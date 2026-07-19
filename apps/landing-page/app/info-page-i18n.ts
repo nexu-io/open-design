@@ -344,6 +344,7 @@ export interface InfoPageCopy {
     label: string;
     heading: string;
     lead: string;
+    mobileDesktopNotice: string;
     autoCtaPrefix: string; // "Download for" → "Download for macOS"
     autoCtaFallback: string; // shown before JS detects platform
     recommended: string; // "Recommended for your system"
@@ -3334,6 +3335,7 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
       heading: 'Download Open Design.',
       lead:
         'Install and create — no API key, no setup. The desktop app ships with the official model router; sign in once and start designing.',
+      mobileDesktopNotice: 'Open Design is a desktop app. Please open this page on a computer to download.',
       autoCtaPrefix: 'Download for',
       autoCtaFallback: 'Download Open Design',
       recommended: 'Recommended',
@@ -4167,6 +4169,7 @@ INFO_PAGE_COPY.zh = {
     label: '下载',
     heading: '下载 Open Design。',
     lead: '装上就能创作——不需要 API key、零配置。桌面端内置官方 model router，登录一次即可开始设计。',
+    mobileDesktopNotice: 'Open Design 是桌面客户端，请在电脑上下载。',
     autoCtaPrefix: '下载适用于',
     autoCtaFallback: '下载 Open Design',
     recommended: '推荐',

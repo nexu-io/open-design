@@ -10,6 +10,30 @@ import type { TrackingArtifactKind, TrackingArtifactWriteSource, TrackingArtifac
 import type { TrackingFileVersionSource, TrackingPluginImportSource, TrackingSessionMode, TrackingSettingsArea } from './ui-click.js';
 // ---- Result events -------------------------------------------------------
 
+// Final outcome for the paid provider submission. Keep this envelope free of
+// prompts, response bodies, configured URLs, credentials, and output paths.
+export interface MediaGenerationResultProps {
+  page_name: 'studio';
+  area: 'media_generation';
+  project_id: string;
+  task_id: string;
+  run_id?: string;
+  surface: 'image' | 'video' | 'audio';
+  provider_id: string;
+  model_id: string;
+  result: 'success' | 'failed';
+  initial_response_status?: number;
+  response_status?: number;
+  attempt_count: number;
+  retry_count: number;
+  retry_reason?: 'rate_limit_429' | 'service_unavailable_503';
+  retry_after_ms?: number;
+  retry_delay_ms?: number;
+  retry_final_result: 'not_attempted' | 'success' | 'failed' | 'skipped_retry_after_budget';
+  duration_ms: number;
+  used_stub_fallback: boolean;
+}
+
 export interface ProjectCreateResultProps {
   page_name: 'home';
   area: 'new_project';
@@ -741,4 +765,3 @@ export interface PackagedRuntimeFailedProps {
   source: string;
   platform: string;
 }
-

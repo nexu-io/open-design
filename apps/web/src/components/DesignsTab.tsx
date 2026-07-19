@@ -10,7 +10,7 @@ import {
   trackProjectsMorePopoverClick,
 } from "../analytics/events";
 import { useT } from "../i18n";
-import { deleteLiveArtifact, fetchLiveArtifacts, fetchProjectFiles, liveArtifactPreviewUrl, projectFileUrl } from "../providers/registry";
+import { deleteLiveArtifact, fetchLiveArtifacts, fetchProjectFiles, liveArtifactPreviewUrl } from "../providers/registry";
 import type {
 	DesignSystemSummary,
 	LiveArtifactSummary,
@@ -28,6 +28,13 @@ import {
 } from "./design-system-project";
 import { LiveArtifactBadges } from "./LiveArtifactBadges";
 import { Toast } from "./Toast";
+import {
+	HtmlProjectCoverFrame,
+	coverFromProjectFile,
+	projectCoverUrl,
+	selectProjectFileCover,
+	type ProjectCoverOverride,
+} from "./project-cover";
 
 type SubTab = "recent" | "yours";
 type ViewMode = "grid" | "kanban";
@@ -116,7 +123,7 @@ export function DesignsTab({
 		Record<string, LiveArtifactSummary[]>
 	>({});
 	const [coverByProject, setCoverByProject] = useState<
-		Record<string, { kind: "html" | "image" | "video" | "logo"; name: string } | null>
+		Record<string, ProjectCoverOverride | null>
 	>({});
 	const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
 	const [selectMode, setSelectMode] = useState(false);
@@ -197,32 +204,11 @@ export function DesignsTab({
 				if (designSystemProject) {
 					const logo = findDesignSystemLogoFile(files);
 					if (logo) {
-						return [
-							project.id,
-							{ kind: "logo" as const, name: logo.path ?? logo.name },
-						] as const;
+						return [project.id, coverFromProjectFile(logo, "logo")] as const;
 					}
 					return [project.id, null] as const;
 				}
-				const image = files
-					.filter((f) => f.kind === "image")
-					.sort((a, b) => b.mtime - a.mtime)[0];
-				if (image) {
-					return [
-						project.id,
-						{ kind: "image" as const, name: image.path ?? image.name },
-					] as const;
-				}
-				const video = files
-					.filter((f) => f.kind === "video")
-					.sort((a, b) => b.mtime - a.mtime)[0];
-				if (video) {
-					return [
-						project.id,
-						{ kind: "video" as const, name: video.path ?? video.name },
-					] as const;
-				}
-				return [project.id, null] as const;
+				return [project.id, selectProjectFileCover(files)] as const;
 			}),
 		).then((entries) => {
 			if (cancelled) return;
@@ -946,7 +932,13 @@ export function DesignsTab({
 									) : cover.kind === "video" && cover.src ? (
 										<video className="thumb-media" src={cover.src} muted preload="metadata" playsInline />
 									) : cover.kind === "html" ? (
-										<span className="project-thumb-glyph">{cover.initial}</span>
+										<HtmlProjectCoverFrame
+											src={cover.src}
+											initial={cover.initial}
+											iframeClassName="thumb-iframe"
+											glyphClassName="project-thumb-glyph"
+											diagnostic={`${p.id}:${cover.name ?? "unknown"}`}
+										/>
 									) : (
 										<span className="project-thumb-glyph">{cover.initial}</span>
 									)}
@@ -1223,12 +1215,13 @@ function isOrbitProject(project: Project): boolean {
 
 function projectCover(
 	project: Project,
-	override: { kind: "html" | "image" | "video" | "logo"; name: string } | null,
+	override: ProjectCoverOverride | null,
 ): {
 	kind: "image" | "video" | "html" | "logo" | "brand" | "fallback";
 	src?: string;
 	style: CSSProperties;
 	initial: string;
+	name?: string;
 	brandId?: string;
 	brandHost?: string;
 } {
@@ -1260,17 +1253,18 @@ function projectCover(
 	if (override) {
 		return {
 			kind: override.kind,
-			src: projectFileUrl(project.id, override.name),
+			src: projectCoverUrl(project.id, override.name, override.mtime),
 			style,
 			initial,
+			name: override.name,
 		};
 	}
 	const entry = meta?.entryFile;
 	if (entry) {
-		const src = projectFileUrl(project.id, entry);
+		const src = projectCoverUrl(project.id, entry, project.updatedAt);
 		if (meta?.kind === "image") return { kind: "image", src, style, initial };
 		if (meta?.kind === "video") return { kind: "video", src, style, initial };
-		if (/\.html?$/i.test(entry)) return { kind: "html", src, style, initial };
+		if (/\.html?$/i.test(entry)) return { kind: "html", src, style, initial, name: entry };
 	}
 	return { kind: "fallback", style, initial };
 }

@@ -149,7 +149,7 @@
 .od-toast.placement-top {
   top: 64px;
   bottom: auto;
-  z-index: 1200;
+  z-index: 1800;
 }
 .project-actions-toast-anchor {
   position: relative;
@@ -219,8 +219,8 @@
 }
 .od-toast.tone-error {
   border: 1px solid color-mix(in srgb, var(--danger, #cf222e) 42%, var(--border));
-  background: color-mix(in srgb, var(--danger, #cf222e) 13%, var(--bg));
-  color: var(--text);
+  background: var(--red-bg);
+  color: var(--red);
   box-shadow:
     0 4px 14px rgba(0, 0, 0, 0.14),
     0 0 0 1px color-mix(in srgb, var(--danger, #cf222e) 12%, transparent);

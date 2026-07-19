@@ -9,7 +9,7 @@
 - **Node.js:** `~24`(Node 24.x). `package.json#engines`로 버전을 강제합니다.
 - **pnpm:** `10.33.x`. `packageManager`에 `pnpm@10.33.2`를 고정해 두었으니, Corepack을 쓰면 고정된 버전이 자동으로 선택됩니다.
 - **OS:** macOS, Linux, WSL2가 주요 지원 환경입니다. Windows 네이티브도 지원합니다. 자주 겪는 설치 문제는 [`docs/windows-troubleshooting.md`](../../docs/windows-troubleshooting.md)를 참고하세요.
-- **선택: 로컬 에이전트 CLI:** Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen, Qoder CLI, GitHub Copilot CLI 등. 설치된 CLI가 없으면 Settings에서 BYOK API 모드를 쓰면 됩니다.
+- **선택: 로컬 에이전트 CLI:** Open Design은 Claude Code, Codex, Devin for Terminal, OpenCode, Cursor Agent, Qwen, Qoder CLI, GitHub Copilot CLI 등을 로컬 런타임 레지스트리로 지원합니다. 현재 목록은 [`apps/daemon/src/runtimes/registry.ts`](../../apps/daemon/src/runtimes/registry.ts)에 있습니다. 설치된 런타임이 없으면 Settings에서 구성한 BYOK 런타임을 쓰면 됩니다.
 
 ### 로컬 에이전트 CLI와 PATH
 
@@ -182,16 +182,11 @@ pnpm tools-dev run web # daemon + web을 포그라운드로 시작합니다
 pnpm tools-dev # daemon + web + desktop을 백그라운드로 시작합니다
 ```
 
-처음 로드할 때 앱은 설치된 코드 에이전트 CLI(Claude Code / Codex / Gemini / OpenCode / Cursor Agent / Qwen)를 감지해 자동으로 선택하고, 기본값으로 `web-prototype` skill과 `Neutral Modern` design system을 사용합니다. 프롬프트를 입력하고 **Send**를 누르세요. 에이전트 출력은 왼쪽 패널에 스트리밍되고, `<artifact>` 태그가 파싱되어 HTML이 오른쪽에 실시간으로 렌더링됩니다. 완료되면 **Save to disk**로 artifact를 저장할 수 있습니다. artifact 저장 경로를 문서화하거나 변경하기 전에 반드시 루트 `AGENTS.md`의 **Daemon data directory contract**를 읽어야 합니다.
+처음 로드할 때 앱은 사용 가능한 로컬 런타임을 감지하고 Settings에서 구성한 BYOK 런타임도 함께 표시합니다. 런타임, 디자인 템플릿, 디자인 시스템을 선택하고 프롬프트를 입력한 뒤 **Send**를 누르세요. 구조화된 로컬 런타임은 정식 프로젝트 파일을 쓰고 파일/도구 이벤트를 스트리밍하며, 파일 작업 공간과 미리보기는 그 쓰기에서 갱신됩니다. 텍스트 전용 및 BYOK 실행은 대신 호스트가 파싱할 완전한 `<artifact>` 블록을 반환합니다. artifact 저장 경로를 문서화하거나 변경하기 전에 반드시 루트 `AGENTS.md`의 **Daemon data directory contract**를 읽어야 합니다.
 
-**Design system** 드롭다운에는 71개의 내장 시스템이 들어 있습니다. 직접 작성한 스타터 2개(Neutral Modern, Warm Editorial)와 [`awesome-design-md`](https://github.com/VoltAgent/awesome-design-md)에서 가져온 69개의 제품 시스템으로, 카테고리별(AI & LLM, Developer Tools, Productivity, Backend, Design Tools, Fintech, E-Commerce, Media, Automotive)로 묶여 있습니다. 하나를 고르면 모든 프로토타입이 그 브랜드의 미감으로 입혀집니다. 여기에 [`awesome-design-skills`](https://github.com/bergside/awesome-design-skills)에서 가져온 57개의 디자인 skill도 함께 제공됩니다.
+**Design systems** 카탈로그는 [`design-systems/`](../../design-systems/)의 `DESIGN.md` 패키지에서 직접 로드됩니다. 하나를 고르면 그 브랜드의 시각 언어가 artifact에 적용됩니다.
 
-**Skill** 드롭다운은 모드별(Prototype / Deck / Template / Design system)로 묶이며, 각 모드의 기본 skill에는 `· default` 접미사가 붙습니다. 함께 제공되는 skill은 다음과 같습니다.
-
-- **Prototype** — `web-prototype`(범용), `saas-landing`, `dashboard`, `pricing-page`, `docs-page`, `blog-post`, `mobile-app`.
-- **Deck / PPT** — `simple-deck`(단일 파일 가로 스와이프)과 `magazine-web-ppt`([`op7418/guizang-ppt-skill`](https://github.com/op7418/guizang-ppt-skill)에서 가져온 `guizang-ppt` 번들. deck 모드의 기본값이며, 자체 에셋/템플릿과 레퍼런스 4개를 함께 제공). 사이드 파일이 있는 skill에는 "Skill root (absolute)" 머리말이 자동으로 붙어, 에이전트가 `assets/template.html`이나 `references/*.md`를 CWD가 아니라 실제 디스크 경로 기준으로 해석할 수 있습니다.
-
-skill과 디자인 시스템을 짝지으면, 프롬프트 하나로 선택한 시각 언어에 맞는 프로토타입이나 deck이 레이아웃에 맞게 생성됩니다.
+**Templates** 카탈로그는 [`design-templates/`](../../design-templates/)에서 오며 프로토타입, deck, 문서, 이미지, 비디오, 오디오 artifact 형식을 묶어 제공합니다. [`skills/`](../../skills/)는 에이전트가 작업 중 호출하는 기능적 역량을 위한 공간입니다. 템플릿과 디자인 시스템을 함께 선택하면 원하는 시각 언어의 artifact를 만들 수 있습니다.
 
 ## 그 밖의 스크립트
 
@@ -271,17 +266,17 @@ location /api/ {
 
 | 모드 | 선택값 | 요청이 흐르는 경로 |
 |---|---|---|
-| **Local CLI** (daemon이 에이전트를 감지하면 기본값) | "Local CLI" | 프론트엔드 → daemon `/api/chat` → `spawn(<agent>, ...)` → stdout → SSE → artifact 파서 → 미리보기 |
-| **API 모드** (대체 수단 / CLI 없음) | "Anthropic API" / "OpenAI API" / "Azure OpenAI" / "Google Gemini" | 프론트엔드 → daemon `/api/proxy/{provider}/stream` → 프로바이더 SSE를 `delta/end/error`로 정규화 → artifact 파서 → 미리보기 |
+| **Local CLI** (daemon이 에이전트를 감지하면 기본값) | "Local CLI" | 프론트엔드 → daemon `/api/chat` → `spawn(<agent>, ...)` → 구조화된 도구/파일 이벤트를 SSE로 전달 → 프로젝트 파일 → 미리보기. plain-stream CLI는 text-artifact 경로를 사용합니다. |
+| **API 모드** (대체 수단 / CLI 없음) | "Anthropic API" / "OpenAI API" / "Atlas Cloud" / "Azure OpenAI" / "Google Gemini" | 프론트엔드 → daemon `/api/proxy/{provider}/stream` → 프로바이더 SSE를 `delta/end/error`로 정규화 → `<artifact>` 파서 → 미리보기 |
 
-두 모드 모두 **같은** `<artifact>` 파서와 **같은** 샌드박스 iframe으로 들어갑니다. 다른 점은 전송 방식과 시스템 프롬프트 전달 방식뿐입니다(로컬 CLI는 별도의 시스템 채널이 없어서, 조합된 프롬프트를 사용자 메시지 안에 접어 넣습니다).
+두 모드 모두 같은 파일 작업 공간과 샌드박스 미리보기에 도달하지만 인계 계약은 다릅니다. 파일 시스템을 사용할 수 있는 런타임은 정식 파일을 쓰며 소스를 `<artifact>`로 되풀이하지 않습니다. plain/텍스트 전용 및 BYOK 실행에는 파일 도구가 없으므로 완전한 HTML을 담은 `<artifact>`가 정식 결과물입니다. 실행 프로필은 런타임 전송 방식에서 선택됩니다.
 
 ## 프롬프트 구성
 
 전송할 때마다 앱은 세 개의 레이어로 시스템 프롬프트를 만들어 프로바이더에 보냅니다.
 
 ```
-BASE_SYSTEM_PROMPT   (출력 규약: <artifact>로 감싸고, 코드 펜스는 쓰지 않는다)
+BASE_SYSTEM_PROMPT   (실행 프로필별 파일 또는 <artifact> 인계)
    + 활성 디자인 시스템 본문  (DESIGN.md — 팔레트/타입/레이아웃)
    + 활성 skill 본문          (SKILL.md — 워크플로우와 출력 규칙)
 ```
@@ -297,9 +292,12 @@ open-design/
 │   │   └── src/
 │   │       ├── cli.ts             # `od` bin 진입점
 │   │       ├── server.ts          # /api/* + 정적 서빙
-│   │       ├── agents.ts          # claude/codex/devin/gemini/opencode/cursor-agent/qwen/qoder/copilot용 PATH 스캐너
+│   │       ├── agents.ts          # 런타임 모듈 호환성 export
+│   │       ├── runtimes/
+│   │       │   ├── registry.ts    # 지원 런타임 레지스트리
+│   │       │   └── defs/          # 런타임별 실행 및 인자 정의
 │   │       ├── skills.ts          # SKILL.md 로더 (frontmatter 파서)
-│   │       └── design-systems.ts  # DESIGN.md 로더
+│   │       └── design-systems/    # DESIGN.md 로더 및 서비스
 │   │   ├── sidecar/           # tools-dev daemon sidecar 래퍼
 │   │   └── tests/             # daemon 패키지 테스트
 │   ├── web/                   # Next.js 16 App Router + React 클라이언트
@@ -308,7 +306,7 @@ open-design/
 │       │   ├── App.tsx        # 모드 / skill / DS 선택기 + 전송 조율
 │       │   ├── providers/     # daemon + BYOK API 전송 계층
 │       │   ├── prompts/       # system, discovery, directions, deck framework
-│       │   ├── artifacts/     # 스트리밍 <artifact> 파서 + manifest
+│       │   ├── artifacts/     # text-artifact 파싱 + artifact manifest
 │       │   ├── runtime/       # iframe srcdoc, markdown, export 헬퍼
 │       │   └── state/         # localStorage + daemon 기반 프로젝트 상태
 │       ├── sidecar/           # tools-dev web sidecar 래퍼
@@ -321,24 +319,9 @@ open-design/
 │   └── platform/              # 범용 process/platform 프리미티브
 ├── tools/dev/                 # `pnpm tools-dev` 라이프사이클 및 inspect CLI
 ├── e2e/                       # Playwright UI + 외부 통합/Vitest 하네스
-├── skills/                    # SKILL.md — 어떤 Claude Code skill 리포지토리에서든 그대로 넣을 수 있음
-│   ├── web-prototype/         # 범용 단일 화면 프로토타입 (prototype 모드 기본값)
-│   ├── saas-landing/          # 마케팅 페이지 (hero / features / pricing / CTA)
-│   ├── dashboard/             # 관리자 / 분석 대시보드
-│   ├── pricing-page/          # 단독 가격 + 비교
-│   ├── docs-page/             # 3단 문서 레이아웃
-│   ├── blog-post/             # 에디토리얼 롱폼
-│   ├── mobile-app/            # 휴대폰 프레임 단일 화면
-│   ├── simple-deck/           # 미니멀 가로 스와이프 deck
-│   └── guizang-ppt/           # magazine-web-ppt — 번들된 deck/PPT 기본값
-│       ├── SKILL.md
-│       ├── assets/template.html
-│       └── references/{themes,layouts,components,checklist}.md
-├── design-systems/            # DESIGN.md — 9개 섹션 스키마 (awesome-claude-design)
-│   ├── default/               # Neutral Modern (스타터)
-│   ├── warm-editorial/        # Warm Editorial (스타터)
-│   ├── README.md              # 카탈로그 개요
-│   └── …129개 시스템          # 스타터 2개 · 제품 시스템 70개 · 디자인 skill 57개
+├── skills/                    # 작업 중 호출하는 기능적 역량
+├── design-templates/          # 프로토타입, deck, 문서, 미디어 렌더링 카탈로그
+├── design-systems/            # DESIGN.md를 중심으로 한 브랜드 패키지
 ├── scripts/sync-design-systems.ts    # 업스트림 getdesign tarball에서 다시 import
 ├── docs/                      # 제품 비전 + 스펙
 ├── pnpm-workspace.yaml        # apps/* + packages/* + tools/* + e2e
@@ -348,7 +331,7 @@ open-design/
 ## 문제 해결
 
 - **Node.js 버전을 바꾼 뒤 `better-sqlite3`가 로드되지 않거나 ABI가 맞지 않을 때** — `pnpm install`이 `postinstall`을 자동으로 다시 돌려 현재 Node.js에 맞게 네이티브 애드온을 리빌드합니다. 직접 리빌드하거나 수정을 확인하려면 `pnpm --filter @open-design/daemon rebuild better-sqlite3`를 실행한 뒤 `pnpm --filter @open-design/daemon exec node -e "require('better-sqlite3')"`를 돌리세요. 빌드 도구 `python3`, `make`, `g++`(또는 `clang++`)가 필요합니다. `.npmrc`에 `ignore-scripts=true`가 있다면, `pnpm install` 후 `node scripts/postinstall.mjs`를 실행하세요.
-- **"no agents found on PATH"** — `claude`, `codex`, `devin`, `gemini`, `opencode`, `cursor-agent`, `qwen`, `qodercli`, `copilot` 중 하나를 설치하세요. 아니면 Settings에서 API 모드로 바꾸고 프로바이더 키를 붙여 넣으세요.
+- **"no agents found on PATH"** — [`apps/daemon/src/runtimes/registry.ts`](../../apps/daemon/src/runtimes/registry.ts)에 등록된 로컬 런타임 중 하나를 설치하고 실행 파일이 daemon에 보이는지 확인한 뒤, **Settings → Execution mode**에서 **Rescan**을 실행하세요. 또는 Settings에서 BYOK 런타임을 구성하세요.
 - **Claude Code가 코드 1로 종료될 때** — Open Design이 `claude`를 시작하긴 했지만, spawn된 비대화형 실행이 응답을 내기 전에 실패한 경우입니다. Open Design을 시작하는 셸이나 앱 환경과 같은 곳에서 다음을 확인하세요.
   ```bash
   claude --version
@@ -356,16 +339,16 @@ open-design/
   printf 'hello' | claude -p --output-format stream-json --verbose --permission-mode bypassPermissions
   ```
   스모크 테스트가 커스텀 엔드포인트 없이 `401`, `apiKeySource: "none"`, 또는 다른 인증 오류를 낸다면, `claude`를 실행해 `/login`한 뒤 Claude를 종료하고 Open Design을 다시 시도하세요. Claude 프로필을 여러 개 쓴다면 **Settings -> Execution mode -> Claude Code config directory**를 `~/.claude-2` 같은 프로필 경로로 지정하세요. `ANTHROPIC_BASE_URL`이나 프록시가 설정돼 있다면 엔드포인트 URL, 프록시 자격 증명, 엔드포인트 인증 환경, 모델 접근 권한을 확인하세요. 표준 Claude Code 인증으로 다시 시도하려는 게 아니라면 커스텀 엔드포인트는 그대로 두세요. Windows에서는 네이티브 PowerShell과 WSL이 서로 다른 Claude 설치본과 자격 증명 저장소를 쓰므로, Open Design이 쓰는 것과 같은 환경에서 다시 인증하고, `/login`으로도 네이티브 Windows 자격 증명이 복구되지 않으면 Windows 자격 증명 관리자를 확인하세요.
-- **`/api/chat`에서 daemon 500** — daemon 터미널의 stderr 끝부분을 확인하세요. 대개 CLI가 자신의 인자를 거부한 경우입니다. CLI마다 받는 argv 형태가 다릅니다. 손봐야 한다면 `apps/daemon/src/agents.ts`의 `buildArgs`를 보세요.
+- **`/api/chat`에서 daemon 500** — daemon 터미널의 stderr 끝부분을 확인하세요. 대개 CLI가 자신의 인자를 거부한 경우입니다. CLI마다 받는 argv 형태가 다릅니다. 손봐야 한다면 `apps/daemon/src/runtimes/defs/`의 해당 정의를 보세요.
 - **미디어 생성이 `OD_BIN` 누락 또는 daemon URL이 `:0`이라고 할 때** — 위의 미디어 dispatcher 점검을 실행하세요. 옛 CLI 세션을 이어 가지 말고, Open Design 앱에서 프로젝트를 다시 열어 daemon이 새 `OD_*` 변수를 주입하게 하세요.
 - **Codex가 플러그인 컨텍스트를 너무 많이 로드할 때** — `OD_CODEX_DISABLE_PLUGINS=1 pnpm tools-dev`로 Open Design을 시작하면, daemon이 spawn하는 Codex 프로세스가 `--disable plugins`로 실행됩니다.
-- **artifact가 끝내 렌더링되지 않을 때** — 모델이 `<artifact>`로 감싸지 않은 텍스트를 만든 경우입니다. 시스템 프롬프트가 제대로 전달되는지 확인하고(daemon 로그 확인), 더 강력한 모델이나 더 엄격한 skill로 바꿔 보세요.
+- **artifact가 끝내 렌더링되지 않을 때** — 먼저 실행의 인계 프로필을 확인하세요. 파일 시스템을 쓰는 로컬 런타임은 미리보기 가능한 프로젝트 파일을 만들었는지, 파일 이벤트가 daemon에 도착했는지 확인하며 소스를 `<artifact>`에 넣지 않습니다. plain/텍스트 전용 또는 BYOK 실행은 완전한 `<artifact>` 블록 하나가 있는지 확인하고 daemon 로그에서 처음 실패한 경계를 찾으세요.
 
 ## 비전과 다시 잇기
 
 이 빠른 시작은 [`docs/`](../../docs/)에 담긴 스펙을 실제로 돌릴 수 있게 만든 씨앗입니다. 스펙은 이것이 어디로 자라날지 설명합니다([`docs/roadmap.md`](../../docs/roadmap.md) 참고). 핵심만 짚으면 다음과 같습니다.
 
 - `docs/architecture.md`는 출시된 스택을 설명합니다. 앞단의 Next.js 16 App Router, 그 뒤의 로컬 daemon, 그리고 dev에서 `apps/web/next.config.ts`의 rewrite가 브라우저를 같은 `/api` 표면과 계속 통신하게 유지하는 구조입니다.
-- `docs/skills-protocol.md`는 `od:` frontmatter 전체(타입 입력, 슬라이더, 기능 게이팅)를 설명합니다. 이 MVP는 `name` / `description` / `triggers` / `od.mode` / `od.design_system.requires`만 읽습니다. 나머지를 추가하려면 `apps/daemon/src/skills.ts`를 확장하세요.
-- `docs/agent-adapters.md`는 더 풍부한 dispatch(기능 감지, 스트리밍 tool-call)를 내다봅니다. 우리의 `apps/daemon/src/agents.ts`는 배선을 증명할 만큼만 갖춘 최소 dispatcher입니다.
-- `docs/modes.md`는 네 가지 모드를 나열합니다. prototype / deck / template / design-system. 우리는 앞의 두 가지를 위한 skill을 제공하며, 선택기는 이미 `mode`로 필터링합니다.
+- `docs/skills-protocol.md`는 현재 `SKILL.md`/`od:` frontmatter와 기능 skill·렌더링 템플릿의 분리를 설명합니다. 파서와 정규화의 구현 기준은 `apps/daemon/src/skills.ts`입니다.
+- `docs/agent-adapters.md`는 어댑터 계약을 설명합니다. 런타임별 실행, 인자, 모델, 스트림 설정은 `apps/daemon/src/runtimes/defs/`에 있고 `apps/daemon/src/runtimes/registry.ts`에서 등록됩니다. `apps/daemon/src/agents.ts`는 호환성 export 표면입니다.
+- `docs/modes.md`는 6개의 New Project 탭과 7개의 정규화된 레지스트리 모드(`prototype`, `deck`, `template`, `design-system`, `image`, `video`, `audio`)를 구분합니다.

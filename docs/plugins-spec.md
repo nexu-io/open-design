@@ -214,7 +214,7 @@ Rules of authorship:
 
 - `SKILL.md` body never carries OD-specific metadata; it stays clean and portable.
 - `open-design.json` only ever **points** at SKILL.md / DESIGN.md / craft files; it never duplicates their bodies.
-- Existing OD-specific frontmatter on SKILL.md (the `od:` namespace already documented in [`skills-protocol.md`](skills-protocol.md) and used in [`skills/blog-post/SKILL.md`](../skills/blog-post/SKILL.md)) is honored as a fallback for plugins without `open-design.json`. We do not deprecate it; we layer over it.
+- Existing OD-specific frontmatter on SKILL.md (the `od:` namespace already documented in [`skills-protocol.md`](skills-protocol.md) and used in [`design-templates/blog-post/SKILL.md`](../design-templates/blog-post/SKILL.md)) is honored as a fallback for plugins without `open-design.json`. We do not deprecate it; we layer over it.
 - A runnable v1 plugin must contain at least one of `SKILL.md` or `.claude-plugin/plugin.json`. `open-design.json` does not define agent behavior by itself; it only tells OD how to display, resolve, and apply that behavior.
 
 ## 5. `open-design.json` — schema v1
@@ -365,7 +365,7 @@ Rules of authorship:
 - `od.context.atoms` — **unordered set** declaring the atoms a plugin needs. The daemon uses them in default order; intended for simple plugins that don't customize flow.
 - `od.pipeline` — **ordered pipeline** in which the plugin author explicitly composes atoms into stages, loops, and termination conditions (§10.1). When both `od.pipeline` and `od.context.atoms` are present, `pipeline` wins; `context.atoms` is treated only as chip-strip metadata.
 - `od.genui.surfaces[]` — **Generative UI declaration**: the set of surfaces the agent may trigger during a run (§10.3). Each entry's `kind` is one of the v1 built-ins (`form` / `choice` / `confirmation` / `oauth-prompt`); `persist` decides where the answer is remembered (`run` / `conversation` / `project`); `trigger` binds the surface to a specific stage / atom so the agent cannot summon arbitrary UI; `schema` is a JSON Schema used to render the default form and validate the answer. **Surface kinds not declared in the manifest cannot be raised at runtime** — `od plugin doctor` plus daemon runtime jointly enforce that no unknown UI is ever produced.
-- `od.connectors` — **connector dependency declaration**: `required[]` lists the daemon-built-in connectors ([`apps/daemon/src/connectors/`](../apps/daemon/src/connectors/), currently Composio-backed) the plugin needs, each `{ id, tools[] }` mapping to `ConnectorCatalogDefinition.id` and a subset of its `allowedToolNames`; `optional[]` is "use if connected, degrade gracefully if not". `od plugin doctor` validates at install/apply time: (a) every `id` exists in `connectorService.listAll()`; (b) every `tools[]` is a subset of that connector's `allowedToolNames`; (c) every `required[].id` has a matching `connector:<id>` capability declared (§5.3 / §9). Required connectors that are not yet connected at apply time auto-derive an `oauth-prompt` GenUI surface (§10.3.1 with `route: 'connector'`); optional connectors do not, but the agent can trigger one explicitly during the run. **Plugins never hold OAuth tokens directly** — tokens stay in `<dataDir>/connectors/credentials.json`; the plugin only declares dependencies.
+- `od.connectors` — **connector dependency declaration**: `required[]` lists the daemon-built-in connectors ([`apps/daemon/src/connectors/`](../apps/daemon/src/connectors/), currently Composio-backed) the plugin needs, each `{ id, tools[] }` mapping to `ConnectorCatalogDefinition.id` and a subset of its `allowedToolNames`; `optional[]` is "use if connected, degrade gracefully if not". `od plugin doctor` validates at install/apply time: (a) every `id` exists in `connectorService.listAll()`; (b) every `tools[]` is a subset of that connector's `allowedToolNames`; (c) every `required[].id` has a matching `connector:<id>` capability declared (§5.3 / §9). Required connectors that are not yet connected at apply time auto-derive an `oauth-prompt` GenUI surface (§10.3.1 with `route: 'connector'`); optional connectors do not, but the agent can trigger one explicitly during the run. **Plugins never hold OAuth tokens directly** — tokens stay in daemon-owned connector credential storage derived from the resolved daemon data root; the plugin only declares dependencies. This spec does not define that filesystem path; see root [`AGENTS.md`](../AGENTS.md) → **Daemon data directory contract**.
 - `od.inputs` — surfaced as form fields on the detail page; their values template `useCase.query` and any string-valued context entries.
 - `od.capabilities` — declarative; defaults to `['prompt:inject']` if omitted on a `restricted` plugin.
 
@@ -765,15 +765,16 @@ Promote what already exists in [`apps/daemon/src/prompts/system.ts`](../apps/dae
 | `live-artifact` | MCP `mcp__live-artifacts__*` | Create/refresh live artifacts | all |
 | `connector` | MCP `mcp__connectors__*` | Composio connectors | all |
 | `critique-theater` | `system.ts` critique addendum | 5-dim panel critique; devloop convergence signal | all |
-| `code-import` *(planned)* | tbd: repo handle ingestion | Clone / read existing repo, extract design-relevant structure | code-migration |
-| `design-extract` *(planned)* | tbd | Extract design tokens from source code / Figma / screenshot | code-migration, figma-migration |
-| `figma-extract` *(planned)* | tbd: Figma REST + node walk | Extract Figma node tree + tokens + assets | figma-migration |
-| `token-map` *(planned)* | tbd | Map extracted tokens onto the active design system | code-migration, figma-migration |
-| `rewrite-plan` / `patch-edit` *(planned)* | tbd | Long-running multi-file rewrite planning + small-step patches | code-migration, tune-collab |
-| `diff-review` *(planned)* | tbd | Render rewrite as diff for user/agent review | code-migration, tune-collab |
-| `handoff` *(planned)* | tbd | Push artifact to cli / other code agents / cloud / desktop surfaces | tune-collab |
+| `code-import` | [`apps/daemon/src/plugins/atoms/code-import.ts`](../apps/daemon/src/plugins/atoms/code-import.ts) | Walk an existing repo and write design-relevant structure to `code/index.json` | code-migration |
+| `design-extract` | [`apps/daemon/src/plugins/atoms/design-extract.ts`](../apps/daemon/src/plugins/atoms/design-extract.ts) | Extract design tokens from imported source structure | code-migration, figma-migration |
+| `figma-extract` | [`apps/daemon/src/plugins/atoms/figma-extract.ts`](../apps/daemon/src/plugins/atoms/figma-extract.ts) | Fetch a Figma file tree, tokens, and assets through Figma REST | figma-migration |
+| `token-map` | [`apps/daemon/src/plugins/atoms/token-map.ts`](../apps/daemon/src/plugins/atoms/token-map.ts) | Map extracted tokens onto the active design system | code-migration, figma-migration |
+| `rewrite-plan` / `patch-edit` | [`apps/daemon/src/plugins/atoms/rewrite-plan.ts`](../apps/daemon/src/plugins/atoms/rewrite-plan.ts), [`patch-edit.ts`](../apps/daemon/src/plugins/atoms/patch-edit.ts) | Plan a multi-file rewrite and apply small, ownership-aware patches | code-migration, tune-collab |
+| `build-test` | [`apps/daemon/src/plugins/atoms/build-test.ts`](../apps/daemon/src/plugins/atoms/build-test.ts) | Run project checks and emit `build.passing` / `tests.passing` signals | code-migration |
+| `diff-review` | [`apps/daemon/src/plugins/atoms/diff-review.ts`](../apps/daemon/src/plugins/atoms/diff-review.ts) | Render the rewrite as a reviewable diff and collect a decision through GenUI | code-migration, tune-collab |
+| `handoff` | [`apps/daemon/src/plugins/atoms/handoff.ts`](../apps/daemon/src/plugins/atoms/handoff.ts) | Record export/deploy provenance and promote the artifact handoff tier | code-migration, tune-collab |
 
-`(planned)` atoms are **not** implemented in v1, but their IDs are reserved here and in §5 schema to avoid a future name churn. `GET /api/atoms` returns only implemented atoms in v1; planned atoms emit a clear "not yet implemented" warning from `od plugin doctor` rather than a generic "unknown atom" error.
+The original v1 catalog reserved the last nine ids as `(planned)`. The Phase 6–8 entry slices later implemented them, and `GET /api/atoms` now reports every catalog entry above as `implemented`. The reservation history is retained in §21's rollout notes; it is no longer the current runtime status.
 
 ### 10.1 `od.pipeline` — the ordered atomic pipeline plugins assemble
 
@@ -861,8 +862,8 @@ export interface GenUISurfaceSpec {
 
 | `oauth.route` | Daemon behavior | UI behavior | Persistence |
 | --- | --- | --- | --- |
-| `connector` | Reuses the existing `apps/daemon/src/connectors/` flow: hits `POST /api/connectors/:connectorId/connect/start` for the redirect URL; on completion the token lands in `<dataDir>/connectors/credentials.json` | Renders the connector card (the visual style of [`apps/web/src/components/ConnectorsBrowser.tsx`](../apps/web/src/components/ConnectorsBrowser.tsx)) inside a modal or drawer; the user clicks through the standard connector OAuth | `genui_surfaces.value_json = { connectorId, accountLabel }`; the token never enters SQLite |
-| `mcp` | Reuses `POST /api/mcp/oauth/start`; the token lands in `<dataDir>/mcp-tokens.json` | Reuses the Settings → MCP servers OAuth visuals | `genui_surfaces.value_json = { mcpServerId }`; the token never enters SQLite |
+| `connector` | Reuses the existing `apps/daemon/src/connectors/` flow: hits `POST /api/connectors/:connectorId/connect/start` for the redirect URL; on completion the token lands in daemon-owned connector credential storage | Renders the connector card (the visual style of [`apps/web/src/components/ConnectorsBrowser.tsx`](../apps/web/src/components/ConnectorsBrowser.tsx)) inside a modal or drawer; the user clicks through the standard connector OAuth | `genui_surfaces.value_json = { connectorId, accountLabel }`; the token never enters SQLite |
+| `mcp` | Reuses `POST /api/mcp/oauth/start`; the token lands in daemon-owned MCP token storage | Reuses the Settings → MCP servers OAuth visuals | `genui_surfaces.value_json = { mcpServerId }`; the token never enters SQLite |
 | `plugin` (Phase 4) | Plugin supplies arbitrary third-party OAuth metadata; daemon goes through a generic PKCE adapter | TBD | TBD |
 
 `od plugin doctor` enforces at install / apply time that: (1) when `oauth.route === 'connector'`, `oauth.connectorId` is present in the plugin's own `od.connectors.required[]` or `od.connectors.optional[]`; (2) when `oauth.route === 'mcp'`, `oauth.mcpServerId` matches a name in the plugin's MCP server set.
@@ -977,7 +978,7 @@ Pure TypeScript, no Next/Express/SQLite/browser deps:
 
 | File | Change |
 | --- | --- |
-| [`apps/daemon/src/skills.ts`](../apps/daemon/src/skills.ts), [`design-systems.ts`](../apps/daemon/src/design-systems.ts), [`craft.ts`](../apps/daemon/src/craft.ts) | Refactor each loader to delegate to a unified `apps/daemon/src/plugins/registry.ts`. Existing endpoints continue to work for backward compat. |
+| [`apps/daemon/src/skills.ts`](../apps/daemon/src/skills.ts), [`design-systems/index.ts`](../apps/daemon/src/design-systems/index.ts), [`craft.ts`](../apps/daemon/src/craft.ts) | Refactor each loader to delegate to a unified `apps/daemon/src/plugins/registry.ts`. Existing endpoints continue to work for backward compat. |
 | New `apps/daemon/src/plugins/registry.ts` | Three-tier scan, conflict resolution, hot-reload watcher. |
 | New `apps/daemon/src/plugins/installer.ts` | github / https / local / marketplace install paths; tar/zip extraction; SQLite write. |
 | New `apps/daemon/src/plugins/apply.ts` | Implements `ApplyResult` assembly: resolves refs, returns asset refs / MCP specs / capability requirements / `appliedPlugin` snapshot; performs no writes. Actual staging and `.mcp.json` writes happen in project create / run start after the capability gate. |
@@ -1315,7 +1316,7 @@ od conversation info <conversationId> [--json]
 ```
 od run start --project <projectId> [--conversation <conversationId>]
              [--message "<text>"] [--plugin <pluginId>] [--input k=v ...]
-             [--agent claude|codex|gemini] [--model <id>] [--reasoning <level>]
+             [--agent claude|codex|opencode] [--model <id>] [--reasoning <level>]
              [--attachments <relpath,...>] [--follow] [--json]
 
 od run watch  <runId>                # ND-JSON SSE-equivalent events on stdout
@@ -1615,7 +1616,7 @@ OD ships as a single multi-arch Docker image so the full plugin/marketplace syst
   - Node 24 runtime + the daemon `dist/` bundle.
   - The `od` CLI on PATH.
   - Web UI bundle (apps/web build) so the same image serves both API and UI.
-  - Bundled code-agent CLIs that OD supports as agent backends: Claude Code, Codex CLI, Gemini CLI. Selectable per run; default is `OD_AGENT_BACKEND`.
+  - Agent CLIs are not baked into the image. Linux operators may mount compatible host-installed CLIs through the documented Compose override, or use a configured BYOK profile. Runtime ids are selected per run from the daemon registry.
   - Common runtime deps plugins assume: `ffmpeg`, `git`, `ripgrep`.
 - **Excluded**: electron, native macOS/Windows toolchains, dev tooling.
 
@@ -1985,20 +1986,20 @@ The v1 `ArtifactManifest` extension in §11.5.1 already reserves these optional 
 
 ### 20.2 Evaluator atoms
 
-The existing `critique-theater` and devloop stages are the right entry point, but "critique" must not remain purely LLM-subjective. Future evaluator capabilities should land as first-party atoms that can be scheduled in `od.pipeline.stages[]`:
+The existing `critique-theater` and devloop stages are the right entry point, but "critique" must not remain purely LLM-subjective. `build-test` has since landed as a first-party evaluator atom; the other evaluator capabilities below remain future work:
 
 - `visual-diff` compares screenshots or Figma captures against generated HTML.
 - `responsive-check` validates common viewport breakpoints.
 - `accessibility-check` runs automated a11y checks and summarizes manual issues.
 - `brand-consistency-check` compares color, typography, spacing, and tone against the active `DESIGN.md`.
-- `build-test` runs package-scoped build / typecheck / lint commands for code outputs.
+- `build-test` **(implemented)** runs package-scoped build / typecheck / lint / test commands for code outputs and emits `build.passing` / `tests.passing`.
 - `screenshot-regression` records and compares preview snapshots across devloop iterations.
 
 Evaluator results should be stored as run events and, once stable, summarized on the artifact manifest as `evaluationSummary` plus links to detailed reports. They do not require a new plugin primitive: they are atoms, capability-gated like any other atom, and can participate in the existing `repeat` / `until` devloop condition.
 
 ### 20.3 Production handoff
 
-`code-migration` and `figma-migration` can initially produce `html-prototype`, `code-diff`, or `implementation-plan` artifacts. A later production-handoff phase upgrades that path into a deployable business-code workflow without changing the plugin substrate:
+`code-migration` and `figma-migration` can produce `html-prototype`, `code-diff`, or `implementation-plan` artifacts. The Phase 7–8 entry slices subsequently implemented the first-party migration atom chain, native diff-review choice surface, and handoff promotion logic without changing the plugin substrate:
 
 1. **Target stack contract.** The run records framework, package manager, styling system, component library, routing model, and test command assumptions.
 2. **Design-token mapping.** Generated tokens map to existing app tokens or create a migration plan before code is patched.
@@ -2006,11 +2007,11 @@ Evaluator results should be stored as run events and, once stable, summarized on
 4. **Patch safety.** The output is a reviewable diff with build/test evidence, not an opaque generated repo overwrite.
 5. **Delivery evidence.** The final artifact carries `handoffKind: 'patch'` or `handoffKind: 'deployable-app'`, evaluator summaries, and export/deploy targets.
 
-This keeps v1 honest: plugins can already organize design-to-code workflows, but full production delivery is a stricter contract layered on top of `artifactKind`, evaluator atoms, and repo-aware patch orchestration.
+The runtime can now promote a handoff to `deployable-app` only when diff review accepts the work, both build and tests pass, and an explicit CLI or Docker export target exists. Generic one-click export/deploy integration and the remaining objective evaluators are still stricter follow-up work layered on top of `artifactKind`, evaluator atoms, and repo-aware patch orchestration.
 
 ## 21. Scenario coverage matrix and delivery roadmap
 
-This section is the **honest accounting** between the four product scenarios already declared in §1 ("Four product scenarios": `new-generation` / `code-migration` / `figma-migration` / `tune-collab`) and what v1 actually ships. It is not a new design surface; it consolidates the gaps already implied across §10 (atoms, several marked `(planned)`), §16 (phased plan), §18 (open questions), and §20 (post-v1 reservations) into one place so future implementers can use it as a single reconciliation table without re-reading the whole spec.
+This section is the **honest accounting** between the four product scenarios already declared in §1 ("Four product scenarios": `new-generation` / `code-migration` / `figma-migration` / `tune-collab`) and the current implementation. It retains the original v1 baseline while recording the later Phase 6–8 entry slices, so historical rollout language is not mistaken for current runtime status.
 
 The four "core agent-native design problems" the OD product targets, restated to make this section navigable:
 
@@ -2021,31 +2022,31 @@ The four "core agent-native design problems" the OD product targets, restated to
 
 ### 21.1 Coverage matrix at a glance
 
-| # | Scenario | `taskKind` | spec covers the contract? | v1 implementation status | What blocks "fully native one-click v1" |
+| # | Scenario | `taskKind` | spec covers the contract? | Current implementation status | Remaining gap |
 | --- | --- | --- | --- | --- | --- |
-| 1 | Figma migration | `figma-migration` | yes (§1, §10 atoms reserved) | **partial** — `figma-extract` and `token-map` are `(planned)` in §10; pipeline shape and provenance are ready | Need to implement the two `(planned)` atoms; everything else (DS injection, GenUI OAuth, devloop, snapshot) is already in v1 |
-| 2 | Existing-codebase refresh | `code-migration` | yes (§1, §10, §20.3) | **not in v1** — `code-import` / `rewrite-plan` / `patch-edit` / `diff-review` all `(planned)`; `build-test` evaluator is §20.2 | Need the §20.3 stricter contract end-to-end (target stack, token mapping, component mapping, patch safety, build evidence) |
+| 1 | Figma migration | `figma-migration` | yes (§1, §10) | **shipped after v1** — `figma-extract`, `token-map`, and the bundled `od-figma-migration` scenario are implemented | Objective visual-diff fidelity remains optional follow-up work |
+| 2 | Existing-codebase refresh | `code-migration` | yes (§1, §10, §20.3) | **shipped after v1** — the Phase 7 atom chain, build/test convergence signals, and bundled `od-code-migration` scenario are implemented | Arbitrary repositories still require explicit target/build inputs; objective visual regression remains follow-up work |
 | 3 | 0→1 design (prototype, deck, interactive video) | `new-generation` | yes (§1 default reference pipeline) | **shipped in v1** — every required atom (`discovery-question-form`, `direction-picker`, `todo-write`, `live-artifact`, `media-image/video/audio`, `critique-theater`) is already implemented | Optional: lift §20.2 `visual-diff` / `brand-consistency-check` into Phase 2 so critique gains an objective signal |
-| 4 | Design → deliverable production code | `tune-collab` (handoff side) | partial (§20.3 explicitly post-v1) | **not in v1** — v1 caps at `handoffKind: 'design-only' \| 'implementation-plan' \| 'patch'`; `'deployable-app'` is post-v1 | Either land §20.3 in full, or formalize the §14.3 OD ↔ external code-agent handoff as the v1 production-code path |
+| 4 | Design → deliverable production code | `tune-collab` (handoff side) | yes for the handoff contract (§20.3) | **partial after v1** — native diff-review decisions and `deployable-app` promotion have entry slices | Generic one-click export/deploy integration still depends on a concrete CLI or Docker export target |
 
-Reading rule: **scenario 3 is the only one v1 fully covers natively**. Scenarios 1 and 2 have correct contracts and naming reserved by v1 but require additional atom implementations; scenario 4 is explicitly post-v1 and leans on §14.3 in the meantime.
+Reading rule: **scenario 3 was the only scenario fully native in the original v1 baseline**. Scenarios 1 and 2 became native reference pipelines in the later Phase 6 and 7 slices. Scenario 4 has a Phase 8 review/handoff entry slice, while generic one-click delivery remains incomplete.
 
-### 21.2 What v1 actually solves for "agent-native design"
+### 21.2 What v1 solved and later phases added
 
-v1 stops at scenario 3 in terms of native completeness, but the substrate it ships is the right substrate for all four scenarios. The five contracts below are the parts of the spec that future scenario work inherits without modification:
+The original v1 stopped at scenario 3 in terms of native completeness, but its substrate was the right substrate for all four scenarios. The five contracts below were inherited by the later Phase 6–8 work without modification:
 
 1. **Plugin = workflow contract, not UI extension** (§1, §13). The Figma-era assumption "plugin owns a panel inside the host" is replaced by "plugin is a manifest + atoms + assets that the agent consumes through `ApplyResult`." Scenarios 1, 2, and 4 inherit this without change; nothing about migration or production handoff requires reopening this decision.
 2. **`od.pipeline` + devloop convergence** (§10.1, §10.2). `repeat: true` + `until` is the convergence mechanism scenarios 1, 2, 3 all need: scenario 3 converges on critique score, scenario 1 converges on token-map fidelity, scenario 2 converges on `build-test` passing. The same loop primitive works for all three; only the `until` signal differs.
 3. **GenUI cross-conversation persisted state** (§10.3, `genui_surfaces` table in §11.4). One-time Figma OAuth, brand confirmation, target stack confirmation, and direction picks are remembered at `project` / `conversation` / `run` tier and reused across subsequent multi-turn chats. Scenarios 1 (Figma OAuth) and 2 (target stack confirmation) depend on this primitive; without it, every new conversation re-asks and the experience collapses.
 4. **`AppliedPluginSnapshot` immutability + replay** (§8.2.1). Reproducibility across plugin upgrades is what makes scenarios 1 and 2 auditable six months later — "which figma file → which token map → which generated diff" is recoverable from one snapshot row. Scenario 3 benefits less but pays no cost.
-5. **CLI-first headless mode** (§11.7, §14.3). This is the v1 fallback path for scenario 4: OD stages SKILL.md / DESIGN.md / craft / generated artifacts into a project cwd; Cursor / Claude Code / Codex acts as the patch-applying code agent in that cwd. The handoff is already specified in §14.3; §21.5 below makes this the explicit v1 contract for "design → production code".
+5. **CLI-first headless mode** (§11.7, §14.3). This was the v1 fallback path for scenario 4 and remains supported: OD stages SKILL.md / DESIGN.md / craft / generated artifacts into a project cwd; Cursor / Claude Code / Codex can act as the patch-applying code agent in that cwd.
 
-What v1 explicitly does **not** solve, listed once so it is unambiguous:
+Original v1 gaps and their current disposition:
 
-- A native `figma-extract` / `token-map` atom pair (scenario 1).
-- A native `code-import` / `rewrite-plan` / `patch-edit` / `diff-review` chain plus `build-test` evaluator (scenario 2 and the patch side of scenario 4).
-- The §20.3 production-handoff contract end-to-end (scenario 4 native path).
-- Repo-aware multi-file diff orchestration with build evidence inside OD (scenario 4 native path).
+- The native `figma-extract` / `token-map` pair and bundled scenario shipped in Phase 6.
+- The native `code-import` / `design-extract` / `token-map` / `rewrite-plan` / `patch-edit` / `build-test` / `diff-review` / `handoff` chain shipped in Phase 7.
+- Phase 8 added native diff-review decisions and handoff promotion, including guarded `deployable-app` promotion.
+- Generic one-click export/deploy remains incomplete; the runtime requires an explicit CLI or Docker export target before `deployable-app` promotion.
 
 ### 21.3 Per-scenario gap analysis
 
@@ -2059,44 +2060,41 @@ What v1 explicitly does **not** solve, listed once so it is unambiguous:
 - The Figma OAuth flow already routes through the GenUI `oauth-prompt` surface kind with `oauth.route='connector'` once a Figma connector is registered (§10.3.1). Cross-conversation persistence is automatic via `genui_surfaces` (§10.3.3).
 - `parentArtifactId` chaining (§11.5.1) lets a migrated artifact become the seed for a follow-up `tune-collab` run without re-extracting.
 
-**What is missing for v1 native delivery:**
+**Post-v1 implementation status:**
 
-- `figma-extract` atom — extract Figma node tree, tokens, and assets from a Figma file URL through Figma REST. Spec reserves the id; implementation is out of v1 scope.
-- `token-map` atom — map the extracted tokens onto the active OD design system (`design-systems/<id>/DESIGN.md`). Spec reserves the id.
-- The Figma connector itself, if not already registered in `apps/daemon/src/connectors/`. (If yes, only the two atoms above are missing.)
+- `figma-extract` now fetches and walks the Figma file through REST, writing the extracted tree, tokens, and assets under the run cwd.
+- `token-map` now maps either Figma- or code-extracted tokens onto the active OD design system.
+- `plugins/_official/scenarios/od-figma-migration/open-design.json` supplies the bundled reference pipeline.
 
-**Why this scenario is the easiest of the three "missing" ones to land:**
+**Why this was the easiest of the three original gaps to land:**
 
 - The input boundary is well-defined: Figma file URL + OAuth token. No "arbitrary repository structure" to reason about.
 - The output boundary is HTML / artifact, not a real repo patch. Patch-safety is not on the critical path.
 - Critique can stay LLM-subjective in the first pass; objective evaluators (`visual-diff` against the original Figma export) can be added incrementally.
 
-**Suggested landing pattern:** ship `figma-extract` + `token-map` as an out-of-tree plugin first (so it can iterate without blocking the daemon release cadence); promote them into first-party atoms once the Figma REST surface and the token-mapping heuristics stabilize.
+**Landing result:** the proposed promotion is complete: both atoms and the bundled scenario now live in the first-party plugin catalog. Out-of-tree Figma integrations remain a supported extension path, not the native fallback.
 
 #### 21.3.2 Scenario 2: Existing-codebase refresh (`code-migration`)
 
 **What v1 already gives you for free:**
 
-- The `code-migration` `taskKind` and the recommended pipeline shape `code-import → design-extract → rewrite-plan → generate → diff-review` are reserved.
+- The `code-migration` `taskKind` and the recommended pipeline shape `code-import → design-extract → token-map → rewrite-plan → patch-edit ↔ build-test → diff-review → handoff` were reserved by v1.
 - `ArtifactManifest` already supports `artifactKind: 'code-diff'`, `renderKind: 'diff' | 'repo'`, and `handoffKind: 'patch'` (§11.5.1).
 - The `tune-collab` taskKind plus `parentArtifactId` chain is the right primitive for "first generate a candidate refresh, then iterate on the same artifact". v1 ships this primitive.
 
-**What is missing for v1 native delivery (everything in §20.3):**
+**Post-v1 implementation status:**
 
-- `code-import` atom — clone or read an existing repo, extract design-relevant structure (current component tree, current token usage, current routing model). Reserved id only.
-- `design-extract` atom — extract design tokens from source code / Figma / screenshots. Reserved id only.
-- `rewrite-plan` atom — long-running multi-file rewrite planning that fits §20.3's "Component mapping" + "Target stack contract". Reserved id only.
-- `patch-edit` atom — small-step file patches that respect the rewrite plan and surface `parentArtifactId` correctly. Reserved id only.
-- `diff-review` atom — render rewrite as a reviewable diff for user / agent review. Reserved id only.
-- `build-test` evaluator atom (§20.2) — run package-scoped build / typecheck / lint / test commands for code outputs; emit a critique signal. Reserved name only.
+- `code-import`, `design-extract`, `token-map`, `rewrite-plan`, `patch-edit`, `build-test`, `diff-review`, and `handoff` all have daemon workers and first-party atom plugins.
+- `build-test` emits `build.passing` and `tests.passing`, and the `until` evaluator accepts those signals directly.
+- `plugins/_official/scenarios/od-code-migration/open-design.json` supplies the bundled patch/edit ↔ build/test devloop and diff-review handoff.
 
-**Why this is the hardest of the three "missing" scenarios:**
+**Why this remains the most input-sensitive scenario:**
 
 - Input is "arbitrary repo with arbitrary build/test config"; the agent cannot guess.
 - Output is a repo patch with build evidence; patch-safety is on the critical path.
-- The `until` signal for the devloop is "build + test pass + visual-diff threshold met", which couples three of the missing atoms.
+- Build and test convergence is native; objective visual-diff convergence remains a separate future evaluator.
 
-**v1 fallback (also documented in §21.5):** instead of running this end-to-end inside OD, point users at the §14.3 headless pipeline — OD generates a `html-prototype` or `implementation-plan` artifact; Cursor / Claude Code applies the patch in the user's repo cwd and runs build/test. v1 does not block this workflow; it just does not own the patch-application step.
+**Original v1 fallback (still supported, also documented in §21.5):** OD can generate a `html-prototype` or `implementation-plan` artifact and hand it to Cursor / Claude Code in the user's repo cwd. Phase 7 added the native reference pipeline; it did not remove this external-agent path.
 
 #### 21.3.3 Scenario 3: 0→1 design (`new-generation`)
 
@@ -2115,51 +2113,51 @@ What v1 explicitly does **not** solve, listed once so it is unambiguous:
 
 #### 21.3.4 Scenario 4: Design → deliverable production code (`tune-collab` extended)
 
-**Reality check (§20.3 is explicit about this):**
+**Current status (§20.3):**
 
-- v1 caps `handoffKind` at `'design-only' | 'implementation-plan' | 'patch'`. `'deployable-app'` is reserved in `ArtifactManifest` (§11.5.1) but **not implementable in v1** without the §20.3 contract.
-- The five §20.3 requirements (target stack contract, design-token mapping, component mapping, patch safety, delivery evidence) collectively assume scenario 2's atom chain is already in place — `build-test`, `rewrite-plan`, `patch-edit`, `diff-review`. Without scenario 2, scenario 4 cannot land natively.
+- The Phase 7 code-migration chain now provides target-stack planning, token/component mapping, patch safety, build/test evidence, and diff review.
+- The Phase 8 entry slice adds an auto-derived native diff-review choice surface and handoff promotion. `handoffKind: 'deployable-app'` is implemented, but only when review accepts the work, build and tests pass, and a CLI or Docker export target is recorded.
 
 **v1 contract (lock this in, see §21.5):**
 
 - "Design → production code" in v1 is a **two-product handoff**: OD owns the design substrate (SKILL.md / DESIGN.md / craft / generated artifacts staged into project cwd, plus `od files`-managed artifact bookkeeping); the user's existing code agent (Cursor / Claude Code / Codex / Gemini CLI) owns the actual repo patch in the user's repo cwd.
 - The handoff surface is the §14.3 headless pipeline plus `od files read` / `od files watch` for the code agent to consume artifacts inline.
 
-**Native v1 delivery requires:**
+**What remains beyond the entry slice:**
 
-- Scenario 2 implemented end-to-end (everything in §21.3.2).
-- Plus repo-aware multi-file patch orchestration with build evidence captured inside OD (a meaningful step beyond §20.3 itself).
-- Plus a UI / CLI surface for "review the patch, apply or reject" that is not part of v1.
+- generic export/deploy orchestration that creates a concrete CLI or Docker target instead of merely recording one supplied by the caller;
+- objective visual/regression evaluators from §20.2;
+- product-specific apply/rollback semantics for repositories that need more than the existing review decision and patch workflow.
 
-This scenario is therefore the largest gap between "what the spec describes" and "what v1 ships natively". Future spec patches should land §20.3 first, then the missing repo-aware orchestration, before claiming this scenario as native.
+The original v1 gap is therefore narrowed but not erased: native review and guarded handoff promotion exist, while generic one-click production delivery does not.
 
-### 21.4 Suggested delivery sequence
+### 21.4 Delivery sequence and status
 
-The §16 phased plan stays as-is; this is a delta-only roadmap that maps the gaps in §21.3 onto incremental phases without restructuring the existing plan.
+The §16 phased plan stays as-is. The table retains the original sequencing decision and records the later delivery status.
 
 | Order | Phase | Scope | Why this order |
 | --- | --- | --- | --- |
 | 1 | §16 Phase 1 + Phase 2A (already planned) | Land scenario 3 end-to-end exactly as written | Validates the plugin-as-workflow-contract thesis on the cleanest scenario |
 | 2 | §16 Phase 2A++ (small addition) | Lift `visual-diff` and `brand-consistency-check` from §20.2 into Phase 2A | Gives `critique-theater`'s `until` condition an objective signal so scenarios 1, 2, 3 all converge on stronger criteria |
 | 3 | §16 Phase 2B + Phase 3 (already planned) | Marketplace deep UI + federated trust | Unlocks third-party plugin distribution before any cross-product handoff is documented |
-| 4 | New "Phase 6 — Figma migration native path" | Implement `figma-extract` and `token-map` atoms; promote them into first-party once stable; ship the official `figma-migration` plugin | Easiest of the three missing scenarios; bounded input/output; reuses GenUI OAuth + `parentArtifactId` chaining without new primitives |
-| 5 | New "Phase 7 — Production handoff contract (§20.3 §21.3.2)" | Implement `code-import`, `design-extract`, `rewrite-plan`, `patch-edit`, `diff-review`, `build-test`; freeze the target-stack contract; freeze the design-token mapping contract | Addresses scenario 2 natively and unblocks scenario 4 native path |
-| 6 | New "Phase 8 — Native production code delivery" | Repo-aware multi-file patch orchestration inside OD; native "review and apply" surface; promote `handoffKind: 'deployable-app'` from reservation to implementation | Closes scenario 4 natively; depends on Phase 7 |
+| 4 | Phase 6 — Figma migration native path **(shipped)** | `figma-extract`, `token-map`, and the official `figma-migration` plugin are implemented | Bounded input/output; reuses GenUI OAuth + `parentArtifactId` chaining without new primitives |
+| 5 | Phase 7 — Production handoff contract (§20.3 §21.3.2) **(shipped)** | The code-import through handoff atom chain, target-stack plan, token mapping, and build/test signals are implemented | Addresses scenario 2 natively and unblocks scenario 4's handoff path |
+| 6 | Phase 8 — Native production code delivery **(entry slice shipped)** | Native diff-review decisions and guarded `deployable-app` promotion are implemented; generic export/deploy orchestration remains | Narrows scenario 4 without claiming generic one-click delivery |
 
-Phases 6, 7, 8 are deliberately enumerated **after** the existing §16 Phase 5 (cloud deployment) so they do not interleave with the headless / Docker stabilization story. Their internal ordering is fixed: 7 must precede 8; 6 can run in parallel with 7 because the two scenarios share only `parentArtifactId` chaining, not atom implementations.
+Phases 6, 7, and 8 were deliberately enumerated **after** the existing §16 Phase 5 (cloud deployment) so they did not interleave with the headless / Docker stabilization story. Their implementation preserved that dependency: Phase 7 supplied the build/review evidence consumed by the Phase 8 handoff entry slice.
 
 ### 21.5 OD ↔ code-agent handoff as the v1 production-code path
 
-Until Phases 6, 7, and 8 land, the production-code experience for users follows the §14.3 headless pipeline. This subsection lifts that pattern into a v1 contract so external code-agent integrations can rely on it without re-reading §14.3.
+Before the Phase 6–8 slices landed, the production-code experience followed the §14.3 headless pipeline. This subsection retains that v1 contract because external code-agent integrations remain supported alongside the native migration/review path.
 
 The contract has four locked points:
 
 1. **OD stages the design substrate into a project cwd.** Per §14.3, the daemon writes SKILL.md / DESIGN.md / craft into a staged skill-context directory and generated artifacts into the project cwd via `od files`. The cwd is discoverable via `od project info <id> --json | jq -r .cwd`.
 2. **The user's code agent operates in that cwd or in their own repo cwd.** OD does not run inside the IDE; it runs as a daemon next to the IDE. Cursor / Claude Code / Codex / Gemini CLI are the patch-applying surface.
-3. **Bookkeeping stays in OD.** `ArtifactManifest` (§11.5.1) records `sourcePluginSnapshotId`, `sourceTaskKind: 'tune-collab'` (or `'code-migration'` once Phase 7 lands), and `handoffKind: 'patch'`; `od files` tracks every artifact byte. Even when the code agent does the patch, OD remains the audit log.
+3. **Bookkeeping stays in OD.** `ArtifactManifest` (§11.5.1) records `sourcePluginSnapshotId`, `sourceTaskKind: 'tune-collab' | 'code-migration'`, and the handoff tier; `od files` tracks every artifact byte. Even when an external code agent does the patch, OD remains the audit log.
 4. **Re-entry into OD is single-step.** The user can reapply any plugin (or a different plugin) on top of the same project at any time via the inline rail (§8) or `od plugin apply ... --project <id>`. `parentArtifactId` chaining (§11.5.1) preserves the lineage across the OD ↔ code-agent boundary.
 
-This is the answer to the user-level question "can I use this plugin system to deliver business code in v1?": yes, but the delivery is OD-substrate + external-code-agent-handoff, not OD-native one-click. Phase 8 (§21.4) is the path to native one-click delivery.
+For the original v1 question "can I use this plugin system to deliver business code?", the answer was OD substrate + external-code-agent handoff. The current runtime also has native migration, review, and guarded handoff-promotion slices, but generic one-click export/deploy is still not implied.
 
 ### 21.6 Reader contract
 
@@ -2167,7 +2165,7 @@ This section is the **single source of truth for "what is shipped vs. what is re
 
 ## 22. Authoring extension points: building uncovered scenarios on top of v1 substrate
 
-§21 records what v1 ships natively. This section records the **other half of the openness story**: even though v1 only ships a complete native pipeline for scenario 3 (`new-generation`), a third-party plugin author can build runnable plugins for scenarios 1, 2, and 4 today, on the v1 substrate, **without waiting for the Phase 6 / 7 / 8 native landings declared in §21.4**. The two halves taken together — what OD ships natively (§21) plus what the substrate lets third parties build (§22) — answer the question "is the plugin system genuinely open?" with a concrete yes.
+§21 records what OD ships natively. This section records the **other half of the openness story**: on the original v1 substrate, third-party authors could build scenarios 1, 2, and 4 before the Phase 6 / 7 / 8 slices landed. Those extension paths remain valid even though scenarios 1 and 2 now have first-party reference pipelines and scenario 4 has a native review/handoff entry slice.
 
 ### 22.1 Substrate vs implementation
 
@@ -2176,7 +2174,7 @@ The distinction this section formalizes:
 - **Substrate** = the primitives the v1 spec hands to plugin authors: manifest fields, capability vocabulary, atom catalog, pipeline / devloop / GenUI / connector / MCP / `od files` / `parentArtifactId` / `AppliedPluginSnapshot` (§5–§11.5.1).
 - **Implementation** = which atoms are built into the daemon as one-line `od.pipeline` entries (§10).
 
-A scenario is "v1 native" only when both substrate and implementation are present. A scenario is "v1 community-buildable" when the substrate is present and the implementation gap can be filled by a plugin author using the substrate's escape hatches. Scenarios 1, 2, and 4 are community-buildable today; the implementation gaps live in atom ergonomics, not capability gates.
+A scenario is "native" only when both substrate and implementation are present. A scenario is "community-buildable" when the substrate is present and an implementation gap can be filled through the substrate's escape hatches. In the original v1 baseline, scenarios 1, 2, and 4 were community-buildable; Phase 6 and 7 later made scenarios 1 and 2 native reference paths.
 
 ### 22.2 Extension-point cookbook
 
@@ -2200,7 +2198,7 @@ Phrased as a rule: **OD-native atom missing → plugin authors compose `MCP serv
 
 ### 22.3 Worked examples
 
-Three sketches of how a plugin author covers a "v1 not native" scenario today.
+Three historical v1 fallback sketches. They remain useful as examples of author extension points, but no longer describe the only implementation path for scenarios 1 and 2.
 
 #### 22.3.1 Figma migration without first-party `figma-extract` / `token-map`
 
@@ -2240,7 +2238,7 @@ Manifest sketch:
 }
 ```
 
-The accompanying `SKILL.md` teaches the agent the procedure: "Figma URL in → call `figma-rest.get_file` → walk node tree → read DESIGN.md from active design system → emit HTML in cwd preserving Figma layout but rebinding tokens to DESIGN.md → live-artifact preview → critique loop." No first-party `figma-extract` or `token-map` needed; those atoms would only flatten the SKILL.md instructions into a reusable prompt fragment.
+The accompanying `SKILL.md` teaches the agent the procedure: "Figma URL in → call `figma-rest.get_file` → walk node tree → read DESIGN.md from active design system → emit HTML in cwd preserving Figma layout but rebinding tokens to DESIGN.md → live-artifact preview → critique loop." This remains a valid custom path; the first-party `figma-extract` and `token-map` atoms now provide the reusable native path.
 
 #### 22.3.2 Existing-codebase refresh without first-party `code-import` / `rewrite-plan` / `build-test`
 
@@ -2254,12 +2252,12 @@ Manifest declares `bash` + `subprocess` + `fs:write`; SKILL.md guides the agent 
 4. devloop stage with `repeat: true`: per iteration, `file-edit` a small batch → `bash pnpm typecheck && pnpm test` → encode build/test status into a `critique-theater` event whose `score` reflects pass/fail (5 = both pass, 1 = build fails). devloop terminates on `critique.score>=4 || iterations>=8`.
 5. Final `critique-theater` over visual + token consistency.
 
-Two ergonomic gaps vs. native (Phase 7 in §21.4):
+Two ergonomic gaps in the original v1 fallback, both closed by the Phase 7 entry slice:
 
 - Build/test verdict is encoded into `critique.score` rather than its own `until` signal — works, but the run-log reader must know the convention.
 - No native diff-review UI; plugin uses a `confirmation` surface paired with raw diff text in the prompt.
 
-Both gaps are fixed by Phase 7 promoting `build-test` and `diff-review` into first-party atoms with their own pipeline and surface semantics, plus the §22.4 limit-1 patch that opens `until` to atom-declared signals.
+Phase 7 promoted `build-test` and `diff-review` into first-party atoms and added the `build.passing` / `tests.passing` convergence signals. The broader arbitrary atom-declared-signal contract remains future work.
 
 #### 22.3.3 Design → production code via OD ↔ code-agent handoff
 
@@ -2273,9 +2271,9 @@ This is exactly the §21.5 contract; the plugin author writes the SKILL.md that 
 
 ### 22.4 Real substrate-level limits (plugin authors cannot work around these in v1)
 
-These three are not ergonomics gaps — they are closed-vocabulary decisions in the v1 substrate and require future spec patches to lift:
+These are closed-vocabulary decisions in the substrate. One was partially lifted for the Phase 7 build/test path; the broader limits remain:
 
-1. **`until` signal vocabulary is closed** (§10.1). Only `critique.score`, `iterations`, `user.confirmed`, `preview.ok` are accepted. A plugin needing `build.passing`, `tests.passing`, `visual_diff.delta < 0.05`, or any other custom convergence signal must encode it through `critique.score` (loss of clarity) or through a `confirmation` surface (loss of automation). Phase 7 (§21.4) and patch 1 in §23.3.1 jointly extend this vocabulary so atoms can declare named signals; until then, scenario 2's "build/test pass = converged" cannot be expressed natively.
+1. **`until` signal vocabulary is closed** (§10.1). The evaluator now accepts `critique.score`, `iterations`, `user.confirmed`, `preview.ok`, `build.passing`, and `tests.passing`. Phase 7 therefore supports native build/test convergence, but arbitrary atom-declared signals such as `visual_diff.delta` are still not accepted.
 2. **Atom registry is closed**. `od.pipeline.stages[*].atoms[]` strings must resolve against §10's catalog (implemented + reserved). Plugin authors cannot register a new atom name. Workaround: ship the new capability as an MCP tool, attach it to the nearest generic atom (`file-write` / `todo-write` / `critique-theater`); the daemon-emitted `pipeline_stage_started` / `pipeline_stage_completed` events lose granularity for the new step.
 3. **Core GenUI surface kinds are closed in v1** (§10.3.1). The product-owned renderer has only `form` / `choice` / `confirmation` / `oauth-prompt` as built-ins. Plugin authors who want side-by-side diff review, canvas annotation, 3D preview, or other high-fidelity UI must use the separate gated `od.genui.surfaces[].component` sandbox path when available; they cannot mint new built-in surface kinds or override the main renderer's styling contract.
 
@@ -2287,7 +2285,7 @@ The recommended pattern for closing each gap, generalized from §21.3.1's Figma 
 
 1. **Out-of-tree plugin first.** Plugin author publishes a community plugin doing the missing work via §22.2 escape hatches. Iteration cadence is independent of daemon releases.
 2. **Stabilize the contract.** Once the SKILL.md instructions, MCP tool surface, and pipeline shape stabilize, distill them into a candidate first-party atom contract: atom id, prompt fragment, tool gating, optional `until` signals, optional GenUI surface defaults.
-3. **Promote into a first-party atom.** Ship the atom under §10's catalog (move from `(planned)` to implemented), and ship the bundled scenario plugin (§23) that consumes the new atom. The promotion is transparent to the original plugin: it can either keep its SKILL.md path or switch to referencing the new atom name.
+3. **Promote into a first-party atom.** Ship the atom under §10's catalog (move a reserved entry to implemented), and ship the bundled scenario plugin (§23) that consumes the new atom. The promotion is transparent to the original plugin: it can either keep its SKILL.md path or switch to referencing the new atom name.
 4. **Update §21 and §23.** Per §21.6 the coverage matrix must be updated in the same patch that promotes the atom; per §23.6 any kernel-boundary change (e.g. extending `until`-signal vocabulary) must be reflected in §23.3 too.
 
 This is how the spec stays honest: the absence of a first-party atom is never a permanent gap, it is a "pre-promotion" state of community work that has not been distilled yet.
@@ -2350,8 +2348,8 @@ The migration is mechanical: every prose constant in `system.ts` has a one-to-on
 Bundled scenario plugins and the pipeline fallback resolver now exist. The remaining work is to remove any product entrypoint that still hand-builds a default stage list instead of selecting a scenario plugin. The target remains: when `od.pipeline` is omitted, daemon/product code resolves a bundled scenario plugin per `taskKind` or explicit entrypoint route, then uses that scenario's `od.pipeline`.
 
 - `plugins/_official/scenarios/od-new-generation/open-design.json`
-- `plugins/_official/scenarios/od-figma-migration/open-design.json` (after Phase 6)
-- `plugins/_official/scenarios/od-code-migration/open-design.json` (after Phase 7)
+- `plugins/_official/scenarios/od-figma-migration/open-design.json`
+- `plugins/_official/scenarios/od-code-migration/open-design.json`
 - `plugins/_official/scenarios/od-tune-collab/open-design.json`
 
 Each ships only an `od.pipeline` and (optionally) some default `od.genui.surfaces[]` for that scenario. Daemon resolution becomes: "no `od.pipeline` provided + has `taskKind` → look up the bundled scenario plugin matching that `taskKind` → use its `od.pipeline`."
@@ -2410,7 +2408,7 @@ Three concrete payoffs justify the patch sequence:
 
 1. **Audit surface convergence.** Every byte that enters the agent system prompt is reachable from a plugin manifest + SKILL.md. Reading `plugins/_official/...` gives a complete answer to "what is OD telling the agent to do today?"; no codebase grep needed.
 2. **Replaceable taste.** Enterprise deployments, vertical editions (real-estate / gaming / legal / financial-reporting), and partner integrations can ship their own `plugins/_official/scenarios/od-<taskKind>` without forking the daemon. The product taste — discovery questioning style, critique axes, default pipeline shape — becomes a content concern, not a code concern.
-3. **First-party work runs the same path as third-party.** When OD ships Phase 6 / 7 / 8 (§21.4), those scenarios land as first-party plugins inside `plugins/_official/scenarios/`, exercising the same loader, resolver, snapshot, and GenUI runtime that any community plugin uses. If first-party hits an ergonomics wall, third-party will hit it harder; this is the strongest dogfooding pressure available.
+3. **First-party work runs the same path as third-party.** The Phase 6 / 7 scenarios and Phase 8 entry slice (§21.4) landed as first-party plugins and atom workers under `plugins/_official/`, exercising the same loader, resolver, snapshot, and GenUI runtime that community plugins use. If first-party hits an ergonomics wall, third-party will hit it harder; this is the strongest dogfooding pressure available.
 
 ### 23.6 Relation to §21 and §22
 

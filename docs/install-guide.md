@@ -1,6 +1,6 @@
 # One-Click Install Guide
 
-**Parent:** [`spec.md`](spec.md) · **Siblings:** [`self-hosting.md`](self-hosting.md) · [`network-security.md`](network-security.md)
+**Parent:** [`spec.md`](spec.md) · **Related:** [`deployment/docker.md`](deployment/docker.md) · [`deploy/README.md`](../deploy/README.md)
 
 Deploy Open Design on Linux or macOS with a single command. The installer wraps the existing Docker Compose stack — no build step required.
 
@@ -16,7 +16,7 @@ bash deploy/scripts/install.sh
 
 ## Prerequisites
 
-The only requirement is Docker with the Compose plugin.
+The supported Linux path requires Docker with the Compose v2 plugin. On macOS, the installer can also detect Podman, although Docker Desktop remains the documented path.
 
 | Platform | Minimum version | Install |
 |----------|----------------|---------|
@@ -24,7 +24,7 @@ The only requirement is Docker with the Compose plugin.
 | Docker Compose plugin | 2.20 | Bundled with Docker Desktop; `apt install docker-compose-plugin` on Linux |
 | Docker Desktop (macOS/Windows) | 4.25 | [docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop/) |
 
-The installer checks for Docker and offers to install it automatically on Ubuntu/Debian, Fedora, and macOS (via Homebrew). Use `--skip-docker-install` to skip this step.
+The installer checks for Docker or Podman and, on Ubuntu/Debian, Fedora, and macOS with Homebrew, offers to install Docker after confirmation; otherwise it prints the manual installation guidance. Use `--skip-docker-install` to skip the prompt. Linux uses the Docker Compose v2 override and therefore requires `docker compose` v2.17 or later.
 
 > **MCP note:** Docker/Compose installs run the daemon inside the container. The MCP client snippets shown in Settings are stdio/local-path based and require a local/source install for now. Container-friendly MCP transport will be added in a follow-up.
 
@@ -59,12 +59,12 @@ Memory limit [384m]:
 |--------|---------|-------|
 | **Docker image** | `ghcr.io/nexu-io/od:latest` | Use `:latest` for the newest stable image, `:<version>` for a pinned release, or `@sha256:<digest>` for reproducibility |
 | **Port** | `7456` | The port the daemon listens on. Must not be in use. |
-| **Allowed origins** | _(empty)_ | CORS origins for reverse-proxy setups. See [`network-security.md`](network-security.md). Leave empty for localhost-only use. |
+| **Allowed origins** | _(empty)_ | CORS origins for reverse-proxy setups. See [`deploy/README.md`](../deploy/README.md). Leave empty for localhost-only use. |
 | **Memory limit** | `384m` | Container memory cap. Raise for large concurrent agent runs. |
 
 After you confirm, the installer:
 
-1. Writes a `deploy/.env` file (backs up any existing one).
+1. Writes a `deploy/.env` file (backs up any existing one) and generates a fresh `OD_API_TOKEN`.
 2. Runs `docker compose pull` to fetch the image.
 3. Runs `docker compose up -d --no-build` to start the container.
 4. Polls `/api/health` for up to 60 seconds to confirm the daemon is ready.
@@ -179,7 +179,7 @@ All settings live in `deploy/.env`. Edit it directly or re-run the installer to 
 | `OPEN_DESIGN_MEM_LIMIT` | `384m` | Container memory cap |
 | `NODE_OPTIONS` | `--max-old-space-size=192` | Node.js heap cap inside the container |
 
-The container always binds `127.0.0.1:<port>:7456` — the daemon is never directly exposed to the network. To allow remote access, put an authenticated reverse proxy in front. See [`network-security.md`](network-security.md).
+The container always binds `127.0.0.1:<port>:7456` — the daemon is never directly exposed to the network. To allow remote access, put an authenticated reverse proxy in front. See [`deploy/README.md`](../deploy/README.md) for the authentication and allowed-origin contract.
 
 ## Troubleshooting
 
@@ -199,5 +199,5 @@ The container always binds `127.0.0.1:<port>:7456` — the daemon is never direc
 
 - Docker Compose config: [`deploy/docker-compose.yml`](../deploy/docker-compose.yml)
 - Environment template: [`deploy/.env.example`](../deploy/.env.example)
-- Self-hosting topologies (PM2, systemd native): [`docs/self-hosting.md`](self-hosting.md)
-- Network security and remote access: [`docs/network-security.md`](network-security.md)
+- Beginner Docker walkthrough: [`docs/deployment/docker.md`](deployment/docker.md)
+- Authentication, remote access, and Linux CLI mounts: [`deploy/README.md`](../deploy/README.md)

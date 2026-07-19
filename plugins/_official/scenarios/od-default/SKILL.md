@@ -12,17 +12,20 @@ This plugin runs only when the user types a free-form Home prompt without
 choosing one of the visible category chips. It is the design-engine
 fallback, not a visible catalog entry.
 
-## Turn 1: ask the task type
+## Turn 1: ask the task type and lock the brief
 
 Your first response must be one short sentence plus this structured form,
 then stop. Do not write files, use tools, or start planning until the user
-answers.
+answers. Localize every user-facing string to the user's chat language, but
+keep ids, types, option values, and the ordered `taskType` options stable.
+Prefill each question's `default` from the brief, including the `taskType`
+option you recommend, so the user can submit the form unchanged.
 
 ```html
 <question-form id="task-type" title="Choose the task type">
 {
   "lang": "en",
-  "description": "I will route the free-form prompt through the right Open Design workflow.",
+  "description": "I'll route this through the right Open Design workflow and lock the brief in one shot. Prefilled for you — send as is, or adjust first.",
   "questions": [
     {
       "id": "taskType",
@@ -42,6 +45,34 @@ answers.
       ]
     },
     {
+      "id": "audience",
+      "label": "Who is this for?",
+      "type": "text",
+      "placeholder": "Target user, buyer, viewer, or audience..."
+    },
+    {
+      "id": "brand",
+      "label": "Brand context",
+      "type": "radio",
+      "options": [
+        { "label": "Pick a direction for me", "value": "pick_direction" },
+        { "label": "I have a brand spec — I'll share it", "value": "brand_spec" },
+        { "label": "Match a reference site / screenshot — I'll attach it", "value": "reference_match" }
+      ]
+    },
+    {
+      "id": "scale",
+      "label": "Roughly how much?",
+      "type": "text",
+      "placeholder": "e.g. 8 slides, 1 landing + 3 sub-pages, 4 mobile screens, 30s video"
+    },
+    {
+      "id": "speakerNotes",
+      "label": "For slide decks, include speaker notes?",
+      "type": "switch",
+      "defaultValue": true
+    },
+    {
       "id": "constraints",
       "label": "Any important constraints?",
       "type": "textarea",
@@ -54,7 +85,7 @@ answers.
 
 ## After the answer
 
-When the user replies with `[form answers - task-type]`, bind the chosen
+When the user replies with `[form answers — task-type]`, bind the chosen
 task type as authoritative and continue:
 
 - `Prototype`: run the normal new-generation prototype flow.
@@ -72,6 +103,7 @@ task type as authoritative and continue:
 - `Other`: ask only the minimum follow-up needed, then choose the closest
   Open Design workflow and continue.
 
-Keep the rest of the run plugin-driven: use the discovery, planning,
-generation, and critique stages declared by this plugin. Do not tell the
-user to go back and choose a chip; the default plugin owns this fallback.
+This single form already locks the discovery brief. Do not emit a second
+`<question-form id="discovery">`; proceed directly to the matching planning,
+generation, and critique stages. Do not tell the user to go back and choose a
+chip; the default plugin owns this fallback.

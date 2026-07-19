@@ -347,6 +347,10 @@ function providerDisplayName(provider: MemoryExtractionRecord['provider'] | unde
       return 'Google Gemini';
     case 'ollama':
       return 'Ollama';
+    case 'senseaudio':
+      return 'SenseAudio';
+    case 'aihubmix':
+      return 'AIHubMix';
     case 'openai':
       return 'OpenAI';
     default:
@@ -578,6 +582,9 @@ function describeRecord(
     if (record.phase !== 'skipped') return null;
     const reason: MemoryExtractionSkipReason | undefined = record.reason;
     if (reason === 'no-provider') return t('settings.memoryExtractionSkipNoProvider');
+    if (reason === 'unsupported-provider') {
+      return t('settings.memoryExtractionSkipUnsupportedProvider');
+    }
     if (reason === 'memory-disabled') return t('settings.memoryExtractionSkipDisabled');
     if (reason === 'chat-disabled') return 'Chat conversation learning is off.';
     if (reason === 'empty-message') return t('settings.memoryExtractionSkipEmpty');
@@ -966,17 +973,28 @@ export function MemorySection({
     return entries.filter((e) => e.type === filter);
   }, [entries, filter]);
 
-  // The "no API key" banner only shows when the most recent attempt
-  // skipped for that specific reason. We don't show it for
-  // memory-disabled (the user's own toggle) or empty-message (a
-  // routine no-op on tool-only turns); those skips just appear in the
-  // history list with a muted subtitle.
-  const showNoProviderBanner = useMemo(() => {
+  // The provider banner only shows when the most recent attempt skipped
+  // because extraction could not resolve a usable provider. We don't show it
+  // for memory-disabled (the user's own toggle) or empty-message (a routine
+  // no-op on tool-only turns); those skips just appear in the history list
+  // with a muted subtitle.
+  const providerConfigBanner = useMemo(() => {
     const latest = extractions[0];
-    return Boolean(
-      latest && latest.phase === 'skipped' && latest.reason === 'no-provider',
-    );
-  }, [extractions]);
+    if (!latest || latest.phase !== 'skipped') return null;
+    if (latest.reason === 'no-provider') {
+      return {
+        title: t('settings.memoryNoProviderBannerTitle'),
+        body: t('settings.memoryNoProviderBannerBody'),
+      };
+    }
+    if (latest.reason === 'unsupported-provider') {
+      return {
+        title: t('settings.memoryNoProviderBannerTitle'),
+        body: t('settings.memoryUnsupportedProviderBannerBody'),
+      };
+    }
+    return null;
+  }, [extractions, t]);
 
   // Now-clock for relative timestamps in the extraction list. Refresh
   // every 30s so "12s ago" doesn't get stuck reading "12s ago" five
@@ -1737,10 +1755,10 @@ export function MemorySection({
         </div>
       ) : null}
 
-      {enabled && showNoProviderBanner ? (
+      {enabled && providerConfigBanner ? (
         <div role="status" className="memory-noprovider-banner">
-          <strong>{t('settings.memoryNoProviderBannerTitle')}</strong> —{' '}
-          {t('settings.memoryNoProviderBannerBody')}
+          <strong>{providerConfigBanner.title}</strong> —{' '}
+          {providerConfigBanner.body}
         </div>
       ) : null}
 

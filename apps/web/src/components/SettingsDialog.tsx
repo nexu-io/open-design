@@ -67,8 +67,10 @@ import {
   SearchableModelSelect,
 } from './modelOptions';
 import {
+  BYOK_PROVIDER_PRESETS,
   DEFAULT_NOTIFICATIONS,
   DEFAULT_ORBIT,
+  defaultKnownProviderModel,
   isStoredMediaProviderEntryEmpty,
   isStoredMediaProviderEntryPresent,
   KNOWN_PROVIDERS,
@@ -221,7 +223,7 @@ interface ByokProviderPreset {
   title: string;
   protocol: ApiProtocol;
   baseUrl: string;
-  model: string;
+  preferredModels: readonly string[];
   custom?: boolean;
 }
 
@@ -315,8 +317,8 @@ export function deriveAboutUpdateControl(
           primaryAction: 'quit',
           primaryLabelKey: 'updater.quitButton',
           showReleaseLink: false,
-          statusKey: 'settings.updateQuitFailed',
-          statusTone: 'warning',
+          statusKey: model.updateKind === 'payload' ? 'updater.installingRestart' : 'updater.opening',
+          statusTone: 'neutral',
         };
       }
       const canInstallUpdate = model.canOpenInstaller || model.canApplyInPlace;
@@ -343,14 +345,22 @@ export function deriveAboutUpdateControl(
         statusKey: 'settings.updateStatusInstalling',
         statusTone: 'neutral',
       };
-    case 'error':
+    case 'error': {
+      const canRetryInstall = model.status.downloadPath != null
+        && (model.canOpenInstaller || model.canApplyInPlace);
+      const primaryAction: AboutUpdatePrimaryAction = canRetryInstall
+        ? 'install'
+        : model.availableVersion != null && model.canDownload
+          ? 'download'
+          : 'check';
       return {
-        primaryAction: 'check',
+        primaryAction,
         primaryLabelKey: 'settings.updateRetry',
         showReleaseLink: true,
-        statusKey: 'settings.updateStatusFailed',
+        statusKey: 'updater.failed',
         statusTone: 'error',
       };
+    }
     case 'unsupported':
       return {
         primaryAction: null,
@@ -866,7 +876,7 @@ function defaultApiProtocolConfig(protocol: ApiProtocol): ApiProtocolConfig {
   return {
     apiKey: '',
     baseUrl: provider?.baseUrl ?? '',
-    model: provider?.model ?? '',
+    model: defaultKnownProviderModel(provider),
     apiVersion: '',
     apiProviderBaseUrl: provider ? provider.baseUrl : null,
   };
@@ -910,7 +920,7 @@ function nextApiProtocolConfig(
     return {
       ...defaultApiProtocolConfig(protocol),
       baseUrl: siblingProvider.baseUrl,
-      model: siblingProvider.model,
+      model: defaultKnownProviderModel(siblingProvider),
       apiProviderBaseUrl: siblingProvider.baseUrl,
     };
   }
@@ -1690,17 +1700,22 @@ export function SettingsDialog({
   >(() => new Set());
   const [aboutUpdaterModel, setAboutUpdaterModel] = useState<UpdaterModel>(() => deriveUpdaterModel(null));
   const [aboutUpdateActionBusy, setAboutUpdateActionBusy] = useState(false);
+  const [aboutUpdateQuitFailed, setAboutUpdateQuitFailed] = useState(false);
   const [aboutToast, setAboutToast] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
     const unsubscribe = subscribeToUpdaterStatus((status) => {
       if (!mounted) return;
-      setAboutUpdaterModel(deriveUpdaterModel(status, { hostAvailable: true }));
+      const nextModel = deriveUpdaterModel(status, { hostAvailable: true });
+      setAboutUpdaterModel(nextModel);
+      if (!nextModel.installerOpened) setAboutUpdateQuitFailed(false);
     });
     void readUpdaterStatus({ payload: { source: 'settings-about:mount' } }).then((result) => {
       if (!mounted) return;
-      setAboutUpdaterModel(result.ok ? result.model : deriveUpdaterModel(null, { hostAvailable: false }));
+      const nextModel = result.ok ? result.model : deriveUpdaterModel(null, { hostAvailable: false });
+      setAboutUpdaterModel(nextModel);
+      if (!nextModel.installerOpened) setAboutUpdateQuitFailed(false);
     });
     return () => {
       mounted = false;
@@ -1708,10 +1723,18 @@ export function SettingsDialog({
     };
   }, []);
 
-  const aboutUpdateControl = useMemo(
-    () => deriveAboutUpdateControl(aboutUpdaterModel, appVersionInfo),
-    [aboutUpdaterModel, appVersionInfo],
-  );
+  const aboutUpdateControl = useMemo(() => {
+    const control = deriveAboutUpdateControl(aboutUpdaterModel, appVersionInfo);
+    if (!aboutUpdateQuitFailed || !aboutUpdaterModel.installerOpened) return control;
+    return {
+      ...control,
+      primaryAction: 'quit' as const,
+      primaryLabelKey: 'updater.quitButton' as const,
+      showReleaseLink: false,
+      statusKey: 'updater.quitFailedTitle' as const,
+      statusTone: 'warning' as const,
+    };
+  }, [aboutUpdateQuitFailed, aboutUpdaterModel, appVersionInfo]);
 
   const applyAboutUpdaterResult = useCallback((result: UpdaterActionResult): boolean => {
     if (!result.ok) {
@@ -1729,6 +1752,8 @@ export function SettingsDialog({
   const handleAboutUpdateAction = useCallback(async () => {
     if (aboutUpdateActionBusy || aboutUpdaterModel.busy || aboutUpdateControl.primaryAction == null) return;
     setAboutUpdateActionBusy(true);
+    setAboutUpdateQuitFailed(false);
+    let quitAttempted = false;
     try {
       const options = { payload: { source: 'settings-about' } };
       if (aboutUpdateControl.primaryAction === 'check') {
@@ -1736,16 +1761,25 @@ export function SettingsDialog({
       } else if (aboutUpdateControl.primaryAction === 'download') {
         applyAboutUpdaterResult(await downloadUpdaterUpdate(options));
       } else if (aboutUpdateControl.primaryAction === 'quit') {
+        quitAttempted = true;
         const quitResult = await quitAfterUpdaterInstallerOpen(options);
-        if (!quitResult.ok) setAboutToast(t('settings.updateQuitFailed'));
+        if (!quitResult.ok) {
+          setAboutUpdateQuitFailed(true);
+          setAboutToast(t('updater.quitFailedTitle'));
+        }
       } else {
         const installed = applyAboutUpdaterResult(await openUpdaterInstaller(options));
         if (installed) {
+          quitAttempted = true;
           const quitResult = await quitAfterUpdaterInstallerOpen(options);
-          if (!quitResult.ok) setAboutToast(t('settings.updateQuitFailed'));
+          if (!quitResult.ok) {
+            setAboutUpdateQuitFailed(true);
+            setAboutToast(t('updater.quitFailedTitle'));
+          }
         }
       }
     } catch {
+      if (quitAttempted) setAboutUpdateQuitFailed(true);
       setAboutToast(t('settings.updateActionFailed'));
     } finally {
       setAboutUpdateActionBusy(false);
@@ -2040,7 +2074,7 @@ export function SettingsDialog({
       return updateCurrentApiProtocolConfig(switchedWithCurrentDraft, {
         ...(providerChanged ? { apiKey: '' } : {}),
         baseUrl: provider.baseUrl,
-        model: provider.model,
+        model: provider.preferredModels[0] ?? '',
         apiProviderBaseUrl: provider.baseUrl,
       });
     });
@@ -2718,187 +2752,13 @@ export function SettingsDialog({
   const apiProtocol = cfg.apiProtocol ?? 'anthropic';
   const defaultApiKeyConsoleLink = API_KEY_CONSOLE_LINKS[apiProtocol];
   const byokProviderPresets: ReadonlyArray<ByokProviderPreset> = [
-    {
-      id: 'anthropic',
-      title: 'Anthropic',
-      protocol: 'anthropic',
-      baseUrl: 'https://api.anthropic.com',
-      model: 'claude-sonnet-4-5',
-    },
-    {
-      id: 'openai',
-      title: 'OpenAI',
-      protocol: 'openai',
-      baseUrl: 'https://api.openai.com/v1',
-      model: 'gpt-4o',
-    },
-    {
-      id: 'atlascloud',
-      title: 'Atlas Cloud',
-      protocol: 'openai',
-      baseUrl: 'https://api.atlascloud.ai/v1',
-      model: 'qwen/qwen3.5-flash',
-    },
-    {
-      id: 'google-ai-studio',
-      title: 'Google Gemini',
-      protocol: 'google',
-      baseUrl: 'https://generativelanguage.googleapis.com',
-      model: 'gemini-3.5-flash',
-    },
-    {
-      id: 'ollama',
-      title: 'Ollama Cloud',
-      protocol: 'ollama',
-      baseUrl: 'https://ollama.com',
-      model: 'gpt-oss:120b',
-    },
-    {
-      id: 'azure',
-      title: 'Azure OpenAI',
-      protocol: 'azure',
-      baseUrl: '',
-      model: '',
-    },
-    {
-      id: 'siliconflow-cn',
-      title: 'SiliconFlow (CN)',
-      protocol: 'openai',
-      baseUrl: 'https://api.siliconflow.cn/v1',
-      model: 'deepseek-ai/DeepSeek-V3.1',
-    },
-    {
-      id: 'siliconflow-global',
-      title: 'SiliconFlow (Global)',
-      protocol: 'openai',
-      baseUrl: 'https://api.siliconflow.com/v1',
-      model: 'deepseek-ai/DeepSeek-V3.1',
-    },
-    {
-      id: 'ppio',
-      title: 'PPIO',
-      protocol: 'openai',
-      baseUrl: 'https://api.ppinfra.com/v3/openai',
-      model: 'deepseek/deepseek-v3.1',
-    },
-    {
-      id: 'nvidia',
-      title: 'NVIDIA',
-      protocol: 'openai',
-      baseUrl: 'https://integrate.api.nvidia.com/v1',
-      model: 'openai/gpt-oss-120b',
-    },
-    {
-      id: 'stepfun',
-      title: 'StepFun',
-      protocol: 'openai',
-      baseUrl: 'https://api.stepfun.ai/v1',
-      model: 'step-2-mini',
-    },
-    {
-      id: 'deepseek',
-      title: 'DeepSeek',
-      protocol: 'openai',
-      baseUrl: 'https://api.deepseek.com',
-      model: 'deepseek-chat',
-    },
-    {
-      id: 'openrouter',
-      title: 'OpenRouter',
-      protocol: 'openai',
-      baseUrl: 'https://openrouter.ai/api/v1',
-      model: 'anthropic/claude-3.7-sonnet',
-    },
-    {
-      id: 'mistral',
-      title: 'Mistral AI',
-      protocol: 'openai',
-      baseUrl: 'https://api.mistral.ai/v1',
-      model: 'mistral-large-latest',
-    },
-    {
-      id: 'xai',
-      title: 'xAI',
-      protocol: 'openai',
-      baseUrl: 'https://api.x.ai/v1',
-      model: 'grok-4',
-    },
-    {
-      id: 'together',
-      title: 'Together AI',
-      protocol: 'openai',
-      baseUrl: 'https://api.together.xyz/v1',
-      model: 'meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo',
-    },
-    {
-      id: 'huggingface',
-      title: 'Hugging Face',
-      protocol: 'openai',
-      baseUrl: 'https://router.huggingface.co/v1',
-      model: 'openai/gpt-oss-120b',
-    },
-    {
-      id: 'qwen',
-      title: '千问',
-      protocol: 'openai',
-      baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-      model: 'qwen-plus',
-    },
-    {
-      id: 'volcengine',
-      title: '火山引擎',
-      protocol: 'openai',
-      baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
-      model: 'doubao-seed-1-6',
-    },
-    {
-      id: 'qianfan',
-      title: '百度千帆',
-      protocol: 'openai',
-      baseUrl: 'https://qianfan.baidubce.com/v2',
-      model: 'ernie-4.5-turbo-128k',
-    },
-    {
-      id: 'vllm',
-      title: 'vLLM',
-      protocol: 'openai',
-      baseUrl: 'http://127.0.0.1:8000/v1',
-      model: 'model',
-    },
-    {
-      id: 'mimo',
-      title: '小米 MiMo',
-      protocol: 'openai',
-      baseUrl: 'https://token-plan-cn.xiaomimimo.com/v1',
-      model: 'mimo-v2.5-pro',
-    },
-    {
-      id: 'minimax',
-      title: 'MiniMax',
-      protocol: 'anthropic',
-      baseUrl: 'https://api.minimaxi.com/anthropic',
-      model: 'MiniMax-M2.7-highspeed',
-    },
-    {
-      id: 'moonshot',
-      title: 'Moonshot',
-      protocol: 'openai',
-      baseUrl: 'https://api.moonshot.cn/v1',
-      model: 'kimi-k2-0711-preview',
-    },
-    {
-      id: 'zhipu',
-      title: '智谱',
-      protocol: 'openai',
-      baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
-      model: 'glm-4.6',
-    },
+    ...BYOK_PROVIDER_PRESETS,
     {
       id: 'custom',
       title: t('settings.customProvider'),
       protocol: apiProtocol,
       baseUrl: cfg.baseUrl,
-      model: cfg.model,
+      preferredModels: cfg.model ? [cfg.model] : [],
       custom: true,
     },
   ];
@@ -2907,7 +2767,7 @@ export function SettingsDialog({
     title: t('settings.customProvider'),
     protocol: apiProtocol,
     baseUrl: cfg.baseUrl,
-    model: cfg.model,
+    preferredModels: cfg.model ? [cfg.model] : [],
     custom: true,
   };
   const byokPresetProtocols = new Set(
@@ -2924,7 +2784,9 @@ export function SettingsDialog({
         title: tab.title,
         protocol: tab.id,
         baseUrl: fallback.baseUrl || DEFAULT_BASE_URL_BY_PROTOCOL[tab.id],
-        model: fallback.model || SUGGESTED_MODELS_BY_PROTOCOL[tab.id][0] || '',
+        preferredModels: [
+          fallback.model || SUGGESTED_MODELS_BY_PROTOCOL[tab.id][0] || '',
+        ].filter(Boolean),
       };
     }),
     customByokProvider,
@@ -3337,10 +3199,41 @@ export function SettingsDialog({
     apiProtocol !== 'azure' &&
     apiProtocol !== 'ollama' &&
     isProviderModelDiscoveryUnsupported(apiProtocol, cfg.baseUrl);
+  const providerModelDiscoverySupported =
+    apiProtocol !== 'azure' &&
+    apiProtocol !== 'ollama' &&
+    !providerModelDiscoveryUnavailable;
   const fetchedApiModelOptions =
     providerModelDiscoveryUnavailable
       ? []
       : activeProviderModelsCache[providerModelsKey] ?? [];
+  const providerPreferredModels =
+    selectedProvider?.preferredModels ?? SUGGESTED_MODELS_BY_PROTOCOL[apiProtocol];
+  const providerManagedModelIds = useMemo(
+    () => new Set([
+      ...providerPreferredModels,
+      ...(selectedProvider?.retiredModels ?? []),
+    ]),
+    [providerPreferredModels, selectedProvider],
+  );
+  const fetchedApiModelIds = useMemo(
+    () => new Set(fetchedApiModelOptions.map((model) => model.id.trim())),
+    [fetchedApiModelOptions],
+  );
+  const pendingProviderModelReconciliation = (() => {
+    if (cfg.mode !== 'api' || apiModelCustomEditing) return null;
+    if (apiModelUserSelectedRef.current) return null;
+    if (fetchedApiModelOptions.length === 0) return null;
+    const currentModel = cfg.model.trim();
+    if (currentModel && fetchedApiModelIds.has(currentModel)) return null;
+    if (currentModel && !providerManagedModelIds.has(currentModel)) return null;
+    const preference = resolveByokModelPreference({
+      currentModel: '',
+      accountModels: fetchedApiModelOptions,
+      providerPreferredModels,
+    });
+    return preference.model === currentModel ? null : preference.model;
+  })();
   const commitProviderModelsInputs = () => {
     if (
       byokFirstPartyBaseUrl?.hostTypo ||
@@ -3363,17 +3256,14 @@ export function SettingsDialog({
       // effects above: one nulls providerModelsCommittedKey, the other bumps
       // providerTestRevisionRef / clears providerAutoTestKeyRef. So committing
       // the model key or starting the auto-test here would be clobbered — the
-      // model commit before the auto-fetch effect reads it, and the auto-test
-      // result dropped by the stale-revision guard. Defer both until the
-      // cleaned value has landed (effect below), otherwise account models
-      // never auto-load and the auto-test success/error never reaches the UI
-      // for the exact dirty-paste case this handles.
+      // model commit before the auto-fetch effect reads it. Defer the commit
+      // until the cleaned value has landed (effect below); connection testing
+      // waits for model discovery and reconciliation.
       deferAfterKeyCleanRef.current = true;
       updateApiConfig({ apiKey: cleanedApiKey });
       return;
     }
     commitProviderModelsInputs();
-    handleAutoTestProvider();
   };
   useEffect(() => {
     if (!deferAfterKeyCleanRef.current) return;
@@ -3386,9 +3276,6 @@ export function SettingsDialog({
     } else {
       setProviderModelsCommittedKey(providerModelsKey);
     }
-    // Runs after the provider-test reset effect (declaration order) bumped the
-    // revision for the cleaned key, so this auto-test is not flagged stale.
-    handleAutoTestProvider();
   }, [
     byokFirstPartyBaseUrl?.hostTypo,
     byokModelFetchDraftValidation,
@@ -3401,11 +3288,34 @@ export function SettingsDialog({
     if (providerTestState.status === 'running') return;
     if (byokFirstPartyBaseUrl?.hostTypo) return;
     if (blockingByokDraftIssues(byokDraftValidation).length > 0) return;
+    if (providerModelDiscoverySupported) {
+      if (
+        apiProtocol !== 'aihubmix' &&
+        providerModelsCommittedKey !== providerModelsKey
+      ) {
+        const timer = window.setTimeout(() => {
+          setProviderModelsCommittedKey(providerModelsKey);
+        }, 200);
+        return () => window.clearTimeout(timer);
+      }
+      if (
+        providerModelsState.status !== 'done' ||
+        providerModelsState.cacheKey !== providerModelsKey
+      ) return;
+      if (
+        !providerModelsState.result.ok &&
+        (
+          providerModelsState.result.kind === 'auth_failed' ||
+          providerModelsState.result.kind === 'forbidden'
+        )
+      ) return;
+      if (pendingProviderModelReconciliation !== null) return;
+    }
     const key = providerConnectionTestKey(apiProtocol, cfg);
     if (providerAutoTestKeyRef.current === key) return;
     const timer = window.setTimeout(() => {
       handleAutoTestProvider();
-    }, 500);
+    }, providerModelDiscoverySupported ? 0 : 500);
     return () => window.clearTimeout(timer);
   }, [
     apiProtocol,
@@ -3416,6 +3326,11 @@ export function SettingsDialog({
     cfg.baseUrl,
     cfg.mode,
     cfg.model,
+    providerModelDiscoverySupported,
+    pendingProviderModelReconciliation,
+    providerModelsCommittedKey,
+    providerModelsKey,
+    providerModelsState,
     providerTestState.status,
     visualStabilityMode,
   ]);
@@ -3490,13 +3405,13 @@ export function SettingsDialog({
   const suggestedApiModelIds = useMemo(
     () => {
       if (providerModelDiscoveryUnavailable) {
-        return selectedProvider?.models?.length
-          ? Array.from(new Set(selectedProvider.models))
+        return selectedProvider?.preferredModels.length
+          ? Array.from(new Set(selectedProvider.preferredModels))
           : [];
       }
       return Array.from(new Set(
-        selectedProvider?.models?.length
-          ? selectedProvider.models
+        selectedProvider?.preferredModels.length
+          ? selectedProvider.preferredModels
           : SUGGESTED_MODELS_BY_PROTOCOL[apiProtocol],
       ));
     },
@@ -3514,42 +3429,15 @@ export function SettingsDialog({
   const byokImageModelOptions = useByokImageModelOptions(apiProtocol);
   const byokVideoModelOptions = useByokVideoModelOptions(apiProtocol);
   const byokSpeechModelOptions = useByokSpeechModelOptions(apiProtocol);
-  const fetchedApiModelIds = useMemo(
-    () => new Set(fetchedApiModelOptions.map((model) => model.id.trim())),
-    [fetchedApiModelOptions],
-  );
   const apiModelIds = useMemo(
     () => apiModelOptions.map((m) => m.id),
     [apiModelOptions],
   );
-  const providerDefaultModel =
-    selectedProvider?.model.trim() || suggestedApiModelIds[0] || '';
   useEffect(() => {
-    if (cfg.mode !== 'api') return;
-    if (apiModelCustomEditing) return;
-    // Respect an explicit user pick — even when it equals the provider preset
-    // id, the user deliberately chose it and discovery must not rewrite it.
-    if (apiModelUserSelectedRef.current) return;
-    if (fetchedApiModelOptions.length === 0) return;
-    const currentModel = cfg.model.trim();
-    if (currentModel && fetchedApiModelIds.has(currentModel)) return;
-    if (currentModel && currentModel !== providerDefaultModel) return;
-
-    const preference = resolveByokModelPreference({
-      currentModel: '',
-      accountModels: fetchedApiModelOptions,
-      providerDefaultModel,
-    });
-    if (preference.source !== 'account') return;
-    if (preference.model === currentModel) return;
-    updateApiConfig({ model: preference.model });
+    if (pendingProviderModelReconciliation === null) return;
+    updateApiConfig({ model: pendingProviderModelReconciliation });
   }, [
-    apiModelCustomEditing,
-    cfg.mode,
-    cfg.model,
-    fetchedApiModelIds,
-    fetchedApiModelOptions,
-    providerDefaultModel,
+    pendingProviderModelReconciliation,
   ]);
   const apiModelCustomActive =
     shouldShowCustomModelInput(
@@ -3708,9 +3596,14 @@ export function SettingsDialog({
     // (AMR routes through ACP `session/set_model` and validates against
     // a live catalog). Undefined === allow, matching today's UX.
     const allowCustomModel = selected.supportsCustomModel !== false;
+    const explicitCustomMode = agentCustomModelIds.has(selected.id);
     const configuredModel =
       typeof effectiveChoice.model === 'string' && effectiveChoice.model
         ? effectiveChoice.model
+        : null;
+    const customModelDraft =
+      explicitCustomMode && typeof choice.model === 'string'
+        ? choice.model
         : null;
     const setChoice = (
       next: { model?: string; reasoning?: string },
@@ -3726,12 +3619,13 @@ export function SettingsDialog({
         };
       });
     };
-    const modelValue =
+    const fallbackModelValue =
       selected.id === 'amr' &&
       configuredModel &&
       !knownModelIds.includes(configuredModel)
         ? defaultAgentModelId(selected) ?? ''
         : configuredModel ?? defaultAgentModelId(selected) ?? '';
+    const modelValue = customModelDraft ?? fallbackModelValue;
     const reasoningValue =
       effectiveChoice.reasoning ??
       choice.reasoning ??
@@ -3742,7 +3636,7 @@ export function SettingsDialog({
       shouldShowCustomModelInput(
         modelValue,
         knownModelIds,
-        agentCustomModelIds.has(selected.id),
+        explicitCustomMode,
       );
     const selectValue = customActive
       ? CUSTOM_MODEL_SENTINEL
@@ -5131,7 +5025,7 @@ export function SettingsDialog({
                     setApiModelCustomEditing(false);
                     updateApiConfig({
                       baseUrl: p.baseUrl,
-                      model: p.model,
+                      model: defaultKnownProviderModel(p),
                       apiProviderBaseUrl: p.baseUrl,
                     });
                   }}
@@ -7536,7 +7430,7 @@ function MediaProvidersSection({
 //
 // Schemas drift between clients in deliberate ways. VS Code keys
 // servers under "servers" with a required "type" field; Zed uses
-// "context_servers"; Cursor, Windsurf, and Antigravity share
+// "context_servers"; Cursor, Kiro, Windsurf, and Antigravity share
 // "mcpServers"; Claude Code is best served by its CLI which writes
 // to the local config for you. Verified against each tool's official
 // docs in May 2026.
@@ -7551,6 +7445,7 @@ type McpClientId =
   | 'claude'
   | 'codex'
   | 'cursor'
+  | 'kiro'
   | 'vscode'
   | 'zed'
   | 'windsurf'
@@ -7813,6 +7708,17 @@ function IntegrationsSection() {
         return `cursor://anysphere.cursor-deeplink/mcp/install?name=open-design&config=${encoded}`;
       },
       deeplinkLabel: () => t('settings.mcpDeeplinkInstallCursor'),
+    },
+    {
+      id: 'kiro',
+      label: 'Kiro CLI',
+      buildMethod: () => t('settings.mcpMethodJson'),
+      buildInstruction: (info) =>
+        t('settings.mcpInstructionKiro', {
+          path: homeConfigPath(info.platform, '~/.kiro/settings/mcp.json', '%USERPROFILE%\\.kiro\\settings\\mcp.json'),
+        }),
+      buildSnippet: buildSharedMcpJson,
+      buildSnippetLang: () => 'json',
     },
     {
       id: 'vscode',

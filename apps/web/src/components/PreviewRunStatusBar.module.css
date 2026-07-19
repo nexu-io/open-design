@@ -43,35 +43,16 @@
   color: var(--text-muted);
 }
 
-.elapsed::before,
-.action::before {
+.elapsed::before {
   content: '·';
   color: var(--text-faint);
 }
 
 .failed .label {
-  color: var(--danger);
-}
-
-.action {
-  display: inline-flex;
-  align-items: baseline;
-  min-height: 28px;
-  margin: -5px -6px;
-  padding: 5px 6px;
-  font-size: 12px;
-  line-height: 18px;
+  /* The preview is intentionally a quiet, canvas-local hint. Keep the
+     failure label neutral here; the full Chat failure card carries the
+     semantic error treatment and recovery action. */
   color: var(--text-muted);
-  background: transparent;
-  border: 0;
-  cursor: pointer;
-  pointer-events: auto;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
-.action:hover {
-  color: var(--text);
 }
 
 @keyframes preview-stage-enter {

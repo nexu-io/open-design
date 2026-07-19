@@ -1,11 +1,13 @@
 import type { ChatSessionMode } from '@open-design/contracts';
 import type { AgentEvent, ChatMessage } from '../types';
+import { hasFileMutationToolUse } from './file-ops';
 import { unfinishedTodosFromEvents } from './todos';
 
 export type DesignDeliveryOutcome =
   | 'not_required'
   | 'awaiting_input'
   | 'delivered'
+  | 'report_only'
   | 'no_result'
   | 'delivery_failed';
 
@@ -60,6 +62,14 @@ function hasLiveArtifactDelivery(events: AgentEvent[] | undefined): boolean {
  * Design mode is artifact-first, but clarification and explicitly unfinished
  * turns are valid intermediate outcomes. Chat and Plan remain text-first and
  * must never be failed merely because they did not write a project file.
+ *
+ * A zero-file success is only a missing deliverable when the turn attempted
+ * to mutate project files (or an artifact save failed). A turn that never
+ * tried to write and answered with substantive text is a report-only result —
+ * image analysis and report-only audits end exactly this way — and must not
+ * be downgraded to ARTIFACT_NOT_FOUND. The known cost: an agent that merely
+ * claims completion without ever calling a write tool now passes as text; the
+ * text itself makes that visible to the user.
  */
 export function resolveDesignDeliveryOutcome(
   input: DesignDeliveryInput,
@@ -78,7 +88,11 @@ export function resolveDesignDeliveryOutcome(
   ) {
     return 'delivered';
   }
-  return input.persistenceFailed ? 'delivery_failed' : 'no_result';
+  if (input.persistenceFailed) return 'delivery_failed';
+  if (!hasFileMutationToolUse(input.events) && input.content.trim().length > 0) {
+    return 'report_only';
+  }
+  return 'no_result';
 }
 
 /**

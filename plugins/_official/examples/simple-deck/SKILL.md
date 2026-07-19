@@ -114,16 +114,13 @@ grep 'class="slide' index.html
 
 Read the resulting class list. If you see `light × 4 in a row`, swap one to `dark`. If no `hero dark` exists in an 8+ slide deck, promote one big-stat or closing slide.
 
-### Step 5 — Emit the artifact
+### Step 5 — Write the project file
 
-```
-<artifact identifier="deck-slug" type="text/html" title="Deck Title">
-<!doctype html>
-<html>...</html>
-</artifact>
-```
+Write the completed deck HTML to `index.html`.
 
-One sentence before the artifact. Stop after `</artifact>`.
+Then send one short ordinary assistant summary naming `index.html` and
+describing the deck. Do not output the full HTML source in chat and do not emit
+a source-code `<artifact>` block.
 
 ## Hard rules
 

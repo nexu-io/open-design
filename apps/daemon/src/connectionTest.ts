@@ -91,6 +91,10 @@ import {
   resolveDefaultModelFromOptions,
   resolveModelForAgent,
 } from './runtimes/models.js';
+import {
+  BYOK_OPENCODE_PROVIDER_ID,
+  buildOpenCodeByokProviderConfig,
+} from './runtimes/byok-opencode.js';
 
 export { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
 
@@ -1142,6 +1146,73 @@ interface ProviderCallShape {
   retryBodyOnUnsupportedMaxTokens?: unknown;
 }
 
+export function resolveOpenAIConnectionTestRunProviderPackage(
+  input: Pick<ProviderTestRequest, 'protocol' | 'baseUrl' | 'apiKey' | 'apiVersion' | 'model'>,
+): string | null {
+  if (input.protocol !== 'openai') return null;
+  const providerConfig = {
+    protocol: input.protocol,
+    baseUrl: input.baseUrl,
+    apiKey: input.apiKey,
+    ...(input.apiVersion !== undefined ? { apiVersion: input.apiVersion } : {}),
+  };
+  const byokConfig = buildOpenCodeByokProviderConfig(
+    providerConfig,
+    input.model,
+  );
+  const providerEntries = byokConfig?.config.provider;
+  if (!providerEntries || typeof providerEntries !== 'object') return null;
+  const provider = (providerEntries as Record<string, unknown>)[BYOK_OPENCODE_PROVIDER_ID];
+  if (!provider || typeof provider !== 'object') return null;
+  const npm = (provider as { npm?: unknown }).npm;
+  return typeof npm === 'string' ? npm : null;
+}
+
+function openAIChatCompletionsProviderCall(
+  baseUrl: string,
+  apiKey: string,
+  model: string,
+): ProviderCallShape {
+  return {
+    url: appendVersionedApiPath(baseUrl, '/chat/completions'),
+    headers: {
+      'content-type': 'application/json',
+      authorization: `Bearer ${apiKey}`,
+      ...(new URL(baseUrl).hostname === 'openrouter.ai' ? {
+        'HTTP-Referer': 'https://opendesign.dev',
+        'X-Title': 'Open Design',
+      } : {}),
+    },
+    body: {
+      model,
+      ...buildOpenAIChatTokenParam(model, PROVIDER_MAX_TOKENS),
+      messages: [{ role: 'user', content: SMOKE_PROMPT }],
+      stream: false,
+    },
+    extractText: extractOpenAIMessageText,
+  };
+}
+
+function openAIResponsesProviderCall(
+  baseUrl: string,
+  apiKey: string,
+  model: string,
+): ProviderCallShape {
+  return {
+    url: appendVersionedApiPath(baseUrl, '/responses'),
+    headers: {
+      'content-type': 'application/json',
+      authorization: `Bearer ${apiKey}`,
+    },
+    body: {
+      model,
+      input: SMOKE_PROMPT,
+      max_output_tokens: PROVIDER_MAX_TOKENS,
+    },
+    extractText: extractOpenAIResponsesText,
+  };
+}
+
 function buildProviderCall(input: ProviderTestRequest): ProviderCallShape {
   const baseUrl = String(input.baseUrl);
   const apiKey = String(input.apiKey);
@@ -1202,24 +1273,16 @@ function buildProviderCall(input: ProviderTestRequest): ProviderCallShape {
       // smoke test reuses the same call shape. We default the base URL
       // upstream-side in chat-routes; this layer assumes the caller passed
       // a concrete URL via the BYOK form.
-      return {
-        url: appendVersionedApiPath(baseUrl, '/chat/completions'),
-        headers: {
-          'content-type': 'application/json',
-          authorization: `Bearer ${apiKey}`,
-          ...(new URL(baseUrl).hostname === 'openrouter.ai' ? {
-            'HTTP-Referer': 'https://opendesign.dev',
-            'X-Title': 'Open Design',
-          } : {}),
-        },
-        body: {
-          model,
-          ...buildOpenAIChatTokenParam(model, PROVIDER_MAX_TOKENS),
-          messages: [{ role: 'user', content: SMOKE_PROMPT }],
-          stream: false,
-        },
-        extractText: extractOpenAIMessageText,
-      };
+      if (input.protocol === 'openai') {
+        const runProviderPackage = resolveOpenAIConnectionTestRunProviderPackage(input);
+        if (runProviderPackage === '@ai-sdk/openai') {
+          return openAIResponsesProviderCall(baseUrl, apiKey, model);
+        }
+        if (runProviderPackage === '@ai-sdk/openai-compatible') {
+          return openAIChatCompletionsProviderCall(baseUrl, apiKey, model);
+        }
+      }
+      return openAIChatCompletionsProviderCall(baseUrl, apiKey, model);
     case 'azure': {
       const url = new URL(baseUrl);
       const basePath = url.pathname.replace(/\/+$/, '');
@@ -1330,6 +1393,22 @@ function extractOpenAIMessageText(data: unknown): string {
     | undefined;
   if (typeof first?.message?.content === 'string') return first.message.content;
   if (typeof first?.text === 'string') return first.text;
+  return '';
+}
+
+function extractOpenAIResponsesText(data: unknown): string {
+  const outputText = (data as { output_text?: unknown }).output_text;
+  if (typeof outputText === 'string') return outputText;
+  const output = (data as { output?: unknown }).output;
+  if (!Array.isArray(output)) return '';
+  for (const item of output) {
+    const content = (item as { content?: unknown } | undefined)?.content;
+    if (!Array.isArray(content)) continue;
+    for (const block of content) {
+      const text = (block as { text?: unknown } | undefined)?.text;
+      if (typeof text === 'string') return text;
+    }
+  }
   return '';
 }
 
@@ -1831,6 +1910,7 @@ function extractOpenCodeTextFromRawStdout(stdout: string): string {
 
 const OPENCODE_OUTDATED_CLI_DETAIL =
   'OpenCode CLI appears to be outdated or incompatible with this connection test. Update it with `npm i -g opencode-ai@latest`, then retry the OpenCode connection test.';
+const OPENCODE_PROVIDER_CONNECTIVITY_DETAIL_MAX_LENGTH = 240;
 
 function openCodeOutdatedCliDetail(output: string): string | null {
   const value = output.toLowerCase();
@@ -1842,6 +1922,23 @@ function openCodeOutdatedCliDetail(output: string): string | null {
   return looksLikeOpenCodeHelp || looksLikeUnsupportedArgs
     ? OPENCODE_OUTDATED_CLI_DETAIL
     : null;
+}
+
+function openCodeProviderConnectivityDetail(output: string): string | null {
+  for (const rawLine of output.split(/\r?\n/u)) {
+    const line = rawLine.replace(/\s+/gu, ' ').trim();
+    if (!line) continue;
+    const match = /\bCannot connect to API:[^"'`\r\n]+/iu.exec(line) ??
+      /\bUnable to connect[^"'`\r\n]+/iu.exec(line) ??
+      /\bWas there a typo in the url or port\?/iu.exec(line);
+    if (!match) continue;
+    const detail = match[0].trim();
+    const boundedDetail = detail.length > OPENCODE_PROVIDER_CONNECTIVITY_DETAIL_MAX_LENGTH
+      ? `${detail.slice(0, OPENCODE_PROVIDER_CONNECTIVITY_DETAIL_MAX_LENGTH - 3).trimEnd()}...`
+      : detail;
+    return `OpenCode reported a provider connectivity failure before the connection test timed out: ${boundedDetail}`;
+  }
+  return null;
 }
 
 interface AgentSpawnHandle {
@@ -2200,6 +2297,23 @@ async function testAgentConnectionInternal(
     kind: 'timeout' | 'aborted',
   ): ConnectionTestResponse => {
     const latencyMs = Date.now() - start;
+    if (kind === 'timeout' && input.agentId === 'opencode') {
+      const rawDetail = `${sink.getStderrTail()}\n${sink.getRawStdoutTail()}`;
+      const providerDetail = openCodeProviderConnectivityDetail(rawDetail);
+      if (providerDetail) {
+        const detail = redactSecrets(providerDetail);
+        console.warn(`[test:agent] ${def.name} → upstream_unavailable: ${detail}`);
+        return {
+          ok: false,
+          kind: 'upstream_unavailable',
+          latencyMs,
+          model,
+          agentName: def.name,
+          detail,
+          diagnostics: buildDiagnostics({ phase: 'connection_smoke_test' }),
+        };
+      }
+    }
     console.warn(`[test:agent] ${def.name} → ${kind} in ${(latencyMs / 1000).toFixed(1)}s`);
     return {
       ok: false,

@@ -46,6 +46,13 @@ export interface ByokChatProviderConfig {
   apiVersion?: string;
   /** Explicit run-scoped provider policy for presets that do not require bearer credentials. */
   requiresApiKey?: boolean;
+  /**
+   * Run-scoped chat model id selected in the chat UI. Forwarded to the daemon
+   * so BYOK-backed utilities (e.g. memory extraction) can honor the user's
+   * model picker instead of falling back to a hardcoded default. Optional
+   * because some presets (e.g. Ollama) infer the model from baseUrl/protocol.
+   */
+  model?: string;
 }
 
 export interface ByokMediaDefaults {

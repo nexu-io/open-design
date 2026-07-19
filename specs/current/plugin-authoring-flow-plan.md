@@ -15,7 +15,7 @@ This plan is intentionally focused on the authoring loop. Marketplace publishing
 - R3. The task should create a real plugin folder containing at minimum `SKILL.md` and `open-design.json`, with optional examples/assets when the user asks for them.
 - R4. Project output must support selecting or viewing the generated plugin folder as a folder, not only as flat single files.
 - R5. A generated plugin folder can be installed into the user plugin registry and then appears in `My plugins` and Home `@` search.
-- R6. Home's intent rail can later add a "Create plugin" chip that reuses the same authoring route and prompt contract.
+- R6. Home's intent rail exposes a "Create plugin" chip that reuses the same authoring handoff, prompt contract, and `od-plugin-authoring` scenario as the Plugins entry.
 
 ## Scope boundaries
 
@@ -26,7 +26,6 @@ This plan is intentionally focused on the authoring loop. Marketplace publishing
 
 ### Deferred to follow-up work
 
-- Home rail "Create plugin" chip can be implemented in a parallel task, as long as it calls the same Home prefill/focus contract defined here.
 - Marketplace publishing and team review workflows belong after local authoring and `My plugins` install are reliable.
 
 ## Current code context
@@ -34,17 +33,17 @@ This plan is intentionally focused on the authoring loop. Marketplace publishing
 - `apps/web/src/components/PluginsView.tsx` already owns the Plugins tab, `Create / Import` button, import modal, `My plugins` tab, and refresh-after-install behavior.
 - `apps/web/src/components/HomeView.tsx` owns prompt state, plugin apply lifecycle, and `HomeHero` focus via `inputRef`.
 - `apps/web/src/components/HomeHero.tsx` renders the textarea, `@` picker, and intent rail.
-- `apps/web/src/components/home-hero/chips.ts` defines the current rail chips. It is the right place for a future declarative `create-plugin` chip.
+- `apps/web/src/components/home-hero/chips.ts` defines the declarative `create-plugin` rail chip; `HomeView` dispatches it through the same authoring handoff used by the Plugins entry.
 - `apps/web/src/components/EntryShell.tsx` owns view switching and the Home submit path that creates a project with `pendingPrompt` and `autoSendFirstMessage`.
 - `apps/web/src/state/projects.ts` already exposes `installPluginSource`, `uploadPluginFolder`, and `uploadPluginZip` for user plugin installation.
-- `apps/daemon/src/server.ts` already exposes `/api/plugins/install`, `/api/plugins/upload-folder`, `/api/plugins/upload-zip`, and `/api/applied-plugins/export`.
+- `apps/daemon/src/routes/plugins/index.ts` registers `/api/plugins/install`, `/api/plugins/upload-folder`, `/api/plugins/upload-zip`, `/api/applied-plugins/export`, and the project-relative `/api/projects/:id/plugins/install-folder` route. The route handlers are composed from `apps/daemon/src/server.ts`.
 - `apps/daemon/src/plugins/scaffold.ts`, `apps/daemon/src/plugins/export.ts`, and `apps/daemon/src/plugins/validate.ts` already encode scaffold/export/validate behavior that the authoring flow should reuse.
 
 ## Key decisions
 
 - The product entry is "Create plugin", not "Create from template" alone. Template scaffolding is one possible implementation detail, but the user intent is to describe a workflow and let the agent produce a plugin.
-- The first supported entry should be Plugins tab → Home prompt prefill. This gives a working authoring loop before the Home rail gets another chip.
-- Use a dedicated bundled scenario plugin for authoring if possible, e.g. `od-plugin-authoring`. Falling back to `od-new-generation` plus a long prompt is acceptable only as an interim bridge.
+- Plugins tab and the Home rail are now equivalent supported entries: both prepare the same editable Home prompt and bind the same authoring scenario.
+- Use the shipped dedicated bundled scenario `od-plugin-authoring`. The `od-new-generation` fallback remains only a compatibility bridge when an older registry does not contain the authoring scenario.
 - The generated plugin folder should live inside the project work directory so it can be inspected, edited, and installed without forcing a browser folder upload.
 - One-click "Add to My plugins" should install from a daemon-visible project output path through the same local install path used by `/api/plugins/install`, then refresh web plugin state.
 
@@ -119,7 +118,7 @@ sequenceDiagram
   **Files:**
   - Create: `plugins/_official/scenarios/od-plugin-authoring/open-design.json`
   - Create: `plugins/_official/scenarios/od-plugin-authoring/SKILL.md`
-  - Modify: `apps/web/src/components/home-hero/chips.ts` only when the Home rail chip lands
+  - Modify: `apps/web/src/components/home-hero/chips.ts`
   - Test: `apps/daemon/tests/plugins-bundled-scenarios-roster.test.ts`
   - Test: `apps/daemon/tests/plugins-local-skill.test.ts`
 
@@ -183,7 +182,7 @@ sequenceDiagram
 
 - [x] U6. **Home rail create-plugin chip parity**
 
-  **Goal:** Let the future Home rail entry use the same authoring flow without duplicating behavior.
+  **Goal:** Let the Home rail entry use the same authoring flow without duplicating behavior.
 
   **Files:**
   - Modify: `apps/web/src/components/home-hero/chips.ts`
@@ -193,11 +192,11 @@ sequenceDiagram
 
   **Approach:**
   - Add a `create-plugin` chip action that invokes the U1 prefill/focus contract.
-  - If this lands in a separate task session, keep the payload shape identical so Plugins tab and rail remain interchangeable entrypoints.
+  - Keep the payload shape identical so Plugins tab and rail remain interchangeable entrypoints.
 
   **Test scenarios:**
   - Happy path: clicking the chip fills the same prompt as Plugins tab create.
-  - Regression: existing Prototype/Image/Figma/Folder/Template chips continue dispatching their current actions.
+  - Regression: existing Prototype/Image/Figma/Template chips continue dispatching their current actions. Folder linking is owned by the composer Tools → Import path, not the Home rail.
 
 ## Prompt contract
 
@@ -229,10 +228,10 @@ Implementation can enrich this with the current locale and UI-provided goal, but
 - Web component coverage for Plugins create entry, Home prefill/focus, and rail parity.
 - Web state coverage for installing a generated project folder.
 - Daemon tests for project-root path resolution, validation failure, and successful install.
-- End-to-end smoke path once the authoring scenario lands: Plugins → Create plugin → Home submit → project produces `generated-plugin/` → Add to My plugins → Home `@` search finds the new plugin.
+- The daemon-backed Playwright smoke in `e2e/ui/real-daemon-run.test.ts` covers Home rail → Create plugin → bound `od-plugin-authoring` run → generated `generated-plugin/` files → action cards in chat and Design Files. Keep the remaining install-to-Home-`@` assertion covered at the web state/API layers until the browser smoke is extended.
 
 ## Open questions
 
-- Should the generated plugin folder default to `generated-plugin/` or `<plugin-id>/`? The plan assumes `generated-plugin/` for predictable UI detection, with final install using the manifest id.
-- Should "Add to My plugins" live in `DesignFilesPanel`, a GenUI final surface, or both? The plan allows both, but v1 should pick one primary owner.
+- Resolved: generated output defaults to `generated-plugin/` for predictable UI detection; final install still uses the manifest id.
+- Resolved: "Add to My plugins" is exposed both on the assistant action card and in `DesignFilesPanel`, backed by the same project-relative install handler.
 - Should the daemon expose a scaffold API now, or should the authoring scenario ask the agent to create files directly? Direct file creation is simpler for v1; scaffold API becomes useful for template-first creation.

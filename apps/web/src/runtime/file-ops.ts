@@ -129,6 +129,25 @@ export function deriveFileOps(events: AgentEvent[] | undefined): FileOpEntry[] {
   return Array.from(byPath.values());
 }
 
+/**
+ * True when the run attempted any file mutation (write/edit/delete tool call,
+ * or a simple Bash rm/unlink), regardless of whether the attempt succeeded.
+ * Tool names must stay aligned with the daemon's cross-runtime
+ * `WRITE_OR_EDIT_TOOL_NAMES` set in `apps/daemon/src/runtimes/run-artifacts.ts`.
+ */
+export function hasFileMutationToolUse(events: AgentEvent[] | undefined): boolean {
+  for (const ev of events ?? []) {
+    if (ev.kind !== 'tool_use') continue;
+    if (ev.name === 'Bash') {
+      if (extractSimpleBashDeletes(ev.input).length > 0) return true;
+      continue;
+    }
+    const kind = classify(ev.name);
+    if (kind === 'write' || kind === 'edit' || kind === 'delete') return true;
+  }
+  return false;
+}
+
 export type FileOpCounts = Record<FileOpKind, number>;
 
 /** Total tool_use count per op family across `entries`. */

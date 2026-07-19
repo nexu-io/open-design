@@ -470,12 +470,14 @@ describe('HomeHero intent rail', () => {
     });
 
     presets = screen.getAllByTestId('home-hero-plugin-preset');
-    expect(presets.map((preset) => preset.getAttribute('data-plugin-id'))).toEqual([
+    // Order within a facet is now usage/sink-driven (OPEND-449); this test is
+    // about which presets route into Live Artifact, so assert membership only.
+    expect(presets.map((preset) => preset.getAttribute('data-plugin-id')).sort()).toEqual([
+      'example-live-artifact',
       'example-live-dashboard',
-      'image-template-notion-team-dashboard-live-artifact',
       'example-social-media-matrix-tracker-template',
       'example-trading-analysis-dashboard-template',
-      'example-live-artifact',
+      'image-template-notion-team-dashboard-live-artifact',
     ]);
   });
 

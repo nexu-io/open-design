@@ -1504,6 +1504,44 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     expect(aboutYouSubmits).toHaveLength(1);
   });
 
+  it('uses provider preferences instead of the first upstream model during BYOK onboarding', async () => {
+    globalThis.fetch = vi.fn(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/api/integrations/vela/status')) {
+        return jsonResponse({ loggedIn: false, profile: 'prod', user: null, configPath: '/x' });
+      }
+      if (url.endsWith('/api/provider/models') && init?.method === 'POST') {
+        return jsonResponse({
+          ok: true,
+          kind: 'success',
+          latencyMs: 10,
+          models: [
+            { id: 'upstream-first', label: 'Upstream First' },
+            { id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5' },
+          ],
+        });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    }) as typeof fetch;
+    const props = renderOnboarding({
+      config: baseConfig({
+        apiProtocol: 'anthropic',
+        apiKey: 'test-api-key',
+        baseUrl: 'https://api.anthropic.com',
+        model: '',
+        apiProviderBaseUrl: 'https://api.anthropic.com',
+      }),
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Bring your own key/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Fetch models/i }));
+
+    await waitFor(() => {
+      expect(props.onApiModelChange).toHaveBeenCalledWith('claude-sonnet-4-5');
+    });
+    expect(props.onApiModelChange).not.toHaveBeenCalledWith('upstream-first');
+  });
+
   it('persists the BYOK config before finishing onboarding', async () => {
     globalThis.fetch = vi.fn(async (input, init) => {
       const url = String(input);

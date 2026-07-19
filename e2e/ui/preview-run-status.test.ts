@@ -40,7 +40,7 @@ test('[P1] preview delivery status keeps persisted delivery-failure recovery in 
   const existingFileResponse = await page.request.post(`/api/projects/${projectId}/files`, {
     data: {
       name: 'existing-design.html',
-      content: '<!doctype html><html><body><p>Existing design</p></body></html>',
+      content: '<!doctype html><html><body style="min-height:100vh;margin:0;background:#121212;color:#fff"><p>Existing design</p></body></html>',
     },
   });
   expect(existingFileResponse.ok(), await existingFileResponse.text()).toBeTruthy();
@@ -84,12 +84,13 @@ test('[P1] preview delivery status keeps persisted delivery-failure recovery in 
   await expect(status.locator('xpath=ancestor::*[@data-testid="design-files-empty"]')).toHaveCount(0);
   await expect(status).not.toContainText('Elapsed');
   await expect(page.getByTestId('preview-run-status-retry')).toHaveCount(0);
-  await expect(page.getByTestId('preview-run-status-view-details')).toBeVisible();
+  await expect(status).toContainText('Retry in Chat');
+  await expect(page.getByTestId('preview-run-status-view-details')).toHaveCount(0);
   const chatRetry = page.locator('.chat-error-retry');
   await expect(chatRetry).toBeVisible();
 
-  // A small persisted preview hint can bring users back to the full Chat
-  // failure card, which remains the sole retry entry point after navigation.
+  // The persisted preview hint stays passive after navigation; the Chat
+  // failure card remains the sole retry entry point.
   await gotoEntryHome(page);
   await gotoProject(page, projectId);
   await expect(page.getByTestId('preview-run-status')).toContainText('Delivery needs attention');

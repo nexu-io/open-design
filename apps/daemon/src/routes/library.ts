@@ -45,6 +45,7 @@ import {
   writeFigmaSidecar,
 } from '../library.js';
 import { reconcileLibrary, type ReconcileLibraryResult } from '../library-sync.js';
+import { fetchExternalBrandAsset } from '../brands/safe-fetch.js';
 import { ensureProjectSubdir } from '../projects.js';
 import {
   confirmPairing,
@@ -107,7 +108,14 @@ function parseDataUrl(dataUrl: string): { bytes: Buffer; mime: string | undefine
 }
 
 async function fetchRemoteBytes(url: string): Promise<{ bytes: Buffer; mime: string | undefined }> {
-  const resp = await fetch(url, { redirect: 'follow' });
+  // Route the client-supplied URL through the same SSRF guard the brand-asset
+  // path uses (assertPublicBrandUrl): reject cloud-metadata (169.254.169.254),
+  // loopback, RFC1918/CGNAT, and link-local hosts, re-validating on every
+  // redirect hop (redirect:'manual'). Without this a caller could make the
+  // privileged daemon fetch an internal/loopback URL and read the response back
+  // via GET /api/library/assets/:id/raw — SSRF + response exfiltration. Sibling
+  // to the loopback-SSRF class in #5478.
+  const resp = await fetchExternalBrandAsset(url);
   if (!resp.ok) throw new Error(`remote fetch failed: ${resp.status}`);
   const declared = Number(resp.headers.get('content-length') ?? '0');
   if (declared && declared > MAX_REMOTE_BYTES) throw new Error('remote resource too large');

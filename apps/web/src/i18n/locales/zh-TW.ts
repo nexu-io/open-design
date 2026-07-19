@@ -626,6 +626,8 @@ export const zhTW: Dict = {
     "點擊「在 Cursor 中安裝」以透過核准對話框安裝，或將此 JSON 合併至 {path}。",
   "settings.mcpDeeplinkInstallCursor": "在 Cursor 中安裝",
   "settings.mcpMethodJson": "JSON 設定檔",
+  "settings.mcpInstructionKiro":
+    "開啟 {path} 並合併此 JSON。若要使用 workspace 層級設定，請使用 .kiro/settings/mcp.json。",
   "settings.mcpInstructionCopilot":
     "開啟 Command Palette（{shortcut}），執行「MCP: Open User Configuration」，然後合併此 JSON。Copilot Chat 必須處於 Agent 模式，工具才會顯示。",
   "settings.mcpInstructionAntigravity":
@@ -697,7 +699,7 @@ export const zhTW: Dict = {
   "workspaceTabs.project": "專案",
   "workspaceTabs.pluginDetails": "外掛詳細資料",
   "workspaceTabs.marketplace": "市集",
-  "homeHero.title": "你今天要設計什麼？",
+  "homeHero.title": "今天想和你的 Agent 一起設計什麼？",
   "homeHero.startWithTemplate": "從範本開始…",
   "homeHero.startBlankProject": "…或建立一個空白專案",
   "homeHero.templatePicker.label": "範本",
@@ -2653,9 +2655,8 @@ export const zhTW: Dict = {
   "previewRunStatus.generating": "正在建構設計方案",
   "previewRunStatus.verifying": "正在驗證交付結果",
   "previewRunStatus.succeeded": "設計已就緒",
-  "previewRunStatus.failed": "交付需要處理",
+  "previewRunStatus.failed": "交付需要處理 · 請在對話中重試",
   "previewRunStatus.elapsed": "已用時 {time}",
-  "previewRunStatus.viewDetails": "查看詳情",
   "workspace.designFilesLink": "設計檔案",
   "workspace.loadingSketch": "正在載入草圖…",
   "workspace.newTab": "新增分頁",
@@ -3172,6 +3173,9 @@ export const zhTW: Dict = {
   "fileViewer.deployProviderLabel": "部署平台",
   "fileViewer.vercelProvider": "Vercel",
   "fileViewer.cloudflarePagesProvider": "Cloudflare Pages",
+  "fileViewer.deployTargetLabel": "目標",
+  "fileViewer.deployTargetPreview": "預覽",
+  "fileViewer.deployTargetProduction": "正式環境",
   "fileViewer.deployToProvider": "部署到 {provider}",
   "fileViewer.redeployToProvider": "重新部署到 {provider}",
   "fileViewer.deployingToProvider": "正在部署到 {provider}…",
@@ -3880,6 +3884,8 @@ export const zhTW: Dict = {
   "settings.memoryExtractionPhaseSkipped": "已跳過",
   "settings.memoryExtractionPhaseFailed": "失敗",
   "settings.memoryExtractionSkipNoProvider": "未設定 API key，LLM 抽取未執行。",
+  "settings.memoryExtractionSkipUnsupportedProvider":
+    "已儲存的媒體 Provider 不能用於 LLM 記憶抽取。",
   "settings.memoryExtractionSkipDisabled": "記憶功能已關閉。",
   "settings.memoryExtractionSkipEmpty": "使用者訊息為空，沒有可抽取的內容。",
   "settings.memoryExtractionSkipNoMatch": "本輪沒有命中任何正則規則。",
@@ -3899,6 +3905,8 @@ export const zhTW: Dict = {
   "settings.memoryNoProviderBannerTitle": "LLM 抽取未啟用",
   "settings.memoryNoProviderBannerBody":
     "未找到可用的 API key，LLM 抽取已跳過。可以在媒體提供者裡填入 OpenAI key，或設定環境變數 ANTHROPIC_API_KEY / OPENAI_API_KEY 來啟用。啟發式抽取仍在執行。",
+  "settings.memoryUnsupportedProviderBannerBody":
+    "已儲存媒體 Provider key，但 Memory 只能複用支援文字抽取的 Provider：OpenAI、MiniMax、AIHubMix 和 SenseAudio。請在媒體提供者中設定其中一個，設定 ANTHROPIC_API_KEY / OPENAI_API_KEY，或在進階設定中選擇 Memory model。",
   "settings.libraryInstall": "安裝",
   "settings.libraryInstallGithub": "GitHub",
   "settings.libraryInstallLocal": "本機路徑",

@@ -560,7 +560,7 @@ export interface DeployConfigResponse {
   accountId?: string;
   projectName?: string;
   cloudflarePages?: CloudflarePagesConfigHints;
-  target: 'preview';
+  target: 'preview' | 'production';
 }
 
 export interface UpdateDeployConfigRequest {
@@ -581,7 +581,7 @@ export interface DeploymentInfo {
   url: string;
   deploymentId?: string;
   deploymentCount: number;
-  target: 'preview';
+  target: 'preview' | 'production';
   status: DeploymentStatus;
   statusMessage?: string;
   reachableAt?: number;
@@ -598,6 +598,7 @@ export interface DeployProjectFileRequest {
   fileName: string;
   providerId?: DeployProviderId;
   cloudflarePages?: CloudflarePagesDeploySelection;
+  target?: 'preview' | 'production';
 }
 
 export interface DeployProjectFileResponse extends DeploymentInfo {}

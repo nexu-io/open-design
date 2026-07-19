@@ -1,6 +1,6 @@
 # `mocks/` — replay-based mock CLIs for OD's supported agents
 
-A drop-in replacement for the real agent CLIs (`claude`, `opencode`,
+A drop-in replacement for the real agent CLIs (`amp`, `claude`, `opencode`,
 `codex`, `gemini`, `cursor-agent`, `deepseek`, `qwen`, `grok`, the
 ACP family `devin` / `hermes` / `kilo` / `kimi` / `kiro` / `vibe`, and
 the AMR `vela` CLI) that replays pre-recorded sessions in each CLI's
@@ -11,8 +11,8 @@ Used by:
 
 - **E2E tests** in `apps/daemon/tests/` — run the full chat-server
   pipeline against a known agent trace, assert UI events / artifacts.
-- **Local self-tests during development** — iterate on `chat-routes.ts`,
-  `claude-stream.ts`, `json-event-stream.ts` parser changes without
+- **Local self-tests during development** — iterate on `routes/chat.ts`,
+  `runtimes/claude-stream.ts`, `runtimes/json-event-stream.ts` parser changes without
   burning provider budget.
 - **Demo / onboarding** — show what a 17-tool `claude` editing session
   looks like end-to-end, offline.
@@ -148,14 +148,14 @@ verified line-by-line against the parsers in `apps/daemon/src/`:
 
 | CLI | OD streamFormat | Parser source |
 |---|---|---|
-| `opencode`        | `json-event-stream` (opencode kind)     | `json-event-stream.ts:handleOpenCodeEvent`   |
-| `codex`           | `json-event-stream` (codex kind)        | `json-event-stream.ts:handleCodexEvent`      |
-| `claude`          | `claude-stream-json`                    | `claude-stream.ts:createClaudeStreamHandler` |
-| `gemini`          | `json-event-stream` (gemini kind)       | `json-event-stream.ts:handleGeminiEvent`     |
-| `cursor-agent`    | `json-event-stream` (cursor-agent kind) | `json-event-stream.ts:handleCursorEvent`     |
+| `opencode`        | `json-event-stream` (opencode kind)     | `runtimes/json-event-stream.ts:handleOpenCodeEvent`   |
+| `codex`           | `json-event-stream` (codex kind)        | `runtimes/json-event-stream.ts:handleCodexEvent`      |
+| `amp` `claude`    | `claude-stream-json`                    | `runtimes/claude-stream.ts:createClaudeStreamHandler` |
+| `gemini`          | `json-event-stream` (gemini kind)       | `runtimes/json-event-stream.ts:handleGeminiEvent`     |
+| `cursor-agent`    | `json-event-stream` (cursor-agent kind) | `runtimes/json-event-stream.ts:handleCursorEvent`     |
 | `deepseek` `qwen` `grok` | `plain`                          | `server.ts` (raw stdout = final assistant text) |
-| `kimi`            | `json-event-stream` (kimi kind)         | `json-event-stream.ts:handleKimiEvent`         |
-| `devin` `hermes` `kilo` `kiro` `vibe` | `acp-json-rpc` | `acp.ts:attachAcpSession`                       |
+| `kimi`            | `json-event-stream` (kimi kind)         | `runtimes/json-event-stream.ts:handleKimiEvent`         |
+| `devin` `hermes` `kilo` `kiro` `vibe` | `acp-json-rpc` | `agent-protocol/acp/session.ts:attachAcpSession`         |
 | `vela` (AMR) | `acp-json-rpc` + `login` / `models` subcommands | `runtimes/defs/amr.ts` + `apps/daemon/tests/fixtures/fake-vela.mjs` (sibling stub) |
 
 > **Note on `cursor-agent`**: OD's parser does NOT recognize tool-call
@@ -432,11 +432,11 @@ mocks/
 │   ├── vela-subcommands.mjs      ← `vela login` + `vela models` handlers
 │   └── format-plain.mjs          ← raw stdout (deepseek/qwen/grok)
 ├── bin/
-│   ├── opencode  claude  codex
+│   ├── amp  claude  codex  opencode  opencode-cli
 │   ├── gemini    cursor-agent
 │   ├── deepseek  qwen    grok
-│   ├── devin hermes kilo kimi kiro vibe
-│   └── vela                       ← 15 bash wrappers, PATH-overlay
+│   ├── devin hermes kilo kimi kiro kiro-cli vibe vibe-acp
+│   └── vela                       ← 19 PATH-overlay wrappers
 ├── manifest.json                 ← committed: 179 entries' metadata + sha256 + provenance + R2 storage hints
 ├── golden/                       ← committed: daemon-event regression snapshots
 │   ├── README.md
@@ -464,8 +464,9 @@ under any Node ≥18.
   rendered as their native protocols — they fall back to the plain
   renderer for now. If you need them, add a `format-<agent>.mjs`
   following the same pattern as `format-codex.mjs`; the parsers are
-  in `apps/daemon/src/{copilot-stream,qoder-stream}.ts` and the pi-rpc
-  handler inside `apps/daemon/src/server.ts`.
+  in `apps/daemon/src/copilot-stream.ts`,
+  `apps/daemon/src/runtimes/qoder-stream.ts`, and
+  `apps/daemon/src/agent-protocol/pi-rpc/session.ts`.
 - The mock does not honor CLI flags that change semantics (`--model`,
   `--permission-mode`, `--allowed-tools`). They're silently ignored.
 
