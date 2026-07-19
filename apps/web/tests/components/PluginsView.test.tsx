@@ -756,6 +756,47 @@ describe('PluginsView', () => {
     expect(within(dialog).queryByTestId('plugins-import-modal-error')).toBeNull();
   });
 
+  it('does not apply a stale import result under a tab the user has since switched away from', async () => {
+    let resolveGithubImport!: (value: PluginShareProjectOutcome) => void;
+    mockedInstallPluginSource.mockReturnValueOnce(
+      new Promise<PluginShareProjectOutcome>((resolve) => {
+        resolveGithubImport = resolve;
+      }),
+    );
+
+    render(<PluginsView />);
+
+    fireEvent.click(await screen.findByTestId('plugins-import-button'));
+    const dialog = screen.getByRole('dialog', { name: /import a plugin/i });
+
+    const source = 'github:owner/repo';
+    fireEvent.change(screen.getByLabelText('GitHub, archive, or marketplace source'), {
+      target: { value: source },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Import' }));
+
+    await waitFor(() =>
+      expect(mockedInstallPluginSource).toHaveBeenCalledWith(source),
+    );
+
+    // Switch to the zip tab before the GitHub request resolves.
+    fireEvent.click(screen.getByRole('button', { name: /upload zip/i }));
+
+    // Now resolve the original, now-stale GitHub request as a failure.
+    resolveGithubImport({
+      ok: false,
+      warnings: [],
+      log: [],
+      message: 'Bad Gateway',
+    });
+
+    // The stale failure must never render under the now-active zip tab.
+    await waitFor(() => {
+      expect(within(dialog).queryByTestId('plugins-import-modal-error')).toBeNull();
+    });
+    expect(screen.queryByText('Bad Gateway')).toBeNull();
+  });
+
   it('confirms a plugin share action before starting the GitHub repo task', async () => {
     mockedListPlugins.mockResolvedValue([
       makePlugin('official-plugin', 'bundled', 'bundled'),
