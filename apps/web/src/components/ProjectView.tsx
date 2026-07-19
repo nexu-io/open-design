@@ -6110,8 +6110,12 @@ export function ProjectView({
             }
           },
           onRunEventId: (lastRunEventId) => {
-            updateMessageById(assistantId, (prev) => ({ ...prev, lastRunEventId }));
-            persistAssistantSoon();
+            checkpointBufferedRunEventId({
+              textBuffer,
+              updateMessage: (updater) => updateMessageById(assistantId, updater),
+              lastRunEventId,
+              persistSoon: persistAssistantSoon,
+            });
           },
         });
         return true;

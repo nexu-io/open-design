@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ProjectView, mergeSavedPreviewComment } from '../../src/components/ProjectView';
 import type {
+  AgentEvent,
   AgentInfo,
   AppConfig,
   ChatMessage,
@@ -1438,6 +1439,84 @@ describe('ProjectView conversation run isolation', () => {
     // files, and the conversation's latest run reflects success.
     await waitFor(() => expect(fetchProjectFiles).toHaveBeenCalled());
     expect(screen.getByTestId('conversation-latest-runs').textContent).toContain('conv-a:succeeded');
+  });
+
+  it('persists delivered final content before its checkpoint and terminal status', async () => {
+    conversationAMessages = [];
+    const daemonRuns: Array<{
+      handlers: {
+        onDelta: (delta: string) => void;
+        onAgentEvent: (event: AgentEvent) => void;
+        onDone: (fullText?: string) => void;
+      };
+      onRunCreated?: (runId: string) => void;
+      onRunStatus?: (status: NonNullable<ChatMessage['runStatus']>) => void;
+      onRunEventId?: (lastRunEventId: string) => void;
+    }> = [];
+    streamViaDaemon.mockImplementation(async (input: unknown) => {
+      const options = input as (typeof daemonRuns)[number];
+      daemonRuns.push(options);
+      options.onRunCreated?.('run-checkpoint-final');
+      options.onRunStatus?.('running');
+    });
+
+    renderProjectView(
+      config,
+      project,
+      [{ id: 'agent-1', name: 'OpenCode', bin: 'opencode', available: true, models: [] }],
+    );
+
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
+    await waitFor(() => expect(screen.getByTestId('send-message')).toHaveProperty('disabled', false));
+
+    fireEvent.click(screen.getByTestId('send-message'));
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+
+    await act(async () => {
+      daemonRuns[0]?.handlers.onAgentEvent({
+        kind: 'tool_use',
+        id: 'write-index',
+        name: 'Write',
+        input: { file_path: 'index.html' },
+      });
+      daemonRuns[0]?.handlers.onAgentEvent({
+        kind: 'tool_result',
+        toolUseId: 'write-index',
+        content: 'Wrote index.html',
+        isError: false,
+      });
+      daemonRuns[0]?.handlers.onDelta('Final assistant summary');
+      daemonRuns[0]?.onRunEventId?.('8327');
+      daemonRuns[0]?.onRunStatus?.('succeeded');
+      daemonRuns[0]?.handlers.onDone('Final assistant summary');
+    });
+
+    await waitFor(() => {
+      const persisted = saveMessage.mock.calls
+        .map((call) => call[2] as ChatMessage)
+        .filter((message) => message?.runId === 'run-checkpoint-final');
+      const checkpointed = persisted.filter((message) => message.lastRunEventId === '8327');
+      expect(checkpointed.length).toBeGreaterThan(0);
+      expect(checkpointed.every((message) => message.content.includes('Final assistant summary')))
+        .toBe(true);
+
+      const finalized = checkpointed.filter((message) => message.runStatus === 'succeeded').at(-1);
+      expect(finalized).toMatchObject({
+        content: 'Final assistant summary',
+        lastRunEventId: '8327',
+        runStatus: 'succeeded',
+      });
+      expect(finalized?.events).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ kind: 'tool_use', id: 'write-index', name: 'Write' }),
+          expect.objectContaining({
+            kind: 'tool_result',
+            toolUseId: 'write-index',
+            isError: false,
+          }),
+        ]),
+      );
+    });
   });
 
   it('skips an interrupted reattached run\'s completion side effects when it finishes late', async () => {
