@@ -1,0 +1,97 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "alkhayr-design-system",
+  "title": "Alkhayr Design System",
+  "version": "0.1.0",
+  "description": "Design system skill for the Alkhayr Waqf Charity Foundation website: pixel-sampled green/gold tokens with measured contrast gates, Bricolage Grotesque single-family type rules, the mihrab arch motif, light + dark themes, and the six real site pages (Home, About, Our Waqf Vision, Projects, Donate, Contact).",
+  "license": "MIT",
+  "author": {
+    "name": "Plastikov",
+    "url": "https://github.com/Plastikov"
+  },
+  "homepage": "https://github.com/Plastikov/alkhayr-design-system",
+  "plugin": {
+    "repo": "https://github.com/Plastikov/alkhayr-design-system"
+  },
+  "tags": [
+    "design-system",
+    "charity",
+    "waqf",
+    "alkhayr",
+    "tokens",
+    "dark-theme",
+    "bricolage-grotesque"
+  ],
+  "compat": {
+    "agentSkills": [{ "path": "./SKILL.md" }]
+  },
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "frontend-design",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./examples/index.html",
+      "motion": "scroll"
+    },
+    "useCase": {
+      "query": {
+        "en": "Design a page or flow for the Alkhayr Waqf Charity Foundation website using its design system — sprig-green actions on a warm Paper canvas, Bricolage Grotesque weight hierarchy, the mihrab arch motif, and honest real copy.",
+        "zh-CN": "使用 Alkhayr 设计系统为 Alkhayr Waqf 慈善基金会网站设计页面或流程——暖纸底色上的嫩绿行动色、Bricolage Grotesque 字重层级、米哈拉布拱形母题与真实文案。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./examples/index.html",
+          "title": "Alkhayr Design System — tokens, components, patterns"
+        }
+      ]
+    },
+    "context": {
+      "skills": [{ "path": "./SKILL.md" }],
+      "designSystem": { "path": "./references/brand-spec.md", "primary": true },
+      "craft": ["typography", "color", "anti-ai-slop"],
+      "assets": [
+        "./examples/index.html",
+        "./examples/assets/alkhayr.jpeg",
+        "./references/brand-spec.md"
+      ],
+      "atoms": ["todo-write", "critique-theater", "handoff"]
+    },
+    "pipeline": {
+      "stages": [
+        { "id": "plan", "atoms": ["todo-write"] },
+        { "id": "generate", "atoms": ["file-write"] },
+        { "id": "critique", "atoms": ["critique-theater"], "repeat": true, "until": "critique.score >= 4 || iterations >= 3" },
+        { "id": "handoff", "atoms": ["handoff"] }
+      ]
+    },
+    "inputs": [
+      {
+        "name": "page",
+        "label": "Which page or surface?",
+        "type": "select",
+        "options": ["home", "about", "waqf-vision", "projects", "donate", "contact", "new-component"],
+        "default": "home",
+        "required": true
+      },
+      {
+        "name": "theme",
+        "label": "Theme",
+        "type": "select",
+        "options": ["light", "dark", "both-with-toggle"],
+        "default": "both-with-toggle"
+      },
+      {
+        "name": "copy",
+        "label": "Real page copy",
+        "type": "text",
+        "placeholder": "Paste the foundation's real copy — never lorem ipsum"
+      }
+    ],
+    "capabilities": ["prompt:inject", "fs:write"]
+  }
+}

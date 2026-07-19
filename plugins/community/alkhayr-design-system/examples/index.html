@@ -1,0 +1,931 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Alkhayr Waqf Charity Foundation — Design System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,200..800&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   ALKHAYR DESIGN SYSTEM — tokens
+   Colors pixel-sampled from assets/alkhayr.jpeg (see brand-spec.md)
+   ============================================================ */
+:root{
+  --paper:#FDFBF6; --paper-2:#F3EEE1; --card:#FFFFFF;
+  --ink:#013B2C; --ink-soft:#5B6B63; --line:#E2DCC8;
+  --accent:#31763F; --accent-hover:#2A6536; --accent-soft:#31763F1c;
+  --gold:#BF9543; --gold-ink:#8A6A2A; --gold-soft:#BF95431f;
+  --deep:#04241A; --deep-2:#0A2E22;
+  --danger:#A83A32; --danger-soft:#A83A3214;
+  --font-display:'Bricolage Grotesque',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+  --font-body:'Bricolage Grotesque',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+  --font-mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+  --r-sm:8px; --r-md:12px; --r-lg:20px;
+  --shadow-1:0 1px 2px rgba(4,36,26,.05),0 4px 16px rgba(4,36,26,.06);
+  --shadow-2:0 8px 32px rgba(4,36,26,.14);
+}
+:root[data-theme="dark"]{
+  --paper:#0B1512; --paper-2:#122019; --card:#101B16;
+  --ink:#E9EFE9; --ink-soft:#9FB0A8; --line:#26362E;
+  --accent:#5FAE6F; --accent-hover:#74C184; --accent-soft:#5FAE6F22;
+  --gold:#D9B65A; --gold-ink:#D9B65A; --gold-soft:#D9B65A22;
+  --deep:#06110D; --deep-2:#0B1A14;
+  --danger:#E08A80; --danger-soft:#E08A8018;
+  --shadow-1:0 1px 2px rgba(0,0,0,.3),0 4px 16px rgba(0,0,0,.35);
+  --shadow-2:0 8px 32px rgba(0,0,0,.5);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  background:var(--paper);color:var(--ink);font-family:var(--font-body);
+  font-size:17px;line-height:1.6;-webkit-font-smoothing:antialiased;
+}
+::selection{background:var(--accent-soft)}
+a{color:var(--accent);text-decoration-thickness:1px;text-underline-offset:3px}
+a:hover{color:var(--accent-hover)}
+code{font-family:var(--font-mono);font-size:.86em;background:var(--paper-2);padding:1px 6px;border-radius:5px}
+.display{font-family:var(--font-display);font-weight:800;text-wrap:balance}
+.eyebrow{font-size:12px;font-weight:700;letter-spacing:.13em;text-transform:uppercase}
+.mono{font-family:var(--font-mono)}
+
+/* ---- doc chrome ---- */
+.ds-layout{display:grid;grid-template-columns:232px minmax(0,1fr);max-width:1280px;margin:0 auto;padding:0 28px;gap:48px}
+.ds-toc{position:sticky;top:0;height:100vh;overflow:auto;padding:40px 0;font-size:13.5px}
+.ds-toc .toc-brand{display:flex;align-items:center;gap:10px;margin-bottom:26px}
+.ds-toc .toc-brand img{width:30px;height:30px;object-fit:contain}
+.ds-toc .toc-brand b{font-size:13px;letter-spacing:.02em}
+.ds-toc ol{list-style:none}
+.ds-toc li{margin:1px 0}
+.ds-toc a{display:block;padding:5px 10px;border-radius:7px;color:var(--ink-soft);text-decoration:none}
+.ds-toc a:hover{background:var(--paper-2);color:var(--ink)}
+.ds-toc a .n{font-family:var(--font-mono);font-size:11px;color:var(--gold-ink);margin-right:8px}
+.ds-main{min-width:0;padding-bottom:40px}
+.masthead{padding:64px 0 44px;border-bottom:1px solid var(--line)}
+.masthead img.lockup{width:132px;height:auto;margin-bottom:26px}
+.status-flag{display:inline-block;padding:4px 12px;border-radius:999px;background:var(--gold-soft);color:var(--gold-ink);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:18px}
+.masthead h1{font-size:clamp(34px,4.4vw,52px);line-height:1.08;letter-spacing:-.02em;margin:0 0 18px;max-width:15ch}
+.dek{max-width:64ch;color:var(--ink-soft);font-size:17.5px}
+.mast-meta{display:flex;flex-wrap:wrap;gap:10px;margin-top:26px}
+.mast-meta span{font-family:var(--font-mono);font-size:11.5px;color:var(--ink-soft);border:1px solid var(--line);border-radius:999px;padding:4px 12px}
+.theme-toggle{position:fixed;right:22px;bottom:22px;z-index:50;display:inline-flex;align-items:center;gap:8px;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:999px;padding:9px 16px;font:600 13px var(--font-body);cursor:pointer;box-shadow:var(--shadow-1)}
+.theme-toggle:hover{border-color:var(--ink-soft)}
+
+/* ---- doc sections ---- */
+section.ds{padding:54px 0;border-bottom:1px solid var(--line)}
+.sec-label{font-family:var(--font-mono);font-size:12px;color:var(--gold-ink);letter-spacing:.06em;margin-bottom:8px}
+.sec-title{font-family:var(--font-display);font-weight:700;font-size:clamp(26px,3vw,34px);letter-spacing:-.01em;line-height:1.15;margin-bottom:10px}
+.sec-desc{max-width:70ch;color:var(--ink-soft);font-size:16px;margin-bottom:30px}
+.specimen{border:1px solid var(--line);border-radius:var(--r-lg);background:var(--card);padding:34px;margin:18px 0}
+.specimen.flush{padding:0;overflow:hidden}
+.spec-note{font-size:13px;color:var(--ink-soft);margin-top:12px}
+.spec-note b{color:var(--ink)}
+h4.sub{font-size:13px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-soft);margin:26px 0 12px}
+
+/* ---- color specimens ---- */
+.sw-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px}
+.sw{border:1px solid var(--line);border-radius:var(--r-md);overflow:hidden;background:var(--card)}
+.sw .chip{height:76px}
+.sw .body{padding:12px 14px}
+.sw .name{font-weight:700;font-size:14px;margin-bottom:2px}
+.sw .val{font-family:var(--font-mono);font-size:11.5px;color:var(--ink-soft);margin-bottom:6px}
+.sw .use{font-size:12.5px;color:var(--ink-soft);line-height:1.45}
+.aa{display:inline-block;font-family:var(--font-mono);font-size:10px;padding:2px 7px;border-radius:999px;background:var(--accent-soft);color:var(--accent);margin-top:8px}
+.aa.warn{background:var(--danger-soft);color:var(--danger)}
+
+/* ---- type specimens ---- */
+.type-row{display:grid;grid-template-columns:120px 1fr;gap:20px;align-items:baseline;padding:16px 0;border-bottom:1px dashed var(--line)}
+.type-row:last-child{border-bottom:0}
+.type-meta{font-family:var(--font-mono);font-size:11px;color:var(--ink-soft);line-height:1.7}
+.t-display{font-family:var(--font-display);font-weight:800;font-size:52px;letter-spacing:-.02em;line-height:1.1}
+.t-h1{font-family:var(--font-display);font-weight:700;font-size:38px;letter-spacing:-.015em;line-height:1.15}
+.t-h2{font-family:var(--font-display);font-weight:700;font-size:29px;letter-spacing:-.01em;line-height:1.2}
+.t-h3{font-family:var(--font-body);font-weight:700;font-size:21px;line-height:1.3}
+.t-body{font-size:17px;max-width:60ch}
+.t-small{font-size:14px;color:var(--ink-soft)}
+.t-eyebrow{font-size:12px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--gold-ink)}
+.t-quote{font-family:var(--font-display);font-weight:500;font-size:22px;line-height:1.4;color:var(--accent)}
+.t-ar{direction:rtl;font-size:26px}
+
+/* ---- spacing/radius specimens ---- */
+.sp-row{display:flex;align-items:center;gap:16px;padding:7px 0}
+.sp-row .lbl{font-family:var(--font-mono);font-size:11.5px;width:110px;color:var(--ink-soft)}
+.sp-bar{height:18px;background:var(--accent);border-radius:3px;opacity:.85}
+.rd-row{display:flex;gap:22px;flex-wrap:wrap}
+.rd-item{text-align:center}
+.rd-box{width:86px;height:64px;border:1.5px solid var(--accent);background:var(--accent-soft)}
+.rd-item .lbl{font-family:var(--font-mono);font-size:11px;color:var(--ink-soft);margin-top:8px}
+
+/* ============================================================
+   COMPONENTS — these are the system, demonstrated live
+   ============================================================ */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:9px;min-height:46px;padding:0 24px;border-radius:var(--r-sm);font:600 15.5px var(--font-body);letter-spacing:.01em;cursor:pointer;border:1px solid transparent;transition:background .15s,border-color .15s,transform .1s;text-decoration:none}
+.btn:active{transform:translateY(1px)}
+.btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:hover{background:var(--accent-hover);color:#fff}
+.btn-secondary{background:transparent;color:var(--ink);border-color:var(--ink)}
+.btn-secondary:hover{background:var(--ink);color:var(--paper)}
+.btn-ghost{background:transparent;color:var(--accent);padding:0 10px;min-height:40px}
+.btn-ghost:hover{background:var(--accent-soft)}
+.btn-ondark{background:var(--paper);color:#013B2C}
+.btn-ondark:hover{background:#fff}
+.btn-outline-dark{background:transparent;color:var(--paper);border-color:#ffffff45}
+.btn-outline-dark:hover{border-color:var(--paper)}
+.btn-sm{min-height:38px;padding:0 16px;font-size:14px}
+.btn[disabled]{opacity:.45;pointer-events:none}
+.btn-row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+
+.badge{display:inline-flex;align-items:center;gap:7px;padding:4px 12px;border-radius:999px;font-size:12.5px;font-weight:600;letter-spacing:.02em;border:1px solid transparent}
+.badge .dot{width:6px;height:6px;border-radius:50%;background:currentColor}
+.badge-pilot{background:var(--accent-soft);color:var(--accent)}
+.badge-planned{background:var(--paper-2);color:var(--ink-soft);border-color:var(--line)}
+.badge-gold{background:var(--gold-soft);color:var(--gold-ink)}
+.tag{display:inline-block;padding:4px 12px;border:1px solid var(--line);border-radius:999px;font-size:12.5px;color:var(--ink-soft);background:var(--card)}
+.badge-row{display:flex;gap:9px;flex-wrap:wrap;align-items:center}
+
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r-md);padding:26px}
+.card-lg{border-radius:var(--r-lg);padding:34px}
+.card-hover{transition:box-shadow .2s,border-color .2s}
+.card-hover:hover{box-shadow:var(--shadow-1);border-color:var(--ink-soft)}
+.card h3{font-family:var(--font-display);font-weight:700;font-size:22px;letter-spacing:-.01em;margin-bottom:8px}
+.card p{color:var(--ink-soft);font-size:15px}
+.arch-img{aspect-ratio:4/3.4;clip-path:url(#mihrab);background:var(--paper-2);display:flex;align-items:center;justify-content:center;position:relative}
+.arch-img .ph{text-align:center;color:var(--ink-soft);font-size:12.5px;max-width:26ch;padding:0 20px}
+.arch-img .ph b{display:block;color:var(--ink);font-size:13px;margin-bottom:4px}
+.stat-num{font-family:var(--font-mono);font-size:38px;font-weight:700;color:var(--accent);letter-spacing:-.02em;line-height:1}
+.stat-lbl{font-size:13px;color:var(--ink-soft);margin-top:8px;line-height:1.45}
+.quote-card{border-top:2px solid var(--gold);background:var(--card);border-radius:0 0 var(--r-md) var(--r-md);border-left:1px solid var(--line);border-right:1px solid var(--line);border-bottom:1px solid var(--line);padding:30px}
+.quote-card blockquote{font-family:var(--font-display);font-weight:500;font-size:21px;line-height:1.45;margin-bottom:14px}
+.quote-card cite{font-style:normal;font-size:13px;color:var(--ink-soft);letter-spacing:.06em;text-transform:uppercase;font-weight:600}
+
+.field{margin-bottom:18px}
+.field label{display:block;font-size:13px;font-weight:600;letter-spacing:.02em;margin-bottom:7px}
+.input,select.input,textarea.input{width:100%;min-height:46px;padding:11px 14px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--card);color:var(--ink);font:400 15.5px var(--font-body);transition:border-color .15s,box-shadow .15s}
+textarea.input{min-height:120px;resize:vertical}
+.input::placeholder{color:var(--ink-soft);opacity:.7}
+.input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.input.err{border-color:var(--danger)}
+.field .hint{font-size:12.5px;color:var(--ink-soft);margin-top:6px}
+.field .err-msg{display:none;font-size:12.5px;color:var(--danger);margin-top:6px}
+.field.invalid .err-msg{display:block}
+.check{display:flex;gap:10px;align-items:flex-start;font-size:14.5px;color:var(--ink-soft)}
+.check input{width:17px;height:17px;margin-top:3px;accent-color:var(--accent)}
+
+.site-nav{display:flex;align-items:center;gap:30px;padding:0 30px;height:68px;background:var(--card);border:1px solid var(--line);border-radius:var(--r-md)}
+.site-nav .brand{display:flex;align-items:center;gap:10px;font-family:var(--font-display);font-weight:700;font-size:17px;letter-spacing:.01em;color:var(--ink);text-decoration:none}
+.site-nav .brand img{width:26px;height:26px;object-fit:contain}
+.site-nav ul{display:flex;gap:4px;list-style:none;margin-left:auto}
+.site-nav ul a{display:block;padding:8px 12px;font-size:14.5px;font-weight:600;color:var(--ink-soft);text-decoration:none;border-radius:7px}
+.site-nav ul a:hover{color:var(--ink);background:var(--paper-2)}
+.site-nav ul a.active{color:var(--accent);background:var(--accent-soft)}
+.site-footer{background:var(--deep);color:#9FB0A8;border-radius:var(--r-md);padding:44px 40px 30px;font-size:14px}
+.site-footer .cols{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:36px;padding-bottom:30px;border-bottom:1px solid #ffffff14;margin-bottom:22px}
+.site-footer h5{color:#FDFBF6;font:700 12px var(--font-body);letter-spacing:.12em;text-transform:uppercase;margin-bottom:14px}
+.site-footer a{color:#C9D6CE;text-decoration:none}
+.site-footer a:hover{color:#fff}
+.site-footer ul{list-style:none;display:grid;gap:9px}
+.site-footer .base{display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;font-family:var(--font-mono);font-size:11.5px}
+
+/* ---- patterns ---- */
+.pat-hero{display:grid;grid-template-columns:1.1fr .9fr;gap:56px;align-items:center;padding:76px 56px;background:var(--card);border-radius:var(--r-lg)}
+.pat-hero .eyebrow{color:var(--gold-ink);margin-bottom:18px;display:block}
+.pat-hero h1{font-family:var(--font-display);font-weight:800;font-size:clamp(38px,4vw,56px);line-height:1.06;letter-spacing:-.02em;margin-bottom:20px}
+.pat-hero .lead{font-size:18px;color:var(--ink-soft);max-width:52ch;margin-bottom:30px}
+.goal-strip{display:flex;flex-wrap:wrap;gap:8px;margin-top:30px}
+.pat-dark{background:var(--deep);color:#E9EFE9;border-radius:var(--r-lg);padding:80px 56px;text-align:center;position:relative;overflow:hidden}
+.pat-dark .arch-glyph{width:44px;height:44px;margin:0 auto 26px;color:var(--gold)}
+.pat-dark blockquote{font-family:var(--font-display);font-weight:500;font-size:clamp(24px,2.6vw,34px);line-height:1.35;max-width:30ch;margin:0 auto 20px;letter-spacing:-.01em}
+.pat-dark cite{font-style:normal;font-family:var(--font-mono);font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--gold)}
+.pat-dark .waqf-def{max-width:62ch;margin:34px auto 0;color:#9FB0A8;font-size:15.5px}
+.pat-dark .hist{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:22px}
+.pat-dark .hist span{border:1px solid #ffffff22;color:#C9D6CE;padding:4px 13px;border-radius:999px;font-size:12.5px}
+.proj-feature{display:grid;grid-template-columns:.95fr 1.05fr;gap:0;border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden;background:var(--card)}
+.proj-feature .body{padding:40px}
+.proj-feature h3{font-family:var(--font-display);font-weight:700;font-size:30px;letter-spacing:-.015em;margin:10px 0 12px}
+.proj-feature p{color:var(--ink-soft);font-size:15.5px}
+.alloc{list-style:none;margin:20px 0 26px;display:grid;gap:9px}
+.alloc li{display:flex;gap:10px;font-size:14.5px;color:var(--ink)}
+.alloc li::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--accent);flex-shrink:0;margin-top:8px}
+.proj-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-top:14px}
+.proj-mini{border:1px solid var(--line);border-radius:var(--r-md);padding:20px;background:var(--card)}
+.proj-mini b{display:block;font-size:15px;margin-bottom:5px}
+.proj-mini span{font-size:13px;color:var(--ink-soft)}
+.donate-wrap{display:grid;grid-template-columns:1.05fr .95fr;gap:40px;align-items:start}
+.give-opt{display:flex;gap:14px;border:1px solid var(--line);border-radius:var(--r-md);padding:16px 18px;background:var(--card);cursor:pointer;margin-bottom:10px;transition:border-color .15s,background .15s;text-align:left;width:100%;font:inherit;color:inherit}
+.give-opt:hover{border-color:var(--ink-soft)}
+.give-opt[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft)}
+.give-opt .radio{width:18px;height:18px;border:2px solid var(--ink-soft);border-radius:50%;flex-shrink:0;margin-top:2px;position:relative}
+.give-opt[aria-pressed="true"] .radio{border-color:var(--accent)}
+.give-opt[aria-pressed="true"] .radio::after{content:"";position:absolute;inset:3px;background:var(--accent);border-radius:50%}
+.give-opt b{display:block;font-size:15.5px;margin-bottom:2px}
+.give-opt span{font-size:13.5px;color:var(--ink-soft)}
+.bank-card{background:var(--deep);color:#E9EFE9;border-radius:var(--r-lg);padding:34px}
+.bank-card h3{font-family:var(--font-display);font-weight:700;color:#FDFBF6;font-size:24px;margin-bottom:6px}
+.bank-card .sub{color:#9FB0A8;font-size:14px;margin-bottom:24px}
+.bank-row{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:13px 0;border-bottom:1px solid #ffffff14}
+.bank-row:last-of-type{border-bottom:0}
+.bank-row .k{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:#9FB0A8}
+.bank-row .v{font-family:var(--font-mono);font-size:15px;color:#FDFBF6}
+.copy-btn{background:transparent;border:1px solid #ffffff2e;color:#E9EFE9;border-radius:7px;padding:5px 11px;font:600 12px var(--font-body);cursor:pointer;letter-spacing:.03em}
+.copy-btn:hover{border-color:var(--gold);color:var(--gold)}
+.copy-btn.done{border-color:var(--accent);color:var(--accent)}
+.contact-wrap{display:grid;grid-template-columns:.9fr 1.1fr;gap:44px;align-items:start}
+.c-row{display:flex;gap:14px;padding:13px 0;border-bottom:1px solid var(--line)}
+.c-row:last-child{border-bottom:0}
+.c-row .k{font-size:11.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-soft);width:92px;flex-shrink:0;padding-top:3px}
+.c-row .v{font-size:15px}
+.form-ok{display:none;border:1px solid var(--accent);background:var(--accent-soft);color:var(--accent);border-radius:var(--r-md);padding:18px 20px;font-weight:600;font-size:15px}
+.form-ok.show{display:block}
+
+/* ---- usage ---- */
+.voice-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.voice-card{border-radius:var(--r-md);padding:18px 20px;border:1px solid var(--line);font-size:15px}
+.voice-card.on{background:var(--accent-soft);border-color:var(--accent)}
+.voice-card.off{background:var(--paper-2);color:var(--ink-soft)}
+.voice-card .lbl{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px}
+.voice-card.on .lbl{color:var(--accent)}
+.rule-list{list-style:none;display:grid;gap:0}
+.rule-list li{display:flex;gap:14px;padding:13px 0;border-bottom:1px solid var(--line);font-size:15px;color:var(--ink-soft)}
+.rule-list li:last-child{border-bottom:0}
+.rule-list .n{font-family:var(--font-mono);font-size:11.5px;color:var(--gold-ink);padding-top:4px;width:26px;flex-shrink:0}
+.rule-list b{color:var(--ink)}
+.contrast-table{width:100%;border-collapse:collapse;font-size:14px}
+.contrast-table th{text-align:left;font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-soft);padding:9px 12px;border-bottom:1px solid var(--line)}
+.contrast-table td{padding:10px 12px;border-bottom:1px solid var(--line)}
+.contrast-table tr:last-child td{border-bottom:0}
+.contrast-table .ratio{font-family:var(--font-mono);font-size:13px}
+.devices{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.device{border:1px solid var(--line);border-radius:var(--r-md);padding:22px;background:var(--card)}
+.device svg{width:34px;height:34px;color:var(--gold-ink);margin-bottom:14px}
+.device b{display:block;font-size:15px;margin-bottom:5px}
+.device span{font-size:13.5px;color:var(--ink-soft)}
+
+footer.doc-end{padding:44px 0 90px;color:var(--ink-soft);font-size:13.5px;max-width:72ch}
+
+@media (max-width:980px){
+  .ds-layout{grid-template-columns:1fr}
+  .ds-toc{display:none}
+  .pat-hero,.donate-wrap,.contact-wrap,.proj-feature{grid-template-columns:1fr}
+  .pat-hero{padding:48px 28px}
+  .pat-dark{padding:56px 26px}
+  .voice-grid{grid-template-columns:1fr}
+  .site-footer .cols{grid-template-columns:1fr}
+  .devices{grid-template-columns:1fr}
+  .site-nav ul{display:none}
+  .type-row{grid-template-columns:1fr;gap:6px}
+}
+</style>
+</head>
+<body>
+
+<!-- shared clip path: the pointed mihrab arch from the logo -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <clipPath id="mihrab" clipPathUnits="objectBoundingBox">
+      <path d="M0,1 L0,0.42 C0,0.18 0.22,0.05 0.5,0.01 C0.78,0.05 1,0.18 1,0.42 L1,1 Z"/>
+    </clipPath>
+  </defs>
+</svg>
+
+<button class="theme-toggle" id="themeToggle" type="button">◐&nbsp; Preview dark tokens</button>
+
+<div class="ds-layout">
+
+  <nav class="ds-toc" aria-label="System contents">
+    <div class="toc-brand">
+      <img src="assets/alkhayr.jpeg" alt="">
+      <b>Alkhayr · DS v1</b>
+    </div>
+    <ol>
+      <li><a href="#positioning"><span class="n">01</span>Positioning</a></li>
+      <li><a href="#color"><span class="n">02</span>Color</a></li>
+      <li><a href="#type"><span class="n">03</span>Typography</a></li>
+      <li><a href="#space"><span class="n">04</span>Space, radius, elevation</a></li>
+      <li><a href="#buttons"><span class="n">05</span>Buttons</a></li>
+      <li><a href="#badges"><span class="n">06</span>Badges &amp; tags</a></li>
+      <li><a href="#cards"><span class="n">07</span>Cards</a></li>
+      <li><a href="#forms"><span class="n">08</span>Forms</a></li>
+      <li><a href="#nav"><span class="n">09</span>Navigation &amp; footer</a></li>
+      <li><a href="#pat-hero"><span class="n">10</span>Pattern · Home hero</a></li>
+      <li><a href="#pat-waqf"><span class="n">11</span>Pattern · Waqf vision</a></li>
+      <li><a href="#pat-projects"><span class="n">12</span>Pattern · Projects</a></li>
+      <li><a href="#pat-donate"><span class="n">13</span>Pattern · Donate</a></li>
+      <li><a href="#pat-contact"><span class="n">14</span>Pattern · Contact</a></li>
+      <li><a href="#usage"><span class="n">15</span>Usage notes</a></li>
+    </ol>
+  </nav>
+
+  <main class="ds-main">
+
+    <header class="masthead">
+      <img class="lockup" src="assets/alkhayr.jpeg" alt="Alkhayr Waqf Charity Foundation logo">
+      <p class="status-flag">v1 — extends the open draft (DEC-002) into a full system</p>
+      <h1 class="display">Alkhayr Waqf Charity Foundation — Design System</h1>
+      <p class="dek">Tokens, components, and page patterns for the six-page site — Home, About Us,
+        Our Waqf Vision, Projects, Donate, Contact. Built from the two real assets that exist:
+        the logo (colors pixel-sampled, shapes inherited) and the drafted copy (voice). One idea
+        governs everything: <em>permanence</em> — give once, and the asset keeps giving.</p>
+      <div class="mast-meta">
+        <span>Ilorin, Nigeria</span><span>6 pages</span><span>Bricolage Grotesque · one family</span>
+        <span>2 greens · gold in reserve</span><span>light + dark tokens</span>
+      </div>
+    </header>
+
+    <!-- 01 POSITIONING -->
+    <section class="ds" id="positioning">
+      <p class="sec-label">/01 · Foundation</p>
+      <h2 class="sec-title">Positioning</h2>
+      <p class="sec-desc">Alkhayr is not running a one-off appeal — it builds <b>income-generating waqf
+        assets</b> (first: a student hostel in Ilorin) whose profits fund orphan care, education,
+        healthcare, entrepreneurship, and poverty relief for as long as the asset stands. Every visual
+        and verbal choice should feel like an institution that plans to exist in fifty years, not a
+        campaign that ends next month. That means: quiet confidence over urgency, documentation over
+        decoration, specifics over sentiment.</p>
+      <div class="badge-row">
+        <span class="tag">Trust &amp; transparency</span><span class="tag">Sustainability</span>
+        <span class="tag">Accountability</span><span class="tag">Community empowerment</span>
+        <span class="tag">Islamic ethical principles</span>
+      </div>
+    </section>
+
+    <!-- 02 COLOR -->
+    <section class="ds" id="color">
+      <p class="sec-label">/02 · Tokens</p>
+      <h2 class="sec-title">Color</h2>
+      <p class="sec-desc">Three brand colors, each with a job, all sampled directly from the logo.
+        The logo itself splits its greens: near-black deep green carries the ink; the brighter sprig
+        green appears only on the leaf — so sprig becomes the action color, tying every "donate" moment
+        to the mark's growth symbol. Gold is the mark's only warm color and stays in reserve.
+        Ratios measured, not estimated.</p>
+      <div class="sw-grid">
+        <div class="sw"><div class="chip" style="background:#013B2C"></div><div class="body">
+          <p class="name">Deep Green — ink</p><p class="val">#013B2C · oklch(31.4% .062 169)</p>
+          <p class="use">Body text, wordmark, primary UI ink. The mark's dominant color.</p>
+          <span class="aa">12.2:1 on Paper ✓</span></div></div>
+        <div class="sw"><div class="chip" style="background:#31763F"></div><div class="body">
+          <p class="name">Sprig Green — accent</p><p class="val">#31763F · oklch(50.7% .110 148)</p>
+          <p class="use">CTAs, links, active states, focus rings, progress. The only action color.</p>
+          <span class="aa">5.4:1 white text ✓</span></div></div>
+        <div class="sw"><div class="chip" style="background:#BF9543"></div><div class="body">
+          <p class="name">Minaret Gold — reserved</p><p class="val">#BF9543 · oklch(69.3% .111 82)</p>
+          <p class="use">The arch outline, eyebrows on dark, small badges, dividers. Never a button fill.</p>
+          <span class="aa warn">2.7:1 on Paper — no text</span></div></div>
+        <div class="sw"><div class="chip" style="background:#8A6A2A"></div><div class="body">
+          <p class="name">Gold Ink — text-safe gold</p><p class="val">#8A6A2A · oklch(53% .09 82)</p>
+          <p class="use">When gold must carry words on light (eyebrows, citations, badges).</p>
+          <span class="aa">4.9:1 on Paper ✓</span></div></div>
+        <div class="sw"><div class="chip" style="background:#04241A"></div><div class="body">
+          <p class="name">Ground Deep — dark surface</p><p class="val">#04241A · oklch(23.4% .042 168)</p>
+          <p class="use">Hero-dark sections, quote band, footer, the bank-details card.</p>
+          <span class="aa">16:1 Paper text ✓</span></div></div>
+        <div class="sw"><div class="chip" style="background:#FDFBF6;border-bottom:1px solid var(--line)"></div><div class="body">
+          <p class="name">Paper — background</p><p class="val">#FDFBF6 · oklch(98.8% .007 89)</p>
+          <p class="use">Page background. The logo's white, warmed slightly for long-form reading.</p></div></div>
+        <div class="sw"><div class="chip" style="background:#F3EEE1"></div><div class="body">
+          <p class="name">Paper 2 — neutral band</p><p class="val">#F3EEE1 · oklch(94.9% .018 89)</p>
+          <p class="use">Alternating section bands, image placeholders, code chips.</p></div></div>
+        <div class="sw"><div class="chip" style="background:#5B6B63"></div><div class="body">
+          <p class="name">Ink Soft — secondary text</p><p class="val">#5B6B63 · oklch(51.2% .023 164)</p>
+          <p class="use">Captions, descriptions, metadata. Body-safe on Paper.</p>
+          <span class="aa">5.5:1 on Paper ✓</span></div></div>
+        <div class="sw"><div class="chip" style="background:#E2DCC8"></div><div class="body">
+          <p class="name">Line — hairlines</p><p class="val">#E2DCC8 · oklch(89.4% .028 93)</p>
+          <p class="use">Borders and dividers. Structure comes from lines + space, not shadows.</p></div></div>
+        <div class="sw"><div class="chip" style="background:#A83A32"></div><div class="body">
+          <p class="name">Danger — semantic</p><p class="val">#A83A32 · oklch(47% .13 30)</p>
+          <p class="use">Form errors only. Success = Sprig, warn = Gold Ink. No other semantics.</p></div></div>
+      </div>
+      <p class="spec-note"><b>Dark theme</b> ships as a full token set (toggle bottom-right to preview):
+        bg <code>#0B1512</code>, card <code>#101B16</code>, ink <code>#E9EFE9</code>, muted
+        <code>#9FB0A8</code>, line <code>#26362E</code>, sprig <code>#5FAE6F</code>, gold
+        <code>#D9B65A</code> (8.5:1 on deep). <b>Accent budget:</b> sprig at most twice per screen —
+        one CTA + one link/active state. Gold never adjacent to sprig.</p>
+    </section>
+
+    <!-- 03 TYPE -->
+    <section class="ds" id="type">
+      <p class="sec-label">/03 · Tokens</p>
+      <h2 class="sec-title">Typography</h2>
+      <p class="sec-desc">One family — <b>Bricolage Grotesque</b> — across the whole system. Weight,
+        not family, carries the hierarchy: extra-bold (800) for trust moments (headlines, the Hadith,
+        the tagline), bold (700) for headings and labels, regular (400) for everything operational —
+        donation steps, bank details, forms. 800 never below 29px. The family ships no italics —
+        quotes stay upright at 500. Mono is for figures and references only.</p>
+      <div class="specimen">
+        <div class="type-row"><div class="type-meta">Display<br>52px · −.02em<br>Bricolage 800</div>
+          <p class="t-display">Building sustainable charity for generations.</p></div>
+        <div class="type-row"><div class="type-meta">H1<br>38px · −.015em<br>Bricolage 700</div>
+          <p class="t-h1">Our first project: a Waqf student hostel</p></div>
+        <div class="type-row"><div class="type-meta">H2<br>29px · −.01em<br>Bricolage 700</div>
+          <p class="t-h2">What is Waqf?</p></div>
+        <div class="type-row"><div class="type-meta">H3<br>21px · Bricolage 700</div>
+          <p class="t-h3">Ways to contribute</p></div>
+        <div class="type-row"><div class="type-meta">Body<br>17px / 1.6 · Bricolage 400</div>
+          <p class="t-body">Waqf is a permanent charitable endowment in Islam where an asset is
+            dedicated for the benefit of society. The asset itself remains intact, while its income
+            is used for charitable causes.</p></div>
+        <div class="type-row"><div class="type-meta">Quote<br>22px · Bricolage 500</div>
+          <p class="t-quote">"When a person dies, all his deeds come to an end except three: ongoing
+            charity, beneficial knowledge, or a righteous child who prays for him."</p></div>
+        <div class="type-row"><div class="type-meta">Eyebrow<br>12px · +.13em · caps</div>
+          <p class="t-eyebrow">Our Waqf Vision</p></div>
+        <div class="type-row"><div class="type-meta">Small<br>14px · Bricolage 400</div>
+          <p class="t-small">Revenue from the hostel supports orphan care, scholarships, healthcare,
+            and community welfare.</p></div>
+        <div class="type-row"><div class="type-meta">Mono<br>figures · refs</div>
+          <p class="mono" style="font-size:15px">0512394034 · DEC-002 · 01/15</p></div>
+        <div class="type-row"><div class="type-meta">Arabic<br>Amiri / Noto Naskh</div>
+          <p class="t-ar">الخير — وقف</p></div>
+      </div>
+      <p class="spec-note"><b>Rules:</b> ALL CAPS always tracked ≥ +.10em. Display sizes always negative-tracked.
+        Weight ladder: 800 display, 700 headings, 400 body — 500 upright for quotes (the family has
+        no italic axis; never synthesize one).
+        Body measure ≤ 65ch. Never recreate the logo's calligraphy as a text style — it is a logotype.
+        Load real Arabic (Amiri) if the site ever carries Arabic copy.</p>
+    </section>
+
+    <!-- 04 SPACE -->
+    <section class="ds" id="space">
+      <p class="sec-label">/04 · Tokens</p>
+      <h2 class="sec-title">Space, radius, elevation</h2>
+      <p class="sec-desc">8px base unit. Section rhythm runs 96/64/48; card internals 24–34.
+        Radii are quiet — the one special shape is the mihrab arch, reserved for image masks and
+        dividers. Elevation is nearly flat: hairlines and whitespace carry structure; one soft shadow
+        marks interactivity.</p>
+      <div class="specimen" style="display:grid;grid-template-columns:1fr 1fr;gap:34px">
+        <div>
+          <h4 class="sub" style="margin-top:0">Spacing scale</h4>
+          <div class="sp-row"><span class="lbl">space-1 · 4</span><span class="sp-bar" style="width:4px"></span></div>
+          <div class="sp-row"><span class="lbl">space-2 · 8</span><span class="sp-bar" style="width:8px"></span></div>
+          <div class="sp-row"><span class="lbl">space-3 · 12</span><span class="sp-bar" style="width:12px"></span></div>
+          <div class="sp-row"><span class="lbl">space-4 · 16</span><span class="sp-bar" style="width:16px"></span></div>
+          <div class="sp-row"><span class="lbl">space-6 · 24</span><span class="sp-bar" style="width:24px"></span></div>
+          <div class="sp-row"><span class="lbl">space-8 · 32</span><span class="sp-bar" style="width:32px"></span></div>
+          <div class="sp-row"><span class="lbl">space-12 · 48</span><span class="sp-bar" style="width:48px"></span></div>
+          <div class="sp-row"><span class="lbl">space-16 · 64</span><span class="sp-bar" style="width:64px"></span></div>
+          <div class="sp-row"><span class="lbl">space-24 · 96</span><span class="sp-bar" style="width:96px"></span></div>
+        </div>
+        <div>
+          <h4 class="sub" style="margin-top:0">Radius</h4>
+          <div class="rd-row">
+            <div class="rd-item"><div class="rd-box" style="border-radius:8px"></div><p class="lbl">8 · controls</p></div>
+            <div class="rd-item"><div class="rd-box" style="border-radius:12px"></div><p class="lbl">12 · cards</p></div>
+            <div class="rd-item"><div class="rd-box" style="border-radius:20px"></div><p class="lbl">20 · feature</p></div>
+            <div class="rd-item"><div class="rd-box" style="border-radius:999px"></div><p class="lbl">pill · badges</p></div>
+          </div>
+          <h4 class="sub">Elevation</h4>
+          <div class="rd-row">
+            <div class="rd-item"><div class="rd-box" style="border:1px solid var(--line);background:var(--card);border-radius:12px"></div><p class="lbl">flat · default</p></div>
+            <div class="rd-item"><div class="rd-box" style="border:1px solid var(--line);background:var(--card);border-radius:12px;box-shadow:var(--shadow-1)"></div><p class="lbl">1 · hover/nav</p></div>
+            <div class="rd-item"><div class="rd-box" style="border:1px solid var(--line);background:var(--card);border-radius:12px;box-shadow:var(--shadow-2)"></div><p class="lbl">2 · modal only</p></div>
+          </div>
+        </div>
+      </div>
+      <p class="spec-note"><b>Layout:</b> 12-col grid, content max 1120px, reading measure 65ch.
+        Alternating bands Paper / Paper 2 separate sections; Ground Deep appears at most once per page.</p>
+    </section>
+
+    <!-- 05 BUTTONS -->
+    <section class="ds" id="buttons">
+      <p class="sec-label">/05 · Components</p>
+      <h2 class="sec-title">Buttons</h2>
+      <p class="sec-desc">One primary action per view — on this site that is almost always
+        <b>Donate</b>. Secondary for the alternative path, ghost for tertiary. Min height 46px
+        (touch-safe). Gold is never a button fill.</p>
+      <div class="specimen">
+        <div class="btn-row">
+          <a class="btn btn-primary" href="#pat-donate">Donate to the Waqf</a>
+          <a class="btn btn-secondary" href="#pat-projects">Explore projects</a>
+          <a class="btn btn-ghost" href="#usage">Read our approach →</a>
+          <a class="btn btn-primary btn-sm" href="#pat-donate">Donate</a>
+          <button class="btn btn-secondary" disabled type="button">Coming soon</button>
+        </div>
+        <p class="spec-note">Primary · Secondary · Ghost · Small · Disabled</p>
+      </div>
+      <div class="specimen" style="background:var(--deep);border-color:transparent">
+        <div class="btn-row">
+          <a class="btn btn-ondark" href="#pat-donate">Support the hostel</a>
+          <a class="btn btn-outline-dark" href="#pat-waqf">What is Waqf?</a>
+        </div>
+        <p class="spec-note" style="color:#9FB0A8">On dark sections: paper fill primary, 28%-white outline secondary.</p>
+      </div>
+    </section>
+
+    <!-- 06 BADGES -->
+    <section class="ds" id="badges">
+      <p class="sec-label">/06 · Components</p>
+      <h2 class="sec-title">Badges &amp; tags</h2>
+      <p class="sec-desc">Status pills for project lifecycle; plain tags for cause areas. Dot
+        indicator only on live/active states. The gold badge is for rare, deliberate moments —
+        founding-donor recognition, a milestone — never decoration.</p>
+      <div class="specimen">
+        <h4 class="sub" style="margin-top:0">Project status</h4>
+        <div class="badge-row">
+          <span class="badge badge-pilot"><span class="dot"></span>Pilot — in development</span>
+          <span class="badge badge-planned">Planned</span>
+          <span class="badge badge-gold">Founding waqf</span>
+        </div>
+        <h4 class="sub">Cause areas (from the mission)</h4>
+        <div class="badge-row">
+          <span class="tag">Orphans</span><span class="tag">Education</span><span class="tag">Healthcare</span>
+          <span class="tag">Entrepreneurship</span><span class="tag">Poverty alleviation</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 07 CARDS -->
+    <section class="ds" id="cards">
+      <p class="sec-label">/07 · Components</p>
+      <h2 class="sec-title">Cards</h2>
+      <p class="sec-desc">Flat with hairline borders; shadow appears on hover only. The arch mask
+        turns project photos into the mark's silhouette — use it on images, not on containers.
+        Stat figures stay honest: only numbers the foundation can evidence.</p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px">
+        <div class="card card-hover" style="padding:0;overflow:hidden">
+          <div class="arch-img"><div class="ph"><b>Site photo — Waqf Student Hostel</b>Documented on
+            location once construction begins. No stock.</div></div>
+          <div style="padding:20px 22px">
+            <span class="badge badge-pilot"><span class="dot"></span>Pilot — in development</span>
+            <h3 style="margin-top:12px">Waqf Student Hostel</h3>
+            <p>Affordable student accommodation in Ilorin. Rental income funds the foundation's causes, permanently.</p>
+          </div>
+        </div>
+        <div class="card card-hover">
+          <p class="eyebrow" style="color:var(--gold-ink);margin-bottom:14px">Impact</p>
+          <p class="stat-num">1 → many</p>
+          <p class="stat-lbl">One pilot asset today; a portfolio of waqf properties as donations compound. Every naira of profit goes to the five cause areas.</p>
+          <a class="btn btn-ghost btn-sm" href="#pat-projects" style="padding:0;margin-top:16px">See the model →</a>
+        </div>
+        <div class="quote-card">
+          <p class="eyebrow" style="color:var(--gold-ink);margin-bottom:14px">Sahih Muslim</p>
+          <blockquote>"…ongoing charity (sadaqah jariyah), beneficial knowledge, or a righteous child who prays for him."</blockquote>
+          <cite>The prophetic basis of waqf</cite>
+        </div>
+      </div>
+    </section>
+
+    <!-- 08 FORMS -->
+    <section class="ds" id="forms">
+      <p class="sec-label">/08 · Components</p>
+      <h2 class="sec-title">Forms</h2>
+      <p class="sec-desc">Used on Contact and the non-cash donation path. One column, visible labels
+        (no placeholder-only fields), 46px inputs, sprig focus ring, inline errors in Danger.
+        Bank details never sit behind this form — they're public on Donate.</p>
+      <div class="specimen" style="max-width:520px">
+        <div class="field">
+          <label for="f-name">Full name</label>
+          <input class="input" id="f-name" type="text" placeholder="Amina Yusuf">
+        </div>
+        <div class="field invalid">
+          <label for="f-email">Email</label>
+          <input class="input err" id="f-email" type="email" value="amina@example">
+          <p class="err-msg">Enter a complete email address, e.g. amina@example.com</p>
+        </div>
+        <div class="field">
+          <label for="f-intent">I'm contacting about</label>
+          <select class="input" id="f-intent">
+            <option>Cash donation</option><option>Waqf property endowment</option>
+            <option>Corporate sponsorship</option><option>Partnership in projects</option><option>General enquiry</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="f-msg">Message</label>
+          <textarea class="input" id="f-msg" placeholder="Tell us how you'd like to contribute…"></textarea>
+          <p class="hint">For cash donations, the account details are on the Donate page — no form needed.</p>
+        </div>
+        <label class="check"><input type="checkbox" checked> I'm happy to be contacted on WhatsApp about this enquiry.</label>
+      </div>
+    </section>
+
+    <!-- 09 NAV -->
+    <section class="ds" id="nav">
+      <p class="sec-label">/09 · Components</p>
+      <h2 class="sec-title">Navigation &amp; footer</h2>
+      <p class="sec-desc">Six pages, flat hierarchy. Donate is the only button in the header — the
+        sprig CTA earns its place because it's the site's single conversion. Footer is Ground Deep:
+        the one guaranteed dark moment on every page.</p>
+      <div class="specimen flush" style="padding:22px">
+        <nav class="site-nav" aria-label="Site">
+          <a class="brand" href="#pat-hero"><img src="assets/alkhayr.jpeg" alt="">Alkhayr</a>
+          <ul>
+            <li><a href="#pat-hero">Home</a></li>
+            <li><a href="#positioning">About Us</a></li>
+            <li><a href="#pat-waqf">Our Waqf Vision</a></li>
+            <li><a href="#pat-projects">Projects</a></li>
+            <li><a href="#pat-contact">Contact</a></li>
+          </ul>
+          <a class="btn btn-primary btn-sm" href="#pat-donate">Donate</a>
+        </nav>
+      </div>
+      <div class="specimen flush" style="padding:22px">
+        <footer class="site-footer">
+          <div class="cols">
+            <div>
+              <h5>Alkhayr Waqf Charity Foundation</h5>
+              <p style="max-width:34ch;line-height:1.6">Building sustainable charity for generations.
+                Waqf assets whose profits serve communities in perpetuity.</p>
+            </div>
+            <div>
+              <h5>Foundation</h5>
+              <ul><li><a href="#positioning">About Us</a></li><li><a href="#pat-waqf">Our Waqf Vision</a></li>
+              <li><a href="#pat-projects">Projects</a></li><li><a href="#pat-donate">Donate</a></li></ul>
+            </div>
+            <div>
+              <h5>Contact</h5>
+              <ul><li>Ilorin, Nigeria</li><li><a href="mailto:alkhayr.waqf@gmail.com">alkhayr.waqf@gmail.com</a></li>
+              <li><a href="tel:+2348135471260">+234 813 547 1260</a> (WhatsApp)</li></ul>
+            </div>
+          </div>
+          <div class="base"><span>© 2026 Alkhayr Waqf Charity Foundation</span><span>Sadaqah Jariyah — charity that continues</span></div>
+        </footer>
+      </div>
+    </section>
+
+    <!-- 10 PATTERN: HERO -->
+    <section class="ds" id="pat-hero">
+      <p class="sec-label">/10 · Pattern</p>
+      <h2 class="sec-title">Home hero</h2>
+      <p class="sec-desc">The tagline is the headline — it's already the strongest line the foundation
+        owns. Display weight (800), one intro paragraph, two CTAs (Donate primary), cause tags as the quiet
+        proof. Right: arch-masked photo slot, honestly labelled until real site photography exists.</p>
+      <div class="specimen flush">
+        <div class="pat-hero">
+          <div>
+            <span class="eyebrow">Alkhayr Waqf Charity Foundation</span>
+            <h1 class="display">Building Sustainable Charity for Generations</h1>
+            <p class="lead">A charitable endowment initiative creating income-generating waqf projects
+              whose profits continuously support orphans, education, healthcare, entrepreneurship, and
+              poverty alleviation — reviving the prophetic tradition of Sadaqah Jariyah.</p>
+            <div class="btn-row">
+              <a class="btn btn-primary" href="#pat-donate">Donate to the Waqf</a>
+              <a class="btn btn-secondary" href="#pat-projects">See the first project</a>
+            </div>
+            <div class="goal-strip">
+              <span class="tag">Orphans</span><span class="tag">Education</span><span class="tag">Healthcare</span>
+              <span class="tag">Entrepreneurship</span><span class="tag">Poverty alleviation</span>
+            </div>
+          </div>
+          <div class="arch-img" style="aspect-ratio:4/4.6">
+            <div class="ph"><b>The hostel, documented as it rises</b>Groundbreaking → construction →
+              first residents. Photographed plainly, as it happens.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 11 PATTERN: WAQF VISION -->
+    <section class="ds" id="pat-waqf">
+      <p class="sec-label">/11 · Pattern</p>
+      <h2 class="sec-title">Waqf vision — the dark quote band</h2>
+      <p class="sec-desc">One Ground-Deep section per page at most; on Our Waqf Vision it carries the
+        Hadith and the definition. Gold appears here as text (5.97:1 — safe on dark) around the arch
+        glyph. This is the brand's one moment of ceremony.</p>
+      <div class="specimen flush">
+        <div class="pat-dark">
+          <svg class="arch-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
+            <path d="M4 21V9.5C4 5.4 7.2 2.6 12 1.5c4.8 1.1 8 3.9 8 8V21"/><path d="M8 21v-6a4 4 0 0 1 8 0v6"/>
+          </svg>
+          <blockquote>"When a person dies, all his deeds come to an end except three: ongoing charity
+            (sadaqah jariyah), beneficial knowledge, or a righteous child who prays for him."</blockquote>
+          <cite>Sahih Muslim</cite>
+          <p class="waqf-def"><b style="color:#FDFBF6">What is Waqf?</b> A permanent charitable endowment
+            in Islam: an asset is dedicated for the benefit of society. The asset itself remains intact,
+            while its income funds charitable causes — universities, hospitals, mosques, schools, water
+            systems, and welfare programs throughout Islamic history.</p>
+          <div class="hist">
+            <span>Universities</span><span>Hospitals</span><span>Mosques</span><span>Schools</span>
+            <span>Water systems</span><span>Social welfare</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 12 PATTERN: PROJECTS -->
+    <section class="ds" id="pat-projects">
+      <p class="sec-label">/12 · Pattern</p>
+      <h2 class="sec-title">Projects</h2>
+      <p class="sec-desc">The pilot gets a feature row (arch image + allocation list); future projects
+        stay modest as planned-state minis. Allocation is the trust device — say exactly where the
+        money goes.</p>
+      <div class="proj-feature">
+        <div class="arch-img" style="aspect-ratio:auto;min-height:100%">
+          <div class="ph"><b>Hostel render / site plan</b>An honest placeholder until photography exists.</div>
+        </div>
+        <div class="body">
+          <span class="badge badge-pilot"><span class="dot"></span>Pilot project — in development</span>
+          <h3>Waqf Student Hostel</h3>
+          <p>Affordable accommodation for students in Ilorin, designed to generate sustainable rental
+            income. The building is the endowment; its revenue is the charity — every year, for as long
+            as it stands. Revenue supports:</p>
+          <ul class="alloc">
+            <li>Orphan care</li><li>Educational scholarships</li>
+            <li>Healthcare support</li><li>Community welfare programs</li>
+          </ul>
+          <a class="btn btn-primary" href="#pat-donate">Fund this project</a>
+        </div>
+      </div>
+      <h4 class="sub">Future waqf investments</h4>
+      <div class="proj-grid">
+        <div class="proj-mini"><b>Agricultural projects</b><span class="badge badge-planned" style="margin-top:8px">Planned</span></div>
+        <div class="proj-mini"><b>Fish farming</b><span class="badge badge-planned" style="margin-top:8px">Planned</span></div>
+        <div class="proj-mini"><b>Commercial real estate</b><span class="badge badge-planned" style="margin-top:8px">Planned</span></div>
+        <div class="proj-mini"><b>Educational facilities</b><span class="badge badge-planned" style="margin-top:8px">Planned</span></div>
+        <div class="proj-mini"><b>Community health initiatives</b><span class="badge badge-planned" style="margin-top:8px">Planned</span></div>
+      </div>
+    </section>
+
+    <!-- 13 PATTERN: DONATE -->
+    <section class="ds" id="pat-donate">
+      <p class="sec-label">/13 · Pattern</p>
+      <h2 class="sec-title">Donate</h2>
+      <p class="sec-desc">Two jobs: make cash donation effortless (details in the open, copyable), and
+        route non-cash contributions (property, sponsorship, partnership) to a conversation. Selecting
+        a path updates the guidance — try it. No invented progress bars, no fake "raised so far".</p>
+      <div class="donate-wrap">
+        <div>
+          <h4 class="sub" style="margin-top:0">Ways to contribute</h4>
+          <button class="give-opt" type="button" aria-pressed="true" data-give="cash">
+            <span class="radio"></span><span><b>Cash donation</b><span>Direct to the foundation's account — details opposite.</span></span>
+          </button>
+          <button class="give-opt" type="button" aria-pressed="false" data-give="property">
+            <span class="radio"></span><span><b>Waqf property endowment</b><span>Dedicate land or a building as a permanent waqf asset.</span></span>
+          </button>
+          <button class="give-opt" type="button" aria-pressed="false" data-give="sponsor">
+            <span class="radio"></span><span><b>Corporate sponsorship</b><span>Fund a project as an organisation, with recognition.</span></span>
+          </button>
+          <button class="give-opt" type="button" aria-pressed="false" data-give="partner">
+            <span class="radio"></span><span><b>Partnership in projects</b><span>Co-develop an income-generating waqf asset with us.</span></span>
+          </button>
+          <p class="spec-note" id="giveNote"><b>Next step:</b> use the account details opposite — your
+            donation becomes Sadaqah Jariyah, charity that continues.</p>
+        </div>
+        <div class="bank-card">
+          <p class="eyebrow" style="color:var(--gold);margin-bottom:12px">Cash donation</p>
+          <h3>Support the Waqf</h3>
+          <p class="sub">Your contribution builds sustainable charity that benefits communities for generations.</p>
+          <div class="bank-row"><span class="k">Account name</span><span class="v">Alkhayr Waqf Charity Foundation</span></div>
+          <div class="bank-row"><span class="k">Account number</span><span class="v">0512394034</span>
+            <button class="copy-btn" type="button" data-copy="0512394034">Copy</button></div>
+          <div class="bank-row"><span class="k">Bank</span><span class="v">The Alternative Bank Limited</span></div>
+          <p class="sub" style="margin:20px 0 0">For property endowment, sponsorship, or partnership,
+            contact us — <a href="mailto:alkhayr.waqf@gmail.com" style="color:var(--gold)">alkhayr.waqf@gmail.com</a></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 14 PATTERN: CONTACT -->
+    <section class="ds" id="pat-contact">
+      <p class="sec-label">/14 · Pattern</p>
+      <h2 class="sec-title">Contact</h2>
+      <p class="sec-desc">Details left (scannable, mono-free, honest about WhatsApp-only), form right.
+        The partnership note does real work — it's the foundation's growth channel.</p>
+      <div class="contact-wrap">
+        <div>
+          <div class="c-row"><span class="k">Location</span><span class="v">Ilorin, Nigeria</span></div>
+          <div class="c-row"><span class="k">Email</span><span class="v"><a href="mailto:alkhayr.waqf@gmail.com">alkhayr.waqf@gmail.com</a>
+            <button class="copy-btn" type="button" data-copy="alkhayr.waqf@gmail.com" style="border-color:var(--line);color:var(--ink-soft);margin-left:8px">Copy</button></span></div>
+          <div class="c-row"><span class="k">Phone</span><span class="v">+234 813 547 1260 <span class="t-small">(WhatsApp only)</span><br>+974 5527 5167</span></div>
+          <div class="c-row"><span class="k">Partnership</span><span class="v">We welcome partnerships with individuals, businesses, and organizations who share our vision of sustainable charity.</span></div>
+        </div>
+        <form id="contactForm" novalidate>
+          <div class="field"><label for="c-name">Full name</label><input class="input" id="c-name" type="text" required></div>
+          <div class="field"><label for="c-email">Email</label><input class="input" id="c-email" type="email" required>
+            <p class="err-msg">Enter a valid email address.</p></div>
+          <div class="field"><label for="c-msg">Message</label><textarea class="input" id="c-msg" required></textarea>
+            <p class="err-msg">A short message helps us route your enquiry.</p></div>
+          <button class="btn btn-primary" type="submit">Send message</button>
+          <p class="form-ok" id="formOk" style="margin-top:14px">Received — we'll reply by email or WhatsApp. Jazakumullahu khairan.</p>
+        </form>
+      </div>
+    </section>
+
+    <!-- 15 USAGE -->
+    <section class="ds" id="usage">
+      <p class="sec-label">/15 · Usage notes</p>
+      <h2 class="sec-title">Voice, imagery, devices, accessibility</h2>
+      <p class="sec-desc">The rules that keep the system coherent after it leaves this page.</p>
+
+      <h4 class="sub">Voice — from the drafted copy, not invented</h4>
+      <div class="voice-grid">
+        <div class="voice-card on"><p class="lbl">On brand</p>
+          <p>"Revenue from the hostel will support orphan care, educational scholarships, healthcare
+            support, and community welfare programs."</p></div>
+        <div class="voice-card off"><p class="lbl">Off brand</p>
+          <p>"Your generous gift transforms lives and brings hope to those who need it most! 🙏"</p></div>
+        <div class="voice-card on"><p class="lbl">On brand</p>
+          <p>"Waqf is a permanent charitable endowment in Islam where an asset is dedicated for the
+            benefit of society."</p></div>
+        <div class="voice-card off"><p class="lbl">Off brand</p>
+          <p>"Waqf (an ancient Islamic tradition passed down through the ages) is our unique way of
+            giving back…"</p></div>
+      </div>
+
+      <h4 class="sub">Graphic devices — inherited from the mark</h4>
+      <div class="devices">
+        <div class="device">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 21V9.5C4 5.4 7.2 2.6 12 1.5c4.8 1.1 8 3.9 8 8V21"/></svg>
+          <b>Mihrab arch</b><span>Image masks, section dividers, the quote-band glyph. "A place built to last." Never a container shape.</span></div>
+        <div class="device">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M20 13.5A8.5 8.5 0 1 1 10.5 4a7 7 0 0 0 9.5 9.5Z"/></svg>
+          <b>Crescent</b><span>Small moments only — a bullet, a favicon, a loading state. Never large enough to compete with the arch.</span></div>
+        <div class="device">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M12 21c-4 0-7-2.5-7-6 3 0 5.5 1 7 3 1.5-2 4-3 7-3 0 3.5-3 6-7 6Z"/><path d="M12 18V9m0 0c-2 0-3.5-1.5-3.5-3.5C10.5 5.5 12 7 12 9Zm0 0c2 0 3.5-1.5 3.5-3.5C13.5 5.5 12 7 12 9Z"/></svg>
+          <b>Hands &amp; sprig</b><span>"Your donation, growing" — impact stats, funding progress, the donate hero. The model made visible.</span></div>
+      </div>
+
+      <h4 class="sub">Imagery</h4>
+      <ul class="rule-list">
+        <li><span class="n">a</span><p><b>Document the real hostel</b> — groundbreaking, construction, the
+          finished building, its residents. Plain, honest photography as it happens.</p></li>
+        <li><span class="n">b</span><p><b>Never NGO stock</b> — no posed "distressed child" shots, no
+          unrelated stock mosques. Credibility comes from the actual project.</p></li>
+        <li><span class="n">c</span><p><b>Honest placeholders until then</b> — a render, a site plan, a
+          labelled slot (as used throughout this document).</p></li>
+      </ul>
+
+      <h4 class="sub">Accessibility — measured gates</h4>
+      <table class="contrast-table">
+        <thead><tr><th>Pair</th><th>Ratio</th><th>Use</th></tr></thead>
+        <tbody>
+          <tr><td>Deep Green on Paper</td><td class="ratio">12.2:1</td><td>Body text ✓</td></tr>
+          <tr><td>Ink Soft on Paper</td><td class="ratio">5.5:1</td><td>Secondary text ✓</td></tr>
+          <tr><td>White on Sprig</td><td class="ratio">5.5:1</td><td>Primary buttons ✓</td></tr>
+          <tr><td>Paper on Ground Deep</td><td class="ratio">16.0:1</td><td>Dark sections ✓</td></tr>
+          <tr><td>Gold on Ground Deep</td><td class="ratio">6.0:1</td><td>Gold text on dark ✓</td></tr>
+          <tr><td>Gold on Paper</td><td class="ratio">2.7:1</td><td>✗ never text — use Gold Ink (4.9:1)</td></tr>
+        </tbody>
+      </table>
+
+      <h4 class="sub">Hard rules</h4>
+      <ul class="rule-list">
+        <li><span class="n">1</span><p><b>Sprig is the only action color</b>, at most twice per screen.
+          Gold is reserve: arch outlines, eyebrows on dark, rare badges — never button fills, never adjacent to sprig.</p></li>
+        <li><span class="n">2</span><p><b>Weight carries the split, not family.</b> Headlines and
+          the Hadith at 800; donation steps, bank details, and forms at 400/600. Bricolage Grotesque everywhere.</p></li>
+        <li><span class="n">3</span><p><b>No invented numbers.</b> No "₦ raised" counters, no percentage
+          goals, no impact stats the foundation can't evidence. Honest placeholders instead.</p></li>
+        <li><span class="n">4</span><p><b>One dark section per page.</b> Ground Deep is ceremony — the
+          quote band, the footer, the bank card. It loses meaning if everything is dark.</p></li>
+        <li><span class="n">5</span><p><b>Faith-grounded without over-explaining.</b> Use Waqf, Sadaqah
+          Jariyah, and the Hadith naturally, trusting the reader — as the drafted copy already does.</p></li>
+      </ul>
+    </section>
+
+    <footer class="doc-end">
+      <p><b>Status:</b> v1 full system, built on the open v1 draft (DEC-002). Palette pixel-sampled from
+        the logo; ratios computed; copy from the drafted site content. Confirm, amend, or reject —
+        on confirmation this splits into locked decisions in the vault. Built 2026-07-19.</p>
+    </footer>
+
+  </main>
+</div>
+
+<script>
+(function(){
+  var root=document.documentElement;
+  try{var saved=localStorage.getItem('ak-theme');if(saved)root.setAttribute('data-theme',saved);}catch(e){}
+  document.getElementById('themeToggle').addEventListener('click',function(){
+    var next=root.getAttribute('data-theme')==='dark'?'light':'dark';
+    root.setAttribute('data-theme',next);
+    try{localStorage.setItem('ak-theme',next);}catch(e){}
+  });
+  document.querySelectorAll('.copy-btn').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      var text=btn.getAttribute('data-copy');
+      function done(){var old=btn.textContent;btn.textContent='Copied ✓';btn.classList.add('done');
+        setTimeout(function(){btn.textContent=old;btn.classList.remove('done');},1600);}
+      if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(done).catch(done);}
+      else{var ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();
+        try{document.execCommand('copy');}catch(e){}document.body.removeChild(ta);done();}
+    });
+  });
+  var notes={cash:'<b>Next step:</b> use the account details opposite — your donation becomes Sadaqah Jariyah, charity that continues.',
+    property:'<b>Next step:</b> email <a href="mailto:alkhayr.waqf@gmail.com">alkhayr.waqf@gmail.com</a> or WhatsApp +234 813 547 1260 to arrange a property endowment.',
+    sponsor:'<b>Next step:</b> contact us to discuss sponsorship of the hostel or a future project — recognition options available.',
+    partner:'<b>Next step:</b> tell us about your project idea via the contact page — we co-develop waqf assets with partners.'};
+  var noteEl=document.getElementById('giveNote');
+  document.querySelectorAll('.give-opt').forEach(function(opt){
+    opt.addEventListener('click',function(){
+      document.querySelectorAll('.give-opt').forEach(function(o){o.setAttribute('aria-pressed','false');});
+      opt.setAttribute('aria-pressed','true');
+      noteEl.innerHTML=notes[opt.getAttribute('data-give')];
+    });
+  });
+  document.getElementById('contactForm').addEventListener('submit',function(e){
+    e.preventDefault();var ok=true;
+    [['c-name',function(v){return v.trim().length>1;}],
+     ['c-email',function(v){return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v);}],
+     ['c-msg',function(v){return v.trim().length>3;}]].forEach(function(pair){
+      var el=document.getElementById(pair[0]);var valid=pair[1](el.value);
+      el.closest('.field').classList.toggle('invalid',!valid);
+      el.classList.toggle('err',!valid);if(!valid)ok=false;
+    });
+    if(ok){document.getElementById('formOk').classList.add('show');
+      e.target.querySelectorAll('input,textarea').forEach(function(i){i.value='';});}
+  });
+})();
+</script>
+</body>
+</html>
