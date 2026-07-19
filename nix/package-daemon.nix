@@ -74,7 +74,7 @@ in
       hash = pnpmDepsHash;
       pnpm = pnpm;
       pnpmWorkspaces = pnpmWorkspaceFilters;
-      fetcherVersion = 3;
+      fetcherVersion = 4;
     };
 
     env.NODE_ENV = "production";

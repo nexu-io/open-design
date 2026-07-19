@@ -52,7 +52,7 @@ in
       # the `pnpm` arg is omitted.
       pnpm = pnpm;
       pnpmWorkspaces = pnpmWorkspaceFilters;
-      fetcherVersion = 3;
+      fetcherVersion = 4;
     };
 
     env = {
