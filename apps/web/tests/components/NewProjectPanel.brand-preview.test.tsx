@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { BrandSummary } from '@open-design/contracts';
@@ -162,6 +162,27 @@ describe('NewProjectPanel brand preview flyout', () => {
     expect(screen.getByText('Acme is a bold engineering brand for fast-moving teams.')).toBeTruthy();
     expect(screen.getByText('Space Grotesk')).toBeTruthy();
     expect(screen.getByText('#0b5fff')).toBeTruthy();
+  });
+
+  it('keeps the picker open when interacting with the portaled brand flyout', async () => {
+    renderPanel('user:brand-acme');
+
+    fireEvent.click(screen.getByTestId('design-system-trigger'));
+
+    const flyout = screen.getByTestId('new-project-ds-brand-flyout');
+    expect(flyout.parentElement).toBe(document.body);
+
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    fireEvent.mouseDown(flyout);
+
+    expect(screen.getByRole('listbox')).toBeTruthy();
+    expect(screen.getByTestId('new-project-ds-brand-flyout')).toBeTruthy();
+
+    fireEvent.mouseDown(document.body);
+    await waitFor(() => {
+      expect(screen.queryByRole('listbox')).toBeNull();
+      expect(screen.queryByTestId('new-project-ds-brand-flyout')).toBeNull();
+    });
   });
 
   it('keeps the flyout hidden for a non-brand selection', () => {

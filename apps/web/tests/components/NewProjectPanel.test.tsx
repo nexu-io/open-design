@@ -263,6 +263,58 @@ describe('NewProjectPanel design system defaults', () => {
     );
   });
 
+  it('portals the target platform dropdown out of the modal form stack', () => {
+    const { container } = render(
+      <NewProjectPanel
+        skills={skills}
+        designSystems={designSystems}
+        defaultDesignSystemId="clay"
+        templates={[]}
+        promptTemplates={[]}
+        onCreate={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Responsive web/i }));
+
+    const listbox = screen.getByRole('listbox', { name: 'Target platforms' });
+    expect(listbox.closest('.platform-picker')).toBeNull();
+    expect(document.body).toContainElement(listbox);
+    expect(container).not.toContainElement(listbox);
+  });
+
+  it('clears the inherited top offset when a portaled picker opens upward', () => {
+    vi.stubGlobal('innerHeight', 420);
+    render(
+      <NewProjectPanel
+        skills={skills}
+        designSystems={designSystems}
+        defaultDesignSystemId="clay"
+        templates={[]}
+        promptTemplates={[]}
+        onCreate={vi.fn()}
+      />,
+    );
+
+    const trigger = screen.getByRole('button', { name: /Responsive web/i });
+    vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue({
+      bottom: 394,
+      height: 44,
+      left: 24,
+      right: 344,
+      top: 350,
+      width: 320,
+      x: 24,
+      y: 350,
+      toJSON: () => ({}),
+    });
+    fireEvent.click(trigger);
+
+    const listbox = screen.getByRole('listbox', { name: 'Target platforms' });
+    expect(listbox.style.top).toBe('auto');
+    expect(listbox.style.bottom).not.toBe('auto');
+  });
+
   it('clears design system metadata when freeform is selected in multi mode', () => {
     const onCreate = vi.fn();
     render(

@@ -8,7 +8,8 @@
    model picker, toggles, …) would cover the open list. Raising the open
    picker's section above its `z-index: auto` siblings restores the
    expected "dropdown on top" order. */
-.ds-picker:has(.ds-picker-popover) { z-index: 31; }
+.ds-picker:has(.ds-picker-popover),
+.ds-picker.open { z-index: 31; }
 .ds-picker-trigger {
   display: flex;
   align-items: center;
@@ -135,6 +136,18 @@
   overflow: hidden;
   animation: ds-pop-in 140ms cubic-bezier(0.2, 0, 0.2, 1);
 }
+.ds-picker-popover--portal {
+  position: fixed;
+  z-index: 1000;
+}
+.ds-picker-popover--portal .ds-picker-head {
+  flex: 0 0 auto;
+}
+.ds-picker-popover--portal .ds-picker-list {
+  max-height: none;
+  flex: 1 1 auto;
+  min-height: 0;
+}
 @keyframes ds-pop-in {
   from { opacity: 0; transform: translateY(-4px); }
   to { opacity: 1; transform: translateY(0); }
@@ -176,6 +189,10 @@
   border-radius: var(--radius);
   box-shadow: var(--shadow-lg);
   animation: ds-pop-in 140ms cubic-bezier(0.2, 0, 0.2, 1);
+}
+.ds-picker-sidecar--portal {
+  position: fixed;
+  z-index: 1001;
 }
 .ds-picker-head {
   display: flex;
