@@ -1263,6 +1263,62 @@
     transform: none;
   }
 }
+.avatar-amr-row__sign-in,
+.avatar-amr-row__sign-in:visited {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow:
+    0 1px 2px color-mix(in srgb, var(--accent) 45%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #fff 20%, transparent);
+  transition:
+    transform 150ms cubic-bezier(0.23, 1, 0.32, 1),
+    background-color 150ms ease,
+    box-shadow 150ms ease;
+}
+@media (hover: hover) and (pointer: fine) {
+  .avatar-amr-row__sign-in:hover {
+    background: var(--accent-hover);
+    box-shadow:
+      0 2px 8px color-mix(in srgb, var(--accent) 42%, transparent),
+      inset 0 1px 0 color-mix(in srgb, #fff 22%, transparent);
+  }
+}
+.avatar-amr-row__sign-in:active {
+  transform: scale(0.96);
+}
+.avatar-amr-row__sign-in:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .avatar-amr-row__sign-in {
+    transition: background-color 150ms ease;
+  }
+  .avatar-amr-row__sign-in:active {
+    transform: none;
+  }
+}
+.avatar-amr-row__status.is-error {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--danger);
+  white-space: nowrap;
+  padding-right: 4px;
+}
 .avatar-item {
   display: flex;
   align-items: center;

@@ -1,11 +1,13 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import type { AmrWalletSnapshot } from '@open-design/contracts';
 import { getResolvedDeviceId } from '../analytics/client';
-import { amrHandoffDeviceId, attributedAmrUrl, recordAmrEntry } from '../analytics/amr-attribution';
+import { amrHandoffDeviceId, attributedAmrUrl, recordAmrEntry, type AmrEntryAttribution } from '../analytics/amr-attribution';
+import { beginAmrAuthTracking, resolveAmrAuthTracking } from '../analytics/amr-auth';
 import { useAnalytics } from '../analytics/provider';
 import { useT } from '../i18n';
 import { AgentIcon } from './AgentIcon';
+import { Icon } from './Icon';
 import { PlanBadge } from './PlanBadge';
 import { RemixIcon } from './RemixIcon';
 import { orderAgentsWithOpenDesignFirst } from './agentOrdering';
@@ -22,9 +24,11 @@ import { apiProtocolLabel } from '../utils/apiProtocol';
 import { fetchProviderModels } from '../providers/provider-models';
 import {
   canUpgradeVelaPlan,
+  cancelVelaLogin,
   fetchAmrWalletSnapshot,
   fetchVelaLoginStatus,
   formatVelaBalanceUsd,
+  startVelaLogin,
   type VelaLoginStatus,
 } from '../providers/daemon';
 import {
@@ -32,6 +36,14 @@ import {
 } from '../runtime/amr-guidance';
 import { isMacPlatform } from '../utils/platform';
 import { isVisibleLocalCliAgent } from '../utils/visibleAgents';
+import {
+  AMR_LOGIN_STATUS_EVENT,
+  AMR_LOGIN_POLL_INTERVAL_MS,
+  AMR_LOGIN_STARTUP_SETTLE_MS,
+  amrLoginPollOutcome,
+  amrLoginStatusEventReason,
+  notifyAmrLoginStatusChanged,
+} from './amrLoginPolling';
 
 interface Props {
   config: AppConfig;
@@ -193,10 +205,120 @@ export function AvatarMenu({
   const [amrAccount, setAmrAccount] = useState<VelaLoginStatus | null>(null);
   const [amrWalletSnapshot, setAmrWalletSnapshot] =
     useState<AmrWalletSnapshot | null>(null);
+  const [amrLoginPending, setAmrLoginPending] = useState(false);
+  const [amrLoginError, setAmrLoginError] = useState<string | null>(null);
+  const amrPollRef = useRef<number | null>(null);
+  const amrLoginStartedAtRef = useRef<number | null>(null);
+  const refreshAmrStatus = useCallback(async () => {
+    const next = await fetchVelaLoginStatus();
+    if (next) {
+      setAmrAccount(next);
+      const pendingStartup =
+        amrLoginStartedAtRef.current !== null &&
+        Date.now() - amrLoginStartedAtRef.current < AMR_LOGIN_STARTUP_SETTLE_MS;
+      if (next.loggedIn) {
+        amrLoginStartedAtRef.current = null;
+        setAmrLoginPending(false);
+      } else if (next.loginInFlight) {
+        setAmrLoginPending(true);
+      } else if (!pendingStartup) {
+        amrLoginStartedAtRef.current = null;
+        setAmrLoginPending(false);
+      }
+    }
+    return next;
+  }, []);
+
+  const stopAmrPolling = useCallback(() => {
+    if (amrPollRef.current !== null) {
+      window.clearInterval(amrPollRef.current);
+      amrPollRef.current = null;
+    }
+  }, []);
+
+  const startAmrPolling = useCallback((startedAt = Date.now()) => {
+    stopAmrPolling();
+    amrLoginStartedAtRef.current = startedAt;
+    const tick = async () => {
+      const next = await refreshAmrStatus();
+      const outcome = amrLoginPollOutcome(next, startedAt);
+      if (outcome === 'signed-in') {
+        resolveAmrAuthTracking(analytics.track, 'success', undefined, {
+          signedInUserId: next?.user?.id ?? null,
+        });
+        notifyAmrLoginStatusChanged();
+        stopAmrPolling();
+        amrLoginStartedAtRef.current = null;
+        setAmrLoginPending(false);
+        return;
+      }
+      if (outcome === 'stopped' || outcome === 'timed-out') {
+        stopAmrPolling();
+        if (outcome === 'timed-out') {
+          resolveAmrAuthTracking(analytics.track, 'timeout', 'login_timeout');
+          void cancelVelaLogin().then(() =>
+            notifyAmrLoginStatusChanged('login-canceled'),
+          );
+        } else {
+          resolveAmrAuthTracking(analytics.track, 'failed', 'login_stopped');
+        }
+        amrLoginStartedAtRef.current = null;
+        setAmrLoginPending(false);
+        setAmrLoginError(t('settings.amrLoginErrorCompact'));
+      }
+    };
+    amrPollRef.current = window.setInterval(() => {
+      void tick();
+    }, AMR_LOGIN_POLL_INTERVAL_MS);
+  }, [analytics.track, refreshAmrStatus, stopAmrPolling, t]);
+
+  const handleAmrSignIn = useCallback(async (
+    attribution?: AmrEntryAttribution | null,
+  ) => {
+    const startedAt = Date.now();
+    amrLoginStartedAtRef.current = startedAt;
+    setAmrLoginError(null);
+    setAmrLoginPending(true);
+    beginAmrAuthTracking(attribution, startedAt);
+    const odDeviceId = amrHandoffDeviceId({
+      metricsConsent: config.telemetry?.metrics === true,
+      resolvedDeviceId: getResolvedDeviceId(),
+      installationId: config.installationId,
+    });
+    const result = await startVelaLogin(attribution, odDeviceId);
+    if (!result.ok && !result.alreadyRunning) {
+      resolveAmrAuthTracking(analytics.track, 'failed', 'spawn_failed');
+      amrLoginStartedAtRef.current = null;
+      setAmrLoginPending(false);
+      setAmrLoginError(result.error || t('settings.amrLoginErrorCompact'));
+      return;
+    }
+    notifyAmrLoginStatusChanged('login-started');
+    startAmrPolling(startedAt);
+  }, [
+    analytics.track,
+    config.installationId,
+    config.telemetry?.metrics,
+    startAmrPolling,
+    t,
+  ]);
+
+  const handleAmrCancelLogin = useCallback(async () => {
+    resolveAmrAuthTracking(analytics.track, 'cancelled');
+    stopAmrPolling();
+    amrLoginStartedAtRef.current = null;
+    setAmrLoginError(null);
+    setAmrLoginPending(false);
+    await cancelVelaLogin();
+    notifyAmrLoginStatusChanged('login-canceled');
+    await refreshAmrStatus();
+  }, [analytics.track, refreshAmrStatus, stopAmrPolling]);
+
   useEffect(() => {
     if (!open || !amrAvailable) {
       setAmrAccount(null);
       setAmrWalletSnapshot(null);
+      setAmrLoginError(null);
       return;
     }
     let cancelled = false;
@@ -219,8 +341,38 @@ export function AvatarMenu({
       });
     return () => {
       cancelled = true;
+      stopAmrPolling();
     };
-  }, [open, amrAvailable]);
+  }, [open, amrAvailable, stopAmrPolling]);
+
+  useEffect(() => {
+    const onStatusChange = (event: Event) => {
+      const reason = amrLoginStatusEventReason(event);
+      if (reason === 'login-started') {
+        const startedAt = Date.now();
+        amrLoginStartedAtRef.current = startedAt;
+        setAmrLoginError(null);
+        setAmrLoginPending(true);
+        startAmrPolling(startedAt);
+      } else if (reason === 'login-canceled') {
+        amrLoginStartedAtRef.current = null;
+        stopAmrPolling();
+        setAmrLoginPending(false);
+      }
+      void refreshAmrStatus().then((next) => {
+        if (next?.loggedIn) {
+          amrLoginStartedAtRef.current = null;
+          stopAmrPolling();
+          return;
+        }
+        if (next?.loginInFlight) startAmrPolling();
+      });
+    };
+    window.addEventListener(AMR_LOGIN_STATUS_EVENT, onStatusChange);
+    return () => {
+      window.removeEventListener(AMR_LOGIN_STATUS_EVENT, onStatusChange);
+    };
+  }, [refreshAmrStatus, startAmrPolling, stopAmrPolling]);
   const amrPlanTrimmed = amrAccount?.loggedIn
     ? amrAccount.account?.plan?.trim() || ''
     : '';
@@ -473,17 +625,50 @@ export function AvatarMenu({
                           ) : null}
                         </span>
                       </button>
-                      {amrCanUpgrade ? (
-                        <a
-                          className="avatar-amr-row__upgrade"
-                          href={amrPlansUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={handleAmrUpgradeClick}
+                      {amrLoginError ? (
+                        <span className="avatar-amr-row__status is-error">
+                          {amrLoginError}
+                        </span>
+                      ) : amrAccount?.loggedIn ? (
+                        amrCanUpgrade ? (
+                          <a
+                            className="avatar-amr-row__upgrade"
+                            href={amrPlansUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={handleAmrUpgradeClick}
+                          >
+                            {t('settings.amrUpgrade')}
+                          </a>
+                        ) : null
+                      ) : (
+                        <button
+                          type="button"
+                          className="avatar-amr-row__sign-in"
+                          data-testid="avatar-amr-sign-in"
+                          title={amrLoginPending ? t('settings.amrCancelSignIn') : undefined}
+                          onClick={() => {
+                            if (amrLoginPending) {
+                              void handleAmrCancelLogin();
+                              return;
+                            }
+                            const attribution = recordAmrEntry(
+                              analytics.track,
+                              'avatar_amr_row',
+                              new Date(),
+                              { metricsConsent: config.telemetry?.metrics === true },
+                            );
+                            void handleAmrSignIn(attribution);
+                          }}
                         >
-                          {t('settings.amrUpgrade')}
-                        </a>
-                      ) : null}
+                          {amrLoginPending ? (
+                            <Icon name="spinner" size={13} />
+                          ) : null}
+                          {amrLoginPending
+                            ? t('settings.amrSigningIn')
+                            : t('settings.amrSignIn')}
+                        </button>
+                      )}
                     </div>
                   );
                 }
