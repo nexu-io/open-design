@@ -114,12 +114,15 @@
       # nix store prefetch-file --hash-type sha256 \
       #   https://registry.npmjs.org/pnpm/-/pnpm-${NEW_VERSION}.tgz
       # ```
-      pnpm = pkgs.pnpm.overrideAttrs (_old: rec {
+      pnpm = pkgs.pnpm.overrideAttrs (old: rec {
         version = "11.15.0";
         src = pkgs.fetchurl {
           url = "https://registry.npmjs.org/pnpm/-/pnpm-${version}.tgz";
           hash = "sha256-dy+OAPcZr7viJQJxfPl0V4gEYw0C51frPeu8CKD4+Do=";
         };
+        postInstall = (old.postInstall or "") + ''
+          chmod +x $out/bin/pnpm
+        '';
       });
 
       daemon = pkgs.callPackage ./nix/package-daemon.nix {
