@@ -598,18 +598,16 @@ test('codex preserves explicit live service tiers from debug models JSON', () =>
   ]);
 });
 
-test('codex preserves service tier labels from debug models JSON', () => {
+test('codex preserves service tier labels from bare-array debug models JSON', () => {
   assert.ok(codex.listModels, 'codex must define live model discovery');
-  const parsed = codex.listModels.parse(JSON.stringify({
-    models: [
-      {
-        slug: 'gpt-5.5',
-        display_name: 'GPT-5.5',
-        visibility: 'list',
-        service_tiers: [{ id: 'priority', label: 'Fast' }],
-      },
-    ],
-  }));
+  const parsed = codex.listModels.parse(JSON.stringify([
+    {
+      slug: 'gpt-5.5',
+      display_name: 'GPT-5.5',
+      visibility: 'list',
+      service_tiers: [{ id: 'priority', label: 'Fast' }],
+    },
+  ]));
 
   assert.deepEqual(parsed, [
     { id: 'default', label: 'Default (CLI config)' },

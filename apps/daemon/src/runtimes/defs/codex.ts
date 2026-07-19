@@ -62,7 +62,9 @@ export function parseCodexDebugModels(stdout: string): RuntimeModelOption[] | nu
     return null;
   }
   if (!parsed || typeof parsed !== 'object') return null;
-  const models = (parsed as { models?: unknown }).models;
+  const models = Array.isArray(parsed)
+    ? parsed
+    : (parsed as { models?: unknown }).models;
   if (!Array.isArray(models)) return null;
 
   const out = [DEFAULT_MODEL_OPTION];
