@@ -1783,6 +1783,143 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     expect(await screen.findByText('Could not fetch models: provider unavailable')).toBeTruthy();
   });
 
+  it('clears provider model discovery errors after a successful BYOK connection test', async () => {
+    const connectionResponse = deferred<Response>();
+    const testConnectionRequests: Array<RequestInit | undefined> = [];
+    fetchProviderModelsMock.mockResolvedValueOnce({
+      ok: false,
+      kind: 'invalid_base_url',
+      latencyMs: 12,
+      detail: 'Base URL invalid or unreachable',
+    });
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === '/api/memory') {
+        return new Response(
+          JSON.stringify({ enabled: true, memories: [], extraction: null }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      expect(url).toBe('/api/test/connection');
+      testConnectionRequests.push(init);
+      return connectionResponse.promise;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderSettingsDialog({
+      apiProtocol: 'openai',
+      apiKey: '',
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o',
+      apiProviderBaseUrl: 'https://api.openai.com/v1',
+    });
+
+    fireEvent.click(screen.getByRole('tab', { name: 'OpenAI' }));
+    fireEvent.change(screen.getByLabelText('API key'), {
+      target: { value: 'sk-openai' },
+    });
+    fireEvent.blur(screen.getByLabelText('API key'));
+
+    const discoveryError = await screen.findByText(
+      'Could not fetch models: Base URL invalid or unreachable',
+    );
+    expect(discoveryError).toBeTruthy();
+    await waitFor(() => {
+      expect(testConnectionRequests).toHaveLength(1);
+    });
+    expect(JSON.parse(String(testConnectionRequests[0]?.body))).toMatchObject({
+      mode: 'provider',
+      protocol: 'openai',
+      apiKey: 'sk-openai',
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o',
+    });
+
+    connectionResponse.resolve(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          kind: 'ok',
+          latencyMs: 31,
+          model: 'gpt-4o',
+          sample: 'pong',
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/Connected\. Replied in 31 ms/)).toBeTruthy();
+    });
+    await waitFor(() => {
+      expect(
+        screen.queryByText('Could not fetch models: Base URL invalid or unreachable'),
+      ).toBeNull();
+    });
+  });
+
+  it('keeps real provider model discovery errors after a successful BYOK connection test', async () => {
+    const connectionResponse = deferred<Response>();
+    const testConnectionRequests: Array<RequestInit | undefined> = [];
+    fetchProviderModelsMock.mockResolvedValueOnce({
+      ok: false,
+      kind: 'upstream_unavailable',
+      latencyMs: 12,
+      status: 503,
+      detail: 'provider unavailable',
+    });
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === '/api/memory') {
+        return new Response(
+          JSON.stringify({ enabled: true, memories: [], extraction: null }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      expect(url).toBe('/api/test/connection');
+      testConnectionRequests.push(init);
+      return connectionResponse.promise;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderSettingsDialog({
+      apiProtocol: 'openai',
+      apiKey: '',
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o',
+      apiProviderBaseUrl: 'https://api.openai.com/v1',
+    });
+
+    fireEvent.click(screen.getByRole('tab', { name: 'OpenAI' }));
+    fireEvent.change(screen.getByLabelText('API key'), {
+      target: { value: 'sk-openai' },
+    });
+    fireEvent.blur(screen.getByLabelText('API key'));
+
+    expect(await screen.findByText('Could not fetch models: provider unavailable')).toBeTruthy();
+    await waitFor(() => {
+      expect(testConnectionRequests).toHaveLength(1);
+    });
+
+    connectionResponse.resolve(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          kind: 'ok',
+          latencyMs: 31,
+          model: 'gpt-4o',
+          sample: 'pong',
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/Connected\. Replied in 31 ms/)).toBeTruthy();
+    });
+    expect(screen.getByText('Could not fetch models: provider unavailable')).toBeTruthy();
+  });
+
   it('supports custom model entry in BYOK mode', async () => {
     const { onPersist } = renderSettingsDialog({ apiProtocol: 'openai', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o', apiProviderBaseUrl: 'https://api.openai.com/v1' });
 
