@@ -5,7 +5,7 @@
   nixpkgs,
   system,
   nodejs,
-  pnpm_10,
+  pnpm,
   fetchPnpmDeps,
   pnpmConfigHook,
   src,
@@ -31,13 +31,12 @@
 #   `pnpm install` (regardless of `engine-strict`). The nixpkgs
 #   default `pnpm` is generally incompatible — older than the
 #   floor or newer than the ceiling depending on which nixpkgs
-#   the consumer follows. The flake overrides `pkgs.pnpm_10` to
-#   the exact tarball pinned by `packageManager` (see flake.nix
-#   for the override + hash bump). This derivation uses
-#   `pnpm_10` for both phases: in `nativeBuildInputs` so the
-#   install-phase `pnpmConfigHook` resolves it from PATH, and
-#   `pnpm = pnpm_10` to `fetchPnpmDeps` to override its
-#   `pkgs.pnpm` default.
+#   the consumer follows. The flake overrides `pkgs.pnpm` to the
+#   exact tarball pinned by `packageManager` (see flake.nix for
+#   the override + hash bump). This derivation uses `pnpm` for
+#   both phases: in `nativeBuildInputs` so the install-phase
+#   `pnpmConfigHook` resolves it from PATH, and `pnpm = pnpm` to
+#   `fetchPnpmDeps` to override its `pkgs.pnpm` default.
 #
 # Workspace siblings the daemon depends on are built in dependency order
 # before the daemon itself; tsc emits each package's dist/, which is what
@@ -56,7 +55,7 @@ in
 
     nativeBuildInputs = [
       nodejs
-      pnpm_10
+      pnpm
       pnpmConfigHook
       makeWrapper
       # Required to rebuild better-sqlite3's native binding from source.
@@ -68,12 +67,12 @@ in
     ];
 
     # `fetchPnpmDeps` defaults to `pkgs.pnpm`; pin to the flake's
-    # `pnpm_10` so the dep-fetch matches the install phase.
+    # `pnpm` so the dep-fetch matches the install phase.
     pnpmDeps = fetchPnpmDeps {
       inherit (finalAttrs) pname version;
       src = pnpmDepsSrc;
       hash = pnpmDepsHash;
-      pnpm = pnpm_10;
+      pnpm = pnpm;
       pnpmWorkspaces = pnpmWorkspaceFilters;
       fetcherVersion = 3;
     };
@@ -97,11 +96,11 @@ in
       #   fail the GitHub fetch and fall through to a compile, so we
       #   skip the download attempt entirely and compile.
       #
-      # Why not `pnpm rebuild`:
-      #   In pnpm 10, `onlyBuiltDependencies` interacts with the
-      #   "approve-builds" consent gate; `pnpm rebuild <pkg>` silently
-      #   no-ops in some configurations. Invoke node-gyp directly to
-      #   sidestep all of that.
+#   Why not `pnpm rebuild`:
+#   In pnpm 11, `allowBuilds` / `strictDepBuilds` interact with the
+#   "approve-builds" consent gate; `pnpm rebuild <pkg>` silently
+#   no-ops in some configurations. Invoke node-gyp directly to
+#   sidestep all of that.
       #
       # Env vars:
       #   * npm_config_nodedir → use the headers shipped with the

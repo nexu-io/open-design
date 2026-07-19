@@ -9,7 +9,7 @@ inputs:
   pnpm-version:
     description: pnpm version to install
     required: false
-    default: '10.33.2'
+    default: '11.15.0'
   runner-labels:
     description: JSON array of labels selected for this job's runs-on value
     required: false

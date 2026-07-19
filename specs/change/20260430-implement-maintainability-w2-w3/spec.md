@@ -311,7 +311,7 @@ Flow:
 - `corepack pnpm install` - passed; workspace graph recognized all 5 projects and updated lockfile state.
 - `corepack pnpm --filter @open-design/contracts typecheck` - passed.
 - `corepack pnpm --filter @open-design/web typecheck` - passed as a package graph/type resolution sanity check.
-- `corepack pnpm typecheck` - attempted; failed because the root script invokes `pnpm` from PATH version 10.28.0 while the repo requires `>=10.33.2 <11`. The Corepack package-level equivalent above passed.
+- `corepack pnpm typecheck` - attempted; failed because the root script invokes `pnpm` from PATH version 10.28.0 while the repo requires `>=11.15.0 <12`. The Corepack package-level equivalent above passed.
 - `corepack pnpm install` - passed after adding app dependencies on `@open-design/contracts`; lockfile links web and daemon to the workspace package.
 - `corepack pnpm --filter @open-design/contracts typecheck` - passed after Step 2 adoption.
 - `corepack pnpm --filter @open-design/web typecheck` - passed after Step 2 adoption.

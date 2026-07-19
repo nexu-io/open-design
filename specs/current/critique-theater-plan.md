@@ -6,7 +6,7 @@
 
 **Architecture:** Three new pure modules in `apps/daemon/src/critique/` (`parser`, `scoreboard`, `orchestrator`) consume the existing CLI stdout and emit new SSE events on the existing `/api/projects/:id/events` stream. New web components under `apps/web/src/components/Theater/` subscribe through a pure reducer. New shared contract types live in `packages/contracts/src/critique.ts`. SQLite gains five additive columns on `artifacts` via a reversible migration.
 
-**Tech Stack:** TypeScript (Node 24, pnpm 10), Next.js 16 App Router, vitest, Playwright, SQLite (better-sqlite3), zod, Prometheus, OpenTelemetry, axe-playwright, size-limit, ts-prune.
+**Tech Stack:** TypeScript (Node 24, pnpm 11), Next.js 16 App Router, vitest, Playwright, SQLite (better-sqlite3), zod, Prometheus, OpenTelemetry, axe-playwright, size-limit, ts-prune.
 
 **Branch:** `feat/critique-theater` (already created off `main`).
 
@@ -39,7 +39,7 @@ Expected: branch `feat/critique-theater`, working tree clean (or only `.omc/` un
 ```bash
 pnpm install
 ```
-Expected: pnpm 10.33.2, no errors, all workspace packages linked.
+Expected: pnpm 11.15.0, no errors, all workspace packages linked.
 
 - [ ] **Step 3: Run baseline checks (these must pass before we change code)**
 

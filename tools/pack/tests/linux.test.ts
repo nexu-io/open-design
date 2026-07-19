@@ -186,13 +186,14 @@ describe("buildDockerArgs", () => {
     const last = args[args.length - 1];
     expect(last).toMatch(/command -v curl >\/dev\/null/);
     expect(last).toMatch(/case "\$\(uname -m\)" in/);
-    expect(last).toMatch(/x86_64\) PNPM_ASSET=pnpm-linuxstatic-x64; PNPM_SHA256=[a-f0-9]{64}/);
-    expect(last).toMatch(/aarch64\) PNPM_ASSET=pnpm-linuxstatic-arm64; PNPM_SHA256=[a-f0-9]{64}/);
+    expect(last).toMatch(/x86_64\) PNPM_ASSET=pnpm-linux-x64; PNPM_SHA256=[a-f0-9]{64}/);
+    expect(last).toMatch(/aarch64\) PNPM_ASSET=pnpm-linux-arm64; PNPM_SHA256=[a-f0-9]{64}/);
     expect(last).toMatch(
-      /curl --retry 3 --retry-all-errors --connect-timeout 10 --max-time 60 -fsSL "https:\/\/github\.com\/pnpm\/pnpm\/releases\/download\/v\d+\.\d+\.\d+\/\$PNPM_ASSET" -o \/tmp\/pnpm\.tmp/,
+      /curl --retry 3 --retry-all-errors --connect-timeout 10 --max-time 60 -fsSL "https:\/\/github\.com\/pnpm\/pnpm\/releases\/download\/v\d+\.\d+\.\d+\/\$PNPM_ASSET\.tar\.gz" -o \/tmp\/pnpm\.tmp\.tar\.gz/,
     );
-    expect(last).toMatch(/echo "\$PNPM_SHA256  \/tmp\/pnpm\.tmp" \| sha256sum -c -/);
-    expect(last).toMatch(/mv \/tmp\/pnpm\.tmp \/tmp\/pnpm/);
+    expect(last).toMatch(/echo "\$PNPM_SHA256  \/tmp\/pnpm\.tmp\.tar\.gz" \| sha256sum -c -/);
+    expect(last).toMatch(/tar -xzf \/tmp\/pnpm\.tmp\.tar\.gz -C \/tmp\/pnpm\.dir/);
+    expect(last).toMatch(/mv \/tmp\/pnpm\.dir\/pnpm \/tmp\/pnpm/);
     expect(last).toMatch(/chmod \+x \/tmp\/pnpm/);
     expect(last).toMatch(/\/tmp\/pnpm env use --global 24\.\d+\.\d+/);
     expect(last).toMatch(/\/tmp\/pnpm install --frozen-lockfile/);
@@ -207,8 +208,8 @@ describe("buildDockerArgs", () => {
     expect(last).not.toMatch(/corepack/);
     expect(last).not.toMatch(/\bnpx\b/);
     expect(last).not.toMatch(/(^|[;&|]\s*)npm(\s|$)/);
-    expect(last).toMatch(/pnpm-linuxstatic-x64/);
-    expect(last).toMatch(/pnpm-linuxstatic-arm64/);
+    expect(last).toMatch(/pnpm-linux-x64/);
+    expect(last).toMatch(/pnpm-linux-arm64/);
   });
 
   it("routes container setup and install output to stderr before the JSON-emitting build", () => {
@@ -225,8 +226,8 @@ describe("buildDockerArgs", () => {
     const args = buildDockerArgs(makeConfig(), { uid: 1000, gid: 1000 });
     const last = args[args.length - 1];
     expect(last).toContain('case "$(uname -m)" in');
-    expect(last).toContain("x86_64) PNPM_ASSET=pnpm-linuxstatic-x64");
-    expect(last).toContain("aarch64) PNPM_ASSET=pnpm-linuxstatic-arm64");
+    expect(last).toContain("x86_64) PNPM_ASSET=pnpm-linux-x64");
+    expect(last).toContain("aarch64) PNPM_ASSET=pnpm-linux-arm64");
     expect(last).toMatch(/unsupported container arch/);
   });
 
@@ -235,9 +236,10 @@ describe("buildDockerArgs", () => {
     const last = args[args.length - 1];
     expect(last).toMatch(/PNPM_SHA256=[a-f0-9]{64}/);
     expect(last).toMatch(/sha256sum -c -/);
-    expect(last).toMatch(/\/tmp\/pnpm\.tmp/);
-    expect(last.indexOf("sha256sum -c -")).toBeLessThan(last.indexOf("mv /tmp/pnpm.tmp /tmp/pnpm"));
-    expect(last.indexOf("mv /tmp/pnpm.tmp /tmp/pnpm")).toBeLessThan(last.indexOf("chmod +x /tmp/pnpm"));
+    expect(last).toMatch(/\/tmp\/pnpm\.tmp\.tar\.gz/);
+    expect(last.indexOf("sha256sum -c -")).toBeLessThan(last.indexOf("tar -xzf /tmp/pnpm.tmp.tar.gz"));
+    expect(last.indexOf("tar -xzf /tmp/pnpm.tmp.tar.gz")).toBeLessThan(last.indexOf("mv /tmp/pnpm.dir/pnpm /tmp/pnpm"));
+    expect(last.indexOf("mv /tmp/pnpm.dir/pnpm /tmp/pnpm")).toBeLessThan(last.indexOf("chmod +x /tmp/pnpm"));
   });
 
   it("hardcoded pnpm version stays in lockstep with root package.json `packageManager`", () => {

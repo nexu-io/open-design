@@ -2544,7 +2544,7 @@ process.stdin.on("end", () => {
 
     expect(workflow).toContain("fnm exec --using=24 -- bash tools/release/scripts/build-platform.sh");
     expect(workflow).toContain('& "C:\\Users\\runner\\.cargo\\bin\\fnm.exe" exec --using=24 -- pwsh -NoProfile -File tools\\release\\scripts\\build-platform.ps1');
-    expect(workflow).toContain("corepack prepare pnpm@10.33.2 --activate");
+    expect(workflow).toContain("corepack prepare pnpm@11.15.0 --activate");
     expect(workflow).toContain('pnpm.cmd install --frozen-lockfile --prefer-offline');
     expect(workflow).toContain("sudo -n \"$OPEN_DESIGN_MAC_SIGNING_HELPER\" \"$cert_path\" \"$password_path\"");
     expect(workflow).not.toContain("PATH: /usr/local/libexec/open-design/wrappers:${{ env.PATH }}");

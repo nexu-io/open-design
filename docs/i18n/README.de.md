@@ -344,7 +344,7 @@ pnpm tools-dev run web
 
 Öffne die von `tools-dev` ausgegebene URL; Entwicklungsports werden dynamisch vergeben, sofern keine Port-Flags angegeben sind.
 
-Node `~24`, pnpm `10.33.x`. Windows-Nutzer, siehe [`docs/windows-troubleshooting.md`](../../docs/windows-troubleshooting.md). Vollständiger Schnellstart, Umgebungsvariablen, Nix-Flake und der gepackte Build-Ablauf → [`QUICKSTART.de.md`](QUICKSTART.de.md).
+Node `~24`, pnpm `11.15.x`. Windows-Nutzer, siehe [`docs/windows-troubleshooting.md`](../../docs/windows-troubleshooting.md). Vollständiger Schnellstart, Umgebungsvariablen, Nix-Flake und der gepackte Build-Ablauf → [`QUICKSTART.de.md`](QUICKSTART.de.md).
 
 ### Ein vollständiger Workflow — vom Briefing zum Artefakt
 

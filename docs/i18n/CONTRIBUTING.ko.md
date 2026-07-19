@@ -37,7 +37,7 @@ pnpm typecheck            # tsc -b --noEmit
 pnpm --filter @open-design/web build  # 필요할 때 web 패키지 빌드
 ```
 
-Node `~24`와 pnpm `10.33.x`가 필요합니다. `nvm`이나 `fnm`은 선택 사항입니다. Node를 그렇게 관리하는 게 편하다면 `nvm install 24 && nvm use 24` 또는 `fnm install 24 && fnm use 24`를 실행하세요. macOS, Linux, WSL2가 주요 지원 환경입니다. Windows 네이티브도 지원합니다. 흔히 겪는 설정 문제는 [`docs/windows-troubleshooting.md`](../../docs/windows-troubleshooting.md)를 참고하세요.
+Node `~24`와 pnpm `11.15.x`가 필요합니다. `nvm`이나 `fnm`은 선택 사항입니다. Node를 그렇게 관리하는 게 편하다면 `nvm install 24 && nvm use 24` 또는 `fnm install 24 && fnm use 24`를 실행하세요. macOS, Linux, WSL2가 주요 지원 환경입니다. Windows 네이티브도 지원합니다. 흔히 겪는 설정 문제는 [`docs/windows-troubleshooting.md`](../../docs/windows-troubleshooting.md)를 참고하세요.
 
 ## Docker 설정
 

@@ -83,7 +83,7 @@ Focused `tools-pack` tests cover:
 - non-strict unsupported-platform skip behavior;
 - release-beta workflow placement of `--require-vela-cli`.
 
-Local validation for the Vela module extraction and `0.0.1-test` bump passed under Node `v24.0.0` and pnpm `10.33.2`:
+Local validation for the Vela module extraction and `0.0.1-test` bump passed under Node `v24.0.0` and pnpm `11.15.0`:
 
 ```bash
 pnpm --filter @open-design/tools-pack typecheck

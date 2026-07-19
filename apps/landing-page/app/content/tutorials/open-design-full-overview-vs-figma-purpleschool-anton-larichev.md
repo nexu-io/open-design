@@ -51,7 +51,7 @@ You have three ways in. Pick the one that fits you:
 | Path | Best for | Requirements |
 | --- | --- | --- |
 | **Desktop app** | Most people — zero config | None. Just download and open. |
-| **Run from source** | Developers who want to read or modify the code | Node `~24`, pnpm `10.33.x` |
+| **Run from source** | Developers who want to read or modify the code | Node `~24`, pnpm `11.15.x` |
 | **Install into your agent** | People who live in the terminal | An existing coding-agent CLI |
 
 ### Option A — Desktop app (recommended, zero config)
@@ -69,7 +69,7 @@ corepack enable && pnpm install
 pnpm tools-dev run web
 ```
 
-Open the local URL it prints. It resolves a dynamic port, so don't hardcode one — just click whatever address it shows. You need Node `~24` and pnpm `10.33.x`; Corepack selects the pinned pnpm version for you.
+Open the local URL it prints. It resolves a dynamic port, so don't hardcode one — just click whatever address it shows. You need Node `~24` and pnpm `11.15.x`; Corepack selects the pinned pnpm version for you.
 
 ### Option C — Install into your coding agent
 

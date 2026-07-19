@@ -55,7 +55,7 @@ Compare the printed hash against the checksum listed on the release page. They m
 | Tool | Version | How to verify |
 |---|---|---|
 | Node.js | `~24` | `node -v` |
-| pnpm | `10.33.x` | `pnpm -v` |
+| pnpm | `11.15.x` | `pnpm -v` |
 | Git | any recent | `git --version` |
 
 ---
@@ -100,14 +100,14 @@ pnpm : The term 'pnpm' is not recognized as the name of a cmdlet...
 
 ### Fix (npm global — Windows native)
 
-The repo pins `pnpm@10.33.2` in `packageManager`, but `corepack enable` on a
+The repo pins `pnpm@11.15.0` in `packageManager`, but `corepack enable` on a
 normal Windows Node installation tries to write shims under
 `C:\Program Files\nodejs` and fails with `EPERM`. Install the pinned pnpm
 version globally instead:
 
 ```powershell
-npm install -g pnpm@10.33.2
-pnpm -v   # should print 10.33.2
+npm install -g pnpm@11.15.0
+pnpm -v   # should print 11.15.0
 ```
 
 Use Corepack in macOS, Linux, and WSL2 as documented in the root Quickstart;
@@ -130,7 +130,7 @@ Later, `pnpm tools-dev run web` fails with native-module errors.
 
 ### Fix
 
-pnpm 10 blocks lifecycle scripts by default. Allow the packages that need native compilation:
+pnpm 11 blocks lifecycle scripts by default. Allow the packages that need native compilation:
 
 ```powershell
 pnpm approve-builds

@@ -37,7 +37,7 @@ pnpm typecheck            # tsc -b --noEmit
 pnpm --filter @open-design/web build  # 必要に応じて web パッケージをビルド
 ```
 
-Node `~24` と pnpm `10.33.x` が必要です。`nvm` / `fnm` はオプション。使用する場合は `nvm install 24 && nvm use 24` または `fnm install 24 && fnm use 24` を実行してください。macOS、Linux、WSL2 が主要プラットフォームです。Windows ネイティブもサポートされています — 一般的なセットアップ時の落とし穴については [`docs/windows-troubleshooting.md`](../../docs/windows-troubleshooting.md) を参照してください。
+Node `~24` と pnpm `11.15.x` が必要です。`nvm` / `fnm` はオプション。使用する場合は `nvm install 24 && nvm use 24` または `fnm install 24 && fnm use 24` を実行してください。macOS、Linux、WSL2 が主要プラットフォームです。Windows ネイティブもサポートされています — 一般的なセットアップ時の落とし穴については [`docs/windows-troubleshooting.md`](../../docs/windows-troubleshooting.md) を参照してください。
 
 OD 自体の開発に agent CLI は `PATH` 上に不要です — daemon は「no agents found」と表示し、**Anthropic API · BYOK** パスにフォールバックします。このパスが最も高速な開発ループです。
 

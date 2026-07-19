@@ -7,7 +7,7 @@ Rode o produto inteiro localmente.
 ## Requisitos de ambiente
 
 - **Node.js:** `~24` (Node 24.x). O repo força isso via `package.json#engines`.
-- **pnpm:** `10.33.x`. O repo fixa `pnpm@10.33.2` via `packageManager`; use Corepack para selecionar a versão fixada automaticamente.
+- **pnpm:** `11.15.x`. O repo fixa `pnpm@11.15.0` via `packageManager`; use Corepack para selecionar a versão fixada automaticamente.
 - **SO:** macOS, Linux e WSL2 são os caminhos principais. Windows nativo costuma funcionar para a maioria dos fluxos, mas WSL2 é a base mais segura.
 - **CLI de agente local (opcional):** O Open Design mantém um registro de runtimes locais, incluindo Claude Code, Codex, Devin for Terminal, OpenCode, Cursor Agent, Qwen, Qoder CLI, GitHub Copilot CLI e outros. A lista atual fica em [`apps/daemon/src/runtimes/registry.ts`](../../apps/daemon/src/runtimes/registry.ts). Sem nenhum instalado, use um runtime BYOK configurado em Settings.
 
@@ -27,7 +27,7 @@ Em seguida, habilite o Corepack e deixe o repo escolher o pnpm:
 
 ```bash
 corepack enable
-corepack pnpm --version   # should print 10.33.2
+corepack pnpm --version   # should print 11.15.0
 ```
 
 ## Em um único comando (modo dev)

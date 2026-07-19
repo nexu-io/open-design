@@ -143,35 +143,38 @@ export function buildDockerArgs(
   // strips node/npm/npx/corepack from PATH. Every "ask the image to invoke a
   // package-manager shim" path fails with `command not found`.
   //
-  // Download the official pnpm `linuxstatic-<arch>` standalone binary at
-  // container start. The binary bundles its own Node runtime, so it does not
-  // depend on the image's npm tooling. Select the asset by the container CPU so
-  // amd64 GitHub runners and arm64 local Docker hosts both work. Stage it under
-  // `/tmp/pnpm`, which is writable by the unprivileged container user. Then use
-  // it to install a pinned Node into PNPM_HOME so root lifecycle scripts and the
-  // final tools-pack CLI can run through an explicit `node .../tools-pack.mjs`
-  // entrypoint instead of generated `node_modules/.bin/*` shims.
+  // Download the official pnpm Linux tarball at container start. pnpm v11 ships
+  // per-arch tarballs that bundle a `pnpm` executable; extracting the tarball
+  // avoids the discontinued `linuxstatic` single-binary releases. Select the
+  // asset by the container CPU so amd64 GitHub runners and arm64 local Docker
+  // hosts both work. Stage the binary under `/tmp/pnpm`, which is writable by
+  // the unprivileged container user. Then use it to install a pinned Node into
+  // PNPM_HOME so root lifecycle scripts and the final tools-pack CLI can run
+  // through an explicit `node .../tools-pack.mjs` entrypoint instead of
+  // generated `node_modules/.bin/*` shims.
   //
   // Route bootstrap and install diagnostics to stderr so stdout remains
   // machine-readable when the inner `tools-pack linux build --json` emits JSON.
   //
   // The pinned version matches the `packageManager` field in the root
   // package.json so reproducibility is preserved.
-  const PNPM_VERSION = "10.33.2";
-  const pnpmLinuxStaticX64Sha256 = "a47be715939bafa420fbdc5e34f7f9d8292c032402162c89ccb611e944e526d6";
-  const pnpmLinuxStaticArm64Sha256 = "4d402d0ef12cdc4d81ca339904e68638d841f4e27c73e460534d06e6b56048a9";
+  const PNPM_VERSION = "11.15.0";
+  const pnpmLinuxX64Sha256 = "f9fb813541b04a9c63f0b87d4116794b24ecf6c61f1c0757f3f32b03bb3b55b3";
+  const pnpmLinuxArm64Sha256 = "d0c62d5953a9ba168267d81d178edf0fcdd9ea947da7b3e21ff8f65a679dd4ba";
   const pnpmReleaseUrl = `https://github.com/pnpm/pnpm/releases/download/v${PNPM_VERSION}`;
   const setupPnpm =
     `command -v curl >/dev/null || { echo "curl not found in container image" >&2; exit 127; } && ` +
-    `mkdir -p ${CONTAINER_PNPM_HOME} && ` +
+    `mkdir -p ${CONTAINER_PNPM_HOME} ${CONTAINER_PNPM_PATH}.dir && ` +
     `case "$(uname -m)" in ` +
-    `x86_64) PNPM_ASSET=pnpm-linuxstatic-x64; PNPM_SHA256=${pnpmLinuxStaticX64Sha256} ;; ` +
-    `aarch64) PNPM_ASSET=pnpm-linuxstatic-arm64; PNPM_SHA256=${pnpmLinuxStaticArm64Sha256} ;; ` +
+    `x86_64) PNPM_ASSET=pnpm-linux-x64; PNPM_SHA256=${pnpmLinuxX64Sha256} ;; ` +
+    `aarch64) PNPM_ASSET=pnpm-linux-arm64; PNPM_SHA256=${pnpmLinuxArm64Sha256} ;; ` +
     `*) echo "unsupported container arch: $(uname -m)" >&2; exit 1 ;; ` +
     `esac && ` +
-    `curl --retry 3 --retry-all-errors --connect-timeout 10 --max-time 60 -fsSL "${pnpmReleaseUrl}/$PNPM_ASSET" -o ${CONTAINER_PNPM_PATH}.tmp && ` +
-    `echo "$PNPM_SHA256  ${CONTAINER_PNPM_PATH}.tmp" | sha256sum -c - && ` +
-    `mv ${CONTAINER_PNPM_PATH}.tmp ${CONTAINER_PNPM_PATH} && ` +
+    `curl --retry 3 --retry-all-errors --connect-timeout 10 --max-time 60 -fsSL "${pnpmReleaseUrl}/$PNPM_ASSET.tar.gz" -o ${CONTAINER_PNPM_PATH}.tmp.tar.gz && ` +
+    `echo "$PNPM_SHA256  ${CONTAINER_PNPM_PATH}.tmp.tar.gz" | sha256sum -c - && ` +
+    `tar -xzf ${CONTAINER_PNPM_PATH}.tmp.tar.gz -C ${CONTAINER_PNPM_PATH}.dir && ` +
+    `mv ${CONTAINER_PNPM_PATH}.dir/pnpm ${CONTAINER_PNPM_PATH} && ` +
+    `rm -rf ${CONTAINER_PNPM_PATH}.dir ${CONTAINER_PNPM_PATH}.tmp.tar.gz && ` +
     `chmod +x ${CONTAINER_PNPM_PATH} && ` +
     `PNPM_HOME=${CONTAINER_PNPM_HOME} PATH=${CONTAINER_PNPM_HOME}:$PATH ${CONTAINER_PNPM_PATH} env use --global ${CONTAINER_NODE_VERSION} && ` +
     `export PNPM_HOME=${CONTAINER_PNPM_HOME} PATH=${CONTAINER_PNPM_HOME}:$PATH && ` +

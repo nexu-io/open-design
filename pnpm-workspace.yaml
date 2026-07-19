@@ -16,11 +16,20 @@ overrides:
   tmp: 0.2.7
   yaml: 2.9.0
 
-onlyBuiltDependencies:
-  - better-sqlite3
-  - core-js
-  - electron
-  - electron-winstaller
-  - esbuild
-  - protobufjs
-  - sharp
+allowBuilds:
+  better-sqlite3: true
+  core-js: true
+  electron: true
+  electron-winstaller: true
+  esbuild: true
+  node-pty: true
+  protobufjs: true
+  sharp: true
+
+# Preserve pre-pnpm-11 behavior: only the packages above may run install scripts;
+# any other package with build scripts is ignored rather than failing the install.
+strictDepBuilds: false
+
+# Opt out of pnpm 11's default 1-day maturity window so CI and fresh installs
+# do not fail on recently published dependencies.
+minimumReleaseAge: 0

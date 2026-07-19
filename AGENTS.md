@@ -38,7 +38,7 @@ This file is the single source of truth for agents entering this repository. Rea
 
 ## Environment baseline
 
-- Runtime target is Node `~24` and `pnpm@10.33.2`; use Corepack so the pnpm version pinned in `package.json` is selected.
+- Runtime target is Node `~24` and `pnpm@11.15.0`; use Corepack so the pnpm version pinned in `package.json` is selected.
 - New project-owned entrypoints, modules, scripts, tests, reporters, and configs should default to TypeScript.
 - Residual JavaScript is limited to generated output, vendored dependencies, explicitly documented compatibility build artifacts, and the allowlist in `scripts/guard.ts`.
 
@@ -47,7 +47,7 @@ This file is the single source of truth for agents entering this repository. Rea
 - macOS, Linux, and WSL2 are the primary supported paths. Windows native is best-effort — file an issue if it doesn't work.
 - Historical Windows-specific friction is documented in closed issues #10, #96, #100, #203, and #315; check the issue tracker for the current state before filing new reports.
 - Install Node 24. Either `winget install OpenJS.NodeJS.LTS` (currently Node 24.x) or download from https://nodejs.org. After install, verify with `node --version` — the WinGet LTS pointer rolls to the next major in October 2026, so re-verify if you re-run the install command later. Do not use Node 22 — see FAQ.
-- `corepack enable` fails with EPERM on Windows (cannot write shims to `Program Files`). Use `npm install -g pnpm@10.33.2` instead.
+- `corepack enable` fails with EPERM on Windows (cannot write shims to `Program Files`). Use `npm install -g pnpm@11.15.0` instead.
 - `better-sqlite3` has no prebuilt binary for win32/Node 24; `pnpm install` will compile it from source via node-gyp (~2 min). Requires Visual Studio Build Tools 2022 or newer. This is expected — not a sign of version incompatibility.
 - For `tools-dev` start/stop/status usage, see "Local lifecycle" below.
 

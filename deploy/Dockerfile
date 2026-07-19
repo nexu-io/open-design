@@ -29,7 +29,7 @@ COPY apps/daemon/package.json ./apps/daemon/package.json
 COPY apps/web/package.json ./apps/web/package.json
 COPY e2e/package.json ./e2e/package.json
 RUN corepack enable && \
-    corepack prepare pnpm@10.33.2 --activate && \
+    corepack prepare pnpm@11.15.0 --activate && \
     pnpm install --frozen-lockfile
 
 COPY apps ./apps

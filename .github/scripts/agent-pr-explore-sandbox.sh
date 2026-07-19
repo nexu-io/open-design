@@ -1092,7 +1092,7 @@ docker run -d \
     test "$(git rev-parse HEAD)" = "${HEAD_SHA}"
 
     corepack enable
-    corepack prepare pnpm@10.33.2 --activate
+    corepack prepare pnpm@11.15.0 --activate
     pnpm config set store-dir /pnpm-store
 
     # The runner direct network to npmjs / nodejs.org / github releases is

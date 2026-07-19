@@ -37,7 +37,7 @@ Three ways in:
 | Path | Best for | Requirements |
 | --- | --- | --- |
 | **Desktop app** | Most people — zero config | None. Just download and open. |
-| **Run from source** | Developers who want to read or modify the code | Node `~24`, pnpm `10.33.x` |
+| **Run from source** | Developers who want to read or modify the code | Node `~24`, pnpm `11.15.x` |
 | **Install into your agent** | People who live in the terminal | An existing coding-agent CLI |
 
 The fastest path is the **desktop app** from [open-design.ai/download](https://open-design.ai/download) — it auto-detects your installed agent CLIs. To run from source (Codedigipt's route):

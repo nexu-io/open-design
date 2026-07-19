@@ -7,7 +7,7 @@
 ## 환경 요구사항
 
 - **Node.js:** `~24`(Node 24.x). `package.json#engines`로 버전을 강제합니다.
-- **pnpm:** `10.33.x`. `packageManager`에 `pnpm@10.33.2`를 고정해 두었으니, Corepack을 쓰면 고정된 버전이 자동으로 선택됩니다.
+- **pnpm:** `11.15.x`. `packageManager`에 `pnpm@11.15.0`를 고정해 두었으니, Corepack을 쓰면 고정된 버전이 자동으로 선택됩니다.
 - **OS:** macOS, Linux, WSL2가 주요 지원 환경입니다. Windows 네이티브도 지원합니다. 자주 겪는 설치 문제는 [`docs/windows-troubleshooting.md`](../../docs/windows-troubleshooting.md)를 참고하세요.
 - **선택: 로컬 에이전트 CLI:** Open Design은 Claude Code, Codex, Devin for Terminal, OpenCode, Cursor Agent, Qwen, Qoder CLI, GitHub Copilot CLI 등을 로컬 런타임 레지스트리로 지원합니다. 현재 목록은 [`apps/daemon/src/runtimes/registry.ts`](../../apps/daemon/src/runtimes/registry.ts)에 있습니다. 설치된 런타임이 없으면 Settings에서 구성한 BYOK 런타임을 쓰면 됩니다.
 
@@ -31,7 +31,7 @@ fnm use 24
 
 ```bash
 corepack enable
-corepack pnpm --version   # 10.33.2가 출력되어야 합니다
+corepack pnpm --version   # 11.15.0가 출력되어야 합니다
 ```
 
 ## Docker 설정

@@ -35,7 +35,7 @@ You have three ways to install Open Design on Windows. Pick the one that fits yo
 | Path | Best for | Requirements |
 | --- | --- | --- |
 | **Desktop app (Windows x64)** | Most Windows users — zero config | None. Download and open. |
-| **Run from source (WSL)** | Developers who want to read or modify the code | WSL2 + Ubuntu, Node `~24`, pnpm `10.33.x` |
+| **Run from source (WSL)** | Developers who want to read or modify the code | WSL2 + Ubuntu, Node `~24`, pnpm `11.15.x` |
 | **Install into your agent** | People who live in the terminal | An existing coding-agent CLI |
 
 The video uses the WSL-from-source path, which is great if you want to live inside the repo. But for most people the **native Windows desktop build is the recommended route** — there is a Windows (x64) installer that needs no WSL, no Node, and no clone. This guide covers both; the WSL walkthrough below is for when you specifically want the source route.
@@ -83,7 +83,7 @@ corepack enable && pnpm install
 pnpm tools-dev run web
 ```
 
-`corepack enable` lets Corepack select the pnpm version pinned in the repo (`10.33.x`), so you do not install pnpm yourself. `pnpm install` pulls dependencies and compiles native pieces — this can take a couple of minutes on the first run, which is expected, not a failure. `pnpm tools-dev run web` then boots the local daemon and web server.
+`corepack enable` lets Corepack select the pnpm version pinned in the repo (`11.15.x`), so you do not install pnpm yourself. `pnpm install` pulls dependencies and compiles native pieces — this can take a couple of minutes on the first run, which is expected, not a failure. `pnpm tools-dev run web` then boots the local daemon and web server.
 
 When it finishes, the command **prints a local URL** — copy it and paste it into your **Windows browser**. WSL forwards the port through to Windows automatically, so the app just opens.
 

@@ -556,7 +556,7 @@ jobs:
           fi
           # shellcheck disable=SC1090
           source "$OPEN_DESIGN_RELEASE_PROFILE"
-          fnm exec --using=24 -- corepack prepare pnpm@10.33.2 --activate
+          fnm exec --using=24 -- corepack prepare pnpm@11.15.0 --activate
           fnm exec --using=24 -- pnpm install --frozen-lockfile
 
       - name: Build betas mac_arm64

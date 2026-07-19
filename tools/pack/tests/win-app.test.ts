@@ -11,7 +11,7 @@ import { createWorkspaceTarballsCacheKey } from "../src/win/app.js";
 const PACKAGE_DIRS = INTERNAL_PACKAGES.map((packageInfo) => packageInfo.directory);
 
 async function writeWorkspace(root: string): Promise<void> {
-  await writeFile(join(root, "package.json"), `${JSON.stringify({ packageManager: "pnpm@10.33.2" }, null, 2)}\n`, "utf8");
+  await writeFile(join(root, "package.json"), `${JSON.stringify({ packageManager: "pnpm@11.15.0" }, null, 2)}\n`, "utf8");
   await writeFile(join(root, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n", "utf8");
   for (const directory of PACKAGE_DIRS) {
     await mkdir(join(root, directory, "src"), { recursive: true });
