@@ -1924,6 +1924,32 @@ function openCodeOutdatedCliDetail(output: string): string | null {
     : null;
 }
 
+// Issue #4514: OpenCode fails with a cryptic "fetch() URL is invalid" when it
+// can't build a valid provider URL. The error text doesn't say why, and there
+// are two common causes we can't distinguish from the message alone:
+//   (1) a custom-provider `{env:...}` placeholder (e.g. baseURL:
+//       "{env:MY_PROVIDER_BASE_URL}") that resolved to empty - common when
+//       Open Design is launched from Finder/the desktop icon, which doesn't
+//       source the shell profile that exports the variable; or
+//   (2) a baseURL written literally in opencode.jsonc that is malformed.
+// Rewrite the bare error into a hint that names both causes and their fixes,
+// rather than asserting the env case. Exported for unit coverage.
+export const OPENCODE_INVALID_PROVIDER_URL_DETAIL =
+  'OpenCode could not build a valid provider URL ("fetch() URL is invalid"). ' +
+  'Two common causes: (1) a custom-provider {env:...} placeholder in your opencode.jsonc ' +
+  '(e.g. baseURL: "{env:MY_PROVIDER_BASE_URL}") resolved to empty because the environment ' +
+  'variable is not visible to Open Design - launching from Finder or the desktop icon does not ' +
+  'load your shell profile, so variables exported in .zshrc/.zprofile are absent; or (2) a ' +
+  'baseURL written literally in opencode.jsonc is malformed. Check your provider baseURL in ' +
+  'opencode.jsonc, and if it uses {env:...}, make sure the variable is exported where Open Design ' +
+  'can see it (launch from a terminal that exports it, or use a literal value).';
+
+export function openCodeInvalidProviderUrlDetail(output: string): string | null {
+  return /fetch\(\)\s*url\s*is\s*invalid/iu.test(output)
+    ? OPENCODE_INVALID_PROVIDER_URL_DETAIL
+    : null;
+}
+
 function openCodeProviderConnectivityDetail(output: string): string | null {
   for (const rawLine of output.split(/\r?\n/u)) {
     const line = rawLine.replace(/\s+/gu, ' ').trim();
@@ -2252,6 +2278,23 @@ async function testAgentConnectionInternal(
     const detail = redactSecrets(
       error instanceof Error ? error.message : String(error),
     );
+    if (input.agentId === 'opencode') {
+      const invalidProviderUrlDetail = openCodeInvalidProviderUrlDetail(detail);
+      if (invalidProviderUrlDetail) {
+        console.warn(
+          `[test:agent] ${def.name} → invalid_provider_url: ${detail}`,
+        );
+        return {
+          ok: false,
+          kind: 'agent_spawn_failed',
+          latencyMs,
+          model,
+          agentName: def.name,
+          detail: invalidProviderUrlDetail,
+          diagnostics: buildDiagnostics(),
+        };
+      }
+    }
     const auth = classifyAgentAuthFailure(input.agentId, detail);
     if (auth?.status === 'missing') {
       console.warn(`[test:agent] ${def.name} → auth_required: ${detail}`);
@@ -2668,6 +2711,25 @@ async function testAgentConnectionInternal(
             model,
             agentName: def.name,
             detail: outdatedCliDetail,
+            diagnostics: buildDiagnostics({
+              phase: 'spawn',
+              exitCode: winner.code,
+              signal: winner.signal,
+            }),
+          };
+        }
+        const invalidProviderUrlDetail = openCodeInvalidProviderUrlDetail(rawDetail);
+        if (invalidProviderUrlDetail) {
+          console.warn(
+            `[test:agent] ${def.name} → invalid_provider_url: ${redactSecrets(rawDetail)}`,
+          );
+          return {
+            ok: false,
+            kind: 'agent_spawn_failed',
+            latencyMs,
+            model,
+            agentName: def.name,
+            detail: invalidProviderUrlDetail,
             diagnostics: buildDiagnostics({
               phase: 'spawn',
               exitCode: winner.code,

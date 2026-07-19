@@ -14,6 +14,7 @@ import {
   createAgentSink,
   isSmokeOkReply,
   mergeNoProxyWithLoopbackDefaults,
+  openCodeInvalidProviderUrlDetail,
   proxyDispatcherRequestInit,
   redactSecrets,
   resolveOpenAIConnectionTestRunProviderPackage,
@@ -3564,6 +3565,83 @@ setTimeout(() => process.exit(0), 50);
           agentName: 'OpenCode',
           detail: 'OpenCode auth failed: login required',
         });
+      },
+    );
+  });
+
+  it('rewrites OpenCode structured fetch-URL-invalid errors to provider URL guidance', async () => {
+    await withFakeOpenCode(
+      `
+const args = process.argv.slice(2);
+if (args[0] === 'models') {
+  console.log('openai/gpt-5');
+  process.exit(0);
+}
+console.log(JSON.stringify({ type: 'error', error: { data: { message: 'fetch() URL is invalid' } } }));
+setTimeout(() => process.exit(0), 50);
+`,
+      async () => {
+        const res = await realFetch(`${baseUrl}/api/test/connection`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ mode: 'agent', agentId: 'opencode' }),
+        });
+        expect(res.status).toBe(200);
+        const body = (await res.json()) as { ok: boolean; detail?: string };
+        expect(body.ok).toBe(false);
+        expect(body.detail).toMatch(/provider URL/i);
+        expect(body.detail).toMatch(/\{env:/);
+        expect(body.detail).toMatch(/malformed|literal/i);
+        expect(body.detail).toMatch(/opencode\.jsonc/);
+      },
+    );
+  });
+
+  // Issue #4514: OpenCode fails with a cryptic "fetch() URL is invalid" when
+  // it can't build a valid provider URL. The connection test must turn that
+  // into an actionable hint. The error text can't tell us why (an empty
+  // {env:...} placeholder vs a malformed literal baseURL), so the hint names
+  // both causes rather than asserting the env case.
+  it('maps the opencode fetch-URL-invalid failure to a hint naming both causes (unit)', () => {
+    const hint = openCodeInvalidProviderUrlDetail('exit 1 · stderr: fetch() URL is invalid');
+    expect(hint).toBeTruthy();
+    expect(hint).toMatch(/opencode\.jsonc/);
+    expect(hint).toMatch(/\{env:/);
+    expect(hint).toMatch(/Finder|terminal|shell profile/);
+    expect(hint).toMatch(/malformed|literal/i);
+    expect(openCodeInvalidProviderUrlDetail('exit 1 · stderr: some other error')).toBeNull();
+  });
+
+  it('keeps malformed literal OpenCode baseURL failures on generic provider-URL guidance', () => {
+    const hint = openCodeInvalidProviderUrlDetail(
+      'exit 1 · stderr: fetch() URL is invalid while loading provider baseURL "http://%"',
+    );
+    expect(hint).toBeTruthy();
+    expect(hint).toMatch(/provider URL/i);
+    expect(hint).toMatch(/literal/i);
+    expect(hint).toMatch(/malformed/i);
+    expect(hint).toMatch(/\{env:/);
+  });
+
+  it('surfaces an actionable env hint when opencode fails with fetch() URL is invalid (#4514)', async () => {
+    await withFakeOpenCode(
+      `
+const args = process.argv.slice(2);
+if (args[0] === 'models') { console.log('openai/gpt-5'); process.exit(0); }
+console.error('fetch() URL is invalid');
+process.exit(1);
+`,
+      async () => {
+        const res = await realFetch(`${baseUrl}/api/test/connection`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ mode: 'agent', agentId: 'opencode' }),
+        });
+        expect(res.status).toBe(200);
+        const body = (await res.json()) as { ok: boolean; detail?: string };
+        expect(body.ok).toBe(false);
+        expect(body.detail).toMatch(/\{env:/);
+        expect(body.detail).toMatch(/opencode\.jsonc/);
       },
     );
   });
