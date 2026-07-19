@@ -42,7 +42,7 @@ const DESKTOP_LOG_ECHO_ENV = "OD_DESKTOP_LOG_ECHO";
 // buildDockerArgs; runProductionInstall reads it to avoid invoking `npm` inside
 // `electronuserland/builder:base`, which strips npm/npx/corepack.
 const PRODUCTION_INSTALL_PNPM_BIN_ENV = "OD_TOOLS_PACK_PNPM_BIN";
-const CONTAINER_PNPM_PATH = "/tmp/pnpm";
+const CONTAINER_PNPM_PATH = "/tmp/pnpm/pnpm";
 const CONTAINER_PNPM_HOME = "/tmp/pnpm-home";
 const CONTAINER_NODE_VERSION = "24.14.1";
 const CONTAINER_TOOLS_PACK_CLI_PATH = "tools/pack/bin/tools-pack.mjs";
@@ -144,14 +144,15 @@ export function buildDockerArgs(
   // package-manager shim" path fails with `command not found`.
   //
   // Download the official pnpm Linux tarball at container start. pnpm v11 ships
-  // per-arch tarballs that bundle a `pnpm` executable; extracting the tarball
-  // avoids the discontinued `linuxstatic` single-binary releases. Select the
-  // asset by the container CPU so amd64 GitHub runners and arm64 local Docker
-  // hosts both work. Stage the binary under `/tmp/pnpm`, which is writable by
-  // the unprivileged container user. Then use it to install a pinned Node into
-  // PNPM_HOME so root lifecycle scripts and the final tools-pack CLI can run
-  // through an explicit `node .../tools-pack.mjs` entrypoint instead of
-  // generated `node_modules/.bin/*` shims.
+  // per-arch tarballs that bundle a `pnpm` executable plus a `dist/` directory
+  // the executable needs; extracting the whole tarball avoids the discontinued
+  // `linuxstatic` single-binary releases. Select the asset by the container CPU
+  // so amd64 GitHub runners and arm64 local Docker hosts both work. Stage the
+  // distribution under `/tmp/pnpm`, which is writable by the unprivileged
+  // container user. Then use it to install a pinned Node into PNPM_HOME so root
+  // lifecycle scripts and the final tools-pack CLI can run through an explicit
+  // `node .../tools-pack.mjs` entrypoint instead of generated
+  // `node_modules/.bin/*` shims.
   //
   // Route bootstrap and install diagnostics to stderr so stdout remains
   // machine-readable when the inner `tools-pack linux build --json` emits JSON.
@@ -164,20 +165,21 @@ export function buildDockerArgs(
   const pnpmReleaseUrl = `https://github.com/pnpm/pnpm/releases/download/v${PNPM_VERSION}`;
   const setupPnpm =
     `command -v curl >/dev/null || { echo "curl not found in container image" >&2; exit 127; } && ` +
-    `mkdir -p ${CONTAINER_PNPM_HOME} ${CONTAINER_PNPM_PATH}.dir && ` +
+    `rm -rf /tmp/pnpm && mkdir -p ${CONTAINER_PNPM_HOME} /tmp/pnpm && ` +
     `case "$(uname -m)" in ` +
     `x86_64) PNPM_ASSET=pnpm-linux-x64; PNPM_SHA256=${pnpmLinuxX64Sha256} ;; ` +
     `aarch64) PNPM_ASSET=pnpm-linux-arm64; PNPM_SHA256=${pnpmLinuxArm64Sha256} ;; ` +
     `*) echo "unsupported container arch: $(uname -m)" >&2; exit 1 ;; ` +
     `esac && ` +
-    `curl --retry 3 --retry-all-errors --connect-timeout 10 --max-time 60 -fsSL "${pnpmReleaseUrl}/$PNPM_ASSET.tar.gz" -o ${CONTAINER_PNPM_PATH}.tmp.tar.gz && ` +
-    `echo "$PNPM_SHA256  ${CONTAINER_PNPM_PATH}.tmp.tar.gz" | sha256sum -c - && ` +
-    `tar -xzf ${CONTAINER_PNPM_PATH}.tmp.tar.gz -C ${CONTAINER_PNPM_PATH}.dir && ` +
-    `mv ${CONTAINER_PNPM_PATH}.dir/pnpm ${CONTAINER_PNPM_PATH} && ` +
-    `rm -rf ${CONTAINER_PNPM_PATH}.dir ${CONTAINER_PNPM_PATH}.tmp.tar.gz && ` +
+    `curl --retry 3 --retry-all-errors --connect-timeout 10 --max-time 60 -fsSL "${pnpmReleaseUrl}/$PNPM_ASSET.tar.gz" -o /tmp/pnpm.tmp.tar.gz && ` +
+    `echo "$PNPM_SHA256  /tmp/pnpm.tmp.tar.gz" | sha256sum -c - && ` +
+    `tar -xzf /tmp/pnpm.tmp.tar.gz -C /tmp/pnpm && ` +
+    `rm -f /tmp/pnpm.tmp.tar.gz && ` +
     `chmod +x ${CONTAINER_PNPM_PATH} && ` +
-    `PNPM_HOME=${CONTAINER_PNPM_HOME} PATH=${CONTAINER_PNPM_HOME}:$PATH ${CONTAINER_PNPM_PATH} env use --global ${CONTAINER_NODE_VERSION} && ` +
-    `export PNPM_HOME=${CONTAINER_PNPM_HOME} PATH=${CONTAINER_PNPM_HOME}:$PATH && ` +
+    `export PNPM_HOME=${CONTAINER_PNPM_HOME} && ` +
+    `export PATH="${CONTAINER_PNPM_HOME}/bin:${CONTAINER_PNPM_HOME}:$PATH" && ` +
+    `export CI=true && ` +
+    `${CONTAINER_PNPM_PATH} env use --global ${CONTAINER_NODE_VERSION} && ` +
     `command -v node >/dev/null`;
   const pnpmCmd = CONTAINER_PNPM_PATH;
   const innerArgs = [
@@ -416,6 +418,14 @@ async function runPnpm(
   args: string[],
   extraEnv: NodeJS.ProcessEnv = {},
 ): Promise<void> {
+  const pnpmBin = process.env[PRODUCTION_INSTALL_PNPM_BIN_ENV];
+  if (pnpmBin != null && pnpmBin.length > 0) {
+    await execFileAsync(pnpmBin, args, {
+      cwd: config.workspaceRoot,
+      env: { ...process.env, ...extraEnv },
+    });
+    return;
+  }
   const invocation = createPackageManagerInvocation(args, process.env);
   await execFileAsync(invocation.command, invocation.args, {
     cwd: config.workspaceRoot,

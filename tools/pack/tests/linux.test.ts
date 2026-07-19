@@ -192,11 +192,10 @@ describe("buildDockerArgs", () => {
       /curl --retry 3 --retry-all-errors --connect-timeout 10 --max-time 60 -fsSL "https:\/\/github\.com\/pnpm\/pnpm\/releases\/download\/v\d+\.\d+\.\d+\/\$PNPM_ASSET\.tar\.gz" -o \/tmp\/pnpm\.tmp\.tar\.gz/,
     );
     expect(last).toMatch(/echo "\$PNPM_SHA256  \/tmp\/pnpm\.tmp\.tar\.gz" \| sha256sum -c -/);
-    expect(last).toMatch(/tar -xzf \/tmp\/pnpm\.tmp\.tar\.gz -C \/tmp\/pnpm\.dir/);
-    expect(last).toMatch(/mv \/tmp\/pnpm\.dir\/pnpm \/tmp\/pnpm/);
-    expect(last).toMatch(/chmod \+x \/tmp\/pnpm/);
-    expect(last).toMatch(/\/tmp\/pnpm env use --global 24\.\d+\.\d+/);
-    expect(last).toMatch(/\/tmp\/pnpm install --frozen-lockfile/);
+    expect(last).toMatch(/tar -xzf \/tmp\/pnpm\.tmp\.tar\.gz -C \/tmp\/pnpm/);
+    expect(last).toMatch(/chmod \+x \/tmp\/pnpm\/pnpm/);
+    expect(last).toMatch(/\/tmp\/pnpm\/pnpm env use --global 24\.\d+\.\d+/);
+    expect(last).toMatch(/\/tmp\/pnpm\/pnpm install --frozen-lockfile/);
     expect(last).toMatch(/node tools\/pack\/bin\/tools-pack\.mjs linux build --to all --namespace default/);
     expect(last).not.toMatch(/\/tmp\/pnpm tools-pack linux build/);
     expect(last).not.toMatch(/--containerized/);
@@ -216,7 +215,7 @@ describe("buildDockerArgs", () => {
     const args = buildDockerArgs(makeConfig(), { uid: 1000, gid: 1000 });
     const last = args[args.length - 1];
     expect(last).toContain("{ command -v curl");
-    expect(last).toContain("/tmp/pnpm install --frozen-lockfile; } >&2 && node tools/pack/bin/tools-pack.mjs linux build");
+    expect(last).toContain("/tmp/pnpm/pnpm install --frozen-lockfile; } >&2 && node tools/pack/bin/tools-pack.mjs linux build");
     expect(last.indexOf("/tmp/pnpm install --frozen-lockfile")).toBeLessThan(
       last.indexOf("} >&2 && node tools/pack/bin/tools-pack.mjs linux build"),
     );
@@ -238,8 +237,7 @@ describe("buildDockerArgs", () => {
     expect(last).toMatch(/sha256sum -c -/);
     expect(last).toMatch(/\/tmp\/pnpm\.tmp\.tar\.gz/);
     expect(last.indexOf("sha256sum -c -")).toBeLessThan(last.indexOf("tar -xzf /tmp/pnpm.tmp.tar.gz"));
-    expect(last.indexOf("tar -xzf /tmp/pnpm.tmp.tar.gz")).toBeLessThan(last.indexOf("mv /tmp/pnpm.dir/pnpm /tmp/pnpm"));
-    expect(last.indexOf("mv /tmp/pnpm.dir/pnpm /tmp/pnpm")).toBeLessThan(last.indexOf("chmod +x /tmp/pnpm"));
+    expect(last.indexOf("tar -xzf /tmp/pnpm.tmp.tar.gz")).toBeLessThan(last.indexOf("chmod +x /tmp/pnpm/pnpm"));
   });
 
   it("hardcoded pnpm version stays in lockstep with root package.json `packageManager`", () => {
@@ -264,7 +262,7 @@ describe("buildDockerArgs", () => {
     const expectedMajor = readFileSync(join(repoRoot, ".node-version"), "utf-8").trim();
     const args = buildDockerArgs(makeConfig(), { uid: 1000, gid: 1000 });
     const last = args[args.length - 1];
-    const match = last.match(/\/tmp\/pnpm env use --global (\d+)\.\d+\.\d+/);
+    const match = last.match(/\/tmp\/pnpm\/pnpm env use --global (\d+)\.\d+\.\d+/);
     expect(match, "expected container bootstrap to install an explicit Node version").not.toBeNull();
     expect(match?.[1]).toBe(expectedMajor);
   });
@@ -317,10 +315,10 @@ describe("buildDockerArgs", () => {
     expect(last).toContain("--app-version '0.5.0-beta.1'\\''quoted'");
   });
 
-  it("exports OD_TOOLS_PACK_PNPM_BIN=/tmp/pnpm so the inner build's production install skips npm", () => {
+  it("exports OD_TOOLS_PACK_PNPM_BIN=/tmp/pnpm/pnpm so the inner build's production install skips npm", () => {
     const args = buildDockerArgs(makeConfig(), { uid: 1000, gid: 1000 });
     const envFlagIndex = args.findIndex(
-      (arg, i) => arg === "-e" && args[i + 1] === "OD_TOOLS_PACK_PNPM_BIN=/tmp/pnpm",
+      (arg, i) => arg === "-e" && args[i + 1] === "OD_TOOLS_PACK_PNPM_BIN=/tmp/pnpm/pnpm",
     );
     expect(envFlagIndex).toBeGreaterThan(-1);
   });
@@ -650,11 +648,11 @@ describe("resolveProductionInstallCommand", () => {
     );
     expect(envFlagIndex).toBeGreaterThan(-1);
     const envValue = dockerArgs[envFlagIndex + 1]?.split("=")[1];
-    expect(envValue).toBe("/tmp/pnpm");
+    expect(envValue).toBe("/tmp/pnpm/pnpm");
 
     const resolved = resolveProductionInstallCommand({ OD_TOOLS_PACK_PNPM_BIN: envValue });
     expect(resolved).toEqual({
-      command: "/tmp/pnpm",
+      command: "/tmp/pnpm/pnpm",
       args: ["install", "--prod", "--no-lockfile", "--config.node-linker=hoisted"],
     });
     expect(resolved.command).not.toBe("npm");
