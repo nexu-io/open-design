@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { createHmac, randomBytes } from "node:crypto";
-import { appendFile, mkdir, realpath, stat, writeFile } from "node:fs/promises";
+import { mkdir, realpath, stat, writeFile } from "node:fs/promises";
 import { release } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -33,6 +33,10 @@ import { exportArtifact as exportArtifactFromHtml } from "./artifact-export.js";
 import { createElectronPdfTarget, exportPdfFromHtml, savePrintReadyDocumentAsPdf } from "./pdf-export.js";
 import { SPLASH_VIDEO_DATA_URL } from "./splash-video.js";
 import { RendererCrashLoopBreaker } from "./renderer-crash-loop.js";
+import {
+  RotatingRendererLogWriter,
+  serializeRendererLogEntry,
+} from "./renderer-log.js";
 import type { PrintReadyPdfOptions } from "./pdf-export.js";
 import type { DesktopUpdater } from "./updater.js";
 import { parseDesktopUpdateMenuLabels } from "./update-menu.js";
@@ -2529,23 +2533,33 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   }
 
   const rendererLogPath = options.rendererLogPath ?? null;
-  let rendererLogReady: Promise<void> | null = null;
-  const ensureRendererLogDir = async (): Promise<void> => {
-    if (rendererLogPath == null) return;
-    if (rendererLogReady == null) {
-      rendererLogReady = mkdir(dirname(rendererLogPath), { recursive: true }).then(() => undefined);
-    }
-    await rendererLogReady;
-  };
-  const persistRendererEntry = async (entry: DesktopConsoleEntry): Promise<void> => {
-    if (rendererLogPath == null) return;
-    if (entry.level !== "error" && entry.level !== "warn") return;
+  const rendererLogWriter =
+    rendererLogPath == null
+      ? null
+      : new RotatingRendererLogWriter({
+          logPath: rendererLogPath,
+          onError: (error) => {
+            console.error("desktop renderer log append failed", error);
+          },
+        });
+  void rendererLogWriter?.initialize();
+  let rendererLogClosed = false;
+  const persistRendererEntry = (entry: DesktopConsoleEntry): void => {
+    if (rendererLogClosed || rendererLogWriter == null) return;
+    if (
+      entry.level !== "error" &&
+      entry.level !== "warn" &&
+      entry.level !== "warning"
+    ) return;
     try {
-      await ensureRendererLogDir();
-      const line = `${JSON.stringify({ timestamp: entry.timestamp, level: entry.level, text: entry.text })}\n`;
-      await appendFile(rendererLogPath, line, "utf8");
+      const line = serializeRendererLogEntry({
+        timestamp: entry.timestamp,
+        level: entry.level,
+        text: entry.text,
+      });
+      void rendererLogWriter.append(line);
     } catch (error) {
-      console.error("desktop renderer log append failed", error);
+      console.error("desktop renderer log serialization failed", error);
     }
   };
 
@@ -2790,6 +2804,8 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     },
     async close() {
       stopped = true;
+      rendererLogClosed = true;
+      await rendererLogWriter?.flush();
       if (timer != null) {
         clearTimeout(timer);
         timer = null;
