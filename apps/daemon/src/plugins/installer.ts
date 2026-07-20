@@ -15,6 +15,7 @@
 //   - Tarball extraction inherits the same caps via tar's strict mode.
 
 import path from 'node:path';
+import { safeExternalFetch } from './plugin-asset-cache.js';
 import fs from 'node:fs';
 import os from 'node:os';
 import { createHash } from 'node:crypto';
@@ -584,7 +585,7 @@ async function* installFromArchiveUrl(
 }
 
 async function defaultFetcher(url: string): ReturnType<ArchiveFetcher> {
-  const response = await fetch(url, { redirect: 'follow' });
+  const response = await safeExternalFetch(url);
   return {
     ok: response.ok,
     status: response.status,
