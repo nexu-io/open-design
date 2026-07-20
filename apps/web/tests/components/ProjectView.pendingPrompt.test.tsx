@@ -216,9 +216,10 @@ const mockedSaveMessage = vi.mocked(saveMessage);
 
 const config: AppConfig = {
   mode: 'api',
-  apiKey: '',
-  baseUrl: '',
-  model: '',
+  apiProtocol: 'openai',
+  apiKey: 'test-key',
+  baseUrl: 'https://api.openai.com/v1',
+  model: 'api-model',
   agentId: null,
   skillId: null,
   designSystemId: null,

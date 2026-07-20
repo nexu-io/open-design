@@ -632,7 +632,9 @@ interface Props {
   onTogglePet?: () => void;
   onOpenPetSettings?: () => void;
   projectMetadata?: ProjectMetadata;
-  onProjectMetadataChange?: (metadata: ProjectMetadata) => void;
+  // Authoritative post-patch project from the daemon — see ChatComposer's
+  // prop of the same name for the recency invariant.
+  onProjectMetadataChange?: (updated: Project) => void;
   activeWorkspaceContext?: WorkspaceContextItem | null;
   initialWorkspaceContexts?: WorkspaceContextItem[];
   workspaceContexts?: WorkspaceContextItem[];

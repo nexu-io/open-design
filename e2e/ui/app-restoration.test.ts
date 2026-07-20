@@ -2679,6 +2679,13 @@ test('[P1] completed background run sends the configured desktop notification', 
 
   await createEmptyProject(page, 'Background notification run');
   await expectWorkspaceReady(page);
+  const sessionModeTrigger = page.getByTestId('chat-composer').getByTestId('session-mode-trigger');
+  await sessionModeTrigger.click();
+  await page
+    .locator('.session-mode-toggle__menu[role="menu"]')
+    .getByRole('menuitemradio', { name: 'Ask mode' })
+    .click();
+  await expect(sessionModeTrigger).toHaveAttribute('aria-label', 'Ask mode');
   await sendPrompt(page, 'Finish and notify me');
   await expect(page.getByRole('button', { name: 'Stop' })).toBeVisible();
   releaseEvents();
@@ -3294,7 +3301,8 @@ test('[P1] inline question form submits selected answers into the next run reque
 });
 
 test('[P1] project composer working directory replace and clear update linked dirs metadata', async ({ page }) => {
-  const workingDir = '/Users/mac/open-design/open-design/e2e';
+  const workingDir = process.cwd();
+  const workingDirLabel = workingDir.split(/[\\/]/).at(-1) ?? workingDir;
   const patchBodies: Array<Record<string, unknown>> = [];
 
   await page.route('**/api/recent-dirs', async (route) => {
@@ -3325,7 +3333,7 @@ test('[P1] project composer working directory replace and clear update linked di
 
   await page.getByTestId('working-dir-trigger').click();
   await page.getByTestId('working-dir-pick').click();
-  await expect(page.getByTestId('working-dir-trigger')).toContainText('e2e');
+  await expect(page.getByTestId('working-dir-trigger')).toContainText(workingDirLabel);
   await expect
     .poll(() => patchBodies.at(-1)?.metadata)
     .toMatchObject({ linkedDirs: [workingDir] });

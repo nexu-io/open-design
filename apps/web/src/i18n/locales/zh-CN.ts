@@ -354,6 +354,8 @@ export const zhCN: Dict = {
   "settings.modeApiMeta": "BYOK",
   "settings.byokNoFileToolsNotice":
     "BYOK 无法读写或修改项目文件；需要改代码时请使用本机 CLI。",
+  "settings.byokDraftNotice":
+    "必填项补全前，此配置只会保存为草稿；当前执行配置将继续保持生效。",
   "settings.codeAgent": "代码代理",
   "settings.codeAgentHint": "选择用来运行提示词的 CLI。",
   "settings.rescan": "↻ 重新扫描",
@@ -624,6 +626,8 @@ export const zhCN: Dict = {
     '点击"在 Cursor 中安装"以通过确认对话框安装，或将此 JSON 合并到 {path}。',
   "settings.mcpDeeplinkInstallCursor": "在 Cursor 中安装",
   "settings.mcpMethodJson": "JSON 配置",
+  "settings.mcpInstructionKiro":
+    "打开 {path} 并合并此 JSON。对于 workspace 级配置，请使用 .kiro/settings/mcp.json。",
   "settings.mcpInstructionCopilot":
     '打开命令面板（{shortcut}），运行 "MCP: Open User Configuration"，然后合并此 JSON。Copilot Chat 必须处于 Agent 模式，工具才会显示。',
   "settings.mcpInstructionAntigravity":
@@ -3159,6 +3163,9 @@ export const zhCN: Dict = {
   "fileViewer.deployProviderLabel": "部署平台",
   "fileViewer.vercelProvider": "Vercel",
   "fileViewer.cloudflarePagesProvider": "Cloudflare Pages",
+  "fileViewer.deployTargetLabel": "目标",
+  "fileViewer.deployTargetPreview": "预览",
+  "fileViewer.deployTargetProduction": "生产环境",
   "fileViewer.deployToProvider": "部署到 {provider}",
   "fileViewer.redeployToProvider": "重新部署到 {provider}",
   "fileViewer.deployingToProvider": "正在部署到 {provider}…",
@@ -3873,6 +3880,8 @@ export const zhCN: Dict = {
   "settings.memoryExtractionPhaseSkipped": "已跳过",
   "settings.memoryExtractionPhaseFailed": "失败",
   "settings.memoryExtractionSkipNoProvider": "未配置 API key，LLM 抽取未运行。",
+  "settings.memoryExtractionSkipUnsupportedProvider":
+    "已保存的媒体 Provider 不能用于 LLM 记忆抽取。",
   "settings.memoryExtractionSkipDisabled": "记忆功能已关闭。",
   "settings.memoryExtractionSkipEmpty": "用户消息为空，没有可抽取的内容。",
   "settings.memoryExtractionSkipNoMatch": "本轮没有命中任何正则规则。",
@@ -3892,6 +3901,8 @@ export const zhCN: Dict = {
   "settings.memoryNoProviderBannerTitle": "LLM 抽取未启用",
   "settings.memoryNoProviderBannerBody":
     "未找到可用的 API key，LLM 抽取已跳过。可以在媒体提供商里填入 OpenAI key，或设置环境变量 ANTHROPIC_API_KEY / OPENAI_API_KEY 来启用。启发式抽取仍在运行。",
+  "settings.memoryUnsupportedProviderBannerBody":
+    "已保存媒体 Provider key，但 Memory 只能复用支持文本抽取的 Provider：OpenAI、MiniMax、AIHubMix 和 SenseAudio。请在媒体提供商中配置其中一个，设置 ANTHROPIC_API_KEY / OPENAI_API_KEY，或在高级设置中选择 Memory model。",
   "settings.libraryInstall": "安装",
   "settings.libraryInstallGithub": "GitHub",
   "settings.libraryInstallLocal": "本地路径",
@@ -3906,6 +3917,9 @@ export const zhCN: Dict = {
   "notify.successBody": "一轮回答已经写完。",
   "notify.failureBody": "本轮任务出错，请查看错误信息。",
   "updater.available": "有可用更新",
+  "updater.activeRunsTitle": "Open Design 仍在执行任务",
+  "updater.activeRunsBody": "仍有 {count} 个任务正在运行。现在重启会中断这些任务。",
+  "updater.activeRunsUnknownBody": "Open Design 无法确认是否仍有任务运行。现在重启可能会中断正在进行的工作。",
   "updater.availableBody":
     "Open Design {version} 可用。下载安装完成后即可打开安装器。",
   "updater.checking": "正在检查更新",
@@ -3924,6 +3938,15 @@ export const zhCN: Dict = {
   "updater.installingRestart": "正在安装并重启…",
   "updater.openInstaller": "安装更新",
   "updater.opening": "正在打开安装器…",
+  "updater.dialogAvailableGeneric": "发现新版本。\n下载后即可安装。",
+  "updater.dialogAvailableVersion": "v{version} 可供更新。\n下载后即可安装。",
+  "updater.dialogCheckFailed": "检查更新失败。\n请稍后重试。",
+  "updater.dialogReadyGeneric":
+    "新版本已准备就绪。\n更好的体验，更智能的设计，欢迎体验新版本。",
+  "updater.dialogReadyVersion":
+    "v{version} 已准备就绪。\n更好的体验，更智能的设计，欢迎体验新版本。",
+  "updater.dialogUnsupported":
+    "当前环境不支持应用内更新。\n可前往发布页手动下载。",
   "updater.payloadReadyGeneric":
     "Open Design 更新已就绪。Open Design 会关闭并自动重启。",
   "updater.payloadReadyVersion":
@@ -3938,6 +3961,9 @@ export const zhCN: Dict = {
   "updater.readyVersion":
     "Open Design {version} 已就绪。Open Design 会关闭并打开安装器。",
   "updater.upToDate": "您已经是最新版本啦",
+  "updater.viewVersionFeatures": "查看新版本特性",
+  "updater.manualDownload": "手动下载",
+  "updater.restartAnyway": "仍然重启",
 
   "whatsNew.cta": "看看有什么新功能",
   "whatsNew.dismissAria": "关闭更新亮点",

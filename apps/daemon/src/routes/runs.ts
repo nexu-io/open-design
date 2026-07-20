@@ -7,6 +7,7 @@ import {
   RUN_RESULT_PACKAGE_SCHEMA,
   type AppliedPluginSnapshot,
   type ArtifactManifest,
+  type ByokChatProviderConfig,
   type ChatRunStatus,
   type ChatRunStatusResponse,
   type ProjectMetadata as ContractProjectMetadata,
@@ -83,6 +84,11 @@ import {
   validateRunToolBundleForAgent,
 } from '../run-tool-bundle.js';
 import type { DetectedAgent, RuntimeAgentDef } from '../runtimes/types.js';
+import {
+  buildOpenCodeByokProviderConfig,
+  BYOK_OPENCODE_AGENT_ID,
+  BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE,
+} from '../runtimes/byok-opencode.js';
 import {
   deriveActivationMilestones,
   runAskedUserQuestion,
@@ -455,6 +461,14 @@ function routeParamId(req: ApiRequest): string | null {
     : null;
 }
 
+function hasCompleteByokOpenCodeConfig(meta: JsonRecord): boolean {
+  if (meta.agentId !== BYOK_OPENCODE_AGENT_ID) return true;
+  return buildOpenCodeByokProviderConfig(
+    meta.byokProvider as ByokChatProviderConfig | null | undefined,
+    typeof meta.model === 'string' ? meta.model : null,
+  ) !== null;
+}
+
 function toOdNativeEvent(record: RunEventRecord): OdNativeEvent | null {
   if (!AGUI_NATIVE_EVENT_KINDS.has(record.event as OdNativeEvent['kind'])) return null;
   return { kind: record.event, ...toJsonRecord(record.data) } as OdNativeEvent;
@@ -513,6 +527,14 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     const toolBundle = parseRunToolBundleForRequest(requestBody.toolBundle);
     if (!toolBundle.ok) {
       return sendApiError(res, 400, 'BAD_REQUEST', toolBundle.message);
+    }
+    if (!hasCompleteByokOpenCodeConfig(requestBody)) {
+      return sendApiError(
+        res,
+        400,
+        'VALIDATION_FAILED',
+        BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE,
+      );
     }
     let resolvedSnapshot = null;
     if (typeof requestBody.projectId === 'string' && requestBody.projectId) {
@@ -610,6 +632,14 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       } catch (err) {
         console.warn('[runs] agent id fallback failed', err);
       }
+    }
+    if (!hasCompleteByokOpenCodeConfig(meta)) {
+      return sendApiError(
+        res,
+        400,
+        'VALIDATION_FAILED',
+        BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE,
+      );
     }
     const toolBundleSupport = validateRunToolBundleForAgent(
       toolBundle.bundle,
@@ -1481,6 +1511,14 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       toolBundle: toolBundle.bundle,
       ...(chatProject?.metadata ? { projectMetadata: chatProject.metadata } : {}),
     };
+    if (!hasCompleteByokOpenCodeConfig(meta)) {
+      return sendApiError(
+        res,
+        400,
+        'VALIDATION_FAILED',
+        BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE,
+      );
+    }
     const run = design.runs.create(meta);
     design.runs.stream(run, req, res);
     reconcileAssistantMessageOnRunEnd(db, design.runs, run);

@@ -9,8 +9,11 @@ import {
   openUpdaterInstaller,
   quitAfterUpdaterInstallerOpen,
   readUpdaterStatus,
+  restartSafetyFromActionResult,
+  restartSafetyFromUpdaterStatus,
   subscribeToUpdaterStatus,
   type UpdaterModel,
+  type UpdaterRestartSafety,
 } from '../lib/updater';
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
@@ -77,6 +80,17 @@ function updateVersionProps(model: UpdaterModel, appVersionBefore: string | null
 
 function updaterErrorCode(model: UpdaterModel): string | undefined {
   return model.status?.error?.code;
+}
+
+/**
+ * User-facing copy for a restart-safety preflight denial. The popup keeps
+ * these denials hard-blocked (no force path — that lives in the app-menu
+ * UpdateDialog), but the copy must say why instead of a generic failure.
+ */
+function restartSafetyText(t: Translator, safety: UpdaterRestartSafety): string {
+  return safety.state === 'blocked'
+    ? t('updater.activeRunsBody', { count: safety.activeRunCount })
+    : t('updater.activeRunsUnknownBody');
 }
 
 export function UpdaterPopup({
@@ -333,8 +347,9 @@ export function UpdaterPopup({
         return;
       }
       if (result.model.errorMessage != null) {
+        const safety = restartSafetyFromUpdaterStatus(result.status);
         actionInFlightRef.current = false;
-        setInstallError(installFailureText);
+        setInstallError(safety == null ? installFailureText : restartSafetyText(t, safety));
         setInstallState('idle');
         trackUpdateInstallResult(analytics.track, {
           page_name: 'home',
@@ -357,6 +372,8 @@ export function UpdaterPopup({
       });
       const quitResult = await quitAfterUpdaterInstallerOpen({ payload: { source: 'updater-prompt' } });
       if (!quitResult.ok) {
+        const quitSafety = restartSafetyFromActionResult(quitResult);
+        if (quitSafety != null) setInstallError(restartSafetyText(t, quitSafety));
         clearHandoffWatchdog();
         actionInFlightRef.current = false;
         setInstallState('recoverable');

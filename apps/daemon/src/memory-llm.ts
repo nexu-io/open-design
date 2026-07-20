@@ -31,11 +31,13 @@
 //   3. BYOK chat-config snapshot for API-mode chats.
 //   4. ANTHROPIC_API_KEY env → Claude Haiku 4.5 (legacy fallback)
 //   5. OPENAI_API_KEY env    → gpt-4o-mini
-//   6. media-config OpenAI BYOK → gpt-4o-mini
+//   6. media-config text-capable BYOK → OpenAI / MiniMax /
+//      AIHubMix / SenseAudio fast defaults
 //      (the key the user already typed into Settings → Media providers;
 //       reuses an existing credential so Local-CLI users don't have to
 //       paste it twice just to get LLM-side memory extraction)
-//   7. nothing               → record a 'skipped: no-provider' attempt
+//   7. unsupported media key → record a 'skipped: unsupported-provider'
+//   8. nothing               → record a 'skipped: no-provider' attempt
 //      so the UI can surface "configure a key to enable LLM memory"
 //      instead of staying silent
 //
@@ -194,6 +196,36 @@ const PROVIDER_DEFAULTS = {
   },
 };
 
+// Some Settings -> Media providers credentials are usable for text
+// extraction even though their media base URL targets image/TTS endpoints.
+// Keep those fallbacks explicit so a saved image/audio-only key does not get
+// reported as "no API key", and so we never accidentally call a non-chat media
+// endpoint as the memory extractor.
+const MEDIA_MEMORY_PROVIDER_FALLBACKS = [
+  {
+    mediaProviderId: 'minimax',
+    memoryProvider: 'openai',
+    model: 'MiniMax-M2.7-highspeed',
+    baseUrl: 'https://api.minimax.io/v1',
+  },
+  {
+    mediaProviderId: 'aihubmix',
+    memoryProvider: 'aihubmix',
+    model: PROVIDER_DEFAULTS.aihubmix.model,
+    baseUrl: PROVIDER_DEFAULTS.aihubmix.baseUrl,
+  },
+  {
+    mediaProviderId: 'senseaudio',
+    memoryProvider: 'senseaudio',
+    model: PROVIDER_DEFAULTS.senseaudio.model,
+    baseUrl: PROVIDER_DEFAULTS.senseaudio.baseUrl,
+  },
+];
+
+const MEDIA_MEMORY_PROVIDER_IDS = new Set(
+  MEDIA_MEMORY_PROVIDER_FALLBACKS.map((fallback) => fallback.mediaProviderId),
+);
+
 // Map an explicit override provider to the env var the daemon should
 // consult when the override doesn't carry its own apiKey. The fallback
 // chain stays the same as before for anthropic/openai; azure uses the
@@ -296,6 +328,66 @@ function localCliProviderFor(agentId, provider, model) {
   };
 }
 
+function providerFromOpenAiMediaConfig(cred, envOverrideModel) {
+  if (!cred || typeof cred.apiKey !== 'string' || !cred.apiKey.trim()) return null;
+  return {
+    kind: 'openai',
+    apiKey: cred.apiKey.trim(),
+    model:
+      envOverrideModel || cred.model || PROVIDER_DEFAULTS.openai.model,
+    baseUrl: (cred.baseUrl && String(cred.baseUrl).trim())
+      || PROVIDER_DEFAULTS.openai.baseUrl,
+    apiVersion: '',
+    credentialSource: 'media-config',
+  };
+}
+
+async function providerFromMediaMemoryFallbacks(projectRoot, envOverrideModel) {
+  for (const fallback of MEDIA_MEMORY_PROVIDER_FALLBACKS) {
+    try {
+      const cred = await resolveProviderConfig(projectRoot, fallback.mediaProviderId);
+      if (cred && typeof cred.apiKey === 'string' && cred.apiKey.trim()) {
+        return {
+          kind: fallback.memoryProvider,
+          apiKey: cred.apiKey.trim(),
+          model: envOverrideModel || fallback.model,
+          // Deliberately use the text-chat default, not the media base URL.
+          baseUrl: fallback.baseUrl,
+          apiVersion: '',
+          credentialSource: 'media-config',
+        };
+      }
+    } catch (err) {
+      console.warn(
+        `[memory-llm] media-config lookup failed (${fallback.mediaProviderId})`,
+        err?.message ?? err,
+      );
+    }
+  }
+  return null;
+}
+
+async function hasUnsupportedMediaProviderConfig(projectRoot) {
+  try {
+    const { readMaskedConfig } = await import('./media/config.js');
+    const masked = await readMaskedConfig(projectRoot);
+    const configured = Object.entries(masked.providers)
+      .filter(([, provider]) => provider?.configured)
+      .map(([id]) => id);
+    if (configured.length === 0) return false;
+    const hasTextCapable = configured.some(
+      (id) => id === 'openai' || MEDIA_MEMORY_PROVIDER_IDS.has(id),
+    );
+    return !hasTextCapable;
+  } catch (err) {
+    console.warn(
+      '[memory-llm] failed to inspect media-config support',
+      err?.message ?? err,
+    );
+    return false;
+  }
+}
+
 // Pick a provider in this order:
 //   0. Memory config override → user-set provider/model/baseUrl/apiKey
 //   1. Current Local CLI → if the user is chatting through Claude Code,
@@ -304,8 +396,8 @@ function localCliProviderFor(agentId, provider, model) {
 //      just because the extraction happens in the background.
 //   2. Chat-protocol-constrained env var → if the chat is on Claude
 //      Code (anthropic), only ANTHROPIC_API_KEY counts; Codex/OpenAI-
-//      compatible CLIs only consult OPENAI_API_KEY (and the media-
-//      config OpenAI key as a secondary fallback). This stops the
+//      compatible CLIs only consult OPENAI_API_KEY (and text-capable
+//      media-config keys as a secondary fallback). This stops the
 //      legacy "claude user, openai gpt-4o-mini extracts in the
 //      background" surprise — if the matching key isn't configured,
 //      we'd rather skip with 'no-provider' and surface that in the
@@ -324,7 +416,8 @@ function localCliProviderFor(agentId, provider, model) {
 //      AND the caller didn't pass `chatProvider`)
 //      ANTHROPIC_API_KEY env → Claude Haiku 4.5
 //   5. (legacy fallback) OPENAI_API_KEY env → gpt-4o-mini
-//   6. (legacy fallback) media-config OpenAI BYOK → gpt-4o-mini
+//   6. (legacy fallback) media-config text-capable BYOK → OpenAI /
+//      MiniMax / AIHubMix / SenseAudio fast defaults
 //
 // The `OD_MEMORY_MODEL` env continues to override the model name across
 // (1)–(6) so power users don't lose that lever. It does NOT override the
@@ -456,16 +549,8 @@ async function pickProvider(projectRoot, dataDir, chatAgentId, chatProvider, cha
       try {
         const cred = await resolveProviderConfig(projectRoot, 'openai');
         if (cred && typeof cred.apiKey === 'string' && cred.apiKey.trim()) {
-          return {
-            kind: 'openai',
-            apiKey: cred.apiKey.trim(),
-            model:
-              envOverrideModel || cred.model || PROVIDER_DEFAULTS.openai.model,
-            baseUrl: (cred.baseUrl && String(cred.baseUrl).trim())
-              || PROVIDER_DEFAULTS.openai.baseUrl,
-            apiVersion: '',
-            credentialSource: 'media-config',
-          };
+          const provider = providerFromOpenAiMediaConfig(cred, envOverrideModel);
+          if (provider) return provider;
         }
       } catch (err) {
         console.warn(
@@ -473,6 +558,11 @@ async function pickProvider(projectRoot, dataDir, chatAgentId, chatProvider, cha
           err?.message ?? err,
         );
       }
+      const mediaProvider = await providerFromMediaMemoryFallbacks(
+        projectRoot,
+        envOverrideModel,
+      );
+      if (mediaProvider) return mediaProvider;
     }
     // The chat protocol is known but no key for it is available. Bail
     // out instead of wandering — recording 'skipped: no-provider' is
@@ -566,23 +656,19 @@ async function pickProvider(projectRoot, dataDir, chatAgentId, chatProvider, cha
   if (projectRoot) {
     try {
       const cred = await resolveProviderConfig(projectRoot, 'openai');
-      if (cred && typeof cred.apiKey === 'string' && cred.apiKey.trim()) {
-        return {
-          kind: 'openai',
-          apiKey: cred.apiKey.trim(),
-          model:
-            envOverrideModel || cred.model || PROVIDER_DEFAULTS.openai.model,
-          baseUrl: (cred.baseUrl && String(cred.baseUrl).trim())
-            || PROVIDER_DEFAULTS.openai.baseUrl,
-          credentialSource: 'media-config',
-        };
-      }
+      const provider = providerFromOpenAiMediaConfig(cred, envOverrideModel);
+      if (provider) return provider;
     } catch (err) {
       console.warn(
         '[memory-llm] failed to read media-config for fallback',
         err?.message ?? err,
       );
     }
+    const mediaProvider = await providerFromMediaMemoryFallbacks(
+      projectRoot,
+      envOverrideModel,
+    );
+    if (mediaProvider) return mediaProvider;
   }
   return null;
 }
@@ -1189,7 +1275,11 @@ async function collectProposedEntries(dataDir, input, options) {
     chatModel,
   );
   if (!provider) {
-    recordSkip({ userMessage, reason: 'no-provider', kind: extractionKind });
+    const reason =
+      projectRoot && await hasUnsupportedMediaProviderConfig(projectRoot)
+        ? 'unsupported-provider'
+        : 'no-provider';
+    recordSkip({ userMessage, reason, kind: extractionKind });
     return { status: 'skipped', attemptId: null, proposed: [], existingEntries: [] };
   }
 

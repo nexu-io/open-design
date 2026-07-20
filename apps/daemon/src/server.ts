@@ -200,7 +200,10 @@ import {
 import { loadMmdRouteLaunchEnv } from './runtimes/mmd-routes.js';
 import { preparePromptFileForAgent } from './runtimes/prompt-file.js';
 import { TerminalControlSequenceStripper } from './runtimes/terminal-control.js';
-import { buildOpenCodeByokProviderConfig } from './runtimes/byok-opencode.js';
+import {
+  buildOpenCodeByokProviderConfig,
+  BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE,
+} from './runtimes/byok-opencode.js';
 import { resolveDeploymentProviderProfile } from './deployment-provider.js';
 import { deploymentProviderRunMetadata } from './deployment-provider-run-session.js';
 import {
@@ -1313,6 +1316,7 @@ function filesystemEmptyAnswerFallbackText(fileNames) {
 export function __forTestFilesystemEmptyAnswerFallbackText(fileNames) {
   return filesystemEmptyAnswerFallbackText(fileNames);
 }
+
 
 export function shouldReportRunCompletedFromMessage(saved, body = {}) {
   return Boolean(
@@ -4306,7 +4310,7 @@ export async function startServer({
       return design.runs.fail(
         run,
         'BYOK_PROVIDER_REQUIRED',
-        'BYOK OpenCode requires a provider, API key, and model for this run.',
+        BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE,
       );
     }
     // Validate the checked-in `inactivityTimeoutMs` hint immediately
@@ -5994,6 +5998,12 @@ export async function startServer({
       persistDeliveredAgentSessionState = () => {
         if (persisted) return;
         persisted = true;
+        if (!getConversation(db, run.conversationId)) {
+          console.warn(
+            '[sessions] skipped delivered session persistence because the conversation is not persisted',
+          );
+          return;
+        }
         // The id to persist for a create turn: capture-style adapters store the
         // session id the CLI minted and reported on the stream; specify-style
         // adapters store the daemon-minted id they passed to the CLI. A
@@ -7962,7 +7972,11 @@ export async function startServer({
           design.runs.finish(run, 'failed', 1, signal);
           return;
         }
-        persistDeliveredAgentSessionState();
+        try {
+          persistDeliveredAgentSessionState();
+        } catch (err) {
+          console.warn('[sessions] delivered session persistence failed', err);
+        }
       }
       finishWithRetryDecision(status, code, signal);
       } finally {

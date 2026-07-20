@@ -53,8 +53,9 @@ describe("waitForLauncherAfterQuit", () => {
     try {
       const paths = fakePaths(root);
 
-      await waitForLauncherAfterQuit({ targetPid: 999999, timeoutMs: 1000 }, paths);
+      const exited = await waitForLauncherAfterQuit({ targetPid: 999999, timeoutMs: 1000 }, paths);
 
+      expect(exited).toBe(true);
       const log = await readFile(join(root, "logs", "launcher", "after-quit.log"), "utf8");
       expect(log).toContain("armed targetPid=999999 timeoutMs=1000");
       expect(log).toContain("observed-exit targetPid=999999");
@@ -66,15 +67,21 @@ describe("waitForLauncherAfterQuit", () => {
   it("logs and warns on timeout", async () => {
     const root = await mkdtemp(join(tmpdir(), "od-launcher-after-quit-timeout-"));
     const logger = { warn: vi.fn() };
+    const stop = fakeStop(4242, { survived: true });
     try {
       const paths = fakePaths(root);
 
-      await waitForLauncherAfterQuit({ targetPid: process.pid, timeoutMs: 1 }, paths, logger);
+      const exited = await waitForLauncherAfterQuit({ targetPid: 4242, timeoutMs: 1 }, paths, logger, {
+        stopProcesses: stop,
+        waitForExit: neverExits,
+      });
 
+      expect(exited).toBe(false);
       const log = await readFile(join(root, "logs", "launcher", "after-quit.log"), "utf8");
-      expect(log).toContain(`armed targetPid=${process.pid} timeoutMs=1`);
-      expect(log).toContain(`timed-out targetPid=${process.pid}`);
-      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining(`timed-out targetPid=${process.pid}`));
+      expect(log).toContain("armed targetPid=4242 timeoutMs=1");
+      expect(log).toContain("timed-out targetPid=4242; forcing stop");
+      expect(log).toContain("force-stop after-quit-timeout pid=4242 outcome=survived");
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining("timed-out targetPid=4242"));
     } finally {
       await rm(root, { force: true, recursive: true });
     }
@@ -86,11 +93,12 @@ describe("waitForLauncherAfterQuit", () => {
     try {
       const paths = fakePaths(root);
 
-      await waitForLauncherAfterQuit({ targetPid: 4242, timeoutMs: 5 }, paths, { warn: vi.fn() }, {
+      const exited = await waitForLauncherAfterQuit({ targetPid: 4242, timeoutMs: 5 }, paths, { warn: vi.fn() }, {
         stopProcesses: stop,
         waitForExit: neverExits,
       });
 
+      expect(exited).toBe(true);
       expect(stop).toHaveBeenCalledWith([4242]);
       const log = await readFile(join(root, "logs", "launcher", "after-quit.log"), "utf8");
       expect(log).toContain("timed-out targetPid=4242; forcing stop");

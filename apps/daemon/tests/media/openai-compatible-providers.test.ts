@@ -222,6 +222,69 @@ process.stdin.on('end', () => {
     expect(bytes.length).toBeGreaterThan(0);
   });
 
+  it('retries a temporarily unavailable custom-image request with the same provider', async () => {
+    await writeConfig({
+      providers: {
+        'custom-image': {
+          baseUrl: 'https://images.example.test/v1',
+          model: 'acme-image-model',
+        },
+      },
+    });
+
+    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
+      expect(String(input)).toBe('https://images.example.test/v1/images/generations');
+      expect(init?.method).toBe('POST');
+      expect(JSON.parse(String(init?.body))).toMatchObject({
+        prompt: 'A product render on white seamless paper',
+        model: 'acme-image-model',
+      });
+      if (fetchMock.mock.calls.length === 1) {
+        return new Response(JSON.stringify({ error: { message: 'try again' } }), {
+          status: 503,
+          headers: {
+            'content-type': 'application/json',
+            'retry-after': '0',
+          },
+        });
+      }
+      return new Response(JSON.stringify({
+        data: [{ b64_json: PNG_BASE64 }],
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const onProviderRequestSettled = vi.fn();
+
+    const result = await generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'project-1',
+      surface: 'image',
+      model: 'custom-image',
+      prompt: 'A product render on white seamless paper',
+      output: 'custom-retried.png',
+      onProviderRequestSettled,
+    });
+
+    expect(result.providerId).toBe('custom-image');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(onProviderRequestSettled).toHaveBeenCalledOnce();
+    expect(onProviderRequestSettled).toHaveBeenCalledWith({
+      providerId: 'custom-image',
+      attemptCount: 2,
+      retryCount: 1,
+      initialResponseStatus: 503,
+      responseStatus: 200,
+      retryReason: 'service_unavailable_503',
+      retryAfterMs: 0,
+      retryDelayMs: 0,
+      retryFinalResult: 'success',
+    });
+  });
+
   it('forwards requestInit.dispatcher through custom-image submit and asset fetches', async () => {
     await writeConfig({
       providers: {
@@ -260,6 +323,46 @@ process.stdin.on('end', () => {
       requestInit: { dispatcher },
     });
 
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not resubmit custom-image generation when the returned asset download fails', async () => {
+    await writeConfig({
+      providers: {
+        'custom-image': {
+          baseUrl: 'https://images.example.test/v1',
+          model: 'acme-image-model',
+        },
+      },
+    });
+
+    let submitCalls = 0;
+    const fetchMock = vi.fn(async (input: unknown) => {
+      if (String(input) === 'https://images.example.test/v1/images/generations') {
+        submitCalls += 1;
+        return new Response(JSON.stringify({
+          data: [{ url: 'https://cdn.example.test/generated.png' }],
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      expect(String(input)).toBe('https://cdn.example.test/generated.png');
+      return new Response('temporarily unavailable', { status: 503 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'project-1',
+      surface: 'image',
+      model: 'custom-image',
+      prompt: 'A product render on white seamless paper',
+      output: 'custom-download-failure.png',
+    })).rejects.toThrow('custom image media fetch 503');
+
+    expect(submitCalls).toBe(1);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 

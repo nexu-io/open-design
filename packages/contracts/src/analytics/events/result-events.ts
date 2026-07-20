@@ -6,9 +6,33 @@ import type { TrackingRuntimeType } from '../public-params.js';
 import type { ReleaseChannel } from '@open-design/release';
 import type { TrackingDesignSystemEditSurface, TrackingDesignSystemKind, TrackingDesignSystemLengthBucket, TrackingDesignSystemOrigin, TrackingDesignSystemRunEntryFrom } from './design-systems.js';
 import type { TrackingSettingsPage } from './event-names.js';
-import type { TrackingArtifactKind, TrackingArtifactWriteSource, TrackingArtifactWriteStatus, TrackingByokProviderId, TrackingCliProviderId, TrackingDesignSystemSource, TrackingExportFormat, TrackingExportResult, TrackingFeedbackAction, TrackingFeedbackProviderId, TrackingFeedbackRating, TrackingFeedbackRatingWithNone, TrackingFeedbackReasonCode, TrackingFidelity, TrackingFileSizeBucket, TrackingFileType, TrackingFirstModelEventType, TrackingLangfuseDeliveryStatus, TrackingLangfuseDropReason, TrackingLangfuseReportResult, TrackingLangfuseReportSkipReason, TrackingProjectKind, TrackingProjectSource, TrackingResult, TrackingRunCloseReason, TrackingRunDiagnosticSource, TrackingRunFailureCategory, TrackingRunFailureDetail, TrackingRunFailureStage, TrackingRunFailureUserAction, TrackingRunLifecyclePhase, TrackingRunPhaseTimingStatus, TrackingRunResult, TrackingRunRetryFinalResult, TrackingRunRetryStrategy, TrackingRunRetrySuppressedReason, TrackingStderrLineCountBucket, TrackingTestResult, TrackingTokenCountSource } from './shared-enums.js';
+import type { TrackingArtifactKind, TrackingArtifactWriteSource, TrackingArtifactWriteStatus, TrackingByokPreflightBlockReason, TrackingByokProviderId, TrackingCliProviderId, TrackingDesignSystemSource, TrackingExecutionMode, TrackingExportFormat, TrackingExportResult, TrackingFeedbackAction, TrackingFeedbackProviderId, TrackingFeedbackRating, TrackingFeedbackRatingWithNone, TrackingFeedbackReasonCode, TrackingFidelity, TrackingFileSizeBucket, TrackingFileType, TrackingFirstModelEventType, TrackingLangfuseDeliveryStatus, TrackingLangfuseDropReason, TrackingLangfuseReportResult, TrackingLangfuseReportSkipReason, TrackingProjectKind, TrackingProjectSource, TrackingResult, TrackingRunCloseReason, TrackingRunDiagnosticSource, TrackingRunFailureCategory, TrackingRunFailureDetail, TrackingRunFailureStage, TrackingRunFailureUserAction, TrackingRunLifecyclePhase, TrackingRunPhaseTimingStatus, TrackingRunResult, TrackingRunRetryFinalResult, TrackingRunRetryStrategy, TrackingRunRetrySuppressedReason, TrackingStderrLineCountBucket, TrackingTestResult, TrackingTokenCountSource } from './shared-enums.js';
 import type { TrackingFileVersionSource, TrackingPluginImportSource, TrackingSessionMode, TrackingSettingsArea } from './ui-click.js';
 // ---- Result events -------------------------------------------------------
+
+// Final outcome for the paid provider submission. Keep this envelope free of
+// prompts, response bodies, configured URLs, credentials, and output paths.
+export interface MediaGenerationResultProps {
+  page_name: 'studio';
+  area: 'media_generation';
+  project_id: string;
+  task_id: string;
+  run_id?: string;
+  surface: 'image' | 'video' | 'audio';
+  provider_id: string;
+  model_id: string;
+  result: 'success' | 'failed';
+  initial_response_status?: number;
+  response_status?: number;
+  attempt_count: number;
+  retry_count: number;
+  retry_reason?: 'rate_limit_429' | 'service_unavailable_503';
+  retry_after_ms?: number;
+  retry_delay_ms?: number;
+  retry_final_result: 'not_attempted' | 'success' | 'failed' | 'skipped_retry_after_budget';
+  duration_ms: number;
+  used_stub_fallback: boolean;
+}
 
 export interface ProjectCreateResultProps {
   page_name: 'home';
@@ -76,9 +100,18 @@ export interface PluginImportResultProps {
 }
 
 export interface UpdateInstallResultProps {
-  page_name: 'home';
-  area: 'update_prompt';
+  page_name: 'home' | 'app';
+  area: 'update_prompt' | 'update_dialog';
   result: TrackingResult;
+  app_version_before?: string;
+  app_version_after?: string;
+  error_code?: string;
+}
+
+export interface UpdateCheckResultProps {
+  page_name: 'app';
+  area: 'update_dialog';
+  result: 'available' | 'up_to_date' | 'failed';
   app_version_before?: string;
   app_version_after?: string;
   error_code?: string;
@@ -383,7 +416,7 @@ export interface UpdateApplyObservedProps {
   namespace: string;
   platform: string;
   arch: string;
-  artifact_type: 'dmg' | 'installer';
+  artifact_type: 'dmg' | 'installer' | 'payload';
   from_version: string;
   to_version: string;
   result: TrackingUpdateApplyResult;
@@ -680,6 +713,13 @@ export interface SettingsByokModelsFetchResultProps {
   duration_ms: number;
 }
 
+export interface ByokPreflightBlockedProps {
+  source: 'settings' | 'run';
+  reason: TrackingByokPreflightBlockReason;
+  provider_id: TrackingByokProviderId | 'unknown';
+  active_execution_mode: TrackingExecutionMode;
+}
+
 export interface SettingsConnectorAuthResultProps {
   page_name: TrackingSettingsPage;
   area: 'connectors';
@@ -741,4 +781,3 @@ export interface PackagedRuntimeFailedProps {
   source: string;
   platform: string;
 }
-

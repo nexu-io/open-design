@@ -143,4 +143,4 @@ HyperFrames enables the Chrome flag automatically during rendering. No special c
 npx hyperframes render --output my-video.mp4
 ```
 
-For Docker renders, the flag is also enabled automatically inside the container. Inside Open Design, the daemon's `npx hyperframes render` call (`apps/daemon/src/media.ts`) inherits the same default — you don't need to thread anything through.
+For Docker renders, the flag is also enabled automatically inside the container. Inside Open Design, the daemon's `npx hyperframes render` call (`apps/daemon/src/media/index.ts`) inherits the same default — you don't need to thread anything through.

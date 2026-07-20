@@ -354,6 +354,8 @@ export const zhTW: Dict = {
   "settings.modeApiMeta": "BYOK",
   "settings.byokNoFileToolsNotice":
     "BYOK 無法讀取、寫入或編輯專案檔案。需要變更程式碼時，請使用 Local CLI。",
+  "settings.byokDraftNotice":
+    "必填項補齊前，此設定只會儲存為草稿；目前的執行設定將繼續維持生效。",
   "settings.codeAgent": "程式碼代理",
   "settings.codeAgentHint": "選擇用來執行提示詞的 CLI。",
   "settings.rescan": "↻ 重新掃描",
@@ -626,6 +628,8 @@ export const zhTW: Dict = {
     "點擊「在 Cursor 中安裝」以透過核准對話框安裝，或將此 JSON 合併至 {path}。",
   "settings.mcpDeeplinkInstallCursor": "在 Cursor 中安裝",
   "settings.mcpMethodJson": "JSON 設定檔",
+  "settings.mcpInstructionKiro":
+    "開啟 {path} 並合併此 JSON。若要使用 workspace 層級設定，請使用 .kiro/settings/mcp.json。",
   "settings.mcpInstructionCopilot":
     "開啟 Command Palette（{shortcut}），執行「MCP: Open User Configuration」，然後合併此 JSON。Copilot Chat 必須處於 Agent 模式，工具才會顯示。",
   "settings.mcpInstructionAntigravity":
@@ -3171,6 +3175,9 @@ export const zhTW: Dict = {
   "fileViewer.deployProviderLabel": "部署平台",
   "fileViewer.vercelProvider": "Vercel",
   "fileViewer.cloudflarePagesProvider": "Cloudflare Pages",
+  "fileViewer.deployTargetLabel": "目標",
+  "fileViewer.deployTargetPreview": "預覽",
+  "fileViewer.deployTargetProduction": "正式環境",
   "fileViewer.deployToProvider": "部署到 {provider}",
   "fileViewer.redeployToProvider": "重新部署到 {provider}",
   "fileViewer.deployingToProvider": "正在部署到 {provider}…",
@@ -3879,6 +3886,8 @@ export const zhTW: Dict = {
   "settings.memoryExtractionPhaseSkipped": "已跳過",
   "settings.memoryExtractionPhaseFailed": "失敗",
   "settings.memoryExtractionSkipNoProvider": "未設定 API key，LLM 抽取未執行。",
+  "settings.memoryExtractionSkipUnsupportedProvider":
+    "已儲存的媒體 Provider 不能用於 LLM 記憶抽取。",
   "settings.memoryExtractionSkipDisabled": "記憶功能已關閉。",
   "settings.memoryExtractionSkipEmpty": "使用者訊息為空，沒有可抽取的內容。",
   "settings.memoryExtractionSkipNoMatch": "本輪沒有命中任何正則規則。",
@@ -3898,6 +3907,8 @@ export const zhTW: Dict = {
   "settings.memoryNoProviderBannerTitle": "LLM 抽取未啟用",
   "settings.memoryNoProviderBannerBody":
     "未找到可用的 API key，LLM 抽取已跳過。可以在媒體提供者裡填入 OpenAI key，或設定環境變數 ANTHROPIC_API_KEY / OPENAI_API_KEY 來啟用。啟發式抽取仍在執行。",
+  "settings.memoryUnsupportedProviderBannerBody":
+    "已儲存媒體 Provider key，但 Memory 只能複用支援文字抽取的 Provider：OpenAI、MiniMax、AIHubMix 和 SenseAudio。請在媒體提供者中設定其中一個，設定 ANTHROPIC_API_KEY / OPENAI_API_KEY，或在進階設定中選擇 Memory model。",
   "settings.libraryInstall": "安裝",
   "settings.libraryInstallGithub": "GitHub",
   "settings.libraryInstallLocal": "本機路徑",
@@ -3912,6 +3923,9 @@ export const zhTW: Dict = {
   "notify.successBody": "一輪回答已經寫完。",
   "notify.failureBody": "本輪任務出錯，請查看錯誤訊息。",
   "updater.available": "有可用更新",
+  "updater.activeRunsTitle": "Open Design 仍在執行任務",
+  "updater.activeRunsBody": "仍有 {count} 個任務正在執行。現在重新啟動會中斷這些任務。",
+  "updater.activeRunsUnknownBody": "Open Design 無法確認是否仍有任務執行。現在重新啟動可能會中斷進行中的工作。",
   "updater.availableBody":
     "Open Design {version} 可用。下載完成後即可開啟安裝器。",
   "updater.checking": "正在檢查更新",
@@ -3926,10 +3940,19 @@ export const zhTW: Dict = {
   "updater.later": "稍後",
   "updater.allowSilentUpdates": "允許以後自動安裝應用內更新",
   "updater.openFailedFallback": "無法開啟安裝器。",
-  "updater.installRestart": "Install and restart",
+  "updater.installRestart": "安裝並重新啟動",
   "updater.installingRestart": "Installing and restarting...",
   "updater.openInstaller": "安裝更新",
   "updater.opening": "正在開啟安裝器…",
+  "updater.dialogAvailableGeneric": "發現新版本。\n下載後即可安裝。",
+  "updater.dialogAvailableVersion": "v{version} 可供更新。\n下載後即可安裝。",
+  "updater.dialogCheckFailed": "檢查更新失敗。\n請稍後再試。",
+  "updater.dialogReadyGeneric":
+    "新版本已準備就緒。\n更好的體驗、更智慧的設計，歡迎體驗新版本。",
+  "updater.dialogReadyVersion":
+    "v{version} 已準備就緒。\n更好的體驗、更智慧的設計，歡迎體驗新版本。",
+  "updater.dialogUnsupported":
+    "目前環境不支援應用程式內更新。\n可前往發布頁面手動下載。",
   "updater.payloadReadyGeneric":
     "A new Open Design update is ready. Open Design will close and restart automatically.",
   "updater.payloadReadyVersion":
@@ -3944,6 +3967,9 @@ export const zhTW: Dict = {
   "updater.readyVersion":
     "Open Design {version} 已就緒。Open Design 會關閉並開啟安裝器。",
   "updater.upToDate": "您已經是最新版本啦",
+  "updater.viewVersionFeatures": "查看新版本特色",
+  "updater.manualDownload": "手動下載",
+  "updater.restartAnyway": "仍然重新啟動",
 
   "whatsNew.cta": "看看有什麼新功能",
   "whatsNew.dismissAria": "關閉更新亮點",

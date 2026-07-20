@@ -2647,13 +2647,21 @@ function fileVersionSourceToTracking(version: ProjectFileVersion): TrackingFileV
   return 'ai';
 }
 
+function sourceLooksLikeDeckPreview(source: string | null | undefined): boolean {
+  if (!source) return false;
+  return (
+    /class\s*=\s*['"](?:[^'"]*\s)?slide(?:\s|['"])/i.test(source) ||
+    sourceLooksLikeExportableDeck(source)
+  );
+}
+
 export function fileVersionPreviewOptions(
   projectId: string,
   fileName: string,
   source: string | null | undefined,
 ) {
   return {
-    deck: sourceLooksLikeExportableDeck(source),
+    deck: sourceLooksLikeDeckPreview(source),
     baseHref: projectRawUrl(projectId, baseDirFor(fileName)),
   };
 }
@@ -2696,6 +2704,12 @@ export function deckKeyboardShortcutForEvent(event: DeckKeyboardShortcutEvent): 
   if (event.key === 'End') return 'last';
   if (event.key.toLowerCase() === 'r') return 'reset';
   return null;
+}
+
+function isEditableKeyboardTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  const tag = target.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable;
 }
 
 function normalizeDeckVisualSource(source: string): string {
@@ -2996,6 +3010,25 @@ function FileVersionManagerModal({
     const fallback = window.setTimeout(() => setLoadedSrcDoc(srcDoc), 6000);
     return () => window.clearTimeout(fallback);
   }, [srcDoc, loadedSrcDoc]);
+
+  useEffect(() => {
+    if (!isDeckPreview || !selectedContentMatchesVersion || loadingContent) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (document.activeElement === versionPreviewIframeRef.current) return;
+      if (isEditableKeyboardTarget(event.target) || isEditableKeyboardTarget(document.activeElement)) return;
+      const shortcut = deckKeyboardShortcutForEvent(event);
+      if (!shortcut) return;
+      const win = versionPreviewIframeRef.current?.contentWindow;
+      if (!win) return;
+      event.preventDefault();
+      win.postMessage({
+        type: 'od:slide',
+        action: shortcut === 'reset' ? 'first' : shortcut,
+      }, '*');
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isDeckPreview, loadingContent, selectedContentMatchesVersion]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -6230,6 +6263,7 @@ function HtmlViewer({
   const [deployResult, setDeployResult] = useState<WebDeployProjectFileResponse | null>(null);
   const [copiedDeployLink, setCopiedDeployLink] = useState<string | null>(null);
   const [deployProviderId, setDeployProviderId] = useState<WebDeployProviderId>(DEFAULT_DEPLOY_PROVIDER_ID);
+  const [deployTarget, setDeployTarget] = useState<'preview' | 'production'>('production');
   const [projectSocialShare, setProjectSocialShare] = useState<SocialShareResponse | null>(null);
   const [deployToken, setDeployToken] = useState('');
   const [teamId, setTeamId] = useState('');
@@ -6703,6 +6737,13 @@ function HtmlViewer({
     setCloudflareAccountId(matchingConfig?.accountId || '');
     setCloudflareZoneId(matchingConfig?.cloudflarePages?.lastZoneId || '');
     setCloudflareDomainPrefix(matchingConfig?.cloudflarePages?.lastDomainPrefix || '');
+    // The daemon's GET /api/deploy/config response currently hardcodes `target: 'preview'`
+    // as a placeholder (apps/daemon/src/deploy.ts publicDeployConfig /
+    // publicCloudflarePagesConfig) rather than persisting a real user preference, so it must
+    // not be used to seed the deploy-target selector's default. Default to 'production' to
+    // match the daemon's documented default for an omitted target on POST deploy, and to match
+    // pre-regression behavior.
+    setDeployTarget('production');
   }
 
   function cloudflareConfigHintsFromForm() {
@@ -7019,11 +7060,7 @@ function HtmlViewer({
   // never surface and the deck becomes a static, unnavigable preview.
   const looksLikeDeck = useMemo(() => {
     const s = routingHtmlSource;
-    if (!s) return false;
-    return (
-      /class\s*=\s*['"](?:[^'"]*\s)?slide(?:\s|['"])/i.test(s) ||
-      sourceLooksLikeExportableDeck(s)
-    );
+    return sourceLooksLikeDeckPreview(s);
   }, [routingHtmlSource]);
   const effectiveDeck = isDeck || (!passiveLargeHtmlPreview && looksLikeDeck);
   const showDeckNavigation = effectiveDeck && (slideState === null || slideState.count > 0);
@@ -9688,7 +9725,13 @@ function HtmlViewer({
         }
       }
       setDeployPhase('preparing-link');
-      const next = await deployProjectFile(projectId, file.name, deployProviderId, cloudflarePagesSelection);
+      const next = await deployProjectFile(
+        projectId,
+        file.name,
+        deployProviderId,
+        cloudflarePagesSelection,
+        deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? deployTarget : undefined,
+      );
       setDeploymentsByProvider((current) => ({
         ...current,
         [next.providerId]: next,
@@ -12807,6 +12850,20 @@ function HtmlViewer({
                   ))}
                 </select>
               </label>
+              {deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? (
+                <label className="deploy-target-field">
+                  <span className="deploy-field-title">{t('fileViewer.deployTargetLabel')}</span>
+                  <select
+                    value={deployTarget}
+                    onChange={(e) => {
+                      setDeployTarget(e.target.value as 'preview' | 'production');
+                    }}
+                  >
+                    <option value="preview">{t('fileViewer.deployTargetPreview')}</option>
+                    <option value="production">{t('fileViewer.deployTargetProduction')}</option>
+                  </select>
+                </label>
+              ) : null}
               <div className="field-label-row deploy-token-label-row">
                 <label htmlFor="deploy-token" className="deploy-field-title required">{t(deployProvider.tokenLabelKey)}</label>
                 <a

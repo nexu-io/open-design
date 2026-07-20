@@ -98,27 +98,21 @@ If running `nvm version` or `node -v` pops up a Windows dialog that asks *"How d
 pnpm : The term 'pnpm' is not recognized as the name of a cmdlet...
 ```
 
-### Fix (Corepack — recommended)
+### Fix (npm global — Windows native)
 
-The repo pins `pnpm@10.33.2` in `packageManager`. Corepack selects that exact version automatically:
-
-```powershell
-corepack enable
-corepack pnpm --version   # should print 10.33.2
-```
-
-> **Note:** If `corepack enable` fails with `EPERM` or `EACCES` (common when Node is installed under `C:\Program Files\nodejs`), use the npm-global fallback in the next section instead.
-
-
-
-### Fix (npm global — alternative)
-
-If Corepack is not available:
+The repo pins `pnpm@10.33.2` in `packageManager`, but `corepack enable` on a
+normal Windows Node installation tries to write shims under
+`C:\Program Files\nodejs` and fails with `EPERM`. Install the pinned pnpm
+version globally instead:
 
 ```powershell
 npm install -g pnpm@10.33.2
 pnpm -v   # should print 10.33.2
 ```
+
+Use Corepack in macOS, Linux, and WSL2 as documented in the root Quickstart;
+do not treat a Windows-native `corepack enable` permission failure as a broken
+Node installation.
 
 ---
 
@@ -148,7 +142,11 @@ Approve any packages that appear in the list (commonly `better-sqlite3`, `electr
 pnpm install
 ```
 
-> **Note:** `better-sqlite3` may fall back to compiling from source on Windows. If `pnpm install` hangs or fails on this package, make sure the Visual Studio Build Tools (step 4) are installed *before* running `pnpm install`.
+> **Expected on Windows native:** `better-sqlite3` does not publish a win32
+> prebuilt binary for Node 24, so `pnpm install` compiles it from source with
+> node-gyp (often around two minutes). Install Visual Studio Build Tools 2022
+> or newer as described in step 4 *before* running `pnpm install`. Compilation
+> output by itself is not a Node-version incompatibility.
 
 ---
 

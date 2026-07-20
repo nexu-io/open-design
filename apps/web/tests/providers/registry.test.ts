@@ -964,6 +964,55 @@ describe('deploy provider registry helpers', () => {
     });
   });
 
+  it('forwards the selected deploy target through deploy requests', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      id: 'deployment-row-2',
+      projectId: 'project-1',
+      fileName: 'index.html',
+      providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
+      url: 'https://open-design-preview.pages.dev',
+      deploymentId: 'cf-deployment-2',
+      deploymentCount: 1,
+      target: 'production',
+      status: 'ready',
+      createdAt: 1,
+      updatedAt: 2,
+    }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      deployProjectFile(
+        'project-1',
+        'index.html',
+        CLOUDFLARE_PAGES_PROVIDER_ID,
+        {
+          zoneId: 'zone-1',
+          zoneName: 'example.com',
+          domainPrefix: 'demo',
+        },
+        'production',
+      ),
+    ).resolves.toMatchObject({
+      providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
+      deploymentId: 'cf-deployment-2',
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/projects/project-1/deploy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fileName: 'index.html',
+        providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
+        cloudflarePages: {
+          zoneId: 'zone-1',
+          zoneName: 'example.com',
+          domainPrefix: 'demo',
+        },
+        target: 'production',
+      }),
+    });
+  });
+
   it('carries the HTTP status as an error .code when a failed deploy has only a human message', async () => {
     // The provider/daemon returns a message but no structured code; the wrapper
     // must still surface the status so analytics (deployErrorCode reads `.code`

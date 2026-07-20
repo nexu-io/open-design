@@ -445,6 +445,7 @@ export type MemoryExtractionPhase =
  *  pattern produced 0 captures. */
 export type MemoryExtractionSkipReason =
   | 'no-provider'
+  | 'unsupported-provider'
   | 'memory-disabled'
   | 'chat-disabled'
   | 'empty-message'

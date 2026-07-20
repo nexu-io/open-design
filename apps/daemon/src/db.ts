@@ -574,7 +574,7 @@ function normalizeDeployment(row: DbRow) {
     url: row.url,
     deploymentId: row.deploymentId ?? undefined,
     deploymentCount: Number(row.deploymentCount ?? 1),
-    target: 'preview',
+    target: row.target === 'production' ? 'production' : 'preview',
     status: row.status || 'ready',
     statusMessage: row.statusMessage ?? undefined,
     reachableAt: row.reachableAt == null ? undefined : Number(row.reachableAt),

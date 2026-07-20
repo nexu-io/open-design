@@ -82,6 +82,7 @@ import { canDuplicatePluginPreview } from './plugins-home/duplicate';
 import { pluginCategoryLabel } from './plugins-home/categoryLabel';
 import { readHomeGuideStage, writeHomeGuideStage } from './home-hero/firstRunGuide';
 import { curatedPluginPriorityForChip } from './plugins-home/curatedPriority';
+import { comparePluginGalleryOrder } from './plugins-home/pluginPopularity';
 import { sortByVisualAppeal } from './plugins-home/visualScore';
 import { applyFacetSelection } from './plugins-home/facets';
 import { inferPluginPreview } from './plugins-home/preview';
@@ -3878,6 +3879,13 @@ function comparePluginPresetOrder(
   b: InstalledPluginRecord,
   chipId: string,
 ): number {
+  // Gallery order (OPEND-449): pins first, default seeds + no-preview tiles sunk
+  // to the bottom, then usage popularity for non-prototype chips. The prototype
+  // chip stays curation-governed, so popularity is skipped and it keeps its
+  // curated order.
+  const curationGoverned = chipId === 'prototype';
+  const gallery = comparePluginGalleryOrder(a.id, b.id, curationGoverned, curationGoverned);
+  if (gallery !== 0) return gallery;
   const aCurated = curatedPluginPriorityForChip(a, chipId);
   const bCurated = curatedPluginPriorityForChip(b, chipId);
   if (aCurated !== null || bCurated !== null) {

@@ -1281,7 +1281,7 @@ async function checkCiTopology(): Promise<boolean> {
       "include: ${{ fromJSON(needs.scopes.outputs.ui_p0_matrix) }}",
       "include: ${{ fromJSON(needs.scopes.outputs.visual_matrix) }}",
       "needs.scopes.outputs.run_ui_p0 == 'true'",
-      "pnpm -C e2e exec tsx scripts/playwright.ts run-ui-group smoke",
+      "pnpm -C e2e exec tsx scripts/playwright.ts run-ui-group critical-extras",
       "pnpm -C e2e exec tsx scripts/playwright.ts run-ui-group ${{ matrix.shard }}",
     ]
       .filter((needle) => !ciWorkflow.includes(needle))

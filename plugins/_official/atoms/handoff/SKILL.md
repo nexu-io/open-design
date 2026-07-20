@@ -56,4 +56,7 @@ matches the user's intent or the user explicitly skipped via the
 
 ## Status
 
-Reserved id, prompt-only fragment in v1.
+Implemented by the daemon runner in
+`apps/daemon/src/plugins/atoms/handoff.ts`. It records provenance,
+`handoffKind`, and export targets, then persists the updated artifact
+manifest.

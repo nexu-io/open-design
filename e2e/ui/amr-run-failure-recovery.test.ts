@@ -48,7 +48,10 @@ const ANTIGRAVITY_AGENT = {
   models: [{ id: 'default', label: 'Default' }],
 };
 
-test.describe.configure({ mode: 'serial', timeout: T.xlong });
+// Timeout-only configure: each test stubs its own catalogs/agents/status
+// routes and creates its own project, so order independence holds and the
+// file stays splittable across CI shards (a serial group cannot be split).
+test.describe.configure({ timeout: T.xlong });
 
 async function stubCatalogsEmpty(page: Page) {
   await page.route('**/api/skills', async (route) => {

@@ -147,8 +147,8 @@ export interface UpdateIndicatorSurfaceViewProps {
 }
 
 export interface UpdatePromptSurfaceViewProps {
-  page_name: 'home';
-  area: 'update_prompt';
+  page_name: 'home' | 'app';
+  area: 'update_prompt' | 'update_dialog';
   app_version_before?: string;
   app_version_after?: string;
 }

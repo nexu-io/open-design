@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { createServer as createHttpsServer } from "node:https";
 import { tmpdir } from "node:os";
@@ -15,12 +15,15 @@ const execFileAsync = promisify(execFile);
 const e2eRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const workspaceRoot = dirname(e2eRoot);
 const ciWorkflowPath = join(workspaceRoot, ".github", "workflows", "ci.yml");
+const uiExtendedMainWorkflowPath = join(workspaceRoot, ".github", "workflows", "ui-extended-main.yml");
+const playwrightConfigPath = join(e2eRoot, "playwright.config.ts");
 const commentWorkflowPath = join(workspaceRoot, ".github", "workflows", "comment.atom.yml");
 const autofixWorkflowPath = join(workspaceRoot, ".github", "workflows", "autofix.atom.yml");
 const reportWorkflowPath = join(workspaceRoot, ".github", "workflows", "report.atom.yml");
 const bakePluginPreviewsWorkflowPath = join(workspaceRoot, ".github", "workflows", "bake-plugin-previews.yml");
 const bakePluginPreviewsPrWorkflowPath = join(workspaceRoot, ".github", "workflows", "bake-plugin-previews-pr.yml");
 const dockerImageWorkflowPath = join(workspaceRoot, ".github", "workflows", "docker-image.yml");
+const flakePath = join(workspaceRoot, "flake.nix");
 const backportAutomergeWorkflowPath = join(workspaceRoot, ".github", "workflows", "backport-automerge.yml");
 const bakePreviewsAutomergeWorkflowPath = join(
   workspaceRoot,
@@ -903,21 +906,29 @@ process.stdin.on("end", () => {
     expect(scopes).toContain("ui_p0_validation_required: ${{ steps.detect.outputs.ui_p0_validation_required }}");
     expect(scopes).toContain("run_ui_p0: ${{ steps.detect.outputs.run_ui_p0 }}");
     expect(workflow).toContain("needs.scopes.outputs.run_ui_p0 == 'true'");
-    expect(validate).toContain('when($out.run_ui_p0 == "true"; ["ui_p0_smoke", "ui_p0"])');
+    expect(validate).toContain('when($out.run_ui_p0 == "true"; ["ui_p0"])');
 
     await expect(runScopesPrint("workflow_dispatch", { inputs: { ci_mode: "hot" } }, ["apps/web/src/app/page.tsx"])).resolves.toMatchObject({
       ci_mode: "hot",
       run_ui_p0: true,
+      run_playwright_critical: false,
+    });
+    await expect(runScopesPrint("workflow_dispatch", { inputs: { ci_mode: "hot" } }, ["tools/dev/src/index.ts"])).resolves.toMatchObject({
+      ci_mode: "hot",
+      run_ui_p0: false,
+      run_playwright_critical: true,
     });
     await expect(runScopesPrint("workflow_dispatch", { inputs: {} })).resolves.toMatchObject({
       ci_mode: "full",
       ui_p0_validation_required: true,
+      run_playwright_critical: false,
       run_ui_p0: true,
       run_preflight: true,
     });
     await expect(runScopesPrint("merge_group", {})).resolves.toMatchObject({
       ci_mode: "full",
       ui_p0_validation_required: true,
+      run_playwright_critical: false,
       run_ui_p0: true,
       run_preflight: true,
     });
@@ -932,6 +943,79 @@ process.stdin.on("end", () => {
       expect(plan).not.toHaveProperty("nix_validation_required");
       expect(plan).not.toHaveProperty("docker_validation_required");
     }
+  });
+
+  it("[P2] skips the critical fallback for pure packaged-leaf changes and stays fail-closed elsewhere", async () => {
+    const hot = { inputs: { ci_mode: "hot" } };
+
+    // Playwright never starts the desktop, packaged, or tools-pack
+    // entrypoints, so a change confined to those leaf roots keeps its
+    // package tests but must not pay the two-job critical fallback.
+    for (const file of [
+      "apps/desktop/src/main.ts",
+      "apps/packaged/src/index.ts",
+      "tools/pack/src/win/installer.ts",
+    ]) {
+      await expect(runScopesPrint("workflow_dispatch", hot, [file])).resolves.toMatchObject({
+        run_playwright_critical: false,
+        run_ui_p0: false,
+        ui_critical_validation_required: false,
+        workspace_validation_required: true,
+      });
+    }
+
+    // Fail-closed: anything that can reach the Playwright runtime — tools-dev,
+    // transitive packages (including the undeclared metatool edge), scripts,
+    // runtime resources, or unknown roots — retains the fallback.
+    for (const file of [
+      "tools/dev/src/index.ts",
+      "packages/metatool/src/index.ts",
+      "packages/agui-adapter/src/adapter.ts",
+      "packages/diagnostics/src/index.ts",
+      "packages/plugin-runtime/src/index.ts",
+      "packages/registry-protocol/src/index.ts",
+      "scripts/guard.ts",
+      "mocks/bin/opencode",
+      "some-new-root/file.ts",
+    ]) {
+      await expect(runScopesPrint("workflow_dispatch", hot, [file])).resolves.toMatchObject({
+        run_playwright_critical: true,
+        ui_critical_validation_required: true,
+      });
+    }
+
+    // A mixed leaf + runtime change retains the fallback.
+    await expect(
+      runScopesPrint("workflow_dispatch", hot, ["apps/desktop/src/main.ts", "tools/dev/src/index.ts"]),
+    ).resolves.toMatchObject({
+      run_playwright_critical: true,
+      ui_critical_validation_required: true,
+    });
+
+    // Root manifest/lock/workspace files keep enabling P0, which retains the
+    // existing critical/P0 mutual exclusion.
+    for (const file of ["package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml"]) {
+      await expect(runScopesPrint("workflow_dispatch", hot, [file])).resolves.toMatchObject({
+        run_ui_p0: true,
+        run_playwright_critical: false,
+      });
+    }
+
+    // Documentation-only changes stay exempt from both.
+    await expect(runScopesPrint("workflow_dispatch", hot, ["docs/spec.md"])).resolves.toMatchObject({
+      run_playwright_critical: false,
+      ui_critical_validation_required: false,
+      workspace_validation_required: false,
+    });
+
+    // merge_group/full behavior is unchanged: everything is required and the
+    // matrix covers critical, so the fallback stays off.
+    await expect(runScopesPrint("merge_group", {})).resolves.toMatchObject({
+      ci_mode: "full",
+      ui_critical_validation_required: true,
+      run_playwright_critical: false,
+      run_ui_p0: true,
+    });
   });
 
   it("[P2] keeps packaging (nix/docker) off the core Validate workspace gate", async () => {
@@ -970,6 +1054,16 @@ process.stdin.on("end", () => {
       web_workspace_tests: { result: "failure" },
     };
     await expect(validateGatePasses(workflow, needsWithFailedWeb)).resolves.toBe(false);
+  });
+
+  it("[P1] includes launcher protocol in the Nix daemon workspace build", async () => {
+    const flake = await readFile(flakePath, "utf8");
+    const daemonWorkspaces = sectionBetween(flake, "      daemonWorkspacePaths = [", "      ];");
+
+    expect(daemonWorkspaces).toContain('"packages/launcher-proto"');
+    expect(daemonWorkspaces.indexOf('"packages/launcher-proto"')).toBeLessThan(
+      daemonWorkspaces.indexOf('"apps/daemon"'),
+    );
   });
 
   it("[P2] routes default CI through cost-sensitive runner tiers", async () => {
@@ -1019,11 +1113,50 @@ process.stdin.on("end", () => {
       "ui/workspace-keyboard-flows.test.ts",
     ]);
     expect(uiP0Groups["project-workspace"].workers).toBe(1);
+    expect(uiP0Groups["critical-extras"]).toEqual({
+      grep: "@merge-extra",
+      workers: 1,
+      files: ["ui/app.test.ts"],
+    });
+    expect(uiP0Groups["workspace-restoration"]).toEqual({
+      grep: String.raw`\[P0\]`,
+      files: ["ui/app-restoration.test.ts", "ui/critical-smoke.test.ts"],
+    });
+    expect(workflow).not.toContain("  ui_p0_smoke:");
+    expect(uiP0).toContain("run-ui-group critical-extras");
+    expect(uiP0).toContain("Preserve project-runtime domain artifact");
     expect(visual).toContain("fromJSON(needs.runners.outputs.runs_on).visual_hot");
     expect(visual).toContain("toJSON(fromJSON(needs.runners.outputs.runs_on).visual_hot)");
     expect(workflow).not.toContain("needs.runners.outputs.contabo_control");
     expect(workflow).not.toContain("needs.runners.outputs.hosted_or_blacksmith");
     expect(workflow).not.toContain("needs.runners.outputs.blacksmith_default");
+  });
+
+  it("[P2] keeps visual ownership and generic full UI sharding explicit", async () => {
+    const playwrightConfig = await readFile(playwrightConfigPath, "utf8");
+    const benchmarkWorkflow = await readFile(uiExtendedMainWorkflowPath, "utf8");
+    const fullUi = benchmarkWorkflow.slice(benchmarkWorkflow.indexOf("  ui_full:"));
+    const fullUiFiles = [...fullUi.matchAll(/ui\/[a-z0-9-]+\.test\.ts/g)]
+      .map(([file]) => file)
+      .sort();
+
+    expect(playwrightConfig).toContain("testIgnore: 'visual-*.test.ts'");
+    expect(benchmarkWorkflow).not.toContain("\n  schedule:");
+    expect(benchmarkWorkflow).not.toContain("layout:");
+    expect(benchmarkWorkflow).toContain("run-ui-group critical-extras");
+    expect(benchmarkWorkflow).toContain("Preserve project-runtime domain artifact");
+    expect(benchmarkWorkflow).toContain("--grep-invert '@merge-extra'");
+    expect(benchmarkWorkflow).toContain("name: project-workspace");
+    expect(fullUi).toContain("fromJSON(needs.p0_runners.outputs.runs_on).ui_hot");
+    expect(fullUi).toContain("shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]");
+    expect(fullUi).toContain('OD_PLAYWRIGHT_FULLY_PARALLEL: "1"');
+    expect(fullUi).not.toContain("OD_PLAYWRIGHT_WORKERS");
+    expect(fullUi).toContain("name: Run full UI shard");
+    expect(fullUi).toContain("playwright test -c playwright.config.ts ui --shard=${{ matrix.shard }}/12");
+    expect(fullUi).toContain("name: ui-full-${{ github.run_id }}-shard-${{ matrix.shard }}-of-12");
+    expect(fullUi).not.toContain("matrix.files");
+    expect(fullUi).not.toContain("--grep");
+    expect(fullUiFiles).toEqual([]);
   });
 
   it("[P2] resolves CI runner profiles by mode", async () => {
@@ -1236,6 +1369,7 @@ process.stdin.on("end", () => {
     expect(releaseBetaWorkflow).toContain("RELEASE_TARGET: win_x64");
     expect(releaseBetaWorkflow).toContain("RELEASE_TARGET: mac_x64");
     expect(releaseBetaWorkflow).toContain("RELEASE_TARGET: linux_x64");
+    expect(releaseBetaWorkflow).toContain("OD_PACKAGED_E2E_MAC_UPDATE_FIXTURE: ${{ inputs.mac_arm64_smoke_mode == 'full' && inputs.mac_arm64_update_metadata_url == '' && inputs.mac_arm64_update_target_version == '' && 'tools-serve' || '' }}");
     const betaWinJob = sectionBetween(releaseBetaWorkflow, "  build_win_x64:", "  build_linux_x64:");
     expect(betaWinJob).not.toContain("tools\\release\\scripts\\build-platform.ps1");
     expect(betaWinJob).toContain("uses: actions/cache/restore@v5");

@@ -3470,6 +3470,98 @@ describe('FileViewer SVG artifacts', () => {
 
     expect(options.deck).toBe(true);
     expect(options.baseHref).toBe('/api/projects/project-1/raw/');
+
+    expect(fileVersionPreviewOptions(
+      'project-1',
+      'slides.html',
+      '<section class="slide">A</section><section class="slide">B</section>',
+    ).deck).toBe(true);
+  });
+
+  it('routes history deck arrow keys to the preview unless a text input is focused', async () => {
+    const deckSource = [
+      '<!doctype html><html><body>',
+      '<deck-stage>',
+      '<section data-screen-label="01 Cover">Cover</section>',
+      '<section data-screen-label="02 Plan">Plan</section>',
+      '</deck-stage>',
+      '</body></html>',
+    ].join('');
+    const file = baseFile({
+      name: 'index.html',
+      path: 'index.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Deck',
+        entry: 'index.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    const currentVersion = {
+      id: 'v4',
+      fileName: 'index.html',
+      version: 4,
+      label: 'Current checkpoint',
+      createdAt: 1_725_000_000_000,
+      source: 'manual',
+      prompt: 'Current prompt',
+      size: 42,
+      mime: 'text/html',
+      kind: 'html',
+      current: true,
+    };
+    const earlierVersions = [3, 2, 1].map((version) => ({
+      ...currentVersion,
+      id: `v${version}`,
+      version,
+      label: `Prior checkpoint ${version}`,
+      prompt: `Prior prompt ${version}`,
+      current: false,
+    }));
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      const method = init?.method ?? 'GET';
+      if (url === '/api/projects/project-1/files/index.html/versions' && method === 'GET') {
+        return new Response(JSON.stringify({ file, versions: [currentVersion, ...earlierVersions] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="slide_deck"
+        file={file}
+        liveHtml={deckSource}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Versions' }));
+    const versionDialog = await screen.findByRole('dialog', { name: 'Versions' });
+    const currentOption = within(versionDialog).getByRole('option', { name: /Current prompt/ }) as HTMLButtonElement;
+    currentOption.focus();
+    const previewFrame = await waitFor(() => {
+      const frame = versionDialog.querySelector('iframe[title="index.html v4"]') as HTMLIFrameElement | null;
+      expect(frame?.contentWindow).toBeTruthy();
+      return frame!;
+    });
+    const postMessage = vi.spyOn(previewFrame.contentWindow!, 'postMessage').mockImplementation(() => {});
+
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+
+    expect(postMessage).toHaveBeenCalledWith({ type: 'od:slide', action: 'next' }, '*');
+
+    postMessage.mockClear();
+    const search = within(versionDialog).getByRole('searchbox', { name: 'Search…' }) as HTMLInputElement;
+    search.focus();
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+
+    expect(postMessage).not.toHaveBeenCalled();
   });
 
   it('exposes selected-version download actions and exports that version content', async () => {

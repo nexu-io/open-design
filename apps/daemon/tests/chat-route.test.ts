@@ -269,6 +269,43 @@ describe('/api/chat', () => {
     expect(body).toContain('AGENT_UNAVAILABLE');
   });
 
+  it('keeps serving when delivered-session persistence has no conversation row', async () => {
+    const conversationId = `missing-conversation-${randomUUID()}`;
+
+    await withFakeAgent(
+      'opencode',
+      `
+console.log(JSON.stringify({ type: 'step_start', sessionID: 'missing-conversation-session' }));
+console.log(JSON.stringify({
+  type: 'text',
+  sessionID: 'missing-conversation-session',
+  part: { text: '<question-form id="discovery">{"questions":[{"id":"style","label":"Style?"}]}</question-form>' },
+}));
+console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+process.exit(0);
+`,
+      async () => {
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            conversationId,
+            message: 'ask for clarification',
+          }),
+        });
+        const body = await response.text();
+
+        expect(response.ok).toBe(true);
+        expect(body).toContain('<question-form');
+        expect(body).toContain('"status":"succeeded"');
+
+        const healthResponse = await fetch(`${baseUrl}/api/health`);
+        expect(healthResponse.status).toBe(200);
+      },
+    );
+  });
+
   it('marks json stream runs failed when an error frame exits with code 0', async () => {
     const conversationId = `conv-${randomUUID()}`;
 

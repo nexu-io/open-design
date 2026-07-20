@@ -49,6 +49,31 @@ describe("contact-sales validation", () => {
     assert.equal((await call({ name: "Ada", source: "pricing_team" })).body.error, "invalid_email");
   });
 
+  it("rejects injection-scanner emails that are whitespace-free but not a real address (2026-07-11 incident)", async () => {
+    // Real payloads captured from the 07-11 SQLi scan of this endpoint. All
+    // passed the old loose regex (one @, a dot, no whitespace), landed in KV,
+    // and broke the downstream Bitable sync for six days.
+    const payloads = [
+      "testing@example.com'||dbms_pipe.receive_message(chr(98)||chr(98)||chr(98),15)||'",
+      'testing@example.com"&&sleep(27*1000)*nogzzf&&"',
+      "testing@example.com0'xor(if(now()=sysdate(),sleep(15),0))xor'z",
+      "testing@example.com&n964235=v916916",
+      "testing@example.com9408701", // digits-only junk appended to the TLD
+      "../testing@example.com",
+      "testing@example.com'\"",
+    ];
+    for (const email of payloads) {
+      const { status, body } = await call({ ...ENTERPRISE_OK, email });
+      assert.equal(status, 400, `should reject ${email}`);
+      assert.equal(body.error, "invalid_email", `should reject ${email}`);
+    }
+    // Legitimate shapes must keep passing, including an apostrophe local part.
+    assert.equal((await call({ ...ENTERPRISE_OK, email: "o'brien@acme.ie" })).status, 200);
+    assert.equal((await call({ ...ENTERPRISE_OK, email: "w.vince.0202@gmail.com" })).status, 200);
+    assert.equal((await call({ ...ENTERPRISE_OK, email: "bingjunxiang.sd@chinatelecom.cn" })).status, 200);
+    assert.equal((await call({ ...ENTERPRISE_OK, email: "rodrigo@linkflow.com.br" })).status, 200);
+  });
+
   it("does not require a name on the shared lead-form sources; the in-app `client` source still does", async () => {
     // Neither web surface collects a name (email is the contact handle).
     assert.equal((await call(ENTERPRISE_OK)).status, 200);

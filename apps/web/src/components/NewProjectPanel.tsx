@@ -1,4 +1,5 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Dialog, DialogDescription, DialogFooter, DialogTitle } from '@open-design/components';
 import { createTabToTracking } from '@open-design/contracts/analytics';
 import { isOpenDesignHostAvailable, pickHostWorkingDir } from '@open-design/host';
@@ -2138,7 +2139,19 @@ function DesignSystemPicker({
   const [query, setQuery] = useState('');
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
+  const [anchor, setAnchor] = useState<{
+    top?: number;
+    bottom?: number;
+    left: number;
+    width: number;
+    maxHeight: number;
+    // Fixed viewport x for the brand preview flyout, placed beside the
+    // portaled popover (right when there is room, else left).
+    flyoutLeft: number;
+  } | null>(null);
 
   // Upgrade the popover's thin list to the rich Brand Kit card whenever the
   // hovered / selected row is a finalized brand (`user:<id>` design system).
@@ -2194,10 +2207,79 @@ function DesignSystemPicker({
     return () => window.clearTimeout(t);
   }, [open]);
 
+  useLayoutEffect(() => {
+    if (!open) {
+      setAnchor(null);
+      return undefined;
+    }
+
+    function updateAnchor() {
+      const trigger = triggerRef.current;
+      if (!trigger) return;
+      const rect = trigger.getBoundingClientRect();
+      const width = Math.max(280, rect.width);
+      const left = Math.max(8, Math.min(window.innerWidth - width - 8, rect.left));
+      const gap = 6;
+      const margin = 12;
+      const preferredMin = 200;
+      const preferredMax = 440;
+      const spaceBelow = window.innerHeight - rect.bottom - gap - margin;
+      const spaceAbove = rect.top - gap - margin;
+      const openUp = spaceBelow < preferredMin + 80 && spaceAbove > spaceBelow;
+      const maxHeight = Math.max(0, Math.min(preferredMax, openUp ? spaceAbove : spaceBelow));
+
+      // Place the brand preview flyout beside the (portaled) popover: to its
+      // right when the 320px card fits, otherwise flipped to its left, then
+      // clamped into the viewport. Without this the flyout kept its old
+      // inline `position: absolute` against the trigger wrapper and was
+      // re-clipped by the modal body once the popover itself moved to a body
+      // portal.
+      const flyoutWidth = 320;
+      const rightLeft = left + width + 8;
+      const leftLeft = left - flyoutWidth - 8;
+      let flyoutLeft: number;
+      if (rightLeft + flyoutWidth <= window.innerWidth - 8) {
+        flyoutLeft = rightLeft;
+      } else if (leftLeft >= 8) {
+        flyoutLeft = leftLeft;
+      } else {
+        flyoutLeft = Math.max(8, window.innerWidth - flyoutWidth - 8);
+      }
+
+      if (openUp) {
+        setAnchor({
+          bottom: window.innerHeight - rect.top + gap,
+          left,
+          width,
+          maxHeight,
+          flyoutLeft,
+        });
+      } else {
+        setAnchor({
+          top: rect.bottom + gap,
+          left,
+          width,
+          maxHeight,
+          flyoutLeft,
+        });
+      }
+    }
+
+    updateAnchor();
+    window.addEventListener('resize', updateAnchor);
+    window.addEventListener('scroll', updateAnchor, true);
+    return () => {
+      window.removeEventListener('resize', updateAnchor);
+      window.removeEventListener('scroll', updateAnchor, true);
+    };
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
     function onPointer(e: MouseEvent) {
-      if (wrapRef.current?.contains(e.target as Node)) return;
+      const target = e.target as Node;
+      if (wrapRef.current?.contains(target)) return;
+      if (popoverRef.current?.contains(target)) return;
       setOpen(false);
     }
     function onKey(e: KeyboardEvent) {
@@ -2267,6 +2349,7 @@ function DesignSystemPicker({
     >
       <label className="newproj-label">{t('newproj.designSystem')}</label>
       <button
+        ref={triggerRef}
         type="button"
         data-testid="design-system-trigger"
         className={`ds-picker-trigger${open ? ' open' : ''}${primary ? '' : ' empty'}`}
@@ -2297,8 +2380,21 @@ function DesignSystemPicker({
           style={{ transform: open ? 'rotate(180deg)' : undefined }}
         />
       </button>
-      {open ? (
-        <div className="ds-picker-popover" role="listbox">
+      {open && anchor && typeof document !== 'undefined'
+        ? createPortal(
+        <div
+          ref={popoverRef}
+          className="ds-picker-popover ds-picker-popover-portal"
+          role="listbox"
+          data-placement={anchor.bottom !== undefined ? 'up' : 'down'}
+          style={{
+            top: anchor.top ?? 'auto',
+            bottom: anchor.bottom ?? 'auto',
+            left: anchor.left,
+            width: anchor.width,
+            maxHeight: anchor.maxHeight,
+          }}
+        >
           <div className="ds-picker-head">
             <input
               ref={searchRef}
@@ -2392,17 +2488,28 @@ function DesignSystemPicker({
               </button>
             </div>
           ) : null}
-        </div>
-      ) : null}
-      {open && previewBrand ? (
+        </div>,
+          document.body,
+        )
+        : null}
+      {open && previewBrand && anchor && typeof document !== 'undefined'
+        ? createPortal(
         <aside
-          className="ds-picker-brand-flyout"
+          className="ds-picker-brand-flyout ds-picker-brand-flyout-portal"
           data-testid="new-project-ds-brand-flyout"
           aria-label={t('brandDetail.identity')}
+          style={{
+            top: anchor.top ?? 'auto',
+            bottom: anchor.bottom ?? 'auto',
+            left: anchor.flyoutLeft,
+            maxHeight: anchor.maxHeight,
+          }}
         >
           <BrandPreviewCard variant="compact" summary={previewBrand} />
-        </aside>
-      ) : null}
+        </aside>,
+          document.body,
+        )
+        : null}
     </div>
   );
 }

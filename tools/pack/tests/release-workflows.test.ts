@@ -80,6 +80,7 @@ describe("release workflows", () => {
     expect(mac).toContain("build_args+=(--signed --notarize)");
     expect(mac).toContain("Build beta mac_arm64 update fixture");
     expect(mac).toContain("OD_PACKAGED_E2E_MAC_UPDATE_BUILD_JSON_PATH: ${{ steps.mac_arm64_update_fixture.outputs.update_build_json_path }}");
+    expect(mac).toContain("OD_PACKAGED_E2E_MAC_UPDATE_FIXTURE: ${{ inputs.mac_arm64_smoke_mode == 'full' && inputs.mac_arm64_update_metadata_url == '' && inputs.mac_arm64_update_target_version == '' && 'tools-serve' || '' }}");
     expect(mac).toContain("pnpm exec tsx scripts/release-smoke.ts mac specs/mac.spec.ts");
     expect(mac).toContain("bash .github/scripts/release/cache/mac.sh");
     expect(macX64).toContain("uses: actions/cache/restore@v5");

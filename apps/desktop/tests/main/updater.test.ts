@@ -623,7 +623,19 @@ describe("desktop updater", () => {
       expect(installed.installResult?.path).toBe(checked.downloadPath);
       expect(installed.installResult?.artifactPath).toBe(checked.downloadPath);
       expect(installed.installResult?.activeVersion).toBe("1.0.0-beta.2");
-      expect(installed.installResult?.launchPath).toBe(launcherLaunchPath);
+      const payloadLaunchPath = join(
+        root,
+        "launcher",
+        "channels",
+        "beta",
+        "namespaces",
+        "release-beta-win",
+        "versions",
+        "1.0.0-beta.2",
+        "payload",
+        "Open Design.exe",
+      );
+      expect(installed.installResult?.launchPath).toBe(payloadLaunchPath);
       expect(installed.installResult?.launcherRuntimePath).toBe(launcherRuntimePath);
       expect(installed.installResult?.helperLogPath).toEqual(expect.stringContaining("open-app-after-quit-test.log"));
       expect(installed.installResult?.dryRun).toBe(false);
@@ -631,7 +643,7 @@ describe("desktop updater", () => {
       expect(launches).toEqual([
         {
           appPid: 4242,
-          launchPath: launcherLaunchPath,
+          launchPath: payloadLaunchPath,
           root: await realpath(join(root, "updates")),
         },
       ]);
@@ -1207,8 +1219,9 @@ describe("desktop updater", () => {
     }
   });
 
-  it("relaunches mac launcher payloads through the installed app bundle from a payload-backed process", async () => {
+  it("relaunches mac launcher payloads through the prepared payload executable", async () => {
     const root = makeRoot();
+    const observationRoot = join(root, "observations", "installer");
     const fixture = await createUpdaterFixture({
       artifactBody: "open design mac dmg fixture",
       channel: "beta",
@@ -1244,6 +1257,7 @@ describe("desktop updater", () => {
           [DESKTOP_UPDATE_ENV.CURRENT_VERSION]: "1.0.0-beta.2",
           [DESKTOP_UPDATE_ENV.OPEN_DRY_RUN]: "0",
         },
+        installerObservationRoot: observationRoot,
         launcherRoot,
         launcherLaunchPath,
         launcherRuntimePath,
@@ -1297,17 +1311,41 @@ describe("desktop updater", () => {
       expect(launches).toEqual([
         {
           appPid: 4243,
-          launchPath: launcherLaunchPath,
+          launchPath: join(
+            root,
+            "launcher",
+            "channels",
+            "beta",
+            "namespaces",
+            "release-beta",
+            "versions",
+            "1.0.0-beta.3",
+            "payload",
+            "Open Design Beta.app",
+            "Contents",
+            "MacOS",
+            "Open Design Beta",
+          ),
           root: await realpath(join(root, "updates")),
         },
       ]);
+      const flowIds = await readdir(observationRoot);
+      const observation = JSON.parse(
+        await readFile(join(observationRoot, flowIds[0] ?? "", "summary.json"), "utf8"),
+      ) as Record<string, unknown>;
+      expect(observation).toMatchObject({
+        artifactType: "payload",
+        fromVersion: "1.0.0-beta.2",
+        result: "pending",
+        toVersion: "1.0.0-beta.3",
+      });
     } finally {
       await fixture.close();
       rmSync(root, { force: true, recursive: true });
     }
   });
 
-  it("relaunches Windows launcher payloads through the installed executable from a payload-backed process", async () => {
+  it("relaunches Windows launcher payloads through the prepared payload executable", async () => {
     const root = makeRoot();
     const fixture = await createUpdaterFixture({
       artifactBody: "open design windows installer fixture",
@@ -1397,7 +1435,18 @@ describe("desktop updater", () => {
       expect(launches).toEqual([
         {
           appPid: 4244,
-          launchPath: launcherLaunchPath,
+          launchPath: join(
+            root,
+            "launcher",
+            "channels",
+            "beta",
+            "namespaces",
+            "release-beta-win",
+            "versions",
+            "1.0.0-beta.3",
+            "payload",
+            "Open Design.exe",
+          ),
           root: await realpath(join(root, "updates")),
         },
       ]);
@@ -1407,7 +1456,7 @@ describe("desktop updater", () => {
     }
   });
 
-  it("fails launcher payload relaunch when the stable launcher entry is unavailable", async () => {
+  it("relaunches the prepared payload even when the stable outer entry disappears", async () => {
     const root = makeRoot();
     const fixture = await createUpdaterFixture({
       artifactBody: "open design windows installer fixture",
@@ -1488,17 +1537,32 @@ describe("desktop updater", () => {
 
       const installed = await updater.installUpdate();
 
-      expect(installed.state).toBe(DESKTOP_UPDATE_STATES.ERROR);
-      expect(installed.error?.code).toBe("payload-relaunch-failed");
-      expect(installed.error?.message).toContain("Open Design.exe");
-      expect(launches).toEqual([]);
+      expect(installed.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
+      expect(installed.error).toBeUndefined();
+      expect(launches).toEqual([
+        expect.objectContaining({
+          appPid: 4246,
+          launchPath: join(
+            root,
+            "launcher",
+            "channels",
+            "beta",
+            "namespaces",
+            "release-beta-win",
+            "versions",
+            "1.0.0-beta.3",
+            "payload",
+            "Open Design.exe",
+          ),
+        }),
+      ]);
     } finally {
       await fixture.close();
       rmSync(root, { force: true, recursive: true });
     }
   });
 
-  it("starts the stable Windows launcher in after-quit mode for payload installs", async () => {
+  it("starts the Windows payload executable in after-quit mode for payload installs", async () => {
     const root = makeRoot();
     const fixture = await createUpdaterFixture({
       artifactBody: "open design windows installer fixture",
@@ -1513,6 +1577,13 @@ describe("desktop updater", () => {
     const launcherLaunchPath = join(root, "installed", "Open Design.exe");
     const spawned: Array<{ args: string[]; command: string; options: unknown }> = [];
     const unref = vi.fn();
+    const child = {
+      once: vi.fn((event: string, listener: (...args: unknown[]) => void) => {
+        if (event === "spawn") queueMicrotask(listener);
+        return child;
+      }),
+      unref,
+    };
     try {
       await mkdir(join(root, "installed"), { recursive: true });
       await writeFile(launcherLaunchPath, "");
@@ -1566,7 +1637,7 @@ describe("desktop updater", () => {
         processPid: 4245,
         spawnDetached: (command, args, options) => {
           spawned.push({ args, command, options });
-          return { unref };
+          return child as never;
         },
       });
 
@@ -1575,11 +1646,23 @@ describe("desktop updater", () => {
 
       expect(installed.error).toBeUndefined();
       expect(installed.installResult?.path).toBe(checked.downloadPath);
-      expect(installed.installResult?.launchPath).toBe(launcherLaunchPath);
+      const payloadLaunchPath = join(
+        root,
+        "launcher",
+        "channels",
+        "beta",
+        "namespaces",
+        "release-beta-win",
+        "versions",
+        "1.0.0-beta.3",
+        "payload",
+        "Open Design.exe",
+      );
+      expect(installed.installResult?.launchPath).toBe(payloadLaunchPath);
       expect(installed.installResult?.helperLogPath).toBeUndefined();
       expect(spawned).toHaveLength(1);
       expect(unref).toHaveBeenCalledTimes(1);
-      expect(spawned[0]?.command).toBe(launcherLaunchPath);
+      expect(spawned[0]?.command).toBe(payloadLaunchPath);
       expect(spawned[0]?.options).toEqual({ detached: true, stdio: "ignore", windowsHide: true });
       const args = spawned[0]?.args ?? [];
       expect(args).toEqual(expect.arrayContaining([
@@ -1589,6 +1672,106 @@ describe("desktop updater", () => {
         LAUNCHER_AFTER_QUIT_TIMEOUT_MS_ARG,
         "600000",
       ]));
+    } finally {
+      await fixture.close();
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("reports an asynchronous payload spawn error instead of freezing a successful install", async () => {
+    const root = makeRoot();
+    const fixture = await createUpdaterFixture({
+      artifactBody: "open design windows installer fixture",
+      channel: "beta",
+      includePayload: true,
+      payloadBody: "open design windows payload fixture",
+      platform: "win",
+      version: "1.0.0-beta.3",
+    });
+    const launcherRuntimePath = join(root, "launcher", "runtime.json");
+    const launcherRoot = root;
+    const launcherLaunchPath = join(root, "installed", "Open Design.exe");
+    const unref = vi.fn();
+    try {
+      await mkdir(join(root, "installed"), { recursive: true });
+      await writeFile(launcherLaunchPath, "");
+      await mkdir(join(root, "launcher"), { recursive: true });
+      await mkdir(join(
+        root,
+        "launcher",
+        "channels",
+        "beta",
+        "namespaces",
+        "release-beta-win",
+        "versions",
+        "1.0.0-beta.2",
+      ), { recursive: true });
+      await writeFile(
+        launcherRuntimePath,
+        `${JSON.stringify({
+          active: { generation: 0, version: "1.0.0-beta.2" },
+          channel: "beta",
+          lastSuccessful: { generation: 0, version: "1.0.0-beta.2" },
+          namespace: "release-beta-win",
+          schemaVersion: LAUNCHER_SCHEMA_VERSION,
+        })}\n`,
+      );
+      const child = {
+        once: vi.fn((event: string, listener: (...args: unknown[]) => void) => {
+          if (event === "error") queueMicrotask(() => listener(new Error("spawn ENOENT")));
+          return child;
+        }),
+        unref,
+      };
+      const updater = createDesktopUpdater({
+        arch: "x64",
+        currentVersion: "1.0.0-beta.2",
+        downloadRoot: join(root, "updates"),
+        env: {
+          ...updaterEnv(fixture.metadataUrl, "win32"),
+          [DESKTOP_UPDATE_ENV.CURRENT_VERSION]: "1.0.0-beta.2",
+          [DESKTOP_UPDATE_ENV.OPEN_DRY_RUN]: "0",
+        },
+        launcherRoot,
+        launcherLaunchPath,
+        launcherRuntimePath,
+        namespace: "release-beta-win",
+        source: SIDECAR_SOURCES.PACKAGED,
+      }, {
+        extractLauncherPayloadArchive: async ({ destinationRoot }) => {
+          await mkdir(join(destinationRoot, "payload", "resources", "open-design"), { recursive: true });
+          await writeFile(join(destinationRoot, "payload", "Open Design.exe"), "");
+          await writeFile(join(destinationRoot, "payload", "resources", "open-design-config.json"), "{}\n");
+          await writeFile(
+            join(destinationRoot, "manifest.json"),
+            `${JSON.stringify({
+              channel: "beta",
+              entry: {
+                cwd: "payload",
+                executable: "payload/Open Design.exe",
+              },
+              namespace: "release-beta-win",
+              payloadRoot: "payload",
+              platform: "win32",
+              schemaVersion: LAUNCHER_SCHEMA_VERSION,
+              version: "1.0.0-beta.3",
+            })}\n`,
+          );
+        },
+        processPid: 4245,
+        spawnDetached: () => child as never,
+      });
+
+      await updater.checkForUpdates();
+      const installed = await updater.installUpdate();
+
+      expect(installed.state).toBe(DESKTOP_UPDATE_STATES.ERROR);
+      expect(installed.error).toMatchObject({
+        code: "payload-relaunch-failed",
+        message: "spawn ENOENT",
+      });
+      expect(installed.installResult).toBeUndefined();
+      expect(unref).not.toHaveBeenCalled();
     } finally {
       await fixture.close();
       rmSync(root, { force: true, recursive: true });
@@ -1843,7 +2026,7 @@ describe("desktop updater", () => {
           processPid: 4242,
           spawnDetached: (command, args) => {
             spawned.push({ args, command });
-            return { unref: vi.fn() };
+            return { unref: vi.fn() } as never;
           },
         },
       );
@@ -1891,7 +2074,7 @@ describe("desktop updater", () => {
           processPid: 4242,
           spawnDetached: (command, args, options) => {
             spawned.push({ args, command, options });
-            return { unref };
+            return { unref } as never;
           },
         },
       );

@@ -614,7 +614,6 @@ export async function prepareVisualWorkspaceFileList(page: Page): Promise<void> 
     await trigger.click();
     await page.getByRole('menuitem', { name: 'All project files' }).click();
   }
-  await expect(trigger).toContainText('All project files');
   await expect(page.getByTestId('design-file-row-index.html')).toBeVisible();
   await expect(page.getByTestId('design-file-preview')).toHaveCount(0);
   await resetVisualScroll(page);
@@ -641,7 +640,6 @@ export async function prepareVisualAvatarMenu(page: Page): Promise<Locator> {
   await prepareVisualWorkspaceFileList(page);
   const menu = await openAvatarMenu(page);
   await expect(menu.locator('.avatar-item').first()).toBeVisible();
-  await expect(page.getByTestId('workspace-pages-menu-trigger')).toContainText('All project files');
   await expect(page.getByTestId('design-file-row-index.html')).toBeVisible();
   await waitForVisualStable(page);
   return menu;

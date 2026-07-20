@@ -37,6 +37,7 @@
     "@open-design/agui-adapter": "workspace:*",
     "@open-design/contracts": "workspace:*",
     "@open-design/diagnostics": "workspace:*",
+    "@open-design/launcher-proto": "workspace:*",
     "@open-design/platform": "workspace:*",
     "@open-design/plugin-runtime": "workspace:*",
     "@open-design/registry-protocol": "workspace:*",

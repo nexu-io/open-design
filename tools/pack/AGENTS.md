@@ -40,10 +40,13 @@ Read this section before changing packaged auto-update behavior. The updater cro
 
 - `apps/desktop/src/main/updater.ts` owns updater state, release metadata parsing, artifact selection, checksum verification, download-store ownership, progress events, and opening the downloaded installer. It is pure main-process logic and is tested under `apps/desktop/tests/main/updater.test.ts`.
 - `apps/desktop/src/main/runtime.ts` exposes updater IPC to the renderer through `od:update:status|check|download|install|quit` and emits `od:update:status-changed`. Keep installer launch separate from process shutdown; quit is an explicit post-installer action.
-- `apps/desktop/src/main/index.ts` wires the scheduler. Native menu update actions are intentionally not the user-facing surface; the web updater UI owns discovery and action prompts.
+- `apps/desktop/src/main/index.ts` wires the scheduler and the packaged macOS app-menu update item. The native item mirrors updater state and opens the renderer-owned update dialog; it must not create a second updater or a native result dialog. Windows and Linux menus do not expose update actions.
 - `apps/web/src/lib/updater.ts` normalizes host updater snapshots into UI-ready state.
-- `apps/web/src/components/UpdaterPopup.tsx` is the visible updater surface in the left rail. All visible copy must go through `apps/web/src/i18n`.
-- `apps/packaged/src/index.ts` passes packaged `appVersion` and namespace-scoped `updateRoot` into desktop main.
+- `apps/web/src/components/UpdaterPopup.tsx` remains the ready-update surface in the left rail. `apps/web/src/components/UpdateDialog.tsx` owns the explicit macOS app-menu check flow. All visible copy and native menu labels must go through `apps/web/src/i18n`.
+- `packages/launcher-proto` owns launcher pointer, attempt, and desktop-handoff journal shapes plus payload selection. `runtime.json` together with `attempt.json` is the only payload-version state machine.
+- `apps/packaged/src/index.ts` delegates to the selected payload desktop before initializing the outer Electron runtime, then passes packaged `appVersion` and namespace-scoped `updateRoot` into desktop main only when the outer itself must run.
+- `apps/daemon/src/sidecar/payload-desktop-handoff.ts` is the isolated compatibility bridge for historical outers that cannot delegate. It rearms the selected payload with the real previous pointer, launches that payload's desktop after the old outer exits, and persists a small desktop-binding journal for later shortcut cold starts. The journal is not a second version selector.
+- `install.json` continues to identify the physically installed outer executable for recovery. Payload activation or handoff must not rewrite it to a versioned payload executable.
 - `tools/serve` owns deterministic local updater fixtures only. It must not contain product updater runtime logic.
 - `tools/pack` owns packaged build/install/start/inspect/logs/uninstall/cleanup and the platform installer harness, including Windows NSIS registry observation and cleanup.
 
@@ -51,8 +54,7 @@ Read this section before changing packaged auto-update behavior. The updater cro
 
 The runtime updater reads `https://releases.open-design.ai/<channel>/latest/metadata.json` unless `OD_UPDATE_METADATA_URL` overrides it. For package-launcher updates:
 
-- mac selects `platforms.mac.artifacts.dmg`.
-- Windows selects `platforms.win.artifacts.installer`.
+- A valid packaged-launcher context prefers `platforms.<platform>.artifacts.payload`; the platform installer (`dmg` on macOS or `installer` on Windows) remains the recovery/fallback path.
 - The artifact must have a checksum, preferably `sha256Url`; the updater verifies bytes before exposing an install action.
 - `OD_UPDATE_CURRENT_VERSION` may override the packaged version for tests, but user-flow package validation should prefer building the package with the intended `--app-version`.
 - Release metadata may include `releaseNote.content`, with a `defaultLocale` and locale descriptors containing `url`, `mediaType`, `sha256`, and `size`. The updater does not currently consume this block; `tools-release` owns its publication and verification independently from updater UI behavior.
@@ -125,9 +127,11 @@ C:\odtp-beta-release-fixed\out\win\namespaces\release-beta-win\builder\Open Desi
 - User launches `Open Design Beta`.
 - App auto-checks the real beta feed and selects the latest Windows launcher payload when the package-launcher context is valid. The installer is the fallback path when the payload artifact or launcher context is unavailable.
 - For the payload path, the app downloads `platforms.win.artifacts.payload`, verifies sha256, prepares the payload under `%APPDATA%\Open Design\launcher\channels\beta\namespaces\release-beta-win\versions\<version>\payload`, and shows the web updater popup.
-- The native File menu must not expose update actions.
+- The native Windows File menu must not expose update actions. On macOS, the app menu exposes the state-aware update item and opens the renderer update dialog without making background checks intrusive.
 - The updater popup uses i18n strings and download progress must not flash to 100% before real bytes arrive.
-- Applying the payload update should quit and relaunch into the prepared payload version, then mark launcher `active` and `lastSuccessful` to that version.
+- Applying the payload update should quit and relaunch the exact executable under the prepared version's `payload` directory, then mark launcher `active` and `lastSuccessful` to that version and clear `attempt.json`.
+- A historical outer may first create a mixed generation. Its daemon-sidecar compatibility handoff must replace the historical desktop with the exact payload desktop executable, preserve the true previous pointer for recovery, and leave the handoff journal either absent or `confirmed`—never stranded in `prepared` or `armed`.
+- After a full stop, launching the installed shortcut/outer again must still converge on the same active payload desktop and preserve daemon/API behavior, including a real PPTX export.
 - If the updater falls back to the installer path, clicking `Open installer` opens the real downloaded beta installer. Installing it should overwrite the same `Open Design-release-beta-win` registry key, not create a second beta key.
 
 5. Registry and launcher sanity check after beta.6 update:
@@ -141,7 +145,7 @@ Get-Content "$env:APPDATA\Open Design\launcher\channels\beta\namespaces\release-
 ```
 
 For a clean beta channel result, expect one beta entry with `PSChildName` `Open Design-release-beta-win` and the latest `DisplayVersion`.
-For the payload path, also expect launcher `active.version` and `lastSuccessful.version` to match the latest beta version.
+For the payload path, also expect launcher `active.version` and `lastSuccessful.version` to match the latest beta version, `attempt.json` to be absent, and the running desktop executable to resolve below that version's `payload` directory. `desktop-handoff.json` may be absent for a current outer or `confirmed` for a historical outer; `prepared` and `armed` are not successful terminal states.
 Windows Settings > Apps may cache uninstall metadata within the current view. If Settings still shows the previous beta version after the registry query is correct, switch away from the Apps view and back, or reopen Settings, before treating it as an installer failure. The registry query above is the source of truth for this harness.
 
 6. Avoid leaving validation residue. Stop running app processes first, then use tools-pack uninstall/cleanup for tool-managed namespaces. Only delete explicit temp roots after verifying the resolved path is exactly the intended directory.
@@ -174,3 +178,4 @@ pnpm typecheck
 ```
 
 Run the high-confidence local user-flow acceptance whenever a change touches real release feed selection, channel identity, Windows registry/install behavior, installer opening, or visible updater UI behavior.
+For launcher payload or handoff changes, also run the platform full spec. The full profile must validate exact desktop executable identity, a real PPTX response, a complete stop followed by an installed-outer cold start, and the same checks again after restart. Windows beta full validation must use `release-beta-win`; a beta-like local namespace is not equivalent delivery evidence.
