@@ -2594,33 +2594,6 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     return true;
   }
 
-  // A folder-imported project resolves files against an external, user-chosen
-  // `metadata.baseDir` instead of PROJECTS_DIR. `validateProjectPath` only
-  // blocks `..`/absolute escapes, so a tree imported at (say) $HOME would let
-  // the raw read / raw delete / folders-delete sinks reach hidden credential
-  // files like `.ssh/id_rsa` or `.aws/credentials`. Mirror the visible-file
-  // rule buildBatchArchive already enforces for archives: reject any hidden
-  // path segment for imported projects, so an imported folder can never serve
-  // or delete dotfiles over the API. Managed projects (no external baseDir)
-  // are unaffected.
-  function rejectHiddenSegmentInImportedProject(
-    res: Response,
-    relPath: unknown,
-    metadata: unknown,
-  ): boolean {
-    const baseDir =
-      metadata && typeof metadata === 'object' && typeof (metadata as { baseDir?: unknown }).baseDir === 'string'
-        ? (metadata as { baseDir: string }).baseDir
-        : '';
-    if (!baseDir) return false;
-    const segments = String(relPath ?? '').replace(/\\/g, '/').split('/').filter(Boolean);
-    if (segments.some((segment) => segment.startsWith('.'))) {
-      sendApiError(res, 400, 'BAD_REQUEST', 'hidden path segments are not accessible in imported folders');
-      return true;
-    }
-    return false;
-  }
-
   function normalizeProjectFileVersionSource(value: unknown): ProjectFileVersionSource | undefined {
     return value === 'ai' || value === 'manual' || value === 'restore' ? value : undefined;
   }
@@ -3124,7 +3097,6 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       if (!project) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       }
-      if (rejectHiddenSegmentInImportedProject(res, folderPath, project.metadata)) return;
       await deleteProjectFolder(
         PROJECTS_DIR,
         req.params.id,
@@ -3312,7 +3284,6 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       const relPath = String(params[1] ?? '');
       if (rejectInternalVersionPath(res, relPath)) return;
       const project = getProject(db, projectId);
-      if (rejectHiddenSegmentInImportedProject(res, relPath, project?.metadata)) return;
       // PreviewModal loads artifact HTML via srcdoc, giving the iframe Origin: "null".
       // data: URIs, file://, and some sandboxed iframes also send null — all are
       // local-only callers, so this is safe. Real cross-origin sites send a real
@@ -3425,7 +3396,6 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       const rawSplat = String(params[1] ?? '');
       if (rejectInternalVersionPath(res, rawSplat)) return;
       const project = getProject(db, projectId);
-      if (rejectHiddenSegmentInImportedProject(res, rawSplat, project?.metadata)) return;
       await deleteProjectFile(PROJECTS_DIR, projectId, rawSplat, project?.metadata);
       await markProjectFileVersionStoreDeleted(PROJECTS_DIR, projectId, rawSplat, project?.metadata);
       /** @type {import('@open-design/contracts').DeleteProjectFileResponse} */

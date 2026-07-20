@@ -239,4 +239,49 @@ describe('import/folder -> home-tree file primitives', () => {
     expect(() => validateProjectPath('../escape')).toThrow();
     expect(() => validateProjectPath('.file-versions/x')).toThrow();
   });
+
+  // Coverage guard (raised by review on #5857): the dotfile denial must live at
+  // the file-op choke point, not just the 3 raw/folders route handlers — every
+  // sibling read route (files/*, text-preview/*, powered/*) resolves through the
+  // same readProjectFile/resolveProjectFilePath and must equally refuse
+  // dotfiles from an imported tree.
+  it('must NOT serve dotfiles through the sibling GET files/* route either', async () => {
+    const { projectId } = await importFakeHome();
+    let status = 0;
+    let body = '';
+    if (projectId) {
+      const resp = await fetch(
+        `${baseUrl}/api/projects/${projectId}/files/${SSH_KEY.split(path.sep).join('/')}`,
+      );
+      status = resp.status;
+      body = await resp.text().catch(() => '');
+    }
+    // eslint-disable-next-line no-console
+    console.log(`[SIBLING READ EVIDENCE] GET files/.ssh/id_rsa status=${status} leaked=${body.includes(SENTINEL_KEY)}`);
+    expect(status).not.toBe(200);
+    expect(body).not.toContain(SENTINEL_KEY);
+  }, 30000);
+
+  // Coverage guard (raised by review on #5857): the sensitive-dir blocklist must
+  // also cover the sibling rebind route POST /api/projects/:id/working-dir,
+  // otherwise a caller creates an ordinary project then rebinds its baseDir to
+  // $HOME to bypass the import-route blocklist.
+  it('must reject rebinding a project working-dir to the home root', async () => {
+    const pid = `rebind_target_${Math.random().toString(36).slice(2)}`;
+    const createResp = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: pid, name: 'rebind-target', metadata: { kind: 'prototype' }, skipDiscoveryBrief: true }),
+    });
+    expect(createResp.status).toBe(200);
+
+    const resp = await fetch(`${baseUrl}/api/projects/${pid}/working-dir`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ baseDir: os.homedir() }),
+    });
+    // eslint-disable-next-line no-console
+    console.log(`[WORKING-DIR EVIDENCE] rebind $HOME status=${resp.status}`);
+    expect(resp.status).toBeGreaterThanOrEqual(400);
+  }, 30000);
 });

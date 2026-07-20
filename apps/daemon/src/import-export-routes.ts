@@ -33,6 +33,28 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
   const { fs, path } = ctx.node;
   const { randomId } = ctx.ids;
   const { PROJECTS_DIR, RUNTIME_DATA_DIR_CANONICAL } = ctx.paths;
+
+  // A project root (imported folder OR a working-dir rebind) must not point at a
+  // system directory or a credential store. Binding it at $HOME / ~/.ssh / etc.
+  // would let the project file API read or delete the user's private keys and
+  // credentials. `isBlockedSystemDir` covers /etc, /proc, …; credential dirs use
+  // a prefix match; the home ROOT only exact-matches so legitimate subfolders
+  // (e.g. ~/Projects) stay usable. Shared by both entry points so neither can
+  // be used to bypass the other. Returns a rejection reason, or null if allowed.
+  async function blockedProjectRootReason(normalizedPath: string): Promise<string | null> {
+    let homeReal = os.homedir();
+    try { homeReal = await fs.promises.realpath(homeReal); } catch { /* keep as-is */ }
+    const credentialDirs = ['.ssh', '.aws', '.gnupg', '.kube', '.docker'].map((d) =>
+      path.join(homeReal, d),
+    );
+    const inCredentialDir = credentialDirs.some(
+      (dir) => normalizedPath === dir || normalizedPath.startsWith(dir + path.sep),
+    );
+    if (isBlockedSystemDir(normalizedPath) || normalizedPath === homeReal || inCredentialDir) {
+      return 'cannot use a system or credential directory as a project root';
+    }
+    return null;
+  }
   const { importClaudeDesignZip, projectDir, detectEntryFile } = ctx.imports;
   const {
     consumedImportNonces,
@@ -202,6 +224,10 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
       ) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'cannot point at the data directory');
       }
+      const workingDirBlockReason = await blockedProjectRootReason(normalizedPath);
+      if (workingDirBlockReason) {
+        return sendApiError(res, 400, 'BAD_REQUEST', workingDirBlockReason);
+      }
       const sandboxReason = normalizedOrchestratorWorkspace && trustedPickerImport
         ? null
         : sandboxImportedProjectRootUnavailableReason(normalizedPath);
@@ -336,22 +362,9 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
       ) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'cannot import the data directory');
       }
-      // Refuse to import a system directory or a credential store. Importing the
-      // home root (or ~/.ssh, ~/.aws, ~/.gnupg) would bind the project's file
-      // API to the user's private keys/credentials — GET/DELETE raw/* could then
-      // read or delete them. `isBlockedSystemDir` covers /etc, /proc, etc.; the
-      // credential set is checked with a prefix match, and the home ROOT only
-      // by exact match so legitimate subfolders (e.g. ~/Projects) stay allowed.
-      let homeReal = os.homedir();
-      try { homeReal = await fs.promises.realpath(homeReal); } catch { /* keep as-is */ }
-      const credentialDirs = ['.ssh', '.aws', '.gnupg', '.kube', '.docker'].map((d) =>
-        path.join(homeReal, d),
-      );
-      const inCredentialDir = credentialDirs.some(
-        (dir) => normalizedPath === dir || normalizedPath.startsWith(dir + path.sep),
-      );
-      if (isBlockedSystemDir(normalizedPath) || normalizedPath === homeReal || inCredentialDir) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'cannot import a system or credential directory');
+      const importBlockReason = await blockedProjectRootReason(normalizedPath);
+      if (importBlockReason) {
+        return sendApiError(res, 400, 'BAD_REQUEST', importBlockReason);
       }
       const sandboxReason = normalizedOrchestratorWorkspace && trustedPickerImport
         ? null
