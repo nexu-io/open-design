@@ -463,6 +463,89 @@ function toOdNativeEvent(record: RunEventRecord): OdNativeEvent | null {
 export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
   const { db, design } = ctx;
   const { createSseResponse, sendApiError } = ctx.http;
+
+  // A conversation may drive exactly one native agent session at a time; a
+  // second concurrent run on the same conversationId forks the single
+  // (conversation_id, agent_id) agent_sessions row (#5490).
+  const conversationHasActiveRun = (conversationId: string): boolean =>
+    design.runs.list({ conversationId }).some((r) => !design.runs.isTerminal(r.status));
+
+  // In-flight conversation claims, held synchronously from the busy-check until
+  // the run is created (after which conversationHasActiveRun covers it). We must
+  // reject BEFORE any durable preparation (plugin-snapshot pinning, message
+  // upsert), but the run isn't created until several awaits later — so a plain
+  // pre-await check would let two true-concurrent submits both pass. The claim
+  // bridges that window: it is added synchronously (no await between the check
+  // and the add), so the race loser sees it.
+  //
+  // Ownership follows HANDLER execution, not response lifetime. A client
+  // disconnect does NOT cancel the async handler, so it still runs on toward
+  // design.runs.create; releasing on socket close would free the id mid-flight
+  // and let a timeout/retry be admitted and fork the run (#5490). So the claim
+  // returns an explicit release the caller invokes in a finally — after create
+  // has synchronously registered the run, or on any pre-create exit.
+  const conversationRunClaims = new Set<string>();
+  const claimConversationOrReject = (
+    conversationId: string | null,
+    res: ApiResponse,
+  ): (() => void) | null => {
+    if (!conversationId) return () => {};
+    if (conversationRunClaims.has(conversationId) || conversationHasActiveRun(conversationId)) {
+      sendApiError(
+        res,
+        409,
+        'CONVERSATION_BUSY',
+        'another run is already active on this conversation; retry after it finishes',
+      );
+      return null;
+    }
+    conversationRunClaims.add(conversationId);
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      conversationRunClaims.delete(conversationId);
+    };
+  };
+
+  // Resolve — WITHOUT creating anything — the project's default conversation: the
+  // earliest one (createdAt, id tiebreak). Read-only and deterministic, so the
+  // pre-await claim below and the MCP/SDK fallback later in the handler agree on
+  // one id. Returns null if the project has no conversation yet.
+  const resolveDefaultConversationId = (projectId: string): string | null => {
+    try {
+      const convs = toConversationRecords(listConversations(db, projectId));
+      if (convs.length === 0) return null;
+      const earliest = [...convs].sort((a, b) => {
+        const aCreated = Number(a?.createdAt);
+        const bCreated = Number(b?.createdAt);
+        if (Number.isFinite(aCreated) && Number.isFinite(bCreated) && aCreated !== bCreated) {
+          return aCreated - bCreated;
+        }
+        return String(a?.id ?? '').localeCompare(String(b?.id ?? ''));
+      })[0];
+      return earliest && typeof earliest.id === 'string' && earliest.id ? earliest.id : null;
+    } catch (err) {
+      console.warn('[runs] default conversation resolution failed', err);
+      return null;
+    }
+  };
+
+  // The canonical conversation a /api/runs request will bind to: an explicit
+  // conversationId, or (for MCP/SDK project-only requests — McpRunCreateRequest
+  // requires only projectId) the project's default conversation. Claiming this
+  // up front closes the concurrent-fork window (#5490) on that path too, which a
+  // check on the raw requestBody.conversationId (undefined there) would miss.
+  const canonicalConversationIdForRequest = (requestBody: JsonRecord): string | null => {
+    if (typeof requestBody.conversationId === 'string' && requestBody.conversationId) {
+      return requestBody.conversationId;
+    }
+    if (typeof requestBody.projectId === 'string' && requestBody.projectId) {
+      return resolveDefaultConversationId(requestBody.projectId);
+    }
+    return null;
+  };
+
   const { PROJECTS_DIR, RUNTIME_DATA_DIR } = ctx.paths;
   const { detectAgents, getAgentDef } = ctx.agents;
   const { startChatRun } = ctx.chat;
@@ -514,168 +597,182 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     if (!toolBundle.ok) {
       return sendApiError(res, 400, 'BAD_REQUEST', toolBundle.message);
     }
+    // Reject a second concurrent run on the same conversation (#5490) BEFORE any
+    // persistent preparation (plugin-snapshot pinning, message upsert, run
+    // create), so a rejected request leaves no durable side effects. The claim
+    // is taken synchronously here so two true-concurrent submits can't both slip
+    // past before the run (created several awaits below) exists. We resolve the
+    // canonical conversation first so a project-only MCP/SDK request claims the
+    // same default conversation the fallback below will bind it to.
+    const releaseClaim = claimConversationOrReject(canonicalConversationIdForRequest(requestBody), res);
+    if (!releaseClaim) return;
+    // Hold the reservation for the entire handler execution (see
+    // claimConversationOrReject): the finally releases only after create has
+    // synchronously registered the run — where conversationHasActiveRun takes
+    // over — or on any pre-create early return/throw. A disconnected retry
+    // therefore still sees the claim and cannot fork the run (#5490).
+    let run: ReturnType<typeof design.runs.create> | null = null;
+    // Declared before the try so the post-create response path (which stays
+    // outside the reservation) can still read them.
     let resolvedSnapshot = null;
-    if (typeof requestBody.projectId === 'string' && requestBody.projectId) {
-      let registryView: Parameters<typeof resolvePluginSnapshot>[0]['registry'];
-      try {
-        registryView = await loadPluginRegistryView();
-      } catch (err) {
-        return res.status(500).json({ error: String(err) });
-      }
-      const explicitPlugin =
-        requestBody.pluginId || requestBody.appliedPluginSnapshotId;
-      let runResolveBody: JsonRecord = requestBody;
-      if (!explicitPlugin) {
-        const projectRow = toProjectRecord(getProject(db, requestBody.projectId));
-        const hasPin =
-          typeof projectRow?.appliedPluginSnapshotId === 'string'
-          && projectRow.appliedPluginSnapshotId.length > 0;
-        if (!hasPin) {
-          const fallbackPluginId = defaultScenarioPluginIdForProjectMetadata(
-            toScenarioProjectMetadata(projectRow?.metadata),
-          );
-          if (fallbackPluginId && getInstalledPlugin(db, fallbackPluginId)) {
-            runResolveBody = { ...requestBody, pluginId: fallbackPluginId };
-          }
-        }
-      }
-      const resolved = resolvePluginSnapshot({
-        db,
-        body: runResolveBody,
-        projectId: requestBody.projectId,
-        conversationId: typeof requestBody.conversationId === 'string'
-          ? requestBody.conversationId
-          : null,
-        registry: registryView,
-        connectorProbe: buildConnectorProbe(connectorService),
-      });
-      if (resolved && !resolved.ok) {
-        if (!explicitPlugin) {
-          console.warn(
-            `[plugins] default-scenario fallback skipped for run on project ${requestBody.projectId}: ${resolved.body?.error?.code ?? 'unknown'}`,
-          );
-        } else {
-          return res.status(resolved.status).json(resolved.body);
-        }
-      } else {
-        resolvedSnapshot = resolved;
-      }
-    }
     const meta: RunCreateMeta = {
       ...requestBody,
       mediaExecution: mediaExecution.policy,
       toolBundle: toolBundle.bundle,
     };
-    if (resolvedSnapshot?.ok) {
-      meta.appliedPluginSnapshotId = resolvedSnapshot.snapshotId;
-      if (!meta.pluginId) meta.pluginId = resolvedSnapshot.snapshot.pluginId;
-      if (typeof meta.message !== 'string' || meta.message.trim().length === 0) {
-        const renderedQuery = renderPluginBriefTemplate(
-          resolvedSnapshot.snapshot.query ?? '',
-          resolvedSnapshot.snapshot.inputs,
-        ).trim();
-        if (renderedQuery.length > 0) meta.message = renderedQuery;
-      }
-    }
-    let runProject: ProjectRecord | null = null;
-    if (typeof meta.projectId === 'string' && meta.projectId) {
-      try {
-        runProject = toProjectRecord(getProject(db, meta.projectId));
-        assertSandboxProjectRootAvailable(runProject?.metadata);
-      } catch (err) {
-        if (err instanceof SandboxImportedProjectError) {
-          return sendApiError(res, 400, 'BAD_REQUEST', err.message);
+    try {
+      if (typeof requestBody.projectId === 'string' && requestBody.projectId) {
+        let registryView: Parameters<typeof resolvePluginSnapshot>[0]['registry'];
+        try {
+          registryView = await loadPluginRegistryView();
+        } catch (err) {
+          return res.status(500).json({ error: String(err) });
         }
-        throw err;
-      }
-    }
-    if (typeof meta.agentId !== 'string' || !meta.agentId) {
-      try {
-        const appCfg = await readAppConfig(RUNTIME_DATA_DIR);
-        const cfgAgent = typeof appCfg.agentId === 'string' && appCfg.agentId
-          ? appCfg.agentId
-          : null;
-        const agents = await detectAgents(
-          toJsonRecord(appCfg.agentCliEnv),
-        ).catch((): DetectedAgent[] => []);
-        const cfgAgentAvailable = cfgAgent
-          ? agents.some((agent) => agent.id === cfgAgent && agent.available)
-          : false;
-        if (cfgAgent && cfgAgentAvailable) {
-          meta.agentId = cfgAgent;
+        const explicitPlugin =
+          requestBody.pluginId || requestBody.appliedPluginSnapshotId;
+        let runResolveBody: JsonRecord = requestBody;
+        if (!explicitPlugin) {
+          const projectRow = toProjectRecord(getProject(db, requestBody.projectId));
+          const hasPin =
+            typeof projectRow?.appliedPluginSnapshotId === 'string'
+            && projectRow.appliedPluginSnapshotId.length > 0;
+          if (!hasPin) {
+            const fallbackPluginId = defaultScenarioPluginIdForProjectMetadata(
+              toScenarioProjectMetadata(projectRow?.metadata),
+            );
+            if (fallbackPluginId && getInstalledPlugin(db, fallbackPluginId)) {
+              runResolveBody = { ...requestBody, pluginId: fallbackPluginId };
+            }
+          }
+        }
+        const resolved = resolvePluginSnapshot({
+          db,
+          body: runResolveBody,
+          projectId: requestBody.projectId,
+          conversationId: typeof requestBody.conversationId === 'string'
+            ? requestBody.conversationId
+            : null,
+          registry: registryView,
+          connectorProbe: buildConnectorProbe(connectorService),
+        });
+        if (resolved && !resolved.ok) {
+          if (!explicitPlugin) {
+            console.warn(
+              `[plugins] default-scenario fallback skipped for run on project ${requestBody.projectId}: ${resolved.body?.error?.code ?? 'unknown'}`,
+            );
+          } else {
+            return res.status(resolved.status).json(resolved.body);
+          }
         } else {
-          const firstAvailable = agents.find((agent) => agent.available)?.id ?? null;
-          if (firstAvailable) meta.agentId = firstAvailable;
+          resolvedSnapshot = resolved;
         }
-      } catch (err) {
-        console.warn('[runs] agent id fallback failed', err);
       }
-    }
-    const toolBundleSupport = validateRunToolBundleForAgent(
-      toolBundle.bundle,
-      typeof meta.agentId === 'string' ? getAgentDef(meta.agentId) : null,
-      {
-        deliveryTarget: runToolBundleDeliveryTargetForProject(
-          meta.projectId,
-          runProject?.metadata,
-        ),
-      },
-    );
-    if (!toolBundleSupport.ok) {
-      return sendApiError(res, 400, 'BAD_REQUEST', toolBundleSupport.message);
-    }
-    if (runProject?.metadata) {
-      meta.projectMetadata = runProject.metadata;
-    }
-    if (
-      typeof meta.projectId === 'string' &&
-      meta.projectId &&
-      (typeof meta.conversationId !== 'string' || !meta.conversationId)
-    ) {
-      try {
-        const convs = toConversationRecords(listConversations(db, meta.projectId));
-        const defaultConv = convs.length > 0
-          ? [...convs].sort((a, b) => {
-              const aCreated = Number(a?.createdAt);
-              const bCreated = Number(b?.createdAt);
-              if (Number.isFinite(aCreated) && Number.isFinite(bCreated) && aCreated !== bCreated) {
-                return aCreated - bCreated;
-              }
-              return String(a?.id ?? '').localeCompare(String(b?.id ?? ''));
-            })[0]
+      if (resolvedSnapshot?.ok) {
+        meta.appliedPluginSnapshotId = resolvedSnapshot.snapshotId;
+        if (!meta.pluginId) meta.pluginId = resolvedSnapshot.snapshot.pluginId;
+        if (typeof meta.message !== 'string' || meta.message.trim().length === 0) {
+          const renderedQuery = renderPluginBriefTemplate(
+            resolvedSnapshot.snapshot.query ?? '',
+            resolvedSnapshot.snapshot.inputs,
+          ).trim();
+          if (renderedQuery.length > 0) meta.message = renderedQuery;
+        }
+      }
+      let runProject: ProjectRecord | null = null;
+      if (typeof meta.projectId === 'string' && meta.projectId) {
+        try {
+          runProject = toProjectRecord(getProject(db, meta.projectId));
+          assertSandboxProjectRootAvailable(runProject?.metadata);
+        } catch (err) {
+          if (err instanceof SandboxImportedProjectError) {
+            return sendApiError(res, 400, 'BAD_REQUEST', err.message);
+          }
+          throw err;
+        }
+      }
+      if (typeof meta.agentId !== 'string' || !meta.agentId) {
+        try {
+          const appCfg = await readAppConfig(RUNTIME_DATA_DIR);
+          const cfgAgent = typeof appCfg.agentId === 'string' && appCfg.agentId
+            ? appCfg.agentId
+            : null;
+          const agents = await detectAgents(
+            toJsonRecord(appCfg.agentCliEnv),
+          ).catch((): DetectedAgent[] => []);
+          const cfgAgentAvailable = cfgAgent
+            ? agents.some((agent) => agent.id === cfgAgent && agent.available)
+            : false;
+          if (cfgAgent && cfgAgentAvailable) {
+            meta.agentId = cfgAgent;
+          } else {
+            const firstAvailable = agents.find((agent) => agent.available)?.id ?? null;
+            if (firstAvailable) meta.agentId = firstAvailable;
+          }
+        } catch (err) {
+          console.warn('[runs] agent id fallback failed', err);
+        }
+      }
+      const toolBundleSupport = validateRunToolBundleForAgent(
+        toolBundle.bundle,
+        typeof meta.agentId === 'string' ? getAgentDef(meta.agentId) : null,
+        {
+          deliveryTarget: runToolBundleDeliveryTargetForProject(
+            meta.projectId,
+            runProject?.metadata,
+          ),
+        },
+      );
+      if (!toolBundleSupport.ok) {
+        return sendApiError(res, 400, 'BAD_REQUEST', toolBundleSupport.message);
+      }
+      if (runProject?.metadata) {
+        meta.projectMetadata = runProject.metadata;
+      }
+      if (
+        typeof meta.projectId === 'string' &&
+        meta.projectId &&
+        (typeof meta.conversationId !== 'string' || !meta.conversationId)
+      ) {
+        try {
+          // Same resolver the pre-await claim used, so the run binds to exactly
+          // the conversation that was reserved for it (#5490).
+          const defaultConvId = resolveDefaultConversationId(meta.projectId);
+          if (defaultConvId) {
+            meta.conversationId = defaultConvId;
+            if (typeof meta.assistantMessageId !== 'string' || !meta.assistantMessageId) {
+              meta.assistantMessageId = randomUUID();
+            }
+            const promptForUserMessage =
+              typeof meta.message === 'string' && meta.message.trim().length > 0
+                ? meta.message
+                : null;
+            if (promptForUserMessage) {
+              upsertMessage(db, defaultConvId, {
+                id: randomUUID(),
+                role: 'user',
+                content: promptForUserMessage,
+                startedAt: Date.now(),
+                endedAt: Date.now(),
+              });
+            }
+          }
+        } catch (err) {
+          console.warn('[runs] mcp conversation fallback failed', err);
+        }
+      }
+      const conversationSession =
+        typeof meta.conversationId === 'string' && meta.conversationId
+          ? getConversation(db, meta.conversationId)
           : null;
-        if (defaultConv && typeof defaultConv.id === 'string' && defaultConv.id) {
-          meta.conversationId = defaultConv.id;
-          if (typeof meta.assistantMessageId !== 'string' || !meta.assistantMessageId) {
-            meta.assistantMessageId = randomUUID();
-          }
-          const promptForUserMessage =
-            typeof meta.message === 'string' && meta.message.trim().length > 0
-              ? meta.message
-              : null;
-          if (promptForUserMessage) {
-            upsertMessage(db, defaultConv.id, {
-              id: randomUUID(),
-              role: 'user',
-              content: promptForUserMessage,
-              startedAt: Date.now(),
-              endedAt: Date.now(),
-            });
-          }
-        }
-      } catch (err) {
-        console.warn('[runs] mcp conversation fallback failed', err);
-      }
+      meta.sessionMode =
+        meta.sessionMode === 'chat' || meta.sessionMode === 'design' || meta.sessionMode === 'plan'
+          ? normalizeConversationSessionMode(meta.sessionMode)
+          : normalizeConversationSessionMode(conversationSession?.sessionMode);
+      run = design.runs.create(meta);
+    } finally {
+      releaseClaim();
     }
-    const conversationSession =
-      typeof meta.conversationId === 'string' && meta.conversationId
-        ? getConversation(db, meta.conversationId)
-        : null;
-    meta.sessionMode =
-      meta.sessionMode === 'chat' || meta.sessionMode === 'design' || meta.sessionMode === 'plan'
-        ? normalizeConversationSessionMode(meta.sessionMode)
-        : normalizeConversationSessionMode(conversationSession?.sessionMode);
-    const run = design.runs.create(meta);
+    if (!run) return;
     try {
       pinAssistantMessageOnRunCreate(db, run);
     } catch (err) {
@@ -1481,9 +1578,24 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       toolBundle: toolBundle.bundle,
       ...(chatProject?.metadata ? { projectMetadata: chatProject.metadata } : {}),
     };
-    const run = design.runs.create(meta);
-    design.runs.stream(run, req, res);
-    reconcileAssistantMessageOnRunEnd(db, design.runs, run);
-    design.runs.start(run, () => startChatRun(meta, run));
+    // Same per-conversation concurrency guard as POST /api/runs (#5490): a second
+    // concurrent run on one conversation would fork the agent_sessions row.
+    // /api/chat has no durable writes and no awaits before create, so the claim
+    // and the synchronous create are adjacent; the finally releases once create
+    // has registered the run (conversationHasActiveRun covers it thereafter).
+    const chatConversationId =
+      typeof requestBody.conversationId === 'string' && requestBody.conversationId
+        ? requestBody.conversationId
+        : null;
+    const releaseClaim = claimConversationOrReject(chatConversationId, res);
+    if (!releaseClaim) return;
+    try {
+      const run = design.runs.create(meta);
+      design.runs.stream(run, req, res);
+      reconcileAssistantMessageOnRunEnd(db, design.runs, run);
+      design.runs.start(run, () => startChatRun(meta, run));
+    } finally {
+      releaseClaim();
+    }
   });
 }

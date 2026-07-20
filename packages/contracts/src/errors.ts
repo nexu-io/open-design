@@ -7,6 +7,10 @@ export const API_ERROR_CODES = [
   'FORBIDDEN',
   'NOT_FOUND',
   'CONFLICT',
+  // A run was requested for a conversation that already has one in flight. A
+  // conversation drives exactly one native agent session, so a second
+  // concurrent run would fork it (#5490). Retryable once the active run ends.
+  'CONVERSATION_BUSY',
   'PAYLOAD_TOO_LARGE',
   'UNSUPPORTED_MEDIA_TYPE',
   'VALIDATION_FAILED',
