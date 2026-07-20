@@ -1,0 +1,19 @@
+{
+  "candidateId": "7b21c008-0499-4ba2-b205-9193c1657b47",
+  "projectId": "8dbc6be4-f452-447b-8dd3-243b9c2f7aed",
+  "runId": "62fdf8c4-82ae-47f0-9071-ec1ee7b2551a",
+  "conversationId": "1fbd5934-b3bd-4033-afb0-63cc59d74317",
+  "provenance": {
+    "summary": "Detected from docs/superpowers/plans/2026-07-20-platform-a-dashboard-refocus.md after a successful run.",
+    "detectedAt": 1784557392353
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "docs/superpowers/plans/2026-07-20-platform-a-dashboard-refocus.md",
+      "label": "docs/superpowers/plans/2026-07-20-platform-a-dashboard-refocus.md",
+      "size": 35592,
+      "copied": true
+    }
+  ]
+}
