@@ -182,6 +182,19 @@ function isEmptyOutputText(text: string): boolean {
     .test(text);
 }
 
+function stripEmptyOutputGuardBoilerplate(text: string): string {
+  return text
+    .split(/\r?\n/)
+    .filter((line) => {
+      const normalized = line.toLowerCase();
+      return !(
+        normalized.includes('agent completed without producing any output') &&
+        normalized.includes('model or provider may have returned an empty response')
+      );
+    })
+    .join('\n');
+}
+
 function isToolErrorText(text: string): boolean {
   if (isPluginArtifactMissingText(text)) return true;
   return /\b(tool|mcp|connector|plugin)\b/i.test(text) &&
@@ -566,6 +579,14 @@ export function classifyRunFailure(
   const text = collectFailureText(input);
   const retryableHint = latestRetryable(input.events);
   const amrFailure = classifyAmrAccountFailure(text);
+  const runtimeCloseReason = readRuntimeCloseReason(input.events);
+  // The daemon's empty-output guard historically included generic
+  // "re-authenticating / checking quota" advice. Discount only that known
+  // boilerplate when looking for service evidence; keep every independent
+  // stderr/error line so a real auth, quota, or upstream failure still wins.
+  // Run events span safe retries, so strip the guard even when a later attempt
+  // ended for a different reason.
+  const serviceText = stripEmptyOutputGuardBoilerplate(text);
   const byokOpenCodeProviderNotFound = isByokOpenCodeProviderNotFoundText(
     input.agentId,
     text,
@@ -711,20 +732,25 @@ export function classifyRunFailure(
     );
   }
 
-  const serviceFailure = classifyAgentServiceFailure(text);
-  if (serviceFailure === 'AGENT_AUTH_REQUIRED' || isAuthDetailText(text)) {
+  const serviceFailure = classifyAgentServiceFailure(serviceText);
+  if (serviceFailure === 'AGENT_AUTH_REQUIRED' || isAuthDetailText(serviceText)) {
     return classification(
       'auth',
-      authDetail(text),
+      authDetail(serviceText),
       'session_init',
       false,
       'login',
     );
   }
 
-  if (errorCode === 'RATE_LIMITED' || serviceFailure === 'RATE_LIMITED' || isHardQuotaText(text) || isRateLimitText(text)) {
-    const hardQuota = isHardQuotaText(text);
-    const workspaceCredits = isWorkspaceCreditsText(text);
+  if (
+    errorCode === 'RATE_LIMITED' ||
+    serviceFailure === 'RATE_LIMITED' ||
+    isHardQuotaText(serviceText) ||
+    isRateLimitText(serviceText)
+  ) {
+    const hardQuota = isHardQuotaText(serviceText);
+    const workspaceCredits = isWorkspaceCreditsText(serviceText);
     const retryable = hardQuota ? false : (retryableHint ?? true);
     return classification(
       'rate_limit',
@@ -743,22 +769,27 @@ export function classifyRunFailure(
     errorCode === 'UPSTREAM_UNAVAILABLE' ||
     errorCode === 'AGENT_CONNECTION_DROPPED' ||
     serviceFailure === 'UPSTREAM_UNAVAILABLE' ||
-    isUpstreamDetailText(text) ||
+    isUpstreamDetailText(serviceText) ||
     byokOpenCodeProviderNotFound
   ) {
     const retryable = byokOpenCodeProviderNotFound
       ? false
-      : retryableHint ?? !isUpstreamClientErrorText(text);
+      : retryableHint ?? !isUpstreamClientErrorText(serviceText);
     return classification(
       'upstream_unavailable',
-      byokOpenCodeProviderNotFound ? 'upstream_client_error' : upstreamDetail(text),
+      byokOpenCodeProviderNotFound
+        ? 'upstream_client_error'
+        : upstreamDetail(serviceText),
       inferFailureStageFromEvents(input.events, 'first_token_wait'),
       retryable,
       retryable ? 'retry' : 'none',
     );
   }
 
-  if (isEmptyOutputText(text)) {
+  if (
+    runtimeCloseReason === 'empty_output' ||
+    isEmptyOutputText(runtimeCloseReason === null ? text : serviceText)
+  ) {
     return classification(
       'empty_output',
       'empty_output',
@@ -820,7 +851,6 @@ export function classifyRunFailure(
   // had a chance to claim auth, quota, upstream, prompt-size, and other known
   // failures. Unlike stream_error, fatal_rpc_error may have no structured SSE
   // error code at all, so it must also refine signal/unknown/exit fallbacks.
-  const runtimeCloseReason = readRuntimeCloseReason(input.events);
   if (
     runtimeCloseReason === 'fatal_rpc_error' &&
     (
