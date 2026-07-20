@@ -795,6 +795,17 @@ describe('PluginsView', () => {
       expect(within(dialog).queryByTestId('plugins-import-modal-error')).toBeNull();
     });
     expect(screen.queryByText('Bad Gateway')).toBeNull();
+
+    // The zip tab's own Import control must be usable again (not stuck on
+    // "Importing…") once a file is selected — this used to fail because
+    // clearing `working` was incorrectly gated on the stale request's token.
+    const zipInput = screen.getByTestId('plugins-zip-input');
+    fireEvent.change(zipInput, {
+      target: { files: [new File(['zip'], 'plugin.zip', { type: 'application/zip' })] },
+    });
+    const zipImportButton = screen.getByRole('button', { name: 'Import' });
+    await waitFor(() => expect(zipImportButton).toBeEnabled());
+    expect(screen.queryByText('Importing…')).toBeNull();
   });
 
   it('confirms a plugin share action before starting the GitHub repo task', async () => {

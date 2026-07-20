@@ -1569,7 +1569,7 @@ function PluginImportModal({
   const [zipFile, setZipFile] = useState<File | null>(null);
   const [folderFiles, setFolderFiles] = useState<File[]>([]);
   const [working, setWorking] = useState(false);
- const [importOutcome, setImportOutcome] = useState<PluginInstallOutcome | null>(null);
+  const [importOutcome, setImportOutcome] = useState<PluginInstallOutcome | null>(null);
   // Guards against a stale import result being applied after the user has
   // switched source tabs (or started a newer import) while the previous
   // request was still in flight. Each runImport() call captures the current
@@ -1628,10 +1628,12 @@ function PluginImportModal({
         if (!outcome.ok) setImportOutcome(outcome);
       }
     } finally {
-      // Only clear the pending indicator if this is still the active
-      // request — an invalidated request shouldn't flip `working` back to
-      // false for a tab the user already left.
-      if (requestToken === importRequestTokenRef.current) setWorking(false);
+      // Only one import can be in flight at a time (the Import button is
+      // disabled across all tabs while working), so it's always safe to
+      // clear the pending indicator here regardless of which request this
+      // was — otherwise a stale request's outcome being discarded above
+      // would leave the modal stuck on "Importing…" forever.
+      setWorking(false);
     }
   }
 
