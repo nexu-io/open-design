@@ -81,6 +81,7 @@ export type TrackingAmrEntrySource =
   | 'inline_amr_upgrade'
   | 'avatar_amr_upgrade'
   | 'avatar_amr_agent_card'
+  | 'avatar_amr_row'
   | 'artifact_success_upgrade'
   | 'home_artifact_upgrade';
 

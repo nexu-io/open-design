@@ -324,11 +324,10 @@ export function AvatarMenu({
     let cancelled = false;
     setAmrAccount(null);
     setAmrWalletSnapshot(null);
-    void fetchVelaLoginStatus()
+    void refreshAmrStatus()
       .then(async (status) => {
-        if (cancelled) return;
-        setAmrAccount(status);
-        if (status?.loggedIn && !formatVelaBalanceUsd(status.account?.balanceUsd)) {
+        if (cancelled || !status) return;
+        if (status.loggedIn && !formatVelaBalanceUsd(status.account?.balanceUsd)) {
           const wallet = await fetchAmrWalletSnapshot();
           if (!cancelled) setAmrWalletSnapshot(wallet);
         }
@@ -343,7 +342,7 @@ export function AvatarMenu({
       cancelled = true;
       stopAmrPolling();
     };
-  }, [open, amrAvailable, stopAmrPolling]);
+  }, [open, amrAvailable, refreshAmrStatus, stopAmrPolling]);
 
   useEffect(() => {
     const onStatusChange = (event: Event) => {
@@ -358,6 +357,10 @@ export function AvatarMenu({
         amrLoginStartedAtRef.current = null;
         stopAmrPolling();
         setAmrLoginPending(false);
+        setAmrAccount((current) => (
+          current ? { ...current, loginInFlight: false } : current
+        ));
+        return;
       }
       void refreshAmrStatus().then((next) => {
         if (next?.loggedIn) {
