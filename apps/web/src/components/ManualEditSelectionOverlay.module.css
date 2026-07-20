@@ -30,6 +30,21 @@
   box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.08);
 }
 
+/* Whole-image move surface. Fills the frame interior so an image can be
+   dragged from anywhere on the picture, not only the top pill. Sits under the
+   side/top handles (later in DOM) so their edge hit areas keep resizing. */
+.moveBody {
+  position: absolute;
+  inset: 0;
+  cursor: grab;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.moveBody:active {
+  cursor: grabbing;
+}
+
 /* Top-center pill: free move. */
 .moveHandle {
   position: absolute;

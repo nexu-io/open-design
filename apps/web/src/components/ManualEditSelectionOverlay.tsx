@@ -30,22 +30,30 @@ interface DragState {
   guides: ManualEditAlignmentGuide[];
   moved: boolean;
   /**
-   * Vertical extent last measured in the iframe. A resize gesture owns x and
-   * width; height is whatever the content reflowed to, which the gesture
-   * cannot predict — widening a text box pulls its text onto fewer lines and
-   * makes it shorter.
+   * The element's REAL box as the iframe last measured it after a resize
+   * preview applied. The gesture rect (`rect`) is only the intent: the element
+   * it targets can re-center (a `margin:auto` / flex-centred image slides a
+   * fixed edge inward as it widens), cap at `max-width`, honor an intrinsic
+   * aspect ratio, or reflow inside its parent — so its rendered box drifts from
+   * the intent on BOTH axes, not just the reflowed height. The frame draws this
+   * measured box (see `displayRect`) so the selection chrome stays locked to
+   * the element instead of trailing beside it — the resize "错位" report. Null
+   * until the first measurement of a gesture, and always null for moves (they
+   * preview through a compositor-only transform and are never measured).
    */
-  measuredY: number | null;
-  measuredHeight: number | null;
+  measured: ManualEditRect | null;
 }
 
-/** The rect the frame draws and the commit records: gesture x/width, measured y/height. */
+/**
+ * The rect the frame draws and the commit records. During a resize the iframe
+ * reports the element's actual box after each preview; the frame follows THAT
+ * so it stays wrapped around the element even when the element re-centers or
+ * caps instead of honoring the raw gesture rect. Before the first measurement
+ * (and for the whole of a move, which is never measured) it falls back to the
+ * gesture rect.
+ */
 function displayRect(state: DragState): ManualEditRect {
-  return {
-    ...state.rect,
-    y: state.measuredY ?? state.rect.y,
-    height: state.measuredHeight ?? state.rect.height,
-  };
+  return state.measured ?? state.rect;
 }
 
 interface CropHandleState {
@@ -270,8 +278,7 @@ export function ManualEditSelectionOverlay({
       rect: startRect,
       guides: [],
       moved: false,
-      measuredY: null,
-      measuredHeight: null,
+      measured: null,
     };
     setDragKind(kind);
     onGestureActiveChange?.(true);
@@ -286,17 +293,18 @@ export function ManualEditSelectionOverlay({
       // listeners below still finish the gesture instead of leaving it stuck.
     }
 
-    // Widening a text box pulls its text onto fewer lines, so the box gets
-    // SHORTER while the gesture only tracks width. Without adopting the height
-    // the iframe measured, the frame stays frozen at the pre-drag height for
-    // the whole drag and only snaps once the commit round-trips — which reads
-    // as "the text never reflowed".
+    // Lock the frame onto the element's real box after each resize preview.
+    // Adopting the FULL measured rect — x and width included, not just the
+    // reflowed y/height — is what keeps the frame from drifting off an element
+    // that re-centers or caps as it resizes (a widened text box also gets
+    // SHORTER as its text pulls onto fewer lines; the height comes back the
+    // same way). The gesture still persists the intent (`state.rect`); only the
+    // chrome the user sees follows the measurement.
     const adoptMeasuredExtent = (measured: ManualEditRect | null) => {
       const state = dragRef.current;
       if (!state || !measured || state.kind === 'move') return;
-      if (state.measuredHeight === measured.height && state.measuredY === measured.y) return;
-      state.measuredY = measured.y;
-      state.measuredHeight = measured.height;
+      if (state.measured && rectsEqual(state.measured, measured)) return;
+      state.measured = measured;
       applyFrameGeometry(displayRect(state));
     };
 
@@ -570,6 +578,18 @@ export function ManualEditSelectionOverlay({
         data-testid="manual-edit-selection-frame"
         style={frame}
       >
+        {isImage ? (
+          // Whole-image move surface: dragging anywhere on the picture moves it,
+          // so moving no longer requires grabbing the top pill. Rendered before
+          // the handles so their edge hit areas paint on top and still resize.
+          // Scoped to images — text/link bodies stay click-to-edit.
+          <div
+            className={styles.moveBody}
+            data-testid="manual-edit-move-body"
+            title={t('manualEdit.moveElement')}
+            onPointerDown={startGesture('move')}
+          />
+        ) : null}
         <div
           className={styles.moveHandle}
           data-testid="manual-edit-move-handle"

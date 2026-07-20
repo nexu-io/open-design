@@ -157,3 +157,12 @@
 协议增量:`od-edit-text-selection` 增 `format {bold,italic,underline,strike} | null`;`od-edit-apply-dom` 增 `op: replace|insert-after|append-child|prepend-child|remove`(默认 replace,向后兼容)。
 
 新增测试:bridge「选区格式状态上报」「insert-after/append-child/prepend-child/remove 原地应用」「重标注跟随位移 + 新元素就地 stamp + 授权 id 不动 + replace 后仍 source-mappable」;source-patches「插入读回(授权锚/位置锚/__body__)」「删除还原描述符(前兄弟/父级 prepend/__body__/缺失)」;FileViewer「文本提交原地不换 srcdoc」「删除走 remove op」「粘贴图片原地插入 + 选中交接」「undo 原地 + Undo 版本 label」。
+
+### v2.5 修订(整图拖拽移动 + 选中框跟随实测盒,2026-07-20)
+
+用户实测(prototype/landing/deck 三种编辑模式)提两点:图片只能靠顶部锚点(pill)拖动,期望**整张图任意处点击拖拽即移动**;拉伸边框时**外层选中框与图片错位**(尤其居中/`max-width`/带比例的图,拉伸后框飘在图旁边),要求所有元素框在交互中与元素**始终一致**。
+
+1. **整图整体移动**。`ManualEditSelectionOverlay` 在选中框内新增一层填满内部的 `moveBody`(`inset:0`、`pointer-events:auto`、`cursor:grab`),`onPointerDown` 复用 `startGesture('move')`——与顶部 pill 完全同一条手势管线(transform 预览 + 松手落 left/top,可撤销、产版本)。仅对 `kind === 'image'` 渲染:文本/链接元素的正文保持「点击进入行内编辑」语义,不被拖拽劫持。`moveBody` 排在 DOM 中的手柄之前,左右/顶部手柄(靠后绘制)在重叠区仍吃到指针,拉伸不受影响。
+2. **选中框跟随元素实测盒(修错位)**。根因:resize 手势里选中框画的是**手势意图矩形**的 x/width,只吸收 iframe 回报的 y/height;而目标元素在拉伸时可能重新居中(`margin:auto`/flex 居中的图,变宽时固定边内滑)、`max-width` 截断、按内在比例缩放或在父容器里回流——真实渲染盒在**两个轴**上都偏离意图,框只在纵向被纠正,横向永久飘移。修复:`DragState.measuredY/measuredHeight` 合并为单个 `measured: ManualEditRect | null`,`adoptMeasuredExtent` 吸收**完整**实测盒(x/y/width/height),`displayRect = state.measured ?? state.rect`。手势仍以 `state.rect`(意图)落盘 `set-style`,只有用户所见的选中框跟随实测——首帧(尚无测量)与整个 move(纯合成器 transform,不测量)回退到意图矩形。提交时 `outcome = displayRect(state)` 也即实测盒,乐观写入 `target.rect` 与 `heldRect` 与刷新后的真实 rect 对齐,松手零闪跳。
+
+新增测试:`ManualEditSelectionOverlay`「整图 body 拖拽提交 move / 非图片无 body 面」「resize 吸收实测盒纠正横向错位」。

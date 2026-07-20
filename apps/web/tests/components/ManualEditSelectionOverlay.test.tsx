@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ManualEditSelectionOverlay } from '../../src/components/ManualEditSelectionOverlay';
-import { emptyManualEditStyles, type ManualEditTarget } from '../../src/edit-mode/types';
+import { emptyManualEditStyles, type ManualEditRect, type ManualEditTarget } from '../../src/edit-mode/types';
 
 const target: ManualEditTarget = {
   id: 'move-me',
@@ -26,6 +26,16 @@ const target: ManualEditTarget = {
   },
   isLayoutContainer: false,
   outerHtml: '<div data-od-id="move-me">Move me</div>',
+};
+
+const imageTarget: ManualEditTarget = {
+  ...target,
+  id: 'photo',
+  kind: 'image',
+  tagName: 'IMG',
+  label: 'Photo',
+  fields: { src: 'photo.png', alt: '' },
+  outerHtml: '<img data-od-id="photo" src="photo.png" alt="">',
 };
 
 let originalSetPointerCapture: typeof HTMLElement.prototype.setPointerCapture | undefined;
@@ -154,6 +164,86 @@ describe('ManualEditSelectionOverlay pointer capture fallbacks', () => {
       'move',
     );
     expect(onGestureCancel).not.toHaveBeenCalled();
+  });
+});
+
+describe('ManualEditSelectionOverlay whole-image move', () => {
+  function renderImageOverlay() {
+    const onGestureCommit = vi.fn();
+    render(
+      <ManualEditSelectionOverlay
+        target={imageTarget}
+        targets={[imageTarget]}
+        scale={1}
+        canvasSize={{ width: 1000, height: 800 }}
+        onGesturePreview={vi.fn()}
+        onGestureCommit={onGestureCommit}
+        onGestureCancel={vi.fn()}
+        onDuplicate={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+    return { onGestureCommit };
+  }
+
+  it('moves an image by dragging its body, not only the top pill', () => {
+    const { onGestureCommit } = renderImageOverlay();
+    const body = screen.getByTestId('manual-edit-move-body');
+
+    fireEvent.pointerDown(body, { clientX: 200, clientY: 140, pointerId: 4 });
+    fireEvent.pointerMove(document, { clientX: 260, clientY: 180, pointerId: 4 });
+    fireEvent.pointerUp(document, { clientX: 260, clientY: 180, pointerId: 4 });
+
+    expect(onGestureCommit).toHaveBeenCalledTimes(1);
+    expect(onGestureCommit).toHaveBeenCalledWith(
+      expect.objectContaining({ left: '160px', top: '140px' }),
+      expect.objectContaining({ x: 160, y: 140 }),
+      'move',
+    );
+  });
+
+  it('keeps the body-drag surface off non-image targets so text stays click-to-edit', () => {
+    renderOverlay();
+    expect(screen.queryByTestId('manual-edit-move-body')).toBeNull();
+  });
+});
+
+describe('ManualEditSelectionOverlay resize frame sync', () => {
+  it('locks the frame onto the element measured box, not the raw gesture rect', () => {
+    let applied: ((rect: ManualEditRect | null) => void) | undefined;
+    render(
+      <ManualEditSelectionOverlay
+        target={imageTarget}
+        targets={[imageTarget]}
+        scale={1}
+        canvasSize={{ width: 1000, height: 800 }}
+        onGesturePreview={(_partial, onApplied) => {
+          applied = onApplied;
+        }}
+        onGestureCommit={vi.fn()}
+        onGestureCancel={vi.fn()}
+        onDuplicate={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+    const handle = screen.getByTestId('manual-edit-resize-right');
+    const frame = screen.getByTestId('manual-edit-selection-frame');
+
+    // Right handle sits at the element's right edge (x + width = 300); drag it
+    // out by 60px. The gesture INTENT keeps the left edge at 100 and widens to
+    // 260, so before any measurement the frame follows that intent.
+    fireEvent.pointerDown(handle, { clientX: 300, clientY: 140, pointerId: 3 });
+    fireEvent.pointerMove(document, { clientX: 360, clientY: 140, pointerId: 3 });
+    expect(applied).toBeInstanceOf(Function);
+    expect(frame.style.left).toBe('100px');
+    expect(frame.style.width).toBe('260px');
+
+    // The element actually re-centred as it widened (a margin:auto image slides
+    // its left edge inward): its real box starts at x=70. The frame must adopt
+    // that measured box on BOTH axes, or it drifts off the picture (the 错位).
+    act(() => applied!({ x: 70, y: 100, width: 260, height: 80 }));
+    expect(frame.style.left).toBe('70px');
+    expect(frame.style.width).toBe('260px');
   });
 });
 
