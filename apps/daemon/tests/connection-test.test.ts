@@ -1099,6 +1099,51 @@ describe('POST /api/test/connection provider mode', () => {
     });
   });
 
+  it('attaches deployment provider run-session metadata before native OpenAI connection-test egress', async () => {
+    await withDeploymentProviderEnv({
+      OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://api.openai.com/v1',
+      OD_PROVIDER_ORCHESTRATOR_API_KEY: 'deployment-secret',
+      OD_PROVIDER_ORCHESTRATOR_RUN_SESSION_URL: 'https://authority.example.test/api/runs',
+      OD_PROVIDER_ORCHESTRATOR_RUN_COST_CAP_USD: '0.05',
+    }, async () => {
+      let fallbackRunId: string | undefined;
+      const fetchMock = passThroughOrUpstream((url, init) => {
+        if (url === 'https://authority.example.test/api/runs') {
+          const requestBody = JSON.parse(String(init?.body));
+          fallbackRunId = requestBody.od_run_id;
+          return jsonResponse({ run_session_id: 'odrs_connection' }, { status: 201 });
+        }
+        expect(url).toBe('https://api.openai.com/v1/responses');
+        const body = JSON.parse(String(init?.body));
+        expect(body.metadata).toMatchObject({
+          opendesign_run_session_id: 'odrs_connection',
+          opendesign_cost_cap_usd: 0.05,
+          opendesign_idempotency_key: fallbackRunId,
+        });
+        return jsonResponse({ output_text: 'ok' });
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const res = await realFetch(`${baseUrl}/api/test/connection`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'provider',
+          protocol: 'openai',
+          credentialSource: 'deployment',
+          model: 'gpt-5.5',
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      await expect(res.json()).resolves.toMatchObject({
+        ok: true,
+        kind: 'success',
+        model: 'gpt-5.5',
+      });
+    });
+  });
+
   it('reports invalid deployment provider run-session config in the connection-test envelope', async () => {
     await withDeploymentProviderEnv({
       OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.example.test/v1',

@@ -1231,6 +1231,7 @@ function openAIResponsesProviderCall(
   baseUrl: string,
   apiKey: string,
   model: string,
+  metadata?: unknown,
 ): ProviderCallShape {
   return {
     url: appendVersionedApiPath(baseUrl, '/responses'),
@@ -1240,6 +1241,7 @@ function openAIResponsesProviderCall(
     },
     body: {
       model,
+      ...metadataField(metadata),
       input: SMOKE_PROMPT,
       max_output_tokens: PROVIDER_MAX_TOKENS,
     },
@@ -1311,7 +1313,7 @@ function buildProviderCall(input: ProviderTestRequest): ProviderCallShape {
       if (input.protocol === 'openai') {
         const runProviderPackage = resolveOpenAIConnectionTestRunProviderPackage(input);
         if (runProviderPackage === '@ai-sdk/openai') {
-          return openAIResponsesProviderCall(baseUrl, apiKey, model);
+          return openAIResponsesProviderCall(baseUrl, apiKey, model, input.metadata);
         }
         if (runProviderPackage === '@ai-sdk/openai-compatible') {
           return openAIChatCompletionsProviderCall(baseUrl, apiKey, model, input.metadata);
