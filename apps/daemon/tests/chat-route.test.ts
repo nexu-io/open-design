@@ -898,6 +898,132 @@ process.stdin.on('end', () => {
     },
   );
 
+  // Regression: nettee review on PR #5818 — the previous `/api/runs` guard
+  // keyed the dedupe on "any historical user row", so a follow-up turn on an
+  // existing explicit-`conversationId` conversation was silently dropped the
+  // moment the conversation already had a prior user+assistant exchange. The
+  // dedupe must key on the *current turn's* id, not on the presence of any
+  // prior `role === 'user'` row. This test seeds an existing user+assistant
+  // exchange before the `/api/runs` call and asserts the new user turn is
+  // appended rather than skipped.
+  it.runIf(process.env.OD_DATA_DIR)(
+    'persists follow-up user turn on /api/runs against an existing seeded conversation (#5811 follow-up)',
+    async () => {
+      if (!process.env.OD_DATA_DIR) {
+        throw new Error('OD_DATA_DIR is required for #5811 follow-up regression');
+      }
+      const projectId = `proj-5811-followup-${randomUUID()}`;
+      const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: projectId, name: '5811-followup-runs-seeded' }),
+      });
+      expect(createProjectResponse.ok).toBe(true);
+
+      const conversationsResponse = await fetch(
+        `${baseUrl}/api/projects/${projectId}/conversations`,
+      );
+      expect(conversationsResponse.ok).toBe(true);
+      const conversationsBody = await conversationsResponse.json() as {
+        conversations: Array<{ id: string }>;
+      };
+      const conversationId = conversationsBody.conversations[0]?.id;
+      expect(conversationId).toBeTruthy();
+
+      // Seed a prior user+assistant exchange so the conversation is non-empty
+      // before the follow-up turn. This is the exact state nettee called out:
+      // the old guard would see `hasUserMessage === true` here and skip the
+      // upsert, dropping the follow-up user turn.
+      const priorUserMessageId = `user-prior-${randomUUID()}`;
+      const priorAssistantMessageId = `assistant-prior-${randomUUID()}`;
+      const dbFile = resolve(process.env.OD_DATA_DIR, 'app.sqlite');
+      const sqlite = new Database(dbFile);
+      try {
+        upsertMessage(sqlite as never, conversationId!, {
+          id: priorUserMessageId,
+          role: 'user',
+          content: 'prior user turn',
+          startedAt: Date.now() - 2_000,
+          endedAt: Date.now() - 1_500,
+        });
+        upsertMessage(sqlite as never, conversationId!, {
+          id: priorAssistantMessageId,
+          role: 'assistant',
+          content: 'prior assistant turn',
+          runStatus: 'completed',
+          startedAt: Date.now() - 1_000,
+          endedAt: Date.now() - 500,
+        });
+      } finally {
+        sqlite.close();
+      }
+
+      await withFakeAgent(
+        'opencode',
+        `
+process.stdin.resume();
+process.stdin.on('end', () => {
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: 'follow-up ok' } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+        async () => {
+          const response = await fetch(`${baseUrl}/api/runs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentId: 'opencode',
+              projectId,
+              conversationId,
+              message: 'follow-up user turn for 5811',
+            }),
+          });
+          expect(response.ok).toBe(true);
+
+          // Wait for the run to finish and read messages.
+          await new Promise((resolve) => setTimeout(resolve, 2_000));
+
+          const msgResponse = await fetch(
+            `${baseUrl}/api/projects/${projectId}/conversations/${conversationId}/messages`,
+          );
+          expect(msgResponse.ok).toBe(true);
+          const msgBody = await msgResponse.json() as {
+            messages: Array<{ id: string; role: string; content: string }>;
+          };
+
+          // 2 seeded rows + 2 new rows (new user turn + new assistant turn).
+          expect(
+            msgBody.messages,
+            '/api/runs follow-up against a seeded conversation should append the new user turn instead of skipping it',
+          ).toHaveLength(4);
+
+          // The new user turn must be present, distinct from the seeded prior
+          // user row, and carry the message we just sent — not the prior one.
+          const userTurns = msgBody.messages.filter((m) => m.role === 'user');
+          expect(userTurns).toHaveLength(2);
+          expect(userTurns[0]).toMatchObject({
+            id: priorUserMessageId,
+            content: 'prior user turn',
+          });
+          expect(userTurns[1]).toMatchObject({
+            content: 'follow-up user turn for 5811',
+          });
+          expect(userTurns[1].id).not.toBe(priorUserMessageId);
+
+          // The new assistant turn must also be present.
+          const assistantTurns = msgBody.messages.filter((m) => m.role === 'assistant');
+          expect(assistantTurns).toHaveLength(2);
+          expect(assistantTurns[0]).toMatchObject({
+            id: priorAssistantMessageId,
+            content: 'prior assistant turn',
+          });
+        },
+      );
+    },
+  );
+
   it('does not leave a pinned assistant message queued when legacy chat fails before spawning', async () => {
     if (!process.env.OD_DATA_DIR) {
       throw new Error('OD_DATA_DIR is required for assistant message pin tests');

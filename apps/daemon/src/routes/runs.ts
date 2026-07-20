@@ -1132,17 +1132,18 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     // an explicit `conversationId` (e.g. external callers and Studio's own
     // /api/runs flow that follows a client-side PUT) and the auto-resolved
     // default conversation. We upsert by a deterministic id keyed to the
-    // run so the client-side PUT and this server-side insert converge on
-    // the same row when both fire, instead of producing two user rows.
+    // current turn so the client-side PUT and this server-side insert
+    // converge on the same row when both fire, instead of producing two
+    // user rows.
     //
-    // Skip if the conversation already has a user message — Studio's
-    // client-side PUT path has already persisted one with a random UUID,
-    // and inserting a second row with `user-{assistantMessageId}` would
-    // double-count the user turn and break the messageCount parity this
-    // fix was meant to restore. The zero-message case is exactly what
-    // external callers hit when they POST /api/runs with an explicit
-    // conversationId they created via PUT /api/projects/.../conversations
-    // without a user message body.
+    // The dedupe key is the *current turn's* id, not "any historical user
+    // row" — guard `hasUserMessage` keyed on `role === 'user'` would skip
+    // the upsert the moment a conversation has any prior transcript, which
+    // drops follow-up turns on existing explicit-`conversationId`
+    // conversations (issue #5811 follow-up). Keying on the per-turn id
+    // keeps the upsert idempotent against a simultaneous client-side PUT
+    // (which uses the same deterministic id) without losing subsequent
+    // user turns.
     if (
       typeof meta.conversationId === 'string' &&
       meta.conversationId &&
@@ -1150,15 +1151,17 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       meta.message.trim().length > 0
     ) {
       try {
+        const turnsUserMessageId =
+          typeof meta.userMessageId === 'string' && meta.userMessageId
+            ? meta.userMessageId
+            : `user-${meta.assistantMessageId ?? randomUUID()}`;
         const existing = listMessages(db, meta.conversationId);
-        const hasUserMessage = existing.some((message) => message.role === 'user');
-        if (!hasUserMessage) {
-          const userMessageId =
-            typeof meta.userMessageId === 'string' && meta.userMessageId
-              ? meta.userMessageId
-              : `user-${meta.assistantMessageId ?? randomUUID()}`;
+        const alreadyPersistedByClient = existing.some(
+          (message) => message.id === turnsUserMessageId,
+        );
+        if (!alreadyPersistedByClient) {
           upsertMessage(db, meta.conversationId, {
-            id: userMessageId,
+            id: turnsUserMessageId,
             role: 'user',
             content: meta.message,
             startedAt: Date.now(),
