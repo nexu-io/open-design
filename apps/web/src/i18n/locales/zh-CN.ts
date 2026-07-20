@@ -354,6 +354,8 @@ export const zhCN: Dict = {
   "settings.modeApiMeta": "BYOK",
   "settings.byokNoFileToolsNotice":
     "BYOK 无法读写或修改项目文件；需要改代码时请使用本机 CLI。",
+  "settings.byokDraftNotice":
+    "必填项补全前，此配置只会保存为草稿；当前执行配置将继续保持生效。",
   "settings.codeAgent": "代码代理",
   "settings.codeAgentHint": "选择用来运行提示词的 CLI。",
   "settings.rescan": "↻ 重新扫描",
@@ -3915,6 +3917,9 @@ export const zhCN: Dict = {
   "notify.successBody": "一轮回答已经写完。",
   "notify.failureBody": "本轮任务出错，请查看错误信息。",
   "updater.available": "有可用更新",
+  "updater.activeRunsTitle": "Open Design 仍在执行任务",
+  "updater.activeRunsBody": "仍有 {count} 个任务正在运行。现在重启会中断这些任务。",
+  "updater.activeRunsUnknownBody": "Open Design 无法确认是否仍有任务运行。现在重启可能会中断正在进行的工作。",
   "updater.availableBody":
     "Open Design {version} 可用。下载安装完成后即可打开安装器。",
   "updater.checking": "正在检查更新",
@@ -3933,6 +3938,15 @@ export const zhCN: Dict = {
   "updater.installingRestart": "正在安装并重启…",
   "updater.openInstaller": "安装更新",
   "updater.opening": "正在打开安装器…",
+  "updater.dialogAvailableGeneric": "发现新版本。\n下载后即可安装。",
+  "updater.dialogAvailableVersion": "v{version} 可供更新。\n下载后即可安装。",
+  "updater.dialogCheckFailed": "检查更新失败。\n请稍后重试。",
+  "updater.dialogReadyGeneric":
+    "新版本已准备就绪。\n更好的体验，更智能的设计，欢迎体验新版本。",
+  "updater.dialogReadyVersion":
+    "v{version} 已准备就绪。\n更好的体验，更智能的设计，欢迎体验新版本。",
+  "updater.dialogUnsupported":
+    "当前环境不支持应用内更新。\n可前往发布页手动下载。",
   "updater.payloadReadyGeneric":
     "Open Design 更新已就绪。Open Design 会关闭并自动重启。",
   "updater.payloadReadyVersion":
@@ -3947,6 +3961,9 @@ export const zhCN: Dict = {
   "updater.readyVersion":
     "Open Design {version} 已就绪。Open Design 会关闭并打开安装器。",
   "updater.upToDate": "您已经是最新版本啦",
+  "updater.viewVersionFeatures": "查看新版本特性",
+  "updater.manualDownload": "手动下载",
+  "updater.restartAnyway": "仍然重启",
 
   "whatsNew.cta": "看看有什么新功能",
   "whatsNew.dismissAria": "关闭更新亮点",

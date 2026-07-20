@@ -354,6 +354,8 @@ export const zhTW: Dict = {
   "settings.modeApiMeta": "BYOK",
   "settings.byokNoFileToolsNotice":
     "BYOK 無法讀取、寫入或編輯專案檔案。需要變更程式碼時，請使用 Local CLI。",
+  "settings.byokDraftNotice":
+    "必填項補齊前，此設定只會儲存為草稿；目前的執行設定將繼續維持生效。",
   "settings.codeAgent": "程式碼代理",
   "settings.codeAgentHint": "選擇用來執行提示詞的 CLI。",
   "settings.rescan": "↻ 重新掃描",
@@ -3921,6 +3923,9 @@ export const zhTW: Dict = {
   "notify.successBody": "一輪回答已經寫完。",
   "notify.failureBody": "本輪任務出錯，請查看錯誤訊息。",
   "updater.available": "有可用更新",
+  "updater.activeRunsTitle": "Open Design 仍在執行任務",
+  "updater.activeRunsBody": "仍有 {count} 個任務正在執行。現在重新啟動會中斷這些任務。",
+  "updater.activeRunsUnknownBody": "Open Design 無法確認是否仍有任務執行。現在重新啟動可能會中斷進行中的工作。",
   "updater.availableBody":
     "Open Design {version} 可用。下載完成後即可開啟安裝器。",
   "updater.checking": "正在檢查更新",
@@ -3935,10 +3940,19 @@ export const zhTW: Dict = {
   "updater.later": "稍後",
   "updater.allowSilentUpdates": "允許以後自動安裝應用內更新",
   "updater.openFailedFallback": "無法開啟安裝器。",
-  "updater.installRestart": "Install and restart",
+  "updater.installRestart": "安裝並重新啟動",
   "updater.installingRestart": "Installing and restarting...",
   "updater.openInstaller": "安裝更新",
   "updater.opening": "正在開啟安裝器…",
+  "updater.dialogAvailableGeneric": "發現新版本。\n下載後即可安裝。",
+  "updater.dialogAvailableVersion": "v{version} 可供更新。\n下載後即可安裝。",
+  "updater.dialogCheckFailed": "檢查更新失敗。\n請稍後再試。",
+  "updater.dialogReadyGeneric":
+    "新版本已準備就緒。\n更好的體驗、更智慧的設計，歡迎體驗新版本。",
+  "updater.dialogReadyVersion":
+    "v{version} 已準備就緒。\n更好的體驗、更智慧的設計，歡迎體驗新版本。",
+  "updater.dialogUnsupported":
+    "目前環境不支援應用程式內更新。\n可前往發布頁面手動下載。",
   "updater.payloadReadyGeneric":
     "A new Open Design update is ready. Open Design will close and restart automatically.",
   "updater.payloadReadyVersion":
@@ -3953,6 +3967,9 @@ export const zhTW: Dict = {
   "updater.readyVersion":
     "Open Design {version} 已就緒。Open Design 會關閉並開啟安裝器。",
   "updater.upToDate": "您已經是最新版本啦",
+  "updater.viewVersionFeatures": "查看新版本特色",
+  "updater.manualDownload": "手動下載",
+  "updater.restartAnyway": "仍然重新啟動",
 
   "whatsNew.cta": "看看有什麼新功能",
   "whatsNew.dismissAria": "關閉更新亮點",

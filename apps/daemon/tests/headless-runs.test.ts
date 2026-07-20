@@ -30,6 +30,67 @@ describe('POST /api/runs headless fallbacks', () => {
     else process.env.OD_AGENT_HOME = oldAgentHome;
   });
 
+  it('rejects incomplete BYOK OpenCode config before creating a run', async () => {
+    started = await startTestServer();
+    const incompleteConfigs = [
+      {
+        name: 'provider',
+        body: {
+          agentId: 'byok-opencode',
+          message: 'Headless BYOK prompt',
+          model: 'gpt-4o',
+        },
+      },
+      {
+        name: 'api key',
+        body: {
+          agentId: 'byok-opencode',
+          message: 'Headless BYOK prompt',
+          model: 'gpt-4o',
+          byokProvider: {
+            protocol: 'openai',
+            apiKey: '',
+            baseUrl: 'https://api.openai.com/v1',
+          },
+        },
+      },
+      {
+        name: 'model',
+        body: {
+          agentId: 'byok-opencode',
+          message: 'Headless BYOK prompt',
+          model: '',
+          byokProvider: {
+            protocol: 'openai',
+            apiKey: 'test-key',
+            baseUrl: 'https://api.openai.com/v1',
+          },
+        },
+      },
+    ];
+
+    for (const endpoint of ['/api/runs', '/api/chat']) {
+      for (const incomplete of incompleteConfigs) {
+        const runResponse = await fetch(`${started.url}${endpoint}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(incomplete.body),
+        });
+        expect(runResponse.status, `${endpoint}: ${incomplete.name}`).toBe(400);
+        await expect(runResponse.json()).resolves.toMatchObject({
+          error: {
+            code: 'VALIDATION_FAILED',
+            message: expect.stringContaining('provider, API key, and model'),
+          },
+        });
+      }
+    }
+
+    const runsResponse = await fetch(`${started.url}/api/runs`);
+    expect(runsResponse.status).toBe(200);
+    await expect(runsResponse.json()).resolves.toEqual({ runs: [] });
+  });
+
   it('binds omitted conversationId to the seeded project conversation', async () => {
     started = await startTestServer();
     const { projectId, conversationId: seededConversationId } = await createProject(

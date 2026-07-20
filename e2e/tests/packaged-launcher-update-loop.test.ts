@@ -74,7 +74,11 @@ type PackagedLauncherRuntime = {
 
 type PackagedLauncherRuntimeModule = {
   confirmPackagedLauncherRuntime: (runtime: PackagedLauncherRuntime) => Promise<void>;
-  resolvePackagedLauncherRuntime: (config: PackagedConfigLike, paths: PackagedPaths) => Promise<PackagedLauncherRuntime>;
+  resolvePackagedLauncherRuntime: (
+    config: PackagedConfigLike,
+    paths: PackagedPaths,
+    options?: { currentExecutablePath?: string },
+  ) => Promise<PackagedLauncherRuntime>;
 };
 
 type FixtureServer = {
@@ -85,6 +89,7 @@ type FixtureServer = {
 type PlatformCase = {
   arch: "arm64" | "x64";
   currentVersion: string;
+  expectedPayloadExecutablePath: (root: string, namespace: string) => string;
   expectedResourceRoot: (root: string, namespace: string) => string;
   fixturePlatformKey: "mac" | "win";
   namespace: "release-beta" | "release-beta-win";
@@ -272,6 +277,8 @@ const platformCases: PlatformCase[] = [
   {
     arch: "x64",
     currentVersion: "1.2.3-beta.4",
+    expectedPayloadExecutablePath: (root, namespace) =>
+      join(root, "launcher", "channels", "beta", "namespaces", namespace, "versions", "1.2.3-beta.5", "payload", "Open Design.exe"),
     expectedResourceRoot: (root, namespace) =>
       join(root, "launcher", "channels", "beta", "namespaces", namespace, "versions", "1.2.3-beta.5", "payload", "resources", "open-design"),
     fixturePlatformKey: "win",
@@ -285,6 +292,8 @@ const platformCases: PlatformCase[] = [
   {
     arch: "arm64",
     currentVersion: "1.2.3-beta.4",
+    expectedPayloadExecutablePath: (root, namespace) =>
+      join(root, "launcher", "channels", "beta", "namespaces", namespace, "versions", "1.2.3-beta.5", "payload", "Open Design Beta.app", "Contents", "MacOS", "Open Design Beta"),
     expectedResourceRoot: (root, namespace) =>
       join(root, "launcher", "channels", "beta", "namespaces", namespace, "versions", "1.2.3-beta.5", "payload", "Open Design Beta.app", "Contents", "Resources", "open-design"),
     fixturePlatformKey: "mac",
@@ -366,7 +375,7 @@ describe("packaged launcher payload update loop", () => {
       expect(launchRequests).toEqual([
         {
           appPid: process.pid,
-          launchPath: initialRuntime.installedLaunchPath,
+          launchPath: testCase.expectedPayloadExecutablePath(paths.installationRoot, config.namespace),
           root: await realpath(paths.updateRoot),
         },
       ]);
@@ -378,7 +387,9 @@ describe("packaged launcher payload update loop", () => {
       expect(runtimeAfterApply.active).toEqual({ generation: 1, version: testCase.promotedVersion });
       expect(runtimeAfterApply.lastSuccessful).toEqual({ generation: 0, version: testCase.currentVersion });
 
-      const promoted = await resolvePackagedLauncherRuntime(config, paths);
+      const promoted = await resolvePackagedLauncherRuntime(config, paths, {
+        currentExecutablePath: testCase.expectedPayloadExecutablePath(paths.installationRoot, config.namespace),
+      });
       expect(promoted.source).toBe("payload");
       expect(promoted.targetVersion).toBe(testCase.promotedVersion);
       expect(promoted.config.appVersion).toBe(testCase.promotedVersion);

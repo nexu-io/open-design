@@ -82,11 +82,13 @@ describe('update apply observations', () => {
     expect(normalizeUpdateObservationChannel('0.8.0', 'prerelease')).toBe('prerelease');
   });
 
-  it('submits one sanitized analytics event and marks delivery metadata', async () => {
+  it.each(['installer', 'payload'] as const)(
+    'submits one sanitized %s analytics event and marks delivery metadata',
+    async (artifactType) => {
     const dataRoot = await mkdtemp(path.join(tmpdir(), 'od-update-observe-'));
     const capture = vi.fn();
     try {
-      const summaryPath = await writeSummary(dataRoot, pendingSummary());
+      const summaryPath = await writeSummary(dataRoot, pendingSummary({ artifactType }));
 
       await expect(observePendingInstallerApplyAttempts({
         analytics: { capture },
@@ -110,7 +112,7 @@ describe('update apply observations', () => {
         insertId: 'update_apply_observed:flow-1',
         properties: {
           arch: 'x64',
-          artifact_type: 'installer',
+          artifact_type: artifactType,
           channel: 'beta',
           elapsed_bucket: 'lt_5m',
           flow_id: 'flow-1',

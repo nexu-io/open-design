@@ -230,10 +230,16 @@ export interface StudioOnboardingHintClickProps {
 }
 
 export interface UpdateIndicatorClickProps {
-  page_name: 'home';
-  area: 'update_indicator' | 'update_prompt';
-  element: 'ready_indicator' | 'later' | 'install_update';
-  action: 'open_prompt' | 'dismiss' | 'install';
+  page_name: 'home' | 'app';
+  area: 'update_indicator' | 'update_prompt' | 'mac_app_menu' | 'update_dialog';
+  element:
+    | 'ready_indicator'
+    | 'later'
+    | 'install_update'
+    | 'check_for_updates'
+    | 'view_release_notes'
+    | 'restart_anyway';
+  action: 'open_prompt' | 'dismiss' | 'install' | 'check' | 'open_link' | 'force_restart';
   app_version_before?: string;
   app_version_after?: string;
 }
@@ -907,7 +913,7 @@ export interface QuestionsFormClickProps {
   form_id?: string;
   question_id?: string;
   style_id?: string;
-  style_context?: 'deck' | 'prototype';
+  style_context?: 'deck' | 'prototype' | 'document' | 'image' | 'video';
   interaction_source?: 'inline' | 'gallery';
   category_id?: 'all' | 'business' | 'editorial' | 'creative' | 'minimal';
   step_index?: number;

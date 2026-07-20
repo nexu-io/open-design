@@ -879,6 +879,78 @@ describe('AssistantMessage question forms', () => {
     );
   });
 
+  it.each([
+    {
+      projectKind: 'web_clone' as const,
+      title: 'Quiet SaaS',
+      src: 'https://repo-assets.open-design.ai/style-catalog/v1/prototype-quiet-saas-v1.webp',
+    },
+    {
+      projectKind: 'wireframe' as const,
+      title: 'Quiet SaaS',
+      src: 'https://repo-assets.open-design.ai/style-catalog/v1/prototype-quiet-saas-v1.webp',
+    },
+    {
+      projectKind: 'live_artifact' as const,
+      title: 'Quiet SaaS',
+      src: 'https://repo-assets.open-design.ai/style-catalog/v1/prototype-quiet-saas-v1.webp',
+    },
+    {
+      projectKind: 'document' as const,
+      title: 'Docs reference',
+      src: 'https://repo-assets.open-design.ai/style-catalog/v1/document-docs-reference-v1.webp',
+    },
+    {
+      projectKind: 'image' as const,
+      title: 'Editorial photo',
+      src: 'https://repo-assets.open-design.ai/style-catalog/v1/image-photo-editorial-v1.webp',
+    },
+    {
+      projectKind: 'video' as const,
+      title: 'Swiss Pulse',
+      src: 'https://repo-assets.open-design.ai/style-catalog/v1/video-swiss-pulse-v1.webp',
+    },
+    {
+      projectKind: 'hyperframes' as const,
+      title: 'Swiss Pulse',
+      src: 'https://repo-assets.open-design.ai/style-catalog/v1/video-swiss-pulse-v1.webp',
+    },
+  ])('keeps selected $projectKind style previews in the answered summary', ({
+    projectKind,
+    title,
+    src,
+  }) => {
+    const form = [
+      '<question-form id="discovery" title="Quick brief">',
+      JSON.stringify({
+        questions: [
+          {
+            id: 'tone',
+            label: 'Visual tone',
+            type: 'checkbox',
+            options: [title],
+          },
+        ],
+      }),
+      '</question-form>',
+    ].join('\n');
+
+    render(
+      <AssistantMessage
+        message={baseMessage({
+          content: form,
+          events: [{ kind: 'text', text: form } as ChatMessage['events'][number]],
+        })}
+        streaming={false}
+        projectId="proj-1"
+        projectKind={projectKind}
+        nextUserContent={`[form answers for discovery]\n- Visual tone: ${title}`}
+      />,
+    );
+
+    expect(screen.getByRole('img', { name: `Visual tone: ${title}` })).toHaveAttribute('src', src);
+  });
+
   it('normalizes every selected legacy visual style to its preview card', () => {
     const form = [
       '<question-form id="discovery" title="Quick brief">',

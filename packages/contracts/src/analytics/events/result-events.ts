@@ -6,7 +6,7 @@ import type { TrackingRuntimeType } from '../public-params.js';
 import type { ReleaseChannel } from '@open-design/release';
 import type { TrackingDesignSystemEditSurface, TrackingDesignSystemKind, TrackingDesignSystemLengthBucket, TrackingDesignSystemOrigin, TrackingDesignSystemRunEntryFrom } from './design-systems.js';
 import type { TrackingSettingsPage } from './event-names.js';
-import type { TrackingArtifactKind, TrackingArtifactWriteSource, TrackingArtifactWriteStatus, TrackingByokProviderId, TrackingCliProviderId, TrackingDesignSystemSource, TrackingExportFormat, TrackingExportResult, TrackingFeedbackAction, TrackingFeedbackProviderId, TrackingFeedbackRating, TrackingFeedbackRatingWithNone, TrackingFeedbackReasonCode, TrackingFidelity, TrackingFileSizeBucket, TrackingFileType, TrackingFirstModelEventType, TrackingLangfuseDeliveryStatus, TrackingLangfuseDropReason, TrackingLangfuseReportResult, TrackingLangfuseReportSkipReason, TrackingProjectKind, TrackingProjectSource, TrackingResult, TrackingRunCloseReason, TrackingRunDiagnosticSource, TrackingRunFailureCategory, TrackingRunFailureDetail, TrackingRunFailureStage, TrackingRunFailureUserAction, TrackingRunLifecyclePhase, TrackingRunPhaseTimingStatus, TrackingRunResult, TrackingRunRetryFinalResult, TrackingRunRetryStrategy, TrackingRunRetrySuppressedReason, TrackingStderrLineCountBucket, TrackingTestResult, TrackingTokenCountSource } from './shared-enums.js';
+import type { TrackingArtifactKind, TrackingArtifactWriteSource, TrackingArtifactWriteStatus, TrackingByokPreflightBlockReason, TrackingByokProviderId, TrackingCliProviderId, TrackingDesignSystemSource, TrackingExecutionMode, TrackingExportFormat, TrackingExportResult, TrackingFeedbackAction, TrackingFeedbackProviderId, TrackingFeedbackRating, TrackingFeedbackRatingWithNone, TrackingFeedbackReasonCode, TrackingFidelity, TrackingFileSizeBucket, TrackingFileType, TrackingFirstModelEventType, TrackingLangfuseDeliveryStatus, TrackingLangfuseDropReason, TrackingLangfuseReportResult, TrackingLangfuseReportSkipReason, TrackingProjectKind, TrackingProjectSource, TrackingResult, TrackingRunCloseReason, TrackingRunDiagnosticSource, TrackingRunFailureCategory, TrackingRunFailureDetail, TrackingRunFailureStage, TrackingRunFailureUserAction, TrackingRunLifecyclePhase, TrackingRunPhaseTimingStatus, TrackingRunResult, TrackingRunRetryFinalResult, TrackingRunRetryStrategy, TrackingRunRetrySuppressedReason, TrackingStderrLineCountBucket, TrackingTestResult, TrackingTokenCountSource } from './shared-enums.js';
 import type { TrackingFileVersionSource, TrackingPluginImportSource, TrackingSessionMode, TrackingSettingsArea } from './ui-click.js';
 // ---- Result events -------------------------------------------------------
 
@@ -100,9 +100,18 @@ export interface PluginImportResultProps {
 }
 
 export interface UpdateInstallResultProps {
-  page_name: 'home';
-  area: 'update_prompt';
+  page_name: 'home' | 'app';
+  area: 'update_prompt' | 'update_dialog';
   result: TrackingResult;
+  app_version_before?: string;
+  app_version_after?: string;
+  error_code?: string;
+}
+
+export interface UpdateCheckResultProps {
+  page_name: 'app';
+  area: 'update_dialog';
+  result: 'available' | 'up_to_date' | 'failed';
   app_version_before?: string;
   app_version_after?: string;
   error_code?: string;
@@ -407,7 +416,7 @@ export interface UpdateApplyObservedProps {
   namespace: string;
   platform: string;
   arch: string;
-  artifact_type: 'dmg' | 'installer';
+  artifact_type: 'dmg' | 'installer' | 'payload';
   from_version: string;
   to_version: string;
   result: TrackingUpdateApplyResult;
@@ -702,6 +711,13 @@ export interface SettingsByokModelsFetchResultProps {
   field_missing?: 'api_key' | 'base_url' | 'model' | 'multiple' | 'none';
   model_count?: number;
   duration_ms: number;
+}
+
+export interface ByokPreflightBlockedProps {
+  source: 'settings' | 'run';
+  reason: TrackingByokPreflightBlockReason;
+  provider_id: TrackingByokProviderId | 'unknown';
+  active_execution_mode: TrackingExecutionMode;
 }
 
 export interface SettingsConnectorAuthResultProps {

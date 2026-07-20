@@ -23,6 +23,7 @@ export type AnalyticsEventName =
   | 'media_generation_result'
   // Packaged updater lifecycle
   | 'update_install_result'
+  | 'update_check_result'
   | 'update_apply_observed'
   // Packaged startup failure — emitted by the packaged MAIN process (not the
   // daemon) when daemon/web sidecars die before reporting status, i.e. the
@@ -51,6 +52,7 @@ export type AnalyticsEventName =
   | 'settings_cli_test_result'
   | 'settings_byok_test_result'
   | 'settings_byok_models_fetch_result'
+  | 'byok_preflight_blocked'
   | 'settings_connector_auth_result'
   // AMR (hosted model) account auth result.
   | 'amr_auth_result'

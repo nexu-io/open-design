@@ -10,6 +10,7 @@ type ScopeOutputs = {
   web_tests_required: boolean;
   tools_dev_tests_required: boolean;
   tools_pack_tests_required: boolean;
+  ui_critical_validation_required: boolean;
   ui_p0_validation_required: boolean;
   visual_validation_required: boolean;
   workspace_validation_required: boolean;
@@ -58,6 +59,7 @@ function createScopePlan(): ScopePlan {
     web_tests_required: false,
     tools_dev_tests_required: false,
     tools_pack_tests_required: false,
+    ui_critical_validation_required: false,
     ui_p0_validation_required: false,
     visual_validation_required: false,
     workspace_validation_required: false,
@@ -90,6 +92,7 @@ function createScopePlan(): ScopePlan {
     outputs.web_tests_required = true;
     outputs.tools_dev_tests_required = true;
     outputs.tools_pack_tests_required = true;
+    outputs.ui_critical_validation_required = true;
     outputs.ui_p0_validation_required = true;
     outputs.visual_validation_required = true;
     outputs.workspace_validation_required = true;
@@ -119,14 +122,15 @@ function createRunPlan(
   ciMode: CiMode,
 ): Omit<ScopePlan, keyof ScopeOutputs | "ui_p0_matrix" | "visual_matrix"> {
   const isFull = ciMode === "full";
+  const runUiP0 = isFull || outputs.ui_p0_validation_required;
 
   return {
     ci_mode: ciMode,
     run_e2e_vitest: isFull || outputs.web_tests_required || outputs.ui_p0_validation_required,
-    run_playwright_critical: isFull || (outputs.workspace_validation_required && !outputs.ui_p0_validation_required),
+    run_playwright_critical: outputs.ui_critical_validation_required && !runUiP0,
     run_playwright_visual: isFull || outputs.visual_validation_required,
     run_preflight: true,
-    run_ui_p0: isFull || outputs.ui_p0_validation_required,
+    run_ui_p0: runUiP0,
     run_web_workspace_tests: isFull || outputs.web_tests_required,
     run_windows_tools_pack_payload_tests: isFull || outputs.tools_pack_tests_required,
     run_workspace_unit_tests: true,
@@ -241,6 +245,15 @@ function applyChangedFile(file: string, target: ScopeOutputs): void {
 
   if (!isWorkspaceValidationExemptFile(file)) {
     target.workspace_validation_required = true;
+    // Fail-closed critical gate: Playwright starts `tools-dev web` (daemon +
+    // web runtimes) and never launches the desktop, packaged, or tools-pack
+    // entrypoints, so a change confined to those leaf roots cannot alter what
+    // the critical suite exercises. Every other non-exempt file — tools-dev,
+    // any transitive package (including undeclared edges like metatool),
+    // scripts, runtime resources, unknown roots — keeps the fallback armed.
+    if (!startsWithAny(file, ["apps/desktop/", "apps/packaged/", "tools/pack/"])) {
+      target.ui_critical_validation_required = true;
+    }
   }
 }
 

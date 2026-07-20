@@ -26,6 +26,7 @@ import { MarketplaceView } from './components/MarketplaceView';
 import { PluginDetailView } from './components/PluginDetailView';
 import type { CreateInput, ImportClaudeDesignOutcome } from './components/NewProjectPanel';
 import { MemoryToast } from './components/MemoryToast';
+import { UpdateDialog } from './components/UpdateDialog';
 import { Toast } from './components/Toast';
 import { CenteredLoader } from './components/Loading';
 import { PetOverlay, type PetTaskCenter } from './components/pet/PetOverlay';
@@ -2627,6 +2628,7 @@ function AppInner() {
         />
       )}
       <TooltipLayer />
+      <UpdateDialog />
       <AmrArtifactUpgradeGate
         homeVisible={route.kind === 'home' && route.view === 'home'}
         activeProjectId={route.kind === 'project' ? route.projectId : null}

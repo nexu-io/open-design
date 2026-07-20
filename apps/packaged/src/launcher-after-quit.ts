@@ -72,22 +72,22 @@ export async function waitForLauncherAfterQuit(
   paths: PackagedNamespacePaths,
   logger: LauncherAfterQuitLogger = console,
   controls: Partial<LauncherProcessControls> = {},
-): Promise<void> {
-  if (request == null) return;
+): Promise<boolean> {
+  if (request == null) return true;
   const waitForExit = controls.waitForExit ?? waitForProcessExit;
   const stop = controls.stopProcesses ?? stopProcesses;
   await writeLauncherAfterQuitLog(paths, `armed targetPid=${request.targetPid} timeoutMs=${request.timeoutMs}`);
   const exited = await waitForExit(request.targetPid, request.timeoutMs);
   if (exited) {
     await writeLauncherAfterQuitLog(paths, `observed-exit targetPid=${request.targetPid}`);
-    return;
+    return true;
   }
   // The old process outlived its quit grace and still holds the fixed socket.
   // Force it off so the relaunched app binds cleanly instead of skewing.
   const message = `timed-out targetPid=${request.targetPid}; forcing stop`;
   await writeLauncherAfterQuitLog(paths, message);
   logger.warn(`[open-design launcher] ${message}`);
-  await forceStopLingeringDesktop(request.targetPid, "after-quit-timeout", paths, logger, stop);
+  return await forceStopLingeringDesktop(request.targetPid, "after-quit-timeout", paths, logger, stop);
 }
 
 export async function inspectExistingDesktopForLauncher(

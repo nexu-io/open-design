@@ -276,7 +276,13 @@ async function findManagedDesktopProcessTree(config: ToolPackConfig): Promise<nu
   const processes = await listProcessSnapshots();
   const stampedRootPids = processes
     .filter((processInfo) =>
-      matchesStampedProcess(processInfo, { mode: SIDECAR_MODES.RUNTIME, namespace: config.namespace, source: SIDECAR_SOURCES.TOOLS_PACK }, OPEN_DESIGN_SIDECAR_CONTRACT),
+      [SIDECAR_SOURCES.TOOLS_PACK, SIDECAR_SOURCES.PACKAGED].some((source) =>
+        matchesStampedProcess(
+          processInfo,
+          { mode: SIDECAR_MODES.RUNTIME, namespace: config.namespace, source },
+          OPEN_DESIGN_SIDECAR_CONTRACT,
+        )
+      ),
     )
     .map((processInfo) => processInfo.pid);
   return collectProcessTreePids(processes, stampedRootPids);

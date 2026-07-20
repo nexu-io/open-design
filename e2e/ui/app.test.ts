@@ -34,6 +34,12 @@ const CRITICAL_SCENARIO_IDS = new Set([
   'file-upload-send',
   'conversation-delete-recovery',
 ]);
+const MERGE_EXTRA_SCENARIO_IDS = new Set([
+  'prototype-basic',
+  'deck-basic',
+  'file-mention',
+  'deep-link-preview',
+]);
 test.describe.configure({ timeout: 45_000 });
 
 function artifactPreview(page: Page) {
@@ -94,7 +100,7 @@ test.beforeEach(async ({ page }) => {
 for (const entry of automatedUiScenarios().filter(
   (scenario) => !APP_OWNED_SCENARIO_FLOWS.has(scenario.flow ?? ''),
 )) {
-  test(`[${scenarioPriority(entry)}]${criticalScenarioTag(entry)} ${entry.id}: ${entry.title}`, async ({ page }) => {
+  test(`[${scenarioPriority(entry)}]${criticalScenarioTag(entry)}${mergeExtraScenarioTag(entry)} ${entry.id}: ${entry.title}`, async ({ page }) => {
     await routeMockAgents(page);
 
     if (entry.flow === 'example-use-prompt') {
@@ -610,6 +616,10 @@ function criticalScenarioTag(entry: UiScenario): string {
   return CRITICAL_SCENARIO_IDS.has(entry.id) ? ' @critical' : '';
 }
 
+function mergeExtraScenarioTag(entry: UiScenario): string {
+  return MERGE_EXTRA_SCENARIO_IDS.has(entry.id) ? ' @merge-extra' : '';
+}
+
 async function routeMockSuccessfulRun(page: Page, runId: string) {
   await page.route('**/api/runs', async (route) => {
     await route.fulfill({
@@ -1032,6 +1042,8 @@ async function runQuestionFormSubmitPersistenceFlow(
   const firstRunBody = (await firstRunRequestPromise).postDataJSON() as Record<string, unknown>;
   expectScenarioRunRequest(firstRunBody, entry);
 
+  // Studio discovery renders the clarification form inline in the chat flow
+  // (the legacy Questions workspace tab is gone), so locate the form directly.
   const form = page.locator('.question-form').first();
   await expect(form).toBeVisible();
 
@@ -1046,7 +1058,9 @@ async function runQuestionFormSubmitPersistenceFlow(
   await expect(summary).toBeVisible();
   await expect(summary.getByText('Questions answered')).toBeVisible();
   await expect(summary.getByText('Visual tone')).toBeVisible();
-  await expect(summary.getByText('Modern minimal')).toBeVisible();
+  // The summary echoes the picked visual-style card (its title), not the
+  // underlying option label.
+  await expect(summary.getByText('Quiet SaaS')).toBeVisible();
 
   const { projectId, conversationId } = await getCurrentProjectContext(page);
   const messagesResponse = await page.request.get(
@@ -1056,13 +1070,17 @@ async function runQuestionFormSubmitPersistenceFlow(
   const { messages } = (await messagesResponse.json()) as { messages: Array<{ role: string; content: string }> };
   const formAnswerMessage = messages.find((message) => message.role === 'user' && message.content.includes('[form answers — discovery]'));
   expect(formAnswerMessage).toBeTruthy();
+  // Inline discovery submits the picked visual-style card and its value id,
+  // not the raw option labels.
+  expect(formAnswerMessage?.content).toContain('Visual tone: Quiet SaaS');
+  expect(formAnswerMessage?.content).toContain('[value: prototype-quiet-saas]');
 
   await page.reload();
   await expectWorkspaceReady(page);
   const restoredSummary = page.getByTestId('question-form-summary');
   await expect(restoredSummary).toBeVisible();
   await expect(restoredSummary.getByText('Visual tone')).toBeVisible();
-  await expect(restoredSummary.getByText('Modern minimal')).toBeVisible();
+  await expect(restoredSummary.getByText('Quiet SaaS')).toBeVisible();
   await expect(page.locator('.question-form')).toHaveCount(0);
 }
 

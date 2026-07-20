@@ -3131,7 +3131,18 @@ function visualStyleContextForProjectKind(
   projectKind: TrackingProjectKind | null,
 ): VisualStyleContext | undefined {
   if (projectKind === "slide_deck") return "deck";
-  if (projectKind === "prototype" || projectKind === "mobile") return "prototype";
+  if (
+    projectKind === "prototype" ||
+    projectKind === "web_clone" ||
+    projectKind === "wireframe" ||
+    projectKind === "mobile" ||
+    projectKind === "live_artifact"
+  ) {
+    return "prototype";
+  }
+  if (projectKind === "document") return "document";
+  if (projectKind === "image") return "image";
+  if (projectKind === "video" || projectKind === "hyperframes") return "video";
   return undefined;
 }
 
