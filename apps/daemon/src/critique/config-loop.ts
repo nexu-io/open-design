@@ -6,7 +6,7 @@
  * 需合并到 apps/daemon/src/critique/config.ts
  */
 
-import type { CritiqueLoopConfig, LoopStrategy } from './loop-types.js';
+import type { CritiqueLoopConfig, FeedbackAggregation, LoopStrategy } from './loop-types.js';
 import { LOOP_STRATEGIES, defaultCritiqueLoopConfig } from './loop-types.js';
 
 export function loadLoopConfigFromEnv(env: NodeJS.ProcessEnv = process.env): CritiqueLoopConfig {
@@ -56,9 +56,9 @@ function parseNonNegInt(key: string, raw: string | undefined, fallback: number):
   return n;
 }
 
-function parseAggregation(raw: string | undefined, fallback: 'cumulative' | 'last_round'): 'cumulative' | 'last_round' {
+function parseAggregation(raw: string | undefined, fallback: FeedbackAggregation): FeedbackAggregation {
   if (!raw) return fallback;
   const v = raw.trim().toLowerCase();
-  if (v === 'cumulative' || v === 'last_round') return v;
-  throw new RangeError(`OD_CRITIQUE_LOOP_FEEDBACK_AGGREGATION: expected "cumulative"|"last_round", got "${v}"`);
+  if (v === 'cumulative' || v === 'last_round' || v === 'none') return v;
+  throw new RangeError(`OD_CRITIQUE_LOOP_FEEDBACK_AGGREGATION: expected "cumulative"|"last_round"|"none", got "${v}"`);
 }

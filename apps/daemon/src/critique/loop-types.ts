@@ -9,13 +9,15 @@
 export const LOOP_STRATEGIES = ['converge', 'score_only', 'mustFix_only'] as const;
 export type LoopStrategy = (typeof LOOP_STRATEGIES)[number];
 
+export type FeedbackAggregation = 'cumulative' | 'last_round' | 'none';
+
 export interface CritiqueLoopConfig {
   enabled: boolean;
   maxIterations: number;
   loopStrategy: LoopStrategy;
   fixTimeoutMs: number;
   loopTotalTimeoutMs: number;
-  feedbackAggregation: 'cumulative' | 'last_round';
+  feedbackAggregation: FeedbackAggregation;
 }
 
 export function defaultCritiqueLoopConfig(): CritiqueLoopConfig {
@@ -27,6 +29,19 @@ export function defaultCritiqueLoopConfig(): CritiqueLoopConfig {
     loopTotalTimeoutMs: 1_800_000,
     feedbackAggregation: 'cumulative',
   };
+}
+
+// ============================================================================
+// 结构化反馈
+// ============================================================================
+
+export interface CritiqueFeedback {
+  /** 必须修复的具体问题清单 */
+  mustFixItems: string[];
+  /** 质量改进建议（非阻塞） */
+  dimNotes: string[];
+  /** 本轮整体状态 */
+  overallStatus: 'shipped' | 'below_threshold' | 'failed' | 'interrupted';
 }
 
 // ============================================================================

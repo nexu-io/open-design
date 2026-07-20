@@ -14,16 +14,14 @@
 import type { ChildProcess } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import type Database from 'better-sqlite3';
-import type { CritiqueConfig, PanelEvent, CritiqueRunStatus, CritiqueRoundSummary, CritiqueSseEvent } from '@open-design/contracts/critique';
-import { panelEventToSse } from '@open-design/contracts/critique';
-import type { CritiqueLoopConfig, LoopEvent } from './loop-types.js';
+import type { CritiqueConfig, CritiqueRoundSummary } from '@open-design/contracts/critique';
+import type { CritiqueLoopConfig, CritiqueFeedback } from './loop-types.js';
 import { loopEventToSse } from './loop-types.js';
 import type { CritiqueSseBus } from './orchestrator.js';
-import { runOrchestrator, type OrchestratorParams, type OrchestratorResult } from './orchestrator.js';
+import { runOrchestrator, type OrchestratorResult } from './orchestrator.js';
 import { extractFeedbackFromEvents } from './loop-feedback.js';
-import { generateLoopRunId, createEmptyStdout } from './loop-utils.js';
+import { generateLoopRunId } from './loop-utils.js';
 import {
-  critiqueLoopIterationsTotal,
   critiqueLoopConvergedTotal,
   critiqueLoopExhaustedTotal,
 } from './metrics-loop.js';
@@ -35,7 +33,7 @@ import { logCritique } from '../logging/critique.js';
 
 /** 修复函数签名：接收反馈，返回修复后的产物 */
 export type FixFunction = (
-  feedback: ReturnType<typeof extractFeedbackFromEvents>,
+  feedback: CritiqueFeedback,
   iteration: number,
 ) => Promise<{ artifactContent: string; artifactMime: string }>;
 
@@ -53,7 +51,7 @@ export interface LoopEngineParams {
   conversationId?: string | null;
   signal?: AbortSignal;
   /** 为每次迭代提供新的 stdout 流（由 spawn handler 注入） */
-  createStdout: (iteration: number, feedback: ReturnType<typeof extractFeedbackFromEvents> | null) => AsyncIterable<string>;
+  createStdout: (iteration: number, feedback: CritiqueFeedback | null) => AsyncIterable<string>;
   createChild?: (iteration: number) => Pick<ChildProcess, 'kill'>;
   createChildExitPromise?: (iteration: number) => Promise<{ code: number | null; signal: string | null }>;
 }
@@ -76,23 +74,120 @@ export interface LoopEngineResult {
 }
 
 // ============================================================================
-// 裁决函数
+// 裁决函数 —— 强制按 loopStrategy 分支决策
 // ============================================================================
 
-function hasConverged(result: OrchestratorResult, cfg: CritiqueConfig): boolean {
-  if (result.status !== 'shipped') return false;
-  if (result.composite === null) return false;
-  return result.composite >= cfg.scoreThreshold - 1e-9;
+/**
+ * 总 mustFix 计数（汇总所有轮次）。
+ * 反馈在重试路径上不能丢弃 — 累积所有轮的可操作 mustFix。
+ */
+function totalMustFix(rounds: CritiqueRoundSummary[]): number {
+  let sum = 0;
+  for (const r of rounds) sum += r.mustFix ?? 0;
+  return sum;
 }
 
-function shouldRetry(result: OrchestratorResult, rounds: CritiqueRoundSummary[]): boolean {
-  if (result.status === 'interrupted' || result.status === 'failed' || result.status === 'degraded') return false;
-  if (result.status === 'below_threshold') return true;
-  if (result.status === 'shipped' && rounds.length > 0) {
-    const lastRound = rounds[rounds.length - 1];
-    if (lastRound.mustFix > 0) return true;
+/**
+ * 按 loopStrategy 判定收敛。
+ *
+ * - converge:    分数达标 AND 零 mustFix（必须两者都满足）
+ * - score_only:  只要分数达标（即使还有 mustFix 也通过）
+ * - mustFix_only: 只要零 mustFix（不关心分数）
+ */
+function hasConverged(
+  result: OrchestratorResult,
+  cfg: CritiqueConfig,
+  strategy: CritiqueLoopConfig['loopStrategy'],
+): boolean {
+  if (result.status !== 'shipped') return false;
+  const composite = result.composite;
+  if (composite === null) return false;
+
+  const scoreOk = composite >= cfg.scoreThreshold - 1e-9;
+  const mustFixOk = totalMustFix(result.rounds) === 0;
+
+  switch (strategy) {
+    case 'converge':
+      return scoreOk && mustFixOk;
+    case 'score_only':
+      return scoreOk;
+    case 'mustFix_only':
+      return mustFixOk;
+    default:
+      return scoreOk && mustFixOk;
   }
-  return false;
+}
+
+/**
+ * 按 loopStrategy 判定是否应重试。
+ *
+ * - converge:     分数不达标 OR (shipped 但仍有 mustFix)
+ * - score_only:   分数不达标
+ * - mustFix_only: shipped 但仍有 mustFix
+ */
+function shouldRetry(
+  result: OrchestratorResult,
+  rounds: CritiqueRoundSummary[],
+  strategy: CritiqueLoopConfig['loopStrategy'],
+): boolean {
+  // 不可恢复的终止状态
+  if (result.status === 'interrupted' || result.status === 'failed' || result.status === 'degraded') {
+    return false;
+  }
+
+  const mustFix = totalMustFix(rounds);
+
+  switch (strategy) {
+    case 'converge':
+      return result.status === 'below_threshold' || (result.status === 'shipped' && mustFix > 0);
+    case 'score_only':
+      return result.status === 'below_threshold';
+    case 'mustFix_only':
+      return result.status === 'shipped' && mustFix > 0;
+    default:
+      return result.status === 'below_threshold' || (result.status === 'shipped' && mustFix > 0);
+  }
+}
+
+// ============================================================================
+// 反馈累积
+// ============================================================================
+
+/**
+ * 按 feedbackAggregation 策略合并新旧反馈。
+ *
+ * - cumulative:  累积所有轮的可操作 mustFixItems（去重）和 dimNotes，
+ *                 确保 retry 路径不丢弃 jury 的任何反馈。
+ * - last_round:  只保留最新一轮的反馈（旧反馈被覆盖）。
+ * - none:        不累积反馈（不会触发修复）。
+ */
+function mergeFeedback(
+  prev: CritiqueFeedback | null,
+  next: CritiqueFeedback | null,
+  aggregation: CritiqueLoopConfig['feedbackAggregation'],
+): CritiqueFeedback | null {
+  if (aggregation === 'none') return null;
+  if (next === null) return prev;
+  if (prev === null) return next;
+  if (aggregation === 'last_round') return next;
+
+  // cumulative: merge mustFixItems and dimNotes, keeping insertion order
+  const seen = new Set(prev.mustFixItems);
+  const mergedMustFix = [
+    ...prev.mustFixItems,
+    ...next.mustFixItems.filter((item) => !seen.has(item)),
+  ];
+  const seenDim = new Set(prev.dimNotes);
+  const mergedDim = [
+    ...prev.dimNotes,
+    ...next.dimNotes.filter((n) => !seenDim.has(n)),
+  ];
+
+  return {
+    mustFixItems: mergedMustFix,
+    dimNotes: mergedDim,
+    overallStatus: next.overallStatus ?? prev.overallStatus,
+  };
 }
 
 // ============================================================================
@@ -111,11 +206,13 @@ export async function startCritiqueLoop(params: LoopEngineParams): Promise<LoopE
     throw new RangeError(`startCritiqueLoop: maxIterations must be >= 1, got ${loopCfg.maxIterations}`);
   }
 
+  const strategy = loopCfg.loopStrategy;
+  const aggregation = loopCfg.feedbackAggregation;
   const startTime = Date.now();
   const iterations: LoopIterationResult[] = [];
-  let accumulatedFeedback: ReturnType<typeof extractFeedbackFromEvents> | null = null;
+  let accumulatedFeedback: CritiqueFeedback | null = null;
 
-  logCritique({ event: 'loop_started', projectId, adapter, maxIterations: loopCfg.maxIterations, strategy: loopCfg.loopStrategy });
+  logCritique({ event: 'loop_started', projectId, adapter, maxIterations: loopCfg.maxIterations, strategy, aggregation });
 
   bus.emit(loopEventToSse({ type: 'loop_started', projectId, maxIterations: loopCfg.maxIterations }));
 
@@ -134,7 +231,7 @@ export async function startCritiqueLoop(params: LoopEngineParams): Promise<LoopE
     }));
 
     // --- 触发修复 ---
-    if (accumulatedFeedback !== null) {
+    if (accumulatedFeedback !== null && aggregation !== 'none') {
       const fixStart = Date.now();
       try {
         logCritique({ event: 'loop_fix_triggered', projectId, iteration, mustFixCount: accumulatedFeedback.mustFixItems.length });
@@ -173,7 +270,7 @@ export async function startCritiqueLoop(params: LoopEngineParams): Promise<LoopE
         childExitPromise: createChildExitPromise?.(iteration),
       });
 
-      const converged = hasConverged(orchestratorResult, critiqueCfg);
+      const converged = hasConverged(orchestratorResult, critiqueCfg, strategy);
       iterations.push({ iteration, orchestratorResult, converged });
 
       bus.emit(loopEventToSse({
@@ -194,8 +291,9 @@ export async function startCritiqueLoop(params: LoopEngineParams): Promise<LoopE
         return buildResult('converged', iterations, orchestratorResult.artifactPath, startTime);
       }
 
-      if (shouldRetry(orchestratorResult, orchestratorResult.rounds)) {
-        accumulatedFeedback = extractFeedbackFromEvents([], orchestratorResult.rounds, orchestratorResult.status);
+      if (shouldRetry(orchestratorResult, orchestratorResult.rounds, strategy)) {
+        const currentFeedback = extractFeedbackFromEvents([], orchestratorResult.rounds, orchestratorResult.status);
+        accumulatedFeedback = mergeFeedback(accumulatedFeedback, currentFeedback, aggregation);
         continue;
       }
 
