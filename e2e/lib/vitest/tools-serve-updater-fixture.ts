@@ -7,6 +7,9 @@ import type { ReleaseChannel } from '@open-design/release';
 export type ToolsServeUpdaterFixture = {
   close: () => Promise<void>;
   info: {
+    artifactPath: string | null;
+    artifactSha256: string;
+    artifactUrl: string;
     metadataUrl: string;
     payloadPath: string | null;
     payloadSha256: string | null;
@@ -16,8 +19,9 @@ export type ToolsServeUpdaterFixture = {
 };
 
 export async function startToolsServeUpdaterFixture(options: {
+  artifactPath?: string;
   channel: ReleaseChannel;
-  payloadPath: string;
+  payloadPath?: string;
   platform: 'mac' | 'win';
   version: string;
   workspaceRoot: string;
@@ -35,10 +39,9 @@ export async function startToolsServeUpdaterFixture(options: {
     options.version,
     '--platform',
     options.platform,
-    '--include-payload',
-    '--payload-path',
-    options.payloadPath,
   ];
+  if (options.artifactPath != null) pnpmArgs.push('--artifact-path', options.artifactPath);
+  if (options.payloadPath != null) pnpmArgs.push('--include-payload', '--payload-path', options.payloadPath);
   const command = process.platform === 'win32' ? (process.env.ComSpec ?? 'cmd.exe') : 'pnpm';
   const args = process.platform === 'win32' ? ['/d', '/s', '/c', 'pnpm.cmd', ...pnpmArgs] : pnpmArgs;
   const child = spawn(command, args, {
@@ -127,14 +130,23 @@ async function readStartupInfo(
 }
 
 function parseInfo(line: string): ToolsServeUpdaterFixture['info'] {
-  const parsed = JSON.parse(line) as Partial<ToolsServeUpdaterFixture['info']>;
+  const parsed = JSON.parse(line) as Partial<ToolsServeUpdaterFixture['info']> & { sha256?: unknown };
   if (typeof parsed.metadataUrl !== 'string' || parsed.metadataUrl.length === 0) {
     throw new Error(`tools-serve updater fixture did not print metadataUrl: ${line}`);
   }
   if (typeof parsed.version !== 'string' || parsed.version.length === 0) {
     throw new Error(`tools-serve updater fixture did not print version: ${line}`);
   }
+  if (typeof parsed.sha256 !== 'string' || parsed.sha256.length === 0) {
+    throw new Error(`tools-serve updater fixture did not print artifact sha256: ${line}`);
+  }
+  if (typeof parsed.artifactUrl !== 'string' || parsed.artifactUrl.length === 0) {
+    throw new Error(`tools-serve updater fixture did not print artifactUrl: ${line}`);
+  }
   return {
+    artifactPath: typeof parsed.artifactPath === 'string' ? parsed.artifactPath : null,
+    artifactSha256: parsed.sha256,
+    artifactUrl: parsed.artifactUrl,
     metadataUrl: parsed.metadataUrl,
     payloadPath: typeof parsed.payloadPath === 'string' ? parsed.payloadPath : null,
     payloadSha256: typeof parsed.payloadSha256 === 'string' ? parsed.payloadSha256 : null,

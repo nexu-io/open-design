@@ -357,6 +357,7 @@ export const fa: Dict = {
   'settings.modeApi': 'ارائه‌دهنده API',
   'settings.modeApiMeta': 'BYOK',
   'settings.byokNoFileToolsNotice': 'BYOK نمی‌تواند فایل‌های پروژه را بخواند، بنویسد یا ویرایش کند. وقتی به تغییرات کد نیاز دارید از Local CLI استفاده کنید.',
+  'settings.byokDraftNotice': 'این پیکربندی تا تکمیل فیلدهای الزامی به‌صورت پیش‌نویس می‌ماند. پیکربندی اجرای فعلی فعال باقی می‌ماند.',
   'settings.codeAgent': 'عامل کد',
   'settings.codeAgentHint': 'با اسکن PATH شما شناسایی شده. CLI مورد نظر برای جریان تولیدات را انتخاب کنید.',
   'settings.rescan': '↻ اسکن مجدد',

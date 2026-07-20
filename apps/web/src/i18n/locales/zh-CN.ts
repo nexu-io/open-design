@@ -354,6 +354,8 @@ export const zhCN: Dict = {
   "settings.modeApiMeta": "BYOK",
   "settings.byokNoFileToolsNotice":
     "BYOK 无法读写或修改项目文件；需要改代码时请使用本机 CLI。",
+  "settings.byokDraftNotice":
+    "必填项补全前，此配置只会保存为草稿；当前执行配置将继续保持生效。",
   "settings.codeAgent": "代码代理",
   "settings.codeAgentHint": "选择用来运行提示词的 CLI。",
   "settings.rescan": "↻ 重新扫描",

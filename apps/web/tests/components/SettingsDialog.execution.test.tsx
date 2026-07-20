@@ -671,9 +671,17 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     await waitForPersist(
       first.onPersist,
       expect.objectContaining({
-        apiProviderBaseUrl: 'https://api.deepseek.com',
-        baseUrl: 'https://api.deepseek.com',
+        apiProviderBaseUrl: 'https://api.openai.com/v1',
+        baseUrl: 'https://api.openai.com/v1',
+        byokPendingProviderKey: 'openai:https://api.deepseek.com',
         byokProviderConfigDrafts: expect.objectContaining({
+          'openai:https://api.deepseek.com': expect.objectContaining({
+            apiConfig: expect.objectContaining({
+              apiKey: '',
+              baseUrl: 'https://api.deepseek.com',
+              model: 'deepseek-v4-flash',
+            }),
+          }),
           'openai:https://api.openai.com/v1': expect.objectContaining({
             apiConfig: expect.objectContaining({
               apiKey: 'sk-openai-provider',
@@ -733,7 +741,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
   });
 
   it('only persists Max tokens overrides within the supported BYOK range', async () => {
-    const { onPersist } = renderSettingsDialog({ apiKey: 'sk-test' });
+    const { onPersist } = renderSettingsDialog({ apiKey: 'sk-ant-test' });
 
     const maxTokensInput = screen.getByRole('spinbutton', { name: /Max tokens/ }) as HTMLInputElement;
     expect(maxTokensInput.min).toBe(String(MIN_MAX_TOKENS));
@@ -1002,11 +1010,143 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     );
   });
 
+  it('keeps a first-time incomplete BYOK setup as a draft until it is complete', async () => {
+    const first = renderSettingsDialog({
+      mode: 'daemon',
+      agentId: 'codex',
+      apiKey: '',
+      apiProtocol: 'anthropic',
+      baseUrl: 'https://api.anthropic.com',
+      model: 'claude-sonnet-4-5',
+      apiProviderBaseUrl: 'https://api.anthropic.com',
+    });
+
+    fireEvent.click(screen.getByRole('tab', { name: /BYOK.*API provider/i }));
+    fireEvent.change(screen.getByLabelText('API key'), {
+      target: { value: 'unfinished-key' },
+    });
+
+    expect(screen.getByTestId('settings-byok-draft-notice').textContent).toBe(
+      'This setup remains a draft until the required fields are complete. Your current execution setup stays active.',
+    );
+
+    await waitFor(() => expect(first.onPersist).toHaveBeenCalled());
+    expect(first.onPersist.mock.calls.at(-1)?.[0]).toMatchObject({
+      mode: 'daemon',
+      agentId: 'codex',
+      byokPendingProviderKey: 'anthropic:https://api.anthropic.com',
+      byokProviderConfigDrafts: {
+        'anthropic:https://api.anthropic.com': {
+          apiConfig: {
+            apiKey: 'unfinished-key',
+            baseUrl: 'https://api.anthropic.com',
+            model: 'claude-sonnet-4-5',
+          },
+        },
+      },
+    });
+    expect(analyticsTrackMock).toHaveBeenCalledWith(
+      'byok_preflight_blocked',
+      {
+        source: 'settings',
+        reason: 'api_key_invalid',
+        provider_id: 'anthropic',
+        active_execution_mode: 'local_cli',
+      },
+      undefined,
+    );
+
+    const persistedDraft = first.onPersist.mock.calls.at(-1)?.[0] as AppConfig;
+    first.unmount();
+
+    const reopened = renderSettingsDialog(persistedDraft);
+    fireEvent.click(screen.getByRole('tab', { name: /BYOK.*API provider/i }));
+    expect((screen.getByLabelText('API key') as HTMLInputElement).value).toBe(
+      'unfinished-key',
+    );
+
+    reopened.onPersist.mockClear();
+    fireEvent.change(screen.getByLabelText('API key'), {
+      target: { value: 'sk-ant-complete' },
+    });
+
+    await waitFor(() =>
+      expect(reopened.onPersist).toHaveBeenCalledWith(
+        expect.objectContaining({
+          mode: 'api',
+          apiKey: 'sk-ant-complete',
+          baseUrl: 'https://api.anthropic.com',
+          model: 'claude-sonnet-4-5',
+        }),
+        expect.any(Object),
+      ),
+    );
+  });
+
+  it('keeps the last valid BYOK config active while an edited replacement is incomplete', async () => {
+    const { onPersist } = renderSettingsDialog({
+      mode: 'api',
+      apiKey: 'sk-ant-active',
+      apiProtocol: 'anthropic',
+      baseUrl: 'https://api.anthropic.com',
+      model: 'claude-sonnet-4-5',
+      apiProviderBaseUrl: 'https://api.anthropic.com',
+    });
+
+    fireEvent.change(screen.getByLabelText('API key'), {
+      target: { value: '' },
+    });
+
+    await waitFor(() => expect(onPersist).toHaveBeenCalled());
+    expect(onPersist.mock.calls.at(-1)?.[0]).toMatchObject({
+      mode: 'api',
+      apiKey: 'sk-ant-active',
+      baseUrl: 'https://api.anthropic.com',
+      model: 'claude-sonnet-4-5',
+      byokProviderConfigDrafts: {
+        'anthropic:https://api.anthropic.com': {
+          apiConfig: {
+            apiKey: '',
+            baseUrl: 'https://api.anthropic.com',
+            model: 'claude-sonnet-4-5',
+          },
+        },
+      },
+    });
+  });
+
+  it('persists a cleared API key after the active provider field is committed', async () => {
+    const { onPersist } = renderSettingsDialog({
+      mode: 'api',
+      apiKey: 'sk-ant-active',
+      apiProtocol: 'anthropic',
+      baseUrl: 'https://api.anthropic.com',
+      model: 'claude-sonnet-4-5',
+      apiProviderBaseUrl: 'https://api.anthropic.com',
+    });
+    const apiKeyInput = screen.getByLabelText('API key');
+
+    fireEvent.change(apiKeyInput, { target: { value: '' } });
+    fireEvent.blur(apiKeyInput);
+
+    await waitFor(() =>
+      expect(onPersist).toHaveBeenCalledWith(
+        expect.objectContaining({
+          mode: 'api',
+          apiKey: '',
+          baseUrl: 'https://api.anthropic.com',
+          model: 'claude-sonnet-4-5',
+        }),
+        expect.any(Object),
+      ),
+    );
+  });
+
   it('surfaces autosave progress, success, and failure states in the modal chrome', async () => {
     const first = renderSettingsDialog();
 
     fireEvent.change(screen.getByLabelText('API key'), {
-      target: { value: 'sk-saved' },
+      target: { value: 'sk-ant-saved' },
     });
 
     await waitFor(() => {
@@ -1016,7 +1156,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
       expect(screen.getByText('All changes saved')).toBeTruthy();
     });
     expect(first.onPersist).toHaveBeenCalledWith(
-      expect.objectContaining({ apiKey: 'sk-saved' }),
+      expect.objectContaining({ apiKey: 'sk-ant-saved' }),
       expect.any(Object),
     );
 
@@ -1026,7 +1166,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     second.onPersist.mockRejectedValueOnce(new Error('daemon offline'));
 
     fireEvent.change(screen.getByLabelText('API key'), {
-      target: { value: 'sk-error' },
+      target: { value: 'sk-ant-error' },
     });
 
     await waitFor(() => {
@@ -1356,7 +1496,15 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
       onPersist,
       expect.objectContaining({
         apiProtocol: 'openai',
-        model: '',
+        model: 'gpt-4o',
+        byokPendingProviderKey: 'openai:https://api.openai.com/v1',
+        byokProviderConfigDrafts: expect.objectContaining({
+          'openai:https://api.openai.com/v1': expect.objectContaining({
+            apiConfig: expect.objectContaining({
+              model: '',
+            }),
+          }),
+        }),
       }),
       {},
     );

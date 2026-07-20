@@ -357,6 +357,7 @@ export const uk: Dict = {
   'settings.modeApi': 'API-провайдер',
   'settings.modeApiMeta': 'BYOK',
   'settings.byokNoFileToolsNotice': 'BYOK не може читати, записувати чи редагувати файли проєкту. Використовуйте Local CLI, коли потрібні зміни в коді.',
+  'settings.byokDraftNotice': 'Ця конфігурація залишатиметься чернеткою, доки не буде заповнено обов’язкові поля. Поточна конфігурація виконання залишатиметься активною.',
   'settings.codeAgent': 'Кодовий агент',
   'settings.codeAgentHint': 'Виявляється за допомогою сканування вашого PATH. Виберіть CLI, через який мають проходити генерації.',
   'settings.rescan': '↻ Переканувати',

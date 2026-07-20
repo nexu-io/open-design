@@ -357,6 +357,7 @@ export const hu: Dict = {
   'settings.modeApi': 'API-szolgáltató',
   'settings.modeApiMeta': 'BYOK',
   'settings.byokNoFileToolsNotice': 'A BYOK nem tud projektfájlokat olvasni, írni vagy szerkeszteni. Ha kódmódosításra van szüksége, használja a Local CLI-t.',
+  'settings.byokDraftNotice': 'Ez a beállítás piszkozat marad, amíg az összes kötelező mezőt ki nem tölti. A jelenlegi végrehajtási beállítás aktív marad.',
   'settings.codeAgent': 'Kód Agent',
   'settings.codeAgentHint': 'A PATH átvizsgálásával észlelve. Válaszd ki a CLI-t, amelyen át a generálásokat szeretnéd futtatni.',
   'settings.rescan': '↻ Újraellenőrzés',

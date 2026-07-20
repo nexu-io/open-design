@@ -357,6 +357,7 @@ export const fr: Dict = {
   'settings.modeApi': 'Fournisseur API',
   'settings.modeApiMeta': 'BYOK',
   'settings.byokNoFileToolsNotice': 'BYOK ne peut pas lire, écrire ni modifier les fichiers du projet. Utilisez la CLI locale quand vous avez besoin de changements de code.',
+  'settings.byokDraftNotice': 'Cette configuration reste un brouillon tant que les champs obligatoires ne sont pas remplis. La configuration d’exécution actuelle reste active.',
   'settings.codeAgent': 'Agent de code',
   'settings.codeAgentHint': 'Choisissez la CLI par laquelle les générations seront routées.',
   'settings.rescan': '↻ Réanalyser',

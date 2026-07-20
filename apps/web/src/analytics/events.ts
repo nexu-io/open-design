@@ -136,6 +136,7 @@ import type {
   SettingsByokModelsFetchResultProps,
   SettingsByokTestResultProps,
   SettingsConnectorAuthResultProps,
+  ByokPreflightBlockedProps,
   OnboardingClickProps,
   OnboardingRuntimeScanResultProps,
   OnboardingCompleteResultProps,
@@ -1068,6 +1069,13 @@ export function trackSettingsByokModelsFetchResult(
   props: SettingsByokModelsFetchResultProps,
 ): void {
   send(track, 'settings_byok_models_fetch_result', props);
+}
+
+export function trackByokPreflightBlocked(
+  track: Track,
+  props: ByokPreflightBlockedProps,
+): void {
+  send(track, 'byok_preflight_blocked', props);
 }
 
 export function trackSettingsConnectorAuthResult(

@@ -399,6 +399,8 @@ export interface AppConfig {
   apiProtocolConfigs?: Partial<Record<ApiProtocol, ApiProtocolConfig>>;
   /** BYOK provider drafts keyed by protocol + selected provider base URL. */
   byokProviderConfigDrafts?: Record<string, ByokProviderConfigDraft>;
+  /** Provider draft restored first when Settings returns to BYOK. */
+  byokPendingProviderKey?: string;
   /** Internal config schema/migration version for localStorage upgrades. */
   configMigrationVersion?: number;
   /** Base URL of the selected known provider; cleared once the user customizes provider fields. */

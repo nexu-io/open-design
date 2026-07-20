@@ -1,7 +1,7 @@
 import { execFile, spawn } from "node:child_process";
 import { access, chmod, cp, mkdir, open, readFile, readdir, readlink, rename, rm, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, posix } from "node:path";
 import { promisify } from "node:util";
 
 import {
@@ -341,8 +341,8 @@ export function matchesAppImageProcess(
   // Direct AppRun launches do not know the installed .AppImage path. Our AppRun
   // fallback sets $APPIMAGE to the sibling AppRun before execing Electron.
   return (
-    basename(snapshot.executable) === PRODUCT_NAME &&
-    snapshot.env.APPIMAGE === join(dirname(snapshot.executable), "AppRun")
+    posix.basename(snapshot.executable) === PRODUCT_NAME &&
+    snapshot.env.APPIMAGE === posix.join(posix.dirname(snapshot.executable), "AppRun")
   );
 }
 

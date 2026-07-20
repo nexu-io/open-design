@@ -357,6 +357,7 @@ export const ptBR: Dict = {
   'settings.modeApi': 'Provedor de API',
   'settings.modeApiMeta': 'BYOK',
   'settings.byokNoFileToolsNotice': 'O BYOK não consegue ler, gravar ou editar arquivos do projeto. Use o Local CLI quando precisar fazer alterações no código.',
+  'settings.byokDraftNotice': 'Esta configuração permanecerá como rascunho até que os campos obrigatórios sejam preenchidos. A configuração de execução atual continuará ativa.',
   'settings.codeAgent': 'Agente de código',
   'settings.codeAgentHint': 'Detectado ao escanear seu PATH. Escolha a CLI por onde as gerações devem passar.',
   'settings.rescan': '↻ Reescanear',

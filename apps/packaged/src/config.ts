@@ -14,6 +14,7 @@ async function loadElectronApp() {
 
 export const PACKAGED_CONFIG_PATH_ENV = "OD_PACKAGED_CONFIG_PATH";
 export const PACKAGED_NAMESPACE_ENV = "OD_PACKAGED_NAMESPACE";
+export const PACKAGED_NAMESPACE_BASE_ROOT_ENV = "OD_PACKAGED_NAMESPACE_BASE_ROOT";
 export const PACKAGED_WEB_OUTPUT_MODE_OVERRIDE_ENV = "OD_PACKAGED_ALLOW_WEB_OUTPUT_MODE_OVERRIDE";
 export const PACKAGED_WEB_STANDALONE_ROOT_ENV = "OD_WEB_STANDALONE_ROOT";
 export const PACKAGED_WEB_OUTPUT_MODE_ENV = "OD_WEB_OUTPUT_MODE";
@@ -103,6 +104,16 @@ function resolveOptionalPath(value: string | undefined): string | undefined {
   return value == null || value.length === 0 ? undefined : resolve(value);
 }
 
+export function resolvePackagedNamespaceBaseRoot(
+  rawNamespaceBaseRoot: string | undefined,
+  electronUserDataRoot: string,
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  return resolveOptionalPath(env[PACKAGED_NAMESPACE_BASE_ROOT_ENV])
+    ?? resolveOptionalPath(rawNamespaceBaseRoot)
+    ?? join(electronUserDataRoot, "namespaces");
+}
+
 // Config DTOs use null for optional scalar values consumed by runtime options;
 // optional paths use undefined so callers can distinguish "no path" from a resolved path string.
 function cleanOptionalString(value: string | undefined): string | null {
@@ -154,8 +165,10 @@ export async function readPackagedConfig(): Promise<PackagedConfig> {
     process.env[PACKAGED_NAMESPACE_ENV] ?? raw.namespace ?? SIDECAR_DEFAULTS.namespace,
   );
   const electronApp = await loadElectronApp();
-  const namespaceBaseRoot =
-    resolveOptionalPath(raw.namespaceBaseRoot) ?? join(electronApp.getPath("userData"), "namespaces");
+  const namespaceBaseRoot = resolvePackagedNamespaceBaseRoot(
+    raw.namespaceBaseRoot,
+    electronApp.getPath("userData"),
+  );
   const resourceRoot = resolveOptionalPath(raw.resourceRoot) ?? join(process.resourcesPath, "open-design");
   const relativeNodeCommand =
     raw.nodeCommandRelative == null || raw.nodeCommandRelative.length === 0

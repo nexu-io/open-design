@@ -558,7 +558,8 @@ export async function startPackedMacApp(config: ToolPackConfig): Promise<MacStar
   const exit = watchProcessExit(child);
   const earlyExit = await exit.wait(1500);
   child.unref();
-  if (earlyExit != null) {
+  const cleanLauncherExit = earlyExit?.code === 0 && earlyExit.signal == null;
+  if (earlyExit != null && !cleanLauncherExit) {
     throw new Error(await createLaunchFailureMessage(config, target, {
       pid,
       reason: `process exited early ${formatExit(earlyExit)}`,
@@ -566,6 +567,12 @@ export async function startPackedMacApp(config: ToolPackConfig): Promise<MacStar
   }
 
   const status = await waitForDesktopStatus(config);
+  if (status == null && earlyExit != null) {
+    throw new Error(await createLaunchFailureMessage(config, target, {
+      pid,
+      reason: `launcher exited cleanly before desktop IPC was available ${formatExit(earlyExit)}`,
+    }));
+  }
   const delayedExit = exit.current();
   if (status == null && delayedExit != null) {
     throw new Error(await createLaunchFailureMessage(config, target, {
@@ -579,12 +586,13 @@ export async function startPackedMacApp(config: ToolPackConfig): Promise<MacStar
       reason: "process exited before desktop IPC was available without an observed exit event",
     }));
   }
+  const activePid = typeof status?.pid === "number" && status.pid > 0 ? status.pid : pid;
   return {
     appPath: target.appPath,
     executablePath: target.executablePath,
     logPath,
     namespace: config.namespace,
-    pid,
+    pid: activePid,
     source: target.source,
     status,
   };
@@ -597,11 +605,13 @@ async function findManagedDesktopProcessTree(config: ToolPackConfig): Promise<{
   const processes = await listProcessSnapshots();
   const stampedRootPids = processes
     .filter((processInfo) =>
-      matchesStampedProcess(processInfo, {
-        mode: SIDECAR_MODES.RUNTIME,
-        namespace: config.namespace,
-        source: SIDECAR_SOURCES.TOOLS_PACK,
-      }, OPEN_DESIGN_SIDECAR_CONTRACT),
+      [SIDECAR_SOURCES.TOOLS_PACK, SIDECAR_SOURCES.PACKAGED].some((source) =>
+        matchesStampedProcess(
+          processInfo,
+          { mode: SIDECAR_MODES.RUNTIME, namespace: config.namespace, source },
+          OPEN_DESIGN_SIDECAR_CONTRACT,
+        )
+      ),
     )
     .map((processInfo) => processInfo.pid);
   const identity = await resolveDesktopRootIdentityFallback(config);

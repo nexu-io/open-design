@@ -357,6 +357,7 @@ export const ko: Dict = {
   'settings.modeApi': 'API 제공자',
   'settings.modeApiMeta': 'BYOK',
   'settings.byokNoFileToolsNotice': 'BYOK는 프로젝트 파일을 읽거나 쓰거나 편집할 수 없습니다. 코드 변경이 필요한 경우 Local CLI를 사용하세요.',
+  'settings.byokDraftNotice': '필수 항목을 모두 입력할 때까지 이 설정은 초안으로 유지됩니다. 현재 실행 설정은 계속 활성 상태로 유지됩니다.',
   'settings.codeAgent': '코드 에이전트',
   'settings.codeAgentHint': 'PATH 환경 변수 스캔을 통해 감지됩니다. 생성을 처리할 CLI를 선택하세요.',
   'settings.rescan': '↻ 다시 스캔',

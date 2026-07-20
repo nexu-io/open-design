@@ -357,6 +357,7 @@ export const tr: Dict = {
   'settings.modeApi': 'API sağlayıcısı',
   'settings.modeApiMeta': 'BYOK',
   'settings.byokNoFileToolsNotice': 'BYOK proje dosyalarını okuyamaz, yazamaz veya düzenleyemez. Kod değişiklikleri gerektiğinde Local CLI kullanın.',
+  'settings.byokDraftNotice': 'Bu yapılandırma, gerekli alanlar tamamlanana kadar taslak olarak kalır. Mevcut yürütme yapılandırması etkin kalır.',
   'settings.codeAgent': 'Kod ajanı',
   'settings.codeAgentHint': 'Yerel PATH taranarak tespit edildi. Oluşum akışının yaşanacağı CLI aracınızı seçin.',
   'settings.rescan': '↻ Yeniden tara',

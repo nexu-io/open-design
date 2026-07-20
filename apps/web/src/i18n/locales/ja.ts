@@ -357,6 +357,7 @@ export const ja: Dict = {
   'settings.modeApi': 'API プロバイダー',
   'settings.modeApiMeta': 'BYOK',
   'settings.byokNoFileToolsNotice': 'BYOK ではプロジェクトファイルの読み取り、書き込み、編集はできません。コードを変更する場合は Local CLI を使用してください。',
+  'settings.byokDraftNotice': '必須項目がすべて入力されるまで、この設定は下書きとして保存されます。現在の実行設定は引き続き有効です。',
   'settings.codeAgent': 'コードエージェント',
   'settings.codeAgentHint': 'PATH をスキャンして検出されます。生成に使用する CLI を選択してください。',
   'settings.rescan': '↻ 再スキャン',

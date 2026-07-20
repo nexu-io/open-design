@@ -354,6 +354,8 @@ export const zhTW: Dict = {
   "settings.modeApiMeta": "BYOK",
   "settings.byokNoFileToolsNotice":
     "BYOK 無法讀取、寫入或編輯專案檔案。需要變更程式碼時，請使用 Local CLI。",
+  "settings.byokDraftNotice":
+    "必填項補齊前，此設定只會儲存為草稿；目前的執行設定將繼續維持生效。",
   "settings.codeAgent": "程式碼代理",
   "settings.codeAgentHint": "選擇用來執行提示詞的 CLI。",
   "settings.rescan": "↻ 重新掃描",

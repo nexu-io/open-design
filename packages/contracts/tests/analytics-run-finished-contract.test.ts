@@ -168,4 +168,26 @@ describe('analytics run_finished contract', () => {
     expect(payload.props.langfuse_report_result).toBe('failed');
     expect(payload.props.langfuse_delivery_status).toBe('failed');
   });
+
+  it('accepts privacy-safe BYOK preflight block events', () => {
+    const payload = {
+      event: 'byok_preflight_blocked',
+      props: {
+        source: 'settings',
+        reason: 'api_key_required',
+        provider_id: 'anthropic',
+        active_execution_mode: 'local_cli',
+      },
+    } satisfies Extract<
+      AnalyticsEventPayload,
+      { event: 'byok_preflight_blocked' }
+    >;
+
+    expect(payload.props).toEqual({
+      source: 'settings',
+      reason: 'api_key_required',
+      provider_id: 'anthropic',
+      active_execution_mode: 'local_cli',
+    });
+  });
 });
