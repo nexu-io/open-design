@@ -1569,7 +1569,13 @@ function PluginImportModal({
   const [zipFile, setZipFile] = useState<File | null>(null);
   const [folderFiles, setFolderFiles] = useState<File[]>([]);
   const [working, setWorking] = useState(false);
-  const [importOutcome, setImportOutcome] = useState<PluginInstallOutcome | null>(null);
+ const [importOutcome, setImportOutcome] = useState<PluginInstallOutcome | null>(null);
+  // Guards against a stale import result being applied after the user has
+  // switched source tabs (or started a newer import) while the previous
+  // request was still in flight. Each runImport() call captures the current
+  // token; if it no longer matches by the time the promise resolves, the
+  // result is discarded rather than rendered under the wrong tab.
+  const importRequestTokenRef = useRef(0);
 
   function selectKind(next: ImportKind) {
     trackPluginImportModalClick(analytics.track, {
@@ -1578,6 +1584,9 @@ function PluginImportModal({
       element: 'source_tab',
       import_source: next,
     });
+    // Invalidate any pending import from the previous tab so its eventual
+    // result (success or failure) is never applied under this new tab.
+    importRequestTokenRef.current += 1;
     setImportOutcome(null);
     setKind(next);
   }
@@ -1589,6 +1598,7 @@ function PluginImportModal({
       element: 'import',
       import_source: kind,
     });
+    const requestToken = ++importRequestTokenRef.current;
     setWorking(true);
     setImportOutcome(null);
     try {
@@ -1601,6 +1611,9 @@ function PluginImportModal({
       } else if (kind === 'folder' && folderFiles.length > 0) {
         outcome = await onUploadFolder(folderFiles);
       }
+      // Discard results from a request that's no longer current — the user
+      // switched tabs (or started a new import) while this one was pending.
+      if (requestToken !== importRequestTokenRef.current) return;
       if (outcome) {
         trackPluginImportResult(analytics.track, {
           page_name: 'plugins',
@@ -1615,7 +1628,10 @@ function PluginImportModal({
         if (!outcome.ok) setImportOutcome(outcome);
       }
     } finally {
-      setWorking(false);
+      // Only clear the pending indicator if this is still the active
+      // request — an invalidated request shouldn't flip `working` back to
+      // false for a tab the user already left.
+      if (requestToken === importRequestTokenRef.current) setWorking(false);
     }
   }
 
