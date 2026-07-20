@@ -79,7 +79,7 @@ in
 
     env.NODE_ENV = "production";
 
-    # pnpm_10.configHook runs in postConfigureHooks: it unpacks
+    # pnpm.configHook runs in postConfigureHooks: it unpacks
     # `pnpmDeps`, points pnpm at the unpacked store, and runs
     # `pnpm install --offline --ignore-scripts --frozen-lockfile`.
     # No custom configurePhase needed.
@@ -96,11 +96,11 @@ in
       #   fail the GitHub fetch and fall through to a compile, so we
       #   skip the download attempt entirely and compile.
       #
-#   Why not `pnpm rebuild`:
-#   In pnpm 11, `allowBuilds` / `strictDepBuilds` interact with the
-#   "approve-builds" consent gate; `pnpm rebuild <pkg>` silently
-#   no-ops in some configurations. Invoke node-gyp directly to
-#   sidestep all of that.
+      #   Why not `pnpm rebuild`:
+      #   In pnpm 11, `allowBuilds` / `strictDepBuilds` interact with the
+      #   "approve-builds" consent gate; `pnpm rebuild <pkg>` silently
+      #   no-ops in some configurations. Invoke node-gyp directly to
+      #   sidestep all of that.
       #
       # Env vars:
       #   * npm_config_nodedir → use the headers shipped with the

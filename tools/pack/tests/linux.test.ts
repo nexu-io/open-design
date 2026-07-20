@@ -216,7 +216,7 @@ describe("buildDockerArgs", () => {
     const last = args[args.length - 1];
     expect(last).toContain("{ command -v curl");
     expect(last).toContain("/tmp/pnpm/pnpm install --frozen-lockfile; } >&2 && node tools/pack/bin/tools-pack.mjs linux build");
-    expect(last.indexOf("/tmp/pnpm install --frozen-lockfile")).toBeLessThan(
+    expect(last.indexOf("/tmp/pnpm/pnpm install --frozen-lockfile")).toBeLessThan(
       last.indexOf("} >&2 && node tools/pack/bin/tools-pack.mjs linux build"),
     );
   });
