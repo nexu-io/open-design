@@ -53,6 +53,8 @@ describe('analytics run_finished contract', () => {
         failure_stage: 'session_init',
         retryable: true,
         user_action: 'retry',
+        terminal_reconciled: true,
+        terminal_recovery_reason: 'daemon_restart',
         langfuse_trace_id: 'trace-1',
         langfuse_expected: true,
         langfuse_delivery_status: 'failed',
@@ -100,6 +102,8 @@ describe('analytics run_finished contract', () => {
     expect(payload.props.failure_category).toBe('rate_limit');
     expect(payload.props.conversation_turn_index).toBe(2);
     expect(payload.props.failure_stage).toBe('session_init');
+    expect(payload.props.terminal_reconciled).toBe(true);
+    expect(payload.props.terminal_recovery_reason).toBe('daemon_restart');
     expect(payload.props.user_action).toBe('retry');
     expect(payload.props.langfuse_delivery_status).toBe('failed');
     expect(payload.props.langfuse_drop_reason).toBe('relay_429');

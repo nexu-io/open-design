@@ -243,6 +243,10 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   failure_stage?: TrackingRunFailureStage;
   retryable?: boolean;
   user_action?: TrackingRunFailureUserAction;
+  // A daemon boot repaired a terminal state that was interrupted before the
+  // normal PostHog/Langfuse finalization path completed.
+  terminal_reconciled?: boolean;
+  terminal_recovery_reason?: 'daemon_restart' | 'analytics_incomplete';
   langfuse_trace_id?: string;
   langfuse_expected?: boolean;
   langfuse_drop_reason?: TrackingLangfuseDropReason;

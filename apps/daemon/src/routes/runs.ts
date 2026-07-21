@@ -217,6 +217,12 @@ interface ChatRunService {
   cancel(run: ChatRun): Promise<ChatRunStatusResponse>;
   isTerminal(status: ChatRunStatus): boolean;
   emit?(run: ChatRun, event: string, data: unknown): RunEventRecord;
+  setAnalyticsRecovery?(run: ChatRun, recovery: {
+    context: AnalyticsContext;
+    properties: Record<string, unknown>;
+    insertId: string;
+  }): void;
+  markAnalyticsCompleted?(run: ChatRun): void;
 }
 
 interface AnalyticsService {
@@ -226,7 +232,7 @@ interface AnalyticsService {
     appVersion: string;
     properties: Record<string, unknown>;
     insertId: string;
-  }): void;
+  }): void | Promise<void>;
 }
 
 interface RunRoutesDesignService {
@@ -1046,6 +1052,11 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         skill_ids: runSkillIds,
         token_count_source: userQueryTokens > 0 ? 'estimated' : 'unknown',
       };
+      design.runs.setAnalyticsRecovery?.(run, {
+        context: analyticsContext,
+        properties: baseProps,
+        insertId: runInsertId,
+      });
       design.analytics.capture({
         eventName: 'run_created',
         context: analyticsContext,
@@ -1240,7 +1251,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
             insertId: `${runInsertId}-${retryEvent.event}-${index}`,
           });
         }
-        design.analytics.capture({
+        await Promise.resolve(design.analytics.capture({
           eventName: 'run_finished',
           context: analyticsContext,
           appVersion: design.getAppVersion(),
@@ -1325,7 +1336,8 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
             token_count_source: usageAnalytics.token_count_source,
           },
           insertId: `${runInsertId}-finish`,
-        });
+        }));
+        design.runs.markAnalyticsCompleted?.(run);
       }).catch(() => {});
     }
   });
