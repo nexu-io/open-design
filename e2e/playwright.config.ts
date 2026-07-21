@@ -39,11 +39,6 @@ export default defineConfig({
   expect: {
     timeout: 10_000,
   },
-  // The webServer owns one daemon and one OD_DATA_DIR for the entire UI suite.
-  // Keep backend-mutating UI tests serialized until the harness can boot an
-  // isolated daemon/data directory per worker.
-  fullyParallel: false,
-  workers: 1,
   reporter: process.env.CI
     ? [
         ['github'],
@@ -59,17 +54,8 @@ export default defineConfig({
         ['junit', { outputFile: './ui/reports/junit.xml' }],
       ],
   use: {
-    baseURL,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
-  },
-  webServer: {
-    command: process.platform === 'win32'
-      ? `set "OD_DATA_DIR=${dataDir}" && pnpm --dir .. tools-dev run web --namespace ${namespace} --daemon-port ${daemonPort} --web-port ${webPort}`
-      : `OD_DATA_DIR=${shellQuote(dataDir)} pnpm --dir .. tools-dev run web --namespace ${shellQuote(namespace)} --daemon-port ${daemonPort} --web-port ${webPort}`,
-    url: baseURL,
-    reuseExistingServer: false,
-    timeout: 120_000,
   },
   projects: [
     {
