@@ -2429,8 +2429,16 @@ async function openHomePluginDetails(
   const home = scopedHome;
   const card = home.locator(`article.plugins-home__card[data-plugin-id="${pluginId}"]`).first();
   await expect(card).toBeVisible();
-  await clickCardAtActionablePoint(page, card);
+  const detailsButton = card.getByTestId(`plugins-home-details-${pluginId}`);
+  await expect(detailsButton).toBeVisible();
   const dialog = page.getByRole('dialog').filter({ hasText: name });
+  await scrollCardIntoActionableView(card);
+  await expect
+    .poll(async () => {
+      return (await getActionablePoint(detailsButton).catch(() => null)) !== null;
+    }, { timeout: T.medium })
+    .toBe(true);
+  await detailsButton.dispatchEvent('click');
   await expect(dialog).toBeVisible();
   return dialog;
 }
@@ -2450,18 +2458,18 @@ async function clickCardAtActionablePoint(page: Page, card: Locator) {
   await scrollCardIntoActionableView(card);
   await expect
     .poll(async () => {
-      return (await getCardActionablePoint(card)) !== null;
+      return (await getActionablePoint(card)) !== null;
     }, { timeout: 5_000 })
     .toBe(true);
-  const point = await getCardActionablePoint(card);
+  const point = await getActionablePoint(card);
   if (!point) {
     throw new Error('Plugin card did not expose an actionable click point.');
   }
   await page.mouse.click(point.x, point.y);
 }
 
-async function getCardActionablePoint(card: Locator) {
-  return card.evaluate((element) => {
+async function getActionablePoint(target: Locator) {
+  return target.evaluate((element) => {
     const rect = element.getBoundingClientRect();
     const points = [
       { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 },
