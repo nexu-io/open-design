@@ -271,6 +271,21 @@ describe("release workflows", () => {
     expect(prereleaseMac).toContain("pnpm exec tools-pack mac cleanup --dir \"$RUNNER_TEMP/tools-pack\" --namespace release-prerelease --json");
     expect(prereleaseMac).toContain("exec tools-pack mac build");
     expect(prereleaseMac).toContain("--cache-dir \"$RUNNER_TEMP/tools-pack-cache\"");
+    expect(countOccurrences(prereleaseMac, "--notarize")).toBe(2);
+    // Both the primary build and the cache-miss retry must carry Apple notary
+    // env, or notarization fails closed on the retry path.
+    expect(
+      countOccurrences(prereleaseMac, "APPLE_ID: ${{ secrets.APPLE_ID }}"),
+    ).toBe(2);
+    expect(
+      countOccurrences(
+        prereleaseMac,
+        "APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}",
+      ),
+    ).toBe(2);
+    expect(
+      countOccurrences(prereleaseMac, "APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}"),
+    ).toBe(2);
     expect(prereleaseMac).toContain("tools-release write-report");
     expect(prereleaseMacX64).toContain("uses: actions/cache/restore@v5");
     expect(prereleaseMacX64).toContain("uses: actions/cache/save@v5");
@@ -278,7 +293,33 @@ describe("release workflows", () => {
     expect(prereleaseMacX64).toContain("pnpm exec tools-pack mac cleanup --dir \"$RUNNER_TEMP/tools-pack\" --namespace release-prerelease-intel --json");
     expect(prereleaseMacX64).toContain("exec tools-pack mac build");
     expect(prereleaseMacX64).toContain("--cache-dir \"$RUNNER_TEMP/tools-pack-cache\"");
+    expect(countOccurrences(prereleaseMacX64, "--notarize")).toBe(2);
+    expect(
+      countOccurrences(prereleaseMacX64, "APPLE_ID: ${{ secrets.APPLE_ID }}"),
+    ).toBe(2);
+    expect(
+      countOccurrences(
+        prereleaseMacX64,
+        "APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}",
+      ),
+    ).toBe(2);
+    expect(
+      countOccurrences(prereleaseMacX64, "APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}"),
+    ).toBe(2);
     expect(prereleaseMacX64).toContain("tools-release write-report");
+    for (const [prereleaseMacJob, nextStep] of [
+      [prereleaseMac, "Smoke prerelease mac"],
+      [prereleaseMacX64, "Write mac_x64 release report"],
+    ] as const) {
+      expect(prereleaseMacJob).toContain("Verify prerelease mac");
+      expect(prereleaseMacJob).toContain('hdiutil attach "$dmg_path" -nobrowse -readonly -mountpoint "$mount_point"');
+      expect(prereleaseMacJob).toContain('codesign --verify --deep --strict "$candidate_app"');
+      expect(prereleaseMacJob).toContain('xcrun stapler validate "$candidate_app"');
+      expect(prereleaseMacJob).toContain('spctl --assess --type execute --verbose=4 "$candidate_app"');
+      expect(prereleaseMacJob.indexOf("Verify prerelease mac")).toBeLessThan(
+        prereleaseMacJob.indexOf(nextStep),
+      );
+    }
     expect(prereleaseWin).toContain("tools-pack-win-v1-prerelease-$env:RUNNER_OS-");
     expect(prereleaseWin).toContain("tools-pack win validate-payload");
     expect(prereleaseWin).toContain("release-build\\win_x64\\build.json");
