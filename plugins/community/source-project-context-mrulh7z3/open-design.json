@@ -1,0 +1,22 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "source-project-context-mrulh7z3",
+  "title": "Source Project Context",
+  "version": "0.1.0",
+  "description": "This design-system workspace was created from an existing Open Design project. Treat the copied project files as the primary source evidence for the generated design system.",
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}
