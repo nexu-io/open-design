@@ -5,7 +5,7 @@ import path from 'node:path';
 import { randomUUID, createHash } from 'node:crypto';
 import { hash as blake3Hash } from 'blake3-wasm';
 import JSZip from 'jszip';
-import { listFiles, readProjectFile, validateProjectPath, resolveProjectDir } from './projects.js';
+import { listFiles, readProjectFile, validateProjectPath } from './projects.js';
 import { findRealTagOffset, HTML_TAG_PATTERNS } from '@open-design/contracts/runtime/html-injection-points';
 
 export const VERCEL_PROVIDER_ID = 'vercel-self';
@@ -760,19 +760,8 @@ export async function deployToNetlify({
   const githubUser = (await userResp.json()) as any;
   const username = githubUser.login;
 
-  // 2. Write netlify.toml and ensure GitHub repository exists
+  // 2. Add netlify.toml to files array if not present and ensure GitHub repository exists
   const netlifyToml = `[build]\n  command = ""\n  publish = "."\n`;
-  if (projectsRoot) {
-    try {
-      const projectDir = resolveProjectDir(projectsRoot, projectId, projectMetadata);
-      const tomlPath = path.join(projectDir, 'netlify.toml');
-      await writeFile(tomlPath, netlifyToml, 'utf8');
-    } catch (err) {
-      // Best effort on read-only environments
-    }
-  }
-
-  // Add netlify.toml to files array if not present
   if (!files.some((f) => f.file === 'netlify.toml')) {
     files.push({
       file: 'netlify.toml',
@@ -1153,7 +1142,8 @@ async function createOrUpdateGitHubFile(
   content: Buffer | Uint8Array | string
 ) {
   const base64Content = Buffer.from(content).toString('base64');
-  const url = `https://api.github.com/repos/${username}/${repo}/contents/${filePath}`;
+  const encodedPath = filePath.split('/').map(encodeURIComponent).join('/');
+  const url = `https://api.github.com/repos/${username}/${repo}/contents/${encodedPath}`;
 
   const size = typeof content === 'string' ? Buffer.byteLength(content) : content.length;
   const acceptHeader = size > 1_000_000 ? 'application/vnd.github.object+json' : 'application/vnd.github.v3+json';
@@ -1342,7 +1332,7 @@ export async function deployToRender({
   const githubUser = (await userResp.json()) as any;
   const username = githubUser.login;
 
-  // 2. Resolve project directory and write render.yaml file
+  // 2. Add render.yaml to files array if not present
   const yamlContent = `services:
   - type: web
     name: od-render-${projectId}
@@ -1351,17 +1341,6 @@ export async function deployToRender({
     staticPublishPath: "."
 `;
 
-  if (projectsRoot) {
-    try {
-      const projectDir = resolveProjectDir(projectsRoot, projectId, projectMetadata);
-      const yamlPath = path.join(projectDir, 'render.yaml');
-      await writeFile(yamlPath, yamlContent, 'utf8');
-    } catch (err) {
-      // Best effort on read-only environments
-    }
-  }
-
-  // Add render.yaml to files array if not present
   if (!files.some((f) => f.file === 'render.yaml')) {
     files.push({
       file: 'render.yaml',
