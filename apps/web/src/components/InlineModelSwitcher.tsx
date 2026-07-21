@@ -406,6 +406,14 @@ export function InlineModelSwitcher({
       const triggerRect = chipRef.current?.getBoundingClientRect();
       if (!triggerRect) return;
       const scrollRect = scrollContainer.getBoundingClientRect();
+      if (
+        triggerRect.width === 0 &&
+        triggerRect.height === 0 &&
+        scrollRect.width === 0 &&
+        scrollRect.height === 0
+      ) {
+        return;
+      }
       const topbarBottom = scrollContainer
         .querySelector<HTMLElement>('.entry-main__topbar')
         ?.getBoundingClientRect().bottom;
