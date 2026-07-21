@@ -1051,6 +1051,133 @@ describe('netlify and railway deploys', () => {
     expect(requestedUrls).toContain('GET https://api.netlify.com/api/v1/deploys/deploy-1');
   });
 
+  it('creates a private GitHub repository using the provided GitHub PAT credential during Netlify deploy', async () => {
+    let repoCreationPayload: Record<string, unknown> | null = null;
+    let repoCreationAuthHeader: string | null = null;
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof Request
+            ? input.url
+            : String(input);
+      const method = init?.method || (input instanceof Request ? input.method : 'GET');
+
+      if (url === 'https://api.github.com/user' && method === 'GET') {
+        return new Response(JSON.stringify({ login: 'testuser' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === 'https://api.github.com/repos/testuser/od-netlify-p1' && method === 'GET') {
+        return new Response(JSON.stringify({ message: 'Not Found' }), {
+          status: 404,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === 'https://api.github.com/user/repos' && method === 'POST') {
+        repoCreationPayload = JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>;
+        const headers = init?.headers ? (init.headers as Record<string, string>) : {};
+        repoCreationAuthHeader = headers['Authorization'] || headers['authorization'] || null;
+        return new Response(JSON.stringify({ id: 123, name: 'od-netlify-p1', private: true, default_branch: 'main' }), {
+          status: 201,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === 'https://api.github.com/repos/testuser/od-netlify-p1/keys' && method === 'POST') {
+        return new Response(JSON.stringify({ id: 789 }), {
+          status: 201,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.startsWith('https://api.github.com/repos/testuser/od-netlify-p1/contents/') && method === 'GET') {
+        return new Response('', { status: 404 });
+      }
+      if (url.startsWith('https://api.github.com/repos/testuser/od-netlify-p1/contents/') && method === 'PUT') {
+        return new Response(JSON.stringify({ content: { sha: 'abc123' } }), {
+          status: 201,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.includes('/sites?name=od-p1') && method === 'GET') {
+        return new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.endsWith('/deploy_keys') && method === 'POST') {
+        return new Response(JSON.stringify({ id: 'deploy-key-1', public_key: 'ssh-rsa AAAAB3NzaC1...' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.endsWith('/sites') && method === 'POST') {
+        return new Response(JSON.stringify({ id: 'site-1', site_id: 'site-1' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.endsWith('/sites/site-1') && method === 'PUT') {
+        return new Response(JSON.stringify({ id: 'site-1', site_id: 'site-1' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.endsWith('/sites/site-1/builds') && method === 'POST') {
+        return new Response(JSON.stringify({
+          id: 'deploy-1',
+          deploy_id: 'deploy-1',
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.endsWith('/deploys/deploy-1') && method === 'GET') {
+        return new Response(JSON.stringify({
+          id: 'deploy-1',
+          state: 'ready',
+          deploy_ssl_url: 'https://deploy--example.netlify.app',
+          ssl_url: 'https://example.netlify.app',
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === 'https://example.netlify.app' && method === 'HEAD') {
+        return new Response('', { status: 200 });
+      }
+
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+    stubGlobalFetch(fetchMock);
+
+    const result = await deployToNetlify({
+      config: { token: 'netlify-token-secret', githubToken: 'ghp-test-token' },
+      projectId: 'p1',
+      projectsRoot: '/tmp/test-projects',
+      files: [
+        {
+          file: 'index.html',
+          data: Buffer.from('<!doctype html><h1>Hello</h1>'),
+          contentType: 'text/html',
+        },
+      ],
+    });
+
+    expect(result).toMatchObject({
+      providerId: NETLIFY_PROVIDER_ID,
+      url: 'https://example.netlify.app',
+      deploymentId: 'deploy-1',
+      status: 'ready',
+    });
+    expect(repoCreationAuthHeader).toBe('Bearer ghp-test-token');
+    expect(repoCreationPayload).toEqual({
+      name: 'od-netlify-p1',
+      private: true,
+      auto_init: true,
+    });
+  });
+
   it('throws DeployError when existing site repository settings update fails', async () => {
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url =

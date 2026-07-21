@@ -55,11 +55,13 @@ function mockDeployFetch(onDeployBody: (body: Record<string, unknown>) => void) 
     if (url === '/api/projects/project-1/deployments') {
       return new Response(JSON.stringify({ deployments: [] }), { status: 200 });
     }
-    if (url === '/api/deploy/config?providerId=cloudflare-pages') {
+    if (url.startsWith('/api/deploy/config')) {
+      const parsedUrl = new URL(url, 'http://localhost');
+      const providerId = parsedUrl.searchParams.get('providerId') ?? 'cloudflare-pages';
       return new Response(JSON.stringify({
-        providerId: 'cloudflare-pages',
+        providerId,
         configured: true,
-        tokenMask: 'saved-cloudflare-token',
+        tokenMask: 'saved-token',
         teamId: '',
         teamSlug: '',
         accountId: 'account-123',
@@ -75,7 +77,7 @@ function mockDeployFetch(onDeployBody: (body: Record<string, unknown>) => void) 
       return new Response(JSON.stringify({
         providerId: body.providerId ?? 'cloudflare-pages',
         configured: true,
-        tokenMask: 'saved-cloudflare-token',
+        tokenMask: 'saved-token',
         teamId: '',
         teamSlug: '',
         accountId: 'account-123',
@@ -191,5 +193,44 @@ describe('FileViewer deploy target selector', () => {
       expect(deployBody).not.toBeNull();
     });
     expect(deployBody!.target).toBe('production');
+  });
+});
+
+describe('FileViewer GitHub PAT scope link', () => {
+  it('requests repo scope for Netlify provider', async () => {
+    vi.stubGlobal('fetch', mockDeployFetch(() => {}));
+
+    await openCloudflareDeployModal(deployableHtmlFile());
+
+    const providerSelect = await screen.findByRole('combobox', { name: /Provider/i });
+    fireEvent.change(providerSelect, { target: { value: 'netlify' } });
+
+    const getPatLink = await screen.findByRole('link', { name: /Get GitHub PAT/i });
+    expect(getPatLink).toHaveAttribute(
+      'href',
+      'https://github.com/settings/tokens/new?scopes=repo&description=Open%20Design%20Deploy',
+    );
+  });
+
+  it('requests public_repo scope for Render and Railway providers', async () => {
+    vi.stubGlobal('fetch', mockDeployFetch(() => {}));
+
+    await openCloudflareDeployModal(deployableHtmlFile());
+
+    const providerSelect = await screen.findByRole('combobox', { name: /Provider/i });
+
+    fireEvent.change(providerSelect, { target: { value: 'render' } });
+    let getPatLink = await screen.findByRole('link', { name: /Get GitHub PAT/i });
+    expect(getPatLink).toHaveAttribute(
+      'href',
+      'https://github.com/settings/tokens/new?scopes=public_repo&description=Open%20Design%20Deploy',
+    );
+
+    fireEvent.change(providerSelect, { target: { value: 'railway' } });
+    getPatLink = await screen.findByRole('link', { name: /Get GitHub PAT/i });
+    expect(getPatLink).toHaveAttribute(
+      'href',
+      'https://github.com/settings/tokens/new?scopes=public_repo&description=Open%20Design%20Deploy',
+    );
   });
 });
