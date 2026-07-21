@@ -1041,7 +1041,12 @@ export interface SketchExportResultProps {
   project_kind: TrackingProjectKind;
 }
 
-export type TrackingDeployProvider = 'vercel' | 'cloudflare_pages';
+export type TrackingDeployProvider =
+  | 'vercel'
+  | 'cloudflare_pages'
+  | 'netlify'
+  | 'render'
+  | 'railway';
 
 // Optional failure detail copied from the daemon's closed-token `failure`
 // field (see packages/contracts/src/api/failure-detail.ts). Present only on

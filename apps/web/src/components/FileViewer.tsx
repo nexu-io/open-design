@@ -14468,6 +14468,22 @@ function HtmlViewer({
     };
   }
 
+function trackingProviderFromDeployProviderId(providerId: WebDeployProviderId): TrackingDeployProvider {
+  switch (providerId) {
+    case CLOUDFLARE_PAGES_PROVIDER_ID:
+      return 'cloudflare_pages';
+    case NETLIFY_PROVIDER_ID:
+      return 'netlify';
+    case RENDER_PROVIDER_ID:
+      return 'render';
+    case RAILWAY_PROVIDER_ID:
+      return 'railway';
+    case DEFAULT_DEPLOY_PROVIDER_ID:
+    default:
+      return 'vercel';
+  }
+}
+
   async function deployToSelectedProvider() {
     setDeploying(true);
     setDeployPhase('deploying');
@@ -14479,8 +14495,7 @@ function HtmlViewer({
     // distinct from the share-popover "opened" signal (artifact_export_result).
     const deployStarted = performance.now();
     const deployRequestId = analytics.newRequestId();
-    const providerForTracking: TrackingDeployProvider =
-      deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? 'cloudflare_pages' : 'vercel';
+    const providerForTracking: TrackingDeployProvider = trackingProviderFromDeployProviderId(deployProviderId);
     const firstConfigure = !deployConfig?.configured;
     let savedNewToken = false;
     const fireDeployResult = (
@@ -14506,8 +14521,10 @@ function HtmlViewer({
     };
     try {
       const typedToken = deployToken.trim();
-      const hasNewToken = typedToken && typedToken !== deployConfig?.tokenMask;
-      savedNewToken = Boolean(hasNewToken);
+      const hasNewToken = Boolean(typedToken && typedToken !== deployConfig?.tokenMask);
+      const typedGithubToken = renderGithubToken.trim();
+      const hasNewGithubToken = Boolean(typedGithubToken && typedGithubToken !== deployConfig?.githubTokenMask);
+      savedNewToken = hasNewToken || hasNewGithubToken;
 
       // Save the latest credentials unconditionally so they are always used for this deploy!
       const nextConfig = await saveDeployConfig({ isDeploying: true });
