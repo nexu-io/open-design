@@ -1528,6 +1528,8 @@ export const hu: Dict = {
   'newproj.createDisabledTitle': 'Először ments el egy projektet sablonként (bármely projekt Megosztás menüjéből).',
   'newproj.importClaudeZip': 'Claude Design ZIP importálása',
   'newproj.importClaudeZipTitle': 'Claude Design .zip export importálása',
+  'newproj.openFolder': 'Mappa megnyitása',
+  'newproj.openingFolder': 'Megnyitás…',
   'newproj.importingClaudeZip': 'Importálás…',
   'newproj.privacyFooter': 'Alapértelmezetten csak te láthatod a projekted.',
   'newproj.designSystem': 'Designrendszer',

@@ -1528,6 +1528,8 @@ export const ptBR: Dict = {
   'newproj.createDisabledTitle': 'Salve primeiro um projeto como template (menu Compartilhar dentro de qualquer projeto).',
   'newproj.importClaudeZip': 'Importar ZIP do Claude Design',
   'newproj.importClaudeZipTitle': 'Importar uma exportação .zip do Claude Design',
+  'newproj.openFolder': 'Abrir pasta',
+  'newproj.openingFolder': 'Abrindo…',
   'newproj.importingClaudeZip': 'Importando…',
   'newproj.privacyFooter': 'Por padrão, só você pode ver seu projeto.',
   'newproj.designSystem': 'Sistema de design',

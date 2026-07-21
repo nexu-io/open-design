@@ -1528,6 +1528,8 @@ export const tr: Dict = {
   'newproj.createDisabledTitle': 'Önce bir projeyi şablon olarak kaydedin (herhangi bir projenin içinde Paylaş menüsünden).',
   'newproj.importClaudeZip': 'Claude Design ZIP’i içe aktar',
   'newproj.importClaudeZipTitle': 'Bir Claude Design .zip’ini içe aktarın',
+  'newproj.openFolder': 'Klasör aç',
+  'newproj.openingFolder': 'Açılıyor…',
   'newproj.importingClaudeZip': 'İçe aktarılıyor…',
   'newproj.privacyFooter': 'Projeyi varsayılan olarak yalnızca siz görebilirsiniz.',
   'newproj.designSystem': 'Tasarım sistemi',

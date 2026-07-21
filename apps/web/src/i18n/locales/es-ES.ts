@@ -1528,6 +1528,8 @@ export const esES: Dict = {
   'newproj.createDisabledTitle': 'Guarda primero un proyecto como plantilla (menú Compartir dentro de cualquier proyecto).',
   'newproj.importClaudeZip': 'Importar ZIP de Claude Design',
   'newproj.importClaudeZipTitle': 'Importar una exportación .zip de Claude Design',
+  'newproj.openFolder': 'Abrir carpeta',
+  'newproj.openingFolder': 'Abriendo…',
   'newproj.importingClaudeZip': 'Importando…',
   'newproj.privacyFooter': 'Por defecto, solo tú puedes ver tu proyecto.',
   'newproj.designSystem': 'Sistema de diseño',

@@ -1528,6 +1528,8 @@ export const ar: Dict = {
   'newproj.createDisabledTitle': 'احفظ مشروعاً كقالب أولاً (قائمة المشاركة داخل أي مشروع).',
   'newproj.importClaudeZip': 'استيراد ZIP من Claude Design',
   'newproj.importClaudeZipTitle': 'استيراد تصدير .zip من Claude Design',
+  'newproj.openFolder': 'فتح مجلد',
+  'newproj.openingFolder': 'جارٍ الفتح…',
   'newproj.importingClaudeZip': 'جاري الاستيراد...',
   'newproj.privacyFooter': 'أنت فقط من يمكنه رؤية مشروعك افتراضياً.',
   'newproj.designSystem': 'نظام التصميم',

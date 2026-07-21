@@ -1528,6 +1528,8 @@ export const ja: Dict = {
   'newproj.createDisabledTitle': '最初にプロジェクトをテンプレートとして保存してください（プロジェクト内の共有メニュー）。',
   'newproj.importClaudeZip': 'Claude Design ZIP をインポート',
   'newproj.importClaudeZipTitle': 'Claude Design の .zip エクスポートをインポート',
+  'newproj.openFolder': 'フォルダを開く',
+  'newproj.openingFolder': '開いています…',
   'newproj.importingClaudeZip': 'インポート中…',
   'newproj.privacyFooter': 'デフォルトではあなただけがプロジェクトを見ることができます。',
   'newproj.designSystem': 'デザインシステム',

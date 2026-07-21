@@ -9,6 +9,7 @@ vi.mock('@open-design/host', () => ({
 }));
 
 import { pickAndImportHostProject } from '@open-design/host';
+import { I18nProvider } from '../../src/i18n';
 import { NewProjectModal } from '../../src/components/NewProjectModal';
 import type {
   DesignSystemSummary,
@@ -122,6 +123,27 @@ describe('NewProjectModal layout', () => {
     await waitFor(() => {
       expect(onClose).toHaveBeenCalledTimes(1);
     });
+  });
+
+  it('localizes the modal title and open-folder action in Chinese', () => {
+    render(
+      <I18nProvider initial="zh-CN">
+        <NewProjectModal
+          open
+          skills={skills}
+          designSystems={designSystems}
+          defaultDesignSystemId={null}
+          templates={[]}
+          promptTemplates={[]}
+          onCreate={() => {}}
+          onImportFolderResponse={async () => {}}
+          onClose={() => {}}
+        />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByRole('heading', { name: '新建项目' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '打开文件夹' })).toBeTruthy();
   });
 
   it('forwards the desktop folder import response handler to the inner panel', async () => {
