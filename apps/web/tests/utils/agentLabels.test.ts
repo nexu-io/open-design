@@ -38,6 +38,13 @@ describe('agentDisplayName', () => {
     expect(agentDisplayName('kiro cli')).toBe('Kiro');
     expect(agentDisplayName('kiro-cli')).toBe('Kiro');
   });
+
+  it('resolves grok / grok-build / "Grok Build" to Grok Build', () => {
+    expect(agentDisplayName('grok')).toBe('Grok Build');
+    expect(agentDisplayName('grok-build')).toBe('Grok Build');
+    expect(agentDisplayName('Grok Build')).toBe('Grok Build');
+    expect(agentDisplayName('grok cli')).toBe('Grok Build');
+  });
 });
 
 describe('exactAgentDisplayName', () => {
@@ -60,6 +67,12 @@ describe('exactAgentDisplayName', () => {
   it('resolves kiro-related aliases through exactAgentDisplayName (consistent with Qoder CLI)', () => {
     expect(exactAgentDisplayName('kiro cli')).toBe('Kiro');
     expect(exactAgentDisplayName('kiro-cli')).toBe('Kiro');
+  });
+
+  it('returns "Grok Build" for exact grok ids and aliases', () => {
+    expect(exactAgentDisplayName('grok')).toBe('Grok Build');
+    expect(exactAgentDisplayName('grok-build')).toBe('Grok Build');
+    expect(exactAgentDisplayName('grok cli')).toBe('Grok Build');
   });
 });
 

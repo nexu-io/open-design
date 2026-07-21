@@ -142,9 +142,10 @@ definitions currently group by transport as follows:
 | `json-event-stream` | `codex`, `cursor-agent`, `opencode`, `mimo`, `byok-opencode` |
 | `copilot-stream-json` | `copilot` |
 | `qoder-stream-json` | `qoder` |
+| `grok-stream-json` | `grok-build` |
 | `acp-json-rpc` | `amr` (Vela), `devin`, `hermes`, `kimi`, `kiro`, `kilo`, `reasonix`, `trae-cli`, `vibe` |
 | `pi-rpc` | `pi` |
-| `plain` | `aider`, `antigravity`, `atomcode`, `deepseek`, `grok-build`, `qwen` |
+| `plain` | `aider`, `antigravity`, `atomcode`, `deepseek`, `qwen` |
 
 `byok-opencode` is the API-backed OpenCode-compatible profile rather than an
 additional local executable. User-defined local profiles may extend the base
@@ -371,6 +372,15 @@ At run completion, the daemon scans the captured plain stdout for `<artifact>` b
 | `text/markdown`, `text/x-markdown`, `markdown`, or `md` | `<identifier>.md` |
 
 The identifier is slugged before use, collisions receive `-2`, `-3`, etc., and outputs without a supported `<artifact>` block are left unchanged. This daemon-side extraction keeps headless runs and web-attached runs aligned: the project file exists even when no browser is present to parse the chat stream.
+
+### 5.13 Grok Build
+
+- Binary: `grok` (https://x.ai/cli). Auth is owned by the CLI (`grok login` → `~/.grok/auth.json`); the daemon does not inject credentials.
+- Invocation uses `--prompt-file <path>` (large skill + design-system prompts exceed safe argv budgets, especially on Windows), plus `--no-plan`, `--always-approve`, and `--output-format streaming-json`.
+- Streaming: `streamFormat: 'grok-stream-json'`. NDJSON events are `thought` / `text` / `end` / `error` (and occasional forward-compatible types such as `max_turns_reached`). The daemon parser maps these to thinking/text UI events and does **not** expose a tool-call timeline — Grok does not currently emit tool_use frames on this wire.
+- Artifacts: reconstructed `text` deltas are fed into the same plain-stream artifact finalizer as §5.12, so `<artifact type="text/html">…</artifact>` blocks still land as project files. Files the CLI writes into the project cwd remain a complementary path.
+- Resume: capture-style. The `end` event carries `sessionId`; the daemon stores it and follow-up turns pass `--resume <sessionId>`. Do **not** use Grok's `-c` / continue-most-recent-in-cwd flag (ambiguous across OD projects).
+- MCP install (client of OD, reverse direction): `od mcp install grok` drives `grok mcp add --scope user … -e KEY=val -- <command> <args>` into `~/.grok/config.toml`.
 
 ## 6. Runtime metadata and UI
 

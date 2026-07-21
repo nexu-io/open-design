@@ -370,6 +370,7 @@ import {
 import { readOpenCodeServiceFailure } from './runtimes/opencode-log.js';
 import { createAgentStderrVisibilityFilter } from './amr-stderr-filter.js';
 import { createQoderStreamHandler } from './runtimes/qoder-stream.js';
+import { createGrokStreamHandler } from './runtimes/grok-stream.js';
 import { subscribe as subscribeFileEvents } from './project-watchers.js';
 import { importFigmaFromBytes } from './figma/figma-import.js';
 import { renderDesignSystemPreview } from './design-systems/preview.js';
@@ -7316,6 +7317,28 @@ export async function startServer({
       const qoder = createQoderStreamHandler(sendAgentEvent);
       child.stdout.on('data', (chunk) => qoder.feed(chunk));
       child.on('close', () => qoder.flush());
+    } else if (def.streamFormat === 'grok-stream-json') {
+      // Grok Build NDJSON (thought/text/end/error). Route through
+      // sendAgentEvent so text_delta is role-marker guarded and status
+      // sessionId is captured for resumesSessionViaCli. Also accumulate
+      // reconstructed assistant text into the plain-artifact buffers so
+      // the shared finalizer can extract <artifact> blocks (Grok does
+      // not emit tool_use / file-write frames on this stream).
+      trackingSubstantiveOutput = true;
+      const grok = createGrokStreamHandler((ev) => {
+        if (ev?.type === 'text_delta' && typeof ev.delta === 'string') {
+          const delta = ev.delta;
+          run.plainStdoutTotalBytes = (run.plainStdoutTotalBytes ?? 0) + delta.length;
+          if ((run.plainArtifactStdout?.length ?? 0) < PLAIN_ARTIFACT_STDOUT_CAP) {
+            run.plainArtifactStdout = (
+              (run.plainArtifactStdout ?? '') + delta
+            ).slice(0, PLAIN_ARTIFACT_STDOUT_CAP);
+          }
+        }
+        sendAgentEvent(ev);
+      });
+      child.stdout.on('data', (chunk) => grok.feed(chunk));
+      child.on('close', () => grok.flush());
     } else if (def.streamFormat === 'copilot-stream-json') {
       const copilot = createCopilotStreamHandler((ev) => {
         lastAgentEventPhase = summarizeAgentEventForInactivity(ev);
@@ -7949,11 +7972,14 @@ export async function startServer({
       if (flushedTitleMarkerText) send('stdout', { chunk: flushedTitleMarkerText });
       if (
         status === 'succeeded' &&
-        (def.streamFormat ?? 'plain') === 'plain' &&
+        ((def.streamFormat ?? 'plain') === 'plain' ||
+          def.streamFormat === 'grok-stream-json') &&
         run.projectId
       ) {
         // Reconstruct the agent's stdout for artifact extraction from two
         // truncation-complementary windows over the SAME underlying stream:
+        // (grok-stream-json feeds reconstructed text_delta into plainArtifactStdout
+        // so this finalizer is shared with plain adapters.)
         //   - head: `run.plainArtifactStdout`, the FIRST CAP bytes (bounded), and
         //   - tail: run.events, the LAST 2000 events.
         // Using stream offsets (total byte count) we stitch them into a single

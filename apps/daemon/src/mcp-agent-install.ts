@@ -45,6 +45,7 @@ export const AGENT_SLUGS = [
   'kiro',
   'trae',
   'opencode',
+  'grok',
 ] as const;
 
 export type AgentSlug = (typeof AGENT_SLUGS)[number];
@@ -200,6 +201,23 @@ export function planAgentInstall(
         ],
         removeArgv: ['mcp', 'remove', serverName],
         getArgv: ['mcp', 'get', serverName],
+      };
+    case 'grok':
+      // Grok Build CLI (`grok mcp add|remove|list`). Uses `-e KEY=value`
+      // like Claude, user scope into ~/.grok/config.toml. No `mcp get` —
+      // `mcp list --json` is the closest probe handle for tooling.
+      return {
+        kind: 'cli',
+        slug,
+        bin: 'grok',
+        addArgv: [
+          'mcp', 'add', '--scope', 'user',
+          serverName,
+          ...envFlags(spec.env, '-e'),
+          '--', spec.command, ...spec.args,
+        ],
+        removeArgv: ['mcp', 'remove', serverName],
+        getArgv: ['mcp', 'list', '--json'],
       };
 
     // ----- JSON config-file agents (safe deep-merge) -----

@@ -28,13 +28,31 @@ describe('agent slug guard', () => {
   it('accepts every documented slug and rejects others', () => {
     for (const s of AGENT_SLUGS) expect(isAgentSlug(s)).toBe(true);
     expect(isAgentSlug('not-an-agent')).toBe(false);
-    expect(AGENT_SLUGS).toHaveLength(15);
+    expect(AGENT_SLUGS).toHaveLength(16);
     expect(isAgentSlug('kiro')).toBe(true);
     expect(isAgentSlug('reasonix')).toBe(true);
+    expect(isAgentSlug('grok')).toBe(true);
   });
 });
 
 describe('CLI-driven agents', () => {
+  it('grok registers via `grok mcp add --scope user` with -e env flags', () => {
+    const plan = planAgentInstall('grok', SPEC, ctx());
+    expect(plan.kind).toBe('cli');
+    if (plan.kind !== 'cli') throw new Error('expected cli');
+    expect(plan.bin).toBe('grok');
+    expect(plan.addArgv).toEqual([
+      'mcp', 'add', '--scope', 'user',
+      'open-design',
+      '-e', 'OD_DATA_DIR=/home/u/.open-design',
+      '--',
+      SPEC.command, ...SPEC.args,
+    ]);
+    expect(plan.removeArgv).toEqual(['mcp', 'remove', 'open-design']);
+    // Grok has no `mcp get`; list --json is the probe handle.
+    expect(plan.getArgv).toEqual(['mcp', 'list', '--json']);
+  });
+
   it('claude registers via `claude mcp add --scope user` with env flags', () => {
     const plan = planAgentInstall('claude', SPEC, ctx());
     expect(plan.kind).toBe('cli');
