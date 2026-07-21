@@ -356,7 +356,7 @@ describe('ProjectView conversation delete', () => {
     renderProjectView(vi.fn());
 
     await waitFor(() => expect(chatPaneProps.onSubmitQuestionForm).toBeDefined());
-    expect(chatPaneProps.questionFormSubmitDisabled).toBe(false);
+    await waitFor(() => expect(chatPaneProps.questionFormSubmitDisabled).toBe(false));
     expect(fileWorkspaceProps.questionForm).toBeUndefined();
   });
 });
