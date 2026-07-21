@@ -42,6 +42,30 @@ describe('FileOpsSummary', () => {
     expect(screen.queryByText('Files from this turn')).toBeNull();
   });
 
+  it('counts unique produced files in the header, not repeated write operations', () => {
+    render(
+      <FileOpsSummary
+        entries={[
+          entry({
+            path: 'qa-sandbox.md',
+            ops: ['write', 'edit'],
+            opCounts: { read: 0, write: 2, edit: 1, delete: 0 },
+            total: 3,
+          }),
+          entry({ path: 'qa-disclosure-output-1.txt' }),
+          entry({ path: 'qa-disclosure-output-2.txt' }),
+          entry({ path: 'qa-disclosure-output-3.txt' }),
+          entry({ path: 'qa-disclosure-output-4.txt' }),
+          entry({ path: 'qa-disclosure-output-5.txt' }),
+        ]}
+      />,
+    );
+
+    expect(screen.getByText(/Write 5/)).toBeTruthy();
+    expect(screen.getByText(/Edit 1/)).toBeTruthy();
+    expect(screen.queryByText(/Write 9/)).toBeNull();
+  });
+
   it('shows up to four files directly without inheriting the run state', () => {
     const { container } = render(
       <FileOpsSummary
@@ -55,7 +79,7 @@ describe('FileOpsSummary', () => {
     );
 
     expect(screen.getByText(/Write 2/)).toBeTruthy();
-    expect(screen.getByText(/Edit 4/)).toBeTruthy();
+    expect(screen.getByText(/Edit 2/)).toBeTruthy();
     expect(screen.queryByText(/Delete/)).toBeNull();
     expect(screen.queryByText(/Read/)).toBeNull();
     expect(screen.getByTestId('file-ops-row-a.ts')).toBeTruthy();

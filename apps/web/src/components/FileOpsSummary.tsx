@@ -18,9 +18,10 @@ import { useState } from 'react';
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import {
-  countFileOps,
+  artifactOpKindForEntry,
+  countUniqueArtifactFiles,
+  type ArtifactOpKind,
   type FileOpEntry,
-  type FileOpKind,
 } from '../runtime/file-ops';
 import { Icon, type IconName } from './Icon';
 
@@ -32,8 +33,6 @@ interface Props {
   projectFileNames?: Set<string> | undefined;
   onRequestOpenFile?: ((name: string) => void) | undefined;
 }
-
-type ArtifactOpKind = Extract<FileOpKind, 'write' | 'edit'>;
 
 const OP_LABEL_KEY: Record<ArtifactOpKind, keyof Dict> = {
   write: 'tool.write',
@@ -66,7 +65,7 @@ export function FileOpsSummary({
     ? entries.slice(0, COLLAPSE_AFTER_ENTRY_COUNT)
     : entries;
 
-  const counts = countFileOps(entries);
+  const counts = countUniqueArtifactFiles(entries);
   const summaryParts: string[] = [];
   if (counts.write > 0) summaryParts.push(`${t('tool.write')} ${counts.write}`);
   if (counts.edit > 0) summaryParts.push(`${t('tool.edit')} ${counts.edit}`);
@@ -168,11 +167,7 @@ function FileOpRow({
   // Artifact rows describe the delivered file, not the execution history.
   // A file that was read and then edited therefore gets one Edit category;
   // read/run/error detail stays in the execution disclosure above.
-  const artifactOp: ArtifactOpKind | null = entry.ops.includes('edit')
-    ? 'edit'
-    : entry.ops.includes('write')
-      ? 'write'
-      : null;
+  const artifactOp = artifactOpKindForEntry(entry);
   const content = (
     <>
       {artifactOp ? (
