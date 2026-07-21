@@ -39,3 +39,15 @@ export const ACP_RAW_EVENT_SHAPE_DIAGNOSTIC_LIMIT = 8;
 export const AMR_STDERR_RETRY_TAIL_LIMIT = 16_000;
 /** Normalised token IDs that identify a model-selection config option in an ACP `session/new` response's `configOptions` array. */
 export const MODEL_CONFIG_OPTION_IDS = new Set(['model', 'models', 'modelid', 'modelids']);
+// ACP exposes the model list only inside a `session/new` result, so model
+// detection has to open a real session on the agent. Session-persisting
+// agents (Kimi CLI, and any other CLI that writes a durable session index)
+// keep that session forever, so the probe must not inherit the daemon's cwd
+// — under Electron that is `/`, which registers a workspace spanning the
+// whole filesystem. Probe inside a dedicated directory instead, and cache
+// the result so a burst of `detectAgents()` calls opens one session, not one
+// per call.
+/** Directory name, created under the OS temp dir, used as the working directory for ACP model-detection probes. */
+export const ACP_PROBE_DIR_NAME = 'open-design-acp-probe';
+/** How long a successful ACP model-detection result is reused before the probe re-opens a session on the agent. */
+export const ACP_MODEL_CACHE_TTL_MS = 5 * 60 * 1000;

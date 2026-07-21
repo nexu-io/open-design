@@ -7,9 +7,19 @@
  * acp/rpc, and acp/session-params.
  */
 import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { createJsonLineStream } from '../core/index.js';
 import type { JsonRpcId, JsonObject, TimerHandle } from './types.js';
-import { ACP_PROTOCOL_VERSION, DEFAULT_TIMEOUT_MS, MODEL_CONFIG_OPTION_IDS } from './constants.js';
+import {
+  ACP_MODEL_CACHE_TTL_MS,
+  ACP_PROBE_DIR_NAME,
+  ACP_PROTOCOL_VERSION,
+  DEFAULT_TIMEOUT_MS,
+  MODEL_CONFIG_OPTION_IDS,
+} from './constants.js';
 import { errorMessage, resolveAcpTimeoutMs, asObject } from './json.js';
 import { sendRpc, rpcErrorMessage } from './rpc.js';
 import { buildAcpSessionNewParams } from './session-params.js';
@@ -35,6 +45,64 @@ export interface DetectAcpModelsOptions {
   clientName?: string;
   clientVersion?: string;
   defaultModelOption?: ModelOption;
+  forceRefresh?: boolean;
+}
+
+let probeCwd: string | null = null;
+/**
+ * Returns the working directory ACP model-detection probes run in, creating it
+ * on first use. Probes must not inherit the daemon's cwd: the desktop app
+ * launches the daemon with cwd `/`, and agents that persist sessions would
+ * record a workspace covering the entire filesystem.
+ *
+ * @returns An absolute path to the probe directory, falling back to the OS temp dir when it cannot be created.
+ */
+export function acpProbeCwd(): string {
+  if (probeCwd) return probeCwd;
+  const dir = path.join(os.tmpdir(), ACP_PROBE_DIR_NAME);
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    probeCwd = dir;
+  } catch {
+    probeCwd = os.tmpdir();
+  }
+  return probeCwd;
+}
+
+interface AcpModelCacheEntry {
+  expiresAt: number;
+  models: ModelOption[];
+}
+const modelCache = new Map<string, AcpModelCacheEntry>();
+const inFlightProbes = new Map<string, Promise<ModelOption[]>>();
+
+// The probe environment selects which account and endpoint an agent reports
+// models for, so it belongs in the key — hashed rather than stored verbatim,
+// since it carries API tokens.
+function modelCacheKey(
+  bin: string,
+  args: string[],
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+): string {
+  const envDigest = createHash('sha256')
+    .update(
+      Object.keys(env)
+        .sort()
+        .map((name) => `${name}=${env[name] ?? ''}`)
+        .join('\0'),
+    )
+    .digest('hex');
+  return [bin, cwd, envDigest, ...args].join('\0');
+}
+
+/**
+ * Drops cached ACP model-detection results so the next `detectAcpModels` call
+ * re-probes the agent. Intended for tests and for an explicit user-triggered
+ * refresh; normal detection relies on the TTL.
+ */
+export function clearAcpModelCache(): void {
+  modelCache.clear();
 }
 /**
  * Normalises a raw config-option field value to a lowercase, whitespace- and
@@ -202,20 +270,50 @@ export function currentModelFromSessionResult(result: JsonObject): string | null
  * Used by runtime adapter definitions to populate the model-selection dropdown
  * without waiting for an actual prompt run.
  *
+ * The `session/new` this performs is not a read: agents that persist sessions
+ * keep the probe session permanently. Successful results are therefore cached
+ * for `ACP_MODEL_CACHE_TTL_MS` and concurrent probes for the same binary share
+ * one subprocess, so repeated `detectAgents()` calls do not each open a
+ * session. Pass `forceRefresh` to bypass the cache.
+ *
  * @param options.bin - Absolute path or `$PATH`-resolvable name of the ACP binary.
  * @param options.args - CLI arguments to pass to the binary.
- * @param options.cwd - Working directory for the probe subprocess.
+ * @param options.cwd - Working directory for the probe subprocess (default: a dedicated temp directory).
  * @param options.env - Environment for the probe subprocess (default: `process.env`).
  * @param options.timeoutMs - Hard timeout for the probe; subject to `MAX_TIMEOUT_MS`.
  * @param options.clientName - Client name sent in the `initialize` handshake.
  * @param options.clientVersion - Client version sent in the `initialize` handshake.
  * @param options.defaultModelOption - Fallback option prepended to the result list.
+ * @param options.forceRefresh - Ignore any cached result and re-probe the agent.
  * @returns A promise resolving to the available `ModelOption[]`.
  */
-export async function detectAcpModels({
+export async function detectAcpModels(
+  options: DetectAcpModelsOptions,
+): Promise<ModelOption[]> {
+  const cwd = options.cwd ?? acpProbeCwd();
+  const key = modelCacheKey(options.bin, options.args, cwd, options.env ?? process.env);
+  if (!options.forceRefresh) {
+    const cached = modelCache.get(key);
+    if (cached && cached.expiresAt > Date.now()) return cached.models;
+    const inFlight = inFlightProbes.get(key);
+    if (inFlight) return await inFlight;
+  }
+  const probe = runAcpModelProbe({ ...options, cwd })
+    .then((models) => {
+      modelCache.set(key, { expiresAt: Date.now() + ACP_MODEL_CACHE_TTL_MS, models });
+      return models;
+    })
+    .finally(() => {
+      if (inFlightProbes.get(key) === probe) inFlightProbes.delete(key);
+    });
+  inFlightProbes.set(key, probe);
+  return await probe;
+}
+
+async function runAcpModelProbe({
   bin,
   args,
-  cwd = process.cwd(),
+  cwd = acpProbeCwd(),
   env = process.env,
   timeoutMs = DEFAULT_TIMEOUT_MS,
   clientName = 'open-design-detect',
