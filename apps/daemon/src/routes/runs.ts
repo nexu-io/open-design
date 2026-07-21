@@ -1128,6 +1128,25 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         console.warn('[runs] mcp conversation fallback failed', err);
       }
     }
+    // Resolve the conversation session and enforce project ownership BEFORE
+    // any user-turn persistence. A request pairing projectId=A with a
+    // conversationId owned by project B must 404 before we touch the foreign
+    // conversation's message table — otherwise this PR reintroduces
+    // cross-project history corruption through the new user-turn write path
+    // (reviewer nettee, 2026-07-20). Mirror the ownership check the sibling
+    // routes already enforce (handoff.ts, terminal.ts).
+    const conversationSession =
+      typeof meta.conversationId === 'string' && meta.conversationId
+        ? getConversation(db, meta.conversationId)
+        : null;
+    if (
+      conversationSession &&
+      typeof meta.projectId === 'string' &&
+      meta.projectId &&
+      conversationSession.projectId !== meta.projectId
+    ) {
+      return sendApiError(res, 404, 'CONVERSATION_NOT_FOUND', 'conversation not found for project');
+    }
     // Persistence of the user turn must happen for both resolved paths:
     // an explicit `conversationId` (e.g. external callers and Studio's own
     // /api/runs flow that follows a client-side PUT) and the auto-resolved
@@ -1170,26 +1189,6 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         }
       } catch (err) {
         console.warn('[runs] user message persistence failed', err);
-      }
-    }
-    const conversationSession =
-      typeof meta.conversationId === 'string' && meta.conversationId
-        ? getConversation(db, meta.conversationId)
-        : null;
-    // Re-check after optional headless conversation bind: a run may only attach
-    // to a conversation that exists and is owned by its project. Covers both
-    // client-supplied ids (already validated above) and fallback-bound ids.
-    // Require a string projectId so omit-pin never seeds without owning-project
-    // context. Must run before omit-pin mint/seed so a missing conversation
-    // never yields a 202 with an assistantMessageId that was never persisted.
-    if (typeof meta.conversationId === 'string' && meta.conversationId) {
-      if (
-        !conversationSession ||
-        typeof meta.projectId !== 'string' ||
-        !meta.projectId ||
-        conversationSession.projectId !== meta.projectId
-      ) {
-        return sendApiError(res, 404, 'CONVERSATION_NOT_FOUND', 'conversation not found for project');
       }
     }
     // Resolve session mode before omit-pin seed so the user turn stores the

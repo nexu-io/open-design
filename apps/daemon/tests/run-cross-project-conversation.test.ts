@@ -97,6 +97,78 @@ describe('run cross-project conversation ownership', () => {
     expect(runResponse.status).toBeGreaterThanOrEqual(400);
   });
 
+  // Regression for the 2026-07-20 follow-up review on PR #5818: the new
+  // `listMessages`/`upsertMessage` block that persists the current user turn
+  // for an explicit `conversationId` MUST run AFTER the project/conversation
+  // ownership guard. If it runs before, a request like
+  //   { projectId: A, conversationId: convB, message: ... }
+  // writes this turn's user row into project B's conversation and only then
+  // returns 404 — silently corrupting B's chat history through the new
+  // user-turn write path even though the assistant pin is now guarded.
+  it('POST /api/runs rejects cross-project pairing BEFORE writing the user turn into the foreign conversation', async () => {
+    started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
+    const url = started.url;
+
+    const projectA = `xproj_a_userturn_${randomUUID()}`;
+    const projectB = `xproj_b_userturn_${randomUUID()}`;
+    await createProject(url, projectA, 'Cross-project A (user turn)');
+    await createProject(url, projectB, 'Cross-project B (user turn)');
+
+    const convB = await firstConversationId(url, projectB);
+    expect(convB).toBeTruthy();
+
+    const assistantMessageId = `assistant_xproj_userturn_${randomUUID()}`;
+    const userMessageId = `user_xproj_userturn_${randomUUID()}`;
+    const rejectedUserContent = 'CROSS_PROJECT_USER_TURN_MARKER';
+
+    const runResponse = await fetch(`${url}/api/runs`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        projectId: projectA,
+        conversationId: convB,
+        assistantMessageId,
+        userMessageId,
+        clientRequestId: `client_xproj_userturn_${randomUUID()}`,
+        agentId: 'claude',
+        message: rejectedUserContent,
+        currentPrompt: rejectedUserContent,
+      }),
+    });
+
+    // The ownership guard must 404 BEFORE any user-turn write into convB.
+    expect(runResponse.status).toBeGreaterThanOrEqual(400);
+
+    const dataDir = process.env.OD_DATA_DIR;
+    expect(dataDir).toBeTruthy();
+    const db = new Database(join(dataDir!, 'app.sqlite'), { readonly: true });
+    try {
+      // The assistant pin was already covered by the sibling test above. This
+      // test focuses on the new user-turn path: no row for the rejected turn
+      // may exist under convB, by id or by content.
+      const userRowByAssistant = db
+        .prepare('SELECT conversation_id FROM messages WHERE id = ?')
+        .get(`user-${assistantMessageId}`) as { conversation_id?: string } | undefined;
+      expect(userRowByAssistant?.conversation_id ?? null).not.toBe(convB);
+
+      const userRowBySupplied = db
+        .prepare('SELECT conversation_id FROM messages WHERE id = ?')
+        .get(userMessageId) as { conversation_id?: string } | undefined;
+      expect(userRowBySupplied?.conversation_id ?? null).not.toBe(convB);
+
+      // No row carrying the rejected turn's marker content may have landed in
+      // convB's message table at all.
+      const leakedRows = db
+        .prepare(
+          'SELECT id FROM messages WHERE conversation_id = ? AND content = ?',
+        )
+        .all(convB, rejectedUserContent) as Array<{ id: string }>;
+      expect(leakedRows).toHaveLength(0);
+    } finally {
+      db.close();
+    }
+  });
+
   it('POST /api/chat is guarded too: a chat run for project A must not write into project B', async () => {
     started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
     const url = started.url;
