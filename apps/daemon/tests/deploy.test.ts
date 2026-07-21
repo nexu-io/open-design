@@ -5993,5 +5993,162 @@ describe('deployment link readiness', () => {
         statusMessage: 'Render deployment is currently: building.',
       });
     });
+
+    it('does not mutate existing netlify.toml or render.yaml in linked folder during deploy', async () => {
+      const projectDir = await mkdtemp(path.join(os.tmpdir(), 'od-linked-folder-deploy-'));
+      try {
+        const customNetlifyToml = '[build]\n  command = "npm run custom-build"\n  publish = "dist"\n';
+        const customRenderYaml = 'services:\n  - type: web\n    name: custom-render-app\n';
+        await writeFile(path.join(projectDir, 'netlify.toml'), customNetlifyToml, 'utf8');
+        await writeFile(path.join(projectDir, 'render.yaml'), customRenderYaml, 'utf8');
+
+        const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+          const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+          const method = init?.method || (input instanceof Request ? input.method : 'GET');
+
+          if (url === 'https://api.github.com/user' && method === 'GET') {
+            return new Response(JSON.stringify({ login: 'testuser' }), { status: 200 });
+          }
+          if (url.startsWith('https://api.github.com/repos/testuser/') && method === 'GET' && !url.includes('/contents/')) {
+            return new Response(JSON.stringify({ id: 123, name: 'repo' }), { status: 200 });
+          }
+          if (url.includes('/keys') && method === 'POST') {
+            return new Response(JSON.stringify({ id: 789 }), { status: 201 });
+          }
+          if (url.includes('/contents/') && method === 'GET') {
+            return new Response('', { status: 404 });
+          }
+          if (url.includes('/contents/') && method === 'PUT') {
+            return new Response(JSON.stringify({ content: { sha: 'abc123' } }), { status: 201 });
+          }
+          if (url.includes('/sites?name=') && method === 'GET') {
+            return new Response(JSON.stringify([]), { status: 200 });
+          }
+          if (url.endsWith('/deploy_keys') && method === 'POST') {
+            return new Response(JSON.stringify({ id: 'deploy-key-1', public_key: 'ssh-rsa AAAAB3NzaC1...' }), { status: 200 });
+          }
+          if (url.endsWith('/sites') && method === 'POST') {
+            return new Response(JSON.stringify({ id: 'site-1', site_id: 'site-1' }), { status: 200 });
+          }
+          if (url.endsWith('/sites/site-1') && method === 'PUT') {
+            return new Response(JSON.stringify({ id: 'site-1', site_id: 'site-1' }), { status: 200 });
+          }
+          if (url.endsWith('/sites/site-1/builds') && method === 'POST') {
+            return new Response(JSON.stringify({ id: 'deploy-1', deploy_id: 'deploy-1' }), { status: 200 });
+          }
+          if (url.endsWith('/deploys/deploy-1') && method === 'GET') {
+            return new Response(JSON.stringify({ id: 'deploy-1', state: 'ready', ssl_url: 'https://example.netlify.app' }), { status: 200 });
+          }
+          if (url === 'https://example.netlify.app' && method === 'HEAD') {
+            return new Response('', { status: 200 });
+          }
+          if (url.includes('/owners') && method === 'GET') {
+            return new Response(JSON.stringify([{ owner: { id: 'owner-1' } }]), { status: 200 });
+          }
+          if (url.includes('/services?limit=100') && method === 'GET') {
+            return new Response(JSON.stringify([]), { status: 200 });
+          }
+          if (url.includes('/services') && method === 'POST') {
+            return new Response(JSON.stringify({ id: 'render-service-1', url: 'https://od-render-p1.onrender.com' }), { status: 200 });
+          }
+          if (url.includes('/deploys?limit=1') && method === 'GET') {
+            return new Response(JSON.stringify([{ deploy: { id: 'render-deploy-1' } }]), { status: 200 });
+          }
+          if (url.includes('/deploys/render-deploy-1') && method === 'GET') {
+            return new Response(JSON.stringify({ status: 'live' }), { status: 200 });
+          }
+          if (url === 'https://od-render-p1.onrender.com' && method === 'HEAD') {
+            return new Response('', { status: 200 });
+          }
+
+          throw new Error(`Unexpected fetch: ${method} ${url}`);
+        });
+        stubGlobalFetch(fetchMock);
+
+        await deployToNetlify({
+          config: { token: 'netlify-token-secret', githubToken: 'ghp-test-token' },
+          projectId: 'p1',
+          projectsRoot: '/tmp/test-projects',
+          projectMetadata: { baseDir: projectDir },
+          files: [{ file: 'index.html', data: Buffer.from('<h1>Hello</h1>'), contentType: 'text/html' }],
+        });
+
+        expect(await readFile(path.join(projectDir, 'netlify.toml'), 'utf8')).toBe(customNetlifyToml);
+
+        await deployToRender({
+          config: { token: 'render-token-secret', githubToken: 'ghp-test-token' },
+          projectId: 'p1',
+          projectsRoot: '/tmp/test-projects',
+          projectMetadata: { baseDir: projectDir },
+          files: [{ file: 'index.html', data: Buffer.from('<h1>Hello</h1>'), contentType: 'text/html' }],
+        });
+
+        expect(await readFile(path.join(projectDir, 'render.yaml'), 'utf8')).toBe(customRenderYaml);
+      } finally {
+        await rm(projectDir, { recursive: true, force: true });
+      }
+    });
+
+    it('encodes file path segments when calling GitHub Contents API for uploads with spaces or special characters', async () => {
+      const requestedUrls: string[] = [];
+      const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+        const method = init?.method || (input instanceof Request ? input.method : 'GET');
+        requestedUrls.push(`${method} ${url}`);
+
+        if (url === 'https://api.github.com/user' && method === 'GET') {
+          return new Response(JSON.stringify({ login: 'testuser' }), { status: 200 });
+        }
+        if (url.startsWith('https://api.github.com/repos/testuser/od-netlify-p1') && method === 'GET' && !url.includes('/contents/')) {
+          return new Response(JSON.stringify({ id: 123, name: 'od-netlify-p1' }), { status: 200 });
+        }
+        if (url.includes('/keys') && method === 'POST') {
+          return new Response(JSON.stringify({ id: 789 }), { status: 201 });
+        }
+        if (url.includes('/contents/') && method === 'GET') {
+          return new Response('', { status: 404 });
+        }
+        if (url.includes('/contents/') && method === 'PUT') {
+          return new Response(JSON.stringify({ content: { sha: 'abc123' } }), { status: 201 });
+        }
+        if (url.includes('/sites?name=') && method === 'GET') {
+          return new Response(JSON.stringify([]), { status: 200 });
+        }
+        if (url.endsWith('/deploy_keys') && method === 'POST') {
+          return new Response(JSON.stringify({ id: 'deploy-key-1', public_key: 'ssh-rsa AAAAB3NzaC1...' }), { status: 200 });
+        }
+        if (url.endsWith('/sites') && method === 'POST') {
+          return new Response(JSON.stringify({ id: 'site-1', site_id: 'site-1' }), { status: 200 });
+        }
+        if (url.endsWith('/sites/site-1') && method === 'PUT') {
+          return new Response(JSON.stringify({ id: 'site-1', site_id: 'site-1' }), { status: 200 });
+        }
+        if (url.endsWith('/sites/site-1/builds') && method === 'POST') {
+          return new Response(JSON.stringify({ id: 'deploy-1', deploy_id: 'deploy-1' }), { status: 200 });
+        }
+        if (url.endsWith('/deploys/deploy-1') && method === 'GET') {
+          return new Response(JSON.stringify({ id: 'deploy-1', state: 'ready', ssl_url: 'https://example.netlify.app' }), { status: 200 });
+        }
+        if (url === 'https://example.netlify.app' && method === 'HEAD') {
+          return new Response('', { status: 200 });
+        }
+
+        throw new Error(`Unexpected fetch: ${method} ${url}`);
+      });
+      stubGlobalFetch(fetchMock);
+
+      await deployToNetlify({
+        config: { token: 'netlify-token-secret', githubToken: 'ghp-test-token' },
+        projectId: 'p1',
+        files: [
+          { file: 'index.html', data: Buffer.from('<h1>Hello</h1>'), contentType: 'text/html' },
+          { file: 'assets/hero #1.png', data: Buffer.from('fake-image-bytes'), contentType: 'image/png' },
+        ],
+      });
+
+      expect(requestedUrls).toContain('GET https://api.github.com/repos/testuser/od-netlify-p1/contents/assets/hero%20%231.png');
+      expect(requestedUrls).toContain('PUT https://api.github.com/repos/testuser/od-netlify-p1/contents/assets/hero%20%231.png');
+    });
   });
 });
+
