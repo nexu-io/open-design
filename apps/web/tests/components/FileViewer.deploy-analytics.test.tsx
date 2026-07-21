@@ -140,10 +140,10 @@ describe('FileViewer deploy analytics attribution', () => {
 
     await waitFor(() => {
       const trackCalls = analyticsTrackMock.mock.calls.filter(
-        (call: [string, Record<string, unknown>]) => call[0] === 'artifact_deploy_result',
+        (call: any[]) => call[0] === 'artifact_deploy_result',
       );
       expect(trackCalls.length).toBeGreaterThan(0);
-      const [, props] = trackCalls[0];
+      const props = trackCalls[0][1] as Record<string, unknown>;
       expect(props).toMatchObject({
         page_name: 'artifact',
         area: 'deploy_modal',
