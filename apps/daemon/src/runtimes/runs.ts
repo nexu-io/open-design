@@ -13,6 +13,9 @@ import { projectWorkspaceProvenance } from '../workspace-contract.js';
 
 export const TERMINAL_RUN_STATUSES = new Set(['succeeded', 'failed', 'canceled']);
 
+const MAX_PERSISTED_EVENT_SCAN_BYTES = 256 * 1024;
+const SAFE_RUN_ID = /^[A-Za-z0-9_-]{1,128}$/;
+
 function readString(value) {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
 }
@@ -130,6 +133,92 @@ export function createChatRunService({
   };
 
   const get = (id) => runs.get(id) ?? null;
+
+  const readPersistedStatus = (id) => {
+    if (!runsLogDir || typeof id !== 'string' || !SAFE_RUN_ID.test(id)) return null;
+    const logPath = path.join(runsLogDir, id, 'events.jsonl');
+    let fd = null;
+    try {
+      const linkStat = fs.lstatSync(logPath);
+      if (!linkStat.isFile() || linkStat.isSymbolicLink() || linkStat.size <= 0) return null;
+      fd = fs.openSync(
+        logPath,
+        fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0),
+      );
+      const stat = fs.fstatSync(fd);
+      if (!stat.isFile() || stat.size <= 0) return null;
+      const tailLength = Math.min(stat.size, MAX_PERSISTED_EVENT_SCAN_BYTES);
+      const tail = Buffer.allocUnsafe(tailLength);
+      fs.readSync(fd, tail, 0, tailLength, stat.size - tailLength);
+      const tailLines = tail.toString('utf8').split('\n');
+      let terminal = null;
+      for (let index = tailLines.length - 1; index >= 0; index -= 1) {
+        const line = tailLines[index]?.trim();
+        if (!line) continue;
+        try {
+          const record = JSON.parse(line);
+          if (
+            record?.event === 'end'
+            && TERMINAL_RUN_STATUSES.has(record?.data?.status)
+          ) {
+            terminal = record;
+            break;
+          }
+        } catch {
+          // A truncated first tail line or malformed diagnostic must not hide
+          // a later valid terminal record.
+        }
+      }
+      if (!terminal) return null;
+
+      const headLength = Math.min(stat.size, MAX_PERSISTED_EVENT_SCAN_BYTES);
+      const head = Buffer.allocUnsafe(headLength);
+      fs.readSync(fd, head, 0, headLength, 0);
+      let createdAt = Number(terminal.timestamp) || stat.birthtimeMs || stat.mtimeMs;
+      for (const line of head.toString('utf8').split('\n')) {
+        if (!line.trim()) continue;
+        try {
+          const record = JSON.parse(line);
+          if (Number.isFinite(record?.timestamp)) {
+            createdAt = record.timestamp;
+            break;
+          }
+        } catch {
+          // Skip malformed records; the terminal timestamp remains a safe
+          // fallback for this read-only historical status.
+        }
+      }
+      const data = terminal.data && typeof terminal.data === 'object' ? terminal.data : {};
+      const artifactCount = Number.isFinite(data.artifactCount) && data.artifactCount >= 0
+        ? data.artifactCount
+        : undefined;
+      return {
+        id,
+        projectId: null,
+        conversationId: null,
+        assistantMessageId: null,
+        agentId: null,
+        status: data.status,
+        createdAt,
+        updatedAt: Number(terminal.timestamp) || stat.mtimeMs,
+        cancelRequested: false,
+        exitCode: typeof data.code === 'number' || data.code === null ? data.code : null,
+        signal: typeof data.signal === 'string' || data.signal === null ? data.signal : null,
+        failureCategory: typeof data.failureCategory === 'string' ? data.failureCategory : null,
+        failureDetail: typeof data.failureDetail === 'string' ? data.failureDetail : null,
+        resumable: data.resumable === true,
+        endedWithUnfinishedWork: data.endedWithUnfinishedWork === true,
+        ...(artifactCount !== undefined ? { artifactCount } : {}),
+        eventsLogPath: logPath,
+      };
+    } catch {
+      return null;
+    } finally {
+      if (fd !== null) {
+        try { fs.closeSync(fd); } catch { /* best-effort */ }
+      }
+    }
+  };
 
   const scheduleCleanup = (run) => {
     setTimeout(() => {
@@ -578,6 +667,7 @@ export function createChatRunService({
     create,
     start,
     get,
+    readPersistedStatus,
     list,
     stream,
     cancel,

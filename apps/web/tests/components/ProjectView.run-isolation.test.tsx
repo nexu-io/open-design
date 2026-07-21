@@ -997,6 +997,204 @@ describe('ProjectView conversation run isolation', () => {
     expect(reattachDaemonRun).not.toHaveBeenCalled();
   });
 
+  it('repairs historical no-result from status-only evidence without text-event replay', async () => {
+    conversationAMessages = [
+      {
+        ...succeededAssistant,
+        content: 'I updated the existing design.',
+        sessionMode: 'design',
+        resultDeliveryState: 'no_result',
+        events: [
+          {
+            kind: 'tool_use',
+            id: 'write-1',
+            name: 'Write',
+            input: { file_path: 'index.html', content: '<!doctype html>' },
+          },
+          {
+            kind: 'status',
+            label: 'error',
+            detail: 'The design run finished without producing a deliverable project file.',
+            code: 'ARTIFACT_NOT_FOUND',
+          },
+        ],
+        preTurnFileNames: ['index.html'],
+        producedFiles: [],
+        traceObjectFiles: [],
+      },
+    ];
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-a',
+      status: 'succeeded',
+      createdAt: 1,
+      updatedAt: 2,
+      exitCode: 0,
+      signal: null,
+      artifactCount: 1,
+    });
+
+    renderProjectView();
+
+    await waitFor(() => {
+      const repaired = saveMessage.mock.calls
+        .map((call) => call[2] as ChatMessage)
+        .find(
+          (message) =>
+            message.id === succeededAssistant.id
+            && message.resultDeliveryState === 'delivered',
+        );
+      expect(repaired).toBeTruthy();
+      expect(repaired?.content).toBe('I updated the existing design.');
+      expect(repaired?.events).not.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ code: 'ARTIFACT_NOT_FOUND' }),
+        ]),
+      );
+    });
+    expect(fetchChatRunStatus).toHaveBeenCalledWith('run-a');
+    expect(reattachDaemonRun).not.toHaveBeenCalled();
+  });
+
+  it('preserves a genuine historical zero-output verdict', async () => {
+    conversationAMessages = [
+      {
+        ...succeededAssistant,
+        content: 'I could not create a deliverable.',
+        sessionMode: 'design',
+        resultDeliveryState: 'no_result',
+        events: [
+          { kind: 'text', text: 'I could not create a deliverable.' },
+          {
+            kind: 'status',
+            label: 'error',
+            detail: 'The design run finished without producing a deliverable project file.',
+            code: 'ARTIFACT_NOT_FOUND',
+          },
+        ],
+        preTurnFileNames: ['index.html'],
+        producedFiles: [],
+        traceObjectFiles: [],
+      },
+    ];
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-a',
+      status: 'succeeded',
+      createdAt: 1,
+      updatedAt: 2,
+      exitCode: 0,
+      signal: null,
+      artifactCount: 0,
+    });
+
+    renderProjectView();
+
+    await waitFor(() => {
+      expect(fetchChatRunStatus).toHaveBeenCalledWith('run-a');
+      const delivered = saveMessage.mock.calls
+        .map((call) => call[2] as ChatMessage)
+        .find(
+          (message) =>
+            message.id === succeededAssistant.id
+            && message.resultDeliveryState === 'delivered',
+        );
+      expect(delivered).toBeUndefined();
+    });
+    expect(reattachDaemonRun).not.toHaveBeenCalled();
+  });
+
+  it('leaves historical no-result state untouched when durable evidence is unavailable', async () => {
+    conversationAMessages = [
+      {
+        ...succeededAssistant,
+        content: 'I could not create a deliverable.',
+        sessionMode: 'design',
+        resultDeliveryState: 'no_result',
+        events: [
+          { kind: 'text', text: 'I could not create a deliverable.' },
+          {
+            kind: 'status',
+            label: 'error',
+            detail: 'The design run finished without producing a deliverable project file.',
+            code: 'ARTIFACT_NOT_FOUND',
+          },
+        ],
+        preTurnFileNames: ['index.html'],
+        producedFiles: [],
+        traceObjectFiles: [],
+      },
+    ];
+    fetchChatRunStatus.mockResolvedValue(null);
+
+    renderProjectView();
+
+    await waitFor(() => expect(fetchChatRunStatus).toHaveBeenCalledWith('run-a'));
+    const rewrittenAsFailed = saveMessage.mock.calls
+      .map((call) => call[2] as ChatMessage)
+      .find(
+        (message) =>
+          message.id === succeededAssistant.id
+          && message.runStatus === 'failed',
+      );
+    expect(rewrittenAsFailed).toBeUndefined();
+    expect(reattachDaemonRun).not.toHaveBeenCalled();
+  });
+
+  it('trusts the daemon artifact count when browser file reconciliation misses delivered output', async () => {
+    conversationAMessages = [
+      {
+        ...succeededAssistant,
+        content: '',
+        sessionMode: 'design',
+        events: [
+          { kind: 'text', text: 'I finished the design.' },
+          {
+            kind: 'tool_use',
+            id: 'write-1',
+            name: 'Write',
+            input: { file_path: 'index.html', content: '<!doctype html>' },
+          },
+        ],
+        preTurnFileNames: [],
+        producedFiles: undefined,
+        traceObjectFiles: undefined,
+      },
+    ];
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-a',
+      status: 'succeeded',
+      createdAt: 1,
+      updatedAt: 2,
+      exitCode: 0,
+      signal: null,
+      artifactCount: 1,
+    });
+
+    renderProjectView();
+
+    await waitFor(() => {
+      const recoveredMessage = saveMessage.mock.calls
+        .map((call) => call[2] as ChatMessage)
+        .find(
+          (message) =>
+            message.id === succeededAssistant.id
+            && message.resultDeliveryState === 'delivered',
+        );
+      expect(recoveredMessage).toMatchObject({
+        runStatus: 'succeeded',
+        resultDeliveryState: 'delivered',
+        producedFiles: [],
+        traceObjectFiles: [],
+      });
+      expect(recoveredMessage?.events).not.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ code: 'ARTIFACT_NOT_FOUND' }),
+        ]),
+      );
+    });
+    expect(screen.getByTestId('chat-error').textContent).toBe('');
+    expect(reattachDaemonRun).not.toHaveBeenCalled();
+  });
+
   it('keeps a reloaded report-only Design run without file writes on the success path', async () => {
     // Prose-only turns (image analysis, audits) are legitimate zero-file
     // Design results (#5714, #5718); reload must not downgrade them.

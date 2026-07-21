@@ -3529,13 +3529,15 @@ export function ProjectView({
           message.runStatus === 'failed' &&
           !!message.runId &&
           hasGenericDisconnectFailureEvent(message);
+        const reconcilingHistoricalDelivery = shouldReconcileHistoricalDesignDelivery(message);
         const replayingTerminalRun =
           shouldReplayTerminalRunMessage(message) || spuriouslyFailedPending;
         const needsFullReplay =
           isActiveRunStatus(message.runStatus) ||
           replayingTerminalRun ||
           spuriouslyFailedPending ||
-          recoverableGenericDisconnectFailed;
+          recoverableGenericDisconnectFailed ||
+          reconcilingHistoricalDelivery;
         if (!needsFullReplay) continue;
         const fallbackRun = !message.runId
           ? activeByMessage.get(message.id) ?? historicalByMessage.get(message.id) ?? null
@@ -3596,7 +3598,13 @@ export function ProjectView({
           // For other message states (phantom running rows with no runId),
           // fall through to the original mark-failed behaviour and seal the
           // runId so we don't loop indefinitely.
-          if (spuriouslyFailedPending) {
+          if (reconcilingHistoricalDelivery) {
+            // Historical delivery repair is opportunistic. If neither the
+            // in-memory run nor durable terminal log is available, preserve
+            // the persisted verdict instead of turning it into a process
+            // failure or retrying forever.
+            completedReattachRunsRef.current.add(runId);
+          } else if (spuriouslyFailedPending) {
             const attempts = transientFailedRetriesRef.current.get(runId) ?? 0;
             if (attempts >= MAX_TRANSIENT_RETRIES) {
               // Cap reached — treat as authoritative completion so we stop retrying.
@@ -3620,6 +3628,38 @@ export function ProjectView({
             );
             completedReattachRunsRef.current.add(runId);
           }
+          continue;
+        }
+        if (reconcilingHistoricalDelivery && isTerminalRunStatus(status.status)) {
+          // Durable terminal evidence is sufficient to repair a stale
+          // historical delivery verdict. Do not route this through content
+          // replay or SSE reattach: after restart the status log survives, but
+          // the in-memory event stream intentionally does not.
+          const deliveryContent =
+            textContentFromAgentEvents(message.events).trim() || message.content;
+          const deliveryOutcome = resolveDesignDeliveryOutcome({
+            sessionMode: message.sessionMode,
+            runStatus: status.status,
+            content: deliveryContent,
+            events: message.events,
+            producedFileCount: message.producedFiles?.length ?? 0,
+            traceObjectFileCount: message.traceObjectFiles?.length ?? 0,
+            artifactCount: status.artifactCount,
+          });
+          if (deliveryOutcome === 'delivered') {
+            setError(null);
+            updateMessageById(
+              message.id,
+              (prev) =>
+                applyDesignDeliveryOutcome(
+                  { ...prev, content: deliveryContent },
+                  deliveryOutcome,
+                ),
+              true,
+              { telemetryFinalized: true },
+            );
+          }
+          completedReattachRunsRef.current.add(runId);
           continue;
         }
         // When the daemon authoritative status is 'failed', the run ended in a
@@ -3803,6 +3843,7 @@ export function ProjectView({
               events: message.events,
               producedFileCount: produced.length,
               traceObjectFileCount: traceObjectFiles.length,
+              artifactCount: status.artifactCount,
               persistenceSucceeded: artifactPersistenceSucceeded,
               persistenceFailed: artifactPersistenceError !== undefined,
             });
@@ -3894,6 +3935,7 @@ export function ProjectView({
         let liveHtml = '';
         let replayedContent = needsFullReplay ? '' : message.content;
         let replayedEvents: AgentEvent[] = needsFullReplay ? [] : [...(message.events ?? [])];
+        let daemonArtifactCount = status.artifactCount;
         let latestReattachRunStatus: ChatMessage['runStatus'] = status.status;
         const applyContentDelta = (delta: string) => {
           for (const ev of parser.feed(delta)) {
@@ -3989,6 +4031,9 @@ export function ProjectView({
               genericDisconnectBackoffUntilRef.current.delete(runId);
               replayedEvents = [...replayedEvents, ev];
               textBuffer.appendEvent(ev);
+            },
+            onArtifactCount: (count) => {
+              daemonArtifactCount = count;
             },
             onDone: async () => {
               // A reattached run interrupted by a "send now" still receives a
@@ -4129,6 +4174,7 @@ export function ProjectView({
                   events: deliveryEvents,
                   producedFileCount: produced.length,
                   traceObjectFileCount: traceObjectFiles.length,
+                  artifactCount: daemonArtifactCount,
                   persistenceSucceeded: artifactPersistenceSucceeded,
                   persistenceFailed: artifactPersistenceError !== undefined,
                 });
@@ -5043,6 +5089,7 @@ export function ProjectView({
       // that just failed in the current session (the daemon status fetch is only
       // needed on reload, not for runs that are already known to have failed).
       let currentRunId: string | undefined = undefined;
+      let daemonArtifactCount: number | undefined;
       const updateConversationLatestRun = (
         status: NonNullable<ChatMessage['runStatus']>,
         endedAt?: number,
@@ -5380,6 +5427,9 @@ export function ProjectView({
           if (ev.kind === 'text') textBuffer.appendTextEvent(ev.text);
           else pushEvent(ev);
         },
+        onArtifactCount: (count: number) => {
+          daemonArtifactCount = count;
+        },
         onToolInputDelta: (id: string, name: string, delta: string) => {
           setLiveToolInput((prev) => ({
             ...prev,
@@ -5588,6 +5638,7 @@ export function ProjectView({
                 events: deliveryCandidate.events,
                 producedFileCount: produced.length,
                 traceObjectFileCount: traceObjectFiles.length,
+                artifactCount: daemonArtifactCount,
                 persistenceSucceeded: artifactPersistenceSucceeded,
                 persistenceFailed: artifactPersistenceError !== undefined,
               });
@@ -9326,6 +9377,23 @@ export function shouldReplayTerminalRunMessage(message: ChatMessage): boolean {
   return !(message.producedFiles?.length);
 }
 
+export function shouldReconcileHistoricalDesignDelivery(message: ChatMessage): boolean {
+  if (
+    message.role !== 'assistant'
+    || message.sessionMode !== 'design'
+    || message.runStatus !== 'succeeded'
+    || message.resultDeliveryState !== 'no_result'
+  ) {
+    return false;
+  }
+  return (message.events ?? []).some(
+    (event) =>
+      event.kind === 'status'
+      && event.label === 'error'
+      && event.code === 'ARTIFACT_NOT_FOUND',
+  );
+}
+
 function textContentFromAgentEvents(events?: AgentEvent[]): string {
   return (events ?? [])
     .filter((event): event is Extract<AgentEvent, { kind: 'text' }> => event.kind === 'text')
@@ -9583,7 +9651,12 @@ function applyDesignDeliveryOutcome(
   persistenceError?: string,
 ): ChatMessage {
   if (outcome === 'delivered') {
-    return { ...message, resultDeliveryState: 'delivered' };
+    const repaired = removeErrorStatusEvent(
+      message,
+      DESIGN_RESULT_MISSING_DETAIL,
+      'ARTIFACT_NOT_FOUND',
+    );
+    return { ...repaired, resultDeliveryState: 'delivered' };
   }
   if (outcome !== 'no_result' && outcome !== 'delivery_failed') return message;
   const detail =

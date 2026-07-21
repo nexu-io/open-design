@@ -203,6 +203,7 @@ interface RunListFilters {
 interface ChatRunService {
   create(meta: RunCreateMeta): ChatRun;
   get(id: string): ChatRun | null;
+  readPersistedStatus(id: string): ChatRunStatusResponse | null;
   list(filters: RunListFilters): ChatRun[];
   statusBody(run: ChatRun): ChatRunStatusResponse;
   stream(run: ChatRun, req: Request, res: Response): void;
@@ -1409,8 +1410,11 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     const runId = routeParamId(req);
     if (!runId) return sendApiError(res, 400, 'BAD_REQUEST', 'run id missing');
     const run = design.runs.get(runId);
-    if (!run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
-    res.json(design.runs.statusBody(run));
+    const status = run
+      ? design.runs.statusBody(run)
+      : design.runs.readPersistedStatus(runId);
+    if (!status) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
+    res.json(status);
   });
 
   app.get('/api/runs/:id/events', (req: ApiRequest, res: ApiResponse) => {
