@@ -13,6 +13,56 @@ import { projectWorkspaceProvenance } from '../workspace-contract.js';
 
 export const TERMINAL_RUN_STATUSES = new Set(['succeeded', 'failed', 'canceled']);
 
+const RUN_STATE_SCHEMA_VERSION = 1;
+
+function atomicWriteJson(filePath, value) {
+  const tempPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
+  try {
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(tempPath, `${JSON.stringify(value)}\n`, { encoding: 'utf8', mode: 0o600 });
+    fs.renameSync(tempPath, filePath);
+  } catch {
+    try { fs.unlinkSync(tempPath); } catch { /* best-effort cleanup */ }
+  }
+}
+
+function durableRunState(run) {
+  return {
+    schemaVersion: RUN_STATE_SCHEMA_VERSION,
+    id: run.id,
+    projectId: run.projectId,
+    conversationId: run.conversationId,
+    assistantMessageId: run.assistantMessageId,
+    agentId: run.agentId,
+    status: run.status,
+    createdAt: run.createdAt,
+    updatedAt: run.updatedAt,
+    exitCode: run.exitCode,
+    signal: run.signal,
+    error: run.error,
+    errorCode: run.errorCode,
+    artifactCount: Number.isFinite(run.artifactCount) ? run.artifactCount : 0,
+    endedWithUnfinishedWork: Boolean(run.endedWithUnfinishedWork),
+    ...(typeof run.userPrompt === 'string' ? { userPrompt: run.userPrompt } : {}),
+    ...(typeof run.model === 'string' ? { model: run.model } : {}),
+    ...(typeof run.reasoning === 'string' ? { reasoning: run.reasoning } : {}),
+    ...(typeof run.skillId === 'string' ? { skillId: run.skillId } : {}),
+    ...(typeof run.designSystemId === 'string' ? { designSystemId: run.designSystemId } : {}),
+    ...(typeof run.designSystemDigest === 'string' ? { designSystemDigest: run.designSystemDigest } : {}),
+    ...(typeof run.designSystemSelectionSource === 'string'
+      ? { designSystemSelectionSource: run.designSystemSelectionSource }
+      : {}),
+    ...(typeof run.clientType === 'string' ? { clientType: run.clientType } : {}),
+    ...(run.analyticsTelemetry ? { analyticsTelemetry: run.analyticsTelemetry } : {}),
+    ...(run.promptTelemetry ? { promptTelemetry: run.promptTelemetry } : {}),
+    ...(run.promptCache ? { promptCache: run.promptCache } : {}),
+    ...(run.analyticsRecovery ? { analyticsRecovery: run.analyticsRecovery } : {}),
+    ...(typeof run.langfuseCompletedAt === 'number'
+      ? { langfuseCompletedAt: run.langfuseCompletedAt }
+      : {}),
+  };
+}
+
 function readString(value) {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
 }
@@ -102,8 +152,22 @@ export function createChatRunService({
       error: null,
       errorCode: null,
       cancelRequested: false,
+      runtimeFailureObservedBeforeCancellation: false,
       retryRestartTimer: null,
+      // First failure that triggered a same-run retry. The next attempt creates
+      // a fresh startChatRun closure and clears run.error/errorCode, so keep the
+      // compact analytics snapshot on the shared run until terminal telemetry.
+      retryOriginFailure: null,
+      retryOriginErrorCode: null,
       stdinOpen: false,
+      // E-lite root-cause telemetry. `stdinBackpressure` records whether the
+      // prompt write to the child's stdin was queued (pipe buffer full — a
+      // corroborating signal for a `stdin_write`-phase stall). `lastAgentActivityAt`
+      // is the clock the inactivity watchdog keys off, read at finish to derive
+      // `last_progress_age_ms`. (`approval_requested` and `tool_result_sent` are
+      // derived from run.events by summarizeRunDiagnosticsForAnalytics.)
+      stdinBackpressure: false,
+      lastAgentActivityAt: now,
       // Work-completeness signals (#1247 / #1060), folded from agent events by
       // captureRunWorkCompletenessSignals (server.ts). `lastTodoSnapshot` is the
       // most recent TodoWrite `todos` array; `truncatedMidTurn` records a
@@ -115,13 +179,41 @@ export function createChatRunService({
       artifactCount: undefined as number | undefined,
       artifactOutcome: undefined,
       eventsLogPath: runsLogDir ? path.join(runsLogDir, id, 'events.jsonl') : null,
+      statePath: runsLogDir ? path.join(runsLogDir, id, 'state.json') : null,
       eventsLogStream: null,
       // Set once finish() has closed the log stream, so a late post-finish emit
       // can't lazily re-open a stream nothing will ever close (FD leak).
       eventsLogClosed: false,
     };
     runs.set(run.id, run);
+    if (run.statePath) atomicWriteJson(run.statePath, durableRunState(run));
     return run;
+  };
+
+  const persistState = (run) => {
+    if (run?.statePath) atomicWriteJson(run.statePath, durableRunState(run));
+  };
+
+  const setAnalyticsRecovery = (run, recovery) => {
+    if (!run || !recovery) return;
+    run.analyticsRecovery = {
+      context: recovery.context,
+      properties: recovery.properties,
+      insertId: recovery.insertId,
+    };
+    persistState(run);
+  };
+
+  const markAnalyticsCompleted = (run) => {
+    if (!run?.analyticsRecovery) return;
+    run.analyticsRecovery.completedAt = Date.now();
+    persistState(run);
+  };
+
+  const markLangfuseCompleted = (run) => {
+    if (!run) return;
+    run.langfuseCompletedAt = Date.now();
+    persistState(run);
   };
 
   const get = (id) => runs.get(id) ?? null;
@@ -180,6 +272,10 @@ export function createChatRunService({
     run.events.push(record);
     if (run.events.length > maxEvents) run.events.splice(0, run.events.length - maxEvents);
     run.updatedAt = Date.now();
+    // State writes are synchronous so they survive process termination. Keep
+    // them on lifecycle boundaries only: agent/text deltas can arrive many
+    // times per second and are already streamed to events.jsonl.
+    if (event === 'start' || event === 'error' || event === 'end') persistState(run);
     const stream = ensureLogStream(run);
     if (stream) {
       try {
@@ -333,9 +429,9 @@ export function createChatRunService({
     if (!run.childExitObservedAt) run.childExitObservedAt = Date.now();
   };
 
-  const waitForChildExit = (child, timeoutMs) => {
+  const waitForChildExit = (child, timeoutMs, { closeOnly = false } = {}) => {
     if (!child) return Promise.resolve(true);
-    if (childHasExited(child)) return Promise.resolve(true);
+    if (!closeOnly && childHasExited(child)) return Promise.resolve(true);
     return new Promise((resolve) => {
       let settled = false;
       const done = (exited) => {
@@ -343,15 +439,29 @@ export function createChatRunService({
         settled = true;
         clearTimeout(timer);
         child.off?.('close', onClose);
-        child.off?.('exit', onClose);
+        if (!closeOnly) child.off?.('exit', onClose);
         resolve(exited);
       };
       const onClose = () => done(true);
       const timer = setTimeout(() => done(false), timeoutMs);
       timer.unref?.();
       child.once?.('close', onClose);
-      child.once?.('exit', onClose);
+      if (!closeOnly) child.once?.('exit', onClose);
     });
+  };
+
+  // A runtime error can be emitted while the child is still draining stdout.
+  // When that happened before cancellation, wait for `close` so server.ts's
+  // earlier close listener can classify and finalize the failure before the
+  // cancel route applies its canceled fallback. Ordinary cancellation keeps
+  // the faster exit-or-close behavior.
+  const waitForCanceledChildExit = (run, timeoutMs) => {
+    if (TERMINAL_RUN_STATUSES.has(run.status)) return Promise.resolve(true);
+    return waitForChildExit(
+      run.child,
+      timeoutMs,
+      { closeOnly: run.runtimeFailureObservedBeforeCancellation === true },
+    );
   };
 
   const forceWaitMs = () => {
@@ -492,24 +602,24 @@ export function createChatRunService({
         // Signal fallback below owns eventual process termination.
       }
       const graceMs = Number(process.env.PI_ABORT_GRACE_MS) || 3000;
-      if (await waitForChildExit(run.child, graceMs)) {
+      if (await waitForCanceledChildExit(run, graceMs)) {
         return finishCanceledFromChildState(run, 'SIGTERM');
       }
       killChild(run, 'SIGTERM');
-      if (await waitForChildExit(run.child, graceMs)) {
+      if (await waitForCanceledChildExit(run, graceMs)) {
         return finishCanceledFromChildState(run, 'SIGTERM');
       }
       killChild(run, 'SIGKILL');
-      await waitForChildExit(run.child, forceWaitMs());
+      await waitForCanceledChildExit(run, forceWaitMs());
       return finishCanceledFromChildState(run, 'SIGKILL');
     }
 
     killChild(run, 'SIGTERM');
-    if (await waitForChildExit(run.child, cancelGraceMs())) {
+    if (await waitForCanceledChildExit(run, cancelGraceMs())) {
       return finishCanceledFromChildState(run, 'SIGTERM');
     }
     killChild(run, 'SIGKILL');
-    await waitForChildExit(run.child, forceWaitMs());
+    await waitForCanceledChildExit(run, forceWaitMs());
     return finishCanceledFromChildState(run, 'SIGKILL');
   };
 
@@ -556,6 +666,9 @@ export function createChatRunService({
       try { finalize(); } catch { /* best-effort */ }
     }
     runs.delete(run.id);
+    if (run.statePath) {
+      try { fs.unlinkSync(run.statePath); } catch { /* best-effort */ }
+    }
     for (const sse of run.clients) {
       try { sse.end(); } catch { /* best-effort detach */ }
     }
@@ -579,6 +692,10 @@ export function createChatRunService({
     shutdownActive,
     wait,
     emit,
+    persistState,
+    setAnalyticsRecovery,
+    markAnalyticsCompleted,
+    markLangfuseCompleted,
     finish,
     fail,
     drop,

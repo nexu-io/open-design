@@ -1012,6 +1012,37 @@ describe('loadConfig', () => {
     expect(config.configMigrationVersion).toBe(2);
   });
 
+  it('keeps the parsed config when re-persisting a downgraded protocol fails', () => {
+    // A stored `bedrock` protocol is downgraded on load, which re-persists via
+    // saveConfig(). If that localStorage write throws (quota / private mode),
+    // the valid parsed config must survive rather than being reset to defaults.
+    const persisted: Partial<AppConfig> = {
+      mode: 'api',
+      apiProtocol: 'bedrock',
+      apiKey: 'sk-secret',
+      baseUrl: 'https://bedrock-runtime.us-east-1.amazonaws.com',
+      model: 'anthropic.claude-3',
+      configMigrationVersion: 1,
+      agentId: null,
+      skillId: null,
+      designSystemId: null,
+    };
+    store.set('open-design:config', JSON.stringify(persisted));
+    const setItem = vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
+      throw new DOMException('exceeded', 'QuotaExceededError');
+    });
+    try {
+      const config = loadConfig();
+      // the unsupported protocol was still downgraded ...
+      expect(config.apiProtocol).toBe(DEFAULT_CONFIG.apiProtocol);
+      // ... but the rest of the user's config was NOT discarded to defaults
+      expect(config.mode).toBe('api');
+    } finally {
+      setItem.mockRestore();
+    }
+  });
+
+
   it('backfills the fixed-origin base URL for AIHubMix when persisted empty', () => {
     // AIHubMix hides the Base URL field, so older configs persisted an empty
     // baseUrl. An empty base URL blocks the live model-list fetch, so loadConfig

@@ -804,6 +804,16 @@ describe("wellKnownUserToolchainBins", () => {
     }
   });
 
+  it("includes ~/.grok/bin when PATH is stripped so Windows Grok Build resolves", () => {
+    const home = mkdtempSync(join(tmpdir(), "wkutb-grok-"));
+    try {
+      const dirs = wellKnownUserToolchainBins({ home, env: { PATH: "" }, includeSystemBins: false });
+      expect(dirs).toContain(join(home, ".grok", "bin"));
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
   // Non-Node user toolchains that still ship agent CLIs (or their deps):
   // Deno's install root, Go's default GOBIN, and pyenv's shim dir. GUI
   // launches inherit a stripped PATH, so these must be searched explicitly.

@@ -156,6 +156,10 @@ export interface RunCreatedProps {
   // persists across sessions. Optional: omitted when the client could not
   // compute it (storage unavailable).
   project_turn_index?: number;
+  // Current run's 0-based position within this `conversation_id`. Derived by
+  // the daemon from persisted run-backed assistant messages, so it survives
+  // browser-session resets and daemon restarts. The first run is 0.
+  conversation_turn_index?: number;
   // True when the project already had a generated artifact when this run
   // started (project-scoped) — i.e. the run is an edit, not a first creation.
   has_existing_artifact?: boolean;
@@ -239,6 +243,10 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   failure_stage?: TrackingRunFailureStage;
   retryable?: boolean;
   user_action?: TrackingRunFailureUserAction;
+  // A daemon boot repaired a terminal state that was interrupted before the
+  // normal PostHog/Langfuse finalization path completed.
+  terminal_reconciled?: boolean;
+  terminal_recovery_reason?: 'daemon_restart' | 'analytics_incomplete';
   langfuse_trace_id?: string;
   langfuse_expected?: boolean;
   langfuse_drop_reason?: TrackingLangfuseDropReason;
@@ -328,6 +336,25 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   bottleneck_phase?: TrackingRunLifecyclePhase;
   last_observed_phase?: TrackingRunLifecyclePhase;
   phase_timing_status?: TrackingRunPhaseTimingStatus;
+  // E-lite root-cause discriminators. `last_observed_phase` tells us WHICH phase
+  // a stalled run died in (e.g. `tool_execution`); these four tell us WHY, which
+  // the phase alone cannot separate:
+  // - `approval_requested`: an approval/permission gate fired. Only the ACP path
+  //   is daemon-observable — stream/CLI runtimes pass a skip-permissions flag so
+  //   no gate fires, and `false` there means "not observed", not "no approval".
+  // - `stdin_backpressure`: writing the prompt to the child's stdin was queued
+  //   because the OS pipe buffer was full (the child was not draining stdin).
+  // - `tool_result_sent`: every committed tool_use received a matching
+  //   tool_result (paired by id, or by count for degraded events that carry a
+  //   null id on both sides). A stall with `tool_call_seen &&
+  //   !tool_result_sent` means a tool result was never delivered (our bug) vs a
+  //   provider that stalled after every tool result was delivered.
+  // - `last_progress_age_ms`: age of the last agent activity at finish. Near the
+  //   inactivity ceiling on a stall; near zero on a clean finish.
+  approval_requested?: boolean;
+  stdin_backpressure?: boolean;
+  tool_result_sent?: boolean;
+  last_progress_age_ms?: number;
   attempt_index?: number;
   attempt_duration_ms?: number;
   attempt_time_to_first_token_ms?: number;
@@ -342,6 +369,12 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   retry_attempt_count?: number;
   retry_final_result?: TrackingRunRetryFinalResult;
   retry_suppressed_reason?: TrackingRunRetrySuppressedReason;
+  agent_cli_version?: string;
+  runtime_companion_name?: string;
+  runtime_companion_version?: string;
+  retry_original_failure_category?: TrackingRunFailureCategory;
+  retry_original_failure_detail?: TrackingRunFailureDetail;
+  retry_original_failure_stage?: TrackingRunFailureStage;
 }
 
 export interface LangfuseReportResultProps {

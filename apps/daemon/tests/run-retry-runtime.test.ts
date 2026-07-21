@@ -112,6 +112,10 @@ describe('same-run retry runtime', () => {
       retry_of_run_id: run.id,
       retry_attempt_index: 1,
       retry_result: 'success',
+      failure_category: 'upstream_unavailable',
+      failure_detail: 'upstream_5xx',
+      failure_stage: 'first_token_wait',
+      error_code: 'UPSTREAM_UNAVAILABLE',
     });
   });
 

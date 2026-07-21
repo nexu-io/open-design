@@ -1,0 +1,299 @@
+{
+  "version": "1.1.0",
+  "positioning_note": "热插拔：Humanize 的 brief 是普通 markdown+JSON，既能交给 HTML PPT skill，也能交给原生 PPTX workflow。本表只标记真实跑通且输出稳定的路线；support_level 必须由真实产物验证推动。",
+  "support_levels": {
+    "full": "brief 出口 + 渲染后演讲体检（--qa-from）+ 渲染器专属失败模式都已在真实 HTML/PPTX 产物上验证过",
+    "brief+qa-verified": "brief 出口可用，且演讲体检（--qa-from）已在该渲染器的真实渲染产物上完整跑通（扫描→发现→修复→复检）；渲染器专属失败模式规则尚未沉淀",
+    "brief-only": "brief 出口可用；演讲体检（--qa-from）这条腿尚未在该渲染器的真实产物上验证，不承诺"
+  },
+  "renderers": [
+    {
+      "id": "guizang",
+      "display_name": "Guizang PPT Skill",
+      "skill_name": "guizang-ppt-skill",
+      "role": "primary-renderer-100pct-native",
+      "support_level": "full",
+      "best_for": [
+        "中文分享",
+        "稳定成稿",
+        "中文默认生产路径",
+        "杂志风",
+        "瑞士风",
+        "v0.6.4 由 Humanize 发 brief，guizang-ppt-skill 原生渲染"
+      ],
+      "inputs": [
+        "deck_brief.md",
+        "ast_outline.md",
+        "slide_plan.json",
+        "speaker_intent.md",
+        "asset_manifest.md",
+        "video_slots.json",
+        "style_brief.md"
+      ],
+      "humanize_outputs": [
+        "guizang-production-prompt.md"
+      ],
+      "outputs": [
+        "outputs/guizang-rendered/index.html",
+        "outputs/guizang-rendered/render_manifest.json"
+      ],
+      "v0_6_4_note": "Humanize writes guizang-production-prompt.md (the brief). The downstream guizang-ppt-skill reads it and renders natively to outputs/guizang-rendered/. Post-render QA is run via --qa-from on the downstream's HTML.",
+      "local_skill_paths": [
+        "~/.agents/skills/guizang-ppt-skill",
+        "~/.hermes/skills/guizang-ppt-skill"
+      ],
+      "command_file": "commands/guizang-agent.md"
+    },
+    {
+      "id": "ppt-master",
+      "display_name": "PPT Master",
+      "skill_name": "ppt-master",
+      "role": "native-editable-pptx-renderer",
+      "support_level": "full",
+      "support_note": "2026-07-10: production brief、main SVG pipeline、raw .pptx template-fill 与 11 个 PPTX 专属失败模式已实现；main route 真实导出 10 页/399 个可编辑容器，template-fill 真实导出 5 页/199 个可编辑容器并通过 LibreOffice 打开渲染，两条均包含 notes、Fade transition 与 Humanize OOXML presentation checkup。记录见 docs/showcase/ppt-master-native/verification-2026-07-10.md。",
+      "best_for": [
+        "原生可编辑 PowerPoint",
+        "DrawingML shapes",
+        "speaker notes",
+        "原生转场与对象动画",
+        "可编辑表格与图表",
+        "raw .pptx template 原生填充"
+      ],
+      "inputs": [
+        "ppt-master-source.md",
+        "deck_brief.md",
+        "ast_outline.md",
+        "slide_plan.json",
+        "speaker_intent.md",
+        "asset_manifest.md",
+        "video_slots.json",
+        "style_brief.md",
+        "optional raw .pptx template"
+      ],
+      "humanize_outputs": [
+        "ppt-master-production-prompt.md",
+        "ppt-master-source.md",
+        "outputs/ppt-master-handoff/"
+      ],
+      "outputs": [
+        "outputs/ppt-master-rendered/deck.pptx",
+        "outputs/ppt-master-rendered/render_manifest.json",
+        "outputs/ppt-master-projects/<project>/exports/*.pptx"
+      ],
+      "local_skill_paths": [
+        "~/.agents/skills/ppt-master",
+        "~/.codex/skills/ppt-master",
+        "~/projects/ppt-master/skills/ppt-master"
+      ],
+      "command_file": "commands/ppt-master-agent.md",
+      "qa_failure_modes": [
+        "pptx-package-invalid",
+        "pptx-slide-count-mismatch",
+        "pptx-placeholder-residue",
+        "pptx-slide-empty",
+        "pptx-flattened-slide",
+        "pptx-missing-speaker-notes",
+        "pptx-speaker-intent-drift",
+        "pptx-ast-content-drift",
+        "pptx-broken-relationship",
+        "pptx-transition-missing",
+        "pptx-native-object-missing"
+      ]
+    },
+    {
+      "id": "beautiful-html-templates",
+      "display_name": "Beautiful HTML Templates",
+      "skill_name": "beautiful-html-templates",
+      "role": "english-native-renderer",
+      "support_level": "full",
+      "support_note": "v0.9.1: brief exit + real --qa-from checkup remain verified on docs/showcase/hermes-agent-mastery/en/ppt/index.html, and the English renderer now has 5 renderer-specific static failure modes: horizontal overflow, low contrast, hyphenation noise, font contract missing, and image alt text missing. This closes the gap that kept it at brief+qa-verified.",
+      "best_for": [
+        "34套模板",
+        "英文默认至少5个真实预览",
+        "按occasion和mood选风格",
+        "design.md视觉契约",
+        "v0.6.4 由 Humanize 发 brief，beautiful-html-templates 原生渲染"
+      ],
+      "inputs": [
+        "deck_brief.md",
+        "ast_outline.md",
+        "slide_plan.json",
+        "speaker_intent.md",
+        "asset_manifest.md",
+        "video_slots.json",
+        "style_brief.md"
+      ],
+      "humanize_outputs": [
+        "beautiful-html-templates-production-prompt.md"
+      ],
+      "outputs": [
+        "outputs/beautiful-rendered/index.html",
+        "outputs/beautiful-rendered/render_manifest.json"
+      ],
+      "v0_6_4_note": "Humanize writes beautiful-html-templates-production-prompt.md (the brief). The downstream beautiful-html-templates reads it and renders natively to outputs/beautiful-rendered/. Post-render QA is run via --qa-from on the downstream's HTML.",
+      "local_skill_paths": [
+        "~/.agents/skills/beautiful-html-templates",
+        "~/.hermes/skills/beautiful-html-templates"
+      ],
+      "command_file": "commands/beautiful-agent.md",
+      "qa_failure_modes": [
+        "english-horizontal-overflow",
+        "english-low-contrast",
+        "english-hyphenation-noise",
+        "english-font-contract-missing",
+        "english-image-alt-missing"
+      ]
+    },
+    {
+      "id": "html-ppt",
+      "display_name": "HTML PPT Studio",
+      "skill_name": "html-ppt",
+      "role": "full-deck-and-presenter-renderer",
+      "best_for": [
+        "演讲者模式",
+        "逐字稿",
+        "36主题",
+        "15个full-deck模板",
+        "31个布局",
+        "动画丰富"
+      ],
+      "inputs": [
+        "deck_brief.md",
+        "slide_plan.json",
+        "speaker_intent.md",
+        "asset_manifest.md"
+      ],
+      "outputs": [
+        "outputs/html-ppt/index.html",
+        "outputs/html-ppt/render_report.md"
+      ],
+      "v0_6_4_note": "html-ppt is a legacy renderer slot. v0.6.4 production paths are guizang (zh) and frontend-slides / beautiful-html-templates (en).",
+      "local_skill_paths": [
+        "~/.hermes/skills/html-ppt",
+        "~/.agents/skills/html-ppt"
+      ],
+      "command_file": "commands/html-ppt-agent.md"
+    },
+    {
+      "id": "frontend-slides",
+      "display_name": "Frontend Slides",
+      "skill_name": "frontend-slides",
+      "role": "english-native-renderer",
+      "support_level": "full",
+      "support_note": "v0.9.1: brief exit + real --qa-from checkup remain verified on docs/showcase/v0.9-frontend-slides/ppt/index.html, and the English renderer now has 5 renderer-specific static failure modes: horizontal overflow, low contrast, hyphenation noise, font contract missing, and image alt text missing. This closes the gap that kept it at brief+qa-verified.",
+      "best_for": [
+        "PPTX转HTML",
+        "英文style discovery",
+        "show-don't-tell风格预览",
+        "viewport fitting",
+        "Vercel deploy",
+        "PDF export",
+        "v0.6.4 由 Humanize 发 brief，frontend-slides 原生渲染"
+      ],
+      "inputs": [
+        "deck_brief.md",
+        "ast_outline.md",
+        "slide_plan.json",
+        "speaker_intent.md",
+        "asset_manifest.md",
+        "video_slots.json",
+        "style_brief.md",
+        "source.pptx"
+      ],
+      "humanize_outputs": [
+        "frontend-slides-production-prompt.md"
+      ],
+      "outputs": [
+        "outputs/frontend-slides-rendered/index.html"
+      ],
+      "v0_6_4_note": "Humanize writes frontend-slides-production-prompt.md (the brief). The downstream frontend-slides reads it and renders natively to outputs/frontend-slides-rendered/. Post-render QA is run via --qa-from on the downstream's HTML.",
+      "local_skill_paths": [
+        "~/.agents/skills/frontend-slides",
+        "~/.hermes/skills/frontend-slides"
+      ],
+      "command_file": "commands/frontend-slides-agent.md",
+      "qa_failure_modes": [
+        "english-horizontal-overflow",
+        "english-low-contrast",
+        "english-hyphenation-noise",
+        "english-font-contract-missing",
+        "english-image-alt-missing"
+      ]
+    },
+    {
+      "id": "post-render-qa-loop",
+      "display_name": "Humanize PPT 演讲体检 (Post-Render QA Loop)",
+      "skill_name": "humanize-ppt",
+      "role": "post-render-quality-gate",
+      "best_for": [
+        "演讲体检：逐页核对渲染结果和大纲页的差异",
+        "把『只能看、不能讲』的页揪出来",
+        "写 fix_prompt.md 给下游 skill 重渲",
+        "3 轮上限，超出 needs-human",
+        "锁定 known-good 视觉基准"
+      ],
+      "inputs": [
+        "--qa-from <rendered.html|native.pptx>",
+        "out/slide_plan.json",
+        "out/qa_iteration.json (上一轮)"
+      ],
+      "outputs": [
+        "outputs/qa/qa_report.md",
+        "outputs/qa/fix_prompt.md",
+        "outputs/qa/qa_iteration.json"
+      ],
+      "v0_6_4_note": "New in v0.6.4. The loop is launched via `python3 scripts/humanize_ppt.py --qa-from <rendered.html> --out <previous out> --renderer guizang --guizang-style A --max-qa-iterations 3`.",
+      "command_file": null
+    },
+    {
+      "id": "presenter-adapter",
+      "display_name": "Humanize PPT Presenter Shell",
+      "skill_name": "humanize-ppt",
+      "role": "humanize-native-presenter-shell",
+      "support_level": "full",
+      "best_for": [
+        "无下游 deck 时也能先上台讲",
+        "用 slide_plan.json + speaker_intent.md 生成独立演讲 shell",
+        "演讲稿面板、翻页状态、计时器、S/左右键快捷键",
+        "不抢下游 deck 的视觉主权"
+      ],
+      "inputs": [
+        "slide_plan.json",
+        "speaker_intent.md"
+      ],
+      "outputs": [
+        "outputs/presenter/presenter-shell.html",
+        "outputs/presenter/presenter_manifest.json",
+        "outputs/presenter/render_report.md"
+      ],
+      "v0_9_1_note": "Humanize writes a standalone presenter-shell.html even when no downstream rendered deck exists. If a final deck exists, outputs/presenter/index.html can still iframe/control it.",
+      "command_file": "commands/presenter-adapter-agent.md"
+    },
+    {
+      "id": "qa",
+      "display_name": "Humanize PPT Brief-Mode QA",
+      "skill_name": "humanize-ppt",
+      "role": "brief-mode-quality-gate",
+      "best_for": [
+        "检查AST是否保留",
+        "检查AI草稿痕迹",
+        "检查路径",
+        "检查交付清单"
+      ],
+      "inputs": [
+        "router_plan.json",
+        "run_manifest.json",
+        "outputs/"
+      ],
+      "outputs": [
+        "outputs/qa/qa_report.md",
+        "outputs/qa/fix_list.md",
+        "outputs/qa/final_manifest.json"
+      ],
+      "local_skill_paths": [
+        "~/.hermes/skills/humanize-ppt"
+      ],
+      "command_file": "commands/qa-agent.md"
+    }
+  ]
+}

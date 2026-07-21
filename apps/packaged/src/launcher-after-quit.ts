@@ -2,7 +2,7 @@ import { appendFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
 import { stopProcesses, waitForProcessExit, type StopProcessesResult } from "@open-design/platform";
-import type { LauncherAfterQuitRequest } from "@open-design/launcher-proto";
+import { compareLauncherVersions, type LauncherAfterQuitRequest } from "@open-design/launcher-proto";
 import {
   APP_KEYS,
   OPEN_DESIGN_SIDECAR_CONTRACT,
@@ -17,8 +17,24 @@ import type { PackagedNamespacePaths } from "./paths.js";
 type LauncherAfterQuitLogger = Pick<Console, "warn"> & Partial<Pick<Console, "info">>;
 
 export type LauncherExistingDesktopGateResult =
-  | { action: "continue"; reason: "inspect-failed" | "not-running" | "stale-sidecar" }
+  | { action: "continue"; reason: "inspect-failed" | "not-running" | "stale-sidecar" | "superseded-version" }
   | { action: "exit"; reason: "existing-focused" | "existing-focus-failed" };
+
+/**
+ * Finish a duplicate packaged entry after the healthy namespace desktop has
+ * accepted focus (or after focus failed without making a duplicate safe).
+ *
+ * Returning from `main()` alone does not terminate Electron's event loop: the
+ * unused outer can keep a main process and Chromium helpers alive indefinitely.
+ */
+export function exitPackagedLauncherForExistingDesktop(
+  result: LauncherExistingDesktopGateResult,
+  exit: (code: number) => void,
+): boolean {
+  if (result.action !== "exit") return false;
+  exit(0);
+  return true;
+}
 
 async function writeLauncherAfterQuitLog(paths: PackagedNamespacePaths, message: string): Promise<void> {
   const logDir = join(paths.logsRoot, "launcher");
@@ -67,6 +83,60 @@ async function forceStopLingeringDesktop(
   return gone;
 }
 
+async function restartExistingDesktop(
+  input: {
+    ipcPath: string;
+    logger: LauncherAfterQuitLogger;
+    namespace: string;
+    paths: PackagedNamespacePaths;
+    pid: number | null;
+    reason: "stale-sidecar" | "superseded-version";
+    requestIpc: typeof requestJsonIpc;
+    stop: typeof stopProcesses;
+    waitForExit: typeof waitForProcessExit;
+  },
+): Promise<boolean> {
+  try {
+    await input.requestIpc(input.ipcPath, { type: SIDECAR_MESSAGES.SHUTDOWN }, { timeoutMs: 800 });
+  } catch (error) {
+    const message = `inspect-found-existing namespace=${input.namespace} shutdown=failed reason=${input.reason} error=${error instanceof Error ? error.message : String(error)}`;
+    await writeLauncherAfterQuitLog(input.paths, message);
+    input.logger.warn(`[open-design launcher] ${message}`);
+    return false;
+  }
+  if (input.pid == null) return true;
+
+  const exited = await input.waitForExit(input.pid, 5000);
+  await writeLauncherAfterQuitLog(
+    input.paths,
+    `inspect-found-existing namespace=${input.namespace} shutdown=${exited ? "exited" : "timed-out"} reason=${input.reason} pid=${input.pid}`,
+  );
+  if (exited) return true;
+
+  return await forceStopLingeringDesktop(
+    input.pid,
+    input.reason,
+    input.paths,
+    input.logger,
+    input.stop,
+  );
+}
+
+function incomingVersionSupersedesExisting(
+  incomingVersion: string | null | undefined,
+  existingVersion: string | null | undefined,
+): boolean {
+  if (incomingVersion == null || existingVersion == null) return false;
+  const incoming = incomingVersion.trim();
+  const existing = existingVersion.trim();
+  if (incoming.length === 0 || existing.length === 0) return false;
+  try {
+    return compareLauncherVersions(incoming, existing) > 0;
+  } catch {
+    return false;
+  }
+}
+
 export async function waitForLauncherAfterQuit(
   request: LauncherAfterQuitRequest | null,
   paths: PackagedNamespacePaths,
@@ -93,6 +163,7 @@ export async function waitForLauncherAfterQuit(
 export async function inspectExistingDesktopForLauncher(
   namespace: string,
   options: {
+    incomingVersion?: string | null;
     logger?: LauncherAfterQuitLogger;
     paths: PackagedNamespacePaths;
     requestIpc?: typeof requestJsonIpc;
@@ -151,29 +222,41 @@ export async function inspectExistingDesktopForLauncher(
       options.paths,
       `inspect-found-existing namespace=${namespace} action=restart reason=stale-sidecar apps=${staleSidecars.join(",")} pid=${pid ?? "unknown"}`,
     );
-    try {
-      await requestIpc(ipcPath, { type: SIDECAR_MESSAGES.SHUTDOWN }, { timeoutMs: 800 });
-    } catch (error) {
-      const message = `inspect-found-existing namespace=${namespace} shutdown=failed reason=stale-sidecar error=${error instanceof Error ? error.message : String(error)}`;
-      await writeLauncherAfterQuitLog(options.paths, message);
-      logger.warn(`[open-design launcher] ${message}`);
-      return { action: "exit", reason: "existing-focus-failed" };
-    }
-    if (pid != null) {
-      const exited = await waitForExit(pid, 5000);
-      await writeLauncherAfterQuitLog(
-        options.paths,
-        `inspect-found-existing namespace=${namespace} shutdown=${exited ? "exited" : "timed-out"} reason=stale-sidecar pid=${pid}`,
-      );
-      // A skewed desktop (running, but its own daemon/web sidecars are stale)
-      // that ignores SHUTDOWN would otherwise make us exit and leave the user
-      // pinned to it. Force it off the socket instead, then restart fresh.
-      if (!exited) {
-        const gone = await forceStopLingeringDesktop(pid, "stale-sidecar", options.paths, logger, stop);
-        if (!gone) return { action: "exit", reason: "existing-focus-failed" };
-      }
-    }
+    const restarted = await restartExistingDesktop({
+      ipcPath,
+      logger,
+      namespace,
+      paths: options.paths,
+      pid,
+      reason: "stale-sidecar",
+      requestIpc,
+      stop,
+      waitForExit,
+    });
+    if (!restarted) return { action: "exit", reason: "existing-focus-failed" };
     return { action: "continue", reason: "stale-sidecar" };
+  }
+
+  const existingVersion = status.update?.currentVersion;
+  if (incomingVersionSupersedesExisting(options.incomingVersion, existingVersion)) {
+    const pid = typeof status.pid === "number" ? status.pid : null;
+    await writeLauncherAfterQuitLog(
+      options.paths,
+      `inspect-found-existing namespace=${namespace} action=restart reason=superseded-version incomingVersion=${options.incomingVersion?.trim()} existingVersion=${existingVersion?.trim()} pid=${pid ?? "unknown"}`,
+    );
+    const restarted = await restartExistingDesktop({
+      ipcPath,
+      logger,
+      namespace,
+      paths: options.paths,
+      pid,
+      reason: "superseded-version",
+      requestIpc,
+      stop,
+      waitForExit,
+    });
+    if (!restarted) return { action: "exit", reason: "existing-focus-failed" };
+    return { action: "continue", reason: "superseded-version" };
   }
 
   try {

@@ -406,7 +406,7 @@ describe('DesignSystemCreationFlow', () => {
     expect(mocks.ensureDesignSystemWorkspace).not.toHaveBeenCalled();
   });
 
-  it('normalizes GitHub SSH source links before starting extraction', async () => {
+  it('keeps GitHub-only source links out of website brand extraction', async () => {
     const project: Project = {
       id: 'brand-github',
       name: 'GitHub Design System',
@@ -430,9 +430,10 @@ describe('DesignSystemCreationFlow', () => {
       | { body: string }
       | undefined;
     expect(requestInit).toBeTruthy();
-    expect(JSON.parse(requestInit!.body)).toMatchObject({
-      url: 'https://github.com/nexu-io/open-design',
-    });
+    const body = JSON.parse(requestInit!.body) as { url?: string; designMd?: string };
+    expect(body.url).toBeUndefined();
+    expect(body.designMd).toEqual(expect.stringContaining('https://github.com/nexu-io/open-design'));
+    expect(body.designMd).toEqual(expect.stringContaining('GitHub repositories: https://github.com/nexu-io/open-design'));
   });
 
   it('keeps protocol-less website paths as website URLs', async () => {

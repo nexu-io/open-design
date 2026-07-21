@@ -17,6 +17,8 @@
 // report `renderable: false` with a reason, and the caller keeps the old
 // iframe thumbnail for that deck.
 
+import DOMPurify from 'dompurify';
+
 import { DECK_SLIDE_SELECTOR } from '@open-design/contracts/runtime/deck-stage-fallback';
 
 export type DeckThumbnailFallbackReason =
@@ -67,7 +69,29 @@ const STRUCTURED_SLIDE_SELECTOR =
   'deck-stage > [data-screen-label], .deck-stage > [data-screen-label], ' +
   '#deck > [data-screen-label], body > [data-screen-label]';
 
-const FONT_HOST_RE = /(?:fonts\.googleapis\.com|fonts\.gstatic\.com|use\.typekit\.net|fonts\.bunny\.net|fonts\.cdnfonts\.com)/i;
+const FONT_HOSTS = new Set([
+  'fonts.googleapis.com',
+  'fonts.gstatic.com',
+  'use.typekit.net',
+  'fonts.bunny.net',
+  'fonts.cdnfonts.com',
+]);
+
+// A font stylesheet link is re-loaded document-wide by DeckSlideThumbnail, so it
+// must be an https URL whose HOST is exactly an approved font CDN — a substring
+// match would accept `https://evil.example/fonts.googleapis.com.css` and inject
+// arbitrary CSS into the app document.
+function isApprovedFontHref(href: string): boolean {
+  // Font-CDN links are always absolute https URLs; a relative href cannot be an
+  // approved CDN and is correctly treated as an untrusted external stylesheet.
+  let url: URL;
+  try {
+    url = new URL(href);
+  } catch {
+    return false;
+  }
+  return url.protocol === 'https:' && FONT_HOSTS.has(url.hostname.toLowerCase());
+}
 
 function unrenderable(reason: DeckThumbnailFallbackReason): ParsedDeckThumbnails {
   return {
@@ -107,7 +131,7 @@ export function parseDeckThumbnails(html: string, baseHref?: string): ParsedDeck
     if (!/\bstylesheet\b/.test(rel)) continue;
     const href = link.getAttribute('href') || '';
     if (!href) continue;
-    if (FONT_HOST_RE.test(href)) {
+    if (isApprovedFontHref(href)) {
       if (!fontLinks.includes(href)) fontLinks.push(href);
     } else {
       return unrenderable('external-stylesheet');
@@ -195,10 +219,10 @@ function collectAncestors(slide: Element): DeckThumbnailAncestor[] {
   while (node) {
     const tag = node.tagName.toLowerCase();
     if (tag === 'body' || tag === 'html') break;
-    chain.push({
-      tag,
-      attributes: Array.from(node.attributes).map((a) => [a.name, a.value] as [string, string]),
-    });
+    // These wrappers are reconstructed as live elements in the app-origin shadow
+    // DOM by DeckSlideThumbnail, so a wrapper is a second injection path for
+    // untrusted deck markup and is sanitized the same way as the slide body.
+    chain.push(sanitizeThumbnailAncestor(node));
     node = node.parentElement;
   }
   return chain.reverse();
@@ -295,13 +319,72 @@ function absolutizeCssUrls(css: string, baseHref: string): string {
   });
 }
 
-// Clone the slide and normalize it for shadow rendering: rewrite inline-style
-// viewport units to canvas px, and (when a base href is known) rewrite relative
-// asset references (`src`, `srcset`, inline `style` url(), `href`) to absolute
-// — a shadow root carries no <base>, so relative URLs would otherwise resolve
-// against the host app page.
+// DOMPurify configuration for a deck THUMBNAIL. DOMPurify's default profile
+// already removes <script>, inline event-handler attributes, javascript: /
+// vbscript: URLs, and mutation/animation vectors (including SVG SMIL that could
+// re-write an attribute after insertion). On top of that we forbid interactive,
+// navigable, and embedding elements so the static thumbnail stays inert and
+// cannot navigate, submit, embed, or animate itself back to life. Custom deck
+// elements (e.g. <deck-stage>) are allowed through as inert unknown elements so
+// descendant CSS selectors keep matching.
+const THUMBNAIL_SANITIZE_CONFIG = {
+  FORBID_TAGS: [
+    'a', 'area', 'audio', 'base', 'button', 'details', 'embed', 'form', 'iframe',
+    'input', 'link', 'marquee', 'meta', 'object', 'select', 'source', 'style',
+    'summary', 'textarea', 'track', 'video',
+    'animate', 'animatecolor', 'animatemotion', 'animatetransform', 'set',
+  ],
+  FORBID_ATTR: ['autofocus', 'tabindex', 'target', 'ping', 'formaction', 'action'],
+  CUSTOM_ELEMENT_HANDLING: {
+    // Only the deck runtime's own `deck-*` custom elements are allowed through.
+    // A broader match would let an untrusted deck name an element the app has
+    // registered, which would upgrade and run its lifecycle callbacks once
+    // appended to the live DOM.
+    tagNameCheck: /^deck-[a-z0-9-]*$/,
+    attributeNameCheck: null,
+    allowCustomizedBuiltInElements: false,
+  },
+};
+
+// Sanitize untrusted deck markup and return its single sanitized root element,
+// or null when the result is not exactly one element (e.g. a forbidden root
+// that DOMPurify unwrapped into several top-level nodes). RETURN_DOM yields a
+// <body> wrapper whose children are the sanitized top-level nodes; a forbidden
+// root that unwraps to one safe child renders as that (already-sanitized) child.
+function sanitizeThumbnailMarkup(html: string): Element | null {
+  const body = DOMPurify.sanitize(html, {
+    ...THUMBNAIL_SANITIZE_CONFIG,
+    RETURN_DOM: true,
+    WHOLE_DOCUMENT: false,
+  }) as unknown as HTMLElement;
+  if (body.children.length !== 1) return null;
+  return body.firstElementChild;
+}
+
+// Sanitize a single reconstructed wrapper element (tag + attributes only). An
+// unsafe wrapper that DOMPurify drops falls back to a plain <div> so the CSS
+// chain depth the slide's descendant selectors expect is preserved.
+function sanitizeThumbnailAncestor(node: Element): DeckThumbnailAncestor {
+  const shell = node.cloneNode(false) as Element;
+  const clean = sanitizeThumbnailMarkup(shell.outerHTML);
+  if (!clean) return { tag: 'div', attributes: [] };
+  return {
+    tag: clean.tagName.toLowerCase(),
+    attributes: Array.from(clean.attributes).map((a) => [a.name, a.value] as [string, string]),
+  };
+}
+
+// Clone the slide and normalize it for shadow rendering: sanitize the untrusted
+// markup with DOMPurify (it is mounted into the app-origin shadow DOM by
+// DeckSlideThumbnail), rewrite inline-style viewport units to canvas px, and
+// (when a base href is known) rewrite relative asset references to absolute — a
+// shadow root carries no <base>, so relative URLs would otherwise resolve
+// against the host app page. If sanitizing does not yield exactly one root
+// element (e.g. a forbidden root unwraps to several nodes) the slide renders a
+// neutral placeholder instead.
 function processSlideHtml(el: Element, baseHref: string | undefined, width: number, height: number): string {
-  const clone = el.cloneNode(true) as Element;
+  const clone = sanitizeThumbnailMarkup(el.outerHTML);
+  if (!clone) return '<div data-od-thumb-unsafe=""></div>';
   const nodes = [clone, ...Array.from(clone.querySelectorAll('[src], [srcset], [style], [href]'))];
   for (const node of nodes) {
     if (baseHref) {

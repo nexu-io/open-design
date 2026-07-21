@@ -371,6 +371,7 @@ describe('Langfuse message finalization gate', () => {
       events: [],
     };
     const capture = vi.fn();
+    const markLangfuseCompleted = vi.fn();
     const report = vi.fn(async () => ({
       langfuse_expected: true,
       langfuse_delivery_status: 'accepted' as const,
@@ -379,7 +380,7 @@ describe('Langfuse message finalization gate', () => {
       design: {
         analytics: { capture },
         getAppVersion: () => '0.7.0',
-        runs: { get: vi.fn(() => run) },
+        runs: { get: vi.fn(() => run), markLangfuseCompleted },
       },
       db: 'db',
       dataDir: '/tmp/od-data',
@@ -420,6 +421,7 @@ describe('Langfuse message finalization gate', () => {
         }),
       }),
     );
+    expect(markLangfuseCompleted).toHaveBeenCalledWith(run);
   });
 
   it('falls back to the run analytics context when final message headers are missing', async () => {

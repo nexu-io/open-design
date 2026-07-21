@@ -177,18 +177,35 @@
 /* ----- verify-scorecard: status header over rubric rows ------------------ */
 
 .scorecard {
-  padding: 12px 14px;
+  padding: 0;
   border: 1px solid var(--border-soft, var(--border));
   border-radius: var(--radius-md, 8px);
   background: var(--bg-panel);
+  overflow: hidden;
 }
 
 .scorecardHead {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 10px;
+  width: 100%;
+  padding: 9px 11px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.scorecardHead:hover {
+  background: transparent;
+}
+
+.scorecardHead:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 38%, transparent);
+  outline-offset: 2px;
 }
 
 .scorecardPill {
@@ -224,14 +241,38 @@
 }
 
 .scorecardSummary {
+  flex: 1 1 auto;
+  min-width: 0;
   font-size: 12px;
   color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scorecardCount {
+  flex: 0 0 auto;
+  color: var(--text-faint);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.scorecardChevron {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--text-faint);
+  transition: transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.scorecardChevronOpen {
+  transform: rotate(180deg);
 }
 
 .scoreRows {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 10px 11px 11px;
+  border-top: 1px solid var(--border-soft, var(--border));
   display: flex;
   flex-direction: column;
   gap: 7px;
@@ -279,35 +320,7 @@
   color: var(--text-muted);
 }
 
-/* ----- rule-proposal: name/assertion/check/rationale + actions ----------- */
-
-.ruleCard {
-  padding: 12px 14px;
-  border: 1px solid var(--border-soft, var(--border));
-  border-radius: var(--radius-md, 8px);
-  background: var(--bg-panel);
-  color: var(--text);
-}
-
-.ruleHead {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 8px;
-}
-
-.ruleHeadIcon {
-  display: inline-flex;
-  color: var(--accent);
-}
-
-.ruleKicker {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
+/* ----- rule-proposal details ------------------------------------------- */
 
 .ruleSummary {
   display: flex;
@@ -405,11 +418,10 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
-  border: 1px solid var(--green-border);
-  border-radius: var(--radius-md, 8px);
-  background: var(--green-bg);
-  color: var(--green);
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
 }
 
 .ruleSavedIcon {

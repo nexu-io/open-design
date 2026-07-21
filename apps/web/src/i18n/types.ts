@@ -2521,7 +2521,9 @@ export interface Dict {
   'chat.runError.title.emptyOutput': string;
   'chat.runError.title.sessionExpired': string;
   'chat.runError.title.gitBashMissing': string;
+  'chat.runError.title.cpuUnsupported': string;
   'chat.runError.title.generic': string;
+  'chat.runError.title.artifactMissing': string;
   'chat.runError.signInMessage.amr': string;
   'chat.runError.signInMessage.other': string;
   'chat.runError.cliMissingMessage': string;
@@ -2539,6 +2541,7 @@ export interface Dict {
   'chat.runError.emptyOutputMessage': string;
   'chat.runError.sessionExpiredMessage': string;
   'chat.runError.gitBashMissingMessage': string;
+  'chat.runError.cpuUnsupportedMessage': string;
   'chat.runError.agentFallback': string;
   'chat.runError.sourceLabel': string;
   'chat.runError.sourceExpandAria': string;
@@ -3586,6 +3589,8 @@ export interface Dict {
   'fileViewer.speakerNotesSaved': string;
   'fileViewer.speakerNotesSaveFailed': string;
   'fileViewer.speakerNotesPlaceholder': string;
+  'fileViewer.previewAssetBlockedTitle': string;
+  'fileViewer.previewAssetBlockedDetail': string;
   'fileViewer.presenterReset': string;
   'fileViewer.present': string;
   'fileViewer.presentInTab': string;

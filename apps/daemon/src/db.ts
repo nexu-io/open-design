@@ -1510,6 +1510,35 @@ export function listMessages(db: SqliteDb, conversationId: string) {
     .map(normalizeMessage);
 }
 
+export function conversationTurnIndexForRun(
+  db: SqliteDb,
+  conversationId: string,
+  runId: string,
+): number | null {
+  const row = db
+    .prepare(
+      `SELECT (
+          SELECT COUNT(*)
+            FROM messages AS previous
+           WHERE previous.conversation_id = current.conversation_id
+             AND previous.role = 'assistant'
+             AND previous.run_id IS NOT NULL
+             AND previous.position < current.position
+        ) AS conversationTurnIndex
+         FROM messages AS current
+        WHERE current.conversation_id = ?
+          AND current.role = 'assistant'
+          AND current.run_id = ?
+        ORDER BY current.position ASC
+        LIMIT 1`,
+    )
+    .get(conversationId, runId) as DbRow | undefined;
+  const index = row?.conversationTurnIndex;
+  return typeof index === 'number' && Number.isInteger(index) && index >= 0
+    ? index
+    : null;
+}
+
 export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
   const existing = db
     .prepare(`SELECT position FROM messages WHERE id = ?`)

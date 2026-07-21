@@ -96,8 +96,8 @@ importers:
         specifier: 1.2.0
         version: 1.2.0
       chokidar:
-        specifier: 5.0.0
-        version: 5.0.0
+        specifier: 3.6.0
+        version: 3.6.0
       express:
         specifier: 5.2.1
         version: 5.2.1
@@ -339,6 +339,9 @@ importers:
       '@xterm/xterm':
         specifier: 5.5.0
         version: 5.5.0
+      dompurify:
+        specifier: 3.4.2
+        version: 3.4.2
       jspdf:
         specifier: 4.2.1
         version: 4.2.1

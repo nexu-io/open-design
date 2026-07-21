@@ -686,16 +686,14 @@
 
 /* op-todo card variant (the .op-todo .todo-list rule already exists above) */
 .op-todo {
-  border-color: var(--accent-soft);
-  background: linear-gradient(180deg, var(--accent-tint) 0%, var(--bg-panel) 60%);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 .op-todo .op-card-head {
-  border-bottom: 1px solid color-mix(in srgb, var(--accent-soft) 70%, transparent);
+  border-bottom: 0;
   background: transparent;
-}
-.op-todo .op-icon {
-  background: var(--accent-soft);
-  color: var(--accent);
 }
 .op-todo .op-title {
   letter-spacing: 0.02em;
@@ -704,10 +702,32 @@
   color: var(--text-strong);
 }
 .op-todo .op-meta {
-  margin-left: auto;
+  margin-left: 0;
   font-variant-numeric: tabular-nums;
   font-size: 11px;
   color: var(--text-strong);
+}
+
+/* One conversation-level task snapshot, pinned above the composer. */
+.chat-pinned-todo {
+  position: relative;
+  padding: 0 16px;
+}
+.chat-pinned-todo::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  height: 28px;
+  background: linear-gradient(to top, var(--bg-panel), transparent);
+  pointer-events: none;
+}
+.chat-pinned-todo .op-card.op-todo {
+  box-shadow: none;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 /*
@@ -738,16 +758,19 @@
 }
 
 /*
- * Make the todo card header a clickable expand/collapse affordance.
- * Default is expanded while work is in flight; the user can flip it via
- * the chevron at the right. Removing the bottom border in the collapsed
- * state keeps the card looking like a single pill rather than an empty
- * disclosure with a hanging line.
+ * Todo cards always expose a clickable expand/collapse affordance. Completed
+ * task lists start collapsed to their progress summary, but remain available
+ * for review. Removing the bottom border in the collapsed state keeps the
+ * compact summary from looking like an empty disclosure with a hanging line.
  */
 .op-todo .op-todo-head {
   display: flex;
   align-items: stretch;
   padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  overflow: hidden;
 }
 .op-todo .op-todo-toggle {
   display: flex;
@@ -763,24 +786,37 @@
   font: inherit;
   color: inherit;
 }
-.op-todo .op-todo-done {
+.op-todo .op-todo-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  color: var(--text-muted);
+}
+.op-todo .op-todo-complete {
+  color: var(--green);
+  font-size: 11px;
+  font-weight: 600;
+}
+.op-todo .op-todo-continue {
   display: inline-flex;
   align-items: center;
   margin: 6px 10px 6px 0;
-  padding: 2px 12px;
-  font-size: 11px;
-  font-weight: 500;
-  border: 1px solid var(--green-border);
+  padding: 2px 10px;
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-pill);
-  background: var(--green-bg);
-  color: var(--green);
+  background: var(--bg-panel);
+  color: var(--text-strong);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
   cursor: pointer;
 }
-.op-todo .op-todo-done:hover {
-  filter: brightness(1.05);
-}
-.op-todo-collapsed .op-card-head {
-  border-bottom-color: transparent;
+.op-todo .op-todo-continue:hover {
+  background: var(--bg-subtle);
 }
 .op-todo-current {
   margin-left: 8px;
@@ -793,10 +829,15 @@
   flex: 1;
 }
 .op-todo-chev {
-  margin-left: 4px;
-  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: auto;
   color: var(--text-muted);
   transition: transform 120ms var(--ease-out);
+}
+.op-todo:not(.op-todo-collapsed) .op-todo-chev {
+  transform: rotate(180deg);
 }
 
 /* Question form — interactive form a planning agent can post into chat */
@@ -3447,8 +3488,11 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   transition: opacity 150ms var(--ease-out);
 }
 .msg.assistant:hover .assistant-footer,
-.assistant-footer[data-streaming="true"],
-.assistant-footer[data-last="true"] { opacity: 1; }
+.msg.assistant:focus-within .assistant-footer,
+.assistant-footer[data-streaming="true"] { opacity: 1; }
+@media (hover: none) {
+  .assistant-footer { opacity: 1; }
+}
 .assistant-footer .dot {
   width: 5px;
   height: 5px;
@@ -3461,11 +3505,6 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 }
 .assistant-footer .assistant-label {
   font-weight: 400;
-  color: var(--text-faint);
-  font-size: 11px;
-}
-.assistant-footer .assistant-stats {
-  font-variant-numeric: tabular-nums;
   color: var(--text-faint);
   font-size: 11px;
 }

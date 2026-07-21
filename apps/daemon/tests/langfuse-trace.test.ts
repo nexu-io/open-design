@@ -888,6 +888,21 @@ describe('buildTracePayload', () => {
   it('mirrors runtime + turn fields into trace metadata for query / export', () => {
     const batch = buildTracePayload(
       makeCtx({
+        run: {
+          runId: 'run-1',
+          status: 'succeeded',
+          startedAt: 1_700_000_000_000,
+          endedAt: 1_700_000_004_500,
+          retryAttemptCount: 1,
+          retryFinalResult: 'success',
+          retryOriginalFailure: {
+            failure_category: 'upstream_unavailable',
+            failure_detail: 'stream_disconnected',
+            failure_stage: 'first_token_wait',
+            retryable: true,
+            user_action: 'retry',
+          },
+        },
         turn: { model: 'claude-sonnet-4-5', skillId: 'landing-page' },
         runtime: {
           os: 'linux',
@@ -897,10 +912,14 @@ describe('buildTracePayload', () => {
           appChannel: 'beta',
           packaged: true,
           clientType: 'web',
+          agentCliVersion: 'claude 3.4.5',
+          runtimeCompanionName: 'opencode',
+          runtimeCompanionVersion: '1.2.3',
         },
       }),
     );
-    const m = (batch[0] as any).body.metadata;
+    const trace = (batch[0] as any).body;
+    const m = trace.metadata;
     expect(m.model).toBe('claude-sonnet-4-5');
     expect(m.skillId).toBe('landing-page');
     expect(m.os).toBe('linux');
@@ -910,8 +929,20 @@ describe('buildTracePayload', () => {
     expect(m.appChannel).toBe('beta');
     expect(m.packaged).toBe(true);
     expect(m.clientType).toBe('web');
+    expect(m.agentCliVersion).toBe('claude 3.4.5');
+    expect(m.runtimeCompanionName).toBe('opencode');
+    expect(m.runtimeCompanionVersion).toBe('1.2.3');
+    expect(m.retryAttemptCount).toBe(1);
+    expect(m.retryFinalResult).toBe('success');
+    expect(m.retryOriginalFailureCategory).toBe('upstream_unavailable');
+    expect(m.retryOriginalFailureDetail).toBe('stream_disconnected');
+    expect(m.retryOriginalFailureStage).toBe('first_token_wait');
     expect(m.projectId).toBe('proj-1');
     expect(m.agent).toBe('claude');
+    expect(trace.release).toBe('0.5.0');
+    expect(trace.version).toBe('claude 3.4.5');
+    expect(bodyOf(batch, 'span-create', 'agent-run').version).toBe('claude 3.4.5');
+    expect(bodyOf(batch, 'generation-create', 'llm').version).toBe('claude 3.4.5');
   });
 
   it('marks generation.level=ERROR when run failed', () => {
@@ -935,6 +966,36 @@ describe('buildTracePayload', () => {
     expect(bodyOf(batch, 'event-create', 'run-error').statusMessage).toBe('boom');
     expect((batch[0] as any).body.metadata.error).toBe('boom');
     expect((batch[0] as any).body.metadata.success).toBe(false);
+  });
+
+  it('redacts secrets from every failed-run error field sent to Langfuse', () => {
+    const providerToken = ['nvapi', 'A'.repeat(48)].join('-');
+    const rawError = `Header has invalid value: Bearer ${providerToken}`;
+    const batch = buildTracePayload(
+      makeCtx({
+        run: {
+          runId: 'run-secret-error',
+          status: 'failed',
+          startedAt: 1,
+          endedAt: 2,
+          error: rawError,
+        },
+      }),
+    );
+    const redactedError =
+      'Header has invalid value: Bearer [REDACTED:nvidia_api_key]';
+
+    expect(bodyOf(batch, 'span-create', 'agent-run').statusMessage).toBe(
+      redactedError,
+    );
+    expect(bodyOf(batch, 'generation-create', 'llm').statusMessage).toBe(
+      redactedError,
+    );
+    expect(bodyOf(batch, 'event-create', 'run-error').statusMessage).toBe(
+      redactedError,
+    );
+    expect((batch[0] as any).body.metadata.error).toBe(redactedError);
+    expect(JSON.stringify(batch)).not.toContain(providerToken);
   });
 
   it('uses an agent-runtime span instead of an llm generation for session-init failures with no model usage', () => {

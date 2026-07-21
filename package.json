@@ -11,6 +11,7 @@
   },
   "scripts": {
     "postinstall": "node ./scripts/postinstall.mjs",
+    "bootstrap": "node ./scripts/postinstall.mjs",
     "tools-dev": "pnpm exec tools-dev",
     "tools-pack": "pnpm exec tools-pack",
     "tools-release": "pnpm exec tools-release",

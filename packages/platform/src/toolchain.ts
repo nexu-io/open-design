@@ -119,6 +119,7 @@ export function wellKnownUserToolchainBins(
     join(home, ".vite-plus", "bin"),
     join(home, ".kimi-code", "bin"),
     join(home, ".opencode", "bin"),
+    join(home, ".grok", "bin"),
     join(home, ".bun", "bin"),
     join(home, ".volta", "bin"),
     join(home, ".asdf", "shims"),

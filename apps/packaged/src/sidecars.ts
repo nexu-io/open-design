@@ -33,6 +33,11 @@ import {
 
 import type { PackagedWebOutputMode } from "./config.js";
 import type { PackagedNamespacePaths } from "./paths.js";
+import {
+  prewarmPackagedFiles,
+  resolveDaemonPrewarmTargets,
+  resolveWebPrewarmTargets,
+} from "./prewarm.js";
 
 const require = createRequire(import.meta.url);
 const PACKAGED_CHILD_ENV_ALLOWLIST = [
@@ -158,6 +163,15 @@ const DAEMON_STATUS_TIMEOUT_MS = 35_000;
 // lets that first launch succeed instead of failing to a recovery screen and
 // forcing a manual relaunch.
 const WIN32_STATUS_TIMEOUT_MS = 90_000;
+// Linux AppImage launches remount a fresh FUSE squashfs every time, so the
+// VFS page cache for the packaged payload is cold on EVERY launch — the
+// daemon demand-pages its 124 MB bundled node binary through FUSE while the
+// Electron main process faults through the same mount, and the 35s POSIX
+// baseline is unreachable on mid-range hardware (issue #5835). The prewarm
+// pass in startPackagedSidecars cuts the usual case to a few seconds; this
+// widened budget is the safety net for slow devices, mirroring the win32
+// rationale above (same "slow, not dead" failure class as #5515).
+const LINUX_STATUS_TIMEOUT_MS = 90_000;
 const DAEMON_MIGRATION_STATUS_TIMEOUT_MS = 30 * 60 * 1000;
 
 // Poll cadence for waitForStatus: start tight so a fast daemon is detected
@@ -168,15 +182,19 @@ const STATUS_POLL_INITIAL_MS = 150;
 const STATUS_POLL_MAX_MS = 1500;
 
 // Baseline status wait budget by platform, before the daemon-only legacy
-// migration override. win32 gets the wider AV-scan headroom; every other OS
-// keeps the 35s baseline.
+// migration override. win32 gets the wider AV-scan headroom, linux gets the
+// same headroom for AppImage FUSE cold starts; every other OS keeps the 35s
+// baseline.
 function baseStatusTimeoutMs(platform: NodeJS.Platform = process.platform): number {
-  return platform === "win32" ? WIN32_STATUS_TIMEOUT_MS : DAEMON_STATUS_TIMEOUT_MS;
+  if (platform === "win32") return WIN32_STATUS_TIMEOUT_MS;
+  if (platform === "linux") return LINUX_STATUS_TIMEOUT_MS;
+  return DAEMON_STATUS_TIMEOUT_MS;
 }
 
 /**
  * Daemon status wait budget. The platform baseline (35s, or 90s on win32 for
- * AV-scan headroom) is fine for normal cold boots, but the OD_LEGACY_DATA_DIR
+ * AV-scan headroom and on linux for AppImage FUSE cold starts) is fine for
+ * normal cold boots, but the OD_LEGACY_DATA_DIR
  * one-shot recovery flow can synch-copy a multi-GB legacy `.od/` payload before
  * SQLite even opens, and killing the child mid-migration can leave dataDir
  * half-promoted. When the env var is set, use a 30-minute budget so the parent
@@ -369,6 +387,7 @@ export type PackagedDaemonSpawnEnvOptions = {
   appVersion: string | null;
   amrProfile?: string | null;
   daemonCliEntry: string | null;
+  nodeCommand?: string | null;
   /**
    * PR #974 round-5 (lefarcen P2): only pin the daemon's import-folder
    * gate ON when the desktop runtime is actually being started in the
@@ -411,6 +430,9 @@ export function buildPackagedDaemonSpawnEnv(
     // fallback, but packaged runtime must not rely on path inference from
     // Electron userData, bundle names, or ports.
     ...createPackagedDaemonManagedPathEnv(paths),
+    ...(options.nodeCommand == null || options.nodeCommand.length === 0
+      ? {}
+      : { OD_NODE_BIN: options.nodeCommand }),
     ...(options.amrProfile == null || options.amrProfile.length === 0
       ? {}
       : { OPEN_DESIGN_AMR_PROFILE: options.amrProfile }),
@@ -572,16 +594,40 @@ export async function startPackagedSidecars(
 
   const children: ManagedSidecarChild[] = [];
 
+  const daemonSidecarEntry =
+    options.daemonSidecarEntry ?? resolveSidecarEntry("@open-design/daemon", "sidecar");
+  const webSidecarEntry =
+    options.webSidecarEntry ?? resolveSidecarEntry("@open-design/web", "sidecar");
+  const prewarmLog = (message: string): void => {
+    void appendSidecarLifecycleLog(join(paths.logsRoot, "launcher", "latest.log"), message);
+  };
+
   try {
+    // Issue #5835: on Linux AppImage the payload lives on a fresh FUSE mount
+    // with a cold page cache. Read the daemon's cold-start set (bundled node
+    // binary + daemon dist) into the page cache BEFORE spawning, so the
+    // timed status window covers real daemon work instead of demand-paging
+    // ~145 MB through FUSE page fault by page fault. Best-effort and gated
+    // to linux+FUSE inside prewarmPackagedFiles; plain-file installs skip.
+    await prewarmPackagedFiles(
+      resolveDaemonPrewarmTargets({
+        nodeCommand: options.nodeCommand,
+        daemonSidecarEntry,
+        resourceRoot: paths.resourceRoot,
+      }),
+      { log: prewarmLog },
+    );
+
     options.onPhase?.("daemon-spawning");
     const daemon = await spawnSidecarChild({
       app: APP_KEYS.DAEMON,
-      entryPath: options.daemonSidecarEntry ?? resolveSidecarEntry("@open-design/daemon", "sidecar"),
+      entryPath: daemonSidecarEntry,
       env: buildPackagedDaemonSpawnEnv(paths, {
         appVersion: options.appVersion,
         amrProfile: options.amrProfile,
         daemonCliEntry: options.daemonCliEntry,
         legacyDataDir: process.env.OD_LEGACY_DATA_DIR ?? null,
+        nodeCommand: options.nodeCommand,
         requireDesktopAuth: options.requireDesktopAuth,
         telemetryRelayUrl: options.telemetryRelayUrl,
         posthogKey: options.posthogKey,
@@ -593,6 +639,17 @@ export async function startPackagedSidecars(
       runtime,
     });
     children.push(daemon);
+    // The web prewarm overlaps the daemon's boot wait: its read set (web
+    // sidecar dist, .next/server chunks, Next framework code) is disjoint
+    // from the daemon's already-warm working set, so the FUSE server stays
+    // busy on sequential reads while the daemon does CPU/SQLite work.
+    const webPrewarm = prewarmPackagedFiles(
+      resolveWebPrewarmTargets({
+        webSidecarEntry,
+        webStandaloneRoot: options.webStandaloneRoot,
+      }),
+      { log: prewarmLog },
+    );
     const daemonStatus = await waitForStatus<DaemonStatusSnapshot>(
       daemon.ipcPath,
       (status) => status.url != null,
@@ -607,10 +664,14 @@ export async function startPackagedSidecars(
     if (daemonStatus.url == null) throw new Error("daemon did not report a URL");
     options.onPhase?.("daemon-ready");
 
+    // The web payload must be in the page cache before the web sidecar
+    // enters its own timed status window.
+    await webPrewarm;
+
     options.onPhase?.("web-spawning");
     const web = await spawnSidecarChild({
       app: APP_KEYS.WEB,
-      entryPath: options.webSidecarEntry ?? resolveSidecarEntry("@open-design/web", "sidecar"),
+      entryPath: webSidecarEntry,
       env: {
         [SIDECAR_ENV.DAEMON_PORT]: extractPort(daemonStatus.url),
         [SIDECAR_ENV.WEB_PORT]: "0",

@@ -32,6 +32,7 @@ import {
 } from '../codex-rollout-usage.js';
 import type { ConnectorService } from '../connectors/service.js';
 import {
+  conversationTurnIndexForRun,
   getConversation,
   getProject,
   listConversations,
@@ -40,6 +41,7 @@ import {
   upsertMessage,
 } from '../db.js';
 import { readVelaLoginStatus } from '../integrations/vela.js';
+import { getDetectedRuntimeVersions } from '../runtimes/detection.js';
 import {
   deriveLangfuseDeliveryState,
   readTelemetrySinkConfig,
@@ -161,9 +163,21 @@ interface ChatRun {
   clients: Set<SseClient>;
   analyticsContext?: AnalyticsContext;
   analyticsTelemetry?: RunTelemetryTimestamps;
+  // E-lite root-cause telemetry read at run_finished. `stdinBackpressure`: the
+  // prompt write to child stdin was queued (pipe buffer full). `lastAgentActivityAt`:
+  // the inactivity-watchdog clock, used to derive `last_progress_age_ms`.
+  stdinBackpressure?: boolean;
+  lastAgentActivityAt?: number;
   retryAttemptCount?: number;
   retryFinalResult?: string;
   retrySuppressedReason?: string;
+  retryOriginalFailure?: {
+    failure_category?: string;
+    failure_detail?: string;
+    failure_stage?: string;
+    retryable?: boolean;
+    user_action?: string;
+  };
   artifactOutcome?: {
     artifactCount: number;
     artifactsCreated?: number;
@@ -211,6 +225,12 @@ interface ChatRunService {
   cancel(run: ChatRun): Promise<ChatRunStatusResponse>;
   isTerminal(status: ChatRunStatus): boolean;
   emit?(run: ChatRun, event: string, data: unknown): RunEventRecord;
+  setAnalyticsRecovery?(run: ChatRun, recovery: {
+    context: AnalyticsContext;
+    properties: Record<string, unknown>;
+    insertId: string;
+  }): void;
+  markAnalyticsCompleted?(run: ChatRun): void;
 }
 
 interface AnalyticsService {
@@ -220,7 +240,7 @@ interface AnalyticsService {
     appVersion: string;
     properties: Record<string, unknown>;
     insertId: string;
-  }): void;
+  }): void | Promise<void>;
 }
 
 interface RunRoutesDesignService {
@@ -701,6 +721,19 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       typeof meta.conversationId === 'string' && meta.conversationId
         ? getConversation(db, meta.conversationId)
         : null;
+    // A run may only attach to a conversation owned by its own project. Without
+    // this guard a request pairing projectId=A with a conversationId owned by
+    // project B runs in A's cwd but pins its messages and native session under
+    // B — corrupting B's chat history and resume identity. Mirror the ownership
+    // check the sibling routes already enforce (handoff.ts, terminal.ts).
+    if (
+      conversationSession &&
+      typeof meta.projectId === 'string' &&
+      meta.projectId &&
+      conversationSession.projectId !== meta.projectId
+    ) {
+      return sendApiError(res, 404, 'CONVERSATION_NOT_FOUND', 'conversation not found for project');
+    }
     meta.sessionMode =
       meta.sessionMode === 'chat' || meta.sessionMode === 'design' || meta.sessionMode === 'plan'
         ? normalizeConversationSessionMode(meta.sessionMode)
@@ -851,11 +884,17 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       const hintProjectTurnIndex = typeof analyticsHints.projectTurnIndex === 'number'
         ? analyticsHints.projectTurnIndex
         : undefined;
+      const conversationTurnIndex = run.conversationId
+        ? conversationTurnIndexForRun(db, run.conversationId, run.id)
+        : null;
       const sessionDimensionProps = {
         ...(hintTurnIndex !== undefined ? { turn_index: hintTurnIndex } : {}),
         ...(hintIsFirstRun !== undefined ? { is_first_run: hintIsFirstRun } : {}),
         ...(hintProjectTurnIndex !== undefined
           ? { project_turn_index: hintProjectTurnIndex }
+          : {}),
+        ...(conversationTurnIndex !== null
+          ? { conversation_turn_index: conversationTurnIndex }
           : {}),
         ...(hintHasExistingArtifact !== undefined
           ? { has_existing_artifact: hintHasExistingArtifact }
@@ -1021,6 +1060,11 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         skill_ids: runSkillIds,
         token_count_source: userQueryTokens > 0 ? 'estimated' : 'unknown',
       };
+      design.runs.setAnalyticsRecovery?.(run, {
+        context: analyticsContext,
+        properties: baseProps,
+        insertId: runInsertId,
+      });
       design.analytics.capture({
         eventName: 'run_created',
         context: analyticsContext,
@@ -1206,6 +1250,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         const finishedModelId = hasExplicitRequestedModelForAnalytics(reqBody.model)
           ? modelIdForTracking(reqBody.model)
           : modelIdForTracking(usageAnalytics.agent_reported_model);
+        const runtimeVersions = getDetectedRuntimeVersions(run.agentId);
         for (const [index, retryEvent] of runRetryEventsForAnalytics(run.events).entries()) {
           design.analytics.capture({
             eventName: retryEvent.event,
@@ -1215,7 +1260,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
             insertId: `${runInsertId}-${retryEvent.event}-${index}`,
           });
         }
-        design.analytics.capture({
+        await Promise.resolve(design.analytics.capture({
           eventName: 'run_finished',
           context: analyticsContext,
           appVersion: design.getAppVersion(),
@@ -1237,6 +1282,33 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
             asked_user_question: runAskedUserQuestion(run.events),
             retry_attempt_count: run.retryAttemptCount ?? 0,
             retry_final_result: run.retryFinalResult ?? 'not_attempted',
+            ...(runtimeVersions?.agentCliVersion
+              ? { agent_cli_version: runtimeVersions.agentCliVersion }
+              : {}),
+            ...(runtimeVersions?.runtimeCompanionName
+              ? { runtime_companion_name: runtimeVersions.runtimeCompanionName }
+              : {}),
+            ...(runtimeVersions?.runtimeCompanionVersion
+              ? { runtime_companion_version: runtimeVersions.runtimeCompanionVersion }
+              : {}),
+            ...(run.retryOriginalFailure?.failure_category
+              ? {
+                  retry_original_failure_category:
+                    run.retryOriginalFailure.failure_category,
+                }
+              : {}),
+            ...(run.retryOriginalFailure?.failure_detail
+              ? {
+                  retry_original_failure_detail:
+                    run.retryOriginalFailure.failure_detail,
+                }
+              : {}),
+            ...(run.retryOriginalFailure?.failure_stage
+              ? {
+                  retry_original_failure_stage:
+                    run.retryOriginalFailure.failure_stage,
+                }
+              : {}),
             ...(run.retrySuppressedReason
               ? { retry_suppressed_reason: run.retrySuppressedReason }
               : {}),
@@ -1247,6 +1319,12 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
             } : {}),
             ...timingAnalytics,
             ...diagnosticsAnalytics,
+            // E-lite: `approval_requested`/`tool_result_sent` ride in via
+            // `...diagnosticsAnalytics`; these two come off the run object.
+            stdin_backpressure: run.stdinBackpressure === true,
+            ...(typeof run.lastAgentActivityAt === 'number'
+              ? { last_progress_age_ms: Math.max(0, analyticsCapturedAt - run.lastAgentActivityAt) }
+              : {}),
             langfuse_trace_id: run.id,
             ...langfuseDeliveryForAnalytics,
             ...(errorCode ? { error_code: errorCode } : {}),
@@ -1294,7 +1372,8 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
             token_count_source: usageAnalytics.token_count_source,
           },
           insertId: `${runInsertId}-finish`,
-        });
+        }));
+        design.runs.markAnalyticsCompleted?.(run);
       }).catch(() => {});
     }
   });
@@ -1504,6 +1583,18 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     );
     if (!toolBundleSupport.ok) {
       return sendApiError(res, 400, 'BAD_REQUEST', toolBundleSupport.message);
+    }
+    // A chat run may only attach to a conversation owned by its own project.
+    // Without this guard, pairing projectId=A with a conversationId owned by
+    // project B runs in A's cwd but pins messages and the native session under
+    // B — corrupting B's history and resume identity. Mirror the ownership
+    // check the sibling routes already enforce (handoff.ts, terminal.ts).
+    if (typeof requestBody.projectId === 'string' && requestBody.projectId &&
+        typeof requestBody.conversationId === 'string' && requestBody.conversationId) {
+      const chatConversation = getConversation(db, requestBody.conversationId);
+      if (chatConversation && chatConversation.projectId !== requestBody.projectId) {
+        return sendApiError(res, 404, 'CONVERSATION_NOT_FOUND', 'conversation not found for project');
+      }
     }
     const meta = {
       ...requestBody,

@@ -446,6 +446,16 @@ export function attachAcpSession({
       fail(`unhandled ACP permission request: ${JSON.stringify(raw)}`);
       return;
     }
+    // E-lite: the ACP path is the only daemon-observable approval gate. Surface
+    // it so `run_finished.approval_requested` can attribute a `tool_execution`
+    // stall to an approval hang even though we auto-approve here.
+    send('agent', {
+      type: 'diagnostic',
+      name: 'acp_approval_request',
+      source: 'acp-json-rpc',
+      elapsedMs: Date.now() - runStartedAt,
+      optionId,
+    });
     resetStageTimer('session/request_permission');
     try {
       sendRpcResult(stdin, raw.id, {
