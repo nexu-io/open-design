@@ -143,7 +143,7 @@ describe('FileViewer deploy analytics attribution', () => {
         (call: any[]) => call[0] === 'artifact_deploy_result',
       );
       expect(trackCalls.length).toBeGreaterThan(0);
-      const props = trackCalls[0][1] as Record<string, unknown>;
+      const props = trackCalls[0]![1] as Record<string, unknown>;
       expect(props).toMatchObject({
         page_name: 'artifact',
         area: 'deploy_modal',
