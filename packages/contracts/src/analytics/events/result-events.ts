@@ -328,6 +328,25 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   bottleneck_phase?: TrackingRunLifecyclePhase;
   last_observed_phase?: TrackingRunLifecyclePhase;
   phase_timing_status?: TrackingRunPhaseTimingStatus;
+  // E-lite root-cause discriminators. `last_observed_phase` tells us WHICH phase
+  // a stalled run died in (e.g. `tool_execution`); these four tell us WHY, which
+  // the phase alone cannot separate:
+  // - `approval_requested`: an approval/permission gate fired. Only the ACP path
+  //   is daemon-observable — stream/CLI runtimes pass a skip-permissions flag so
+  //   no gate fires, and `false` there means "not observed", not "no approval".
+  // - `stdin_backpressure`: writing the prompt to the child's stdin was queued
+  //   because the OS pipe buffer was full (the child was not draining stdin).
+  // - `tool_result_sent`: every committed tool_use received a matching
+  //   tool_result (paired by id, or by count for degraded events that carry a
+  //   null id on both sides). A stall with `tool_call_seen &&
+  //   !tool_result_sent` means a tool result was never delivered (our bug) vs a
+  //   provider that stalled after every tool result was delivered.
+  // - `last_progress_age_ms`: age of the last agent activity at finish. Near the
+  //   inactivity ceiling on a stall; near zero on a clean finish.
+  approval_requested?: boolean;
+  stdin_backpressure?: boolean;
+  tool_result_sent?: boolean;
+  last_progress_age_ms?: number;
   attempt_index?: number;
   attempt_duration_ms?: number;
   attempt_time_to_first_token_ms?: number;

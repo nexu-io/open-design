@@ -94,6 +94,7 @@ import {
   validateCodexGeneratedImagesDir,
 } from './runtimes/chat-prompt-inputs.js';
 import {
+  writePromptAndEndStdin,
   applyClaudeStreamJsonRunBookkeeping,
   assertValidRuntimeDefInactivityTimeoutMs,
   bufferedAntigravityGeminiFirstTokenAt,
@@ -6242,6 +6243,9 @@ export async function startServer({
         artifactRegistered,
       });
     const noteAgentActivity = () => {
+      // E-lite: stamp the last-activity clock BEFORE the disabled-watchdog bail
+      // so `last_progress_age_ms` is recorded even when the watchdog is off.
+      run.lastAgentActivityAt = Date.now();
       const delay = activeInactivityTimeoutMs();
       if (delay <= 0) return;
       clearInactivityWatchdog();
@@ -8055,7 +8059,11 @@ export async function startServer({
           },
         });
         try {
-          child.stdin.write(`${userMessage}\n`, 'utf8', markStdinWriteEnd);
+          // E-lite: `write` returns false when the chunk was buffered because the
+          // OS pipe is full (the child isn't draining stdin) — the corroborating
+          // signal for a `stdin_write`-phase inactivity stall.
+          const accepted = child.stdin.write(`${userMessage}\n`, 'utf8', markStdinWriteEnd);
+          run.stdinBackpressure = accepted === false;
         } catch (err) {
           // Swallow EPIPE here for the same reason as the listener above —
           // a fast-exiting child has already routed its failure through
@@ -8064,7 +8072,9 @@ export async function startServer({
         }
         run.stdinOpen = true;
       } else {
-        child.stdin.end(composed, 'utf8', markStdinWriteEnd);
+        // Split write + close so the boolean backpressure signal survives —
+        // see writePromptAndEndStdin for why `end(chunk)` cannot report it.
+        run.stdinBackpressure = writePromptAndEndStdin(child.stdin, composed, markStdinWriteEnd);
       }
     }
   };

@@ -85,6 +85,10 @@ describe('analytics run_finished contract', () => {
         first_token_seen: true,
         user_visible_output_seen: true,
         tool_call_seen: true,
+        tool_result_sent: false,
+        approval_requested: true,
+        stdin_backpressure: false,
+        last_progress_age_ms: 610_000,
         artifact_write_seen: false,
         live_artifact_seen: false,
         retry_attempt_count: 1,
@@ -102,6 +106,10 @@ describe('analytics run_finished contract', () => {
     expect(payload.props.tool_call_count).toBe(2);
     expect(payload.props.rpc_close_reason).toBe('stream_error');
     expect(payload.props.first_token_seen).toBe(true);
+    expect(payload.props.tool_result_sent).toBe(false);
+    expect(payload.props.approval_requested).toBe(true);
+    expect(payload.props.stdin_backpressure).toBe(false);
+    expect(payload.props.last_progress_age_ms).toBe(610_000);
     expect(payload.props.retry_attempt_count).toBe(1);
     expect(payload.props.retry_final_result).toBe('success');
   });

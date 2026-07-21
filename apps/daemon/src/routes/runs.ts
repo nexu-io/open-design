@@ -161,6 +161,11 @@ interface ChatRun {
   clients: Set<SseClient>;
   analyticsContext?: AnalyticsContext;
   analyticsTelemetry?: RunTelemetryTimestamps;
+  // E-lite root-cause telemetry read at run_finished. `stdinBackpressure`: the
+  // prompt write to child stdin was queued (pipe buffer full). `lastAgentActivityAt`:
+  // the inactivity-watchdog clock, used to derive `last_progress_age_ms`.
+  stdinBackpressure?: boolean;
+  lastAgentActivityAt?: number;
   retryAttemptCount?: number;
   retryFinalResult?: string;
   retrySuppressedReason?: string;
@@ -1260,6 +1265,12 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
             } : {}),
             ...timingAnalytics,
             ...diagnosticsAnalytics,
+            // E-lite: `approval_requested`/`tool_result_sent` ride in via
+            // `...diagnosticsAnalytics`; these two come off the run object.
+            stdin_backpressure: run.stdinBackpressure === true,
+            ...(typeof run.lastAgentActivityAt === 'number'
+              ? { last_progress_age_ms: Math.max(0, analyticsCapturedAt - run.lastAgentActivityAt) }
+              : {}),
             langfuse_trace_id: run.id,
             ...langfuseDeliveryForAnalytics,
             ...(errorCode ? { error_code: errorCode } : {}),
