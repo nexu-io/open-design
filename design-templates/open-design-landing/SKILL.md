@@ -202,10 +202,13 @@ Set `inputs.imagery.strategy` accordingly.
 npx tsx scripts/placeholder.ts <out>/assets/
 ```
 
-Writes 16 `.svg` files (with `.png` aliases for compatibility) into
+Writes 16 `.svg` files into
 `<out>/assets/`. Each placeholder shows the slot id, ratio, pixel
 dimensions, and the prompt hint from `image-manifest.json`. The
-composer's `<img src='./assets/hero.png'>` etc. just work.
+composer selects `.svg` references when `imagery.strategy` is
+`placeholder`. To replace them with real PNGs, switch the strategy to
+`generate` or `bring-your-own` and compose the artifact again; no template
+code changes are required.
 
 #### `generate` — gpt-image-2 mode
 
