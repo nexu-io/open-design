@@ -1829,6 +1829,8 @@ export const esES: Dict = {
   'chat.annotationUploadFailed': 'Error al subir el adjunto. Inténtalo de nuevo.',
   'chat.conversationsTitle': 'Conversaciones',
   'chat.conversationsAria': 'Historial de conversaciones',
+  'chat.independentReview': 'Revisión independiente',
+  'chat.independentReviewStarting': 'Iniciando revisión independiente…',
   'chat.newConversation': 'Nueva conversación',
   'chat.newConversationsTitle': 'Nueva conversación',
   'chat.conversationsHeading': 'Conversaciones',

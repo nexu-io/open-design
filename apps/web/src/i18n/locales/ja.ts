@@ -1829,6 +1829,8 @@ export const ja: Dict = {
   'chat.annotationUploadFailed': '添付ファイルのアップロードに失敗しました。もう一度お試しください。',
   'chat.conversationsTitle': '会話',
   'chat.conversationsAria': '会話履歴',
+  'chat.independentReview': '独立レビュー',
+  'chat.independentReviewStarting': '独立レビューを開始しています…',
   'chat.newConversation': '新しい会話',
   'chat.newConversationsTitle': '新しい会話',
   'chat.conversationsHeading': '会話',

@@ -1829,6 +1829,8 @@ export const ptBR: Dict = {
   'chat.annotationUploadFailed': 'Falha ao enviar o anexo. Tente novamente.',
   'chat.conversationsTitle': 'Conversas',
   'chat.conversationsAria': 'Histórico de conversas',
+  'chat.independentReview': 'Revisão independente',
+  'chat.independentReviewStarting': 'Iniciando revisão independente…',
   'chat.newConversation': 'Nova conversa',
   'chat.newConversationsTitle': 'Nova conversa',
   'chat.conversationsHeading': 'Conversas',

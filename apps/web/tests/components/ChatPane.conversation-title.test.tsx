@@ -102,6 +102,18 @@ describe('ChatPane session switcher', () => {
     expect(screen.queryByDisplayValue('Contract review draft')).toBeNull();
   });
 
+  it('starts an independent review from the project header', () => {
+    const onIndependentReview = vi.fn();
+    renderChatPane({
+      conversations: [conversation({ id: 'conv-1', title: 'Current' })],
+      activeConversationId: 'conv-1',
+      onIndependentReview,
+    });
+
+    fireEvent.click(screen.getByTestId('independent-review-trigger'));
+    expect(onIndependentReview).toHaveBeenCalledTimes(1);
+  });
+
   it('tracks run_failed_toast exposure for AMR balance guidance', async () => {
     render(
       <ChatPane
@@ -229,6 +241,7 @@ function renderChatPane(props: {
   conversations: Conversation[];
   activeConversationId: string | null;
   onSelectConversation?: (id: string) => void;
+  onIndependentReview?: () => void;
 }) {
   return render(chatPaneElement(props));
 }
@@ -237,10 +250,12 @@ function chatPaneElement({
   conversations,
   activeConversationId,
   onSelectConversation,
+  onIndependentReview,
 }: {
   conversations: Conversation[];
   activeConversationId: string | null;
   onSelectConversation?: (id: string) => void;
+  onIndependentReview?: () => void;
 }) {
   return (
     <ChatPane
@@ -256,6 +271,7 @@ function chatPaneElement({
       activeConversationId={activeConversationId}
       onSelectConversation={onSelectConversation ?? vi.fn()}
       onDeleteConversation={vi.fn()}
+      onIndependentReview={onIndependentReview}
     />
   );
 }

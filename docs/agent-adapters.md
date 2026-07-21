@@ -229,6 +229,13 @@ the active-run staging implementation is in
 - Follow-up turns use `codex exec resume --json ... <thread-id>`. Resume uses
   `-c sandbox_mode=...` because Codex rejects create-only `--sandbox`, `-C`,
   and `--add-dir` flags on `exec resume`.
+- `od run review --project <project-id>` starts a fresh daemon-owned Codex
+  conversation with a forced `read-only` sandbox. Review runs do not resume an
+  existing Codex thread, add linked write roots, or receive daemon tool tokens;
+  an operator `OD_CODEX_SANDBOX` override cannot widen this policy. They also
+  run from a temporary `CODEX_HOME` that carries login state but excludes the
+  user's config, MCP servers, and plugins; plugins are disabled explicitly.
+  The Web UI exposes the same run from the project chat header.
 - Detection uses `codex login status` for auth and `codex debug models` for
   live model discovery, with static model hints as a fallback. Skills use the
   shared composition/staging path in §4 rather than version-gated loading from

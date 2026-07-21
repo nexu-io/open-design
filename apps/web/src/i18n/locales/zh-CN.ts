@@ -1938,6 +1938,8 @@ export const zhCN: Dict = {
   "chat.annotationUploadFailed": "附件上传失败，请重试",
   "chat.conversationsTitle": "对话历史",
   "chat.conversationsAria": "对话历史",
+  "chat.independentReview": "独立审查",
+  "chat.independentReviewStarting": "正在启动独立审查…",
   "chat.newConversation": "新建对话",
   "chat.newConversationsTitle": "新建对话",
   "chat.conversationsHeading": "对话",

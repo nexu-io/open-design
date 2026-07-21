@@ -1829,6 +1829,8 @@ export const pl: Dict = {
   'chat.annotationUploadFailed': 'Nie udało się przesłać załącznika. Spróbuj ponownie.',
   'chat.conversationsTitle': 'Rozmowy',
   'chat.conversationsAria': 'Historia rozmów',
+  'chat.independentReview': 'Niezależny przegląd',
+  'chat.independentReviewStarting': 'Rozpoczynanie niezależnego przeglądu…',
   'chat.newConversation': 'Nowa rozmowa',
   'chat.newConversationsTitle': 'Nowa rozmowa',
   'chat.conversationsHeading': 'Rozmowy',

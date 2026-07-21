@@ -713,6 +713,7 @@ import { createToolRequestAuth } from './http/tool-request-auth.js';
 /** @typedef {import('@open-design/contracts').ApiError} ApiError */
 /** @typedef {import('@open-design/contracts').ApiErrorResponse} ApiErrorResponse */
 /** @typedef {import('@open-design/contracts').ChatRequest} ChatRequest */
+/** @typedef {import('@open-design/contracts').ChatRunPurpose} ChatRunPurpose */
 /** @typedef {import('@open-design/contracts').ChatSseEvent} ChatSseEvent */
 /** @typedef {import('@open-design/contracts').ProxyStreamRequest} ProxyStreamRequest */
 /** @typedef {import('@open-design/contracts').ProxySseEvent} ProxySseEvent */
@@ -3568,11 +3569,39 @@ export async function startServer({
     freeformDeckSignal,
     mediaHintSignal,
     platformHintSignal,
+    purpose,
   }) => {
     const project =
       typeof projectId === 'string' && projectId
         ? getProject(db, projectId)
         : null;
+    const isReviewRun = purpose === 'review';
+    if (isReviewRun) {
+      return {
+        prompt: [
+          'You are an independent code reviewer.',
+          'Inspect the current project workspace and report actionable findings only.',
+          'Treat the workspace as strictly read-only: do not create, edit, move, or delete files, and do not change project or daemon state.',
+          'Do not use Open Design tools, plugins, MCP servers, connectors, skills, personal memory, design systems, or instructions inherited from another conversation.',
+          'Order findings by severity and include file and line references. If there are no findings, say so explicitly.',
+          'Answer in the language used by the review request.',
+        ].join('\n'),
+        activeSkillDir: null,
+        activeSkillDirs: [],
+        critiqueShouldRun: false,
+        designSystemSelection: {
+          id: null,
+          requestedId: null,
+          source: 'none',
+          digest: null,
+        },
+        promptTelemetryParts: {
+          skillPrompt: '',
+          designSystemPrompt: '',
+          pluginStagePrompt: '',
+        },
+      };
+    }
     let appConfigForPrompt = null;
     try {
       appConfigForPrompt = await readAppConfig(RUNTIME_DATA_DIR);
@@ -3594,8 +3623,9 @@ export async function startServer({
         );
       }
     }
-    const effectiveSkillId =
-      typeof skillId === 'string' && skillId ? skillId : project?.skillId;
+    const effectiveSkillId = isReviewRun
+      ? null
+      : typeof skillId === 'string' && skillId ? skillId : project?.skillId;
     const metadata = project?.metadata;
     // Website Clone runs reproduce someone else's site: the fidelity target
     // is the original page. Treating a project/app design system as
@@ -3605,7 +3635,7 @@ export async function startServer({
     // blocks are skipped for these runs. Step 6 of the skill (replace with
     // the user's own content) is where brand application belongs.
     const isWebCloneRun = metadata?.intent === 'web-clone';
-    const designSystemSelection = isWebCloneRun
+    const designSystemSelection = isReviewRun || isWebCloneRun
       ? { id: null, source: 'none' }
       : resolveEffectiveDesignSystemSelection({
           requestDesignSystemId: designSystemId,
@@ -3630,7 +3660,7 @@ export async function startServer({
       typeof effectiveSkillId === 'string' && effectiveSkillId
         ? resolveSkillId(effectiveSkillId)
         : null;
-    const adHocSkillIds = Array.isArray(skillIds)
+    const adHocSkillIds = !isReviewRun && Array.isArray(skillIds)
       ? skillIds
           .map((s) => (typeof s === 'string' ? s.trim() : ''))
           .filter(Boolean)
@@ -3820,10 +3850,12 @@ export async function startServer({
     // run. composeMemoryBody returns '' when memory is disabled or
     // empty; the composer drops the block on a falsy value.
     let memoryBody = '';
-    try {
-      memoryBody = await composeMemoryBody(RUNTIME_DATA_DIR);
-    } catch (err) {
-      console.warn('[memory] composeMemoryBody failed', err);
+    if (!isReviewRun) {
+      try {
+        memoryBody = await composeMemoryBody(RUNTIME_DATA_DIR);
+      } catch (err) {
+        console.warn('[memory] composeMemoryBody failed', err);
+      }
     }
 
     // Per-hook switches for the two-loop memory feature. Read alongside the
@@ -3833,20 +3865,22 @@ export async function startServer({
     // composer treats as on-by-default — matching the config's default-on
     // semantics.
     let memoryHooks: { profile?: boolean; rewrite?: boolean; verify?: boolean } | undefined;
-    try {
-      const memCfg = await readMemoryConfig(RUNTIME_DATA_DIR);
-      memoryHooks = {
-        profile: memCfg.profileEnabled,
-        rewrite: memCfg.rewriteEnabled,
-        verify: memCfg.verifyEnabled,
-      };
-    } catch (err) {
-      console.warn('[memory] readMemoryConfig failed', err);
+    if (!isReviewRun) {
+      try {
+        const memCfg = await readMemoryConfig(RUNTIME_DATA_DIR);
+        memoryHooks = {
+          profile: memCfg.profileEnabled,
+          rewrite: memCfg.rewriteEnabled,
+          verify: memCfg.verifyEnabled,
+        };
+      } catch (err) {
+        console.warn('[memory] readMemoryConfig failed', err);
+      }
     }
 
     // User-level custom instructions from app-config.json.
     let userInstructions = '';
-    if (appConfigForPrompt?.customInstructions) {
+    if (!isReviewRun && appConfigForPrompt?.customInstructions) {
       userInstructions = appConfigForPrompt.customInstructions;
     }
 
@@ -3927,7 +3961,7 @@ export async function startServer({
 
     const excludedCraft = new Set(designSystemCraftExemptions);
     // Web-clone fidelity exemption — see `isWebCloneRun` above.
-    const requestedCraft = isWebCloneRun
+    const requestedCraft = isReviewRun || isWebCloneRun
       ? []
       : Array.from(
           new Set([...skillCraftRequires, ...designSystemCraftApplies]),
@@ -3941,12 +3975,13 @@ export async function startServer({
     }
 
     const template =
-      metadata?.kind === 'template' && typeof metadata.templateId === 'string'
+      !isReviewRun && metadata?.kind === 'template' && typeof metadata.templateId === 'string'
         ? (getTemplate(db, metadata.templateId) ?? undefined)
         : undefined;
     let audioVoiceOptions = [];
     let audioVoiceOptionsError;
     if (
+      !isReviewRun &&
       metadata?.kind === 'audio' &&
       metadata?.audioKind === 'speech' &&
       metadata?.audioModel === 'elevenlabs-v3' &&
@@ -4017,7 +4052,7 @@ export async function startServer({
     // is instructed to emit Critique Theater tags that no orchestrator
     // consumes.
     const resolvedExclusiveSurface = resolveExclusiveSurface({
-      metadata,
+      metadata: isReviewRun ? undefined : metadata,
       skillMode,
       skillModes: skillModes.size > 0 ? Array.from(skillModes) : undefined,
     });
@@ -4256,7 +4291,7 @@ export async function startServer({
   const startChatRun = async (chatBody, run) => {
     const lifecycle = createRunLifecycleTracer(run);
     lifecycle.mark('chat_run_started');
-    /** @type {Partial<ChatRequest> & { imagePaths?: string[] }} */
+    /** @type {Partial<ChatRequest> & { imagePaths?: string[], purpose?: ChatRunPurpose }} */
     chatBody = chatBody || {};
     const {
       agentId,
@@ -4276,6 +4311,7 @@ export async function startServer({
       commentAttachments = [],
       model,
       reasoning,
+      purpose,
       locale,
       research,
       context,
@@ -4365,10 +4401,12 @@ export async function startServer({
     ) {
       return design.runs.fail(run, 'BAD_REQUEST', 'message required');
     }
-    const browserUseRunState = buildBrowserUseRunState({
-      requested: isBrowserUseRequested(message, currentPrompt, systemPrompt),
-      agentId: def.id,
-    });
+    const browserUseRunState = purpose === 'review'
+      ? null
+      : buildBrowserUseRunState({
+          requested: isBrowserUseRequested(message, currentPrompt, systemPrompt),
+          agentId: def.id,
+        });
     if (browserUseRunState) {
       run.browserUse = browserUseRunState;
       design.runs.emit(run, 'diagnostic', {
@@ -4387,6 +4425,7 @@ export async function startServer({
     // turn's prompt. Failures are swallowed — memory is best-effort and
     // must never block the agent run.
     if (
+      purpose !== 'review' &&
       (run.retryAttemptCount ?? 0) === 0 &&
       typeof message === 'string' &&
       message.trim().length > 0
@@ -4416,12 +4455,29 @@ export async function startServer({
         // folders with no managed copy in sandbox mode), so we pass chatMeta
         // through instead of branching on baseDir here.
         assertSandboxProjectRootAvailable(chatMeta);
-        cwd = await ensureProject(PROJECTS_DIR, projectId, chatMeta);
+        if (purpose === 'review') {
+          cwd = resolveProjectDir(PROJECTS_DIR, projectId, chatMeta);
+          const projectRootStat = await fs.promises.stat(cwd);
+          if (!projectRootStat.isDirectory()) {
+            throw new Error('review project workspace is not a directory');
+          }
+        } else {
+          cwd = await ensureProject(PROJECTS_DIR, projectId, chatMeta);
+        }
         existingProjectFiles = await listFiles(PROJECTS_DIR, projectId, { metadata: chatMeta });
         existingProjectFolders = await listProjectFolders(PROJECTS_DIR, projectId, { metadata: chatMeta });
       } catch (err) {
         if (err instanceof SandboxImportedProjectError) {
           return design.runs.fail(run, 'BAD_REQUEST', err.message);
+        }
+        if (purpose === 'review') {
+          return design.runs.fail(
+            run,
+            'BAD_REQUEST',
+            err instanceof Error
+              ? `review project workspace is unavailable: ${err.message}`
+              : 'review project workspace is unavailable',
+          );
         }
         cwd = null;
         existingProjectFiles = [];
@@ -4473,8 +4529,10 @@ export async function startServer({
       typeof projectId === 'string' && projectId
         ? getProject(db, projectId)
         : null;
-    const runContextPrompt = renderRunContextPrompt(context, projectRecord?.metadata);
-    const linkedDirs = (() => {
+    const runContextPrompt = purpose === 'review'
+      ? ''
+      : renderRunContextPrompt(context, projectRecord?.metadata);
+    const linkedDirs = purpose === 'review' ? [] : (() => {
       if (!Array.isArray(projectRecord?.metadata?.linkedDirs)) return [];
       const v = validateLinkedDirs(projectRecord.metadata.linkedDirs);
       return v.dirs ?? [];
@@ -4503,7 +4561,7 @@ export async function startServer({
         };
       }
     }
-    const toolTokenGrant = cwd && typeof projectId === 'string' && projectId
+    const toolTokenGrant = purpose !== 'review' && cwd && typeof projectId === 'string' && projectId
       ? toolTokenRegistry.mint({
           runId,
           projectId,
@@ -4533,7 +4591,9 @@ export async function startServer({
         activeChatRunHandles.delete(sinkRunId);
       };
     }
-    const runtimeToolPrompt = createAgentRuntimeToolPrompt(daemonUrl, toolTokenGrant);
+    const runtimeToolPrompt = purpose === 'review'
+      ? ''
+      : createAgentRuntimeToolPrompt(daemonUrl, toolTokenGrant);
     const commentHint = renderCommentAttachmentHint(safeCommentAttachments);
 
     // Resolve external MCP config + stored OAuth tokens up-front so the
@@ -4543,7 +4603,7 @@ export async function startServer({
     // values further down at .mcp.json write time — see the spawn block
     // below — instead of re-reading.
     let externalMcpConfig = { servers: [] };
-    if (!SANDBOX_RUNTIME.enabled) {
+    if (purpose !== 'review' && !SANDBOX_RUNTIME.enabled) {
       try {
         externalMcpConfig = await readMcpConfig(RUNTIME_DATA_DIR);
       } catch (err) {
@@ -4637,8 +4697,9 @@ export async function startServer({
       media: detectMediaIntentSignal(...intentSignalTexts),
       platform: detectPlatformIntentSignal(...intentSignalTexts),
     };
-    const intentSignals =
-      !legacyIntentSignalScan && typeof run.conversationId === 'string' && run.conversationId
+    const intentSignals = purpose === 'review'
+      ? { deck: false, media: false, platform: false }
+      : !legacyIntentSignalScan && typeof run.conversationId === 'string' && run.conversationId
         ? latchConversationIntentSignals(db, run.conversationId, freshIntentSignals)
         : freshIntentSignals;
 
@@ -4671,6 +4732,7 @@ export async function startServer({
         freeformDeckSignal: intentSignals.deck,
         mediaHintSignal: intentSignals.media,
         platformHintSignal: intentSignals.platform,
+        purpose,
       });
 
     run.designSystemId = designSystemSelection?.id ?? null;
@@ -4733,7 +4795,7 @@ export async function startServer({
     // for ANY agent (not just claude_code). Only for real project runs: a
     // null `cwd` means a no-project run rooted at PROJECT_ROOT, whose churn is
     // not the user's artifacts — those fall back to the tool-stream count.
-    if (run?.id && cwd) {
+    if (purpose !== 'review' && run?.id && cwd) {
       try {
         runArtifactBaselines.remember(run.id, cwd, snapshotProjectArtifacts(cwd));
       } catch {
@@ -4770,6 +4832,7 @@ export async function startServer({
     };
     const resolveRunArtifactOutcomeBeforeFinish = () => {
       if (!run?.id) return null;
+      if (purpose === 'review') return null;
       if (run.artifactOutcome) return run.artifactOutcome;
 
       const artifactBaseline = runArtifactBaselines.take(run.id);
@@ -4805,6 +4868,7 @@ export async function startServer({
       return outcome;
     };
     const snapshotAiHtmlVersionsBeforeSuccess = async () => {
+      if (purpose === 'review') return;
       const outcome = resolveRunArtifactOutcomeBeforeFinish();
       if (!outcome?.diff || !outcome.projectRoot || !run.projectId) return;
       const promptInfo = latestRunPromptForHtmlVersionSnapshot();
@@ -4829,13 +4893,15 @@ export async function startServer({
         resolveRunArtifactOutcomeBeforeFinish();
       }
     };
-    let codexGeneratedImagesDir = resolveCodexGeneratedImagesDir(
-      agentId,
-      projectRecord?.metadata,
-      process.env,
-      os.homedir(),
-      run?.mediaExecution,
-    );
+    let codexGeneratedImagesDir = purpose === 'review'
+      ? null
+      : resolveCodexGeneratedImagesDir(
+          agentId,
+          projectRecord?.metadata,
+          process.env,
+          os.homedir(),
+          run?.mediaExecution,
+        );
     if (codexGeneratedImagesDir) {
       codexGeneratedImagesDir = validateCodexGeneratedImagesDir(
         codexGeneratedImagesDir,
@@ -4858,10 +4924,9 @@ export async function startServer({
       extraAllowedDirs,
       mediaExecution: run?.mediaExecution,
     });
-    const researchCommandContract = resolveResearchCommandContract(
-      research,
-      message,
-    );
+    const researchCommandContract = purpose === 'review'
+      ? ''
+      : resolveResearchCommandContract(research, message);
     // Resume-capable adapters continue their own upstream session so they
     // keep working memory across turns. Decide once per run; reuse for the
     // prompt-composition skipTranscript choice, the buildArgs flags, and the
@@ -4889,6 +4954,45 @@ export async function startServer({
     } catch {
       configuredAgentEnv = {};
     }
+    let isolatedReviewCodexHome = null;
+    const cleanupIsolatedReviewCodexHome = () => {
+      if (!isolatedReviewCodexHome) return;
+      const dir = isolatedReviewCodexHome;
+      isolatedReviewCodexHome = null;
+      fs.promises.rm(dir, { recursive: true, force: true }).catch(() => {});
+    };
+    if (purpose === 'review' && def.id === 'codex') {
+      const sourceEnv = spawnEnvForAgent('codex', process.env, configuredAgentEnv);
+      const sourceHome = sourceEnv.CODEX_HOME?.trim() || path.join(os.homedir(), '.codex');
+      isolatedReviewCodexHome = await fs.promises.mkdtemp(
+        path.join(os.tmpdir(), 'od-codex-review-'),
+      );
+      try {
+        // Preserve login state only. In particular, do not copy config.toml,
+        // plugins, skills, or MCP definitions into the independent review.
+        await fs.promises.copyFile(
+          path.join(sourceHome, 'auth.json'),
+          path.join(isolatedReviewCodexHome, 'auth.json'),
+        );
+      } catch (err) {
+        if (err?.code !== 'ENOENT') {
+          cleanupIsolatedReviewCodexHome();
+          throw err;
+        }
+      }
+      configuredAgentEnv = {
+        ...configuredAgentEnv,
+        CODEX_HOME: isolatedReviewCodexHome,
+      };
+      const previousOnFinalize = run.onFinalize;
+      run.onFinalize = () => {
+        try {
+          previousOnFinalize?.();
+        } finally {
+          cleanupIsolatedReviewCodexHome();
+        }
+      };
+    }
     const requestedLiveModelScope = def.id === 'amr'
       ? resolveAmrProfile({
           ...process.env,
@@ -4915,7 +5019,11 @@ export async function startServer({
       typeof reasoning === 'string' && Array.isArray(def.reasoningOptions)
         ? (def.reasoningOptions.find((r) => r.id === reasoning)?.id ?? null)
         : null;
-    const agentOptions = { model: safeModel, reasoning: safeReasoning };
+    const agentOptions = {
+      model: safeModel,
+      reasoning: safeReasoning,
+      ...(purpose === 'review' ? { filesystemAccess: 'read-only' } : {}),
+    };
     const agentLaunch = resolveAgentLaunch(def, configuredAgentEnv);
     const resolvedBin = agentLaunch.selectedPath;
     if (def.id === 'amr' && resolvedBin && agentLaunch.launchPath) {
@@ -5535,6 +5643,7 @@ export async function startServer({
           ? capturedSessionId
           : agentResumeCtx.newSessionId;
       const resumableFailure =
+        purpose !== 'review' &&
         result === 'failed' &&
         def.resumesSessionViaCli === true &&
         !!run.conversationId &&
@@ -6050,7 +6159,7 @@ export async function startServer({
     }
 
     let persistDeliveredAgentSessionState = () => {};
-    if (def.resumesSessionViaCli === true && run.conversationId) {
+    if (purpose !== 'review' && def.resumesSessionViaCli === true && run.conversationId) {
       let persisted = false;
       persistDeliveredAgentSessionState = () => {
         if (persisted) return;
@@ -6463,6 +6572,22 @@ export async function startServer({
           ? { [isMiMoContent ? 'MIMOCODE_CONFIG_CONTENT' : 'OPENCODE_CONFIG_CONTENT']: opencodeConfigContent }
           : {}),
       }, agentLaunch);
+      if (purpose === 'review') {
+        for (const key of Object.keys(env)) {
+          const normalizedKey = key.toUpperCase();
+          if (
+            normalizedKey.startsWith('OD_')
+            || normalizedKey.startsWith('OPEN_DESIGN_')
+            || normalizedKey.startsWith('CODEX_')
+          ) {
+            delete env[key];
+          }
+        }
+        // Sandbox mode may rewrite CODEX_HOME after configured env is merged.
+        // Re-pin the isolated home at the final spawn boundary after removing
+        // every Open Design runtime capability from the child environment.
+        if (isolatedReviewCodexHome) env.CODEX_HOME = isolatedReviewCodexHome;
+      }
       spawnedAgentEnv = env;
       const invocation = createCommandInvocation({
         command: agentLaunch.launchPath,
@@ -6592,7 +6717,7 @@ export async function startServer({
     // hook_started/hook_response frames — none of which is the reply; mining it
     // produced empty extractions that, near-identical across a build's re-fires,
     // caused the same turn to be re-analyzed dozens of times.
-    child.on('close', () => {
+    if (purpose !== 'review') child.on('close', () => {
       const userMsg = typeof message === 'string' ? message : '';
       // Forward the chat agent id so memory-llm.pickProvider can
       // constrain its auto-pick to the chat protocol's family — keeps
@@ -8335,6 +8460,7 @@ export async function startServer({
     agents: { detectAgents, getAgentDef },
     chat: { startChatRun },
     lifecycle: { isDaemonShuttingDown: () => daemonShuttingDown },
+    events: { emitProjectEvent },
     plugins: {
       connectorService,
       detectSkillPluginCandidateOnRunSuccess,

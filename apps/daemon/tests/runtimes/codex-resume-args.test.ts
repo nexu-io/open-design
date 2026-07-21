@@ -94,6 +94,34 @@ describe('codex buildArgs session resume', () => {
     expect(args).not.toContain('resume');
   });
 
+  it('keeps an independent review read-only even when the operator default is danger-full-access', () => {
+    const previous = process.env.OD_CODEX_SANDBOX;
+    process.env.OD_CODEX_SANDBOX = 'danger-full-access';
+    try {
+      const args = codexAgentDef.buildArgs(
+        'review prompt',
+        [],
+        ['/extra/writable/dir'],
+        { filesystemAccess: 'read-only' },
+        { cwd: '/some/project/dir' },
+      );
+      const sandboxIndex = args.indexOf('--sandbox');
+      expect(sandboxIndex).toBeGreaterThan(-1);
+      expect(args[sandboxIndex + 1]).toBe('read-only');
+      expect(args).not.toContain('danger-full-access');
+      expect(args).not.toContain('--add-dir');
+      expect(args).not.toContain('/extra/writable/dir');
+      expect(args).toContain('--disable');
+      expect(args[args.indexOf('--disable') + 1]).toBe('plugins');
+      expect(args).toContain('--ephemeral');
+      expect(args).toContain('--ignore-user-config');
+      expect(args).toContain('--ignore-rules');
+    } finally {
+      if (previous === undefined) delete process.env.OD_CODEX_SANDBOX;
+      else process.env.OD_CODEX_SANDBOX = previous;
+    }
+  });
+
   it('declares CLI-managed, capture-style session resume', () => {
     expect(codexAgentDef.resumesSessionViaCli).toBe(true);
     expect(codexAgentDef.capturesSessionIdFromStream).toBe(true);

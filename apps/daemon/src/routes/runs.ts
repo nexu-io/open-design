@@ -8,9 +8,11 @@ import {
   type AppliedPluginSnapshot,
   type ArtifactManifest,
   type ByokChatProviderConfig,
+  type ChatRunPurpose,
   type ChatRunStatus,
   type ChatRunStatusResponse,
   type ProjectMetadata as ContractProjectMetadata,
+  type ProjectConversationCreatedSsePayload,
   type RunResultPackageResponse,
 } from '@open-design/contracts';
 import {
@@ -35,6 +37,7 @@ import {
   conversationTurnIndexForRun,
   getConversation,
   getProject,
+  insertConversation,
   listConversations,
   normalizeConversationSessionMode,
   updateProject,
@@ -144,6 +147,7 @@ interface ChatRun {
   conversationId: string | null;
   assistantMessageId: string | null;
   agentId: string | null;
+  purpose?: ChatRunPurpose | null;
   model?: string | null;
   status: ChatRunStatus;
   createdAt: number;
@@ -205,6 +209,7 @@ interface RunCreateMeta extends JsonRecord {
   appliedPluginSnapshotId?: string;
   message?: string;
   currentPrompt?: string;
+  purpose?: ChatRunPurpose;
   projectMetadata?: ProjectMetadata;
 }
 
@@ -306,6 +311,12 @@ export interface RegisterRunRoutesDeps {
   };
   lifecycle: {
     isDaemonShuttingDown: () => boolean;
+  };
+  events: {
+    emitProjectEvent: (
+      projectId: string,
+      payload: ProjectConversationCreatedSsePayload,
+    ) => boolean;
   };
   plugins: {
     connectorService: ConnectorService;
@@ -500,6 +511,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
   const { PROJECTS_DIR, RUNTIME_DATA_DIR } = ctx.paths;
   const { detectAgents, getAgentDef } = ctx.agents;
   const { startChatRun } = ctx.chat;
+  const { emitProjectEvent } = ctx.events;
   const {
     connectorService,
     detectSkillPluginCandidateOnRunSuccess,
@@ -540,6 +552,50 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       return sendApiError(res, 503, 'UPSTREAM_UNAVAILABLE', 'daemon is shutting down');
     }
     const requestBody = toJsonRecord(req.body);
+    if (requestBody.purpose !== undefined && requestBody.purpose !== 'review') {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'purpose must be review when provided');
+    }
+    const isReviewRun = requestBody.purpose === 'review';
+    let reviewConversationCreatedEvent: ProjectConversationCreatedSsePayload | null = null;
+    if (isReviewRun) {
+      const allowedReviewFields = new Set([
+        'projectId',
+        'purpose',
+        'message',
+        'agentId',
+        'model',
+      ]);
+      const unsupportedReviewFields = Object.keys(requestBody)
+        .filter((field) => !allowedReviewFields.has(field));
+      if (unsupportedReviewFields.length > 0) {
+        return sendApiError(
+          res,
+          400,
+          'BAD_REQUEST',
+          `review runs do not accept ${unsupportedReviewFields.join(', ')}`,
+        );
+      }
+      if (typeof requestBody.projectId !== 'string' || !requestBody.projectId) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'review runs require projectId');
+      }
+      if (typeof requestBody.message !== 'string' || !requestBody.message.trim()) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'review runs require message');
+      }
+      if (requestBody.conversationId !== undefined && requestBody.conversationId !== null) {
+        return sendApiError(
+          res,
+          400,
+          'BAD_REQUEST',
+          'review runs always create a fresh conversation',
+        );
+      }
+      if (requestBody.agentId !== undefined && requestBody.agentId !== 'codex') {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'review runs currently require Codex');
+      }
+      requestBody.agentId = 'codex';
+      requestBody.sessionMode = 'plan';
+      requestBody.currentPrompt = requestBody.currentPrompt ?? requestBody.message;
+    }
     const mediaExecution = parseMediaExecutionPolicyInput(requestBody.mediaExecution);
     if (!mediaExecution.ok) {
       return sendApiError(res, 400, 'BAD_REQUEST', mediaExecution.message);
@@ -557,7 +613,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       );
     }
     let resolvedSnapshot = null;
-    if (typeof requestBody.projectId === 'string' && requestBody.projectId) {
+    if (!isReviewRun && typeof requestBody.projectId === 'string' && requestBody.projectId) {
       let registryView: Parameters<typeof resolvePluginSnapshot>[0]['registry'];
       try {
         registryView = await loadPluginRegistryView();
@@ -677,6 +733,39 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     if (runProject?.metadata) {
       meta.projectMetadata = runProject.metadata;
     }
+    if (isReviewRun) {
+      if (!runProject || typeof meta.projectId !== 'string' || !meta.projectId) {
+        return sendApiError(res, 404, 'NOT_FOUND', 'project not found');
+      }
+      const now = Date.now();
+      const conversation = insertConversation(db, {
+        id: randomUUID(),
+        projectId: meta.projectId,
+        title: 'Independent review',
+        sessionMode: 'plan',
+        createdAt: now,
+        updatedAt: now,
+      });
+      if (!conversation) {
+        return sendApiError(res, 500, 'INTERNAL_ERROR', 'failed to create review conversation');
+      }
+      meta.conversationId = conversation.id;
+      meta.assistantMessageId = randomUUID();
+      reviewConversationCreatedEvent = {
+        type: 'conversation-created',
+        projectId: meta.projectId,
+        conversationId: conversation.id,
+        title: 'Independent review',
+        createdAt: now,
+      };
+      upsertMessage(db, conversation.id, {
+        id: randomUUID(),
+        role: 'user',
+        content: String(meta.message),
+        startedAt: now,
+        endedAt: now,
+      });
+    }
     if (
       typeof meta.projectId === 'string' &&
       meta.projectId &&
@@ -771,6 +860,9 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         : {}),
     };
     res.status(202).json(body);
+    if (reviewConversationCreatedEvent) {
+      emitProjectEvent(meta.projectId as string, reviewConversationCreatedEvent);
+    }
     if (resolvedSnapshot?.ok && resolvedSnapshot.snapshot.pipeline) {
       firePipelineForRun({
         run,
@@ -780,7 +872,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       });
     }
     reconcileAssistantMessageOnRunEnd(db, design.runs, run);
-    if (run.projectId && run.conversationId) {
+    if (!isReviewRun && run.projectId && run.conversationId) {
       try {
         const project = toProjectRecord(getProject(db, run.projectId));
         const projectRoot = resolveProjectDir(PROJECTS_DIR, run.projectId, project?.metadata);
@@ -1551,6 +1643,14 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       return sendApiError(res, 503, 'UPSTREAM_UNAVAILABLE', 'daemon is shutting down');
     }
     const requestBody = toJsonRecord(req.body);
+    if (requestBody.purpose !== undefined) {
+      return sendApiError(
+        res,
+        400,
+        'BAD_REQUEST',
+        'purpose is only supported by POST /api/runs',
+      );
+    }
     const mediaExecution = parseMediaExecutionPolicyInput(requestBody.mediaExecution);
     if (!mediaExecution.ok) {
       return sendApiError(res, 400, 'BAD_REQUEST', mediaExecution.message);

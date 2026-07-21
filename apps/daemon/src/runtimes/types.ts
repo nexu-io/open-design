@@ -22,6 +22,7 @@ export type RuntimeReasoningOption = RuntimeModelOption;
 export type RuntimeBuildOptions = {
   model?: string | null;
   reasoning?: string | null;
+  filesystemAccess?: 'read-only';
 };
 
 export type RuntimeContext = {

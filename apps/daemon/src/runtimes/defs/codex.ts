@@ -117,6 +117,7 @@ export const codexAgentDef = {
       // and Linux (Landlock+seccomp) keep workspace-write because their
       // sandbox enforcement permits shell while restricting writes.
       const needsDangerFullAccess = codexNeedsDangerFullAccessSandbox();
+      const readOnly = options.filesystemAccess === 'read-only';
       // Capture-style resume: when the daemon has a stored Codex thread id for
       // this conversation it asks the CLI to continue that session with
       // `exec resume <thread_id>` instead of `exec` (a fresh session). Codex
@@ -134,7 +135,11 @@ export const codexAgentDef = {
       // the create turn so Codex's per-turn `turn_context` block byte-matches
       // across turns and does not break the upstream prefix cache the resume
       // is meant to reuse.
-      const sandboxArgs = needsDangerFullAccess
+      const sandboxArgs = readOnly
+        ? resumeSessionId
+          ? ['-c', 'sandbox_mode="read-only"']
+          : ['--sandbox', 'read-only']
+        : needsDangerFullAccess
         ? resumeSessionId
           ? ['-c', 'sandbox_mode="danger-full-access"']
           : ['--sandbox', 'danger-full-access']
@@ -154,8 +159,14 @@ export const codexAgentDef = {
       const args = resumeSessionId
         ? ['exec', 'resume', '--json', '--skip-git-repo-check', ...sandboxArgs]
         : ['exec', '--json', '--skip-git-repo-check', ...sandboxArgs];
-      if (process.env.OD_CODEX_DISABLE_PLUGINS === '1') {
+      // A read-only review must not inherit Codex plugins. Plugin processes run
+      // outside the shell sandbox and could otherwise write or use the network
+      // even though the main Codex turn is constrained to read-only access.
+      if (readOnly || process.env.OD_CODEX_DISABLE_PLUGINS === '1') {
         args.push('--disable', 'plugins');
+      }
+      if (readOnly) {
+        args.push('--ephemeral', '--ignore-user-config', '--ignore-rules');
       }
       // `-C <cwd>` and `--add-dir <dir>` are CREATE-only flags: `codex exec
       // resume` rejects both (`error: unexpected argument '-C' found`), so
@@ -169,11 +180,13 @@ export const codexAgentDef = {
         if (runtimeContext.cwd) {
           args.push('-C', runtimeContext.cwd);
         }
-        const dirs = (extraAllowedDirs || []).filter(
-          (d) => typeof d === 'string' && d.length > 0,
-        );
-        for (const d of dirs) {
-          args.push('--add-dir', d);
+        if (!readOnly) {
+          const dirs = (extraAllowedDirs || []).filter(
+            (d) => typeof d === 'string' && d.length > 0,
+          );
+          for (const d of dirs) {
+            args.push('--add-dir', d);
+          }
         }
       }
       if (options.model && options.model !== 'default') {

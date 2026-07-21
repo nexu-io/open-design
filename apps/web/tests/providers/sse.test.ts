@@ -6,6 +6,7 @@ import {
   latestUserPromptFromHistory,
   reattachDaemonRun,
   sanitizePriorAssistantTurnForTranscript,
+  startIndependentReview,
   streamViaDaemon,
   type DaemonRunFinishedEventDetail,
 } from '../../src/providers/daemon';
@@ -35,6 +36,31 @@ describe('parseSseFrame', () => {
 
   it('returns empty for frames without data or comments', () => {
     expect(parseSseFrame('')).toEqual({ kind: 'empty' });
+  });
+});
+
+describe('startIndependentReview', () => {
+  it('starts a fresh Codex review through the dedicated run purpose', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({
+      runId: 'review-run',
+      conversationId: 'review-conversation',
+      assistantMessageId: 'review-assistant',
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(startIndependentReview('project-1')).resolves.toMatchObject({
+      runId: 'review-run',
+      conversationId: 'review-conversation',
+    });
+
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('/api/runs');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      projectId: 'project-1',
+      purpose: 'review',
+      agentId: 'codex',
+    });
   });
 });
 
