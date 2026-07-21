@@ -48,6 +48,14 @@ export interface SeoHeadProps {
   /** Set when this page has no generated per-locale variants. */
   localeCanonicalOnly?: boolean;
   /**
+   * Drop the hreflang cluster because this page's locale variants are served
+   * with `noindex`. Deliberately NOT `localeCanonicalOnly`: the variants do
+   * exist here and stay reachable through the language switcher, they just
+   * must not be advertised to search engines, since hreflang may not point at
+   * noindexed URLs.
+   */
+  noindexedLocaleVariants?: boolean;
+  /**
    * Keep this single page out of the search index. Independent of the
    * site-wide staging flag below: staging emits `noindex, nofollow` for the
    * whole mirror, whereas a page opting in here emits `noindex, follow` so
@@ -89,7 +97,7 @@ const locale = localeFromPath(props.pathname);
 const localeDef = getLocaleDefinition(locale);
 const basePath = stripLocaleFromPath(props.pathname).pathname;
 const altEntries = alternateLinksForPath(props.pathname);
-const alternateLinks = props.localeCanonicalOnly
+const alternateLinks = props.localeCanonicalOnly || props.noindexedLocaleVariants
   ? []
   : altEntries.map((entry) => ({
       ...entry,

@@ -251,7 +251,7 @@ const isLocalizedVariant = locale !== DEFAULT_LOCALE;
       datePublished={post.data.date}
       category={post.data.category}
       noindex={noindexLocaleVariants && isLocalizedVariant}
-      localeCanonicalOnly={noindexLocaleVariants}
+      noindexedLocaleVariants={noindexLocaleVariants}
     />
     <script is:inline type='application/ld+json' set:html={JSON.stringify(breadcrumbJsonLd)} />
     <SiteAnalytics />
