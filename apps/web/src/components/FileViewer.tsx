@@ -17872,7 +17872,7 @@ function HtmlViewer({
                         <p className="hint">{t('fileViewer.githubPatTokenReuseHint')}</p>
                       ) : null}
                       <a
-                        href="https://github.com/settings/tokens/new?scopes=public_repo&description=Open%20Design%20Deploy"
+                        href={`https://github.com/settings/tokens/new?scopes=${deployProviderId === NETLIFY_PROVIDER_ID ? 'repo' : 'public_repo'}&description=Open%20Design%20Deploy`}
                         target="_blank"
                         rel="noreferrer noopener"
                       >
