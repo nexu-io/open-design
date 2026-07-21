@@ -120,7 +120,7 @@ export function createChatRunService({
       artifactCount: undefined as number | undefined,
       artifactOutcome: undefined,
       eventsLogPath: runsLogDir ? path.join(runsLogDir, id, 'events.jsonl') : null,
-      eventsLogStream: null,
+      eventsLogFd: null,
       // Set once finish() has closed the log stream, so a late post-finish emit
       // can't lazily re-open a stream nothing will ever close (FD leak).
       eventsLogClosed: false,
@@ -141,29 +141,26 @@ export function createChatRunService({
   // not exist yet; mkdir is recursive so it's safe to call repeatedly.
   // Disk failures are best-effort — if we can't write, the run still
   // proceeds (SSE clients keep getting events from memory).
-  const ensureLogStream = (run) => {
+  const ensureLogFd = (run) => {
     if (!run.eventsLogPath) return null;
-    if (run.eventsLogStream) return run.eventsLogStream;
-    // finish() has already closed + nulled this run's log stream. Re-opening it
+    if (run.eventsLogFd != null) return run.eventsLogFd;
+    // finish() has already closed + nulled this run's log fd. Re-opening it
     // here for a late event (async child-close diagnostic, trailing tool
     // callback, telemetry) would leak a file descriptor that nothing ever
     // closes. We gate on the explicit `eventsLogClosed` flag — NOT on terminal
     // status — so finish()'s own `end` emit (which runs while status is already
-    // terminal but before the stream is closed) can still open + write + close
+    // terminal but before the fd is closed) can still open + write + close
     // the log for a run that had no prior events. Late events still reach
     // memory + SSE clients below; we just stop persisting them to the closed
     // log. (#3408 P1 FD-leak fix; cf. #4163.)
     if (run.eventsLogClosed) return null;
     try {
       fs.mkdirSync(path.dirname(run.eventsLogPath), { recursive: true });
-      run.eventsLogStream = fs.createWriteStream(run.eventsLogPath, { flags: 'a' });
-      // Don't crash the daemon on a stream-level error; just stop
-      // trying to use this stream so subsequent emits silently skip.
-      run.eventsLogStream.on('error', () => {
-        try { run.eventsLogStream?.destroy(); } catch { /* ignore */ }
-        run.eventsLogStream = null;
-      });
-      return run.eventsLogStream;
+      // Append-mode fd for synchronous writes (see emit): each record is durable
+      // on disk before emit() returns, so the reattach backfill can always
+      // recover an evicted event without a durability watermark or race window.
+      run.eventsLogFd = fs.openSync(run.eventsLogPath, 'a');
+      return run.eventsLogFd;
     } catch {
       return null;
     }
@@ -183,17 +180,30 @@ export function createChatRunService({
       try { onEventEmitted(run, record); } catch { /* observer must never break emit */ }
     }
     run.events.push(record);
-    if (run.events.length > maxEvents) run.events.splice(0, run.events.length - maxEvents);
     run.updatedAt = Date.now();
-    const stream = ensureLogStream(run);
-    if (stream) {
+    const fd = ensureLogFd(run);
+    if (fd != null) {
       try {
-        stream.write(JSON.stringify(record) + '\n');
+        // Synchronous append: the record is durable on disk before emit()
+        // returns. The reattach backfill (stream()) reads events.jsonl, so an
+        // event must be on the file before the ring buffer can evict it below —
+        // a synchronous write guarantees that by construction, with no
+        // durability watermark and no window where an evicted record sits on
+        // neither memory nor disk.
+        fs.writeSync(fd, JSON.stringify(record) + '\n');
       } catch {
-        // Stream-level write errors are caught by the on('error') above;
-        // swallowing here keeps the SSE fan-out below from being skipped.
+        // Disk failure is best-effort: stop using this fd so later emits skip
+        // persistence. The run still proceeds and SSE clients keep getting
+        // events from memory; an unwritten record simply behaves like the
+        // no-persistence path below.
+        try { fs.closeSync(fd); } catch { /* ignore */ }
+        run.eventsLogFd = null;
       }
     }
+    // Every persisted record is already durable on disk, so evicting the oldest
+    // over-cap records can never strand one where the reattach backfill can't
+    // find it.
+    if (run.events.length > maxEvents) run.events.splice(0, run.events.length - maxEvents);
     for (const sse of run.clients) sse.send(event, data, id);
     return record;
   };
@@ -274,10 +284,10 @@ export function createChatRunService({
     run.clients.clear();
     for (const waiter of run.waiters) waiter(statusBody(run));
     run.waiters.clear();
-    // Close the event log stream now that no more events will be
-    // emitted for this run. The file stays on disk for tail/grep.
-    try { run.eventsLogStream?.end(); } catch { /* ignore */ }
-    run.eventsLogStream = null;
+    // Close the event log fd now that no more events will be emitted for this
+    // run. The file stays on disk for tail/grep.
+    try { if (run.eventsLogFd != null) fs.closeSync(run.eventsLogFd); } catch { /* ignore */ }
+    run.eventsLogFd = null;
     // Any event emitted after this point must not lazily re-open the log.
     run.eventsLogClosed = true;
     scheduleCleanup(run);
@@ -296,10 +306,45 @@ export function createChatRunService({
     return run;
   };
 
+  // Read persisted events in the exclusive id range (afterId, beforeId) from the
+  // on-disk log, in order. Used to backfill the reattach gap below; returns []
+  // when persistence is disabled or the log is unreadable.
+  const readPersistedEventRange = (run, afterId, beforeId) => {
+    const out = [];
+    if (!run.eventsLogPath) return out;
+    let text;
+    try { text = fs.readFileSync(run.eventsLogPath, 'utf8'); } catch { return out; }
+    for (const line of text.split('\n')) {
+      if (!line) continue;
+      let rec;
+      try { rec = JSON.parse(line); } catch { continue; }
+      if (typeof rec?.id !== 'number') continue;
+      if (rec.id > afterId && rec.id < beforeId) out.push(rec);
+    }
+    return out;
+  };
+
   const stream = (run, req, res) => {
     const sse = createSseResponse(res);
     const lastEventId = Number(req.get('Last-Event-ID') || req.query.after || 0);
     let sent = 0;
+    // Reattach gap backfill. run.events is a bounded ring buffer (maxEvents), so
+    // a client reconnecting with a cursor older than the oldest surviving event
+    // would otherwise silently skip everything the buffer already evicted. Those
+    // events are still in the on-disk log, so replay the missing prefix from disk
+    // first — the reattach stays gapless instead of dropping events with no signal.
+    const firstBufferedId = run.events.length > 0 ? run.events[0].id : null;
+    if (
+      Number.isFinite(lastEventId) &&
+      lastEventId > 0 &&
+      firstBufferedId != null &&
+      firstBufferedId > lastEventId + 1
+    ) {
+      for (const record of readPersistedEventRange(run, lastEventId, firstBufferedId)) {
+        sse.send(record.event, record.data, record.id);
+        sent++;
+      }
+    }
     for (const record of run.events) {
       if (!Number.isFinite(lastEventId) || record.id > lastEventId) {
         sse.send(record.event, record.data, record.id);
@@ -572,6 +617,11 @@ export function createChatRunService({
     run.updatedAt = Date.now();
     for (const waiter of run.waiters) waiter(statusBody(run));
     run.waiters.clear();
+    // Close the log fd if this run ever opened one, so dropping a run never
+    // leaks a descriptor. Normally null (drop targets runs that never emitted).
+    try { if (run.eventsLogFd != null) fs.closeSync(run.eventsLogFd); } catch { /* ignore */ }
+    run.eventsLogFd = null;
+    run.eventsLogClosed = true;
   };
 
   return {

@@ -828,11 +828,11 @@ describe('run event log persistence', () => {
 
     runs.emit(run, 'agent', { type: 'text_delta', delta: 'hi' }); // opens the stream
     runs.finish(run, 'succeeded', 0, null); // closes + nulls the stream
-    expect(run.eventsLogStream).toBeNull();
+    expect(run.eventsLogFd).toBeNull();
 
     // A late event must NOT lazily re-open a stream that will never be closed.
     runs.emit(run, 'diagnostic', { type: 'runtime_close' });
-    expect(run.eventsLogStream).toBeNull();
+    expect(run.eventsLogFd).toBeNull();
   });
 
   it("still writes finish()'s own end event for a run that finished with no prior events", async () => {
@@ -859,9 +859,9 @@ describe('run event log persistence', () => {
     expect(lines.length).toBe(1);
     expect(JSON.parse(lines[0] ?? '')).toMatchObject({ event: 'end', data: { status: 'canceled' } });
     // …but the stream is closed and a later emit still must not re-open it.
-    expect(run.eventsLogStream).toBeNull();
+    expect(run.eventsLogFd).toBeNull();
     runs.emit(run, 'diagnostic', { type: 'runtime_close' });
-    expect(run.eventsLogStream).toBeNull();
+    expect(run.eventsLogFd).toBeNull();
   });
 
   it('does not leak real file descriptors across many finished runs with late emits', async () => {
@@ -886,9 +886,9 @@ describe('run event log persistence', () => {
       runs.finish(run, 'succeeded', 0, null);
       runs.emit(run, 'diagnostic', { type: 'runtime_close' }); // late — must not re-open
     }
-    // createWriteStream opens its fd asynchronously, so any leaked streams from
-    // the late emits only hold their fd a tick later — wait for opens to settle
-    // before counting, otherwise the leak is invisible to a synchronous count.
+    // The log fd is opened synchronously (openSync), so a leaked fd from a late
+    // emit would be held immediately; a short settle wait is kept as a harmless
+    // margin so the count is stable.
     await new Promise((resolve) => setTimeout(resolve, 250));
     const after = countFds();
     // Generous noise margin, far below ITER. On the buggy code this grows by
