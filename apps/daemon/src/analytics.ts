@@ -111,7 +111,7 @@ export interface AnalyticsService {
     appVersion: string;
     properties: Record<string, unknown>;
     insertId: string;
-  }): void;
+  }): Promise<void>;
   /**
    * Safety / reliability events (renderer crashes, daemon uncaught errors,
    * SSE health, etc.) that intentionally BYPASS the user's analytics
@@ -145,7 +145,7 @@ export interface AnalyticsService {
 }
 
 const NOOP_SERVICE: AnalyticsService = {
-  capture: () => undefined,
+  capture: async () => undefined,
   captureSafety: async () => undefined,
   mergeAnonymousPerson: async () => undefined,
   shutdown: async () => undefined,
@@ -195,46 +195,44 @@ export function createAnalyticsService(args: {
   client.on?.('error', () => undefined);
 
   return {
-    capture: ({ eventName, context, appVersion, properties, insertId }) => {
+    capture: async ({ eventName, context, appVersion, properties, insertId }) => {
       // Defense-in-depth consent re-check. The route handler already gates
       // on header presence, but a future header leak or a Settings toggle
       // mid-request would still let events through without this. Reading
       // app-config.json adds one small file read per event; the daemon is
       // not on a hot critical path here.
-      void (async () => {
-        try {
-          const appCfg = await readAppConfig(args.dataDir);
-          if (appCfg.telemetry?.metrics !== true) return;
-          client.capture({
-            distinctId: context.deviceId,
-            event: eventName,
-            properties: {
-              ...properties,
-              event_id: insertId,
-              event_schema_version: EVENT_SCHEMA_VERSION,
-              env: cfg.env,
-              ui_version: appVersion,
-              app_version: appVersion,
-              session_id: context.sessionId,
-              // v2 rename: was `anonymous_id`. Value unchanged.
-              device_id: context.deviceId,
-              client_type: context.clientType,
-              locale: context.locale,
-              // Canonical PostHog OS props so backend events join the same
-              // OS breakdown as posthog-js (which the daemon can't auto-fill).
-              $os: DAEMON_OS_NAME,
-              $os_version: DAEMON_OS_VERSION,
-              ...(context.requestId ? { request_id: context.requestId } : {}),
-              // $insert_id is PostHog's dedup key — passing the same id
-              // from web and daemon prevents the mirrored result event
-              // from being counted twice.
-              $insert_id: insertId,
-            },
-          });
-        } catch {
-          // Swallowed by design; capture failures must never propagate.
-        }
-      })();
+      try {
+        const appCfg = await readAppConfig(args.dataDir);
+        if (appCfg.telemetry?.metrics !== true) return;
+        client.capture({
+          distinctId: context.deviceId,
+          event: eventName,
+          properties: {
+            ...properties,
+            event_id: insertId,
+            event_schema_version: EVENT_SCHEMA_VERSION,
+            env: cfg.env,
+            ui_version: appVersion,
+            app_version: appVersion,
+            session_id: context.sessionId,
+            // v2 rename: was `anonymous_id`. Value unchanged.
+            device_id: context.deviceId,
+            client_type: context.clientType,
+            locale: context.locale,
+            // Canonical PostHog OS props so backend events join the same
+            // OS breakdown as posthog-js (which the daemon can't auto-fill).
+            $os: DAEMON_OS_NAME,
+            $os_version: DAEMON_OS_VERSION,
+            ...(context.requestId ? { request_id: context.requestId } : {}),
+            // $insert_id is PostHog's dedup key — passing the same id
+            // from web and daemon prevents the mirrored result event
+            // from being counted twice.
+            $insert_id: insertId,
+          },
+        });
+      } catch {
+        // Swallowed by design; capture failures must never propagate.
+      }
     },
     captureSafety: async ({ eventName, distinctId, appVersion, properties, insertId }) => {
       // No consent re-check here — that's the entire point of this surface.

@@ -10,6 +10,7 @@ import { spawnEnvForAgent } from './env.js';
 import { probeAgentAuthStatus } from './auth.js';
 import { agentCapabilities } from './capabilities.js';
 import { installMetaForAgent } from './metadata.js';
+import { resolveAmrOpenCodeExecutable } from './executables.js';
 import { resolveAmrProfile } from '../integrations/vela.js';
 import {
   buildAuthDiagnostic,
@@ -30,6 +31,25 @@ type FetchedRuntimeModels = {
   models: RuntimeModelOption[];
   source: RuntimeModelSource;
 };
+
+export interface DetectedRuntimeVersions {
+  agentCliVersion?: string;
+  runtimeCompanionName?: string;
+  runtimeCompanionVersion?: string;
+}
+
+// Detection already pays the bounded `--version` probe cost used by Settings.
+// Keep the result as daemon-lifetime provenance so run telemetry can name the
+// exact executable family without spawning another process on every turn.
+const detectedRuntimeVersions = new Map<string, DetectedRuntimeVersions>();
+
+export function getDetectedRuntimeVersions(
+  agentId: string | null | undefined,
+): DetectedRuntimeVersions | null {
+  if (!agentId) return null;
+  const remembered = detectedRuntimeVersions.get(agentId);
+  return remembered ? { ...remembered } : null;
+}
 
 function configuredEnvForAgent(
   configuredEnvByAgent: Record<string, Record<string, string>>,
@@ -153,6 +173,24 @@ async function probeVersionAtPath(
   }
 }
 
+async function probeAmrOpenCodeVersion(
+  def: RuntimeAgentDef,
+  env: NodeJS.ProcessEnv,
+): Promise<string | null> {
+  if (def.id !== 'amr') return null;
+  const companion = resolveAmrOpenCodeExecutable(env);
+  if (!companion) return null;
+  try {
+    const { stdout } = await execAgentFile(companion, ['--version'], {
+      env,
+      timeout: def.versionProbeTimeoutMs ?? 3000,
+    });
+    return String(stdout).trim().split('\n')[0] || null;
+  } catch {
+    return null;
+  }
+}
+
 function unavailableAgent(
   def: RuntimeAgentDef,
   diagnostics: AgentDiagnostic[] = [],
@@ -200,6 +238,7 @@ async function probe(
   def: RuntimeAgentDef,
   configuredEnv: Record<string, string> = {},
 ): Promise<DetectedAgent> {
+  detectedRuntimeVersions.delete(def.id);
   // Detection must probe the exact path the runtime will spawn, not just the
   // PATH-visible shim. This is load-bearing for Codex under nvm/fnm/mise:
   // the discovered `codex` entry is often a `#!/usr/bin/env node` wrapper
@@ -236,16 +275,29 @@ async function probe(
   // so a single agent's detection wall is max(help, models, auth) ≈ 5s rather
   // than the sum ≈ 15s. `--help` capabilities are cached on `agentCapabilities`
   // for buildArgs to consult.
-  const [caps, modelResult, auth] = await Promise.all([
+  const [caps, modelResult, auth, amrOpenCodeVersion] = await Promise.all([
     probeCapabilities(def, launch.launchPath, probeEnv),
     fetchModels(def, launch.launchPath, probeEnv),
     probeAgentAuthStatus(def, launch.launchPath, probeEnv),
+    probeAmrOpenCodeVersion(def, probeEnv),
   ]);
   const surfacedModelResult = withRememberedAmrModels(def, probeEnv, modelResult);
   if (caps) {
     agentCapabilities.set(def.id, caps);
   }
   const authDiagnostic = auth ? buildAuthDiagnostic(def, auth) : null;
+  const runtimeVersions: DetectedRuntimeVersions = {
+    ...(outcome.version ? { agentCliVersion: outcome.version } : {}),
+    ...(amrOpenCodeVersion
+      ? {
+          runtimeCompanionName: 'opencode',
+          runtimeCompanionVersion: amrOpenCodeVersion,
+        }
+      : {}),
+  };
+  if (Object.keys(runtimeVersions).length > 0) {
+    detectedRuntimeVersions.set(def.id, runtimeVersions);
+  }
   return {
     ...stripFns(def),
     models: surfacedModelResult.models,

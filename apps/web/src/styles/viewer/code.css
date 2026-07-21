@@ -980,7 +980,6 @@
   animation: pulse 1.2s ease-in-out infinite;
 }
 .assistant-label { font-weight: 500; color: var(--text-muted); font-size: 11px; }
-.assistant-stats { font-variant-numeric: tabular-nums; margin-left: auto; }
 
 .assistant-flow {
   display: flex;
@@ -1583,6 +1582,49 @@
   flex: 1; min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+.task-activity .action-card-toggle {
+  width: fit-content;
+  padding: 4px 0;
+  gap: 5px;
+}
+.task-activity .action-card-toggle:hover {
+  background: transparent;
+}
+.task-activity .action-card-toggle .summary {
+  flex: 0 1 auto;
+  font-weight: 400;
+}
+.task-activity-elapsed {
+  color: var(--text-muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.task-activity .action-card-body {
+  position: relative;
+  padding: 8px 0;
+  gap: 6px;
+}
+.task-activity .action-card-body::before {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  top: 20px;
+  bottom: 20px;
+  left: 15.5px;
+  width: 1px;
+  background: var(--border-soft);
+}
+.task-activity .action-card-body > * {
+  position: relative;
+  z-index: 1;
+}
+.task-activity .action-card-toggle .chev {
+  transform: rotate(0deg);
+  transition: transform 200ms var(--ease-out);
+}
+.task-activity.is-open .action-card-toggle .chev {
+  transform: rotate(180deg);
+}
 .action-card-toggle .chev { color: var(--text-faint); font-size: 10px; flex-shrink: 0; transition: transform 120ms var(--ease-out); }
 .action-card-body {
   padding: 8px 0 8px 32px;
@@ -1626,6 +1668,12 @@
   font-family: inherit;
 }
 .op-card-head:hover { background: var(--bg-fill-tertiary); }
+.op-card-head--static {
+  cursor: default;
+}
+.op-card-head--static:hover {
+  background: transparent;
+}
 .op-card-detail {
   padding: 8px 4px 8px 32px;
   display: flex;
@@ -1647,6 +1695,20 @@
 }
 .op-card-file-detail .op-open {
   flex: 0 0 auto;
+}
+.op-card-read-detail {
+  flex-direction: column;
+  align-items: stretch;
+}
+.op-card-file-path-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.op-card-file-path-row .op-path {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 .op-card-detail .op-command {
   margin: 0;

@@ -41,6 +41,7 @@
     "@open-design/sidecar-proto": "workspace:*",
     "@xterm/addon-fit": "0.10.0",
     "@xterm/xterm": "5.5.0",
+    "dompurify": "3.4.2",
     "jspdf": "4.2.1",
     "lexical": "0.36.2",
     "lucide-react": "1.16.0",

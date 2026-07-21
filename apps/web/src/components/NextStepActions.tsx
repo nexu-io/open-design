@@ -653,8 +653,12 @@ export function NextStepActions({
   const keepOpen = { onMouseEnter: cancelClose, onMouseLeave: scheduleClose };
 
   return (
-    <div className={styles.root} data-testid="next-step-actions">
-      <div className={styles.label}>{t('nextStep.title')}</div>
+    <div
+      className={styles.root}
+      data-testid="next-step-actions"
+      role="group"
+      aria-label={t('nextStep.title')}
+    >
       {showBrandRows || showPlanRows || showProjectIncompleteRows || showDesignSystemRows || showToolbox || hasMore ? (
         <div className={styles.toolboxList} data-testid="next-step-toolbox">
           {showPlanRows

@@ -1,5 +1,5 @@
 import { Fragment, memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ToolCard } from "./ToolCard";
+import { TodoCard, ToolCard } from "./ToolCard";
 import { FileOpsSummary } from "./FileOpsSummary";
 import {
   renderMarkdown,
@@ -71,7 +71,8 @@ import {
   type PluginFolderCandidate,
 } from "./design-files/pluginFolders";
 import type { PluginFolderAgentAction } from "./design-files/pluginFolderActions";
-import { Icon } from "./Icon";
+import { Icon, type IconName } from "./Icon";
+import { UserActionCard } from "./UserActionCard";
 import { NextStepActions, type NextStepActionsVariant } from "./NextStepActions";
 import type { DesignToolboxActionId } from "../runtime/design-toolbox";
 import { copyToClipboard } from "../lib/copy-to-clipboard";
@@ -288,26 +289,26 @@ function SkillPluginCandidateCard({
   }
 
   return (
-    <div className="plugin-action-panel" data-testid={`skill-plugin-candidate-${block.candidateId}`}>
-      <div className="plugin-action-card">
-        <div className="plugin-action-card__body">
-          <div className="plugin-action-card__title">
-            <Icon name="sparkles" size={14} />
-            <span>{block.title}</span>
-          </div>
-          <p className="plugin-action-card__description">
-            {description}
-          </p>
-          <div className="plugin-action-card__actions">
-            <button
-              type="button"
-              className="plugin-action-button plugin-action-button--primary"
-              disabled={disabled}
-              onClick={() => void share("contribute-open-design")}
-            >
-              <Icon name={busy === "contribute" ? "spinner" : "share"} size={13} />
-              <span>{busy === "contribute" ? "Starting..." : t("skillPluginCandidate.contributeToMain")}</span>
-            </button>
+    <div className="plugin-action-candidate" data-testid={`skill-plugin-candidate-${block.candidateId}`}>
+      <UserActionCard
+        dataKind="plugin-suggestion"
+        icon="puzzle"
+        title={block.title}
+        detailsLabel={t("brand.viewDetails")}
+        actions={
+          <button
+            type="button"
+            className="plugin-action-button"
+            disabled={disabled}
+            onClick={() => void share("contribute-open-design")}
+          >
+            <Icon name={busy === "contribute" ? "spinner" : "share"} size={13} />
+            <span>{busy === "contribute" ? "Starting..." : t("skillPluginCandidate.contributeToMain")}</span>
+          </button>
+        }
+        details={
+          <div className="plugin-action-candidate__details">
+            <p className="plugin-action-card__description">{description}</p>
             <button
               type="button"
               className="plugin-action-button"
@@ -318,13 +319,13 @@ function SkillPluginCandidateCard({
               <span>{busy === "draft" ? "Creating..." : t("skillPluginCandidate.createForMe")}</span>
             </button>
           </div>
-          {notice ? (
-            <div className="plugin-action-card__notice" role="status">
-              <ActionNoticeView notice={notice} />
-            </div>
-          ) : null}
-        </div>
-      </div>
+        }
+        status={notice ? (
+          <span role="status">
+            <ActionNoticeView notice={notice} />
+          </span>
+        ) : null}
+      />
     </div>
   );
 }
@@ -337,11 +338,6 @@ interface Props {
   // in-flight Write/Edit's code in real time before the full `tool_use`
   // arrives. Never persisted.
   liveToolInput?: Record<string, { name: string; text: string; seq?: number }>;
-  // ChatPane renders the canonical conversation-level TodoWrite card as its
-  // own row, while this message strips TodoWrite tool groups to avoid a
-  // duplicate per-message card.
-  showConversationTodoCard?: boolean;
-  conversationTodoInput?: unknown | null;
   projectId?: string | null;
   // Analytics context for the assistant_feedback_* events. Defaults
   // applied at the call site keep AssistantMessage usable in tests
@@ -372,6 +368,9 @@ interface Props {
   // `od-share-to-community` trigger prompt.
   onShareToOpenDesign?: () => void;
   shareToOpenDesignBusy?: boolean;
+  // Consecutive messages from the same assistant share one identity header.
+  // ChatPane sets this false after the first item in a contiguous run.
+  showRole?: boolean;
   // True only for the most recent assistant message.
   isLast?: boolean;
   // Assistant message id whose run-failure error is rendered as ChatPane's
@@ -419,8 +418,8 @@ interface Props {
 }
 
 // Props compared by reference to decide whether a memoized AssistantMessage can
-// skip re-rendering. The interaction callbacks (onContinueRemainingTasks,
-// onForkFromMessage, onFeedback, and next-step actions) are DELIBERATELY
+// skip re-rendering. The interaction callbacks (onForkFromMessage, onFeedback,
+// and next-step actions) are DELIBERATELY
 // excluded: ChatPane re-creates them per render, but routes them through a ref
 // so their behavior is reference-stable — comparing them would defeat the memo
 // on every streamed frame. `isLast` is compared, which captures the only state
@@ -431,8 +430,6 @@ interface Props {
 const ASSISTANT_MESSAGE_COMPARED_PROPS: Array<keyof Props> = [
   'message',
   'streaming',
-  'showConversationTodoCard',
-  'conversationTodoInput',
   'projectId',
   'projectKind',
   'conversationId',
@@ -444,6 +441,7 @@ const ASSISTANT_MESSAGE_COMPARED_PROPS: Array<keyof Props> = [
   'onRequestPluginFolderAgentAction',
   'activePluginActionPaths',
   'hiddenPluginActionPaths',
+  'showRole',
   'isLast',
   'errorCardOwnerId',
   'nextUserContent',
@@ -497,8 +495,6 @@ function AssistantMessageImpl({
   message,
   streaming,
   liveToolInput,
-  showConversationTodoCard = false,
-  conversationTodoInput = null,
   projectId = null,
   projectKind = null,
   conversationId = null,
@@ -513,6 +509,7 @@ function AssistantMessageImpl({
   hiddenPluginActionPaths = new Set(),
   onShareToOpenDesign,
   shareToOpenDesignBusy = false,
+  showRole = true,
   isLast,
   errorCardOwnerId = null,
   nextUserContent,
@@ -557,9 +554,8 @@ function AssistantMessageImpl({
         ? ([{ kind: "text", text: message.content }] satisfies AgentEvent[])
         : [];
   const displayEvents = useMemo(() => dedupeToolUsesById(events), [events]);
-  // ChatPane renders the canonical TodoWrite card as a standalone chat row, so
-  // we strip TodoWrite tool-groups out of the per-message flow to avoid the
-  // same task list rendering twice.
+  // ChatPane renders the canonical TodoWrite card above the composer, so the
+  // per-message flow must not render the same task list again.
   const settledUseIds = useMemo(
     () => new Set(displayEvents.filter((e) => e.kind === "tool_use").map((e) => e.id)),
     [displayEvents],
@@ -575,17 +571,27 @@ function AssistantMessageImpl({
     }
     return out;
   }, [streaming, liveToolInput, settledUseIds]);
-  // Compose the block list, then run the strip/suppress pipeline once.
+  // ChatPane owns one canonical conversation-level Todo card above the
+  // composer. Strip TodoWrite snapshots from individual messages so plans do
+  // not appear twice or jump around as history is virtualized.
   const blocks = useMemo(() => {
     const rawBlocks = [...buildBlocks(displayEvents), ...liveCodeBlocks];
-    return placeConversationTodoCard(
+    return stripTodoToolGroups(
       stripEmptyThinkingBlocks(suppressDuplicateQuestionForms(rawBlocks)),
-      {
-        show: showConversationTodoCard,
-        input: conversationTodoInput,
-      },
     );
-  }, [displayEvents, liveCodeBlocks, showConversationTodoCard, conversationTodoInput]);
+  }, [displayEvents, liveCodeBlocks]);
+  // A task gets one execution-record disclosure. This keeps answer prose
+  // readable when an agent has alternated between many tools, while retaining
+  // every command, file operation, and streaming code preview for review.
+  // TodoWrite has already been removed because ChatPane owns the single
+  // conversation-level progress card outside message history.
+  const { contentBlocks, taskActivity } = useMemo(
+    () => splitTaskActivity(blocks),
+    [blocks],
+  );
+  const hasConclusion = contentBlocks.some(
+    (block) => block.kind === "text" && block.text.trim().length > 0,
+  );
   const fileOps = useMemo(() => deriveFileOps(displayEvents), [displayEvents]);
   const produced = message.producedFiles ?? [];
   const displayedProduced = useMemo(
@@ -613,6 +619,12 @@ function AssistantMessageImpl({
   const turnFileOps = useMemo(
     () => mergeProducedFilesIntoFileOps(fileOps, displayedProduced),
     [displayedProduced, fileOps],
+  );
+  // The result section must contain artifacts, not inputs the agent merely
+  // inspected. Read/delete history remains available in the execution record.
+  const turnArtifactOps = useMemo(
+    () => turnFileOps.filter((entry) => entry.ops.includes('write') || entry.ops.includes('edit')),
+    [turnFileOps],
   );
   // The single artifact the "next step" affordance anchors to: prefer the HTML
   // produced by THIS turn; if the final turn emitted none (a summary / continue
@@ -723,6 +735,9 @@ function AssistantMessageImpl({
     [message.content, nextStepVariant, projectMetadata, streaming],
   );
   const unfinishedTodos = streaming ? [] : unfinishedTodosFromEvents(events);
+  const hasTodoSnapshot = events.some(
+    (event) => event.kind === "tool_use" && isTodoWriteToolName(event.name),
+  );
   const runSucceeded =
     !streaming &&
     !hasResultDeliveryFailure &&
@@ -731,18 +746,6 @@ function AssistantMessageImpl({
       (!message.runStatus && !!message.endedAt) ||
       isBrandBrowserAssistMessage
     );
-  const runTerminal =
-    !streaming &&
-    (
-      (message.runStatus ? isTerminalRunStatus(message.runStatus) : false) ||
-      (!message.runStatus && !!message.endedAt) ||
-      isBrandBrowserAssistMessage
-    );
-  const canContinueTodos =
-    !streaming &&
-    !!isLast &&
-    unfinishedTodos.length > 0 &&
-    !!onContinueRemainingTasks;
   const canFork = !streaming && !!onForkFromMessage;
   const copyMarkdown = message.content.trim().length > 0 ? message.content : undefined;
   const showFeedback =
@@ -807,21 +810,36 @@ function AssistantMessageImpl({
         (!nextUserContent || !parseSubmittedAnswers(seg.form, nextUserContent)),
     );
   }, [message.content, nextUserContent, suppressDirectionForms]);
-  // Terminal turns should leave the user with an actionable path, including
-  // canceled/failed/no-artifact turns. Artifact-backed cards still wire Share
-  // and Download to the chosen file; incomplete cards fall back to composer
-  // prompts or toolbox actions. A turn still waiting on question-form answers
-  // is the exception: the next step IS answering the form.
+  // "Next step" is a delivery affordance, not a generic terminal-state card.
+  // Keep it out of pure Q&A, failures/cancellations and incomplete Todo turns;
+  // only a successful turn that actually produced something may surface it.
+  const hasTurnDeliverable =
+    turnArtifactOps.length > 0 ||
+    displayedProduced.length > 0 ||
+    pluginActionFolders.length > 0;
+  // Incomplete brand extraction is an explicit recovery workflow, not a
+  // generic failed turn: its Continue action is the only way to resume the
+  // saved extraction state, even when no artifact was produced yet.
+  const isBrandExtractionRecovery =
+    message.runStatus !== 'canceled' &&
+    (effectiveNextStepVariant === 'brand-extraction-incomplete' ||
+      effectiveNextStepVariant === 'brand-programmatic-incomplete' ||
+      effectiveNextStepVariant === 'brand-ai-incomplete');
   const showNextStepActions =
     !streaming &&
-    runTerminal &&
+    unfinishedTodos.length === 0 &&
     !hasPendingQuestionForm &&
-    ((!!isLast && hasNextStepPrimary) || showOpenDesignSubmission);
+    ((!!isLast && hasNextStepPrimary &&
+      ((runSucceeded && hasTurnDeliverable) || isBrandExtractionRecovery)) ||
+      showOpenDesignSubmission);
   // Pre-output vs working: before any real content (text / thinking / tools /
   // files) the footer shimmers "Preparing…"; the moment content lands it
   // flips to "Working". The elapsed clock stays anchored to the persisted run
   // start so switching project tabs or remounting the message cannot restart it.
-  const hasContent = blocks.some((b) => b.kind !== "status") || turnFileOps.length > 0;
+  const hasContent =
+    contentBlocks.some((b) => b.kind !== "status") ||
+    taskActivity !== null ||
+    turnFileOps.length > 0;
   const preparing = streaming && !hasContent;
   const preparingStatus = preparing && events.some((e) => e.kind === "status" && e.label === "thinking")
     ? "thinking"
@@ -830,8 +848,8 @@ function AssistantMessageImpl({
   // Index of the trailing text block — the streaming caret rides the end of
   // the last prose block so it tracks the final character as tokens arrive.
   let lastTextBlockIndex = -1;
-  for (let i = blocks.length - 1; i >= 0; i--) {
-    if (blocks[i]?.kind === "text") {
+  for (let i = contentBlocks.length - 1; i >= 0; i--) {
+    if (contentBlocks[i]?.kind === "text") {
       lastTextBlockIndex = i;
       break;
     }
@@ -840,16 +858,39 @@ function AssistantMessageImpl({
   return (
     <div
       id={`assistant-message-${message.id}`}
-      className="msg assistant"
+      className={`msg assistant${showRole ? '' : ' assistant-continuation'}`}
       data-assistant-message-id={message.id}
       tabIndex={-1}
     >
-      <div className="role">
-        <AgentIcon id={roleIconId} size={20} className="role-agent-icon" />
-        <span className="role-name">{roleName}</span>
-      </div>
+      {showRole ? (
+        <div className="role">
+          <AgentIcon id={roleIconId} size={20} className="role-agent-icon" />
+          <span className="role-name">{roleName}</span>
+        </div>
+      ) : null}
       <div className="assistant-flow">
-        {blocks.map((b, i) => {
+        {taskActivity ? (
+          <TaskActivityCard
+            entries={taskActivity.entries}
+            trailingThinking={taskActivity.trailingThinking}
+            hasConclusion={hasConclusion}
+            runStreaming={streaming}
+            runSucceeded={runSucceeded}
+            runFailed={
+              !streaming &&
+              (message.runStatus === "failed" ||
+                message.runStatus === "canceled" ||
+                hasResultDeliveryFailure)
+            }
+            startedAt={message.startedAt}
+            endedAt={message.endedAt}
+            durationMs={usage?.durationMs}
+            projectFileNames={projectFileNames}
+            onRequestOpenFile={onRequestOpenFile}
+            onThinkingLinkClick={thinkingLinkClick}
+          />
+        ) : null}
+        {contentBlocks.map((b, i) => {
           if (b.kind === "text")
             return (
               <ProseBlock
@@ -882,7 +923,7 @@ function AssistantMessageImpl({
               <ThinkingBlock
                 key={i}
                 text={b.text}
-                streaming={streaming && i === blocks.length - 1}
+                streaming={streaming && i === contentBlocks.length - 1}
                 onLinkClick={thinkingLinkClick}
               />
             );
@@ -899,7 +940,10 @@ function AssistantMessageImpl({
             );
           }
           if (b.kind === "live-tool") {
-            return <LiveCodeBox key={b.id} name={b.name} raw={b.raw} />;
+            // splitTaskActivity moves live code into the same execution
+            // disclosure as settled tools. Keep this branch defensive in
+            // case a future block type opts out of that collection.
+            return null;
           }
           if (b.kind === "plugin-candidate") {
             return (
@@ -938,15 +982,14 @@ function AssistantMessageImpl({
             ].join(":")}
           />
         ) : null}
-        {turnFileOps.length > 0 ? (
+        {turnArtifactOps.length > 0 ? (
           <FileOpsSummary
-            entries={turnFileOps}
-            streaming={streaming}
+            entries={turnArtifactOps}
             projectFileNames={projectFileNames}
             onRequestOpenFile={onRequestOpenFile}
           />
         ) : null}
-        {!streaming && turnFileOps.length === 0 && displayedProduced.length > 0 && projectId ? (
+        {!streaming && turnArtifactOps.length === 0 && displayedProduced.length > 0 && projectId ? (
           <ProducedFiles
             files={displayedProduced}
             projectId={projectId}
@@ -986,13 +1029,6 @@ function AssistantMessageImpl({
                 </div>
               ))
           : null}
-        {!streaming && unfinishedTodos.length > 0 ? (
-          <UnfinishedTodosPanel
-            todos={unfinishedTodos}
-            canContinue={canContinueTodos}
-            onContinue={() => onContinueRemainingTasks?.(unfinishedTodos)}
-          />
-        ) : null}
         {showCompletionRow ? (
           <div className="assistant-completion-row">
             {showFeedback ? (
@@ -1010,9 +1046,6 @@ function AssistantMessageImpl({
                 hasDesignSystemContext={hasDesignSystemContext}
                 footerProps={{
                   streaming,
-                  startedAt: message.startedAt,
-                  endedAt: message.endedAt,
-                  usage,
                   hasUnfinishedTodos: unfinishedTodos.length > 0,
                   hasEmptyResponse,
                   preparing,
@@ -1022,14 +1055,15 @@ function AssistantMessageImpl({
                   forking,
                   forceVisible: true,
                   isLast: !!isLast,
+                  hideRunStatus:
+                    taskActivity !== null ||
+                    hasTodoSnapshot ||
+                    message.id === errorCardOwnerId,
                 }}
               />
             ) : (
               <AssistantFooter
                 streaming={streaming}
-                startedAt={message.startedAt}
-                endedAt={message.endedAt}
-                usage={usage}
                 hasUnfinishedTodos={unfinishedTodos.length > 0}
                 hasEmptyResponse={hasEmptyResponse}
                 preparing={preparing}
@@ -1038,6 +1072,11 @@ function AssistantMessageImpl({
                 onFork={canFork ? onForkFromMessage : undefined}
                 forking={forking}
                 isLast={!!isLast}
+                hideRunStatus={
+                  taskActivity !== null ||
+                  hasTodoSnapshot ||
+                  message.id === errorCardOwnerId
+                }
               />
             )}
           </div>
@@ -1465,9 +1504,6 @@ function appendRoleModel(label: string, model: string | null): string {
 
 interface AssistantFooterProps {
   streaming: boolean;
-  startedAt: number | undefined;
-  endedAt: number | undefined;
-  usage: Extract<AgentEvent, { kind: "usage" }> | undefined;
   hasUnfinishedTodos: boolean;
   hasEmptyResponse: boolean;
   // Pre-output phase: streaming but nothing rendered yet. The label shimmers
@@ -1479,16 +1515,16 @@ interface AssistantFooterProps {
   forking?: boolean;
   feedbackControls?: ReactNode;
   forceVisible?: boolean;
-  // The most recent assistant reply keeps its footer permanently visible
-  // (not hover-gated), matching Lobe Chat's persistent last-message footer.
+  // Identifies the latest reply for UI/analytics hooks. Completed controls are
+  // hover/focus-gated on pointer devices and remain visible without hover.
   isLast?: boolean;
+  // When the turn has an execution disclosure, its run state lives at the top
+  // of the answer. The footer keeps only actions so run state is not repeated.
+  hideRunStatus?: boolean;
 }
 
 function AssistantFooter({
   streaming,
-  startedAt,
-  endedAt,
-  usage,
   hasUnfinishedTodos,
   hasEmptyResponse,
   preparing = false,
@@ -1499,21 +1535,12 @@ function AssistantFooter({
   feedbackControls,
   forceVisible = false,
   isLast = false,
+  hideRunStatus = false,
 }: AssistantFooterProps) {
   const t = useT();
-  const elapsed = useLiveElapsed(streaming, startedAt, endedAt, usage?.durationMs);
-  const formattedCost =
-    typeof usage?.costUsd === "number" &&
-    Number.isFinite(usage.costUsd) &&
-    usage.costUsd > 0
-      ? usage.costUsd.toFixed(4)
-      : "";
-  const costLabel = formattedCost && formattedCost !== "0.0000" ? ` · $${formattedCost}` : "";
   if (
     !forceVisible &&
     !streaming &&
-    !elapsed &&
-    !usage &&
     !hasUnfinishedTodos &&
     !hasEmptyResponse &&
     !copyMarkdown &&
@@ -1527,27 +1554,24 @@ function AssistantFooter({
       data-streaming={streaming ? "true" : "false"}
       data-last={isLast ? "true" : "false"}
     >
-      <span className="dot" data-active={streaming ? "true" : "false"} />
-      <span className={`assistant-label${streaming && preparing ? " shimmer-text shimmer-prepare" : ""}`}>
-        {streaming
-          ? preparing
-            ? preparingStatus === "thinking"
-              ? t("assistant.statusThinking")
-              : t("assistant.statusPreparing")
-            : t("assistant.workingLabel")
-          : hasEmptyResponse
-          ? t("assistant.emptyResponseLabel")
-          : hasUnfinishedTodos
-          ? t("assistant.unfinishedLabel")
-          : t("assistant.doneLabel")}
-      </span>
-      <span className="assistant-stats">
-        {elapsed}
-        {usage?.outputTokens != null
-          ? ` · ${t("assistant.outTokens", { n: usage.outputTokens })}`
-          : ""}
-        {costLabel}
-      </span>
+      {!hideRunStatus ? (
+        <>
+          <span className="dot" data-active={streaming ? "true" : "false"} />
+          <span className={`assistant-label${streaming && preparing ? " shimmer-text shimmer-prepare" : ""}`}>
+            {streaming
+              ? preparing
+                ? preparingStatus === "thinking"
+                  ? t("assistant.statusThinking")
+                  : t("assistant.statusPreparing")
+                : t("assistant.workingLabel")
+              : hasEmptyResponse
+              ? t("assistant.emptyResponseLabel")
+              : hasUnfinishedTodos
+              ? t("assistant.unfinishedLabel")
+              : t("assistant.doneLabel")}
+          </span>
+        </>
+      ) : null}
       {copyMarkdown || onFork || feedbackControls ? (
         <span className="assistant-footer-controls">
           {copyMarkdown ? <AssistantMarkdownCopyButton markdown={copyMarkdown} /> : null}
@@ -2093,52 +2117,6 @@ function feedbackReasonLabel(
   return code;
 }
 
-function UnfinishedTodosPanel({
-  todos,
-  canContinue,
-  onContinue,
-}: {
-  todos: TodoItem[];
-  canContinue: boolean;
-  onContinue: () => void;
-}) {
-  const t = useT();
-  const visible = todos.slice(0, 3);
-  const hiddenCount = todos.length - visible.length;
-  return (
-    <div className="unfinished-todos">
-      <div className="unfinished-todos-head">
-        <span className="unfinished-todos-title">
-          {t("assistant.unfinishedSummary", { n: todos.length })}
-        </span>
-        {canContinue ? (
-          <button
-            type="button"
-            className="unfinished-todos-continue"
-            onClick={onContinue}
-          >
-            {t("assistant.continueRemaining")}
-          </button>
-        ) : null}
-      </div>
-      <ul className="unfinished-todos-list">
-        {visible.map((todo, i) => (
-          <li key={`${todo.status}-${todo.content}-${i}`}>
-            {todo.status === "in_progress" && todo.activeForm
-              ? todo.activeForm
-              : todo.content}
-          </li>
-        ))}
-      </ul>
-      {hiddenCount > 0 ? (
-        <div className="unfinished-todos-more">
-          {t("assistant.unfinishedMore", { n: hiddenCount })}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
 function ProducedFiles({
   files,
   projectId,
@@ -2593,6 +2571,7 @@ function ProseBlock({
       })}
       {live ? (
         <StreamingCodeCard
+          icon="file-code"
           titleLabel={t("tool.write")}
           metaLabel={live.title || live.identifier || undefined}
           code={live.content}
@@ -3429,10 +3408,12 @@ function extractStreamingJsonString(raw: string, field: string): string | null {
 // normal card once the write/artifact completes. Shared by the tool-call
 // path (LiveCodeBox) and the streaming-artifact path (ProseBlock).
 function StreamingCodeCard({
+  icon,
   titleLabel,
   metaLabel,
   code,
 }: {
+  icon: IconName;
   titleLabel: string;
   metaLabel?: string;
   code: string;
@@ -3446,8 +3427,8 @@ function StreamingCodeCard({
   return (
     <div className="op-card op-file live-code-box">
       <div className="op-card-head live-code-head">
-        <span className="action-card-status op-status-running" aria-hidden>
-          <Icon name="spinner" size={14} />
+        <span className="op-status op-status-category op-status-running" aria-hidden>
+          <Icon name={icon} size={14} />
         </span>
         <span className="op-title shimmer-text">{titleLabel}</span>
         {metaLabel ? <span className="op-meta">{metaLabel}</span> : null}
@@ -3482,6 +3463,7 @@ function LiveCodeBox({ name, raw }: { name: string; raw: string }) {
   const isEdit = /edit/i.test(name);
   return (
     <StreamingCodeCard
+      icon={isEdit ? "pencil" : "file-code"}
       titleLabel={isEdit ? t("tool.edit") : t("tool.write")}
       metaLabel={baseName || undefined}
       code={code}
@@ -3503,7 +3485,16 @@ function ToolGroupCard({
   onRequestOpenFile?: (name: string) => void;
 }) {
   const t = useT();
-  const [open, setOpen] = useState(false);
+  // While a task is running, expose the current execution detail. Once it
+  // settles, retain just the activity summary and let the user expand it for
+  // command-level evidence. This gives a task one readable progress line
+  // instead of a stack of finished tool cards.
+  const [open, setOpen] = useState(runStreaming);
+  const [userToggled, setUserToggled] = useState(false);
+
+  useEffect(() => {
+    if (!userToggled) setOpen(runStreaming);
+  }, [runStreaming, userToggled]);
 
   // Snapshot-style tools (TodoWrite and friends) replace their whole state on
   // each call, so a turn that wrote the list several times would otherwise
@@ -3511,30 +3502,32 @@ function ToolGroupCard({
   // snapshot; every other tool passes through untouched.
   items = dedupeSnapshotToolRetries(items);
 
-  // A run of one tool collapses to that tool's card directly so we don't
-  // wrap a single child in a redundant disclosure.
-  if (items.length === 1) {
+  // Fallback for direct ActionGroup use: keep a Todo summary as the first
+  // disclosure level instead of nesting it under the generic tool accordion.
+  if (items.length > 0 && items.every((item) => isTodoWriteToolName(item.use.name))) {
+    const latestTodo = items[items.length - 1]!;
     return (
-      <ToolCard
-        use={items[0]!.use}
-        result={items[0]!.result}
+      <TodoCard
+        input={latestTodo.use.input}
         runStreaming={runStreaming}
         runSucceeded={runSucceeded}
-        projectFileNames={projectFileNames}
-        onRequestOpenFile={onRequestOpenFile}
       />
     );
   }
 
   const summary = summarizeGroup(items, t, runStreaming, runSucceeded);
   const running = runStreaming && items.some((it) => !it.result);
-  const hasError = items.some((it) => it.result?.isError);
+  const hasError =
+    items.some((it) => it.result?.isError) || (!runStreaming && !runSucceeded);
   return (
     <div className="action-card">
       <button
         type="button"
         className={`action-card-toggle ${running ? "running" : ""}`}
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => {
+          setUserToggled(true);
+          setOpen((value) => !value);
+        }}
         aria-expanded={open}
       >
         <span className={`action-card-status ${running ? 'op-status-running' : hasError ? 'op-status-error' : 'op-status-ok'}`} aria-hidden>
@@ -3570,6 +3563,188 @@ function ToolGroupCard({
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * One compact, per-turn audit trail for thinking and every non-progress tool.
+ * The default view keeps the overall run state above the answer; opening it
+ * restores the chronological evidence with a semantic icon for each activity.
+ */
+function TaskActivityCard({
+  entries,
+  trailingThinking,
+  hasConclusion,
+  runStreaming,
+  runSucceeded,
+  runFailed,
+  startedAt,
+  endedAt,
+  durationMs,
+  projectFileNames,
+  onRequestOpenFile,
+  onThinkingLinkClick,
+}: {
+  entries: TaskActivityEntry[];
+  trailingThinking: boolean;
+  hasConclusion: boolean;
+  runStreaming: boolean;
+  runSucceeded: boolean;
+  runFailed: boolean;
+  startedAt: number | undefined;
+  endedAt: number | undefined;
+  durationMs: number | undefined;
+  projectFileNames?: Set<string>;
+  onRequestOpenFile?: (name: string) => void;
+  onThinkingLinkClick?: MarkdownLinkClickHandler;
+}) {
+  const t = useT();
+  const [open, setOpen] = useState(runStreaming);
+  const [userToggled, setUserToggled] = useState(false);
+  useEffect(() => {
+    if (!userToggled) setOpen(runStreaming);
+  }, [runStreaming, userToggled]);
+  const toolItems = entries
+    .filter((entry): entry is Extract<TaskActivityEntry, { kind: "tool" }> => entry.kind === "tool")
+    .map((entry) => entry.item);
+  const settledItems = dedupeSnapshotToolRetries(toolItems);
+  const visibleTools = new Set(settledItems);
+  const visibleEntries = entries.filter(
+    (entry) => entry.kind !== "tool" || visibleTools.has(entry.item),
+  );
+  const currentIndex = visibleEntries.length - 1;
+  const currentEntry = currentIndex >= 0 ? visibleEntries[currentIndex] : undefined;
+  const running = runStreaming;
+  const hasError =
+    !runStreaming &&
+    (runFailed ||
+      settledItems.some(
+        (item) => item.result?.isError || (!item.result && !runSucceeded),
+      ));
+  const stateLabel = running
+    ? t("assistant.workingLabel")
+    : hasError
+      ? t("critiqueTheater.failedHeading")
+      : t("assistant.doneLabel");
+  const runState = running ? "running" : hasError ? "error" : "completed";
+  const elapsed = useLiveElapsed(runStreaming, startedAt, endedAt, durationMs);
+
+  if (running && !hasConclusion && currentEntry) {
+    return (
+      <div
+        className="action-card task-activity task-activity-current"
+        data-run-state="running"
+        data-testid="task-activity-current"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        <div
+          key={taskActivityEntryKey(currentEntry, currentIndex)}
+          className="task-activity-current-row"
+        >
+          <CurrentTaskActivityRow
+            entry={currentEntry}
+            projectFileNames={projectFileNames}
+            onRequestOpenFile={onRequestOpenFile}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`action-card task-activity${open ? " is-open" : ""}`}>
+      <button
+        type="button"
+        className={`action-card-toggle task-state-${runState}${running ? " running" : ""}`}
+        onClick={() => {
+          setUserToggled(true);
+          setOpen((value) => !value);
+        }}
+        aria-expanded={open}
+        data-run-state={runState}
+        data-testid="task-activity-toggle"
+      >
+        <span className={`summary${running ? " shimmer-text" : ""}`}>{stateLabel}</span>
+        {elapsed ? <span className="task-activity-elapsed">{elapsed}</span> : null}
+        <span className="chev" aria-hidden>
+          <Icon name="chevron-down" size={13} />
+        </span>
+      </button>
+      <div className={`accordion-collapsible${open ? " open" : ""}`}>
+        <div className="accordion-collapsible-inner">
+          <div className="action-card-body">
+            {visibleEntries.map((entry, index) => {
+              if (entry.kind === "thinking") {
+                return (
+                  <ThinkingBlock
+                    key={`thinking-${index}`}
+                    text={entry.text}
+                    streaming={runStreaming && trailingThinking && index === visibleEntries.length - 1}
+                    onLinkClick={onThinkingLinkClick}
+                  />
+                );
+              }
+              if (entry.kind === "live-tool") {
+                return <LiveCodeBox key={entry.id} name={entry.name} raw={entry.raw} />;
+              }
+              return (
+                <ToolCard
+                  key={entry.item.use.id || index}
+                  use={entry.item.use}
+                  result={entry.item.result}
+                  runStreaming={runStreaming}
+                  runSucceeded={runSucceeded}
+                  projectFileNames={projectFileNames}
+                  onRequestOpenFile={onRequestOpenFile}
+                />
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function taskActivityEntryKey(entry: TaskActivityEntry, index: number): string {
+  if (entry.kind === "thinking") return `thinking-${index}`;
+  if (entry.kind === "live-tool") return `live-${entry.id}`;
+  return `tool-${entry.item.use.id || index}`;
+}
+
+function CurrentTaskActivityRow({
+  entry,
+  projectFileNames,
+  onRequestOpenFile,
+}: {
+  entry: TaskActivityEntry;
+  projectFileNames?: Set<string>;
+  onRequestOpenFile?: (name: string) => void;
+}) {
+  const t = useT();
+  if (entry.kind === "thinking") {
+    return (
+      <div className="task-activity-current-thinking">
+        <span className="op-status op-status-category" aria-hidden>
+          <Icon name="sparkles" size={14} />
+        </span>
+        <span className="op-title shimmer-text">{t("assistant.thinking")}</span>
+      </div>
+    );
+  }
+  if (entry.kind === "live-tool") {
+    return <LiveCodeBox name={entry.name} raw={entry.raw} />;
+  }
+  return (
+    <ToolCard
+      use={entry.item.use}
+      result={entry.item.result}
+      runStreaming
+      runSucceeded={false}
+      projectFileNames={projectFileNames}
+      onRequestOpenFile={onRequestOpenFile}
+    />
   );
 }
 
@@ -3678,35 +3853,66 @@ type Block =
     }
   | { kind: "status"; label: string; detail?: string | undefined };
 
+type TaskActivityEntry =
+  | Extract<Block, { kind: "thinking" }>
+  | Extract<Block, { kind: "live-tool" }>
+  | { kind: "tool"; item: ToolItem };
+
+type TaskActivity = {
+  entries: TaskActivityEntry[];
+  trailingThinking: boolean;
+};
+
+function splitTaskActivity(blocks: Block[]): {
+  contentBlocks: Block[];
+  taskActivity: TaskActivity | null;
+} {
+  const contentBlocks: Block[] = [];
+  const entries: TaskActivityEntry[] = [];
+
+  for (const block of blocks) {
+    if (block.kind === "thinking") {
+      entries.push(block);
+      continue;
+    }
+    if (block.kind === "live-tool") {
+      entries.push(block);
+      continue;
+    }
+    if (block.kind === "tool-group") {
+      // The canonical TodoWrite display is kept above the composer. It
+      // remains the one task-progress surface, rather than becoming another
+      // item inside the execution audit trail.
+      if (block.items.every((item) => isTodoWriteToolName(item.use.name))) {
+        contentBlocks.push(block);
+      } else {
+        entries.push(...block.items.map((item) => ({ kind: "tool" as const, item })));
+      }
+      continue;
+    }
+    contentBlocks.push(block);
+  }
+
+  return {
+    contentBlocks,
+    taskActivity: entries.length > 0
+      ? { entries, trailingThinking: blocks.at(-1)?.kind === "thinking" }
+      : null,
+  };
+}
+
 /**
  * Walk the event stream and build the rendering layout list. We additionally
  * collapse runs of consecutive tool_uses sharing the same tool family into a
  * single tool-group block so the chat surface stays compact during chains
  * of edits / reads.
  */
-function placeConversationTodoCard(
-  blocks: Block[],
-  options: { show: boolean; input: unknown | null },
-): Block[] {
-  let placed = false;
-  return blocks.flatMap((block): Block[] => {
-    if (block.kind !== "tool-group") return [block];
-    if (!block.items.every((it) => isTodoWriteToolName(it.use.name))) return [block];
-    if (!options.show || placed) return [];
-    placed = true;
-    const item = block.items[0];
-    if (!item || options.input == null) return [block];
-    return [{
-      ...block,
-      items: [{
-        ...item,
-        use: {
-          ...item.use,
-          input: options.input,
-        },
-      }],
-    }];
-  });
+function stripTodoToolGroups(blocks: Block[]): Block[] {
+  return blocks.filter(
+    (block) =>
+      block.kind !== "tool-group" ||
+      !block.items.every((item) => isTodoWriteToolName(item.use.name)),
+  );
 }
 
 function stripEmptyThinkingBlocks(blocks: Block[]): Block[] {

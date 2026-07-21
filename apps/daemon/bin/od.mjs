@@ -9,7 +9,7 @@ const distEntry = resolve(entryDir, "../dist/cli.js");
 
 if (!existsSync(distEntry)) {
   throw new Error(
-    `Open Design daemon dist entry not found at ${distEntry}. Run "pnpm --filter @open-design/daemon build" first.`,
+    `Open Design daemon dist entry not found at ${distEntry}. Run "pnpm bootstrap" after install (or "pnpm --filter @open-design/daemon build").`,
   );
 }
 

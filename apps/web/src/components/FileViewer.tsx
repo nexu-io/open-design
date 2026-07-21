@@ -149,6 +149,7 @@ import {
   type UrlLoadDecision,
 } from './file-viewer-render-mode';
 import {
+  collectPreviewAssetPaths,
   htmlHasRootRelativeProjectAssetRefs,
   normalizeRootRelativeProjectAssetRefs,
   rewriteInlinedCssAssetRefs,
@@ -294,7 +295,9 @@ const POWERED_PREVIEW_ALLOW =
 const PREVIEW_BRIDGE_QUERY = 'odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot';
 const HTML_PASSIVE_PREVIEW_FULL_TEXT_LIMIT = 2 * 1024 * 1024;
 const HTML_ROUTING_TEXT_PREVIEW_LIMIT = 96 * 1024;
+const HTML_PREVIEW_ASSET_PREFLIGHT_LIMIT = 32;
 type HtmlSourceLoadMode = 'full' | 'routing-preview';
+type PreviewAssetWarning = { filePath: string };
 
 function previewTextNeedsFullSourceForSafeInline(source: string | null): boolean {
   if (!source) return false;
@@ -304,6 +307,38 @@ function previewTextNeedsFullSourceForSafeInline(source: string | null): boolean
     htmlNeedsRedirectGuard(source) ||
     hasTweaksTemplate(source)
   );
+}
+
+function isBlockedPreviewAssetResponse(body: unknown): boolean {
+  if (typeof body === 'string') {
+    return /path escapes project dir/i.test(body);
+  }
+  if (!body || typeof body !== 'object') return false;
+  const payload = body as { error?: unknown; message?: unknown };
+  const error = payload.error;
+  if (typeof error === 'string') return isBlockedPreviewAssetResponse(error);
+  if (error && typeof error === 'object') {
+    const detail = error as { code?: unknown; message?: unknown };
+    if (detail.code === 'BAD_REQUEST' && isBlockedPreviewAssetResponse(detail.message)) return true;
+    return isBlockedPreviewAssetResponse(detail.message);
+  }
+  return isBlockedPreviewAssetResponse(payload.message);
+}
+
+async function readPreviewAssetResponseBody(resp: Response): Promise<unknown> {
+  const contentType = resp.headers.get('Content-Type') ?? '';
+  if (/json/i.test(contentType)) {
+    try {
+      return await resp.json();
+    } catch {
+      return '';
+    }
+  }
+  try {
+    return await resp.text();
+  } catch {
+    return '';
+  }
 }
 
 const PREVIEW_VIEWPORT_PRESETS: PreviewViewportPreset[] = [
@@ -6210,6 +6245,7 @@ function HtmlViewer({
   const [source, setSource] = useState<string | null>(liveHtml ?? null);
   const [routingSource, setRoutingSource] = useState<string | null>(liveHtml ?? null);
   const [serverPoweredPreviewRequired, setServerPoweredPreviewRequired] = useState(false);
+  const [previewAssetWarning, setPreviewAssetWarning] = useState<PreviewAssetWarning | null>(null);
   const [inlinedSource, setInlinedSource] = useState<string | null>(null);
   const [zoom, setZoom] = useState(100);
   const [zoomMode, setZoomMode] = useState<'auto' | 'manual'>('auto');
@@ -7227,6 +7263,53 @@ function HtmlViewer({
     () => source != null && htmlHasRootRelativeProjectAssetRefs(source, projectFilePathSet),
     [source, projectFilePathSet],
   );
+  useEffect(() => {
+    setPreviewAssetWarning(null);
+    if (mode !== 'preview' || effectiveDeck) return;
+    const s = routingHtmlSource;
+    if (!s) return;
+    const assetPaths = collectPreviewAssetPaths(s, file.name, projectFilePathSet)
+      .filter((assetPath) => assetPath !== file.name)
+      .slice(0, HTML_PREVIEW_ASSET_PREFLIGHT_LIMIT);
+    if (assetPaths.length === 0) return;
+
+    let cancelled = false;
+    const cacheBust = `${Math.round(file.mtime)}-${reloadKey}-${filesRefreshKey}`;
+    void (async () => {
+      for (const assetPath of assetPaths) {
+        if (cancelled) return;
+        try {
+          const resp = await fetch(`${projectRawUrl(projectId, assetPath)}?previewAssetCheck=${encodeURIComponent(cacheBust)}`);
+          if (cancelled) return;
+          if (resp.ok || resp.status === 404) continue;
+          const body = await readPreviewAssetResponseBody(resp);
+          if (cancelled) return;
+          if (isBlockedPreviewAssetResponse(body)) {
+            if (!cancelled) setPreviewAssetWarning({ filePath: assetPath });
+            return;
+          }
+        } catch {
+          // Network/daemon reachability errors are already represented by the
+          // normal preview loading path. This preflight is only for clear raw
+          // route security blocks hidden inside iframe subresource loads.
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    effectiveDeck,
+    file.mtime,
+    file.name,
+    filesRefreshKey,
+    mode,
+    projectFilePathSet,
+    projectId,
+    reloadKey,
+    routingHtmlSource,
+  ]);
   // A real WebGL/Worker/WASM/SharedArrayBuffer artifact needs the "powered
   // preview" path — a cross-origin-isolated iframe with allow-same-origin —
   // which the opaque preview sandbox cannot provide (issue #724). Powered mode
@@ -10394,9 +10477,11 @@ function HtmlViewer({
     // in the browser screenshot flow (DesignBrowserPanel).
     await waitForAnimationFrame();
     await waitForAnimationFrame();
-    // Prefer the daemon's off-screen render (desktop only): viewport-independent
-    // and, rendering the artifact alone in a hidden window, it can never capture
-    // Open Design's own UI. `wholeDeck` (Export as image) stitches every slide
+    // Prefer the daemon's off-screen render (desktop only): isolated from the
+    // preview pane and, rendering the artifact alone in a hidden window, it can
+    // never capture Open Design's own UI. Page exports use the selected preview
+    // preset; desktop pages and decks retain the renderer defaults. `wholeDeck`
+    // (Export as image) stitches every slide
     // top-to-bottom into one long image — matching the slide count the viewer
     // reports; otherwise (Copy screenshot, Mark/Draw capture) it grabs the
     // CURRENT slide, mirroring what's on screen. An ordinary page is its
@@ -10417,11 +10502,16 @@ function HtmlViewer({
       const trackedActive = slideState?.active ?? htmlPreviewSlideState.get(previewStateKey)?.active ?? null;
       const plan = planDeckImageCapture({ deck: imageDeckSignal, wholeDeck, trackedActive });
       if (plan.useOffscreen) {
+        const exportViewport = !imageDeckSignal && previewViewport !== 'desktop'
+          ? PREVIEW_VIEWPORT_PRESETS.find((preset) => preset.id === previewViewport)
+          : null;
         const rendered = await exportProjectImageDataUrl({
           projectId,
           fileName: file.name,
           deck: imageDeckSignal,
           ...(plan.index != null ? { index: plan.index } : {}),
+          ...(exportViewport?.width != null ? { width: exportViewport.width } : {}),
+          ...(exportViewport?.height != null ? { height: exportViewport.height } : {}),
           ...(exportContext?.versionId ? { versionId: exportContext.versionId } : {}),
         });
         if (rendered.ok) return rendered.snapshot;
@@ -10486,6 +10576,7 @@ function HtmlViewer({
     deckExportSignalForContext,
     slideState?.active,
     previewStateKey,
+    previewViewport,
     projectId,
     file.name,
   ]);
@@ -12256,6 +12347,14 @@ function HtmlViewer({
                       />
                     </div>
                   </PreviewDrawOverlay>
+                  {previewAssetWarning ? (
+                    <div className="preview-asset-warning" role="alert" data-testid="preview-asset-warning">
+                      <strong>{t('fileViewer.previewAssetBlockedTitle')}</strong>
+                      <span>
+                        {t('fileViewer.previewAssetBlockedDetail', { filePath: previewAssetWarning.filePath })}
+                      </span>
+                    </div>
+                  ) : null}
                 </div>
               </div>
               {boardMode ? (

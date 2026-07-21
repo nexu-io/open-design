@@ -1074,7 +1074,10 @@ function slugifyProjectId(name: string): string {
 async function startRun(baseUrl: string, args: McpArgs) {
   const { id, resolved, active } = await resolveProjectArg(baseUrl, args.project);
   const body: JsonObject = { projectId: id };
-  if (typeof args.prompt === 'string' && args.prompt.length > 0) body.message = args.prompt;
+  if (typeof args.prompt === 'string' && args.prompt.length > 0) {
+    body.message = args.prompt;
+    body.currentPrompt = args.prompt;
+  }
   if (typeof args.skill === 'string' && args.skill.length > 0) body.skillId = args.skill;
   if (typeof args.plugin === 'string' && args.plugin.length > 0) body.pluginId = args.plugin;
   if (typeof args.agent === 'string' && args.agent.length > 0) body.agentId = args.agent;

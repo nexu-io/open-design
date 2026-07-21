@@ -465,7 +465,13 @@ export function createClaudeStreamHandler(
           wroteHtmlFileThisTurn = false;
         }
       }
-      if (typeof obj.error === 'string' && obj.error.trim()) {
+      // A sub-agent (parent_tool_use_id != null) in-stream error must NOT be
+      // emitted as a run-level error: it condemns a main turn that has already
+      // recovered (end_turn + is_error:false result + exit 0) to a false
+      // `failed`. Mirror the parent_tool_use_id guard the turn_end emit above
+      // already carries (#5488). Main-turn errors (connection-drop path) are
+      // unaffected since they carry a null parent_tool_use_id.
+      if (typeof obj.error === 'string' && obj.error.trim() && obj.parent_tool_use_id == null) {
         onEvent({
           type: 'error',
           message: assistantText(obj.message.content) || obj.error,

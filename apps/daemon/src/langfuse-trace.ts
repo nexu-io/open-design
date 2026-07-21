@@ -31,6 +31,7 @@ import type {
   RunTimingAnalytics,
 } from './run-analytics-observability.js';
 import type { RunFailureClassification } from './run-failure-classification.js';
+import { redactSecrets } from './redact.js';
 import { readTelemetryEnvironment } from './telemetry-environment.js';
 
 // Langfuse US region: confirmed by an end-to-end smoke on 2026-05-07 — the
@@ -114,6 +115,10 @@ export interface RunSummary {
     truncated: boolean;
   };
   diagnostics?: unknown;
+  retryAttemptCount?: number;
+  retryFinalResult?: string;
+  retrySuppressedReason?: string;
+  retryOriginalFailure?: RunFailureClassification;
 }
 
 export interface MessageSummary {
@@ -259,6 +264,11 @@ export interface RuntimeInfo {
   packaged?: boolean;
   /** Front-end carrier — `desktop` (Electron), `web` (browser), or unknown. */
   clientType?: 'desktop' | 'web' | 'unknown';
+  /** Exact CLI version observed by the daemon's bounded detection probe. */
+  agentCliVersion?: string;
+  /** Optional companion runtime used behind the selected CLI (AMR → OpenCode). */
+  runtimeCompanionName?: string;
+  runtimeCompanionVersion?: string;
 }
 
 export interface TurnInfo {
@@ -1261,6 +1271,8 @@ function shouldCreateGenerationObservation(ctx: ReportContext): boolean {
 export function buildTracePayload(ctx: ReportContext): unknown[] {
   const wantsContent = ctx.prefs.metrics === true && ctx.prefs.content === true;
   const wantsArtifacts = wantsContent;
+  const safeRunError =
+    ctx.run.error === undefined ? undefined : redactSecrets(ctx.run.error);
 
   const sessionId =
     ctx.conversationId.length <= SESSION_ID_MAX ? ctx.conversationId : undefined;
@@ -1364,7 +1376,7 @@ export function buildTracePayload(ctx: ReportContext): unknown[] {
     success,
     env: readTelemetryEnvironment(),
     status: ctx.run.status,
-    error: ctx.run.error ?? undefined,
+    error: safeRunError,
     error_code: ctx.run.errorCode,
     langfuse_trace_id: traceId,
     ...langfuseDelivery,
@@ -1413,9 +1425,24 @@ export function buildTracePayload(ctx: ReportContext): unknown[] {
     osRelease: ctx.runtime?.osRelease,
     arch: ctx.runtime?.arch,
     clientType: ctx.runtime?.clientType,
+    agentCliVersion: ctx.runtime?.agentCliVersion,
+    runtimeCompanionName: ctx.runtime?.runtimeCompanionName,
+    runtimeCompanionVersion: ctx.runtime?.runtimeCompanionVersion,
+    retryAttemptCount: ctx.run.retryAttemptCount,
+    retryFinalResult: ctx.run.retryFinalResult,
+    retrySuppressedReason: ctx.run.retrySuppressedReason,
+    retryOriginalFailureCategory:
+      ctx.run.retryOriginalFailure?.failure_category,
+    retryOriginalFailureDetail:
+      ctx.run.retryOriginalFailure?.failure_detail,
+    retryOriginalFailureStage:
+      ctx.run.retryOriginalFailure?.failure_stage,
     ...promptStackFlatMetadata,
     ...promptStackBlameMetadata,
   };
+
+  const observationVersion =
+    ctx.runtime?.agentCliVersion ?? ctx.runtime?.appVersion;
 
   // Generation-level model parameters mirror the Langfuse schema so the UI
   // shows them in the dedicated Model Parameters card and filters work.
@@ -1446,6 +1473,8 @@ export function buildTracePayload(ctx: ReportContext): unknown[] {
         input: inputText,
         output: outputText,
         metadata: traceMetadata,
+        release: ctx.runtime?.appVersion,
+        version: observationVersion,
         timestamp: startTimeIso,
       },
     },
@@ -1462,7 +1491,8 @@ export function buildTracePayload(ctx: ReportContext): unknown[] {
         input: inputText,
         output: outputText,
         level: success ? 'DEFAULT' : 'ERROR',
-        statusMessage: ctx.run.error ?? undefined,
+        statusMessage: safeRunError,
+        version: observationVersion,
         metadata: {
           status: ctx.run.status,
           messageId: ctx.message.messageId || undefined,
@@ -1497,7 +1527,8 @@ export function buildTracePayload(ctx: ReportContext): unknown[] {
         input: generationInput,
         output: outputText,
         level: success ? 'DEFAULT' : 'ERROR',
-        statusMessage: ctx.run.error ?? undefined,
+        statusMessage: safeRunError,
+        version: observationVersion,
         usage,
         metadata: {
           durationMs: ctx.eventsSummary.durationMs,
@@ -1527,7 +1558,8 @@ export function buildTracePayload(ctx: ReportContext): unknown[] {
         input: generationInput,
         output: outputText,
         level: 'ERROR',
-        statusMessage: ctx.run.error ?? undefined,
+        statusMessage: safeRunError,
+        version: observationVersion,
         metadata: {
           durationMs: ctx.eventsSummary.durationMs,
           cost_usd: costBreakdown.cost_usd,
@@ -1667,7 +1699,7 @@ export function buildTracePayload(ctx: ReportContext): unknown[] {
         name: success ? 'error-summary' : 'run-error',
         startTime: endTimeIso,
         level: 'ERROR',
-        statusMessage: ctx.run.error ?? undefined,
+        statusMessage: safeRunError,
         metadata: {
           status: ctx.run.status,
           errors: ctx.eventsSummary.errors,

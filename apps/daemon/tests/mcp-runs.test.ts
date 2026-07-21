@@ -57,6 +57,7 @@ describe('public MCP discovery + generation tools', () => {
     expect(postBody).toEqual({
       projectId: 'project-1',
       message: 'A 5-slide seed pitch deck',
+      currentPrompt: 'A 5-slide seed pitch deck',
       pluginId: 'pitch-deck',
       pluginInputs: { tone: 'bold' },
       agentId: 'claude',
@@ -77,7 +78,11 @@ describe('public MCP discovery + generation tools', () => {
     const result = await handleMcpToolCall('http://127.0.0.1:17456', 'start_run', { prompt: 'iterate' });
 
     const postBody = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body));
-    expect(postBody).toMatchObject({ projectId: 'active-1', message: 'iterate' });
+    expect(postBody).toMatchObject({
+      projectId: 'active-1',
+      message: 'iterate',
+      currentPrompt: 'iterate',
+    });
     expect(JSON.parse(firstText(result))).toMatchObject({
       runId: 'run-7',
       usedActiveContext: { projectId: 'active-1' },

@@ -104,6 +104,26 @@ export function htmlHasRootRelativeProjectAssetRefs(
   return found;
 }
 
+/**
+ * Collect project asset paths referenced by an HTML preview. Used by
+ * FileViewer's host-side preflight so raw-route security failures do not stay
+ * hidden as broken images inside a sandboxed iframe.
+ */
+export function collectPreviewAssetPaths(
+  html: string,
+  ownerFilePath: string,
+  projectFilePaths: ReadonlySet<string> | null,
+): string[] {
+  const paths = new Set<string>();
+  eachAssetRef(html, (ref) => {
+    const rootPath = rootRelativeProjectAssetPath(ref, projectFilePaths);
+    const relPath = resolveRelativeAssetPath(ownerFilePath, ref);
+    const projectPath = rootPath ?? relPath;
+    if (projectPath) paths.add(projectPath);
+  });
+  return [...paths];
+}
+
 /** `zh/index.html` → `zh/`; flat files → ``. */
 export function assetBaseDirFor(filePath: string): string {
   const idx = filePath.lastIndexOf('/');

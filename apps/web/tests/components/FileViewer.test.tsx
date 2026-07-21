@@ -4835,6 +4835,57 @@ describe('FileViewer tweaks toolbar', () => {
     expect(hiddenAfterExit.srcdoc).toContain('Materialize me');
   });
 
+  it('surfaces raw-route security failures for preview assets without leaking the symlink target', async () => {
+    const source = '<html><body><img src="assets/hero.png" alt="Hero"></body></html>';
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url.includes('/api/projects/project-1/files')) {
+        return new Response(JSON.stringify({
+          files: [
+            htmlPreviewFile(),
+            baseFile({
+              name: 'assets/hero.png',
+              path: 'assets/hero.png',
+              type: 'file',
+              kind: 'image',
+              mime: 'image/png',
+            }),
+          ],
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/projects/project-1/deployments')) {
+        return new Response(JSON.stringify({ deployments: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url.includes('/api/projects/project-1/raw/assets/hero.png')) {
+        return new Response(JSON.stringify({
+          error: {
+            code: 'BAD_REQUEST',
+            message: 'Error: path escapes project dir via symlink /Users/me/.ssh/id_rsa',
+          },
+        }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml={source}
+      />,
+    );
+
+    const warning = await screen.findByTestId('preview-asset-warning');
+    expect(warning.textContent).toContain('assets/hero.png');
+    expect(warning.textContent).toContain('Replace external symlinks');
+    expect(warning.textContent).not.toContain('/Users/me/.ssh');
+  });
+
   it('always injects the manual-edit bridge into the preview srcDoc so entering Edit after materialization does not reload', async () => {
     const { container } = render(
       <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}

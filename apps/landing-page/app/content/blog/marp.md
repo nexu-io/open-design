@@ -4,6 +4,7 @@ date: 2026-07-10
 category: "Tools & Skills"
 readingTime: 7
 summary: "Marp is the open-source Markdown presentation ecosystem — write slides in Markdown, then use the Marp CLI to export HTML, PDF, or PowerPoint. This guide covers Marp themes, Markdown authoring, marp-cli export to pptx (as images), how it compares to reveal.js and Slidev, and where an agent-native design workspace fits."
+noindexLocaleVariants: true
 ctaKind: download-app
 author: nadia-haddad
 i18n:
