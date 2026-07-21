@@ -166,6 +166,85 @@ test('[P1] sticky topbar chips stay above the composer card while its switcher p
   ).toEqual([]);
 });
 
+test('[P1] nested model list stays inside the topbar safe region or closes when its trigger scrolls away', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1120, height: 640 });
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: 15_000 });
+  await page.mouse.wheel(0, 500);
+  await scrollComposerUnderTopbar(page);
+
+  await page.getByTestId('inline-model-switcher-chip').click();
+  await expect(page.getByTestId('inline-model-switcher-popover')).toBeVisible();
+  await page.getByTestId('inline-model-switcher-agent-model').click();
+  const modelPopover = page.getByTestId('inline-model-switcher-agent-model-popover');
+  await expect(modelPopover).toBeVisible();
+
+  const beforeScroll = await page.evaluate(() => {
+    const topbar = document.querySelector('.entry-main__topbar');
+    const popover = document.querySelector(
+      '[data-testid="inline-model-switcher-agent-model-popover"]',
+    );
+    if (!topbar || !popover) return { ok: false, reason: 'missing nodes' };
+    const topbarRect = topbar.getBoundingClientRect();
+    const popoverRect = popover.getBoundingClientRect();
+    return {
+      ok: popoverRect.top >= topbarRect.bottom - 2,
+      reason: `popover top ${Math.round(popoverRect.top)} vs topbar bottom ${Math.round(topbarRect.bottom)}`,
+    };
+  });
+  expect(
+    beforeScroll.ok,
+    `nested model list should start below the sticky topbar (${beforeScroll.reason})`,
+  ).toBe(true);
+
+  await page.evaluate(() => {
+    const scroller = document.querySelector('.entry-main--scroll');
+    const card = document.querySelector('.home-hero__input-card');
+    const topbar = document.querySelector('.entry-main__topbar');
+    if (!scroller || !card || !topbar) return;
+    const topbarRect = topbar.getBoundingClientRect();
+    const cardTop = card.getBoundingClientRect().top;
+    scroller.scrollTop += Math.max(0, cardTop - topbarRect.top + topbarRect.height + 24);
+  });
+
+  const afterScroll = await page.evaluate(() => {
+    const topbar = document.querySelector('.entry-main__topbar');
+    const popover = document.querySelector(
+      '[data-testid="inline-model-switcher-agent-model-popover"]',
+    );
+    const trigger = document.querySelector(
+      '[data-testid="inline-model-switcher-agent-model"]',
+    );
+    if (!topbar || !trigger) return { ok: false, reason: 'missing nodes' };
+    const topbarRect = topbar.getBoundingClientRect();
+    const triggerRect = trigger.getBoundingClientRect();
+    const triggerInSafeRegion =
+      triggerRect.bottom > topbarRect.bottom && triggerRect.top < window.innerHeight - 8;
+    if (!popover) {
+      return { ok: true, closed: true, triggerInSafeRegion };
+    }
+    const popoverRect = popover.getBoundingClientRect();
+    return {
+      ok: popoverRect.top >= topbarRect.bottom - 2,
+      closed: false,
+      triggerInSafeRegion,
+      reason: `popover top ${Math.round(popoverRect.top)} vs topbar bottom ${Math.round(topbarRect.bottom)}`,
+    };
+  });
+
+  if (afterScroll.closed) {
+    expect(afterScroll.triggerInSafeRegion).toBe(false);
+    return;
+  }
+
+  expect(
+    afterScroll.ok,
+    `nested model list should stay below the sticky topbar after scrolling (${afterScroll.reason})`,
+  ).toBe(true);
+});
+
 // Scrolls `.entry-main--scroll` so the composer card's top edge lands inside
 // the sticky topbar strip (which stays pinned at the container's top). Fails
 // loudly when the container cannot scroll far enough to create the overlap.

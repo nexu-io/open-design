@@ -10,6 +10,17 @@ import {
   MODEL_CAPABILITY_TAG_LABEL_KEYS,
 } from './modelCapabilityTags';
 
+function stickyTopbarBottom(pad = 8): number | null {
+  const topbar = document.querySelector('.entry-main__topbar');
+  if (!(topbar instanceof HTMLElement)) return null;
+  const topbarRect = topbar.getBoundingClientRect();
+  return topbarRect.top <= pad && topbarRect.bottom > pad ? topbarRect.bottom : null;
+}
+
+function isInSafeRegion(rect: DOMRect, safeTop: number, safeBottom: number): boolean {
+  return rect.bottom > safeTop && rect.top < safeBottom;
+}
+
 export function renderModelOptions(models: AgentModelOption[]) {
   const groups = new Map<string, AgentModelOption[]>();
   const flat: AgentModelOption[] = [];
@@ -203,22 +214,31 @@ export const SearchableModelSelect = forwardRef<
         buttonRef.current?.getBoundingClientRect() ??
         wrapRef.current?.getBoundingClientRect();
       if (!rect) return;
-      const viewportWidth = typeof window === 'undefined' ? rect.width : window.innerWidth;
-      const viewportHeight = typeof window === 'undefined' ? rect.height : window.innerHeight;
+      const pad = 8;
+      const gap = 6;
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      const safeTop = stickyTopbarBottom(pad) ?? pad;
+      const safeBottom = viewportHeight - pad;
+      if (rect.width > 0 && rect.height > 0 && !isInSafeRegion(rect, safeTop, safeBottom)) {
+        setOpen(false);
+        setPopoverStyle(null);
+        return;
+      }
       const desiredWidth = Math.max(rect.width, popoverMinWidth ?? 0);
-      const maxWidth = Math.max(160, viewportWidth - 16);
+      const maxWidth = Math.max(160, viewportWidth - pad * 2);
       const width = Math.min(desiredWidth, maxWidth);
       const left = Math.min(
-        Math.max(8, rect.left),
-        Math.max(8, viewportWidth - width - 8),
+        Math.max(pad, rect.left),
+        Math.max(pad, viewportWidth - width - pad),
       );
-      const availableBelow = Math.max(140, viewportHeight - rect.bottom - 12);
-      const availableAbove = Math.max(140, rect.top - 12);
+      const availableBelow = Math.max(140, safeBottom - rect.bottom - gap);
+      const availableAbove = Math.max(140, rect.top - gap - safeTop);
       const shouldOpenUpward = availableBelow < 260 && availableAbove > availableBelow;
       const maxHeight = Math.min(360, shouldOpenUpward ? availableAbove : availableBelow);
       if (shouldOpenUpward) {
         setPopoverStyle({
-          bottom: Math.max(8, viewportHeight - rect.top + 6),
+          bottom: Math.max(pad, viewportHeight - rect.top + gap),
           left,
           width,
           maxHeight,
@@ -226,7 +246,7 @@ export const SearchableModelSelect = forwardRef<
         return;
       }
       setPopoverStyle({
-        top: rect.bottom + 6,
+        top: rect.bottom + gap,
         left,
         width,
         maxHeight,
