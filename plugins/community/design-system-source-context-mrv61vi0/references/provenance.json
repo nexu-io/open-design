@@ -1,0 +1,19 @@
+{
+  "candidateId": "4e2a7606-5657-436b-b421-790ccf61606e",
+  "projectId": "brand-github-e21407",
+  "runId": "a29b1c1a-02ec-4b42-8c2d-50392cb6afa5",
+  "conversationId": "db93cbe2-7078-4b40-a0f5-8bce06827b9f",
+  "provenance": {
+    "summary": "Detected from context/source-context.md after a successful run.",
+    "detectedAt": 1784669229058
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "context/source-context.md",
+      "label": "context/source-context.md",
+      "size": 13043,
+      "copied": true
+    }
+  ]
+}
