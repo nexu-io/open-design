@@ -172,6 +172,7 @@ export function InlineModelSwitcher({
   const analytics = useAnalytics();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
+  const chipRef = useRef<HTMLButtonElement | null>(null);
   const providerModelsFetchingRef = useRef<Set<string>>(new Set());
   const [amrStatus, setAmrStatus] = useState<VelaLoginStatus | null>(null);
   const [amrWalletSnapshot, setAmrWalletSnapshot] =
@@ -184,6 +185,28 @@ export function InlineModelSwitcher({
     useState(false);
   const amrPollRef = useRef<number | null>(null);
   const amrLoginStartedAtRef = useRef<number | null>(null);
+
+  const getModelPopoverBoundary = useCallback(() => {
+    const scrollContainer = wrapRef.current?.closest<HTMLElement>(
+      '.entry-main--scroll',
+    );
+    const scrollRect = scrollContainer?.getBoundingClientRect();
+    const topbarRect = scrollContainer
+      ?.querySelector<HTMLElement>('.entry-main__topbar')
+      ?.getBoundingClientRect();
+    return {
+      top: Math.max(8, (topbarRect?.bottom ?? scrollRect?.top ?? 0) + 8),
+      right: Math.min(
+        window.innerWidth - 8,
+        (scrollRect?.right ?? window.innerWidth) - 8,
+      ),
+      bottom: Math.min(
+        window.innerHeight - 8,
+        (scrollRect?.bottom ?? window.innerHeight) - 8,
+      ),
+      left: Math.max(8, (scrollRect?.left ?? 0) + 8),
+    };
+  }, []);
 
   const stopAmrPolling = useCallback(() => {
     if (amrPollRef.current !== null) {
@@ -351,6 +374,48 @@ export function InlineModelSwitcher({
     return () => {
       document.removeEventListener('mousedown', onClick);
       document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const scrollContainer = wrapRef.current?.closest('.entry-main--scroll');
+    if (!(scrollContainer instanceof HTMLElement)) return;
+    let frame = 0;
+    const updateAnchorVisibility = () => {
+      frame = 0;
+      const triggerRect = chipRef.current?.getBoundingClientRect();
+      if (!triggerRect) return;
+      const scrollRect = scrollContainer.getBoundingClientRect();
+      const topbarBottom = scrollContainer
+        .querySelector<HTMLElement>('.entry-main__topbar')
+        ?.getBoundingClientRect().bottom;
+      const safeTop = Math.max(scrollRect.top, topbarBottom ?? scrollRect.top);
+      const safeBottom = Math.min(window.innerHeight, scrollRect.bottom);
+      const safeLeft = Math.max(0, scrollRect.left);
+      const safeRight = Math.min(window.innerWidth, scrollRect.right);
+      if (
+        triggerRect.bottom <= safeTop ||
+        triggerRect.top >= safeBottom ||
+        triggerRect.right <= safeLeft ||
+        triggerRect.left >= safeRight
+      ) {
+        setOpen(false);
+      }
+    };
+    const scheduleVisibilityUpdate = () => {
+      if (frame !== 0) return;
+      frame = window.requestAnimationFrame(updateAnchorVisibility);
+    };
+    updateAnchorVisibility();
+    scrollContainer.addEventListener('scroll', scheduleVisibilityUpdate, {
+      passive: true,
+    });
+    window.addEventListener('resize', scheduleVisibilityUpdate);
+    return () => {
+      if (frame !== 0) window.cancelAnimationFrame(frame);
+      scrollContainer.removeEventListener('scroll', scheduleVisibilityUpdate);
+      window.removeEventListener('resize', scheduleVisibilityUpdate);
     };
   }, [open]);
 
@@ -652,6 +717,7 @@ export function InlineModelSwitcher({
       data-testid="inline-model-switcher"
     >
       <button
+        ref={chipRef}
         type="button"
         className={
           'inline-switcher__chip od-tooltip' +
@@ -972,6 +1038,7 @@ export function InlineModelSwitcher({
                     searchInputTestId="inline-model-switcher-agent-model-search"
                     popoverTestId="inline-model-switcher-agent-model-popover"
                     searchPlaceholder={t('designs.searchPlaceholder')}
+                    getPopoverBoundary={getModelPopoverBoundary}
                     aria-label={t('inlineSwitcher.modelLabel')}
                     models={inlineAgentModelOptions}
                     value={currentModelId ?? ''}
@@ -1097,6 +1164,7 @@ export function InlineModelSwitcher({
                     searchInputTestId="inline-model-switcher-api-model-search"
                     popoverTestId="inline-model-switcher-api-model-popover"
                     searchPlaceholder={t('designs.searchPlaceholder')}
+                    getPopoverBoundary={getModelPopoverBoundary}
                     aria-label={t('inlineSwitcher.modelLabel')}
                     models={apiModelChoices}
                     value={config.model}
