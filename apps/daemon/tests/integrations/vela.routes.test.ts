@@ -18,7 +18,7 @@ import https from 'node:https';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import type http from 'node:http';
+import http from 'node:http';
 import { PassThrough } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 
@@ -1432,6 +1432,102 @@ describe('ALL /api/integrations/vela/api-proxy/*', () => {
       );
       expect(upstreamRequests[0]?.headers['content-length']).toBe(String(Buffer.byteLength(body)));
       expect(upstreamRequests[0]?.body).toBe(body);
+    } finally {
+      requestSpy.mockRestore();
+    }
+  });
+});
+
+describe('ALL /api/integrations/vela/message-center/*', () => {
+  it('forwards only Message Center routes to the configured profile origin with its control key', async () => {
+    const requests: Array<{ url: string; method: string; authorization: string | undefined }> = [];
+    const upstream = createServer((req, res) => {
+      requests.push({
+        url: req.url ?? '',
+        method: req.method ?? '',
+        authorization: req.headers.authorization,
+      });
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ messages: [], nextCursor: null, unreadCount: 0 }));
+    });
+    await new Promise<void>((resolve) => upstream.listen(0, '127.0.0.1', resolve));
+    const address = upstream.address() as AddressInfo;
+    seedLogin('local', { apiUrl: `http://127.0.0.1:${address.port}` });
+    try {
+      const response = await fetch(
+        `${baseUrl}/api/integrations/vela/message-center/messages?locale=en-US&limit=30`,
+        { headers: { authorization: 'Bearer browser-supplied-key' } },
+      );
+      expect(response.status).toBe(200);
+      expect(requests).toEqual([
+        {
+          url: '/api/v1/message-center/messages?locale=en-US&limit=30',
+          method: 'GET',
+          authorization: 'Bearer ck-seeded-key',
+        },
+      ]);
+      const markRead = await fetch(
+        `${baseUrl}/api/integrations/vela/message-center/messages/release/read`,
+        { method: 'POST' },
+      );
+      expect(markRead.status).toBe(200);
+      expect(requests).toEqual([
+        {
+          url: '/api/v1/message-center/messages?locale=en-US&limit=30',
+          method: 'GET',
+          authorization: 'Bearer ck-seeded-key',
+        },
+        {
+          url: '/api/v1/message-center/messages/release/read',
+          method: 'POST',
+          authorization: 'Bearer ck-seeded-key',
+        },
+      ]);
+      const rejected = await fetch(`${baseUrl}/api/integrations/vela/message-center/wallet/balance`);
+      expect(rejected.status).toBe(404);
+      expect(await rejected.json()).toEqual({ error: 'unknown_message_center_path' });
+      expect(requests).toHaveLength(2);
+    } finally {
+      await new Promise<void>((resolve) => upstream.close(() => resolve()));
+    }
+  });
+
+  it('fails visibly when no control key is configured', async () => {
+    const response = await fetch(
+      `${baseUrl}/api/integrations/vela/message-center/messages?locale=en-US`,
+    );
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ error: 'vela_control_key_required' });
+  });
+
+  it('guards upstream response-stream errors after headers without crashing the daemon', async () => {
+    const requestSpy = vi.spyOn(http, 'request').mockImplementation(((target, options, callback) => {
+      const req = new PassThrough() as any;
+      req.on('finish', () => {
+        const upstreamRes = new PassThrough() as any;
+        upstreamRes.statusCode = 200;
+        upstreamRes.headers = { 'content-type': 'application/json' };
+        callback?.(upstreamRes);
+        upstreamRes.write('{"messages":[');
+        setImmediate(() => upstreamRes.emit('error', new Error('mid-stream reset')));
+      });
+      req.setTimeout = () => req;
+      return req;
+    }) as typeof http.request);
+
+    seedLogin('local', { apiUrl: 'http://127.0.0.1:18080' });
+
+    try {
+      const response = await fetch(
+        `${baseUrl}/api/integrations/vela/message-center/messages?locale=en-US`,
+      );
+
+      expect(response.status).toBe(200);
+      expect(await response.text()).toBe('{"messages":[');
+
+      const status = await getJson<{ loggedIn: boolean }>(`${baseUrl}/api/integrations/vela/status`);
+      expect(status.status).toBe(200);
+      expect(status.body.loggedIn).toBe(true);
     } finally {
       requestSpy.mockRestore();
     }

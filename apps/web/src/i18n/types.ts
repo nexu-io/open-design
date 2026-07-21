@@ -1033,6 +1033,22 @@ export interface Dict {
   'entry.navDesignSystems': string;
   'entry.navBrands': string;
   'entry.navIntegrations': string;
+  // Client message center
+  'messageCenter.openAria': string;
+  'messageCenter.unreadCount': string;
+  'messageCenter.title': string;
+  'messageCenter.subtitle': string;
+  'messageCenter.filterAll': string;
+  'messageCenter.filterUnread': string;
+  'messageCenter.filterRead': string;
+  'messageCenter.markAllRead': string;
+  'messageCenter.emptyAllTitle': string;
+  'messageCenter.emptyUnreadTitle': string;
+  'messageCenter.emptyReadTitle': string;
+  'messageCenter.emptyBody': string;
+  'messageCenter.close': string;
+  'messageCenter.desktopSettings': string;
+  'messageCenter.desktopSettingsHint': string;
   'workspaceTabs.project': string;
   'workspaceTabs.pluginDetails': string;
   'workspaceTabs.marketplace': string;

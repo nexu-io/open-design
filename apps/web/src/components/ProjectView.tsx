@@ -217,6 +217,7 @@ import { historyWithApiAttachmentContext } from '../api-attachment-context';
 import { filterImplicitProducedFiles } from '../produced-files';
 import { AvatarMenu } from './AvatarMenu';
 import { EntrySettingsMenu } from './EntrySettingsMenu';
+import { MessageCenter } from './MessageCenter';
 import { HandoffButton } from './HandoffButton';
 import { Icon } from './Icon';
 import { localizePluginTitle } from './plugins-home/localization';
@@ -8853,6 +8854,9 @@ export function ProjectView({
                 artifactKind={headerArtifact.artifact_kind}
                 metricsConsent={config.telemetry?.metrics === true}
                 installationId={config.installationId}
+              />
+              <MessageCenter
+                onOpenNotificationSettings={() => onOpenSettings('notifications')}
               />
               <EntrySettingsMenu
                 config={config}

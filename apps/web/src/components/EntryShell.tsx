@@ -138,6 +138,7 @@ import {
   EntrySettingsMenu,
   type EntrySettingsSection,
 } from './EntrySettingsMenu';
+import { MessageCenter } from './MessageCenter';
 import { NewProjectModal } from './NewProjectModal';
 import { PluginsView } from './PluginsView';
 import type { CreateInput, CreateTab, ImportClaudeDesignOutcome } from './NewProjectPanel';
@@ -1087,6 +1088,9 @@ export function EntryShell({
               }
             />
             <WhatsNewPopup active={view === 'home'} />
+            <MessageCenter
+              onOpenNotificationSettings={() => onOpenSettings('notifications')}
+            />
             {avatarMenu}
             {amrBalanceGateBlock ? (
               <AmrBalanceDialog
