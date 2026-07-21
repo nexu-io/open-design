@@ -2521,6 +2521,7 @@ export interface Dict {
   'chat.runError.title.emptyOutput': string;
   'chat.runError.title.sessionExpired': string;
   'chat.runError.title.gitBashMissing': string;
+  'chat.runError.title.cpuUnsupported': string;
   'chat.runError.title.generic': string;
   'chat.runError.signInMessage.amr': string;
   'chat.runError.signInMessage.other': string;
@@ -2539,6 +2540,7 @@ export interface Dict {
   'chat.runError.emptyOutputMessage': string;
   'chat.runError.sessionExpiredMessage': string;
   'chat.runError.gitBashMissingMessage': string;
+  'chat.runError.cpuUnsupportedMessage': string;
   'chat.runError.agentFallback': string;
   'chat.runError.sourceLabel': string;
   'chat.runError.sourceExpandAria': string;

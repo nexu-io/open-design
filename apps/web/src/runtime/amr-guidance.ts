@@ -110,6 +110,7 @@ export type RunFailureMessageKey =
   | 'chat.runError.emptyOutputMessage'
   | 'chat.runError.sessionExpiredMessage'
   | 'chat.runError.gitBashMissingMessage'
+  | 'chat.runError.cpuUnsupportedMessage'
   | null;
 
 // i18n keys for the unified error card's TITLE (the "error type" line above the
@@ -135,6 +136,7 @@ export type RunFailureTitleKey =
   | 'chat.runError.title.emptyOutput'
   | 'chat.runError.title.sessionExpired'
   | 'chat.runError.title.gitBashMissing'
+  | 'chat.runError.title.cpuUnsupported'
   | 'chat.runError.title.generic';
 
 export interface RunFailureUi {
@@ -289,6 +291,18 @@ const AGENT_AGNOSTIC_DETAIL_FAILURE_UI: Record<string, RunFailureUi> = {
     'chat.runError.title.gitBashMissing',
     'chat.runError.gitBashMissingMessage',
   ),
+  // The bundled agent binary needs a CPU instruction set (AVX2) this device
+  // doesn't have, so it crashes on launch — retrying reproduces the crash and
+  // switching hosted models doesn't help (the runtime binary is the problem).
+  // The fix is updating Open Design to a build that bundles a compatible
+  // (baseline) runtime, so show guidance copy without a dead Retry button.
+  cpu_unsupported: {
+    primaryAction: 'none',
+    titleKey: 'chat.runError.title.cpuUnsupported',
+    messageKey: 'chat.runError.cpuUnsupportedMessage',
+    secondaryRetry: false,
+    showSwitchCard: false,
+  },
 };
 
 // Resolve the failure UI for a failed run:

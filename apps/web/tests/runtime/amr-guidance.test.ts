@@ -122,6 +122,22 @@ describe('resolveRunFailureUi', () => {
     }
   });
 
+  // A cpu_unsupported crash (bundled agent binary requires AVX2, this CPU has
+  // none) is deterministic: retry re-runs the same binary on the same CPU, and
+  // switching hosted models doesn't replace the runtime binary. So: guidance
+  // copy only — no Retry button, no AMR promotion — for every agent.
+  it('maps cpu_unsupported to update guidance without retry or switch card', () => {
+    for (const agent of ['claude', 'codex', 'amr', null]) {
+      expect(resolveRunFailureUi('AGENT_EXECUTION_FAILED', 'cpu_unsupported', agent)).toMatchObject({
+        primaryAction: 'none',
+        titleKey: 'chat.runError.title.cpuUnsupported',
+        messageKey: 'chat.runError.cpuUnsupportedMessage',
+        secondaryRetry: false,
+        showSwitchCard: false,
+      });
+    }
+  });
+
   // Agent-agnostic root-cause codes (#895): each carries a named failure type +
   // actionable fix, resolved the same way for any agent, with a plain Retry and
   // no AMR promotion (these aren't "switch to hosted model" cases).

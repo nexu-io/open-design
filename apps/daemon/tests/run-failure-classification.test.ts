@@ -1141,6 +1141,10 @@ describe('classifyRunFailure — signal and interrupt attribution', () => {
       ),
     ).toMatchObject({
       failure_category: 'process_exit',
+      // A bare Bun illegal-instruction banner WITHOUT the no_avx2 CPU-feature
+      // line stays process_crashed: it may be an unrelated SIGILL on an
+      // AVX2-capable machine, so it must not claim the cpu_unsupported detail
+      // (which shows "Processor not supported" guidance).
       failure_detail: 'process_crashed',
       retryable: false,
       user_action: 'none',
@@ -1151,6 +1155,158 @@ describe('classifyRunFailure — signal and interrupt attribution', () => {
 function runtimeCloseEvent(reason: string): RunEventForFailureClassification {
   return { event: 'diagnostic', data: { type: 'runtime_close', rpc_close_reason: reason } };
 }
+
+describe('cpu_unsupported (AVX2) crash classification', () => {
+  // Windows AMR failure shape from Langfuse: the bundled opencode.exe is a Bun
+  // build requiring AVX2; on CPUs without it the child dies with an illegal
+  // instruction BEFORE readiness, vela surfaces an ACP fatal, and the daemon
+  // stamps runtime_close: fatal_rpc_error. The crash text must win over the
+  // fatal_rpc_error close-reason promotion — retrying the same binary on the
+  // same CPU deterministically fails again.
+  it('classifies a Bun illegal-instruction crash under an ACP fatal close as cpu_unsupported', () => {
+    const stderr = [
+      '============================================================',
+      'Bun v1.3.10 (30e609e0) Windows x64',
+      'CPU: sse42 popcnt no_avx no_avx2',
+      'panic(main thread): Illegal instruction',
+      'oh no: Bun has crashed. This indicates a bug in Bun, not your code.',
+    ].join('\n');
+    expect(
+      classify('AGENT_EXECUTION_FAILED', '', [
+        { event: 'stderr', data: { chunk: stderr } },
+        errorEvent('AGENT_EXECUTION_FAILED', ''),
+        runtimeCloseEvent('fatal_rpc_error'),
+      ]),
+    ).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'cpu_unsupported',
+      retryable: false,
+      user_action: 'none',
+    });
+  });
+
+  it('classifies the abort-after-panic shape (exit status 3) via its stderr banner', () => {
+    // Production shape (Langfuse trace 266a5706, 0.15.0 stable): on a CPU with
+    // AVX but not AVX2 (Sandy/Ivy Bridge era), Bun panics on an illegal
+    // instruction, panics again during the panic, and abort()s — so the exit
+    // status vela reports is 3, not STATUS_ILLEGAL_INSTRUCTION. Only the
+    // stderr banner carries the truth.
+    const stderr = [
+      '============================================================',
+      'Bun v1.3.14 (0d9b296a) Windows x64',
+      'Windows v.win10_cu',
+      'CPU: sse42 avx',
+      'Args: ',
+      'Features: no_avx2 ',
+      '',
+      'panic: Illegal instruction at address 0x7FF6C08DF82C',
+      'panicked during a panic. Aborting.',
+    ].join('\n');
+    expect(
+      classify(
+        'AGENT_EXECUTION_FAILED',
+        'json-rpc id 2: start opencode server: opencode exited before readiness: exit status 3',
+        [
+          { event: 'stderr', data: { chunk: stderr } },
+          errorEvent(
+            'AGENT_EXECUTION_FAILED',
+            'json-rpc id 2: start opencode server: opencode exited before readiness: exit status 3',
+          ),
+          runtimeCloseEvent('fatal_rpc_error'),
+        ],
+      ),
+    ).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'cpu_unsupported',
+      retryable: false,
+      user_action: 'none',
+    });
+  });
+
+  it('classifies a bare STATUS_ILLEGAL_INSTRUCTION exit under an ACP fatal close as cpu_unsupported', () => {
+    // No Bun crash banner — vela only reports the raw Windows exit status
+    // (0xC000001D, decimal 3221225501 in Go/Node exit-status text).
+    expect(
+      classify(
+        'AGENT_EXECUTION_FAILED',
+        'start opencode server: exit status 3221225501',
+        [
+          errorEvent('AGENT_EXECUTION_FAILED', 'start opencode server: exit status 3221225501'),
+          runtimeCloseEvent('fatal_rpc_error'),
+        ],
+      ),
+    ).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'cpu_unsupported',
+      retryable: false,
+      user_action: 'none',
+    });
+  });
+
+  it('classifies the hex STATUS_ILLEGAL_INSTRUCTION form as cpu_unsupported', () => {
+    const message = 'start opencode server: opencode exited before readiness: exit status 0xC000001D';
+    expect(
+      classify('AGENT_EXECUTION_FAILED', message, [
+        errorEvent('AGENT_EXECUTION_FAILED', message),
+        runtimeCloseEvent('fatal_rpc_error'),
+      ]),
+    ).toMatchObject({
+      failure_detail: 'cpu_unsupported',
+      retryable: false,
+    });
+  });
+
+  it('keeps a STATUS_ILLEGAL_INSTRUCTION exit outside the opencode startup context retryable', () => {
+    // The raw status code is generic Windows SIGILL — any agent binary can die
+    // with it for reasons that have nothing to do with AVX2. Without vela's
+    // bundled-opencode startup wrapper text it must stay on the existing
+    // fatal_rpc_error path instead of surfacing the processor-support card.
+    const message = 'codex acp bridge exited: exit status 3221225501';
+    expect(
+      classify('AGENT_EXECUTION_FAILED', message, [
+        errorEvent('AGENT_EXECUTION_FAILED', message),
+        runtimeCloseEvent('fatal_rpc_error'),
+      ]),
+    ).toMatchObject({
+      failure_detail: 'fatal_rpc_error',
+      retryable: true,
+    });
+  });
+
+  it('does not claim an illegal-instruction crash without the no_avx2 feature line', () => {
+    // A SIGILL on an AVX2-capable machine (runtime bug, corrupted jump) prints
+    // the same "Illegal instruction" panic but a CPU-feature line WITHOUT
+    // no_avx2. That must keep the retryable fatal_rpc_error path — labeling it
+    // "Processor not supported" would mislead the user and drop the retry.
+    const stderr = [
+      'Bun v1.3.14 (0d9b296a) Windows x64',
+      'CPU: sse42 avx avx2',
+      'panic(main thread): Illegal instruction at address 0x7FF6C08DF82C',
+    ].join('\n');
+    expect(
+      classify('AGENT_EXECUTION_FAILED', '', [
+        { event: 'stderr', data: { chunk: stderr } },
+        errorEvent('AGENT_EXECUTION_FAILED', ''),
+        runtimeCloseEvent('fatal_rpc_error'),
+      ]),
+    ).toMatchObject({
+      failure_detail: 'fatal_rpc_error',
+      retryable: true,
+    });
+  });
+
+  it('keeps plain ACP fatal closes without crash text on fatal_rpc_error', () => {
+    expect(
+      classify('AGENT_EXECUTION_FAILED', '', [
+        errorEvent('AGENT_EXECUTION_FAILED', ''),
+        runtimeCloseEvent('fatal_rpc_error'),
+      ]),
+    ).toMatchObject({
+      failure_detail: 'fatal_rpc_error',
+      retryable: true,
+    });
+  });
+})
 
 describe('execution_failed close-reason refinement', () => {
   // A generic AGENT_EXECUTION_FAILED whose text matched no pattern, plus the

@@ -300,6 +300,25 @@ describe('decideSafeRunRetry', () => {
     });
   });
 
+  it('never auto-retries a cpu_unsupported crash even when marked retryable', () => {
+    // An AVX2-requiring binary on a CPU without AVX2 crashes deterministically;
+    // the process_exit allowlist must keep cpu_unsupported out even if an
+    // upstream retryable hint leaks in as true.
+    expect(
+      decide({
+        failure: {
+          failure_category: 'process_exit',
+          failure_detail: 'cpu_unsupported',
+          failure_stage: 'session_init',
+          retryable: true,
+        },
+      }),
+    ).toMatchObject({
+      shouldRetry: false,
+      retrySuppressedReason: 'non_retryable_category',
+    });
+  });
+
   it('never auto-retries process kills, crashes, or interruptions', () => {
     for (const failure_detail of [
       'signal_killed',
