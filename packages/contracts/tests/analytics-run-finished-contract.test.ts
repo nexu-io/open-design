@@ -47,6 +47,7 @@ describe('analytics run_finished contract', () => {
       props: {
         ...makeBaseRunFinishedProps(),
         token_count_source: 'provider_usage',
+        conversation_turn_index: 2,
         error_code: 'RATE_LIMITED',
         failure_category: 'rate_limit',
         failure_stage: 'session_init',
@@ -97,6 +98,7 @@ describe('analytics run_finished contract', () => {
     } satisfies Extract<AnalyticsEventPayload, { event: 'run_finished' }>;
 
     expect(payload.props.failure_category).toBe('rate_limit');
+    expect(payload.props.conversation_turn_index).toBe(2);
     expect(payload.props.failure_stage).toBe('session_init');
     expect(payload.props.user_action).toBe('retry');
     expect(payload.props.langfuse_delivery_status).toBe('failed');

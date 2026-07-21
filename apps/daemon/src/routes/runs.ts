@@ -32,6 +32,7 @@ import {
 } from '../codex-rollout-usage.js';
 import type { ConnectorService } from '../connectors/service.js';
 import {
+  conversationTurnIndexForRun,
   getConversation,
   getProject,
   listConversations,
@@ -869,11 +870,17 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       const hintProjectTurnIndex = typeof analyticsHints.projectTurnIndex === 'number'
         ? analyticsHints.projectTurnIndex
         : undefined;
+      const conversationTurnIndex = run.conversationId
+        ? conversationTurnIndexForRun(db, run.conversationId, run.id)
+        : null;
       const sessionDimensionProps = {
         ...(hintTurnIndex !== undefined ? { turn_index: hintTurnIndex } : {}),
         ...(hintIsFirstRun !== undefined ? { is_first_run: hintIsFirstRun } : {}),
         ...(hintProjectTurnIndex !== undefined
           ? { project_turn_index: hintProjectTurnIndex }
+          : {}),
+        ...(conversationTurnIndex !== null
+          ? { conversation_turn_index: conversationTurnIndex }
           : {}),
         ...(hintHasExistingArtifact !== undefined
           ? { has_existing_artifact: hintHasExistingArtifact }

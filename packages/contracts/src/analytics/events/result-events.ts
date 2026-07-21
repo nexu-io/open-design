@@ -156,6 +156,10 @@ export interface RunCreatedProps {
   // persists across sessions. Optional: omitted when the client could not
   // compute it (storage unavailable).
   project_turn_index?: number;
+  // Current run's 0-based position within this `conversation_id`. Derived by
+  // the daemon from persisted run-backed assistant messages, so it survives
+  // browser-session resets and daemon restarts. The first run is 0.
+  conversation_turn_index?: number;
   // True when the project already had a generated artifact when this run
   // started (project-scoped) — i.e. the run is an edit, not a first creation.
   has_existing_artifact?: boolean;
