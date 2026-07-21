@@ -102,6 +102,7 @@ export function createChatRunService({
       error: null,
       errorCode: null,
       cancelRequested: false,
+      runtimeFailureObservedBeforeCancellation: false,
       retryRestartTimer: null,
       // First failure that triggered a same-run retry. The next attempt creates
       // a fresh startChatRun closure and clears run.error/errorCode, so keep the
@@ -346,9 +347,9 @@ export function createChatRunService({
     if (!run.childExitObservedAt) run.childExitObservedAt = Date.now();
   };
 
-  const waitForChildExit = (child, timeoutMs) => {
+  const waitForChildExit = (child, timeoutMs, { closeOnly = false } = {}) => {
     if (!child) return Promise.resolve(true);
-    if (childHasExited(child)) return Promise.resolve(true);
+    if (!closeOnly && childHasExited(child)) return Promise.resolve(true);
     return new Promise((resolve) => {
       let settled = false;
       const done = (exited) => {
@@ -356,15 +357,29 @@ export function createChatRunService({
         settled = true;
         clearTimeout(timer);
         child.off?.('close', onClose);
-        child.off?.('exit', onClose);
+        if (!closeOnly) child.off?.('exit', onClose);
         resolve(exited);
       };
       const onClose = () => done(true);
       const timer = setTimeout(() => done(false), timeoutMs);
       timer.unref?.();
       child.once?.('close', onClose);
-      child.once?.('exit', onClose);
+      if (!closeOnly) child.once?.('exit', onClose);
     });
+  };
+
+  // A runtime error can be emitted while the child is still draining stdout.
+  // When that happened before cancellation, wait for `close` so server.ts's
+  // earlier close listener can classify and finalize the failure before the
+  // cancel route applies its canceled fallback. Ordinary cancellation keeps
+  // the faster exit-or-close behavior.
+  const waitForCanceledChildExit = (run, timeoutMs) => {
+    if (TERMINAL_RUN_STATUSES.has(run.status)) return Promise.resolve(true);
+    return waitForChildExit(
+      run.child,
+      timeoutMs,
+      { closeOnly: run.runtimeFailureObservedBeforeCancellation === true },
+    );
   };
 
   const forceWaitMs = () => {
@@ -505,24 +520,24 @@ export function createChatRunService({
         // Signal fallback below owns eventual process termination.
       }
       const graceMs = Number(process.env.PI_ABORT_GRACE_MS) || 3000;
-      if (await waitForChildExit(run.child, graceMs)) {
+      if (await waitForCanceledChildExit(run, graceMs)) {
         return finishCanceledFromChildState(run, 'SIGTERM');
       }
       killChild(run, 'SIGTERM');
-      if (await waitForChildExit(run.child, graceMs)) {
+      if (await waitForCanceledChildExit(run, graceMs)) {
         return finishCanceledFromChildState(run, 'SIGTERM');
       }
       killChild(run, 'SIGKILL');
-      await waitForChildExit(run.child, forceWaitMs());
+      await waitForCanceledChildExit(run, forceWaitMs());
       return finishCanceledFromChildState(run, 'SIGKILL');
     }
 
     killChild(run, 'SIGTERM');
-    if (await waitForChildExit(run.child, cancelGraceMs())) {
+    if (await waitForCanceledChildExit(run, cancelGraceMs())) {
       return finishCanceledFromChildState(run, 'SIGTERM');
     }
     killChild(run, 'SIGKILL');
-    await waitForChildExit(run.child, forceWaitMs());
+    await waitForCanceledChildExit(run, forceWaitMs());
     return finishCanceledFromChildState(run, 'SIGKILL');
   };
 
