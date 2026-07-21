@@ -6,7 +6,11 @@ import { describe, expect, it, vi } from "vitest";
 import { SIDECAR_MESSAGES } from "@open-design/sidecar-proto";
 import type { StopProcessesResult, stopProcesses, waitForProcessExit } from "@open-design/platform";
 
-import { inspectExistingDesktopForLauncher, waitForLauncherAfterQuit } from "../src/launcher-after-quit.js";
+import {
+  exitPackagedLauncherForExistingDesktop,
+  inspectExistingDesktopForLauncher,
+  waitForLauncherAfterQuit,
+} from "../src/launcher-after-quit.js";
 import type { PackagedNamespacePaths } from "../src/paths.js";
 
 /** Build a `stopProcesses` result without signalling any real PID. */
@@ -109,14 +113,85 @@ describe("waitForLauncherAfterQuit", () => {
   });
 });
 
+describe("exitPackagedLauncherForExistingDesktop", () => {
+  it.each(["existing-focused", "existing-focus-failed"] as const)(
+    "terminates the duplicate outer after %s",
+    (reason) => {
+      const exit = vi.fn();
+
+      expect(exitPackagedLauncherForExistingDesktop({ action: "exit", reason }, exit)).toBe(true);
+      expect(exit).toHaveBeenCalledExactlyOnceWith(0);
+    },
+  );
+
+  it("keeps the outer alive when startup must continue", () => {
+    const exit = vi.fn();
+
+    expect(exitPackagedLauncherForExistingDesktop(
+      { action: "continue", reason: "superseded-version" },
+      exit,
+    )).toBe(false);
+    expect(exit).not.toHaveBeenCalled();
+  });
+});
+
 describe("inspectExistingDesktopForLauncher", () => {
-  it("focuses an existing namespace desktop and exits", async () => {
+  it("restarts a healthy older desktop before a newer installed package continues", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-launcher-inspect-superseded-"));
+    const requests: unknown[] = [];
+    try {
+      const paths = fakePaths(root);
+
+      const result = await inspectExistingDesktopForLauncher("release-prerelease", {
+        incomingVersion: "0.16.0-prerelease.1",
+        paths,
+        requestIpc: (async (ipcPath: string, message: unknown) => {
+          requests.push(message);
+          if ((message as { type?: string }).type === SIDECAR_MESSAGES.STATUS) {
+            if (ipcPath.includes("daemon") || ipcPath.includes("web")) {
+              return { pid: 2345, state: "running", updatedAt: new Date().toISOString(), url: "http://127.0.0.1:1234" };
+            }
+            return {
+              pid: 1234,
+              state: "running",
+              update: { currentVersion: "0.15.1-prerelease.15" },
+              updatedAt: new Date().toISOString(),
+            };
+          }
+          return { accepted: true };
+        }) as typeof import("@open-design/sidecar").requestJsonIpc,
+        waitForExit: (async (pid: number) => pid === 1234) as typeof import("@open-design/platform").waitForProcessExit,
+      });
+
+      expect(result).toEqual({ action: "continue", reason: "superseded-version" });
+      expect(requests).toEqual([
+        { type: SIDECAR_MESSAGES.STATUS },
+        { type: SIDECAR_MESSAGES.STATUS },
+        { type: SIDECAR_MESSAGES.STATUS },
+        { type: SIDECAR_MESSAGES.SHUTDOWN },
+      ]);
+      const log = await readFile(join(root, "logs", "launcher", "after-quit.log"), "utf8");
+      expect(log).toContain(
+        "action=restart reason=superseded-version incomingVersion=0.16.0-prerelease.1 existingVersion=0.15.1-prerelease.15 pid=1234",
+      );
+      expect(log).toContain("shutdown=exited reason=superseded-version pid=1234");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it.each([
+    { existingVersion: "0.16.0-prerelease.1", incomingVersion: "0.16.0-prerelease.1", label: "the same version" },
+    { existingVersion: "0.16.0-prerelease.2", incomingVersion: "0.16.0-prerelease.1", label: "a newer version" },
+    { existingVersion: undefined, incomingVersion: "0.16.0-prerelease.1", label: "an unknown historical version" },
+  ])("focuses an existing namespace desktop running $label", async ({ existingVersion, incomingVersion }) => {
     const root = await mkdtemp(join(tmpdir(), "od-launcher-inspect-focus-"));
     const requests: Array<{ message: unknown; timeoutMs?: number }> = [];
     try {
       const paths = fakePaths(root);
 
       const result = await inspectExistingDesktopForLauncher("release-beta-win", {
+        incomingVersion,
         paths,
         requestIpc: (async (ipcPath: string, message: unknown, options?: { timeoutMs?: number }) => {
           requests.push({ message, timeoutMs: options?.timeoutMs });
@@ -124,7 +199,12 @@ describe("inspectExistingDesktopForLauncher", () => {
             if (ipcPath.includes("daemon") || ipcPath.includes("web")) {
               return { pid: 2345, state: "running", updatedAt: new Date().toISOString(), url: "http://127.0.0.1:1234" };
             }
-            return { pid: 1234, state: "running", updatedAt: new Date().toISOString() };
+            return {
+              pid: 1234,
+              state: "running",
+              ...(existingVersion == null ? {} : { update: { currentVersion: existingVersion } }),
+              updatedAt: new Date().toISOString(),
+            };
           }
           return { accepted: true };
         }) as typeof import("@open-design/sidecar").requestJsonIpc,
