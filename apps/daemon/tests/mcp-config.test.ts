@@ -905,6 +905,20 @@ describe('MCP_TEMPLATES', () => {
     expect(key?.secret).toBe(true);
   });
 
+  it('includes the guarded Latchshot hosted-HTTP template with required Authorization', () => {
+    const tpl = MCP_TEMPLATES.find((t) => t.id === 'latchshot');
+    expect(tpl).toBeDefined();
+    expect(tpl?.category).toBe('web-capture');
+    expect(tpl?.transport).toBe('http');
+    expect(tpl?.authMode).toBe('none');
+    expect(tpl?.url).toBe('https://latchshot.fly.dev/mcp');
+    expect(tpl?.description).toContain('publicly reachable HTTP(S) pages');
+    expect(tpl?.description).toContain('does not support authenticated or private-network targets');
+    const auth = tpl?.headerFields?.find((f) => f.key === 'Authorization');
+    expect(auth?.required).toBe(true);
+    expect(auth?.secret).toBe(true);
+  });
+
   it('includes the 21st.dev Magic UI-component template (positional API_KEY arg)', () => {
     const tpl = MCP_TEMPLATES.find((t) => t.id === '21st-dev-magic');
     expect(tpl).toBeDefined();

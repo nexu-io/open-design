@@ -869,6 +869,28 @@ export const MCP_TEMPLATES: McpTemplate[] = [
     ],
   },
   {
+    id: 'latchshot',
+    label: 'Latchshot (guarded public-page capture)',
+    description:
+      'Hosted Streamable HTTP screenshot and PDF API for publicly reachable HTTP(S) pages on ports 80/443. Returns PNG, JPEG and PDF content inline without a local browser process. Use it for a guarded public-page capture path; it does not support authenticated or private-network targets, selectors, scripts, proxies, browser sessions or provider-hosted result URLs. Get a Free API key at latchshot.fly.dev.',
+    transport: 'http',
+    authMode: 'none',
+    category: 'web-capture',
+    homepage: 'https://latchshot.fly.dev/guides/screenshot-mcp-server.html',
+    example:
+      'Capture a 1280×800 PNG of https://example.com and return the image inline.',
+    url: 'https://latchshot.fly.dev/mcp',
+    headerFields: [
+      {
+        key: 'Authorization',
+        label: 'Authorization (Bearer <Latchshot API key>)',
+        required: true,
+        placeholder: 'Bearer ls_live_...',
+        secret: true,
+      },
+    ],
+  },
+  {
     id: 'pagecast',
     label: 'Pagecast (browser → demo GIF / MP4)',
     description:
