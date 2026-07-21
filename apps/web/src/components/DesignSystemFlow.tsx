@@ -2296,6 +2296,7 @@ export function DesignSystemDetailView({
         projectId,
         conversationId,
         assistantMessageId: assistantMsg.id,
+        userMessageId: userMsg.id,
         clientRequestId: randomUUID(),
         skillId: null,
         designSystemId: system.id,

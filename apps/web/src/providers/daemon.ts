@@ -293,6 +293,16 @@ export interface DaemonStreamOptions {
   conversationId?: string | null;
   sessionMode?: ChatSessionMode;
   assistantMessageId?: string | null;
+  /**
+   * Per-turn id of the user row the caller already persisted (or will
+   * persist) for this run. Forwarded to `POST /api/runs` so the daemon's
+   * user-turn dedupe recognizes the pre-persisted client row and doesn't
+   * insert a second user message for the same turn (issue #5811). Studio's
+   * web flow populates this from the `randomUUID()` it assigns to the
+   * optimistic user message; external callers that don't pre-persist a
+   * user row can omit it and let the daemon synthesize one.
+   */
+  userMessageId?: string | null;
   clientRequestId?: string | null;
   skillId?: string | null;
   // Per-turn skill ids picked via the composer's @-mention popover. These
@@ -643,6 +653,7 @@ export async function streamViaDaemon({
   conversationId,
   sessionMode,
   assistantMessageId,
+  userMessageId,
   clientRequestId,
   skillId,
   skillIds,
@@ -682,6 +693,7 @@ export async function streamViaDaemon({
     conversationId: conversationId ?? null,
     sessionMode,
     assistantMessageId: assistantMessageId ?? null,
+    userMessageId: userMessageId ?? null,
     clientRequestId: clientRequestId ?? null,
     skillId: skillId ?? null,
     skillIds: Array.isArray(skillIds) ? skillIds : [],

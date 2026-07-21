@@ -288,6 +288,7 @@ export function useConversationChat(
         projectId,
         conversationId,
         assistantMessageId: assistantId,
+        userMessageId: userMsg.id,
         clientRequestId: randomUUID(),
         skillId: null,
         skillIds: [],

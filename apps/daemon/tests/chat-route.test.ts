@@ -1024,6 +1024,124 @@ process.stdin.on('end', () => {
     },
   );
 
+  // Regression: nettee #3 on PR #5818 — Studio's web flow persists the
+  // optimistic user message via `PUT /api/.../messages/:id` with a
+  // `randomUUID()` id *before* POSTing `/api/runs`. The daemon's user-turn
+  // upsert on `/api/runs` must recognize that pre-persisted row via
+  // `meta.userMessageId` and converge on it instead of inserting a second
+  // user row for the same turn. Earlier fix (#5811 follow-up above) made the
+  // dedupe key on the *turn* id but never wired the client's pre-persisted
+  // id through the request body, so the daemon synthesized its own
+  // `user-<assistantMessageId>` and the conversation showed two user rows
+  // for one prompt. This test seeds exactly that state via the same
+  // `upsertMessage` path the PUT route uses, then POSTs /api/runs with
+  // `userMessageId` set to the seeded id and asserts only one user row
+  // remains.
+  it.runIf(process.env.OD_DATA_DIR)(
+    'dedupes the user turn against a pre-persisted client row when /api/runs receives meta.userMessageId (#5818 nettee #3)',
+    async () => {
+      if (!process.env.OD_DATA_DIR) {
+        throw new Error('OD_DATA_DIR is required for #5818 nettee #3 regression');
+      }
+      const projectId = `proj-5818-nettee3-${randomUUID()}`;
+      const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: projectId, name: '5818-nettee3-pre-persist' }),
+      });
+      expect(createProjectResponse.ok).toBe(true);
+
+      const conversationsResponse = await fetch(
+        `${baseUrl}/api/projects/${projectId}/conversations`,
+      );
+      expect(conversationsResponse.ok).toBe(true);
+      const conversationsBody = await conversationsResponse.json() as {
+        conversations: Array<{ id: string }>;
+      };
+      const conversationId = conversationsBody.conversations[0]?.id;
+      expect(conversationId).toBeTruthy();
+
+      // Simulate the client's optimistic PUT — Studio assigns a randomUUID
+      // and writes the user row before the /api/runs call. The id is what
+      // `streamViaDaemon({ userMessageId })` threads through to the daemon.
+      const clientUserMessageId = `user-client-${randomUUID()}`;
+      const dbFile = resolve(process.env.OD_DATA_DIR, 'app.sqlite');
+      const sqlite = new Database(dbFile);
+      try {
+        upsertMessage(sqlite as never, conversationId!, {
+          id: clientUserMessageId,
+          role: 'user',
+          content: 'client-persisted user turn',
+          startedAt: Date.now() - 1_000,
+          endedAt: Date.now() - 500,
+        });
+      } finally {
+        sqlite.close();
+      }
+
+      await withFakeAgent(
+        'opencode',
+        `
+process.stdin.resume();
+process.stdin.on('end', () => {
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: 'deduped ok' } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+        async () => {
+          const assistantMessageId = `assistant-5818-nettee3-${randomUUID()}`;
+          const response = await fetch(`${baseUrl}/api/runs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentId: 'opencode',
+              projectId,
+              conversationId,
+              assistantMessageId,
+              // The fix: thread the client's pre-persisted user row id
+              // through the run-create meta so the daemon's user-turn
+              // upsert converges on it instead of synthesizing a new id.
+              userMessageId: clientUserMessageId,
+              message: 'client-persisted user turn',
+            }),
+          });
+          expect(response.ok).toBe(true);
+
+          await new Promise((resolve) => setTimeout(resolve, 2_000));
+
+          const msgResponse = await fetch(
+            `${baseUrl}/api/projects/${projectId}/conversations/${conversationId}/messages`,
+          );
+          expect(msgResponse.ok).toBe(true);
+          const msgBody = await msgResponse.json() as {
+            messages: Array<{ id: string; role: string; content: string }>;
+          };
+
+          // Exactly one user row — the pre-persisted client row — must
+          // remain. Before the fix the daemon would synthesize its own
+          // `user-<assistantMessageId>` and the conversation ended up
+          // with two user rows for one prompt.
+          const userTurns = msgBody.messages.filter((m) => m.role === 'user');
+          expect(
+            userTurns,
+            '/api/runs with meta.userMessageId must not duplicate the pre-persisted client user row',
+          ).toHaveLength(1);
+          expect(userTurns[0]).toMatchObject({
+            id: clientUserMessageId,
+            content: 'client-persisted user turn',
+          });
+
+          // The assistant turn from the fake agent must also be present,
+          // proving the run actually ran and didn't bail on the dedupe.
+          const assistantTurns = msgBody.messages.filter((m) => m.role === 'assistant');
+          expect(assistantTurns).toHaveLength(1);
+        },
+      );
+    },
+  );
+
   it('does not leave a pinned assistant message queued when legacy chat fails before spawning', async () => {
     if (!process.env.OD_DATA_DIR) {
       throw new Error('OD_DATA_DIR is required for assistant message pin tests');

@@ -80,6 +80,16 @@ export interface ChatRequest {
   conversationId?: string | null;
   sessionMode?: ChatSessionMode;
   assistantMessageId?: string | null;
+  /**
+   * Per-turn id of the user row the caller already persisted via
+   * `PUT /api/.../messages/:id` (or intends to persist). When the daemon
+   * receives this it dedupes its own `upsertMessage` against the row so
+   * the server-side insert and the client-side PUT converge on the same
+   * row instead of producing two user messages for one turn (issue #5811
+   * follow-up). Callers that don't pre-persist (external API scripts) can
+   * omit it; the daemon then synthesizes `user-<assistantMessageId>`.
+   */
+  userMessageId?: string | null;
   clientRequestId?: string | null;
   skillId?: string | null;
   // Per-turn skill ids picked via the composer's @-mention popover. The
