@@ -3998,13 +3998,18 @@ function buildBlocks(events: AgentEvent[]): Block[] {
       continue;
     }
     if (ev.kind === "status") {
+      // Keep in sync with providers/daemon.ts TRANSIENT_ACP_STATUS_LABELS.
+      // The live SSE path normalizes these to "running", but the
+      // persisted-events path does not — so bare labels survive here.
       if (
         ev.label === "streaming" ||
         ev.label === "starting" ||
         ev.label === "running" ||
         ev.label === "requesting" ||
         ev.label === "thinking" ||
-        ev.label === "empty_response"
+        ev.label === "empty_response" ||
+        ev.label === "tool_call" ||
+        ev.label === "tool_call_update"
       )
         continue;
       const last = out[out.length - 1];
