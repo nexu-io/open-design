@@ -68,6 +68,7 @@ export const hu: Dict = {
   'chat.runError.title.runtimeConfig': 'Konfigurációs hiba',
   'chat.runError.cliMissingMessage': 'A(z) {agent} parancssori eszköze nem található. Telepítsd, és győződj meg róla, hogy szerepel a PATH-ban, majd próbáld újra.',
   'chat.runError.promptTooLargeMessage': 'Ez a kör túllépte a modell kontextushatárát. Rövidítsd le a promptot, távolíts el mellékleteket, vagy indíts új beszélgetést, majd próbáld újra.',
+  'chat.runError.reduceContextCta': 'Új beszélgetés',
   'chat.runError.modelUnavailableMessage': 'A kiválasztott modell nem érhető el vagy nem létezik. Válts át másik modellre a Beállításokban, majd próbáld újra.',
   'chat.runError.rateLimitedMessage': 'Elérted a modellszolgáltatás használati korlátját. Várj egy kicsit, és próbáld újra, vagy válts másik modellre vagy szolgáltatásra.',
   'chat.runError.upstreamUnavailableMessage': 'A modellszolgáltatás átmenetileg nem érhető el — általában upstream instabilitás vagy hálózati/proxy probléma miatt. Próbáld újra egy pillanat múlva.',

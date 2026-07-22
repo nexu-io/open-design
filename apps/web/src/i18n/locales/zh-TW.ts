@@ -74,6 +74,7 @@ export const zhTW: Dict = {
   "chat.runError.title.runtimeConfig": "設定錯誤",
   "chat.runError.cliMissingMessage": "找不到 {agent} 的命令列工具。請先安裝並確認它在 PATH 中，然後重試。",
   "chat.runError.promptTooLargeMessage": "本輪輸入超出了模型的上下文上限。請縮短提示詞、減少附件，或另開對話後重試。",
+  "chat.runError.reduceContextCta": "新增對話",
   "chat.runError.modelUnavailableMessage": "所選模型不可用或不存在。請在設定中切換到其他可用模型後重試。",
   "chat.runError.rateLimitedMessage": "已觸發模型服務的用量上限。請稍後重試，或切換到其他模型／服務。",
   "chat.runError.upstreamUnavailableMessage": "模型服務暫時無法使用，通常是上游波動或網路／代理問題。請稍後重試。",

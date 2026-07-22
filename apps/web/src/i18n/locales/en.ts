@@ -68,6 +68,7 @@ export const en: Dict = {
   'chat.runError.title.runtimeConfig': 'Configuration error',
   'chat.runError.cliMissingMessage': 'The {agent} command-line tool wasn\'t found. Install it and make sure it\'s on your PATH, then retry.',
   'chat.runError.promptTooLargeMessage': 'This turn exceeded the model\'s context limit. Shorten your prompt, remove attachments, or start a new conversation, then retry.',
+  'chat.runError.reduceContextCta': 'New conversation',
   'chat.runError.modelUnavailableMessage': 'The selected model is unavailable or does not exist. Switch to another model in Settings, then retry.',
   'chat.runError.rateLimitedMessage': 'You\'ve hit the model service\'s usage limit. Wait a moment and retry, or switch to another model or service.',
   'chat.runError.upstreamUnavailableMessage': 'The model service is temporarily unavailable — usually upstream instability or a network/proxy issue. Retry in a moment.',

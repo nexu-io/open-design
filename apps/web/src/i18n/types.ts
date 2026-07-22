@@ -2546,6 +2546,7 @@ export interface Dict {
   'chat.runError.signInMessage.other': string;
   'chat.runError.cliMissingMessage': string;
   'chat.runError.promptTooLargeMessage': string;
+  'chat.runError.reduceContextCta': string;
   'chat.runError.modelUnavailableMessage': string;
   'chat.runError.rateLimitedMessage': string;
   'chat.runError.upstreamUnavailableMessage': string;

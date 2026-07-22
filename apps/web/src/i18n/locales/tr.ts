@@ -68,6 +68,7 @@ export const tr: Dict = {
   'chat.runError.title.runtimeConfig': 'Yapılandırma hatası',
   'chat.runError.cliMissingMessage': '{agent} komut satırı aracı bulunamadı. Yükleyin ve PATH içinde olduğundan emin olun, ardından yeniden deneyin.',
   'chat.runError.promptTooLargeMessage': 'Bu tur modelin bağlam sınırını aştı. İsteminizi kısaltın, ekleri kaldırın veya yeni bir sohbet başlatıp yeniden deneyin.',
+  'chat.runError.reduceContextCta': 'Yeni sohbet',
   'chat.runError.modelUnavailableMessage': 'Seçilen model kullanılamıyor veya mevcut değil. Ayarlar’dan başka bir modele geçip yeniden deneyin.',
   'chat.runError.rateLimitedMessage': 'Model hizmetinin kullanım sınırına ulaştınız. Biraz bekleyip yeniden deneyin ya da başka bir modele veya hizmete geçin.',
   'chat.runError.upstreamUnavailableMessage': 'Model hizmeti geçici olarak kullanılamıyor — genellikle üst kaynak kararsızlığı veya bir ağ/proxy sorunu. Birazdan yeniden deneyin.',

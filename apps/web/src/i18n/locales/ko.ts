@@ -68,6 +68,7 @@ export const ko: Dict = {
   'chat.runError.title.runtimeConfig': '구성 오류',
   'chat.runError.cliMissingMessage': '{agent} 명령줄 도구를 찾을 수 없습니다. 설치한 뒤 PATH에 포함되어 있는지 확인하고 다시 시도하세요.',
   'chat.runError.promptTooLargeMessage': '이번 입력이 모델의 컨텍스트 한도를 초과했습니다. 프롬프트를 줄이거나 첨부를 제거하거나 새 대화를 시작한 뒤 다시 시도하세요.',
+  'chat.runError.reduceContextCta': '새 대화',
   'chat.runError.modelUnavailableMessage': '선택한 모델을 사용할 수 없거나 존재하지 않습니다. 설정에서 다른 모델로 전환한 뒤 다시 시도하세요.',
   'chat.runError.rateLimitedMessage': '모델 서비스의 사용 한도에 도달했습니다. 잠시 후 다시 시도하거나 다른 모델 또는 서비스로 전환하세요.',
   'chat.runError.upstreamUnavailableMessage': '모델 서비스를 일시적으로 사용할 수 없습니다. 대개 업스트림 불안정이나 네트워크/프록시 문제입니다. 잠시 후 다시 시도하세요.',

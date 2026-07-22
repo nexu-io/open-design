@@ -145,7 +145,6 @@ describe('resolveRunFailureUi', () => {
     const cases: Array<[string, string, string | null]> = [
       ['ARTIFACT_NOT_FOUND', 'chat.runError.title.artifactMissing', null],
       ['AGENT_UNAVAILABLE', 'chat.runError.title.cliMissing', 'chat.runError.cliMissingMessage'],
-      ['AGENT_PROMPT_TOO_LARGE', 'chat.runError.title.promptTooLarge', 'chat.runError.promptTooLargeMessage'],
       ['AMR_MODEL_UNAVAILABLE', 'chat.runError.title.modelUnavailable', 'chat.runError.modelUnavailableMessage'],
       ['TOOL_LOOP_DETECTED', 'chat.runError.title.toolLoop', 'chat.runError.toolLoopMessage'],
       ['ROLE_MARKER_HALLUCINATION', 'chat.runError.title.outputInvalid', 'chat.runError.outputInvalidMessage'],
@@ -162,6 +161,23 @@ describe('resolveRunFailureUi', () => {
           showSwitchCard: false,
         });
       }
+    }
+  });
+
+  it('offers a reduce-context CTA for prompt-too-large instead of bare retry (#4782)', () => {
+    // Retrying re-sends the same oversized prompt and fails identically, so the
+    // primary action points to a fresh conversation rather than implying Retry
+    // will work. Retry remains available as a secondary action for the trimmed-
+    // prompt case. Applies the same way regardless of the agent.
+    for (const agent of ['claude', 'codex', 'amr', 'antigravity', null]) {
+      const ui = resolveRunFailureUi('AGENT_PROMPT_TOO_LARGE', null, agent);
+      expect(ui).toMatchObject({
+        primaryAction: 'reduce-context',
+        titleKey: 'chat.runError.title.promptTooLarge',
+        messageKey: 'chat.runError.promptTooLargeMessage',
+        secondaryRetry: true,
+        showSwitchCard: false,
+      });
     }
   });
 

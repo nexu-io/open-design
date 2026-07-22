@@ -68,6 +68,7 @@ export const de: Dict = {
   'chat.runError.title.runtimeConfig': 'Konfigurationsfehler',
   'chat.runError.cliMissingMessage': 'Das Kommandozeilen-Tool von {agent} wurde nicht gefunden. Installiere es und stelle sicher, dass es im PATH liegt, und versuche es dann erneut.',
   'chat.runError.promptTooLargeMessage': 'Diese Runde hat das Kontextlimit des Modells überschritten. Kürze deine Eingabe, entferne Anhänge oder starte eine neue Unterhaltung und versuche es erneut.',
+  'chat.runError.reduceContextCta': 'Neue Unterhaltung',
   'chat.runError.modelUnavailableMessage': 'Das ausgewählte Modell ist nicht verfügbar oder existiert nicht. Wechsle in den Einstellungen zu einem anderen Modell und versuche es erneut.',
   'chat.runError.rateLimitedMessage': 'Das Nutzungslimit des Modelldienstes wurde erreicht. Warte einen Moment und versuche es erneut oder wechsle zu einem anderen Modell oder Dienst.',
   'chat.runError.upstreamUnavailableMessage': 'Der Modelldienst ist vorübergehend nicht verfügbar – meist wegen Upstream-Störungen oder eines Netzwerk-/Proxy-Problems. Versuche es gleich erneut.',

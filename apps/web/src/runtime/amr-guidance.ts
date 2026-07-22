@@ -84,7 +84,13 @@ export type RunFailurePrimaryAction =
   // No self-contained recovery button. Used when retrying is futile (e.g. a
   // hard quota / exhausted credits) and the only forward path is the AMR switch
   // card rendered below, so the card shows guidance copy without a dead Retry.
-  | 'none';
+  | 'none'
+  // The submitted prompt exceeded the model's context window. Re-sending the
+  // same prompt would fail identically, so the primary action points the user
+  // at starting a fresh conversation (dropping the oversized context) rather
+  // than implying Retry will work. Retry is kept as a secondary action for the
+  // case where the user has trimmed the prompt themselves.
+  | 'reduce-context';
 
 // i18n keys for the gray-card text override (null = show the raw error).
 // Keys ending in a value with `{agent}` are interpolated at render time via
@@ -170,6 +176,23 @@ function retryWithGuidance(
   };
 }
 
+// Context-window overflow: retrying re-sends the same oversized prompt, so the
+// primary action steers to a fresh conversation (the composer is still open, but
+// the card itself should point at the fix). Retry stays available as a secondary
+// action for users who trim the prompt and want to re-run in place.
+function reduceContextWithGuidance(
+  titleKey: RunFailureTitleKey,
+  messageKey: RunFailureMessageKey,
+): RunFailureUi {
+  return {
+    primaryAction: 'reduce-context',
+    titleKey,
+    messageKey,
+    secondaryRetry: true,
+    showSwitchCard: false,
+  };
+}
+
 // Agent-agnostic failure codes that carry a clear root cause and a concrete
 // fix, mapped the same way regardless of which agent produced them. The daemon
 // already classifies these into failure_category / user_action
@@ -189,7 +212,10 @@ const AGENT_AGNOSTIC_FAILURE_UI: Record<string, RunFailureUi> = {
     'chat.runError.cliMissingMessage',
   ),
   // Input exceeded the model context window (user_action: reduce_context).
-  AGENT_PROMPT_TOO_LARGE: retryWithGuidance(
+  // Retry alone is futile — the same oversized prompt fails again — so the
+  // primary CTA is "New conversation"; Retry stays secondary for the trimmed-
+  // prompt case. See issue #4782.
+  AGENT_PROMPT_TOO_LARGE: reduceContextWithGuidance(
     'chat.runError.title.promptTooLarge',
     'chat.runError.promptTooLargeMessage',
   ),

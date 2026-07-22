@@ -68,6 +68,7 @@ export const id: Dict = {
   'chat.runError.title.runtimeConfig': 'Kesalahan konfigurasi',
   'chat.runError.cliMissingMessage': 'Alat baris perintah {agent} tidak ditemukan. Pasang dan pastikan ada di PATH, lalu coba lagi.',
   'chat.runError.promptTooLargeMessage': 'Giliran ini melebihi batas konteks model. Perpendek prompt, hapus lampiran, atau mulai percakapan baru, lalu coba lagi.',
+  'chat.runError.reduceContextCta': 'Percakapan baru',
   'chat.runError.modelUnavailableMessage': 'Model yang dipilih tidak tersedia atau tidak ada. Beralih ke model lain di Pengaturan, lalu coba lagi.',
   'chat.runError.rateLimitedMessage': 'Anda telah mencapai batas penggunaan layanan model. Tunggu sebentar dan coba lagi, atau beralih ke model atau layanan lain.',
   'chat.runError.upstreamUnavailableMessage': 'Layanan model sementara tidak tersedia — biasanya karena ketidakstabilan upstream atau masalah jaringan/proxy. Coba lagi sebentar lagi.',

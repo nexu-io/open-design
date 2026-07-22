@@ -68,6 +68,7 @@ export const fr: Dict = {
   'chat.runError.title.runtimeConfig': 'Erreur de configuration',
   'chat.runError.cliMissingMessage': 'L’outil en ligne de commande de {agent} est introuvable. Installez-le et assurez-vous qu’il figure dans le PATH, puis réessayez.',
   'chat.runError.promptTooLargeMessage': 'Ce tour a dépassé la limite de contexte du modèle. Raccourcissez votre message, retirez des pièces jointes ou démarrez une nouvelle conversation, puis réessayez.',
+  'chat.runError.reduceContextCta': 'Nouvelle conversation',
   'chat.runError.modelUnavailableMessage': 'Le modèle sélectionné est indisponible ou inexistant. Passez à un autre modèle dans les Paramètres, puis réessayez.',
   'chat.runError.rateLimitedMessage': 'Vous avez atteint la limite d’utilisation du service de modèle. Patientez un instant et réessayez, ou changez de modèle ou de service.',
   'chat.runError.upstreamUnavailableMessage': 'Le service de modèle est temporairement indisponible, généralement en raison d’une instabilité en amont ou d’un problème réseau/proxy. Réessayez dans un instant.',

@@ -68,6 +68,7 @@ export const fa: Dict = {
   'chat.runError.title.runtimeConfig': 'خطای پیکربندی',
   'chat.runError.cliMissingMessage': 'ابزار خط فرمان {agent} پیدا نشد. آن را نصب کنید و مطمئن شوید در PATH قرار دارد، سپس دوباره تلاش کنید.',
   'chat.runError.promptTooLargeMessage': 'این نوبت از محدودیت زمینه مدل فراتر رفت. پرامپت را کوتاه کنید، پیوست‌ها را کم کنید یا گفت‌وگوی جدیدی شروع کنید و دوباره تلاش کنید.',
+  'chat.runError.reduceContextCta': 'گفت‌وگوی جدید',
   'chat.runError.modelUnavailableMessage': 'مدل انتخاب‌شده در دسترس نیست یا وجود ندارد. در تنظیمات به مدل دیگری تغییر دهید و دوباره تلاش کنید.',
   'chat.runError.rateLimitedMessage': 'به محدودیت استفاده از سرویس مدل رسیده‌اید. کمی صبر کنید و دوباره تلاش کنید، یا به مدل یا سرویس دیگری تغییر دهید.',
   'chat.runError.upstreamUnavailableMessage': 'سرویس مدل موقتاً در دسترس نیست — معمولاً به دلیل بی‌ثباتی سرویس بالادستی یا مشکل شبکه/پروکسی. کمی بعد دوباره تلاش کنید.',

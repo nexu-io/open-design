@@ -68,6 +68,7 @@ export const ar: Dict = {
   'chat.runError.title.runtimeConfig': 'خطأ في الإعداد',
   'chat.runError.cliMissingMessage': 'لم يتم العثور على أداة سطر الأوامر لـ {agent}. ثبّتها وتأكد من وجودها في PATH ثم أعد المحاولة.',
   'chat.runError.promptTooLargeMessage': 'تجاوزت هذه الجولة حد سياق النموذج. اختصر الطلب أو أزل المرفقات أو ابدأ محادثة جديدة ثم أعد المحاولة.',
+  'chat.runError.reduceContextCta': 'محادثة جديدة',
   'chat.runError.modelUnavailableMessage': 'النموذج المحدد غير متاح أو غير موجود. بدّل إلى نموذج آخر في الإعدادات ثم أعد المحاولة.',
   'chat.runError.rateLimitedMessage': 'لقد بلغت حد استخدام خدمة النموذج. انتظر قليلاً ثم أعد المحاولة، أو بدّل إلى نموذج أو خدمة أخرى.',
   'chat.runError.upstreamUnavailableMessage': 'خدمة النموذج غير متاحة مؤقتًا — عادةً بسبب عدم استقرار المصدر أو مشكلة في الشبكة/الوكيل. أعد المحاولة بعد قليل.',
