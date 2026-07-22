@@ -3147,8 +3147,12 @@ export const ko: Dict = {
   'mcpClient.forwardedAcpNote': 'stdio로 표시된 ACP 어댑터는 이 목록에서 stdio MCP 서버만 받습니다. HTTP 및 SSE 항목은 생성 시점에 제외됩니다.',
   'mcpClient.notForwardedNote': '해당 Agent의 경우 Agent 자체 구성 파일(예: ~/.codex/config.toml, ~/.gemini/settings.json)에서 MCP 서버를 구성하세요. 아래 서버는 거기서 자동으로 사용되지 않습니다.',
   'apiTokenPrompt.title': 'Daemon requires a token',
-  'apiTokenPrompt.description': 'This daemon requires an API token to serve requests. Enter your OD_API_TOKEN below.',
+  'apiTokenPrompt.description': 'This daemon requires an API token to verify your session. Enter the token configured as OD_API_TOKEN on the daemon.',
   'apiTokenPrompt.placeholder': 'Paste your API token',
+  'apiTokenPrompt.submitLabel': 'Verify & continue',
+  'apiTokenPrompt.verifyingLabel': 'Verifying…',
+  'apiTokenPrompt.showKey': 'Show',
+  'apiTokenPrompt.hideKey': 'Hide',
   'apiTokenPrompt.invalidToken': 'The token was rejected by the daemon. Check your OD_API_TOKEN value and try again.',
   'apiTokenPrompt.serverError': 'The daemon returned an error. Check that the daemon is running and try again.',
 

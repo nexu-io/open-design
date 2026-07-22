@@ -3147,8 +3147,12 @@ export const fr: Dict = {
   'mcpClient.forwardedAcpNote': 'Les adaptateurs ACP marqués stdio ne reçoivent que les serveurs MCP stdio de cette liste ; les entrées HTTP et SSE sont abandonnées au lancement.',
   'mcpClient.notForwardedNote': 'Pour ces agents, configurez les serveurs MCP dans le fichier de configuration propre à l\'agent (par ex. ~/.codex/config.toml, ~/.gemini/settings.json) ; les serveurs ci-dessous y sont inutilisés sans avertissement.',
   'apiTokenPrompt.title': 'Daemon requires a token',
-  'apiTokenPrompt.description': 'This daemon requires an API token to serve requests. Enter your OD_API_TOKEN below.',
+  'apiTokenPrompt.description': 'This daemon requires an API token to verify your session. Enter the token configured as OD_API_TOKEN on the daemon.',
   'apiTokenPrompt.placeholder': 'Paste your API token',
+  'apiTokenPrompt.submitLabel': 'Verify & continue',
+  'apiTokenPrompt.verifyingLabel': 'Verifying…',
+  'apiTokenPrompt.showKey': 'Show',
+  'apiTokenPrompt.hideKey': 'Hide',
   'apiTokenPrompt.invalidToken': 'The token was rejected by the daemon. Check your OD_API_TOKEN value and try again.',
   'apiTokenPrompt.serverError': 'The daemon returned an error. Check that the daemon is running and try again.',
 

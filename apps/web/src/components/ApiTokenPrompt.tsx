@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { useT } from '../i18n';
 
 interface Props {
@@ -10,6 +10,7 @@ interface Props {
 export function ApiTokenPrompt({ onSubmit, submitting, error }: Props): JSX.Element {
   const t = useT();
   const inputRef = useRef<HTMLInputElement>(null);
+  const [showToken, setShowToken] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,24 +30,46 @@ export function ApiTokenPrompt({ onSubmit, submitting, error }: Props): JSX.Elem
           {t('apiTokenPrompt.description')}
         </p>
         <form onSubmit={handleSubmit} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <input
-            ref={inputRef}
-            type="password"
-            autoComplete="off"
-            placeholder={t('apiTokenPrompt.placeholder')}
-            style={{
-              width: '100%',
-              padding: '10px 14px',
-              fontSize: 14,
-              borderRadius: 8,
-              border: error ? '1px solid var(--error-primary)' : '1px solid var(--border-primary)',
-              background: 'var(--bg-secondary)',
-              color: 'var(--text-primary)',
-              outline: 'none',
-              boxSizing: 'border-box',
-            }}
-            autoFocus
-          />
+          <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+            <input
+              ref={inputRef}
+              type={showToken ? 'text' : 'password'}
+              autoComplete="off"
+              placeholder={t('apiTokenPrompt.placeholder')}
+              style={{
+                width: '100%',
+                padding: '10px 14px',
+                paddingRight: 44,
+                fontSize: 14,
+                borderRadius: 8,
+                border: error ? '1px solid var(--error-primary)' : '1px solid var(--border-primary)',
+                background: 'var(--bg-secondary)',
+                color: 'var(--text-primary)',
+                outline: 'none',
+                boxSizing: 'border-box',
+              }}
+              autoFocus
+            />
+            <button
+              type="button"
+              onClick={() => setShowToken(!showToken)}
+              title={showToken ? t('apiTokenPrompt.hideKey') : t('apiTokenPrompt.showKey')}
+              style={{
+                position: 'absolute',
+                right: 8,
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: 'var(--text-tertiary)',
+                fontSize: 13,
+                padding: '4px 6px',
+                borderRadius: 4,
+                lineHeight: 1,
+              }}
+            >
+              {showToken ? t('apiTokenPrompt.hideKey') : t('apiTokenPrompt.showKey')}
+            </button>
+          </div>
           {error && (
             <p style={{ margin: 0, fontSize: 12, lineHeight: 1.4, color: 'var(--error-primary)', textAlign: 'left' }}>
               {error}
@@ -58,7 +81,7 @@ export function ApiTokenPrompt({ onSubmit, submitting, error }: Props): JSX.Elem
             style={{ alignSelf: 'center' }}
             disabled={submitting}
           >
-            {submitting ? 'Verifying…' : t('common.save')}
+            {submitting ? t('apiTokenPrompt.verifyingLabel') : t('apiTokenPrompt.submitLabel')}
           </button>
         </form>
       </div>

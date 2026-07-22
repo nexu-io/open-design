@@ -3147,8 +3147,12 @@ export const ja: Dict = {
   'mcpClient.forwardedAcpNote': 'stdio only と表示された ACP アダプターは、このリストから stdio タイプの MCP サーバーのみを受け取ります。HTTP と SSE のエントリは起動時に破棄されます。',
   'mcpClient.notForwardedNote': 'これらのエージェントについては、各エージェント自身の設定ファイル（例：~/.codex/config.toml、~/.gemini/settings.json）で MCP サーバーを設定してください。以下のサーバーはそこでは使用されません。',
   'apiTokenPrompt.title': 'Daemon requires a token',
-  'apiTokenPrompt.description': 'This daemon requires an API token to serve requests. Enter your OD_API_TOKEN below.',
+  'apiTokenPrompt.description': 'This daemon requires an API token to verify your session. Enter the token configured as OD_API_TOKEN on the daemon.',
   'apiTokenPrompt.placeholder': 'Paste your API token',
+  'apiTokenPrompt.submitLabel': 'Verify & continue',
+  'apiTokenPrompt.verifyingLabel': 'Verifying…',
+  'apiTokenPrompt.showKey': 'Show',
+  'apiTokenPrompt.hideKey': 'Hide',
   'apiTokenPrompt.invalidToken': 'The token was rejected by the daemon. Check your OD_API_TOKEN value and try again.',
   'apiTokenPrompt.serverError': 'The daemon returned an error. Check that the daemon is running and try again.',
 
