@@ -15,7 +15,49 @@ afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { force: true, recursive: true })));
 });
 
-async function createMacInstalledOuter(): Promise<{ executablePath: string; launchPath: string }> {
+type InspectInstalledOuterPath = (path: string) => Promise<{
+  isDirectory(): boolean;
+  isFile(): boolean;
+  isSymbolicLink(): boolean;
+} | null>;
+
+function inspectedEntry(options: {
+  directory?: boolean;
+  symbolicLink?: boolean;
+} = {}) {
+  return {
+    isDirectory: () => options.directory ?? false,
+    isFile: () => !(options.directory ?? false),
+    isSymbolicLink: () => options.symbolicLink ?? false,
+  };
+}
+
+function macInspectMock(
+  launchPath: string,
+  executablePath: string,
+  executableSymbolicLink = false,
+): InspectInstalledOuterPath {
+  return vi.fn(async (path) => {
+    if (path === launchPath) return inspectedEntry({ directory: true });
+    if (path === executablePath) return inspectedEntry({ symbolicLink: executableSymbolicLink });
+    return null;
+  });
+}
+
+async function createMacInstalledOuter(): Promise<{
+  executablePath: string;
+  inspectInstalledOuterPath?: InspectInstalledOuterPath;
+  launchPath: string;
+}> {
+  if (process.platform === "win32") {
+    const launchPath = "/Applications/Open Design.app";
+    const executablePath = `${launchPath}/Contents/MacOS/Open Design`;
+    return {
+      executablePath,
+      inspectInstalledOuterPath: macInspectMock(launchPath, executablePath),
+      launchPath,
+    };
+  }
   const root = await mkdtemp(join(tmpdir(), "od-obsolete-outer-"));
   roots.push(root);
   const launchPath = join(root, "Open Design.app");
@@ -23,6 +65,28 @@ async function createMacInstalledOuter(): Promise<{ executablePath: string; laun
   await mkdir(join(launchPath, "Contents", "MacOS"), { recursive: true });
   await writeFile(executablePath, "legacy outer", "utf8");
   return { executablePath, launchPath };
+}
+
+function fileInspectMock(symbolicLink = false): InspectInstalledOuterPath {
+  return vi.fn(async () => inspectedEntry({ symbolicLink }));
+}
+
+async function createWindowsInstalledOuter(
+  executableName = "Open Design.exe",
+): Promise<{
+  executablePath: string;
+  inspectInstalledOuterPath?: InspectInstalledOuterPath;
+  launchPath: string;
+}> {
+  if (process.platform !== "win32") {
+    const executablePath = `C:\\Program Files\\Open Design\\${executableName}`;
+    return { executablePath, inspectInstalledOuterPath: fileInspectMock(), launchPath: executablePath };
+  }
+  const root = await mkdtemp(join(tmpdir(), "od-obsolete-outer-win-"));
+  roots.push(root);
+  const executablePath = join(root, executableName);
+  await writeFile(executablePath, "legacy outer", "utf8");
+  return { executablePath, launchPath: executablePath };
 }
 
 function snapshot(pid: number, ppid: number, command: string): ProcessSnapshot {
@@ -47,7 +111,7 @@ function stopMock() {
 
 describe("createObsoleteInstalledOuterRetirement", () => {
   it("stops only the exact installed outer root and its descendants", async () => {
-    const { executablePath, launchPath } = await createMacInstalledOuter();
+    const { executablePath, inspectInstalledOuterPath, launchPath } = await createMacInstalledOuter();
     const snapshots = [
       snapshot(101, 1, executablePath),
       snapshot(102, 101, `${launchPath}/Contents/Frameworks/Open Design Helper.app/Contents/MacOS/Open Design Helper`),
@@ -67,6 +131,7 @@ describe("createObsoleteInstalledOuterRetirement", () => {
       payloadExecutablePath: "/payload/Open Design.app/Contents/MacOS/Open Design",
       platform: "darwin",
     }, {
+      inspectInstalledOuterPath,
       listProcessSnapshots: async () => snapshots,
       stopProcesses,
     });
@@ -105,33 +170,23 @@ describe("createObsoleteInstalledOuterRetirement", () => {
     expect(stopProcesses).not.toHaveBeenCalled();
   });
 
-  it("stays disabled on Windows until the platform path is independently validated", async () => {
-    const listProcessSnapshots = vi.fn(async () => []);
-    const stopProcesses = stopMock();
-    const retire = createObsoleteInstalledOuterRetirement({
-      currentExecutablePath: "C:\\payload\\Open Design.exe",
-      currentPid: 900,
-      installedLaunchPath: "C:\\Program Files\\Open Design\\Open Design.exe",
-      logger: { info: vi.fn(), warn: vi.fn() },
-      payloadDesktopProcess: true,
-      payloadExecutablePath: "C:\\payload\\Open Design.exe",
-      platform: "win32",
-    }, { listProcessSnapshots, stopProcesses });
-
-    await expect(retire()).resolves.toMatchObject({ reason: "unsupported-platform", status: "skipped" });
-    expect(listProcessSnapshots).not.toHaveBeenCalled();
-    expect(stopProcesses).not.toHaveBeenCalled();
-  });
-
   it("rejects a symlinked install executable before enumerating processes", async () => {
-    const root = await mkdtemp(join(tmpdir(), "od-obsolete-outer-symlink-"));
-    roots.push(root);
-    const launchPath = join(root, "Open Design.app");
-    const executableDirectory = join(launchPath, "Contents", "MacOS");
-    const target = join(root, "target");
-    await mkdir(executableDirectory, { recursive: true });
-    await writeFile(target, "not the installed executable", "utf8");
-    await symlink(target, join(executableDirectory, "Open Design"));
+    let inspectInstalledOuterPath: InspectInstalledOuterPath | undefined;
+    let launchPath: string;
+    if (process.platform === "win32") {
+      launchPath = "/Applications/Open Design.app";
+      const executablePath = `${launchPath}/Contents/MacOS/Open Design`;
+      inspectInstalledOuterPath = macInspectMock(launchPath, executablePath, true);
+    } else {
+      const root = await mkdtemp(join(tmpdir(), "od-obsolete-outer-symlink-"));
+      roots.push(root);
+      launchPath = join(root, "Open Design.app");
+      const executableDirectory = join(launchPath, "Contents", "MacOS");
+      const target = join(root, "target");
+      await mkdir(executableDirectory, { recursive: true });
+      await writeFile(target, "not the installed executable", "utf8");
+      await symlink(target, join(executableDirectory, "Open Design"));
+    }
     const listProcessSnapshots = vi.fn(async () => []);
     const retire = createObsoleteInstalledOuterRetirement({
       currentExecutablePath: "/payload/Open Design",
@@ -141,14 +196,18 @@ describe("createObsoleteInstalledOuterRetirement", () => {
       payloadDesktopProcess: true,
       payloadExecutablePath: "/payload/Open Design",
       platform: "darwin",
-    }, { listProcessSnapshots, stopProcesses: async (pids) => stopped(pids.filter((pid): pid is number => pid != null)) });
+    }, {
+      inspectInstalledOuterPath,
+      listProcessSnapshots,
+      stopProcesses: async (pids) => stopped(pids.filter((pid): pid is number => pid != null)),
+    });
 
     await expect(retire()).resolves.toMatchObject({ reason: "invalid-install-anchor", status: "skipped" });
     expect(listProcessSnapshots).not.toHaveBeenCalled();
   });
 
   it("refuses to stop an outer tree that contains the current payload", async () => {
-    const { executablePath, launchPath } = await createMacInstalledOuter();
+    const { executablePath, inspectInstalledOuterPath, launchPath } = await createMacInstalledOuter();
     const stopProcesses = stopMock();
     const retire = createObsoleteInstalledOuterRetirement({
       currentExecutablePath: "/payload/Open Design",
@@ -159,6 +218,7 @@ describe("createObsoleteInstalledOuterRetirement", () => {
       payloadExecutablePath: "/payload/Open Design",
       platform: "darwin",
     }, {
+      inspectInstalledOuterPath,
       listProcessSnapshots: async () => [
         snapshot(101, 1, executablePath),
         snapshot(800, 101, "handoff daemon"),
@@ -176,7 +236,7 @@ describe("createObsoleteInstalledOuterRetirement", () => {
   });
 
   it("coalesces concurrent retirement requests without suppressing later opens", async () => {
-    const { executablePath, launchPath } = await createMacInstalledOuter();
+    const { executablePath, inspectInstalledOuterPath, launchPath } = await createMacInstalledOuter();
     let releaseEnumeration: (() => void) | undefined;
     const listProcessSnapshots = vi.fn(async () => {
       await new Promise<void>((resolve) => {
@@ -193,7 +253,7 @@ describe("createObsoleteInstalledOuterRetirement", () => {
       payloadDesktopProcess: true,
       payloadExecutablePath: "/payload/Open Design",
       platform: "darwin",
-    }, { listProcessSnapshots, stopProcesses });
+    }, { inspectInstalledOuterPath, listProcessSnapshots, stopProcesses });
 
     const first = retire();
     const concurrent = retire();
@@ -206,5 +266,148 @@ describe("createObsoleteInstalledOuterRetirement", () => {
     await vi.waitFor(() => expect(listProcessSnapshots).toHaveBeenCalledTimes(2));
     releaseEnumeration?.();
     await later;
+  });
+});
+
+describe("Windows obsolete installed outer retirement", () => {
+  it("stops the revalidated exact installed outer root and its current descendants", async () => {
+    const { executablePath, inspectInstalledOuterPath, launchPath } = await createWindowsInstalledOuter();
+    const firstSnapshots = [
+      snapshot(201, 1, `"${executablePath.toUpperCase()}"`),
+      snapshot(202, 201, "Open Design.exe --type=gpu-process"),
+      snapshot(203, 202, "Open Design.exe --type=utility"),
+      snapshot(204, 1, `"${executablePath}" od://project/123`),
+      snapshot(205, 1, `${executablePath}.old`),
+      snapshot(900, 1, "C:\\payload\\Open Design.exe"),
+    ];
+    const secondSnapshots = [
+      snapshot(201, 1, `"${executablePath}"`),
+      snapshot(202, 201, "Open Design.exe --type=gpu-process"),
+      snapshot(206, 202, "Open Design.exe --type=renderer"),
+      snapshot(204, 1, `"${executablePath}" od://project/123`),
+      snapshot(205, 1, `${executablePath}.old`),
+      snapshot(900, 1, "C:\\payload\\Open Design.exe"),
+    ];
+    const listProcessSnapshots = vi.fn()
+      .mockResolvedValueOnce(firstSnapshots)
+      .mockResolvedValueOnce(secondSnapshots);
+    const stopProcesses = stopMock();
+    const logger = { info: vi.fn(), warn: vi.fn() };
+    const retire = createObsoleteInstalledOuterRetirement({
+      currentExecutablePath: "C:\\PAYLOAD\\OPEN DESIGN.EXE",
+      currentPid: 900,
+      installedLaunchPath: launchPath,
+      logger,
+      payloadDesktopProcess: true,
+      payloadExecutablePath: "c:\\payload\\Open Design.exe",
+      platform: "win32",
+    }, { inspectInstalledOuterPath, listProcessSnapshots, stopProcesses });
+
+    const result = await retire();
+
+    expect(listProcessSnapshots).toHaveBeenCalledTimes(2);
+    expect(stopProcesses).toHaveBeenCalledExactlyOnceWith([206, 202, 201]);
+    expect(result).toMatchObject({
+      executablePath,
+      rootPids: [201],
+      status: "retired",
+      treePids: [206, 202, 201],
+    });
+  });
+
+  it("skips a reused root pid when the second snapshot no longer matches the executable", async () => {
+    const { executablePath, inspectInstalledOuterPath, launchPath } = await createWindowsInstalledOuter();
+    const listProcessSnapshots = vi.fn()
+      .mockResolvedValueOnce([
+        snapshot(201, 1, `"${executablePath}"`),
+        snapshot(202, 201, "Open Design.exe --type=gpu-process"),
+      ])
+      .mockResolvedValueOnce([
+        snapshot(201, 1, "C:\\Windows\\System32\\notepad.exe"),
+        snapshot(202, 201, "Open Design.exe --type=gpu-process"),
+      ]);
+    const stopProcesses = stopMock();
+    const retire = createObsoleteInstalledOuterRetirement({
+      currentExecutablePath: "C:\\payload\\Open Design.exe",
+      currentPid: 900,
+      installedLaunchPath: launchPath,
+      logger: { info: vi.fn(), warn: vi.fn() },
+      payloadDesktopProcess: true,
+      payloadExecutablePath: "C:\\payload\\Open Design.exe",
+      platform: "win32",
+    }, { inspectInstalledOuterPath, listProcessSnapshots, stopProcesses });
+
+    await expect(retire()).resolves.toMatchObject({ reason: "no-match", status: "skipped" });
+    expect(listProcessSnapshots).toHaveBeenCalledTimes(2);
+    expect(stopProcesses).not.toHaveBeenCalled();
+  });
+
+  it("rejects installed executables whose basename does not match the payload", async () => {
+    const { inspectInstalledOuterPath, launchPath } = await createWindowsInstalledOuter("Not Open Design.exe");
+    const listProcessSnapshots = vi.fn(async () => []);
+    const stopProcesses = stopMock();
+    const retire = createObsoleteInstalledOuterRetirement({
+      currentExecutablePath: "C:\\payload\\Open Design.exe",
+      currentPid: 900,
+      installedLaunchPath: launchPath,
+      logger: { info: vi.fn(), warn: vi.fn() },
+      payloadDesktopProcess: true,
+      payloadExecutablePath: "C:\\payload\\Open Design.exe",
+      platform: "win32",
+    }, { inspectInstalledOuterPath, listProcessSnapshots, stopProcesses });
+
+    await expect(retire()).resolves.toMatchObject({ reason: "invalid-install-anchor", status: "skipped" });
+    expect(listProcessSnapshots).not.toHaveBeenCalled();
+    expect(stopProcesses).not.toHaveBeenCalled();
+  });
+
+  it("refuses a revalidated outer tree that contains the current payload", async () => {
+    const { executablePath, inspectInstalledOuterPath, launchPath } = await createWindowsInstalledOuter();
+    const snapshots = [
+      snapshot(201, 1, `"${executablePath}"`),
+      snapshot(800, 201, "handoff daemon"),
+      snapshot(900, 800, "C:\\payload\\Open Design.exe"),
+    ];
+    const listProcessSnapshots = vi.fn(async () => snapshots);
+    const stopProcesses = stopMock();
+    const retire = createObsoleteInstalledOuterRetirement({
+      currentExecutablePath: "C:\\payload\\Open Design.exe",
+      currentPid: 900,
+      installedLaunchPath: launchPath,
+      logger: { info: vi.fn(), warn: vi.fn() },
+      payloadDesktopProcess: true,
+      payloadExecutablePath: "C:\\payload\\Open Design.exe",
+      platform: "win32",
+    }, { inspectInstalledOuterPath, listProcessSnapshots, stopProcesses });
+
+    await expect(retire()).resolves.toMatchObject({
+      reason: "unsafe-current-descendant",
+      status: "skipped",
+    });
+    expect(listProcessSnapshots).toHaveBeenCalledTimes(2);
+    expect(stopProcesses).not.toHaveBeenCalled();
+  });
+
+  it("rejects a symlinked Windows executable before enumerating processes", async () => {
+    const executablePath = "C:\\Program Files\\Open Design\\Open Design.exe";
+    const listProcessSnapshots = vi.fn(async () => []);
+    const stopProcesses = stopMock();
+    const retire = createObsoleteInstalledOuterRetirement({
+      currentExecutablePath: "C:\\payload\\Open Design.exe",
+      currentPid: 900,
+      installedLaunchPath: executablePath,
+      logger: { info: vi.fn(), warn: vi.fn() },
+      payloadDesktopProcess: true,
+      payloadExecutablePath: "C:\\payload\\Open Design.exe",
+      platform: "win32",
+    }, {
+      inspectInstalledOuterPath: fileInspectMock(true),
+      listProcessSnapshots,
+      stopProcesses,
+    });
+
+    await expect(retire()).resolves.toMatchObject({ reason: "invalid-install-anchor", status: "skipped" });
+    expect(listProcessSnapshots).not.toHaveBeenCalled();
+    expect(stopProcesses).not.toHaveBeenCalled();
   });
 });
