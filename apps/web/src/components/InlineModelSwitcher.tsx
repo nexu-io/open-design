@@ -414,10 +414,12 @@ export function InlineModelSwitcher({
       ) {
         return;
       }
-      const topbarBottom = scrollContainer
-        .querySelector<HTMLElement>('.entry-main__topbar')
-        ?.getBoundingClientRect().bottom;
-      const safeTop = Math.max(scrollRect.top, topbarBottom ?? scrollRect.top);
+      const topbar = scrollContainer.querySelector<HTMLElement>('.entry-main__topbar');
+      const topbarBottom = topbar?.getBoundingClientRect().bottom;
+      const triggerInTopbar = chipRef.current ? topbar?.contains(chipRef.current) === true : false;
+      const safeTop = triggerInTopbar
+        ? scrollRect.top
+        : Math.max(scrollRect.top, topbarBottom ?? scrollRect.top);
       const safeBottom = Math.min(window.innerHeight, scrollRect.bottom);
       const safeLeft = Math.max(0, scrollRect.left);
       const safeRight = Math.min(window.innerWidth, scrollRect.right);

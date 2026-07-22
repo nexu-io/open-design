@@ -140,6 +140,7 @@ function expectVelaLoginWithAttribution(
 describe('InlineModelSwitcher AMR row', () => {
   afterEach(() => {
     cleanup();
+    vi.restoreAllMocks();
     vi.mocked(fetchProviderModels).mockReset();
     vi.unstubAllGlobals();
     vi.useRealTimers();
@@ -148,6 +149,45 @@ describe('InlineModelSwitcher AMR row', () => {
     } catch {
       // jsdom normally exposes localStorage; keep cleanup tolerant.
     }
+  });
+
+  it('keeps the popover open while the topbar chip remains visible', () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(
+      function getBoundingClientRectMock(this: HTMLElement) {
+        if (this.classList.contains('entry-main--scroll')) {
+          return new DOMRect(0, 0, 1000, 800);
+        }
+        if (this.classList.contains('entry-main__topbar')) {
+          return new DOMRect(0, 0, 1000, 64);
+        }
+        if (this.getAttribute('data-testid') === 'inline-model-switcher-chip') {
+          return new DOMRect(24, 16, 180, 40);
+        }
+        return new DOMRect(0, 0, 0, 0);
+      },
+    );
+
+    render(
+      <div className="entry-main--scroll">
+        <div className="entry-main__topbar">
+          <InlineModelSwitcher
+            config={baseConfig}
+            agents={[amrAgent]}
+            daemonLive={true}
+            onModeChange={vi.fn()}
+            onAgentChange={vi.fn()}
+            onAgentModelChange={vi.fn()}
+            onApiProtocolChange={vi.fn()}
+            onApiModelChange={vi.fn()}
+            onOpenSettings={vi.fn()}
+          />
+        </div>
+      </div>,
+    );
+
+    fireEvent.click(screen.getByTestId('inline-model-switcher-chip'));
+
+    expect(screen.getByTestId('inline-model-switcher-popover')).toBeTruthy();
   });
 
   it('shows the AMR reminder dot once when another CLI is selected', async () => {
