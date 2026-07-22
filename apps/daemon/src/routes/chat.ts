@@ -32,7 +32,7 @@ import {
 } from '../integrations/aihubmix.js';
 import { isSafeId as isSafeProjectId } from '../projects.js';
 import { projectKindToTracking } from '@open-design/contracts/analytics';
-import { proxyDispatcherRequestInit, validateUserProviderBaseUrl } from '../connectionTest.js';
+import { proxyDispatcherRequestInit, validateUserProviderBaseUrl, requiresAzureResponsesApi } from '../connectionTest.js';
 import { googleStreamGenerateContentUrl } from '../integrations/google-models.js';
 import { createRoleMarkerGuard } from '../role-marker-guard.js';
 import { authorizeReasoningEgress, sendReasoningEgressDenial } from '../reasoning-egress.js';
@@ -558,6 +558,19 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     const first = choices[0];
     if (typeof first?.delta?.content === 'string') return first.delta.content;
     if (typeof first?.text === 'string') return first.text;
+    return '';
+  };
+  const extractAzureResponsesDeltaText = (data: any) => {
+    return data?.type === 'response.output_text.delta' && typeof data?.delta === 'string'
+      ? data.delta
+      : '';
+  };
+
+  const extractAzureResponsesErrorMessage = (data: any) => {
+    if (data?.type !== 'response.error' && data?.type !== 'error') return '';
+    const err = data?.error ?? data;
+    if (typeof err === 'string') return err;
+    if (typeof err?.message === 'string') return err.message;
     return '';
   };
 
@@ -1126,9 +1139,10 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         : usesVersionedOpenAIPath
           ? ''
           : '2024-10-21';
+    const useResponsesApi = requiresAzureResponsesApi(model);
     url.pathname = usesVersionedOpenAIPath
-      ? `${basePath}/chat/completions`
-      : `${basePath}/openai/deployments/${encodeURIComponent(model)}/chat/completions`;
+      ? `${basePath}/${useResponsesApi ? 'responses' : 'chat/completions'}`
+      : `${basePath}/openai/deployments/${encodeURIComponent(model)}/${useResponsesApi ? 'responses' : 'chat/completions'}`;
     if (usesVersionedOpenAIPath && !version) {
       url.searchParams.delete('api-version');
     }
@@ -1136,7 +1150,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       url.searchParams.set('api-version', version);
     }
     console.log(
-      `[proxy:azure] ${req.method} ${validated.parsed!.hostname} deployment=${model} api-version=${version || 'omitted'}`,
+      `[proxy:azure] ${req.method} ${validated.parsed!.hostname} deployment=${model} api-version=${version || 'omitted'} api=${useResponsesApi ? 'responses' : 'chat_completions'}`,
     );
 
     const payloadMessages = Array.isArray(messages) ? [...messages] : [];
@@ -1146,12 +1160,22 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
 
     const effectiveMaxTokens =
       typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 8192;
-    const payload = {
-      ...(usesVersionedOpenAIPath ? { model } : {}),
-      messages: payloadMessages,
-      ...buildLegacyMaxTokensParam(effectiveMaxTokens),
-      stream: true,
-    };
+    const payload: any = useResponsesApi
+      ? {
+          ...(usesVersionedOpenAIPath ? { model } : {}),
+          input: payloadMessages.map((m: any) => ({
+            role: m.role === 'assistant' ? 'assistant' : m.role === 'system' ? 'system' : 'user',
+            content: m.content,
+          })),
+          max_output_tokens: effectiveMaxTokens,
+          stream: true,
+        }
+      : {
+          ...(usesVersionedOpenAIPath ? { model } : {}),
+          messages: payloadMessages,
+          ...buildLegacyMaxTokensParam(effectiveMaxTokens),
+          stream: true,
+        };
     const retryPayload = {
       ...(usesVersionedOpenAIPath ? { model } : {}),
       messages: payloadMessages,
@@ -1183,6 +1207,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       if (!response.ok) {
         let errorText = await response.text();
         if (
+          !useResponsesApi &&
           response.status === 400 &&
           isUnsupportedMaxTokensError(errorText)
         ) {
@@ -1212,34 +1237,63 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         }
       }
 
-      let ended = false;
+     let ended = false;
       const guard = createDeltaGuard(sse);
-      await streamUpstreamSse(response, ({ payload: ssePayload, data }: any) => {
-        if (ssePayload === '[DONE]') {
-          sse.send('end', {});
-          ended = true;
-          return true;
-        }
-        if (!data) return false;
-        const streamError = extractStreamErrorMessage(data);
-        if (streamError) {
-          sendProxyError(sse, `Azure error: ${streamError}`, { details: data });
-          ended = true;
-          return true;
-        }
-        const delta = extractOpenAIText(data);
-        if (delta) { guard.sendDelta(delta); 
-          if (guard.contaminated) { 
-            sse.send('end', {}); 
-            ended = true; 
-            return true; 
-          } 
-        }
-        return false;
-      });
+      if (useResponsesApi) {
+        await streamUpstreamSse(response, ({ data }: any) => {
+          if (!data) return false;
+          const streamError = extractAzureResponsesErrorMessage(data);
+          if (streamError) {
+            sendProxyError(sse, `Azure error: ${streamError}`, { details: data });
+            ended = true;
+            return true;
+          }
+          const delta = extractAzureResponsesDeltaText(data);
+          if (delta) {
+            guard.sendDelta(delta);
+            if (guard.contaminated) {
+              sse.send('end', {});
+              ended = true;
+              return true;
+            }
+          }
+          if (data?.type === 'response.completed' || data?.type === 'response.incomplete') {
+            sse.send('end', {});
+            ended = true;
+            return true;
+          }
+          return false;
+        });
+      } else {
+        await streamUpstreamSse(response, ({ payload: ssePayload, data }: any) => {
+          if (ssePayload === '[DONE]') {
+            sse.send('end', {});
+            ended = true;
+            return true;
+          }
+          if (!data) return false;
+          const streamError = extractStreamErrorMessage(data);
+          if (streamError) {
+            sendProxyError(sse, `Azure error: ${streamError}`, { details: data });
+            ended = true;
+            return true;
+          }
+          const delta = extractOpenAIText(data);
+          if (delta) { guard.sendDelta(delta); 
+            if (guard.contaminated) { 
+              sse.send('end', {}); 
+              ended = true; 
+              return true; 
+            } 
+          }
+          return false;
+        });
+      }
       if (!ended) sse.send('end', {});
       sse.end();
-    } catch (err: any) {
+        } 
+        
+      catch (err: any) {
       console.error(`[proxy:azure] internal error: ${err.message}`);
       sendProxyError(sse, err.message, { code: 'INTERNAL_ERROR' });
       sse.end();
