@@ -2422,6 +2422,13 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     // the conversation row lands with at least one user message before the
     // assistant placeholder is pinned and streamed — Studio then sees a
     // populated transcript and the messageCount matches /api/runs parity.
+    //
+    // When the client already persisted the user row (carrying `userMessageId`
+    // that matches the row it PUT under the same id), do NOT upsert again —
+    // the client's row is the source of truth and rewriting it with the partial
+    // `meta.message` payload drops fields the client stored (attachments,
+    // toolCallId, etc). Mirror the /api/runs dedupe keyed on the per-turn id
+    // (issue #5811 follow-up, nettee 2026-07-22 review on head 6fade58bd).
     if (
       typeof meta.conversationId === 'string' &&
       meta.conversationId &&
@@ -2429,17 +2436,23 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       meta.message.trim().length > 0
     ) {
       try {
-        const userMessageId =
+        const turnsUserMessageId =
           typeof meta.userMessageId === 'string' && meta.userMessageId
             ? meta.userMessageId
             : `user-${meta.assistantMessageId ?? randomUUID()}`;
-        upsertMessage(db, meta.conversationId, {
-          id: userMessageId,
-          role: 'user',
-          content: meta.message,
-          startedAt: Date.now(),
-          endedAt: Date.now(),
-        });
+        const existing = listMessages(db, meta.conversationId);
+        const alreadyPersistedByClient = existing.some(
+          (message) => message.id === turnsUserMessageId,
+        );
+        if (!alreadyPersistedByClient) {
+          upsertMessage(db, meta.conversationId, {
+            id: turnsUserMessageId,
+            role: 'user',
+            content: meta.message,
+            startedAt: Date.now(),
+            endedAt: Date.now(),
+          });
+        }
       } catch (err) {
         console.warn('[chat] user message persistence failed', err);
       }
