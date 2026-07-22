@@ -1528,6 +1528,8 @@ export const th: Dict = {
   'newproj.createDisabledTitle': 'คุณต้องบันทึกโปรเจกต์เป็นเทมเพลตก่อน',
   'newproj.importClaudeZip': 'นำเข้า Claude Design ZIP',
   'newproj.importClaudeZipTitle': 'นำเข้า .zip จาก Claude Design',
+  'newproj.openFolder': 'เปิดโฟลเดอร์',
+  'newproj.openingFolder': 'กำลังเปิด…',
   'newproj.importingClaudeZip': 'กำลังนำเข้า…',
   'newproj.privacyFooter': 'โดยค่าเริ่มต้น คุณเท่านั้นที่สามารถดูโปรเจกต์ของคุณได้',
   'newproj.designSystem': 'ระบบการออกแบบ',

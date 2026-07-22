@@ -1528,6 +1528,8 @@ export const uk: Dict = {
   'newproj.createDisabledTitle': 'Спочатку збережіть проект як шаблон (меню Поділитися всередині будь-якого проекту).',
   'newproj.importClaudeZip': 'Імпортувати Claude Design ZIP',
   'newproj.importClaudeZipTitle': 'Імпортувати експорт Claude Design .zip',
+  'newproj.openFolder': 'Відкрити папку',
+  'newproj.openingFolder': 'Відкриваємо…',
   'newproj.importingClaudeZip': 'Імпортування…',
   'newproj.privacyFooter': 'За замовчуванням лише ви можете переглянути свій проект.',
   'newproj.designSystem': 'Система дизайну',

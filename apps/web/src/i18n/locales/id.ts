@@ -1528,6 +1528,8 @@ export const id: Dict = {
   'newproj.createDisabledTitle': 'Simpan proyek sebagai templat dulu.',
   'newproj.importClaudeZip': 'Impor ZIP Claude Design',
   'newproj.importClaudeZipTitle': 'Impor file .zip hasil ekspor Claude Design',
+  'newproj.openFolder': 'Buka folder',
+  'newproj.openingFolder': 'Membuka…',
   'newproj.importingClaudeZip': 'Mengimpor...',
   'newproj.privacyFooter': 'Secara default hanya kamu yang bisa melihat proyekmu.',
   'newproj.designSystem': 'Sistem desain',

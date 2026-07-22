@@ -1644,6 +1644,8 @@ export const zhTW: Dict = {
     "請先在任意專案內透過「分享」選單將其儲存為範本。",
   "newproj.importClaudeZip": "匯入 Claude Design ZIP",
   "newproj.importClaudeZipTitle": "匯入 Claude Design 匯出的 .zip 檔案",
+  "newproj.openFolder": "開啟資料夾",
+  "newproj.openingFolder": "正在開啟…",
   "newproj.importingClaudeZip": "正在匯入…",
   "newproj.privacyFooter": "預設情況下只有你能看到自己的專案。",
   "newproj.designSystem": "設計系統",

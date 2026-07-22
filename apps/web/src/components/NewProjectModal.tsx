@@ -19,6 +19,7 @@ import type {
   PromptTemplateSummary,
   SkillSummary,
 } from '../types';
+import { useT } from '../i18n';
 import { Icon } from './Icon';
 import {
   NewProjectPanel,
@@ -86,6 +87,7 @@ function NewProjectModalBody({
   onClose,
   initialTab,
 }: Omit<Props, 'open'>) {
+  const t = useT();
   const closeRef = useRef<HTMLButtonElement | null>(null);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
@@ -133,7 +135,7 @@ function NewProjectModalBody({
       className="new-project-modal-backdrop"
       role="dialog"
       aria-modal="true"
-      aria-label="New project"
+      aria-label={t('entry.navNewProject')}
       data-testid="new-project-modal"
       onClick={(e) => {
         if (e.target === e.currentTarget && !creating) onClose();
@@ -151,15 +153,15 @@ function NewProjectModalBody({
         exit="exit"
       >
         <header className="new-project-modal__head">
-          <h2 className="new-project-modal__title">New project</h2>
+          <h2 className="new-project-modal__title">{t('entry.navNewProject')}</h2>
           <button
             ref={closeRef}
             type="button"
             className="new-project-modal__close"
             onClick={onClose}
             disabled={creating}
-            aria-label="Close"
-            title="Close (Esc)"
+            aria-label={t('common.close')}
+            title={t('designSystemPicker.closeEsc')}
           >
             <Icon name="close" size={14} />
           </button>

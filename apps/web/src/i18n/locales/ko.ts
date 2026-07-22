@@ -1528,6 +1528,8 @@ export const ko: Dict = {
   'newproj.createDisabledTitle': '먼저 프로젝트를 템플릿으로 저장하세요 (프로젝트 내 공유 메뉴 이용).',
   'newproj.importClaudeZip': 'Claude Design ZIP 가져오기',
   'newproj.importClaudeZipTitle': 'Claude Design .zip 내보내기 파일 가져오기',
+  'newproj.openFolder': '폴더 열기',
+  'newproj.openingFolder': '여는 중…',
   'newproj.importingClaudeZip': '가져오는 중…',
   'newproj.privacyFooter': '기본적으로 프로젝트는 나만 볼 수 있습니다.',
   'newproj.designSystem': '디자인 시스템',

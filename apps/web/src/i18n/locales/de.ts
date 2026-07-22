@@ -1528,6 +1528,8 @@ export const de: Dict = {
   'newproj.createDisabledTitle': 'Speichern Sie zuerst ein Projekt als Template (Teilen-Menü in einem beliebigen Projekt).',
   'newproj.importClaudeZip': 'Claude Design ZIP importieren',
   'newproj.importClaudeZipTitle': 'Einen Claude Design .zip-Export importieren',
+  'newproj.openFolder': 'Ordner öffnen',
+  'newproj.openingFolder': 'Wird geöffnet…',
   'newproj.importingClaudeZip': 'Import läuft…',
   'newproj.privacyFooter': 'Standardmäßig können nur Sie Ihr Projekt sehen.',
   'newproj.designSystem': 'Designsystem',

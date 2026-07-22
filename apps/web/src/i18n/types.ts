@@ -2036,6 +2036,8 @@ export interface Dict {
   'newproj.createDisabledTitle': string;
   'newproj.importClaudeZip': string;
   'newproj.importClaudeZipTitle': string;
+  'newproj.openFolder': string;
+  'newproj.openingFolder': string;
   'newproj.importingClaudeZip': string;
   'newproj.privacyFooter': string;
   'newproj.designSystem': string;
