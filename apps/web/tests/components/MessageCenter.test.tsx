@@ -31,9 +31,9 @@ function mockFetch(
   }));
 }
 
-function renderMessageCenter() {
+function renderMessageCenter(locale: 'en' | 'zh-CN' = 'en') {
   const onOpenNotificationSettings = vi.fn();
-  const result = render(<I18nProvider initial="en"><MessageCenter onOpenNotificationSettings={onOpenNotificationSettings}/></I18nProvider>);
+  const result = render(<I18nProvider initial={locale}><MessageCenter onOpenNotificationSettings={onOpenNotificationSettings}/></I18nProvider>);
   return { ...result, onOpenNotificationSettings };
 }
 
@@ -64,6 +64,20 @@ afterEach(() => {
 });
 
 describe('MessageCenter', () => {
+  it('formats published dates using the selected locale', async () => {
+    const publishedAt = new Date(defaultMessages[0]!.publishedAt);
+    const zhDate = new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium' }).format(publishedAt);
+    const enDate = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium' }).format(publishedAt);
+    renderMessageCenter('zh-CN');
+    fireEvent.click(screen.getByTestId('message-center-trigger'));
+
+    await waitFor(() => {
+      expect(screen.getByText(zhDate)).toBeTruthy();
+    });
+    expect(zhDate).not.toBe(enDate);
+    expect(screen.queryByText(enDate)).toBeNull();
+  });
+
   it('renders API messages for anonymous clients without a local window', async () => {
     renderMessageCenter();
     const dialog = await openCenter();
