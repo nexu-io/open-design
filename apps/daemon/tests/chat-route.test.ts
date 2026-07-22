@@ -1010,7 +1010,7 @@ process.stdin.on('end', () => {
           expect(userTurns[1]).toMatchObject({
             content: 'follow-up user turn for 5811',
           });
-          expect(userTurns[1].id).not.toBe(priorUserMessageId);
+          expect(userTurns[1]?.id).not.toBe(priorUserMessageId);
 
           // The new assistant turn must also be present.
           const assistantTurns = msgBody.messages.filter((m) => m.role === 'assistant');
