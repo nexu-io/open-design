@@ -7,7 +7,7 @@ import { zhCN } from '../../src/i18n/locales/zh-CN';
 import { zhTW } from '../../src/i18n/locales/zh-TW';
 import { LOCALES, LOCALE_LABEL, type Dict, type Locale } from '../../src/i18n/types';
 
-const EXPECTED_LOCALES = ['en', 'id', 'de', 'zh-CN', 'zh-TW', 'pt-BR', 'es-ES', 'ru', 'fa', 'ar', 'ja', 'ko', 'pl', 'hu', 'fr', 'uk', 'tr', 'th', 'it'];
+const EXPECTED_LOCALES = ['en', 'id', 'de', 'zh-CN', 'zh-TW', 'pt-BR', 'es-ES', 'ru', 'fa', 'ar', 'ja', 'ko', 'pl', 'hu', 'he', 'fr', 'uk', 'tr', 'th', 'it'];
 
 function placeholders(value: string): string[] {
   const names: string[] = [];
@@ -41,6 +41,7 @@ describe('i18n locales', () => {
     expect(resolveSystemLocale(['zh-Hant-HK', 'en-US'])).toBe('zh-TW');
     expect(resolveSystemLocale(['pt-PT', 'en-US'])).toBe('pt-BR');
     expect(resolveSystemLocale(['es-MX', 'en-US'])).toBe('es-ES');
+    expect(resolveSystemLocale(['he-IL', 'en-US'])).toBe('he');
     expect(resolveSystemLocale(['nl-NL', 'en-US'])).toBe('en');
     expect(resolveSystemLocale(['nl-NL'])).toBeNull();
   });
@@ -51,6 +52,7 @@ describe('i18n locales', () => {
     expect((LOCALE_LABEL as Record<string, string>).de).toBe('Deutsch');
     expect((LOCALE_LABEL as Record<string, string>).it).toBe('Italiano');
     expect((LOCALE_LABEL as Record<string, string>).ja).toBe('日本語');
+    expect((LOCALE_LABEL as Record<string, string>).he).toBe('עברית');
   });
 
   it('keeps locale dictionaries aligned with English keys and placeholders', async () => {
