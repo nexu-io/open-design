@@ -3284,6 +3284,7 @@ export interface Dict {
   'apiTokenPrompt.placeholder': string;
   'apiTokenPrompt.submitLabel': string;
   'apiTokenPrompt.verifyingLabel': string;
+  'apiTokenPrompt.verifiedLabel': string;
   'apiTokenPrompt.showKey': string;
   'apiTokenPrompt.hideKey': string;
   'apiTokenPrompt.invalidToken': string;

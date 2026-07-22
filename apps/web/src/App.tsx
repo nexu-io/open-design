@@ -471,6 +471,7 @@ function AppInner() {
   const [needsToken, setNeedsToken] = useState(false);
   const [apiTokenError, setApiTokenError] = useState<string | null>(null);
   const [verifyingToken, setVerifyingToken] = useState(false);
+  const [tokenVerified, setTokenVerified] = useState(false);
   const apiTokenRef = useRef('');
   const route = useRoute();
   const analytics = useAnalytics();
@@ -2089,6 +2090,7 @@ function AppInner() {
   const handleApiTokenSubmit = useCallback(async (token: string) => {
     setVerifyingToken(true);
     setApiTokenError(null);
+    setTokenVerified(false);
     try {
       const probe = await fetch('/api/auth/verify', {
         headers: { Authorization: `Bearer ${token}` },
@@ -2142,7 +2144,10 @@ function AppInner() {
     });
 
     setVerifyingToken(false);
-    setNeedsToken(false);
+    setTokenVerified(true);
+    // Hold the green "✓ Verified" box briefly so the user sees
+    // confirmation before the prompt unmounts into the real app.
+    setTimeout(() => setNeedsToken(false), 600);
   }, []);
 
   // Cmd+, (mac) / Ctrl+, (win/linux) opens Settings. Capture phase so we
@@ -2277,6 +2282,7 @@ function AppInner() {
         onSubmit={handleApiTokenSubmit}
         error={apiTokenError ?? undefined}
         submitting={verifyingToken}
+        verified={tokenVerified}
       />
     );
   } else if (pendingFirstRunOnboardingRoute) {

@@ -3152,6 +3152,7 @@ export const zhTW: Dict = {
   'apiTokenPrompt.placeholder': 'Paste your API token',
   'apiTokenPrompt.submitLabel': 'Verify & continue',
   'apiTokenPrompt.verifyingLabel': 'Verifying…',
+  'apiTokenPrompt.verifiedLabel': '✓ Verified',
   'apiTokenPrompt.showKey': 'Show',
   'apiTokenPrompt.hideKey': 'Hide',
   'apiTokenPrompt.invalidToken': 'The token was rejected by the daemon. Check your OD_API_TOKEN value and try again.',
