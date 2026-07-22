@@ -29,7 +29,7 @@ describe('message center client', () => {
     expect(result.map((message) => message.id)).toEqual(['new', 'old']);
     expect(vi.mocked(fetch)).toHaveBeenCalledTimes(2);
     const firstUrl = String(vi.mocked(fetch).mock.calls[0]?.[0]);
-    expect(firstUrl).toContain('/api/integrations/vela/api-proxy/api/v1/message-center/messages?');
+    expect(firstUrl).toContain('/api/integrations/vela/message-center-public/messages?');
     expect(firstUrl).not.toContain('startedAt=');
   });
 

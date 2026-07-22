@@ -19,7 +19,7 @@ interface MessageCenterPage {
 }
 
 const ACCOUNT_PROXY = '/api/integrations/vela/message-center';
-const ANONYMOUS_PROXY = '/api/integrations/vela/api-proxy/api/v1/message-center';
+const ANONYMOUS_PROXY = '/api/integrations/vela/message-center-public';
 const LEGACY_WINDOW_KEY = 'open-design.message-center.anonymous-started-at.v1';
 const MESSAGES_KEY = 'open-design.message-center.anonymous-messages.v1';
 const READ_KEY = 'open-design.message-center.anonymous-read-ids.v1';

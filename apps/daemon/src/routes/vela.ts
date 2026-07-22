@@ -23,6 +23,7 @@ import {
   clearAllVelaLiveAccounts,
   parseVelaLoginAttribution,
   peekVelaLiveAccount,
+  readVelaApiContext,
   readVelaCredentialRevision,
   readVelaControlApiContext,
   readVelaLoginStatus,
@@ -46,6 +47,7 @@ import {
 
 const AMR_API_PROXY_PREFIX = '/api/integrations/vela/api-proxy';
 const VELA_MESSAGE_CENTER_PREFIX = '/api/integrations/vela/message-center';
+const VELA_PUBLIC_MESSAGE_CENTER_PREFIX = '/api/integrations/vela/message-center-public';
 const AMR_API_UPSTREAM_ORIGIN = 'https://amr-api.open-design.ai';
 
 type ReadAppConfig = (dataDir: string) => Promise<AppConfigPrefs>;
@@ -180,9 +182,10 @@ function isAllowedMessageCenterRequest(method: string, pathname: string): boolea
 function proxyVelaMessageCenterRequest(
   req: Request,
   res: Response,
-  context: { apiUrl: string; controlKey: string },
+  context: { apiUrl: string; controlKey?: string },
+  proxyPrefix = VELA_MESSAGE_CENTER_PREFIX,
 ): void {
-  const suffix = req.originalUrl.slice(VELA_MESSAGE_CENTER_PREFIX.length);
+  const suffix = req.originalUrl.slice(proxyPrefix.length);
   const parsedSuffix = new URL(suffix, 'http://message-center.local');
   if (!isAllowedMessageCenterRequest(req.method, parsedSuffix.pathname)) {
     res.status(404).json({ error: 'unknown_message_center_path' });
@@ -199,8 +202,8 @@ function proxyVelaMessageCenterRequest(
   const body = velaProxyRequestBody(req);
   const headers: Record<string, string> = {
     accept: typeof req.headers.accept === 'string' ? req.headers.accept : 'application/json',
-    authorization: `Bearer ${context.controlKey}`,
   };
+  if (context.controlKey) headers.authorization = `Bearer ${context.controlKey}`;
   if (typeof req.headers['content-type'] === 'string') {
     headers['content-type'] = req.headers['content-type'];
   }
@@ -420,6 +423,17 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
   });
 
   app.all('/api/integrations/vela/api-proxy/*splat', proxyAmrApiRequest);
+
+  app.get('/api/integrations/vela/message-center-public/messages', async (req, res) => {
+    try {
+      const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
+      const configuredEnv = agentCliEnvForAgent(appConfig.agentCliEnv, 'amr');
+      const context = readVelaApiContext(env, configuredEnv);
+      proxyVelaMessageCenterRequest(req, res, context, VELA_PUBLIC_MESSAGE_CENTER_PREFIX);
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
 
   app.all('/api/integrations/vela/message-center/*splat', async (req, res) => {
     try {

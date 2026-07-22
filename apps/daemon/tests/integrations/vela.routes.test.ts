@@ -1439,6 +1439,43 @@ describe('ALL /api/integrations/vela/api-proxy/*', () => {
 });
 
 describe('ALL /api/integrations/vela/message-center/*', () => {
+  it('uses the selected profile origin for anonymous messages without forwarding credentials', async () => {
+    const requests: Array<{ url: string; authorization: string | undefined }> = [];
+    const upstream = createServer((req, res) => {
+      requests.push({
+        url: req.url ?? '',
+        authorization: req.headers.authorization,
+      });
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ messages: [], nextCursor: null, unreadCount: 0 }));
+    });
+    await new Promise<void>((resolve) => upstream.listen(0, '127.0.0.1', resolve));
+    const address = upstream.address() as AddressInfo;
+    seedLogin('test', {
+      apiUrl: `http://127.0.0.1:${address.port}`,
+      controlKey: undefined,
+      runtimeKey: undefined,
+      user: undefined,
+    });
+    await setSettingsAmrEnv({ OPEN_DESIGN_AMR_PROFILE: 'test' });
+    try {
+      const response = await fetch(
+        `${baseUrl}/api/integrations/vela/message-center-public/messages?locale=en-US&limit=30`,
+        { headers: { authorization: 'Bearer browser-supplied-key' } },
+      );
+      expect(response.status).toBe(200);
+      expect(requests).toEqual([
+        {
+          url: '/api/v1/message-center/messages?locale=en-US&limit=30',
+          authorization: undefined,
+        },
+      ]);
+    } finally {
+      await setSettingsAmrEnv({ OPEN_DESIGN_AMR_PROFILE: undefined });
+      await new Promise<void>((resolve) => upstream.close(() => resolve()));
+    }
+  });
+
   it('forwards only Message Center routes to the configured profile origin with its control key', async () => {
     const requests: Array<{ url: string; method: string; authorization: string | undefined }> = [];
     const upstream = createServer((req, res) => {
