@@ -79,23 +79,27 @@
 }
 
 .close {
-  width: 30px;
-  height: 30px;
-  flex: 0 0 30px;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid transparent;
+  border: 1px solid var(--border-soft);
   border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-muted);
+  background: var(--bg-subtle);
+  color: var(--text);
   cursor: pointer;
+  transition:
+    background 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 .close:hover {
   border-color: var(--border);
-  background: var(--bg-subtle);
-  color: var(--text);
+  background: var(--bg-muted);
+  color: var(--text-strong);
 }
 
 .close:focus-visible,

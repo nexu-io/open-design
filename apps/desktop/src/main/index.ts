@@ -63,6 +63,7 @@ import {
   exportDiagnosticsToFile,
   registerDesktopDiagnosticsIpc,
 } from "./diagnostics.js";
+import { notifyDesktopExternalShow } from "./external-show.js";
 
 // Re-export pure URL-policy helpers so the packaged workspace's
 // vitest can pin their behaviour without spinning up a full Electron
@@ -141,6 +142,7 @@ export function applyOsLocaleSwitch(electronApp: Electron.App): string {
 
 export type DesktopMainOptions = {
   beforeShutdown?: () => Promise<void>;
+  onExternalShow?: () => void | Promise<void>;
   discoverWebUrl?: () => Promise<string | null>;
   /**
    * Round-7 (lefarcen P2 @ runtime.ts:336): packaged builds report the
@@ -866,6 +868,7 @@ export async function runDesktopMain(
             return activeDesktop.console();
           case SIDECAR_MESSAGES.SHOW:
             activeDesktop.show();
+            notifyDesktopExternalShow(options.onExternalShow);
             return { accepted: true };
           case SIDECAR_MESSAGES.CLICK:
             return await activeDesktop.click(request.input as DesktopClickInput);

@@ -14,12 +14,13 @@ import path from 'node:path';
 
 import { modelIdForTracking } from '@open-design/contracts/analytics';
 
-import { readAppConfig } from './app-config.js';
+import { agentCliEnvForAgent, readAppConfig } from './app-config.js';
 import type { AppVersionInfo } from './app-version.js';
 import { listMessages } from './db.js';
+import { normalizeOpenDesignTelemetryRelayUrl } from './integrations/telemetry-relay.js';
 import {
   deriveLangfuseDeliveryState,
-  readTelemetrySinkConfig,
+  readFeedbackTelemetrySinkConfig,
   reportRunCompleted,
   reportRunFeedback,
   type AgentEventSummary,
@@ -195,14 +196,21 @@ function inferObjectRegistrationRelayUrl(env: NodeJS.ProcessEnv = process.env): 
   const objectRelayUrl = env.OPEN_DESIGN_OBJECT_RELAY_URL?.trim();
   if (!objectRelayUrl) {
     const telemetryRelayUrl = env.OPEN_DESIGN_TELEMETRY_RELAY_URL?.trim();
-    return telemetryRelayUrl ? telemetryRelayUrl.replace(/\/+$/, '') : null;
+    return telemetryRelayUrl
+      ? normalizeOpenDesignTelemetryRelayUrl(telemetryRelayUrl)
+      : null;
   }
+  const normalizedObjectRelayUrl = normalizeOpenDesignTelemetryRelayUrl(
+    objectRelayUrl,
+  );
   try {
-    const url = new URL(objectRelayUrl);
+    const url = new URL(normalizedObjectRelayUrl);
     url.pathname = url.pathname.replace(/\/api\/objects\/batch\/?$/, '/api/langfuse');
     return url.toString().replace(/\/+$/, '');
   } catch {
-    return objectRelayUrl.replace(/\/api\/objects\/batch\/?$/, '/api/langfuse').replace(/\/+$/, '');
+    return normalizedObjectRelayUrl
+      .replace(/\/api\/objects\/batch\/?$/, '/api/langfuse')
+      .replace(/\/+$/, '');
   }
 }
 
@@ -949,6 +957,7 @@ export async function reportRunCompletedFromDaemon(
       return deriveLangfuseDeliveryState(prefs, null);
     }
     const installationId = cfg.installationId ?? null;
+    const configuredAmrEnv = agentCliEnvForAgent(cfg.agentCliEnv, 'amr');
 
     let messageContent = '';
     let producedFilesRaw: unknown = undefined;
@@ -1133,6 +1142,7 @@ export async function reportRunCompletedFromDaemon(
         buildContext(mergeTraceSafeManifests(manifests, registrationManifests)),
         {
           config: objectRegistrationTelemetryConfig(),
+          deliveryPurpose: 'object-registration',
           ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}),
         },
       );
@@ -1145,7 +1155,10 @@ export async function reportRunCompletedFromDaemon(
         traceObjectFilesRaw,
         ...(uploadedManifests ? { uploaded: uploadedManifests } : {}),
       })),
-      opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {},
+      {
+        configuredEnv: configuredAmrEnv,
+        ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}),
+      },
     );
   } catch (err) {
     console.warn('[langfuse-bridge] report failed:', String(err));
@@ -1198,7 +1211,8 @@ export async function reportRunFeedbackFromDaemon(
   // Pre-resolve the sink before claiming `accepted`. Avoids advertising a
   // successful enqueue to callers when there's no Langfuse endpoint
   // configured to ship the score to.
-  const sink = readTelemetrySinkConfig();
+  const configuredAmrEnv = agentCliEnvForAgent(cfg.agentCliEnv, 'amr');
+  const sink = readFeedbackTelemetrySinkConfig(process.env, configuredAmrEnv);
   if (!sink) {
     return { status: 'skipped_no_sink' };
   }
@@ -1218,7 +1232,10 @@ export async function reportRunFeedbackFromDaemon(
   // telemetry, not a client-facing signal.
   void reportRunFeedback(
     ctx,
-    opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {},
+    {
+      configuredEnv: configuredAmrEnv,
+      ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}),
+    },
   ).catch((err) => {
     console.warn('[langfuse-bridge] feedback report failed:', String(err));
   });
