@@ -1420,7 +1420,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     expect(screen.getByText('Model discovery is not available for this protocol.')).toBeTruthy();
 
     fetchProviderModelsMock.mockClear();
-    fireEvent.click(screen.getByRole('tab', { name: '小米 MiMo' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Xiaomi MiMo' }));
     await new Promise((resolve) => window.setTimeout(resolve, 350));
 
     expect(fetchProviderModelsMock).not.toHaveBeenCalled();
@@ -1733,7 +1733,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
   });
 
   it('auto-tests a saved complete BYOK config when Settings opens', async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
       const url = input.toString();
       if (url === '/api/memory') {
         return new Response(
@@ -1866,7 +1866,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
       apiProviderBaseUrl: 'https://open.bigmodel.cn/api/paas/v4',
     });
 
-    fireEvent.click(screen.getByRole('tab', { name: '智谱' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Zhipu AI' }));
 
     expect(await screen.findByText('✓ Loaded 8 models from your account.')).toBeTruthy();
     fireEvent.click(screen.getByRole('combobox', { name: 'Model' }));
@@ -2799,6 +2799,129 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     expect(
       screen.getByText(/Showing built-in defaults/i),
     ).toBeTruthy();
+  });
+
+  it('persists Codex service tier selection and sends it to the agent test', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/test/connection') {
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            kind: 'success',
+            latencyMs: 12,
+            model: 'gpt-5.5',
+            sample: 'ok',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { onPersist } = renderSettingsDialog(
+      {
+        mode: 'daemon',
+        agentId: 'codex',
+        agentModels: {
+          codex: { model: 'gpt-5.5', reasoning: 'default' },
+        },
+      },
+      {
+        agents: [
+          {
+            ...availableAgents[0]!,
+            reasoningOptions: [
+              { id: 'default', label: 'Default' },
+              { id: 'high', label: 'High' },
+            ],
+            modelsSource: 'live',
+            models: [
+              { id: 'default', label: 'Default' },
+              {
+                id: 'gpt-5.5',
+                label: 'gpt-5.5',
+                serviceTierOptions: [{ id: 'priority', label: 'Fast' }],
+              },
+            ],
+          },
+        ],
+      },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI/i }));
+    const serviceTierPicker = screen.getByRole('combobox', {
+      name: en['settings.serviceTierPicker'],
+    }) as HTMLSelectElement;
+    expect(
+      Array.from(serviceTierPicker.options).map((option) => option.textContent),
+    ).toEqual(['Default', 'Fast']);
+
+    fireEvent.change(serviceTierPicker, { target: { value: 'priority' } });
+
+    await waitForPersist(
+      onPersist,
+      expect.objectContaining({
+        agentModels: {
+          codex: {
+            model: 'gpt-5.5',
+            reasoning: 'default',
+            serviceTier: 'priority',
+          },
+        },
+      }),
+      {},
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: en['settings.test'] }));
+
+    await waitFor(() => {
+      const calls = fetchMock.mock.calls as Array<[RequestInfo | URL, RequestInit?]>;
+      const testCall = calls.find(
+        ([input]) => input.toString() === '/api/test/connection',
+      );
+      expect(testCall).toBeDefined();
+      const init = testCall?.[1] as RequestInit | undefined;
+      const body = JSON.parse(String(init?.body));
+      expect(body).toEqual(expect.objectContaining({
+        mode: 'agent',
+        agentId: 'codex',
+        model: 'gpt-5.5',
+        reasoning: 'default',
+        serviceTier: 'priority',
+      }));
+    });
+
+    const reasoningPicker = screen.getByRole('combobox', {
+      name: en['settings.reasoningPicker'],
+    }) as HTMLSelectElement;
+    fireEvent.change(reasoningPicker, { target: { value: 'high' } });
+
+    await waitForPersist(
+      onPersist,
+      expect.objectContaining({
+        agentModels: {
+          codex: {
+            model: 'gpt-5.5',
+            reasoning: 'high',
+            serviceTier: 'priority',
+          },
+        },
+      }),
+      {},
+    );
+
+    fireEvent.change(serviceTierPicker, { target: { value: 'default' } });
+
+    await waitFor(() => {
+      const clearedPersist = onPersist.mock.calls.find(([config]) => {
+        const choice = (config as AppConfig).agentModels?.codex;
+        return choice?.model === 'gpt-5.5'
+          && choice.reasoning === 'high'
+          && !Object.prototype.hasOwnProperty.call(choice, 'serviceTier');
+      });
+      expect(clearedPersist).toBeDefined();
+    });
   });
 
   it('uses the existing Settings card picker for AMR without exposing custom stale models', () => {

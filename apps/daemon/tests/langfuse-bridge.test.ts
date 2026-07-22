@@ -725,7 +725,10 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
     expect(fetchSpy).toHaveBeenCalledTimes(4);
     expect(fetchSpy.mock.calls[0]![0]).toContain('/api/langfuse');
     const registrationBody = JSON.parse(fetchSpy.mock.calls[0]![1]!.body as string).batch as any[];
+    expect(registrationBody).toHaveLength(1);
     const registrationTrace = registrationBody[0].body;
+    expect(registrationTrace).not.toHaveProperty('input');
+    expect(registrationTrace).not.toHaveProperty('output');
     expect(registrationTrace.metadata.attachment_manifest[0]).not.toHaveProperty('reason');
     expect(registrationTrace.metadata.artifact_manifest[0]).not.toHaveProperty('reason');
     expect(registrationTrace.metadata.input_text_snapshot_manifest[0]).not.toHaveProperty('reason');

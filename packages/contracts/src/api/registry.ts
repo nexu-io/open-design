@@ -20,6 +20,10 @@ export interface AgentModelOption {
   outputPriceUsdPerMillion?: number;
   /** Provider/catalog-owned model picker metadata. */
   metadata?: ModelMetadata;
+  /** Raw Codex `additional_speed_tiers` values, when the CLI catalog exposes them. */
+  additionalSpeedTiers?: string[];
+  /** Service tiers supported by this model, keyed by Codex config id. */
+  serviceTierOptions?: AgentModelOption[];
 }
 
 /**

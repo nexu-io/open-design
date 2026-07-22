@@ -42,6 +42,7 @@ export {
   listProcessSnapshots,
   matchesProcessStamp,
   matchesStampedProcess,
+  processCommandExactlyRunsExecutable,
   readFlagValue,
   readProcessStamp,
   readProcessStampFromCommand,

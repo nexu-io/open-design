@@ -511,12 +511,11 @@ async function spawnSidecarChild(options: {
   const child = spawn(
     command,
     [options.entryPath, ...createProcessStampArgs(stamp, OPEN_DESIGN_SIDECAR_CONTRACT)],
-    {
-      cwd: process.cwd(),
+    createPackagedSidecarSpawnOptions({
       env: childEnv,
-      stdio: ["ignore", logHandle.fd, logHandle.fd],
-      windowsHide: true,
-    },
+      logFd: logHandle.fd,
+      paths: options.paths,
+    }),
   );
 
   await new Promise<void>((resolveSpawn, rejectSpawn) => {
@@ -525,6 +524,24 @@ async function spawnSidecarChild(options: {
   });
 
   return { app: options.app, child, ipcPath, logHandle, logPath };
+}
+
+export function createPackagedSidecarSpawnOptions(input: {
+  env: NodeJS.ProcessEnv;
+  logFd: number;
+  paths: Pick<PackagedNamespacePaths, "runtimeRoot">;
+}): {
+  cwd: string;
+  env: NodeJS.ProcessEnv;
+  stdio: ["ignore", number, number];
+  windowsHide: true;
+} {
+  return {
+    cwd: input.paths.runtimeRoot,
+    env: input.env,
+    stdio: ["ignore", input.logFd, input.logFd],
+    windowsHide: true,
+  };
 }
 
 async function closeManagedChild(child: ManagedSidecarChild): Promise<void> {

@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { collectProcessTreePids, type ProcessSnapshot } from "../src/index.js";
+import {
+  collectProcessTreePids,
+  processCommandExactlyRunsExecutable,
+  type ProcessSnapshot,
+} from "../src/index.js";
 
 function snapshot(pid: number, ppid: number, command = `pid-${pid}`): ProcessSnapshot {
   return { command, pid, ppid };
@@ -37,5 +41,46 @@ describe("collectProcessTreePids", () => {
   it("terminates on parent-child cycles instead of looping forever", () => {
     const processes = [snapshot(100, 200), snapshot(200, 100)];
     expect(collectProcessTreePids(processes, [100])).toEqual([200, 100]);
+  });
+});
+
+describe("processCommandExactlyRunsExecutable", () => {
+  it("accepts exact POSIX and quoted Windows executable commands", () => {
+    expect(processCommandExactlyRunsExecutable(
+      "/Applications/Open Design.app/Contents/MacOS/Open Design",
+      "/Applications/Open Design.app/Contents/MacOS/Open Design",
+      "darwin",
+    )).toBe(true);
+    expect(processCommandExactlyRunsExecutable(
+      '"C:\\Program Files\\Open Design\\Open Design.exe"',
+      "C:\\Program Files\\Open Design\\Open Design.exe",
+      "win32",
+    )).toBe(true);
+  });
+
+  it("rejects arguments and lookalike executable prefixes", () => {
+    const executable = "/Applications/Open Design.app/Contents/MacOS/Open Design";
+    expect(processCommandExactlyRunsExecutable(`${executable} --inspect`, executable, "darwin")).toBe(false);
+    expect(processCommandExactlyRunsExecutable(`${executable} Helper`, executable, "darwin")).toBe(false);
+
+    const windowsExecutable = "C:\\Program Files\\Open Design\\Open Design.exe";
+    expect(processCommandExactlyRunsExecutable(
+      `"${windowsExecutable}" od://project/123`,
+      windowsExecutable,
+      "win32",
+    )).toBe(false);
+    expect(processCommandExactlyRunsExecutable(
+      `"${windowsExecutable}.old"`,
+      windowsExecutable,
+      "win32",
+    )).toBe(false);
+  });
+
+  it("compares Windows executable paths case-insensitively", () => {
+    expect(processCommandExactlyRunsExecutable(
+      '"C:\\PROGRAM FILES\\OPEN DESIGN\\OPEN DESIGN.EXE"',
+      "c:\\Program Files\\Open Design\\Open Design.exe",
+      "win32",
+    )).toBe(true);
   });
 });
