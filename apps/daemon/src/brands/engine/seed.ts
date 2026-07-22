@@ -236,6 +236,32 @@ export function seedFromBrand(brand: Brand): SeedToken {
   };
 }
 
+/**
+ * True when the brand's observed canvas is dark-native — a site like Vercel that
+ * paints light text on a near-black background. The seed itself always keeps a
+ * light baseline (see `seedFromBrand`: dark canvases fall back to white), so the
+ * three light/dark/compact token sets stay unchanged. This predicate is the
+ * separate "primary appearance" signal the assembler uses to decide whether the
+ * brand-representative outputs (artifacts, gallery, antd theme) render with the
+ * dark theme instead of the light one — so a black brand reads as black instead
+ * of a white kit with the brand color reduced to a single button.
+ *
+ * Detection prefers the real relationship between the extracted background and
+ * foreground (light text on a darker canvas) and falls back to an absolute
+ * near-black threshold when only a background was captured.
+ */
+export function isDarkNativeBrand(brand: Brand): boolean {
+  const colors = brand.colors ?? [];
+  const bgHex =
+    normalizeHex(findRole(colors, "background")?.hex ?? "") ??
+    normalizeHex(findRole(colors, "surface")?.hex ?? "");
+  if (!bgHex) return false;
+  const bgLum = luminance(bgHex);
+  const fgHex = normalizeHex(findRole(colors, "foreground")?.hex ?? "");
+  if (fgHex) return bgLum < luminance(fgHex) && bgLum < 0.5;
+  return bgLum < 0.2;
+}
+
 // ─────────────────────────── Material → Seed ────────────────────────────────
 
 /**

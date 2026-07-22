@@ -200,7 +200,7 @@ describe('agent-driven brand extraction engine', () => {
   let projectsRoot: string;
   let userDesignSystemsRoot: string;
 
-  it('keeps the generated default theme light even when the source canvas is dark', () => {
+  it('keeps the light/dark token sets stable but renders a dark canvas brand dark', () => {
     const darkCanvasBrand: Brand = {
       ...VALID_BRAND,
       name: 'Open Design',
@@ -214,13 +214,16 @@ describe('agent-driven brand extraction engine', () => {
 
     const system = buildBrandSystem(darkCanvasBrand);
 
+    // The named light/dark token sets are unchanged: `default` stays the light
+    // mode, `dark` stays the dark mode. Only the brand's *primary appearance*
+    // (which set the rendered kit uses) follows the dark canvas.
     expect(system.themes.default.colorBgContainer).toBe('#ffffff');
     expect(system.themes.default.colorText).toBe('#1f1f1f');
     expect(system.themes.dark.colorBgContainer).toBe('#141414');
     expect(system.themes.dark.colorText).toBe('#dcdcdc');
-    expect(system.files['kit.html']).toContain('--brand-color-bg-container: #ffffff;');
-    expect(system.files['kit.html']).toContain('--brand-color-text: #1f1f1f;');
-    expect(system.files['kit.html']).not.toContain('--brand-color-bg-container: #141414;');
+    expect(system.files['kit.html']).toContain('--brand-color-bg-container: #141414;');
+    expect(system.files['kit.html']).toContain('--brand-color-text: #dcdcdc;');
+    expect(system.files['kit.html']).not.toContain('--brand-color-bg-container: #ffffff;');
     expect(system.files['kit.dark.html']).toContain('--brand-color-bg-container: #141414;');
   });
 
@@ -238,6 +241,42 @@ describe('agent-driven brand extraction engine', () => {
     expect(seed.colorTextBase).toBe('#000000');
     expect(deriveTokens(seed, 'default').colorBgContainer).toBe('#ffffff');
     expect(deriveTokens(seed, 'dark').colorBgContainer).toBe('#141414');
+  });
+
+  it('renders brand artifacts with the dark theme for a dark-native brand', () => {
+    // A dark-native site (Vercel-like): light text on a near-black canvas. The
+    // brand-representative outputs should read as the brand actually looks
+    // instead of a white kit with the brand color reduced to a button.
+    const darkNativeBrand: Brand = {
+      ...VALID_BRAND,
+      name: 'Vercel',
+      colors: [
+        { role: 'background', hex: '#000000', oklch: 'oklch(0% 0 0)', name: 'Black', usage: 'page canvas' },
+        { role: 'surface', hex: '#0a0a0a', oklch: 'oklch(4% 0 0)', name: 'Surface', usage: 'cards' },
+        { role: 'foreground', hex: '#ffffff', oklch: 'oklch(100% 0 0)', name: 'White', usage: 'body text' },
+        { role: 'accent', hex: '#0070f3', oklch: 'oklch(60% 0.2 250)', name: 'Blue', usage: 'links' },
+      ],
+    };
+
+    const system = buildBrandSystem(darkNativeBrand);
+
+    // Brand products + gallery lead with the dark canvas.
+    expect(system.files['artifacts/landing.html']).toContain('--brand-color-bg-container: #141414;');
+    expect(system.files['artifacts/poster.html']).toContain('--brand-color-bg-container: #141414;');
+    expect(system.files['index.html']).toContain('--brand-color-bg-container: #141414;');
+
+    // The light/dark token sets are untouched; the rendered kit follows the
+    // brand's dark primary appearance and kit.dark.html stays the dark reference.
+    expect(system.themes.default.colorBgContainer).toBe('#ffffff');
+    expect(system.themes.dark.colorBgContainer).toBe('#141414');
+    expect(system.files['kit.html']).toContain('--brand-color-bg-container: #141414;');
+    expect(system.files['kit.dark.html']).toContain('--brand-color-bg-container: #141414;');
+  });
+
+  it('keeps brand artifacts light for a light-native brand', () => {
+    const system = buildBrandSystem(VALID_BRAND);
+    expect(system.files['artifacts/landing.html']).not.toContain('--brand-color-bg-container: #141414;');
+    expect(system.files['index.html']).not.toContain('--brand-color-bg-container: #141414;');
   });
 
   beforeEach(() => {

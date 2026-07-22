@@ -16,21 +16,17 @@
  * the same bundle can be returned over HTTP, written to disk by the CLI, or
  * inspected in a test — without any of those paths re-implementing the wiring.
  *
- * `buildBrandSystem` is fully deterministic and offline. `buildFromUrl` adds a
- * single network hop (prefetchBrand) and then re-uses the exact same assembly,
- * so the URL path stays LLM-free.
+ * `buildBrandSystem` is fully deterministic and offline.
  */
 
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 
 import type { Brand, AssetKind } from "../schema.js";
 import { injectFontFaces, type FontFile } from "../fonts.js";
-import { prefetchBrand, type PrefetchResult } from "../prefetch.js";
 import type { BrandSystem, DesignTokens, SeedToken, ThemeAlgorithm } from "./types.js";
 import { deriveTokens } from "./derive.js";
-import { seedFromBrand, seedFromMaterial } from "./seed.js";
+import { seedFromBrand, isDarkNativeBrand } from "./seed.js";
 import { tokensToJson, tokensToCssVars, tokensToThemeJson } from "./export.js";
 import { renderKitPage } from "./kit.js";
 import { renderArtifact, renderArtifactGallery, brandFontAssets } from "./artifacts/index.js";
@@ -123,7 +119,7 @@ Everything below is *derived* — no token here was hand-authored.
 | \`variables.css\` | \`:root{}\` + \`.dark{}\` CSS custom properties (\`--brand-*\`). |
 | \`variables.dark.css\` | Standalone \`:root{}\` for the dark theme. |
 | \`theme.json\` | antd \`ConfigProvider\` theme (token + algorithm). |
-| \`kit.html\` | Themed component showcase (light). |
+| \`kit.html\` | Themed component showcase (brand's primary appearance). |
 | \`kit.dark.html\` | Themed component showcase (dark). |
 | \`artifacts/landing.html\` | Full landing page (hero → features → pricing → FAQ → CTA). |
 | \`artifacts/deck.html\` | 9-slide 16:9 pitch deck with keyboard navigation. |
@@ -183,6 +179,19 @@ function assemble({ slug, brand, seed, extraFiles, fontFiles, fontsBase = "../" 
     compact: deriveTokens(seed, "compact"),
   };
 
+  // A dark-native brand (Vercel etc.) leads with its dark theme so the rendered
+  // products read as the brand actually looks. The light/dark token sets above
+  // are untouched — only which one drives the brand-representative outputs
+  // (component kit, artifacts, gallery, antd theme.json) changes. `kit.dark.html`
+  // stays the explicit dark reference regardless.
+  //
+  // This reads `brand.colors`, the authoritative canvas. The LLM-free URL path
+  // (`buildFromUrl`) feeds a brand reconstructed from the light-clamped seed, so
+  // it stays on the light default — its prefetch material has no reliable canvas
+  // signal to key off, and guessing one wrong is worse than the light fallback.
+  const primaryAlgorithm: ThemeAlgorithm = isDarkNativeBrand(brand) ? "dark" : "default";
+  const primary = themes[primaryAlgorithm];
+
   const files: Record<string, string> = {};
 
   // ── seed + raw tokens ──
@@ -200,7 +209,7 @@ function assemble({ slug, brand, seed, extraFiles, fontFiles, fontsBase = "../" 
   files["scripts/apply-design-tokens.mjs"] = applyDesignTokensScript();
 
   // ── antd ConfigProvider theme ──
-  files["theme.json"] = tokensToThemeJson(seed, "default");
+  files["theme.json"] = tokensToThemeJson(seed, primaryAlgorithm);
 
   // kit/index sit at the bundle root, artifacts one level deeper — each doc's
   // @font-face urls are relative to its own location.
@@ -209,9 +218,11 @@ function assemble({ slug, brand, seed, extraFiles, fontFiles, fontsBase = "../" 
     injectFontFaces(html, fontFiles ?? [], fontsPrefix(depth));
 
   // ── themed component kit ──
+  // kit.html follows the brand's primary appearance (dark for a dark-native
+  // brand); kit.dark.html is always the explicit dark reference.
   const fonts = brandFontAssets(brand);
   files["kit.html"] = withFonts(
-    renderKitPage(themes.default, {
+    renderKitPage(primary, {
       title: `${brand.name} — component kit`,
       brandName: brand.name,
       fontLinks: fonts.links,
@@ -231,14 +242,14 @@ function assemble({ slug, brand, seed, extraFiles, fontFiles, fontsBase = "../" 
 
   // ── artifacts (products) ──
   for (const kind of ARTIFACT_KINDS) {
-    files[`artifacts/${kind}.html`] = withFonts(renderArtifact(kind, brand, themes.default), 2);
+    files[`artifacts/${kind}.html`] = withFonts(renderArtifact(kind, brand, primary), 2);
   }
 
   // ── gallery / index ──
   // srcdoc previews are separate documents — each gets its own injection,
   // with urls resolved from the index's location (depth 1).
   files["index.html"] = withFonts(
-    buildIndexPage(slug, brand, themes.default, fontFiles, fontsPrefix(1)),
+    buildIndexPage(slug, brand, primary, fontFiles, fontsPrefix(1)),
     1,
   );
 
@@ -291,7 +302,7 @@ function buildIndexPage(
     v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
   const links = [
-    ["kit.html", "Component kit (light)"],
+    ["kit.html", "Component kit"],
     ["kit.dark.html", "Component kit (dark)"],
     ["artifacts/landing.html", "Landing page"],
     ["artifacts/email.html", "Email"],
@@ -346,120 +357,6 @@ export function buildBrandSystem(
   const slug = opts?.slug ? slugify(opts.slug) : slugify(normalizedBrand.name);
   const seed = seedFromBrand(normalizedBrand);
   return assemble({ slug, brand: normalizedBrand, seed, fontFiles: opts?.fontFiles });
-}
-
-// ─────────────────────────── public: from a URL ─────────────────────────────
-
-/**
- * Synthesize a minimal Brand from prefetched material so the URL path can drive
- * the same artifact/kit assembly. This is intentionally lightweight: the rich
- * Brand kit (voice, imagery, full color roles) is the LLM's job; here we only
- * need enough to seed colors/fonts/copy deterministically.
- */
-function brandFromMaterial(material: PrefetchResult, seed: SeedToken): Brand {
-  const hostName = (() => {
-    try {
-      const core = new URL(material.url).hostname.replace(/^www\./i, "").split(".")[0] ?? "";
-      return core ? core.charAt(0).toUpperCase() + core.slice(1) : "";
-    } catch {
-      return "";
-    }
-  })();
-  const name = (material.siteName || material.title || hostName || "Brand").trim();
-  const headings = material.headings ?? [];
-  const paragraphs = material.paragraphs ?? [];
-
-  return {
-    name,
-    tagline: material.description || headings[0] || "",
-    description: paragraphs[0] || material.description || "",
-    sourceUrl: material.finalUrl || material.url,
-    logo: {
-      primary: material.logos?.[0] ? `logos/${material.logos[0].file}` : null,
-      alternates: (material.logos ?? []).slice(1).map((l) => `logos/${l.file}`),
-      notes: "",
-    },
-    colors: [
-      { role: "background", hex: seed.colorBgBase, oklch: "", name: "background", usage: "page canvas" },
-      { role: "foreground", hex: seed.colorTextBase, oklch: "", name: "foreground", usage: "body text" },
-      { role: "accent", hex: seed.colorPrimary, oklch: "", name: "accent", usage: "primary brand color" },
-    ],
-    typography: {
-      display: { family: material.fonts?.[0]?.family ?? "Inter", fallbacks: [], weights: [400, 700] },
-      body: { family: material.fonts?.[0]?.family ?? "Inter", fallbacks: [], weights: [400, 700] },
-    },
-    voice: {
-      adjectives: [],
-      tone: "",
-      messagingPillars: headings.slice(0, 3),
-      vocabulary: { use: [], avoid: [] },
-    },
-    imagery: { style: "", subjects: [], treatment: "", avoid: [] },
-    layout: {
-      radius: `${seed.borderRadius}px`,
-      borderWeight: `${seed.lineWidth}px`,
-      spacing: "8px baseline grid",
-      postureRules: [],
-    },
-  };
-}
-
-/**
- * Build a BrandSystem straight from a site URL — the deterministic, no-LLM
- * path. `prefetchBrand` must write to a brand dir, so we hand it a throwaway
- * temp dir, read back any downloaded logos into the bundle, then assemble.
- */
-export async function buildFromUrl(url: string, opts?: { slug?: string }): Promise<BrandSystem> {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "brand-prefetch-"));
-  try {
-    const material = await prefetchBrand(url, tmpDir);
-    if (!material) {
-      throw new Error(`Could not fetch ${url} — the site may block server-side requests.`);
-    }
-
-    const seed = seedFromMaterial(material);
-    const brand = brandFromMaterial(material, seed);
-    const slug = opts?.slug ? slugify(opts.slug) : slugify(brand.name);
-
-    // Pull any downloaded logos back into the in-memory bundle.
-    const extraFiles: Record<string, string> = {};
-    for (const logo of material.logos ?? []) {
-      const abs = path.join(tmpDir, "logos", logo.file);
-      try {
-        if (logo.contentType?.includes("svg") || logo.file.endsWith(".svg")) {
-          extraFiles[`logos/${logo.file}`] = fs.readFileSync(abs, "utf8");
-        } else {
-          // Binary assets: keep as base64 data so the bundle stays string-only.
-          const b64 = fs.readFileSync(abs).toString("base64");
-          extraFiles[`logos/${logo.file}.b64`] = b64;
-        }
-      } catch {
-        /* logo missing on disk — skip */
-      }
-    }
-    // Same for downloaded webfonts (binary → base64, manifest/css as text).
-    for (const f of material.fontFiles ?? []) {
-      try {
-        extraFiles[`fonts/${f.file}.b64`] = fs
-          .readFileSync(path.join(tmpDir, "fonts", f.file))
-          .toString("base64");
-      } catch {
-        /* font missing on disk — skip */
-      }
-    }
-    for (const aux of ["manifest.json", "fonts.css"]) {
-      try {
-        extraFiles[`fonts/${aux}`] = fs.readFileSync(path.join(tmpDir, "fonts", aux), "utf8");
-      } catch {
-        /* no fonts harvested */
-      }
-    }
-
-    // fonts/ ships inside this standalone bundle, so urls resolve from its root.
-    return assemble({ slug, brand, seed, extraFiles, fontFiles: material.fontFiles, fontsBase: "./" });
-  } finally {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  }
 }
 
 // ─────────────────────────── disk writer (shared by CLI + API) ──────────────

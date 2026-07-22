@@ -36,7 +36,6 @@ Import from the barrel `@/lib/brand/engine`:
 ```ts
 import {
   buildBrandSystem,   // Brand  → BrandSystem (offline)
-  buildFromUrl,       // URL    → BrandSystem (one prefetch hop, no LLM)
   writeBrandSystem,   // BrandSystem + outDir → writes files to disk
   slugify,
   // lower-level building blocks

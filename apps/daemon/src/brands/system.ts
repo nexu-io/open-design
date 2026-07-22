@@ -9,6 +9,7 @@ import {
   brandFontAssets,
   buildBrandSystem,
   deriveTokens,
+  isDarkNativeBrand,
   renderArtifact,
   renderArtifactGallery,
   renderKitPage,
@@ -55,6 +56,11 @@ function reassembleWithSeed(
     dark: deriveTokens(seed, 'dark'),
     compact: deriveTokens(seed, 'compact'),
   };
+  // Dark-native brands lead with their dark theme for the rendered products;
+  // the token sets and the light/dark kit references stay unchanged. Mirrors
+  // the primary-appearance choice in engine/build.ts `assemble`.
+  const primaryAlgorithm: ThemeAlgorithm = isDarkNativeBrand(brand) ? 'dark' : 'default';
+  const primary = themes[primaryAlgorithm];
   const withFonts = (html: string, depth: 1 | 2) =>
     injectFontFaces(html, fontFiles, depth === 1 ? '../fonts/' : '../../fonts/');
 
@@ -67,10 +73,10 @@ function reassembleWithSeed(
     tokensToCssVars(themes.default, ':root') + '\n' + tokensToCssVars(themes.dark, '.dark');
   files['variables.dark.css'] = tokensToCssVars(themes.dark, ':root');
   files['scripts/apply-design-tokens.mjs'] = applyDesignTokensScript();
-  files['theme.json'] = tokensToThemeJson(seed, 'default');
+  files['theme.json'] = tokensToThemeJson(seed, primaryAlgorithm);
   const fonts = brandFontAssets(brand);
   files['kit.html'] = withFonts(
-    renderKitPage(themes.default, {
+    renderKitPage(primary, {
       title: `${brand.name} - component kit`,
       brandName: brand.name,
       fontLinks: fonts.links,
@@ -88,10 +94,10 @@ function reassembleWithSeed(
     1,
   );
   for (const kind of BRAND_ARTIFACT_KINDS) {
-    files[`artifacts/${kind}.html`] = withFonts(renderArtifact(kind, brand, themes.default), 2);
+    files[`artifacts/${kind}.html`] = withFonts(renderArtifact(kind, brand, primary), 2);
   }
   files['index.html'] = withFonts(
-    renderArtifactGallery(brand, themes.default, {
+    renderArtifactGallery(brand, primary, {
       decorate: (html) => injectFontFaces(html, fontFiles, '../fonts/'),
     }),
     1,
