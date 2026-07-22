@@ -29,6 +29,7 @@ import {
 import { LiveArtifactBadges } from "./LiveArtifactBadges";
 import { Toast } from "./Toast";
 import {
+	DeckProjectCoverFrame,
 	HtmlProjectCoverFrame,
 	coverFromProjectFile,
 	projectCoverUrl,
@@ -932,13 +933,23 @@ export function DesignsTab({
 									) : cover.kind === "video" && cover.src ? (
 										<video className="thumb-media" src={cover.src} muted preload="metadata" playsInline />
 									) : cover.kind === "html" ? (
-										<HtmlProjectCoverFrame
-											src={cover.src}
-											initial={cover.initial}
-											iframeClassName="thumb-iframe"
-											glyphClassName="project-thumb-glyph"
-											diagnostic={`${p.id}:${cover.name ?? "unknown"}`}
-										/>
+										p.metadata?.kind === "deck" ? (
+											<DeckProjectCoverFrame
+												src={cover.src}
+												initial={cover.initial}
+												iframeClassName="thumb-iframe"
+												glyphClassName="project-thumb-glyph"
+												diagnostic={`${p.id}:${cover.name ?? "unknown"}`}
+											/>
+										) : (
+											<HtmlProjectCoverFrame
+												src={cover.src}
+												initial={cover.initial}
+												iframeClassName="thumb-iframe"
+												glyphClassName="project-thumb-glyph"
+												diagnostic={`${p.id}:${cover.name ?? "unknown"}`}
+											/>
+										)
 									) : (
 										<span className="project-thumb-glyph">{cover.initial}</span>
 									)}

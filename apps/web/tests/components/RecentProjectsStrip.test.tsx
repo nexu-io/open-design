@@ -78,11 +78,12 @@ function projects(count: number): Project[] {
   );
 }
 
-function stubCoverProbe(status = 200, statusText = 'OK') {
+function stubCoverProbe(status = 200, statusText = 'OK', body?: string) {
   const fetchMock = vi.fn(async () => ({
     ok: status >= 200 && status < 300,
     status,
     statusText,
+    text: async () => body ?? '',
   }) as Response);
   vi.stubGlobal('fetch', fetchMock);
   return fetchMock;
@@ -256,7 +257,15 @@ describe('RecentProjectsStrip', () => {
   });
 
   it('renders HTML and deck covers from the current file URL', async () => {
-    const fetchMock = stubCoverProbe();
+    // Deck projects render the first slide as an inert thumbnail (no carousel
+    // chrome), so the deck cover returns a minimal parseable deck body; plain
+    // HTML projects keep the raw iframe. See #2648.
+    const deckBody =
+      '<!DOCTYPE html><html><body>' +
+      '<div class="slide">Slide one</div>' +
+      '<style>.slide{width:1280px;height:720px;background:#fff;color:#000}</style>' +
+      '</body></html>';
+    const fetchMock = stubCoverProbe(200, 'OK', deckBody);
 
     const { container } = render(
       <RecentProjectsStrip
@@ -282,9 +291,9 @@ describe('RecentProjectsStrip', () => {
     const htmlCard = container.querySelector('[data-project-id="project-html"]');
 
     await waitFor(() => {
-      expect(deckCard?.querySelector('iframe')?.getAttribute('src')).toBe(
-        '/api/projects/project-deck/files/index.html?v=400',
-      );
+      // Deck card renders the static slide thumbnail, not the raw iframe, so
+      // no carousel nav controls leak into the gallery card.
+      expect(deckCard?.querySelector('iframe')).toBeNull();
       expect(htmlCard?.querySelector('iframe')?.getAttribute('src')).toBe(
         '/api/projects/project-html/files/index.html?v=200',
       );
@@ -293,7 +302,7 @@ describe('RecentProjectsStrip', () => {
     });
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/projects/project-deck/files/index.html?v=400',
-      expect.objectContaining({ cache: 'no-store', method: 'HEAD' }),
+      expect.objectContaining({ cache: 'no-store', signal: expect.any(AbortSignal) }),
     );
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/projects/project-html/files/index.html?v=200',

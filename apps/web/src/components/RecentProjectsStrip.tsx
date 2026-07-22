@@ -16,6 +16,7 @@ import { Icon } from './Icon';
 import { STATUS_LABEL_KEYS } from './DesignsTab';
 import { isDesignSystemProject, isPublishedDesignSystemProject } from './design-system-project';
 import {
+  DeckProjectCoverFrame,
   HtmlProjectCoverFrame,
   coverFromProjectFile,
   projectCoverUrl,
@@ -275,13 +276,23 @@ export function RecentProjectsStrip({
                       playsInline
                     />
                   ) : cover.kind === 'html' ? (
-                    <HtmlProjectCoverFrame
-                      src={cover.src}
-                      initial={cover.initial}
-                      iframeClassName="recent-projects__thumb-iframe"
-                      glyphClassName="recent-projects__card-glyph"
-                      diagnostic={`${project.id}:${cover.name ?? 'unknown'}`}
-                    />
+                    project.metadata?.kind === 'deck' ? (
+                      <DeckProjectCoverFrame
+                        src={cover.src}
+                        initial={cover.initial}
+                        iframeClassName="recent-projects__thumb-iframe"
+                        glyphClassName="recent-projects__card-glyph"
+                        diagnostic={`${project.id}:${cover.name ?? 'unknown'}`}
+                      />
+                    ) : (
+                      <HtmlProjectCoverFrame
+                        src={cover.src}
+                        initial={cover.initial}
+                        iframeClassName="recent-projects__thumb-iframe"
+                        glyphClassName="recent-projects__card-glyph"
+                        diagnostic={`${project.id}:${cover.name ?? 'unknown'}`}
+                      />
+                    )
                   ) : (
                     <span className="recent-projects__card-glyph">{cover.initial}</span>
                   )}
