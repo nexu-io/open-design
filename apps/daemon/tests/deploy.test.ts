@@ -692,6 +692,43 @@ describe('deploy plan and analyzer', () => {
     expect(plan.invalid).toEqual([]);
   });
 
+  it('reports missing landing image variants from srcset and CSS backgrounds', async () => {
+    const { projectsRoot, projectId, dir } = await setupProject();
+    await mkdir(path.join(dir, 'assets'), { recursive: true });
+    await writeFile(
+      path.join(dir, 'index.html'),
+      [
+        '<!doctype html>',
+        '<meta name="viewport" content="width=device-width">',
+        '<link rel="stylesheet" href="styles.css">',
+        '<picture>',
+        '<source srcset="assets/hero.png 1x, assets/hero@2x.png 2x">',
+        '<img src="assets/fallback.png" alt="">',
+        '</picture>',
+      ].join(''),
+    );
+    await writeFile(path.join(dir, 'styles.css'), 'body{background:url("assets/bg.png")}');
+    await writeFile(path.join(dir, 'assets/hero.png'), 'hero');
+    await writeFile(path.join(dir, 'assets/fallback.png'), 'fallback');
+
+    const plan = await buildDeployFilePlan(projectsRoot, projectId, 'index.html');
+    expect(plan.files.map((f) => f.file).sort()).toEqual([
+      'assets/fallback.png',
+      'assets/hero.png',
+      'index.html',
+      'styles.css',
+    ]);
+    expect(plan.missing.sort()).toEqual(['assets/bg.png', 'assets/hero@2x.png']);
+
+    const { warnings } = analyzeDeployPlan(plan);
+    expect(warnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'broken-reference', path: 'assets/bg.png' }),
+        expect.objectContaining({ code: 'broken-reference', path: 'assets/hero@2x.png' }),
+      ]),
+    );
+  });
+
   it('flags missing assets as broken-reference warnings', () => {
     const { warnings } = analyzeDeployPlan({
       entryPath: 'index.html',

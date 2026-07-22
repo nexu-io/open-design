@@ -762,6 +762,7 @@
    raised page surfaces (e.g. the home composer card at z-index 1700 when
    its agent picker is open) so the prompt paints on top. */
 .entry-main__topbar:has(.entry-settings-menu__popover),
+.entry-main__topbar:has(.inline-switcher__popover),
 .entry-main__topbar:has(.updater-popup) {
   z-index: 1900;
 }

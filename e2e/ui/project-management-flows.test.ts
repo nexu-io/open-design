@@ -32,7 +32,12 @@ const AGENTS = [
     version: '0.134.0',
     models: [
       { id: 'default', label: 'Default (CLI config)' },
-      { id: 'gpt-5.5', label: 'GPT 5.5' },
+      {
+        id: 'gpt-5.5',
+        label: 'GPT 5.5',
+        additionalSpeedTiers: ['fast'],
+        serviceTierOptions: [{ id: 'priority', label: 'Fast' }],
+      },
     ],
   },
   {
@@ -454,7 +459,7 @@ test('[P2] project detail header keeps the title and execution controls aligned 
   await page.setViewportSize({ width: 1365, height: 900 });
 
   const title = page.getByTestId('project-title');
-  const settingsButton = page.locator('.settings-icon-btn');
+  const settingsButton = page.getByTestId('entry-settings-menu-trigger');
   const handoffButton = page.getByRole('button', { name: /Choose hand-off target/i });
 
   await expect(title).toBeVisible();
@@ -1228,8 +1233,7 @@ test('[P0] @critical project detail composer agent menu lets the user switch Loc
   const modelSelect = menu.locator('.avatar-model-section [role=\"combobox\"]').first();
   await expect(modelSelect).toBeVisible();
   await expect(modelSelect).toContainText(/default/i);
-  await modelSelect.click();
-  await page.getByRole('option', { name: /^Sonnet \(alias\)$/i }).click();
+  await selectAvatarModelOption(page, modelSelect, /^Sonnet \(alias\)$/i);
   await expect(modelSelect).toContainText(/Sonnet/i);
 });
 
@@ -1260,8 +1264,7 @@ test('[P0] project detail composer agent, model, and Plan mode switches carry in
   const { menu, claudeButton } = await openComposerAgentMenu(page);
   await claudeButton.click();
   const modelSelect = menu.locator('.avatar-model-section [role=\"combobox\"]').first();
-  await modelSelect.click();
-  await page.getByRole('option', { name: /^Sonnet \(alias\)$/i }).click();
+  await selectAvatarModelOption(page, modelSelect, /^Sonnet \(alias\)$/i);
   await expect(modelSelect).toContainText(/Sonnet/i);
   await page.keyboard.press('Escape');
   await expect(page.locator('.avatar-popover[role="dialog"]')).toHaveCount(0);
@@ -1279,6 +1282,44 @@ test('[P0] project detail composer agent, model, and Plan mode switches carry in
   expect(runRequestBodies[0]?.agentId).toBe('claude');
   expect(runRequestBodies[0]?.model).toBe('sonnet');
   expect(runRequestBodies[0]?.sessionMode).toBe('plan');
+});
+
+test('[P1] GPT 5.5 Fast service tier carries into the next Codex daemon run request', async ({ page }) => {
+  test.setTimeout(60_000);
+  const runRequestBodies: Array<Record<string, unknown>> = [];
+  await routeSuccessfulRuns(page, runRequestBodies, 'codex-fast-tier-run');
+
+  await page.goto('/');
+  await createProject(page, 'Codex Fast service tier contract');
+  await expectWorkspaceReady(page);
+
+  const { menu } = await openComposerAgentMenu(page);
+  const modelSelect = menu.locator('.avatar-model-section [role=\"combobox\"]').first();
+  await selectAvatarModelOption(page, modelSelect, /^GPT 5\.5$/i);
+  await expect(modelSelect).toContainText(/GPT 5\.5/i);
+
+  const serviceTierSelect = menu
+    .locator('label.avatar-select-row', { hasText: /Service tier/i })
+    .locator('select');
+  await expect(serviceTierSelect).toBeVisible();
+  await serviceTierSelect.selectOption('priority');
+  await expect(serviceTierSelect).toHaveValue('priority');
+
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.avatar-popover[role="dialog"]')).toHaveCount(0);
+
+  await page.getByTestId('chat-composer-input').fill('Use GPT 5.5 Fast for this Codex run.');
+  await Promise.all([
+    page.waitForRequest((request) => request.url().includes('/api/runs') && request.method() === 'POST'),
+    page.getByTestId('chat-send').click(),
+  ]);
+
+  await expect.poll(() => runRequestBodies.length).toBe(1);
+  expect(runRequestBodies[0]).toMatchObject({
+    agentId: 'codex',
+    model: 'gpt-5.5',
+    serviceTier: 'priority',
+  });
 });
 
 test('[P1] project detail composer can alternate Design, Ask, and Plan modes across turns', async ({ page }) => {
@@ -1498,8 +1539,7 @@ test('[P0] @critical project detail composer keeps Local CLI and BYOK model choi
   const { menu, claudeButton } = await openComposerAgentMenu(page);
   await claudeButton.click();
   const localModelSelect = menu.locator('.avatar-model-section [role="combobox"]').first();
-  await localModelSelect.click();
-  await page.getByRole('option', { name: /^Sonnet \(alias\)$/i }).click();
+  await selectAvatarModelOption(page, localModelSelect, /^Sonnet \(alias\)$/i);
   await expect(localModelSelect).toContainText(/Sonnet/i);
 
   await menu.getByRole('button', { name: /API · BYOK|Use API/i }).click();
@@ -1800,6 +1840,223 @@ test('[P1] project detail session mode switch carries Ask and Plan semantics int
   await expect.poll(() => runRequestBodies.length).toBe(2);
   expect(runRequestBodies[1]?.sessionMode).toBe('chat');
   await expect(page.getByTestId('msg-session-mode-chip').last()).toContainText('Ask');
+});
+
+test('[P1] BYOK OpenCode project run sends provider config through the daemon contract', async ({ page }) => {
+  const byokConfig = {
+    mode: 'api',
+    apiKey: 'sk-openai-e2e',
+    apiProtocol: 'openai',
+    apiVersion: '',
+    baseUrl: 'https://api.openai.com/v1',
+    model: 'gpt-4o-mini',
+    apiProviderBaseUrl: 'https://api.openai.com/v1',
+    agentId: null,
+    skillId: null,
+    designSystemId: null,
+    onboardingCompleted: true,
+    privacyDecisionAt: 1,
+    telemetry: { metrics: false, content: false, artifactManifest: false },
+    agentModels: {},
+    agentCliEnv: {},
+  };
+  await page.addInitScript(
+    ({ key, value }) => {
+      window.localStorage.setItem(key, JSON.stringify(value));
+    },
+    { key: STORAGE_KEY, value: byokConfig },
+  );
+  await page.route('**/api/app-config', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill({ json: { config: byokConfig } });
+  });
+  await routeAgents(page, [
+    ...AGENTS,
+    {
+      id: 'byok-opencode',
+      name: 'BYOK OpenCode',
+      bin: 'opencode',
+      available: true,
+      version: '0.12.0',
+      models: [{ id: 'default', label: 'Default' }],
+    },
+  ]);
+  await page.route('**/api/memory/extract', async (route) => {
+    await route.fulfill({ json: { ok: true, extracted: [] } });
+  });
+  const runRequestBodies: Array<Record<string, unknown>> = [];
+  await routeSuccessfulRuns(page, runRequestBodies, 'byok-opencode-run');
+
+  await page.goto('/');
+  await createProject(page, 'BYOK OpenCode daemon contract');
+  await expectWorkspaceReady(page);
+
+  const input = page.getByTestId('chat-composer-input');
+  await input.fill('Create a landing page with the configured BYOK provider.');
+  await Promise.all([
+    page.waitForRequest((request) => request.url().includes('/api/runs') && request.method() === 'POST'),
+    page.getByTestId('chat-send').click(),
+  ]);
+
+  await expect.poll(() => runRequestBodies.length).toBe(1);
+  expect(runRequestBodies[0]).toMatchObject({
+    agentId: 'byok-opencode',
+    model: 'gpt-4o-mini',
+    byokProvider: {
+      protocol: 'openai',
+      apiKey: 'sk-openai-e2e',
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o-mini',
+      apiVersion: '',
+    },
+    analyticsHints: {
+      runtimeType: 'byok',
+    },
+  });
+});
+
+test('[P1] BYOK OpenCode keyless vLLM run keeps auth fields out of the daemon contract', async ({ page }) => {
+  const byokConfig = {
+    mode: 'api',
+    apiKey: '',
+    apiProtocol: 'openai',
+    apiVersion: '',
+    baseUrl: 'http://127.0.0.1:8000/v1',
+    model: 'model',
+    apiProviderBaseUrl: 'http://127.0.0.1:8000/v1',
+    agentId: null,
+    skillId: null,
+    designSystemId: null,
+    onboardingCompleted: true,
+    privacyDecisionAt: 1,
+    telemetry: { metrics: false, content: false, artifactManifest: false },
+    agentModels: {},
+    agentCliEnv: {},
+  };
+  await page.addInitScript(
+    ({ key, value }) => {
+      window.localStorage.setItem(key, JSON.stringify(value));
+    },
+    { key: STORAGE_KEY, value: byokConfig },
+  );
+  await page.route('**/api/app-config', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill({ json: { config: byokConfig } });
+  });
+  await routeAgents(page, [
+    ...AGENTS,
+    {
+      id: 'byok-opencode',
+      name: 'BYOK OpenCode',
+      bin: 'opencode',
+      available: true,
+      version: '0.12.0',
+      models: [{ id: 'default', label: 'Default' }],
+    },
+  ]);
+  await page.route('**/api/memory/extract', async (route) => {
+    await route.fulfill({ json: { ok: true, extracted: [] } });
+  });
+  const runRequestBodies: Array<Record<string, unknown>> = [];
+  await routeSuccessfulRuns(page, runRequestBodies, 'byok-opencode-keyless-run');
+
+  await page.goto('/');
+  await createProject(page, 'BYOK OpenCode keyless vLLM contract');
+  await expectWorkspaceReady(page);
+
+  await page.getByTestId('chat-composer-input').fill('Use the local vLLM BYOK endpoint.');
+  await Promise.all([
+    page.waitForRequest((request) => request.url().includes('/api/runs') && request.method() === 'POST'),
+    page.getByTestId('chat-send').click(),
+  ]);
+
+  await expect.poll(() => runRequestBodies.length).toBe(1);
+  expect(runRequestBodies[0]).toMatchObject({
+    agentId: 'byok-opencode',
+    model: 'model',
+    byokProvider: {
+      protocol: 'openai',
+      apiKey: '',
+      baseUrl: 'http://127.0.0.1:8000/v1',
+      model: 'model',
+      apiVersion: '',
+      requiresApiKey: false,
+    },
+    analyticsHints: {
+      runtimeType: 'byok',
+    },
+  });
+});
+
+test('[P1] BYOK OpenCode unavailable blocks the project run before daemon routing', async ({ page }) => {
+  const byokConfig = {
+    mode: 'api',
+    apiKey: 'sk-openai-e2e',
+    apiProtocol: 'openai',
+    apiVersion: '',
+    baseUrl: 'https://api.openai.com/v1',
+    model: 'gpt-4o-mini',
+    apiProviderBaseUrl: 'https://api.openai.com/v1',
+    agentId: null,
+    skillId: null,
+    designSystemId: null,
+    onboardingCompleted: true,
+    privacyDecisionAt: 1,
+    telemetry: { metrics: false, content: false, artifactManifest: false },
+    agentModels: {},
+    agentCliEnv: {},
+  };
+  await page.addInitScript(
+    ({ key, value }) => {
+      window.localStorage.setItem(key, JSON.stringify(value));
+    },
+    { key: STORAGE_KEY, value: byokConfig },
+  );
+  await page.route('**/api/app-config', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill({ json: { config: byokConfig } });
+  });
+  await routeAgents(page, [
+    ...AGENTS,
+    {
+      id: 'byok-opencode',
+      name: 'BYOK OpenCode',
+      bin: 'opencode',
+      available: false,
+      version: null,
+      models: [],
+    },
+  ]);
+
+  let runRequestSent = false;
+  page.on('request', (request) => {
+    if (request.url().includes('/api/runs') && request.method() === 'POST') {
+      runRequestSent = true;
+    }
+  });
+
+  await page.goto('/');
+  await createProject(page, 'BYOK OpenCode unavailable contract');
+  await expectWorkspaceReady(page);
+
+  const input = page.getByTestId('chat-composer-input');
+  await input.fill('Create a landing page with unavailable OpenCode.');
+  await page.getByTestId('chat-send').click();
+
+  await expect(page.locator('.run-error__description')).toContainText(
+    /BYOK API runs require OpenCode/i,
+  );
+  await page.waitForTimeout(750);
+  expect(runRequestSent).toBe(false);
 });
 
 test('[P1] project detail active file context is sent with the run and shown on the user message', async ({ page }) => {
@@ -3177,6 +3434,22 @@ async function openComposerAgentMenu(page: Page): Promise<{
   }
   await expect(claudeButton).toBeVisible({ timeout: 20_000 });
   return { menu, claudeButton };
+}
+
+async function selectAvatarModelOption(
+  page: Page,
+  modelSelect: Locator,
+  optionName: RegExp,
+) {
+  await expect(modelSelect).toBeVisible();
+  const option = page.getByRole('option', { name: optionName });
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    await modelSelect.click();
+    if (await option.isVisible({ timeout: 2_000 }).catch(() => false)) break;
+    await page.keyboard.press('Escape').catch(() => {});
+  }
+  await expect(option).toBeVisible({ timeout: 10_000 });
+  await option.click();
 }
 
 async function selectComposerSessionMode(page: Page, modeTitle: 'Ask mode' | 'Plan mode' | 'Design mode') {

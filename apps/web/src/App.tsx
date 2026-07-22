@@ -207,7 +207,8 @@ function sameAgentModelChoice(
   right: AgentModelChoice | undefined,
 ): boolean {
   return (left?.model ?? null) === (right?.model ?? null)
-    && (left?.reasoning ?? null) === (right?.reasoning ?? null);
+    && (left?.reasoning ?? null) === (right?.reasoning ?? null)
+    && (left?.serviceTier ?? null) === (right?.serviceTier ?? null);
 }
 
 export function mergeAgentModelChoice(

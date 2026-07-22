@@ -237,7 +237,12 @@ afterEach(() => {
   delete process.env.OPEN_DESIGN_AMR_ANALYTICS_URL;
   delete process.env.OPEN_DESIGN_AMR_ANALYTICS_ENV;
   delete process.env.OD_AMR_WALLET_FETCH_TIMEOUT_MS;
-  rmSync(tmpHome, { recursive: true, force: true });
+  rmSync(tmpHome, {
+    recursive: true,
+    force: true,
+    maxRetries: 5,
+    retryDelay: 50,
+  });
 });
 
 describe('GET /api/integrations/vela/wallet', () => {

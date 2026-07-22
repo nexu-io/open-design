@@ -1345,6 +1345,129 @@ describe("desktop updater", () => {
     }
   });
 
+  it("relaunches prerelease mac launcher payloads through the prerelease app bundle", async () => {
+    const root = makeRoot();
+    const fixture = await createUpdaterFixture({
+      artifactBody: "open design prerelease mac dmg fixture",
+      channel: "prerelease",
+      includePayload: true,
+      payloadBody: "open design prerelease mac payload fixture",
+      platform: "mac",
+      version: "1.0.0-prerelease.3",
+    });
+    const launcherRuntimePath = join(root, "launcher", "runtime.json");
+    const launcherRoot = root;
+    const launcherLaunchPath = join(root, "installed", "Open Design Prerelease.app");
+    const launches: Array<{ appPid: number; launchPath: string; root: string }> = [];
+    try {
+      await mkdir(launcherLaunchPath, { recursive: true });
+      await mkdir(join(root, "launcher"), { recursive: true });
+      await mkdir(
+        join(root, "launcher", "channels", "prerelease", "namespaces", "release-prerelease", "versions", "1.0.0-prerelease.2"),
+        { recursive: true },
+      );
+      await writeFile(
+        launcherRuntimePath,
+        `${JSON.stringify({
+          active: { generation: 0, version: "1.0.0-prerelease.2" },
+          channel: "prerelease",
+          lastSuccessful: { generation: 0, version: "1.0.0-prerelease.2" },
+          namespace: "release-prerelease",
+          schemaVersion: LAUNCHER_SCHEMA_VERSION,
+        })}\n`,
+      );
+      const updater = createDesktopUpdater({
+        arch: "arm64",
+        currentVersion: "1.0.0-prerelease.2",
+        downloadRoot: join(root, "updates"),
+        env: {
+          ...updaterEnv(fixture.metadataUrl, "darwin"),
+          [DESKTOP_UPDATE_ENV.CURRENT_VERSION]: "1.0.0-prerelease.2",
+          [DESKTOP_UPDATE_ENV.OPEN_DRY_RUN]: "0",
+        },
+        launcherRoot,
+        launcherLaunchPath,
+        launcherRuntimePath,
+        namespace: "release-prerelease",
+        source: SIDECAR_SOURCES.PACKAGED,
+      }, {
+        extractLauncherPayloadArchive: async ({ destinationRoot }) => {
+          await mkdir(join(destinationRoot, "payload", "Open Design Prerelease.app", "Contents", "MacOS"), { recursive: true });
+          await mkdir(join(destinationRoot, "payload", "Open Design Prerelease.app", "Contents", "Resources", "open-design"), { recursive: true });
+          await writeFile(join(destinationRoot, "payload", "Open Design Prerelease.app", "Contents", "MacOS", "Open Design Prerelease"), "");
+          await writeFile(join(destinationRoot, "payload", "Open Design Prerelease.app", "Contents", "Resources", "open-design-config.json"), "{}\n");
+          await writeFile(
+            join(destinationRoot, "manifest.json"),
+            `${JSON.stringify({
+              channel: "prerelease",
+              entry: {
+                cwd: "payload/Open Design Prerelease.app",
+                executable: "payload/Open Design Prerelease.app/Contents/MacOS/Open Design Prerelease",
+              },
+              namespace: "release-prerelease",
+              payloadRoot: "payload",
+              platform: "darwin",
+              schemaVersion: LAUNCHER_SCHEMA_VERSION,
+              version: "1.0.0-prerelease.3",
+            })}\n`,
+          );
+        },
+        launchAppAfterQuit: async (input) => {
+          launches.push({
+            appPid: input.appPid,
+            launchPath: input.launchPath,
+            root: input.root,
+          });
+          return {};
+        },
+        processExecPath: join(root, "launcher", "channels", "prerelease", "namespaces", "release-prerelease", "versions", "1.0.0-prerelease.2", "payload", "Open Design Prerelease.app", "Contents", "MacOS", "Open Design Prerelease"),
+        processPid: 4244,
+      });
+
+      const checked = await updater.checkForUpdates();
+      expect(checked.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
+      expect(checked.channel).toBe(DESKTOP_UPDATE_CHANNELS.PRERELEASE);
+      expect(checked.artifact?.type).toBe("payload");
+      expect(checked.artifact?.name).toBe("open-design-1.0.0-prerelease.3-mac-arm64-payload.zip");
+      expect(await readFile(checked.downloadPath ?? "", "utf8")).toBe("open design prerelease mac payload fixture");
+
+      const installed = await updater.installUpdate();
+      const payloadLaunchPath = join(
+        root,
+        "launcher",
+        "channels",
+        "prerelease",
+        "namespaces",
+        "release-prerelease",
+        "versions",
+        "1.0.0-prerelease.3",
+        "payload",
+        "Open Design Prerelease.app",
+        "Contents",
+        "MacOS",
+        "Open Design Prerelease",
+      );
+      expect(installed.installResult?.activeVersion).toBe("1.0.0-prerelease.3");
+      expect(installed.installResult?.launchPath).toBe(payloadLaunchPath);
+      expect(launches).toEqual([
+        {
+          appPid: 4244,
+          launchPath: payloadLaunchPath,
+          root: await realpath(join(root, "updates")),
+        },
+      ]);
+      expect(JSON.parse(await readFile(launcherRuntimePath, "utf8"))).toMatchObject({
+        active: { generation: 1, version: "1.0.0-prerelease.3" },
+        channel: "prerelease",
+        lastSuccessful: { generation: 0, version: "1.0.0-prerelease.2" },
+        namespace: "release-prerelease",
+      });
+    } finally {
+      await fixture.close();
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
   it("relaunches Windows launcher payloads through the prepared payload executable", async () => {
     const root = makeRoot();
     const fixture = await createUpdaterFixture({

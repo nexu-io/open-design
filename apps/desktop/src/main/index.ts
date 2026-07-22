@@ -943,7 +943,11 @@ export async function runDesktopMain(
     desktop.openUpdateDialog({ source: "mac-app-menu" });
   }
   console.info("[open-design desktop] desktop runtime created");
-  options.onDesktopReady?.({ show: () => desktop?.show() });
+  options.onDesktopReady?.({
+    show: () => {
+      void Promise.resolve(options.onExternalShow?.()).finally(() => desktop?.show());
+    },
+  });
 
   const discoverDaemonBaseUrl = resolveDaemonBaseUrl(runtime, options);
   // Report each abnormal exit of a prior run now that the daemon is up to relay

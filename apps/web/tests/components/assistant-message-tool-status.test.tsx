@@ -451,6 +451,44 @@ describe('AssistantMessage tool status', () => {
     expect(screen.queryByTestId('task-activity-terminal')).toBeNull();
   });
 
+  it('hides empty tool_call / tool_call_update status rows (no displayable detail) (#4618)', () => {
+    const { container } = render(
+      <AssistantMessage
+        projectKind="prototype"
+        conversationId="conv-1"
+        message={messageWithEvents([
+          { kind: 'status', label: 'tool_call' },
+          { kind: 'status', label: 'tool_call_update' },
+        ])}
+        streaming={false}
+        projectId="project-1"
+      />,
+    );
+
+    // These persisted ACP markers carry no tool name/input/output, so they must
+    // not surface as empty, expandable status pills.
+    expect(container.querySelector('[data-status="tool_call"]')).toBeNull();
+    expect(container.querySelector('[data-status="tool_call_update"]')).toBeNull();
+    expect(container.querySelector('.status-pill')).toBeNull();
+  });
+
+  it('still renders status rows that carry a displayable detail', () => {
+    const { container } = render(
+      <AssistantMessage
+        projectKind="prototype"
+        conversationId="conv-1"
+        message={messageWithEvents([
+          { kind: 'status', label: 'model', detail: 'claude-opus-4-7-high' },
+        ])}
+        streaming={false}
+        projectId="project-1"
+      />,
+    );
+
+    expect(container.querySelector('[data-status="model"]')).not.toBeNull();
+    expect(container.querySelector('.status-detail')?.textContent).toContain('claude-opus-4-7-high');
+  });
+
   it('renders URLs in JSON-like status details without trailing structural characters', () => {
     const { container } = render(
       <AssistantMessage

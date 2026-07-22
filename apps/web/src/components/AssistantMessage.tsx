@@ -4004,7 +4004,15 @@ function buildBlocks(events: AgentEvent[]): Block[] {
         ev.label === "running" ||
         ev.label === "requesting" ||
         ev.label === "thinking" ||
-        ev.label === "empty_response"
+        ev.label === "empty_response" ||
+        // Transient ACP tool-call markers (#4618). On the live SSE path the
+        // daemon normalizes these to `running` (TRANSIENT_ACP_STATUS_LABELS in
+        // providers/daemon.ts), which is already skipped above; the persisted-
+        // events path does not normalize, so they arrive here as bare labels
+        // with no tool name/input/output/detail and would otherwise render as
+        // empty, expandable "tool ran but produced no output" status pills.
+        ev.label === "tool_call" ||
+        ev.label === "tool_call_update"
       )
         continue;
       const last = out[out.length - 1];

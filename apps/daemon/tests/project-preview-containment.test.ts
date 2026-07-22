@@ -107,6 +107,44 @@ describe('project preview containment routes', () => {
     expect(await assetResponse.text()).toContain('color: black');
   });
 
+  it('serves generated PNG assets through preview scopes and clearly 404s missing image references', async () => {
+    const projectId = await createProject({ entryFile: 'index.html' });
+    await writeProjectFile(
+      projectId,
+      'index.html',
+      '<!doctype html><title>PNG Preview</title><img src="assets/hero.png"><img src="assets/missing.png">',
+    );
+    await writeProjectFile(projectId, 'assets/hero.png', 'png-bytes');
+
+    const urlResponse = await fetch(
+      `${baseUrl}/api/projects/${projectId}/preview-url?file=${encodeURIComponent('index.html')}`,
+    );
+    expect(urlResponse.ok).toBe(true);
+    const body = await urlResponse.json() as { url: string };
+    const scope = body.url.match(/\/preview\/([^/]+)\//u)?.[1];
+    expect(scope).toBeTruthy();
+
+    const existingAsset = await fetch(
+      `${baseUrl}/api/projects/${projectId}/preview/${scope}/assets/hero.png`,
+      { headers: { Origin: 'null' } },
+    );
+    expect(existingAsset.status).toBe(200);
+    expect(existingAsset.headers.get('access-control-allow-origin')).toBe('*');
+    expect(existingAsset.headers.get('content-type')).toContain('image/png');
+    expect(await existingAsset.text()).toBe('png-bytes');
+
+    const missingAsset = await fetch(
+      `${baseUrl}/api/projects/${projectId}/preview/${scope}/assets/missing.png`,
+      { headers: { Origin: 'null' } },
+    );
+    expect(missingAsset.status).toBe(404);
+    expect(missingAsset.headers.get('access-control-allow-origin')).toBe('*');
+    expect(missingAsset.headers.get('content-type')).toContain('application/json');
+    const missingBody = await missingAsset.json() as { error?: { message?: string } };
+    expect(missingBody.error?.message).toContain('ENOENT');
+    expect(missingBody.error?.message).toContain('assets/missing.png');
+  });
+
   it('serves minted preview HTML and assets without bearer headers when API token auth is enabled', async () => {
     const previousToken = process.env.OD_API_TOKEN;
     const token = `preview-token-${randomUUID()}`;

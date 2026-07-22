@@ -97,6 +97,7 @@ import {
 } from '../integrations/aihubmix.js';
 
 const execFile = promisify(execFileCb);
+const DEFAULT_OPENROUTER_VIDEO_POLL_INTERVAL_MS = 8000;
 type ProviderConfig = { apiKey?: string; baseUrl?: string; model?: string };
 type ProgressFn = (message: string) => void;
 type ImageRef = { path: string; abs: string; mime: string; size: number; dataUrl: string };
@@ -2222,6 +2223,11 @@ async function renderOpenRouterVideo(
     Number.isFinite(configuredMaxMs) && configuredMaxMs >= 60_000
       ? configuredMaxMs
       : 30 * 60 * 1000; // 30 minutes default
+  const configuredPollIntervalMs = Number(process.env.OD_OPENROUTER_VIDEO_POLL_INTERVAL_MS);
+  const pollIntervalMs =
+    Number.isFinite(configuredPollIntervalMs) && configuredPollIntervalMs >= 0
+      ? configuredPollIntervalMs
+      : DEFAULT_OPENROUTER_VIDEO_POLL_INTERVAL_MS;
 
   let lastStatus = submitData?.status || 'pending';
   let videoUrls: string[] | null = null;
@@ -2234,7 +2240,9 @@ async function renderOpenRouterVideo(
   }
 
   while (Date.now() - startedAt < maxMs) {
-    await sleep(8000);
+    if (pollIntervalMs > 0) {
+      await sleep(pollIntervalMs);
+    }
     const pollResp = await fetch(pollingUrl, withMediaRequestInit(ctx, {
       headers: {
         'authorization': `Bearer ${credentials.apiKey}`,

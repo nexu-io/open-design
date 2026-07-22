@@ -381,6 +381,93 @@ test('codex model picker includes current OpenAI choices in priority order', asy
   }
 });
 
+test('codex derives service tiers from live speed tiers when service_tiers is absent', () => {
+  assert.ok(codex.listModels, 'codex must define live model discovery');
+  const parsed = codex.listModels.parse(JSON.stringify({
+    models: [
+      {
+        slug: 'gpt-5.5',
+        display_name: 'GPT 5.5',
+        visibility: 'list',
+        additional_speed_tiers: ['fast'],
+      },
+    ],
+  }));
+
+  assert.deepEqual(parsed, [
+    { id: 'default', label: 'Default (CLI config)' },
+    {
+      id: 'gpt-5.5',
+      label: 'GPT 5.5',
+      additionalSpeedTiers: ['fast'],
+      serviceTierOptions: [{ id: 'priority', label: 'Fast' }],
+    },
+  ]);
+});
+
+test('codex preserves explicit live service tiers from debug models JSON', () => {
+  assert.ok(codex.listModels, 'codex must define live model discovery');
+  const parsed = codex.listModels.parse(JSON.stringify({
+    models: [
+      {
+        slug: 'gpt-6-codex',
+        display_name: 'GPT-6 Codex',
+        visibility: 'list',
+        service_tiers: [
+          { id: 'priority', name: 'Fast' },
+          { id: 'standard', name: 'Standard' },
+        ],
+      },
+    ],
+  }));
+
+  assert.deepEqual(parsed, [
+    { id: 'default', label: 'Default (CLI config)' },
+    {
+      id: 'gpt-6-codex',
+      label: 'GPT-6 Codex',
+      serviceTierOptions: [
+        { id: 'priority', label: 'Fast' },
+        { id: 'standard', label: 'Standard' },
+      ],
+    },
+  ]);
+});
+
+test('codex live model metadata falls back to static service tiers', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'od-agents-codex-live-tier-'));
+  try {
+    await withEnvSnapshot(['PATH', 'OD_AGENT_HOME', 'CODEX_BIN'], async () => {
+      const codexBin = join(dir, 'codex');
+      writeFileSync(
+        codexBin,
+        `#!/bin/sh
+if [ "$1" = "--version" ]; then echo "codex-cli 9.9.9"; exit 0; fi
+if [ "$1" = "debug" ] && [ "$2" = "models" ]; then
+  printf '%s\\n' '{"models":[{"slug":"gpt-5.5","display_name":"GPT 5.5","visibility":"list"}]}'
+  exit 0
+fi
+if [ "$1" = "login" ] && [ "$2" = "status" ]; then echo "Logged in using ChatGPT"; exit 0; fi
+exit 2
+`,
+      );
+      chmodSync(codexBin, 0o755);
+      process.env.OD_AGENT_HOME = dir;
+      process.env.PATH = dir;
+      delete process.env.CODEX_BIN;
+
+      const agents = await detectAgents();
+      const detected = agents.find((agent) => agent.id === 'codex');
+      const model = detected?.models.find((m: { id: string }) => m.id === 'gpt-5.5');
+
+      assert.deepEqual(model?.serviceTierOptions, [{ id: 'priority', label: 'Fast' }]);
+      assert.equal(isKnownServiceTier(codex, 'gpt-5.5', 'priority'), true);
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('claude probes auth status so rescans reflect CLI auth changes', async () => {
   assert.deepEqual(claude.authProbe, {
     args: ['auth', 'status'],
