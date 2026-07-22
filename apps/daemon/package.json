@@ -50,6 +50,7 @@
     "cheerio": "1.2.0",
     "chokidar": "3.6.0",
     "express": "5.2.1",
+    "jose": "6.2.3",
     "jszip": "3.10.1",
     "kiwi-schema": "0.5.0",
     "multer": "2.1.1",

@@ -101,6 +101,9 @@ importers:
       express:
         specifier: 5.2.1
         version: 5.2.1
+      jose:
+        specifier: 6.2.3
+        version: 6.2.3
       jszip:
         specifier: 3.10.1
         version: 3.10.1

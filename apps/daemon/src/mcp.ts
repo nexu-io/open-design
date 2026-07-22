@@ -22,13 +22,323 @@ import { buildProjectRawFileUrl } from '@open-design/contracts';
 import { randomUUID } from 'node:crypto';
 
 import { postCreateArtifactRequest } from './artifacts/create.js';
+import {
+  classifyAmrAccountFailure,
+  DEFAULT_AMR_RECHARGE_URL,
+} from './integrations/vela-errors.js';
 
 const SERVER_NAME = 'open-design';
-const SERVER_VERSION = '0.2.0';
+const SERVER_VERSION = '0.2.3';
 const MCP_STDIO_IDLE_EXIT_MS = 30 * 60 * 1000;
+const CHATGPT_WIDGET_URI = 'ui://open-design/artifact-card-v2.html';
+const CHATGPT_V1_TOOL_NAMES = new Set([
+  'get_cloud_account',
+  'create_project',
+  'start_run',
+  'get_run',
+  'cancel_run',
+  'list_versions',
+  'restore_version',
+  'export_project',
+]);
+
+export function chatGptV1RequiredScopes(toolName: string): string[] {
+  switch (toolName) {
+    case 'get_cloud_account':
+      return ['opendesign.account.read'];
+    case 'create_project':
+      return ['opendesign.projects.write'];
+    case 'start_run':
+    case 'cancel_run':
+      return ['opendesign.runs.write'];
+    case 'get_run':
+      return ['opendesign.runs.read'];
+    case 'list_versions':
+      return ['opendesign.projects.read'];
+    case 'restore_version':
+      return ['opendesign.versions.write'];
+    case 'export_project':
+      return ['opendesign.exports.read'];
+    default:
+      return [];
+  }
+}
+
+function chatGptV1OutputSchema(toolName: string): JsonObject {
+  const stringValue = { type: 'string' };
+  const schemas: Record<string, JsonObject> = {
+    get_cloud_account: {
+      loggedIn: { type: 'boolean' },
+      balanceUsd: { type: ['string', 'null'] },
+      balanceStatus: { type: 'string', enum: ['signed_out', 'unavailable', 'available', 'empty'] },
+      canUseCloud: { type: ['boolean', 'null'] },
+      nextAction: { type: 'string', enum: ['sign_in', 'retry_account', 'generate', 'recharge'] },
+      rechargeUrl: stringValue,
+    },
+    create_project: {
+      project: { type: 'object' },
+      conversationId: stringValue,
+      studioUrl: stringValue,
+    },
+    start_run: {
+      id: stringValue,
+      runId: stringValue,
+      projectId: stringValue,
+      conversationId: stringValue,
+      status: stringValue,
+      studioUrl: stringValue,
+    },
+    get_run: {
+      id: stringValue,
+      runId: stringValue,
+      projectId: stringValue,
+      status: { type: 'string', enum: ['queued', 'running', 'succeeded', 'failed', 'canceled'] },
+      previewUrl: stringValue,
+      studioUrl: stringValue,
+      entryFile: stringValue,
+      agentMessage: stringValue,
+    },
+    cancel_run: {
+      id: stringValue,
+      runId: stringValue,
+      status: stringValue,
+    },
+    list_versions: {
+      projectId: stringValue,
+      path: stringValue,
+      versions: { type: 'array', items: { type: 'object' } },
+    },
+    restore_version: {
+      projectId: stringValue,
+      path: stringValue,
+      version: { type: 'object' },
+    },
+    export_project: {
+      ok: { type: 'boolean' },
+      projectId: stringValue,
+      fileName: stringValue,
+      bytes: { type: 'number' },
+    },
+  };
+  return { type: 'object', properties: schemas[toolName] ?? {}, additionalProperties: true };
+}
+
+// One small, dependency-free MCP Apps widget serves the account, progress,
+// and completed-artifact states. Non-ChatGPT MCP clients ignore the UI
+// metadata and continue to consume the normal text/structured tool result.
+const CHATGPT_WIDGET_HTML = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    :root { color-scheme: light dark; font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 8px; background: transparent; color: CanvasText; }
+    .card { overflow: hidden; border: 1px solid color-mix(in srgb, CanvasText 14%, transparent); border-radius: 20px; background: color-mix(in srgb, Canvas 96%, CanvasText 4%); box-shadow: 0 18px 50px color-mix(in srgb, CanvasText 9%, transparent); }
+    .head { display: flex; align-items: center; gap: 12px; padding: 16px 18px; }
+    .mark { width: 34px; height: 34px; border-radius: 11px; background: #111; position: relative; flex: 0 0 auto; }
+    .mark:before { content: ''; position: absolute; inset: 8px; border: 4px solid #f3ebdd; border-radius: 50%; }
+    .mark:after { content: ''; position: absolute; width: 5px; height: 5px; border-radius: 50%; background: #f3ebdd; left: 14.5px; top: 14.5px; }
+    .title { margin: 0; font-size: 15px; font-weight: 700; letter-spacing: -.01em; }
+    .sub { margin: 2px 0 0; opacity: .62; font-size: 12px; }
+    .badge { margin-left: auto; border-radius: 999px; padding: 6px 9px; background: color-mix(in srgb, #4f7cff 15%, transparent); color: #4f7cff; font-size: 11px; font-weight: 700; text-transform: capitalize; }
+    .preview { min-height: 148px; border-block: 1px solid color-mix(in srgb, CanvasText 12%, transparent); background: radial-gradient(circle at 15% 0%, #b7c8ff55, transparent 34%), linear-gradient(135deg, color-mix(in srgb, Canvas 88%, #e4d6bb 12%), Canvas); display: grid; place-items: center; position: relative; }
+    .preview iframe { width: 100%; height: 240px; border: 0; background: white; }
+    .placeholder { text-align: center; padding: 30px; }
+    .pulse { width: 32px; height: 32px; margin: 0 auto 12px; border-radius: 50%; border: 3px solid color-mix(in srgb, #4f7cff 25%, transparent); border-top-color: #4f7cff; animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .body { padding: 15px 18px 17px; }
+    .meta { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; margin-bottom: 14px; }
+    .datum { padding: 10px 11px; border-radius: 12px; background: color-mix(in srgb, CanvasText 5%, transparent); }
+    .label { display: block; opacity: .55; font-size: 10px; text-transform: uppercase; letter-spacing: .08em; }
+    .value { display: block; margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 650; }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    button { appearance: none; border: 0; border-radius: 999px; padding: 9px 13px; cursor: pointer; font: inherit; font-size: 12px; font-weight: 700; background: #111; color: #f8f3e9; transition: transform 140ms cubic-bezier(.23,1,.32,1), opacity 140ms; }
+    button.secondary { background: color-mix(in srgb, CanvasText 8%, transparent); color: CanvasText; }
+    button:hover { transform: translateY(-1px); }
+    button:disabled { opacity: .42; cursor: default; transform: none; }
+    .note { margin: 0 0 12px; font-size: 12px; line-height: 1.45; opacity: .7; }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <header class="head"><span class="mark"></span><div><h1 class="title">Open Design</h1><p class="sub" id="subtitle">Ready to create</p></div><span class="badge" id="status">ready</span></header>
+    <section class="preview" id="preview"><div class="placeholder"><div class="pulse" id="pulse"></div><strong id="preview-title">Preparing your design</strong></div></section>
+    <section class="body"><p class="note" id="note"></p><div class="meta" id="meta"></div><div id="version-list"></div><div class="actions"><button id="recharge" hidden>Recharge balance</button><button id="studio" hidden>Open Studio</button><button class="secondary" id="raw" hidden>Open preview</button><button class="secondary" id="refresh" hidden>Refresh</button><button class="secondary" id="versions" hidden>Versions</button><button class="secondary" id="export" hidden>Export source</button></div></section>
+  </main>
+  <script>
+    const byId = (id) => document.getElementById(id);
+    const safeText = (value, fallback = '—') => value === undefined || value === null || value === '' ? fallback : String(value);
+    let current = {};
+    let pollTimer = null;
+    let rpcId = 0;
+    const pendingRequests = new Map();
+    const rpcNotify = (method, params) => window.parent.postMessage({ jsonrpc: '2.0', method, params }, '*');
+    const rpcRequest = (method, params, timeoutMs = 30000) => new Promise((resolve, reject) => {
+      const id = ++rpcId;
+      const timer = setTimeout(() => {
+        pendingRequests.delete(id);
+        reject(new Error(method + ' timed out'));
+      }, timeoutMs);
+      pendingRequests.set(id, { resolve, reject, timer });
+      window.parent.postMessage({ jsonrpc: '2.0', id, method, params }, '*');
+    });
+    const initializeBridge = async () => {
+      try {
+        await rpcRequest('ui/initialize', {
+          appInfo: { name: 'open-design-artifact-card', version: '${SERVER_VERSION}' },
+          appCapabilities: {},
+          protocolVersion: '2026-01-26',
+        }, 1000);
+        rpcNotify('ui/notifications/initialized', {});
+        return true;
+      } catch { return false; }
+    };
+    const bridgeReady = initializeBridge();
+    async function callTool(name, args) {
+      if (await bridgeReady) return rpcRequest('tools/call', { name, arguments: args });
+      return window.openai?.callTool?.(name, args);
+    }
+    function openUrl(url) {
+      if (!url) return;
+      if (window.openai?.openExternal) window.openai.openExternal({ href: url });
+      else window.open(url, '_blank', 'noopener,noreferrer');
+    }
+    function datum(label, value) {
+      const el = document.createElement('div'); el.className = 'datum';
+      const l = document.createElement('span'); l.className = 'label'; l.textContent = label;
+      const v = document.createElement('span'); v.className = 'value'; v.textContent = safeText(value);
+      el.append(l, v); return el;
+    }
+    function render(output) {
+      if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+      current = output && typeof output === 'object' ? output : {};
+      const account = current.account || {};
+      const wallet = current.wallet || {};
+      const status = safeText(current.status || (current.nextAction === 'recharge' ? 'recharge' : current.loggedIn === true ? 'connected' : current.loggedIn === false ? 'sign in' : 'ready')).toLowerCase();
+      const running = status === 'queued' || status === 'running';
+      const completed = status === 'succeeded' || Boolean(current.previewUrl);
+      byId('status').textContent = status;
+      byId('subtitle').textContent = current.name || current.projectName || (current.loggedIn === true ? 'Open Design Cloud connected' : running ? 'Generating with Open Design' : completed ? 'Artifact ready' : 'Ready to create');
+      byId('note').textContent = current.hint || (current.loggedIn === false ? 'Sign in to Open Design Cloud before starting a Cloud run.' : completed ? 'Review the result here, then continue detailed editing, versions, and export in Open Design.' : running ? 'Open Design is working. Long thinking intervals are normal.' : 'Create a website, product prototype, presentation, or reusable design system.');
+      const meta = byId('meta'); meta.replaceChildren();
+      if (current.loggedIn !== undefined) meta.append(datum('Cloud', current.loggedIn ? 'Signed in' : 'Sign in'));
+      const balance = current.balanceUsd ?? account.balanceUsd ?? wallet.balanceUsd;
+      if (balance !== undefined && balance !== null) meta.append(datum('Balance', '$' + balance));
+      if (current.projectId || current.id) meta.append(datum('Project', current.projectId || current.id));
+      if (current.runId || (current.id && current.status)) meta.append(datum('Run', current.runId || current.id));
+      if (current.kind) meta.append(datum('Type', current.kind));
+      byId('pulse').hidden = !running;
+      byId('preview-title').textContent = running ? 'Creating your design…' : completed ? 'Artifact ready' : current.loggedIn === false ? 'Connect Open Design Cloud' : 'Ready for your brief';
+      const preview = byId('preview');
+      const oldFrame = preview.querySelector('iframe'); if (oldFrame) oldFrame.remove();
+      const placeholder = preview.querySelector('.placeholder'); if (placeholder) placeholder.hidden = completed && Boolean(current.previewUrl);
+      if (completed && current.previewUrl) {
+        const frame = document.createElement('iframe'); frame.src = current.previewUrl; frame.title = 'Open Design artifact preview'; frame.loading = 'lazy'; preview.prepend(frame);
+      }
+      const studio = byId('studio'); studio.hidden = !current.studioUrl; studio.onclick = () => openUrl(current.studioUrl);
+      const recharge = byId('recharge'); recharge.hidden = current.nextAction !== 'recharge' || !current.rechargeUrl; recharge.onclick = () => openUrl(current.rechargeUrl);
+      const raw = byId('raw'); raw.hidden = !current.previewUrl; raw.onclick = () => openUrl(current.previewUrl);
+      const refreshRun = async () => {
+        const next = await callTool('get_run', { runId: current.runId || current.id });
+        if (next?.structuredContent) render(next.structuredContent);
+        return next;
+      };
+      const refresh = byId('refresh'); refresh.hidden = !running || !(current.runId || current.id); refresh.onclick = async () => {
+        refresh.disabled = true;
+        try { await refreshRun(); }
+        finally { refresh.disabled = false; }
+      };
+      const projectId = current.projectId || (current.status ? null : current.id);
+      const entryFile = current.entryFile || (current.previewUrl ? decodeURIComponent(String(current.previewUrl).split('/raw/')[1] || '') : '');
+      const versions = byId('versions'); versions.hidden = !projectId || !entryFile; versions.onclick = async () => {
+        versions.disabled = true;
+        try { const next = await callTool('list_versions', { project: projectId, path: entryFile }); if (next?.structuredContent) renderVersions(next.structuredContent); }
+        finally { versions.disabled = false; }
+      };
+      const exportButton = byId('export'); exportButton.hidden = !projectId; exportButton.onclick = async () => {
+        exportButton.disabled = true; byId('note').textContent = 'Preparing a source ZIP…';
+        try {
+          const next = await callTool('export_project', { project: projectId });
+          byId('note').textContent = next?.isError ? 'Export failed. Open Studio to export from the full editor.' : 'Source ZIP is ready in the tool result. Use Open Studio for rendered PDF, image, or PPTX export.';
+        } finally { exportButton.disabled = false; }
+      };
+      if (Object.keys(current).length > 0) {
+        window.openai?.setWidgetState?.({
+          projectId: current.projectId || null,
+          projectName: current.projectName || current.name || null,
+          runId: current.runId || (current.status ? current.id : null),
+          status,
+          previewUrl: current.previewUrl || null,
+          studioUrl: current.studioUrl || null,
+          entryFile: entryFile || null,
+          hint: current.hint || null,
+          nextAction: current.nextAction || null,
+          rechargeUrl: current.rechargeUrl || null,
+        });
+      }
+      if (running && (current.runId || current.id)) {
+        pollTimer = setTimeout(() => { refreshRun().catch(() => { pollTimer = setTimeout(() => render(current), 30000); }); }, 30000);
+      }
+    }
+    function renderVersions(output) {
+      const host = byId('version-list'); host.replaceChildren();
+      const versions = Array.isArray(output?.versions) ? output.versions.slice().reverse().slice(0, 6) : [];
+      if (!versions.length) { byId('note').textContent = 'No saved HTML versions yet.'; return; }
+      const heading = document.createElement('p'); heading.className = 'note'; heading.textContent = 'Recent versions'; host.append(heading);
+      versions.forEach((version) => {
+        const row = document.createElement('div'); row.className = 'datum'; row.style.marginBottom = '7px'; row.style.display = 'flex'; row.style.alignItems = 'center'; row.style.gap = '8px';
+        const text = document.createElement('span'); text.className = 'value'; text.style.flex = '1'; text.textContent = 'v' + safeText(version.version, '?') + (version.label ? ' · ' + version.label : ''); row.append(text);
+        if (!version.current && version.id) { const restore = document.createElement('button'); restore.className = 'secondary'; restore.textContent = 'Restore'; restore.onclick = async () => { restore.disabled = true; try { await callTool('restore_version', { project: output.projectId, path: output.path, versionId: version.id, confirm: true }); byId('note').textContent = 'Version restored. Open Studio or refresh the preview to review it.'; } finally { restore.disabled = false; } }; row.append(restore); }
+        host.append(row);
+      });
+    }
+    render(window.openai?.toolOutput ?? window.openai?.widgetState);
+    window.addEventListener('message', (event) => {
+      if (event.source !== window.parent) return;
+      const message = event.data;
+      if (!message || message.jsonrpc !== '2.0') return;
+      if (typeof message.id === 'number') {
+        const pending = pendingRequests.get(message.id);
+        if (!pending) return;
+        pendingRequests.delete(message.id);
+        clearTimeout(pending.timer);
+        if (message.error) pending.reject(message.error); else pending.resolve(message.result);
+        return;
+      }
+      if (message.method === 'ui/notifications/tool-result' && message.params?.structuredContent) {
+        render(message.params.structuredContent);
+      }
+    }, { passive: true });
+    window.addEventListener('openai:set_globals', (event) => render(
+      event.detail?.globals?.toolOutput
+        ?? window.openai?.toolOutput
+        ?? event.detail?.globals?.widgetState
+        ?? window.openai?.widgetState,
+    ), { passive: true });
+  </script>
+</body>
+</html>`;
+
+const CHATGPT_STATUS_META = {
+  'openai/toolInvocation/invoking': 'Working in Open Design…',
+  'openai/toolInvocation/invoked': 'Open Design updated.',
+};
+
+const CHATGPT_WIDGET_META = {
+  ui: { resourceUri: CHATGPT_WIDGET_URI },
+  'openai/outputTemplate': CHATGPT_WIDGET_URI,
+  ...CHATGPT_STATUS_META,
+};
 
 type JsonObject = Record<string, unknown>;
 interface RunMcpOptions { daemonUrl: string | URL }
+export interface CreateOpenDesignMcpServerOptions {
+  daemonUrl: string | URL;
+  widgetFrameDomains?: string[];
+  transformToolResult?: (toolName: string, result: any) => any | Promise<any>;
+}
 interface CatalogItem { id: string; name?: string; title?: string; description?: string; summary?: string }
 interface SkillsPayload { skills?: CatalogItem[] }
 interface PluginsPayload { plugins?: CatalogItem[] }
@@ -40,7 +350,7 @@ interface ProjectPayload { project?: ProjectSummary; id?: string; name?: string;
 interface ActiveContext { active?: boolean; projectId?: string; projectName?: string | null; fileName?: string | null; ageMs?: number | null }
 type ResolvedProject = { id: string; name: string; source: 'uuid' | 'id' | 'exact' | 'slug' | 'substring' };
 interface ProjectListCache { baseUrl: string; t: number; list: ProjectSummary[] }
-interface McpArgs extends JsonObject { project?: unknown; entry?: unknown; include?: unknown; maxBytes?: unknown; path?: unknown; offset?: unknown; limit?: unknown; since?: unknown; query?: unknown; pattern?: unknown; max?: unknown; name?: unknown; content?: unknown; encoding?: unknown; artifactManifest?: unknown; confirm?: unknown; prompt?: unknown; plugin?: unknown; inputs?: unknown; agent?: unknown; model?: unknown; runId?: unknown; id?: unknown; designSystem?: unknown; skill?: unknown; includeUnavailable?: unknown }
+interface McpArgs extends JsonObject { project?: unknown; entry?: unknown; include?: unknown; maxBytes?: unknown; path?: unknown; offset?: unknown; limit?: unknown; since?: unknown; query?: unknown; pattern?: unknown; max?: unknown; name?: unknown; content?: unknown; encoding?: unknown; artifactManifest?: unknown; confirm?: unknown; confirmed?: unknown; prompt?: unknown; plugin?: unknown; inputs?: unknown; agent?: unknown; model?: unknown; runId?: unknown; id?: unknown; designSystem?: unknown; skill?: unknown; artifactType?: unknown; brief?: unknown; includeUnavailable?: unknown; versionId?: unknown }
 interface ProjectFileBundleEntry { name: string; mime: string; size: number | null; content: string | null; binary: boolean }
 interface BundleInput { project: ProjectPayload | ProjectSummary; entry: string; files: ProjectFileBundleEntry[]; truncated: boolean; active: ActiveContext | null; resolved?: ResolvedProject | null }
 interface ErrorWithCode { message?: string; code?: string; cause?: { code?: string } }
@@ -392,6 +702,7 @@ const TOOL_DEFS = [
       additionalProperties: false,
     },
     annotations: { ...WRITE_ANNOTATIONS, title: 'Create Open Design project' },
+    _meta: CHATGPT_STATUS_META,
   },
   // Discovery + generation. An external coding agent does NOT run a
   // skill itself — it commissions Open Design to, via start_run. The
@@ -401,6 +712,13 @@ const TOOL_DEFS = [
   // kicks off the run and get_run polls it to completion. Design
   // systems stay resource-only (od://design-systems/...) since they're
   // reference material the caller opts into, not something to run.
+  {
+    name: 'get_cloud_account',
+    description: 'Check whether Open Design Cloud is signed in and read the wallet balance. Call this before generation so you can choose Cloud, recharge, or a local Code Agent/BYOK fallback without guessing.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    annotations: { ...READ_ANNOTATIONS, title: 'Check Open Design Cloud account' },
+    _meta: CHATGPT_WIDGET_META,
+  },
   {
     name: 'list_skills',
     description: 'List Open Design skills you can pass to start_run as a recipe. Discovery only — Open Design runs the skill, not you.',
@@ -450,6 +768,7 @@ const TOOL_DEFS = [
       additionalProperties: false,
     },
     annotations: { ...WRITE_ANNOTATIONS, title: 'Generate with Open Design' },
+    _meta: CHATGPT_WIDGET_META,
   },
   {
     name: 'get_run',
@@ -464,6 +783,49 @@ const TOOL_DEFS = [
       additionalProperties: false,
     },
     annotations: { ...READ_ANNOTATIONS, title: 'Check Open Design run' },
+    _meta: CHATGPT_STATUS_META,
+  },
+  {
+    name: 'list_versions',
+    description: 'List saved versions of an HTML artifact. Path is optional when the project entry file can be resolved.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: PROJECT_ARG,
+        path: { type: 'string', description: 'Project-relative HTML path. Defaults to the project entry file.' },
+      },
+      additionalProperties: false,
+    },
+    annotations: { ...READ_ANNOTATIONS, title: 'List artifact versions' },
+    _meta: CHATGPT_STATUS_META,
+  },
+  {
+    name: 'restore_version',
+    description: 'Restore a saved HTML artifact version. Requires explicit project, path, versionId, and confirm:true.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: { type: 'string', description: 'Explicit project id or name.' },
+        path: { type: 'string', description: 'Project-relative HTML path.' },
+        versionId: { type: 'string', description: 'Version id returned by list_versions.' },
+        confirm: { type: 'boolean', description: 'Must be true to replace the current artifact content.' },
+      },
+      required: ['project', 'path', 'versionId', 'confirm'],
+      additionalProperties: false,
+    },
+    annotations: { ...WRITE_ANNOTATIONS, destructiveHint: true, title: 'Restore artifact version' },
+    _meta: CHATGPT_STATUS_META,
+  },
+  {
+    name: 'export_project',
+    description: 'Export the complete Open Design project source as a ZIP resource. Use Open Design Studio for rendered PDF, image, or PPTX exports.',
+    inputSchema: {
+      type: 'object',
+      properties: { project: PROJECT_ARG },
+      additionalProperties: false,
+    },
+    annotations: { ...READ_ANNOTATIONS, title: 'Export Open Design source ZIP' },
+    _meta: CHATGPT_STATUS_META,
   },
   {
     name: 'cancel_run',
@@ -617,6 +979,12 @@ export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
     ]);
     const resources = [
       {
+        uri: CHATGPT_WIDGET_URI,
+        name: 'Open Design artifact card',
+        description: 'Interactive account, progress, and artifact result card for ChatGPT.',
+        mimeType: 'text/html;profile=mcp-app',
+      },
+      {
         uri: 'od://focus/active',
         name: 'Active Open Design context',
         description: 'The project/file the user has open in Open Design right now.',
@@ -644,6 +1012,29 @@ export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
 
   server.setRequestHandler(ReadResourceRequestSchema, withMcpActivity(async (req) => {
     const uri = req.params?.uri;
+    if (uri === CHATGPT_WIDGET_URI) {
+      return {
+        contents: [
+          {
+            uri,
+            mimeType: 'text/html;profile=mcp-app',
+            text: CHATGPT_WIDGET_HTML,
+            _meta: {
+              ui: {
+                prefersBorder: true,
+                csp: {
+                  frameDomains: [
+                    'http://127.0.0.1:7456',
+                    'http://localhost:7456',
+                    'https://open-design.ai',
+                  ],
+                },
+              },
+            },
+          },
+        ],
+      };
+    }
     if (uri === 'od://focus/active') {
       const data = await getJson<ActiveContext>(`${baseUrl}/api/active`);
       return {
@@ -732,9 +1123,293 @@ export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
   }
 }
 
+// Stateless transports (notably ChatGPT's Streamable HTTP client) need a
+// fresh Server instance per request. The hosted surface deliberately exposes
+// only the V1 product workflow; local file mutation, deletion, active-focus,
+// and arbitrary artifact tools stay on `od mcp` and are not part of the
+// public ChatGPT app contract.
+export function createOpenDesignMcpServer({
+  daemonUrl,
+  widgetFrameDomains = [],
+  transformToolResult,
+}: CreateOpenDesignMcpServerOptions): Server {
+  const baseUrl = String(daemonUrl).replace(/\/$/, '');
+  const frameDomains = [...new Set(['https://open-design.ai', ...widgetFrameDomains])];
+  const server = new Server(
+    { name: SERVER_NAME, version: SERVER_VERSION },
+    {
+      capabilities: { tools: {}, resources: {} },
+      instructions: [
+        'Open Design creates and refines websites, product prototypes, presentations, and design systems.',
+        'Confirm audience, outcome, content/flows, visual direction, and output format before calling start_run with confirmed:true.',
+        'Before Cloud generation call get_cloud_account. Use create_project, then start_run; its card polls get_run and updates in place.',
+        'Open Design runs can take 5–30 minutes. Do not cancel unless the user asks.',
+        'On success, surface studioUrl and previewUrl. Complex editing stays in Open Design.',
+      ].join('\n'),
+    },
+  );
+
+  const tools = TOOL_DEFS
+    .filter((tool) => CHATGPT_V1_TOOL_NAMES.has(tool.name))
+    .map(chatGptV1ToolDefinition);
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools }));
+  server.setRequestHandler(ListResourcesRequestSchema, async () => {
+    const dsData = await getJson<DesignSystemsPayload>(`${baseUrl}/api/design-systems`)
+      .catch((): DesignSystemsPayload => ({ designSystems: [] }));
+    const resources = [
+      {
+        uri: CHATGPT_WIDGET_URI,
+        name: 'Open Design artifact card',
+        description: 'Interactive account, progress, and artifact result card for ChatGPT.',
+        mimeType: 'text/html;profile=mcp-app',
+      },
+      ...(dsData.designSystems ?? []).map((designSystem) => ({
+        uri: `od://design-systems/${encodeURIComponent(designSystem.id)}/DESIGN.md`,
+        name: `Design system: ${designSystem.title || designSystem.name || designSystem.id}`,
+        description: oneLine(designSystem.summary) ?? '',
+        mimeType: 'text/markdown',
+      })),
+    ];
+    return { resources };
+  });
+  server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+    const uri = request.params?.uri;
+    if (uri === CHATGPT_WIDGET_URI) {
+      return {
+        contents: [{
+          uri,
+          mimeType: 'text/html;profile=mcp-app',
+          text: CHATGPT_WIDGET_HTML,
+          _meta: {
+            ui: {
+              prefersBorder: true,
+              csp: {
+                frameDomains,
+              },
+            },
+          },
+        }],
+      };
+    }
+    const match = String(uri || '').match(/^od:\/\/(design-systems)\/([^/]+)\/(.+)$/);
+    if (!match) throw new Error(`unsupported resource URI: ${uri}`);
+    const [, kind, encodedId] = match as [string, 'design-systems', string, string];
+    const decodedId = decodeURIComponent(encodedId);
+    const data = await getJson<ResourcePayload>(
+      `${baseUrl}/api/${kind}/${encodeURIComponent(decodedId)}`,
+    );
+    const text = data.skill?.body ?? data.skill?.content ?? data.designSystem?.body
+      ?? data.designSystem?.content ?? data.body ?? data.content ?? '';
+    return { contents: [{ uri, mimeType: 'text/markdown', text }] };
+  });
+  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    const name = request.params?.name;
+    if (typeof name !== 'string' || !CHATGPT_V1_TOOL_NAMES.has(name)) {
+      return errorResult(`tool is outside the Open Design ChatGPT V1 scope: ${String(name ?? '')}`);
+    }
+    const args = (request.params?.arguments ?? {}) as McpArgs;
+    const result = await handleChatGptV1ToolCall(baseUrl, name, args);
+    return transformToolResult ? transformToolResult(name, result) : result;
+  });
+  return server;
+}
+
+function chatGptV1ToolDefinition(tool: (typeof TOOL_DEFS)[number]): any {
+  const securitySchemes = [{ type: 'oauth2', scopes: chatGptV1RequiredScopes(tool.name) }];
+  const authMeta = {
+    ...tool._meta,
+    securitySchemes,
+    ui: {
+      ...(tool._meta && typeof tool._meta === 'object' && 'ui' in tool._meta
+        ? (tool._meta.ui as JsonObject)
+        : {}),
+      visibility: ['model', 'app'],
+    },
+    // MCP Apps `tools/call` is the primary bridge. Keep the ChatGPT-specific
+    // compatibility flag so older Apps SDK hosts can also invoke polling,
+    // version, restore, and export tools from the component.
+    'openai/widgetAccessible': true,
+  };
+  const outputSchema = chatGptV1OutputSchema(tool.name);
+  if (tool.name === 'start_run') {
+    return {
+      ...tool,
+      securitySchemes,
+      _meta: authMeta,
+      outputSchema,
+      description: 'Create or refine a V1 Open Design Cloud artifact from a confirmed structured brief. Choose the artifact type; the server selects the approved workflow and pins generation to Open Design Cloud. Returns immediately so get_run can report progress.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          project: PROJECT_ARG,
+          artifactType: {
+            type: 'string',
+            enum: ['website', 'product-prototype', 'presentation', 'design-system'],
+            description: 'The V1 deliverable type. The server maps it to the approved Open Design workflow.',
+          },
+          brief: {
+            type: 'object',
+            properties: {
+              audience: { type: 'string', description: 'Who will use or view the artifact.' },
+              outcome: { type: 'string', description: 'The result this artifact must achieve.' },
+              contentAndFlows: { type: 'string', description: 'Required content, sections, product flows, and interactions.' },
+              visualDirection: { type: 'string', description: 'Visual direction, references, brand constraints, or instruction to use the attached Design System.' },
+              outputFormat: { type: 'string', description: 'Expected output, for example responsive website, interactive prototype, browser deck, PPTX-ready deck, or DESIGN.md.' },
+              constraints: { type: 'string', description: 'Optional must-have or must-avoid constraints.' },
+            },
+            required: ['audience', 'outcome', 'contentAndFlows', 'visualDirection', 'outputFormat'],
+            additionalProperties: false,
+          },
+          confirmed: {
+            type: 'boolean',
+            description: 'Must be true after the user has seen or already supplied the complete working brief.',
+          },
+        },
+        required: ['project', 'artifactType', 'brief', 'confirmed'],
+        additionalProperties: false,
+      },
+    };
+  }
+  if (tool.name === 'create_project') {
+    return {
+      ...tool,
+      securitySchemes,
+      _meta: authMeta,
+      outputSchema,
+      inputSchema: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: 'Human-readable project name.' },
+          id: { type: 'string', description: 'Optional project id slug.' },
+          designSystem: { type: 'string', description: 'Optional Design System id to apply.' },
+        },
+        required: ['name'],
+        additionalProperties: false,
+      },
+    };
+  }
+  return { ...tool, securitySchemes, _meta: authMeta, outputSchema };
+}
+
+function removePublicSecrets(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(removePublicSecrets);
+  if (!value || typeof value !== 'object') return value;
+  const blocked = new Set([
+    'eventslogpath',
+    'accesstoken',
+    'refreshtoken',
+    'sessiontoken',
+    'controlkey',
+    'runtimekey',
+    'apikey',
+    'clientsecret',
+    'authorization',
+    'cookie',
+  ]);
+  return Object.fromEntries(
+    Object.entries(value as JsonObject)
+      .filter(([key]) => !blocked.has(key.replace(/[_-]/gu, '').toLowerCase()))
+      .map(([key, child]) => [key, removePublicSecrets(child)]),
+  );
+}
+
+function publicChatGptResult(name: string, result: any): any {
+  if (!result?.structuredContent || typeof result.structuredContent !== 'object') return result;
+  const structuredContent = removePublicSecrets(result.structuredContent) as JsonObject;
+  if (name === 'start_run') {
+    structuredContent.hint = 'Open Design Cloud is creating the artifact. Show the progress card and poll get_run every 30–60 seconds.';
+  } else if (name === 'get_run' && ['queued', 'running'].includes(String(structuredContent.status))) {
+    structuredContent.hint = 'Open Design Cloud is still working. Keep the progress card visible and poll again in 30–60 seconds.';
+  } else if (name === 'get_run') {
+    const accountFailure = classifyAmrAccountFailure(JSON.stringify(structuredContent));
+    if (accountFailure?.action === 'recharge') {
+      structuredContent.accountAction = 'recharge';
+      structuredContent.rechargeUrl = accountFailure.actionUrl ?? DEFAULT_AMR_RECHARGE_URL;
+      structuredContent.nextAction = 'recharge';
+      structuredContent.fallbackHint = 'After offering recharge, the user can open this project in Open Design and choose a local Code Agent or BYOK mode.';
+    }
+  }
+  return {
+    ...result,
+    structuredContent,
+    content: Array.isArray(result.content)
+      ? result.content.map((item: any) => item?.type === 'text'
+        ? { ...item, text: JSON.stringify(structuredContent, null, 2) }
+        : item)
+      : result.content,
+  };
+}
+
+async function handleChatGptV1ToolCall(baseUrl: string, name: string, args: McpArgs): Promise<any> {
+  let callArgs = args;
+  if (name === 'start_run') {
+    const prepared = prepareChatGptV1Run(args);
+    if ('error' in prepared) return errorResult(prepared.error);
+    const account = await getCloudAccount(baseUrl);
+    if (account.canUseCloud !== true) {
+      const text = account.nextAction === 'recharge'
+        ? 'Open Design Cloud balance is empty. Recharge before starting this run.'
+        : account.nextAction === 'sign_in'
+          ? 'Sign in to Open Design Cloud before starting this run.'
+          : 'Open Design Cloud account status is unavailable. Retry the account check before starting this run.';
+      return { isError: true, structuredContent: account, content: [{ type: 'text', text }] };
+    }
+    callArgs = {
+      project: args.project,
+      prompt: prepared.prompt,
+      skill: prepared.skill,
+      agent: 'amr',
+    };
+  }
+  const result = await handleMcpToolCall(baseUrl, name, callArgs);
+  return publicChatGptResult(name, result);
+}
+
+function prepareChatGptV1Run(args: McpArgs): { skill: string; prompt: string } | { error: string } {
+  const skillByArtifact: Record<string, string> = {
+    website: 'frontend-design',
+    'product-prototype': 'frontend-design',
+    presentation: 'slides',
+    'design-system': 'design-md',
+  };
+  if (typeof args.artifactType !== 'string') {
+    return { error: 'artifactType must be website, product-prototype, presentation, or design-system.' };
+  }
+  const skill = skillByArtifact[args.artifactType];
+  if (!skill) return { error: 'artifactType must be website, product-prototype, presentation, or design-system.' };
+  if (args.confirmed !== true) {
+    return { error: 'confirmed:true is required after the user has supplied or approved the working brief.' };
+  }
+  if (!args.brief || typeof args.brief !== 'object' || Array.isArray(args.brief)) {
+    return { error: 'brief is required.' };
+  }
+  const brief = args.brief as JsonObject;
+  const required = ['audience', 'outcome', 'contentAndFlows', 'visualDirection', 'outputFormat'] as const;
+  for (const field of required) {
+    if (typeof brief[field] !== 'string' || !String(brief[field]).trim()) {
+      return { error: `brief.${field} is required.` };
+    }
+  }
+  const lines = [
+    `Artifact type: ${args.artifactType}`,
+    `Audience: ${brief.audience}`,
+    `Outcome: ${brief.outcome}`,
+    `Content and flows: ${brief.contentAndFlows}`,
+    `Visual direction: ${brief.visualDirection}`,
+    `Output format: ${brief.outputFormat}`,
+  ];
+  if (typeof brief.constraints === 'string' && brief.constraints.trim()) {
+    lines.push(`Constraints: ${brief.constraints}`);
+  }
+  return { skill, prompt: lines.join('\n') };
+}
+
 function ok(payload: unknown) {
   const text =
     typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2);
+  if (payload !== null && typeof payload === 'object' && !Array.isArray(payload)) {
+    return { structuredContent: payload as JsonObject, content: [{ type: 'text', text }] };
+  }
   return { content: [{ type: 'text', text }] };
 }
 
@@ -748,7 +1423,10 @@ function requireString(v: unknown, name: string): asserts v is string {
   }
 }
 
-async function handleMcpToolCall(baseUrl: string, name: unknown, args: McpArgs) {
+// MCP tool results may contain text, embedded binary resources, or both. Keep
+// this dynamic dispatcher broad at the boundary; every returned value is
+// validated by the SDK's CallToolResult schema before it reaches a client.
+async function handleMcpToolCall(baseUrl: string, name: unknown, args: McpArgs): Promise<any> {
   try {
     switch (name) {
       case 'list_projects':
@@ -851,6 +1529,8 @@ async function handleMcpToolCall(baseUrl: string, name: unknown, args: McpArgs) 
         return await deleteProject(baseUrl, args);
       case 'create_project':
         return await createProject(baseUrl, args);
+      case 'get_cloud_account':
+        return ok(await getCloudAccount(baseUrl));
       case 'list_skills':
         return ok(await getJson<SkillsPayload>(`${baseUrl}/api/skills`));
       case 'list_plugins':
@@ -861,6 +1541,12 @@ async function handleMcpToolCall(baseUrl: string, name: unknown, args: McpArgs) 
         return await startRun(baseUrl, args);
       case 'get_run':
         return await getRun(baseUrl, args);
+      case 'list_versions':
+        return await listVersions(baseUrl, args);
+      case 'restore_version':
+        return await restoreVersion(baseUrl, args);
+      case 'export_project':
+        return await exportProject(baseUrl, args);
       case 'cancel_run': {
         requireString(args.runId, 'runId');
         return ok(
@@ -876,6 +1562,127 @@ async function handleMcpToolCall(baseUrl: string, name: unknown, args: McpArgs) 
   } catch (err) {
     return errorResult(formatError(err, baseUrl));
   }
+}
+
+async function getCloudAccount(baseUrl: string): Promise<JsonObject> {
+  const [status, wallet] = await Promise.all([
+    getJson<JsonObject>(`${baseUrl}/api/integrations/vela/status`),
+    getJson<JsonObject>(`${baseUrl}/api/integrations/vela/wallet`).catch((error: unknown) => ({
+      status: 'unavailable',
+      error: { message: error instanceof Error ? error.message : String(error) },
+    })),
+  ]);
+  const loggedIn = status.loggedIn === true;
+  const walletRecord = wallet as JsonObject;
+  const walletBalance = typeof walletRecord.balanceUsd === 'string' ? walletRecord.balanceUsd : null;
+  const account = status.account && typeof status.account === 'object'
+    ? status.account as JsonObject
+    : null;
+  const accountBalance = typeof account?.balanceUsd === 'string' ? account.balanceUsd : null;
+  const balanceUsd = walletBalance ?? accountBalance;
+  const parsedBalance = balanceUsd === null ? null : Number(balanceUsd);
+  const balanceKnown = parsedBalance !== null && Number.isFinite(parsedBalance);
+  const canUseCloud = loggedIn && balanceKnown ? parsedBalance > 0 : null;
+  const nextAction = !loggedIn
+    ? 'sign_in'
+    : !balanceKnown
+      ? 'retry_account'
+      : canUseCloud
+        ? 'generate'
+        : 'recharge';
+  return {
+    loggedIn,
+    user: status.user ?? null,
+    account,
+    wallet,
+    balanceUsd,
+    balanceStatus: !loggedIn ? 'signed_out' : !balanceKnown ? 'unavailable' : canUseCloud ? 'available' : 'empty',
+    canUseCloud,
+    nextAction,
+    rechargeUrl: DEFAULT_AMR_RECHARGE_URL,
+    fallback: {
+      availableIn: 'Open Design',
+      modes: ['local_code_agent', 'byok'],
+    },
+    hint: nextAction === 'generate'
+      ? 'Open Design Cloud is connected and has a positive wallet balance. The ChatGPT app will use Cloud for the next run.'
+      : nextAction === 'recharge'
+        ? 'Open Design Cloud balance is empty. Offer recharge first. The user may instead open Open Design and choose a local Code Agent or BYOK mode.'
+        : nextAction === 'sign_in'
+          ? 'Open Design Cloud is not signed in. Complete Open Design authorization, then check the account again.'
+          : 'Open Design Cloud wallet status is temporarily unavailable. Do not treat it as zero; retry before starting a paid run.',
+  };
+}
+
+function encodeProjectRelativePath(filePath: string): string {
+  return filePath.split('/').filter(Boolean).map(encodeURIComponent).join('/');
+}
+
+async function resolveVersionPath(baseUrl: string, projectId: string, requested: unknown): Promise<string> {
+  if (typeof requested === 'string' && requested.length > 0) return requested;
+  const project = await getJson<ProjectPayload>(`${baseUrl}/api/projects/${encodeURIComponent(projectId)}`);
+  const entry = await resolveProjectEntry(baseUrl, projectId, project.project?.metadata?.entryFile ?? project.metadata?.entryFile ?? null);
+  if (!entry) throw new Error('path is required because this project has no resolvable entry file');
+  return entry;
+}
+
+async function listVersions(baseUrl: string, args: McpArgs) {
+  const { id, resolved, active } = await resolveProjectArg(baseUrl, args.project);
+  const filePath = await resolveVersionPath(baseUrl, id, args.path);
+  const data = await getJson<JsonObject>(
+    `${baseUrl}/api/projects/${encodeURIComponent(id)}/files/${encodeProjectRelativePath(filePath)}/versions`,
+  );
+  return ok(withActiveEcho({ ...data, projectId: id, path: filePath }, active, resolved));
+}
+
+async function restoreVersion(baseUrl: string, args: McpArgs) {
+  if (typeof args.project !== 'string' || !args.project) throw new Error('project is required');
+  requireString(args.path, 'path');
+  requireString(args.versionId, 'versionId');
+  if (args.confirm !== true) return errorResult('confirm:true is required to restore a version');
+  const { id, resolved } = await resolveProjectArg(baseUrl, args.project);
+  const result = await postJson<JsonObject>(
+    `${baseUrl}/api/projects/${encodeURIComponent(id)}/files/${encodeProjectRelativePath(args.path)}/versions/${encodeURIComponent(args.versionId)}/restore`,
+    {},
+  );
+  return ok(withActiveEcho({ ...result, projectId: id, path: args.path }, null, resolved));
+}
+
+async function exportProject(baseUrl: string, args: McpArgs) {
+  const { id, resolved, active } = await resolveProjectArg(baseUrl, args.project);
+  const url = `${baseUrl}/api/projects/${encodeURIComponent(id)}/archive`;
+  const response = await fetch(url);
+  if (!response.ok) return errorResult(await formatDaemonError(response, url));
+  const bytes = Buffer.from(await response.arrayBuffer());
+  const maxBytes = 12 * 1024 * 1024;
+  if (bytes.length > maxBytes) {
+    return errorResult(`Project ZIP is ${bytes.length} bytes, above the ${maxBytes}-byte ChatGPT transfer limit. Open Open Design Studio to export it directly.`);
+  }
+  const disposition = response.headers.get('content-disposition') ?? '';
+  const encodedName = /filename\*=UTF-8''([^;]+)/i.exec(disposition)?.[1];
+  const plainName = /filename="([^"]+)"/i.exec(disposition)?.[1];
+  const fileName = encodedName ? decodeURIComponent(encodedName) : plainName || `${id}.zip`;
+  const structuredContent = withActiveEcho({
+    ok: true,
+    projectId: id,
+    fileName,
+    mimeType: 'application/zip',
+    bytes: bytes.length,
+  }, active, resolved);
+  return {
+    structuredContent,
+    content: [
+      { type: 'text' as const, text: `Exported ${fileName} (${bytes.length} bytes).` },
+      {
+        type: 'resource' as const,
+        resource: {
+          uri: `od://exports/${encodeURIComponent(id)}/${encodeURIComponent(fileName)}`,
+          mimeType: 'application/zip',
+          blob: bytes.toString('base64'),
+        },
+      },
+    ],
+  };
 }
 
 async function writeFile(baseUrl: string, args: McpArgs) {

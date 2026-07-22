@@ -1,0 +1,35 @@
+{
+  "name": "open-design",
+  "version": "0.2.3",
+  "description": "Create websites, product prototypes, presentations, and reusable design systems with Open Design from ChatGPT.",
+  "author": {
+    "name": "Nexu",
+    "email": "support@open-design.ai",
+    "url": "https://open-design.ai"
+  },
+  "homepage": "https://open-design.ai",
+  "repository": "https://github.com/nexu-io/open-design",
+  "license": "Apache-2.0",
+  "keywords": ["design", "website", "prototype", "presentation", "design-system"],
+  "skills": "./skills/",
+  "apps": "./.app.json",
+  "interface": {
+    "displayName": "Open Design",
+    "shortDescription": "Turn a brief into a real design artifact.",
+    "longDescription": "Create and refine websites, product prototypes, presentations, and reusable design systems through Open Design. Review progress, previews, versions, and exports in ChatGPT, then open the full Open Design studio for detailed editing.",
+    "developerName": "Nexu",
+    "category": "Design",
+    "capabilities": ["Interactive", "Write"],
+    "websiteURL": "https://open-design.ai",
+    "privacyPolicyURL": "https://github.com/nexu-io/open-design/blob/main/PRIVACY.md",
+    "termsOfServiceURL": "https://open-design.ai/terms/",
+    "defaultPrompt": [
+      "Create a polished website from my brief.",
+      "Turn this product idea into an interactive prototype.",
+      "Create a presentation with a coherent visual system."
+    ],
+    "brandColor": "#111111",
+    "composerIcon": "./assets/icon.svg",
+    "logo": "./assets/logo.svg"
+  }
+}

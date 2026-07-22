@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 80" role="img" aria-label="Open Design">
+  <rect width="320" height="80" rx="20" fill="#111111"/>
+  <circle cx="42" cy="40" r="22" fill="none" stroke="#F3EBDD" stroke-width="8"/>
+  <circle cx="42" cy="40" r="6" fill="#F3EBDD"/>
+  <text x="82" y="51" fill="#F3EBDD" font-family="Arial, sans-serif" font-size="32" font-weight="650">Open Design</text>
+</svg>

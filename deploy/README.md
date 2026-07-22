@@ -84,6 +84,35 @@ The image intentionally does not bundle Claude/Codex/Gemini CLI binaries. Keep
 those outside the image, or build a separate private runtime layer if a server
 deployment needs local code-agent CLIs installed in the container.
 
+## ChatGPT Cloud gateway overlay
+
+The ChatGPT V1 deployment uses the same image with the managed-tenant overlay:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.chatgpt.yml up -d --build
+```
+
+Fill the ChatGPT gateway variables in `.env` first. In particular, the MCP
+resource URL must exactly match Vela's OAuth audience, and the gateway secret
+must match Vela's backend-only credential-exchange secret. Managed mode starts
+one loopback-only child daemon per active OAuth subject, bounded by
+`OD_CHATGPT_TENANT_MAX_ACTIVE`; the overlay raises the default container memory
+and process limits accordingly.
+
+The public TLS reverse proxy must expose `POST /mcp`, the two OAuth
+protected-resource metadata paths, and `GET /chatgpt/preview/*`. The preview
+route accepts an opaque active-tenant capability and proxies only raw project
+assets; it does not expose the general REST API. Keep `/api/*`, tenant child
+ports, and the Vela credential exchange off the public proxy. The child daemons
+receive personal, expiring Vela credentials and persist through the gateway's
+resolved daemon data root; see root `AGENTS.md` → **Daemon data directory
+contract** for the storage invariant.
+
+Leave `OD_CHATGPT_STUDIO_URL_TEMPLATE` unset until a tenant-aware Studio edge
+is deployed. When configured, the URL must route the signed-in Open Design user
+to the same tenant storage; otherwise the MCP gateway intentionally omits the
+Studio link while keeping ChatGPT preview, versions, restore, and export usable.
+
 ## Linux: mounting host agent CLIs
 
 On Linux you can mount host-installed agent CLIs (Claude Code, opencode, Codex,
