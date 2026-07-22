@@ -216,6 +216,37 @@ function normalizeTabsState(state: WorkspaceTabsState): WorkspaceTabsState {
     );
   }
 
+  // Coalesce duplicate project tabs (one-project/one-tab invariant): a
+  // workspace restored from localStorage can already hold several tabs for the
+  // same projectId if the user hit the duplicate-tab bug before upgrading.
+  // Keep one canonical tab per projectId — the active match, else the newest —
+  // and drop the rest. This runs on every normalize, so it repairs persisted
+  // state as well as preventing new corruption. See issue #2641.
+  const projectTabs = sourceTabs.filter((tab) => tab.kind === 'project');
+  if (projectTabs.length > 0) {
+    const canonicalByProject = new Map<string, WorkspaceChromeTab>();
+    for (const tab of projectTabs) {
+      const existing = canonicalByProject.get(tab.projectId);
+      if (!existing) {
+        canonicalByProject.set(tab.projectId, tab);
+        continue;
+      }
+      // Prefer the currently active tab; otherwise keep the most recently used.
+      const tabIsActive = tab.id === state.activeTabId;
+      const existingIsActive = existing.id === state.activeTabId;
+      const keepTab =
+        (tabIsActive && !existingIsActive) ||
+        (!existingIsActive && tab.lastActiveAt > existing.lastActiveAt);
+      if (keepTab) canonicalByProject.set(tab.projectId, tab);
+    }
+    const canonicalProjectIds = new Set(
+      Array.from(canonicalByProject.values()).map((tab) => tab.id),
+    );
+    sourceTabs = sourceTabs.filter(
+      (tab) => tab.kind !== 'project' || canonicalProjectIds.has(tab.id),
+    );
+  }
+
   // Pin the single entry tab to the leftmost position (Figma-style). It is the
   // one permanent, non-closable tab regardless of which section it currently
   // shows; project / marketplace tabs always sit to its right in insertion
