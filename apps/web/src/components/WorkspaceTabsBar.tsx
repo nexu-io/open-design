@@ -1809,7 +1809,11 @@ function displayTabFor(
     projects: 'folder',
     tasks: 'kanban',
     plugins: 'grid',
-    'design-systems': 'blocks',
+    // `palette` is a clean line glyph that reads as "design system / tokens",
+    // consistent with the other outline entry icons. The heavier `blocks`
+    // glyph renders visually inconsistent next to them (same reason Brand Kit
+    // nav moved off `blocks` — see Icon.tsx swatchbook comment).
+    'design-systems': 'palette',
     library: 'image',
     brands: 'blocks',
     integrations: 'link',
