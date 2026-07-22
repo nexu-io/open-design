@@ -196,6 +196,24 @@ describe('/api/chat', () => {
     expect(body).toContain('AGENT_UNAVAILABLE');
   });
 
+  it('rejects independent review purpose on the legacy chat endpoint', async () => {
+    const response = await fetch(`${baseUrl}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        agentId: 'codex',
+        conversationId: `existing-${randomUUID()}`,
+        message: 'review this project',
+        purpose: 'review',
+      }),
+    });
+    const body = await response.json() as { error?: { code?: string; message?: string } };
+
+    expect(response.status).toBe(400);
+    expect(body.error?.code).toBe('BAD_REQUEST');
+    expect(body.error?.message).toContain('POST /api/runs');
+  });
+
   it('keeps serving when delivered-session persistence has no conversation row', async () => {
     const conversationId = `missing-conversation-${randomUUID()}`;
 

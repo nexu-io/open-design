@@ -224,6 +224,29 @@ interface ChatRunCreateRequest {
 }
 ```
 
+Independent code review reuses `POST /api/runs` with a constrained request:
+
+```ts
+interface IndependentReviewRunCreateRequest {
+  projectId: string;
+  purpose: 'review';
+  message: string;
+  agentId?: 'codex';
+  model?: string;
+}
+```
+
+The daemon creates a fresh conversation for every independent review and
+forces the Codex process into a read-only filesystem sandbox. Review requests
+cannot attach to an existing conversation, load plugins or skills, provide a
+tool bundle, or receive a daemon tool token. The process uses an isolated
+temporary `CODEX_HOME` containing only copied login state and explicitly
+disables plugins, so user MCP/plugin configuration cannot widen the sandbox.
+The legacy `/api/chat` endpoint
+does not accept `purpose`. The project chat header exposes the same operation
+as an **Independent review** action and switches to the daemon-created review
+conversation after the run is accepted. `od run review` is the CLI equivalent.
+
 `GET /api/runs/:id` should return enough state for recovery:
 
 ```ts

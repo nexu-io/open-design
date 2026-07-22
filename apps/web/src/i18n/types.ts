@@ -2622,6 +2622,8 @@ export interface Dict {
   'chat.inspect.commentHint': string;
   'chat.conversationsTitle': string;
   'chat.conversationsAria': string;
+  'chat.independentReview': string;
+  'chat.independentReviewStarting': string;
   'chat.newConversation': string;
   'chat.newConversationsTitle': string;
   'chat.conversationsHeading': string;

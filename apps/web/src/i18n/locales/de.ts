@@ -1844,6 +1844,8 @@ export const de: Dict = {
   'chat.annotationUploadFailed': 'Hochladen des Anhangs fehlgeschlagen. Bitte versuche es erneut.',
   'chat.conversationsTitle': 'Konversationen',
   'chat.conversationsAria': 'Konversationsverlauf',
+  'chat.independentReview': 'Unabhängige Prüfung',
+  'chat.independentReviewStarting': 'Unabhängige Prüfung wird gestartet…',
   'chat.newConversation': 'Neue Konversation',
   'chat.newConversationsTitle': 'Neue Konversation',
   'chat.conversationsHeading': 'Konversationen',

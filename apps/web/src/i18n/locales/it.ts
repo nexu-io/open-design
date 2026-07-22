@@ -1844,6 +1844,8 @@ export const it: Dict = {
   'chat.annotationUploadFailed': 'Caricamento dell\'allegato non riuscito. Riprova.',
   'chat.conversationsTitle': 'Conversazioni',
   'chat.conversationsAria': 'Cronologia delle conversazioni',
+  'chat.independentReview': 'Revisione indipendente',
+  'chat.independentReviewStarting': 'Avvio della revisione indipendente…',
   'chat.newConversation': 'Nuova conversazione',
   'chat.newConversationsTitle': 'Nuova conversazione',
   'chat.conversationsHeading': 'Conversazioni',

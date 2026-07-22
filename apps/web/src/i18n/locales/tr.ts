@@ -1844,6 +1844,8 @@ export const tr: Dict = {
   'chat.annotationUploadFailed': 'Ek yükleme başarısız oldu. Lütfen tekrar deneyin.',
   'chat.conversationsTitle': 'Konuşmalar',
   'chat.conversationsAria': 'Konuşma geçmişi',
+  'chat.independentReview': 'Bağımsız inceleme',
+  'chat.independentReviewStarting': 'Bağımsız inceleme başlatılıyor…',
   'chat.newConversation': 'Yeni konuşma',
   'chat.newConversationsTitle': 'Yeni Konuşma',
   'chat.conversationsHeading': 'Konuşmalar',

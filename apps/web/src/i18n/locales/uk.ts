@@ -1844,6 +1844,8 @@ export const uk: Dict = {
   'chat.annotationUploadFailed': 'Не вдалося завантажити вкладення. Спробуйте ще раз.',
   'chat.conversationsTitle': 'Розмови',
   'chat.conversationsAria': 'Історія розмов',
+  'chat.independentReview': 'Незалежна перевірка',
+  'chat.independentReviewStarting': 'Запуск незалежної перевірки…',
   'chat.newConversation': 'Нова розмова',
   'chat.newConversationsTitle': 'Нова розмова',
   'chat.conversationsHeading': 'Розмови',

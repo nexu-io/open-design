@@ -34,6 +34,7 @@ function durableRunState(run) {
     conversationId: run.conversationId,
     assistantMessageId: run.assistantMessageId,
     agentId: run.agentId,
+    purpose: run.purpose ?? null,
     status: run.status,
     createdAt: run.createdAt,
     updatedAt: run.updatedAt,
@@ -108,6 +109,7 @@ export function createChatRunService({
       assistantMessageId: typeof meta.assistantMessageId === 'string' && meta.assistantMessageId ? meta.assistantMessageId : null,
       clientRequestId: typeof meta.clientRequestId === 'string' && meta.clientRequestId ? meta.clientRequestId : null,
       agentId: typeof meta.agentId === 'string' && meta.agentId ? meta.agentId : null,
+      purpose: meta.purpose === 'review' ? 'review' : null,
       projectMetadata:
         meta.projectMetadata && typeof meta.projectMetadata === 'object' && !Array.isArray(meta.projectMetadata)
           ? meta.projectMetadata
@@ -295,6 +297,7 @@ export function createChatRunService({
     conversationId: run.conversationId,
     assistantMessageId: run.assistantMessageId,
     agentId: run.agentId,
+    purpose: run.purpose ?? null,
     designSystemId: run.designSystemId ?? null,
     designSystemRequestedId: run.designSystemRequestedId ?? null,
     designSystemSelectionSource: run.designSystemSelectionSource ?? null,

@@ -28,6 +28,7 @@ import {
   publishDaemonRunFinishedEvent,
   reattachDaemonRun,
   reportChatRunFeedback,
+  startIndependentReview,
   streamViaDaemon,
 } from '../providers/daemon';
 import { normalizeCustomReason } from '@open-design/contracts/analytics';
@@ -1807,6 +1808,7 @@ export function ProjectView({
   // correctly gate new-conversation creation even during async loads.
   const messagesConversationIdRef = useRef<string | null>(null);
   const creatingConversationRef = useRef(false);
+  const independentReviewStartingRef = useRef(false);
   // Last conversation id this view pushed into the URL. Lets the
   // route -> active-conversation sync tell a genuine external navigation
   // apart from the URL merely lagging a local conversation switch.
@@ -1840,6 +1842,7 @@ export function ProjectView({
   // allowed to apply its result.
   const conversationsRefreshTokenRef = useRef(0);
   const [creatingConversation, setCreatingConversation] = useState(false);
+  const [independentReviewStarting, setIndependentReviewStarting] = useState(false);
   const currentConversationHasProgrammaticBrandExtractionRun = useMemo(
     () => messages.some((m) => isProgrammaticBrandExtractionStatusMessage(m, currentProject.metadata)),
     [messages, currentProject.metadata],
@@ -2626,9 +2629,9 @@ export function ProjectView({
       return;
     }
     if (evt.type === 'conversation-created') {
-      // A new conversation was inserted into this project by a path the
-      // open project view can't observe through its own state (currently:
-      // Routines "Run now" in reuse-an-existing-project mode, #1361).
+      // A new conversation was inserted into this project by a server-side
+      // path the open project view may not observe through its own state
+      // (for example a routine or an independent review run).
       // Refetch the conversation list so the new entry becomes visible
       // without requiring the user to leave and re-enter the project.
       // Deliberately do NOT change the active conversation here — the
@@ -7049,6 +7052,48 @@ export function ProjectView({
     setMessageLoadRetryNonce((nonce) => nonce + 1);
   }, [activeConversationId, failedMessagesConversationId, project.id, openTabsState.active]);
 
+  const handleIndependentReview = useCallback(async () => {
+    if (independentReviewStartingRef.current || currentConversationActionDisabled) return;
+    independentReviewStartingRef.current = true;
+    setIndependentReviewStarting(true);
+    setConversationLoadError(null);
+    try {
+      const capturedProjectId = project.id;
+      const created = await startIndependentReview(capturedProjectId);
+      if (!created.conversationId) {
+        throw new Error('The daemon did not return an independent review conversation.');
+      }
+      if (projectIdRef.current !== capturedProjectId) return;
+      const conversationId = created.conversationId;
+      const myToken = ++conversationsRefreshTokenRef.current;
+      setConversations((current) =>
+        ensureConversationPresent(current, conversationId, capturedProjectId));
+      handleSelectConversation(created.conversationId);
+      setError(null);
+      // The daemon has already accepted the review. Refreshing the sidebar is
+      // best-effort: a transient list failure must not report that start as a
+      // failure and tempt the user to create a duplicate review. The monotonic
+      // token also prevents this response from overwriting a newer project
+      // event refresh.
+      void listConversations(capturedProjectId)
+        .then((list) => {
+          if (projectIdRef.current !== capturedProjectId) return;
+          if (conversationsRefreshTokenRef.current !== myToken) return;
+          setConversations(ensureConversationPresent(list, conversationId, capturedProjectId));
+        })
+        .catch(() => {});
+    } catch (err) {
+      const message = err instanceof Error
+        ? err.message
+        : 'Could not start an independent review.';
+      setConversationLoadError(message);
+      setError(message);
+    } finally {
+      independentReviewStartingRef.current = false;
+      setIndependentReviewStarting(false);
+    }
+  }, [currentConversationActionDisabled, handleSelectConversation, project.id]);
+
   const refreshConversationsForProgrammaticBrandRetry = useCallback(
     async (conversationId: string): Promise<boolean> => {
       const capturedProjectId = project.id;
@@ -8614,6 +8659,13 @@ export function ProjectView({
               forkingMessageId={forkingMessageId}
               onNewConversation={handleNewConversation}
               newConversationDisabled={newConversationDisabled}
+              onIndependentReview={
+                config.mode === 'daemon' && daemonLive
+                  ? () => void handleIndependentReview()
+                  : undefined
+              }
+              independentReviewBusy={independentReviewStarting}
+              independentReviewDisabled={currentConversationActionDisabled}
               conversations={conversations}
               activeConversationId={activeConversationId}
               messagesConversationId={messagesConversationId}

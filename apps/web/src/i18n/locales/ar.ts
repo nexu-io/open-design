@@ -1844,6 +1844,8 @@ export const ar: Dict = {
   'chat.annotationUploadFailed': 'فشل رفع المرفق. يُرجى المحاولة مرة أخرى.',
   'chat.conversationsTitle': 'المحادثات',
   'chat.conversationsAria': 'سجل المحادثات',
+  'chat.independentReview': 'مراجعة مستقلة',
+  'chat.independentReviewStarting': 'جارٍ بدء المراجعة المستقلة…',
   'chat.newConversation': 'محادثة جديدة',
   'chat.newConversationsTitle': 'محادثة جديدة',
   'chat.conversationsHeading': 'المحادثات',

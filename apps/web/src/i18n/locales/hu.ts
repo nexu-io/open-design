@@ -1844,6 +1844,8 @@ export const hu: Dict = {
   'chat.annotationUploadFailed': 'A melléklet feltöltése nem sikerült. Kérjük, próbálja újra.',
   'chat.conversationsTitle': 'Beszélgetések',
   'chat.conversationsAria': 'Beszélgetések előzménye',
+  'chat.independentReview': 'Független ellenőrzés',
+  'chat.independentReviewStarting': 'Független ellenőrzés indítása…',
   'chat.newConversation': 'Új beszélgetés',
   'chat.newConversationsTitle': 'Új beszélgetés',
   'chat.conversationsHeading': 'Beszélgetések',

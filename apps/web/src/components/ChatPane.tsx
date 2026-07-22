@@ -14,6 +14,7 @@ import {
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { Button } from '@open-design/components';
 import { hasOdCard } from '@open-design/contracts';
 import { useAnalytics } from '../analytics/provider';
 import { getResolvedDeviceId } from '../analytics/client';
@@ -555,6 +556,9 @@ interface Props {
   // Header "+" button — kicks off ProjectView's create-conversation flow.
   onNewConversation?: () => void;
   newConversationDisabled?: boolean;
+  onIndependentReview?: () => void;
+  independentReviewBusy?: boolean;
+  independentReviewDisabled?: boolean;
   // Conversation list that used to live in the topbar. The chat tab now
   // owns the list so users can browse + switch conversations without
   // leaving the pane.
@@ -843,6 +847,9 @@ export function ChatPane({
   forkingMessageId = null,
   onNewConversation,
   newConversationDisabled = false,
+  onIndependentReview,
+  independentReviewBusy = false,
+  independentReviewDisabled = false,
   conversations,
   activeConversationId,
   messagesConversationId = null,
@@ -2142,6 +2149,23 @@ export function ChatPane({
         ) : null}
         {projectHeader ? (
           <span className="chat-project-header-title">{projectHeader}</span>
+        ) : null}
+        {onIndependentReview ? (
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="chat-session-trigger icon-only"
+            data-testid="independent-review-trigger"
+            title={independentReviewBusy
+              ? t('chat.independentReviewStarting')
+              : t('chat.independentReview')}
+            aria-label={t('chat.independentReview')}
+            disabled={independentReviewBusy || independentReviewDisabled}
+            onClick={onIndependentReview}
+          >
+            <Icon name={independentReviewBusy ? 'spinner' : 'check'} size={16} />
+          </Button>
         ) : null}
         <div
           className={`chat-history-wrap chat-session-switcher${showConvList ? ' open' : ''}`}

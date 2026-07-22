@@ -31,7 +31,10 @@ afterEach(async () => {
   stub = null;
 });
 
-async function startRunStubServer(resumable: boolean): Promise<StubServer> {
+async function startRunStubServer(
+  resumable: boolean,
+  purpose: 'review' | null = null,
+): Promise<StubServer> {
   const requests: CapturedRequest[] = [];
   const server = http.createServer((req, res) => {
     let raw = '';
@@ -56,6 +59,7 @@ async function startRunStubServer(resumable: boolean): Promise<StubServer> {
           agentId: 'claude',
           status: 'failed',
           resumable,
+          purpose,
         }));
         return;
       }
@@ -106,6 +110,35 @@ async function runCli(args: string[]): Promise<{ stdout: string; stderr: string;
 }
 
 describe('od run CLI', () => {
+  it('starts an independent Codex review through the normal run API', async () => {
+    stub = await startRunStubServer(false);
+
+    const result = await runCli([
+      'run',
+      'review',
+      '--project',
+      'project-1',
+      '--message',
+      'Review the current changes.',
+      '--daemon-url',
+      stub.baseUrl,
+      '--json',
+    ]);
+
+    expect(result.code).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(JSON.parse(result.stdout)).toEqual({ runId: 'run-2' });
+    expect(stub.requests.map((request) => `${request.method} ${request.url}`)).toEqual([
+      'POST /api/runs',
+    ]);
+    expect(JSON.parse(stub.requests[0]!.body)).toEqual({
+      projectId: 'project-1',
+      agentId: 'codex',
+      purpose: 'review',
+      message: 'Review the current changes.',
+    });
+  });
+
   it('continues a resumable run through the normal run creation API', async () => {
     stub = await startRunStubServer(true);
 
@@ -149,6 +182,24 @@ describe('od run CLI', () => {
     expect(result.code).toBe(1);
     expect(result.stdout).toBe('');
     expect(result.stderr).toContain('Run run-1 does not have a safe recoverable native session.');
+    expect(stub.requests.map((request) => `${request.method} ${request.url}`)).toEqual([
+      'GET /api/runs/run-1',
+    ]);
+  });
+
+  it('never continues an independent review as a writable normal run', async () => {
+    stub = await startRunStubServer(true, 'review');
+
+    const result = await runCli([
+      'run',
+      'continue',
+      'run-1',
+      '--daemon-url',
+      stub.baseUrl,
+    ]);
+
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain('cannot be continued with writable access');
     expect(stub.requests.map((request) => `${request.method} ${request.url}`)).toEqual([
       'GET /api/runs/run-1',
     ]);

@@ -1844,6 +1844,8 @@ export const fr: Dict = {
   'chat.annotationUploadFailed': 'L’envoi de la pièce jointe a échoué. Veuillez réessayer.',
   'chat.conversationsTitle': 'Conversations',
   'chat.conversationsAria': 'Historique des conversations',
+  'chat.independentReview': 'Revue indépendante',
+  'chat.independentReviewStarting': 'Démarrage de la revue indépendante…',
   'chat.newConversation': 'Nouvelle conversation',
   'chat.newConversationsTitle': 'Nouvelle conversation',
   'chat.conversationsHeading': 'Conversations',

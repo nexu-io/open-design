@@ -1844,6 +1844,8 @@ export const th: Dict = {
   'chat.annotationUploadFailed': 'การอัปโหลดไฟล์แนบล้มเหลว โปรดลองอีกครั้ง',
   'chat.conversationsTitle': 'การสนทนา',
   'chat.conversationsAria': 'ประวัติ',
+  'chat.independentReview': 'การตรวจสอบอิสระ',
+  'chat.independentReviewStarting': 'กำลังเริ่มการตรวจสอบอิสระ…',
   'chat.newConversation': 'สนทนาใหม่',
   'chat.newConversationsTitle': 'เริ่มใหม่',
   'chat.conversationsHeading': 'บทสนทนาทั้งหมด',

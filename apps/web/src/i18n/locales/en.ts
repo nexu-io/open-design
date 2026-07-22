@@ -1844,6 +1844,8 @@ export const en: Dict = {
   'chat.annotationUploadFailed': 'Attachment upload failed. Please try again.',
   'chat.conversationsTitle': 'Conversations',
   'chat.conversationsAria': 'Conversation history',
+  'chat.independentReview': 'Independent review',
+  'chat.independentReviewStarting': 'Starting independent review…',
   'chat.newConversation': 'New conversation',
   'chat.newConversationsTitle': 'New conversation',
   'chat.conversationsHeading': 'Conversations',

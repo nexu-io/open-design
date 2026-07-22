@@ -29,6 +29,7 @@ export type RunFailureDetail = TrackingRunFailureDetail;
 
 export type ChatRole = 'user' | 'assistant';
 export type ChatSessionMode = 'design' | 'chat' | 'plan';
+export type ChatRunPurpose = 'review';
 export type ChatCommentSelectionKind = PreviewCommentSelectionKind | 'visual';
 export type ByokChatProtocol =
   | 'anthropic'
@@ -289,6 +290,19 @@ export interface ChatRunCreateRequest extends ChatRequest {
 }
 
 /**
+ * A daemon-owned independent review. The daemon creates the conversation and
+ * forces Codex into a read-only filesystem policy; callers cannot attach the
+ * run to an existing conversation or widen its tool access.
+ */
+export interface IndependentReviewRunCreateRequest {
+  projectId: string;
+  purpose: 'review';
+  message: string;
+  agentId?: 'codex';
+  model?: string;
+}
+
+/**
  * Minimal POST /api/runs shape accepted from MCP / SDK callers that do not
  * manage conversation state client-side. Only `projectId` is required;
  * `message` and `agentId` are optional — the daemon resolves `agentId` from
@@ -450,6 +464,8 @@ export interface ChatRunStatusResponse {
   conversationId: string | null;
   assistantMessageId: string | null;
   agentId: string | null;
+  /** Special daemon execution policy, when this is not a normal chat run. */
+  purpose?: ChatRunPurpose | null;
   /** Design system whose prompt context was actually injected for this run. */
   designSystemId?: string | null;
   /** Selected design system before usability/body checks; useful for diagnostics. */

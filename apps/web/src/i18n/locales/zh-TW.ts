@@ -1962,6 +1962,8 @@ export const zhTW: Dict = {
   "chat.annotationUploadFailed": "附件上傳失敗，請重試。",
   "chat.conversationsTitle": "對話紀錄",
   "chat.conversationsAria": "對話紀錄",
+  "chat.independentReview": "獨立審查",
+  "chat.independentReviewStarting": "正在啟動獨立審查…",
   "chat.newConversation": "新建對話",
   "chat.newConversationsTitle": "新建對話",
   "chat.conversationsHeading": "對話",

@@ -6278,6 +6278,9 @@ async function runRun(args) {
   od run start --project <projectId> [--conversation <id>] [--message "<text>"]
                [--plugin <id>] [--inputs <json>] [--grant-caps a,b]
                [--agent claude|codex|opencode] [--model <id>] [--follow] [--json]
+  od run review --project <projectId> [--message "<text>" | --prompt-file <path|->]
+               [--model <id>] [--follow] [--json]
+                                           Start a fresh read-only Codex review.
   od run redesign [--path <folder>] [--message "<text>" | --prompt-file <path|->]
                [--agent claude] [--model <id>] [--follow] [--json]
   od run watch  <runId>                     ND-JSON event stream on stdout.
@@ -6298,6 +6301,29 @@ Common options:
   const flags = parseFlags(rest, { string: PROJECT_STRING_FLAGS, boolean: PROJECT_BOOLEAN_FLAGS });
   const base = (await projectDaemonUrl(flags)).replace(/\/$/, '');
   switch (sub) {
+    case 'review': {
+      if (!flags.project) {
+        console.error('--project <projectId> is required');
+        process.exit(2);
+      }
+      const defaultMessage =
+        'Review the current project changes without modifying files. Report actionable findings in severity order with file and line references. If there are no findings, say so explicitly.';
+      const message = await readRunMessageFromFlags(flags, defaultMessage);
+      const body = {
+        projectId: flags.project,
+        agentId: 'codex',
+        purpose: 'review',
+        message,
+        ...(flags.model ? { model: flags.model } : {}),
+      };
+      const data = await postJsonToDaemon(base, '/api/runs', body);
+      if (flags.json && !flags.follow) {
+        return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      }
+      console.log(`[run] review started ${data.runId} (conversation ${data.conversationId ?? '-'})`);
+      if (flags.follow) await streamRunEvents(base, data.runId);
+      return;
+    }
     case 'list': {
       const url = flags.project
         ? `${base}/api/runs?projectId=${encodeURIComponent(flags.project)}`
@@ -6368,6 +6394,17 @@ Common options:
       const statusResp = await fetch(`${base}/api/runs/${encodeURIComponent(id)}`);
       if (!statusResp.ok) return structuredHttpFailure(statusResp, 'run-not-found');
       const status = await statusResp.json();
+      if (status?.purpose === 'review') {
+        const payload = {
+          error: {
+            code: 'review-run-not-continuable',
+            message: `Independent review run ${id} cannot be continued with writable access. Start a new review instead.`,
+          },
+        };
+        if (flags.json) process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
+        else console.error(payload.error.message);
+        process.exit(1);
+      }
       if (status?.resumable !== true) {
         const payload = {
           error: {

@@ -1844,6 +1844,8 @@ export const ru: Dict = {
   'chat.annotationUploadFailed': 'Не удалось загрузить вложение. Попробуйте ещё раз.',
   'chat.conversationsTitle': 'Разговоры',
   'chat.conversationsAria': 'История разговоров',
+  'chat.independentReview': 'Независимая проверка',
+  'chat.independentReviewStarting': 'Запуск независимой проверки…',
   'chat.newConversation': 'Новый разговор',
   'chat.newConversationsTitle': 'Новый разговор',
   'chat.conversationsHeading': 'Разговоры',

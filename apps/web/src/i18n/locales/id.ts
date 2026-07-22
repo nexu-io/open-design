@@ -1844,6 +1844,8 @@ export const id: Dict = {
   'chat.annotationUploadFailed': 'Attachment upload failed. Please try again.',
   'chat.conversationsTitle': 'Percakapan',
   'chat.conversationsAria': 'Buka percakapan',
+  'chat.independentReview': 'Tinjauan independen',
+  'chat.independentReviewStarting': 'Memulai tinjauan independen…',
   'chat.newConversation': 'Percakapan baru',
   'chat.newConversationsTitle': 'Mulai percakapan baru',
   'chat.conversationsHeading': 'Percakapan',

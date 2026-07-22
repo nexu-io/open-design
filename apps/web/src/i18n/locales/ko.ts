@@ -1844,6 +1844,8 @@ export const ko: Dict = {
   'chat.annotationUploadFailed': '첨부 파일 업로드에 실패했습니다. 다시 시도해 주세요.',
   'chat.conversationsTitle': '대화 목록',
   'chat.conversationsAria': '대화 내역',
+  'chat.independentReview': '독립 검토',
+  'chat.independentReviewStarting': '독립 검토를 시작하는 중…',
   'chat.newConversation': '새 대화 시작',
   'chat.newConversationsTitle': '새 대화',
   'chat.conversationsHeading': '대화 목록',

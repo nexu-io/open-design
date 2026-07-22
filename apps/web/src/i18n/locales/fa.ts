@@ -1844,6 +1844,8 @@ export const fa: Dict = {
   'chat.annotationUploadFailed': 'بارگذاری پیوست ناموفق بود. لطفاً دوباره تلاش کنید.',
   'chat.conversationsTitle': 'مکالمات',
   'chat.conversationsAria': 'تاریخچه مکالمات',
+  'chat.independentReview': 'بررسی مستقل',
+  'chat.independentReviewStarting': 'در حال شروع بررسی مستقل…',
   'chat.newConversation': 'مکالمه جدید',
   'chat.newConversationsTitle': 'مکالمه جدید',
   'chat.conversationsHeading': 'مکالمات',

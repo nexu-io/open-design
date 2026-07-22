@@ -14,6 +14,7 @@ import type { AmrEntryAttribution } from '../analytics/amr-attribution';
 import type {
   ChatAnalyticsHints,
   ChatRunCreateResponse,
+  IndependentReviewRunCreateRequest,
   ChatRunListResponse,
   ChatRunStatus,
   ChatRunStatusResponse,
@@ -48,12 +49,42 @@ function detectClientType(): 'desktop' | 'web' | 'unknown' {
   if (ua) return 'web';
   return 'unknown';
 }
+
 import { parseSseFrame } from './sse';
 import {
   summarizeArtifactsForTranscript,
   type PersistedArtifactFileRef,
 } from '../artifacts/strip';
 import { trackRunProgress, trackRunStart, trackRunTerminal } from '../observability/stuck-run';
+
+const DEFAULT_INDEPENDENT_REVIEW_PROMPT =
+  'Review the current project changes without modifying files. Report actionable findings in severity order with file and line references. If there are no findings, say so explicitly.';
+
+export async function startIndependentReview(
+  projectId: string,
+): Promise<ChatRunCreateResponse> {
+  const request: IndependentReviewRunCreateRequest = {
+    projectId,
+    purpose: 'review',
+    agentId: 'codex',
+    message: DEFAULT_INDEPENDENT_REVIEW_PROMPT,
+  };
+  const response = await fetch('/api/runs', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-OD-Client': detectClientType(),
+    },
+    body: JSON.stringify(request),
+  });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '');
+    throw new Error(`daemon ${response.status}: ${detail || 'could not start independent review'}`);
+  }
+  const created = (await response.json()) as ChatRunCreateResponse;
+  notifyRunsChanged();
+  return created;
+}
 
 const MAX_TRANSCRIPT_MESSAGE_CHARS = 12_000;
 const LARGE_TOOL_RESULT_CHARS = 8_000;
