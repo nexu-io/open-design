@@ -556,9 +556,33 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
       const detail = (event as CustomEvent<{ route?: Route }>).detail;
       const nextRoute = detail?.route;
       if (!nextRoute) return;
-      const nextTab = tabFromRoute(nextRoute);
       setState((current) => {
         const normalized = normalizeTabsState(current);
+        // Mirror syncStateToRoute: reuse an existing project tab for the same
+        // projectId instead of appending a duplicate on repeated opens.
+        if (nextRoute.kind === 'project') {
+          const existingProjectTab = normalized.tabs.find(
+            (tab) => tab.kind === 'project' && tab.projectId === nextRoute.projectId,
+          );
+          if (existingProjectTab) {
+            const timestamp = Date.now();
+            return normalizeTabsState({
+              ...normalized,
+              tabs: normalized.tabs.map((tab) =>
+                tab.id === existingProjectTab.id
+                  ? {
+                      ...tab,
+                      conversationId: nextRoute.conversationId ?? null,
+                      fileName: nextRoute.fileName,
+                      lastActiveAt: timestamp,
+                    }
+                  : tab,
+              ),
+              activeTabId: existingProjectTab.id,
+            });
+          }
+        }
+        const nextTab = tabFromRoute(nextRoute);
         return normalizeTabsState({
           tabs: [...normalized.tabs, nextTab],
           activeTabId: nextTab.id,

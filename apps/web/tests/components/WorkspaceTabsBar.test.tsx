@@ -352,6 +352,38 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     });
   });
 
+  it('reuses the existing project tab instead of duplicating on repeated open', async () => {
+    render(<WorkspaceTabsBar route={{ kind: 'home', view: 'home' }} projects={[project]} />);
+
+    openWorkspaceTab({ ...projectRoute });
+    openWorkspaceTab({ ...projectRoute });
+    openWorkspaceTab({ ...projectRoute });
+
+    await waitFor(() => {
+      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      expect(labels).toHaveLength(2);
+      expect(labels.filter((label) => label.includes('Project Alpha'))).toHaveLength(1);
+    });
+  });
+
+  it('updates the existing project tab fields instead of appending when reopened with new context', async () => {
+    render(<WorkspaceTabsBar route={{ kind: 'home', view: 'home' }} projects={[project]} />);
+
+    openWorkspaceTab({ ...projectRoute });
+    openWorkspaceTab({
+      kind: 'project',
+      projectId: 'project-alpha',
+      conversationId: 'conv-1',
+      fileName: 'deck.html',
+    });
+
+    await waitFor(() => {
+      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      expect(labels).toHaveLength(2);
+      expect(labels.filter((label) => label.includes('Project Alpha'))).toHaveLength(1);
+    });
+  });
+
   it('keeps a singleton Home tab when restoring a Home-less workspace and navigating back to Home', async () => {
     window.localStorage.setItem(
       'open-design:workspace-tabs:v1',
