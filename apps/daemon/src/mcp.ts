@@ -18,17 +18,957 @@ import {
   ListToolsRequestSchema,
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { buildProjectRawFileUrl } from '@open-design/contracts';
+import {
+  buildProjectRawFileUrl,
+  QUESTION_FORM_DECISION_ALIAS_GROUPS,
+} from '@open-design/contracts';
+import type {
+  DirectionCard,
+  FormOption,
+  FormQuestion,
+  QuestionForm,
+} from '@open-design/contracts';
 import { randomUUID } from 'node:crypto';
 
 import { postCreateArtifactRequest } from './artifacts/create.js';
+import { classifyAmrAccountFailure } from './integrations/vela-errors.js';
 
 const SERVER_NAME = 'open-design';
-const SERVER_VERSION = '0.2.0';
+const SERVER_VERSION = '0.2.13';
 const MCP_STDIO_IDLE_EXIT_MS = 30 * 60 * 1000;
+// MCP Apps hosts cache widget resources by URI. Bump this whenever the
+// embedded HTML/CSS/JS changes so a failed or stale sandbox is not reused.
+const CHATGPT_WIDGET_URI = 'ui://open-design/artifact-card-v10.html';
+// A running host can retain tool metadata across a daemon/plugin refresh and
+// keep reading the previous URI. Serve the latest widget at that URI too so
+// existing conversations recover without requiring a Codex restart.
+const LEGACY_CHATGPT_WIDGET_URIS = new Set([
+  'ui://open-design/artifact-card-v2.html',
+  'ui://open-design/artifact-card-v3.html',
+  'ui://open-design/artifact-card-v4.html',
+  'ui://open-design/artifact-card-v5.html',
+  'ui://open-design/artifact-card-v6.html',
+  'ui://open-design/artifact-card-v7.html',
+  'ui://open-design/artifact-card-v8.html',
+  'ui://open-design/artifact-card-v9.html',
+]);
+
+const CHATGPT_ARTIFACT_TYPES = [
+  'website',
+  'product-prototype',
+  'presentation',
+  'design-system',
+  'image',
+  'video',
+  'audio',
+  'document',
+] as const;
+type ChatGptArtifactType = (typeof CHATGPT_ARTIFACT_TYPES)[number];
+const CHATGPT_ARTIFACT_TYPE_SET = new Set<string>(CHATGPT_ARTIFACT_TYPES);
+const CHATGPT_BRIEF_QUESTION_TYPES = [
+  'radio',
+  'checkbox',
+  'select',
+  'switch',
+  'direction-cards',
+] as const;
+type ChatGptBriefQuestionType = (typeof CHATGPT_BRIEF_QUESTION_TYPES)[number];
+const CHATGPT_BRIEF_QUESTION_TYPE_SET = new Set<string>(CHATGPT_BRIEF_QUESTION_TYPES);
+const CHATGPT_BRIEF_MAX_QUESTIONS = 5;
+const CHATGPT_BRIEF_MAX_OPTIONS = 10;
+
+function isChatGptArtifactType(value: unknown): value is ChatGptArtifactType {
+  return typeof value === 'string' && CHATGPT_ARTIFACT_TYPE_SET.has(value);
+}
+
+function chatGptArtifactTypeError(): string {
+  return `artifactType must be one of: ${CHATGPT_ARTIFACT_TYPES.join(', ')}.`;
+}
+
+export function isChatGptWidgetResourceUri(value: unknown): value is string {
+  const uri = typeof value === 'string' ? value : '';
+  return uri === CHATGPT_WIDGET_URI || LEGACY_CHATGPT_WIDGET_URIS.has(uri);
+}
+const CHATGPT_SIGN_IN_URL = 'https://open-design.ai/amr';
+const CHATGPT_RECHARGE_URL = 'https://open-design.ai/amr/wallet';
+const CHATGPT_V1_TOOL_NAMES = new Set([
+  'collect_brief',
+  'get_cloud_account',
+  'create_project',
+  'start_run',
+  'get_run',
+  'cancel_run',
+  'list_versions',
+  'restore_version',
+  'export_project',
+]);
+
+export function chatGptV1RequiredScopes(toolName: string): string[] {
+  switch (toolName) {
+    case 'get_cloud_account':
+      return ['opendesign.account.read'];
+    case 'create_project':
+      return ['opendesign.projects.write'];
+    case 'start_run':
+    case 'cancel_run':
+      return ['opendesign.runs.write'];
+    case 'get_run':
+      return ['opendesign.runs.read'];
+    case 'list_versions':
+      return ['opendesign.projects.read'];
+    case 'restore_version':
+      return ['opendesign.versions.write'];
+    case 'export_project':
+      return ['opendesign.exports.read'];
+    default:
+      return [];
+  }
+}
+
+function chatGptQuestionFormInputSchema(): JsonObject {
+  const optionSchema: JsonObject = {
+    type: 'object',
+    properties: {
+      label: { type: 'string' },
+      value: { type: 'string' },
+      description: { type: 'string' },
+    },
+    required: ['label', 'value'],
+    additionalProperties: false,
+  };
+  const defaultValueRequirement: JsonObject = {
+    anyOf: [
+      { required: ['default'] },
+      { required: ['defaultValue'] },
+    ],
+  };
+  const optionsRequirement: JsonObject = {
+    if: {
+      properties: {
+        type: { enum: ['radio', 'checkbox', 'select'] },
+      },
+      required: ['type'],
+    },
+    then: { required: ['options'] },
+  };
+  const cardsRequirement: JsonObject = {
+    if: {
+      properties: { type: { const: 'direction-cards' } },
+      required: ['type'],
+    },
+    then: { required: ['cards'] },
+  };
+  const cardSchema: JsonObject = {
+    type: 'object',
+    properties: {
+      id: { type: 'string' },
+      label: { type: 'string' },
+      mood: { type: 'string' },
+      references: { type: 'array', items: { type: 'string' }, maxItems: 6 },
+      palette: { type: 'array', items: { type: 'string' }, maxItems: 8 },
+      displayFont: { type: 'string' },
+      bodyFont: { type: 'string' },
+    },
+    required: ['id', 'label'],
+    additionalProperties: false,
+  };
+  return {
+    type: 'object',
+    description: 'Open Design QuestionForm schema authored for this exact user input. Ask only unresolved decisions that would materially change the artifact.',
+    properties: {
+      id: { type: 'string', description: 'Stable English form id, such as presentation-brief.' },
+      title: { type: 'string', description: 'Localized user-visible form title.' },
+      description: { type: 'string', description: 'Localized explanation of why these remaining decisions matter.' },
+      lang: { type: 'string', description: 'BCP-47 language tag matching the user, such as zh-CN.' },
+      submitLabel: { type: 'string', description: 'Localized submit button label.' },
+      questions: {
+        type: 'array',
+        minItems: 1,
+        maxItems: CHATGPT_BRIEF_MAX_QUESTIONS,
+        description: 'Two or three high-impact unresolved questions are preferred; never exceed five.',
+        items: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', description: 'Stable English semantic id. Reuse knownAnswers keys for equivalent decisions.' },
+            label: { type: 'string', description: 'Localized user-visible question.' },
+            type: { type: 'string', enum: [...CHATGPT_BRIEF_QUESTION_TYPES] },
+            options: {
+              type: 'array',
+              minItems: 2,
+              maxItems: CHATGPT_BRIEF_MAX_OPTIONS,
+              items: optionSchema,
+            },
+            cards: {
+              type: 'array',
+              minItems: 2,
+              maxItems: 6,
+              items: cardSchema,
+            },
+            help: { type: 'string' },
+            required: { type: 'boolean' },
+            default: {
+              oneOf: [
+                { type: 'string' },
+                { type: 'boolean' },
+                { type: 'array', items: { type: 'string' } },
+              ],
+              description: 'Recommended option value inferred from the current brief.',
+            },
+            defaultValue: {
+              oneOf: [
+                { type: 'string' },
+                { type: 'boolean' },
+                { type: 'array', items: { type: 'string' } },
+              ],
+            },
+            maxSelections: { type: 'integer', minimum: 1 },
+            allowCustom: {
+              type: 'boolean',
+              enum: [false],
+              description: 'Must remain false so the Plugin brief stays choice-only.',
+            },
+          },
+          required: ['id', 'label', 'type'],
+          allOf: [defaultValueRequirement, optionsRequirement, cardsRequirement],
+          additionalProperties: false,
+        },
+      },
+    },
+    required: ['id', 'title', 'questions'],
+    additionalProperties: false,
+  };
+}
+
+function chatGptKnownAnswersInputSchema(): JsonObject {
+  return {
+    type: 'object',
+    description: 'Decisions already answered by the user input, project metadata, attachments, or active design system. Questions with matching ids are removed server-side.',
+    additionalProperties: {
+      oneOf: [
+        { type: 'string' },
+        { type: 'array', items: { type: 'string' } },
+      ],
+    },
+  };
+}
+
+function chatGptV1OutputSchema(toolName: string): JsonObject {
+  const stringValue = { type: 'string' };
+  const schemas: Record<string, JsonObject> = {
+    collect_brief: {
+      view: { type: 'string', enum: ['brief-form'] },
+      artifactType: { type: 'string', enum: [...CHATGPT_ARTIFACT_TYPES] },
+      projectTitle: stringValue,
+      questionForm: chatGptQuestionFormInputSchema(),
+      knownAnswers: chatGptKnownAnswersInputSchema(),
+    },
+    get_cloud_account: {
+      loggedIn: { type: 'boolean' },
+      balanceUsd: { type: ['string', 'null'] },
+      balanceStatus: { type: 'string', enum: ['signed_out', 'unavailable', 'available', 'empty'] },
+      canUseCloud: { type: ['boolean', 'null'] },
+      nextAction: { type: 'string', enum: ['sign_in', 'retry_account', 'generate', 'recharge'] },
+      rechargeUrl: stringValue,
+    },
+    create_project: {
+      project: { type: 'object' },
+      conversationId: stringValue,
+      studioUrl: stringValue,
+    },
+    start_run: {
+      id: stringValue,
+      runId: stringValue,
+      projectId: stringValue,
+      conversationId: stringValue,
+      status: stringValue,
+      stage: { type: 'string', enum: ['queued', 'generating', 'ready', 'failed', 'canceled'] },
+      artifactType: { type: 'string', enum: [...CHATGPT_ARTIFACT_TYPES] },
+      briefConfirmed: { type: 'boolean' },
+      studioUrl: stringValue,
+    },
+    get_run: {
+      id: stringValue,
+      runId: stringValue,
+      projectId: stringValue,
+      status: { type: 'string', enum: ['queued', 'running', 'succeeded', 'failed', 'canceled'] },
+      stage: { type: 'string', enum: ['queued', 'generating', 'ready', 'failed', 'canceled'] },
+      skillId: { type: ['string', 'null'] },
+      artifactCount: { type: 'number', minimum: 0 },
+      previewUrl: stringValue,
+      studioUrl: stringValue,
+      entryFile: stringValue,
+      agentMessage: stringValue,
+      error: { type: ['string', 'null'] },
+      errorCode: { type: ['string', 'null'] },
+      retryable: { type: 'boolean' },
+    },
+    cancel_run: {
+      id: stringValue,
+      runId: stringValue,
+      status: stringValue,
+    },
+    list_versions: {
+      projectId: stringValue,
+      path: stringValue,
+      versions: { type: 'array', items: { type: 'object' } },
+    },
+    restore_version: {
+      projectId: stringValue,
+      path: stringValue,
+      version: { type: 'object' },
+    },
+    export_project: {
+      ok: { type: 'boolean' },
+      projectId: stringValue,
+      fileName: stringValue,
+      bytes: { type: 'number' },
+    },
+  };
+  return { type: 'object', properties: schemas[toolName] ?? {}, additionalProperties: true };
+}
+
+// One small, dependency-free MCP Apps widget serves the account, progress,
+// and completed-artifact states. Non-ChatGPT MCP clients ignore the UI
+// metadata and continue to consume the normal text/structured tool result.
+const CHATGPT_WIDGET_HTML = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    :root {
+      color-scheme: light dark;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --surface: rgba(250, 250, 250, .72);
+      --surface-strong: rgba(250, 250, 250, .9);
+      --text: rgba(32, 32, 32, .92);
+      --text-muted: rgba(73, 73, 73, .62);
+      --text-soft: rgba(73, 73, 73, .4);
+      --border: rgba(73, 73, 73, .18);
+      --fill: rgba(73, 73, 73, .08);
+      --button: #202020;
+      --button-text: #fafafa;
+      --success: #168052;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --surface: rgba(53, 53, 53, .72);
+        --surface-strong: rgba(53, 53, 53, .9);
+        --text: rgba(250, 250, 250, .92);
+        --text-muted: rgba(237, 237, 237, .62);
+        --text-soft: rgba(237, 237, 237, .4);
+        --border: rgba(255, 255, 255, .16);
+        --fill: rgba(255, 255, 255, .07);
+        --button: #fafafa;
+        --button-text: #202020;
+        --success: #70d6a6;
+      }
+    }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    body { margin: 0; padding: 8px; background: transparent; color: var(--text); }
+    .card {
+      overflow: hidden;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--surface);
+      -webkit-backdrop-filter: blur(24px) saturate(1.6);
+      backdrop-filter: blur(24px) saturate(1.6);
+      box-shadow: 0 1px 2px rgba(28, 27, 26, .05), 0 1px 3px rgba(28, 27, 26, .04);
+      animation: card-in 200ms cubic-bezier(.23, 1, .32, 1) both;
+    }
+    @keyframes card-in { from { opacity: 0; transform: translateY(4px); } }
+    .compact { display: grid; gap: 16px; padding: 22px 16px 16px; }
+    .state { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+    .state-dot { width: 8px; height: 8px; margin-top: 5px; border-radius: 50%; flex: 0 0 auto; background: var(--text-soft); }
+    .state-dot[data-tone="success"] { background: var(--success); box-shadow: 0 0 0 4px color-mix(in srgb, var(--success) 12%, transparent); }
+    .state-dot[data-tone="running"] { background: var(--text); box-shadow: 0 0 0 4px var(--fill); animation: breathe 1.4s ease-in-out infinite; }
+    @keyframes breathe { 50% { opacity: .35; transform: scale(.82); } }
+    .state-copy { min-width: 0; }
+    .state-title { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 16px; line-height: 1.3; font-weight: 650; letter-spacing: -.015em; }
+    .state-detail { margin: 4px 0 0; color: var(--text-muted); font-size: 13px; line-height: 1.4; }
+    .balance { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-top: 14px; border-top: 1px solid var(--border); }
+    .balance-label { color: var(--text-muted); font-size: 12px; }
+    .balance-value { font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; }
+    .preview { min-height: 148px; border-bottom: 1px solid var(--border); background: var(--fill); display: grid; place-items: center; position: relative; }
+    .preview iframe { width: 100%; height: 240px; border: 0; background: white; }
+    .placeholder { text-align: center; padding: 30px; }
+    .pulse { width: 28px; height: 28px; margin: 0 auto 12px; border-radius: 50%; border: 2px solid var(--border); border-top-color: var(--text); animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .body { padding: 14px 16px 16px; }
+    .datum { padding: 10px 11px; border-radius: 8px; background: var(--fill); }
+    .label { display: block; color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: .08em; }
+    .value { display: block; margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 650; }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    button { appearance: none; min-height: 36px; border: 0; border-radius: 999px; padding: 0 16px; cursor: pointer; font: inherit; font-size: 13px; font-weight: 600; background: var(--button); color: var(--button-text); transition: transform 140ms cubic-bezier(.23,1,.32,1), opacity 140ms, background 140ms; }
+    button.secondary { background: var(--fill); color: var(--text); }
+    button:hover { transform: translateY(-1px); }
+    button:disabled { opacity: .42; cursor: default; transform: none; }
+    .compact > button { justify-self: start; }
+    .note { margin: 0 0 12px; color: var(--text-muted); font-size: 12px; line-height: 1.45; }
+    .brief { padding: 18px 16px 16px; }
+    .brief-copy { margin: 0 0 16px; }
+    .brief-title { margin: 0; font-size: 17px; font-weight: 650; letter-spacing: -.015em; }
+    .brief-detail { margin: 4px 0 0; color: var(--text-muted); font-size: 12px; line-height: 1.45; }
+    .brief-groups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 16px; }
+    .brief-group { min-width: 0; margin: 0; padding: 0; border: 0; }
+    .brief-group.wide { grid-column: 1 / -1; }
+    .brief-group legend { margin: 0 0 8px; padding: 0; color: var(--text); font-size: 12px; font-weight: 650; }
+    .brief-group legend small { margin-left: 5px; color: var(--text-muted); font-size: 10px; font-weight: 500; }
+    .choice-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); gap: 7px; }
+    .choice { position: relative; min-width: 0; cursor: pointer; }
+    .choice input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+    .choice > span {
+      min-height: 38px; display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      border: 1px solid var(--border); border-radius: 9px; padding: 8px 10px;
+      background: var(--fill); color: var(--text); font-size: 12px; line-height: 1.3;
+      transition: border-color 140ms cubic-bezier(.23,1,.32,1), background 140ms cubic-bezier(.23,1,.32,1), color 140ms cubic-bezier(.23,1,.32,1), transform 140ms cubic-bezier(.23,1,.32,1);
+    }
+    .choice-copy { display: grid; gap: 2px; min-width: 0; }
+    .choice-label { font-weight: 600; }
+    .choice-detail { color: var(--text-muted); font-size: 10px; line-height: 1.35; }
+    .choice:hover > span { transform: translateY(-1px); border-color: color-mix(in srgb, var(--text) 30%, var(--border)); }
+    .choice input:checked + span { border-color: var(--button); background: var(--button); color: var(--button-text); }
+    .choice input:checked + span .choice-detail { color: color-mix(in srgb, var(--button-text) 72%, transparent); }
+    .choice input:checked + span::after { content: "✓"; flex: 0 0 auto; font-size: 11px; font-weight: 700; }
+    .choice input:focus-visible + span { box-shadow: 0 0 0 3px color-mix(in srgb, var(--text) 12%, transparent); }
+    .brief-actions { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
+    .brief-error { margin: 0; color: #b42318; font-size: 12px; line-height: 1.4; }
+    .brief-error[data-tone="pending"] { color: var(--text-muted); }
+    .brief-error[data-tone="success"] { color: var(--success); }
+    .card[data-view="compact"] .preview,
+    .card[data-view="compact"] .body { display: none; }
+    .card[data-view="artifact"] .compact { display: none; }
+    .card[data-view="brief"] .compact,
+    .card[data-view="brief"] .preview,
+    .card[data-view="brief"] .body { display: none; }
+    @media (max-width: 560px) { .brief-groups { grid-template-columns: 1fr; } .brief-group.wide { grid-column: auto; } }
+    @media (prefers-reduced-motion: reduce) { .card, .state-dot { animation: none !important; } }
+    @media (prefers-reduced-transparency: reduce) { .card { background: var(--surface-strong); -webkit-backdrop-filter: none; backdrop-filter: none; } }
+  </style>
+</head>
+<body>
+  <main class="card" id="card" data-view="compact">
+    <section class="compact" id="compact"><div class="state"><span class="state-dot" id="state-dot"></span><div class="state-copy"><strong class="state-title" id="state-title"></strong><p class="state-detail" id="state-detail"></p></div></div><div class="balance" id="balance" hidden><span class="balance-label">Remaining balance</span><strong class="balance-value" id="balance-value"></strong></div><button id="account-action" hidden></button></section>
+    <section class="brief" id="brief-form" hidden>
+      <div class="brief-copy"><h2 class="brief-title" id="brief-title"></h2><p class="brief-detail" id="brief-detail"></p></div>
+      <form id="brief-fields">
+        <div class="brief-groups" id="brief-questions"></div>
+        <div class="brief-actions"><button id="brief-submit" type="submit"></button><p class="brief-error" id="brief-error" role="status"></p></div>
+      </form>
+    </section>
+    <section class="preview" id="preview"><div class="placeholder"><div class="pulse" id="pulse"></div><strong id="preview-title">Preparing your design</strong></div></section>
+    <section class="body"><p class="note" id="note"></p><div id="version-list"></div><div class="actions"><button id="studio" hidden>Edit in Open Design</button><button class="secondary" id="raw" hidden>Open preview</button><button class="secondary" id="refresh" hidden>Refresh</button><button class="secondary" id="versions" hidden>Versions</button><button class="secondary" id="export" hidden>Export source</button></div></section>
+  </main>
+  <script>
+    const byId = (id) => document.getElementById(id);
+    const safeText = (value, fallback = '—') => value === undefined || value === null || value === '' ? fallback : String(value);
+    let current = {};
+    let pollTimer = null;
+    let rpcId = 0;
+    let bridgeInitialized = false;
+    let resizeFrame = 0;
+    let lastReportedSize = '';
+    let briefHydratedKey = '';
+    const pendingRequests = new Map();
+    const rpcNotify = (method, params) => window.parent.postMessage({ jsonrpc: '2.0', method, params }, '*');
+    const rpcRequest = (method, params, timeoutMs = 30000) => new Promise((resolve, reject) => {
+      const id = ++rpcId;
+      const timer = setTimeout(() => {
+        pendingRequests.delete(id);
+        reject(new Error(method + ' timed out'));
+      }, timeoutMs);
+      pendingRequests.set(id, { resolve, reject, timer });
+      window.parent.postMessage({ jsonrpc: '2.0', id, method, params }, '*');
+    });
+    const scheduleSizeChanged = () => {
+      if (!bridgeInitialized || resizeFrame) return;
+      resizeFrame = requestAnimationFrame(() => {
+        resizeFrame = 0;
+        const body = document.body;
+        const bodyStyle = getComputedStyle(body);
+        const cardRect = byId('card').getBoundingClientRect();
+        const verticalPadding = (parseFloat(bodyStyle.paddingTop) || 0) + (parseFloat(bodyStyle.paddingBottom) || 0);
+        const height = Math.max(1, Math.ceil(cardRect.height + verticalPadding));
+        const sizeKey = String(height);
+        if (sizeKey === lastReportedSize) return;
+        lastReportedSize = sizeKey;
+        rpcNotify('ui/notifications/size-changed', { height });
+      });
+    };
+    window.addEventListener('message', (event) => {
+      if (event.source !== window.parent) return;
+      const message = event.data;
+      if (!message || message.jsonrpc !== '2.0') return;
+      if (typeof message.id === 'number') {
+        const pending = pendingRequests.get(message.id);
+        if (!pending) return;
+        pendingRequests.delete(message.id);
+        clearTimeout(pending.timer);
+        if (message.error) pending.reject(message.error); else pending.resolve(message.result);
+        return;
+      }
+      if (message.method === 'ui/notifications/tool-result') {
+        const result = message.params?.result ?? message.params;
+        if (result?.structuredContent) render(result.structuredContent);
+      }
+    }, { passive: true });
+    const initializeBridge = async () => {
+      try {
+        await rpcRequest('ui/initialize', {
+          appInfo: { name: 'open-design-artifact-card', version: '${SERVER_VERSION}' },
+          appCapabilities: {},
+          protocolVersion: '2026-01-26',
+        });
+        bridgeInitialized = true;
+        rpcNotify('ui/notifications/initialized', {});
+        scheduleSizeChanged();
+        return true;
+      } catch { return false; }
+    };
+    const bridgeReady = initializeBridge();
+    async function callTool(name, args) {
+      if (await bridgeReady) return rpcRequest('tools/call', { name, arguments: args });
+      return window.openai?.callTool?.(name, args);
+    }
+    async function openUrl(url) {
+      if (!url) return;
+      if (window.openai?.openExternal) {
+        window.openai.openExternal({ href: url });
+        return;
+      }
+      if (bridgeInitialized) {
+        try {
+          await rpcRequest('ui/open-link', { url });
+          return;
+        } catch {}
+      }
+      window.open(url, '_blank', 'noopener,noreferrer');
+    }
+    function briefOptionList(question) {
+      const rawOptions = Array.isArray(question?.options) ? question.options : [];
+      const cards = Array.isArray(question?.cards) ? question.cards : [];
+      return rawOptions.map((rawOption) => {
+        const option = typeof rawOption === 'string'
+          ? { label: rawOption, value: rawOption }
+          : rawOption && typeof rawOption === 'object'
+            ? {
+                label: safeText(rawOption.label, rawOption.value),
+                value: safeText(rawOption.value, rawOption.label),
+                description: safeText(rawOption.description, ''),
+              }
+            : null;
+        if (!option || !option.label || !option.value) return null;
+        const card = cards.find((candidate) => candidate && candidate.id === option.value);
+        return {
+          label: option.label,
+          value: option.value,
+          description: option.description || safeText(card?.mood, ''),
+        };
+      }).filter(Boolean);
+    }
+    function briefDefaultValues(question) {
+      const raw = question?.defaultValue;
+      if (Array.isArray(raw)) return raw.map((value) => String(value));
+      if (raw === undefined || raw === null || raw === '') return [];
+      return [String(raw)];
+    }
+    function briefUiCopy(questionForm) {
+      const chinese = safeText(questionForm?.lang, '').toLowerCase().startsWith('zh');
+      return chinese ? {
+        chooseOne: '请选择',
+        chooseAll: '可多选',
+        chooseUpTo: (count) => '最多选择 ' + count + ' 项',
+        maxError: (label, count) => label + '：最多选择 ' + count + ' 项。',
+        noChoices: '当前没有可选择的问题。',
+        continue: '确认并继续',
+        missing: (labels) => '请选择：' + labels.join('、') + '。',
+        exceeded: (labels) => '以下问题选择过多：' + labels.join('、') + '。',
+        submitting: '正在提交…',
+        submitted: '已提交',
+        submittedStatus: '已提交。',
+        submitFailed: '暂时无法提交，请重试。',
+      } : {
+        chooseOne: 'Choose one',
+        chooseAll: 'Choose all that apply',
+        chooseUpTo: (count) => 'Choose up to ' + count,
+        maxError: (label, count) => label + ': choose no more than ' + count + '.',
+        noChoices: 'No choices are available for this brief.',
+        continue: 'Continue',
+        missing: (labels) => 'Choose an option for: ' + labels.join(', ') + '.',
+        exceeded: (labels) => 'Too many choices selected for: ' + labels.join(', ') + '.',
+        submitting: 'Submitting…',
+        submitted: 'Submitted',
+        submittedStatus: 'Brief submitted.',
+        submitFailed: 'Could not submit the brief.',
+      };
+    }
+    function briefQuestionHelp(question, copy) {
+      if (typeof question?.help === 'string' && question.help.trim()) return question.help.trim();
+      if (question?.type !== 'checkbox') return '';
+      if (Number.isInteger(question.maxSelections) && question.maxSelections > 0) {
+        return copy.chooseUpTo(question.maxSelections);
+      }
+      return copy.chooseAll;
+    }
+    function briefAnswerDisplay(question, value) {
+      const option = briefOptionList(question).find(
+        (candidate) => candidate.value === value || candidate.label === value,
+      );
+      if (!option) return value;
+      return option.label === option.value
+        ? option.label
+        : option.label + ' [value: ' + option.value + ']';
+    }
+    function formatQuestionFormAnswers(questionForm, answers) {
+      const lines = ['[form answers — ' + questionForm.id + ']'];
+      questionForm.questions.forEach((question) => {
+        const answer = answers[question.id];
+        let display = '(skipped)';
+        if (Array.isArray(answer) && answer.length > 0) {
+          display = answer.map((value) => briefAnswerDisplay(question, value)).join(', ');
+        } else if (typeof answer === 'string' && answer.trim()) {
+          display = briefAnswerDisplay(question, answer.trim());
+        }
+        lines.push('- ' + question.label + ': ' + display);
+      });
+      const text = lines.join('\\n');
+      return text;
+    }
+    async function sendQuestionFormAnswers(output, questionForm, answers) {
+      const text = formatQuestionFormAnswers(questionForm, answers);
+      const modelContext = {
+        artifactType: safeText(output.artifactType, ''),
+        projectTitle: safeText(output.projectTitle, 'New Open Design project').trim(),
+        questionForm,
+        knownAnswers: output.knownAnswers && typeof output.knownAnswers === 'object'
+          ? output.knownAnswers
+          : {},
+        answers,
+      };
+      if (await bridgeReady) {
+        try {
+          await rpcRequest('ui/update-model-context', {
+            structuredContent: { openDesignBrief: { ...modelContext, confirmed: true } },
+          });
+        } catch {}
+        await rpcRequest('ui/message', {
+          role: 'user',
+          content: [{ type: 'text', text }],
+        });
+        return;
+      }
+      if (window.openai?.sendFollowUpMessage) {
+        await window.openai.sendFollowUpMessage({ prompt: text });
+        return;
+      }
+      throw new Error('This host cannot submit Custom UI messages.');
+    }
+    let briefQuestionControls = [];
+    function renderBriefQuestion(question, questionIndex, questionCount, copy) {
+      const fieldset = document.createElement('fieldset');
+      fieldset.className = 'brief-group';
+      if (questionCount === 1 || question.type === 'checkbox' || question.type === 'direction-cards') {
+        fieldset.classList.add('wide');
+      }
+      const legend = document.createElement('legend');
+      legend.append(document.createTextNode(safeText(question.label, copy.chooseOne)));
+      const help = briefQuestionHelp(question, copy);
+      if (help) {
+        const helpText = document.createElement('small');
+        helpText.textContent = help;
+        legend.append(helpText);
+      }
+      const choices = document.createElement('div');
+      choices.className = 'choice-grid';
+      const multiple = question.type === 'checkbox';
+      const defaults = new Set(briefDefaultValues(question));
+      const options = briefOptionList(question);
+      const inputs = [];
+      options.forEach((option) => {
+        const label = document.createElement('label');
+        label.className = 'choice';
+        const input = document.createElement('input');
+        input.type = multiple ? 'checkbox' : 'radio';
+        input.name = 'brief-question-' + questionIndex;
+        input.value = option.value;
+        input.checked = defaults.has(option.value) || defaults.has(option.label);
+        const card = document.createElement('span');
+        const copy = document.createElement('span');
+        copy.className = 'choice-copy';
+        const optionLabel = document.createElement('span');
+        optionLabel.className = 'choice-label';
+        optionLabel.textContent = option.label;
+        copy.append(optionLabel);
+        if (option.description) {
+          const detail = document.createElement('span');
+          detail.className = 'choice-detail';
+          detail.textContent = option.description;
+          copy.append(detail);
+        }
+        card.append(copy);
+        label.append(input, card);
+        choices.append(label);
+        inputs.push(input);
+      });
+      if (multiple && Number.isInteger(question.maxSelections) && question.maxSelections > 0) {
+        inputs.forEach((input) => {
+          input.addEventListener('change', () => {
+            const selectedCount = inputs.filter((candidate) => candidate.checked).length;
+            if (selectedCount <= question.maxSelections) return;
+            input.checked = false;
+            const error = byId('brief-error');
+            error.dataset.tone = 'error';
+            error.textContent = copy.maxError(safeText(question.label, copy.chooseOne), question.maxSelections);
+            scheduleSizeChanged();
+          });
+        });
+      }
+      fieldset.append(legend, choices);
+      briefQuestionControls.push({ question, inputs });
+      return fieldset;
+    }
+    function collectQuestionFormAnswers(questionForm) {
+      const answers = {};
+      const missing = [];
+      const exceeded = [];
+      briefQuestionControls.forEach(({ question, inputs }) => {
+        const selected = inputs.filter((input) => input.checked).map((input) => input.value);
+        if (question.type === 'checkbox') {
+          answers[question.id] = selected;
+          if (Number.isInteger(question.maxSelections) && selected.length > question.maxSelections) {
+            exceeded.push(safeText(question.label, question.id));
+          }
+        } else {
+          answers[question.id] = selected[0] || '';
+        }
+        if (question.required === true && selected.length === 0) {
+          missing.push(safeText(question.label, question.id));
+        }
+      });
+      return { answers, missing, exceeded };
+    }
+    function renderBrief(output) {
+      const questionForm = output.questionForm && typeof output.questionForm === 'object'
+        ? output.questionForm
+        : {};
+      const questions = Array.isArray(questionForm.questions) ? questionForm.questions : [];
+      const copy = briefUiCopy(questionForm);
+      const hydrationKey = JSON.stringify({
+        artifactType: output.artifactType,
+        projectTitle: output.projectTitle,
+        questionForm,
+        knownAnswers: output.knownAnswers,
+      });
+      if (hydrationKey !== briefHydratedKey) {
+        briefHydratedKey = hydrationKey;
+        byId('brief-form').lang = safeText(questionForm.lang, 'en');
+        byId('brief-title').textContent = safeText(questionForm.title, 'A few quick questions');
+        const description = byId('brief-detail');
+        description.textContent = safeText(questionForm.description, '');
+        description.hidden = !description.textContent;
+        const questionHost = byId('brief-questions');
+        questionHost.replaceChildren();
+        briefQuestionControls = [];
+        questions.forEach((question, index) => {
+          questionHost.append(renderBriefQuestion(question, index, questions.length, copy));
+        });
+        const submit = byId('brief-submit');
+        submit.disabled = questions.length === 0;
+        submit.textContent = safeText(questionForm.submitLabel, copy.continue);
+        const error = byId('brief-error');
+        error.dataset.tone = questions.length === 0 ? 'error' : '';
+        error.textContent = questions.length === 0 ? copy.noChoices : '';
+      }
+      const form = byId('brief-fields');
+      form.onsubmit = async (event) => {
+        event.preventDefault();
+        const submit = byId('brief-submit');
+        const error = byId('brief-error');
+        const result = collectQuestionFormAnswers(questionForm);
+        if (result.missing.length > 0) {
+          error.dataset.tone = 'error';
+          error.textContent = copy.missing(result.missing);
+          scheduleSizeChanged();
+          return;
+        }
+        if (result.exceeded.length > 0) {
+          error.dataset.tone = 'error';
+          error.textContent = copy.exceeded(result.exceeded);
+          scheduleSizeChanged();
+          return;
+        }
+        submit.disabled = true;
+        error.dataset.tone = 'pending';
+        error.textContent = copy.submitting;
+        try {
+          await sendQuestionFormAnswers(output, questionForm, result.answers);
+          error.dataset.tone = 'success';
+          error.textContent = copy.submittedStatus;
+          submit.textContent = copy.submitted;
+        } catch (submitError) {
+          error.dataset.tone = 'error';
+          error.textContent = submitError instanceof Error
+            ? submitError.message
+            : copy.submitFailed;
+          submit.disabled = false;
+        }
+        scheduleSizeChanged();
+      };
+    }
+    function accountLabel() {
+      const user = current.user && typeof current.user === 'object' ? current.user : {};
+      const account = current.account && typeof current.account === 'object' ? current.account : {};
+      return user.name || user.displayName || user.email || account.name || account.email || 'OpenDesign account';
+    }
+    function render(output) {
+      if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+      const incoming = output && typeof output === 'object' ? output : {};
+      current = { ...current, ...incoming };
+      const briefMode = current.view === 'brief-form';
+      byId('brief-form').hidden = !briefMode;
+      if (briefMode) {
+        byId('card').dataset.view = 'brief';
+        renderBrief(current);
+        scheduleSizeChanged();
+        return;
+      }
+      const account = current.account || {};
+      const wallet = current.wallet || {};
+      const status = safeText(current.status || (current.nextAction === 'recharge' ? 'recharge' : current.loggedIn === true ? 'connected' : current.loggedIn === false ? 'sign in' : 'ready')).toLowerCase();
+      const running = status === 'queued' || status === 'running';
+      const completed = status === 'succeeded' || Boolean(current.previewUrl);
+      const projectLabel = current.name || current.projectName || '';
+      byId('note').textContent = current.hint || (current.loggedIn === false ? 'Sign in to Open Design Cloud before starting a Cloud run.' : completed ? 'Review the result here, then continue detailed editing, versions, and export in Open Design.' : running ? 'Open Design is working. Long thinking intervals are normal.' : 'Create an Open Design artifact from the confirmed brief.');
+      const balance = current.balanceUsd ?? account.balanceUsd ?? wallet.balanceUsd;
+      const rechargeMode = current.nextAction === 'recharge';
+      const compactMode = running || rechargeMode || (!completed && current.loggedIn !== undefined);
+      byId('card').dataset.view = compactMode ? 'compact' : 'artifact';
+      const stateDot = byId('state-dot');
+      const stateTitle = byId('state-title');
+      const stateDetail = byId('state-detail');
+      const balanceRow = byId('balance');
+      const accountAction = byId('account-action');
+      stateDot.dataset.tone = running ? 'running' : current.loggedIn === true ? 'success' : 'neutral';
+      balanceRow.hidden = true;
+      accountAction.hidden = true;
+      stateDetail.hidden = false;
+      if (running) {
+        stateTitle.textContent = projectLabel ? 'Creating “' + projectLabel + '”' : 'Creating your design';
+        stateDetail.textContent = status === 'queued' ? 'Preparing the workspace…' : 'Generating your design…';
+      } else if (rechargeMode) {
+        stateTitle.textContent = accountLabel();
+        stateDetail.hidden = true;
+        balanceRow.hidden = false;
+        byId('balance-value').textContent = '$' + safeText(balance, '0.00');
+        accountAction.textContent = 'Recharge';
+        accountAction.hidden = false;
+        accountAction.onclick = () => openUrl('${CHATGPT_RECHARGE_URL}');
+      } else if (current.loggedIn === true) {
+        stateTitle.textContent = 'Authorization complete';
+        stateDetail.hidden = true;
+      } else if (current.loggedIn === false) {
+        stateTitle.textContent = 'Not signed in';
+        stateDetail.hidden = true;
+        accountAction.textContent = 'Sign in / Register';
+        accountAction.hidden = false;
+        accountAction.onclick = () => openUrl('${CHATGPT_SIGN_IN_URL}');
+      } else {
+        stateTitle.textContent = status === 'failed' ? 'Needs attention' : 'Ready';
+        stateDetail.textContent = current.hint || '';
+      }
+      byId('pulse').hidden = !running;
+      byId('preview-title').textContent = running ? 'Creating your design…' : completed ? 'Artifact ready' : current.loggedIn === false ? 'Connect Open Design Cloud' : 'Ready for your brief';
+      const preview = byId('preview');
+      const oldFrame = preview.querySelector('iframe'); if (oldFrame) oldFrame.remove();
+      const placeholder = preview.querySelector('.placeholder'); if (placeholder) placeholder.hidden = completed && Boolean(current.previewUrl);
+      if (completed && current.previewUrl) {
+        const frame = document.createElement('iframe'); frame.src = current.previewUrl; frame.title = 'Open Design artifact preview'; frame.loading = 'lazy'; preview.prepend(frame);
+      }
+      const studio = byId('studio'); studio.hidden = !current.studioUrl; studio.onclick = () => openUrl(current.studioUrl);
+      const raw = byId('raw'); raw.hidden = !current.previewUrl; raw.onclick = () => openUrl(current.previewUrl);
+      const refreshRun = async () => {
+        const next = await callTool('get_run', { runId: current.runId || current.id });
+        if (next?.structuredContent) render(next.structuredContent);
+        return next;
+      };
+      const refresh = byId('refresh'); refresh.hidden = !running || !(current.runId || current.id); refresh.onclick = async () => {
+        refresh.disabled = true;
+        try { await refreshRun(); }
+        finally { refresh.disabled = false; }
+      };
+      const projectId = current.projectId || (current.status ? null : current.id);
+      const entryFile = current.entryFile || (current.previewUrl ? decodeURIComponent(String(current.previewUrl).split('/raw/')[1] || '') : '');
+      const versions = byId('versions'); versions.hidden = !projectId || !entryFile; versions.onclick = async () => {
+        versions.disabled = true;
+        try { const next = await callTool('list_versions', { project: projectId, path: entryFile }); if (next?.structuredContent) renderVersions(next.structuredContent); }
+        finally { versions.disabled = false; }
+      };
+      const exportButton = byId('export'); exportButton.hidden = !projectId || !completed; exportButton.onclick = async () => {
+        exportButton.disabled = true; byId('note').textContent = 'Preparing a source ZIP…'; scheduleSizeChanged();
+        try {
+          const next = await callTool('export_project', { project: projectId });
+          byId('note').textContent = next?.isError ? 'Export failed. Open Studio to export from the full editor.' : 'Source ZIP is ready in the tool result. Use Open Studio for rendered PDF, image, or PPTX export.';
+        } finally { exportButton.disabled = false; scheduleSizeChanged(); }
+      };
+      if (running && (current.runId || current.id)) {
+        pollTimer = setTimeout(() => { refreshRun().catch(() => { pollTimer = setTimeout(() => render(current), 30000); }); }, 30000);
+      }
+      scheduleSizeChanged();
+    }
+    function renderVersions(output) {
+      const host = byId('version-list'); host.replaceChildren();
+      const versions = Array.isArray(output?.versions) ? output.versions.slice().reverse().slice(0, 6) : [];
+      if (!versions.length) { byId('note').textContent = 'No saved HTML versions yet.'; scheduleSizeChanged(); return; }
+      const heading = document.createElement('p'); heading.className = 'note'; heading.textContent = 'Recent versions'; host.append(heading);
+      versions.forEach((version) => {
+        const row = document.createElement('div'); row.className = 'datum'; row.style.marginBottom = '7px'; row.style.display = 'flex'; row.style.alignItems = 'center'; row.style.gap = '8px';
+        const text = document.createElement('span'); text.className = 'value'; text.style.flex = '1'; text.textContent = 'v' + safeText(version.version, '?') + (version.label ? ' · ' + version.label : ''); row.append(text);
+        if (!version.current && version.id) { const restore = document.createElement('button'); restore.className = 'secondary'; restore.textContent = 'Restore'; restore.onclick = async () => { restore.disabled = true; try { await callTool('restore_version', { project: output.projectId, path: output.path, versionId: version.id, confirm: true }); byId('note').textContent = 'Version restored. Open Studio or refresh the preview to review it.'; } finally { restore.disabled = false; scheduleSizeChanged(); } }; row.append(restore); }
+        host.append(row);
+      });
+      scheduleSizeChanged();
+    }
+    render(window.openai?.toolOutput ?? window.openai?.widgetState);
+    window.addEventListener('openai:set_globals', (event) => render(
+      event.detail?.globals?.toolOutput
+        ?? window.openai?.toolOutput
+        ?? event.detail?.globals?.widgetState
+        ?? window.openai?.widgetState,
+    ), { passive: true });
+  </script>
+</body>
+</html>`;
+
+const CHATGPT_STATUS_META = {
+  'openai/toolInvocation/invoking': 'Working in Open Design…',
+  'openai/toolInvocation/invoked': 'Open Design updated.',
+};
+
+const CHATGPT_WIDGET_META = {
+  ui: { resourceUri: CHATGPT_WIDGET_URI },
+  // `registerAppTool` from @modelcontextprotocol/ext-apps publishes both
+  // spellings. Keep the legacy flat key for hosts that have not fully moved
+  // to nested `ui.resourceUri` yet.
+  'ui/resourceUri': CHATGPT_WIDGET_URI,
+  'openai/outputTemplate': CHATGPT_WIDGET_URI,
+  ...CHATGPT_STATUS_META,
+};
+
+const CHATGPT_WIDGET_RESULT_META = {
+  ui: { resourceUri: CHATGPT_WIDGET_URI },
+  'ui/resourceUri': CHATGPT_WIDGET_URI,
+  'openai/outputTemplate': CHATGPT_WIDGET_URI,
+};
 
 type JsonObject = Record<string, unknown>;
 interface RunMcpOptions { daemonUrl: string | URL }
+export interface CreateOpenDesignMcpServerOptions {
+  daemonUrl: string | URL;
+  widgetFrameDomains?: string[];
+  widgetRedirectDomains?: string[];
+  transformToolResult?: (toolName: string, result: any) => any | Promise<any>;
+}
 interface CatalogItem { id: string; name?: string; title?: string; description?: string; summary?: string }
 interface SkillsPayload { skills?: CatalogItem[] }
 interface PluginsPayload { plugins?: CatalogItem[] }
@@ -40,9 +980,24 @@ interface ProjectPayload { project?: ProjectSummary; id?: string; name?: string;
 interface ActiveContext { active?: boolean; projectId?: string; projectName?: string | null; fileName?: string | null; ageMs?: number | null }
 type ResolvedProject = { id: string; name: string; source: 'uuid' | 'id' | 'exact' | 'slug' | 'substring' };
 interface ProjectListCache { baseUrl: string; t: number; list: ProjectSummary[] }
-interface McpArgs extends JsonObject { project?: unknown; entry?: unknown; include?: unknown; maxBytes?: unknown; path?: unknown; offset?: unknown; limit?: unknown; since?: unknown; query?: unknown; pattern?: unknown; max?: unknown; name?: unknown; content?: unknown; encoding?: unknown; artifactManifest?: unknown; confirm?: unknown; prompt?: unknown; plugin?: unknown; inputs?: unknown; agent?: unknown; model?: unknown; runId?: unknown; id?: unknown; designSystem?: unknown; skill?: unknown; includeUnavailable?: unknown }
+interface McpArgs extends JsonObject { project?: unknown; entry?: unknown; include?: unknown; maxBytes?: unknown; path?: unknown; offset?: unknown; limit?: unknown; since?: unknown; query?: unknown; pattern?: unknown; max?: unknown; name?: unknown; title?: unknown; projectTitle?: unknown; content?: unknown; encoding?: unknown; artifactManifest?: unknown; confirm?: unknown; confirmed?: unknown; prompt?: unknown; plugin?: unknown; inputs?: unknown; agent?: unknown; model?: unknown; runId?: unknown; id?: unknown; designSystem?: unknown; skill?: unknown; artifactType?: unknown; brief?: unknown; knownAnswers?: unknown; questionForm?: unknown; audience?: unknown; outcome?: unknown; contentAndFlows?: unknown; visualDirection?: unknown; outputFormat?: unknown; constraints?: unknown; includeUnavailable?: unknown; versionId?: unknown }
 interface ProjectFileBundleEntry { name: string; mime: string; size: number | null; content: string | null; binary: boolean }
 interface BundleInput { project: ProjectPayload | ProjectSummary; entry: string; files: ProjectFileBundleEntry[]; truncated: boolean; active: ActiveContext | null; resolved?: ResolvedProject | null }
+
+function withChatGptWidgetResultMeta(toolName: string, result: any): any {
+  if (!['collect_brief', 'get_cloud_account', 'start_run'].includes(toolName) || !result || typeof result !== 'object') return result;
+  if (!result.structuredContent || typeof result.structuredContent !== 'object') return result;
+  const currentMeta = result._meta && typeof result._meta === 'object' ? result._meta as JsonObject : {};
+  const currentUi = currentMeta.ui && typeof currentMeta.ui === 'object' ? currentMeta.ui as JsonObject : {};
+  return {
+    ...result,
+    _meta: {
+      ...currentMeta,
+      ...CHATGPT_WIDGET_RESULT_META,
+      ui: { ...currentUi, resourceUri: CHATGPT_WIDGET_URI },
+    },
+  };
+}
 interface ErrorWithCode { message?: string; code?: string; cause?: { code?: string } }
 
 interface McpIdleExitControllerOptions {
@@ -378,6 +1333,11 @@ const TOOL_DEFS = [
       type: 'object',
       properties: {
         name: { type: 'string', description: 'Human-readable project name.' },
+        artifactType: {
+          type: 'string',
+          enum: [...CHATGPT_ARTIFACT_TYPES],
+          description: 'Artifact type used to initialize the matching Open Design project kind.',
+        },
         id: {
           type: 'string',
           description: 'Optional project id slug ([A-Za-z0-9._-], <=128 chars). Derived from name when omitted.',
@@ -392,6 +1352,7 @@ const TOOL_DEFS = [
       additionalProperties: false,
     },
     annotations: { ...WRITE_ANNOTATIONS, title: 'Create Open Design project' },
+    _meta: CHATGPT_STATUS_META,
   },
   // Discovery + generation. An external coding agent does NOT run a
   // skill itself — it commissions Open Design to, via start_run. The
@@ -401,6 +1362,34 @@ const TOOL_DEFS = [
   // kicks off the run and get_run polls it to completion. Design
   // systems stay resource-only (od://design-systems/...) since they're
   // reference material the caller opts into, not something to run.
+  {
+    name: 'collect_brief',
+    description: 'Show a dynamic Open Design QuestionForm in Custom UI. Author the questionForm from the current user input using the same discovery policy as Open Design: omit decisions already known from the request, metadata, or knownAnswers; add only two or three artifact-specific questions whose answers materially change the result; never exceed five; localize visible copy; and preselect an inferred recommendation. Use only choice controls; never emit <question-form> markup or ask the same questions in prose.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        artifactType: {
+          type: 'string',
+          enum: [...CHATGPT_ARTIFACT_TYPES],
+          description: 'The requested Open Design deliverable type.',
+        },
+        projectTitle: { type: 'string', description: 'Suggested human-readable project name inferred from the request.' },
+        knownAnswers: chatGptKnownAnswersInputSchema(),
+        questionForm: chatGptQuestionFormInputSchema(),
+      },
+      required: ['artifactType', 'questionForm'],
+      additionalProperties: false,
+    },
+    annotations: { ...READ_ANNOTATIONS, title: 'Complete Open Design brief' },
+    _meta: CHATGPT_WIDGET_META,
+  },
+  {
+    name: 'get_cloud_account',
+    description: 'Check whether Open Design Cloud is signed in and read the wallet balance. Call this before generation so you can choose Cloud, recharge, or a local Code Agent/BYOK fallback without guessing.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    annotations: { ...READ_ANNOTATIONS, title: 'Check Open Design Cloud account' },
+    _meta: CHATGPT_WIDGET_META,
+  },
   {
     name: 'list_skills',
     description: 'List Open Design skills you can pass to start_run as a recipe. Discovery only — Open Design runs the skill, not you.',
@@ -450,6 +1439,7 @@ const TOOL_DEFS = [
       additionalProperties: false,
     },
     annotations: { ...WRITE_ANNOTATIONS, title: 'Generate with Open Design' },
+    _meta: CHATGPT_WIDGET_META,
   },
   {
     name: 'get_run',
@@ -464,6 +1454,49 @@ const TOOL_DEFS = [
       additionalProperties: false,
     },
     annotations: { ...READ_ANNOTATIONS, title: 'Check Open Design run' },
+    _meta: CHATGPT_STATUS_META,
+  },
+  {
+    name: 'list_versions',
+    description: 'List saved versions of an HTML artifact. Path is optional when the project entry file can be resolved.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: PROJECT_ARG,
+        path: { type: 'string', description: 'Project-relative HTML path. Defaults to the project entry file.' },
+      },
+      additionalProperties: false,
+    },
+    annotations: { ...READ_ANNOTATIONS, title: 'List artifact versions' },
+    _meta: CHATGPT_STATUS_META,
+  },
+  {
+    name: 'restore_version',
+    description: 'Restore a saved HTML artifact version. Requires explicit project, path, versionId, and confirm:true.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: { type: 'string', description: 'Explicit project id or name.' },
+        path: { type: 'string', description: 'Project-relative HTML path.' },
+        versionId: { type: 'string', description: 'Version id returned by list_versions.' },
+        confirm: { type: 'boolean', description: 'Must be true to replace the current artifact content.' },
+      },
+      required: ['project', 'path', 'versionId', 'confirm'],
+      additionalProperties: false,
+    },
+    annotations: { ...WRITE_ANNOTATIONS, destructiveHint: true, title: 'Restore artifact version' },
+    _meta: CHATGPT_STATUS_META,
+  },
+  {
+    name: 'export_project',
+    description: 'Export the complete Open Design project source as a ZIP resource. Use Open Design Studio for rendered PDF, image, or PPTX exports.',
+    inputSchema: {
+      type: 'object',
+      properties: { project: PROJECT_ARG },
+      additionalProperties: false,
+    },
+    annotations: { ...READ_ANNOTATIONS, title: 'Export Open Design source ZIP' },
+    _meta: CHATGPT_STATUS_META,
   },
   {
     name: 'cancel_run',
@@ -498,6 +1531,7 @@ const TOOL_DEFS = [
 
 export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
   const baseUrl = String(daemonUrl).replace(/\/$/, '');
+  const localWidgetFrameDomains = [...new Set([new URL(baseUrl).origin, 'https://open-design.ai'])];
   let closeTransportForIdle: (() => void) | null = null;
   const idleExit = _createMcpIdleExitController({
     idleMs: MCP_STDIO_IDLE_EXIT_MS,
@@ -617,6 +1651,18 @@ export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
     ]);
     const resources = [
       {
+        uri: CHATGPT_WIDGET_URI,
+        name: 'Open Design artifact card',
+        description: 'Interactive account, progress, and artifact result card for ChatGPT.',
+        mimeType: 'text/html;profile=mcp-app',
+        _meta: {
+          ui: {
+            prefersBorder: true,
+            csp: { frameDomains: localWidgetFrameDomains },
+          },
+        },
+      },
+      {
         uri: 'od://focus/active',
         name: 'Active Open Design context',
         description: 'The project/file the user has open in Open Design right now.',
@@ -644,6 +1690,25 @@ export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
 
   server.setRequestHandler(ReadResourceRequestSchema, withMcpActivity(async (req) => {
     const uri = req.params?.uri;
+    if (isChatGptWidgetResourceUri(uri)) {
+      return {
+        contents: [
+          {
+            uri,
+            mimeType: 'text/html;profile=mcp-app',
+            text: CHATGPT_WIDGET_HTML,
+            _meta: {
+              ui: {
+                prefersBorder: true,
+                csp: {
+                  frameDomains: localWidgetFrameDomains,
+                },
+              },
+            },
+          },
+        ],
+      };
+    }
     if (uri === 'od://focus/active') {
       const data = await getJson<ActiveContext>(`${baseUrl}/api/active`);
       return {
@@ -732,9 +1797,715 @@ export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
   }
 }
 
+export async function runChatGptMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
+  const baseUrl = String(daemonUrl).replace(/\/$/, '');
+  const server = createOpenDesignMcpServer({
+    daemonUrl: baseUrl,
+    widgetFrameDomains: [new URL(baseUrl).origin],
+    widgetRedirectDomains: ['https://open-design.ai'],
+  });
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+
+  await new Promise<void>((resolve) => {
+    const sdkOnClose = transport.onclose;
+    let finished = false;
+    const done = () => {
+      if (finished) return;
+      finished = true;
+      resolve();
+    };
+    transport.onclose = () => {
+      sdkOnClose?.();
+      done();
+    };
+    const closeTransportForStdin = () => {
+      void transport.close().catch(() => done());
+    };
+    process.stdin.once('end', closeTransportForStdin);
+    process.stdin.once('close', closeTransportForStdin);
+  });
+}
+
+// Stateless transports (notably ChatGPT's Streamable HTTP client) need a
+// fresh Server instance per request. The hosted surface deliberately exposes
+// only the V1 product workflow; local file mutation, deletion, active-focus,
+// and arbitrary artifact tools stay on `od mcp` and are not part of the
+// public ChatGPT app contract.
+export function createOpenDesignMcpServer({
+  daemonUrl,
+  widgetFrameDomains = [],
+  widgetRedirectDomains = [],
+  transformToolResult,
+}: CreateOpenDesignMcpServerOptions): Server {
+  const baseUrl = String(daemonUrl).replace(/\/$/, '');
+  const frameDomains = [...new Set(['https://open-design.ai', ...widgetFrameDomains])];
+  const server = new Server(
+    { name: SERVER_NAME, version: SERVER_VERSION },
+    {
+      capabilities: { tools: {}, resources: {} },
+      instructions: [
+        'Open Design creates and refines websites, product prototypes, presentations, design systems, images, videos, audio, and documents.',
+        'Before calling start_run with confirmed:true, resolve only the artifact-specific decisions that materially affect this request. If an important decision remains unknown, author a request-specific choice-only QuestionForm and call collect_brief; never reuse a universal questionnaire or emit <question-form>, JSON form markup, or prose questions as assistant text.',
+        'Before Cloud generation call get_cloud_account. Use create_project, then start_run; its card polls get_run and updates in place.',
+        'Open Design runs can take 5–30 minutes. Do not cancel unless the user asks.',
+        'A browser-artifact run is delivered only when get_run returns status:succeeded plus artifactCount greater than zero and a real previewUrl. A Design System run instead requires status:succeeded plus artifactCount greater than zero.',
+        'For every delivered browser or media artifact, use the host in-app browser to open studioUrl and previewUrl in two separate tabs before replying. Never replace either with the Open Design root or /onboarding. If no in-app browser capability exists, show both as clickable links.',
+        'Complex editing stays in Open Design.',
+      ].join('\n'),
+    },
+  );
+
+  const tools = TOOL_DEFS
+    .filter((tool) => CHATGPT_V1_TOOL_NAMES.has(tool.name))
+    .map(chatGptV1ToolDefinition);
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools }));
+  server.setRequestHandler(ListResourcesRequestSchema, async () => {
+    const dsData = await getJson<DesignSystemsPayload>(`${baseUrl}/api/design-systems`)
+      .catch((): DesignSystemsPayload => ({ designSystems: [] }));
+    const resources = [
+      {
+        uri: CHATGPT_WIDGET_URI,
+        name: 'Open Design artifact card',
+        description: 'Interactive account, progress, and artifact result card for ChatGPT.',
+        mimeType: 'text/html;profile=mcp-app',
+        _meta: {
+          ui: {
+            prefersBorder: true,
+            csp: { frameDomains },
+          },
+        },
+      },
+      ...(dsData.designSystems ?? []).map((designSystem) => ({
+        uri: `od://design-systems/${encodeURIComponent(designSystem.id)}/DESIGN.md`,
+        name: `Design system: ${designSystem.title || designSystem.name || designSystem.id}`,
+        description: oneLine(designSystem.summary) ?? '',
+        mimeType: 'text/markdown',
+      })),
+    ];
+    return { resources };
+  });
+  server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+    const uri = request.params?.uri;
+    if (isChatGptWidgetResourceUri(uri)) {
+      return {
+        contents: [{
+          uri,
+          mimeType: 'text/html;profile=mcp-app',
+          text: CHATGPT_WIDGET_HTML,
+          _meta: {
+            ui: {
+              prefersBorder: true,
+              csp: {
+                frameDomains,
+              },
+            },
+            ...(widgetRedirectDomains.length > 0
+              ? {
+                  'openai/widgetCSP': {
+                    redirect_domains: [...new Set(widgetRedirectDomains)],
+                  },
+                }
+              : {}),
+          },
+        }],
+      };
+    }
+    const match = String(uri || '').match(/^od:\/\/(design-systems)\/([^/]+)\/(.+)$/);
+    if (!match) throw new Error(`unsupported resource URI: ${uri}`);
+    const [, kind, encodedId] = match as [string, 'design-systems', string, string];
+    const decodedId = decodeURIComponent(encodedId);
+    const data = await getJson<ResourcePayload>(
+      `${baseUrl}/api/${kind}/${encodeURIComponent(decodedId)}`,
+    );
+    const text = data.skill?.body ?? data.skill?.content ?? data.designSystem?.body
+      ?? data.designSystem?.content ?? data.body ?? data.content ?? '';
+    return { contents: [{ uri, mimeType: 'text/markdown', text }] };
+  });
+  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    const name = request.params?.name;
+    if (typeof name !== 'string' || !CHATGPT_V1_TOOL_NAMES.has(name)) {
+      return errorResult(`tool is outside the Open Design ChatGPT V1 scope: ${String(name ?? '')}`);
+    }
+    const args = (request.params?.arguments ?? {}) as McpArgs;
+    const result = await handleChatGptV1ToolCall(baseUrl, name, args);
+    const transformed = transformToolResult ? await transformToolResult(name, result) : result;
+    return withChatGptWidgetResultMeta(name, transformed);
+  });
+  return server;
+}
+
+function chatGptV1ToolDefinition(tool: (typeof TOOL_DEFS)[number]): any {
+  const requiredScopes = chatGptV1RequiredScopes(tool.name);
+  const securitySchemes = tool.name === 'collect_brief'
+    ? [{ type: 'noauth' }]
+    : [{ type: 'oauth2', scopes: requiredScopes }];
+  const authMeta = {
+    ...tool._meta,
+    securitySchemes,
+    ui: {
+      ...(tool._meta && typeof tool._meta === 'object' && 'ui' in tool._meta
+        ? (tool._meta.ui as JsonObject)
+        : {}),
+      visibility: ['model', 'app'],
+    },
+    // MCP Apps `tools/call` is the primary bridge. Keep the ChatGPT-specific
+    // compatibility flag so older Apps SDK hosts can also invoke polling,
+    // version, restore, and export tools from the component.
+    'openai/widgetAccessible': true,
+  };
+  const outputSchema = chatGptV1OutputSchema(tool.name);
+  if (tool.name === 'start_run') {
+    return {
+      ...tool,
+      securitySchemes,
+      _meta: authMeta,
+      outputSchema,
+      description: 'Create or refine a V1 Open Design Cloud artifact from a confirmed structured brief. Choose the artifact type; the server selects the approved workflow and pins generation to Open Design Cloud. Returns immediately so get_run can report progress.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          project: PROJECT_ARG,
+          artifactType: {
+            type: 'string',
+            enum: [...CHATGPT_ARTIFACT_TYPES],
+            description: 'The V1 deliverable type. The server maps it to the approved Open Design workflow.',
+          },
+          brief: {
+            type: 'object',
+            properties: {
+              audience: { type: 'string', description: 'Who will use or view the artifact.' },
+              outcome: { type: 'string', description: 'The result this artifact must achieve.' },
+              contentAndFlows: { type: 'string', description: 'Required content, sections, product flows, and interactions.' },
+              visualDirection: { type: 'string', description: 'Visual direction, references, brand constraints, or instruction to use the attached Design System.' },
+              outputFormat: { type: 'string', description: 'Expected output selected in the artifact-specific Custom UI.' },
+              constraints: { type: 'string', description: 'Optional must-have or must-avoid constraints.' },
+            },
+            required: ['audience', 'outcome', 'contentAndFlows', 'visualDirection', 'outputFormat'],
+            additionalProperties: false,
+          },
+          confirmed: {
+            type: 'boolean',
+            description: 'Must be true after the user has seen or already supplied the complete working brief.',
+          },
+        },
+        required: ['project', 'artifactType', 'brief', 'confirmed'],
+        additionalProperties: false,
+      },
+    };
+  }
+  if (tool.name === 'create_project') {
+    return {
+      ...tool,
+      securitySchemes,
+      _meta: authMeta,
+      outputSchema,
+      inputSchema: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: 'Human-readable project name.' },
+          artifactType: {
+            type: 'string',
+            enum: [...CHATGPT_ARTIFACT_TYPES],
+            description: 'Artifact type used to initialize the matching Open Design project kind.',
+          },
+          id: { type: 'string', description: 'Optional project id slug.' },
+          designSystem: { type: 'string', description: 'Optional Design System id to apply.' },
+        },
+        required: ['name', 'artifactType'],
+        additionalProperties: false,
+      },
+    };
+  }
+  return { ...tool, securitySchemes, _meta: authMeta, outputSchema };
+}
+
+function removePublicSecrets(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(removePublicSecrets);
+  if (!value || typeof value !== 'object') return value;
+  const blocked = new Set([
+    'eventslogpath',
+    'accesstoken',
+    'refreshtoken',
+    'sessiontoken',
+    'controlkey',
+    'runtimekey',
+    'apikey',
+    'clientsecret',
+    'authorization',
+    'cookie',
+  ]);
+  return Object.fromEntries(
+    Object.entries(value as JsonObject)
+      .filter(([key]) => !blocked.has(key.replace(/[_-]/gu, '').toLowerCase()))
+      .map(([key, child]) => [key, removePublicSecrets(child)]),
+  );
+}
+
+type ChatGptKnownAnswers = Record<string, string | string[]>;
+
+function requiredBriefString(value: unknown, field: string, maxLength: number): string {
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new Error(`${field} is required.`);
+  }
+  const normalized = value.trim();
+  if (normalized.length > maxLength) {
+    throw new Error(`${field} must be ${maxLength} characters or fewer.`);
+  }
+  return normalized;
+}
+
+function optionalBriefString(value: unknown, field: string, maxLength: number): string | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  return requiredBriefString(value, field, maxLength);
+}
+
+function normalizeChatGptKnownAnswers(raw: unknown): ChatGptKnownAnswers {
+  if (raw === undefined) return {};
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new Error('knownAnswers must be an object.');
+  }
+  const entries = Object.entries(raw as JsonObject);
+  if (entries.length > 32) throw new Error('knownAnswers must contain 32 fields or fewer.');
+  const normalized: ChatGptKnownAnswers = {};
+  for (const [rawId, rawValue] of entries) {
+    const id = requiredBriefString(rawId, 'knownAnswers id', 80);
+    if (Object.hasOwn(normalized, id)) throw new Error(`knownAnswers ids must be unique: ${id}.`);
+    if (Array.isArray(rawValue)) {
+      if (rawValue.length > CHATGPT_BRIEF_MAX_OPTIONS) {
+        throw new Error(`knownAnswers.${id} must contain ${CHATGPT_BRIEF_MAX_OPTIONS} values or fewer.`);
+      }
+      normalized[id] = rawValue.map((value) => requiredBriefString(value, `knownAnswers.${id}`, 500));
+      continue;
+    }
+    normalized[id] = requiredBriefString(rawValue, `knownAnswers.${id}`, 500);
+  }
+  return normalized;
+}
+
+function normalizeBriefDecisionId(value: string): string {
+  return value.replace(/[^a-z0-9]/giu, '').toLowerCase();
+}
+
+const QUESTION_FORM_DECISION_ALIAS_LOOKUP = new Map<string, string>(
+  QUESTION_FORM_DECISION_ALIAS_GROUPS.flatMap((group) => {
+    const canonical = normalizeBriefDecisionId(group[0]);
+    return group.map((alias) => [normalizeBriefDecisionId(alias), canonical] as const);
+  }),
+);
+
+function canonicalBriefDecisionId(value: string): string {
+  const normalized = normalizeBriefDecisionId(value);
+  return QUESTION_FORM_DECISION_ALIAS_LOOKUP.get(normalized) ?? normalized;
+}
+
+function normalizeChatGptFormOption(raw: unknown, field: string): FormOption {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new Error(`${field} must be an option object with localized label and stable value.`);
+  }
+  const option = raw as JsonObject;
+  const label = requiredBriefString(option.label, `${field}.label`, 160);
+  const value = requiredBriefString(option.value, `${field}.value`, 200);
+  const description = optionalBriefString(option.description, `${field}.description`, 300);
+  return { label, value, ...(description ? { description } : {}) };
+}
+
+function normalizeChatGptDirectionCard(raw: unknown, field: string): DirectionCard {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new Error(`${field} must be a direction card object.`);
+  }
+  const card = raw as JsonObject;
+  const strings = (value: unknown, name: string, maxItems: number): string[] => {
+    if (value === undefined) return [];
+    if (!Array.isArray(value) || value.length > maxItems) {
+      throw new Error(`${name} must contain ${maxItems} strings or fewer.`);
+    }
+    return value.map((entry) => requiredBriefString(entry, name, 120));
+  };
+  return {
+    id: requiredBriefString(card.id, `${field}.id`, 80),
+    label: requiredBriefString(card.label, `${field}.label`, 160),
+    mood: optionalBriefString(card.mood, `${field}.mood`, 300) ?? '',
+    references: strings(card.references, `${field}.references`, 6),
+    palette: strings(card.palette, `${field}.palette`, 8),
+    displayFont: optionalBriefString(card.displayFont, `${field}.displayFont`, 160) ?? 'Georgia, serif',
+    bodyFont: optionalBriefString(card.bodyFont, `${field}.bodyFont`, 160) ?? '-apple-system, system-ui, sans-serif',
+  };
+}
+
+function localizedSwitchOptions(lang: string | undefined): FormOption[] {
+  if (lang?.toLowerCase().startsWith('zh')) {
+    return [{ label: '是', value: 'true' }, { label: '否', value: 'false' }];
+  }
+  return [{ label: 'Yes', value: 'true' }, { label: 'No', value: 'false' }];
+}
+
+function normalizeChatGptDefaultValue(
+  raw: unknown,
+  type: ChatGptBriefQuestionType,
+  options: FormOption[],
+  field: string,
+): string | string[] {
+  if (raw === undefined || raw === null) {
+    throw new Error(`${field} is required so the dynamic form is preselected.`);
+  }
+  const normalizeValue = (value: unknown): string => {
+    const normalized = typeof value === 'boolean'
+      ? String(value)
+      : requiredBriefString(value, field, 200);
+    if (!options.some((option) => option.value === normalized || option.label === normalized)) {
+      throw new Error(`${field} must match one of the question option values.`);
+    }
+    return options.find((option) => option.label === normalized)?.value ?? normalized;
+  };
+  if (type === 'checkbox') {
+    const values = Array.isArray(raw) ? raw : [raw];
+    if (values.length === 0) throw new Error(`${field} must select at least one option.`);
+    const normalized = values.map(normalizeValue);
+    if (new Set(normalized).size !== normalized.length) {
+      throw new Error(`${field} must not contain duplicate option values.`);
+    }
+    return normalized;
+  }
+  if (Array.isArray(raw)) throw new Error(`${field} must be a single option value.`);
+  return normalizeValue(raw);
+}
+
+function normalizeChatGptQuestionForm(
+  raw: unknown,
+  knownAnswers: ChatGptKnownAnswers,
+): QuestionForm {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new Error('questionForm is required.');
+  }
+  const form = raw as JsonObject;
+  const id = requiredBriefString(form.id, 'questionForm.id', 80);
+  const title = requiredBriefString(form.title, 'questionForm.title', 160);
+  const description = optionalBriefString(form.description, 'questionForm.description', 500);
+  const lang = optionalBriefString(form.lang, 'questionForm.lang', 40);
+  const submitLabel = optionalBriefString(form.submitLabel, 'questionForm.submitLabel', 80);
+  if (!Array.isArray(form.questions)) throw new Error('questionForm.questions is required.');
+  if (form.questions.length < 1 || form.questions.length > CHATGPT_BRIEF_MAX_QUESTIONS) {
+    throw new Error(`questionForm.questions must contain 1–${CHATGPT_BRIEF_MAX_QUESTIONS} questions.`);
+  }
+  const seenIds = new Set<string>();
+  const knownDecisionIds = new Set(Object.keys(knownAnswers).map(canonicalBriefDecisionId));
+  const questions: FormQuestion[] = [];
+  form.questions.forEach((rawQuestion, index) => {
+    if (!rawQuestion || typeof rawQuestion !== 'object' || Array.isArray(rawQuestion)) {
+      throw new Error(`questionForm.questions[${index}] must be an object.`);
+    }
+    const question = rawQuestion as JsonObject;
+    const questionId = requiredBriefString(question.id, `questionForm.questions[${index}].id`, 80);
+    if (seenIds.has(questionId)) throw new Error(`questionForm question ids must be unique: ${questionId}.`);
+    seenIds.add(questionId);
+    if (knownDecisionIds.has(canonicalBriefDecisionId(questionId))) return;
+    const rawType = requiredBriefString(question.type, `questionForm.questions[${index}].type`, 40);
+    if (!CHATGPT_BRIEF_QUESTION_TYPE_SET.has(rawType)) {
+      throw new Error(`questionForm question type must be one of: ${CHATGPT_BRIEF_QUESTION_TYPES.join(', ')}.`);
+    }
+    const type = rawType as ChatGptBriefQuestionType;
+    if (question.allowCustom === true) {
+      throw new Error('questionForm choice questions must set allowCustom:false or omit it.');
+    }
+    const cards = Array.isArray(question.cards)
+      ? question.cards.map((card, cardIndex) => normalizeChatGptDirectionCard(
+          card,
+          `questionForm.questions[${index}].cards[${cardIndex}]`,
+        ))
+      : undefined;
+    if (cards && type !== 'direction-cards') {
+      throw new Error(`questionForm.questions[${index}].cards is only valid for direction-cards.`);
+    }
+    if (type === 'direction-cards' && (!cards || cards.length < 2 || cards.length > 6)) {
+      throw new Error(`questionForm.questions[${index}].cards must contain 2–6 direction cards.`);
+    }
+    if (cards && new Set(cards.map((card) => card.id)).size !== cards.length) {
+      throw new Error(`questionForm.questions[${index}] direction card ids must be unique.`);
+    }
+    let options = Array.isArray(question.options)
+      ? question.options.map((option, optionIndex) => normalizeChatGptFormOption(
+          option,
+          `questionForm.questions[${index}].options[${optionIndex}]`,
+        ))
+      : undefined;
+    if (type === 'direction-cards' && cards) {
+      const cardIds = new Set(cards.map((card) => card.id));
+      if (options && (
+        options.length !== cards.length
+        || options.some((option) => !cardIds.has(option.value))
+      )) {
+        throw new Error(`questionForm.questions[${index}] direction-card options must match card ids.`);
+      }
+      options = cards.map((card) => ({
+        label: card.label,
+        value: card.id,
+        ...(card.mood ? { description: card.mood } : {}),
+      }));
+    }
+    if ((!options || options.length === 0) && type === 'switch') {
+      options = localizedSwitchOptions(lang);
+    }
+    if (!options || options.length < 2 || options.length > CHATGPT_BRIEF_MAX_OPTIONS) {
+      throw new Error(`questionForm.questions[${index}].options must contain 2–${CHATGPT_BRIEF_MAX_OPTIONS} choices.`);
+    }
+    if (new Set(options.map((option) => option.value)).size !== options.length) {
+      throw new Error(`questionForm.questions[${index}] option values must be unique.`);
+    }
+    const rawDefault = question.defaultValue ?? question.default;
+    const defaultValue = normalizeChatGptDefaultValue(
+      rawDefault,
+      type,
+      options,
+      `questionForm.questions[${index}].defaultValue`,
+    );
+    const maxSelections = type === 'checkbox' && question.maxSelections !== undefined
+      ? Number(question.maxSelections)
+      : undefined;
+    if (maxSelections !== undefined && (
+      !Number.isInteger(maxSelections)
+      || maxSelections < 1
+      || maxSelections > options.length
+    )) {
+      throw new Error(`questionForm.questions[${index}].maxSelections is invalid.`);
+    }
+    if (maxSelections !== undefined && Array.isArray(defaultValue) && defaultValue.length > maxSelections) {
+      throw new Error(`questionForm.questions[${index}].defaultValue exceeds maxSelections.`);
+    }
+    questions.push({
+      id: questionId,
+      label: requiredBriefString(question.label, `questionForm.questions[${index}].label`, 200),
+      type,
+      options,
+      ...(question.help ? { help: requiredBriefString(question.help, `questionForm.questions[${index}].help`, 300) } : {}),
+      ...(question.required === true ? { required: true } : {}),
+      defaultValue,
+      ...(maxSelections !== undefined ? { maxSelections } : {}),
+      allowCustom: false,
+      ...(cards ? { cards } : {}),
+    });
+  });
+  if (questions.length === 0) {
+    throw new Error('All proposed questions are already answered. Skip collect_brief and continue with the known brief.');
+  }
+  return {
+    id,
+    title,
+    questions,
+    ...(description ? { description } : {}),
+    ...(submitLabel ? { submitLabel } : {}),
+    ...(lang ? { lang } : {}),
+  };
+}
+
+function publicChatGptResult(name: string, result: any): any {
+  if (!result?.structuredContent || typeof result.structuredContent !== 'object') return result;
+  const structuredContent = removePublicSecrets(result.structuredContent) as JsonObject;
+  if (name === 'start_run') {
+    structuredContent.hint = 'Open Design Cloud is creating the artifact. Show the progress card and poll get_run every 30–60 seconds.';
+  } else if (name === 'get_run' && ['queued', 'running'].includes(String(structuredContent.status))) {
+    structuredContent.stage = structuredContent.status === 'queued' ? 'queued' : 'generating';
+    structuredContent.hint = 'Open Design Cloud is still working. Keep the progress card visible and poll again in 30–60 seconds.';
+  } else if (name === 'get_run') {
+    // A V1 start_run always represents a confirmed artifact commission. The
+    // daemon's `succeeded` status means the agent process completed cleanly;
+    // it does not prove that a deliverable reached the project filesystem.
+    // Never turn a clean process exit with zero touched artifacts into a
+    // misleading Ready card.
+    const isSucceeded = structuredContent.status === 'succeeded';
+    const artifactCount = typeof structuredContent.artifactCount === 'number'
+      ? structuredContent.artifactCount
+      : 0;
+    const isDesignSystemRun = structuredContent.skillId === 'design-md';
+    const missingDeliverable = isSucceeded && artifactCount <= 0;
+    const missingBrowserPreview = isSucceeded && !isDesignSystemRun && !structuredContent.previewUrl;
+    const missingStudioUrl = isSucceeded && !structuredContent.studioUrl;
+    if (missingDeliverable || missingBrowserPreview || missingStudioUrl) {
+      structuredContent.status = 'failed';
+      structuredContent.stage = 'failed';
+      structuredContent.errorCode = missingDeliverable
+        ? 'RUN_NO_DELIVERABLE'
+        : missingBrowserPreview
+          ? 'RUN_NO_PREVIEW'
+          : 'RUN_NO_STUDIO_URL';
+      structuredContent.error = missingDeliverable
+        ? 'Open Design Cloud finished without creating or updating any project files.'
+        : missingBrowserPreview
+          ? 'Open Design Cloud wrote files but did not produce a reachable browser preview.'
+          : 'Open Design Cloud produced files but could not resolve the exact Studio project URL.';
+      structuredContent.retryable = true;
+      structuredContent.hint = missingDeliverable
+        ? 'Generation failed because no deliverable was written. Do not claim that an artifact is ready or offer a preview. Retry the run; if it repeats, report the Cloud tool failure.'
+        : missingBrowserPreview
+          ? 'Generation is incomplete because no reachable preview entry was produced. Do not claim that the Artifact is ready. Retry with an explicit HTML entry-file requirement.'
+          : 'Generation is incomplete because the exact Open Design project URL is unavailable. Do not open the Open Design root or /onboarding as a substitute.';
+      delete structuredContent.previewUrl;
+      delete structuredContent.entryFile;
+    } else {
+      const terminalStage: Record<string, string> = { succeeded: 'ready', failed: 'failed', canceled: 'canceled' };
+      if (terminalStage[String(structuredContent.status)]) structuredContent.stage = terminalStage[String(structuredContent.status)];
+      if (isSucceeded && structuredContent.previewUrl) {
+        structuredContent.hint = 'Delivery complete. Before replying, use the host in-app browser to open studioUrl and previewUrl in two separate tabs. Open these exact returned URLs; do not substitute the Open Design root or /onboarding.';
+      } else if (isSucceeded && isDesignSystemRun) {
+        structuredContent.hint = 'Delivery complete. Before replying, open the exact studioUrl in the host in-app browser; do not substitute the Open Design root or /onboarding.';
+      }
+    }
+    const accountFailure = classifyAmrAccountFailure(JSON.stringify(structuredContent));
+    if (accountFailure?.action === 'recharge') {
+      structuredContent.accountAction = 'recharge';
+      structuredContent.rechargeUrl = CHATGPT_RECHARGE_URL;
+      structuredContent.nextAction = 'recharge';
+      structuredContent.fallbackHint = 'After offering recharge, the user can open this project in Open Design and choose a local Code Agent or BYOK mode.';
+    }
+  }
+  return {
+    ...result,
+    structuredContent,
+    content: Array.isArray(result.content)
+      ? result.content.map((item: any) => item?.type === 'text'
+        ? { ...item, text: JSON.stringify(structuredContent, null, 2) }
+        : item)
+      : result.content,
+  };
+}
+
+async function handleChatGptV1ToolCall(baseUrl: string, name: string, args: McpArgs): Promise<any> {
+  if (name === 'collect_brief') {
+    if (!isChatGptArtifactType(args.artifactType)) {
+      return errorResult(chatGptArtifactTypeError());
+    }
+    try {
+      const knownAnswers = normalizeChatGptKnownAnswers(args.knownAnswers);
+      const questionForm = normalizeChatGptQuestionForm(args.questionForm, knownAnswers);
+      return ok({
+        view: 'brief-form',
+        artifactType: args.artifactType,
+        projectTitle: typeof args.projectTitle === 'string' && args.projectTitle.trim()
+          ? args.projectTitle.trim()
+          : `New Open Design ${args.artifactType}`,
+        knownAnswers,
+        questionForm,
+      });
+    } catch (error) {
+      return errorResult(error instanceof Error ? error.message : 'Invalid dynamic QuestionForm.');
+    }
+  }
+  let callArgs = args;
+  if (name === 'start_run') {
+    const prepared = prepareChatGptV1Run(args);
+    if ('error' in prepared) return errorResult(prepared.error);
+    const account = await getCloudAccount(baseUrl);
+    if (account.canUseCloud !== true) {
+      const text = account.nextAction === 'recharge'
+        ? 'Open Design Cloud balance is empty. Recharge before starting this run.'
+        : account.nextAction === 'sign_in'
+          ? 'Sign in to Open Design Cloud before starting this run.'
+          : 'Open Design Cloud account status is unavailable. Retry the account check before starting this run.';
+      return { isError: true, structuredContent: account, content: [{ type: 'text', text }] };
+    }
+    callArgs = {
+      project: args.project,
+      prompt: prepared.prompt,
+      ...(prepared.skill ? { skill: prepared.skill } : {}),
+      ...(prepared.plugin ? { plugin: prepared.plugin } : {}),
+      ...(prepared.inputs ? { inputs: prepared.inputs } : {}),
+      agent: 'amr',
+    };
+  }
+  const result = await handleMcpToolCall(baseUrl, name, callArgs);
+  if (name === 'start_run' && result?.structuredContent && typeof result.structuredContent === 'object') {
+    result.structuredContent = {
+      ...result.structuredContent,
+      artifactType: args.artifactType,
+      briefConfirmed: true,
+      stage: result.structuredContent.status === 'queued' ? 'queued' : 'generating',
+    };
+  }
+  return publicChatGptResult(name, result);
+}
+
+interface PreparedChatGptV1Run {
+  prompt: string;
+  skill?: string;
+  plugin?: string;
+  inputs?: JsonObject;
+}
+
+function mediaAspectFromOutputFormat(outputFormat: string): string | undefined {
+  return outputFormat.match(/(?:^|\s|·)(1:1|16:9|9:16|4:3|3:4)(?:$|\s)/u)?.[1];
+}
+
+function prepareChatGptV1Run(args: McpArgs): PreparedChatGptV1Run | { error: string } {
+  if (!isChatGptArtifactType(args.artifactType)) {
+    return { error: chatGptArtifactTypeError() };
+  }
+  if (args.confirmed !== true) {
+    return { error: 'confirmed:true is required after the user has supplied or approved the working brief.' };
+  }
+  if (!args.brief || typeof args.brief !== 'object' || Array.isArray(args.brief)) {
+    return { error: 'brief is required.' };
+  }
+  const brief = args.brief as JsonObject;
+  const required = ['audience', 'outcome', 'contentAndFlows', 'visualDirection', 'outputFormat'] as const;
+  for (const field of required) {
+    if (typeof brief[field] !== 'string' || !String(brief[field]).trim()) {
+      return { error: `brief.${field} is required.` };
+    }
+  }
+  const lines: string[] = [
+    `Artifact type: ${args.artifactType}`,
+    `Audience: ${brief.audience}`,
+    `Outcome: ${brief.outcome}`,
+    `Content and flows: ${brief.contentAndFlows}`,
+    `Visual direction: ${brief.visualDirection}`,
+    `Output format: ${brief.outputFormat}`,
+  ];
+  if (typeof brief.constraints === 'string' && brief.constraints.trim()) {
+    lines.push(`Constraints: ${brief.constraints}`);
+  }
+  lines.push('Delivery contract: write the actual deliverable files inside the current project working directory. Project files are discovered automatically; there is no separate artifact registration command to run. Verify every required file can be read back before finishing. If any write or verification tool reports an error, report that error and do not claim the file exists.');
+
+  switch (args.artifactType) {
+    case 'website':
+      lines.push('Website deliverable: create a polished responsive website with a real index.html entry file and verify the rendered desktop and mobile layouts.');
+      return { skill: 'frontend-design', prompt: lines.join('\n') };
+    case 'product-prototype':
+      lines.push('Prototype deliverable: create a realistic interactive product prototype with a real index.html entry file, working core flows, and responsive behavior appropriate to the selected output.');
+      return { skill: 'frontend-design', prompt: lines.join('\n') };
+    case 'presentation':
+      lines.push('Presentation deliverable: create a complete browser-rendered slide deck with a real index.html entry file, coherent narrative pacing, and no clipped or overflowing slide content.');
+      return { skill: 'slides', prompt: lines.join('\n') };
+    case 'design-system':
+      lines.push('Design-system deliverable: create a reusable DESIGN.md with concrete foundations, tokens, components, states, accessibility guidance, and application rules.');
+      return { skill: 'design-md', prompt: lines.join('\n') };
+    case 'document':
+      lines.push('Document deliverable: create both document.md as the editable source and a polished print-ready index.html browser preview. The HTML must be suitable for later PDF export. Do not claim to create a native DOCX file.');
+      return { skill: 'frontend-design', prompt: lines.join('\n') };
+    case 'image':
+    case 'video':
+    case 'audio': {
+      lines.push(`Media deliverable: use the Open Design media-generation workflow to produce and save a real ${args.artifactType} binary in the project. Do not stop at a prompt, plan, placeholder, or textual description.`);
+      const aspect = mediaAspectFromOutputFormat(String(brief.outputFormat));
+      return {
+        plugin: 'od-media-generation',
+        prompt: lines.join('\n'),
+        inputs: {
+          mediaKind: args.artifactType,
+          subject: `${String(brief.outcome).trim()}. ${String(brief.contentAndFlows).trim()}`,
+          style: String(brief.visualDirection).trim(),
+          ...(aspect ? { aspect } : {}),
+        },
+      };
+    }
+  }
+}
+
 function ok(payload: unknown) {
   const text =
     typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2);
+  if (payload !== null && typeof payload === 'object' && !Array.isArray(payload)) {
+    return { structuredContent: payload as JsonObject, content: [{ type: 'text', text }] };
+  }
   return { content: [{ type: 'text', text }] };
 }
 
@@ -748,7 +2519,10 @@ function requireString(v: unknown, name: string): asserts v is string {
   }
 }
 
-async function handleMcpToolCall(baseUrl: string, name: unknown, args: McpArgs) {
+// MCP tool results may contain text, embedded binary resources, or both. Keep
+// this dynamic dispatcher broad at the boundary; every returned value is
+// validated by the SDK's CallToolResult schema before it reaches a client.
+async function handleMcpToolCall(baseUrl: string, name: unknown, args: McpArgs): Promise<any> {
   try {
     switch (name) {
       case 'list_projects':
@@ -769,8 +2543,8 @@ async function handleMcpToolCall(baseUrl: string, name: unknown, args: McpArgs) 
         const project = data?.project ?? data;
         const resolvedDir = typeof data?.resolvedDir === 'string' ? data.resolvedDir : null;
         const declaredEntry = project?.metadata?.entryFile ?? null;
-        const entryFile = await resolveProjectEntry(baseUrl, id, declaredEntry);
-        const previewUrl = rawPreviewUrl(baseUrl, id, entryFile);
+        const entryFile = await resolveProjectEntry(baseUrl, id, declaredEntry, project?.metadata?.kind);
+        const previewUrl = await validatePreviewUrl(rawPreviewUrl(baseUrl, id, entryFile));
         // Build the studio deep link too — needs the project's
         // default conversation, which we look up once. Cheap to skip
         // when the daemon has no webBaseUrl configured.
@@ -851,6 +2625,8 @@ async function handleMcpToolCall(baseUrl: string, name: unknown, args: McpArgs) 
         return await deleteProject(baseUrl, args);
       case 'create_project':
         return await createProject(baseUrl, args);
+      case 'get_cloud_account':
+        return ok(await getCloudAccount(baseUrl));
       case 'list_skills':
         return ok(await getJson<SkillsPayload>(`${baseUrl}/api/skills`));
       case 'list_plugins':
@@ -861,6 +2637,12 @@ async function handleMcpToolCall(baseUrl: string, name: unknown, args: McpArgs) 
         return await startRun(baseUrl, args);
       case 'get_run':
         return await getRun(baseUrl, args);
+      case 'list_versions':
+        return await listVersions(baseUrl, args);
+      case 'restore_version':
+        return await restoreVersion(baseUrl, args);
+      case 'export_project':
+        return await exportProject(baseUrl, args);
       case 'cancel_run': {
         requireString(args.runId, 'runId');
         return ok(
@@ -876,6 +2658,128 @@ async function handleMcpToolCall(baseUrl: string, name: unknown, args: McpArgs) 
   } catch (err) {
     return errorResult(formatError(err, baseUrl));
   }
+}
+
+async function getCloudAccount(baseUrl: string): Promise<JsonObject> {
+  const [status, wallet] = await Promise.all([
+    getJson<JsonObject>(`${baseUrl}/api/integrations/vela/status`),
+    getJson<JsonObject>(`${baseUrl}/api/integrations/vela/wallet`).catch((error: unknown) => ({
+      status: 'unavailable',
+      error: { message: error instanceof Error ? error.message : String(error) },
+    })),
+  ]);
+  const loggedIn = status.loggedIn === true;
+  const walletRecord = wallet as JsonObject;
+  const walletBalance = typeof walletRecord.balanceUsd === 'string' ? walletRecord.balanceUsd : null;
+  const account = status.account && typeof status.account === 'object'
+    ? status.account as JsonObject
+    : null;
+  const accountBalance = typeof account?.balanceUsd === 'string' ? account.balanceUsd : null;
+  const balanceUsd = walletBalance ?? accountBalance;
+  const parsedBalance = balanceUsd === null ? null : Number(balanceUsd);
+  const balanceKnown = parsedBalance !== null && Number.isFinite(parsedBalance);
+  const canUseCloud = loggedIn && balanceKnown ? parsedBalance > 0 : null;
+  const nextAction = !loggedIn
+    ? 'sign_in'
+    : !balanceKnown
+      ? 'retry_account'
+      : canUseCloud
+        ? 'generate'
+        : 'recharge';
+  return {
+    loggedIn,
+    user: status.user ?? null,
+    account,
+    wallet,
+    balanceUsd,
+    balanceStatus: !loggedIn ? 'signed_out' : !balanceKnown ? 'unavailable' : canUseCloud ? 'available' : 'empty',
+    canUseCloud,
+    nextAction,
+    rechargeUrl: CHATGPT_RECHARGE_URL,
+    fallback: {
+      availableIn: 'Open Design',
+      modes: ['local_code_agent', 'byok'],
+    },
+    hint: nextAction === 'generate'
+      ? 'Open Design Cloud is connected and has a positive wallet balance. The ChatGPT app will use Cloud for the next run.'
+      : nextAction === 'recharge'
+        ? 'Open Design Cloud balance is empty. Offer recharge first. The user may instead open Open Design and choose a local Code Agent or BYOK mode.'
+        : nextAction === 'sign_in'
+          ? 'Open Design Cloud is not signed in. Complete Open Design authorization, then check the account again.'
+          : 'Open Design Cloud wallet status is temporarily unavailable. Do not treat it as zero; retry before starting a paid run.',
+  };
+}
+
+function encodeProjectRelativePath(filePath: string): string {
+  return filePath.split('/').filter(Boolean).map(encodeURIComponent).join('/');
+}
+
+async function resolveVersionPath(baseUrl: string, projectId: string, requested: unknown): Promise<string> {
+  if (typeof requested === 'string' && requested.length > 0) return requested;
+  const project = await getJson<ProjectPayload>(`${baseUrl}/api/projects/${encodeURIComponent(projectId)}`);
+  const metadata = project.project?.metadata ?? project.metadata;
+  const entry = await resolveProjectEntry(baseUrl, projectId, metadata?.entryFile ?? null, metadata?.kind);
+  if (!entry) throw new Error('path is required because this project has no resolvable entry file');
+  return entry;
+}
+
+async function listVersions(baseUrl: string, args: McpArgs) {
+  const { id, resolved, active } = await resolveProjectArg(baseUrl, args.project);
+  const filePath = await resolveVersionPath(baseUrl, id, args.path);
+  const data = await getJson<JsonObject>(
+    `${baseUrl}/api/projects/${encodeURIComponent(id)}/files/${encodeProjectRelativePath(filePath)}/versions`,
+  );
+  return ok(withActiveEcho({ ...data, projectId: id, path: filePath }, active, resolved));
+}
+
+async function restoreVersion(baseUrl: string, args: McpArgs) {
+  if (typeof args.project !== 'string' || !args.project) throw new Error('project is required');
+  requireString(args.path, 'path');
+  requireString(args.versionId, 'versionId');
+  if (args.confirm !== true) return errorResult('confirm:true is required to restore a version');
+  const { id, resolved } = await resolveProjectArg(baseUrl, args.project);
+  const result = await postJson<JsonObject>(
+    `${baseUrl}/api/projects/${encodeURIComponent(id)}/files/${encodeProjectRelativePath(args.path)}/versions/${encodeURIComponent(args.versionId)}/restore`,
+    {},
+  );
+  return ok(withActiveEcho({ ...result, projectId: id, path: args.path }, null, resolved));
+}
+
+async function exportProject(baseUrl: string, args: McpArgs) {
+  const { id, resolved, active } = await resolveProjectArg(baseUrl, args.project);
+  const url = `${baseUrl}/api/projects/${encodeURIComponent(id)}/archive`;
+  const response = await fetch(url);
+  if (!response.ok) return errorResult(await formatDaemonError(response, url));
+  const bytes = Buffer.from(await response.arrayBuffer());
+  const maxBytes = 12 * 1024 * 1024;
+  if (bytes.length > maxBytes) {
+    return errorResult(`Project ZIP is ${bytes.length} bytes, above the ${maxBytes}-byte ChatGPT transfer limit. Open Open Design Studio to export it directly.`);
+  }
+  const disposition = response.headers.get('content-disposition') ?? '';
+  const encodedName = /filename\*=UTF-8''([^;]+)/i.exec(disposition)?.[1];
+  const plainName = /filename="([^"]+)"/i.exec(disposition)?.[1];
+  const fileName = encodedName ? decodeURIComponent(encodedName) : plainName || `${id}.zip`;
+  const structuredContent = withActiveEcho({
+    ok: true,
+    projectId: id,
+    fileName,
+    mimeType: 'application/zip',
+    bytes: bytes.length,
+  }, active, resolved);
+  return {
+    structuredContent,
+    content: [
+      { type: 'text' as const, text: `Exported ${fileName} (${bytes.length} bytes).` },
+      {
+        type: 'resource' as const,
+        resource: {
+          uri: `od://exports/${encodeURIComponent(id)}/${encodeURIComponent(fileName)}`,
+          mimeType: 'application/zip',
+          blob: bytes.toString('base64'),
+        },
+      },
+    ],
+  };
 }
 
 async function writeFile(baseUrl: string, args: McpArgs) {
@@ -983,13 +2887,37 @@ async function postJson<T>(url: string, body: unknown): Promise<T> {
 // <question-form> output ends up dropped from the MCP response because
 // no project file is produced. Better to let the outer agent gather
 // requirements directly and pass a precise prompt to start_run.
+function projectMetadataForArtifactType(artifactType: ChatGptArtifactType): JsonObject {
+  switch (artifactType) {
+    case 'website':
+    case 'product-prototype':
+      return { kind: 'prototype' };
+    case 'presentation':
+      return { kind: 'deck' };
+    case 'design-system':
+      return { kind: 'brand' };
+    case 'image':
+    case 'video':
+    case 'audio':
+      return { kind: artifactType };
+    case 'document':
+      return { kind: 'other', intent: 'document' };
+  }
+}
+
 async function createProject(baseUrl: string, args: McpArgs) {
   requireString(args.name, 'name');
+  if (args.artifactType !== undefined && !isChatGptArtifactType(args.artifactType)) {
+    throw new Error(chatGptArtifactTypeError());
+  }
   const id =
     typeof args.id === 'string' && args.id.length > 0
       ? args.id
       : slugifyProjectId(args.name);
   const body: JsonObject = { id, name: args.name, skipDiscoveryBrief: true };
+  if (isChatGptArtifactType(args.artifactType)) {
+    body.metadata = projectMetadataForArtifactType(args.artifactType);
+  }
   if (typeof args.designSystem === 'string' && args.designSystem.length > 0) {
     body.designSystemId = args.designSystem;
   }
@@ -1286,7 +3214,28 @@ async function getDefaultConversationId(baseUrl: string, projectId: string): Pro
 // index.html exists at the project root — without the fallback,
 // get_project/get_run would silently omit previewUrl and force the
 // outer agent to guess a file:// path.
-async function resolveProjectEntry(baseUrl: string, projectId: string, declared: unknown): Promise<string | null> {
+const PREVIEWABLE_MEDIA_EXTENSIONS: Record<'image' | 'video' | 'audio', Set<string>> = {
+  image: new Set(['png', 'jpg', 'jpeg', 'webp', 'gif', 'avif', 'svg']),
+  video: new Set(['mp4', 'webm', 'mov', 'm4v']),
+  audio: new Set(['mp3', 'wav', 'm4a', 'ogg', 'aac', 'flac']),
+};
+
+function projectFilePath(file: { path?: string; name?: string }): string | null {
+  if (typeof file.path === 'string' && file.path.length > 0) return file.path;
+  if (typeof file.name === 'string' && file.name.length > 0) return file.name;
+  return null;
+}
+
+function fileExtension(filePath: string): string {
+  return filePath.split('.').at(-1)?.toLowerCase() ?? '';
+}
+
+async function resolveProjectEntry(
+  baseUrl: string,
+  projectId: string,
+  declared: unknown,
+  projectKind?: unknown,
+): Promise<string | null> {
   if (typeof declared === 'string' && declared.length > 0) return declared;
   try {
     const data = await getJson<{ files?: Array<{ path?: string; name?: string; kind?: string }> }>(
@@ -1295,13 +3244,33 @@ async function resolveProjectEntry(baseUrl: string, projectId: string, declared:
     const files = data?.files ?? [];
     // index.html wins at any level — the conventional entry signal.
     const indexHtml = files.find((f) => f?.path === 'index.html' || f?.name === 'index.html');
-    if (indexHtml?.path) return indexHtml.path;
+    if (indexHtml) return projectFilePath(indexHtml);
     // Otherwise: if exactly one .html sits at the project root, that
     // is unambiguous enough to pick. Don't guess past one match.
     const htmlAtRoot = files.filter(
       (f) => typeof f?.path === 'string' && !f.path.includes('/') && f.path.toLowerCase().endsWith('.html'),
     );
     if (htmlAtRoot.length === 1 && htmlAtRoot[0]?.path) return htmlAtRoot[0].path;
+
+    const preferredMediaKind = projectKind === 'image' || projectKind === 'video' || projectKind === 'audio'
+      ? projectKind
+      : null;
+    if (preferredMediaKind) {
+      const media = files.find((file) => {
+        const path = projectFilePath(file);
+        return path !== null && (
+          file.kind === preferredMediaKind || PREVIEWABLE_MEDIA_EXTENSIONS[preferredMediaKind].has(fileExtension(path))
+        );
+      });
+      if (media) return projectFilePath(media);
+    }
+
+    const anyMedia = files.find((file) => {
+      const path = projectFilePath(file);
+      return path !== null && Object.values(PREVIEWABLE_MEDIA_EXTENSIONS)
+        .some((extensions) => extensions.has(fileExtension(path)));
+    });
+    if (anyMedia) return projectFilePath(anyMedia);
     return null;
   } catch {
     return null;
@@ -1319,6 +3288,36 @@ function rawPreviewUrl(baseUrl: string, projectId: string, entry: unknown): stri
   return buildProjectRawFileUrl(baseUrl, projectId, entry);
 }
 
+async function validatePreviewUrl(url: string | null): Promise<string | null> {
+  if (!url) return null;
+  try {
+    const response = await fetch(url, { method: 'GET' });
+    if (!response.ok) return null;
+    const contentType = response.headers.get('content-type')?.toLowerCase() ?? '';
+    const previewable = contentType.startsWith('text/html')
+      || contentType.startsWith('image/')
+      || contentType.startsWith('video/')
+      || contentType.startsWith('audio/')
+      || contentType.startsWith('application/pdf');
+    if (!previewable) {
+      try {
+        await response.body?.cancel();
+      } catch {
+        // The response is already rejected as a browser preview.
+      }
+      return null;
+    }
+    try {
+      await response.body?.cancel();
+    } catch {
+      // The successful browser-renderable response already proved that the entry is reachable.
+    }
+    return url;
+  } catch {
+    return null;
+  }
+}
+
 // Best-effort variant for get_run, which only has a projectId: fetch the
 // project, then build the URL. Returns null on any lookup failure — the
 // run result is still reachable via get_artifact, so this is a
@@ -1329,9 +3328,9 @@ async function buildRunPreviewUrl(baseUrl: string, projectId: string): Promise<s
       `${baseUrl}/api/projects/${encodeURIComponent(projectId)}`,
     );
     const project = data?.project ?? data;
-    const declared = (project as { metadata?: JsonObject } | undefined)?.metadata?.entryFile;
-    const entry = await resolveProjectEntry(baseUrl, projectId, declared);
-    return rawPreviewUrl(baseUrl, projectId, entry);
+    const metadata = (project as { metadata?: JsonObject } | undefined)?.metadata;
+    const entry = await resolveProjectEntry(baseUrl, projectId, metadata?.entryFile, metadata?.kind);
+    return await validatePreviewUrl(rawPreviewUrl(baseUrl, projectId, entry));
   } catch {
     return null;
   }

@@ -5,8 +5,10 @@ import {
   isAutosaveDraftOnlyChange,
   persistComposioConfigChange,
   resolveSettingsCloseConfig,
+  shouldRedirectFirstRunToOnboarding,
   shouldSyncMediaProvidersOnSave,
 } from '../src/App';
+import { parseRoute } from '../src/router';
 import type { AppConfig } from '../src/types';
 
 const baseConfig: AppConfig = {
@@ -56,6 +58,33 @@ describe('shouldSyncMediaProvidersOnSave', () => {
 
   it('syncs an explicit empty media map when the user save should force a clear', () => {
     expect(shouldSyncMediaProvidersOnSave({}, { force: true })).toBe(true);
+  });
+});
+
+describe('shouldRedirectFirstRunToOnboarding', () => {
+  it('keeps a project deep link when onboarding is incomplete', () => {
+    const route = parseRoute('/projects/project-1/conversations/conversation-1');
+
+    expect(route).toMatchObject({
+      kind: 'project',
+      projectId: 'project-1',
+      conversationId: 'conversation-1',
+    });
+    expect(shouldRedirectFirstRunToOnboarding(false, route)).toBe(false);
+  });
+
+  it('still redirects an incomplete first run from the root home route', () => {
+    expect(shouldRedirectFirstRunToOnboarding(false, parseRoute('/'))).toBe(true);
+  });
+
+  it('keeps onboarding gated for other non-project deep links', () => {
+    expect(shouldRedirectFirstRunToOnboarding(false, parseRoute('/plugins'))).toBe(true);
+    expect(shouldRedirectFirstRunToOnboarding(false, parseRoute('/design-systems/create'))).toBe(true);
+    expect(shouldRedirectFirstRunToOnboarding(false, parseRoute('/integrations'))).toBe(true);
+  });
+
+  it('does not redirect the onboarding route back to itself', () => {
+    expect(shouldRedirectFirstRunToOnboarding(false, parseRoute('/onboarding'))).toBe(false);
   });
 });
 

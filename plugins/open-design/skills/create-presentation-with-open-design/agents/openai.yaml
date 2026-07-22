@@ -1,0 +1,4 @@
+interface:
+  display_name: "Create Presentation with Open Design"
+  short_description: "Create coherent browser presentations in Open Design."
+  default_prompt: "Use $create-presentation-with-open-design to create a coherent browser presentation in Open Design."

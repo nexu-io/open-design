@@ -1,0 +1,20 @@
+{
+  "name": "open-design",
+  "interface": {
+    "displayName": "Open Design"
+  },
+  "plugins": [
+    {
+      "name": "open-design",
+      "source": {
+        "source": "local",
+        "path": "./plugins/open-design"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_USE"
+      },
+      "category": "Creativity"
+    }
+  ]
+}

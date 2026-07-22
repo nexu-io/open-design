@@ -74,7 +74,7 @@ import {
   type VelaLoginStatus,
 } from './providers/daemon';
 import { AMR_LOGIN_STATUS_EVENT } from './components/amrLoginPolling';
-import { navigate, useRoute } from './router';
+import { navigate, useRoute, type Route } from './router';
 import {
   fetchDaemonConfig,
   DEFAULT_PET,
@@ -167,6 +167,15 @@ export function shouldSyncMediaProvidersOnSave(
   options?: { force?: boolean },
 ): boolean {
   return Boolean(options?.force) || hasAnyConfiguredProvider(mediaProviders);
+}
+
+export function shouldRedirectFirstRunToOnboarding(
+  onboardingCompleted: AppConfig['onboardingCompleted'],
+  route: Route,
+): boolean {
+  if (onboardingCompleted === true) return false;
+  if (route.kind === 'project') return false;
+  return !(route.kind === 'home' && route.view === 'onboarding');
 }
 
 function normalizeSavedComposioConfig(config: AppConfig['composio']): AppConfig['composio'] {
@@ -517,6 +526,8 @@ function AppInner() {
   // can't overwrite the saved state with `''` before hydration lands.
   const [composioConfigLoading, setComposioConfigLoading] = useState(true);
   const route = useRoute();
+  const latestRouteRef = useRef(route);
+  latestRouteRef.current = route;
   const analytics = useAnalytics();
 
   const beginAgentStreamRequest = useCallback(() => {
@@ -1057,7 +1068,12 @@ function AppInner() {
         // banner keys off `privacyDecisionAt`. They may coexist on the
         // first launch; the banner sits above the modal layer so it
         // stays actionable regardless of the active view.
-        if (!next.onboardingCompleted) {
+        if (
+          shouldRedirectFirstRunToOnboarding(
+            next.onboardingCompleted,
+            latestRouteRef.current,
+          )
+        ) {
           navigate({ kind: 'home', view: 'onboarding' }, { replace: true });
         }
         setDaemonConfigLoaded(true);

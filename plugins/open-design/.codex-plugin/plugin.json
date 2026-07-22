@@ -1,0 +1,55 @@
+{
+  "name": "open-design",
+  "version": "0.2.13+codex.20260717104744",
+  "description": "Create websites, product prototypes, presentations, design systems, media, and web-first documents from adaptive choice-only briefs with Open Design.",
+  "author": {
+    "name": "OpenDesign",
+    "email": "support@open-design.ai",
+    "url": "https://open-design.ai"
+  },
+  "homepage": "https://open-design.ai",
+  "repository": "https://github.com/nexu-io/open-design",
+  "license": "Apache-2.0",
+  "keywords": [
+    "design",
+    "website",
+    "product-prototype",
+    "presentation",
+    "design-system",
+    "image",
+    "video",
+    "audio",
+    "document",
+    "custom-ui"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "apps": "./.app.json",
+  "interface": {
+    "displayName": "Open Design",
+    "shortDescription": "Create eight artifact types from adaptive choices.",
+    "longDescription": "Use Open Design Basics plus a focused skill to create websites, product prototypes, presentations, design systems, images, videos, audio, and web-first documents. Confirm a request-specific choice-only brief that omits decisions you already supplied, review real progress and output in the host, then open Open Design studio for detailed editing, versions, and export. Document V1 delivers Markdown plus print-ready HTML rather than native DOCX.",
+    "developerName": "OpenDesign",
+    "category": "Creativity",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "websiteURL": "https://open-design.ai",
+    "privacyPolicyURL": "https://github.com/nexu-io/open-design/blob/main/PRIVACY.md",
+    "termsOfServiceURL": "https://open-design.ai/terms/",
+    "defaultPrompt": [
+      "Create a responsive website through a choice-only brief.",
+      "Turn this product idea into an interactive prototype.",
+      "Create a presentation with a coherent visual system.",
+      "Extract a reusable design system from this reference.",
+      "Generate a campaign image in the format I choose.",
+      "Create a short product video with selectable pacing and aspect.",
+      "Produce an audio track with selectable type, duration, and direction.",
+      "Create a web-first report with Markdown and print-ready HTML."
+    ],
+    "brandColor": "#111111",
+    "composerIcon": "./assets/icon.svg",
+    "logo": "./assets/logo.svg"
+  }
+}

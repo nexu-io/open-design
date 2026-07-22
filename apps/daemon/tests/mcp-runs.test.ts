@@ -11,6 +11,15 @@ function firstText(result: { content: Array<{ text: string }> }): string {
   return item.text;
 }
 
+function previewHtmlResponse(url: string): Response | null {
+  return url.includes('/raw/') && url.endsWith('.html')
+    ? new Response('<!doctype html><title>Preview</title>', {
+        status: 200,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      })
+    : null;
+}
+
 // These tools let a coding agent (Codex, Cursor, …) commission Open
 // Design to generate a design and then poll for the result, instead of
 // only reading/creating raw artifacts. The agent never runs a skill
@@ -168,6 +177,8 @@ describe('public MCP discovery + generation tools', () => {
 
   it('get_run returns status and, on success, a previewUrl built from the project entry file', async () => {
     const fetchMock = vi.fn(async (url: string) => {
+      const preview = previewHtmlResponse(url);
+      if (preview) return preview;
       if (url.endsWith('/api/runs/run-42')) {
         return new Response(JSON.stringify({ id: 'run-42', status: 'succeeded', projectId: 'project-1' }), { status: 200 });
       }
@@ -182,6 +193,53 @@ describe('public MCP discovery + generation tools', () => {
     const parsed = JSON.parse(firstText(result));
     expect(parsed).toMatchObject({ id: 'run-42', status: 'succeeded' });
     expect(parsed.previewUrl).toBe(buildProjectRawFileUrl('http://127.0.0.1:17456', 'project-1', 'index.html'));
+  });
+
+  it('get_run omits previewUrl when the declared entry file is not reachable', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.endsWith('/api/runs/run-stale')) {
+        return new Response(JSON.stringify({ id: 'run-stale', status: 'succeeded', projectId: 'project-stale' }), { status: 200 });
+      }
+      if (url.endsWith('/api/projects/project-stale')) {
+        return new Response(JSON.stringify({ project: { id: 'project-stale', metadata: { entryFile: 'index.html' } } }), { status: 200 });
+      }
+      if (url.endsWith('/api/projects/project-stale/raw/index.html')) {
+        return new Response('not found', { status: 404 });
+      }
+      if (url.endsWith('/api/runs/run-stale/events')) {
+        return new Response('not found', { status: 404 });
+      }
+      throw new Error(`unexpected url ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await handleMcpToolCall('http://127.0.0.1:17456', 'get_run', { runId: 'run-stale' });
+    expect(JSON.parse(firstText(result)).previewUrl).toBeUndefined();
+  });
+
+  it('get_run omits previewUrl when the declared entry is reachable but is not HTML', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.endsWith('/api/runs/run-source')) {
+        return new Response(JSON.stringify({ id: 'run-source', status: 'succeeded', projectId: 'project-source' }), { status: 200 });
+      }
+      if (url.endsWith('/api/projects/project-source')) {
+        return new Response(JSON.stringify({ project: { id: 'project-source', metadata: { entryFile: 'src/App.tsx' } } }), { status: 200 });
+      }
+      if (url.endsWith('/api/projects/project-source/raw/src/App.tsx')) {
+        return new Response('export function App() { return <main>Hello</main>; }', {
+          status: 200,
+          headers: { 'content-type': 'text/typescript; charset=utf-8' },
+        });
+      }
+      if (url.endsWith('/api/runs/run-source/events')) {
+        return new Response('not found', { status: 404 });
+      }
+      throw new Error(`unexpected url ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await handleMcpToolCall('http://127.0.0.1:17456', 'get_run', { runId: 'run-source' });
+    expect(JSON.parse(firstText(result)).previewUrl).toBeUndefined();
   });
 
   it('get_run does not add a previewUrl while the run is still running', async () => {
@@ -214,6 +272,8 @@ describe('public MCP discovery + generation tools', () => {
 
   it('get_run includes studioUrl on success when webBaseUrl + conversationId are available', async () => {
     const fetchMock = vi.fn(async (url: string) => {
+      const preview = previewHtmlResponse(url);
+      if (preview) return preview;
       if (url.endsWith('/api/mcp/install-info')) {
         return new Response(JSON.stringify({ webBaseUrl: 'http://127.0.0.1:65321' }), { status: 200 });
       }
@@ -406,6 +466,8 @@ describe('public MCP discovery + generation tools', () => {
 
   it('get_project includes a browser-openable previewUrl from metadata.entryFile', async () => {
     const fetchMock = vi.fn(async (url: string) => {
+      const preview = previewHtmlResponse(url);
+      if (preview) return preview;
       expect(url).toBe(`http://127.0.0.1:17456/api/projects/${PROJECT_UUID}`);
       return new Response(
         JSON.stringify({ project: { id: PROJECT_UUID, name: 'P1', metadata: { entryFile: 'index.html', kind: 'landing' } } }),
@@ -443,6 +505,8 @@ describe('public MCP discovery + generation tools', () => {
   // fall back to obvious entries (index.html first, then a single .html).
   it('get_project falls back to index.html when metadata.entryFile is missing but the file exists', async () => {
     const fetchMock = vi.fn(async (url: string) => {
+      const preview = previewHtmlResponse(url);
+      if (preview) return preview;
       if (url.endsWith('/api/projects/' + PROJECT_UUID + '/files')) {
         return new Response(JSON.stringify({
           files: [
@@ -462,6 +526,8 @@ describe('public MCP discovery + generation tools', () => {
 
   it('get_project falls back to the only *.html when no index.html and no entryFile', async () => {
     const fetchMock = vi.fn(async (url: string) => {
+      const preview = previewHtmlResponse(url);
+      if (preview) return preview;
       if (url.endsWith('/api/projects/' + PROJECT_UUID + '/files')) {
         return new Response(JSON.stringify({
           files: [
@@ -545,6 +611,8 @@ describe('public MCP discovery + generation tools', () => {
 
   it('get_run still includes agentMessage even when previewUrl is present', async () => {
     const fetchMock = vi.fn(async (url: string) => {
+      const preview = previewHtmlResponse(url);
+      if (preview) return preview;
       if (url.endsWith('/api/runs/run-42')) {
         return new Response(JSON.stringify({ id: 'run-42', status: 'succeeded', projectId: 'project-1' }), { status: 200 });
       }
@@ -569,6 +637,8 @@ describe('public MCP discovery + generation tools', () => {
 
   it('get_run tolerates a missing events endpoint (older daemons / unreachable)', async () => {
     const fetchMock = vi.fn(async (url: string) => {
+      const preview = previewHtmlResponse(url);
+      if (preview) return preview;
       if (url.endsWith('/api/runs/run-42')) {
         return new Response(JSON.stringify({ id: 'run-42', status: 'succeeded', projectId: 'project-1' }), { status: 200 });
       }
@@ -597,6 +667,8 @@ describe('public MCP discovery + generation tools', () => {
   // tell callers to pass the projectId returned here explicitly.
   it('get_run success hint directs callers to pass project explicitly, not rely on active context', async () => {
     const fetchMock = vi.fn(async (url: string) => {
+      const preview = previewHtmlResponse(url);
+      if (preview) return preview;
       if (url.endsWith('/api/runs/run-42')) {
         return new Response(JSON.stringify({ id: 'run-42', status: 'succeeded', projectId: 'project-xyz' }), { status: 200 });
       }

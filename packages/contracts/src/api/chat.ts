@@ -450,6 +450,8 @@ export interface ChatRunStatusResponse {
   conversationId: string | null;
   assistantMessageId: string | null;
   agentId: string | null;
+  /** Effective skill selected for this run. */
+  skillId?: string | null;
   /** Design system whose prompt context was actually injected for this run. */
   designSystemId?: string | null;
   /** Selected design system before usability/body checks; useful for diagnostics. */

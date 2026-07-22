@@ -1,0 +1,4 @@
+interface:
+  display_name: "Create Design System with Open Design"
+  short_description: "Create reusable design systems through Open Design."
+  default_prompt: "Use $create-design-system-with-open-design to create a reusable design system in Open Design."

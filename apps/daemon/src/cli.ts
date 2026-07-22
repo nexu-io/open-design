@@ -1445,9 +1445,11 @@ async function runMcp(args) {
   if (args[0] === 'install') {
     return runMcpInstall(args.slice(1));
   }
+  const chatGptSurface = args[0] === 'chatgpt';
+  const mcpArgs = chatGptSurface ? args.slice(1) : args;
   let flags;
   try {
-    flags = parseFlags(args, {
+    flags = parseFlags(mcpArgs, {
       string: MCP_STRING_FLAGS,
       boolean: MCP_BOOLEAN_FLAGS,
     });
@@ -1463,7 +1465,11 @@ async function runMcp(args) {
 
   const daemonUrl = await cliDaemonUrl(flags);
 
-  const { runMcpStdio } = await import('./mcp.js');
+  const { runChatGptMcpStdio, runMcpStdio } = await import('./mcp.js');
+  if (chatGptSurface) {
+    await runChatGptMcpStdio({ daemonUrl });
+    return;
+  }
   await runMcpStdio({ daemonUrl });
 }
 
@@ -1475,6 +1481,10 @@ tool calls to a running Open Design daemon. Wire it into a coding agent
 in another repo so the agent can pull files from a local Open Design
 project and create project-scoped artifacts without exporting a zip
 every iteration.
+
+Use \`od mcp chatgpt\` for the narrower ChatGPT/Codex plugin surface. It
+exposes the Cloud V1 workflow and Custom UI resources without the local
+file-management tools from the engineering MCP surface.
 
 Options:
   --daemon-url <url>   Open Design daemon HTTP base URL. Resolution

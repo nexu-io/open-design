@@ -81,6 +81,9 @@ const residualAllowedExactPaths = new Set([
   "scripts/postinstall.mjs",
   // Checked-in bin shim so pnpm can link `od` before daemon dist output exists.
   "apps/daemon/bin/od.mjs",
+  // Generated self-contained stdio MCP used by the installed Codex plugin.
+  // Its TypeScript source stays at plugins/open-design/mcp/server.ts.
+  "plugins/open-design/mcp/server.bundle.mjs",
   "apps/packaged/esbuild.config.mjs",
   // Browser service workers must be served as JavaScript files.
   "apps/web/public/od-notifications-sw.js",

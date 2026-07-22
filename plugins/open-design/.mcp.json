@@ -1,9 +1,11 @@
 {
   "mcpServers": {
     "open-design": {
-      "type": "stdio",
-      "command": "od",
-      "args": ["mcp", "--daemon-url", "http://127.0.0.1:7456"]
+      "title": "Open Design Custom UI MCP",
+      "description": "Expose the Open Design Cloud V1 tools and Custom UI in Codex.",
+      "command": "node",
+      "args": ["./mcp/server.bundle.mjs"],
+      "cwd": "."
     }
   }
 }

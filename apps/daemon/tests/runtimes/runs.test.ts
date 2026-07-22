@@ -11,13 +11,16 @@ import { createChatRunService } from '../../src/runtimes/runs.js';
 describe('chat run service shutdown', () => {
   it('publishes the authoritative artifact count in status and terminal events', async () => {
     const runs = createRuns();
-    const run = runs.create({ projectId: 'project-1', conversationId: 'conv-1' });
-
+    const run = runs.create({
+      projectId: 'project-1',
+      conversationId: 'conv-1',
+      skillId: 'frontend-design',
+    });
     run.artifactCount = 2;
     const wait = runs.wait(run);
     runs.finish(run, 'succeeded', 0, null);
 
-    expect(runs.statusBody(run)).toMatchObject({ status: 'succeeded', artifactCount: 2 });
+    expect(runs.statusBody(run)).toMatchObject({ status: 'succeeded', skillId: 'frontend-design', artifactCount: 2 });
     expect(run.events.at(-1)).toMatchObject({
       event: 'end',
       data: { status: 'succeeded', artifactCount: 2 },

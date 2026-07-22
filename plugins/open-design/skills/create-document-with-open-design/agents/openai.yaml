@@ -1,0 +1,4 @@
+interface:
+  display_name: "Create Document with Open Design"
+  short_description: "Create readable web-first documents through Open Design."
+  default_prompt: "Use $create-document-with-open-design to create a web-first document in Open Design."

@@ -50,6 +50,13 @@ apps/desktop/vendor/dom-to-pptx/dom-to-pptx.bundle.js
 
 .cursor/
 .agents/
+# The public Codex plugin marketplace manifest ships with the repository;
+# personal agent state remains ignored.
+!.agents/
+.agents/*
+!.agents/plugins/
+.agents/plugins/*
+!.agents/plugins/marketplace.json
 .opencode/
 .claude/*
 # Exception: od-contribute skill ships with the repo so the OD app can mount it

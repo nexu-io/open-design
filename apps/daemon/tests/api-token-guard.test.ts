@@ -12,7 +12,7 @@
 // the "refuse 0.0.0.0 without token" path is exercised by a separate
 // negative case that constructs the start call directly).
 
-import type http from 'node:http';
+import http from 'node:http';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { isApiAuthDisabled, isApiTokenMiddlewareEnabled } from '../src/api-token-auth.js';
 import { startServer } from '../src/server.js';
@@ -90,6 +90,43 @@ describe('bearer middleware', () => {
     // is 127.0.0.1 → middleware short-circuits.
     const resp = await fetch(`${baseUrl}/api/plugins`);
     expect(resp.status).toBe(200);
+  });
+
+  it('requires the bearer when a loopback reverse proxy preserves a public Host', async () => {
+    const requestWithPublicHost = (authorization?: string) => new Promise<{
+      status: number;
+      body: unknown;
+    }>((resolve, reject) => {
+      const url = new URL('/api/plugins', baseUrl);
+      const req = http.request({
+        hostname: url.hostname,
+        port: url.port,
+        path: url.pathname,
+        headers: {
+          host: 'mcp.open-design.ai',
+          ...(authorization ? { authorization } : {}),
+        },
+      }, (res) => {
+        let body = '';
+        res.setEncoding('utf8');
+        res.on('data', (chunk) => { body += chunk; });
+        res.on('end', () => resolve({
+          status: res.statusCode ?? 0,
+          body: JSON.parse(body),
+        }));
+      });
+      req.once('error', reject);
+      req.end();
+    });
+
+    const unauthenticated = await requestWithPublicHost();
+    expect(unauthenticated.status).toBe(401);
+    expect(unauthenticated.body).toMatchObject({
+      error: { code: 'API_TOKEN_REQUIRED' },
+    });
+
+    const authenticated = await requestWithPublicHost('Bearer secret-test-token');
+    expect(authenticated.status).toBe(200);
   });
 
   it('keeps health / readiness / version probes open without a bearer', async () => {

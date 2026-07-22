@@ -1,0 +1,4 @@
+interface:
+  display_name: "Open Design Basics"
+  short_description: "Use Open Design safely across artifact workflows."
+  default_prompt: "Use $open-design-basics to follow the shared Open Design execution contract."

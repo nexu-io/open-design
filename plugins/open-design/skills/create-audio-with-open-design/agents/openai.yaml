@@ -1,0 +1,4 @@
+interface:
+  display_name: "Create Audio with Open Design"
+  short_description: "Create music, speech, or sound with Open Design."
+  default_prompt: "Use $create-audio-with-open-design to create an audio artifact in Open Design."

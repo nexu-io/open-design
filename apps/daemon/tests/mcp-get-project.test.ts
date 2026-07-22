@@ -22,6 +22,12 @@ describe('public MCP get_project', () => {
     const projectId = '11111111-1111-1111-1111-111111111111';
     const resolvedDir = '/tmp/open-design/projects/demo';
     const fetchMock = vi.fn(async (url: string) => {
+      if (url.endsWith('/raw/index.html')) {
+        return new Response('<!doctype html><title>Demo</title>', {
+          status: 200,
+          headers: { 'content-type': 'text/html; charset=utf-8' },
+        });
+      }
       if (url.endsWith('/api/mcp/install-info')) {
         return new Response(JSON.stringify({ webBaseUrl: null }), { status: 200 });
       }
@@ -44,7 +50,7 @@ describe('public MCP get_project', () => {
       project: projectId,
     });
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(firstJson(result)).toMatchObject({
       id: projectId,
       name: 'Demo',

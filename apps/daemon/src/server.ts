@@ -463,6 +463,13 @@ import {
   PendingAuthCache,
   refreshAccessToken,
 } from './mcp-oauth.js';
+import { registerChatGptMcpRoutes } from './routes/chatgpt-mcp.js';
+import {
+  chatGptCapabilitySecret,
+  chatGptStudioCookieToken,
+  verifyChatGptCapabilityToken,
+} from './services/chatgpt-capabilities.js';
+import { createManagedChatGptTenantManager } from './services/chatgpt-tenant-daemons.js';
 import {
   clearToken,
   getToken,
@@ -2121,11 +2128,36 @@ export async function startServer({
           return next();
         }
       }
+      const studioToken = chatGptStudioCookieToken(req.headers.cookie);
+      if (
+        studioToken
+        && String(process.env.OD_CHATGPT_TENANT_MODE ?? '').trim().toLowerCase() === 'managed'
+      ) {
+        try {
+          const claims = verifyChatGptCapabilityToken(
+            studioToken,
+            chatGptCapabilitySecret(process.env),
+          );
+          if (claims?.purpose === 'studio') return next();
+        } catch {
+          // Fall through to the normal daemon bearer check. The ChatGPT route
+          // returns the user-facing expired/misconfigured session response.
+        }
+      }
       // Loopback short-circuit. We ignore the proxied X-Forwarded-For
       // header here because a reverse proxy MUST always forward the
       // bearer; the loopback bypass exists for the localhost desktop
       // UI which has no proxy in the path.
-      if (isLoopbackPeerAddress(req.socket?.remoteAddress)) return next();
+      const requestHost = req.get('host');
+      let requestHostIsLoopback = false;
+      if (requestHost) {
+        try {
+          requestHostIsLoopback = isLoopbackHostname(new URL(`http://${requestHost}`).hostname);
+        } catch {
+          requestHostIsLoopback = false;
+        }
+      }
+      if (isLoopbackPeerAddress(req.socket?.remoteAddress) && requestHostIsLoopback) return next();
       const auth = req.get('authorization') ?? '';
       const match = /^Bearer\s+(\S+)\s*$/i.exec(auth);
       if (!match || match[1] !== apiToken) {
@@ -2136,6 +2168,34 @@ export async function startServer({
       return next();
     });
   }
+
+  // Register the managed ChatGPT tenant boundary before product API routes.
+  // A signed Studio session must be proxied to its subject daemon before any
+  // same-path handler can accidentally read the gateway's shared parent state.
+  const chatGptTenantManager = createManagedChatGptTenantManager({
+    dataRoot: RUNTIME_DATA_DIR,
+    env: process.env,
+  });
+  const chatGptTenantReaper = chatGptTenantManager
+    ? setInterval(() => {
+        void chatGptTenantManager.reapIdle().catch((error) => {
+          console.warn('[chatgpt-mcp] tenant idle reaper failed', error);
+        });
+      }, 5 * 60_000)
+    : null;
+  chatGptTenantReaper?.unref?.();
+  registerChatGptMcpRoutes(app, {
+    getDaemonUrl: () => `http://127.0.0.1:${resolvedPort}`,
+    ...(chatGptTenantManager
+      ? {
+          resolveTenantDaemonUrl: (principal, accessToken) =>
+            chatGptTenantManager.resolve(principal.subject, accessToken),
+          resolveTenantDaemonByKey: (tenantKey) =>
+            chatGptTenantManager.resolveCapability(tenantKey),
+        }
+      : {}),
+    env: process.env,
+  });
 
   const designSystemServices = createDesignSystemServerServices({
     roots: { SKILL_ROOTS, DESIGN_TEMPLATE_ROOTS, ALL_SKILL_LIKE_ROOTS },
@@ -8800,6 +8860,7 @@ export async function startServer({
   return await new Promise((resolve, reject) => {
     let daemonShutdownStarted = false;
     const cleanupDaemonBackgroundWork = () => {
+      if (chatGptTenantReaper) clearInterval(chatGptTenantReaper);
       composioConnectorProvider.stopCatalogRefreshLoop();
       orbitService.stop();
       routineService?.stop();
@@ -8811,6 +8872,7 @@ export async function startServer({
       await design.runs.shutdownActive({ graceMs: resolveChatRunShutdownGraceMs() });
       await terminalService.shutdownActive();
       await design.analytics.shutdown();
+      await chatGptTenantManager?.stopAll();
     };
     let server;
     try {
