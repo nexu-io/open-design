@@ -36,6 +36,7 @@ import {
   applyPackagedElectronPathOverrides,
   claimPackagedSingleInstanceLock,
   ensurePackagedNamespacePaths,
+  stabilizePackagedWorkingDirectory,
 } from "./launch.js";
 import {
   attachPackagedDesktopProcessLogging,
@@ -169,6 +170,7 @@ async function main(): Promise<void> {
   };
 
   await ensurePackagedNamespacePaths(paths);
+  stabilizePackagedWorkingDirectory(paths);
   const downloadAttribution = await discoverPackagedDownloadAttribution(paths, console).catch((error: unknown) => {
     console.warn("[attribution] failed to discover packaged download attribution", error);
     return null;
