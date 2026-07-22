@@ -24,6 +24,18 @@ const codexAgent: AgentInfo = {
   ],
 };
 
+const codexFastAgent: AgentInfo = {
+  ...codexAgent,
+  models: [
+    { id: 'default', label: 'Default (CLI config)' },
+    {
+      id: 'gpt-5.5',
+      label: 'gpt-5.5',
+      serviceTierOptions: [{ id: 'priority', label: 'Fast' }],
+    },
+  ],
+};
+
 const claudeAgent: AgentInfo = {
   id: 'claude',
   name: 'Claude Code',
@@ -58,7 +70,7 @@ type ModeChangeHandler = (mode: ExecMode) => void;
 type AgentChangeHandler = (id: string) => void;
 type AgentModelChangeHandler = (
   id: string,
-  choice: { model?: string; reasoning?: string },
+  choice: { model?: string; reasoning?: string; serviceTier?: string },
 ) => void;
 type VoidHandler = () => void;
 type OpenSettingsHandler = (section?: 'execution') => void;
@@ -266,6 +278,40 @@ describe('AvatarMenu', () => {
 
     expect(onAgentModelChange).toHaveBeenCalledWith('codex', {
       reasoning: 'high',
+    });
+  });
+
+  it('routes service tier selection changes through onAgentModelChange', () => {
+    const onAgentModelChange = vi.fn();
+    renderMenu({
+      config: {
+        ...baseConfig,
+        agentModels: {
+          codex: { model: 'gpt-5.5', reasoning: 'default' },
+        },
+      },
+      agents: [codexFastAgent, claudeAgent],
+      onAgentModelChange,
+    });
+
+    openMenu();
+    const tierSelect = screen.getAllByRole('combobox')[2] as HTMLSelectElement;
+    expect(Array.from(tierSelect.options).map((option) => option.textContent)).toEqual([
+      'common.default',
+      'Fast',
+    ]);
+
+    fireEvent.change(tierSelect, { target: { value: 'priority' } });
+
+    expect(onAgentModelChange).toHaveBeenCalledWith('codex', {
+      serviceTier: 'priority',
+    });
+
+    onAgentModelChange.mockClear();
+    fireEvent.change(tierSelect, { target: { value: 'default' } });
+
+    expect(onAgentModelChange).toHaveBeenCalledWith('codex', {
+      serviceTier: undefined,
     });
   });
 

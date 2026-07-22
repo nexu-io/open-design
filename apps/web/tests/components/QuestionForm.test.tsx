@@ -1025,7 +1025,7 @@ describe('QuestionFormView', () => {
     expect(firstPage).toHaveLength(4);
     expect(screen.queryByLabelText('Custom answer')).toBeNull();
     expect(screen.queryByText('Refresh')).toBeNull();
-    expect(screen.getByText('+18')).toBeTruthy();
+    expect(screen.getByText('+21')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
     expect(onInteraction).toHaveBeenCalledWith({
@@ -1043,7 +1043,7 @@ describe('QuestionFormView', () => {
       styleContext: 'deck',
     });
     const dialog = screen.getByRole('dialog', { name: 'Visual direction' });
-    expect(dialog.querySelectorAll('.qf-visual-card input')).toHaveLength(22);
+    expect(dialog.querySelectorAll('.qf-visual-card input')).toHaveLength(25);
     expect(
       dialog.querySelector(
         'img[src="https://repo-assets.open-design.ai/style-catalog/v1/deck-editorial-narrative-v1.webp"]',
@@ -1065,7 +1065,7 @@ describe('QuestionFormView', () => {
       styleContext: 'deck',
       categoryId: 'business',
     });
-    expect(dialog.querySelectorAll('.qf-visual-card input')).toHaveLength(5);
+    expect(dialog.querySelectorAll('.qf-visual-card input')).toHaveLength(6);
     expect(dialog.querySelector('[aria-label="Data briefing"]')).toBeTruthy();
     expect(dialog.querySelector('[aria-label="Premium pitch"]')).toBeTruthy();
     fireEvent.click(dialog.querySelector('[aria-label="Premium pitch"]')!);
@@ -1080,7 +1080,7 @@ describe('QuestionFormView', () => {
     expect(container.querySelector('.qf-visual-custom-summary')).toBeNull();
 
     fireEvent.click(screen.getByRole('tab', { name: 'All' }));
-    expect(dialog.querySelectorAll('.qf-visual-card input')).toHaveLength(22);
+    expect(dialog.querySelectorAll('.qf-visual-card input')).toHaveLength(25);
 
     fireEvent.click(screen.getByRole('button', { name: /done/i }));
     expect(screen.queryByRole('dialog', { name: 'Visual direction' })).toBeNull();
@@ -1091,17 +1091,32 @@ describe('QuestionFormView', () => {
     );
   });
 
-  it('exposes all uploaded style previews for both artifact types', () => {
+  it('exposes all uploaded style previews for every supported artifact type', () => {
     const deckCards = visualStyleCardsForContext('deck');
     const prototypeCards = visualStyleCardsForContext('prototype');
+    const documentCards = visualStyleCardsForContext('document');
+    const imageCards = visualStyleCardsForContext('image');
+    const videoCards = visualStyleCardsForContext('video');
 
-    expect(deckCards).toHaveLength(22);
-    expect(prototypeCards).toHaveLength(22);
-    expect(deckCards.find((card) => card.value === 'deck-bento')?.preview.src).toBe(
-      'https://repo-assets.open-design.ai/style-catalog/v1/deck-bento-v1.webp',
+    expect(deckCards).toHaveLength(25);
+    expect(prototypeCards).toHaveLength(26);
+    expect(documentCards).toHaveLength(11);
+    expect(imageCards).toHaveLength(22);
+    expect(videoCards).toHaveLength(12);
+    expect(deckCards.find((card) => card.value === 'deck-academic-research')?.preview.src).toBe(
+      'https://repo-assets.open-design.ai/style-catalog/v1/deck-academic-research-v1.webp',
     );
     expect(
-      prototypeCards.find((card) => card.value === 'prototype-photojournal')?.preview.src,
-    ).toBe('https://repo-assets.open-design.ai/style-catalog/v1/prototype-photojournal-v1.webp');
+      prototypeCards.find((card) => card.value === 'prototype-y2k-chrome')?.preview.src,
+    ).toBe('https://repo-assets.open-design.ai/style-catalog/v1/prototype-y2k-chrome-v1.webp');
+    expect(
+      documentCards.find((card) => card.value === 'document-academic-paper')?.preview.src,
+    ).toBe('https://repo-assets.open-design.ai/style-catalog/v1/document-academic-paper-v1.webp');
+    expect(
+      imageCards.find((card) => card.value === 'image-chrome-3d')?.preview.src,
+    ).toBe('https://repo-assets.open-design.ai/style-catalog/v1/image-chrome-3d-v1.webp');
+    expect(
+      videoCards.find((card) => card.value === 'video-kinetic-type')?.preview.src,
+    ).toBe('https://repo-assets.open-design.ai/style-catalog/v1/video-kinetic-type-v1.webp');
   });
 });

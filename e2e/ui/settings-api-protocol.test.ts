@@ -657,6 +657,9 @@ test('[P0] @critical BYOK clearing the API key restores the suggested OpenAI mod
   await apiKeyInput.fill('sk-openai-test');
   await apiKeyInput.blur();
   await expect.poll(() => providerModelRequests.length).toBe(1);
+  await expect.poll(async () => readSavedConfig(page)).toMatchObject({
+    apiKey: 'sk-openai-test',
+  });
 
   await modelSelect.click();
   await expect(page.locator(MODEL_POPOVER_SELECTOR).last().getByRole('option', {

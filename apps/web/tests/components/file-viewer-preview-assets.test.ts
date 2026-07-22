@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  collectPreviewAssetPaths,
   htmlHasRootRelativeProjectAssetRefs,
   normalizeRootRelativeProjectAssetRefs,
   ownerRelativeAssetPath,
@@ -87,6 +88,42 @@ describe('htmlHasRootRelativeProjectAssetRefs', () => {
     ).toBe(false);
     expect(htmlHasRootRelativeProjectAssetRefs('<img src="/not-here.png">', files)).toBe(false);
     expect(htmlHasRootRelativeProjectAssetRefs('<img src="images/hero.png">', files)).toBe(false);
+  });
+});
+
+describe('collectPreviewAssetPaths', () => {
+  const files = new Set(['images/hero.png', 'css/app.css', 'nested/card.png']);
+
+  it('collects unique relative and confirmed root-relative asset paths', () => {
+    const html = [
+      '<link rel="stylesheet" href="/css/app.css">',
+      '<img src="./images/hero.png" srcset="./images/hero.png 1x, ./nested/card.png 2x">',
+      '<style>.card { background: url("./nested/card.png"); }</style>',
+      '<a href="/css/app.css">download</a>',
+    ].join('\n');
+
+    expect(collectPreviewAssetPaths(html, 'index.html', files)).toEqual([
+      'images/hero.png',
+      'css/app.css',
+      'nested/card.png',
+    ]);
+  });
+
+  it('keeps unconfirmed root-relative candidates while the file list is loading', () => {
+    expect(collectPreviewAssetPaths('<img src="/maybe-later.png">', 'index.html', null)).toEqual([
+      'maybe-later.png',
+    ]);
+  });
+
+  it('rejects external schemes, navigation links, and traversal refs', () => {
+    const html = [
+      '<img src="https://cdn.example.com/a.png">',
+      '<img src="data:image/png;base64,xx">',
+      '<img src="../escape.png">',
+      '<a href="images/hero.png">open</a>',
+    ].join('\n');
+
+    expect(collectPreviewAssetPaths(html, 'index.html', files)).toEqual([]);
   });
 });
 

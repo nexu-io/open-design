@@ -76,6 +76,8 @@ describe('run diagnostics', () => {
       first_token_seen: false,
       user_visible_output_seen: false,
       tool_call_seen: false,
+      tool_result_sent: false,
+      approval_requested: false,
       artifact_write_seen: false,
       live_artifact_seen: false,
       resume_auto_reseeded: false,
@@ -105,6 +107,8 @@ describe('run diagnostics', () => {
       first_token_seen: false,
       user_visible_output_seen: false,
       tool_call_seen: false,
+      tool_result_sent: false,
+      approval_requested: false,
       artifact_write_seen: false,
       live_artifact_seen: false,
       resume_auto_reseeded: false,
@@ -131,6 +135,8 @@ describe('run diagnostics', () => {
       first_token_seen: false,
       user_visible_output_seen: false,
       tool_call_seen: false,
+      tool_result_sent: false,
+      approval_requested: false,
       artifact_write_seen: false,
       live_artifact_seen: false,
       resume_auto_reseeded: false,
@@ -153,7 +159,7 @@ describe('run diagnostics', () => {
     const result = summarizeRunDiagnosticsForAnalytics({
       events: [
         { event: 'stdout', data: { chunk: 'hello\n' } },
-        { event: 'agent', data: { type: 'tool_use', name: 'Read' } },
+        { event: 'agent', data: { type: 'tool_use', name: 'Read', id: 'tool-1' } },
         { event: 'agent', data: { type: 'artifact' } },
       ],
       exitCode: null,
@@ -170,8 +176,102 @@ describe('run diagnostics', () => {
       first_token_seen: true,
       user_visible_output_seen: true,
       tool_call_seen: true,
+      // A tool_use with no following tool_result → not delivered.
+      tool_result_sent: false,
+      approval_requested: false,
       artifact_write_seen: true,
       live_artifact_seen: true,
     });
+  });
+
+  it('flags tool_result_sent / approval_requested (E-lite root-cause discriminators)', () => {
+    // Every committed tool_use resolved (paired by id) → delivered.
+    const resolved = summarizeRunDiagnosticsForAnalytics({
+      events: [
+        { event: 'agent', data: { type: 'tool_use', name: 'Read', id: 't1' } },
+        { event: 'agent', data: { type: 'tool_result', toolUseId: 't1' } },
+      ],
+      exitCode: 0,
+      signal: null,
+    });
+    expect(resolved.tool_call_seen).toBe(true);
+    expect(resolved.tool_result_sent).toBe(true);
+
+    // Two parallel tool_uses both resolve (interleaved) → delivered.
+    const parallelResolved = summarizeRunDiagnosticsForAnalytics({
+      events: [
+        { event: 'agent', data: { type: 'tool_use', name: 'Read', id: 'a' } },
+        { event: 'agent', data: { type: 'tool_use', name: 'Grep', id: 'b' } },
+        { event: 'agent', data: { type: 'tool_result', toolUseId: 'a' } },
+        { event: 'agent', data: { type: 'tool_result', toolUseId: 'b' } },
+      ],
+      exitCode: 0,
+      signal: null,
+    });
+    expect(parallelResolved.tool_result_sent).toBe(true);
+
+    // The reviewer's regression case: tool_use(A), tool_use(B), tool_result(A).
+    // B is still outstanding, so a result arriving for A must NOT mark delivered.
+    const parallelHung = summarizeRunDiagnosticsForAnalytics({
+      events: [
+        { event: 'agent', data: { type: 'tool_use', name: 'Read', id: 'a' } },
+        { event: 'agent', data: { type: 'tool_use', name: 'Bash', id: 'b' } },
+        { event: 'agent', data: { type: 'tool_result', toolUseId: 'a' } },
+      ],
+      exitCode: null,
+      signal: 'SIGKILL',
+    });
+    expect(parallelHung.tool_call_seen).toBe(true);
+    expect(parallelHung.tool_result_sent).toBe(false);
+
+    // The last tool_use of a sequential turn has no result → not delivered.
+    const hung = summarizeRunDiagnosticsForAnalytics({
+      events: [
+        { event: 'agent', data: { type: 'tool_use', name: 'Read', id: 'a' } },
+        { event: 'agent', data: { type: 'tool_result', toolUseId: 'a' } },
+        { event: 'agent', data: { type: 'tool_use', name: 'Bash', id: 'b' } },
+      ],
+      exitCode: null,
+      signal: 'SIGKILL',
+    });
+    expect(hung.tool_call_seen).toBe(true);
+    expect(hung.tool_result_sent).toBe(false);
+
+    // Degraded provider events carry a null id on BOTH sides (pi-rpc,
+    // copilot-stream emit `toolCallId ?? null`). An unpaired id-less tool call
+    // must NOT fall through to "delivered".
+    const idlessHung = summarizeRunDiagnosticsForAnalytics({
+      events: [
+        { event: 'agent', data: { type: 'tool_use', name: 'Read', id: null } },
+      ],
+      exitCode: null,
+      signal: 'SIGKILL',
+    });
+    expect(idlessHung.tool_call_seen).toBe(true);
+    expect(idlessHung.tool_result_sent).toBe(false);
+
+    // ...but an id-less tool call that DID get its (also id-less) result counts.
+    const idlessResolved = summarizeRunDiagnosticsForAnalytics({
+      events: [
+        { event: 'agent', data: { type: 'tool_use', name: 'Read', id: null } },
+        { event: 'agent', data: { type: 'tool_result', toolUseId: null } },
+      ],
+      exitCode: 0,
+      signal: null,
+    });
+    expect(idlessResolved.tool_result_sent).toBe(true);
+
+    // An ACP approval diagnostic flips approval_requested.
+    const approved = summarizeRunDiagnosticsForAnalytics({
+      events: [
+        {
+          event: 'agent',
+          data: { type: 'diagnostic', name: 'acp_approval_request', optionId: 'allow_once' },
+        },
+      ],
+      exitCode: 0,
+      signal: null,
+    });
+    expect(approved.approval_requested).toBe(true);
   });
 });

@@ -126,6 +126,24 @@ const blog = defineCollection({
       author: z.string().optional(),
       socialImage: z.string().optional(),
       ctaKind: z.enum(['download-app', 'event-register']).optional(),
+      /**
+       * Keep the generated `/{locale}/blog/<slug>/` variants out of the search
+       * index (the English post stays indexable).
+       *
+       * Set this on posts whose subject is a language-neutral proper noun — a
+       * product name like `marp` or `slidev`. Google treats those queries as
+       * navigational and ranks every translated copy against the *same*
+       * English-language SERP, so the localized variants accumulate large
+       * impression counts at a click-through rate of ~0.02% while adding
+       * nothing a searcher wants. Left alone they drown out the rest of the
+       * site's Search Console data and read as thin duplicate coverage.
+       *
+       * When set, `blog/[slug].astro` emits `noindex, follow` on the localized
+       * variants (outbound link equity still flows) and suppresses the hreflang
+       * cluster on all variants including English, since hreflang must not
+       * point at noindexed URLs.
+       */
+      noindexLocaleVariants: z.boolean().optional(),
       ctaHref: z.string().url().optional(),
       ctaTitle: z.string().min(1).optional(),
       ctaBody: z.string().min(1).optional(),

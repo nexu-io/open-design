@@ -330,7 +330,7 @@ open-design/
 
 ## 문제 해결
 
-- **Node.js 버전을 바꾼 뒤 `better-sqlite3`가 로드되지 않거나 ABI가 맞지 않을 때** — `pnpm install`이 `postinstall`을 자동으로 다시 돌려 현재 Node.js에 맞게 네이티브 애드온을 리빌드합니다. 직접 리빌드하거나 수정을 확인하려면 `pnpm --filter @open-design/daemon rebuild better-sqlite3`를 실행한 뒤 `pnpm --filter @open-design/daemon exec node -e "require('better-sqlite3')"`를 돌리세요. 빌드 도구 `python3`, `make`, `g++`(또는 `clang++`)가 필요합니다. `.npmrc`에 `ignore-scripts=true`가 있다면, `pnpm install` 후 `node scripts/postinstall.mjs`를 실행하세요.
+- **Node.js 버전을 바꾼 뒤 `better-sqlite3`가 로드되지 않거나 ABI가 맞지 않을 때** — `pnpm install`이 `postinstall`을 자동으로 다시 돌려 현재 Node.js에 맞게 네이티브 애드온을 리빌드합니다. 직접 리빌드하거나 수정을 확인하려면 `pnpm --filter @open-design/daemon rebuild better-sqlite3`를 실행한 뒤 `pnpm --filter @open-design/daemon exec node -e "require('better-sqlite3')"`를 돌리세요. 빌드 도구 `python3`, `make`, `g++`(또는 `clang++`)가 필요합니다. `.npmrc`에 `ignore-scripts=true`가 있다면(AUR 패키지의 일반적인 경우), `pnpm install` 후 `pnpm bootstrap`을 실행하세요.
 - **"no agents found on PATH"** — [`apps/daemon/src/runtimes/registry.ts`](../../apps/daemon/src/runtimes/registry.ts)에 등록된 로컬 런타임 중 하나를 설치하고 실행 파일이 daemon에 보이는지 확인한 뒤, **Settings → Execution mode**에서 **Rescan**을 실행하세요. 또는 Settings에서 BYOK 런타임을 구성하세요.
 - **Claude Code가 코드 1로 종료될 때** — Open Design이 `claude`를 시작하긴 했지만, spawn된 비대화형 실행이 응답을 내기 전에 실패한 경우입니다. Open Design을 시작하는 셸이나 앱 환경과 같은 곳에서 다음을 확인하세요.
   ```bash

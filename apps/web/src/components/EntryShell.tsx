@@ -138,6 +138,7 @@ import {
   EntrySettingsMenu,
   type EntrySettingsSection,
 } from './EntrySettingsMenu';
+import { MessageCenter } from './MessageCenter';
 import { NewProjectModal } from './NewProjectModal';
 import { PluginsView } from './PluginsView';
 import type { CreateInput, CreateTab, ImportClaudeDesignOutcome } from './NewProjectPanel';
@@ -387,7 +388,7 @@ interface Props {
   onAgentChange: (id: string) => void;
   onAgentModelChange: (
     id: string,
-    choice: { model?: string; reasoning?: string },
+    choice: { model?: string; reasoning?: string; serviceTier?: string },
   ) => void;
   onApiProtocolChange: (protocol: ApiProtocol) => void;
   onApiModelChange: (model: string) => void;
@@ -1087,6 +1088,9 @@ export function EntryShell({
               }
             />
             <WhatsNewPopup active={view === 'home'} />
+            <MessageCenter
+              onOpenNotificationSettings={() => onOpenSettings('notifications')}
+            />
             {avatarMenu}
             {amrBalanceGateBlock ? (
               <AmrBalanceDialog
@@ -1310,7 +1314,7 @@ function OnboardingView({
   onAgentChange: (id: string) => void;
   onAgentModelChange: (
     id: string,
-    choice: { model?: string; reasoning?: string },
+    choice: { model?: string; reasoning?: string; serviceTier?: string },
   ) => void;
   onApiProtocolChange: (protocol: ApiProtocol) => void;
   onApiModelChange: (model: string) => void;

@@ -3,6 +3,8 @@ import type { ByokChatProviderConfig } from '@open-design/contracts';
 export const BYOK_OPENCODE_AGENT_ID = 'byok-opencode';
 export const BYOK_OPENCODE_PROVIDER_ID = 'open-design-byok';
 export const BYOK_OPENCODE_API_KEY_ENV = 'OPEN_DESIGN_BYOK_API_KEY';
+export const BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE =
+  'BYOK OpenCode requires a provider, API key, and model for this run.';
 const DEFAULT_CONTEXT_TOKEN_LIMIT = 128_000;
 const DEFAULT_OUTPUT_TOKEN_LIMIT = 16_384;
 
@@ -101,8 +103,8 @@ function normalizeProviderBaseUrl(
 ): string {
   const trimmed = baseUrl.trim().replace(/\/+$/, '');
   if (!trimmed) return trimmed;
-  if (protocol === 'anthropic' && isExactOrigin(trimmed, 'https://api.anthropic.com')) {
-    return 'https://api.anthropic.com/v1';
+  if (protocol === 'anthropic' && !hasVersionedApiPath(trimmed)) {
+    return appendVersionedApiPath(trimmed);
   }
   if (protocol === 'openai' && isExactOrigin(trimmed, 'https://api.openai.com')) {
     return 'https://api.openai.com/v1';
@@ -252,6 +254,20 @@ function safeUrlPathname(value: string): string {
     return new URL(value).pathname.replace(/\/+$/, '');
   } catch {
     return '';
+  }
+}
+
+function hasVersionedApiPath(value: string): boolean {
+  return /\/v\d+(?:\/|$)/.test(safeUrlPathname(value));
+}
+
+function appendVersionedApiPath(value: string): string {
+  try {
+    const url = new URL(value);
+    url.pathname = `${url.pathname.replace(/\/+$/, '')}/v1`;
+    return url.toString();
+  } catch {
+    return `${value}/v1`;
   }
 }
 

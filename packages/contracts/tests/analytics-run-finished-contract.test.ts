@@ -47,11 +47,14 @@ describe('analytics run_finished contract', () => {
       props: {
         ...makeBaseRunFinishedProps(),
         token_count_source: 'provider_usage',
+        conversation_turn_index: 2,
         error_code: 'RATE_LIMITED',
         failure_category: 'rate_limit',
         failure_stage: 'session_init',
         retryable: true,
         user_action: 'retry',
+        terminal_reconciled: true,
+        terminal_recovery_reason: 'daemon_restart',
         langfuse_trace_id: 'trace-1',
         langfuse_expected: true,
         langfuse_delivery_status: 'failed',
@@ -85,15 +88,28 @@ describe('analytics run_finished contract', () => {
         first_token_seen: true,
         user_visible_output_seen: true,
         tool_call_seen: true,
+        tool_result_sent: false,
+        approval_requested: true,
+        stdin_backpressure: false,
+        last_progress_age_ms: 610_000,
         artifact_write_seen: false,
         live_artifact_seen: false,
         retry_attempt_count: 1,
         retry_final_result: 'success',
+        agent_cli_version: 'vela 0.0.26',
+        runtime_companion_name: 'opencode',
+        runtime_companion_version: 'opencode 1.2.3',
+        retry_original_failure_category: 'upstream_unavailable',
+        retry_original_failure_detail: 'stream_disconnected',
+        retry_original_failure_stage: 'first_token_wait',
       },
     } satisfies Extract<AnalyticsEventPayload, { event: 'run_finished' }>;
 
     expect(payload.props.failure_category).toBe('rate_limit');
+    expect(payload.props.conversation_turn_index).toBe(2);
     expect(payload.props.failure_stage).toBe('session_init');
+    expect(payload.props.terminal_reconciled).toBe(true);
+    expect(payload.props.terminal_recovery_reason).toBe('daemon_restart');
     expect(payload.props.user_action).toBe('retry');
     expect(payload.props.langfuse_delivery_status).toBe('failed');
     expect(payload.props.langfuse_drop_reason).toBe('relay_429');
@@ -102,8 +118,15 @@ describe('analytics run_finished contract', () => {
     expect(payload.props.tool_call_count).toBe(2);
     expect(payload.props.rpc_close_reason).toBe('stream_error');
     expect(payload.props.first_token_seen).toBe(true);
+    expect(payload.props.tool_result_sent).toBe(false);
+    expect(payload.props.approval_requested).toBe(true);
+    expect(payload.props.stdin_backpressure).toBe(false);
+    expect(payload.props.last_progress_age_ms).toBe(610_000);
     expect(payload.props.retry_attempt_count).toBe(1);
     expect(payload.props.retry_final_result).toBe('success');
+    expect(payload.props.agent_cli_version).toBe('vela 0.0.26');
+    expect(payload.props.runtime_companion_version).toBe('opencode 1.2.3');
+    expect(payload.props.retry_original_failure_detail).toBe('stream_disconnected');
   });
 
   it('accepts retry attempted and finished lifecycle events', () => {
@@ -167,5 +190,27 @@ describe('analytics run_finished contract', () => {
 
     expect(payload.props.langfuse_report_result).toBe('failed');
     expect(payload.props.langfuse_delivery_status).toBe('failed');
+  });
+
+  it('accepts privacy-safe BYOK preflight block events', () => {
+    const payload = {
+      event: 'byok_preflight_blocked',
+      props: {
+        source: 'settings',
+        reason: 'api_key_required',
+        provider_id: 'anthropic',
+        active_execution_mode: 'local_cli',
+      },
+    } satisfies Extract<
+      AnalyticsEventPayload,
+      { event: 'byok_preflight_blocked' }
+    >;
+
+    expect(payload.props).toEqual({
+      source: 'settings',
+      reason: 'api_key_required',
+      provider_id: 'anthropic',
+      active_execution_mode: 'local_cli',
+    });
   });
 });

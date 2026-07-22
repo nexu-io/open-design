@@ -56,12 +56,13 @@ export const zhCN: Dict = {
   "chat.runError.title.signInRequired": "需要登录",
   "chat.runError.title.rateLimited": "已达用量上限",
   "chat.runError.title.generic": "任务执行失败",
+  "chat.runError.title.artifactMissing": "未生成文件产物",
   "chat.runError.signInMessage.amr":
     "Open Design Cloud 智能体尚未登录，前往登录即可正常使用",
   "chat.runError.signInMessage.other":
     "{agent}尚未登录，请本地检查登录状态。推荐使用 Open Design Cloud 智能体，更稳定划算",
   "chat.runError.agentFallback": "智能体",
-  "chat.runError.sourceLabel": "报错源码",
+  "chat.runError.sourceLabel": "查看错误详情",
   "chat.runError.sourceExpandAria": "展开报错源码",
   "chat.runError.sourceCollapseAria": "收起报错源码",
   "chat.runError.title.cliMissing": "智能体未安装",
@@ -84,6 +85,7 @@ export const zhCN: Dict = {
   "chat.runError.title.emptyOutput": "没有任何输出",
   "chat.runError.title.sessionExpired": "会话已过期",
   "chat.runError.title.gitBashMissing": "缺少 Git Bash",
+  "chat.runError.title.cpuUnsupported": "处理器不支持",
   "chat.runError.quotaExhaustedMessage": "所用模型服务的额度或账单上限已用尽，重试也无法恢复。请前往对应服务充值，或切换到其他模型/服务。",
   "chat.runError.workspaceCreditsMessage": "工作区额度已用尽。请充值（或联系工作区管理员补充），或切换到其他模型/服务。",
   "chat.runError.timedOutMessage": "本次运行耗时过长已被中断。请重试，或缩小任务范围后再试。",
@@ -91,6 +93,7 @@ export const zhCN: Dict = {
   "chat.runError.emptyOutputMessage": "智能体本次结束时没有产生任何输出。这通常是暂时的，重试即可再次运行。",
   "chat.runError.sessionExpiredMessage": "要恢复的会话已过期，已为你重置。重试即可开始一次全新运行。",
   "chat.runError.gitBashMissingMessage": "在 Windows 上运行该智能体需要 Git Bash，但未找到。请安装 Git for Windows 后重试。",
+  "chat.runError.cpuUnsupportedMessage": "该智能体的运行时需要此设备处理器不支持的指令集（AVX2），因此无法启动。请将 Open Design 更新到最新版本，新版本附带兼容的运行时。",
   "common.cancel": "取消",
   "chat.selectFromLibrary": "从资源库导入",
   "chat.importFigma": "从 Figma 导入",
@@ -354,6 +357,8 @@ export const zhCN: Dict = {
   "settings.modeApiMeta": "BYOK",
   "settings.byokNoFileToolsNotice":
     "BYOK 无法读写或修改项目文件；需要改代码时请使用本机 CLI。",
+  "settings.byokDraftNotice":
+    "必填项补全前，此配置只会保存为草稿；当前执行配置将继续保持生效。",
   "settings.codeAgent": "代码代理",
   "settings.codeAgentHint": "选择用来运行提示词的 CLI。",
   "settings.rescan": "↻ 重新扫描",
@@ -521,6 +526,7 @@ export const zhCN: Dict = {
   "settings.modelSourceLive": "来自 CLI 的实时列表",
   "settings.modelSourceFallback": "内置列表",
   "settings.reasoningPicker": "推理强度",
+  "settings.serviceTierPicker": "服务层级",
   "settings.modelPickerHint":
     "当 CLI 提供 `models` 命令时会自动拉取。选择「默认」则沿用 CLI 自身的配置；选择「自定义」可手动输入任何 CLI 支持的模型 id。",
   "settings.modelPickerLiveHint":
@@ -693,6 +699,21 @@ export const zhCN: Dict = {
   "entry.navDesignSystems": "设计体系",
   "entry.navBrands": "设计系统",
   "entry.navIntegrations": "集成",
+  "messageCenter.openAria": "打开消息中心",
+  "messageCenter.unreadCount": "{count} 条未读",
+  "messageCenter.title": "消息中心",
+  "messageCenter.subtitle": "Open Design 更新、平台公告和权益提醒",
+  "messageCenter.filterAll": "全部",
+  "messageCenter.filterUnread": "未读",
+  "messageCenter.filterRead": "已读",
+  "messageCenter.markAllRead": "全部标为已读",
+  "messageCenter.emptyAllTitle": "暂时没有消息",
+  "messageCenter.emptyUnreadTitle": "都看完了",
+  "messageCenter.emptyReadTitle": "暂时没有已读消息",
+  "messageCenter.emptyBody": "新消息会出现在这里。",
+  "messageCenter.close": "关闭消息中心",
+  "messageCenter.desktopSettings": "桌面提醒设置",
+  "messageCenter.desktopSettingsHint": "任务完成声音和系统通知仍在设置中管理。",
   "workspaceTabs.project": "项目",
   "workspaceTabs.pluginDetails": "插件详情",
   "workspaceTabs.marketplace": "插件市场",
@@ -1815,6 +1836,7 @@ export const zhCN: Dict = {
   "avatar.modelSection": "模型",
   "avatar.modelLabel": "模型",
   "avatar.reasoningLabel": "推理",
+  "avatar.serviceTierLabel": "服务层级",
   "avatar.customSuffix": "（自定义）",
   "socialShare.openDesignSection": "分享 Open Design",
   "socialShare.openDesignTitle": "GitHub 上的 Open Design",
@@ -3013,6 +3035,8 @@ export const zhCN: Dict = {
   "fileViewer.speakerNotesSaved": "已保存",
   "fileViewer.speakerNotesSaveFailed": "无法保存演讲者备注。",
   "fileViewer.speakerNotesPlaceholder": "为这一页添加演讲者备注...",
+  "fileViewer.previewAssetBlockedTitle": "预览资源已被阻止",
+  "fileViewer.previewAssetBlockedDetail": "无法加载 {filePath}。请将外部符号链接替换为此项目内的文件。",
   "fileViewer.presenterReset": "重置",
   "fileViewer.present": "演示",
   "fileViewer.presentInTab": "在当前标签页",
@@ -3920,6 +3944,9 @@ export const zhCN: Dict = {
   "notify.successBody": "一轮回答已经写完。",
   "notify.failureBody": "本轮任务出错，请查看错误信息。",
   "updater.available": "有可用更新",
+  "updater.activeRunsTitle": "Open Design 仍在执行任务",
+  "updater.activeRunsBody": "仍有 {count} 个任务正在运行。现在重启会中断这些任务。",
+  "updater.activeRunsUnknownBody": "Open Design 无法确认是否仍有任务运行。现在重启可能会中断正在进行的工作。",
   "updater.availableBody":
     "Open Design {version} 可用。下载安装完成后即可打开安装器。",
   "updater.checking": "正在检查更新",
@@ -3938,6 +3965,15 @@ export const zhCN: Dict = {
   "updater.installingRestart": "正在安装并重启…",
   "updater.openInstaller": "安装更新",
   "updater.opening": "正在打开安装器…",
+  "updater.dialogAvailableGeneric": "发现新版本。\n下载后即可安装。",
+  "updater.dialogAvailableVersion": "v{version} 可供更新。\n下载后即可安装。",
+  "updater.dialogCheckFailed": "检查更新失败。\n请稍后重试。",
+  "updater.dialogReadyGeneric":
+    "新版本已准备就绪。\n更好的体验，更智能的设计，欢迎体验新版本。",
+  "updater.dialogReadyVersion":
+    "v{version} 已准备就绪。\n更好的体验，更智能的设计，欢迎体验新版本。",
+  "updater.dialogUnsupported":
+    "当前环境不支持应用内更新。\n可前往发布页手动下载。",
   "updater.payloadReadyGeneric":
     "Open Design 更新已就绪。Open Design 会关闭并自动重启。",
   "updater.payloadReadyVersion":
@@ -3952,6 +3988,9 @@ export const zhCN: Dict = {
   "updater.readyVersion":
     "Open Design {version} 已就绪。Open Design 会关闭并打开安装器。",
   "updater.upToDate": "您已经是最新版本啦",
+  "updater.viewVersionFeatures": "查看新版本特性",
+  "updater.manualDownload": "手动下载",
+  "updater.restartAnyway": "仍然重启",
 
   "whatsNew.cta": "看看有什么新功能",
   "whatsNew.dismissAria": "关闭更新亮点",

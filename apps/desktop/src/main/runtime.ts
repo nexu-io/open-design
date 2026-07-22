@@ -19,7 +19,13 @@ import {
   type DesktopRenderSlidesResult,
   type DesktopUpdateStatusSnapshot,
 } from "@open-design/sidecar-proto";
-import type { OpenDesignHostActionResult, OpenDesignHostCaptureResult, OpenDesignHostUpdaterActionOptions } from "@open-design/host";
+import type {
+  OpenDesignHostActionResult,
+  OpenDesignHostCaptureResult,
+  OpenDesignHostUpdaterActionOptions,
+  OpenDesignHostUpdaterMenuLabels,
+  OpenDesignHostUpdaterOpenDialogRequest,
+} from "@open-design/host";
 
 import { renderDeckSlides } from "./deck-capture.js";
 import { openValidatedDirectory } from "./open-path.js";
@@ -29,6 +35,12 @@ import { SPLASH_VIDEO_DATA_URL } from "./splash-video.js";
 import { RendererCrashLoopBreaker } from "./renderer-crash-loop.js";
 import type { PrintReadyPdfOptions } from "./pdf-export.js";
 import type { DesktopUpdater } from "./updater.js";
+import { parseDesktopUpdateMenuLabels } from "./update-menu.js";
+import {
+  checkUpdateRestartSafety,
+  parseUpdateActionRequest,
+  updateRestartSafetyError,
+} from "./update-preflight.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -266,6 +278,7 @@ const DESKTOP_PET_WINDOW_WIDTH = 360;
 const DESKTOP_PET_WINDOW_HEIGHT = 300;
 const DESKTOP_PET_WINDOW_MARGIN = 24;
 const UPDATER_STATUS_EVENT = "od:update:status-changed";
+const UPDATER_OPEN_DIALOG_EVENT = "od:update:open-dialog";
 const DESIGN_BROWSER_PARTITION = "persist:open-design-design-browser";
 const UPDATER_IPC_CHANNELS = [
   "od:update:status",
@@ -273,6 +286,7 @@ const UPDATER_IPC_CHANNELS = [
   "od:update:download",
   "od:update:install",
   "od:update:quit",
+  "od:update:set-menu-labels",
 ] as const;
 
 export type DesktopEvalInput = {
@@ -338,6 +352,7 @@ export type DesktopRuntime = {
   eval(input: DesktopEvalInput): Promise<DesktopEvalResult>;
   exportArtifact(input: DesktopExportArtifactInput): Promise<DesktopExportArtifactResult>;
   exportPdf(input: DesktopExportPdfInput): Promise<DesktopExportPdfResult>;
+  openUpdateDialog(request: OpenDesignHostUpdaterOpenDialogRequest): void;
   renderSlides(input: DesktopRenderSlidesInput): Promise<DesktopRenderSlidesResult>;
   screenshot(input: DesktopScreenshotInput): Promise<DesktopScreenshotResult>;
   show(): void;
@@ -424,6 +439,7 @@ export type DesktopRuntimeOptions = {
    * as having reached running for abnormal-exit detection.
    */
   onRevealed?: () => void;
+  onUpdateMenuLabels?: (labels: OpenDesignHostUpdaterMenuLabels) => void;
 };
 
 const DESKTOP_IMPORT_TOKEN_HEADER = "X-OD-Desktop-Import-Token";
@@ -2269,6 +2285,20 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       throw new Error("host IPC is only available to the main Open Design window");
     }
   };
+  const discoverUpdateDaemonBaseUrl = async (): Promise<string> => {
+    const daemonUrl = await options.discoverDaemonUrl?.();
+    const baseUrl = daemonUrl ?? await options.discoverUrl();
+    if (baseUrl == null) throw new Error("daemon URL is unavailable");
+    return baseUrl;
+  };
+  const guardedUpdaterStatus = async (rawOptions: unknown): Promise<DesktopUpdateStatusSnapshot | null> => {
+    const request = parseUpdateActionRequest(rawOptions);
+    if (request.force) return null;
+    const safety = await checkUpdateRestartSafety({ discoverDaemonBaseUrl: discoverUpdateDaemonBaseUrl });
+    if (safety.state === "clear") return null;
+    const status = await (options.updater?.status() ?? unavailableUpdaterStatus());
+    return { ...status, error: updateRestartSafetyError(safety) };
+  };
   window.webContents.on("will-attach-webview", (event, webPreferences, params) => {
     const src = typeof params.src === "string" ? params.src : "";
     const partition = typeof params.partition === "string" ? params.partition : "";
@@ -2347,14 +2377,26 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     sendUpdaterStatus(status);
     return status;
   });
-  ipcMain.handle("od:update:install", async (event) => {
+  ipcMain.handle("od:update:install", async (event, updaterOptions: unknown) => {
     requireMainWindowSender(event);
+    const blocked = await guardedUpdaterStatus(updaterOptions);
+    if (blocked != null) {
+      // Preflight denials travel only on the IPC response. The updater store
+      // itself is still healthy, so broadcasting the synthetic error through
+      // the shared status channel would make unrelated subscribers observe a
+      // failure that never happened.
+      return blocked;
+    }
     const status = await (options.updater?.installUpdate() ?? unavailableUpdaterStatus());
     sendUpdaterStatus(status);
     return status;
   });
-  ipcMain.handle("od:update:quit", async (event): Promise<OpenDesignHostActionResult> => {
+  ipcMain.handle("od:update:quit", async (event, updaterOptions: unknown): Promise<OpenDesignHostActionResult> => {
     requireMainWindowSender(event);
+    const blocked = await guardedUpdaterStatus(updaterOptions);
+    if (blocked?.error != null) {
+      return { details: blocked.error.details, ok: false, reason: blocked.error.code };
+    }
     const status = await (options.updater?.status() ?? unavailableUpdaterStatus());
     if (status.installResult == null) {
       return { ok: false, reason: "installer has not been opened" };
@@ -2363,6 +2405,13 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       return { ok: false, reason: "desktop quit is not available" };
     }
     setTimeout(() => options.requestQuit?.(), 0);
+    return { ok: true };
+  });
+  ipcMain.handle("od:update:set-menu-labels", async (event, rawLabels: unknown): Promise<OpenDesignHostActionResult> => {
+    requireMainWindowSender(event);
+    const labels = parseDesktopUpdateMenuLabels(rawLabels);
+    if (labels == null) return { ok: false, reason: "invalid updater menu labels" };
+    options.onUpdateMenuLabels?.(labels);
     return { ok: true };
   });
 
@@ -2531,6 +2580,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     splashStartedAt = created.startedAt;
   }
 
+  let pendingUpdateDialogRequest: OpenDesignHostUpdaterOpenDialogRequest | null = null;
   let revealed = false;
   let revealing = false;
 
@@ -2541,6 +2591,10 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     window.show();
     window.focus();
     ensureWindowVisible(window);
+    if (pendingUpdateDialogRequest != null) {
+      window.webContents.send(UPDATER_OPEN_DIALOG_EVENT, pendingUpdateDialogRequest);
+      pendingUpdateDialogRequest = null;
+    }
     if (splash != null && !splash.isDestroyed()) splash.close();
     // The app is now truly up (mounted + shown). Fire once — revealed guards
     // re-entry — so callers can mark "reached running".
@@ -2785,6 +2839,16 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     },
     exportPdf(input) {
       return exportPdfFromHtml(input);
+    },
+    openUpdateDialog(request) {
+      if (window.isDestroyed()) return;
+      if (!revealed) {
+        pendingUpdateDialogRequest = request;
+        return;
+      }
+      window.webContents.send(UPDATER_OPEN_DIALOG_EVENT, request);
+      window.show();
+      window.focus();
     },
     renderSlides(input) {
       return renderDeckSlides(input);

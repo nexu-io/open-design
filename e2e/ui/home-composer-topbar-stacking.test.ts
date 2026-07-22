@@ -51,7 +51,17 @@ test.beforeEach(async ({ page }) => {
       bin: 'codex',
       available: true,
       version: '0.80.0',
-      models: [{ id: 'default', label: 'Default' }],
+      models: [
+        { id: 'default', label: 'Default (CLI config)' },
+        { id: 'gpt-5.6-sol', label: 'GPT-5.6-Sol' },
+        { id: 'gpt-5.6-terra', label: 'GPT-5.6-Terra' },
+        { id: 'gpt-5.6-luna', label: 'GPT-5.6-Luna' },
+        { id: 'gpt-5.5', label: 'GPT-5.5' },
+        { id: 'gpt-5.4', label: 'GPT-5.4' },
+        { id: 'gpt-5.4-mini', label: 'GPT-5.4-Mini' },
+        { id: 'gpt-5.3-codex-spark', label: 'GPT-5.3-Codex-Spark' },
+        { id: 'codex-auto-review', label: 'Codex Auto Review' },
+      ],
     },
   ]);
 
@@ -88,7 +98,7 @@ test('[P1] sticky topbar chips stay above the composer card while its switcher p
   // Reveal the community templates section (first-run gesture) so the scroll
   // container has enough content height to slide the composer under the
   // sticky topbar strip.
-  await page.mouse.wheel(0, 500);
+  await revealCommunityTemplates(page);
 
   // Scroll the entry main container until the composer card's top edge sits
   // inside the sticky topbar strip, vertically overlapping the chip row.
@@ -166,6 +176,77 @@ test('[P1] sticky topbar chips stay above the composer card while its switcher p
   ).toEqual([]);
 });
 
+test('[P1] nested model picker stays inside the visible area below the sticky topbar', async ({
+  page,
+}) => {
+  await openNestedModelPicker(page);
+
+  const geometry = await page.evaluate(() => {
+    const topbar = document.querySelector('.entry-main__topbar');
+    const popover = document.querySelector('[data-testid="inline-model-switcher-agent-model-popover"]');
+    if (topbar == null || popover == null) return null;
+    const topbarRect = topbar.getBoundingClientRect();
+    const popoverRect = popover.getBoundingClientRect();
+    return {
+      popoverBottom: popoverRect.bottom,
+      popoverTop: popoverRect.top,
+      topbarBottom: topbarRect.bottom,
+      viewportHeight: window.innerHeight,
+    };
+  });
+
+  expect(geometry, 'topbar and nested model picker must both be present').not.toBeNull();
+  expect(geometry!.popoverTop).toBeGreaterThanOrEqual(geometry!.topbarBottom + 6);
+  expect(geometry!.popoverBottom).toBeLessThanOrEqual(geometry!.viewportHeight - 8);
+});
+
+test('[P1] nested model picker follows the visible anchor and closes after it exits', async ({
+  page,
+}) => {
+  await openNestedModelPicker(page);
+
+  const modelPopover = page.getByTestId('inline-model-switcher-agent-model-popover');
+  const switcherPopover = page.getByTestId('inline-model-switcher-popover');
+  const modelList = modelPopover.locator('.model-select-searchable__list');
+
+  const listCanScroll = await modelList.evaluate((element) => {
+    element.scrollTop = 48;
+    element.dispatchEvent(new Event('scroll'));
+    return element.scrollHeight > element.clientHeight;
+  });
+  expect(listCanScroll, 'test setup: compact model list must have internal scroll room').toBe(true);
+  await expect(modelPopover).toBeVisible();
+  await expect(switcherPopover).toBeVisible();
+
+  const beforeScroll = await modelAnchorGeometry(page);
+  await page.locator('.entry-main--scroll').evaluate((element) => {
+    element.scrollTop += 48;
+    element.dispatchEvent(new Event('scroll'));
+  });
+
+  await expect(modelPopover).toBeVisible();
+  await expect(switcherPopover).toBeVisible();
+  const afterScroll = await modelAnchorGeometry(page);
+  expect(afterScroll.placement).toBe(beforeScroll.placement);
+  expect(afterScroll.gap).toBeGreaterThanOrEqual(5);
+  expect(afterScroll.gap).toBeLessThanOrEqual(7);
+  expect(afterScroll.popoverTop).toBeGreaterThanOrEqual(afterScroll.topbarBottom + 6);
+  expect(afterScroll.popoverBottom).toBeLessThanOrEqual(afterScroll.viewportHeight - 8);
+
+  await page.locator('.entry-main--scroll').evaluate((element) => {
+    const chip = document.querySelector('[data-testid="inline-model-switcher-chip"]');
+    const topbar = document.querySelector('.entry-main__topbar');
+    if (chip == null || topbar == null) throw new Error('missing anchor geometry');
+    const distanceToOcclusion =
+      chip.getBoundingClientRect().bottom - topbar.getBoundingClientRect().bottom;
+    element.scrollTop += Math.max(1, distanceToOcclusion + 12);
+    element.dispatchEvent(new Event('scroll'));
+  });
+
+  await expect(modelPopover).toBeHidden();
+  await expect(switcherPopover).toBeHidden();
+});
+
 // Scrolls `.entry-main--scroll` so the composer card's top edge lands inside
 // the sticky topbar strip (which stays pinned at the container's top). Fails
 // loudly when the container cannot scroll far enough to create the overlap.
@@ -189,4 +270,60 @@ async function scrollComposerUnderTopbar(page: Page) {
   expect(result.ok, `test setup: could not scroll the composer under the topbar (${result.reason})`).toBe(
     true,
   );
+}
+
+async function openNestedModelPicker(page: Page) {
+  // Keep the outer switcher's model field reachable without scrolling while
+  // leaving too little room below it for the full nested model list.
+  await page.setViewportSize({ width: 546, height: 640 });
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
+  await expect(page.getByTestId('home-hero-input')).toBeVisible();
+  await revealCommunityTemplates(page);
+
+  await page.getByTestId('inline-model-switcher-chip').click();
+  await expect(page.getByTestId('inline-model-switcher-popover')).toBeVisible();
+  await page.getByTestId('inline-model-switcher-agent-model').click();
+  await expect(page.getByTestId('inline-model-switcher-agent-model-popover')).toBeVisible();
+}
+
+async function modelAnchorGeometry(page: Page) {
+  return page.evaluate(() => {
+    const trigger = document.querySelector(
+      '[data-testid="inline-model-switcher-agent-model"]',
+    );
+    const popover = document.querySelector(
+      '[data-testid="inline-model-switcher-agent-model-popover"]',
+    );
+    const topbar = document.querySelector('.entry-main__topbar');
+    if (trigger == null || popover == null || topbar == null) {
+      throw new Error('missing model picker geometry');
+    }
+    const triggerRect = trigger.getBoundingClientRect();
+    const popoverRect = popover.getBoundingClientRect();
+    const placement = popoverRect.bottom <= triggerRect.top ? 'above' : 'below';
+    return {
+      gap:
+        placement === 'above'
+          ? triggerRect.top - popoverRect.bottom
+          : popoverRect.top - triggerRect.bottom,
+      placement,
+      popoverBottom: popoverRect.bottom,
+      popoverTop: popoverRect.top,
+      topbarBottom: topbar.getBoundingClientRect().bottom,
+      viewportHeight: window.innerHeight,
+    };
+  });
+}
+
+async function revealCommunityTemplates(page: Page) {
+  await expect(page.getByTestId('home-templates-hint')).toBeVisible();
+  await page.evaluate(() => {
+    window.dispatchEvent(new WheelEvent('wheel', { deltaY: 500 }));
+  });
+  await expect(page.locator('.home-templates-reveal')).toHaveClass(/is-revealed/);
+  await page.locator('.entry-main--scroll').evaluate((element) => {
+    element.scrollTop = 0;
+    element.dispatchEvent(new Event('scroll'));
+  });
 }

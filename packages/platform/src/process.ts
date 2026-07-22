@@ -11,6 +11,7 @@
  * `errorCode` copy so it owns no cross-module runtime surface.
  */
 import { execFile, spawn, type ChildProcess, type StdioOptions } from "node:child_process";
+import { posix, win32 } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 
 import { createCommandInvocation, type CommandInvocationRequest } from "./command.js";
@@ -50,6 +51,31 @@ export type StopProcessesResult = {
   remainingPids: number[];
   stoppedPids: number[];
 };
+
+function normalizeExecutablePath(path: string, platform: NodeJS.Platform): string {
+  const normalized = platform === "win32" ? win32.normalize(path) : posix.normalize(path);
+  return platform === "win32" ? normalized.toLowerCase() : normalized;
+}
+
+/**
+ * Test whether a process command line contains only the given executable path.
+ * Windows process enumeration may wrap a no-argument executable in quotes;
+ * commands with arguments are deliberately rejected on every platform.
+ */
+export function processCommandExactlyRunsExecutable(
+  command: string,
+  executablePath: string,
+  platform: NodeJS.Platform = process.platform,
+): boolean {
+  const trimmed = command.trim();
+  if (normalizeExecutablePath(trimmed, platform) === normalizeExecutablePath(executablePath, platform)) {
+    return true;
+  }
+  if (platform !== "win32" || trimmed.length < 2 || !trimmed.startsWith('"') || !trimmed.endsWith('"')) {
+    return false;
+  }
+  return normalizeExecutablePath(trimmed.slice(1, -1), platform) === normalizeExecutablePath(executablePath, platform);
+}
 
 type WindowsProcessRecord = {
   CommandLine?: string | null;

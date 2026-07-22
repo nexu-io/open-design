@@ -6,14 +6,18 @@ import {
   LAUNCHER_SCHEMA_VERSION,
   LauncherProtocolError,
   buildLauncherAfterQuitArgs,
+  buildLauncherHandoffResumeArgs,
   compareLauncherVersions,
   parseLauncherAfterQuitArgs,
+  parseLauncherHandoffResumeArgs,
   resolveLauncherPaths,
   resolveLauncherVersionPaths,
   selectLauncherRuntimeTarget,
   validateLauncherCleanupDescriptor,
+  validateLauncherDesktopHandoffDescriptor,
   validateLauncherRuntimeDescriptor,
   type LauncherCleanupDescriptor,
+  type LauncherDesktopHandoffDescriptor,
   type LauncherRuntimeDescriptor,
 } from "../src/index.js";
 
@@ -26,6 +30,7 @@ describe("launcher protocol paths", () => {
     expect(paths.namespaceRoot).toBe(join(root, "launcher", "channels", "beta", "namespaces", "release-beta"));
     expect(paths.runtimePath).toBe(join(paths.namespaceRoot, "runtime.json"));
     expect(paths.installPath).toBe(join(paths.namespaceRoot, "install.json"));
+    expect(paths.handoffPath).toBe(join(paths.namespaceRoot, "state", "desktop-handoff.json"));
     expect(paths.downloadsRoot).toBe(join(paths.namespaceRoot, "updates", "downloads"));
     expect(paths.stagingRoot).toBe(join(paths.namespaceRoot, "updates", "staging"));
     expect(paths.releasesRoot).toBe(join(paths.namespaceRoot, "updates", "releases"));
@@ -57,6 +62,22 @@ describe("launcher protocol paths", () => {
     expect(() => resolveLauncherPaths({ channel: "beta", namespace: "release-beta", root: "relative" })).toThrow(LauncherProtocolError);
     expect(() => resolveLauncherVersionPaths({ channel: "beta", namespace: "release-beta", root, version: "../0.8.1" })).toThrow(LauncherProtocolError);
     expect(() => resolveLauncherVersionPaths({ channel: "beta", namespace: "release-beta", root, version: "0.8..1" })).toThrow(LauncherProtocolError);
+  });
+});
+
+describe("launcher handoff resume argv", () => {
+  it("round-trips one opaque handoff id", () => {
+    const args = buildLauncherHandoffResumeArgs({ handoffId: "f5d4a712-8ba9-4c28-bcad-6dbed5db2d7c" });
+
+    expect(parseLauncherHandoffResumeArgs(args)).toEqual({
+      handoffId: "f5d4a712-8ba9-4c28-bcad-6dbed5db2d7c",
+    });
+  });
+
+  it("rejects missing or unsafe handoff ids", () => {
+    expect(parseLauncherHandoffResumeArgs(["--other"])).toBeNull();
+    expect(() => parseLauncherHandoffResumeArgs(["--od-launcher-resume-handoff"])).toThrow(LauncherProtocolError);
+    expect(() => buildLauncherHandoffResumeArgs({ handoffId: "../handoff" })).toThrow(LauncherProtocolError);
   });
 });
 
@@ -116,6 +137,24 @@ describe("launcher runtime descriptors", () => {
       reason: "last-successful",
       selected: true,
     });
+
+    expect(
+      selectLauncherRuntimeTarget({
+        attempted: {
+          channel: "beta",
+          generation: 2,
+          namespace: "release-beta",
+          schemaVersion: LAUNCHER_SCHEMA_VERSION,
+          version: "0.8.1-beta.2",
+        },
+        resume: { generation: 2, version: "0.8.1-beta.2" },
+        runtime,
+      }),
+    ).toEqual({
+      pointer: { generation: 2, version: "0.8.1-beta.2" },
+      reason: "active-resume",
+      selected: true,
+    });
   });
 
   it("falls back cleanly when no active runtime target exists", () => {
@@ -137,6 +176,72 @@ describe("launcher runtime descriptors", () => {
         lastSuccessful: null,
       },
     })).toEqual({ reason: "no-runtime-target", selected: false });
+  });
+});
+
+describe("launcher desktop handoff descriptors", () => {
+  const prepared: LauncherDesktopHandoffDescriptor = {
+    channel: "beta",
+    createdAt: "2026-07-15T01:00:00.000Z",
+    handoffId: "f5d4a712-8ba9-4c28-bcad-6dbed5db2d7c",
+    namespace: "release-beta",
+    outer: {
+      executablePath: process.platform === "win32" ? "C:\\Program Files\\Open Design Beta\\Open Design Beta.exe" : "/Applications/Open Design Beta.app/Contents/MacOS/Open Design Beta",
+      pid: 4321,
+    },
+    payloadExecutablePath: process.platform === "win32" ? "C:\\od-data\\payload\\Open Design Beta.exe" : "/tmp/od-data/payload/Open Design Beta.app/Contents/MacOS/Open Design Beta",
+    previous: { generation: 0, version: "0.8.1-beta.1" },
+    schemaVersion: LAUNCHER_SCHEMA_VERSION,
+    source: { generation: 1, version: "0.8.1-beta.2" },
+    state: "prepared",
+    updatedAt: "2026-07-15T01:00:00.000Z",
+  };
+
+  it("validates prepared, armed, and confirmed recovery state", () => {
+    expect(validateLauncherDesktopHandoffDescriptor(prepared, {
+      channel: "beta",
+      namespace: "release-beta",
+    })).toEqual(prepared);
+
+    expect(validateLauncherDesktopHandoffDescriptor({
+      ...prepared,
+      state: "armed",
+      target: { generation: 2, version: "0.8.1-beta.2" },
+    }, {
+      channel: "beta",
+      namespace: "release-beta",
+    })).toMatchObject({
+      state: "armed",
+      target: { generation: 2, version: "0.8.1-beta.2" },
+    });
+
+    expect(validateLauncherDesktopHandoffDescriptor({
+      ...prepared,
+      source: { generation: 2, version: "0.8.1-beta.2" },
+      state: "confirmed",
+      target: { generation: 2, version: "0.8.1-beta.2" },
+    }, {
+      channel: "beta",
+      namespace: "release-beta",
+    })).toMatchObject({
+      source: { generation: 2, version: "0.8.1-beta.2" },
+      state: "confirmed",
+      target: { generation: 2, version: "0.8.1-beta.2" },
+    });
+  });
+
+  it("rejects an armed handoff without a target and mismatched identity", () => {
+    expect(() => validateLauncherDesktopHandoffDescriptor({
+      ...prepared,
+      state: "armed",
+    }, {
+      channel: "beta",
+      namespace: "release-beta",
+    })).toThrow(LauncherProtocolError);
+    expect(() => validateLauncherDesktopHandoffDescriptor(prepared, {
+      channel: "stable",
+      namespace: "release-beta",
+    })).toThrow(LauncherProtocolError);
   });
 });
 

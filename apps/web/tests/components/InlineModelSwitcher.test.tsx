@@ -63,6 +63,18 @@ const codexAgent: AgentInfo = {
   models: [{ id: 'default', label: 'Default' }],
 };
 
+const codexFastAgent: AgentInfo = {
+  ...codexAgent,
+  models: [
+    { id: 'default', label: 'Default' },
+    {
+      id: 'gpt-5.5',
+      label: 'gpt-5.5',
+      serviceTierOptions: [{ id: 'priority', label: 'Fast' }],
+    },
+  ],
+};
+
 function renderSwitcher(
   config: Partial<AppConfig> = {},
   agents: AgentInfo[] = [amrAgent],
@@ -312,6 +324,41 @@ describe('InlineModelSwitcher AMR row', () => {
         model: 'default',
         reasoning: 'default',
       });
+    });
+  });
+
+  it('routes Codex service tier changes through onAgentModelChange', () => {
+    const { onAgentModelChange } = renderSwitcher(
+      {
+        agentId: 'codex',
+        agentModels: {
+          codex: { model: 'gpt-5.5', reasoning: 'default' },
+        },
+      },
+      [amrAgent, codexFastAgent],
+    );
+
+    fireEvent.click(screen.getByTestId('inline-model-switcher-chip'));
+
+    const tierSelect = screen.getByRole('combobox', {
+      name: 'Service tier',
+    }) as HTMLSelectElement;
+    expect(tierSelect).toBe(screen.getByTestId('inline-model-switcher-service-tier'));
+    expect(
+      Array.from(tierSelect.options).map((option) => option.textContent),
+    ).toEqual(['Default', 'Fast']);
+
+    fireEvent.change(tierSelect, { target: { value: 'priority' } });
+
+    expect(onAgentModelChange).toHaveBeenCalledWith('codex', {
+      serviceTier: 'priority',
+    });
+
+    onAgentModelChange.mockClear();
+    fireEvent.change(tierSelect, { target: { value: 'default' } });
+
+    expect(onAgentModelChange).toHaveBeenCalledWith('codex', {
+      serviceTier: undefined,
     });
   });
 

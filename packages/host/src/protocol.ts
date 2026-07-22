@@ -277,6 +277,21 @@ export type OpenDesignHostUpdaterResult =
 
 export type OpenDesignHostUpdaterStatusListener = (status: OpenDesignHostUpdaterStatusSnapshot) => void;
 
+export type OpenDesignHostUpdaterMenuLabels = {
+  check: string;
+  checking: string;
+  downloading: string;
+  install: string;
+  installing: string;
+  restart: string;
+};
+
+export type OpenDesignHostUpdaterOpenDialogRequest = {
+  source: string;
+};
+
+export type OpenDesignHostUpdaterOpenDialogListener = (request: OpenDesignHostUpdaterOpenDialogRequest) => void;
+
 export type OpenDesignHostBridge = {
   browser: {
     clearData(options?: OpenDesignHostBrowserClearDataOptions): Promise<OpenDesignHostActionResult>;
@@ -307,8 +322,10 @@ export type OpenDesignHostBridge = {
     download(options?: OpenDesignHostUpdaterActionOptions): Promise<OpenDesignHostUpdaterStatusSnapshot>;
     install(options?: OpenDesignHostUpdaterActionOptions): Promise<OpenDesignHostUpdaterStatusSnapshot>;
     quit(options?: OpenDesignHostUpdaterActionOptions): Promise<OpenDesignHostActionResult>;
+    setMenuLabels(labels: OpenDesignHostUpdaterMenuLabels): Promise<OpenDesignHostActionResult>;
     status(options?: OpenDesignHostUpdaterActionOptions): Promise<OpenDesignHostUpdaterStatusSnapshot>;
     subscribe(listener: OpenDesignHostUpdaterStatusListener): () => void;
+    subscribeOpenDialog(listener: OpenDesignHostUpdaterOpenDialogListener): () => void;
   };
   version: typeof OPEN_DESIGN_HOST_VERSION;
 };

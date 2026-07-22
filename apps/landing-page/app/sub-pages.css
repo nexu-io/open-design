@@ -3889,3 +3889,209 @@ dialog.tpl-share-popover .detail-share-dialog-text {
   .info-page.solution-page .info-section + .info-section,
   .info-page.solution-index-page .info-section + .info-section { margin-top: 0; }
 }
+
+/* ---------------------------------------------------------------------------
+ * codex-design page (.agent-rich-hub): sticky sidebar TOC + consistent image
+ * sizing. Scoped to .agent-rich-hub so no other agent/solution page is
+ * touched — promote to the shared agent-rich layout later if it lands well.
+ * ------------------------------------------------------------------------- */
+.agent-rich-hub .agent-rich-body {
+  display: grid;
+  grid-template-columns: 212px minmax(0, 1fr);
+  gap: 56px;
+  align-items: start;
+}
+.agent-rich-hub .agent-toc-rail {
+  position: sticky;
+  top: 84px;
+  align-self: start;
+}
+.agent-rich-hub .agent-toc-rail .info-toc {
+  display: block;
+  border: 0;
+  border-left: 1px solid var(--line);
+  padding: 0 0 0 16px;
+  margin: 0;
+  text-transform: none;
+  letter-spacing: 0;
+  font-family: var(--sans);
+  font-size: 12.5px;
+}
+.agent-rich-hub .agent-toc-rail .info-toc span {
+  display: block;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-bottom: 12px;
+}
+.agent-rich-hub .agent-toc-rail .info-toc a {
+  display: block;
+  padding: 5px 0;
+  color: var(--ink-soft);
+  border-bottom: 0;
+  line-height: 1.35;
+  transition: color 0.14s ease;
+}
+.agent-rich-hub .agent-toc-rail .info-toc a:hover { color: var(--ink); border-bottom: 0; }
+.agent-rich-hub .agent-toc-rail .info-toc a.is-active { color: var(--coral); font-weight: 600; }
+
+/* One consistent measure for every figure: hero + section illustrations +
+ * product screenshots all cap to the same width and center, so the article's
+ * imagery reads as one set instead of jumping between full-bleed and small. */
+.agent-rich-hub .agent-hero-banner { max-width: 720px; }
+.agent-rich-hub .agent-rich-main .agent-section-img {
+  max-width: 720px;
+  margin: 30px auto 12px;
+}
+.agent-rich-hub .agent-rich-main .agent-section-img figcaption { text-align: center; }
+
+@media (max-width: 900px) {
+  .agent-rich-hub .agent-rich-body { display: block; }
+  .agent-rich-hub .agent-toc-rail { position: static; margin-bottom: 30px; }
+  .agent-rich-hub .agent-toc-rail .info-toc {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    padding: 14px 0;
+  }
+  .agent-rich-hub .agent-toc-rail .info-toc a { padding: 3px 0; }
+}
+
+/* ---------------------------------------------------------------------------
+ * codex-design editorial polish — echoes the /stories/ ".v4" magazine look
+ * (mono eyebrows, bolder tight headings, mono captions, generous rhythm, olive
+ * accent). Scoped to .agent-rich-hub; presentation only, no other page moves.
+ * ------------------------------------------------------------------------- */
+/* Bolder, tighter headings like .v4h2. */
+.agent-rich-hub .info-section > h2 {
+  font-size: clamp(25px, 3vw, 37px);
+  line-height: 1.13;
+  letter-spacing: -0.024em;
+  font-weight: 760;
+  margin-bottom: 22px;
+}
+
+/* Editorial lead: larger, ink-dark opening paragraph. */
+.agent-rich-hub .agent-intro .agent-hero-lead {
+  font-size: clamp(18px, 1.9vw, 22px);
+  line-height: 1.5;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+/* More generous section rhythm. */
+.agent-rich-hub .agent-rich-main .info-section + .info-section { margin-top: 74px; }
+
+/* Cleaner, more editorial figures + mono captions. */
+.agent-rich-hub .agent-rich-main .agent-section-img img {
+  border: 1px solid var(--line-soft, var(--line));
+  border-radius: 12px;
+  background: transparent;
+  box-shadow: 0 18px 44px -30px rgba(20, 18, 11, 0.5);
+}
+.agent-rich-hub .agent-rich-main .agent-section-img figcaption {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  letter-spacing: 0.02em;
+  color: var(--ink-faint);
+  text-align: center;
+  margin-top: 12px;
+}
+.agent-rich-hub .agent-hero-banner > img {
+  box-shadow: 0 18px 44px -30px rgba(20, 18, 11, 0.5);
+}
+
+/* ---------------------------------------------------------------------------
+ * codex-design full-bleed background bands — echoes the /stories/ .v4 look:
+ * a light-scrim hero backdrop and a dark image CTA. Scoped to .agent-rich-hub.
+ * ------------------------------------------------------------------------- */
+.agent-rich-hub .agent-rich-head {
+  position: relative;
+  isolation: isolate;
+  padding-top: 52px;
+  padding-bottom: 12px;
+}
+.agent-rich-hub .agent-rich-head::before {
+  content: "";
+  position: absolute;
+  top: -128px;
+  bottom: -40px;
+  left: calc(50% - 50vw);
+  width: 100vw;
+  background-image:
+    linear-gradient(180deg, rgba(247, 247, 244, 0.55), rgba(247, 247, 244, 0.9) 72%, var(--paper, #f7f7f4)),
+    url(/lab-stage-art.webp);
+  background-size: cover;
+  background-position: center 22%;
+  z-index: -1;
+  pointer-events: none;
+}
+
+/* Dark image CTA band. */
+.agent-rich-hub .agent-rich-main .info-cta {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border: 0;
+  border-radius: 16px;
+  padding: 54px 44px;
+  color: #fff;
+}
+.agent-rich-hub .agent-rich-main .info-cta::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(16, 16, 18, 0.82), rgba(16, 16, 18, 0.9)),
+    url(/cta-bg.webp);
+  background-size: cover;
+  background-position: center;
+  z-index: -1;
+}
+.agent-rich-hub .agent-rich-main .info-cta h2,
+.agent-rich-hub .agent-rich-main .info-cta p { color: #fff; }
+.agent-rich-hub .agent-rich-main .info-cta .stamp { color: rgba(255, 255, 255, 0.85); }
+.agent-rich-hub .agent-rich-main .info-cta .info-cta-meta,
+.agent-rich-hub .agent-rich-main .info-cta .info-cta-meta a,
+.agent-rich-hub .agent-rich-main .info-cta .info-cta-meta .inline-link { color: rgba(255, 255, 255, 0.72); }
+.agent-rich-hub .agent-rich-main .info-cta .btn-primary { background: #fff; color: var(--ink); }
+.agent-rich-hub .agent-rich-main .info-cta .btn-ghost { background: transparent; color: #fff; border-color: rgba(255, 255, 255, 0.45); }
+
+/* Polished terminal-style code cards on the codex page (warm dark + window
+ * chrome), replacing the flat black block. Scoped to .agent-rich-hub. */
+.agent-rich-hub .agent-rich-main .agent-code {
+  position: relative;
+  margin: 24px 0;
+  padding: 42px 20px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 12px;
+  background: linear-gradient(160deg, #221f18, #1a1712);
+  box-shadow: 0 20px 48px -32px rgba(20, 18, 11, 0.62);
+}
+.agent-rich-hub .agent-rich-main .agent-code::before {
+  content: "";
+  position: absolute;
+  top: 16px;
+  left: 18px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #ff5f57;
+  box-shadow: 19px 0 0 #febc2e, 38px 0 0 #28c840;
+}
+.agent-rich-hub .agent-rich-main .agent-code::after {
+  content: "";
+  position: absolute;
+  top: 40px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.07);
+}
+.agent-rich-hub .agent-rich-main .agent-code code {
+  color: #e9e6dd;
+  font-size: 12.5px;
+  line-height: 1.75;
+}

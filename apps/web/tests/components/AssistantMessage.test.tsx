@@ -63,6 +63,56 @@ function producedFile(name: string): ProjectFile {
 }
 
 describe('AssistantMessage feedback gate', () => {
+  it('renders plugin suggestions as compact user decisions with secondary actions in details', () => {
+    const message = baseMessage({
+      content: '',
+      events: [
+        {
+          kind: 'plugin_candidate',
+          candidateId: 'candidate-1',
+          title: 'Design review helper',
+          description: 'Turn this repository workflow into a reusable helper.',
+        } as ChatMessage['events'][number],
+      ],
+    });
+
+    const { container } = render(
+      <AssistantMessage
+        message={message}
+        streaming={false}
+        projectId="proj-1"
+      />,
+    );
+
+    expect(container.querySelector('[data-user-action-card="plugin-suggestion"]')).toBeTruthy();
+    const contribute = screen.getByRole('button', { name: 'Contribute to open-design' });
+    expect(contribute).toBeTruthy();
+    expect(contribute.classList.contains('plugin-action-button--primary')).toBe(false);
+    const toggle = screen.getByRole('button', { name: 'View details' });
+    const disclosure = container.querySelector('[data-user-action-card="plugin-suggestion"] .accordion-collapsible');
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(disclosure?.classList.contains('open')).toBe(false);
+
+    fireEvent.click(toggle);
+    expect(disclosure?.classList.contains('open')).toBe(true);
+    expect(screen.getByRole('button', { name: 'Create plugin/template' })).toBeTruthy();
+  });
+
+  it('omits the repeated identity header for a consecutive assistant reply', () => {
+    const { container } = render(
+      <AssistantMessage
+        message={baseMessage()}
+        streaming={false}
+        projectId="proj-1"
+        showRole={false}
+      />,
+    );
+
+    expect(container.querySelector('.msg.assistant-continuation')).toBeTruthy();
+    expect(container.querySelector('.msg .role')).toBeNull();
+    expect(container.textContent).toContain('Done.');
+  });
+
   it('copies the raw assistant markdown from the completion footer', async () => {
     const originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
     const writeText = vi.fn().mockResolvedValue(undefined);
@@ -879,6 +929,78 @@ describe('AssistantMessage question forms', () => {
     );
   });
 
+  it.each([
+    {
+      projectKind: 'web_clone' as const,
+      title: 'Quiet SaaS',
+      src: 'https://repo-assets.open-design.ai/style-catalog/v1/prototype-quiet-saas-v1.webp',
+    },
+    {
+      projectKind: 'wireframe' as const,
+      title: 'Quiet SaaS',
+      src: 'https://repo-assets.open-design.ai/style-catalog/v1/prototype-quiet-saas-v1.webp',
+    },
+    {
+      projectKind: 'live_artifact' as const,
+      title: 'Quiet SaaS',
+      src: 'https://repo-assets.open-design.ai/style-catalog/v1/prototype-quiet-saas-v1.webp',
+    },
+    {
+      projectKind: 'document' as const,
+      title: 'Docs reference',
+      src: 'https://repo-assets.open-design.ai/style-catalog/v1/document-docs-reference-v1.webp',
+    },
+    {
+      projectKind: 'image' as const,
+      title: 'Editorial photo',
+      src: 'https://repo-assets.open-design.ai/style-catalog/v1/image-photo-editorial-v1.webp',
+    },
+    {
+      projectKind: 'video' as const,
+      title: 'Swiss Pulse',
+      src: 'https://repo-assets.open-design.ai/style-catalog/v1/video-swiss-pulse-v1.webp',
+    },
+    {
+      projectKind: 'hyperframes' as const,
+      title: 'Swiss Pulse',
+      src: 'https://repo-assets.open-design.ai/style-catalog/v1/video-swiss-pulse-v1.webp',
+    },
+  ])('keeps selected $projectKind style previews in the answered summary', ({
+    projectKind,
+    title,
+    src,
+  }) => {
+    const form = [
+      '<question-form id="discovery" title="Quick brief">',
+      JSON.stringify({
+        questions: [
+          {
+            id: 'tone',
+            label: 'Visual tone',
+            type: 'checkbox',
+            options: [title],
+          },
+        ],
+      }),
+      '</question-form>',
+    ].join('\n');
+
+    render(
+      <AssistantMessage
+        message={baseMessage({
+          content: form,
+          events: [{ kind: 'text', text: form } as ChatMessage['events'][number]],
+        })}
+        streaming={false}
+        projectId="proj-1"
+        projectKind={projectKind}
+        nextUserContent={`[form answers for discovery]\n- Visual tone: ${title}`}
+      />,
+    );
+
+    expect(screen.getByRole('img', { name: `Visual tone: ${title}` })).toHaveAttribute('src', src);
+  });
+
   it('normalizes every selected legacy visual style to its preview card', () => {
     const form = [
       '<question-form id="discovery" title="Quick brief">',
@@ -954,7 +1076,7 @@ describe('AssistantMessage question forms', () => {
     expect(screen.getByText('Warm Japanese editorial')).toBeTruthy();
   });
 
-  it('does not recommend next steps on the same turn as an inline question form', () => {
+  it('does not recommend next steps for a question-only turn', () => {
     const form = [
       '<question-form id="discovery" title="Quick brief — tailored">',
       JSON.stringify({
@@ -996,7 +1118,7 @@ describe('AssistantMessage question forms', () => {
       />,
     );
     expect(screen.getByTestId('question-form-summary')).toBeTruthy();
-    expect(screen.getByTestId('next-step-actions')).toBeTruthy();
+    expect(screen.queryByTestId('next-step-actions')).toBeNull();
 
     rerender(
       <AssistantMessage
@@ -1007,7 +1129,7 @@ describe('AssistantMessage question forms', () => {
         onNextStepPromptAction={onNextStepPromptAction}
       />,
     );
-    expect(screen.getByTestId('next-step-actions')).toBeTruthy();
+    expect(screen.queryByTestId('next-step-actions')).toBeNull();
   });
 
   it('shows an inline loading frame while a form is streaming', () => {
@@ -1059,7 +1181,7 @@ describe('AssistantMessage recovered produced files', () => {
 
     expect(screen.getByTestId('file-ops-summary')).toBeTruthy();
     expect(screen.getByTestId('file-ops-row-browser-war-deck-outline.md')).toBeTruthy();
-    expect(screen.getByText(/Write 1/)).toBeTruthy();
+    expect(screen.getByTitle('Write')).toBeTruthy();
   });
 
   it('shows project files mentioned as plain filenames in the assistant summary', () => {

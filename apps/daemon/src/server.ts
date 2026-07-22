@@ -28,6 +28,11 @@ import {
   renderConnectedExternalMcpDirective,
   resolveExclusiveSurface,
 } from './prompts/system.js';
+import {
+  computeStableSectionHashes,
+  serializeStableSections,
+  type StableSectionHashes,
+} from './prompts/stable-sections.js';
 import { emittedRenderableQuestionForm } from './question-form-detect.js';
 import { resolveProjectRoot } from './project-root.js';
 import {
@@ -94,6 +99,7 @@ import {
   validateCodexGeneratedImagesDir,
 } from './runtimes/chat-prompt-inputs.js';
 import {
+  writePromptAndEndStdin,
   applyClaudeStreamJsonRunBookkeeping,
   assertValidRuntimeDefInactivityTimeoutMs,
   bufferedAntigravityGeminiFirstTokenAt,
@@ -184,6 +190,7 @@ import {
   detectAgents,
   getAgentDef,
   isKnownModel,
+  isKnownServiceTier,
   openDesignAmrTraceEnv,
   applyAgentLaunchEnv,
   resolveAgentLaunch,
@@ -196,13 +203,18 @@ import {
   rememberLiveModels,
   resolveDefaultModelFromOptions,
   resolveModelForAgent,
+  resolveModelForServiceTier,
 } from './runtimes/models.js';
 import { loadMmdRouteLaunchEnv } from './runtimes/mmd-routes.js';
 import { preparePromptFileForAgent } from './runtimes/prompt-file.js';
 import { TerminalControlSequenceStripper } from './runtimes/terminal-control.js';
-import { buildOpenCodeByokProviderConfig } from './runtimes/byok-opencode.js';
 import {
-  persistPlainStreamArtifacts,
+  buildOpenCodeByokProviderConfig,
+  BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE,
+} from './runtimes/byok-opencode.js';
+import {
+  extractPlainStreamArtifacts,
+  persistPlainStreamArtifactList,
   plainStdoutFromRunEvents,
 } from './runtimes/plain-stream.js';
 import {
@@ -315,6 +327,7 @@ import {
   restoreProjectSnapshotLink,
   resolvePluginSnapshot,
   runPipelineForRun,
+  isSafePluginId,
   runStageWithRegistry,
   startSnapshotGc,
   uninstallPlugin,
@@ -390,6 +403,7 @@ import {
   snapshotAiHtmlVersionsForRun,
 } from './run-html-version-snapshots.js';
 import { reportRunCompletedFromDaemon } from './langfuse-bridge.js';
+import { reconcileDurableRunTerminals } from './runtimes/run-terminal-reconciliation.js';
 import { buildPromptStackTelemetry } from './prompt-telemetry.js';
 import { readAnalyticsContext } from './analytics.js';
 import {
@@ -736,7 +750,32 @@ const PLUGIN_PREVIEWS_DIR = resolveDaemonPluginPreviewsDir({
   projectRoot: PROJECT_ROOT,
 });
 const OD_BIN = resolveDaemonCliPath();
-const OD_NODE_BIN = process.execPath;
+export function resolveOpenDesignNodeBin({
+  env = process.env,
+  execPath = process.execPath,
+  platform = process.platform,
+  resourceRoot = DAEMON_RESOURCE_ROOT,
+  exists = fs.existsSync,
+}: {
+  env?: NodeJS.ProcessEnv | Record<string, string | undefined>;
+  execPath?: string;
+  platform?: NodeJS.Platform;
+  resourceRoot?: string | null;
+  exists?: (path: string) => boolean;
+} = {}): string {
+  const configured = env.OD_NODE_BIN?.trim();
+  if (configured) return configured;
+
+  const bundledName = platform === 'win32' ? 'node.exe' : 'node';
+  const bundled = resourceRoot
+    ? (platform === 'win32' ? path.win32 : path).join(resourceRoot, 'bin', bundledName)
+    : null;
+  if (bundled && exists(bundled)) return bundled;
+
+  return execPath;
+}
+
+const OD_NODE_BIN = resolveOpenDesignNodeBin();
 const SKILLS_DIR = resolveDaemonResourceDir(
   DAEMON_RESOURCE_ROOT,
   'skills',
@@ -1088,7 +1127,7 @@ export function createAgentRuntimeEnv(
   baseEnv: NodeJS.ProcessEnv | Record<string, string | undefined>,
   daemonUrl: string,
   toolTokenGrant: { token?: string } | null = null,
-  nodeBin: string = process.execPath,
+  nodeBin: string = OD_NODE_BIN,
 ): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = applySandboxRuntimeEnv(
     {
@@ -1578,6 +1617,12 @@ export function createFinalizedMessageTelemetryReporter({
         skipReason: state.langfuse_expected === false ? 'not_expected' : undefined,
         status: saved.runStatus,
       });
+      if (
+        state.langfuse_expected === false
+        || state.langfuse_delivery_status === 'accepted'
+      ) {
+        design.runs.markLangfuseCompleted?.(run);
+      }
     })();
   };
 }
@@ -2511,6 +2556,25 @@ export async function startServer({
     readAnalyticsContext,
   };
 
+  // Runs are process-local, but their terminal obligations are durable. On a
+  // fresh daemon boot, repair stale message rows and replay any PostHog or
+  // Langfuse terminal work whose checkpoint was not committed. Network work
+  // stays off the startup critical path.
+  void reconcileDurableRunTerminals({
+    analytics: analyticsService,
+    appVersion: telemetry.getCachedAppVersion()?.version ?? '0.0.0',
+    appVersionInfo: telemetry.getCachedAppVersion(),
+    db,
+    reportLangfuse: reportRunCompletedFromDaemon,
+    runsLogDir: path.join(RUNTIME_DATA_DIR, 'runs'),
+  }).then((reconciled) => {
+    if (reconciled.interrupted > 0 || reconciled.messagesReconciled > 0) {
+      console.warn('[runs] reconciled interrupted run terminals', reconciled);
+    }
+  }).catch((error) => {
+    console.warn('[runs] terminal reconciliation failed', error);
+  });
+
   // Interactive Terminal sessions (node-pty). In-memory, process-local, and
   // killed on daemon shutdown — see shutdownDaemonRuns below.
   const terminalService = createTerminalService();
@@ -2885,6 +2949,7 @@ export async function startServer({
     testAgentConnection,
     getAgentDef,
     isKnownModel,
+    isKnownServiceTier,
     sanitizeCustomModel,
   };
   const critiqueDeps = {
@@ -3415,6 +3480,7 @@ export async function startServer({
       listInstalledPlugins,
       getInstalledPlugin,
       installPlugin,
+      isSafePluginId,
       uninstallPlugin,
       installFromLocalFolder,
       applyPlugin,
@@ -3467,6 +3533,7 @@ export async function startServer({
       listInstalledPlugins,
       getInstalledPlugin,
       installPlugin,
+      isSafePluginId,
       uninstallPlugin,
       installFromLocalFolder,
       applyPlugin,
@@ -4026,7 +4093,11 @@ export async function startServer({
       }
     }
 
-    const prompt = composeSystemPrompt({
+    // Hoisted verbatim out of the composeSystemPrompt() call so the exact same
+    // object both composes the prompt and feeds section-level drift
+    // attribution — a second, hand-maintained copy of these inputs would drift
+    // from the real ones and mislabel the telemetry it exists to explain.
+    const systemPromptInputs = {
       agentId,
       includeCodexImagegenOverride: false,
       skillBody,
@@ -4080,7 +4151,8 @@ export async function startServer({
       // restores the classic stack. main keeps classic as the default —
       // do NOT carry this flip into a PR against main.
       promptCoreVariant: process.env.OD_PROMPT_CORE === 'classic' ? undefined : 'slim',
-    });
+    };
+    const prompt = composeSystemPrompt(systemPromptInputs);
     // The chat handler also needs to know where the active skill lives
     // on disk so it can stage a per-project copy of its side files
     // before spawning the agent. Returning that here avoids a second
@@ -4105,6 +4177,10 @@ export async function startServer({
           .filter((part) => typeof part === 'string' && part.trim().length > 0)
           .join('\n\n---\n\n'),
       },
+      // Diagnostic only. The caller merges its own stable inputs
+      // (runtimeToolPrompt, the client system prompt) in before hashing, so the
+      // section map covers the whole fingerprint rather than just this half.
+      stableSectionInputs: systemPromptInputs,
     };
   };
 
@@ -4217,6 +4293,7 @@ export async function startServer({
       commentAttachments = [],
       model,
       reasoning,
+      serviceTier,
       locale,
       research,
       context,
@@ -4241,6 +4318,7 @@ export async function startServer({
     if (typeof telemetryPrompt === 'string') run.userPrompt = telemetryPrompt;
     if (typeof model === 'string' && model) run.model = model;
     if (typeof reasoning === 'string' && reasoning) run.reasoning = reasoning;
+    if (typeof serviceTier === 'string' && serviceTier) run.serviceTier = serviceTier;
     if (typeof skillId === 'string' && skillId) run.skillId = skillId;
     if (typeof designSystemId === 'string' && designSystemId)
       run.designSystemId = designSystemId;
@@ -4271,7 +4349,7 @@ export async function startServer({
       return design.runs.fail(
         run,
         'BYOK_PROVIDER_REQUIRED',
-        'BYOK OpenCode requires a provider, API key, and model for this run.',
+        BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE,
       );
     }
     // Validate the checked-in `inactivityTimeoutMs` hint immediately
@@ -4589,6 +4667,7 @@ export async function startServer({
       critiqueShouldRun,
       designSystemSelection,
       promptTelemetryParts,
+      stableSectionInputs,
     } =
       await composeDaemonSystemPrompt({
         agentId,
@@ -4824,8 +4903,10 @@ export async function startServer({
     // the upstream session's own configured default; omitted models may still
     // resolve to an available fallback below.
     let configuredAgentEnv = {};
+    let appConfigForRun = null;
     try {
       const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
+      appConfigForRun = appConfig;
       configuredAgentEnv = agentCliEnvForAgent(appConfig.agentCliEnv, def.id);
     } catch {
       configuredAgentEnv = {};
@@ -4837,13 +4918,17 @@ export async function startServer({
           ...configuredAgentEnv,
         })
       : null;
+    const configuredModel =
+      typeof appConfigForRun?.agentModels?.[def.id]?.model === 'string'
+        ? appConfigForRun.agentModels[def.id].model
+        : null;
     let safeModel = resolveModelForAgent(
       def,
       typeof model === 'string'
         ? isKnownModel(def, model, requestedLiveModelScope)
           ? model
           : sanitizeCustomModel(model)
-        : null,
+        : configuredModel,
       process.env,
       requestedLiveModelScope,
     );
@@ -4856,7 +4941,22 @@ export async function startServer({
       typeof reasoning === 'string' && Array.isArray(def.reasoningOptions)
         ? (def.reasoningOptions.find((r) => r.id === reasoning)?.id ?? null)
         : null;
-    const agentOptions = { model: safeModel, reasoning: safeReasoning };
+    safeModel = resolveModelForServiceTier(
+      def,
+      safeModel,
+      typeof serviceTier === 'string' ? serviceTier : null,
+      requestedLiveModelScope,
+    );
+    const safeServiceTier =
+      typeof serviceTier === 'string' &&
+      isKnownServiceTier(def, safeModel, serviceTier, requestedLiveModelScope)
+        ? serviceTier
+        : null;
+    const agentOptions = {
+      model: safeModel,
+      reasoning: safeReasoning,
+      serviceTier: safeServiceTier,
+    };
     const agentLaunch = resolveAgentLaunch(def, configuredAgentEnv);
     const resolvedBin = agentLaunch.selectedPath;
     if (def.id === 'amr' && resolvedBin && agentLaunch.launchPath) {
@@ -4905,7 +5005,7 @@ export async function startServer({
             currentCwd: effectiveCwd,
             currentAssistantMessageId: run.assistantMessageId ?? null,
           })
-        : { storedSessionId: null as string | null, resumeSessionId: null as string | null, newSessionId: undefined as string | undefined, isResuming: false, storedStablePromptHash: null as string | null, invalidationReason: null };
+        : { storedSessionId: null as string | null, resumeSessionId: null as string | null, newSessionId: undefined as string | undefined, isResuming: false, storedStablePromptHash: null as string | null, storedStableSections: null as StableSectionHashes | null, invalidationReason: null };
     const publishNativeSessionRecoveryMetadata = () => {
       if (!run.nativeSessionRecovery) return;
       design.runs.emit(run, 'diagnostic', {
@@ -4943,6 +5043,14 @@ export async function startServer({
       .map((part) => (typeof part === 'string' ? part.trim() : ''))
       .join('\n\n---\n\n');
     const currentStableHash = hashStableInstructions(stableInstructionFingerprint);
+    // Per-section digests of the SAME inputs the fingerprint is built from, so a
+    // drift event can name which one moved. `currentStableHash` above stays the
+    // sole re-send decider — these only label a decision already made.
+    const currentStableSections = computeStableSectionHashes({
+      ...(stableSectionInputs ?? {}),
+      runtimeToolPrompt,
+      clientSystemPrompt: systemPrompt,
+    });
     // `runtimeToolPrompt` is part of the fingerprint and varies only when the
     // tool-token grant's presence flips between turns (rare cwd/projectId edge
     // cases); any such change correctly forces a full re-send that turn.
@@ -4955,7 +5063,10 @@ export async function startServer({
       isResuming: agentResumeCtx.isResuming,
       storedStablePromptHash: agentResumeCtx.storedStablePromptHash,
       currentStableHash,
+      storedStableSections: agentResumeCtx.storedStableSections,
+      currentStableSections,
     });
+    const currentStableSectionsJson = serializeStableSections(currentStableSections);
     const browserUsePromptGuard = renderBrowserUseUnavailablePrompt(run.browserUse ?? null);
     const titleGenerationRequested =
       titleGeneration &&
@@ -5110,6 +5221,10 @@ export async function startServer({
     // extractor only needs the head of the reply.
     const MEMORY_REPLY_CAP = 32 * 1024;
     let memoryReplyText = '';
+    // Upper bound for the truncation-proof plain-stream stdout accumulator used
+    // by the artifact finalizer (see the emit handler below). 8 MiB comfortably
+    // covers realistic artifact-bearing runs while bounding per-run memory.
+    const PLAIN_ARTIFACT_STDOUT_CAP = 8 * 1024 * 1024;
     const send = (event, data) => {
       const lifecycleMarkers = runLifecycleMarkersForStreamEvent(event, data);
       if (lifecycleMarkers.firstModelEventType) {
@@ -5155,6 +5270,24 @@ export async function startServer({
               : '';
         if (replyPiece) {
           memoryReplyText = (memoryReplyText + replyPiece).slice(0, MEMORY_REPLY_CAP);
+        }
+      }
+      // Keep enough of the plain-stream stdout on the run itself that the
+      // finalizer's artifact extraction does not depend on the <artifact> tag
+      // surviving the 2000-event run.events ring buffer. A long run that streams
+      // a complete <artifact> early and then floods >2000 later stdout events
+      // would evict the opening tag, making a scan of run.events miss it and
+      // silently drop the delivered file (#5351 fixed the same truncation class
+      // for the verdict consumers). We keep the HEAD (first CAP bytes, bounded)
+      // and separately track the TOTAL byte count; the finalizer stitches the
+      // head to the tail-biased run.events at their exact stream offset, so no
+      // artifact is lost and none is double-counted regardless of where in the
+      // stream it appears.
+      if (event === 'stdout' && data && typeof data.chunk === 'string') {
+        run.plainStdoutTotalBytes = (run.plainStdoutTotalBytes ?? 0) + data.chunk.length;
+        if ((run.plainArtifactStdout?.length ?? 0) < PLAIN_ARTIFACT_STDOUT_CAP) {
+          run.plainArtifactStdout =
+            ((run.plainArtifactStdout ?? '') + data.chunk).slice(0, PLAIN_ARTIFACT_STDOUT_CAP);
         }
       }
       persistRunEventToAssistantMessage(db, run, event, data);
@@ -5324,10 +5457,20 @@ export async function startServer({
         attemptCount > 0
           ? { ...decision, retryAttemptIndex: attemptCount }
           : decision;
+      // A successful retry has no current failure classification or error code.
+      // Fall back to the failure that caused attempt 0 to be retried so success
+      // recovery can still be attributed by root cause. Failed/suppressed retry
+      // events retain their existing current-attempt semantics.
+      const eventFailure = retryResult === 'success'
+        ? run.retryOriginFailure ?? failure
+        : failure;
+      const eventErrorCode = retryResult === 'success'
+        ? run.retryOriginErrorCode ?? errorCode
+        : errorCode;
       run.retryFinalResult = retryResult;
       run.retrySuppressedReason = retrySuppressedReason;
       design.runs.emit(run, 'run_retry_finished', {
-        ...retryAnalyticsBase(eventDecision, failure, errorCode),
+        ...retryAnalyticsBase(eventDecision, eventFailure, eventErrorCode),
         retry_result: retryResult,
         ...(retrySuppressedReason
           ? { retry_suppressed_reason: retrySuppressedReason }
@@ -5393,6 +5536,11 @@ export async function startServer({
         sideEffects,
       });
       if (decision.shouldRetry && !design.runs.isTerminal(run.status)) {
+        run.retryOriginalFailure ??= failure ?? undefined;
+        if ((run.retryAttemptCount ?? 0) === 0) {
+          run.retryOriginFailure = failure ? { ...failure } : null;
+          run.retryOriginErrorCode = errorCode ?? null;
+        }
         run.retryAttemptCount = decision.retryAttemptIndex;
         run.retryFinalResult = undefined;
         run.retrySuppressedReason = undefined;
@@ -5463,6 +5611,7 @@ export async function startServer({
           agentId: def.id,
           sessionId: liveSessionId,
           stablePromptHash: currentStableHash,
+          stablePromptSections: currentStableSectionsJson,
           model: safeModel ?? null,
           cwd: effectiveCwd,
           lastMessageId: run.assistantMessageId ?? null,
@@ -5980,6 +6129,7 @@ export async function startServer({
             agentId: def.id,
             sessionId: createTurnSessionId,
             stablePromptHash: currentStableHash,
+            stablePromptSections: currentStableSectionsJson,
             model: safeModel ?? null,
             cwd: effectiveCwd,
             lastMessageId: run.assistantMessageId ?? null,
@@ -6006,6 +6156,7 @@ export async function startServer({
             agentId: def.id,
             sessionId: agentResumeCtx.resumeSessionId,
             stablePromptHash: currentStableHash,
+            stablePromptSections: currentStableSectionsJson,
             model: safeModel ?? null,
             cwd: effectiveCwd,
             lastMessageId: run.assistantMessageId ?? null,
@@ -6199,6 +6350,9 @@ export async function startServer({
         artifactRegistered,
       });
     const noteAgentActivity = () => {
+      // E-lite: stamp the last-activity clock BEFORE the disabled-watchdog bail
+      // so `last_progress_age_ms` is recorded even when the watchdog is off.
+      run.lastAgentActivityAt = Date.now();
       const delay = activeInactivityTimeoutMs();
       if (delay <= 0) return;
       clearInactivityWatchdog();
@@ -6309,6 +6463,7 @@ export async function startServer({
       cwd,
       model: safeModel,
       reasoning: safeReasoning,
+      serviceTier: safeServiceTier,
       toolTokenExpiresAt: toolTokenGrant?.expiresAt ?? null,
     });
     noteAgentActivity();
@@ -6746,6 +6901,12 @@ export async function startServer({
     // plain streams (most other CLIs) we forward raw chunks unchanged so
     // the browser can append them to the assistant's text buffer.
     let agentStreamError = null;
+    // Preserve whether a latched error predates a later cancel request. The
+    // close handler runs after cancel() has already flipped cancelRequested,
+    // so consulting only the current flag loses the ordering of those events.
+    let agentStreamErrorObservedBeforeCancellation = false;
+    let acpFatalErrorObservedBeforeCancellation = false;
+    run.runtimeFailureObservedBeforeCancellation = false;
     // Holds buffered plain-text stdout chunks for agents (currently
     // antigravity) where we need to inspect the full output at close
     // time before deciding whether to forward it. The auth-prompt guard
@@ -6995,6 +7156,10 @@ export async function startServer({
 
     const sendAgentEvent = (ev) => {
       if (ev?.type === 'error') {
+        // Cancellation is the terminal user intent. Some CLIs flush a final
+        // error record while reacting to SIGTERM; treating that late frame as
+        // a run failure races the cancel route and can make it return failed.
+        if (run.cancelRequested) return;
         if (agentStreamError) return;
         flushVisibleAgentStderr();
         const failureText = [
@@ -7008,6 +7173,8 @@ export async function startServer({
           String(ev.message || 'Agent stream error'),
           failureText,
         );
+        agentStreamErrorObservedBeforeCancellation = true;
+        run.runtimeFailureObservedBeforeCancellation = true;
         clearInactivityWatchdog();
         const authFailure = classifyAgentAuthFailure(agentId, failureText);
         if (authFailure?.status === 'missing') {
@@ -7098,6 +7265,10 @@ export async function startServer({
         // init/system line arrives well before the model's first token.
         noteCliReadyAt();
         if (ev?.type === 'error') {
+          // Claude commonly reports its SIGTERM shutdown as an assistant or
+          // result error frame. Once cancellation has been requested, that
+          // frame is shutdown noise rather than a new user-visible failure.
+          if (run.cancelRequested) return;
           if (agentStreamError) return;
           // Hold back a resume-failure error so the close handler's transparent
           // reseed stays invisible. An is_error result frame on a dead --resume
@@ -7148,6 +7319,8 @@ export async function startServer({
           const serviceCode = classifyAgentServiceFailure(failureText);
           agentStreamError = diagnostic?.message
             ?? rewriteKnownAgentStreamError(agentId, message, failureText);
+          agentStreamErrorObservedBeforeCancellation = true;
+          run.runtimeFailureObservedBeforeCancellation = true;
           send('error', createSseErrorPayload(
             diagnostic?.code ?? serviceCode ?? 'AGENT_EXECUTION_FAILED',
             agentStreamError,
@@ -7243,9 +7416,13 @@ export async function startServer({
           if (channel === 'agent') {
             sendAgentEvent(payload);
           } else if (channel === 'error') {
+            if (run.cancelRequested) return;
             if (agentStreamError) return;
             flushVisibleAgentStderr();
             agentStreamError = String(payload?.message || 'Pi session error');
+            agentStreamErrorObservedBeforeCancellation = true;
+            acpFatalErrorObservedBeforeCancellation = true;
+            run.runtimeFailureObservedBeforeCancellation = true;
             const piErrorCode = typeof payload?.code === 'string' ? payload.code : null;
             if (piErrorCode) {
               run.errorCode = piErrorCode;
@@ -7287,6 +7464,11 @@ export async function startServer({
         onCliReady: () => noteCliReadyAt(),
         onSessionInit: () => noteSessionInitDoneAt(),
         send: (event, data) => {
+          if (event === 'error') {
+            if (run.cancelRequested) return;
+            acpFatalErrorObservedBeforeCancellation = true;
+            run.runtimeFailureObservedBeforeCancellation = true;
+          }
           if (event === 'agent') {
             lastAgentEventPhase = summarizeAgentEventForInactivity(data);
           }
@@ -7412,12 +7594,25 @@ export async function startServer({
       emitVisibleAgentStderr(chunk);
     });
 
+    const finishCanceledIfRequested = (
+      code: number | null,
+      signal: NodeJS.Signals | null,
+    ): boolean => {
+      if (!run.cancelRequested) return false;
+      if (!design.runs.isTerminal(run.status)) {
+        markRpcCloseReason('cancel_requested');
+        finishWithRetryDecision('canceled', code, signal);
+      }
+      return true;
+    };
+
     child.on('error', (err) => {
       clearInactivityWatchdog();
       cleanupPromptFile();
       flushVisibleAgentStderr();
       revokeToolToken('child_exit');
       unregisterChatAgentEventSink();
+      if (finishCanceledIfRequested(1, null)) return;
       send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', err.message));
       finishWithRetryDecision('failed', 1, null);
     });
@@ -7496,13 +7691,13 @@ export async function startServer({
         ));
         return design.runs.finish(run, 'failed', code ?? 1, signal ?? null);
       }
-      if (acpSession?.hasFatalError()) {
+      if (acpFatalErrorObservedBeforeCancellation && acpSession?.hasFatalError()) {
         markRpcCloseReason('fatal_rpc_error');
         return finishWithRetryDecision('failed', code ?? 1, signal ?? null);
       }
       parseBufferedAntigravityGeminiJsonEventStream();
       flushAgentTitleMarkerBuffer();
-      if (agentStreamError) {
+      if (agentStreamErrorObservedBeforeCancellation && agentStreamError) {
         markRpcCloseReason('stream_error');
         return finishWithRetryDecision('failed', code === 0 ? 1 : (code ?? 1), signal ?? null);
       }
@@ -7813,14 +8008,51 @@ export async function startServer({
         (def.streamFormat ?? 'plain') === 'plain' &&
         run.projectId
       ) {
-        const plainStdout = plainStdoutFromRunEvents(run.events);
-        if (plainStdout.includes('<artifact')) {
+        // Reconstruct the agent's stdout for artifact extraction from two
+        // truncation-complementary windows over the SAME underlying stream:
+        //   - head: `run.plainArtifactStdout`, the FIRST CAP bytes (bounded), and
+        //   - tail: run.events, the LAST 2000 events.
+        // Using stream offsets (total byte count) we stitch them into a single
+        // continuous string at their exact seam, then extract ONCE. This is
+        // correct by construction:
+        //   - not truncated  -> head == whole stream (or tail == whole stream);
+        //   - overlapping    -> seam removes the double-covered span, so the
+        //                        same artifact is never counted twice AND two
+        //                        distinct artifacts that share a body are both
+        //                        kept (no value-level dedup);
+        //   - a true gap (a run with both >CAP early bytes AND >2000 later
+        //     events whose tail does not reach back to CAP) -> extract each
+        //     window separately and concatenate the artifact lists. The windows
+        //     do not overlap there, so there are no duplicate occurrences; only
+        //     an artifact buried entirely in the un-covered middle is lost, which
+        //     was already unrecoverable before this change (the old code only
+        //     ever had the tail).
+        const head = run.plainArtifactStdout ?? '';
+        const tail = plainStdoutFromRunEvents(run.events);
+        const totalBytes = run.plainStdoutTotalBytes ?? head.length;
+        const tailStart = Math.max(0, totalBytes - tail.length);
+        let plainArtifacts: ReturnType<typeof extractPlainStreamArtifacts>;
+        if (head.length === 0) {
+          plainArtifacts = extractPlainStreamArtifacts(tail);
+        } else if (tailStart <= head.length) {
+          // Overlap or contiguous: splice tail on at the seam and extract once.
+          const stitched = head + tail.slice(head.length - tailStart);
+          plainArtifacts = extractPlainStreamArtifacts(stitched);
+        } else {
+          // Gap: no overlap, so extracting each window and concatenating cannot
+          // produce a duplicate occurrence or a false cross-gap artifact.
+          plainArtifacts = [
+            ...extractPlainStreamArtifacts(head),
+            ...extractPlainStreamArtifacts(tail),
+          ];
+        }
+        if (plainArtifacts.length > 0) {
           try {
             const project = getProject(db, run.projectId);
-            const persistedPlainArtifacts = await persistPlainStreamArtifacts({
+            const persistedPlainArtifacts = await persistPlainStreamArtifactList({
               projectsRoot: PROJECTS_DIR,
               projectId: run.projectId,
-              stdout: plainStdout,
+              artifacts: plainArtifacts,
               metadata: project?.metadata,
               writeProjectFile,
             });
@@ -7873,6 +8105,7 @@ export async function startServer({
             agentId: def.id,
             sessionId: sessionPath,
             stablePromptHash: currentStableHash,
+            stablePromptSections: currentStableSectionsJson,
             model: safeModel ?? null,
             cwd: effectiveCwd,
             lastMessageId: run.assistantMessageId ?? null,
@@ -7902,6 +8135,7 @@ export async function startServer({
           agentId: def.id,
           sessionId: acpSession.getDurableSessionId(),
           stablePromptHash: currentStableHash,
+          stablePromptSections: currentStableSectionsJson,
           model: safeModel ?? null,
           cwd: effectiveCwd,
           lastMessageId: run.assistantMessageId ?? null,
@@ -7975,7 +8209,11 @@ export async function startServer({
           },
         });
         try {
-          child.stdin.write(`${userMessage}\n`, 'utf8', markStdinWriteEnd);
+          // E-lite: `write` returns false when the chunk was buffered because the
+          // OS pipe is full (the child isn't draining stdin) — the corroborating
+          // signal for a `stdin_write`-phase inactivity stall.
+          const accepted = child.stdin.write(`${userMessage}\n`, 'utf8', markStdinWriteEnd);
+          run.stdinBackpressure = accepted === false;
         } catch (err) {
           // Swallow EPIPE here for the same reason as the listener above —
           // a fast-exiting child has already routed its failure through
@@ -7984,7 +8222,9 @@ export async function startServer({
         }
         run.stdinOpen = true;
       } else {
-        child.stdin.end(composed, 'utf8', markStdinWriteEnd);
+        // Split write + close so the boolean backpressure signal survives —
+        // see writePromptAndEndStdin for why `end(chunk)` cannot report it.
+        run.stdinBackpressure = writePromptAndEndStdin(child.stdin, composed, markStdinWriteEnd);
       }
     }
   };
@@ -8092,6 +8332,7 @@ export async function startServer({
       designSystemId: orbitDesignSystemId,
       model: modelPrefs.model ?? null,
       reasoning: modelPrefs.reasoning ?? null,
+      serviceTier: modelPrefs.serviceTier ?? null,
       message: prompt,
       systemPrompt: [
         renderOrbitTemplateSystemPrompt(template),
@@ -8408,6 +8649,7 @@ export async function startServer({
         context: routineContext,
         model: modelPrefs.model ?? null,
         reasoning: modelPrefs.reasoning ?? null,
+        serviceTier: modelPrefs.serviceTier ?? null,
         message: routine.prompt,
         systemPrompt: [
           `You are running an unattended scheduled routine named "${routine.name}".`,
@@ -8601,6 +8843,7 @@ export async function startServer({
     chat: { startChatRun },
     agents: agentDeps,
     critique: critiqueDeps,
+    appConfig: { readAppConfig },
     validation: validationDeps,
     lifecycle: { isDaemonShuttingDown: () => daemonShuttingDown },
     telemetry: { reportFinalizedMessage, reportFeedback },

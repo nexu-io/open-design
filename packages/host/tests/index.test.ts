@@ -21,7 +21,9 @@ import {
   printHostPdf,
   openHostProjectPath,
   quitHostAfterUpdaterInstallerOpen,
+  setHostUpdaterMenuLabels,
   setHostPetVisible,
+  subscribeHostUpdaterOpenDialog,
   subscribeHostUpdater,
 } from "../src/index.js";
 import { createMockOpenDesignHost, installMockOpenDesignHost } from "../src/testing.js";
@@ -258,9 +260,12 @@ describe("open-design host contract", () => {
     const statusFn = vi.fn(async () => status);
     const unsubscribe = vi.fn();
     const subscribe = vi.fn(() => unsubscribe);
+    const unsubscribeOpenDialog = vi.fn();
+    const subscribeOpenDialog = vi.fn(() => unsubscribeOpenDialog);
+    const setMenuLabels = vi.fn(async () => ({ ok: true as const }));
     const scope: Record<string, unknown> = {};
     scope[OPEN_DESIGN_HOST_GLOBAL] = createMockOpenDesignHost({
-      updater: { check, install, quit, status: statusFn, subscribe },
+      updater: { check, install, quit, setMenuLabels, status: statusFn, subscribe, subscribeOpenDialog },
     });
 
     await expect(getHostUpdaterStatus({ payload: { source: "mount" } }, scope)).resolves.toEqual({
@@ -281,11 +286,23 @@ describe("open-design host contract", () => {
 
     const listener = vi.fn();
     expect(subscribeHostUpdater(listener, scope)).toBe(unsubscribe);
+    const openDialogListener = vi.fn();
+    expect(subscribeHostUpdaterOpenDialog(openDialogListener, scope)).toBe(unsubscribeOpenDialog);
+    await expect(setHostUpdaterMenuLabels({
+      check: "Check for Updates…",
+      checking: "Checking for Updates…",
+      downloading: "Downloading Update…",
+      install: "Install Update…",
+      installing: "Installing Update…",
+      restart: "Restart to Update Open Design…",
+    }, scope)).resolves.toEqual({ ok: true });
     expect(statusFn).toHaveBeenCalledWith({ payload: { source: "mount" } });
     expect(check).toHaveBeenCalledWith({ payload: { source: "button" } });
     expect(install).toHaveBeenCalledWith({ payload: { source: "popup" } });
     expect(quit).toHaveBeenCalledWith({ payload: { source: "opened-popup" } });
     expect(subscribe).toHaveBeenCalledWith(listener);
+    expect(subscribeOpenDialog).toHaveBeenCalledWith(openDialogListener);
+    expect(setMenuLabels).toHaveBeenCalledOnce();
   });
 
   it("wraps updater action throws into structured failures", async () => {

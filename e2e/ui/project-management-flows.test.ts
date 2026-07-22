@@ -211,7 +211,9 @@ function artifactPreviewFrame(page: Page) {
 }
 
 test.describe('new project modal from left rail', () => {
-  test.describe.configure({ mode: 'serial', timeout: 60_000 });
+  // Timeout-only configure: both tests open the modal themselves against
+  // stubbed data; serial would make the pair atomic within one CI shard.
+  test.describe.configure({ timeout: 60_000 });
 
   test('[P1] new project tabs switch visible form sections and preserve drafts', async ({ page }) => {
     await stubEmptyProjectsNewProjectData(page);
@@ -1650,12 +1652,16 @@ test('[P1] project handoff AMR website link carries attribution from the CLI tab
   const menu = await openHandoffCliTab(page);
   const amrLink = menu.locator('.handoff-amr-link');
   await expect(amrLink).toBeVisible();
+  await expect(amrLink).toHaveAttribute('target', '_blank');
+  await expect(amrLink).toHaveAttribute('rel', 'noreferrer');
 
-  const popupPromise = page.waitForEvent('popup');
+  await amrLink.evaluate((link) => {
+    link.addEventListener('click', (event) => event.preventDefault(), { once: true });
+  });
   await amrLink.click();
-  const popup = await popupPromise;
-  const url = new URL(popup.url());
-  await popup.close();
+  const href = await amrLink.getAttribute('href');
+  expect(href).toBeTruthy();
+  const url = new URL(href!);
 
   expect(url.searchParams.get('od_origin')).toBe('open_design');
   expect(url.searchParams.get('od_entry_source')).toBe('handoff_amr_website');
@@ -1742,7 +1748,7 @@ test('[P1] project detail workspace keeps design file tabs and preview controls 
   const fileTab = tabBySuffix(page, uploadedName);
   await expect(fileTab).toBeVisible();
   await expect(fileTab).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByRole('tab', { name: 'Design Files' })).toBeVisible();
+  await expect(page.getByTestId('workspace-pages-menu-trigger')).toBeVisible();
 
   await openUploadedHtmlArtifactPreview(page, uploadedName);
 
@@ -2688,7 +2694,15 @@ test('[P2] projects kanban view groups cards into status columns', async ({ page
   await expect(page.locator('.design-kanban-card.status-awaiting_input')).toHaveCount(1);
   await expect(page.locator('.design-kanban-card.status-succeeded')).toHaveCount(1);
   await expect(page.locator('.design-kanban-card.status-failed')).toHaveCount(1);
-  await expect(page.locator('.design-kanban-empty')).toHaveCount(1);
+  const kanbanColumns = page.locator('.design-kanban-col');
+  await expect(kanbanColumns).toHaveCount(7);
+  await expect(
+    kanbanColumns.filter({ hasText: 'Incomplete' }).locator('.design-kanban-empty'),
+  ).toHaveCount(1);
+  await expect(
+    kanbanColumns.filter({ hasText: 'Canceled' }).locator('.design-kanban-empty'),
+  ).toHaveCount(1);
+  await expect(page.locator('.design-kanban-empty')).toHaveCount(2);
 
   await expect(page.locator('.design-kanban-card.status-running')).toContainText('Running Card');
   await expect(page.locator('.design-kanban-card.status-awaiting_input')).toContainText(

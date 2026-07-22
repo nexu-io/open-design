@@ -51,6 +51,7 @@
         "packages/agui-adapter"
         "packages/plugin-runtime"
         "packages/sidecar-proto"
+        "packages/launcher-proto"
         "packages/sidecar"
         "packages/platform"
         "packages/diagnostics"

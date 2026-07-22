@@ -4,6 +4,7 @@ date: 2026-07-10
 category: "Tools & Skills"
 readingTime: 7
 summary: "reveal.js is the open-source HTML presentation framework with 71.9k GitHub stars — you author slides in HTML or Markdown and present in any browser. Here's an honest guide: how themes, templates and examples work, how PDF and PowerPoint export really behaves, how it compares to Slidev and Marp, and where an agent-native design workspace fits."
+noindexLocaleVariants: true
 ctaKind: download-app
 author: mira-zhao
 i18n:

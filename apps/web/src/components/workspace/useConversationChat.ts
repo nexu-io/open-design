@@ -296,6 +296,7 @@ export function useConversationChat(
         commentAttachments: userMsg.commentAttachments ?? [],
         model: choice?.model ?? null,
         reasoning: choice?.reasoning ?? null,
+        serviceTier: choice?.serviceTier ?? null,
         locale: loc,
         sessionMode,
         onRunCreated: (runId) => {

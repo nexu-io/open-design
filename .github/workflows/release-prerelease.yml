@@ -318,6 +318,7 @@ jobs:
             --to all
             --json
             --signed
+            --notarize
           )
           if build_output="$(pnpm "${build_args[@]}" 2> >(tee -a "$RUNNER_TEMP/release-build/mac_arm64/build.log" >&2))"; then
             printf '%s\n' "$build_output" | tee "$RUNNER_TEMP/release-build/mac_arm64/build.json"
@@ -328,6 +329,10 @@ jobs:
           fi
       - name: Retry prerelease mac_arm64 without restored cache
         if: ${{ steps.mac_arm64_tools_pack_build.outcome == 'failure' }}
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           set -euo pipefail
           rm -rf "$RUNNER_TEMP/tools-pack-cache"
@@ -345,6 +350,7 @@ jobs:
             --to all
             --json
             --signed
+            --notarize
           )
           if build_output="$(pnpm "${build_args[@]}" 2> >(tee -a "$RUNNER_TEMP/release-build/mac_arm64/build.log" >&2))"; then
             printf '%s\n' "$build_output" | tee "$RUNNER_TEMP/release-build/mac_arm64/build.json"
@@ -371,6 +377,33 @@ jobs:
             fi
           done <<< "$cache_ids"
           echo "deletedFailedCacheKey=$matched_key count=$count"
+
+      - name: Verify prerelease mac_arm64 notarization
+        run: |
+          set -euo pipefail
+          build_json="$RUNNER_TEMP/release-build/mac_arm64/build.json"
+          dmg_path="$(node -e 'const fs = require("node:fs"); const value = JSON.parse(fs.readFileSync(process.argv[1], "utf8")).dmgPath; if (typeof value !== "string" || value.length === 0) process.exit(1); process.stdout.write(value);' "$build_json")"
+          if [ ! -f "$dmg_path" ]; then
+            echo "prerelease mac_arm64 DMG not found: $dmg_path" >&2
+            exit 1
+          fi
+
+          mount_point="$(mktemp -d "$RUNNER_TEMP/prerelease-mac-arm64.XXXXXX")"
+          cleanup() {
+            hdiutil detach "$mount_point" >/dev/null 2>&1 || true
+            rmdir "$mount_point" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          hdiutil attach "$dmg_path" -nobrowse -readonly -mountpoint "$mount_point"
+          candidate_app="$mount_point/Open Design Prerelease.app"
+          if [ ! -d "$candidate_app" ]; then
+            echo "prerelease app not found in DMG: $candidate_app" >&2
+            exit 1
+          fi
+          codesign --verify --deep --strict "$candidate_app"
+          xcrun stapler validate "$candidate_app"
+          spctl --assess --type execute --verbose=4 "$candidate_app"
 
       - name: Capture mac framework diagnostics
         if: ${{ failure() }}
@@ -643,6 +676,7 @@ jobs:
             --to all
             --json
             --signed
+            --notarize
           )
           if build_output="$(pnpm "${build_args[@]}" 2> >(tee -a "$RUNNER_TEMP/release-build/mac_x64/build.log" >&2))"; then
             printf '%s\n' "$build_output" | tee "$RUNNER_TEMP/release-build/mac_x64/build.json"
@@ -654,6 +688,10 @@ jobs:
 
       - name: Retry prerelease mac_x64 without restored cache
         if: ${{ steps.mac_x64_tools_pack_build.outcome == 'failure' }}
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           set -euo pipefail
           rm -rf "$RUNNER_TEMP/tools-pack-cache"
@@ -671,6 +709,7 @@ jobs:
             --to all
             --json
             --signed
+            --notarize
           )
           if build_output="$(pnpm "${build_args[@]}" 2> >(tee -a "$RUNNER_TEMP/release-build/mac_x64/build.log" >&2))"; then
             printf '%s\n' "$build_output" | tee "$RUNNER_TEMP/release-build/mac_x64/build.json"
@@ -697,6 +736,33 @@ jobs:
             fi
           done <<< "$cache_ids"
           echo "deletedFailedCacheKey=$matched_key count=$count"
+
+      - name: Verify prerelease mac_x64 notarization
+        run: |
+          set -euo pipefail
+          build_json="$RUNNER_TEMP/release-build/mac_x64/build.json"
+          dmg_path="$(node -e 'const fs = require("node:fs"); const value = JSON.parse(fs.readFileSync(process.argv[1], "utf8")).dmgPath; if (typeof value !== "string" || value.length === 0) process.exit(1); process.stdout.write(value);' "$build_json")"
+          if [ ! -f "$dmg_path" ]; then
+            echo "prerelease mac_x64 DMG not found: $dmg_path" >&2
+            exit 1
+          fi
+
+          mount_point="$(mktemp -d "$RUNNER_TEMP/prerelease-mac-x64.XXXXXX")"
+          cleanup() {
+            hdiutil detach "$mount_point" >/dev/null 2>&1 || true
+            rmdir "$mount_point" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          hdiutil attach "$dmg_path" -nobrowse -readonly -mountpoint "$mount_point"
+          candidate_app="$mount_point/Open Design Prerelease.app"
+          if [ ! -d "$candidate_app" ]; then
+            echo "prerelease app not found in DMG: $candidate_app" >&2
+            exit 1
+          fi
+          codesign --verify --deep --strict "$candidate_app"
+          xcrun stapler validate "$candidate_app"
+          spctl --assess --type execute --verbose=4 "$candidate_app"
 
       - name: Write mac_x64 release report
         if: ${{ always() }}

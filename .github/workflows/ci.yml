@@ -441,57 +441,6 @@ jobs:
           OD_PLAYWRIGHT_FULLY_PARALLEL: "1"
         run: pnpm -C e2e exec playwright test -c playwright.config.ts ${{ matrix.files }} --grep '@critical'
 
-  ui_p0_smoke:
-    name: UI P0 smoke
-    needs: [scopes, runners]
-    if: ${{ needs.scopes.outputs.run_ui_p0 == 'true' }}
-    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).ui_hot }}
-    timeout-minutes: 30
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6.0.2
-
-      - name: Configure CI parallelism
-        uses: ./.github/actions/configure-ci-parallelism
-
-      - name: Setup workspace
-        uses: ./.github/actions/setup-workspace
-        with:
-          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).ui_hot) }}
-
-      - name: Setup Playwright
-        uses: ./.github/actions/setup-playwright
-        with:
-          package-json-path: e2e/package.json
-          install-command: pnpm -C e2e exec playwright install --with-deps chromium
-          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).ui_hot) }}
-
-      - name: Prebuild workspace type declarations
-        run: |
-          pnpm --filter @open-design/daemon build
-          pnpm --filter @open-design/desktop build
-          pnpm --filter @open-design/web build:sidecar
-
-      - name: Clean Playwright state
-        run: pnpm -C e2e exec tsx scripts/playwright.ts clean
-
-      - name: Run UI shell smoke
-        run: pnpm -C e2e exec tsx scripts/playwright.ts run-ui-group smoke
-
-      - name: Upload Playwright debug artifact
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: ui-p0-ci-${{ github.run_id }}-smoke
-          path: |
-            e2e/ui/reports/playwright-html-report
-            e2e/ui/reports/test-results
-            e2e/ui/reports/results.json
-            e2e/ui/test-results
-          if-no-files-found: ignore
-          retention-days: 7
-
   ui_p0:
     name: UI P0 (${{ matrix.name }})
     needs: [scopes, runners]
@@ -533,6 +482,23 @@ jobs:
 
       - name: Run UI P0 domain
         run: pnpm -C e2e exec tsx scripts/playwright.ts run-ui-group ${{ matrix.shard }}
+
+      - name: Preserve project-runtime domain artifact
+        if: ${{ success() && matrix.shard == 'project-runtime' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: ui-p0-ci-${{ github.run_id }}-${{ matrix.name }}-domain
+          path: |
+            e2e/ui/reports/playwright-html-report
+            e2e/ui/reports/test-results
+            e2e/ui/reports/results.json
+            e2e/ui/test-results
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Run UI critical extras
+        if: ${{ matrix.shard == 'project-runtime' }}
+        run: pnpm -C e2e exec tsx scripts/playwright.ts run-ui-group critical-extras
 
       - name: Upload Playwright debug artifact
         if: ${{ always() }}
@@ -648,7 +614,6 @@ jobs:
       - web_workspace_tests
       - e2e_vitest
       - playwright_critical
-      - ui_p0_smoke
       - ui_p0
       - playwright_visual
     if: ${{ always() }}
@@ -695,7 +660,7 @@ jobs:
               + when($out.run_web_workspace_tests == "true"; ["web_workspace_tests"])
               + when($out.run_e2e_vitest == "true"; ["e2e_vitest"])
               + when($out.run_playwright_critical == "true"; ["playwright_critical"])
-              + when($out.run_ui_p0 == "true"; ["ui_p0_smoke", "ui_p0"])
+              + when($out.run_ui_p0 == "true"; ["ui_p0"])
               + when($out.run_playwright_visual == "true"; ["playwright_visual"])
             )[]
             | select(($needs[.].result // "missing") != "success")

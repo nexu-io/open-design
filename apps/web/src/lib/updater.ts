@@ -6,10 +6,14 @@ import {
   installHostUpdater,
   isOpenDesignHostAvailable,
   quitHostAfterUpdaterInstallerOpen,
+  setHostUpdaterMenuLabels,
   subscribeHostUpdater,
+  subscribeHostUpdaterOpenDialog,
   type OpenDesignHostActionResult,
   type OpenDesignHostFailure,
   type OpenDesignHostUpdaterActionOptions,
+  type OpenDesignHostUpdaterMenuLabels,
+  type OpenDesignHostUpdaterOpenDialogListener,
   type OpenDesignHostUpdaterResult,
   type OpenDesignHostUpdaterStatusListener,
   type OpenDesignHostUpdaterStatusSnapshot,
@@ -26,6 +30,10 @@ export type UpdaterDownloadProgress = {
 export type UpdaterActionResult =
   | { ok: true; model: UpdaterModel; status: OpenDesignHostUpdaterStatusSnapshot }
   | OpenDesignHostFailure;
+
+export type UpdaterRestartSafety =
+  | { activeRunCount: number; state: 'blocked' }
+  | { activeRunCount: null; state: 'unknown' };
 
 export type UpdaterModel = {
   availableVersion: string | null;
@@ -182,4 +190,45 @@ export async function quitAfterUpdaterInstallerOpen(
 
 export function subscribeToUpdaterStatus(listener: OpenDesignHostUpdaterStatusListener): () => void {
   return subscribeHostUpdater(listener);
+}
+
+export function subscribeToUpdaterOpenDialog(listener: OpenDesignHostUpdaterOpenDialogListener): () => void {
+  return subscribeHostUpdaterOpenDialog(listener);
+}
+
+export async function syncUpdaterMenuLabels(
+  labels: OpenDesignHostUpdaterMenuLabels,
+): Promise<OpenDesignHostActionResult> {
+  return await setHostUpdaterMenuLabels(labels);
+}
+
+export function restartSafetyFromUpdaterStatus(
+  status: OpenDesignHostUpdaterStatusSnapshot | null,
+): UpdaterRestartSafety | null {
+  const code = status?.error?.code;
+  if (code !== 'active-runs-blocked' && code !== 'active-runs-unknown') return null;
+  const details = status?.error?.details;
+  const activeRunCount =
+    typeof details === 'object' && details != null && 'activeRunCount' in details
+      ? (details as { activeRunCount?: unknown }).activeRunCount
+      : null;
+  if (code === 'active-runs-blocked' && typeof activeRunCount === 'number' && activeRunCount > 0) {
+    return { activeRunCount, state: 'blocked' };
+  }
+  return { activeRunCount: null, state: 'unknown' };
+}
+
+export function restartSafetyFromActionResult(result: OpenDesignHostActionResult): UpdaterRestartSafety | null {
+  if (result.ok || (result.reason !== 'active-runs-blocked' && result.reason !== 'active-runs-unknown')) {
+    return null;
+  }
+  const details = result.details;
+  const activeRunCount =
+    typeof details === 'object' && details != null && 'activeRunCount' in details
+      ? (details as { activeRunCount?: unknown }).activeRunCount
+      : null;
+  if (result.reason === 'active-runs-blocked' && typeof activeRunCount === 'number' && activeRunCount > 0) {
+    return { activeRunCount, state: 'blocked' };
+  }
+  return { activeRunCount: null, state: 'unknown' };
 }

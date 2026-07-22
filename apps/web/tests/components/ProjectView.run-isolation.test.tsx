@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ProjectView, mergeSavedPreviewComment } from '../../src/components/ProjectView';
+import type { SettingsSection } from '../../src/components/SettingsDialog';
 import type {
   AgentInfo,
   AppConfig,
@@ -41,6 +42,13 @@ const patchProject = vi.fn();
 const saveTabs = vi.fn();
 const playSound = vi.fn();
 const showCompletionNotification = vi.fn();
+const analyticsTrackMock = vi.fn();
+
+vi.mock('../../src/analytics/provider', () => ({
+  useAnalytics: () => ({
+    track: analyticsTrackMock,
+  }),
+}));
 
 vi.mock('../../src/i18n', () => ({
   useI18n: () => ({
@@ -1840,6 +1848,77 @@ describe('ProjectView conversation run isolation', () => {
     await waitFor(() => expect(playSound).toHaveBeenCalledWith('success-sound'));
   });
 
+  it.each([
+    {
+      mode: 'api' as const,
+      agentId: 'agent-1',
+      missing: 'API key',
+      apiKey: '',
+      model: 'api-model',
+      reason: 'api_key_required' as const,
+    },
+    {
+      mode: 'api' as const,
+      agentId: 'agent-1',
+      missing: 'model',
+      apiKey: 'test-key',
+      model: '',
+      reason: 'model_required' as const,
+    },
+    {
+      mode: 'daemon' as const,
+      agentId: 'byok-opencode',
+      missing: 'API key through the daemon selector',
+      apiKey: '',
+      model: 'api-model',
+      reason: 'api_key_required' as const,
+    },
+  ])(
+    'opens Settings and blocks a BYOK send with a missing $missing',
+    async ({ mode, agentId, apiKey, model, reason }) => {
+      listMessages.mockResolvedValue([]);
+      const onOpenSettings = vi.fn();
+
+      renderProjectView(
+        {
+          ...config,
+          mode,
+          agentId,
+          apiProtocol: 'openai',
+          apiKey,
+          baseUrl: 'https://api.openai.com/v1',
+          model,
+        },
+        project,
+        undefined,
+        { onOpenSettings },
+      );
+
+      await waitFor(() =>
+        expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'),
+      );
+      await waitFor(() =>
+        expect(screen.getByTestId('send-message')).toHaveProperty('disabled', false),
+      );
+
+      fireEvent.click(screen.getByTestId('send-message'));
+
+      await waitFor(() => expect(onOpenSettings).toHaveBeenCalledWith('execution'));
+      expect(analyticsTrackMock).toHaveBeenCalledWith(
+        'byok_preflight_blocked',
+        {
+          source: 'run',
+          reason,
+          provider_id: 'openai',
+          active_execution_mode: mode === 'api' ? 'byok' : 'local_cli',
+        },
+        undefined,
+      );
+      expect(streamViaDaemon).not.toHaveBeenCalled();
+      expect(saveMessage).not.toHaveBeenCalled();
+    },
+  );
+
   it('routes keyless local Ollama BYOK chats through OpenCode with provider metadata', async () => {
     listMessages.mockResolvedValue([]);
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true }));
@@ -2378,6 +2457,7 @@ function renderProjectView(
   handlers: {
     onModeChange?: (mode: 'daemon' | 'api') => void;
     onAgentChange?: (agentId: string) => void;
+    onOpenSettings?: (section?: SettingsSection) => void;
     onOpenAmrSettings?: () => void;
   } = {},
 ) {
@@ -2395,7 +2475,7 @@ function renderProjectView(
       onAgentChange={handlers.onAgentChange ?? (() => {})}
       onAgentModelChange={() => {}}
       onRefreshAgents={() => {}}
-      onOpenSettings={() => {}}
+      onOpenSettings={handlers.onOpenSettings ?? (() => {})}
       onOpenAmrSettings={handlers.onOpenAmrSettings}
       onBack={() => {}}
       onClearPendingPrompt={() => {}}

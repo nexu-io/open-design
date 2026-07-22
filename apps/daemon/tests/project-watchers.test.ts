@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, mkdtemp, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { EventEmitter } from 'node:events';
@@ -155,6 +155,38 @@ describe('project-watchers (refcounting)', () => {
 });
 
 describe('project-watchers (real chokidar)', () => {
+  it.skipIf(process.platform !== 'darwin')(
+    'keeps macOS file-descriptor usage bounded for projects with many files',
+    async () => {
+      const { root, projectId } = await makeProjectsRoot();
+      const projectRoot = path.join(root, projectId);
+      await Promise.all(
+        Array.from({ length: 160 }, async (_, index) => {
+          const sourceDir = path.join(projectRoot, `section-${index}`, 'src');
+          await mkdir(sourceDir, { recursive: true });
+          await writeFile(path.join(sourceDir, 'index.txt'), 'watched');
+        }),
+      );
+
+      // Chokidar 5 opens one descriptor per watched file on Darwin in this
+      // configuration (160 here), eventually leaving agent spawns to fail with
+      // EBADF. The FSEvents-backed watcher should stay well below that linear
+      // growth; leave some headroom for descriptors owned by the test runner.
+      const before = (await readdir('/dev/fd')).length;
+      const sub = subscribe(root, projectId, () => {}, FAST_WATCH_OPTIONS);
+      await sub.ready;
+
+      try {
+        const after = (await readdir('/dev/fd')).length;
+        expect(after - before).toBeLessThan(32);
+      } finally {
+        await sub.unsubscribe();
+        await rm(root, { recursive: true, force: true });
+      }
+    },
+    REAL_WATCHER_TEST_TIMEOUT_MS,
+  );
+
   it('ignores generated build trees case-insensitively before chokidar descends', async () => {
     const { root, projectId } = await makeProjectsRoot();
     const projectRoot = path.join(root, projectId);
@@ -167,6 +199,20 @@ describe('project-watchers (real chokidar)', () => {
     expect(ignored(path.join(projectRoot, 'src', 'App.swift'))).toBe(false);
 
     await rm(root, { recursive: true, force: true });
+  });
+
+  it('never ignores the watch root when it is a directory symlink', async () => {
+    const dataRoot = await mkdtemp(path.join(tmpdir(), 'od-symlink-root-'));
+    const targetRoot = path.join(dataRoot, 'target');
+    const symlinkRoot = path.join(dataRoot, 'root');
+    await mkdir(targetRoot);
+
+    try {
+      await symlink(targetRoot, symlinkRoot, 'dir');
+      expect(makeIgnored(symlinkRoot)(symlinkRoot, await lstat(symlinkRoot))).toBe(false);
+    } finally {
+      await rm(dataRoot, { recursive: true, force: true });
+    }
   });
 
   it('emits file-changed events on add / change / unlink', async () => {

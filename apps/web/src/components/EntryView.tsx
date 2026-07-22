@@ -91,7 +91,7 @@ interface Props {
   onAgentChange: (id: string) => void;
   onAgentModelChange: (
     id: string,
-    choice: { model?: string; reasoning?: string },
+    choice: { model?: string; reasoning?: string; serviceTier?: string },
   ) => void;
   onApiProtocolChange: (protocol: ApiProtocol) => void;
   onApiModelChange: (model: string) => void;

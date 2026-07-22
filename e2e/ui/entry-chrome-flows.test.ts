@@ -371,7 +371,9 @@ test('[P1] home view exposes the redesigned hero, recent projects, and starters'
   await expect(page.getByTestId('recent-projects-view-all')).toBeVisible();
   await expect(home.getByTestId('plugins-home-section')).toBeVisible();
   await expect(home.getByTestId('plugins-home-browse-registry')).toBeVisible();
+  // The Community gallery defaults to the All slice (#5759).
   await expect(home.getByTestId('plugins-home-pill-category-all')).toHaveAttribute('aria-selected', 'true');
+  await expect(home.getByTestId('plugins-home-pill-category-deck')).toHaveAttribute('aria-selected', 'false');
   await expect(page.getByTestId('home-hero')).toBeVisible();
   await expect(page.getByTestId('home-templates-hint')).toHaveCount(0);
   await expect(page.getByTestId('entry-nav-home')).toHaveAttribute('aria-current', 'page');
@@ -506,8 +508,11 @@ test('[P1] disabled design systems are filtered from entry creation surfaces', a
   const modal = page.getByTestId('new-project-modal');
   await expect(modal).toBeVisible();
   await modal.getByTestId('design-system-trigger').click();
-  await expect(modal.getByRole('option', { name: /Agentic/i })).toBeVisible();
-  await expect(modal.getByRole('option', { name: /Airbnb/i })).toHaveCount(0);
+  // The picker popover renders through a document.body portal (so short
+  // viewports cannot clip it), so its options live outside the modal subtree.
+  const modalPicker = page.locator('.ds-picker-popover');
+  await expect(modalPicker.getByRole('option', { name: /Agentic/i })).toBeVisible();
+  await expect(modalPicker.getByRole('option', { name: /Airbnb/i })).toHaveCount(0);
   await page.keyboard.press('Escape');
   await page.keyboard.press('Escape');
   await expect(modal).toHaveCount(0);
@@ -895,8 +900,11 @@ test('[P1] home starters can browse registry and use a starter from Home', async
   });
 
   await gotoEntryHome(page);
-  await expect(page.getByTestId('plugins-home-browse-registry')).toBeVisible();
-  await page.getByTestId('plugins-home-browse-registry').click();
+  // The browse link lives inside the first-run reveal container; reveal it
+  // first or the collapsed overlay intercepts the click.
+  const home = await revealHomeTemplates(page);
+  await expect(home.getByTestId('plugins-home-browse-registry')).toBeVisible();
+  await home.getByTestId('plugins-home-browse-registry').click();
   await expect(page).toHaveURL(/\/plugins$/);
   await expect(page.getByTestId('entry-nav-plugins')).toHaveAttribute('aria-current', 'page');
   await expect(page.locator('h1').filter({ hasText: 'Plugins' })).toBeVisible();
@@ -977,19 +985,15 @@ test('[P2] home starters search and facet filters narrow the visible gallery', a
   await gotoEntryHome(page);
 
   const home = await revealHomeTemplates(page);
-  await expect(home.getByTestId('plugins-home-pill-category-all')).toContainText('4');
-
-  await home.getByTestId('plugins-home-pill-category-deck').click({ force: true });
+  const deckCategory = home.getByTestId('plugins-home-pill-category-deck');
+  // The gallery defaults to the All slice (#5759); pick Deck explicitly
+  // before asserting the deck-only visibility set.
+  await deckCategory.click();
+  await expect(deckCategory).toHaveAttribute('aria-selected', 'true');
   await expect(home.locator('[data-plugin-id="deck-writer"]')).toBeVisible();
   await expect(home.locator('[data-plugin-id="figma-importer"]')).toHaveCount(0);
   await expect(home.locator('[data-plugin-id="localized-plugin"]')).toHaveCount(0);
   await expect(home.locator('[data-plugin-id="hyperframes-video"]')).toHaveCount(0);
-
-  await home.getByTestId('plugins-home-pill-category-all').click({ force: true });
-  await expect(home.locator('[data-plugin-id="figma-importer"]')).toBeVisible();
-  await expect(home.locator('[data-plugin-id="localized-plugin"]')).toBeVisible();
-  await expect(home.locator('[data-plugin-id="hyperframes-video"]')).toBeVisible();
-  await expect(home.locator('[data-plugin-id="deck-writer"]')).toBeVisible();
 
   const search = home.getByTestId('plugins-home-search');
   await search.fill('Deck Writer');
@@ -997,7 +1001,7 @@ test('[P2] home starters search and facet filters narrow the visible gallery', a
   await expect(home.locator('[data-plugin-id="localized-plugin"]')).toHaveCount(0);
   await expect(home.locator('[data-plugin-id="hyperframes-video"]')).toHaveCount(0);
   await home.getByTestId('plugins-home-search-clear').click({ force: true });
-  await expect(home.locator('[data-plugin-id="localized-plugin"]')).toBeVisible();
+  await expect(home.locator('[data-plugin-id="deck-writer"]')).toBeVisible();
 });
 
 test('[P1] home starters category tabs and subcategory tabs switch the gallery slice', async ({ page }) => {
@@ -1012,9 +1016,12 @@ test('[P1] home starters category tabs and subcategory tabs switch the gallery s
   await gotoEntryHome(page);
   const home = await revealHomeTemplates(page);
 
-  await expect(home.getByTestId('plugins-home-pill-category-all')).toContainText('8');
+  // The gallery defaults to the All slice (#5759): the All pill is selected
+  // and every facet is visible until a category is picked.
+  await expect(home.getByTestId('plugins-home-pill-category-all')).toHaveAttribute('aria-selected', 'true');
+  await expect(home.getByTestId('plugins-home-pill-category-deck')).toHaveAttribute('aria-selected', 'false');
+  await expect(home.locator('[data-plugin-id="facet-deck"]')).toBeVisible();
   await expect(home.locator('[data-plugin-id="facet-landing-prototype"]')).toBeVisible();
-  await expect(home.locator('[data-plugin-id="facet-audio"]')).toBeVisible();
 
   const categoryCases = [
     ['prototype', 'facet-landing-prototype', 'facet-deck'],
@@ -1036,12 +1043,10 @@ test('[P1] home starters category tabs and subcategory tabs switch the gallery s
     await expect(home.locator(`[data-plugin-id="${hiddenId}"]`)).toHaveCount(0);
   }
 
-  await home.getByTestId('plugins-home-pill-category-all').click({ force: true });
-  await expect(home.getByTestId('plugins-home-pill-category-all')).toHaveAttribute('aria-selected', 'true');
-  await expect(home.locator('[data-plugin-id="facet-landing-prototype"]')).toBeVisible();
-  await expect(home.locator('[data-plugin-id="facet-audio"]')).toBeVisible();
-
-  await home.getByTestId('plugins-home-pill-category-prototype').click({ force: true });
+  const prototypeCategory = home.getByTestId('plugins-home-pill-category-prototype');
+  await prototypeCategory.scrollIntoViewIfNeeded();
+  await expect(prototypeCategory).toBeVisible();
+  await prototypeCategory.click();
   await expect(home.getByTestId('plugins-home-row-subcategory-prototype')).toBeVisible();
   await home.getByTestId('plugins-home-pill-subcategory-prototype-landing-marketing').click({ force: true });
   await expect(home.getByTestId('plugins-home-pill-subcategory-prototype-landing-marketing')).toHaveAttribute('aria-selected', 'true');
@@ -1068,7 +1073,10 @@ test('[P1] home starters can jump into plugin creation through the registry brow
   });
 
   await gotoEntryHome(page);
-  await page.getByTestId('plugins-home-browse-registry').click();
+  // The browse link lives inside the first-run reveal container; reveal it
+  // first or the collapsed overlay intercepts the click.
+  const home = await revealHomeTemplates(page);
+  await home.getByTestId('plugins-home-browse-registry').click();
   await expect(page).toHaveURL(/\/plugins$/);
   await expect(page.locator('h1').filter({ hasText: 'Plugins' })).toBeVisible();
   await page.getByTestId('plugins-create-button').click();
@@ -1091,7 +1099,6 @@ test('[P2] home starters search can enter a no-results state and recover with cl
   // plugins views (both stay mounted), so scope to the home view to keep these
   // strict-mode locators unambiguous.
   const home = await revealHomeTemplates(page);
-  await home.getByTestId('plugins-home-pill-category-all').click({ force: true });
   const search = home.getByTestId('plugins-home-search');
   await search.click({ force: true });
   await search.fill('no-such-starter');
@@ -1682,8 +1689,10 @@ test('[P1] home starters Use plugin from the details modal applies the plugin to
   });
 
   await gotoEntryHome(page);
-  await page.locator('article.plugins-home__card[data-plugin-id="detail-use-plugin"]').hover();
-  await page.getByTestId('plugins-home-details-detail-use-plugin').click({ force: true });
+  // Reveal first: a force-click on the details testid inside the collapsed
+  // (inert) reveal container is silently swallowed.
+  const detailHome = await revealHomeTemplates(page);
+  await detailHome.getByTestId('plugins-home-details-detail-use-plugin').click({ force: true });
 
   const dialog = page.getByRole('dialog', { name: /Detail Use Plugin preview/i });
   await expect(dialog).toBeVisible();
@@ -2327,8 +2336,21 @@ test('[P1] rail can be collapsed again on coarse-pointer / non-hover devices', a
 });
 
 async function gotoEntryHome(page: Page) {
+  // The home surface re-renders (and can remount transient UI such as the
+  // templates reveal container or an open details modal) when the async
+  // projects list resolves. Arm the waiter before navigating and hold until
+  // that fetch settles so tests never interact inside the remount window.
+  const projectsSettled = page
+    .waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === '/api/projects' &&
+        response.request().method() === 'GET',
+      { timeout: 10_000 },
+    )
+    .catch(() => null);
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
+  await projectsSettled;
   const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
   if (await privacyDialog.isVisible()) {
     await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
@@ -2349,21 +2371,41 @@ async function gotoEntryHome(page: Page) {
 async function revealHomeTemplates(page: Page) {
   const home = page.locator('[data-testid="entry-view-home"][data-active="true"]');
   const section = home.getByTestId('plugins-home-section');
-  const hint = home.getByTestId('home-templates-hint');
-  if (await hint.count()) {
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      if (await home.locator('.home-templates-reveal').evaluate((node) => node.classList.contains('is-revealed')).catch(() => false)) break;
-      await page.mouse.wheel(0, 900);
-      await page.waitForTimeout(120);
+  const reveal = home.locator('.home-templates-reveal');
+  const isRevealed = () =>
+    reveal.evaluate((node) => node.classList.contains('is-revealed')).catch(() => false);
+  // `HomeTemplatesReveal` keeps its revealed flag in component state, and the
+  // async projects fetch can remount it (or flip `enabled`) after we reveal,
+  // silently collapsing the gallery again. Reveal, then require the revealed
+  // state to survive a settle window before trusting it; retry on regression.
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    if (!(await reveal.count())) {
+      // Looks like pass-through mode, but the wrapper can mount late (React
+      // may still be processing the projects response and flip `enabled`
+      // right after we look). Hold one settle window and re-check; only a
+      // stable absence is really pass-through.
+      await page.waitForTimeout(600);
+      if (!(await reveal.count())) break;
+      continue;
     }
-    if (!(await home.locator('.home-templates-reveal').evaluate((node) => node.classList.contains('is-revealed')).catch(() => false))) {
-      await hint.scrollIntoViewIfNeeded();
-      await expect(hint).toBeVisible();
-      await hint.click();
+    const hint = home.getByTestId('home-templates-hint');
+    if (!(await isRevealed())) {
+      for (let wheel = 0; wheel < 3 && !(await isRevealed()); wheel += 1) {
+        await page.mouse.wheel(0, 900);
+        await page.waitForTimeout(120);
+      }
+      if (!(await isRevealed()) && (await hint.count())) {
+        await hint.scrollIntoViewIfNeeded();
+        await expect(hint).toBeVisible();
+        await hint.click();
+      }
     }
-    await expect(home.locator('.home-templates-reveal')).toHaveClass(/is-revealed/);
+    await page.waitForTimeout(600);
+    if (await isRevealed()) break;
+  }
+  if (await reveal.count()) {
+    await expect(reveal).toHaveClass(/is-revealed/);
     await expect(home.locator('.home-templates-reveal__body')).not.toHaveAttribute('inert', '');
-    await page.waitForTimeout(450);
   }
   await expect(section).toBeVisible();
   await page.locator('.entry-main--scroll').evaluate((node) => {
@@ -2378,15 +2420,25 @@ async function openHomePluginDetails(
   name: RegExp,
   scopedHome = page.locator('[data-testid="entry-view-home"][data-active="true"]'),
 ) {
-  let home = scopedHome;
-  let card = home.locator(`article.plugins-home__card[data-plugin-id="${pluginId}"]`).first();
-  if (!(await card.isVisible().catch(() => false))) {
-    home = await revealHomeTemplates(page);
-    card = home.locator(`article.plugins-home__card[data-plugin-id="${pluginId}"]`).first();
-  }
+  // Always walk the reveal path (it is idempotent when the templates are
+  // already expanded): a card inside the collapsed first-run reveal container
+  // still reports isVisible(), so gating the reveal on card visibility leaves
+  // the card without an actionable click point whenever the previous test in
+  // the worker left the home in its collapsed hero state.
+  await revealHomeTemplates(page);
+  const home = scopedHome;
+  const card = home.locator(`article.plugins-home__card[data-plugin-id="${pluginId}"]`).first();
   await expect(card).toBeVisible();
-  await clickCardAtActionablePoint(page, card);
+  const detailsButton = card.getByTestId(`plugins-home-details-${pluginId}`);
+  await expect(detailsButton).toBeVisible();
   const dialog = page.getByRole('dialog').filter({ hasText: name });
+  await scrollCardIntoActionableView(card);
+  await expect
+    .poll(async () => {
+      return (await getActionablePoint(detailsButton).catch(() => null)) !== null;
+    }, { timeout: T.medium })
+    .toBe(true);
+  await detailsButton.dispatchEvent('click');
   await expect(dialog).toBeVisible();
   return dialog;
 }
@@ -2406,18 +2458,18 @@ async function clickCardAtActionablePoint(page: Page, card: Locator) {
   await scrollCardIntoActionableView(card);
   await expect
     .poll(async () => {
-      return (await getCardActionablePoint(card)) !== null;
+      return (await getActionablePoint(card)) !== null;
     }, { timeout: 5_000 })
     .toBe(true);
-  const point = await getCardActionablePoint(card);
+  const point = await getActionablePoint(card);
   if (!point) {
     throw new Error('Plugin card did not expose an actionable click point.');
   }
   await page.mouse.click(point.x, point.y);
 }
 
-async function getCardActionablePoint(card: Locator) {
-  return card.evaluate((element) => {
+async function getActionablePoint(target: Locator) {
+  return target.evaluate((element) => {
     const rect = element.getBoundingClientRect();
     const points = [
       { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 },

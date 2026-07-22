@@ -118,6 +118,16 @@ export type TrackingFidelity =
 
 export type TrackingExecutionMode = 'local_cli' | 'byok';
 
+export type TrackingByokPreflightBlockReason =
+  | 'api_key_required'
+  | 'api_key_invalid'
+  | 'base_url_required'
+  | 'base_url_invalid'
+  | 'model_required'
+  | 'model_default'
+  | 'multiple'
+  | 'config_invalid';
+
 // v2 BYOK provider catalogue (CSV row 65). Replaces v1's
 // `anthropic|openai|azure|ollama|google`. `senseaudio` was added on
 // `main` after the v2 doc was published; we forward it verbatim so
@@ -215,6 +225,11 @@ export type TrackingRunFailureDetail =
   | 'local_model_not_loaded'
   | 'cli_version_incompatible'
   | 'prompt_too_large'
+  | 'request_too_large'
+  | 'attachment_media_type_unsupported'
+  | 'tool_schema_invalid'
+  | 'prompt_tokenization_failed'
+  | 'provider_resource_not_found'
   | 'upstream_5xx'
   | 'upstream_client_error'
   | 'stream_disconnected'
@@ -241,6 +256,7 @@ export type TrackingRunFailureDetail =
   | 'qoder_stop_sequence'
   | 'signal_killed'
   | 'process_crashed'
+  | 'cpu_unsupported'
   | 'interrupted'
   | 'exit_code'
   | 'terminated_unknown'
@@ -361,6 +377,12 @@ export type TrackingLangfuseDropReason =
   | 'relay_5xx'
   | 'langfuse_4xx'
   | 'langfuse_5xx'
+  | 'vela_400'
+  | 'vela_401'
+  | 'vela_403'
+  | 'vela_413'
+  | 'vela_429'
+  | 'vela_5xx'
   | 'network_error';
 export type TrackingLangfuseReportResult =
   | 'accepted'

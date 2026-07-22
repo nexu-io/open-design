@@ -249,6 +249,37 @@ export interface PluginAssetCache {
   get(rawUrl: string): Promise<AssetCacheResult>;
 }
 
+let sharedSsrfDispatcher: Agent | undefined;
+
+/**
+ * Fetch a user-influenced external URL with SSRF protection. Rejects
+ * private/loopback/link-local/metadata hosts, bad schemes, and embedded
+ * credentials up front (`assertSafePublicUrl`), and pins every outbound
+ * connection — including redirect hops, since `follow` re-connects per hop —
+ * to a validating DNS lookup so a hostname cannot rebind to a private address.
+ *
+ * Every daemon fetch of a user-supplied URL must route through this instead of
+ * a bare `fetch(url, { redirect: 'follow' })`, so no single call site can
+ * silently reopen the SSRF hole.
+ */
+export async function safeExternalFetch(
+  rawUrl: string,
+  init: RequestInit = {},
+  fetchImpl: typeof fetch = fetch,
+): Promise<Response> {
+  assertSafePublicUrl(rawUrl);
+  if (!sharedSsrfDispatcher) {
+    sharedSsrfDispatcher = new Agent({
+      connect: { lookup: createValidatingLookup() as unknown as LookupFunction },
+    });
+  }
+  // `dispatcher` is an undici extension of RequestInit; attach at runtime to
+  // dodge the undici-types vs undici@7 skew (same pattern as the asset cache).
+  const withGuard: RequestInit = { redirect: 'follow', ...init };
+  (withGuard as { dispatcher?: unknown }).dispatcher = sharedSsrfDispatcher;
+  return fetchImpl(rawUrl, withGuard);
+}
+
 /** Build a disk-backed cache for external preview media. Concurrent requests
  *  for the same URL share one in-flight fetch; completed fetches persist to
  *  `<cacheDir>/<sha256>` (+ `.json` sidecar) and are replayed from disk. */

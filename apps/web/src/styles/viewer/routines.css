@@ -1278,8 +1278,11 @@
   transition: opacity 150ms var(--ease-out);
 }
 .app .msg.assistant:hover .assistant-footer,
-.app .assistant-footer[data-streaming="true"],
-.app .assistant-footer[data-last="true"] { opacity: 1; }
+.app .msg.assistant:focus-within .assistant-footer,
+.app .assistant-footer[data-streaming="true"] { opacity: 1; }
+@media (hover: none) {
+  .app .assistant-footer { opacity: 1; }
+}
 .app .assistant-footer .dot {
   width: 5px;
   height: 5px;
@@ -1293,10 +1296,6 @@
   font-weight: 400;
   font-size: 11px;
   color: var(--text-faint);
-}
-.app .assistant-footer .assistant-stats {
-  font-size: 11.5px;
-  color: var(--text-muted);
 }
 .app .op-waiting {
   width: fit-content;
@@ -1341,6 +1340,35 @@
   padding: 8px 0 8px 32px;
   border-top: none;
 }
+.app .task-activity .action-card-toggle {
+  width: fit-content;
+  min-height: 32px;
+  padding: 4px 0;
+  gap: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  transition: color 200ms var(--ease-out);
+}
+.app .task-activity .action-card-toggle:hover {
+  background: transparent;
+}
+.app .task-activity .action-card-toggle.task-state-completed {
+  color: var(--text-muted);
+}
+.app .task-activity .action-card-toggle .summary {
+  color: currentColor;
+  font-weight: 600;
+}
+.app .task-activity .task-activity-elapsed {
+  color: var(--text-muted);
+}
+.app .task-activity .action-card-toggle .chev {
+  color: var(--text-faint);
+}
+.app .task-activity .action-card-body {
+  padding: 8px 0;
+}
 .app .op-card {
   border: none;
   border-radius: 0;
@@ -1381,6 +1409,67 @@
   border: 1px solid var(--border-soft);
   background: var(--bg-panel);
 }
+.app .op-status.op-status-category {
+  border-color: transparent;
+  background: var(--bg-panel);
+}
+@keyframes task-activity-current-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.app .task-activity-current {
+  min-height: 36px;
+  overflow: hidden;
+}
+.app .task-activity-current-row {
+  width: fit-content;
+  max-width: 100%;
+  animation: task-activity-current-enter 200ms var(--ease-out);
+}
+.app .task-activity-current-row .op-card,
+.app .task-activity-current-row .live-code-box {
+  width: fit-content;
+  max-width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  pointer-events: none;
+}
+.app .task-activity-current-row .op-card-head,
+.app .task-activity-current-thinking {
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+  gap: 6px;
+  padding: 4px 0;
+  background: transparent;
+}
+.app .task-activity-current-row .op-card-head:hover {
+  background: transparent;
+}
+.app .task-activity-current-row .op-status-running,
+.app .task-activity-current-row .op-status-category,
+.app .task-activity-current-row .op-title,
+.app .task-activity-current-row .op-meta {
+  color: var(--text-muted);
+}
+.app .task-activity-current-row .op-expand-chev,
+.app .task-activity-current-row .accordion-collapsible,
+.app .task-activity-current-row .live-code-pre,
+.app .task-activity-current-row .op-output {
+  display: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .app .task-activity-current-row {
+    animation: none;
+  }
+}
 .app .thinking-block {
   background: none;
   border: none;
@@ -1402,6 +1491,10 @@
   height: 24px;
   border-radius: var(--radius);
   border: 1px solid var(--border-soft);
+  background: var(--bg-panel);
+}
+.app .task-activity .thinking-status {
+  border-color: transparent;
   background: var(--bg-panel);
 }
 .app .thinking-label {

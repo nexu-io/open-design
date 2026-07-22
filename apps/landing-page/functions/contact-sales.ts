@@ -67,7 +67,15 @@ const ALLOWED_ORIGINS = [
   "http://127.0.0.1",
 ];
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// Strict shape, not the loose "no whitespace, one @, a dot" check: the 07-11
+// SQLi scan submitted payloads like `testing@example.com'||dbms_pipe...` that
+// the loose regex accepted into KV and which then broke the downstream Bitable
+// sync (its email column rejects them, and the batch insert is atomic).
+// Local part: common atom charset incl. apostrophe (o'brien@…). Domain:
+// hyphenated alphanumeric labels with a letters-only TLD — no quotes, pipes,
+// parens, or `&`/`=` can survive this.
+const EMAIL_RE =
+  /^[A-Za-z0-9._%+'-]+@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*\.[A-Za-z]{2,}$/;
 const MAX_EMAIL_LENGTH = 254;
 const MAX_SHORT = 200;
 const MAX_MESSAGE = 4000;
