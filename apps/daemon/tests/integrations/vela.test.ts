@@ -322,6 +322,64 @@ describe('readVelaCredentialRevision', () => {
   });
 });
 
+describe('readVelaControlApiContext', () => {
+  it('keeps apiUrl and controlKey on the same config snapshot', async () => {
+    vi.resetModules();
+    const configPath = path.join(tmpHome, '.amr', 'config.json');
+    let configReads = 0;
+
+    vi.doMock('node:fs', async () => {
+      const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
+      const readFileSyncMock = vi.fn(
+        (target: Parameters<typeof actual.readFileSync>[0], options?: Parameters<typeof actual.readFileSync>[1]) => {
+          if (typeof target === 'string' && target === configPath) {
+            configReads += 1;
+            return JSON.stringify({
+              profiles: {
+                test:
+                  configReads === 1
+                    ? {
+                        apiUrl: 'https://old.example',
+                        controlKey: 'ck-old',
+                        user: { id: 'u-old', email: 'old@example.com' },
+                      }
+                    : {
+                        apiUrl: 'https://new.example',
+                        controlKey: 'ck-new',
+                        user: { id: 'u-new', email: 'new@example.com' },
+                      },
+              },
+            });
+          }
+          return actual.readFileSync(target, options as never);
+        },
+      );
+      return {
+        ...actual,
+        existsSync: vi.fn((target: string) =>
+          target.endsWith(path.join('.amr', 'config.json')) ? true : actual.existsSync(target),
+        ),
+        readFileSync: readFileSyncMock,
+        statSync: vi.fn(() => ({ mtimeMs: 123 } as ReturnType<typeof actual.statSync>)),
+      };
+    });
+
+    const vela = await import('../../src/integrations/vela.js');
+    const context = vela.readVelaControlApiContext({ HOME: tmpHome, OPEN_DESIGN_AMR_PROFILE: 'test' });
+    expect(context).toEqual({
+      profile: 'test',
+      apiUrl: 'https://old.example',
+      controlKey: 'ck-old',
+      user: { id: 'u-old', email: 'old@example.com' },
+      configMtimeMs: 123,
+    });
+    expect(configReads).toBe(1);
+
+    vi.doUnmock('node:fs');
+    vi.resetModules();
+  });
+});
+
 describe('forgetVelaLogin', () => {
   it('removes only the resolved profile credentials and preserves the rest of the config', () => {
     const file = writeConfig({

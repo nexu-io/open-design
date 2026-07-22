@@ -13,6 +13,8 @@ export type RuntimeModelOption = {
   inputPriceUsdPerMillion?: number;
   outputPriceUsdPerMillion?: number;
   metadata?: ModelMetadata;
+  additionalSpeedTiers?: string[];
+  serviceTierOptions?: RuntimeModelOption[];
 };
 
 export type RuntimeModelSource = 'live' | 'fallback';
@@ -22,6 +24,7 @@ export type RuntimeReasoningOption = RuntimeModelOption;
 export type RuntimeBuildOptions = {
   model?: string | null;
   reasoning?: string | null;
+  serviceTier?: string | null;
 };
 
 export type RuntimeContext = {

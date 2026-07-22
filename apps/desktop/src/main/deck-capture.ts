@@ -105,6 +105,7 @@ export const HIDE_CHROME_SELECTOR =
 // mode clones (`.mini-slide .slide`, `.overview .slide`) are filtered out in the
 // page rather than via a rigid direct-child selector, which missed nested decks.
 const SLIDE_SELECTOR = ".slide, [data-screen-label], .deck-slide, .ppt-slide";
+export const DECK_STAGE_SELECTOR = "deck-stage, #deck-stage, .deck-stage";
 // JS expression (used inside executeJavaScript) returning the real slides.
 const REAL_SLIDES_JS =
   "Array.prototype.slice.call(document.querySelectorAll('.slide, [data-screen-label], .deck-slide, .ppt-slide')).filter(function(el){return !el.closest('.mini-slide, .overview, .notes-overlay, .thumb')})";
@@ -214,7 +215,7 @@ export async function renderDeckSlides(
     // Deck mode only: now apply the deck DOM prep (hide presenter chrome, freeze
     // animations) so each slide reaches its final state for capture.
     await window.webContents.executeJavaScript(
-      `(${prepareDeckStage.toString()})(${JSON.stringify(HIDE_CHROME_SELECTOR)})`,
+      `(${prepareDeckStage.toString()})(${JSON.stringify(HIDE_CHROME_SELECTOR)}, ${JSON.stringify(DECK_STAGE_SELECTOR)})`,
       true,
     );
 
@@ -229,7 +230,10 @@ export async function renderDeckSlides(
     await nextFrames(window);
 
     // Pin the stage to the measured slide size.
-    await window.webContents.executeJavaScript(`(${pinDeckStage.toString()})(${stage.w}, ${stage.h})`, true);
+    await window.webContents.executeJavaScript(
+      `(${pinDeckStage.toString()})(${stage.w}, ${stage.h}, ${JSON.stringify(DECK_STAGE_SELECTOR)})`,
+      true,
+    );
 
     // Editable PPTX: hand the live, laid-out slides to the vendored dom-to-pptx
     // engine (native shapes/text) instead of capturing images.
@@ -336,7 +340,7 @@ export function requestedRenderSize(
 async function measureSlideStage(window: BrowserWindow): Promise<Stage> {
   try {
     const measured = (await window.webContents.executeJavaScript(
-      `(${measureSlide.toString()})(${JSON.stringify(SLIDE_SELECTOR)})`,
+      `(${measureSlide.toString()})(${JSON.stringify(SLIDE_SELECTOR)}, ${JSON.stringify(DECK_STAGE_SELECTOR)})`,
       true,
     )) as { w: number; h: number } | null;
     if (
@@ -1211,7 +1215,7 @@ export async function runDomToPptx(slideSelector: string): Promise<{ b64?: strin
 // chrome, switch any <deck-stage> runtime to authored (1:1) size, and freeze
 // animations/transitions so each slide (and its reveal-on-show inner elements,
 // e.g. `.slide.visible .reveal`) reaches its final state.
-function prepareDeckStage(hideSelector: string): void {
+export function prepareDeckStage(hideSelector: string, stageSelector: string): void {
   document.querySelectorAll(hideSelector).forEach((el) => {
     (el as HTMLElement).style.setProperty("display", "none", "important");
   });
@@ -1221,8 +1225,11 @@ function prepareDeckStage(hideSelector: string): void {
   // it here (no-op for plain `.slide` decks that have no <deck-stage>), or a
   // deck whose authored canvas differs from the 1920x1080 capture viewport would
   // be measured + captured at the preview-scaled size instead of 1:1.
-  document.querySelectorAll("deck-stage").forEach((el) => {
+  document.querySelectorAll(stageSelector).forEach((el) => {
     el.setAttribute("noscale", "");
+    const style = (el as HTMLElement).style;
+    style.setProperty("transform", "none", "important");
+    style.setProperty("transform-origin", "top left", "important");
   });
   const s = document.createElement("style");
   s.textContent =
@@ -1233,11 +1240,11 @@ function prepareDeckStage(hideSelector: string): void {
 // Deck-only: pin to the measured WxH stage so each slide captures
 // deterministically. NOT applied in page mode — an ordinary page must keep its
 // natural width/height.
-function pinDeckStage(w: number, h: number): void {
+function pinDeckStage(w: number, h: number, stageSelector: string): void {
   const style = document.createElement("style");
   style.textContent =
     `html,body{margin:0!important;padding:0!important;width:${w}px!important;height:${h}px!important;overflow:hidden!important}` +
-    `.deck,deck-stage{width:${w}px!important;height:${h}px!important}`;
+    `.deck,${stageSelector}{width:${w}px!important;height:${h}px!important}`;
   document.head.appendChild(style);
 }
 
@@ -1245,7 +1252,7 @@ function pinDeckStage(w: number, h: number): void {
 // that already has a non-zero layout rect (covers decks that hide inactive
 // slides via opacity/visibility); if every slide is display:none, force-measures
 // the first one off-screen. Returns the authored DIP size or null.
-function measureSlide(slideSelector: string): { w: number; h: number } | null {
+function measureSlide(slideSelector: string, stageSelector: string): { w: number; h: number } | null {
   function positiveCssNumber(value: unknown): number | null {
     if (typeof value === "number") return Number.isFinite(value) && value > 1 ? value : null;
     if (typeof value !== "string") return null;
@@ -1266,10 +1273,17 @@ function measureSlide(slideSelector: string): { w: number; h: number } | null {
       (stage as unknown as { designHeight?: unknown }).designHeight,
     );
     if (byProp) return byProp;
-    return sizePair(stage.getAttribute("width"), stage.getAttribute("height"));
+    const byAttr = sizePair(stage.getAttribute("width"), stage.getAttribute("height"));
+    if (byAttr) return byAttr;
+    const byStyle = sizePair(stage.style?.width, stage.style?.height);
+    if (byStyle) return byStyle;
+    const computed = window.getComputedStyle?.(stage);
+    const byComputed = computed ? sizePair(computed.width, computed.height) : null;
+    if (byComputed) return byComputed;
+    return sizePair(stage.offsetWidth, stage.offsetHeight);
   }
   function measureAuthored(el: HTMLElement): { w: number; h: number } | null {
-    const stage = el.closest("deck-stage") as HTMLElement | null;
+    const stage = el.closest(stageSelector) as HTMLElement | null;
     const stageSize = stage ? deckStageAuthoredSize(stage) : null;
     if (stageSize) return stageSize;
     const attrSize = sizePair(el.getAttribute("width"), el.getAttribute("height"));
@@ -1314,7 +1328,7 @@ function measureSlide(slideSelector: string): { w: number; h: number } | null {
 // is intentionally left to the caller as a last resort because it includes
 // fit-to-viewport transforms.
 export function measureAuthoredSlideBox(el: HTMLElement): { w: number; h: number } | null {
-  const stage = el.closest("deck-stage") as HTMLElement | null;
+  const stage = el.closest(DECK_STAGE_SELECTOR) as HTMLElement | null;
   const stageSize = stage ? deckStageAuthoredSize(stage) : null;
   if (stageSize) return stageSize;
 
@@ -1341,7 +1355,15 @@ function deckStageAuthoredSize(stage: HTMLElement): { w: number; h: number } | n
     (stage as unknown as { designHeight?: unknown }).designHeight,
   );
   if (byProp) return byProp;
-  return sizePair(stage.getAttribute("width"), stage.getAttribute("height"));
+  const byAttr = sizePair(stage.getAttribute("width"), stage.getAttribute("height"));
+  if (byAttr) return byAttr;
+  const byStyle = sizePair(stage.style?.width, stage.style?.height);
+  if (byStyle) return byStyle;
+  const view = stage.ownerDocument?.defaultView;
+  const computed = view?.getComputedStyle?.(stage);
+  const byComputed = computed ? sizePair(computed.width, computed.height) : null;
+  if (byComputed) return byComputed;
+  return sizePair(stage.offsetWidth, stage.offsetHeight);
 }
 
 function sizePair(w: unknown, h: unknown): { w: number; h: number } | null {

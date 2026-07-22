@@ -19,13 +19,14 @@ import { EventEmitter } from 'node:events';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, join, posix } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { createJsonIpcServer, resolveAppIpcPath } from '@open-design/sidecar';
 import { APP_KEYS, OPEN_DESIGN_SIDECAR_CONTRACT } from '@open-design/sidecar-proto';
 
 import {
   buildPackagedDaemonSpawnEnv,
+  createPackagedSidecarSpawnOptions,
   resolveDaemonStatusTimeoutMs,
   resolvePackagedChildBaseEnv,
   resolvePackagedElectronNodeCommand,
@@ -351,6 +352,28 @@ describe('buildPackagedDaemonSpawnEnv', () => {
       webIdentityPath: '/tmp/od-pkg/runtime/web-root.json',
     };
   }
+
+  it('uses the namespace runtime root for child processes without reading cwd', () => {
+    const cwd = vi.spyOn(process, 'cwd').mockImplementation(() => {
+      throw new Error('uv_cwd');
+    });
+
+    try {
+      expect(createPackagedSidecarSpawnOptions({
+        env: { NODE_ENV: 'production' },
+        logFd: 42,
+        paths: fakePaths(),
+      })).toEqual({
+        cwd: '/tmp/od-pkg/runtime',
+        env: { NODE_ENV: 'production' },
+        stdio: ['ignore', 42, 42],
+        windowsHide: true,
+      });
+      expect(cwd).not.toHaveBeenCalled();
+    } finally {
+      cwd.mockRestore();
+    }
+  });
 
   it('sets OD_REQUIRE_DESKTOP_AUTH=1 when requireDesktopAuth=true (Electron entry)', () => {
     const env = buildPackagedDaemonSpawnEnv(fakePaths(), {

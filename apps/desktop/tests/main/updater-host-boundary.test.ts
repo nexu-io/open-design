@@ -46,6 +46,21 @@ describe("desktop updater host boundary", () => {
     expect(startupIpcBody).toContain("desktop runtime is not initialized");
   });
 
+  it("keeps obsolete installed-outer policy outside generic desktop while exposing the SHOW hook", () => {
+    const main = source("src/main/index.ts");
+    const showStart = main.indexOf("case SIDECAR_MESSAGES.SHOW:");
+    const clickStart = main.indexOf("case SIDECAR_MESSAGES.CLICK:", showStart);
+    expect(showStart).toBeGreaterThanOrEqual(0);
+    expect(clickStart).toBeGreaterThan(showStart);
+    const showHandler = main.slice(showStart, clickStart);
+    expect(showHandler).toContain("activeDesktop.show()");
+    expect(showHandler).toContain("notifyDesktopExternalShow(options.onExternalShow)");
+    expect(showHandler.indexOf("activeDesktop.show()"))
+      .toBeLessThan(showHandler.indexOf("notifyDesktopExternalShow(options.onExternalShow)"));
+    expect(main).not.toContain("listProcessSnapshots");
+    expect(main).not.toContain("stopProcesses");
+  });
+
   it("keeps desktop STATUS responsive when updater status is slow", () => {
     const main = source("src/main/index.ts");
     expect(main).toContain("async function snapshotUpdateForStatus()");

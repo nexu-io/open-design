@@ -773,6 +773,13 @@ export type PackagedStartupFailureKind =
   // the daemon cold start), as opposed to a sidecar that exited (`daemon-start` /
   // `web-start`). Split out so this bucket stops hiding inside `unknown`.
   | 'status-timeout'
+  // The sidecar process could not be created at all — Node rejected the spawn
+  // itself (win32 CreateProcess denied by AV quarantine, a locked/partially
+  // written exe, a missing interpreter). Distinct from a sidecar that started
+  // and then died (`daemon-start`) and from one that never reported ready
+  // (`status-timeout`); it used to land in `unknown` with the real cause sitting
+  // unread on the error's `code`/`errno`/`syscall`.
+  | 'spawn-failed'
   | 'unknown';
 
 // Event-specific props for `packaged_runtime_failed`. Emitted by the packaged
@@ -793,6 +800,21 @@ export interface PackagedRuntimeFailedProps {
   // The unresolved module when error_code is a module-resolution failure
   // (e.g. `better-sqlite3` for #4638).
   missing_module: string | null;
+  // The sidecar's own fatal line from the same log tail (e.g.
+  // `SqliteError: database disk image is malformed`), for the daemons that die
+  // of something the `ERR_*` match cannot name. Without it a daemon that threw
+  // any non-`ERR_` error reported error_code=null AND missing_module=null even
+  // though the reason was sitting in a log we had already read. Scrubbed and
+  // truncated like the other free-form fields.
+  daemon_error?: string | null;
+  // Node's system-error triplet read off the THROWN error object, as opposed to
+  // `error_code`, which is parsed out of the sidecar log. A failed spawn or
+  // socket op carries its real cause here (`UNKNOWN`/-4094/`spawn`,
+  // `ENOSPC`/-28/`write`) while `.message` stays generic, so dropping these
+  // collapsed distinct OS-level failures into one opaque bucket.
+  sys_code?: string | null;
+  sys_errno?: number | null;
+  sys_syscall?: string | null;
   // Crash-scene evidence added for the field-crash subset (#4638 follow-up): the
   // shipped build is verified-good, so these separate a machine-side "module
   // missing/unloadable" from a code path, and give the Windows `unknown` bucket

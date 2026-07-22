@@ -54,6 +54,7 @@ import {
   deploymentProviderRunMetadata,
   type DeploymentProviderRunMetadataResult,
 } from '../deployment-provider-run-session.js';
+import { resolveModelForServiceTier } from '../runtimes/models.js';
 import { googleStreamGenerateContentUrl } from '../integrations/google-models.js';
 import { createRoleMarkerGuard } from '../role-marker-guard.js';
 import { authorizeReasoningEgress, sendReasoningEgressDenial } from '../reasoning-egress.js';
@@ -147,12 +148,13 @@ function isProviderProtocol(value: unknown): value is ConnectionTestProtocol {
   return typeof value === 'string' && PROVIDER_PROTOCOLS.has(value as ConnectionTestProtocol);
 }
 
-export interface RegisterChatRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'chat' | 'agents' | 'critique' | 'validation' | 'lifecycle' | 'paths' | 'telemetry'> {}
+export interface RegisterChatRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'chat' | 'agents' | 'critique' | 'validation' | 'lifecycle' | 'paths' | 'telemetry' | 'appConfig'> {}
 
 export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
   const { db, design } = ctx;
   const { sendApiError, createSseResponse } = ctx.http;
-  const { testProviderConnection, testAgentConnection, getAgentDef, isKnownModel, sanitizeCustomModel, listProviderModels } = ctx.agents;
+  const { readAppConfig } = ctx.appConfig;
+  const { testProviderConnection, testAgentConnection, getAgentDef, isKnownModel, isKnownServiceTier, sanitizeCustomModel, listProviderModels } = ctx.agents;
   const {
     handleCritiqueArtifact,
     handleCritiqueInterrupt,
@@ -485,11 +487,18 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         try {
           const def = getAgentDef(body.agentId);
           const testStart = Date.now();
-          const safeModel =
-            def && typeof body.model === 'string'
-              ? isKnownModel(def, body.model)
-                ? body.model
-                : sanitizeCustomModel(body.model)
+          const appConfig = await readAppConfig(ctx.paths.RUNTIME_DATA_DIR).catch(() => ({}));
+          const configuredModel =
+            def && typeof appConfig.agentModels?.[def.id]?.model === 'string'
+              ? appConfig.agentModels[def.id].model
+              : undefined;
+          const requestedModel =
+            typeof body.model === 'string' ? body.model : configuredModel;
+          let safeModel =
+            def && typeof requestedModel === 'string'
+              ? isKnownModel(def, requestedModel)
+                ? requestedModel
+                : sanitizeCustomModel(requestedModel)
               : undefined;
           if (def && typeof body.model === 'string' && body.model.trim() && !safeModel) {
             return res.json({
@@ -507,10 +516,24 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
             Array.isArray(def.reasoningOptions)
               ? (def.reasoningOptions.find((r: any) => r.id === body.reasoning)?.id ?? undefined)
               : undefined;
+          safeModel = def
+            ? resolveModelForServiceTier(
+                def,
+                safeModel,
+                typeof body.serviceTier === 'string' ? body.serviceTier : null,
+              ) ?? undefined
+            : safeModel;
+          const safeServiceTier =
+            def &&
+            typeof body.serviceTier === 'string' &&
+            isKnownServiceTier(def, safeModel, body.serviceTier)
+              ? body.serviceTier
+              : undefined;
           const result = await testAgentConnection({
             agentId: body.agentId,
             model: safeModel ?? undefined,
             reasoning: safeReasoning,
+            serviceTier: safeServiceTier,
             agentCliEnv:
               body.agentCliEnv && typeof body.agentCliEnv === 'object'
                 ? body.agentCliEnv

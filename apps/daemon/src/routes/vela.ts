@@ -1,5 +1,6 @@
 import type { Express, Request, Response } from 'express';
 import dns from 'node:dns';
+import http from 'node:http';
 import https from 'node:https';
 
 import {
@@ -22,7 +23,9 @@ import {
   clearAllVelaLiveAccounts,
   parseVelaLoginAttribution,
   peekVelaLiveAccount,
+  readVelaApiContext,
   readVelaCredentialRevision,
+  readVelaControlApiContext,
   readVelaLoginStatus,
   setVelaLiveAccount,
   shouldRefreshVelaLiveAccount,
@@ -43,6 +46,8 @@ import {
 } from '../runtimes/defs/amr.js';
 
 const AMR_API_PROXY_PREFIX = '/api/integrations/vela/api-proxy';
+const VELA_MESSAGE_CENTER_PREFIX = '/api/integrations/vela/message-center';
+const VELA_PUBLIC_MESSAGE_CENTER_PREFIX = '/api/integrations/vela/message-center-public';
 const AMR_API_UPSTREAM_ORIGIN = 'https://amr-api.open-design.ai';
 
 type ReadAppConfig = (dataDir: string) => Promise<AppConfigPrefs>;
@@ -166,6 +171,71 @@ function proxyAmrApiRequest(req: Request, res: Response): void {
   } else {
     upstream.end();
   }
+}
+
+function isAllowedMessageCenterRequest(method: string, pathname: string): boolean {
+  if (method === 'GET' && pathname === '/messages') return true;
+  if (method !== 'POST') return false;
+  return pathname === '/read-all' || /^\/messages\/[^/]+\/read$/.test(pathname);
+}
+
+function proxyVelaMessageCenterRequest(
+  req: Request,
+  res: Response,
+  context: { apiUrl: string; controlKey?: string },
+  proxyPrefix = VELA_MESSAGE_CENTER_PREFIX,
+): void {
+  const suffix = req.originalUrl.slice(proxyPrefix.length);
+  const parsedSuffix = new URL(suffix, 'http://message-center.local');
+  if (!isAllowedMessageCenterRequest(req.method, parsedSuffix.pathname)) {
+    res.status(404).json({ error: 'unknown_message_center_path' });
+    return;
+  }
+  const target = new URL(
+    `/api/v1/message-center${parsedSuffix.pathname}${parsedSuffix.search}`,
+    context.apiUrl,
+  );
+  if (target.protocol !== 'http:' && target.protocol !== 'https:') {
+    res.status(500).json({ error: 'invalid_vela_api_url' });
+    return;
+  }
+  const body = velaProxyRequestBody(req);
+  const headers: Record<string, string> = {
+    accept: typeof req.headers.accept === 'string' ? req.headers.accept : 'application/json',
+  };
+  if (context.controlKey) headers.authorization = `Bearer ${context.controlKey}`;
+  if (typeof req.headers['content-type'] === 'string') {
+    headers['content-type'] = req.headers['content-type'];
+  }
+  if (body) headers['content-length'] = String(body.length);
+  const transport = target.protocol === 'https:' ? https : http;
+  const upstream = transport.request(
+    target,
+    { method: req.method, headers },
+    (upstreamRes) => {
+      res.status(upstreamRes.statusCode ?? 502);
+      for (const [key, value] of Object.entries(upstreamRes.headers)) {
+        if (value !== undefined) res.setHeader(key, value);
+      }
+      pipeProxyStreamWithGuard(upstreamRes, res, (err) => {
+        if (!res.headersSent) {
+          res.status(502).json({ error: err instanceof Error ? err.message : String(err) });
+        } else {
+          res.end();
+        }
+      });
+    },
+  );
+  upstream.setTimeout(30_000, () => upstream.destroy(new Error('Vela Message Center timed out')));
+  upstream.on('error', (err) => {
+    if (!res.headersSent) {
+      res.status(502).json({ error: err instanceof Error ? err.message : String(err) });
+    } else {
+      res.end();
+    }
+  });
+  if (body) upstream.write(body);
+  upstream.end();
 }
 
 export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): void {
@@ -353,6 +423,32 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
   });
 
   app.all('/api/integrations/vela/api-proxy/*splat', proxyAmrApiRequest);
+
+  app.get('/api/integrations/vela/message-center-public/messages', async (req, res) => {
+    try {
+      const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
+      const configuredEnv = agentCliEnvForAgent(appConfig.agentCliEnv, 'amr');
+      const context = readVelaApiContext(env, configuredEnv);
+      proxyVelaMessageCenterRequest(req, res, context, VELA_PUBLIC_MESSAGE_CENTER_PREFIX);
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  app.all('/api/integrations/vela/message-center/*splat', async (req, res) => {
+    try {
+      const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
+      const configuredEnv = agentCliEnvForAgent(appConfig.agentCliEnv, 'amr');
+      const context = readVelaControlApiContext(env, configuredEnv);
+      if (!context) {
+        res.status(401).json({ error: 'vela_control_key_required' });
+        return;
+      }
+      proxyVelaMessageCenterRequest(req, res, context);
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
 
   app.post('/api/integrations/vela/login', async (req, res) => {
     try {

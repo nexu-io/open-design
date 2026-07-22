@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const readAppConfigMock = vi.fn();
+const agentCliEnvForAgentMock = vi.fn();
 const listMessagesMock = vi.fn();
 const reportRunCompletedMock = vi.fn();
 
 vi.mock('../src/app-config.js', () => ({
+  agentCliEnvForAgent: agentCliEnvForAgentMock,
   readAppConfig: readAppConfigMock,
 }));
 
@@ -13,7 +15,7 @@ vi.mock('../src/db.js', () => ({
 }));
 
 vi.mock('../src/langfuse-trace.js', () => ({
-  readTelemetrySinkConfig: vi.fn(() => ({ kind: 'langfuse' })),
+  readFeedbackTelemetrySinkConfig: vi.fn(() => ({ kind: 'langfuse' })),
   reportRunCompleted: reportRunCompletedMock,
   reportRunFeedback: vi.fn(),
 }));
@@ -66,6 +68,8 @@ function makeRun(overrides: Record<string, unknown> = {}) {
 
 describe('langfuse-bridge non-blocking behavior', () => {
   beforeEach(() => {
+    agentCliEnvForAgentMock.mockReset();
+    agentCliEnvForAgentMock.mockReturnValue({});
     readAppConfigMock.mockResolvedValue({
       installationId: 'install-1',
       telemetry: { metrics: true, content: true },
@@ -76,6 +80,28 @@ describe('langfuse-bridge non-blocking behavior', () => {
       langfuse_expected: true,
       langfuse_delivery_status: 'accepted',
     });
+  });
+
+  it('passes configured AMR env only to the completed-run reporter', async () => {
+    const configuredEnv = {
+      VELA_CONTROL_KEY: 'ck_profile',
+      VELA_API_URL: 'https://vela.example.test',
+    };
+    agentCliEnvForAgentMock.mockReturnValue(configuredEnv);
+    listMessagesMock.mockReturnValue([]);
+
+    await reportRunCompletedFromDaemon({
+      db: {},
+      dataDir: '/tmp/od-test',
+      run: makeRun() as any,
+      fetchImpl: vi.fn() as any,
+    });
+
+    expect(agentCliEnvForAgentMock).toHaveBeenCalledWith(undefined, 'amr');
+    expect(reportRunCompletedMock).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({ configuredEnv }),
+    );
   });
 
   afterEach(() => {

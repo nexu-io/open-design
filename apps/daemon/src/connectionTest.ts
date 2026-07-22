@@ -979,6 +979,27 @@ function extractProviderErrorDetail(data: unknown, rawText: string): string {
   return rawText.trim().slice(0, 240);
 }
 
+/**
+ * Compose the `detail` for a transport failure so the real cause survives.
+ *
+ * undici reports DNS/TLS/connect failures as a `TypeError` whose message is the
+ * generic `fetch failed`, with the actual reason only on `cause.code`. Since
+ * `networkErrorToKind` maps just an allowlist to `invalid_base_url`, everything
+ * else — `DEPTH_ZERO_SELF_SIGNED_CERT`, `SELF_SIGNED_CERT_IN_CHAIN`,
+ * `UNABLE_TO_GET_ISSUER_CERT_LOCALLY`, `EPROTO` — became `kind: unknown` with
+ * `detail: "fetch failed"`, i.e. a failure the user sees and we cannot name.
+ * That is the bulk of the 776 unattributed connection tests / 196 devices a day.
+ *
+ * The cause code is an OpenSSL/libuv constant, never user content, so appending
+ * it is safe; the message still goes through `redactSecrets`.
+ */
+function networkErrorDetail(err: unknown, secrets: (string | undefined)[]): string {
+  const message = redactSecrets(err instanceof Error ? err.message : String(err), secrets);
+  const code = (err as { cause?: { code?: unknown } } | null | undefined)?.cause?.code;
+  if (typeof code !== 'string' || !code) return message;
+  return message.includes(code) ? message : `${message} (${code})`;
+}
+
 function networkErrorToKind(err: unknown): ConnectionTestKind {
   if (err instanceof Error) {
     if (err.name === 'AbortError') return 'timeout';
@@ -1091,9 +1112,7 @@ async function validateSenseAudioNonChatModel(
       kind,
       latencyMs,
       model: input.model,
-      detail: redactSecrets(err instanceof Error ? err.message : String(err), [
-        input.apiKey,
-      ]),
+      detail: networkErrorDetail(err, [input.apiKey]),
     };
   }
 
@@ -1496,9 +1515,7 @@ export async function testProviderConnection(
       kind: 'unknown',
       latencyMs: Date.now() - start,
       model,
-      detail: redactSecrets(err instanceof Error ? err.message : String(err), [
-        input.apiKey,
-      ]),
+      detail: networkErrorDetail(err, [input.apiKey]),
     };
   }
 
@@ -1725,7 +1742,7 @@ export async function testProviderConnection(
       kind,
       latencyMs,
       model,
-      detail: redactSecrets(message, [input.apiKey]),
+      detail: networkErrorDetail(err, [input.apiKey]),
     };
   } finally {
     clearTimeout(timer);
@@ -2378,7 +2395,11 @@ async function testAgentConnectionInternal(
         SMOKE_PROMPT,
         [],
         [],
-        { model: input.model ?? null, reasoning: input.reasoning ?? null },
+        {
+          model: input.model ?? null,
+          reasoning: input.reasoning ?? null,
+          serviceTier: input.serviceTier ?? null,
+        },
         {
           cwd: tempDir,
           ...(promptFile ? { promptFilePath: promptFile.path } : {}),

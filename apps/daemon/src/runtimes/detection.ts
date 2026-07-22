@@ -3,6 +3,7 @@ import { AGENT_DEFS } from './registry.js';
 import {
   DEFAULT_MODEL_OPTION,
   getRememberedLiveModels,
+  mergeFallbackModelMetadata,
   rememberLiveModels,
 } from './models.js';
 import { applyAgentLaunchEnv, resolveAgentLaunch } from './launch.js';
@@ -85,7 +86,7 @@ async function fetchModels(
       if (!parsed || parsed.length === 0) {
         return { models: def.fallbackModels, source: 'fallback' };
       }
-      return { models: parsed, source: 'live' };
+      return { models: mergeFallbackModelMetadata(def, parsed), source: 'live' };
     } catch {
       return { models: def.fallbackModels, source: 'fallback' };
     }
@@ -109,7 +110,7 @@ async function fetchModels(
     if (!parsed || parsed.length === 0) {
       return { models: def.fallbackModels, source: 'fallback' };
     }
-    return { models: parsed, source: 'live' };
+    return { models: mergeFallbackModelMetadata(def, parsed), source: 'live' };
   } catch {
     return { models: def.fallbackModels, source: 'fallback' };
   }

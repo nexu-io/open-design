@@ -100,7 +100,7 @@ interface Props {
   onAgentChange: (id: string) => void;
   onAgentModelChange: (
     id: string,
-    choice: { model?: string; reasoning?: string },
+    choice: { model?: string; reasoning?: string; serviceTier?: string },
   ) => void;
   onApiProtocolChange: (protocol: ApiProtocol) => void;
   onApiModelChange: (model: string) => void;
@@ -505,6 +505,7 @@ export function InlineModelSwitcher({
   const currentAgentId = currentAgent?.id ?? null;
   const normalizedCurrentModelId = normalizedCurrentChoice?.model ?? null;
   const normalizedCurrentReasoning = normalizedCurrentChoice?.reasoning;
+  const normalizedCurrentServiceTier = normalizedCurrentChoice?.serviceTier;
   const currentAgentModelIds = currentAgent?.models?.map((m) => m.id) ?? [];
   const configuredModelId =
     typeof effectiveCurrentChoice.model === 'string' && effectiveCurrentChoice.model
@@ -517,27 +518,43 @@ export function InlineModelSwitcher({
     !currentAgentModelIds.includes(configuredModelId)
       ? defaultAgentModelId(currentAgent)
       : configuredModelId ?? defaultAgentModelId(currentAgent);
+  const currentModelOption =
+    currentAgent?.models?.find((m) => m.id === currentModelId) ?? null;
 
   useEffect(() => {
     if (!currentAgentId || !normalizedCurrentModelId) return;
-    onAgentModelChange(currentAgentId, {
+    const nextChoice: {
+      model: string;
+      reasoning?: string;
+      serviceTier?: string;
+    } = {
       model: normalizedCurrentModelId,
       reasoning: normalizedCurrentReasoning,
-    });
+    };
+    if (normalizedCurrentServiceTier !== undefined) {
+      nextChoice.serviceTier = normalizedCurrentServiceTier;
+    }
+    onAgentModelChange(currentAgentId, nextChoice);
   }, [
     currentAgentId,
     normalizedCurrentModelId,
     normalizedCurrentReasoning,
+    normalizedCurrentServiceTier,
     onAgentModelChange,
   ]);
 
   const currentModelLabel =
-    currentAgent?.models?.find((m) => m.id === currentModelId)?.label ?? null;
+    currentModelOption?.label ?? null;
   const inlineAgentModelOptions = useMemo(() => {
     const models = currentAgent?.models ?? [];
     if (currentAgent?.id !== 'amr') return models;
     return orderModelOptionsByAvailability(models);
   }, [currentAgent]);
+  const currentServiceTierOptions = currentModelOption?.serviceTierOptions ?? [];
+  const currentServiceTierId =
+    currentServiceTierOptions.some((tier) => tier.id === currentChoice.serviceTier)
+      ? currentChoice.serviceTier!
+      : 'default';
   const amrLoggedIn = amrStatus?.loggedIn === true;
 
   useEffect(() => {
@@ -1122,6 +1139,7 @@ export function InlineModelSwitcher({
                       });
                       onAgentModelChange?.(currentAgent.id, {
                         model: nextValue,
+                        serviceTier: undefined,
                       });
                     }}
                     additionalOptions={
@@ -1179,6 +1197,38 @@ export function InlineModelSwitcher({
                         : undefined
                     }
                   />
+                </div>
+              ) : null}
+              {currentAgent && currentServiceTierOptions.length > 0 ? (
+                <div className="inline-switcher__row">
+                  <span className="inline-switcher__label">
+                    {t('avatar.serviceTierLabel')}
+                  </span>
+                  <select
+                    aria-label={t('avatar.serviceTierLabel')}
+                    className="inline-switcher__select"
+                    data-testid="inline-model-switcher-service-tier"
+                    value={currentServiceTierId}
+                    onChange={(e) => {
+                      trackExecutionSettingsPopoverClick(analytics.track, {
+                        page_name: 'home',
+                        area: 'execution_settings_popover',
+                        element: 'model_dropdown',
+                        execution_mode: 'local_cli',
+                      });
+                      onAgentModelChange?.(currentAgent.id, {
+                        serviceTier:
+                          e.target.value === 'default' ? undefined : e.target.value,
+                      });
+                    }}
+                  >
+                    <option value="default">{t('common.default')}</option>
+                    {currentServiceTierOptions.map((tier) => (
+                      <option key={tier.id} value={tier.id}>
+                        {tier.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               ) : null}
             </>
