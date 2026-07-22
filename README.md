@@ -116,6 +116,7 @@ Inside a project's Studio, the same design system streams out multiple artifact 
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | ✅ Supported | `od mcp install claude` |
 | [Codex CLI](https://github.com/openai/codex) | ✅ Supported | `od mcp install codex` |
 | [DeepSeek Reasonix](https://github.com/esengine/DeepSeek-Reasonix) | ✅ Supported | `od mcp install reasonix` |
+| [Raven](https://github.com/EverMind-AI/Raven) | ✅ Supported | `od mcp install raven` |
 | [Cursor](https://www.cursor.com/cli) | ✅ Supported | `od mcp install cursor` |
 | [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ Supported | `od mcp install copilot` |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ Supported | `od mcp install copilot` |
@@ -310,7 +311,7 @@ client-specific snippet; it uses absolute paths and does not rely on the bare
 ```bash
 # One-line install into the agent you're using:
 od mcp install <agent>
-# <agent> = claude | codex | reasonix | cursor | copilot | openclaw
+# <agent> = claude | codex | reasonix | raven | cursor | copilot | openclaw
 #         | antigravity | gemini | pi | vibe | hermes | cline | kimi
 #         | trae | opencode
 
