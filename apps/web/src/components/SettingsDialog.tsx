@@ -10,6 +10,7 @@ import {
   settingsSectionToTracking,
 } from '@open-design/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
+import { byokErrorCode } from '../analytics/byok-error-code';
 import {
   amrHandoffDeviceId,
   attributedAmrUrl,
@@ -2514,7 +2515,7 @@ export function SettingsDialog({
           area: 'execution_model',
           provider_id: byokProviderId,
           result: byokTrackingTestResult(result),
-          ...(result.ok ? {} : { error_code: result.kind || 'UNKNOWN' }),
+          ...(result.ok ? {} : { error_code: byokErrorCode(result) }),
           ...(result.ok ? {} : { error_kind: result.kind || 'UNKNOWN' }),
           field_missing: 'none',
           config_key_changed: configKeyChanged,
