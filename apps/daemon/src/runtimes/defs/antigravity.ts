@@ -215,17 +215,14 @@ export const antigravityAgentDef = {
         runtimeContext.antigravitySettingsPath,
       );
     }
-    // We invoke agy via `-p -` (print mode + stdin sentinel), NOT
-    // `chat -`. Verified against `agy --help` on v1.0.3 — the
-    // `Available subcommands` list is `changelog / help / install /
-    // plugin / update`, and `chat` is NOT among them. `-p` is the
-    // documented print-mode flag (`Short alias for --print`) and
-    // `agy -p -` reads the prompt from stdin. The looper reviewer
-    // bot's environment runs a different agy build that may have
-    // renamed the entry point; until upstream confirms a stable
+    // We invoke agy via `-p <prompt>` (print mode).
+    // In `agy` v1.0.3, `-p -` read from stdin, but as of v1.1.5,
+    // `-p` requires the prompt to be passed as a positional argument.
+    // The looper reviewer bot's environment runs a different agy build
+    // that may have renamed the entry point; until upstream confirms a stable
     // headless subcommand (see google-antigravity/antigravity-cli#119)
     // and the change actually ships in the auto-update channel that
-    // packaged OD users get, `-p -` is the contract that actually
+    // packaged OD users get, `-p <prompt>` is the contract that actually
     // produces a print-mode reply on the installed CLI.
     const args: string[] = [];
     // Always opt into `--log-file` when the daemon supplied a path so
@@ -243,11 +240,10 @@ export const antigravityAgentDef = {
     if (runtimeContext.agentLogFilePath) {
       args.push('--log-file', runtimeContext.agentLogFilePath);
     }
-    args.push('-p');
-    args.push('-');
+    args.push('-p', _prompt);
     return args;
   },
-  promptViaStdin: true,
+  promptViaStdin: false,
   streamFormat: 'plain',
   installUrl: 'https://antigravity.google/cli',
   docsUrl: 'https://antigravity.google/docs/cli-overview',
