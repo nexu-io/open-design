@@ -1,14 +1,47 @@
 import { test } from 'vitest';
 import {
-  AGENT_DEFS, amp, assert, chmodSync, claude, codex, cursorAgent, detectAgents, grokBuild, join, mkdtempSync, rmSync, tmpdir, withEnvSnapshot, withPlatform, writeFileSync,
+  AGENT_DEFS, amp, assert, chmodSync, claude, codex, cursorAgent, detectAgents, grokBuild, join, minimalAgentDef, mkdtempSync, rmSync, tmpdir, withEnvSnapshot, withPlatform, writeFileSync,
 } from './helpers/test-helpers.js';
 import { codexNeedsDangerFullAccessSandbox } from '../../src/runtimes/defs/codex.js';
+import { modelDiscoveryForAgent } from '../../src/runtimes/detection.js';
 import { readLocalAgentProfileDefs } from '../../src/runtimes/registry.js';
 
 test('AGENT_DEFS ids are unique', () => {
   const ids = AGENT_DEFS.map((a) => a.id);
   const dupes = ids.filter((id, i) => ids.indexOf(id) !== i);
   assert.deepEqual(dupes, [], `duplicate agent ids: ${JSON.stringify(dupes)}`);
+});
+
+test('model discovery metadata distinguishes CLI, local config, and unsupported adapters', () => {
+  assert.equal(modelDiscoveryForAgent(codex), 'cli');
+  assert.equal(modelDiscoveryForAgent(claude), 'local-config');
+  assert.equal(
+    modelDiscoveryForAgent(
+      minimalAgentDef({
+        bin: 'fetching-agent',
+        fetchModels: async () => [{ id: 'live-model', label: 'Live model' }],
+      }),
+    ),
+    'cli',
+  );
+  assert.equal(modelDiscoveryForAgent(minimalAgentDef({ bin: 'static-agent' })), 'unsupported');
+});
+
+test('detectAgents includes discovery metadata for unavailable adapters', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'od-agent-discovery-metadata-'));
+  try {
+    await withEnvSnapshot(['PATH', 'OD_AGENT_HOME'], async () => {
+      process.env.PATH = dir;
+      process.env.OD_AGENT_HOME = dir;
+
+      const agents = await detectAgents();
+
+      assert.equal(agents.find((agent) => agent.id === 'claude')?.modelDiscovery, 'local-config');
+      assert.equal(agents.find((agent) => agent.id === 'amp')?.modelDiscovery, 'unsupported');
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('local agent profiles inherit a base adapter and can pin the default model', async () => {
@@ -558,6 +591,7 @@ exit 2
 
       assert.ok(detected);
       assert.equal(detected.available, true);
+      assert.equal(detected.modelDiscovery, 'cli');
       assert.equal(detected.modelsSource, 'live');
       assert.deepEqual(detected.models.map((m: { id: string }) => m.id), [
         'default',

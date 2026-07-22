@@ -2596,6 +2596,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
         agents: [
           {
             ...availableAgents[0]!,
+            modelDiscovery: 'cli',
             modelsSource: 'live',
             models: [
               { id: 'default', label: 'Default' },
@@ -2694,6 +2695,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
         agents: [
           {
             ...availableAgents[0]!,
+            modelDiscovery: 'cli',
             modelsSource: 'fallback',
           },
         ],
@@ -2703,8 +2705,234 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     fireEvent.click(screen.getByRole('tab', { name: /Local CLI/i }));
     expect(screen.getByText('Built-in list')).toBeTruthy();
     expect(
-      screen.getByText(/Showing built-in defaults/i),
+      screen.getByText(/Live model discovery is temporarily unavailable/i),
     ).toBeTruthy();
+    expect(screen.getByTestId('settings-agent-model-refresh-codex')).toBeTruthy();
+  });
+
+  it('labels local-config model discovery and keeps refresh available', () => {
+    const claudeAgent: AgentInfo = {
+      id: 'claude',
+      name: 'Claude Code',
+      bin: 'claude',
+      available: true,
+      modelDiscovery: 'local-config',
+      modelsSource: 'fallback',
+      models: [
+        { id: 'default', label: 'Default (CLI config)' },
+        { id: 'sonnet', label: 'Sonnet (alias)' },
+      ],
+    };
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'claude' },
+      { agents: [claudeAgent] },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI/i }));
+    expect(screen.getByText('Local configuration')).toBeTruthy();
+    expect(screen.getByText(/Claude Code does not expose a model catalog/i)).toBeTruthy();
+    expect(screen.getByTestId('settings-agent-model-refresh-claude')).toBeTruthy();
+  });
+
+  it('explains unsupported discovery without rendering a refresh action', () => {
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex' },
+      {
+        agents: [
+          {
+            ...availableAgents[0]!,
+            modelDiscovery: 'unsupported',
+            modelsSource: 'fallback',
+          },
+        ],
+      },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI/i }));
+    expect(screen.getByText(/This CLI does not expose model discovery/i)).toBeTruthy();
+    expect(screen.queryByTestId('settings-agent-model-refresh-codex')).toBeNull();
+  });
+
+  it('refreshes the selected CLI model catalog and reports a live result', async () => {
+    const pending = deferred<AgentInfo[]>();
+    const onRefreshAgents = vi.fn(() => pending.promise);
+    renderSettingsDialog(
+      {
+        mode: 'daemon',
+        agentId: 'codex',
+        agentCliEnv: { codex: { CODEX_HOME: '~/.codex-draft' } },
+      },
+      {
+        agents: [{ ...availableAgents[0]!, modelDiscovery: 'cli', modelsSource: 'fallback' }],
+        onRefreshAgents,
+      },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI/i }));
+    const refresh = screen.getByTestId('settings-agent-model-refresh-codex') as HTMLButtonElement;
+    fireEvent.click(refresh);
+    fireEvent.click(refresh);
+
+    expect(onRefreshAgents).toHaveBeenCalledTimes(1);
+    expect(onRefreshAgents).toHaveBeenCalledWith({
+      throwOnError: true,
+      agentCliEnv: { codex: { CODEX_HOME: '~/.codex-draft' } },
+    });
+    expect(refresh.disabled).toBe(true);
+
+    pending.resolve([
+      {
+        ...availableAgents[0]!,
+        modelDiscovery: 'cli',
+        modelsSource: 'live',
+        models: [{ id: 'gpt-6-codex', label: 'GPT-6 Codex' }],
+      },
+    ]);
+
+    await waitFor(() => {
+      expect(screen.getByText('Models refreshed from the CLI.')).toBeTruthy();
+      expect(refresh.disabled).toBe(false);
+    });
+  });
+
+  it('keeps fallback models when catalog refresh returns no live models', async () => {
+    const onRefreshAgents = vi.fn(async () => [
+      { ...availableAgents[0]!, modelDiscovery: 'cli' as const, modelsSource: 'fallback' as const },
+    ]);
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex' },
+      {
+        agents: [{ ...availableAgents[0]!, modelDiscovery: 'cli', modelsSource: 'fallback' }],
+        onRefreshAgents,
+      },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI/i }));
+    fireEvent.click(screen.getByTestId('settings-agent-model-refresh-codex'));
+
+    await waitFor(() => {
+      expect(screen.getByText(/No live catalog was returned/i)).toBeTruthy();
+    });
+  });
+
+  it('reports a local configuration fallback after refreshing Claude models', async () => {
+    const claudeAgent: AgentInfo = {
+      id: 'claude',
+      name: 'Claude Code',
+      bin: 'claude',
+      available: true,
+      modelDiscovery: 'local-config',
+      modelsSource: 'fallback',
+      models: [{ id: 'default', label: 'Default (CLI config)' }],
+    };
+    const onRefreshAgents = vi.fn(async () => [claudeAgent]);
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'claude' },
+      { agents: [claudeAgent], onRefreshAgents },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI/i }));
+    fireEvent.click(screen.getByTestId('settings-agent-model-refresh-claude'));
+
+    await waitFor(() => {
+      expect(screen.getByText(en['settings.modelRefreshLocalConfigFallback'])).toBeTruthy();
+      expect(screen.queryByText(en['settings.modelRefreshFallback'])).toBeNull();
+    });
+  });
+
+
+  it('reports a model refresh failure without clearing the picker', async () => {
+    const onRefreshAgents = vi.fn(async () => {
+      throw new Error('daemon unavailable');
+    });
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex' },
+      {
+        agents: [{ ...availableAgents[0]!, modelDiscovery: 'cli', modelsSource: 'fallback' }],
+        onRefreshAgents,
+      },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI/i }));
+    fireEvent.click(screen.getByTestId('settings-agent-model-refresh-codex'));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Could not refresh models/i)).toBeTruthy();
+      expect(screen.getByRole('combobox', { name: en['settings.modelPicker'] })).toBeTruthy();
+    });
+  });
+
+  it('keeps a saved custom model selected after a live catalog refresh', async () => {
+    const onRefreshAgents = vi.fn(async () => [
+      {
+        ...availableAgents[0]!,
+        modelDiscovery: 'cli' as const,
+        modelsSource: 'live' as const,
+        models: [{ id: 'gpt-6-codex', label: 'GPT-6 Codex' }],
+      },
+    ]);
+    renderSettingsDialog(
+      {
+        mode: 'daemon',
+        agentId: 'codex',
+        agentModels: { codex: { model: 'gpt-private-preview' } },
+      },
+      {
+        agents: [{ ...availableAgents[0]!, modelDiscovery: 'cli', modelsSource: 'fallback' }],
+        onRefreshAgents,
+      },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI/i }));
+    expect((screen.getByLabelText(en['settings.modelCustomLabel']) as HTMLInputElement).value)
+      .toBe('gpt-private-preview');
+
+    fireEvent.click(screen.getByTestId('settings-agent-model-refresh-codex'));
+
+    await waitFor(() => {
+      expect(screen.getByText(en['settings.modelRefreshLive'])).toBeTruthy();
+      expect((screen.getByLabelText(en['settings.modelCustomLabel']) as HTMLInputElement).value)
+        .toBe('gpt-private-preview');
+    });
+  });
+
+  it('does not show a completed refresh status on a different selected agent', async () => {
+    const pending = deferred<AgentInfo[]>();
+    const onRefreshAgents = vi.fn(() => pending.promise);
+    const claudeAgent: AgentInfo = {
+      id: 'claude',
+      name: 'Claude Code',
+      bin: 'claude',
+      available: true,
+      modelDiscovery: 'local-config',
+      modelsSource: 'fallback',
+      models: [{ id: 'default', label: 'Default' }],
+    };
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex' },
+      {
+        agents: [
+          { ...availableAgents[0]!, modelDiscovery: 'cli', modelsSource: 'fallback' },
+          claudeAgent,
+        ],
+        onRefreshAgents,
+      },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI/i }));
+    fireEvent.click(screen.getByTestId('settings-agent-model-refresh-codex'));
+    fireEvent.click(screen.getByTestId('settings-agent-select-claude'));
+
+    await act(async () => {
+      pending.resolve([
+        { ...availableAgents[0]!, modelDiscovery: 'cli', modelsSource: 'live' },
+        claudeAgent,
+      ]);
+      await pending.promise;
+    });
+
+    expect(screen.queryByText(en['settings.modelRefreshLive'])).toBeNull();
+    expect(screen.getByText(en['settings.modelSourceLocalConfig'])).toBeTruthy();
   });
 
   it('uses the existing Settings card picker for AMR without exposing custom stale models', () => {

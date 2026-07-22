@@ -94,6 +94,8 @@ export interface AgentDiagnostic {
   fixActions?: AgentFixIntent[];
 }
 
+export type AgentModelDiscoveryKind = 'cli' | 'local-config' | 'unsupported';
+
 export interface AgentInfo {
   id: string;
   name: string;
@@ -112,6 +114,8 @@ export interface AgentInfo {
   models?: AgentModelOption[];
   /** Whether models came from the installed CLI or Open Design's static fallback. */
   modelsSource?: 'live' | 'fallback';
+  /** How this agent can refresh the models shown in Settings. */
+  modelDiscovery?: AgentModelDiscoveryKind;
   reasoningOptions?: AgentModelOption[];
   /** HTTPS URL to install or download the CLI (vendor docs, GitHub README, npm). */
   installUrl?: string;

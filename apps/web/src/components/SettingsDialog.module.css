@@ -1,0 +1,35 @@
+.modelHeader {
+  width: 100%;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.modelLabelMeta {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.modelRefreshButton {
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  padding: 0;
+  flex: 0 0 auto;
+}
+
+.modelRefreshNotice {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.success {
+  color: var(--green);
+}
+
+.error {
+  color: var(--danger);
+}
