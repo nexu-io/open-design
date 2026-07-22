@@ -1142,6 +1142,157 @@ process.stdin.on('end', () => {
     },
   );
 
+  // Regression: nettee #4 on PR #5818 (head 6fade58bd, 2026-07-22) — the
+  // shared `ChatRequest.userMessageId` contract documents the
+  // already-persisted `PUT /api/projects/:id/conversations/:cid/messages/:mid`
+  // case, but `/api/chat` still unconditionally calls `upsertMessage()` with
+  // only `{ id, role, content, startedAt, endedAt }`. That matters because
+  // `upsertMessage()`'s UPDATE path rewrites `attachments_json` and
+  // `comment_attachments_json` from the passed object, so an existing user
+  // row with staged attachments or comment attachments gets those fields
+  // cleared when the same turn is POSTed to `/api/chat`. `/api/runs` avoids
+  // that by checking `alreadyPersistedByClient` before writing (the nettee
+  // #3 fix above); `/api/chat` should mirror that guard so the
+  // `userMessageId` contract does not silently drop metadata. This test
+  // seeds exactly that state — a user row with `attachments` and
+  // `commentAttachments` pre-persisted via `upsertMessage` (the same code
+  // path the PUT route uses) — then POSTs `/api/chat` with `userMessageId`
+  // set to the seeded id and asserts both attachment arrays survive the run.
+  it.runIf(process.env.OD_DATA_DIR)(
+    'preserves attachments on the pre-persisted client user row when /api/chat receives meta.userMessageId (#5818 nettee #4)',
+    async () => {
+      if (!process.env.OD_DATA_DIR) {
+        throw new Error('OD_DATA_DIR is required for #5818 nettee #4 regression');
+      }
+      const projectId = `proj-5818-nettee4-${randomUUID()}`;
+      const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: projectId, name: '5818-nettee4-attachments-survive' }),
+      });
+      expect(createProjectResponse.ok).toBe(true);
+
+      const conversationsResponse = await fetch(
+        `${baseUrl}/api/projects/${projectId}/conversations`,
+      );
+      expect(conversationsResponse.ok).toBe(true);
+      const conversationsBody = await conversationsResponse.json() as {
+        conversations: Array<{ id: string }>;
+      };
+      const conversationId = conversationsBody.conversations[0]?.id;
+      expect(conversationId).toBeTruthy();
+
+      // Simulate the client's optimistic PUT — Studio assigns a randomUUID
+      // and writes the user row (with attachment metadata the user staged
+      // before submitting) before the /api/chat call. The id is what the
+      // web threads through as `userMessageId` on the chat request.
+      const clientUserMessageId = `user-client-${randomUUID()}`;
+      const seededAttachments = [
+        { type: 'image', path: '/tmp/seeded-attachment-1.png', name: 'seeded-1.png' },
+        { type: 'image', path: '/tmp/seeded-attachment-2.png', name: 'seeded-2.png' },
+      ];
+      const seededCommentAttachments = [
+        { type: 'image', path: '/tmp/seeded-comment-1.png', name: 'seeded-comment-1.png' },
+      ];
+      const dbFile = resolve(process.env.OD_DATA_DIR, 'app.sqlite');
+      const sqlite = new Database(dbFile);
+      try {
+        upsertMessage(sqlite as never, conversationId!, {
+          id: clientUserMessageId,
+          role: 'user',
+          content: 'client-persisted user turn with attachments',
+          attachments: seededAttachments,
+          commentAttachments: seededCommentAttachments,
+          startedAt: Date.now() - 1_000,
+          endedAt: Date.now() - 500,
+        });
+      } finally {
+        sqlite.close();
+      }
+
+      await withFakeAgent(
+        'opencode',
+        `
+process.stdin.resume();
+process.stdin.on('end', () => {
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: 'attachments preserved ok' } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+        async () => {
+          const response = await fetch(`${baseUrl}/api/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentId: 'opencode',
+              projectId,
+              conversationId,
+              // The fix: thread the client's pre-persisted user row id
+              // through the chat request meta so the daemon's user-turn
+              // upsert converges on it instead of rewriting the row and
+              // clearing attachments_json / comment_attachments_json.
+              userMessageId: clientUserMessageId,
+              message: 'client-persisted user turn with attachments',
+            }),
+          });
+          expect(response.ok).toBe(true);
+
+          await new Promise((resolve) => setTimeout(resolve, 2_000));
+
+          const msgResponse = await fetch(
+            `${baseUrl}/api/projects/${projectId}/conversations/${conversationId}/messages`,
+          );
+          expect(msgResponse.ok).toBe(true);
+          const msgBody = await msgResponse.json() as {
+            messages: Array<{
+              id: string;
+              role: string;
+              content: string;
+              attachments?: unknown;
+              commentAttachments?: unknown;
+            }>;
+          };
+
+          // Exactly one user row — the pre-persisted client row — must
+          // remain. Before the fix the daemon would rewrite the row with
+          // the partial `{ id, role, content, startedAt, endedAt }`
+          // payload and the conversation ended up with the same row but
+          // with `attachments_json` and `comment_attachments_json` cleared
+          // (because `upsertMessage`'s UPDATE path writes NULL when the
+          // caller does not pass `attachments` / `commentAttachments`).
+          const userTurns = msgBody.messages.filter((m) => m.role === 'user');
+          expect(
+            userTurns,
+            '/api/chat with meta.userMessageId must not rewrite the pre-persisted client user row',
+          ).toHaveLength(1);
+          expect(userTurns[0]).toMatchObject({
+            id: clientUserMessageId,
+            content: 'client-persisted user turn with attachments',
+          });
+
+          // The attachments and commentAttachments the client staged
+          // before the run must survive the run — `upsertMessage`'s UPDATE
+          // path must NOT have been invoked for this row.
+          expect(
+            userTurns[0]?.attachments,
+            '/api/chat must preserve attachments_json on the pre-persisted client user row',
+          ).toEqual(seededAttachments);
+          expect(
+            userTurns[0]?.commentAttachments,
+            '/api/chat must preserve comment_attachments_json on the pre-persisted client user row',
+          ).toEqual(seededCommentAttachments);
+
+          // The assistant turn from the fake agent must also be present,
+          // proving the chat actually ran and didn't bail on the dedupe.
+          const assistantTurns = msgBody.messages.filter((m) => m.role === 'assistant');
+          expect(assistantTurns).toHaveLength(1);
+        },
+      );
+    },
+  );
+
   it('does not leave a pinned assistant message queued when legacy chat fails before spawning', async () => {
     if (!process.env.OD_DATA_DIR) {
       throw new Error('OD_DATA_DIR is required for assistant message pin tests');
