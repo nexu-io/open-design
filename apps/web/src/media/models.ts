@@ -166,10 +166,13 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
   {
     id: 'comfyui',
     label: 'ComfyUI',
-    hint: 'Local JSON workflow server (planned adapter)',
-    integrated: false,
+    hint: 'Local JSON workflow server',
+    integrated: true,
     defaultBaseUrl: 'http://127.0.0.1:8188',
     docsUrl: 'https://docs.comfy.org/development/core-concepts/workflow',
+    credentialsRequired: false,
+    supportsCustomModel: true,
+    customModelPlaceholder: 'sd_xl_base_1.0.safetensors',
   },
   {
     id: 'bfl',
@@ -530,6 +533,7 @@ export const IMAGE_MODELS: MediaModel[] = [
 
   // Midjourney via community proxies.
   { id: 'midjourney-v7', label: 'midjourney-v7', hint: 'Midjourney · via proxy', provider: 'midjourney', caps: ['t2i'] },
+  { id: 'comfyui-sdxl', label: 'comfyui-sdxl', hint: 'Local ComfyUI · SDXL', provider: 'comfyui', caps: ['t2i'], default: true },
 ];
 
 /**

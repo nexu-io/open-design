@@ -670,6 +670,11 @@ export async function generateMedia(args: {
       bytes = result.bytes;
       providerNote = result.providerNote;
       suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'comfyui' && surface === 'image') {
+      const result = await renderComfyUIImage(ctx, credentials);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
     } else if (def.provider === 'openrouter' && surface === 'image') {
       const result = await renderOpenRouterImage(ctx, credentials);
       bytes = result.bytes;
@@ -1109,6 +1114,50 @@ async function renderCustomOpenAIImage(ctx: MediaContext, credentials: ProviderC
   return {
     bytes,
     providerNote: `custom-image/${wireModel} · ${body.size} · ${bytes.length} bytes`,
+    suggestedExt: sniffImageExt(bytes),
+  };
+}
+
+async function renderComfyUIImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
+  const baseUrl = (credentials.baseUrl || '').trim();
+  if (!baseUrl) {
+    throw new Error('ComfyUI base URL required — configure in Settings (default: http://127.0.0.1:8188)');
+  }
+  const wireModel = (
+    credentials.model
+    || (ctx.wireModel !== 'comfyui-sdxl' ? ctx.wireModel : '')
+  ).trim();
+  const customModel = wireModel || 'sd_xl_base_1.0.safetensors';
+
+  const headers: Record<string, string> = {
+    'content-type': 'application/json',
+  };
+  if (credentials.apiKey) {
+    headers.authorization = `Bearer ${credentials.apiKey}`;
+  }
+
+  const body: Record<string, unknown> = {
+    prompt: ctx.prompt || 'A high-quality image.',
+    model: customModel,
+    width: openaiSizeFor('gpt-image-1', ctx.aspect).split('x')[0],
+    height: openaiSizeFor('gpt-image-1', ctx.aspect).split('x')[1],
+    n: 1,
+  };
+
+  const resp = await fetchImageGenerationWithResponseRetry(
+    () => fetch(`${baseUrl}/v1/images/generations`, withMediaRequestInit(ctx, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+    })),
+    'comfyui',
+  );
+
+  const data = await parseOpenAICompatibleJson(resp, 'comfyui');
+  const bytes = await bytesFromOpenAICompatibleData(data, 'comfyui', ctx.requestInit);
+  return {
+    bytes,
+    providerNote: `comfyui/${customModel} · ${body.width}x${body.height} · ${bytes.length} bytes`,
     suggestedExt: sniffImageExt(bytes),
   };
 }
