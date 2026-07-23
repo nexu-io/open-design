@@ -310,6 +310,72 @@ describe('RecentProjectsStrip', () => {
     );
   });
 
+  it('does not mount the deck iframe fallback while the deck body is still loading (#2648)', async () => {
+    // Regression for the loading-state gap mrcfps flagged on #6013: while the
+    // deck GET/parse is pending, the card must render the glyph (loading), not
+    // the raw HTML iframe — otherwise an immediately-successful HEAD probe
+    // could mount index.html with the carousel chrome this change removes, and
+    // every parseable deck pays for a redundant probe. Here the deck GET never
+    // resolves (deferred), so the card stays in the loading/glyph phase and no
+    // iframe is mounted for the deck card at all.
+    const deckUrl = '/api/projects/project-deck/files/index.html?v=400';
+    const htmlUrl = '/api/projects/project-html/files/index.html?v=200';
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+      // Deck GET stays pending forever (deferred body).
+      if (url === deckUrl && init?.method !== 'HEAD') {
+        return new Promise<Response>(() => {});
+      }
+      return {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        text: async () => '',
+      } as Response;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { container } = render(
+      <RecentProjectsStrip
+        projects={[
+          project({
+            id: 'project-deck',
+            name: 'Simple Deck',
+            updatedAt: 4,
+            metadata: { kind: 'deck' },
+          }),
+          project({
+            id: 'project-html',
+            name: 'Web Prototype',
+            updatedAt: 3,
+          }),
+        ]}
+        onOpen={() => {}}
+        onViewAll={() => {}}
+      />,
+    );
+
+    const deckCard = container.querySelector('[data-project-id="project-deck"]');
+
+    // While the deck body is still loading, the deck card shows the glyph and
+    // never mounts an iframe (no carousel chrome, no redundant HEAD probe).
+    await waitFor(() => {
+      expect(deckCard?.querySelector('.recent-projects__card-glyph')).not.toBeNull();
+    });
+    expect(deckCard?.querySelector('iframe')).toBeNull();
+    // The deck GET was issued exactly once (the loading fetch); no HEAD probe.
+    const deckCalls = fetchMock.mock.calls.filter(([input]) => {
+      const url = typeof input === 'string' ? input : String(input);
+      return url === deckUrl;
+    });
+    expect(deckCalls).toHaveLength(1);
+    // The plain-HTML card still resolves normally via its HEAD probe.
+    expect(fetchMock).toHaveBeenCalledWith(
+      htmlUrl,
+      expect.objectContaining({ cache: 'no-store', method: 'HEAD' }),
+    );
+  });
+
   it('falls back to the glyph and logs when an HTML cover is unavailable', async () => {
     stubCoverProbe(404, 'Not Found');
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});

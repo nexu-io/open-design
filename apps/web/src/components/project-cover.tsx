@@ -141,22 +141,29 @@ export function DeckProjectCoverFrame({
   glyphClassName: string;
   diagnostic: string;
 }) {
-  const [failed, setFailed] = useState(false);
+  // Explicit three-state model so the raw-iframe fallback never mounts while
+  // the deck GET/parse is still pending. While loading we render the same glyph
+  // the card would show for an unknown cover — never `HtmlProjectCoverFrame`,
+  // which would fire a redundant HEAD probe and could mount the raw
+  // `index.html` iframe (with the carousel chrome this change removes) if that
+  // probe resolves before the deck body finishes parsing. The iframe only
+  // mounts once parsing or shadow rendering has explicitly failed.
+  const [phase, setPhase] = useState<'loading' | 'parsed' | 'fallback'>('loading');
   const [parsed, setParsed] = useState<ParsedDeckThumbnails | null>(null);
-  const [thumbFailed, setThumbFailed] = useState(false);
+  const [shadowFailed, setShadowFailed] = useState(false);
 
   useEffect(() => {
     if (!src) {
-      setFailed(false);
+      setPhase('loading');
       setParsed(null);
-      setThumbFailed(false);
+      setShadowFailed(false);
       return;
     }
     const controller = new AbortController();
     let disposed = false;
-    setFailed(false);
+    setPhase('loading');
     setParsed(null);
-    setThumbFailed(false);
+    setShadowFailed(false);
 
     fetch(src, { signal: controller.signal, cache: 'no-store' })
       .then((response) => {
@@ -166,7 +173,7 @@ export function DeckProjectCoverFrame({
             `[project-cover] deck cover unavailable (${response.status} ${response.statusText}):`,
             diagnostic,
           );
-          setFailed(true);
+          setPhase('fallback');
           return;
         }
         return response.text();
@@ -176,15 +183,16 @@ export function DeckProjectCoverFrame({
         const result = parseDeckThumbnails(html, src);
         if (!result.renderable || result.slides.length === 0) {
           // Unparseable deck source — fall back to the raw HTML iframe.
-          setThumbFailed(true);
+          setPhase('fallback');
           return;
         }
         setParsed(result);
+        setPhase('parsed');
       })
       .catch((err) => {
         if (disposed || (err instanceof DOMException && err.name === 'AbortError')) return;
         console.warn('[project-cover] failed to fetch deck cover:', diagnostic, err);
-        setFailed(true);
+        setPhase('fallback');
       });
 
     return () => {
@@ -193,13 +201,16 @@ export function DeckProjectCoverFrame({
     };
   }, [src, diagnostic]);
 
-  // Source unreachable or no deck markup at all → project glyph.
-  if (!src || failed) {
+  // No source, or still loading the deck body → glyph. Keeps the card out of
+  // the iframe path until parsing resolves.
+  if (!src || phase === 'loading') {
     return <span className={glyphClassName}>{initial}</span>;
   }
 
-  // Deck parsed and renderable → inert first-slide thumbnail (no carousel chrome).
-  if (parsed && !thumbFailed) {
+  // Deck parsed and shadow rendering hasn't errored → inert first-slide
+  // thumbnail (no carousel chrome). If the shadow build later fails, the
+  // onError callback flips us to the iframe fallback.
+  if (phase === 'parsed' && parsed && !shadowFailed) {
     return (
       // DeckSlideThumbnail scales its shadow canvas to its host div's
       // clientWidth/clientHeight, so the host must fill the card thumb. The
@@ -209,13 +220,14 @@ export function DeckProjectCoverFrame({
         <DeckSlideThumbnail
           parsed={parsed}
           index={0}
-          onError={() => setThumbFailed(true)}
+          onError={() => setShadowFailed(true)}
         />
       </div>
     );
   }
 
-  // Fallback: parse failed or thumbnail errored → raw HTML iframe (current behavior).
+  // Explicit failure: unparseable source, fetch error, or shadow-render error
+  // → raw HTML iframe (previous behavior).
   return (
     <HtmlProjectCoverFrame
       src={src}
