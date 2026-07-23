@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { projectFileUrl } from '../providers/registry';
 import type { ProjectFile } from '../types';
 import { parseDeckThumbnails, type ParsedDeckThumbnails } from '../runtime/deck-thumbnail-parser';
@@ -152,6 +152,12 @@ export function DeckProjectCoverFrame({
   const [parsed, setParsed] = useState<ParsedDeckThumbnails | null>(null);
   const [shadowFailed, setShadowFailed] = useState(false);
 
+  // Stable identity so DeckSlideThumbnail's layout-effect (which clears and
+  // rebuilds the shadow root when its deps change) doesn't tear down a healthy
+  // preview on unrelated parent rerenders. Mirrors DeckThumbnailRail's
+  // handleShadowError.
+  const handleShadowError = useCallback(() => setShadowFailed(true), []);
+
   useEffect(() => {
     if (!src) {
       setPhase('loading');
@@ -220,7 +226,7 @@ export function DeckProjectCoverFrame({
         <DeckSlideThumbnail
           parsed={parsed}
           index={0}
-          onError={() => setShadowFailed(true)}
+          onError={handleShadowError}
         />
       </div>
     );
