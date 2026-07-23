@@ -4,7 +4,6 @@ import { trackPreviewRunStatusSurfaceView } from '../analytics/events';
 import { useAnalytics } from '../analytics/provider';
 import { useI18n } from '../i18n';
 import {
-  formatPreviewRunElapsed,
   latestPreviewRunStatus,
   PREVIEW_RUN_SUCCESS_VISIBLE_MS,
   previewRunStatusCompletedAt,
@@ -127,10 +126,10 @@ export function PreviewRunStatusBar({
   const displayed = current ?? lastVisible;
   if (!displayed) return null;
 
-  const elapsed = formatPreviewRunElapsed(displayed.elapsedMs);
-  const isFailure = displayed.phase === 'failed';
   const label = t(statusLabelKey(displayed));
 
+  // Keep the floating preview hint focused on the current stage. Precise run
+  // timing already appears in Chat, so repeating it here obscures the preview.
   return (
     <div
       className={`${styles.root}${leaving ? ` ${styles.leaving}` : ''}`}
@@ -146,11 +145,6 @@ export function PreviewRunStatusBar({
         >
           {label}
         </span>
-        {isFailure ? null : (
-          <span className={styles.elapsed} aria-hidden="true">
-            {t('previewRunStatus.elapsed', { time: elapsed })}
-          </span>
-        )}
       </div>
     </div>
   );

@@ -3178,6 +3178,7 @@ describe('FileWorkspace empty-project generation contract', () => {
     expect(previewStatus.closest('[data-testid="design-files-empty"]')).toBeNull();
     expect(previewStatus).not.toHaveAttribute('aria-live');
     expect(within(previewStatus).getByRole('status')).toHaveTextContent('Design ready');
-    expect(previewStatus.querySelector('[aria-hidden="true"]')).toHaveTextContent('Elapsed 0:03');
+    expect(previewStatus).not.toHaveTextContent('Elapsed');
+    expect(previewStatus.querySelector('[aria-hidden="true"]')).toBeNull();
   });
 });
