@@ -67,6 +67,7 @@ import {
   parseInspectOverridesFromSource,
   previewOverlayTransform,
   previewMeasurementFrameIsUsable,
+  previewScaleShellStyle,
   resolveDesktopPreviewContentMeasurement,
   resolveDesktopPreviewZoomPercent,
   serializeInspectOverrides,
@@ -1138,6 +1139,35 @@ describe('FileViewer preview scale', () => {
     expect(tablet.scale).toBeCloseTo(752 / 1180, 5);
     expect(tablet.offsetX).toBeCloseTo(24 + (1152 - 820 * (752 / 1180)) / 2, 5);
     expect(tablet.offsetY).toBe(24);
+  });
+
+  it('keeps the desktop deck shell at 100% and applies the inverse-percentage trick only for non-deck (#5805)', () => {
+    // Deck/slide previews render on a fixed canvas and zoom optically, so the
+    // shell must stay at 100% and let transform: scale() actually scale it.
+    // Using width: 100/scale% here would cancel the scale out algebraically
+    // and leave the slide visually stuck at 100% regardless of zoom.
+    expect(previewScaleShellStyle('desktop', 1.5, { isDeck: true })).toEqual({
+      width: '100%',
+      height: '100%',
+      transform: 'scale(1.5)',
+      transformOrigin: '0 0',
+    });
+    // Non-deck desktop HTML previews keep the inverse-percentage trick:
+    // the layout box grows by 1/scale so content reflows, then scale() shrinks
+    // it back to fit the clip (browser-zoom semantics for auto-fit).
+    expect(previewScaleShellStyle('desktop', 2)).toEqual({
+      width: '50%',
+      height: '50%',
+      transform: 'scale(2)',
+      transformOrigin: '0 0',
+    });
+    // Mobile/tablet (CSS-var driven) is unaffected by the deck option.
+    expect(previewScaleShellStyle('mobile', 1.5, { isDeck: true })).toEqual({
+      width: 'var(--preview-viewport-width)',
+      height: 'var(--preview-viewport-height)',
+      transform: 'scale(var(--preview-scale, 1))',
+      transformOrigin: '0 0',
+    });
   });
 });
 

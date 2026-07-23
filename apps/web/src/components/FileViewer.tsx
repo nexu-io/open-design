@@ -1345,11 +1345,31 @@ export function previewOverlayTransform(
   };
 }
 
-function previewScaleShellStyle(
+export function previewScaleShellStyle(
   viewport: PreviewViewportId,
   previewScale: number,
+  options?: { isDeck?: boolean },
 ): CSSProperties & Record<string, string | number> {
   if (viewport === 'desktop') {
+    // For deck/slide previews the iframe renders at a fixed canvas size and
+    // zoom is optical-only, so the shell must keep the full canvas size and
+    // let `transform: scale()` actually scale it. Using `width: 100/scale%`
+    // here would cancel out the scale (an algebraic inverse), leaving the
+    // slide visually stuck at 100% regardless of the zoom value (#5805). The
+    // outer `.comment-frame-clip` already clips overflow for zoom-in.
+    if (options?.isDeck) {
+      return {
+        width: '100%',
+        height: '100%',
+        transform: `scale(${previewScale})`,
+        transformOrigin: '0 0',
+      };
+    }
+    // For non-deck HTML previews (the auto-fit / reflow flow) the
+    // inverse-percentage trick is intentional browser-zoom semantics: the
+    // layout box grows by 1/scale so content reflows, then `transform:
+    // scale()` shrinks it back to fit the clip. This lets zoom-out show more
+    // content instead of just optically shrinking the same layout.
     return {
       width: `${100 / previewScale}%`,
       height: `${100 / previewScale}%`,
@@ -15286,7 +15306,7 @@ function HtmlViewer({
                   style={
                     manualEditMode
                       ? manualEditPreviewShellStyle(previewViewport, previewScale, manualEditViewportWidth)
-                      : previewScaleShellStyle(previewViewport, previewScale)
+                      : previewScaleShellStyle(previewViewport, previewScale, { isDeck: effectiveDeck })
                   }
                 >
                   <PreviewDrawOverlay
