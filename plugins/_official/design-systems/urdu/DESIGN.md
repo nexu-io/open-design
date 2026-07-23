@@ -877,7 +877,7 @@ Here's a complete, production-ready example:
       border-radius: 6px;
       font-family: "Courier New", monospace;
       direction: ltr; /* Code is LTR, even in RTL pages */
-      text-align: left;
+      text-align: start;
       margin-block: var(--space-md);
       border-inline-start: 4px solid var(--color-accent);
     }

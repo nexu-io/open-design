@@ -751,7 +751,7 @@ body.sub-page {
 }
 /* Keep the key/value meta as a left-aligned table (spec: don't center tabular
    content); center the CTA row. */
-.detail-head .detail-meta { align-self: stretch; text-align: left; }
+.detail-head .detail-meta { align-self: stretch; text-align: start; }
 .detail-head .detail-actions { justify-content: center; }
 
 .detail-actions {
@@ -1256,7 +1256,7 @@ body.sub-page {
 }
 .compare-table th,
 .compare-table td {
-  text-align: left;
+  text-align: start;
   padding: 14px 16px;
   border-bottom: 1px solid var(--line);
   vertical-align: top;
@@ -3508,7 +3508,7 @@ dialog.tpl-share-popover .detail-share-dialog-text {
   color: var(--od-secondary);
   font-size: var(--font-size-16, 16px);
   line-height: 125%;
-  text-align: left;
+  text-align: start;
 }
 .tldr-card,
 .solution-step,

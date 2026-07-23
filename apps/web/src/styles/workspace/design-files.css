@@ -185,7 +185,7 @@
   background: transparent;
   color: var(--text);
   font-size: 13px;
-  text-align: left;
+  text-align: start;
   white-space: normal;
 }
 .df-actions .df-project-menu button:hover:not(:disabled),
@@ -370,7 +370,7 @@
   border: none;
   border-bottom: 1px solid var(--border-soft);
   border-radius: 0;
-  text-align: left;
+  text-align: start;
   cursor: pointer;
   font: inherit;
   color: inherit;
@@ -397,7 +397,7 @@
   color: inherit;
   cursor: pointer;
   font: inherit;
-  text-align: left;
+  text-align: start;
 }
 .df-plugin-install {
   appearance: none;
@@ -598,7 +598,7 @@
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-  text-align: right;
+  text-align: end;
 }
 .df-row-time {
   font-size: 11.5px;
@@ -1128,7 +1128,7 @@
   border: none;
   padding: 7px 10px;
   font-size: 12.5px;
-  text-align: left;
+  text-align: start;
   border-radius: var(--radius-xs);
   color: var(--text);
 }

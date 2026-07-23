@@ -99,7 +99,7 @@
   border-radius: var(--radius);
   background: transparent;
   color: var(--text-muted);
-  text-align: left;
+  text-align: start;
   cursor: pointer;
   transition: background-color 120ms var(--ease-out), border-color 120ms var(--ease-out), color 120ms var(--ease-out);
 }
@@ -703,7 +703,7 @@
   border-radius: var(--radius);
   background: var(--bg-panel);
   color: var(--text-muted);
-  text-align: left;
+  text-align: start;
   cursor: pointer;
   transition: background-color 120ms var(--ease-out), border-color 120ms var(--ease-out), color 120ms var(--ease-out);
 }

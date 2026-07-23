@@ -40,7 +40,7 @@
     .log-row { display: grid; grid-template-columns: 120px 1fr 140px; gap: 24px; align-items: baseline; padding: 18px 0; border-top: 1px solid var(--border); }
     .log-row h3 { margin: 0; font-size: 19px; letter-spacing: -0.005em; }
     .log-row p { margin: 5px 0 0; color: var(--muted); font-size: 14px; }
-    .pull { text-align: right; }
+    .pull { text-align: end; }
     .list { margin: 16px 0 0; padding: 0 0 0 18px; }
     .list li { margin: 8px 0; }
     .cta { text-align: center; max-width: 640px; margin: 0 auto; }
@@ -50,7 +50,7 @@
     .num { font-variant-numeric: tabular-nums; font-family: var(--font-mono); }
     @media (max-width: 920px) {
       .log-row { grid-template-columns: 1fr; gap: 8px; }
-      .pull { text-align: left; }
+      .pull { text-align: start; }
       nav { display: none; }
     }
   </style>

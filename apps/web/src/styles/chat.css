@@ -442,7 +442,7 @@
   color: inherit;
   font: inherit;
   font-size: 10px;
-  text-align: left;
+  text-align: start;
   cursor: pointer;
   transition: color 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
@@ -559,7 +559,7 @@
   max-width: 100%;
   overflow: hidden;
   white-space: nowrap;
-  text-align: left;
+  text-align: start;
   appearance: none;
 }
 .msg-plugin-chip--action {
@@ -1548,7 +1548,7 @@
   width: 100%;
   height: 30px;
   justify-content: flex-start;
-  text-align: left;
+  text-align: start;
   padding: 0 8px;
   border-color: transparent;
   border-radius: var(--radius-sm);
@@ -1567,7 +1567,7 @@
   flex: 1 1 auto;
   overflow: hidden;
   text-overflow: ellipsis;
-  text-align: left;
+  text-align: start;
 }
 .session-mode-toggle__check {
   display: inline-flex;
@@ -2276,7 +2276,7 @@
   border: 0;
   background: transparent;
   color: inherit;
-  text-align: left;
+  text-align: start;
 }
 .staged-preview-trigger:hover:not(:disabled) {
   background: transparent;
@@ -2471,7 +2471,7 @@
   max-width: 240px;
   color: var(--text);
   cursor: default;
-  text-align: left;
+  text-align: start;
   font-family: inherit;
   font-size: 9px;
   line-height: 12px;

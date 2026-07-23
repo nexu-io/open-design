@@ -217,7 +217,7 @@ body {
   font-size: 11.5px;
   font-weight: 500;
   line-height: 1.55;
-  text-align: left;
+  text-align: start;
   letter-spacing: normal;
   text-transform: none;
   opacity: 0;
@@ -258,7 +258,7 @@ body {
   color: var(--text);
   border-radius: var(--radius-md);
   cursor: pointer;
-  text-align: left;
+  text-align: start;
   font-family: inherit;
   transition:
     background var(--dur-quick) var(--ease-out),

@@ -328,7 +328,7 @@
 }
 [dir='rtl'] .entry-help-popover__item {
   flex-direction: row-reverse;
-  text-align: right;
+  text-align: end;
 }
 
 .entry-updater-menu {
@@ -1068,7 +1068,7 @@
   gap: 10px;
   padding: 0 9px;
   font-size: 12.5px;
-  text-align: left;
+  text-align: start;
   text-decoration: none;
   cursor: pointer;
   transition: background-color 120ms var(--ease-out), border-color 120ms var(--ease-out),
@@ -1116,7 +1116,7 @@
   left: 0;
 }
 [dir='rtl'] .entry-settings-menu__item {
-  text-align: right;
+  text-align: end;
 }
 
 /* Stacked menu-item layout — the collapsed model-switcher row
@@ -1400,7 +1400,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  text-align: left;
+  text-align: start;
 }
 .inline-switcher__agent-status {
   display: inline-flex;
@@ -1442,7 +1442,7 @@
   overflow: hidden;
   white-space: nowrap;
   color: var(--text-strong);
-  text-align: right;
+  text-align: end;
 }
 .inline-switcher__agent-action-default,
 .inline-switcher__agent-action-hover {
@@ -1526,7 +1526,7 @@
   background: none;
   padding: 0;
   margin: 0;
-  text-align: left;
+  text-align: start;
   cursor: pointer;
 }
 .inline-switcher__account-id-icon {
@@ -1731,7 +1731,7 @@
   appearance: none;
   border: 0;
   background: transparent;
-  text-align: left;
+  text-align: start;
   padding: 8px 30px 8px 10px;
   border-radius: var(--radius);
   display: flex;
@@ -1911,7 +1911,7 @@
     no-repeat right 10px center;
   font-size: 12px;
   color: var(--text);
-  text-align: left;
+  text-align: start;
   cursor: pointer;
 }
 .inline-switcher__select .model-select-searchable__value {
@@ -2728,7 +2728,7 @@
   padding: 8px 10px;
   color: var(--text);
   background: var(--bg-panel);
-  text-align: left;
+  text-align: start;
   cursor: pointer;
   animation: onboarding-agent-pop 220ms cubic-bezier(0.23, 1, 0.32, 1) both;
 }
@@ -2920,7 +2920,7 @@
   border: 1px solid var(--border);
   background: var(--bg-panel);
   color: var(--text);
-  text-align: left;
+  text-align: start;
   cursor: pointer;
   position: relative;
   box-shadow: var(--shadow-xs);
@@ -3716,7 +3716,7 @@
   background: var(--bg-panel);
   font: inherit;
   font-size: 13px;
-  text-align: left;
+  text-align: start;
   cursor: pointer;
   box-shadow: var(--shadow-xs);
   transition: background-color 160ms cubic-bezier(0.23, 1, 0.32, 1), border-color 160ms cubic-bezier(0.23, 1, 0.32, 1), color 160ms cubic-bezier(0.23, 1, 0.32, 1), box-shadow 160ms cubic-bezier(0.23, 1, 0.32, 1);
@@ -3936,7 +3936,7 @@
   font: inherit;
   font-size: 12.5px;
   line-height: 1.25;
-  text-align: left;
+  text-align: start;
   cursor: pointer;
 }
 

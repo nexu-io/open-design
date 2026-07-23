@@ -628,7 +628,7 @@
   border-radius: var(--radius-sm);
   color: var(--text-strong);
   font-size: 12.5px;
-  text-align: left;
+  text-align: start;
   cursor: pointer;
 }
 .design-card-menu button:hover { background: var(--bg-subtle); }
@@ -1690,7 +1690,7 @@
   color: var(--text-muted);
   font-size: 12.5px;
   line-height: 1.25;
-  text-align: left;
+  text-align: start;
   cursor: pointer;
 }
 .ws-pages-menu button:hover,
@@ -1824,7 +1824,7 @@
   font-size: 12.5px;
   font-weight: 500;
   line-height: 1.25;
-  text-align: left;
+  text-align: start;
   cursor: pointer;
 }
 .page-creator-sidebar button span:not(.page-creator-sidebar-count) {
@@ -2027,7 +2027,7 @@
   padding: 10px;
   background: var(--bg-panel);
   color: inherit;
-  text-align: left;
+  text-align: start;
 }
 .page-creator-card-frame {
   display: block;

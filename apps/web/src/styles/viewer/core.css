@@ -146,7 +146,7 @@
   background: transparent;
   color: var(--text);
   font-size: 12.5px;
-  text-align: left;
+  text-align: start;
 }
 .viewer-toolbar-more-item svg:first-child {
   flex: 0 0 auto;
@@ -351,7 +351,7 @@
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   line-height: 1;
-  text-align: left;
+  text-align: start;
 }
 .viewer-action-icon:not(.od-tooltip)[data-tooltip]::after,
 .viewer-comment-count-trigger:not(.od-tooltip)[data-tooltip]::after {
@@ -415,7 +415,7 @@
   font-size: 12.5px;
   line-height: 1.2;
   white-space: nowrap;
-  text-align: left;
+  text-align: start;
   cursor: pointer;
 }
 .artifact-tool-menu-item:hover {
@@ -538,7 +538,7 @@
   background: transparent;
   color: var(--text-muted);
   font-size: 12.5px;
-  text-align: left;
+  text-align: start;
 }
 .viewer-mode-menu-item:hover,
 .viewer-mode-menu-item.active {
@@ -919,7 +919,7 @@
   flex-direction: column;
   align-items: flex-end;
   gap: 2px;
-  text-align: right;
+  text-align: end;
 }
 .live-artifact-refresh-label {
   font-size: 10.5px;
@@ -1261,7 +1261,7 @@
   }
   .live-artifact-refresh-hero-metric {
     align-items: flex-start;
-    text-align: left;
+    text-align: start;
   }
 }
 .viewer-body iframe {
@@ -1396,7 +1396,7 @@
   font-size: 12.5px;
   font-weight: 600;
   line-height: 1;
-  text-align: left;
+  text-align: start;
 }
 .viewer-viewport-menu-item:hover {
   background: var(--bg-subtle);
@@ -2579,7 +2579,7 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   color: var(--text-muted);
   font-size: 11px;
   min-width: 42px;
-  text-align: right;
+  text-align: end;
 }
 .inspect-panel-footer {
   display: flex;
@@ -2953,7 +2953,7 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   border-radius: 10px;
   background: transparent;
   color: var(--text);
-  text-align: left;
+  text-align: start;
   cursor: pointer;
 }
 .file-version-item + .file-version-item {
@@ -3067,7 +3067,7 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   overflow: hidden;
   color: var(--text-muted);
   font-size: 11.5px;
-  text-align: right;
+  text-align: end;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

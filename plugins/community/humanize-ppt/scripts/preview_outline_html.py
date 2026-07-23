@@ -224,7 +224,7 @@ def render_html(title, plan_path, rows, beats):
   @media (max-width: 760px) {{
     .grid-head {{ display: none; }}
     .row {{ grid-template-columns: 1fr; gap: 4px; }}
-    .cell-arrow {{ text-align: left; }}
+    .cell-arrow {{ text-align: start; }}
   }}
 </style>
 </head>

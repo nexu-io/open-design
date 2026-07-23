@@ -151,7 +151,7 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
 /* ================= UTILITY ================= */
 .hidden{display:none!important}
 .nowrap{white-space:nowrap}
-.tr{text-align:right}.tc{text-align:center}.tl{text-align:left}
+.tr{text-align:end}.tc{text-align:center}.tl{text-align:start}
 .uppercase{text-transform:uppercase;letter-spacing:.12em}
 
 /* ================= PRINT ================= */
@@ -547,7 +547,7 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
   line-height: 1.8;
   color: var(--text-1, #c0caf5);
   white-space: pre-wrap;
-  text-align: left;
+  text-align: start;
 }
 .tpl-presenter-mode-reveal .code-block .comment { color: var(--text-3, #6c75a6); }
 .tpl-presenter-mode-reveal .code-block .cmd { color: var(--good, #9ece6a); font-weight: 600; }
@@ -569,7 +569,7 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
 /* Closing line sits under a left-aligned code block; keep one alignment
  * voice instead of a lone centered strip (alignment drift is an AI tell). */
 .tpl-presenter-mode-reveal .code-block + .lede.tc {
-  text-align: left;
+  text-align: start;
   max-width: 920px;
   font-size: 18px;
 }

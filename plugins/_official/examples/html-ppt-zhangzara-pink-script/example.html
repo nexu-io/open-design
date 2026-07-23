@@ -91,7 +91,7 @@
   .s-toc .row .num { font-family: "Instrument Serif", serif; font-style: italic; font-size: 64px; color: var(--pink); line-height: 1; }
   .s-toc .row .title { font-family: "Instrument Serif", serif; font-style: italic; font-size: 56px; color: var(--paper); line-height: 1.05; }
   .s-toc .row .desc { font-family: "Instrument Sans", sans-serif; font-size: 24px; color: var(--mute); margin-top: 8px; line-height: 1.4; font-style: normal; }
-  .s-toc .row .meta { font-family: "JetBrains Mono", monospace; font-size: 24px; letter-spacing: .12em; text-transform: uppercase; color: var(--mute); text-align: right; }
+  .s-toc .row .meta { font-family: "JetBrains Mono", monospace; font-size: 24px; letter-spacing: .12em; text-transform: uppercase; color: var(--mute); text-align: end; }
   .s-toc .row.cur .num, .s-toc .row.cur .title { color: var(--pink); }
 
   /* ============== 3. BY THE NUMBERS ======================== */
@@ -140,7 +140,7 @@
   .s-chart .plotwrap .xax { position: absolute; left: 0; right: 0; bottom: 0; display: flex; justify-content: space-between; font-family: "JetBrains Mono", monospace; font-size: 22px; letter-spacing: .1em; color: var(--mute); }
   .s-chart .callout {
     position: absolute; right: 60px; top: 480px; bottom: 200px;
-    display: flex; flex-direction: column; gap: 8px; width: 360px; align-items: flex-end; text-align: right; justify-content: flex-start;
+    display: flex; flex-direction: column; gap: 8px; width: 360px; align-items: flex-end; text-align: end; justify-content: flex-start;
     border-left: 1px solid var(--pink); padding-left: 24px; padding-top: 4px;
   }
   .s-chart .callout .num { font-family: "Instrument Serif", serif; font-style: italic; font-size: 120px; line-height: .9; color: var(--pink); }
@@ -169,7 +169,7 @@
   .s-matrix .head { position: absolute; left: 60px; right: 60px; top: 140px; display: flex; align-items: end; justify-content: space-between; gap: 60px; }
   .s-matrix .head h2 { font-family: "Instrument Serif", serif; font-style: italic; font-size: 132px; line-height: 1.04; color: var(--paper); max-width: 14ch; padding-bottom: .1em; }
   .s-matrix .head h2 em { color: var(--pink); font-style: italic; }
-  .s-matrix .head .source { font-family: "JetBrains Mono", monospace; font-size: 22px; letter-spacing: .14em; text-transform: uppercase; color: var(--mute); padding-bottom: 18px; max-width: 30ch; line-height: 1.5; text-align: right; }
+  .s-matrix .head .source { font-family: "JetBrains Mono", monospace; font-size: 22px; letter-spacing: .14em; text-transform: uppercase; color: var(--mute); padding-bottom: 18px; max-width: 30ch; line-height: 1.5; text-align: end; }
   .s-matrix .table { position: absolute; left: 60px; right: 60px; top: 460px; bottom: 140px; display: grid; grid-template-columns: 1.4fr 1fr 1fr 1fr; grid-auto-rows: 1fr; }
   .s-matrix .cell { padding: 16px 24px; border-bottom: 1px solid var(--line); display: flex; align-items: center; font-family: "Instrument Sans", sans-serif; font-size: 22px; line-height: 1.4; color: var(--paper); font-weight: 400; }
   .s-matrix .cell.colhead { background: transparent; font-family: "JetBrains Mono", monospace; font-size: 22px; letter-spacing: .14em; text-transform: uppercase; color: var(--pink); border-bottom-color: var(--pink); }

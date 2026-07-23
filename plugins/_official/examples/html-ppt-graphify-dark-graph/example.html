@@ -107,7 +107,7 @@ img,svg{max-width:100%;display:block}
 .track{display:grid;grid-template-columns:96px 1fr;gap:24px;align-items:center;padding:26px 0}
 .track+.track{border-top:1px solid var(--line)}
 .track .who{font-family:var(--font-display);font-weight:600;font-size:16px;line-height:1.35;
-  text-align:right;color:var(--text-2)}
+  text-align:end;color:var(--text-2)}
 .track.open .who{color:var(--text)}
 .track .lane{position:relative;height:40px}
 .track .lane::before{content:'';position:absolute;left:0;right:0;top:50%;height:1px;background:var(--line-strong)}
@@ -160,7 +160,7 @@ img,svg{max-width:100%;display:block}
   .cap+.cap,.stat+.stat{border-left:none;padding-left:0;border-top:1px solid var(--line)}
   .pipe::before{display:none}
   .track{grid-template-columns:1fr;gap:8px}
-  .track .who{text-align:left}
+  .track .who{text-align:start}
 }
 </style>
 </head>

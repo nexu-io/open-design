@@ -112,7 +112,7 @@
     font-size: clamp(48px, min(5.2vw, 9vh), 96px);
     color: var(--ink);
     line-height: 0.96;
-    text-align: right;
+    text-align: end;
     letter-spacing: -0.005em;
     z-index: 5;
   }
@@ -194,7 +194,7 @@
     line-height: 1.04;
     color: var(--ink);
     letter-spacing: -0.005em;
-    text-align: left;
+    text-align: start;
   }
   .s-manifesto .attr {
     position: absolute;
@@ -375,7 +375,7 @@
   .s-data .chart { display: flex; flex-direction: column; gap: clamp(8px, 1vh, 14px); justify-content: center; }
   .s-data .row { display: grid; grid-template-columns: 64px 1fr 80px; align-items: center; gap: clamp(12px, 1vw, 22px); }
   .s-data .row .yr { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: clamp(12px, 0.85vw, 14px); color: var(--ink); letter-spacing: 0.04em; }
-  .s-data .row .val { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: clamp(12px, 0.85vw, 14px); color: var(--ink); text-align: right; letter-spacing: 0.02em; }
+  .s-data .row .val { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: clamp(12px, 0.85vw, 14px); color: var(--ink); text-align: end; letter-spacing: 0.02em; }
   .s-data .bar { height: clamp(14px, 1.6vh, 22px); background: var(--ink); position: relative; }
   .s-data .bar.lit { background: var(--sun); border: 1px solid var(--ink); }
 
@@ -479,7 +479,7 @@
   .s-cal .row .ttl  { font-family: 'Instrument Serif', Georgia, serif; font-size: clamp(20px, 1.6vw, 30px); line-height: 1.15; color: var(--ink); }
   .s-cal .row .ttl em { font-style: italic; }
   .s-cal .row .ven  { font-family: 'Archivo', sans-serif; font-size: clamp(14px, 0.92vw, 15px); color: var(--ink); }
-  .s-cal .row .dur  { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: clamp(12px, 0.84vw, 14px); color: var(--ink); text-align: right; letter-spacing: 0.04em; opacity: 0.78; }
+  .s-cal .row .dur  { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: clamp(12px, 0.84vw, 14px); color: var(--ink); text-align: end; letter-spacing: 0.04em; opacity: 0.78; }
   .s-cal .row.headrow { border-bottom: 1px solid var(--ink); padding-bottom: 8px; }
   .s-cal .row.headrow > div { font-family: 'Archivo', sans-serif; font-weight: 600; text-transform: uppercase; letter-spacing: 0.18em; font-size: clamp(10px, 0.7vw, 12px); color: var(--ink); }
 

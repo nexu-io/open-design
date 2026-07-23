@@ -264,7 +264,7 @@
   align-items: center;
   justify-content: flex-start;
   gap: 6px;
-  text-align: left;
+  text-align: start;
   cursor: inherit;
 }
 .workspace-tab__main:hover:not(:disabled) {
@@ -428,7 +428,7 @@
   display: flex;
   align-items: center;
   gap: 9px;
-  text-align: left;
+  text-align: start;
 }
 .workspace-tabs-list__main:hover:not(:disabled) {
   background: transparent;
@@ -798,7 +798,7 @@
   color: var(--text);
   font-size: 12.5px;
   cursor: pointer;
-  text-align: left;
+  text-align: start;
 }
 .zoom-menu-item:hover { background: var(--bg-subtle); }
 .zoom-menu-item.active { color: var(--accent-strong); font-weight: 600; }
@@ -1166,7 +1166,7 @@
   background: transparent;
   font: inherit;
   color: inherit;
-  text-align: left;
+  text-align: start;
   cursor: pointer;
 }
 /* The select button fills the row; let the row's own background (highlight when
@@ -1270,7 +1270,7 @@
   width: 100%;
   padding: 8px 10px;
   font-size: 12.5px;
-  text-align: left;
+  text-align: start;
   background: transparent;
   border: none;
   border-radius: var(--radius-sm);

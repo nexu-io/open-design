@@ -205,7 +205,7 @@ textarea { resize: vertical; font-family: inherit; }
   padding: 7px 10px;
   font: inherit;
   color: var(--text);
-  text-align: left;
+  text-align: start;
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -278,7 +278,7 @@ textarea { resize: vertical; font-family: inherit; }
   border-radius: var(--radius-sm);
   font: inherit;
   font-size: 12.5px;
-  text-align: left;
+  text-align: start;
   cursor: pointer;
 }
 .od-select-option:hover:not(:disabled),

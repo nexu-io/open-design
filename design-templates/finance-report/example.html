@@ -78,13 +78,13 @@
   .bar-row .label { color: var(--muted); }
   .bar-track { background: var(--accent-soft); border-radius: 4px; height: 10px; position: relative; overflow: hidden; }
   .bar-fill { background: var(--accent); height: 100%; border-radius: 4px; }
-  .bar-value { font-family: var(--mono); font-size: 11.5px; text-align: right; color: var(--ink); }
+  .bar-value { font-family: var(--mono); font-size: 11.5px; text-align: end; color: var(--ink); }
 
   /* Tables */
   table { width: 100%; border-collapse: collapse; margin-top: 6px; }
-  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); font-size: 13px; vertical-align: middle; }
+  th, td { text-align: start; padding: 10px 12px; border-bottom: 1px solid var(--line); font-size: 13px; vertical-align: middle; }
   th { font-family: var(--mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); border-bottom: 1px solid var(--line-strong); }
-  td.num, th.num { text-align: right; font-family: var(--mono); }
+  td.num, th.num { text-align: end; font-family: var(--mono); }
   tr.total td { font-weight: 700; border-top: 2px solid var(--ink); border-bottom: none; padding-top: 14px; }
   .badge { display: inline-block; padding: 2px 8px; font-size: 11px; border-radius: 999px; font-weight: 500; }
   .badge.green { background: #e7f4ee; color: var(--positive); }

@@ -83,7 +83,7 @@
   flex-direction: column;
   gap: 8px;
   align-items: stretch;
-  text-align: left;
+  text-align: start;
   padding: 14px 16px;
   min-height: 120px;
   border: 1px solid var(--border);

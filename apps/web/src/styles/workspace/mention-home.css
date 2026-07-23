@@ -105,7 +105,7 @@
   border-radius: var(--radius-sm);
   padding: 7px 8px;
   font-size: 12px;
-  text-align: left;
+  text-align: start;
   column-gap: 8px;
   color: var(--text);
   min-height: 42px;
@@ -141,7 +141,7 @@
   gap: 3px;
   min-width: 0;
   overflow: hidden;
-  text-align: left;
+  text-align: start;
 }
 .mention-item-body strong {
   font-weight: 600;
@@ -153,7 +153,7 @@
 }
 .mention-meta--desc {
   align-self: stretch;
-  text-align: left;
+  text-align: start;
   white-space: nowrap;
   font-size: 10.5px;
   line-height: 1.3;
@@ -1212,7 +1212,7 @@
   gap: 10px;
   align-items: center;
   padding: 7px 10px;
-  text-align: left;
+  text-align: start;
   cursor: pointer;
 }
 .settings-nav-item:hover {
@@ -2000,7 +2000,7 @@
 .orbit-switch-text {
   font-variant-numeric: tabular-nums;
   min-width: 22px;
-  text-align: right;
+  text-align: end;
 }
 
 .orbit-automation-schedule-controls {

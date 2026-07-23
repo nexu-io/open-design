@@ -13,7 +13,7 @@
 .code-viewer .gutter {
   background: var(--bg);
   color: var(--text-faint);
-  text-align: right;
+  text-align: end;
   padding: 16px 12px 16px 16px;
   user-select: none;
   border-right: 1px solid var(--border-soft);
@@ -42,7 +42,7 @@
   align-items: center;
   justify-content: center;
   gap: 12px;
-  text-align: left;
+  text-align: start;
 }
 .document-preview {
   max-width: 860px;
@@ -786,7 +786,7 @@
   gap: 12px;
   width: 100%;
   padding: 14px 16px;
-  text-align: left;
+  text-align: start;
   cursor: pointer;
   background: var(--bg-fill-tertiary);
   border: none;
@@ -1324,7 +1324,7 @@
 .markdown-rendered th,
 .markdown-rendered td {
   padding: 11px 14px;
-  text-align: left;
+  text-align: start;
   vertical-align: top;
   border-bottom: 1px solid var(--border-soft);
 }
@@ -1374,7 +1374,7 @@
   padding: 4px;
   background: transparent;
   border: none;
-  text-align: left;
+  text-align: start;
   font-size: 13px;
   color: var(--text);
   cursor: pointer;
@@ -1552,7 +1552,7 @@
   padding: 4px;
   background: transparent;
   border: none;
-  text-align: left;
+  text-align: start;
   font-size: 13px;
   color: var(--text);
   cursor: pointer;
@@ -1660,7 +1660,7 @@
   width: 100%;
   background: transparent;
   border: none;
-  text-align: left;
+  text-align: start;
   color: var(--text);
   cursor: pointer;
   border-radius: var(--radius);

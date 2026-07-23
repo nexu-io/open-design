@@ -646,7 +646,7 @@ export function table(opts: { columns: string[]; rows: string[][] }): string {
   const th = opts.columns
     .map(
       (c) => `<th style="${style([
-        "text-align:left",
+        "text-align:start",
         "padding:" + varRef("sizeSM") + " " + varRef("sizeMD"),
         "font-size:" + varRef("fontSizeSM"),
         "font-weight:" + varRef("fontWeightStrong"),

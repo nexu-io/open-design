@@ -40,7 +40,7 @@
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  text-align: left;
+  text-align: start;
 }
 .mcp-picker-item:hover {
   border-color: var(--border-strong);
@@ -56,7 +56,7 @@
   background: transparent;
   border: 0;
   padding: 0;
-  text-align: left;
+  text-align: start;
   cursor: pointer;
   width: 100%;
   color: inherit;
@@ -221,7 +221,7 @@
   font-size: 11px;
   color: var(--text-muted);
   margin-left: auto;
-  text-align: right;
+  text-align: end;
   /* Hide the per-group hint on narrow widths so the count + title stay
      readable. The hint is supplementary so dropping it is acceptable. */
   overflow: hidden;
@@ -460,7 +460,7 @@
   background: transparent;
   border: 1px solid transparent;
   border-radius: var(--radius-xs);
-  text-align: left;
+  text-align: start;
   cursor: pointer;
   color: inherit;
   font: inherit;
@@ -990,7 +990,7 @@
   border-radius: var(--radius-sm, 6px);
   font-size: 12px;
   cursor: pointer;
-  text-align: left;
+  text-align: start;
 }
 .plugin-loop-home__card-action:hover:not(:disabled) {
   border-color: var(--accent);
@@ -1707,7 +1707,7 @@
   background: transparent;
   border: none;
   border-radius: var(--radius-sm);
-  text-align: left;
+  text-align: start;
   cursor: pointer;
   color: inherit;
   font: inherit;
@@ -2098,7 +2098,7 @@
   background: transparent;
   border: none;
   border-radius: var(--radius-sm, 6px);
-  text-align: left;
+  text-align: start;
   cursor: pointer;
   color: var(--text);
 }

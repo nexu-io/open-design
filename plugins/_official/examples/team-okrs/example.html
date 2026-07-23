@@ -30,7 +30,7 @@
   .quarter-banner { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 24px; padding: 28px 32px; background: linear-gradient(135deg, var(--ink), #2a3050); color: white; border-radius: 16px; margin: 6px 0 28px; }
   .quarter-banner h1 { margin: 6px 0 4px; font-size: 32px; font-weight: 700; letter-spacing: -0.02em; }
   .quarter-banner .meta { color: rgba(255,255,255,0.72); font-size: 13.5px; }
-  .qb-progress { text-align: right; }
+  .qb-progress { text-align: end; }
   .qb-progress .num { font-size: 56px; font-weight: 800; letter-spacing: -0.03em; line-height: 1; color: #b3c0ff; }
   .qb-progress .label { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(255,255,255,0.6); margin-top: 4px; }
 
@@ -62,7 +62,7 @@
   .kr-fill { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--accent), #6e85ff); }
   .kr-fill.warn { background: linear-gradient(90deg, var(--warn), #f1b13a); }
   .kr-fill.danger { background: linear-gradient(90deg, var(--danger), #d8625e); }
-  .kr-pct { font-family: var(--mono); font-size: 13px; font-weight: 600; text-align: right; }
+  .kr-pct { font-family: var(--mono); font-size: 13px; font-weight: 600; text-align: end; }
 
   /* Sidebar */
   aside.side h3 { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 22px 0 12px; font-weight: 500; }
@@ -87,7 +87,7 @@
     aside.side { border-left: none; border-top: 1px solid var(--line); }
     .obj-head { grid-template-columns: 1fr; }
     .kr { grid-template-columns: 1fr; }
-    .kr-pct { text-align: left; }
+    .kr-pct { text-align: start; }
   }
 </style>
 </head>

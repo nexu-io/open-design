@@ -128,7 +128,7 @@
   background: transparent;
   border-radius: var(--radius-sm);
   cursor: pointer;
-  text-align: left;
+  text-align: start;
   color: var(--text);
 }
 

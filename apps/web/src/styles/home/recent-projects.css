@@ -61,7 +61,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--bg-panel);
-  text-align: left;
+  text-align: start;
   overflow: visible;
   transition: border-color 120ms var(--ease-out), box-shadow 120ms var(--ease-out), transform 120ms var(--ease-out);
 }
@@ -79,7 +79,7 @@
   color: inherit;
   cursor: pointer;
   font: inherit;
-  text-align: left;
+  text-align: start;
   overflow: hidden;
 }
 .recent-projects__card:hover {
@@ -315,7 +315,7 @@
   cursor: pointer;
   font: inherit;
   font-size: 13px;
-  text-align: left;
+  text-align: start;
 }
 .recent-projects__card-menu button:hover,
 .recent-projects__card-menu button:focus-visible {

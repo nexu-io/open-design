@@ -172,7 +172,7 @@
   background: transparent;
   color: var(--text);
   padding: 6px 8px;
-  text-align: left;
+  text-align: start;
   font-size: 12px;
   cursor: pointer;
 }
@@ -322,7 +322,7 @@
   color: var(--text);
   padding: 7px 9px;
   cursor: pointer;
-  text-align: left;
+  text-align: start;
   transition: background 120ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 .db-suggestions button:hover {
@@ -394,7 +394,7 @@
   background: transparent;
   color: var(--text);
   padding: 7px 9px;
-  text-align: left;
+  text-align: start;
   cursor: pointer;
   font-size: 12.5px;
   transition: background 120ms cubic-bezier(0.23, 1, 0.32, 1), color 120ms cubic-bezier(0.23, 1, 0.32, 1);
@@ -1170,7 +1170,7 @@
   color: var(--text);
   padding: 0;
   cursor: pointer;
-  text-align: left;
+  text-align: start;
 }
 .db-reference-icon {
   width: 36px;

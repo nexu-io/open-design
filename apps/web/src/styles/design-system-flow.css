@@ -1782,7 +1782,7 @@ a.ds-source-link-open:focus-visible {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  text-align: left;
+  text-align: start;
 }
 .ds-review-section__head span {
   display: grid;
@@ -1900,7 +1900,7 @@ a.ds-source-link-open:focus-visible {
   border-bottom: 1px solid var(--border-soft);
   background: transparent;
   color: var(--text);
-  text-align: left;
+  text-align: start;
   cursor: pointer;
 }
 .ds-file-row:not(:disabled):hover,
@@ -2084,7 +2084,7 @@ a.ds-source-link-open:focus-visible {
   border-bottom: 1px solid var(--border);
   border-radius: 0;
   background: var(--bg-panel);
-  text-align: left;
+  text-align: start;
 }
 .ds-create-row:hover {
   background: var(--bg-subtle);
@@ -2197,7 +2197,7 @@ a.ds-source-link-open:focus-visible {
   background: transparent;
   color: inherit;
   cursor: pointer;
-  text-align: left;
+  text-align: start;
 }
 .ds-create-row + .ds-user-list .ds-user-row:first-child {
   border-top: 0;
@@ -3208,7 +3208,7 @@ a.ds-source-link-open:focus-visible {
   align-items: flex-start;
   gap: 8px;
   padding: 0;
-  text-align: left;
+  text-align: start;
 }
 .ds-project-section-title svg {
   margin-top: 1px;
@@ -3328,7 +3328,7 @@ a.ds-source-link-open:focus-visible {
   flex-direction: column;
   gap: 8px;
   padding: 12px;
-  text-align: left;
+  text-align: start;
   background: var(--bg-elevated);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
@@ -3509,7 +3509,7 @@ a.ds-source-link-open:focus-visible {
   align-items: center;
   gap: 10px;
   padding: 12px 14px;
-  text-align: left;
+  text-align: start;
   color: var(--text);
 }
 .ds-project-file-row:last-child {

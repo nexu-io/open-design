@@ -312,7 +312,7 @@
   background: transparent;
   border: 0;
   cursor: pointer;
-  text-align: left;
+  text-align: start;
   font-size: 12px;
   color: var(--text);
   min-width: 0;
@@ -386,7 +386,7 @@
   background: transparent;
   color: inherit;
   font: inherit;
-  text-align: left;
+  text-align: start;
 }
 .file-ops-row-main--action {
   cursor: pointer;
@@ -603,7 +603,7 @@
   border: none;
   padding: 8px 10px;
   font-size: 12px;
-  text-align: left;
+  text-align: start;
   border-radius: var(--radius-sm);
   cursor: pointer;
   display: flex;
@@ -714,7 +714,7 @@
   width: 100%;
   padding: 8px 10px;
   font-size: 12.5px;
-  text-align: left;
+  text-align: start;
   background: transparent;
   border: none;
   border-radius: var(--radius-sm);
@@ -819,7 +819,7 @@
   background: var(--bg-panel);
   color: var(--text);
   font-size: 12.5px;
-  text-align: left;
+  text-align: start;
   text-decoration: none;
   cursor: pointer;
 }

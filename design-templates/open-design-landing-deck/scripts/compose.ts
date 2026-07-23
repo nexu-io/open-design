@@ -491,7 +491,7 @@ body::before { z-index: 0; }
 /* ---------- CTA slide ---------- */
 .s-cta .slide-inner {
   grid-template-columns: 1fr; max-width: 980px;
-  gap: 32px; text-align: left;
+  gap: 32px; text-align: start;
 }
 .s-cta .eyebrow {
   font-family: var(--sans); font-size: 11px; font-weight: 600;
@@ -526,7 +526,7 @@ body::before { z-index: 0; }
   grid-template-columns: 1fr;
   align-content: end;
   padding-bottom: 32px;
-  text-align: left;
+  text-align: start;
   gap: 16px;
   max-width: none;
 }

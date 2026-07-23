@@ -196,7 +196,7 @@
   line-height: 1.8;
   color: #e6edf3;
   white-space: pre-wrap;
-  text-align: left;
+  text-align: start;
 }
 .tpl-presenter-mode-reveal .code-block .comment { color: #8b949e; }
 .tpl-presenter-mode-reveal .code-block .cmd { color: #3fb950; font-weight: 600; }

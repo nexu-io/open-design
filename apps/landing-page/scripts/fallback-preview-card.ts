@@ -346,7 +346,7 @@ export function renderFallbackCard(meta: SkillCardMeta, indexInCatalog: number):
     font-family: 'JetBrains Mono', monospace;
     font-size: 14px;
     color: var(--ink-mute);
-    text-align: right;
+    text-align: end;
   }
   .attribution .from {
     display: block;

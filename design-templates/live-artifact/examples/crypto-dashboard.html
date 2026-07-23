@@ -345,7 +345,7 @@
   .ticker .ext .ico { font-size: 9px; opacity: 0.7; margin-left: 2px; }
   .ticker .name { color: var(--muted); font-size: 12.5px; }
 
-  .price-block { text-align: right; }
+  .price-block { text-align: end; }
   .px-now { font-family: var(--display); font-weight: 600; font-size: 30px; letter-spacing: -0.02em; }
   .px-delta { font-family: var(--mono); font-size: 12.5px; margin-top: 2px; }
 
@@ -445,7 +445,7 @@
 
   table.holdings { width: 100%; border-collapse: collapse; }
   table.holdings th, table.holdings td {
-    padding: 12px 16px; text-align: left; font-size: 12.5px;
+    padding: 12px 16px; text-align: start; font-size: 12.5px;
     border-bottom: 1px solid var(--hairline);
   }
   table.holdings th {
@@ -455,7 +455,7 @@
   }
   table.holdings tr:last-child td { border-bottom: 0; }
   table.holdings tr:hover td { background: rgba(34,211,238,0.025); }
-  td.num, th.num { text-align: right; font-family: var(--mono); }
+  td.num, th.num { text-align: end; font-family: var(--mono); }
   .sym-cell { display: flex; align-items: center; gap: 12px; }
   .sym-mark {
     width: 30px; height: 30px; border-radius: 8px;
