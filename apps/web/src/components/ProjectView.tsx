@@ -257,7 +257,10 @@ import {
   markFirstOnboardingGenerationCompleted,
   type OnboardingEntry,
 } from '../onboarding/onboarding-entry';
-import { producedPreviewableArtifact } from '../onboarding/first-generation';
+import {
+  hasPreviewableArtifactForOnboarding,
+  producedPreviewableArtifact,
+} from '../onboarding/first-generation';
 import { sentPrefilledPrompt } from '../onboarding/first-prompt';
 import { beginFirstLoop, recordFirstLoopStep } from '../onboarding/first-loop';
 import { BrandReadyPrompt } from './BrandReadyPrompt';
@@ -724,6 +727,24 @@ function mergeChatAttachments(...groups: ChatAttachment[][]): ChatAttachment[] {
     }
   }
   return out;
+}
+
+function attachmentPathsForAssistant(
+  messages: readonly ChatMessage[],
+  assistantMessageId: string,
+): string[] {
+  const assistantIndex = messages.findIndex((message) => message.id === assistantMessageId);
+  for (let index = assistantIndex - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message?.role !== 'user') continue;
+    return mergeChatAttachments(
+      message.attachments ?? [],
+      ...(message.commentAttachments ?? []).map((attachment) =>
+        chatAttachmentsFromPreviewCommentImages(attachment.imageAttachments),
+      ),
+    ).map((attachment) => attachment.path);
+  }
+  return [];
 }
 
 function historyWithWorkspaceContext(
@@ -2552,15 +2573,13 @@ export function ProjectView({
     () => new Set(projectFiles.map((f) => f.name)),
     [projectFiles],
   );
-  // A previewable artifact exists once any HTML file has been produced. Gates
-  // the one-time first-generation hint (spec §8.3); the hint component owns its
-  // own once-ever "seen" budget.
-  const hasPreviewableArtifact = useMemo(() => {
-    for (const name of projectFileNames) {
-      if (name.toLowerCase().endsWith('.html')) return true;
-    }
-    return false;
-  }, [projectFileNames]);
+  // Legacy HTML keeps its project-level fallback. Images require successful
+  // assistant-produced provenance so uploaded references cannot trigger the
+  // one-time first-generation hint (spec §8.3).
+  const hasPreviewableArtifact = useMemo(
+    () => hasPreviewableArtifactForOnboarding(projectFiles, messages),
+    [messages, projectFiles],
+  );
   // First-loop ledger: the artifact reaching the preview is the 查看 step of the
   // loop (spec §8.3). Recorded once per project; a no-op for any project not
   // started from a recommendation.
@@ -3507,6 +3526,7 @@ export function ProjectView({
       for (const message of messages) {
         if (cancelled) return;
         if (message.role !== 'assistant') continue;
+        const runAttachmentPaths = attachmentPathsForAssistant(messages, message.id);
 
         // A message whose run_status was spuriously written as 'failed' before
         // the page reloaded (e.g. the SSE reconnect fallback fired while the
@@ -3731,6 +3751,12 @@ export function ProjectView({
             );
 
             let nextFiles = await refreshProjectFiles();
+            const attachmentFileNames = resolveProjectFileNames(
+              runAttachmentPaths,
+              nextFiles,
+              project.id,
+              projectDetail.resolvedDir,
+            );
             const beforeFileNames = new Set(
               message.preTurnFileNames ?? nextFiles.map((f) => f.name),
             );
@@ -3741,7 +3767,11 @@ export function ProjectView({
             let artifactPersistenceSucceeded = false;
             let artifactPersistenceError: string | undefined;
             if (artifactToPersist?.html) {
-              const producedBeforeFallback = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
+              const producedBeforeFallback = computeProducedFiles(
+                beforeFileNames,
+                nextFiles,
+                attachmentFileNames,
+              ) ?? [];
               const runStartedAt = status.createdAt || message.startedAt || message.createdAt;
               recoveredExistingArtifact =
                 await findSameTurnWriteForRecoveredArtifact({
@@ -3772,7 +3802,11 @@ export function ProjectView({
                 nextFiles = await refreshProjectFiles();
               }
             }
-            const diff = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
+            const diff = computeProducedFiles(
+              beforeFileNames,
+              nextFiles,
+              attachmentFileNames,
+            ) ?? [];
             const produced = mergeRecoveredArtifact(diff, recoveredExistingArtifact);
             const touchedFilePaths = extractTouchedFilePathsFromEvents(message.events);
             const traceObjectFiles = mergeRecoveredTraceObjectFile(
@@ -3795,6 +3829,7 @@ export function ProjectView({
                 project.id,
                 projectDetail.resolvedDir,
               ),
+              excludedFileNames: attachmentFileNames,
             });
             if (producedArtifactToOpen) requestOpenFile(producedArtifactToOpen);
             const deliveryOutcome = resolveDesignDeliveryOutcome({
@@ -4052,6 +4087,12 @@ export function ProjectView({
               void (async () => {
                 const preTurn = message.preTurnFileNames;
                 let nextFiles = await refreshProjectFiles();
+                const attachmentFileNames = resolveProjectFileNames(
+                  runAttachmentPaths,
+                  nextFiles,
+                  project.id,
+                  projectDetail.resolvedDir,
+                );
                 let artifactPersistenceSucceeded = false;
                 let artifactPersistenceError: string | undefined;
                 // Use the turn-start snapshot when available so reload
@@ -4063,7 +4104,11 @@ export function ProjectView({
                   ? parsedArtifact
                   : artifactFromStandaloneHtml(replayedContent);
                 if (artifactToPersist?.html) {
-                  const producedBeforeFallback = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
+                  const producedBeforeFallback = computeProducedFiles(
+                    beforeFileNames,
+                    nextFiles,
+                    attachmentFileNames,
+                  ) ?? [];
                   const runStartedAt = status.createdAt || message.startedAt || message.createdAt;
                   recoveredExistingArtifact =
                     await findSameTurnWriteForRecoveredArtifact({
@@ -4094,7 +4139,11 @@ export function ProjectView({
                     nextFiles = await refreshProjectFiles();
                   }
                 }
-                const diff = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
+                const diff = computeProducedFiles(
+                  beforeFileNames,
+                  nextFiles,
+                  attachmentFileNames,
+                ) ?? [];
                 const produced = mergeRecoveredArtifact(diff, recoveredExistingArtifact);
                 const touchedFilePaths = extractTouchedFilePathsFromEvents(
                   needsFullReplay ? replayedEvents : message.events,
@@ -4119,6 +4168,7 @@ export function ProjectView({
                     project.id,
                     projectDetail.resolvedDir,
                   ),
+                  excludedFileNames: attachmentFileNames,
                 });
                 if (producedArtifactToOpen) requestOpenFile(producedArtifactToOpen);
                 const deliveryContent = needsFullReplay ? replayedContent : message.content;
@@ -4193,12 +4243,22 @@ export function ProjectView({
                       : artifactFromStandaloneHtml(replayedContent);
                     if (!artifactToPersist?.html) return;
                     let nextFiles = await refreshProjectFiles();
+                    const attachmentFileNames = resolveProjectFileNames(
+                      runAttachmentPaths,
+                      nextFiles,
+                      project.id,
+                      projectDetail.resolvedDir,
+                    );
                     const beforeFileNames = new Set(
                       message.preTurnFileNames ?? nextFiles.map((f) => f.name),
                     );
                     const runStartedAt =
                       latestRunStatus?.createdAt || message.startedAt || message.createdAt;
-                    const producedBeforeFallback = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
+                    const producedBeforeFallback = computeProducedFiles(
+                      beforeFileNames,
+                      nextFiles,
+                      attachmentFileNames,
+                    ) ?? [];
                     let recoveredExistingArtifact =
                       await findSameTurnWriteForRecoveredArtifact({
                         artifact: artifactToPersist,
@@ -4229,12 +4289,19 @@ export function ProjectView({
                         { minMtime: runStartedAt },
                       );
                     }
-                    const diff = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
+                    const diff = computeProducedFiles(
+                      beforeFileNames,
+                      nextFiles,
+                      attachmentFileNames,
+                    ) ?? [];
                     const produced = mergeRecoveredArtifact(diff, recoveredExistingArtifact);
                     if (produced.length > 0) {
                       recoveredArtifactMessagesRef.current.add(message.id);
                     }
-                    const producedArtifactToOpen = selectAutoOpenProducedArtifact(produced, autoOpenArtifactOptions);
+                    const producedArtifactToOpen = selectAutoOpenProducedArtifact(produced, {
+                      ...autoOpenArtifactOptions,
+                      excludedFileNames: attachmentFileNames,
+                    });
                     if (producedArtifactToOpen) requestOpenFile(producedArtifactToOpen);
                     if (latestRunStatus?.status === 'succeeded') setError(null);
                     if (
@@ -4538,6 +4605,7 @@ export function ProjectView({
         for (const message of recoveryMessages) {
           if (cancelled) return;
           if (!hasRecoverableArtifactMessage(message)) continue;
+          const runAttachmentPaths = attachmentPathsForAssistant(recoveryMessages, message.id);
           if (recoveredArtifactMessagesRef.current.has(message.id)) continue;
           const runId = message.runId;
           if (!runId) continue;
@@ -4580,12 +4648,22 @@ export function ProjectView({
           const latestRunStatus = await fetchChatRunStatus(runId).catch(() => null);
           let nextFiles = await refreshProjectFiles();
           if (cancelled) return;
+          const attachmentFileNames = resolveProjectFileNames(
+            runAttachmentPaths,
+            nextFiles,
+            project.id,
+            projectDetail.resolvedDir,
+          );
           const beforeFileNames = new Set(
             message.preTurnFileNames ?? nextFiles.map((f) => f.name),
           );
           const runStartedAt =
             latestRunStatus?.createdAt || message.startedAt || message.createdAt;
-          const producedBeforeFallback = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
+          const producedBeforeFallback = computeProducedFiles(
+            beforeFileNames,
+            nextFiles,
+            attachmentFileNames,
+          ) ?? [];
           let recoveredExistingArtifact =
             await findSameTurnWriteForRecoveredArtifact({
               artifact: artifactToPersist,
@@ -4617,13 +4695,20 @@ export function ProjectView({
             );
           }
           if (cancelled) return;
-          const diff = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
+          const diff = computeProducedFiles(
+            beforeFileNames,
+            nextFiles,
+            attachmentFileNames,
+          ) ?? [];
           const produced = mergeRecoveredArtifact(diff, recoveredExistingArtifact);
           if (produced.length === 0) {
             continue;
           }
           recoveredArtifactMessagesRef.current.add(message.id);
-          const producedArtifactToOpen = selectAutoOpenProducedArtifact(produced, autoOpenArtifactOptions);
+          const producedArtifactToOpen = selectAutoOpenProducedArtifact(produced, {
+            ...autoOpenArtifactOptions,
+            excludedFileNames: attachmentFileNames,
+          });
           if (producedArtifactToOpen) requestOpenFile(producedArtifactToOpen);
           // This message's persisted runStatus was already terminal (a
           // precondition of hasRecoverableArtifactMessage); when it has no
@@ -4998,6 +5083,9 @@ export function ProjectView({
           chatAttachmentsFromPreviewCommentImages(attachment.imageAttachments),
         ),
       );
+      const runAttachmentPaths = runAttachments
+        .map((attachment) => normalizeComparableFilePath(attachment.path))
+        .filter(Boolean);
       const selectedAgent =
         config.mode === 'daemon' && config.agentId
           ? agentsById.get(config.agentId)
@@ -5022,7 +5110,10 @@ export function ProjectView({
               effectiveSelectedAgentChoice?.model,
             )
           : apiProtocolModelLabel(config.apiProtocol, config.model);
-      const preTurnFileNames = projectFiles.map((f) => f.name);
+      const preTurnFileNames = Array.from(new Set([
+        ...projectFiles.map((file) => file.name),
+        ...runAttachmentPaths,
+      ]));
       const assistantId = randomUUID();
       const assistantMsg: ChatMessage = {
         id: assistantId,
@@ -5495,6 +5586,12 @@ export function ProjectView({
           void (async () => {
             try {
               let nextFiles = await refreshProjectFiles();
+              const attachmentFileNames = resolveProjectFileNames(
+                runAttachmentPaths,
+                nextFiles,
+                project.id,
+                projectDetail.resolvedDir,
+              );
               let artifactPersistenceSucceeded = false;
               let artifactPersistenceError: string | undefined;
               const finalText = streamedText || fullText;
@@ -5502,7 +5599,11 @@ export function ProjectView({
                 ? parsedArtifact
                 : artifactFromStandaloneHtml(finalText);
               if (artifactToPersist?.html) {
-                const producedBeforeFallback = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
+                const producedBeforeFallback = computeProducedFiles(
+                  beforeFileNames,
+                  nextFiles,
+                  attachmentFileNames,
+                ) ?? [];
                 const sameTurnArtifactWrite =
                   await findSameTurnNonHtmlWriteForRecoveredArtifact({
                     artifact: artifactToPersist,
@@ -5532,13 +5633,17 @@ export function ProjectView({
                   nextFiles = await refreshProjectFiles();
                 }
               }
-              const produced = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
+              const produced = computeProducedFiles(
+                beforeFileNames,
+                nextFiles,
+                attachmentFileNames,
+              ) ?? [];
               // Completion half of the onboarding funnel: the first generation
               // in a recommendation-started project that actually produced a
               // previewable artifact. Gated on the same artifact-producing
-              // condition as the first-artifact hint (a produced `.html`), so a
-              // `succeeded` run that returned only text or a clarifying question
-              // does NOT count. Fires once.
+              // condition as the first-artifact hint (HTML or generated image),
+              // so a `succeeded` run that returned only text or a clarifying
+              // question does NOT count. Fires once.
               if (
                 ownsCurrentRun &&
                 onboardingEntryRef.current &&
@@ -5572,6 +5677,7 @@ export function ProjectView({
                   project.id,
                   projectDetail.resolvedDir,
                 ),
+                excludedFileNames: attachmentFileNames,
               });
               if (producedArtifactToOpen) requestOpenFile(producedArtifactToOpen);
               const deliveryCandidate: ChatMessage = {
@@ -9611,10 +9717,13 @@ function applyDesignDeliveryOutcome(
 export function computeProducedFiles(
   beforeNames: ReadonlySet<string> | readonly string[] | undefined,
   next: readonly ProjectFile[],
+  excludedFileNames?: ReadonlySet<string>,
 ): ProjectFile[] | undefined {
   if (!beforeNames) return undefined;
   const set = beforeNames instanceof Set ? beforeNames : new Set(beforeNames);
-  return filterImplicitProducedFiles(next.filter((f) => !set.has(f.name)));
+  return filterImplicitProducedFiles(
+    next.filter((file) => !set.has(file.name) && !excludedFileNames?.has(file.name)),
+  );
 }
 
 export function computeTraceObjectFiles(
@@ -9772,8 +9881,17 @@ export function resolveAgentTouchedFileNames(
   projectId?: string,
   projectRoot?: string | null,
 ): Set<string> {
+  return resolveProjectFileNames(touchedPaths, files, projectId, projectRoot);
+}
+
+function resolveProjectFileNames(
+  paths: Iterable<string>,
+  files: readonly ProjectFile[],
+  projectId?: string,
+  projectRoot?: string | null,
+): Set<string> {
   const names = new Set<string>();
-  for (const rawPath of touchedPaths) {
+  for (const rawPath of paths) {
     const file = findTouchedProjectFile(rawPath, files, projectId, projectRoot);
     if (file) names.add(file.name);
   }

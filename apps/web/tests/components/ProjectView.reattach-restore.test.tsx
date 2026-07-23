@@ -207,6 +207,16 @@ describe('computeProducedFiles', () => {
     expect(produced?.map((f) => f.name)).toEqual(['diagram.svg']);
   });
 
+  it('excludes user attachment paths from turn output attribution', () => {
+    const next = [
+      { name: 'reference.png', path: '/p/reference.png', size: 2, mtime: 2, kind: 'image', mime: 'image/png' },
+    ];
+
+    const produced = computeProducedFiles([], next as never, new Set(['reference.png']));
+
+    expect(produced).toEqual([]);
+  });
+
   it('returns undefined when no baseline is provided', () => {
     expect(computeProducedFiles(undefined, [] as never)).toBeUndefined();
   });
@@ -489,10 +499,17 @@ describe('ProjectView daemon reattach restore', () => {
     ).toBe(false);
   });
 
-  it('populates producedFiles on the persisted message after reattach completes', async () => {
+  it('does not attribute a preceding user attachment after reattach completes', async () => {
     const startedAt = Date.now();
     listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
     listMessages.mockResolvedValue([
+      {
+        id: 'msg-user',
+        role: 'user',
+        content: 'Use this as a reference.',
+        createdAt: startedAt - 1,
+        attachments: [{ path: 'reference.png', name: 'original-reference.png', kind: 'image' }],
+      } satisfies ChatMessage,
       {
         id: 'msg-reattach',
         role: 'assistant',
@@ -509,6 +526,7 @@ describe('ProjectView daemon reattach restore', () => {
     const beforeFiles = [{ name: 'existing.html', path: '/p/existing.html', size: 1, updatedAt: 0 }];
     const afterFiles = [
       ...beforeFiles,
+      { name: 'reference.png', path: '/p/reference.png', size: 2, updatedAt: 0, kind: 'image' },
       { name: 'new.pptx', path: '/p/new.pptx', size: 2, updatedAt: 0 },
     ];
     fetchProjectFiles.mockResolvedValueOnce(beforeFiles).mockResolvedValue(afterFiles);

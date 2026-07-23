@@ -182,6 +182,49 @@ describe('selectAutoOpenProducedArtifact', () => {
     expect(result).toBe('index.html');
   });
 
+  it('auto-opens a produced image when the turn has no html artifact', () => {
+    const result = selectAutoOpenProducedArtifact([
+      { name: 'cute-puppy.png', path: 'cute-puppy.png', kind: 'image', mtime: 30 },
+    ]);
+
+    expect(result).toBe('cute-puppy.png');
+  });
+
+  it('prefers html over a newer image produced in the same turn', () => {
+    const result = selectAutoOpenProducedArtifact([
+      { name: 'index.html', path: 'index.html', kind: 'html', mtime: 10 },
+      { name: 'hero.png', path: 'hero.png', kind: 'image', mtime: 30 },
+    ]);
+
+    expect(result).toBe('index.html');
+  });
+
+  it('prefers an image over a newer markdown note produced in the same turn', () => {
+    const result = selectAutoOpenProducedArtifact([
+      { name: 'hero.png', path: 'hero.png', kind: 'image', mtime: 10 },
+      { name: 'README.md', path: 'README.md', kind: 'text', mtime: 30 },
+    ]);
+
+    expect(result).toBe('hero.png');
+  });
+
+  it('prefers the newest image when a turn produces multiple images', () => {
+    const result = selectAutoOpenProducedArtifact([
+      { name: 'draft.png', path: 'draft.png', kind: 'image', mtime: 10 },
+      { name: 'final.png', path: 'final.png', kind: 'image', mtime: 30 },
+    ]);
+
+    expect(result).toBe('final.png');
+  });
+
+  it('does not infer image previewability from a sketch file extension', () => {
+    const result = selectAutoOpenProducedArtifact([
+      { name: 'sketch-preview.png', path: 'sketch-preview.png', kind: 'sketch', mtime: 30 },
+    ]);
+
+    expect(result).toBeNull();
+  });
+
   it('leaves a plain .txt file alone (text kind is shared with markdown)', () => {
     // `.md` and `.txt` both arrive as kind: 'text'; only markdown should open.
     const result = selectAutoOpenProducedArtifact([
@@ -291,6 +334,35 @@ describe('selectAutoOpenTurnArtifact', () => {
     );
 
     expect(result).toBe('index.html');
+  });
+
+  it('opens a pre-existing image the turn rewrote without a Write event', () => {
+    const result = selectAutoOpenTurnArtifact(
+      [],
+      [
+        { name: 'hero.png', path: 'hero.png', kind: 'image', mtime: TURN_START + 5_000 },
+      ],
+      { turnStartedAt: TURN_START, agentTouchedFileNames: new Set() },
+    );
+
+    expect(result).toBe('hero.png');
+  });
+
+  it('never opens a user attachment even when turn attribution includes it', () => {
+    const attachment = {
+      name: 'reference.png',
+      path: 'reference.png',
+      kind: 'image',
+      mtime: TURN_START + 5_000,
+    } as const;
+    const options = {
+      turnStartedAt: TURN_START,
+      agentTouchedFileNames: new Set<string>(),
+      excludedFileNames: new Set(['reference.png']),
+    };
+
+    expect(selectAutoOpenTurnArtifact([attachment], [attachment], options)).toBeNull();
+    expect(selectAutoOpenTurnArtifact([], [attachment], options)).toBeNull();
   });
 
   it('keeps preferring newly produced files and merges rewritten ones by rank', () => {
