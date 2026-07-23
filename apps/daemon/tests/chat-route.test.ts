@@ -1222,6 +1222,14 @@ process.stdin.on('end', () => {
 });
 `,
         async () => {
+          // Studio always picks an assistant message id up-front and threads
+          // it through `streamViaDaemon({ assistantMessageId })` so the daemon
+          // can pin the streamed assistant turn under the same id. Mirror
+          // that here — without one, `persistAssistantMessage` early-outs
+          // (`if (!run.conversationId || !run.assistantMessageId) return`)
+          // and the assistant turn never lands, which would mask the
+          // user-row dedupe regression we're asserting below.
+          const assistantMessageId = `assistant-5818-nettee4-${randomUUID()}`;
           const response = await fetch(`${baseUrl}/api/chat`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1229,6 +1237,7 @@ process.stdin.on('end', () => {
               agentId: 'opencode',
               projectId,
               conversationId,
+              assistantMessageId,
               // The fix: thread the client's pre-persisted user row id
               // through the chat request meta so the daemon's user-turn
               // upsert converges on it instead of rewriting the row and

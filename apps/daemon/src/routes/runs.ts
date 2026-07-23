@@ -2467,14 +2467,29 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       );
     }
     const run = creation.run;
-    if (creation.kind === 'reused') {
-      design.runs.stream(run, req, res);
-      return;
-    }
+    // Mirror /api/runs: pin the assistant placeholder row before the stream
+    // starts so live SSE events can `appendMessageAgentEvent` against it.
+    // Studio always supplies `assistantMessageId` in body, so the row is
+    // pinned under that id. Without this call, `reconcileAssistantMessageOnRunEnd`
+    // runs an UPDATE against a missing row (no-op) and the streamed `text`
+    // deltas are silently dropped — the conversation ends up with only the
+    // user turn persisted, which is the regression seen in #5818 nettee #4
+    // (`/api/chat` route was missing the pin that `/api/runs` already had).
+    //
+    // Idempotent on the reused path too: the original run was pinned when
+    // first created; re-pinning here is a no-op against the same id. Bare
+    // API callers that omit `assistantMessageId` still won't see the
+    // assistant turn pinned — `pinAssistantMessageOnRunCreate` early-outs
+    // when it's null. Same pre-existing limitation b7d01fff8's #5811 tests
+    // already document and out of scope here.
     try {
       pinAssistantMessageOnRunCreate(db, run);
     } catch (err) {
-      console.warn('[chat] message create pin failed', err);
+      console.warn('[chat] assistant message pin failed', err);
+    }
+    if (creation.kind === 'reused') {
+      design.runs.stream(run, req, res);
+      return;
     }
     design.runs.stream(run, req, res);
     reconcileAssistantMessageOnRunEnd(db, design.runs, run);
