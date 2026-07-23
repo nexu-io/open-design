@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { composeSystemPrompt } from '../src/prompts/system.js';
+import { composeSystemPrompt as composePrompt } from '../src/prompts/system.js';
 import {
   COPYRIGHT_GUARDRAIL_BULLET,
   WEB_CLONE_COPYRIGHT_GUARDRAIL_BULLET,
 } from '../src/prompts/official-system.js';
+
+const composeSystemPrompt = (input: Parameters<typeof composePrompt>[0]) =>
+  composePrompt({ ...input, promptCoreVariant: 'classic' });
 
 // The daemon prompt (apps/daemon/src/prompts/system.ts) swaps the copyright
 // guardrail for a faithful-reproduction rule on `intent: 'web-clone'` runs. The
@@ -13,14 +16,13 @@ import {
 // feature is inconsistent across execution modes (blocking review on PR #5178).
 describe('composeSystemPrompt — web-clone copyright guardrail swap (BYOK parity)', () => {
   it('keeps the original "build something original" guardrail for non-web-clone runs', () => {
-    const prompt = composeSystemPrompt({ sessionMode: 'plan', metadata: { kind: 'prototype' } as any });
+    const prompt = composeSystemPrompt({ metadata: { kind: 'prototype' } as any });
     expect(prompt).toContain(COPYRIGHT_GUARDRAIL_BULLET);
     expect(prompt).not.toContain(WEB_CLONE_COPYRIGHT_GUARDRAIL_BULLET);
   });
 
   it('swaps in the faithful-reproduction rule when metadata.intent is web-clone', () => {
     const prompt = composeSystemPrompt({
-      sessionMode: 'plan',
       metadata: { kind: 'prototype', intent: 'web-clone' } as any,
     });
     expect(prompt).toContain(WEB_CLONE_COPYRIGHT_GUARDRAIL_BULLET);
@@ -30,9 +32,8 @@ describe('composeSystemPrompt — web-clone copyright guardrail swap (BYOK parit
   it('guards that the swapped bullet is byte-identical to the one inside the prompt', () => {
     // If OFFICIAL_DESIGNER_PROMPT's bullet drifts from COPYRIGHT_GUARDRAIL_BULLET,
     // the .replace() becomes a silent no-op and web-clone runs keep the wrong rule.
-    const base = composeSystemPrompt({ sessionMode: 'plan', metadata: { kind: 'prototype' } as any });
+    const base = composeSystemPrompt({ metadata: { kind: 'prototype' } as any });
     const cloned = composeSystemPrompt({
-      sessionMode: 'plan',
       metadata: { kind: 'prototype', intent: 'web-clone' } as any,
     });
     expect(cloned).not.toEqual(base);
@@ -45,20 +46,22 @@ describe('composeSystemPrompt — web-clone copyright guardrail swap (BYOK parit
 // is still told the design system is authoritative (blocking review on #5178).
 describe('composeSystemPrompt — web-clone suppresses active-design-system guidance (BYOK parity)', () => {
   const DS = { designSystemBody: '# Tokens\n--brand: #ff0000;', designSystemTitle: 'Acme' };
-  const AUTHORITATIVE = 'Treat the following DESIGN.md as authoritative';
 
-  it('includes the authoritative design-system block for a normal prototype run', () => {
+  it('includes the mode-scoped design-system block for a normal prototype run', () => {
     const prompt = composeSystemPrompt({ sessionMode: 'plan', metadata: { kind: 'prototype' } as any, ...DS });
-    expect(prompt).toContain(AUTHORITATIVE);
+    expect(prompt).toContain(
+      'Use the following curated design-system context as visual requirements for the plan',
+    );
+    expect(prompt).toContain(DS.designSystemBody);
   });
 
-  it('drops the authoritative design-system block for a web-clone run', () => {
+  it('drops the design-system block for a web-clone run', () => {
     const prompt = composeSystemPrompt({
       sessionMode: 'plan',
       metadata: { kind: 'prototype', intent: 'web-clone' } as any,
       ...DS,
     });
-    expect(prompt).not.toContain(AUTHORITATIVE);
+    expect(prompt).not.toContain('Use the following DESIGN.md as visual requirements for the plan');
     // and still carries the design-system body verbatim NOWHERE — the whole block is gone
     expect(prompt).not.toContain(DS.designSystemBody);
   });

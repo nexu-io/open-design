@@ -8,12 +8,20 @@ od:
 
 # Direction picker
 
-Generative work benefits from explicit divergence before it converges.
-The direction-picker atom asks the agent to draft 3-5 distinct
-directions (visual / structural / tonal) and emit them in an inline
-`<question-form>` with a `direction-cards` question so the user picks the
-winning direction before the expensive generation pass. The submitted choice
-returns as the next user message.
+This atom is conditional, not a mandatory pipeline pause. The binding host
+clarification gate and active mode decide whether a form may interrupt the
+turn. Use the picker only when the user explicitly asks to compare or explore
+directions and an active design system has not already locked the visual
+direction. Otherwise infer the best direction from the brief and continue.
+
+When active, draft 3–5 genuinely distinct visual / structural / tonal
+directions and emit one inline `<question-form>` using either:
+
+- `direction-cards` with the complete `cards` metadata required by the shared
+  question-form schema; or
+- a normal `radio` question when complete card metadata is unavailable.
+
+The submitted choice returns as the next user message.
 
 ## Convergence
 

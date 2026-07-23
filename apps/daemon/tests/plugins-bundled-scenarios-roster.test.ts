@@ -85,23 +85,33 @@ describe('plugins/_official/scenarios roster', () => {
     });
   }
 
-  it('od-default is hidden and asks for task type through a GenUI surface', async () => {
+  it('od-default is hidden and uses query-aware discovery without a forced GenUI surface', async () => {
     const manifestPath = path.join(scenariosRoot, 'od-default', 'open-design.json');
+    const skillPath = path.join(scenariosRoot, 'od-default', 'SKILL.md');
+    const discoveryAtomPath = path.join(
+      repoRoot,
+      'plugins',
+      '_official',
+      'atoms',
+      'discovery-question-form',
+      'SKILL.md',
+    );
     const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+    const skill = await readFile(skillPath, 'utf8');
+    const discoveryAtom = await readFile(discoveryAtomPath, 'utf8');
     expect(manifest.od.hidden).toBe(true);
     expect(manifest.od.context?.craft).toEqual(
       expect.arrayContaining(['typography', 'color', 'anti-ai-slop']),
     );
-    expect(manifest.od.pipeline.stages[0].id).toBe('task-type');
-    expect(manifest.od.genui.surfaces).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          id: 'task-type',
-          kind: 'choice',
-          trigger: expect.objectContaining({ stageId: 'task-type' }),
-        }),
-      ]),
-    );
+    expect(manifest.od.pipeline.stages[0].id).toBe('discovery');
+    expect(manifest.od.genui).toBeUndefined();
+    expect(manifest.od.capabilities).not.toContain('genui:choice');
+    expect(skill).toContain('Infer the task type from the current user query first');
+    expect(skill).toContain('When one route is clear, skip `<question-form>`');
+    expect(skill).toContain('landing page, marketing site, brand website, or editorial page');
+    expect(skill).toContain('<question-form id="task-type">');
+    expect(discoveryAtom).toContain('Preserve a form id supplied by the active skill or router');
+    expect(discoveryAtom).not.toContain('starts with `<question-form id="discovery"');
   });
 
   it('od-new-generation declares the default craft rails for anti-slop HTML output', async () => {

@@ -222,7 +222,11 @@ the current repository package schema.
 
 ## 5.5 Craft references (`craft/`)
 
-Some craft knowledge is **universal** — true regardless of brand. ALL CAPS always needs ≥0.06em letter-spacing; `var(--accent)` should appear at most 2 times per screen; `#6366f1` is always the AI-default tell. These rules don't belong in any one `DESIGN.md` because they apply across every brand.
+Craft references contain two kinds of brand-agnostic knowledge: aesthetic
+defaults for details the active design system leaves open, and objective
+quality gates such as legibility, contrast, overflow safety, and factual
+integrity. Explicit visual decisions in `DESIGN.md` override aesthetic craft
+defaults; objective gates and auto-checked P0 rules remain binding.
 
 OD ships these as a separate packaged resource tree:
 
@@ -262,7 +266,8 @@ Repository authoring is stricter than runtime loading: `pnpm lint:craft` and
 explicitly listed in `craft/FUTURE_SECTIONS.md`. See
 [`craft/README.md`](../craft/README.md) for the canonical list.
 
-The split keeps DESIGN.md authors free of universal-craft duplication and keeps craft authors free of brand-specific drift.
+The split keeps DESIGN.md authors free of shared-craft duplication and keeps
+craft authors free of brand-specific drift.
 
 ## 6. Skill inspection and distribution
 

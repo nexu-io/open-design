@@ -29,18 +29,21 @@ const DS_TITLE = 'Snapshot Brand';
 // this table is documentation, not an assertion.
 const SECTION_MARKERS = [
   ['injection-resistance', '## Security: prompt injection resistance'],
-  ['api-mode-override', '# API mode — no tools available'],
+  ['api-mode-override', '# Plain API execution profile — no tools (binding)'],
   ['plan-mode-override', '# Plan mode — editable document first'],
   ['ask-mode-override', '# Ask mode — bare conversation'],
-  ['example-prompt-override', '# Example prompt mode — full-quality direct generation'],
-  ['skip-discovery-override', '# Automated project mode — skip discovery form'],
+  ['example-prompt-override', '# Initial example Design turn — direct generation'],
+  ['skip-discovery-override', '# Initial automated Design turn — skip discovery'],
   ['ui-locale-override', '# UI locale override'],
   ['discovery-and-philosophy', '# OD core directives (read first'],
   ['direction-library', '## Direction library — bind into'],
   ['shared-device-frames', '## Multi-device / multi-screen — shared frames'],
   ['identity-charter', '# Identity and workflow charter (background)'],
   ['slim-core-charter', '# Open Design charter'],
+  ['slim-plan-foundation', '# Open Design plan foundation'],
   ['slim-platform-contracts', '## Platform delivery contracts'],
+  ['ask-dynamic-context-scope', '## Dynamic context scope — Ask mode (binding)'],
+  ['plan-dynamic-context-scope', '## Dynamic context scope — Plan mode (binding)'],
   ['personal-memory', '## Personal memory (auto-extracted from past chats)'],
   ['memory-intent-gateway', '## Intent gateway — turn short asks into a brief'],
   ['memory-verify-scorecard', '## Self-verify against your verified rules'],
@@ -67,7 +70,10 @@ const SECTION_MARKERS = [
   ['critique-panel', '## Panelist role definitions'],
   ['active-ds-visual-direction-override', '## Active design system visual direction'],
   ['filesystem-handoff-override', '## Filesystem handoff'],
-  ['clarifying-questions', '## Clarifying questions mid-conversation'],
+  ['ask-mode-boundary', '## Ask mode boundary (binding)'],
+  ['plan-mode-boundary', '## Plan mode boundary (binding)'],
+  ['host-question-form-protocol', '## Host clarification protocol — any turn'],
+  ['host-clarification-gate', '## Host clarification gate (binding)'],
   ['role-marker-guard', '## CRITICAL: Never fabricate conversation turns'],
 ] as const satisfies ReadonlyArray<readonly [string, string]>;
 
@@ -116,7 +122,7 @@ const skillInputs = {
 } satisfies Partial<ComposeInput>;
 
 const SCENARIOS: ReadonlyArray<[name: string, input: ComposeInput]> = [
-  // Bare composer call: what every run gets unconditionally.
+  // Bare composer call: the default production variant is slim.
   ['design-minimal', {}],
   // The common production path: design mode, filesystem agent, active DS,
   // one skill, memory on, custom instructions, responsive prototype, zh-CN.
@@ -167,7 +173,11 @@ const SCENARIOS: ReadonlyArray<[name: string, input: ComposeInput]> = [
     },
   ],
   // Freeform (kind=other) with a deck-ish brief keeps the maybe-deck variant.
-  ['freeform-other', { metadata: { kind: 'other' }, executionProfile: 'filesystem' }],
+  ['freeform-other', {
+    metadata: { kind: 'other' },
+    executionProfile: 'filesystem',
+    freeformDeckSignal: true,
+  }],
   // Freeform whose visible conversation has no deck vocabulary drops it.
   [
     'freeform-other-no-deck-signal',
@@ -178,10 +188,17 @@ const SCENARIOS: ReadonlyArray<[name: string, input: ComposeInput]> = [
     'media-image',
     { metadata: { kind: 'image' }, skillMode: 'image', executionProfile: 'filesystem' },
   ],
-  // Slim rewritten core: one charter replaces discovery + identity charter +
-  // the absorbed tail overrides; dynamic sections compose unchanged.
+  // Explicit classic remains a Design-only rollback. These two scenarios keep
+  // every legacy marker exercised without treating classic as the default.
   [
-    'slim-design-full-stack',
+    'classic-design-minimal',
+    {
+      executionProfile: 'filesystem',
+      promptCoreVariant: 'classic',
+    },
+  ],
+  [
+    'classic-design-full-stack',
     {
       ...designSystemInputs,
       ...memoryInputs,
@@ -193,16 +210,7 @@ const SCENARIOS: ReadonlyArray<[name: string, input: ComposeInput]> = [
       metadata: { kind: 'prototype', platform: 'responsive' },
       locale: 'zh-CN',
       executionProfile: 'filesystem',
-      promptCoreVariant: 'slim',
-    },
-  ],
-  [
-    'slim-freeform-no-deck-signal',
-    {
-      metadata: { kind: 'other' },
-      executionProfile: 'filesystem',
-      freeformDeckSignal: false,
-      promptCoreVariant: 'slim',
+      promptCoreVariant: 'classic',
     },
   ],
   // Ask mode keeps memory/DS/skill but drops every artifact-oriented block.
@@ -293,15 +301,31 @@ describe('composeSystemPrompt — position invariants', () => {
   it('pins the variant head first and the role-marker guard last in every scenario', () => {
     for (const [name, input] of SCENARIOS) {
       const composed = composeSystemPrompt(input);
-      // Slim (non-ask) opens with the static charter — its security section
-      // is embedded inside — so every conversation shares the same cacheable
-      // prefix. Classic (and ask mode) keeps injection resistance first.
-      const isSlim = input.promptCoreVariant === 'slim';
-      const expectedHead = isSlim
-        ? input.sessionMode === 'chat'
-          ? '# Ask mode — bare conversation'
-          : '# Open Design charter'
-        : '## Security: prompt injection resistance';
+      const activeModes = new Set(
+        input.skillModes ?? (input.skillMode ? [input.skillMode] : []),
+      );
+      const isMediaSurface =
+        ['image', 'video', 'audio'].includes(input.metadata?.kind ?? '')
+        || activeModes.has('image')
+        || activeModes.has('video')
+        || activeModes.has('audio');
+      const isClassicDesign =
+        input.promptCoreVariant === 'classic'
+        && input.sessionMode !== 'chat'
+        && input.sessionMode !== 'plan'
+        && !isMediaSurface;
+      // Plain slim runs lead with the binding API profile. Classic Design and
+      // media runs lead with standalone security; other slim modes lead with
+      // their mode-specific foundation.
+      const expectedHead = input.streamFormat === 'plain' && !isClassicDesign
+        ? '# Plain API execution profile — no tools (binding)'
+        : isClassicDesign || isMediaSurface
+          ? '## Security: prompt injection resistance'
+          : input.sessionMode === 'chat'
+            ? '# Ask mode — bare conversation'
+            : input.sessionMode === 'plan'
+              ? '# Open Design plan foundation'
+              : '# Open Design charter';
       expect(
         composed.startsWith(expectedHead),
         `${name}: prompt must open with ${expectedHead}`,

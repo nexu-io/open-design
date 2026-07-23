@@ -253,7 +253,9 @@ For new or changed brand-agnostic craft references under `craft/`.
 
 **Accept when:**
 
-- The reference is **universal** craft knowledge — true regardless of brand or design system (typography rules, color discipline, anti-AI-slop, motion principles).
+- The reference is brand-agnostic craft knowledge: either an aesthetic default
+  that yields to explicit `DESIGN.md` visual decisions, or an objective quality
+  gate that remains valid across brands.
 - It is a single dense rulebook on one craft dimension, sized like existing entries (`typography.md`, `color.md`, `animation-discipline.md`).
 - The slug is short and stable enough to be referenced by skills via `od.craft.requires`.
 - At least one shipping skill opts into it via `od.craft.requires`, OR the PR explains why the reference will be opted into in a follow-up and lists the candidate skills.

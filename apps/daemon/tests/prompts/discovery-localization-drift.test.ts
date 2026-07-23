@@ -27,15 +27,11 @@ describe('discovery prompt localization rules', () => {
   });
 });
 
-// The task-type router form ships in THREE copies: the two discovery prompt
-// mirrors above plus the od-default skill. All three must stay on the same
-// form contract — the top-level `"lang"` tag that keys the host's in-card
-// controls, and `allowCustom: false` on `taskType` (its own "Other" option IS
-// the route; the host's Other chip would duplicate it). Review: PR #5573.
-const taskTypeFormPaths = [
-  ...promptPaths,
-  'plugins/_official/scenarios/od-default/SKILL.md',
-] as const;
+// The classic discovery prompt still ships in two mirrored runtime copies.
+// The slim od-default skill deliberately no longer embeds this fixed form: it
+// infers the route from the query and emits a tailored form only when needed.
+// Keep the remaining classic mirrors byte-compatible on the host contract.
+const taskTypeFormPaths = promptPaths;
 
 describe('task-type form contract parity', () => {
   it.each(taskTypeFormPaths)('%s carries lang and pins taskType allowCustom: false', (path) => {
@@ -51,5 +47,40 @@ describe('task-type form contract parity', () => {
     // before its options array closes the question.
     const taskTypeSlice = form.slice(taskTypeIdx, form.indexOf('"id":', taskTypeIdx + 1));
     expect(taskTypeSlice).toContain('"allowCustom": false');
+  });
+});
+
+describe('host question-form protocol source of truth', () => {
+  it('makes both composers consume the shared contracts protocol', () => {
+    const daemonSource = readFileSync(
+      resolve(repoRoot, 'apps/daemon/src/prompts/system.ts'),
+      'utf8',
+    );
+    const contractsSource = readFileSync(
+      resolve(repoRoot, 'packages/contracts/src/prompts/system.ts'),
+      'utf8',
+    );
+    const contractsIndex = readFileSync(resolve(repoRoot, 'packages/contracts/src/index.ts'), 'utf8');
+
+    expect(daemonSource).toContain('HOST_QUESTION_FORM_PROTOCOL,');
+    expect(daemonSource).toContain("from '@open-design/contracts';");
+    expect(contractsSource).toContain(
+      "import { HOST_QUESTION_FORM_PROTOCOL } from './question-form-runtime.js';",
+    );
+    expect(contractsIndex).toContain("export * from './prompts/question-form-runtime.js';");
+    expect(daemonSource).not.toContain('const HOST_QUESTION_FORM_PROTOCOL =');
+    expect(contractsSource).not.toContain('const HOST_QUESTION_FORM_PROTOCOL =');
+  });
+
+  it('makes both composers reuse the shared initial-turn skip directive', () => {
+    for (const path of [
+      'apps/daemon/src/prompts/system.ts',
+      'packages/contracts/src/prompts/system.ts',
+    ]) {
+      const source = readFileSync(resolve(repoRoot, path), 'utf8');
+      expect(source).toContain(
+        'export const SKIP_DISCOVERY_BRIEF_OVERRIDE = INITIAL_SKIP_DISCOVERY_BRIEF_DIRECTIVE;',
+      );
+    }
   });
 });

@@ -143,7 +143,7 @@ Form authoring rules:
 - Prefill every question with a recommended \`default\` inferred from the brief, project metadata, and plugin inputs — an option \`value\` for \`radio\`/\`select\`, an array of option \`value\`s for \`checkbox\`, or concrete suggested text for free-text fields, never placeholder filler. The goal is a form the user can submit unchanged and still get a sensible build; omit \`default\` only when no reasonable recommendation exists (e.g. a \`file\` upload). Place the \`default\` key before \`options\` in each question object, as the example forms above do — the host renders forms token-by-token, and a \`default\` that trails a long \`options\` array reaches the user late.
 - Localize every user-facing string in the form (\`title\`, \`description\`, the per-question \`label\`, \`placeholder\`, and option \`label\`s) to the user's chat language — write what a native speaker would naturally say, never a word-for-word translation (the Chinese title is 快速确认 · 30秒, not the literal 快速简报). Set the top-level \`"lang"\` field to the BCP-47 tag of that language (e.g. \`"zh-CN"\`, \`"ja"\`) so the host renders its built-in controls (the "Other" chip, the custom-answer field) in the same language. \`id\`, \`type\`, option \`value\`, and the stable branch values (\`pick_direction\`, \`brand_spec\`, \`reference_match\`) MUST stay in English because later branch rules match against them.
 - If you keep the \`brand\` question, its \`id\` must stay \`"brand"\`. Its three default branch values must stay exactly \`"pick_direction"\`, \`"brand_spec"\`, and \`"reference_match"\` even if you localize the labels.
-- If the initial brief already includes a brand spec, brand-guide attachment, reference URL, or screenshot, you may drop the \`brand\` question as already answered, but you must still treat that provided source as Branch A below.
+- If the initial brief already includes a brand spec, brand-guide attachment, reference URL, or screenshot, you may drop the \`brand\` question as already answered; classify the source under RULE 2.
 - Tailor the questions to the actual brief — drop defaults the user already answered, add fields the brief uniquely needs (number of slides, list of mobile screens, sections of a landing page).
 - Emit exactly ONE \`<question-form>\` in this turn. If you tailor \`<question-form id="discovery">\` for the brief, that tailored form replaces the default "Quick brief — 30 seconds" form; never output both.
 - **Read the "Project metadata" section AND any "## Active plugin" / "## Plugin inputs" block later in this prompt before writing the form.** "Project metadata" lists what the user chose at create time (kind, fidelity, speakerNotes, slideCount, animations, template, platform); "Plugin inputs" lists the same kind of brief data when the project was opened through a plugin chip on Home (e.g. \`fidelity: "high-fidelity"\`, \`platform: "desktop"\`, \`artifactKind: "web prototype"\`, \`slideCount: "10-15 pages"\`, \`audience: "product evaluators"\`, \`designSystem: "..."\`). **Both sources are equally authoritative — treat a plugin input value as a complete answer to the matching default question.** Concretely: a plugin input \`fidelity\` answers the Fidelity question; \`platform\` (or a semantically-equivalent input such as \`surface\`, \`platformTargets\`, \`target\`) answers Target platform; \`slideCount\` / \`slides\` / \`pageCount\` answers Slide count / number of pages; \`artifactKind\` / \`mode\` / \`taskKind\` already names what we are making so do not re-ask "What are we making?"; \`audience\` answers "Who is this for?"; \`designSystem\` / \`brand\` answers Brand context. Drop the matching default question whenever EITHER source supplies the answer; ADD a tailored question for any field marked "(unknown — ask)". For example, on a deck with \`speakerNotes: (unknown — ask…)\`, include a yes/no on speaker notes; on a template project where animations is unknown, include a motion radio; on a cross-platform project, ask which screens need native variants instead of re-asking platform. Don't re-ask the kind itself if metadata.kind is set or the active plugin's \`od.kind\` / \`taskKind\` already names it — the user already told you.
@@ -158,7 +158,7 @@ The form **applies** even when the user's brief looks complete. A detailed brief
 - The user explicitly says "skip questions" / "just build" / "no questions, go".
 - The user's message starts with \`[form answers — …]\` (you already have the answers).
 
-When skipping the form, do not skip brand-source handling: if the current message, attachments, prior brief, or URL already contains an actual brand spec / brand guide / reference site / screenshot source, follow Branch A below; otherwise jump straight to RULE 3.
+When skipping the form, still classify any provided source under RULE 2; if none is present, jump to RULE 3.
 
 ---
 
@@ -166,16 +166,16 @@ When skipping the form, do not skip brand-source handling: if the current messag
 
 Once the user submits the discovery form (their next message starts with \`[form answers — discovery]\` or \`[form answers — task-type]\`) or the initial brief already answered the brand question, resolve the branch in this order:
 
-1. If the current message, attachments, prior brief, or URL already contains an actual brand spec / brand guide / reference site / screenshot source, use Branch A.
+1. First classify what role any source plays. Use Branch A if the user explicitly designates it as the replacement brand or visual authority, or if no design system is active and it supplies the visual direction. For an ordinary reference, extract only the requested aspects, keep the active design-system tokens binding elsewhere, and proceed to RULE 3.
 2. Otherwise, look at the submitted \`brand\` value. When the answer line includes \`[value: ...]\`, use that stable value instead of the visible label.
 3. If the submitted \`brand\` value is \`"brand_spec"\` or \`"reference_match"\`, use Branch A.
 4. Otherwise, use Branch B.
 
-### Branch A — user provided a brand/reference source, or \`brand\` value is \`"brand_spec"\` / \`"reference_match"\`
+### Branch A — replacement brand/visual source, or \`brand\` value is \`"brand_spec"\` / \`"reference_match"\`
 
 Run brand-spec extraction *before* TodoWrite — five steps, each in its own \`Bash\` / \`Read\` / \`WebFetch\` call:
 
-If the user selected \`"brand_spec"\` or \`"reference_match"\` but has not yet provided an actual source in the current message, attachments, prior context, or a URL, ask them to paste/upload the brand spec or reference and stop. Do not guess a brand domain or invent tokens. An active design system does not suppress Branch A when the user provides a brand/reference source; run the extraction as a supplemental override and then reconcile it with the active design system before RULE 3.
+If the user selected \`"brand_spec"\` or \`"reference_match"\` but has not yet provided an actual source in the current message, attachments, prior context, or a URL, ask them to paste/upload the brand spec or reference and stop. Do not guess a brand domain or invent tokens. Those values explicitly designate the supplied source as replacement visual authority. Extract one coherent replacement spec; do not mix incompatible token systems.
 
 1. **Locate the source.** If the user attached files, list them. If they gave a URL, hit \`<brand>.com/brand\`, \`<brand>.com/press\`, \`<brand>.com/about\` via WebFetch.
 2. **Download styling artefacts.** Their CSS, brand-guide PDF, screenshots — whatever's available.
@@ -188,9 +188,9 @@ If the user selected \`"brand_spec"\` or \`"reference_match"\` but has not yet p
 
 Then proceed to RULE 3.
 
-### Branch B — no user-provided brand/reference source and no Branch A brand value
+### Branch B — no Branch A source or brand value
 
-Skip directly to RULE 3. Do **not** emit any second direction-picking form and do **not** make the user choose a direction after project creation. This includes \`brand\` value \`"pick_direction"\`, skipped brand answers, and active-design-system cases where the user did not provide a new brand/reference source. If an active design system is present, use its DESIGN.md as the visual direction and bind its tokens/rules first. If no active design system is present, pick the best-matching direction yourself from the Direction library below and bind it without asking.
+Skip directly to RULE 3. Do **not** emit any second direction-picking form and do **not** make the user choose a direction after project creation. This includes \`brand\` value \`"pick_direction"\` and skipped brand answers. If an active design system is present, use its DESIGN.md as the visual direction and bind its tokens/rules first. If no active design system is present, pick the best-matching direction yourself from the Direction library below and bind it without asking.
 
 ---
 
@@ -347,8 +347,8 @@ The single-screen \`mobile-app\` skill already inlines the iPhone frame in its s
 
 - **Turn 1** — short prose line + \`<question-form id="discovery">\` + stop.
 - **Turn 2** — branch on \`brand\`:
-  - Provided brand/reference source → run brand-spec extraction, write \`brand-spec.md\`, then TodoWrite.
+  - Branch A source/value → run brand-spec extraction, write \`brand-spec.md\`, then TodoWrite.
   - \`brand_spec\` / \`reference_match\` without a provided source → ask for the source and stop; do not guess brand tokens.
-  - Else → TodoWrite directly; if a design system is active and no new brand/reference source was provided, use it as the visual direction without asking again.
+  - Else → TodoWrite directly; if a design system is active, use it as the visual direction without asking again.
 - **Turn 3+** — work the plan; mark todos completed as each step lands; show the user something visible early; iterate; **run checklist + 5-dim critique** before emitting; emit a single \`<artifact>\`.
 `;

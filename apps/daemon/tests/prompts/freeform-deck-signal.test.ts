@@ -40,18 +40,18 @@ describe('detectDeckIntentSignal', () => {
 describe('composeSystemPrompt — freeform maybe-deck gating', () => {
   const freeform = { metadata: { kind: 'other' as const }, executionProfile: 'filesystem' as const };
 
-  it('keeps the maybe-deck framework when the signal is true or absent (legacy)', () => {
-    for (const input of [freeform, { ...freeform, freeformDeckSignal: true }]) {
-      const out = composeSystemPrompt(input);
-      expect(out).toContain(MAYBE_DECK_HEADING);
-      expect(out).toContain(DECK_FRAMEWORK_HEADING);
-    }
+  it('includes the maybe-deck framework only when the signal is true', () => {
+    const out = composeSystemPrompt({ ...freeform, freeformDeckSignal: true });
+    expect(out).toContain(MAYBE_DECK_HEADING);
+    expect(out).toContain(DECK_FRAMEWORK_HEADING);
   });
 
-  it('drops the maybe-deck framework when the signal is false', () => {
-    const out = composeSystemPrompt({ ...freeform, freeformDeckSignal: false });
-    expect(out).not.toContain(MAYBE_DECK_HEADING);
-    expect(out).not.toContain(DECK_FRAMEWORK_HEADING);
+  it('drops the maybe-deck framework when the signal is false or absent', () => {
+    for (const input of [freeform, { ...freeform, freeformDeckSignal: false }]) {
+      const out = composeSystemPrompt(input);
+      expect(out).not.toContain(MAYBE_DECK_HEADING);
+      expect(out).not.toContain(DECK_FRAMEWORK_HEADING);
+    }
   });
 
   it('never gates deck-kind projects on the signal', () => {

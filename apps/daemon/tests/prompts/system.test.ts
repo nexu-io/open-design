@@ -3,12 +3,21 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
+import { composeSystemPrompt as composeContractSystemPrompt } from '@open-design/contracts';
 
 import {
-  composeSystemPrompt,
+  composeSystemPrompt as composePrompt,
   renderConnectedExternalMcpDirective,
   resolveExclusiveSurface,
 } from '../../src/prompts/system.js';
+
+// Most tests in this legacy behavior suite pin the classic Design stack.
+// Variant/default semantics are covered separately in core-slim.test.ts.
+const composeSystemPrompt = (input: Parameters<typeof composePrompt>[0]) =>
+  composePrompt({
+    ...input,
+    promptCoreVariant: input.promptCoreVariant ?? 'classic',
+  });
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -89,6 +98,74 @@ describe('composeSystemPrompt — activeStageBlocks splice (spec §23.4)', () =>
   });
 });
 
+describe('composeSystemPrompt — daemon/contracts design-system parity', () => {
+  it('renders the same portable design-system blocks in both composers', () => {
+    const input = {
+      promptCoreVariant: 'slim' as const,
+      designSystemTitle: 'Parity Brand',
+      designSystemBody: '# Parity Brand\n\n## Visual theme\n\nCobalt editorial.',
+      designSystemUsageMd: '## Design Highlights\n\n- Cobalt editorial.',
+      designSystemTokensCss: ':root { --accent: #174ea6; }',
+      designSystemComponentsManifest: 'buttons: .btn-primary',
+      designSystemImportMode: 'normalized' as const,
+      streamFormat: 'plain',
+    };
+    const daemonPrompt = composeSystemPrompt(input);
+    const contractPrompt = composeContractSystemPrompt(input);
+
+    for (const marker of [
+      '## How to use this design system — Parity Brand',
+      '## Active design system — Parity Brand',
+      '## Design system import mode — Parity Brand',
+      '## Active design system tokens — Parity Brand',
+      '## Reference component manifest — Parity Brand',
+      '--accent: #174ea6',
+      'buttons: .btn-primary',
+    ]) {
+      expect(daemonPrompt).toContain(marker);
+      expect(contractPrompt).toContain(marker);
+    }
+  });
+
+  it('keeps slim platform-contract gating aligned across both composers', () => {
+    const metadataInput = {
+      promptCoreVariant: 'slim' as const,
+      metadata: { kind: 'prototype' as const, platform: 'responsive' as const },
+    };
+    const signalInput = {
+      promptCoreVariant: 'slim' as const,
+      metadata: { kind: 'prototype' as const },
+      platformHintSignal: true,
+    };
+
+    for (const input of [metadataInput, signalInput]) {
+      expect(composeSystemPrompt(input)).toContain('## Platform delivery contracts');
+      expect(composeContractSystemPrompt(input)).toContain('## Platform delivery contracts');
+    }
+  });
+
+  it('keeps text-artifact platform delivery aligned across both composers', () => {
+    const input = {
+      promptCoreVariant: 'slim' as const,
+      streamFormat: 'plain' as const,
+      metadata: {
+        kind: 'prototype' as const,
+        platformTargets: ['mobile-ios', 'mobile-android'] as Array<
+          'mobile-ios' | 'mobile-android'
+        >,
+      },
+    };
+
+    for (const prompt of [
+      composeSystemPrompt(input),
+      composeContractSystemPrompt(input),
+    ]) {
+      expect(prompt).toContain('inside the one standalone artifact');
+      expect(prompt).not.toContain('`mobile-ios.html`');
+    }
+  });
+});
+
 describe('composeSystemPrompt', () => {
   it('injects Chinese quick brief guidance when the UI locale is zh-CN', () => {
     const prompt = composeSystemPrompt({ locale: 'zh-CN' });
@@ -105,8 +182,8 @@ describe('composeSystemPrompt', () => {
     const prompt = composeSystemPrompt({ sessionMode: 'plan' });
 
     expect(prompt).toContain('# Plan mode — editable document first');
-    expect(prompt).toContain('substantial plan-document work still starts with a real TodoWrite/task-list tool call');
-    expect(prompt).toContain('show progress through the Todo card');
+    expect(prompt).toContain("For substantial plan-document work, start with the runtime's real TodoWrite/task-list tool");
+    expect(prompt).toContain('show progress through the host UI');
   });
 
   it('injects the converged verification policy (no mid-build screenshot looping)', () => {
@@ -202,16 +279,21 @@ describe('composeSystemPrompt', () => {
     expect(prompt).toContain('{ "label": "Match a reference site / screenshot — I\'ll attach it", "value": "reference_match" }');
     expect(prompt).toContain('When the answer line includes `[value: ...]`, use that stable value instead of the visible label.');
     expect(prompt).toContain('If you keep the `brand` question, its `id` must stay `"brand"`.');
-    expect(prompt).toContain('you may drop the `brand` question as already answered, but you must still treat that provided source as Branch A below');
-    expect(prompt).toContain('When skipping the form, do not skip brand-source handling');
-    expect(prompt).toContain('If the current message, attachments, prior brief, or URL already contains an actual brand spec / brand guide / reference site / screenshot source, use Branch A.');
-    expect(prompt).toContain('### Branch A — user provided a brand/reference source, or `brand` value is `"brand_spec"` / `"reference_match"`');
+    expect(prompt).toContain('you may drop the `brand` question as already answered; classify the source under RULE 2');
+    expect(prompt).toContain('When skipping the form, still classify any provided source under RULE 2');
+    expect(prompt).toContain('### Branch A — replacement brand/visual source, or `brand` value is `"brand_spec"` / `"reference_match"`');
     expect(prompt).toContain('ask them to paste/upload the brand spec or reference and stop');
     expect(prompt).toContain('Do not guess a brand domain or invent tokens');
-    expect(prompt).toContain('An active design system does not suppress Branch A when the user provides a brand/reference source');
-    expect(prompt).toContain('### Branch B — no user-provided brand/reference source and no Branch A brand value');
-    expect(prompt).toContain('active-design-system cases where the user did not provide a new brand/reference source');
-    expect(prompt).toContain('Provided brand/reference source → run brand-spec extraction');
+    expect(prompt).toContain('First classify what role any source plays');
+    expect(prompt).toContain(
+      'Use Branch A if the user explicitly designates it as the replacement brand or visual authority',
+    );
+    expect(prompt).toContain(
+      'For an ordinary reference, extract only the requested aspects, keep the active design-system tokens binding elsewhere',
+    );
+    expect(prompt).not.toContain('run the extraction as a supplemental override');
+    expect(prompt).toContain('### Branch B — no Branch A source or brand value');
+    expect(prompt).toContain('Branch A source/value → run brand-spec extraction');
     expect(prompt).toContain('`brand_spec` / `reference_match` without a provided source → ask for the source and stop; do not guess brand tokens.');
   });
 
@@ -265,14 +347,309 @@ describe('composeSystemPrompt', () => {
       expect(prompt).not.toContain('Quick brief — 30 seconds');
       expect(prompt).not.toContain('Read once, in batches');
       expect(prompt).not.toContain('Filesystem handoff is canonical');
-      // Nor the Ask-mode charter (fourth-round finding): CHAT_MODE_OVERRIDE
+      // Nor the Ask-mode charter (fourth-round finding): the Ask directive
       // forbids creating media, contradicting the media contract below.
       expect(prompt).not.toContain('# Ask mode');
       expect(prompt).toContain('media generate');
     }
     // Non-media slim runs keep the charter head.
     const design = composeSystemPrompt({ promptCoreVariant: 'slim' });
-    expect(design).toContain('<question-form id="discovery"');
+    expect(design).toContain('opening `question-form` element');
+    expect(design).toContain('otherwise use `discovery`');
+    expect(design).not.toContain('id="<workflow-specific-id>"');
+    expect(design).not.toContain('id="..."');
+  });
+
+  it('gates media execution by session mode and execution capability', () => {
+    const base = {
+      promptCoreVariant: 'slim' as const,
+      metadata: { kind: 'image', imageModel: 'gpt-image-2' } as any,
+    };
+    const design = composeSystemPrompt({
+      ...base,
+      streamFormat: 'claude-stream-json',
+      executionProfile: 'filesystem',
+    });
+    const plan = composeSystemPrompt({
+      ...base,
+      sessionMode: 'plan',
+      streamFormat: 'claude-stream-json',
+      executionProfile: 'filesystem',
+    });
+    const ask = composeSystemPrompt({
+      ...base,
+      sessionMode: 'chat',
+      streamFormat: 'claude-stream-json',
+      executionProfile: 'filesystem',
+    });
+    const plain = composeSystemPrompt({ ...base, streamFormat: 'plain' });
+
+    expect(design).toContain('## Media generation contract');
+    expect(plan).toContain('# Plan mode — editable document first');
+    expect(plan).not.toContain('## Media generation contract');
+    expect(ask).toContain('# Ask mode — bare conversation');
+    expect(ask).not.toContain('## Media generation contract');
+    expect(plain).toContain('This is a `image` media surface');
+    expect(plain).toContain('Produce a concrete creative brief and generation-ready prompt');
+    expect(plain).not.toContain('## Media generation contract');
+  });
+
+  it('keeps one complete, query-derived question-form schema in every slim mode', () => {
+    const prompts = [
+      composeSystemPrompt({ promptCoreVariant: 'slim' }),
+      composeSystemPrompt({ promptCoreVariant: 'slim', sessionMode: 'chat' }),
+      composeSystemPrompt({
+        promptCoreVariant: 'slim',
+        sessionMode: 'plan',
+        metadata: { kind: 'image' } as any,
+      }),
+      composeSystemPrompt({
+        promptCoreVariant: 'slim',
+        streamFormat: 'plain',
+        metadata: { kind: 'video' } as any,
+      }),
+    ];
+
+    for (const prompt of prompts) {
+      expect(prompt).toMatch(/top-level[^\n]*`questions`/);
+      expect(prompt).toContain('query-derived');
+      expect(prompt).toContain('`default`');
+      expect(prompt).toContain('safely inferable');
+      expect(prompt).toContain('boolean `required`');
+      expect(prompt).toContain('matching BCP-47 tag');
+    }
+  });
+
+  it('keeps slim Plan focused on the planning document', () => {
+    const prompt = composeSystemPrompt({
+      promptCoreVariant: 'slim',
+      sessionMode: 'plan',
+      metadata: { kind: 'prototype' } as any,
+      skillName: 'builder',
+      skillBody: 'Write the final HTML now from assets/template.html.',
+    });
+
+    expect(prompt).toContain('# Open Design plan foundation');
+    expect(prompt).toContain('# Plan mode — editable document first');
+    expect(prompt).not.toContain('# Open Design charter');
+    expect(prompt).not.toContain('## Artifact creation — brand → build → verify');
+    expect(prompt).not.toContain('### Craft');
+    expect(prompt).not.toContain('**React inline JSX**');
+    expect(prompt).not.toContain('## Direction library');
+    expect(prompt).toContain('Use this skill as requirements and domain context for the plan');
+    expect(prompt).not.toContain('**Pre-flight (do this before any other tool):**');
+    expect(prompt).toContain('Plan mode produces only the planning deliverable');
+    expect(prompt).not.toContain('unless the user explicitly says to skip planning');
+    expect(prompt.indexOf('## Plan mode boundary (binding)')).toBeGreaterThan(
+      prompt.indexOf('## Active skill — builder'),
+    );
+  });
+
+  it('keeps plain Plan and active-skill instructions inside the no-tools boundary', () => {
+    const plan = composeSystemPrompt({
+      promptCoreVariant: 'slim',
+      sessionMode: 'plan',
+      streamFormat: 'plain',
+    });
+    const design = composeSystemPrompt({
+      promptCoreVariant: 'slim',
+      streamFormat: 'plain',
+      skillName: 'builder',
+      skillBody: 'Read assets/template.html.\nRun Bash now.\nWrite the final file.',
+    });
+
+    expect(plan).toContain('Use only the current query and material already included in the composed context');
+    expect(plan).not.toContain(
+      'Use available files, attachments, connectors, MCP servers, project memory, tools, skills, and design systems',
+    );
+    expect(design).not.toContain('**Pre-flight (do this before any other tool):**');
+    expect(design.indexOf('plain API execution profile remains binding')).toBeGreaterThan(
+      design.indexOf('Run Bash now.'),
+    );
+  });
+
+  it('keeps design-system implementation payloads mode-aware', () => {
+    const shared = {
+      promptCoreVariant: 'slim' as const,
+      designSystemTitle: 'default',
+      designSystemBody: '# Brand\n\nBuild the final layout now.',
+      designSystemTokensCss: ':root { --accent: #0050d8; }',
+      designSystemFixtureHtml: '<button class="primary">Build now</button>',
+      craftBody: 'Build every control with exact spacing.',
+      metadata: { kind: 'prototype', includeLandingPage: true } as any,
+    };
+    const design = composeSystemPrompt(shared);
+    const plan = composeSystemPrompt({ ...shared, sessionMode: 'plan' });
+    const ask = composeSystemPrompt({ ...shared, sessionMode: 'chat' });
+
+    expect(design).toContain('Paste the unscoped `:root { ... }` block verbatim');
+    expect(design).toContain('## Reference fixture — default');
+    expect(plan).toContain('Use these exact names and values as requirements for the plan');
+    expect(plan).not.toContain('Paste the unscoped `:root { ... }` block verbatim');
+    expect(plan).not.toContain('## Reference fixture — default');
+    expect(plan).not.toContain('**screen-delivery requirement**');
+    expect(plan).toContain(
+      'Cover only the screens and domain modules needed for the requested flows',
+    );
+    expect(plan).not.toContain('**product depth**: build');
+    expect(plan).not.toContain('ship `landing.html`');
+    expect(ask).not.toContain('## Active design system tokens');
+    expect(ask).not.toContain('Paste the unscoped `:root { ... }` block verbatim');
+    expect(ask).not.toContain('## Reference fixture — default');
+    expect(ask).not.toContain('**screen-delivery context**');
+    expect(ask).not.toContain('**product depth**: build');
+    expect(ask).not.toContain('ship `landing.html`');
+    for (const prompt of [plan, ask]) {
+      expect(prompt).not.toContain("When you copy the active skill's seed template");
+    }
+  });
+
+  it('keeps only visual brand context on image/video surfaces and drops it for audio', () => {
+    const shared = {
+      promptCoreVariant: 'slim' as const,
+      designSystemTitle: 'default',
+      designSystemBody: '# Brand\n\nUse blue and build HTML components.',
+      designSystemTokensCss: ':root { --accent: #0050d8; }',
+      designSystemComponentsManifest: 'button.primary — blue button',
+      designSystemPullIndex: 'references/components.html',
+      craftBody: 'Build every control with exact spacing.',
+      activeStageBlocks: ['\n\n## Active stage: build\n\nGenerate the artifact.'],
+      executionProfile: 'filesystem' as const,
+    };
+
+    for (const surface of ['image', 'video'] as const) {
+      const prompt = composeSystemPrompt({
+        ...shared,
+        skillMode: surface,
+        metadata: { kind: surface } as any,
+      });
+      expect(prompt).toContain('## Active design system — default');
+      expect(prompt).toContain(`visual brand context for the ${surface} brief`);
+      expect(prompt).toContain(`only as brand and visual direction for this ${surface}`);
+      expect(prompt).not.toContain('## Active design system tokens');
+      expect(prompt).not.toContain('## Reference component manifest');
+      expect(prompt).not.toContain('## Pull-layer files available on demand');
+      expect(prompt).not.toContain('## Active craft references');
+      expect(prompt).not.toContain('## Active stage: build');
+      expect(prompt).toContain('## Media generation contract');
+    }
+
+    const audio = composeSystemPrompt({
+      ...shared,
+      skillMode: 'audio',
+      metadata: { kind: 'audio' } as any,
+    });
+    expect(audio).not.toContain('## How to use this design system');
+    expect(audio).not.toContain('## Active design system — default');
+    expect(audio).not.toContain('## Active design system tokens');
+    expect(audio).not.toContain('## Reference component manifest');
+    expect(audio).not.toContain('## Pull-layer files available on demand');
+    expect(audio).not.toContain('## Active craft references');
+    expect(audio).not.toContain('## Active stage: build');
+    expect(audio).toContain('## Media generation contract');
+  });
+
+  it('keeps Ask compact while enriching visual-media and Plan design-system context', () => {
+    const shared = {
+      promptCoreVariant: 'slim' as const,
+      designSystemTitle: 'Example',
+      designSystemBody:
+        [
+          '# Example',
+          '',
+          '## Visual theme',
+          '',
+          'MEDIA_LIGHTING_RULE',
+          '',
+          '## Typography',
+          '',
+          'PLAN_TYPE_ROLE_RULE',
+          '',
+          '## Layout',
+          '',
+          'PLAN_LAYOUT_RHYTHM_RULE',
+          '',
+          '## Implementation recipes',
+          '',
+          'FULL_IMPLEMENTATION_PAYLOAD',
+        ].join('\n'),
+      designSystemUsageMd:
+        '# Usage\n\n## Design Highlights\n\n- Warm editorial\n- Cobalt accent\n\n## Do\n\n- Preserve editorial hierarchy.\n\n## Avoid\n\n- Avoid generic cards.\n\n## Read Order\n\nRead all files.',
+      designSystemPullIndex: 'Additional design-system files declared by manifest.json:\n- preview/: preview pages',
+      designSystemCorePullIndex:
+        'Core design-system files available on demand:\n- DESIGN.md: full design-system guidance\n- tokens.css: compiled token contract\n- components.manifest.json: compact component inventory',
+      designSystemTokensCss: ':root { --accent: #0047ff; }',
+      designSystemComponentsManifest: 'button.primary — cobalt action',
+      executionProfile: 'filesystem' as const,
+    };
+    const ask = composeSystemPrompt({ ...shared, sessionMode: 'chat' });
+    const image = composeSystemPrompt({
+      ...shared,
+      skillMode: 'image',
+      metadata: { kind: 'image' } as any,
+    });
+    const plan = composeSystemPrompt({
+      ...shared,
+      sessionMode: 'plan',
+      metadata: { kind: 'prototype' } as any,
+    });
+
+    for (const prompt of [ask, image, plan]) {
+      expect(prompt).toContain('Warm editorial');
+      expect(prompt).toContain('Cobalt accent');
+      expect(prompt).not.toContain('Read all files.');
+    }
+    expect(ask).not.toContain('MEDIA_LIGHTING_RULE');
+    expect(ask).not.toContain('PLAN_TYPE_ROLE_RULE');
+    expect(image).toContain('MEDIA_LIGHTING_RULE');
+    expect(image).toContain('PLAN_TYPE_ROLE_RULE');
+    expect(image).not.toContain('PLAN_LAYOUT_RHYTHM_RULE');
+    expect(image).not.toContain('FULL_IMPLEMENTATION_PAYLOAD');
+    expect(plan).toContain('MEDIA_LIGHTING_RULE');
+    expect(plan).toContain('PLAN_TYPE_ROLE_RULE');
+    expect(plan).toContain('PLAN_LAYOUT_RHYTHM_RULE');
+    expect(plan).toContain('Preserve editorial hierarchy.');
+    expect(plan).toContain('Avoid generic cards.');
+    expect(plan).not.toContain('FULL_IMPLEMENTATION_PAYLOAD');
+    expect(plan).toContain('- DESIGN.md: full design-system guidance');
+    expect(plan).toContain('- preview/: preview pages');
+    expect(plan).not.toContain('- tokens.css: compiled token contract');
+    expect(plan).not.toContain('- components.manifest.json: compact component inventory');
+  });
+
+  it('pins Ask boundaries after dynamic skill context and omits stage bodies', () => {
+    const prompt = composeSystemPrompt({
+      promptCoreVariant: 'slim',
+      sessionMode: 'chat',
+      skillName: 'builder',
+      skillBody: 'Write files now.',
+      activeStageBlocks: ['\n\n## Active stage: build\n\nGenerate the artifact.'],
+    });
+    const stageAt = prompt.indexOf('## Active stage: build');
+    const boundaryAt = prompt.indexOf('## Ask mode boundary (binding)');
+    const protocolAt = prompt.indexOf('## Host clarification protocol — any turn');
+    const guardAt = prompt.indexOf('## CRITICAL: Never fabricate conversation turns');
+
+    expect(prompt).toContain('Use this skill as domain context for the answer');
+    expect(stageAt).toBe(-1);
+    expect(boundaryAt).toBeGreaterThan(prompt.indexOf('## Active skill — builder'));
+    expect(protocolAt).toBeGreaterThan(boundaryAt);
+    expect(guardAt).toBeGreaterThan(protocolAt);
+  });
+
+  it('swaps the slim Website Clone copyright rule for faithful reproduction', () => {
+    const normal = composeSystemPrompt({
+      promptCoreVariant: 'slim',
+      metadata: { kind: 'prototype' } as any,
+    });
+    const clone = composeSystemPrompt({
+      promptCoreVariant: 'slim',
+      metadata: { kind: 'prototype', intent: 'web-clone' } as any,
+    });
+
+    expect(normal).toContain("Don't recreate copyrighted designs.");
+    expect(clone).toContain('Website Clone is an explicit faithful-reproduction task');
+    expect(clone).not.toContain("Don't recreate copyrighted designs.");
   });
 
   it('injects the html-in-canvas preflight for the hyperframes skill', () => {
@@ -290,7 +667,10 @@ describe('composeSystemPrompt', () => {
     expect(prompt).toContain('**Pre-flight (do this before any other tool):**');
     expect(prompt).toContain('`references/html-in-canvas.md`');
     expect(prompt).toContain('media generate --surface video --model hyperframes-html --composition-dir <rel>');
-    expect(prompt).toContain('Do not run `npx hyperframes render` yourself');
+    expect(prompt).toMatch(/Do not run `npx hyperframes render`\s+yourself/);
+    const mediaContract = prompt.slice(prompt.indexOf('## Media generation contract'));
+    expect(mediaContract).not.toContain('npx hyperframes init');
+    expect(prompt.match(/npx hyperframes init/g)).toHaveLength(1);
     expect(prompt).not.toContain('intentionally rejected for this model');
     expect(prompt).not.toContain('AGENT_RENDERED');
     expect(prompt).not.toContain('rendered by you directly via npx');
@@ -303,7 +683,16 @@ describe('composeSystemPrompt', () => {
       expect(markdown).not.toContain('AGENT_RENDERED');
       expect(markdown).not.toContain('rendered by you directly via npx');
       expect(markdown).not.toContain('dispatcher path returns a 400');
+      expect(markdown).toContain('while [ -n "$task_id" ]; do');
+      expect(markdown).not.toContain('while [ "$ec" -eq 2 ]');
+      expect(markdown).not.toContain('jq -r');
+      expect(markdown).toContain('`generate` exits 0 for both outcomes');
+      expect(markdown).toContain('Visual Identity Gate (standalone HyperFrames only)');
+      expect(markdown).toContain('If `$OD_PROJECT_DIR` is set, this subsection does not apply');
+      expect(markdown).toContain('in OD it is the hidden');
+      expect(markdown).toContain('Reserve the current daemon dispatch for `render`');
     }
+    expect(officialHyperframesSkillMarkdown.trimEnd()).toBe(hyperframesSkillMarkdown.trimEnd());
   });
 
   it('does not add the responsive web contract to deck metadata without platform fields', () => {
@@ -400,12 +789,11 @@ describe('composeSystemPrompt', () => {
 
     it('prioritizes question forms over native tool calls when clarifying', () => {
       const prompt = composeSystemPrompt({ agentId: 'amr' });
-      expect(prompt).toContain('## Clarifying questions mid-conversation');
-      expect(prompt).toContain('`<question-form>` is assistant text for the Open Design UI, not a native tool call');
-      expect(prompt).toContain(
-        'emit the complete `<question-form>...</question-form>` block directly in the assistant message before any TodoWrite, file write/edit, Bash, or other native tool call',
-      );
-      expect(prompt).toContain('Do not stop after an introductory sentence such as "先确认一下方向："');
+      expect(prompt).toContain('## Host clarification protocol — any turn');
+      expect(prompt).toContain('The form is assistant text parsed by the Open Design host, not a native tool call');
+      expect(prompt).toContain('emit one complete `question-form` element');
+      expect(prompt).toContain('Do not ask a blocking clarification as prose');
+      expect(prompt).toContain('then end the turn');
     });
 
     it('pins filesystem artifact handoff for other CLI agents too', () => {
@@ -673,7 +1061,34 @@ describe('composeSystemPrompt', () => {
       expect(prompt).toContain('## Pull-layer files available on demand — default');
       expect(prompt).toContain('preview/colors.html: Colors; colors');
       expect(prompt).toContain('source/evidence.md: import evidence notes');
-      expect(prompt).toContain('Keep the push prompt light');
+      expect(prompt).toContain('The files below are not already present in this prompt');
+    });
+
+    it('shows core pull files only in compact Ask mode, not when they are already inline', () => {
+      const shared = {
+        designSystemTitle: 'default',
+        designSystemBody: '# x\n\nbody',
+        designSystemTokensCss: ':root { --accent: #111; }',
+        designSystemComponentsManifest: 'buttons: .btn',
+        designSystemCorePullIndex:
+          'Core design-system files available on demand:\n- DESIGN.md: full design-system guidance\n- tokens.css: compiled token contract',
+        designSystemPullIndex:
+          'Additional design-system files declared by manifest.json:\n- preview/colors.html: Colors; colors',
+        executionProfile: 'filesystem' as const,
+      };
+      const design = composeSystemPrompt(shared);
+      const plan = composeSystemPrompt({ ...shared, sessionMode: 'plan' });
+      const ask = composeSystemPrompt({ ...shared, sessionMode: 'chat' });
+
+      expect(design).toContain('preview/colors.html: Colors; colors');
+      expect(design).not.toContain('DESIGN.md: full design-system guidance');
+      expect(design).not.toContain('tokens.css: compiled token contract');
+      expect(plan).toContain('preview/colors.html: Colors; colors');
+      expect(plan).toContain('DESIGN.md: full design-system guidance');
+      expect(plan).not.toContain('tokens.css: compiled token contract');
+      expect(ask).toContain('preview/colors.html: Colors; colors');
+      expect(ask).toContain('DESIGN.md: full design-system guidance');
+      expect(ask).toContain('tokens.css: compiled token contract');
     });
 
     it('adds importMode guidance when the manifest declares consumption semantics', () => {

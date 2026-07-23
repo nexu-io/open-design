@@ -98,6 +98,28 @@ describe('composeSystemPrompt critique wiring', () => {
     expect(out).toContain('<CRITIQUE_RUN');
   });
 
+  it('skips the panel addendum in Ask mode', () => {
+    const cfg = { ...defaultCritiqueConfig(), enabled: true };
+    const out = composeSystemPrompt({
+      critique: cfg,
+      critiqueBrand: BRAND,
+      critiqueSkill: SKILL,
+      sessionMode: 'chat',
+    });
+    expect(out).not.toContain('<CRITIQUE_RUN');
+  });
+
+  it('skips the panel addendum in Plan mode', () => {
+    const cfg = { ...defaultCritiqueConfig(), enabled: true };
+    const out = composeSystemPrompt({
+      critique: cfg,
+      critiqueBrand: BRAND,
+      critiqueSkill: SKILL,
+      sessionMode: 'plan',
+    });
+    expect(out).not.toContain('<CRITIQUE_RUN');
+  });
+
   // Round 3 review feedback on PR #524.
   // The composer takes its eligibility decision from the caller. The
   // server-side gate in startChatRun is responsible for suppressing the

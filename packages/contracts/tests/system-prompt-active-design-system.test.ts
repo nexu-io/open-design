@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { composeSystemPrompt } from '../src/prompts/system.js';
+import { composeSystemPrompt as composePrompt } from '../src/prompts/system.js';
+
+const composeSystemPrompt = (input: Parameters<typeof composePrompt>[0]) =>
+  composePrompt({ ...input, promptCoreVariant: 'classic' });
 
 describe('composeSystemPrompt — active design system visual direction', () => {
   it('treats an active design system as the visual direction', () => {

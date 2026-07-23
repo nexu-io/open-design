@@ -1,3 +1,6 @@
+import type { MediaSurface } from '../api/media.js';
+import type { AudioKind } from '../api/projects.js';
+
 export const MEDIA_GENERATION_CONTRACT = `
 ---
 
@@ -6,8 +9,8 @@ export const MEDIA_GENERATION_CONTRACT = `
 This project is a **non-web** surface (image / video / audio). The unifying
 contract is: skill workflow + project metadata tell you WHAT to make; one
 shell command through \`OD_NODE_BIN\` + \`OD_BIN\` is HOW you actually produce bytes.
-Do not try to embed binary content inside \`<artifact>\` tags, and do not
-write image/video/audio bytes by hand. Always call out to the dispatcher.
+The dispatcher is the only byte-generation path; do not write image/video/audio
+bytes by hand.
 
 The daemon injects these environment variables for agent sessions:
 
@@ -72,3 +75,61 @@ in \`.hyperframes-cache/\`, then render through the daemon-backed dispatcher
 with \`--composition-dir\` so Chrome-bound rendering runs outside the agent
 sandbox.
 `;
+
+export function renderMediaGenerationContract(
+  surface: MediaSurface,
+  audioKind?: AudioKind | undefined,
+  includeHyperframesGuide = surface === 'video',
+): string {
+  let contract = MEDIA_GENERATION_CONTRACT
+    .replace(
+      'This project is a **non-web** surface (image / video / audio).',
+      `This project is an **${surface}** surface.`,
+    )
+    .replace('--surface <image|video|audio>', `--surface ${surface}`);
+
+  if (surface === 'image') {
+    contract = contract
+      .replace('  [--length <seconds>] \\\n', '')
+      .replace('  [--duration <seconds>] \\\n', '')
+      .replace('  [--prompt-influence <0-1>] \\\n', '')
+      .replace('  [--loop] \\\n', '')
+      .replace('  [--audio-kind music|speech|sfx] \\\n', '')
+      .replace('  [--voice <provider-voice-id>] \\\n', '')
+      .replace('  [--language <lang>]\n', '');
+  } else if (surface === 'video') {
+    contract = contract
+      .replace('  [--duration <seconds>] \\\n', '')
+      .replace('  [--prompt-influence <0-1>] \\\n', '')
+      .replace('  [--loop] \\\n', '')
+      .replace('  [--audio-kind music|speech|sfx] \\\n', '')
+      .replace('  [--voice <provider-voice-id>] \\\n', '')
+      .replace('  [--language <lang>]\n', '');
+  } else {
+    contract = contract
+      .replace('  [--aspect 1:1|16:9|9:16|4:3|3:4] \\\n', '')
+      .replace('  [--length <seconds>] \\\n', '')
+      .replace(
+        '  [--audio-kind music|speech|sfx] \\\n',
+        `  --audio-kind ${audioKind ?? '<music|speech|sfx>'} \\\n`,
+      );
+    if (audioKind !== 'speech') {
+      contract = contract
+        .replace('  [--voice <provider-voice-id>] \\\n', '')
+        .replace('  [--language <lang>]\n', '');
+    }
+    if (audioKind !== 'sfx') {
+      contract = contract
+        .replace('  [--prompt-influence <0-1>] \\\n', '')
+        .replace('  [--loop] \\\n', '');
+    }
+  }
+
+  if (surface !== 'audio' || (audioKind && audioKind !== 'sfx')) {
+    contract = contract.replace(/\nFor \`elevenlabs-sfx\`[\s\S]*?by the provider\.\n/, '\n');
+  }
+  if (surface !== 'video' || !includeHyperframesGuide) {
+    contract = contract.replace(/\nSpecial case: \`hyperframes-html\`[\s\S]*?agent\nsandbox\.\n/, '\n');
+  }
+  return contract;
+}

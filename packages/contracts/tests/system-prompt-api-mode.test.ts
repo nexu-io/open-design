@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { composeSystemPrompt, SKIP_DISCOVERY_BRIEF_OVERRIDE } from '../src/prompts/system.js';
+import { composeSystemPrompt as composePrompt, SKIP_DISCOVERY_BRIEF_OVERRIDE } from '../src/prompts/system.js';
+
+const composeSystemPrompt = (input: Parameters<typeof composePrompt>[0]) =>
+  composePrompt({ ...input, promptCoreVariant: 'classic' });
 
 /**
  * Regression coverage for #313 — Anthropic API mode renders TodoWrite /
@@ -32,7 +35,7 @@ describe('composeSystemPrompt — API mode (#313)', () => {
       expect(prompt).toContain('Do not emit a direction question-form');
       expect(prompt).not.toContain('<question-form id="direction"');
       expect(prompt).not.toContain('Pick a visual direction');
-      expect(prompt).toContain('if a design system is active and no new brand/reference source was provided, use it as the visual direction without asking again');
+      expect(prompt).toContain('if a design system is active, use it as the visual direction without asking again');
     });
 
     it('uses stable brand option values for discovery-form branching', () => {
@@ -42,16 +45,21 @@ describe('composeSystemPrompt — API mode (#313)', () => {
       expect(prompt).toContain('{ "label": "Match a reference site / screenshot — I\'ll attach it", "value": "reference_match" }');
       expect(prompt).toContain('When the answer line includes `[value: ...]`, use that stable value instead of the visible label.');
       expect(prompt).toContain('If you keep the `brand` question, its `id` must stay `"brand"`.');
-      expect(prompt).toContain('you may drop the `brand` question as already answered, but you must still treat that provided source as Branch A below');
-      expect(prompt).toContain('When skipping the form, do not skip brand-source handling');
-      expect(prompt).toContain('If the current message, attachments, prior brief, or URL already contains an actual brand spec / brand guide / reference site / screenshot source, use Branch A.');
-      expect(prompt).toContain('### Branch A — user provided a brand/reference source, or `brand` value is `"brand_spec"` / `"reference_match"`');
+      expect(prompt).toContain('you may drop the `brand` question as already answered; classify the source under RULE 2');
+      expect(prompt).toContain('When skipping the form, still classify any provided source under RULE 2');
+      expect(prompt).toContain('### Branch A — replacement brand/visual source, or `brand` value is `"brand_spec"` / `"reference_match"`');
       expect(prompt).toContain('ask them to paste/upload the brand spec or reference and stop');
       expect(prompt).toContain('Do not guess a brand domain or invent tokens');
-      expect(prompt).toContain('An active design system does not suppress Branch A when the user provides a brand/reference source');
-      expect(prompt).toContain('### Branch B — no user-provided brand/reference source and no Branch A brand value');
-      expect(prompt).toContain('active-design-system cases where the user did not provide a new brand/reference source');
-      expect(prompt).toContain('Provided brand/reference source → run brand-spec extraction');
+      expect(prompt).toContain('First classify what role any source plays');
+      expect(prompt).toContain(
+        'Use Branch A if the user explicitly designates it as the replacement brand or visual authority',
+      );
+      expect(prompt).toContain(
+        'For an ordinary reference, extract only the requested aspects, keep the active design-system tokens binding elsewhere',
+      );
+      expect(prompt).not.toContain('run the extraction as a supplemental override');
+      expect(prompt).toContain('### Branch B — no Branch A source or brand value');
+      expect(prompt).toContain('Branch A source/value → run brand-spec extraction');
       expect(prompt).toContain('`brand_spec` / `reference_match` without a provided source → ask for the source and stop; do not guess brand tokens.');
     });
 
@@ -60,16 +68,17 @@ describe('composeSystemPrompt — API mode (#313)', () => {
       expect(prompt).not.toMatch(/API mode — no tools available/i);
     });
 
-    it('carries the mid-conversation clarification guidance for daemon mode too', () => {
+    it('carries the all-turn clarification protocol for daemon mode too', () => {
       const prompt = composeSystemPrompt({});
-      expect(prompt).toContain('Clarifying questions mid-conversation');
+      expect(prompt).toContain('Host clarification protocol — any turn');
+      expect(prompt).toContain('It applies on turn 1 and every later turn');
     });
   });
 
   describe('API mode (streamFormat: plain)', () => {
     it('injects the API-mode override section', () => {
       const prompt = composeSystemPrompt({ streamFormat: 'plain' });
-      expect(prompt).toMatch(/API mode — no tools available/i);
+      expect(prompt).toContain('# Plain API execution profile — no tools (binding)');
     });
 
     it('pins the override at the top so it overrides the discovery layer', () => {
@@ -80,24 +89,21 @@ describe('composeSystemPrompt — API mode (#313)', () => {
       // re-enables TodoWrite/Read/Write/Edit/Bash mentions later in the
       // prompt.
       const prompt = composeSystemPrompt({ streamFormat: 'plain' });
-      const overrideIdx = prompt.search(/API mode — no tools available/i);
+      const overrideIdx = prompt.indexOf('# Plain API execution profile — no tools (binding)');
       const discoveryIdx = prompt.indexOf('# OD core directives');
       expect(overrideIdx).toBeGreaterThanOrEqual(0);
       expect(discoveryIdx).toBeGreaterThanOrEqual(0);
       expect(overrideIdx).toBeLessThan(discoveryIdx);
     });
 
-    it('names every tool the agent must not pretend to call', () => {
+    it('covers unavailable tool categories without redefining the active workflow', () => {
       const prompt = composeSystemPrompt({ streamFormat: 'plain' });
-      // Each tool the discovery layer / base prompt assumes is available
-      // must be explicitly listed as unavailable so the model knows the
-      // later instructions are describing daemon-mode behavior.
-      expect(prompt).toMatch(/\bTodoWrite\b/);
-      expect(prompt).toMatch(/\bRead\b/);
-      expect(prompt).toMatch(/\bWrite\b/);
-      expect(prompt).toMatch(/\bEdit\b/);
-      expect(prompt).toMatch(/\bBash\b/);
-      expect(prompt).toMatch(/\bWebFetch\b/);
+      const apiDirective = prompt.slice(0, prompt.indexOf('# OD core directives'));
+      expect(apiDirective).toContain('filesystem reads or writes');
+      expect(apiDirective).toContain('shell commands');
+      expect(apiDirective).toContain('connector/MCP calls');
+      expect(apiDirective).toContain('runtime-specific planning tools');
+      expect(apiDirective).toContain('does not override the active session mode');
     });
 
     it('forbids the pseudo-tool markup observed in #313 (`<todo-list>` and `[读取 ...]`)', () => {
@@ -106,16 +112,17 @@ describe('composeSystemPrompt — API mode (#313)', () => {
       expect(prompt).toMatch(/\[读取/);
     });
 
-    it('tells the agent to state its plan in prose instead of pretending to call TodoWrite', () => {
+    it('forbids pretending that planning or other tool calls ran', () => {
       const prompt = composeSystemPrompt({ streamFormat: 'plain' });
-      expect(prompt).toMatch(/state.*plan.*prose|describe.*plan.*prose|plan.*as prose/i);
+      expect(prompt).toContain('runtime-specific planning tools will not execute');
+      expect(prompt).toContain('do not pretend a tool ran');
     });
 
     it('keeps tool-unavailable details out of user-visible prose', () => {
       const prompt = composeSystemPrompt({ streamFormat: 'plain' });
       expect(prompt).toContain('Do not mention tool unavailability to the user');
-      expect(prompt).toContain('Avoid phrases such as "TodoWrite is unavailable"');
-      expect(prompt).toContain('without mentioning missing tools');
+      expect(prompt).toContain('never emit pseudo-tool markup');
+      expect(prompt).toContain('statements promising to call, read, write, fetch, or generate through a tool');
     });
 
     it('explicitly invalidates later "call TodoWrite" / tool-use instructions', () => {
@@ -133,18 +140,14 @@ describe('composeSystemPrompt — API mode (#313)', () => {
     });
 
     // Regression coverage for the unified ask-user flow: API/BYOK mode must
-    // route mid-conversation clarification through the same `<question-form>`
-    // Questions-tab surface as daemon mode, not fall back to plain-text
-    // markdown option lists. The API-mode allowed-output list must NOT scope
-    // `<question-form>` to turn-1 only, and the composer must carry the
-    // daemon-mirrored "Clarifying questions mid-conversation" guidance.
-    it('permits mid-conversation clarification forms, not just turn-1 discovery', () => {
+    // route blocking clarification on every turn through the same
+    // `<question-form>` Questions-tab surface as daemon mode.
+    it('requires clarification forms on every turn, including turn 1', () => {
       const prompt = composeSystemPrompt({ streamFormat: 'plain' });
-      expect(prompt).toContain('Clarifying questions mid-conversation');
-      expect(prompt).toMatch(/discovery \(turn 1\) and for mid-conversation clarification/);
-      // The old turn-1-only allowance must be gone so it can't re-scope the
-      // form back to discovery in BYOK/API runs.
-      expect(prompt).not.toContain('blocks for discovery on turn 1, exactly');
+      expect(prompt).toContain('Host clarification protocol — any turn');
+      expect(prompt).toContain('It applies on turn 1 and every later turn');
+      expect(prompt).toContain('Do not ask a blocking clarification as prose');
+      expect(prompt).not.toContain('Clarifying questions mid-conversation');
     });
 
     it('honors metadata.skipDiscoveryBrief before the discovery rules', () => {
@@ -156,9 +159,29 @@ describe('composeSystemPrompt — API mode (#313)', () => {
       const discoveryIdx = prompt.indexOf('# OD core directives');
       expect(skipIdx).toBeGreaterThanOrEqual(0);
       expect(skipIdx).toBeLessThan(discoveryIdx);
-      expect(prompt).toMatch(/do NOT emit `?<question-form id="discovery">`?/i);
-      expect(prompt).toContain('Do not emit any question form');
-      expect(prompt).toContain('choose reasonable defaults for any missing details');
+      expect(prompt).toContain('do not emit a discovery form');
+      expect(prompt).toContain('infer safe defaults for missing details');
+      expect(prompt).toContain('For this initial Design turn only');
+    });
+
+    it('does not persist skipDiscoveryBrief into later turns or non-Design modes', () => {
+      const later = composeSystemPrompt({
+        streamFormat: 'plain',
+        isInitialProjectTurn: false,
+        metadata: { kind: 'prototype', skipDiscoveryBrief: true },
+      });
+      const ask = composeSystemPrompt({
+        sessionMode: 'chat',
+        metadata: { kind: 'prototype', skipDiscoveryBrief: true },
+      });
+      const plan = composeSystemPrompt({
+        sessionMode: 'plan',
+        metadata: { kind: 'prototype', skipDiscoveryBrief: true },
+      });
+
+      for (const prompt of [later, ask, plan]) {
+        expect(prompt).not.toContain(SKIP_DISCOVERY_BRIEF_OVERRIDE);
+      }
     });
   });
 
@@ -172,8 +195,8 @@ describe('composeSystemPrompt — API mode (#313)', () => {
       const prompt = composeSystemPrompt({
         metadata: { kind: 'prototype', examplePrompt: true },
       });
-      expect(prompt).toContain('Example prompt mode — full-quality direct generation');
-      expect(prompt).toMatch(/do NOT emit `?<question-form id="discovery">`?/i);
+      expect(prompt).toContain('Initial example Design turn — direct generation');
+      expect(prompt).toContain('do not emit a discovery form');
     });
 
     it('interpolates the curated title and pre-filled brief', () => {
@@ -195,7 +218,7 @@ describe('composeSystemPrompt — API mode (#313)', () => {
         streamFormat: 'plain',
         metadata: { kind: 'prototype', examplePrompt: true },
       });
-      const overrideIdx = prompt.indexOf('Example prompt mode — full-quality direct generation');
+      const overrideIdx = prompt.indexOf('Initial example Design turn — direct generation');
       const discoveryIdx = prompt.indexOf('# OD core directives');
       expect(overrideIdx).toBeGreaterThanOrEqual(0);
       expect(overrideIdx).toBeLessThan(discoveryIdx);
@@ -205,8 +228,31 @@ describe('composeSystemPrompt — API mode (#313)', () => {
       const prompt = composeSystemPrompt({
         metadata: { kind: 'prototype', examplePrompt: true, skipDiscoveryBrief: true },
       });
-      expect(prompt).toContain('Example prompt mode — full-quality direct generation');
+      expect(prompt).toContain('Initial example Design turn — direct generation');
       expect(prompt).not.toContain(SKIP_DISCOVERY_BRIEF_OVERRIDE);
+    });
+
+    it('does not persist the example override into later turns or non-Design modes', () => {
+      const inputs: Array<Parameters<typeof composeSystemPrompt>[0]> = [
+        {
+          isInitialProjectTurn: false,
+          metadata: { kind: 'prototype', examplePrompt: true },
+        },
+        {
+          sessionMode: 'chat' as const,
+          metadata: { kind: 'prototype', examplePrompt: true },
+        },
+        {
+          sessionMode: 'plan' as const,
+          metadata: { kind: 'prototype', examplePrompt: true },
+        },
+      ];
+
+      for (const input of inputs) {
+        expect(composeSystemPrompt(input)).not.toContain(
+          'Initial example Design turn — direct generation',
+        );
+      }
     });
   });
 });

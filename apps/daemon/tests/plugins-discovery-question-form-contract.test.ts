@@ -21,23 +21,22 @@ describe('bundled discovery-question-form atom prompt contract', () => {
     expect(stages[1]?.atoms).toEqual(['file-write', 'live-artifact']);
   });
 
-  it('teaches agents to emit the wrapped question-form renderer contract', async () => {
+  it('delegates rendering to the shared host contract without duplicating its schema', async () => {
     const body = await readFile(discoveryAtomPath, 'utf8');
 
-    expect(body).toContain('<question-form id="discovery"');
-    expect(body).toContain('"questions": [');
-    expect(body).toContain('</question-form>');
-    expect(body).toMatch(/Do not emit a bare question object by itself/);
+    expect(body).toContain('binding host clarification gate and shared');
+    expect(body).toContain('cannot make discovery mandatory');
+    expect(body).toMatch(/Preserve a form id supplied by the active skill or router/);
+    expect(body).toMatch(/otherwise use\s+`discovery`/);
+    expect(body).toContain('Emit one complete form and end the turn');
+    expect(body).not.toContain('"questions": [');
   });
 
-  it('does not present a bare keyed question JSON object as the canonical emission shape', async () => {
+  it('does not reintroduce a concrete default question as the canonical emission shape', async () => {
     const body = await readFile(discoveryAtomPath, 'utf8');
-    const emissionShape = body.slice(
-      body.indexOf('## Emission shape'),
-      body.indexOf('## Question object shape'),
-    );
 
-    expect(emissionShape).not.toMatch(/```jsonc\s*\{\s*"id":/s);
+    expect(body).not.toMatch(/```jsonc\s*\{\s*"id":/s);
     expect(body).not.toMatch(/```jsonc[\s\S]*"id": "audience"/);
+    expect(body).not.toContain('Which brand source should I follow?');
   });
 });

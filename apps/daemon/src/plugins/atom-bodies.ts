@@ -15,6 +15,7 @@
 import path from 'node:path';
 import { promises as fsp } from 'node:fs';
 import type Database from 'better-sqlite3';
+import type { ChatSessionMode, MediaSurface } from '@open-design/contracts';
 import { getInstalledPlugin } from './registry.js';
 
 type SqliteDb = Database.Database;
@@ -26,6 +27,45 @@ export interface AtomBodyEntry {
   // bundled plugin's SKILL.md is missing or unreadable; the caller
   // should drop empty entries from the prompt block.
   body: string;
+}
+
+export interface PromptAtomFilterContext {
+  sessionMode?: ChatSessionMode | undefined;
+  mediaSurface?: MediaSurface | null | undefined;
+  projectIntent?: string | null | undefined;
+  critiqueEnabled?: boolean | undefined;
+}
+
+/**
+ * Select atom bodies that should be shown to the model.
+ *
+ * This does not alter the runtime pipeline. Ask/Plan modes and media surfaces
+ * keep their own prompt contracts, while the scheduler may still execute and
+ * report every configured stage. On ordinary Design runs, retain custom atoms
+ * and drop only known surface-specific bodies that would be misleading.
+ */
+export function filterAtomIdsForPrompt(
+  atomIds: ReadonlyArray<string>,
+  context: PromptAtomFilterContext,
+): string[] {
+  if (
+    context.sessionMode === 'chat'
+    || context.sessionMode === 'plan'
+    || context.mediaSurface
+  ) {
+    return [];
+  }
+
+  return atomIds.filter((rawId) => {
+    const id = rawId.trim().toLowerCase();
+    if (!id) return false;
+    if (id === 'critique-theater') return context.critiqueEnabled === true;
+    if (id === 'live-artifact') return context.projectIntent === 'live-artifact';
+    if (id === 'media-image' || id === 'media-video' || id === 'media-audio') {
+      return false;
+    }
+    return true;
+  });
 }
 
 // Load SKILL.md bodies for every requested atom id. Looks each id up

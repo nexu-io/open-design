@@ -23,7 +23,12 @@ import {
   IMAGE_MODELS,
   VIDEO_MODELS,
 } from '../media/models.js';
-import type { ByokMediaDefaults, MediaExecutionPolicy, MediaSurface } from '@open-design/contracts';
+import type {
+  AudioKind,
+  ByokMediaDefaults,
+  MediaExecutionPolicy,
+  MediaSurface,
+} from '@open-design/contracts';
 
 function fmtList(ids: string[]): string {
   return ids.map((id) => `\`${id}\``).join(', ');
@@ -34,14 +39,44 @@ const VIDEO_IDS = fmtList(VIDEO_MODELS.map((m) => m.id));
 const AUDIO_MUSIC_IDS = fmtList(AUDIO_MODELS_BY_KIND.music.map((m) => m.id));
 const AUDIO_SPEECH_IDS = fmtList(AUDIO_MODELS_BY_KIND.speech.map((m) => m.id));
 const AUDIO_SFX_IDS = fmtList(AUDIO_MODELS_BY_KIND.sfx.map((m) => m.id));
+export const DEFAULT_IMAGE_GENERATION_MODEL_ID =
+  IMAGE_MODELS.find((model) => model.default)?.id ?? 'gpt-image-2';
+export const DEFAULT_VIDEO_GENERATION_MODEL_ID =
+  VIDEO_MODELS.find((model) => model.default)?.id ?? 'doubao-seedance-2-0-260128';
 
-export function renderMediaGenerationContract(
-  mediaExecution?: MediaExecutionPolicy | undefined,
-  byokMediaDefaults?: ByokMediaDefaults | undefined,
-): string {
+export interface MediaGenerationPromptOptions {
+  surface: MediaSurface;
+  model?: string | null | undefined;
+  audioKind?: AudioKind | null | undefined;
+  includeHyperframesGuide?: boolean | undefined;
+  includeModelCatalogue?: boolean | undefined;
+  includeProviderDiagnostics?: boolean | undefined;
+  mediaExecution?: MediaExecutionPolicy | undefined;
+  byokMediaDefaults?: ByokMediaDefaults | undefined;
+}
+
+export function renderMediaGenerationContract({
+  surface,
+  model,
+  audioKind,
+  includeHyperframesGuide,
+  includeModelCatalogue,
+  includeProviderDiagnostics,
+  mediaExecution,
+  byokMediaDefaults,
+}: MediaGenerationPromptOptions): string {
   const mode = mediaExecution?.mode ?? 'enabled';
   if (mode === 'enabled') {
-    return renderEnabledMediaGenerationContract(mediaExecution, byokMediaDefaults);
+    return renderEnabledMediaGenerationContract({
+      surface,
+      model,
+      audioKind,
+      includeHyperframesGuide,
+      includeModelCatalogue,
+      includeProviderDiagnostics,
+      mediaExecution,
+      byokMediaDefaults,
+    });
   }
   const scope = renderMediaPolicyScope(mediaExecution);
   if (mode === 'disabled') {
@@ -62,43 +97,88 @@ preference, references, and output filename in chat, then stop. Do not claim a
 file was generated and do not emit an \`<artifact>\` block for media.
 ${scope}`;
   }
-  return renderEnabledMediaGenerationContract(mediaExecution, byokMediaDefaults);
+  return renderEnabledMediaGenerationContract({
+    surface,
+    model,
+    audioKind,
+    includeHyperframesGuide,
+    includeModelCatalogue,
+    includeProviderDiagnostics,
+    mediaExecution,
+    byokMediaDefaults,
+  });
 }
 
 function renderEnabledMediaGenerationContract(
-  mediaExecution?: MediaExecutionPolicy | undefined,
-  byokMediaDefaults?: ByokMediaDefaults | undefined,
+  options: MediaGenerationPromptOptions,
 ): string {
+  const {
+    surface,
+    model,
+    audioKind,
+    includeHyperframesGuide,
+    includeModelCatalogue,
+    includeProviderDiagnostics,
+    mediaExecution,
+    byokMediaDefaults,
+  } = options;
   const scope = renderMediaPolicyScope(mediaExecution);
-  const defaults = renderByokMediaDefaults(byokMediaDefaults);
-  if (!scope && !defaults) return MEDIA_GENERATION_CONTRACT;
-  return MEDIA_GENERATION_CONTRACT.replace(
-    '\n### Allowed model IDs (per surface)',
-    `
-${defaults}
+  const defaults = renderByokMediaDefaults(byokMediaDefaults, surface, audioKind);
+  const effectiveModel = resolveByokMediaModel(byokMediaDefaults, surface, audioKind)
+    ?? model;
+  let contract = renderSurfaceContract(
+    surface,
+    effectiveModel,
+    audioKind,
+    includeHyperframesGuide,
+    includeModelCatalogue ?? !effectiveModel?.trim(),
+    includeProviderDiagnostics ?? false,
+  );
+  if (!scope && !defaults) return contract;
+  contract = contract.replace(
+    '\n### Workflow rules',
+    `\n${defaults}
 ${scope ? `### Active media policy scope
 
 The dispatcher will reject surfaces or models outside this run's active
-allowlist. Treat this allowlist as narrower than the full catalogue below;
+allowlist. Treat it as narrower than the active-surface catalogue below;
 select only from it.
 ${scope}
 
-` : ''}### Allowed model IDs (per surface)`,
+` : ''}### Workflow rules`,
   );
+  return contract;
+}
+
+function resolveByokMediaModel(
+  defaults: ByokMediaDefaults | undefined,
+  surface: MediaSurface,
+  audioKind?: AudioKind | null,
+): string | undefined {
+  if (surface === 'image') return defaults?.imageModel?.trim() || undefined;
+  if (surface === 'video') return defaults?.videoModel?.trim() || undefined;
+  if (surface === 'audio' && (!audioKind || audioKind === 'speech')) {
+    return defaults?.speechModel?.trim() || undefined;
+  }
+  return undefined;
 }
 
 function renderByokMediaDefaults(
   defaults?: ByokMediaDefaults | undefined,
+  surface?: MediaSurface | undefined,
+  audioKind?: AudioKind | null | undefined,
 ): string {
   const lines: string[] = [];
   const imageModel = defaults?.imageModel?.trim();
   const videoModel = defaults?.videoModel?.trim();
   const speechModel = defaults?.speechModel?.trim();
   const speechVoice = defaults?.speechVoice?.trim();
-  if (imageModel) lines.push(`- Image model: \`${imageModel}\``);
-  if (videoModel) lines.push(`- Video model: \`${videoModel}\``);
-  if (speechModel) lines.push(`- Speech model: \`${speechModel}\``);
-  if (speechVoice) lines.push(`- Speech voice: \`${speechVoice}\``);
+  if (surface === 'image' && imageModel) lines.push(`- Image model: \`${imageModel}\``);
+  if (surface === 'video' && videoModel) lines.push(`- Video model: \`${videoModel}\``);
+  if (surface === 'audio' && (!audioKind || audioKind === 'speech')) {
+    if (speechModel) lines.push(`- Speech model: \`${speechModel}\``);
+    if (speechVoice) lines.push(`- Speech voice: \`${speechVoice}\``);
+  }
   if (lines.length === 0) return '';
   return `### Run-scoped BYOK media defaults
 
@@ -108,6 +188,245 @@ a different model or voice.
 ${lines.join('\n')}
 
 `;
+}
+
+function replaceSection(
+  source: string,
+  startMarker: string,
+  endMarker: string,
+  replacement: string,
+): string {
+  const start = source.indexOf(startMarker);
+  const end = source.indexOf(endMarker, start + startMarker.length);
+  if (start < 0 || end < 0) {
+    throw new Error(`Media prompt section marker drift: ${startMarker} -> ${endMarker}`);
+  }
+  return `${source.slice(0, start)}${replacement.trimEnd()}\n\n${source.slice(end)}`;
+}
+
+function renderSurfaceContract(
+  surface: MediaSurface,
+  model?: string | null | undefined,
+  audioKind?: AudioKind | null | undefined,
+  includeHyperframesGuide?: boolean | undefined,
+  includeModelCatalogue = true,
+  includeProviderDiagnostics = false,
+): string {
+  const article = surface === 'image' || surface === 'audio' ? 'an' : 'a';
+  let contract = MEDIA_GENERATION_CONTRACT_TEMPLATE
+    .replace(
+      'This project is a **non-web** surface (image / video / audio).',
+      `This project is ${article} **${surface}** surface.`,
+    )
+    .replace('write image/video/audio bytes by hand', `write ${surface} bytes by hand`)
+    .replace(
+      '{ "file": { "name": "poster.png", "size": 12345, "kind": "image", "mime": "image/png", ... } }',
+      `{ "file": { "name": "<generated-file>", "size": 12345, "kind": "${surface}", ... } }`,
+    )
+    .replace('Save the \`file.name\` and reference it in your reply ("I generated\n\`poster.png\`.").', 'Save the \`file.name\` and reference that exact name in your reply.');
+
+  contract = replaceSection(
+    contract,
+    '### Invocation',
+    'Always quote the prompt value.',
+    renderInvocation(surface, audioKind),
+  );
+
+  const shouldIncludeHyperframesGuide =
+    surface === 'video'
+    && model === 'hyperframes-html'
+    && (includeHyperframesGuide ?? true);
+  if (!shouldIncludeHyperframesGuide) {
+    contract = replaceSection(
+      contract,
+      '#### Carve-out: `hyperframes-html` is agent-authored, daemon-rendered',
+      '### All slow renders: generate → wait loop',
+      '',
+    );
+  }
+
+  contract = replaceSection(
+    contract,
+    'For media projects, `"$OD_NODE_BIN" "$OD_BIN" media generate …` is the **only**',
+    shouldIncludeHyperframesGuide
+      ? '#### Carve-out: `hyperframes-html` is agent-authored, daemon-rendered'
+      : '### All slow renders: generate → wait loop',
+    renderExecutionPath(shouldIncludeHyperframesGuide),
+  );
+  contract = replaceSection(
+    contract,
+    '### All slow renders: generate → wait loop',
+    '### Allowed model IDs (per surface)',
+    renderWaitContract(),
+  );
+  contract = replaceSection(
+    contract,
+    '### Allowed model IDs (per surface)',
+    '### Workflow rules',
+    includeModelCatalogue
+      ? renderModelCatalogue(surface, audioKind)
+      : renderActiveModel(model),
+  );
+  contract = replaceSection(
+    contract,
+    '1. **Read project metadata first.**',
+    '2. **Dispatch immediately when the brief is complete.**',
+    renderMetadataRules(surface, audioKind),
+  );
+  contract = replaceSection(
+    contract,
+    '2. **Dispatch immediately when the brief is complete.**',
+    '3. **Generate by shell, reply in one short message.**',
+    renderDispatchRules(surface, audioKind),
+  );
+  if (!includeProviderDiagnostics) {
+    const diagnosticsMarker = '\n### Detecting and surfacing provider errors';
+    const diagnosticsStart = contract.indexOf(diagnosticsMarker);
+    if (diagnosticsStart < 0) {
+      throw new Error(`Media prompt section marker drift: ${diagnosticsMarker}`);
+    }
+    contract = `${contract.slice(0, diagnosticsStart).trimEnd()}\n`;
+  }
+  return contract;
+}
+
+function renderInvocation(surface: MediaSurface, audioKind?: AudioKind | null): string {
+  const optionalFlags = surface === 'image'
+    ? '  [--aspect 1:1|16:9|9:16|4:3|3:4]'
+    : surface === 'video'
+      ? '  [--aspect 1:1|16:9|9:16|4:3|3:4] \\\n  [--length <seconds>] \\\n  [--image <project-relative-path>] \\\n  [--composition-dir <project-relative-dir>]'
+      : `  --audio-kind ${audioKind ?? '<music|speech|sfx>'} \\\n  [--duration <seconds>]${audioKind === 'speech' ? ' \\\n  [--voice <provider-voice-id>] \\\n  [--language <lang>]' : ''}${audioKind === 'sfx' ? ' \\\n  [--prompt-influence <0-1>] \\\n  [--loop]' : ''}`;
+
+  return `### Invocation
+
+Run via your shell tool (Bash on Claude Code, exec on Codex/Gemini, etc.):
+
+\`\`\`bash
+"$OD_NODE_BIN" "$OD_BIN" media generate \\
+  --project "$OD_PROJECT_ID" \\
+  --surface ${surface} \\
+  --model <model-id> \\
+  --output <filename> \\
+  --prompt "<full prompt>" \\
+${optionalFlags}
+\`\`\``;
+}
+
+function renderExecutionPath(includeHyperframesGuide: boolean): string {
+  return includeHyperframesGuide
+    ? `For this media project, \`"$OD_NODE_BIN" "$OD_BIN" media generate …\` is the
+only approved byte-generation path except for authoring the selected
+\`hyperframes-html\` composition described below. Do not replace the dispatcher
+with direct provider calls, ad-hoc wrappers, or alternate render paths.`
+    : `For this media project, \`"$OD_NODE_BIN" "$OD_BIN" media generate …\` is the
+only approved byte-generation path. Do not replace it with direct provider
+calls, ad-hoc wrappers, or alternate byte-generation paths.`;
+}
+
+function renderWaitContract(): string {
+  return `### Long-running renders: generate → wait
+
+\`media generate\` polls for about 25 seconds and exits \`0\` with either a final
+\`{"file": ...}\` result or \`{"taskId":"...","nextSince":0}\` as a successful
+handoff. A \`taskId\` is not completion: call
+\`"$OD_NODE_BIN" "$OD_BIN" media wait <taskId> --since <nextSince>\` until it
+finishes. \`media wait\` exits \`0\` with the final file, \`2\` while still
+running, and \`5\` when the provider task fails. On \`2\`, reuse the returned
+\`nextSince\` and wait again; never treat it as an error or stop at the handoff.
+Progress streams to stderr, so keep the tool call running rather than narrating
+an unverified result.`;
+}
+
+function renderModelCatalogue(surface: MediaSurface, audioKind?: AudioKind | null): string {
+  let catalogue: string;
+  if (surface === 'image') {
+    catalogue = `- **image**: ${IMAGE_IDS}`;
+  } else if (surface === 'video') {
+    catalogue = `- **video**: ${VIDEO_IDS}
+
+The Volcengine Seedance i2v models accept a project-relative first-frame image
+through \`--image <path>\`. The dispatcher reads and encodes it; traversal outside
+the project is rejected. \`hyperframes-html\` requires \`--composition-dir\` and
+the full authoring guide is included only when that model is selected.`;
+  } else if (audioKind === 'music') {
+    catalogue = `- **audio · music**: ${AUDIO_MUSIC_IDS}`;
+  } else if (audioKind === 'speech') {
+    catalogue = `- **audio · speech**: ${AUDIO_SPEECH_IDS}`;
+  } else if (audioKind === 'sfx') {
+    catalogue = `- **audio · sfx**: ${AUDIO_SFX_IDS}`;
+  } else {
+    catalogue = `- **audio · music**: ${AUDIO_MUSIC_IDS}
+- **audio · speech**: ${AUDIO_SPEECH_IDS}
+- **audio · sfx**: ${AUDIO_SFX_IDS}`;
+  }
+
+  const falPassthrough = surface === 'image' || surface === 'video'
+    ? `\n\nA model id beginning with \`fal-ai/\` is a valid passthrough for this surface;
+send it unchanged without warning or substitution.`
+    : '';
+  return `### Allowed model IDs (active surface)
+
+${catalogue}
+
+If the user requests another id, warn them and either use a registered id or
+the project default; never silently substitute.${falPassthrough}`;
+}
+
+function renderActiveModel(model?: string | null): string {
+  const selected = model?.trim();
+  if (!selected) return '';
+  return `### Active model
+
+Use the run-selected model \`${selected}\` unless the current user message explicitly requests another one. The dispatcher validates model availability and reports the exact error when it is not allowed.`;
+}
+
+function renderMetadataRules(surface: MediaSurface, audioKind?: AudioKind | null): string {
+  let subtype = '';
+  if (surface === 'audio' && audioKind === 'speech') {
+    subtype = ` For \`minimax-tts\` and \`elevenlabs-v3\`, \`--voice\` must be a
+real provider voice id, not a natural-language description; omit it when no
+valid id is available. Use \`--language\` only for a real pronunciation boost.`;
+  } else if (surface === 'audio' && audioKind === 'sfx') {
+    subtype = ` For \`elevenlabs-sfx\`, put the audible event in \`--prompt\` and
+never pass \`--voice\`. Keep the prompt under 450 characters (target 180–320),
+describing source/action, material, intensity, space, timing, decay, and things
+to avoid. Use \`--prompt-influence 0.7\` for specified SFX and \`--loop\` only
+for seamless ambience/background/game loops. Provider duration is capped at
+30 seconds.`;
+  } else if (surface === 'audio' && !audioKind) {
+    subtype = ` Infer music, speech, or SFX from the requested audible result.
+Speech may use a real provider voice id; SFX puts the sound brief in \`--prompt\`
+and never uses \`--voice\`.`;
+  }
+
+  return `1. **Read active metadata first.** Treat the selected ${surface} model
+and its surface-specific settings as authoritative defaults; override them only
+when the current user message explicitly asks for something else.${subtype}`;
+}
+
+function renderDispatchRules(surface: MediaSurface, audioKind?: AudioKind | null): string {
+  if (surface === 'image') {
+    return `2. **Dispatch when subject and direction are clear.** Infer a safe
+aspect ratio from the brief (landscape \`16:9\`, portrait/social \`9:16\`, product
+or uncued default \`1:1\`). Use the selected model; otherwise use
+\`${DEFAULT_IMAGE_GENERATION_MODEL_ID}\` by default and \`flux-pro-ultra\` only
+for an explicit best-quality request. Do not ask about model or aspect when
+these defaults resolve the gap.`;
+  }
+  if (surface === 'video') {
+    return `2. **Dispatch when subject, motion, and setting are clear.** Infer a
+safe aspect ratio from the brief and use the selected model; otherwise prefer
+\`${DEFAULT_VIDEO_GENERATION_MODEL_ID}\`. Ask only when the actual motion/output intent is
+materially ambiguous. If the selected model is \`hyperframes-html\`, author the
+composition as described above and dispatch it without a second planning or
+environment-check turn.`;
+  }
+  const kindRule = audioKind
+    ? `The active subtype is \`${audioKind}\`; do not include flags or guidance for the other audio subtypes.`
+    : 'Infer the audio subtype from the requested audible result; ask through the host form only when different subtypes would materially change the deliverable.';
+  return `2. **Dispatch when the audible result is clear.** ${kindRule} Use the
+selected model and duration defaults. Do not ask for optional production details
+that can be safely inferred from the content, language, and intended use.`;
 }
 
 function renderMediaPolicyScope(
@@ -123,7 +442,7 @@ function renderMediaPolicyScope(
   return lines.length > 0 ? `\n\n${lines.join('\n')}` : '';
 }
 
-export const MEDIA_GENERATION_CONTRACT = `
+const MEDIA_GENERATION_CONTRACT_TEMPLATE = `
 ---
 
 ## Media generation contract (load-bearing — overrides softer wording above)
@@ -131,8 +450,8 @@ export const MEDIA_GENERATION_CONTRACT = `
 This project is a **non-web** surface (image / video / audio). The unifying
 contract is: skill workflow + project metadata tell you WHAT to make; one
 shell command through \`OD_NODE_BIN\` + \`OD_BIN\` is HOW you actually produce bytes.
-Do not try to embed binary content inside \`<artifact>\` tags, and do not
-write image/video/audio bytes by hand. Always call out to the dispatcher.
+The dispatcher is the only byte-generation path; do not write image/video/audio
+bytes by hand.
 
 **Explicit layer overrides — read this first.** The design-workflow
 sections of this prompt (designer charter, discovery, and any deck
@@ -146,7 +465,8 @@ prompt and the narration.
 
 ### Environment the daemon injected for you
 
-The daemon spawns you with these env vars set (verify with \`echo\`):
+The daemon spawns you with these env vars set. Trust the injected values and
+make the first dispatcher attempt without a separate environment probe:
 
 - \`OD_NODE_BIN\`    — absolute path to the Node-compatible runtime that started the daemon. Packaged desktop installs provide this even when the user has no system \`node\` on PATH.
 - \`OD_BIN\`         — absolute path to the OD CLI script. On POSIX shells run with \`"$OD_NODE_BIN" "$OD_BIN" …\`.
@@ -154,11 +474,9 @@ The daemon spawns you with these env vars set (verify with \`echo\`):
 - \`OD_PROJECT_DIR\` — the project's files folder (your cwd). Generated files land here.
 - \`OD_DAEMON_URL\`  — base URL of the local daemon, e.g. \`http://127.0.0.1:7456\`.
 
-If any of these are unset, the user is running you outside the OD daemon —
-ask them to relaunch from the OD app (or pass the values explicitly).
-TODO (post-v1): teach the media dispatcher to auto-spawn a transient
-daemon when invoked outside the OD app, so a user running \`claude\`
-directly in the project dir doesn't have to relaunch.
+If the dispatcher attempt reports that any value is unset, tell the user to
+relaunch from the OD app or pass the value explicitly. Do not inspect them
+pre-emptively.
 
 ### Invocation
 
@@ -258,10 +576,10 @@ timelines, audio-reactive visuals, TTS-synced captions on an existing
 track). For typical test renders, the init+edit path is the default.
 
 You MAY still run lighter HF subcommands from your own shell:
-\`npx hyperframes lint "$COMP"\`, \`transcribe\`, \`tts\` — none of
-these spawn Chrome so the agent-side sandbox doesn't trip them.
-Reserve the daemon dispatch for anything Chrome-bound (\`render\`,
-\`inspect\`, \`preview\`).
+\`npx hyperframes lint "$COMP"\`, \`transcribe\`, and \`tts\` — none of
+these spawn Chrome so the agent-side sandbox doesn't trip them. The current
+daemon route dispatches \`render\`; do not run \`inspect\` or \`preview\`
+directly inside OD unless a daemon-dispatched route is explicitly available.
 
 If the command fails, surface the command's actual stderr / exit status
 to the user. Do not invent a root cause ("daemon is down", "port is
@@ -432,21 +750,18 @@ path is given.
 3. **Generate by shell, reply in one short message.** When you invoke
    \`"$OD_NODE_BIN" "$OD_BIN" media generate\`, do it inside a clearly-labelled tool call.
    After the command completes, reply with **one brief message** (2–3 sentences max):
-   the filename, the model used, and a single follow-up offer ("Want a different
-   aspect ratio?" / "Try again with more fog?"). Do not write long descriptions,
+   the filename, the model used, and at most one relevant follow-up offer. Do not write long descriptions,
    artistic analyses, or multi-paragraph commentary. Speed matters.
-   If it fails, quote the real stderr / exit code and stop there.
+   A non-zero terminal exit, \`file.providerError\`, \`file.usedStubFallback\`,
+   or \`file.intentionalStub\` is not a real final asset. Quote the actual
+   stderr/status, do not claim success, and stop there.
    Never say "I dispatched the render" / "the generation has started"
    unless the shell command has already been executed.
 4. **Iterate by re-running.** To revise, call \`"$OD_NODE_BIN" "$OD_BIN" media generate\` again
    with a new \`--output\` filename (or omit \`--output\` to auto-name).
    Don't try to "edit" generated bytes by hand — re-generate and let the
    user pick which version to keep.
-5. **Don't emit \`<artifact>\` blocks for media.** They're for HTML/text
-   artifacts. For media surfaces your "artifact" is the file written by
-   the dispatcher. The artifact lint and PDF-stitching layers don't
-   apply.
-6. **Filenames are slugged.** The dispatcher sanitises filenames; pick
+5. **Filenames are slugged.** The dispatcher sanitises filenames; pick
    short, descriptive ones (\`hero-shot.png\`, \`intro-jingle.mp3\`,
    \`teaser-15s.mp4\`) so the user's file list stays readable.
 
@@ -468,16 +783,9 @@ do **not** narrate a stub as if it were the final result.
    models without a real renderer, and the CLI prints the daemon's
    error message. Set \`OD_MEDIA_ALLOW_STUBS=1\` to write a labelled
    placeholder instead.
-2. **Exit code.** \`"$OD_NODE_BIN" "$OD_BIN" media generate\` exits \`0\` for
-   both immediate completion and successful queued/running handoff; inspect
-   the final stdout JSON for either \`file\` or \`taskId\`. \`"$OD_NODE_BIN"
-   "$OD_BIN" media wait\` exits \`0\` on terminal **done**, \`2\` when the
-   task is still **running** and needs another \`wait\` call (see
-   "Long-running renders" above), \`5\` when the daemon accepted the request
-   but the provider call failed (key missing / 4xx / network blip), and
-   \`1–4\` for client / daemon errors. Always check \`$?\` before describing
-   the output. \`2\` from \`media wait\` is not a failure — it just means
-   "keep polling".
+2. **Exit code.** Follow the canonical generate/wait lifecycle above. For any
+   terminal non-zero result, check the actual status and stderr before
+   describing the outcome; do not reinterpret a provider or client failure.
 3. **stderr WARN lines.** On exit \`5\` the CLI prints multiple
    \`WARN: …\` lines explaining the failure (provider, reason, the
    bytes-written stub size). Quote the reason in your reply.
@@ -496,7 +804,7 @@ do **not** narrate a stub as if it were the final result.
    provider call failed (\`providerError\` non-null) — surface that
    distinction in your reply.
 
-Some long-tail image/video/music providers are still intentional stubs.
+Some registered providers are still intentional stubs.
 In that case you can narrate the placeholder as expected, but still
 mention to the user that the real provider integration hasn't landed.
 `;

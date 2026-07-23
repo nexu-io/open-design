@@ -14,16 +14,15 @@ describe('composeSystemPrompt — audio voice options', () => {
       },
     });
 
-    expect(prompt).toContain('`elevenlabs-sfx`');
-    expect(prompt).toContain('Describe the audible event itself');
-    expect(prompt).toContain('--prompt-influence 0.7');
-    expect(prompt).toContain('--loop');
-    expect(prompt).toContain('Keep ElevenLabs SFX `--prompt` under 450 characters');
-    expect(prompt).toContain('lo-fi felt-piano cafe loop');
-    expect(prompt).toContain('SFX duration is capped at 30 seconds');
+    expect(prompt).toContain('elevenlabs-sfx');
+    expect(prompt).toContain('source/action, materials, intensity, acoustic space');
+    expect(prompt).toContain('prompt under 450 characters (target 180–320)');
+    expect(prompt).toContain('prompt influence 0.7');
+    expect(prompt).toContain('looping only for seamless ambience/background/game audio');
+    expect(prompt).not.toContain('## Media generation contract');
   });
 
-  it('renders an ElevenLabs voice select form in API-mode project metadata', () => {
+  it('provides exact ElevenLabs voice values without hardcoding English form copy', () => {
     const voiceOptions = Array.from({ length: 50 }, (_, index) => {
       const ordinal = index + 1;
       return {
@@ -46,15 +45,20 @@ describe('composeSystemPrompt — audio voice options', () => {
       audioVoiceOptions: voiceOptions,
     });
 
-    expect(prompt).toContain('<question-form id="elevenlabs-voice" title="Choose an ElevenLabs voice">');
-    expect(prompt).toContain('"type": "select"');
-    expect(prompt).toContain('"allowCustom": false');
+    expect(prompt).toContain('emit one localized `<question-form id="elevenlabs-voice">`');
+    expect(prompt).toContain('top-level `lang`');
+    expect(prompt).toContain('`allowCustom` is `false`');
+    expect(prompt).not.toContain('<question-form id="elevenlabs-voice" title="Choose an ElevenLabs voice">');
+    expect(prompt).not.toContain('"submitLabel": "Use voice"');
     expect(prompt).toContain('"label": "Rachel — american · female"');
     expect(prompt).toContain('"value": "21m00Tcm4TlvDq8ikWAM"');
     expect(prompt).toContain('"label": "Voice 50 — mandarin"');
     expect(prompt).toContain('"value": "voice-50"');
     expect(prompt).not.toContain('showing the first 12');
-    expect(prompt).toContain('selected value must be the exact `voice_id`');
+    expect(prompt).toContain('preserve each exact option `value` as the `voice_id`');
+    expect(prompt).not.toContain('For `elevenlabs-sfx`');
+    expect(prompt).not.toContain('--prompt-influence');
+    expect(prompt).not.toContain('[--loop]');
   });
 
   it('surfaces ElevenLabs voice lookup failures in the prompt', () => {

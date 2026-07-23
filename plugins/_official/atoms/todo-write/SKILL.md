@@ -8,17 +8,13 @@ od:
 
 # Todo write
 
-Before writing any artifact files, the agent commits to a numbered plan
-via the TodoWrite tool. The plan is the audit trail; subsequent turns
-either tick items off or rewrite the plan. The atom's prompt fragment
-teaches the agent to:
+This atom reinforces the active mode's planning contract; it does not mandate a
+specific tool name. In a substantial Design build, use the runtime's real
+plan/task UI when available, otherwise maintain a concise numbered plan. Plan
+mode owns its planning-document workflow, and Ask mode does not activate this
+atom.
 
 1. Keep todos atomic (one verb per todo).
 2. Reorder freely as the picture sharpens.
 3. Mark a todo complete only after the matching artifact lands.
 4. Surface blockers as todos — never silently skip.
-
-The Open Design daemon does not enforce a particular tool name; the
-agent is free to use TodoWrite (Claude Code) or an in-prompt list.
-The atom's job is to keep "make a plan first" in the system prompt so
-non-trivial workflows don't skip the planning step.

@@ -47,6 +47,7 @@ const SECTION_INPUTS = {
     'freeformDeckSignal',
     'mediaHintSignal',
     'platformHintSignal',
+    'initialTurnDirectiveActive',
   ],
   // Per-conversation mode (design/plan/chat) and the handoff profile.
   mode: ['sessionMode', 'executionProfile', 'streamFormat'],
@@ -58,6 +59,7 @@ const SECTION_INPUTS = {
     'designSystemComponentsManifest',
     'designSystemFixtureHtml',
     'designSystemPullIndex',
+    'designSystemCorePullIndex',
     'designSystemImportMode',
   ],
   skill: ['skillBody', 'skillName', 'skillMode', 'skillModes'],
