@@ -149,6 +149,25 @@
   transform-origin: 0 0;
   transform: scale(calc(100cqw / 1280px));
 }
+/* Deck project cover: a static first-slide thumbnail (no carousel chrome).
+ * Fills the card thumb the same way the raw iframe does, and stretches the
+ * DeckSlideThumbnail shadow host to that fill area so its canvas can scale. */
+.recent-projects__card-thumb .deck-cover-frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  pointer-events: none;
+  background: #fff;
+}
+.recent-projects__card-thumb .deck-cover-frame .deck-thumbnail-shadow-host {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
 .recent-projects__deck-frame,
 .recent-projects__deck-iframe,
 .recent-projects__deck-cover-loading {

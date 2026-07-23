@@ -201,11 +201,17 @@ export function DeckProjectCoverFrame({
   // Deck parsed and renderable → inert first-slide thumbnail (no carousel chrome).
   if (parsed && !thumbFailed) {
     return (
-      <DeckSlideThumbnail
-        parsed={parsed}
-        index={0}
-        onError={() => setThumbFailed(true)}
-      />
+      // DeckSlideThumbnail scales its shadow canvas to its host div's
+      // clientWidth/clientHeight, so the host must fill the card thumb. The
+      // shared thumb-iframe classes carry raw-iframe scale transforms that
+      // would distort a plain div, so this uses a dedicated fill wrapper.
+      <div className="deck-cover-frame" aria-hidden>
+        <DeckSlideThumbnail
+          parsed={parsed}
+          index={0}
+          onError={() => setThumbFailed(true)}
+        />
+      </div>
     );
   }
 

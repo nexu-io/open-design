@@ -783,6 +783,23 @@
   background: var(--bg-panel);
   pointer-events: none;
 }
+/* Deck project cover: static first-slide thumbnail filling the card thumb. */
+.design-card-thumb .deck-cover-frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  pointer-events: none;
+  background: var(--bg-panel);
+}
+.design-card-thumb .deck-cover-frame .deck-thumbnail-shadow-host {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
 .project-thumb-image,
 .project-thumb-video,
 .project-thumb-html,
