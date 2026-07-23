@@ -61,6 +61,14 @@ import {
   PT_BR_SKILL_COPY,
 } from './content.pt-BR';
 import {
+  HE_DESIGN_SYSTEM_CATEGORIES,
+  HE_DESIGN_SYSTEM_SUMMARIES,
+  HE_PROMPT_TEMPLATE_CATEGORIES,
+  HE_PROMPT_TEMPLATE_COPY,
+  HE_PROMPT_TEMPLATE_TAGS,
+  HE_SKILL_COPY,
+} from './content.he';
+import {
   AR_DESIGN_SYSTEM_CATEGORIES,
   AR_DESIGN_SYSTEM_SUMMARIES,
   AR_PROMPT_TEMPLATE_CATEGORIES,
@@ -1130,6 +1138,14 @@ const LOCALIZED_CONTENT: Partial<Record<Locale, LocalizedContentBundle>> = {
     promptTemplateCategories: PT_BR_PROMPT_TEMPLATE_CATEGORIES,
     promptTemplateTags: PT_BR_PROMPT_TEMPLATE_TAGS,
     promptTemplateCopy: PT_BR_PROMPT_TEMPLATE_COPY,
+  },
+  he: {
+    skillCopy: HE_SKILL_COPY,
+    designSystemSummaries: HE_DESIGN_SYSTEM_SUMMARIES,
+    designSystemCategories: HE_DESIGN_SYSTEM_CATEGORIES,
+    promptTemplateCategories: HE_PROMPT_TEMPLATE_CATEGORIES,
+    promptTemplateTags: HE_PROMPT_TEMPLATE_TAGS,
+    promptTemplateCopy: HE_PROMPT_TEMPLATE_COPY,
   },
   ar: {
     skillCopy: AR_SKILL_COPY,
