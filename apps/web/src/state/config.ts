@@ -146,6 +146,7 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     protocol: 'anthropic',
     baseUrl: 'https://api.minimax.io/anthropic',
     preferredModels: [
+      'MiniMax-M3',
       'MiniMax-M2.7-highspeed',
       'MiniMax-M2.7',
       'MiniMax-M2.5-highspeed',
@@ -160,6 +161,7 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     protocol: 'anthropic',
     baseUrl: 'https://api.minimaxi.com/anthropic',
     preferredModels: [
+      'MiniMax-M3',
       'MiniMax-M2.7-highspeed',
       'MiniMax-M2.7',
       'MiniMax-M2.5-highspeed',
@@ -341,6 +343,22 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     protocol: 'openai',
     baseUrl: 'https://api.minimax.io/v1',
     preferredModels: [
+      'MiniMax-M3',
+      'MiniMax-M2.7-highspeed',
+      'MiniMax-M2.7',
+      'MiniMax-M2.5-highspeed',
+      'MiniMax-M2.5',
+      'MiniMax-M2.1-highspeed',
+      'MiniMax-M2.1',
+      'MiniMax-M2',
+    ],
+  },
+  {
+    label: 'MiniMax — OpenAI (CN)',
+    protocol: 'openai',
+    baseUrl: 'https://api.minimaxi.com/v1',
+    preferredModels: [
+      'MiniMax-M3',
       'MiniMax-M2.7-highspeed',
       'MiniMax-M2.7',
       'MiniMax-M2.5-highspeed',
