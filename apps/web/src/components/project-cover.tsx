@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { projectFileUrl } from '../providers/registry';
 import type { ProjectFile } from '../types';
 import { parseDeckThumbnails, type ParsedDeckThumbnails } from '../runtime/deck-thumbnail-parser';
@@ -151,6 +151,13 @@ export function DeckProjectCoverFrame({
   const [phase, setPhase] = useState<'loading' | 'parsed' | 'fallback'>('loading');
   const [parsed, setParsed] = useState<ParsedDeckThumbnails | null>(null);
   const [shadowFailed, setShadowFailed] = useState(false);
+  // Visibility gate: DesignsTab mounts one cover per item without
+  // virtualization, so eagerly fetching + DOMParser-parsing every deck's full
+  // index.html (including cards far below the fold) is a regression vs the old
+  // iframe path, which had loading="lazy" and only a HEAD probe. We defer the
+  // full-body fetch until the cover scrolls near the viewport.
+  const [visible, setVisible] = useState(false);
+  const hostRef = useRef<HTMLSpanElement | null>(null);
 
   // Stable identity so DeckSlideThumbnail's layout-effect (which clears and
   // rebuilds the shadow root when its deps change) doesn't tear down a healthy
@@ -159,10 +166,33 @@ export function DeckProjectCoverFrame({
   const handleShadowError = useCallback(() => setShadowFailed(true), []);
 
   useEffect(() => {
-    if (!src) {
-      setPhase('loading');
-      setParsed(null);
-      setShadowFailed(false);
+    const host = hostRef.current;
+    if (!host || visible) return;
+    if (typeof IntersectionObserver === 'undefined') {
+      // No observer available (e.g. jsdom) — fall back to fetching eagerly.
+      setVisible(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setVisible(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: '200px' },
+    );
+    observer.observe(host);
+    return () => observer.disconnect();
+  }, [visible]);
+
+  useEffect(() => {
+    if (!src || !visible) {
+      if (!src) {
+        setPhase('loading');
+        setParsed(null);
+        setShadowFailed(false);
+      }
       return;
     }
     const controller = new AbortController();
@@ -185,7 +215,14 @@ export function DeckProjectCoverFrame({
         return response.text();
       })
       .then((html) => {
-        if (disposed || !html) return;
+        if (disposed) return;
+        // Empty body (e.g. a 304 with no body, or a zero-byte 200) means
+        // parsing definitively finished with nothing to render — go to the
+        // raw-iframe fallback rather than leaving the card stuck in loading.
+        if (!html) {
+          setPhase('fallback');
+          return;
+        }
         const result = parseDeckThumbnails(html, src);
         if (!result.renderable || result.slides.length === 0) {
           // Unparseable deck source — fall back to the raw HTML iframe.
@@ -205,12 +242,18 @@ export function DeckProjectCoverFrame({
       disposed = true;
       controller.abort();
     };
-  }, [src, diagnostic]);
+  }, [src, diagnostic, visible]);
 
-  // No source, or still loading the deck body → glyph. Keeps the card out of
-  // the iframe path until parsing resolves.
-  if (!src || phase === 'loading') {
-    return <span className={glyphClassName}>{initial}</span>;
+  // Before the cover is visible (IntersectionObserver hasn't fired), it stays
+  // in the glyph/loading phase — no fetch, no iframe. The glyph span carries
+  // the observer ref; once visible flips true the observer disconnects and the
+  // fetch effect below takes over, so the ref is only needed on this branch.
+  if (!src || !visible || phase === 'loading') {
+    return (
+      <span ref={hostRef} className={glyphClassName}>
+        {initial}
+      </span>
+    );
   }
 
   // Deck parsed and shadow rendering hasn't errored → inert first-slide
@@ -232,8 +275,8 @@ export function DeckProjectCoverFrame({
     );
   }
 
-  // Explicit failure: unparseable source, fetch error, or shadow-render error
-  // → raw HTML iframe (previous behavior).
+  // Explicit failure: unparseable source, empty body, fetch error, or
+  // shadow-render error → raw HTML iframe (previous behavior).
   return (
     <HtmlProjectCoverFrame
       src={src}
