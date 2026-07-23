@@ -155,7 +155,7 @@
   justify-content: center;
   width: 30px;
   height: 30px;
-  margin-right: auto;
+  margin-inline-end: auto;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--bg-panel);
