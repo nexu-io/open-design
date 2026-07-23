@@ -2349,7 +2349,7 @@ section.tight { padding: 90px 0; }
   position: absolute;
   right: -8px;
   top: 26px;
-  text-align: end;
+  text-align: right;
   font-family: var(--sans);
   font-size: 10.5px;
   line-height: 1.55;

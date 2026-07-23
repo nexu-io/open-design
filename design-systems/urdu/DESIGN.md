@@ -390,7 +390,7 @@ In RTL, icons should be placed on the **right (logical-right)** of the text:
   font-weight: 700;
   color: var(--color-text-primary);
   margin-block-end: 8px;
-  text-align: end;  /* Right-aligned for RTL labels */
+  text-align: right;  /* Right-aligned for RTL labels */
 }
 
 .input {
