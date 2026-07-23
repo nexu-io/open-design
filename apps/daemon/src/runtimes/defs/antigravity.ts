@@ -209,33 +209,6 @@ export const antigravityAgentDef = {
     options = {},
     runtimeContext = {},
   ) => {
-    if (process.platform === 'win32' && prompt.length > 30000) {
-      // Workaround: write the massive payload to a temp file and have agy's AI read it
-      const tmpDir = join(process.cwd(), '.tmp', 'agy_payloads');
-      if (!existsSync(tmpDir)) {
-        mkdirSync(tmpDir, { recursive: true });
-      }
-      const tempPath = join(tmpDir, `od_payload_${Date.now()}.txt`);
-      writeFileSync(tempPath, prompt, 'utf8');
-      
-      prompt = `Read the file ${tempPath} using your file reading tool. Treat the entire contents of that file as your system instructions and the user's prompt. Execute the instructions inside it exactly, and output the final response exactly as the instructions dictate. Do NOT output anything else.`;
-      
-      // We must also inject --dangerously-skip-permissions to allow the read_file tool to work headlessly
-      const args: string[] = [];
-      if (options.model && options.model !== DEFAULT_MODEL_OPTION.id) {
-        writeAntigravityModelSelection(
-          options.model,
-          runtimeContext.antigravitySettingsPath,
-        );
-      }
-      if (runtimeContext.agentLogFilePath) {
-        args.push('--log-file', runtimeContext.agentLogFilePath);
-      }
-      args.push('--dangerously-skip-permissions');
-      args.push('-p', prompt);
-      return args;
-    }
-
     if (options.model && options.model !== DEFAULT_MODEL_OPTION.id) {
       writeAntigravityModelSelection(
         options.model,
@@ -243,9 +216,23 @@ export const antigravityAgentDef = {
       );
     }
     const args: string[] = [];
+    // Always opt into `--log-file` when the daemon supplied a path so
+    // it can post-exit grep for the actual upstream failure shape
+    // (auth missing vs quota reached vs upstream error) — without it
+    // the chat surfaces a generic "empty response" because print mode
+    // never echoes those errors on stdout. See server.ts empty-output
+    // guard for the consumer.
+    //
+    // Flag order is load-bearing on agy: `agy -p --log-file /tmp/x <prompt>`
+    // runs, while the reverse leaves the log empty.
     if (runtimeContext.agentLogFilePath) {
       args.push('--log-file', runtimeContext.agentLogFilePath);
     }
+    // agy's `-p`/`--print` takes the prompt as a command-line argument;
+    // it does not read from stdin and has no `-` stdin sentinel. Passing
+    // the literal `-` (the old behavior) made agy treat the dash as an
+    // empty prompt and reply "your request was empty or a placeholder
+    // (-)". Deliver the composed prompt as the `-p` argument instead.
     args.push('-p', prompt);
     return args;
   },
