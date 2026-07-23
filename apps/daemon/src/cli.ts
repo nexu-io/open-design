@@ -11,6 +11,7 @@ import { parseDesignSystemRenameArgs } from './design-system-rename-args.js';
 import { runLiveArtifactsToolCli } from './tools-live-artifacts-cli.js';
 import { splitResearchSubcommand } from './research/cli-args.js';
 import { resolveDaemonUrl } from './daemon-url.js';
+import { runCritiqueCli } from './critique-cli.js';
 import { requestJsonIpc } from '@open-design/sidecar';
 import { SIDECAR_ENV, SIDECAR_MESSAGES } from '@open-design/sidecar-proto';
 import {
@@ -279,6 +280,7 @@ const SUBCOMMAND_MAP = {
   version: runVersion,
   doctor: runDoctor,
   config: runConfig,
+  critique: runCritique,
 };
 
 if (argv[0] === 'mcp' && argv[1] === 'live-artifacts') {
@@ -483,6 +485,11 @@ async function runResearchSearch(rawArgs) {
 
 async function runArtifacts(args) {
   const { exitCode } = await runArtifactsCli(args);
+  process.exit(exitCode);
+}
+
+async function runCritique(args) {
+  const { exitCode } = await runCritiqueCli(args);
   process.exit(exitCode);
 }
 

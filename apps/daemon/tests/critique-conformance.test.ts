@@ -15,10 +15,10 @@ import { PARSER_WARNING_KINDS } from '@open-design/contracts/critique';
 import { runAdapterConformance } from '../src/critique/conformance.js';
 import {
   syntheticGoodStream,
-} from '../src/critique/__fixtures__/adapters/synthetic-good.js';
+} from './critique/__fixtures__/adapters/synthetic-good.js';
 import {
   syntheticBadStream,
-} from '../src/critique/__fixtures__/adapters/synthetic-bad.js';
+} from './critique/__fixtures__/adapters/synthetic-bad.js';
 import {
   __resetDegradedRegistryForTests,
   __setDegradedClockForTests,

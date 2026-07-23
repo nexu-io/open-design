@@ -1,73 +1,53 @@
-/**
- * Critique Theater 循环工程 — 类型定义与契约
- */
+// Re-export shared loop type contracts so the daemon and any consumer
+// that imports from ./critique/loop-types.js gets the canonical types
+// from @open-design/contracts.
+export type {
+  LoopStrategy,
+  CritiqueLoopConfig,
+  ExtendedCritiqueConfig,
+} from '@open-design/contracts/critique-loop';
+export { LOOP_STRATEGIES } from '@open-design/contracts/critique-loop';
 
-// ============================================================================
-// 循环配置
-// ============================================================================
+// ---------------------------------------------------------------------------
+// Daemon-side runtime defaults and SSE transport helpers
+// ---------------------------------------------------------------------------
 
-export const LOOP_STRATEGIES = ['converge', 'score_only', 'mustFix_only'] as const;
-export type LoopStrategy = (typeof LOOP_STRATEGIES)[number];
+export const DEFAULT_ITERATION_CAP = 5;
 
-export interface CritiqueLoopConfig {
-  enabled: boolean;
-  maxIterations: number;
-  loopStrategy: LoopStrategy;
-  fixTimeoutMs: number;
-  loopTotalTimeoutMs: number;
-  feedbackAggregation: 'cumulative' | 'last_round';
-}
-
-export function defaultCritiqueLoopConfig(): CritiqueLoopConfig {
+export function defaultCritiqueLoopConfig(): import('@open-design/contracts/critique-loop').CritiqueLoopConfig {
   return {
     enabled: false,
-    maxIterations: 5,
+    maxIterations: DEFAULT_ITERATION_CAP,
     loopStrategy: 'converge',
     fixTimeoutMs: 300_000,
-    loopTotalTimeoutMs: 1_800_000,
+    loopTotalTimeoutMs: 600_000,
     feedbackAggregation: 'cumulative',
   };
 }
 
-// ============================================================================
-// 扩展 CritiqueConfig（loop 字段尚未合并到 contracts/critique.ts）
-// 使用本地扩展类型，避免对 contracts 中 type alias 做无效的 module augmentation
-// ============================================================================
+// ---------------------------------------------------------------------------
+// Critique loop SSE event types
+// ---------------------------------------------------------------------------
 
-import type { CritiqueConfig } from '@open-design/contracts/critique';
+export type LoopEventType =
+  | 'loop_started'
+  | 'loop_aborted'
+  | 'loop_iteration_start'
+  | 'loop_iteration_end'
+  | 'loop_converged'
+  | 'loop_exhausted';
 
-/** 带 loop 扩展的 CritiqueConfig，供 daemon 侧使用 */
-export interface ExtendedCritiqueConfig extends CritiqueConfig {
-  loop?: CritiqueLoopConfig;
+export interface LoopEvent {
+  type: LoopEventType;
+  projectId: string;
+  [key: string]: unknown;
 }
 
-// ============================================================================
-// 循环事件
-// ============================================================================
-
-export type LoopEvent =
-  | { type: 'loop_started'; projectId: string; maxIterations: number }
-  | { type: 'loop_iteration_start'; projectId: string; iteration: number; totalMaxIterations: number; hasPriorFeedback: boolean }
-  | { type: 'loop_fix_started'; projectId: string; iteration: number; mustFixCount: number }
-  | { type: 'loop_fix_completed'; projectId: string; iteration: number; fixDurationMs: number }
-  | { type: 'loop_fix_failed'; projectId: string; iteration: number; error: string }
-  | { type: 'loop_iteration_end'; projectId: string; iteration: number; status: string; composite: number; converged: boolean }
-  | { type: 'loop_converged'; projectId: string; totalIterations: number; finalComposite: number; totalDurationMs: number }
-  | { type: 'loop_exhausted'; projectId: string; totalIterations: number; bestComposite: number | null }
-  | { type: 'loop_aborted'; projectId: string; iteration: number; reason: string };
-
-const LOOP_EVENT_SSE: Record<LoopEvent['type'], string> = {
-  loop_started: 'critique.loop.started',
-  loop_iteration_start: 'critique.loop.iteration_start',
-  loop_fix_started: 'critique.loop.fix_started',
-  loop_fix_completed: 'critique.loop.fix_completed',
-  loop_fix_failed: 'critique.loop.fix_failed',
-  loop_iteration_end: 'critique.loop.iteration_end',
-  loop_converged: 'critique.loop.converged',
-  loop_exhausted: 'critique.loop.exhausted',
-  loop_aborted: 'critique.loop.aborted',
-};
-
-export function loopEventToSse(event: LoopEvent): { event: string; data: LoopEvent } {
-  return { event: LOOP_EVENT_SSE[event.type], data: event };
+/**
+ * Convert a loop engine event to an SSE transport object compatible with
+ * the CritiqueSseBus emit interface. The emit callback expects
+ * `{ event: string; data: unknown }`.
+ */
+export function loopEventToSse(event: LoopEvent): { event: string; data: unknown } {
+  return { event: event.type, data: event };
 }
