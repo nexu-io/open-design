@@ -4773,6 +4773,62 @@ const HOME_PROMPT_EXAMPLES: Record<Locale, Record<string, string[]>> = {
       "Készíts márkázott értesítési hangcsomagot a sikeres, emlékeztető és hiba állapotokhoz, megőrizve egyetlen hangzásbeli identitást",
     ],
   },
+  "he": {
+    prototype: [
+      "Design a high-converting website for an AI CRM with a clear hero, feature story, proof points, and trial CTA",
+      "Create a desktop dashboard for a team knowledge base with search, recent updates, permissions, and collaboration entry points",
+      "Redesign onboarding for a financial SaaS product so new users can connect data, finish setup, and see first value fast",
+      "Prototype a mobile fitness coaching app covering goal setup, weekly plans, workout check-ins, and progress review",
+    ],
+    wireframe: [
+      "Wireframe a SaaS dashboard with navigation, key metrics, a data table, and an empty state",
+      "Sketch the lo-fi flow for a checkout: cart, shipping, payment, and confirmation screens",
+      "Lay out a content management screen with list, detail, and edit states in greybox fidelity",
+      "Wireframe an onboarding wizard covering account, workspace, invite, and first-run steps",
+    ],
+    mobile: [
+      "Design a mobile banking app with home balance, transactions, transfer, and card management screens",
+      "Lay out a food delivery app covering browse, restaurant detail, cart, and order tracking",
+      "Prototype a habit-tracker app with today view, streak detail, add-habit, and stats screens",
+      "Design a messaging app with chat list, conversation, profile, and settings screens",
+    ],
+    document: [
+      "Draft a one-page resume for a senior product designer with summary, experience, skills, and selected work",
+      "Write a polished project proposal with problem, approach, timeline, and budget sections",
+      "Create a product one-pager covering the pitch, key features, pricing, and a call to action",
+      "Generate a tidy meeting brief with agenda, decisions, owners, and next steps",
+    ],
+    deck: [
+      "Research the market opportunity for a product launch, including competitors, target users, pricing hypotheses, and launch narrative",
+      "Generate a weekly team status report with progress, risks, metric changes, and next-week priorities",
+      "Design an investor pitch with market sizing, growth model, product advantage, and three-year forecast data",
+      "Create a strategic business review deck covering quarterly performance, root causes, opportunities, and next actions",
+    ],
+    image: [
+      "Generate a glassmorphism AI workspace poster with multi-screen collaboration, soft lighting, and a premium launch mood",
+      "Create an ecommerce hero image for new wireless headphones that highlights material detail, lifestyle context, and core benefits",
+      "Design a minimalist tech launch key visual with a clean composition, strong product focus, and restrained launch copy",
+      "Make a social teaser set for a product drop, including countdown, close-up detail, benefit reveal, and launch-day visual",
+    ],
+    video: [
+      "Make an 8-second product reveal film that moves from silhouette to close-up detail and ends on the brand mark",
+      "Generate an app feature demo video that follows the user journey, key states, and final outcome",
+      "Create a vertical brand opener with rhythmic typography, product close-ups, and a clean logo ending for short-form video",
+      "Turn a website into a 15-second social ad by extracting the hero claim, interaction highlights, and a clear CTA",
+    ],
+    hyperframes: [
+      "Build a captioned product launch short with title cards, feature shots, rhythmic transitions, and an ending CTA",
+      "Generate an audio-reactive data visualization where bars, particles, and titles respond to narration beats",
+      "Create a 3-second logo outro using line convergence, subtle elasticity, and the brand color system",
+      "Make an animated flight-route map showing city nodes, route growth, mileage data, and a final summary frame",
+    ],
+    audio: [
+      "Generate a product startup sound that feels light, trustworthy, slightly futuristic, and suitable for a desktop app launch",
+      "Create a 20-second podcast intro bed with a warm opening, clear pulse, and a clean handoff into voiceover",
+      "Make a seamless ambient loop for a meditation app using soft nature textures, low-frequency warmth, and calm pacing",
+      "Generate a branded notification sound set for success, reminder, and error states while keeping one sonic identity",
+    ],
+  },
   "fr": {
     prototype: [
       "Concevez un site web à fort taux de conversion pour un AI CRM, avec un hero clair, un récit des fonctionnalités, des preuves concrètes et un CTA d'essai",
