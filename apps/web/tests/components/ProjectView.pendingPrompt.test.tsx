@@ -75,6 +75,7 @@ vi.mock('../../src/providers/daemon', () => ({
   fetchChatRunStatus: vi.fn(),
   listActiveChatRuns: vi.fn().mockResolvedValue([]),
   listProjectRuns: vi.fn().mockResolvedValue([]),
+  publishDaemonRunFinishedEvent: vi.fn(),
   reattachDaemonRun: vi.fn(),
   streamViaDaemon: vi.fn(),
 }));
@@ -215,9 +216,10 @@ const mockedSaveMessage = vi.mocked(saveMessage);
 
 const config: AppConfig = {
   mode: 'api',
-  apiKey: '',
-  baseUrl: '',
-  model: '',
+  apiProtocol: 'openai',
+  apiKey: 'test-key',
+  baseUrl: 'https://api.openai.com/v1',
+  model: 'api-model',
   agentId: null,
   skillId: null,
   designSystemId: null,

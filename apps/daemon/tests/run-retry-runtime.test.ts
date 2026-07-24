@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { startServer } from '../src/server.js';
@@ -33,6 +34,19 @@ type RunEvent = {
   event: string;
   data: Record<string, unknown>;
 };
+
+const FAKE_VELA = fileURLToPath(new URL('./fixtures/fake-vela.mjs', import.meta.url));
+
+// The two silent-stall cases below make the inactivity watchdog do two jobs with
+// one budget: trip on the first (silent) attempt so the same-run retry fires,
+// and NOT trip on that retry before its fresh child clears node cold-start and
+// emits its first token. The old 400ms sat too close to cold-start on a loaded
+// host, so the retry occasionally tripped its own watchdog and the spec flaked
+// (#5721; same watchdog path as #5292). The first attempt stalls for ~60s, so
+// any value trips it deterministically — sizing the budget well above any
+// realistic subprocess cold-start removes the race. 40 consecutive runs of both
+// stall cases were clean at 3000ms; 400ms flaked ~1/8.
+const STALL_WATCHDOG_TIMEOUT_MS = '3000';
 
 describe('same-run retry runtime', () => {
   const originalEnv = snapshotEnv();
@@ -98,7 +112,87 @@ describe('same-run retry runtime', () => {
       retry_of_run_id: run.id,
       retry_attempt_index: 1,
       retry_result: 'success',
+      failure_category: 'upstream_unavailable',
+      failure_detail: 'upstream_5xx',
+      failure_stage: 'first_token_wait',
+      error_code: 'UPSTREAM_UNAVAILABLE',
     });
+  });
+
+  it('retries a generic OpenCode stream error without an explicit retryability hint', async () => {
+    binDir = await mkdtemp(path.join(os.tmpdir(), 'od-run-retry-stream-error-bin-'));
+    const fakeOpenCode = await writeStreamErrorThenSuccessfulOpenCode(
+      binDir,
+      'opencode-stream-error-then-success',
+    );
+
+    delete process.env.POSTHOG_KEY;
+    delete process.env.POSTHOG_HOST;
+    delete process.env.LANGFUSE_PUBLIC_KEY;
+    delete process.env.LANGFUSE_SECRET_KEY;
+    delete process.env.LANGFUSE_BASE_URL;
+    delete process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
+
+    started = await startServer({ port: 0, returnServer: true }) as StartedServer;
+    await putConfig(started.url, {
+      agentId: 'opencode',
+      agentCliEnv: { opencode: { OPENCODE_BIN: fakeOpenCode } },
+      telemetry: { metrics: true, content: false, artifactManifest: false },
+      privacyDecisionAt: Date.now(),
+    });
+
+    const run = await createAndWaitForRun(started.url, 'opencode');
+    expect(run.status).toBe('succeeded');
+
+    const events = await readRunEvents(run.eventsLogPath);
+    expect(events.filter((event) => event.event === 'start')).toHaveLength(2);
+    expect(events.filter((event) => event.event === 'run_retry_attempted')).toHaveLength(1);
+    expect(events.find((event) => event.event === 'run_retry_attempted')?.data).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'stream_error',
+      retry_reason: 'transient_failure',
+    });
+  });
+
+  it('retries an ACP fatal close after persisting its runtime close reason', async () => {
+    binDir = await mkdtemp(path.join(os.tmpdir(), 'od-run-retry-acp-fatal-bin-'));
+    const fakeVela = await writeFatalThenSuccessfulVela(binDir, 'vela-fatal-then-success');
+
+    delete process.env.POSTHOG_KEY;
+    delete process.env.POSTHOG_HOST;
+    delete process.env.LANGFUSE_PUBLIC_KEY;
+    delete process.env.LANGFUSE_SECRET_KEY;
+    delete process.env.LANGFUSE_BASE_URL;
+    delete process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
+    process.env.VELA_RUNTIME_KEY = `fake-runtime-key-${randomUUID()}`;
+    process.env.VELA_LINK_URL = 'https://amr-link.open-design.ai/v1';
+
+    started = await startServer({ port: 0, returnServer: true }) as StartedServer;
+    await putConfig(started.url, {
+      agentId: 'amr',
+      agentCliEnv: { amr: { VELA_BIN: fakeVela } },
+      telemetry: { metrics: true, content: false, artifactManifest: false },
+      privacyDecisionAt: Date.now(),
+    });
+
+    const run = await createAndWaitForRun(started.url, 'amr');
+    expect(run.status).toBe('succeeded');
+
+    const events = await readRunEvents(run.eventsLogPath);
+    expect(events.filter((event) => event.event === 'start')).toHaveLength(2);
+    expect(events.filter((event) => event.event === 'run_retry_attempted')).toHaveLength(1);
+    expect(events.find((event) => event.event === 'run_retry_attempted')?.data).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'fatal_rpc_error',
+      retry_reason: 'transient_failure',
+    });
+
+    const fatalCloseDiagnostics = events.filter(
+      (event) => event.event === 'diagnostic' &&
+        event.data.type === 'runtime_close' &&
+        event.data.rpc_close_reason === 'fatal_rpc_error',
+    );
+    expect(fatalCloseDiagnostics).toHaveLength(1);
   });
 
   it('retries a silent first-token stall caught by the inactivity watchdog', async () => {
@@ -111,11 +205,10 @@ describe('same-run retry runtime', () => {
     delete process.env.LANGFUSE_SECRET_KEY;
     delete process.env.LANGFUSE_BASE_URL;
     delete process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
-    // Trip the no-output inactivity watchdog quickly so the first (silent)
-    // attempt stalls at first_token_wait and the same-run retry can fire. Kept
-    // comfortably above node cold-start so the recovered retry attempt's own
-    // watchdog does not also trip before it emits its first token.
-    process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = '400';
+    // Trip the no-output watchdog on the silent first attempt so the same-run
+    // retry fires; sized above cold-start so the retry doesn't trip it too
+    // (see STALL_WATCHDOG_TIMEOUT_MS).
+    process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = STALL_WATCHDOG_TIMEOUT_MS;
 
     started = await startServer({ port: 0, returnServer: true }) as StartedServer;
     await putConfig(started.url, {
@@ -182,10 +275,15 @@ describe('same-run retry runtime', () => {
     delete process.env.LANGFUSE_SECRET_KEY;
     delete process.env.LANGFUSE_BASE_URL;
     delete process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
-    // Watchdog trips the first (silent) attempt fast; the escalation grace is
-    // shortened so the stale SIGTERM/SIGKILL land while the retry child is
-    // mid-work (retry backoff is <=500ms, so 800ms grace guarantees overlap).
-    process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = '400';
+    // Watchdog trips the first (silent) attempt; the escalation grace is short
+    // so the stale SIGTERM/SIGKILL land while the retry child is mid-work. Both
+    // the escalation window (trip + grace) and the retry lifetime (trip +
+    // backoff) are anchored to the trip, so the overlap that makes this a valid
+    // regression is independent of the timeout value; the timeout only has to
+    // clear the retry's cold-start (see STALL_WATCHDOG_TIMEOUT_MS). Retry backoff
+    // is <=500ms and the retry keeps emitting for ~2.1s, so the 800ms grace
+    // still lands mid-work.
+    process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = STALL_WATCHDOG_TIMEOUT_MS;
     process.env.OD_CHAT_RUN_INACTIVITY_KILL_GRACE_MS = '800';
 
     started = await startServer({ port: 0, returnServer: true }) as StartedServer;
@@ -261,6 +359,8 @@ function snapshotEnv(): Record<string, string | undefined> {
     POSTHOG_HOST: process.env.POSTHOG_HOST,
     OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS: process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS,
     OD_CHAT_RUN_INACTIVITY_KILL_GRACE_MS: process.env.OD_CHAT_RUN_INACTIVITY_KILL_GRACE_MS,
+    VELA_RUNTIME_KEY: process.env.VELA_RUNTIME_KEY,
+    VELA_LINK_URL: process.env.VELA_LINK_URL,
   };
 }
 
@@ -300,6 +400,73 @@ if (attempts === 0) {
       content: [{ type: 'text', text: 'Recovered after retry.' }],
       stop_reason: 'end_turn'
     }
+  }));
+  setTimeout(() => process.exit(0), 20);
+}
+`, 'utf8');
+  await chmod(bin, 0o755);
+  return bin;
+}
+
+async function writeFatalThenSuccessfulVela(dir: string, name: string): Promise<string> {
+  const bin = path.join(dir, name);
+  const counterPath = path.join(dir, `${name}-attempts`);
+  await writeFile(bin, `#!/bin/sh
+export FAKE_VELA_REQUIRE_SET_MODEL=0
+if [ "$1" = "agent" ] && [ "$2" = "run" ]; then
+  attempts=0
+  if [ -f ${JSON.stringify(counterPath)} ]; then
+    attempts=$(tr -dc '0-9' < ${JSON.stringify(counterPath)})
+  fi
+  echo $((attempts + 1)) > ${JSON.stringify(counterPath)}
+  if [ "$attempts" -eq 0 ]; then
+    export FAKE_VELA_PROMPT_ERROR='transient fatal RPC close'
+  fi
+fi
+exec ${JSON.stringify(process.execPath)} ${JSON.stringify(FAKE_VELA)} "$@"
+`, 'utf8');
+  await chmod(bin, 0o755);
+  return bin;
+}
+
+async function writeStreamErrorThenSuccessfulOpenCode(dir: string, name: string): Promise<string> {
+  const bin = path.join(dir, name);
+  const counterPath = path.join(dir, `${name}-attempts`);
+  await writeFile(bin, `#!/usr/bin/env node
+const fs = require('node:fs');
+const argv = process.argv.slice(2);
+const counterPath = ${JSON.stringify(counterPath)};
+if (argv.includes('--version')) { console.log('1.17.7'); process.exit(0); }
+if (argv.includes('--help')) { console.log('opencode run [message..]'); process.exit(0); }
+if (argv[0] === 'models') { console.log('anthropic/claude-sonnet-4-5'); process.exit(0); }
+if (argv[0] !== 'run' || !process.cwd().includes('retry_runtime_')) {
+  process.exit(0);
+}
+let attempts = 0;
+try { attempts = Number(fs.readFileSync(counterPath, 'utf8')) || 0; } catch {}
+fs.writeFileSync(counterPath, String(attempts + 1));
+if (attempts === 0) {
+  console.log(JSON.stringify({
+    type: 'error',
+    error: { data: { message: 'synthetic generic stream frame failure' } },
+  }));
+  setTimeout(() => process.exit(1), 20);
+} else {
+  const sessionID = 'ses_retry_stream_error_success';
+  console.log(JSON.stringify({ type: 'step_start', sessionID, part: { type: 'step-start' } }));
+  console.log(JSON.stringify({
+    type: 'text',
+    sessionID,
+    part: { type: 'text', text: 'Recovered after a generic stream error.' },
+  }));
+  console.log(JSON.stringify({
+    type: 'step_finish',
+    sessionID,
+    part: {
+      type: 'step-finish',
+      tokens: { input: 8, output: 7, reasoning: 0, cache: { read: 0, write: 0 } },
+      cost: 0,
+    },
   }));
   setTimeout(() => process.exit(0), 20);
 }
@@ -363,7 +530,7 @@ async function putConfig(url: string, patch: Record<string, unknown>): Promise<v
   expect(response.status).toBe(200);
 }
 
-async function createAndWaitForRun(url: string): Promise<RunStatus> {
+async function createAndWaitForRun(url: string, agentId = 'claude'): Promise<RunStatus> {
   const projectId = `retry_runtime_${randomUUID()}`;
   const projectResponse = await fetch(`${url}/api/projects`, {
     method: 'POST',
@@ -391,7 +558,7 @@ async function createAndWaitForRun(url: string): Promise<RunStatus> {
       conversationId: projectBody.conversationId,
       assistantMessageId,
       clientRequestId: `client_retry_${randomUUID()}`,
-      agentId: 'claude',
+      agentId,
       message: 'please retry a transient runtime failure',
       currentPrompt: 'please retry a transient runtime failure',
     }),

@@ -10,6 +10,9 @@ import {
   openUpdaterInstaller,
   quitAfterUpdaterInstallerOpen,
   readUpdaterStatus,
+  restartSafetyFromUpdaterStatus,
+  subscribeToUpdaterOpenDialog,
+  syncUpdaterMenuLabels,
 } from '../../src/lib/updater';
 
 function downloadedStatus(overrides: Partial<OpenDesignHostUpdaterStatusSnapshot> = {}): OpenDesignHostUpdaterStatusSnapshot {
@@ -83,6 +86,33 @@ describe('web updater model', () => {
     expect(model.canOpenInstaller).toBe(true);
     expect(model.shouldShowControl).toBe(true);
     expect(model.promptKey).toContain('1.2.3-beta.4');
+  });
+
+  it('exposes the reinstall requirement from the host snapshot', () => {
+    const model = deriveUpdaterModel(
+      downloadedStatus({
+        reinstall: {
+          installedVersion: '1.0.0-beta.9',
+          minVersion: '1.2.0-beta.1',
+          reason: 'outer-below-min',
+          url: 'https://example.com/reinstall-help',
+        },
+      }),
+      { hostAvailable: true },
+    );
+    expect(model.reinstall).toEqual({
+      installedVersion: '1.0.0-beta.9',
+      minVersion: '1.2.0-beta.1',
+      reason: 'outer-below-min',
+      url: 'https://example.com/reinstall-help',
+    });
+    expect(model.updateKind).toBe('installer');
+    expect(model.shouldPrompt).toBe(true);
+  });
+
+  it('defaults reinstall to null when the snapshot carries none', () => {
+    expect(deriveUpdaterModel(downloadedStatus(), { hostAvailable: true }).reinstall).toBeNull();
+    expect(deriveUpdaterModel(null, { hostAvailable: false }).reinstall).toBeNull();
   });
 
   it('derives a desktop prompt for payload updates without manual installer capability', () => {
@@ -234,5 +264,52 @@ describe('web updater model', () => {
     expect(download).toHaveBeenCalledWith({ payload: { source: 'test-download' } });
     expect(install).toHaveBeenCalledWith({ payload: { source: 'test-popup' } });
     expect(quit).toHaveBeenCalledWith({ payload: { source: 'test-quit' } });
+  });
+
+  it('routes native menu label sync and open-dialog subscriptions through the host', async () => {
+    const setMenuLabels = vi.fn(async () => ({ ok: true as const }));
+    let openDialog: ((request: { source: string }) => void) | null = null;
+    const subscribeOpenDialog = vi.fn((listener: (request: { source: string }) => void) => {
+      openDialog = listener;
+      return vi.fn();
+    });
+    restoreHost = installMockOpenDesignHost({
+      host: { updater: { setMenuLabels, subscribeOpenDialog } },
+    });
+
+    const listener = vi.fn();
+    subscribeToUpdaterOpenDialog(listener);
+    expect(openDialog).not.toBeNull();
+    (openDialog as unknown as (request: { source: string }) => void)({ source: 'mac-app-menu' });
+    expect(listener).toHaveBeenCalledWith({ source: 'mac-app-menu' });
+
+    const labels = {
+      check: 'Check for Updates…',
+      checking: 'Checking for Updates…',
+      downloading: 'Downloading Update…',
+      install: 'Install Update…',
+      installing: 'Installing Update…',
+      restart: 'Restart to Update Open Design…',
+    };
+    await expect(syncUpdaterMenuLabels(labels)).resolves.toEqual({ ok: true });
+    expect(setMenuLabels).toHaveBeenCalledWith(labels);
+  });
+
+  it('treats blocked and unknown active-run preflights as explicit restart risks', () => {
+    expect(restartSafetyFromUpdaterStatus(downloadedStatus({
+      error: {
+        code: 'active-runs-blocked',
+        details: { activeRunCount: 2 },
+        message: 'tasks are active',
+      },
+    }))).toEqual({ activeRunCount: 2, state: 'blocked' });
+    expect(restartSafetyFromUpdaterStatus(downloadedStatus({
+      error: {
+        code: 'active-runs-unknown',
+        details: { activeRunCount: null },
+        message: 'could not check tasks',
+      },
+    }))).toEqual({ activeRunCount: null, state: 'unknown' });
+    expect(restartSafetyFromUpdaterStatus(downloadedStatus())).toBeNull();
   });
 });

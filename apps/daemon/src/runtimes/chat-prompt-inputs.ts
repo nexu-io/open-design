@@ -7,6 +7,11 @@ import {
   shouldRenderCodexImagegenOverride,
 } from '../prompts/system.js';
 import { renderResearchCommandContract } from '../prompts/research-contract.js';
+import {
+  describeChangedStableSections,
+  type StableChangedSection,
+  type StableSectionHashes,
+} from '../prompts/stable-sections.js';
 
 export const MAX_CHAT_IMAGE_BYTES = 1024 * 1024;
 export const UPLOAD_DIR = path.join(os.tmpdir(), 'od-uploads');
@@ -390,20 +395,26 @@ export function describeStablePromptCache({
   isResuming,
   storedStablePromptHash,
   currentStableHash,
+  storedStableSections,
+  currentStableSections,
 }: {
   isResuming: boolean;
   storedStablePromptHash: string | null;
   currentStableHash: string;
+  storedStableSections?: StableSectionHashes | null;
+  currentStableSections?: StableSectionHashes | null;
 }): {
   stablePromptHash: string;
   hit: boolean;
   missReason: StablePromptCacheMissReason;
+  changedSections: StableChangedSection[] | null;
 } {
   if (!isResuming) {
     return {
       stablePromptHash: currentStableHash,
       hit: false,
       missReason: 'new-session',
+      changedSections: null,
     };
   }
   if (storedStablePromptHash === currentStableHash) {
@@ -411,14 +422,22 @@ export function describeStablePromptCache({
       stablePromptHash: currentStableHash,
       hit: true,
       missReason: null,
+      changedSections: null,
     };
   }
+  const missReason: StablePromptCacheMissReason = storedStablePromptHash === null
+    ? 'missing-stored-hash'
+    : 'stable-prompt-changed';
   return {
     stablePromptHash: currentStableHash,
     hit: false,
-    missReason: storedStablePromptHash === null
-      ? 'missing-stored-hash'
-      : 'stable-prompt-changed',
+    missReason,
+    // Attribute only real drift. `missing-stored-hash` is a legacy/again-seeded
+    // row with no baseline to diff against, so naming sections there would
+    // report the whole map as "changed" and drown the signal we care about.
+    changedSections: missReason === 'stable-prompt-changed' && currentStableSections
+      ? describeChangedStableSections(storedStableSections, currentStableSections)
+      : null,
   };
 }
 
@@ -496,7 +515,23 @@ export function normalizeCommentAttachments(input: readonly CommentAttachmentInp
         record.selectionKind === 'visual' ? 'visual' : record.selectionKind === 'pod' ? 'pod' : 'element';
       if (!filePath || !elementId) return null;
       if (selectionKind !== 'visual' && !selector) return null;
-      if (selectionKind === 'visual' && !screenshotPath) return null;
+      // Visual marks are kept even without a screenshot (#4084): when the
+      // preview capture fails (#4080) the structured location — file,
+      // pagePosition, markKind, currentText — is the only anchor the agent
+      // gets, so dropping the attachment here would silently strip the
+      // user's targeting from the prompt.
+      const pagePosition = normalizeAttachmentPosition(record.pagePosition);
+      if (selectionKind === 'visual' && !screenshotPath) {
+        // A screenshot-less visual mark is only actionable when it carries a
+        // concrete anchor: a positive-size pagePosition or a DOM selector.
+        // /api/runs accepts commentAttachments from any client, and
+        // normalizeAttachmentPosition() collapses missing/malformed positions
+        // to 0,0,0x0 — which identifies no region. Rendering such a payload
+        // would hard-scope the agent onto fields that point nowhere and steer
+        // it to edit an arbitrary part of the file, so drop it instead.
+        const hasUsablePosition = pagePosition.width > 0 && pagePosition.height > 0;
+        if (!hasUsablePosition && !selector) return null;
+      }
       const podMembers = selectionKind === 'pod' ? normalizeAttachmentPodMembers(record.podMembers) : [];
       const memberCount =
         selectionKind === 'pod'
@@ -517,16 +552,16 @@ export function normalizeCommentAttachments(input: readonly CommentAttachmentInp
         label,
         comment,
         currentText: compactString(record.currentText, 160),
-        pagePosition: normalizeAttachmentPosition(record.pagePosition),
+        pagePosition,
         htmlHint: compactString(record.htmlHint, 180),
         style: normalizeAnnotationStyle(record.style),
         selectionKind,
         memberCount,
         podMembers,
-        screenshotPath: selectionKind === 'visual' ? screenshotPath : undefined,
+        screenshotPath: selectionKind === 'visual' && screenshotPath ? screenshotPath : undefined,
         markKind: selectionKind === 'visual' ? markKind : undefined,
         intent: selectionKind === 'visual'
-          ? intent || visualAnnotationIntent(markKind)
+          ? intent || (screenshotPath ? visualAnnotationIntent(markKind) : visualAnnotationIntentWithoutScreenshot())
           : undefined,
         imageAttachments: imageAttachments.length > 0 ? imageAttachments : undefined,
         commentContext,
@@ -545,7 +580,7 @@ export function renderCommentAttachmentHint(
     '',
     '',
     '<attached-preview-comments>',
-    "Hard scope: change ONLY the elements identified below by selector / position / pod members. Do NOT modify sibling sub-pages, parent layout, global CSS, design tokens, or unrelated rules even if you notice issues there — surface those as a follow-up note in your reply instead of editing them. If the user's request cannot be satisfied without touching outside this scope, ask the user before proceeding. For visual marks, inspect the screenshot and modify the marked region first.",
+    "Hard scope: change ONLY the elements identified below by selector / position / pod members. Do NOT modify sibling sub-pages, parent layout, global CSS, design tokens, or unrelated rules even if you notice issues there — surface those as a follow-up note in your reply instead of editing them. If the user's request cannot be satisfied without touching outside this scope, ask the user before proceeding. For visual marks, inspect the screenshot when one is provided (otherwise locate the region from the structured fields) and modify the marked region first.",
   ];
   for (const item of commentAttachments) {
     const targetKind =
@@ -565,11 +600,20 @@ export function renderCommentAttachmentHint(
       lines.push(`comment: ${item.comment}`);
     }
     if (targetKind === 'visual') {
-      lines.push(
-        `screenshot: ${item.screenshotPath}`,
-        `markKind: ${item.markKind || 'stroke'}`,
-        `intent: ${item.intent || visualAnnotationIntent(item.markKind || 'stroke')}`,
-      );
+      if (item.screenshotPath) {
+        lines.push(
+          `screenshot: ${item.screenshotPath}`,
+          `markKind: ${item.markKind || 'stroke'}`,
+          `intent: ${item.intent || visualAnnotationIntent(item.markKind || 'stroke')}`,
+        );
+      } else {
+        // Screenshot capture failed (#4080) — no screenshot exists for this
+        // mark. Point the agent at the structured fields instead (#4084).
+        lines.push(
+          `markKind: ${item.markKind || 'stroke'}`,
+          `intent: ${item.intent || visualAnnotationIntentWithoutScreenshot()}`,
+        );
+      }
       if (item.selector) lines.push(`selector: ${item.selector}`);
     } else {
       lines.splice(lines.length - 4, 0, `selector: ${item.selector}`);
@@ -640,6 +684,13 @@ function visualAnnotationIntent(markKind: InputValue) {
     return 'The screenshot has a blue focus box and red strokes; together they identify the part the user wants changed.';
   }
   return 'The screenshot has red strokes that identify the visual region the user wants changed.';
+}
+
+// Screenshot-less variant (#4084): the capture failed (#4080), so the intent
+// must not reference a screenshot that does not exist. Mirrors the copy in
+// apps/web/src/comments.ts.
+function visualAnnotationIntentWithoutScreenshot() {
+  return 'The user marked a region of the live preview; no screenshot was captured, so locate the region using file, position, and currentText.';
 }
 
 function compactString(value: InputValue, max: number) {

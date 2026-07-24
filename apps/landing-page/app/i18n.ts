@@ -1380,6 +1380,7 @@ export interface LandingUiCopy {
       guides: string;
       useCases: string;
       community: string;
+      tools: string;
     };
     minRead: string;
     readMore: string;
@@ -4508,6 +4509,7 @@ const LANDING_UI_COPY: LandingUiCopy = {
       guides: 'Guides',
       useCases: 'Use cases',
       community: 'Community',
+      tools: 'Tools & Skills',
     },
     minRead: 'min read',
     readMore: 'Read more →',
@@ -4799,6 +4801,7 @@ const LANDING_UI_COPY_OVERRIDES: Partial<
         guides: '指南',
         useCases: '使用场景',
         community: '社区',
+        tools: '工具与技能',
       },
       minRead: '分钟阅读',
       readMore: '继续阅读 →',
@@ -5086,6 +5089,7 @@ const LANDING_UI_COPY_OVERRIDES: Partial<
         guides: '指南',
         useCases: '使用場景',
         community: '社群',
+        tools: '工具與技能',
       },
       minRead: '分鐘閱讀',
       readMore: '繼續閱讀 →',

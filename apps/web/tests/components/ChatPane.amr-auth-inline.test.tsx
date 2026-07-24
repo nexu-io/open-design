@@ -146,6 +146,7 @@ describe('ChatPane inline AMR auth', () => {
     expect(lastPillProps?.metricsConsent).toBe(true);
     expect(lastPillProps?.installationId).toBe('install-123');
     expect(lastPillProps?.showActivationDetails).toBe(true);
+    expect(screen.queryByText('promptTemplates.retry')).toBeNull();
   });
 
   it('retries the failed run exactly once on a signed-out -> signed-in transition', () => {

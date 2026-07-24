@@ -1361,6 +1361,9 @@
    File workspace — tabs + viewer
    ============================================================ */
 .workspace {
+  /* Containing block for .workspace-toast-anchor (viewer/routines.css), which
+     pins workspace-owned toasts to this pane instead of the viewport. */
+  position: relative;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -1483,7 +1486,11 @@
   font-size: 12.5px;
   cursor: pointer;
   flex-shrink: 0;
-  max-width: 110px;
+  /* Tabs take their natural label width so short names ("Design System",
+     "Design Files") render in full; the cap only truncates genuinely long
+     file names. When many tabs open, the strip falls back to its existing
+     horizontal scroll instead of squeezing tabs. */
+  max-width: 220px;
   min-width: 0;
   color: var(--text-muted);
   transition: background 120ms var(--ease-out), color 120ms var(--ease-out);

@@ -112,7 +112,10 @@ describe('DesignBrowserPanel <webview> navigation', () => {
 
     const downloadItem = await screen.findByRole('menuitem', { name: 'Download Page' });
     expect(downloadItem.classList.contains('is-attention')).toBe(true);
-    expect(screen.getByText(/click Download Page here/)).toBeTruthy();
+    const assistGuide = view.container.querySelector('.db-download-assist');
+    expect(assistGuide).toBeTruthy();
+    expect(assistGuide?.textContent).toContain('When the page is ready, click Download Page');
+    expect(view.container.querySelector('.db-status')).toBeNull();
 
     view.rerender(
       <DesignBrowserPanel
@@ -790,9 +793,9 @@ describe('DesignBrowserPanel <webview> navigation', () => {
     expect(webview.executeJavaScript).not.toHaveBeenCalled();
   });
 
-  it('does not show the bottom Download Page hint when the workspace owns snapshot toasts', async () => {
+  it('keeps Download Page guidance inside the Browser panel when the workspace owns snapshot toasts', async () => {
     const attentionRequest = { action: 'download-page' as const, nonce: 1 };
-    render(
+    const { container } = render(
       <DesignBrowserPanel
         projectId="proj-webview-download-attention-parent-toast"
         initialTitle="Example"
@@ -806,7 +809,8 @@ describe('DesignBrowserPanel <webview> navigation', () => {
 
     const downloadItem = await screen.findByRole('menuitem', { name: 'Download Page' });
     expect(downloadItem.classList.contains('is-attention')).toBe(true);
-    expect(screen.queryByText(/click Download Page here/)).toBeNull();
+    expect(container.querySelector('.db-download-assist')).toBeTruthy();
+    expect(container.querySelector('.db-status')).toBeNull();
   });
 
   it('does not render saved browser comment markers in the external browser', async () => {

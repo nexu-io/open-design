@@ -10,14 +10,15 @@ od:
 
 Generative work benefits from explicit divergence before it converges.
 The direction-picker atom asks the agent to draft 3-5 distinct
-directions (visual / structural / tonal) and surface them via a
-GenUI `choice` surface so the user picks the winning direction before
-the expensive generation pass.
+directions (visual / structural / tonal) and emit them in an inline
+`<question-form>` with a `direction-cards` question so the user picks the
+winning direction before the expensive generation pass. The submitted choice
+returns as the next user message.
 
 ## Convergence
 
-The atom completes when the user resolves the `choice` surface with a
-direction id. The agent's next turn must lock onto that direction —
+The atom completes when the submitted form answer contains a direction id.
+The agent's next turn must lock onto that direction —
 backtracking forces a fresh devloop iteration of the picker stage.
 
 ## Anti-patterns the prompt fragment forbids

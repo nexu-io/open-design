@@ -45,6 +45,7 @@ vi.mock('../src/runtimes/auth.js', () => ({
 
 import {
   classifyRunFailure,
+  isResumableFailure,
   type RunEventForFailureClassification,
 } from '../src/run-failure-classification.js';
 
@@ -66,7 +67,8 @@ function errorEvent(
   };
 }
 
-function classify(
+function classifyForAgent(
+  agentId: string,
   code: string | null,
   message = '',
   events: RunEventForFailureClassification[] = code
@@ -83,9 +85,19 @@ function classify(
       signal: null,
     },
     ...(code ? { errorCode: code } : {}),
-    agentId: 'claude',
+    agentId,
     events,
   });
+}
+
+function classify(
+  code: string | null,
+  message = '',
+  events: RunEventForFailureClassification[] = code
+    ? [errorEvent(code, message)]
+    : [],
+) {
+  return classifyForAgent('claude', code, message, events);
 }
 
 describe('classifyRunFailure', () => {
@@ -890,6 +902,34 @@ describe('classifyRunFailure — signal and interrupt attribution', () => {
     });
 
     expect(
+      classify(
+        'AGENT_EXECUTION_FAILED',
+        "The 'gpt-5.6-terra' model requires a newer version of Codex.",
+        [
+          {
+            event: 'diagnostic',
+            data: {
+              type: 'model_capability_preflight',
+              status: 'incompatible',
+              model: 'gpt-5.6-terra',
+            },
+          },
+          errorEvent(
+            'AGENT_EXECUTION_FAILED',
+            "The 'gpt-5.6-terra' model requires a newer version of Codex.",
+            false,
+          ),
+        ],
+      ),
+    ).toMatchObject({
+      failure_category: 'model_unavailable',
+      failure_detail: 'cli_version_incompatible',
+      failure_stage: 'preflight',
+      retryable: false,
+      user_action: 'switch_model',
+    });
+
+    expect(
       classify(null, 'Selected model is at capacity. Please try a different model.'),
     ).toMatchObject({
       failure_category: 'upstream_unavailable',
@@ -1129,6 +1169,10 @@ describe('classifyRunFailure — signal and interrupt attribution', () => {
       ),
     ).toMatchObject({
       failure_category: 'process_exit',
+      // A bare Bun illegal-instruction banner WITHOUT the no_avx2 CPU-feature
+      // line stays process_crashed: it may be an unrelated SIGILL on an
+      // AVX2-capable machine, so it must not claim the cpu_unsupported detail
+      // (which shows "Processor not supported" guidance).
       failure_detail: 'process_crashed',
       retryable: false,
       user_action: 'none',
@@ -1139,6 +1183,158 @@ describe('classifyRunFailure — signal and interrupt attribution', () => {
 function runtimeCloseEvent(reason: string): RunEventForFailureClassification {
   return { event: 'diagnostic', data: { type: 'runtime_close', rpc_close_reason: reason } };
 }
+
+describe('cpu_unsupported (AVX2) crash classification', () => {
+  // Windows AMR failure shape from Langfuse: the bundled opencode.exe is a Bun
+  // build requiring AVX2; on CPUs without it the child dies with an illegal
+  // instruction BEFORE readiness, vela surfaces an ACP fatal, and the daemon
+  // stamps runtime_close: fatal_rpc_error. The crash text must win over the
+  // fatal_rpc_error close-reason promotion — retrying the same binary on the
+  // same CPU deterministically fails again.
+  it('classifies a Bun illegal-instruction crash under an ACP fatal close as cpu_unsupported', () => {
+    const stderr = [
+      '============================================================',
+      'Bun v1.3.10 (30e609e0) Windows x64',
+      'CPU: sse42 popcnt no_avx no_avx2',
+      'panic(main thread): Illegal instruction',
+      'oh no: Bun has crashed. This indicates a bug in Bun, not your code.',
+    ].join('\n');
+    expect(
+      classify('AGENT_EXECUTION_FAILED', '', [
+        { event: 'stderr', data: { chunk: stderr } },
+        errorEvent('AGENT_EXECUTION_FAILED', ''),
+        runtimeCloseEvent('fatal_rpc_error'),
+      ]),
+    ).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'cpu_unsupported',
+      retryable: false,
+      user_action: 'none',
+    });
+  });
+
+  it('classifies the abort-after-panic shape (exit status 3) via its stderr banner', () => {
+    // Production shape (Langfuse trace 266a5706, 0.15.0 stable): on a CPU with
+    // AVX but not AVX2 (Sandy/Ivy Bridge era), Bun panics on an illegal
+    // instruction, panics again during the panic, and abort()s — so the exit
+    // status vela reports is 3, not STATUS_ILLEGAL_INSTRUCTION. Only the
+    // stderr banner carries the truth.
+    const stderr = [
+      '============================================================',
+      'Bun v1.3.14 (0d9b296a) Windows x64',
+      'Windows v.win10_cu',
+      'CPU: sse42 avx',
+      'Args: ',
+      'Features: no_avx2 ',
+      '',
+      'panic: Illegal instruction at address 0x7FF6C08DF82C',
+      'panicked during a panic. Aborting.',
+    ].join('\n');
+    expect(
+      classify(
+        'AGENT_EXECUTION_FAILED',
+        'json-rpc id 2: start opencode server: opencode exited before readiness: exit status 3',
+        [
+          { event: 'stderr', data: { chunk: stderr } },
+          errorEvent(
+            'AGENT_EXECUTION_FAILED',
+            'json-rpc id 2: start opencode server: opencode exited before readiness: exit status 3',
+          ),
+          runtimeCloseEvent('fatal_rpc_error'),
+        ],
+      ),
+    ).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'cpu_unsupported',
+      retryable: false,
+      user_action: 'none',
+    });
+  });
+
+  it('classifies a bare STATUS_ILLEGAL_INSTRUCTION exit under an ACP fatal close as cpu_unsupported', () => {
+    // No Bun crash banner — vela only reports the raw Windows exit status
+    // (0xC000001D, decimal 3221225501 in Go/Node exit-status text).
+    expect(
+      classify(
+        'AGENT_EXECUTION_FAILED',
+        'start opencode server: exit status 3221225501',
+        [
+          errorEvent('AGENT_EXECUTION_FAILED', 'start opencode server: exit status 3221225501'),
+          runtimeCloseEvent('fatal_rpc_error'),
+        ],
+      ),
+    ).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'cpu_unsupported',
+      retryable: false,
+      user_action: 'none',
+    });
+  });
+
+  it('classifies the hex STATUS_ILLEGAL_INSTRUCTION form as cpu_unsupported', () => {
+    const message = 'start opencode server: opencode exited before readiness: exit status 0xC000001D';
+    expect(
+      classify('AGENT_EXECUTION_FAILED', message, [
+        errorEvent('AGENT_EXECUTION_FAILED', message),
+        runtimeCloseEvent('fatal_rpc_error'),
+      ]),
+    ).toMatchObject({
+      failure_detail: 'cpu_unsupported',
+      retryable: false,
+    });
+  });
+
+  it('keeps a STATUS_ILLEGAL_INSTRUCTION exit outside the opencode startup context retryable', () => {
+    // The raw status code is generic Windows SIGILL — any agent binary can die
+    // with it for reasons that have nothing to do with AVX2. Without vela's
+    // bundled-opencode startup wrapper text it must stay on the existing
+    // fatal_rpc_error path instead of surfacing the processor-support card.
+    const message = 'codex acp bridge exited: exit status 3221225501';
+    expect(
+      classify('AGENT_EXECUTION_FAILED', message, [
+        errorEvent('AGENT_EXECUTION_FAILED', message),
+        runtimeCloseEvent('fatal_rpc_error'),
+      ]),
+    ).toMatchObject({
+      failure_detail: 'fatal_rpc_error',
+      retryable: true,
+    });
+  });
+
+  it('does not claim an illegal-instruction crash without the no_avx2 feature line', () => {
+    // A SIGILL on an AVX2-capable machine (runtime bug, corrupted jump) prints
+    // the same "Illegal instruction" panic but a CPU-feature line WITHOUT
+    // no_avx2. That must keep the retryable fatal_rpc_error path — labeling it
+    // "Processor not supported" would mislead the user and drop the retry.
+    const stderr = [
+      'Bun v1.3.14 (0d9b296a) Windows x64',
+      'CPU: sse42 avx avx2',
+      'panic(main thread): Illegal instruction at address 0x7FF6C08DF82C',
+    ].join('\n');
+    expect(
+      classify('AGENT_EXECUTION_FAILED', '', [
+        { event: 'stderr', data: { chunk: stderr } },
+        errorEvent('AGENT_EXECUTION_FAILED', ''),
+        runtimeCloseEvent('fatal_rpc_error'),
+      ]),
+    ).toMatchObject({
+      failure_detail: 'fatal_rpc_error',
+      retryable: true,
+    });
+  });
+
+  it('keeps plain ACP fatal closes without crash text on fatal_rpc_error', () => {
+    expect(
+      classify('AGENT_EXECUTION_FAILED', '', [
+        errorEvent('AGENT_EXECUTION_FAILED', ''),
+        runtimeCloseEvent('fatal_rpc_error'),
+      ]),
+    ).toMatchObject({
+      failure_detail: 'fatal_rpc_error',
+      retryable: true,
+    });
+  });
+})
 
 describe('execution_failed close-reason refinement', () => {
   // A generic AGENT_EXECUTION_FAILED whose text matched no pattern, plus the
@@ -1153,6 +1349,8 @@ describe('execution_failed close-reason refinement', () => {
     expect(withCloseReason('stream_error')).toMatchObject({
       failure_category: 'process_exit',
       failure_detail: 'stream_error',
+      retryable: true,
+      user_action: 'retry',
     });
   });
 
@@ -1167,6 +1365,21 @@ describe('execution_failed close-reason refinement', () => {
     expect(withCloseReason('fatal_rpc_error')).toMatchObject({
       failure_category: 'process_exit',
       failure_detail: 'fatal_rpc_error',
+      retryable: true,
+      user_action: 'retry',
+    });
+  });
+
+  it('honors an explicit non-retryable hint on fatal close reasons', () => {
+    const result = classify('AGENT_EXECUTION_FAILED', '', [
+      errorEvent('AGENT_EXECUTION_FAILED', '', false),
+      runtimeCloseEvent('fatal_rpc_error'),
+    ]);
+    expect(result).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'fatal_rpc_error',
+      retryable: false,
+      user_action: 'none',
     });
   });
 
@@ -1293,6 +1506,16 @@ describe('classifyRunFailure — batch A reclassification out of execution_faile
     expect(result?.failure_detail).toBe('prompt_too_large');
   });
 
+  it('classifies AMR request body limits as prompt_too_large', () => {
+    const result = classify(
+      'AGENT_EXECUTION_FAILED',
+      'json-rpc id 4: opencode event stream: {"properties":{"error":{"data":{"message":"[code=request_too_large] request body exceeds configured limit"}}}}',
+    );
+    expect(result?.failure_category).toBe('prompt_too_large');
+    expect(result?.failure_detail).toBe('request_too_large');
+    expect(result?.user_action).toBe('reduce_context');
+  });
+
   it('classifies an ACP "thread/start failed" as agent_protocol_error', () => {
     const result = classify(
       'AGENT_EXECUTION_FAILED',
@@ -1347,7 +1570,8 @@ describe('classifyRunFailure — batch A reclassification out of execution_faile
 
 describe('classifyRunFailure — BYOK OpenCode reclassification out of stream_error', () => {
   it('classifies missing BYOK OpenCode run config as fixable agent config', () => {
-    const result = classify(
+    const result = classifyForAgent(
+      'byok-opencode',
       'BYOK_PROVIDER_REQUIRED',
       'BYOK OpenCode requires a provider, API key, and model for this run.',
     );
@@ -1361,7 +1585,8 @@ describe('classifyRunFailure — BYOK OpenCode reclassification out of stream_er
   });
 
   it('classifies BYOK OpenCode 404 provider responses as non-retryable upstream client errors', () => {
-    const result = classify(
+    const result = classifyForAgent(
+      'byok-opencode',
       'AGENT_EXECUTION_FAILED',
       'json-rpc id 4: opencode event stream: opencode session error: Not Found: 404 page not found',
     );
@@ -1374,8 +1599,83 @@ describe('classifyRunFailure — BYOK OpenCode reclassification out of stream_er
     });
   });
 
-  it('classifies BYOK OpenCode provider request-shape rejections as non-retryable upstream client errors', () => {
+  it('does not treat a committed-work BYOK provider 404 as resumable', () => {
+    const message = 'Not Found';
+    const failure = classifyForAgent(
+      'byok-opencode',
+      'AGENT_EXECUTION_FAILED',
+      message,
+      [
+        {
+          event: 'agent',
+          data: {
+            type: 'tool_use',
+            id: 'toolu_byok_404',
+            name: 'Bash',
+            input: { command: 'echo committed' },
+          },
+        },
+        errorEvent('AGENT_EXECUTION_FAILED', message, false),
+        runtimeCloseEvent('stream_error'),
+      ],
+    );
+
+    expect(failure).toMatchObject({
+      failure_category: 'upstream_unavailable',
+      failure_detail: 'upstream_client_error',
+      retryable: false,
+    });
+    expect(isResumableFailure(failure)).toBe(false);
+  });
+
+  it.each([
+    'Not Found',
+    'Resource not found',
+    'Not Found: {"error":{"message":"The requested resource was not found","type":"resource_not_found_error"}}',
+    'Not Found: {"error_msg":"404 Route Not Found"}',
+    'Not Found: Not support',
+    'Not Found: {"error":{"message":"Not found","type":"api_error"}}',
+    'Not Found: {"detail":"Not Found"}',
+  ])('classifies the production BYOK provider shape %j as a non-retryable client error', (message) => {
+    const result = classifyForAgent(
+      'byok-opencode',
+      'AGENT_EXECUTION_FAILED',
+      message,
+      [
+        errorEvent('AGENT_EXECUTION_FAILED', message, true),
+        runtimeCloseEvent('stream_error'),
+      ],
+    );
+
+    expect(result).toMatchObject({
+      failure_category: 'upstream_unavailable',
+      failure_detail: 'upstream_client_error',
+      failure_stage: 'first_token_wait',
+      retryable: false,
+      user_action: 'none',
+    });
+  });
+
+  it('does not globally reinterpret a bare Not Found from another agent as an upstream client error', () => {
     const result = classify(
+      'AGENT_EXECUTION_FAILED',
+      'Not Found',
+      [
+        errorEvent('AGENT_EXECUTION_FAILED', 'Not Found', true),
+        runtimeCloseEvent('stream_error'),
+      ],
+    );
+
+    expect(result).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'stream_error',
+      retryable: true,
+    });
+  });
+
+  it('classifies BYOK OpenCode provider request-shape rejections as non-retryable upstream client errors', () => {
+    const result = classifyForAgent(
+      'byok-opencode',
       'AGENT_EXECUTION_FAILED',
       'json-rpc id 4: opencode event stream: data did not match any variant of untagged enum InputParam',
     );
@@ -1388,7 +1688,8 @@ describe('classifyRunFailure — BYOK OpenCode reclassification out of stream_er
   });
 
   it('classifies BYOK OpenCode Responses API request rejections as non-retryable upstream client errors', () => {
-    const result = classify(
+    const result = classifyForAgent(
+      'byok-opencode',
       'AGENT_EXECUTION_FAILED',
       'json-rpc id 4: opencode event stream: Invalid Responses API request',
     );
@@ -1400,8 +1701,48 @@ describe('classifyRunFailure — BYOK OpenCode reclassification out of stream_er
     });
   });
 
+  it('does not let a coarse SDK retry hint override a provider client error', () => {
+    const message = 'API Error: 400 Bad Request: Invalid Responses API request';
+    const result = classifyForAgent(
+      'byok-opencode',
+      'AGENT_EXECUTION_FAILED',
+      message,
+      [
+        errorEvent('AGENT_EXECUTION_FAILED', message, true),
+        runtimeCloseEvent('stream_error'),
+      ],
+    );
+
+    expect(result).toMatchObject({
+      failure_category: 'upstream_unavailable',
+      failure_detail: 'upstream_client_error',
+      retryable: false,
+      user_action: 'none',
+    });
+    expect(isResumableFailure(result)).toBe(false);
+  });
+
+  it('prefers provider client-error evidence over mixed stream-disconnect text', () => {
+    const message = 'stream disconnected before completion: statusCode:404';
+    const result = classifyForAgent(
+      'byok-opencode',
+      'AGENT_EXECUTION_FAILED',
+      message,
+      [errorEvent('AGENT_EXECUTION_FAILED', message, true)],
+    );
+
+    expect(result).toMatchObject({
+      failure_category: 'upstream_unavailable',
+      failure_detail: 'upstream_client_error',
+      retryable: false,
+      user_action: 'none',
+    });
+    expect(isResumableFailure(result)).toBe(false);
+  });
+
   it('classifies BYOK OpenCode config directory permission errors as fixable agent config', () => {
-    const result = classify(
+    const result = classifyForAgent(
+      'byok-opencode',
       'AGENT_EXECUTION_FAILED',
       [
         "EACCES: permission denied, mkdir '/Users/11140200/.config/opencode'",
@@ -1433,5 +1774,160 @@ describe('classifyRunFailure — custom Anthropic endpoint disconnects', () => {
       retryable: true,
       user_action: 'retry',
     });
+  });
+});
+
+describe('classifyRunFailure — AMR sampled failures', () => {
+  it('classifies Windows opencode readiness crash status as process_crashed', () => {
+    const result = classify(
+      'AGENT_SIGNAL_SIGTERM',
+      'json-rpc id 2: start opencode server: opencode exited before readiness: exit status 0xc0000409',
+    );
+    expect(result).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'process_crashed',
+      retryable: false,
+      user_action: 'none',
+    });
+  });
+
+  it('classifies AMR stream idle timeout as a disconnected upstream stream', () => {
+    const result = classify(
+      'AGENT_EXECUTION_FAILED',
+      'json-rpc id 4: opencode event stream: {"properties":{"error":{"data":{"message":"[code=upstream_error] stream idle timeout: no data received within configured window"}}}}',
+    );
+    expect(result).toMatchObject({
+      failure_category: 'upstream_unavailable',
+      failure_detail: 'stream_disconnected',
+      retryable: true,
+      user_action: 'retry',
+    });
+  });
+});
+
+describe('classifyRunFailure — sampled 0.15.1 provider request failures', () => {
+  it.each([
+    {
+      name: 'HTTP 413 request body rejection',
+      agentId: 'claude',
+      message: 'Payload Too Large: request entity too large',
+      expected: {
+        failure_category: 'prompt_too_large',
+        failure_detail: 'request_too_large',
+        failure_stage: 'prompt_send',
+        retryable: false,
+        user_action: 'reduce_context',
+      },
+      resumable: false,
+    },
+    {
+      name: 'unsupported PDF attachment media type',
+      agentId: 'claude',
+      message: "request.messages.2.content.0.content.1.source.media_type: Invalid enum value. Expected 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp', received 'application/pdf'",
+      expected: {
+        failure_category: 'upstream_unavailable',
+        failure_detail: 'attachment_media_type_unsupported',
+        failure_stage: 'prompt_send',
+        retryable: false,
+        user_action: 'none',
+      },
+      resumable: false,
+    },
+    {
+      name: 'invalid Gemini function declaration name',
+      agentId: 'byok-opencode',
+      message: 'GenerateContentRequest.tools[0].function_declarations[0].name: Invalid function name. Must start with a letter or underscore.',
+      expected: {
+        failure_category: 'upstream_unavailable',
+        failure_detail: 'tool_schema_invalid',
+        failure_stage: 'prompt_send',
+        retryable: false,
+        user_action: 'none',
+      },
+      resumable: false,
+    },
+    {
+      name: 'prompt tokenization rejection',
+      agentId: 'byok-opencode',
+      message: '400: {"code":400,"message":"Failed to tokenize prompt","type":"invalid_request_error"}',
+      expected: {
+        failure_category: 'upstream_unavailable',
+        failure_detail: 'prompt_tokenization_failed',
+        failure_stage: 'prompt_send',
+        retryable: false,
+        user_action: 'none',
+      },
+      resumable: false,
+    },
+    {
+      name: 'context size exceeded',
+      agentId: 'byok-opencode',
+      message: 'Context size has been exceeded.',
+      expected: {
+        failure_category: 'prompt_too_large',
+        failure_detail: 'prompt_too_large',
+        failure_stage: 'prompt_send',
+        retryable: false,
+        user_action: 'reduce_context',
+      },
+      resumable: false,
+    },
+    {
+      name: 'unsupported model',
+      agentId: 'byok-opencode',
+      message: 'Not supported model mimo-v2.5-pro-ultraspeed',
+      expected: {
+        failure_category: 'model_unavailable',
+        failure_detail: 'model_not_supported',
+        failure_stage: 'model_select',
+        retryable: false,
+        user_action: 'switch_model',
+      },
+      resumable: false,
+    },
+    {
+      name: 'provider account function not found',
+      agentId: 'byok-opencode',
+      message: 'Not Found: {"status":404,"detail":"Function \'chat-completions\' Not found for account acct_123"}',
+      expected: {
+        failure_category: 'upstream_unavailable',
+        failure_detail: 'provider_resource_not_found',
+        failure_stage: 'prompt_send',
+        retryable: false,
+        user_action: 'none',
+      },
+      resumable: false,
+    },
+    {
+      name: 'genuine upstream idle timeout',
+      agentId: 'byok-opencode',
+      message: 'Upstream idle timeout exceeded',
+      expected: {
+        failure_category: 'upstream_unavailable',
+        failure_detail: 'stream_disconnected',
+        failure_stage: 'first_token_wait',
+        retryable: true,
+        user_action: 'retry',
+      },
+      resumable: true,
+    },
+  ])('classifies $name before the generic stream close fallback', ({
+    agentId,
+    message,
+    expected,
+    resumable,
+  }) => {
+    const result = classifyForAgent(
+      agentId,
+      'AGENT_EXECUTION_FAILED',
+      message,
+      [
+        errorEvent('AGENT_EXECUTION_FAILED', message, true),
+        runtimeCloseEvent('stream_error'),
+      ],
+    );
+
+    expect(result).toMatchObject(expected);
+    expect(isResumableFailure(result)).toBe(resumable);
   });
 });

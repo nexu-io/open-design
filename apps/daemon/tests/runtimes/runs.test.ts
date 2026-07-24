@@ -9,6 +9,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createChatRunService } from '../../src/runtimes/runs.js';
 
 describe('chat run service shutdown', () => {
+  it('publishes the authoritative artifact count in status and terminal events', async () => {
+    const runs = createRuns();
+    const run = runs.create({ projectId: 'project-1', conversationId: 'conv-1' });
+
+    run.artifactCount = 2;
+    const wait = runs.wait(run);
+    runs.finish(run, 'succeeded', 0, null);
+
+    expect(runs.statusBody(run)).toMatchObject({ status: 'succeeded', artifactCount: 2 });
+    expect(run.events.at(-1)).toMatchObject({
+      event: 'end',
+      data: { status: 'succeeded', artifactCount: 2 },
+    });
+    await expect(wait).resolves.toMatchObject({ status: 'succeeded', artifactCount: 2 });
+  });
+
   it('retains structured error details on failed run status bodies', async () => {
     const runs = createRuns();
     const run = runs.create({ projectId: 'project-1', conversationId: 'conv-1' });
@@ -720,6 +736,56 @@ describe('run event log persistence', () => {
     expect(parsed[0]).toMatchObject({ event: 'agent', data: { type: 'text_delta', delta: 'hello' } });
     expect(parsed[1]).toMatchObject({ event: 'agent', data: { type: 'text_delta', delta: ' world' } });
     expect(parsed[2]).toMatchObject({ event: 'end', data: { status: 'succeeded' } });
+  });
+
+  it('persists a restart-safe terminal state and telemetry checkpoints', () => {
+    const runs = createRunsWithLog(tmpDir);
+    const run = runs.create({
+      projectId: 'p1',
+      conversationId: 'c1',
+      assistantMessageId: 'm1',
+      agentId: 'claude',
+    });
+    const statePath = path.join(tmpDir, run.id, 'state.json');
+
+    expect(JSON.parse(fs.readFileSync(statePath, 'utf8'))).toMatchObject({
+      schemaVersion: 1,
+      id: run.id,
+      status: 'queued',
+      assistantMessageId: 'm1',
+    });
+
+    runs.setAnalyticsRecovery(run, {
+      context: {
+        deviceId: 'device-1',
+        sessionId: 'session-1',
+        clientType: 'desktop',
+        locale: 'zh-CN',
+      },
+      properties: {
+        page_name: 'chat_panel',
+        area: 'chat_panel',
+        project_id: 'p1',
+        conversation_id: 'c1',
+        run_id: run.id,
+      },
+      insertId: 'run-created-1',
+    });
+    run.status = 'running';
+    runs.emit(run, 'start', { status: 'running' });
+    runs.finish(run, 'failed', 1, null);
+    runs.markAnalyticsCompleted(run);
+    runs.markLangfuseCompleted(run);
+
+    expect(JSON.parse(fs.readFileSync(statePath, 'utf8'))).toMatchObject({
+      status: 'failed',
+      exitCode: 1,
+      analyticsRecovery: {
+        insertId: 'run-created-1',
+        completedAt: expect.any(Number),
+      },
+      langfuseCompletedAt: expect.any(Number),
+    });
   });
 
   it('persists native session recovery diagnostics in the run event log', async () => {

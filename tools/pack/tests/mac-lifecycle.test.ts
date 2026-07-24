@@ -5,13 +5,21 @@ import { join } from "node:path";
 import type { ChildProcess } from "node:child_process";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { DesktopStatusSnapshot } from "@open-design/sidecar-proto";
 
 import type { ToolPackConfig } from "../src/config.js";
 import { resolveMacPaths } from "../src/mac/paths.js";
 
-const requestJsonIpc = vi.fn(async () => ({ state: "running" }));
+const requestJsonIpc = vi.fn(async (): Promise<DesktopStatusSnapshot> => ({ state: "running" }));
 const resolveAppIpcPath = vi.fn(() => "/tmp/open-design/ipc/test/desktop.sock");
 const createSidecarLaunchEnv = vi.fn(({ extraEnv }: { extraEnv: NodeJS.ProcessEnv }) => extraEnv);
+const collectProcessTreePids = vi.fn(
+  (_processes: unknown[], rootPids: Array<number | null>) =>
+    rootPids.filter((pid): pid is number => typeof pid === "number"),
+);
+const listProcessSnapshots = vi.fn(async () => [] as Array<{ command: string; pid: number; ppid: number }>);
+const matchesStampedProcess = vi.fn<typeof import("@open-design/platform").matchesStampedProcess>(() => false);
+const stopProcesses = vi.fn(async (pids: number[]) => ({ remainingPids: [], stoppedPids: pids }));
 const spawnLoggedProcess = vi.fn(async ({ env }: { env: NodeJS.ProcessEnv }) => {
   return Object.assign(new EventEmitter(), {
     env,
@@ -27,17 +35,17 @@ vi.mock("@open-design/sidecar", () => ({
 }));
 
 vi.mock("@open-design/platform", () => ({
-  collectProcessTreePids: vi.fn(),
+  collectProcessTreePids,
   createProcessStampArgs: vi.fn(() => []),
   isProcessAlive: vi.fn(() => true),
-  listProcessSnapshots: vi.fn(async () => []),
-  matchesStampedProcess: vi.fn(() => false),
+  listProcessSnapshots,
+  matchesStampedProcess,
   readLogTail: vi.fn(async () => []),
   spawnLoggedProcess,
-  stopProcesses: vi.fn(async () => []),
+  stopProcesses,
 }));
 
-const { startPackedMacApp } = await import("../src/mac/lifecycle.js");
+const { startPackedMacApp, stopPackedMacApp } = await import("../src/mac/lifecycle.js");
 
 function makeConfig(root: string, overrides: Partial<ToolPackConfig> = {}): ToolPackConfig {
   return {
@@ -80,9 +88,73 @@ function makeConfig(root: string, overrides: Partial<ToolPackConfig> = {}): Tool
 afterEach(() => {
   vi.clearAllMocks();
   requestJsonIpc.mockResolvedValue({ state: "running" });
+  listProcessSnapshots.mockResolvedValue([]);
+  matchesStampedProcess.mockReturnValue(false);
+  collectProcessTreePids.mockImplementation(
+    (_processes: unknown[], rootPids: Array<number | null>) =>
+      rootPids.filter((pid): pid is number => typeof pid === "number"),
+  );
+  stopProcesses.mockImplementation(async (pids: number[]) => ({ remainingPids: [], stoppedPids: pids }));
 });
 
 describe("startPackedMacApp", () => {
+  it("accepts a clean launcher exit when the delegated desktop becomes healthy", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-mac-lifecycle-"));
+    try {
+      const config = makeConfig(root);
+      const paths = resolveMacPaths(config);
+      const executablePath = join(paths.installedAppPath, "Contents", "MacOS", "Open Design");
+      const delegatedPid = 5678;
+
+      await mkdir(join(paths.installedAppPath, "Contents", "MacOS"), { recursive: true });
+      await writeFile(executablePath, "#!/bin/sh\nexit 0\n", "utf8");
+      await chmod(executablePath, 0o755);
+      requestJsonIpc.mockResolvedValue({ pid: delegatedPid, state: "running" });
+      spawnLoggedProcess.mockImplementationOnce(async ({ env }: { env: NodeJS.ProcessEnv }) => {
+        const child = Object.assign(new EventEmitter(), {
+          env,
+          pid: 1234,
+          unref: vi.fn(),
+        }) as unknown as ChildProcess & { env: NodeJS.ProcessEnv };
+        setTimeout(() => child.emit("exit", 0, null), 10);
+        return child;
+      });
+
+      const result = await startPackedMacApp(config);
+
+      expect(result.pid).toBe(delegatedPid);
+      expect(result.status).toEqual({ pid: delegatedPid, state: "running" });
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("rejects a non-zero launcher exit before desktop handoff", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-mac-lifecycle-"));
+    try {
+      const config = makeConfig(root);
+      const paths = resolveMacPaths(config);
+      const executablePath = join(paths.installedAppPath, "Contents", "MacOS", "Open Design");
+
+      await mkdir(join(paths.installedAppPath, "Contents", "MacOS"), { recursive: true });
+      await writeFile(executablePath, "#!/bin/sh\nexit 1\n", "utf8");
+      await chmod(executablePath, 0o755);
+      spawnLoggedProcess.mockImplementationOnce(async ({ env }: { env: NodeJS.ProcessEnv }) => {
+        const child = Object.assign(new EventEmitter(), {
+          env,
+          pid: 1234,
+          unref: vi.fn(),
+        }) as unknown as ChildProcess & { env: NodeJS.ProcessEnv };
+        setTimeout(() => child.emit("exit", 1, null), 10);
+        return child;
+      });
+
+      await expect(startPackedMacApp(config)).rejects.toThrow("process exited early code=1 signal=null");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
   it("writes a launch override when the bundled config is missing", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-mac-lifecycle-"));
     try {
@@ -164,6 +236,47 @@ describe("startPackedMacApp", () => {
       expect(result.source).toBe("installed");
       expect(result.executablePath).toBe(executablePath);
       expect(result.status?.state).toBe("running");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+});
+
+describe("stopPackedMacApp", () => {
+  it("waits for a packaged-source payload desktop to exit after graceful shutdown", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-mac-lifecycle-"));
+    const config = makeConfig(root);
+    const payloadDesktop = { command: "payload-desktop", pid: 4242, ppid: 1 };
+
+    try {
+      requestJsonIpc.mockResolvedValue({ state: "running" });
+      listProcessSnapshots
+        .mockResolvedValueOnce([payloadDesktop])
+        .mockResolvedValueOnce([payloadDesktop])
+        .mockResolvedValueOnce([]);
+      matchesStampedProcess.mockImplementation((processInfo, criteria) => {
+        const sidecarCriteria = criteria as { namespace?: string; source?: string };
+        return (
+          processInfo.command === payloadDesktop.command &&
+          sidecarCriteria.namespace === config.namespace &&
+          sidecarCriteria.source === "packaged"
+        );
+      });
+
+      await expect(stopPackedMacApp(config)).resolves.toMatchObject({
+        gracefulRequested: true,
+        namespace: config.namespace,
+        remainingPids: [],
+        status: "stopped",
+        stoppedPids: [payloadDesktop.pid],
+      });
+      expect(listProcessSnapshots).toHaveBeenCalledTimes(3);
+      expect(matchesStampedProcess).toHaveBeenCalledWith(
+        payloadDesktop,
+        expect.objectContaining({ namespace: config.namespace, source: "packaged" }),
+        expect.anything(),
+      );
+      expect(stopProcesses).not.toHaveBeenCalled();
     } finally {
       await rm(root, { force: true, recursive: true });
     }

@@ -23,8 +23,8 @@ The shape is:
 
 `mocks/scripts/smoke-test.sh` confirms the mock CLIs *run* and emit
 events. It doesn't tell you whether the events have the *right shape*
-— a parser change in `apps/daemon/src/claude-stream.ts` or
-`json-event-stream.ts` could silently drop a field, rename
+— a parser change in `apps/daemon/src/runtimes/claude-stream.ts` or
+`runtimes/json-event-stream.ts` could silently drop a field, rename
 `sessionID` → `sessionId`, or stop emitting `turn_end`. The goldens
 are diffed by `apps/daemon/tests/mocks-golden.test.ts`; a regression
 makes that test fail loudly.

@@ -29,6 +29,10 @@
 .op-status-running { color: var(--purple); }
 .op-status-ok { color: var(--green); }
 .op-status-error { color: var(--red); }
+.op-status-category {
+  border-color: transparent;
+  background: var(--bg-panel);
+}
 .op-toggle {
   font-size: 10.5px;
   padding: 2px 8px;
@@ -269,9 +273,21 @@
   word-break: break-all;
 }
 
-/* "Files this turn" summary — derived from file operation tool_use events
-   so users can scan every file the agent touched without expanding tool-
-   group disclosures. Compact pill while streaming, full list once done. */
+.plugin-action-candidate__details {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 9px;
+}
+
+.plugin-action-candidate__details p {
+  flex: 1 1 240px;
+  margin: 0;
+}
+
+/* "Files this turn" summary — derived from file operation tool_use events.
+   Show up to four files as part of the answer; larger batches stay compact
+   until the user opens the disclosure. */
 .file-ops {
   display: flex;
   flex-direction: column;
@@ -280,15 +296,18 @@
   background: var(--bg-panel);
   overflow: hidden;
 }
-.file-ops.is-streaming {
-  border-style: dashed;
-  background: var(--bg-subtle);
+.file-ops-head {
+  display: flex;
+  align-items: center;
+  min-width: 0;
 }
 .file-ops-toggle {
   display: flex;
   align-items: center;
   gap: 8px;
   width: 100%;
+  min-width: 0;
+  flex: 1 1 auto;
   padding: 7px 10px;
   background: transparent;
   border: 0;
@@ -299,6 +318,8 @@
   min-width: 0;
 }
 .file-ops-toggle:hover { background: var(--bg-subtle); }
+.file-ops-toggle--static { cursor: default; }
+.file-ops-toggle--static:hover { background: transparent; }
 .file-ops-icon { display: inline-flex; color: var(--text-muted); }
 .file-ops-label {
   font-size: 10.5px;
@@ -316,21 +337,19 @@
   font-variant-numeric: tabular-nums;
   color: var(--text-muted);
 }
-.file-ops-count {
+.file-ops-more {
   font-size: 10.5px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: var(--text-muted);
-  padding: 1px 6px;
-  border-radius: var(--radius);
-  background: var(--bg-subtle);
-  border: 1px solid var(--border);
+  white-space: nowrap;
 }
-.file-ops.is-streaming .file-ops-count {
-  color: var(--accent);
-  border-color: color-mix(in oklab, var(--accent) 30%, var(--border));
+.file-ops-chev {
+  display: inline-flex;
+  color: var(--text-muted);
+  transition: transform 120ms var(--ease-out);
 }
-.file-ops-chev { display: inline-flex; color: var(--text-muted); }
+.file-ops-chev.is-expanded { transform: rotate(180deg); }
 .file-ops-list {
   list-style: none;
   margin: 0;
@@ -342,16 +361,40 @@
   overflow-y: auto;
   border-top: 1px solid var(--border-soft, var(--border));
 }
+.file-ops-list--single {
+  padding: 0;
+  border-top: 0;
+  overflow: visible;
+}
 .file-ops-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 5px 8px;
+  display: block;
+  padding: 0;
   border-radius: var(--radius-sm);
   font-size: 12px;
   min-width: 0;
 }
 .file-ops-row:hover { background: var(--bg-subtle); }
+.file-ops-row-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+.file-ops-row-main--action {
+  cursor: pointer;
+}
+.file-ops-row-main--action:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 38%, transparent);
+  outline-offset: 1px;
+}
 .file-ops-row--running { color: var(--text); }
 .file-ops-row--error { color: var(--text); }
 .file-ops-row-badges { display: inline-flex; gap: 3px; flex-shrink: 0; }
@@ -431,19 +474,22 @@
   color: #c0392b;
   background: color-mix(in oklab, #c0392b 12%, transparent);
 }
-.file-ops-row-open {
-  font-size: 11px;
-  padding: 3px 9px;
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  color: var(--text);
-  cursor: pointer;
+.file-ops-row-open-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
+  color: var(--text-faint);
+  opacity: 0;
+  transform: translateX(-2px);
+  transition:
+    opacity 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.file-ops-row-open:hover {
-  border-color: var(--accent);
-  color: var(--accent);
+.file-ops-row-main--action:hover .file-ops-row-open-icon,
+.file-ops-row-main--action:focus-visible .file-ops-row-open-icon {
+  opacity: 1;
+  transform: translateX(0);
 }
 
 .op-bash .op-command,

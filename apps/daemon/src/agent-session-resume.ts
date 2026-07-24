@@ -9,6 +9,10 @@ import {
   latestCompletedAssistantMessageId,
   upsertAgentSession,
 } from './db.js';
+import {
+  parseStableSections,
+  type StableSectionHashes,
+} from './prompts/stable-sections.js';
 
 type SqliteDb = Database.Database;
 
@@ -25,6 +29,12 @@ export interface AgentResumeContext {
   isResuming: boolean;
   /** Hash of the stable instruction block last sent on this session, or null. */
   storedStablePromptHash: string | null;
+  /**
+   * Per-section digests behind `storedStablePromptHash`, for naming which input
+   * drifted when the hash no longer matches. Diagnostic only — never an input
+   * to the resume decision.
+   */
+  storedStableSections: StableSectionHashes | null;
   /** Set when a stored session existed but was rejected; see the type. */
   invalidationReason: ResumeInvalidationReason | null;
 }
@@ -112,6 +122,7 @@ export function resolveAgentResumeContext(
     newSessionId: randomUUID(),
     isResuming: resumable,
     storedStablePromptHash: resumable ? (record?.stablePromptHash ?? null) : null,
+    storedStableSections: resumable ? parseStableSections(record?.stablePromptSections) : null,
     invalidationReason,
   };
 }
@@ -131,6 +142,7 @@ export function persistCapturedAgentSession(
     agentId: string;
     sessionId: string | null;
     stablePromptHash?: string | null;
+    stablePromptSections?: string | null;
     // Resume identity (see resolveAgentResumeContext). Must be stored alongside
     // the captured session so the next turn can verify the session is still
     // safe to resume; omitting them leaves a null cursor that the guard treats
@@ -147,6 +159,7 @@ export function persistCapturedAgentSession(
       agentId: input.agentId,
       sessionId: input.sessionId,
       stablePromptHash: input.stablePromptHash ?? null,
+      stablePromptSections: input.stablePromptSections ?? null,
       model: input.model ?? null,
       cwd: input.cwd ?? null,
       lastMessageId: input.lastMessageId ?? null,
@@ -296,7 +309,12 @@ export function isAgentResumeFailure(
 ): boolean {
   if (agentId === 'codex') return isCodexResumeFailure(stderr);
   if (agentId === 'opencode') return isOpencodeResumeFailure(stderr);
-  if (agentId === 'amr') return isAmrResumeFailure(stdout);
+  if (agentId === 'amr') {
+    return (
+      isAmrResumeFailure(stdout) ||
+      isAmrOpencodeEventStreamResumeFailure(`${stderr}\n${stdout}`)
+    );
+  }
   // claude + codebuddy share Claude Code's stream-json result shape.
   return isClaudeResumeFailure(stderr, stdout);
 }
@@ -306,9 +324,23 @@ export function isAgentResumeFailure(
 // protocol channel). Match the structured marker — not a bare word — so a
 // model reply that merely mentions "resume_failed" cannot trip it.
 const AMR_RESUME_FAILURE_PATTERN = /"kind"\s*:\s*"resume_failed"/;
+const AMR_OPENCODE_EVENT_STREAM_RESUME_FAILURE_PATTERNS: RegExp[] = [
+  /opencode SSE ended before prompt completion/i,
+  /opencode event stream:\s*opencode SSE ended before prompt completion/i,
+];
 
 /** True when vela's ACP output carries a resume_failed signal. */
 export function isAmrResumeFailure(stdout: string): boolean {
   if (!stdout) return false;
   return AMR_RESUME_FAILURE_PATTERN.test(stdout);
+}
+
+/**
+ * True when AMR's opencode ACP bridge reports a stream EOF while resuming.
+ * The caller only treats this as recoverable on resume turns, so matching this
+ * bridge-level failure lets the daemon clear the stale handle and re-seed.
+ */
+export function isAmrOpencodeEventStreamResumeFailure(text: string): boolean {
+  if (!text) return false;
+  return AMR_OPENCODE_EVENT_STREAM_RESUME_FAILURE_PATTERNS.some((re) => re.test(text));
 }

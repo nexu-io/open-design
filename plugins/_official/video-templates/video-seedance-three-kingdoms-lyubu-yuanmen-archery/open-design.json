@@ -24,6 +24,7 @@
     "en": "Video - Three Kingdoms ARPG - Lyu Bu Yuanmen Archery (Seedance 2.0)"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "A ~10s in-engine cinematic action sequence bringing the companion image template game-screenshot-three-kingdoms-lyubu-yuanmen-archery to life. Lyu Bu (吕布) stands at the center of a dusty military encampment between two facing armies, draws a red-lacquered longbow, holds a bead-on-draw, then looses a single gold-glowing qi-imbued arrow down the range toward a distant halberd planted in the ground. Tuned for Seedance 2.0 — tight camera discipline, a single decisive beat, crisp HUD-safe framing, clean bow/arrow physics, wind + dust + banner motion, and in-game-screenshot color grading. Designed as the direct video companion to the matching image template so the still and the clip can be served as a pair. Reference image: the Lyu Bu yuanmen-archery screenshot template.",
   "description_i18n": {
     "zh-CN": "约10秒游戏引擎内过场动作片段，吕布在两军阵营间的军营中央拉开红漆长弓，凝神瞄准后射出一支金色真气箭矢射向远处插在地上的方天画戟。专为 Seedance 2.0 调校，包含严谨镜头控制、弓箭物理效果、风沙旗帜动态和游戏截图色调。配套同名静态图模板使用。",

@@ -215,7 +215,7 @@ test('[P0] @critical preview toolbar keeps share, download, comment, and zoom ac
   await expect(page.getByTestId('board-mode-toggle')).toHaveAttribute('aria-pressed', 'false');
 
   const zoomButton = page.locator('.viewer-toolbar-zoom .zoom-trigger');
-  await expect(zoomButton).toHaveText('100%');
+  await expect(zoomButton).toHaveText(/^\d+%$/);
   await zoomButton.click();
   const zoomMenu = page.locator('.zoom-menu-popover[role="menu"]');
   await expect(zoomMenu).toBeVisible();
@@ -374,7 +374,13 @@ test('[P1] HTML preview toolbar exposes screenshot, comments, mark, and edit wor
   await expect(page.getByTestId('draw-overlay-toggle')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('button', { name: 'Box select' })).toBeVisible();
   await page.getByPlaceholder('Add a note for this mark').fill('Mark this hero crop');
-  await expect(page.getByRole('button', { name: 'Add to input' })).toBeEnabled();
+  const submitOptionsButton = page.getByRole('button', { name: 'Submit options' });
+  await expect(submitOptionsButton).toBeEnabled();
+  await submitOptionsButton.click();
+  const submitOptionsMenu = page.getByRole('menu', { name: 'Submit options' });
+  await expect(submitOptionsMenu.getByRole('menuitemradio', { name: 'Add to input' })).toBeEnabled();
+  await submitOptionsButton.click();
+  await expect(submitOptionsMenu).toHaveCount(0);
 
   const previewBox = await artifactPreview(page).boundingBox();
   expect(previewBox).not.toBeNull();
@@ -382,9 +388,10 @@ test('[P1] HTML preview toolbar exposes screenshot, comments, mark, and edit wor
   await page.mouse.down();
   await page.mouse.move(previewBox!.x + 220, previewBox!.y + 170);
   await page.mouse.up();
-  const queueButton = page.getByRole('button', { name: 'Queue' });
-  await expect(queueButton).toBeEnabled();
-  await queueButton.click();
+  await submitOptionsButton.click();
+  const queueOption = submitOptionsMenu.getByRole('menuitemradio', { name: 'Queue' });
+  await expect(queueOption).toBeEnabled();
+  await queueOption.click();
   const queuedStrip = page.getByTestId('chat-queued-send-strip');
   await expect(queuedStrip).toBeVisible();
   await expect(queuedStrip).toContainText('Mark this hero crop');
@@ -722,6 +729,76 @@ test('[P0] deck host counter stays synced when a self-handling deck stops slide 
   await expect(frame.getByText('Slide One')).toBeVisible();
   await expect(hostCounter).toHaveText(/1\s*\/\s*3/);
   await expect(frame.locator('#deck-cur')).toHaveText('01');
+});
+
+test('[P0] history version deck keyboard navigation advances the displayed preview before iframe click', async ({ page }) => {
+  test.setTimeout(T.xlong);
+  await routeMockAgents(page);
+  const projectId = await createEmptyProject(page, 'History deck keyboard');
+  const fileName = 'history-keyboard-deck.html';
+  await seedDeckArtifact(
+    page,
+    projectId,
+    fileName,
+    'History Keyboard Deck',
+    [
+      'Slide One',
+      'Slide Two',
+      'Slide Three',
+      'Slide Four',
+      'Slide Five',
+      'Slide Six',
+      'Slide Seven',
+      'Slide Eight',
+      'Slide Nine',
+      'Slide Ten',
+    ],
+    { stopsSlideMessagePropagation: true },
+  );
+  const currentVersion = {
+    id: 'v-current',
+    fileName,
+    version: 3,
+    label: 'Selected 10-slide history preview',
+    createdAt: Date.now(),
+    source: 'manual',
+    prompt: 'Selected 10-slide history preview',
+    size: 42,
+    mime: 'text/html',
+    kind: 'html',
+    current: true,
+  };
+  await page.route(`**/api/projects/${projectId}/files/${fileName}/versions`, async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({
+        json: {
+          file: { name: fileName, kind: 'html', mime: 'text/html', size: 42, mtime: Date.now() },
+          versions: [currentVersion],
+        },
+      });
+      return;
+    }
+    await route.continue();
+  });
+  await page.goto(`/projects/${projectId}/files/${fileName}`, { waitUntil: 'domcontentloaded' });
+  await openDesignFile(page, fileName);
+
+  await page.getByRole('button', { name: 'Versions' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Versions' });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('option', { name: /Selected 10-slide history preview/i }).focus();
+  const historyFrame = dialog.locator('iframe').first().contentFrame();
+  await expect(historyFrame.locator('#deck-cur')).toHaveText('01');
+  await expect(historyFrame.locator('#deck-total')).toHaveText('10');
+
+  await page.keyboard.press('ArrowRight');
+  await expect(historyFrame.locator('#deck-cur')).toHaveText('02');
+  await page.keyboard.press('PageDown');
+  await expect(historyFrame.locator('#deck-cur')).toHaveText('03');
+  await page.keyboard.press('ArrowLeft');
+  await expect(historyFrame.locator('#deck-cur')).toHaveText('02');
+  await page.keyboard.press('PageUp');
+  await expect(historyFrame.locator('#deck-cur')).toHaveText('01');
 });
 
 

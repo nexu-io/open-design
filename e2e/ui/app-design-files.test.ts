@@ -372,15 +372,34 @@ function escapeRegExp(value: string): string {
 
 async function runUploadedImageRendersInPreviewFlow(page: Page, entry: UiScenario) {
   const { projectId } = await getCurrentProjectContext(page);
-  const pngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO5W6McAAAAASUVORK5CYII=';
-  await seedProjectFile(page, projectId, 'brand.png', pngBase64, 'base64');
+  const pngBytes = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO5W6McAAAAASUVORK5CYII=',
+    'base64',
+  );
+  await page.getByTestId('design-files-upload-input').setInputFiles({
+    name: 'brand.png',
+    mimeType: 'image/png',
+    buffer: pngBytes,
+  });
+  await expect(page.getByRole('tab', { name: /brand\.png/i })).toBeVisible();
+
+  const uploadedImage = await page.request.get(
+    `/api/projects/${encodeURIComponent(projectId)}/raw/brand.png`,
+  );
+  expect(uploadedImage.ok(), `uploaded image: ${await uploadedImage.text()}`).toBeTruthy();
+  expect(uploadedImage.headers()['content-type']).toContain('image/png');
+
   await seedHtmlArtifact(
     page,
     projectId,
     'image-preview.html',
-    '<!doctype html><html><body><main><h1>Image Preview</h1><img alt="Brand logo" src="brand.png"></main></body></html>',
+    // Generated pages commonly use site-root paths. Before the preview asset
+    // normalization fix, this resolved against the Open Design app origin and
+    // left the uploaded image broken even though its project raw URL was valid.
+    '<!doctype html><html><body><main><h1>Image Preview</h1><img alt="Brand logo" src="/brand.png"></main></body></html>',
   );
   await page.reload();
+  await expectWorkspaceReady(page);
   await openDesignFile(page, 'image-preview.html');
 
   const image = page.frameLocator('[data-testid="artifact-preview-frame"]').getByRole('img', { name: 'Brand logo' });
@@ -502,7 +521,7 @@ test('[P1] design files page keeps the current single-file actions and context h
 
   await expect(page.getByTestId('design-files-upload-trigger')).toBeVisible();
   await expect(page.getByRole('button', { name: /new sketch/i })).toBeVisible();
-  await expect(page.getByRole('button', { name: /paste/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /create document/i })).toBeVisible();
 
   await expect(page.getByRole('button', { name: /filter by kind/i })).toHaveCount(0);
   await expect(page.getByTestId('design-files-batch-delete')).toHaveCount(0);
@@ -530,7 +549,7 @@ test('[P1] design files new sketch creates a persisted sketch tab and restores i
   await page.goto(`/projects/${projectId}`, { waitUntil: 'domcontentloaded' });
   await expectWorkspaceReady(page);
 
-  await page.getByTestId('design-files-tab').click();
+  await openAllProjectFiles(page);
   await page.getByTestId('design-files-empty-new-sketch').click();
 
   const sketchName = await waitForSingleSketchFile(page, projectId);
@@ -559,7 +578,7 @@ test('[P1] design files sketch toolbar creates a sketch and exposes editor menu 
   await seedProjectFile(page, projectId, 'alpha.html', '<!doctype html><title>alpha</title><h1>alpha</h1>');
   await page.goto(`/projects/${projectId}`, { waitUntil: 'domcontentloaded' });
   await expectWorkspaceReady(page);
-  await page.getByTestId('design-files-tab').click();
+  await openAllProjectFiles(page);
 
   await expect(page.getByTestId('design-file-row-alpha.html')).toBeVisible();
   await page.getByRole('button', { name: /new sketch/i }).click();
@@ -641,7 +660,7 @@ test('[P1] plan mode selection and new Excalidraw sketch emit analytics dimensio
   await page.goto(`/projects/${projectId}`, { waitUntil: 'domcontentloaded' });
   await expectWorkspaceReady(page);
   await selectComposerSessionMode(page, 'Plan mode');
-  await page.getByTestId('design-files-tab').click();
+  await openAllProjectFiles(page);
   await page.getByTestId('design-files-empty-new-sketch').click();
 
   const sketchName = await waitForSingleSketchFile(page, projectId);
@@ -649,9 +668,9 @@ test('[P1] plan mode selection and new Excalidraw sketch emit analytics dimensio
   await expectProjectFileToContain(page, projectId, sketchName, '"type": "excalidraw"');
 
   await expect.poll(() => analyticsBodies.join('\n')).toContain('session_mode_toggle');
+  await expect.poll(() => analyticsBodies.join('\n'), { timeout: T.medium }).toContain('new_sketch');
   const raw = analyticsBodies.join('\n');
   expect(raw).toContain('"mode_after":"plan"');
-  expect(raw).toContain('new_sketch');
   expect(raw).toContain(projectId);
 });
 

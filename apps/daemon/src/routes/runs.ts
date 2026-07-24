@@ -7,6 +7,7 @@ import {
   RUN_RESULT_PACKAGE_SCHEMA,
   type AppliedPluginSnapshot,
   type ArtifactManifest,
+  type ByokChatProviderConfig,
   type ChatRunStatus,
   type ChatRunStatusResponse,
   type ProjectMetadata as ContractProjectMetadata,
@@ -31,6 +32,7 @@ import {
 } from '../codex-rollout-usage.js';
 import type { ConnectorService } from '../connectors/service.js';
 import {
+  conversationTurnIndexForRun,
   getConversation,
   getProject,
   listConversations,
@@ -39,6 +41,7 @@ import {
   upsertMessage,
 } from '../db.js';
 import { readVelaLoginStatus } from '../integrations/vela.js';
+import { getDetectedRuntimeVersions } from '../runtimes/detection.js';
 import {
   deriveLangfuseDeliveryState,
   readTelemetrySinkConfig,
@@ -83,6 +86,11 @@ import {
   validateRunToolBundleForAgent,
 } from '../run-tool-bundle.js';
 import type { DetectedAgent, RuntimeAgentDef } from '../runtimes/types.js';
+import {
+  buildOpenCodeByokProviderConfig,
+  BYOK_OPENCODE_AGENT_ID,
+  BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE,
+} from '../runtimes/byok-opencode.js';
 import {
   deriveActivationMilestones,
   runAskedUserQuestion,
@@ -155,9 +163,30 @@ interface ChatRun {
   clients: Set<SseClient>;
   analyticsContext?: AnalyticsContext;
   analyticsTelemetry?: RunTelemetryTimestamps;
+  resolvedModelId?: string | null;
+  preflightAgentCliVersion?: string | null;
+  // E-lite root-cause telemetry read at run_finished. `stdinBackpressure`: the
+  // prompt write to child stdin was queued (pipe buffer full). `lastAgentActivityAt`:
+  // the inactivity-watchdog clock, used to derive `last_progress_age_ms`.
+  stdinBackpressure?: boolean;
+  lastAgentActivityAt?: number;
   retryAttemptCount?: number;
   retryFinalResult?: string;
   retrySuppressedReason?: string;
+  retryOriginalFailure?: {
+    failure_category?: string;
+    failure_detail?: string;
+    failure_stage?: string;
+    retryable?: boolean;
+    user_action?: string;
+  };
+  artifactOutcome?: {
+    artifactCount: number;
+    artifactsCreated?: number;
+    artifactsModified?: number;
+    designSystemCreated: boolean;
+    previewModuleCount: number;
+  };
   designSystemId?: string | null;
   designSystemRequestedId?: string | null;
   designSystemSelectionSource?: string | null;
@@ -166,6 +195,7 @@ interface ChatRun {
     stablePromptHash?: string;
     hit?: boolean;
     missReason?: string | null;
+    changedSections?: string[] | null;
   };
 }
 
@@ -198,6 +228,12 @@ interface ChatRunService {
   cancel(run: ChatRun): Promise<ChatRunStatusResponse>;
   isTerminal(status: ChatRunStatus): boolean;
   emit?(run: ChatRun, event: string, data: unknown): RunEventRecord;
+  setAnalyticsRecovery?(run: ChatRun, recovery: {
+    context: AnalyticsContext;
+    properties: Record<string, unknown>;
+    insertId: string;
+  }): void;
+  markAnalyticsCompleted?(run: ChatRun): void;
 }
 
 interface AnalyticsService {
@@ -207,7 +243,7 @@ interface AnalyticsService {
     appVersion: string;
     properties: Record<string, unknown>;
     insertId: string;
-  }): void;
+  }): void | Promise<void>;
 }
 
 interface RunRoutesDesignService {
@@ -448,6 +484,14 @@ function routeParamId(req: ApiRequest): string | null {
     : null;
 }
 
+function hasCompleteByokOpenCodeConfig(meta: JsonRecord): boolean {
+  if (meta.agentId !== BYOK_OPENCODE_AGENT_ID) return true;
+  return buildOpenCodeByokProviderConfig(
+    meta.byokProvider as ByokChatProviderConfig | null | undefined,
+    typeof meta.model === 'string' ? meta.model : null,
+  ) !== null;
+}
+
 function toOdNativeEvent(record: RunEventRecord): OdNativeEvent | null {
   if (!AGUI_NATIVE_EVENT_KINDS.has(record.event as OdNativeEvent['kind'])) return null;
   return { kind: record.event, ...toJsonRecord(record.data) } as OdNativeEvent;
@@ -506,6 +550,14 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     const toolBundle = parseRunToolBundleForRequest(requestBody.toolBundle);
     if (!toolBundle.ok) {
       return sendApiError(res, 400, 'BAD_REQUEST', toolBundle.message);
+    }
+    if (!hasCompleteByokOpenCodeConfig(requestBody)) {
+      return sendApiError(
+        res,
+        400,
+        'VALIDATION_FAILED',
+        BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE,
+      );
     }
     let resolvedSnapshot = null;
     if (typeof requestBody.projectId === 'string' && requestBody.projectId) {
@@ -604,6 +656,14 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         console.warn('[runs] agent id fallback failed', err);
       }
     }
+    if (!hasCompleteByokOpenCodeConfig(meta)) {
+      return sendApiError(
+        res,
+        400,
+        'VALIDATION_FAILED',
+        BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE,
+      );
+    }
     const toolBundleSupport = validateRunToolBundleForAgent(
       toolBundle.bundle,
       typeof meta.agentId === 'string' ? getAgentDef(meta.agentId) : null,
@@ -664,6 +724,19 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       typeof meta.conversationId === 'string' && meta.conversationId
         ? getConversation(db, meta.conversationId)
         : null;
+    // A run may only attach to a conversation owned by its own project. Without
+    // this guard a request pairing projectId=A with a conversationId owned by
+    // project B runs in A's cwd but pins its messages and native session under
+    // B — corrupting B's chat history and resume identity. Mirror the ownership
+    // check the sibling routes already enforce (handoff.ts, terminal.ts).
+    if (
+      conversationSession &&
+      typeof meta.projectId === 'string' &&
+      meta.projectId &&
+      conversationSession.projectId !== meta.projectId
+    ) {
+      return sendApiError(res, 404, 'CONVERSATION_NOT_FOUND', 'conversation not found for project');
+    }
     meta.sessionMode =
       meta.sessionMode === 'chat' || meta.sessionMode === 'design' || meta.sessionMode === 'plan'
         ? normalizeConversationSessionMode(meta.sessionMode)
@@ -814,11 +887,17 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       const hintProjectTurnIndex = typeof analyticsHints.projectTurnIndex === 'number'
         ? analyticsHints.projectTurnIndex
         : undefined;
+      const conversationTurnIndex = run.conversationId
+        ? conversationTurnIndexForRun(db, run.conversationId, run.id)
+        : null;
       const sessionDimensionProps = {
         ...(hintTurnIndex !== undefined ? { turn_index: hintTurnIndex } : {}),
         ...(hintIsFirstRun !== undefined ? { is_first_run: hintIsFirstRun } : {}),
         ...(hintProjectTurnIndex !== undefined
           ? { project_turn_index: hintProjectTurnIndex }
+          : {}),
+        ...(conversationTurnIndex !== null
+          ? { conversation_turn_index: conversationTurnIndex }
           : {}),
         ...(hintHasExistingArtifact !== undefined
           ? { has_existing_artifact: hintHasExistingArtifact }
@@ -984,6 +1063,11 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         skill_ids: runSkillIds,
         token_count_source: userQueryTokens > 0 ? 'estimated' : 'unknown',
       };
+      design.runs.setAnalyticsRecovery?.(run, {
+        context: analyticsContext,
+        properties: baseProps,
+        insertId: runInsertId,
+      });
       design.analytics.capture({
         eventName: 'run_created',
         context: analyticsContext,
@@ -1110,37 +1194,46 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           runDesignSystemCreatedForRun(run);
         const toolStreamPreviewModuleCount = (): number =>
           runPreviewModuleCountForRun(run);
-        const artifactBaseline = runArtifactBaselines.take(run.id);
         let artifactCount: number;
         let artifactsCreated: number | undefined;
         let artifactsModified: number | undefined;
         let designSystemCreated: boolean;
         let previewModuleCount: number;
-        if (artifactBaseline && !artifactBaseline.contended) {
-          let diff: ReturnType<typeof diffRunArtifacts> | null = null;
-          try {
-            diff = diffRunArtifacts(
-              artifactBaseline.before,
-              snapshotProjectArtifacts(artifactBaseline.cwd),
-            );
-          } catch {
-            diff = null;
-          }
-          if (diff) {
-            artifactCount = diff.touched;
-            artifactsCreated = diff.created;
-            artifactsModified = diff.modified;
-            designSystemCreated = diff.designSystemCreated;
-            previewModuleCount = diff.previewModuleCount;
+        const artifactOutcome = run.artifactOutcome;
+        if (artifactOutcome) {
+          artifactCount = artifactOutcome.artifactCount;
+          artifactsCreated = artifactOutcome.artifactsCreated;
+          artifactsModified = artifactOutcome.artifactsModified;
+          designSystemCreated = artifactOutcome.designSystemCreated;
+          previewModuleCount = artifactOutcome.previewModuleCount;
+        } else {
+          const artifactBaseline = runArtifactBaselines.take(run.id);
+          if (artifactBaseline && !artifactBaseline.contended) {
+            let diff: ReturnType<typeof diffRunArtifacts> | null = null;
+            try {
+              diff = diffRunArtifacts(
+                artifactBaseline.before,
+                snapshotProjectArtifacts(artifactBaseline.cwd),
+              );
+            } catch {
+              diff = null;
+            }
+            if (diff) {
+              artifactCount = diff.touched;
+              artifactsCreated = diff.created;
+              artifactsModified = diff.modified;
+              designSystemCreated = diff.designSystemCreated;
+              previewModuleCount = diff.previewModuleCount;
+            } else {
+              artifactCount = toolStreamArtifactCount();
+              designSystemCreated = toolStreamDesignSystemCreated();
+              previewModuleCount = toolStreamPreviewModuleCount();
+            }
           } else {
             artifactCount = toolStreamArtifactCount();
             designSystemCreated = toolStreamDesignSystemCreated();
             previewModuleCount = toolStreamPreviewModuleCount();
           }
-        } else {
-          artifactCount = toolStreamArtifactCount();
-          designSystemCreated = toolStreamDesignSystemCreated();
-          previewModuleCount = toolStreamPreviewModuleCount();
         }
         const activationMilestones = deriveActivationMilestones({
           result,
@@ -1159,7 +1252,12 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         });
         const finishedModelId = hasExplicitRequestedModelForAnalytics(reqBody.model)
           ? modelIdForTracking(reqBody.model)
-          : modelIdForTracking(usageAnalytics.agent_reported_model);
+          : modelIdForTracking(
+              usageAnalytics.agent_reported_model ?? run.resolvedModelId,
+            );
+        const runtimeVersions = getDetectedRuntimeVersions(run.agentId);
+        const agentCliVersion =
+          run.preflightAgentCliVersion ?? runtimeVersions?.agentCliVersion;
         for (const [index, retryEvent] of runRetryEventsForAnalytics(run.events).entries()) {
           design.analytics.capture({
             eventName: retryEvent.event,
@@ -1169,7 +1267,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
             insertId: `${runInsertId}-${retryEvent.event}-${index}`,
           });
         }
-        design.analytics.capture({
+        await Promise.resolve(design.analytics.capture({
           eventName: 'run_finished',
           context: analyticsContext,
           appVersion: design.getAppVersion(),
@@ -1181,6 +1279,11 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
             stable_prompt_hash: run.promptCache?.stablePromptHash,
             stable_prompt_cache_hit: run.promptCache?.hit,
             stable_prompt_cache_miss_reason: run.promptCache?.missReason,
+            // Which stable-prefix input drifted, for miss_reason
+            // 'stable-prompt-changed' only. `unattributed` means the prefix
+            // moved but no tracked section did — a coverage gap in
+            // prompts/stable-sections.ts, not a cause.
+            stable_prompt_changed_sections: run.promptCache?.changedSections ?? undefined,
             area: isDesignSystemRun ? 'design_system_generation' : 'chat_panel',
             result,
             ...(activationMilestones ? { $set_once: activationMilestones } : {}),
@@ -1191,6 +1294,33 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
             asked_user_question: runAskedUserQuestion(run.events),
             retry_attempt_count: run.retryAttemptCount ?? 0,
             retry_final_result: run.retryFinalResult ?? 'not_attempted',
+            ...(agentCliVersion
+              ? { agent_cli_version: agentCliVersion }
+              : {}),
+            ...(runtimeVersions?.runtimeCompanionName
+              ? { runtime_companion_name: runtimeVersions.runtimeCompanionName }
+              : {}),
+            ...(runtimeVersions?.runtimeCompanionVersion
+              ? { runtime_companion_version: runtimeVersions.runtimeCompanionVersion }
+              : {}),
+            ...(run.retryOriginalFailure?.failure_category
+              ? {
+                  retry_original_failure_category:
+                    run.retryOriginalFailure.failure_category,
+                }
+              : {}),
+            ...(run.retryOriginalFailure?.failure_detail
+              ? {
+                  retry_original_failure_detail:
+                    run.retryOriginalFailure.failure_detail,
+                }
+              : {}),
+            ...(run.retryOriginalFailure?.failure_stage
+              ? {
+                  retry_original_failure_stage:
+                    run.retryOriginalFailure.failure_stage,
+                }
+              : {}),
             ...(run.retrySuppressedReason
               ? { retry_suppressed_reason: run.retrySuppressedReason }
               : {}),
@@ -1201,6 +1331,12 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
             } : {}),
             ...timingAnalytics,
             ...diagnosticsAnalytics,
+            // E-lite: `approval_requested`/`tool_result_sent` ride in via
+            // `...diagnosticsAnalytics`; these two come off the run object.
+            stdin_backpressure: run.stdinBackpressure === true,
+            ...(typeof run.lastAgentActivityAt === 'number'
+              ? { last_progress_age_ms: Math.max(0, analyticsCapturedAt - run.lastAgentActivityAt) }
+              : {}),
             langfuse_trace_id: run.id,
             ...langfuseDeliveryForAnalytics,
             ...(errorCode ? { error_code: errorCode } : {}),
@@ -1248,7 +1384,8 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
             token_count_source: usageAnalytics.token_count_source,
           },
           insertId: `${runInsertId}-finish`,
-        });
+        }));
+        design.runs.markAnalyticsCompleted?.(run);
       }).catch(() => {});
     }
   });
@@ -1459,13 +1596,38 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     if (!toolBundleSupport.ok) {
       return sendApiError(res, 400, 'BAD_REQUEST', toolBundleSupport.message);
     }
+    // A chat run may only attach to a conversation owned by its own project.
+    // Without this guard, pairing projectId=A with a conversationId owned by
+    // project B runs in A's cwd but pins messages and the native session under
+    // B — corrupting B's history and resume identity. Mirror the ownership
+    // check the sibling routes already enforce (handoff.ts, terminal.ts).
+    if (typeof requestBody.projectId === 'string' && requestBody.projectId &&
+        typeof requestBody.conversationId === 'string' && requestBody.conversationId) {
+      const chatConversation = getConversation(db, requestBody.conversationId);
+      if (chatConversation && chatConversation.projectId !== requestBody.projectId) {
+        return sendApiError(res, 404, 'CONVERSATION_NOT_FOUND', 'conversation not found for project');
+      }
+    }
     const meta = {
       ...requestBody,
       mediaExecution: mediaExecution.policy,
       toolBundle: toolBundle.bundle,
       ...(chatProject?.metadata ? { projectMetadata: chatProject.metadata } : {}),
     };
+    if (!hasCompleteByokOpenCodeConfig(meta)) {
+      return sendApiError(
+        res,
+        400,
+        'VALIDATION_FAILED',
+        BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE,
+      );
+    }
     const run = design.runs.create(meta);
+    try {
+      pinAssistantMessageOnRunCreate(db, run);
+    } catch (err) {
+      console.warn('[chat] message create pin failed', err);
+    }
     design.runs.stream(run, req, res);
     reconcileAssistantMessageOnRunEnd(db, design.runs, run);
     design.runs.start(run, () => startChatRun(meta, run));

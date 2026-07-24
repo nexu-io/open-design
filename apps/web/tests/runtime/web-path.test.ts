@@ -1,6 +1,16 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { apiPath, assetPath, webPathConfig, withWebBasePath } from '../../src/runtime/web-path';
+import {
+  apiFetch,
+  apiPath,
+  assetPath,
+  webPathConfig,
+  withWebBasePath,
+} from '../../src/runtime/web-path';
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe('web path helpers', () => {
   it('keeps the root deployment compatible', () => {
@@ -14,5 +24,14 @@ describe('web path helpers', () => {
     // behavior is pinned by the pure package tests and the Next build/e2e
     // matrix, because Vite cannot re-evaluate NEXT_PUBLIC_* substitutions.
     expect(withWebBasePath('/api/projects')).toBe('/api/projects');
+  });
+
+  it('preserves native fetch arity when request init is omitted', async () => {
+    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await apiFetch('/api/projects');
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/projects');
   });
 });

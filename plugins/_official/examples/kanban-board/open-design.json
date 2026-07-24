@@ -24,6 +24,7 @@
     "en": "Kanban Board"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "Kanban / task board with columns (To do / In progress / In review / Done), draggable-looking cards, assignee avatars, swimlanes, and a top filter bar. Use when the brief mentions \"kanban\", \"task board\", \"sprint board\", \"trello\", \"看板\".",
   "description_i18n": {
     "zh-CN": "看板/任务面板，包含多个列（待办/进行中/审核中/已完成）、可拖动样式的卡片、成员头像、泳道和顶部筛选栏。当需求中提到'kanban'、'task board'、'sprint board'、'trello'、'看板'时使用。",

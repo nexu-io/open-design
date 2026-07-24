@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 import ts from "typescript";
 
 import { checkCrossAppImports } from "./check-cross-app-imports.ts";
+import { checkTsNocheckImports } from "./check-ts-nocheck-imports.ts";
 import { checkDesignSystemManifests } from "./check-design-system-manifests.ts";
 import { checkDesignSystemPackageQuality } from "./check-design-system-package-quality.ts";
 import { checkDesignSystemComponentFixtureReport } from "./check-components-fixtures.ts";
@@ -499,6 +500,28 @@ async function collectTestLayoutViolations(directory: string): Promise<string[]>
   }
 
   return violations;
+}
+
+async function checkScriptsTestFree(): Promise<boolean> {
+  const scriptsFiles = await collectRepositoryFiles(path.join(repoRoot, "scripts"), testLayoutSkippedDirectories);
+  const violations = scriptsFiles.filter(isScriptTestFile);
+
+  if (violations.length > 0) {
+    console.error(
+      "Root scripts/ is test-free: move behavior-contract coverage to e2e/tests/scripts/ (see e2e/AGENTS.md):",
+    );
+    for (const violation of violations) {
+      console.error(`- ${violation}`);
+    }
+    return false;
+  }
+
+  console.log("Scripts test-free check passed: no test files under root scripts/.");
+  return true;
+}
+
+export function isScriptTestFile(repositoryPath: string): boolean {
+  return /\.test\.[^/]+$/.test(repositoryPath);
 }
 
 async function checkTestLayout(): Promise<boolean> {
@@ -1276,13 +1299,12 @@ async function checkCiTopology(): Promise<boolean> {
       "ci_mode: ${{ steps.detect.outputs.ci_mode }}",
       "ui_p0_validation_required: ${{ steps.detect.outputs.ui_p0_validation_required }}",
       "run_ui_p0: ${{ steps.detect.outputs.run_ui_p0 }}",
-      "run_nix_validation: ${{ steps.detect.outputs.run_nix_validation }}",
       "ui_p0_matrix: ${{ steps.detect.outputs.ui_p0_matrix }}",
       "visual_matrix: ${{ steps.detect.outputs.visual_matrix }}",
       "include: ${{ fromJSON(needs.scopes.outputs.ui_p0_matrix) }}",
       "include: ${{ fromJSON(needs.scopes.outputs.visual_matrix) }}",
       "needs.scopes.outputs.run_ui_p0 == 'true'",
-      "pnpm -C e2e exec tsx scripts/playwright.ts run-ui-group smoke",
+      "pnpm -C e2e exec tsx scripts/playwright.ts run-ui-group critical-extras",
       "pnpm -C e2e exec tsx scripts/playwright.ts run-ui-group ${{ matrix.shard }}",
     ]
       .filter((needle) => !ciWorkflow.includes(needle))
@@ -1304,7 +1326,9 @@ const checks: GuardCheck[] = [
   { name: "package dependency specs", run: checkPackageDependencySpecs },
   { name: "product neutrality", run: checkProductNeutrality },
   { name: "cross-app imports", run: checkCrossAppImports },
+  { name: "@ts-nocheck import resolution", run: checkTsNocheckImports },
   { name: "test layout", run: checkTestLayout },
+  { name: "scripts test-free", run: checkScriptsTestFree },
   { name: "e2e layout", run: checkE2eLayout },
   { name: "web test layout", run: checkWebTestLayout },
   { name: "web import isolation", run: checkWebImportIsolation },

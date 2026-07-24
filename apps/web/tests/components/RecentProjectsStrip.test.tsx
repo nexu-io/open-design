@@ -38,10 +38,10 @@ vi.mock('../../src/providers/registry', () => ({
       ];
     }
     if (projectId === 'project-html') {
-      return [{ name: 'index.html', kind: 'html', mtime: 2 }];
+      return [{ name: 'index.html', kind: 'html', mtime: 200 }];
     }
     if (projectId === 'project-deck') {
-      return [{ name: 'index.html', kind: 'html', mtime: 2 }];
+      return [{ name: 'index.html', kind: 'html', mtime: 400 }];
     }
     return [];
   }),
@@ -76,6 +76,16 @@ function projects(count: number): Project[] {
       updatedAt: count - index,
     }),
   );
+}
+
+function stubCoverProbe(status = 200, statusText = 'OK') {
+  const fetchMock = vi.fn(async () => ({
+    ok: status >= 200 && status < 300,
+    status,
+    statusText,
+  }) as Response);
+  vi.stubGlobal('fetch', fetchMock);
+  return fetchMock;
 }
 
 describe('RecentProjectsStrip', () => {
@@ -173,6 +183,8 @@ describe('RecentProjectsStrip', () => {
   });
 
   it('matches project cards with previews and design-system tags', async () => {
+    stubCoverProbe();
+
     const { container } = render(
       <RecentProjectsStrip
         projects={[
@@ -205,10 +217,12 @@ describe('RecentProjectsStrip', () => {
     await waitFor(() => {
       expect(designSystemCard?.querySelector('.recent-projects__card-thumb-image img')).toBeTruthy();
       expect(designSystemCard?.querySelector('img')?.getAttribute('src')).toBe(
-        '/api/projects/project-ds/files/imagery/cover-0.png',
+        '/api/projects/project-ds/files/imagery/cover-0.png?v=3',
       );
-      expect(container.querySelector('.recent-projects__card-thumb-html iframe')).toBeNull();
-      expect(container.querySelector('.recent-projects__card-thumb-html .recent-projects__card-glyph')).toBeTruthy();
+      const htmlFrame = container.querySelector<HTMLIFrameElement>('.recent-projects__card-thumb-html iframe');
+      expect(htmlFrame).toBeTruthy();
+      expect(htmlFrame?.getAttribute('src')).toBe('/api/projects/project-html/files/index.html?v=200');
+      expect(container.querySelector('.recent-projects__card-thumb-html .recent-projects__card-glyph')).toBeNull();
     });
   });
 
@@ -236,14 +250,13 @@ describe('RecentProjectsStrip', () => {
     await waitFor(() => {
       expect(designSystemCard?.querySelector('.recent-projects__card-thumb-logo img')).toBeTruthy();
       expect(designSystemCard?.querySelector('img')?.getAttribute('src')).toBe(
-        '/api/projects/project-ds-fallback/files/logos/wordmark.svg',
+        '/api/projects/project-ds-fallback/files/logos/wordmark.svg?v=3',
       );
     });
   });
 
-  it('does not run HTML or deck previews inside recent project cards', async () => {
-    const fetchMock = vi.fn();
-    vi.stubGlobal('fetch', fetchMock);
+  it('renders HTML and deck covers from the current file URL', async () => {
+    const fetchMock = stubCoverProbe();
 
     const { container } = render(
       <RecentProjectsStrip
@@ -269,11 +282,51 @@ describe('RecentProjectsStrip', () => {
     const htmlCard = container.querySelector('[data-project-id="project-html"]');
 
     await waitFor(() => {
-      expect(deckCard?.querySelector('iframe')).toBeNull();
-      expect(htmlCard?.querySelector('iframe')).toBeNull();
-      expect(deckCard?.querySelector('.recent-projects__card-glyph')).toBeTruthy();
-      expect(htmlCard?.querySelector('.recent-projects__card-glyph')).toBeTruthy();
+      expect(deckCard?.querySelector('iframe')?.getAttribute('src')).toBe(
+        '/api/projects/project-deck/files/index.html?v=400',
+      );
+      expect(htmlCard?.querySelector('iframe')?.getAttribute('src')).toBe(
+        '/api/projects/project-html/files/index.html?v=200',
+      );
+      expect(deckCard?.querySelector('.recent-projects__card-glyph')).toBeNull();
+      expect(htmlCard?.querySelector('.recent-projects__card-glyph')).toBeNull();
     });
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/projects/project-deck/files/index.html?v=400',
+      expect.objectContaining({ cache: 'no-store', method: 'HEAD' }),
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/projects/project-html/files/index.html?v=200',
+      expect.objectContaining({ cache: 'no-store', method: 'HEAD' }),
+    );
+  });
+
+  it('falls back to the glyph and logs when an HTML cover is unavailable', async () => {
+    stubCoverProbe(404, 'Not Found');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const { container } = render(
+      <RecentProjectsStrip
+        projects={[
+          project({
+            id: 'project-html',
+            name: 'Web Prototype',
+            updatedAt: 3,
+          }),
+        ]}
+        onOpen={() => {}}
+        onViewAll={() => {}}
+      />,
+    );
+
+    await waitFor(() => {
+      const htmlThumb = container.querySelector('.recent-projects__card-thumb-html');
+      expect(htmlThumb?.querySelector('iframe')).toBeNull();
+      expect(htmlThumb?.querySelector('.recent-projects__card-glyph')?.textContent).toBe('W');
+      expect(warn).toHaveBeenCalledWith(
+        '[project-cover] HTML cover unavailable (404 Not Found):',
+        'project-html:index.html',
+      );
+    });
   });
 });

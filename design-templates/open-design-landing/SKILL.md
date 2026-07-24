@@ -280,7 +280,7 @@ Before marking done, the agent **must** verify:
 ## Files in this skill
 
 ```text
-skills/open-design-landing/
+design-templates/open-design-landing/
 ├── SKILL.md                 # this contract
 ├── README.md                # quick-start
 ├── schema.ts                # typed inputs (single source of truth)
@@ -317,4 +317,4 @@ skills/open-design-landing/
 
 - [`design-systems/atelier-zero/DESIGN.md`](../../design-systems/atelier-zero/DESIGN.md) — token spec.
 - [`apps/landing-page/`](../../apps/landing-page/) — deployable Astro static counterpart.
-- [`skills/open-design-landing-deck/`](../open-design-landing-deck/) — sibling slides skill that reuses this design system.
+- [`design-templates/open-design-landing-deck/`](../open-design-landing-deck/) — sibling slides skill that reuses this design system.

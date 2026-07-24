@@ -69,7 +69,9 @@ export function isOpenDesignHostBridge(value: unknown): value is OpenDesignHostB
     !hasFunction(updater, "download") ||
     !hasFunction(updater, "install") ||
     !hasFunction(updater, "quit") ||
-    !hasFunction(updater, "subscribe")
+    !hasFunction(updater, "setMenuLabels") ||
+    !hasFunction(updater, "subscribe") ||
+    !hasFunction(updater, "subscribeOpenDialog")
   ) {
     return false;
   }

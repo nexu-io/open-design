@@ -105,6 +105,7 @@ export const HIDE_CHROME_SELECTOR =
 // mode clones (`.mini-slide .slide`, `.overview .slide`) are filtered out in the
 // page rather than via a rigid direct-child selector, which missed nested decks.
 const SLIDE_SELECTOR = ".slide, [data-screen-label], .deck-slide, .ppt-slide";
+export const DECK_STAGE_SELECTOR = "deck-stage, #deck-stage, .deck-stage";
 // JS expression (used inside executeJavaScript) returning the real slides.
 const REAL_SLIDES_JS =
   "Array.prototype.slice.call(document.querySelectorAll('.slide, [data-screen-label], .deck-slide, .ppt-slide')).filter(function(el){return !el.closest('.mini-slide, .overview, .notes-overlay, .thumb')})";
@@ -214,7 +215,7 @@ export async function renderDeckSlides(
     // Deck mode only: now apply the deck DOM prep (hide presenter chrome, freeze
     // animations) so each slide reaches its final state for capture.
     await window.webContents.executeJavaScript(
-      `(${prepareDeckStage.toString()})(${JSON.stringify(HIDE_CHROME_SELECTOR)})`,
+      `(${prepareDeckStage.toString()})(${JSON.stringify(HIDE_CHROME_SELECTOR)}, ${JSON.stringify(DECK_STAGE_SELECTOR)})`,
       true,
     );
 
@@ -229,7 +230,10 @@ export async function renderDeckSlides(
     await nextFrames(window);
 
     // Pin the stage to the measured slide size.
-    await window.webContents.executeJavaScript(`(${pinDeckStage.toString()})(${stage.w}, ${stage.h})`, true);
+    await window.webContents.executeJavaScript(
+      `(${pinDeckStage.toString()})(${stage.w}, ${stage.h}, ${JSON.stringify(DECK_STAGE_SELECTOR)})`,
+      true,
+    );
 
     // Editable PPTX: hand the live, laid-out slides to the vendored dom-to-pptx
     // engine (native shapes/text) instead of capturing images.
@@ -336,7 +340,7 @@ export function requestedRenderSize(
 async function measureSlideStage(window: BrowserWindow): Promise<Stage> {
   try {
     const measured = (await window.webContents.executeJavaScript(
-      `(${measureSlide.toString()})(${JSON.stringify(SLIDE_SELECTOR)})`,
+      `(${measureSlide.toString()})(${JSON.stringify(SLIDE_SELECTOR)}, ${JSON.stringify(DECK_STAGE_SELECTOR)})`,
       true,
     )) as { w: number; h: number } | null;
     if (
@@ -363,7 +367,7 @@ async function measureSlideStage(window: BrowserWindow): Promise<Stage> {
 // matters for long decks where the loop dominates.
 async function showDeckSlide(window: BrowserWindow, i: number, stage: Stage): Promise<void> {
   const rect = (await window.webContents.executeJavaScript(
-    `(${showSlide.toString()})(${JSON.stringify(SLIDE_SELECTOR)}, ${i})`,
+    `(() => { const restoreActiveSlideCapture = ${restoreActiveSlideCapture.toString()}; return (${showSlide.toString()})(${JSON.stringify(SLIDE_SELECTOR)}, ${i}); })()`,
     true,
   )) as { x: number; y: number; w: number; h: number } | null;
   // If the active slide did not land in the top-left capture viewport (a
@@ -377,7 +381,7 @@ async function showDeckSlide(window: BrowserWindow, i: number, stage: Stage): Pr
     rect.h >= stage.h * 0.5;
   if (!onStage) {
     await window.webContents.executeJavaScript(
-      `(() => { const activeSlideCaptureOffsetTransform = ${activeSlideCaptureOffsetTransform.toString()}; return (${restackActiveSlide.toString()})(${JSON.stringify(SLIDE_SELECTOR)}, ${i}, ${stage.w}, ${stage.h}); })()`,
+      `(() => { const activeSlideCaptureOffsetTransform = ${activeSlideCaptureOffsetTransform.toString()}; const restoreActiveSlideCapture = ${restoreActiveSlideCapture.toString()}; return (${restackActiveSlide.toString()})(${JSON.stringify(SLIDE_SELECTOR)}, ${i}, ${stage.w}, ${stage.h}); })()`,
       true,
     );
     await nextFrames(window);
@@ -400,8 +404,10 @@ async function renderEditablePptx(
   );
   await nextFrames(window);
   await window.webContents.executeJavaScript(await loadDomToPptxBundle(), true);
+  // runDomToPptx calls cjkPromotedFontFamily by name; define it in the same scope
+  // as the serialized body so the reference resolves inside the render window.
   const out = (await window.webContents.executeJavaScript(
-    `(${runDomToPptx.toString()})(${JSON.stringify(SLIDE_SELECTOR)})`,
+    `(() => { const cjkPromotedFontFamily = ${cjkPromotedFontFamily.toString()}; return (${runDomToPptx.toString()})(${JSON.stringify(SLIDE_SELECTOR)}); })()`,
     true,
   )) as { b64?: string; error?: string };
   if (!out || out.error || !out.b64) {
@@ -427,8 +433,9 @@ async function renderEditablePptx(
 // cannot return a stale composited frame of the previous slide — the
 // duplicate-page race `capturePage` exhibits); falls back to `capturePage` when
 // the debugger isn't attached. `scale: 1` because the window's device-pixel
-// ratio already provides the pixel scale (avoids double-scaling).
-async function captureDeckSlide(
+// ratio already provides the pixel scale (avoids double-scaling). Exported so
+// focused tests can exercise the real selection/restack/capture orchestration.
+export async function captureDeckSlide(
   window: BrowserWindow,
   dbg: Electron.Debugger | null,
   i: number,
@@ -955,6 +962,46 @@ function showAllSlides(slideSelector: string): number {
   return slides.length;
 }
 
+// Picks the typeface the exported PPTX should name for a run of `text`, given its
+// CSS `font-family` stack. dom-to-pptx names ONE typeface per run — the first
+// family in the stack — and writes it to the PowerPoint `<a:latin>`, `<a:ea>`
+// (East-Asian) and `<a:cs>` slots alike. Our deck templates lead every stack
+// with a Latin-only webfont (e.g. `'Inter','Noto Sans SC',…`): the browser then
+// renders CJK glyphs with the later CJK family via per-glyph fallback, but the
+// export mislabels those runs with the Latin font — which has no CJK glyphs — so
+// PowerPoint, WPS, and Keynote each substitute a DIFFERENT fallback and the
+// Chinese/Japanese/Korean text renders wrong and inconsistently ("字体错乱").
+//
+// When `text` contains East-Asian characters and the stack carries a CJK-capable
+// family further down, return the stack reordered so that family leads (the whole
+// stack is preserved so the browser keeps its own per-glyph fallback). Returns
+// `null` when nothing needs to change (Latin-only text, no CJK family in the
+// stack, or a CJK family already leads) so callers can skip the element. Kept
+// pure and self-contained so it can be both unit-tested and serialized into the
+// export render window.
+export function cjkPromotedFontFamily(fontFamily: string, text: string): string | null {
+  // CJK symbols/punctuation, Hiragana, Katakana, CJK Unified Ideographs (+ Ext-A),
+  // Yi, Hangul syllables, CJK compatibility ideographs, and half/fullwidth forms.
+  const cjkText =
+    /[\u2E80-\u2FDF\u3000-\u303F\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF\uA000-\uA4CF\uAC00-\uD7AF\uF900-\uFAFF\uFF00-\uFFEF]/;
+  // Family names that carry CJK glyph coverage: the Noto SC/TC/JP/KR webfonts the
+  // html-ppt templates ship, plus common system CJK faces an authored deck may
+  // name, so a promoted typeface resolves to a real CJK font across the office
+  // suites instead of each app's arbitrary fallback.
+  const cjkFamily =
+    /noto\s*(sans|serif)\s*(sc|tc|hk|jp|kr|cjk)|source\s*han|pingfang|hiragino|heiti|songti|kaiti|fangsong|microsoft\s*(yahei|jhenghei)|yahei|simsun|simhei|mingliu|meiryo|ms\s*(gothic|mincho)|malgun|nanum|gulim|batang|dotum|思源|苹方|黑体|宋体|楷体|仿宋|微软雅黑|明體|明朝|ゴシック/i;
+  if (!fontFamily || !cjkText.test(text || "")) return null;
+  const families = fontFamily
+    .split(",")
+    .map((f) => f.trim())
+    .filter(Boolean);
+  if (families.length < 2) return null;
+  const firstCjk = families.findIndex((f) => cjkFamily.test(f.replace(/^["']|["']$/g, "").trim()));
+  // No CJK family to promote, or one already leads the stack.
+  if (firstCjk <= 0) return null;
+  return [families[firstCjk], ...families.filter((_, i) => i !== firstCjk)].join(", ");
+}
+
 // Serialized into the page: runs the injected dom-to-pptx engine over every real
 // slide and returns the .pptx bytes as base64 (or an error). Fonts are
 // auto-detected + embedded; SVGs stay vector (editable in PowerPoint).
@@ -1085,6 +1132,33 @@ export async function runDomToPptx(slideSelector: string): Promise<{ b64?: strin
     }
   }
 
+  // Reorder each text run's font-family so CJK runs name their CJK typeface (not
+  // the Latin webfont that leads our template stacks) before dom-to-pptx reads it,
+  // so PowerPoint/WPS/Keynote all resolve the same real font. See
+  // cjkPromotedFontFamily for the why. Keyed on the element that directly owns the
+  // text so a container that only holds Latin markup is never rewritten. Decide on
+  // the element's COMBINED direct text: bilingual markup often splits one element
+  // across text nodes (`Product Launch<br>产品发布`, `Welcome <strong>…</strong> 欢迎`),
+  // so a later CJK chunk must still win even when a Latin chunk comes first.
+  function promoteCjkTypefaces(slides: HTMLElement[]): void {
+    const touched = new Set<HTMLElement>();
+    for (const slide of slides) {
+      const walker = document.createTreeWalker(slide, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        const el = node.parentElement;
+        if (!el || touched.has(el)) continue;
+        touched.add(el);
+        let combined = "";
+        for (const child of el.childNodes) {
+          if (child.nodeType === Node.TEXT_NODE) combined += child.nodeValue || "";
+        }
+        if (!combined.trim()) continue;
+        const promoted = cjkPromotedFontFamily(getComputedStyle(el).fontFamily, combined);
+        if (promoted) el.style.setProperty("font-family", promoted, "important");
+      }
+    }
+  }
+
   try {
     const w = window as unknown as {
       domToPptx?: { exportToPptx: (target: unknown, options: unknown) => Promise<Blob> };
@@ -1098,6 +1172,7 @@ export async function runDomToPptx(slideSelector: string): Promise<{ b64?: strin
     if (slides.length === 0) return { error: "no slides to export" };
     ensureExplicitSlideBackgrounds(slides as HTMLElement[]);
     stabilizeLargeSingleLineText(slides as HTMLElement[]);
+    promoteCjkTypefaces(slides as HTMLElement[]);
     // dom-to-pptx assumes `node.className` is a string, but SVG elements expose
     // an SVGAnimatedString, so its DOM walk throws on decks containing inline SVG.
     // Normalize those to a plain string in this throwaway render window.
@@ -1140,7 +1215,7 @@ export async function runDomToPptx(slideSelector: string): Promise<{ b64?: strin
 // chrome, switch any <deck-stage> runtime to authored (1:1) size, and freeze
 // animations/transitions so each slide (and its reveal-on-show inner elements,
 // e.g. `.slide.visible .reveal`) reaches its final state.
-function prepareDeckStage(hideSelector: string): void {
+export function prepareDeckStage(hideSelector: string, stageSelector: string): void {
   document.querySelectorAll(hideSelector).forEach((el) => {
     (el as HTMLElement).style.setProperty("display", "none", "important");
   });
@@ -1150,8 +1225,11 @@ function prepareDeckStage(hideSelector: string): void {
   // it here (no-op for plain `.slide` decks that have no <deck-stage>), or a
   // deck whose authored canvas differs from the 1920x1080 capture viewport would
   // be measured + captured at the preview-scaled size instead of 1:1.
-  document.querySelectorAll("deck-stage").forEach((el) => {
+  document.querySelectorAll(stageSelector).forEach((el) => {
     el.setAttribute("noscale", "");
+    const style = (el as HTMLElement).style;
+    style.setProperty("transform", "none", "important");
+    style.setProperty("transform-origin", "top left", "important");
   });
   const s = document.createElement("style");
   s.textContent =
@@ -1162,11 +1240,11 @@ function prepareDeckStage(hideSelector: string): void {
 // Deck-only: pin to the measured WxH stage so each slide captures
 // deterministically. NOT applied in page mode — an ordinary page must keep its
 // natural width/height.
-function pinDeckStage(w: number, h: number): void {
+function pinDeckStage(w: number, h: number, stageSelector: string): void {
   const style = document.createElement("style");
   style.textContent =
     `html,body{margin:0!important;padding:0!important;width:${w}px!important;height:${h}px!important;overflow:hidden!important}` +
-    `.deck,deck-stage{width:${w}px!important;height:${h}px!important}`;
+    `.deck,${stageSelector}{width:${w}px!important;height:${h}px!important}`;
   document.head.appendChild(style);
 }
 
@@ -1174,7 +1252,7 @@ function pinDeckStage(w: number, h: number): void {
 // that already has a non-zero layout rect (covers decks that hide inactive
 // slides via opacity/visibility); if every slide is display:none, force-measures
 // the first one off-screen. Returns the authored DIP size or null.
-function measureSlide(slideSelector: string): { w: number; h: number } | null {
+function measureSlide(slideSelector: string, stageSelector: string): { w: number; h: number } | null {
   function positiveCssNumber(value: unknown): number | null {
     if (typeof value === "number") return Number.isFinite(value) && value > 1 ? value : null;
     if (typeof value !== "string") return null;
@@ -1195,10 +1273,17 @@ function measureSlide(slideSelector: string): { w: number; h: number } | null {
       (stage as unknown as { designHeight?: unknown }).designHeight,
     );
     if (byProp) return byProp;
-    return sizePair(stage.getAttribute("width"), stage.getAttribute("height"));
+    const byAttr = sizePair(stage.getAttribute("width"), stage.getAttribute("height"));
+    if (byAttr) return byAttr;
+    const byStyle = sizePair(stage.style?.width, stage.style?.height);
+    if (byStyle) return byStyle;
+    const computed = window.getComputedStyle?.(stage);
+    const byComputed = computed ? sizePair(computed.width, computed.height) : null;
+    if (byComputed) return byComputed;
+    return sizePair(stage.offsetWidth, stage.offsetHeight);
   }
   function measureAuthored(el: HTMLElement): { w: number; h: number } | null {
-    const stage = el.closest("deck-stage") as HTMLElement | null;
+    const stage = el.closest(stageSelector) as HTMLElement | null;
     const stageSize = stage ? deckStageAuthoredSize(stage) : null;
     if (stageSize) return stageSize;
     const attrSize = sizePair(el.getAttribute("width"), el.getAttribute("height"));
@@ -1243,7 +1328,7 @@ function measureSlide(slideSelector: string): { w: number; h: number } | null {
 // is intentionally left to the caller as a last resort because it includes
 // fit-to-viewport transforms.
 export function measureAuthoredSlideBox(el: HTMLElement): { w: number; h: number } | null {
-  const stage = el.closest("deck-stage") as HTMLElement | null;
+  const stage = el.closest(DECK_STAGE_SELECTOR) as HTMLElement | null;
   const stageSize = stage ? deckStageAuthoredSize(stage) : null;
   if (stageSize) return stageSize;
 
@@ -1270,7 +1355,15 @@ function deckStageAuthoredSize(stage: HTMLElement): { w: number; h: number } | n
     (stage as unknown as { designHeight?: unknown }).designHeight,
   );
   if (byProp) return byProp;
-  return sizePair(stage.getAttribute("width"), stage.getAttribute("height"));
+  const byAttr = sizePair(stage.getAttribute("width"), stage.getAttribute("height"));
+  if (byAttr) return byAttr;
+  const byStyle = sizePair(stage.style?.width, stage.style?.height);
+  if (byStyle) return byStyle;
+  const view = stage.ownerDocument?.defaultView;
+  const computed = view?.getComputedStyle?.(stage);
+  const byComputed = computed ? sizePair(computed.width, computed.height) : null;
+  if (byComputed) return byComputed;
+  return sizePair(stage.offsetWidth, stage.offsetHeight);
 }
 
 function sizePair(w: unknown, h: unknown): { w: number; h: number } | null {
@@ -1289,10 +1382,34 @@ function positiveCssNumber(value: unknown): number | null {
   return Number.isFinite(n) && n > 1 ? n : null;
 }
 
+// Restores the live slide moved into the capture layer before the next slide is
+// selected. The temporary style overrides are capture-only and must not leak
+// into later selector/index passes.
+export function restoreActiveSlideCapture(): void {
+  const layer = document.getElementById("__od_export_active_slide_capture") as
+    | (HTMLElement & {
+        __odSourceStyles?: Array<{ name: string; priority: string; value: string }>;
+      })
+    | null;
+  if (!layer) return;
+  const placeholder = document.getElementById("__od_export_active_slide_placeholder");
+  const liveSlide = layer.firstElementChild?.firstElementChild as HTMLElement | null;
+  if (placeholder?.parentNode && liveSlide) {
+    placeholder.parentNode.moveBefore(liveSlide, placeholder);
+    placeholder.remove();
+    for (const { name, priority, value } of layer.__odSourceStyles ?? []) {
+      if (value) liveSlide.style.setProperty(name, value, priority);
+      else liveSlide.style.removeProperty(name);
+    }
+  }
+  layer.remove();
+}
+
 // Returns a Promise that resolves after the style change has settled for two
 // animation frames, so the caller can show + wait in a single round trip.
-function showSlide(slideSelector: string, index: number): Promise<{ x: number; y: number; w: number; h: number } | null> {
-  document.getElementById("__od_export_active_slide_capture")?.remove();
+// Exported so focused tests can drive the real per-slide selection.
+export function showSlide(slideSelector: string, index: number): Promise<{ x: number; y: number; w: number; h: number } | null> {
+  restoreActiveSlideCapture();
   const slides = Array.prototype.slice
     .call(document.querySelectorAll(slideSelector))
     .filter((el) => !(el as HTMLElement).closest(".mini-slide, .overview, .notes-overlay, .thumb"));
@@ -1300,16 +1417,35 @@ function showSlide(slideSelector: string, index: number): Promise<{ x: number; y
   // the slide (incl. visibility:hidden->visible and reveal animations), plus
   // inline overrides as a backstop for decks that hide via opacity/visibility.
   const activeClasses = ["active", "visible", "is-active", "current"];
+  // The injected <deck-stage> fallback (packages/contracts/src/runtime/
+  // deck-stage-fallback.ts) hides slotted slides with an `!important` shadow rule
+  // and reveals ONLY the one carrying `data-od-deck-active`. We toggle exactly that
+  // attribute. We do NOT also set the real deck-stage.js runtime's
+  // `data-deck-active`: it is unnecessary for reveal (mechanism 1 below already
+  // reveals that runtime's slides), and skipping it keeps the export from depending
+  // on the prepareDeckStage() animation freeze to neutralize any authored
+  // `[data-deck-active]`-keyed entrance motion.
+  const activeAttributes = ["data-od-deck-active"];
   slides.forEach((node, k) => {
     const el = node as HTMLElement;
     const on = k === index;
-    el.style.transition = "none";
-    el.style.animation = "none";
-    el.style.opacity = on ? "1" : "0";
-    el.style.visibility = on ? "visible" : "hidden";
-    el.style.pointerEvents = on ? "auto" : "none";
-    el.style.zIndex = on ? "999" : "0";
+    // Reveal the captured slide through the two mechanisms real decks actually use:
+    //   1. Inline `!important` styles beat a deck's own NON-important hide rules —
+    //      the real <deck-stage> runtime's `::slotted(*){visibility:hidden}` and
+    //      class-based `.slide` decks — because importance wins outright there.
+    //   2. The `data-od-deck-active` attribute is the ONLY thing that reveals the
+    //      fallback, whose hide rule is `::slotted(*){visibility:hidden!important}`
+    //      in its shadow root: a shadow-tree `!important` declaration beats an outer
+    //      inline `!important` one (for `!important`, the inner context wins), so
+    //      inline styles alone cannot reveal a fallback slide — the attribute can.
+    el.style.setProperty("transition", "none", "important");
+    el.style.setProperty("animation", "none", "important");
+    el.style.setProperty("opacity", on ? "1" : "0", "important");
+    el.style.setProperty("visibility", on ? "visible" : "hidden", "important");
+    el.style.setProperty("pointer-events", on ? "auto" : "none", "important");
+    el.style.setProperty("z-index", on ? "999" : "0", "important");
     activeClasses.forEach((c) => el.classList.toggle(c, on));
+    activeAttributes.forEach((a) => el.toggleAttribute(a, on));
   });
   // Report where the active slide actually landed after two frames, so the
   // capturer can detect a slide that the deck keeps off-screen (e.g. a
@@ -1327,19 +1463,21 @@ function showSlide(slideSelector: string, index: number): Promise<{ x: number; y
   });
 }
 
-// Serialized into the page: overlays a capture-only clone of the active slide in
-// the top-left viewport for decks that position the real slide elsewhere
-// (translated carousel strip). The real DOM tree is left intact: authored
-// transforms on the slide or its wrappers must continue to affect layout exactly
-// as they do in the preview.
-function restackActiveSlide(slideSelector: string, index: number, w: number, h: number): void {
-  document.getElementById("__od_export_active_slide_capture")?.remove();
+// Serialized into the page: temporarily moves the live active slide into a
+// capture-only layer for decks that position it outside the viewport (translated
+// carousel strip). A state-preserving DOM move rather than cloning keeps
+// canvas/WebGL bitmaps, media frames, iframe browsing state, and other runtime
+// content continuously connected in the only paintable subtree. Align from its
+// live rect after insertion: moving outside a translated parent drops that
+// parent's transform, so reusing the source rect would apply the lost offset a
+// second time.
+export function restackActiveSlide(slideSelector: string, index: number, w: number, h: number): void {
+  restoreActiveSlideCapture();
   const slides = Array.prototype.slice
     .call(document.querySelectorAll(slideSelector))
     .filter((el) => !(el as HTMLElement).closest(".mini-slide, .overview, .notes-overlay, .thumb"));
   const el = slides[index] as HTMLElement | undefined;
   if (!el) return;
-  const rect = el.getBoundingClientRect();
   const layer = document.createElement("div");
   layer.id = "__od_export_active_slide_capture";
   layer.setAttribute("aria-hidden", "true");
@@ -1363,16 +1501,27 @@ function restackActiveSlide(slideSelector: string, index: number, w: number, h: 
     "top:0",
     `width:${w}px`,
     `height:${h}px`,
-    `transform:${activeSlideCaptureOffsetTransform(rect)}`,
     "transform-origin:top left",
   ].join("!important;") + "!important";
 
-  const clone = el.cloneNode(true) as HTMLElement;
-  clone.style.setProperty("opacity", "1", "important");
-  clone.style.setProperty("visibility", "visible", "important");
-  clone.style.setProperty("pointer-events", "none", "important");
-  clone.style.setProperty("z-index", "2147483647", "important");
-  offset.appendChild(clone);
+  const sourceStyleNames = ["opacity", "visibility", "pointer-events", "z-index"];
+  (layer as typeof layer & {
+    __odSourceStyles: Array<{ name: string; priority: string; value: string }>;
+  }).__odSourceStyles = sourceStyleNames.map((name) => ({
+    name,
+    priority: el.style.getPropertyPriority(name),
+    value: el.style.getPropertyValue(name),
+  }));
+  const placeholder = document.createElement("template");
+  placeholder.id = "__od_export_active_slide_placeholder";
+  el.before(placeholder);
   layer.appendChild(offset);
   document.body.appendChild(layer);
+  el.style.setProperty("opacity", "1", "important");
+  el.style.setProperty("visibility", "visible", "important");
+  el.style.setProperty("pointer-events", "none", "important");
+  el.style.setProperty("z-index", "2147483647", "important");
+  offset.moveBefore(el, null);
+  const liveRect = el.getBoundingClientRect();
+  offset.style.setProperty("transform", activeSlideCaptureOffsetTransform(liveRect), "important");
 }

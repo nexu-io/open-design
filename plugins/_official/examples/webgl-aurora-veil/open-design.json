@@ -16,6 +16,7 @@
     "en": "Aurora Veil"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-07-08T17:29:38Z",
   "description": "A self-contained WebGL2 hero: layered aurora light curtains warped over a night sky scattered with stars; move the cursor to sway the veil.",
   "description_i18n": {
     "zh-CN": "自包含 WebGL2 主视觉：夜空之上扭曲的分层极光帘幕，点缀星光；移动光标摆动帘幕。",

@@ -24,6 +24,7 @@
     "en": "Wasteland Factory Chase"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "A cinematic prompt for a high-speed desert wasteland scene featuring a moving industrial factory on legs and a rebel bike chase.",
   "description_i18n": {
     "zh-CN": "用于生成荒漠高速追逐场景的电影级提示词，包含移动的工业腿式工厂和反叛摩托追击。",

@@ -1,0 +1,24 @@
+# Production Cloudflare Pages bindings. Keep this file in sync with the
+# production project before changing bindings: Pages deploy replaces the
+# project's binding set from this configuration.
+name = "open-design-landing"
+pages_build_output_dir = "out"
+compatibility_date = "2026-05-04"
+
+[[kv_namespaces]]
+binding = "CONTACT_LEADS"
+id = "20f7edc0bb0a4b9798437e79f4830501"
+
+[[kv_namespaces]]
+binding = "NEWSLETTER_SUBSCRIBERS"
+id = "1db91da7309c4135908c20f794204fcc"
+
+[[kv_namespaces]]
+binding = "ATTRIBUTION_KV"
+id = "3f0fd725887548c4a5a3f2c229cce95b"
+
+[[d1_databases]]
+binding = "ATTRIBUTION_DB"
+database_name = "open-design-landing-attribution"
+database_id = "17db8b2c-81ae-4f2b-aa93-d77f32d3c0d0"
+migrations_dir = "migrations"

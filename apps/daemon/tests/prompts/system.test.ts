@@ -249,6 +249,32 @@ describe('composeSystemPrompt', () => {
   // /system.ts exists for non-daemon contexts and was updated in the
   // hyperframes PR; without this test the two copies drift silently and the
   // main HyperFrames flow misses its preflight directive in production.
+  it('keeps the slim design charter out of media-surface prompts', () => {
+    // Reviewer finding (#5603): with slim as the server default, the charter
+    // head was composed before the media surface was known, so image/video/
+    // audio runs carried the turn-1 discovery mandate and HTML handoff rules
+    // alongside the media contract — two mutually exclusive workflow
+    // authorities. The media contract must stay the only one.
+    for (const surface of ['image', 'video', 'audio'] as const) {
+      const prompt = composeSystemPrompt({
+        promptCoreVariant: 'slim',
+        skillMode: surface,
+        metadata: { kind: surface } as any,
+      });
+      expect(prompt).not.toContain('<question-form id="discovery"');
+      expect(prompt).not.toContain('Quick brief — 30 seconds');
+      expect(prompt).not.toContain('Read once, in batches');
+      expect(prompt).not.toContain('Filesystem handoff is canonical');
+      // Nor the Ask-mode charter (fourth-round finding): CHAT_MODE_OVERRIDE
+      // forbids creating media, contradicting the media contract below.
+      expect(prompt).not.toContain('# Ask mode');
+      expect(prompt).toContain('media generate');
+    }
+    // Non-media slim runs keep the charter head.
+    const design = composeSystemPrompt({ promptCoreVariant: 'slim' });
+    expect(design).toContain('<question-form id="discovery"');
+  });
+
   it('injects the html-in-canvas preflight for the hyperframes skill', () => {
     const prompt = composeSystemPrompt({
       skillName: 'hyperframes',
@@ -332,6 +358,15 @@ describe('composeSystemPrompt', () => {
     expect(prompt).toContain('calc(var(--v) / var(--max)');
     expect(prompt).toContain('visible category label AND value label');
     expect(prompt).toContain('Mentally spot-check two bars');
+  });
+
+  it('pins the mermaid theme discipline inside the deck framework (dark decks)', () => {
+    const prompt = composeSystemPrompt({ skillMode: 'deck' });
+
+    expect(prompt).toContain('## Mermaid diagram theme discipline');
+    expect(prompt).toContain("theme: 'dark'");
+    expect(prompt).toContain('themeVariables');
+    expect(prompt).toContain('no dark-on-dark labels');
   });
 
   it('resolves a non-media primary surface ahead of composed media mentions', () => {

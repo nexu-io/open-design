@@ -13,7 +13,6 @@ import { EntryHelpMenu } from './EntryHelpMenu';
 import { Icon } from './Icon';
 import { useT } from '../i18n';
 import { LIBRARY_UI_VISIBLE } from '../features/libraryUi';
-import { publicPath } from '../runtime/web-path';
 
 export type EntryView =
   | 'home'
@@ -116,11 +115,9 @@ export function EntryNavRail({
             aria-label={brandLabel}
             data-testid="entry-nav-logo"
           >
-            <img
-              src={publicPath('/logo.svg')}
-              alt=""
-              className="entry-nav-rail__logo-img"
-              draggable={false}
+            <span
+              className="entry-nav-rail__logo-img od-brand-glyph"
+              aria-hidden="true"
             />
           </button>
           <button

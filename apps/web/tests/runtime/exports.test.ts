@@ -632,6 +632,8 @@ describe('exportProjectImageDataUrl', () => {
       fileName: 'screens/main page.html',
       index: 2,
       deck: false,
+      width: 390,
+      height: 844,
       versionId: 'v1',
     });
 
@@ -643,8 +645,29 @@ describe('exportProjectImageDataUrl', () => {
         fileName: 'screens/main page.html',
         index: 2,
         deck: false,
+        width: 390,
+        height: 844,
         versionId: 'v1',
       }),
+    });
+  });
+
+  it('omits viewport dimensions when the caller uses renderer defaults', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ error: { message: 'desktop only' } }), { status: 501 })),
+    );
+
+    await exportProjectImageDataUrl({
+      projectId: 'proj-1',
+      fileName: 'index.html',
+      deck: false,
+    });
+
+    expect(fetch).toHaveBeenCalledWith('/api/projects/proj-1/export/image', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ fileName: 'index.html', deck: false }),
     });
   });
 });

@@ -141,6 +141,39 @@ describe('web-clone example-card tracking', () => {
     ).toBe(true);
   });
 
+  it('renders the contracted Open Design site card with a local eager logo', async () => {
+    writeHomeGuideStage('done');
+    stubPlugins();
+    renderHome();
+
+    fireEvent.click(await screen.findByTestId('home-hero-rail-web-clone'));
+    const siteCard = (await screen.findAllByTestId('home-hero-prompt-example'))[0]!;
+    const logo = siteCard.querySelector<HTMLImageElement>('.home-hero__site-badge img');
+    expect(logo?.getAttribute('src')).toBe('/logo.svg');
+    expect(logo?.getAttribute('loading')).toBe('eager');
+    expect(logo?.getAttribute('fetchpriority')).toBe('high');
+  });
+
+  it('falls back when the local Open Design site card logo cannot load', async () => {
+    writeHomeGuideStage('done');
+    stubPlugins();
+    renderHome();
+
+    fireEvent.click(await screen.findByTestId('home-hero-rail-web-clone'));
+    const siteCard = (await screen.findAllByTestId('home-hero-prompt-example'))[0]!;
+    const localLogo = siteCard.querySelector<HTMLImageElement>('.home-hero__site-badge img');
+    expect(localLogo?.getAttribute('src')).toBe('/logo.svg');
+
+    fireEvent.error(localLogo!);
+    const remoteFallback = siteCard.querySelector<HTMLImageElement>('.home-hero__site-badge img');
+    expect(remoteFallback?.getAttribute('src')).toBe(
+      'https://www.google.com/s2/favicons?sz=128&domain=open-design.ai',
+    );
+
+    fireEvent.error(remoteFallback!);
+    expect(siteCard.querySelector('.home-hero__site-monogram')?.textContent).toBe('O');
+  });
+
   it('fires element=example_prompt with chip_id=web-clone when a text example is picked', async () => {
     writeHomeGuideStage('done');
     stubPlugins();

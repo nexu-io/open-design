@@ -24,6 +24,7 @@
     "en": "Social Media Post - Social Media Fashion Outfit Generation"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "A prompt to generate a week's worth of fashion blogger-style outfit recommendations based on a character profile, complete with item labels and prices.",
   "description_i18n": {
     "zh-CN": "根据角色档案生成一周时尚博主风格的穿搭推荐，包含单品标签和价格信息。",

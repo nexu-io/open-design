@@ -24,6 +24,7 @@
     "uk": "Головна сторінка Open Design"
   },
   "version": "1.0.0",
+  "publishedAt": "2026-07-09T12:42:32Z",
   "description": "A pixel-faithful mirror of the live open-design.ai homepage — an interactive WebGL/Three.js (React Three Fiber) hero built on Next.js. Features a real-time 3D \"Open Design\" wordmark (Draco-compressed geometry), a scattered sticker collage, custom variable fonts, cursor-reactive parallax, and scroll-driven motion. This is a first-party showcase of the visual ceiling Open Design targets for interactive marketing surfaces on the web — with all assets bundled locally (only the Draco decoder loads from a CDN, like the other WebGL examples), rendering in the sandboxed preview. Use as a reference for high-craft 3D landing pages, agent-native product sites, and motion-rich hero sections.",
   "description_i18n": {
     "en": "A pixel-faithful mirror of the live open-design.ai homepage — an interactive WebGL/Three.js (React Three Fiber) hero built on Next.js. Features a real-time 3D \"Open Design\" wordmark (Draco-compressed geometry), a scattered sticker collage, custom variable fonts, cursor-reactive parallax, and scroll-driven motion. This is a first-party showcase of the visual ceiling Open Design targets for interactive marketing surfaces on the web — with all assets bundled locally (only the Draco decoder loads from a CDN, like the other WebGL examples), rendering in the sandboxed preview. Use as a reference for high-craft 3D landing pages, agent-native product sites, and motion-rich hero sections.",

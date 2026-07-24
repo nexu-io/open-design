@@ -96,6 +96,12 @@ interface SearchableModelSelectProps
   onDisabledOptionUpgrade?: (option: AgentModelOption) => void;
   minSearchableOptions?: number;
   popoverMinWidth?: number;
+  getPopoverBoundary?: () => {
+    top?: number;
+    right?: number;
+    bottom?: number;
+    left?: number;
+  } | null;
 }
 
 export const SearchableModelSelect = forwardRef<
@@ -115,6 +121,7 @@ export const SearchableModelSelect = forwardRef<
     onDisabledOptionUpgrade,
     minSearchableOptions = 8,
     popoverMinWidth,
+    getPopoverBoundary,
     className,
     ...buttonProps
   },
@@ -123,11 +130,18 @@ export const SearchableModelSelect = forwardRef<
   const t = useT();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const [popoverStyle, setPopoverStyle] = useState<({ left: number; width: number; maxHeight: number } & ({ top: number; bottom?: never } | { bottom: number; top?: never })) | null>(null);
+  const [popoverStyle, setPopoverStyle] = useState<{
+    placement: 'above' | 'below';
+    offset: number;
+    left: number;
+    width: number;
+    maxHeight: number;
+  } | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const popoverRef = useRef<HTMLDivElement | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
+  const placementRef = useRef<'above' | 'below' | null>(null);
   const listboxId = useMemo(
     () => `model-picker-${Math.random().toString(36).slice(2, 10)}`,
     [],
@@ -205,28 +219,84 @@ export const SearchableModelSelect = forwardRef<
       if (!rect) return;
       const viewportWidth = typeof window === 'undefined' ? rect.width : window.innerWidth;
       const viewportHeight = typeof window === 'undefined' ? rect.height : window.innerHeight;
-      const desiredWidth = Math.max(rect.width, popoverMinWidth ?? 0);
-      const maxWidth = Math.max(160, viewportWidth - 16);
-      const width = Math.min(desiredWidth, maxWidth);
-      const left = Math.min(
-        Math.max(8, rect.left),
-        Math.max(8, viewportWidth - width - 8),
+      const requestedBoundary = getPopoverBoundary?.();
+      const boundaryLeft = Math.min(
+        viewportWidth,
+        Math.max(0, requestedBoundary?.left ?? 8),
       );
-      const availableBelow = Math.max(140, viewportHeight - rect.bottom - 12);
-      const availableAbove = Math.max(140, rect.top - 12);
-      const shouldOpenUpward = availableBelow < 260 && availableAbove > availableBelow;
-      const maxHeight = Math.min(360, shouldOpenUpward ? availableAbove : availableBelow);
-      if (shouldOpenUpward) {
-        setPopoverStyle({
-          bottom: Math.max(8, viewportHeight - rect.top + 6),
-          left,
-          width,
-          maxHeight,
-        });
+      const boundaryRight = Math.max(
+        boundaryLeft,
+        Math.min(viewportWidth, requestedBoundary?.right ?? viewportWidth - 8),
+      );
+      const boundaryTop = Math.min(
+        viewportHeight,
+        Math.max(0, requestedBoundary?.top ?? 8),
+      );
+      const boundaryBottom = Math.max(
+        boundaryTop,
+        Math.min(
+          viewportHeight,
+          requestedBoundary?.bottom ?? viewportHeight - 8,
+        ),
+      );
+
+      const referenceHasLayout = rect.width > 0 || rect.height > 0;
+      const referenceIsOutsideBoundary =
+        referenceHasLayout &&
+        (rect.bottom <= boundaryTop ||
+          rect.top >= boundaryBottom ||
+          rect.right <= boundaryLeft ||
+          rect.left >= boundaryRight);
+      if (referenceIsOutsideBoundary) {
+        setPopoverStyle(null);
+        setOpen(false);
         return;
       }
+
+      const desiredWidth = Math.max(rect.width, popoverMinWidth ?? 0);
+      const maxWidth = Math.max(0, boundaryRight - boundaryLeft);
+      const width = Math.min(desiredWidth, maxWidth);
+      const left = Math.min(
+        Math.max(boundaryLeft, rect.left),
+        Math.max(boundaryLeft, boundaryRight - width),
+      );
+      const gap = 6;
+      const availableBelow = Math.max(0, boundaryBottom - rect.bottom - gap);
+      const availableAbove = Math.max(0, rect.top - boundaryTop - gap);
+      const minimumHeight = shouldShowSearch ? 96 : 52;
+      let placement = placementRef.current;
+      if (placement === null) {
+        placement =
+          availableBelow < 260 && availableAbove > availableBelow
+            ? 'above'
+            : 'below';
+      } else {
+        const currentAvailable =
+          placement === 'above' ? availableAbove : availableBelow;
+        const oppositeAvailable =
+          placement === 'above' ? availableBelow : availableAbove;
+        if (
+          currentAvailable < minimumHeight &&
+          oppositeAvailable >= minimumHeight
+        ) {
+          placement = placement === 'above' ? 'below' : 'above';
+        }
+      }
+      const availableHeight =
+        placement === 'above' ? availableAbove : availableBelow;
+      if ((referenceHasLayout && width <= 0) || availableHeight < minimumHeight) {
+        setPopoverStyle(null);
+        setOpen(false);
+        return;
+      }
+      placementRef.current = placement;
+      const maxHeight = Math.min(360, availableHeight);
       setPopoverStyle({
-        top: rect.bottom + 6,
+        placement,
+        offset:
+          placement === 'above'
+            ? viewportHeight - rect.top + gap
+            : rect.bottom + gap,
         left,
         width,
         maxHeight,
@@ -239,15 +309,18 @@ export const SearchableModelSelect = forwardRef<
       window.removeEventListener('resize', updatePosition);
       window.removeEventListener('scroll', updatePosition, true);
     };
-  }, [open, popoverMinWidth]);
+  }, [getPopoverBoundary, open, popoverMinWidth, shouldShowSearch]);
 
   useEffect(() => {
     if (!open || !shouldShowSearch) return;
-    searchRef.current?.focus();
+    searchRef.current?.focus({ preventScroll: true });
   }, [open, shouldShowSearch]);
 
   useEffect(() => {
-    if (!open) setQuery('');
+    if (!open) {
+      placementRef.current = null;
+      setQuery('');
+    }
   }, [open]);
 
   return (
@@ -298,8 +371,15 @@ export const SearchableModelSelect = forwardRef<
               onKeyDown={handlePopoverKeyDown}
               style={{
                 position: 'fixed',
-                top: popoverStyle.top != null ? `${popoverStyle.top}px` : 'auto',
-                bottom: popoverStyle.bottom != null ? `${popoverStyle.bottom}px` : 'auto',
+                top:
+                  popoverStyle.placement === 'below'
+                    ? `${popoverStyle.offset}px`
+                    : 'auto',
+                right: 'auto',
+                bottom:
+                  popoverStyle.placement === 'above'
+                    ? `${popoverStyle.offset}px`
+                    : 'auto',
                 left: `${popoverStyle.left}px`,
                 width: `${popoverStyle.width}px`,
                 maxHeight: `${popoverStyle.maxHeight}px`,
@@ -324,7 +404,7 @@ export const SearchableModelSelect = forwardRef<
                 id={listboxId}
                 role="listbox"
                 style={{
-                  maxHeight: `${Math.max(96, popoverStyle.maxHeight - (shouldShowSearch ? 52 : 12))}px`,
+                  maxHeight: `${Math.max(0, popoverStyle.maxHeight - (shouldShowSearch ? 52 : 12))}px`,
                 }}
               >
                 {filteredOptions.map((option, index) => {
@@ -354,24 +434,6 @@ export const SearchableModelSelect = forwardRef<
                       <span className="model-select-searchable__option-copy">
                         <span className="model-select-searchable__option-label">
                           <span id={optionLabelId}>{option.label}</span>
-                          {showUpgradeLock ? (
-                            <button
-                              type="button"
-                              className="model-select-searchable__option-lock-inline od-tooltip"
-                              data-testid="model-option-upgrade-lock"
-                              id={optionDisabledId}
-                              data-tooltip={disabledHint ?? undefined}
-                              data-tooltip-placement="top"
-                              title={disabledHint ?? undefined}
-                              aria-label={disabledHint ?? undefined}
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                onDisabledOptionUpgrade?.(option);
-                              }}
-                            >
-                              <Icon name="lock" size={13} />
-                            </button>
-                          ) : null}
                         </span>
                         {costLabel ? (
                           <span
@@ -390,13 +452,35 @@ export const SearchableModelSelect = forwardRef<
                           </span>
                         ) : null}
                       </span>
-                      {tagLabel ? (
-                        <span
-                          className="model-select-searchable__option-badge"
-                          data-tag={tag}
-                          id={optionTagId}
-                        >
-                          {tagLabel}
+                      {showUpgradeLock || tagLabel ? (
+                        <span className="model-select-searchable__option-affordances">
+                          {showUpgradeLock ? (
+                            <button
+                              type="button"
+                              className="model-select-searchable__option-lock-inline od-tooltip"
+                              data-testid="model-option-upgrade-lock"
+                              id={optionDisabledId}
+                              data-tooltip={disabledHint ?? undefined}
+                              data-tooltip-placement="top"
+                              title={disabledHint ?? undefined}
+                              aria-label={disabledHint ?? undefined}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                onDisabledOptionUpgrade?.(option);
+                              }}
+                            >
+                              <Icon name="lock" size={13} />
+                            </button>
+                          ) : null}
+                          {tagLabel ? (
+                            <span
+                              className="model-select-searchable__option-badge"
+                              data-tag={tag}
+                              id={optionTagId}
+                            >
+                              {tagLabel}
+                            </span>
+                          ) : null}
                         </span>
                       ) : null}
                     </span>

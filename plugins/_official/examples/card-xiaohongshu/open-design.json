@@ -24,6 +24,7 @@
     "uk": "Картка Xiaohongshu"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-13T13:02:05Z",
   "description": "Xiaohongshu-style knowledge cards, arranged as a swipeable multi-card carousel.",
   "description_i18n": {
     "en": "Xiaohongshu-style knowledge cards, arranged as a swipeable multi-card carousel.",

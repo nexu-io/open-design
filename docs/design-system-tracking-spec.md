@@ -1,9 +1,16 @@
-# Design System 埋点方案（Tracking Spec）
+# Design System 埋点方案（已落地的历史实施计划）
 
-> 状态：方案稿（仅设计，未实现代码）
-> 关联 PR：#4691 `feat(brands): turn any brand into a reusable design system`，分支 `iodized-nephew`
-> 目标读者：埋点实现 / 数据分析
-> 维护：本文件是“代码现状 + 目标口径”的对照表，落地后逐条勾掉。
+> 状态：归档实施计划。最初的“仅设计、未实现代码”基线随后已由
+> design-system tracking、创建来源、编辑生命周期和 enrichment 系列提交落地。
+> 顶部“实现进度”记录最终收口情况；正文中的“现状 / 要做 / 行号 / ❌”保留为
+> 当时的设计与实施检查表，不再代表当前代码。
+>
+> 当前事件契约以 `packages/contracts/src/analytics/events.ts` 为准，web 埋点以
+> `apps/web/src/analytics/` 及调用点为准，daemon 侧 enrichment / project metadata
+> 写入以 `apps/daemon/src/` 为准。新增或修改埋点时应直接更新这些真相源与测试，
+> 不要继续维护本文中的历史行号。
+>
+> 关联原始 PR：#4691 `feat(brands): turn any brand into a reusable design system`。
 
 ## 术语：只有一个对象 = Design System（先读这段，避免被 brand 绕晕）
 

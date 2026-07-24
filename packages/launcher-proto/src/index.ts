@@ -7,6 +7,9 @@ export const LAUNCHER_SCHEMA_VERSION = 1 as const;
 export const LAUNCHER_AFTER_QUIT_FLAG = "--od-launcher-after-quit" as const;
 export const LAUNCHER_AFTER_QUIT_TARGET_PID_ARG = "--od-launcher-target-pid" as const;
 export const LAUNCHER_AFTER_QUIT_TIMEOUT_MS_ARG = "--od-launcher-timeout-ms" as const;
+export const LAUNCHER_HANDOFF_RESUME_ARG = "--od-launcher-resume-handoff" as const;
+export const LAUNCHER_DELEGATED_GENERATION_ARG = "--od-launcher-delegated-generation" as const;
+export const LAUNCHER_DELEGATED_VERSION_ARG = "--od-launcher-delegated-version" as const;
 
 export const LAUNCHER_CHANNELS = Object.freeze({
   BETA: RELEASE_CHANNELS.BETA,
@@ -36,6 +39,7 @@ export type LauncherPaths = {
   channelRoot: string;
   cleanupPath: string;
   downloadsRoot: string;
+  handoffPath: string;
   installPath: string;
   launcherPath: string;
   lockRoot: string;
@@ -81,6 +85,24 @@ export type LauncherAttemptDescriptor = {
   version: string;
 };
 
+export type LauncherDesktopHandoffDescriptor = {
+  channel: LauncherChannel;
+  createdAt: string;
+  handoffId: string;
+  namespace: string;
+  outer: {
+    executablePath: string;
+    pid: number;
+  };
+  payloadExecutablePath: string;
+  previous: LauncherVersionPointer;
+  schemaVersion: typeof LAUNCHER_SCHEMA_VERSION;
+  source: LauncherVersionPointer;
+  state: "armed" | "confirmed" | "prepared";
+  target?: LauncherVersionPointer;
+  updatedAt: string;
+};
+
 export type LauncherCleanupState = "cleanup-deferred" | "cleanup-removed" | "deprecated" | "retained";
 
 export type LauncherCleanupReason =
@@ -112,12 +134,18 @@ export type LauncherCleanupDescriptor = {
 
 export type LauncherTargetSelection =
   | { pointer: LauncherVersionPointer; reason: "active"; selected: true }
+  | { pointer: LauncherVersionPointer; reason: "active-delegated"; selected: true }
+  | { pointer: LauncherVersionPointer; reason: "active-resume"; selected: true }
   | { pointer: LauncherVersionPointer; reason: "last-successful"; selected: true }
   | { reason: "no-runtime-target"; selected: false };
 
 export type LauncherAfterQuitRequest = {
   targetPid: number;
   timeoutMs: number;
+};
+
+export type LauncherHandoffResumeRequest = {
+  handoffId: string;
 };
 
 export class LauncherProtocolError extends Error {
@@ -224,6 +252,13 @@ function valueAfterArg(args: readonly string[], name: string): string | null {
   return args[index + 1] ?? null;
 }
 
+function normalizeLauncherHandoffId(value: unknown): string {
+  if (typeof value !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_-]{15,127}$/.test(value)) {
+    throw new LauncherProtocolError("launcher handoff id must be 16-128 URL-safe characters");
+  }
+  return value;
+}
+
 export function buildLauncherAfterQuitArgs(request: LauncherAfterQuitRequest): string[] {
   return [
     LAUNCHER_AFTER_QUIT_FLAG,
@@ -245,6 +280,51 @@ export function parseLauncherAfterQuitArgs(args: readonly string[]): LauncherAft
       valueAfterArg(args, LAUNCHER_AFTER_QUIT_TIMEOUT_MS_ARG),
       "launcher after-quit timeout",
     ),
+  };
+}
+
+function normalizeLauncherGeneration(value: unknown): number {
+  const generation = typeof value === "string" && value.length > 0 ? Number(value) : value;
+  if (typeof generation !== "number" || !Number.isSafeInteger(generation) || generation < 0) {
+    throw new LauncherProtocolError(`launcher generation must be a non-negative safe integer: ${String(value)}`);
+  }
+  return generation;
+}
+
+/**
+ * Delegated-launch marker: a parent that pre-armed attempt.json for the
+ * pointer it is about to spawn (packaged outer delegation, updater payload
+ * relaunch) passes the pointer along so the spawned payload can tell its own
+ * in-progress attempt apart from a previous failed launch. Without the
+ * pre-arm, a payload that dies before reaching its own bookkeeping leaves no
+ * rollback evidence and the next cold start retries the same broken payload
+ * forever.
+ */
+export function buildLauncherDelegatedArgs(pointer: LauncherVersionPointer): string[] {
+  return [
+    LAUNCHER_DELEGATED_GENERATION_ARG,
+    normalizeLauncherGeneration(pointer.generation).toString(),
+    LAUNCHER_DELEGATED_VERSION_ARG,
+    normalizeLauncherVersion(pointer.version),
+  ];
+}
+
+export function parseLauncherDelegatedArgs(args: readonly string[]): LauncherVersionPointer | null {
+  if (!args.includes(LAUNCHER_DELEGATED_GENERATION_ARG)) return null;
+  return {
+    generation: normalizeLauncherGeneration(valueAfterArg(args, LAUNCHER_DELEGATED_GENERATION_ARG)),
+    version: normalizeLauncherVersion(valueAfterArg(args, LAUNCHER_DELEGATED_VERSION_ARG)),
+  };
+}
+
+export function buildLauncherHandoffResumeArgs(request: LauncherHandoffResumeRequest): string[] {
+  return [LAUNCHER_HANDOFF_RESUME_ARG, normalizeLauncherHandoffId(request.handoffId)];
+}
+
+export function parseLauncherHandoffResumeArgs(args: readonly string[]): LauncherHandoffResumeRequest | null {
+  if (!args.includes(LAUNCHER_HANDOFF_RESUME_ARG)) return null;
+  return {
+    handoffId: normalizeLauncherHandoffId(valueAfterArg(args, LAUNCHER_HANDOFF_RESUME_ARG)),
   };
 }
 
@@ -288,6 +368,7 @@ export function resolveLauncherPaths(request: LauncherRootRequest): LauncherPath
     channelRoot,
     cleanupPath: assertUnderRoot(root, join(stateRoot, "cleanup.json")),
     downloadsRoot: assertUnderRoot(root, join(updatesRoot, "downloads")),
+    handoffPath: assertUnderRoot(root, join(stateRoot, "desktop-handoff.json")),
     installPath: assertUnderRoot(root, join(namespaceRoot, "install.json")),
     launcherPath,
     lockRoot: assertUnderRoot(root, join(stateRoot, "lock")),
@@ -324,6 +405,12 @@ function normalizePointer(value: LauncherVersionPointer | null): LauncherVersion
     throw new LauncherProtocolError(`launcher generation must be a non-negative safe integer: ${value.generation}`);
   }
   return { generation: value.generation, version };
+}
+
+function normalizeRequiredPointer(value: LauncherVersionPointer | null, label: string): LauncherVersionPointer {
+  const pointer = normalizePointer(value);
+  if (pointer == null) throw new LauncherProtocolError(`${label} is required`);
+  return pointer;
 }
 
 function normalizeOptionalIsoString(value: unknown, label: string): string | undefined {
@@ -430,6 +517,103 @@ export function validateLauncherRuntimeDescriptor(
   };
 }
 
+export function validateLauncherAttemptDescriptor(
+  attempt: LauncherAttemptDescriptor,
+  expected: { channel: string; namespace: string },
+): LauncherAttemptDescriptor {
+  if (attempt.schemaVersion !== LAUNCHER_SCHEMA_VERSION) {
+    throw new LauncherProtocolError(`unsupported launcher attempt schemaVersion: ${String(attempt.schemaVersion)}`);
+  }
+  const channel = normalizeLauncherChannel(attempt.channel);
+  const expectedChannel = normalizeLauncherChannel(expected.channel);
+  if (channel !== expectedChannel) {
+    throw new LauncherProtocolError(`launcher attempt channel ${channel} does not match expected channel ${expectedChannel}`);
+  }
+  const namespace = normalizeLauncherNamespace(attempt.namespace);
+  const expectedNamespace = normalizeLauncherNamespace(expected.namespace);
+  if (namespace !== expectedNamespace) {
+    throw new LauncherProtocolError(`launcher attempt namespace ${namespace} does not match expected namespace ${expectedNamespace}`);
+  }
+  const pointer = normalizeRequiredPointer(attempt, "launcher attempt pointer");
+  return {
+    channel,
+    generation: pointer.generation,
+    namespace,
+    schemaVersion: LAUNCHER_SCHEMA_VERSION,
+    ...(attempt.startedAt == null ? {} : {
+      startedAt: normalizeIsoString(attempt.startedAt, "launcher attempt startedAt"),
+    }),
+    version: pointer.version,
+  };
+}
+
+function normalizeAbsoluteLauncherPath(value: unknown, label: string): string {
+  if (typeof value !== "string" || value.length === 0 || value.includes("\0")) {
+    throw new LauncherProtocolError(`${label} must be a non-empty absolute path`);
+  }
+  if (!isAbsolute(value)) throw new LauncherProtocolError(`${label} must be absolute: ${value}`);
+  return resolve(value);
+}
+
+export function validateLauncherDesktopHandoffDescriptor(
+  handoff: LauncherDesktopHandoffDescriptor,
+  expected: { channel: string; namespace: string },
+): LauncherDesktopHandoffDescriptor {
+  if (handoff.schemaVersion !== LAUNCHER_SCHEMA_VERSION) {
+    throw new LauncherProtocolError(`unsupported launcher desktop handoff schemaVersion: ${String(handoff.schemaVersion)}`);
+  }
+  const channel = normalizeLauncherChannel(handoff.channel);
+  const expectedChannel = normalizeLauncherChannel(expected.channel);
+  if (channel !== expectedChannel) {
+    throw new LauncherProtocolError(`launcher desktop handoff channel ${channel} does not match expected channel ${expectedChannel}`);
+  }
+  const namespace = normalizeLauncherNamespace(handoff.namespace);
+  const expectedNamespace = normalizeLauncherNamespace(expected.namespace);
+  if (namespace !== expectedNamespace) {
+    throw new LauncherProtocolError(`launcher desktop handoff namespace ${namespace} does not match expected namespace ${expectedNamespace}`);
+  }
+  if (
+    handoff.state !== "prepared" &&
+    handoff.state !== "armed" &&
+    handoff.state !== "confirmed"
+  ) {
+    throw new LauncherProtocolError(`unsupported launcher desktop handoff state: ${String(handoff.state)}`);
+  }
+  const target = handoff.target == null ? null : normalizePointer(handoff.target);
+  if ((handoff.state === "armed" || handoff.state === "confirmed") && target == null) {
+    throw new LauncherProtocolError(`${handoff.state} launcher desktop handoff requires a target pointer`);
+  }
+  if (handoff.state === "prepared" && target != null) {
+    throw new LauncherProtocolError("prepared launcher desktop handoff must not include a target pointer");
+  }
+  if (handoff.outer == null || typeof handoff.outer !== "object") {
+    throw new LauncherProtocolError("launcher desktop handoff outer identity is required");
+  }
+  return {
+    channel,
+    createdAt: normalizeIsoString(handoff.createdAt, "launcher desktop handoff createdAt"),
+    handoffId: normalizeLauncherHandoffId(handoff.handoffId),
+    namespace,
+    outer: {
+      executablePath: normalizeAbsoluteLauncherPath(
+        handoff.outer.executablePath,
+        "launcher desktop handoff outer executablePath",
+      ),
+      pid: normalizePositiveInteger(handoff.outer.pid, "launcher desktop handoff outer pid"),
+    },
+    payloadExecutablePath: normalizeAbsoluteLauncherPath(
+      handoff.payloadExecutablePath,
+      "launcher desktop handoff payloadExecutablePath",
+    ),
+    previous: normalizeRequiredPointer(handoff.previous, "launcher desktop handoff previous pointer"),
+    schemaVersion: LAUNCHER_SCHEMA_VERSION,
+    source: normalizeRequiredPointer(handoff.source, "launcher desktop handoff source pointer"),
+    state: handoff.state,
+    ...(target == null ? {} : { target }),
+    updatedAt: normalizeIsoString(handoff.updatedAt, "launcher desktop handoff updatedAt"),
+  };
+}
+
 export function validateLauncherCleanupDescriptor(
   cleanup: LauncherCleanupDescriptor,
   expected: { channel: string; namespace: string },
@@ -462,10 +646,14 @@ export function validateLauncherCleanupDescriptor(
 
 export function selectLauncherRuntimeTarget(input: {
   attempted?: LauncherAttemptDescriptor | null;
+  delegated?: LauncherVersionPointer | null;
+  resume?: LauncherVersionPointer | null;
   runtime: LauncherRuntimeDescriptor;
 }): LauncherTargetSelection {
   const active = normalizePointer(input.runtime.active);
   const lastSuccessful = normalizePointer(input.runtime.lastSuccessful);
+  const delegated = input.delegated == null ? null : normalizePointer(input.delegated);
+  const resume = input.resume == null ? null : normalizePointer(input.resume);
   const attempted = input.attempted == null
     ? null
     : {
@@ -482,9 +670,27 @@ export function selectLauncherRuntimeTarget(input: {
   if (
     attempted != null &&
     attempted.version === active.version &&
-    attempted.generation === active.generation &&
-    lastSuccessful != null
+    attempted.generation === active.generation
   ) {
+    if (
+      resume != null &&
+      resume.version === active.version &&
+      resume.generation === active.generation
+    ) {
+      return { pointer: active, reason: "active-resume", selected: true };
+    }
+    // A delegated pointer matching active marks THIS launch's pre-armed
+    // attempt (the parent wrote it just before spawning us) — the launch in
+    // progress, not a previous failure. Only an exact active match qualifies;
+    // a stale pointer from an older generation must not defeat the rollback.
+    if (
+      delegated != null &&
+      delegated.version === active.version &&
+      delegated.generation === active.generation
+    ) {
+      return { pointer: active, reason: "active-delegated", selected: true };
+    }
+    if (lastSuccessful == null) return { pointer: active, reason: "active", selected: true };
     return { pointer: lastSuccessful, reason: "last-successful", selected: true };
   }
 

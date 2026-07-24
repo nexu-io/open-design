@@ -457,7 +457,7 @@ Use `--no-contrast` to skip if iterating rapidly and you'll check later.
 After authoring animations, run the animation map to verify choreography:
 
 ```bash
-node skills/hyperframes/scripts/animation-map.mjs <composition-dir> \
+node design-templates/hyperframes/scripts/animation-map.mjs <composition-dir> \
   --out <composition-dir>/.hyperframes/anim-map
 ```
 

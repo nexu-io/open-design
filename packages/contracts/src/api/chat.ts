@@ -46,6 +46,13 @@ export interface ByokChatProviderConfig {
   apiVersion?: string;
   /** Explicit run-scoped provider policy for presets that do not require bearer credentials. */
   requiresApiKey?: boolean;
+  /**
+   * Run-scoped chat model id selected in the chat UI. Forwarded to the daemon
+   * so BYOK-backed utilities (e.g. memory extraction) can honor the user's
+   * model picker instead of falling back to a hardcoded default. Optional
+   * because some presets (e.g. Ollama) infer the model from baseUrl/protocol.
+   */
+  model?: string;
 }
 
 export interface ByokMediaDefaults {
@@ -78,6 +85,7 @@ export interface ChatRequest {
   commentAttachments?: ChatCommentAttachment[];
   model?: string | null;
   reasoning?: string | null;
+  serviceTier?: string | null;
   /**
    * Run-scoped BYOK provider credentials for the daemon-backed OpenCode
    * adapter. The daemon must not persist this object; it is translated into
@@ -294,6 +302,7 @@ export interface McpRunCreateRequest {
   skillId?: string;
   pluginId?: string;
   model?: string;
+  serviceTier?: string;
   pluginInputs?: Record<string, unknown>;
   mediaExecution?: MediaExecutionPolicy;
   toolBundle?: RunScopedToolBundle;
@@ -490,6 +499,9 @@ export interface ChatRunStatusResponse {
    *  Judged by the canonical `todoSnapshotHasUnfinishedWork` predicate so it can
    *  never diverge from the chat footer's `unfinishedTodosFromEvents`. */
   endedWithUnfinishedWork?: boolean;
+  /** Authoritative artifact files created or modified by this run. Mirrors
+   *  ChatSseEndPayload.artifactCount and run_finished.artifact_count. */
+  artifactCount?: number;
   /** Absolute path to the per-run JSONL event log the daemon mirrors
    *  the SSE stream to (see runs.ts `runsLogDir`). Null when the
    *  daemon was launched without event persistence configured. */

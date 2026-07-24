@@ -11,6 +11,14 @@ function parseWorkerCount(value: string | undefined): number {
 
 export default defineConfig({
   testDir: './ui',
+  // This is the functional config. Strict-visual specs (`visual-*.test.ts`)
+  // are owned by `playwright.visual.config.ts` (its own `testMatch`,
+  // snapshot/output settings, and the `playwright_visual` CI lane), so they
+  // must never be picked up here — otherwise a bare `pnpm test:ui` or the
+  // generic full-pool shard run would execute them without their visual
+  // config. Excluding them at the config level keeps every functional
+  // consumer (full pool, `test:ui*`, ui_p0 groups) aligned.
+  testIgnore: 'visual-*.test.ts',
   outputDir: './ui/reports/test-results',
   timeout: Number(process.env.OD_PLAYWRIGHT_TIMEOUT) || 45_000,
   retries: process.env.CI ? 1 : 0,

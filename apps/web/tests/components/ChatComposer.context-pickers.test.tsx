@@ -541,7 +541,7 @@ describe('ChatComposer context pickers', () => {
       expect(screen.queryByText('reference-dir')).toBeNull();
     });
     expect(onProjectMetadataChange).toHaveBeenLastCalledWith(
-      expect.objectContaining({ linkedDirs: [] }),
+      expect.objectContaining({ metadata: expect.objectContaining({ linkedDirs: [] }) }),
     );
   });
 
@@ -599,11 +599,13 @@ describe('ChatComposer context pickers', () => {
     });
     expect(onProjectMetadataChange).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        linkedDirs: [
-          '/Users/me/work-dir',
-          '/tmp/open-design/reference-a',
-          '/tmp/open-design/reference-b',
-        ],
+        metadata: expect.objectContaining({
+          linkedDirs: [
+            '/Users/me/work-dir',
+            '/tmp/open-design/reference-a',
+            '/tmp/open-design/reference-b',
+          ],
+        }),
       }),
     );
   });
@@ -657,7 +659,7 @@ describe('ChatComposer context pickers', () => {
         projectMetadata: metadata,
         onProjectMetadataChange: (next) => {
           onProjectMetadataChange(next);
-          setMetadata(next);
+          setMetadata(next.metadata ?? { kind: 'prototype' });
         },
         onSend,
       });
@@ -700,7 +702,7 @@ describe('ChatComposer context pickers', () => {
     expect(projectPatchBodies()[1]?.metadata?.linkedDirs).toEqual([]);
     expect(screen.queryByTestId('staged-contexts')?.textContent ?? '').not.toContain('reference-dir');
     expect(onProjectMetadataChange).toHaveBeenLastCalledWith(
-      expect.objectContaining({ linkedDirs: [] }),
+      expect.objectContaining({ metadata: expect.objectContaining({ linkedDirs: [] }) }),
     );
   });
 
@@ -819,7 +821,7 @@ describe('ChatComposer context pickers', () => {
         projectMetadata: metadata,
         onProjectMetadataChange: (next) => {
           onProjectMetadataChange(next);
-          setMetadata(next);
+          setMetadata(next.metadata ?? { kind: 'prototype' });
         },
       });
     }
@@ -873,7 +875,7 @@ describe('ChatComposer context pickers', () => {
         projectMetadata: metadata,
         onProjectMetadataChange: (next) => {
           onProjectMetadataChange(next);
-          setMetadata(next);
+          setMetadata(next.metadata ?? { kind: 'prototype' });
         },
       });
     }
@@ -908,7 +910,7 @@ describe('ChatComposer context pickers', () => {
     expect(projectPatchBodies()).toHaveLength(2);
     expect(screen.getByTestId('working-dir-trigger').textContent).toContain('shared');
     expect(onProjectMetadataChange).toHaveBeenLastCalledWith(
-      expect.objectContaining({ linkedDirs: ['/Users/me/shared'] }),
+      expect.objectContaining({ metadata: expect.objectContaining({ linkedDirs: ['/Users/me/shared'] }) }),
     );
   });
 
@@ -922,7 +924,7 @@ describe('ChatComposer context pickers', () => {
         projectMetadata: metadata,
         onProjectMetadataChange: (next) => {
           onProjectMetadataChange(next);
-          setMetadata(next);
+          setMetadata(next.metadata ?? { kind: 'prototype' });
         },
       });
     }
@@ -959,7 +961,7 @@ describe('ChatComposer context pickers', () => {
     expect(screen.getByTestId('staged-contexts').textContent).toContain('shared');
     expect(screen.getByTestId('working-dir-trigger').textContent).not.toContain('shared');
     expect(onProjectMetadataChange).toHaveBeenLastCalledWith(
-      expect.objectContaining({ linkedDirs: ['/Users/me/shared'] }),
+      expect.objectContaining({ metadata: expect.objectContaining({ linkedDirs: ['/Users/me/shared'] }) }),
     );
   });
 
@@ -996,7 +998,7 @@ describe('ChatComposer context pickers', () => {
     });
     expect(projectPatchBodies()).toHaveLength(1);
     expect(onProjectMetadataChange).toHaveBeenLastCalledWith(
-      expect.objectContaining({ linkedDirs: ['/Users/me/shared'] }),
+      expect.objectContaining({ metadata: expect.objectContaining({ linkedDirs: ['/Users/me/shared'] }) }),
     );
   });
 

@@ -979,6 +979,10 @@ jobs:
           RELEASE_LATEST_CAS_REQUIRED: "true"
           RELEASE_ASSET_SUFFIX: auto
           RELEASE_CHANNEL: betas
+          RELEASE_LAUNCHER_VERSION_MIN_BETAS: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_BETAS }}
+          RELEASE_LAUNCHER_VERSION_MIN_STABLE: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_STABLE }}
+          RELEASE_LAUNCHER_VERSION_MIN_URL_BETAS: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_URL_BETAS }}
+          RELEASE_LAUNCHER_VERSION_MIN_URL_STABLE: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_URL_STABLE }}
           RELEASE_MANIFEST_DIR: ${{ runner.temp }}/release-platform-manifests
           RELEASE_METADATA_DIR: ${{ runner.temp }}/release-metadata
           RELEASE_NOTE_MANIFEST_PATH: ${{ runner.temp }}/release-metadata/release-note-publication.json

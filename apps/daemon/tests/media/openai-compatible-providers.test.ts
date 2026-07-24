@@ -121,6 +121,7 @@ describe('OpenAI-compatible media providers', () => {
       expectedConfigExcludes?: string;
       expectedArgsIncludes?: string;
       expectedArgsExcludes?: string;
+      outputFileName?: string;
     } = {},
   ) {
     const codexBin = path.join(root, `${threadId}.mjs`);
@@ -133,6 +134,7 @@ const expectedConfigIncludes = ${JSON.stringify(options.expectedConfigIncludes ?
 const expectedConfigExcludes = ${JSON.stringify(options.expectedConfigExcludes ?? '')};
 const expectedArgsIncludes = ${JSON.stringify(options.expectedArgsIncludes ?? '')};
 const expectedArgsExcludes = ${JSON.stringify(options.expectedArgsExcludes ?? '')};
+const outputFileName = ${JSON.stringify(options.outputFileName ?? 'ig_0001.png')};
 const args = process.argv.slice(2);
 const addDirIndex = args.indexOf('--add-dir');
 const generatedRoot = addDirIndex >= 0 ? args[addDirIndex + 1] : '';
@@ -162,7 +164,7 @@ process.stdin.on('end', () => {
   if (!stdin.includes('$imagegen') || !generatedRoot) process.exit(7);
   const outDir = path.join(generatedRoot, '${threadId}');
   mkdirSync(outDir, { recursive: true });
-  writeFileSync(path.join(outDir, 'ig_0001.png'), Buffer.from(pngBase64, 'base64'));
+  writeFileSync(path.join(outDir, outputFileName), Buffer.from(pngBase64, 'base64'));
   process.stdout.write(JSON.stringify({ type: 'thread.started', thread_id: '${threadId}' }) + '\\n');
 });
 `, 'utf8');
@@ -220,6 +222,69 @@ process.stdin.on('end', () => {
     expect(bytes.length).toBeGreaterThan(0);
   });
 
+  it('retries a temporarily unavailable custom-image request with the same provider', async () => {
+    await writeConfig({
+      providers: {
+        'custom-image': {
+          baseUrl: 'https://images.example.test/v1',
+          model: 'acme-image-model',
+        },
+      },
+    });
+
+    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
+      expect(String(input)).toBe('https://images.example.test/v1/images/generations');
+      expect(init?.method).toBe('POST');
+      expect(JSON.parse(String(init?.body))).toMatchObject({
+        prompt: 'A product render on white seamless paper',
+        model: 'acme-image-model',
+      });
+      if (fetchMock.mock.calls.length === 1) {
+        return new Response(JSON.stringify({ error: { message: 'try again' } }), {
+          status: 503,
+          headers: {
+            'content-type': 'application/json',
+            'retry-after': '0',
+          },
+        });
+      }
+      return new Response(JSON.stringify({
+        data: [{ b64_json: PNG_BASE64 }],
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const onProviderRequestSettled = vi.fn();
+
+    const result = await generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'project-1',
+      surface: 'image',
+      model: 'custom-image',
+      prompt: 'A product render on white seamless paper',
+      output: 'custom-retried.png',
+      onProviderRequestSettled,
+    });
+
+    expect(result.providerId).toBe('custom-image');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(onProviderRequestSettled).toHaveBeenCalledOnce();
+    expect(onProviderRequestSettled).toHaveBeenCalledWith({
+      providerId: 'custom-image',
+      attemptCount: 2,
+      retryCount: 1,
+      initialResponseStatus: 503,
+      responseStatus: 200,
+      retryReason: 'service_unavailable_503',
+      retryAfterMs: 0,
+      retryDelayMs: 0,
+      retryFinalResult: 'success',
+    });
+  });
+
   it('forwards requestInit.dispatcher through custom-image submit and asset fetches', async () => {
     await writeConfig({
       providers: {
@@ -258,6 +323,46 @@ process.stdin.on('end', () => {
       requestInit: { dispatcher },
     });
 
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not resubmit custom-image generation when the returned asset download fails', async () => {
+    await writeConfig({
+      providers: {
+        'custom-image': {
+          baseUrl: 'https://images.example.test/v1',
+          model: 'acme-image-model',
+        },
+      },
+    });
+
+    let submitCalls = 0;
+    const fetchMock = vi.fn(async (input: unknown) => {
+      if (String(input) === 'https://images.example.test/v1/images/generations') {
+        submitCalls += 1;
+        return new Response(JSON.stringify({
+          data: [{ url: 'https://cdn.example.test/generated.png' }],
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      expect(String(input)).toBe('https://cdn.example.test/generated.png');
+      return new Response('temporarily unavailable', { status: 503 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'project-1',
+      surface: 'image',
+      model: 'custom-image',
+      prompt: 'A product render on white seamless paper',
+      output: 'custom-download-failure.png',
+    })).rejects.toThrow('custom image media fetch 503');
+
+    expect(submitCalls).toBe(1);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
@@ -529,6 +634,52 @@ process.stdin.on('end', () => {
     expect(fetchMock).not.toHaveBeenCalled();
     const bytes = await readFile(path.join(projectsRoot, 'project-1', 'subscription-default.png'));
     expect(bytes.length).toBeGreaterThan(0);
+  });
+
+  it('ingests call-prefixed Codex subscription image output', async () => {
+    const generatedHome = path.join(root, 'call-prefixed-codex-home');
+    await writeCodexAuth(generatedHome, {
+      auth_mode: 'chatgpt',
+      OPENAI_API_KEY: null,
+    });
+    await installFakeCodex(generatedHome, 'call-prefixed-codex-thread', {
+      outputFileName: 'call_Er2KDML8Fof5QcOXdSovI85V.png',
+    });
+
+    const result = await generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'project-1',
+      surface: 'image',
+      model: 'gpt-image-2',
+      prompt: 'A compact purple cat icon',
+      output: 'call-prefixed.png',
+    });
+
+    expect(result.providerId).toBe('codex');
+    const bytes = await readFile(path.join(projectsRoot, 'project-1', 'call-prefixed.png'));
+    expect(bytes.length).toBeGreaterThan(0);
+  });
+
+  it('ignores unrelated image files in the Codex generated thread directory', async () => {
+    const generatedHome = path.join(root, 'unrelated-image-codex-home');
+    await writeCodexAuth(generatedHome, {
+      auth_mode: 'chatgpt',
+      OPENAI_API_KEY: null,
+    });
+    await installFakeCodex(generatedHome, 'unrelated-image-codex-thread', {
+      outputFileName: 'preview.png',
+    });
+
+    await expect(generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'project-1',
+      surface: 'image',
+      model: 'gpt-image-2',
+      prompt: 'A compact purple cat icon',
+      output: 'unrelated-image.png',
+    })).rejects.toThrow(/did not write an ig_\* or call_\* image/i);
   });
 
   it('prefers the Codex subscription path for gpt-image-2 even when an OpenAI key is configured', async () => {

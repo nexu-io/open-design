@@ -1020,10 +1020,11 @@ export function planDeckImageCapture(opts: {
 }
 
 // Programmatic image export: render a single pixel-perfect PNG via the daemon
-// (off-screen Electron Chromium), independent of the preview pane size. For a
-// deck pass the current slide `index` (Copy screenshot); omit it to stitch the
-// WHOLE deck top-to-bottom into one long image (Export as image) or to capture an
-// ordinary page at natural size. Returns a {dataUrl,w,h} snapshot compatible with
+// (off-screen Electron Chromium). Optional width/height select a responsive page
+// viewport without depending on preview-pane geometry. For a deck pass the
+// current slide `index` (Copy screenshot); omit it to stitch the WHOLE deck
+// top-to-bottom into one long image (Export as image) or to capture an ordinary
+// page at natural size. Returns a {dataUrl,w,h} snapshot compatible with
 // the existing image-export pipeline, or null if unavailable.
 // Discriminates a genuinely-unavailable off-screen renderer (no desktop host /
 // 501 / network) — where the caller may fall back to a visible-preview capture —
@@ -1039,6 +1040,8 @@ export async function exportProjectImageDataUrl(opts: {
   fileName: string;
   index?: number;
   deck?: boolean;
+  width?: number;
+  height?: number;
   versionId?: string;
 }): Promise<ProjectImageExportResult> {
   const url = `/api/projects/${encodeURIComponent(opts.projectId)}/export/image`;
@@ -1051,6 +1054,8 @@ export async function exportProjectImageDataUrl(opts: {
         fileName: opts.fileName,
         ...(typeof opts.index === 'number' ? { index: opts.index } : {}),
         ...(typeof opts.deck === 'boolean' ? { deck: opts.deck } : {}),
+        ...(typeof opts.width === 'number' ? { width: opts.width } : {}),
+        ...(typeof opts.height === 'number' ? { height: opts.height } : {}),
         ...(opts.versionId ? { versionId: opts.versionId } : {}),
       }),
     });
@@ -1216,7 +1221,7 @@ export function buildSandboxedPreviewDocument(
 
 function currentOriginBaseHref(): string | undefined {
   if (typeof window !== 'undefined' && typeof window.location?.origin === 'string') {
-    return new URL(withWebBasePath('/'), window.location.origin).href;
+    return `${window.location.origin.replace(/\/+$/, '')}${withWebBasePath('/')}`;
   }
   const base =
     typeof document !== 'undefined' && typeof document.baseURI === 'string'

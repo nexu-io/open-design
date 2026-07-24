@@ -352,6 +352,21 @@ test('spawnEnvForAgent injects the resolved AMR profile after configured env', (
   assert.equal(env.PATH, '/usr/bin');
 });
 
+test('spawnEnvForAgent enables OpenCode web search providers for AMR by default', () => {
+  const env = spawnEnvForAgent('amr', { PATH: '/usr/bin' });
+
+  assert.equal(env.OPENCODE_ENABLE_EXA, '1');
+  assert.equal(env.VELA_ENABLE_PARALLEL_MCP, '1');
+
+  const overridden = spawnEnvForAgent('amr', {
+    OPENCODE_ENABLE_EXA: '0',
+    VELA_ENABLE_PARALLEL_MCP: '0',
+    PATH: '/usr/bin',
+  });
+  assert.equal(overridden.OPENCODE_ENABLE_EXA, '0');
+  assert.equal(overridden.VELA_ENABLE_PARALLEL_MCP, '0');
+});
+
 test('spawnEnvForAgent gives AMR a stable OpenCode home under OD_DATA_DIR', () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'od-amr-data-'));
   try {

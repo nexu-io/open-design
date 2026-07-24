@@ -11,8 +11,28 @@ vi.mock("electron", () => ({
 import { PackagedPathAccessError } from "../src/errors.js";
 import {
   claimPackagedSingleInstanceLock,
+  stabilizePackagedWorkingDirectory,
   verifyPackagedDataRootWritable,
 } from "../src/launch.js";
+
+describe("stabilizePackagedWorkingDirectory", () => {
+  it("switches to the namespace runtime root without reading the inherited cwd", () => {
+    const runtimeRoot = join(tmpdir(), "od-packaged-runtime");
+    const chdir = vi.fn();
+    const cwd = vi.spyOn(process, "cwd").mockImplementation(() => {
+      throw new Error("uv_cwd");
+    });
+
+    try {
+      stabilizePackagedWorkingDirectory({ runtimeRoot }, chdir);
+
+      expect(chdir).toHaveBeenCalledWith(runtimeRoot);
+      expect(cwd).not.toHaveBeenCalled();
+    } finally {
+      cwd.mockRestore();
+    }
+  });
+});
 
 describe("verifyPackagedDataRootWritable", () => {
   it("accepts a writable dataRoot", async () => {

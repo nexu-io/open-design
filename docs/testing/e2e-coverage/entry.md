@@ -4,10 +4,9 @@
 
 - 新建项目入口面板
 - 入口侧栏项目类型切换与草稿保持
-- 首页顶部标签结构
-- Examples 示例库搜索、筛选、预览与导出
+- Home 左侧导航、最近项目与 starter 入口
 - 提示词模板创建路径
-- 连接器入口与连接器 gate
+- Integrations 连接器入口与连接器 gate
 - 资源驱动的项目创建 happy path
 
 ## 对应测试文件
@@ -15,7 +14,7 @@
 - `e2e/ui/entry-configuration-flows.test.ts`
 - `e2e/ui/entry-chrome-flows.test.ts`
 - `e2e/ui/app.test.ts`
-- `apps/web/tests/components/ExamplesTab.test.tsx`
+- `e2e/ui/project-management-flows.test.ts`
 
 ## 已自动化
 
@@ -26,7 +25,7 @@
 | ENTRY-001 | 提示词模板加载失败后重试，编辑后的模板正文会写入项目 metadata | `entry-configuration-flows.test.ts` |
 | ENTRY-002 | live artifact 的空状态连接器 CTA 会跳转到受保护的 connector setup 路径 | `entry-configuration-flows.test.ts` |
 | ENTRY-003 | connectors 入口支持搜索、空结果态，以及详情抽屉的键盘关闭 | `entry-configuration-flows.test.ts` |
-| ENTRY-004 | 在 Settings 里保存 Composio key 后，Entry 页 connectors gate 会立即解锁，搜索和卡片可直接使用 | `entry-configuration-flows.test.ts` |
+| ENTRY-004 | 在 Integrations 里保存 Composio key 后，connectors gate 会立即解锁，搜索和卡片可直接使用 | `entry-configuration-flows.test.ts` |
 | ENTRY-005 | 创建原型时切换到 `Wireframe` 后，即使先切到其他项目类型再切回，`fidelity` 选择也会保留，并正确写入创建 payload | `NewProjectPanel.test.tsx` |
 | ENTRY-006 | 创建原型时在 design system 多选模式下切回 `不指定 — 自由发挥`，会清空主设计体系和 inspiration metadata | `NewProjectPanel.test.tsx` |
 | ENTRY-007 | 创建原型时若项目名为空白，会回退到自动生成的默认标题而不是提交空名 | `NewProjectPanel.test.tsx` |
@@ -36,16 +35,9 @@
 | ENTRY-011 | 创建图片项目时，所选 `aspect` 与修剪后的 `style notes` 会正确写入创建 payload | `NewProjectPanel.test.tsx` |
 | ENTRY-012 | 创建视频项目时，所选 `aspect` 与 `duration` 会正确写入创建 payload | `NewProjectPanel.test.tsx` |
 | ENTRY-013 | 创建音频项目时，所选 `duration` 与修剪后的 `voice` 会正确写入创建 payload | `NewProjectPanel.test.tsx` |
-| ENTRY-014 | 顶部 settings menu 可以切换 pet rail 的显示/隐藏 | `entry-chrome-flows.test.ts` |
+| ENTRY-014 | 入口页不再渲染旧 pet rail，Settings 也不再暴露 pet picker 的显示/隐藏开关 | `entry-chrome-flows.test.ts` |
 | ENTRY-015 | 紧凑桌面宽度下，入口页 header 与整页不会出现明显横向溢出 | `entry-chrome-flows.test.ts` |
-| ENTRY-016 | 首页顶部标签固定为 `Designs / Examples / Design systems / Image templates / Video templates`，不再展示旧 `Connectors` 标签 | `entry-chrome-flows.test.ts` |
-| ENTRY-017 | Examples 示例库为空时展示 daemon/catalog 不可用提示 | `ExamplesTab.test.tsx` |
-| ENTRY-018 | Examples 搜索支持按名称、描述、prompt 命中，并在无匹配时展示空结果态 | `ExamplesTab.test.tsx` |
-| ENTRY-019 | Examples 支持按 Surface、Type、Scenario 筛选并正确收敛卡片列表 | `ExamplesTab.test.tsx` |
-| ENTRY-020 | 点击 Examples 卡片的 `Use this prompt` 会把选中的 skill 传给创建快路径 | `ExamplesTab.test.tsx` |
-| ENTRY-021 | Examples 预览按需加载后，Share 菜单可触发 PDF、ZIP、HTML 导出 | `ExamplesTab.test.tsx` |
-| ENTRY-022 | Examples 全屏预览弹窗支持 Fullscreen/ESC 退出/Exit、Share 导出 PDF/ZIP/HTML、Open in new tab 和关闭 | `ExamplesTab.test.tsx` |
-| ENTRY-023 | Examples 点击 `Docs & templates` 筛选后只展示模板类 example，并可点击 `Use this prompt` 使用模板 prompt | `ExamplesTab.test.tsx` |
+| ENTRY-016 | 展开的入口导航包含 `Home / Projects / Automations / Plugins / Design systems / Integrations`，并把 Plugins 与 Integrations 保持在主导航组 | `entry-chrome-flows.test.ts` |
 
 ### 资源驱动创建场景
 
@@ -53,14 +45,12 @@
 | --- | --- | --- |
 | ENTRY-101 | Prototype 项目可以创建并预览生成的 artifact | `app.test.ts` via `prototype-basic` |
 | ENTRY-102 | Deck 项目可以创建并预览生成的 deck artifact | `app.test.ts` via `deck-basic` |
-| ENTRY-103 | 选择 design system 后，创建项目时会正确带入配置 | `app.test.ts` via `design-system-selection` |
-| ENTRY-104 | 使用 example prompt 可以直接创建带有预填草稿提示词的项目 | `app.test.ts` via `example-use-prompt` |
-
-## 自动化候选
-
-| ID | 场景 | 原因 |
-| --- | --- | --- |
-| ENTRY-C01 | 更多 image template / video template 的入口创建流 | 业务有价值，但当前入口覆盖仍以主路径为主，可在模板能力稳定后补进自动化 |
+| ENTRY-103 | New project 的 design system 多选会把主系统与 inspirations 正确写入创建 payload | `project-management-flows.test.ts` |
+| ENTRY-104 | Image 项目通过当前 Media → Image 路径创建，并保存图片项目 metadata | `app.test.ts` via `image-basic` |
+| ENTRY-105 | Video 项目通过当前 Media → Video 路径创建，并保存默认模型、画幅与时长 metadata | `app.test.ts` via `video-basic` |
+| ENTRY-106 | Audio SFX 项目通过当前 Media → Audio 路径创建，并保存音频类型 metadata | `app.test.ts` via `audio-sfx-basic` |
+| ENTRY-107 | Live artifact 项目通过当前独立入口创建，并保存 intent 与高保真 metadata | `app.test.ts` via `live-artifact-basic` |
+| ENTRY-108 | HyperFrames 项目通过当前 Media → Video 路径创建，并预览生成的 HTML motion artifact | `app.test.ts` via `hyperframes-basic` |
 
 ## 手工保留
 
@@ -72,4 +62,5 @@
 ## 说明
 
 - `app.test.ts` 的部分场景来自 `e2e/resources/playwright.ts`。新增资源驱动用例时，需要同时更新资源文件和这份文档。
+- 旧 `ExamplesTab` 组件及其组件测试仍在仓库中，但当前 `EntryShell` 不挂载该页面；这些孤立组件测试不计作当前入口用户流覆盖，旧 `example-use-prompt` 资源也不能证明一条可达入口路径。
 - 依赖 mocked SSE 的入口流程应尽量保持稳定、可重复、执行快。

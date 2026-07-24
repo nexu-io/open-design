@@ -24,6 +24,7 @@
     "en": "Game Screenshot - Three Kingdoms ARPG: Guan Yu Slaying Yan Liang"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "An in-game action-RPG screenshot of the iconic Three Kingdoms scene where Guan Yu rides his Red Hare warhorse through a torrential-rain battlefield and charges toward the enemy general Yan Liang. Rendered in the cinematic photoreal style of Black Myth: Wukong, Unreal Engine 5, third-person tracking camera from behind-and-left of the mounted hero. Full boss-fight HUD (portrait, minimap with dense enemy dots, skill hotbar with a finisher prompt, floating boss HP bar on the enemy general) turns the scene into a AAA ARPG combat moment. Tuned for gpt-image-2 at 16:9.",
   "description_i18n": {
     "zh-CN": "《Black Myth: Wukong》风格的三国题材ARPG游戏截图，展现关羽骑赤兔马在暴雨战场冲向敌将颜良的经典场景，采用Unreal Engine 5渲染，第三人称视角，包含完整Boss战HUD界面。16:9比例，适配gpt-image-2。",

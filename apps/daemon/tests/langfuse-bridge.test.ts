@@ -725,7 +725,10 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
     expect(fetchSpy).toHaveBeenCalledTimes(4);
     expect(fetchSpy.mock.calls[0]![0]).toContain('/api/langfuse');
     const registrationBody = JSON.parse(fetchSpy.mock.calls[0]![1]!.body as string).batch as any[];
+    expect(registrationBody).toHaveLength(1);
     const registrationTrace = registrationBody[0].body;
+    expect(registrationTrace).not.toHaveProperty('input');
+    expect(registrationTrace).not.toHaveProperty('output');
     expect(registrationTrace.metadata.attachment_manifest[0]).not.toHaveProperty('reason');
     expect(registrationTrace.metadata.artifact_manifest[0]).not.toHaveProperty('reason');
     expect(registrationTrace.metadata.input_text_snapshot_manifest[0]).not.toHaveProperty('reason');
@@ -1541,6 +1544,43 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
       expect.arrayContaining(['model:claude-opus-4-1']),
     );
     expect(generation.model).toBe('claude-opus-4-1');
+  });
+
+  it('labels a preflight failure with its resolved model and CLI version', async () => {
+    await writeAppCfg({
+      installationId: 'install-uuid-preflight',
+      telemetry: { metrics: true, content: true, artifactManifest: false },
+    });
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValue(new Response('{}', { status: 207 }));
+    process.env.LANGFUSE_PUBLIC_KEY = 'pk';
+    process.env.LANGFUSE_SECRET_KEY = 'sk';
+    try {
+      await reportRunCompletedFromDaemon({
+        db: makeDbWithListMessages({ 'conv-1': [] }),
+        dataDir,
+        run: makeRun({
+          agentId: 'codex',
+          model: 'default',
+          resolvedModelId: 'gpt-5.6-terra',
+          preflightAgentCliVersion: 'codex-cli 0.142.5',
+        }) as any,
+        fetchImpl: fetchSpy as any,
+      });
+    } finally {
+      delete process.env.LANGFUSE_PUBLIC_KEY;
+      delete process.env.LANGFUSE_SECRET_KEY;
+    }
+    const init = fetchSpy.mock.calls[0]![1] as RequestInit;
+    const batch = JSON.parse(init.body as string).batch as any[];
+    const trace = batch[0].body;
+    const generation = bodyOf(batch, 'generation-create', 'llm');
+
+    expect(trace.metadata.model).toBe('gpt-5.6-terra');
+    expect(trace.metadata.agentCliVersion).toBe('codex-cli 0.142.5');
+    expect(trace.tags).toEqual(expect.arrayContaining(['model:gpt-5.6-terra']));
+    expect(generation.model).toBe('gpt-5.6-terra');
   });
 
   it('forwards token usage for a totalTokens-only usage event', async () => {

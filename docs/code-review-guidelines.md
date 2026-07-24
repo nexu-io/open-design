@@ -20,12 +20,12 @@ Authoritative rules live in `AGENTS.md` and the directory-level `AGENTS.md` file
 
 ## What `pnpm guard` already checks
 
-Reviewers do not need to manually check rules that `pnpm guard` enforces. The authoritative source for what guard catches is its implementation in `scripts/guard.ts`; the list below reflects that script at the time of writing and may drift — when in doubt, read the script.
-
-- TypeScript-first rule for project-owned entrypoints, modules, scripts, tests, reporters, and configs.
-- New `.js`, `.mjs`, or `.cjs` files outside the documented allowlist (generated output, vendored deps, explicit compatibility build artifacts).
-
-Trust guard for these. Focus review attention elsewhere.
+Do not maintain a prose copy of the guard inventory here. The executable source
+of truth is [`scripts/guard.ts`](../scripts/guard.ts) and the checks it imports;
+read those files when guard coverage matters to a review. A passing guard lets a
+reviewer avoid repeating its mechanical checks, but it does not replace review
+of behavior, boundaries, migration safety, or validation that the guard does
+not encode.
 
 ## 1. Product relevance test
 
@@ -34,7 +34,7 @@ Run this test **before** reviewing implementation details. A PR passes only when
 A PR passes the relevance test when **all** of the following hold:
 
 - The PR description identifies the Open Design feature, command, protocol, package, resource format, or runtime path being changed.
-- Tests exercise existing Open Design flows through their public seams: artifact generation/rendering via documented daemon APIs, daemon HTTP/SSE endpoints, web UI on shipped routes, desktop/packaged launch behavior, sidecar status/IPC, `tools-dev`/`tools-pack` lifecycle commands, skills/design-system/craft resource loading, or documented cross-boundary smoke behavior. Rendering domain content through a generic primitive does **not** count.
+- Tests exercise existing Open Design flows through their public seams: artifact generation/rendering via documented daemon APIs, daemon HTTP/SSE endpoints, web UI on shipped routes, desktop/packaged launch behavior, sidecar status/IPC, `tools-dev`/`tools-pack` lifecycle commands, functional-skill/design-template/design-system/plugin/craft resource loading, or documented cross-boundary smoke behavior. Rendering domain content through a generic primitive does **not** count.
 - Tests target real routes, DOM, APIs, commands, fixtures, and user flows that exist in this repository.
 - Tests use the repository's existing harness, base URL, and lifecycle conventions — not hard-coded standalone app URLs.
 - Test assertions provide real signal. Tautological assertions (e.g. `expect(x + y).toBeGreaterThanOrEqual(0)`) are not coverage.
@@ -51,7 +51,7 @@ Governance documents — `AGENTS.md` files, contribution guides, review guidelin
 
 A fixture qualifies as first-party only when **all three** are true:
 
-1. It lives in `skills/`, `design-systems/`, `craft/`, the owning package's `tests/` directory, or `e2e/resources/`.
+1. It lives in `skills/`, `design-templates/`, `design-systems/`, `plugins/_official/`, `craft/`, the owning package's `tests/` directory, or `e2e/resources/`.
 2. It is referenced by a maintained test or runtime path.
 3. The PR description names that consumer.
 
@@ -84,29 +84,29 @@ This is the canonical list. Any PR that recreates one of these is out of scope u
 
 ## 3. Ownership and scope
 
-Treat scope as an approval gate. This repository is for Open Design itself: the local web/daemon/desktop product, its sidecar and packaging infrastructure, shared contracts, development/release tools, e2e coverage of those surfaces, and first-party skills/design-system/craft resources consumed by that product.
+Treat scope as an approval gate. This repository is for Open Design itself: the local web/daemon/desktop product, its sidecar and packaging infrastructure, shared contracts, development/release tools, e2e coverage of those surfaces, and first-party functional skills, rendering templates, design systems, plugins, and craft resources consumed by that product.
 
 Accept a PR only when its boundary is clear, why the change belongs here is clear, and validation proves the touched boundary still works.
 
 ### In scope
 
-A PR is in scope when it passes the [Product relevance test](#1-product-relevance-test) and matches one of these patterns:
+A PR is in scope when it passes the [Product relevance test](#1-product-relevance-test) and has an owner in the repository's `AGENTS.md` chain. Route ownership by path instead of copying every app, package, or tool responsibility into this guide:
 
-**Single primary ownership area:**
+| Changed path | Required ownership guide |
+| --- | --- |
+| Repository-wide behavior | root `AGENTS.md` |
+| `.github/` | `.github/AGENTS.md`, then the workflow-specific section it points to |
+| `apps/` | `apps/AGENTS.md`, then the nearest app-level `AGENTS.md` |
+| `packages/` | `packages/AGENTS.md`, then any nearer package guide |
+| `tools/` | `tools/AGENTS.md`, then any nearer tool guide |
+| `e2e/` | `e2e/AGENTS.md` |
+| `skills/` | `skills/AGENTS.md` |
+| `design-templates/` | `design-templates/AGENTS.md` |
+| `plugins/` | `plugins/AGENTS.md` |
+| `design-systems/_schema/` | `design-systems/_schema/AGENTS.md` |
 
-- `apps/web` — Next.js App Router UI, browser runtime behavior, web-local provider integration.
-- `apps/landing-page` — first-party marketing site workspace package with its own documented boundaries and commands.
-- `apps/daemon` — local privileged daemon APIs, SSE, agent spawning, SQLite persistence, skills/design-system/resource serving, artifacts, credentials storage, static serving, daemon CLI.
-- `apps/desktop` — Electron shell that discovers runtime state through sidecar IPC.
-- `apps/packaged` — packaged Electron entry, packaged sidecar startup, runtime integration, `od://` entry glue.
-- `packages/contracts` — pure TypeScript web/daemon DTOs, request/response shapes, SSE event unions, task shapes, errors, example payloads.
-- `packages/sidecar-proto` — Open Design sidecar business protocol; app/mode/source constants, namespace validation, stamp fields/flags, IPC message schema, status shapes, error semantics.
-- `packages/sidecar` — generic sidecar bootstrap, IPC transport, path/runtime resolution, launch environment, JSON runtime-file primitives.
-- `packages/platform` — generic OS process primitives, stamp serialization, command parsing, process matching/search.
-- `tools/dev` — local development lifecycle control plane.
-- `tools/pack` — packaged build, install, start, stop, logs, release-artifact control plane.
-- `e2e` — user-level smoke tests, cross-app/cross-runtime checks, Playwright UI automation.
-- `skills/`, `design-systems/`, `craft/` — project resource and content updates within their documented responsibilities.
+For a path without a nearer guide, the root rules remain authoritative. Do not
+infer ownership from a stale list in a PR description or this review guide.
 
 **Multi-area changes** are in scope when they cross a public seam: an HTTP API, shared contract DTO, sidecar protocol, package primitive, command surface, persisted format, or resource format. The owning contract/protocol/primitive must change first, before app-specific behavior is wired against it.
 
@@ -124,7 +124,7 @@ A PR is out of scope when it does any of the following — block or require a sp
 - Recreates anything in [Forbidden surfaces](#2-forbidden-surfaces).
 - Adds tests under `src/`, puts package/app tests outside the package-level `tests/` directory, puts Playwright UI tests outside `e2e/ui/`, or moves app-owned component coverage into e2e.
 - Adds feature-depth scenarios to `e2e/specs/` instead of `e2e/tests/` (see `e2e/AGENTS.md` for the test-pyramid rules).
-- Changes skills, design systems, or craft content in a way that requires new runtime semantics without updating the daemon/resource contract and validation.
+- Changes functional skills, rendering templates, design systems, plugins, or craft content in a way that requires new runtime semantics without updating the owning daemon/resource contract and validation.
 - Introduces speculative abstractions, new packages, new lifecycle entrypoints, broad architecture rewrites, or cross-cutting migrations without a current product need and explicit ownership.
 - Changes generated output, vendored files, or compatibility JavaScript without the documented reason required by `AGENTS.md`.
 
@@ -171,42 +171,83 @@ For any change to `packages/contracts`, `packages/sidecar-proto`, persisted SQLi
 
 **Accept when:**
 
-- The entry is a folder containing a `DESIGN.md`; no code changes, custom loaders, or special runtime handling required to appear after refresh.
-- The first H1 is the picker title; the next line uses the documented metadata shape when grouping is needed: `> Category: <Group>` followed by a short summary.
-- The category is an existing dropdown group from `design-systems/README.md`, or a deliberate new group with a clear reason.
-- Brand-inspired systems use normalized ASCII slugs (`linear.app` → `linear-app`, `x.ai` → `x-ai`).
-- Content covers the comparable `DESIGN.md` concerns used by existing systems (visual theme, color, typography, spacing/layout, component tone, interaction guidance, accessibility expectations).
-- Imported/bundled sets preserve their normalized shape (e.g. the 9-section `DESIGN.md` for sourced design skills).
+- The entry is a package with `manifest.json`, `DESIGN.md`, and `tokens.css`; the manifest uses `od-design-system-project/v1`, its id matches the normalized ASCII folder slug, and its declared files exist.
+- Picker name, category, description, source, and canonical file paths come from the manifest. Markdown H1 and `> Category:` metadata are readable legacy fallbacks, not the primary package contract.
+- `DESIGN.md` is substantive and, for a migrated rich package, has at least seven H2 sections. It is not forced into a fixed nine-section or numbered-heading template.
+- `tokens.css` satisfies the shared token contract and agrees with the prose. Brand extensions are explicitly allowed by the schema instead of silently introducing shared token names.
+- Rich package files declared by the manifest stay complete and synchronized: usage guide, component fixture/manifest, preview pages, source evidence, and derived token outputs as applicable.
+- Component manifests, Design Tokens JSON, and Tailwind CSS are regenerated from their canonical inputs instead of hand-edited into drift.
 - Brand-inspired systems are framed as aesthetic inspirations, not official assets or endorsements.
 - Source, license, and attribution are documented when content is adapted from upstream.
 - New assets are minimal, license-safe, intentionally named, and referenced by the [first-party fixture rule](#first-party-fixture-rule).
+- The change follows the current metadata, quality, motion, and localization requirements in [`docs/design-systems.md`](design-systems.md).
 
 **Block when:**
 
 - The "design system" is actually a customer/product page, marketing experiment, or unrelated visual collection.
-- It omits `DESIGN.md`, has malformed metadata, uses a non-normalized slug, or won't appear cleanly in the picker.
-- It deviates from existing entries' shape without updating the documented resource contract, importer flow, README, and validation.
+- A new repository entry relies on the legacy `DESIGN.md`-only fallback, omits canonical package files, has malformed manifest metadata, or uses a non-normalized slug.
+- Prose, tokens, components, previews, source evidence, or derived outputs disagree with each other.
+- It deviates from the package contract without updating the schema, importer/runtime consumers, documentation, and validation together.
 - It requires runtime behavior, custom loaders, or app-specific assumptions not part of the design-system resource model.
 - It imports official/proprietary brand assets, unclear-license material, or large unreferenced assets.
 
-### 4.4 Skill additions (`skills/`)
+### 4.4 Design-template additions (`design-templates/`)
+
+Design templates are packaged rendering shapes: decks, prototypes, reusable
+page templates, and image/video/audio templates.
 
 **Accept when:**
 
-- The skill supports design work in Open Design — artifact generation, visual design, layout, branding, design-system application, interaction design, accessibility review, design critique.
+- The folder contains a `SKILL.md` using the shared skill shape plus an explicit rendering `od.mode`: `prototype`, `deck`, `template`, `image`, `video`, or `audio`.
+- It ships a baked `example.html` and any referenced assets or side files needed by the gallery; optional derived examples follow the documented `<parent>:<key>` model.
+- Instructions describe how to render the artifact shape and keep rendering assets portable and license-safe.
+- Deck templates satisfy the keyboard, wheel, touch, dot, active-slide, iframe-focus, no-script, and print behavior in `design-templates/AGENTS.md`.
+- Runtime and asset URLs use the existing design-template registry and shared `/api/skills/:id/...` compatibility routes.
+
+**Block when:**
+
+- The entry primarily performs work on arbitrary user input (a utility, brief, packager, or audit); that is a functional skill and belongs in `skills/`.
+- It has no baked preview, depends on user-specific files, or cannot render through the current template/gallery paths.
+- It adds template-specific daemon behavior instead of using the shared resource protocol, or changes that protocol without updating all consumers and validation.
+
+### 4.5 Functional-skill additions (`skills/`)
+
+**Accept when:**
+
+- The skill is a capability invoked mid-task to do work on user input, such as a utility, brief, asset packager, fidelity audit, accessibility review, or design critique.
 - It follows the structure and metadata conventions of existing first-party skills, including the skills protocol front-matter (e.g. `od.craft.requires` when relevant).
+- Its `od.mode` is functional (`utility` or `design-system`) rather than one of the rendering-template modes.
 - Instructions are general-purpose enough for Open Design workflows, not a single unrelated external service or business process.
 - Examples and fixtures are minimal, design-relevant, and satisfy the [first-party fixture rule](#first-party-fixture-rule).
 - Runtime expectations match the existing skills protocol and daemon resource-loading behavior.
 
 **Block when:**
 
+- The entry's primary purpose is to render a repeatable deck, prototype, or media artifact shape; it belongs in `design-templates/`.
 - The skill is unrelated to design or artifact creation/review, even if otherwise useful.
 - It primarily automates a non-design workflow (finance, sales, CRM, generic productivity, unrelated API administration, domain-specific content processing).
 - It requires new daemon/runtime semantics without updating the skills protocol, resource contract, and validation.
 - It adds broad external integrations or credentials not necessary for a design-focused Open Design workflow.
 
-### 4.5 Craft additions (`craft/`)
+### 4.6 Plugin additions (`plugins/`)
+
+**Accept when:**
+
+- Bundled first-party plugins live under `plugins/_official/<tier>/<id>/`; portable specification examples live under `plugins/spec/examples/<id>/` and are not treated as installed catalog entries.
+- Each portable plugin has a `SKILL.md`. Open Design display, input, preview, pipeline, capability, and source metadata lives in `open-design.json`, not in the portable skill body.
+- `open-design.json` conforms to `docs/schemas/open-design.plugin.v1.json` and references only supported atoms, design systems, craft docs, assets, scripts, MCP servers, or connectors.
+- Plugin content stays portable and does not import app-private source.
+- Contribution-facing spec documentation updates its matching `*.zh-CN.md` mirror.
+- Validation follows `plugins/AGENTS.md`, including plugin-runtime typechecking and `od plugin validate` when the built CLI is available.
+
+**Block when:**
+
+- A spec example is placed in the bundled registration subtree or described as auto-installed.
+- Open Design-only marketplace/runtime metadata is embedded in `SKILL.md` instead of `open-design.json`.
+- The plugin imports app internals, bypasses supported extension points, or adds new runtime semantics without updating the plugin contract and consumers.
+- An enriched or bundled example lacks its skill, `open-design.json`, referenced assets, or required bilingual documentation update.
+
+### 4.7 Craft additions (`craft/`)
 
 For new or changed brand-agnostic craft references under `craft/`.
 
@@ -221,7 +262,7 @@ For new or changed brand-agnostic craft references under `craft/`.
 **Block when:**
 
 - The reference is brand-specific or design-system-specific (belongs in `design-systems/`).
-- It is artifact-shape advice (belongs in `skills/`).
+- It is a reusable rendering shape (belongs in `design-templates/`) or a task workflow (belongs in `skills/`).
 - It duplicates an existing craft reference instead of extending it.
 - No skill references it and no follow-up consumer is named.
 
@@ -240,7 +281,7 @@ Review in this order. Each priority lists the concrete checks for it.
 
 ### 5.2 Repository boundaries
 
-- Check the nearest `AGENTS.md` before reviewing code under `apps/`, `packages/`, `tools/`, or `e2e/`.
+- Follow the ownership table above and read every applicable `AGENTS.md` from the root to the nearest changed directory before reviewing implementation details.
 - Confirm app internals stay private, shared DTOs live in `packages/contracts`, and sidecar concerns stay out of app business logic.
 - Confirm source/test placement: source-only `src/`, package/app/tool tests in sibling `tests/`, Playwright UI in `e2e/ui/`, cross-app/cross-runtime checks in `e2e/tests/`, PR/release smoke in `e2e/specs/`.
 - Look for stale references to anything in [Forbidden surfaces](#2-forbidden-surfaces).
@@ -255,8 +296,9 @@ Review in this order. Each priority lists the concrete checks for it.
 
 - No committed secrets, API keys, or `media-config.json` content. No widening of credential storage scope without explicit need.
 - Logs do not leak credentials, tokens, or full prompt payloads.
-- Runtime files stay under the documented paths: `<project-root>/.tmp/<source>/<namespace>/...` and POSIX IPC sockets under `/tmp/open-design/ipc/<namespace>/<app>.sock`.
-- For daemon, desktop, sidecar, path, log, or namespace changes, validate runtime isolation per `AGENTS.md` (concurrent namespaces, log paths under `.tmp/tools-dev/<namespace>/...`, `inspect eval` and `inspect screenshot` per namespace).
+- Keep control-plane runtime state separate from daemon-owned data. Sidecar and `tools-dev` runtime/log/IPC state follows the namespace-scoped `.tmp/<source>/<namespace>/...` contract (with `tools-dev` logs under `.tmp/tools-dev/<namespace>/...`) and POSIX IPC sockets under `/tmp/open-design/ipc/<namespace>/<app>.sock`.
+- Daemon-owned data must derive from the daemon's already-resolved `RUNTIME_DATA_DIR`; subprocesses inherit that truth through `OD_DATA_DIR`. Review the root **Daemon data directory contract** instead of documenting or recomputing another concrete daemon data path.
+- For daemon, desktop, sidecar, path, log, or namespace changes, validate the relevant side of that split per `AGENTS.md`: resolved daemon data-root propagation for daemon data; concurrent namespaces, log-path inspection, and desktop `inspect eval`/`inspect screenshot` for control-plane state.
 
 ### 5.5 Performance and operational risk
 

@@ -76,6 +76,34 @@ export interface PricingContent {
   plans: Record<PlanTierId, PlanCopy>;
 }
 
+/**
+ * Mirrors vela's `TRIAL_CREDIT_PROMO_ENABLED` kill switch
+ * (`apps/web/src/lib/commerce/trial-credit.ts`, powerformer/vela#912): the
+ * new-user signup trial-credit promotion is temporarily offline while output
+ * quality catches up, and is expected to return later.
+ *
+ * While `false`, the /pricing/ Free card hides its trial-credit benefit row
+ * and its premium/standard model lists, swaps the "limited-time free trial"
+ * tagline for the no-promo variant below, and the FAQ drops/rewrites its
+ * trial-credit entries (see `getFaqs`). Flip back to `true` together with the
+ * vela switch on relaunch — the promo copy below stays in place untouched.
+ */
+export const TRIAL_CREDIT_PROMO_ENABLED = false;
+
+/** Free-card tagline used while the trial promotion is offline. */
+const FREE_TAGLINE_TRIAL_OFF: Partial<Record<LandingLocaleCode, string>> = {
+  en: 'Free with your own agent setup or BYOK',
+  zh: '配置自己的 Agent 或 BYOK，免费使用',
+  'zh-tw': '配置自己的 Agent 或 BYOK，免費使用',
+  ja: '自分の Agent 設定または BYOK で無料利用',
+  ko: '직접 구성한 Agent 또는 BYOK로 무료 사용',
+  de: 'Kostenlos mit eigenem Agent-Setup oder BYOK',
+  fr: 'Gratuit avec votre propre agent ou BYOK',
+  ru: 'Бесплатно с собственным агентом или BYOK',
+  es: 'Gratis con tu propio agent o BYOK',
+  'pt-br': 'Grátis com seu próprio agent ou BYOK',
+};
+
 // Model rosters are proper nouns — identical across locales, mirrored 1:1 from
 // the vela modal (names byte-identical so the two surfaces read the same).
 // Every paid tier shares one hosted-model roster (plans differ by credit
@@ -860,7 +888,15 @@ const CONTENT_BY_LOCALE: Partial<Record<LandingLocaleCode, PricingContent>> = {
 
 /** Resolve localized pricing copy, falling back to English. */
 export function getPricingContent(locale: LandingLocaleCode): PricingContent {
-  return CONTENT_BY_LOCALE[locale] ?? EN;
+  const content = CONTENT_BY_LOCALE[locale] ?? EN;
+  if (TRIAL_CREDIT_PROMO_ENABLED) return content;
+  return {
+    ...content,
+    free: {
+      ...content.free,
+      tagline: FREE_TAGLINE_TRIAL_OFF[locale] ?? FREE_TAGLINE_TRIAL_OFF.en!,
+    },
+  };
 }
 
 /** Fill `{token}` placeholders in a label template. */

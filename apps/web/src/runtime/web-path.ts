@@ -44,7 +44,8 @@ function prefixRequestInput(input: RequestInfo | URL): RequestInfo | URL {
 
 /** Explicit fetch wrapper for same-origin application paths. */
 export function apiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  return fetch(prefixRequestInput(input), init);
+  const prefixedInput = prefixRequestInput(input);
+  return init === undefined ? fetch(prefixedInput) : fetch(prefixedInput, init);
 }
 
 export function apiEventSource(path: string, eventSourceInitDict?: EventSourceInit): EventSource {

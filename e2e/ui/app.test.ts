@@ -34,6 +34,12 @@ const CRITICAL_SCENARIO_IDS = new Set([
   'file-upload-send',
   'conversation-delete-recovery',
 ]);
+const MERGE_EXTRA_SCENARIO_IDS = new Set([
+  'prototype-basic',
+  'deck-basic',
+  'file-mention',
+  'deep-link-preview',
+]);
 test.describe.configure({ timeout: 45_000 });
 
 function artifactPreview(page: Page) {
@@ -94,7 +100,7 @@ test.beforeEach(async ({ page }) => {
 for (const entry of automatedUiScenarios().filter(
   (scenario) => !APP_OWNED_SCENARIO_FLOWS.has(scenario.flow ?? ''),
 )) {
-  test(`[${scenarioPriority(entry)}]${criticalScenarioTag(entry)} ${entry.id}: ${entry.title}`, async ({ page }) => {
+  test(`[${scenarioPriority(entry)}]${criticalScenarioTag(entry)}${mergeExtraScenarioTag(entry)} ${entry.id}: ${entry.title}`, async ({ page }) => {
     await routeMockAgents(page);
 
     if (entry.flow === 'example-use-prompt') {
@@ -204,7 +210,7 @@ for (const entry of automatedUiScenarios().filter(
       });
     }
 
-    if (entry.flow === 'question-form-selection-limit') {
+    if (entry.flow === 'question-form-single-selection') {
       await page.route('**/api/runs', async (route) => {
         await route.fulfill({ status: 202, contentType: 'application/json', body: '{"runId":"mock-run"}' });
       });
@@ -217,9 +223,8 @@ for (const entry of automatedUiScenarios().filter(
               questions: [
                 {
                   id: 'tone',
-                  label: 'Visual tone (pick up to two)',
-                  type: 'checkbox',
-                  maxSelections: 2,
+                  label: 'Visual tone',
+                  type: 'radio',
                   options: ['Editorial / magazine', 'Modern minimal', 'Soft / warm'],
                   required: true,
                 },
@@ -271,9 +276,8 @@ for (const entry of automatedUiScenarios().filter(
                     questions: [
                       {
                         id: 'tone',
-                        label: 'Visual tone (pick up to two)',
-                        type: 'checkbox',
-                        maxSelections: 2,
+                        label: 'Visual tone',
+                        type: 'radio',
                         options: ['Editorial / magazine', 'Modern minimal', 'Soft / warm'],
                         required: true,
                       },
@@ -362,8 +366,8 @@ for (const entry of automatedUiScenarios().filter(
       await runConversationDeleteRecoveryFlow(page, entry);
       return;
     }
-    if (entry.flow === 'question-form-selection-limit') {
-      await runQuestionFormSelectionLimitFlow(page, entry);
+    if (entry.flow === 'question-form-single-selection') {
+      await runQuestionFormSingleSelectionFlow(page, entry);
       return;
     }
     if (entry.flow === 'question-form-submit-persistence') {
@@ -601,7 +605,7 @@ function scenarioPriority(entry: UiScenario): 'P0' | 'P1' | 'P2' {
     case 'deck-pagination-next-prev-correctness':
     case 'deck-pagination-per-file-isolated':
       return 'P1';
-    case 'question-form-selection-limit':
+    case 'question-form-single-selection':
       return 'P2';
     default:
       return 'P1';
@@ -610,6 +614,10 @@ function scenarioPriority(entry: UiScenario): 'P0' | 'P1' | 'P2' {
 
 function criticalScenarioTag(entry: UiScenario): string {
   return CRITICAL_SCENARIO_IDS.has(entry.id) ? ' @critical' : '';
+}
+
+function mergeExtraScenarioTag(entry: UiScenario): string {
+  return MERGE_EXTRA_SCENARIO_IDS.has(entry.id) ? ' @merge-extra' : '';
 }
 
 async function routeMockSuccessfulRun(page: Page, runId: string) {
@@ -1002,41 +1010,27 @@ async function runLiveArtifactProjectRoutingFlow(
 }
 
 
-async function runQuestionFormSelectionLimitFlow(
+async function runQuestionFormSingleSelectionFlow(
   page: Page,
   entry: UiScenario,
 ) {
   await sendPrompt(page, entry.prompt);
 
-  const toneQuestion = page.locator('.qf-field', {
-    has: page.getByText('Visual tone (pick up to two)'),
-  });
+  const toneQuestion = page.locator('.qf-field', { has: page.getByText('Visual tone') });
   await expect(toneQuestion).toBeVisible();
 
-  const editorialChip = toneQuestion.locator('label.qf-chip', {
-    has: page.getByText('Editorial / magazine'),
-  });
-  const modernChip = toneQuestion.locator('label.qf-chip', {
-    has: page.getByText('Modern minimal'),
-  });
-  const softChip = toneQuestion.locator('label.qf-chip', {
-    has: page.getByText('Soft / warm'),
-  });
-  const editorial = editorialChip.locator('input[type="checkbox"]');
-  const modern = modernChip.locator('input[type="checkbox"]');
-  const soft = softChip.locator('input[type="checkbox"]');
+  const editorial = toneQuestion.getByRole('radio', { name: 'Content-led product' });
+  const modern = toneQuestion.getByRole('radio', { name: 'Quiet SaaS' });
+  const editorialCard = toneQuestion.locator('label.qf-visual-card[title="Content-led product"]');
+  const modernCard = toneQuestion.locator('label.qf-visual-card[title="Quiet SaaS"]');
 
-  await editorialChip.click();
-  await modernChip.click();
-
+  await editorialCard.click();
   await expect(editorial).toBeChecked();
-  await expect(modern).toBeChecked();
-  await expect(soft).toBeDisabled();
+  await modernCard.click();
 
-  const checkedOptions = toneQuestion.locator('input[type="checkbox"]:checked');
-  await expect(checkedOptions).toHaveCount(2);
-  await expect(soft).not.toBeChecked();
-  await expect(checkedOptions).toHaveCount(2);
+  await expect(editorial).not.toBeChecked();
+  await expect(modern).toBeChecked();
+  await expect(toneQuestion.locator('input[type="radio"]:checked')).toHaveCount(1);
 }
 
 async function runQuestionFormSubmitPersistenceFlow(
@@ -1048,20 +1042,25 @@ async function runQuestionFormSubmitPersistenceFlow(
   const firstRunBody = (await firstRunRequestPromise).postDataJSON() as Record<string, unknown>;
   expectScenarioRunRequest(firstRunBody, entry);
 
+  // Studio discovery renders the clarification form inline in the chat flow
+  // (the legacy Questions workspace tab is gone), so locate the form directly.
   const form = page.locator('.question-form').first();
   await expect(form).toBeVisible();
 
-  const toneQuestion = form.locator('.qf-field', {
-    has: page.getByText('Visual tone (pick up to two)'),
-  });
-  await toneQuestion.locator('label.qf-chip', { has: page.getByText('Editorial / magazine') }).click();
-  await toneQuestion.locator('label.qf-chip', { has: page.getByText('Modern minimal') }).click();
+  const toneQuestion = form.locator('.qf-field', { has: page.getByText('Visual tone') });
+  const modern = toneQuestion.getByRole('radio', { name: 'Quiet SaaS' });
+  await toneQuestion.locator('label.qf-visual-card[title="Quiet SaaS"]').click();
+  await expect(modern).toBeChecked();
 
   await form.getByRole('button', { name: 'Send answers' }).click();
 
-  await expect(page.getByText('[form answers — discovery]', { exact: false })).toBeVisible();
-  await expect(form.getByText('answered', { exact: true })).toBeVisible();
-  await expect(form.getByText('Answers sent — agent is using these for the rest of the session.')).toBeVisible();
+  const summary = page.getByTestId('question-form-summary');
+  await expect(summary).toBeVisible();
+  await expect(summary.getByText('Questions answered')).toBeVisible();
+  await expect(summary.getByText('Visual tone')).toBeVisible();
+  // The summary echoes the picked visual-style card (its title), not the
+  // underlying option label.
+  await expect(summary.getByText('Quiet SaaS')).toBeVisible();
 
   const { projectId, conversationId } = await getCurrentProjectContext(page);
   const messagesResponse = await page.request.get(
@@ -1071,13 +1070,18 @@ async function runQuestionFormSubmitPersistenceFlow(
   const { messages } = (await messagesResponse.json()) as { messages: Array<{ role: string; content: string }> };
   const formAnswerMessage = messages.find((message) => message.role === 'user' && message.content.includes('[form answers — discovery]'));
   expect(formAnswerMessage).toBeTruthy();
+  // Inline discovery submits the picked visual-style card and its value id,
+  // not the raw option labels.
+  expect(formAnswerMessage?.content).toContain('Visual tone: Quiet SaaS');
+  expect(formAnswerMessage?.content).toContain('[value: prototype-quiet-saas]');
 
   await page.reload();
-  const restoredForm = page.locator('.question-form').first();
-  await expect(restoredForm).toBeVisible();
-  await expect(restoredForm.getByText('answered', { exact: true })).toBeVisible();
-  await expect(restoredForm.locator('input[type="checkbox"]:checked')).toHaveCount(2);
-  await expect(restoredForm.getByRole('button', { name: 'Send answers' })).toHaveCount(0);
+  await expectWorkspaceReady(page);
+  const restoredSummary = page.getByTestId('question-form-summary');
+  await expect(restoredSummary).toBeVisible();
+  await expect(restoredSummary.getByText('Visual tone')).toBeVisible();
+  await expect(restoredSummary.getByText('Quiet SaaS')).toBeVisible();
+  await expect(page.locator('.question-form')).toHaveCount(0);
 }
 
 async function runGenerationDoesNotCreateExtraFileFlow(

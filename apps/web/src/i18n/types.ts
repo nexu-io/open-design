@@ -310,6 +310,7 @@ export interface Dict {
   'settings.modeApi': string;
   'settings.modeApiMeta': string;
   'settings.byokNoFileToolsNotice': string;
+  'settings.byokDraftNotice': string;
   'settings.codeAgent': string;
   'settings.codeAgentHint': string;
   'settings.rescan': string;
@@ -466,6 +467,7 @@ export interface Dict {
   'settings.modelSourceLive': string;
   'settings.modelSourceFallback': string;
   'settings.reasoningPicker': string;
+  'settings.serviceTierPicker': string;
   'settings.modelPickerHint': string;
   'settings.modelPickerLiveHint': string;
   'settings.modelPickerLiveCatalogOnlyHint': string;
@@ -842,6 +844,7 @@ export interface Dict {
   'settings.memoryExtractionPhaseSkipped': string;
   'settings.memoryExtractionPhaseFailed': string;
   'settings.memoryExtractionSkipNoProvider': string;
+  'settings.memoryExtractionSkipUnsupportedProvider': string;
   'settings.memoryExtractionSkipDisabled': string;
   'settings.memoryExtractionSkipEmpty': string;
   'settings.memoryExtractionSkipNoMatch': string;
@@ -859,6 +862,7 @@ export interface Dict {
   'settings.memoryExtractionsClearConfirm': string;
   'settings.memoryNoProviderBannerTitle': string;
   'settings.memoryNoProviderBannerBody': string;
+  'settings.memoryUnsupportedProviderBannerBody': string;
   // Memory model picker — rendered inline next to the chat model picker
   // so picking "the fast model that mines facts each turn" lives in the
   // same row as the chat agent + model. Reuses the surrounding chat
@@ -890,6 +894,7 @@ export interface Dict {
   'settings.mcpInstructionCursor': string;
   'settings.mcpDeeplinkInstallCursor': string;
   'settings.mcpMethodJson': string;
+  'settings.mcpInstructionKiro': string;
   'settings.mcpInstructionCopilot': string;
   'settings.mcpInstructionAntigravity': string;
   'settings.mcpInstructionZed': string;
@@ -944,15 +949,25 @@ export interface Dict {
   // Desktop updater
   'updater.available': string;
   'updater.availableBody': string;
+  'updater.activeRunsTitle': string;
+  'updater.activeRunsBody': string;
+  'updater.activeRunsUnknownBody': string;
   'updater.checking': string;
   'updater.download': string;
   'updater.downloading': string;
   'updater.downloadingPercent': string;
+  'updater.dialogAvailableGeneric': string;
+  'updater.dialogAvailableVersion': string;
+  'updater.dialogCheckFailed': string;
+  'updater.dialogReadyGeneric': string;
+  'updater.dialogReadyVersion': string;
+  'updater.dialogUnsupported': string;
   'updater.done': string;
   'updater.failed': string;
   'updater.installerOpenBody': string;
   'updater.installerOpened': string;
   'updater.later': string;
+  'updater.manualDownload': string;
   'updater.allowSilentUpdates': string;
   'updater.openFailedFallback': string;
   'updater.installRestart': string;
@@ -968,7 +983,14 @@ export interface Dict {
   'updater.ready': string;
   'updater.readyGeneric': string;
   'updater.readyVersion': string;
+  // Forced installer reinstall (feed control.launcher.version.min gate).
+  // Copy priority: operator jump link (reinstall.url) > these defaults.
+  'updater.reinstallLearnMore': string;
+  'updater.reinstallReadyGeneric': string;
+  'updater.reinstallReadyVersion': string;
+  'updater.restartAnyway': string;
   'updater.upToDate': string;
+  'updater.viewVersionFeatures': string;
 
   // Post-update "what's new" card on the home surface. Release-configured
   // copy comes from the release feed; these keys cover the card chrome and
@@ -1017,6 +1039,22 @@ export interface Dict {
   'entry.navDesignSystems': string;
   'entry.navBrands': string;
   'entry.navIntegrations': string;
+  // Client message center
+  'messageCenter.openAria': string;
+  'messageCenter.unreadCount': string;
+  'messageCenter.title': string;
+  'messageCenter.subtitle': string;
+  'messageCenter.filterAll': string;
+  'messageCenter.filterUnread': string;
+  'messageCenter.filterRead': string;
+  'messageCenter.markAllRead': string;
+  'messageCenter.emptyAllTitle': string;
+  'messageCenter.emptyUnreadTitle': string;
+  'messageCenter.emptyReadTitle': string;
+  'messageCenter.emptyBody': string;
+  'messageCenter.close': string;
+  'messageCenter.desktopSettings': string;
+  'messageCenter.desktopSettingsHint': string;
   'workspaceTabs.project': string;
   'workspaceTabs.pluginDetails': string;
   'workspaceTabs.marketplace': string;
@@ -2377,6 +2415,7 @@ export interface Dict {
   'avatar.modelSection': string;
   'avatar.modelLabel': string;
   'avatar.reasoningLabel': string;
+  'avatar.serviceTierLabel': string;
   'avatar.customSuffix': string;
   'socialShare.openDesignSection': string;
   'socialShare.openDesignTitle': string;
@@ -2471,6 +2510,20 @@ export interface Dict {
   'chat.amrLowBalance.rechargeCta': string;
   'chat.amrLowBalance.proceedCta': string;
   'chat.amrLowBalance.dontRemind': string;
+  'chat.amrArtifactUpgrade.title': string;
+  'chat.amrArtifactUpgrade.message': string;
+  'chat.amrArtifactUpgrade.benefit1': string;
+  'chat.amrArtifactUpgrade.benefit2': string;
+  'chat.amrArtifactUpgrade.benefit3': string;
+  'chat.amrArtifactUpgrade.benefit4': string;
+  'chat.amrArtifactUpgrade.promoBanner': string;
+  'chat.amrArtifactUpgrade.countdownLabel': string;
+  'chat.amrArtifactUpgrade.plansCta': string;
+  'chat.amrArtifactUpgrade.homePlansCta': string;
+  'chat.amrArtifactUpgrade.laterCta': string;
+  'chat.amrArtifactUpgrade.homeTitle': string;
+  'chat.amrArtifactUpgrade.homeMessage': string;
+  'chat.amrArtifactUpgrade.homeArtifactCta': string;
   'chat.antigravityError.launchTerminalCta': string;
   'chat.antigravityError.launchSwitchModelCta': string;
   'chat.connectionDropped': string;
@@ -2491,7 +2544,9 @@ export interface Dict {
   'chat.runError.title.emptyOutput': string;
   'chat.runError.title.sessionExpired': string;
   'chat.runError.title.gitBashMissing': string;
+  'chat.runError.title.cpuUnsupported': string;
   'chat.runError.title.generic': string;
+  'chat.runError.title.artifactMissing': string;
   'chat.runError.signInMessage.amr': string;
   'chat.runError.signInMessage.other': string;
   'chat.runError.cliMissingMessage': string;
@@ -2509,6 +2564,7 @@ export interface Dict {
   'chat.runError.emptyOutputMessage': string;
   'chat.runError.sessionExpiredMessage': string;
   'chat.runError.gitBashMissingMessage': string;
+  'chat.runError.cpuUnsupportedMessage': string;
   'chat.runError.agentFallback': string;
   'chat.runError.sourceLabel': string;
   'chat.runError.sourceExpandAria': string;
@@ -3210,6 +3266,12 @@ export interface Dict {
   'workspace.terminalReconnecting': string;
   'workspace.terminalStartFailed': string;
   'workspace.terminalRestart': string;
+  'previewRunStatus.analyzing': string;
+  'previewRunStatus.generating': string;
+  'previewRunStatus.verifying': string;
+  'previewRunStatus.succeeded': string;
+  'previewRunStatus.failed': string;
+  'previewRunStatus.elapsed': string;
   'designFiles.title': string;
   'designFiles.upload': string;
   'designFiles.pasteText': string;
@@ -3550,6 +3612,8 @@ export interface Dict {
   'fileViewer.speakerNotesSaved': string;
   'fileViewer.speakerNotesSaveFailed': string;
   'fileViewer.speakerNotesPlaceholder': string;
+  'fileViewer.previewAssetBlockedTitle': string;
+  'fileViewer.previewAssetBlockedDetail': string;
   'fileViewer.presenterReset': string;
   'fileViewer.present': string;
   'fileViewer.presentInTab': string;
@@ -3672,6 +3736,9 @@ export interface Dict {
   'fileViewer.deployProviderLabel': string;
   'fileViewer.vercelProvider': string;
   'fileViewer.cloudflarePagesProvider': string;
+  'fileViewer.deployTargetLabel': string;
+  'fileViewer.deployTargetPreview': string;
+  'fileViewer.deployTargetProduction': string;
   'fileViewer.deployToProvider': string;
   'fileViewer.redeployToProvider': string;
   'fileViewer.deployingToProvider': string;
@@ -3903,6 +3970,7 @@ export interface Dict {
   'qf.choose': string;
   'qf.customLabel': string;
   'qf.customPlaceholder': string;
+  'qf.otherOption': string;
   'qf.required': string;
   'qf.lockedSubmitted': string;
   'qf.lockedPrev': string;
@@ -4213,6 +4281,13 @@ export interface Dict {
   'settings.resetOnboarding': string;
   'settings.resetOnboardingDesc': string;
   'settings.resetOnboardingButton': string;
+  // Manual updater/launcher cache clear (disaster recovery, About pane).
+  'settings.clearUpdaterCacheTitle': string;
+  'settings.clearUpdaterCacheHint': string;
+  'settings.clearUpdaterCacheButton': string;
+  'settings.clearUpdaterCacheConfirmButton': string;
+  'settings.clearUpdaterCacheSuccess': string;
+  'settings.clearUpdaterCacheFailed': string;
   'onboarding.brandTitle': string;
   'onboarding.brandSubtitle': string;
   'onboarding.brandSkip': string;

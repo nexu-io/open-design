@@ -5,12 +5,13 @@ dimension of professional UI craft (typography, color, motion, …). Skills
 opt into the references they need; the daemon injects only the requested
 ones into the system prompt above the active skill body.
 
-## Why a third axis next to `skills/` and `design-systems/`
+## Why a fourth axis next to skills, templates, and design systems
 
 | Axis | Scope | Example |
 |---|---|---|
-| `skills/` | Artifact shape | `saas-landing`, `dashboard`, `pricing-page` |
-| `design-systems/` | Brand visual language (the 9-section `DESIGN.md`) | `linear-app`, `apple`, `notion` |
+| `skills/` | Functional capabilities invoked while doing work | `design-brief`, `brand-extract`, `imagegen` |
+| `design-templates/` | Packaged artifact shapes | `saas-landing`, `dashboard`, `pricing-page` |
+| `design-systems/` | Brand package: prose, token contract, and optional rich resources | `linear-app`, `apple`, `notion` |
 | `craft/` | **Universal** craft knowledge — true regardless of brand | letter-spacing rules, accent-overuse caps, anti-AI-slop |
 
 `DESIGN.md` tells the agent which colors and fonts a brand uses. `craft/`
@@ -38,8 +39,9 @@ od:
     requires: [typography, typography-hierarchy, typography-hierarchy-editorial]
 ```
 
-Allowed values match the file names in this directory minus the `.md`
-extension. Unknown values are silently ignored (forward-compatible).
+Allowed shipped values match the file names in this directory minus the `.md`
+extension. The runtime skips an absent file for compatibility, but repository
+authoring does not silently accept arbitrary values.
 
 Run `pnpm lint:craft` after adding or changing `od.craft.requires`. The
 repository guard reports unresolved slugs with their manifest paths, so typos
@@ -47,16 +49,17 @@ cannot silently drop a craft section from the runtime prompt. If a slug is an
 intentional forward reference, list it in `craft/FUTURE_SECTIONS.md` until the
 matching `craft/<slug>.md` file ships.
 
-### Why silent fallback instead of fail-fast?
+### Runtime compatibility and authoring failures
 
-A skeptical reader will ask: "If a skill requests a planned-but-not-yet-vendored
-section and the corresponding file doesn't exist yet, shouldn't we warn
-the user?" We chose forward-compatibility over fail-fast: a skill
-authored today can list a planned slug and start benefiting the moment
-the matching `craft/<slug>.md` is vendored in a follow-up PR, with no
-skill edit needed. The cost of a missed reference is a missing
-paragraph in the system prompt, not a broken skill — so the loud
-failure mode is not worth the friction.
+The loader remains tolerant because externally installed or older bundles may
+reference a section that is unavailable in the current resource set. A missing
+optional paragraph must not make an otherwise usable runtime bundle fail.
+
+Checked-in content has a stronger contract: `pnpm lint:craft` and
+`pnpm guard` fail on malformed slugs and unresolved references. A deliberate
+forward reference is valid only when it is listed in
+`craft/FUTURE_SECTIONS.md`; this makes planned work explicit while preserving
+the runtime compatibility behavior.
 
 Note for skill authors arriving from older guidance: an earlier draft
 used `motion` as the future-slug placeholder. The shipped equivalent
@@ -90,8 +93,9 @@ A purely behavioral craft file (state-coverage, animation-discipline) is guidanc
 
 **Partial-stateful skills.** A skill that's mostly static but contains an embedded form, data table, or query surface should opt in. State-coverage rules apply to the stateful component, not the whole page.
 
-More sections (`icons`, `craft-details`) will be added in follow-up
-PRs as we wire the linter side.
+Planned-but-unshipped slugs are recorded in
+[`FUTURE_SECTIONS.md`](FUTURE_SECTIONS.md); do not hard-code a second future
+list here.
 
 ## Attribution
 

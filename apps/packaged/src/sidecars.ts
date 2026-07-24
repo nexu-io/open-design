@@ -33,6 +33,11 @@ import {
 
 import type { PackagedWebOutputMode } from "./config.js";
 import type { PackagedNamespacePaths } from "./paths.js";
+import {
+  prewarmPackagedFiles,
+  resolveDaemonPrewarmTargets,
+  resolveWebPrewarmTargets,
+} from "./prewarm.js";
 
 const require = createRequire(import.meta.url);
 const PACKAGED_CHILD_ENV_ALLOWLIST = [
@@ -52,6 +57,30 @@ const PACKAGED_CHILD_ENV_ALLOWLIST = [
   "http_proxy",
   "https_proxy",
   "no_proxy",
+] as const;
+
+// The daemon owns the historical-outer compatibility handoff. Preserve the
+// updater controls it needs to launch the replacement payload desktop with the
+// same feed/test policy as the outer process, without broadening the packaged
+// child environment allowlist.
+const PACKAGED_DESKTOP_HANDOFF_ENV_KEYS = [
+  "OD_UPDATE_ARCH",
+  "OD_UPDATE_AUTO_CHECK",
+  "OD_UPDATE_AUTO_DOWNLOAD",
+  "OD_UPDATE_AUTO_OPEN",
+  "OD_UPDATE_CHANNEL",
+  "OD_UPDATE_CHECK_BACKOFF_INITIAL_MS",
+  "OD_UPDATE_CHECK_BACKOFF_MAX_MS",
+  "OD_UPDATE_CHECK_INITIAL_DELAY_MS",
+  "OD_UPDATE_CHECK_INTERVAL_MS",
+  "OD_UPDATE_CURRENT_VERSION",
+  "OD_UPDATE_DOWNLOAD_ROOT",
+  "OD_UPDATE_ENABLED",
+  "OD_UPDATE_INSTALLED_VERSION",
+  "OD_UPDATE_METADATA_URL",
+  "OD_UPDATE_MODE",
+  "OD_UPDATE_OPEN_DRY_RUN",
+  "OD_UPDATE_PLATFORM",
 ] as const;
 
 function shouldForwardPackagedChildEnv(key: string, includeProviderSecrets = false): boolean {
@@ -149,25 +178,62 @@ async function openLog(path: string): Promise<FileHandle> {
 }
 
 const DAEMON_STATUS_TIMEOUT_MS = 35_000;
+// Windows first launches routinely blow past the 35s POSIX budget: Defender
+// real-time scanning of the freshly-written packaged binaries inflates the
+// daemon cold start (native better-sqlite3 load + first SQLite open/migrate +
+// status-pipe bind) well past 35s. PostHog on the packaged_runtime_failed
+// status-timeout bucket showed ~90% of affected devices DID open the app on a
+// later launch — the daemon was merely slow, not dead — so a wider win32 budget
+// lets that first launch succeed instead of failing to a recovery screen and
+// forcing a manual relaunch.
+const WIN32_STATUS_TIMEOUT_MS = 90_000;
+// Linux AppImage launches remount a fresh FUSE squashfs every time, so the
+// VFS page cache for the packaged payload is cold on EVERY launch — the
+// daemon demand-pages its 124 MB bundled node binary through FUSE while the
+// Electron main process faults through the same mount, and the 35s POSIX
+// baseline is unreachable on mid-range hardware (issue #5835). The prewarm
+// pass in startPackagedSidecars cuts the usual case to a few seconds; this
+// widened budget is the safety net for slow devices, mirroring the win32
+// rationale above (same "slow, not dead" failure class as #5515).
+const LINUX_STATUS_TIMEOUT_MS = 90_000;
 const DAEMON_MIGRATION_STATUS_TIMEOUT_MS = 30 * 60 * 1000;
 
+// Poll cadence for waitForStatus: start tight so a fast daemon is detected
+// promptly, then back off geometrically (capped) so a not-yet-bound pipe is not
+// hammered with connect attempts that add CPU/AV contention to an already-slow
+// cold start.
+const STATUS_POLL_INITIAL_MS = 150;
+const STATUS_POLL_MAX_MS = 1500;
+
+// Baseline status wait budget by platform, before the daemon-only legacy
+// migration override. win32 gets the wider AV-scan headroom, linux gets the
+// same headroom for AppImage FUSE cold starts; every other OS keeps the 35s
+// baseline.
+function baseStatusTimeoutMs(platform: NodeJS.Platform = process.platform): number {
+  if (platform === "win32") return WIN32_STATUS_TIMEOUT_MS;
+  if (platform === "linux") return LINUX_STATUS_TIMEOUT_MS;
+  return DAEMON_STATUS_TIMEOUT_MS;
+}
+
 /**
- * Daemon status wait budget. The default 35s is fine for normal cold
- * boots, but the OD_LEGACY_DATA_DIR one-shot recovery flow can synch-
- * copy a multi-GB legacy `.od/` payload before SQLite even opens, and
- * killing the child mid-migration can leave dataDir half-promoted.
- * When the env var is set, use a 30-minute budget so the parent will
- * not tear the daemon down before the migration can complete.
+ * Daemon status wait budget. The platform baseline (35s, or 90s on win32 for
+ * AV-scan headroom and on linux for AppImage FUSE cold starts) is fine for
+ * normal cold boots, but the OD_LEGACY_DATA_DIR
+ * one-shot recovery flow can synch-copy a multi-GB legacy `.od/` payload before
+ * SQLite even opens, and killing the child mid-migration can leave dataDir
+ * half-promoted. When the env var is set, use a 30-minute budget so the parent
+ * will not tear the daemon down before the migration can complete.
  *
  * @see apps/daemon/src/legacy-data-migrator.ts
  * @see https://github.com/nexu-io/open-design/issues/710
  */
 export function resolveDaemonStatusTimeoutMs(
   env: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
 ): number {
   const raw = env.OD_LEGACY_DATA_DIR;
   if (raw != null && raw.length > 0) return DAEMON_MIGRATION_STATUS_TIMEOUT_MS;
-  return DAEMON_STATUS_TIMEOUT_MS;
+  return baseStatusTimeoutMs(platform);
 }
 
 /**
@@ -190,6 +256,7 @@ export async function waitForStatus<T>(
 ): Promise<T> {
   const startedAt = Date.now();
   let lastError: unknown;
+  let pollDelayMs = STATUS_POLL_INITIAL_MS;
   let childExited: { code: number | null; signal: NodeJS.Signals | null } | null = null;
 
   // Cover the race between spawn-resolved and now: if the child has
@@ -223,12 +290,12 @@ export async function waitForStatus<T>(
         if (watch?.child.pid != null) {
           if (statusPid == null) {
             lastError = new Error(`sidecar status did not include pid for spawned pid ${watch.child.pid}`);
-            await sleep(150);
+            await sleep(STATUS_POLL_INITIAL_MS);
             continue;
           }
           if (statusPid !== watch.child.pid) {
             lastError = new Error(`sidecar status pid ${statusPid} did not match spawned pid ${watch.child.pid}`);
-            await sleep(150);
+            await sleep(STATUS_POLL_INITIAL_MS);
             continue;
           }
         }
@@ -236,7 +303,14 @@ export async function waitForStatus<T>(
       } catch (error) {
         lastError = error;
       }
-      await sleep(150);
+      // Keep timeoutMs a hard-ish upper bound: never sleep past the deadline, so
+      // the widened win32 budget can't be overshot by a full backoff interval on
+      // a slow/dead sidecar. The in-flight requestJsonIpc timeout is the only
+      // residual overshoot; the while-condition re-checks the deadline next tick.
+      const remaining = timeoutMs - (Date.now() - startedAt);
+      if (remaining <= 0) break;
+      await sleep(Math.min(pollDelayMs, remaining));
+      pollDelayMs = Math.min(pollDelayMs * 2, STATUS_POLL_MAX_MS);
     }
 
     throw new Error(
@@ -337,6 +411,8 @@ export type PackagedDaemonSpawnEnvOptions = {
   appVersion: string | null;
   amrProfile?: string | null;
   daemonCliEntry: string | null;
+  desktopHandoffEnv?: NodeJS.ProcessEnv;
+  nodeCommand?: string | null;
   /**
    * PR #974 round-5 (lefarcen P2): only pin the daemon's import-folder
    * gate ON when the desktop runtime is actually being started in the
@@ -379,10 +455,14 @@ export function buildPackagedDaemonSpawnEnv(
     // fallback, but packaged runtime must not rely on path inference from
     // Electron userData, bundle names, or ports.
     ...createPackagedDaemonManagedPathEnv(paths),
+    ...(options.nodeCommand == null || options.nodeCommand.length === 0
+      ? {}
+      : { OD_NODE_BIN: options.nodeCommand }),
     ...(options.amrProfile == null || options.amrProfile.length === 0
       ? {}
       : { OPEN_DESIGN_AMR_PROFILE: options.amrProfile }),
     ...(options.appVersion == null ? {} : { OD_APP_VERSION: options.appVersion }),
+    ...pickPackagedDesktopHandoffEnv(options.desktopHandoffEnv ?? {}),
     ...(options.telemetryRelayUrl == null || options.telemetryRelayUrl.length === 0
       ? {}
       : { OPEN_DESIGN_TELEMETRY_RELAY_URL: options.telemetryRelayUrl }),
@@ -407,6 +487,15 @@ export function buildPackagedDaemonSpawnEnv(
       ? {}
       : { POSTHOG_HOST: options.posthogHost }),
   };
+}
+
+function pickPackagedDesktopHandoffEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const selected: NodeJS.ProcessEnv = {};
+  for (const key of PACKAGED_DESKTOP_HANDOFF_ENV_KEYS) {
+    const value = env[key];
+    if (value != null && value.length > 0) selected[key] = value;
+  }
+  return selected;
 }
 
 async function spawnSidecarChild(options: {
@@ -457,12 +546,11 @@ async function spawnSidecarChild(options: {
   const child = spawn(
     command,
     [options.entryPath, ...createProcessStampArgs(stamp, OPEN_DESIGN_SIDECAR_CONTRACT)],
-    {
-      cwd: process.cwd(),
+    createPackagedSidecarSpawnOptions({
       env: childEnv,
-      stdio: ["ignore", logHandle.fd, logHandle.fd],
-      windowsHide: true,
-    },
+      logFd: logHandle.fd,
+      paths: options.paths,
+    }),
   );
 
   await new Promise<void>((resolveSpawn, rejectSpawn) => {
@@ -471,6 +559,24 @@ async function spawnSidecarChild(options: {
   });
 
   return { app: options.app, child, ipcPath, logHandle, logPath };
+}
+
+export function createPackagedSidecarSpawnOptions(input: {
+  env: NodeJS.ProcessEnv;
+  logFd: number;
+  paths: Pick<PackagedNamespacePaths, "runtimeRoot">;
+}): {
+  cwd: string;
+  env: NodeJS.ProcessEnv;
+  stdio: ["ignore", number, number];
+  windowsHide: true;
+} {
+  return {
+    cwd: input.paths.runtimeRoot,
+    env: input.env,
+    stdio: ["ignore", input.logFd, input.logFd],
+    windowsHide: true,
+  };
 }
 
 async function closeManagedChild(child: ManagedSidecarChild): Promise<void> {
@@ -540,16 +646,41 @@ export async function startPackagedSidecars(
 
   const children: ManagedSidecarChild[] = [];
 
+  const daemonSidecarEntry =
+    options.daemonSidecarEntry ?? resolveSidecarEntry("@open-design/daemon", "sidecar");
+  const webSidecarEntry =
+    options.webSidecarEntry ?? resolveSidecarEntry("@open-design/web", "sidecar");
+  const prewarmLog = (message: string): void => {
+    void appendSidecarLifecycleLog(join(paths.logsRoot, "launcher", "latest.log"), message);
+  };
+
   try {
+    // Issue #5835: on Linux AppImage the payload lives on a fresh FUSE mount
+    // with a cold page cache. Read the daemon's cold-start set (bundled node
+    // binary + daemon dist) into the page cache BEFORE spawning, so the
+    // timed status window covers real daemon work instead of demand-paging
+    // ~145 MB through FUSE page fault by page fault. Best-effort and gated
+    // to linux+FUSE inside prewarmPackagedFiles; plain-file installs skip.
+    await prewarmPackagedFiles(
+      resolveDaemonPrewarmTargets({
+        nodeCommand: options.nodeCommand,
+        daemonSidecarEntry,
+        resourceRoot: paths.resourceRoot,
+      }),
+      { log: prewarmLog },
+    );
+
     options.onPhase?.("daemon-spawning");
     const daemon = await spawnSidecarChild({
       app: APP_KEYS.DAEMON,
-      entryPath: options.daemonSidecarEntry ?? resolveSidecarEntry("@open-design/daemon", "sidecar"),
+      entryPath: daemonSidecarEntry,
       env: buildPackagedDaemonSpawnEnv(paths, {
         appVersion: options.appVersion,
         amrProfile: options.amrProfile,
         daemonCliEntry: options.daemonCliEntry,
+        desktopHandoffEnv: process.env,
         legacyDataDir: process.env.OD_LEGACY_DATA_DIR ?? null,
+        nodeCommand: options.nodeCommand,
         requireDesktopAuth: options.requireDesktopAuth,
         telemetryRelayUrl: options.telemetryRelayUrl,
         posthogKey: options.posthogKey,
@@ -561,6 +692,17 @@ export async function startPackagedSidecars(
       runtime,
     });
     children.push(daemon);
+    // The web prewarm overlaps the daemon's boot wait: its read set (web
+    // sidecar dist, .next/server chunks, Next framework code) is disjoint
+    // from the daemon's already-warm working set, so the FUSE server stays
+    // busy on sequential reads while the daemon does CPU/SQLite work.
+    const webPrewarm = prewarmPackagedFiles(
+      resolveWebPrewarmTargets({
+        webSidecarEntry,
+        webStandaloneRoot: options.webStandaloneRoot,
+      }),
+      { log: prewarmLog },
+    );
     const daemonStatus = await waitForStatus<DaemonStatusSnapshot>(
       daemon.ipcPath,
       (status) => status.url != null,
@@ -575,10 +717,14 @@ export async function startPackagedSidecars(
     if (daemonStatus.url == null) throw new Error("daemon did not report a URL");
     options.onPhase?.("daemon-ready");
 
+    // The web payload must be in the page cache before the web sidecar
+    // enters its own timed status window.
+    await webPrewarm;
+
     options.onPhase?.("web-spawning");
     const web = await spawnSidecarChild({
       app: APP_KEYS.WEB,
-      entryPath: options.webSidecarEntry ?? resolveSidecarEntry("@open-design/web", "sidecar"),
+      entryPath: webSidecarEntry,
       env: {
         [SIDECAR_ENV.DAEMON_PORT]: extractPort(daemonStatus.url),
         [SIDECAR_ENV.WEB_PORT]: "0",
@@ -595,7 +741,10 @@ export async function startPackagedSidecars(
     const webStatus = await waitForStatus<WebStatusSnapshot>(
       web.ipcPath,
       (status) => status.url != null,
-      DAEMON_STATUS_TIMEOUT_MS,
+      // Web has no legacy-migration path, so it uses the plain platform
+      // baseline (still widened on win32, where AV scanning can also slow the
+      // web sidecar's first bind) rather than resolveDaemonStatusTimeoutMs.
+      baseStatusTimeoutMs(),
       { child: web.child, logPath: logPathFor(paths, APP_KEYS.WEB) },
     );
     if (webStatus.url == null) throw new Error("web did not report a URL");

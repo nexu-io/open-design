@@ -18,6 +18,7 @@ import type {
   DesignSystemsTemplatesModalSurfaceViewProps,
   AssistantFeedbackReasonPanelSurfaceViewProps,
   QuestionsFormSurfaceViewProps,
+  PreviewRunStatusSurfaceViewProps,
   // ui_click
   HomeNavClickProps,
   HelpPopoverClickProps,
@@ -135,6 +136,7 @@ import type {
   SettingsByokModelsFetchResultProps,
   SettingsByokTestResultProps,
   SettingsConnectorAuthResultProps,
+  ByokPreflightBlockedProps,
   OnboardingClickProps,
   OnboardingRuntimeScanResultProps,
   OnboardingCompleteResultProps,
@@ -148,6 +150,7 @@ import type {
   DesignSystemApplyResultProps,
   UpdateIndicatorSurfaceViewProps,
   UpdatePromptSurfaceViewProps,
+  UpdateCheckResultProps,
   UpdateInstallResultProps,
   WhatsNewPopupSurfaceViewProps,
   WhatsNewPopupClickProps,
@@ -252,6 +255,13 @@ export function trackAssistantFeedbackReasonPanelSurfaceView(
 export function trackRunFailedToastSurfaceView(
   track: Track,
   props: RunFailedToastSurfaceViewProps,
+): void {
+  send(track, 'surface_view', props);
+}
+
+export function trackPreviewRunStatusSurfaceView(
+  track: Track,
+  props: PreviewRunStatusSurfaceViewProps,
 ): void {
   send(track, 'surface_view', props);
 }
@@ -1062,6 +1072,13 @@ export function trackSettingsByokModelsFetchResult(
   send(track, 'settings_byok_models_fetch_result', props);
 }
 
+export function trackByokPreflightBlocked(
+  track: Track,
+  props: ByokPreflightBlockedProps,
+): void {
+  send(track, 'byok_preflight_blocked', props);
+}
+
 export function trackSettingsConnectorAuthResult(
   track: Track,
   props: SettingsConnectorAuthResultProps,
@@ -1235,6 +1252,13 @@ export function trackUpdateInstallResult(
   props: UpdateInstallResultProps,
 ): void {
   send(track, 'update_install_result', props);
+}
+
+export function trackUpdateCheckResult(
+  track: Track,
+  props: UpdateCheckResultProps,
+): void {
+  send(track, 'update_check_result', props);
 }
 
 // ---- Post-update "what's new" card ---------------------------------------

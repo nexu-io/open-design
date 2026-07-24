@@ -207,6 +207,8 @@ type DesignToolboxResource =
   | (DesignToolboxResourceBase & { kind: 'connector'; connector: ConnectorDetail })
   | (DesignToolboxResourceBase & { kind: 'file'; file: ProjectFile });
 
+export type ChatSendOutcome = void | 'restore-draft';
+
 interface Props {
   projectId: string | null;
   projectFiles: ProjectFile[];
@@ -236,7 +238,7 @@ interface Props {
     attachments: ChatAttachment[],
     commentAttachments: ChatCommentAttachment[],
     meta?: ChatSendMeta,
-  ) => void;
+  ) => ChatSendOutcome | Promise<ChatSendOutcome>;
   onStop: () => void;
   // Opens the global settings dialog (CLI / model / agent picker). The
   // composer's leading gear icon routes here so users can switch models
@@ -258,7 +260,12 @@ interface Props {
   onOpenPetSettings?: () => void;
   researchAvailable?: boolean;
   projectMetadata?: ProjectMetadata;
-  onProjectMetadataChange?: (metadata: ProjectMetadata) => void;
+  // Fired after the daemon accepts a metadata PATCH, with the authoritative
+  // post-patch project (fresh `updatedAt` included). Callers must replace
+  // their whole project copy with it: forwarding only the metadata onto a
+  // stale copy lets an older detail snapshot win recency comparisons and
+  // shadow the change (e.g. the working-dir label never updating).
+  onProjectMetadataChange?: (updated: Project) => void;
   activeWorkspaceContext?: WorkspaceContextItem | null;
   initialWorkspaceContexts?: WorkspaceContextItem[];
   workspaceContexts?: WorkspaceContextItem[];
@@ -1170,6 +1177,34 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       return Object.keys(meta).length > 0 ? meta : undefined;
     }
 
+    function finishComposedSend(
+      outcome: ChatSendOutcome | Promise<ChatSendOutcome>,
+      pendingMetadata?: { entryFrom: ChatSendMeta['entryFrom'] | null; sessionMode: ChatSessionMode | null },
+    ) {
+      void Promise.resolve(outcome).then(
+        (result) => {
+          if (result === 'restore-draft') {
+            if (pendingMetadata?.entryFrom && !pendingEntryFromRef.current) {
+              pendingEntryFromRef.current = pendingMetadata.entryFrom;
+            }
+            if (pendingMetadata?.sessionMode && !pendingSessionModeRef.current) {
+              pendingSessionModeRef.current = pendingMetadata.sessionMode;
+            }
+            return;
+          }
+          reset();
+        },
+        () => {
+          if (pendingMetadata?.entryFrom && !pendingEntryFromRef.current) {
+            pendingEntryFromRef.current = pendingMetadata.entryFrom;
+          }
+          if (pendingMetadata?.sessionMode && !pendingSessionModeRef.current) {
+            pendingSessionModeRef.current = pendingMetadata.sessionMode;
+          }
+        },
+      );
+    }
+
     function sendComposedTurn(
       prompt: string,
       attachments: ChatAttachment[],
@@ -1202,8 +1237,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       };
       const effectiveMeta =
         Object.keys(effectiveMetaShape).length > 0 ? effectiveMetaShape : undefined;
-      onSend(prompt, nextAttachments, nextCommentAttachments, effectiveMeta);
-      reset();
+      finishComposedSend(
+        onSend(prompt, nextAttachments, nextCommentAttachments, effectiveMeta),
+        { entryFrom: pendingEntryFrom, sessionMode: pendingSessionMode },
+      );
       return true;
     }
 
@@ -1306,7 +1343,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
           onShowToast?.(t('homeWorkingDir.applyFailed'));
           return false;
         }
-        onProjectMetadataChange?.(result.metadata);
+        onProjectMetadataChange?.(result);
         for (const trimmed of trimmedDirs) void rememberRecentDir(trimmed);
       }
       return trackedByDir;
@@ -1636,7 +1673,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         onShowToast?.(t('homeWorkingDir.applyFailed'));
         return false;
       }
-      onProjectMetadataChange?.(result.metadata);
+      onProjectMetadataChange?.(result);
       setWorkspaceLinkedDirAdds((current) => {
         const { [id]: _removed, ...rest } = current;
         return rest;
@@ -1844,31 +1881,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               const result = await uploadProjectFiles(id, annotationFiles);
               if (result.uploaded.length > 0) {
                 uploaded = assignChatAttachmentOrders(result.uploaded, orderStart);
-                const screenshot = detail.file ? uploaded[0] : null;
-                if (screenshot && detail.markKind && detail.bounds) {
-                  visualAttachmentInput = {
-                    order: isFiniteAttachmentOrder(screenshot.order) ? screenshot.order : orderStart,
-                    idSeed: screenshot.path,
-                    screenshotPath: screenshot.path,
-                    markKind: detail.markKind,
-                    note: detail.note,
-                    bounds: detail.bounds,
-                    target: detail.target
-                      ? {
-                          filePath: detail.target.filePath || detail.filePath || screenshot.path,
-                          elementId: detail.target.elementId,
-                          selector: detail.target.selector,
-                          label: detail.target.label,
-                          text: detail.target.text,
-                          position: detail.target.position,
-                          htmlHint: detail.target.htmlHint,
-                        }
-                      : {
-                          filePath: detail.filePath || screenshot.path,
-                          position: detail.bounds,
-                        },
-                  };
-                }
               }
               if (result.failed.length > 0) {
                 const detailText = result.error ? ` (${result.error})` : '';
@@ -1878,6 +1890,38 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                   return;
                 }
               }
+            }
+            // The structured visual comment is built whenever the mark has a
+            // location, with or without the screenshot upload. When the
+            // preview capture failed (#4080) the screenshot is absent, but
+            // file/bounds/markKind still anchor the marked region for the
+            // agent (#4084) — dropping them would reduce the send to bare
+            // prose and force the agent to guess what "this part" means.
+            if (detail.markKind && detail.bounds) {
+              const screenshot = detail.file && uploaded.length > 0 ? uploaded[0] : null;
+              visualAttachmentInput = {
+                order: screenshot && isFiniteAttachmentOrder(screenshot.order) ? screenshot.order : 1,
+                idSeed: screenshot?.path
+                  ?? `${detail.filePath || 'preview'}-${detail.markKind}-${Math.round(detail.bounds.x * 1000)}-${Math.round(detail.bounds.y * 1000)}`,
+                ...(screenshot ? { screenshotPath: screenshot.path } : {}),
+                markKind: detail.markKind,
+                note: detail.note,
+                bounds: detail.bounds,
+                target: detail.target
+                  ? {
+                      filePath: detail.target.filePath || detail.filePath || screenshot?.path || '',
+                      elementId: detail.target.elementId,
+                      selector: detail.target.selector,
+                      label: detail.target.label,
+                      text: detail.target.text,
+                      position: detail.target.position,
+                      htmlHint: detail.target.htmlHint,
+                    }
+                  : {
+                      filePath: detail.filePath || screenshot?.path || '',
+                      position: detail.bounds,
+                    },
+              };
             }
             setUploading(false);
 
@@ -2073,7 +2117,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         onShowToast?.(t('homeWorkingDir.applyFailed'));
         return;
       }
-      onProjectMetadataChange?.(result.metadata);
+      onProjectMetadataChange?.(result);
       const promotedDir = dir.trim();
       setPromotedWorkspaceContextDir(
         selectedWorkspaceContextDirs.includes(promotedDir) ? promotedDir : null,
@@ -2102,7 +2146,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       const result = await patchProject(projectId, { metadata });
       if (result?.metadata) {
         setPromotedWorkspaceContextDir(null);
-        onProjectMetadataChange?.(result.metadata);
+        onProjectMetadataChange?.(result);
       }
     }
 
@@ -2385,19 +2429,19 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       if (hatched) {
         if (streaming) return;
         setStreamingAnnotationSendPending(false);
-        onSend(hatched, staged, nextCommentAttachments, contextMeta);
-        reset();
+        finishComposedSend(onSend(hatched, staged, nextCommentAttachments, contextMeta));
         return;
       }
       const search = researchAvailable ? expandSearchCommand(prompt) : null;
       if (search) {
         if (streaming) return;
         setStreamingAnnotationSendPending(false);
-        onSend(search.prompt, staged, nextCommentAttachments, {
-          ...contextMeta,
-          research: { enabled: true, query: search.query },
-        });
-        reset();
+        finishComposedSend(
+          onSend(search.prompt, staged, nextCommentAttachments, {
+            ...contextMeta,
+            research: { enabled: true, query: search.query },
+          }),
+        );
         return;
       }
       if (!prompt && staged.length === 0 && nextCommentAttachments.length === 0) {

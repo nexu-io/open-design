@@ -99,7 +99,7 @@ export function installErrorHandlers(): void {
   installed = true;
 
   window.addEventListener('error', (event) => {
-    captureException(event.error, event.message ?? 'Uncaught error', {
+    captureException(event.error, event.message || 'Uncaught error', {
       filename: typeof event.filename === 'string' ? event.filename : undefined,
       lineno: typeof event.lineno === 'number' ? event.lineno : undefined,
       colno: typeof event.colno === 'number' ? event.colno : undefined,
@@ -118,7 +118,7 @@ export function installErrorHandlers(): void {
 // want it visible in PostHog (e.g. an ErrorBoundary's componentDidCatch).
 // Unhandled errors go through the window listeners above.
 export function reportHandledException(error: unknown, message?: string): void {
-  captureException(error, message ?? defaultMessage(error), { handled: true });
+  captureException(error, message || defaultMessage(error), { handled: true });
 }
 
 interface CaptureMetadata {
@@ -276,19 +276,90 @@ function dispatch(item: BufferedSafetyEvent): void {
   }
 }
 
+// Frame-level source-map correlation.
+//
+// `@posthog/cli sourcemap inject` (run from tools/pack/src/web-sourcemaps.ts
+// on every packaged build) bakes a unique chunk id into each browser chunk
+// and the matching id into the .map it uploads to PostHog. At load time each
+// injected chunk registers `globalThis._posthogChunkIds[<its Error().stack>] =
+// <chunkId>`. Symbolication then requires that chunk id to ride along on each
+// captured frame: packaged chunks load over the `od://` scheme, which PostHog
+// cannot fetch a `.map` from, so the chunk id is the ONLY correlation key.
+//
+// posthog-js stamps it natively, but we set `capture_exceptions: false` and
+// hand-build exceptions here, so we must replicate the stamping or every
+// packaged frame ships un-symbolicatable (observed in prod: 100% of frames
+// failed with "had no source url or chunk id"). This mirrors
+// @posthog/core error-tracking/chunk-ids.ts so the filename→chunkId map is
+// identical to what the uploaded maps were injected against.
+type ChunkIdMap = Record<string, string>;
+
+let cachedRegistry: ChunkIdMap | undefined;
+let cachedFilenameChunkIds: ChunkIdMap | undefined;
+let cachedRegistryKeyCount = -1;
+
+function getFilenameToChunkIdMap(): ChunkIdMap {
+  const registry = (globalThis as { _posthogChunkIds?: ChunkIdMap })._posthogChunkIds;
+  if (!registry) return {};
+  const keys = Object.keys(registry);
+  // Chunks register lazily as they load, so the registry grows over the
+  // session. Rebuild only when it changes (same identity + same size = hit).
+  if (
+    cachedFilenameChunkIds &&
+    cachedRegistry === registry &&
+    keys.length === cachedRegistryKeyCount
+  ) {
+    return cachedFilenameChunkIds;
+  }
+  const map: ChunkIdMap = {};
+  for (const stackKey of keys) {
+    const chunkId = registry[stackKey];
+    if (!chunkId) continue;
+    // The registry key is an Error().stack captured inside the injected chunk.
+    // Key the chunk id on the frame where that Error was constructed — the
+    // chunk's own file. @posthog/core scans its stackParser output (which it
+    // reverses to oldest-first) from the end, i.e. the NEWEST frame; parseStack
+    // here keeps Error.stack's native newest-first order, so the newest frame
+    // is frames[0]. Take the first frame with a filename. A registration stack
+    // is typically multi-frame (the injected IIFE sits above webpack
+    // require/loader frames), so picking the wrong end would key the id onto a
+    // runtime-chunk filename and leave the real chunk with no entry.
+    const frames = parseStack(stackKey, {});
+    for (const frame of frames) {
+      const filename = frame?.filename;
+      if (typeof filename === 'string' && filename) {
+        map[filename] = chunkId;
+        break;
+      }
+    }
+  }
+  cachedRegistry = registry;
+  cachedRegistryKeyCount = keys.length;
+  cachedFilenameChunkIds = map;
+  return map;
+}
+
 function buildExceptionList(
   error: unknown,
   fallbackMessage: string,
   metadata: CaptureMetadata,
 ): Array<Record<string, unknown>> {
   const isError = error instanceof Error;
-  const type = isError ? error.name : typeof error === 'string' ? 'Error' : 'NonError';
-  const value = isError
-    ? error.message
-    : typeof error === 'string'
-      ? error
-      : fallbackMessage;
+  // Every branch below must yield a NON-EMPTY type and value. An empty string
+  // here ships an exception PostHog cannot type or group — in production 70
+  // events on the current release carried neither. `error.name` can be '' when
+  // a minifier mangles a `this.name = new.target.name` subclass, and
+  // `error.message` is '' for a bare `new Error()`.
+  const type =
+    (isError ? error.name : typeof error === 'string' ? 'Error' : 'NonError') || 'Error';
+  const value =
+    (isError
+      ? error.message
+      : typeof error === 'string'
+        ? error
+        : fallbackMessage) || fallbackMessage || 'Unknown error';
   const stack = isError && typeof error.stack === 'string' ? error.stack : '';
+  const chunkIds = getFilenameToChunkIdMap();
   // Stamp `platform` on every frame. PostHog's exception ingestion treats
   // it as a required field (it selects the symbolication / issue-grouping
   // strategy per frame); a frame without it fails the exceptions pipeline
@@ -297,10 +368,21 @@ function buildExceptionList(
   // were failing to ingest. posthog-js stamps the same value on each frame;
   // we replicate it because client.ts sets `capture_exceptions: false` and
   // this module is the sole browser-exception transport.
-  const frames = parseStack(stack, metadata).map((frame) => ({
-    ...frame,
-    platform: FRAME_PLATFORM,
-  }));
+  //
+  // Also stamp `chunk_id` when the frame's chunk registered one (see
+  // `getFilenameToChunkIdMap`). Without it, packaged `od://` frames carry no
+  // source URL PostHog can fetch, so the uploaded sourcemap can never be
+  // matched and every frame stays minified — the reason production stacks
+  // showed `?:?` despite the tools-pack sourcemap upload succeeding.
+  const frames = parseStack(stack, metadata).map((frame) => {
+    const filename = typeof frame.filename === 'string' ? frame.filename : undefined;
+    const chunkId = filename ? chunkIds[filename] : undefined;
+    return {
+      ...frame,
+      platform: FRAME_PLATFORM,
+      ...(chunkId ? { chunk_id: chunkId } : {}),
+    };
+  });
   return [
     {
       type,
@@ -321,22 +403,47 @@ function buildExceptionList(
 const STACK_RE_V8 = /^\s*at\s+(?:(.+?)\s+\()?(.+?):(\d+):(\d+)\)?$/;
 const STACK_RE_SPIDERMONKEY = /^(.*?)@(.+?):(\d+):(\d+)$/;
 
+/**
+ * Never ship a zero-frame stacktrace.
+ *
+ * PostHog derives `$exception_types` / `$exception_values` from
+ * `$exception_list` during ingestion and skips entries that fail frame-level
+ * validation, so an empty `frames` array is how an exception lands with neither
+ * field set — the `Error` row with no value in the stability report.
+ *
+ * The guard runs on the PARSED result, not on the raw string: a header-only
+ * stack (`"Error: Script error."`) is truthy yet yields no frames, because the
+ * first line is dropped as a message rather than a frame. Checking the input
+ * only would let exactly that case through.
+ */
 function parseStack(stack: string, metadata: CaptureMetadata): Array<Record<string, unknown>> {
-  if (!stack) {
-    if (metadata.filename) {
-      return [
-        {
-          function: '<anonymous>',
-          filename: metadata.filename,
-          abs_path: metadata.filename,
-          lineno: metadata.lineno ?? 0,
-          colno: metadata.colno ?? 0,
-          in_app: true,
-        },
-      ];
-    }
-    return [];
+  const parsed = stack ? parseStackFrames(stack) : [];
+  if (parsed.length > 0) return parsed;
+  if (metadata.filename) {
+    return [
+      {
+        function: '<anonymous>',
+        filename: metadata.filename,
+        abs_path: metadata.filename,
+        lineno: metadata.lineno ?? 0,
+        colno: metadata.colno ?? 0,
+        in_app: true,
+      },
+    ];
   }
+  return [
+    {
+      function: '<unknown>',
+      filename: '<no stack>',
+      abs_path: '<no stack>',
+      lineno: metadata.lineno ?? 0,
+      colno: metadata.colno ?? 0,
+      in_app: true,
+    },
+  ];
+}
+
+function parseStackFrames(stack: string): Array<Record<string, unknown>> {
   const lines = stack.split('\n');
   // The first line is usually the message (e.g. "TypeError: foo is not a
   // function") rather than a frame — skip it when it doesn't start with

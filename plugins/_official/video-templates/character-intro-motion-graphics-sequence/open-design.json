@@ -24,6 +24,7 @@
     "en": "Character Intro Motion Graphics Sequence"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "A complex, multi-stage motion graphics prompt for introducing a team of characters with specific UI overlays and transitions, designed for the Seedance 2.0 model.",
   "description_i18n": {
     "zh-CN": "为 Seedance 2.0 模型设计的复杂多阶段动态图形提示词，用于介绍团队角色并添加特定 UI 叠加层和转场效果。",

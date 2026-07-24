@@ -158,6 +158,41 @@ function lightThemeForeground(raw: string | undefined): string {
   return hex && luminance(hex) <= 0.45 ? hex : defaultSeed.colorTextBase;
 }
 
+/** Canvas at or below this luminance reads as a deliberate dark background. */
+const DARK_CANVAS_MAX_LUMINANCE = 0.3;
+/** Foreground at or above this luminance reads as light text. */
+const LIGHT_FOREGROUND_MIN_LUMINANCE = 0.6;
+
+/**
+ * Resolve the seed's neutral bases from the brand's explicit neutral roles.
+ *
+ * A brand that carries BOTH a confidently dark background (or surface) AND a
+ * light foreground is dark-first: its canvas is preserved so the derived
+ * default theme stays on-brand instead of clamping to the light Ant baseline.
+ * Anything ambiguous (mid-gray canvas, missing roles, dark-on-dark) falls back
+ * to the light baseline exactly as before.
+ */
+function neutralBases(
+  background: string | undefined,
+  surface: string | undefined,
+  foreground: string | undefined,
+): { colorTextBase: string; colorBgBase: string } {
+  const bgHex = normalizeHex(background ?? "") ?? normalizeHex(surface ?? "");
+  const fgHex = normalizeHex(foreground ?? "");
+  const darkFirst =
+    bgHex !== null &&
+    fgHex !== null &&
+    luminance(bgHex) <= DARK_CANVAS_MAX_LUMINANCE &&
+    luminance(fgHex) >= LIGHT_FOREGROUND_MIN_LUMINANCE;
+  if (darkFirst) {
+    return { colorTextBase: fgHex, colorBgBase: bgHex };
+  }
+  return {
+    colorTextBase: lightThemeForeground(foreground),
+    colorBgBase: lightThemeBackground(background, surface),
+  };
+}
+
 // ─────────────────────────── Brand → Seed ───────────────────────────────────
 
 function findRole(colors: BrandColor[], role: BrandColor["role"]): BrandColor | undefined {
@@ -190,8 +225,10 @@ function fontStack(primaryFamily: string | undefined, fallbacks: string[]): stri
  *  - colorInfo     ← same as primary
  *  - colorLink     ← role "accent-secondary" (else "")
  *  - colorSuccess  ← accent-secondary if it reads green, else default
- *  - colorTextBase ← dark role "foreground"; light foregrounds fall back to black
- *  - colorBgBase   ← light role "background" / "surface"; dark canvases fall back to white
+ *  - colorTextBase / colorBgBase ← neutralBases(): dark-first brands (dark
+ *                    background + light foreground) keep their true canvas;
+ *                    otherwise light foregrounds fall back to black and dark
+ *                    canvases fall back to white as before
  *  - fontFamily    ← body face + fallbacks + system tail
  *  - borderRadius  ← parseInt(layout.radius) || 6
  *  - everything else ← defaultSeed
@@ -229,8 +266,7 @@ export function seedFromBrand(brand: Brand): SeedToken {
     colorInfo: primaryHex,
     colorLink: linkHex ?? "",
     colorSuccess: successHex,
-    colorTextBase: lightThemeForeground(foreground?.hex),
-    colorBgBase: lightThemeBackground(background?.hex, surface?.hex),
+    ...neutralBases(background?.hex, surface?.hex, foreground?.hex),
     fontFamily: fontStack(brand.typography?.body?.family, brand.typography?.body?.fallbacks ?? []),
     borderRadius: Number.isFinite(radius) && radius > 0 ? radius : defaultSeed.borderRadius,
   };

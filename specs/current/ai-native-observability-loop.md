@@ -53,10 +53,11 @@ The storage foundation is partly in place but not yet connected to this
 observability boundary:
 
 - project files, uploads, pasted content, generated files, and live artifacts
-  currently live under the local project filesystem rooted at
-  `<dataDir>/projects/<projectId>`;
-- saved standalone HTML artifacts live under `<dataDir>/artifacts` and are
-  served through the daemon's static `/artifacts/*` route;
+  are daemon-managed state derived from the daemon's already-resolved
+  `RUNTIME_DATA_DIR`; imported-folder projects are the explicit exception and
+  use their user-selected `metadata.baseDir`;
+- saved standalone HTML artifacts derive from the resolved `ARTIFACTS_DIR` and
+  are served through the daemon's static `/artifacts/*` route;
 - media generation writes its output into the same project file directory;
 - `ProjectStorage`, `LocalProjectStorage`, and `S3ProjectStorage` already define
   a read/write/list/delete/stat adapter contract for S3-compatible stores, but
@@ -66,6 +67,10 @@ observability boundary:
   visual-regression assets, landing-page static assets, and mock recordings, so
   the repository has S3-compatible operational precedent outside the product
   runtime.
+
+This planning spec does not define a concrete daemon data path. Before changing
+or documenting storage, read root [`AGENTS.md`](../../AGENTS.md) → **Daemon data
+directory contract**; that contract is the repository-wide source of truth.
 
 The gap is therefore not "does Open Design know how to talk to object storage?"
 The gap is productizing that substrate for user attachments, generated

@@ -1284,6 +1284,10 @@ jobs:
           MAC_X64_RESULT: ${{ needs.build_mac_intel.result }}
           RELEASE_ASSET_SUFFIX: ""
           RELEASE_CHANNEL: preview
+          RELEASE_LAUNCHER_VERSION_MIN_PREVIEW: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_PREVIEW }}
+          RELEASE_LAUNCHER_VERSION_MIN_STABLE: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_STABLE }}
+          RELEASE_LAUNCHER_VERSION_MIN_URL_PREVIEW: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_URL_PREVIEW }}
+          RELEASE_LAUNCHER_VERSION_MIN_URL_STABLE: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_URL_STABLE }}
           RELEASE_MANIFEST_DIR: ${{ runner.temp }}/release-platform-manifests
           RELEASE_METADATA_DIR: ${{ runner.temp }}/release-metadata
           RELEASE_NOTE_MANIFEST_PATH: ${{ runner.temp }}/release-metadata/release-note-publication.json
@@ -1319,6 +1323,10 @@ jobs:
           MAC_ARM64_RESULT: ${{ needs.build_mac.result }}
           MAC_X64_RESULT: ${{ needs.build_mac_intel.result }}
           RELEASE_CHANNEL: preview
+          RELEASE_LAUNCHER_VERSION_MIN_PREVIEW: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_PREVIEW }}
+          RELEASE_LAUNCHER_VERSION_MIN_STABLE: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_STABLE }}
+          RELEASE_LAUNCHER_VERSION_MIN_URL_PREVIEW: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_URL_PREVIEW }}
+          RELEASE_LAUNCHER_VERSION_MIN_URL_STABLE: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_URL_STABLE }}
           RELEASE_METADATA_URL: ${{ steps.outputs.outputs.version_metadata_url }}
           RELEASE_NOTE_MANIFEST_PATH: ${{ runner.temp }}/release-metadata/release-note-publication.json
           RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}

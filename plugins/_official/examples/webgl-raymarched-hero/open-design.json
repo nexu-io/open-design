@@ -24,6 +24,7 @@
     "en": "Raymarched Hero"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-07-08T08:58:51Z",
   "description": "Build a raymarched 3D hero — soft-shadowed morphing metaballs with a fresnel rim light, orbiting slowly and sphere-traced per pixel in a fragment shader — rendered full-screen at 60fps as a single self-contained index.html.",
   "description_i18n": {
     "zh-CN": "构建一个光线步进的 3D 主视觉——带 fresnel 边缘光的柔和阴影形变元球，缓慢环绕并在片元 shader 中逐像素球体追踪——以 60fps 全屏渲染，作为单个自包含的 index.html。",

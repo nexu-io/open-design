@@ -9,6 +9,7 @@ import {
   localizedHref,
 } from '../i18n';
 import { getFooterLegalCopy } from '../footer-legal-i18n';
+import { getSolutionPageCopy, type SolutionPageKey } from '../solution-pages-i18n';
 
 interface Props {
   counts: HeaderProps['counts'];
@@ -37,6 +38,21 @@ const USE_CASE_HREFS = [
   '/solutions/image/',
   '/solutions/video/',
   '/solutions/design-system/',
+] as const;
+
+// Solution → Tools. Kept in lockstep with header.tsx's TOOL_ENTRIES; labels
+// reuse each tool page's own breadcrumb so footer, nav, and hub cards share a
+// single translation source. Rendered at the bottom of the Solution column,
+// mirroring the nav dropdown order (use cases → tools).
+const TOOL_ENTRIES: ReadonlyArray<{ href: string; key: SolutionPageKey }> = [
+  { href: '/solutions/ai-wireframe-generator/', key: 'aiWireframeGenerator' },
+  { href: '/solutions/ai-ui-generator/', key: 'aiUiGenerator' },
+  { href: '/solutions/ai-prototype-generator/', key: 'aiPrototypeGenerator' },
+  { href: '/solutions/ai-landing-page-generator/', key: 'aiLandingPageGenerator' },
+  { href: '/solutions/design-to-code/', key: 'designToCode' },
+  { href: '/solutions/figma-to-code/', key: 'figmaToCode' },
+  { href: '/solutions/screenshot-to-code/', key: 'screenshotToCode' },
+  { href: '/solutions/html-to-ppt/', key: 'htmlToPpt' },
 ] as const;
 
 // A short, recognisable subset of the agent roster for the footer; the
@@ -71,6 +87,12 @@ const l = getFooterLegalCopy(locale);
         <ul>
           {menu.useCaseItems.map((name, i) => (
             <li><a href={href(USE_CASE_HREFS[i]!)}>{name}</a></li>
+          ))}
+        </ul>
+        <h6 class='sub-footer-subhead'>{menu.tools}</h6>
+        <ul>
+          {TOOL_ENTRIES.map(({ href: toolHref, key }) => (
+            <li><a href={href(toolHref)}>{getSolutionPageCopy(locale, key).breadcrumb}</a></li>
           ))}
         </ul>
       </div>
@@ -223,6 +245,17 @@ const l = getFooterLegalCopy(locale);
     }
     .foot-social a:hover {
       color: var(--ink, #262626);
+    }
+    /* Secondary "Tools" heading inside the Solution column — reuses the h5
+       eyebrow look but sits below the use-case list, so it needs top spacing. */
+    .sub-footer-subhead {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--ink-mute);
+      font-weight: 500;
+      margin: 20px 0 14px;
     }
   </style>
 </footer>

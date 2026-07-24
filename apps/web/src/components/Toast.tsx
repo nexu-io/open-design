@@ -47,11 +47,14 @@ const EXIT_MS = 160;
 
 // A leading status glyph makes the toast's outcome readable at a glance:
 // a check for confirmations (e.g. "Screenshot copied to clipboard"), a
-// spinner while an action is in flight, and a cross for failures.
-const TONE_ICON: Record<NonNullable<ToastProps['tone']>, 'check' | 'close' | 'spinner' | null> = {
+// spinner while an action is in flight, and an alert for failures.
+const TONE_ICON: Record<
+  NonNullable<ToastProps['tone']>,
+  'alert-triangle' | 'check' | 'spinner' | null
+> = {
   default: null,
   success: 'check',
-  error: 'close',
+  error: 'alert-triangle',
   loading: 'spinner',
 };
 

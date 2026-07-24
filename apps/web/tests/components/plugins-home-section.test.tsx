@@ -218,13 +218,35 @@ describe('PluginsHomeSection (community gallery)', () => {
     expect(screen.getByTestId('plugins-home-use-prototype-dashboard')).toBeTruthy();
   });
 
-  it('hides All and keeps Slides selected on the lightweight gallery layout', () => {
+  it('shows all Community types by default on the lightweight gallery layout', () => {
+    const first = renderSection(sample, { cardLayout: 'gallery' });
+
+    expect(screen.getByTestId('plugins-home-pill-category-all').getAttribute('aria-selected')).toBe(
+      'true',
+    );
+    expect(screen.getByTestId('plugins-home-pill-category-deck').getAttribute('aria-selected')).toBe(
+      'false',
+    );
+    expect(screen.queryByTestId('plugins-home-row-subcategory-deck')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('plugins-home-pill-category-deck'));
+    expect(screen.getByTestId('plugins-home-pill-category-all').getAttribute('aria-selected')).toBe(
+      'false',
+    );
+    expect(screen.getByTestId('plugins-home-pill-category-deck').getAttribute('aria-selected')).toBe(
+      'true',
+    );
+    expect(pluginIds()).toEqual(['deck-pitch']);
+
+    first.unmount();
     renderSection(sample, { cardLayout: 'gallery' });
 
-    expect(screen.queryByTestId('plugins-home-pill-category-all')).toBeNull();
-    expect(screen.getByTestId('plugins-home-pill-category-deck').getAttribute('aria-selected')).toBe('true');
-    fireEvent.click(screen.getByTestId('plugins-home-pill-category-deck'));
-    expect(screen.getByTestId('plugins-home-pill-category-deck').getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByTestId('plugins-home-pill-category-all').getAttribute('aria-selected')).toBe(
+      'true',
+    );
+    expect(screen.getByTestId('plugins-home-pill-category-deck').getAttribute('aria-selected')).toBe(
+      'false',
+    );
   });
 });
 
@@ -276,12 +298,13 @@ describe('PluginsHomeSection (category bar)', () => {
 
     fireEvent.click(screen.getByTestId('plugins-home-pill-category-live-artifact'));
 
-    expect(pluginIds()).toEqual([
+    // Order is now usage/sink-driven (OPEND-449); assert grouping membership.
+    expect(pluginIds().sort()).toEqual([
+      'example-live-artifact',
       'example-live-dashboard',
-      'image-template-notion-team-dashboard-live-artifact',
       'example-social-media-matrix-tracker-template',
       'example-trading-analysis-dashboard-template',
-      'example-live-artifact',
+      'image-template-notion-team-dashboard-live-artifact',
     ]);
     expect(screen.queryByTestId('plugins-home-row-subcategory-live-artifact')).toBeNull();
   });
