@@ -232,14 +232,26 @@ describe('renderSlimCoreCharter — frozen protocol markers', () => {
     expect(charter).toContain("Copy the seed and paste its layouts — don't write CSS from scratch");
   });
 
-  it('pins the photo-overlay placement discipline', () => {
-    // Real-imagery production value without this rule shipped badges that
-    // straddle the image edge or cover the photo's subject.
-    expect(charter).toContain('**Overlays on photos are placements, not decoration.**');
+  it('keeps metadata in flow and makes intentional media overlays safe', () => {
+    // Metadata that is accidentally positioned over a later media sibling can
+    // be hidden by normal paint order. Keep it in flow unless the overlap is
+    // intentional, then make the media wrapper own the stacking contract.
+    expect(charter).toContain('**Media and metadata placement.**');
+    expect(charter).toContain('Metadata belongs beside or above media in normal flow');
+    expect(charter).toContain('nested inside that media container');
+    expect(charter).toContain('explicit stacking order above the media');
     expect(charter).toContain('pins to ONE corner with a consistent inset');
     expect(charter).toContain('never straddling the edge or floating half-off');
-    expect(charter).toContain("stays clear of faces and the photo's focal subject");
+    expect(charter).toContain("stays clear of faces and the media's focal subject");
     expect(charter).toContain('No safe corner → put the label beside the image, not on it');
+  });
+
+  it('makes positioned-element layout checks operational across view modes', () => {
+    expect(charter).toContain('For a new artifact, inspect every absolute/fixed element');
+    expect(charter).toContain('for an edit, inspect those in each affected component or layout surface');
+    expect(charter).toContain('containing block, reserved space, paint order / z-index');
+    expect(charter).toContain('overflow-clipping ancestor');
+    expect(charter).toContain('Repeat this source check for each affected layout/view-mode override');
   });
 
   it('separates the optional preview budget from final delivery exports', () => {
