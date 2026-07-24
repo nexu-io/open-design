@@ -534,18 +534,18 @@ test('qwen args check promptViaStdin, base args, model args and exclude `-` sent
 // the daemon would render the resulting empty reply as a "successful"
 // agent response — exactly the failure mode the auth/quota guard at
 // server.ts ~12090 is meant to catch but for the wrong reason.
-test('antigravity passes the prompt as the -p argument (print mode)', () => {
+test('antigravity uses STDIN for the prompt instead of the legacy -p flag', () => {
   assert.equal(antigravity.bin, 'agy');
   assert.equal(antigravity.streamFormat, 'plain');
-  assert.equal(antigravity.promptViaStdin, false);
+  assert.equal(antigravity.promptViaStdin, true);
 
   const args = antigravity.buildArgs('write hello world', [], [], {}, {});
-  assert.deepEqual(args, ['-p', 'write hello world']);
+  assert.deepEqual(args, []);
 
   const argsWithLog = antigravity.buildArgs('write hello world', [], [], {}, {
     agentLogFilePath: '/tmp/od-agy-test.log',
   });
-  assert.deepEqual(argsWithLog, ['--log-file', '/tmp/od-agy-test.log', '-p', 'write hello world']);
+  assert.deepEqual(argsWithLog, ['--log-file', '/tmp/od-agy-test.log']);
 
   // No `--model` flag exists upstream, so buildArgs argv must stay the
   // same regardless of which label the user picks.
@@ -560,7 +560,7 @@ test('antigravity passes the prompt as the -p argument (print mode)', () => {
       antigravitySettingsPath: join(settingsDir, 'settings.json'),
     });
     assert.equal(withModel.includes('--model'), false);
-    assert.deepEqual(withModel, ['--log-file', '/tmp/od-agy-test.log', '-p', 'hi']);
+    assert.deepEqual(withModel, ['--log-file', '/tmp/od-agy-test.log']);
   } finally {
     rmSync(settingsDir, { recursive: true, force: true });
   }
@@ -576,13 +576,13 @@ test('antigravity passes the prompt as the -p argument (print mode)', () => {
   const followUp = antigravity.buildArgs('next message', [], [], {}, {
     hasPriorAssistantTurn: true,
   });
-  assert.deepEqual(followUp, ['-p', 'next message']);
+  assert.deepEqual(followUp, []);
   assert.equal(followUp.includes('-c'), false);
 
   const firstTurn = antigravity.buildArgs('first', [], [], {}, {
     hasPriorAssistantTurn: false,
   });
-  assert.deepEqual(firstTurn, ['-p', 'first']);
+  assert.deepEqual(firstTurn, []);
   assert.equal(antigravity.resumesSessionViaCli, undefined);
 
   assert.equal(antigravity.maxPromptArgBytes, undefined);

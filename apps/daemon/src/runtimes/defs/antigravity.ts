@@ -6,12 +6,7 @@ import {
 } from 'node:fs';
 import { readFile as fsReadFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { dirname, join, delimiter } from 'node:path';
-
-const localAgyPath = join(process.cwd(), '.agy');
-if (existsSync(localAgyPath) && !process.env.PATH?.includes(localAgyPath)) {
-  process.env.PATH = localAgyPath + delimiter + process.env.PATH;
-}
+import { dirname, join } from 'node:path';
 
 import { DEFAULT_MODEL_OPTION } from './shared.js';
 import type { RuntimeAgentDef } from '../types.js';
@@ -208,7 +203,7 @@ export const antigravityAgentDef = {
   // composed in server.ts gives a second line of defense for weak
   // plain-stream models like Gemini 3.5 Flash.
   buildArgs: (
-    prompt,
+    _prompt,
     _imagePaths,
     _extra = [],
     options = {},
@@ -228,17 +223,9 @@ export const antigravityAgentDef = {
     // never echoes those errors on stdout. See server.ts empty-output
     // guard for the consumer.
     //
-    // Flag order is load-bearing on agy: `agy -p --log-file /tmp/x <prompt>`
-    // runs, while the reverse leaves the log empty.
     if (runtimeContext.agentLogFilePath) {
       args.push('--log-file', runtimeContext.agentLogFilePath);
     }
-    // agy's `-p`/`--print` takes the prompt as a command-line argument;
-    // it does not read from stdin and has no `-` stdin sentinel. Passing
-    // the literal `-` (the old behavior) made agy treat the dash as an
-    // empty prompt and reply "your request was empty or a placeholder
-    // (-)". The latest agy 1.1.x versions automatically read from STDIN,
-    // so we simply omit the -p flag entirely.
     return args;
   },
   promptViaStdin: true,
