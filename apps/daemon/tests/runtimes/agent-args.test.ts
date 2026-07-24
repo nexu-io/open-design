@@ -1059,6 +1059,15 @@ test('claude buildArgs clamps reasoning effort per model (Sonnet/Opus 4.6 lack x
     // Case/format tolerance: path-style ids and case variants.
     ['anthropic/claude-sonnet-4-6', 'xhigh', 'high'],
     ['CLAUDE-SONNET-4-6', 'xhigh', 'high'],
+    // Regression (PR #6046 review): mmd routes surface suffixed 4.6 ids
+    // (see mmd-routes.test.ts's `claude-opus-4-6-thinking` fixture) through
+    // the same picker as the bare ids above. An exact-string match would
+    // miss these and let xhigh through unclamped.
+    ['claude-opus-4-6-thinking', 'xhigh', 'high'],
+    ['claude-sonnet-4-6-thinking', 'xhigh', 'high'],
+    // A suffix on a full-range model must NOT be mistaken for the 4.6
+    // family purely because it also starts with a similar prefix shape.
+    ['claude-opus-4-8-thinking', 'xhigh', 'xhigh'],
     // Aliases and unknown ids: treated as current (full-range) generation.
     ['sonnet', 'xhigh', 'xhigh'],
     ['opus', 'xhigh', 'xhigh'],
