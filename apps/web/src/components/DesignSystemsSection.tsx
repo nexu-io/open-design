@@ -511,8 +511,19 @@ export function DesignSystemsSection({
             {orderedGroups.map(([category, items]) => (
               <div key={category} className="library-group">
                 {categoryFilter === 'All' ? (
-                  <h4 className="library-group-title">
-                    {category}{' '}
+                  <h4
+                    className="library-group-title"
+                    data-testid={`library-group-title-${category}`}
+                  >
+                    {/* Issue #2688: Wrap the raw category text node in a
+                        shrinkable flex child so `text-overflow: ellipsis`
+                        actually fires in Chromium — mrcfps 2026-07-24
+                        review on head d9f8274e showed that an anonymous
+                        flex item backing a raw text node is NOT ellipsized
+                        by `text-overflow` on the parent `display: flex`
+                        container; the count badge (`.library-group-count`)
+                        stays as the non-shrinking sibling. */}
+                    <span className="library-group-name">{category}</span>
                     <span className="library-group-count">{items.length}</span>
                   </h4>
                 ) : null}

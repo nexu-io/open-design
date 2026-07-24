@@ -773,9 +773,25 @@
   align-items: center;
   gap: 6px;
   /* Issue #2688: long localized category names ("Social & Messaging") wrap
-     and break the grid rhythm. Keep the heading on one line; the inner
-     cards show their own truncated title and the section count badge aligns
-     next to the category. */
+     and break the grid rhythm. The truncation contract lives on the
+     shrinkable flex CHILD `.library-group-name` (see below) — carrying
+     `overflow/text-overflow/white-space` on this `display: flex` parent is
+     a Chromium no-op for the anonymous flex item backing a raw text node,
+     so it never ellipsized the heading text and silently hard-clipped long
+     categories while pushing the count badge out of view. mrcfps flagged
+     this in their 2026-07-24 review on head d9f8274e. `min-width: 0` here
+     lets the flex child actually shrink; the count badge owns
+     `.library-group-count { flex: 0 0 auto }`. */
+  min-width: 0;
+}
+
+.library-group-name {
+  /* The ellipsis owner. `min-width: 0` defeats the flex auto-min so this
+     can shrink below its content size; `flex: 1 1 auto` makes it the only
+     shrinkable child of `.library-group-title`. The standard truncation
+     triple (`overflow: hidden; text-overflow: ellipsis; white-space:
+     nowrap`) then actually fires in Chromium. */
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;

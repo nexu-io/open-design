@@ -4,18 +4,26 @@
 // name is long (e.g. "Social & Messaging"), the left-side list rows must
 // stay on a single line and ellipsize rather than wrap to a second line.
 // The right detail pane keeps the full text. This file is the regression
-// boundary for the three pickers that ship a master-detail list:
+// boundary for the two pickers that ship a master-detail list and have a
+// user-reachable entry point today:
 //
 //   1. Settings → Design systems tab (DesignSystemsTab left sidebar row).
 //      The row subtitle (`.itemSub`) already ellipsizes; this spec locks
 //      that boundary so it cannot silently regress.
-//   2. Chat composer → "Skills and design systems" picker
-//      (`DesignSystemSwitchPicker`). The category group heading
-//      (`.composer-ds-picker-group-title`) and the per-row title
-//      (`.composer-ds-picker-item-title`) must stay on one line.
-//   3. New project → "Design system" trigger popover (`NewProjectPanel`
+//   2. New project → "Design system" trigger popover (`NewProjectPanel`
 //      local picker built on `.ds-picker-*`). The shared `.ds-picker-item-title`
 //      class already ellipsizes; this spec locks that boundary too.
+//
+// Note (mrcfps 2026-07-24 review on head d9f8274e): the prior third case
+// targeted the chat-composer "Skills and design systems" switch picker
+// (`DesignSystemSwitchPicker`, `.composer-ds-picker-*`). It was removed
+// because that surface has no user-reachable entry point today: nobody
+// passes `onSwitchDesignSystem` to `ChatComposer`, so `composer-plus-design-system`
+// is wired through `onOpenDesignSystems` to the project-level picker
+// (`DesignSystemPicker`, `.project-ds-picker-*`) instead. Testing the
+// switch picker through `composer-plus-design-system` was exercising the
+// wrong surface and could not reach either geometry assertion. The dead
+// `.composer-ds-picker-*` CSS cleanup is tracked separately.
 //
 // Regression scope is geometry, not pixels: each label/row's `scrollHeight`
 // must not exceed its `clientHeight` by more than 1px (no wrap-induced
@@ -26,8 +34,6 @@ import { expect, test } from '@/playwright/suite';
 import type { Page } from '@playwright/test';
 import { routeAgents, STORAGE_KEY } from '@/playwright/mock-factory';
 import { openNewProjectModal } from '@/playwright/rail';
-
-import { randomUUID } from 'node:crypto';
 
 // WeChat ships the longest localized category string ("Social & Messaging") —
 // the exact label the issue screenshot called out. Using the real preset keeps
@@ -66,6 +72,14 @@ test.beforeEach(async ({ page }) => {
         designSystemId: null,
         onboardingCompleted: true,
         agentModels: {},
+        // Privacy consent: pin `privacyDecisionAt` + disabled telemetry so
+        // the "Help us improve Open Design" overlay doesn't intercept rail
+        // helpers — mrcfps 2026-07-24 review on head d9f8274e flagged that
+        // the missing fields cause `ensureRailOpen` to time out waiting for
+        // `entry--rail-open`. Mirror `applyStandardMocks`'s standard fixture
+        // (e2e/lib/playwright/mock-factory.ts:15-16,25-26).
+        privacyDecisionAt: 1,
+        telemetry: { metrics: false, content: false, artifactManifest: false },
       }),
     );
   }, STORAGE_KEY);
@@ -80,6 +94,10 @@ test.beforeEach(async ({ page }) => {
           designSystemId: null,
           agentModels: {},
           agentCliEnv: {},
+          // Privacy consent — mirrors the localStorage seed above so the
+          // server-served config also suppresses the consent overlay.
+          privacyDecisionAt: 1,
+          telemetry: { metrics: false, content: false, artifactManifest: false },
         },
       },
     });
@@ -181,65 +199,6 @@ test('[P1] Settings Design systems sidebar row truncates long category labels (#
   );
 
   await page.screenshot({ path: 'ui/reports/2688-settings-sidebar-truncated.png' });
-});
-
-// ---- Picker 2: Chat composer design-system switch picker --------------------
-
-test('[P1] Chat composer design-system picker truncates the WeChat group heading and row title (#2688)', async ({
-  page,
-}) => {
-  // The composer picker needs an active project (the "Skills and design
-  // systems" entry is disabled when onSwitchDesignSystem is unset). Create
-  // one through the API, then navigate to the conversation view that hosts
-  // the chat composer. The daemon's `POST /api/projects` route rejects a
-  // payload missing a safe `id` string, so supply one. The same response
-  // returns the auto-seeded `conversationId`, so we don't need a second
-  // `POST /api/projects/:id/conversations` — that pattern is mirrored from
-  // `e2e/ui/composer-toolbar-alignment.test.ts`'s `createProject` helper.
-  const project = await page.request.post('/api/projects', {
-    data: {
-      id: randomUUID(),
-      name: 'issue-2688-composer',
-      skillId: null,
-      designSystemId: null,
-      metadata: { kind: 'prototype', nameSource: 'user' },
-    },
-  });
-  expect(project.ok()).toBeTruthy();
-  const projectBody = (await project.json()) as {
-    project: { id: string };
-    conversationId: string;
-  };
-  const projectId = projectBody.project.id;
-  await page.goto(`/projects/${projectId}/conversations/${projectBody.conversationId}`);
-
-  await expect(page.getByTestId('chat-composer')).toBeVisible();
-  await page.getByTestId('chat-composer').getByTestId('chat-plus-trigger').click();
-  await page.getByTestId('composer-plus-design-system').click();
-
-  const popover = page.getByTestId('composer-ds-picker');
-  await expect(popover).toBeVisible();
-  // The picker groups by category — "Social & Messaging" must render as a
-  // `.composer-ds-picker-group-title` group heading.
-  await expect(
-    popover.locator('.composer-ds-picker-group-title', { hasText: WECHAT_PRESET.category }),
-  ).toHaveCount(1);
-  await expect(
-    popover.getByTestId(`composer-ds-picker-item-${WECHAT_PRESET.id}`),
-  ).toHaveCount(1);
-
-  await expectSingleLineRow(
-    page,
-    '.composer-ds-picker-group-title',
-    `composer group title "${WECHAT_PRESET.category}"`,
-  );
-  await expectSingleLineRow(
-    page,
-    `[data-testid="composer-ds-picker-item-${WECHAT_PRESET.id}"] .composer-ds-picker-item-title`,
-    'composer row title "WeChat"',
-  );
-
-  await page.screenshot({ path: 'ui/reports/2688-composer-ds-picker-truncated.png' });
 });
 
 // ---- Picker 3: New project design-system popover ----------------------------
