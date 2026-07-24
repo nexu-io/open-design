@@ -727,6 +727,7 @@ describe('composeSystemPrompt', () => {
 
     expect(prompt).toContain('## Media generation contract');
     expect(prompt).not.toContain('# Slide deck — fixed framework');
+    expect(prompt).not.toContain('# Deck delivery contract');
   });
 
   it('lets metadata.kind win over conflicting composed skill modes', () => {
@@ -736,26 +737,26 @@ describe('composeSystemPrompt', () => {
       metadata: { kind: 'deck' } as any,
     });
 
-    expect(prompt).toContain('# Slide deck — fixed framework');
+    expect(prompt).toContain('# Deck delivery contract');
+    expect(prompt).toContain('# Deck outcome quality rules');
     expect(prompt).not.toContain('## Media generation contract');
   });
 
-  it('pins the data chart discipline inside the deck framework (#907)', () => {
+  it('pins outcome-based quantitative chart integrity into deck runs (#907)', () => {
     const prompt = composeSystemPrompt({ skillMode: 'deck' });
 
-    expect(prompt).toContain('## Data chart discipline');
-    expect(prompt).toContain('calc(var(--v) / var(--max)');
-    expect(prompt).toContain('visible category label AND value label');
-    expect(prompt).toContain('Mentally spot-check two bars');
+    expect(prompt).toContain('**Quantitative charts:**');
+    expect(prompt).toContain('Derive visual proportions from the actual values');
+    expect(prompt).toContain('show both category and value labels');
+    expect(prompt).toContain('Never eyeball bar lengths, areas, or ratios');
   });
 
-  it('pins the mermaid theme discipline inside the deck framework (dark decks)', () => {
+  it('pins background-aware chart and diagram legibility into deck runs', () => {
     const prompt = composeSystemPrompt({ skillMode: 'deck' });
 
-    expect(prompt).toContain('## Mermaid diagram theme discipline');
-    expect(prompt).toContain("theme: 'dark'");
-    expect(prompt).toContain('themeVariables');
-    expect(prompt).toContain('no dark-on-dark labels');
+    expect(prompt).toContain('**Charts and diagrams:**');
+    expect(prompt).toContain("Theme them for the slide's actual background");
+    expect(prompt).toContain('legible at presentation distance');
   });
 
   it('resolves a non-media primary surface ahead of composed media mentions', () => {
@@ -852,18 +853,16 @@ describe('composeSystemPrompt', () => {
       );
     });
 
-    it('also keeps deck-mode prompts free of the unconditional emit line (DECK_FRAMEWORK_DIRECTIVE only stacks for deck projects)', () => {
+    it('also keeps deck-mode prompts free of the unconditional emit line', () => {
       // The plain composeSystemPrompt({}) call does NOT include
-      // DECK_FRAMEWORK_DIRECTIVE; that directive only stacks when
-      // `skillMode === 'deck'` or `metadata.kind === 'deck'`. So if
-      // deck-framework.ts:327 ever regresses back to "Emit single <artifact>",
-      // a no-args negative assertion is a false negative — exercise the deck
-      // path explicitly here.
+      // the deck directive; it only stacks when `skillMode === 'deck'` or
+      // `metadata.kind === 'deck'`. Exercise the deck path explicitly so a
+      // no-args negative assertion cannot hide a deck-only regression.
       const deckPrompt = composeSystemPrompt({ skillMode: 'deck' });
       expect(deckPrompt).not.toMatch(/^7\.\s+Emit single <artifact>\s*$/m);
       expect(deckPrompt).not.toContain('Copy the canonical skeleton below as index.html');
-      expect(deckPrompt).toContain('semantically named deck HTML file');
-      expect(deckPrompt).toMatch(/Summarize the written or changed deck file/i);
+      expect(deckPrompt).toContain('# Deck delivery contract');
+      expect(deckPrompt).toContain('Following the active execution contract');
     });
   });
 

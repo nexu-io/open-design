@@ -123,29 +123,29 @@ describe('DISCOVERY_AND_PHILOSOPHY (contracts copy) — prompt routing parity', 
     expect(plain).not.toContain('## Semantic output file names');
   });
 
-  it('does not make index.html the fixed deck-framework destination', () => {
+  it('does not make index.html a fixed deck destination', () => {
     const prompt = composeSystemPrompt({ skillMode: 'deck' });
 
     expect(prompt).not.toContain('Copy the canonical skeleton below as index.html');
-    expect(prompt).toContain('semantically named deck HTML file');
+    expect(prompt).toContain('# Deck delivery contract');
+    expect(prompt).toContain('one complete HTML deck artifact');
   });
 
-  it('pins the data chart discipline inside the deck framework (#907)', () => {
+  it('pins outcome-based quantitative chart integrity into deck runs (#907)', () => {
     const prompt = composeSystemPrompt({ skillMode: 'deck' });
 
-    expect(prompt).toContain('## Data chart discipline');
-    expect(prompt).toContain('calc(var(--v) / var(--max)');
-    expect(prompt).toContain('visible category label AND value label');
-    expect(prompt).toContain('Mentally spot-check two bars');
+    expect(prompt).toContain('**Quantitative charts:**');
+    expect(prompt).toContain('Derive visual proportions from the actual values');
+    expect(prompt).toContain('show both category and value labels');
+    expect(prompt).toContain('Never eyeball bar lengths, areas, or ratios');
   });
 
-  it('pins the mermaid theme discipline inside the deck framework (dark decks)', () => {
+  it('pins background-aware chart and diagram legibility into deck runs', () => {
     const prompt = composeSystemPrompt({ skillMode: 'deck' });
 
-    expect(prompt).toContain('## Mermaid diagram theme discipline');
-    expect(prompt).toContain("theme: 'dark'");
-    expect(prompt).toContain('themeVariables');
-    expect(prompt).toContain('no dark-on-dark labels');
+    expect(prompt).toContain('**Charts and diagrams:**');
+    expect(prompt).toContain("Theme them for the slide's actual background");
+    expect(prompt).toContain('legible at presentation distance');
   });
 });
 

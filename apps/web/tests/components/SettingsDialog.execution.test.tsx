@@ -335,6 +335,27 @@ function renderIntegrationsView(
   return { onConfigPersist, onPersistComposioKey, ...view };
 }
 
+describe('SettingsDialog deck prompt experiment', () => {
+  it('switches the persisted variant from the instructions section', async () => {
+    const { onPersist } = renderSettingsDialog(
+      { deckPromptVariant: 'current' },
+      { initialSection: 'instructions' },
+    );
+
+    fireEvent.change(
+      screen.getByLabelText(en['settings.deckPromptVariantLabel']),
+      { target: { value: 'outcome_only' } },
+    );
+
+    await waitFor(() => {
+      expect(onPersist).toHaveBeenCalledWith(
+        expect.objectContaining({ deckPromptVariant: 'outcome_only' }),
+        expect.anything(),
+      );
+    });
+  });
+});
+
 function renderLanguageSettingsDialog(initialLocale: Parameters<typeof I18nProvider>[0]['initial'] = 'en') {
   const onPersist = vi.fn();
   const onClose = vi.fn();

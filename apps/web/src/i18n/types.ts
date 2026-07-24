@@ -1859,6 +1859,12 @@ export interface Dict {
   'settings.instructionsSubtitle': string;
   'settings.instructionsNavSub': string;
   'settings.customInstructionsDesc': string;
+  'settings.deckPromptVariantTitle': string;
+  'settings.deckPromptVariantDesc': string;
+  'settings.deckPromptVariantLabel': string;
+  'settings.deckPromptVariantCurrent': string;
+  'settings.deckPromptVariantCurrentOutcome': string;
+  'settings.deckPromptVariantOutcomeOnly': string;
   'mcpClient.forwardedToLabel': string;
   'mcpClient.notForwardedToLabel': string;
   'mcpClient.forwardedAcpNote': string;

@@ -83,6 +83,7 @@ function buildPresenterFrameHtml(previewHtml: string): string {
 [role="navigation"][aria-label*="Slide"],
 [role="navigation"][aria-label*="slide"],
 [data-deck-nav],
+[data-od-id="deck-nav"],
 [data-slide-nav] {
   display: none !important;
   visibility: hidden !important;

@@ -177,6 +177,7 @@ describe('speaker notes HTML helpers', () => {
     expect(match).not.toBeNull();
     const data = JSON.parse(match![1] ?? '{}') as { previewHtml?: string };
     expect(data.previewHtml).toContain('data-od-presenter-frame-chrome');
+    expect(data.previewHtml).toContain('[data-od-id="deck-nav"]');
     expect(data.previewHtml).toContain('.deck-counter,');
     expect(data.previewHtml).toContain('.deck-floating-nav,');
     expect(data.previewHtml).toContain('[role="navigation"][aria-label*="Deck"]');

@@ -98,6 +98,28 @@ describe('app-config', () => {
       expect(cfg).toEqual({ telemetry: DEFAULT_TELEMETRY });
     });
 
+    it('preserves only supported deck prompt experiment variants', async () => {
+      for (const deckPromptVariant of [
+        'current',
+        'current_outcome',
+        'outcome_only',
+      ] as const) {
+        await writeFile(
+          path.join(dataDir, 'app-config.json'),
+          JSON.stringify({ deckPromptVariant }),
+        );
+        expect((await readAppConfig(dataDir)).deckPromptVariant).toBe(
+          deckPromptVariant,
+        );
+      }
+
+      await writeFile(
+        path.join(dataDir, 'app-config.json'),
+        JSON.stringify({ deckPromptVariant: 'unsupported' }),
+      );
+      expect((await readAppConfig(dataDir)).deckPromptVariant).toBeUndefined();
+    });
+
     it('preserves an explicit telemetry opt-out across reads', async () => {
       // Regression guard: the `applyTelemetryDefaults` helper must only
       // fill in defaults when the saved config has NO telemetry field.
@@ -545,6 +567,18 @@ describe('app-config', () => {
       const cfg = await readAppConfig(dataDir);
       expect(cfg.agentId).toBe('test');
     });
+  });
+
+  it('persists a valid deck prompt experiment variant and ignores an invalid update', async () => {
+    await writeAppConfig(dataDir, { deckPromptVariant: 'current_outcome' });
+    expect((await readAppConfig(dataDir)).deckPromptVariant).toBe(
+      'current_outcome',
+    );
+
+    await writeAppConfig(dataDir, { deckPromptVariant: 'unsupported' });
+    expect((await readAppConfig(dataDir)).deckPromptVariant).toBe(
+      'current_outcome',
+    );
   });
 });
 

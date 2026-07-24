@@ -15,16 +15,14 @@
  *      `references/checklist.md`), we inject a hard pre-flight rule above
  *      the skill body so the agent reads them BEFORE writing any code.
  *   4. For decks (skillMode === 'deck' OR metadata.kind === 'deck'), the
- *      deck framework directive (./deck-framework.ts) is pinned LAST so it
- *      overrides any softer slide-handling wording earlier in the stack —
- *      this is the load-bearing nav / counter / scroll JS / print
- *      stylesheet contract that PDF stitching depends on. We also fire on
- *      the metadata path so deck-kind projects without a bound skill
- *      (skill_id null) still get a framework, instead of having the agent
- *      re-author scaling / nav / print logic from scratch each turn. When
- *      the active skill ships its own seed (skill body references
- *      `assets/template.html`), we defer to that seed and skip the generic
- *      skeleton — the skill's framework wins to avoid double-injection.
+ *      generic deck directive (./deck-framework.ts) is pinned LAST. Its
+ *      production default is a minimal host-delivery contract plus
+ *      outcome-quality rules; the experiment variants retain the legacy
+ *      fixed framework for comparison. We also fire on the metadata path so
+ *      deck-kind projects without a bound skill (skill_id null) still get the
+ *      directive. When the active skill ships its own seed (skill body
+ *      references `assets/template.html`), we defer to that seed and skip the
+ *      generic directive — the skill's framework wins to avoid double-injection.
  *
  * The composed string is what the daemon sees as `systemPrompt` and what
  * the Anthropic path sends as `system`.
@@ -34,7 +32,11 @@ import type { MediaSurface } from '../api/media.js';
 import type { ProjectMetadata, ProjectTemplate } from '../api/projects.js';
 import { OFFICIAL_DESIGNER_PROMPT, renderOfficialDesignerPrompt } from './official-system.js';
 import { DISCOVERY_AND_PHILOSOPHY } from './discovery.js';
-import { renderDeckFrameworkDirective } from './deck-framework.js';
+import {
+  DEFAULT_DECK_PROMPT_VARIANT,
+  renderDeckPromptDirective,
+  type DeckPromptVariant,
+} from './deck-framework.js';
 import { renderDirectionSpecBlock } from './directions.js';
 import { renderMediaGenerationContract } from './media-contract.js';
 import { HOST_QUESTION_FORM_PROTOCOL } from './question-form-runtime.js';
@@ -244,6 +246,9 @@ export interface ComposeInput {
   // Shared Design-doctrine variant. Slim is the default for BYOK/API too;
   // classic is retained only as an explicit Design-mode rollback path.
   promptCoreVariant?: 'classic' | 'slim' | undefined;
+  // Selects the generic deck directive for experiment and rollback runs.
+  // The default is the production vNext delivery + outcome directive.
+  deckPromptVariant?: DeckPromptVariant | undefined;
   executionProfile?: ExecutionProfile | undefined;
   // Turn-level platform intent detected by the caller. Metadata remains the
   // stable source; this signal covers a platform first named in conversation.
@@ -279,6 +284,7 @@ export function composeSystemPrompt({
   projectInstructions,
   freeformDeckSignal,
   promptCoreVariant = 'slim',
+  deckPromptVariant = DEFAULT_DECK_PROMPT_VARIANT,
   executionProfile,
   platformHintSignal,
 }: ComposeInput): string {
@@ -582,14 +588,16 @@ export function composeSystemPrompt({
   // already define their own opinionated framework (simple-deck's
   // scroll-snap, guizang-ppt's magazine layout) and re-pinning the generic
   // skeleton would conflict. The skill-seed path takes over via
-  // `derivePreflight` above, so we only fire the generic skeleton when no
+  // `derivePreflight` above, so we only fire the generic directive when no
   // skill seed is on offer.
   const isDeckProject = skillMode === 'deck' || metadata?.kind === 'deck';
   const isFreeformProject = !skillMode && (!metadata || metadata.kind === 'other');
   const hasSkillSeed =
     !!skillBody && /assets\/template\.html/.test(skillBody);
   if (!isAskMode && sessionMode !== 'plan' && isDeckProject && !hasSkillSeed) {
-    parts.push(`\n\n---\n\n${renderDeckFrameworkDirective(resolvedExecutionProfile)}`);
+    parts.push(
+      `\n\n---\n\n${renderDeckPromptDirective(deckPromptVariant, resolvedExecutionProfile)}`,
+    );
   } else if (
     !isAskMode
     && sessionMode !== 'plan'
@@ -607,7 +615,7 @@ export function composeSystemPrompt({
     // adopts it when the brief actually is a deck — otherwise the
     // directive is read as background reference and ignored.
     parts.push(
-      `\n\n---\n\n## If this brief is a slide deck / keynote / presentation\n\nThe user did not pre-select a "Slide deck" surface, but their request may still call for one. **If — and only if — the brief reads as slides, keynote, presentation, deck, PPT, or 讲解, follow the framework below.** Otherwise ignore everything in this section and continue with the freeform output you would have written anyway.\n\n${renderDeckFrameworkDirective(resolvedExecutionProfile)}`,
+      `\n\n---\n\n## If this brief is a slide deck / keynote / presentation\n\nThe user did not pre-select a "Slide deck" surface, but their request may still call for one. **If — and only if — the brief reads as slides, keynote, presentation, deck, PPT, or 讲解, follow the deck directive below.** Otherwise ignore everything in this section and continue with the freeform output you would have written anyway.\n\n${renderDeckPromptDirective(deckPromptVariant, resolvedExecutionProfile)}`,
     );
   }
 

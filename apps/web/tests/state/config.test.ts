@@ -325,6 +325,17 @@ describe('mergeDaemonConfig', () => {
     expect(merged.telemetry).toEqual({ metrics: true });
   });
 
+  it('uses the daemon deck prompt experiment variant and defaults to vNext', () => {
+    expect(
+      mergeDaemonConfig(DEFAULT_CONFIG, {
+        deckPromptVariant: 'current_outcome',
+      }).deckPromptVariant,
+    ).toBe('current_outcome');
+    expect(mergeDaemonConfig(DEFAULT_CONFIG, {}).deckPromptVariant).toBe(
+      'outcome_only',
+    );
+  });
+
   it('migrates old daemon privacy config to a resolved decision', () => {
     const merged = mergeDaemonConfig(DEFAULT_CONFIG, {
       installationId: 'install-1',

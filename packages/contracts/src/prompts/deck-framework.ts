@@ -1,9 +1,13 @@
 /**
- * Stable deck framework injected into the system prompt when the active skill
- * mode is `deck`. The whole point: stop regenerating the scale-to-fit JS, the
- * keyboard handler, the slide visibility toggle, the counter, and the print
- * rules each turn — every regeneration has subtly different bugs (focus is
- * wrong, scaling drifts inside the iframe wrapper, arrow keys swallowed).
+ * Legacy fixed deck framework retained for the `current` and
+ * `current_outcome` experiment / rollback variants. The production vNext
+ * directive is defined below as a minimal delivery contract plus outcome
+ * quality rules.
+ *
+ * The legacy framework's purpose was to stop regenerating the scale-to-fit JS,
+ * keyboard handler, slide visibility toggle, counter, and print rules each turn
+ * — every regeneration has subtly different bugs (focus is wrong, scaling
+ * drifts inside the iframe wrapper, arrow keys swallowed).
  *
  * Two pieces ship together:
  *   - DECK_SKELETON_HTML : the literal scaffold the model copies verbatim.
@@ -43,6 +47,13 @@
  */
 
 import type { ExecutionProfile } from '../execution-profile.js';
+
+export type DeckPromptVariant =
+  | 'current'
+  | 'current_outcome'
+  | 'outcome_only';
+
+export const DEFAULT_DECK_PROMPT_VARIANT: DeckPromptVariant = 'outcome_only';
 
 export const DECK_SKELETON_HTML = `<!doctype html>
 <html lang="en">
@@ -371,7 +382,7 @@ When the user asks for slides, your TodoWrite plan **must** start with "copy the
 \`\`\`
 1.  Bind the active direction's palette + fonts to :root in the framework
 2.  Copy the canonical skeleton below as a semantically named deck HTML file, such as \`investor-pitch-deck.html\` (nothing else first)
-3.  Plan the slide arc and theme rhythm (state aloud before writing)
+3.  Plan the slide arc and surface hierarchy (state the dominant surface and each inversion's narrative role aloud before writing)
 4.  Add per-deck classes inside the second <style> block
 5.  Replace each <section class="slide"> SLOT with real content
 6.  Self-check (no rewriting framework chrome / @media print / nav script)
@@ -390,6 +401,10 @@ You may edit only inside slots marked \`SLOT:\`:
 - \`SLOT: per-deck styles\` — the second \`<style>\` block. Define classes used by your slide content (e.g. \`.title\`, \`.big-stat\`, \`.grid-3\`, custom typography). **Never redefine** \`.deck-shell\`, \`.deck-stage\`, \`.slide\`, \`.deck-counter\`, \`.deck-hint\`, or anything inside \`@media print\`.
 - \`SLOT: slides\` — the \`<section class="slide">\` blocks. Add as many as the brief calls for. The first slide MUST be \`<section class="slide active" …>\`; the rest are \`<section class="slide" …>\` (no \`active\`). The script auto-counts them.
 - \`SLOT: slide N content\` — content inside each \`<section>\`.
+
+## Surface hierarchy — narrative first
+
+Unless the user or active design system explicitly requires a different surface program, choose one dominant slide surface from the active brand or direction. Consecutive slides may share it. Use an inverse surface only when it marks a named narrative role such as a chapter break, key reveal, proof point, or closing. A single-surface deck is valid; never alternate light and dark by slide index or quota. Create rhythm through layout, scale, density, imagery, and typography before changing the background.
 
 ## Common drift modes — DO NOT DO THESE
 
@@ -517,6 +532,8 @@ If any answer is "no", redesign the slide BEFORE ${DECK_HANDOFF_CHECK_ACTION_PLA
 
 If \`plugins/_official/examples/simple-deck/assets/template.html\` and its \`references/layouts.md\` are readable from the project workspace, **prefer those layouts over inventing your own**. The simple-deck skill ships eight paste-ready slide skeletons (cover, body, big-stat, three-point row, pipeline, dark quote, before/after, closing) with tested type scales, density rules, and a P0/P1/P2 checklist. Re-inventing those layouts is the source of most density / overflow bugs the framework can't catch.
 
+Use the layout vocabulary, not the examples' surface sequence. The deck-level surface hierarchy above remains authoritative unless the user, active design system, or an explicitly selected specialized template defines a different surface program.
+
 ## Canonical skeleton (this is exactly what the file you write looks like)
 
 \`\`\`html
@@ -547,6 +564,59 @@ export function renderDeckFrameworkDirective(
       DECK_HANDOFF_CHECK_ACTION_PLACEHOLDER,
       isTextArtifact ? 'emitting the artifact' : 'handoff',
     );
+}
+
+export const DECK_DELIVERY_CONTRACT_DIRECTIVE = `# Deck delivery contract
+
+These requirements define only the delivery boundary between the deck and Open Design. They do not prescribe a visual style or slide template.
+
+1. **Deliver a complete artifact.** Following the active execution contract, deliver one complete HTML deck artifact. When editing an existing deck, preserve its compatible runtime structure unless changing it is necessary to fix a real problem; do not rebuild the runtime for an ordinary content edit.
+2. **Use a recognizable slide structure.** Represent every slide as one top-level \`<section class="slide" data-screen-label="NN Title">\` in presentation order. Keep every \`data-screen-label\` stable and unique. The first slide must be visible after load, and all slides must remain in the DOM so the host can navigate, thumbnail, annotate, and export them.
+3. **Use a standard presentation canvas.** Use a fixed 16:9 slide that renders correctly at 1920×1080. Keep all content inside the slide bounds; the audience must not need to scroll to see the complete slide.
+4. **Cooperate with host navigation.** Do not place navigation inside the slide canvas or reserve slide space for it. If the artifact includes standalone previous/next controls, pagination dots, a page counter, reset controls, or keyboard hints, place all of that chrome in one \`data-deck-nav\` container outside the slide canvas. Open Design hides that container when host navigation is present.
+5. **Make the static completed state sufficient.** Essential content must not require hover, clicks, or an unfinished entrance animation to become visible. Every slide must be complete, legible, and exportable in its settled static state.
+6. **Honor explicit user requirements.** If the user explicitly requests another aspect ratio, a vertical deck, or special interaction, you may depart from these defaults. Preserve slide discoverability where possible and state any preview or export limitation that remains.
+
+Before handoff, verify slide count and order, first-slide visibility, and slide bounds. When the corresponding capability is available, test host navigation, thumbnail discovery, and multi-page export; otherwise inspect the artifact for the standard structure those capabilities require. Fix failures in the artifact; do not substitute an explanation for a fix.`;
+
+export const DECK_OUTCOME_RULES_DIRECTIVE = `# Deck outcome quality rules
+
+Apply these as result criteria for the deck and for every slide. They constrain the outcome, not the implementation technique.
+
+1. **Give every slide one narrative job.** The deck must move through a deliberate argument, not a pile of independently attractive pages. If removing a slide does not weaken the story, remove or rewrite it.
+2. **Make the title the slide's claim.** A title should state the conclusion the audience should retain, not merely name the topic. Keep one primary idea per slide.
+3. **Close the claim–evidence–implication loop.** The body must visibly support the title with the most relevant fact, example, comparison, mechanism, or proof, then make clear why that evidence matters. Do not present unsupported conclusions or evidence with no takeaway.
+4. **Let structure express reasoning.** Use parallel groups for peers, flows for causality, timelines for sequence, comparisons for choices, and charts for quantitative relationships. Do not force unrelated ideas into equal cards or decorate prose with a diagram that adds no meaning.
+5. **Make whitespace functional.** Empty space should establish hierarchy, pacing, grouping, or emphasis. If a slide feels unfinished because content is stranded in one corner, either enlarge the key message, add the missing evidence, or choose a structure that uses the canvas deliberately.
+6. **Design for presentation distance.** At thumbnail size, the claim, primary evidence, and reading order must still be apparent. Use a clear type hierarchy, sufficient contrast, and no more detail than the audience can absorb while listening.
+7. **Create one visual center of gravity.** Each slide needs a dominant element — a statement, number, chart, product view, or diagram. Supporting elements must reinforce it rather than compete with it.
+8. **Vary composition only for narrative reasons.** Keep a coherent deck-wide system. Change surface, density, or layout when the story changes mode — opening, evidence, transition, reveal, or close — never by slide index or for arbitrary variety.
+9. **Preserve epistemic honesty.** Distinguish sourced facts, user-provided facts, assumptions, and recommendations. Never invent metrics, traction, quotes, customers, or research to make a slide look complete; use an explicit placeholder or qualitative framing when evidence is missing.
+10. **Make every visual element earn its place.** Every line, border, container, icon, and decoration must clarify hierarchy, grouping, comparison, scale, or meaning. If removing it does not reduce comprehension, remove it. Never stack multiple boundaries to express the same separation; prefer whitespace, alignment, type, and surface before adding boxes or rules.
+
+Only when relevant:
+
+- **Quantitative charts:** Derive visual proportions from the actual values and show both category and value labels. Never eyeball bar lengths, areas, or ratios.
+- **Charts and diagrams:** Theme them for the slide's actual background and verify that every label remains legible at presentation distance.
+
+Before handoff, review the deck once at thumbnail scale and once slide by slide. Rewrite any slide whose claim is unclear, whose evidence does not support it, whose layout hides the reading order, whose content does not advance the narrative, or whose content clips, overflows, or requires scrolling.`;
+
+export const DECK_VNEXT_DIRECTIVE = `${DECK_DELIVERY_CONTRACT_DIRECTIVE}
+
+---
+
+${DECK_OUTCOME_RULES_DIRECTIVE}`;
+
+export function renderDeckPromptDirective(
+  variant: DeckPromptVariant = DEFAULT_DECK_PROMPT_VARIANT,
+  executionProfile: ExecutionProfile = 'filesystem',
+): string {
+  if (variant === 'outcome_only') return DECK_VNEXT_DIRECTIVE;
+  const current = renderDeckFrameworkDirective(executionProfile);
+  if (variant === 'current_outcome') {
+    return `${current}\n\n---\n\n${DECK_OUTCOME_RULES_DIRECTIVE}`;
+  }
+  return current;
 }
 
 /** Filesystem compatibility constant for existing imports. */

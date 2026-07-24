@@ -62,7 +62,7 @@ const SECTION_MARKERS = [
   ['plugin-block', '## Active plugin'],
   ['active-stage-blocks', '## Active stage:'],
   ['project-metadata', '## Project metadata'],
-  ['deck-framework', '# Slide deck — fixed framework'],
+  ['deck-directive', '# Deck delivery contract'],
   ['maybe-deck-framework', '## If this brief is a slide deck / keynote / presentation'],
   ['media-generation-contract', '## Media generation contract'],
   ['media-dispatch-hint', '## Media generation (if asked)'],
@@ -92,8 +92,8 @@ function markerMatches(composed: string, marker: string): boolean {
 }
 
 // Note one genuine containment: the maybe-deck variant embeds the full deck
-// directive, so `maybe-deck-framework` scenarios also report `deck-framework`.
-// `deck-framework` WITHOUT `maybe-deck-framework` means the unconditional
+// directive, so `maybe-deck-framework` scenarios also report `deck-directive`.
+// `deck-directive` WITHOUT `maybe-deck-framework` means the unconditional
 // deck-kind path fired.
 function detectSections(composed: string): SectionName[] {
   return SECTION_MARKERS.filter(([, marker]) => markerMatches(composed, marker)).map(
@@ -159,9 +159,9 @@ const SCENARIOS: ReadonlyArray<[name: string, input: ComposeInput]> = [
       executionProfile: 'filesystem',
     },
   ],
-  // Deck-kind project with no skill seed gets the generic deck framework.
+  // Deck-kind project with no skill seed gets the generic deck directive.
   ['deck-kind-no-skill', { metadata: { kind: 'deck' }, executionProfile: 'filesystem' }],
-  // A skill seed (assets/template.html) suppresses the generic framework.
+  // A skill seed (assets/template.html) suppresses the generic directive.
   [
     'deck-kind-with-skill-seed',
     {

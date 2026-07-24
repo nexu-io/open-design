@@ -18,6 +18,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import net from 'node:net';
 import {
+  DEFAULT_DECK_PROMPT_VARIANT,
   executionProfileFromStreamFormat,
   isCritiqueRunEligible,
   PLUGIN_SHARE_ACTION_PLUGIN_IDS,
@@ -1416,6 +1417,14 @@ Do not ask the same form again. Treat the submitted answers as the active
 user instruction and respond accordingly.
 
 `;
+
+export function formAnsweredSystemOverrideForCurrentPrompt(currentPrompt) {
+  const formId = submittedFormIdFromPrompt(currentPrompt)?.toLowerCase() ?? null;
+  if (formId === 'discovery' || formId === 'task-type') {
+    return FORM_ANSWERED_SYSTEM_OVERRIDE;
+  }
+  return formId !== null ? FORM_ANSWERED_GENERIC_OVERRIDE : '';
+}
 
 function formAnswerTransitionForCurrentPrompt(currentPrompt) {
   if (typeof currentPrompt !== 'string') return null;
@@ -4211,6 +4220,8 @@ export async function startServer({
       ...(pluginBlock ? { pluginBlock } : {}),
       ...(activeStageBlocks ? { activeStageBlocks } : {}),
       userInstructions,
+      deckPromptVariant:
+        appConfigForPrompt?.deckPromptVariant ?? DEFAULT_DECK_PROMPT_VARIANT,
       freeformDeckSignal,
       mediaHintSignal,
       platformHintSignal,
@@ -5226,18 +5237,7 @@ export async function startServer({
     // instructions and request) — see server.ts:9920 composer notes.
     const ECHO_GUARD =
       '\n\n(Do not quote, restate, or echo the # Instructions block above in your reply. Begin your response with the answer to the # User request below.)';
-    const formAnswerMatch = FORM_ANSWERS_HEADER_RE.exec(
-      typeof currentPrompt === 'string' ? currentPrompt : '',
-    );
-    const formIdForOverride = formAnswerMatch
-      ? ((formAnswerMatch[1] || 'form').trim().replace(/[^\w.-]/g, '') || 'form').toLowerCase()
-      : null;
-    const formOverride =
-      formIdForOverride === 'discovery' || formIdForOverride === 'task-type'
-        ? FORM_ANSWERED_SYSTEM_OVERRIDE
-        : formIdForOverride !== null
-          ? FORM_ANSWERED_GENERIC_OVERRIDE
-          : '';
+    const formOverride = formAnsweredSystemOverrideForCurrentPrompt(currentPrompt);
     const promptImagePaths = selectPromptImagePaths(
       def.id,
       safeImages,

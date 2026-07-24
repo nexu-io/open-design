@@ -1,3 +1,5 @@
+import type { DeckPromptVariant } from '../prompts/deck-framework.js';
+
 export interface AgentModelPrefs {
   model?: string;
   reasoning?: string;
@@ -50,6 +52,8 @@ export interface AppConfigPrefs {
   allowSilentUpdates?: boolean;
   orbit?: OrbitConfigPrefs;
   customInstructions?: string | null;
+  /** Selects the generic deck prompt injected for deck runs without a skill-owned template seed. */
+  deckPromptVariant?: DeckPromptVariant;
   /** External project library roots. The daemon adds its built-in .od/projects location at read time. */
   projectLocations?: ProjectLocationPrefs[];
   /** Project location id used for new projects when the create request does not choose one explicitly. */

@@ -1750,7 +1750,7 @@ process.stdin.on('data', (chunk) => {
 process.stdin.on('end', () => {
   const checks = [
     prompt.includes('## Composed skill — open-design-landing-deck') ? 'has-deck-skill-header' : 'missing-deck-skill-header',
-    prompt.includes('# Slide deck — fixed framework (this is non-negotiable for deck mode)') ? 'has-deck-framework' : 'missing-deck-framework',
+    prompt.includes('# Deck delivery contract') ? 'has-deck-directive' : 'missing-deck-directive',
   ];
   console.log(JSON.stringify({ type: 'step_start' }));
   console.log(JSON.stringify({ type: 'text', part: { text: checks.join('\\n') } }));
@@ -1772,9 +1772,9 @@ process.stdin.on('end', () => {
 
         expect(response.ok).toBe(true);
         expect(body).toContain('has-deck-skill-header');
-        expect(body).toContain('has-deck-framework');
+        expect(body).toContain('has-deck-directive');
         expect(body).not.toContain('missing-deck-skill-header');
-        expect(body).not.toContain('missing-deck-framework');
+        expect(body).not.toContain('missing-deck-directive');
       },
     );
   });
@@ -1793,7 +1793,7 @@ process.stdin.on('end', () => {
     prompt.includes('# imagegen') ? 'has-base-image-skill-body' : 'missing-base-image-skill-body',
     prompt.includes('## Composed skill — open-design-landing-deck') ? 'has-composed-deck-skill-header' : 'missing-composed-deck-skill-header',
     prompt.includes('## Media generation contract (load-bearing — overrides softer wording above)') ? 'has-image-contract' : 'missing-image-contract',
-    prompt.includes('# Slide deck — fixed framework (this is non-negotiable for deck mode)') ? 'unexpected-deck-framework' : 'kept-deck-framework-out',
+    prompt.includes('# Deck delivery contract') ? 'unexpected-deck-directive' : 'kept-deck-directive-out',
   ];
   console.log(JSON.stringify({ type: 'step_start' }));
   console.log(JSON.stringify({ type: 'text', part: { text: checks.join('\\n') } }));
@@ -1818,11 +1818,11 @@ process.stdin.on('end', () => {
         expect(body).toContain('has-base-image-skill-body');
         expect(body).toContain('has-composed-deck-skill-header');
         expect(body).toContain('has-image-contract');
-        expect(body).toContain('kept-deck-framework-out');
+        expect(body).toContain('kept-deck-directive-out');
         expect(body).not.toContain('missing-base-image-skill-body');
         expect(body).not.toContain('missing-composed-deck-skill-header');
         expect(body).not.toContain('missing-image-contract');
-        expect(body).not.toContain('unexpected-deck-framework');
+        expect(body).not.toContain('unexpected-deck-directive');
       },
     );
   });

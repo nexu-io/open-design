@@ -4359,6 +4359,13 @@ export const zhCN: Dict = {
   "settings.instructionsNavSub": "固定的助手行为",
   "settings.customInstructionsDesc":
     "Open Design 在每次对话中都会遵循的固定指令。它们不是保存的记忆；事实、偏好和项目上下文请使用「记忆」。",
+  "settings.deckPromptVariantTitle": "Deck 规范实验",
+  "settings.deckPromptVariantDesc":
+    "选择下一次通用 Deck 任务动态注入的规范。自带模板种子的 Deck Skill 不受影响。",
+  "settings.deckPromptVariantLabel": "Deck 规范版本",
+  "settings.deckPromptVariantCurrent": "V1 · 旧版固定框架",
+  "settings.deckPromptVariantCurrentOutcome": "V2 · 旧版框架 + 结果导向规则",
+  "settings.deckPromptVariantOutcomeOnly": "V3 · vNext",
   "mcpClient.forwardedToLabel": "已转发给：",
   "mcpClient.notForwardedToLabel": "未转发给：",
   "mcpClient.forwardedAcpNote":

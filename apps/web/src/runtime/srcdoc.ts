@@ -2417,6 +2417,10 @@ export const DECK_MOTION_FREEZE_CSS = `*, *::before, *::after {
   scroll-behavior: auto !important;
 }`;
 
+// `data-od-id="deck-nav"` is the backward-compatible marker emitted by
+// freeform decks before the prompt standardized `data-deck-nav`. Keep both:
+// localized aria-labels cannot be enumerated safely, while a generic `.nav`
+// selector would hide legitimate in-slide content.
 export const DECK_CHROME_HIDE_CSS = `.deck-counter,
 .deck-hint,
 .deck-nav,
@@ -2434,6 +2438,7 @@ export const DECK_CHROME_HIDE_CSS = `.deck-counter,
 [role="navigation"][aria-label*="Slide"],
 [role="navigation"][aria-label*="slide"],
 [data-deck-nav],
+[data-od-id="deck-nav"],
 [data-slide-nav] {
   display: none !important;
   visibility: hidden !important;

@@ -1222,3 +1222,18 @@ describe('trust-gradient', () => {
     expect(findings.find((f) => f.id === 'trust-gradient')).toBeDefined();
   });
 });
+
+describe('deck surface hierarchy', () => {
+  it('does not require implementation-specific theme classes or surface alternation', () => {
+    const html = `
+      <section class="slide" data-screen-label="01 Cover"></section>
+      <section class="slide" data-screen-label="02 Problem"></section>
+      <section class="slide" data-screen-label="03 Evidence"></section>
+      <section class="slide" data-screen-label="04 Solution"></section>
+    `;
+    const findings = lintArtifact(html);
+
+    expect(findings.find((finding) => finding.id === 'slide-theme-missing')).toBeUndefined();
+    expect(findings.find((finding) => finding.id === 'slide-rhythm')).toBeUndefined();
+  });
+});

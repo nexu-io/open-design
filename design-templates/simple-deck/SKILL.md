@@ -52,8 +52,8 @@ simple-deck/
 ├── assets/
 │   └── template.html       ← seed: tokens + slide primitives + proven nav script (READ FIRST)
 └── references/
-    ├── layouts.md          ← 8 paste-ready slide layouts + theme-rhythm rules
-    └── checklist.md        ← P0/P1/P2 self-review (rhythm spot-check at bottom)
+    ├── layouts.md          ← 8 paste-ready slide layouts + surface-hierarchy rules
+    └── checklist.md        ← P0/P1/P2 self-review (surface spot-check at bottom)
 ```
 
 ## Workflow
@@ -61,14 +61,14 @@ simple-deck/
 ### Step 0 — Pre-flight
 
 1. **Read `assets/template.html`** end-to-end through the `<style>` block AND the `<script>` block. The script solves five iframe-specific bugs (real scroller detection, dual capture-phase listeners, auto-focus, no `scrollIntoView`, position persistence) — do not rewrite it.
-2. **Read `references/layouts.md`** so you know the 8 layouts. Pay special attention to the "Theme rhythm" section — it's the rule that prevents the deck from feeling sleepy.
+2. **Read `references/layouts.md`** so you know the 8 layouts. Pay special attention to "Surface hierarchy" — it keeps background changes tied to the story.
 3. **Read the active DESIGN.md** — map its tokens to the six `:root` variables in the seed.
 
 ### Step 1 — Copy the seed
 
 Copy `assets/template.html` to the project root as `index.html`. Replace the six `:root` variables with the active design system's tokens. Replace the page `<title>`.
 
-### Step 2 — Decide slide count + theme rhythm BEFORE writing any slide
+### Step 2 — Decide slide count + surface hierarchy BEFORE writing any slide
 
 Default: 6 slides unless the brief says otherwise.
 
@@ -78,25 +78,26 @@ Default: 6 slides unless the brief says otherwise.
 | Pitch deck (15 min) | 8–10 |
 | Investor update / longer talk (20–30 min) | 12–18 |
 
-Then write out the rhythm before any HTML — for example, 8 slides:
+Then choose a dominant surface and write each inverse slide's narrative role before any HTML — for example, 8 slides:
 
 ```
-01  hero light center  Cover
-02  light              Problem
-03  hero dark center   Big stat
-04  light              Three points
-05  dark               Pipeline
-06  hero light center  Quote
-07  light              Before / after
-08  hero dark center   Ask
+01  hero light center  Cover                 dominant
+02  light              Problem               dominant
+03  light              Why now               dominant
+04  hero dark center   Solution reveal       inverse: new act
+05  dark               Product workflow      inverse: same act
+06  light              Evidence              dominant
+07  light              Business model        dominant
+08  hero dark center   Ask                    inverse: closing
 ```
 
 A healthy sequence has:
-- No 3+ same theme in a row
-- ≥ 1 `hero dark` AND ≥ 1 `hero light` (for 8+ slides)
-- Alternating breath every 3–4 slides
+- One dominant surface chosen from the active brand or direction, unless the user or active DESIGN.md explicitly requires another surface program
+- Every inverse slide assigned a named narrative role
+- Consecutive same-surface slides when they belong to the same act
+- A single surface when the brief does not justify an inversion
 
-Show this rhythm sketch to the user *before* writing slide HTML — they can redirect cheaply.
+Show this surface sketch to the user *before* writing slide HTML — they can redirect cheaply.
 
 ### Step 3 — Paste and fill
 
@@ -106,13 +107,13 @@ Tag each slide with `data-screen-label="01 Cover"`, `"02 Problem"`, etc., in the
 
 ### Step 4 — Self-check
 
-Run through `references/checklist.md`. The "Theme rhythm spot-check" at the end is non-negotiable:
+Run through `references/checklist.md`. The "Surface hierarchy spot-check" at the end is non-negotiable:
 
 ```bash
 grep 'class="slide' index.html
 ```
 
-Read the resulting class list. If you see `light × 4 in a row`, swap one to `dark`. If no `hero dark` exists in an 8+ slide deck, promote one big-stat or closing slide.
+Read the resulting class list beside the slide labels. If an inverse slide has no narrative purpose, return it to the dominant surface. Never alternate light and dark merely to break a same-surface run.
 
 ### Step 5 — Write the project file
 
@@ -123,7 +124,7 @@ Then send one short ordinary assistant summary naming `index.html` and describin
 ## Hard rules
 
 - **Theme class on every slide** (`light` | `dark` | `hero light` | `hero dark`). Bare `class="slide"` = regression.
-- **No 3+ same theme in a row.**
+- **One dominant surface.** Every inverse surface has a named narrative role; never alternate by slide index or quota.
 - **Display = serif via `var(--font-display)`.** `.h-hero` / `.h-xl` / `.h-md` already enforce.
 - **One accent per slide, used at most twice.**
 - **Don't rewrite the nav script.** It's proven.

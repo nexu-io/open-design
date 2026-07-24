@@ -9,9 +9,11 @@
   that the naive version silently breaks (see comments in the script).
 
   Theme tokens at the top mirror the web-prototype seed; bind them to the
-  active DESIGN.md and stop. A deck has TWO surfaces — `.slide.light` and
-  `.slide.dark` — that swap fg / bg without touching the accent. Use both;
-  alternating creates the rhythm that prevents visual fatigue.
+  active DESIGN.md and stop. A deck offers TWO surfaces — `.slide.light` and
+  `.slide.dark` — that swap fg / bg without touching the accent. Choose one
+  dominant surface unless the user or active DESIGN.md explicitly requires
+  another surface program. Use the inverse only for a named narrative role;
+  it is optional, and you should never alternate by slide index or quota.
 -->
 <html lang="en">
 <head>
@@ -247,8 +249,9 @@
     │  PASTE SLIDES FROM references/layouts.md HERE.                 │
     │  ► Each `<section class="slide">` must include a class from:    │
     │    light | dark | hero light | hero dark                        │
-    │  ► No 3+ same-theme in a row.                                   │
-    │  ► For 8+ slides: ≥ 1 `hero dark` AND ≥ 1 `hero light`.         │
+    │  ► Choose one dominant surface from the brand / direction.      │
+    │  ► Inverse slides need a named narrative purpose.               │
+    │  ► Never alternate surfaces by slide index or quota.            │
     │  ► End with a clear CTA / takeaway slide.                       │
     └─────────────────────────────────────────────────────────────────┘
   -->
@@ -270,10 +273,12 @@
     <h2 class="h-hero">[REPLACE] The take-away.</h2>
   </section>
 
-  <!-- chrome -->
-  <div class="deck-progress" id="deck-progress" aria-hidden></div>
-  <div class="deck-counter"  id="deck-counter">1 / 3</div>
-  <div class="deck-hint">← / → · scroll · swipe</div>
+  <!-- Standalone chrome. Open Design hides this container when host navigation is present. -->
+  <div data-deck-nav aria-label="Standalone deck navigation">
+    <div class="deck-progress" id="deck-progress" aria-hidden></div>
+    <div class="deck-counter"  id="deck-counter">1 / 3</div>
+    <div class="deck-hint">← / → · scroll · swipe</div>
+  </div>
 
   <script>
     /*

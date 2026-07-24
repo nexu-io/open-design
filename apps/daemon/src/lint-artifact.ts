@@ -462,50 +462,6 @@ export function lintArtifact(rawHtml: unknown): LintFinding[] {
     });
   }
 
-  // ── P2-2: missing slide theme classes (deck specifically) ──────────
-  // Triggered only if the artifact looks deck-shaped (has .slide).
-  if (/class\s*=\s*["'][^"']*\bslide\b/.test(html)) {
-    const slideMatches = html.match(/<section\s+class\s*=\s*["'][^"']*\bslide\b[^"']*["']/gi) ?? [];
-    const themed = slideMatches.filter((s) =>
-      /\b(light|dark|hero\s+light|hero\s+dark)\b/.test(s),
-    ).length;
-    if (slideMatches.length > 0 && themed < slideMatches.length) {
-      out.push({
-        severity: 'P0',
-        id: 'slide-theme-missing',
-        message: `${slideMatches.length - themed} of ${slideMatches.length} slides lack a theme class (light / dark / hero light / hero dark).`,
-        fix: 'Every <section class="slide"> must include exactly one theme class. Audit your slide list and add light/dark/hero modifiers.',
-      });
-    }
-    // Theme rhythm: no 3+ same-theme in a row.
-    const themeSeq = slideMatches
-      .map((s) => {
-        if (/hero\s+dark/.test(s)) return 'HD';
-        if (/hero\s+light/.test(s)) return 'HL';
-        if (/\bdark\b/.test(s)) return 'D';
-        if (/\blight\b/.test(s)) return 'L';
-        return '?';
-      })
-      .filter((t) => t !== '?');
-    for (let i = 0; i < themeSeq.length - 2; i++) {
-      const a = themeSeq[i];
-      const isLight = (t: string | undefined) => t === 'L' || t === 'HL';
-      const isDark = (t: string | undefined) => t === 'D' || t === 'HD';
-      if (
-        (isLight(a) && isLight(themeSeq[i + 1]) && isLight(themeSeq[i + 2])) ||
-        (isDark(a) && isDark(themeSeq[i + 1]) && isDark(themeSeq[i + 2]))
-      ) {
-        out.push({
-          severity: 'P1',
-          id: 'slide-rhythm',
-          message: `Three same-theme slides in a row at position ${i + 1}–${i + 3} — visual fatigue.`,
-          fix: 'Swap the middle slide to the opposite theme (light → dark, or dark → light). For 8+ slides, mix in at least one hero light AND one hero dark.',
-        });
-        break;
-      }
-    }
-  }
-
   return out;
 }
 

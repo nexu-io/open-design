@@ -60,7 +60,7 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "host-question-form-protocol",
       "role-marker-guard",
     ],
-    "totalChars": 71384,
+    "totalChars": 71959,
   },
   "classic-design-minimal": {
     "sections": [
@@ -73,7 +73,7 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "host-question-form-protocol",
       "role-marker-guard",
     ],
-    "totalChars": 59639,
+    "totalChars": 60214,
   },
   "codex-imagegen": {
     "sections": [
@@ -109,12 +109,12 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "injection-resistance",
       "slim-core-charter",
       "project-metadata",
-      "deck-framework",
+      "deck-directive",
       "media-dispatch-hint",
       "host-clarification-gate",
       "role-marker-guard",
     ],
-    "totalChars": 52828,
+    "totalChars": 31679,
   },
   "deck-kind-with-skill-seed": {
     "sections": [
@@ -212,13 +212,13 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "injection-resistance",
       "slim-core-charter",
       "project-metadata",
-      "deck-framework",
+      "deck-directive",
       "maybe-deck-framework",
       "media-dispatch-hint",
       "host-clarification-gate",
       "role-marker-guard",
     ],
-    "totalChars": 53183,
+    "totalChars": 32039,
   },
   "freeform-other-no-deck-signal": {
     "sections": [

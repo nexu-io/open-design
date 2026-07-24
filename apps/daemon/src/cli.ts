@@ -8581,7 +8581,12 @@ async function runConfig(args) {
 
 Common options:
   --daemon-url <url>   Open Design daemon HTTP base.
-  --json               Emit raw JSON.`);
+  --json               Emit raw JSON.
+
+Deck prompt experiment:
+  od config set deckPromptVariant current
+  od config set deckPromptVariant current_outcome
+  od config set deckPromptVariant outcome_only`);
     process.exit(args.length === 0 ? 2 : 0);
   }
   const sub = args[0];

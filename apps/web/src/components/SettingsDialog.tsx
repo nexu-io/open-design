@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, Dispatch, SetStateAction } from 'react';
 import { Button, VisuallyHidden } from '@open-design/components';
-import type { AmrWalletSnapshot } from '@open-design/contracts';
+import {
+  DEFAULT_DECK_PROMPT_VARIANT,
+  type AmrWalletSnapshot,
+} from '@open-design/contracts';
 import { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
 import {
   agentIdToTracking,
@@ -5744,6 +5747,40 @@ export function SettingsDialog({
                     })
                   }
                 />
+              </div>
+              <div className="memory-field-block instructions-rules-card">
+                <div className="memory-block-head">
+                  <div>
+                    <h4>{t('settings.deckPromptVariantTitle')}</h4>
+                    <p className="hint">{t('settings.deckPromptVariantDesc')}</p>
+                  </div>
+                </div>
+                <label className="field">
+                  <span className="field-label">
+                    {t('settings.deckPromptVariantLabel')}
+                  </span>
+                  <select
+                    value={cfg.deckPromptVariant ?? DEFAULT_DECK_PROMPT_VARIANT}
+                    onChange={(event) =>
+                      setCfg({
+                        ...cfg,
+                        deckPromptVariant: event.target.value as NonNullable<
+                          AppConfig['deckPromptVariant']
+                        >,
+                      })
+                    }
+                  >
+                    <option value="current">
+                      {t('settings.deckPromptVariantCurrent')}
+                    </option>
+                    <option value="current_outcome">
+                      {t('settings.deckPromptVariantCurrentOutcome')}
+                    </option>
+                    <option value="outcome_only">
+                      {t('settings.deckPromptVariantOutcomeOnly')}
+                    </option>
+                  </select>
+                </label>
               </div>
             </section>
           ) : null}

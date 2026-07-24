@@ -21,6 +21,7 @@ import { readFileSync } from 'node:fs';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { createHash, randomBytes } from 'node:crypto';
 import path from 'node:path';
+import type { DeckPromptVariant } from '@open-design/contracts';
 import { expandHomePrefix } from './home-expansion.js';
 
 import {
@@ -117,6 +118,7 @@ export interface AppConfigPrefs {
   allowSilentUpdates?: boolean;
   orbit?: OrbitConfigPrefs;
   customInstructions?: string | null;
+  deckPromptVariant?: DeckPromptVariant;
   projectLocations?: ProjectLocationPrefs[];
   defaultProjectLocationId?: string | null;
   // Most-recently-used local working directories the user granted the agent
@@ -146,6 +148,7 @@ const ALLOWED_KEYS: ReadonlySet<keyof AppConfigPrefs> = new Set([
   'allowSilentUpdates',
   'orbit',
   'customInstructions',
+  'deckPromptVariant',
   'projectLocations',
   'defaultProjectLocationId',
   'recentLinkedDirs',
@@ -589,6 +592,16 @@ function applyConfigValue(
     if (typeof value === 'string') {
       target[key] = value.slice(0, 5000);
     } else if (value === null) {
+      target[key] = value;
+    }
+    return;
+  }
+  if (key === 'deckPromptVariant') {
+    if (
+      value === 'current' ||
+      value === 'current_outcome' ||
+      value === 'outcome_only'
+    ) {
       target[key] = value;
     }
     return;

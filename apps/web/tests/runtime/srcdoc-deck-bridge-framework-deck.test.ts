@@ -82,6 +82,8 @@ describe('injectDeckBridge — framework-deck detection (#deck-stage)', () => {
     expect(out).toMatch(/<style[^>]*data-od-deck-chrome-hidden/);
     expect(out).toContain('.deck-counter,');
     expect(out).toContain('.deck-hint,');
+    expect(out).toContain('[data-deck-nav],');
+    expect(out).toContain('[data-od-id="deck-nav"],');
     expect(out).toContain('display: none !important');
   });
 

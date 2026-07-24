@@ -476,7 +476,7 @@ describe('composeSystemPrompt — promptCoreVariant switch', () => {
     );
   });
 
-  it('slim keeps the dynamic sections (DS, skill, deck framework, media hint) composing as before', () => {
+  it('slim keeps the dynamic sections (DS, skill, deck directive, media hint) composing', () => {
     const out = composeSystemPrompt({
       metadata: { kind: 'deck' as const },
       executionProfile: 'filesystem',
@@ -488,7 +488,8 @@ describe('composeSystemPrompt — promptCoreVariant switch', () => {
     });
     expect(out).toContain('## Active design system — Brand');
     expect(out).toContain('## Active skill — test-skill');
-    expect(out).toContain('# Slide deck — fixed framework');
+    expect(out).toContain('# Deck delivery contract');
+    expect(out).toContain('# Deck outcome quality rules');
     expect(out).toContain('## Media generation (if asked)');
   });
 });

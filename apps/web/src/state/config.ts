@@ -1,4 +1,7 @@
-import type { AppConfigPrefs } from '@open-design/contracts';
+import {
+  DEFAULT_DECK_PROMPT_VARIANT,
+  type AppConfigPrefs,
+} from '@open-design/contracts';
 import { MEDIA_PROVIDERS } from '../media/models';
 import { isOpenAICompatible } from '../providers/openai-compatible';
 import type {
@@ -88,6 +91,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   orbit: DEFAULT_ORBIT,
   projectLocations: [],
   defaultProjectLocationId: 'default',
+  deckPromptVariant: DEFAULT_DECK_PROMPT_VARIANT,
   // Telemetry defaults to ON so fresh-install users emit onboarding /
   // ui_click events from the first frame. The disclosure modal still
   // appears after `onboardingCompleted` flips, and Settings → Privacy
@@ -972,6 +976,7 @@ const DAEMON_OWNED_KEYS = new Set<keyof AppConfig>([
   'telemetry',
   'privacyDecisionAt',
   'allowSilentUpdates',
+  'deckPromptVariant',
 ]);
 
 const AGENT_CLI_SECRET_ENV_KEYS = new Set([
@@ -1086,6 +1091,9 @@ export function mergeDaemonConfig(
   }
   if (daemonConfig.customInstructions !== undefined) {
     next.customInstructions = daemonConfig.customInstructions ?? undefined;
+  }
+  if (daemonConfig.deckPromptVariant !== undefined) {
+    next.deckPromptVariant = daemonConfig.deckPromptVariant;
   }
   if (daemonConfig.projectLocations !== undefined) {
     next.projectLocations = daemonConfig.projectLocations;
@@ -1209,6 +1217,8 @@ export async function syncConfigToDaemon(
     privacyDecisionAt: config.privacyDecisionAt,
     allowSilentUpdates: config.allowSilentUpdates,
     customInstructions: config.customInstructions ?? null,
+    deckPromptVariant:
+      config.deckPromptVariant ?? DEFAULT_DECK_PROMPT_VARIANT,
     projectLocations: config.projectLocations ?? [],
     defaultProjectLocationId: config.defaultProjectLocationId ?? 'default',
   };

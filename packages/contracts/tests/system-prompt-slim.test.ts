@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { renderDeckFrameworkDirective } from '../src/prompts/deck-framework.js';
+import {
+  renderDeckFrameworkDirective,
+  renderDeckPromptDirective,
+} from '../src/prompts/deck-framework.js';
 import { stripCssCommentsForPrompt } from '../src/prompts/design-system-runtime.js';
 import { composeSystemPrompt } from '../src/prompts/system.js';
 
@@ -586,6 +589,75 @@ describe('composeSystemPrompt — shared slim default', () => {
     expect(filesystem).not.toContain('Emit one complete `<artifact>` block');
     expect(textArtifact).toContain('Pre-emit self-check');
     expect(textArtifact).toContain('Emit one complete `<artifact>` block');
+  });
+
+  it('uses narrative surface hierarchy instead of a light-dark quota', () => {
+    const framework = renderDeckFrameworkDirective('filesystem');
+
+    expect(framework).toContain('choose one dominant slide surface');
+    expect(framework).toContain('named narrative role');
+    expect(framework).toContain('A single-surface deck is valid');
+    expect(framework).toContain('never alternate light and dark by slide index or quota');
+    expect(framework).not.toContain('no 3+ same-theme');
+  });
+
+  it('keeps the current deck directive byte-identical as the legacy rollback variant', () => {
+    expect(renderDeckPromptDirective('current', 'filesystem')).toBe(
+      renderDeckFrameworkDirective('filesystem'),
+    );
+  });
+
+  it('uses the vNext delivery and outcome directive as the production default', () => {
+    const defaultDirective = renderDeckPromptDirective();
+    const outcomeOnly = renderDeckPromptDirective('outcome_only', 'filesystem');
+
+    expect(defaultDirective).toBe(outcomeOnly);
+    expect(defaultDirective).toContain('# Deck delivery contract');
+    expect(defaultDirective).toContain('data-deck-nav');
+    expect(defaultDirective).toContain('# Deck outcome quality rules');
+    expect(defaultDirective).toContain('Make every visual element earn its place');
+    expect(defaultDirective).toContain('Quantitative charts');
+    expect(defaultDirective).not.toContain('# Slide deck — fixed framework');
+    expect(defaultDirective).not.toContain('## Canonical skeleton');
+  });
+
+  it('renders the two experimental deck directive variants from shared blocks', () => {
+    const currentWithOutcome = renderDeckPromptDirective(
+      'current_outcome',
+      'filesystem',
+    );
+    const outcomeOnly = renderDeckPromptDirective('outcome_only', 'filesystem');
+
+    expect(currentWithOutcome).toContain('# Slide deck — fixed framework');
+    expect(currentWithOutcome).toContain('# Deck outcome quality rules');
+    expect(currentWithOutcome).not.toContain('# Deck delivery contract');
+    expect(outcomeOnly).toContain('# Deck delivery contract');
+    expect(outcomeOnly).toContain('# Deck outcome quality rules');
+    expect(outcomeOnly).not.toContain('# Slide deck — fixed framework');
+    expect(outcomeOnly).not.toContain('## Canonical skeleton');
+  });
+
+  it('composes the selected deck directive variant into real deck runs', () => {
+    const current = composeSystemPrompt({
+      metadata: { kind: 'deck' } as any,
+      deckPromptVariant: 'current',
+    });
+    const currentWithOutcome = composeSystemPrompt({
+      metadata: { kind: 'deck' } as any,
+      deckPromptVariant: 'current_outcome',
+    });
+    const outcomeOnly = composeSystemPrompt({
+      metadata: { kind: 'deck' } as any,
+      deckPromptVariant: 'outcome_only',
+    });
+
+    expect(current).toContain('# Slide deck — fixed framework');
+    expect(current).not.toContain('# Deck outcome quality rules');
+    expect(currentWithOutcome).toContain('# Slide deck — fixed framework');
+    expect(currentWithOutcome).toContain('# Deck outcome quality rules');
+    expect(outcomeOnly).not.toContain('# Slide deck — fixed framework');
+    expect(outcomeOnly).toContain('# Deck delivery contract');
+    expect(outcomeOnly).toContain('# Deck outcome quality rules');
   });
 
   it('does not inject the freeform deck framework without a positive query signal', () => {
