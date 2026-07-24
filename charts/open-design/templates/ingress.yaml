@@ -38,7 +38,7 @@ spec:
       http:
         paths:
           {{- range .paths }}
-          {{- $configuredPath := .path | trimSuffix "/" -}}
+          {{- $configuredPath := .path | trimSuffix "/" }}
           - path: {{ if and $webBasePath (eq $configuredPath "") }}{{ $webBasePath }}{{ else }}{{ .path }}{{ end }}
             pathType: {{ .pathType }}
             backend:
