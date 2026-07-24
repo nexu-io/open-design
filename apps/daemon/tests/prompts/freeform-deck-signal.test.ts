@@ -66,6 +66,8 @@ describe('composeSystemPrompt — freeform maybe-deck gating', () => {
     });
     expect(out).toContain(DECK_DELIVERY_HEADING);
     expect(out).toContain(DECK_OUTCOME_HEADING);
+    expect(out).toContain('End with a purposeful close.');
+    expect(out).toContain('Do not add a generic "Thank you" slide');
     expect(out).not.toContain(MAYBE_DECK_HEADING);
   });
 
