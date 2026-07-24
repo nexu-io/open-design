@@ -1007,6 +1007,83 @@ test('claude helpArgs probes the -p subcommand where --add-dir lives (issue #430
   );
 });
 
+// ---- Claude Code reasoning-effort passthrough ------------------------------
+// The model switcher sends `reasoning` through server.ts's `safeReasoning`
+// sanitizer, which nulls the value out unless `def.reasoningOptions` is a
+// non-empty array containing it (see server.ts / routes/chat.ts). Without
+// declaring `reasoningOptions`, a selected effort never survives to reach
+// buildArgs at all — these tests pin both halves of the fix: the declared
+// options list (so the value round-trips through the sanitizer and the
+// AvatarMenu/SettingsDialog picker renders) and the `--effort` flag itself.
+
+test('claude declares reasoningOptions so the daemon sanitizer does not drop effort', () => {
+  const options = claude.reasoningOptions ?? [];
+  assert.ok(options.length > 0);
+  const ids = options.map((o) => o.id);
+  assert.deepEqual(ids, ['default', 'low', 'medium', 'high', 'xhigh', 'max']);
+  // 'default' must be first so AvatarMenu/SettingsDialog's
+  // `reasoningOptions[0].id` fallback resolves to "omit --effort."
+  assert.equal(options[0]?.id, 'default');
+});
+
+test('claude buildArgs appends --effort when reasoning is set', () => {
+  const args = claude.buildArgs('', [], [], { reasoning: 'high' }, {});
+  assert.ok(args.includes('--effort'));
+  assert.equal(args[args.indexOf('--effort') + 1], 'high');
+});
+
+test('claude buildArgs omits --effort when reasoning is unset or the "default" sentinel', () => {
+  const noReasoning = claude.buildArgs('', [], [], {}, {});
+  assert.equal(noReasoning.includes('--effort'), false);
+
+  const defaultReasoning = claude.buildArgs('', [], [], { reasoning: 'default' }, {});
+  assert.equal(defaultReasoning.includes('--effort'), false);
+});
+
+test('claude buildArgs clamps reasoning effort per model (Sonnet/Opus 4.6 lack xhigh)', () => {
+  const cases: Array<[string | undefined, string, string]> = [
+    // [model, requested effort, expected wire-level --effort value]
+    // Current generation supports the full range, including xhigh.
+    [undefined, 'xhigh', 'xhigh'],
+    ['default', 'xhigh', 'xhigh'],
+    ['claude-sonnet-5', 'xhigh', 'xhigh'],
+    ['claude-opus-4-8', 'xhigh', 'xhigh'],
+    ['claude-opus-4-7', 'xhigh', 'xhigh'],
+    ['claude-fable-5', 'xhigh', 'xhigh'],
+    // Prior generation: xhigh -> high, everything else passes through.
+    ['claude-sonnet-4-6', 'xhigh', 'high'],
+    ['claude-sonnet-4-6', 'high', 'high'],
+    ['claude-sonnet-4-6', 'max', 'max'],
+    ['claude-opus-4-6', 'xhigh', 'high'],
+    ['claude-opus-4-6', 'medium', 'medium'],
+    // Case/format tolerance: path-style ids and case variants.
+    ['anthropic/claude-sonnet-4-6', 'xhigh', 'high'],
+    ['CLAUDE-SONNET-4-6', 'xhigh', 'high'],
+    // Aliases and unknown ids: treated as current (full-range) generation.
+    ['sonnet', 'xhigh', 'xhigh'],
+    ['opus', 'xhigh', 'xhigh'],
+  ];
+  for (const [model, reasoning, expected] of cases) {
+    const args = claude.buildArgs(
+      '',
+      [],
+      [],
+      { ...(model === undefined ? {} : { model }), reasoning },
+      {},
+    );
+    const effortIndex = args.indexOf('--effort');
+    assert.ok(
+      effortIndex >= 0,
+      `(model=${model ?? '<none>'}, reasoning=${reasoning}) → expected --effort to be present; args=${JSON.stringify(args)}`,
+    );
+    assert.equal(
+      args[effortIndex + 1],
+      expected,
+      `(model=${model ?? '<none>'}, reasoning=${reasoning}) → expected ${expected}; args=${JSON.stringify(args)}`,
+    );
+  }
+});
+
 // server.ts:4615 branches on `def.promptInputFormat` to decide how to write
 // the composed prompt to a stdin-fed child: 'stream-json' writes one JSONL
 // `user` message and keeps stdin open, anything else writes the raw prompt
