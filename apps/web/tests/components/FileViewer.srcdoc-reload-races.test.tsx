@@ -428,11 +428,12 @@ describe('FileViewer srcDoc reload — prevSourceBeforeReloadRef race conditions
   // source=null window opened by a Reload click on an artifact whose srcDoc
   // path is driven by a source-derived predicate (htmlNeedsSandboxShim).
   // ---------------------------------------------------------------------------
-  it('keeps the srcDoc iframe active (does not flip to URL-load) while source is null after a Reload click on an htmlNeedsSandboxShim artifact', async () => {
-    // An HTML file that uses localStorage — triggers htmlNeedsSandboxShim and
-    // therefore forces the srcDoc path (forceInline=true).  No .slide class so
-    // looksLikeDeck stays false and isDeck is passed as false; the ONLY reason
-    // this file takes the srcDoc path is the sandbox-shim predicate.
+  it('keeps the powered iframe active (does not flip to plain URL-load) while source is null after a Reload click on an htmlNeedsSandboxShim artifact', async () => {
+    // An HTML file that uses localStorage — triggers htmlNeedsSandboxShim,
+    // which now routes through powered mode (needsPoweredPreview) for real,
+    // persisting Web Storage instead of the srcDoc in-memory shim.  No .slide
+    // class so looksLikeDeck stays false and isDeck is passed as false; the
+    // ONLY reason this file takes the powered path is the sandbox-shim signal.
     const shimFile: ProjectFile = {
       name: 'app.html',
       path: 'app.html',
@@ -444,10 +445,21 @@ describe('FileViewer srcDoc reload — prevSourceBeforeReloadRef race conditions
     };
     const shimHtml =
       '<html><body><script>localStorage.setItem("key","val");</script><p>loaded</p></body></html>';
+    const isolationResponse = () =>
+      new Response(JSON.stringify({ supported: true, baseOrigin: 'http://127.0.0.1:43111' }), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    const poweredSrcPrefix = 'http://localhost:43111/api/projects/project-1/powered/app.html';
 
     // Step 1: mount with shimHtml — source is non-null, needsSandboxShim=true,
-    // forceInline=true, useUrlLoadPreview=false → srcDoc iframe is active.
-    vi.stubGlobal('fetch', fetchReturning(shimHtml));
+    // needsPowered=true. Once the (mocked) isolation probe resolves, the
+    // powered iframe becomes the active `artifact-preview-frame`.
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url === '/api/preview/isolation') return isolationResponse();
+      if (url.startsWith(RAW_URL_PREFIX)) return new Response(shimHtml, { status: 200 });
+      return new Response('', { status: 404 });
+    }));
 
     render(
       <FileViewer
@@ -458,47 +470,59 @@ describe('FileViewer srcDoc reload — prevSourceBeforeReloadRef race conditions
       />,
     );
 
-    // Wait for the source fetch to resolve so the component has non-null source.
+    // Wait for the source fetch AND the isolation probe to resolve so the
+    // component has settled on the powered iframe as active.
     await waitFor(() => {
-      // The srcDoc iframe is active: its testid is 'artifact-preview-frame'
-      // (not 'artifact-preview-frame-srcdoc') when useUrlLoadPreview=false.
       const frame = screen.queryByTestId('artifact-preview-frame');
       expect(frame).not.toBeNull();
-      expect((frame as HTMLIFrameElement).getAttribute('data-od-render-mode')).toBe('srcdoc');
+      expect((frame as HTMLIFrameElement).getAttribute('data-od-render-mode')).toBe('url-load');
+      expect((frame as HTMLIFrameElement).getAttribute('data-od-powered')).toBe('true');
+      expect((frame as HTMLIFrameElement).getAttribute('src')).toMatch(new RegExp(`^${poweredSrcPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
     });
 
-    // Step 2: click Reload — source goes null synchronously.  Without the fix,
-    // needsSandboxShim(null)=false → forceInline flips → useUrlLoadPreview
-    // becomes true → the URL-load iframe hijacks testid 'artifact-preview-frame'
-    // and the srcDoc iframe is renamed to 'artifact-preview-frame-srcdoc'.
-    const { handle: reloadHandle, stub: reloadStub } = deferredFetch();
-    vi.stubGlobal('fetch', reloadStub);
+    // Step 2: click Reload — source goes null synchronously. Without the fix,
+    // needsSandboxShim(null)=false → needsPowered flips false → the plain
+    // (non-powered) URL-load iframe would hijack testid 'artifact-preview-frame'.
+    const rawHandle: { resolve: (html: string) => void } = { resolve: () => {} };
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url === '/api/preview/isolation') return isolationResponse();
+      if (url.startsWith(RAW_URL_PREFIX)) {
+        return new Promise<Response>((ok) => {
+          rawHandle.resolve = (html: string) => ok(new Response(html, { status: 200 }));
+        });
+      }
+      return new Response('', { status: 404 });
+    }));
 
     act(() => {
       fireEvent.click(screen.getByRole('button', { name: /reload preview/i }));
     });
 
-    // Step 3: assert BEFORE the fetch resolves — this is the reload window
+    // Drain one microtask tick: the (cached) isolation probe re-resolves via
+    // a fresh .then() on file/reload-key change even though fetchPreviewIsolation
+    // itself hits the cache instantly — the resulting setState still needs a
+    // tick to flush. This is well before the deferred raw-html fetch below
+    // resolves, so the reload window this test guards is still open.
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    // Step 3: assert BEFORE the raw fetch resolves — this is the reload window
     // where the source=null race can expose the bug.
     //
-    // The srcDoc iframe must remain the active iframe: its testid stays
-    // 'artifact-preview-frame' and its data-od-render-mode is 'srcdoc'.
-    // If the routing flipped, a URL-load iframe would have taken the
-    // 'artifact-preview-frame' testid and data-od-active='true' instead.
+    // The powered iframe must remain the active iframe: its testid stays
+    // 'artifact-preview-frame', still on url-load/powered. If the routing
+    // flipped, a plain (non-powered) URL-load iframe would have taken over
+    // instead.
     const activeFrame = screen.getByTestId('artifact-preview-frame');
-    expect(activeFrame.getAttribute('data-od-render-mode')).toBe('srcdoc');
+    expect(activeFrame.getAttribute('data-od-render-mode')).toBe('url-load');
+    expect(activeFrame.getAttribute('data-od-powered')).toBe('true');
     expect(activeFrame.getAttribute('data-od-active')).toBe('true');
-
-    // Confirm the URL-load iframe is NOT the active one (it would carry
-    // data-od-render-mode='url-load' and data-od-active='true' on a buggy build).
-    const urlLoadFrame = screen.queryByTestId('artifact-preview-frame-url-load');
-    if (urlLoadFrame) {
-      expect(urlLoadFrame.getAttribute('data-od-active')).toBe('false');
-    }
 
     // Drain the deferred fetch so it doesn't leak into subsequent tests.
     await act(async () => {
-      reloadHandle.resolve(shimHtml);
+      rawHandle.resolve(shimHtml);
       await Promise.resolve();
     });
   });
@@ -926,9 +950,12 @@ describe('FileViewer srcDoc reload — prevSourceBeforeReloadRef race conditions
   // was not silently dropped.
   // ---------------------------------------------------------------------------
   it('saves a Manual Edit patch made during the Reload window instead of silently discarding it', async () => {
-    // Include localStorage to trigger htmlNeedsSandboxShim → forceInline=true
-    // → srcDoc render path even before Manual Edit mode is entered.  This lets
-    // the test confirm srcdoc content in Step 1 and verify the iframe is active.
+    // Include localStorage to trigger htmlNeedsSandboxShim, which now routes
+    // through powered mode (needsPoweredPreview) rather than forceInline/
+    // srcDoc — Step 1 below waits for the powered iframe instead of srcdoc
+    // content. Entering Manual Edit mode in Step 2 forces srcDoc regardless
+    // (editMode always wins over powered — see shouldUrlLoadHtmlPreview), so
+    // everything from Step 2 onward is unaffected by the pre-edit transport.
     const initialSource =
       '<!doctype html><html><body>' +
       '<script>localStorage.setItem("k","v");</script>' +
@@ -956,6 +983,16 @@ describe('FileViewer srcDoc reload — prevSourceBeforeReloadRef race conditions
         return new Response(
           JSON.stringify({ file: manualEditFile() }),
           { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+
+      // Powered-preview isolation probe — the localStorage signal below now
+      // routes this file through powered mode pre-edit-mode (see the comment
+      // above this test).
+      if (url === '/api/preview/isolation') {
+        return new Response(
+          JSON.stringify({ supported: true, baseOrigin: 'http://127.0.0.1:43111' }),
+          { headers: { 'Content-Type': 'application/json' } },
         );
       }
 
@@ -1017,7 +1054,8 @@ describe('FileViewer srcDoc reload — prevSourceBeforeReloadRef race conditions
 
     await waitFor(() => {
       const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
-      expect(frame.srcdoc).toContain('Hello');
+      expect(frame.getAttribute('data-od-render-mode')).toBe('url-load');
+      expect(frame.getAttribute('data-od-powered')).toBe('true');
     });
 
     // Step 2: enter Manual Edit mode — manualEditFrozenSource captures V1.

@@ -141,9 +141,9 @@ import {
   hasTweaksTemplate,
   hasUrlModeBridge,
   htmlNeedsFocusGuard,
-  htmlNeedsPoweredPreview,
   htmlNeedsRedirectGuard,
   htmlNeedsSandboxShim,
+  needsPoweredPreview,
   parseForceInline,
   shouldUrlLoadHtmlPreview,
   type UrlLoadDecision,
@@ -7320,11 +7320,22 @@ function HtmlViewer({
   // needs. The interactive-bridge srcDoc modes (deck/inspect/edit/palette/
   // tweaks/comment) still win — they require host-injected bridges powered mode
   // can't carry.
-  const needsPowered = useMemo(() => {
-    if (serverPoweredPreviewRequired) return true;
-    const s = routingHtmlSource;
-    return s != null && htmlNeedsPoweredPreview(s);
-  }, [routingHtmlSource, serverPoweredPreviewRequired]);
+  //
+  // `needsSandboxShim` artifacts (Babel/localStorage/external-script signals —
+  // htmlNeedsSandboxShim) also route through powered mode rather than the
+  // srcDoc in-memory shim: they get real, persisting Web Storage instead of a
+  // fake store that resets every reload. The daemon's `/powered/*` route
+  // injects a per-project key-prefix shim (injectPoweredStorageNamespaceShim)
+  // so different projects sharing the one powered-preview origin can't
+  // collide on the same storage keys.
+  const needsPowered = useMemo(
+    () =>
+      needsPoweredPreview(routingHtmlSource, {
+        serverRequired: serverPoweredPreviewRequired,
+        sandboxShimNeeded: needsSandboxShim,
+      }),
+    [routingHtmlSource, serverPoweredPreviewRequired, needsSandboxShim],
+  );
   const [urlSelectionBridgeReady, setUrlSelectionBridgeReady] = useState(false);
   const urlLoadDecision: UrlLoadDecision = {
     mode,

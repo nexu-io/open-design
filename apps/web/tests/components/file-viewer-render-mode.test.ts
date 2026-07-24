@@ -7,6 +7,7 @@ import {
   htmlNeedsPoweredPreview,
   htmlNeedsRedirectGuard,
   htmlNeedsSandboxShim,
+  needsPoweredPreview,
   parseForceInline,
   shouldUrlLoadHtmlPreview,
 } from '../../src/components/file-viewer-render-mode';
@@ -374,6 +375,43 @@ describe('htmlNeedsPoweredPreview', () => {
   it('does NOT match unrelated prose that mentions the words', () => {
     expect(htmlNeedsPoweredPreview('<p>Our web worker culture is great</p>')).toBe(false);
     expect(htmlNeedsPoweredPreview('<p>A workshop about 3D printing</p>')).toBe(false);
+  });
+});
+
+describe('needsPoweredPreview', () => {
+  const opts = (overrides: Partial<{ serverRequired: boolean; sandboxShimNeeded: boolean }> = {}) => ({
+    serverRequired: false,
+    sandboxShimNeeded: false,
+    ...overrides,
+  });
+
+  it('returns false for null/empty source with no other trigger', () => {
+    expect(needsPoweredPreview(null, opts())).toBe(false);
+    expect(needsPoweredPreview('', opts())).toBe(false);
+  });
+
+  it('routes a WebGL2/Worker/WASM artifact through powered mode (unchanged behavior)', () => {
+    expect(needsPoweredPreview("new Worker('sort.js')", opts())).toBe(true);
+    expect(needsPoweredPreview('<p>plain html</p>', opts())).toBe(false);
+  });
+
+  it('routes an artifact that only needs the sandbox shim through powered mode too', () => {
+    // e.g. localStorage usage or an external <script src> — see
+    // htmlNeedsSandboxShim. These previously got only the srcDoc in-memory
+    // shim; they now get real, persisting storage via powered mode.
+    expect(needsPoweredPreview('<p>no signals here</p>', opts({ sandboxShimNeeded: true }))).toBe(true);
+  });
+
+  it('honors serverRequired regardless of source content', () => {
+    expect(needsPoweredPreview(null, opts({ serverRequired: true }))).toBe(true);
+    expect(needsPoweredPreview('<p>plain html</p>', opts({ serverRequired: true }))).toBe(true);
+  });
+
+  it('does not fall back to scanning source for the sandbox-shim signal itself', () => {
+    // sandboxShimNeeded must be passed in already-computed (it's gated by
+    // FileViewer's own passiveLargeHtmlPreview check) -- this function must
+    // not re-derive it from source, or that gate would silently disappear.
+    expect(needsPoweredPreview('localStorage.getItem("x")', opts())).toBe(false);
   });
 });
 

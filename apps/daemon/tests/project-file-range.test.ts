@@ -410,7 +410,9 @@ describe('GET /api/projects/:id/raw/* range request route', () => {
     expect(res.status).toBe(200);
     expect(res.headers.get('document-isolation-policy')).toBe('isolate-and-credentialless');
     expect(res.headers.get('access-control-allow-origin')).toBeNull();
-    expect(await res.text()).toBe('<html/>');
+    // Powered previews now also carry the per-project storage-namespace shim
+    // (see the dedicated test below), so this is no longer a byte-exact match.
+    expect(await res.text()).toContain('<html/>');
 
     const foreign = await fetch(poweredUrl('page.html'), {
       headers: { Origin: 'https://foreign.example' },
@@ -427,6 +429,23 @@ describe('GET /api/projects/:id/raw/* range request route', () => {
     });
     expect(preflight.status).toBe(204);
     expect(preflight.headers.get('access-control-allow-origin')).toBeNull();
+  });
+
+  it('injects a per-project storage-namespace shim into powered previews only', async () => {
+    const powered = await fetch(poweredUrl('page.html'));
+    expect(powered.status).toBe(200);
+    const poweredHtml = await powered.text();
+    expect(poweredHtml).toContain('data-od-powered-storage-namespace');
+    expect(poweredHtml).toContain(`"od:proj:${projectId}:"`);
+    expect(poweredHtml).toContain('localStorage');
+    expect(poweredHtml).toContain('sessionStorage');
+
+    // The non-powered /raw/ route serves the same file untouched -- its
+    // bare `allow-scripts` sandbox (no allow-same-origin) can't reach real
+    // storage anyway, so there's nothing for the shim to namespace there.
+    const raw = await fetch(rawUrl('page.html'));
+    expect(raw.status).toBe(200);
+    expect(await raw.text()).not.toContain('data-od-powered-storage-namespace');
   });
 
   it('injects the URL preview scroll bridge for powered previews when requested', async () => {
@@ -450,7 +469,9 @@ describe('GET /api/projects/:id/raw/* range request route', () => {
       },
     });
     expect(poweredFile.status).toBe(200);
-    expect(await poweredFile.text()).toBe('<html/>');
+    // The powered route also carries the per-project storage-namespace shim
+    // (see the dedicated test above), so this is no longer a byte-exact match.
+    expect(await poweredFile.text()).toContain('<html/>');
 
     const api = await fetch(`${origin}/api/projects`, {
       headers: {

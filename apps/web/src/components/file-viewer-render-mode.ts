@@ -251,6 +251,37 @@ export function htmlNeedsPoweredPreview(source: string | null | undefined): bool
   return false;
 }
 
+/**
+ * Combined powered-preview trigger FileViewer actually uses to compute
+ * `needsPowered`. Isolated here (rather than inlined in the component) so the
+ * composition is directly unit-testable, matching every other decision in
+ * this file.
+ *
+ * Artifacts that only need `htmlNeedsSandboxShim` (Babel / localStorage /
+ * external-script signals) also route through powered mode now: instead of
+ * `injectSandboxShim`'s in-memory fake store (apps/web/src/runtime/srcdoc.ts
+ * — exists purely so the preview doesn't crash, never persists), they get
+ * the powered path's real, same-origin Web Storage. The daemon's
+ * `injectPoweredStorageNamespaceShim` (apps/daemon/src/routes/project/
+ * index.ts) key-prefixes that storage per project, since every project's
+ * powered preview shares one cross-origin-isolated loopback origin.
+ *
+ * `sandboxShimNeeded` is a parameter rather than re-derived from `source`
+ * here because FileViewer's own `needsSandboxShim` memo additionally gates on
+ * `passiveLargeHtmlPreview` (skip the full scan on huge passive previews) —
+ * recomputing it from raw `source` in this function would silently lose that
+ * gate. `htmlNeedsPoweredPreview` has no such gate today, so `source` is
+ * still scanned directly for it.
+ */
+export function needsPoweredPreview(
+  source: string | null | undefined,
+  options: { serverRequired: boolean; sandboxShimNeeded: boolean },
+): boolean {
+  if (options.serverRequired || options.sandboxShimNeeded) return true;
+  if (source == null) return false;
+  return htmlNeedsPoweredPreview(source);
+}
+
 export function htmlNeedsSandboxShim(source: string): boolean {
   // Quote-optional: HTML5 permits unquoted attribute values
   // (`<script type=text/babel src=app.jsx>`). The trailing `\b` rejects

@@ -796,7 +796,7 @@ describe('FileViewer SVG artifacts', () => {
     expect(screen.getByTestId('artifact-preview-frame')).toBe(firstFrame);
   });
 
-  it('promotes large HTML files to the srcDoc path when the routing preview shows sandbox-unsafe scripts', async () => {
+  it('promotes large HTML files to the powered path when the routing preview shows sandbox-unsafe scripts', async () => {
     const file = baseFile({
       name: 'index.html',
       path: 'index.html',
@@ -813,12 +813,25 @@ describe('FileViewer SVG artifacts', () => {
       },
     });
     const previewText = '<!doctype html><html><head><script src="./app.js"></script></head>';
-    let fullHtml = `${previewText}<body><main>Imported filesystem app</main></body></html>`;
+    const fullHtml = `${previewText}<body><main>Imported filesystem app</main></body></html>`;
     const fetchMock = vi.fn(async (input: string | URL | Request) => {
       const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url === '/api/preview/isolation') {
+        return new Response(JSON.stringify({
+          supported: true,
+          baseOrigin: 'http://127.0.0.1:43111',
+        }), {
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
       if (url.startsWith('/api/projects/project-1/text-preview/index.html')) {
         return new Response(JSON.stringify({
           text: previewText,
+          // The external <script src="./app.js"> signal comes from the client-
+          // side htmlNeedsSandboxShim scan of this routing preview text, not
+          // from the server's own WebGL/Worker/WASM poweredPreview hint — this
+          // stays `required: false` on purpose to prove the client-side signal
+          // alone is what promotes the file to powered mode.
           poweredPreview: { required: false, reasons: [] },
         }), {
           status: 200,
@@ -845,13 +858,14 @@ describe('FileViewer SVG artifacts', () => {
 
     await waitFor(() => {
       const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
-      expect(frame.getAttribute('data-od-render-mode')).toBe('srcdoc');
-      expect(frame.getAttribute('srcDoc')).toContain('Imported filesystem app');
+      expect(frame.getAttribute('data-od-render-mode')).toBe('url-load');
+      expect(frame.getAttribute('data-od-powered')).toBe('true');
+      expect(frame.getAttribute('src')).toBe(
+        `http://localhost:43111/api/projects/project-1/powered/index.html?v=${file.mtime}&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot`,
+      );
     });
     expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/projects/project-1/text-preview/index.html'), { cache: 'no-store' });
-    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/projects/project-1/raw/index.html?cacheBust='), {});
 
-    fullHtml = `${previewText}<body><main>Updated filesystem app</main></body></html>`;
     rerender(
       <FileViewer
         projectId="project-1"
@@ -862,8 +876,10 @@ describe('FileViewer SVG artifacts', () => {
 
     await waitFor(() => {
       const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
-      expect(frame.getAttribute('data-od-render-mode')).toBe('srcdoc');
-      expect(frame.getAttribute('srcDoc')).toContain('Updated filesystem app');
+      expect(frame.getAttribute('data-od-render-mode')).toBe('url-load');
+      expect(frame.getAttribute('src')).toBe(
+        `http://localhost:43111/api/projects/project-1/powered/index.html?v=${file.mtime + 1}&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot`,
+      );
     });
   });
 
@@ -1651,7 +1667,20 @@ describe('FileViewer SVG artifacts', () => {
     expect(toggle.getAttribute('aria-pressed')).toBe('true');
   });
 
-  it('renders sandbox-shim artifacts on the srcdoc transport without entering edit mode (#2791)', () => {
+  it('renders sandbox-shim artifacts on the powered transport without entering edit mode (#2791)', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url === '/api/preview/isolation') {
+        return new Response(JSON.stringify({
+          supported: true,
+          baseOrigin: 'http://127.0.0.1:43111',
+        }), {
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response('', { status: 404 });
+    }));
+
     const file = baseFile({
       name: 'search.html',
       path: 'search.html',
@@ -1676,11 +1705,25 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    const srcDocFrame = container.querySelector('iframe[data-od-render-mode="srcdoc"]') as HTMLIFrameElement | null;
-    expect(srcDocFrame?.getAttribute('data-od-active')).toBe('true');
-    expect(srcDocFrame?.srcdoc).toContain('data-od-id="results"');
-    expect(srcDocFrame?.srcdoc).not.toContain('data-od-lazy-srcdoc-transport');
-    expect(srcDocFrame?.srcdoc).toContain('data-od-sandbox-shim');
+    // The external <script src="app.js"> signal (htmlNeedsSandboxShim) now
+    // routes through powered mode for real, persisting Web Storage instead of
+    // the srcDoc in-memory shim (see needsPoweredPreview) -- the daemon
+    // (apps/daemon/src/routes/project/index.ts) is responsible for actually
+    // injecting the per-project storage shim into what it serves at this URL;
+    // that's covered separately in project-file-range.test.ts. This test only
+    // confirms the frontend picks the powered transport (and never detours
+    // through manual-edit mode) for sandbox-unsafe content.
+    await waitFor(() => {
+      const frame = container.querySelector('iframe[data-od-render-mode="url-load"]') as HTMLIFrameElement | null;
+      expect(frame?.getAttribute('data-od-active')).toBe('true');
+      expect(frame?.getAttribute('data-od-powered')).toBe('true');
+      expect(frame?.getAttribute('src')).toBe(
+        `http://localhost:43111/api/projects/project-1/powered/search.html?v=${file.mtime}&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot`,
+      );
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId('manual-edit-mode-toggle').getAttribute('aria-pressed')).toBe('false'),
+    );
   });
 
   it('keeps srcDoc HTML previews available with a compact Code action', async () => {

@@ -895,6 +895,87 @@ function applyUrlPreviewBridgesToHtml(
   return html;
 }
 
+// Powered previews (apps/web/src/runtime/powered-preview.ts) load from one
+// shared cross-origin-isolated loopback origin regardless of which project
+// they belong to — the project id is only a URL path segment, not part of
+// the origin, so a bare `localStorage`/`sessionStorage` write from one
+// project's powered preview is visible to (and can collide with) every other
+// project's powered preview. This wraps `window.localStorage` /
+// `window.sessionStorage` in the served document with a per-project
+// key-prefixed store, backed by the real native storage (unlike
+// injectSandboxShim's in-memory fake in apps/web/src/runtime/srcdoc.ts, which
+// exists only so non-powered srcDoc previews don't crash and never persists).
+// Injected as early as possible (right after `<head>`/`<body>` opens) so it
+// runs before any artifact script reads storage at module-eval/mount time.
+function injectPoweredStorageNamespaceShim(
+  html: string | Buffer,
+  mime: string,
+  projectId: string,
+): string | Buffer {
+  if (!/^text\/html(?:;|$)/i.test(mime)) return html;
+  const doc = Buffer.isBuffer(html) ? html.toString('utf8') : html;
+  const marker = 'data-od-powered-storage-namespace';
+  if (doc.includes(marker)) return doc;
+  const prefix = `od:proj:${projectId}:`;
+  const shim = `<script ${marker}>(function(){
+  var PREFIX = ${JSON.stringify(prefix)};
+  function makeNamespacedStore(real){
+    function pk(k){ return PREFIX + String(k); }
+    var api = {
+      getItem: function(k){ try { return real.getItem(pk(k)); } catch (_) { return null; } },
+      setItem: function(k, v){ try { real.setItem(pk(k), String(v)); } catch (_) {} },
+      removeItem: function(k){ try { real.removeItem(pk(k)); } catch (_) {} },
+      clear: function(){
+        try {
+          var toRemove = [];
+          for (var i = 0; i < real.length; i++) {
+            var fk = real.key(i);
+            if (fk !== null && fk.indexOf(PREFIX) === 0) toRemove.push(fk);
+          }
+          for (var j = 0; j < toRemove.length; j++) real.removeItem(toRemove[j]);
+        } catch (_) {}
+      },
+      key: function(i){
+        try {
+          var count = -1;
+          for (var idx = 0; idx < real.length; idx++) {
+            var fk = real.key(idx);
+            if (fk !== null && fk.indexOf(PREFIX) === 0) {
+              count++;
+              if (count === i) return fk.slice(PREFIX.length);
+            }
+          }
+        } catch (_) {}
+        return null;
+      }
+    };
+    Object.defineProperty(api, 'length', { get: function(){
+      try {
+        var count = 0;
+        for (var i = 0; i < real.length; i++) {
+          var fk = real.key(i);
+          if (fk !== null && fk.indexOf(PREFIX) === 0) count++;
+        }
+        return count;
+      } catch (_) { return 0; }
+    } });
+    return api;
+  }
+  function swap(name){
+    try {
+      var real = window[name];
+      if (!real || typeof real.getItem !== 'function') return;
+      Object.defineProperty(window, name, { configurable: true, value: makeNamespacedStore(real) });
+    } catch (_) {}
+  }
+  swap('localStorage');
+  swap('sessionStorage');
+})();</script>`;
+  if (/<head[^>]*>/i.test(doc)) return doc.replace(/<head[^>]*>/i, (m) => `${m}${shim}`);
+  if (/<body[^>]*>/i.test(doc)) return doc.replace(/<body[^>]*>/i, (m) => `${m}${shim}`);
+  return shim + doc;
+}
+
 // ---------------------------------------------------------------------------
 // Teams-safe title sanitization for the URL-load preview path (issue #3918).
 //
@@ -3375,7 +3456,8 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
             projectsRoot: PROJECTS_DIR,
             readProjectFile,
           });
-          return applyUrlPreviewBridgesToHtml(transformed, file.mime, req.query.odPreviewBridge);
+          const withBridges = applyUrlPreviewBridgesToHtml(transformed, file.mime, req.query.odPreviewBridge);
+          return injectPoweredStorageNamespaceShim(withBridges, file.mime, projectId);
         },
       );
     } catch (err: any) {
