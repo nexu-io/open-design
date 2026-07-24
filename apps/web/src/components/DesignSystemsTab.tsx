@@ -929,7 +929,9 @@ function SystemRow({ system, active, isDefault, subtitle, statusLabel, onSelect 
           <span className={styles.itemName}>{system.title}</span>
           {isDefault ? <span className={styles.badgeDefault}>{t('dsManager.badgeDefault')}</span> : null}
         </span>
-        <span className={styles.itemSub}>{subtitle}</span>
+        <span className={styles.itemSub} data-testid={`design-system-card-subtitle-${system.id}`}>
+          {subtitle}
+        </span>
       </span>
       {isUser ? (
         <span
