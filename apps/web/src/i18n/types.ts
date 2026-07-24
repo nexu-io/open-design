@@ -523,6 +523,17 @@ export interface Dict {
   'settings.privacyDataDeletionHint': string;
   'settings.about': string;
   'settings.aboutHint': string;
+  'settings.aboutTagline': string;
+  'settings.aboutUpdates': string;
+  'settings.aboutWebsite': string;
+  'settings.aboutOpenSource': string;
+  'settings.aboutCommunity': string;
+  'settings.aboutLicense': string;
+  'settings.aboutSupport': string;
+  'settings.aboutReportBug': string;
+  'settings.aboutSendFeedback': string;
+  'settings.aboutAdvancedDetails': string;
+  'settings.aboutTroubleshooting': string;
   'settings.appVersion': string;
   'settings.appChannel': string;
   'settings.appRuntime': string;

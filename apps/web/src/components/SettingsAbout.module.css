@@ -1,0 +1,326 @@
+.root {
+  --about-card-radius: var(--radius-sm);
+  --about-row-min-height: 54px;
+  gap: 18px;
+  padding-bottom: 8px;
+}
+
+.hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px 16px;
+  text-align: center;
+}
+
+.logoFrame {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+}
+
+.logoFrame img {
+  width: 48px;
+  height: 48px;
+}
+
+.heroCopy {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.heroCopy h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 21px;
+  font-weight: 680;
+  letter-spacing: -0.025em;
+}
+
+.versionLine {
+  margin: 0;
+}
+
+.versionLine {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.root :global(.settings-about-version-num) {
+  color: inherit;
+  font-size: inherit;
+  font-weight: 600;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.group > h3 {
+  margin: 0;
+  padding: 0 4px;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.075em;
+  text-transform: uppercase;
+}
+
+.card {
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--text) 9%, var(--border));
+  border-radius: var(--about-card-radius);
+  background: color-mix(in srgb, var(--bg-panel) 82%, var(--bg-elevated));
+}
+
+.row,
+.linkRow {
+  position: relative;
+  display: flex;
+  min-height: var(--about-row-min-height);
+  width: 100%;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 13px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+}
+
+.card > :not(:last-child)::after {
+  position: absolute;
+  right: 13px;
+  bottom: 0;
+  left: 45px;
+  height: 1px;
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  content: '';
+}
+
+.linkRow {
+  cursor: pointer;
+  transition:
+    background 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.linkRow:hover {
+  background: color-mix(in srgb, var(--text) 4.5%, transparent);
+}
+
+.linkRow:focus-visible {
+  z-index: 1;
+  outline: 2px solid var(--accent-strong);
+  outline-offset: -2px;
+}
+
+.rowIcon {
+  display: grid;
+  width: 20px;
+  flex: 0 0 20px;
+  place-items: center;
+  color: var(--text-muted);
+}
+
+.rowCopy {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.rowTitle {
+  min-width: 0;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 570;
+  line-height: 1.35;
+}
+
+.rowHint {
+  max-width: 500px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.45;
+}
+
+.rowValue {
+  min-width: 0;
+  margin-left: auto;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.root :global(.settings-about-update-status) {
+  display: block;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.4;
+}
+
+.root :global(.settings-about-update-status--success) {
+  color: var(--green, #137a3d);
+}
+
+.root :global(.settings-about-update-status--warning),
+.root :global(.settings-about-update-status--error) {
+  color: var(--red, #d4543b);
+}
+
+.root :global(.settings-about-update-button) {
+  flex: 0 0 auto;
+  min-height: 30px;
+  white-space: nowrap;
+}
+
+.root .toggleRow {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) 34px;
+  align-items: center;
+  column-gap: 12px;
+  flex-direction: row;
+  cursor: pointer;
+}
+
+.switchControl {
+  position: relative;
+  display: inline-flex;
+  width: 34px;
+  height: 20px;
+  min-height: 0;
+  flex: 0 0 34px;
+  justify-self: end;
+}
+
+.switchControl input {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  appearance: none;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.switchTrack {
+  position: absolute;
+  inset: 0;
+  border: 1px solid color-mix(in srgb, var(--text) 10%, var(--border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text) 13%, var(--bg-subtle));
+  transition:
+    background 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.switchThumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 4px color-mix(in srgb, #000000 24%, transparent);
+  transition: transform 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.switchControl input:checked + .switchTrack {
+  border-color: var(--accent-strong);
+  background: var(--accent-strong);
+}
+
+.switchControl input:checked + .switchTrack .switchThumb {
+  transform: translateX(14px);
+}
+
+.switchControl input:focus-visible + .switchTrack {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 2px;
+}
+
+.switchControl input:disabled {
+  cursor: default;
+}
+
+.switchControl input:disabled + .switchTrack {
+  opacity: 0.5;
+}
+
+.diagnosticsRow :global(.diagnostics-export-row) {
+  max-width: min(220px, 36%);
+}
+
+.diagnosticsRow :global(.diagnostics-export-status) {
+  font-size: 10px;
+}
+
+.troubleshooting {
+  margin-top: 2px;
+}
+
+@media (max-width: 720px) {
+  .hero {
+    padding-top: 4px;
+  }
+
+  .row,
+  .linkRow {
+    gap: 10px;
+    padding: 10px 11px;
+  }
+
+  .rowValue {
+    max-width: 38%;
+  }
+
+  .diagnosticsRow {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .diagnosticsRow :global(.diagnostics-export-row) {
+    width: 100%;
+    max-width: none;
+    align-items: flex-start;
+    padding-left: 32px;
+  }
+
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .linkRow,
+  .switchTrack,
+  .switchThumb {
+    transition: none;
+  }
+}

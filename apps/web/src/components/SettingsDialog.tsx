@@ -62,6 +62,11 @@ import {
 import { isVisibleLocalCliAgent } from '../utils/visibleAgents';
 import { ExportDiagnosticsRow } from './ExportDiagnosticsButton';
 import { Icon } from './Icon';
+import {
+  formatStars,
+  GITHUB_STARS_FALLBACK_LABEL,
+  useGithubStars,
+} from './useGithubStars';
 import { defaultAgentModelId, effectiveAgentModelChoice } from './agentModelSelection';
 import {
   CUSTOM_MODEL_SENTINEL,
@@ -189,6 +194,7 @@ import {
   resolveAccentColor,
 } from '../state/appearance';
 import { isAutosaveDraftOnlyChange } from '../App';
+import aboutStyles from './SettingsAbout.module.css';
 import {
   FAILURE_SOUNDS,
   SUCCESS_SOUNDS,
@@ -239,6 +245,19 @@ interface ByokProviderPreset {
 export type SettingsHighlight = 'amr' | null;
 
 const OPEN_DESIGN_RELEASES_URL = 'https://github.com/nexu-io/open-design/releases';
+const OPEN_DESIGN_WEBSITE_URL = 'https://open-design.ai';
+const OPEN_DESIGN_REPO_URL = 'https://github.com/nexu-io/open-design';
+const OPEN_DESIGN_DISCORD_URL = 'https://discord.gg/mHAjSMV6gz';
+const OPEN_DESIGN_LICENSE_URL = `${OPEN_DESIGN_REPO_URL}/blob/main/LICENSE`;
+const OPEN_DESIGN_BUG_REPORT_URL = `${OPEN_DESIGN_REPO_URL}/issues/new?template=bug-report.yml`;
+const OPEN_DESIGN_FEEDBACK_URL = `${OPEN_DESIGN_REPO_URL}/issues/new?template=feature-request.yml`;
+
+function AboutGithubStars() {
+  const count = useGithubStars();
+  const countLabel = count == null ? GITHUB_STARS_FALLBACK_LABEL : formatStars(count);
+
+  return <span aria-label={`${countLabel} GitHub stars`}>★ {countLabel}</span>;
+}
 
 type AboutUpdatePrimaryAction = 'check' | 'download' | 'install' | 'quit';
 type AboutUpdateTone = 'neutral' | 'success' | 'warning' | 'error';
@@ -5761,164 +5780,260 @@ export function SettingsDialog({
           ) : null}
 
           {activeSection === 'about' ? (
-            <section className="settings-section">
+            <section className={`settings-section settings-about-list ${aboutStyles.root}`}>
               {appVersionInfo ? (
-                <dl className="settings-about-list">
-                  <div className="settings-about-version-row">
-                    <div className="settings-about-version-copy">
-                      <div className="settings-about-version-left">
-                        <dt>{t('settings.appVersion')}</dt>
-                        <span className="settings-about-version-num">{appVersionInfo.version}</span>
-                        <dd
-                          aria-live="polite"
-                          className={`settings-about-update-status settings-about-update-status--${aboutUpdateControl.statusTone}`}
-                        >
-                          {t(aboutUpdateControl.statusKey, aboutUpdateControl.statusVars)}
-                        </dd>
-                      </div>
+                <>
+                  <header className={aboutStyles.hero}>
+                    <div className={aboutStyles.logoFrame} aria-hidden="true">
+                      <img src="/logo.svg" alt="" />
                     </div>
-                    <div className="settings-about-update-actions">
-                      {aboutUpdateControl.primaryLabelKey ? (
-                        <button
-                          type="button"
-                          className={`settings-about-update-button${
-                            aboutUpdateControl.primaryAction === 'download'
+                    <div className={aboutStyles.heroCopy}>
+                      <h3>{t('app.brand')}</h3>
+                      <p className={aboutStyles.versionLine}>
+                        <span>v</span>
+                        <span className="settings-about-version-num">{appVersionInfo.version}</span>
+                      </p>
+                    </div>
+                  </header>
+
+                  <section className={aboutStyles.group} aria-labelledby="settings-about-updates">
+                    <h3 id="settings-about-updates">{t('settings.aboutUpdates')}</h3>
+                    <div className={aboutStyles.card}>
+                      <div className={aboutStyles.row}>
+                        <span className={aboutStyles.rowIcon} aria-hidden="true">
+                          <Icon name="refresh" size={18} />
+                        </span>
+                        <div className={aboutStyles.rowCopy}>
+                          <span className={aboutStyles.rowTitle}>{t('settings.updateCheck')}</span>
+                          <span
+                            aria-live="polite"
+                            className={`settings-about-update-status settings-about-update-status--${aboutUpdateControl.statusTone}`}
+                          >
+                            {t(aboutUpdateControl.statusKey, aboutUpdateControl.statusVars)}
+                          </span>
+                        </div>
+                        {aboutUpdateControl.primaryLabelKey ? (
+                          <Button
+                            className="settings-about-update-button"
+                            variant={
+                              aboutUpdateControl.primaryAction === 'download'
                               || aboutUpdateControl.primaryAction === 'install'
                               || aboutUpdateControl.primaryAction === 'quit'
-                              ? ' settings-about-update-button--primary'
-                              : ''
-                          }`}
-                          disabled={
-                            aboutUpdateActionBusy
-                            || aboutUpdaterModel.busy
-                            || aboutUpdateControl.primaryAction == null
-                          }
-                          onClick={handleAboutUpdateAction}
-                        >
-                          {aboutUpdateActionBusy
-                            ? t('common.loading')
-                            : t(aboutUpdateControl.primaryLabelKey)}
-                        </button>
-                      ) : null}
+                                ? 'primary'
+                                : 'default'
+                            }
+                            disabled={
+                              aboutUpdateActionBusy
+                              || aboutUpdaterModel.busy
+                              || aboutUpdateControl.primaryAction == null
+                            }
+                            onClick={handleAboutUpdateAction}
+                          >
+                            {aboutUpdateActionBusy
+                              ? t('common.loading')
+                              : t(aboutUpdateControl.primaryLabelKey)}
+                          </Button>
+                        ) : null}
+                      </div>
+                      <label className={`${aboutStyles.row} ${aboutStyles.toggleRow}`}>
+                        <span className={aboutStyles.rowIcon} aria-hidden="true">
+                          <Icon name="download" size={18} />
+                        </span>
+                        <span className={aboutStyles.rowCopy}>
+                          <span className={aboutStyles.rowTitle}>{t('settings.allowSilentUpdates')}</span>
+                          <span className={aboutStyles.rowHint}>{t('settings.allowSilentUpdatesDesc')}</span>
+                        </span>
+                        <span className={aboutStyles.switchControl}>
+                          <input
+                            aria-label={t('settings.allowSilentUpdates')}
+                            checked={cfg.allowSilentUpdates === true}
+                            data-testid="settings-allow-silent-updates"
+                            disabled={silentUpdateBusy}
+                            type="checkbox"
+                            role="switch"
+                            onChange={(event) => {
+                              // Capture before setState: React clears event.currentTarget
+                              // after the handler returns, and the functional updater can
+                              // run later when SettingsDialog already has pending lanes
+                              // (about-updater status, autosave indicator, etc.).
+                              const allowSilentUpdates = event.currentTarget.checked;
+                              const previous = cfg.allowSilentUpdates;
+                              // Dedicated non-optimistic path: do not flush through
+                              // handleConfigPersist (which setConfig before daemon write).
+                              // Serialize via busy + write token so a slow earlier save
+                              // cannot re-apply UI after a later toggle.
+                              const writeToken = ++silentUpdateWriteTokenRef.current;
+                              suppressNextAutosaveRef.current = true;
+                              setCfg((current) => ({
+                                ...current,
+                                allowSilentUpdates,
+                              }));
+                              if (onSilentUpdatePreferenceChange == null) return;
+                              setSilentUpdateBusy(true);
+                              void (async () => {
+                                try {
+                                  await onSilentUpdatePreferenceChange(allowSilentUpdates);
+                                  if (writeToken !== silentUpdateWriteTokenRef.current) return;
+                                  // Only advance the baseline for this daemon-owned field.
+                                  // Spreading autosaveLatestRef would stamp any concurrent
+                                  // draft (theme, accent, …) as already saved and let the
+                                  // generic autosave skip a real onPersist for that edit.
+                                  autosaveLastSavedRef.current = {
+                                    ...autosaveLastSavedRef.current,
+                                    allowSilentUpdates,
+                                  };
+                                  setAutosaveStatus('saved');
+                                  if (autosaveSavedTimerRef.current != null) {
+                                    window.clearTimeout(autosaveSavedTimerRef.current);
+                                  }
+                                  autosaveSavedTimerRef.current = window.setTimeout(() => {
+                                    autosaveSavedTimerRef.current = null;
+                                    setAutosaveStatus((curr) => (curr === 'saved' ? 'idle' : curr));
+                                  }, 1800);
+                                } catch {
+                                  if (writeToken !== silentUpdateWriteTokenRef.current) return;
+                                  suppressNextAutosaveRef.current = true;
+                                  setCfg((current) => ({
+                                    ...current,
+                                    allowSilentUpdates: previous,
+                                  }));
+                                  setAutosaveStatus('error');
+                                } finally {
+                                  if (writeToken === silentUpdateWriteTokenRef.current) {
+                                    setSilentUpdateBusy(false);
+                                  }
+                                }
+                              })();
+                            }}
+                          />
+                          <span className={aboutStyles.switchTrack} aria-hidden="true">
+                            <span className={aboutStyles.switchThumb} />
+                          </span>
+                        </span>
+                      </label>
                       {aboutUpdateControl.showReleaseLink ? (
                         <button
                           type="button"
-                          className="settings-about-release-link"
+                          className={aboutStyles.linkRow}
                           onClick={handleOpenReleaseNotes}
                         >
-                          {t('settings.updateViewReleases')}
+                          <span className={aboutStyles.rowIcon} aria-hidden="true">
+                            <Icon name="file-text" size={18} />
+                          </span>
+                          <span className={aboutStyles.rowTitle}>{t('settings.updateViewReleases')}</span>
+                          <Icon name="external-link" size={15} />
                         </button>
                       ) : null}
                     </div>
-                  </div>
-                  <div>
-                    <dt>{t('settings.appChannel')}</dt>
-                    <dd>{appVersionInfo.channel}</dd>
-                  </div>
-                  <div>
-                    <dt>{t('settings.appRuntime')}</dt>
-                    <dd>
-                      {appVersionInfo.packaged
-                        ? t('settings.runtimePackaged')
-                        : t('settings.runtimeDevelopment')}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>{t('settings.appPlatform')}</dt>
-                    <dd>{appVersionInfo.platform}</dd>
-                  </div>
-                  <div>
-                    <dt>{t('settings.appArchitecture')}</dt>
-                    <dd>{appVersionInfo.arch}</dd>
-                  </div>
-                </dl>
+                  </section>
+
+                  <section className={aboutStyles.group} aria-labelledby="settings-about-product">
+                    <h3 id="settings-about-product">{t('app.brand')}</h3>
+                    <div className={aboutStyles.card}>
+                      {[
+                        {
+                          icon: 'globe' as const,
+                          label: t('settings.aboutWebsite'),
+                          value: 'open-design.ai',
+                          url: OPEN_DESIGN_WEBSITE_URL,
+                        },
+                        {
+                          icon: 'github' as const,
+                          label: 'GitHub',
+                          value: <AboutGithubStars />,
+                          url: OPEN_DESIGN_REPO_URL,
+                        },
+                        {
+                          icon: 'discord' as const,
+                          label: 'Discord',
+                          value: t('settings.aboutCommunity'),
+                          url: OPEN_DESIGN_DISCORD_URL,
+                        },
+                        {
+                          icon: 'file-text' as const,
+                          label: t('settings.aboutLicense'),
+                          value: 'Apache 2.0',
+                          url: OPEN_DESIGN_LICENSE_URL,
+                        },
+                      ].map((item) => (
+                        <button
+                          type="button"
+                          className={aboutStyles.linkRow}
+                          key={item.url}
+                          onClick={() => { void openExternalUrl(item.url); }}
+                        >
+                          <span className={aboutStyles.rowIcon} aria-hidden="true">
+                            <Icon name={item.icon} size={18} />
+                          </span>
+                          <span className={aboutStyles.rowTitle}>{item.label}</span>
+                          <span className={aboutStyles.rowValue}>{item.value}</span>
+                          <Icon name="external-link" size={15} />
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+
+                  <section className={aboutStyles.group} aria-labelledby="settings-about-support">
+                    <h3 id="settings-about-support">{t('settings.aboutSupport')}</h3>
+                    <div className={aboutStyles.card}>
+                      <button
+                        type="button"
+                        className={aboutStyles.linkRow}
+                        onClick={() => { void openExternalUrl(OPEN_DESIGN_BUG_REPORT_URL); }}
+                      >
+                        <span className={aboutStyles.rowIcon} aria-hidden="true">
+                          <Icon name="alert-triangle" size={18} />
+                        </span>
+                        <span className={aboutStyles.rowTitle}>{t('settings.aboutReportBug')}</span>
+                        <span className={aboutStyles.rowValue}>GitHub</span>
+                        <Icon name="external-link" size={15} />
+                      </button>
+                      <button
+                        type="button"
+                        className={aboutStyles.linkRow}
+                        onClick={() => { void openExternalUrl(OPEN_DESIGN_FEEDBACK_URL); }}
+                      >
+                        <span className={aboutStyles.rowIcon} aria-hidden="true">
+                          <Icon name="comment" size={18} />
+                        </span>
+                        <span className={aboutStyles.rowTitle}>{t('settings.aboutSendFeedback')}</span>
+                        <span className={aboutStyles.rowValue}>GitHub</span>
+                        <Icon name="external-link" size={15} />
+                      </button>
+                      <div className={`${aboutStyles.row} ${aboutStyles.diagnosticsRow}`}>
+                        <span className={aboutStyles.rowIcon} aria-hidden="true">
+                          <Icon name="download" size={18} />
+                        </span>
+                        <div className={aboutStyles.rowCopy}>
+                          <span className={aboutStyles.rowTitle}>{t('diagnostics.exportTitle')}</span>
+                          <span className={aboutStyles.rowHint}>{t('diagnostics.exportHint')}</span>
+                        </div>
+                        <ExportDiagnosticsRow />
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className={`${aboutStyles.group} ${aboutStyles.troubleshooting}`} aria-labelledby="settings-about-troubleshooting">
+                    <h3 id="settings-about-troubleshooting">{t('settings.aboutTroubleshooting')}</h3>
+                    <div className={aboutStyles.card}>
+                      <div className={aboutStyles.row}>
+                        <span className={aboutStyles.rowIcon} aria-hidden="true">
+                          <Icon name="history" size={18} />
+                        </span>
+                        <div className={aboutStyles.rowCopy}>
+                          <span className={aboutStyles.rowTitle}>{t('settings.resetOnboarding')}</span>
+                          <span className={aboutStyles.rowHint}>{t('settings.resetOnboardingDesc')}</span>
+                        </div>
+                        <Button variant="ghost" onClick={handleResetOnboarding}>
+                          {t('settings.resetOnboardingButton')}
+                        </Button>
+                      </div>
+                    </div>
+                  </section>
+                </>
               ) : (
                 <div className="empty-card">{t('settings.versionUnavailable')}</div>
               )}
-              <div className="settings-about-diagnostics settings-about-silent-updates">
-                <label className="settings-about-toggle">
-                  <input
-                    checked={cfg.allowSilentUpdates === true}
-                    data-testid="settings-allow-silent-updates"
-                    disabled={silentUpdateBusy}
-                    type="checkbox"
-                    onChange={(event) => {
-                      // Capture before setState: React clears event.currentTarget
-                      // after the handler returns, and the functional updater can
-                      // run later when SettingsDialog already has pending lanes
-                      // (about-updater status, autosave indicator, etc.).
-                      const allowSilentUpdates = event.currentTarget.checked;
-                      const previous = cfg.allowSilentUpdates;
-                      // Dedicated non-optimistic path: do not flush through
-                      // handleConfigPersist (which setConfig before daemon write).
-                      // Serialize via busy + write token so a slow earlier save
-                      // cannot re-apply UI after a later toggle.
-                      const writeToken = ++silentUpdateWriteTokenRef.current;
-                      suppressNextAutosaveRef.current = true;
-                      setCfg((current) => ({
-                        ...current,
-                        allowSilentUpdates,
-                      }));
-                      if (onSilentUpdatePreferenceChange == null) return;
-                      setSilentUpdateBusy(true);
-                      void (async () => {
-                        try {
-                          await onSilentUpdatePreferenceChange(allowSilentUpdates);
-                          if (writeToken !== silentUpdateWriteTokenRef.current) return;
-                          // Only advance the baseline for this daemon-owned field.
-                          // Spreading autosaveLatestRef would stamp any concurrent
-                          // draft (theme, accent, …) as already saved and let the
-                          // generic autosave skip a real onPersist for that edit.
-                          autosaveLastSavedRef.current = {
-                            ...autosaveLastSavedRef.current,
-                            allowSilentUpdates,
-                          };
-                          setAutosaveStatus('saved');
-                          if (autosaveSavedTimerRef.current != null) {
-                            window.clearTimeout(autosaveSavedTimerRef.current);
-                          }
-                          autosaveSavedTimerRef.current = window.setTimeout(() => {
-                            autosaveSavedTimerRef.current = null;
-                            setAutosaveStatus((curr) => (curr === 'saved' ? 'idle' : curr));
-                          }, 1800);
-                        } catch {
-                          if (writeToken !== silentUpdateWriteTokenRef.current) return;
-                          suppressNextAutosaveRef.current = true;
-                          setCfg((current) => ({
-                            ...current,
-                            allowSilentUpdates: previous,
-                          }));
-                          setAutosaveStatus('error');
-                        } finally {
-                          if (writeToken === silentUpdateWriteTokenRef.current) {
-                            setSilentUpdateBusy(false);
-                          }
-                        }
-                      })();
-                    }}
-                  />
-                  <span className="settings-about-toggle-copy">
-                    <span>{t('settings.allowSilentUpdates')}</span>
-                    <span className="hint">{t('settings.allowSilentUpdatesDesc')}</span>
-                  </span>
-                </label>
-              </div>
-              <div className="settings-about-diagnostics">
-                <div className="settings-about-diagnostics-text">
-                  <h4>{t('diagnostics.exportTitle')}</h4>
-                  <p className="hint">{t('diagnostics.exportHint')}</p>
-                </div>
-                <ExportDiagnosticsRow />
-              </div>
-              <div className="settings-about-diagnostics">
-                <div className="settings-about-diagnostics-text">
-                  <h4>{t('settings.resetOnboarding')}</h4>
-                  <p className="hint">{t('settings.resetOnboardingDesc')}</p>
-                </div>
-                <Button onClick={handleResetOnboarding}>
-                  {t('settings.resetOnboardingButton')}
-                </Button>
-              </div>
             </section>
           ) : null}
           {aboutToast ? (

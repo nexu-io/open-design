@@ -5201,7 +5201,7 @@ describe('SettingsDialog about interactions', () => {
     cleanup();
   });
 
-  it('renders app version and runtime details when version info is available', () => {
+  it('renders the app version when version info is available', () => {
     renderSettingsDialog(
       { mode: 'daemon', agentId: 'codex' },
       {
@@ -5216,16 +5216,39 @@ describe('SettingsDialog about interactions', () => {
       },
     );
 
-    expect(screen.getByText('Version')).toBeTruthy();
     expect(screen.getByText('0.4.1')).toBeTruthy();
-    expect(screen.getByText('Channel')).toBeTruthy();
-    expect(screen.getByText('beta')).toBeTruthy();
-    expect(screen.getByText('Runtime')).toBeTruthy();
-    expect(screen.getByText('Packaged app')).toBeTruthy();
-    expect(screen.getByText('Platform')).toBeTruthy();
-    expect(screen.getByText('darwin')).toBeTruthy();
-    expect(screen.getByText('Architecture')).toBeTruthy();
-    expect(screen.getByText('arm64')).toBeTruthy();
+    expect(screen.queryByText('beta')).toBeNull();
+  });
+
+  it('organizes About around product identity, updates, and support', () => {
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex' },
+      {
+        initialSection: 'about',
+        appVersionInfo: {
+          version: '0.15.1',
+          channel: 'development',
+          packaged: false,
+          platform: 'darwin',
+          arch: 'arm64',
+        },
+      },
+    );
+
+    expect(screen.getByRole('heading', { name: en['settings.aboutUpdates'] })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: en['settings.aboutSupport'] })).toBeTruthy();
+    expect(screen.queryByText(en['settings.aboutTagline'])).toBeNull();
+    expect(screen.getByRole('switch', { name: en['settings.allowSilentUpdates'] })).toBeTruthy();
+
+    expect(screen.getByRole('button', { name: /GitHub.*stars/i })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /Websiteopen-design\.ai/i }));
+    expect(openExternalUrlMock).toHaveBeenCalledWith('https://open-design.ai');
+
+    fireEvent.click(screen.getByRole('button', { name: /Report a bugGitHub/i }));
+    expect(openExternalUrlMock).toHaveBeenCalledWith(
+      'https://github.com/nexu-io/open-design/issues/new?template=bug-report.yml',
+    );
   });
 
   it('renders the unavailable fallback when app version info is missing', () => {
