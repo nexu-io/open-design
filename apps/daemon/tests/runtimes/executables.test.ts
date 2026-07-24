@@ -60,6 +60,53 @@ test('resolveAgentExecutable finds Grok Build in OD_AGENT_HOME on Windows', () =
   }
 });
 
+test('resolveAgentExecutable finds Windows npm .cmd shims when PATHEXT is stripped', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'od-windows-path-cmd-shim-'));
+  try {
+    return withEnvSnapshot(['PATH', 'PATHEXT', 'OD_AGENT_HOME'], () =>
+      withPlatform('win32', () => {
+        const codexCmd = join(dir, 'codex.cmd');
+        writeFileSync(codexCmd, '');
+        process.env.PATH = dir;
+        process.env.PATHEXT = '.EXE';
+        process.env.OD_AGENT_HOME = join(dir, 'empty-home');
+
+        assert.equal(
+          resolveAgentExecutable(minimalAgentDef({ id: 'codex', bin: 'codex' }))?.toLowerCase(),
+          codexCmd.toLowerCase(),
+        );
+      }),
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('resolveAgentExecutable accepts configured Windows .cmd overrides when PATHEXT is stripped', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'od-windows-configured-cmd-shim-'));
+  try {
+    return withEnvSnapshot(['PATH', 'PATHEXT', 'OD_AGENT_HOME'], () =>
+      withPlatform('win32', () => {
+        const codexCmd = join(dir, 'codex.cmd');
+        writeFileSync(codexCmd, '');
+        process.env.PATH = '';
+        process.env.PATHEXT = '.EXE';
+        process.env.OD_AGENT_HOME = join(dir, 'empty-home');
+
+        assert.equal(
+          resolveAgentExecutable(
+            minimalAgentDef({ id: 'codex', bin: 'codex' }),
+            { CODEX_BIN: codexCmd },
+          ),
+          codexCmd,
+        );
+      }),
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 // resolveAgentExecutable touches the filesystem via existsSync; on
 // Windows resolveOnPath also walks PATHEXT extensions, which our fixture
 // files don't carry. Skip the filesystem-backed cases there — the

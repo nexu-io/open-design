@@ -38,6 +38,7 @@ const AGENT_BIN_ENV_KEYS = new Map<string, string>([
   ['vibe', 'VIBE_BIN'],
 ]);
 
+const DEFAULT_WINDOWS_EXECUTABLE_EXTENSIONS = ['.EXE', '.CMD', '.BAT'];
 const TOOLCHAIN_DIR_CACHE_TTL_MS = 5000;
 let cachedToolchainHome: string | null = null;
 let cachedToolchainDirs: string[] | null = null;
@@ -119,6 +120,25 @@ export function agentSearchDirs(): string[] {
   return resolvePathDirs();
 }
 
+function windowsExecutableExtensions(options: { includeBare: boolean }): string[] {
+  const values = [
+    ...(options.includeBare ? [''] : []),
+    ...(process.env.PATHEXT ?? '').split(';'),
+    ...DEFAULT_WINDOWS_EXECUTABLE_EXTENSIONS,
+  ];
+  const seen = new Set<string>();
+  return values
+    .map((value) => value.trim())
+    .filter((value) => value || options.includeBare)
+    .map((value) => (value && !value.startsWith('.') ? `.${value}` : value))
+    .filter((value) => {
+      const key = value.toUpperCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
 // The `*_BIN` environment variable that overrides PATH detection for a given
 // agent id (e.g. `cursor-agent` → `CURSOR_AGENT_BIN`), or null when the agent
 // has no override key. Drives the `setEnv` / `clearEnv` fix intents.
@@ -130,7 +150,7 @@ export function agentBinEnvKey(agentId: string | undefined): string | null {
 export function resolveOnPath(bin: string): string | null {
   const exts =
     process.platform === 'win32'
-      ? (process.env.PATHEXT || '.EXE;.CMD;.BAT').split(';')
+      ? windowsExecutableExtensions({ includeBare: true })
       : [''];
   const dirs = resolvePathDirs();
   for (const dir of dirs) {
@@ -145,10 +165,8 @@ export function resolveOnPath(bin: string): string | null {
 function looksExecutableOnWindows(filePath: string): boolean {
   const ext = path.extname(filePath).trim().toUpperCase();
   if (!ext) return false;
-  const executableExts = (process.env.PATHEXT || '.EXE;.CMD;.BAT')
-    .split(';')
-    .map((value) => value.trim().toUpperCase())
-    .filter(Boolean);
+  const executableExts = windowsExecutableExtensions({ includeBare: false })
+    .map((value) => value.toUpperCase());
   return executableExts.includes(ext);
 }
 
