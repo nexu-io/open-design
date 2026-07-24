@@ -156,10 +156,16 @@ async function writeFakeWinUnpackedApp(root: string, namespace: string, version:
   const paths = createWinPaths(root, namespace);
   await mkdir(join(paths.unpackedRoot, "resources"), { recursive: true });
   await writeFile(join(paths.unpackedRoot, "Open Design.exe"), "fake executable\n", "utf8");
+  await mkdir(join(paths.unpackedRoot, "resources", "open-design", "prebundled", "daemon"), { recursive: true });
+  await mkdir(join(paths.unpackedRoot, "resources", "open-design", "prebundled", "web"), { recursive: true });
+  await writeFile(join(paths.unpackedRoot, "resources", "open-design", "prebundled", "daemon", "daemon-cli.mjs"), "export {};\n", "utf8");
+  await writeFile(join(paths.unpackedRoot, "resources", "open-design", "prebundled", "daemon", "daemon-sidecar.mjs"), "export {};\n", "utf8");
+  await writeFile(join(paths.unpackedRoot, "resources", "open-design", "prebundled", "web", "web-sidecar.mjs"), "export {};\n", "utf8");
   await writeFile(
     join(paths.unpackedRoot, "resources", "open-design-config.json"),
     `${JSON.stringify({
       appVersion: version,
+      daemonCliEntryRelative: "open-design/prebundled/daemon/daemon-cli.mjs",
       daemonSidecarEntryRelative: "open-design/prebundled/daemon/daemon-sidecar.mjs",
       namespace,
       nodeCommandRelative: "open-design/bin/node",
@@ -179,6 +185,7 @@ async function writeFakeWinUnpackedApp(root: string, namespace: string, version:
     paths.packagedConfigPath,
     `${JSON.stringify({
       appVersion: version,
+      daemonCliEntryRelative: "open-design/prebundled/daemon/daemon-cli.mjs",
       daemonSidecarEntryRelative: "open-design/prebundled/daemon/daemon-sidecar.mjs",
       namespace,
       nodeCommandRelative: "open-design/bin/node",

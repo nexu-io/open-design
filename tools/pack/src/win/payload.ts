@@ -299,6 +299,40 @@ function archiveRelativePath(value: string): string {
   return value.replaceAll("/", "\\").replaceAll("\\", "\\");
 }
 
+type PayloadPackagedConfig = {
+  daemonCliEntryRelative?: unknown;
+  daemonSidecarEntryRelative?: unknown;
+  webOutputMode?: unknown;
+  webSidecarEntryRelative?: unknown;
+};
+
+function packagedConfigString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+async function requirePayloadConfigEntry(
+  extractRoot: string,
+  config: PayloadPackagedConfig,
+  key: "daemonCliEntryRelative" | "daemonSidecarEntryRelative" | "webSidecarEntryRelative",
+): Promise<void> {
+  const relativeEntry = packagedConfigString(config[key]);
+  if (relativeEntry == null) {
+    throw new Error(`Windows launcher payload packaged config is missing ${key}`);
+  }
+  await stat(join(extractRoot, archiveRelativePath(`payload/resources/${relativeEntry}`)));
+}
+
+async function validatePayloadPackagedConfigEntrypoints(
+  extractRoot: string,
+  configPath: string,
+): Promise<void> {
+  const config = JSON.parse(await readFile(configPath, "utf8")) as PayloadPackagedConfig;
+  if (config.webOutputMode !== "standalone") return;
+  await requirePayloadConfigEntry(extractRoot, config, "daemonCliEntryRelative");
+  await requirePayloadConfigEntry(extractRoot, config, "daemonSidecarEntryRelative");
+  await requirePayloadConfigEntry(extractRoot, config, "webSidecarEntryRelative");
+}
+
 export async function validateWinLauncherPayloadArchive(input: {
   expectedVersion: string;
   namespace: string;
@@ -331,7 +365,9 @@ export async function validateWinLauncherPayloadArchive(input: {
     requirePayloadManifestValue(manifest.entry?.executable, "entry.executable", "payload/Open Design.exe");
 
     await stat(join(extractRoot, archiveRelativePath("payload/Open Design.exe")));
-    await stat(join(extractRoot, archiveRelativePath("payload/resources/open-design-config.json")));
+    const packagedConfigPath = join(extractRoot, archiveRelativePath("payload/resources/open-design-config.json"));
+    await stat(packagedConfigPath);
+    await validatePayloadPackagedConfigEntrypoints(extractRoot, packagedConfigPath);
     return { manifest, payloadPath, valid: true };
   } finally {
     await rm(extractRoot, { force: true, recursive: true });
