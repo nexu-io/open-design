@@ -849,6 +849,8 @@ process.stdin.on('end', () => {
 `,
       async () => {
         const url = route === 'runs' ? '/api/runs' : '/api/chat';
+        const assistantMessageId = `assistant-5811-${route}-${randomUUID()}`;
+        const userMessageId = `user-5811-${route}-${randomUUID()}`;
         const response = await fetch(`${baseUrl}${url}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -857,6 +859,8 @@ process.stdin.on('end', () => {
             projectId,
             conversationId,
             message: 'user turn for 5811',
+            userMessageId,
+            assistantMessageId,
           }),
         });
         expect(response.ok).toBe(true);
@@ -970,6 +974,7 @@ process.stdin.on('end', () => {
 });
 `,
         async () => {
+          const followUpAssistantMessageId = `assistant-5811-followup-${randomUUID()}`;
           const response = await fetch(`${baseUrl}/api/runs`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -978,6 +983,7 @@ process.stdin.on('end', () => {
               projectId,
               conversationId,
               message: 'follow-up user turn for 5811',
+              assistantMessageId: followUpAssistantMessageId,
             }),
           });
           expect(response.ok).toBe(true);
