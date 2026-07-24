@@ -1007,6 +1007,17 @@ test('claude helpArgs probes the -p subcommand where --add-dir lives (issue #430
   );
 });
 
+test('claude fallback models include the current generation, not just 4.5', () => {
+  const ids = claude.fallbackModels.map((m) => m.id);
+  assert.ok(ids.includes('claude-fable-5'), 'Fable 5 must be selectable');
+  assert.ok(ids.includes('claude-opus-4-8'));
+  assert.ok(ids.includes('claude-sonnet-5'));
+  assert.ok(ids.includes('claude-haiku-4-5-20251001'));
+  assert.ok(ids.includes('claude-opus-4-7'));
+  assert.ok(ids.includes('claude-sonnet-4-6'));
+  assert.ok(ids.includes('claude-opus-4-6'));
+});
+
 // server.ts:4615 branches on `def.promptInputFormat` to decide how to write
 // the composed prompt to a stdin-fed child: 'stream-json' writes one JSONL
 // `user` message and keeps stdin open, anything else writes the raw prompt
