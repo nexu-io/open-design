@@ -327,7 +327,12 @@ async function validatePayloadPackagedConfigEntrypoints(
   configPath: string,
 ): Promise<void> {
   const config = JSON.parse(await readFile(configPath, "utf8")) as PayloadPackagedConfig;
-  if (config.webOutputMode !== "standalone") return;
+  if (config.webOutputMode !== "standalone" && config.webOutputMode !== "server") {
+    throw new Error(
+      `Windows launcher payload packaged config webOutputMode expected "standalone" or "server" but got ${JSON.stringify(config.webOutputMode)}`,
+    );
+  }
+  if (config.webOutputMode === "server") return;
   await requirePayloadConfigEntry(extractRoot, config, "daemonCliEntryRelative");
   await requirePayloadConfigEntry(extractRoot, config, "daemonSidecarEntryRelative");
   await requirePayloadConfigEntry(extractRoot, config, "webSidecarEntryRelative");

@@ -340,6 +340,31 @@ describe("tools-pack launcher payload archives", () => {
         payloadPath: paths.launcherPayloadPath,
         workspaceRoot: root,
       })).rejects.toThrow("launcher payload manifest version expected");
+
+      const malformedOverlayRoot = join(root, "malformed-overlay");
+      await mkdir(join(malformedOverlayRoot, "payload", "resources"), { recursive: true });
+      await writeFile(
+        join(malformedOverlayRoot, "payload", "resources", "open-design-config.json"),
+        `${JSON.stringify({
+          appVersion: version,
+          daemonCliEntryRelative: "open-design/prebundled/daemon/daemon-cli.mjs",
+          daemonSidecarEntryRelative: "open-design/prebundled/daemon/daemon-sidecar.mjs",
+          namespace,
+          nodeCommandRelative: "open-design/bin/node",
+          webSidecarEntryRelative: "open-design/prebundled/web/web-sidecar.mjs",
+        }, null, 2)}\n`,
+        "utf8",
+      );
+      await execFileAsync(winResources.sevenZipExe, ["u", "-t7z", paths.launcherPayloadPath, ".\\*"], {
+        cwd: malformedOverlayRoot,
+        windowsHide: true,
+      });
+      await expect(validateWinLauncherPayloadArchive({
+        expectedVersion: version,
+        namespace,
+        payloadPath: paths.launcherPayloadPath,
+        workspaceRoot: root,
+      })).rejects.toThrow("webOutputMode expected");
     } finally {
       await rm(root, { force: true, recursive: true });
     }
