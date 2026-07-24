@@ -149,6 +149,24 @@ describe('parseDeckThumbnails', () => {
     expect(parsed.slides[0]).not.toContain('12vh');
   });
 
+  it('uses the iframe fallback for decks with container query units', () => {
+    // A generated deck can use `cqi` throughout a `.frame` that establishes
+    // `container-type: size`. That unit is relative to the authored frame, not
+    // the reconstructed thumbnail canvas, so the static clone can collapse to
+    // a black rail even when the normal preview is correct.
+    const html = `<!doctype html><html><head><style>
+      .deck { height: 100vh; }
+      .slide { height: 100vh; }
+      .frame { width: 1280px; height: 720px; container-type: size; }
+      .title { font-size: 4cqi; }
+    </style></head><body><main class="deck">
+      <section class="slide"><div class="frame"><h1 class="title">A</h1></div></section>
+    </main></body></html>`;
+    const parsed = parseDeckThumbnails(html);
+    expect(parsed.renderable).toBe(false);
+    expect(parsed.reason).toBe('container-query-units');
+  });
+
   it('stays renderable for a fixed px canvas with percent-sized slides', () => {
     const html = `<!doctype html><html><head><style>
       .deck-stage { width: 1920px; height: 1080px; }
