@@ -3089,7 +3089,10 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled {
   border-right: 1px solid var(--border);
 }
 /* Group heading separating "your systems" from "official presets", matching the
-   Design Systems tab split. Sticks to the top while scrolling the list. */
+   Design Systems tab split. Sticks to the top while scrolling the list.
+   Issue #2688: heading text comes from localized i18n keys; some locales can
+   push the label past one line. Keep it single-line with ellipsis so the
+   sticky heading does not push the first option row out of alignment. */
 .project-ds-picker-group-label {
   position: sticky;
   top: -5px;
@@ -3101,6 +3104,9 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled {
   text-transform: uppercase;
   color: var(--text-faint);
   background: var(--bg, var(--surface, #fff));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .project-ds-picker-group-label:first-child {
   padding-top: 4px;
@@ -3138,32 +3144,15 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.project-ds-picker-option-cat {
-  font-size: 10.5px;
-  padding: 1px 6px;
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--text-muted) 12%, transparent);
-  color: var(--text-muted);
-}
-.project-ds-picker-option-summary {
-  font-size: 11.5px;
-  color: var(--text-muted);
-  line-height: 1.4;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-.project-ds-picker-option-swatches {
-  display: flex;
-  gap: 3px;
-}
-.project-ds-picker-option-swatch {
-  width: 14px;
-  height: 14px;
-  border-radius: 3px;
-  border: 1px solid var(--border);
-}
+/* Truncation contract for the picker's left list rows (issue #2688):
+   the renderer (DesignSystemPicker.tsx) keeps each row as a single-line
+   `option-head > option-title + check`, so the earlier multi-element
+   `option-summary/-swatches/-swatch` rules had zero markup references and
+   were retired with this change. If a future renderer reintroduces an
+   inline category pill or two-line summary on the picker rows, restore
+   those rules with `min-width: 0` + `overflow: hidden` + `text-overflow:
+   ellipsis` + `white-space: nowrap` so the row stays single-line and the
+   right detail pane carries the full label. */
 .project-ds-picker-option-check {
   margin-left: auto;
   width: 16px;

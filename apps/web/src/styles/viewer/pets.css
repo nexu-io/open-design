@@ -1189,6 +1189,12 @@
   text-transform: uppercase;
   color: var(--text-faint);
   padding: 6px 4px 2px;
+  /* Group headings can be long localized category names (e.g. "Social &
+     Messaging"); keep them on one line so the picker list stays compact and
+     the right detail pane carries the full label. Issue #2688. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .composer-ds-picker-item {
   display: flex;
@@ -1216,6 +1222,12 @@
   font-size: 12.5px;
   font-weight: 500;
   color: var(--text);
+  /* Issue #2688: keep the row title on a single line. Long names truncate
+     with an ellipsis; the surrounding list is for fast scanning, the
+     detail/header pane carries the full text. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .composer-ds-picker-item-summary {
   font-size: 11px;

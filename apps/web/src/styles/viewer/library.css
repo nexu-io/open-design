@@ -772,12 +772,21 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  /* Issue #2688: long localized category names ("Social & Messaging") wrap
+     and break the grid rhythm. Keep the heading on one line; the inner
+     cards show their own truncated title and the section count badge aligns
+     next to the category. */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .library-group-count {
   font-weight: 400;
   font-size: 11px;
   opacity: 0.6;
+  flex: 0 0 auto;
 }
 
 .library-card {
@@ -1035,6 +1044,12 @@
   font-size: 13px;
   font-weight: 600;
   margin-bottom: 2px;
+  /* Issue #2688: keep card titles on a single line so long preset names
+     don't wrap inside the grid card. The 2-line clamp on .library-ds-summary
+     is the only place where multi-line text is allowed. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .library-ds-summary {
