@@ -6,7 +6,12 @@ import {
 } from 'node:fs';
 import { readFile as fsReadFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, delimiter } from 'node:path';
+
+const localAgyPath = join(process.cwd(), '.agy');
+if (existsSync(localAgyPath) && !process.env.PATH?.includes(localAgyPath)) {
+  process.env.PATH = localAgyPath + delimiter + process.env.PATH;
+}
 
 import { DEFAULT_MODEL_OPTION } from './shared.js';
 import type { RuntimeAgentDef } from '../types.js';
@@ -232,11 +237,11 @@ export const antigravityAgentDef = {
     // it does not read from stdin and has no `-` stdin sentinel. Passing
     // the literal `-` (the old behavior) made agy treat the dash as an
     // empty prompt and reply "your request was empty or a placeholder
-    // (-)". Deliver the composed prompt as the `-p` argument instead.
-    args.push('-p', prompt);
+    // (-)". The latest agy 1.1.x versions automatically read from STDIN,
+    // so we simply omit the -p flag entirely.
     return args;
   },
-  promptViaStdin: false,
+  promptViaStdin: true,
   streamFormat: 'plain',
   installUrl: 'https://antigravity.google/cli',
   docsUrl: 'https://antigravity.google/docs/cli-overview',
