@@ -45,8 +45,8 @@ spec:
             - name: PROXY_API_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "open-design.fullname" . }}
-                  key: OD_API_TOKEN
+                  name: {{ include "open-design.secretName" . | quote }}
+                  key: {{ include "open-design.secretKey" . | quote }}
           volumeMounts:
             - name: proxy-template
               mountPath: /etc/nginx/templates
@@ -71,8 +71,8 @@ spec:
             - name: OD_API_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "open-design.fullname" . }}
-                  key: OD_API_TOKEN
+                  name: {{ include "open-design.secretName" . | quote }}
+                  key: {{ include "open-design.secretKey" . | quote }}
           {{- if .Values.livenessProbe.enabled }}
           livenessProbe:
             exec:

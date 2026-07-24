@@ -72,7 +72,9 @@ This chart adheres to strict security defaults:
 | `config.nodeOptions`   | V8 engine memory optimizations                                                                                | `--max-old-space-size=192`           |
 | `config.webPort`       | Web server listening port                                                                                     | `7456`                               |
 | `config.bindHost`      | Host to bind the web server to                                                                                | `"127.0.0.1"`                        |
-| `config.apiToken`      | API authentication token (must be changed from default)                                                       | `"secure-default-token-change-me"`   |
+| `config.apiToken`      | API authentication token (must be changed from default). Ignored when `config.existingSecret` is set.          | `"secure-default-token-change-me"`   |
+| `config.existingSecret`| Name of an existing, externally-managed Secret (e.g. created by External Secrets) to source the token from. When set, the chart renders no Secret of its own and `config.apiToken` is ignored. | `""` |
+| `config.existingSecretKey` | Key inside the token Secret (chart-managed or `existingSecret`) that holds the token.                       | `"OD_API_TOKEN"`                     |
 
 ### Auth Proxy Parameters
 
