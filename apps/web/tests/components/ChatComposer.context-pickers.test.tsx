@@ -256,7 +256,10 @@ beforeEach(() => {
       });
     }
     if (url === '/api/projects/project-1' && init?.method === 'PATCH') {
-      const body = JSON.parse(String(init.body ?? '{}')) as { metadata?: unknown };
+      const body = JSON.parse(String(init.body ?? '{}')) as {
+        metadata?: unknown;
+        skillId?: string | null;
+      };
       if (rejectNextProjectPatch) {
         rejectNextProjectPatch = false;
         return new Response(JSON.stringify({
@@ -277,7 +280,7 @@ beforeEach(() => {
         project: {
           id: 'project-1',
           name: 'Project',
-          skillId: SKILL.id,
+          skillId: body.skillId === undefined ? SKILL.id : body.skillId,
           designSystemId: null,
           createdAt: 1,
           updatedAt: 1,
@@ -1055,6 +1058,40 @@ describe('ChatComposer context pickers', () => {
     fireEvent.click(screen.getByLabelText('Remove Deck Builder'));
     await waitFor(() => expect(composerText().trim()).toBe(''));
     expect(screen.queryByTestId('staged-contexts')).toBeNull();
+  });
+
+  it('inserts a newly selected skill immediately after the previous mention is deleted', async () => {
+    const nextSkill = makeSkill({
+      id: 'prototype-coach',
+      name: 'Prototype Coach',
+      description: 'Guide a product prototype.',
+      triggers: ['prototype'],
+    });
+    skills = [SKILL, nextSkill];
+    renderComposer();
+    await flushMounts();
+
+    await typeAndSettle('@deck');
+    fireEvent.click(await screen.findByText('Deck Builder'));
+    await waitFor(() => expect(composerText()).toBe('@Deck Builder '));
+
+    await typeAndSettle('');
+    await waitFor(() => expect(screen.queryByTestId('staged-contexts')).toBeNull());
+
+    deferNextProjectPatch = true;
+    fireEvent.click(screen.getByTestId('chat-plus-trigger'));
+    fireEvent.click(await screen.findByTestId('composer-plus-skills'));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Prototype Coach' }));
+
+    await waitFor(() => expect(resolveDeferredProjectPatch).toBeTruthy());
+    const draftBeforeProjectPatchCompletes = composerText();
+    await act(async () => {
+      resolveDeferredProjectPatch?.();
+      await Promise.resolve();
+    });
+
+    expect(draftBeforeProjectPatchCompletes).toBe('@Prototype Coach ');
+    expect(screen.getByTestId('staged-contexts').textContent).toContain('@Prototype Coach');
   });
 
   it('shows all matching skills and ranks exact prefix matches first', async () => {
