@@ -4123,11 +4123,11 @@ export function OnboardingDropdown(props: OnboardingDropdownProps) {
     !options.some((option) => option.value.toLowerCase() === normalizedQuery);
   const visibleOptions = canUseCustomValue
     ? [
+        ...filteredOptions,
         {
           value: trimmedQuery,
           label: t('settings.onboardingModelUseCustom', { query: trimmedQuery }),
         },
-        ...filteredOptions,
       ]
     : filteredOptions;
   const emptyMessage = searchable ? t('homeHero.footer.noMatches') : t('settings.fetchModelsEmpty');
