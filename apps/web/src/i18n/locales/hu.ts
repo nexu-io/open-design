@@ -605,6 +605,7 @@ export const hu: Dict = {
   'settings.modelCustom': 'Egyedi (gépeld be alább)…',
   'settings.modelCustomLabel': 'Egyedi modell-id',
   'settings.modelCustomPlaceholder': 'pl. anthropic/claude-sonnet-4-6',
+  'settings.onboardingModelUseCustom': 'Use "{query}"',
   'settings.mediaProviders': 'Média-szolgáltatók',
   'settings.mediaProvidersHint': 'API-kulcsok kép-, videó- és hanggeneráláshoz. Helyben tárolva, és a helyi daemonnal szinkronizálva.',
   'settings.mcpServerTitle': 'Open Design MCP',

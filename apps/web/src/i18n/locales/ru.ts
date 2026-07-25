@@ -605,6 +605,7 @@ export const ru: Dict = {
   'settings.modelCustom': 'Пользовательская (введите ниже)…',
   'settings.modelCustomLabel': 'Пользовательский ID модели',
   'settings.modelCustomPlaceholder': 'например, anthropic/claude-sonnet-4-6',
+  'settings.onboardingModelUseCustom': 'Use "{query}"',
   'settings.mediaProviders': 'Медиа-провайдеры',
   'settings.mediaProvidersHint': 'API-ключи для генерации изображений, видео и аудио. Хранятся локально и синхронизируются с локальным демоном.',
   'settings.mcpServerTitle': 'Open Design MCP',

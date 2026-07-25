@@ -605,6 +605,7 @@ export const esES: Dict = {
   'settings.modelCustom': 'Personalizado (escribe abajo)…',
   'settings.modelCustomLabel': 'Id de modelo personalizado',
   'settings.modelCustomPlaceholder': 'p. ej., anthropic/claude-sonnet-4-6',
+  'settings.onboardingModelUseCustom': 'Use "{query}"',
   'settings.mediaProviders': 'Proveedores de medios',
   'settings.mediaProvidersHint': 'Claves de API para generación de imagen, vídeo y audio. Se guardan localmente y se sincronizan con el daemon local.',
   'settings.mcpServerTitle': 'Open Design MCP',

@@ -605,6 +605,7 @@ export const id: Dict = {
   'settings.modelCustom': 'Kustom (isi di bawah)...',
   'settings.modelCustomLabel': 'ID model kustom',
   'settings.modelCustomPlaceholder': 'mis. anthropic/claude-sonnet-4-6',
+  'settings.onboardingModelUseCustom': 'Use "{query}"',
   'settings.mediaProviders': 'Provider media',
   'settings.mediaProvidersHint': 'API key untuk generasi gambar, video, dan audio. Disimpan lokal dan disinkronkan ke daemon lokal.',
   'settings.mcpServerTitle': 'Open Design MCP',

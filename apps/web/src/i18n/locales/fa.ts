@@ -605,6 +605,7 @@ export const fa: Dict = {
   'settings.modelCustom': 'سفارشی (در زیر تایپ کنید)…',
   'settings.modelCustomLabel': 'شناسه مدل سفارشی',
   'settings.modelCustomPlaceholder': 'مثلاً anthropic/claude-sonnet-4-6',
+  'settings.onboardingModelUseCustom': 'Use "{query}"',
   'settings.mediaProviders': 'ارائه‌دهندگان رسانه',
   'settings.mediaProvidersHint': 'کلیدهای API برای تولید تصویر، ویدئو و صدا. به صورت محلی ذخیره و با daemon محلی همگام می‌شود.',
   'settings.mcpServerTitle': 'Open Design MCP',

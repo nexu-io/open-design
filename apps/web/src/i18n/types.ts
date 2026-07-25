@@ -573,6 +573,7 @@ export interface Dict {
   'settings.modelCustom': string;
   'settings.modelCustomLabel': string;
   'settings.modelCustomPlaceholder': string;
+  'settings.onboardingModelUseCustom': string;
   'settings.mediaProviders': string;
   'settings.mediaProvidersHint': string;
   'settings.mcpServerTitle': string;

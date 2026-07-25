@@ -611,6 +611,7 @@ export const zhTW: Dict = {
   "settings.modelCustom": "自訂（在下方填寫）…",
   "settings.modelCustomLabel": "自訂模型 id",
   "settings.modelCustomPlaceholder": "例如 anthropic/claude-sonnet-4-6",
+  "settings.onboardingModelUseCustom": "Use \"{query}\"",
   "settings.mediaProviders": "媒體生成提供商",
   "settings.mediaProvidersHint": "連接圖片、影片、音訊和搜尋供應商。",
   "settings.mcpServerTitle": "Open Design MCP",

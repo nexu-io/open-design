@@ -605,6 +605,7 @@ export const ptBR: Dict = {
   'settings.modelCustom': 'Personalizado (digite abaixo)…',
   'settings.modelCustomLabel': 'Id do modelo personalizado',
   'settings.modelCustomPlaceholder': 'ex.: anthropic/claude-sonnet-4-6',
+  'settings.onboardingModelUseCustom': 'Use "{query}"',
   'settings.mediaProviders': 'Provedores de mídia',
   'settings.mediaProvidersHint': 'Chaves de API para geração de imagem, vídeo e áudio. Salvas localmente e sincronizadas com o daemon local.',
   'settings.mcpServerTitle': 'Open Design MCP',

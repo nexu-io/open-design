@@ -605,6 +605,7 @@ export const ar: Dict = {
   'settings.modelCustom': 'مخصص (اكتب أدناه)...',
   'settings.modelCustomLabel': 'معرف النموذج المخصص',
   'settings.modelCustomPlaceholder': 'مثلاً: anthropic/claude-sonnet-4-6',
+  'settings.onboardingModelUseCustom': 'Use "{query}"',
   'settings.mediaProviders': 'مزودو الوسائط',
   'settings.mediaProvidersHint': 'مفاتيح API لإنشاء الصور والفيديو والصوت. تخزن محلياً وتزامن مع البرنامج الخفي المحلي.',
   'settings.mcpServerTitle': 'Open Design MCP',
