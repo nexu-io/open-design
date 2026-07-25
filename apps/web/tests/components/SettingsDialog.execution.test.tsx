@@ -3836,10 +3836,17 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
             summary: {
               workspaceId: 'ws-team',
               membershipTier: 'team',
-              totalAvailableCredits: 21.01,
-              subscriptionCredits: 21.01,
+              // recvqakgSc1Pwd: B reports credits and USD on separate scales
+              // (thousands of credits per dollar) — a real workspace read
+              // 99933 credits / $9.9933. Earlier fixture data used a
+              // fractional credits count that coincidentally equaled its own
+              // balanceUsd string, which let a totalAvailableCredits-as-USD
+              // regression pass silently. These numbers are deliberately far
+              // apart so only reading `balanceUsd` can produce '$9.99'.
+              totalAvailableCredits: 99933,
+              subscriptionCredits: 99933,
               rechargeCredits: 0,
-              balanceUsd: '21.01',
+              balanceUsd: '9.9933',
               subscriptionStatus: 'active',
               availableActions: [],
             },
@@ -3893,7 +3900,13 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
 
-    expect(await screen.findByText('$21.01')).toBeTruthy();
+    // recvqakgSc1Pwd: the card must format `balanceUsd` (a real dollar
+    // figure vela reports), never `totalAvailableCredits` (a raw credits
+    // count) — feeding the credits count through the USD formatter is how a
+    // FEATURE TEST workspace with 388307 credits rendered "Balance
+    // $388307.00" in Settings > Models & providers > Local CLI.
+    expect(await screen.findByText('$9.99')).toBeTruthy();
+    expect(screen.queryByText('$99933.00')).toBeNull();
     expect(screen.queryByText('$138.63')).toBeNull();
   });
 

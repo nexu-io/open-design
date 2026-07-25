@@ -4542,9 +4542,18 @@ export function SettingsDialog({
                           // source of truth and wins here for the same reason;
                           // the account-scoped pair stays as the fallback for
                           // local/BYOK use with no workspace billing at all.
+                          //
+                          // recvqakgSc1Pwd: this must read `balanceUsd` — the
+                          // dollar figure vela already computed — not
+                          // `totalAvailableCredits`, a raw credits COUNT on a
+                          // completely different scale (vela reports
+                          // thousands of credits per dollar). Formatting the
+                          // credits count as a dollar amount is what put
+                          // "Balance $388307.00" on a workspace whose real
+                          // balance was under $39.
                           const amrWorkspaceBalance =
                             amrWalletVisible && workspaceBilling
-                              ? formatVelaBalanceUsd(String(workspaceBilling.totalAvailableCredits))
+                              ? formatVelaBalanceUsd(workspaceBilling.balanceUsd)
                               : null;
                           const amrCardBalanceLabel =
                             isAmrAgent && active && amrCardStatus?.loggedIn
