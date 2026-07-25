@@ -65,5 +65,8 @@
       "protobufjs",
       "sharp"
     ]
+  },
+  "dependencies": {
+    "tar": "7.5.19"
   }
 }
