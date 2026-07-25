@@ -178,6 +178,11 @@ export interface ManualEditTextSessionMessage {
   committed?: boolean;
 }
 
+export interface ManualEditDeleteRequestMessage {
+  type: 'od-edit-delete-request';
+  id: string;
+}
+
 /** Free drag-to-reposition finished: the element's new translate() value, to
  *  be committed as a pending style so the panel's Save persists it. */
 export interface ManualEditDragCommitMessage {
@@ -199,6 +204,7 @@ export type ManualEditBridgeMessage =
   | ManualEditPreviewAppliedMessage
   | ManualEditTextCommitMessage
   | ManualEditTextSessionMessage
+  | ManualEditDeleteRequestMessage
   | ManualEditDragCommitMessage;
 
 export const MANUAL_EDIT_STYLE_PROPS: readonly (keyof ManualEditStyles)[] = [

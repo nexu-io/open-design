@@ -1408,16 +1408,18 @@
 .manual-edit-delete-confirm {
   display: flex;
   align-items: center;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 6px;
   min-width: 0;
 }
 .manual-edit-delete-confirm span {
-  max-width: 170px;
-  overflow: hidden;
+  flex: 1 0 100%;
+  min-width: 0;
   color: var(--text-muted);
   font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.35;
 }
 .manual-edit-floating .manual-edit-titlebar {
   min-height: 48px;
