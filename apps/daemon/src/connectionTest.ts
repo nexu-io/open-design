@@ -140,7 +140,9 @@ export async function validateBaseUrlResolved(
   if (sync.error || !sync.parsed) return sync;
 
   const hostname = sync.parsed.hostname.toLowerCase();
-  if (isLoopbackApiHost(hostname)) return sync;
+  // When forbidLoopback is set, do NOT short-circuit on loopback — let it
+  // fall through to the block check (issue #5478).
+  if (!options.forbidLoopback && isLoopbackApiHost(hostname)) return sync;
   // Issue #3225 — an operator who trusts this hostname has opted it out of the
   // guard entirely, so skip the resolved-IP block even though it points into
   // private space. The sync check above already honored a literal-IP allowlist
@@ -157,7 +159,18 @@ export async function validateBaseUrlResolved(
 
   for (const addr of addresses) {
     const ip = String(addr.address).toLowerCase();
-    if (isLoopbackApiHost(ip)) continue;
+    // When forbidLoopback is set (asset download URLs from issue #5478),
+    // a DNS name that resolves to loopback is just as dangerous as a
+    // literal loopback host — reject it instead of skipping.
+    if (isLoopbackApiHost(ip)) {
+      if (options.forbidLoopback) {
+        return {
+          error: `DNS-resolved loopback address blocked (${ip})`,
+          forbidden: true,
+        };
+      }
+      continue;
+    }
     // A resolved address the operator explicitly allowlisted (they listed the
     // IP rather than the hostname) is permitted; everything else in private
     // space is still blocked.
@@ -215,7 +228,12 @@ export async function assertExternalAssetUrl(
   if (typeof rawUrl !== 'string' || !rawUrl) {
     return { ok: false, error: 'empty download url' };
   }
-  const validated = await validateBaseUrlResolved(rawUrl);
+  // Asset URLs come from upstream API responses (data.url / data.video_url)
+  // and are attacker-controllable. They MUST NOT point at loopback or
+  // internal addresses, regardless of operator allowlists (issue #5478).
+  const validated = await validateBaseUrlResolved(rawUrl, undefined, {
+    forbidLoopback: true,
+  });
   if (validated.error || !validated.parsed) {
     return {
       ok: false,
