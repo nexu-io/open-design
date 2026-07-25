@@ -53,6 +53,7 @@
       "postcss": "8.5.15",
       "protobufjs": "8.4.0",
       "qs": "6.15.2",
+      "tar": "7.5.19",
       "tmp": "0.2.7",
       "yaml": "2.9.0"
     },
@@ -65,8 +66,5 @@
       "protobufjs",
       "sharp"
     ]
-  },
-  "dependencies": {
-    "tar": "7.5.19"
   }
 }
