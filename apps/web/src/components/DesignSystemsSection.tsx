@@ -2,6 +2,7 @@ import { Dialog, DialogFooter, DialogTitle } from '@open-design/components';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { Dispatch, FormEvent, SetStateAction } from 'react';
 import { useT } from '../i18n';
+import { designSystemImportErrorKey } from '../runtime/design-system-import-error';
 import type { AppConfig, DesignSystemGenerationJob, DesignSystemSummary } from '../types';
 import {
   fetchDesignSystems,
@@ -9,6 +10,7 @@ import {
   importLocalDesignSystem,
   importShadcnDesignSystem,
   updateDesignSystemDraft,
+  type SkillImportError,
 } from '../providers/registry';
 import { DesignSystemPreviewModal } from './DesignSystemPreviewModal';
 import { Icon } from './Icon';
@@ -73,7 +75,7 @@ export function DesignSystemsSection({
   const [importMessage, setImportMessage] = useState<string | null>(null);
   const [importedDesignSystem, setImportedDesignSystem] = useState<DesignSystemSummary | null>(null);
   const [highlightedDesignSystemId, setHighlightedDesignSystemId] = useState<string | null>(null);
-  const [importError, setImportError] = useState<string | null>(null);
+  const [importError, setImportError] = useState<SkillImportError | null>(null);
   const { context: workspaceContext } = useWorkspaceContext();
   const workspaceIdentity = workspaceIdentityCacheKey(workspaceContext);
 
@@ -253,7 +255,7 @@ export function DesignSystemsSection({
           : await importLocalDesignSystem({ baseDir: importTarget, ...importOptions });
     setImporting(false);
     if ('error' in result) {
-      setImportError(result.error.message);
+      setImportError(result.error);
       return;
     }
     setDesignSystems((current) => {
@@ -289,6 +291,8 @@ export function DesignSystemsSection({
       return next;
     });
   }
+
+  const importErrorKey = importError ? designSystemImportErrorKey(importError) : null;
 
   return (
     <section className="settings-section settings-design-systems">
@@ -465,7 +469,15 @@ export function DesignSystemsSection({
                 </div>
               </div>
             </div>
-            {importError ? <p className="library-install-error">{importError}</p> : null}
+            {importError ? (
+              <p className="library-install-error">
+                {importErrorKey ? t(importErrorKey) : importError.message}
+                <details className="library-install-error-detail">
+                  <summary>{t('settings.designSystemsImportErrorDetails')}</summary>
+                  <code>{importError.message}</code>
+                </details>
+              </p>
+            ) : null}
             {importMessage ? (
               <p className="library-install-status">
                 <span>{t('settings.designSystemsImportedStatus', { title: importMessage })}</span>

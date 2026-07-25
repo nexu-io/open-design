@@ -257,11 +257,15 @@ describe('DesignSystemsSection import error localization (issue #2686)', () => {
       );
     });
 
-    // The daemon's English error must NOT be rendered to the user.
+    // The localized Chinese summary replaces the raw English as the
+    // user-facing message. The raw detail stays under <details>.
     await waitFor(() => {
-      expect(
-        screen.queryByText(/local project path must be a directory/i),
-      ).toBeNull();
+      expect(screen.getByText(/无法导入设计系统/)).toBeInTheDocument();
     });
+
+    // Raw daemon detail is still accessible for diagnostics.
+    const detail = document.querySelector('.library-install-error-detail code');
+    expect(detail).toBeTruthy();
+    expect(detail!.textContent).toBe('local project path must be a directory');
   });
 });
