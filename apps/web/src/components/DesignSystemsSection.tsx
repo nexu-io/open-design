@@ -535,6 +535,7 @@ export function DesignSystemsSection({
                         if (node) cardRefs.current.set(ds.id, node);
                         else cardRefs.current.delete(ds.id);
                       }}
+                      data-testid={`library-ds-card-${ds.id}`}
                       className={`library-ds-card${
                         disabledDS.has(ds.id) ? ' disabled' : ''
                       }${

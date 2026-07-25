@@ -31,9 +31,10 @@
 // (the bug we're guarding against is wrapping).
 
 import { expect, test } from '@/playwright/suite';
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { routeAgents, STORAGE_KEY } from '@/playwright/mock-factory';
 import { openNewProjectModal } from '@/playwright/rail';
+import { openSettingsDialog } from '../lib/playwright/amr.js';
 
 // WeChat ships the longest localized category string ("Social & Messaging") —
 // the exact label the issue screenshot called out. Using the real preset keeps
@@ -157,8 +158,8 @@ test.beforeEach(async ({ page }) => {
 // and the CSS truncation contract (`white-space: nowrap`) is honored. The 1px
 // band covers subpixel rounding on some platforms; anything more means the
 // label wrapped onto a second line — the regression we're guarding against.
-async function expectSingleLineRow(page: Page, selector: string, label: string) {
-  const result = await page.locator(selector).first().evaluate((el: Element, lbl: string) => {
+async function expectSingleLineRow(locator: Locator, label: string) {
+  const result = await locator.evaluate((el: Element, lbl: string) => {
     const r = el.getBoundingClientRect();
     const cs = window.getComputedStyle(el);
     return {
@@ -207,8 +208,7 @@ test('[P1] Settings Design systems sidebar row truncates long category labels (#
   // is the same one used by the unit tests in
   // `apps/web/tests/components/DesignSystemsTab.test.tsx`.
   await expectSingleLineRow(
-    page,
-    `[data-testid="design-system-card-subtitle-${WECHAT_PRESET.id}"]`,
+    page.getByTestId(`design-system-card-subtitle-${WECHAT_PRESET.id}`),
     'settings sidebar subtitle',
   );
 
@@ -216,8 +216,7 @@ test('[P1] Settings Design systems sidebar row truncates long category labels (#
   // bounded width; long categories must ellipsize rather than wrap.
   await page.setViewportSize({ width: 600, height: 800 });
   await expectSingleLineRow(
-    page,
-    `[data-testid="design-system-card-subtitle-${WECHAT_PRESET.id}"]`,
+    page.getByTestId(`design-system-card-subtitle-${WECHAT_PRESET.id}`),
     'settings sidebar subtitle (narrow)',
   );
 
@@ -246,12 +245,23 @@ test('[P1] New project design-system popover renders WeChat on a single-line row
   const popover = page.locator('.ds-picker-popover').last();
   await expect(popover).toBeVisible();
 
-  const wechatOption = popover.getByRole('option', { name: new RegExp(`^${WECHAT_PRESET.title}$`) });
+  // mrcfps 2026-07-25 review on head 7d3ba987: the rendered accessible name
+  // for the WeChat option is `WeChat DEFAULT WeChat super-app messaging
+  // patterns.` — `getDefaultDesignSystemId()` marks `wechat` as the default,
+  // so `DesignSystemPicker` appends the `DEFAULT` chip and the localized
+  // summary. The exact `^WeChat$` matcher therefore times out before any
+  // geometry assertion. Use a prefix matcher that is unique to the WeChat
+  // row (no other shipped preset title starts with `WeChat`) and then
+  // locate the title element within that row.
+  const wechatOption = popover.getByRole('option', { name: /^WeChat\b/ });
   await expect(wechatOption).toBeVisible();
 
+  // mrcfps also flagged that `.ds-picker-popover .ds-picker-item-title` picks
+  // the short `None — freeform` row when there are multiple matches, so the
+  // case could pass without ever exercising WeChat. Resolve the title from
+  // the WeChat option itself so the assertion is bound to the real row.
   await expectSingleLineRow(
-    page,
-    `.ds-picker-popover .ds-picker-item-title`,
+    wechatOption.locator('.ds-picker-item-title').first(),
     'new-project popover wechat option title',
   );
 
@@ -300,10 +310,31 @@ test('[P2] Settings library card truncates a long user-system name without clipp
     });
   });
 
-  await page.goto('/design-systems');
+  await page.goto('/');
+  // mrcfps 2026-07-25 review on head 7d3ba987: `/design-systems` mounts
+  // `DesignSystemsTab`, whose `SystemRow` emits the
+  // `design-system-card-<id>` test id but does NOT render
+  // `.library-ds-title` / `.library-ds-title-text` / `.library-ds-edit` —
+  // those belong to `DesignSystemsSection`, which `SettingsDialog` mounts
+  // when its `activeSection === 'designSystems'`. Going to `/design-systems`
+  // therefore resolves `design-system-card-long-editable-user-system` to the
+  // standalone page sidebar row that lacks the rename pencil, and the
+  // `.library-ds-title-text` locator below times out before any geometry
+  // assertion. Open the Settings dialog and switch to the Design systems
+  // section so `DesignSystemsSection` actually mounts.
+  const settings = await openSettingsDialog(page);
+  await settings
+    .getByRole('button', { name: /Design systems|设计系统|設計系統/i })
+    .click();
+  await expect(
+    settings.getByRole('heading', { name: /Design systems|设计系统|設計系統/i }),
+  ).toBeVisible();
+
   // The library section aggregates every shipped system regardless of tab;
-  // long names should be visible without selecting a specific tab.
-  const longCard = page.getByTestId(`design-system-card-${LONG_EDITABLE_PRESET.id}`);
+  // long names should be visible without selecting a specific tab. Use the
+  // stable test id added to `DesignSystemsSection`'s `.library-ds-card` so
+  // the assertion is bound to the right surface.
+  const longCard = settings.getByTestId(`library-ds-card-${LONG_EDITABLE_PRESET.id}`);
   await expect(longCard).toBeVisible();
 
   const title = longCard.locator('.library-ds-title-text').first();
