@@ -578,6 +578,25 @@ describe('SettingsDialog provider model fetch helpers', () => {
         'ollama',
       ),
     ).toBe(false);
+    // Local Ollama supports discovery via GET /api/tags and needs no API key.
+    expect(
+      canFetchProviderModels(
+        { apiKey: '', baseUrl: 'http://localhost:11434' },
+        'ollama',
+      ),
+    ).toBe(true);
+    expect(
+      canFetchProviderModels(
+        { apiKey: '', baseUrl: 'http://127.0.0.1:11434' },
+        'ollama',
+      ),
+    ).toBe(true);
+    expect(
+      isProviderModelDiscoveryUnsupported('ollama', 'http://localhost:11434'),
+    ).toBe(false);
+    expect(
+      isProviderModelDiscoveryUnsupported('ollama', 'https://ollama.com'),
+    ).toBe(true);
     expect(
       canFetchProviderModels(
         {
