@@ -94,6 +94,13 @@ function shouldForwardPackagedChildEnv(key: string, includeProviderSecrets = fal
 
 export type PackagedSidecarHandle = {
   close(): Promise<void>;
+  /**
+   * URL of the web sidecar that is live *right now*. `web` below is the
+   * first-boot snapshot and goes stale as soon as the sidecar is
+   * respawned on a fresh ephemeral port, so anything that dials the
+   * sidecar per request must read this instead.
+   */
+  currentWebUrl(): string;
   daemon: DaemonStatusSnapshot;
   web: WebStatusSnapshot;
 };
@@ -777,39 +784,79 @@ export async function startPackagedSidecars(
     // enters its own timed status window.
     await webPrewarm;
 
+    // Resolved out here rather than inside `spawnWeb`: the null check
+    // above narrows `daemonStatus.url` to string, but TypeScript drops
+    // property narrowing inside a closure that could run later.
+    const daemonPort = extractPort(daemonStatus.url);
+
+    const webRestartPolicy = createRestartPolicy();
+    let closing = false;
+    let currentWebUrl = "";
+
+    const spawnWeb = async (): Promise<WebStatusSnapshot> => {
+      const web = await spawnSidecarChild({
+        app: APP_KEYS.WEB,
+        entryPath: webSidecarEntry,
+        env: {
+          [SIDECAR_ENV.DAEMON_PORT]: daemonPort,
+          [SIDECAR_ENV.WEB_PORT]: "0",
+          ...(options.webStandaloneRoot == null ? {} : { OD_WEB_STANDALONE_ROOT: options.webStandaloneRoot }),
+          OD_WEB_OUTPUT_MODE: options.webOutputMode,
+          PORT: "0",
+        },
+        electronNodeCommand: options.electronNodeCommand,
+        nodeCommand: options.nodeCommand,
+        paths,
+        runtime,
+      });
+      children.push(web);
+      const status = await waitForStatus<WebStatusSnapshot>(
+        web.ipcPath,
+        (candidate) => candidate.url != null,
+        // Web has no legacy-migration path, so it uses the plain platform
+        // baseline (still widened on win32, where AV scanning can also slow the
+        // web sidecar's first bind) rather than resolveDaemonStatusTimeoutMs.
+        baseStatusTimeoutMs(),
+        { child: web.child, logPath: logPathFor(paths, APP_KEYS.WEB) },
+      );
+      if (status.url == null) throw new Error("web did not report a URL");
+      currentWebUrl = status.url;
+
+      // Supervise the child. The web sidecar can die on its own — an
+      // unhandled rejection inside Next, an OOM kill, or an update
+      // handoff reaping the previous generation's processes. Nothing
+      // used to notice: `od://` stayed pinned to the dead port and the
+      // whole UI 502'd until the user quit and relaunched the app.
+      web.child.once("exit", () => {
+        if (closing) return;
+        void resolveWebRestart({
+          policy: webRestartPolicy,
+          nowMs: Date.now(),
+          restart: async () => {
+            const next = await spawnWeb();
+            return next.url as string;
+          },
+        });
+      });
+      return status;
+    };
+
+    // Phase callbacks drive the splash screen, so they stay on the
+    // first-boot path only: a mid-session respawn must not rewind the
+    // user's splash back to "web-spawning".
     options.onPhase?.("web-spawning");
-    const web = await spawnSidecarChild({
-      app: APP_KEYS.WEB,
-      entryPath: webSidecarEntry,
-      env: {
-        [SIDECAR_ENV.DAEMON_PORT]: extractPort(daemonStatus.url),
-        [SIDECAR_ENV.WEB_PORT]: "0",
-        ...(options.webStandaloneRoot == null ? {} : { OD_WEB_STANDALONE_ROOT: options.webStandaloneRoot }),
-        OD_WEB_OUTPUT_MODE: options.webOutputMode,
-        PORT: "0",
-      },
-      electronNodeCommand: options.electronNodeCommand,
-      nodeCommand: options.nodeCommand,
-      paths,
-      runtime,
-    });
-    children.push(web);
-    const webStatus = await waitForStatus<WebStatusSnapshot>(
-      web.ipcPath,
-      (status) => status.url != null,
-      // Web has no legacy-migration path, so it uses the plain platform
-      // baseline (still widened on win32, where AV scanning can also slow the
-      // web sidecar's first bind) rather than resolveDaemonStatusTimeoutMs.
-      baseStatusTimeoutMs(),
-      { child: web.child, logPath: logPathFor(paths, APP_KEYS.WEB) },
-    );
-    if (webStatus.url == null) throw new Error("web did not report a URL");
+    const webStatus = await spawnWeb();
     options.onPhase?.("web-ready");
 
     return {
       daemon: daemonStatus,
       web: webStatus,
+      currentWebUrl: () => currentWebUrl,
       async close() {
+        // Set before tearing children down so the exit handler above
+        // does not read an intentional shutdown as a crash and respawn
+        // a sidecar mid-quit.
+        closing = true;
         for (const child of [...children].reverse()) {
           await closeManagedChild(child).catch((error: unknown) => {
             console.error(`failed to close packaged ${child.app} sidecar`, error);
