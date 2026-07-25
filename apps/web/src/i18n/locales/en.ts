@@ -605,6 +605,7 @@ export const en: Dict = {
   'settings.modelCustom': 'Custom (type below)…',
   'settings.modelCustomLabel': 'Custom model id',
   'settings.modelCustomPlaceholder': 'e.g. anthropic/claude-sonnet-4-6',
+  'settings.onboardingModelUseCustom': 'Use "{query}"',
   'settings.mediaProviders': 'Media providers',
   'settings.mediaProvidersHint': 'Connect providers for image, video, audio, and search.',
   'settings.mcpServerTitle': 'Open Design MCP',
