@@ -58,6 +58,21 @@ const DESIGN_SYSTEMS = [
   },
 ];
 
+// mrcfps 2026-07-25 review on head 5c1c383: long editable design-system
+// names must still leave the rename pencil reachable. The base mock marks
+// every system `isEditable: false`, so the truncation-with-edit test below
+// mounts its own route override that flips a long-named user system to
+// `source: 'user' / isEditable: true`. The id is intentionally distinct
+// from WECHAT_PRESET so the explicit truncation case above is unaffected.
+const LONG_EDITABLE_PRESET = {
+  id: 'long-editable-user-system',
+  title:
+    'Acme Genuine Long-Named User Design System That Must Truncate And Still Leave Rename Reachable',
+  category: 'Product',
+  summary: 'Long-name regression for the .library-ds-title flex rename contract.',
+  swatches: ['#333333'],
+};
+
 test.beforeEach(async ({ page }) => {
   await page.addInitScript((key) => {
     window.localStorage.setItem(
@@ -82,6 +97,14 @@ test.beforeEach(async ({ page }) => {
         telemetry: { metrics: false, content: false, artifactManifest: false },
       }),
     );
+    // Persisted rail state — mrcfps 2026-07-25 review on head 5c1c383 flagged
+    // that `openNewProjectModal` clicks the visible rail toggle but `.entry`
+    // stays collapsed (never gains `entry--rail-open`) without this seed, so
+    // the new-project picker case times out before reaching the geometry
+    // assertions. Mirror the persisted state used by
+    // `new-project-ds-picker-stacking.test.ts` and
+    // `new-project-ds-picker-clipping.test.ts`.
+    window.localStorage.setItem('od.entry.railOpen', 'true');
   }, STORAGE_KEY);
 
   await page.route('**/api/app-config', async (route) => {
@@ -233,4 +256,107 @@ test('[P1] New project design-system popover renders WeChat on a single-line row
   );
 
   await page.screenshot({ path: 'ui/reports/2688-new-project-ds-picker-truncated.png' });
+});
+
+// ---- Picker 4: Settings library card with long editable name ----------------
+//
+// mrcfps 2026-07-25 review on head 5c1c383 flagged that truncating
+// `.library-ds-title` directly clips the rename pencil outside the parent
+// box for long user-system names (140px title ended at x=148, 22px edit
+// button began at x=415). The CSS fix promotes `.library-ds-title` to a
+// constrained flex row and moves the truncation triple onto the
+// `.library-ds-title-text` child while keeping `.library-ds-edit`
+// non-shrinking. This case proves the rename pencil stays reachable
+// when the long name is itself truncated to ellipsis.
+
+test('[P2] Settings library card truncates a long user-system name without clipping the rename pencil (#2688)', async ({
+  page,
+}) => {
+  // Override the base `/api/design-systems` mock for this case only: flip
+  // the long-named preset to `source: 'user' / isEditable: true` so the
+  // `DesignSystemsSection` renderer actually emits the `.library-ds-edit`
+  // button. `page.route` on the same URL in Playwright prepends the new
+  // handler, so the override wins over the `beforeEach` fallback.
+  await page.route('**/api/design-systems', async (route) => {
+    await route.fulfill({
+      json: {
+        designSystems: [
+          ...DESIGN_SYSTEMS.map((s) => ({
+            ...s,
+            source: 'preset',
+            isEditable: false,
+            surface: 'web',
+            hidden: false,
+          })),
+          {
+            ...LONG_EDITABLE_PRESET,
+            source: 'user',
+            isEditable: true,
+            surface: 'web',
+            hidden: false,
+          },
+        ],
+      },
+    });
+  });
+
+  await page.goto('/design-systems');
+  // The library section aggregates every shipped system regardless of tab;
+  // long names should be visible without selecting a specific tab.
+  const longCard = page.getByTestId(`design-system-card-${LONG_EDITABLE_PRESET.id}`);
+  await expect(longCard).toBeVisible();
+
+  const title = longCard.locator('.library-ds-title-text').first();
+  const edit = longCard.locator('.library-ds-edit').first();
+
+  await expect(title).toBeVisible();
+  await expect(edit).toBeAttached();
+
+  const geometry = await longCard.evaluate((el: Element) => {
+    const card = el.getBoundingClientRect();
+    const titleEl = el.querySelector('.library-ds-title');
+    const titleTextEl = el.querySelector('.library-ds-title-text');
+    const editEl = el.querySelector('.library-ds-edit');
+    if (!titleEl || !titleTextEl || !editEl) {
+      throw new Error('missing title/edit element');
+    }
+    const t = titleEl.getBoundingClientRect();
+    const tt = titleTextEl.getBoundingClientRect();
+    const ed = editEl.getBoundingClientRect();
+    const cs = window.getComputedStyle(titleEl);
+    return {
+      card: { left: Math.round(card.left), right: Math.round(card.right), width: Math.round(card.width) },
+      title: { left: Math.round(t.left), right: Math.round(t.right), width: Math.round(t.width) },
+      titleText: { left: Math.round(tt.left), right: Math.round(tt.right), width: Math.round(tt.width) },
+      edit: { left: Math.round(ed.left), right: Math.round(ed.right), width: Math.round(ed.width) },
+      titleDisplay: cs.display,
+      titleMinWidth: cs.minWidth,
+    };
+  });
+
+  // The title row is the flex parent we expect from the fix.
+  expect(geometry.titleDisplay, `expected .library-ds-title { display: flex }, got ${geometry.titleDisplay}.`).toBe('flex');
+  expect(geometry.titleMinWidth, `expected .library-ds-title { min-width: 0 }, got ${geometry.titleMinWidth}.`).toBe('0px');
+
+  // The rename pencil stays inside the card and inside the title row, not
+  // clipped beyond the parent's right edge.
+  expect(
+    geometry.edit.right,
+    `rename pencil right edge (${geometry.edit.right}) exceeds card right edge (${geometry.card.right}) — clipped outside the card.`,
+  ).toBeLessThanOrEqual(geometry.card.right);
+  expect(
+    geometry.edit.right,
+    `rename pencil right edge (${geometry.edit.right}) exceeds title row right edge (${geometry.title.right}) — clipped outside the title container.`,
+  ).toBeLessThanOrEqual(geometry.title.right);
+  expect(
+    geometry.edit.left,
+    `rename pencil left edge (${geometry.edit.left}) sits before title text right edge (${geometry.titleText.right}) — overlapping the truncated text.`,
+  ).toBeGreaterThanOrEqual(geometry.titleText.right - 1);
+
+  // The long title text actually truncated (its rendered width is bounded by
+  // the available row width minus the pencil, not by the full untruncated text).
+  expect(
+    geometry.titleText.right,
+    `title text right edge (${geometry.titleText.right}) exceeds the title row right edge (${geometry.title.right}) — the text was not truncated.`,
+  ).toBeLessThanOrEqual(geometry.title.right);
 });

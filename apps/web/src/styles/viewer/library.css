@@ -1063,6 +1063,24 @@
   /* Issue #2688: keep card titles on a single line so long preset names
      don't wrap inside the grid card. The 2-line clamp on .library-ds-summary
      is the only place where multi-line text is allowed. */
+  /* mrcfps 2026-07-25 review on head 5c1c383: previously
+     `white-space: nowrap; overflow: hidden; text-overflow: ellipsis` lived
+     directly on this flex container, but Chromium does not ellipsize the
+     anonymous flex item — long text hard-clipped with no `…`, and the
+     sibling `.library-ds-edit` rename button was laid out beyond the
+     parent's clip box and became unreachable (140px title box ended at
+     x=148, 22px edit button began at x=415, so the hover-only control had
+     no hit target). Promote this to a constrained flex row and hand the
+     truncation triple to the already-rendered `.library-ds-title-text`
+     child; keep `.library-ds-edit` non-shrinking. */
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.library-ds-title-text {
+  flex: 1 1 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
