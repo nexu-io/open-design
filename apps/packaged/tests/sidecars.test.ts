@@ -27,10 +27,12 @@ import { APP_KEYS, OPEN_DESIGN_SIDECAR_CONTRACT } from '@open-design/sidecar-pro
 import {
   buildPackagedDaemonSpawnEnv,
   createPackagedSidecarSpawnOptions,
+  createRestartPolicy,
   resolveDaemonStatusTimeoutMs,
   resolvePackagedChildBaseEnv,
   resolvePackagedElectronNodeCommand,
   resolvePackagedPathEnv,
+  resolveWebRestart,
   waitForStatus,
 } from '../src/sidecars.js';
 import type { PackagedNamespacePaths } from '../src/paths.js';
@@ -633,5 +635,93 @@ describe('waitForStatus child-exit fast-fail', () => {
     } finally {
       await server.close();
     }
+  });
+});
+
+/**
+ * The web sidecar used to be spawned once and never watched. When it
+ * died mid-session — observed 2026-07-25 after a 0.15.1 -> 0.16.1
+ * launcher handoff reaped it — nothing respawned it, and the od://
+ * proxy kept forwarding to the dead port until the app was relaunched.
+ *
+ * The supervisor respawns it, but a sidecar that crashes during boot
+ * must not respawn forever: each attempt spends a full Next.js boot.
+ */
+describe('createRestartPolicy', () => {
+  it('allows up to maxRestarts inside the window and refuses the next one', () => {
+    const policy = createRestartPolicy({ maxRestarts: 3, windowMs: 60_000 });
+    expect(policy.allow(1_000)).toBe(true);
+    expect(policy.allow(2_000)).toBe(true);
+    expect(policy.allow(3_000)).toBe(true);
+    expect(policy.allow(4_000)).toBe(false);
+  });
+
+  it('forgets attempts that fell out of the window', () => {
+    const policy = createRestartPolicy({ maxRestarts: 2, windowMs: 10_000 });
+    expect(policy.allow(1_000)).toBe(true);
+    expect(policy.allow(2_000)).toBe(true);
+    expect(policy.allow(3_000)).toBe(false);
+    // 12_001 is more than windowMs after both recorded attempts, so the
+    // window is empty again and a fresh burst is allowed.
+    expect(policy.allow(12_001)).toBe(true);
+  });
+
+  it('defaults to 5 restarts per 60s window', () => {
+    const policy = createRestartPolicy();
+    for (let i = 0; i < 5; i += 1) {
+      expect(policy.allow(1_000 + i)).toBe(true);
+    }
+    expect(policy.allow(1_006)).toBe(false);
+  });
+});
+
+describe('resolveWebRestart', () => {
+  it('returns the next URL when the policy allows a restart', async () => {
+    const policy = createRestartPolicy({ maxRestarts: 2, windowMs: 60_000 });
+    const started: string[] = [];
+    const restart = async () => {
+      started.push('start');
+      return 'http://127.0.0.1:59530';
+    };
+
+    await expect(
+      resolveWebRestart({ policy, nowMs: 1_000, restart }),
+    ).resolves.toBe('http://127.0.0.1:59530');
+    expect(started).toHaveLength(1);
+  });
+
+  it('returns null and does not restart once the policy refuses', async () => {
+    const policy = createRestartPolicy({ maxRestarts: 1, windowMs: 60_000 });
+    await resolveWebRestart({
+      policy,
+      nowMs: 1_000,
+      restart: async () => 'http://127.0.0.1:1',
+    });
+
+    const started: string[] = [];
+    await expect(
+      resolveWebRestart({
+        policy,
+        nowMs: 2_000,
+        restart: async () => {
+          started.push('start');
+          return 'http://127.0.0.1:2';
+        },
+      }),
+    ).resolves.toBeNull();
+    expect(started).toHaveLength(0);
+  });
+
+  it('returns null when the restart itself throws', async () => {
+    const policy = createRestartPolicy({ maxRestarts: 3, windowMs: 60_000 });
+    await expect(
+      resolveWebRestart({
+        policy,
+        nowMs: 1_000,
+        restart: async () => {
+          throw new Error('spawn failed');
+        },
+      }),
+    ).resolves.toBeNull();
   });
 });

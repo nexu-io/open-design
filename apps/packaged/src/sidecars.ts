@@ -227,6 +227,62 @@ function baseStatusTimeoutMs(platform: NodeJS.Platform = process.platform): numb
  * @see apps/daemon/src/legacy-data-migrator.ts
  * @see https://github.com/nexu-io/open-design/issues/710
  */
+export type RestartPolicy = { allow(nowMs: number): boolean };
+
+/**
+ * Sliding-window cap on sidecar respawns.
+ *
+ * A sidecar that dies once should come back; a sidecar that crashes
+ * during boot must not respawn forever, because each attempt spends a
+ * full Next.js boot and would pin a core indefinitely.
+ *
+ * ponytail: a plain array of timestamps pruned by filter — the window
+ * holds single digits of entries, so a ring buffer would be more code
+ * for no measurable gain.
+ */
+export function createRestartPolicy(
+  options: { maxRestarts?: number; windowMs?: number } = {},
+): RestartPolicy {
+  const maxRestarts = options.maxRestarts ?? 5;
+  const windowMs = options.windowMs ?? 60_000;
+  let attempts: number[] = [];
+  return {
+    allow(nowMs: number): boolean {
+      attempts = attempts.filter((at) => nowMs - at < windowMs);
+      if (attempts.length >= maxRestarts) return false;
+      attempts.push(nowMs);
+      return true;
+    },
+  };
+}
+
+/**
+ * One policy-gated respawn attempt.
+ *
+ * Split out from the child's `exit` handler so the decision logic is
+ * unit-testable without spawning a real sidecar. Returns the new web
+ * runtime URL, or null when the restart was refused by the policy or
+ * the spawn itself failed — in which case the caller keeps serving the
+ * previous URL and the renderer sees ordinary 502s instead of the app
+ * hanging or crashing.
+ */
+export async function resolveWebRestart(options: {
+  policy: RestartPolicy;
+  nowMs: number;
+  restart: () => Promise<string>;
+}): Promise<string | null> {
+  if (!options.policy.allow(options.nowMs)) {
+    console.error("packaged web sidecar restart budget exhausted; not respawning");
+    return null;
+  }
+  try {
+    return await options.restart();
+  } catch (error: unknown) {
+    console.error("failed to restart packaged web sidecar", error);
+    return null;
+  }
+}
+
 export function resolveDaemonStatusTimeoutMs(
   env: NodeJS.ProcessEnv = process.env,
   platform: NodeJS.Platform = process.platform,
