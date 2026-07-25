@@ -90,13 +90,56 @@ function clampDimension(value: unknown, fallback: number): number {
 }
 
 /**
- * Resolve the shell binary for a new PTY. Honors an explicit request override,
- * then the user's environment (SHELL on posix, ComSpec on win32), and finally
- * falls back to a per-platform default.
+ * Platform-aware allowlist of shell binaries accepted when the client
+ * supplies an explicit `shell` override on `POST /api/projects/:id/terminals`.
+ *
+ * On posix, the requested path must match one of the known absolute paths
+ * exactly. On win32, the bare executable name is matched (case-insensitive)
+ * since Windows resolves PATH entries.
+ *
+ * Any value not in the allowlist is silently dropped and the function falls
+ * through to the environment default. This prevents an attacker from using
+ * the terminal route to spawn arbitrary executables (CWE-78).
+ */
+const SHELL_ALLOWLIST_POSIX = new Set([
+  '/bin/bash',
+  '/bin/sh',
+  '/bin/zsh',
+  '/bin/fish',
+  '/bin/dash',
+  '/usr/bin/bash',
+  '/usr/bin/sh',
+  '/usr/bin/zsh',
+  '/usr/bin/fish',
+  '/usr/bin/dash',
+]);
+
+const SHELL_ALLOWLIST_WIN32 = new Set([
+  'powershell.exe',
+  'pwsh.exe',
+  'cmd.exe',
+]);
+
+function isAllowedShell(candidate: string): boolean {
+  if (process.platform === 'win32') {
+    return SHELL_ALLOWLIST_WIN32.has(candidate.toLowerCase());
+  }
+  return SHELL_ALLOWLIST_POSIX.has(candidate);
+}
+
+/**
+ * Resolve the shell binary for a new PTY. Honors an explicit request override
+ * **only when it matches the platform allowlist**, then the user's environment
+ * (SHELL on posix, ComSpec on win32), and finally falls back to a per-platform
+ * default.
+ *
+ * Before the allowlist was added (issue #5479), any non-empty string from the
+ * client was passed directly to `pty.spawn()`, allowing arbitrary process
+ * execution as the daemon user.
  */
 export function resolveShell(requested?: string | null): string {
   const explicit = typeof requested === 'string' && requested.trim() ? requested.trim() : null;
-  if (explicit) return explicit;
+  if (explicit && isAllowedShell(explicit)) return explicit;
   if (process.platform === 'win32') {
     return process.env.ComSpec || 'powershell.exe';
   }
