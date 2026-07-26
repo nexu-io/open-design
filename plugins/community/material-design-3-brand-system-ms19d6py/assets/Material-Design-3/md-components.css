@@ -11,7 +11,8 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  height: 40px;
+  min-height: 48px;
+  height: 48px;
   padding: 0 24px;
   border: none;
   border-radius: var(--md-sys-shape-corner-full);
@@ -60,7 +61,7 @@
 
 /* === Icon button ========================================== */
 .md-icon-button {
-  width: 40px; height: 40px; padding: 0;
+  width: 48px; height: 48px; padding: 0;
   border-radius: var(--md-sys-shape-corner-full);
   border: none; background: transparent;
   color: var(--md-sys-color-on-surface-variant);
@@ -88,7 +89,7 @@
   transition: box-shadow var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
 }
 .md-fab:hover { box-shadow: var(--md-sys-elevation-level4); }
-.md-fab.small { width: 40px; height: 40px; border-radius: 12px; }
+.md-fab.small { width: 48px; height: 48px; border-radius: 12px; }
 .md-fab.large { width: 96px; height: 96px; border-radius: 28px; }
 .md-fab.large .material-symbols-outlined { font-size: 36px; }
 .md-fab.extended { width: auto; height: 56px; padding: 0 20px; gap: 12px; font: var(--md-sys-typescale-label-large-weight) var(--md-sys-typescale-label-large-size) / 1 var(--md-sys-typescale-label-large-font); }
@@ -152,7 +153,26 @@
 .md-textfield.filled input:focus { border-bottom: 2px solid var(--md-sys-color-primary); padding-bottom: 3px; }
 
 /* === Chips ================================================ */
+.md-touch-target {
+  position: relative;
+  display: inline-flex;
+  min-width: 48px;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+}
+
+.md-control-label {
+  position: relative;
+  display: inline-flex;
+  min-height: 48px;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
 .md-chip {
+  display: inline-flex;
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -168,6 +188,15 @@
   cursor: pointer;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
+  position: relative;
+}
+.md-chip::before,
+.md-switch::before {
+  content: "";
+  position: absolute;
+  inset: -8px;
+  border-radius: inherit;
+  pointer-events: auto;
 }
 .md-chip .material-symbols-outlined { font-size: 18px; }
 .md-chip:hover { background: color-mix(in oklab, var(--md-sys-color-on-surface-variant) 8%, transparent); }
@@ -207,6 +236,10 @@
   cursor: pointer;
   box-sizing: border-box;
   transition: background-color var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
+  position: relative;
+}
+.md-switch::before {
+  inset: -8px;
 }
 .md-switch .thumb {
   width: 16px; height: 16px;
@@ -225,6 +258,15 @@
   border-radius: 2px;
   color: var(--md-sys-color-on-primary);
   cursor: pointer;
+  position: relative;
+}
+.md-checkbox::before,
+.md-radio::before {
+  content: "";
+  position: absolute;
+  inset: -15px;
+  border-radius: inherit;
+  pointer-events: auto;
 }
 .md-checkbox.on { background: var(--md-sys-color-primary); border-color: var(--md-sys-color-primary); }
 .md-checkbox.on::after { content: ""; width: 4px; height: 9px; border: solid var(--md-sys-color-on-primary); border-width: 0 2px 2px 0; transform: rotate(45deg) translate(-1px, -1px); }
@@ -235,6 +277,7 @@
   border: 2px solid var(--md-sys-color-on-surface-variant);
   border-radius: 9999px;
   cursor: pointer;
+  position: relative;
 }
 .md-radio.on { border-color: var(--md-sys-color-primary); }
 .md-radio.on::after { content: ""; width: 10px; height: 10px; background: var(--md-sys-color-primary); border-radius: 9999px; }

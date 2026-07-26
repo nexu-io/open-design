@@ -27,7 +27,7 @@
 
 ## 布局与交互
 
-采用 8px baseline grid（可用 4px half-step），大屏内容约束在 1200px。compact `<600px`、medium `600–960px`、expanded `>960px` 时切换导航、列数和图像裁切。所有控件至少 48px 触控区域；交互采用 state layer、ripple、2px focus ring，深度首先来自 surface containers，其次才是阴影。
+采用 8px baseline grid（可用 4px half-step），大屏内容约束在 1200px。compact `<600px`、medium `600–960px`、expanded `>960px` 时切换导航、列数和图像裁切。所有控件至少 48px 触控区域；`md-components.css` 对按钮、图标按钮和 FAB 提供 48px 盒子，对 chip、switch、checkbox、radio 提供 hit-slope；checkbox/radio 放进 `.md-control-label` 标签或 `.md-touch-target` 包装器。交互采用 state layer、ripple、2px focus ring，深度首先来自 surface containers，其次才是阴影。
 
 ## 资产目录
 
@@ -42,4 +42,4 @@
 2. 显示/正文/等宽字体绑定正确，字号与 line-height 不把内容挤出容器。
 3. 在 360、600、960、1200、1920px 检查无横向滚动与意外遮挡。
 4. 图像使用相对路径、具备中文 alt/caption，避免把图标或头像当 hero。
-5. 交互控件满足 48px 触控尺寸、键盘焦点可见、文案为 sentence case。
+5. 交互控件满足 48px 触控尺寸、键盘焦点可见、文案为 sentence case；自定义小尺寸控件使用 `.md-touch-target` 或内置 hit-slope，不直接缩小命中区域。

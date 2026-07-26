@@ -32,7 +32,7 @@ user-invocable: true
 6. 只在图片能回答具体组件、状态或主题问题时使用 `imagery/`；不要把营销封面、网页背景图、头像或图标当作视觉样本。
 7. 显示文字用 Google Sans，正文用 Google Sans Text，代码用 Google Sans Mono；本包不再分发 Google 专有字体文件，必须保留声明的系统 fallback。
 8. 在 compact `<600px`、medium `600–960px`、expanded `>960px` 三段姿态下重新组织导航与内容；不能把桌面布局硬挤到手机。
-9. 交付前检查 48px 触控区、键盘焦点、交互状态、无横向滚动、相对资源路径、中文 alt/caption 与 sentence case。
+9. 交付前检查 48px 触控区、键盘焦点、交互状态、无横向滚动、相对资源路径、中文 alt/caption 与 sentence case。使用 `md-components.css` 时，按钮、图标按钮和 FAB 直接提供 48px 盒子；chip、switch、checkbox、radio 使用内置 hit-slope，checkbox/radio 放进 `<label class="md-control-label">`，或包在 `.md-touch-target` 中。
 
 ## Expected output
 
