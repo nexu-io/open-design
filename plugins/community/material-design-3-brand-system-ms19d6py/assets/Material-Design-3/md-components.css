@@ -359,7 +359,7 @@
   border-radius: var(--md-sys-shape-corner-extra-small);
   box-shadow: var(--md-sys-elevation-level3);
 }
-.md-snackbar .action { color: var(--md-sys-color-inverse-primary); padding: 8px 12px; cursor: pointer; font: 500 14px/20px var(--md-ref-typeface-plain); border-radius: 9999px; }
+.md-snackbar .action { min-height: 48px; display: inline-flex; align-items: center; color: var(--md-sys-color-inverse-primary); padding: 8px 12px; cursor: pointer; font: 500 14px/20px var(--md-ref-typeface-plain); border-radius: 9999px; }
 .md-snackbar .action:hover { background: color-mix(in oklab, var(--md-sys-color-inverse-primary) 12%, transparent); }
 
 /* === Dialog =============================================== */
