@@ -4,7 +4,7 @@
   "runId": "acfa8c3f-9e7f-48a1-96d8-ff4adfe2149a",
   "conversationId": "f79949b3-1cd9-4929-8bd5-4a57103b7b95",
   "provenance": {
-    "summary": "Detected from SKILL.md after a successful run.",
+      "summary": "Material Design 3 skill snapshot plus packaged, license-mapped resources.",
     "detectedAt": 1785037476305
   },
   "sourceRefs": [
@@ -12,7 +12,7 @@
       "kind": "file",
       "value": "SKILL.md",
       "label": "SKILL.md",
-      "size": 3856,
+      "size": 3785,
       "copied": true
     }
   ]

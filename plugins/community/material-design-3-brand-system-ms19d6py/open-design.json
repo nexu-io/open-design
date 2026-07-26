@@ -4,19 +4,61 @@
   "name": "material-design-3-brand-system-ms19d6py",
   "title": "Material Design 3 Brand System",
   "version": "0.1.0",
-  "description": "--- name: material-design-3-brand-system description: 使用从 m3.material.io 实测增补的 Material Design 3 设计系统，构建清晰、可适配、富有表现力的 HTML 界面与原型。 user-invocable: true ---",
+  "description": "使用已打包的 Material Design 3 规范、七角色主题、完整 Material Web 公开组件目录和高信号界面样本构建设计产物。",
+  "license": "Apache-2.0",
+  "tags": ["design-system", "material-design", "components", "web"],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
   "od": {
     "kind": "skill",
     "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "preview": {
+      "type": "html",
+      "entry": "./assets/Material-Design-3/ui_kits/material-web/index.html",
+      "motion": "scroll"
+    },
+    "useCase": {
+      "query": "使用 Material Design 3 设计系统创建一个完整的 {{artifactKind}}，并遵守 DESIGN.md 中的颜色、字体、组件、状态和响应式规则。"
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "产物类型",
+        "type": "select",
+        "options": ["响应式原型", "后台界面", "表单", "营销页面", "演示文稿"],
+        "default": "响应式原型"
+      }
+    ],
     "context": {
       "skills": [
         {
           "path": "./SKILL.md"
         }
+      ],
+      "assets": [
+        "./DESIGN.md",
+        "./BRAND.md",
+        "./brand.json",
+        "./assets/Material-Design-3",
+        "./imagery",
+        "./references/material-web"
       ]
     },
-    "capabilities": [
-      "prompt:inject"
-    ]
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": ["file-write", "live-artifact"]
+        }
+      ]
+    },
+    "capabilities": ["prompt:inject", "fs:write"]
   }
 }

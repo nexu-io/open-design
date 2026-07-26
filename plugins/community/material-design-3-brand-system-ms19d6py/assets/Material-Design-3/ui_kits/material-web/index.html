@@ -1,0 +1,223 @@
+<!doctype html>
+<!-- @dsCard group="UI Kit — Material Web" name="完整组件目录" subtitle="43 个公开元素 / 20 个家族，另标注 Labs" viewport="1440x1080" -->
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Material Web · 完整组件目录</title>
+  <link rel="stylesheet" href="../../colors_and_type.css">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-25..200" rel="stylesheet">
+  <script type="importmap">
+    {"imports":{"@material/web/":"https://esm.run/@material/web@2.4.1/"}}
+  </script>
+  <style>
+    :root {
+      color-scheme: light;
+      --md-sys-color-primary: #6442d6;
+      --md-sys-color-on-primary: #fefbff;
+      --md-sys-color-primary-container: #9f86ff;
+      --md-sys-color-on-primary-container: #1c1b1d;
+      --md-sys-color-secondary: #4d4256;
+      --md-sys-color-on-secondary: #fefbff;
+      --md-sys-color-secondary-container: #f8f1f6;
+      --md-sys-color-on-secondary-container: #1c1b1d;
+      --md-sys-color-tertiary: #4d4256;
+      --md-sys-color-on-tertiary: #fefbff;
+      --md-sys-color-tertiary-container: #e6e1e3;
+      --md-sys-color-on-tertiary-container: #1c1b1d;
+      --md-sys-color-surface: #fefbff;
+      --md-sys-color-surface-dim: #e6e1e3;
+      --md-sys-color-surface-bright: #fefbff;
+      --md-sys-color-surface-container-lowest: #fefbff;
+      --md-sys-color-surface-container-low: #fefbff;
+      --md-sys-color-surface-container: #f8f1f6;
+      --md-sys-color-surface-container-high: #e6e1e3;
+      --md-sys-color-surface-container-highest: #e6e1e3;
+      --md-sys-color-on-surface: #1c1b1d;
+      --md-sys-color-on-surface-variant: #4d4256;
+      --md-sys-color-outline: #4d4256;
+      --md-sys-color-outline-variant: #e6e1e3;
+      --md-sys-color-inverse-surface: #1c1b1d;
+      --md-sys-color-inverse-on-surface: #fefbff;
+      --md-sys-color-inverse-primary: #9f86ff;
+      --md-sys-color-error: #6442d6;
+      --md-sys-color-on-error: #fefbff;
+      --md-sys-color-error-container: #f8f1f6;
+      --md-sys-color-on-error-container: #1c1b1d;
+      --md-ref-typeface-brand: 'Google Sans', system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+      --md-ref-typeface-plain: 'Google Sans Text', system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html { background: #fefbff; color: #1c1b1d; scroll-behavior: smooth; }
+    body { margin: 0; font-family: var(--md-ref-typeface-plain); }
+    a { color: #6442d6; }
+    .shell { display: grid; grid-template-columns: 264px minmax(0,1fr); min-height: 100vh; }
+    .sidebar { position: sticky; top: 0; height: 100vh; overflow: auto; padding: 32px 20px; border-right: 1px solid #e6e1e3; background: #f8f1f6; }
+    .sidebar h1 { margin: 0; font: 500 22px/28px var(--md-ref-typeface-brand); }
+    .sidebar p { margin: 8px 0 24px; color: #4d4256; font-size: 13px; line-height: 19px; }
+    .sidebar nav { display: grid; gap: 4px; }
+    .sidebar nav a { min-height: 44px; display: flex; align-items: center; padding: 0 14px; border-radius: 8px; color: #4d4256; text-decoration: none; font-size: 14px; }
+    .sidebar nav a:hover, .sidebar nav a:focus-visible { background: #e6e1e3; color: #1c1b1d; outline: none; }
+    main { min-width: 0; padding: 56px clamp(24px, 5vw, 80px) 96px; }
+    .hero { max-width: 1120px; margin: 0 auto 56px; display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: end; gap: 32px; }
+    .eyebrow { margin: 0 0 12px; color: #6442d6; font: 500 14px/20px var(--md-ref-typeface-plain); }
+    .hero h2 { margin: 0; max-width: 820px; font: 475 clamp(44px, 6vw, 76px)/1.02 var(--md-ref-typeface-brand); letter-spacing: -1px; }
+    .hero p { max-width: 720px; margin: 20px 0 0; color: #4d4256; font: 400 18px/28px var(--md-ref-typeface-plain); }
+    .count { min-width: 148px; padding: 20px; border-radius: 8px; background: #f8f1f6; border: 1px solid #e6e1e3; }
+    .count strong { display: block; font: 475 42px/46px var(--md-ref-typeface-brand); }
+    .count span { color: #4d4256; font-size: 13px; }
+    .catalog { max-width: 1120px; margin: 0 auto; display: grid; gap: 24px; }
+    .group { border: 1px solid #e6e1e3; border-radius: 8px; background: #fefbff; overflow: clip; }
+    .group-head { display: flex; align-items: start; justify-content: space-between; gap: 24px; padding: 24px 28px; border-bottom: 1px solid #e6e1e3; }
+    .group h3 { margin: 0; font: 475 26px/34px var(--md-ref-typeface-brand); }
+    .group-head p { margin: 6px 0 0; color: #4d4256; font-size: 14px; line-height: 20px; }
+    code { color: #4d4256; font: 12px/18px 'Google Sans Mono', ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace; }
+    .specimens { padding: 28px; display: flex; flex-wrap: wrap; align-items: center; gap: 20px 16px; min-height: 112px; }
+    .specimens.column { align-items: stretch; flex-direction: column; }
+    .subgrid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 16px; width: 100%; }
+    .sample { min-width: 0; padding: 20px; border-radius: 8px; background: #f8f1f6; }
+    .sample-title { margin: 0 0 16px; color: #4d4256; font: 500 12px/16px var(--md-ref-typeface-plain); }
+    .control-row { display: flex; flex-wrap: wrap; gap: 16px 22px; align-items: center; }
+    .control-label { display: inline-flex; align-items: center; gap: 10px; min-height: 48px; }
+    .wide { width: min(100%, 360px); }
+    md-filled-text-field, md-outlined-text-field, md-filled-select, md-outlined-select { width: min(100%, 320px); }
+    md-slider { width: min(100%, 420px); }
+    md-elevated-button, md-filled-button, md-filled-tonal-button, md-outlined-button, md-text-button,
+    md-icon-button, md-filled-icon-button, md-filled-tonal-icon-button, md-outlined-icon-button,
+    md-assist-chip, md-filter-chip, md-input-chip, md-suggestion-chip, md-fab, md-branded-fab,
+    md-checkbox, md-radio, md-switch, md-primary-tab, md-secondary-tab { min-height: 48px; }
+    md-icon-button, md-filled-icon-button, md-filled-tonal-icon-button, md-outlined-icon-button,
+    md-checkbox, md-radio, md-switch { min-width: 48px; }
+    md-list { width: min(100%, 520px); background: #f8f1f6; border-radius: 8px; overflow: hidden; }
+    md-tabs { width: min(100%, 560px); }
+    .elevation-box { position: relative; width: 120px; height: 88px; display: grid; place-items: center; border-radius: 8px; background: #fefbff; }
+    .focus-demo { position: relative; min-width: 128px; min-height: 48px; display: grid; place-items: center; border-radius: 8px; background: #f8f1f6; }
+    .labs { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; width: 100%; }
+    .lab { min-height: 104px; padding: 16px; border-radius: 8px; background: #f8f1f6; border: 1px solid #e6e1e3; }
+    .lab strong { display: block; font: 500 15px/20px var(--md-ref-typeface-brand); }
+    .lab span { display: block; margin-top: 6px; color: #4d4256; font-size: 12px; line-height: 17px; }
+    .status { flex: none; padding: 5px 9px; border-radius: 9999px; background: #f8f1f6; color: #4d4256; font-size: 11px; }
+    @media (max-width: 960px) { .shell { grid-template-columns: 1fr; } .sidebar { position: static; height: auto; border-right: 0; border-bottom: 1px solid #e6e1e3; } .sidebar nav { grid-template-columns: repeat(3, minmax(0,1fr)); } .hero { grid-template-columns: 1fr; } .count { width: fit-content; } .labs { grid-template-columns: repeat(2, minmax(0,1fr)); } }
+    @media (max-width: 600px) { main { padding: 36px 16px 64px; } .sidebar nav { grid-template-columns: repeat(2, minmax(0,1fr)); } .subgrid, .labs { grid-template-columns: 1fr; } .group-head { padding: 20px; } .specimens { padding: 20px; } }
+  </style>
+</head>
+<body>
+  <div class="shell" data-od-id="material-web-catalog">
+    <aside class="sidebar" data-od-id="catalog-navigation">
+      <h1>Material Web</h1>
+      <p>GitHub `all.ts` 公开组件目录<br>固定版本：`@material/web@2.4.1`</p>
+      <nav aria-label="组件目录">
+        <a href="#buttons">按钮</a><a href="#icon-buttons">图标按钮</a><a href="#fab">FAB</a>
+        <a href="#chips">Chips</a><a href="#text-fields">文本字段</a><a href="#selects">选择器</a>
+        <a href="#selection-controls">选择控件</a><a href="#sliders">滑块</a><a href="#tabs">Tabs</a>
+        <a href="#lists">列表</a><a href="#menus">菜单</a><a href="#dialogs">Dialog</a>
+        <a href="#progress">进度</a><a href="#fields">底层字段</a><a href="#interaction-foundations">交互基础</a>
+        <a href="#labs">Labs</a>
+      </nav>
+    </aside>
+
+    <main>
+      <header class="hero" data-od-id="catalog-hero">
+        <div><p class="eyebrow">源码取证 · material-components/material-web</p><h2>公开组件，一个不漏。</h2><p>主目录直接运行官方 Web Components。稳定公开 API 与实验性 Labs 分开标注，避免把设计规范、私有 primitive 和已发布组件混在一起。</p></div>
+        <div class="count"><strong>43</strong><span>公开元素 · 20 个家族</span></div>
+      </header>
+
+      <div class="catalog">
+        <section class="group" id="buttons" data-od-id="component-buttons">
+          <div class="group-head"><div><h3>Buttons</h3><p>5 个公开变体；示例包含图标与 disabled。</p></div><code>button/*</code></div>
+          <div class="specimens"><md-elevated-button>提升按钮</md-elevated-button><md-filled-button><md-icon slot="icon">add</md-icon>新建</md-filled-button><md-filled-tonal-button>柔和按钮</md-filled-tonal-button><md-outlined-button>描边按钮</md-outlined-button><md-text-button>文本按钮</md-text-button><md-filled-button disabled>不可用</md-filled-button></div>
+        </section>
+
+        <section class="group" id="icon-buttons" data-od-id="component-icon-buttons">
+          <div class="group-head"><div><h3>Icon buttons</h3><p>standard、filled、filled tonal、outlined 与 toggle 状态。</p></div><code>iconbutton/*</code></div>
+          <div class="specimens"><md-icon-button aria-label="收藏"><md-icon>favorite</md-icon></md-icon-button><md-filled-icon-button aria-label="分享"><md-icon>share</md-icon></md-filled-icon-button><md-filled-tonal-icon-button aria-label="通知"><md-icon>notifications</md-icon></md-filled-tonal-icon-button><md-outlined-icon-button aria-label="设置"><md-icon>settings</md-icon></md-outlined-icon-button><md-icon-button toggle selected aria-label="切换书签"><md-icon>bookmark</md-icon><md-icon slot="selected">bookmark</md-icon></md-icon-button><md-icon-button disabled aria-label="不可用"><md-icon>delete</md-icon></md-icon-button></div>
+        </section>
+
+        <section class="group" id="fab" data-od-id="component-fab">
+          <div class="group-head"><div><h3>FAB</h3><p>small、regular、large、extended 与 branded。</p></div><code>fab/*</code></div>
+          <div class="specimens"><md-fab size="small" aria-label="编辑"><md-icon slot="icon">edit</md-icon></md-fab><md-fab aria-label="添加"><md-icon slot="icon">add</md-icon></md-fab><md-fab size="large" aria-label="创建"><md-icon slot="icon">create</md-icon></md-fab><md-fab label="撰写邮件"><md-icon slot="icon">edit</md-icon></md-fab><md-branded-fab label="品牌操作"><md-icon slot="icon">auto_awesome</md-icon></md-branded-fab></div>
+        </section>
+
+        <section class="group" id="chips" data-od-id="component-chips">
+          <div class="group-head"><div><h3>Chips</h3><p>assist、filter、input、suggestion 与 chip set。</p></div><code>chips/*</code></div>
+          <div class="specimens"><md-chip-set><md-assist-chip label="添加到日历"><md-icon slot="icon">calendar_add_on</md-icon></md-assist-chip><md-filter-chip label="未读" selected></md-filter-chip><md-input-chip label="李明" selected removable></md-input-chip><md-suggestion-chip label="回复全部"></md-suggestion-chip></md-chip-set></div>
+        </section>
+
+        <section class="group" id="text-fields" data-od-id="component-text-fields">
+          <div class="group-head"><div><h3>Text fields</h3><p>filled / outlined；普通、supporting、error、prefix/suffix 与 textarea。</p></div><code>textfield/*</code></div>
+          <div class="specimens column"><div class="subgrid"><div class="sample"><p class="sample-title">基础与 supporting</p><div class="control-row"><md-filled-text-field label="姓名" value="陈一" supporting-text="用于账户显示"></md-filled-text-field><md-outlined-text-field label="邮箱" type="email" value="chen@example.com"></md-outlined-text-field></div></div><div class="sample"><p class="sample-title">错误与多行</p><div class="control-row"><md-outlined-text-field label="用户名" value="material" error error-text="名称已被占用"></md-outlined-text-field><md-filled-text-field type="textarea" rows="3" label="备注" supporting-text="最多 120 字"></md-filled-text-field></div></div></div></div>
+        </section>
+
+        <section class="group" id="selects" data-od-id="component-selects">
+          <div class="group-head"><div><h3>Select</h3><p>filled / outlined 与 select option。</p></div><code>select/*</code></div>
+          <div class="specimens"><md-filled-select label="工作区"><md-select-option value="design" selected><div slot="headline">设计系统</div></md-select-option><md-select-option value="prototype"><div slot="headline">原型</div></md-select-option></md-filled-select><md-outlined-select label="密度"><md-select-option value="comfortable" selected><div slot="headline">舒适</div></md-select-option><md-select-option value="compact"><div slot="headline">紧凑</div></md-select-option></md-outlined-select></div>
+        </section>
+
+        <section class="group" id="selection-controls" data-od-id="component-selection-controls">
+          <div class="group-head"><div><h3>Checkbox · Radio · Switch</h3><p>选中、混合、关闭与 disabled。</p></div><code>checkbox · radio · switch</code></div>
+          <div class="specimens"><label class="control-label"><md-checkbox checked></md-checkbox><span>已选择</span></label><label class="control-label"><md-checkbox indeterminate></md-checkbox><span>部分选择</span></label><label class="control-label"><md-checkbox disabled></md-checkbox><span>不可用</span></label><label class="control-label"><md-radio name="density" checked></md-radio><span>舒适</span></label><label class="control-label"><md-radio name="density"></md-radio><span>紧凑</span></label><label class="control-label"><md-switch selected></md-switch><span>已开启</span></label><label class="control-label"><md-switch disabled></md-switch><span>不可用</span></label></div>
+        </section>
+
+        <section class="group" id="sliders" data-od-id="component-sliders">
+          <div class="group-head"><div><h3>Slider</h3><p>单值、范围、刻度与 disabled。</p></div><code>slider/slider.js</code></div>
+          <div class="specimens column"><div class="sample"><p class="sample-title">单值与刻度</p><md-slider min="0" max="100" value="68" step="10" ticks labeled></md-slider></div><div class="sample"><p class="sample-title">范围与不可用</p><md-slider range min="0" max="100" value-start="24" value-end="76"></md-slider><md-slider disabled value="40"></md-slider></div></div>
+        </section>
+
+        <section class="group" id="tabs" data-od-id="component-tabs">
+          <div class="group-head"><div><h3>Tabs</h3><p>primary / secondary；支持 icon 与滚动容器。</p></div><code>tabs/*</code></div>
+          <div class="specimens column"><div class="sample"><p class="sample-title">Primary</p><md-tabs><md-primary-tab active><md-icon slot="icon">palette</md-icon>样式</md-primary-tab><md-primary-tab><md-icon slot="icon">widgets</md-icon>组件</md-primary-tab><md-primary-tab><md-icon slot="icon">code</md-icon>开发</md-primary-tab></md-tabs></div><div class="sample"><p class="sample-title">Secondary</p><md-tabs><md-secondary-tab active>全部</md-secondary-tab><md-secondary-tab>已收藏</md-secondary-tab><md-secondary-tab>最近使用</md-secondary-tab></md-tabs></div></div>
+        </section>
+
+        <section class="group" id="lists" data-od-id="component-lists">
+          <div class="group-head"><div><h3>Lists · Divider</h3><p>单行、双行、leading/trailing、disabled 与 divider。</p></div><code>list/* · divider/*</code></div>
+          <div class="specimens"><md-list><md-list-item headline="收件箱"><md-icon slot="start">inbox</md-icon><span slot="end">12</span></md-list-item><md-divider inset></md-divider><md-list-item headline="设计系统周报" supporting-text="今天 09:30"><md-icon slot="start">article</md-icon><md-icon slot="end">star</md-icon></md-list-item><md-divider inset></md-divider><md-list-item headline="不可用项目" disabled><md-icon slot="start">block</md-icon></md-list-item></md-list></div>
+        </section>
+
+        <section class="group" id="menus" data-od-id="component-menus">
+          <div class="group-head"><div><h3>Menu</h3><p>anchored menu、menu item 与 sub-menu；点击按钮查看。</p></div><code>menu/*</code></div>
+          <div class="specimens"><div style="position:relative"><md-outlined-button id="menu-anchor">打开菜单<md-icon slot="icon">arrow_drop_down</md-icon></md-outlined-button><md-menu id="demo-menu" has-overflow><md-menu-item><div slot="headline">新建文件</div><md-icon slot="start">note_add</md-icon></md-menu-item><md-menu-item><div slot="headline">复制链接</div><md-icon slot="start">link</md-icon></md-menu-item><md-sub-menu><md-menu-item slot="item"><div slot="headline">导出</div><md-icon slot="end">arrow_right</md-icon></md-menu-item><md-menu slot="menu"><md-menu-item><div slot="headline">导出 PNG</div></md-menu-item><md-menu-item><div slot="headline">导出 PDF</div></md-menu-item></md-menu></md-sub-menu><md-menu-item disabled><div slot="headline">删除</div><md-icon slot="start">delete</md-icon></md-menu-item></md-menu></div></div>
+        </section>
+
+        <section class="group" id="dialogs" data-od-id="component-dialogs">
+          <div class="group-head"><div><h3>Dialog</h3><p>alert dialog、scrim 与 actions。</p></div><code>dialog/dialog.js</code></div>
+          <div class="specimens"><md-filled-button id="dialog-open">打开 Dialog</md-filled-button><md-dialog id="sample-dialog"><div slot="headline">保存更改？</div><div slot="content"><p>这些修改会应用到当前设计系统。</p></div><div slot="actions"><md-text-button id="dialog-cancel">取消</md-text-button><md-filled-button id="dialog-confirm">保存</md-filled-button></div></md-dialog></div>
+        </section>
+
+        <section class="group" id="progress" data-od-id="component-progress">
+          <div class="group-head"><div><h3>Progress</h3><p>linear / circular；determinate 与 indeterminate。</p></div><code>progress/*</code></div>
+          <div class="specimens"><div class="wide"><md-linear-progress value="0.68"></md-linear-progress></div><div class="wide"><md-linear-progress indeterminate></md-linear-progress></div><md-circular-progress value="0.72"></md-circular-progress><md-circular-progress indeterminate></md-circular-progress></div>
+        </section>
+
+        <section class="group" id="fields" data-od-id="component-fields">
+          <div class="group-head"><div><h3>Field primitives</h3><p>filled / outlined 是 text field 与 select 的底层容器，不应误当完整输入控件。</p></div><code>field/*</code></div>
+          <div class="specimens"><div class="sample wide"><p class="sample-title">Filled field foundation</p><md-filled-field label="标签" supporting-text="底层字段容器"></md-filled-field></div><div class="sample wide"><p class="sample-title">Outlined field foundation</p><md-outlined-field label="标签" supporting-text="底层字段容器"></md-outlined-field></div></div>
+        </section>
+
+        <section class="group" id="interaction-foundations" data-od-id="component-interaction-foundations">
+          <div class="group-head"><div><h3>Elevation · Focus ring · Ripple · Icon</h3><p>这些是组件内部可复用的交互与视觉 primitives。</p></div><code>elevation · focus · ripple · icon</code></div>
+          <div class="specimens"><div class="elevation-box">Level 1<md-elevation style="--md-elevation-level:1"></md-elevation></div><div class="elevation-box">Level 3<md-elevation style="--md-elevation-level:3"></md-elevation></div><div class="focus-demo" tabindex="0">键盘聚焦<md-focus-ring></md-focus-ring></div><div class="focus-demo">点击涟漪<md-ripple></md-ripple></div><md-icon style="font-size:40px">auto_awesome</md-icon></div>
+        </section>
+
+        <section class="group" id="labs" data-od-id="component-labs">
+          <div class="group-head"><div><h3>Labs</h3><p>仓库存在但不在 `all.ts` 中；明确标记实验性。</p></div><span class="status">非稳定公开 API</span></div>
+          <div class="specimens"><div class="labs"><div class="lab"><strong>Badge</strong><span>`labs/badge/`</span></div><div class="lab"><strong>Card</strong><span>`labs/card/`</span></div><div class="lab"><strong>Item</strong><span>`labs/item/`</span></div><div class="lab"><strong>Navigation bar</strong><span>`labs/navigationbar/`</span></div><div class="lab"><strong>Navigation drawer</strong><span>`labs/navigationdrawer/`</span></div><div class="lab"><strong>Navigation tab</strong><span>`labs/navigationtab/`</span></div><div class="lab"><strong>Segmented button</strong><span>`labs/segmentedbutton/`</span></div><div class="lab"><strong>Segmented button set</strong><span>`labs/segmentedbuttonset/`</span></div></div></div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <script type="module">
+    import '@material/web/all.js';
+
+    const menu = document.querySelector('#demo-menu');
+    const menuAnchor = document.querySelector('#menu-anchor');
+    menu.anchorElement = menuAnchor;
+    menuAnchor.addEventListener('click', () => { menu.open = !menu.open; });
+
+    const dialog = document.querySelector('#sample-dialog');
+    document.querySelector('#dialog-open').addEventListener('click', () => dialog.show());
+    document.querySelector('#dialog-cancel').addEventListener('click', () => dialog.close());
+    document.querySelector('#dialog-confirm').addEventListener('click', () => dialog.close());
+  </script>
+</body>
+</html>

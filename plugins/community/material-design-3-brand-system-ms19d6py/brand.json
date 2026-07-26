@@ -1,0 +1,206 @@
+{
+  "name": "Material Design",
+  "tagline": "Google’s open-source design system",
+  "description": "Material Design 3 - Google's open-source design system, provides comprehensive guidelines, styles, & components to create user-friendly interfaces.",
+  "sourceUrl": "https://m3.material.io/",
+  "seed": {
+    "controlHeight": 48
+  },
+  "colors": [
+    {
+      "role": "background",
+      "hex": "#fefbff",
+      "oklch": "oklch(0.9915 0.0061 317.8)",
+      "name": "M3 Background",
+      "usage": "官网主画布；实测 --mio-theme-color-background"
+    },
+    {
+      "role": "surface",
+      "hex": "#f8f1f6",
+      "oklch": "oklch(0.9650 0.0099 335.5)",
+      "name": "Surface 1",
+      "usage": "卡片与分层表面；实测 --mio-theme-color-surface-1"
+    },
+    {
+      "role": "foreground",
+      "hex": "#1c1b1d",
+      "oklch": "oklch(0.2241 0.0041 308.3)",
+      "name": "On surface",
+      "usage": "正文与标题；实测 --mio-theme-color-on-background / on-surface"
+    },
+    {
+      "role": "muted",
+      "hex": "#4d4256",
+      "oklch": "oklch(0.3981 0.0359 309.6)",
+      "name": "On surface variant",
+      "usage": "次级文本与导航文字；实测 --mio-theme-color-on-surface-variant"
+    },
+    {
+      "role": "border",
+      "hex": "#e6e1e3",
+      "oklch": "oklch(0.9142 0.0060 350.8)",
+      "name": "Surface 4",
+      "usage": "分隔线与低强调边界；实测 --mio-theme-color-surface-4"
+    },
+    {
+      "role": "accent",
+      "hex": "#6442d6",
+      "oklch": "oklch(0.5081 0.2133 286.7)",
+      "name": "Primary",
+      "usage": "主操作与链接；实测 --mio-theme-color-primary"
+    },
+    {
+      "role": "accent-secondary",
+      "hex": "#9f86ff",
+      "oklch": "oklch(0.6962 0.1728 290.7)",
+      "name": "Primary container",
+      "usage": "强调容器与高亮表面；实测 --mio-theme-color-primary-container"
+    }
+  ],
+  "typography": {
+    "display": {
+      "family": "Google Sans",
+      "fallbacks": [
+        "system-ui",
+        "-apple-system",
+        "Segoe UI",
+        "Helvetica Neue",
+        "Arial",
+        "sans-serif"
+      ],
+      "weights": [
+        400,
+        475,
+        500,
+        700
+      ],
+      "notes": "官网计算样式实测；显示级使用 Google Sans，标题权重常为 475。"
+    },
+    "body": {
+      "family": "Google Sans Text",
+      "fallbacks": [
+        "system-ui",
+        "-apple-system",
+        "Segoe UI",
+        "Helvetica Neue",
+        "Arial",
+        "sans-serif"
+      ],
+      "weights": [
+        400,
+        500,
+        700
+      ],
+      "notes": "官网计算样式实测；正文 16px/24px，导航和标签使用 500。"
+    },
+    "mono": {
+      "family": "Google Sans Mono",
+      "fallbacks": [
+        "ui-monospace",
+        "SFMono-Regular",
+        "Consolas",
+        "Liberation Mono",
+        "Menlo",
+        "monospace"
+      ],
+      "weights": [
+        400,
+        500
+      ],
+      "notes": "官网 token --mio-theme-mono-font-family；代码和代码片段使用。"
+    }
+  },
+  "voice": {
+    "adjectives": [
+      "清晰",
+      "克制",
+      "指导性",
+      "自适应",
+      "富有表现力"
+    ],
+    "tone": "平静、讲解式、面向实践；用简单的现在时主动句帮助人们开始构建，同时允许 M3 Expressive 在颜色、形状和动效中传达情绪。",
+    "messagingPillars": [
+      "Foundations、styles、components 三部分组织方式",
+      "Personal、adaptive、expressive experiences",
+      "Design guidance、specs 与 open-source code",
+      "M3 Expressive：用情绪增强可用性与产品欲望"
+    ],
+    "vocabulary": {
+      "use": [
+        "Get started",
+        "Explore",
+        "Design",
+        "Develop",
+        "Foundations",
+        "Styles",
+        "Components",
+        "adaptive",
+        "expressive",
+        "open-source"
+      ],
+      "avoid": [
+        "Click here",
+        "空泛的营销夸张语",
+        "产品 chrome 中使用 Title Case",
+        "emoji 作为界面图标"
+      ]
+    }
+  },
+  "imagery": {
+    "style": "以真实组件界面、状态和主题应用为主；图像必须能回答组件如何组合、状态如何变化或主题如何应用。",
+    "subjects": [
+      "Material Web 公开组件与状态",
+      "动态主题在真实产品中的应用"
+    ],
+    "treatment": "优先使用官方组件 hero、真实组件状态和主题示例；每张图都标明所证明的组件、状态或主题规则。",
+    "avoid": [
+      "只有颜色和形状、却不能指导界面设计的网页背景图",
+      "把营销封面或 OG 图片当作组件参考",
+      "图标、头像、精灵图和跟踪像素作为主图"
+    ],
+    "samples": [
+      {
+        "file": "imagery/material-web-components.gif",
+        "kind": "product",
+        "caption": "Material Web 官方组件集合与交互状态"
+      },
+      {
+        "file": "imagery/material-theming.webp",
+        "kind": "product",
+        "caption": "动态主题在多种真实产品界面中的应用"
+      },
+      {
+        "file": "imagery/component-buttons.webp",
+        "kind": "product",
+        "caption": "Buttons：5 类按钮的层级与状态参考"
+      },
+      {
+        "file": "imagery/component-menu.webp",
+        "kind": "product",
+        "caption": "Menu：锚定、层级、图标与选中状态"
+      },
+      {
+        "file": "imagery/component-text-fields.webp",
+        "kind": "product",
+        "caption": "Text fields：filled、outlined、输入与错误状态"
+      },
+      {
+        "file": "imagery/component-tabs.webp",
+        "kind": "product",
+        "caption": "Tabs：primary 与 secondary 的导航层级（Material Web docs/components/images/tabs/hero.webp）"
+      }
+    ]
+  },
+  "layout": {
+    "radius": "8px default；4px–28px token scale，满圆 9999px",
+    "borderWeight": "1px",
+    "spacing": "8px baseline grid，允许 4px half-step",
+    "postureRules": [
+      "浅色画布使用 #FEFBFF，surface-1 至 surface-4 逐级建立层次；优先 tonal surface，少用阴影。",
+      "导航与内容按 compact <600px、medium 600–960px、expanded >960px 自适应；大屏内容保持约 1200px 上限。",
+      "标题使用 Google Sans（官网实测 display 96px/72px/57px，常用权重 475），正文使用 Google Sans Text 16px/24px。",
+      "交互元素至少 48px 触控区域；官网实测搜索按钮 56×56px、主导航项约 80×60px。",
+      "界面文案使用 sentence case、主动动词与短句；把表现力放在颜色、形状与动效而不是口号上。"
+    ]
+  }
+}
