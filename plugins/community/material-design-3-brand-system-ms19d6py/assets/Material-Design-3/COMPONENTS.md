@@ -54,4 +54,4 @@ Material 3 网站还描述了更多模式和组件；不要把它们虚构成 `@
 1. 原型可使用 `@material/web/all.js`；生产只导入实际使用的独立组件。
 2. 组件颜色、字体与形状通过 `--md-sys-*` token 绑定，不在组件内部散落 raw hex。
 3. 每个可交互示例至少展示 default、hover/focus 可达、selected/active、disabled 或 error 中适用的状态。
-4. 完整性以本文件、`ui_kits/material-web/index.html` 和 `references/material-web/all.ts` 为准；本包不提供额外的 React 包装器。
+4. 完整性以本文件、`ui_kits/material-web/index.html` 和 `../../references/material-web/all.ts` 为准；本包不提供额外的 React 包装器。

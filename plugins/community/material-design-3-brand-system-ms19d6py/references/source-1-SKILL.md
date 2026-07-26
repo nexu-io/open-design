@@ -28,7 +28,7 @@ user-invocable: true
 2. 读取 `assets/Material-Design-3/COMPONENTS.md`；需要核对公开导出时，再读 `references/material-web/all.ts`。不要把 Labs 当成稳定 API。
 3. 在 HTML 的第一个 `<style>` 之前载入 `assets/Material-Design-3/colors_and_type.css`，按需再载入 `md-components.css`。
 4. 主题色引用 `var(--md-sys-color-*)`，字号引用 `var(--md-sys-typescale-*)`，形状引用 `var(--md-sys-shape-corner-*)`；不要新增未注册的颜色字面量。
-5. 需要官方 Web Components 时，从 `ui_kits/material-web/index.html` 复制固定版本 import map 和单个组件用法。生产代码按家族导入实际使用的元素，不要无条件导入整个 `all.js`。
+5. 需要官方 Web Components 时，从 `assets/Material-Design-3/ui_kits/material-web/index.html` 复制固定版本 import map 和单个组件用法。生产代码按家族导入实际使用的元素，不要无条件导入整个 `all.js`。
 6. 只在图片能回答具体组件、状态或主题问题时使用 `imagery/`；不要把营销封面、网页背景图、头像或图标当作视觉样本。
 7. 显示文字用 Google Sans，正文用 Google Sans Text，代码用 Google Sans Mono；本包不再分发 Google 专有字体文件，必须保留声明的系统 fallback。
 8. 在 compact `<600px`、medium `600–960px`、expanded `>960px` 三段姿态下重新组织导航与内容；不能把桌面布局硬挤到手机。
