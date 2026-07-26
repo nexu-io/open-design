@@ -251,6 +251,95 @@ test('[P0] @critical home hero submit creates a project and lands on a usable wo
   await expect(page.getByTestId('file-workspace')).toBeVisible();
 });
 
+test('[P1] hero-created projects clear their pending prompt and never re-seed a later entry', async ({ page }) => {
+  // Regression guard for #2878. The hero writes `pendingPrompt` onto the new
+  // project, and `ProjectView` is the only place that clears it (on mount,
+  // via `onClearPendingPrompt`). This locks the cleared-state invariant so a
+  // refactor that moves or drops that clear cannot silently reintroduce a
+  // prompt carrying over into a reload, the Home hero, or a second project.
+  const ALPHA = 'REGRESSION-ALPHA first hero prompt.';
+  const BETA = 'REGRESSION-BETA second hero prompt.';
+  // Typed but never sent, so the assertions below are not vacuous: the hero
+  // path auto-sends, which leaves the composer empty on its own. Without a
+  // real draft in it there would be nothing available to leak, and every
+  // "composer is empty" assertion would pass for the wrong reason.
+  const GAMMA = 'REGRESSION-GAMMA unsent draft.';
+
+  await page.route('**/api/runs', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({
+      status: 202,
+      contentType: 'application/json',
+      body: '{"runId":"entry-pending-prompt-cleared"}',
+    });
+  });
+  await page.route('**/api/runs/*/events', async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' },
+      body: ['event: end', 'data: {"code":0,"status":"succeeded"}', '', ''].join('\n'),
+    });
+  });
+
+  await gotoEntryHome(page);
+
+  // Arm both waiters before submitting: the clearing PATCH races the redirect.
+  const createRequest = page.waitForRequest(isCreateProjectRequest);
+  const clearRequest = page.waitForRequest(isClearPendingPromptRequest);
+  await page.getByTestId('home-hero-input').fill(ALPHA);
+  await page.getByTestId('home-hero-submit').click();
+
+  expect((await createRequest).postDataJSON()).toMatchObject({ pendingPrompt: ALPHA });
+
+  await expect(page).toHaveURL(/\/projects\//, { timeout: 15_000 });
+  const projectAUrl = page.url();
+  const composer = page.getByTestId('chat-composer-input');
+  await expect(composer).toBeVisible();
+
+  // Mount clears the persisted prompt rather than leaving it on the project.
+  expect((await clearRequest).postDataJSON()).toMatchObject({ pendingPrompt: null });
+
+  // Auto-send consumed the prompt, so it must not also sit in the composer.
+  await expect(composer).toHaveText('');
+
+  // Reloading re-reads the project from the daemon: proves the clear was
+  // persisted, not just applied to in-memory state.
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expect(composer).toBeVisible({ timeout: T.long });
+  await expect(composer).toHaveText('');
+
+  await composer.click();
+  await composer.fill(GAMMA);
+  await expect(composer).toHaveText(GAMMA);
+
+  // Leaving the project goes through the pinned entry tab, not a back button:
+  // #5517 gave ChatPane's top-left slot to the pane-collapse control and the
+  // `AppChromeHeader` that owned "Back to projects" is no longer mounted, so
+  // that locator only resolves inside the closed avatar popover. Same intent
+  // (leave the project through real chrome), current carrier — this mirrors
+  // `leaveProjectForEntry` in `real-daemon-run.test.ts`.
+  const pinnedEntryTab = page.locator('.workspace-tab.is-pinned');
+  await expect(pinnedEntryTab).toBeVisible();
+  await pinnedEntryTab.locator('.workspace-tab__main').click();
+  const hero = page.getByTestId('home-hero-input');
+  await expect(hero).toBeVisible();
+  await expect(hero).toHaveText('');
+
+  const secondCreateRequest = page.waitForRequest(isCreateProjectRequest);
+  await hero.fill(BETA);
+  await page.getByTestId('home-hero-submit').click();
+  const secondBody = (await secondCreateRequest).postDataJSON() as { pendingPrompt?: string };
+  expect(secondBody.pendingPrompt).toBe(BETA);
+
+  await expect(page).toHaveURL(/\/projects\//, { timeout: 15_000 });
+  await expect.poll(() => page.url()).not.toBe(projectAUrl);
+  await expect(composer).toBeVisible();
+  await expect(composer).toHaveText('');
+});
+
 test('[P1] onboarding lands on the home composer without a recommended-start strip', async ({ page }) => {
   const createdBodies: Array<Record<string, unknown>> = [];
   const runBodies: Array<Record<string, unknown>> = [];
@@ -1669,6 +1758,13 @@ function isCreateProjectRequest(request: Request): boolean {
   return url.pathname === '/api/projects' && request.method() === 'POST';
 }
 
+// The PATCH `ProjectView` issues on mount to wipe the seeded `pendingPrompt`.
+function isClearPendingPromptRequest(request: Request): boolean {
+  const url = new URL(request.url());
+  if (request.method() !== 'PATCH' || !url.pathname.startsWith('/api/projects/')) return false;
+  const body = request.postDataJSON() as { pendingPrompt?: string | null } | null;
+  return Boolean(body) && 'pendingPrompt' in (body as object);
+}
 
 function skillSummary(
   id: string,
