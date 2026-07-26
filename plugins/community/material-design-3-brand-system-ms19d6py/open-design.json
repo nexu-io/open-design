@@ -1,0 +1,22 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "material-design-3-brand-system-ms19d6py",
+  "title": "Material Design 3 Brand System",
+  "version": "0.1.0",
+  "description": "--- name: material-design-3-brand-system description: 使用从 m3.material.io 实测增补的 Material Design 3 设计系统，构建清晰、可适配、富有表现力的 HTML 界面与原型。 user-invocable: true ---",
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}
