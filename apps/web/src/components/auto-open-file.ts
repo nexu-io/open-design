@@ -102,24 +102,24 @@ function isHtmlPreviewFile(file: CandidateFile): boolean {
   return file.kind === 'html' || /\.html?$/i.test(path);
 }
 
-// Markdown documents (plan.md, report.md, DESIGN.md, …) render inline in the
-// viewer, so a turn that produces one should surface it just like an HTML
-// page. The daemon maps `.md`/`.txt` to the same `kind: 'text'`, so the
-// extension — not `kind` — is the only reliable discriminator: we open
-// markdown but deliberately leave plain `.txt` alone.
 function isMarkdownPreviewFile(file: CandidateFile): boolean {
   const path = file.path ?? file.name;
   return /\.(md|markdown)$/i.test(path);
 }
 
+function isImagePreviewFile(file: CandidateFile): boolean {
+  return file.kind === 'image';
+}
+
 // Auto-open priority for a turn's produced files. Higher wins. HTML is the
 // primary visual deliverable, so when a turn writes both an HTML page and a
-// markdown note (e.g. index.html + README.md) the page takes focus; markdown
-// is the next-best previewable artifact; everything else (decks, images, raw
-// text) has no in-place reshape preview worth stealing focus for and is left
+// markdown note (e.g. index.html + README.md) the page takes focus; images
+// and markdown are the next-best previewable artifacts; decks and raw text
+// have no in-place reshape preview worth stealing focus for and are left
 // for the user to open from the produced-files chips.
 function autoOpenPreviewRank(file: CandidateFile): number {
   if (isHtmlPreviewFile(file)) return 2;
+  if (isImagePreviewFile(file)) return 1;
   if (isMarkdownPreviewFile(file)) return 1;
   return 0;
 }

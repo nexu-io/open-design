@@ -199,6 +199,32 @@ describe('selectAutoOpenProducedArtifact', () => {
     expect(result).toBeNull();
   });
 
+  it('auto-opens a produced image file when no html or markdown exists', () => {
+    const result = selectAutoOpenProducedArtifact([
+      { name: 'screenshot.png', path: 'screenshot.png', kind: 'image', mtime: 30 },
+    ]);
+
+    expect(result).toBe('screenshot.png');
+  });
+
+  it('prefers html over a produced image when both exist', () => {
+    const result = selectAutoOpenProducedArtifact([
+      { name: 'index.html', path: 'index.html', kind: 'html', mtime: 10 },
+      { name: 'screenshot.png', path: 'screenshot.png', kind: 'image', mtime: 30 },
+    ]);
+
+    expect(result).toBe('index.html');
+  });
+
+  it('prefers the newest image when multiple images are produced', () => {
+    const result = selectAutoOpenProducedArtifact([
+      { name: 'chart.png', path: 'chart.png', kind: 'image', mtime: 10 },
+      { name: 'screenshot.png', path: 'screenshot.png', kind: 'image', mtime: 30 },
+    ]);
+
+    expect(result).toBe('screenshot.png');
+  });
+
   describe('preferSiteEntry (website-clone turns)', () => {
     it('opens the site entry even when subpages were written after it', () => {
       // A clone run writes the entry first and keeps landing subpages and
