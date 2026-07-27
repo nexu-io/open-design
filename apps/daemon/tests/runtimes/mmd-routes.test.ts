@@ -152,7 +152,7 @@ test('mmd route loader uses HOME default path and keeps Claude fallback models',
       'sonnet',
     ]);
     assert.ok(ids?.includes('opus'));
-    assert.ok(ids?.includes('claude-sonnet-4-5'));
+    assert.ok(ids?.includes('claude-sonnet-5'));
     assert.equal(JSON.stringify(models).includes('secret'), false);
   } finally {
     rmSync(dir, { recursive: true, force: true });

@@ -8,15 +8,18 @@ import type { RuntimeAgentDef } from '../types.js';
 // keep this list in step with the CLI's `--model` help text when Anthropic
 // ships a new family (issue: Opus 5 missing from the picker).
 const CLAUDE_FALLBACK_MODELS = [
+  // Alias order is load-bearing: mmd route ids are spliced in after
+  // `default`, and tests/runtimes/mmd-routes.test.ts pins `sonnet` as the
+  // first alias that follows them.
   DEFAULT_MODEL_OPTION,
-  { id: 'fable', label: 'Fable (alias)' },
-  { id: 'opus', label: 'Opus (alias)' },
   { id: 'sonnet', label: 'Sonnet (alias)' },
+  { id: 'opus', label: 'Opus (alias)' },
   { id: 'haiku', label: 'Haiku (alias)' },
-  { id: 'claude-fable-5', label: 'claude-fable-5' },
+  { id: 'fable', label: 'Fable (alias)' },
   { id: 'claude-opus-5', label: 'claude-opus-5' },
   { id: 'claude-sonnet-5', label: 'claude-sonnet-5' },
   { id: 'claude-haiku-4-5', label: 'claude-haiku-4-5' },
+  { id: 'claude-fable-5', label: 'claude-fable-5' },
   { id: 'claude-opus-4-8', label: 'claude-opus-4-8' },
 ];
 
