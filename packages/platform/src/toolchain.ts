@@ -3,7 +3,7 @@
  *
  * User-level toolchain bin discovery. Single source of truth for the CLI
  * install locations a GUI-launched daemon must search even under a stripped
- * PATH — npm/pnpm/bun/cargo/deno/go/pyenv prefixes, version-manager shims
+ * PATH — npm/pnpm/bun/cargo/deno/go/pyenv/Nix prefixes, version-manager shims
  * (asdf, volta, mise, nvm, fnm), and per-version Node install roots. Pure path
  * assembly plus best-effort directory probing; no process, command, or proxy
  * concerns.
@@ -16,8 +16,9 @@ export type WellKnownUserToolchainOptions = {
   // Override homedir() so callers in sandboxed tests or namespaced launches
   // can substitute a fixture directory. Falls back to os.homedir().
   home?: string;
-  // Include /opt/homebrew/bin and /usr/local/bin in the result. Defaults to
-  // true on POSIX so GUI-launched processes (which inherit a minimal PATH
+  // Include /opt/homebrew/bin, /usr/local/bin, and
+  // /run/current-system/sw/bin in the result. Defaults to true on POSIX so
+  // GUI-launched processes (which inherit a minimal PATH
   // from launchd / desktop launchers) still see Homebrew-installed CLIs;
   // defaults to false on Windows because those paths are POSIX-only.
   includeSystemBins?: boolean;
@@ -125,6 +126,7 @@ export function wellKnownUserToolchainBins(
     join(home, ".asdf", "shims"),
     join(home, "Library", "pnpm"),
     join(home, ".cargo", "bin"),
+    join(home, ".nix-profile", "bin"),
     // Common user-level npm prefixes for sudo-free global installs.
     // ~/.npm-global is the dominant non-canonical convention shipped
     // in most third-party "fix npm EACCES" tutorials, and
@@ -168,7 +170,7 @@ export function wellKnownUserToolchainBins(
   }
 
   if (includeSystemBins) {
-    dirs.push("/opt/homebrew/bin", "/usr/local/bin");
+    dirs.push("/opt/homebrew/bin", "/usr/local/bin", "/run/current-system/sw/bin");
   }
   // Per-version Node toolchains: scan the install root and surface every
   // version directory's bin folder. Best-effort — missing roots simply

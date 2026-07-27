@@ -799,6 +799,7 @@ describe("wellKnownUserToolchainBins", () => {
       expect(dirs).toContain(join(home, ".asdf", "shims"));
       expect(dirs).toContain(join(home, "Library", "pnpm"));
       expect(dirs).toContain(join(home, ".cargo", "bin"));
+      expect(dirs).toContain(join(home, ".nix-profile", "bin"));
     } finally {
       rmSync(home, { recursive: true, force: true });
     }
@@ -1122,23 +1123,25 @@ describe("wellKnownUserToolchainBins", () => {
     }
   });
 
-  it("includes /opt/homebrew/bin and /usr/local/bin when includeSystemBins is true", () => {
+  it("includes Homebrew, local, and Nix system bins when includeSystemBins is true", () => {
     const home = mkdtempSync(join(tmpdir(), "wkutb-sys-"));
     try {
       const dirs = wellKnownUserToolchainBins({ home, env: {}, includeSystemBins: true });
       expect(dirs).toContain("/opt/homebrew/bin");
       expect(dirs).toContain("/usr/local/bin");
+      expect(dirs).toContain("/run/current-system/sw/bin");
     } finally {
       rmSync(home, { recursive: true, force: true });
     }
   });
 
-  it("omits /opt/homebrew/bin and /usr/local/bin when includeSystemBins is false", () => {
+  it("omits Homebrew, local, and Nix system bins when includeSystemBins is false", () => {
     const home = mkdtempSync(join(tmpdir(), "wkutb-nosys-"));
     try {
       const dirs = wellKnownUserToolchainBins({ home, env: {}, includeSystemBins: false });
       expect(dirs).not.toContain("/opt/homebrew/bin");
       expect(dirs).not.toContain("/usr/local/bin");
+      expect(dirs).not.toContain("/run/current-system/sw/bin");
     } finally {
       rmSync(home, { recursive: true, force: true });
     }
