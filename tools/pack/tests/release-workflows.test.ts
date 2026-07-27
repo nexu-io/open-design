@@ -35,7 +35,7 @@ describe("release workflows", () => {
       readFile(new URL("../../../tools/release/scripts/prepare-platform-assets.ps1", import.meta.url), "utf8"),
       readFile(new URL("../../../tools/release/src/storage/publish-platform.ts", import.meta.url), "utf8"),
       readFile(new URL("../src/win/lifecycle.ts", import.meta.url), "utf8"),
-      readFile(new URL("../../../apps/desktop/src/main/updater.ts", import.meta.url), "utf8"),
+      readFile(new URL("../../../apps/desktop/src/main/updater/payload.ts", import.meta.url), "utf8"),
       readFile(new URL("../src/mac/build.ts", import.meta.url), "utf8"),
       readFile(new URL("../src/mac/fs.ts", import.meta.url), "utf8"),
       readFile(new URL("../../../scripts/install-unsafe-dmg.sh", import.meta.url), "utf8"),
