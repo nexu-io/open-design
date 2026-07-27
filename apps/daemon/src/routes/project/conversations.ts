@@ -133,6 +133,14 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
     res.json({ conversation: conv });
   });
 
+  app.get('/api/projects/:id/conversations/:cid', (req, res) => {
+    const conv = getConversation(db, req.params.cid);
+    if (!conv || conv.projectId !== req.params.id) {
+      return res.status(404).json({ error: 'conversation not found' });
+    }
+    res.json({ conversation: conv });
+  });
+
   app.patch('/api/projects/:id/conversations/:cid', (req, res) => {
     const conv = getConversation(db, req.params.cid);
     if (!conv || conv.projectId !== req.params.id) {
