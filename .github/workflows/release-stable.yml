@@ -106,7 +106,7 @@ on:
         description: "Windows x64 installer download URL."
         value: ${{ jobs.publish.outputs.win_url }}
       linux_url:
-        description: "Linux x64 AppImage download URL (empty if linux disabled)."
+        description: "Linux x64 AppImage download URL."
         value: ${{ jobs.publish.outputs.linux_url }}
 
 permissions:
@@ -927,10 +927,7 @@ jobs:
   build_linux:
     name: Build release linux x64
     needs: [metadata, verify]
-    # Linux AppImage packaging is temporarily excluded from stable releases.
-    # Keep the job definition in place so the Linux lane can be re-enabled once
-    # the containerized pnpm bootstrap is fixed and reviewed.
-    if: ${{ needs.metadata.outputs.run_prepublish_jobs == 'true' && vars.ENABLE_STABLE_LINUX == 'true' }}
+    if: ${{ needs.metadata.outputs.run_prepublish_jobs == 'true' }}
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
@@ -992,6 +989,7 @@ jobs:
         env:
           OD_PACKAGED_E2E_LINUX_APPIMAGE: "1"
           OD_PACKAGED_E2E_NAMESPACE: ${{ needs.metadata.outputs.linux_namespace }}
+          OD_PACKAGED_NAMESPACE_BASE_ROOT: ${{ runner.temp }}/tools-pack/runtime/linux/namespaces
           OD_PACKAGED_E2E_SCREENSHOT_PATH: ${{ runner.temp }}/release-report/linux/screenshots/open-design-linux-smoke.png
           OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
         run: |
@@ -1118,7 +1116,7 @@ jobs:
         needs.build_mac.result == 'success' &&
         needs.build_mac_intel.result == 'success' &&
         needs.build_win.result == 'success' &&
-        (needs.build_linux.result == 'success' || needs.build_linux.result == 'skipped')
+        needs.build_linux.result == 'success'
       }}
     runs-on: ubuntu-latest
     outputs:
@@ -1135,7 +1133,7 @@ jobs:
       GITHUB_SHA: ${{ needs.metadata.outputs.commit }}
       BASE_VERSION: ${{ needs.metadata.outputs.base_version }}
       BRANCH_NAME: ${{ needs.metadata.outputs.branch }}
-      ENABLE_LINUX: ${{ needs.build_linux.result == 'success' }}
+      ENABLE_LINUX: "true"
       ENABLE_MAC: "true"
       ENABLE_MAC_INTEL: "true"
       ENABLE_WIN: "true"
@@ -1188,7 +1186,6 @@ jobs:
           path: ${{ runner.temp }}/release-platform-manifests
 
       - name: Download linux publish manifest
-        if: ${{ needs.build_linux.result == 'success' }}
         uses: actions/download-artifact@v8
         with:
           name: open-design-release-linux-x64-publish-manifest
@@ -1226,14 +1223,12 @@ jobs:
           path: ${{ runner.temp }}/release-assets/win
 
       - name: Download linux release bundle
-        if: ${{ needs.build_linux.result == 'success' }}
         uses: actions/download-artifact@v8
         with:
           name: open-design-release-linux-release-assets
           path: ${{ runner.temp }}/release-assets/linux
 
       - name: Download linux e2e spec report
-        if: ${{ needs.build_linux.result == 'success' }}
         uses: actions/download-artifact@v8
         with:
           name: open-design-release-linux-e2e-report
@@ -1253,7 +1248,6 @@ jobs:
 
       - name: Prepare stable GitHub Release asset plan
         env:
-          ENABLE_LINUX_X64: ${{ needs.build_linux.result == 'success' }}
           RELEASE_CHANNEL: ${{ needs.metadata.outputs.channel }}
           RELEASE_GITHUB_ASSETS_DIR: ${{ runner.temp }}/github-release-assets
           RELEASE_GITHUB_ASSETS_SOURCE_DIR: ${{ runner.temp }}/release-assets
@@ -1312,7 +1306,7 @@ jobs:
       - name: Prepare release metadata
         env:
           BASE_VERSION: ${{ needs.metadata.outputs.base_version }}
-          ENABLE_LINUX_X64: ${{ needs.build_linux.result == 'success' }}
+          ENABLE_LINUX_X64: "true"
           ENABLE_MAC_ARM64: "true"
           ENABLE_MAC_X64: "true"
           ENABLE_WIN_X64: "true"
@@ -1360,7 +1354,7 @@ jobs:
 
       - name: Verify release metadata
         env:
-          ENABLE_LINUX_X64: ${{ needs.build_linux.result == 'success' }}
+          ENABLE_LINUX_X64: "true"
           ENABLE_MAC_ARM64: "true"
           ENABLE_MAC_X64: "true"
           ENABLE_WIN_X64: "true"

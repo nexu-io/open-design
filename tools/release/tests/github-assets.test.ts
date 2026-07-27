@@ -36,9 +36,11 @@ describe("stable GitHub Release asset plan", () => {
         `open-design-${version}-mac-x64.dmg.sha256`,
         `open-design-${version}-win-x64-setup.exe`,
         `open-design-${version}-win-x64-setup.exe.sha256`,
+        `open-design-${version}-linux-x64.AppImage`,
+        `open-design-${version}-linux-x64.AppImage.sha256`,
       ];
       for (const name of allowed) {
-        await writeAsset(source, name.includes("win") ? "win" : name.includes("x64") ? "mac-intel" : "mac", name);
+        await writeAsset(source, name.includes("linux") ? "linux" : name.includes("win") ? "win" : name.includes("x64") ? "mac-intel" : "mac", name);
       }
       for (const name of [
         `open-design-${version}-mac-arm64-payload.zip`,

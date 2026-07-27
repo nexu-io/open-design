@@ -38,9 +38,7 @@ const execFileAsync = promisify(execFile);
 const PRODUCT_NAME = "Open Design";
 const APP_IMAGE_PRODUCT_NAME = "Open-Design";
 const DESKTOP_LOG_ECHO_ENV = "OD_DESKTOP_LOG_ECHO";
-// The containerized build sets this to the standalone pnpm binary fetched by
-// buildDockerArgs; runProductionInstall reads it to avoid invoking `npm` inside
-// `electronuserland/builder:base`, which strips npm/npx/corepack.
+// Optional override for environments that cannot run npm directly.
 const PRODUCTION_INSTALL_PNPM_BIN_ENV = "OD_TOOLS_PACK_PNPM_BIN";
 const CONTAINER_PNPM_PATH = "/tmp/pnpm";
 const CONTAINER_PNPM_HOME = "/tmp/pnpm-home";
@@ -174,7 +172,8 @@ export function buildDockerArgs(
     `mv ${CONTAINER_PNPM_PATH}.tmp ${CONTAINER_PNPM_PATH} && ` +
     `chmod +x ${CONTAINER_PNPM_PATH} && ` +
     `PNPM_HOME=${CONTAINER_PNPM_HOME} PATH=${CONTAINER_PNPM_HOME}:$PATH ${CONTAINER_PNPM_PATH} env use --global ${CONTAINER_NODE_VERSION} && ` +
-    `export PNPM_HOME=${CONTAINER_PNPM_HOME} PATH=${CONTAINER_PNPM_HOME}:$PATH && ` +
+    `export PNPM_HOME=${CONTAINER_PNPM_HOME} PATH=${CONTAINER_PNPM_HOME}/nodejs/${CONTAINER_NODE_VERSION}/bin:${CONTAINER_PNPM_HOME}:$PATH && ` +
+    `ln -sf ${CONTAINER_PNPM_PATH} ${CONTAINER_PNPM_HOME}/pnpm && ` +
     `command -v node >/dev/null`;
   const pnpmCmd = CONTAINER_PNPM_PATH;
   const innerArgs = [
@@ -212,11 +211,13 @@ export function buildDockerArgs(
     "-e",
     "HOME=/home/builder",
     "-e",
+    "CI=true",
+    "-e",
     "ELECTRON_CACHE=/home/builder/.cache/electron",
     "-e",
     "ELECTRON_BUILDER_CACHE=/home/builder/.cache/electron-builder",
     "-e",
-    `${PRODUCTION_INSTALL_PNPM_BIN_ENV}=${CONTAINER_PNPM_PATH}`,
+    `npm_execpath=${CONTAINER_PNPM_PATH}`,
   ];
   if (config.telemetryRelayUrl != null) {
     dockerArgs.push("-e", `OPEN_DESIGN_TELEMETRY_RELAY_URL=${config.telemetryRelayUrl}`);

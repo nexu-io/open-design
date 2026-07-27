@@ -1330,6 +1330,7 @@ export type SplashStageSurface = {
   isDestroyed(): boolean;
   webContents: {
     executeJavaScript(code: string, userGesture?: boolean): Promise<unknown>;
+    isDestroyed(): boolean;
     once(event: "did-finish-load", listener: () => void): void;
   };
 };
@@ -1341,12 +1342,17 @@ type SplashStageState = { ready: boolean; pending: SplashBootStage | null };
 const splashStageState = new WeakMap<SplashStageSurface, SplashStageState>();
 
 function applySplashStage(splash: SplashStageSurface, stage: SplashBootStage): void {
-  void splash.webContents
-    .executeJavaScript(
-      `window.__odSplashSetStage && window.__odSplashSetStage(${JSON.stringify(splashStagePayload(stage))});`,
-      true,
-    )
-    .catch(() => undefined);
+  if (splash.isDestroyed() || splash.webContents.isDestroyed()) return;
+  try {
+    void splash.webContents
+      .executeJavaScript(
+        `window.__odSplashSetStage && window.__odSplashSetStage(${JSON.stringify(splashStagePayload(stage))});`,
+        true,
+      )
+      .catch(() => undefined);
+  } catch (error) {
+    if (!(error instanceof Error) || error.message !== "Object has been destroyed") throw error;
+  }
 }
 
 /**
