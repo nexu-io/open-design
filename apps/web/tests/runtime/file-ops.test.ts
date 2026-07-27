@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { countFileOps, deriveFileOps } from '../../src/runtime/file-ops';
+import {
+  countFileOps,
+  countUniqueArtifactFiles,
+  deriveFileOps,
+} from '../../src/runtime/file-ops';
 import type { AgentEvent } from '../../src/types';
 
 type ToolUse = Extract<AgentEvent, { kind: 'tool_use' }>;
@@ -178,6 +182,28 @@ describe('deriveFileOps', () => {
     ];
     const [row] = deriveFileOps(events);
     expect(row?.path).toBe('file.ts');
+  });
+});
+
+describe('countUniqueArtifactFiles', () => {
+  it('counts one bucket per file even when write/edit operations repeat', () => {
+    const events: AgentEvent[] = [
+      use('Write', { file_path: '/tmp/qa-sandbox.md', content: 'v1' }, 't1'),
+      ok('t1'),
+      use('Write', { file_path: '/tmp/qa-sandbox.md', content: 'v2' }, 't2'),
+      ok('t2'),
+      use('Edit', { file_path: '/tmp/qa-sandbox.md', old_string: 'v2', new_string: 'v3' }, 't3'),
+      ok('t3'),
+      use('Write', { file_path: '/tmp/qa-disclosure-output-1.txt', content: '1' }, 't4'),
+      ok('t4'),
+      use('Write', { file_path: '/tmp/qa-disclosure-output-2.txt', content: '2' }, 't5'),
+      ok('t5'),
+    ];
+    const rows = deriveFileOps(events);
+    expect(rows).toHaveLength(3);
+    expect(countFileOps(rows).write).toBe(4);
+    expect(countFileOps(rows).edit).toBe(1);
+    expect(countUniqueArtifactFiles(rows)).toEqual({ write: 2, edit: 1 });
   });
 });
 

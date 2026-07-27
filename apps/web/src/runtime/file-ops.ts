@@ -150,6 +150,29 @@ export function hasFileMutationToolUse(events: AgentEvent[] | undefined): boolea
 
 export type FileOpCounts = Record<FileOpKind, number>;
 
+export type ArtifactOpKind = Extract<FileOpKind, 'write' | 'edit'>;
+
+/** Delivered-file category for one aggregated path (edit wins over write). */
+export function artifactOpKindForEntry(entry: FileOpEntry): ArtifactOpKind | null {
+  if (entry.ops.includes('edit')) return 'edit';
+  if (entry.ops.includes('write')) return 'write';
+  return null;
+}
+
+/** Unique produced-file counts for disclosure headers (one file, one bucket). */
+export function countUniqueArtifactFiles(
+  entries: FileOpEntry[],
+): Pick<FileOpCounts, 'write' | 'edit'> {
+  let write = 0;
+  let edit = 0;
+  for (const entry of entries) {
+    const kind = artifactOpKindForEntry(entry);
+    if (kind === 'edit') edit += 1;
+    else if (kind === 'write') write += 1;
+  }
+  return { write, edit };
+}
+
 /** Total tool_use count per op family across `entries`. */
 export function countFileOps(entries: FileOpEntry[]): FileOpCounts {
   const counts: FileOpCounts = { read: 0, write: 0, edit: 0, delete: 0 };
