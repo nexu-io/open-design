@@ -28,6 +28,17 @@ import type { RuntimeAgentDef } from '../types.js';
 //   $ agy --model totally-bogus-model-xyz -p "hi"
 //   Error: invalid model selection … is not recognized as a known model
 
+export const ANTIGRAVITY_LEGACY_MODEL_ALIASES: Record<string, string> = {
+  'Gemini 3.1 Pro (High)': 'gemini-3.1-pro-high',
+  'Gemini 3.1 Pro (Low)': 'gemini-3.1-pro-low',
+  'Gemini 3.5 Flash (High)': 'gemini-3.5-flash-high',
+  'Gemini 3.5 Flash (Medium)': 'gemini-3.5-flash-medium',
+  'Gemini 3.5 Flash (Low)': 'gemini-3.5-flash-low',
+  'Claude Sonnet 4.6 (Thinking)': 'claude-sonnet-4-6',
+  'Claude Opus 4.6 (Thinking)': 'claude-opus-4-6-thinking',
+  'GPT-OSS 120B (Medium)': 'gpt-oss-120b-medium',
+};
+
 export const antigravityAgentDef = {
   id: 'antigravity',
   name: 'Antigravity',
@@ -45,6 +56,13 @@ export const antigravityAgentDef = {
   // The ids below are the slugs `agy models` printed on 2026-07-27. They
   // will drift; `--model` also accepts the display-label form, so a stale
   // entry here is a missing option rather than a broken spawn.
+  // Selections persisted by the pre-v1.1.7 adapter were agy's display
+  // labels, because that is what the settings.json mechanism wrote. The
+  // picker now offers slugs, so without this map a user who had pinned a
+  // model would fail `isKnownModel` and get `invalid_model_id` on their
+  // next run until they re-picked. agy itself accepts either form; this
+  // keeps Open Design's own validation in step.
+  legacyModelAliases: ANTIGRAVITY_LEGACY_MODEL_ALIASES,
   fallbackModels: [
     DEFAULT_MODEL_OPTION,
     { id: 'gemini-3.6-flash-high', label: 'gemini-3.6-flash-high' },
@@ -118,7 +136,11 @@ export const antigravityAgentDef = {
       args.push('--log-file', runtimeContext.agentLogFilePath);
     }
     if (options.model && options.model !== DEFAULT_MODEL_OPTION.id) {
-      args.push('--model', options.model);
+      // Canonicalise a label persisted by the pre-v1.1.7 adapter so argv
+      // matches what the picker shows. agy accepts either form, so this
+      // is for consistency in logs and diagnostics rather than
+      // correctness.
+      args.push('--model', ANTIGRAVITY_LEGACY_MODEL_ALIASES[options.model] ?? options.model);
     }
     args.push('-p', prompt);
     return args;

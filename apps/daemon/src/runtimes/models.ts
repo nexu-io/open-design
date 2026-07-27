@@ -59,6 +59,16 @@ function findFallbackModel(
   return def.fallbackModels.find((m) => m.id === modelId) ?? null;
 }
 
+// Resolve an id the adapter used to persist onto the id it accepts now.
+// Returns the input unchanged when there is no alias, so callers can
+// apply it unconditionally.
+export function resolveLegacyModelAlias(
+  def: RuntimeAgentDef,
+  modelId: string,
+): string {
+  return def.legacyModelAliases?.[modelId] ?? modelId;
+}
+
 function cloneModelOptions(options: RuntimeModelOption[]): RuntimeModelOption[] {
   return options.map((option) => ({ ...option }));
 }
@@ -112,9 +122,13 @@ export function findKnownModel(
   scope?: string | null,
 ): RuntimeModelOption | null {
   if (!modelId) return null;
+  // A selection persisted by an older version of the adapter is resolved
+  // to its current id before lookup, so upgrading never invalidates a
+  // stored model choice.
+  const resolvedId = resolveLegacyModelAlias(def, modelId);
   const live = liveModelCache.get(liveModelCacheKey(def.id, scope));
-  const liveModel = live?.get(modelId);
-  const fallbackModel = findFallbackModel(def, modelId);
+  const liveModel = live?.get(resolvedId);
+  const fallbackModel = findFallbackModel(def, resolvedId);
   if (liveModel) {
     return mergeMissingFallbackModelMetadata(liveModel, fallbackModel);
   }

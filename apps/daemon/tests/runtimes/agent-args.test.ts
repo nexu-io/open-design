@@ -4,6 +4,7 @@ import {
   AGENT_DEFS, aider, antigravity, assert, claude, codex, copilot, cursorAgent, deepseek, devin, detectAgents, grokBuild, join, kilo, kimi, kiro, mkdtempSync, opencode, pi, qoder, qwen, rmSync, spawnEnvForAgent, tmpdir, vibe, writeFileSync, chmodSync,
 } from './helpers/test-helpers.js';
 import { agentCapabilities } from '../../src/runtimes/capabilities.js';
+import { isKnownModel } from '../../src/runtimes/models.js';
 import type { TestAgentDef } from './helpers/test-helpers.js';
 
 // ---- Cursor Agent --trust capability (issue #4461) -------------------------
@@ -575,13 +576,25 @@ test('antigravity passes the prompt as the -p flag value (print mode)', () => {
     'hi',
   ]);
 
-  // A saved display label from the pre-v1.1.7 picker must still pass
-  // through untouched — agy accepts both that and the slug form, so
-  // existing users need no migration.
+  // A selection saved by the pre-v1.1.7 picker was a display label. It
+  // must still work: canonicalised to the slug in argv, and accepted by
+  // the daemon's own `isKnownModel` validation so the run is not
+  // rejected as `invalid_model_id` before it ever spawns.
   const withLegacyLabel = antigravity.buildArgs('hi', [], [], {
     model: 'Gemini 3.1 Pro (High)',
   }, {});
-  assert.deepEqual(withLegacyLabel, ['--model', 'Gemini 3.1 Pro (High)', '-p', 'hi']);
+  assert.deepEqual(withLegacyLabel, ['--model', 'gemini-3.1-pro-high', '-p', 'hi']);
+  assert.equal(isKnownModel(antigravity as never, 'Gemini 3.1 Pro (High)'), true);
+  assert.equal(isKnownModel(antigravity as never, 'gemini-3.1-pro-high'), true);
+  assert.equal(isKnownModel(antigravity as never, 'Totally Bogus (High)'), false);
+
+  // Every retired label maps onto an id the picker actually offers.
+  const offered = new Set(antigravity.fallbackModels.map((m) => m.id));
+  for (const [legacy, slug] of Object.entries(
+    antigravity.legacyModelAliases ?? {},
+  )) {
+    assert.ok(offered.has(slug), `${legacy} maps to unknown id ${slug}`);
+  }
 
   // `default` is synthetic — it means "let agy use its own configured
   // model", so no --model flag at all.

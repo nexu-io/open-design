@@ -126,6 +126,11 @@ export type RuntimeAgentDef = {
   promptInputFormat?: 'text' | 'stream-json';
   eventParser?: string;
   env?: Record<string, string>;
+  // Maps model ids a previous version of this adapter persisted onto the
+  // ids it accepts today. Consulted by `findKnownModel` so a selection
+  // saved under the old scheme still validates instead of failing with
+  // `invalid_model_id` on the next run. Keys are the retired ids.
+  legacyModelAliases?: Record<string, string>;
   listModels?: RuntimeListModels;
   fetchModels?: (
     resolvedBin: string,
