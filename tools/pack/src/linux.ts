@@ -348,7 +348,7 @@ export function matchesAppImageProcess(
 
 // --- Step 1: LinuxPaths type and resolveLinuxPaths ---
 
-type LinuxPaths = {
+export type LinuxPaths = {
   appBuilderConfigPath: string;
   appBuilderOutputRoot: string;
   appImageAppRunPath: string;
@@ -376,7 +376,7 @@ function iconFileName(namespace: string): string {
   return `open-design-${sanitizeNamespace(namespace)}.png`;
 }
 
-function resolveLinuxPaths(config: ToolPackConfig): LinuxPaths {
+export function resolveLinuxPaths(config: ToolPackConfig): LinuxPaths {
   const namespaceRoot = config.roots.output.namespaceRoot;
   const appBuilderOutputRoot = config.roots.output.appBuilderRoot;
   const home = homedir();
@@ -605,7 +605,7 @@ async function writeLinuxAppImageAppRun(paths: LinuxPaths): Promise<void> {
 
 // --- Step 5: writeLinuxBuilderConfig helper ---
 
-async function writeLinuxBuilderConfig(config: ToolPackConfig, paths: LinuxPaths): Promise<void> {
+export async function writeLinuxBuilderConfig(config: ToolPackConfig, paths: LinuxPaths): Promise<void> {
   const target = config.to === "dir" ? ["dir"] : ["AppImage"];
   const namespaceToken = sanitizeNamespace(config.namespace);
   const packagedVersion = await readPackagedVersion(config);
@@ -616,7 +616,14 @@ async function writeLinuxBuilderConfig(config: ToolPackConfig, paths: LinuxPaths
     artifactName: `${PRODUCT_NAME}-${namespaceToken}.\${ext}`,
     asar: false,
     buildDependenciesFromSource: false,
-    compression: "maximum",
+    // "normal" (gzip), not "maximum" (xz). With an xz payload the AppImage
+    // type-2 runtime behind `--appimage-extract-and-run` extracts most entries
+    // but silently omits the V8 snapshot files, so Electron dies with
+    // `Error loading V8 startup snapshot file` before main() runs (verified
+    // against runtime effcebc: 40272 files extracted, snapshot_blob.bin and
+    // v8_context_snapshot.bin absent). gzip extracts every entry. See
+    // startPackedLinuxApp for why we use --appimage-extract-and-run over FUSE.
+    compression: "normal",
     directories: {
       app: paths.assembledAppRoot,
       output: paths.appBuilderOutputRoot,

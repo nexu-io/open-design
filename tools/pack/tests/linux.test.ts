@@ -37,11 +37,13 @@ import {
   renderLinuxAppImageAppRun,
   renderLinuxPackagedMainEntry,
   resolveLinuxLifecycleMode,
+  resolveLinuxPaths,
   resolveProductionInstallCommand,
   shouldRejectLinuxHeadlessInspectOptions,
   stopPackedLinuxApp,
   sanitizeNamespace,
   stopPackedLinuxHeadless,
+  writeLinuxBuilderConfig,
 } from "../src/linux.js";
 
 async function pathExists(path: string): Promise<boolean> {
@@ -1006,5 +1008,48 @@ describe("matchesAppImageProcess", () => {
       installPath,
     );
     expect(ok).toBe(false);
+  });
+});
+
+describe("writeLinuxBuilderConfig compression", () => {
+  // Regression guard for the AppImage xz-extraction bug: the AppImage type-2
+  // runtime behind `--appimage-extract-and-run` silently omits the V8 snapshot
+  // files from an xz payload, so Electron dies before main() runs. The Linux
+  // builder config must therefore NOT select `compression: "maximum"` (which
+  // app-builder-lib maps to an xz squashfs). See the comment at the
+  // `compression` field in writeLinuxBuilderConfig for the full rationale.
+  it("does not select xz (maximum) compression for the AppImage payload", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-linux-"));
+    try {
+      const config: ToolPackConfig = {
+        ...makeConfig(),
+        // appVersion short-circuits readPackagedVersion so the test does not
+        // depend on apps/packaged/package.json on disk.
+        appVersion: "0.16.1",
+        containerized: false,
+        to: "appimage",
+        workspaceRoot: root,
+        roots: {
+          ...makeConfig().roots,
+          output: {
+            appBuilderRoot: join(root, ".tmp", "tools-pack", "out", "linux", "namespaces", "default", "builder"),
+            namespaceRoot: join(root, ".tmp", "tools-pack", "out", "linux", "namespaces", "default"),
+            platformRoot: join(root, ".tmp", "tools-pack", "out", "linux"),
+            root: join(root, ".tmp", "tools-pack", "out"),
+          },
+        },
+      };
+      const paths = resolveLinuxPaths(config);
+
+      await writeLinuxBuilderConfig(config, paths);
+      const builderConfig = JSON.parse(await readFile(paths.appBuilderConfigPath, "utf8")) as {
+        compression?: string;
+      };
+
+      expect(builderConfig.compression).not.toBe("maximum");
+      expect(builderConfig.compression).toBe("normal");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
   });
 });
