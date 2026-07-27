@@ -41,6 +41,7 @@ import {
   type LauncherRuntimeDescriptor,
 } from "@open-design/launcher-proto";
 import {
+  DESKTOP_UPDATE_ACTIONS,
   DESKTOP_UPDATE_CHANNELS,
   DESKTOP_UPDATE_MODES,
   DESKTOP_UPDATE_STATES,
@@ -110,8 +111,7 @@ const DEFAULT_POLL_INITIAL_DELAY_MS = 5000;
 const DEFAULT_POLL_BACKOFF_INITIAL_MS = 60 * 1000;
 const DEFAULT_POLL_BACKOFF_MAX_MS = 30 * 60 * 1000;
 const MIN_SCHEDULED_POLL_DELAY_MS = 1000;
-const MAC_DEFERRED_INSTALLER_TIMEOUT_MS = 10 * 60 * 1000;
-const WINDOWS_DEFERRED_INSTALLER_TIMEOUT_MS = 10 * 60 * 1000;
+const DEFERRED_INSTALLER_TIMEOUT_MS = 10 * 60 * 1000;
 const ARTIFACT_DOWNLOAD_MAX_ATTEMPTS = 3;
 const DESKTOP_UPDATE_CHANNEL_VALUES = new Set<string>(Object.values(DESKTOP_UPDATE_CHANNELS));
 const execFileAsync = promisify(execFile);
@@ -3553,7 +3553,7 @@ export function createDesktopUpdater(
       cwd: config.runtimeBase,
       installerPath: resolvedDownload,
       root: updateRoot,
-      timeoutMs: config.platform === "win32" ? WINDOWS_DEFERRED_INSTALLER_TIMEOUT_MS : MAC_DEFERRED_INSTALLER_TIMEOUT_MS,
+      timeoutMs: DEFERRED_INSTALLER_TIMEOUT_MS,
     });
   }
 
@@ -3579,7 +3579,7 @@ export function createDesktopUpdater(
       ...(delegated == null ? {} : { delegated }),
       launchPath,
       root: updateRoot,
-      timeoutMs: config.platform === "win32" ? WINDOWS_DEFERRED_INSTALLER_TIMEOUT_MS : MAC_DEFERRED_INSTALLER_TIMEOUT_MS,
+      timeoutMs: DEFERRED_INSTALLER_TIMEOUT_MS,
     });
     return { ...result, launchPath };
   }
@@ -3805,15 +3805,15 @@ export function createDesktopUpdater(
     downloadUpdate: () => serialized(downloadUpdate),
     handle(action) {
       switch (action) {
-        case "status":
+        case DESKTOP_UPDATE_ACTIONS.STATUS:
           return this.status();
-        case "check":
+        case DESKTOP_UPDATE_ACTIONS.CHECK:
           return this.checkForUpdates();
-        case "clear-cache":
+        case DESKTOP_UPDATE_ACTIONS.CLEAR_CACHE:
           return this.clearCache();
-        case "download":
+        case DESKTOP_UPDATE_ACTIONS.DOWNLOAD:
           return this.downloadUpdate();
-        case "install":
+        case DESKTOP_UPDATE_ACTIONS.INSTALL:
           return this.installUpdate();
       }
     },
