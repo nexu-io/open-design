@@ -534,18 +534,30 @@ test('qwen args check promptViaStdin, base args, model args and exclude `-` sent
 // the daemon would render the resulting empty reply as a "successful"
 // agent response — exactly the failure mode the auth/quota guard at
 // server.ts ~12090 is meant to catch but for the wrong reason.
-test('antigravity pipes prompt via stdin via -p flag (print mode)', () => {
+test('antigravity passes the prompt as the -p flag value (print mode)', () => {
   assert.equal(antigravity.bin, 'agy');
   assert.equal(antigravity.streamFormat, 'plain');
-  assert.equal(antigravity.promptViaStdin, true);
+  // agy v1.1.7 dropped stdin prompt delivery: `-p` takes the prompt as its
+  // argument, and the old `-p -` sentinel is read as a literal `-` prompt,
+  // which the model answers with a generic greeting instead of doing the
+  // work. Print mode is argv-only, so the adapter must NOT set
+  // promptViaStdin and must carry an argv budget guard.
+  assert.equal(antigravity.promptViaStdin, undefined);
+  assert.equal(typeof antigravity.maxPromptArgBytes, 'number');
 
   const args = antigravity.buildArgs('write hello world', [], [], {}, {});
-  assert.deepEqual(args, ['-p', '-']);
+  assert.deepEqual(args, ['-p', 'write hello world']);
+  assert.equal(args.includes('-'), false);
 
   const argsWithLog = antigravity.buildArgs('write hello world', [], [], {}, {
     agentLogFilePath: '/tmp/od-agy-test.log',
   });
-  assert.deepEqual(argsWithLog, ['--log-file', '/tmp/od-agy-test.log', '-p', '-']);
+  assert.deepEqual(argsWithLog, [
+    '--log-file',
+    '/tmp/od-agy-test.log',
+    '-p',
+    'write hello world',
+  ]);
 
   // No `--model` flag exists upstream, so buildArgs argv must stay the
   // same regardless of which label the user picks.
@@ -560,7 +572,12 @@ test('antigravity pipes prompt via stdin via -p flag (print mode)', () => {
       antigravitySettingsPath: join(settingsDir, 'settings.json'),
     });
     assert.equal(withModel.includes('--model'), false);
-    assert.deepEqual(withModel, ['--log-file', '/tmp/od-agy-test.log', '-p', '-']);
+    assert.deepEqual(withModel, [
+      '--log-file',
+      '/tmp/od-agy-test.log',
+      '-p',
+      'hi',
+    ]);
   } finally {
     rmSync(settingsDir, { recursive: true, force: true });
   }
@@ -576,16 +593,14 @@ test('antigravity pipes prompt via stdin via -p flag (print mode)', () => {
   const followUp = antigravity.buildArgs('next message', [], [], {}, {
     hasPriorAssistantTurn: true,
   });
-  assert.deepEqual(followUp, ['-p', '-']);
+  assert.deepEqual(followUp, ['-p', 'next message']);
   assert.equal(followUp.includes('-c'), false);
 
   const firstTurn = antigravity.buildArgs('first', [], [], {}, {
     hasPriorAssistantTurn: false,
   });
-  assert.deepEqual(firstTurn, ['-p', '-']);
+  assert.deepEqual(firstTurn, ['-p', 'first']);
   assert.equal(antigravity.resumesSessionViaCli, undefined);
-
-  assert.equal(antigravity.maxPromptArgBytes, undefined);
 
   // Picker exposes the synthetic Default + the 8 labels agy's TUI
   // Switch-Model surfaces for consumer-tier accounts. The set is small
