@@ -3,14 +3,21 @@ import { DEFAULT_MODEL_OPTION } from './shared.js';
 import { loadMmdRouteModels } from '../mmd-routes.js';
 import type { RuntimeAgentDef } from '../types.js';
 
+// Aliases resolve to the latest model in each family; the explicit ids let a
+// user pin a generation. Both forms are what `claude --model` documents, so
+// keep this list in step with the CLI's `--model` help text when Anthropic
+// ships a new family (issue: Opus 5 missing from the picker).
 const CLAUDE_FALLBACK_MODELS = [
   DEFAULT_MODEL_OPTION,
-  { id: 'sonnet', label: 'Sonnet (alias)' },
+  { id: 'fable', label: 'Fable (alias)' },
   { id: 'opus', label: 'Opus (alias)' },
+  { id: 'sonnet', label: 'Sonnet (alias)' },
   { id: 'haiku', label: 'Haiku (alias)' },
-  { id: 'claude-opus-4-5', label: 'claude-opus-4-5' },
-  { id: 'claude-sonnet-4-5', label: 'claude-sonnet-4-5' },
+  { id: 'claude-fable-5', label: 'claude-fable-5' },
+  { id: 'claude-opus-5', label: 'claude-opus-5' },
+  { id: 'claude-sonnet-5', label: 'claude-sonnet-5' },
   { id: 'claude-haiku-4-5', label: 'claude-haiku-4-5' },
+  { id: 'claude-opus-4-8', label: 'claude-opus-4-8' },
 ];
 
 export const claudeAgentDef = {
