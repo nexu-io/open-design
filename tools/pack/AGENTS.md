@@ -108,7 +108,7 @@ curl.exe --ssl-no-revoke -fsSL https://releases.open-design.ai/beta/latest/metad
 For `release-beta-s`, check the internal feed instead:
 
 ```bash
-curl.exe --ssl-no-revoke -fsSL https://s3.nexu.space/od-releases/beta/latest/metadata.json
+curl.exe --ssl-no-revoke -fsSL https://s3.nexu.space/od-releases/betas/latest/metadata.json
 ```
 
 2. Build a non-portable Windows beta package with the real beta namespace and a version lower than latest:
