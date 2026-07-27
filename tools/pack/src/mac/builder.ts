@@ -17,6 +17,7 @@ import {
 import { pathExists } from "./fs.js";
 import { resolveMacInstallIdentity } from "./identity.js";
 import { readPackagedVersion } from "./manifest.js";
+import { assertMacRuntimeDependenciesResolvable } from "./runtime-dependencies.js";
 import { sanitizeNamespace } from "./paths.js";
 import type { ElectronBuilderTarget, MacBuildOutput, MacPaths } from "./types.js";
 
@@ -164,5 +165,9 @@ export async function runElectronBuilder(
       ...(config.signed ? {} : { CSC_IDENTITY_AUTO_DISCOVERY: "false" }),
       ...(webStandaloneHookConfigPath == null ? {} : { [WEB_STANDALONE_HOOK_CONFIG_ENV]: webStandaloneHookConfigPath }),
     },
+  });
+  await assertMacRuntimeDependenciesResolvable({
+    manifestPath: paths.assembledPackageJsonPath,
+    runtimeRoot: join(paths.appPath, "Contents", "Resources", "app"),
   });
 }

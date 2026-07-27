@@ -22,7 +22,12 @@ import {
 import { copyBundledResourceTrees } from "../resources.js";
 import { copyOptionalVelaCliBinary } from "../vela-cli.js";
 import { electronBuilderVersionForAppVersion } from "../versions.js";
-import { runEsbuild, runNpmInstall, runPnpm } from "./commands.js";
+import {
+  resolveNpmPackageManagerIdentity,
+  runEsbuild,
+  runNpmInstall,
+  runPnpm,
+} from "./commands.js";
 import {
   ELECTRON_BUILDER_BUILD_DEPENDENCIES_FROM_SOURCE,
   ELECTRON_REBUILD_MODE,
@@ -31,6 +36,7 @@ import {
 } from "./constants.js";
 import { resolveMacInstallIdentity } from "./identity.js";
 import { readPackagedVersion } from "./manifest.js";
+import { assertMacRuntimeDependenciesResolvable } from "./runtime-dependencies.js";
 import type { MacPaths, PackedTarballInfo } from "./types.js";
 
 function toPosixPath(value: string): string {
@@ -295,6 +301,30 @@ export async function collectWorkspaceTarballs(
   return packedTarballs;
 }
 
+export function renderMacAssembledPackageManifest(options: {
+  dependencies: Record<string, string>;
+  optionalDependencies?: Record<string, string>;
+  packageManager: string;
+  productName: string;
+  version: string;
+}): string {
+  return `${JSON.stringify(
+    {
+      dependencies: options.dependencies,
+      description: "Open Design packaged runtime",
+      main: "./main.cjs",
+      name: "open-design-packaged-app",
+      ...(options.optionalDependencies == null ? {} : { optionalDependencies: options.optionalDependencies }),
+      packageManager: options.packageManager,
+      private: true,
+      productName: options.productName,
+      version: options.version,
+    },
+    null,
+    2,
+  )}\n`;
+}
+
 export async function writeAssembledApp(
   config: ToolPackConfig,
   paths: MacPaths,
@@ -332,23 +362,19 @@ export async function writeAssembledApp(
   const optionalDependencies = usePrebundledStandaloneWeb
     ? MAC_PREBUNDLE_COPIED_RUNTIME_DEPENDENCIES
     : undefined;
+  // Electron Builder otherwise inherits pnpm identity from the parent workspace
+  // and inspects this npm-owned node_modules tree with its pnpm collector.
+  const packageManager = await resolveNpmPackageManagerIdentity(paths.assembledAppRoot);
 
   await writeFile(
     paths.assembledPackageJsonPath,
-    `${JSON.stringify(
-      {
-        dependencies,
-        description: "Open Design packaged runtime",
-        main: "./main.cjs",
-        name: "open-design-packaged-app",
-        ...(optionalDependencies == null ? {} : { optionalDependencies }),
-        private: true,
-        productName: identity.productName,
-        version: packageVersion,
-      },
-      null,
-      2,
-    )}\n`,
+    renderMacAssembledPackageManifest({
+      dependencies,
+      optionalDependencies,
+      packageManager,
+      productName: identity.productName,
+      version: packageVersion,
+    }),
     "utf8",
   );
   if (usePrebundledStandaloneWeb) {
@@ -372,5 +398,9 @@ export async function writeAssembledApp(
   if (usePrebundledStandaloneWeb) {
     await copyMacPrebundleRuntimeDependencies(config, paths.assembledAppRoot);
   }
+  await assertMacRuntimeDependenciesResolvable({
+    manifestPath: paths.assembledPackageJsonPath,
+    runtimeRoot: paths.assembledAppRoot,
+  });
   await runMacElectronRebuild(config, paths.assembledAppRoot);
 }

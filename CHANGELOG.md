@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- macOS packaged apps now keep daemon runtime dependencies resolvable from top-level `node_modules` paths and reject quarantined `.ignored` layouts during packaging. (#6088)
+
 ## [0.9.0] - 2026-05-29
 
 🎉 **310 PRs · 88 contributors · 7 days** — Meet the **install-and-create release**. No more API-key scavenger hunts. No more asking teammates to install three different CLIs before their first prompt. **Open Design AMR** is now built into the app: sign in once, pick a model, and start building. Around that zero-config first run, 0.9.0 brings a bigger agent bench, faster model picking, a more discoverable plugin marketplace, richer review workflows, smoother Studio tools, and easier installs across Windows, macOS, and Linux. 🚀

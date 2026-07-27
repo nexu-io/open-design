@@ -1,10 +1,13 @@
-import { spawn, type SpawnOptionsWithoutStdio } from "node:child_process";
+import { execFile, spawn, type SpawnOptionsWithoutStdio } from "node:child_process";
+import { promisify } from "node:util";
 
 import { createPackageManagerInvocation } from "@open-design/platform";
 
 import type { ToolPackConfig } from "../config.js";
 
 type LoggedCommandOptions = Pick<SpawnOptionsWithoutStdio, "cwd" | "env" | "windowsVerbatimArguments">;
+
+const captureExecFile = promisify(execFile);
 
 function quoteCommandPart(value: string): string {
   if (!/[\s"'$`\\]/.test(value)) return value;
@@ -70,6 +73,23 @@ export async function runNpmInstall(appRoot: string): Promise<void> {
     cwd: appRoot,
     env: process.env,
   });
+}
+
+export function formatNpmPackageManagerIdentity(npmVersion: string): string {
+  const version = npmVersion.trim();
+  if (!/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(version)) {
+    throw new Error(`npm --version returned an invalid version: ${JSON.stringify(npmVersion)}`);
+  }
+  return `npm@${version}`;
+}
+
+export async function resolveNpmPackageManagerIdentity(appRoot: string): Promise<string> {
+  const { stdout } = await captureExecFile("npm", ["--version"], {
+    cwd: appRoot,
+    env: process.env,
+    encoding: "utf8",
+  });
+  return formatNpmPackageManagerIdentity(stdout);
 }
 
 export async function runEsbuild(config: ToolPackConfig, args: string[]): Promise<void> {
