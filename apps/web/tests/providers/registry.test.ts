@@ -834,6 +834,46 @@ describe('uploadProjectFiles', () => {
     expect(result.failed).toHaveLength(1);
     expect(result.failed[0]).toMatchObject({ name: 'c.txt' });
   });
+
+  it('uploads folder files into their browser-relative directories', async () => {
+    const index = new File(['index'], 'wrong-index-name.html', { type: 'text/html' });
+    const style = new File(['style'], 'wrong-style-name.css', { type: 'text/css' });
+    Object.defineProperty(index, 'webkitRelativePath', { value: 'site/index.html' });
+    Object.defineProperty(style, 'webkitRelativePath', { value: 'site/assets/style.css' });
+
+    const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      if (!(init?.body instanceof FormData)) {
+        throw new Error('expected multipart upload body');
+      }
+      const form = init.body;
+      const dir = form.get('dir');
+      if (dir === 'site') {
+        const files = form.getAll('files');
+        expect(files.map((file) => (file instanceof File ? file.name : ''))).toEqual(['index.html']);
+        return new Response(JSON.stringify({
+          files: [{ name: 'index.html', path: 'site/index.html', size: 5, originalName: 'index.html' }],
+        }), { status: 200 });
+      }
+      if (dir === 'site/assets') {
+        const files = form.getAll('files');
+        expect(files.map((file) => (file instanceof File ? file.name : ''))).toEqual(['style.css']);
+        return new Response(JSON.stringify({
+          files: [{ name: 'style.css', path: 'site/assets/style.css', size: 5, originalName: 'style.css' }],
+        }), { status: 200 });
+      }
+      throw new Error(`unexpected upload dir ${String(dir)}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await uploadProjectFiles('project-1', [index, style]);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result.failed).toEqual([]);
+    expect(result.uploaded.map((file) => file.path)).toEqual([
+      'site/index.html',
+      'site/assets/style.css',
+    ]);
+  });
 });
 
 describe('deploy provider registry helpers', () => {

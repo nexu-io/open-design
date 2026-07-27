@@ -556,6 +556,7 @@ describe('ComposerPlusMenu module wiring', () => {
 
   it('invokes each Files / Code / Designs row handler', () => {
     const { props } = renderMenu({
+      onAttachFolder: vi.fn(),
       onReferenceProject: vi.fn(),
       onLinkLocalCode: vi.fn(),
       onImportFigma: vi.fn(),
@@ -571,6 +572,9 @@ describe('ComposerPlusMenu module wiring', () => {
 
     clickRow('composer-plus-attach');
     expect(props.onAttachFiles).toHaveBeenCalledTimes(1);
+
+    clickRow('composer-plus-attach-folder');
+    expect(props.onAttachFolder).toHaveBeenCalledTimes(1);
 
     clickRow('composer-plus-reference-project');
     expect(props.onReferenceProject).toHaveBeenCalledTimes(1);

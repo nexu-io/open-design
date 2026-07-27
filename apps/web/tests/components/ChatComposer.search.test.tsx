@@ -68,6 +68,66 @@ describe('ChatComposer /search command', () => {
     );
   });
 
+  it('uploads selected folders from the composer with browser-relative files', async () => {
+    const onSend = vi.fn();
+    mockedUploadProjectFiles.mockResolvedValue({
+      uploaded: [
+        { path: 'site/index.html', name: 'index.html', kind: 'file', size: 5 },
+        { path: 'site/assets/style.css', name: 'style.css', kind: 'file', size: 5 },
+      ],
+      failed: [],
+    });
+
+    render(
+      <ChatComposer
+        projectId="project-1"
+        projectFiles={[]}
+        streaming={false}
+        onEnsureProject={async () => 'project-1'}
+        onSend={onSend}
+        onStop={vi.fn()}
+      />,
+    );
+
+    const index = new File(['index'], 'index.html', { type: 'text/html' });
+    const style = new File(['style'], 'style.css', { type: 'text/css' });
+    Object.defineProperty(index, 'webkitRelativePath', { value: 'site/index.html' });
+    Object.defineProperty(style, 'webkitRelativePath', { value: 'site/assets/style.css' });
+
+    fireEvent.change(screen.getByTestId('chat-folder-input'), {
+      target: { files: [index, style] },
+    });
+
+    await waitFor(() => expect(mockedUploadProjectFiles).toHaveBeenCalledTimes(1));
+    expect(mockedUploadProjectFiles).toHaveBeenCalledWith('project-1', [index, style]);
+    await waitFor(() => expect(screen.getByTestId('staged-contexts').textContent).toContain('index.html'));
+    expect(screen.getByTestId('staged-contexts').textContent).toContain('style.css');
+  });
+
+  it('shows a clear attachment error when no project can be created yet', async () => {
+    render(
+      <ChatComposer
+        projectId={null}
+        projectFiles={[]}
+        streaming={false}
+        onEnsureProject={async () => null}
+        onSend={vi.fn()}
+        onStop={vi.fn()}
+      />,
+    );
+
+    fireEvent.change(screen.getByTestId('chat-folder-input'), {
+      target: {
+        files: [new File(['index'], 'index.html', { type: 'text/html' })],
+      },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Create or open a project before attaching files.')).toBeTruthy();
+    });
+    expect(mockedUploadProjectFiles).not.toHaveBeenCalled();
+  });
+
   it('appends uploaded attachments after already staged design-file context', async () => {
     const onSend = vi.fn();
     mockedUploadProjectFiles.mockResolvedValue({

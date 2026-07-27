@@ -175,6 +175,7 @@ export interface ComposerPlusMenuProps {
 
   /** Triggers file attachment (opens the native picker). */
   onAttachFiles: () => void;
+  onAttachFolder?: () => void;
   attachLoading?: boolean;
 
   /** Opens the reference-project picker. */
@@ -291,6 +292,7 @@ export function ComposerPlusMenu({
   onPickMcp,
   onAddMcp,
   onAttachFiles,
+  onAttachFolder,
   attachLoading,
   onReferenceProject,
   onLinkLocalCode,
@@ -605,6 +607,26 @@ export function ComposerPlusMenu({
             />
             <span>{t('chat.plus.attachFiles')}</span>
           </button>
+          {onAttachFolder ? (
+            <button
+              type="button"
+              role="menuitem"
+              className="plus-menu__item"
+              data-testid="composer-plus-attach-folder"
+              disabled={attachLoading}
+              onClick={() => {
+                close();
+                onAttachFolder();
+              }}
+            >
+              <Icon
+                name={attachLoading ? 'spinner' : 'folder'}
+                size={14}
+                className="plus-menu__item-icon"
+              />
+              <span>{t('ds.importFolder')}</span>
+            </button>
+          ) : null}
           {onReferenceProject ? (
             <button
               type="button"

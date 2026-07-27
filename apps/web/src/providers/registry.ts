@@ -2068,10 +2068,6 @@ export async function importProjectFigma(
   }
 }
 
-// Multi-file project upload used by the chat composer's paste / drop /
-// picker. Each file lands flat in the project folder; the response is
-// reshaped into ChatAttachments so the composer can stage them without a
-// follow-up listFiles round-trip.
 const PROJECT_UPLOAD_BATCH_SIZE = 12;
 
 export interface ProjectUploadFailure {
@@ -2086,6 +2082,49 @@ export interface UploadProjectFilesResult {
   error?: string;
 }
 
+interface ProjectUploadPart {
+  file: File;
+  dir: string;
+  uploadName: string;
+  failureName: string;
+}
+
+function browserRelativePath(file: File): string {
+  if ('webkitRelativePath' in file && typeof file.webkitRelativePath === 'string') {
+    const relativePath = file.webkitRelativePath.trim();
+    if (relativePath) return relativePath;
+  }
+  return file.name;
+}
+
+function uploadPathSegments(file: File): string[] {
+  const parts = browserRelativePath(file)
+    .replace(/\\/g, '/')
+    .split('/')
+    .filter((part) => part.length > 0 && part !== '.' && part !== '..');
+  return parts.length > 0 ? parts : [file.name];
+}
+
+function normalizedUploadDir(dir: string | undefined): string {
+  return (dir ?? '')
+    .trim()
+    .replace(/\\/g, '/')
+    .replace(/^\/+|\/+$/g, '');
+}
+
+function uploadPart(file: File, targetDir: string): ProjectUploadPart {
+  const parts = uploadPathSegments(file);
+  const uploadName = parts[parts.length - 1] ?? file.name;
+  const relativeDir = parts.slice(0, -1).join('/');
+  const dir = [targetDir, relativeDir].filter(Boolean).join('/');
+  return {
+    file,
+    dir,
+    uploadName,
+    failureName: dir ? `${dir}/${uploadName}` : uploadName,
+  };
+}
+
 export async function uploadProjectFiles(
   projectId: string,
   files: File[],
@@ -2096,17 +2135,27 @@ export async function uploadProjectFiles(
   const uploaded: ChatAttachment[] = [];
   const failed: ProjectUploadFailure[] = [];
   let error: string | undefined;
-  const targetDir = dir?.trim() ?? '';
+  const targetDir = normalizedUploadDir(dir);
+  const parts = files.map((file) => uploadPart(file, targetDir));
 
-  for (let i = 0; i < files.length; i += PROJECT_UPLOAD_BATCH_SIZE) {
-    const batch = files.slice(i, i + PROJECT_UPLOAD_BATCH_SIZE);
-    const remaining = files.slice(i + PROJECT_UPLOAD_BATCH_SIZE);
+  for (let i = 0; i < parts.length;) {
+    const batchDir = parts[i]?.dir ?? '';
+    let end = i;
+    while (
+      end < parts.length &&
+      parts[end]?.dir === batchDir &&
+      end - i < PROJECT_UPLOAD_BATCH_SIZE
+    ) {
+      end += 1;
+    }
+    const batch = parts.slice(i, end);
+    const remaining = parts.slice(end);
     const form = new FormData();
     // The `dir` field MUST be appended before the file parts: the daemon's
     // multer destination resolver reads req.body.dir as each file streams in,
     // and busboy only exposes fields parsed earlier in the multipart body.
-    if (targetDir) form.append('dir', targetDir);
-    for (const f of batch) form.append('files', f);
+    if (batchDir) form.append('dir', batchDir);
+    for (const part of batch) form.append('files', part.file, part.uploadName);
 
     try {
       const resp = await fetch(
@@ -2119,11 +2168,11 @@ export async function uploadProjectFiles(
           | { code?: string; error?: string }
           | null;
         error = payload?.error ?? `upload failed (${resp.status})`;
-        for (const f of batch) {
-          failed.push({ name: f.name, code: payload?.code, error: error });
+        for (const part of batch) {
+          failed.push({ name: part.failureName, code: payload?.code, error: error });
         }
-        for (const f of remaining) {
-          failed.push({ name: f.name, code: payload?.code, error: error });
+        for (const part of remaining) {
+          failed.push({ name: part.failureName, code: payload?.code, error: error });
         }
         break;
       }
@@ -2143,23 +2192,24 @@ export async function uploadProjectFiles(
       // Server preserves request order; any dropped files are unmatched at the batch tail.
       if (responseFiles.length < batch.length) {
         error ??= 'some files could not be stored';
-        for (const f of batch.slice(responseFiles.length)) {
+        for (const part of batch.slice(responseFiles.length)) {
           failed.push({
-            name: f.name,
+            name: part.failureName,
             error: error ?? 'some files could not be stored',
           });
         }
       }
     } catch {
       error = 'upload request failed';
-      for (const f of batch) {
-        failed.push({ name: f.name, error });
+      for (const part of batch) {
+        failed.push({ name: part.failureName, error });
       }
-      for (const f of remaining) {
-        failed.push({ name: f.name, error });
+      for (const part of remaining) {
+        failed.push({ name: part.failureName, error });
       }
       break;
     }
+    i = end;
   }
 
   return { uploaded, failed, error };

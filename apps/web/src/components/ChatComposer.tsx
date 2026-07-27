@@ -145,6 +145,11 @@ type ToolsTab = 'plugins' | 'skills' | 'mcp' | 'import';
 
 type MentionTab = 'all' | 'tabs' | 'files' | 'plugins' | 'skills' | 'mcp' | 'connectors';
 
+const FOLDER_INPUT_PROPS = {
+  webkitdirectory: '',
+  directory: '',
+} satisfies Record<string, string>;
+
 const USER_PLUGIN_SOURCE_KINDS = new Set<PluginSourceKind>([
   'user',
   'project',
@@ -580,6 +585,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       () => (draft ?? '').trim().length > 0,
     );
     const fileInputRef = useRef<HTMLInputElement | null>(null);
+    const folderInputRef = useRef<HTMLInputElement | null>(null);
     // The Lexical editor handle — drives text/mention/clear/focus from the
     // host. Replaces the old textareaRef + manual selection plumbing. IME
     // composition guarding now lives inside the editor's command handlers.
@@ -1715,10 +1721,13 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
 
     async function uploadFiles(files: File[]) {
       if (files.length === 0) return;
-      const id = await ensureProject();
-      if (!id) return;
-      setUploading(true);
       setUploadError(null);
+      const id = await ensureProject();
+      if (!id) {
+        setUploadError('Create or open a project before attaching files.');
+        return;
+      }
+      setUploading(true);
       // Cohort math is identical to the Design Files Upload button; see
       // `analytics/upload-tracking.ts`. v2 doc fires one
       // file_upload_result per surface so this path reports
@@ -2818,6 +2827,19 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 e.target.value = '';
               }}
             />
+            <input
+              ref={folderInputRef}
+              data-testid="chat-folder-input"
+              type="file"
+              multiple
+              style={{ display: 'none' }}
+              {...FOLDER_INPUT_PROPS}
+              onChange={(e) => {
+                const files = Array.from(e.target.files ?? []);
+                void uploadFiles(files);
+                e.target.value = '';
+              }}
+            />
             <ComposerPlusMenu
               triggerTestId="chat-plus-trigger"
               placementPreference="up"
@@ -2894,6 +2916,14 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                   element: 'attachment',
                 });
                 fileInputRef.current?.click();
+              }}
+              onAttachFolder={() => {
+                trackChatPanelClick(analytics.track, {
+                  page_name: 'chat_panel',
+                  area: 'chat_panel',
+                  element: 'attachment',
+                });
+                folderInputRef.current?.click();
               }}
               onReferenceProject={() => {
                 trackComposerBar({ element: 'plus_pick', resource_kind: 'workspace', resource_id: 'reference-project' });
