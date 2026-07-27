@@ -1841,3 +1841,77 @@ async function withSandboxMode<T>(run: () => Promise<T>): Promise<T> {
     else process.env.OD_SANDBOX_MODE = previous;
   }
 }
+
+describe('GET /api/projects/:id/conversations/:cid', () => {
+  let server: http.Server;
+  let baseUrl: string;
+  const tempDirs: string[] = [];
+
+  beforeAll(async () => {
+    const started = (await startServer({ port: 0, returnServer: true })) as {
+      url: string;
+      server: http.Server;
+    };
+    baseUrl = started.url;
+    server = started.server;
+  });
+
+  afterEach(() => {
+    for (const dir of tempDirs.splice(0)) {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  afterAll(() => {
+    return new Promise<void>((resolve) => server.close(() => resolve()));
+  });
+
+  function makeFolder(): string {
+    const d = mkdtempSync(path.join(tmpdir(), 'od-projects-routes-conv-'));
+    tempDirs.push(d);
+    return d;
+  }
+
+  it('succeeds for the owning project and returns 404 for a different project', async () => {
+    const folder1 = makeFolder();
+    await writeFile(path.join(folder1, 'index.html'), '<!doctype html>');
+    const folder2 = makeFolder();
+    await writeFile(path.join(folder2, 'index.html'), '<!doctype html>');
+
+    // 1. Create two projects
+    const p1Resp = await fetch(`${baseUrl}/api/import/folder`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ baseDir: folder1 }),
+    });
+    const p1 = (await p1Resp.json()) as { project: { id: string } };
+
+    const p2Resp = await fetch(`${baseUrl}/api/import/folder`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ baseDir: folder2 }),
+    });
+    const p2 = (await p2Resp.json()) as { project: { id: string } };
+
+    // 2. Create a conversation in Project 1
+    const convResp = await fetch(`${baseUrl}/api/projects/${p1.project.id}/conversations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'Test Convo' }),
+    });
+    expect(convResp.status).toBe(200);
+    const conv = (await convResp.json()) as { conversation: { id: string; title: string } };
+    const cid = conv.conversation.id;
+
+    // 3. Fetch from owning project -> 200
+    const get1 = await fetch(`${baseUrl}/api/projects/${p1.project.id}/conversations/${cid}`);
+    expect(get1.status).toBe(200);
+    const get1Body = (await get1.json()) as { conversation: { id: string; title: string } };
+    expect(get1Body.conversation.id).toBe(cid);
+    expect(get1Body.conversation.title).toBe('Test Convo');
+
+    // 4. Fetch from different project -> 404 (not daemon-not-running)
+    const get2 = await fetch(`${baseUrl}/api/projects/${p2.project.id}/conversations/${cid}`);
+    expect(get2.status).toBe(404);
+  });
+});
