@@ -57,3 +57,12 @@ export async function directoryIsEmpty(path: string): Promise<boolean> {
   return entries.length === 0;
 }
 
+export function numberField(record: Record<string, unknown>, key: string): number | undefined {
+  const value = record[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+export function objectField(record: Record<string, unknown>, key: string): Record<string, unknown> | null {
+  const value = record[key];
+  return isRecord(value) ? value : null;
+}
