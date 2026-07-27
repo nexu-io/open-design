@@ -1,0 +1,19 @@
+{
+  "candidateId": "7318ad57-4fef-470a-8fd1-4d3395489554",
+  "projectId": "brand-product-dc5888",
+  "runId": "dff61ad6-f67f-468e-a037-fc7409759542",
+  "conversationId": "75f67a44-3468-4d9e-88f4-67a53590c034",
+  "provenance": {
+    "summary": "Detected from context/input-DESIGN.md after a successful run.",
+    "detectedAt": 1785114562102
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "context/input-DESIGN.md",
+      "label": "context/input-DESIGN.md",
+      "size": 2459,
+      "copied": true
+    }
+  ]
+}

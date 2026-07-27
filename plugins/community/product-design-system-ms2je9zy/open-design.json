@@ -1,0 +1,22 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "product-design-system-ms2je9zy",
+  "title": "Product Design System",
+  "version": "0.1.0",
+  "description": "--- name: \"Product\" description: \"Fonts, logos and assets: arch-icons.svg, Art of the Possible.dc.html, Brim Asset Library.dc.html, Brim Architecture.dc.html, Brim Brand Audit.dc.html, Brim Brand Guidelines-print.dc.html",
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}
