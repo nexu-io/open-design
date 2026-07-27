@@ -5130,15 +5130,20 @@ export function SettingsDialog({
                   versa), and the section hijacked Settings real estate
                   on every open even though nine in ten users never
                   touch it. Now: filtered to the *currently selected*
-                  agent only, and folded into a collapsed disclosure
-                  that opens to "Advanced: proxy & custom paths" — power
+                  agent, except that CODEX_BIN stays reachable while
+                  Codex is unavailable. The collapsed disclosure opens
+                  to "Advanced: proxy & custom paths" — power
                   users who route through LiteLLM or installed the
                   binary out-of-PATH still have one click access; new
                   users no longer wonder "are these fields I forgot to
                   fill in?".
                 */
                 const cliEnvFields = AGENT_CLI_ENV_FIELDS.filter(
-                  (field) => field.agentId === cfg.agentId,
+                  (field) =>
+                    field.agentId === cfg.agentId ||
+                    (field.agentId === 'codex' &&
+                      field.envKey === 'CODEX_BIN' &&
+                      unavailableAgents.some((agent) => agent.id === 'codex')),
                 );
                 if (cliEnvFields.length === 0) return null;
                 return (

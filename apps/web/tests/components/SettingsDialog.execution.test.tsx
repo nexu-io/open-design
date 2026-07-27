@@ -3050,6 +3050,43 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     });
   });
 
+  it('exposes the Codex binary override when Codex is unavailable', async () => {
+    const unavailableCodex: AgentInfo = {
+      ...availableAgents[0]!,
+      available: false,
+      version: null,
+    };
+    const onRefreshAgents = vi.fn(async () => [unavailableCodex]);
+    const { onPersist } = renderSettingsDialog(
+      { mode: 'daemon', agentId: null },
+      { agents: [unavailableCodex], onRefreshAgents },
+    );
+
+    fireEvent.change(screen.getByLabelText('Codex executable path'), {
+      target: { value: '/nix/profile/bin/codex' },
+    });
+
+    await waitForPersist(
+      onPersist,
+      expect.objectContaining({
+        agentCliEnv: {
+          codex: { CODEX_BIN: '/nix/profile/bin/codex' },
+        },
+      }),
+      {},
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Rescan/i }));
+    await waitFor(() => {
+      expect(onRefreshAgents).toHaveBeenCalledWith({
+        throwOnError: true,
+        agentCliEnv: {
+          codex: { CODEX_BIN: '/nix/profile/bin/codex' },
+        },
+      });
+    });
+  });
+
   it('autosaves CLI env overrides from the execution form', async () => {
     const { onPersist } = renderSettingsDialog(
       { mode: 'daemon', agentId: 'codex' },
