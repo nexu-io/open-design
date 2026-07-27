@@ -10,7 +10,7 @@ import type {
 import express from 'express';
 import multer from 'multer';
 import JSZip from 'jszip';
-import { execFile, spawn } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -180,7 +180,6 @@ export {
 } from './runtimes/run-lifecycle-analytics.js';
 
 export { resolveProjectRoot };
-import { createCommandInvocation } from '@open-design/platform';
 import { SIDECAR_ENV } from '@open-design/sidecar-proto';
 import {
   buildLiveArtifactsMcpServersForAgent,
@@ -206,6 +205,7 @@ import {
   resolveModelForServiceTier,
 } from './runtimes/models.js';
 import { loadMmdRouteLaunchEnv } from './runtimes/mmd-routes.js';
+import { spawnAgentFile } from './runtimes/invocation.js';
 import { preflightCodexDefaultModel } from './runtimes/codex-model-preflight.js';
 import { preparePromptFileForAgent } from './runtimes/prompt-file.js';
 import { TerminalControlSequenceStripper } from './runtimes/terminal-control.js';
@@ -6592,23 +6592,14 @@ export async function startServer({
           : {}),
       }, agentLaunch);
       spawnedAgentEnv = env;
-      const invocation = createCommandInvocation({
-        command: agentLaunch.launchPath,
-        args,
-        env,
-      });
       lifecycle.mark('launch_preflight_end');
       lifecycle.mark('process_spawn_start');
-      child = spawn(invocation.command, invocation.args, {
+      child = spawnAgentFile(agentLaunch.launchPath, args, {
         env,
         stdio: [stdinMode, 'pipe', 'pipe'],
         cwd: effectiveCwd,
         shell: false,
         detached: process.platform !== 'win32',
-        // Required when invocation wraps a Windows .cmd/.bat shim through
-        // cmd.exe; without this, Node re-escapes the inner command line and
-        // breaks paths containing spaces (issue #315).
-        windowsVerbatimArguments: invocation.windowsVerbatimArguments,
       });
       lifecycle.mark('process_spawned');
       run.child = child;
