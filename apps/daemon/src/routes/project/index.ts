@@ -57,6 +57,7 @@ import { auditDesignSystemPackage } from '../../tools-connectors-cli.js';
 import { parseOrchestratorWorkspace } from '../../workspace-contract.js';
 import { registerProjectConversationRoutes } from './conversations.js';
 import { cancelRunsOwnedBy } from './cancel-owned-runs.js';
+import { removeRunDirsOwnedByProject } from './remove-owned-run-dirs.js';
 
 export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'projectStore' | 'projectFiles' | 'conversations' | 'templates' | 'status' | 'events' | 'ids' | 'telemetry' | 'appConfig' | 'agents' | 'validation'> {}
 
@@ -2278,6 +2279,15 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       await cancelRunsOwnedBy(design.runs, { projectId: req.params.id });
       dbDeleteProject(db, req.params.id);
       await removeProjectDir(PROJECTS_DIR, req.params.id).catch(() => {});
+      // Run event logs live under the runs root keyed by run id, not inside
+      // the project directory, so removeProjectDir does not reach them.
+      // Without this every run a deleted project produced is stranded on
+      // disk permanently — including the prompts and agent output in
+      // events.jsonl, which a user deleting a project expects to be gone.
+      await removeRunDirsOwnedByProject(
+        path.join(ctx.paths.RUNTIME_DATA_DIR, 'runs'),
+        req.params.id,
+      ).catch(() => {});
       /** @type {import('@open-design/contracts').OkResponse} */
       const body = { ok: true };
       res.json(body);
