@@ -209,7 +209,7 @@ import {
   marketplaceRegistryIdFromUrl,
 } from './plugins/marketplaces.js';
 import { composeMemoryBody, extractFromMessage } from './memory.js';
-import { attachAcpSession } from './acp.js';
+import { attachAcpSession, resolvePendingAcpPermission } from './acp.js';
 import { attachPiRpcSession } from './pi-rpc.js';
 import { stageAmrImagePaths } from './media/amr-image-staging.js';
 import { ingestRoutineConnectorEvolution } from './automation-routine-evolution.js';
@@ -9693,6 +9693,7 @@ export async function startServer({
         mcpServers,
         envFormat: def.acpMcpEnvFormat ?? 'array',
         ...(def.id === 'amr' ? { modelUnavailableErrorCode: 'AMR_MODEL_UNAVAILABLE' } : {}),
+        runId: run.id,
         send: (event, data) => {
           if (event === 'agent') {
             lastAgentEventPhase = summarizeAgentEventForInactivity(data);
@@ -11341,6 +11342,24 @@ export async function startServer({
     /** @type {import('@open-design/contracts').ChatRunCancelResponse} */
     const body = { ok: true, run: status };
     res.json(body);
+  });
+
+  // Answers a pending ACP session/request_permission for this run (see
+  // acp.ts's replyPermission / resolvePendingAcpPermission). choice must be
+  // one of the exact strings the run's `permission_request` agent event
+  // listed under `choices` -- typically a subset of once/session/always/deny.
+  app.post('/api/runs/:id/permission', (req, res) => {
+    const run = design.runs.get(req.params.id);
+    if (!run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
+    const choice = req.body?.choice;
+    if (typeof choice !== 'string' || !choice) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'choice is required');
+    }
+    const resolved = resolvePendingAcpPermission(run.id, choice);
+    if (!resolved) {
+      return sendApiError(res, 409, 'CONFLICT', 'no pending permission request for this run (already answered or timed out)');
+    }
+    res.json({ ok: true });
   });
 
   app.post('/api/chat', (req, res) => {

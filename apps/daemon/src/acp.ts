@@ -89,6 +89,12 @@ interface AttachAcpSessionOptions {
   clientVersion?: string;
   stageTimeoutMs?: number;
   modelUnavailableErrorCode?: 'AMR_MODEL_UNAVAILABLE';
+  // Correlates an in-flight ACP session/request_permission with a real
+  // human answer delivered later via POST /api/runs/:id/permission. See
+  // resolvePendingAcpPermission below — required for permission requests
+  // to ever be answered by anyone; omitting it means every permission
+  // request fails closed (denied) on timeout, never auto-approved.
+  runId?: string;
 }
 
 function errorMessage(err: unknown): string {
@@ -250,15 +256,66 @@ function formatUsage(usage: unknown): FormattedUsage | null {
   return Object.keys(out).length > 0 ? out : null;
 }
 
-function choosePermissionOutcome(options: unknown): string | null {
+// Real human-in-the-loop bridge for ACP session/request_permission.
+//
+// Previously `choosePermissionOutcome` picked an "allow" option the instant
+// a permission request arrived -- no human was ever asked, no UI event was
+// ever emitted, and there was no deny path at all (the function only ever
+// returns an allow_* optionId or null). Every dangerous-command approval
+// and every plugin `pre_tool_call` "approve" directive coming from a spawned
+// ACP agent (Hermes, Kimi, Kilo, Kiro, Vibe, Devin) was therefore silently
+// auto-approved. Fixed by turning the reply into a real pending decision:
+// the request is pushed to the client as a `permission_request` agent
+// event, and the daemon waits for a matching POST /api/runs/:id/permission
+// call. No answer within the timeout is a DENY, never an allow -- this
+// mirrors Hermes' own fail-closed philosophy for its dangerous-command gate
+// (see hermes-agent's tools/approval.py, `request_tool_approval`'s
+// `fail_closed_when_no_human=True`).
+const PERMISSION_ANSWER_TIMEOUT_MS = 55_000;
+
+interface PendingAcpPermission {
+  resolve: (choice: string) => void;
+}
+
+const pendingAcpPermissions = new Map<string, PendingAcpPermission>();
+
+/**
+ * Deliver a real human's answer to an in-flight ACP permission request.
+ * Called from POST /api/runs/:id/permission. Returns false if there is no
+ * matching pending request (already answered, timed out, or wrong run id)
+ * so the route can report a clean 404/409 rather than silently no-op.
+ */
+export function resolvePendingAcpPermission(runId: string, choice: string): boolean {
+  const pending = pendingAcpPermissions.get(runId);
+  if (!pending) return false;
+  pendingAcpPermissions.delete(runId);
+  pending.resolve(choice);
+  return true;
+}
+
+function findAcpOptionId(options: unknown, choice: string): string | null {
   const list = Array.isArray(options) ? options : [];
-  const approveForSession = list.find((option) => option?.optionId === 'approve_for_session');
-  if (approveForSession) return 'approve_for_session';
-  const allowAlways = list.find((option) => option?.kind === 'allow_always');
-  if (allowAlways?.optionId) return allowAlways.optionId;
-  const allowOnce = list.find((option) => option?.kind === 'allow_once');
-  if (allowOnce?.optionId) return allowOnce.optionId;
-  return null;
+  const wantedId = choice === 'deny' ? 'deny' : `allow_${choice}`;
+  const match = list.find((option) => option?.optionId === wantedId);
+  return typeof match?.optionId === 'string' ? match.optionId : null;
+}
+
+function findDenyOptionId(options: unknown): string | null {
+  const list = Array.isArray(options) ? options : [];
+  const deny = list.find((option) => option?.optionId === 'deny');
+  return typeof deny?.optionId === 'string' ? deny.optionId : null;
+}
+
+function summarizePermissionRequest(params: JsonObject | null): { title: string; description: string } {
+  const toolCall = asObject(params?.toolCall);
+  const title = typeof toolCall?.title === 'string' ? toolCall.title : 'Tool call requires approval';
+  const rawInput = asObject(toolCall?.rawInput);
+  const description = typeof rawInput?.description === 'string'
+    ? rawInput.description
+    : typeof rawInput?.command === 'string'
+      ? rawInput.command
+      : title;
+  return { title, description };
 }
 
 function normalizeConfigOptionToken(value: unknown): string {
@@ -821,6 +878,7 @@ export function attachAcpSession({
   clientVersion = 'runtime-adapter',
   stageTimeoutMs = DEFAULT_STAGE_TIMEOUT_MS,
   modelUnavailableErrorCode,
+  runId,
 }: AttachAcpSessionOptions) {
   const runStartedAt = Date.now();
   const effectiveCwd = path.resolve(cwd || process.cwd());
@@ -992,21 +1050,69 @@ export function attachAcpSession({
     child.once('close', () => clearTimeout(cleanExitTimer));
   };
 
-  const replyPermission = (raw: JsonObject) => {
+  const replyPermission = async (raw: JsonObject) => {
     const params = asObject(raw.params);
-    const optionId = choosePermissionOutcome(params?.options);
-    if (!optionId || !isJsonRpcId(raw.id)) {
+    if (!isJsonRpcId(raw.id)) {
       fail(`unhandled ACP permission request: ${JSON.stringify(raw)}`);
       return;
     }
+    // Narrowing raw.id via isJsonRpcId above doesn't survive into the
+    // respond() closure below (it runs after an await, and TS discards
+    // property narrowing across closure boundaries) -- capture it as its
+    // own correctly-typed binding instead of re-reading raw.id later.
+    const jsonRpcId: JsonRpcId = raw.id;
+    // Hold the stage watchdog open while we wait on a real human -- this is
+    // exactly the kind of legitimate silence (no stdout from the child
+    // until it gets an answer) the watchdog exists to distinguish from a
+    // genuinely hung agent.
     resetStageTimer('session/request_permission');
-    try {
-      sendRpcResult(stdin, raw.id, {
-        outcome: { outcome: 'selected', optionId },
-      });
-    } catch (err) {
-      fail(`stdin write failed: ${errorMessage(err)}`);
+
+    const denyOptionId = findDenyOptionId(params?.options);
+    const respond = (optionId: string | null) => {
+      try {
+        sendRpcResult(stdin, jsonRpcId, {
+          outcome: optionId
+            ? { outcome: 'selected', optionId }
+            : { outcome: 'cancelled' },
+        });
+      } catch (err) {
+        fail(`stdin write failed: ${errorMessage(err)}`);
+      }
+    };
+
+    if (!runId) {
+      // No run id means nothing can ever answer this (see AttachAcpSessionOptions.runId
+      // doc comment) -- fail closed immediately rather than hang until timeout.
+      respond(denyOptionId);
+      return;
     }
+
+    const { title, description } = summarizePermissionRequest(params);
+    const requestId = `perm_${runId}_${Date.now()}`;
+    send('agent', {
+      type: 'permission_request',
+      requestId,
+      title,
+      description,
+      // Only the choices Hermes actually offered for this specific request
+      // (e.g. a non-permanent-eligible call omits "always") -- the answering
+      // client must not invent an option that wasn't on the real list.
+      choices: (Array.isArray(params?.options) ? params.options : [])
+        .map((o) => (typeof o?.optionId === 'string' ? o.optionId : null))
+        .filter((id): id is string => id !== null)
+        .map((id) => id.replace(/^allow_/, '').replace(/^deny_?/, 'deny')),
+    });
+
+    const choice = await new Promise<string>((resolve) => {
+      pendingAcpPermissions.set(runId, { resolve });
+      setTimeout(() => {
+        if (pendingAcpPermissions.delete(runId)) resolve('deny');
+      }, PERMISSION_ANSWER_TIMEOUT_MS);
+    });
+
+    send('agent', { type: 'permission_resolved', requestId, choice });
+    const optionId = findAcpOptionId(params?.options, choice) ?? denyOptionId;
+    respond(optionId);
   };
 
   const recoverFromModelSelectionError = () => {
@@ -1058,7 +1164,10 @@ export function attachAcpSession({
       return;
     }
     if (obj.method === 'session/request_permission') {
-      replyPermission(obj);
+      // Deliberately not awaited: replyPermission now waits on a real human
+      // answer (or a timeout), and this dispatcher must keep processing
+      // other stdout lines from the child in the meantime.
+      void replyPermission(obj);
       return;
     }
     const update = asObject(params?.update);
