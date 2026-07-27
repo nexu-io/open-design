@@ -3,7 +3,7 @@ import {
   type DesktopUpdateStatusSnapshot,
 } from "@open-design/sidecar-proto";
 
-import type { DesktopUpdater, DesktopUpdaterLogger } from "./updater.js";
+import type { DesktopUpdater, DesktopUpdaterLogger } from "../updater.js";
 
 /**
  * @module updater-scheduler

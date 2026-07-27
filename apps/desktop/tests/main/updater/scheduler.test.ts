@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { DESKTOP_UPDATE_CHANNELS, DESKTOP_UPDATE_STATES } from "@open-design/sidecar-proto";
 
-import { createDesktopUpdaterScheduler } from "../../src/main/updater-scheduler.js";
+import { createDesktopUpdaterScheduler } from "../../../src/main/updater/scheduler.js";
 
 describe("desktop updater scheduler", () => {
   it("silently applies a ready launcher payload during the startup poll when enabled", async () => {

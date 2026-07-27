@@ -74,18 +74,18 @@ import {
   resolveDesktopUpdaterConfig,
   type DesktopUpdaterConfig,
   type DesktopUpdaterConfigInput,
-} from "./updater-config.js";
+} from "./updater/config.js";
 
 export {
   DESKTOP_UPDATE_ENV,
   resolveDesktopUpdaterConfig,
   type DesktopUpdaterConfig,
   type DesktopUpdaterConfigInput,
-} from "./updater-config.js";
+} from "./updater/config.js";
 export {
   createDesktopUpdaterScheduler,
   type DesktopUpdaterScheduler,
-} from "./updater-scheduler.js";
+} from "./updater/scheduler.js";
 
 const OWNERSHIP_SENTINEL = ".open-design-updater-root.json";
 const STORE_METADATA_FILE = "metadata.json";
