@@ -1,0 +1,22 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "clone-audit-ms2yu3ol",
+  "title": "Clone Audit",
+  "version": "0.1.0",
+  "description": "- Project: /Users/ericchansmac/Library/Application Support/Open Design/namespaces/release-stable/data/projects/896a37bf-5da8-4267-8fa2-d1b8a20f2e01 - Scanned files: 13 - Findings: 357",
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}
