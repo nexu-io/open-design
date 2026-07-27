@@ -161,7 +161,7 @@ export function parseDeckThumbnails(html: string, baseHref?: string): ParsedDeck
   // faithfully rewritten against the deck canvas as viewport units can. Keep
   // the live iframe fallback for these decks rather than rendering a black or
   // collapsed thumbnail rail.
-  if (CONTAINER_QUERY_UNIT_RE.test(rawStyle)) return unrenderable('container-query-units');
+  if (hasContainerQueryUnits(doc, rawStyle)) return unrenderable('container-query-units');
 
   const designSize = resolveDesignSize(doc, rawStyle);
 
@@ -195,6 +195,13 @@ export function parseDeckThumbnails(html: string, baseHref?: string): ParsedDeck
 
 const VIEWPORT_UNIT_TOKEN_RE = /(-?\d*\.?\d+)\s*(vw|vh|vmin|vmax|svw|svh|lvw|lvh|dvw|dvh)\b/gi;
 const CONTAINER_QUERY_UNIT_RE = /-?\d*\.?\d+\s*(?:cqw|cqh|cqi|cqb|cqmin|cqmax)\b/i;
+
+function hasContainerQueryUnits(doc: Document, stylesheet: string): boolean {
+  if (CONTAINER_QUERY_UNIT_RE.test(stylesheet)) return true;
+  return Array.from(doc.querySelectorAll('[style]')).some((element) =>
+    CONTAINER_QUERY_UNIT_RE.test(element.getAttribute('style') || ''),
+  );
+}
 
 // Replace each `<n><viewport-unit>` with `calc(<n> * <k>px)` where `k` is the
 // design canvas dimension / 100. Works inside `clamp()`/`min()`/`max()` and

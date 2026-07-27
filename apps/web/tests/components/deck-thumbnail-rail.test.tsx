@@ -83,6 +83,16 @@ describe('DeckThumbnailRail', () => {
     expect(rebuilt).toHaveBeenCalledTimes(3);
   });
 
+  it('removes the loading cover after an iframe thumbnail loads', () => {
+    const { container } = render(<DeckThumbnailRail {...railProps({ count: 1, labelTotal: 1 })} />);
+    const iframe = container.querySelector('.deck-thumbnail-frame iframe');
+
+    expect(iframe).toBeTruthy();
+    expect(container.querySelector('.deck-thumbnail-loading')).toBeTruthy();
+    fireEvent.load(iframe!);
+    expect(container.querySelector('.deck-thumbnail-loading')).toBeNull();
+  });
+
   it('reports the clicked slide index and marks the active thumbnail', () => {
     const onSelect = vi.fn();
     const { container } = render(

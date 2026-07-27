@@ -133,7 +133,11 @@ const DeckThumbnailItem = memo(function DeckThumbnailItem({
   useEffect(() => {
     if (!mounted) setReadySource(null);
   }, [mounted]);
-  const handleThumbnailReady = useCallback(() => setReadySource(thumbnailSource), [thumbnailSource]);
+  const handleThumbnailReady = useCallback(
+    // The iframe source is a function, so wrap it to store the value instead of invoking it as an updater.
+    () => setReadySource(() => thumbnailSource),
+    [thumbnailSource],
+  );
   const handleShadowError = useCallback(() => {
     setReadySource(null);
     setShadowFailed(true);

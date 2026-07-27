@@ -167,6 +167,17 @@ describe('parseDeckThumbnails', () => {
     expect(parsed.reason).toBe('container-query-units');
   });
 
+  it('uses the iframe fallback for container query units in inline styles', () => {
+    const html = `<!doctype html><html><head><style>
+      .deck { width: 1280px; height: 720px; container-type: size; }
+    </style></head><body><main class="deck">
+      <section class="slide"><h1 style="font-size: 4cqi">A</h1></section>
+    </main></body></html>`;
+    const parsed = parseDeckThumbnails(html);
+    expect(parsed.renderable).toBe(false);
+    expect(parsed.reason).toBe('container-query-units');
+  });
+
   it('stays renderable for a fixed px canvas with percent-sized slides', () => {
     const html = `<!doctype html><html><head><style>
       .deck-stage { width: 1920px; height: 1080px; }
