@@ -52,10 +52,10 @@
 // placeholder as the final result.
 
 import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
-import { execFile as execFileCb, spawn } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
-import { promisify } from 'node:util';
+
 import { Agent as UndiciAgent } from 'undici';
 import {
   AUDIO_DURATIONS_SEC,
@@ -96,7 +96,6 @@ import {
   classifyAIHubMixModel,
 } from '../integrations/aihubmix.js';
 
-const execFile = promisify(execFileCb);
 const DEFAULT_OPENROUTER_VIDEO_POLL_INTERVAL_MS = 8000;
 type ProviderConfig = { apiKey?: string; baseUrl?: string; model?: string };
 type ProgressFn = (message: string) => void;

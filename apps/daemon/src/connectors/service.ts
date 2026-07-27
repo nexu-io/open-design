@@ -12,7 +12,7 @@ import {
   type ConnectorToolSafety,
   type ConnectorStatus,
 } from './catalog.js';
-import { composioConnectorProvider, getStaticComposioCatalogDefinitions, type ComposioAuthConfigPrepareResult, type ComposioConnectionStart } from './composio.js';
+import { composioConnectorProvider, type ComposioAuthConfigPrepareResult, type ComposioConnectionStart } from './composio.js';
 
 export interface ConnectorExecuteRequest {
   connectorId: string;

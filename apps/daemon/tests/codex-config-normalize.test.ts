@@ -31,7 +31,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync, writeFileSync, readFileSync, statSync, readdirSync } from 'node:fs';
-import { readFile, writeFile, rename, unlink } from 'node:fs/promises';
+import { readFile, writeFile, unlink } from 'node:fs/promises';
 import { tmpdir, homedir } from 'node:os';
 import { join, normalize } from 'node:path';
 import {

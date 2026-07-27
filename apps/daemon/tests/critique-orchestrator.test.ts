@@ -1,11 +1,11 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, existsSync, readFileSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { migrateCritique, getCritiqueRun } from '../src/critique/persistence.js';
-import { runOrchestrator, type CritiqueSseBus, type OrchestratorParams } from '../src/critique/orchestrator.js';
+import { runOrchestrator, type CritiqueSseBus } from '../src/critique/orchestrator.js';
 import type { CritiqueSseEvent } from '@open-design/contracts/critique';
 import { defaultCritiqueConfig, type CritiqueConfig } from '@open-design/contracts/critique';
 

@@ -24,7 +24,6 @@ import type Database from 'better-sqlite3';
 import type {
   AppliedPluginSnapshot,
   ApplyResult,
-  InstalledPluginRecord,
   PluginConnectorBinding,
 } from '@open-design/contracts';
 import {

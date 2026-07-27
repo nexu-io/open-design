@@ -31,7 +31,6 @@ import {
   classifyAIHubMixModel,
 } from '../integrations/aihubmix.js';
 import { isSafeId as isSafeProjectId } from '../projects.js';
-import { projectKindToTracking } from '@open-design/contracts/analytics';
 import { proxyDispatcherRequestInit, validateUserProviderBaseUrl } from '../connectionTest.js';
 import { resolveModelForServiceTier } from '../runtimes/models.js';
 import { googleStreamGenerateContentUrl } from '../integrations/google-models.js';
@@ -62,7 +61,7 @@ export interface RegisterChatRoutesDeps extends RouteDeps<'db' | 'design' | 'htt
 }
 
 export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
-  const { db, design } = ctx;
+  const { db } = ctx;
   const { sendApiError, createSseResponse } = ctx.http;
   const { readAppConfig } = ctx.appConfig;
   const { testProviderConnection, testAgentConnection, getAgentDef, isKnownModel, isKnownServiceTier, sanitizeCustomModel, listProviderModels } = ctx.agents;

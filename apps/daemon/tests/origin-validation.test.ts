@@ -677,9 +677,6 @@ describe('isLocalSameOrigin: OD_ALLOWED_ORIGINS bypass for reverse-proxy deploym
     };
     expect(isLocalSameOrigin(reqLoopback, 7457, env)).toBe(true);
 
-    const reqNonLoopback = {
-      headers: { host: '172.18.0.5:7457' },
-    };
     // 172.18.0.0/16 is private, so it actually passes isLoopbackOrPrivateLanHost;
     // demonstrate the more important invariant: an entirely external host fails.
     const reqExternal = {

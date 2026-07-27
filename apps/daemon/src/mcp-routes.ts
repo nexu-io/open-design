@@ -3,19 +3,18 @@ import fs from 'node:fs';
 import { SIDECAR_ENV } from '@open-design/sidecar-proto';
 import { buildMcpInstallPayload, type McpInstallPayload } from './mcp-install-info.js';
 import { installCodexMcp, probeCodexInstall, uninstallCodexMcp } from './codex-cli.js';
-import { MCP_TEMPLATES, buildAcpMcpServers, buildClaudeMcpJson, isManagedProjectCwd, readMcpConfig, writeMcpConfig } from './mcp-config.js';
-import { beginAuth, exchangeCodeForToken, refreshAccessToken } from './mcp-oauth.js';
-import { clearToken, getToken, isTokenExpired, readAllTokens, setToken } from './mcp-tokens.js';
+import { MCP_TEMPLATES, readMcpConfig, writeMcpConfig } from './mcp-config.js';
+import { beginAuth, exchangeCodeForToken } from './mcp-oauth.js';
+import { clearToken, getToken, setToken } from './mcp-tokens.js';
 import type { RouteDeps } from './server-context.js';
 
 export interface RegisterMcpRoutesDeps extends RouteDeps<'http' | 'paths' | 'mcp'> {}
 
 export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
   const { isLocalSameOrigin, resolvedPortRef, sendApiError } = ctx.http;
-  const { OD_BIN, RUNTIME_DATA_DIR, PROJECTS_DIR } = ctx.paths;
-  const { pendingAuth, daemonUrlRef } = ctx.mcp;
+  const { OD_BIN, RUNTIME_DATA_DIR } = ctx.paths;
+  const { pendingAuth } = ctx.mcp;
   const getResolvedPort = () => resolvedPortRef.current;
-  const getDaemonUrl = () => daemonUrlRef.current;
   // Surfaces the absolute paths to the daemon's Node-compatible runtime and
   // CLI entry so the Settings → MCP server panel can render snippets that work
   // even when `od` isn't on the user's PATH (the common case for source clones

@@ -1,4 +1,4 @@
-import type { Express, NextFunction, Request, RequestHandler, Response } from 'express';
+import type { Express, Request, RequestHandler, Response } from 'express';
 import type {
   InstalledPluginRecord,
   PluginDuplicateProjectRequest,
@@ -826,7 +826,7 @@ export function registerPluginRoutes(app: Express, deps: RegisterPluginRoutesDep
 }
 
 export function registerProjectPluginRoutes(app: Express, deps: RegisterPluginRoutesDeps): void {
-  const { db, paths, plugins, helpers } = deps;
+  const { db, plugins, helpers } = deps;
   const authorizeWrite = (req: Request, res: Response, projectId: string) =>
     deps.authorizeProjectRequest(
       req,

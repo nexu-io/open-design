@@ -88,7 +88,7 @@ export function resolveLegacyMediaRouteGrant(input: {
 
 export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) {
   const { db, design } = ctx;
-  const { sendApiError, requireLocalDaemonRequest, isLocalSameOrigin, resolvedPortRef } = ctx.http;
+  const { sendApiError, isLocalSameOrigin, resolvedPortRef } = ctx.http;
   const { PROJECT_ROOT, PROJECTS_DIR, RUNTIME_DATA_DIR } = ctx.paths;
   const { authorizeToolRequest, optionalToolGrantFromRequest, requestProjectOverride } = ctx.auth;
   const { randomUUID } = ctx.ids;
@@ -101,7 +101,6 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
   const { orbitService } = ctx.orbit;
   const { openBrowser, openNativeFolderDialog } = ctx.nativeDialogs;
   const { getProject } = ctx.projectStore;
-  const { insertConversation, upsertMessage } = ctx.conversations;
   const { searchResearch, ResearchError } = ctx.research;
   const getResolvedPort = () => resolvedPortRef.current;
 

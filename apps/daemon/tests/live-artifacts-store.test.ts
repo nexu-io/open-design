@@ -31,7 +31,6 @@ import {
 import {
   applyLiveArtifactOutputMapping,
   buildLiveArtifactRefreshCandidate,
-  LiveArtifactRefreshAbortError,
   executeLocalDaemonRefreshSource,
   LiveArtifactRefreshRunRegistry,
   normalizeLiveArtifactRefreshTimeouts,

@@ -70,8 +70,6 @@ type RoleHint = {
 
 const DEFAULT_BODY_FONT =
   'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-const DEFAULT_MONO_FONT =
-  'ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Monaco, Consolas, monospace';
 
 const DEFAULT_TOKEN_VALUES: TokenDefaults = {
   '--bg': '#f8fafc',

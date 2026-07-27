@@ -2,7 +2,6 @@ import type { Express, Response } from 'express';
 import { PROJECT_EXPORT_MANIFEST_SCHEMA, isExportFormat } from '@open-design/contracts';
 import nodePath from 'node:path';
 import os from 'node:os';
-import { readFile, rm } from 'node:fs/promises';
 import { isBlocked as isBlockedSystemDir } from './linked-dirs.js';
 import type { RouteDeps } from './server-context.js';
 import type { AuthorizeProjectRequest } from './collab/project-request-authority.js';

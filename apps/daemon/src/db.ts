@@ -27,7 +27,6 @@ import { migratePlugins } from './plugins/persistence.js';
 
 type SqliteDb = Database.Database;
 type DbRow = Record<string, any>;
-type JsonObject = Record<string, unknown>;
 type ChatSessionMode = 'design' | 'chat' | 'plan';
 
 let dbInstance: SqliteDb | null = null;

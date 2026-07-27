@@ -144,10 +144,6 @@ export function emitWithTextSuppressor(
   return true;
 }
 
-function possibleDsmlArtifactOpenStart(text: string): number {
-  return possibleTagStart(text, isPossibleDsmlArtifactOpen);
-}
-
 function possibleTagStart(text: string, predicate: (tail: string) => boolean): number {
   const min = Math.max(0, text.length - MAX_CANDIDATE_LENGTH);
   let index = text.lastIndexOf('<');
@@ -168,10 +164,6 @@ function isPossibleDsmlArtifactOpen(text: string): boolean {
     compact.startsWith(DSML_OPEN_CANONICAL) ||
     ARTIFACT_OPEN_CANONICAL.startsWith(compact) ||
     compact.startsWith(ARTIFACT_OPEN_CANONICAL);
-}
-
-function possibleArtifactCloseStart(text: string): number {
-  return possibleTagStart(text, isPossibleArtifactClose);
 }
 
 function isPossibleArtifactClose(text: string): boolean {

@@ -18,7 +18,8 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "skipLibCheck": true,
-    "types": ["node", "vitest"]
+    "types": ["node", "vitest"],
+    "noUnusedLocals": true
   },
   "include": [
     "src/**/*.ts",

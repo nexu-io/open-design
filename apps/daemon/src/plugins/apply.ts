@@ -27,8 +27,6 @@ import {
   type InstalledPluginRecord,
   type McpServerSpec,
   type PluginAssetRef,
-  type PluginConnectorBinding,
-  type PluginConnectorRef,
   type PluginManifest,
   type PluginProjectMetadataPatch,
   type TrustTier,

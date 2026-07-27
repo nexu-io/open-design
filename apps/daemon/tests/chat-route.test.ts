@@ -2,7 +2,6 @@ import type http from 'node:http';
 import Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
 import {
-  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -11,7 +10,6 @@ import {
   realpathSync,
   rmSync,
   symlinkSync,
-  writeFileSync,
 } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';

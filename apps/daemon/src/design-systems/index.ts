@@ -3253,19 +3253,6 @@ function sanitizeRevisionId(raw: string | undefined): string | null {
   return /^[a-zA-Z0-9-]+$/.test(value) ? value : null;
 }
 
-async function uniqueSlug(root: string, base: string): Promise<string> {
-  let candidate = base || 'design-system';
-  let index = 2;
-  for (;;) {
-    try {
-      await stat(path.join(root, candidate));
-      candidate = `${base}-${index++}`;
-    } catch {
-      return candidate;
-    }
-  }
-}
-
 async function reserveUniqueSlugDirectory(
   root: string,
   base: string,

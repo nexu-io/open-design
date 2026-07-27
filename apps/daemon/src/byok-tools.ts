@@ -97,7 +97,6 @@ export function isAIHubMixSpeechModel(value: unknown): value is string {
 }
 export const BYOK_AIHUBMIX_DEFAULT_SPEECH_MODEL = 'aihubmix-tts-1';
 
-const AIHUBMIX_DEFAULT_TTS_MODEL = 'tts-1';
 const AIHUBMIX_DEFAULT_TTS_VOICE = 'alloy';
 
 // AIHubMix video knobs for the chat `generate_video` tool. The wire shape
