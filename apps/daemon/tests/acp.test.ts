@@ -5,7 +5,12 @@ import os from 'node:os';
 import { PassThrough } from 'node:stream';
 import path from 'node:path';
 import { test, vi } from 'vitest';
-import { attachAcpSession, buildAcpSessionNewParams, normalizeModels } from '../src/acp.js';
+import {
+  attachAcpSession,
+  buildAcpSessionNewParams,
+  normalizeModels,
+  resolvePendingAcpPermission,
+} from '../src/acp.js';
 import { countNewArtifacts } from '../src/runtimes/run-artifacts.js';
 
 const DEFAULT_MODEL_OPTION = { id: 'default', label: 'Default (CLI config)' };
@@ -1266,6 +1271,204 @@ test('attachAcpSession treats stageTimeoutMs <= 0 as a watchdog disable, not an 
       `expected stageTimeoutMs=0 to disable the watchdog, got: ${JSON.stringify(errors)}`,
     );
     assert.equal(child.killed, false);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+// The 0cd288be0 fix made EVERY ACP session/request_permission wait on a real
+// human answer over SSE, which correctly closed the silent-auto-approve hole
+// but also blocked routine tool calls (write_file, read_file, execute_code,
+// ...) for up to 55s with no apps/web UI yet able to answer in time. These
+// three tests pin the follow-up scoping down to Hostinger tool calls only
+// (see isHostingerAcpToolCall in acp.ts): everything else must go straight
+// back to the pre-fix auto-approve behavior, and only mcp__hostinger__*
+// calls go through the pending-decision flow.
+test('attachAcpSession auto-approves a non-Hostinger ACP permission request (routine file edit)', () => {
+  const child = new FakeAcpChild();
+  const writes: string[] = [];
+  const events: Array<{ event: string; payload: unknown }> = [];
+  child.stdin.on('data', (chunk) => writes.push(String(chunk)));
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'update the hero copy',
+    cwd: '/tmp/od-project',
+    model: null,
+    mcpServers: [],
+    runId: 'run-edit-1',
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  writeAcpResult(child, 1, {});
+  writeAcpResult(child, 2, { sessionId: 'session-1' });
+
+  // Real Hermes plugin-approval title for a routine file edit, captured
+  // live from a run this fix was verified against -- no mcp__<server>__
+  // tool id embedded, so this must NOT go through the SSE pending-decision
+  // flow the way it did before this change.
+  child.stdout.write(
+    `${JSON.stringify({
+      id: 100,
+      method: 'session/request_permission',
+      params: {
+        toolCall: { title: 'Approve edit: variation-white-purple-gold.html' },
+        options: [
+          { optionId: 'allow_once', kind: 'allow_once' },
+          { optionId: 'deny', kind: 'reject_once' },
+        ],
+      },
+    })}\n`,
+  );
+
+  const permissionEvents = events.filter(
+    (entry) => entry.event === 'agent' && (entry.payload as { type?: unknown }).type === 'permission_request',
+  );
+  assert.deepEqual(
+    permissionEvents,
+    [],
+    'a non-Hostinger tool call must not go through the human-approval SSE flow',
+  );
+
+  const responses = parseRpcWrites(writes);
+  const permissionResponse = responses.find((entry) => entry.id === 100);
+  assert.deepEqual(
+    permissionResponse?.result,
+    { outcome: { outcome: 'selected', optionId: 'allow_once' } },
+    'non-Hostinger permission requests should auto-approve immediately, matching pre-fix behavior',
+  );
+});
+
+test('attachAcpSession routes a Hostinger ACP permission request through the human-approval flow', async () => {
+  const child = new FakeAcpChild();
+  const writes: string[] = [];
+  const events: Array<{ event: string; payload: unknown }> = [];
+  child.stdin.on('data', (chunk) => writes.push(String(chunk)));
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'delete the firewall rule',
+    cwd: '/tmp/od-project',
+    model: null,
+    mcpServers: [],
+    runId: 'run-hostinger-1',
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  writeAcpResult(child, 1, {});
+  writeAcpResult(child, 2, { sessionId: 'session-1' });
+
+  // Real Hermes plugin-approval title for a Hostinger tool call, captured
+  // live from run def4c121-c33b-4da3-8100-7c8b4a474c5f.
+  child.stdout.write(
+    `${JSON.stringify({
+      id: 200,
+      method: 'session/request_permission',
+      params: {
+        toolCall: {
+          title:
+            'Hostinger tool call requires approval: mcp__hostinger__VPS_deleteFirewallRuleV1({"ruleId": 0, "firewallId": "00000000-0000-0000-0000-000000000000"}): <mcp__hostinger__VPS_deleteFirewallRuleV1> (plugin approval rule)',
+        },
+        options: [
+          { optionId: 'allow_once', kind: 'allow_once' },
+          { optionId: 'allow_session', kind: 'allow_always' },
+          { optionId: 'allow_always', kind: 'allow_always' },
+          { optionId: 'deny', kind: 'reject_once' },
+          { optionId: 'deny_always', kind: 'reject_always' },
+        ],
+      },
+    })}\n`,
+  );
+
+  await vi.waitFor(() => {
+    const requested = events.some(
+      (entry) => entry.event === 'agent' && (entry.payload as { type?: unknown }).type === 'permission_request',
+    );
+    assert.equal(requested, true, 'expected a Hostinger tool call to raise a permission_request SSE event');
+  });
+
+  const requestEvent = events.find(
+    (entry) => entry.event === 'agent' && (entry.payload as { type?: unknown }).type === 'permission_request',
+  );
+  assert.match(
+    (requestEvent?.payload as { title?: string }).title ?? '',
+    /mcp__hostinger__VPS_deleteFirewallRuleV1/,
+  );
+  assert.deepEqual((requestEvent?.payload as { choices?: unknown }).choices, [
+    'once',
+    'session',
+    'always',
+    'deny',
+    'denyalways',
+  ]);
+
+  // Simulate the real human answer that POST /api/runs/:id/permission delivers.
+  const resolved = resolvePendingAcpPermission('run-hostinger-1', 'once');
+  assert.equal(resolved, true);
+
+  await vi.waitFor(() => {
+    const responses = parseRpcWrites(writes);
+    assert.equal(responses.some((entry) => entry.id === 200), true);
+  });
+
+  const responses = parseRpcWrites(writes);
+  const permissionResponse = responses.find((entry) => entry.id === 200);
+  assert.deepEqual(permissionResponse?.result, { outcome: { outcome: 'selected', optionId: 'allow_once' } });
+});
+
+test('attachAcpSession fails a Hostinger ACP permission request closed (deny) if no human answers in time', async () => {
+  vi.useFakeTimers();
+  try {
+    const child = new FakeAcpChild();
+    const writes: string[] = [];
+    const events: Array<{ event: string; payload: unknown }> = [];
+    child.stdin.on('data', (chunk) => writes.push(String(chunk)));
+
+    attachAcpSession({
+      child: child as never,
+      prompt: 'delete the firewall rule',
+      cwd: '/tmp/od-project',
+      model: null,
+      mcpServers: [],
+      runId: 'run-hostinger-2',
+      send: (event, payload) => events.push({ event, payload }),
+    });
+
+    writeAcpResult(child, 1, {});
+    writeAcpResult(child, 2, { sessionId: 'session-1' });
+
+    child.stdout.write(
+      `${JSON.stringify({
+        id: 300,
+        method: 'session/request_permission',
+        params: {
+          toolCall: { title: 'Hostinger tool call requires approval: mcp__hostinger__VPS_deleteFirewallRuleV1({})' },
+          options: [
+            { optionId: 'allow_once', kind: 'allow_once' },
+            { optionId: 'deny', kind: 'reject_once' },
+          ],
+        },
+      })}\n`,
+    );
+
+    await vi.waitFor(() => {
+      assert.equal(
+        events.some((entry) => entry.event === 'agent' && (entry.payload as { type?: unknown }).type === 'permission_request'),
+        true,
+      );
+    });
+
+    // No POST /api/runs/:id/permission ever arrives -- advance past the 55s
+    // answer window and confirm the request fails closed (deny), not open.
+    await vi.advanceTimersByTimeAsync(55_000);
+
+    const responses = parseRpcWrites(writes);
+    const permissionResponse = responses.find((entry) => entry.id === 300);
+    assert.deepEqual(
+      permissionResponse?.result,
+      { outcome: { outcome: 'selected', optionId: 'deny' } },
+      'an unanswered Hostinger permission request must deny, never auto-allow, on timeout',
+    );
   } finally {
     vi.useRealTimers();
   }

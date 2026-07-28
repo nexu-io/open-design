@@ -89,11 +89,14 @@ interface AttachAcpSessionOptions {
   clientVersion?: string;
   stageTimeoutMs?: number;
   modelUnavailableErrorCode?: 'AMR_MODEL_UNAVAILABLE';
-  // Correlates an in-flight ACP session/request_permission with a real
-  // human answer delivered later via POST /api/runs/:id/permission. See
-  // resolvePendingAcpPermission below — required for permission requests
-  // to ever be answered by anyone; omitting it means every permission
-  // request fails closed (denied) on timeout, never auto-approved.
+  // Correlates an in-flight Hostinger ACP session/request_permission with a
+  // real human answer delivered later via POST /api/runs/:id/permission. See
+  // resolvePendingAcpPermission and isHostingerAcpToolCall below — only
+  // Hostinger tool calls (mcp__hostinger__*) go through this pending-decision
+  // flow, so runId only matters for those; every other ACP tool call
+  // auto-approves without it. Omitting runId on a Hostinger call means that
+  // request fails closed (denied) immediately rather than hanging until
+  // timeout.
   runId?: string;
 }
 
@@ -256,7 +259,8 @@ function formatUsage(usage: unknown): FormattedUsage | null {
   return Object.keys(out).length > 0 ? out : null;
 }
 
-// Real human-in-the-loop bridge for ACP session/request_permission.
+// Real human-in-the-loop bridge for ACP session/request_permission --
+// scoped to Hostinger MCP tool calls only (mcp__hostinger__*).
 //
 // Previously `choosePermissionOutcome` picked an "allow" option the instant
 // a permission request arrived -- no human was ever asked, no UI event was
@@ -264,13 +268,21 @@ function formatUsage(usage: unknown): FormattedUsage | null {
 // returns an allow_* optionId or null). Every dangerous-command approval
 // and every plugin `pre_tool_call` "approve" directive coming from a spawned
 // ACP agent (Hermes, Kimi, Kilo, Kiro, Vibe, Devin) was therefore silently
-// auto-approved. Fixed by turning the reply into a real pending decision:
-// the request is pushed to the client as a `permission_request` agent
-// event, and the daemon waits for a matching POST /api/runs/:id/permission
-// call. No answer within the timeout is a DENY, never an allow -- this
-// mirrors Hermes' own fail-closed philosophy for its dangerous-command gate
-// (see hermes-agent's tools/approval.py, `request_tool_approval`'s
-// `fail_closed_when_no_human=True`).
+// auto-approved. First fix made this a real pending decision for EVERY ACP
+// permission request: push it to the client as a `permission_request` agent
+// event and wait for a matching POST /api/runs/:id/permission call, denying
+// (never allowing) on timeout -- mirroring Hermes' own fail-closed
+// philosophy for its dangerous-command gate (see hermes-agent's
+// tools/approval.py, `request_tool_approval`'s `fail_closed_when_no_human=True`).
+//
+// That universal version blocked every routine tool call (write_file,
+// read_file, execute_code, ...) for up to 55s with no apps/web UI yet able
+// to answer the SSE prompt in time. Scoped down to just Hostinger tool
+// calls (see isHostingerAcpToolCall below), the one tool family that can
+// actually delete production infrastructure (VMs, firewalls, domains,
+// mailboxes, ...) today. Every other ACP tool call goes back to the pre-fix
+// auto-approve behavior via chooseAutoApprovedOptionId. Full universal
+// gating is still the eventual goal once a real approval UI exists.
 const PERMISSION_ANSWER_TIMEOUT_MS = 55_000;
 
 interface PendingAcpPermission {
@@ -316,6 +328,52 @@ function summarizePermissionRequest(params: JsonObject | null): { title: string;
       ? rawInput.command
       : title;
   return { title, description };
+}
+
+// ACP's session/request_permission carries no dedicated tool-name field --
+// only a free-text toolCall.title / toolCall.rawInput.description written by
+// the agent. Hermes' plugin-approval title format embeds the fully
+// qualified MCP tool id verbatim, e.g.:
+//   "Hostinger tool call requires approval:
+//    mcp__hostinger__VPS_deleteFirewallRuleV1({...}):
+//    <mcp__hostinger__VPS_deleteFirewallRuleV1> (plugin approval rule)"
+// (confirmed against a real approval-gated Hostinger call). Extracting that
+// token is the only available signal for scoping the human-approval gate to
+// Hostinger tool calls specifically.
+const ACP_TOOL_NAME_RE = /\bmcp__[A-Za-z0-9_]+__[A-Za-z0-9_]+\b/;
+const HOSTINGER_ACP_TOOL_PREFIX = 'mcp__hostinger__';
+
+function extractAcpToolName(params: JsonObject | null): string | null {
+  const toolCall = asObject(params?.toolCall);
+  const rawInput = asObject(toolCall?.rawInput);
+  const candidates = [toolCall?.title, rawInput?.description, rawInput?.command];
+  for (const candidate of candidates) {
+    if (typeof candidate !== 'string') continue;
+    const match = candidate.match(ACP_TOOL_NAME_RE);
+    if (match) return match[0];
+  }
+  return null;
+}
+
+function isHostingerAcpToolCall(params: JsonObject | null): boolean {
+  return extractAcpToolName(params)?.startsWith(HOSTINGER_ACP_TOOL_PREFIX) ?? false;
+}
+
+// Pre-fix auto-approve behavior, restored for every ACP tool call that is
+// NOT a Hostinger tool call (see isHostingerAcpToolCall above). ACP has no
+// session-scoped permission kind, so Hermes' "allow for this session" option
+// (optionId: allow_session) is sent with kind: "allow_always" -- the same
+// kind as the real "allow always" option -- so approve_for_session is
+// matched first by optionId rather than relying on kind for it.
+function chooseAutoApprovedOptionId(options: unknown): string | null {
+  const list = Array.isArray(options) ? options : [];
+  const approveForSession = list.find((option) => option?.optionId === 'approve_for_session');
+  if (approveForSession) return 'approve_for_session';
+  const allowAlways = list.find((option) => option?.kind === 'allow_always');
+  if (allowAlways?.optionId) return allowAlways.optionId;
+  const allowOnce = list.find((option) => option?.kind === 'allow_once');
+  if (allowOnce?.optionId) return allowOnce.optionId;
+  return null;
 }
 
 function normalizeConfigOptionToken(value: unknown): string {
@@ -1061,12 +1119,33 @@ export function attachAcpSession({
     // property narrowing across closure boundaries) -- capture it as its
     // own correctly-typed binding instead of re-reading raw.id later.
     const jsonRpcId: JsonRpcId = raw.id;
+    resetStageTimer('session/request_permission');
+
+    if (!isHostingerAcpToolCall(params)) {
+      // Auto-approve, matching pre-approval-gate behavior. The real
+      // human-in-the-loop pending-decision flow below is scoped to
+      // Hostinger tool calls only -- see the comment above
+      // PERMISSION_ANSWER_TIMEOUT_MS for why.
+      const optionId = chooseAutoApprovedOptionId(params?.options);
+      if (!optionId) {
+        fail(`unhandled ACP permission request: ${JSON.stringify(raw)}`);
+        return;
+      }
+      try {
+        sendRpcResult(stdin, jsonRpcId, {
+          outcome: { outcome: 'selected', optionId },
+        });
+      } catch (err) {
+        fail(`stdin write failed: ${errorMessage(err)}`);
+      }
+      return;
+    }
+
+    // Hostinger tool call: real human-in-the-loop pending-decision flow.
     // Hold the stage watchdog open while we wait on a real human -- this is
     // exactly the kind of legitimate silence (no stdout from the child
     // until it gets an answer) the watchdog exists to distinguish from a
     // genuinely hung agent.
-    resetStageTimer('session/request_permission');
-
     const denyOptionId = findDenyOptionId(params?.options);
     const respond = (optionId: string | null) => {
       try {
