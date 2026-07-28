@@ -31,6 +31,10 @@ describe('StoreScreenshotDocument', () => {
 
   it('执行平台数量限制', () => {
     expect(platformSpecs.appStore.size).toEqual({ width: 1290, height: 2796 });
+    expect(platformSpecs.appStore.defaultPageCount).toBe(4);
+    expect(platformSpecs.appStore.allowAlpha).toBe(false);
+    expect(platformSpecs.googlePlay.defaultPageCount).toBe(4);
+    expect(platformSpecs.googlePlay.allowAlpha).toBe(false);
     expect(() => assertPlatformPageCount('googlePlay', 3)).toThrow('4 到 8');
     expect(() => assertPlatformPageCount('appStore', 10)).not.toThrow();
   });
@@ -60,6 +64,7 @@ describe('StoreScreenshotDocument', () => {
       }],
     };
 
+    expect(StoreScreenshotDocumentSchema.safeParse(valid).success).toBe(true);
     expect(StoreScreenshotDocumentSchema.safeParse({ ...valid, schemaVersion: 2 }).success).toBe(false);
     expect(StoreScreenshotDocumentSchema.safeParse({
       ...valid,

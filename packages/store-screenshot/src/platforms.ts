@@ -5,6 +5,8 @@ export interface StorePlatformSpec {
     width: number;
     height: number;
   };
+  defaultPageCount: number;
+  allowAlpha: boolean;
   pageCount: {
     min: number;
     max: number;
@@ -14,10 +16,14 @@ export interface StorePlatformSpec {
 export const platformSpecs: Record<StorePlatform, StorePlatformSpec> = {
   appStore: {
     size: { width: 1290, height: 2796 },
+    defaultPageCount: 4,
+    allowAlpha: false,
     pageCount: { min: 1, max: 10 },
   },
   googlePlay: {
     size: { width: 1080, height: 1920 },
+    defaultPageCount: 4,
+    allowAlpha: false,
     pageCount: { min: 4, max: 8 },
   },
 };
