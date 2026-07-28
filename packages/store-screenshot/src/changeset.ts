@@ -1,9 +1,11 @@
+import { z } from 'zod';
 import type {
   StorePlatform,
   StoreScreenshotColorField,
   StoreScreenshotDocument,
   StoreScreenshotPage,
 } from './schema.js';
+import { StorePlatformSchema, StoreScreenshotDocumentSchema, StoreScreenshotPageSchema } from './schema.js';
 
 export type ChangeOperation =
   | { op: 'setText'; pageId: string; field: 'headline' | 'body'; value: string; platform?: StorePlatform }
@@ -22,6 +24,72 @@ export interface StoreScreenshotChangeSet {
   operations: ChangeOperation[];
 }
 
+const HexColorSchema = z.string().regex(/^#[0-9A-Fa-f]{6}$/);
+const FiniteNumberSchema = z.number().finite();
+const LockedFieldsSchema = z.array(z.enum(['headline', 'body', 'template', 'screenshot', 'layout']));
+
+export const ChangeOperationSchema = z.discriminatedUnion('op', [
+  z.object({
+    op: z.literal('setText'),
+    pageId: z.string().min(1),
+    field: z.enum(['headline', 'body']),
+    value: z.string(),
+    platform: StorePlatformSchema.optional(),
+  }).strict(),
+  z.object({
+    op: z.literal('setColor'),
+    pageId: z.string().min(1),
+    field: z.enum(['background', 'accent', 'text']),
+    value: HexColorSchema,
+  }).strict(),
+  z.object({
+    op: z.literal('setTransform'),
+    pageId: z.string().min(1),
+    x: FiniteNumberSchema,
+    y: FiniteNumberSchema,
+    scale: FiniteNumberSchema,
+  }).strict(),
+  z.object({
+    op: z.literal('setAsset'),
+    pageId: z.string().min(1),
+    assetId: z.string().min(1),
+  }).strict(),
+  z.object({
+    op: z.literal('setVisibility'),
+    pageId: z.string().min(1),
+    visible: z.boolean(),
+    platform: StorePlatformSchema.optional(),
+  }).strict(),
+  z.object({
+    op: z.literal('insertPage'),
+    afterPageId: z.string().min(1).optional(),
+    page: StoreScreenshotPageSchema.strict(),
+  }).strict(),
+  z.object({
+    op: z.literal('duplicatePage'),
+    pageId: z.string().min(1),
+  }).strict(),
+  z.object({
+    op: z.literal('deletePage'),
+    pageId: z.string().min(1),
+  }).strict(),
+  z.object({
+    op: z.literal('movePage'),
+    pageId: z.string().min(1),
+    toIndex: z.number().int().nonnegative(),
+  }).strict(),
+  z.object({
+    op: z.literal('setLocks'),
+    pageId: z.string().min(1),
+    fields: LockedFieldsSchema,
+  }).strict(),
+]);
+
+export const StoreScreenshotChangeSetSchema = z.object({
+  baseVersion: z.number().int().positive(),
+  operations: z.array(ChangeOperationSchema),
+}).strict();
+
 export function applyChangeSet(
   document: StoreScreenshotDocument,
   changeSet: StoreScreenshotChangeSet,
@@ -30,16 +98,25 @@ export function applyChangeSet(
     throw new Error('VERSION_CONFLICT');
   }
 
+  const parsedChangeSet = StoreScreenshotChangeSetSchema.safeParse(changeSet);
+  if (!parsedChangeSet.success) {
+    throw new Error('INVALID_CHANGESET');
+  }
+
   let pages = document.pages.map((page) => clonePage(page));
-  for (const operation of changeSet.operations) {
+  for (const operation of parsedChangeSet.data.operations as ChangeOperation[]) {
     pages = applyOperation(document, pages, operation);
   }
 
-  return {
+  const candidate: StoreScreenshotDocument = {
     ...document,
     version: document.version + 1,
     pages: normalizePageOrder(pages),
   };
+  if (!StoreScreenshotDocumentSchema.safeParse(candidate).success) {
+    throw new Error('INVALID_DOCUMENT');
+  }
+  return candidate;
 }
 
 function applyOperation(

@@ -42,4 +42,18 @@ describe('compileStoreScreenshotSvg', () => {
     expect(svg).toContain('<svg xmlns="http://www.w3.org/2000/svg" width="1290" height="2796" viewBox="0 0 1290 2796">');
     expect(svg).toContain('x="141.35" y="1113.90" width="1032.00" height="1509.84"');
   });
+
+  it('编译平台正文覆盖而不是原始正文', () => {
+    const withBodyOverride: StoreScreenshotDocument = {
+      ...document,
+      pages: [{
+        ...document.pages[0]!,
+        overrides: { googlePlay: { body: '平台正文 & 内容' } },
+      }],
+    };
+
+    const svg = compileStoreScreenshotSvg(deriveStoreScreenshotPage(withBodyOverride, 'page-1', 'googlePlay'));
+    expect(svg).toContain('平台正文 &amp; 内容');
+    expect(svg).not.toContain('&quot;quoted&quot;');
+  });
 });

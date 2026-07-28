@@ -59,7 +59,25 @@ describe('applyChangeSet', () => {
     expect(() => applyChangeSet(document, {
       baseVersion: 3,
       operations: [{ op: 'replaceEverything', pageId: 'page-1' } as never],
-    })).toThrow('UNSUPPORTED_OPERATION');
+    })).toThrow('INVALID_CHANGESET');
+  });
+
+  it('拒绝伪装成已知操作的非法字段', () => {
+    expect(() => applyChangeSet(document, {
+      baseVersion: 3,
+      operations: [{ op: 'setText', pageId: 'page-2', field: 'templateId', value: 'editorial-split' } as never],
+    })).toThrow('INVALID_CHANGESET');
+  });
+
+  it('拒绝无效平台和非有限变换数值', () => {
+    expect(() => applyChangeSet(document, {
+      baseVersion: 3,
+      operations: [{ op: 'setVisibility', pageId: 'page-2', visible: true, platform: 'desktopStore' } as never],
+    })).toThrow('INVALID_CHANGESET');
+    expect(() => applyChangeSet(document, {
+      baseVersion: 3,
+      operations: [{ op: 'setTransform', pageId: 'page-2', x: Infinity, y: 0, scale: 1 } as never],
+    })).toThrow('INVALID_CHANGESET');
   });
 
   it('应用素材、颜色、变换和平台可见性操作', () => {
@@ -105,5 +123,49 @@ describe('applyChangeSet', () => {
 
     expect(next.pages.map((page) => page.id)).toEqual(['page-2', 'page-3', 'page-2-copy']);
     expect(next.pages.map((page) => page.order)).toEqual([0, 1, 2]);
+  });
+
+  it('拒绝将十页文档扩展到十一页', () => {
+    const fullDocument: StoreScreenshotDocument = {
+      ...document,
+      pages: Array.from({ length: 10 }, (_, order) => ({
+        ...document.pages[1]!,
+        id: `page-${order + 1}`,
+        order,
+      })),
+    };
+
+    expect(() => applyChangeSet(fullDocument, {
+      baseVersion: 3,
+      operations: [{
+        op: 'insertPage',
+        page: {
+          id: 'page-11',
+          order: 10,
+          templateId: 'minimal-center',
+          headline: '超出上限',
+          overrides: {},
+          lockedFields: [],
+        },
+      }],
+    })).toThrow('INVALID_DOCUMENT');
+  });
+
+  it('拒绝插入悬空素材引用页面', () => {
+    expect(() => applyChangeSet(document, {
+      baseVersion: 3,
+      operations: [{
+        op: 'insertPage',
+        page: {
+          id: 'page-3',
+          order: 2,
+          templateId: 'minimal-center',
+          headline: '悬空素材',
+          screenshotAssetId: 'missing',
+          overrides: {},
+          lockedFields: [],
+        },
+      }],
+    })).toThrow('INVALID_DOCUMENT');
   });
 });

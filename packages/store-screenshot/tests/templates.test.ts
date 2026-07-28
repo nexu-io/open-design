@@ -50,4 +50,17 @@ describe('store screenshot templates', () => {
     expect(derived.screenshotAsset).toEqual({ id: 'screen-1', color: '#123ABC' });
     expect(deriveStoreScreenshotPage(document, 'page-1', 'googlePlay').hidden).toBe(true);
   });
+
+  it('保留非空的平台正文覆盖', () => {
+    const withBodyOverride: StoreScreenshotDocument = {
+      ...document,
+      pages: [{
+        ...document.pages[0]!,
+        overrides: { appStore: { body: '专为 App Store 编写的正文' } },
+      }],
+    };
+
+    expect(deriveStoreScreenshotPage(withBodyOverride, 'page-1', 'appStore').body)
+      .toBe('专为 App Store 编写的正文');
+  });
 });

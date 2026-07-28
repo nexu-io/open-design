@@ -30,6 +30,7 @@ export function deriveStoreScreenshotPage(
   const page = findPage(document.pages, pageId);
   const template = storeScreenshotTemplates[page.templateId];
   const override = page.overrides[platform];
+  const body = override?.body ?? page.body;
   const screenshotAsset = page.screenshotAssetId === undefined
     ? undefined
     : document.assets.find((asset) => asset.id === page.screenshotAssetId);
@@ -40,7 +41,7 @@ export function deriveStoreScreenshotPage(
     size: platformSpecs[platform].size,
     template,
     headline: override?.headline ?? page.headline,
-    ...(override?.body ?? page.body === undefined ? {} : { body: override?.body ?? page.body }),
+    ...(body === undefined ? {} : { body }),
     hidden: override?.hidden ?? page.hidden ?? false,
     colors: { ...template.colors, ...page.colors },
     transform: page.transform ?? { x: 0, y: 0, scale: 1 },
