@@ -108,7 +108,7 @@ test('[P1] captures the topbar Open Design account balance surface', async ({ pa
   const popup = await popupPromise;
   const upgradeUrl = new URL(popup.url());
   await popup.close();
-  expect(upgradeUrl.searchParams.get('view')).toBe('plans');
+  expect(upgradeUrl.searchParams.get('billing')).toBe('plan');
   expect(upgradeUrl.searchParams.get('od_origin')).toBe('open_design');
   expect(upgradeUrl.searchParams.get('od_entry_source')).toBe('inline_amr_upgrade');
   expect(upgradeUrl.searchParams.get('od_entry_id')).toBeTruthy();
@@ -227,13 +227,13 @@ test('[P1] Avatar menu surfaces the signed-in plan/balance and upgrade entry', a
   await expect(row).toContainText('Plus');
   await expect(row).toContainText('$247.51');
   const upgrade = row.locator('.avatar-amr-row__upgrade');
-  await expect(upgrade).toHaveAttribute('href', /view=plans/);
+  await expect(upgrade).toHaveAttribute('href', /billing=plan/);
   const popupPromise = page.waitForEvent('popup');
   await upgrade.click();
   const popup = await popupPromise;
   const upgradeUrl = new URL(popup.url());
   await popup.close();
-  expect(upgradeUrl.searchParams.get('view')).toBe('plans');
+  expect(upgradeUrl.searchParams.get('billing')).toBe('plan');
   expect(upgradeUrl.searchParams.get('od_origin')).toBe('open_design');
   expect(upgradeUrl.searchParams.get('od_entry_source')).toBe('avatar_amr_upgrade');
   expect(upgradeUrl.searchParams.get('od_entry_id')).toBeTruthy();
