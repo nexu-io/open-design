@@ -87,7 +87,7 @@ import {
   type WorkspaceResourceMutationCapability,
 } from '../../collab/workspace-resource-mutation.js';
 import type { WorkspaceContextProvider } from '../../collab/workspace-context.js';
-import { resolveProjectWorkspaceScope } from '../../collab/project-workspace-scope.js';
+import { resolveProjectWorkspaceScopeForCaller } from '../../collab/project-workspace-scope.js';
 import {
   authorizeCreatedProjectWorkspace,
   bindCreatedProjectToWorkspace,
@@ -3431,10 +3431,17 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
           (): WorkspaceDirectoryFetchResult => ({ ok: false, items: [] }),
         )
       : { ok: false, items: [] };
-    const scope = resolveProjectWorkspaceScope({
+    // A project with no binding of its own resolves to the workspace THIS
+    // caller is acting in, read the same sanctioned way every neighbouring
+    // handler reads it. A bound project ignores the caller entirely — see
+    // `resolveProjectWorkspaceScopeForCaller`.
+    const callerCtx = workspaceProjectContextFromRequest(req);
+    const scope = resolveProjectWorkspaceScopeForCaller({
       projectId: project.id,
       binding,
       directory,
+      callerWorkspaceId:
+        callerCtx === null || callerCtx === 'missing' ? null : callerCtx.workspaceId,
     });
     /** @type {import('@open-design/contracts').ProjectWorkspaceScopeResponse} */
     const body = { scope };
