@@ -407,3 +407,167 @@ test('[P2] Settings library card truncates a long user-system name without clipp
     `title text right edge (${geometry.titleText.right}) exceeds the title row right edge (${geometry.title.right}) — the text was not truncated.`,
   ).toBeLessThanOrEqual(geometry.title.right);
 });
+
+// ---- Picker 5: Settings dialog library-group-name with active count ---------
+//
+// mrcfps round 4 review flagged that truncating `.library-group-name`
+// must not push the `.library-group-count` badge out of view: the parent
+// `.library-group-title` carries `overflow: hidden` (added to clip the
+// long name), so if the flex child calculation is wrong, the count badge
+// could be clipped at the row's right edge after the title child
+// consumes the available width.
+test('[P2] Settings dialog long library-group-name does not clip the count badge (#2688)', async ({
+ page,
+}) => {
+ await page.route('**/api/app-config', async (route) => {
+ await route.fulfill({
+ json: {
+ config: {
+ onboardingCompleted: true,
+ agentId: 'mock',
+ skillId: null,
+ designSystemId: null,
+ agentModels: {},
+ agentCliEnv: {},
+ privacyDecisionAt: 1,
+ telemetry: { metrics: false, content: false, artifactManifest: false },
+ // Seed an owned design system so the "Custom" library group renders
+ // with an actual count > 0 (otherwise the count badge shows "0" or
+ // is hidden by the renderer's 0-count guard).
+ ownedDesignSystems: [
+ {
+ id: 'custom-ds',
+ title: 'Custom',
+ isEditable: true,
+ source: 'user',
+ },
+ ],
+ },
+ },
+ });
+ });
+
+ await page.route('**/api/design-systems', async (route) => {
+ await route.fulfill({
+ json: {
+ designSystems: [
+ ...DESIGN_SYSTEMS.map((s) => ({
+ ...s,
+ source: 'preset',
+ isEditable: false,
+ surface: 'web',
+ hidden: false,
+ })),
+ {
+ ...LONG_EDITABLE_PRESET,
+ source: 'user',
+ isEditable: true,
+ surface: 'web',
+ hidden: false,
+ },
+ ],
+ ownedDesignSystems: [
+ {
+ id: 'custom-ds',
+ title: 'Custom',
+ isEditable: true,
+ source: 'user',
+ },
+ ],
+ },
+ });
+ });
+
+ await page.goto('/');
+ const settings = await openSettingsDialog(page);
+ await settings
+ .getByRole('button', { name: /Design systems|设计系统|設計系統/i })
+ .click();
+ await expect(
+ settings.getByRole('heading', { name: /Design systems|设计系统|設計系統/i }),
+ ).toBeVisible();
+
+ // Locate the "Custom" group heading inside the Settings dialog's
+ // library section. The heading carries `.library-group-title` with
+ // two children: `.library-group-name` (shrinkable, ellipsizing) and
+ // `.library-group-count` (non-shrinking badge).
+ const customGroupHeading = settings
+ .getByRole('heading', { name: /Custom/i })
+ .first();
+ await expect(customGroupHeading).toBeVisible();
+
+ const groupTitle = customGroupHeading.locator('.library-group-title');
+ await expect(groupTitle).toBeVisible();
+
+ const nameSpan = groupTitle.locator('.library-group-name');
+ const countSpan = groupTitle.locator('.library-group-count');
+
+ await expect(nameSpan).toBeVisible();
+ await expect(countSpan).toBeVisible();
+
+ // Verify the count badge has non-zero dimensions — this proves it is
+ // rendered and not clipped out by the parent's overflow: hidden.
+ const countRect = await countSpan.evaluate((el: Element) => {
+ const r = el.getBoundingClientRect();
+ return { w: Math.round(r.width), h: Math.round(r.height) };
+ });
+ expect(countRect.w, 'count badge has zero width — likely clipped').toBeGreaterThan(0);
+ expect(countRect.h, 'count badge has zero height').toBeGreaterThan(0);
+
+ // Verify the name span AND the count are both inside the title row.
+ const layoutInfo = await groupTitle.evaluate((el: Element) => {
+ const t = el.getBoundingClientRect();
+ const nameEl = el.querySelector('.library-group-name');
+ const countEl = el.querySelector('.library-group-count');
+ if (!nameEl || !countEl) {
+ throw new Error('missing name or count span');
+ }
+ const n = nameEl.getBoundingClientRect();
+ const c = countEl.getBoundingClientRect();
+ return {
+ titleRight: Math.round(t.right),
+ nameRight: Math.round(n.right),
+ countLeft: Math.round(c.left),
+ countRight: Math.round(c.right),
+ countWidth: Math.round(c.width),
+ };
+ });
+
+ // Both children must be inside the title row — the name should not push
+ // the count past the row's right edge.
+ expect(
+ layoutInfo.nameRight,
+ `name span right (${layoutInfo.nameRight}) exceeds title row right (${layoutInfo.titleRight}) — name is clipping beyond the row.`,
+ ).toBeLessThanOrEqual(layoutInfo.titleRight);
+ expect(
+ layoutInfo.countLeft,
+ `count badge left (${layoutInfo.countLeft}) exceeds title row right (${layoutInfo.titleRight}) — count badge is clipped beyond the row.`,
+ ).toBeLessThanOrEqual(layoutInfo.titleRight);
+ expect(
+ layoutInfo.countRight,
+ `count badge right (${layoutInfo.countRight}) exceeds title row right (${layoutInfo.titleRight}) — count badge is clipped beyond the row.`,
+ ).toBeLessThanOrEqual(layoutInfo.titleRight);
+
+ // The name and count must not overlap: name's right edge must be at or
+ // before count's left edge (allowing 1px subpixel).
+ expect(
+ layoutInfo.nameRight,
+ `name overlaps count: name right (${layoutInfo.nameRight}) exceeds count left (${layoutInfo.countLeft}).`,
+ ).toBeLessThanOrEqual(layoutInfo.countLeft + 1);
+
+ // The name span actually truncated horizontally: its scrollWidth must
+ // be greater than its clientWidth (proving text was ellipsized rather
+ // than fitting naturally).
+ const nameGeometry = await nameSpan.evaluate((el: Element) => {
+ const r = el.getBoundingClientRect();
+ return {
+ scrollWidth: el.scrollWidth,
+ clientWidth: el.clientWidth,
+ width: Math.round(r.width),
+ };
+ });
+ expect(
+ nameGeometry.scrollWidth - nameGeometry.clientWidth,
+ `name span has no horizontal truncation: scrollWidth (${nameGeometry.scrollWidth}) <= clientWidth (${nameGeometry.clientWidth}). Long category name may not be long enough.`,
+ ).toBeGreaterThan(0);
+});
