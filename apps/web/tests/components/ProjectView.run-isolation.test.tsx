@@ -579,6 +579,28 @@ vi.mock('../../src/components/ChatPane', () => ({
         >
           send with context
         </button>
+        <button
+          type="button"
+          data-testid="send-message-with-pure-plugin"
+          onClick={() =>
+            onSend(
+              'use the selected plugin',
+              [],
+              [],
+              {
+                appliedPluginSnapshotId: '',
+                appliedPluginSnapshot: {
+                  snapshotId: '',
+                  pluginId: 'sample-plugin',
+                  inputs: { audience: 'founders' },
+                },
+              },
+            )
+          }
+          disabled={sendDisabled}
+        >
+          send with pure plugin
+        </button>
         <button type="button" data-testid="new-conversation" onClick={onNewConversation}>
           new
         </button>
@@ -1317,6 +1339,30 @@ describe('ProjectView conversation run isolation', () => {
     expect(streamViaDaemon).toHaveBeenCalledWith(
       expect.objectContaining({ workspaceContext: workspaceA }),
     );
+  });
+
+  it('forwards plugin identity and inputs from a pure apply to the daemon run', async () => {
+    conversationAMessages = [];
+    renderProjectView();
+
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
+    await waitFor(() =>
+      expect(screen.getByTestId('send-message-with-pure-plugin')).toHaveProperty('disabled', false),
+    );
+
+    fireEvent.click(screen.getByTestId('send-message-with-pure-plugin'));
+
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    const daemonRun = streamViaDaemon.mock.calls[0]?.[0] as {
+      appliedPluginSnapshotId?: string;
+      pluginId?: string;
+      pluginInputs?: Record<string, unknown>;
+    };
+    expect(daemonRun).toMatchObject({
+      appliedPluginSnapshotId: '',
+      pluginId: 'sample-plugin',
+      pluginInputs: { audience: 'founders' },
+    });
   });
 
   it('submits the live AMR fallback model when the saved AMR model is stale', async () => {
