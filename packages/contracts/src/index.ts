@@ -37,6 +37,7 @@ export * from './api/research.js';
 export * from './api/run-completeness.js';
 export * from './api/reasoningExecution.js';
 export * from './api/social-share.js';
+export * from './api/store-screenshots.js';
 export * from './api/terminals.js';
 export * from './api/version.js';
 export * from './api/whats-new.js';

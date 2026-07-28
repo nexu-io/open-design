@@ -59,6 +59,12 @@ export const API_ERROR_CODES = [
   // than silently disabling the agent-specific watchdog.
   'AGENT_RUNTIME_DEF_INVALID',
   'PROJECT_NOT_FOUND',
+  'DOCUMENT_NOT_FOUND',
+  'VERSION_CONFLICT',
+  'INVALID_ASSET',
+  'PLATFORM_VALIDATION_FAILED',
+  'PROVIDER_NOT_CONFIGURED',
+  'JOB_NOT_FOUND',
   // Handoff (`POST /api/projects/:id/handoff`): the requested conversation
   // is not in the project, or has no messages to synthesize a handoff from.
   'CONVERSATION_NOT_FOUND',

@@ -249,8 +249,10 @@ describe("postinstall script contract", () => {
     expect(missingTsconfigs).toEqual([]);
     expect(dependencySpecifier(rootManifest, "@open-design/daemon")).toBe("workspace:*");
     expect(targets.indexOf("packages/release")).toBeGreaterThanOrEqual(0);
+    expect(targets.indexOf("packages/store-screenshot")).toBeGreaterThanOrEqual(0);
     expect(targets.indexOf("packages/contracts")).toBeGreaterThanOrEqual(0);
     expect(targets.indexOf("packages/release")).toBeLessThan(targets.indexOf("packages/contracts"));
+    expect(targets.indexOf("packages/store-screenshot")).toBeLessThan(targets.indexOf("packages/contracts"));
   });
 
   it("[P2] skips absent tsconfig targets in partial install contexts on the default path", () => {

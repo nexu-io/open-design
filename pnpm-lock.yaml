@@ -503,6 +503,9 @@ importers:
 
   packages/contracts:
     dependencies:
+      '@launch-studio/store-screenshot':
+        specifier: workspace:*
+        version: link:../store-screenshot
       '@open-design/release':
         specifier: workspace:*
         version: link:../release
