@@ -7,6 +7,9 @@
 
 **System in one sentence:** Black void canvas with chalk-on-ink typography, white paper cards in a tight bento grid, mono uppercase labels, and a five-color sensor palette used only as high-signal accents.
 
+> **Plugin note:** This file is the canonical rules reference inside `source-project-context-ms4fn3em`. Package paths mentioned below (`colors_and_type.css`, `fonts/`, `preview/`, `ui_kits/app/`, etc.) describe a full design-system package to **generate in a consumer project**. They are not required to exist inside this plugin bundle — use sibling `references/source-*.md` files only.
+
+
 ## 1. Product Context & Atmosphere
 
 Deep-tech edge AI for sensor compression — not SaaS purple, not consumer pastel. The page reads as instrument panel meets editorial lab: pure black field, white “paper” cells, hairline chalk rules, stencil display faces, and sparse coral/tan/green/blue/purple signals like sensor channels.
@@ -55,7 +58,7 @@ Deep-tech edge AI for sensor compression — not SaaS purple, not consumer paste
 3. White paper cells use ink type; dark cells use chalk type. Do not invert casually.
 4. Coral banner is a full-width exception: solid `--coral` with ink text.
 
-Bind tokens from `colors_and_type.css`. Prefer `var(--token)` over raw hex in new work.
+Bind the tokens documented in this file (generate `colors_and_type.css` in the consumer if needed). Prefer `var(--token)` over raw hex in new work.
 
 ## 3. Typography
 
@@ -68,7 +71,7 @@ Bind tokens from `colors_and_type.css`. Prefer `var(--token)` over raw hex in ne
 | Body / UI | **Inter** | `--font-sans` | Default body; rarely used for labels |
 | Mono / labels | **Fragment Mono** | `--font-mono` | Uppercase labels, CTAs, telemetry, subtitles |
 
-Load via `fonts/fonts.css` or `assets/fonts/fonts.css`.
+Prefer self-hosted faces when the consumer has font files; otherwise use the declared fallback stacks. Do not require plugin-local font paths.
 
 ### Scale
 
@@ -246,16 +249,16 @@ Prefer semantic deliverables (`homepage-bento.html`, `capabilities-section.html`
 
 ## Package map
 
-| Path | Purpose |
-|------|---------|
-| `DESIGN.md` | This document |
-| `README.md` | Human package overview |
-| `SKILL.md` | Agent usage contract |
-| `colors_and_type.css` | Tokens + type utilities |
-| `fonts/` | Self-hosted faces |
-| `assets/` | Icons, logos, images, benchmarks |
-| `preview/` | Focused review cards |
-| `ui_kits/app/` | Applied interface kit |
-| `examples/` | Preserved full homepage clones |
-| `brand-spec.md` | Compact brand tokens |
-| `context/` | Provenance & source handoff |
+Full-package paths below are **targets to generate in a consumer project**. Inside this plugin, the equivalent evidence is the `references/source-*.md` set (see plugin root `SKILL.md`).
+
+| Full-package path | Purpose | Plugin evidence |
+|------|---------|-----------------|
+| `DESIGN.md` | This document | `source-2-DESIGN.md` |
+| `README.md` | Human package overview | `source-3-README.md` |
+| `SKILL.md` | Agent usage contract | `source-4-SKILL.md` |
+| `colors_and_type.css` | Tokens + type utilities | Generate from this DESIGN |
+| `fonts/` / `assets/` | Faces and brand media | Not shipped in plugin |
+| `preview/` | Focused review cards | Generate in consumer |
+| `ui_kits/app/` | Applied interface kit | Structure in `source-5-README.md` |
+| `examples/` | Full homepage clones | Not shipped in plugin |
+| `brand-spec.md` / `context/` | Compact brand + handoff | `source-1` + `provenance.json` |

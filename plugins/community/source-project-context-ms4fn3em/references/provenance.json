@@ -4,42 +4,42 @@
   "runId": "2fbb5d19-d578-4a81-9161-c648e3c74a90",
   "conversationId": "36c6b04e-7937-45f7-bfeb-ebe05761afb2",
   "provenance": {
-    "summary": "Detected from context/source-context.md, DESIGN.md, README.md, SKILL.md, ui_kits/app/README.md after a successful run.",
+    "summary": "Formalized source evidence as plugin references only: source context, DESIGN, README, TCC SKILL, and ui_kits app README. Unshipped workspace binaries/HTML are not part of the installable bundle.",
     "detectedAt": 1785229426713
   },
   "sourceRefs": [
     {
       "kind": "file",
-      "value": "context/source-context.md",
-      "label": "context/source-context.md",
+      "value": "references/source-1-source-context.md",
+      "label": "source-1-source-context.md (from context/source-context.md)",
       "size": 2199,
       "copied": true
     },
     {
       "kind": "file",
-      "value": "DESIGN.md",
-      "label": "DESIGN.md",
+      "value": "references/source-2-DESIGN.md",
+      "label": "source-2-DESIGN.md (from DESIGN.md)",
       "size": 10800,
       "copied": true
     },
     {
       "kind": "file",
-      "value": "README.md",
-      "label": "README.md",
+      "value": "references/source-3-README.md",
+      "label": "source-3-README.md (from README.md)",
       "size": 3959,
       "copied": true
     },
     {
       "kind": "file",
-      "value": "SKILL.md",
-      "label": "SKILL.md",
+      "value": "references/source-4-SKILL.md",
+      "label": "source-4-SKILL.md (from SKILL.md)",
       "size": 3890,
       "copied": true
     },
     {
       "kind": "file",
-      "value": "ui_kits/app/README.md",
-      "label": "ui_kits/app/README.md",
+      "value": "references/source-5-README.md",
+      "label": "source-5-README.md (from ui_kits/app/README.md)",
       "size": 2072,
       "copied": true
     }
