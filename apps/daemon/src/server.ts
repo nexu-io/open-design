@@ -672,7 +672,10 @@ import { registerSocialShareRoutes } from './routes/social-share.js';
 import { registerOpenDesignPublicMetadataRoutes } from './routes/open-design-public-metadata.js';
 import { registerWhatsNewRoutes } from './routes/whats-new.js';
 import { registerMemoryRoutes } from './routes/memory.js';
-import { registerCollabPresenceRoutes } from './routes/collab-presence.js';
+import {
+  createCollabPresenceCloudClient,
+  registerCollabPresenceRoutes,
+} from './routes/collab-presence.js';
 import {
   registerCollabSyncRoutes,
   type TeamMirrorPullScope,
@@ -3456,14 +3459,10 @@ export async function startServer({
     }).workspaceId;
   registerCollabPresenceRoutes(app, {
     collab,
-    cloud: {
-      heartbeatPresence: (projectId, input) =>
-        velaCliCollabClient.heartbeatPresence(projectId, input, presenceScopeFor(projectId)),
-      listPresence: (projectId) =>
-        velaCliCollabClient.listPresence(projectId, presenceScopeFor(projectId)),
-      leavePresence: (projectId, input) =>
-        velaCliCollabClient.leavePresence(projectId, input, presenceScopeFor(projectId)),
-    },
+    // Null when this run has no vela-cli collab transport, which is what keeps
+    // the process-local presence fallback reachable. See
+    // `createCollabPresenceCloudClient` for the invariant.
+    cloud: createCollabPresenceCloudClient(velaCliCollabClient, presenceScopeFor),
     isProjectShared: isSharedTeamProject,
     cloudAuthorizesProjectPresence: (projectId) => {
       const workspaceId = findTeamWorkspaceIdForProject(db, projectId)?.trim();

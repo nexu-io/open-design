@@ -336,6 +336,8 @@ const PREVIEW_BRIDGE_QUERY = 'odPreviewBridge=scroll&odPreviewBridge=selection&o
 // switch. This preserves the current page of multi-page prototypes while
 // leaving artifact scripts and business state inside their sandboxed frames.
 const PREVIEW_RUNTIME_STATE_MAX_ELEMENTS = 3500;
+const PREVIEW_RUNTIME_STATE_MAX_ROOTS = 64;
+const PREVIEW_RUNTIME_STATE_MAX_ROOT_HTML = 2 * 1024 * 1024;
 type PreviewRuntimeStateEntry = {
   path: number[];
   tag: string;
@@ -348,9 +350,17 @@ type PreviewRuntimeStateEntry = {
   scrollLeft?: number;
   scrollTop?: number;
 };
+type PreviewRuntimeStateRoot = {
+  path: number[];
+  tag: string;
+  id?: string;
+  odId?: string;
+  html: string;
+};
 type PreviewRuntimeState = {
   version: 1;
   hash: string;
+  roots?: PreviewRuntimeStateRoot[];
   htmlAttrs: Record<string, string>;
   bodyAttrs: Record<string, string>;
   entries: PreviewRuntimeStateEntry[];
@@ -378,6 +388,27 @@ function isPreviewRuntimeState(value: unknown): value is PreviewRuntimeState {
     state.version !== 1 ||
     typeof state.hash !== 'string' ||
     state.hash.length > 4096 ||
+    (state.roots !== undefined && (
+      !Array.isArray(state.roots) ||
+      state.roots.length > PREVIEW_RUNTIME_STATE_MAX_ROOTS ||
+      state.roots.reduce((total, root) => total + (
+        root && typeof root === 'object' && typeof root.html === 'string'
+          ? root.html.length
+          : PREVIEW_RUNTIME_STATE_MAX_ROOT_HTML + 1
+      ), 0) > PREVIEW_RUNTIME_STATE_MAX_ROOT_HTML ||
+      !state.roots.every((root) => (
+        !!root &&
+        typeof root === 'object' &&
+        typeof root.tag === 'string' &&
+        root.tag.length <= 32 &&
+        Array.isArray(root.path) &&
+        root.path.length <= 64 &&
+        root.path.every((index) => Number.isInteger(index) && index >= 0 && index <= 100_000) &&
+        (root.id === undefined || (typeof root.id === 'string' && root.id.length <= 4096)) &&
+        (root.odId === undefined || (typeof root.odId === 'string' && root.odId.length <= 4096)) &&
+        typeof root.html === 'string'
+      ))
+    )) ||
     !isPreviewRuntimeAttributeMap(state.htmlAttrs) ||
     !isPreviewRuntimeAttributeMap(state.bodyAttrs) ||
     !Array.isArray(state.entries) ||
@@ -1545,6 +1576,7 @@ export const FileViewer = memo(function FileViewer({
         onSendBoardCommentAttachments={onSendBoardCommentAttachments}
         onFileSaved={onFileSaved}
         onBrandExtractionStopRequest={onBrandExtractionStopRequest}
+        onOpenFileReplacing={onOpenFileReplacing}
         commentPortalId={commentPortalId}
         onCommentModeChange={onCommentModeChange}
         shareRequest={shareRequest}
@@ -6640,6 +6672,7 @@ function HtmlViewer({
   onSendBoardCommentAttachments,
   onFileSaved,
   onBrandExtractionStopRequest,
+  onOpenFileReplacing,
   commentPortalId,
   onCommentModeChange,
   shareRequest,
@@ -6670,6 +6703,7 @@ function HtmlViewer({
   onSendBoardCommentAttachments?: (attachments: ChatCommentAttachment[], images?: File[]) => Promise<boolean | void> | boolean | void;
   onFileSaved?: () => Promise<void> | void;
   onBrandExtractionStopRequest?: () => void;
+  onOpenFileReplacing?: (openName: string, closeName: string) => void;
   commentPortalId?: string;
   onCommentModeChange?: (active: boolean) => void;
   shareRequest?: { nonce: number } | null;
@@ -9075,6 +9109,25 @@ function HtmlViewer({
   }, [isActivePreviewIframeSource, isOurPreviewIframeSource]);
 
   useEffect(() => {
+    function onMessage(ev: MessageEvent) {
+      if (!isActivePreviewIframeSource(ev.source)) return;
+      const data = ev.data as { type?: unknown; fileName?: unknown } | null;
+      if (
+        data?.type !== 'od:preview-open-file' ||
+        typeof data.fileName !== 'string' ||
+        data.fileName.length > 4096 ||
+        !/\.html?$/i.test(data.fileName) ||
+        data.fileName.split('/').some((part) => !part || part === '.' || part === '..')
+      ) {
+        return;
+      }
+      onOpenFileReplacing?.(data.fileName, file.name);
+    }
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [file.name, isActivePreviewIframeSource, onOpenFileReplacing]);
+
+  useEffect(() => {
     if (!effectiveDeck) {
       setSlideState(null);
       return;
@@ -11355,6 +11408,11 @@ function HtmlViewer({
         closeArtifactToolMenus();
       };
       if (!useUrlLoadPreview) {
+        // A snapshot is only valid for the URL-load -> srcDoc handoff that
+        // captured it. Once srcDoc is already the active transport it owns the
+        // newest in-frame navigation state; retaining a missed/late snapshot
+        // lets syncBridgeModes replay an older page when Edit is toggled again.
+        previewRuntimeStateRef.current = null;
         enterManualEditMode();
         return;
       }

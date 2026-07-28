@@ -416,6 +416,97 @@ describe('manual edit bridge target normalization', () => {
     dom.window.close();
   });
 
+  it('draws the same element hover guides again after edit mode exits and re-enters', () => {
+    const dom = new JSDOM(
+      `<main data-od-source-path="path-0"><h1 data-od-source-path="path-0-0">Plain title</h1></main>${buildManualEditBridge(true)}`,
+      { runScripts: 'dangerously', url: 'http://localhost' },
+    );
+    const title = dom.window.document.querySelector('h1') as HTMLElement;
+    title.getBoundingClientRect = () => ({
+      x: 10, y: 20, width: 160, height: 36,
+      top: 20, right: 170, bottom: 56, left: 10,
+      toJSON: () => ({}),
+    } as DOMRect);
+
+    title.dispatchEvent(new dom.window.Event('pointerover', { bubbles: true }));
+    const layer = dom.window.document.querySelector('[data-od-edit-guides-layer]')!;
+    expect(layer.children.length).toBeGreaterThan(0);
+
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      data: { type: 'od-edit-mode', enabled: false },
+    }));
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      data: { type: 'od-edit-mode', enabled: true },
+    }));
+    expect(layer.children.length).toBe(0);
+
+    title.dispatchEvent(new dom.window.Event('pointerover', { bubbles: true }));
+    expect(layer.querySelector('.od-edit-guide-box-hover')).not.toBeNull();
+
+    dom.window.close();
+  });
+
+  it('recovers hover guides from pointer movement inside an element after edit mode re-enters', () => {
+    const dom = new JSDOM(
+      `<main data-od-source-path="path-0"><h1 data-od-source-path="path-0-0">Plain title</h1></main>${buildManualEditBridge(true)}`,
+      { runScripts: 'dangerously', url: 'http://localhost' },
+    );
+    const title = dom.window.document.querySelector('h1') as HTMLElement;
+    title.getBoundingClientRect = () => ({
+      x: 10, y: 20, width: 160, height: 36,
+      top: 20, right: 170, bottom: 56, left: 10,
+      toJSON: () => ({}),
+    } as DOMRect);
+
+    title.dispatchEvent(new dom.window.Event('pointerover', { bubbles: true }));
+    const layer = dom.window.document.querySelector('[data-od-edit-guides-layer]')!;
+
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      data: { type: 'od-edit-mode', enabled: false },
+    }));
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      data: { type: 'od-edit-mode', enabled: true },
+    }));
+    expect(layer.children.length).toBe(0);
+
+    // Electron can preserve the iframe's pointer hit target while the toolbar
+    // toggles edit mode. In that case movement within the same element emits
+    // pointermove but no fresh pointerover.
+    title.dispatchEvent(new dom.window.Event('pointermove', { bubbles: true }));
+    expect(layer.querySelector('.od-edit-guide-box-hover')).not.toBeNull();
+
+    dom.window.close();
+  });
+
+  it('hands same-project HTML links to the host instead of losing the srcDoc edit bridge', () => {
+    const posts: Array<{ type?: string; fileName?: string }> = [];
+    const dom = new JSDOM(
+      `<base href="http://localhost/api/projects/project-1/raw/today.html"><main data-od-source-path="path-0"><a href="discover.html?variant=a">Discover</a></main>${buildManualEditBridge(false)}`,
+      { runScripts: 'dangerously', url: 'http://localhost' },
+    );
+    dom.window.parent.postMessage = ((message: unknown) => {
+      posts.push(message as { type?: string; fileName?: string });
+    }) as typeof dom.window.parent.postMessage;
+    const link = dom.window.document.querySelector('a')!;
+    const click = new dom.window.MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+    });
+
+    link.dispatchEvent(click);
+
+    expect(click.defaultPrevented).toBe(true);
+    expect(posts).toContainEqual({
+      type: 'od:preview-open-file',
+      fileName: 'discover.html',
+      search: '?variant=a',
+      hash: '',
+    });
+
+    dom.window.close();
+  });
+
   it('drag-repositions an element via pointer drag and posts od-edit-drag-commit', () => {
     const posts: Array<{ type?: string; id?: string; transform?: string }> = [];
     const dom = new JSDOM(

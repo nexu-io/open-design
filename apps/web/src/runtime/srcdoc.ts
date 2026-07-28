@@ -2201,6 +2201,20 @@ function meaningfulDomFallbackTarget(el) {
       !Array.isArray(state.entries) ||
       state.entries.length > 3500
     ) return;
+    if (Array.isArray(state.roots) && state.roots.length <= 64) {
+      var rootHtmlLength = 0;
+      for (var r = 0; r < state.roots.length; r++) {
+        var root = state.roots[r];
+        if (!root || typeof root !== 'object' || typeof root.html !== 'string') continue;
+        rootHtmlLength += root.html.length;
+        if (rootHtmlLength > 2097152) break;
+        var currentRoot = runtimeStateElement(root);
+        if (!currentRoot) continue;
+        // Preserve the root node itself: application closures and delegated
+        // listeners frequently retain #app/#root by identity.
+        currentRoot.innerHTML = root.html;
+      }
+    }
     applyRuntimeStateAttributes(document.documentElement, state.htmlAttrs);
     applyRuntimeStateAttributes(document.body, state.bodyAttrs);
     for (var i = 0; i < state.entries.length; i++) {

@@ -803,6 +803,29 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
   }
   function captureRuntimeState(){
     var entries = [];
+    var roots = [];
+    var rootHtmlLength = 0;
+    var runtimeRoots = document.body
+      ? document.body.querySelectorAll('#app, #root, [data-reactroot]')
+      : [];
+    for (var rootIndex = 0; rootIndex < runtimeRoots.length && roots.length < 64; rootIndex++) {
+      var root = runtimeRoots[rootIndex];
+      var rootTag = String(root.tagName || '').toLowerCase();
+      var rootPath = runtimeStatePath(root);
+      if (!rootPath) continue;
+      var rootHtml = String(root.innerHTML || '');
+      if (rootHtmlLength + rootHtml.length > 2097152) break;
+      var rootEntry = {
+        path: rootPath,
+        tag: rootTag,
+        html: rootHtml
+      };
+      if (root.id) rootEntry.id = String(root.id);
+      var rootOdId = root.getAttribute && root.getAttribute('data-od-id');
+      if (rootOdId) rootEntry.odId = String(rootOdId);
+      roots.push(rootEntry);
+      rootHtmlLength += rootHtml.length;
+    }
     var nodes = document.body ? document.body.querySelectorAll('*') : [];
     var count = Math.min(nodes.length, 3500);
     for (var i = 0; i < count; i++) {
@@ -832,6 +855,7 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
     return {
       version: 1,
       hash: String(window.location.hash || ''),
+      roots: roots,
       htmlAttrs: runtimeStateAttributes(document.documentElement),
       bodyAttrs: runtimeStateAttributes(document.body),
       entries: entries

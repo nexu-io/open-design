@@ -32,6 +32,60 @@ export interface RegisterCollabPresenceRoutesDeps {
   cloudAuthorizesProjectPresence?: (projectId: string) => boolean;
 }
 
+/**
+ * The workspace-scoped presence surface of the collab transport, as this route
+ * module needs it. `VelaCliCollabClient` satisfies it structurally.
+ */
+export interface CollabPresenceCloudTransport {
+  heartbeatPresence(
+    projectId: string,
+    input: VelaCliPresenceHeartbeatInput,
+    workspaceId?: string,
+  ): Promise<CollabPresenceMember[]>;
+  listPresence(
+    projectId: string,
+    workspaceId?: string,
+  ): Promise<CollabPresenceMember[]>;
+  leavePresence(
+    projectId: string,
+    input: VelaCliPresenceLeaveInput,
+    workspaceId?: string,
+  ): Promise<CollabPresenceMember[]>;
+}
+
+/**
+ * Bind a collab transport to a per-project workspace scope, producing the
+ * `cloud` dependency below — or nothing when this run has no cloud transport.
+ *
+ * The invariant: **a `cloud` dependency exists if and only if a transport
+ * exists.** Every endpoint below reads a present `cloud` as "the cloud owns
+ * presence for this run" and stops consulting the process-local tracker
+ * entirely. So a relay built over an absent transport is not merely useless —
+ * it turns the in-process fallback into dead code and every gated presence
+ * request into a 502. Returning `null` is what keeps that fallback reachable
+ * for the runs that have no transport, which is every build that has not
+ * opted into the vela-cli collab transport: all stable/prod packaged builds
+ * and every plain `tools-dev` run.
+ *
+ * Callers must route through this rather than assembling an object literal of
+ * arrow functions, because a literal is unconditionally truthy no matter what
+ * the transport turned out to be.
+ */
+export function createCollabPresenceCloudClient(
+  transport: CollabPresenceCloudTransport | null | undefined,
+  workspaceScopeFor: (projectId: string) => string | undefined,
+): CollabPresenceCloudClient | null {
+  if (!transport) return null;
+  return {
+    heartbeatPresence: (projectId, input) =>
+      transport.heartbeatPresence(projectId, input, workspaceScopeFor(projectId)),
+    listPresence: (projectId) =>
+      transport.listPresence(projectId, workspaceScopeFor(projectId)),
+    leavePresence: (projectId, input) =>
+      transport.leavePresence(projectId, input, workspaceScopeFor(projectId)),
+  };
+}
+
 function readHeartbeat(body: unknown): {
   member: PresenceMember;
   clientId?: string;

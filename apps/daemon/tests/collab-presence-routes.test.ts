@@ -3,7 +3,10 @@ import express from 'express';
 import http from 'node:http';
 import { createCollabRuntime } from '../src/collab/runtime.js';
 import type { CollabPresenceCloudClient } from '../src/routes/collab-presence.js';
-import { registerCollabPresenceRoutes } from '../src/routes/collab-presence.js';
+import {
+  createCollabPresenceCloudClient,
+  registerCollabPresenceRoutes,
+} from '../src/routes/collab-presence.js';
 
 let server: http.Server | null = null;
 
@@ -209,5 +212,48 @@ describe('collab presence routes', () => {
     expect(heartbeat.status).toBe(200);
     expect(calls).toEqual(['list:p1', 'heartbeat:p1']);
     expect(isProjectShared).not.toHaveBeenCalled();
+  });
+});
+
+describe('createCollabPresenceCloudClient', () => {
+  // The routes read a present `cloud` as "the cloud owns presence", so an
+  // absent transport MUST produce an absent dependency — not a relay that
+  // dereferences nothing. See the factory's docblock.
+  it('is absent when there is no collab transport', () => {
+    expect(createCollabPresenceCloudClient(null, () => undefined)).toBeNull();
+    expect(createCollabPresenceCloudClient(undefined, () => undefined)).toBeNull();
+  });
+
+  it('binds each call to the project workspace scope when a transport exists', async () => {
+    const calls: string[] = [];
+    const transport = {
+      async heartbeatPresence(projectId: string, _input: unknown, workspaceId?: string) {
+        calls.push(`heartbeat:${projectId}:${workspaceId}`);
+        return [];
+      },
+      async listPresence(projectId: string, workspaceId?: string) {
+        calls.push(`list:${projectId}:${workspaceId}`);
+        return [];
+      },
+      async leavePresence(projectId: string, _input: unknown, workspaceId?: string) {
+        calls.push(`leave:${projectId}:${workspaceId}`);
+        return [];
+      },
+    };
+    const cloud = createCollabPresenceCloudClient(
+      transport,
+      (projectId) => `ws-for-${projectId}`,
+    );
+    expect(cloud).not.toBeNull();
+
+    await cloud!.heartbeatPresence('p1', { member: { memberId: 'm1' } });
+    await cloud!.listPresence('p1');
+    await cloud!.leavePresence('p1', { memberId: 'm1' });
+
+    expect(calls).toEqual([
+      'heartbeat:p1:ws-for-p1',
+      'list:p1:ws-for-p1',
+      'leave:p1:ws-for-p1',
+    ]);
   });
 });
