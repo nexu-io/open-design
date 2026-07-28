@@ -103,9 +103,12 @@ export function applyChangeSet(
     throw new Error('INVALID_CHANGESET');
   }
 
-  let pages = document.pages.map((page) => clonePage(page));
+  const startingLocks = new Map(document.pages.map((page) => [page.id, new Set(page.lockedFields)]));
+  let pages = [...document.pages]
+    .sort((left, right) => left.order - right.order)
+    .map((page) => clonePage(page));
   for (const operation of parsedChangeSet.data.operations as ChangeOperation[]) {
-    pages = applyOperation(document, pages, operation);
+    pages = applyOperation(document, pages, operation, startingLocks);
   }
 
   const candidate: StoreScreenshotDocument = {
@@ -123,11 +126,12 @@ function applyOperation(
   document: StoreScreenshotDocument,
   pages: StoreScreenshotPage[],
   operation: ChangeOperation,
+  startingLocks: Map<string, Set<StoreScreenshotPage['lockedFields'][number]>>,
 ): StoreScreenshotPage[] {
   switch (operation.op) {
     case 'setText':
       return updatePage(pages, operation.pageId, (page) => {
-        if (page.lockedFields.includes(operation.field)) return page;
+        if (isLocked(startingLocks, page.id, operation.field)) return page;
         if (operation.platform === undefined) return { ...page, [operation.field]: operation.value };
         return {
           ...page,
@@ -138,23 +142,23 @@ function applyOperation(
         };
       });
     case 'setColor':
-      return updatePage(pages, operation.pageId, (page) => ({
-        ...page,
-        colors: { ...page.colors, [operation.field]: operation.value },
-      }));
+      return updatePage(pages, operation.pageId, (page) => isLocked(startingLocks, page.id, 'layout')
+        ? page
+        : { ...page, colors: { ...page.colors, [operation.field]: operation.value } });
     case 'setTransform':
-      return updatePage(pages, operation.pageId, (page) => page.lockedFields.includes('layout')
+      return updatePage(pages, operation.pageId, (page) => isLocked(startingLocks, page.id, 'layout')
         ? page
         : { ...page, transform: { x: operation.x, y: operation.y, scale: operation.scale } });
     case 'setAsset':
       if (!document.assets.some((asset) => asset.id === operation.assetId)) {
         throw new Error(`ASSET_NOT_FOUND:${operation.assetId}`);
       }
-      return updatePage(pages, operation.pageId, (page) => page.lockedFields.includes('screenshot')
+      return updatePage(pages, operation.pageId, (page) => isLocked(startingLocks, page.id, 'screenshot')
         ? page
         : { ...page, screenshotAssetId: operation.assetId });
     case 'setVisibility':
       return updatePage(pages, operation.pageId, (page) => {
+        if (isLocked(startingLocks, page.id, 'layout')) return page;
         if (operation.platform === undefined) return { ...page, hidden: !operation.visible };
         return {
           ...page,
@@ -196,6 +200,14 @@ function applyOperation(
     default:
       throw new Error('UNSUPPORTED_OPERATION');
   }
+}
+
+function isLocked(
+  startingLocks: Map<string, Set<StoreScreenshotPage['lockedFields'][number]>>,
+  pageId: string,
+  field: StoreScreenshotPage['lockedFields'][number],
+): boolean {
+  return startingLocks.get(pageId)?.has(field) ?? false;
 }
 
 function updatePage(

@@ -48,6 +48,64 @@ describe('applyChangeSet', () => {
     expect(next.version).toBe(4);
   });
 
+  it('以 ChangeSet 开始时的锁定字段约束整批内容和布局修改', () => {
+    const lockedDocument: StoreScreenshotDocument = {
+      ...document,
+      pages: [{
+        ...document.pages[0]!,
+        lockedFields: ['headline', 'screenshot', 'layout'],
+      }, document.pages[1]!],
+    };
+
+    const next = applyChangeSet(lockedDocument, {
+      baseVersion: 3,
+      operations: [
+        { op: 'setLocks', pageId: 'page-1', fields: [] },
+        { op: 'setText', pageId: 'page-1', field: 'headline', value: '本批次不能覆盖' },
+        { op: 'setAsset', pageId: 'page-1', assetId: 'screen-2' },
+        { op: 'setTransform', pageId: 'page-1', x: 12, y: 24, scale: 0.8 },
+      ],
+    });
+
+    expect(next.pages[0]).toMatchObject({
+      headline: '锁定标题',
+      screenshotAssetId: 'screen-1',
+      lockedFields: [],
+    });
+    expect(next.pages[0]?.transform).toBeUndefined();
+
+    const followingChangeSet = applyChangeSet(next, {
+      baseVersion: 4,
+      operations: [
+        { op: 'setText', pageId: 'page-1', field: 'headline', value: '下一批次可修改' },
+        { op: 'setAsset', pageId: 'page-1', assetId: 'screen-2' },
+        { op: 'setTransform', pageId: 'page-1', x: 12, y: 24, scale: 0.8 },
+      ],
+    });
+
+    expect(followingChangeSet.pages[0]).toMatchObject({
+      headline: '下一批次可修改',
+      screenshotAssetId: 'screen-2',
+      transform: { x: 12, y: 24, scale: 0.8 },
+    });
+  });
+
+  it('先按 order 规范化页面再只修改目标页', () => {
+    const outOfOrderDocument: StoreScreenshotDocument = {
+      ...document,
+      pages: [document.pages[1]!, document.pages[0]!],
+    };
+
+    const next = applyChangeSet(outOfOrderDocument, {
+      baseVersion: 3,
+      operations: [{ op: 'setText', pageId: 'page-2', field: 'headline', value: '新标题' }],
+    });
+
+    expect(next.pages.map((page) => page.id)).toEqual(['page-1', 'page-2']);
+    expect(next.pages[0]).toEqual(document.pages[0]);
+    expect(next.pages[1]).toMatchObject({ ...document.pages[1], headline: '新标题' });
+  });
+
   it('拒绝过期版本而不静默覆盖', () => {
     expect(() => applyChangeSet(document, {
       baseVersion: 2,
