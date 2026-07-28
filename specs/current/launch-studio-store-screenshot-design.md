@@ -1,193 +1,176 @@
-# Launch Studio Store Screenshot Phase 1 Design
+# Launch Studio 商店截图第一阶段设计规格
 
-## Status
+## 文档状态
 
-- Date: 2026-07-28
-- Status: Approved in conversation; awaiting written-spec review
-- Product: Launch Studio
-- Upstream baseline: `nexu-io/open-design` `main` at `f52fda29a8a6fc65c501a45bb165b6f5208194a1`
-- Target platforms: macOS and Windows desktop
+- 日期：2026-07-28
+- 状态：对话设计已确认，等待书面规格复核
+- 产品：Launch Studio
+- 上游基线：`nexu-io/open-design` `main`，提交 `f52fda29a8a6fc65c501a45bb165b6f5208194a1`
+- 目标平台：macOS 和 Windows 桌面端
 
-## 1. Objective
+## 1. 目标
 
-Phase 1 turns the Open Design fork into a focused App Store and Google Play
-phone-screenshot studio.
+第一阶段将在 Open Design Fork 基础上实现专注于 App Store 和 Google Play
+手机截图的生成与编辑工作台。
 
-The user can:
+用户可以：
 
-1. Create a screenshot project.
-2. Enter the minimum product information needed for truthful marketing copy.
-3. Upload real product screenshots, a logo, and optional brand assets.
-4. Select an existing Design System and a screenshot template.
-5. Ask AI to propose a structured screenshot set, or build one manually.
-6. Review and edit every page without leaving the existing Open Design Studio
-   experience.
-7. Generate App Store and Google Play portrait variants from one canonical
-   document.
-8. Validate and export opaque PNG files plus a machine-readable manifest.
+1. 创建商店截图项目。
+2. 填写生成真实营销文案所需的最小产品信息。
+3. 上传真实产品截图、Logo 和可选品牌素材。
+4. 选择已有 Design System 和截图模板。
+5. 让 AI 生成结构化截图方案，或完全手工创建。
+6. 在现有 Open Design Studio 体验中审阅和编辑每一页。
+7. 从同一份规范文档生成 App Store 与 Google Play 竖屏版本。
+8. 校验并导出无透明通道的 PNG 文件和机器可读的 manifest。
 
-## 2. Product and Interface Direction
+## 2. 产品与界面方向
 
-Launch Studio retains the current Open Design product shell, navigation,
-components, interaction language, and Studio layout.
+Launch Studio 保留 Open Design 现有的产品外壳、导航、组件、交互语言和
+Studio 布局。
 
-It does not introduce a separate three-column screenshot application.
+第一阶段不新建一套独立的三栏截图编辑应用。
 
-### 2.1 Entry points
+### 2.1 功能入口
 
-- Add a Store Screenshots task card to the existing home and new-project
-  surfaces.
-- Add a store-screenshot template or scenario to the existing picker.
-- Allow the same capability through the daemon HTTP API and the `od` CLI.
+- 在现有首页和新建项目界面增加“商店截图”任务卡片。
+- 在现有选择器中增加商店截图模板或 Scenario。
+- Daemon HTTP API 与 `od` CLI 同时提供相同能力。
 
-### 2.2 Studio behavior
+### 2.2 Studio 行为
 
-- The left side remains the Open Design conversation and generation-progress
-  surface.
-- The right side becomes a screenshot-set gallery inside the existing preview
-  surface.
-- Existing provider, Design System, template, and export controls remain in
-  their established locations.
-- The gallery switches between App Store and Google Play variants.
-- A thumbnail rail changes the active screenshot page.
-- A focused-edit action opens the selected page for direct text, color, asset,
-  visibility, position, and scale edits.
-- Focused editing uses the existing Open Design floating-edit interaction
-  language. Fabric.js is an internal canvas adapter, not a replacement app
-  shell.
+- 左侧继续使用 Open Design 的对话和生成进度界面。
+- 右侧在现有预览区域中显示整套截图画廊。
+- Provider、Design System、模板和导出控件继续放在原有位置。
+- 画廊可以切换 App Store 与 Google Play 版本。
+- 用户通过缩略图轨道切换当前截图页面。
+- 点击“精细编辑”后，可直接编辑当前页面的文字、颜色、素材、可见性、位置和缩放。
+- 精细编辑沿用 Open Design 现有的浮动编辑交互。Fabric.js 仅作为内部画布适配器，
+  不替换外层产品界面。
 
-### 2.3 Conversational changes
+### 2.3 对话修改
 
-The user can request set-level or page-level changes, including:
+用户可以发起整套或单页修改，例如：
 
-- Rewrite the second page headline.
-- Move page three before page two.
-- Apply a dark visual direction to the set.
-- Replace the product screenshot on page four.
-- Hide a subtitle on Google Play only.
+- 重写第二页标题。
+- 将第三页移动到第二页之前。
+- 将整套截图切换为深色视觉方向。
+- 替换第四页的产品截图。
+- 仅在 Google Play 版本中隐藏副标题。
 
-AI returns a validated ChangeSet. The UI previews the affected pages and applies
-the ChangeSet only after user confirmation.
+AI 返回经过校验的 ChangeSet。界面先预览受影响页面，只有用户确认后才应用修改。
 
-## 3. Scope
+## 3. 范围
 
-### 3.1 Included
+### 3.1 第一阶段包含
 
-- iPhone portrait App Store screenshots.
-- Android phone portrait Google Play screenshots.
-- One canonical screenshot set with platform-specific variants.
-- Minimum Product Profile fields required to ground generated copy.
-- Existing Open Design Design Systems as the initial Brand Profile source.
-- Asset upload and managed references.
-- At least three deterministic templates.
-- AI-generated structured screenshot plans.
-- Manual creation when no provider is configured.
-- Focused editing of text, colors, visibility, position, scale, and image
-  selection.
-- Page add, duplicate, delete, reorder, lock, and regenerate.
-- Background validation, rendering, and ZIP export.
-- Document version history and restore.
-- HTTP, UI, and CLI surfaces.
+- iPhone 竖屏 App Store 截图。
+- Android Phone 竖屏 Google Play 截图。
+- 一份规范截图文档及其平台专属版本。
+- 生成文案所需的最小 Product Profile。
+- 使用现有 Open Design Design System 作为首期 Brand Profile 来源。
+- 素材上传与受管引用。
+- 至少三个确定性模板。
+- AI 生成结构化截图方案。
+- 未配置 Provider 时的完整手工创建流程。
+- 编辑文字、颜色、可见性、位置、缩放和产品截图。
+- 页面新增、复制、删除、排序、锁定和重新生成。
+- 后台校验、渲染和 ZIP 导出。
+- 文档版本历史与恢复。
+- HTTP、UI 和 CLI 三个能力入口。
 
-### 3.2 Excluded
+### 3.2 第一阶段不包含
 
-- iPad and Android tablet screenshots.
-- Landscape screenshots.
-- Google Play feature graphics, icons, and preview videos.
-- App Preview video generation.
-- Automatic upload to App Store Connect or Google Play Console.
-- Localization and CJK or RTL layout adaptation.
-- Social-media images, store copy suites, product video, Website Studio, and
-  Automation.
-- A professional freeform timeline, Photoshop-equivalent image editor, or
-  arbitrary user-code execution.
+- iPad 和 Android Tablet 截图。
+- 横屏截图。
+- Google Play Feature Graphic、应用图标和 Preview Video。
+- App Preview 视频生成。
+- 自动上传 App Store Connect 或 Google Play Console。
+- 多语言本地化、CJK 排版适配和 RTL 排版适配。
+- 社交媒体图片、完整商店文案套件、产品视频、Website Studio 和 Automation。
+- 专业时间轴、Photoshop 级自由图像编辑器或任意用户代码执行。
 
-## 4. Platform Targets
+## 4. 平台输出目标
 
-Platform rules live in versioned configuration and are not hard-coded into UI
-components.
+平台规则保存在版本化配置中，不能写死在 UI 组件里。
 
 ### 4.1 App Store
 
-- Platform target ID: `app-store-iphone-6.9-portrait`
-- Output size: 1290 × 2796 pixels
-- Output format: PNG
-- Alpha channel: forbidden
-- Allowed count: 1–10 pages
+- 平台目标 ID：`app-store-iphone-6.9-portrait`
+- 输出尺寸：1290 × 2796 像素
+- 输出格式：PNG
+- Alpha 通道：禁止
+- 页面数量：1–10 页
+- 产品默认：4 页
 
-Apple accepts multiple 6.9-inch screenshot dimensions. Phase 1 uses 1290 × 2796
-because it is an accepted portrait size and matches the existing technical
-proposal's canonical Design Document example.
+Apple 接受多组 6.9 英寸截图尺寸。第一阶段选择 1290 × 2796，是因为它属于
+Apple 接受的竖屏尺寸，并且与现有技术方案中的规范 Design Document 示例一致。
 
 ### 4.2 Google Play
 
-- Platform target ID: `google-play-phone-portrait`
-- Output size: 1080 × 1920 pixels
-- Output format: PNG
-- Alpha channel: forbidden
-- Product default: at least 4 pages
+- 平台目标 ID：`google-play-phone-portrait`
+- 输出尺寸：1080 × 1920 像素
+- 输出格式：PNG
+- Alpha 通道：禁止
+- 页面数量：4–8 页
+- 产品默认：4 页
 
-Google Play permits a broader range. Phase 1 chooses 1080 × 1920 because it is a
-recommended high-resolution 9:16 portrait target for phone screenshots.
+Google Play 接受更宽泛的尺寸范围。第一阶段选择 1080 × 1920，是因为它符合手机截图的
+9:16 竖屏比例和官方推荐的高分辨率要求。
 
-## 5. Architecture
+## 5. 总体架构
 
-Launch Studio remains a modular monolith:
+Launch Studio 第一阶段保持模块化单体：
 
 ```text
-Electron shell
+Electron 桌面外壳
     ↓
 Open Design Web Studio
     ↓ HTTP / SSE
 Local Daemon
-    ├── Store Screenshot routes and service
-    ├── AI orchestration and ChangeSet validation
-    ├── Job queue
-    └── Project persistence
+    ├── 商店截图路由与 Service
+    ├── AI 编排与 ChangeSet 校验
+    ├── Job Queue
+    └── 项目持久化
             ↓
-Store Screenshot domain package
-    ├── Canonical document schemas
-    ├── Platform specifications
-    ├── Layout constraints
-    ├── Validation rules
-    └── Render model compiler
+商店截图 Domain Package
+    ├── 规范文档 Schema
+    ├── 平台规格
+    ├── 布局约束
+    ├── 校验规则
+    └── Render Model Compiler
             ↓
-Background deterministic renderer
+后台确定性渲染器
     ↓
-Opaque PNG files + manifest + ZIP
+无透明通道 PNG + manifest + ZIP
 ```
 
-### 5.1 Fork strategy
+### 5.1 Fork 策略
 
-- Keep inherited `@open-design/*` package names and internal control-plane
-  protocols in Phase 1.
-- Change user-visible branding through centralized product identity surfaces.
-- Add Launch Studio business logic behind new domain boundaries.
-- Keep `upstream` pointing at `https://github.com/nexu-io/open-design.git`.
-- Do not perform a repository-wide rename that would make upstream merges
-  impractical.
-- Retain the Apache-2.0 license and all applicable third-party notices.
+- 第一阶段保留继承自 Open Design 的 `@open-design/*` 包名和内部控制协议。
+- 通过集中式产品身份配置替换用户可见品牌。
+- 使用新的 Domain 边界承载 Launch Studio 业务逻辑。
+- `upstream` 继续指向 `https://github.com/nexu-io/open-design.git`。
+- 不进行会严重阻碍上游合并的全仓库重命名。
+- 保留 Apache-2.0 许可证和所有适用的第三方声明。
 
-### 5.2 Repository boundaries
+### 5.2 仓库边界
 
-- Shared web/daemon DTOs and wire schemas belong in `packages/contracts`.
-- Canonical screenshot business rules belong in a pure TypeScript package
-  named `@launch-studio/store-screenshot`.
-- HTTP routes, database access, file access, jobs, and rendering orchestration
-  belong in `apps/daemon`.
-- Product UI belongs in a focused feature directory under `apps/web/src`.
-- App source directories remain source-only; tests use each package or app's
-  sibling `tests/` directory.
-- Every public capability closes the HTTP, UI, and CLI loop in the same change.
+- Web 与 Daemon 共用的 DTO 和 Wire Schema 放在 `packages/contracts`。
+- 规范截图业务规则放在纯 TypeScript 包 `@launch-studio/store-screenshot`。
+- HTTP 路由、数据库、文件访问、任务和渲染编排放在 `apps/daemon`。
+- 产品 UI 放在 `apps/web/src` 下独立的 Feature 目录。
+- `src/` 目录只包含源码；测试放在 Package 或 App 的同级 `tests/` 目录。
+- 每个公开能力必须在同一次改动中完成 HTTP、UI 和 CLI 闭环。
 
-## 6. Canonical Business Documents
+## 6. 规范业务文档
 
-The editable source document is the long-lived product data. Fabric JSON,
-generated HTML, and exported PNG files are derived artifacts.
+可编辑源文档是长期保存的产品数据。Fabric JSON、生成 HTML 和导出 PNG
+均属于可重新生成的派生产物。
 
-### 6.1 Product profile
+### 6.1 Product Profile
 
-Phase 1 requires only:
+第一阶段只要求以下字段：
 
 ```ts
 interface StoreProductProfile {
@@ -205,9 +188,9 @@ interface StoreProductProfile {
 }
 ```
 
-Generated headlines must be grounded in these confirmed fields.
+所有生成标题必须以这些已确认字段为依据。
 
-### 6.2 Store screenshot document
+### 6.2 Store Screenshot Document
 
 ```ts
 type StorePlatformTarget =
@@ -251,10 +234,9 @@ interface StoreScreenshotVariant {
 }
 ```
 
-Nodes use normalized layout constraints. They do not expose Fabric's native
-serialization as business data.
+Node 使用规范化布局约束，不把 Fabric 原生序列化结果作为业务数据。
 
-### 6.3 Platform specification
+### 6.3 Platform Specification
 
 ```ts
 interface StorePlatformSpec {
@@ -273,8 +255,7 @@ interface StorePlatformSpec {
 }
 ```
 
-The UI, validator, renderer, and exporter read the same versioned
-specification.
+UI、Validator、Renderer 和 Exporter 必须读取同一份版本化平台规格。
 
 ### 6.4 ChangeSet
 
@@ -292,82 +273,80 @@ interface StoreScreenshotChangeSet {
 }
 ```
 
-Application order:
+应用顺序：
 
 ```text
-Schema validation
-→ base-version check
-→ lock check
-→ business-rule validation
-→ preview
-→ user confirmation
-→ immutable version snapshot
-→ apply
+Schema 校验
+→ 基础版本检查
+→ 字段锁定检查
+→ 业务规则校验
+→ 预览
+→ 用户确认
+→ 创建不可变版本快照
+→ 应用修改
 ```
 
-## 7. AI Generation
+## 7. AI 生成
 
-AI generates a `ScreenshotPlan`, not pixels or arbitrary application code.
+AI 生成 `ScreenshotPlan`，不直接生成像素，也不编写任意应用代码。
 
-The generation context contains:
+生成上下文包含：
 
-- Confirmed Product Profile fields.
-- Active Design System tokens and guidance.
-- Selected source assets.
-- Selected platform targets.
-- Available template manifests.
-- Existing pages when regenerating.
-- Locked fields and terms.
+- 已确认的 Product Profile 字段。
+- 当前 Design System Token 与规则。
+- 用户选择的源素材。
+- 目标平台。
+- 可用模板 Manifest。
+- 重新生成时的现有页面。
+- 锁定字段与锁定术语。
 
-The plan contains:
+`ScreenshotPlan` 包含：
 
-- Page count and order.
-- Feature-to-page mapping.
-- Headline and optional subtitle.
-- Template ID.
-- Source asset references.
-- Structured layout and variant hints.
+- 页面数量与顺序。
+- 功能到页面的映射。
+- 标题与可选副标题。
+- Template ID。
+- 源素材引用。
+- 结构化布局建议与平台差异建议。
 
-Unknown features, unverified rankings, awards, prices, discounts, and absolute
-claims are forbidden. Invalid structured output is retried within the existing
-orchestrator policy and is never written directly to the project.
+禁止生成未知功能、未经证实的排名或奖项、价格促销和绝对化承诺。结构化输出无效时，
+按照现有 Orchestrator 策略重试，但不能直接写入项目。
 
-Manual template mode remains fully usable without an AI provider.
+未配置 AI Provider 时，用户仍可以通过模板完成所有手工操作和导出。
 
-## 8. Editing and Rendering
+## 8. 编辑与渲染
 
-### 8.1 Editing adapter
+### 8.1 编辑适配器
 
 ```text
 StoreScreenshotDocument
-↔ Store screenshot editor model
-↔ Fabric adapter
-↔ Focused interactive canvas
+↔ 商店截图编辑模型
+↔ Fabric Adapter
+↔ 聚焦交互画布
 ```
 
-The adapter maps canonical nodes to Fabric objects and converts committed
-interactions back into canonical operations.
+Adapter 将规范 Node 转换为 Fabric Object，并将用户确认的交互转换回规范操作。
 
-### 8.2 Layout adaptation
+### 8.2 布局适配
 
-The renderer:
+Renderer 按以下顺序工作：
 
-1. Resolves the selected platform specification.
-2. Loads the page and platform override.
-3. Resolves Design System tokens and fonts.
-4. Computes normalized constraints at the target size.
-5. Fits text within configured line and minimum-font-size limits.
-6. Resolves source assets and device framing.
-7. Detects bounds and safe-area violations.
-8. Produces a render model.
-9. Renders an opaque bitmap.
-10. Reopens the output to verify dimensions, format, and alpha state.
+1. 解析目标平台规格。
+2. 加载页面和平台 Override。
+3. 解析 Design System Token 和字体。
+4. 按目标尺寸计算规范化约束。
+5. 在最大行数和最小字号限制内适配文字。
+6. 解析源素材和设备框。
+7. 检查边界和安全区域。
+8. 生成 Render Model。
+9. 渲染无透明通道 Bitmap。
+10. 重新读取输出，验证尺寸、格式和 Alpha 状态。
 
-### 8.3 Background jobs
+### 8.3 后台任务
 
-High-resolution render and ZIP packaging run outside the renderer UI.
+高分辨率渲染和 ZIP 打包不能阻塞 Renderer UI。
 
-Job states:
+任务状态：
 
 ```text
 pending → queued → running → completed
@@ -376,34 +355,30 @@ pending → queued → running → completed
                        └── interrupted
 ```
 
-Progress and page-level failures stream to the Studio through the existing SSE
-event path. A failed page can be retried without recreating completed pages.
+进度和页面级错误通过现有 SSE 事件流发送给 Studio。单页失败时可以只重试该页，
+无需重新生成已完成页面。
 
-## 9. Persistence and Versioning
+## 9. 持久化与版本管理
 
-- Daemon-owned data derives from the resolved `OD_DATA_DIR` and follows the
-  upstream data-root contract.
-- SQLite stores project, document, version, asset-reference, job, export, and
-  audit metadata.
-- Canonical JSON documents and immutable version snapshots are stored beneath
-  the daemon-managed project data.
-- Original, processed, preview, and thumbnail assets remain separate.
-- Exported PNG and ZIP files are reproducible outputs, not the source of truth.
-- API keys remain in OS-backed secure storage through the existing provider
-  configuration path.
+- 所有 Daemon 数据从解析后的 `OD_DATA_DIR` 派生，遵守上游数据根目录约束。
+- SQLite 保存项目、文档、版本、素材引用、任务、导出和审计元数据。
+- 规范 JSON 文档和不可变版本快照存储在 Daemon 管理的项目数据中。
+- 原始素材、处理素材、预览素材和缩略图分别存储。
+- 导出的 PNG 与 ZIP 是可重建结果，不是唯一数据源。
+- API Key 继续通过现有 Provider 配置保存在操作系统安全存储中。
 
-Version operations record:
+版本操作需要记录来源：
 
-- User edit.
-- AI ChangeSet.
-- Template application.
-- Asset replacement.
-- Page reorder.
-- Restore.
+- 用户编辑。
+- AI ChangeSet。
+- 应用模板。
+- 替换素材。
+- 页面排序。
+- 恢复版本。
 
-## 10. API and CLI Surface
+## 10. API 与 CLI
 
-### 10.1 HTTP
+### 10.1 HTTP API
 
 ```text
 POST   /api/projects/:projectId/store-screenshots
@@ -419,8 +394,7 @@ GET    /api/projects/:projectId/store-screenshots/:documentId/versions
 POST   /api/projects/:projectId/store-screenshots/:documentId/versions/:version/restore
 ```
 
-Long-running routes return a job reference and stream progress through existing
-job events.
+耗时接口返回 Job 引用，并通过现有 Job 事件流发送进度。
 
 ### 10.2 CLI
 
@@ -435,49 +409,47 @@ od store-screenshot versions
 od store-screenshot restore
 ```
 
-All commands support `--json`. Commands that accept long prompts support
-`--prompt-file <path|->`.
+所有命令支持 `--json`。接收长 Prompt 的命令支持 `--prompt-file <path|->`。
 
-## 11. Validation and Error Handling
+## 11. 校验与错误处理
 
-### 11.1 Upload validation
+### 11.1 上传校验
 
-- Verify supported extension, MIME, and file signature.
-- Decode images before acceptance.
-- Reject corrupted or oversized assets with a user-facing reason.
-- Sanitize SVG or HTML-based sources before any preview.
+- 校验受支持的扩展名、MIME 和文件签名。
+- 素材通过真实解码后才能进入项目。
+- 损坏或过大的素材必须显示明确原因并拒绝保存。
+- SVG 或 HTML 类素材在预览前必须完成安全清理。
 
-### 11.2 Blocking export errors
+### 11.2 阻止导出的错误
 
-- Missing source asset.
-- Font not loaded or unavailable.
-- Text overflow after minimum-size fitting.
-- Node outside the legal render bounds.
-- Incorrect page count.
-- Incorrect output dimensions or format.
-- Alpha channel present.
-- Unresolved document or platform-spec version.
+- 源素材缺失。
+- 字体不存在或尚未加载完成。
+- 已达到最小字号但仍发生文字溢出。
+- Node 超出合法渲染边界。
+- 页面数量不符合平台规则。
+- 输出尺寸或格式错误。
+- 图片存在 Alpha 通道。
+- 文档或平台规格版本无法解析。
 
-### 11.3 Warnings
+### 11.3 警告
 
-- Important content approaches a crop or visual safe area.
-- Google Play text density is excessive.
-- Copy may contain rankings, price promotions, awards, or unverifiable claims.
-- Product UI is not visually prominent in the first pages.
-- Pages repeat the same benefit.
+- 重要内容接近裁切区域或视觉安全区。
+- Google Play 截图文字密度过高。
+- 文案可能包含排名、价格促销、奖项或无法验证的承诺。
+- 前几页中的真实产品界面不够突出。
+- 多页重复表达同一个用户收益。
 
-Warnings require review but do not block export unless a deterministic platform
-rule is violated.
+除非违反确定性平台规则，否则警告需要用户复核，但不阻止导出。
 
-### 11.4 Recovery
+### 11.4 恢复策略
 
-- AI parse or schema failures leave the current document unchanged.
-- A stale ChangeSet fails with a version-conflict response.
-- A failed page render is independently retryable.
-- An interrupted job is marked as interrupted on restart.
-- Completed render outputs are reused when their content hashes match.
+- AI 解析或 Schema 校验失败时，当前文档保持不变。
+- ChangeSet 的 `baseVersion` 过期时返回版本冲突。
+- 单页渲染失败时可以单独重试。
+- 应用重启后，未完成任务标记为 `interrupted`。
+- 内容 Hash 相同的已完成渲染结果可以直接复用。
 
-## 12. Export Package
+## 12. 导出结构
 
 ```text
 Store Screenshots/
@@ -494,118 +466,112 @@ Store Screenshots/
 └── manifest.json
 ```
 
-The manifest includes:
+`manifest.json` 包含：
 
-- Document ID and version.
-- Platform-spec ID and version.
-- Page order and filenames.
-- Width, height, format, and content hash.
-- Source asset references.
-- Validation result.
-- Export timestamp.
+- Document ID 与版本。
+- Platform Specification ID 与版本。
+- 页面顺序和文件名。
+- 宽度、高度、格式和内容 Hash。
+- 源素材引用。
+- 校验结果。
+- 导出时间。
 
-## 13. Test Strategy
+## 13. 测试方案
 
-### 13.1 Unit tests
+### 13.1 单元测试
 
-- Zod document and API schemas.
-- Platform-spec parsing.
-- Page-count and output-format rules.
-- Normalized layout adaptation.
-- Text fitting and overflow.
-- ChangeSet application.
-- Base-version conflicts.
-- Document and term locks.
-- Filename generation.
-- Content-hash stability.
+- Zod 文档和 API Schema。
+- Platform Specification 解析。
+- 页面数量与输出格式规则。
+- 规范化布局适配。
+- 文字适配和溢出。
+- ChangeSet 应用。
+- `baseVersion` 冲突。
+- 文档锁定和术语锁定。
+- 文件命名。
+- 内容 Hash 稳定性。
 
-### 13.2 Contract tests
+### 13.2 Contract Test
 
-- Web and daemon use the same request, response, error, job, and SSE shapes.
-- CLI and UI call the same HTTP endpoints.
-- Stored documents survive schema round trips.
-- Platform-spec and manifest types remain compatible.
+- Web 与 Daemon 使用相同的请求、响应、错误、Job 和 SSE 类型。
+- CLI 与 UI 调用相同 HTTP API。
+- 存储文档通过 Schema Round Trip 后保持一致。
+- Platform Specification 与 Manifest 类型保持兼容。
 
-### 13.3 Integration tests
+### 13.3 集成测试
 
-- Create project and screenshot document.
-- Upload and reference product screenshots.
-- Generate a plan through a deterministic test provider.
-- Apply a valid ChangeSet.
-- Reject a locked-field ChangeSet.
-- Validate, render, and export both platforms.
-- Restore an immutable version.
-- Recover an interrupted render job.
+- 创建项目和截图文档。
+- 上传并引用产品截图。
+- 通过确定性测试 Provider 生成 Screenshot Plan。
+- 应用合法 ChangeSet。
+- 拒绝修改锁定字段的 ChangeSet。
+- 校验、渲染并导出两个平台。
+- 恢复不可变历史版本。
+- 恢复中断的渲染任务。
 
-### 13.4 Visual regression
+### 13.4 视觉回归
 
-Use fixed fonts, assets, Design System tokens, and templates to compare:
+使用固定字体、素材、Design System Token 和模板检查：
 
-- Every starter template at 1290 × 2796.
-- Every starter template at 1080 × 1920.
-- Long headline fitting.
-- Missing-subtitle layout.
-- Platform-specific overrides.
-- Opaque output and exact dimensions.
+- 每个首发模板的 1290 × 2796 输出。
+- 每个首发模板的 1080 × 1920 输出。
+- 长标题适配。
+- 无副标题布局。
+- 平台专属 Override。
+- 无透明通道和精确尺寸。
 
-Golden images are platform-specific to avoid false failures from font and
-renderer differences.
+Golden Image 按平台分别维护，避免字体和 Renderer 差异产生无效失败。
 
-### 13.5 End-to-end acceptance
+### 13.5 端到端验收
 
 ```text
-Create project
-→ upload product screenshots
-→ choose Design System
-→ generate four-page set
-→ edit one page
-→ reorder pages
-→ validate both platforms
-→ export ZIP
-→ verify manifest and PNG files
-→ restart app
-→ reopen the editable document
+创建项目
+→ 上传产品截图
+→ 选择 Design System
+→ 生成四页截图
+→ 编辑其中一页
+→ 调整页面顺序
+→ 校验两个平台
+→ 导出 ZIP
+→ 验证 manifest 与 PNG
+→ 重启应用
+→ 重新打开可编辑源文档
 ```
 
-Required gates:
+必须通过：
 
 - `pnpm guard`
-- Relevant package typecheck and tests.
-- Web typecheck, tests, and build.
-- Daemon typecheck, tests, and build.
-- Desktop build.
-- Targeted Playwright E2E.
-- Local desktop startup and daemon health check.
+- 相关 Package 的 Typecheck 和 Test。
+- Web Typecheck、Test 和 Build。
+- Daemon Typecheck、Test 和 Build。
+- Desktop Build。
+- 目标 Playwright E2E。
+- 本地桌面端启动和 Daemon Health Check。
 
-## 14. Acceptance Criteria
+## 14. 验收标准
 
-1. The Store Screenshots entry and Studio experience visually and behaviorally
-   match Open Design.
-2. A user can create a project and upload real product screenshots.
-3. At least three deterministic templates read the active Design System's
-   colors, typography, and logo.
-4. AI can generate at least four grounded pages, while manual mode works
-   without a provider.
-5. One canonical document produces App Store and Google Play portrait variants.
-6. The user can edit headlines, colors, product screenshots, page order,
-   element visibility, position, and scale.
-7. Regenerating one page does not change another page.
-8. Locked fields and terms cannot be overwritten by AI or template changes.
-9. App Store files are exactly 1290 × 2796 PNG.
-10. Google Play files are exactly 1080 × 1920 PNG.
-11. Every exported image is opaque and ordered correctly.
-12. The export contains the expected directory structure and manifest.
-13. Restarting the application preserves projects, assets, canonical documents,
-    versions, and recoverable job state.
-14. HTTP, UI, and CLI surfaces expose the same capability and contract.
-15. All required validation, build, visual-regression, and E2E gates pass.
+1. “商店截图”入口与 Studio 体验在视觉和行为上保持 Open Design 风格。
+2. 用户可以创建项目并上传真实产品截图。
+3. 至少三个确定性模板能够读取当前 Design System 的颜色、字体和 Logo。
+4. AI 可以生成至少四页基于真实产品信息的截图；无 Provider 时可以手工完成。
+5. 同一份规范文档可以生成 App Store 和 Google Play 竖屏版本。
+6. 用户可以编辑标题、颜色、产品截图、页面顺序、元素可见性、位置和缩放。
+7. 重新生成单页不会修改其他页面。
+8. AI 或模板变更不能覆盖已锁定字段和术语。
+9. App Store 文件必须是精确的 1290 × 2796 PNG。
+10. Google Play 文件必须是精确的 1080 × 1920 PNG。
+11. 所有导出图片必须无 Alpha 通道且顺序正确。
+12. 导出结果包含约定目录结构和 manifest。
+13. 应用重启后保留项目、素材、规范文档、版本和可恢复任务状态。
+14. HTTP、UI 和 CLI 使用相同能力与 Contract。
+15. 所有必须的校验、Build、视觉回归和 E2E 均通过。
 
-## 15. Source References
+## 15. 参考资料
 
-- Launch Studio product requirements under `doc/`.
-- Launch Studio technical proposal under `doc/`.
-- Open Design root `AGENTS.md` and directory-level guidance.
-- Apple App Store Connect screenshot specifications:
+- `doc/` 下的 Launch Studio 产品需求文档。
+- `doc/` 下的 Launch Studio 技术方案。
+- Open Design 根目录 `AGENTS.md` 与目录级开发约束。
+- Apple App Store Connect Screenshot Specifications：
   `https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications/`
-- Google Play preview-asset requirements:
+- Google Play Preview Asset Requirements：
   `https://support.google.com/googleplay/android-developer/answer/9866151`
