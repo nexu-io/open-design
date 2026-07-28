@@ -1,8 +1,14 @@
 <h1 align="center">Open Design: 오픈소스 Claude Design 대안</h1>
 
+<<<<<<< HEAD
 > 🔥 **Open Design 0.9.0 출시: 설정 없이 바로 창작하세요.** [공식 Model Router](https://open-design.ai/amr)가 앱에 그대로 내장되어 있습니다 — 추가 설정도, 설치할 CLI도, 준비할 API 키도 필요 없습니다. 앱을 열고 로그인한 뒤 곧바로 디자인하고 창작하세요. [0.9.0 다운로드](https://github.com/nexu-io/open-design/releases) · [토론 참여하기](https://github.com/nexu-io/open-design/discussions/3524)
 >
 > 🏅 **Open Design Fellow 프로그램이 지금 열렸습니다.** 디자인은 열려 있어야 한다고 믿으신다면 — Open Design Fellow가 되어 핵심 팀과 함께 제품을 빚어내고, 더 많은 사람이 디자인의 미래를 정의하는 일에 참여하도록 도와주세요. 자세히 → [`MAINTAINERS.md`](../../MAINTAINERS.md) 및 [Discord](https://discord.gg/qhbcCH8Am4).
+=======
+> ⚡ **Open Design Cloud — 공식 모델 서비스.** 한 번의 충전으로 Open Design 안에서 GPT, Claude, Gemini, DeepSeek를 바로 사용하세요. 20+ 플래그십 모델, 무설정, 실제 토큰 사용량 기반 과금. [Open Design Cloud 사용해 보기](https://open-design.ai/cloud/)
+>
+> 🏅 **Open Design Fellow 프로그램이 지금 열렸습니다.** 디자인은 열려 있어야 한다고 믿으신다면 — Open Design Fellow가 되어 핵심 팀과 함께 제품을 빚어내고, 더 많은 사람이 디자인의 미래를 정의하는 일에 참여하도록 도와주세요. 자세히 → [`MAINTAINERS.md`](../../MAINTAINERS.md) 및 [Discord](https://discord.gg/mHAjSMV6gz).
+>>>>>>> upstream/main
 
 <p align="center">
   <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="Open Design — The open-source Claude Design alternative · 150 Design Systems · 261 Plugins · 21 Coding Agents · 14 Media Providers" width="100%" />
@@ -113,10 +119,18 @@ Open Design가 무엇이고 무엇을 하는지 빠르게 살펴봅니다. **Hom
 |---|:---:|---|
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | ✅ 지원됨 | `od mcp install claude` |
 | [Codex CLI](https://github.com/openai/codex) | ✅ 지원됨 | `od mcp install codex` |
+<<<<<<< HEAD
 | [Cursor](https://www.cursor.com/cli) | ✅ 지원됨 | `od mcp install cursor` |
 | [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ 지원됨 | `od mcp install copilot` |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ 지원됨 | `od mcp install copilot` |
 | Gemini CLI | ✅ 지원됨 | `od mcp install gemini` |
+=======
+| [DeepSeek Reasonix](https://github.com/esengine/DeepSeek-Reasonix) | ✅ 지원됨 | `od mcp install reasonix` |
+| [Raven](https://github.com/EverMind-AI/Raven) | ✅ 지원됨 | `od mcp install raven` |
+| [Cursor](https://www.cursor.com/cli) | ✅ 지원됨 | `od mcp install cursor` |
+| [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ 지원됨 | `od mcp install copilot` |
+| [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ 지원됨 | `od mcp install copilot` |
+>>>>>>> upstream/main
 | [OpenCode](https://opencode.ai/) | ✅ 지원됨 | `od mcp install opencode` |
 | [OpenClaw](https://github.com/openclaw/openclaw) | ✅ 지원됨 | `od mcp install openclaw` |
 | [Antigravity](https://antigravity.google) | ✅ 지원됨 | `od mcp install antigravity` |
@@ -299,9 +313,15 @@ GUI를 한 번도 열지 않고도 Open Design를 사용할 수 있습니다 —
 
 ```bash
 # One-line install into the agent you're using:
+<<<<<<< HEAD
 curl -fsSL https://open-design.ai/install.sh | sh -s <agent>
 # <agent> = claude | codex | cursor | copilot | openclaw | antigravity | gemini
 #         | pi | vibe | hermes | cline | kimi | trae | opencode
+=======
+od mcp install <agent>
+# <agent> = claude | codex | reasonix | raven | cursor | copilot | openclaw | antigravity
+#         | pi | vibe | hermes | cline | kimi | kiro | trae | opencode
+>>>>>>> upstream/main
 ```
 
 그런 다음 에이전트 안에서:

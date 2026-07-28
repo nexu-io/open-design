@@ -112,6 +112,24 @@ import { useByokImageModelOptions, useByokVideoModelOptions, useByokSpeechModelO
 import { XaiOAuthControl } from './XaiOAuthControl';
 import type { MediaProvider } from '../media/models';
 import { Toast } from './Toast';
+<<<<<<< HEAD
+=======
+import {
+  checkForUpdaterUpdate,
+  clearUpdaterCache,
+  deriveUpdaterModel,
+  downloadUpdaterUpdate,
+  openUpdaterInstaller,
+  quitAfterUpdaterInstallerOpen,
+  readUpdaterStatus,
+  restartSafetyFromActionResult,
+  restartSafetyFromUpdaterStatus,
+  subscribeToUpdaterStatus,
+  type UpdaterActionResult,
+  type UpdaterModel,
+  type UpdaterRestartSafety,
+} from '../lib/updater';
+>>>>>>> upstream/main
 import { PetSettings } from './pet/PetSettings';
 import { McpClientSection } from './McpClientSection';
 import { SkillsSection } from './SkillsSection';
@@ -1321,6 +1339,9 @@ export function SettingsDialog({
   >(() => new Set());
   const [versionChecking, setVersionChecking] = useState(false);
   const [aboutToast, setAboutToast] = useState<string | null>(null);
+  // Two-stage inline confirm for the destructive manual cache clear.
+  const [clearUpdaterCacheStage, setClearUpdaterCacheStage] = useState<'idle' | 'confirm'>('idle');
+  const [clearUpdaterCacheBusy, setClearUpdaterCacheBusy] = useState(false);
 
   const handleInstallLatest = useCallback(async () => {
     if (versionChecking || !appVersionInfo) return;
@@ -1337,8 +1358,58 @@ export function SettingsDialog({
     } finally {
       setVersionChecking(false);
     }
+<<<<<<< HEAD
     window.open('https://github.com/nexu-io/open-design/releases', '_blank', 'noopener,noreferrer');
   }, [versionChecking, appVersionInfo, t]);
+=======
+  }, [
+    aboutUpdateActionBusy,
+    aboutUpdateControl.primaryAction,
+    aboutUpdaterModel.busy,
+    aboutUpdaterToastText,
+    applyAboutUpdaterResult,
+    t,
+  ]);
+
+  const handleOpenReleaseNotes = useCallback(() => {
+    void openExternalUrl(OPEN_DESIGN_RELEASES_URL);
+  }, []);
+
+  // Manual updater/launcher cache clear — the disaster-recovery action for
+  // stuck update state. The desktop owns the capability; this handler only
+  // reports the outcome and refreshes the About updater model.
+  const handleClearUpdaterCache = useCallback(() => {
+    if (clearUpdaterCacheBusy) return;
+    setClearUpdaterCacheBusy(true);
+    void (async () => {
+      try {
+        const result = await clearUpdaterCache();
+        if (result.ok) {
+          setAboutUpdaterModel(result.model);
+          setAboutToast(t('settings.clearUpdaterCacheSuccess'));
+        } else {
+          setAboutToast(t('settings.clearUpdaterCacheFailed'));
+        }
+      } finally {
+        setClearUpdaterCacheBusy(false);
+        setClearUpdaterCacheStage('idle');
+      }
+    })();
+  }, [clearUpdaterCacheBusy, t]);
+
+  // Precise inverse of App.handleCompleteOnboarding: flip
+  // onboardingCompleted back to false, mirror it to localStorage and the
+  // daemon through the same config-persist path, then route the user into
+  // the first-run flow so they can replay setup (including brand extraction).
+  const handleResetOnboarding = useCallback(() => {
+    const next: AppConfig = { ...cfg, onboardingCompleted: false };
+    setCfg(next);
+    saveConfig(next);
+    void syncConfigToDaemon(next);
+    onClose();
+    navigateRoute({ kind: 'home', view: 'onboarding' });
+  }, [cfg, onClose]);
+>>>>>>> upstream/main
 
   // Imperative handle for the External MCP section. The dialog footer Save
   // routes through this when the MCP tab is active so the user can press the
@@ -4628,6 +4699,112 @@ export function SettingsDialog({
               ) : (
                 <div className="empty-card">{t('settings.versionUnavailable')}</div>
               )}
+<<<<<<< HEAD
+=======
+              <div className="settings-about-diagnostics settings-about-silent-updates">
+                <label className="settings-about-toggle">
+                  <input
+                    checked={cfg.allowSilentUpdates === true}
+                    data-testid="settings-allow-silent-updates"
+                    disabled={silentUpdateBusy}
+                    type="checkbox"
+                    onChange={(event) => {
+                      // Capture before setState: React clears event.currentTarget
+                      // after the handler returns, and the functional updater can
+                      // run later when SettingsDialog already has pending lanes
+                      // (about-updater status, autosave indicator, etc.).
+                      const allowSilentUpdates = event.currentTarget.checked;
+                      const previous = cfg.allowSilentUpdates;
+                      // Dedicated non-optimistic path: do not flush through
+                      // handleConfigPersist (which setConfig before daemon write).
+                      // Serialize via busy + write token so a slow earlier save
+                      // cannot re-apply UI after a later toggle.
+                      const writeToken = ++silentUpdateWriteTokenRef.current;
+                      suppressNextAutosaveRef.current = true;
+                      setCfg((current) => ({
+                        ...current,
+                        allowSilentUpdates,
+                      }));
+                      if (onSilentUpdatePreferenceChange == null) return;
+                      setSilentUpdateBusy(true);
+                      void (async () => {
+                        try {
+                          await onSilentUpdatePreferenceChange(allowSilentUpdates);
+                          if (writeToken !== silentUpdateWriteTokenRef.current) return;
+                          // Only advance the baseline for this daemon-owned field.
+                          // Spreading autosaveLatestRef would stamp any concurrent
+                          // draft (theme, accent, …) as already saved and let the
+                          // generic autosave skip a real onPersist for that edit.
+                          autosaveLastSavedRef.current = {
+                            ...autosaveLastSavedRef.current,
+                            allowSilentUpdates,
+                          };
+                          setAutosaveStatus('saved');
+                          if (autosaveSavedTimerRef.current != null) {
+                            window.clearTimeout(autosaveSavedTimerRef.current);
+                          }
+                          autosaveSavedTimerRef.current = window.setTimeout(() => {
+                            autosaveSavedTimerRef.current = null;
+                            setAutosaveStatus((curr) => (curr === 'saved' ? 'idle' : curr));
+                          }, 1800);
+                        } catch {
+                          if (writeToken !== silentUpdateWriteTokenRef.current) return;
+                          suppressNextAutosaveRef.current = true;
+                          setCfg((current) => ({
+                            ...current,
+                            allowSilentUpdates: previous,
+                          }));
+                          setAutosaveStatus('error');
+                        } finally {
+                          if (writeToken === silentUpdateWriteTokenRef.current) {
+                            setSilentUpdateBusy(false);
+                          }
+                        }
+                      })();
+                    }}
+                  />
+                  <span className="settings-about-toggle-copy">
+                    <span>{t('settings.allowSilentUpdates')}</span>
+                    <span className="hint">{t('settings.allowSilentUpdatesDesc')}</span>
+                  </span>
+                </label>
+              </div>
+              {aboutUpdaterModel.environment === 'desktop'
+                && aboutUpdaterModel.supported
+                && appVersionInfo?.packaged !== false ? (
+                <div className="settings-about-diagnostics">
+                  <div className="settings-about-diagnostics-text">
+                    <h4>{t('settings.clearUpdaterCacheTitle')}</h4>
+                    <p className="hint">{t('settings.clearUpdaterCacheHint')}</p>
+                  </div>
+                  {clearUpdaterCacheStage === 'confirm' ? (
+                    <>
+                      <Button
+                        disabled={clearUpdaterCacheBusy}
+                        onClick={() => setClearUpdaterCacheStage('idle')}
+                      >
+                        {t('common.cancel')}
+                      </Button>
+                      <Button
+                        data-testid="settings-clear-updater-cache-confirm"
+                        disabled={clearUpdaterCacheBusy || aboutUpdaterModel.busy}
+                        onClick={handleClearUpdaterCache}
+                      >
+                        {t('settings.clearUpdaterCacheConfirmButton')}
+                      </Button>
+                    </>
+                  ) : (
+                    <Button
+                      data-testid="settings-clear-updater-cache"
+                      disabled={clearUpdaterCacheBusy || aboutUpdaterModel.busy}
+                      onClick={() => setClearUpdaterCacheStage('confirm')}
+                    >
+                      {t('settings.clearUpdaterCacheButton')}
+                    </Button>
+                  )}
+                </div>
+              ) : null}
+>>>>>>> upstream/main
               <div className="settings-about-diagnostics">
                 <div className="settings-about-diagnostics-text">
                   <h4>{t('diagnostics.exportTitle')}</h4>

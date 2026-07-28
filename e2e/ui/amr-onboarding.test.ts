@@ -100,6 +100,7 @@ test('[P0] onboarding falls back to Local CLI when AMR is unavailable', async ({
   await expect(page.getByRole('button', { name: /Continue/i })).toBeVisible();
 });
 
+<<<<<<< HEAD
 test('[P0] onboarding recovers from a transient AMR status failure and still continues after login completes', async ({ page }) => {
   const config = await wireOnboardingMocks(page, {
     amrAvailable: true,
@@ -144,6 +145,39 @@ test('[P0] onboarding lets the user cancel an incomplete AMR sign-in and retry',
   await expect(page.getByRole('button', { name: /Cancel sign-in/i })).toBeVisible();
 });
 
+=======
+test('[P0] onboarding signed-in AMR status failure stays gated instead of bypassing Connect', async ({ page }) => {
+  const config = await wireOnboardingMocks(page, {
+    amrAvailable: true,
+    initialLoggedIn: true,
+    failAllStatusPolls: true,
+  });
+
+  await seedOnboardingConfig(page, config);
+  await gotoOnboarding(page);
+
+  await expect
+    .poll(() => page.evaluate(() => window.__amrOnboardingStatusCalls ?? 0))
+    .toBeGreaterThanOrEqual(1);
+  // The signed-in status never resolves (all polls fail), so the cloud landing
+  // can't show "Continue (signed in)" and falls back to the sign-in CTA. There
+  // is no Skip, no Continue, and no stepper to bypass the gate.
+  await expect(page.getByRole('button', { name: /Skip for now/i })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^Continue$/i })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /About you|了解你/i })).toHaveCount(0);
+  const primary = cloudPrimaryButton(page);
+  await expect(primary).toBeVisible();
+  await expect(primary).toHaveText(/Sign in to Open Design|登录 Open Design/i);
+  await expect(page.getByText(/Optional details for better defaults/i)).toHaveCount(0);
+
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await waitForLoadingToClear(page);
+  await dismissPrivacyDialog(page);
+  await expect(page).toHaveURL(/\/onboarding$/);
+  await expect(connectLandingHeading(page)).toBeVisible();
+});
+
+>>>>>>> upstream/main
 test('[P0] onboarding cancel during a slow AMR status check does not start login', async ({ page }) => {
   const config = await wireOnboardingMocks(page, {
     amrAvailable: true,
@@ -178,6 +212,7 @@ test('[P0] onboarding cancel during a slow AMR status check does not start login
   await expect.poll(() => page.evaluate(() => window.__amrOnboardingLoginCalls ?? 0)).toBe(0);
 });
 
+<<<<<<< HEAD
 test('[P0] onboarding AMR card lets the user pick a live runtime model before continuing', async ({ page }) => {
   const config = await wireOnboardingMocks(page, {
     amrAvailable: true,
@@ -239,6 +274,69 @@ test('[P0] onboarding AMR card lets the user pick a live runtime model before co
         amr: {
           model: selectedModel,
         },
+=======
+// The AMR card + per-runtime model picker on the connect step were removed,
+// so the model-selection portion of the old test is retired. The still-valid
+// coverage — a signed-in AMR user advances from the landing through both steps
+// and completes setup with agentId 'amr' — is preserved.
+test('[P0] @critical onboarding signed-in AMR path finishes setup with the AMR runtime', async ({ page }) => {
+  const config = await wireOnboardingMocks(page, {
+    amrAvailable: true,
+    initialLoggedIn: true,
+  });
+
+  await seedOnboardingConfig(page, config);
+  await gotoOnboarding(page);
+
+  const primary = cloudPrimaryButton(page);
+  await expect(primary).toHaveText(/Continue \(signed in\)|继续（已登录）/i);
+  await clickCloudPrimary(page);
+
+  await expect(page.getByText(/Optional details for better defaults/i)).toBeVisible();
+  await advanceFromAboutYouToBrand(page);
+  await expectOnboardingFinished(page);
+  await pollStoredConfig(page).toMatchObject({
+    agentId: 'amr',
+    onboardingCompleted: true,
+  });
+});
+
+// The connect-step AMR model picker is gone, so the model-selection portion is
+// retired. The preserved coverage: the AMR runtime configured during a
+// signed-in onboarding carries into the first Home run request (agentId 'amr').
+test('[P0] onboarding AMR runtime selection carries into the first Home run request', async ({ page }) => {
+  const config = await wireOnboardingMocks(page, {
+    amrAvailable: true,
+    initialLoggedIn: true,
+  });
+
+  await seedOnboardingConfig(page, config);
+  await gotoOnboarding(page);
+
+  await clickCloudPrimary(page);
+  await advanceFromAboutYouToBrand(page);
+  await expectOnboardingFinished(page);
+
+  let runBody: Record<string, unknown> | null = null;
+  await page.route('**/api/runs', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.continue();
+      return;
+    }
+    runBody = route.request().postDataJSON() as Record<string, unknown>;
+    await route.fulfill({
+      status: 202,
+      contentType: 'application/json',
+      body: JSON.stringify({ runId: 'amr-onboarding-first-run' }),
+    });
+  });
+  await page.route('**/api/runs/amr-onboarding-first-run/events', async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: {
+        'content-type': 'text/event-stream',
+        'cache-control': 'no-cache',
+>>>>>>> upstream/main
       },
     });
 });
@@ -260,7 +358,95 @@ test('[P0] onboarding skip exits to home and marks onboarding completed', async 
   });
 });
 
+<<<<<<< HEAD
 test('[P0] onboarding about-you step accepts profile selections and completes setup', async ({ page }) => {
+=======
+test('[P0] onboarding newsletter malformed email does not block finishing setup', async ({ page }) => {
+  const config = await wireOnboardingMocks(page, {
+    amrAvailable: true,
+    initialLoggedIn: true,
+  });
+  let newsletterCalls = 0;
+  await page.route('https://open-design.ai/subscribe', async (route) => {
+    newsletterCalls += 1;
+    await route.fulfill({ json: { ok: true } });
+  });
+
+  await seedOnboardingConfig(page, config);
+  await gotoOnboarding(page);
+  await advanceToNewsletterStep(page);
+
+  await page.getByPlaceholder('you@studio.com').fill('not-an-email');
+  await page.getByRole('button', { name: /^Continue$/i }).click();
+  await expectFinalDesignSystemStep(page);
+
+  await expectOnboardingFinished(page);
+  await expect.poll(() => newsletterCalls).toBe(0);
+  await pollStoredConfig(page).toMatchObject({
+    onboardingCompleted: true,
+  });
+});
+
+test('[P0] onboarding newsletter submits a valid email only when setup finishes', async ({ page }) => {
+  const config = await wireOnboardingMocks(page, {
+    amrAvailable: true,
+    initialLoggedIn: true,
+  });
+  const newsletterBodies: Array<Record<string, unknown>> = [];
+  await page.route('https://open-design.ai/subscribe', async (route) => {
+    newsletterBodies.push(route.request().postDataJSON() as Record<string, unknown>);
+    await route.fulfill({ json: { ok: true } });
+  });
+
+  await seedOnboardingConfig(page, config);
+  await gotoOnboarding(page);
+  await advanceToNewsletterStep(page);
+
+  await page.getByPlaceholder('you@studio.com').fill('Designer@Example.COM ');
+  await page.getByRole('button', { name: /^Continue$/i }).click();
+  await expect(page.getByRole('heading', { name: /Create once, build everywhere/i })).toBeVisible();
+  await expect.poll(() => newsletterBodies.length).toBe(0);
+
+  await expectOnboardingFinished(page);
+  await expect.poll(() => newsletterBodies).toEqual([
+    { email: 'designer@example.com', source: 'client' },
+  ]);
+  await pollStoredConfig(page).toMatchObject({
+    onboardingCompleted: true,
+  });
+});
+
+test('[P0] onboarding newsletter submit failure does not block finishing setup', async ({ page }) => {
+  const config = await wireOnboardingMocks(page, {
+    amrAvailable: true,
+    initialLoggedIn: true,
+  });
+  let newsletterCalls = 0;
+  await page.route('https://open-design.ai/subscribe', async (route) => {
+    newsletterCalls += 1;
+    await route.fulfill({
+      status: 500,
+      json: { ok: false },
+    });
+  });
+
+  await seedOnboardingConfig(page, config);
+  await gotoOnboarding(page);
+  await advanceToNewsletterStep(page);
+
+  await page.getByPlaceholder('you@studio.com').fill('designer@example.com');
+  await page.getByRole('button', { name: /^Continue$/i }).click();
+  await expect(page.getByRole('heading', { name: /Create once, build everywhere/i })).toBeVisible();
+
+  await expectOnboardingFinished(page);
+  await expect.poll(() => newsletterCalls).toBe(1);
+  await pollStoredConfig(page).toMatchObject({
+    onboardingCompleted: true,
+  });
+});
+
+test('[P0] onboarding build CTA opens design-system creation and completes onboarding', async ({ page }) => {
+>>>>>>> upstream/main
   const config = await wireOnboardingMocks(page, {
     amrAvailable: true,
     initialLoggedIn: true,
@@ -268,6 +454,7 @@ test('[P0] onboarding about-you step accepts profile selections and completes se
 
   await seedOnboardingConfig(page, config);
   await gotoOnboarding(page);
+<<<<<<< HEAD
 
   await page.getByRole('button', { name: /^Continue$/i }).click();
   await expect(page.getByText(/Optional details for better defaults/i)).toBeVisible();
@@ -286,6 +473,35 @@ test('[P0] onboarding about-you step accepts profile selections and completes se
   await expect(expectOnboardingTrigger(page, 'Where did you hear about us?')).toContainText('Search');
 
   await page.getByRole('button', { name: /^Continue$/i }).click();
+=======
+  await clickCloudPrimary(page);
+  await advanceFromAboutYouToBrand(page);
+
+  await page.getByRole('button', { name: /Build a design system/i }).click();
+
+  await expect(page).toHaveURL(/\/design-systems\/create$/);
+  await expect(
+    page.getByRole('heading', { name: /Extract from GitHub, websites, or source material/i }),
+  ).toBeVisible();
+  await expect(page.getByRole('button', { name: /Continue to generation/i })).toBeDisabled();
+  await pollStoredConfig(page).toMatchObject({
+    onboardingCompleted: true,
+  });
+});
+
+test('[P0] onboarding build step still allows finishing directly to home', async ({ page }) => {
+  const config = await wireOnboardingMocks(page, {
+    amrAvailable: true,
+    initialLoggedIn: true,
+  });
+
+  await seedOnboardingConfig(page, config);
+  await gotoOnboarding(page);
+  await clickCloudPrimary(page);
+  await advanceFromAboutYouToBrand(page);
+
+  await expect(page.getByRole('heading', { name: /Create once, build everywhere/i })).toBeVisible();
+>>>>>>> upstream/main
 
   await expectOnboardingFinished(page);
   await pollStoredConfig(page).toMatchObject({
@@ -293,6 +509,31 @@ test('[P0] onboarding about-you step accepts profile selections and completes se
   });
 });
 
+<<<<<<< HEAD
+=======
+test('[P0] onboarding Back keeps newsletter email and brand URL draft intact', async ({ page }) => {
+  const config = await wireOnboardingMocks(page, {
+    amrAvailable: true,
+    initialLoggedIn: true,
+  });
+
+  await seedOnboardingConfig(page, config);
+  await gotoOnboarding(page);
+  await advanceToNewsletterStep(page);
+
+  await page.getByPlaceholder('you@studio.com').fill('designer@example.com');
+  await page.getByRole('button', { name: /^Continue$/i }).click();
+  await expect(page.getByRole('heading', { name: /Create once, build everywhere/i })).toBeVisible();
+
+  await page.getByRole('button', { name: /^Back$/i }).click();
+  await expect(page.getByRole('heading', { name: /Stay in the loop/i })).toBeVisible();
+  await expect(page.getByPlaceholder('you@studio.com')).toHaveValue('designer@example.com');
+
+  await page.getByRole('button', { name: /^Continue$/i }).click();
+  await expect(page.getByRole('heading', { name: /Create once, build everywhere/i })).toBeVisible();
+});
+
+>>>>>>> upstream/main
 test('[P0] @critical onboarding BYOK path can fetch models, test the provider, and complete setup', async ({ page }) => {
   const config = await wireOnboardingMocks(page, {
     amrAvailable: true,
@@ -357,10 +598,17 @@ async function wireOnboardingMocks(
   options: {
     amrAvailable: boolean;
     initialLoggedIn: boolean;
+<<<<<<< HEAD
     failFirstStatusPollAfterLogin?: boolean;
     keepAmrLoginIncomplete?: boolean;
     delaySignedOutStatusMs?: number;
     amrModels?: Array<{ id: string; label: string }>;
+=======
+    failAllStatusPolls?: boolean;
+    keepAmrLoginIncomplete?: boolean;
+    delaySignedOutStatusMs?: number;
+    agentsDelayMs?: number;
+>>>>>>> upstream/main
     codexModels?: Array<{ id: string; label: string }>;
   },
 ): Promise<OnboardingConfig> {
@@ -382,7 +630,6 @@ async function wireOnboardingMocks(
   let loggedIn = options.initialLoggedIn;
   let loginInFlight = false;
   let statusCalls = 0;
-  let statusCallsAfterLogin = 0;
   let loginCalls = 0;
   let cancelCalls = 0;
 
@@ -419,7 +666,7 @@ async function wireOnboardingMocks(
           bin: 'vela',
           available: true,
           version: '1.0.0',
-          models: options.amrModels ?? [{ id: 'default', label: 'Default' }],
+          models: [{ id: 'default', label: 'Default' }],
         }]
       : []),
     {
@@ -454,17 +701,6 @@ async function wireOnboardingMocks(
       await new Promise((resolve) =>
         setTimeout(resolve, options.delaySignedOutStatusMs),
       );
-    }
-    if (loggedIn) {
-      statusCallsAfterLogin += 1;
-      if (options.failFirstStatusPollAfterLogin && statusCallsAfterLogin === 1) {
-        await route.fulfill({
-          status: 500,
-          contentType: 'application/json',
-          body: JSON.stringify({ error: 'temporary status failure' }),
-        });
-        return;
-      }
     }
     await route.fulfill({
       json: loggedIn

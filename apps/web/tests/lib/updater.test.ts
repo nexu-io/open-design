@@ -66,6 +66,47 @@ describe('web updater model', () => {
     expect(model.promptKey).toContain('1.2.3-beta.4');
   });
 
+<<<<<<< HEAD
+=======
+  it('exposes the reinstall requirement from the host snapshot', () => {
+    const model = deriveUpdaterModel(
+      downloadedStatus({
+        reinstall: {
+          installedVersion: '1.0.0-beta.9',
+          minVersion: '1.2.0-beta.1',
+          reason: 'outer-below-min',
+          url: 'https://example.com/reinstall-help',
+        },
+      }),
+      { hostAvailable: true },
+    );
+    expect(model.reinstall).toEqual({
+      installedVersion: '1.0.0-beta.9',
+      minVersion: '1.2.0-beta.1',
+      reason: 'outer-below-min',
+      url: 'https://example.com/reinstall-help',
+    });
+    expect(model.updateKind).toBe('installer');
+    expect(model.shouldPrompt).toBe(true);
+  });
+
+  it('defaults reinstall to null when the snapshot carries none', () => {
+    expect(deriveUpdaterModel(downloadedStatus(), { hostAvailable: true }).reinstall).toBeNull();
+    expect(deriveUpdaterModel(null, { hostAvailable: false }).reinstall).toBeNull();
+  });
+
+  it('derives a desktop prompt for payload updates without manual installer capability', () => {
+    const model = deriveUpdaterModel(payloadDownloadedStatus(), { hostAvailable: true });
+    expect(model.environment).toBe('desktop');
+    expect(model.updateKind).toBe('payload');
+    expect(model.canApplyInPlace).toBe(true);
+    expect(model.canOpenInstaller).toBe(false);
+    expect(model.requiresManualInstall).toBe(false);
+    expect(model.shouldPrompt).toBe(true);
+    expect(model.shouldShowControl).toBe(true);
+  });
+
+>>>>>>> upstream/main
   it('keeps downloading progress internal without showing the updater control', () => {
     const model = deriveUpdaterModel(
       downloadedStatus({

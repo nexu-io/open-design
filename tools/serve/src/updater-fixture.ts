@@ -11,6 +11,11 @@ export type UpdaterFixtureOptions = {
   artifactBody?: Buffer | string;
   artifactPath?: string;
   channel?: UpdaterFixtureChannel;
+<<<<<<< HEAD
+=======
+  controlLauncherVersionMin?: string;
+  controlLauncherVersionUrl?: string;
+>>>>>>> upstream/main
   host?: string;
   includePayload?: boolean;
   platform?: "mac" | "win";
@@ -310,6 +315,22 @@ export async function startUpdaterFixtureServer(options: UpdaterFixtureOptions =
         channel,
         generatedAt: new Date().toISOString(),
         ...channelMetadata(channel, version),
+<<<<<<< HEAD
+=======
+        ...(options.launcherSchema != null ? { launcher: { schema: options.launcherSchema } } : {}),
+        ...(options.controlLauncherVersionMin != null || options.controlLauncherVersionUrl != null
+          ? {
+              control: {
+                launcher: {
+                  version: {
+                    ...(options.controlLauncherVersionMin != null ? { min: options.controlLauncherVersionMin } : {}),
+                    ...(options.controlLauncherVersionUrl != null ? { url: options.controlLauncherVersionUrl } : {}),
+                  },
+                },
+              },
+            }
+          : {}),
+>>>>>>> upstream/main
         platforms: {
           [platformKey]: {
             arch: platform === "win" ? "x64" : "arm64",

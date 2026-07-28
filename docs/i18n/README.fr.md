@@ -1,8 +1,14 @@
 <h1 align="center">Open Design : l'alternative open source à Claude Design</h1>
 
+<<<<<<< HEAD
 > 🔥 **Open Design 0.9.0 est là : créez sans la moindre configuration.** Le [Model Router officiel](https://open-design.ai/amr) est intégré directement dans l'application — aucune configuration supplémentaire, aucun CLI à installer, aucune clé API à préparer. Ouvrez simplement l'application, connectez-vous et commencez à concevoir et à créer immédiatement. [Télécharger 0.9.0](https://github.com/nexu-io/open-design/releases) · [Rejoindre la discussion](https://github.com/nexu-io/open-design/discussions/3524)
 >
 > 🏅 **Le programme Open Design Fellow est désormais ouvert.** Si vous croyez vous aussi que le design devrait être ouvert — devenez Open Design Fellow, façonnez le produit aux côtés de l'équipe principale et aidez davantage de personnes à participer à la définition de l'avenir du design. Détails → [`MAINTAINERS.md`](../../MAINTAINERS.md) et [Discord](https://discord.gg/qhbcCH8Am4).
+=======
+> ⚡ **Open Design Cloud — le service de modèles officiel.** Une seule recharge pour utiliser GPT, Claude, Gemini et DeepSeek directement dans Open Design : plus de 20 modèles phares, zéro configuration, facturation à l'usage réel des tokens. [Essayer Open Design Cloud](https://open-design.ai/cloud/)
+>
+> 🏅 **Le programme Open Design Fellow est désormais ouvert.** Si vous croyez vous aussi que le design devrait être ouvert — devenez Open Design Fellow, façonnez le produit aux côtés de l'équipe principale et aidez davantage de personnes à participer à la définition de l'avenir du design. Détails → [`MAINTAINERS.md`](../../MAINTAINERS.md) et [Discord](https://discord.gg/mHAjSMV6gz).
+>>>>>>> upstream/main
 
 <p align="center">
   <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="Open Design — l'alternative open source à Claude Design · 150 systèmes de design · 261 plugins · 21 agents de code · 14 fournisseurs de médias" width="100%" />
@@ -113,10 +119,18 @@ Un aperçu rapide de ce qu'est Open Design et de ce qu'il fait. Partez de la pag
 |---|:---:|---|
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | ✅ Pris en charge | `od mcp install claude` |
 | [Codex CLI](https://github.com/openai/codex) | ✅ Pris en charge | `od mcp install codex` |
+<<<<<<< HEAD
 | [Cursor](https://www.cursor.com/cli) | ✅ Pris en charge | `od mcp install cursor` |
 | [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ Pris en charge | `od mcp install copilot` |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ Pris en charge | `od mcp install copilot` |
 | Gemini CLI | ✅ Pris en charge | `od mcp install gemini` |
+=======
+| [DeepSeek Reasonix](https://github.com/esengine/DeepSeek-Reasonix) | ✅ Pris en charge | `od mcp install reasonix` |
+| [Raven](https://github.com/EverMind-AI/Raven) | ✅ Pris en charge | `od mcp install raven` |
+| [Cursor](https://www.cursor.com/cli) | ✅ Pris en charge | `od mcp install cursor` |
+| [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ Pris en charge | `od mcp install copilot` |
+| [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ Pris en charge | `od mcp install copilot` |
+>>>>>>> upstream/main
 | [OpenCode](https://opencode.ai/) | ✅ Pris en charge | `od mcp install opencode` |
 | [OpenClaw](https://github.com/openclaw/openclaw) | ✅ Pris en charge | `od mcp install openclaw` |
 | [Antigravity](https://antigravity.google) | ✅ Pris en charge | `od mcp install antigravity` |
@@ -299,9 +313,15 @@ Vous pouvez utiliser Open Design sans jamais ouvrir l'interface graphique — ap
 
 ```bash
 # One-line install into the agent you're using:
+<<<<<<< HEAD
 curl -fsSL https://open-design.ai/install.sh | sh -s <agent>
 # <agent> = claude | codex | cursor | copilot | openclaw | antigravity | gemini
 #         | pi | vibe | hermes | cline | kimi | trae | opencode
+=======
+od mcp install <agent>
+# <agent> = claude | codex | reasonix | raven | cursor | copilot | openclaw | antigravity
+#         | pi | vibe | hermes | cline | kimi | kiro | trae | opencode
+>>>>>>> upstream/main
 ```
 
 Ensuite, à l'intérieur de l'agent :

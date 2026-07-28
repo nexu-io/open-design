@@ -1381,6 +1381,7 @@ export default function Page({
               <div className='foot-col'>
                 <h5>{ui.footer.products}</h5>
                 <ul>
+<<<<<<< HEAD
                   <li>
                     <a href={href('/')}>Open Design</a>
                   </li>
@@ -1390,6 +1391,12 @@ export default function Page({
                   <li>
                     <a href={href('/html-video/')}>{ui.footer.htmlVideo}</a>
                   </li>
+=======
+                  <li><a href={href('/')}>Open Design</a></li>
+                  <li><a href={href('/html-anything/')}>{ui.footer.htmlAnything}</a></li>
+                  <li><a href={href('/html-video/')}>{ui.footer.htmlVideo}</a></li>
+                  <li><a href={href('/codex-slides/')}>Codex Slides</a></li>
+>>>>>>> upstream/main
                 </ul>
               </div>
               <div className='foot-col'>

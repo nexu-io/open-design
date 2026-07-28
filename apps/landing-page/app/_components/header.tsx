@@ -85,6 +85,12 @@ export interface HeaderProps {
     | 'product'
     | 'html-anything'
     | 'html-video'
+<<<<<<< HEAD
+=======
+    | 'codex-slides'
+    | 'solution'
+    | 'agent'
+>>>>>>> upstream/main
     | 'plugins'
     /*
      * `library` is kept as an alias for the dropdown trigger so older
@@ -204,18 +210,79 @@ export function Header({
                   active === 'product' ||
                   active === 'home' ||
                   active === 'html-anything' ||
+<<<<<<< HEAD
                   active === 'html-video'
                     ? 'is-active'
                     : undefined
+=======
+                  active === 'html-video' ||
+                  active === 'codex-slides' ||
+                  active === 'agent'
+                    ? ' is-active'
+                    : '')
+>>>>>>> upstream/main
                 }
                 aria-haspopup='true'
                 aria-expanded='false'
               >
                 {productMenuCopy.product}
                 <span className='dropdown-caret' aria-hidden='true'>▾</span>
+<<<<<<< HEAD
               </a>
               <ul className='nav-dropdown' role='menu'>
                 <li role='none'>
+=======
+              </button>
+              <ul
+                className='nav-dropdown nav-dropdown-mega'
+                aria-label={productMenuCopy.product}
+              >
+                {/* Products column — the Open Design product family. Names
+                    only (no blurbs): keeps the column compact and aligned
+                    with the Agent column, and avoids per-locale width blowups
+                    from long descriptions. */}
+                <li className='nav-mega-col'>
+                  <span className='nav-mega-col-head'>{productMenuCopy.product}</span>
+                  <ul className='nav-mega-list'>
+                    <li>
+                      <a href={href('/')}>
+                        <span className='dropdown-name'>{productMenuCopy.openDesignName}</span>
+                      </a>
+                    </li>
+                    <li>
+                      <a
+                        href={href('/html-anything/')}
+                        className={active === 'html-anything' ? 'is-active' : undefined}
+                      >
+                        <span className='dropdown-name'>{productMenuCopy.htmlAnythingName}</span>
+                      </a>
+                    </li>
+                    <li>
+                      <a href={href('/html-video/')}>
+                        <span className='dropdown-name'>{productMenuCopy.htmlVideoName}</span>
+                      </a>
+                    </li>
+                    {/* Product name, not a translatable phrase — same treatment
+                        as the hardcoded "Open Design" in the footer's product
+                        column, so it does not add an identical string to every
+                        locale block. */}
+                    <li>
+                      <a
+                        href={href('/codex-slides/')}
+                        className={active === 'codex-slides' ? 'is-active' : undefined}
+                      >
+                        <span className='dropdown-name'>Codex Slides</span>
+                      </a>
+                    </li>
+                  </ul>
+                </li>
+                {/* Agent column — the coding agents each with a dedicated
+                    design page. The column header links to the /agents/ hub
+                    (the old top-level Agent tab's target). The list caps its
+                    own height and scrolls so 21 rows never run the panel
+                    off-screen; the shorter Products column stays static. */}
+                <li className='nav-mega-col nav-mega-col-agent'>
+>>>>>>> upstream/main
                   <a
                     role='menuitem'
                     href={href('/')}

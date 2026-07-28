@@ -1,8 +1,14 @@
 <h1 align="center">Open Design: オープンソースの Claude Design 代替ツール</h1>
 
+<<<<<<< HEAD
 > 🔥 **Open Design 0.9.0 が登場——セットアップなしで創作を。** [公式 Model Router](https://open-design.ai/amr) がアプリに直接組み込まれました。追加設定も、インストールする CLI も、用意する API キーも不要。アプリを開いてサインインするだけで、すぐにデザインと創作を始められます。[0.9.0 をダウンロード](https://github.com/nexu-io/open-design/releases) · [ディスカッションに参加](https://github.com/nexu-io/open-design/discussions/3524)
 >
 > 🏅 **Open Design Fellow プログラムの募集を開始しました。** あなたもデザインはオープンであるべきだと信じるなら——Open Design Fellow となり、コアチームとともにプロダクトを形づくり、より多くの人がデザインの未来を定義することに参加できるよう手助けしてください。詳細 → [`MAINTAINERS.md`](../../MAINTAINERS.md) と [Discord](https://discord.gg/qhbcCH8Am4)。
+=======
+> ⚡ **Open Design Cloud——公式モデルサービス。** 一度のチャージで、Open Design の中で GPT、Claude、Gemini、DeepSeek をそのまま利用可能。20+ のフラッグシップモデル、設定ゼロ、実トークン使用量ベースの課金。[Open Design Cloud を試す](https://open-design.ai/cloud/)
+>
+> 🏅 **Open Design Fellow プログラムの募集を開始しました。** あなたもデザインはオープンであるべきだと信じるなら——Open Design Fellow となり、コアチームとともにプロダクトを形づくり、より多くの人がデザインの未来を定義することに参加できるよう手助けしてください。詳細 → [`MAINTAINERS.md`](../../MAINTAINERS.md) と [Discord](https://discord.gg/mHAjSMV6gz)。
+>>>>>>> upstream/main
 
 <p align="center">
   <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="Open Design — The open-source Claude Design alternative · 150 Design Systems · 261 Plugins · 21 Coding Agents · 14 Media Providers" width="100%" />
@@ -113,10 +119,18 @@ Open Design が何であり、何ができるのかを手早く見ていきま�
 |---|:---:|---|
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | ✅ 対応済み | `od mcp install claude` |
 | [Codex CLI](https://github.com/openai/codex) | ✅ 対応済み | `od mcp install codex` |
+<<<<<<< HEAD
 | [Cursor](https://www.cursor.com/cli) | ✅ 対応済み | `od mcp install cursor` |
 | [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ 対応済み | `od mcp install copilot` |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ 対応済み | `od mcp install copilot` |
 | Gemini CLI | ✅ 対応済み | `od mcp install gemini` |
+=======
+| [DeepSeek Reasonix](https://github.com/esengine/DeepSeek-Reasonix) | ✅ 対応済み | `od mcp install reasonix` |
+| [Raven](https://github.com/EverMind-AI/Raven) | ✅ 対応済み | `od mcp install raven` |
+| [Cursor](https://www.cursor.com/cli) | ✅ 対応済み | `od mcp install cursor` |
+| [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ 対応済み | `od mcp install copilot` |
+| [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ 対応済み | `od mcp install copilot` |
+>>>>>>> upstream/main
 | [OpenCode](https://opencode.ai/) | ✅ 対応済み | `od mcp install opencode` |
 | [OpenClaw](https://github.com/openclaw/openclaw) | ✅ 対応済み | `od mcp install openclaw` |
 | [Antigravity](https://antigravity.google) | ✅ 対応済み | `od mcp install antigravity` |
@@ -299,9 +313,15 @@ GUI を一度も開くことなく Open Design を使えます——Claude Code�
 
 ```bash
 # One-line install into the agent you're using:
+<<<<<<< HEAD
 curl -fsSL https://open-design.ai/install.sh | sh -s <agent>
 # <agent> = claude | codex | cursor | copilot | openclaw | antigravity | gemini
 #         | pi | vibe | hermes | cline | kimi | trae | opencode
+=======
+od mcp install <agent>
+# <agent> = claude | codex | reasonix | raven | cursor | copilot | openclaw | antigravity
+#         | pi | vibe | hermes | cline | kimi | kiro | trae | opencode
+>>>>>>> upstream/main
 ```
 
 そして、エージェントの内部で:

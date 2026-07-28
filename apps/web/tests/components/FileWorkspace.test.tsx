@@ -1794,7 +1794,102 @@ describe('FileWorkspace empty-project generation contract', () => {
 
       expect(screen.queryByTestId('generating-tab')).toBeNull();
       expect(screen.queryByTestId('generation-preview-stage')).toBeNull();
+      expect(screen.queryByTestId('preview-run-status')).toBeNull();
       expect(screen.getByTestId('design-files-empty')).toBeTruthy();
     },
   );
+<<<<<<< HEAD
+=======
+
+  it('keeps delivery recovery in Chat without mounting status over existing preview files', () => {
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('previous-design.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: DESIGN_FILES_TAB }}
+        onTabsStateChange={vi.fn()}
+        messages={[
+          {
+            ...assistantMessage('failed'),
+            id: 'delivery-failure',
+            runStatus: 'succeeded',
+            resultDeliveryState: 'no_result',
+            sessionMode: 'design',
+            endedAt: 1_700_000_012_000,
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.queryByTestId('preview-run-status')).toBeNull();
+    expect(screen.queryByTestId('preview-run-status-retry')).toBeNull();
+    expect(screen.queryByTestId('preview-run-status-view-details')).toBeNull();
+  });
+
+  it('does not mount main-preview delivery feedback over a browser tab', () => {
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('previous-design.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{
+          tabs: ['previous-design.html'],
+          active: '__browser__:1',
+          browserTabs: [{ id: '__browser__:1', label: 'Browser', url: 'https://example.com' }],
+        }}
+        onTabsStateChange={vi.fn()}
+        messages={[
+          {
+            ...assistantMessage('failed'),
+            id: 'browser-delivery-failure',
+            runStatus: 'succeeded',
+            resultDeliveryState: 'delivery_failed',
+            sessionMode: 'design',
+            endedAt: 1_700_000_012_000,
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByTestId('design-browser-panel')).toBeTruthy();
+    expect(screen.queryByTestId('preview-run-status')).toBeNull();
+  });
+
+  it('does not mount a delivered confirmation over the preview canvas', () => {
+    const now = 1_700_000_012_500;
+    vi.spyOn(Date, 'now').mockReturnValue(now);
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('delivered-design.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['delivered-design.html'], active: 'delivered-design.html' }}
+        onTabsStateChange={vi.fn()}
+        messages={[
+          {
+            ...assistantMessage('failed'),
+            id: 'delivery-succeeded',
+            runStatus: 'succeeded',
+            resultDeliveryState: 'delivered',
+            sessionMode: 'design',
+            startedAt: now - 4_000,
+            endedAt: now - 1_000,
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.queryByTestId('preview-run-status')).toBeNull();
+  });
+>>>>>>> upstream/main
 });

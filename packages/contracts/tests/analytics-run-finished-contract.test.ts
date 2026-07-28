@@ -128,4 +128,75 @@ describe('analytics run_finished contract', () => {
     expect(attempted.props.retry_strategy).toBe('same_run_transient');
     expect(finished.props.retry_suppressed_reason).toBe('tool_call_seen');
   });
+<<<<<<< HEAD
+=======
+
+  it.each(['tool_outstanding', 'post_tool_resume'] as const)(
+    'accepts the %s failure stage for run outcomes',
+    (failureStage) => {
+      const payload = {
+        event: 'run_finished',
+        props: {
+          ...makeBaseRunFinishedProps(),
+          failure_category: 'timeout',
+          failure_detail: 'inactivity_timeout',
+          failure_stage: failureStage,
+          retryable: true,
+          user_action: 'retry',
+        },
+      } satisfies Extract<AnalyticsEventPayload, { event: 'run_finished' }>;
+
+      expect(payload.props.failure_stage).toBe(failureStage);
+    },
+  );
+
+  it('accepts Langfuse report result events for actual delivery monitoring', () => {
+    const payload = {
+      event: 'langfuse_report_result',
+      props: {
+        page_name: 'chat_panel',
+        area: 'chat_panel',
+        project_id: 'proj-1',
+        conversation_id: 'conv-1',
+        run_id: 'run-1',
+        langfuse_trace_id: 'run-1',
+        langfuse_expected: true,
+        langfuse_delivery_status: 'failed',
+        langfuse_drop_reason: 'network_error',
+        langfuse_report_result: 'failed',
+        langfuse_report_trigger: 'terminal_fallback',
+        report_duration_ms: 123,
+        result: 'failed',
+        error_code: 'AGENT_EXECUTION_FAILED',
+        agent_provider_id: 'codex_cli',
+        model_id: 'default',
+      },
+    } satisfies Extract<AnalyticsEventPayload, { event: 'langfuse_report_result' }>;
+
+    expect(payload.props.langfuse_report_result).toBe('failed');
+    expect(payload.props.langfuse_delivery_status).toBe('failed');
+  });
+
+  it('accepts privacy-safe BYOK preflight block events', () => {
+    const payload = {
+      event: 'byok_preflight_blocked',
+      props: {
+        source: 'settings',
+        reason: 'api_key_required',
+        provider_id: 'anthropic',
+        active_execution_mode: 'local_cli',
+      },
+    } satisfies Extract<
+      AnalyticsEventPayload,
+      { event: 'byok_preflight_blocked' }
+    >;
+
+    expect(payload.props).toEqual({
+      source: 'settings',
+      reason: 'api_key_required',
+      provider_id: 'anthropic',
+      active_execution_mode: 'local_cli',
+    });
+  });
+>>>>>>> upstream/main
 });

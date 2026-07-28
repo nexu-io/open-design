@@ -21,7 +21,12 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
+<<<<<<< HEAD
 import { attachAcpSession, detectAcpModels } from '../src/acp.js';
+=======
+import { attachAcpSession, detectAcpModels } from '../src/agent-protocol/index.js';
+import { acpTelemetryToolCallId } from '../src/agent-protocol/acp/updates.js';
+>>>>>>> upstream/main
 import { classifyAmrAccountFailure } from '../src/integrations/vela-errors.js';
 import { AmrModelLoadingCache } from '../src/runtimes/amr-model-cache.js';
 import {
@@ -645,6 +650,347 @@ describe('AMR ACP transport — end-to-end against fake vela stub', () => {
     expect(payload?.error?.code).toBe('AMR_MODEL_UNAVAILABLE');
   });
 
+<<<<<<< HEAD
+=======
+  it('fails AMR turns that report activity but produce no visible text or concrete tool event', async () => {
+    const child = spawnAcpUpdateFixture(
+      [
+        {
+          sessionUpdate: 'tool_call',
+          toolCallId: 'call_1',
+          title: 'Thinking',
+          status: 'pending',
+        },
+        {
+          sessionUpdate: 'tool_call_update',
+          toolCallId: 'call_1',
+          title: 'Thinking',
+          status: 'completed',
+        },
+      ],
+      { inputTokens: 75_734, outputTokens: 5_071, totalTokens: 80_805 },
+    );
+    const errors: Array<{ event: string; payload: unknown }> = [];
+    const agentEvents: unknown[] = [];
+    try {
+      const session = attachAcpSession({
+        child: child as never,
+        prompt: 'Generate a test',
+        cwd: process.cwd(),
+        model: 'step-3.7-flash',
+        mcpServers: [],
+        modelUnavailableErrorCode: 'AMR_MODEL_UNAVAILABLE',
+        send: (event, payload) => {
+          if (event === 'error') errors.push({ event, payload });
+          if (event === 'agent') agentEvents.push(payload);
+        },
+      });
+
+      await waitForExit(child);
+      expect(session.hasFatalError()).toBe(true);
+      expect(session.completedSuccessfully()).toBe(false);
+    } finally {
+      if (child.exitCode === null) child.kill('SIGTERM');
+    }
+
+    const payload = errors[0]?.payload as {
+      message?: unknown;
+      error?: { code?: unknown; retryable?: unknown; details?: Record<string, unknown> };
+    };
+    expect(String(payload?.message ?? '')).toContain('did not produce visible assistant text');
+    expect(payload?.error?.code).toBe('AGENT_EXECUTION_FAILED');
+    expect(payload?.error?.retryable).toBe(true);
+    expect(payload?.error?.details).toMatchObject({
+      kind: 'acp_no_visible_output',
+      output_tokens: 5_071,
+      raw_tool_update_seen: true,
+    });
+    expect(agentEvents).toContainEqual(
+      expect.objectContaining({
+        type: 'diagnostic',
+        name: 'acp_raw_event_shape',
+        shape: expect.objectContaining({
+          sessionUpdate: 'tool_call',
+          hasToolCallId: true,
+          titlePresent: true,
+        }),
+      }),
+    );
+    expect(agentEvents).not.toContainEqual(expect.objectContaining({ type: 'tool_use' }));
+  });
+
+  it('fails AMR turns when think-only tool completes via status-only frame (no title)', async () => {
+    // Sticky thinkOnly: pending title "Thinking" then terminal status-only must
+    // not emit tool_use and must still take the no-visible-output failure path.
+    const child = spawnAcpUpdateFixture(
+      [
+        {
+          sessionUpdate: 'tool_call',
+          toolCallId: 'call_think',
+          title: 'Thinking',
+          status: 'pending',
+        },
+        {
+          sessionUpdate: 'tool_call_update',
+          toolCallId: 'call_think',
+          status: 'completed',
+        },
+      ],
+      { inputTokens: 10, outputTokens: 100, totalTokens: 110 },
+    );
+    const errors: Array<{ event: string; payload: unknown }> = [];
+    const agentEvents: unknown[] = [];
+    try {
+      const session = attachAcpSession({
+        child: child as never,
+        prompt: 'Generate a test',
+        cwd: process.cwd(),
+        model: 'step-3.7-flash',
+        mcpServers: [],
+        modelUnavailableErrorCode: 'AMR_MODEL_UNAVAILABLE',
+        send: (event, payload) => {
+          if (event === 'error') errors.push({ event, payload });
+          if (event === 'agent') agentEvents.push(payload);
+        },
+      });
+
+      await waitForExit(child);
+      expect(session.hasFatalError()).toBe(true);
+      expect(session.completedSuccessfully()).toBe(false);
+    } finally {
+      if (child.exitCode === null) child.kill('SIGTERM');
+    }
+
+    const payload = errors[0]?.payload as {
+      message?: unknown;
+      error?: { code?: unknown; retryable?: unknown; details?: Record<string, unknown> };
+    };
+    expect(String(payload?.message ?? '')).toContain('did not produce visible assistant text');
+    expect(payload?.error?.code).toBe('AGENT_EXECUTION_FAILED');
+    expect(payload?.error?.retryable).toBe(true);
+    expect(agentEvents).not.toContainEqual(expect.objectContaining({ type: 'tool_use' }));
+    expect(agentEvents).not.toContainEqual(expect.objectContaining({ type: 'tool_result' }));
+  });
+
+  it('accepts ACP message chunks that carry text outside content.text', async () => {
+    const child = spawnAcpUpdateFixture([
+      {
+        sessionUpdate: 'agent_message_chunk',
+        content: [{ type: 'text', text: 'Hello ' }],
+      },
+      {
+        sessionUpdate: 'agent_message_chunk',
+        delta: 'world',
+      },
+    ], { inputTokens: 1, outputTokens: 2, totalTokens: 3 });
+    const text: string[] = [];
+    const errors: unknown[] = [];
+    try {
+      const session = attachAcpSession({
+        child: child as never,
+        prompt: 'Say hello',
+        cwd: process.cwd(),
+        model: 'step-3.7-flash',
+        mcpServers: [],
+        modelUnavailableErrorCode: 'AMR_MODEL_UNAVAILABLE',
+        send: (event, payload) => {
+          if (event === 'error') errors.push(payload);
+          if (
+            event === 'agent' &&
+            typeof (payload as { type?: unknown; delta?: unknown }).delta === 'string' &&
+            (payload as { type?: unknown }).type === 'text_delta'
+          ) {
+            text.push((payload as { delta: string }).delta);
+          }
+        },
+      });
+
+      await waitForExit(child);
+      expect(session.hasFatalError()).toBe(false);
+      expect(session.completedSuccessfully()).toBe(true);
+    } finally {
+      if (child.exitCode === null) child.kill('SIGTERM');
+    }
+
+    expect(errors).toHaveLength(0);
+    expect(text.join('')).toBe('Hello world');
+  });
+
+  it('records suppressed artifact echo after an ACP artifact write without claiming visible streaming', async () => {
+    const child = spawnAcpUpdateFixture([
+      {
+        sessionUpdate: 'tool_call',
+        toolCallId: 'write_1',
+        title: 'Write index.html',
+        status: 'pending',
+      },
+      {
+        sessionUpdate: 'tool_call_update',
+        toolCallId: 'write_1',
+        title: 'Write index.html',
+        status: 'completed',
+        locations: [{ path: 'index.html' }],
+      },
+      {
+        sessionUpdate: 'agent_message_chunk',
+        content: {
+          type: 'text',
+          text: '<artifact identifier="page" type="text/html"><!doctype html><html></html></artifact>',
+        },
+      },
+    ], { inputTokens: 1, outputTokens: 50, totalTokens: 51 });
+    const agentEvents: unknown[] = [];
+    const errors: unknown[] = [];
+    try {
+      const session = attachAcpSession({
+        child: child as never,
+        prompt: 'Build a page',
+        cwd: process.cwd(),
+        model: 'step-3.7-flash',
+        mcpServers: [],
+        modelUnavailableErrorCode: 'AMR_MODEL_UNAVAILABLE',
+        send: (event, payload) => {
+          if (event === 'agent') agentEvents.push(payload);
+          if (event === 'error') errors.push(payload);
+        },
+      });
+
+      await waitForExit(child);
+      expect(session.hasFatalError()).toBe(false);
+      expect(session.completedSuccessfully()).toBe(true);
+    } finally {
+      if (child.exitCode === null) child.kill('SIGTERM');
+    }
+
+    expect(errors).toHaveLength(0);
+    expect(agentEvents).toContainEqual(
+      expect.objectContaining({
+        type: 'tool_use',
+        id: acpTelemetryToolCallId('write_1'),
+        name: 'Write',
+        input: { file_path: 'index.html' },
+      }),
+    );
+    expect(agentEvents).toContainEqual(
+      expect.objectContaining({
+        type: 'diagnostic',
+        name: 'acp_artifact_text_suppression',
+        reason: 'artifact_echo',
+        suppressedChars: expect.any(Number),
+        openedBlocks: 1,
+        closedBlocks: 1,
+      }),
+    );
+    expect(agentEvents).toContainEqual(
+      expect.objectContaining({
+        type: 'diagnostic',
+        name: 'unexpected_text_artifact_in_filesystem_run',
+        suppressedChars: expect.any(Number),
+        openedBlocks: 1,
+        closedBlocks: 1,
+      }),
+    );
+    expect(agentEvents).toContainEqual(
+      expect.objectContaining({
+        type: 'diagnostic',
+        name: 'acp_artifact_text_suppression_summary',
+        suppressedChars: expect.any(Number),
+        openedBlocks: 1,
+        closedBlocks: 1,
+      }),
+    );
+    expect(agentEvents).not.toContainEqual(expect.objectContaining({ type: 'text_delta' }));
+    expect(agentEvents).not.toContainEqual(
+      expect.objectContaining({ type: 'status', label: 'streaming' }),
+    );
+  });
+
+  it('suppresses XML tool-call text that AMR emits as an assistant message chunk', async () => {
+    const child = spawnAcpUpdateFixture([
+      {
+        sessionUpdate: 'agent_message_chunk',
+        content: { type: 'text', text: '<od-card type="task-brief">ok</od-card>' },
+      },
+      {
+        sessionUpdate: 'agent_message_chunk',
+        content: {
+          type: 'text',
+          text: '<edit>\n<parameter=filePath>/tmp/index.html</parameter>\n',
+        },
+      },
+      {
+        sessionUpdate: 'agent_message_chunk',
+        content: {
+          type: 'text',
+          text: '<parameter=newString><section>new</section></parameter>\n',
+        },
+      },
+      {
+        sessionUpdate: 'agent_message_chunk',
+        content: {
+          type: 'text',
+          text: '<parameter=oldString><section>old</section></parameter>\n</function>\n</tool_call>',
+        },
+      },
+    ], { inputTokens: 1, outputTokens: 50, totalTokens: 51 });
+    const agentEvents: unknown[] = [];
+    const errors: unknown[] = [];
+    try {
+      const session = attachAcpSession({
+        child: child as never,
+        prompt: 'Edit a page',
+        cwd: process.cwd(),
+        model: 'step-3.7-flash',
+        mcpServers: [],
+        modelUnavailableErrorCode: 'AMR_MODEL_UNAVAILABLE',
+        send: (event, payload) => {
+          if (event === 'agent') agentEvents.push(payload);
+          if (event === 'error') errors.push(payload);
+        },
+      });
+
+      await waitForExit(child);
+      expect(session.hasFatalError()).toBe(false);
+      expect(session.completedSuccessfully()).toBe(true);
+    } finally {
+      if (child.exitCode === null) child.kill('SIGTERM');
+    }
+
+    expect(errors).toHaveLength(0);
+    const visibleText = agentEvents
+      .filter((event): event is { type: 'text_delta'; delta: string } =>
+        typeof event === 'object' &&
+        event !== null &&
+        (event as { type?: unknown }).type === 'text_delta' &&
+        typeof (event as { delta?: unknown }).delta === 'string',
+      )
+      .map((event) => event.delta)
+      .join('');
+    expect(visibleText).toBe('<od-card type="task-brief">ok</od-card>');
+    expect(visibleText).not.toContain('<edit>');
+    expect(visibleText).not.toContain('<parameter=');
+    expect(agentEvents).toContainEqual(
+      expect.objectContaining({
+        type: 'diagnostic',
+        name: 'acp_tool_call_text_suppression',
+        reason: 'tool_call_xml',
+        suppressedChars: expect.any(Number),
+        openedBlocks: 1,
+        closedBlocks: 1,
+      }),
+    );
+    expect(agentEvents).toContainEqual(
+      expect.objectContaining({
+        type: 'diagnostic',
+        name: 'acp_tool_call_text_suppression_summary',
+        suppressedChars: expect.any(Number),
+        openedBlocks: 1,
+        closedBlocks: 1,
+      }),
+    );
+  });
+
+>>>>>>> upstream/main
   it('surfaces an actionable error when the ACP child exits before initialize completes', async () => {
     const child = spawnFixtureScript(
       "process.stdout.write('not-json\\n'); setTimeout(() => process.exit(0), 20);",

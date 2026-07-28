@@ -1,8 +1,14 @@
 <h1 align="center">Open Design：開源的 Claude Design 替代方案</h1>
 
+<<<<<<< HEAD
 > 🔥 **Open Design 0.9.0 登場：免設定即可開始創作。** [官方 Model Router](https://open-design.ai/amr) 已直接內建於應用程式中——無須額外設定、無須安裝 CLI、無須準備 API key。只要打開應用程式、登入，就能立刻開始設計與創作。[下載 0.9.0](https://github.com/nexu-io/open-design/releases) · [加入討論](https://github.com/nexu-io/open-design/discussions/3524)
 >
 > 🏅 **Open Design Fellow 計畫現已開放。** 如果你也相信設計應該是開放的——歡迎成為 Open Design Fellow，與核心團隊一同形塑這項產品，並協助更多人參與定義設計的未來。詳情請見 → [`MAINTAINERS.md`](../../MAINTAINERS.md) 與 [Discord](https://discord.gg/qhbcCH8Am4)。
+=======
+> ⚡ **Open Design Cloud——官方模型服務。** 一次儲值，即可在 Open Design 中直接使用 GPT、Claude、Gemini 與 DeepSeek：20+ 旗艦模型、零設定、依實際 token 用量計費。[立即體驗](https://open-design.ai/cloud/?utm_source=github&utm_medium=referral&utm_content=readme_try_cloud)
+>
+> 🏅 **Open Design Fellow 計畫現已開放。** 如果你也相信設計應該是開放的——歡迎成為 Open Design Fellow，與核心團隊一同形塑這項產品，並協助更多人參與定義設計的未來。詳情請見 → [`MAINTAINERS.md`](../../MAINTAINERS.md) 與 [Discord](https://discord.gg/mHAjSMV6gz)。
+>>>>>>> upstream/main
 
 <p align="center">
   <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="Open Design — The open-source Claude Design alternative · 150 Design Systems · 261 Plugins · 21 Coding Agents · 14 Media Providers" width="100%" />
@@ -113,10 +119,18 @@ Open Design 是這樣誕生的：當 Anthropic 隨 Claude Design 推出的那套
 |---|:---:|---|
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | ✅ 已支援 | `od mcp install claude` |
 | [Codex CLI](https://github.com/openai/codex) | ✅ 已支援 | `od mcp install codex` |
+<<<<<<< HEAD
 | [Cursor](https://www.cursor.com/cli) | ✅ 已支援 | `od mcp install cursor` |
 | [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ 已支援 | `od mcp install copilot` |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ 已支援 | `od mcp install copilot` |
 | Gemini CLI | ✅ 已支援 | `od mcp install gemini` |
+=======
+| [DeepSeek Reasonix](https://github.com/esengine/DeepSeek-Reasonix) | ✅ 已支援 | `od mcp install reasonix` |
+| [Raven](https://github.com/EverMind-AI/Raven) | ✅ 已支援 | `od mcp install raven` |
+| [Cursor](https://www.cursor.com/cli) | ✅ 已支援 | `od mcp install cursor` |
+| [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ 已支援 | `od mcp install copilot` |
+| [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ 已支援 | `od mcp install copilot` |
+>>>>>>> upstream/main
 | [OpenCode](https://opencode.ai/) | ✅ 已支援 | `od mcp install opencode` |
 | [OpenClaw](https://github.com/openclaw/openclaw) | ✅ 已支援 | `od mcp install openclaw` |
 | [Antigravity](https://antigravity.google) | ✅ 已支援 | `od mcp install antigravity` |
@@ -299,9 +313,18 @@ Open Design（OD）就是那個開源的替代方案。同樣的迴圈、同樣�
 
 ```bash
 # One-line install into the agent you're using:
+<<<<<<< HEAD
 curl -fsSL https://open-design.ai/install.sh | sh -s <agent>
 # <agent> = claude | codex | cursor | copilot | openclaw | antigravity | gemini
 #         | pi | vibe | hermes | cline | kimi | trae | opencode
+=======
+od mcp install <agent>
+# <agent> = claude | codex | reasonix | raven | cursor | copilot | openclaw | antigravity
+#         | pi | vibe | hermes | cline | kimi | kiro | trae | opencode
+
+# Hosted equivalent for curl-based setup:
+curl -fsSL https://open-design.ai/install.sh | sh -s <agent>
+>>>>>>> upstream/main
 ```
 
 接著，在 agent 內：

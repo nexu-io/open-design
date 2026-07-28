@@ -1,8 +1,14 @@
 <h1 align="center">Open Design: The open-source Claude Design alternative</h1>
 
+<<<<<<< HEAD
 > 🔥 **Open Design 0.9.0 is here: create without the setup.** The [official Model Router](https://open-design.ai/amr) is built right into the app — no extra configuration, no CLI to install, no API key to prepare. Just open the app, sign in, and start designing and creating right away. [Download 0.9.0](https://github.com/nexu-io/open-design/releases) · [Join the discussion](https://github.com/nexu-io/open-design/discussions/3524)
 >
 > 🏅 **The Open Design Fellow program is now open.** If you also believe design should be open — become an Open Design Fellow, shape the product alongside the core team, and help more people take part in defining the future of design. Details → [`MAINTAINERS.md`](MAINTAINERS.md) and [Discord](https://discord.gg/qhbcCH8Am4).
+=======
+> ⚡ **Open Design Cloud — the official model service.** One recharge to use GPT, Claude, Gemini, and DeepSeek inside Open Design: 20+ flagship models, zero config, billed by real token usage. [Try Open Design Cloud](https://open-design.ai/cloud/?utm_source=github&utm_medium=referral&utm_content=readme_try_cloud)
+>
+> 🏅 **The Open Design Fellow program is now open.** If you also believe design should be open — become an Open Design Fellow, shape the product alongside the core team, and help more people take part in defining the future of design. Details → [`MAINTAINERS.md`](MAINTAINERS.md) and [Discord](https://discord.gg/mHAjSMV6gz).
+>>>>>>> upstream/main
 
 <p align="center">
   <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="Open Design — The open-source Claude Design alternative · 150 Design Systems · 261 Plugins · 21 Coding Agents · 14 Media Providers" width="100%" />
@@ -116,7 +122,10 @@ Inside a project's Studio, the same design system streams out multiple artifact 
 | [Cursor](https://www.cursor.com/cli) | ✅ Supported | `od mcp install cursor` |
 | [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ Supported | `od mcp install copilot` |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ Supported | `od mcp install copilot` |
+<<<<<<< HEAD
 | Gemini CLI | ✅ Supported | `od mcp install gemini` |
+=======
+>>>>>>> upstream/main
 | [OpenCode](https://opencode.ai/) | ✅ Supported | `od mcp install opencode` |
 | [OpenClaw](https://github.com/openclaw/openclaw) | ✅ Supported | `od mcp install openclaw` |
 | [Antigravity](https://antigravity.google) | ✅ Supported | `od mcp install antigravity` |
@@ -299,6 +308,15 @@ You can use Open Design without ever opening the GUI — call it as a skill, plu
 
 ```bash
 # One-line install into the agent you're using:
+<<<<<<< HEAD
+=======
+od mcp install <agent>
+# <agent> = claude | codex | reasonix | raven | cursor | copilot | openclaw
+#         | antigravity | pi | vibe | hermes | cline | kimi | kiro
+#         | trae | opencode
+
+# Hosted equivalent for curl-based setup:
+>>>>>>> upstream/main
 curl -fsSL https://open-design.ai/install.sh | sh -s <agent>
 # <agent> = claude | codex | cursor | copilot | openclaw | antigravity | gemini
 #         | pi | vibe | hermes | cline | kimi | trae | opencode

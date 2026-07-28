@@ -80,7 +80,19 @@ export type DaemonAgentPayload =
   | { type: 'thinking_start' }
   | LiveArtifactSsePayload
   | LiveArtifactRefreshSsePayload
+<<<<<<< HEAD
   | { type: 'tool_use'; id: string; name: string; input: unknown }
+=======
+  | PlainStreamArtifactSsePayload
+  | {
+      type: 'tool_use';
+      id: string;
+      name: string;
+      input: unknown;
+      /** Optional wall-clock ms when the tool first started (e.g. ACP first frame). */
+      startedAt?: number;
+    }
+>>>>>>> upstream/main
   /**
    * Live-only incremental tool-input fragment, emitted while the model is still
    * streaming a tool call's JSON arguments (Claude `input_json_delta`). `delta`

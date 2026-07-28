@@ -94,6 +94,7 @@ export const SIDECAR_MESSAGES = Object.freeze({
 
 export const DESKTOP_UPDATE_ACTIONS = Object.freeze({
   CHECK: "check",
+  CLEAR_CACHE: "clear-cache",
   DOWNLOAD: "download",
   INSTALL: "install",
   STATUS: "status",
@@ -313,7 +314,7 @@ export type DesktopUpdateIncomingSnapshot = {
   version: string;
 };
 
-export type DesktopUpdateCacheLifecycleTrigger = "cold-start" | "next-version-ready";
+export type DesktopUpdateCacheLifecycleTrigger = "cold-start" | "manual" | "next-version-ready";
 
 export type DesktopUpdateReleaseLifecycleState =
   | "cleanup-deferred"
@@ -341,6 +342,30 @@ export type DesktopUpdateCacheSnapshot = {
   lifecycle?: DesktopUpdateCacheLifecycleSummary;
 };
 
+export const DESKTOP_UPDATE_REINSTALL_REASONS = Object.freeze({
+  LAUNCHER_SCHEMA: "launcher-schema",
+  OUTER_BELOW_MIN: "outer-below-min",
+  OUTER_VERSION_UNREADABLE: "outer-version-unreadable",
+} as const);
+
+export type DesktopUpdateReinstallReason =
+  (typeof DESKTOP_UPDATE_REINSTALL_REASONS)[keyof typeof DESKTOP_UPDATE_REINSTALL_REASONS];
+
+/**
+ * Present on a status snapshot when the release feed requires a full installer
+ * reinstall instead of an in-place payload update. `installedVersion` is the
+ * physically installed outer package version (not the running payload version);
+ * it is omitted when the outer bundle config could not be read. `url` is an
+ * optional operator-supplied explanation link from
+ * `control.launcher.version.url`.
+ */
+export type DesktopUpdateReinstallSnapshot = {
+  installedVersion?: string;
+  minVersion?: string;
+  reason: DesktopUpdateReinstallReason;
+  url?: string;
+};
+
 export type DesktopUpdateStatusSnapshot = {
   active?: DesktopUpdateReleaseSnapshot;
   arch: string;
@@ -363,6 +388,7 @@ export type DesktopUpdateStatusSnapshot = {
   paths?: DesktopUpdatePathSnapshot;
   platform: string;
   progress?: DesktopUpdateProgressSnapshot;
+  reinstall?: DesktopUpdateReinstallSnapshot;
   state: DesktopUpdateState;
   supported: boolean;
 };
@@ -639,7 +665,88 @@ function normalizeDesktopExportPdfInput(input: unknown): DesktopExportPdfInput {
   };
 }
 
+<<<<<<< HEAD
 function isDesktopUpdateAction(value: unknown): value is DesktopUpdateAction {
+=======
+function normalizeDesktopRenderSlidesInput(input: unknown): DesktopRenderSlidesInput {
+  const value = assertObject(input, "desktop render slides input");
+  assertKnownKeys(value, ["baseHref", "deck", "editable", "height", "html", "index", "outputDir", "pageImageFormat", "stitch", "paginate", "width"], "desktop render slides input");
+  if (value.deck != null && typeof value.deck !== "boolean") {
+    throw new Error("desktop render slides deck must be a boolean");
+  }
+  if (value.editable != null && typeof value.editable !== "boolean") {
+    throw new Error("desktop render slides editable must be a boolean");
+  }
+  if (value.index != null && (typeof value.index !== "number" || !Number.isInteger(value.index) || value.index < 0)) {
+    throw new Error("desktop render slides index must be a non-negative integer");
+  }
+  if (value.pageImageFormat != null && value.pageImageFormat !== "png" && value.pageImageFormat !== "jpeg") {
+    throw new Error("desktop render slides pageImageFormat must be 'png' or 'jpeg'");
+  }
+  if (value.stitch != null && typeof value.stitch !== "boolean") {
+    throw new Error("desktop render slides stitch must be a boolean");
+  }
+  if (value.paginate != null && typeof value.paginate !== "boolean") {
+    throw new Error("desktop render slides paginate must be a boolean");
+  }
+  if (value.outputDir != null) {
+    const dir = normalizeNonEmptyString(value.outputDir, "desktop render slides outputDir");
+    // outputDir is a daemon-owned absolute scratch path; reject relative values
+    // so a malformed request can't make desktop main write outside it. Accepts
+    // POSIX (`/…`), Windows drive (`C:\…` / `C:/…`), and UNC (`\\…`) absolutes.
+    if (!/^(\/|[A-Za-z]:[\\/]|\\\\)/.test(dir)) {
+      throw new Error("desktop render slides outputDir must be an absolute path");
+    }
+  }
+  return {
+    ...(value.baseHref == null ? {} : { baseHref: normalizeNonEmptyString(value.baseHref, "desktop render slides baseHref") }),
+    ...(value.deck == null ? {} : { deck: value.deck }),
+    ...(value.editable == null ? {} : { editable: value.editable }),
+    html: normalizeNonEmptyString(value.html, "desktop render slides html"),
+    ...(value.index == null ? {} : { index: value.index }),
+    ...(value.outputDir == null ? {} : { outputDir: normalizeNonEmptyString(value.outputDir, "desktop render slides outputDir") }),
+    ...(value.pageImageFormat == null ? {} : { pageImageFormat: value.pageImageFormat }),
+    ...(value.stitch == null ? {} : { stitch: value.stitch }),
+    ...(value.paginate == null ? {} : { paginate: value.paginate }),
+    ...(value.width == null ? {} : { width: normalizeOptionalPositiveNumber(value.width, "desktop render slides width") }),
+    ...(value.height == null ? {} : { height: normalizeOptionalPositiveNumber(value.height, "desktop render slides height") }),
+  };
+}
+
+function normalizeOptionalPositiveNumber(value: unknown, label: string): number | undefined {
+  if (value == null) return undefined;
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    throw new Error(`${label} must be a positive number`);
+  }
+  return value;
+}
+
+const DESKTOP_EXPORT_ARTIFACT_FORMATS: readonly DesktopExportArtifactFormat[] = ["pdf", "image"];
+const DESKTOP_EXPORT_ARTIFACT_IMAGE_FORMATS: readonly DesktopExportArtifactImageFormat[] = ["png", "jpeg"];
+
+function normalizeDesktopExportArtifactInput(input: unknown): DesktopExportArtifactInput {
+  const value = assertObject(input, "desktop artifact export input");
+  assertKnownKeys(value, ["baseHref", "deck", "format", "html", "imageFormat", "title", "width", "height"], "desktop artifact export input");
+  if (!DESKTOP_EXPORT_ARTIFACT_FORMATS.includes(value.format as DesktopExportArtifactFormat)) {
+    throw new Error(`unsupported artifact export format: ${String(value.format)}`);
+  }
+  if (value.imageFormat != null && !DESKTOP_EXPORT_ARTIFACT_IMAGE_FORMATS.includes(value.imageFormat as DesktopExportArtifactImageFormat)) {
+    throw new Error(`unsupported artifact export image format: ${String(value.imageFormat)}`);
+  }
+  return {
+    ...(value.baseHref == null ? {} : { baseHref: normalizeNonEmptyString(value.baseHref, "desktop artifact export baseHref") }),
+    deck: normalizeBoolean(value.deck, "desktop artifact export deck"),
+    format: value.format as DesktopExportArtifactFormat,
+    html: normalizeNonEmptyString(value.html, "desktop artifact export html"),
+    ...(value.imageFormat == null ? {} : { imageFormat: value.imageFormat as DesktopExportArtifactImageFormat }),
+    title: normalizeNonEmptyString(value.title, "desktop artifact export title"),
+    ...(value.width == null ? {} : { width: normalizeOptionalPositiveNumber(value.width, "desktop artifact export width")! }),
+    ...(value.height == null ? {} : { height: normalizeOptionalPositiveNumber(value.height, "desktop artifact export height")! }),
+  };
+}
+
+export function isDesktopUpdateAction(value: unknown): value is DesktopUpdateAction {
+>>>>>>> upstream/main
   return Object.values(DESKTOP_UPDATE_ACTIONS).includes(value as DesktopUpdateAction);
 }
 

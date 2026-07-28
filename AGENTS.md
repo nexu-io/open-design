@@ -6,9 +6,16 @@ This file is the single source of truth for agents entering this repository. Rea
 
 - Product and onboarding: `README.md`, `docs/i18n/README.zh-CN.md`, `QUICKSTART.md`.
 - Contribution and environment: `CONTRIBUTING.md`, `docs/i18n/CONTRIBUTING.zh-CN.md`.
+<<<<<<< HEAD
 - Architecture and protocols: `docs/spec.md`, `docs/architecture.md`, `docs/skills-protocol.md`, `docs/agent-adapters.md`, `docs/modes.md`.
 - Roadmap and references: `docs/roadmap.md`, `docs/references.md`, `docs/code-review-guidelines.md`, `specs/current/maintainability-roadmap.md`.
 - Directory-level agent guidance: `apps/AGENTS.md`, `packages/AGENTS.md`, `tools/AGENTS.md`, `e2e/AGENTS.md`.
+=======
+- Architecture and protocols: `docs/architecture.md`, `docs/skills-protocol.md`, `docs/agent-adapters.md`, `docs/modes.md`.
+- Historical product baseline: `docs/spec.md`, `docs/roadmap.md` (both explicitly archived; do not treat their dated decisions as current behavior).
+- References and current plans: `docs/references.md`, `docs/code-review-guidelines.md`, `specs/current/maintainability-roadmap.md`, `specs/current/ci.md` (CI scope confidence methodology — required before changing confidence or guard fields in `scripts/scopes.ts`).
+- Directory-level agent guidance: `.github/AGENTS.md`, `apps/AGENTS.md`, `packages/AGENTS.md`, `tools/AGENTS.md`, `e2e/AGENTS.md`.
+>>>>>>> upstream/main
 - Packaged auto-update architecture and high-confidence local harness: read `tools/pack/AGENTS.md` section "Packaged auto-update architecture and harness" before touching packaged updater code, release-channel identity, installer behavior, or updater UI.
 
 ## Workspace directories
@@ -174,6 +181,10 @@ root `pnpm tools-pr` script without a new explicit maintainer decision.
 
 ## Validation strategy
 
+- Before adding, repairing, or optimizing tests, follow
+  [`docs/testing/test-efficiency.zh-CN.md`](docs/testing/test-efficiency.zh-CN.md)
+  for completion signals, virtual-clock usage, isolation, and performance
+  validation.
 - After package, workspace, or command-entry changes, run `pnpm install` so workspace links and generated dist entries stay fresh.
 - For agent-stream / parser changes (`apps/daemon/src/claude-stream.ts`, `json-event-stream.ts`, `qoder-stream.ts`, etc.), replay a recorded session through the mock CLIs in `mocks/` to verify event shapes round-trip without burning provider budget. PATH-overlay activation: `export PATH="$PWD/mocks/bin:$PATH" OD_MOCKS_TRACE=<8-char-id> OD_MOCKS_NO_DELAY=1`. See `mocks/README.md` for the trace catalog and selection knobs.
 - Treat every `pnpm-lock.yaml` change as requiring a Nix pnpm deps hash refresh check. `nix/pnpm-deps.nix` is a generated lock artifact; use `pnpm nix:update-hash` only when intentionally maintaining Nix packaging, then re-run `nix flake check --print-build-logs --keep-going`. Contributors without Nix can rely on the PR `Validate workspace` gate, which now uploads or auto-applies the generated hash-only fix when possible.

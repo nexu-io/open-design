@@ -53,6 +53,7 @@ import {
   resolveModelForAgent,
 } from './runtimes/models.js';
 import { loadMmdRouteLaunchEnv } from './runtimes/mmd-routes.js';
+import { preflightCodexDefaultModel } from './runtimes/codex-model-preflight.js';
 import { preparePromptFileForAgent } from './runtimes/prompt-file.js';
 import {
   cancelVelaLogin,
@@ -3024,7 +3025,64 @@ export function createFinalizedMessageTelemetryReporter({
   getAppVersion?: () => any;
   report?: typeof reportRunCompletedFromDaemon;
 }) {
+<<<<<<< HEAD
   return (saved, body = {}) => {
+=======
+  const appVersionForCapture = () => {
+    const appVersion = getAppVersion();
+    if (typeof appVersion === 'string') return appVersion;
+    if (appVersion && typeof appVersion.version === 'string') return appVersion.version;
+    if (typeof design?.getAppVersion === 'function') return design.getAppVersion();
+    return 'unknown';
+  };
+  const captureResult = ({
+    analyticsContext,
+    conversationId,
+    delivery,
+    durationMs,
+    projectId,
+    reportResult,
+    reportTrigger = 'final_message',
+    run,
+    runId,
+    skipReason,
+    status,
+  }) => {
+    const context = analyticsContext ?? run?.analyticsContext ?? null;
+    if (!context || !design?.analytics?.capture || !runId || !delivery) return;
+    const terminalResult = status ? runResultFromStatus(status) : undefined;
+    design.analytics.capture({
+      eventName: 'langfuse_report_result',
+      context,
+      appVersion: appVersionForCapture(),
+      properties: {
+        page_name: 'chat_panel',
+        area: 'chat_panel',
+        project_id: run?.projectId ?? projectId ?? null,
+        conversation_id: run?.conversationId ?? conversationId ?? null,
+        run_id: runId,
+        langfuse_trace_id: runId,
+        langfuse_expected: delivery.langfuse_expected,
+        langfuse_delivery_status: delivery.langfuse_delivery_status,
+        ...(delivery.langfuse_drop_reason
+          ? { langfuse_drop_reason: delivery.langfuse_drop_reason }
+          : {}),
+        langfuse_report_result: reportResult,
+        langfuse_report_trigger: reportTrigger,
+        ...(skipReason ? { langfuse_report_skip_reason: skipReason } : {}),
+        ...(durationMs !== undefined ? { report_duration_ms: durationMs } : {}),
+        ...(terminalResult ? { result: terminalResult } : {}),
+        ...(run?.errorCode ? { error_code: run.errorCode } : {}),
+        ...(run?.agentId ? { agent_provider_id: agentIdToTracking(run.agentId) } : {}),
+        ...(run?.model !== undefined || run?.resolvedModelId !== undefined
+          ? { model_id: modelIdForTracking(run.resolvedModelId ?? run.model) }
+          : {}),
+      },
+      insertId: `${runId}-langfuse-report-${reportTrigger}-${reportResult}${skipReason ? `-${skipReason}` : ''}`,
+    });
+  };
+  return (saved, body = {}, options = {}) => {
+>>>>>>> upstream/main
     if (!shouldReportRunCompletedFromMessage(saved, body)) return;
     const run = design.runs.get(saved.runId);
     if (!run || reportedRuns.has(run.id)) return;
@@ -12145,6 +12203,101 @@ export async function startServer({
       if (promptFile) promptFile.cleanup().catch(() => {});
     };
 
+<<<<<<< HEAD
+=======
+    // Codex CLI parses config.toml before processing any -c overrides. An
+    // invalid `service_tier` value (the Codex app has written "priority",
+    // "default", and other values the CLI rejects) causes an immediate parse
+    // error and exit-1 before any work starts. Normalize it in-place — any
+    // value outside {fast,flex} has its line removed so the CLI uses its
+    // built-in default — so the launch succeeds. Errors are silently swallowed
+    // — a missing or read-only config.toml is fine, and the Codex CLI still
+    // surfaces the original error if the write fails. See issue #4276 / #3408.
+    if (def.id === 'codex') {
+      const { normalizeCodexConfigFile } = await import('./codex-config-normalize.js');
+      // Route through spawnEnvForAgent so resolveCodexConfigPath sees the same
+      // fully-expanded CODEX_HOME the Codex child process will see. In
+      // particular, spawnEnvForAgent calls expandConfiguredEnv which expands
+      // `~/` / `~\` prefixes — a user-configured CODEX_HOME="~/.codex-alt"
+      // would otherwise resolve to the literal path "~/.codex-alt/config.toml"
+      // in the normalizer while the child resolves it to the absolute path,
+      // leaving the real config untouched. Mirrors the diagnostics-export.ts
+      // `envFor('codex')` pattern. See issue #4276.
+      const codexConfigEnv = spawnEnvForAgent(
+        'codex',
+        process.env,
+        configuredAgentEnv,
+        undefined,
+        { resolvedBin: agentLaunch.selectedPath },
+      );
+      await normalizeCodexConfigFile(codexConfigEnv);
+
+      // When Open Design leaves model selection at `default`, Codex resolves
+      // the concrete model from config.toml. A known-old CLI can accept the
+      // config, start `exec`, and only then reject a newer configured model.
+      // Gate only evidence-backed stable-version/model combinations before
+      // buildArgs/spawn. Every uncertain boundary (custom provider, API-key
+      // auth, config overlays, project config, unknown/prerelease version)
+      // fails open so Codex keeps its existing forward compatibility.
+      if (agentLaunch.launchPath) {
+        if (run.cancelRequested || design.runs.isTerminal(run.status)) {
+          lifecycle.mark('launch_preflight_end');
+          cleanupPromptFile();
+          return;
+        }
+        const preflight = await preflightCodexDefaultModel({
+          launchPath: agentLaunch.launchPath,
+          env: applyAgentLaunchEnv(codexConfigEnv, agentLaunch),
+          requestedModel: safeModel,
+          projectRoot: effectiveCwd,
+        });
+        if (run.cancelRequested || design.runs.isTerminal(run.status)) {
+          lifecycle.mark('launch_preflight_end');
+          cleanupPromptFile();
+          return;
+        }
+        if (preflight.status === 'compatible' || preflight.status === 'incompatible') {
+          run.resolvedModelId = preflight.model;
+          run.preflightAgentCliVersion = preflight.cliVersion;
+        }
+        if (preflight.status === 'incompatible') {
+          lifecycle.mark('launch_preflight_end');
+          const message =
+            `The '${preflight.model}' model requires a newer version of Codex. ` +
+            `The installed Codex CLI (${preflight.cliVersion}) is older than the known-compatible ` +
+            `minimum (${preflight.requiredCliVersion}). ` +
+            'Upgrade the Codex CLI or choose a model supported by this installation, then retry.';
+          design.runs.emit(run, 'diagnostic', {
+            type: 'model_capability_preflight',
+            status: 'incompatible',
+            model: preflight.model,
+            cli_version: preflight.cliVersion,
+            required_cli_version: preflight.requiredCliVersion,
+          });
+          send('error', createSseErrorPayload(
+            'AGENT_EXECUTION_FAILED',
+            message,
+            {
+              retryable: false,
+              details: {
+                failureCategory: 'model_unavailable',
+                failureDetail: 'cli_version_incompatible',
+                model: preflight.model,
+                requiredCliVersion: preflight.requiredCliVersion,
+              },
+            },
+          ));
+          cleanupPromptFile();
+          // No child was spawned, so there is no process exit code to report.
+          // Passing null preserves the preflight attribution instead of
+          // polluting exit_nonzero transport metrics with a synthetic exit 1.
+          finishWithRetryDecision('failed', null, null);
+          return;
+        }
+      }
+    }
+
+>>>>>>> upstream/main
     // Serialize antigravity spawns whose buildArgs writes a concrete
     // model into settings.json. Two concurrent runs with different
     // models would otherwise race the file: A writes model A, B writes

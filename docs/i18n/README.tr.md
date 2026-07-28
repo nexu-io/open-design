@@ -1,8 +1,14 @@
 <h1 align="center">Open Design: Açık kaynaklı Claude Design alternatifi</h1>
 
+<<<<<<< HEAD
 > 🔥 **Open Design 0.9.0 burada: kurulum olmadan üret.** [Resmî Model Router](https://open-design.ai/amr) doğrudan uygulamaya gömülü — ek yapılandırma yok, kurulacak CLI yok, hazırlanacak API anahtarı yok. Sadece uygulamayı açın, oturum açın ve hemen tasarlamaya ve üretmeye başlayın. [0.9.0'ı indir](https://github.com/nexu-io/open-design/releases) · [Tartışmaya katıl](https://github.com/nexu-io/open-design/discussions/3524)
 >
 > 🏅 **Open Design Fellow programı artık açık.** Siz de tasarımın açık olması gerektiğine inanıyorsanız — bir Open Design Fellow olun, ürünü çekirdek ekiple birlikte şekillendirin ve daha fazla insanın tasarımın geleceğini tanımlamaya katılmasına yardımcı olun. Ayrıntılar → [`MAINTAINERS.md`](../../MAINTAINERS.md) ve [Discord](https://discord.gg/qhbcCH8Am4).
+=======
+> ⚡ **Open Design Cloud — resmî model servisi.** Tek bir yüklemeyle GPT, Claude, Gemini ve DeepSeek'i doğrudan Open Design içinde kullanın: 20+ amiral gemisi model, sıfır yapılandırma, gerçek token kullanımına göre faturalandırma. [Open Design Cloud'yi dene](https://open-design.ai/cloud/)
+>
+> 🏅 **Open Design Fellow programı artık açık.** Siz de tasarımın açık olması gerektiğine inanıyorsanız — bir Open Design Fellow olun, ürünü çekirdek ekiple birlikte şekillendirin ve daha fazla insanın tasarımın geleceğini tanımlamaya katılmasına yardımcı olun. Ayrıntılar → [`MAINTAINERS.md`](../../MAINTAINERS.md) ve [Discord](https://discord.gg/mHAjSMV6gz).
+>>>>>>> upstream/main
 
 <p align="center">
   <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="Open Design — The open-source Claude Design alternative · 150 Design Systems · 261 Plugins · 21 Coding Agents · 14 Media Providers" width="100%" />
@@ -113,10 +119,18 @@ Bir projenin Studio'su içinde, aynı tasarım sistemi birden çok artifact tür
 |---|:---:|---|
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | ✅ Destekleniyor | `od mcp install claude` |
 | [Codex CLI](https://github.com/openai/codex) | ✅ Destekleniyor | `od mcp install codex` |
+<<<<<<< HEAD
 | [Cursor](https://www.cursor.com/cli) | ✅ Destekleniyor | `od mcp install cursor` |
 | [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ Destekleniyor | `od mcp install copilot` |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ Destekleniyor | `od mcp install copilot` |
 | Gemini CLI | ✅ Destekleniyor | `od mcp install gemini` |
+=======
+| [DeepSeek Reasonix](https://github.com/esengine/DeepSeek-Reasonix) | ✅ Destekleniyor | `od mcp install reasonix` |
+| [Raven](https://github.com/EverMind-AI/Raven) | ✅ Destekleniyor | `od mcp install raven` |
+| [Cursor](https://www.cursor.com/cli) | ✅ Destekleniyor | `od mcp install cursor` |
+| [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ Destekleniyor | `od mcp install copilot` |
+| [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ Destekleniyor | `od mcp install copilot` |
+>>>>>>> upstream/main
 | [OpenCode](https://opencode.ai/) | ✅ Destekleniyor | `od mcp install opencode` |
 | [OpenClaw](https://github.com/openclaw/openclaw) | ✅ Destekleniyor | `od mcp install openclaw` |
 | [Antigravity](https://antigravity.google) | ✅ Destekleniyor | `od mcp install antigravity` |
@@ -299,9 +313,15 @@ Open Design'ı GUI'yi hiç açmadan kullanabilirsiniz — Claude Code, Codex, Cu
 
 ```bash
 # One-line install into the agent you're using:
+<<<<<<< HEAD
 curl -fsSL https://open-design.ai/install.sh | sh -s <agent>
 # <agent> = claude | codex | cursor | copilot | openclaw | antigravity | gemini
 #         | pi | vibe | hermes | cline | kimi | trae | opencode
+=======
+od mcp install <agent>
+# <agent> = claude | codex | reasonix | raven | cursor | copilot | openclaw | antigravity
+#         | pi | vibe | hermes | cline | kimi | kiro | trae | opencode
+>>>>>>> upstream/main
 ```
 
 Ardından, ajanın içinde:

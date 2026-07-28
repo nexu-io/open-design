@@ -1,0 +1,14 @@
+---
+/*
+ * /plugins/beautiful-shadows/ — curated Codex design plugin, filed flat in the plugin
+ * library. A static route wins over the bundled `[slug]` catalogue route, which
+ * keeps that SEO-critical file untouched; `assertNoCodexSlugCollision` fails the
+ * build if a bundled plugin ever claims the same slug.
+ */
+import CodexSkillDetail from '../../../_components/codex-skill-detail.astro';
+import { getCodexSkill } from '../../../_lib/codex-design';
+
+const skill = getCodexSkill('beautiful-shadows')!;
+---
+
+<CodexSkillDetail skill={skill} />

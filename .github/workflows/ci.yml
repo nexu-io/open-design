@@ -38,6 +38,20 @@ jobs:
       tools_pack_tests_required: ${{ steps.detect.outputs.tools_pack_tests_required }}
       nix_validation_required: ${{ steps.detect.outputs.nix_validation_required }}
       workspace_validation_required: ${{ steps.detect.outputs.workspace_validation_required }}
+<<<<<<< HEAD
+=======
+      run_e2e_vitest: ${{ steps.detect.outputs.run_e2e_vitest }}
+      run_playwright_critical: ${{ steps.detect.outputs.run_playwright_critical }}
+      run_playwright_visual: ${{ steps.detect.outputs.run_playwright_visual }}
+      run_preflight: ${{ steps.detect.outputs.run_preflight }}
+      run_preflight_typecheck: ${{ steps.detect.outputs.run_preflight_typecheck }}
+      run_ui_p0: ${{ steps.detect.outputs.run_ui_p0 }}
+      run_web_workspace_tests: ${{ steps.detect.outputs.run_web_workspace_tests }}
+      run_windows_tools_pack_payload_tests: ${{ steps.detect.outputs.run_windows_tools_pack_payload_tests }}
+      run_workspace_unit_tests: ${{ steps.detect.outputs.run_workspace_unit_tests }}
+      ui_p0_matrix: ${{ steps.detect.outputs.ui_p0_matrix }}
+      visual_matrix: ${{ steps.detect.outputs.visual_matrix }}
+>>>>>>> upstream/main
 
     steps:
       - name: Detect workspace and app test scopes
@@ -134,16 +148,62 @@ jobs:
             echo "workspace_validation_required=$workspace_validation_required"
           } >> "$GITHUB_OUTPUT"
 
+<<<<<<< HEAD
   blob_guard:
     name: Guard changed file sizes
     runs-on: ubuntu-latest
     timeout-minutes: 5
+=======
+      - name: Upload visual report handoff
+        if: ${{ steps.visual_report_handoff.outputs.name != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.visual_report_handoff.outputs.name }}
+          path: ${{ steps.visual_report_handoff.outputs.path }}
+          if-no-files-found: error
+          retention-days: 7
+
+  static_gate:
+    name: Static gate
+    needs: [runners]
+    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).control }}
+    timeout-minutes: 10
+    env:
+      ACTIONLINT_VERSION: 1.7.12
+      SHELLCHECK_VERSION: 0.11.0
+>>>>>>> upstream/main
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
+<<<<<<< HEAD
         with:
           fetch-depth: 0
+=======
+
+      - name: Install actionlint and ShellCheck
+        run: |
+          case "$(uname -m)" in
+            x86_64)
+              actionlint_arch=amd64
+              shellcheck_arch=x86_64
+              ;;
+            aarch64|arm64)
+              actionlint_arch=arm64
+              shellcheck_arch=aarch64
+              ;;
+            *) echo "Unsupported actionlint architecture: $(uname -m)" >&2; exit 1 ;;
+          esac
+          curl -fsSL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_${actionlint_arch}.tar.gz" \
+            | tar -xz actionlint
+          curl -fsSL "https://github.com/koalaman/shellcheck/releases/download/v${SHELLCHECK_VERSION}/shellcheck-v${SHELLCHECK_VERSION}.linux.${shellcheck_arch}.tar.gz" \
+            | tar -xz --strip-components=1 "shellcheck-v${SHELLCHECK_VERSION}/shellcheck"
+          sudo install -m 0755 actionlint /usr/local/bin/actionlint
+          sudo install -m 0755 shellcheck /usr/local/bin/shellcheck
+
+      - name: Check workflow files
+        run: actionlint -color
+>>>>>>> upstream/main
 
       - name: Check changed tracked file sizes
         env:
@@ -346,12 +406,14 @@ jobs:
       # If postinstall grows a targeted app type-generation phase covering these
       # three exports without broad app builds, this CI prebuild can be removed.
       - name: Prebuild workspace type declarations
+        if: ${{ needs.scopes.outputs.run_preflight_typecheck == 'true' }}
         run: |
           pnpm --filter @open-design/daemon build
           pnpm --filter @open-design/desktop build
           pnpm --filter @open-design/web build:sidecar
 
       - name: Typecheck workspaces
+        if: ${{ needs.scopes.outputs.run_preflight_typecheck == 'true' }}
         run: |
           pnpm -r --filter '!open-design' --filter '!@open-design/landing-page' --workspace-concurrency=4 --if-present run typecheck
           pnpm exec tsc -p scripts/tsconfig.json --noEmit
@@ -386,8 +448,18 @@ jobs:
           if [ "${{ needs.change_scopes.outputs.tools_dev_tests_required }}" = "true" ]; then
             pnpm --filter @open-design/tools-dev test
           fi
+<<<<<<< HEAD
           if [ "${{ needs.change_scopes.outputs.tools_pack_tests_required }}" = "true" ]; then
+=======
+          if [ "${{ needs.scopes.outputs.tools_pack_tests_required }}" = "true" ]; then
+            pnpm --filter @open-design/desktop build
+            pnpm --filter @open-design/desktop test
+            pnpm --filter @open-design/packaged test
+>>>>>>> upstream/main
             pnpm --filter @open-design/tools-pack test
+            if [ "${{ needs.scopes.outputs.run_e2e_vitest }}" != "true" ]; then
+              pnpm --filter @open-design/e2e test tests/packaged-launcher-update-loop.test.ts
+            fi
           fi
 
   windows_tools_pack_payload_tests:
@@ -541,8 +613,183 @@ jobs:
             exit 1
           fi
 
+<<<<<<< HEAD
   runtime_trace:
     name: Runtime trace
+=======
+          required_misses="$(echo "$NEEDS_JSON" | jq -r '
+            . as $needs |
+            ($needs.scopes.outputs // {}) as $out |
+            def when($condition; $jobs): if $condition then $jobs else [] end;
+            (
+              ["scopes", "static_gate"]
+              + when($out.run_preflight == "true"; ["preflight"])
+              + when($out.run_workspace_unit_tests == "true"; ["workspace_unit_tests"])
+              + when($out.run_windows_tools_pack_payload_tests == "true"; ["windows_tools_pack_payload_tests"])
+              + when($out.run_web_workspace_tests == "true"; ["web_workspace_tests"])
+              + when($out.run_e2e_vitest == "true"; ["e2e_vitest"])
+              + when($out.run_playwright_critical == "true"; ["playwright_critical"])
+              + when($out.run_ui_p0 == "true"; ["ui_p0"])
+              + when($out.run_playwright_visual == "true"; ["playwright_visual"])
+            )[]
+            | select(($needs[.].result // "missing") != "success")
+            | "\(.)=\($needs[.].result // "missing")"
+          ')"
+          if [ -n "$required_misses" ]; then
+            echo "Required validation jobs did not succeed:"
+            echo "$required_misses"
+            exit 1
+          fi
+
+      - name: Block merge while the needs-validation label is present
+        id: needs_validation_gate
+        # Hard gate: a PR that still carries `needs-validation` must not merge. Enforced ONLY in
+        # the merge_group (merge-queue) context — never on pull_request. main requires the merge
+        # queue, so every merge passes through merge_group; a needs-validation entry fails this
+        # step there and is ejected from the queue, so it can never land.
+        #
+        # Why not also fail on pull_request: that turns the PR's own required `Validate workspace`
+        # check red, and a deliberately-red required check is indistinguishable from a real CI
+        # failure to everything downstream — it flips the PR's mergeStateStatus to BLOCKED and
+        # reads as ci_status=failure to the review bot, which deadlocks the very QA/validation that
+        # is supposed to clear the label (QA never gets requested → label never removed → blocked
+        # forever). The merge_group run executes on the queue's transient ref, so this failure does
+        # NOT appear in the PR head's status rollup; the PR stays green until the label is cleared.
+        # Fails closed: any label-lookup error blocks rather than silently waving the merge through.
+        # Respects skip-validation implicitly (that override means needs-validation is never added).
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          REPO: ${{ github.repository }}
+          # Resolving the queued PR via commits/<sha>/pulls alone is unreliable: the merge queue
+          # squashes, so the queued commits are NEW synthetic SHAs GitHub does not associate back
+          # to the PR — that found nothing and waved a needs-validation PR through (#4736). So we
+          # resolve each merge-group commit to a PR from several signals, per commit (see below).
+          MERGE_GROUP_REF: ${{ github.event.merge_group.head_ref }}
+          BASE_SHA: ${{ github.event.merge_group.base_sha }}
+          HEAD_SHA: ${{ github.event.merge_group.head_sha }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" != "merge_group" ]; then
+            echo "needs-validation is gated at merge time in the merge_group context; nothing to enforce on $EVENT_NAME (PR check stays green)."
+          else
+            # An ejection is invisible from the PR: this failure runs on the queue's transient
+            # ref, the PR's own checks stay green, and `mergeQueueEntry` just goes null. Leave a
+            # visible trace by producing a `handoff/comment` artifact for the labeled PR; the
+            # trusted `comment.atom.yml` consumer upserts it as a PR comment after this run
+            # completes. Best-effort: a handoff failure must never soften the block itself.
+            emit_ejection_notice() {
+              local pr="$1"
+              local pr_json pr_head pr_base handoff_id handoff_root handoff_dir marker
+              pr_json="$(gh api "repos/$REPO/pulls/$pr")"
+              pr_head="$(jq -r '.head.sha' <<< "$pr_json")"
+              pr_base="$(jq -r '.base.sha' <<< "$pr_json")"
+              handoff_id="needs-validation-pr-$pr"
+              handoff_root="$RUNNER_TEMP/handoff-comment-$handoff_id"
+              handoff_dir="$(python3 .github/scripts/handoff.py dir comment "$handoff_id" --root "$handoff_root")"
+              mkdir -p "$handoff_dir"
+              marker="<!-- merge-queue-needs-validation -->"
+              {
+                printf '%s\n' "$marker"
+                # Markdown code spans are intentional literal text.
+                # shellcheck disable=SC2016
+                printf 'Ejected from the merge queue: this PR still carries the `needs-validation` label.\n\n'
+                printf 'The merge queue gate ([run %s](%s/%s/actions/runs/%s)) blocked the queued group because of the label. That failure runs on the queue'"'"'s transient ref, so it never appears in this PR'"'"'s own checks — they stay green, and this notice is the only visible trace on the PR.\n\n' "$RUN_ID" "$GITHUB_SERVER_URL" "$REPO" "$RUN_ID"
+                # shellcheck disable=SC2016
+                printf 'To land this PR: complete the QA pass the label is tracking, remove the `needs-validation` label, then add the PR back to the merge queue.\n'
+              } > "$handoff_dir/body.md"
+              jq -n \
+                --arg kind "comment" \
+                --arg id "$handoff_id" \
+                --arg head "$pr_head" \
+                --arg base "$pr_base" \
+                --arg marker "$marker" \
+                --argjson schema_version 1 \
+                --argjson pr_number "$pr" \
+                --argjson run_id "$RUN_ID" \
+                '{schema_version: $schema_version, kind: $kind, id: $id, pr_number: $pr_number, head_sha: $head, base_sha: $base, run_id: $run_id, marker: $marker}' \
+                > "$handoff_dir/metadata.json"
+              python3 .github/scripts/handoff.py validate comment "$handoff_dir" >/dev/null
+              {
+                echo "comment_created=true"
+                echo "comment_name=$(python3 .github/scripts/handoff.py artifact-name comment "$handoff_id")"
+                echo "comment_path=$handoff_root"
+              } >> "$GITHUB_OUTPUT"
+            }
+            # Resolve EVERY merge-group commit to at least one real PR and check its labels.
+            # Each queued entry can be recovered from up to three signals:
+            #   1. ref `.../pr-<N>-<sha>` — names the (tip) entry only; squash-safe.
+            #   2. the commit subject's trailing `(#N)` — the queue appends each entry's own PR
+            #      number, so this recovers the NON-tip PRs of a batched group.
+            #   3. commits/<sha>/pulls — covers a non-squash queue where commits map back directly.
+            # A `(#N)` can also be a spurious reference — e.g. #4833, titled "... (#4828)", where
+            # 4828 is the fixed ISSUE, not a PR; `gh pr view 4828` then fails with "Could not
+            # resolve to a PullRequest". We must NOT fail closed on that (it ejected a clean,
+            # label-free PR from the queue forever) — but we must also NOT blindly skip it, or a
+            # batched non-tip PR whose only recovered number is such a reference would go unchecked
+            # and a needs-validation entry could slip through (#4736). So we resolve PER COMMIT:
+            # ignore a non-PR candidate only when its commit is still covered by another candidate
+            # that DOES resolve to a real PR; a commit that resolves to no PR fails closed.
+            compare_json="$(gh api "repos/$REPO/compare/$BASE_SHA...$HEAD_SHA")"
+            ref_prs="$(printf '%s\n' "$MERGE_GROUP_REF" | grep -oE 'pr-[0-9]+' | grep -oE '[0-9]+' || true)"
+            commit_shas="$(printf '%s' "$compare_json" | jq -r '.commits[].sha')"
+            if [ -z "$commit_shas" ]; then
+              echo "::error::merge_group compare $BASE_SHA...$HEAD_SHA returned no commits — cannot resolve queued PRs; blocking merge (fail closed)."
+              exit 1
+            fi
+            checked=""
+            for sha in $commit_shas; do
+              subject="$(printf '%s' "$compare_json" | jq -r --arg s "$sha" '.commits[] | select(.sha==$s) | .commit.message | split("\n")[0]')"
+              subj_prs="$(printf '%s' "$subject" | grep -oE '\(#[0-9]+\)' | grep -oE '[0-9]+' || true)"
+              # Required assignment (no `|| true`): a transient API failure must block, not
+              # silently shrink this commit's candidate set.
+              assoc_prs="$(gh api "repos/$REPO/commits/$sha/pulls" --jq '.[].number')"
+              ref_for_commit=""
+              [ "$sha" = "$HEAD_SHA" ] && ref_for_commit="$ref_prs"
+              candidates="$(printf '%s\n%s\n%s\n' "$subj_prs" "$assoc_prs" "$ref_for_commit" | grep -E '^[0-9]+$' | sort -u || true)"
+              covered=0
+              for pr in $candidates; do
+                if ! labels="$(gh pr view "$pr" --repo "$REPO" --json labels --jq '.labels[].name' 2>/tmp/pr_view_err)"; then
+                  if grep -q 'Could not resolve to a PullRequest' /tmp/pr_view_err; then
+                    echo "commit $sha: candidate #$pr is not a pull request (e.g. an issue reference) — ignoring this candidate."
+                    continue
+                  fi
+                  echo "::error::label lookup for #$pr (commit $sha) failed — blocking merge (fail closed):"
+                  cat /tmp/pr_view_err
+                  exit 1
+                fi
+                covered=1
+                case " $checked " in *" $pr "*) ;; *) checked="$checked $pr";; esac
+                if printf '%s\n' "$labels" | grep -qx 'needs-validation'; then
+                  echo "::error::PR #$pr still has 'needs-validation' — blocking merge."
+                  # Fail-fast keeps this per-run notice on the FIRST labeled PR found; every
+                  # labeled entry also fails its own queue run, so each still gets its own notice.
+                  emit_ejection_notice "$pr" || echo "::warning::could not produce the ejection-notice handoff for PR #$pr; the block itself still stands."
+                  exit 1
+                fi
+                echo "PR #$pr: no needs-validation label."
+              done
+              if [ "$covered" -eq 0 ]; then
+                echo "::error::merge-group commit $sha resolved to no pull request (candidates: ${candidates:-none}) — cannot verify needs-validation; blocking merge (fail closed)."
+                exit 1
+              fi
+            done
+            echo "No 'needs-validation' label in the queued group ($checked ) — clear to merge."
+          fi
+
+      # `failure()` is required: the gate exits 1 on the very path that produces the handoff,
+      # and the default `success()` condition would skip this upload exactly when it matters.
+      - name: Upload merge-queue ejection notice handoff
+        if: ${{ failure() && steps.needs_validation_gate.outputs.comment_created == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.needs_validation_gate.outputs.comment_name }}
+          path: ${{ steps.needs_validation_gate.outputs.comment_path }}
+
+  runtime_summary:
+    name: Runtime summary
+>>>>>>> upstream/main
     needs:
       - validate
     if: ${{ always() && github.event_name == 'workflow_dispatch' }}

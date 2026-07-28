@@ -11,6 +11,24 @@ import {
 } from "./common.ts";
 import { assertCurrentVersionReservation, versionLockObjectKey } from "./beta-version-reservation.ts";
 import { getStorageObject, putStorageObject, putStorageObjectWithStatus } from "./s3-upload.ts";
+<<<<<<< HEAD:.github/workflow/scripts/release/storage/publish-metadata.ts
+=======
+import {
+  assertLauncherVersionFloorSatisfiable,
+  resolveLauncherVersionFloor,
+} from "./launcher-version-floor.ts";
+import {
+  parseCountedReleaseVersion,
+  parseReleaseBaseVersion,
+  releaseChannelDescriptor,
+  releaseMetadataVersionFields,
+  type CountedReleaseChannel,
+} from "@open-design/release";
+import {
+  parseReleaseNotePublication,
+  releaseNoteMetadataFromPublication,
+} from "../release-note/publication.ts";
+>>>>>>> upstream/main:tools/release/src/storage/publish-metadata.ts
 
 type PlatformManifest = {
   artifacts?: Record<string, { url?: string }>;
@@ -60,6 +78,56 @@ const currentRunId = Number(optional("RELEASE_RUN_ID", "0"));
 const versionLockRequired = process.env.RELEASE_VERSION_LOCK_REQUIRED === "true";
 const versionLockKey = optional("RELEASE_VERSION_LOCK_KEY", versionLockObjectKey(releaseVersion));
 const latestCasRequired = process.env.RELEASE_LATEST_CAS_REQUIRED === "true";
+<<<<<<< HEAD:.github/workflow/scripts/release/storage/publish-metadata.ts
+=======
+const storage = publishSideEffectsEnabled || versionLockRequired ? storageConfigFromEnv() : null;
+
+// Operator-supplied installer-reinstall floor: one repo-vars pair per channel,
+// resolved with pair-level stable fallback by the shared channel-policy
+// resolver. Published as control.launcher.version.{min,url}; the desktop
+// updater compares min against the physically installed outer package version
+// and forces the installer route — including a same-version reinstall — when
+// the outer is below it.
+const launcherVersionFloor = resolveLauncherVersionFloor(releaseChannel);
+if (launcherVersionFloor != null) {
+  assertLauncherVersionFloorSatisfiable(launcherVersionFloor, releaseVersion);
+}
+const controlBlock = launcherVersionFloor == null
+  ? {}
+  : {
+      control: {
+        launcher: {
+          version: {
+            min: launcherVersionFloor.min,
+            ...(launcherVersionFloor.url == null ? {} : { url: launcherVersionFloor.url }),
+          },
+        },
+      },
+    };
+
+function readReleaseNoteMetadata(): ReturnType<typeof releaseNoteMetadataFromPublication> {
+  if (releaseNoteManifestPath.length === 0) {
+    if (releaseChannel === "stable") {
+      throw new Error("RELEASE_NOTE_MANIFEST_PATH is required for stable metadata publication");
+    }
+    return null;
+  }
+  const publication = parseReleaseNotePublication(JSON.parse(readFileSync(releaseNoteManifestPath, "utf8")) as unknown);
+  if (publication.channel !== releaseChannel || publication.releaseVersion !== releaseVersion) {
+    throw new Error(`release note publication identity mismatch for ${releaseChannel} ${releaseVersion}`);
+  }
+  if (releaseChannel === "stable" && publication.state === "absent") {
+    throw new Error("release note publication is required for stable metadata");
+  }
+  if (publication.state !== "absent") {
+    const expectedState = publishSideEffectsEnabled ? "published" : "planned";
+    if (publication.state !== expectedState) {
+      throw new Error(`release note publication must be ${expectedState} before metadata publication; got ${publication.state}`);
+    }
+  }
+  return releaseNoteMetadataFromPublication(publication);
+}
+>>>>>>> upstream/main:tools/release/src/storage/publish-metadata.ts
 
 if (versionLockRequired) {
   await assertCurrentVersionReservation(storage, releaseVersion, versionLockKey);
@@ -324,6 +392,7 @@ const latestMetadataUpdated = releaseState === "complete";
 const metadata = {
   ...releaseMetadataFields(),
   channel: releaseChannel,
+  ...controlBlock,
   expectedPlatforms: expectedTargets,
   expectedTargets,
   failedPlatforms: failedTargets,

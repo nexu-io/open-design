@@ -1,0 +1,344 @@
+---
+/*
+ * Detail view for one curated Codex design plugin.
+ *
+ * Editorial (not bundled-plugin driven): what it is, why it matters for design,
+ * how to install it, how to run it with Codex, and where it comes from.
+ *
+ * Layout follows the user-story pages (`/stories/*`): full-bleed bands with a
+ * centered measure, one inverted band for the install module, and a dossier row
+ * for source metadata. The band primitives live in `_partials/detail-bands.css`
+ * so this page reads as the same family rather than a one-off layout.
+ *
+ * Rendered by the flat `/plugins/<slug>/` static routes so a curated plugin can
+ * live at the top level of the library and be filed under several categories.
+ */
+import Layout from './sub-page-layout.astro';
+import { getPluginsCopy } from '../_lib/plugins-i18n';
+import { getCodexCopy, categoryLabel, skillCopy } from '../_lib/codex-i18n';
+import { localeFromPath, localizedHref } from '../i18n';
+import {
+  CODEX_SKILLS,
+  CODEX_COLLECTION,
+  AWESOME_REPO_URL,
+  OD_DOWNLOAD_URL,
+  type CodexSkill,
+} from '../_lib/codex-design';
+import '../_partials/detail-bands.css';
+
+interface Props {
+  skill: CodexSkill;
+}
+const { skill } = Astro.props as Props;
+
+/** 24010 -> '24.0K'. */
+function formatStars(n: number): string {
+  return n >= 1000 ? `${(n / 1000).toFixed(1)}K` : String(n);
+}
+
+const locale = localeFromPath(Astro.url.pathname);
+const pcopy = getPluginsCopy(locale);
+const cc = getCodexCopy(locale);
+const sc = skillCopy(cc, skill.slug);
+const href = (path: string) => localizedHref(path, locale);
+
+// Four fills the 4-up grid exactly, so the row never ends ragged.
+const related = CODEX_SKILLS.filter((s) => s.slug !== skill.slug).slice(0, 4);
+
+const title = `${sc.name} · Codex design · Open Design`;
+const description = `${sc.tagline} ${sc.whatIsIt}`;
+
+const jsonLd = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'TechArticle',
+    headline: `${sc.name}, a Codex design plugin`,
+    description: sc.whatIsIt,
+    url: new URL(Astro.url.pathname, Astro.site).toString(),
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: pcopy.hubLabel, item: new URL(href('/plugins/'), Astro.site).toString() },
+      { '@type': 'ListItem', position: 2, name: CODEX_COLLECTION.eyebrow, item: new URL(href('/plugins/codex-design/'), Astro.site).toString() },
+      { '@type': 'ListItem', position: 3, name: sc.name, item: new URL(Astro.url.pathname, Astro.site).toString() },
+    ],
+  },
+];
+---
+
+<Layout
+  title={title}
+  description={description}
+  active="plugins"
+  jsonLd={jsonLd}
+  mainClassName="sub-main"
+>
+  <article class="db codex-detail">
+    {/* Hero band: identity, promise, one action, and the plugin's cover. */}
+    <section class="dbband dbhero">
+      <div class="dbin">
+        <nav class="dbcrumb" aria-label="Breadcrumb">
+          <a href={href('/plugins/')}>{pcopy.hubLabel}</a>
+          <span aria-hidden="true">·</span>
+          <a href={href('/plugins/codex-design/')}>{CODEX_COLLECTION.eyebrow}</a>
+        </nav>
+
+        <div class="dbherotop">
+          <div>
+            <p class="dbeye">{categoryLabel(cc, skill.category)}</p>
+            <h1 class="dbh1">{sc.name}</h1>
+            <p class="dbdek">{sc.tagline}</p>
+            <div class="dbcta-row">
+              {/*
+                A true "install into the client" button would need the desktop
+                app to register `od://` as a system URL scheme. Today that
+                scheme is Electron-internal only, so a web page can neither
+                detect an installed client nor hand it an install intent.
+                Until that exists, this stays an honest download link.
+              */}
+              <a class="dbbtn-p" href={href(OD_DOWNLOAD_URL)}>{cc.ctaDownload}</a>
+              <a class="dbbtn-g" href={AWESOME_REPO_URL} target="_blank" rel="noopener">
+                {cc.ctaOurRepo} ↗
+              </a>
+            </div>
+          </div>
+          <figure class="dbheroart">
+            <img src={skill.image} alt="" width="640" height="400" loading="eager" />
+          </figure>
+        </div>
+
+      </div>
+    </section>
+
+    {/* What it is + why it matters, with provenance alongside. */}
+    <section class="dbband">
+      <div class="dbin dbbody">
+        <div class="dbbody-main">
+        <h2 class="dbh2">{cc.detailWhatIsIt}</h2>
+        <p class="dblede">{sc.whatIsIt}</p>
+        {skill.bundle && <p class="dbbundle">{skill.bundle}</p>}
+
+        <figure class="dbquote">
+          <blockquote>{skill.upstreamDescription}</blockquote>
+          <figcaption>{cc.detailUpstream}</figcaption>
+        </figure>
+
+        <h2 class="dbh2 dbh2-tight">{cc.detailWhyForDesign}</h2>
+        <ul class="dbpoints">
+          {sc.whyForDesign.map((p) => <li>{p}</li>)}
+        </ul>
+
+        <h2 class="dbh2 dbh2-tight">{cc.detailCovers}</h2>
+        <ul class="dbcovers">
+          {skill.covers.map((c) => <li>{c}</li>)}
+        </ul>
+
+        {sc.example && (
+          <p class="dbexample">
+            <span>{cc.detailExampleTag}</span>
+            {sc.example}
+          </p>
+        )}
+        </div>
+
+          <aside class="dbcard" aria-label={cc.detailSource}>
+            <div>
+              <span class="k">{cc.detailSource}</span>
+              <span class="v"><a href={skill.source.url} target="_blank" rel="noopener">{skill.repo} ↗</a></span>
+            </div>
+            {skill.stars && (
+              <div class="dbcard-stats">
+                <div>
+                  <span class="n">{formatStars(skill.stars)}</span>
+                  <span class="k">{cc.detailStars}</span>
+                </div>
+              </div>
+            )}
+            <div>
+              <span class="k">{cc.detailMaintainer}</span>
+              <span class="v">
+                {skill.reference
+                  ? <a href={skill.reference.url} target="_blank" rel="noopener">{skill.badge} ↗</a>
+                  : skill.badge}
+              </span>
+            </div>
+            <div>
+              <span class="k">{cc.detailLicense}</span>
+              <span class="v"><a href={skill.license.url} target="_blank" rel="noopener">{skill.license.label} ↗</a></span>
+            </div>
+            <div>
+              <span class="k">{cc.detailTags}</span>
+              <ul class="dbsnapbar-tags">
+                {skill.tags.map((t) => <li>{t}</li>)}
+              </ul>
+            </div>
+            {skill.codexNote && (
+              <div>
+                <span class="k">{cc.detailCodexNote}</span>
+                <span class="v vsoft">{skill.codexNote}</span>
+              </div>
+            )}
+            {skill.social && (
+              <div>
+                <span class="k">{cc.detailTraction}</span>
+                <span class="v vsoft">{skill.social}</span>
+              </div>
+            )}
+          </aside>
+      </div>
+    </section>
+
+    {/* Install module: the page's practical payoff, on the inverted band. */}
+    <section class="dbband ink" aria-labelledby="codex-install-heading">
+      <div class="dbin">
+        <p class="dbeye">{cc.installHeading}</p>
+        <h2 class="dbh2" id="codex-install-heading">{sc.name}</h2>
+        <ol class="dbfeats3">
+          {skill.install.kind === 'installer' ? (
+            <>
+              <li>
+                <span class="num" aria-hidden="true">1</span>
+                <p>{cc.installRunInCodex}</p>
+                <code>{skill.install.command}</code>
+              </li>
+              <li>
+                <span class="num" aria-hidden="true">2</span>
+                <p>{cc.installRestart}</p>
+              </li>
+              <li>
+                <span class="num" aria-hidden="true">3</span>
+                <p>{cc.installThenUse}</p>
+              </li>
+            </>
+          ) : (
+            <>
+              <li>
+                <span class="num" aria-hidden="true">1</span>
+                <p>{cc.installClone}</p>
+                <code>{skill.install.command}</code>
+              </li>
+              <li>
+                <span class="num" aria-hidden="true">2</span>
+                <p>{cc.installPoint}</p>
+                <code>{skill.install.skillPath}</code>
+              </li>
+              <li>
+                <span class="num" aria-hidden="true">3</span>
+                <p>{cc.installThenUse}</p>
+              </li>
+            </>
+          )}
+        </ol>
+        <h2 class="dbsub">{cc.detailHowWithCodex}</h2>
+        <ol class="dbfeats3">
+          {sc.howWithCodex.map((step, i) => (
+            <li>
+              <span class="num" aria-hidden="true">{i + 1}</span>
+              <p>{step}</p>
+            </li>
+          ))}
+        </ol>
+
+        <div class="dbnote">
+          <p>{cc.installNote}</p>
+          <a href={AWESOME_REPO_URL} target="_blank" rel="noopener">{cc.detailMoreOnList} ↗</a>
+        </div>
+      </div>
+    </section>
+
+    {/* More from the collection. */}
+    {related.length > 0 && (
+      <section class="dbband">
+        <div class="dbin">
+          <div class="dbrelated dbrelated-top">
+            <h2 class="dbh2 dbh2-sm">{cc.detailRelated}</h2>
+            <div class="codex-skill-grid">
+              {related.map((r) => (
+                <article class="tpl-card">
+                  <a class="tpl-media" href={href(`/plugins/${r.slug}/`)} aria-label={skillCopy(cc, r.slug).name}>
+                    <img class="tpl-media-poster" src={r.image} alt="" loading="lazy" />
+                    <span class="tpl-media-kind">{categoryLabel(cc, r.category)}</span>
+                  </a>
+                  <div class="tpl-meta">
+                    <span class="tpl-author">{r.badge}</span>
+                    <span>{cc.cardKind}</span>
+                  </div>
+                  <a class="tpl-excerpt" href={href(`/plugins/${r.slug}/`)}>
+                    <span class="tpl-excerpt-head">{cc.cardWhatItDoes}</span>
+                    <span class="tpl-excerpt-title">{skillCopy(cc, r.slug).name}</span>
+                    <span class="tpl-excerpt-body">{skillCopy(cc, r.slug).tagline}</span>
+                  </a>
+                  <div class="tpl-actions">
+                    <a class="tpl-cta" href={href(`/plugins/${r.slug}/`)}>{cc.cardCta}</a>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+    )}
+
+    {/* Closing CTA: the client download. */}
+    <section class="dbband dbfinal">
+      <div class="dbin">
+        <p class="dbeye">{cc.finalEyebrow}</p>
+        <h2 class="dbfinal-h">{cc.detailCloserHeading}</h2>
+        <p class="dbfinal-p">{cc.detailCloserBody}</p>
+        <div class="dbcta-row">
+          <a class="dbbtn-p" href={href(OD_DOWNLOAD_URL)}>{cc.ctaDownload} ↗</a>
+          <a class="dbbtn-g" href={href('/plugins/codex-design/')}>{cc.installNoteCta}</a>
+        </div>
+      </div>
+    </section>
+  </article>
+
+  <style>
+    /* Page-level additions on top of the shared band primitives.
+       The layout is mounted with `mainClassName="sub-main"` (no `.container`),
+       so bands span the viewport without a 100vw breakout. */
+    .codex-detail section { padding-block: 68px; }
+    .codex-detail .dbhero { padding-block: 96px 56px; }
+
+    .dbcrumb {
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: 0.06em;
+      color: var(--ink-faint);
+      margin: 0 0 26px;
+      display: flex;
+      gap: 0.6em;
+      align-items: center;
+    }
+    .dbcrumb a { color: inherit; text-decoration: none; }
+    .dbcrumb a:hover { color: var(--ink); text-decoration: underline; }
+
+    .dbh2-tight { margin-top: 44px; }
+    .dbh2-spaced { margin-top: 52px; }
+    .dbh2-sm { font-size: clamp(20px, 2.4vw, 26px); margin: 0 0 24px; }
+
+    .dbexample {
+      margin: 34px 0 0;
+      padding-left: 20px;
+      border-left: 2px solid var(--coral);
+      font-size: 16px;
+      line-height: 1.6;
+      color: var(--ink-soft);
+    }
+    .dbexample span {
+      display: block;
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--ink-faint);
+      margin-bottom: 8px;
+    }
+
+    .dbcloser-p { max-width: 640px; }
+    .dbrelated-top { margin: 0; padding: 0; border: 0; }
+    /* `.codex-skill-grid` (tpl-card DNA) is global in sub-pages.css. */
+  </style>
+</Layout>

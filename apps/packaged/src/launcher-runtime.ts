@@ -52,6 +52,43 @@ type LauncherInstallDescriptor = {
   updatedAt?: string;
 };
 
+<<<<<<< HEAD
+=======
+type LauncherCleanupDescriptor = {
+  channel: LauncherChannel;
+  currentVersion: string;
+  namespace: string;
+  updatedAt: string;
+  version: 1;
+  versions: LauncherCleanupEntry[];
+};
+
+type LauncherCleanupEntry = {
+  generation: number;
+  reason: "current-bound-package" | "older-than-bound-package";
+  state: "deprecated" | "retained";
+  updatedAt: string;
+  version: string;
+};
+
+type ResolvedPayloadConfig = {
+  config: PackagedConfig;
+  desktopExecutablePath: string;
+  electronNodeCommand: string | null;
+};
+
+export type ResolvePackagedLauncherRuntimeOptions = {
+  currentExecutablePath?: string;
+  /**
+   * Pointer from `--od-launcher-delegated-*` argv: the spawning parent
+   * pre-armed attempt.json for this pointer, so a matching attempt marks the
+   * launch in progress rather than a previous failure.
+   */
+  delegated?: LauncherVersionPointer | null;
+  resume?: LauncherHandoffResumeRequest | null;
+};
+
+>>>>>>> upstream/main
 async function pathExists(path: string): Promise<boolean> {
   try {
     await access(path);
@@ -255,7 +292,36 @@ export async function resolvePackagedLauncherRuntime(
   });
   const descriptor = await readOrCreateRuntimeDescriptor(config, launcherPaths, channel);
   const attempted = await readLauncherAttempt(launcherPaths, channel, config.namespace).catch(() => null);
+<<<<<<< HEAD
   const selection = selectLauncherRuntimeTarget({ attempted, runtime: descriptor });
+=======
+  const currentExecutablePath = options.currentExecutablePath ?? process.execPath;
+  const handoff = options.resume == null
+    ? null
+    : await readJsonFile<LauncherDesktopHandoffDescriptor>(launcherPaths.handoffPath)
+      .then((value) => validateLauncherDesktopHandoffDescriptor(value, {
+        channel,
+        namespace: config.namespace,
+      }))
+      .catch(() => null);
+  const requestedResume = options.resume != null &&
+    handoff?.state === "armed" &&
+    handoff.handoffId === options.resume.handoffId &&
+    handoff.target != null &&
+    descriptor.active?.version === handoff.target.version &&
+    descriptor.active.generation === handoff.target.generation &&
+    attempted?.version === handoff.target.version &&
+    attempted.generation === handoff.target.generation &&
+    sameExecutablePath(currentExecutablePath, handoff.payloadExecutablePath)
+    ? handoff.target
+    : null;
+  const selection = selectLauncherRuntimeTarget({
+    attempted,
+    delegated: options.delegated ?? null,
+    resume: requestedResume,
+    runtime: descriptor,
+  });
+>>>>>>> upstream/main
   const persistedInstall = await readLauncherInstallDescriptor(launcherPaths, channel, config.namespace).catch(() => null);
   const currentPackageLaunchPath = stableAppLaunchPathFromExecutable(process.execPath);
 
@@ -313,9 +379,51 @@ async function writeJsonFile(path: string, payload: unknown): Promise<void> {
   await writeFile(path, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
 }
 
+<<<<<<< HEAD
 export async function confirmPackagedLauncherRuntime(runtime: PackagedLauncherRuntime): Promise<void> {
   if (runtime.source !== "payload") return;
   if (!runtime.selection.selected || runtime.selection.reason !== "active") return;
+=======
+/**
+ * Arm attempt.json for a normal active delegation BEFORE the payload spawns.
+ * A payload that dies before reaching its own launcher bookkeeping then still
+ * leaves rollback evidence, so the next cold start rolls back to
+ * lastSuccessful instead of retrying the broken payload forever. Rollback
+ * (last-successful) delegations are deliberately excluded: the attempt on
+ * disk IS the rollback evidence and must not be overwritten.
+ */
+export async function armPackagedLauncherRuntimeAttempt(
+  runtime: PackagedLauncherRuntime,
+): Promise<void> {
+  if (runtime.source !== "payload") return;
+  if (!runtime.selection.selected || runtime.selection.reason !== "active") return;
+  await writeJsonFile(runtime.launcherPaths.attemptsPath, {
+    channel: runtime.launcherPaths.channel,
+    generation: runtime.selection.pointer.generation,
+    namespace: runtime.launcherPaths.namespace,
+    schemaVersion: LAUNCHER_SCHEMA_VERSION,
+    startedAt: new Date().toISOString(),
+    version: runtime.selection.pointer.version,
+  } satisfies LauncherAttemptDescriptor);
+}
+
+export async function recordPackagedLauncherRuntimeFailedAttempt(
+  runtime: PackagedLauncherRuntime,
+): Promise<void> {
+  await armPackagedLauncherRuntimeAttempt(runtime);
+}
+
+export async function confirmPackagedLauncherRuntime(runtime: PackagedLauncherRuntime): Promise<void> {
+  if (runtime.source !== "payload") return;
+  if (!runtime.payloadDesktopProcess) return;
+  if (runtime.desktopExecutablePath == null) return;
+  if (!runtime.selection.selected || (
+    runtime.selection.reason !== "active" &&
+    runtime.selection.reason !== "active-delegated" &&
+    runtime.selection.reason !== "active-resume"
+  )) return;
+  const confirmedAt = new Date().toISOString();
+>>>>>>> upstream/main
   const next: LauncherRuntimeDescriptor = {
     ...runtime.descriptor,
     active: runtime.selection.pointer,

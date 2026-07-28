@@ -1712,7 +1712,347 @@ body.sub-page {
  * `[locale]/[...path].astro` catch-all (prefixed locales) so the
  * localized chrome reuses the same style without rendering twice.
  */
+<<<<<<< HEAD
+=======
+/* /plugins/ hub shares the 1180px centered safe area used by /solutions/
+   and /agents/, so the three hubs read as one family. */
+.sub-main:has(> .plugins-tile-grid) > .plugins-tile-grid,
+.sub-main:has(> .plugins-tile-grid) > .plugins-feature,
+.sub-main:has(> .plugins-tile-grid) > .plugins-explore,
+.sub-main:has(> .plugins-tile-grid) > .plugin-contribute {
+  max-width: 1180px;
+  margin-inline: auto;
+}
+
+/* Codex design collection — grid of tpl-cards. Global (not scoped) so it
+   is shared by the collection page and each skill detail page's
+   "more skills" row, and so it reliably applies to the global tpl-card
+   children. */
+.codex-skill-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 18px;
+}
+@media (max-width: 1080px) {
+  .codex-skill-grid { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 760px) {
+  .codex-skill-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 480px) {
+  .codex-skill-grid { grid-template-columns: 1fr; }
+}
+
+/* Featured curated collection banner (Codex design) on the hub —
+   editorial tpl-card DNA: 1.5px ink border + hard offset hover shadow. */
+.plugins-feature {
+  /* The hero's art plate is a tall positioned pseudo-element that would
+     otherwise paint over this banner (static elements lose to positioned
+     siblings). Lift it into the same layer as the hero copy. */
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr);
+  gap: clamp(20px, 3vw, 44px);
+  align-items: center;
+  margin-bottom: clamp(28px, 4vw, 48px);
+  padding: 16px;
+  border: 1.5px solid var(--ink);
+  background: var(--bone);
+  text-decoration: none;
+  color: inherit;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+.plugins-feature:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0 var(--ink);
+}
+.plugins-feature-cover {
+  width: 100%;
+  height: 100%;
+  max-height: 248px;
+  object-fit: cover;
+  border: 1.5px solid var(--ink);
+  background: var(--paper-warm);
+}
+.plugins-feature-body {
+  padding: 4px 16px 4px 4px;
+}
+.plugins-feature-eyebrow {
+  display: block;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--coral);
+  margin-bottom: 12px;
+}
+.plugins-feature-title {
+  font-size: clamp(1.3rem, 2.4vw, 1.8rem);
+  line-height: 1.18;
+  margin: 0 0 0.5em;
+  text-wrap: balance;
+}
+.plugins-feature-blurb {
+  font-size: 0.98rem;
+  line-height: 1.55;
+  color: var(--ink-soft);
+  margin: 0 0 1.1em;
+  max-width: 54ch;
+}
+.plugins-feature-cta {
+  font-weight: 600;
+  color: var(--ink);
+}
+.plugins-feature:hover .plugins-feature-cta { color: var(--coral); }
+@media (max-width: 760px) {
+  .plugins-feature {
+    grid-template-columns: 1fr;
+  }
+  .plugins-feature-cover {
+    max-height: 200px;
+  }
+}
+/* Centered library hero — eyebrow, title, lead, stats + CTAs stack. Used by the
+   /plugins hub and by curated collection pages via `.plugins-hero-art`.
+   A soft brand-tinted wash sits behind the hero and dissolves into the
+   page (echoing the /stories hero's faded-image treatment). */
+.sub-main:has(> .plugins-tile-grid) > .catalog-head,
+.catalog-head.plugins-hero-art {
+  position: relative;
+  max-width: 820px;
+  margin-inline: auto;
+  text-align: center;
+  padding-top: 28px;
+}
+.sub-main:has(> .plugins-tile-grid) > .catalog-head::before,
+.catalog-head.plugins-hero-art::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  /* Pull up past .sub-main's 140px top padding so the art reaches the very
+     top of the page (behind the transparent sticky nav) with no white gap. */
+  top: -168px;
+  transform: translateX(-50%);
+  width: 100vw;
+  height: 792px;
+  z-index: 0;
+  pointer-events: none;
+  /* Same faded base-image treatment as the /stories hero: a shared OD
+     art plate (1920×1153) that dissolves into the page. Cap at the image's
+     native width so wide screens don't upscale/soften it, and keep the
+     overlay light so the art reads as vividly as the reference. */
+  background:
+    linear-gradient(rgba(250, 250, 250, 0.34), rgba(250, 250, 250, 0.82) 68%, #fafafa 94%),
+    url('/lab-stage-art.webp');
+  background-size: cover;
+  background-position: 50% 16%;
+  background-repeat: no-repeat;
+}
+.sub-main:has(> .plugins-tile-grid) > .catalog-head > *,
+.catalog-head.plugins-hero-art > * {
+  position: relative;
+  z-index: 1;
+}
+.sub-main:has(> .plugins-tile-grid) > .catalog-head .lead,
+.catalog-head.plugins-hero-art .lead {
+  max-width: 640px;
+  margin-inline: auto;
+}
+.plugins-eyebrow {
+  margin: 0 0 14px;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--coral);
+}
+.plugins-stats {
+  list-style: none;
+  margin: 22px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+.plugins-stats li {
+  font-size: 13px;
+  color: var(--ink-mute);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 6px 14px;
+  background: var(--card, #fff);
+}
+.plugins-stats strong {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.plugins-stat-link {
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+.plugins-stat-link a {
+  color: inherit;
+  text-decoration: none;
+}
+.plugins-stat-link:hover {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+.plugins-hero-cta {
+  margin-top: 26px;
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.plugins-star-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.plugins-star-btn svg {
+  color: var(--coral);
+}
+.plugins-star-count {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-mute);
+  padding-left: 2px;
+}
+/* Explore-all section — dense real-plugin grid with filter chips. */
+.plugins-explore {
+  width: 100%;
+  /* Cancel the global `section { padding: 130px 0 }` rule. */
+  padding: 0;
+  margin: 8px 0 8px;
+}
+.plugins-explore .plugins-sec-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.plugins-sec-title {
+  margin: 0;
+  font-family: var(--serif);
+  font-weight: 700;
+  font-size: 26px;
+  letter-spacing: -0.02em;
+}
+.plugins-sec-more {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  white-space: nowrap;
+}
+.plugins-sec-more:hover {
+  color: var(--coral);
+}
+.explore-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 22px;
+  padding: 0;
+}
+.explore-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 550;
+  line-height: 1;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink-mute);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+.explore-tag:hover {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+.explore-tag.is-active {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper);
+}
+.explore-tag .chip-num {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.55;
+}
+.explore-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  /* Equal-height rows so every card lines up (CTA buttons on one line). */
+  grid-auto-rows: 1fr;
+  gap: 14px;
+}
+@media (max-width: 1100px) {
+  .explore-grid { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 800px) {
+  .explore-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 520px) {
+  .explore-grid { grid-template-columns: 1fr; }
+}
+/* Each cell stretches to the row height and the card fills it, so the
+   internal `1fr` excerpt row absorbs the slack and the actions align. */
+.explore-cell {
+  display: flex;
+}
+.explore-cell[hidden] {
+  display: none;
+}
+.explore-grid .tpl-card {
+  width: 100%;
+  height: 100%;
+}
+/* Clamp the description so one long card can't inflate every row. */
+.explore-grid .tpl-excerpt-body {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Category tiles lead with an on-brand cover illustration. The cover
+   bleeds to the card edges, so padding moves onto an inner body. */
+.plugins-tile-covered {
+  padding: 0;
+  overflow: hidden;
+}
+.plugins-tile-cover {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  background: var(--bone);
+  border-bottom: 1px solid var(--line);
+}
+.plugins-tile-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 22px 26px 24px;
+  flex: 1;
+}
+.plugins-tile-covered .plugins-tile-cta {
+  margin-top: auto;
+}
+
+>>>>>>> upstream/main
 .plugins-tile-grid {
+  /* Same reason as .plugins-feature — stay above the hero art plate. */
+  position: relative;
+  z-index: 1;
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 16px;
@@ -2358,3 +2698,1016 @@ dialog.tpl-share-popover .detail-share-dialog-text {
     grid-template-columns: 1fr;
   }
 }
+<<<<<<< HEAD
+=======
+
+/* ---------------------------------------------------------------------------
+ * Agent detail — industrial long-form layout (`/agents/<slug>-design/`).
+ * Opt-in: only rendered when an agent guide carries a `rich` payload. Hero
+ * CTA strip leads with the product, deep sections carry prose + code + images.
+ * ------------------------------------------------------------------------- */
+.agent-hero-cta {
+  margin: 4px 0 8px;
+  padding: 22px 24px;
+  border: 1px solid var(--ink);
+  background: var(--paper-warm);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px 20px;
+}
+.agent-hero-cta p {
+  flex: 1 1 320px;
+  margin: 0;
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+  max-width: 60ch;
+}
+.agent-hero-cta-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.agent-intro p {
+  font-size: 16.5px;
+  color: var(--ink-soft);
+}
+.agent-section-img {
+  margin: 22px 0 6px;
+}
+.agent-section-img img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--line, rgba(38, 38, 38, 0.12));
+  border-radius: 8px;
+  background: var(--paper-warm);
+}
+.agent-section-img figcaption {
+  margin-top: 8px;
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-faint);
+}
+/* Image + prose side by side (editorial). Stacks on mobile. */
+.agent-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 32px;
+  align-items: start;
+  margin: 28px 0 10px;
+}
+.agent-split--img-right .agent-split-img { order: 2; }
+.agent-split-img {
+  margin: 0;
+}
+.agent-split-img img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border: 1px solid var(--line, rgba(38, 38, 38, 0.12));
+  border-radius: 8px;
+  background: var(--paper-warm);
+}
+.agent-split-img figcaption {
+  margin-top: 8px;
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-faint);
+}
+.agent-split-text p { margin: 0 0 12px; }
+.agent-split-text p:last-child { margin-bottom: 0; }
+@media (max-width: 720px) {
+  .agent-split { grid-template-columns: 1fr; gap: 16px; }
+  .agent-split--img-right .agent-split-img { order: 0; }
+}
+.agent-code {
+  margin: 0 0 18px;
+  padding: 16px 18px;
+  border: 1px solid var(--line, rgba(38, 38, 38, 0.12));
+  border-radius: 8px;
+  background: #262626;
+  overflow-x: auto;
+}
+.agent-code code {
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.65;
+  color: #f5f5f5;
+  white-space: pre;
+  background: none;
+  padding: 0;
+}
+.agent-steps {
+  list-style: none;
+  margin: 0 0 18px;
+  padding: 0;
+}
+.agent-steps li {
+  position: relative;
+  padding-left: 1.4em;
+  margin-bottom: 10px;
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--ink-soft);
+}
+.agent-steps li::before {
+  content: "—";
+  position: absolute;
+  left: 0;
+  color: var(--coral);
+}
+.agent-steps li strong { color: var(--ink); }
+@media (max-width: 600px) {
+  .agent-hero-cta { padding: 18px; }
+  .agent-hero-cta-actions .btn { flex: 1 1 auto; text-align: center; }
+}
+
+/* Unify list styling inside agent long-form sections: bare <ul>/<ol> share the
+ * same rhythm and coral marker as `.agent-steps`, so a section that mixes both
+ * (steps + facts list) reads as one consistent list family rather than two. */
+.solution-page .info-section ul,
+.solution-page .info-section ol {
+  list-style: none;
+  margin: 0 0 18px;
+  padding-left: 0;
+  max-width: 70ch;
+}
+/* The coral dash / number markers are only for plain prose lists. Components
+ * that ship their own layout and numbering — the FAQ (.faq-list), the how-to
+ * steps (.solution-steps), and the template / system galleries
+ * (.solution-tpl-grid / .solution-system-grid) — keep the list-style reset
+ * above but opt OUT of the marker + indent below, so they don't get a
+ * duplicate coral counter or a stray dash shifting their cards. */
+.solution-page .info-section ul:not(.solution-tpl-grid):not(.solution-system-grid) li,
+.solution-page .info-section ol:not(.faq-list):not(.solution-steps) li {
+  position: relative;
+  padding-left: 1.4em;
+  margin-bottom: 10px;
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--ink-soft);
+}
+.solution-page .info-section ul:not(.solution-tpl-grid):not(.solution-system-grid) li::before {
+  content: "—";
+  position: absolute;
+  left: 0;
+  color: var(--coral);
+}
+/* Ordered prose lists keep their number, coral, in a monospace marker. */
+.solution-page .info-section ol:not(.faq-list):not(.solution-steps) {
+  counter-reset: agent-ol;
+}
+.solution-page .info-section ol:not(.faq-list):not(.solution-steps) li {
+  padding-left: 1.9em;
+  counter-increment: agent-ol;
+}
+.solution-page .info-section ol:not(.faq-list):not(.solution-steps) li::before {
+  content: counter(agent-ol) ".";
+  position: absolute;
+  left: 0;
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--coral);
+}
+/* steps and the unified lists now share one look; keep steps' bottom margin
+ * tight when it directly precedes a fact list in the same section. */
+.solution-page .info-section .agent-steps + ul,
+.solution-page .info-section .agent-steps + ol { margin-top: 2px; }
+
+/* ---------------------------------------------------------------------------
+ * Solution + agent pages: single-column text content fills the section and
+ * lines up with the full-width hero / feature rows / tables / template grid,
+ * instead of stranding in a ~707px column pinned hard left (the 70ch ul/ol
+ * prose cap above is meant for genuine bullet lists but also catches the FAQ
+ * list and how-to steps, which should fill). Prose is justified so both edges
+ * sit flush. Genuine prose bullet lists keep the readable 70ch measure.
+ * ------------------------------------------------------------------------- */
+.solution-page .info-section > p,
+.solution-page .info-section .faq-list,
+.solution-page .info-section .solution-steps,
+.solution-page .solution-step-text p { max-width: none; }
+.solution-page .info-section > p {
+  text-align: justify;
+  text-justify: inter-character;
+}
+/* Let the step's text column grow to the section's right edge so the step body
+ * lines up with the FAQ rows and the feature/compare tables above and below. */
+.solution-page .solution-step-text { flex: 1 1 auto; min-width: 0; }
+/* The template grid inherits the narrow ~706px cap from the catalog `.tpl-grid`
+ * (built for the dense /templates/ index), which strands its three columns in
+ * the left half of the wide solution canvas. Drop the cap so the grid fills the
+ * section and its cards line up with everything else. */
+.solution-page .info-section ul.solution-tpl-grid,
+.solution-page .info-section ul.solution-system-grid { max-width: none; }
+
+/* ---------------------------------------------------------------------------
+ * Solution pages — UIUX-design skill refresh (skills01).
+ * Keeps the existing Astro page/data model, but remaps the visual layer to
+ * the fixed neutral + brand-green system: Albert Sans, 125% line-height,
+ * token spacing, 8px cards/buttons, neutral buttons, and Remix Icon checks.
+ * ------------------------------------------------------------------------- */
+.info-page.solution-page,
+.info-page.solution-index-page {
+  --od-white: #ffffff;
+  --od-page: #fafafa;
+  --od-soft: #f5f5f5;
+  --od-divide: #f0f0f0;
+  --od-border: #d9d9d9;
+  --od-border-hover: #bfbfbf;
+  --od-muted: #8c8c8c;
+  --od-secondary: #595959;
+  --od-text: #434343;
+  --od-strong: #262626;
+  --od-brand-soft: #f2ffe6;
+  --od-brand-light: #d8ffb5;
+  --od-brand: #63fe13;
+  --od-brand-deep: #218c00;
+  --od-link: #1a74ff;
+  max-width: 1180px;
+  color: var(--od-text);
+}
+.info-page.solution-index-page {
+  max-width: 1180px;
+  margin-inline: auto;
+}
+.info-page.solution-page *,
+.info-page.solution-index-page * {
+  letter-spacing: 0;
+}
+.info-page.solution-page .ri,
+.info-page.solution-index-page .ri {
+  font-family: 'Remix Icon';
+  font-style: normal;
+  font-weight: 400;
+  line-height: 1;
+  -webkit-font-smoothing: antialiased;
+}
+.info-page.solution-page .catalog-head,
+.info-page.solution-index-page .catalog-head {
+  max-width: 760px;
+  margin-bottom: var(--spacing-48);
+  border-top: 1px solid var(--od-border);
+  padding-top: var(--spacing-28);
+}
+.info-page.solution-page .catalog-head {
+  max-width: none;
+  border-top: 0;
+}
+.info-page.solution-index-page > .catalog-head {
+  display: none;
+}
+.info-page.solution-page .catalog-head .label,
+.info-page.solution-index-page .catalog-head .label,
+.info-page.solution-page .info-section > h2,
+.info-page.solution-index-page .info-section > h2 {
+  font-family: var(--sans);
+}
+.info-page.solution-page .catalog-head .label,
+.info-page.solution-index-page .catalog-head .label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-10);
+  margin-bottom: var(--spacing-18);
+  color: var(--od-secondary);
+  font-size: var(--font-size-12, 12px);
+  line-height: 125%;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.info-page.solution-page .catalog-head .label {
+  display: none;
+}
+.info-page.solution-page .catalog-head .label::before,
+.info-page.solution-index-page .catalog-head .label::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: var(--spacing-8);
+  background: var(--od-brand);
+  border: 1px solid var(--od-brand-deep);
+}
+.info-page.solution-page .catalog-head .display,
+.info-page.solution-index-page .catalog-head .display {
+  color: var(--od-strong);
+  font-family: var(--sans);
+  font-size: var(--font-size-64, 64px);
+  font-weight: 700;
+  line-height: 125%;
+  margin-bottom: var(--spacing-24);
+}
+.info-page.solution-page .catalog-head .display em,
+.info-page.solution-index-page .catalog-head .display em,
+.info-page.solution-page h2 em,
+.info-page.solution-index-page h2 em {
+  color: var(--od-brand-deep);
+  font-style: italic;
+}
+.info-page.solution-page .catalog-head .lead,
+.info-page.solution-index-page .catalog-head .lead {
+  max-width: 720px;
+  color: var(--od-secondary);
+  font-size: var(--font-size-20, 20px);
+  line-height: 125%;
+}
+.solution-hero-band {
+  gap: var(--spacing-48);
+  margin: var(--spacing-12) 0 var(--spacing-24);
+  padding: var(--spacing-32);
+  border: 1px solid var(--od-border);
+  border-radius: var(--spacing-8);
+  background: var(--od-white);
+}
+.solution-hero-band .catalog-head {
+  border-top: 0;
+  padding-top: 0;
+  margin-bottom: 0;
+}
+.solution-hero-band .solution-hero img,
+.solution-feature-media img,
+.solution-feature-card img,
+.solution-gallery-item img {
+  border-color: var(--od-border);
+  border-radius: var(--spacing-8);
+  background: var(--od-soft);
+  box-shadow: none;
+}
+.solution-hero-band .solution-hero img {
+  max-height: 420px;
+}
+.solution-hero-cta,
+.info-cta-actions {
+  gap: var(--spacing-12);
+}
+.solution-page .btn,
+.solution-index-page .btn {
+  min-height: 42px;
+  padding: var(--spacing-10) var(--spacing-16);
+  border-radius: var(--spacing-8);
+  font-family: var(--sans);
+  font-size: var(--font-size-14, 14px);
+  font-weight: 500;
+  line-height: 125%;
+  box-shadow: none;
+}
+.solution-page .btn-primary,
+.solution-index-page .btn-primary {
+  background: var(--od-strong);
+  color: var(--od-white);
+  border-color: var(--od-strong);
+}
+.solution-page .btn-primary:hover,
+.solution-index-page .btn-primary:hover {
+  background: var(--od-text);
+}
+.solution-page .btn-ghost,
+.solution-index-page .btn-ghost {
+  background: var(--od-white);
+  color: var(--od-strong);
+  border-color: var(--od-border);
+}
+.solution-page .btn-ghost:hover,
+.solution-index-page .btn-ghost:hover {
+  background: var(--od-soft);
+  border-color: var(--od-border-hover);
+}
+.info-page.solution-page .info-section,
+.info-page.solution-index-page .info-section {
+  padding: var(--spacing-48) 0;
+  border-top: 1px solid var(--od-border);
+}
+.info-page.solution-page .info-section:first-of-type,
+.info-page.solution-index-page .info-section:first-of-type {
+  border-top: 0;
+}
+.info-page.solution-page .info-section > h2,
+.info-page.solution-index-page .info-section > h2 {
+  color: var(--od-strong);
+  font-size: var(--font-size-36, 36px);
+  font-weight: 700;
+  line-height: 125%;
+  margin-bottom: var(--spacing-24);
+}
+.solution-page .info-section > p,
+.solution-index-page .info-section > p {
+  max-width: 760px;
+  color: var(--od-secondary);
+  font-size: var(--font-size-16, 16px);
+  line-height: 125%;
+  text-align: left;
+}
+.tldr-card,
+.solution-step,
+.compare-card,
+.info-cta {
+  border-radius: var(--spacing-8);
+}
+.tldr-card {
+  margin: var(--spacing-32) 0 0;
+  padding: var(--spacing-24);
+  border: 1px solid var(--od-brand-light);
+  background: var(--od-brand-soft);
+}
+.tldr-card h3 {
+  margin: 0 0 var(--spacing-8);
+  color: var(--od-strong);
+  font-family: var(--sans);
+  font-size: var(--font-size-20, 20px);
+  font-weight: 700;
+  line-height: 125%;
+}
+.tldr-card p {
+  margin: 0;
+  color: var(--od-secondary);
+  font-size: var(--font-size-16, 16px);
+  line-height: 125%;
+}
+.solution-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--spacing-16);
+  margin-top: var(--spacing-20);
+  /* Cards hug their own content rather than stretching to the tallest in the
+     row — combined with no min-height below, every card keeps an even 20px
+     inset on all four sides instead of a ballooning bottom gap. */
+  align-items: start;
+}
+.solution-step {
+  display: flex;
+  gap: var(--spacing-16);
+  padding: var(--spacing-20);
+  border: 1px solid var(--od-border);
+  background: var(--od-white);
+}
+.solution-step-index,
+.faq-index {
+  color: var(--od-brand-deep);
+  font-family: var(--sans);
+  font-size: var(--font-size-13, 13px);
+  font-weight: 700;
+  line-height: 125%;
+}
+.solution-step-text h3 {
+  color: var(--od-strong);
+  font-family: var(--sans);
+  font-size: var(--font-size-18, 18px);
+  font-weight: 700;
+  line-height: 125%;
+  margin: 0 0 var(--spacing-8);
+}
+.solution-step-text p {
+  color: var(--od-secondary);
+  font-size: var(--font-size-14, 14px);
+  line-height: 125%;
+}
+.solution-page .solution-tpl-grid,
+.solution-page .solution-system-grid,
+.solution-index-page .compare-grid {
+  gap: var(--spacing-18);
+}
+.solution-page .template-card,
+.solution-page .system-card,
+.solution-index-page .compare-card {
+  border: 1px solid var(--od-border);
+  border-radius: var(--spacing-8);
+  background: var(--od-white);
+  box-shadow: none;
+}
+.solution-page .template-card:hover,
+.solution-page .system-card:hover,
+.solution-index-page .compare-card:hover {
+  border-color: var(--od-border-hover);
+  transform: translateY(-2px);
+}
+.solution-page .template-name,
+.solution-page .system-name,
+.solution-index-page .compare-card h3 {
+  color: var(--od-strong);
+  font-family: var(--sans);
+  font-size: var(--font-size-20, 20px);
+  font-weight: 700;
+  line-height: 125%;
+}
+.solution-page .template-summary,
+.solution-page .system-tagline,
+.solution-index-page .compare-card p {
+  color: var(--od-secondary);
+  font-size: var(--font-size-14, 14px);
+  line-height: 125%;
+}
+.solution-page .template-meta-line,
+.solution-page .system-cat {
+  color: var(--od-muted);
+  font-family: var(--sans);
+  font-size: var(--font-size-12, 12px);
+  line-height: 125%;
+}
+.solution-index-page .compare-card {
+  padding: var(--spacing-24);
+}
+.solution-index-page .compare-card a {
+  color: var(--od-link);
+  font-family: var(--sans);
+  font-size: var(--font-size-14, 14px);
+  font-weight: 500;
+  line-height: 125%;
+}
+.solution-index-page .compare-card .solution-card-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-8);
+  width: fit-content;
+  max-width: 100%;
+  margin-top: var(--spacing-4);
+  color: var(--od-strong);
+  text-decoration: none;
+  text-transform: none;
+  letter-spacing: 0;
+  border: 1px solid var(--od-border);
+  border-bottom-color: var(--od-border);
+}
+.solution-index-page .compare-card .solution-card-action:hover {
+  color: var(--od-strong);
+  border-color: var(--od-border-hover);
+}
+.solution-index-page .compare-card .solution-card-action .ri {
+  flex: 0 0 auto;
+  font-size: var(--font-size-16, 16px);
+}
+.solution-page .compare-table-wrap {
+  border: 1px solid var(--od-border);
+  border-radius: var(--spacing-8);
+  background: var(--od-white);
+}
+.solution-page .compare-table {
+  font-family: var(--sans);
+  font-size: var(--font-size-14, 14px);
+  line-height: 125%;
+}
+.solution-page .compare-table th,
+.solution-page .compare-table td {
+  border-bottom-color: var(--od-divide);
+  padding: var(--spacing-16);
+}
+.solution-page .compare-table thead th {
+  background: var(--od-soft);
+  color: var(--od-secondary);
+  font-family: var(--sans);
+  font-size: var(--font-size-12, 12px);
+  font-weight: 700;
+  line-height: 125%;
+}
+.solution-page .compare-table tbody th {
+  color: var(--od-strong);
+  font-family: var(--sans);
+  font-size: var(--font-size-14, 14px);
+  font-weight: 700;
+  line-height: 125%;
+}
+.solution-page .compare-table td {
+  color: var(--od-secondary);
+}
+.solution-page .compare-table td.yes {
+  color: var(--od-text);
+}
+.solution-page .compare-table td .check {
+  color: var(--od-brand-deep);
+  font-size: var(--font-size-16, 16px);
+  margin-right: var(--spacing-8);
+}
+.solution-page .faq-list {
+  display: grid;
+  gap: var(--spacing-10);
+}
+.solution-page .faq-item {
+  border: 1px solid var(--od-border);
+  border-radius: var(--spacing-8);
+  background: var(--od-white);
+}
+.solution-page .faq-item summary {
+  grid-template-columns: 40px 1fr 32px;
+  gap: var(--spacing-16);
+  padding: var(--spacing-16);
+}
+.solution-page .faq-q {
+  color: var(--od-strong);
+  font-family: var(--sans);
+  font-size: var(--font-size-18, 18px);
+  font-weight: 600;
+  line-height: 125%;
+}
+.solution-page .faq-toggle {
+  border-radius: var(--spacing-8);
+  border-color: var(--od-border);
+}
+.solution-page .faq-a {
+  margin: 0;
+  padding: 0 var(--spacing-16) var(--spacing-16) 72px;
+  max-width: none;
+  color: var(--od-secondary);
+  font-family: var(--sans);
+  font-size: var(--font-size-14, 14px);
+  line-height: 125%;
+}
+.solution-page .info-cta {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--spacing-24);
+  align-items: center;
+  margin-top: var(--spacing-48);
+  padding: var(--spacing-32);
+  border: 1px solid var(--od-border);
+  background: var(--od-white);
+  color: var(--od-text);
+}
+.solution-page .info-cta h2 {
+  color: var(--od-strong);
+  font-family: var(--sans);
+  font-size: var(--font-size-32, 32px);
+  line-height: 125%;
+}
+.solution-page .info-cta p,
+.solution-page .info-cta-meta {
+  color: var(--od-secondary);
+  font-size: var(--font-size-14, 14px);
+  line-height: 125%;
+}
+.solution-page .info-cta-meta {
+  grid-column: 1 / -1;
+  border-top: 1px solid var(--od-divide);
+  padding-top: var(--spacing-16);
+}
+.solution-page .info-cta-meta .stamp {
+  color: var(--od-brand-deep);
+}
+@media (max-width: 880px) {
+  .solution-hero-band,
+  .solution-page .info-cta {
+    grid-template-columns: 1fr;
+  }
+  .solution-steps {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 640px) {
+  .info-page.solution-page .catalog-head .display,
+  .info-page.solution-index-page .catalog-head .display {
+    font-size: var(--font-size-48, 48px);
+  }
+  .info-page.solution-page .catalog-head .lead,
+  .info-page.solution-index-page .catalog-head .lead {
+    font-size: var(--font-size-18, 18px);
+  }
+  .solution-hero-band,
+  .tldr-card,
+  .solution-page .info-cta {
+    padding: var(--spacing-20);
+  }
+  .solution-page .faq-item summary {
+    grid-template-columns: 32px 1fr 32px;
+  }
+  .solution-page .faq-a {
+    padding-left: var(--spacing-16);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Agent rich page is a long-form ARTICLE, not a solution marketing page: ONE
+ * centered single-column measure for everything — heading, hero banner, intro,
+ * TOC, how-to sections, FAQ, CTA all share the same width and the same left
+ * edge. This avoids the two failure modes of a wide solution canvas: prose
+ * stranded in a narrow column pinned hard left (huge empty right), and a wide
+ * 2-column hero whose heading wraps mid-word and whose left edge doesn't line
+ * up with the narrower body below it.
+ * ------------------------------------------------------------------------- */
+.info-page.solution-page.agent-rich {
+  max-width: 1080px;
+  margin-inline: auto;
+}
+/* Everything fills the single measure — drop the inherited 70ch prose caps
+ * (.info-page p, .solution-page .info-section > p) so the intro, section
+ * paragraphs, and lists all reach the column's right edge and line up with the
+ * full-width hero banner instead of re-stranding in a ~640px column. */
+.agent-rich .agent-intro p,
+.agent-rich .info-section > p,
+.agent-rich .info-section ul,
+.agent-rich .info-section ol { max-width: none; }
+
+/* Justify body prose so both the left AND right edge sit flush — the ragged
+ * right edge of plain left-aligned text reads as sloppy for CJK copy. Lists
+ * and captions stay left-aligned (their markers want a hard left edge). */
+.agent-rich .agent-intro p,
+.agent-rich .info-section > p {
+  text-align: justify;
+  text-justify: inter-character;
+}
+
+/* Header fills the full measure too — override the shared .catalog-head 880px
+ * cap and its 720px lead cap so the heading, lead, hero banner, and body all
+ * share one left edge and one right edge. Nothing in the article is narrower
+ * than anything else. */
+.agent-rich-head { margin-bottom: 4px; max-width: none; }
+.agent-rich-head .lead { max-width: none; }
+
+/* Hero banner: full-width editorial illustration under the header. The agent's
+ * own mark is baked into the illustration's central hub, so no overlay needed. */
+.agent-hero-banner {
+  margin: 22px auto 6px;
+  max-width: 560px;
+}
+.agent-hero-banner > img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--paper-warm);
+}
+
+/* ---------------------------------------------------------------------------
+ * Agents hub (/agents/) — all adapters in one grid, no tier split. Tighten the
+ * vertical rhythm: the page is a long list of short sections, so the shared
+ * 44px info-section gap reads as too airy here.
+ * ------------------------------------------------------------------------- */
+/* Center the hub: the article caps at the .info-page 920px measure, so
+   without auto margins it hugs the container's left edge and the page
+   reads lopsided. The breadcrumb above it follows the same measure. */
+.agents-hub {
+  max-width: 1180px;
+  margin-inline: auto;
+}
+.sub-main:has(.agents-hub) > .breadcrumb {
+  max-width: 1180px;
+  margin-inline: auto;
+}
+.agents-hub .info-section + .info-section { margin-top: 68px; }
+.agents-hub .info-section > p { margin-bottom: 12px; }
+.agents-hub .agent-grid {
+  margin-top: 18px;
+  grid-template-columns: repeat(3, 1fr);
+}
+@media (max-width: 1024px) {
+  .agents-hub .agent-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ====================================================================
+   Mobile module rhythm — match the homepage's unified 112px gap (≤880px)
+   across the info-page family, so the gap between major modules is
+   consistent site-wide. The homepage uses 56px section padding (= 112px
+   gaps); here the same 112px gap is produced per layout type. This block
+   is last in source so it wins over the older ≤720/≤640 sub-page rules.
+   ==================================================================== */
+@media (max-width: 880px) {
+  /* Margin-based pages (plain info-page + agents-hub): sections carry no
+     vertical padding, so the gap IS the inter-section margin. */
+  .info-page .info-section + .info-section { margin-top: 112px; }
+  .agents-hub .info-section + .info-section { margin-top: 112px; }
+
+  /* Divider-based pages (solution + solution-index): the gap is the padding
+     above/below each section's border-top rule — 56px a side = 112px. Zero
+     any inherited inter-section margin so it isn't added on top (solution-
+     index was 48 + 42 + 48 = 138px before). */
+  .info-page.solution-page .info-section,
+  .info-page.solution-index-page .info-section { padding: 56px 0; }
+  .info-page.solution-page .info-section + .info-section,
+  .info-page.solution-index-page .info-section + .info-section { margin-top: 0; }
+}
+
+/* ---------------------------------------------------------------------------
+ * codex-design page (.agent-rich-hub): sticky sidebar TOC + consistent image
+ * sizing. Scoped to .agent-rich-hub so no other agent/solution page is
+ * touched — promote to the shared agent-rich layout later if it lands well.
+ * ------------------------------------------------------------------------- */
+.agent-rich-hub .agent-rich-body {
+  display: grid;
+  grid-template-columns: 212px minmax(0, 1fr);
+  gap: 56px;
+  align-items: start;
+}
+.agent-rich-hub .agent-toc-rail {
+  position: sticky;
+  top: 84px;
+  align-self: start;
+}
+.agent-rich-hub .agent-toc-rail .info-toc {
+  display: block;
+  border: 0;
+  border-left: 1px solid var(--line);
+  padding: 0 0 0 16px;
+  margin: 0;
+  text-transform: none;
+  letter-spacing: 0;
+  font-family: var(--sans);
+  font-size: 12.5px;
+}
+.agent-rich-hub .agent-toc-rail .info-toc span {
+  display: block;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-bottom: 12px;
+}
+.agent-rich-hub .agent-toc-rail .info-toc a {
+  display: block;
+  padding: 5px 0;
+  color: var(--ink-soft);
+  border-bottom: 0;
+  line-height: 1.35;
+  transition: color 0.14s ease;
+}
+.agent-rich-hub .agent-toc-rail .info-toc a:hover { color: var(--ink); border-bottom: 0; }
+.agent-rich-hub .agent-toc-rail .info-toc a.is-active { color: var(--coral); font-weight: 600; }
+
+/* One consistent measure for every figure: hero + section illustrations +
+ * product screenshots all cap to the same width and center, so the article's
+ * imagery reads as one set instead of jumping between full-bleed and small. */
+.agent-rich-hub .agent-hero-banner { max-width: 720px; }
+.agent-rich-hub .agent-rich-main .agent-section-img {
+  max-width: 720px;
+  margin: 30px auto 12px;
+}
+.agent-rich-hub .agent-rich-main .agent-section-img figcaption { text-align: center; }
+
+@media (max-width: 900px) {
+  .agent-rich-hub .agent-rich-body { display: block; }
+  .agent-rich-hub .agent-toc-rail { position: static; margin-bottom: 30px; }
+  .agent-rich-hub .agent-toc-rail .info-toc {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    padding: 14px 0;
+  }
+  .agent-rich-hub .agent-toc-rail .info-toc a { padding: 3px 0; }
+}
+
+/* ---------------------------------------------------------------------------
+ * codex-design editorial polish — echoes the /stories/ ".v4" magazine look
+ * (mono eyebrows, bolder tight headings, mono captions, generous rhythm, olive
+ * accent). Scoped to .agent-rich-hub; presentation only, no other page moves.
+ * ------------------------------------------------------------------------- */
+/* Bolder, tighter headings like .v4h2. */
+.agent-rich-hub .info-section > h2 {
+  font-size: clamp(25px, 3vw, 37px);
+  line-height: 1.13;
+  letter-spacing: -0.024em;
+  font-weight: 760;
+  margin-bottom: 22px;
+}
+
+/* Editorial lead: larger, ink-dark opening paragraph. */
+.agent-rich-hub .agent-intro .agent-hero-lead {
+  font-size: clamp(18px, 1.9vw, 22px);
+  line-height: 1.5;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+/* More generous section rhythm. */
+.agent-rich-hub .agent-rich-main .info-section + .info-section { margin-top: 74px; }
+
+/* Cleaner, more editorial figures + mono captions. */
+.agent-rich-hub .agent-rich-main .agent-section-img img {
+  border: 1px solid var(--line-soft, var(--line));
+  border-radius: 12px;
+  background: transparent;
+  box-shadow: 0 18px 44px -30px rgba(20, 18, 11, 0.5);
+}
+.agent-rich-hub .agent-rich-main .agent-section-img figcaption {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  letter-spacing: 0.02em;
+  color: var(--ink-faint);
+  text-align: center;
+  margin-top: 12px;
+}
+.agent-rich-hub .agent-hero-banner > img {
+  box-shadow: 0 18px 44px -30px rgba(20, 18, 11, 0.5);
+}
+
+/* ---------------------------------------------------------------------------
+ * codex-design full-bleed background bands — echoes the /stories/ .v4 look:
+ * a light-scrim hero backdrop and a dark image CTA. Scoped to .agent-rich-hub.
+ * ------------------------------------------------------------------------- */
+.agent-rich-hub .agent-rich-head {
+  position: relative;
+  isolation: isolate;
+  padding-top: 52px;
+  padding-bottom: 12px;
+}
+.agent-rich-hub .agent-rich-head::before {
+  content: "";
+  position: absolute;
+  top: -128px;
+  bottom: -40px;
+  left: calc(50% - 50vw);
+  width: 100vw;
+  background-image:
+    linear-gradient(180deg, rgba(247, 247, 244, 0.55), rgba(247, 247, 244, 0.9) 72%, var(--paper, #f7f7f4)),
+    url(/lab-stage-art.webp);
+  background-size: cover;
+  background-position: center 22%;
+  z-index: -1;
+  pointer-events: none;
+}
+
+/* Dark image CTA band. */
+.agent-rich-hub .agent-rich-main .info-cta {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border: 0;
+  border-radius: 16px;
+  padding: 54px 44px;
+  color: #fff;
+}
+.agent-rich-hub .agent-rich-main .info-cta::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(16, 16, 18, 0.82), rgba(16, 16, 18, 0.9)),
+    url(/cta-bg.webp);
+  background-size: cover;
+  background-position: center;
+  z-index: -1;
+}
+.agent-rich-hub .agent-rich-main .info-cta h2,
+.agent-rich-hub .agent-rich-main .info-cta p { color: #fff; }
+.agent-rich-hub .agent-rich-main .info-cta .stamp { color: rgba(255, 255, 255, 0.85); }
+.agent-rich-hub .agent-rich-main .info-cta .info-cta-meta,
+.agent-rich-hub .agent-rich-main .info-cta .info-cta-meta a,
+.agent-rich-hub .agent-rich-main .info-cta .info-cta-meta .inline-link { color: rgba(255, 255, 255, 0.72); }
+.agent-rich-hub .agent-rich-main .info-cta .btn-primary { background: #fff; color: var(--ink); }
+.agent-rich-hub .agent-rich-main .info-cta .btn-ghost { background: transparent; color: #fff; border-color: rgba(255, 255, 255, 0.45); }
+
+/* Polished terminal-style code cards on the codex page (warm dark + window
+ * chrome), replacing the flat black block. Scoped to .agent-rich-hub. */
+.agent-rich-hub .agent-rich-main .agent-code {
+  position: relative;
+  margin: 24px 0;
+  padding: 42px 20px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 12px;
+  background: linear-gradient(160deg, #221f18, #1a1712);
+  box-shadow: 0 20px 48px -32px rgba(20, 18, 11, 0.62);
+}
+.agent-rich-hub .agent-rich-main .agent-code::before {
+  content: "";
+  position: absolute;
+  top: 16px;
+  left: 18px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #ff5f57;
+  box-shadow: 19px 0 0 #febc2e, 38px 0 0 #28c840;
+}
+.agent-rich-hub .agent-rich-main .agent-code::after {
+  content: "";
+  position: absolute;
+  top: 40px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.07);
+}
+.agent-rich-hub .agent-rich-main .agent-code code {
+  color: #e9e6dd;
+  font-size: 12.5px;
+  line-height: 1.75;
+}
+
+/* Codex design collection — category filter chips. Global (not Astro-scoped)
+   because scoped styles are unreliable for these map-generated buttons in this
+   app; the same thing bit .codex-skill-grid and .dbjobs. */
+.codex-filter { display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 26px; }
+.codex-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 15px;
+  border: 1.5px solid var(--ink);
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease;
+}
+.codex-chip:hover { background: var(--bone); }
+.codex-chip.is-on { background: var(--ink); color: #fff; }
+.codex-chip-n { font-size: 10px; opacity: 0.6; font-variant-numeric: tabular-nums; }
+.tpl-card[hidden] { display: none; }
+>>>>>>> upstream/main

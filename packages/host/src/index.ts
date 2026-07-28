@@ -107,8 +107,39 @@ export type OpenDesignHostUpdaterAction =
   (typeof OPEN_DESIGN_HOST_UPDATER_ACTIONS)[keyof typeof OPEN_DESIGN_HOST_UPDATER_ACTIONS];
 type OpenDesignHostUpdaterStatusAction = Exclude<
   OpenDesignHostUpdaterAction,
+<<<<<<< HEAD
   typeof OPEN_DESIGN_HOST_UPDATER_ACTIONS.QUIT
 >;
+=======
+  OpenDesignHostUpdaterState,
+  OpenDesignHostUpdaterMode,
+  OpenDesignHostUpdaterChannel,
+  OpenDesignHostUpdaterActionOptions,
+  OpenDesignHostUpdaterCapabilitySet,
+  OpenDesignHostUpdaterPathSnapshot,
+  OpenDesignHostUpdaterChecksumSnapshot,
+  OpenDesignHostUpdaterArtifactSnapshot,
+  OpenDesignHostUpdaterProgressSnapshot,
+  OpenDesignHostUpdaterErrorSnapshot,
+  OpenDesignHostUpdaterInstallResult,
+  OpenDesignHostUpdaterReleaseSnapshot,
+  OpenDesignHostUpdaterIncomingSnapshot,
+  OpenDesignHostUpdaterCacheLifecycleTrigger,
+  OpenDesignHostUpdaterReleaseLifecycleState,
+  OpenDesignHostUpdaterCacheLifecycleSummary,
+  OpenDesignHostUpdaterCacheSnapshot,
+  OpenDesignHostUpdaterReinstallReason,
+  OpenDesignHostUpdaterReinstallSnapshot,
+  OpenDesignHostUpdaterStatusSnapshot,
+  OpenDesignHostUpdaterResult,
+  OpenDesignHostUpdaterStatusListener,
+  OpenDesignHostUpdaterMenuLabels,
+  OpenDesignHostUpdaterOpenDialogRequest,
+  OpenDesignHostUpdaterOpenDialogListener,
+  OpenDesignHostBridge,
+  OpenDesignHostGlobalScope,
+} from "./protocol.js";
+>>>>>>> upstream/main
 
 export const OPEN_DESIGN_HOST_UPDATER_STATES = Object.freeze({
   AVAILABLE: "available",
@@ -125,6 +156,7 @@ export const OPEN_DESIGN_HOST_UPDATER_STATES = Object.freeze({
 export type OpenDesignHostUpdaterState =
   (typeof OPEN_DESIGN_HOST_UPDATER_STATES)[keyof typeof OPEN_DESIGN_HOST_UPDATER_STATES];
 
+<<<<<<< HEAD
 export type OpenDesignHostUpdaterMode = "js-incremental" | "package-launcher";
 export type OpenDesignHostUpdaterChannel = "beta" | "nightly" | "preview" | "stable";
 
@@ -670,3 +702,26 @@ export function subscribeHostUpdater(
     return () => undefined;
   }
 }
+=======
+// --- actions: renderer-facing host action wrappers ---
+export {
+  openHostExternalUrl,
+  openHostProjectPath,
+  clearHostBrowserData,
+  captureHostPage,
+  pickAndImportHostProject,
+  pickAndReplaceHostProjectWorkingDir,
+  pickHostWorkingDir,
+  printHostPdf,
+  setHostPetVisible,
+  getHostUpdaterStatus,
+  checkHostUpdater,
+  clearHostUpdaterCache,
+  downloadHostUpdater,
+  installHostUpdater,
+  quitHostAfterUpdaterInstallerOpen,
+  subscribeHostUpdater,
+  subscribeHostUpdaterOpenDialog,
+  setHostUpdaterMenuLabels,
+} from "./actions.js";
+>>>>>>> upstream/main

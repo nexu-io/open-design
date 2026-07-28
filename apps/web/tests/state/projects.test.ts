@@ -3,6 +3,7 @@ import {
   applyPlugin,
   contributeGeneratedPluginToOpenDesign,
   createPluginShareProject,
+  deleteProject,
   importClaudeDesignZip,
   importFolderProject,
   installGeneratedPluginFolder,
@@ -406,5 +407,43 @@ describe('pickLocalFolderPath', () => {
     )));
 
     await expect(pickLocalFolderPath()).rejects.toThrow('cross-origin request rejected');
+  });
+});
+
+describe('deleteProject tabs cache', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const tabsKey = 'open-design:project-tabs:v1:p1';
+
+  function stubWindowStore(): Map<string, string> {
+    const store = new Map<string, string>([[tabsKey, JSON.stringify({ tabs: [], active: null })]]);
+    vi.stubGlobal('window', {
+      localStorage: {
+        getItem: (k: string) => store.get(k) ?? null,
+        setItem: (k: string, v: string) => {
+          store.set(k, v);
+        },
+        removeItem: (k: string) => {
+          store.delete(k);
+        },
+      },
+    });
+    return store;
+  }
+
+  it('prunes the project tabs cache on a successful delete', async () => {
+    const store = stubWindowStore();
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response(null, { status: 200 })));
+    await expect(deleteProject('p1')).resolves.toBe(true);
+    expect(store.has(tabsKey)).toBe(false);
+  });
+
+  it('keeps the tabs cache when the delete fails', async () => {
+    const store = stubWindowStore();
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response(null, { status: 500 })));
+    await expect(deleteProject('p1')).resolves.toBe(false);
+    expect(store.has(tabsKey)).toBe(true);
   });
 });

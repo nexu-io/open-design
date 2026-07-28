@@ -334,7 +334,14 @@ export type PersistedAgentEvent =
       refreshedSourceCount?: number;
       error?: string;
     }
-  | { kind: 'tool_use'; id: string; name: string; input: unknown }
+  | {
+      kind: 'tool_use';
+      id: string;
+      name: string;
+      input: unknown;
+      /** Optional wall-clock ms when the tool first started (e.g. ACP first frame). */
+      startedAt?: number;
+    }
   | { kind: 'tool_result'; toolUseId: string; content: string; isError: boolean }
   | {
       kind: 'plugin_candidate';

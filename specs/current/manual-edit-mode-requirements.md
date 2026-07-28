@@ -515,7 +515,14 @@ Exit criteria:
 
 ## Non-Goals for v1
 
-- Drag-and-drop layout editing.
+> v2 update: drag-based layout editing (free move with alignment guides, edge
+> resize), element duplication, image replace/crop, the floating typography
+> toolbar with range-level formatting, and visible undo/redo (+ keyboard
+> shortcuts) shipped as the direct-manipulation upgrade — see
+> `manual-edit-direct-manipulation.zh-CN.md`. The remaining bullets below still
+> hold.
+
+- Drag-and-drop layout editing (superseded by v2 — see note above).
 - Freeform vector editing.
 - Multi-user collaboration.
 - Auto-layout system.

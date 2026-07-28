@@ -4,6 +4,7 @@ import type { OpenDesignHostUpdaterStatusSnapshot } from '@open-design/host';
 
 import { Icon } from './Icon';
 import { popoverIn } from '../motion';
+import { openExternalUrl } from '../providers/registry';
 import {
   deriveUpdaterModel,
   openUpdaterInstaller,
@@ -29,6 +30,9 @@ type Translator = (key: keyof Dict, vars?: Record<string, string | number>) => s
 
 function versionText(t: Translator, model: UpdaterModel): string {
   const version = model.availableVersion;
+  if (model.reinstall != null) {
+    return version == null ? t('updater.reinstallReadyGeneric') : t('updater.reinstallReadyVersion', { version });
+  }
   if (model.updateKind === 'payload') {
     return version == null ? t('updater.payloadReadyGeneric') : t('updater.payloadReadyVersion', { version });
   }
@@ -339,3 +343,113 @@ export function UpdaterPopup() {
     </div>
   );
 }
+<<<<<<< HEAD
+=======
+
+function ReinstallLearnMoreLink({ t, url }: { t: Translator; url: string }) {
+  return (
+    <button
+      className="updater-popup__link"
+      data-testid="updater-reinstall-learn-more"
+      type="button"
+      onClick={() => void openExternalUrl(url)}
+    >
+      {t('updater.reinstallLearnMore')} <Icon name="external-link" size={12} />
+    </button>
+  );
+}
+
+function UpdaterPopupPanel({
+  allowSilentUpdatesChecked,
+  channelLabel,
+  installError,
+  installBusy,
+  model,
+  quitRecoverable,
+  silentUpdatesPersistError,
+  silentUpdatesPersisting,
+  t,
+  onClose,
+  onInstall,
+  onSilentUpdatesChange,
+}: {
+  allowSilentUpdatesChecked: boolean;
+  channelLabel: string | null;
+  installError: string | null;
+  installBusy: boolean;
+  model: UpdaterModel;
+  quitRecoverable: boolean;
+  silentUpdatesPersistError: string | null;
+  silentUpdatesPersisting: boolean;
+  t: Translator;
+  onClose: () => void;
+  onInstall: () => void;
+  onSilentUpdatesChange: (allowSilentUpdates: boolean) => void;
+}) {
+  return (
+    <motion.section
+      aria-labelledby="updater-popup-title"
+      className="updater-popup is-ready"
+      data-testid="updater-popup"
+      role="dialog"
+      variants={popoverIn}
+      initial="hidden"
+      animate="visible"
+      exit="exit"
+      onMouseDown={(event) => event.stopPropagation()}
+    >
+      <div className="updater-popup__icon">
+        <Icon name="arrow-up" size={20} strokeWidth={2.2} />
+      </div>
+      <div className="updater-popup__body">
+        <h2 id="updater-popup-title">{quitRecoverable ? t('updater.quitFailedTitle') : t('updater.ready')}</h2>
+        {quitRecoverable && model.updateKind === 'payload'
+          ? null
+          : <p>{quitRecoverable ? t('updater.quitFailedBody') : versionText(t, model)}</p>}
+        {!quitRecoverable && model.reinstall?.url != null ? (
+          <ReinstallLearnMoreLink t={t} url={model.reinstall.url} />
+        ) : null}
+        {channelLabel != null ? <span className="updater-popup__badge">{channelLabel}</span> : null}
+        {installError != null ? (
+          <p className="updater-popup__error" data-testid="updater-install-error" role="alert">
+            {installError}
+          </p>
+        ) : null}
+      </div>
+      <div className="updater-popup__footer">
+        {!quitRecoverable ? <div className="updater-popup__preference">
+          <label className="updater-popup__checkbox">
+            <input
+              checked={allowSilentUpdatesChecked}
+              data-testid="updater-silent-update-checkbox"
+              disabled={installBusy || silentUpdatesPersisting}
+              type="checkbox"
+              onChange={(event) => onSilentUpdatesChange(event.currentTarget.checked)}
+            />
+            <span>{t('updater.allowSilentUpdates')}</span>
+          </label>
+          {silentUpdatesPersistError != null ? (
+            <p className="updater-popup__error" data-testid="updater-silent-update-error" role="alert">
+              {silentUpdatesPersistError}
+            </p>
+          ) : null}
+        </div> : null}
+        <div className="updater-popup__actions">
+          <button className="updater-popup__button" disabled={installBusy} type="button" onClick={onClose}>
+            {t('updater.later')}
+          </button>
+          <button
+            className="updater-popup__button updater-popup__button--primary"
+            data-testid="updater-install-button"
+            disabled={installBusy}
+            type="button"
+            onClick={onInstall}
+          >
+            {quitRecoverable ? t('updater.quitButton') : installActionText(t, model, installBusy)}
+          </button>
+        </div>
+      </div>
+    </motion.section>
+  );
+}
+>>>>>>> upstream/main

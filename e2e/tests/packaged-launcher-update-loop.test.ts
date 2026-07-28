@@ -74,7 +74,18 @@ type PackagedLauncherRuntime = {
 
 type PackagedLauncherRuntimeModule = {
   confirmPackagedLauncherRuntime: (runtime: PackagedLauncherRuntime) => Promise<void>;
+<<<<<<< HEAD
   resolvePackagedLauncherRuntime: (config: PackagedConfigLike, paths: PackagedPaths) => Promise<PackagedLauncherRuntime>;
+=======
+  resolvePackagedLauncherRuntime: (
+    config: PackagedConfigLike,
+    paths: PackagedPaths,
+    options?: {
+      currentExecutablePath?: string;
+      delegated?: { generation: number; version: string };
+    },
+  ) => Promise<PackagedLauncherRuntime>;
+>>>>>>> upstream/main
 };
 
 type FixtureServer = {
@@ -378,7 +389,14 @@ describe("packaged launcher payload update loop", () => {
       expect(runtimeAfterApply.active).toEqual({ generation: 1, version: testCase.promotedVersion });
       expect(runtimeAfterApply.lastSuccessful).toEqual({ generation: 0, version: testCase.currentVersion });
 
+<<<<<<< HEAD
       const promoted = await resolvePackagedLauncherRuntime(config, paths);
+=======
+      const promoted = await resolvePackagedLauncherRuntime(config, paths, {
+        currentExecutablePath: testCase.expectedPayloadExecutablePath(paths.installationRoot, config.namespace),
+        delegated: { generation: 1, version: testCase.promotedVersion },
+      });
+>>>>>>> upstream/main
       expect(promoted.source).toBe("payload");
       expect(promoted.targetVersion).toBe(testCase.promotedVersion);
       expect(promoted.config.appVersion).toBe(testCase.promotedVersion);

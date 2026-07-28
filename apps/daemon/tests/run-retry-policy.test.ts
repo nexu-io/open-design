@@ -83,6 +83,119 @@ describe('decideSafeRunRetry', () => {
     ).toBe(true);
   });
 
+<<<<<<< HEAD
+=======
+  it('allows named transient process-exit details before side effects', () => {
+    for (const failure_detail of [
+      'agent_protocol_error',
+      'qoder_stop_sequence',
+      'session_resume_expired',
+      'stream_error',
+      'fatal_rpc_error',
+    ] as const) {
+      expect(
+        decide({
+          failure: {
+            failure_category: 'process_exit',
+            failure_detail,
+            failure_stage: 'child_close',
+            retryable: true,
+          },
+        }),
+      ).toMatchObject({
+        shouldRetry: true,
+        retryReason: 'transient_failure',
+      });
+    }
+  });
+
+  it('keeps upstream client errors out of the transient retry allowlist', () => {
+    expect(
+      decide({
+        failure: {
+          failure_category: 'upstream_unavailable',
+          failure_detail: 'upstream_client_error',
+          failure_stage: 'first_token_wait',
+          retryable: true,
+        },
+      }),
+    ).toMatchObject({
+      shouldRetry: false,
+      retrySuppressedReason: 'non_retryable_category',
+    });
+  });
+
+  it.each([
+    'request_too_large',
+    'attachment_media_type_unsupported',
+    'tool_schema_invalid',
+    'prompt_tokenization_failed',
+    'provider_resource_not_found',
+  ] as const)('keeps %s out of the transient retry allowlist', (failure_detail) => {
+    expect(
+      decide({
+        failure: {
+          failure_category: failure_detail === 'request_too_large'
+            ? 'prompt_too_large'
+            : 'upstream_unavailable',
+          failure_detail,
+          failure_stage: 'prompt_send',
+          retryable: true,
+        },
+      }),
+    ).toMatchObject({
+      shouldRetry: false,
+      retrySuppressedReason: 'non_retryable_category',
+    });
+  });
+
+  it('uses unsafe_failure_stage for transient categories after unsafe output phases', () => {
+    expect(
+      decide({
+        failure: {
+          failure_category: 'empty_output',
+          failure_detail: 'empty_output',
+          failure_stage: 'artifact_write',
+          retryable: true,
+        },
+      }),
+    ).toMatchObject({
+      shouldRetry: false,
+      retrySuppressedReason: 'unsafe_failure_stage',
+    });
+
+    expect(
+      decide({
+        failure: {
+          failure_category: 'timeout',
+          failure_detail: 'inactivity_timeout',
+          failure_stage: 'child_close',
+          retryable: true,
+        },
+      }),
+    ).toMatchObject({
+      shouldRetry: false,
+      retrySuppressedReason: 'unsafe_failure_stage',
+    });
+
+    for (const failure_stage of ['tool_outstanding', 'post_tool_resume'] as const) {
+      expect(
+        decide({
+          failure: {
+            failure_category: 'timeout',
+            failure_detail: 'inactivity_timeout',
+            failure_stage,
+            retryable: true,
+          },
+        }),
+      ).toMatchObject({
+        shouldRetry: false,
+        retrySuppressedReason: 'unsafe_failure_stage',
+      });
+    }
+  });
+
+>>>>>>> upstream/main
   it('does not retry successful or cancelled terminal results', () => {
     expect(decide({ result: 'success' })).toMatchObject({
       shouldRetry: false,

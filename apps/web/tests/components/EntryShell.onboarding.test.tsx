@@ -417,7 +417,11 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     expect(screen.queryByText('Signing in…')).toBeNull();
   });
 
+<<<<<<< HEAD
   it('clears AMR login pending when the user switches to another runtime', async () => {
+=======
+  it('clears AMR login pending when canceled and allows a fresh sign-in attempt', async () => {
+>>>>>>> upstream/main
     const fetchMock = vi.fn(async (input, init) => {
       const url = String(input);
       if (url.endsWith('/api/integrations/vela/status')) {
@@ -442,7 +446,26 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     await act(async () => {});
 
     expect(screen.queryByText('Signing in…')).toBeNull();
+<<<<<<< HEAD
     expect(screen.getByRole('button', { name: /^Continue$/i }).hasAttribute('disabled')).toBe(false);
+=======
+    // The landing CTA returns to its signed-out copy and is enabled again,
+    // and the secondary runtime links are available once more.
+    const cloudButton = await screen.findByRole('button', {
+      name: /Sign in to Open Design/i,
+    });
+    expect(cloudButton.hasAttribute('disabled')).toBe(false);
+    expect(screen.getByRole('button', { name: /Local coding agent/i })).toBeTruthy();
+
+    fireEvent.click(cloudButton);
+    await act(async () => {});
+    expect(screen.getByText('Signing in…')).toBeTruthy();
+    const loginCalls = fetchMock.mock.calls.filter(
+      ([input, init]) =>
+        String(input).endsWith('/api/integrations/vela/login') && init?.method === 'POST',
+    );
+    expect(loginCalls).toHaveLength(2);
+>>>>>>> upstream/main
   });
 
   it('cancels AMR login and re-enables onboarding after the login timeout', async () => {

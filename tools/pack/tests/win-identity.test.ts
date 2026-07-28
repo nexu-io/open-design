@@ -95,6 +95,88 @@ describe("resolveWinInstallIdentity", () => {
       source.indexOf("Call SyncLauncherRuntime"),
     );
     expect(source.indexOf("Call SyncLauncherRuntime")).toBeLessThan(source.indexOf('Push "install section done"'));
+<<<<<<< HEAD
+=======
+  });
+
+  it.skipIf(process.platform !== "win32")("writes cleanup metadata when installer runtime sync supersedes an older runtime", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-pack-launcher-sync-"));
+    const runtimePath = join(root, "launcher", "channels", "beta", "namespaces", "cf", "runtime.json");
+    const attemptsPath = join(root, "launcher", "channels", "beta", "namespaces", "cf", "state", "attempt.json");
+    const cleanupPath = join(root, "launcher", "channels", "beta", "namespaces", "cf", "state", "cleanup.json");
+    const scriptPath = join(root, "sync-launcher-runtime.ps1");
+
+    try {
+      await mkdir(join(root, "launcher", "channels", "beta", "namespaces", "cf", "state"), { recursive: true });
+      await writeFile(
+        runtimePath,
+        `${JSON.stringify({
+          active: { generation: 1, version: "0.10.2-beta.9" },
+          channel: "beta",
+          lastSuccessful: { generation: 0, version: "0.10.1-beta.1" },
+          namespace: "cf",
+          schemaVersion: 1,
+        })}\n`,
+        "utf8",
+      );
+      await writeFile(
+        attemptsPath,
+        `${JSON.stringify({
+          channel: "beta",
+          generation: 1,
+          namespace: "cf",
+          schemaVersion: 1,
+          version: "0.10.2-beta.9",
+        })}\n`,
+        "utf8",
+      );
+      await writeFile(scriptPath, createLauncherRuntimeSyncPowerShellScript(), "utf8");
+
+      await execFileAsync("powershell.exe", [
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        scriptPath,
+        "-RuntimePath",
+        runtimePath,
+        "-AttemptsPath",
+        attemptsPath,
+        "-CleanupPath",
+        cleanupPath,
+        "-Channel",
+        "beta",
+        "-Namespace",
+        "cf",
+        "-Version",
+        "0.10.2-beta.10",
+      ], { windowsHide: true });
+
+      expect(JSON.parse(await readFile(runtimePath, "utf8"))).toMatchObject({
+        active: { generation: 0, version: "0.10.2-beta.10" },
+        channel: "beta",
+        lastSuccessful: { generation: 0, version: "0.10.2-beta.10" },
+        namespace: "cf",
+        schemaVersion: 1,
+      });
+      await expect(access(attemptsPath)).rejects.toThrow();
+      expect(JSON.parse(await readFile(cleanupPath, "utf8"))).toMatchObject({
+        channel: "beta",
+        currentVersion: "0.10.2-beta.10",
+        namespace: "cf",
+        version: 1,
+        versions: expect.arrayContaining([
+          expect.objectContaining({ reason: "older-than-bound-package", state: "deprecated", version: "0.10.2-beta.9" }),
+          expect.objectContaining({ reason: "older-than-bound-package", state: "deprecated", version: "0.10.1-beta.1" }),
+          expect.objectContaining({ reason: "current-bound-package", state: "retained", version: "0.10.2-beta.10" }),
+        ]),
+      });
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+>>>>>>> upstream/main
   });
 
   it("keeps installer diagnostic log events ASCII-only for silent overwrite", async () => {

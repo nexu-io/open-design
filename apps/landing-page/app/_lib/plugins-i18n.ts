@@ -39,6 +39,30 @@ export interface PluginsCopy {
   hubLabel: string;
   hubHeading: (n: number) => string;
   hubLead: string;
+<<<<<<< HEAD
+=======
+  /** Keyword-led <title> for the /plugins/ hub (targets "claude skills marketplace / directory"). EN baseline; zh-CN/zh-TW localized, rest fall back. */
+  hubMetaTitle: (n: number) => string;
+  hubMetaDescription: string;
+
+  /** Featured curated-collection banner on the hub (currently Codex design). */
+  hubFeatureEyebrow: string;
+  hubFeatureTitle: string;
+  hubFeatureBlurb: string;
+  hubFeatureCta: string;
+
+  /** Hub hero + explore section. EN baseline; zh localized, rest fall back to EN. */
+  hubEyebrow: string;
+  hubUnitPlugins: string;
+  hubStatOpen: string;
+  hubStatAgents: string;
+  hubCtaDownload: string;
+  hubExploreTitle: string;
+  hubFilterAll: string;
+  hubViewAll: string;
+  /** Localized labels for the curated explore filter tags. */
+  tagLabels: Readonly<Record<string, string>>;
+>>>>>>> upstream/main
 
   tileTemplates: string;
   tileSkills: string;
@@ -150,7 +174,30 @@ const en: PluginsCopy = {
   hubLabel: 'Plugin library',
   hubHeading: (n) => `${n} composable pieces.`,
   hubLead:
+<<<<<<< HEAD
     'Open Design is built around four kinds of plugin. Templates and Skills are what your agent runs; Systems and Craft are how it stays on-brand and accessible. Pick a section to drill in, or jump straight to a slug if you already know which one you want.',
+=======
+    'Ready-made design systems, skills, and templates that plug straight into your AI agent — so it designs from a real starting point instead of a blank page. Browse by agent, brand, or type, or jump to a slug you already know.',
+  hubMetaTitle: (n) => `Claude Skills Marketplace — ${n}+ Plugins | Open Design`,
+  hubMetaDescription:
+    'Browse the open-source Claude skills marketplace — design skills, systems, templates and craft your coding agent runs directly. Works with Claude, Codex, Cursor.',
+
+  hubFeatureEyebrow: 'Curated · Codex design',
+  hubFeatureTitle: 'The design plugins that make Codex ship real UI',
+  hubFeatureBlurb:
+    'A hand-picked set of plugins — aesthetic skills and design-system rules — that give OpenAI Codex taste. Install one, or run them all inside Open Design.',
+  hubFeatureCta: 'Explore the collection',
+
+  hubEyebrow: 'Plugin library',
+  hubUnitPlugins: 'plugins',
+  hubStatOpen: 'Open source · Apache-2.0',
+  hubStatAgents: 'Works with Claude, Codex & 21 agents',
+  hubCtaDownload: 'Download the app',
+  hubExploreTitle: 'Explore all resources',
+  hubFilterAll: 'All',
+  hubViewAll: 'See all',
+  tagLabels: { web: 'Web', deck: 'Deck', marketing: 'Marketing', prototype: 'Prototype', desktop: 'Desktop', brand: 'Brand', editorial: 'Editorial', motion: 'Motion' },
+>>>>>>> upstream/main
 
   tileTemplates: 'Templates',
   tileSkills: 'Skills',
@@ -346,8 +393,18 @@ const en: PluginsCopy = {
 
 const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
   zh: {
+<<<<<<< HEAD
     hubLabel: '插件库',
     hubHeading: (n) => `${n} 个可组合的构件。`,
+=======
+    hubFeatureEyebrow: '精选 · Codex 设计',
+    hubFeatureTitle: '让 Codex 做出真正能用的 UI 的设计插件',
+    hubFeatureBlurb:
+      '一组精挑细选的插件——审美类 Skill 和设计系统规则——让 OpenAI Codex 有审美。装一个，或者在 Open Design 里全部跑起来。',
+    hubFeatureCta: '浏览精选合集',
+    hubLabel: 'Agent 设计插件库',
+    hubHeading: () => `Agent 设计插件库`,
+>>>>>>> upstream/main
     hubLead:
       'Open Design 围绕四类插件构建：Templates 与 Skills 是 agent 真正运行的内容，Systems 与 Craft 让它保持品牌一致和可访问。点进任意一类深入查看，或直接跳到你已经知道 slug 的那一项。',
     tileTemplates: '模板',
@@ -613,7 +670,29 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     },
   },
   ja: {
+<<<<<<< HEAD
     hubLabel: 'プラグインライブラリ', hubHeading: (n) => `${n} 個の組み合わせ可能なパーツ。`,
+=======
+    hubFeatureEyebrow: 'キュレーション · Codex デザイン',
+    hubFeatureTitle: 'Codex に本物の UI を作らせるデザインプラグイン',
+    hubFeatureBlurb:
+      'OpenAI Codex にセンスを与える、厳選したプラグイン集 — 美意識のスキルとデザインシステムのルール。ひとつだけ入れるのも、Open Design ですべて動かすのも自由です。',
+    hubFeatureCta: 'コレクションを見る',
+    hubMetaTitle: (n) => `Claude Skills マーケットプレイス — ${n}+ プラグイン | Open Design`,
+    hubMetaDescription: 'オープンソースの Claude skills マーケットプレイス——デザイン skills、デザインシステム、テンプレート、craft を coding agent が直接実行。Claude、Codex、Cursor に対応。',
+    skillsMetaTitle: (n) => `デザイン向け Claude Skills — ${n} 個のオープンソース skills | Open Design`,
+    skillsMetaDescription: 'オープンソースのデザイン向け Claude skills——コピーライティング、配色、クリエイティブディレクションなどを coding agent がタスク中に読み込み。Claude、Codex、Cursor に対応。',
+    hubLabel: 'プラグインライブラリ', hubHeading: () => `AI エージェントのためのデザインプラグインライブラリ`,
+    hubLead: '既製のデザインシステム、スキル、テンプレートを AI エージェントにそのまま組み込み——白紙からではなく、実用的な出発点からデザインできます。エージェント・ブランド・種類で探すか、目的の項目に直接ジャンプ。',
+    hubEyebrow: 'プラグインライブラリ',
+    hubUnitPlugins: '個のプラグイン',
+    hubStatAgents: 'Claude、Codex など 21 種類のエージェントに対応',
+    hubCtaDownload: 'アプリをダウンロード',
+    hubExploreTitle: 'すべてのリソースを見る',
+    hubFilterAll: 'すべて',
+    hubViewAll: 'すべて見る',
+    tagLabels: { web: 'Web', deck: 'スライド', marketing: 'マーケティング', prototype: 'プロトタイプ', desktop: 'デスクトップ', brand: 'ブランド', editorial: 'エディトリアル', motion: 'モーション' },
+>>>>>>> upstream/main
     tileTemplates: 'テンプレート', tileSkills: 'スキル', tileSystems: 'システム', tileCraft: 'クラフト',
     browseTemplates: 'テンプレートを見る', browseSkills: 'スキルを見る', browseSystems: 'システムを見る', browseCraft: 'クラフトを見る',
     artifactKindLabel: '成果物の種類', sceneLabel: 'シーン', allChip: 'すべて',
@@ -762,7 +841,29 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     },
   },
   ko: {
+<<<<<<< HEAD
     hubLabel: '플러그인 라이브러리', hubHeading: (n) => `${n}개의 조합 가능한 구성요소.`,
+=======
+    hubFeatureEyebrow: '큐레이션 · Codex 디자인',
+    hubFeatureTitle: 'Codex가 진짜 UI를 만들게 하는 디자인 플러그인',
+    hubFeatureBlurb:
+      'OpenAI Codex에 안목을 더해 주는 엄선된 플러그인 모음 — 미감을 잡아 주는 스킬과 디자인 시스템 규칙. 하나만 설치하거나, Open Design 안에서 전부 실행하세요.',
+    hubFeatureCta: '컬렉션 둘러보기',
+    hubMetaTitle: (n) => `Claude Skills 마켓플레이스 — ${n}+ 플러그인 | Open Design`,
+    hubMetaDescription: '오픈소스 Claude skills 마켓플레이스 둘러보기——디자인 skills, 디자인 시스템, 템플릿, craft를 coding agent가 바로 실행합니다. Claude, Codex, Cursor 지원.',
+    skillsMetaTitle: (n) => `디자인용 Claude Skills — 오픈소스 skills ${n}개 | Open Design`,
+    skillsMetaDescription: '오픈소스 디자인용 Claude skills 둘러보기——카피라이팅, 컬러, 크리에이티브 디렉션 등을 coding agent가 작업 중에 불러옵니다. Claude, Codex, Cursor 지원.',
+    hubLabel: '플러그인 라이브러리', hubHeading: () => `AI 에이전트를 위한 디자인 플러그인 라이브러리`,
+    hubLead: '이미 만들어진 디자인 시스템, 스킬, 템플릿을 AI 에이전트에 바로 연결하세요——빈 화면이 아니라 실제 출발점에서 디자인합니다. 에이전트·브랜드·유형으로 찾거나 원하는 항목으로 바로 이동하세요.',
+    hubEyebrow: '플러그인 라이브러리',
+    hubUnitPlugins: '개 플러그인',
+    hubStatAgents: 'Claude, Codex 등 21종 에이전트 지원',
+    hubCtaDownload: '앱 다운로드',
+    hubExploreTitle: '모든 리소스 둘러보기',
+    hubFilterAll: '전체',
+    hubViewAll: '전체 보기',
+    tagLabels: { web: '웹', deck: '슬라이드', marketing: '마케팅', prototype: '프로토타입', desktop: '데스크톱', brand: '브랜드', editorial: '에디토리얼', motion: '모션' },
+>>>>>>> upstream/main
     tileTemplates: '템플릿', tileSkills: '스킬', tileSystems: '시스템', tileCraft: '크래프트',
     browseTemplates: '템플릿 보기', browseSkills: '스킬 보기', browseSystems: '시스템 보기', browseCraft: '크래프트 보기',
     artifactKindLabel: '산출물 종류', sceneLabel: '장면', allChip: '전체',
@@ -911,7 +1012,29 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     },
   },
   de: {
+<<<<<<< HEAD
     hubLabel: 'Plugin-Bibliothek', hubHeading: (n) => `${n} kombinierbare Bausteine.`,
+=======
+    hubFeatureEyebrow: 'Kuratiert · Codex Design',
+    hubFeatureTitle: 'Die Design-Plugins, mit denen Codex echtes UI liefert',
+    hubFeatureBlurb:
+      'Eine handverlesene Sammlung von Plugins — ästhetische Skills und Design-System-Regeln —, die OpenAI Codex Geschmack geben. Installiere eines oder lass sie alle in Open Design laufen.',
+    hubFeatureCta: 'Sammlung entdecken',
+    hubMetaTitle: (n) => `Claude Skills Marktplatz — ${n}+ Plugins | Open Design`,
+    hubMetaDescription: 'Durchstöbere den Open-Source-Marktplatz für Claude skills——Design-skills, Designsysteme, Vorlagen und craft, die dein coding agent direkt ausführt. Funktioniert mit Claude, Codex, Cursor.',
+    skillsMetaTitle: (n) => `Claude Skills für Design — ${n} Open-Source-skills | Open Design`,
+    skillsMetaDescription: 'Durchstöbere Open-Source Claude skills fürs Design——Texten, Farbe, Creative Direction und mehr, die dein coding agent mitten in der Aufgabe lädt. Mit Claude, Codex & Cursor.',
+    hubLabel: 'Plugin-Bibliothek', hubHeading: () => `Die Design-Plugin-Bibliothek für KI-Agenten`,
+    hubLead: 'Fertige Designsysteme, Skills und Vorlagen, die direkt in deinen KI-Agenten einfließen — damit er von einem echten Ausgangspunkt statt einem leeren Blatt gestaltet. Stöbere nach Agent, Marke oder Typ oder springe direkt zum gewünschten Eintrag.',
+    hubEyebrow: 'Plugin-Bibliothek',
+    hubUnitPlugins: 'Plugins',
+    hubStatAgents: 'Funktioniert mit Claude, Codex & 21 Agenten',
+    hubCtaDownload: 'App herunterladen',
+    hubExploreTitle: 'Alle Ressourcen entdecken',
+    hubFilterAll: 'Alle',
+    hubViewAll: 'Alle ansehen',
+    tagLabels: { web: 'Web', deck: 'Deck', marketing: 'Marketing', prototype: 'Prototyp', desktop: 'Desktop', brand: 'Marke', editorial: 'Editorial', motion: 'Motion' },
+>>>>>>> upstream/main
     tileTemplates: 'Vorlagen', tileSkills: 'Skills', tileSystems: 'Systeme', tileCraft: 'Handwerk',
     browseTemplates: 'Vorlagen ansehen', browseSkills: 'Skills ansehen', browseSystems: 'Systeme ansehen', browseCraft: 'Handwerk ansehen',
     artifactKindLabel: 'Artefakt-Art', sceneLabel: 'Szene', allChip: 'Alle',
@@ -1060,7 +1183,30 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     },
   },
   fr: {
+<<<<<<< HEAD
     hubLabel: 'Bibliothèque de plugins', hubHeading: (n) => `${n} éléments composables.`,
+=======
+    hubFeatureEyebrow: 'Sélection · Design Codex',
+    hubFeatureTitle:
+      'Les skills design qui font livrer à Codex de vraies interfaces',
+    hubFeatureBlurb:
+      'Une sélection de plugins — des skills esthétiques et des règles de design system — qui donnent du goût à OpenAI Codex. Installez-en un, ou faites-les tourner tous dans Open Design.',
+    hubFeatureCta: 'Explorer la collection',
+    hubMetaTitle: (n) => `Marketplace Claude Skills — ${n}+ plugins | Open Design`,
+    hubMetaDescription: 'Explorez la marketplace open source de Claude skills——skills de design, design systems, modèles et craft que votre coding agent exécute directement. Compatible Claude, Codex, Cursor.',
+    skillsMetaTitle: (n) => `Claude Skills pour le design — ${n} skills open source | Open Design`,
+    skillsMetaDescription: 'Explorez les Claude skills open source pour le design——rédaction, couleur, direction créative et plus, que votre coding agent charge en pleine tâche. Compatible Claude, Codex et Cursor.',
+    hubLabel: 'Bibliothèque de plugins', hubHeading: () => `La bibliothèque de plugins de design pour agents IA`,
+    hubLead: 'Des systèmes de design, skills et modèles prêts à l\'emploi qui s\'intègrent directement à votre agent IA — pour qu\'il conçoive à partir d\'un vrai point de départ, pas d\'une page blanche. Parcourez par agent, marque ou type, ou accédez directement à l\'élément voulu.',
+    hubEyebrow: 'Bibliothèque de plugins',
+    hubUnitPlugins: 'plugins',
+    hubStatAgents: 'Compatible avec Claude, Codex et 21 agents',
+    hubCtaDownload: 'Télécharger l\'app',
+    hubExploreTitle: 'Explorer toutes les ressources',
+    hubFilterAll: 'Tout',
+    hubViewAll: 'Tout voir',
+    tagLabels: { web: 'Web', deck: 'Deck', marketing: 'Marketing', prototype: 'Prototype', desktop: 'Desktop', brand: 'Marque', editorial: 'Éditorial', motion: 'Motion' },
+>>>>>>> upstream/main
     tileTemplates: 'Modèles', tileSkills: 'Skills', tileSystems: 'Systèmes', tileCraft: 'Artisanat',
     browseTemplates: 'Parcourir les modèles', browseSkills: 'Parcourir les skills', browseSystems: 'Parcourir les systèmes', browseCraft: 'Parcourir l’artisanat',
     artifactKindLabel: 'Type d’artefact', sceneLabel: 'Scène', allChip: 'Tous',
@@ -1209,7 +1355,29 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     },
   },
   ru: {
+<<<<<<< HEAD
     hubLabel: 'Библиотека плагинов', hubHeading: (n) => `${n} компонуемых элементов.`,
+=======
+    hubFeatureEyebrow: 'Подборка · дизайн с Codex',
+    hubFeatureTitle: 'Дизайн-плагины, с которыми Codex выдаёт настоящий UI',
+    hubFeatureBlurb:
+      'Отобранный вручную набор плагинов — скиллы для эстетики и правила дизайн-систем, — которые дают OpenAI Codex вкус. Поставьте один или запустите их все внутри Open Design.',
+    hubFeatureCta: 'Смотреть подборку',
+    hubMetaTitle: (n) => `Маркетплейс Claude Skills — ${n}+ плагинов | Open Design`,
+    hubMetaDescription: 'Откройте опенсорсный маркетплейс Claude skills——дизайн-skills, дизайн-системы, шаблоны и craft, которые ваш coding agent запускает напрямую. Работает с Claude, Codex, Cursor.',
+    skillsMetaTitle: (n) => `Claude Skills для дизайна — ${n} опенсорсных skills | Open Design`,
+    skillsMetaDescription: 'Откройте опенсорсные Claude skills для дизайна——копирайтинг, цвет, креативное руководство и не только, что ваш coding agent подгружает по ходу задачи. Работает с Claude, Codex и Cursor.',
+    hubLabel: 'Библиотека плагинов', hubHeading: () => `Библиотека дизайн-плагинов для ИИ-агентов`,
+    hubLead: 'Готовые дизайн-системы, навыки и шаблоны, которые встраиваются прямо в вашего ИИ-агента — чтобы он проектировал с реальной отправной точки, а не с чистого листа. Ищите по агенту, бренду или типу либо переходите сразу к нужному.',
+    hubEyebrow: 'Библиотека плагинов',
+    hubUnitPlugins: 'плагинов',
+    hubStatAgents: 'Работает с Claude, Codex и 21 агентом',
+    hubCtaDownload: 'Скачать приложение',
+    hubExploreTitle: 'Все ресурсы',
+    hubFilterAll: 'Все',
+    hubViewAll: 'Смотреть все',
+    tagLabels: { web: 'Веб', deck: 'Слайды', marketing: 'Маркетинг', prototype: 'Прототип', desktop: 'Десктоп', brand: 'Бренд', editorial: 'Редакционный', motion: 'Моушн' },
+>>>>>>> upstream/main
     tileTemplates: 'Шаблоны', tileSkills: 'Скиллы', tileSystems: 'Системы', tileCraft: 'Ремесло',
     browseTemplates: 'Все шаблоны', browseSkills: 'Все скиллы', browseSystems: 'Все системы', browseCraft: 'Все правила ремесла',
     artifactKindLabel: 'Тип артефакта', sceneLabel: 'Сцена', allChip: 'Все',
@@ -1358,7 +1526,30 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     },
   },
   es: {
+<<<<<<< HEAD
     hubLabel: 'Biblioteca de plugins', hubHeading: (n) => `${n} piezas componibles.`,
+=======
+    hubFeatureEyebrow: 'Selección · Diseño con Codex',
+    hubFeatureTitle:
+      'Las skills de diseño que hacen que Codex entregue UI de verdad',
+    hubFeatureBlurb:
+      'Una selección de plugins — skills de estética y reglas de design system — que le dan criterio a OpenAI Codex. Instala uno o ejecútalos todos dentro de Open Design.',
+    hubFeatureCta: 'Explorar la colección',
+    hubMetaTitle: (n) => `Marketplace de Claude Skills — ${n}+ plugins | Open Design`,
+    hubMetaDescription: 'Explora el marketplace open source de Claude skills——skills de diseño, design systems, plantillas y craft que tu coding agent ejecuta directamente. Compatible con Claude, Codex, Cursor.',
+    skillsMetaTitle: (n) => `Claude Skills para diseño — ${n} skills open source | Open Design`,
+    skillsMetaDescription: 'Explora los Claude skills open source para diseño——copywriting, color, dirección creativa y más que tu coding agent carga durante la tarea. Compatible con Claude, Codex y Cursor.',
+    hubLabel: 'Biblioteca de plugins', hubHeading: () => `La biblioteca de plugins de diseño para agentes de IA`,
+    hubLead: 'Sistemas de diseño, skills y plantillas listos para usar que se integran directamente en tu agente de IA — para que diseñe desde un punto de partida real, no una página en blanco. Explora por agente, marca o tipo, o salta directo al que ya conoces.',
+    hubEyebrow: 'Biblioteca de plugins',
+    hubUnitPlugins: 'plugins',
+    hubStatAgents: 'Compatible con Claude, Codex y 21 agentes',
+    hubCtaDownload: 'Descargar la app',
+    hubExploreTitle: 'Explorar todos los recursos',
+    hubFilterAll: 'Todos',
+    hubViewAll: 'Ver todo',
+    tagLabels: { web: 'Web', deck: 'Deck', marketing: 'Marketing', prototype: 'Prototipo', desktop: 'Escritorio', brand: 'Marca', editorial: 'Editorial', motion: 'Motion' },
+>>>>>>> upstream/main
     tileTemplates: 'Plantillas', tileSkills: 'Skills', tileSystems: 'Sistemas', tileCraft: 'Oficio',
     browseTemplates: 'Ver plantillas', browseSkills: 'Ver skills', browseSystems: 'Ver sistemas', browseCraft: 'Ver oficio',
     artifactKindLabel: 'Tipo de artefacto', sceneLabel: 'Escena', allChip: 'Todos',
@@ -1507,7 +1698,29 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     },
   },
   'pt-br': {
+<<<<<<< HEAD
     hubLabel: 'Biblioteca de plugins', hubHeading: (n) => `${n} peças combináveis.`,
+=======
+    hubFeatureEyebrow: 'Curadoria · Design com Codex',
+    hubFeatureTitle: 'Os plugins de design que fazem o Codex entregar UI de verdade',
+    hubFeatureBlurb:
+      'Uma seleção a dedo de plugins — skills de estética e regras de design system — que dão bom gosto ao OpenAI Codex. Instale um ou rode todos dentro do Open Design.',
+    hubFeatureCta: 'Explorar a coleção',
+    hubMetaTitle: (n) => `Marketplace de Claude Skills — ${n}+ plugins | Open Design`,
+    hubMetaDescription: 'Explore o marketplace open source de Claude skills——skills de design, design systems, templates e craft que seu coding agent executa direto. Funciona com Claude, Codex, Cursor.',
+    skillsMetaTitle: (n) => `Claude Skills para design — ${n} skills open source | Open Design`,
+    skillsMetaDescription: 'Explore os Claude skills open source para design——copywriting, cor, direção criativa e mais que seu coding agent carrega no meio da tarefa. Funciona com Claude, Codex e Cursor.',
+    hubLabel: 'Biblioteca de plugins', hubHeading: () => `A biblioteca de plugins de design para agentes de IA`,
+    hubLead: 'Design systems, skills e templates prontos que se conectam direto ao seu agente de IA — para ele desenhar a partir de um ponto de partida real, não de uma página em branco. Navegue por agente, marca ou tipo, ou vá direto ao que você já conhece.',
+    hubEyebrow: 'Biblioteca de plugins',
+    hubUnitPlugins: 'plugins',
+    hubStatAgents: 'Funciona com Claude, Codex e 21 agentes',
+    hubCtaDownload: 'Baixar o app',
+    hubExploreTitle: 'Explorar todos os recursos',
+    hubFilterAll: 'Todos',
+    hubViewAll: 'Ver tudo',
+    tagLabels: { web: 'Web', deck: 'Deck', marketing: 'Marketing', prototype: 'Protótipo', desktop: 'Desktop', brand: 'Marca', editorial: 'Editorial', motion: 'Motion' },
+>>>>>>> upstream/main
     tileTemplates: 'Templates', tileSkills: 'Skills', tileSystems: 'Sistemas', tileCraft: 'Ofício',
     browseTemplates: 'Ver templates', browseSkills: 'Ver skills', browseSystems: 'Ver sistemas', browseCraft: 'Ver ofício',
     artifactKindLabel: 'Tipo de artefato', sceneLabel: 'Cena', allChip: 'Todos',
@@ -1656,7 +1869,29 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     },
   },
   it: {
+<<<<<<< HEAD
     hubLabel: 'Libreria plugin', hubHeading: (n) => `${n} pezzi componibili.`,
+=======
+    hubFeatureEyebrow: 'Selezione curata · Codex design',
+    hubFeatureTitle: 'I plugin di design che fanno spedire UI vere a Codex',
+    hubFeatureBlurb:
+      'Una selezione ragionata di plugin — skill estetiche e regole di design system — che danno gusto a OpenAI Codex. Installane uno, oppure usali tutti dentro Open Design.',
+    hubFeatureCta: 'Esplora la raccolta',
+    hubMetaTitle: (n) => `Marketplace di Claude Skills — ${n}+ plugin | Open Design`,
+    hubMetaDescription: 'Esplora il marketplace open source di Claude skills——skills di design, design system, template e craft che il tuo coding agent esegue direttamente. Compatibile con Claude, Codex, Cursor.',
+    skillsMetaTitle: (n) => `Claude Skills per il design — ${n} skills open source | Open Design`,
+    skillsMetaDescription: 'Esplora i Claude skills open source per il design——copywriting, colore, direzione creativa e altro che il tuo coding agent carica durante il task. Compatibile con Claude, Codex e Cursor.',
+    hubLabel: 'Libreria plugin', hubHeading: () => `La libreria di plugin di design per agenti IA`,
+    hubLead: 'Design system, skill e template pronti all\'uso che si integrano direttamente nel tuo agente IA — così progetta da un punto di partenza reale, non da una pagina bianca. Sfoglia per agente, brand o tipo, oppure vai dritto a quello che già conosci.',
+    hubEyebrow: 'Libreria plugin',
+    hubUnitPlugins: 'plugin',
+    hubStatAgents: 'Compatibile con Claude, Codex e 21 agenti',
+    hubCtaDownload: 'Scarica l\'app',
+    hubExploreTitle: 'Esplora tutte le risorse',
+    hubFilterAll: 'Tutti',
+    hubViewAll: 'Vedi tutto',
+    tagLabels: { web: 'Web', deck: 'Deck', marketing: 'Marketing', prototype: 'Prototipo', desktop: 'Desktop', brand: 'Brand', editorial: 'Editoriale', motion: 'Motion' },
+>>>>>>> upstream/main
     tileTemplates: 'Modelli', tileSkills: 'Skill', tileSystems: 'Sistemi', tileCraft: 'Artigianato',
     browseTemplates: 'Esplora modelli', browseSkills: 'Esplora skill', browseSystems: 'Esplora sistemi', browseCraft: 'Esplora artigianato',
     artifactKindLabel: 'Tipo di artefatto', sceneLabel: 'Scena', allChip: 'Tutti',
@@ -2252,7 +2487,29 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     },
   },
   tr: {
+<<<<<<< HEAD
     hubLabel: 'Eklenti kütüphanesi', hubHeading: (n) => `${n} birleştirilebilir parça.`,
+=======
+    hubFeatureEyebrow: 'Küratörlü · Codex tasarım',
+    hubFeatureTitle: 'Codex’e gerçek arayüz çıkarttıran tasarım eklentileri',
+    hubFeatureBlurb:
+      'OpenAI Codex’e zevk kazandıran, elle seçilmiş eklentiler — estetik skill’ler ve tasarım sistemi kuralları. Birini kurun ya da hepsini Open Design içinde çalıştırın.',
+    hubFeatureCta: 'Koleksiyonu keşfet',
+    hubMetaTitle: (n) => `Claude Skills Pazarı — ${n}+ Eklenti | Open Design`,
+    hubMetaDescription: 'Açık kaynaklı Claude skills pazarına göz atın——coding agent\'ınızın doğrudan çalıştırdığı tasarım skills, tasarım sistemleri, şablonlar ve craft. Claude, Codex, Cursor ile çalışır.',
+    skillsMetaTitle: (n) => `Tasarım için Claude Skills — ${n} Açık Kaynak skills | Open Design`,
+    skillsMetaDescription: 'Tasarım için açık kaynaklı Claude skills\'e göz atın——metin yazarlığı, renk, kreatif yönetim ve coding agent\'ınızın görev sırasında yüklediği daha fazlası. Claude, Codex ve Cursor ile çalışır.',
+    hubLabel: 'Eklenti kütüphanesi', hubHeading: () => `Yapay zeka ajanları için tasarım eklentisi kütüphanesi`,
+    hubLead: 'Hazır tasarım sistemleri, beceriler ve şablonlar doğrudan yapay zeka ajanına bağlanır — böylece boş sayfadan değil, gerçek bir başlangıç noktasından tasarlar. Ajana, markaya ya da türe göre gözat veya bildiğin öğeye doğrudan geç.',
+    hubEyebrow: 'Eklenti kütüphanesi',
+    hubUnitPlugins: 'eklenti',
+    hubStatAgents: 'Claude, Codex ve 21 ajanla çalışır',
+    hubCtaDownload: 'Uygulamayı indir',
+    hubExploreTitle: 'Tüm kaynakları keşfet',
+    hubFilterAll: 'Tümü',
+    hubViewAll: 'Tümünü gör',
+    tagLabels: { web: 'Web', deck: 'Deck', marketing: 'Pazarlama', prototype: 'Prototip', desktop: 'Masaüstü', brand: 'Marka', editorial: 'Editoryal', motion: 'Motion' },
+>>>>>>> upstream/main
     tileTemplates: 'Şablonlar', tileSkills: 'Yetenekler', tileSystems: 'Sistemler', tileCraft: 'Zanaat',
     browseTemplates: 'Şablonları gözat', browseSkills: 'Yetenekleri gözat', browseSystems: 'Sistemleri gözat', browseCraft: 'Zanaatı gözat',
     artifactKindLabel: 'Çıktı türü', sceneLabel: 'Sahne', allChip: 'Tümü',

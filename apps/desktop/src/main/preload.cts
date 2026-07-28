@@ -240,7 +240,7 @@ const capture = {
 };
 
 function invokeUpdater(
-  action: 'check' | 'download' | 'install' | 'status',
+  action: 'check' | 'clear-cache' | 'download' | 'install' | 'status',
   options?: OpenDesignHostUpdaterActionOptions,
 ): Promise<OpenDesignHostUpdaterStatusSnapshot> {
   return ipcRenderer.invoke(`od:update:${action}`, options ?? null);
@@ -249,6 +249,8 @@ function invokeUpdater(
 const updater = {
   check: (options?: OpenDesignHostUpdaterActionOptions): Promise<OpenDesignHostUpdaterStatusSnapshot> =>
     invokeUpdater('check', options),
+  'clear-cache': (options?: OpenDesignHostUpdaterActionOptions): Promise<OpenDesignHostUpdaterStatusSnapshot> =>
+    invokeUpdater('clear-cache', options),
   download: (options?: OpenDesignHostUpdaterActionOptions): Promise<OpenDesignHostUpdaterStatusSnapshot> =>
     invokeUpdater('download', options),
   install: (options?: OpenDesignHostUpdaterActionOptions): Promise<OpenDesignHostUpdaterStatusSnapshot> =>

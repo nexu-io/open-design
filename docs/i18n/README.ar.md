@@ -2,9 +2,15 @@
 
 <h1 align="center">Open Design: البديل مفتوح المصدر لـ Claude Design</h1>
 
+<<<<<<< HEAD
 > 🔥 **‏Open Design 0.9.0 وصل: أنشئ دون أي إعداد.** [Model Router الرسمي](https://open-design.ai/amr) مدمج مباشرة في التطبيق — لا إعدادات إضافية، ولا CLI لتثبيته، ولا مفتاح API لتجهيزه. ما عليك سوى فتح التطبيق وتسجيل الدخول والبدء فورًا في التصميم والإنشاء. [حمّل 0.9.0](https://github.com/nexu-io/open-design/releases) · [انضم إلى النقاش](https://github.com/nexu-io/open-design/discussions/3524)
 >
 > 🏅 **برنامج Open Design Fellow مفتوح الآن.** إن كنت تؤمن أنت أيضًا بأن التصميم يجب أن يكون مفتوحًا — كُن Open Design Fellow، وشارك في تشكيل المنتج جنبًا إلى جنب مع الفريق الأساسي، وساعد المزيد من الناس على المشاركة في تحديد مستقبل التصميم. التفاصيل ← [`MAINTAINERS.md`](../../MAINTAINERS.md) و[Discord](https://discord.gg/qhbcCH8Am4).
+=======
+> ⚡ **‏Open Design Cloud — خدمة النماذج الرسمية.** شحنة واحدة لاستخدام GPT وClaude وGemini وDeepSeek داخل Open Design: أكثر من 20 نموذجًا رائدًا، بدون أي إعداد، وفوترة حسب الاستخدام الفعلي للرموز. [جرّب Open Design Cloud](https://open-design.ai/cloud/)
+>
+> 🏅 **برنامج Open Design Fellow مفتوح الآن.** إن كنت تؤمن أنت أيضًا بأن التصميم يجب أن يكون مفتوحًا — كُن Open Design Fellow، وشارك في تشكيل المنتج جنبًا إلى جنب مع الفريق الأساسي، وساعد المزيد من الناس على المشاركة في تحديد مستقبل التصميم. التفاصيل ← [`MAINTAINERS.md`](../../MAINTAINERS.md) و[Discord](https://discord.gg/mHAjSMV6gz).
+>>>>>>> upstream/main
 
 <p align="center">
   <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="Open Design — The open-source Claude Design alternative · 150 Design Systems · 261 Plugins · 21 Coding Agents · 14 Media Providers" width="100%" />
@@ -115,10 +121,18 @@
 |---|:---:|---|
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | ✅ مدعوم | `od mcp install claude` |
 | [Codex CLI](https://github.com/openai/codex) | ✅ مدعوم | `od mcp install codex` |
+<<<<<<< HEAD
 | [Cursor](https://www.cursor.com/cli) | ✅ مدعوم | `od mcp install cursor` |
 | [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ مدعوم | `od mcp install copilot` |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ مدعوم | `od mcp install copilot` |
 | Gemini CLI | ✅ مدعوم | `od mcp install gemini` |
+=======
+| [DeepSeek Reasonix](https://github.com/esengine/DeepSeek-Reasonix) | ✅ مدعوم | `od mcp install reasonix` |
+| [Raven](https://github.com/EverMind-AI/Raven) | ✅ مدعوم | `od mcp install raven` |
+| [Cursor](https://www.cursor.com/cli) | ✅ مدعوم | `od mcp install cursor` |
+| [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ مدعوم | `od mcp install copilot` |
+| [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ مدعوم | `od mcp install copilot` |
+>>>>>>> upstream/main
 | [OpenCode](https://opencode.ai/) | ✅ مدعوم | `od mcp install opencode` |
 | [OpenClaw](https://github.com/openclaw/openclaw) | ✅ مدعوم | `od mcp install openclaw` |
 | [Antigravity](https://antigravity.google) | ✅ مدعوم | `od mcp install antigravity` |
@@ -301,9 +315,15 @@
 
 ```bash
 # One-line install into the agent you're using:
+<<<<<<< HEAD
 curl -fsSL https://open-design.ai/install.sh | sh -s <agent>
 # <agent> = claude | codex | cursor | copilot | openclaw | antigravity | gemini
 #         | pi | vibe | hermes | cline | kimi | trae | opencode
+=======
+od mcp install <agent>
+# <agent> = claude | codex | reasonix | raven | cursor | copilot | openclaw | antigravity
+#         | pi | vibe | hermes | cline | kimi | kiro | trae | opencode
+>>>>>>> upstream/main
 ```
 
 ثم، داخل الوكيل:

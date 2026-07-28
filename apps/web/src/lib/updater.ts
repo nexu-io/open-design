@@ -1,6 +1,7 @@
 import {
   OPEN_DESIGN_HOST_UPDATER_STATES,
   checkHostUpdater,
+  clearHostUpdaterCache,
   downloadHostUpdater,
   getHostUpdaterStatus,
   installHostUpdater,
@@ -10,6 +11,12 @@ import {
   type OpenDesignHostActionResult,
   type OpenDesignHostFailure,
   type OpenDesignHostUpdaterActionOptions,
+<<<<<<< HEAD
+=======
+  type OpenDesignHostUpdaterMenuLabels,
+  type OpenDesignHostUpdaterOpenDialogListener,
+  type OpenDesignHostUpdaterReinstallSnapshot,
+>>>>>>> upstream/main
   type OpenDesignHostUpdaterResult,
   type OpenDesignHostUpdaterStatusListener,
   type OpenDesignHostUpdaterStatusSnapshot,
@@ -43,6 +50,16 @@ export type UpdaterModel = {
   installerOpened: boolean;
   updateKind: 'installer' | 'payload' | 'unknown';
   promptKey: string | null;
+<<<<<<< HEAD
+=======
+  /**
+   * Present when the feed requires a full installer reinstall (broken or
+   * outdated installed outer package). UI copy priority: `reinstall.url`
+   * jump link > default i18n reinstall copy.
+   */
+  reinstall: OpenDesignHostUpdaterReinstallSnapshot | null;
+  requiresManualInstall: boolean;
+>>>>>>> upstream/main
   upToDate: boolean;
   shouldShowControl: boolean;
   shouldPrompt: boolean;
@@ -140,6 +157,11 @@ export function deriveUpdaterModel(
     installerOpened,
     updateKind,
     promptKey,
+<<<<<<< HEAD
+=======
+    reinstall: status?.reinstall ?? null,
+    requiresManualInstall: Boolean(status?.capabilities.requiresManualInstall),
+>>>>>>> upstream/main
     upToDate,
     shouldShowControl,
     shouldPrompt: canOpenInstaller && hasDownloadedInstaller && !installerOpened,
@@ -162,6 +184,10 @@ export async function downloadUpdaterUpdate(options?: OpenDesignHostUpdaterActio
 
 export async function openUpdaterInstaller(options?: OpenDesignHostUpdaterActionOptions): Promise<UpdaterActionResult> {
   return modelFromHostResult(await installHostUpdater(options));
+}
+
+export async function clearUpdaterCache(options?: OpenDesignHostUpdaterActionOptions): Promise<UpdaterActionResult> {
+  return modelFromHostResult(await clearHostUpdaterCache(options));
 }
 
 export async function quitAfterUpdaterInstallerOpen(

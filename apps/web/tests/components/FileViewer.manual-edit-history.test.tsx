@@ -36,9 +36,10 @@ function clickAgentTool(testId: string) {
   fireEvent.click(screen.getByTestId(testId));
 }
 
-// Pins the inspector to a target. Hover no longer auto-selects, so selection
-// rides the explicit click path (od-edit-select), matching the bridge sending
-// it when the user clicks the hover affordance or a container/image body.
+// Pins the inspector to a target. Selection rides the explicit click path
+// (od-edit-select); since v2.1 the inspector panel is opt-in, so the helper
+// mirrors the real two-step flow — select, then open the panel through the
+// action bar's params button.
 async function selectManualEditTarget(target = heroTarget()) {
   const frame = await waitFor(() => {
     const node = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
@@ -50,6 +51,9 @@ async function selectManualEditTarget(target = heroTarget()) {
       data: { type: 'od-edit-select', target },
       source: frame.contentWindow,
     }));
+  });
+  await waitFor(() => {
+    fireEvent.click(screen.getByTestId('manual-edit-open-inspector'));
   });
   await waitFor(() => expect(panelState.props).not.toBeNull());
 }

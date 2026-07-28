@@ -153,7 +153,20 @@ export async function configureVisualPage(page: Page, options: VisualPageOptions
   const config = { ...VISUAL_CONFIG, ...(options.config ?? {}) };
   const agents = options.agents ?? [MOCK_AGENT];
 
+<<<<<<< HEAD
   await page.addInitScript(([key, config, githubStarsKey, githubStarsCount]) => {
+=======
+  // Visual coverage is a web rendering contract, not a daemon behavior lane.
+  // Register these first so the narrower fixtures below win; every other
+  // daemon-owned request terminates at a deterministic browser-side boundary.
+  for (const pattern of ['**/api/**', '**/artifacts/**', '**/frames/**', '**/powered/**']) {
+    await page.route(pattern, async (route) => {
+      await route.fulfill({ status: 404, json: { error: 'not mocked by visual coverage' } });
+    });
+  }
+
+  await page.addInitScript(([key, config, githubStarsKey, githubStarsCount, visualStabilityKey]) => {
+>>>>>>> upstream/main
     window.localStorage.setItem(key, JSON.stringify(config));
     window.localStorage.setItem(
       githubStarsKey,
@@ -169,6 +182,46 @@ export async function configureVisualPage(page: Page, options: VisualPageOptions
     await fulfillAgentsRoute(route, agents);
   });
 
+<<<<<<< HEAD
+=======
+  await page.route('**/api/test/connection', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.fallback();
+      return;
+    }
+
+    await route.fulfill({
+      json: {
+        ok: true,
+        kind: 'success',
+        latencyMs: 1,
+        model: config.model,
+        sample: 'Visual connection check.',
+      },
+    });
+  });
+
+  await page.route('**/api/provider/models', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.fallback();
+      return;
+    }
+
+    await route.fulfill({
+      json: {
+        ok: true,
+        kind: 'success',
+        latencyMs: 1,
+        models: [
+          { id: 'gpt-4o', label: 'GPT-4o' },
+          { id: 'gpt-4o-mini', label: 'GPT-4o mini' },
+          { id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5' },
+        ],
+      },
+    });
+  });
+
+>>>>>>> upstream/main
   await page.route('**/api/health', async (route) => {
     await fulfillGet(route, { ok: true });
   });
@@ -184,7 +237,7 @@ export async function configureVisualPage(page: Page, options: VisualPageOptions
 
   await page.route(VISUAL_GITHUB_REPO_API, async (route) => {
     if (route.request().method() !== 'GET') {
-      await route.continue();
+      await route.fallback();
       return;
     }
 
@@ -197,9 +250,31 @@ export async function configureVisualPage(page: Page, options: VisualPageOptions
     await fulfillGet(route, { projects });
   });
 
+<<<<<<< HEAD
+=======
+  await page.route('**/api/projects/*/files', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.fallback();
+      return;
+    }
+    await fulfillGet(route, { files: VISUAL_PROJECT_FILES });
+  });
+
+  await page.route('**/api/projects/*/raw/*', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill({
+      contentType: 'text/html; charset=utf-8',
+      body: VISUAL_PROJECT_FILE_HTML,
+    });
+  });
+
+>>>>>>> upstream/main
   await page.route('**/api/projects/*/upload', async (route) => {
     if (route.request().method() !== 'POST') {
-      await route.continue();
+      await route.fallback();
       return;
     }
     await route.fulfill({
@@ -246,7 +321,7 @@ export async function configureVisualPage(page: Page, options: VisualPageOptions
 
   await page.route('**/api/plugins/*/apply', async (route) => {
     if (route.request().method() !== 'POST') {
-      await route.continue();
+      await route.fallback();
       return;
     }
     const id = decodeURIComponent(new URL(route.request().url()).pathname.split('/').at(-2) ?? 'plugin');
@@ -293,7 +368,7 @@ export async function configureVisualPage(page: Page, options: VisualPageOptions
 
   await page.route('**/api/design-systems/*', async (route) => {
     if (route.request().method() !== 'GET') {
-      await route.continue();
+      await route.fallback();
       return;
     }
     const id = decodeURIComponent(new URL(route.request().url()).pathname.split('/').at(-1) ?? 'agentic');
@@ -403,7 +478,7 @@ function sanitizeVisualName(name: string): string {
 
 async function fulfillGet(route: Route, json: unknown): Promise<void> {
   if (route.request().method() !== 'GET') {
-    await route.continue();
+    await route.fallback();
     return;
   }
 

@@ -943,6 +943,10 @@ jobs:
           MAC_X64_RESULT: ${{ needs.build_mac_x64.result }}
           RELEASE_ASSET_SUFFIX: ${{ needs.metadata.outputs.asset_version_suffix }}
           RELEASE_CHANNEL: beta
+          RELEASE_LAUNCHER_VERSION_MIN_BETA: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_BETA }}
+          RELEASE_LAUNCHER_VERSION_MIN_STABLE: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_STABLE }}
+          RELEASE_LAUNCHER_VERSION_MIN_URL_BETA: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_URL_BETA }}
+          RELEASE_LAUNCHER_VERSION_MIN_URL_STABLE: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_URL_STABLE }}
           RELEASE_MANIFEST_DIR: ${{ runner.temp }}/release-platform-manifests
           RELEASE_METADATA_DIR: ${{ runner.temp }}/release-metadata
           RELEASE_OUTPUTS_PATH: ${{ runner.temp }}/release-metadata/outputs.json
@@ -977,6 +981,10 @@ jobs:
           MAC_ARM64_RESULT: ${{ needs.build_mac_arm64.result }}
           MAC_X64_RESULT: ${{ needs.build_mac_x64.result }}
           RELEASE_CHANNEL: beta
+          RELEASE_LAUNCHER_VERSION_MIN_BETA: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_BETA }}
+          RELEASE_LAUNCHER_VERSION_MIN_STABLE: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_STABLE }}
+          RELEASE_LAUNCHER_VERSION_MIN_URL_BETA: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_URL_BETA }}
+          RELEASE_LAUNCHER_VERSION_MIN_URL_STABLE: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_URL_STABLE }}
           RELEASE_METADATA_URL: ${{ steps.outputs.outputs.version_metadata_url }}
           RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}
           WIN_X64_RESULT: ${{ needs.build_win_x64.result }}

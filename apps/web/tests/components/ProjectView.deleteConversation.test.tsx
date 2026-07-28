@@ -288,4 +288,57 @@ describe('ProjectView conversation delete', () => {
     await waitFor(() => expect(chatPaneProps.activeConversationId).toBe('conv-fresh'));
     expect(chatPaneProps.conversations?.map((conversation) => conversation.id)).toEqual(['conv-fresh']);
   });
+<<<<<<< HEAD
+=======
+
+  it('keeps the latest unanswered question form in chat instead of the workspace panel', async () => {
+    const form: QuestionForm = {
+      id: 'task-type',
+      title: 'Choose the task type',
+      questions: [
+        {
+          id: 'taskType',
+          label: 'What should we make?',
+          type: 'radio',
+          required: true,
+          options: [
+            { label: 'Prototype', value: 'prototype' },
+            { label: 'Image', value: 'image' },
+          ],
+        },
+      ],
+    };
+    const assistantMessage = {
+      id: 'assistant-1',
+      role: 'assistant',
+      content: [
+        '<question-form id="task-type" title="Choose the task type">',
+        JSON.stringify({ questions: form.questions }),
+        '</question-form>',
+      ].join('\n'),
+      runStatus: 'succeeded',
+      events: [],
+      producedFiles: [],
+    };
+
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation 1' }]);
+    listMessages.mockResolvedValue([assistantMessage]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    fetchChatRunStatus.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    reattachDaemonRun.mockResolvedValue(undefined);
+
+    renderProjectView(vi.fn());
+
+    await waitFor(() => expect(chatPaneProps.onSubmitQuestionForm).toBeDefined());
+    await waitFor(() => expect(chatPaneProps.questionFormSubmitDisabled).toBe(false));
+    expect(fileWorkspaceProps.questionForm).toBeUndefined();
+  });
+>>>>>>> upstream/main
 });

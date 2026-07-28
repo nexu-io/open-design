@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from '../../src/App';
@@ -198,6 +198,12 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
+async function advanceTestClock(ms: number): Promise<void> {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(ms);
+  });
+}
+
 describe('App AMR polling', () => {
   beforeEach(() => {
     mockedDaemonIsLive.mockResolvedValue(true);
@@ -247,20 +253,24 @@ describe('App AMR polling', () => {
 
   afterEach(() => {
     cleanup();
+    vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
   });
 
-  it('keeps polling AMR models until the remote catalog replaces the preset list', { timeout: 10_000 }, async () => {
+  it('keeps polling AMR models until the remote catalog replaces the preset list', async () => {
+    vi.useFakeTimers();
     render(<App />);
 
-    await waitFor(() => {
-      expect(screen.getByTestId('amr-model').textContent).toBe('preset-a');
-    });
+    await advanceTestClock(0);
+    expect(screen.getByTestId('amr-model').textContent).toBe('preset-a');
+    expect(mockedFetchAmrModels).toHaveBeenCalledTimes(1);
 
-    await waitFor(() => {
-      expect(screen.getByTestId('amr-model').textContent).toBe('remote-a');
-    }, { timeout: 4_000 });
+    await advanceTestClock(1_999);
+    expect(mockedFetchAmrModels).toHaveBeenCalledTimes(2);
+    await advanceTestClock(1);
+
+    expect(screen.getByTestId('amr-model').textContent).toBe('remote-a');
     expect(mockedFetchAmrModels).toHaveBeenCalledTimes(3);
   });
 
@@ -306,9 +316,70 @@ describe('App AMR polling', () => {
     });
   });
 
+<<<<<<< HEAD
   it('restarts AMR polling after sign-in when preset refresh previously stopped on a remote error', {
     timeout: 10_000,
   }, async () => {
+=======
+  it('rescans agents on window focus so external CLI auth changes are detected', async () => {
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(0);
+    mockedFetchAmrModels.mockReset();
+    mockedFetchAmrModels.mockResolvedValue({
+      source: 'preset',
+      refreshing: false,
+      models: [{ id: 'preset-a', label: 'preset-a' }],
+    });
+    mockedFetchAgentsStream
+      .mockResolvedValueOnce([
+        {
+          id: 'codex',
+          name: 'Codex CLI',
+          bin: 'codex',
+          available: true,
+          version: 'codex-cli 9.9.9',
+          authStatus: 'missing',
+          models: [],
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: 'codex',
+          name: 'Codex CLI',
+          bin: 'codex',
+          available: true,
+          version: 'codex-cli 9.9.9',
+          authStatus: 'ok',
+          models: [],
+        },
+      ]);
+
+    try {
+      render(<App />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('codex-auth').textContent).toBe('missing');
+      });
+
+      fireEvent(window, new Event('focus'));
+      expect(mockedFetchAgentsStream).toHaveBeenCalledTimes(1);
+
+      await waitFor(() => {
+        nowSpy.mockReturnValue(10_001);
+        fireEvent(window, new Event('focus'));
+        expect(mockedFetchAgentsStream).toHaveBeenCalledTimes(2);
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('codex-auth').textContent).toBe('ok');
+      });
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it('restarts AMR polling after sign-in when preset refresh previously stopped on a remote error', async () => {
+    vi.useFakeTimers();
+>>>>>>> upstream/main
     mockedFetchAmrModels.mockReset();
     mockedFetchAmrModels
       .mockResolvedValueOnce({
@@ -330,33 +401,73 @@ describe('App AMR polling', () => {
 
     render(<App />);
 
-    await waitFor(() => {
-      expect(mockedFetchAmrModels).toHaveBeenCalledTimes(1);
-    });
+    await advanceTestClock(0);
+    expect(mockedFetchAmrModels).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('amr-model').textContent).toBe('preset-a');
 
+<<<<<<< HEAD
     await waitFor(() => {
       expect(mockedFetchAmrModels).toHaveBeenCalledTimes(2);
     }, { timeout: 4_000 });
 
     await new Promise((resolve) => setTimeout(resolve, 1_500));
-
+=======
+    await advanceTestClock(1_000);
     expect(mockedFetchAmrModels).toHaveBeenCalledTimes(2);
+    expect(screen.getByTestId('amr-model').textContent).toBe('preset-a');
+>>>>>>> upstream/main
+
+    await advanceTestClock(1_500);
+    expect(mockedFetchAmrModels).toHaveBeenCalledTimes(2);
+
+    fireEvent.click(screen.getByText('open settings'));
+    expect(screen.getByText('mark amr signed in')).toBeTruthy();
+    fireEvent.click(screen.getByText('mark amr signed in'));
+    await advanceTestClock(0);
+
+    expect(mockedFetchAmrModels).toHaveBeenCalledTimes(3);
+    expect(screen.getByTestId('amr-model').textContent).toBe('remote-a');
+  });
+
+<<<<<<< HEAD
+  it('stops polling after the preset retry budget is exhausted when remote never arrives', {
+    timeout: 20_000,
+  }, async () => {
+=======
+  it('does not restart AMR model polling for repeated signed-in status snapshots', async () => {
+    mockedFetchAmrModels.mockReset();
+    mockedFetchAmrModels.mockResolvedValue({
+      source: 'remote',
+      refreshing: false,
+      models: [{ id: 'remote-a', label: 'remote-a' }],
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(mockedFetchAmrModels).toHaveBeenCalledTimes(1);
+    });
 
     fireEvent.click(screen.getByText('open settings'));
     await waitFor(() => {
       expect(screen.getByText('mark amr signed in')).toBeTruthy();
     });
-    fireEvent.click(screen.getByText('mark amr signed in'));
 
+    fireEvent.click(screen.getByText('mark amr signed in'));
     await waitFor(() => {
-      expect(mockedFetchAmrModels).toHaveBeenCalledTimes(3);
-      expect(screen.getByTestId('amr-model').textContent).toBe('remote-a');
-    }, { timeout: 4_000 });
+      expect(mockedFetchAmrModels).toHaveBeenCalledTimes(2);
+    });
+
+    fireEvent.click(screen.getByText('mark amr signed in'));
+    fireEvent.click(screen.getByText('mark amr signed in'));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(mockedFetchAmrModels).toHaveBeenCalledTimes(2);
   });
 
-  it('stops polling after the preset retry budget is exhausted when remote never arrives', {
-    timeout: 20_000,
-  }, async () => {
+  it('stops polling after the preset retry budget is exhausted when remote never arrives', async () => {
+    vi.useFakeTimers();
+>>>>>>> upstream/main
     mockedFetchAmrModels.mockReset();
     mockedFetchAmrModels.mockImplementation(async () => ({
       source: 'preset',
@@ -366,14 +477,15 @@ describe('App AMR polling', () => {
 
     render(<App />);
 
-    await waitFor(() => {
-      expect(mockedFetchAmrModels).toHaveBeenCalledTimes(11);
-    }, { timeout: 12_000 });
-
-    await new Promise((resolve) => setTimeout(resolve, 1_500));
+    await advanceTestClock(0);
+    expect(mockedFetchAmrModels).toHaveBeenCalledTimes(1);
+    await advanceTestClock(10_000);
 
     expect(mockedFetchAmrModels).toHaveBeenCalledTimes(11);
     expect(screen.getByTestId('amr-model').textContent).toBe('preset-a');
+
+    await advanceTestClock(1_500);
+    expect(mockedFetchAmrModels).toHaveBeenCalledTimes(11);
   });
 
   it('does not merge stale AMR remote models over a rescan with new agent env', async () => {

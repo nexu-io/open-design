@@ -65,7 +65,6 @@ test.afterEach(async ({ page }) => {
 });
 
 test('[P0] real daemon run streams, persists, and previews an artifact', async ({ page }) => {
-  await page.goto('/');
   await createProject(page, 'Real daemon run smoke');
   await expectWorkspaceReady(page);
 
@@ -89,7 +88,6 @@ test('[P0] real daemon run streams, persists, and previews an artifact', async (
 });
 
 test('[P0] real daemon run persists an artifact streamed across multiple chunks', async ({ page }) => {
-  await page.goto('/');
   await createProject(page, 'Chunked daemon run smoke');
   await expectWorkspaceReady(page);
 
@@ -103,8 +101,23 @@ test('[P0] real daemon run persists an artifact streamed across multiple chunks'
   await expectProjectFileToContain(page, projectId, CHUNKED_FILE, CHUNKED_HEADING);
 });
 
+<<<<<<< HEAD
+=======
+test('[P1] plain stdout daemon runtime persists artifact tags into project files and preview', async ({ page }) => {
+  await createProject(page, 'Plain stream artifact smoke', 'qwen');
+  await expectWorkspaceReady(page);
+
+  await sendPrompt(page, 'Fake runtime smoke for qwen');
+
+  const { projectId } = await currentProjectContext(page);
+  await expectProjectFilesToContain(page, projectId, [PLAIN_STREAM_FILE]);
+  await expect(artifactPreview(page)).toBeVisible();
+  await expect(artifactPreviewFrame(page).getByRole('heading', { name: PLAIN_STREAM_HEADING })).toBeVisible();
+  await expectProjectFileToContain(page, projectId, PLAIN_STREAM_FILE, PLAIN_STREAM_HEADING);
+});
+
+>>>>>>> upstream/main
 test('[P0] real daemon run surfaces process/parser errors in chat', async ({ page }) => {
-  await page.goto('/');
   await createProject(page, 'Daemon error smoke');
   await expectWorkspaceReady(page);
 
@@ -115,7 +128,6 @@ test('[P0] real daemon run surfaces process/parser errors in chat', async ({ pag
 });
 
 test('[P0] real daemon run classifies a Claude mid-stream socket drop as a retryable connection error', async ({ page }) => {
-  await page.goto('/');
   await createProject(page, 'Daemon socket-drop smoke', 'claude');
   await expectWorkspaceReady(page);
 
@@ -131,7 +143,6 @@ test('[P0] real daemon run classifies a Claude mid-stream socket drop as a retry
 });
 
 test('[P0] real daemon run supports a follow-up turn in the same project', async ({ page }) => {
-  await page.goto('/');
   await createProject(page, 'Daemon follow-up smoke');
   await expectWorkspaceReady(page);
 
@@ -150,8 +161,170 @@ test('[P0] real daemon run supports a follow-up turn in the same project', async
   await expectProjectFileToContain(page, projectId, FOLLOW_UP_FILE, 'Generated after an earlier daemon turn.');
 });
 
+<<<<<<< HEAD
+=======
+test('[P1] real daemon run treats an in-place artifact edit as produced work', async ({ page }) => {
+  await createProject(page, 'Daemon artifact edit smoke', 'claude');
+  await expectWorkspaceReady(page);
+
+  await sendPrompt(page, 'Create a deterministic smoke artifact');
+  const { projectId, conversationId } = await currentProjectContext(page);
+  await expectProjectFilesToContain(page, projectId, [GENERATED_FILE]);
+  await expectProjectFileToContain(page, projectId, GENERATED_FILE, GENERATED_HEADING);
+
+  await sendPrompt(page, 'Edit the existing deterministic smoke artifact through the managed project alias');
+
+  await expectProjectFileToContain(page, projectId, GENERATED_FILE, EDITED_GENERATED_HEADING);
+  const files = await listProjectFiles(page, projectId);
+  expect(files.filter((file) => file.name === GENERATED_FILE)).toHaveLength(1);
+  await expect(artifactPreviewFrame(page).getByRole('heading', { name: EDITED_GENERATED_HEADING })).toBeVisible();
+
+  await expect
+    .poll(async () => {
+      const messages = await listConversationMessages(page, projectId, conversationId);
+      const assistantMessages = messages.filter((message) => message.role === 'assistant');
+      return assistantMessages.map((message) => ({
+        runStatus: message.runStatus ?? null,
+        producedFiles: message.producedFiles?.map((file) => file.name) ?? [],
+        traceObjectFiles: message.traceObjectFiles?.map((file) => file.name) ?? [],
+        resultDeliveryState: message.resultDeliveryState ?? null,
+      }));
+    }, { timeout: 15_000 })
+    .toContainEqual({
+      runStatus: 'succeeded',
+      producedFiles: [],
+      traceObjectFiles: [GENERATED_FILE],
+      resultDeliveryState: 'delivered',
+    });
+  await expect(runErrorCard(page)).toHaveCount(0);
+
+  await page.getByTestId('manual-edit-mode-toggle').click();
+  const editedHeading = artifactPreviewFrame(page).locator('[data-od-id="smoke-title"]');
+  await expect(editedHeading).toBeVisible();
+  await editedHeading.click();
+  await expect(editedHeading).toHaveAttribute('data-od-edit-selected', 'true');
+  await page.getByTestId('manual-edit-open-inspector').click();
+  const fontSizeInput = page
+    .locator('.manual-edit-modal .cc-section')
+    .filter({ hasText: 'TYPOGRAPHY' })
+    .locator('.cc-row')
+    .filter({ hasText: 'Size' })
+    .locator('input');
+  await fontSizeInput.fill('52');
+  await page.locator('.manual-edit-modal').getByRole('button', { name: /^Save$/ }).click({ force: true });
+  await expectProjectFileToContain(page, projectId, GENERATED_FILE, 'font-size: 52px');
+  await page.getByTestId('manual-edit-mode-toggle').click();
+
+  await page.getByRole('button', { name: 'Versions' }).click();
+  const versionsDialog = page.getByRole('dialog', { name: 'Versions' });
+  await expect(versionsDialog).toBeVisible();
+  await expect(versionsDialog).toContainText('3 versions');
+  await expect(versionsDialog.getByRole('option')).toHaveCount(3);
+});
+
+test('[P1] Plan mode daemon run creates, opens, and restores an editable markdown plan', async ({ page }) => {
+  await createProject(page, 'Plan mode markdown smoke');
+  await expectWorkspaceReady(page);
+
+  await selectComposerSessionMode(page, 'Plan mode');
+  const runRequestPromise = page.waitForRequest(isCreateRunRequest);
+  await sendPrompt(page, 'Create a deterministic plan document');
+  const runRequest = await runRequestPromise;
+  expect((runRequest.postDataJSON() as { sessionMode?: string }).sessionMode).toBe('plan');
+
+  const { projectId } = await currentProjectContext(page);
+  await expectProjectFilesToContain(page, projectId, ['plan.md']);
+  await expectProjectFileToContain(page, projectId, 'plan.md', '# Deterministic Plan');
+  await expect(page.getByTestId('file-workspace').getByRole('tab', { name: /plan\.md/i })).toBeVisible();
+  await expect(page.getByRole('textbox', { name: /markdown editor/i })).toHaveValue(/Deterministic Plan/);
+  await expect(page.getByLabel(/markdown preview/i)).toContainText('Scope');
+  await expect(page.getByTestId('chat-composer')).toBeVisible();
+  await expect(page.getByTestId('chat-composer-input')).toBeVisible();
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expectWorkspaceReady(page);
+  await expect(page.getByTestId('file-workspace').getByRole('tab', { name: /plan\.md/i })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('textbox', { name: /markdown editor/i })).toHaveValue(/Deterministic Plan/);
+  await expect(page.getByLabel(/markdown preview/i)).toContainText('Keep the plan editable');
+  await expect(page.getByTestId('chat-composer')).toBeVisible();
+});
+
+// Red spec for "Plan 模式生成 HTML 后没有自动打开生成的文件": after the user
+// reviews the plan and asks for the final deliverable, the generation turn
+// writes the HTML as a project file (Write tool, no inline artifact echo) and
+// then touches the plan document again. The viewer must auto-open the
+// generated HTML instead of staying on the markdown plan.
+test('[P1] Plan mode generation turn auto-opens the generated HTML file', async ({ page }) => {
+  test.setTimeout(120_000);
+  await createProject(page, 'Plan mode html auto-open smoke', 'claude');
+  await expectWorkspaceReady(page);
+
+  await selectComposerSessionMode(page, 'Plan mode');
+  await sendPrompt(page, 'Create a deterministic plan document');
+  const { projectId } = await currentProjectContext(page);
+  await expectProjectFilesToContain(page, projectId, ['plan.md']);
+  const planTab = page.getByTestId('file-workspace').getByRole('tab', { name: /plan\.md/i });
+  await expect(planTab).toHaveAttribute('aria-selected', 'true');
+
+  // Mirror the real Plan-mode interaction: the user reviews and edits the
+  // markdown plan in the split editor (autosave on) before asking for the
+  // final deliverable.
+  const planEditor = page.getByRole('textbox', { name: /markdown editor/i });
+  await expect(planEditor).toHaveValue(/Deterministic Plan/);
+  await planEditor.click();
+  await planEditor.press('End');
+  await planEditor.pressSequentially('\n- Reviewed by the user before generation.\n', { delay: 10 });
+  await expectProjectFileToContain(page, projectId, 'plan.md', 'Reviewed by the user before generation.');
+
+  await sendPrompt(page, 'Generate the deterministic artifact from the plan document');
+  await expectProjectFilesToContain(page, projectId, ['index.html', 'plan.md']);
+  const htmlTab = page.getByTestId('file-workspace').getByRole('tab', { name: /index\.html/i });
+  await expect(htmlTab).toBeVisible({ timeout: 15_000 });
+  await expect(htmlTab).toHaveAttribute('aria-selected', 'true');
+});
+
+// Red spec, regeneration loop: Plan mode's core iteration is
+// plan → generate → edit the plan → generate AGAIN. On the second generation
+// the HTML file already exists, so a pre/post file-name diff sees no "new"
+// file — the viewer must still re-focus the regenerated HTML. Uses the codex
+// fake runtime (no tool_use events, like most CLI protocols) so the per-write
+// auto-open path cannot mask the turn-end selection.
+test('[P1] Plan mode regeneration re-opens the existing generated HTML file', async ({ page }) => {
+  test.setTimeout(120_000);
+  await createProject(page, 'Plan mode html regen smoke');
+  await expectWorkspaceReady(page);
+
+  await selectComposerSessionMode(page, 'Plan mode');
+  await sendPrompt(page, 'Create a deterministic plan document');
+  const { projectId, conversationId } = await currentProjectContext(page);
+  await expectProjectFilesToContain(page, projectId, ['plan.md']);
+  const workspace = page.getByTestId('file-workspace');
+  await expect(workspace.getByRole('tab', { name: /plan\.md/i })).toHaveAttribute('aria-selected', 'true');
+
+  await sendPrompt(page, 'Generate the deterministic artifact from the plan document');
+  await expectProjectFilesToContain(page, projectId, ['index.html', 'plan.md']);
+  const htmlTab = workspace.getByRole('tab', { name: /index\.html/i });
+  await expect(htmlTab).toBeVisible({ timeout: 15_000 });
+  await expect(htmlTab).toHaveAttribute('aria-selected', 'true');
+
+  // The user goes back to the plan document to revise it...
+  await workspace.getByRole('tab', { name: /plan\.md/i }).click();
+  await expect(workspace.getByRole('tab', { name: /plan\.md/i })).toHaveAttribute('aria-selected', 'true');
+
+  // ...and asks for another generation. index.html is rewritten in place —
+  // no new file name appears, but the fresh deliverable must take focus.
+  await sendPrompt(page, 'Generate the deterministic artifact from the plan document');
+  await expect
+    .poll(async () => {
+      const messages = await listConversationMessages(page, projectId, conversationId);
+      return messages.filter((m) => m.role === 'assistant' && m.runStatus === 'succeeded').length;
+    }, { timeout: 30_000 })
+    .toBeGreaterThanOrEqual(3);
+  await expect(htmlTab).toHaveAttribute('aria-selected', 'true', { timeout: 15_000 });
+});
+
+>>>>>>> upstream/main
 test('[P0] real daemon run restores a delayed artifact turn after reload', async ({ page }) => {
-  await page.goto('/');
   await createProject(page, 'Delayed daemon reload smoke');
   await expectWorkspaceReady(page);
 
@@ -176,8 +349,113 @@ test('[P0] real daemon run restores a delayed artifact turn after reload', async
   });
 });
 
+<<<<<<< HEAD
+=======
+test('[P1] real daemon run reconnects after reload while the run is still active', async ({ page }) => {
+  test.setTimeout(90_000);
+
+  await createProject(page, 'Running daemon reload smoke');
+  await expectWorkspaceReady(page);
+
+  const runResponse = await sendPrompt(page, 'Create a slow reload deterministic smoke artifact');
+  const { runId } = (await runResponse.json()) as { runId: string };
+  await expect
+    .poll(async () => {
+      const status = await page.request.get(`/api/runs/${runId}`);
+      if (!status.ok()) return `http-${status.status()}`;
+      return ((await status.json()) as { status: string }).status;
+    }, { timeout: 10_000 })
+    .toBe('running');
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expectWorkspaceReady(page);
+
+  const { projectId, conversationId } = await currentProjectContext(page);
+  await expectProjectFilesToContain(page, projectId, [SLOW_RELOAD_FILE], 40_000);
+  await expect(artifactPreviewFrame(page).getByRole('heading', { name: SLOW_RELOAD_HEADING })).toBeVisible();
+  await expectRestoredDelayedAssistantMessage(page, projectId, conversationId, {
+    requireRunId: true,
+    expectedThinking: false,
+    producedFiles: [SLOW_RELOAD_FILE],
+  });
+});
+
+// Regression spec for #4607: when the page is reloaded while a real daemon
+// run is still active and then reattaches, the artifact write must complete and
+// be recorded on the assistant message.  The bug manifests as producedFiles
+// being empty even after runStatus reaches succeeded.
+test('[P1] artifact persistence survives page reload during an active real daemon run', async ({ page }) => {
+  test.setTimeout(120_000);
+
+  await createProject(page, 'Running daemon reload smoke');
+  await expectWorkspaceReady(page);
+
+  // Send a prompt that makes the fake agent delay 15 s before emitting the
+  // artifact, giving us a reliable window to reload mid-run.
+  const runResponse = await sendPrompt(page, 'Create a slow reload deterministic smoke artifact');
+  const { runId } = (await runResponse.json()) as { runId: string };
+
+  // Wait until the run is actually in-flight before reloading.
+  await expect
+    .poll(async () => {
+      const status = await page.request.get(`/api/runs/${runId}`);
+      if (!status.ok()) return `http-${status.status()}`;
+      return ((await status.json()) as { status: string }).status;
+    }, { timeout: 10_000 })
+    .toBe('running');
+
+  // Capture the conversation identity BEFORE reload so the post-reload poll
+  // asserts against the *same* conversation.  Picking by updatedAt after reload
+  // would pass even if reattach regressed by switching or recreating the
+  // conversation, masking the real failure.
+  const { projectId, conversationId } = await currentProjectContext(page);
+
+  // Reload while the run is still active — this is the reattach trigger.
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expectWorkspaceReady(page);
+
+  // Criterion 1 + 2: run reaches succeeded and the assistant message is still
+  // attached to the original conversation (asserting assistantMessages === 1).
+  await expect
+    .poll(async () => {
+      const messages = await listConversationMessages(page, projectId, conversationId);
+      const assistant = messages.find((m) => m.role === 'assistant');
+      return {
+        runStatus: assistant?.runStatus ?? null,
+        assistantMessages: messages.filter((m) => m.role === 'assistant').length,
+      };
+    }, { timeout: 50_000 })
+    .toEqual({ runStatus: 'succeeded', assistantMessages: 1 });
+
+  // Criterion 3: the generated file is written to project storage.
+  await expectProjectFileToContain(page, projectId, SLOW_RELOAD_FILE, SLOW_RELOAD_HEADING);
+
+  // Criterion 4: producedFiles on the assistant message records the artifact
+  // AND the message retains its runId (proves it was reattached in-place,
+  // not recreated).  This is the primary regression assertion — the bug
+  // leaves producedFiles empty.
+  await expectRestoredDelayedAssistantMessage(page, projectId, conversationId, {
+    requireRunId: true,
+    producedFiles: [SLOW_RELOAD_FILE],
+    expectedThinking: false,
+  });
+  // Criterion 4b: the runId must equal the *original* runId captured before
+  // reload — requireRunId:true above only proves *some* runId is present, not
+  // that the message was reattached in-place rather than recreated with a new id.
+  await expect
+    .poll(async () => {
+      const messages = await listConversationMessages(page, projectId, conversationId);
+      const assistant = messages.find((m) => m.role === 'assistant');
+      return assistant?.runId ?? null;
+    }, { timeout: 5_000 })
+    .toBe(runId);
+
+  // Criterion 5: the artifact preview restores and renders the artifact heading.
+  await expect(artifactPreviewFrame(page).getByRole('heading', { name: SLOW_RELOAD_HEADING })).toBeVisible({ timeout: 15_000 });
+});
+
+>>>>>>> upstream/main
 test('[P1] real daemon run survives reload before the create response reaches the browser', async ({ page }) => {
-  await page.goto('/');
   await createProject(page, 'Delayed daemon create-response reload smoke');
   await expectWorkspaceReady(page);
 
@@ -198,7 +476,6 @@ test('[P1] real daemon run survives reload before the create response reaches th
 });
 
 test('[P0] empty daemon output fails cleanly, persists after reload, and does not leave ghost files', async ({ page }) => {
-  await page.goto('/');
   await createProject(page, 'Empty daemon failure smoke');
   await expectWorkspaceReady(page);
 
@@ -218,12 +495,37 @@ test('[P0] empty daemon output fails cleanly, persists after reload, and does no
   await page.reload({ waitUntil: 'domcontentloaded' });
   await expectWorkspaceReady(page);
   await expect(page.getByText(expectedError, { exact: false }).first()).toBeVisible();
+<<<<<<< HEAD
   await expect(page.locator('.msg.error')).toContainText(expectedError);
+=======
+  await expect(runErrorCard(page)).toContainText(expectedError);
+  expect(await listProjectFiles(page, projectId)).toEqual([]);
+});
+
+test('[P1] plain stdout daemon runtime surfaces stderr-only failures without ghost files', async ({ page }) => {
+  await createProject(page, 'Plain stderr failure smoke', 'qwen');
+  await expectWorkspaceReady(page);
+
+  await sendPrompt(page, 'Return a stderr-only daemon smoke failure');
+
+  const expectedError = 'stderr-only daemon smoke failure from fake qwen';
+  await expect(runErrorCard(page)).toContainText(expectedError, { timeout: 15_000 });
+
+  const { projectId, conversationId } = await currentProjectContext(page);
+  await expect.poll(async () => {
+    const messages = await listConversationMessages(page, projectId, conversationId);
+    return messages.find((message) => message.role === 'assistant')?.runStatus ?? 'missing';
+  }, { timeout: 15_000 }).toBe('failed');
+  expect(await listProjectFiles(page, projectId)).toEqual([]);
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expectWorkspaceReady(page);
+  await expect(runErrorCard(page)).toContainText(expectedError);
+>>>>>>> upstream/main
   expect(await listProjectFiles(page, projectId)).toEqual([]);
 });
 
 test('[P0] separate projects keep daemon artifacts isolated across recent-project navigation', async ({ page }) => {
-  await page.goto('/');
   await createProject(page, 'Real daemon isolation alpha');
   await expectWorkspaceReady(page);
   await sendPrompt(page, 'Create a deterministic smoke artifact');
@@ -351,18 +653,38 @@ test('[P0] real daemon run supports fake non-Codex runtime protocols', async ({ 
 async function createProject(page: Page, name: string, agentId: FakeAgentId = 'codex') {
   await configureFakeAgent(page, agentId);
   await installBrowserAgentConfig(page, agentId);
-  await gotoEntryHome(page);
-  await setBrowserAgentConfig(page, agentId);
-  await page.reload({ waitUntil: 'domcontentloaded' });
+  const projectId = `real-daemon-${agentId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  await createProjectViaApi(page, projectId, name);
+  try {
+    await page.goto(`/projects/${projectId}`, { waitUntil: 'domcontentloaded' });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!/ERR_ABORTED|frame was detached/i.test(message)) throw error;
+  }
   await waitForLoadingToClear(page);
-  await setBrowserAgentConfig(page, agentId);
-  await configureFakeAgent(page, agentId);
   await expectBrowserAgentConfig(page, agentId);
   await dismissPrivacyDialog(page);
+<<<<<<< HEAD
   await ensureRailOpen(page);
   await page.getByTestId('entry-nav-new-project').click();
   await expect(page.getByTestId('new-project-modal')).toBeVisible();
   await expect(page.getByTestId('new-project-panel')).toBeVisible();
+=======
+}
+
+async function createByokOpenCodeProject(page: Page, name: string) {
+  await configureByokOpenCodeWithoutProvider(page);
+  await installBrowserByokOpenCodeConfig(page);
+  await gotoEntryHome(page);
+  await setBrowserByokOpenCodeConfig(page);
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await waitForLoadingToClear(page);
+  await setBrowserByokOpenCodeConfig(page);
+  await configureByokOpenCodeWithoutProvider(page);
+  await expectBrowserAgentConfig(page, 'byok-opencode');
+  await dismissPrivacyDialog(page);
+  await openNewProjectModalFromProjects(page);
+>>>>>>> upstream/main
   await page.getByTestId('new-project-tab-prototype').click();
   await page.getByTestId('new-project-name').fill(name);
   await page.getByTestId('create-project').click();

@@ -111,15 +111,27 @@ FunctionEnd
   return `
 Function SyncLauncherRuntime
   Push $0
+<<<<<<< HEAD
   CreateDirectory "${runtimeDir}"
   FileOpen $0 "${escapedRuntimePath}" w
   IfErrors done
 ${descriptorJson.map((line) => `  FileWrite $0 "${escapeNsisString(line)}$\\r$\\n"`).join("\n")}
   FileClose $0
   Delete "${escapedAttemptsPath}"
+=======
+  InitPluginsDir
+  File "/oname=$PLUGINSDIR\\${helperFileName}" "${escapeNsisString(helperScriptPath)}"
+  nsExec::ExecToLog 'powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\\${helperFileName}" -RuntimePath "${escapedRuntimePath}" -AttemptsPath "${escapedAttemptsPath}" -CleanupPath "${escapedCleanupPath}" -Channel "${escapedChannel}" -Namespace "${escapedNamespace}" -Version "\${APP_VERSION}"'
+  Pop $0
+  Push "launcher runtime sync exit=$0"
+  Call LogInstallerEvent
+  \${If} $0 != "0"
+    DetailPrint "launcher runtime sync failed with exit code $0"
+    Abort
+  \${EndIf}
+>>>>>>> upstream/main
   Push "event=launcher_runtime_after_write path=${escapedRuntimePath}"
   Call LogInstallerEvent
-done:
   Pop $0
 FunctionEnd
 `;
@@ -387,7 +399,17 @@ write:
   Call LogInstallerEvent
 FunctionEnd
 
+<<<<<<< HEAD
 ${createLauncherRuntimeSyncScript(config, packagedVersion, launcher.paths.runtimePath, launcher.paths.attemptsPath)}
+=======
+${createLauncherRuntimeSyncScript(
+  config,
+  launcher.paths.runtimePath,
+  launcher.paths.attemptsPath,
+  launcher.paths.cleanupPath,
+  launcherRuntimeSyncScriptPath,
+)}
+>>>>>>> upstream/main
 
 Function un.LogInstallerEvent
   Exch $0

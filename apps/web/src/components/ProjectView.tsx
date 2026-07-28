@@ -2749,12 +2749,260 @@ export function ProjectView({
                   }),
                   true,
                 );
+<<<<<<< HEAD
+=======
+                if (!genericDisconnect && artifactFromRecoverableSourceText(replayedContent)) {
+                  void (async () => {
+                    if (recoveredArtifactMessagesRef.current.has(message.id)) return;
+                    const latestRunStatus = await fetchChatRunStatus(runId).catch(() => null);
+                    const artifactToPersist = parsedArtifact?.html
+                      ? parsedArtifact
+                      : artifactFromStandaloneHtml(replayedContent);
+                    if (!artifactToPersist?.html) return;
+                    let nextFiles = await refreshProjectFiles();
+                    const beforeFileNames = new Set(
+                      message.preTurnFileNames ?? nextFiles.map((f) => f.name),
+                    );
+                    const runStartedAt =
+                      latestRunStatus?.createdAt || message.startedAt || message.createdAt;
+                    const producedBeforeFallback = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
+                    let recoveredExistingArtifact =
+                      await findSameTurnWriteForRecoveredArtifact({
+                        artifact: artifactToPersist,
+                        sourceText: replayedContent,
+                        producedFiles: producedBeforeFallback,
+                        readProjectText: readProjectHtml,
+                      }) ??
+                      findExistingArtifactProjectFile(
+                        artifactToPersist,
+                        nextFiles,
+                        { minMtime: runStartedAt },
+                      );
+                    if (recoveredExistingArtifact) {
+                      savedArtifactRef.current = recoveredExistingArtifact.name;
+                      requestOpenFile(recoveredExistingArtifact.name);
+                    } else {
+                      savedArtifactRef.current = null;
+                      await persistArtifact(
+                        artifactToPersist,
+                        nextFiles,
+                        replayedContent,
+                        { pointerMinMtime: runStartedAt },
+                      );
+                      nextFiles = await refreshProjectFiles();
+                      recoveredExistingArtifact = findExistingArtifactProjectFile(
+                        artifactToPersist,
+                        nextFiles,
+                        { minMtime: runStartedAt },
+                      );
+                    }
+                    const diff = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
+                    const produced = mergeRecoveredArtifact(diff, recoveredExistingArtifact);
+                    if (produced.length > 0) {
+                      recoveredArtifactMessagesRef.current.add(message.id);
+                    }
+                    const producedArtifactToOpen = selectAutoOpenProducedArtifact(produced, autoOpenArtifactOptions);
+                    if (producedArtifactToOpen) requestOpenFile(producedArtifactToOpen);
+                    if (latestRunStatus?.status === 'succeeded') setError(null);
+                    if (
+                      shouldPublishRunFinishedEvent
+                      && latestRunStatus?.status === 'succeeded'
+                      && typeof latestRunStatus.artifactCount === 'number'
+                    ) {
+                      publishDaemonRunFinishedEvent({
+                        runId,
+                        projectId: project.id,
+                        conversationId: reattachConversationId,
+                        result: 'success',
+                        artifactCount: latestRunStatus.artifactCount,
+                      });
+                    }
+                    // Unlike the recoverArtifacts sibling below, this row's
+                    // endedAt was already stamped synchronously above (~4041)
+                    // at disconnect time — `prev.endedAt` is never null here,
+                    // so a `prev.endedAt ?? ...` fallback would never fire.
+                    // Overwrite it, but ONLY when the daemon just confirmed
+                    // succeeded (the same condition gating the runStatus
+                    // upgrade below) — `latestRunStatus` is already the fresh,
+                    // confirmed-terminal probe from above, so its `updatedAt`
+                    // is authoritative directly, with no extra re-probe.
+                    // Otherwise this row is still not terminal and must keep
+                    // its existing endedAt.
+                    updateMessageById(
+                      message.id,
+                      (prev) => ({
+                        ...prev,
+                        content: replayedContent,
+                        producedFiles: produced.length > 0 ? produced : prev.producedFiles,
+                        resultDeliveryState:
+                          produced.length > 0 ? 'delivered' : prev.resultDeliveryState,
+                        runStatus: latestRunStatus?.status === 'succeeded' ? 'succeeded' : prev.runStatus,
+                        endedAt:
+                          latestRunStatus?.status === 'succeeded'
+                            ? latestRunStatus.updatedAt
+                            : prev.endedAt,
+                      }),
+                      true,
+                      { telemetryFinalized: true },
+                    );
+                    await auditDesignSystemWorkspaceAfterRun(message.id);
+                    onProjectsRefresh();
+                  })();
+                }
+              }
+              // Clear stale retry count for the run.  Generic disconnects
+              // (browser SSE reconnect-budget exhaustion) are NOT authoritative
+              // terminal failures — the daemon may still report the run as
+              // queued/running/succeeded on the next attachRecoverableRuns tick.
+              // Only seal completedReattachRunsRef for real terminal errors so
+              // generic disconnects stay eligible for re-query.
+              // Generic disconnects share the transient-retry budget with the
+              // null-status path. Even once the generic-disconnect retry budget
+              // is exhausted, we must not seal on a transient status-probe miss:
+              // fetchChatRunStatus() returns null for any network/non-OK failure,
+              // not only when the daemon has truly forgotten the run. Treat
+              // null the same as an active retryable state and keep the row
+              // eligible for future refresh/reattach. Only authoritative
+              // terminal statuses seal completedReattachRunsRef.
+              let shouldRefreshConversationAfterCleanup = true;
+              let shouldRetryAfterControllerCleanup = false;
+              if (genericDisconnect) {
+                const attempts = (genericDisconnectRetriesRef.current.get(runId) ?? 0) + 1;
+                if (attempts >= MAX_TRANSIENT_RETRIES) {
+                  const backoffUntil = Date.now() + 3000;
+                  genericDisconnectRetriesRef.current.set(runId, attempts);
+                  genericDisconnectBackoffUntilRef.current.set(runId, backoffUntil);
+                  // consumeDaemonRun invokes async error handlers without
+                  // awaiting them. Clear the streaming marker before the status
+                  // probe yields so the surrounding finally block cannot clear
+                  // the refs first and strand the conversation in streaming.
+                  clearCurrentRunStreamingMarker(
+                    reattachConversationId,
+                    controller,
+                    cancelController,
+                  );
+                  const backoffTimer = scheduleProjectTimeout(() => {
+                    genericDisconnectBackoffUntilRef.current.delete(runId);
+                    shouldRetryAfterControllerCleanup = true;
+                    setRecoveryTick((t) => t + 1);
+                  }, 3000);
+                  const latestRunStatus = await fetchChatRunStatus(runId).catch(() => null);
+                  if (!latestRunStatus || isActiveRunStatus(latestRunStatus.status)) {
+                    // If the backoff elapsed while this probe was still in
+                    // flight, its recovery tick already ran while the run was
+                    // still registered as reattaching. Re-run recovery after
+                    // controller cleanup so the retry is not stranded until an
+                    // unrelated state change.
+                    shouldRefreshConversationAfterCleanup = false;
+                  } else if (latestRunStatus.status === 'succeeded') {
+                    if (
+                      shouldPublishRunFinishedEvent
+                      && typeof latestRunStatus.artifactCount === 'number'
+                    ) {
+                      publishDaemonRunFinishedEvent({
+                        runId,
+                        projectId: project.id,
+                        conversationId: reattachConversationId,
+                        result: 'success',
+                        artifactCount: latestRunStatus.artifactCount,
+                      });
+                    }
+                    clearProjectTimeout(backoffTimer);
+                    setError(null);
+                    // If the resumed stream already replayed some content/events
+                    // before disconnecting again, finalizing this row as
+                    // succeeded would persist a truncated transcript. Clear the
+                    // partial local replay and trigger one immediate full replay
+                    // from the daemon's terminal event log instead.
+                    if (
+                      needsFullReplay
+                      && !(message.producedFiles?.length)
+                      && (replayedContent.trim().length > 0 || replayedEvents.length > 0)
+                    ) {
+                      updateMessageById(
+                        message.id,
+                        (prev) => ({
+                          ...removeErrorStatusEvent(prev, err.message, errorCode),
+                          content: '',
+                          events: [],
+                          runStatus: 'succeeded',
+                          // Adopt the daemon's authoritative terminal timestamp rather
+                          // than the stale disconnect-time stamp taken when the generic
+                          // disconnect first fired.
+                          endedAt: latestRunStatus.updatedAt,
+                          ...(latestRunStatus.resumable !== undefined
+                            ? { resumable: latestRunStatus.resumable }
+                            : {}),
+                        }),
+                        true,
+                        { telemetryFinalized: true },
+                      );
+                      retryFullReplayAfterCleanup = true;
+                    } else {
+                      updateMessageById(
+                        message.id,
+                        (prev) => ({
+                          ...removeErrorStatusEvent(prev, err.message, errorCode),
+                          runStatus: 'succeeded',
+                          endedAt: latestRunStatus.updatedAt,
+                          ...(latestRunStatus.resumable !== undefined
+                            ? { resumable: latestRunStatus.resumable }
+                            : {}),
+                        }),
+                        true,
+                        { telemetryFinalized: true },
+                      );
+                    }
+                    skipFinalPersistNow = true;
+                    genericDisconnectRetriesRef.current.delete(runId);
+                    genericDisconnectBackoffUntilRef.current.delete(runId);
+                  } else {
+                    clearProjectTimeout(backoffTimer);
+                    if (latestRunStatus.status === 'canceled') setError(null);
+                    updateMessageById(
+                      message.id,
+                      (prev) => ({
+                        ...prev,
+                        runStatus: latestRunStatus.status,
+                        endedAt: latestRunStatus.updatedAt,
+                        ...(latestRunStatus.resumable !== undefined
+                          ? { resumable: latestRunStatus.resumable }
+                          : {}),
+                      }),
+                      true,
+                      { telemetryFinalized: true },
+                    );
+                    skipFinalPersistNow = true;
+                    completedReattachRunsRef.current.add(runId);
+                    genericDisconnectRetriesRef.current.delete(runId);
+                    genericDisconnectBackoffUntilRef.current.delete(runId);
+                  }
+                } else {
+                  genericDisconnectRetriesRef.current.set(runId, attempts);
+                }
+              } else {
+                transientFailedRetriesRef.current.delete(runId);
+                genericDisconnectRetriesRef.current.delete(runId);
+                genericDisconnectBackoffUntilRef.current.delete(runId);
+                completedReattachRunsRef.current.add(runId);
+>>>>>>> upstream/main
               }
               completedReattachRunsRef.current.add(runId);
               reattachControllersRef.current.delete(runId);
               reattachCancelControllersRef.current.delete(runId);
               clearCurrentRunStreamingMarker(reattachConversationId, controller, cancelController);
+<<<<<<< HEAD
               persistNow({ telemetryFinalized: true });
+=======
+              if (!skipFinalPersistNow) persistNow({ telemetryFinalized: true });
+              if (shouldRetryAfterControllerCleanup && !shouldRefreshConversationAfterCleanup) {
+                setRecoveryTick((t) => t + 1);
+              }
+              if (retryFullReplayAfterCleanup) setRecoveryTick((t) => t + 1);
+              if (shouldRefreshConversationAfterCleanup) {
+                scheduleConversationMessageRefresh(reattachConversationId);
+              }
+>>>>>>> upstream/main
             },
           },
           onRunStatus: (runStatus) => {
@@ -3483,6 +3731,133 @@ export function ProjectView({
               void patchAttachedStatuses(runCommentAttachments, 'failed');
             }
           }
+<<<<<<< HEAD
+=======
+          // Mark the run as completed in the reattach registry so that
+          // attachRecoverableRuns does not race it after streaming ends.
+          // Without this guard, the spuriouslyFailedPending heuristic would
+          // match a freshly-failed live run (no content, no producedFiles) and
+          // attempt a daemon status fetch on a run the client already knows
+          // failed — overwriting the assistant message's resumable flag with
+          // the fetched status before the ChatPane has had a chance to render.
+          //
+          // EXCEPTION: the generic "daemon stream disconnected before run
+          // completed" error is a browser-side SSE reconnect-budget exhaustion,
+          // NOT an authoritative terminal failure.  The daemon may still report
+          // the run as queued/running on the next tick, so we must leave the
+          // runId eligible for attachRecoverableRuns to re-query.  Only seal
+          // the registry entry on authoritative terminal failures (any error
+          // that is NOT the generic disconnect message).
+          // Generic disconnects share the transient-retry budget with the
+          // reattach null-status path. As with the reattach path above, a null
+          // status probe is not authoritative — it may be a transient fetch or
+          // daemon hiccup — so keep the run eligible for future re-query unless
+          // the daemon explicitly reports a terminal status.
+          if (currentRunId) {
+            if (isGenericDaemonDisconnect(err)) {
+              const runIdForGenericDisconnect = currentRunId;
+              const attempts =
+                (genericDisconnectRetriesRef.current.get(runIdForGenericDisconnect) ?? 0) + 1;
+              if (attempts >= MAX_TRANSIENT_RETRIES) {
+                const backoffUntil = Date.now() + 3000;
+                genericDisconnectRetriesRef.current.set(runIdForGenericDisconnect, attempts);
+                genericDisconnectBackoffUntilRef.current.set(runIdForGenericDisconnect, backoffUntil);
+                const backoffTimer = scheduleProjectTimeout(() => {
+                  genericDisconnectBackoffUntilRef.current.delete(runIdForGenericDisconnect);
+                  setRecoveryTick((t) => t + 1);
+                }, 3000);
+                const latestRunStatus = await fetchChatRunStatus(runIdForGenericDisconnect).catch(() => null);
+                if (!latestRunStatus || isActiveRunStatus(latestRunStatus.status)) {
+                } else if (latestRunStatus.status === 'succeeded') {
+                  if (typeof latestRunStatus.artifactCount === 'number') {
+                    publishDaemonRunFinishedEvent({
+                      runId: runIdForGenericDisconnect,
+                      projectId: project.id,
+                      conversationId: runConversationId,
+                      result: 'success',
+                      artifactCount: latestRunStatus.artifactCount,
+                    });
+                  }
+                  clearProjectTimeout(backoffTimer);
+                  // Advance the outer endedAt so updateConversationLatestRun()
+                  // below adopts this same authoritative terminal timestamp,
+                  // matching the message row's endedAt set further down.
+                  endedAt = latestRunStatus.updatedAt;
+                  if (runMayFinalize) {
+                    setError(null);
+                    updateAssistant((prev) => {
+                      const recovered = removeErrorStatusEvent(prev, err.message, errorCode);
+                      if (
+                        !prev.producedFiles?.length
+                        && (prev.content.trim().length > 0 || (prev.events?.length ?? 0) > 0)
+                      ) {
+                        return {
+                          ...recovered,
+                          content: '',
+                          events: [],
+                          // Adopt the daemon's authoritative terminal timestamp rather
+                          // than the stale disconnect-time stamp taken when the generic
+                          // disconnect first fired.
+                          endedAt: latestRunStatus.updatedAt,
+                          runStatus: 'succeeded',
+                          ...(latestRunStatus.resumable !== undefined
+                            ? { resumable: latestRunStatus.resumable }
+                            : {}),
+                        };
+                      }
+                      return {
+                        ...recovered,
+                        endedAt: latestRunStatus.updatedAt,
+                        runStatus: 'succeeded',
+                        ...(latestRunStatus.resumable !== undefined
+                          ? { resumable: latestRunStatus.resumable }
+                          : {}),
+                      };
+                    });
+                    updateConversationLatestRun('succeeded', endedAt);
+                    conversationFinalizedInline = true;
+                  }
+                  if (runCommentAttachments.length > 0) {
+                    void patchAttachedStatuses(runCommentAttachments, 'needs_review');
+                  }
+                  finalRunStatusAfterError = 'succeeded';
+                  refreshConversationAfterError = true;
+                  genericDisconnectRetriesRef.current.delete(runIdForGenericDisconnect);
+                  genericDisconnectBackoffUntilRef.current.delete(runIdForGenericDisconnect);
+                } else {
+                  clearProjectTimeout(backoffTimer);
+                  // Same rationale as the succeeded branch above: keep the
+                  // conversation-level stamp in step with the message row.
+                  endedAt = latestRunStatus.updatedAt;
+                  if (runMayFinalize) {
+                    if (latestRunStatus.status === 'canceled') setError(null);
+                    updateAssistant((prev) => ({
+                      ...prev,
+                      endedAt: latestRunStatus.updatedAt,
+                      runStatus: latestRunStatus.status,
+                      ...(latestRunStatus.resumable !== undefined
+                        ? { resumable: latestRunStatus.resumable }
+                        : {}),
+                    }));
+                    updateConversationLatestRun(latestRunStatus.status, endedAt);
+                    conversationFinalizedInline = true;
+                  }
+                  finalRunStatusAfterError = latestRunStatus.status;
+                  refreshConversationAfterError = true;
+                  completedReattachRunsRef.current.add(runIdForGenericDisconnect);
+                  genericDisconnectRetriesRef.current.delete(runIdForGenericDisconnect);
+                  genericDisconnectBackoffUntilRef.current.delete(runIdForGenericDisconnect);
+                }
+              } else {
+                genericDisconnectRetriesRef.current.set(runIdForGenericDisconnect, attempts);
+              }
+            } else {
+              genericDisconnectRetriesRef.current.delete(currentRunId);
+              genericDisconnectBackoffUntilRef.current.delete(currentRunId);
+              completedReattachRunsRef.current.add(currentRunId);
+            }
+          }
+>>>>>>> upstream/main
           const ownsCurrentRun = clearCurrentRunStreamingMarker(
             runConversationId,
             controller,

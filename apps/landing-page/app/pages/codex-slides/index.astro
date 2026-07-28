@@ -1,0 +1,616 @@
+---
+/*
+ * /codex-slides/ — sister-project landing page for nexu-io/codex-slides.
+ *
+ * Third entry in the Product menu next to HTML Anything and HTML Video, and it
+ * reuses that family's page shape 1:1 (hero + at-a-glance band + ideas +
+ * numbered flow + image gallery + two-up notes + tieback), so
+ * the three product pages stay visually interchangeable.
+ *
+ * Copy lives in `codex-slides-i18n.ts` (English base + one Agent-translated
+ * override per landing locale). Everything that is NOT language — counts,
+ * install commands, export formats, screenshots — stays here so it is never
+ * duplicated per locale.
+ *
+ * Screenshots are local `public/codex-slides/*.webp` rather than the R2 bucket
+ * the HTML Anything / HTML Video pages use: they ship with the PR (no separate
+ * upload step) and each file is far below the 1 MiB changed-file guard.
+ */
+import Layout from '../../_components/sub-page-layout.astro';
+import LazyImg from '../../_components/lazy-img.astro';
+import { getCodexSlidesCopy } from '../../codex-slides-i18n';
+import { getInfoPageCopy } from '../../info-page-i18n';
+import { localeFromPath, localizedHref } from '../../i18n';
+// Shared closing-band primitives (painted plate + coral CTA), the same ones the
+// /plugins/codex-design/ collection page ends on.
+import '../../_partials/detail-bands.css';
+
+const CS_REPO = 'nexu-io/codex-slides';
+const CS_URL = `https://github.com/${CS_REPO}`;
+const CS_REPO_API = `https://api.github.com/repos/${CS_REPO}`;
+const SITE = 'https://open-design.ai';
+
+// Catalog sizes, quoted straight from the upstream README. Not localized:
+// they are counts, and every locale renders the same digits.
+const TEMPLATE_COUNT = '45';
+const STYLE_COUNT = '73';
+const SCENARIO_COUNT = '24';
+
+// Numeric fallback for a build that cannot reach the GitHub API; the glance
+// card labels this "GitHub stars", so it must read as a count.
+const FALLBACK_STARS = '369';
+const FALLBACK_LICENSE = 'MIT';
+
+const HERO = '/codex-slides/hero.webp';
+// Share card stays a PNG: social crawlers (Facebook, LinkedIn, …) still have
+// spotty WebP support, same rule as `heroImage` in `image-assets.ts`.
+const OG_CARD = '/codex-slides/og.png';
+
+const DECK_SHOTS = [
+  '/codex-slides/deck-market-report.webp',
+  '/codex-slides/deck-data.webp',
+  '/codex-slides/deck-keynote.webp',
+  '/codex-slides/deck-editorial.webp',
+  '/codex-slides/deck-clean-daylight.webp',
+  '/codex-slides/deck-technical-cutaway.webp',
+] as const;
+
+const STUDIO_SHOTS = [
+  '/codex-slides/ui-home.webp',
+  '/codex-slides/ui-scenarios.webp',
+  '/codex-slides/ui-outline.webp',
+  '/codex-slides/ui-editor.webp',
+] as const;
+
+const INSTALL_COMMANDS = [
+  'codex plugin marketplace add nexu-io/codex-slides',
+  'codex plugin add codex-slides@codex-slides',
+].join('\n');
+
+function formatCount(count: unknown): string | null {
+  if (typeof count !== 'number' || !Number.isFinite(count) || count <= 0) return null;
+  if (count < 1000) return String(count);
+  return `${(count / 1000).toFixed(1).replace(/\.0$/, '')}K`;
+}
+
+let starsLabel = FALLBACK_STARS;
+let licenseLabel = FALLBACK_LICENSE;
+
+try {
+  const response = await fetch(CS_REPO_API, {
+    headers: { Accept: 'application/vnd.github+json' },
+  });
+  if (response.ok) {
+    const repo = (await response.json()) as {
+      stargazers_count?: number;
+      license?: { spdx_id?: string };
+    };
+    starsLabel = formatCount(repo.stargazers_count) ?? starsLabel;
+    licenseLabel = repo.license?.spdx_id ?? licenseLabel;
+  }
+} catch {
+  // Network unavailable at build time — keep the fallbacks.
+}
+
+const locale = localeFromPath(Astro.url.pathname);
+const href = (path: string) => localizedHref(path, locale);
+const copy = getCodexSlidesCopy(locale);
+// Shared `Star on GitHub` label so the ghost CTA matches every other sub-page
+// (already localized per locale). The primary CTA uses this page's own
+// `downloadCta`, which names Open Design explicitly.
+const common = getInfoPageCopy(locale).common;
+const title = copy.title;
+const description = copy.description;
+
+// Structured data uses the LOCALIZED page URL: an `/ja/` render must not claim
+// to be the English canonical.
+const pageUrl = new URL(Astro.url.pathname, SITE).href;
+const homeUrl = new URL(href('/'), SITE).href;
+
+const jsonLd: Array<Record<string, unknown>> = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'SoftwareApplication',
+    name: 'Codex Slides',
+    alternateName: [
+      'codex-slides',
+      'Codex Slides plugin',
+      'AI slide studio for Codex',
+      'open source AI slide generator',
+      'open source AI presentation maker',
+      copy.schemaAlternateName,
+    ],
+    applicationCategory: 'BusinessApplication',
+    operatingSystem: 'macOS, Linux, Windows',
+    description,
+    url: pageUrl,
+    sameAs: [CS_URL],
+    license: 'https://opensource.org/licenses/MIT',
+    offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+    author: {
+      '@type': 'Organization',
+      name: 'Open Design',
+      url: homeUrl,
+    },
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Open Design', item: homeUrl },
+      { '@type': 'ListItem', position: 2, name: 'Codex Slides', item: pageUrl },
+    ],
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: [
+      { '@type': 'Question', name: copy.schemaWhatQuestion, acceptedAnswer: { '@type': 'Answer', text: copy.schemaWhatAnswer } },
+      { '@type': 'Question', name: copy.schemaKeyQuestion, acceptedAnswer: { '@type': 'Answer', text: copy.schemaKeyAnswer } },
+      { '@type': 'Question', name: copy.schemaExportQuestion, acceptedAnswer: { '@type': 'Answer', text: copy.schemaExportAnswer } },
+      { '@type': 'Question', name: copy.schemaRelationQuestion, acceptedAnswer: { '@type': 'Answer', text: copy.schemaRelationAnswer } },
+    ],
+  },
+];
+
+// Zip tiles with their shots so each grid maps a single array instead of doing
+// a parallel-index lookup TS widens to `string | undefined`.
+const deckTiles = copy.showcase.map((tile, i) => ({ ...tile, src: DECK_SHOTS[i] ?? HERO }));
+const studioTiles = copy.inside.map((tile, i) => ({ ...tile, src: STUDIO_SHOTS[i] ?? HERO }));
+---
+
+<Layout title={title} description={description} active="codex-slides" ogImage={OG_CARD} jsonLd={jsonLd}>
+  <header class="catalog-head">
+    <span class="label">{copy.label}</span>
+    <h1 class="display">
+      <em>Codex Slides</em>: {copy.heading}<span class="dot">.</span>
+    </h1>
+    <p class="lead">
+      {copy.lead}
+    </p>
+    <div class="cs-cta">
+      <a class="btn btn-primary" href={href('/download/')}>{copy.downloadCta}</a>
+      <a class="btn btn-ghost" href={CS_URL} target="_blank" rel="noreferrer noopener">{common.starOnGithub}</a>
+    </div>
+  </header>
+
+  <figure class="ha-hero-figure">
+    <img
+      src={HERO}
+      alt={copy.heroAlt}
+      width="2400"
+      height="1620"
+      loading="eager"
+      fetchpriority="high"
+      decoding="async"
+    />
+  </figure>
+
+  <section class="ha-glance" aria-label={copy.glanceAria}>
+    <ul>
+      <li><span class="num">{starsLabel}</span><span class="lbl">{copy.glance.stars}</span></li>
+      <li><span class="num">{TEMPLATE_COUNT}</span><span class="lbl">{copy.glance.templates}</span></li>
+      <li><span class="num">{STYLE_COUNT}</span><span class="lbl">{copy.glance.styles}</span></li>
+      <li><span class="num">{SCENARIO_COUNT}</span><span class="lbl">{copy.glance.scenarios}</span></li>
+      <li><span class="num">{licenseLabel}</span><span class="lbl">{copy.glance.license}</span></li>
+    </ul>
+  </section>
+
+  <section class="ha-section" aria-labelledby="cs-why">
+    <h2 id="cs-why" class="ha-h2">{copy.whyTitle}</h2>
+    <p class="ha-section-lead">{copy.whyLead}</p>
+    <div class="ha-ideas">
+      {copy.ideas.map((idea) => (
+        <article class="ha-idea">
+          <h3>{idea.headline}</h3>
+          <p>{idea.body}</p>
+        </article>
+      ))}
+    </div>
+  </section>
+
+  <section class="ha-section" aria-labelledby="cs-flow">
+    <h2 id="cs-flow" class="ha-h2">{copy.flowTitle}</h2>
+    <p class="ha-section-lead">{copy.flowLead}</p>
+    <ol class="ha-flow">
+      {copy.flow.map((step) => (
+        <li>
+          <span class="step-num">{step.step}</span>
+          <div class="step-body">
+            <h3>{step.headline}</h3>
+            <p>{step.body}</p>
+          </div>
+        </li>
+      ))}
+    </ol>
+  </section>
+
+  <section class="ha-section" aria-labelledby="cs-showcase">
+    <h2 id="cs-showcase" class="ha-h2">{copy.showcaseTitle}</h2>
+    <p class="ha-section-lead">{copy.showcaseLead}</p>
+    <ul class="ha-showcase">
+      {deckTiles.map((tile) => (
+        <li>
+          <figure>
+            <LazyImg src={tile.src} alt={tile.alt} />
+            <figcaption>{tile.tag}</figcaption>
+          </figure>
+        </li>
+      ))}
+    </ul>
+  </section>
+
+  <section class="ha-section" aria-labelledby="cs-inside">
+    <h2 id="cs-inside" class="ha-h2">{copy.insideTitle}</h2>
+    <p class="ha-section-lead">{copy.insideLead}</p>
+    <ul class="ha-showcase ha-showcase-wide">
+      {studioTiles.map((tile) => (
+        <li>
+          <figure>
+            <LazyImg src={tile.src} alt={tile.alt} />
+            <figcaption>{tile.tag}</figcaption>
+          </figure>
+        </li>
+      ))}
+    </ul>
+  </section>
+
+  <section class="ha-section" aria-labelledby="cs-scenarios">
+    <h2 id="cs-scenarios" class="ha-h2">{copy.scenariosTitle}</h2>
+    <p class="ha-section-lead">{copy.scenariosLead}</p>
+    <ul class="ha-surfaces">
+      {copy.scenarios.map((scenario) => (
+        <li>
+          <h3>{scenario.name}</h3>
+          <p>{scenario.blurb}</p>
+        </li>
+      ))}
+    </ul>
+  </section>
+
+  <section class="ha-section" aria-labelledby="cs-formats">
+    <h2 id="cs-formats" class="ha-h2">{copy.formatsTitle}</h2>
+    <p class="ha-section-lead">{copy.formatsLead}</p>
+    <dl class="cs-formats">
+      {copy.formatsRows.map((row) => (
+        <div class="cs-formats-row">
+          <dt>{row.label}</dt>
+          <dd>{row.values}</dd>
+        </div>
+      ))}
+    </dl>
+  </section>
+
+  <section class="ha-section" aria-labelledby="cs-duo">
+    <h2 id="cs-duo" class="ha-h2">{copy.duoTitle}</h2>
+    <div class="ha-duo">
+      <div class="ha-note">
+        <h3 class="ha-note-h">{copy.fastTitle}</h3>
+        <p>{copy.fastLead}</p>
+      </div>
+      <div class="ha-note">
+        <h3 class="ha-note-h">{copy.installTitle}</h3>
+        <p>{copy.installLead}</p>
+        <pre class="cs-code"><code>{INSTALL_COMMANDS}</code></pre>
+      </div>
+    </div>
+  </section>
+
+  {/* Closing CTA: full-bleed painted band ending on the Open Design download,
+      reusing the shared .dbfinal primitive from the codex-design collection. */}
+  <section class="dbband dbfinal cs-final-band" aria-labelledby="cs-tieback">
+    <div class="dbin">
+      <p class="dbeye">{copy.finalEyebrow}</p>
+      <h2 id="cs-tieback" class="dbfinal-h">{copy.tiebackTitle}</h2>
+      <p class="dbfinal-p">{copy.tiebackBody}</p>
+      <div class="dbcta-row">
+        <a class="dbbtn-p" href={href('/download/')}>{copy.downloadCta} ↗</a>
+        <a class="dbbtn-g" href={CS_URL} target="_blank" rel="noreferrer noopener">{common.starOnGithub}</a>
+      </div>
+    </div>
+  </section>
+</Layout>
+
+<style>
+  /* Page-local styles for the shared product-page shape (HTML Anything /
+   * HTML Video). Buttons reuse the site-wide `.btn`/`.btn-primary`/`.btn-ghost`
+   * from globals.css so the CTAs are pixel-identical to every other sub-page;
+   * only the layout wrapper (`.cs-cta`) and the hint line are local. */
+
+  /* ---- CTA row (shared .btn styles come from globals.css) ---- */
+  .cs-cta {
+    margin-top: 1.5rem;
+    display: flex;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+  }
+  /* ---- Hero figure ---- */
+  .ha-hero-figure {
+    margin: 1.25rem 0 0 0;
+    padding: 0;
+  }
+  .ha-hero-figure img {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: 6px;
+    border: 1px solid var(--line);
+  }
+
+  /* ---- At-a-glance stat band. Bottom margin is 0 so the following
+     section's own padding-top owns the gap (no doubled whitespace). ---- */
+  .ha-glance {
+    margin: 2rem 0 0;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    padding: 1.25rem 0;
+  }
+  .ha-glance ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 1.25rem 1.75rem;
+  }
+  .ha-glance li {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+  }
+  .ha-glance .num {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: 1.9rem;
+    line-height: 1;
+    letter-spacing: -0.015em;
+    color: var(--ink);
+  }
+  .ha-glance .lbl {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--ink-mute);
+  }
+
+  /* ---- Section rhythm: one consistent, tight gap between sections ---- */
+  .ha-section { margin: 0; padding-top: 1.5rem; }
+  .ha-h2 {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: clamp(1.5rem, 3vw, 2rem);
+    line-height: 1.1;
+    letter-spacing: -0.018em;
+    color: var(--ink);
+    margin: 0 0 0.75rem 0;
+  }
+  .ha-section-lead {
+    max-width: 62ch;
+    font-size: 1rem;
+    line-height: 1.55;
+    color: var(--ink-soft);
+    margin: 0 0 1.5rem 0;
+  }
+
+  /* ---- Ideas ---- */
+  .ha-ideas {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.25rem;
+  }
+  .ha-idea {
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 1.25rem 1.35rem;
+    background: var(--paper-warm);
+  }
+  .ha-idea h3 {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: 1.15rem;
+    line-height: 1.25;
+    color: var(--ink);
+    margin: 0 0 0.5rem 0;
+  }
+  .ha-idea p { margin: 0; font-size: 0.95rem; line-height: 1.55; color: var(--ink-soft); }
+
+  /* ---- How-it-works numbered flow ---- */
+  .ha-flow {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    gap: 0;
+  }
+  .ha-flow li {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.25rem 1.25rem;
+    padding: 1.1rem 0;
+    border-top: 1px solid var(--line);
+  }
+  .ha-flow li:last-child { border-bottom: 1px solid var(--line); }
+  .step-num {
+    font-family: var(--mono);
+    font-size: 0.85rem;
+    letter-spacing: 0.04em;
+    color: var(--coral);
+    padding-top: 0.2rem;
+  }
+  .step-body { display: grid; gap: 0.3rem; }
+  .ha-flow h3 {
+    font-family: var(--serif);
+    font-weight: 600;
+    margin: 0;
+    font-size: 1.1rem;
+    color: var(--ink);
+  }
+  .ha-flow p { margin: 0; font-size: 0.95rem; line-height: 1.55; color: var(--ink-soft); max-width: 70ch; }
+
+  /* ---- Image galleries ---- */
+  .ha-showcase {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.25rem;
+  }
+  .ha-showcase figure {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+  }
+  .ha-showcase img {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    border-radius: 6px;
+    border: 1px solid var(--line);
+    background: var(--paper-warm);
+  }
+  .ha-showcase figcaption {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink-mute);
+  }
+  /* Studio UI screenshots carry dense product chrome, so they need a bigger
+     cell than the simple deck cards — two-up instead of four-up. */
+  .ha-showcase-wide {
+    grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  }
+
+  /* ---- Scenario cards ---- */
+  /* Six groups → a clean 3-up grid (two even rows), so the 6th card never
+     leaves a lonely orphan next to a wide empty band. */
+  .ha-surfaces {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.85rem;
+  }
+  @media (max-width: 720px) {
+    .ha-surfaces { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 460px) {
+    .ha-surfaces { grid-template-columns: 1fr; }
+  }
+  .ha-surfaces li {
+    border: 1px solid var(--line);
+    padding: 0.9rem 1rem;
+    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+  .ha-surfaces h3 {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: 1rem;
+    color: var(--ink);
+    margin: 0;
+  }
+  .ha-surfaces p {
+    font-size: 0.85rem;
+    line-height: 1.45;
+    color: var(--ink-soft);
+    margin: 0;
+  }
+
+  /* ---- Export formats: a small definition list, one row per facet ---- */
+  .cs-formats {
+    margin: 0;
+    display: grid;
+    gap: 0;
+    max-width: 640px;
+  }
+  .cs-formats-row {
+    display: grid;
+    grid-template-columns: minmax(9rem, 12rem) 1fr;
+    gap: 0.5rem 1.25rem;
+    padding: 0.8rem 0;
+    border-top: 1px solid var(--line);
+  }
+  .cs-formats-row:last-child { border-bottom: 1px solid var(--line); }
+  .cs-formats dt {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--ink-mute);
+    align-self: center;
+  }
+  .cs-formats dd {
+    margin: 0;
+    font-size: 0.95rem;
+    line-height: 1.5;
+    color: var(--ink);
+    align-self: center;
+  }
+
+  /* ---- Two-up notes (fast mode / install). align-items:start so each note's
+     coral rule spans only its own text, never a tall empty band when the two
+     columns differ in height (install has an extra command block). ---- */
+  .ha-duo {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.25rem;
+    align-items: start;
+  }
+  .ha-note {
+    border-left: 2px solid var(--coral);
+    padding: 0.1rem 0 0.1rem 1.1rem;
+  }
+  .ha-note-h {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: 1.2rem;
+    line-height: 1.2;
+    color: var(--ink);
+    margin: 0 0 0.5rem 0;
+  }
+  .ha-note p {
+    margin: 0;
+    font-size: 0.95rem;
+    line-height: 1.55;
+    color: var(--ink-soft);
+    max-width: 56ch;
+  }
+
+  /* ---- Install command block ---- */
+  .cs-code {
+    margin: 0.85rem 0 0 0;
+    padding: 0.8rem 0.95rem;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--paper-warm);
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    line-height: 1.6;
+    color: var(--ink-soft);
+    overflow-x: auto;
+  }
+  .cs-code code { font: inherit; color: inherit; }
+
+  /* ---- Closing band: break the full-bleed .dbfinal plate out of the
+     centered `.sub-main container` so the painted background spans the whole
+     viewport, then let `.dbin` re-center the content. Top margin gives the
+     band air from the last light section. ---- */
+  .cs-final-band {
+    margin-top: 3.5rem;
+    width: 100vw;
+    position: relative;
+    left: 50%;
+    right: 50%;
+    margin-left: -50vw;
+    margin-right: -50vw;
+  }
+</style>

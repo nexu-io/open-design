@@ -106,6 +106,25 @@ function deferredResponse() {
   return { promise, resolve };
 }
 
+function installElementFullscreenMock() {
+  const original = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'requestFullscreen');
+  const requestFullscreen = vi.fn(() => Promise.resolve());
+  Object.defineProperty(HTMLElement.prototype, 'requestFullscreen', {
+    configurable: true,
+    value: requestFullscreen,
+  });
+  return {
+    requestFullscreen,
+    restore() {
+      if (original) {
+        Object.defineProperty(HTMLElement.prototype, 'requestFullscreen', original);
+      } else {
+        Reflect.deleteProperty(HTMLElement.prototype, 'requestFullscreen');
+      }
+    },
+  };
+}
+
 function srcDocActivationMessages(calls: readonly (readonly unknown[])[]) {
   return calls
     .map(([message]) => message)
@@ -1015,20 +1034,22 @@ describe('FileViewer SVG artifacts', () => {
     });
     const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
 
-    // Hover only surfaces the floating "edit params" affordance (#3438); it
-    // must not open the inspector. Pinning requires an explicit select.
+    // Hover surfaces no host chrome (the dashed highlight is in-iframe CSS);
+    // it must not open the inspector. Pinning requires an explicit select.
     window.dispatchEvent(new MessageEvent('message', {
       source: frame.contentWindow,
       data: { type: 'od-edit-hover', target: heroTarget },
     }));
-    expect(await screen.findByTestId('manual-edit-hover-open')).toBeTruthy();
+    expect(screen.queryByTestId('manual-edit-hover-open')).toBeNull();
     expect(screen.queryByText('Hero card')).toBeNull();
 
-    // Selecting pins the inspector to the hero card.
+    // Selecting raises the lightweight chrome; the inspector opens on demand
+    // through the action bar's params button and pins to the hero card.
     window.dispatchEvent(new MessageEvent('message', {
       source: frame.contentWindow,
       data: { type: 'od-edit-select', target: heroTarget },
     }));
+    fireEvent.click(await screen.findByTestId('manual-edit-open-inspector'));
     expect(await screen.findByText('Hero card')).toBeTruthy();
 
     // Hovering a different element must not switch the pinned inspector.
@@ -1041,6 +1062,248 @@ describe('FileViewer SVG artifacts', () => {
     expect(screen.queryByText('Trend card')).toBeNull();
   });
 
+<<<<<<< HEAD
+=======
+  // #3646 / #3647 exit-path regression: leaving edit mode while an inline text
+  // edit is live must ask the iframe to commit and WAIT for the session to end
+  // before tearing down, otherwise the final edit is dropped.
+  it('waits for the iframe to finish the inline text edit before leaving edit mode (#3646)', async () => {
+    const textTarget = {
+      ...manualEditTarget('copy', 'Editable copy', 20),
+      kind: 'text' as const,
+      tagName: 'p',
+      text: 'Editable copy',
+      fields: { text: 'Editable copy' },
+      isLayoutContainer: false,
+      outerHtml: '<p data-od-id="copy">Editable copy</p>',
+    };
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={baseFile({
+          name: 'page.html',
+          path: 'page.html',
+          mime: 'text/html',
+          kind: 'html',
+          artifactManifest: {
+            version: 1,
+            kind: 'html',
+            title: 'Page',
+            entry: 'page.html',
+            renderer: 'html',
+            exports: ['html'],
+          },
+        })}
+        liveHtml='<html><body><p data-od-id="copy">Editable copy</p></body></html>'
+      />,
+    );
+
+    const toggle = screen.getByTestId('manual-edit-mode-toggle');
+    fireEvent.click(toggle);
+    await waitFor(() => {
+      expect(screen.getByTestId('artifact-preview-frame').getAttribute('data-od-render-mode')).toBe('srcdoc');
+    });
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, 'postMessage');
+
+    // An inline text edit is in progress inside the iframe.
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { type: 'od-edit-select', target: textTarget },
+    }));
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { type: 'od-edit-text-session', id: 'copy', active: true },
+    }));
+
+    // Exiting asks the iframe to commit, then must stay in edit mode until the
+    // session is acknowledged (the prior fix tore down here and lost the edit).
+    fireEvent.click(toggle);
+    await waitFor(() => {
+      expect(postMessage).toHaveBeenCalledWith({ type: 'od-edit-text-finish', commit: true }, '*');
+    });
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+
+    // The iframe acks the finished session; only now does exit complete.
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { type: 'od-edit-text-session', id: 'copy', active: false, committed: true, changed: true },
+    }));
+
+    await waitFor(() => {
+      expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    });
+  });
+
+  // #4291 review: if the exit-time text commit fails, the close path must NOT
+  // tear down edit mode (which clears the error) and look like a successful
+  // save — it has to keep edit mode open with the error preserved.
+  it('keeps edit mode open and preserves the error when the exit-time text commit fails (#4291)', async () => {
+    const textTarget = {
+      ...manualEditTarget('card-title', 'Pricing that scales', 20),
+      kind: 'text' as const,
+      tagName: 'div',
+      text: 'Pricing that scales',
+      fields: { text: 'Pricing that scales' },
+      isLayoutContainer: false,
+      outerHtml: '<div data-od-id="card-title">Pricing that scales</div>',
+    };
+    vi.stubGlobal('fetch', vi.fn(async (url: unknown, opts?: { method?: string }) => {
+      const u = String(url);
+      if (u.includes('/files') && opts?.method === 'POST') {
+        return new Response(JSON.stringify({ error: { message: 'disk full' } }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      // The pre-save history check re-fetches the source; treat it as absent so
+      // the commit proceeds to the (failing) save.
+      return new Response('', { status: 404 });
+    }));
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={baseFile({
+          name: 'page.html',
+          path: 'page.html',
+          mime: 'text/html',
+          kind: 'html',
+          artifactManifest: {
+            version: 1,
+            kind: 'html',
+            title: 'Page',
+            entry: 'page.html',
+            renderer: 'html',
+            exports: ['html'],
+          },
+        })}
+        liveHtml='<html><body><div data-od-id="card-title">Pricing that scales</div></body></html>'
+      />,
+    );
+
+    const toggle = screen.getByTestId('manual-edit-mode-toggle');
+    fireEvent.click(toggle);
+    await waitFor(() => {
+      expect(screen.getByTestId('artifact-preview-frame').getAttribute('data-od-render-mode')).toBe('srcdoc');
+    });
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { type: 'od-edit-select', target: textTarget },
+    }));
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { type: 'od-edit-text-session', id: 'card-title', active: true },
+    }));
+    // Selection raises the lightweight chrome (no auto-open inspector).
+    expect(await screen.findByTestId('manual-edit-selection-frame')).toBeTruthy();
+
+    // Exit while editing; the iframe commits new text, but the save fails.
+    fireEvent.click(toggle);
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { type: 'od-edit-text-commit', id: 'card-title', value: 'New title' },
+    }));
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { type: 'od-edit-text-session', id: 'card-title', active: false, committed: true, changed: true },
+    }));
+
+    // The save error is surfaced and edit mode stays open instead of tearing down.
+    expect(await screen.findByText(/Could not save the edited file/)).toBeTruthy();
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  // #4291 review (iframe-driven path): an Enter-committed edit can still be
+  // in flight when the user exits. Exit must await that commit and honor a
+  // failure even though no host-side finish is pending, instead of tearing
+  // down through the race and hiding the failed save.
+  it('keeps edit mode open when an iframe-committed edit fails while exit races it (#4291)', async () => {
+    const textTarget = {
+      ...manualEditTarget('card-title', 'Pricing that scales', 20),
+      kind: 'text' as const,
+      tagName: 'div',
+      text: 'Pricing that scales',
+      fields: { text: 'Pricing that scales' },
+      isLayoutContainer: false,
+      outerHtml: '<div data-od-id="card-title">Pricing that scales</div>',
+    };
+    let releaseSave!: () => void;
+    const savePending = new Promise<void>((resolve) => { releaseSave = resolve; });
+    vi.stubGlobal('fetch', vi.fn(async (url: unknown, opts?: { method?: string }) => {
+      const u = String(url);
+      if (u.includes('/files') && opts?.method === 'POST') {
+        await savePending; // hold the save in flight until the test releases it
+        return new Response(JSON.stringify({ error: { message: 'disk full' } }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response('', { status: 404 });
+    }));
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={baseFile({
+          name: 'page.html',
+          path: 'page.html',
+          mime: 'text/html',
+          kind: 'html',
+          artifactManifest: {
+            version: 1,
+            kind: 'html',
+            title: 'Page',
+            entry: 'page.html',
+            renderer: 'html',
+            exports: ['html'],
+          },
+        })}
+        liveHtml='<html><body><div data-od-id="card-title">Pricing that scales</div></body></html>'
+      />,
+    );
+
+    const toggle = screen.getByTestId('manual-edit-mode-toggle');
+    fireEvent.click(toggle);
+    await waitFor(() => {
+      expect(screen.getByTestId('artifact-preview-frame').getAttribute('data-od-render-mode')).toBe('srcdoc');
+    });
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { type: 'od-edit-select', target: textTarget },
+    }));
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { type: 'od-edit-text-session', id: 'card-title', active: true },
+    }));
+    // Selection raises the lightweight chrome (no auto-open inspector).
+    expect(await screen.findByTestId('manual-edit-selection-frame')).toBeTruthy();
+
+    // Iframe-driven finish (Enter): commit + session-inactive with NO host finish.
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { type: 'od-edit-text-commit', id: 'card-title', value: 'New title' },
+    }));
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { type: 'od-edit-text-session', id: 'card-title', active: false, committed: true, changed: true },
+    }));
+
+    // Exit while that commit is still in flight, then let the save fail.
+    fireEvent.click(toggle);
+    await Promise.resolve();
+    releaseSave();
+
+    expect(await screen.findByText(/Could not save the edited file/)).toBeTruthy();
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+  });
+
+>>>>>>> upstream/main
   it('renders sandbox-shim artifacts on the srcdoc transport without entering edit mode (#2791)', () => {
     const file = baseFile({
       name: 'search.html',
@@ -1240,6 +1503,230 @@ describe('FileViewer SVG artifacts', () => {
     workspaceShell.remove();
   });
 
+<<<<<<< HEAD
+=======
+  it('closes deck in-tab presentation when the present iframe forwards Escape', async () => {
+    const file = baseFile({
+      name: 'deck.html',
+      path: 'deck.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Deck',
+        entry: 'deck.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+
+    const { container } = render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={file}
+        isDeck
+        liveHtml="<html><body><section class='slide active'>one</section><section class='slide'>two</section></body></html>"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /present/i }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /start from current slide/i }));
+
+    const frame = await waitFor(() => {
+      const nextFrame = document.body.querySelector<HTMLIFrameElement>('.present-overlay iframe');
+      expect(nextFrame).toBeTruthy();
+      return nextFrame!;
+    });
+    expect(container.querySelector('.html-viewer.is-tab-present')).toBeTruthy();
+
+    window.dispatchEvent(new MessageEvent('message', {
+      data: { type: 'od:present-escape' },
+      source: frame.contentWindow,
+    }));
+
+    await waitFor(() => {
+      expect(container.querySelector('.html-viewer.is-tab-present')).toBeNull();
+    });
+  });
+
+  it('starts deck presentation from the current slide and requests fullscreen immediately', async () => {
+    const file = baseFile({
+      name: 'deck.html',
+      path: 'deck.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Deck',
+        entry: 'deck.html',
+        renderer: 'deck-html',
+        exports: ['html'],
+      },
+    });
+    const fullscreen = installElementFullscreenMock();
+    const openMock = vi.spyOn(window, 'open').mockReturnValue(null);
+
+    try {
+      render(
+        <FileViewer
+          projectId="project-1"
+          projectKind="prototype"
+          file={file}
+          isDeck
+          liveHtml="<html><body><section class='slide'>one</section><section class='slide'>two</section></body></html>"
+        />,
+      );
+
+      const previewFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      act(() => {
+        window.dispatchEvent(new MessageEvent('message', {
+          data: { type: 'od:slide-state', active: 1, count: 2 },
+          source: previewFrame.contentWindow,
+        }));
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /present/i }));
+      expect(screen.getByRole('menuitem', { name: /start from beginning/i })).toBeTruthy();
+      expect(screen.getByRole('menuitem', { name: /start from current slide/i })).toBeTruthy();
+      expect(screen.getByRole('menuitem', { name: /presenter mode/i })).toBeTruthy();
+      expect(screen.queryByRole('menuitem', { name: /new tab/i })).toBeNull();
+
+      fireEvent.click(screen.getByRole('menuitem', { name: /start from current slide/i }));
+
+      const overlay = document.body.querySelector<HTMLElement>('.present-overlay');
+      const frame = overlay?.querySelector<HTMLIFrameElement>('iframe');
+      expect(overlay).toBeTruthy();
+      expect(frame?.srcdoc).toContain('var initialSlideIndex = 1;');
+      expect(fullscreen.requestFullscreen).toHaveBeenCalledTimes(1);
+      expect(fullscreen.requestFullscreen.mock.instances[0]).toBe(overlay);
+      expect(openMock).not.toHaveBeenCalled();
+      expect(analyticsTrackMock.mock.calls.some(([eventName, props]) => (
+        eventName === 'ui_click'
+        && props?.area === 'present_popover'
+        && props?.element === 'start_from_current'
+      ))).toBe(true);
+    } finally {
+      fullscreen.restore();
+    }
+  });
+
+  it('resets deck presentation to slide one before entering fullscreen', () => {
+    const file = baseFile({
+      name: 'deck.html',
+      path: 'deck.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Deck',
+        entry: 'deck.html',
+        renderer: 'deck-html',
+        exports: ['html'],
+      },
+    });
+    const fullscreen = installElementFullscreenMock();
+    const openMock = vi.spyOn(window, 'open').mockReturnValue(null);
+
+    try {
+      render(
+        <FileViewer
+          projectId="project-1"
+          projectKind="prototype"
+          file={file}
+          isDeck
+          liveHtml="<html><body><section class='slide'>one</section><section class='slide'>two</section></body></html>"
+        />,
+      );
+
+      const previewFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      act(() => {
+        window.dispatchEvent(new MessageEvent('message', {
+          data: { type: 'od:slide-state', active: 1, count: 2 },
+          source: previewFrame.contentWindow,
+        }));
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /present/i }));
+      fireEvent.click(screen.getByRole('menuitem', { name: /start from beginning/i }));
+
+      const overlay = document.body.querySelector<HTMLElement>('.present-overlay');
+      const frame = overlay?.querySelector<HTMLIFrameElement>('iframe');
+      expect(frame?.srcdoc).toContain('var initialSlideIndex = 0;');
+      expect(fullscreen.requestFullscreen.mock.instances[0]).toBe(overlay);
+      expect(openMock).not.toHaveBeenCalled();
+      expect(analyticsTrackMock.mock.calls.some(([eventName, props]) => (
+        eventName === 'ui_click'
+        && props?.area === 'present_popover'
+        && props?.element === 'start_from_beginning'
+      ))).toBe(true);
+    } finally {
+      fullscreen.restore();
+    }
+  });
+
+  it('opens presenter controls while the deck stage enters fullscreen', () => {
+    const file = baseFile({
+      name: 'deck.html',
+      path: 'deck.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Deck',
+        entry: 'deck.html',
+        renderer: 'deck-html',
+        exports: ['html'],
+      },
+    });
+    const fullscreen = installElementFullscreenMock();
+    const popupDocument = {
+      open: vi.fn(),
+      write: vi.fn(),
+      close: vi.fn(),
+    };
+    const popup = {
+      closed: false,
+      close: vi.fn(),
+      document: popupDocument,
+      focus: vi.fn(),
+      postMessage: vi.fn(),
+    } as unknown as Window;
+    const openMock = vi.spyOn(window, 'open').mockReturnValue(popup);
+
+    try {
+      render(
+        <FileViewer
+          projectId="project-1"
+          projectKind="prototype"
+          file={file}
+          isDeck
+          liveHtml="<html><body><section class='slide'>one</section><section class='slide'>two</section></body></html>"
+        />,
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: /present/i }));
+      fireEvent.click(screen.getByRole('menuitem', { name: /presenter mode/i }));
+
+      const overlay = document.body.querySelector<HTMLElement>('.present-overlay');
+      expect(openMock).toHaveBeenCalledTimes(1);
+      expect(popupDocument.write).toHaveBeenCalledWith(expect.stringContaining('od-presenter-data'));
+      expect(fullscreen.requestFullscreen.mock.instances[0]).toBe(overlay);
+      expect(analyticsTrackMock.mock.calls.some(([eventName, props]) => (
+        eventName === 'ui_click'
+        && props?.area === 'present_popover'
+        && props?.element === 'presenter_mode'
+      ))).toBe(true);
+    } finally {
+      fullscreen.restore();
+    }
+  });
+
+>>>>>>> upstream/main
   it('allows downloads in React component preview iframes', async () => {
     const file = baseFile({
       name: 'Card.jsx',
@@ -2855,6 +3342,391 @@ describe('FileViewer tweaks toolbar', () => {
     expect((screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement).srcdoc).toBe(frame.srcdoc);
   });
 
+<<<<<<< HEAD
+=======
+  it('keeps the URL-loaded iframe active when opening Draw after the URL preview bridge is ready', async () => {
+    const { container } = render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
+        liveHtml='<html><body><button>Stateful tab</button><main data-od-id="hero">Hero</main></body></html>'
+      />,
+    );
+
+    const urlFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const srcDocFrame = screen.getByTestId('artifact-preview-frame-srcdoc') as HTMLIFrameElement;
+    expect(urlFrame.getAttribute('data-od-render-mode')).toBe('url-load');
+    expect(urlFrame.getAttribute('src')).toContain('odPreviewBridge=snapshot');
+    expect(srcDocFrame.getAttribute('data-od-active')).toBe('false');
+
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        source: urlFrame.contentWindow,
+        data: { type: 'od:url-selection-bridge-ready' },
+      }));
+    });
+
+    clickAgentTool('draw-overlay-toggle');
+
+    await waitFor(() => {
+      const activeFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(activeFrame).toBe(urlFrame);
+      expect(activeFrame.getAttribute('data-od-render-mode')).toBe('url-load');
+      expect(activeFrame.getAttribute('data-od-active')).toBe('true');
+      expect(srcDocFrame.getAttribute('data-od-active')).toBe('false');
+      expect(container.querySelector('canvas')).toBeTruthy();
+    });
+  });
+
+  it('keeps the URL-load iframe warm while the Draw bar is open (no reload on close)', async () => {
+    const { container } = render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+      />,
+    );
+
+    const urlFrame = container.querySelector('iframe[data-od-render-mode="url-load"]') as HTMLIFrameElement | null;
+    expect(urlFrame).toBeTruthy();
+    expect(urlFrame?.getAttribute('data-od-active')).toBe('true');
+    const warmSrc = urlFrame?.getAttribute('src') ?? '';
+    expect(warmSrc).not.toBe('about:blank');
+    expect(warmSrc).toContain('/raw/');
+
+    // Opening Draw before bridge-ready flips the *visible* frame to the
+    // materialized srcDoc bridge (see the test above), but the URL-load iframe
+    // must stay warm rather than park at about:blank — otherwise closing the
+    // bar re-fetches the whole artifact and the user sees a black → loading →
+    // reload after every screenshot.
+    clickAgentTool('draw-overlay-toggle');
+
+    await waitFor(() => {
+      const active = container.querySelector('iframe[data-od-render-mode="srcdoc"]') as HTMLIFrameElement | null;
+      expect(active?.getAttribute('data-od-active')).toBe('true');
+    });
+
+    const urlFrameDuringDraw = container.querySelector('iframe[data-od-render-mode="url-load"]') as HTMLIFrameElement | null;
+    expect(urlFrameDuringDraw).toBe(urlFrame);
+    expect(urlFrameDuringDraw?.getAttribute('data-od-active')).toBe('false');
+    expect(urlFrameDuringDraw?.getAttribute('src')).not.toBe('about:blank');
+    expect(urlFrameDuringDraw?.getAttribute('src')).toBe(warmSrc);
+  });
+
+  it('holds the preview steady while the Draw bar is open instead of live-reloading on a file change', async () => {
+    const { rerender } = render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile({ mtime: 1000 })}
+        liveHtml='<html><body><main data-od-id="hero">Hero V1</main></body></html>'
+      />,
+    );
+
+    clickAgentTool('draw-overlay-toggle');
+    await waitFor(() => {
+      const active = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(active.getAttribute('data-od-render-mode')).toBe('srcdoc');
+      expect(active.srcdoc).toContain('Hero V1');
+    });
+
+    // Simulate an agent rewrite arriving via the chokidar live-reload signal
+    // (fresh liveHtml + bumped files-refresh + new mtime) WHILE the user is
+    // mid-mark. The preview must not yank itself out from under the
+    // annotation — that auto-refresh is the reported bug.
+    rerender(
+      <FileViewer projectId="project-1" projectKind="prototype"
+        file={htmlPreviewFile({ mtime: 999999 })}
+        filesRefreshKey={7}
+        liveHtml='<html><body><main data-od-id="hero">Hero V2</main></body></html>'
+      />,
+    );
+    await Promise.resolve();
+
+    const duringDraw = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    expect(duringDraw.srcdoc).toContain('Hero V1');
+    expect(duringDraw.srcdoc).not.toContain('Hero V2');
+
+    // Closing the Draw bar flushes the deferred update: the URL-load iframe
+    // returns active with the new mtime so the latest content lands in one
+    // clean pass.
+    clickAgentTool('draw-overlay-toggle');
+    await waitFor(() => {
+      const active = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(active.getAttribute('data-od-render-mode')).toBe('url-load');
+      expect(active.getAttribute('src') ?? '').toContain('v=999999');
+    });
+  });
+
+  it('drops the annotation freeze when switching files so the new artifact shows immediately', async () => {
+    const { container, rerender } = render(
+      <FileViewer projectId="project-1" projectKind="prototype"
+        file={htmlPreviewFile({ name: 'a.html', path: 'a.html' })}
+        liveHtml='<html><body><main data-od-id="hero">Artifact A</main></body></html>'
+      />,
+    );
+
+    clickAgentTool('draw-overlay-toggle');
+    await waitFor(() => {
+      expect((screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement).getAttribute('data-od-render-mode')).toBe('srcdoc');
+      expect(screen.getByPlaceholderText('Add a note for this mark')).toBeTruthy();
+    });
+
+    // Switch to a different file while Draw is still open. The viewer must not
+    // stay pinned to file A's frozen snapshot — the per-file tool closes and
+    // the new artifact renders live. Regression guard for nettee's review on
+    // the freeze having no projectId/file.name reset.
+    rerender(
+      <FileViewer projectId="project-1" projectKind="prototype"
+        file={htmlPreviewFile({ name: 'b.html', path: 'b.html' })}
+        liveHtml='<html><body><main data-od-id="hero">Artifact B</main></body></html>'
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByPlaceholderText('Add a note for this mark')).toBeNull();
+      const urlFrame = container.querySelector('iframe[data-od-render-mode="url-load"]') as HTMLIFrameElement | null;
+      expect(urlFrame?.getAttribute('data-od-active')).toBe('true');
+      expect(urlFrame?.getAttribute('src') ?? '').toContain('b.html');
+    });
+  });
+
+  it('closes the comment tool when switching files so a save cannot post to the previous file', async () => {
+    const { rerender } = render(
+      <FileViewer projectId="project-1" projectKind="prototype"
+        file={htmlPreviewFile({ name: 'a.html', path: 'a.html' })}
+        liveHtml='<html><body><main data-od-id="hero">A</main></body></html>'
+      />,
+    );
+
+    // Open Comment create mode — the side dock (`commentPanelOpen`) opens.
+    clickAgentTool('comment-panel-toggle');
+    await waitFor(() => {
+      expect(screen.getByTestId('comment-panel-toggle').getAttribute('aria-pressed')).toBe('true');
+      expect(screen.getByTestId('comment-side-panel')).toBeTruthy();
+    });
+
+    // Switch files with Comment still open. boardMode alone closing isn't
+    // enough — the dock and the file-scoped save target must tear down too,
+    // else the dock lingers and the next save posts back to the previous file.
+    rerender(
+      <FileViewer projectId="project-1" projectKind="prototype"
+        file={htmlPreviewFile({ name: 'b.html', path: 'b.html' })}
+        liveHtml='<html><body><main data-od-id="hero">B</main></body></html>'
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('comment-panel-toggle').getAttribute('aria-pressed')).toBe('false');
+      expect(screen.queryByTestId('comment-side-panel')).toBeNull();
+    });
+  });
+
+  it('materializes the srcDoc iframe only on first mode entry (not while hidden), then keeps it warm', async () => {
+    const { container } = render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Materialize me</main></body></html>'
+      />,
+    );
+
+    // Passive preview: the hidden srcDoc iframe stays on the lazy shell. The
+    // artifact must NOT be rendered a second time while hidden — that ran a
+    // duplicate live mount and rendered scroll/reveal-animated content while
+    // invisible (the white-on-enter bug). Give any stray async a beat.
+    const before = container.querySelector('iframe[data-od-render-mode="srcdoc"]');
+    expect((before as HTMLIFrameElement).getAttribute('data-od-active')).toBe('false');
+    await new Promise((r) => setTimeout(r, 50));
+    {
+      const f = container.querySelector('iframe[data-od-render-mode="srcdoc"]') as HTMLIFrameElement;
+      expect(f.srcdoc).toContain('data-od-lazy-srcdoc-transport');
+      expect(f.srcdoc).not.toContain('Materialize me');
+    }
+
+    // First mode entry materializes the srcDoc WHILE VISIBLE (reveal animations
+    // fire correctly there).
+    clickAgentTool('draw-overlay-toggle');
+    await waitFor(() => {
+      const f = container.querySelector('iframe[data-od-render-mode="srcdoc"]') as HTMLIFrameElement;
+      expect(f.getAttribute('data-od-active')).toBe('true');
+      expect(f.srcdoc).toContain('Materialize me');
+    });
+
+    // Exit then re-enter: the iframe is the SAME DOM node (no remount) and stays
+    // materialized (sticky) — so every later toggle is an instant visibility
+    // swap, no re-load.
+    clickAgentTool('draw-overlay-toggle');
+    await waitFor(() => {
+      expect((container.querySelector('iframe[data-od-render-mode="url-load"]') as HTMLIFrameElement).getAttribute('data-od-active')).toBe('true');
+    });
+    const hiddenAfterExit = container.querySelector('iframe[data-od-render-mode="srcdoc"]') as HTMLIFrameElement;
+    expect(hiddenAfterExit).toBe(before);
+    expect(hiddenAfterExit.srcdoc).toContain('Materialize me');
+  });
+
+  it('surfaces raw-route security failures for preview assets without leaking the symlink target', async () => {
+    const source = '<html><body><img src="assets/hero.png" alt="Hero"></body></html>';
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url.includes('/api/projects/project-1/files')) {
+        return new Response(JSON.stringify({
+          files: [
+            htmlPreviewFile(),
+            baseFile({
+              name: 'assets/hero.png',
+              path: 'assets/hero.png',
+              type: 'file',
+              kind: 'image',
+              mime: 'image/png',
+            }),
+          ],
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('/api/projects/project-1/deployments')) {
+        return new Response(JSON.stringify({ deployments: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url.includes('/api/projects/project-1/raw/assets/hero.png')) {
+        return new Response(JSON.stringify({
+          error: {
+            code: 'BAD_REQUEST',
+            message: 'Error: path escapes project dir via symlink /Users/me/.ssh/id_rsa',
+          },
+        }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile()}
+        liveHtml={source}
+      />,
+    );
+
+    const warning = await screen.findByTestId('preview-asset-warning');
+    expect(warning.textContent).toContain('assets/hero.png');
+    expect(warning.textContent).toContain('Replace external symlinks');
+    expect(warning.textContent).not.toContain('/Users/me/.ssh');
+  });
+
+  it('always injects the manual-edit bridge into the preview srcDoc so entering Edit after materialization does not reload', async () => {
+    const { container } = render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Stable doc</main></body></html>'
+      />,
+    );
+
+    // Passive preview still uses the lazy shell; the first real materialization
+    // happens only after the user enters an interactive mode.
+    const initialSrcDocFrame = container.querySelector('iframe[data-od-render-mode="srcdoc"]') as HTMLIFrameElement;
+    expect(initialSrcDocFrame.srcdoc).toContain('data-od-lazy-srcdoc-transport');
+
+    // Materialize once via Draw. The manual-edit bridge must already be present
+    // even though Edit is NOT active — it boots dormant and only acts on the
+    // host's od-edit-mode message.
+    clickAgentTool('draw-overlay-toggle');
+    const materializedSrcDoc = await waitFor(() => {
+      const f = container.querySelector('iframe[data-od-render-mode="srcdoc"]') as HTMLIFrameElement;
+      expect(f.getAttribute('data-od-active')).toBe('true');
+      expect(f.srcdoc).toContain('Stable doc');
+      expect(f.srcdoc).toContain('data-od-edit-bridge');
+      return f.srcdoc;
+    });
+
+    // Leave Draw and enter Edit. Because the edit bridge was already in the
+    // materialized srcDoc, entering Edit must NOT change the document string —
+    // same string means the browser does not re-parse/reload it; editing
+    // activates via postMessage.
+    clickAgentTool('draw-overlay-toggle');
+    await waitFor(() => {
+      const urlFrame = container.querySelector('iframe[data-od-render-mode="url-load"]') as HTMLIFrameElement;
+      expect(urlFrame.getAttribute('data-od-active')).toBe('true');
+    });
+    clickAgentTool('manual-edit-mode-toggle');
+    await waitFor(() => {
+      const active = container.querySelector('iframe[data-od-render-mode="srcdoc"]') as HTMLIFrameElement;
+      expect(active.getAttribute('data-od-active')).toBe('true');
+    });
+    const srcDocAfter = (container.querySelector('iframe[data-od-render-mode="srcdoc"]') as HTMLIFrameElement).srcdoc;
+    expect(srcDocAfter).toBe(materializedSrcDoc);
+  });
+
+  // The freeze / deferred-flush logic covers every interactive preview mode
+  // (`annotationFreezeActive` = Draw || Comment || Inspect; the URL freeze also
+  // covers manual Edit). Pin the non-Draw branches so a regression in any one
+  // can't slip through green. Inspect shares the exact `annotationFreezeActive`
+  // path as Comment and has no toggle in this prototype surface, so Comment
+  // stands in for both.
+  it('holds the preview steady while Comment mode is open instead of live-reloading on a file change', async () => {
+    const { rerender } = render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile({ mtime: 1000 })}
+        liveHtml='<html><body><main data-od-id="hero">Comment V1</main></body></html>'
+      />,
+    );
+    fireEvent.click(screen.getByTestId('board-mode-toggle'));
+    await waitFor(() => {
+      const active = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(active.getAttribute('data-od-render-mode')).toBe('srcdoc');
+      expect(active.srcdoc).toContain('Comment V1');
+    });
+
+    rerender(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile({ mtime: 999999 })}
+        filesRefreshKey={7}
+        liveHtml='<html><body><main data-od-id="hero">Comment V2</main></body></html>'
+      />,
+    );
+    await Promise.resolve();
+
+    const f = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    expect(f.srcdoc).toContain('Comment V1');
+    expect(f.srcdoc).not.toContain('Comment V2');
+  });
+
+  it('defers an external file change during an edit interaction, then follows it once idle', async () => {
+    const { rerender } = render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile({ mtime: 1000 })}
+        liveHtml='<html><body><main data-od-id="hero">Edit V1</main></body></html>'
+      />,
+    );
+    fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
+    await waitFor(() => {
+      const active = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(active.getAttribute('data-od-render-mode')).toBe('srcdoc');
+      expect(active.srcdoc).toContain('Edit V1');
+    });
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+
+    // A live inline text session must not be yanked by a background rewrite.
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        source: frame.contentWindow,
+        data: { type: 'od-edit-text-session', id: 'hero', active: true },
+      }));
+    });
+    rerender(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile({ mtime: 999999 })}
+        filesRefreshKey={7}
+        liveHtml='<html><body><main data-od-id="hero">Edit V2</main></body></html>'
+      />,
+    );
+    await Promise.resolve();
+    const held = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    expect(held.srcdoc).toContain('Edit V1');
+    expect(held.srcdoc).not.toContain('Edit V2');
+
+    // Interaction ends → the deferred rewrite flushes into the edit canvas,
+    // so Edit keeps building on what the agent produced.
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        source: frame.contentWindow,
+        data: { type: 'od-edit-text-session', id: 'hero', active: false },
+      }));
+    });
+    await waitFor(() => {
+      expect((screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement).srcdoc).toContain('Edit V2');
+    });
+  });
+
+>>>>>>> upstream/main
   it('preserves URL-loaded preview scroll when opening Draw', async () => {
     vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
       cb(0);

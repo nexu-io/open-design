@@ -1,22 +1,17 @@
 import { createHash } from "node:crypto";
-import { execFile, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import { createReadStream } from "node:fs";
 import {
   access,
-  chmod,
   lstat,
   mkdir,
   readdir,
-  readFile,
-  realpath,
   rename,
   rm,
   stat,
-  writeFile,
 } from "node:fs/promises";
-import { dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { pipeline } from "node:stream/promises";
-import { promisify } from "node:util";
 
 import {
   MANAGED_DOWNLOAD_ERROR_CODES,
@@ -27,57 +22,129 @@ import {
 } from "@open-design/download";
 import {
   LAUNCHER_SCHEMA_VERSION,
+<<<<<<< HEAD
   buildLauncherAfterQuitArgs,
   resolveLauncherVersionPaths,
   validateLauncherRuntimeDescriptor,
   type LauncherRuntimeDescriptor,
+=======
+>>>>>>> upstream/main
 } from "@open-design/launcher-proto";
 import {
-  DESKTOP_UPDATE_CHANNELS,
+  DESKTOP_UPDATE_ACTIONS,
   DESKTOP_UPDATE_MODES,
   DESKTOP_UPDATE_STATES,
-  SIDECAR_SOURCES,
   type DesktopUpdateAction,
-  type DesktopUpdateArtifactSnapshot,
   type DesktopUpdateCacheLifecycleSummary,
-  type DesktopUpdateCacheLifecycleTrigger,
-  type DesktopUpdateChannel,
   type DesktopUpdateChecksumSnapshot,
   type DesktopUpdateErrorSnapshot,
-  type DesktopUpdateReleaseLifecycleState,
-  type DesktopUpdateMode,
   type DesktopUpdateProgressSnapshot,
+  type DesktopUpdateReinstallSnapshot,
   type DesktopUpdateStatusSnapshot,
   type DesktopUpdateState,
-  type SidecarSource,
 } from "@open-design/sidecar-proto";
+<<<<<<< HEAD
 
+=======
+>>>>>>> upstream/main
 import {
   markInstallerObservationOpenFailed,
   writePendingInstallerObservation,
   type InstallerObservationArtifactType,
   type InstallerObservationHandle,
 } from "./installer-observations.js";
+import {
+  capabilitiesFor,
+  isSupportedPackageLauncherPlatform,
+  resolveDesktopUpdaterConfig,
+  type DesktopUpdaterConfig,
+  type DesktopUpdaterConfigInput,
+} from "./updater/config.js";
 
-export const DESKTOP_UPDATE_ENV = Object.freeze({
-  ARCH: "OD_UPDATE_ARCH",
-  AUTO_CHECK: "OD_UPDATE_AUTO_CHECK",
-  AUTO_DOWNLOAD: "OD_UPDATE_AUTO_DOWNLOAD",
-  AUTO_OPEN: "OD_UPDATE_AUTO_OPEN",
-  CHECK_BACKOFF_INITIAL_MS: "OD_UPDATE_CHECK_BACKOFF_INITIAL_MS",
-  CHECK_BACKOFF_MAX_MS: "OD_UPDATE_CHECK_BACKOFF_MAX_MS",
-  CHECK_INITIAL_DELAY_MS: "OD_UPDATE_CHECK_INITIAL_DELAY_MS",
-  CHECK_INTERVAL_MS: "OD_UPDATE_CHECK_INTERVAL_MS",
-  CHANNEL: "OD_UPDATE_CHANNEL",
-  CURRENT_VERSION: "OD_UPDATE_CURRENT_VERSION",
-  DOWNLOAD_ROOT: "OD_UPDATE_DOWNLOAD_ROOT",
-  ENABLED: "OD_UPDATE_ENABLED",
-  METADATA_URL: "OD_UPDATE_METADATA_URL",
-  MODE: "OD_UPDATE_MODE",
-  OPEN_DRY_RUN: "OD_UPDATE_OPEN_DRY_RUN",
-  PLATFORM: "OD_UPDATE_PLATFORM",
-} as const);
+export {
+  DESKTOP_UPDATE_ENV,
+  resolveDesktopUpdaterConfig,
+  type DesktopUpdaterConfig,
+  type DesktopUpdaterConfigInput,
+} from "./updater/config.js";
+export {
+  createDesktopUpdaterScheduler,
+  type DesktopUpdaterScheduler,
+} from "./updater/scheduler.js";
+import {
+  containsPath,
+  createError,
+  isRecord,
+  readJson,
+  readJsonStrict,
+  writeJson,
+} from "./updater/support.js";
+import {
+  artifactFileName,
+  checksumMatchesCandidate,
+  compareVersions,
+  fetchJson,
+  hasValidLauncherPayloadContext,
+  releaseKey,
+  releaseMatchesCandidate,
+  remoteRequiresReinstall,
+  resolveChecksum,
+  resolveInstalledOuterVersion,
+  selectUpdateCandidateWithFallback,
+  type UpdateCandidate,
+} from "./updater/feed.js";
 
+export { compareVersions, remoteRequiresReinstall, resolveInstalledOuterVersion } from "./updater/feed.js";
+import {
+  activatePreparedLauncherPayloadRelease,
+  clearLauncherStateForManualClear,
+  defaultExtractLauncherPayloadArchive,
+  prepareLauncherPayloadRelease,
+  runLauncherCleanupLifecycle,
+  type LauncherPayloadExtractInput,
+} from "./updater/payload.js";
+
+export type { LauncherPayloadExtractInput } from "./updater/payload.js";
+import {
+  DEFERRED_INSTALLER_TIMEOUT_MS,
+  launchMacInstallerAfterQuit,
+  launchPayloadAppAfterQuit,
+  launchWindowsInstallerAfterQuit,
+  type DeferredAppLaunchInput,
+  type DeferredInstallerLaunchInput,
+  type DeferredLaunchResult,
+  type SpawnInstallerHelper,
+} from "./updater/deferred-launch.js";
+
+export type {
+  DeferredAppLaunchInput,
+  DeferredInstallerLaunchInput,
+  DeferredLaunchResult,
+} from "./updater/deferred-launch.js";
+import {
+  runUpdateReleaseLifecycle,
+  scheduleBackCleanup,
+} from "./updater/release-lifecycle.js";
+import {
+  DOWNLOADS_DIR,
+  RELEASES_DIR,
+  STAGING_DIR,
+  STORE_METADATA_FILE,
+  STORE_METADATA_VERSION,
+  ensureOwnedSubdir,
+  ensureOwnedUpdateRoot,
+  isResolvedChecksumSnapshot,
+  isUpdateStoreMetadata,
+  logStoreError,
+  rebuildOwnedUpdateRootForManualClear,
+  storeShapeError,
+  type IncomingRef,
+  type OwnedRoot,
+  type UpdateReleaseRef,
+  type UpdateStoreMetadata,
+} from "./updater/store.js";
+
+<<<<<<< HEAD
 const DEFAULT_RELEASE_ORIGIN = "https://releases.open-design.ai";
 const OWNERSHIP_SENTINEL = ".open-design-updater-root.json";
 const STORE_METADATA_FILE = "metadata.json";
@@ -148,6 +215,9 @@ export type DesktopUpdaterConfig = {
   platform: string;
   source: SidecarSource;
 };
+=======
+const ARTIFACT_DOWNLOAD_MAX_ATTEMPTS = 3;
+>>>>>>> upstream/main
 
 export type DesktopUpdaterDeps = {
   extractLauncherPayloadArchive?: (input: LauncherPayloadExtractInput) => Promise<void>;
@@ -162,13 +232,9 @@ export type DesktopUpdaterDeps = {
   spawnDetached?: SpawnInstallerHelper;
 };
 
-export type LauncherPayloadExtractInput = {
-  archivePath: string;
-  destinationRoot: string;
-  extractorPath?: string;
-  platform: string;
-};
+export type DesktopUpdaterLogger = Pick<Console, "error" | "warn"> & Partial<Pick<Console, "info">>;
 
+<<<<<<< HEAD
 type DesktopUpdaterLogger = Pick<Console, "error" | "warn"> & Partial<Pick<Console, "info">>;
 type DetachedProcess = { unref(): void };
 type SpawnInstallerHelper = (
@@ -242,20 +308,18 @@ type UpdateStoreMetadata = {
 };
 
 type LoadedRelease = {
+=======
+export type LoadedRelease = {
+>>>>>>> upstream/main
   path: string;
   ref: UpdateReleaseRef;
 };
-
-type ResolvedChecksumSnapshot = DesktopUpdateChecksumSnapshot & { value: string };
-
-type OwnedRoot =
-  | { layout: DesktopUpdaterStoreLayout; metadataPath: string; ok: true; realRoot: string }
-  | { error: DesktopUpdateErrorSnapshot; ok: false };
 
 type ActionOptions = {
   autoDownload?: boolean;
 };
 
+<<<<<<< HEAD
 type DesktopUpdaterStoreLayout = {
   backRoot: string;
   cleanupPath: string;
@@ -302,8 +366,11 @@ type ReleaseCleanupDescriptor = {
   version: typeof RELEASE_CLEANUP_DESCRIPTOR_VERSION;
 };
 
+=======
+>>>>>>> upstream/main
 export type DesktopUpdater = {
   checkForUpdates(options?: ActionOptions): Promise<DesktopUpdateStatusSnapshot>;
+  clearCache(): Promise<DesktopUpdateStatusSnapshot>;
   config: DesktopUpdaterConfig;
   downloadUpdate(): Promise<DesktopUpdateStatusSnapshot>;
   handle(action: DesktopUpdateAction): Promise<DesktopUpdateStatusSnapshot>;
@@ -314,6 +381,7 @@ export type DesktopUpdater = {
   subscribe(listener: () => void): () => void;
 };
 
+<<<<<<< HEAD
 export type DesktopUpdaterScheduler = {
   isRunning(): boolean;
   start(): void;
@@ -922,11 +990,14 @@ function selectedPackageLauncherArtifact(config: DesktopUpdaterConfig, preferPay
   return null;
 }
 
+=======
+>>>>>>> upstream/main
 function installerObservationArtifactType(value: string | undefined): InstallerObservationArtifactType | null {
   if (value === "dmg" || value === "installer") return value;
   return null;
 }
 
+<<<<<<< HEAD
 function selectUpdateCandidate(
   metadata: Record<string, unknown>,
   config: DesktopUpdaterConfig,
@@ -1100,6 +1171,8 @@ async function resolveChecksum(fetchImpl: typeof globalThis.fetch, checksum: Des
   };
 }
 
+=======
+>>>>>>> upstream/main
 async function hashFile(path: string, algorithm: "sha256" | "sha512"): Promise<string> {
   const hash = createHash(algorithm);
   await pipeline(createReadStream(path), hash);
@@ -1151,6 +1224,7 @@ function desktopDownloadError(error: unknown): DesktopUpdateErrorSnapshot {
   return createError("download-failed", userFacingDownloadErrorMessage(error));
 }
 
+<<<<<<< HEAD
 type LauncherPayloadManifest = {
   channel: string;
   entry?: { cwd?: string; executable?: string };
@@ -2073,6 +2147,8 @@ async function runUpdateReleaseLifecycle(input: {
   });
 }
 
+=======
+>>>>>>> upstream/main
 async function readStoreMetadata(root: OwnedRoot & { ok: true }, logger: DesktopUpdaterLogger): Promise<
   | { metadata: UpdateStoreMetadata; ok: true }
   | { error: DesktopUpdateErrorSnapshot; ok: false }
@@ -2166,10 +2242,14 @@ async function loadActiveRelease(
   metadata: UpdateStoreMetadata,
   config: DesktopUpdaterConfig,
   logger: DesktopUpdaterLogger,
+  allowCurrentVersion = false,
 ): Promise<{ active: LoadedRelease | null; ok: true } | { error: DesktopUpdateErrorSnapshot; ok: false }> {
   const active = metadata.active;
   if (active == null) return { ok: true, active: null };
-  if (compareVersions(active.version, config.currentVersion) <= 0) return { ok: true, active: null };
+  const currentVersionComparison = compareVersions(active.version, config.currentVersion);
+  if (currentVersionComparison < 0 || (currentVersionComparison === 0 && !allowCurrentVersion)) {
+    return { ok: true, active: null };
+  }
   const artifactPath = resolve(root.realRoot, active.artifactPath);
   if (!containsPath(root.realRoot, artifactPath)) {
     const error = storeShapeError(root.realRoot, "active release artifact path escaped update root", { artifactPath });
@@ -2192,13 +2272,6 @@ async function loadActiveRelease(
     return { ok: false, error: storeError };
   }
   return { ok: true, active: { path: artifactPath, ref: active } };
-}
-
-function checksumMatchesCandidate(checksum: ResolvedChecksumSnapshot, candidate: UpdateCandidate): boolean {
-  if (checksum.algorithm !== candidate.checksum.algorithm) return false;
-  if (candidate.checksum.url != null && checksum.url !== candidate.checksum.url) return false;
-  if (candidate.checksum.value != null && checksum.value.toLowerCase() !== candidate.checksum.value.toLowerCase()) return false;
-  return true;
 }
 
 async function loadVerifiedReleaseForCandidate(
@@ -2283,6 +2356,7 @@ export function createDesktopUpdater(
   let installFrozen = false;
   let lifecycleSummary: DesktopUpdateCacheLifecycleSummary | undefined;
   let progress: DesktopUpdateProgressSnapshot | undefined;
+  let reinstallRequirement: DesktopUpdateReinstallSnapshot | undefined;
   let state: DesktopUpdateState = DESKTOP_UPDATE_STATES.IDLE;
   let error: DesktopUpdateErrorSnapshot | undefined;
   let operation: Promise<unknown> = Promise.resolve();
@@ -2362,6 +2436,7 @@ export function createDesktopUpdater(
       paths: { downloadRoot: config.downloadRoot, manifestPath: join(config.downloadRoot, STORE_METADATA_FILE) },
       platform: config.platform,
       ...(progress == null ? {} : { progress }),
+      ...(reinstallRequirement == null ? {} : { reinstall: reinstallRequirement }),
       state,
       supported: statusSupported,
     };
@@ -2418,9 +2493,34 @@ export function createDesktopUpdater(
     const opened = await openStore();
     if (!opened.ok) return opened.status;
     const restoredMetadata = await clearInterruptedIncomingDownload(opened.root, opened.metadata, logger);
-    const loadedActive = await loadActiveRelease(opened.root, restoredMetadata, config, logger);
+    const storedActive = restoredMetadata.active;
+    const launcherPayloadContextValid = storedActive != null
+      && storedActive.artifact.type === "installer"
+      && compareVersions(storedActive.version, config.currentVersion) === 0
+      && await hasValidLauncherPayloadContext(config);
+    const restoredReinstallRequirement = launcherPayloadContextValid
+      ? remoteRequiresReinstall(
+          storedActive.metadata,
+          config,
+          await resolveInstalledOuterVersion(config),
+        ) ?? undefined
+      : undefined;
+    const restoreSameVersionReinstall =
+      restoredReinstallRequirement != null
+      && restoredReinstallRequirement.reason !== "launcher-schema"
+      && restoredReinstallRequirement.minVersion != null
+      && storedActive != null
+      && compareVersions(restoredReinstallRequirement.minVersion, storedActive.version) <= 0;
+    const loadedActive = await loadActiveRelease(
+      opened.root,
+      restoredMetadata,
+      config,
+      logger,
+      restoreSameVersionReinstall,
+    );
     if (!loadedActive.ok) return setState(DESKTOP_UPDATE_STATES.ERROR, loadedActive.error);
     activeRelease = loadedActive.active;
+    reinstallRequirement = activeRelease == null ? undefined : restoredReinstallRequirement;
     // If the app now runs at or beyond the stored active release, the
     // external installer succeeded and its one-shot UI state is stale.
     const clearedAppliedRelease =
@@ -2430,18 +2530,34 @@ export function createDesktopUpdater(
         restoredMetadata.installFrozen === true ||
         restoredMetadata.installResult != null
       );
-    if (clearedAppliedRelease) {
+    // A payload install records the promised relaunch version in
+    // installResult.activeVersion. If this process is running an OLDER
+    // version, that relaunch never stuck — the payload crashed and the
+    // launcher rolled back. The freeze and stale install result must not
+    // survive, or every future check on the rolled-back install would be a
+    // frozen no-op; the downloaded release itself stays verified and
+    // user-actionable.
+    const staleRelaunchFreeze =
+      !clearedAppliedRelease &&
+      restoredMetadata.installResult?.activeVersion != null &&
+      compareVersions(restoredMetadata.installResult.activeVersion, config.currentVersion) > 0;
+    if (clearedAppliedRelease || staleRelaunchFreeze) {
       await writeStoreMetadata(opened.root, {
         ...restoredMetadata,
-        active: undefined,
+        ...(clearedAppliedRelease ? { active: undefined } : {}),
         incoming: undefined,
         installFrozen: undefined,
         installResult: undefined,
         version: STORE_METADATA_VERSION,
       });
+      if (staleRelaunchFreeze) {
+        logUpdateEvent("restore-cleared-stale-relaunch-freeze", {
+          promisedVersion: restoredMetadata.installResult?.activeVersion,
+        });
+      }
     }
-    installFrozen = clearedAppliedRelease ? false : restoredMetadata.installFrozen === true;
-    installResult = clearedAppliedRelease ? undefined : restoredMetadata.installResult;
+    installFrozen = clearedAppliedRelease || staleRelaunchFreeze ? false : restoredMetadata.installFrozen === true;
+    installResult = clearedAppliedRelease || staleRelaunchFreeze ? undefined : restoredMetadata.installResult;
     lastCheckedAt = restoredMetadata.lastCheckedAt;
     metadata = activeRelease?.ref.metadata ?? null;
     candidate = null;
@@ -2507,9 +2623,43 @@ export function createDesktopUpdater(
         lastCheckedAt,
       }));
       if (root != null) scheduleBackCleanup(root.realRoot, logger);
+<<<<<<< HEAD
       const selected = selectUpdateCandidateWithFallback(body, config, await hasValidLauncherPayloadContext(config));
       if (!selected.ok) return setState(selected.state, selected.error);
       if (compareVersions(selected.candidate.version, config.currentVersion) <= 0) {
+=======
+      const launcherPayloadContextValid = await hasValidLauncherPayloadContext(config);
+      const installedOuterVersion = launcherPayloadContextValid ? await resolveInstalledOuterVersion(config) : null;
+      reinstallRequirement = launcherPayloadContextValid
+        ? remoteRequiresReinstall(body, config, installedOuterVersion) ?? undefined
+        : undefined;
+      if (reinstallRequirement != null) {
+        logUpdateEvent("reseed-required-installer-route", {
+          currentVersion: config.currentVersion,
+          installedVersion: reinstallRequirement.installedVersion,
+          minVersion: reinstallRequirement.minVersion,
+          reason: reinstallRequirement.reason,
+          supportedLauncherSchema: LAUNCHER_SCHEMA_VERSION,
+        });
+      }
+      const selected = selectUpdateCandidateWithFallback(body, config, launcherPayloadContextValid && reinstallRequirement == null);
+      if (!selected.ok) {
+        return selected.state === DESKTOP_UPDATE_STATES.ERROR
+          ? setFailurePreservingActive(selected.error)
+          : setState(selected.state, selected.error);
+      }
+      // Same-version installer reinstall (disaster posture): when the installed
+      // outer is below min, the installer must be offered even with no newer
+      // release — waiting for the next release would strand broken outers.
+      // Clamped to min <= candidate so reinstalling actually clears the gate;
+      // otherwise the offer could never converge and would nag forever.
+      const sameVersionReinstall =
+        reinstallRequirement != null &&
+        reinstallRequirement.reason !== "launcher-schema" &&
+        reinstallRequirement.minVersion != null &&
+        compareVersions(reinstallRequirement.minVersion, selected.candidate.version) <= 0;
+      if (!sameVersionReinstall && compareVersions(selected.candidate.version, config.currentVersion) <= 0) {
+>>>>>>> upstream/main
         logUpdateEvent("check-not-available", { candidateVersion: selected.candidate.version });
         candidate = null;
         activeRelease = null;
@@ -2802,11 +2952,19 @@ export function createDesktopUpdater(
       appPid: processPid,
       installerPath: resolvedDownload,
       root: updateRoot,
-      timeoutMs: config.platform === "win32" ? WINDOWS_DEFERRED_INSTALLER_TIMEOUT_MS : MAC_DEFERRED_INSTALLER_TIMEOUT_MS,
+      timeoutMs: DEFERRED_INSTALLER_TIMEOUT_MS,
     });
   }
 
+<<<<<<< HEAD
   async function requestPayloadRelaunch(updateRoot: string): Promise<DeferredLaunchResult & { launchPath?: string }> {
+=======
+  async function requestPayloadRelaunch(
+    updateRoot: string,
+    launchPath: string,
+    delegated?: { generation: number; version: string },
+  ): Promise<DeferredLaunchResult & { launchPath?: string }> {
+>>>>>>> upstream/main
     if (config.openDryRun) return {};
     if (config.platform !== "darwin" && config.platform !== "win32") return {};
     const launchPath = config.launcherLaunchPath;
@@ -2824,9 +2982,14 @@ export function createDesktopUpdater(
     }
     const result = await launchAppAfterQuit({
       appPid: processPid,
+<<<<<<< HEAD
+=======
+      cwd: config.runtimeBase,
+      ...(delegated == null ? {} : { delegated }),
+>>>>>>> upstream/main
       launchPath,
       root: updateRoot,
-      timeoutMs: config.platform === "win32" ? WINDOWS_DEFERRED_INSTALLER_TIMEOUT_MS : MAC_DEFERRED_INSTALLER_TIMEOUT_MS,
+      timeoutMs: DEFERRED_INSTALLER_TIMEOUT_MS,
     });
     return { ...result, launchPath };
   }
@@ -2881,7 +3044,15 @@ export function createDesktopUpdater(
           config,
           now,
         });
+<<<<<<< HEAD
         const relaunch = await requestPayloadRelaunch(opened.root.realRoot);
+=======
+        const relaunch = await requestPayloadRelaunch(
+          opened.root.realRoot,
+          activation.launchPath,
+          activation.runtime.active ?? undefined,
+        );
+>>>>>>> upstream/main
         if (relaunch.error != null && relaunch.error.length > 0) {
           return setState(DESKTOP_UPDATE_STATES.ERROR, createError("payload-relaunch-failed", relaunch.error));
         }
@@ -2955,19 +3126,102 @@ export function createDesktopUpdater(
     return await next;
   }
 
+  /**
+   * Manual disaster-recovery reset. Clears every deletable cache domain and
+   * the one-shot update state (downloaded release, install freeze) so the next
+   * check starts from a clean slate. Retained launcher versions
+   * (active/lastSuccessful) and a confirmed handoff journal are never touched.
+   * Boundary: an installer helper already spawned by a prior install is not
+   * cancelled — clearing after opening an installer resets the updater state
+   * only.
+   */
+  async function clearCacheAndResetState(): Promise<DesktopUpdateStatusSnapshot> {
+    const unsupported = unsupportedStatus();
+    if (unsupported != null) return unsupported;
+    logUpdateEvent("manual-cache-clear-start");
+    let opened = await openStore();
+    if (!opened.ok) {
+      // Disaster posture: a corrupt store is one of the blocking scenarios
+      // this action exists to recover from. Rebuild only when ownership is
+      // provable; otherwise surface the original store error unchanged.
+      if (!(await rebuildOwnedUpdateRootForManualClear(config, logger))) return opened.status;
+      logUpdateEvent("manual-cache-clear-store-rebuilt");
+      opened = await openStore();
+      if (!opened.ok) return opened.status;
+    }
+    // Reset one-shot state before any deletion: even if later cleanup steps
+    // fail, the UI must not stay stuck on stale downloaded/frozen state — that
+    // is the very blocking scenario this action exists to recover from.
+    await writeStoreMetadata(opened.root, {
+      ...opened.metadata,
+      active: undefined,
+      incoming: undefined,
+      installFrozen: false,
+      installResult: undefined,
+      version: STORE_METADATA_VERSION,
+    });
+    activeRelease = null;
+    candidate = null;
+    incomingRelease = null;
+    installFrozen = false;
+    installResult = undefined;
+    progress = undefined;
+    reinstallRequirement = undefined;
+
+    const layout = opened.root.layout;
+    for (const transientRoot of [layout.stagingRoot, layout.downloadsRoot]) {
+      const entries = await readdir(transientRoot).catch(() => [] as string[]);
+      for (const entry of entries) {
+        const target = resolve(transientRoot, entry);
+        if (!containsPath(transientRoot, target)) continue;
+        await rm(target, { force: true, recursive: true }).catch((error: unknown) => {
+          logger.warn("[open-design updater] failed manual transient cache cleanup", {
+            error: error instanceof Error ? error.message : String(error),
+            path: target,
+          });
+        });
+      }
+    }
+    scheduleBackCleanup(opened.root.realRoot, logger);
+
+    const releaseSummary = await runUpdateReleaseLifecycle({
+      config,
+      layout,
+      logger,
+      now,
+      reclaimStaleLock: true,
+      trigger: "manual",
+    });
+    if (releaseSummary == null) {
+      return setState(
+        DESKTOP_UPDATE_STATES.ERROR,
+        createError("updater-lifecycle-lock-held", "update cache cleanup is blocked by an active or unverifiable lifecycle lock"),
+      );
+    }
+    lifecycleSummary = releaseSummary;
+
+    await clearLauncherStateForManualClear({ config, logger, now, removeLauncherPayloadRoot });
+
+    logUpdateEvent("manual-cache-clear-complete");
+    return setState(DESKTOP_UPDATE_STATES.IDLE);
+  }
+
   return {
     checkForUpdates: (options) => serialized(() => checkForCandidate(options)),
+    clearCache: () => serialized(clearCacheAndResetState),
     config,
     downloadUpdate: () => serialized(downloadUpdate),
     handle(action) {
       switch (action) {
-        case "status":
+        case DESKTOP_UPDATE_ACTIONS.STATUS:
           return this.status();
-        case "check":
+        case DESKTOP_UPDATE_ACTIONS.CHECK:
           return this.checkForUpdates();
-        case "download":
+        case DESKTOP_UPDATE_ACTIONS.CLEAR_CACHE:
+          return this.clearCache();
+        case DESKTOP_UPDATE_ACTIONS.DOWNLOAD:
           return this.downloadUpdate();
-        case "install":
+        case DESKTOP_UPDATE_ACTIONS.INSTALL:
           return this.installUpdate();
       }
     },
@@ -2991,6 +3245,7 @@ export function createDesktopUpdater(
     },
   };
 }
+<<<<<<< HEAD
 
 export function createDesktopUpdaterScheduler(
   updater: DesktopUpdater,
@@ -3074,3 +3329,5 @@ export function createDesktopUpdaterScheduler(
     stop,
   };
 }
+=======
+>>>>>>> upstream/main

@@ -5,7 +5,15 @@ import {
   SIDECAR_SOURCES,
   type SidecarStamp,
 } from "@open-design/sidecar-proto";
+<<<<<<< HEAD
 import { parseLauncherAfterQuitArgs } from "@open-design/launcher-proto";
+=======
+import {
+  parseLauncherAfterQuitArgs,
+  parseLauncherDelegatedArgs,
+  parseLauncherHandoffResumeArgs,
+} from "@open-design/launcher-proto";
+>>>>>>> upstream/main
 import {
   bootstrapSidecarRuntime,
   createSidecarLaunchEnv,
@@ -82,6 +90,11 @@ async function main(): Promise<void> {
 
   const config = await readPackagedConfig();
   const afterQuit = parseLauncherAfterQuitArgs(process.argv.slice(1));
+<<<<<<< HEAD
+=======
+  const handoffResume = parseLauncherHandoffResumeArgs(process.argv.slice(1));
+  const delegated = parseLauncherDelegatedArgs(process.argv.slice(1));
+>>>>>>> upstream/main
   const argvStamp = readProcessStamp(process.argv.slice(1), OPEN_DESIGN_SIDECAR_CONTRACT);
   const namespace = argvStamp?.namespace ?? config.namespace;
   const namespaceConfig = namespace === config.namespace ? config : { ...config, namespace };
@@ -91,7 +104,20 @@ async function main(): Promise<void> {
     logger: console,
     paths: initialPaths,
   });
+<<<<<<< HEAD
   if (existingDesktop.action === "exit") {
+=======
+  if (exitPackagedLauncherForExistingDesktop(existingDesktop, (code) => app.exit(code))) {
+    return;
+  }
+  const stamp = argvStamp ?? createPackagedDesktopStamp(namespace);
+  const launcherRuntime = await resolvePackagedLauncherRuntime(namespaceConfig, initialPaths, {
+    delegated,
+    resume: handoffResume,
+  });
+  if (await launchPackagedPayloadDesktop(launcherRuntime, stamp)) {
+    app.exit(0);
+>>>>>>> upstream/main
     return;
   }
   const launcherRuntime = await resolvePackagedLauncherRuntime(namespaceConfig, initialPaths);

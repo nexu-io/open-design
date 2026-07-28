@@ -76,8 +76,12 @@ import { SideChatTab, type ActiveConversationChatState } from './workspace/SideC
 import { TerminalViewer } from './workspace/TerminalViewer';
 import { LiveArtifactBadges } from './LiveArtifactBadges';
 import { MissingBrandFontsBanner } from './MissingBrandFontsBanner';
+<<<<<<< HEAD
 import { PasteTextDialog } from './PasteTextDialog';
 import { QuestionsPanel } from './QuestionsPanel';
+=======
+import { LibraryPicker } from './LibraryPicker';
+>>>>>>> upstream/main
 import { QuickSwitcher } from './QuickSwitcher';
 import { SketchEditor } from './SketchEditor';
 import {
@@ -1444,6 +1448,39 @@ export function FileWorkspace({
     return liveArtifactEntries.find((entry) => entry.tabId === activeTab) ?? null;
   }, [activeTab, liveArtifactEntries]);
 
+<<<<<<< HEAD
+=======
+  // Identity-stable props for the memoized FileViewer. Without these, every
+  // FileWorkspace state change (closing an adjacent tab, drag hover, launcher
+  // toggles) would hand FileViewer fresh object/function identities and drag
+  // the whole viewer subtree — live iframes included — through a re-render.
+  const activeFilePreviewComments = useMemo(
+    () => previewComments.filter((comment) => comment.filePath === activeFile?.name),
+    [previewComments, activeFile?.name],
+  );
+  const activeFileShareRequest = useMemo(
+    () => (shareRequest && shareRequest.name === activeFile?.name
+      ? { nonce: shareRequest.nonce }
+      : null),
+    [shareRequest, activeFile?.name],
+  );
+  const activeFileDownloadRequest = useMemo(
+    () => (downloadRequest && downloadRequest.name === activeFile?.name
+      ? { nonce: downloadRequest.nonce }
+      : null),
+    [downloadRequest, activeFile?.name],
+  );
+  const activeFileSlideNavRequest = useMemo(
+    () => deliverableSlideNavForActiveFile(
+      slideNavRequest,
+      activeFile?.name,
+      slideNavDeliverableNonce,
+    ),
+    [slideNavRequest, activeFile?.name, slideNavDeliverableNonce],
+  );
+  const stableOpenFileReplacing = useStableHandler(openFileReplacing);
+
+>>>>>>> upstream/main
   const activeWorkspaceContext = useMemo<WorkspaceContextItem | null>(() => {
     if (activeTab === DESIGN_SYSTEM_TAB && designSystemProject) {
       return {
