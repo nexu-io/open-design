@@ -63,6 +63,10 @@ import { LibraryPicker } from './LibraryPicker';
 import { FigmaImportModal } from './FigmaImportModal';
 import { FigmaHelpModal } from './FigmaHelpModal';
 import {
+  formatFolderAttachmentSkippedNotice,
+  selectFolderAttachmentFiles,
+} from './folder-attachment-policy';
+import {
   ProjectReferenceModal,
   type ProjectReferenceSelection,
 } from './ProjectReferenceModal';
@@ -1719,8 +1723,16 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       return onEnsureProject();
     }
 
-    async function uploadFiles(files: File[]) {
-      if (files.length === 0) return;
+    async function uploadFiles(files: File[], skippedFolderFileCount = 0) {
+      const skippedFolderNotice = skippedFolderFileCount > 0
+        ? ` ${formatFolderAttachmentSkippedNotice(skippedFolderFileCount)}`
+        : '';
+      if (files.length === 0) {
+        if (skippedFolderFileCount > 0) {
+          setUploadError(formatFolderAttachmentSkippedNotice(skippedFolderFileCount));
+        }
+        return;
+      }
       setUploadError(null);
       const id = await ensureProject();
       if (!id) {
@@ -1747,10 +1759,12 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
           const detail = result.error ? ` (${result.error})` : '';
           setUploadError(
             uploadedCount > 0
-              ? `Attached ${uploadedCount} file(s), but ${failedCount} failed${detail}.`
-              : `Attachment upload failed for ${failedCount} file(s)${detail}.`,
+              ? `Attached ${uploadedCount} file(s), but ${failedCount} failed${detail}.${skippedFolderNotice}`
+              : `Attachment upload failed for ${failedCount} file(s)${detail}.${skippedFolderNotice}`,
           );
           console.warn('Some attachments failed to upload', result.failed);
+        } else if (skippedFolderFileCount > 0) {
+          setUploadError(`Attached ${result.uploaded.length} file(s).${skippedFolderNotice}`);
         }
         trackFileUploadResult(analytics.track, {
           page_name: 'chat_panel',
@@ -1762,7 +1776,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         });
       } catch (err) {
         const detail = err instanceof Error ? err.message : String(err);
-        setUploadError(`Attachment upload failed (${detail}).`);
+        setUploadError(`Attachment upload failed (${detail}).${skippedFolderNotice}`);
         trackFileUploadResult(analytics.track, {
           page_name: 'chat_panel',
           area: 'chat_composer',
@@ -2836,7 +2850,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               {...FOLDER_INPUT_PROPS}
               onChange={(e) => {
                 const files = Array.from(e.target.files ?? []);
-                void uploadFiles(files);
+                const { accepted, skippedCount } = selectFolderAttachmentFiles(files);
+                void uploadFiles(accepted, skippedCount);
                 e.target.value = '';
               }}
             />

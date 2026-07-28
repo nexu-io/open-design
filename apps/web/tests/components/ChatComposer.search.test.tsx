@@ -104,6 +104,107 @@ describe('ChatComposer /search command', () => {
     expect(screen.getByTestId('staged-contexts').textContent).toContain('style.css');
   });
 
+  it('filters recursive folder selections and reports skipped files', async () => {
+    const onSend = vi.fn();
+    mockedUploadProjectFiles.mockResolvedValue({
+      uploaded: [
+        { path: 'site/index.html', name: 'index.html', kind: 'file', size: 5 },
+        { path: 'site/src/App.tsx', name: 'App.tsx', kind: 'file', size: 5 },
+      ],
+      failed: [],
+    });
+
+    render(
+      <ChatComposer
+        projectId="project-1"
+        projectFiles={[]}
+        streaming={false}
+        onEnsureProject={async () => 'project-1'}
+        onSend={onSend}
+        onStop={vi.fn()}
+      />,
+    );
+
+    const index = new File(['index'], 'index.html', { type: 'text/html' });
+    const app = new File(['app'], 'App.tsx', { type: 'text/typescript' });
+    const gitConfig = new File(['config'], 'config');
+    const dependency = new File(['pkg'], 'index.js', { type: 'text/javascript' });
+    const buildOutput = new File(['build'], 'bundle.js', { type: 'text/javascript' });
+    const envFile = new File(['SECRET=value'], '.env');
+    const npmrc = new File(['//registry.example/:_authToken=token'], '.npmrc');
+    const oversized = new File([new Uint8Array(1024 * 1024 + 1)], 'large.bin');
+    Object.defineProperty(index, 'webkitRelativePath', { value: 'site/index.html' });
+    Object.defineProperty(app, 'webkitRelativePath', { value: 'site/src/App.tsx' });
+    Object.defineProperty(gitConfig, 'webkitRelativePath', { value: 'site/.git/config' });
+    Object.defineProperty(dependency, 'webkitRelativePath', { value: 'site/node_modules/pkg/index.js' });
+    Object.defineProperty(buildOutput, 'webkitRelativePath', { value: 'site/dist/bundle.js' });
+    Object.defineProperty(envFile, 'webkitRelativePath', { value: 'site/.env' });
+    Object.defineProperty(npmrc, 'webkitRelativePath', { value: 'site/.npmrc' });
+    Object.defineProperty(oversized, 'webkitRelativePath', { value: 'site/assets/large.bin' });
+
+    fireEvent.change(screen.getByTestId('chat-folder-input'), {
+      target: { files: [index, app, gitConfig, dependency, buildOutput, envFile, npmrc, oversized] },
+    });
+
+    await waitFor(() => expect(mockedUploadProjectFiles).toHaveBeenCalledTimes(1));
+    expect(mockedUploadProjectFiles).toHaveBeenCalledWith('project-1', [index, app]);
+    await waitFor(() => expect(screen.getByText(/6 folder files were skipped/u)).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('staged-contexts').textContent).toContain('index.html'));
+    expect(screen.getByTestId('staged-contexts').textContent).toContain('App.tsx');
+  });
+
+  it('does not upload a recursive folder selection when every file is skipped', async () => {
+    render(
+      <ChatComposer
+        projectId="project-1"
+        projectFiles={[]}
+        streaming={false}
+        onEnsureProject={async () => 'project-1'}
+        onSend={vi.fn()}
+        onStop={vi.fn()}
+      />,
+    );
+
+    const envFile = new File(['SECRET=value'], '.env');
+    const dependency = new File(['pkg'], 'index.js', { type: 'text/javascript' });
+    Object.defineProperty(envFile, 'webkitRelativePath', { value: 'site/.env' });
+    Object.defineProperty(dependency, 'webkitRelativePath', { value: 'site/node_modules/pkg/index.js' });
+
+    fireEvent.change(screen.getByTestId('chat-folder-input'), {
+      target: { files: [envFile, dependency] },
+    });
+
+    expect(mockedUploadProjectFiles).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.getByText(/2 folder files were skipped/u)).toBeTruthy());
+  });
+
+  it('keeps explicit file picker uploads outside the recursive folder policy', async () => {
+    mockedUploadProjectFiles.mockResolvedValue({
+      uploaded: [{ path: '.env', name: '.env', kind: 'file', size: 12 }],
+      failed: [],
+    });
+
+    render(
+      <ChatComposer
+        projectId="project-1"
+        projectFiles={[]}
+        streaming={false}
+        onEnsureProject={async () => 'project-1'}
+        onSend={vi.fn()}
+        onStop={vi.fn()}
+      />,
+    );
+
+    const envFile = new File(['SECRET=value'], '.env');
+    fireEvent.change(screen.getByTestId('chat-file-input'), {
+      target: { files: [envFile] },
+    });
+
+    await waitFor(() => expect(mockedUploadProjectFiles).toHaveBeenCalledTimes(1));
+    expect(mockedUploadProjectFiles).toHaveBeenCalledWith('project-1', [envFile]);
+    await waitFor(() => expect(screen.getByTestId('staged-contexts').textContent).toContain('.env'));
+  });
+
   it('shows a clear attachment error when no project can be created yet', async () => {
     render(
       <ChatComposer
