@@ -17,7 +17,6 @@ import type {
   AgentInfo,
   ApiProtocol,
   AppConfig,
-  AppTheme,
   DesignSystemSummary,
   ExecMode,
   Project,
@@ -99,10 +98,6 @@ interface Props {
   onSkillsRefresh?: () => Promise<void> | void;
   onSkillsChanged?: (affectedSkillId?: string) => void;
   onRefreshAgents: () => Promise<AgentInfo[]> | AgentInfo[];
-  // Quick theme switch invoked from the avatar-popover dropdown so the
-  // user can flip light/dark/system without opening the full Settings
-  // dialog. Persistence happens in `App`; this component just forwards.
-  onThemeChange: (theme: AppTheme) => void;
   // Per-resource loading flags. Each tab gates its own content on whichever
   // flag matches the data it renders, so a slow `/api/agents` probe does
   // not block tabs that don't need agents. Templates are not gated here —
@@ -267,7 +262,6 @@ export function EntryView({
   onSkillsRefresh,
   onSkillsChanged,
   onRefreshAgents,
-  onThemeChange,
   skillsLoading = false,
   designSystemsLoading = false,
   projectsLoading = false,
@@ -389,8 +383,7 @@ export function EntryView({
       onConfigPersist={onConfigPersist}
       onSkillsRefresh={onSkillsRefresh}
       onSkillsChanged={onSkillsChanged}
-      onRefreshAgents={onRefreshAgents}
-      onThemeChange={onThemeChange}
+          onRefreshAgents={onRefreshAgents}
       onCreateProject={onCreateProject}
       onCreatePluginShareProject={onCreatePluginShareProject}
       onImportClaudeDesign={onImportClaudeDesign}

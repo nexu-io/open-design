@@ -550,11 +550,6 @@ export interface Dict {
   'settings.noAgentSelected': string;
   'settings.language': string;
   'settings.languageHint': string;
-  'settings.appearance': string;
-  'settings.appearanceHint': string;
-  'settings.themeSystem': string;
-  'settings.themeLight': string;
-  'settings.themeDark': string;
   'settings.agentModelHead': string;
   'settings.modelPicker': string;
   'settings.modelSourceLive': string;

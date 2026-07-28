@@ -46,7 +46,7 @@ const routerState = vi.hoisted(() => {
 });
 
 const entryViewCapture = vi.hoisted(() => ({
-  firstThemeChange: null as null | ((theme: AppConfig['theme']) => void),
+  firstAgentChange: null as null | ((agentId: string) => void),
   firstCompleteOnboarding: null as null | (() => void),
   firstRefreshAgents: null as null | ((
     options?: { throwOnError?: boolean; agentCliEnv?: AppConfig['agentCliEnv'] },
@@ -78,24 +78,24 @@ vi.mock('../../src/router', async () => {
 vi.mock('../../src/components/EntryView', () => ({
   EntryView: ({
     config,
-    onThemeChange,
+    onAgentChange,
     onCompleteOnboarding,
     onRefreshAgents,
   }: {
     config: AppConfig;
-    onThemeChange: (theme: AppConfig['theme']) => void;
+    onAgentChange: (agentId: string) => void;
     onCompleteOnboarding: () => void;
     onRefreshAgents: (
       options?: { throwOnError?: boolean; agentCliEnv?: AppConfig['agentCliEnv'] },
     ) => unknown;
   }) => {
-    entryViewCapture.firstThemeChange ??= onThemeChange;
+    entryViewCapture.firstAgentChange ??= onAgentChange;
     entryViewCapture.firstCompleteOnboarding ??= onCompleteOnboarding;
     entryViewCapture.firstRefreshAgents ??= onRefreshAgents;
     return (
       <>
         <div data-testid="onboarding-completed">{String(config.onboardingCompleted)}</div>
-        <div data-testid="theme">{String(config.theme ?? 'system')}</div>
+        <div data-testid="agent-id">{String(config.agentId ?? 'none')}</div>
       </>
     );
   },
@@ -251,7 +251,7 @@ async function navigatedToOnboarding(): Promise<boolean> {
 describe('App onboarding completion persistence', () => {
   beforeEach(() => {
     routerState.current = { kind: 'home', view: 'home' };
-    entryViewCapture.firstThemeChange = null;
+    entryViewCapture.firstAgentChange = null;
     entryViewCapture.firstCompleteOnboarding = null;
     entryViewCapture.firstRefreshAgents = null;
     settingsCapture.resetOnboarding = null;
@@ -339,12 +339,12 @@ describe('App onboarding completion persistence', () => {
     render(<App />);
 
     await waitFor(() => {
-      expect(entryViewCapture.firstThemeChange).not.toBeNull();
+      expect(entryViewCapture.firstAgentChange).not.toBeNull();
     });
-    const preHydrationThemeChange = entryViewCapture.firstThemeChange;
+    const preHydrationAgentChange = entryViewCapture.firstAgentChange;
 
     act(() => {
-      preHydrationThemeChange?.('dark');
+      preHydrationAgentChange?.('codex');
     });
 
     await act(async () => {
@@ -358,14 +358,14 @@ describe('App onboarding completion persistence', () => {
     // Exercise the exact callback instance captured before hydration. It must
     // merge into the latest persisted config rather than its render snapshot.
     act(() => {
-      preHydrationThemeChange?.('light');
+      preHydrationAgentChange?.('claude-code');
     });
 
     expect(screen.getByTestId('onboarding-completed').textContent).toBe('true');
     expect(mockedSyncConfigToDaemon).toHaveBeenLastCalledWith(
       expect.objectContaining({
         onboardingCompleted: true,
-        theme: 'light',
+        agentId: 'claude-code',
       }),
     );
   });
@@ -408,7 +408,7 @@ describe('App onboarding completion persistence', () => {
     );
   });
 
-  it('does not roll back a theme change while an agent refresh sync is pending', async () => {
+  it('does not roll back an agent change while an agent refresh sync is pending', async () => {
     mockedLoadConfig.mockReturnValue(returningUserConfig());
     mockedFetchDaemonConfig.mockResolvedValue({ onboardingCompleted: true });
 
@@ -432,16 +432,16 @@ describe('App onboarding completion persistence', () => {
       });
     });
     act(() => {
-      entryViewCapture.firstThemeChange?.('dark');
+      entryViewCapture.firstAgentChange?.('codex');
     });
-    expect(screen.getByTestId('theme').textContent).toBe('dark');
+    expect(screen.getByTestId('agent-id').textContent).toBe('codex');
 
     await act(async () => {
       pendingSync.resolve();
       await refreshPromise;
     });
 
-    expect(screen.getByTestId('theme').textContent).toBe('dark');
+    expect(screen.getByTestId('agent-id').textContent).toBe('codex');
   });
 
   it('resolves first-run onboarding routing once per boot, not on every navigation', async () => {

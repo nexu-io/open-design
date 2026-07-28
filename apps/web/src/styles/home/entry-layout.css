@@ -1667,50 +1667,6 @@
   color: var(--accent-strong);
   font-weight: 600;
 }
-.entry-settings-menu__theme {
-  appearance: none;
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--text);
-  min-width: 0;
-  min-height: 30px;
-  border-radius: var(--radius);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 0 8px;
-  font-size: 12px;
-  cursor: pointer;
-  transition: background-color 120ms var(--ease-out), border-color 120ms var(--ease-out),
-    color 120ms var(--ease-out);
-}
-.entry-settings-menu__theme span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.entry-settings-menu__theme:hover {
-  background: var(--bg-panel);
-  border-color: var(--border);
-  color: var(--text-strong);
-}
-.entry-settings-menu__theme.is-active {
-  background: var(--bg-panel);
-  border-color: color-mix(in srgb, var(--accent) 26%, var(--border));
-  color: var(--accent-strong);
-  box-shadow: var(--shadow-xs);
-}
-.entry-settings-menu__theme-row {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 4px;
-  padding: 3px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius);
-  background: var(--bg-subtle);
-}
 .entry-settings-menu__divider {
   height: 1px;
   margin: 0 4px;
@@ -2700,29 +2656,6 @@
 }
 
 .lang-pill--compact:hover {
-  color: var(--text-strong);
-}
-
-.onboarding-cloud__theme {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  background: var(--bg-panel);
-  color: var(--text);
-  cursor: pointer;
-  transition:
-    color 160ms cubic-bezier(0.23, 1, 0.32, 1),
-    border-color 160ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-
-.onboarding-cloud__theme:hover:not(:disabled) {
-  background: var(--bg-panel);
-  border-color: var(--text-muted);
   color: var(--text-strong);
 }
 

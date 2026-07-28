@@ -14,7 +14,7 @@ export interface HelpPopoverSurfaceViewProps {
 
 // Impression of the header gear settings popover. Mirrors
 // HelpPopoverSurfaceViewProps: fires once each time the popover opens so the
-// share / language / appearance funnels have a denominator.
+// share / language funnels have a denominator.
 export interface SettingsPopoverSurfaceViewProps {
   page_name: 'home' | 'artifact';
   area: 'settings_popover';

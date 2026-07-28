@@ -477,7 +477,6 @@ interface Props {
   ) => void;
   onApiModelChange?: (model: string) => void;
   onRefreshAgents: () => void;
-  onThemeChange?: (theme: AppConfig['theme']) => void;
   onOpenSettings: (section?: SettingsSection) => void;
   onOpenAmrSettings?: () => void;
   onOpenMcpSettings?: () => void;
@@ -1506,7 +1505,6 @@ export function ProjectView({
   onAgentModelChange,
   onApiModelChange,
   onRefreshAgents,
-  onThemeChange,
   onOpenSettings,
   onOpenAmrSettings,
   onOpenMcpSettings,

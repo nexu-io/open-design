@@ -1152,17 +1152,11 @@
 .settings-general-block .section-head {
   display: none;
 }
-.settings-general-block--appearance .settings-section {
-  padding: 0;
-}
 .settings-general-block .seg-control {
   max-width: 100%;
   min-width: 0;
   border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--bg-subtle) 58%, var(--bg-panel));
-}
-.settings-general-block--appearance .seg-control {
-  width: 100%;
 }
 .settings-general-block .project-locations-section,
 .settings-general-block .project-location-card,

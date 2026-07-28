@@ -1166,16 +1166,14 @@ function AppInner() {
     agents,
   ]);
 
-  // Sync theme preference to the <html> element so CSS variables pick it up.
-  // useLayoutEffect (vs useEffect) fires before the browser paints, so a
-  // live theme switch in Settings applies atomically — no 1-frame flash of
-  // the old theme. Safe here because the component tree is ssr:false.
+  // Stamp the app appearance onto the <html> element so CSS variables pick it
+  // up. The theme itself is a constant (light-only), but the accent still comes
+  // from config, and the stamp must be re-applied whenever that changes.
+  // useLayoutEffect (vs useEffect) fires before the browser paints, so no
+  // 1-frame flash. Safe here because the component tree is ssr:false.
   useLayoutEffect(() => {
-    applyAppearanceToDocument({
-      theme: config.theme ?? 'system',
-      accentColor: config.accentColor,
-    });
-  }, [config.theme, config.accentColor]);
+    applyAppearanceToDocument({ accentColor: config.accentColor });
+  }, [config.accentColor]);
 
   // Tell the daemon what the user is currently looking at, so the MCP
   // server can surface it as `get_active_context` to a coding agent in
@@ -1826,32 +1824,6 @@ function AppInner() {
       const next = { ...latestPersistedConfigRef.current, mode };
       latestPersistedConfigRef.current = next;
       saveConfig(next);
-      setConfig(next);
-    },
-    [],
-  );
-
-  // Quick theme switch from the settings dropdown in the entry view.
-  // Skips the full SettingsDialog round-trip so the appearance flip
-  // feels instantaneous; the live preview comes for free because the
-  // `useLayoutEffect` above re-runs `applyAppearanceToDocument` the
-  // moment `config.theme` changes. We still persist to localStorage
-  // and the daemon so the choice survives reloads.
-  const handleThemeChange = useCallback(
-    (theme: AppConfig['theme']) => {
-      const current = latestPersistedConfigRef.current;
-      const next = { ...current, theme };
-      latestPersistedConfigRef.current = next;
-      // Apply to the DOM synchronously inside the click handler so the theme
-      // flips instantly. Otherwise the visible switch waits on the (heavier)
-      // React re-render of the whole tree before the layout effect re-applies
-      // it — which reads as a perceptible lag after the click.
-      applyAppearanceToDocument({
-        theme: theme ?? 'system',
-        accentColor: current.accentColor,
-      });
-      saveConfig(next);
-      void syncConfigToDaemon(next);
       setConfig(next);
     },
     [],
@@ -3379,7 +3351,6 @@ function AppInner() {
         onAgentModelChange={handleAgentModelChange}
         onApiModelChange={handleApiModelChange}
         onRefreshAgents={refreshAgents}
-        onThemeChange={handleThemeChange}
         onOpenSettings={openSettings}
         onOpenAmrSettings={openAmrSettings}
         onOpenMcpSettings={openMcpSettings}
@@ -3429,7 +3400,6 @@ function AppInner() {
         onSkillsRefresh={refreshSkills}
         onSkillsChanged={handleSkillsChanged}
         onRefreshAgents={refreshAgents}
-        onThemeChange={handleThemeChange}
         skillsLoading={skillsLoading}
         designSystemsLoading={dsLoading}
         projectsLoading={projectsLoading}

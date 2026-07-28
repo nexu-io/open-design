@@ -19,7 +19,6 @@ import {
 } from '../analytics/amr-attribution';
 import { getResolvedDeviceId } from '../analytics/client';
 import {
-  trackSettingsAppearanceClick,
   trackByokPreflightBlocked,
   trackSettingsByokModelsFetchResult,
   trackSettingsByokTestResult,
@@ -109,7 +108,6 @@ import type {
   ApiProtocol,
   ApiProtocolConfig,
   AppConfig,
-  AppTheme,
   AppVersionInfo,
   ConnectionTestResponse,
   DesignSystemGenerationJob,
@@ -189,9 +187,7 @@ import {
   useCritiqueTheaterEnabled,
 } from './Theater';
 import {
-  DEFAULT_ACCENT_COLOR,
   applyAppearanceToDocument,
-  normalizeAccentColor,
   resolveAccentColor,
 } from '../state/appearance';
 import { isAutosaveDraftOnlyChange } from '../App';
@@ -1524,8 +1520,8 @@ export function SettingsDialog({
     ReadonlySet<string>
   >(() => new Set());
   const previousInitialRef = useRef(initial);
+  // Accent only — the theme is a constant now that the app ships light-only.
   const lastSavedAppearanceRef = useRef({
-    theme: initial.theme ?? 'system',
     accentColor: resolveAccentColor(initial.accentColor),
   });
 
@@ -1541,10 +1537,9 @@ export function SettingsDialog({
 
   useEffect(() => {
     lastSavedAppearanceRef.current = {
-      theme: initial.theme ?? 'system',
       accentColor: resolveAccentColor(initial.accentColor),
     };
-  }, [initial.theme, initial.accentColor]);
+  }, [initial.accentColor]);
 
   useEffect(() => {
     const previousInitial = previousInitialRef.current;
@@ -3248,7 +3243,6 @@ export function SettingsDialog({
             committedClearedByokProviderKeyRef.current = null;
           }
           lastSavedAppearanceRef.current = {
-            theme: persistedSnapshot.theme ?? 'system',
             accentColor: resolveAccentColor(persistedSnapshot.accentColor),
           };
           // If a newer edit landed while the request was in flight,
@@ -3788,7 +3782,11 @@ export function SettingsDialog({
     integrations: { title: t('settings.mcpServerTitle'), subtitle: t('settings.mcpServerHint') },
     mcpClient: { title: t('settings.externalMcpTitle'), subtitle: t('settings.externalMcpHint') },
     language: { title: t('settings.language'), subtitle: t('settings.languageHint') },
-    appearance: { title: t('settings.appearance'), subtitle: t('settings.appearanceHint') },
+    // The theme setting is gone (the app ships light-only), so `appearance` has
+    // no copy of its own. It survives only as a legacy deep-link token that
+    // `normalizeSettingsSection` folds into General, so this entry can never be
+    // the active header — it exists to keep the Record exhaustive.
+    appearance: { title: t('settings.general'), subtitle: t('settings.generalHint') },
     critiqueTheater: {
       title: t('critiqueTheater.settingsNav'),
       subtitle: t('critiqueTheater.settingsNavHint'),
@@ -5759,7 +5757,7 @@ export function SettingsDialog({
               there is no longer a standalone render block for any of them. */}
           {activeSection === 'general' ? (
             <section className="settings-section settings-general-section">
-              <div className="settings-general-block settings-general-block--appearance">
+              <div className="settings-general-block">
                 <div className="settings-general-field">
                   <span className="settings-general-label">{t('settings.language')}</span>
                   <label className="settings-general-select">
@@ -8579,79 +8577,6 @@ function IntegrationsSection() {
           {t('settings.mcpRunningNote')}
         </p>
         </div>{/* end mcp-setup-card */}
-      </div>
-    </section>
-  );
-}
-
-const THEMES: Array<{
-  value: AppTheme;
-  labelKey: 'settings.themeSystem' | 'settings.themeLight' | 'settings.themeDark';
-  icon?: 'sun' | 'moon';
-}> = [
-  { value: 'system', labelKey: 'settings.themeSystem' },
-  { value: 'light', labelKey: 'settings.themeLight', icon: 'sun' },
-  { value: 'dark', labelKey: 'settings.themeDark', icon: 'moon' },
-];
-
-function AppearanceSection({
-  cfg,
-  setCfg,
-}: {
-  cfg: AppConfig;
-  setCfg: Dispatch<SetStateAction<AppConfig>>;
-}) {
-  const { t } = useI18n();
-  const analytics = useAnalytics();
-  const current = cfg.theme ?? 'system';
-  // #5517 dropped the accent-colour picker from Settings, so there is no UI
-  // that writes `accentColor` any more. Keep applying the stored (or default)
-  // accent so the live theme preview below still renders a stable accent.
-  const currentAccent = normalizeAccentColor(cfg.accentColor) ?? DEFAULT_ACCENT_COLOR;
-
-  // Apply the draft theme immediately so the user sees a live preview
-  // before hitting Save. SettingsDialog's cleanup reverts this on cancel.
-  useLayoutEffect(() => {
-    applyAppearanceToDocument({
-      theme: current,
-      accentColor: currentAccent,
-    });
-  }, [current, currentAccent]);
-
-  // The 系统/浅色/深色 segmented control is deliberately kept even though
-  // #5517 comments it out as *temporarily* hidden: the account menu no longer
-  // carries a 切换主题 row (see EntryNavRail), so this is the product's only
-  // remaining way to pick "follow system". Recorded as NON-ALIGNMENT #9.
-  return (
-    <section className="settings-section">
-      <div
-        className="seg-control"
-        role="group"
-        aria-label={t('settings.appearance')}
-        style={{ '--seg-cols': THEMES.length } as React.CSSProperties}
-      >
-        {THEMES.map(({ value, labelKey, icon }) => (
-          <button
-            key={value}
-            type="button"
-            className={'seg-btn' + (current === value ? ' active' : '')}
-            aria-pressed={current === value}
-            onClick={() => {
-              // P1 ui_click area=appearance — `system|light|dark`.
-              if (value === 'system' || value === 'light' || value === 'dark') {
-                trackSettingsAppearanceClick(analytics.track, {
-                  page_name: 'settings',
-                  area: 'appearance',
-                  element: value,
-                });
-              }
-              setCfg((c) => ({ ...c, theme: value }));
-            }}
-          >
-            {icon ? <Icon name={icon} size={14} aria-hidden="true" /> : null}
-            <span className="seg-title">{t(labelKey)}</span>
-          </button>
-        ))}
       </div>
     </section>
   );
