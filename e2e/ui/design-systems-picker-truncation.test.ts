@@ -159,33 +159,49 @@ test.beforeEach(async ({ page }) => {
 // band covers subpixel rounding on some platforms; anything more means the
 // label wrapped onto a second line — the regression we're guarding against.
 async function expectSingleLineRow(locator: Locator, label: string) {
-  const result = await locator.evaluate((el: Element, lbl: string) => {
-    const r = el.getBoundingClientRect();
-    const cs = window.getComputedStyle(el);
-    return {
-      label: lbl,
-      rowWidth: Math.round(r.width),
-      rowHeight: Math.round(r.height),
-      scrollHeight: el.scrollHeight,
-      clientHeight: el.clientHeight,
-      scrollWidth: el.scrollWidth,
-      clientWidth: el.clientWidth,
-      whiteSpace: cs.whiteSpace,
-      overflow: cs.overflow,
-      textOverflow: cs.textOverflow,
-      text: (el.textContent ?? '').trim(),
-    } as const;
-  }, label);
+ const result = await locator.evaluate((el: Element, lbl: string) => {
+ const r = el.getBoundingClientRect();
+ const cs = window.getComputedStyle(el);
+ return {
+ label: lbl,
+ rowWidth: Math.round(r.width),
+ rowHeight: Math.round(r.height),
+ scrollHeight: el.scrollHeight,
+ clientHeight: el.clientHeight,
+ scrollWidth: el.scrollWidth,
+ clientWidth: el.clientWidth,
+ whiteSpace: cs.whiteSpace,
+ overflow: cs.overflow,
+ textOverflow: cs.textOverflow,
+ text: (el.textContent ?? '').trim(),
+ } as const;
+ }, label);
 
-  expect(
-    result.scrollHeight - result.clientHeight,
-    `[${label}] row scrollHeight (${result.scrollHeight}) exceeds clientHeight (${result.clientHeight}) — a long label wrapped onto a second line. Geometry: ${JSON.stringify(result)}`,
-  ).toBeLessThanOrEqual(1);
+ expect(
+ result.scrollHeight - result.clientHeight,
+ `[${label}] row scrollHeight (${result.scrollHeight}) exceeds clientHeight (${result.clientHeight}) — a long label wrapped onto a second line. Geometry: ${JSON.stringify(result)}`,
+ ).toBeLessThanOrEqual(1);
 
-  expect(
-    result.whiteSpace,
-    `[${label}] expected white-space: nowrap, got ${result.whiteSpace}. Geometry: ${JSON.stringify(result)}`,
-  ).toBe('nowrap');
+ expect(
+ result.whiteSpace,
+ `[${label}] expected white-space: nowrap, got ${result.whiteSpace}. Geometry: ${JSON.stringify(result)}`,
+ ).toBe('nowrap');
+
+ // The regression contract is visible one-line ellipsis, not merely
+ // prevention of wrapping. Without these two checks, removing
+ // `overflow: hidden` or `text-overflow: ellipsis` would still pass.
+ expect(
+ result.overflow,
+ `[${label}] expected overflow: hidden, got ${result.overflow}.`,
+ ).toBe('hidden');
+ expect(
+ result.textOverflow,
+ `[${label}] expected text-overflow: ellipsis, got ${result.textOverflow}.`,
+ ).toBe('ellipsis');
+ expect(
+ result.scrollWidth - result.clientWidth,
+ `[${label}] expected text to be horizontally truncated (scrollWidth > clientWidth), but scrollWidth=${result.scrollWidth}, clientWidth=${result.clientWidth}. The label may not be long enough to trigger ellipsis at this viewport.`,
+ ).toBeGreaterThan(0);
 }
 
 // ---- Picker 1: Settings tab sidebar row ------------------------------------
