@@ -53,6 +53,7 @@ const PACKAGED_CHILD_ENV_ALLOWLIST = [
   "TMPDIR",
   "USER",
   "VP_HOME",
+  "OD_ALLOWED_INTERNAL_HOSTS",
   "all_proxy",
   "http_proxy",
   "https_proxy",
