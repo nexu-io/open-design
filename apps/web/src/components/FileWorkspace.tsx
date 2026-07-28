@@ -111,6 +111,7 @@ import {
   useWorkspaceContext,
 } from '../collab/useWorkspaceContext';
 import { createTerminal, killTerminal, listPlugins, moveWorkspaceProject } from '../state/projects';
+import { MoveToTeamConfirmDialog, moveConfirmSkipped } from './MoveToTeamConfirmDialog';
 import { DesignFilesPanel, type DesignFilesNavState } from './DesignFilesPanel';
 import {
   DesignBrowserPanel,
@@ -1395,6 +1396,7 @@ export function FileWorkspace({
   const [projectShareMenuOpen, setProjectShareMenuOpen] = useState(false);
   const [projectShareAccess, setProjectShareAccess] = useState<'private' | 'workspace'>('private');
   const [projectShareAccessMenuOpen, setProjectShareAccessMenuOpen] = useState(false);
+  const [projectShareConfirm, setProjectShareConfirm] = useState<'private' | 'workspace' | null>(null);
   const [projectShareBusy, setProjectShareBusy] = useState(false);
   const [pageCreatorOpen, setPageCreatorOpen] = useState(false);
   const [pageCreatorQuery, setPageCreatorQuery] = useState('');
@@ -1406,7 +1408,7 @@ export function FileWorkspace({
   const [communityPluginPresets, setCommunityPluginPresets] = useState<ProjectPagePreset[]>([]);
   // Transient feedback when a launcher "create" action (e.g. New Terminal)
   // fails on the daemon side, so the click is never a silent no-op.
-  const [launcherToast, setLauncherToast] = useState<string | null>(null);
+  const [launcherToast, setLauncherToast] = useState<{ message: string; tone: 'success' | 'error' } | null>(null);
   const [browserSnapshotToast, setBrowserSnapshotToast] = useState<WorkspaceActionToast | null>(null);
   const [tabsOverflowing, setTabsOverflowing] = useState(false);
   const [draggedTabName, setDraggedTabName] = useState<string | null>(null);
@@ -2512,7 +2514,7 @@ export function FileWorkspace({
       }, workspaceContext);
       if (!file) {
         // Never let a failed create read as a silent no-op click.
-        setLauncherToast(t('workspace.pageCreateFailed'));
+        setLauncherToast({ message: t('workspace.pageCreateFailed'), tone: 'error' });
         return;
       }
       setPageCreatorOpen(false);
@@ -2523,7 +2525,7 @@ export function FileWorkspace({
       openFile(file.name, { forcePersist: true });
     } catch (err) {
       console.error('[pages] create blank page failed:', err);
-      setLauncherToast(t('workspace.pageCreateFailed'));
+      setLauncherToast({ message: t('workspace.pageCreateFailed'), tone: 'error' });
     } finally {
       setPageCreating(false);
     }
@@ -3298,7 +3300,7 @@ export function FileWorkspace({
     createTerminal: async () => {
       const term = await createTerminal(projectId);
       if (!term) {
-        setLauncherToast(t('workspace.terminalStartFailed'));
+        setLauncherToast({ message: t('workspace.terminalStartFailed'), tone: 'error' });
         return null;
       }
       return term.id;
@@ -3306,9 +3308,20 @@ export function FileWorkspace({
   };
   // A read-only viewer gets no launcher edit actions (new file, import, etc.).
   const launcherActions = viewerOnly ? [] : buildLauncherActions(launcherContext);
-  async function setProjectWorkspaceShareAccess(nextAccess: 'private' | 'workspace') {
+  // Crossing the team-space boundary routes through the shared 转入/移出
+  // 团队空间 confirmation (same dialog + 不再提示 skip key as the project
+  // grid) instead of silently moving the project.
+  function setProjectWorkspaceShareAccess(nextAccess: 'private' | 'workspace') {
     setProjectShareAccessMenuOpen(false);
     if (nextAccess === projectShareAccess || projectShareBusy || viewerOnly) return;
+    if (moveConfirmSkipped()) {
+      void commitProjectWorkspaceShareAccess(nextAccess);
+      return;
+    }
+    setProjectShareConfirm(nextAccess);
+  }
+
+  async function commitProjectWorkspaceShareAccess(nextAccess: 'private' | 'workspace') {
     if (projectShareBusy) return;
     setProjectShareBusy(true);
     try {
@@ -3319,18 +3332,22 @@ export function FileWorkspace({
       });
       setProjectShareAccess(nextAccess);
       notifyTeamProjectsChanged();
-      setLauncherToast(
-        nextAccess === 'workspace'
-          ? t('fileViewer.workspaceShareSuccess')
-          : t('fileViewer.workspaceUnshareSuccess'),
-      );
+      setLauncherToast({
+        message:
+          nextAccess === 'workspace'
+            ? t('fileViewer.workspaceShareSuccess')
+            : t('fileViewer.workspaceUnshareSuccess'),
+        tone: 'success',
+      });
     } catch (error) {
       console.warn('[FileWorkspace] failed to update workspace project sharing', error);
-      setLauncherToast(
-        nextAccess === 'workspace'
-          ? t('fileViewer.workspaceShareFailed')
-          : t('fileViewer.workspaceUnshareFailed'),
-      );
+      setLauncherToast({
+        message:
+          nextAccess === 'workspace'
+            ? t('fileViewer.workspaceShareFailed')
+            : t('fileViewer.workspaceUnshareFailed'),
+        tone: 'error',
+      });
     } finally {
       setProjectShareBusy(false);
     }
@@ -3345,6 +3362,17 @@ export function FileWorkspace({
       ].filter(Boolean).join(' ')}
       data-testid="file-workspace"
     >
+      {projectShareConfirm ? (
+        <MoveToTeamConfirmDialog
+          action={projectShareConfirm === 'workspace' ? 'to-team' : 'to-personal'}
+          onCancel={() => setProjectShareConfirm(null)}
+          onConfirm={() => {
+            const next = projectShareConfirm;
+            setProjectShareConfirm(null);
+            if (next) void commitProjectWorkspaceShareAccess(next);
+          }}
+        />
+      ) : null}
       <SketchEnginePrewarm />
       <div className="ws-tabs-shell">
         {onFocusModeChange && focusMode ? (
@@ -3591,8 +3619,10 @@ export function FileWorkspace({
       ) : launcherToast ? (
         <div className="workspace-toast-anchor">
           <Toast
-            message={launcherToast}
-            role="alert"
+            message={launcherToast.message}
+            tone={launcherToast.tone}
+            role={launcherToast.tone === 'error' ? 'alert' : 'status'}
+            ttlMs={40000}
             onDismiss={() => setLauncherToast(null)}
           />
         </div>
@@ -4910,7 +4940,7 @@ function DesignSystemProjectPanel({
         <Toast
           message={kitToast.message}
           tone={kitToast.tone}
-          ttlMs={kitToast.tone === 'loading' ? 60000 : 2600}
+          ttlMs={40000}
           role={kitToast.tone === 'error' ? 'alert' : 'status'}
           onDismiss={() => setKitToast(null)}
         />
@@ -7333,18 +7363,8 @@ function PageCreatorDialog({
       >
         <header className="page-creator-head">
           <div>
-            <p className="page-creator-kicker">{t('workspace.pages')}</p>
             <h2>{t('workspace.pageCreatorTitle')}</h2>
           </div>
-          <label className="page-creator-search">
-            <Icon name="search" size={14} />
-            <input
-              value={query}
-              onChange={(event) => onQueryChange(event.target.value)}
-              placeholder={t('workspace.pageCreatorSearch')}
-              autoFocus
-            />
-          </label>
           <button
             type="button"
             className="page-creator-close od-tooltip"
@@ -7359,6 +7379,15 @@ function PageCreatorDialog({
         </header>
         <div className="page-creator-body">
           <aside className="page-creator-sidebar" aria-label={t('workspace.pageCreatorCategoryAll')}>
+            <label className="page-creator-search">
+              <Icon name="search" size={14} />
+              <input
+                value={query}
+                onChange={(event) => onQueryChange(event.target.value)}
+                placeholder={t('workspace.pageCreatorSearch')}
+                autoFocus
+              />
+            </label>
             {PAGE_CREATOR_CATEGORIES.map((item) => (
               <button
                 key={item.id}

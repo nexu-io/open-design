@@ -70,6 +70,12 @@ export interface LauncherAction {
 }
 
 const ENABLE_TERMINAL_WORKSPACE_ENTRYPOINT = false;
+// 新建空白页面 left the launcher (product call, 2026-07-27): pages come from
+// the chat/generation flows, and a hand-created empty page was a dead end.
+// Flip to re-enable — FileWorkspace's PageCreatorDialog wiring stays intact.
+// Exported so the PageCreator suites can skipIf on the same switch and revive
+// themselves the day this flips back.
+export const ENABLE_BLANK_PAGE_WORKSPACE_ENTRYPOINT = false;
 
 /**
  * Build the list of "create new" actions for the current context.
@@ -81,7 +87,7 @@ const ENABLE_TERMINAL_WORKSPACE_ENTRYPOINT = false;
  */
 export function buildLauncherActions(ctx: LauncherContext): LauncherAction[] {
   const actions: LauncherAction[] = [];
-  if (ctx.createPage) {
+  if (ENABLE_BLANK_PAGE_WORKSPACE_ENTRYPOINT && ctx.createPage) {
     actions.push({
       id: 'new-page',
       iconName: 'file-text',

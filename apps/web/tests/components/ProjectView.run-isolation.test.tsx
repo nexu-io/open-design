@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProjectView, mergeSavedPreviewComment } from '../../src/components/ProjectView';
 import type { SettingsSection } from '../../src/components/SettingsDialog';
 import type { ProjectWorkspaceScopeState } from '../../src/collab/useProjectWorkspaceScope';
+import type { AmrWorkspaceScopeBlock } from '../../src/runtime/amr-workspace-scope-gate';
 import type { WorkspaceCollabContext } from '@open-design/contracts';
 import type {
   AgentInfo,
@@ -281,6 +282,7 @@ vi.mock('../../src/components/ChatPane', () => ({
     conversations,
     streaming,
     sendDisabled,
+    amrScopeBlock,
     queuedItems,
     previewComments,
     attachedComments,
@@ -297,6 +299,7 @@ vi.mock('../../src/components/ChatPane', () => ({
     conversations: Conversation[];
     streaming: boolean;
     sendDisabled?: boolean;
+    amrScopeBlock?: AmrWorkspaceScopeBlock | null;
     queuedItems?: Array<{
       id: string;
       prompt: string;
@@ -370,6 +373,7 @@ vi.mock('../../src/components/ChatPane', () => ({
             .join('\n')}
         </output>
         <output data-testid="attached-comment-count">{attached.length}</output>
+        <output data-testid="amr-scope-block">{amrScopeBlock?.kind ?? ''}</output>
         {retryTarget && onRetry ? (
           <button type="button" data-testid="chat-retry" onClick={() => onRetry(retryTarget)}>
             retry
@@ -828,6 +832,110 @@ describe('ProjectView conversation run isolation', () => {
     expect(screen.getByTestId('send-message')).toHaveProperty('disabled', true);
     fireEvent.click(screen.getByTestId('send-message'));
     expect(streamViaDaemon).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      'an unbound project',
+      {
+        loading: false,
+        scope: {
+          kind: 'unbound' as const,
+          projectId: project.id,
+          workspaceId: null,
+          context: null,
+        },
+      },
+    ],
+    [
+      'an old daemon',
+      { loading: false, scope: null, failure: 'unsupported' as const },
+    ],
+    [
+      'a workspace-directory outage',
+      { loading: false, scope: null, failure: 'unavailable' as const },
+    ],
+  ])(
+    'fails closed WITH a reason for AMR with %s, instead of silently',
+    async (_label, projectScope) => {
+      // The fail-closed behavior above is intended. Being silent about it is
+      // the bug: the composer must hand the chat surface a classified reason so
+      // it can explain the disabled send and offer the remedy that clears it.
+      conversationAMessages = [];
+      workspaceScopeMocks.projectScope = projectScope;
+
+      renderProjectView(
+        { ...config, agentId: 'amr' },
+        project,
+        [{
+          id: 'amr',
+          name: 'AMR',
+          bin: 'amr',
+          available: true,
+          models: [{ id: 'glm-5', label: 'GLM 5' }],
+        }],
+      );
+
+      await waitFor(() =>
+        expect(screen.getByTestId('active-conversation').textContent).toBe(
+          'conv-a',
+        ),
+      );
+      expect(screen.getByTestId('send-message')).toHaveProperty('disabled', true);
+      // No ambient workspace identity in this fixture: the account is signed
+      // out, so the reason routes to the in-app sign-in remedy.
+      expect(screen.getByTestId('amr-scope-block').textContent).toBe('signed_out');
+    },
+  );
+
+  it('reports an unresolved authority (not a sign-in prompt) while signed in', async () => {
+    conversationAMessages = [];
+    workspaceScopeMocks.ambientContext = teamWorkspaceContext(
+      'workspace-a',
+      'member-a',
+    );
+    workspaceScopeMocks.projectScope = {
+      loading: false,
+      scope: null,
+      failure: 'unavailable',
+    };
+
+    renderProjectView(
+      { ...config, agentId: 'amr' },
+      project,
+      [{
+        id: 'amr',
+        name: 'AMR',
+        bin: 'amr',
+        available: true,
+        models: [{ id: 'glm-5', label: 'GLM 5' }],
+      }],
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'),
+    );
+    expect(screen.getByTestId('send-message')).toHaveProperty('disabled', true);
+    expect(screen.getByTestId('amr-scope-block').textContent).toBe('unresolved');
+  });
+
+  it('keeps the composer silent for a non-AMR agent that cannot resolve a scope', async () => {
+    conversationAMessages = [];
+    workspaceScopeMocks.projectScope = {
+      loading: false,
+      scope: null,
+      failure: 'unavailable',
+    };
+
+    renderProjectView();
+
+    await waitFor(() =>
+      expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'),
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId('send-message')).toHaveProperty('disabled', false),
+    );
+    expect(screen.getByTestId('amr-scope-block').textContent).toBe('');
   });
 
   it('uses the project-bound workspace instead of the ambient workspace for run authorization', async () => {

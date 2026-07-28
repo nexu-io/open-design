@@ -1259,7 +1259,11 @@
   contain: layout style;
   transform: translateZ(0);
 }
-.chat-composer-fixed-layer .composer {
+.chat-composer-fixed-layer .composer,
+/* The 扩展 / 设计百宝箱 quick pills travel with the composer into this layer;
+   without their own opt-in they inherit the layer's pointer-events: none and
+   clicks fall straight through to the transcript. */
+.chat-composer-fixed-layer [data-testid='composer-quick-pills'] {
   pointer-events: auto;
 }
 .chat-composer-fixed-layer .composer-shell {
@@ -1630,6 +1634,14 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Chips may shrink, their GLYPHS may not: the row-wide `min-width: 0` frees
+   flex shrink for label ellipsis, but an SVG flex item defaults to
+   shrinkable too, so a hard squeeze rendered the palette icon tiny. The
+   label's ellipsis is the intended give — pin every chip glyph. */
+.composer-row .icon-btn > svg,
+.composer-row .composer-ds-icon-trigger > svg {
+  flex: 0 0 auto;
+}
 .composer-row {
   display: flex;
   align-items: center;
@@ -1716,17 +1728,30 @@
   margin: 0;
   cursor: default;
 }
-.composer-row .composer-toolbox-standalone-popup {
+.composer .composer-toolbox-standalone-popup {
   position: absolute;
   left: 8px;
   right: auto;
   top: auto;
-  bottom: calc(100% + 8px);
+  /* Anchored to `.composer` itself (the popover blocks are its direct
+     children, not the toolbar row's): clear the quick-pills row sitting
+     directly above the composer — 36px pill height + 8px gap — so the popup
+     floats fully ABOVE the pills with the buttons visible beneath it. */
+  bottom: calc(100% + 44px);
   z-index: 90;
+  /* Uniform 8px inset on all four sides of the popover. */
+  padding: 8px;
   max-height: min(60vh, 440px);
   overflow-y: auto;
   scrollbar-width: thin;
   animation: composer-toolbox-pop-in 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+/* Plugins variant of the standalone popover: sized like the "+" menu's
+   `.plus-menu__flyout--plugins` so the list + hover-preview pane fits. */
+.composer .composer-plugins-standalone-popup {
+  width: 466px;
+  max-width: calc(100vw - 24px);
+  overflow: hidden;
 }
 @keyframes composer-toolbox-pop-in {
   from {
@@ -2571,6 +2596,14 @@
 .staged-context .staged-icon svg {
   width: 8px;
   height: 8px;
+}
+/* Skill chips (设计百宝箱 picks): icon-less pill with a touch more air on
+   every side than the compact 22px context chips (dogfood 2026-07-28). */
+.staged-context--skill {
+  height: auto;
+  min-height: 26px;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill, 999px);
 }
 .staged-context .staged-name {
   max-width: 106px;

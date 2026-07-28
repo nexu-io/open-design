@@ -167,6 +167,7 @@ test('[P0] manual edit mode preserves the current page in a multi-page mobile ap
 
   await page.getByTestId('manual-edit-mode-toggle').click();
   await expect(page.getByTestId('manual-edit-mode-toggle')).toHaveAttribute('aria-pressed', 'false');
+  await expect(preview.locator('html[data-od-edit-mode]')).toHaveCount(0);
   await expect(preview.getByTestId('mobile-page-profile')).toBeVisible();
   await preview.getByRole('button', { name: 'Home' }).click();
   await expect(preview.getByTestId('mobile-page-home')).toBeVisible();
@@ -201,6 +202,102 @@ test('[P0] manual edit mode preserves the current page in a multi-page mobile ap
   await expect(preview.locator('[data-edit-revision="fresh"]')).toBeVisible();
   await expect(preview.getByTestId('mobile-page-home')).toBeVisible();
   await expect(preview.getByTestId('mobile-page-profile')).toBeHidden();
+});
+
+test('[P0] manual edit mode preserves a runtime-rendered mobile app page', async ({ page }) => {
+  await routeMockAgents(page);
+  const projectId = await createEmptyProject(page, 'Runtime-rendered mobile edit');
+  await seedHtmlArtifact(page, projectId, 'mobile-app.html', runtimeRenderedMobileHtml());
+  await page.goto(`/projects/${projectId}/files/mobile-app.html`);
+  await openDesignFile(page, 'mobile-app.html');
+
+  const preview = artifactPreviewFrame(page);
+  await expect(preview.getByTestId('mobile-page-today')).toBeVisible();
+  await page.getByRole('tab', { name: 'Code', exact: true }).click();
+  await page.getByRole('tab', { name: 'Preview', exact: true }).click();
+  await expect(page.frameLocator('iframe[data-testid="artifact-preview-frame-srcdoc"]')
+    .getByTestId('mobile-page-today')).toBeAttached();
+
+  await preview.getByRole('button', { name: 'Profile' }).click();
+  await expect(preview.getByTestId('mobile-page-profile')).toBeVisible();
+  await expect(preview.getByRole('heading', { name: 'Profile page' })).toBeVisible();
+  await expect(preview.getByTestId('mobile-page-today')).toHaveCount(0);
+
+  await page.getByTestId('manual-edit-mode-toggle').click();
+
+  await expect(page.getByTestId('manual-edit-mode-toggle')).toHaveAttribute('aria-pressed', 'true');
+  await expect(preview.getByTestId('mobile-page-profile')).toBeVisible();
+  await expect(preview.getByRole('heading', { name: 'Profile page' })).toBeVisible();
+  await expect(preview.getByRole('heading', { name: 'Today page' })).toHaveCount(0);
+  await expect(preview.getByTestId('mobile-page-today')).toHaveCount(0);
+  await preview.locator('[data-od-id="profile-screen"]').hover();
+  await expect(preview.locator('[data-od-edit-guides-layer]')).toHaveCount(1);
+  await expect(preview.locator('[data-od-edit-guides-layer] > *')).not.toHaveCount(0);
+  await selectPreviewElementThroughBridge(
+    page,
+    preview,
+    '[data-od-id="profile-screen"]',
+    'CONTENT',
+  );
+
+  await page.getByTestId('manual-edit-mode-toggle').click();
+  await expect(page.getByTestId('manual-edit-mode-toggle')).toHaveAttribute('aria-pressed', 'false');
+  await expect(preview.locator('html[data-od-edit-mode]')).toHaveCount(0);
+  await preview.getByRole('button', { name: 'Today' }).click();
+  await expect(preview.getByTestId('mobile-page-today')).toBeVisible();
+  await expect(preview.getByTestId('mobile-page-profile')).toHaveCount(0);
+
+  await page.getByTestId('manual-edit-mode-toggle').click();
+  await expect(page.getByTestId('manual-edit-mode-toggle')).toHaveAttribute('aria-pressed', 'true');
+  await expect(preview.getByTestId('mobile-page-today')).toBeVisible();
+  await expect(preview.getByTestId('mobile-page-profile')).toHaveCount(0);
+  await preview.locator('[data-od-id="today-screen"]').hover();
+  await expect(preview.locator('[data-od-edit-guides-layer] > *')).not.toHaveCount(0);
+});
+
+test('[P0] srcDoc page navigation keeps manual edit hover guides across files and re-entry', async ({ page }) => {
+  await routeMockAgents(page);
+  const projectId = await createEmptyProject(page, 'Cross-file mobile edit');
+  await seedHtmlArtifact(
+    page,
+    projectId,
+    'today.html',
+    linkedMobilePageHtml('Today page', 'today-screen', 'profile.html', 'Profile'),
+  );
+  await seedHtmlArtifact(
+    page,
+    projectId,
+    'profile.html',
+    linkedMobilePageHtml('Profile page', 'profile-screen', 'today.html', 'Today'),
+  );
+  await page.goto(`/projects/${projectId}/files/today.html`);
+  await openDesignFile(page, 'today.html');
+
+  const preview = artifactPreviewFrame(page);
+  await expect(preview.getByRole('heading', { name: 'Today page' })).toBeVisible();
+  await page.getByTestId('manual-edit-mode-toggle').click();
+  await expect(page.getByTestId('manual-edit-mode-toggle')).toHaveAttribute('aria-pressed', 'true');
+  await preview.locator('[data-od-id="today-screen"]').hover();
+  await expect(preview.locator('[data-od-edit-guides-layer] > *')).not.toHaveCount(0);
+
+  await page.getByTestId('manual-edit-mode-toggle').click();
+  await expect(page.getByTestId('manual-edit-mode-toggle')).toHaveAttribute('aria-pressed', 'false');
+  await expect(preview.locator('html[data-od-edit-mode]')).toHaveCount(0);
+  await preview.getByRole('link', { name: 'Profile' }).click();
+
+  await expect(tabBySuffix(page, 'profile.html')).toHaveAttribute('aria-selected', 'true');
+  await expect(preview.getByRole('heading', { name: 'Profile page' })).toBeVisible();
+  await page.getByTestId('manual-edit-mode-toggle').click();
+  await expect(page.getByTestId('manual-edit-mode-toggle')).toHaveAttribute('aria-pressed', 'true');
+  await preview.locator('[data-od-id="profile-screen"]').hover();
+  await expect(preview.locator('[data-od-edit-guides-layer] > *')).not.toHaveCount(0);
+
+  await page.getByTestId('manual-edit-mode-toggle').click();
+  await expect(preview.locator('html[data-od-edit-mode]')).toHaveCount(0);
+  await page.getByTestId('manual-edit-mode-toggle').click();
+  await expect(preview.locator('html[data-od-edit-mode]')).toHaveCount(1);
+  await preview.locator('[data-od-id="profile-screen"]').hover();
+  await expect(preview.locator('[data-od-edit-guides-layer] > *')).not.toHaveCount(0);
 });
 
 async function selectPreviewElementThroughBridge(
@@ -1143,6 +1240,62 @@ function multiPageMobileHtml(): string {
         });
       });
     </script>
+  </body>
+</html>`;
+}
+
+function runtimeRenderedMobileHtml(): string {
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+  </head>
+  <body>
+    <div id="app"></div>
+    <script>
+      const app = document.querySelector('#app');
+      const renderToday = () => {
+        app.innerHTML =
+          '<main data-testid="mobile-page-today" data-od-id="today-screen">' +
+            '<h1>Today page</h1>' +
+            '<button type="button" data-page-target="profile">Profile</button>' +
+          '</main>';
+      };
+      const renderProfile = () => {
+        app.innerHTML =
+          '<main data-testid="mobile-page-profile" data-od-id="profile-screen">' +
+            '<section><h1>Profile page</h1><p>Current page content</p></section>' +
+            '<button type="button" data-page-target="today">Today</button>' +
+          '</main>';
+      };
+      document.addEventListener('click', (event) => {
+        if (event.target.closest('[data-page-target="profile"]')) renderProfile();
+        if (event.target.closest('[data-page-target="today"]')) renderToday();
+      });
+      renderToday();
+    </script>
+  </body>
+</html>`;
+}
+
+function linkedMobilePageHtml(
+  heading: string,
+  screenId: string,
+  href: string,
+  linkLabel: string,
+): string {
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+  </head>
+  <body>
+    <main data-od-id="${screenId}">
+      <h1>${heading}</h1>
+      <a href="${href}">${linkLabel}</a>
+    </main>
   </body>
 </html>`;
 }

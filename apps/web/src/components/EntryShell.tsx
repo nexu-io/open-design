@@ -78,7 +78,6 @@ import type {
   ApiProtocol,
   ApiProtocolConfig,
   AppConfig,
-  AppTheme,
   ConnectionTestResponse,
   DesignSystemSummary,
   ExecMode,
@@ -131,13 +130,6 @@ import { Icon } from './Icon';
 import { defaultAgentModelId, effectiveAgentModelChoice } from './agentModelSelection';
 import { AgentIcon } from './AgentIcon';
 import { CommunityView } from './CommunityView';
-import { UpdateReminderDialog, UpdateReminderStrip } from './UpdateReminderDialog';
-import {
-  markUpdateReminderSeen,
-  markUpdateReminderUpdated,
-  readSeenUpdateReminderVersion,
-  readUpdatedUpdateReminderVersion,
-} from '../lib/update-reminder';
 import { TeamSlotPlaceholder } from './TeamSlotPlaceholder';
 import {
   notifyTeamProjectsChanged,
@@ -147,6 +139,7 @@ import {
   useWorkspaceBillingResponse,
   useWorkspaceContext,
   workspaceBillingBalanceUsd,
+  workspaceBillingSummaryForContext,
 } from '../collab/useWorkspaceContext';
 import { useWorkspaceInvalidation } from '../collab/workspace-events';
 import {
@@ -171,6 +164,9 @@ import type { CreateInput, CreateTab, ImportClaudeDesignOutcome } from './NewPro
 import type { PluginLoopSubmit } from './PluginLoopHome';
 import {
   createProject,
+  duplicatePluginAsProject,
+  patchProject,
+  resolvedWorkspaceContextForWrite,
   type PluginShareAction,
   type PluginShareProjectOutcome,
 } from '../state/projects';
@@ -433,10 +429,6 @@ interface Props {
   onSkillsRefresh?: () => Promise<void> | void;
   onSkillsChanged?: (affectedSkillId?: string) => void;
   onRefreshAgents: () => Promise<AgentInfo[]> | AgentInfo[];
-  // Quick theme switch from the avatar-popover dropdown. Lets the user
-  // flip between system / light / dark without opening the full Settings
-  // dialog. App owns persistence; this component just calls the callback.
-  onThemeChange: (theme: AppTheme) => void;
   onCreateProject: (input: EntryCreateProjectInput) => Promise<boolean> | boolean | void;
   onCreatePluginShareProject: (
     pluginId: string,
@@ -527,21 +519,6 @@ function inactiveViewProps(active: boolean) {
   };
 }
 
-// Placeholder release payload for the update reminder. Real wiring should
-// derive version/notes from the updater release feed (see ../lib/updater);
-// until then this drives the dialog on the Community view and the collapsed
-// strip above the nav rail's account row.
-const UPDATE_REMINDER_DEMO = {
-  version: '1.4.6',
-  coverSrc: '/update-reminder-cover.jpg',
-  notes: [
-    'Faster canvas rendering with smoother pan and zoom',
-    'New community template filters and search',
-    'Fixes for project import and dark mode contrast',
-  ],
-};
-
-
 export function EntryShell({
   skills,
   designTemplates,
@@ -573,7 +550,6 @@ export function EntryShell({
   onSkillsRefresh,
   onSkillsChanged,
   onRefreshAgents,
-  onThemeChange,
   onCreateProject,
   onCreatePluginShareProject,
   onImportClaudeDesign,
@@ -605,11 +581,23 @@ export function EntryShell({
   // The one shared workspace context. Any non-null context is a real workspace
   // (personal or team); workspace surfaces gate on B's permission bits, not on
   // workspaceType.
-  const { context: workspaceContext, loading: workspaceLoading } = useWorkspaceContext();
+  // The whole state (not just `context`) so workspace-scoped WRITES can go
+  // through `resolvedWorkspaceContextForWrite`, which refuses to collapse an
+  // unresolved or unavailable authority into an anonymous, unbound create.
+  const workspaceContextState = useWorkspaceContext();
+  const { context: workspaceContext, loading: workspaceLoading } = workspaceContextState;
   const workspaceContextRef = useRef(workspaceContext);
   workspaceContextRef.current = workspaceContext;
   const workspaceBillingResponse = useWorkspaceBillingResponse();
-  const workspaceBilling = workspaceBillingResponse?.summary ?? null;
+  // Plan and money are both workspace-scoped questions, so both go through a
+  // context-partitioned projection. `response.summary` on its own is an ACCOUNT
+  // read (`workspaceId: null` by contract) — feeding it to the rail's plan
+  // nameplate is what kept a personal Plus badge on a 免费 workspace while the
+  // 额度 row beside it correctly followed the switch.
+  const workspaceBilling = workspaceBillingSummaryForContext(
+    workspaceBillingResponse,
+    workspaceContext,
+  );
   const workspaceBalanceUsd = workspaceBillingBalanceUsd(
     workspaceBillingResponse,
     workspaceContext,
@@ -861,15 +849,6 @@ export function EntryShell({
     await open();
     return true;
   }
-  // Resolve the effective light/dark theme so the rail's account-menu theme toggle
-  // flips to the opposite of what's actually shown (system → resolved).
-  const activeTheme: AppTheme = config.theme ?? 'system';
-  const resolvedDark =
-    activeTheme === 'dark' ||
-    (activeTheme === 'system' &&
-      typeof window !== 'undefined' &&
-      typeof window.matchMedia === 'function' &&
-      window.matchMedia('(prefers-color-scheme: dark)').matches);
   // Workspace-only destinations. Personal and team workspaces both use these;
   // signed-out/local state falls back to home once the context has resolved.
   // `community` is allowed in both states, so it is not guarded.
@@ -920,50 +899,6 @@ export function EntryShell({
   // route) and a reload, instead of snapping back to collapsed.
   const [railOpen, setRailOpen] = useState<boolean>(readStoredRailOpen);
   const [projectSearchOpen, setProjectSearchOpen] = useState(false);
-
-  // Update reminder lifecycle: 'dialog' (unseen version, shown on the
-  // Community view) → 'strip' (dismissed; collapses to the icon button above
-  // the nav rail's account row) → 'updating' (progress shown above the
-  // button) → 'hidden' (update finished). Transitions are persisted per
-  // version (see ../lib/update-reminder).
-  const [updateReminderStage, setUpdateReminderStage] =
-    useState<'hidden' | 'dialog' | 'strip' | 'updating'>('hidden');
-  const [updateReminderProgress, setUpdateReminderProgress] = useState(0);
-  useEffect(() => {
-    if (readUpdatedUpdateReminderVersion() === UPDATE_REMINDER_DEMO.version) return;
-    setUpdateReminderStage(
-      readSeenUpdateReminderVersion() === UPDATE_REMINDER_DEMO.version ? 'strip' : 'dialog',
-    );
-  }, []);
-  const collapseUpdateReminder = useCallback(() => {
-    markUpdateReminderSeen(UPDATE_REMINDER_DEMO.version);
-    setUpdateReminderStage('strip');
-  }, []);
-  const confirmUpdateReminder = useCallback(() => {
-    markUpdateReminderSeen(UPDATE_REMINDER_DEMO.version);
-    setUpdateReminderProgress(0);
-    setUpdateReminderStage('updating');
-  }, []);
-  // Simulated download progress until the reminder is wired to the real
-  // updater feed (see ../lib/updater): ease toward 100% in uneven steps so the
-  // bar reads like a live download rather than a linear animation.
-  useEffect(() => {
-    if (updateReminderStage !== 'updating') return;
-    const timer = window.setInterval(() => {
-      setUpdateReminderProgress((prev) =>
-        prev >= 100 ? 100 : Math.min(100, prev + Math.max(1, Math.round((100 - prev) * 0.14))),
-      );
-    }, 200);
-    return () => window.clearInterval(timer);
-  }, [updateReminderStage]);
-  useEffect(() => {
-    if (updateReminderStage !== 'updating' || updateReminderProgress < 100) return;
-    const done = window.setTimeout(() => {
-      markUpdateReminderUpdated(UPDATE_REMINDER_DEMO.version);
-      setUpdateReminderStage('hidden');
-    }, 600);
-    return () => window.clearTimeout(done);
-  }, [updateReminderStage, updateReminderProgress]);
 
   // ⌘K / Ctrl+K opens the project search palette — same as clicking the rail
   // search box.
@@ -1328,9 +1263,10 @@ export function EntryShell({
   // #5517: the GitHub/Discord/X/mail badges and the settings chip leave the
   // rail footer. Socials live in the account menu, while settings stays
   // reachable through either the account menu or the signed-out rail item.
-  // The updater popup host also lives here (the entry topbar is gone — the
-  // rail toggle is the pinned Home tab in the workspace tabs bar); it renders
-  // nothing until an update is in flight.
+  // The updater host also lives here (the entry topbar is gone — the rail
+  // toggle is the pinned Home tab in the workspace tabs bar), which puts the
+  // bottom-left rocket indicator in this slot; it renders nothing until the
+  // real updater reports a downloaded, unopened installer.
   const railFooterActions = (
     <UpdaterPopup
       allowSilentUpdates={config.allowSilentUpdates}
@@ -1387,7 +1323,7 @@ export function EntryShell({
 
   // #5517 removes the entry top-bar settings cog: the nav-rail account menu owns
   // the settings entry (EntryNavRail onOpenSettings), so the top strip no longer
-  // carries a redundant one. Theme switching lives in 设置·通用 alone.
+  // carries a redundant one.
 
 
   if (view === 'onboarding') {
@@ -1409,7 +1345,6 @@ export function EntryShell({
             onConfigPersist={onConfigPersist}
             onRefreshAgents={onRefreshAgents}
             onFinish={finishOnboarding}
-            onThemeChange={onThemeChange}
             onGoBuild={() => {
               onCompleteOnboarding();
               refreshWorkspaceSurfacesAfterOnboarding();
@@ -1480,23 +1415,7 @@ export function EntryShell({
               workspaceLoading ? <RailAccountSyncTip /> : <CloudSignInTip />
             ) : null
           }
-          accountNotice={
-            updateReminderStage === 'strip' || updateReminderStage === 'updating' ? (
-              <UpdateReminderStrip
-                onConfirm={confirmUpdateReminder}
-                updating={updateReminderStage === 'updating'}
-                progress={updateReminderProgress}
-              />
-            ) : null
-          }
         />
-        {updateReminderStage === 'dialog' && view === 'community' ? (
-          <UpdateReminderDialog
-            content={UPDATE_REMINDER_DEMO}
-            onCancel={collapseUpdateReminder}
-            onConfirm={confirmUpdateReminder}
-          />
-        ) : null}
         {projectSearchOpen ? (
           <ProjectSearchModal
             // The same merged catalog as the All Projects grid (own + team-
@@ -1675,19 +1594,57 @@ export function EntryShell({
             ) : null}
             {view === 'community' ? (
               <CommunityView
-                onRemixTemplate={({ prompt }) => {
-                  // Remix drops the user straight into a running project
-                  // instead of just prefilling Home's composer: create a
-                  // project seeded with this template's prompt (the same
-                  // auto-send-on-mount path Home's own submit uses) and let
-                  // onCreateProject open it.
-                  void onCreateProject({
-                    name: summarizeProjectNameFromPrompt(prompt) || t('common.untitled'),
-                    skillId: null,
-                    designSystemId: null,
-                    metadata: { kind: 'other', nameSource: 'prompt' },
-                    pendingPrompt: prompt,
-                  });
+                onRemixTemplate={({ templateId, prompt }) => {
+                  // Remix carries the template's PROJECT along, not just its
+                  // prompt: duplicate the plugin's example artifact into a
+                  // fresh project (the same daemon flow as the plugin
+                  // gallery's 创建副本), seed the composer with the template
+                  // prompt for review, then open it on the copied entry file.
+                  // Templates without a duplicable artifact fall back to the
+                  // old prompt-only project.
+                  void (async () => {
+                    const name =
+                      summarizeProjectNameFromPrompt(prompt) || t('common.untitled');
+                    try {
+                      // One resolved authority for BOTH requests: the create
+                      // binds the copied project to this workspace, and the
+                      // seed patch is then authorized against that same
+                      // binding. A headerless create is read by the daemon as a
+                      // legacy caller and leaves the project bound to no
+                      // workspace at all, which is what kept remixed projects
+                      // out of the member's own 草稿 list.
+                      const writeContext =
+                        resolvedWorkspaceContextForWrite(workspaceContextState);
+                      const result = await duplicatePluginAsProject(
+                        templateId,
+                        { name },
+                        writeContext,
+                      );
+                      const seeded = await patchProject(
+                        result.projectId,
+                        { pendingPrompt: prompt },
+                        writeContext,
+                      );
+                      if (!seeded) {
+                        // The project itself exists and is bound — only the
+                        // prompt seed was refused. Keep the user on it
+                        // (retrying through the catch below would leave the
+                        // copy orphaned and create a second, empty project)
+                        // and surface the dropped seed instead of discarding
+                        // it silently.
+                        console.error('Community remix: could not seed the template prompt.');
+                      }
+                      await Promise.resolve(onOpenProject(result.projectId, result.relPath));
+                    } catch {
+                      await onCreateProject({
+                        name,
+                        skillId: null,
+                        designSystemId: null,
+                        metadata: { kind: 'other', nameSource: 'prompt' },
+                        pendingPrompt: prompt,
+                      });
+                    }
+                  })();
                 }}
                 onUsePrompt={(prompt) => {
                   // Seed the Home composer with the template's starting prompt,
@@ -1834,7 +1791,6 @@ function OnboardingView({
   onConfigPersist,
   onRefreshAgents,
   onFinish,
-  onThemeChange,
   onGoBuild,
 }: {
   config: AppConfig;
@@ -1856,7 +1812,6 @@ function OnboardingView({
   // `survey` is passed on the About-you completion paths (not on skip) so the
   // shell can build a personalized Home recommendation.
   onFinish: (survey?: { role: string; useCases: string[] }) => void;
-  onThemeChange: (theme: AppTheme) => void;
   onGoBuild: () => void;
 }) {
   const t = useT();
@@ -3108,16 +3063,8 @@ function OnboardingView({
 
   // Connect step, default face: a minimal, centered Open Design Cloud sign-in
   // landing. No stepper, no runtime cards — just the cloud CTA, a secondary
-  // link into the full runtime chooser, and a top-left language/theme bar.
+  // link into the full runtime chooser, and a top-left language bar.
   if (step === 0 && connectExpanded === null) {
-    const activeTheme: AppTheme = config.theme ?? 'system';
-    const resolvedDark =
-      activeTheme === 'dark' ||
-      (activeTheme === 'system' &&
-        typeof window !== 'undefined' &&
-        typeof window.matchMedia === 'function' &&
-        window.matchMedia('(prefers-color-scheme: dark)').matches);
-    const themeIcon: 'sun' | 'moon' = resolvedDark ? 'moon' : 'sun';
     const cloudBusy = amrLoginPending;
     const amrStatusResolving = !amrStatusResolved;
     return (
@@ -3127,15 +3074,6 @@ function OnboardingView({
       >
         <div className="onboarding-cloud__topbar">
           <LanguageMenu compact placement="down" align="end" />
-          <button
-            type="button"
-            className="onboarding-cloud__theme"
-            aria-label={resolvedDark ? t('settings.themeLight') : t('settings.themeDark')}
-            title={resolvedDark ? t('settings.themeLight') : t('settings.themeDark')}
-            onClick={() => onThemeChange(resolvedDark ? 'light' : 'dark')}
-          >
-            <Icon name={themeIcon} size={25} />
-          </button>
         </div>
         <div className="onboarding-cloud__center">
           <span

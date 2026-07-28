@@ -747,7 +747,7 @@ export function DesignSystemsTab({
           <Toast
             message={actionToast.message}
             tone={actionToast.tone}
-            ttlMs={actionToast.tone === 'loading' ? 60000 : 2600}
+            ttlMs={40000}
             role={actionToast.tone === 'error' ? 'alert' : 'status'}
             onDismiss={() => setActionToast(null)}
           />

@@ -227,7 +227,7 @@ export function ComposerModePicker({ mode, onModeChange, labelHidden = false }: 
             if (mode !== 'design') onModeChange?.('design');
           }}
         >
-          <Icon name="close" size={12} strokeWidth={2.2} />
+          <Icon name="close" size={16} strokeWidth={2.2} />
         </button>
       ) : null}
       {open && typeof document !== 'undefined'

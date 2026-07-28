@@ -131,7 +131,7 @@
   min-width: 0;
   padding: 3px;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-pill, 999px);
   background: var(--bg-subtle);
 }
 
@@ -151,7 +151,7 @@
   align-items: center;
   gap: 5px;
   padding: 0 9px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-pill, 999px);
 }
 
 .filter:hover,
@@ -181,6 +181,7 @@
 .markAll {
   flex: 0 0 auto;
   padding: 6px 4px;
+  border-radius: var(--radius-pill, 999px);
 }
 
 .markAll:disabled {

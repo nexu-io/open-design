@@ -1081,6 +1081,14 @@ html.od-radial-open .workspace-shell {
   font-weight: 700;
   cursor: pointer;
 }
+/* Hover inverts the resting pair: ink-dark fill with the brand-green icon +
+   label on top (same ink-pill-with-green-label recipe as the launcher's
+   active chip and the move-to-team confirm). */
+.chrome-publish-primary:hover:not(:disabled) {
+  background: #202020;
+  border-color: #202020;
+  color: var(--brand);
+}
 .chrome-publish-button--ghost {
   border-color: var(--border);
   background: var(--bg-panel);
@@ -1133,14 +1141,32 @@ body[data-artifact-share-access='private'] .ws-tabs-file-actions-before {
   justify-content: space-between;
   gap: 12px;
 }
+/* The title block must shrink, not the actions: with a fixed title width the
+   head could total wider than the panel (290 + gap + 2×28 buttons + padding
+   ≈ 392 > 390) and push the close button past the panel edge. :first-child
+   only — a bare `> div` also catches the actions container and inflates it,
+   which floats the close button into the middle of the panel instead of
+   flush with the cards' right edge. */
+.artifact-version-panel__head > div:first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
 .artifact-version-panel__head p {
-  margin: 0 0 4px;
+  margin: 4px 0 0;
   color: var(--text-muted);
   font-size: 12px;
 }
+/* While the history panel is open it floats over the tab-row file actions,
+   but the dark 分享 button's right sliver still peeked past the panel's edge
+   and read as a control overflowing the panel frame (dogfood 2026-07-27).
+   The cluster is unreachable behind the fixed panel anyway — hide it. */
+body:has(.artifact-version-panel) .ws-tabs-file-actions,
+body:has(.artifact-version-panel) .ws-tabs-file-actions-before {
+  visibility: hidden;
+}
 .artifact-version-panel__head strong {
   display: block;
-  max-width: 290px;
+  max-width: 100%;
   overflow: hidden;
   color: var(--text-strong);
   font-size: 16px;
@@ -1218,7 +1244,7 @@ body[data-artifact-share-access='private'] .ws-tabs-file-actions-before {
   justify-content: center;
   gap: 6px;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-pill);
   background: var(--bg);
   color: var(--text);
   font: inherit;
@@ -1257,8 +1283,12 @@ body[data-artifact-share-access='private'] .ws-tabs-file-actions-before {
   padding-right: 10px;
 }
 .artifact-version-card {
+  position: relative;
   display: grid;
   grid-template-columns: 38px minmax(0, 1fr);
+  /* The v-mark tops-align with the first text line instead of floating at the
+     card's vertical center next to a tall prompt body. */
+  align-items: start;
   gap: 10px;
   /* Reset the global `button` rule (height: 36px; white-space: nowrap) — it
      clamped the multi-line card to 36px so the rows overlapped, and stopped the
@@ -1266,28 +1296,96 @@ body[data-artifact-share-access='private'] .ws-tabs-file-actions-before {
   height: auto;
   white-space: normal;
   padding: 10px;
-  border: 1px solid var(--border);
+  /* Borderless cards (dogfood 2026-07-27): fills alone carry the states —
+     the transparent 1px keeps the box size stable. */
+  border: 1px solid transparent;
   border-radius: var(--radius);
   background: var(--bg-panel);
   color: var(--text);
   text-align: left;
   cursor: pointer;
 }
-.artifact-version-card.is-selected {
-  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
-  background: color-mix(in srgb, var(--accent) 5%, var(--bg-panel));
+/* Package-tracking timeline treatment (dogfood 2026-07-27): the rows read as
+   stops on one vertical route — a dashed connector runs through the v-node
+   column. Each card owns two segments so the line stays continuous across
+   the 8px list gap: ::before climbs from the gap above down to its node,
+   ::after drops from its node to the card's bottom edge. 26.5px centers the
+   1px line on the 34px node inside the 10px card padding. */
+.artifact-version-card::before,
+.artifact-version-card::after {
+  content: '';
+  position: absolute;
+  left: 26.5px;
+  width: 0;
+  border-left: 1px dashed var(--border-strong);
+  pointer-events: none;
 }
+.artifact-version-card::before {
+  top: -8px;
+  height: calc(8px + 10px);
+}
+.artifact-version-card::after {
+  top: calc(10px + 34px);
+  bottom: 0;
+}
+.artifact-version-card:first-child::before,
+.artifact-version-card:last-child::after {
+  content: none;
+}
+/* The current stop's outgoing segment runs solid green, like the reference
+   tracker's active leg; the rest of the route stays dashed. */
+.artifact-version-card.is-current::after {
+  border-left-style: solid;
+  border-left-color: var(--green);
+}
+/* Selection lives on the NODE, not the row (dogfood 2026-07-27 v2): picking a
+   version turns only its v-mark into the ink/green pill — the row itself adds
+   no plate. The CURRENT row keeps its green plate as the "you are here" stop.
+   border-color stays pinned transparent so no lower-layer rule leaks a stroke
+   back in. */
+.artifact-version-card.is-selected {
+  border-color: transparent;
+  background: transparent;
+}
+/* No plate on the current row either (dogfood 2026-07-27 v3): the ink/green
+   node alone marks 当前 — rows stay surfaceless across the board. */
+.artifact-version-card.is-current {
+  border-color: transparent;
+  background: transparent;
+}
+/* Round timeline node, ringed like the reference tracker's stops; the solid
+   panel fill masks the connector line passing behind it. */
 .artifact-version-card__mark {
+  position: relative;
+  z-index: 1;
   width: 34px;
   height: 34px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: var(--radius);
-  background: var(--bg-subtle);
-  color: var(--text-strong);
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-panel);
+  color: var(--text-muted);
   font-size: 12px;
   font-weight: 700;
+}
+/* The current stop keeps a green ring + green label so 当前 stays findable,
+   while the ink/green pill below is reserved for the SELECTION. When the
+   current row IS the selection (panel just opened), the selected rule after
+   this one wins and it renders as the ink pill. */
+.artifact-version-card.is-current .artifact-version-card__mark {
+  border-color: var(--green);
+  box-shadow: 0 0 0 1px var(--green) inset;
+  color: var(--green);
+}
+/* Selected node — the ink/green pill. Declared after the current-stop rule
+   so selection wins whenever both states sit on one row. */
+.artifact-version-card.is-selected .artifact-version-card__mark {
+  border-color: var(--text-strong);
+  background: var(--text-strong);
+  box-shadow: none;
+  color: var(--brand, #87ea5c);
 }
 .artifact-version-card__body {
   min-width: 0;
@@ -1361,6 +1459,12 @@ body[data-artifact-share-access='private'] .ws-tabs-file-actions-before {
 }
 .artifact-version-panel .artifact-version-card__title-text {
   min-width: 0;
+  /* Long prompts fold at 3 lines — the card is a picker row, not a reading
+     surface; the full text still lives in the preview/restore flow. */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .artifact-version-panel .artifact-version-card__title em {
   flex: 0 0 auto;

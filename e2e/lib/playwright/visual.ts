@@ -136,6 +136,16 @@ const VISUAL_PROJECTS = [
 
 type VisualProject = (typeof VISUAL_PROJECTS)[number];
 
+/** The single conversation every workspace capture opens into. */
+const VISUAL_CONVERSATION = {
+  id: 'visual-conversation-launchpad',
+  projectId: 'visual-project-launchpad',
+  title: null,
+  messageCount: 0,
+  createdAt: 1_700_000_000_000,
+  updatedAt: 1_700_000_050_000,
+} as const;
+
 const VISUAL_PROJECT_FILE_HTML =
   '<!doctype html><html><body><main><h1>Visual CSS Smoke</h1><p>Workspace preview remains framed.</p></main></body></html>';
 
@@ -351,6 +361,42 @@ export async function configureVisualPage(page: Page, options: VisualPageOptions
 
   await page.route('**/api/projects', async (route) => {
     await fulfillGet(route, { projects });
+  });
+
+  // The conversation boundary. `ProjectView` renders `ChatPane` — and therefore
+  // the composer every workspace capture waits for — only once a conversation
+  // resolves (`activeConversationId || conversationLoadError`), and both
+  // `listConversations` and `createConversation` swallow a non-ok response
+  // (`[]` / `null`) rather than surfacing an error. So while the catch-all above
+  // answered `/conversations` with 404, the project opened with no conversation
+  // AND no load error, ChatPane never mounted, and every capture that navigates
+  // into the workspace died on `chat-composer` not existing. The catch-all's own
+  // contract is that "every other daemon-owned request terminates at a
+  // deterministic browser-side boundary" — this is that boundary for
+  // conversations, which the catch-all closed without supplying.
+  await page.route('**/api/projects/*/conversations', async (route) => {
+    const method = route.request().method();
+    if (method === 'GET') {
+      await route.fulfill({ json: { conversations: [VISUAL_CONVERSATION] } });
+      return;
+    }
+    if (method === 'POST') {
+      await route.fulfill({ json: { conversation: VISUAL_CONVERSATION } });
+      return;
+    }
+    await route.fallback();
+  });
+
+  await page.route('**/api/projects/*/conversations/*', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.fulfill({ json: { conversation: VISUAL_CONVERSATION } });
+      return;
+    }
+    await fulfillGet(route, { conversation: VISUAL_CONVERSATION });
+  });
+
+  await page.route('**/api/projects/*/conversations/*/messages', async (route) => {
+    await fulfillGet(route, { messages: [] });
   });
 
   await page.route('**/api/projects/*/files', async (route) => {
@@ -633,12 +679,33 @@ export async function gotoVisualWorkspace(page: Page): Promise<void> {
   await prepareVisualWorkspaceFileList(page);
 }
 
+/**
+ * Drive the workspace onto its Design Files tab, converging on that state
+ * instead of deciding once whether to click.
+ *
+ * `aria-selected` and the design-file rows both come off FileWorkspace's single
+ * `activeTab === DESIGN_FILES_TAB` expression, so probing the rows to decide
+ * whether to click was never asking the wrong question — the problem is that the
+ * answer can still change after the probe. The tab is *persisted*
+ * (`setPersistedActive`) and restored asynchronously, so a restore that lands
+ * after this helper's one click puts another tab back, and a one-shot helper has
+ * nothing left to re-click. Under the visual lane — fully parallel, `retries: 0`
+ * — that surfaced as a single capture timing out for 10s on `aria-selected`
+ * while its siblings, running this identical prelude, all passed.
+ *
+ * Clicking is safe to repeat: the tab's handler just sets the same active id.
+ */
+export async function activateVisualDesignFilesTab(page: Page): Promise<void> {
+  const tab = page.getByTestId('design-files-tab');
+  await expect(tab).toBeVisible({ timeout: T.medium });
+  await expect(async () => {
+    if ((await tab.getAttribute('aria-selected')) !== 'true') await tab.click();
+    await expect(tab).toHaveAttribute('aria-selected', 'true', { timeout: T.short });
+  }).toPass({ timeout: T.long });
+}
+
 export async function prepareVisualWorkspaceFileList(page: Page): Promise<void> {
-  const fileRow = page.getByTestId('design-file-row-index.html');
-  if (!(await fileRow.isVisible().catch(() => false))) {
-    await page.getByTestId('design-files-tab').click();
-  }
-  await expect(page.getByTestId('design-files-tab')).toHaveAttribute('aria-selected', 'true');
+  await activateVisualDesignFilesTab(page);
   // No pages dropdown to drive: 023937ef4 replaced the tab strip's pages
   // menu with a plain Design Files tab (#5517), deleting
   // `workspace-pages-menu-trigger` from the app and this helper alike. The
@@ -682,7 +749,12 @@ export async function prepareVisualAvatarMenu(page: Page): Promise<Locator> {
 export async function prepareVisualSettingsDialog(page: Page): Promise<Locator> {
   await prepareVisualWorkspaceFileList(page);
   const dialog = await openSettingsDetailsFromHeader(page);
-  await expect(dialog.getByRole('heading', { name: /Settings|General|Execution mode/i })).toBeVisible();
+  // Assert the section nav, not a heading: the surface's own <h2> is consumed as
+  // its accessible name via aria-labelledby, and opening from a project lands on
+  // the execution section whose heading reads "Models & providers" — neither
+  // matches a /Settings|General|Execution mode/ probe. The nav is what proves
+  // Settings opened, in either presentation. (Same check critical-smoke uses.)
+  await expect(dialog.getByTestId('settings-nav-execution')).toBeVisible();
   await waitForVisualStable(page);
   return dialog;
 }

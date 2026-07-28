@@ -1195,8 +1195,9 @@ desktopMacDescribe('mac desktop settings smoke', () => {
   // the only appearance control the section still owns. The invariants under
   // test are the same ones the theme leg used to prove: the edit previews
   // immediately on the live document, and it survives the dialog closing via
-  // Save. The seeded `theme` is asserted as untouched, because Settings must
-  // no longer be able to move it (only the account menu's 切换主题 can).
+  // Save. The seeded `theme` is a LEGACY dark value: the theme setting is gone
+  // and the app ships light-only, so the packaged runtime must coerce it to
+  // light on read rather than carry it into the document.
   test('previews and saves the desktop appearance preference', async () => {
     await seedDesktopConfig(desktop, {
       mode: 'api',
@@ -1211,7 +1212,7 @@ desktopMacDescribe('mac desktop settings smoke', () => {
       onboardingCompleted: true,
       mediaProviders: {},
       agentModels: {},
-      theme: 'system',
+      theme: 'dark',
     }, 'theme');
 
     await desktop.openSettings();
@@ -1223,10 +1224,10 @@ desktopMacDescribe('mac desktop settings smoke', () => {
       expect(snapshot.dialogOpen).toBe(true);
       // Live preview lands on the document before anything is saved.
       expect(snapshot.documentAccent).toBe('#87ea5c');
-      // The seeded `system` theme is untouched by an Appearance edit, and
-      // `system` still means "no explicit document theme".
-      expect(snapshot.documentTheme).toBe(null);
-      expect(snapshot.savedTheme).toBe('system');
+      // The seeded legacy `dark` never reaches the document, and the coerced
+      // value is written back so the dark preference stops existing on disk.
+      expect(snapshot.documentTheme).toBe('light');
+      expect(snapshot.savedTheme).toBe('light');
     });
 
     await clickDesktopSettingsFooterButton(desktop, 'primary');
@@ -1236,7 +1237,7 @@ desktopMacDescribe('mac desktop settings smoke', () => {
       expect(snapshot.dialogOpen).toBe(false);
       expect(snapshot.documentAccent).toBe('#87ea5c');
       expect(snapshot.savedAccent).toBe('#87ea5c');
-      expect(snapshot.savedTheme).toBe('system');
+      expect(snapshot.savedTheme).toBe('light');
     });
   }, 45_000);
 
@@ -2199,10 +2200,11 @@ async function clickDesktopExecutionModeTab(
 /**
  * Click an accent swatch in the Settings › Appearance section.
  *
- * Replaces the old `clickDesktopSegmentButton` theme helper: #5517 removed the
- * 系统/浅色/深色 segmented control, leaving the accent swatches as the only
- * appearance control Settings still owns. Swatches carry the hex as their
- * aria-label (the default swatch is labelled "Default accent color").
+ * Replaces the old `clickDesktopSegmentButton` theme helper: the
+ * 系统/浅色/深色 segmented control is gone (#5517 hid it, and the theme setting
+ * was removed outright because the app ships light-only), leaving the accent
+ * swatches as the only appearance control Settings still owns. Swatches carry
+ * the hex as their aria-label (the default swatch is "Default accent color").
  */
 async function clickDesktopAccentSwatch(
   desktop: DesktopHarness,

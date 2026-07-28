@@ -43,10 +43,24 @@
   display: flex;
   align-items: center;
   align-content: flex-start;
-  flex-wrap: wrap;
-  gap: 4px;
+  /* All filter tabs stay on ONE line; overflow scrolls horizontally
+     (scrollbar hidden below) instead of wrapping to a second row. */
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  gap: 2px;
   min-height: 0;
   padding: 6px;
+  /* Divider separating the filter strip from the results below. */
+  border-bottom: 1px solid var(--border-soft);
+}
+.mention-tabs::-webkit-scrollbar {
+  display: none;
+}
+/* Keep each pill at its natural width — shrinking would ellipsize the tab
+   labels instead of scrolling the strip. */
+.mention-tabs > .mention-tab {
+  flex: 0 0 auto;
   background: var(--bg-subtle);
   border-bottom: 1px solid var(--border-soft);
   overflow: hidden;
@@ -73,12 +87,23 @@
     background-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
     color 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.mention-tab:hover { color: var(--text); background: var(--bg-panel); }
-.mention-tab.active {
+/* Scoped with the parent class so these outrank the global button primitives
+   (the bare `.mention-tab` tied with them and let a grey fill leak onto
+   unselected pills). Only the SELECTED tab is filled; the rest are bare. */
+.mention-tabs .mention-tab {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+.mention-tabs .mention-tab:hover {
+  color: var(--text);
   background: var(--bg-panel);
+}
+.mention-tabs .mention-tab.active {
+  background: var(--bg-subtle);
   color: var(--text-strong);
-  border-color: var(--border);
-  box-shadow: var(--shadow-xs);
+  border-color: transparent;
+  box-shadow: none;
 }
 .mention-results {
   flex: 1 1 auto;
@@ -117,7 +142,6 @@
 .mention-item.is-active {
   background: var(--accent-tint);
   border-color: var(--accent-soft);
-  box-shadow: inset 2px 0 0 0 var(--accent);
 }
 .mention-section-label {
   font-size: 12px;
@@ -196,6 +220,14 @@
   color: var(--text-soft);
   font-size: 12px;
   align-self: center;
+}
+/* The base align-self: center above wins over .mention-meta--desc by source
+   order alone, re-centering row descriptions (and clipping them at BOTH ends
+   under overflow: hidden). Doubled class so the description always stretches
+   and left-aligns with its title. */
+.mention-meta.mention-meta--desc {
+  align-self: stretch;
+  text-align: left;
 }
 .mention-item-kind {
   justify-self: end;
@@ -328,12 +360,15 @@
   top: 0;
   left: calc(100% + 12px);
   width: min(360px, calc(100vw - var(--entry-rail-width, 56px) - 24px));
-  display: grid;
-  grid-template-columns: 44px minmax(0, 1fr);
-  gap: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
   padding: 18px;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  /* Same panel radius as the what's-new dialog — the two update surfaces
+     share one visual language (white panel, black CTA pill with brand-green
+     ink). */
+  border-radius: var(--radius-lg, 12px);
   background: var(--bg-elevated);
   color: var(--text);
   box-shadow: var(--shadow-lg);
@@ -354,16 +389,6 @@
 [dir='rtl'] .entry-main__topbar .entry-updater-menu .updater-popup {
   right: auto;
   left: 0;
-}
-
-.updater-popup__icon {
-  width: 44px;
-  height: 44px;
-  display: grid;
-  place-items: center;
-  border-radius: var(--radius);
-  background: color-mix(in oklab, var(--accent) 12%, var(--bg-subtle));
-  color: var(--accent);
 }
 
 .updater-popup__body {
@@ -410,14 +435,14 @@
   text-decoration: underline;
 }
 
-/* Footer stays a single row: long en labels wrap inside the checkbox column;
-   actions stay non-shrinking on the trailing edge. */
+/* Footer stacks (what's-new dialog layout): the silent-update checkbox
+   gets the full panel width on its own row — the old single-row layout
+   squeezed its label into a skinny always-wrapping column once the pill
+   buttons widened — and the two action pills split the row below 50/50. */
 .updater-popup__footer {
-  grid-column: 1 / -1;
   display: flex;
-  flex-wrap: nowrap;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
+  align-items: stretch;
   gap: 12px;
   min-width: 0;
 }
@@ -426,7 +451,6 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  flex: 1 1 0;
   min-width: 0;
 }
 
@@ -456,21 +480,20 @@
 }
 
 .updater-popup__actions {
-  display: flex;
-  flex: 0 0 auto;
-  flex-wrap: nowrap;
-  justify-content: flex-end;
-  align-items: center;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 8px;
   min-height: 34px;
 }
 
+/* Buttons mirror the what's-new dialog: a soft white pill for the secondary
+   action, a black pill with brand-green ink for the CTA. */
 .updater-popup__button {
   min-height: 34px;
-  padding: 0 12px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
-  background: var(--bg-panel);
+  padding: 0 16px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-pill, 999px);
+  background: var(--bg-elevated);
   color: var(--text);
   font: inherit;
   font-size: 13px;
@@ -478,7 +501,7 @@
 }
 
 .updater-popup__button:hover {
-  border-color: var(--text-muted);
+  border-color: var(--border-strong);
 }
 
 .updater-popup__button:disabled {
@@ -487,9 +510,15 @@
 }
 
 .updater-popup__button--primary {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: #ffffff;
+  border-color: transparent;
+  background: var(--text-strong);
+  color: var(--brand, #87ea5c);
+  font-weight: 600;
+}
+
+.updater-popup__button--primary:hover:not(:disabled) {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--text-strong) 88%, var(--brand, #87ea5c));
 }
 
 @media (max-width: 560px) {

@@ -1675,6 +1675,7 @@ export function RecentProjectsStrip({
       {moveTarget ? (
         <Dialog
           className="modal-confirm"
+          backdropClassName="modal-backdrop--no-blur"
           role="alertdialog"
           onClose={() => setMoveTarget(null)}
           closeOnEscape
@@ -1713,6 +1714,7 @@ export function RecentProjectsStrip({
       {bulkMoveAction ? (
         <Dialog
           className="modal-confirm"
+          backdropClassName="modal-backdrop--no-blur"
           role="alertdialog"
           onClose={() => setBulkMoveAction(null)}
           closeOnEscape

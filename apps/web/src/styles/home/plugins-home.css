@@ -618,12 +618,6 @@
   display: block;
   transition: transform 320ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-/* Cover zoom on hover — same effect as the home recent-projects cards; the
-   preview box clips (overflow hidden), the media scales in place. */
-.plugins-home__card:hover .plugins-home__media-img,
-.plugins-home__card:hover .plugins-home__media-video {
-  transform: scale(1.04);
-}
 .plugins-home__media-video {
   position: absolute;
   inset: 0;

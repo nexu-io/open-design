@@ -173,6 +173,12 @@ export interface ComposerPlusMenuProps {
   onPickPlugin: (plugin: InstalledPluginRecord) => void;
   /** Opens the plugin registry; omit to hide the add row. */
   onAddPlugin?: () => void;
+  /**
+   * Hide the whole Plugins submenu row. The project composer sets this: its
+   * 插件 quick pill above the input owns the plugins surface, so the row here
+   * would be a duplicate. Home keeps the row (it has no pills).
+   */
+  hidePluginsRow?: boolean;
 
   /** Enabled MCP servers shown under the "MCP" submenu. */
   mcpServers: McpServerConfig[];
@@ -311,6 +317,7 @@ export function ComposerPlusMenu({
   plugins,
   onPickPlugin,
   onAddPlugin,
+  hidePluginsRow,
   mcpServers,
   onPickMcp,
   onAddMcp,
@@ -776,6 +783,7 @@ export function ComposerPlusMenu({
               </>
             ) : null}
           </PlusSubmenuRow>
+          {hidePluginsRow ? null : (
           <PlusSubmenuRow
             label={t('entry.navPlugins')}
             icon="sparkles"
@@ -847,6 +855,7 @@ export function ComposerPlusMenu({
               ) : null}
             </div>
           </PlusSubmenuRow>
+          )}
           <PlusSubmenuRow
             label="MCP"
             icon="link"

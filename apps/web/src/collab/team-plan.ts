@@ -35,7 +35,17 @@ export function hasTeamPlan(
 
 /** The tier sources a surface may have in scope; pass whichever it holds. */
 export interface PlanTierSources {
-  /** `GET /api/workspace/billing` — the workspace's live subscription. */
+  /**
+   * `GET /api/workspace/billing`, PROJECTED onto the workspace in scope by
+   * `workspaceBillingSummaryForContext` (or `useWorkspaceBilling`).
+   *
+   * The raw `response.summary` is an ACCOUNT read — the contract pins its
+   * `workspaceId` to null and the daemon answers every `?workspaceId=` with the
+   * same unscoped read — so its `membershipTier` is NOT a workspace plan and
+   * must not be passed here. It outranks the context hint below precisely
+   * because a projected summary is the more specific workspace answer; handing
+   * it an account tier inverts that and pins the plan to the account.
+   */
   billing?: WorkspaceBillingSummary | null;
   /** `GET /api/workspace/context` — carries the same raw plan id as billing. */
   context?: WorkspaceCollabContext | null;
@@ -48,11 +58,13 @@ export interface PlanTierSources {
  *
  * Three sources report a tier and they disagree by design. vela's login-status
  * projection is ACCOUNT-scoped, so a user whose entitlements are held by a TEAM
- * workspace reads `free` — or nothing at all — there. The workspace billing
- * summary and the collab context both report the WORKSPACE plan id
+ * workspace reads `free` — or nothing at all — there. The workspace-projected
+ * billing summary and the collab context both report the WORKSPACE plan id
  * (`team_plus`, …), so they win over it, in that order. Reading the account
  * projection as authoritative is what showed free-user surfaces to paid team
  * accounts.
+ *
+ * `sources.billing` must already be workspace-projected — see its field doc.
  *
  * Every step falls through on an EMPTY STRING, not only on null: B reports an
  * empty `membershipTier` for a workspace with no active subscription, and an

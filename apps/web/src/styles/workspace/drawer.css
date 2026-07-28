@@ -785,8 +785,9 @@
   left: 0;
   width: 250%;
   height: 250%;
-  /* --thumb-zoom multiplies the fixed fit scale so the hover zoom composes
-     with (never replaces) it. */
+  /* --thumb-zoom multiplies the fixed fit scale so an optional zoom composes
+     with (never replaces) it. Nothing sets it today — the hover cover zoom
+     was removed (see recent-projects.css) — but the seam stays cheap. */
   --thumb-zoom: 1;
   transform: scale(calc(0.4 * var(--thumb-zoom)));
   transform-origin: top left;
@@ -794,13 +795,6 @@
   background: var(--bg-panel);
   pointer-events: none;
   transition: transform 320ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-/* Subtle cover zoom on hover. */
-.design-card:hover .design-card-thumb .thumb-media {
-  transform: scale(1.04);
-}
-.design-card:hover .design-card-thumb .thumb-iframe {
-  --thumb-zoom: 1.04;
 }
 .project-thumb-image,
 .project-thumb-video,
@@ -1543,14 +1537,21 @@
   border-color: var(--text-strong);
   color: var(--bg-app);
 }
+/* Hover keeps the ink fill and flips the label/icon to brand green — the
+   same black-fill + green-ink pairing as the Community selected tab and the
+   page-creator 使用 button. */
 .app .ws-tabs-actions .chrome-action-share-dark:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--text-strong) 88%, var(--bg-app));
-  border-color: color-mix(in srgb, var(--text-strong) 88%, var(--bg-app));
-  color: var(--bg-app);
+  background: var(--text-strong);
+  border-color: var(--text-strong);
+  color: var(--brand, #87ea5c);
 }
 .app .ws-tabs-actions .chrome-action-share-dark svg,
 .app .ws-tabs-actions .chrome-action-share-dark i {
   color: var(--bg-app);
+}
+.app .ws-tabs-actions .chrome-action-share-dark:hover:not(:disabled) svg,
+.app .ws-tabs-actions .chrome-action-share-dark:hover:not(:disabled) i {
+  color: var(--brand, #87ea5c);
 }
 
 .project-collab-demo-stage {
@@ -1846,7 +1847,9 @@
 .page-creator-head {
   flex: 0 0 auto;
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  /* Title + close only — the search pill lives at the top of the category
+     sidebar now, above 幻灯片. */
+  grid-template-columns: 1fr auto;
   align-items: center;
   gap: 16px;
   padding: 18px 22px 17px;
@@ -1962,13 +1965,14 @@
   overflow: hidden;
 }
 .page-creator-search {
-  justify-self: center;
-  width: min(400px, 100%);
-  height: 38px;
+  /* First row of the category sidebar, above 幻灯片. */
+  width: 100%;
+  height: 34px;
+  margin-bottom: 10px;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 14px;
+  padding: 0 11px;
   border: 1px solid transparent;
   border-radius: var(--radius-pill);
   background: var(--bg-subtle);
@@ -2026,7 +2030,7 @@
   background: var(--bg-panel);
   color: var(--text-muted);
   font-size: 12.5px;
-  font-weight: 550;
+  font-weight: 400;
   line-height: 1;
   white-space: nowrap;
   cursor: pointer;
@@ -2048,6 +2052,7 @@
   border-color: var(--text-strong);
   background: var(--text-strong);
   color: var(--brand, #87ea5c);
+  font-weight: 550;
 }
 .page-creator-subcat.active:hover {
   border-color: var(--text-strong);
@@ -2335,7 +2340,7 @@
   min-width: 0;
   padding: 0 10px;
   border: 1px solid color-mix(in srgb, var(--accent) 76%, transparent);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-pill);
   font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
@@ -2355,17 +2360,20 @@
   border-color: color-mix(in srgb, var(--accent) 88%, transparent);
   color: var(--accent);
 }
+/* Black fill + brand-green ink — the same pairing as the Community selected
+   tab — in the resting state; hover only lightens the fill slightly. */
 .page-creator-use {
-  background: var(--accent);
-  color: var(--accent-contrast, #fff);
+  background: var(--text-strong);
+  border-color: transparent;
+  color: var(--brand, #87ea5c);
 }
 /* Hover keeps the solid fill but flips the label to brand-green ink — the
    same black-fill/green-ink pairing as the Community selected tab. */
 .page-creator-use:hover:not(:disabled) {
-  background: var(--accent-hover);
-  border-color: var(--accent-hover);
+  background: color-mix(in srgb, var(--text-strong) 88%, var(--brand, #87ea5c));
+  border-color: transparent;
   color: var(--brand, #87ea5c);
-  box-shadow: 0 6px 14px -10px color-mix(in srgb, var(--accent) 72%, transparent);
+  box-shadow: 0 6px 14px -10px color-mix(in srgb, var(--text-strong) 72%, transparent);
 }
 .page-creator-use:active:not(:disabled),
 .page-creator-preview-button:active:not(:disabled) {

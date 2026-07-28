@@ -58,21 +58,31 @@ describe('recvpYC6eTaifb — home hero blank space above the title (empty worksp
 
 describe('recvpYDfW12NBu — example-prompt preset thumbnails read as mostly padding', () => {
   it('zooms baked preset posters/videos in past their raw cover-fit crop', () => {
-    const rest = cssDeclarations(homeHeroCss, '.home-hero__plugin-preset-preview .plugins-home__media-img');
-    const hover = cssDeclarations(
-      homeHeroCss,
-      '.home-hero__plugin-preset:not(:disabled):hover .plugins-home__media-img',
-    );
+    // The fix is a FRAMING transform on the resting tile: the baked poster is
+    // framed 1.31:1 while the preset cell is a wider ~1.65:1 box, so a bare
+    // object-fit:cover only crops vertically and leaves the poster's own
+    // canvas margin intact on every side. Scaling the already-cover-fitted
+    // media up around its centre crops that margin off instead.
+    const img = cssDeclarations(homeHeroCss, '.home-hero__plugin-preset-preview .plugins-home__media-img');
+    const video = cssDeclarations(homeHeroCss, '.home-hero__plugin-preset-preview .plugins-home__media-video');
 
-    expect(ruleValue(rest, 'transform')).toBe('scale(1.15)');
-    expect(ruleValue(hover, 'transform')).toBe('scale(1.2)');
-    // The html-iframe / deck paths keep their own existing fit-scale math —
-    // this fix is scoped to baked image/video posters only.
-    const iframeHover = cssDeclarations(
-      homeHeroCss,
+    expect(ruleValue(img, 'transform')).toBe('scale(1.15)');
+    expect(ruleValue(video, 'transform')).toBe('scale(1.15)');
+  });
+
+  it('keeps the framing zoom out of the hover state (cover zoom removed 2026-07-27)', () => {
+    // The whole hover "cover zoom" family (recent projects, community cards,
+    // plugins gallery, design files, project drawer, prompt templates, hero
+    // presets) was removed on dogfood feedback — scaling raster/video/iframe
+    // thumbs resamples them and the covers go visibly soft. The resting
+    // framing zoom above must not grow a hover partner again.
+    for (const selector of [
+      '.home-hero__plugin-preset:not(:disabled):hover .plugins-home__media-img',
+      '.home-hero__plugin-preset:not(:disabled):hover .plugins-home__media-video',
       '.home-hero__plugin-preset:not(:disabled):hover .plugins-home__html-iframe',
-    );
-    expect(ruleValue(iframeHover, 'transform')).toBe('scale(0.17888)');
+    ]) {
+      expect(() => cssDeclarations(homeHeroCss, selector)).toThrow(/Missing CSS block/);
+    }
   });
 });
 

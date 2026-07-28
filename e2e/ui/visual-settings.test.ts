@@ -1,3 +1,6 @@
+import type { Locator } from '@playwright/test';
+
+import type { WorkspaceCollabContext } from '@open-design/contracts';
 import { expect, test } from '@/playwright/suite';
 import { T } from '@/timeouts';
 import {
@@ -14,6 +17,55 @@ import {
 } from '@/playwright/visual';
 
 test.describe.configure({ timeout: T.xlong });
+
+/**
+ * The BYOK half of Settings' Execution-mode switch.
+ *
+ * #5971 ("Polish Home and Settings terminology") renamed this tab's title from
+ * `BYOK` to `API providers` — on `main` `settings.modeApiMeta` is still
+ * `'BYOK'`, on this branch it is `'API providers'` — so the old
+ * `getByRole('tab', { name: 'BYOK' })` matched nothing and every BYOK capture
+ * below hung on an unactionable click until the test timed out. The product
+ * copy is the acceptance result; the oracle follows it.
+ *
+ * Scoped to the Execution-mode tablist rather than matching the label
+ * repo-wide: the BYOK pane renders its own `API protocol` tablist, and the
+ * media section renders a tab per provider, so an unscoped name match is one
+ * renamed provider away from resolving to the wrong tab.
+ */
+function byokModeTab(dialog: Locator): Locator {
+  return dialog
+    .getByRole('tablist', { name: 'Execution mode' })
+    .getByRole('tab', { name: /API providers/i });
+}
+
+// The auto-provisioned personal workspace every signed-in identity has. Typed
+// against the contract so a new required permission bit or context field fails
+// typecheck here instead of drifting into a fixture that silently misrepresents
+// a real member. Permission bits mirror
+// `buildWorkspacePermissions({ role: 'owner', lifecycleState: 'active' })`.
+const VISUAL_PERSONAL_WORKSPACE_CONTEXT: WorkspaceCollabContext = {
+  workspaceId: 'visual-ws-personal',
+  workspaceType: 'personal',
+  workspaceMemberId: 'visual-wm-owner',
+  role: 'owner',
+  memberStatus: 'active',
+  lifecycleState: 'active',
+  billingState: 'active',
+  planId: null,
+  providerMode: 'platform_credits',
+  seatSummary: { seatLimit: 1, usedSeats: 1, availableSeats: 0, isSeatFull: true },
+  permissions: {
+    canManageMembers: true,
+    canManageBilling: true,
+    canInviteMembers: true,
+    canManageAutoRecharge: true,
+    canShareProjects: true,
+    canWriteSyncedFiles: true,
+    canViewWorkspaceSettings: true,
+    canManageSharedResources: true,
+  },
+};
 
 test('[P2] captures the settings execution surface', async ({ page }) => {
   await configureVisualPage(page);
@@ -39,6 +91,19 @@ test('[P1] captures the settings Open Design account balance surface', async ({ 
     },
   });
   await mockSignedInVelaAccount(page);
+  // A signed-in vela account is no longer sufficient for the upgrade entry:
+  // `SettingsDialog`'s `amrCardCanUpgrade` also requires
+  // `workspaceContext.permissions.canManageBilling` (recvqfYKutwWlQ — a team
+  // member whose plan is upgradeable still can't act on billing, which is
+  // owner-only), and this lane never established a workspace context, so the
+  // gate correctly closed on an unrepresented identity. Stub the personal
+  // workspace every signed-in user has: `buildWorkspacePermissions` resolves
+  // `canManageBilling` true for its owner, which is who the upgrade entry is
+  // for. `planId` stays null so `resolvePlanTier` keeps falling through to the
+  // account plan the balance/plan assertions below read.
+  await page.route('**/api/workspace/context', async (route) => {
+    await route.fulfill({ json: { context: VISUAL_PERSONAL_WORKSPACE_CONTEXT } });
+  });
   await gotoVisualHome(page);
   await gotoVisualWorkspace(page);
 
@@ -122,7 +187,7 @@ test('[P2] captures the settings BYOK surface', async ({ page }) => {
   await gotoVisualWorkspace(page);
 
   const dialog = await prepareVisualSettingsDialog(page);
-  await dialog.getByRole('tab', { name: 'BYOK' }).click();
+  await byokModeTab(dialog).click();
   await expect(dialog.getByRole('tablist', { name: 'API protocol' })).toBeVisible();
   await expect(dialog.getByRole('heading', { name: 'Anthropic API' })).toBeVisible();
   await waitForVisualFonts(page);
@@ -145,7 +210,7 @@ test('[P2] captures the settings BYOK OpenAI surface', async ({ page }) => {
   await gotoVisualWorkspace(page);
 
   const dialog = await prepareVisualSettingsDialog(page);
-  await dialog.getByRole('tab', { name: 'BYOK' }).click();
+  await byokModeTab(dialog).click();
   await dialog.getByRole('tab', { name: 'OpenAI', exact: true }).click();
   await expect(dialog.getByRole('heading', { name: 'OpenAI API' })).toBeVisible();
   await waitForVisualFonts(page);
@@ -168,7 +233,7 @@ test('[P2] captures the settings BYOK model dropdown surface', async ({ page }) 
   await gotoVisualWorkspace(page);
 
   const dialog = await prepareVisualSettingsDialog(page);
-  await dialog.getByRole('tab', { name: 'BYOK' }).click();
+  await byokModeTab(dialog).click();
   await dialog.getByRole('tab', { name: 'OpenAI', exact: true }).click();
   const modelSelect = dialog.getByRole('combobox', { name: 'Model', exact: true });
   await expect(modelSelect).toBeVisible();

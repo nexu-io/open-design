@@ -204,6 +204,23 @@ describe('App updater dialog integration', () => {
     vi.clearAllMocks();
   });
 
+  it('exposes the desktop host platform on the workspace shell', () => {
+    restoreHost = installMockOpenDesignHost({
+      host: {
+        client: {
+          platform: 'win32',
+        },
+      },
+    });
+
+    const { container } = render(<App />);
+
+    expect(container.querySelector('.workspace-shell')).toHaveAttribute(
+      'data-host-platform',
+      'win32',
+    );
+  });
+
   it('mounts the updater open-dialog subscription and handles the mac app menu request', async () => {
     let openDialogListener: OpenDesignHostUpdaterOpenDialogListener | null = null;
     const check = vi.fn(async () => idleStatus({ state: 'not-available' }));

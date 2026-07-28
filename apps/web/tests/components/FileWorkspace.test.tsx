@@ -13,6 +13,7 @@ import {
   FileWorkspace,
   scrollWorkspaceTabsWithWheel,
 } from '../../src/components/FileWorkspace';
+import { ENABLE_BLANK_PAGE_WORKSPACE_ENTRYPOINT } from '../../src/components/workspace/tab-launcher';
 import { I18nProvider } from '../../src/i18n';
 import { DesignFilesPanel } from '../../src/components/DesignFilesPanel';
 import { projectSplitClassName, projectSplitStyle } from '../../src/components/ProjectView';
@@ -684,7 +685,10 @@ describe('FileWorkspace upload input', () => {
     );
   });
 
-  it('creates slide template pages without default speaker notes', async () => {
+  // PageCreator flows are unreachable while the 新建空白页面 launcher entry
+  // is paused (see ENABLE_BLANK_PAGE_WORKSPACE_ENTRYPOINT); these suites
+  // revive automatically when the switch flips back.
+  it.skipIf(!ENABLE_BLANK_PAGE_WORKSPACE_ENTRYPOINT)('creates slide template pages without default speaker notes', async () => {
     const onRefreshFiles = vi.fn();
     const onTabsStateChange = vi.fn();
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
@@ -760,7 +764,10 @@ describe('FileWorkspace upload input', () => {
     await waitFor(() => expect(onRefreshFiles).toHaveBeenCalledTimes(1));
   });
 
-  it('localizes page creator content and saves template query as the first version prompt', async () => {
+  // PageCreator flows are unreachable while the 新建空白页面 launcher entry
+  // is paused (see ENABLE_BLANK_PAGE_WORKSPACE_ENTRYPOINT); these suites
+  // revive automatically when the switch flips back.
+  it.skipIf(!ENABLE_BLANK_PAGE_WORKSPACE_ENTRYPOINT)('localizes page creator content and saves template query as the first version prompt', async () => {
     const onRefreshFiles = vi.fn();
     const onTabsStateChange = vi.fn();
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
@@ -861,7 +868,10 @@ describe('FileWorkspace upload input', () => {
     await waitFor(() => expect(onRefreshFiles).toHaveBeenCalledTimes(1));
   });
 
-  it('hides blank cards and media category entries in the page creator dialog', async () => {
+  // PageCreator flows are unreachable while the 新建空白页面 launcher entry
+  // is paused (see ENABLE_BLANK_PAGE_WORKSPACE_ENTRYPOINT); these suites
+  // revive automatically when the switch flips back.
+  it.skipIf(!ENABLE_BLANK_PAGE_WORKSPACE_ENTRYPOINT)('hides blank cards and media category entries in the page creator dialog', async () => {
     render(
       <FileWorkspace
         projectId="project-1"

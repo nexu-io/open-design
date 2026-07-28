@@ -88,6 +88,9 @@ expect(retry).toHaveBeenCalledTimes(1);
 
 - 每个用例独立建立自己依赖的项目、配置、mock 和运行状态。
 - 不依赖同文件前序用例或同 worker 前序文件遗留的数据。
+- 只有验证首页、项目创建表单或创建后的路由行为时，才通过对应 UI 建立项目。
+  其他浏览器用例应先注入首屏所需配置，通过 API 建立独立项目，再直达目标
+  路由，避免把无关的首页渲染、modal 交互和 reload 纳入每条测试链路。
 - 不为了摊薄启动成本共享可变 daemon、浏览器上下文或数据目录。
 - 不用 serial group 隐藏竞争条件。
 - 嵌套资源按后创建、先关闭的顺序释放：page、browser context 和 browser

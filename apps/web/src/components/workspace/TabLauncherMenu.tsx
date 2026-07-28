@@ -308,12 +308,12 @@ export function TabLauncherMenu({
                       <span className={styles.rowIcon} aria-hidden>
                         <Icon name={kindIconName(file.kind)} size={15} />
                       </span>
+                      {/* Name only — the kind/size/mtime meta line was dropped
+                          (dogfood 2026-07-27): the icon and extension already
+                          say the kind, and the launcher is a jump list, not a
+                          file manager. */}
                       <span className={styles.rowBody}>
                         <span className={styles.rowName}>{file.name}</span>
-                        <span className={styles.rowMeta}>
-                          {kindLabel(file.kind, t)} · {formatBytes(file.size)} ·{' '}
-                          {formatRelativeTime(file.mtime, t)}
-                        </span>
                       </span>
                       {isOpen ? <span className={styles.rowOpen}>{t('workspace.tabOpen')}</span> : null}
                     </button>
@@ -367,9 +367,9 @@ export function TabLauncherMenu({
 }
 
 // --- local helpers ---------------------------------------------------------
-// DesignFilesPanel keeps equivalent `humanBytes` / `relativeTime` /
-// `kindLabel` helpers but does not export them, so we keep tiny copies here
-// (same formatting contract) rather than widening that component's surface.
+// DesignFilesPanel keeps an equivalent `kindLabel` helper but does not export
+// it, so we keep a tiny copy here (same wording contract) rather than widening
+// that component's surface.
 
 function kindIconName(kind: ProjectFileKind): IconName {
   if (kind === 'html') return 'file-code';
@@ -417,21 +417,3 @@ function workspaceContextSearchText(item: WorkspaceContextItem): string {
   ].join(' ');
 }
 
-function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  return `${(n / 1024 / 1024).toFixed(1)} MB`;
-}
-
-function formatRelativeTime(ts: number, t: TranslateFn): string {
-  const diff = Date.now() - ts;
-  const min = 60_000;
-  const hr = 60 * min;
-  const day = 24 * hr;
-  if (diff < min) return t('common.justNow');
-  if (diff < hr) return t('common.minutesAgo', { n: Math.floor(diff / min) });
-  if (diff < day) return t('common.hoursAgo', { n: Math.floor(diff / hr) });
-  if (diff < 7 * day) return t('common.daysAgo', { n: Math.floor(diff / day) });
-  if (diff < 30 * day) return t('designFiles.weeksAgo', { n: Math.floor(diff / (7 * day)) });
-  return new Date(ts).toLocaleDateString();
-}

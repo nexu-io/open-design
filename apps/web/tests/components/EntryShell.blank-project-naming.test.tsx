@@ -162,7 +162,6 @@ function renderAt(path: string, overrides: Partial<React.ComponentProps<typeof E
     onApiModelChange: vi.fn(),
     onConfigPersist: vi.fn(),
     onRefreshAgents: vi.fn(() => [cliAgent()]),
-    onThemeChange: vi.fn(),
     onCreateProject: vi.fn(() => Promise.resolve(true)),
     onCreatePluginShareProject: vi.fn(),
     onImportClaudeDesign: vi.fn(),

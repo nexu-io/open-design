@@ -134,6 +134,7 @@ import {
   listProjects,
   listTemplates,
   deleteTemplate,
+  duplicatePluginAsProject,
   patchProject,
   resolvedWorkspaceContextForWrite,
 } from './state/projects';
@@ -144,7 +145,7 @@ import type {
   PluginShareProjectOutcome,
   WorkspaceProjectListView,
 } from './state/projects';
-import type { OpenDesignHostProjectImportSuccess } from '@open-design/host';
+import { getOpenDesignHost, type OpenDesignHostProjectImportSuccess } from '@open-design/host';
 import { useI18n } from './i18n';
 import { liveArtifactTabId } from './types';
 import type {
@@ -665,6 +666,7 @@ function AppInner() {
   const { t } = useI18n();
   const iframeKeepAlivePool = useIframeKeepAlivePool();
   const clientType = useMemo(() => detectClientType(), []);
+  const hostPlatform = useMemo(() => getOpenDesignHost()?.client.platform, []);
   useModalWindowDragGuard();
   const workspaceContextState = useWorkspaceContext();
   const {
@@ -716,7 +718,11 @@ function AppInner() {
   // scrim to let the wallpaper show through more clearly; on focus the scrim
   // returns to full strength (app-wash.css keys off this class).
   useEffect(() => {
-    if (clientType !== 'desktop' || typeof window === 'undefined') return undefined;
+    if (
+      clientType !== 'desktop'
+      || hostPlatform !== 'darwin'
+      || typeof window === 'undefined'
+    ) return undefined;
     const root = document.documentElement;
     const sync = () => root.classList.toggle('is-window-blurred', !document.hasFocus());
     sync();
@@ -727,7 +733,7 @@ function AppInner() {
       window.removeEventListener('blur', sync);
       root.classList.remove('is-window-blurred');
     };
-  }, [clientType]);
+  }, [clientType, hostPlatform]);
   const [config, setConfig] = useState<AppConfig>(() => loadConfig());
   const configRef = useRef(config);
   configRef.current = config;
@@ -1166,16 +1172,14 @@ function AppInner() {
     agents,
   ]);
 
-  // Sync theme preference to the <html> element so CSS variables pick it up.
-  // useLayoutEffect (vs useEffect) fires before the browser paints, so a
-  // live theme switch in Settings applies atomically — no 1-frame flash of
-  // the old theme. Safe here because the component tree is ssr:false.
+  // Stamp the app appearance onto the <html> element so CSS variables pick it
+  // up. The theme itself is a constant (light-only), but the accent still comes
+  // from config, and the stamp must be re-applied whenever that changes.
+  // useLayoutEffect (vs useEffect) fires before the browser paints, so no
+  // 1-frame flash. Safe here because the component tree is ssr:false.
   useLayoutEffect(() => {
-    applyAppearanceToDocument({
-      theme: config.theme ?? 'system',
-      accentColor: config.accentColor,
-    });
-  }, [config.theme, config.accentColor]);
+    applyAppearanceToDocument({ accentColor: config.accentColor });
+  }, [config.accentColor]);
 
   // Tell the daemon what the user is currently looking at, so the MCP
   // server can surface it as `get_active_context` to a coding agent in
@@ -1826,32 +1830,6 @@ function AppInner() {
       const next = { ...latestPersistedConfigRef.current, mode };
       latestPersistedConfigRef.current = next;
       saveConfig(next);
-      setConfig(next);
-    },
-    [],
-  );
-
-  // Quick theme switch from the settings dropdown in the entry view.
-  // Skips the full SettingsDialog round-trip so the appearance flip
-  // feels instantaneous; the live preview comes for free because the
-  // `useLayoutEffect` above re-runs `applyAppearanceToDocument` the
-  // moment `config.theme` changes. We still persist to localStorage
-  // and the daemon so the choice survives reloads.
-  const handleThemeChange = useCallback(
-    (theme: AppConfig['theme']) => {
-      const current = latestPersistedConfigRef.current;
-      const next = { ...current, theme };
-      latestPersistedConfigRef.current = next;
-      // Apply to the DOM synchronously inside the click handler so the theme
-      // flips instantly. Otherwise the visible switch waits on the (heavier)
-      // React re-render of the whole tree before the layout effect re-applies
-      // it — which reads as a perceptible lag after the click.
-      applyAppearanceToDocument({
-        theme: theme ?? 'system',
-        accentColor: current.accentColor,
-      });
-      saveConfig(next);
-      void syncConfigToDaemon(next);
       setConfig(next);
     },
     [],
@@ -3289,19 +3267,53 @@ function AppInner() {
   } else if (route.kind === 'community') {
     appMain = (
       <CommunityView
-        onRemixTemplate={({ prompt }) => {
-          // Remix drops the user straight into a running project instead of
-          // just prefilling Home's composer: create a project seeded with
-          // this template's prompt (the same auto-send-on-mount path Home's
-          // own submit uses) and navigate into it (keep in sync with the
-          // EntryShell-embedded community tab).
-          void handleCreateProject({
-            name: summarizeProjectNameFromPrompt(prompt) || t('common.untitled'),
-            skillId: null,
-            designSystemId: null,
-            metadata: { kind: 'other', nameSource: 'prompt' },
-            pendingPrompt: prompt,
-          });
+        onRemixTemplate={({ templateId, prompt }) => {
+          // Remix carries the template's PROJECT along, not just its prompt:
+          // duplicate the plugin's example artifact into a fresh project,
+          // seed the composer with the template prompt, then open it on the
+          // copied entry file (keep in sync with the EntryShell-embedded
+          // community tab). Templates without a duplicable artifact fall
+          // back to the old prompt-only project.
+          void (async () => {
+            const name = summarizeProjectNameFromPrompt(prompt) || t('common.untitled');
+            try {
+              // One resolved authority for BOTH requests: the create binds the
+              // copied project to this workspace, and the seed patch is then
+              // authorized against that same binding. A headerless create is
+              // read by the daemon as a legacy caller and leaves the project
+              // bound to no workspace at all, which is what kept remixed
+              // projects out of the member's own 草稿 list.
+              const writeContext = resolvedWorkspaceContextForWrite(workspaceContextState);
+              const result = await duplicatePluginAsProject(templateId, { name }, writeContext);
+              const seeded = await patchProject(
+                result.projectId,
+                { pendingPrompt: prompt },
+                writeContext,
+              );
+              if (!seeded) {
+                // The project itself exists and is bound — only the prompt seed
+                // was refused. Keep the user on it (retrying through the catch
+                // below would leave the copy orphaned and create a second,
+                // empty project) and surface the dropped seed instead of
+                // discarding it silently.
+                console.error('Community remix: could not seed the template prompt.');
+              }
+              navigate({
+                kind: 'project',
+                projectId: result.projectId,
+                conversationId: result.conversationId,
+                fileName: result.relPath,
+              });
+            } catch {
+              await handleCreateProject({
+                name,
+                skillId: null,
+                designSystemId: null,
+                metadata: { kind: 'other', nameSource: 'prompt' },
+                pendingPrompt: prompt,
+              });
+            }
+          })();
         }}
         onUsePrompt={(prompt) => {
           // Seed the Home composer with the template's starting prompt, then hand
@@ -3379,7 +3391,6 @@ function AppInner() {
         onAgentModelChange={handleAgentModelChange}
         onApiModelChange={handleApiModelChange}
         onRefreshAgents={refreshAgents}
-        onThemeChange={handleThemeChange}
         onOpenSettings={openSettings}
         onOpenAmrSettings={openAmrSettings}
         onOpenMcpSettings={openMcpSettings}
@@ -3429,7 +3440,6 @@ function AppInner() {
         onSkillsRefresh={refreshSkills}
         onSkillsChanged={handleSkillsChanged}
         onRefreshAgents={refreshAgents}
-        onThemeChange={handleThemeChange}
         skillsLoading={skillsLoading}
         designSystemsLoading={dsLoading}
         projectsLoading={projectsLoading}
@@ -3497,6 +3507,7 @@ function AppInner() {
       <div
         className={`workspace-shell workspace-shell--${clientType}`}
         data-client-type={clientType}
+        data-host-platform={hostPlatform}
       >
         <WorkspaceTabsBar
           route={route}

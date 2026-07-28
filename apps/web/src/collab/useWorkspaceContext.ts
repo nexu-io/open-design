@@ -10,6 +10,7 @@ import type {
   WorkspaceInvalidationSsePayload,
 } from '@open-design/contracts';
 import { coalescedGet, forceCoalescedGet } from '../lib/coalesced-get';
+import { isTeamPlanTier } from './team-plan';
 import { fetchTeamProjectsCatalog } from './team-projects-catalog';
 import { useWorkspaceInvalidation } from './workspace-events';
 import {
@@ -710,61 +711,102 @@ export function useWorkspaceBillingResponse(
 }
 
 /**
- * Compatibility view used by plan/upgrade surfaces. Account wallet metadata
- * remains untouched, while an authorized workspace snapshot overrides only
- * the plan/status fields that are workspace-scoped.
+ * Return the billing summary PROJECTED onto the workspace `context` names.
+ *
+ * `WorkspaceBillingSummary` is an ACCOUNT read: the contract pins its
+ * `workspaceId` to null, and the daemon answers every `?workspaceId=` with the
+ * same unscoped `vela billing summary`. Its `membershipTier` therefore says
+ * what the ACCOUNT subscribes to, never what THIS workspace subscribes to — an
+ * account holding a personal Plus reports `plus` while the user stands in a
+ * brand-new, unpaid team workspace. Handing that field to a workspace surface
+ * produces a nameplate that cannot change when the workspace changes, because
+ * it was never about the workspace: the 专业版 Plus badge on a 免费 workspace,
+ * beside a wallet figure that was correct precisely because money already
+ * routes through `workspaceBillingBalanceUsd`.
+ *
+ * Plan and money are partitioned on the same key — `workspaceId` +
+ * `workspaceMemberId`:
+ *
+ *  • personal workspace — the account IS the scope, so the summary passes
+ *    through untouched. (A team-namespaced tier is deliberately kept here:
+ *    `hasTeamPlan` offers the team surfaces to a personal workspace that holds
+ *    a team plan.)
+ *  • team workspace — the plan comes from the context-authorized snapshot.
+ *    Without one, the account tier may stand in ONLY when it is itself
+ *    team-namespaced (`isTeamPlanTier`), because a personal tier
+ *    (`free`/`plus`/`pro`/`max`) describes the account's own subscription and
+ *    cannot name a team workspace's plan. Anything else becomes `''` — the
+ *    contract's "this source does not know" — so `resolvePlanTier` falls
+ *    through to the workspace-scoped `context.planId` / `context.billingState`
+ *    instead of answering a workspace question with an account tier.
+ *
+ * That fallback is load-bearing, not laxness: `workspaceSnapshot` is an
+ * additive capability, and B omits `planId`/`billingState` from a non-owner's
+ * context, so for a paying MEMBER on an older daemon/CLI a team-namespaced
+ * account tier is the only surviving evidence that their team is paid. Dropping
+ * it flashed the free-tier upsell at Team Plus members (飞书 P0, covered by
+ * `tests/components/App.amr-plan-tier.test.tsx`).
+ *
+ * Money fields are left alone: they are already documented as account metadata
+ * and every workspace surface reads them through `workspaceBillingBalanceUsd`.
  */
-export function useWorkspaceBilling(): WorkspaceBillingSummary | null {
-  const response = useWorkspaceBillingResponse();
-  if (!response) return null;
+export function workspaceBillingSummaryForContext(
+  response: WorkspaceBillingResponse | null | undefined,
+  context: WorkspaceCollabContext | null | undefined,
+): WorkspaceBillingSummary | null {
+  if (!response || !context) return null;
   const summary = response.summary;
-  const snapshot = response.workspaceSnapshot;
-  const runtime = response.workspaceRuntime;
-  if (
-    runtime &&
-    (
-      !workspaceBillingRuntimeProjectionIsUsable(runtime) ||
-      !snapshot ||
-      snapshot.workspaceId !== runtime.workspaceId ||
-      snapshot.workspaceMemberId !== runtime.workspaceMemberId
-    )
-  ) {
-    return null;
-  }
+  if (context.workspaceType !== 'team') return summary ?? null;
+  const snapshot = workspaceBillingSnapshotForContext(response, context);
   const snapshotTier =
     snapshot?.billing.planId?.trim()
     || (snapshot?.billing.billingState === 'free' ? 'free' : '');
-  if (!snapshotTier && !summary) return null;
+  const accountTier = summary?.membershipTier?.trim() ?? '';
+  const teamNamespacedAccountTier = isTeamPlanTier(accountTier) ? accountTier : '';
+  const scopedTier = snapshotTier || teamNamespacedAccountTier;
   if (summary) {
-    return snapshotTier
-      ? {
-          ...summary,
-          membershipTier: snapshotTier,
-          subscriptionStatus:
-            snapshot?.billing.billingState ?? summary.subscriptionStatus,
-        }
-      : summary;
+    return {
+      ...summary,
+      membershipTier: scopedTier,
+      subscriptionStatus: snapshotTier
+        ? snapshot?.billing.billingState ?? ''
+        : scopedTier
+          ? summary.subscriptionStatus
+          : '',
+    };
   }
+  // Account metadata is independently nullable from workspace state, so a
+  // proven workspace plan must survive an account-summary outage.
+  if (!snapshot) return null;
   return {
     workspaceId: null,
     membershipTier: snapshotTier,
     totalAvailableCredits: 0,
     subscriptionCredits: 0,
     rechargeCredits: 0,
-    balanceUsd: snapshot?.wallet.balanceUsd ?? '0',
-    subscriptionStatus: snapshot?.billing.billingState ?? '',
+    balanceUsd: snapshot.wallet.balanceUsd,
+    subscriptionStatus: snapshot.billing.billingState ?? '',
     availableActions: [],
-    workspaceBalance: snapshot
-      ? {
-          workspaceId: snapshot.workspaceId,
-          workspaceMemberId: snapshot.workspaceMemberId,
-          balanceUsd: snapshot.wallet.balanceUsd,
-          billingScopeVersion: 2,
-          expiresAt: snapshot.wallet.expiresAt,
-          updatedAt: snapshot.wallet.updatedAt,
-        }
-      : null,
+    workspaceBalance: {
+      workspaceId: snapshot.workspaceId,
+      workspaceMemberId: snapshot.workspaceMemberId,
+      balanceUsd: snapshot.wallet.balanceUsd,
+      billingScopeVersion: 2,
+      expiresAt: snapshot.wallet.expiresAt,
+      updatedAt: snapshot.wallet.updatedAt,
+    },
   };
+}
+
+/**
+ * The ambient-navigation view used by plan/upgrade surfaces: the billing
+ * summary projected onto the workspace the shell is currently in. See
+ * `workspaceBillingSummaryForContext` for the partition rule.
+ */
+export function useWorkspaceBilling(): WorkspaceBillingSummary | null {
+  const { context } = useWorkspaceContext();
+  const response = useWorkspaceBillingResponse();
+  return workspaceBillingSummaryForContext(response, context);
 }
 
 /**

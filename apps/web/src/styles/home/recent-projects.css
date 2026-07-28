@@ -21,6 +21,13 @@
   flex-direction: row;
   align-items: center;
 }
+/* Move-to-team / move-out confirmations: dim the page but keep it sharp — no
+   frosted blur behind the dialog (the shared Dialog backdrop blurs by
+   default; the doubled class outweighs its module rule). */
+.modal-backdrop--no-blur.modal-backdrop {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
 .recent-projects__move-remind input {
   flex: 0 0 auto;
   width: auto;
@@ -276,20 +283,12 @@
   object-fit: cover;
   transition: transform 320ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-/* Subtle cover zoom on hover — the thumb container clips (overflow hidden),
-   so the media scales in place without touching layout. */
-.recent-projects__card-main:hover:not(:disabled) .recent-projects__thumb-media {
-  transform: scale(1.04);
-}
-.recent-projects__card-main:hover:not(:disabled) .recent-projects__thumb-iframe {
-  --thumb-zoom: 1.04;
-}
-.recent-projects__row.is-selecting .recent-projects__thumb-media {
-  transform: none;
-}
-.recent-projects__row.is-selecting .recent-projects__thumb-iframe {
-  --thumb-zoom: 1;
-}
+/* NO cover zoom on hover. This block used to scale the thumb media to 1.04,
+   and the whole "cover zoom" family (community cards, plugins gallery, design
+   files, project drawer, prompt templates, hero presets) referenced it as the
+   origin. Scaling raster/video/iframe thumbs resamples them and the covers go
+   visibly soft — removed on dogfood feedback (2026-07-27). Do not re-add here
+   or in any of the sibling card galleries. */
 .recent-projects__card-thumb-logo .recent-projects__thumb-media {
   inset: 22%;
   width: 56%;
@@ -309,8 +308,9 @@
   width: 1280px;
   height: 720px;
   transform-origin: 0 0;
-  /* --thumb-zoom multiplies the fit scale so the hover zoom below composes
-     with (never replaces) the responsive fitting transform. */
+  /* --thumb-zoom multiplies the fit scale so an optional zoom composes with
+     (never replaces) the responsive fitting transform. Nothing sets it today —
+     the hover cover zoom was removed — but the seam stays cheap. */
   --thumb-zoom: 1;
   transform: scale(calc(100cqw / 1280px * var(--thumb-zoom)));
   transition: transform 320ms cubic-bezier(0.23, 1, 0.32, 1);
@@ -403,8 +403,13 @@
   flex: 0 0 auto;
 }
 /* "转入团队空间" confirm button: green label on the dark filled button to read
-   as the positive, forward action (2 classes out-specifies button.primary). */
-.recent-projects__move-confirm.primary {
+   as the positive, forward action. The selector mirrors mention-home.css's
+   `.modal-confirm .row button.primary` ink-pill restyle (color: #fafafa,
+   including :hover/:active) with one extra class so the green label wins in
+   every interaction state. */
+.modal-confirm .row button.recent-projects__move-confirm.primary,
+.modal-confirm .row button.recent-projects__move-confirm.primary:hover,
+.modal-confirm .row button.recent-projects__move-confirm.primary:active {
   color: var(--brand);
 }
 .recent-projects__card-status {
@@ -842,7 +847,24 @@
   gap: 8px;
 }
 .recent-projects__row--list .recent-projects__card {
-  min-height: 68px;
+  position: relative;
+  min-height: 88px;
+}
+/* Row separator: a hairline pinned to the card's bottom edge that starts
+   AFTER the thumbnail (content padding 10px + 128px thumb + 14px gap), so the
+   image column stays divider-free. The last row draws none. */
+.recent-projects__row--list .recent-projects__card::after {
+  content: '';
+  position: absolute;
+  left: calc(10px + 128px + 14px);
+  right: 10px;
+  bottom: 0;
+  height: 1px;
+  background: var(--border-soft, rgba(0, 0, 0, 0.08));
+  pointer-events: none;
+}
+.recent-projects__row--list .recent-projects__card:last-child::after {
+  display: none;
 }
 /* List rows pad their content 8px, so pulling the ring 4px inside the card
    edge leaves exactly 4px between the stroke and the content. */
@@ -853,15 +875,15 @@
   flex-direction: row;
   align-items: center;
   gap: 14px;
-  min-height: 68px;
+  min-height: 88px;
   padding: 8px 48px 8px 10px;
 }
 .recent-projects__row--list .recent-projects__card-thumb {
   width: 128px;
-  height: 52px;
+  height: auto;
   flex: 0 0 128px;
-  min-height: 52px;
-  aspect-ratio: auto;
+  min-height: 0;
+  aspect-ratio: 16 / 9;
   border-radius: var(--radius-sm);
   margin: 0;
 }

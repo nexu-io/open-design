@@ -117,7 +117,9 @@
      close button's 8–34px inset range and gets visually covered by it,
      regardless of message length (recvqaZAbIdfz1). */
   padding: 10px 48px 10px 14px;
-  border-radius: var(--radius-sm, 4px);
+  /* Pill toast (dogfood 2026-07-27): single-line confirmations read as fully
+     rounded capsules; multi-block toasts opt back out below. */
+  border-radius: var(--radius-pill, 999px);
   background: color-mix(in srgb, var(--text-strong, #1f2328) 78%, transparent);
   -webkit-backdrop-filter: var(--glass-backdrop);
   backdrop-filter: var(--glass-backdrop);
@@ -161,6 +163,13 @@
   top: 64px;
   bottom: auto;
   z-index: 1800;
+}
+/* Toasts that stack extra blocks (details / code / browser snapshot) can't
+   wear the capsule radius — their tall rectangular content would clip. */
+.od-toast:has(.od-toast-details),
+.od-toast:has(.od-toast-code),
+.od-toast:has(.od-toast-browser-snapshot) {
+  border-radius: var(--radius, 12px);
 }
 .project-actions-toast-anchor {
   position: relative;
@@ -213,6 +222,21 @@
   animation: none;
   pointer-events: auto;
 }
+/* Launcher/share feedback toasts match the design-systems treatment: pinned
+   near the pane's TOP edge as a pill, success wearing the light-green /
+   medium-green palette. Browser-snapshot toasts keep the bottom anchor —
+   their card carries actions and previews sized for the bottom edge. */
+.workspace-toast-anchor:not(:has(.od-toast-browser-snapshot)) {
+  inset: 24px 24px auto;
+}
+.workspace-toast-anchor:not(:has(.od-toast-browser-snapshot)) .od-toast {
+  border-radius: var(--radius-pill, 999px);
+}
+.workspace-toast-anchor:not(:has(.od-toast-browser-snapshot)) .od-toast.tone-success {
+  border: 1px solid color-mix(in srgb, var(--success, #2da44e) 30%, transparent);
+  background: color-mix(in srgb, var(--success, #2da44e) 15%, var(--bg, #fff));
+  color: var(--success, #2da44e);
+}
 .workspace-toast-anchor .od-toast.od-toast-browser-snapshot {
   width: min(460px, 100%);
   max-width: 100%;
@@ -245,6 +269,23 @@
   animation: none;
   pointer-events: auto;
   border-radius: var(--radius-pill, 999px);
+  /* Light-green status pill with medium-green text (product ask): this
+     page's share/sync feedback wears the success palette even while
+     loading, instead of the base .od-toast dark scrim + white text. */
+  border: 1px solid color-mix(in srgb, var(--success, #2da44e) 30%, transparent);
+  background: color-mix(in srgb, var(--success, #2da44e) 15%, var(--bg, #fff));
+  color: var(--success, #2da44e);
+}
+/* Keep every glyph on the green pill green: out-specify the dark-toast close
+   disc (.od-toast:not(...):not(...) .od-toast-close) and the tone-loading
+   muted spinner, both of which assume the base dark scrim. */
+.design-systems-toast-anchor .od-toast.tone-loading .od-toast-icon {
+  color: inherit;
+}
+.design-systems-toast-anchor .od-toast:not(.tone-success):not(.tone-error) .od-toast-close {
+  border-color: color-mix(in srgb, var(--success, #2da44e) 26%, transparent);
+  background: color-mix(in srgb, var(--success, #2da44e) 10%, transparent);
+  color: inherit;
 }
 .design-systems-toast-anchor .od-toast.leaving {
   animation: none;
@@ -3548,6 +3589,16 @@
    full width. */
 .project-ds-picker-preview-brand {
   width: 100%;
+}
+/* The kit preview reuses DesignKitView, whose module/swatch cards carry their
+   own hairline frames. Inside the picker's already-framed right pane that
+   reads as double-boxing — strip every stroke here (transparent, not 0, so
+   nothing reflows). Scoped to the picker only; the brand detail page keeps
+   its frames. */
+.project-ds-picker-preview-kit *,
+.project-ds-picker-preview-kit-wrap * {
+  border-color: transparent !important;
+  box-shadow: none !important;
 }
 .project-ds-picker-preview-open {
   margin-top: 8px;

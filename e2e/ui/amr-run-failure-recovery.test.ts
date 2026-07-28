@@ -55,10 +55,18 @@ async function openExecutionSettingsDialog(page: Page) {
   return settings;
 }
 
-test.describe.configure({ mode: 'serial', timeout: T.xlong });
 // Timeout-only configure: each test stubs its own catalogs/agents/status
 // routes and creates its own project, so order independence holds and the
 // file stays splittable across CI shards (a serial group cannot be split).
+//
+// This must stay a SINGLE call. `test.describe.configure` only overwrites the
+// keys it is given, so a later `configure({ timeout })` cannot undo an earlier
+// `configure({ mode: 'serial' })` — a second call reading as "timeout-only"
+// left the whole file serial, where one failure skipped the eight cases behind
+// it and reported them as "did not run" rather than as real results.
+// `mode: 'serial'` is also forbidden outright by e2e/AGENTS.md's UI test
+// stability rules (a serial group cannot be split across the sharded full pool
+// and floors its wall time).
 test.describe.configure({ timeout: T.xlong });
 
 async function stubCatalogsEmpty(page: Page) {

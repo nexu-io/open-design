@@ -87,11 +87,25 @@
   gap: 6px;
 }
 
+/* Placement variant for the pills' home above the composer input (ChatPane).
+   No own bottom margin: `.composer` below already carries 8px padding-top,
+   which IS the intended 8px visible gap — adding margin here doubled it.
+   The 8px horizontal inset mirrors `.composer`'s own horizontal padding so
+   the first pill's left edge lines up with the grey input frame below. */
+.composerQuickPills {
+  margin: 0 8px;
+  /* Above the standalone popovers' click-catcher backdrop (z 89) so the
+     pills stay hoverable while a panel is open — hover-switching between
+     插件 and 设计百宝箱 swaps panels without an extra dismiss click. */
+  position: relative;
+  z-index: 91;
+}
+
 .quickPill {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 12px;
+  padding: 3px 11px;
   font-size: 12px;
   color: var(--text-default);
   background: var(--bg-panel);
@@ -107,6 +121,7 @@
   background: var(--bg-subtle);
   border-color: var(--border);
 }
+
 
 .toolboxList {
   display: flex;
@@ -129,7 +144,8 @@
   color: var(--text-default);
   background: var(--bg-panel);
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  /* Full capsule, matching the quick pills above the composer. */
+  border-radius: 999px;
   cursor: pointer;
   text-align: left;
   transition:
@@ -163,7 +179,8 @@
 
 .toolboxRowIcon {
   flex: none;
-  color: var(--accent-strong);
+  /* Brand green, same accent as the quick-pill icons. */
+  color: var(--brand);
 }
 
 .toolboxRowText {

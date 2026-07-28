@@ -178,7 +178,6 @@ describe('EntryShell AMR workspace precheck race', () => {
           onApiModelChange={vi.fn()}
           onConfigPersist={vi.fn()}
           onRefreshAgents={vi.fn(() => [amrAgent()])}
-          onThemeChange={vi.fn()}
           onCreateProject={onCreateProject}
           onCreatePluginShareProject={vi.fn()}
           onImportClaudeDesign={vi.fn()}

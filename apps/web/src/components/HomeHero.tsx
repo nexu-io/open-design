@@ -2383,14 +2383,8 @@ function PluginPromptPresetCard({
           ) : null}
         </span>
         <span className="home-hero__plugin-preset-meta">
-          {categoryLabel ? (
-            <span
-              className="home-hero__plugin-preset-category"
-              data-testid={`home-hero-plugin-preset-category-${record.id}`}
-            >
-              {categoryLabel}
-            </span>
-          ) : null}
+          {/* Category tag dropped (dogfood 2026-07-28): the filter chips above
+              the rail already scope the row, so the per-card pill was noise. */}
           <span className="home-hero__plugin-preset-title">
             {title}
           </span>

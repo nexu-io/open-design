@@ -227,8 +227,9 @@ interface Props {
   onShareToOpenDesign?: () => void;
   shareToOpenDesignBusy?: boolean;
   variant?: NextStepActionsVariant;
-  // Quick-access pills above the card: open the composer "+" menu directly on
-  // the 扩展 (plugins) or 设计百宝箱 (toolbox) flyout.
+  // Accepted for API compatibility but no longer rendered here: the 扩展 /
+  // 设计百宝箱 quick pills moved out of this card to sit directly above the
+  // composer input (ChatPane renders them next to ChatComposer).
   onOpenComposerPanel?: (which: 'plugins' | 'toolbox') => void;
 }
 
@@ -814,31 +815,6 @@ export function NextStepActions({
           ) : null}
         </div>
       ) : null}
-      {/* The 扩展 / 设计百宝箱 quick pills sit BELOW the suggestion rows so
-          they hug the composer input right underneath this card. */}
-      {onOpenComposerPanel ? (
-        <div className={styles.quickPills} data-testid="next-step-quick-pills">
-          <button
-            type="button"
-            className={styles.quickPill}
-            data-testid="next-step-quick-pill-plugins"
-            onClick={() => onOpenComposerPanel('plugins')}
-          >
-            <Icon name="sparkles" size={13} />
-            <span>{t('entry.navPlugins')}</span>
-          </button>
-          <button
-            type="button"
-            className={styles.quickPill}
-            data-testid="next-step-quick-pill-toolbox"
-            onClick={() => onOpenComposerPanel('toolbox')}
-          >
-            <Icon name="lightbulb" size={13} />
-            <span>{t('chat.designToolbox.tooltip')}</span>
-          </button>
-        </div>
-      ) : null}
-
       {/* Level: featured-row detail card */}
       {detail && typeof document !== 'undefined'
         ? createPortal(

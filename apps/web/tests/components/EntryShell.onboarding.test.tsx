@@ -107,7 +107,6 @@ function renderOnboarding(
     onApiModelChange: vi.fn(),
     onConfigPersist: vi.fn(),
     onRefreshAgents: vi.fn(() => [amrAgent(), cliAgent()]),
-    onThemeChange: vi.fn(),
     onCreateProject: vi.fn(),
     onCreatePluginShareProject: vi.fn(),
     onImportClaudeDesign: vi.fn(),
@@ -163,7 +162,6 @@ function renderHome(
     config: baseConfig({
       agentId: 'claude-code',
       agentModels: { 'claude-code': { model: 'sonnet' } },
-      theme: 'system',
     }),
     agents: [cliAgent()],
     daemonLive: true,
@@ -174,7 +172,6 @@ function renderHome(
     onApiModelChange: vi.fn(),
     onConfigPersist: vi.fn(),
     onRefreshAgents: vi.fn(() => [cliAgent()]),
-    onThemeChange: vi.fn(),
     onCreateProject: vi.fn(),
     onCreatePluginShareProject: vi.fn(),
     onImportClaudeDesign: vi.fn(),

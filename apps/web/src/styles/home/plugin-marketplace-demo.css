@@ -1490,19 +1490,14 @@
   user-select: none;
   transition: transform 320ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-/* Cover zoom on hover — same effect as the home recent-projects cards; the
-   preview box clips (overflow hidden), the media scales in place. */
-.community-template-card.is-clickable:hover .community-template-thumb__image {
-  transform: scale(1.04);
-}
 
 /* Media surface slot. The shared MediaSurface (the same one the plugins-home
    gallery uses) renders the poster and, for plugins the daemon has baked, the
    looping preview clip; it lays itself out against its container, so the thumb
-   owns the positioned box that fills the preview plate. The two rules below
-   only re-establish the crop anchor and hover zoom the sibling
-   `.community-template-thumb__image` rules give a plain poster — the card's
-   framing, plate, and footer are unchanged. */
+   owns the positioned box that fills the preview plate. The rule below only
+   re-establishes the crop anchor the sibling `.community-template-thumb__image`
+   rules give a plain poster — the card's framing, plate, and footer are
+   unchanged. */
 .community-template-thumb__media {
   position: relative;
   width: 100%;
@@ -1513,11 +1508,6 @@
 .community-template-thumb__media .plugins-home__media-video {
   object-position: top center;
   user-select: none;
-}
-
-.community-template-card.is-clickable:hover .community-template-thumb__media .plugins-home__media-img,
-.community-template-card.is-clickable:hover .community-template-thumb__media .plugins-home__media-video {
-  transform: scale(1.04);
 }
 
 .community-template-card__foot {
@@ -1647,6 +1637,22 @@
   -webkit-backdrop-filter: var(--scrim-backdrop);
   backdrop-filter: var(--scrim-backdrop);
 }
+/* Shape-blur layer on the scrim itself: soft radial blobs (blurred by
+   construction, the app-wash language) so the backdrop carries its own
+   frosted material instead of relying solely on the content blur beneath.
+   z-index -1 keeps it above the scrim tint but under the preview panel. */
+.community-template-preview::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(46% 38% at 16% 8%, var(--wash-blue) 0%, transparent 66%),
+    radial-gradient(40% 34% at 86% 12%, var(--wash-pink) 0%, transparent 64%),
+    radial-gradient(48% 42% at 78% 92%, var(--wash-peach) 0%, transparent 62%),
+    radial-gradient(52% 44% at 12% 96%, var(--wash-mist) 0%, transparent 68%);
+}
 
 .community-template-preview__panel {
   display: grid;
@@ -1718,18 +1724,38 @@
   font-size: 13px;
 }
 
+/* Remix + Prompt sit side by side on the right, mirroring the card footer. */
+.community-template-preview__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+/* Same treatment as `.community-template-card__foot button`: borderless gray
+   pill at rest, hover fills black with brand-green ink. */
 .community-template-preview__foot button {
   appearance: none;
   min-height: 36px;
   padding: 0 16px;
-  border: 0;
-  border-radius: 999px;
-  background: var(--accent);
-  color: var(--accent-contrast, #fff);
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  background: var(--bg-panel);
+  color: var(--text);
   font: inherit;
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
+  transition:
+    background-color 140ms var(--ease-out),
+    color 140ms var(--ease-out),
+    border-color 140ms var(--ease-out);
+}
+.community-template-preview__foot button:hover:not(:disabled) {
+  background: var(--text-strong);
+  border-color: transparent;
+  color: var(--brand, #87ea5c);
+  filter: none;
 }
 
 @media (max-width: 980px) {

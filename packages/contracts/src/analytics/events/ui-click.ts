@@ -72,16 +72,15 @@ export interface ExecutionSettingsPopoverClickProps {
 }
 
 // Items inside the header gear settings popover (EntrySettingsMenu): the
-// interface-language select, the appearance (system/light/dark) radio row,
-// the "Share Open Design" social grid, the Discord / social follow links and
-// the Settings → details entry. The same popover is mounted both on the home
-// header and the in-project artifact header, hence the two-value page_name.
+// interface-language select, the "Share Open Design" social grid, the Discord /
+// social follow links and the Settings → details entry. The same popover is
+// mounted both on the home header and the in-project artifact header, hence the
+// two-value page_name.
 export interface SettingsPopoverClickProps {
   page_name: 'home' | 'artifact';
   area: 'settings_popover';
   element:
     | 'language_select'
-    | 'appearance'
     | 'share_channel'
     | 'workspace_teams'
     | 'join_discord'
@@ -92,8 +91,7 @@ export interface SettingsPopoverClickProps {
     | 'follow_linkedin'
     | 'follow_xiaohongshu'
     | 'open_settings';
-  // element=language_select → snake_cased locale (e.g. en, zh_cn, pt_br);
-  // element=appearance → system | light | dark.
+  // element=language_select → snake_cased locale (e.g. en, zh_cn, pt_br).
   value?: string;
   // element=share_channel only — which social network was clicked.
   channel?:
@@ -1488,13 +1486,6 @@ export interface SettingsLanguageClickProps {
   element: string;
 }
 
-export interface SettingsAppearanceClickProps {
-  page_name: TrackingSettingsPage;
-  area: 'appearance';
-  element: 'system' | 'light' | 'dark' | 'accent_color';
-  color?: string;
-}
-
 export interface SettingsNotificationsClickProps {
   page_name: TrackingSettingsPage;
   area: 'notifications';
@@ -1634,7 +1625,6 @@ export type UiClickProps =
   | SettingsMediaProvidersClickProps
   | SettingsConnectorsClickProps
   | SettingsLanguageClickProps
-  | SettingsAppearanceClickProps
   | SettingsNotificationsClickProps
   | SettingsPetsClickProps
   | SettingsPrivacyClickProps

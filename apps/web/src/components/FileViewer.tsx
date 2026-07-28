@@ -66,6 +66,7 @@ import {
   type PublicFilePublishFailureKey,
 } from '../collab/public-file-publish';
 import { moveWorkspaceProject } from '../state/projects';
+import { MoveToTeamConfirmDialog, moveConfirmSkipped } from './MoveToTeamConfirmDialog';
 import type { Dict, Locale } from '../i18n/types';
 import {
   fetchLiveArtifact,
@@ -336,6 +337,8 @@ const PREVIEW_BRIDGE_QUERY = 'odPreviewBridge=scroll&odPreviewBridge=selection&o
 // switch. This preserves the current page of multi-page prototypes while
 // leaving artifact scripts and business state inside their sandboxed frames.
 const PREVIEW_RUNTIME_STATE_MAX_ELEMENTS = 3500;
+const PREVIEW_RUNTIME_STATE_MAX_ROOTS = 64;
+const PREVIEW_RUNTIME_STATE_MAX_ROOT_HTML = 2 * 1024 * 1024;
 type PreviewRuntimeStateEntry = {
   path: number[];
   tag: string;
@@ -348,9 +351,17 @@ type PreviewRuntimeStateEntry = {
   scrollLeft?: number;
   scrollTop?: number;
 };
+type PreviewRuntimeStateRoot = {
+  path: number[];
+  tag: string;
+  id?: string;
+  odId?: string;
+  html: string;
+};
 type PreviewRuntimeState = {
   version: 1;
   hash: string;
+  roots?: PreviewRuntimeStateRoot[];
   htmlAttrs: Record<string, string>;
   bodyAttrs: Record<string, string>;
   entries: PreviewRuntimeStateEntry[];
@@ -378,6 +389,27 @@ function isPreviewRuntimeState(value: unknown): value is PreviewRuntimeState {
     state.version !== 1 ||
     typeof state.hash !== 'string' ||
     state.hash.length > 4096 ||
+    (state.roots !== undefined && (
+      !Array.isArray(state.roots) ||
+      state.roots.length > PREVIEW_RUNTIME_STATE_MAX_ROOTS ||
+      state.roots.reduce((total, root) => total + (
+        root && typeof root === 'object' && typeof root.html === 'string'
+          ? root.html.length
+          : PREVIEW_RUNTIME_STATE_MAX_ROOT_HTML + 1
+      ), 0) > PREVIEW_RUNTIME_STATE_MAX_ROOT_HTML ||
+      !state.roots.every((root) => (
+        !!root &&
+        typeof root === 'object' &&
+        typeof root.tag === 'string' &&
+        root.tag.length <= 32 &&
+        Array.isArray(root.path) &&
+        root.path.length <= 64 &&
+        root.path.every((index) => Number.isInteger(index) && index >= 0 && index <= 100_000) &&
+        (root.id === undefined || (typeof root.id === 'string' && root.id.length <= 4096)) &&
+        (root.odId === undefined || (typeof root.odId === 'string' && root.odId.length <= 4096)) &&
+        typeof root.html === 'string'
+      ))
+    )) ||
     !isPreviewRuntimeAttributeMap(state.htmlAttrs) ||
     !isPreviewRuntimeAttributeMap(state.bodyAttrs) ||
     !Array.isArray(state.entries) ||
@@ -1545,6 +1577,7 @@ export const FileViewer = memo(function FileViewer({
         onSendBoardCommentAttachments={onSendBoardCommentAttachments}
         onFileSaved={onFileSaved}
         onBrandExtractionStopRequest={onBrandExtractionStopRequest}
+        onOpenFileReplacing={onOpenFileReplacing}
         commentPortalId={commentPortalId}
         onCommentModeChange={onCommentModeChange}
         shareRequest={shareRequest}
@@ -3167,6 +3200,30 @@ function FileVersionManagerModal({
     return () => document.removeEventListener('pointerdown', onPointerDown);
   }, [downloadMenuVersionId]);
 
+  // Clicking anywhere outside dismisses the panel, like every other popover
+  // on this surface — but dismissal is LAYERED: while an inner popover
+  // (download menu / restore confirm) is open, the outside click belongs to
+  // that layer's own dismiss handler and must not also tear down the whole
+  // panel. The toolbar entry that toggles the panel is excluded so its own
+  // toggle keeps working without a close/reopen race.
+  useEffect(() => {
+    if (confirmRestore || downloadMenuVersionId) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (
+        target.closest(
+          '.artifact-version-panel, .file-version-download-menu, .file-version-restore-confirm, [data-od-version-entry]',
+        )
+      ) {
+        return;
+      }
+      onClose();
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
+  }, [onClose, confirmRestore, downloadMenuVersionId]);
+
   useEffect(() => {
     if (!selectedId) {
       setSelectedContent(null);
@@ -3493,9 +3550,10 @@ function FileVersionManagerModal({
         aria-label={t('fileViewer.versions.title')}
       >
         <header className="artifact-version-panel__head">
+          {/* Title first, the 历史版本·N count as a subline under it. */}
           <div>
-            <p>{`${t('fileViewer.versions.entryFull')} · ${versionCountLabel}`}</p>
             <strong title={panelFileName}>{panelFileName}</strong>
+            <p>{`${t('fileViewer.versions.entryFull')} · ${versionCountLabel}`}</p>
           </div>
           <div className="artifact-version-panel__head-actions">
             <button
@@ -3624,7 +3682,7 @@ function FileVersionManagerModal({
                 <button
                   key={version.id}
                   type="button"
-                  className={`artifact-version-card${selected ? ' is-selected' : ''}`}
+                  className={`artifact-version-card${selected ? ' is-selected' : ''}${version.current ? ' is-current' : ''}`}
                   role="option"
                   aria-selected={selected}
                   onClick={selectVersion}
@@ -5910,6 +5968,7 @@ function ReactComponentViewer({
   const [unifiedActionTab, setUnifiedActionTab] = useState<'share' | 'export' | 'send'>('share');
   const [shareAccess, setShareAccess] = useState<'private' | 'workspace'>('private');
   const [shareAccessMenuOpen, setShareAccessMenuOpen] = useState(false);
+  const [shareAccessConfirm, setShareAccessConfirm] = useState<'private' | 'workspace' | null>(null);
   const [shareAccessBusy, setShareAccessBusy] = useState(false);
   const [publishedFileUrl, setPublishedFileUrl] = useState('');
   const [publishedFileSlug, setPublishedFileSlug] = useState('');
@@ -6146,10 +6205,20 @@ function ReactComponentViewer({
     }, 1800);
   }
 
-  async function setWorkspaceShareAccess(nextAccess: 'private' | 'workspace') {
+  // Crossing the team-space boundary routes through the shared 转入/移出
+  // 团队空间 confirmation (same dialog + 不再提示 skip key as the project
+  // grid) instead of silently moving the project.
+  function setWorkspaceShareAccess(nextAccess: 'private' | 'workspace') {
     setShareAccessMenuOpen(false);
     if (nextAccess === shareAccess || shareAccessBusy || viewerOnly) return;
+    if (moveConfirmSkipped()) {
+      void commitWorkspaceShareAccess(nextAccess);
+      return;
+    }
+    setShareAccessConfirm(nextAccess);
+  }
 
+  async function commitWorkspaceShareAccess(nextAccess: 'private' | 'workspace') {
     setShareAccessBusy(true);
     try {
       await moveWorkspaceProject({
@@ -6200,6 +6269,17 @@ function ReactComponentViewer({
 
   return (
     <div className="viewer react-component-viewer">
+      {shareAccessConfirm ? (
+        <MoveToTeamConfirmDialog
+          action={shareAccessConfirm === 'workspace' ? 'to-team' : 'to-personal'}
+          onCancel={() => setShareAccessConfirm(null)}
+          onConfirm={() => {
+            const next = shareAccessConfirm;
+            setShareAccessConfirm(null);
+            if (next) void commitWorkspaceShareAccess(next);
+          }}
+        />
+      ) : null}
       <div className="viewer-toolbar">
         <div className="viewer-toolbar-left">
           <button
@@ -6640,6 +6720,7 @@ function HtmlViewer({
   onSendBoardCommentAttachments,
   onFileSaved,
   onBrandExtractionStopRequest,
+  onOpenFileReplacing,
   commentPortalId,
   onCommentModeChange,
   shareRequest,
@@ -6670,6 +6751,7 @@ function HtmlViewer({
   onSendBoardCommentAttachments?: (attachments: ChatCommentAttachment[], images?: File[]) => Promise<boolean | void> | boolean | void;
   onFileSaved?: () => Promise<void> | void;
   onBrandExtractionStopRequest?: () => void;
+  onOpenFileReplacing?: (openName: string, closeName: string) => void;
   commentPortalId?: string;
   onCommentModeChange?: (active: boolean) => void;
   shareRequest?: { nonce: number } | null;
@@ -7005,6 +7087,7 @@ function HtmlViewer({
   const [unifiedActionTab, setUnifiedActionTab] = useState<'share' | 'export' | 'send'>('share');
   const [shareAccess, setShareAccess] = useState<'private' | 'workspace'>('private');
   const [shareAccessMenuOpen, setShareAccessMenuOpen] = useState(false);
+  const [shareAccessConfirm, setShareAccessConfirm] = useState<'private' | 'workspace' | null>(null);
   const [shareAccessBusy, setShareAccessBusy] = useState(false);
   const [publishedFileUrl, setPublishedFileUrl] = useState('');
   const [publishedFileSlug, setPublishedFileSlug] = useState('');
@@ -7236,10 +7319,19 @@ function HtmlViewer({
       setPublishLinkFeedback((current) => (current === feedback ? null : current));
     }, 1800);
   }
-  async function setWorkspaceShareAccess(nextAccess: 'private' | 'workspace') {
+  // Same shared 转入/移出团队空间 confirmation as the project grid — see the
+  // ReactComponentViewer copy above for the rationale.
+  function setWorkspaceShareAccess(nextAccess: 'private' | 'workspace') {
     setShareAccessMenuOpen(false);
     if (nextAccess === shareAccess || shareAccessBusy || viewerOnly) return;
+    if (moveConfirmSkipped()) {
+      void commitWorkspaceShareAccess(nextAccess);
+      return;
+    }
+    setShareAccessConfirm(nextAccess);
+  }
 
+  async function commitWorkspaceShareAccess(nextAccess: 'private' | 'workspace') {
     setShareAccessBusy(true);
     try {
       await moveWorkspaceProject({
@@ -9073,6 +9165,25 @@ function HtmlViewer({
       window.removeEventListener('message', onContentSizeMessage);
     };
   }, [isActivePreviewIframeSource, isOurPreviewIframeSource]);
+
+  useEffect(() => {
+    function onMessage(ev: MessageEvent) {
+      if (!isActivePreviewIframeSource(ev.source)) return;
+      const data = ev.data as { type?: unknown; fileName?: unknown } | null;
+      if (
+        data?.type !== 'od:preview-open-file' ||
+        typeof data.fileName !== 'string' ||
+        data.fileName.length > 4096 ||
+        !/\.html?$/i.test(data.fileName) ||
+        data.fileName.split('/').some((part) => !part || part === '.' || part === '..')
+      ) {
+        return;
+      }
+      onOpenFileReplacing?.(data.fileName, file.name);
+    }
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [file.name, isActivePreviewIframeSource, onOpenFileReplacing]);
 
   useEffect(() => {
     if (!effectiveDeck) {
@@ -11355,6 +11466,11 @@ function HtmlViewer({
         closeArtifactToolMenus();
       };
       if (!useUrlLoadPreview) {
+        // A snapshot is only valid for the URL-load -> srcDoc handoff that
+        // captured it. Once srcDoc is already the active transport it owns the
+        // newest in-frame navigation state; retaining a missed/late snapshot
+        // lets syncBridgeModes replay an older page when Edit is toggled again.
+        previewRuntimeStateRef.current = null;
         enterManualEditMode();
         return;
       }
@@ -12956,6 +13072,7 @@ function HtmlViewer({
                 {versioningAvailable ? (
                   <button
                     type="button"
+                    data-od-version-entry="true"
                     className="viewer-toolbar-more-item"
                     role="menuitem"
                     disabled={source === null}
@@ -13145,6 +13262,7 @@ function HtmlViewer({
           {versioningAvailable && (rawCanShare || rawCanDownload) ? (
             <button
               type="button"
+              data-od-version-entry="true"
               className={`chrome-action chrome-action-secondary chrome-action-icon od-tooltip${versionModalOpen ? ' is-active' : ''}`}
               // Same disabled contract as the Share button directly below:
               // `viewerOnly` + `viewerOnlyDisabledTitle`. A readonly shared
@@ -14779,6 +14897,17 @@ function HtmlViewer({
           onDismiss={() => setDeployActionToast(null)}
         />,
         document.body,
+      ) : null}
+      {shareAccessConfirm ? (
+        <MoveToTeamConfirmDialog
+          action={shareAccessConfirm === 'workspace' ? 'to-team' : 'to-personal'}
+          onCancel={() => setShareAccessConfirm(null)}
+          onConfirm={() => {
+            const next = shareAccessConfirm;
+            setShareAccessConfirm(null);
+            if (next) void commitWorkspaceShareAccess(next);
+          }}
+        />
       ) : null}
       {versionRestoredToast && typeof document !== 'undefined' ? createPortal(
         <Toast

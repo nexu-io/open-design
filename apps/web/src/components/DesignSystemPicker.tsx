@@ -249,7 +249,7 @@ export function DesignSystemPicker({
               className="project-ds-picker-option-check"
               data-testid={`project-ds-picker-option-${d.id}-check`}
             >
-              <Icon name="check" size={13} strokeWidth={2} />
+              <Icon name="check" size={12} strokeWidth={2} />
             </span>
           ) : null}
         </div>
@@ -356,7 +356,7 @@ export function DesignSystemPicker({
                         className="project-ds-picker-option-check"
                         data-testid="project-ds-picker-option-none-check"
                       >
-                        <Icon name="check" size={13} strokeWidth={2} />
+                        <Icon name="check" size={12} strokeWidth={2} />
                       </span>
                     ) : null}
                   </div>
@@ -414,7 +414,7 @@ export function DesignSystemPicker({
                       data-testid="project-ds-picker-preview-expand"
                       onClick={() => openSystemPreview(previewSystem)}
                     >
-                      <Icon name="eye" size={13} strokeWidth={1.9} />
+                      <Icon name="eye" size={12} strokeWidth={1.9} />
                       <span>{t('designSystemPicker.openPreview')}</span>
                     </button>
                   </div>

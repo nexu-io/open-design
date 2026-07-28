@@ -43,27 +43,46 @@ function accentVars(accentColor: string): Record<(typeof ACCENT_VARS)[number], s
   };
 }
 
+/**
+ * The one appearance Open Design ships.
+ *
+ * Product removed the theme setting: the workspace surfaces have no dark
+ * tokens, so a dark app is a broken app. `data-theme` is therefore a constant
+ * rather than a preference — and it must always be PRESENT, not merely
+ * non-dark. Every dark rule in the app is gated on the attribute being absent
+ * (`html:not([data-theme])` in CSS) or falls back to `prefers-color-scheme`
+ * when the attribute is missing (`shiki`, `ConnectorLogo`, `SketchEditor`,
+ * `TerminalViewer`, `connectorBrandColor`, `MentionNode`). Stamping it
+ * unconditionally is what keeps a dark OS from leaking through.
+ */
+export const FORCED_APP_THEME = 'light' as const;
+
+/**
+ * Coerce any persisted theme to the only one that still exists.
+ *
+ * Changing the default alone cannot fix an existing install: every user who
+ * ever opened the old picker has `'dark'` — or `'system'`, which resolves dark
+ * on a dark OS — written to localStorage, and a stored value does not move
+ * when the default does. Config reads funnel through here so those installs
+ * come back light.
+ */
+export function resolveAppTheme(persisted?: AppTheme | null): AppTheme {
+  return persisted === FORCED_APP_THEME ? persisted : FORCED_APP_THEME;
+}
+
 export function applyAppearanceToDocument({
-  theme,
   accentColor,
 }: {
-  theme?: AppTheme;
   accentColor?: string;
 }): void {
   const root = document.documentElement;
-  if (theme === 'light' || theme === 'dark') {
-    root.setAttribute('data-theme', theme);
-  } else {
-    root.removeAttribute('data-theme');
-  }
+  root.setAttribute('data-theme', FORCED_APP_THEME);
   // Desktop shell: keep the native window appearance (the macOS vibrancy
   // glass material) in step with the app theme. Without this the glass
-  // follows the OS appearance, so an explicitly light app over a dark OS sat
-  // on dark glass and read as a muddy gray (#94). Feature-detected — browsers
-  // and older host builds have no appearance capability.
-  getOpenDesignHost()?.appearance?.setTheme(
-    theme === 'light' || theme === 'dark' ? theme : 'system',
-  );
+  // follows the OS appearance, so the light app over a dark OS sat on dark
+  // glass and read as a muddy gray (#94). Feature-detected — browsers and
+  // older host builds have no appearance capability.
+  getOpenDesignHost()?.appearance?.setTheme(FORCED_APP_THEME);
 
   const normalized = resolveAccentColor(accentColor);
   const vars = accentVars(normalized);

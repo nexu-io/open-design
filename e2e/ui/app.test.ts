@@ -400,54 +400,7 @@ for (const entry of automatedUiScenarios().filter(
   });
 }
 
-test('[P0] @critical comment attachment flow attaches preview comments to the next run as structured context', async ({ page }) => {
-  test.setTimeout(75_000);
-  const entry = automatedUiScenarios().find((scenario) => scenario.id === 'comment-attachment-flow');
-  if (!entry?.mockArtifact) {
-    throw new Error('comment-attachment-flow scenario fixture is missing');
-  }
-
-  await routeMockAgents(page);
-  await page.route('**/api/runs', async (route) => {
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: JSON.stringify({ runId: 'comment-attachment-run' }),
-    });
-  });
-  await page.route('**/api/runs/*/events', async (route) => {
-    const body = [
-      'event: start',
-      'data: {"bin":"mock-agent"}',
-      '',
-      'event: end',
-      'data: {"code":0,"status":"succeeded"}',
-      '',
-      '',
-    ].join('\n');
-    await route.fulfill({
-      status: 200,
-      headers: {
-        'content-type': 'text/event-stream',
-        'cache-control': 'no-cache',
-      },
-      body,
-    });
-  });
-
-  const projectId = await createEmptyProject(page, 'Comment attachment flow');
-  await expectWorkspaceReady(page);
-  await seedHtmlArtifact(page, projectId, entry.mockArtifact.fileName, entry.mockArtifact.html);
-  await page.reload();
-  await expectWorkspaceReady(page);
-  await page.goto(`/projects/${projectId}/files/${entry.mockArtifact.fileName}`, { waitUntil: 'domcontentloaded' });
-  await waitForLoadingToClear(page);
-  await expect(artifactPreview(page)).toBeVisible();
-
-  await runCommentAttachmentFlow(page, entry);
-});
-
-test('[P0] sending preview comments opens the refreshed follow-up artifact', async ({ page }) => {
+test('[P0] @critical sending preview comments attaches structured context and opens the refreshed artifact', async ({ page }) => {
   test.setTimeout(75_000);
   const entry = automatedUiScenarios().find((scenario) => scenario.id === 'comment-attachment-flow');
   if (!entry?.mockArtifact) {
@@ -518,6 +471,8 @@ test('[P0] sending preview comments opens the refreshed follow-up artifact', asy
   await page.getByTestId('comment-popover-input').fill('Make the headline more specific.');
   await page.getByTestId('comment-popover-save').click();
   await expect(page.getByTestId('comment-saved-marker-hero-title')).toBeVisible();
+  await expect(page.getByTestId('staged-comment-attachments')).toHaveCount(0);
+  await expect(page.getByTestId('comment-popover')).toHaveCount(0);
 
   const sidePanel = page.getByTestId('comment-side-panel');
   await expect(sidePanel).toBeVisible();
@@ -547,6 +502,7 @@ test('[P0] sending preview comments opens the refreshed follow-up artifact', asy
       filePath?: string;
     }>;
   };
+  expect(body.message ?? '').not.toContain('Apply selected preview comments');
   expect(body.message).toContain('Make the headline more specific.');
   expect(body.commentAttachments).toEqual([
     expect.objectContaining({

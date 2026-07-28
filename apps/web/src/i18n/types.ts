@@ -550,11 +550,6 @@ export interface Dict {
   'settings.noAgentSelected': string;
   'settings.language': string;
   'settings.languageHint': string;
-  'settings.appearance': string;
-  'settings.appearanceHint': string;
-  'settings.themeSystem': string;
-  'settings.themeLight': string;
-  'settings.themeDark': string;
   'settings.agentModelHead': string;
   'settings.modelPicker': string;
   'settings.modelSourceLive': string;
@@ -1100,18 +1095,13 @@ export interface Dict {
   'updater.upToDate': string;
   'updater.viewVersionFeatures': string;
 
-  // Post-update "what's new" card on the home surface. Release-configured
-  // copy comes from the release feed; these keys cover the card chrome and
-  // the generic fallback when a version ships without highlights.
+  // Post-update "what's new" dialog on the home surface. Cover art, release
+  // headline and highlight bullets come from the hosted highlights document;
+  // these keys cover the dialog chrome only. `updatedTitle` takes the RUNNING
+  // app version — never a literal. `cta` opens the release notes, so it names
+  // that destination rather than teasing "see what's new".
+  'whatsNew.updatedTitle': string;
   'whatsNew.cta': string;
-  'whatsNew.dismissAria': string;
-
-  // Update reminder card on /community: cover artwork, release highlights, and
-  // a cancel/update action pair. Highlight copy comes from the release payload;
-  // these keys cover the card chrome only.
-  'updateReminder.title': string;
-  'updateReminder.notesLabel': string;
-  'updateReminder.confirm': string;
 
   // Newsletter email field on the onboarding About-you step.
   'newsletter.label': string;
@@ -2861,6 +2851,8 @@ export interface Dict {
   'chat.amrBalanceGate.signedOutMessage': string;
   'chat.amrBalanceGate.signInCta': string;
   'chat.amrBalanceGate.watchingWallet': string;
+  'chat.amrScopeGate.signedOutMessage': string;
+  'chat.amrScopeGate.unresolvedMessage': string;
   'chat.amrLowBalance.title': string;
   'chat.amrLowBalance.message': string;
   'chat.amrLowBalance.rechargeCta': string;

@@ -519,6 +519,39 @@ describe('selection bridge — empty annotation surface (#890)', () => {
     expect(profile.hasAttribute('hidden')).toBe(true);
   });
 
+  it('restores the current page content before manual edit activates', async () => {
+    const { win } = setupBridgeDom(
+      '<main id="app" data-page="today"><h1 data-od-source-path="path-0-0">Today page</h1></main>',
+      'inspect',
+    );
+
+    win.dispatchEvent(
+      new win.MessageEvent('message', {
+        data: {
+          type: 'od:preview-runtime-state-restore',
+          state: {
+            version: 1,
+            hash: '',
+            roots: [{
+              path: [0],
+              tag: 'main',
+              id: 'app',
+              html: '<section data-od-id="profile-screen"><h1>Profile page</h1><p>Current page content</p></section>',
+            }],
+            htmlAttrs: {},
+            bodyAttrs: {},
+            entries: [],
+          },
+        },
+      }),
+    );
+
+    expect(win.document.getElementById('app')?.getAttribute('data-page')).toBe('today');
+    expect(win.document.querySelector('[data-od-id="profile-screen"] h1')?.textContent).toBe('Profile page');
+    expect(win.document.body.textContent).toContain('Current page content');
+    expect(win.document.body.textContent).not.toContain('Today page');
+  });
+
   it('posts od:comment-target for the annotated card when the device-frame iframe is clicked', async () => {
     const { win, parentPostMessage } = setupBridgeDom(
       '<article data-od-id="tablet-card" class="frame-card"><div class="meta">Tablet edition</div><iframe id="f" class="tablet-frame" title="Tablet edition" src="about:blank"></iframe></article>',

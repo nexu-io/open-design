@@ -914,6 +914,10 @@ export function buildManualEditBridge(enabled: boolean): string {
         finishActiveTextEdit(true);
         clearSelectedTarget();
         clearGuidesLayer();
+        // Re-entering Edit must treat the first pointerover as fresh. Keeping
+        // lastHoverId here made the same element look deduplicated forever
+        // after an exit -> enter cycle, so its green guides never came back.
+        clearHoverTracking();
         guidesMemoryEl = null;
         guidesMemoryId = null;
         guidesMemoryClearedAt = 0;
@@ -1069,6 +1073,50 @@ export function buildManualEditBridge(enabled: boolean): string {
       return;
     }
   }, true);
+  function previewHtmlFileForLink(link){
+    if (!link || link.hasAttribute('download')) return null;
+    var target = String(link.getAttribute('target') || '').toLowerCase();
+    if (target && target !== '_self') return null;
+    var href = link.getAttribute('href');
+    if (!href || href.charAt(0) === '#') return null;
+    try {
+      var baseUrl = new URL(document.baseURI || location.href);
+      var nextUrl = new URL(href, baseUrl);
+      var rawMarker = '/raw/';
+      var rawIndex = baseUrl.pathname.lastIndexOf(rawMarker);
+      if (nextUrl.origin !== baseUrl.origin || rawIndex < 0) return null;
+      var rawRoot = baseUrl.pathname.slice(0, rawIndex + rawMarker.length);
+      if (nextUrl.pathname.indexOf(rawRoot) !== 0) return null;
+      var fileName = decodeURIComponent(nextUrl.pathname.slice(rawRoot.length));
+      if (
+        !fileName ||
+        fileName.charAt(0) === '/' ||
+        fileName.split('/').some(function(part){ return !part || part === '.' || part === '..'; }) ||
+        !/\\.html?$/i.test(fileName)
+      ) return null;
+      return { fileName: fileName, search: nextUrl.search || '', hash: nextUrl.hash || '' };
+    } catch (_) {
+      return null;
+    }
+  }
+  // Once Manual Edit has activated srcDoc, keep same-project HTML navigation
+  // in the host workspace. Letting the iframe navigate itself replaces this
+  // document (and therefore this bridge) with a raw URL response; a later Edit
+  // toggle then looks active in the toolbar but cannot draw/select anything.
+  document.addEventListener('click', function(ev){
+    if (enabled || ev.defaultPrevented || ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
+    var origin = ev.target;
+    var link = origin && origin.closest ? origin.closest('a[href]') : null;
+    var destination = previewHtmlFileForLink(link);
+    if (!destination) return;
+    ev.preventDefault();
+    window.parent.postMessage({
+      type: 'od:preview-open-file',
+      fileName: destination.fileName,
+      search: destination.search,
+      hash: destination.hash
+    }, '*');
+  }, true);
   document.addEventListener('pointerover', function(ev){
     if (!enabled) return;
     // A drag in progress owns the overlay (selection chrome only); pointerover
@@ -1146,7 +1194,13 @@ export function buildManualEditBridge(enabled: boolean): string {
     if (!hoveredEl) {
       clearHoverTracking();
       renderSelectedChromeForCurrent();
+      return;
     }
+    // A toolbar toggle or iframe visibility swap can leave the pointer inside
+    // the same DOM element without producing a fresh pointerover. Treat normal
+    // movement as the recovery path; postHoverTarget keeps this cheap through
+    // its stable-id dedupe during ordinary movement.
+    postHoverTarget(hoveredEl);
   }, true);
   window.addEventListener('resize', postTargets);
   var hoverGuidesScrollScheduled = false;

@@ -9,6 +9,10 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+  /* Size container so the preset strip inside the 960px hero column can
+     measure the full home column (100cqw) and match the recent-projects
+     width exactly — see .home-hero__plugin-presets-wrap. */
+  container-type: inline-size;
 }
 /* Empty workspace: no recent projects rendered below, so the hero column
    centers vertically in the scroll viewport instead of hugging the top. */
@@ -2560,15 +2564,22 @@
   border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
 }
 
+/* Break out of the hero's 960px column to the full home column, so the strip
+   is exactly as wide as the 最近项目 grid below. 100cqw reads the .home-view
+   size container; the symmetric margins re-center the wider box inside the
+   centered hero (they collapse to 0 when the viewport is narrower than the
+   hero cap and the two widths coincide). */
 .home-hero__plugin-presets-wrap {
-  max-width: min(880px, 100%);
+  width: 100cqw;
+  max-width: 100cqw;
+  margin-inline: calc((100% - 100cqw) / 2);
 }
 
 /* Positioning context so the edge auto-scroll zones anchor to just the
    scrolling presets row (not the title above it). */
 .home-hero__rail-scroller {
   position: relative;
-  min-height: 202px;
+  min-height: 194px;
 }
 
 .home-hero__plugin-presets {
@@ -2600,7 +2611,10 @@
   position: relative;
   width: 100%;
   height: auto;
-  min-height: 184px;
+  /* Low enough that the caption row hugs its text (150 preview + 8 gap +
+     one 16px line + 6px pad ≈ 180); a taller min just reads as dead space
+     under the title. */
+  min-height: 172px;
   min-width: 0;
   display: grid;
   grid-template-rows: 150px minmax(0, auto);
@@ -2736,45 +2750,20 @@
   transform: translate(-50%, -50%) scale(var(--deck-preview-scale));
 }
 
-/* Cover zoom on hover — same as the home recent-projects cards. The preview
-   box clips (overflow: hidden), so each surface scales in place; the zoom
-   composes with whatever fit transform the surface already carries:
-   image/video have none (→ 1.04), the html preview iframe is fit-scaled to
-   0.172 (→ 0.172 × 1.04 = 0.17888), and the deck stage keeps its measured
-   --deck-preview-scale fit (→ × 1.04). */
-.home-hero__plugin-preset-preview .plugins-home__media-img,
-.home-hero__plugin-preset-preview .plugins-home__media-video,
-.home-hero__plugin-preset-preview .plugins-home__html-iframe {
-  transition: transform 320ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-/* Baseline zoom, not just the hover bump: the baked hover-pan poster is
-   framed 1.31:1 (see below) while this row's cell is a wider ~1.65:1 box, so
-   a bare object-fit:cover only has room to crop vertically — it fills the
-   box edge-to-edge on the WIDTH axis, which leaves the poster's own outer
-   canvas/whitespace margin (visible on every side of the source frame, e.g.
-   the wireframe examples' graph-paper/dot-grid gutter) sitting fully intact
-   inside the thumbnail. That reads as "small image, big padding" even though
-   no literal padding declaration exists. Scaling the already-cover-fitted
-   image up around its own center crops that margin off every edge instead,
-   so the actual content fills more of the tile. Hover composes on top of
-   this (1.15 × 1.04 ≈ 1.2) the same way it already composed with the html
-   iframe's fit scale. */
+/* Baseline zoom — a FRAMING transform, not a hover effect (the hover cover
+   zoom was removed family-wide; see recent-projects.css). The baked hover-pan
+   poster is framed 1.31:1 (see below) while this row's cell is a wider
+   ~1.65:1 box, so a bare object-fit:cover only has room to crop vertically —
+   it fills the box edge-to-edge on the WIDTH axis, which leaves the poster's
+   own outer canvas/whitespace margin (visible on every side of the source
+   frame, e.g. the wireframe examples' graph-paper/dot-grid gutter) sitting
+   fully intact inside the thumbnail. That reads as "small image, big padding"
+   even though no literal padding declaration exists. Scaling the
+   already-cover-fitted image up around its own center crops that margin off
+   every edge instead, so the actual content fills more of the tile. */
 .home-hero__plugin-preset-preview .plugins-home__media-img,
 .home-hero__plugin-preset-preview .plugins-home__media-video {
   transform: scale(1.15);
-}
-.home-hero__plugin-preset:not(:disabled):hover .plugins-home__media-img,
-.home-hero__plugin-preset:not(:disabled):hover .plugins-home__media-video {
-  transform: scale(1.2);
-}
-.home-hero__plugin-preset:not(:disabled):hover .plugins-home__html-iframe {
-  transform: scale(0.17888);
-}
-.home-hero__plugin-preset[data-od-mode="deck"]:not(:disabled):hover
-  .plugins-home__html-iframe {
-  /* Compose with the deck's centered fit transform — a bare scale(1.04) would
-     drop the translate/fit and blow the stage out of the cell. */
-  transform: translate(-50%, -50%) scale(calc(var(--deck-preview-scale) * 1.04));
 }
 
 /* Baked clips are framed 1.31:1 for the Community grid; the wider preset tiles
@@ -2792,7 +2781,11 @@
   display: flex;
   flex-direction: column;
   gap: 5px;
-  padding: 2px 12px 12px;
+  /* Caption sits flush with the card/preview left edge (no horizontal
+     inset — dogfood 2026-07-28) and 12px under the preview's bottom line:
+     the 8px grid row gap + this 4px. Overflowing titles ellipsize at the
+     card edge (nowrap + ellipsis on the title below). */
+  padding: 4px 0 8px;
 }
 .home-hero__plugin-preset-category {
   align-self: flex-start;
@@ -2814,7 +2807,10 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  padding: 0 12px 12px;
+  /* No horizontal padding of its own: the title nests inside
+     `__plugin-preset-meta`, whose 8px inset IS the text-to-card-edge
+     distance — a second inset here silently doubles it. */
+  padding: 0 0 6px;
   font-size: 13px;
   font-weight: 600;
   line-height: 1.2;
@@ -3117,27 +3113,20 @@
     transform 160ms var(--ease-out),
     color 160ms var(--ease-out);
 }
+/* No gradient wash on the edge zones (dogfood 2026-07-28): the fade veiled
+   the last partially-visible card. The zones stay as invisible hover strips;
+   only the arrow icon shows. */
 .home-hero__rail-edge--left {
   left: 0;
   justify-content: flex-start;
   padding-left: 8px;
   cursor: w-resize;
-  background: linear-gradient(
-    to right,
-    color-mix(in srgb, var(--bg-app) 92%, transparent),
-    transparent
-  );
 }
 .home-hero__rail-edge--right {
   right: 0;
   justify-content: flex-end;
   padding-right: 8px;
   cursor: e-resize;
-  background: linear-gradient(
-    to left,
-    color-mix(in srgb, var(--bg-app) 92%, transparent),
-    transparent
-  );
 }
 @media (prefers-reduced-motion: reduce) {
   .home-hero__rail-edge,
@@ -3237,7 +3226,9 @@
   background-color: #f9fff4;
   background-image: none;
   color: #2f781d;
-  box-shadow: var(--shadow-xs);
+  /* Same selected stroke as the composer-mode (设计) pill: an inset 1px ring
+     at 22% of the deep brand green. */
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #2f781d 22%, transparent);
 }
 .home-hero__footer-option--select[data-field-name='template']:hover,
 .home-hero__footer-option--select[data-field-name='template'].is-open,
@@ -3254,6 +3245,9 @@
   border-color: transparent;
   background-color: #f9fff4;
   color: #2f781d;
+  /* Keep the selected ring through hover/open/focus — the generic template
+     hover rule above would otherwise swap it back to shadow-xs. */
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #2f781d 22%, transparent);
 }
 .home-hero__footer-option.home-hero__template-option:hover,
 .home-hero__footer-option.home-hero__template-option.is-open,

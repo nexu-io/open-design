@@ -1361,10 +1361,6 @@
   display: block;
   transition: transform 320ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-/* Cover zoom on hover — same effect as the home recent-projects cards. */
-.prompt-template-card:hover .prompt-template-thumb img {
-  transform: scale(1.04);
-}
 .prompt-template-thumb-fallback {
   color: var(--text-faint);
 }

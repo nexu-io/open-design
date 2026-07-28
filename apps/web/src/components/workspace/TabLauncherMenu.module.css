@@ -9,10 +9,10 @@
   max-width: calc(100vw - 24px);
   display: flex;
   flex-direction: column;
-  background: var(--glass-regular);
-  -webkit-backdrop-filter: var(--glass-backdrop);
-  backdrop-filter: var(--glass-backdrop);
-  border: 1px solid var(--material-separator);
+  /* Solid panel, not frosted glass: the launcher floats over arbitrary page
+     content (often dark artifacts), where translucency made rows unreadable. */
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-lg);
   overflow: hidden;
@@ -73,8 +73,8 @@
   background: var(--bg);
   color: var(--text-muted);
   border-radius: var(--radius-pill);
-  padding: 2px 10px;
-  font-size: 12px;
+  padding: 1px 8px;
+  font-size: 11px;
   cursor: pointer;
   white-space: nowrap;
   transition: background 120ms cubic-bezier(0.23, 1, 0.32, 1),
@@ -88,10 +88,24 @@
   border-color: var(--border-strong);
 }
 
+/* Ink pill with a bright-green label. Fixed values, not theme tokens: the
+   chip stays ink-dark in BOTH themes (that is the look, not a light-mode
+   accident), and the theme greens (--green) are tuned for light panels —
+   too dark to read on this ground. */
 .chip.chipActive {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
+  background: #111;
+  border-color: #111;
+  color: #87ea5c;
+}
+
+/* Hover must not restyle the active chip: the global `button:hover` primitive
+   (primitives.css) otherwise outranks .chipActive and flips the ink fill to
+   light gray under the green label. Pin the same values at higher
+   specificity so the selected pill reads identically at rest and on hover. */
+.chip.chipActive:hover {
+  background: #111;
+  border-color: #111;
+  color: #87ea5c;
 }
 
 .sectionHeader {
@@ -178,14 +192,6 @@
 
 .rowName {
   font-size: 13px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.rowMeta {
-  font-size: 12px;
-  color: var(--text-faint);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

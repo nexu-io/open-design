@@ -712,253 +712,12 @@
   text-align: right;
 }
 
+/* Positioning host for the update-ready indicator and its panel. The
+   indicator's own look lives in UpdaterPopup.module.css; `.updater-popup`
+   anchors against this box (see styles/workspace/mention-home.css). */
 .entry-updater-menu {
-  --updater-accent: var(--accent);
-  --updater-accent-strong: var(--accent-strong, var(--accent));
-  --updater-accent-ui: color-mix(in srgb, var(--updater-accent) 62%, var(--text-muted));
-  --updater-accent-line: color-mix(in srgb, var(--updater-accent-strong) 24%, var(--border));
-  --updater-accent-dot: color-mix(in srgb, var(--updater-accent) 76%, #ffffff);
-  --updater-accent-glow: color-mix(in srgb, var(--updater-accent) 9%, transparent);
   position: relative;
   display: inline-flex;
-}
-.entry-updater-menu .entry-updater-menu__button {
-  position: relative;
-  overflow: visible;
-  isolation: isolate;
-  color: var(--updater-accent-ui);
-  border-color: var(--updater-accent-line);
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--updater-accent) 6%, transparent),
-      color-mix(in srgb, var(--updater-accent) 2%, transparent)
-    ),
-    color-mix(in srgb, var(--bg-panel) 97%, var(--updater-accent));
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--updater-accent-strong) 9%, transparent),
-    0 1px 2px rgba(0, 0, 0, 0.12),
-    0 0 14px var(--updater-accent-glow);
-  transform: translateZ(0);
-}
-.entry-updater-menu .entry-updater-menu__button::before {
-  content: '';
-  position: absolute;
-  inset: 4px;
-  z-index: -1;
-  border-radius: calc(var(--radius) - 1px);
-  background:
-    radial-gradient(
-      circle at 50% 24%,
-      color-mix(in srgb, var(--updater-accent) 9%, transparent),
-      transparent 48%
-    ),
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--updater-accent) 5%, transparent),
-      color-mix(in srgb, var(--updater-accent) 2%, transparent)
-    );
-  opacity: 0.72;
-  transition: opacity 140ms cubic-bezier(0.23, 1, 0.32, 1), transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-.entry-updater-menu .entry-updater-menu__button.is-ready::after {
-  content: '';
-  position: absolute;
-  top: 2px;
-  right: 2px;
-  width: 7px;
-  height: 7px;
-  z-index: 3;
-  border-radius: var(--radius-pill);
-  background: var(--updater-accent-dot);
-  border: 2px solid var(--bg-panel);
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--updater-accent-strong) 30%, transparent),
-    0 0 8px color-mix(in srgb, var(--updater-accent) 28%, transparent);
-}
-.entry-updater-menu .entry-updater-menu__button:hover,
-.entry-updater-menu .entry-updater-menu__button.is-active {
-  color: color-mix(in srgb, var(--updater-accent) 72%, var(--text-strong));
-  border-color: color-mix(in srgb, var(--updater-accent-strong) 42%, var(--border-strong));
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--updater-accent) 10%, transparent),
-      color-mix(in srgb, var(--updater-accent) 4%, transparent)
-    ),
-    color-mix(in srgb, var(--bg-panel) 94%, var(--updater-accent));
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--updater-accent-strong) 18%, transparent),
-    0 4px 12px rgba(0, 0, 0, 0.16),
-    0 0 18px color-mix(in srgb, var(--updater-accent) 14%, transparent);
-}
-.entry-updater-menu .entry-updater-menu__button:hover::before,
-.entry-updater-menu .entry-updater-menu__button.is-active::before {
-  opacity: 1;
-  transform: scale(1.04);
-}
-.entry-updater-menu .entry-updater-menu__button.is-ready {
-  animation: updater-ready-arrive 520ms cubic-bezier(0.23, 1, 0.32, 1) 1;
-}
-.entry-updater-menu .entry-updater-menu__button.is-current {
-  color: color-mix(in srgb, var(--green) 72%, var(--text-muted));
-  border-color: color-mix(in srgb, var(--green) 22%, var(--border));
-  background: color-mix(in srgb, var(--green-bg) 45%, var(--bg-panel));
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--green) 8%, transparent);
-}
-.entry-updater-menu .entry-updater-menu__button.is-error {
-  color: var(--red);
-  border-color: color-mix(in srgb, var(--red) 42%, var(--border));
-  background: color-mix(in srgb, var(--red-bg) 62%, var(--bg-panel));
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--red) 14%, transparent),
-    0 4px 12px color-mix(in srgb, var(--red) 10%, transparent);
-}
-.entry-updater-menu .entry-updater-menu__button.is-disabled {
-  cursor: default;
-  color: color-mix(in srgb, var(--updater-accent) 42%, var(--text-faint));
-  border-color: color-mix(in srgb, var(--updater-accent-strong) 22%, transparent);
-}
-.entry-updater-menu .entry-updater-menu__button.is-disabled:hover {
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--updater-accent) 5%, transparent),
-      color-mix(in srgb, var(--updater-accent) 2%, transparent)
-    ),
-    color-mix(in srgb, var(--bg-panel) 97%, var(--updater-accent));
-  color: color-mix(in srgb, var(--updater-accent) 42%, var(--text-faint));
-}
-.entry-updater-menu__glyph {
-  position: relative;
-  z-index: 2;
-  width: 24px;
-  height: 24px;
-  display: grid;
-  place-items: center;
-  border-radius: var(--radius-pill);
-  color: currentColor;
-  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--updater-accent) 18%, transparent));
-  transform: translateY(-1px);
-}
-.entry-updater-menu__glyph::before {
-  content: '';
-  position: absolute;
-  inset: 2px;
-  z-index: -1;
-  border-radius: inherit;
-  background: radial-gradient(
-    circle,
-    color-mix(in srgb, var(--updater-accent) 8%, transparent),
-    transparent 68%
-  );
-}
-.entry-updater-menu__progress {
-  position: absolute;
-  left: 6px;
-  right: 6px;
-  bottom: 4px;
-  height: 3px;
-  overflow: hidden;
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--updater-accent-strong) 22%, transparent);
-  pointer-events: none;
-}
-.entry-updater-menu__progress::after {
-  content: '';
-  display: block;
-  width: var(--updater-progress, 100%);
-  height: 100%;
-  border-radius: inherit;
-  background: var(--updater-accent-strong);
-  transition: width 180ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-@keyframes updater-ready-arrive {
-  0% {
-    box-shadow:
-      0 0 0 1px color-mix(in srgb, var(--updater-accent-strong) 8%, transparent),
-      0 1px 2px rgba(0, 0, 0, 0.12),
-      0 0 0 color-mix(in srgb, var(--updater-accent) 0%, transparent);
-    transform: translateZ(0) scale(0.96);
-  }
-  100% {
-    box-shadow:
-      0 0 0 1px color-mix(in srgb, var(--updater-accent-strong) 9%, transparent),
-      0 1px 2px rgba(0, 0, 0, 0.12),
-      0 0 14px var(--updater-accent-glow);
-    transform: translateZ(0) scale(1);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .entry-updater-menu .entry-updater-menu__button.is-ready {
-    animation: none;
-  }
-}
-
-.entry-main__topbar .entry-updater-menu {
-  margin-left: 0;
-}
-.entry-main__topbar .entry-updater-menu .entry-updater-menu__button {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-pill);
-  border-color: transparent;
-  background: transparent;
-  box-shadow: none;
-  color: color-mix(in srgb, var(--updater-accent) 66%, var(--text-muted));
-}
-.entry-main__topbar .entry-updater-menu .entry-updater-menu__button::before {
-  inset: 5px;
-  border-radius: inherit;
-  opacity: 0;
-}
-.entry-main__topbar .entry-updater-menu .entry-updater-menu__button.is-ready {
-  border-color: color-mix(in srgb, var(--updater-accent-strong) 18%, var(--border));
-  background: color-mix(in srgb, var(--updater-accent) 5%, transparent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--updater-accent-strong) 5%, transparent);
-}
-.entry-main__topbar .entry-updater-menu .entry-updater-menu__button.is-current {
-  color: color-mix(in srgb, var(--green) 76%, var(--text-muted));
-  border-color: transparent;
-  background: transparent;
-  box-shadow: none;
-}
-.entry-main__topbar .entry-updater-menu .entry-updater-menu__button:hover,
-.entry-main__topbar .entry-updater-menu .entry-updater-menu__button.is-active {
-  color: color-mix(in srgb, var(--updater-accent) 72%, var(--text-strong));
-  border-color: color-mix(in srgb, var(--updater-accent-strong) 24%, var(--border));
-  background: color-mix(in srgb, var(--updater-accent) 7%, transparent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--updater-accent-strong) 8%, transparent);
-}
-.entry-main__topbar .entry-updater-menu .entry-updater-menu__button:hover::before,
-.entry-main__topbar .entry-updater-menu .entry-updater-menu__button.is-active::before {
-  opacity: 0.72;
-  transform: none;
-}
-.entry-main__topbar .entry-updater-menu .entry-updater-menu__button.is-ready::after {
-  top: 3px;
-  right: 3px;
-  width: 6px;
-  height: 6px;
-  border-width: 1.5px;
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--updater-accent-strong) 24%, transparent),
-    0 0 6px color-mix(in srgb, var(--updater-accent) 20%, transparent);
-}
-.entry-main__topbar .entry-updater-menu__glyph {
-  width: 20px;
-  height: 20px;
-  filter: none;
-  transform: none;
-}
-.entry-main__topbar .entry-updater-menu__glyph::before {
-  opacity: 0;
-}
-.entry-main__topbar .entry-updater-menu__progress {
-  left: 7px;
-  right: 7px;
-  bottom: 4px;
-  height: 2px;
 }
 .entry-nav-rail__logo {
   appearance: none;
@@ -1023,12 +782,25 @@
   transition: background-color 120ms var(--ease-out), color 120ms var(--ease-out), border-color 120ms var(--ease-out);
 }
 .entry-nav-rail__btn-icon {
+  /* Anchor for the unread dot (message-center rail item). */
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex: 0 0 18px;
   /* Tracks the unselected label tone above. */
   color: color-mix(in srgb, var(--text) 68%, transparent);
+}
+/* Unread marker on a rail item's icon — same 6px red dot as the account
+   menu's `__menu-item-dot`, pinned to the glyph's top-right corner. */
+.entry-nav-rail__btn-dot {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--red);
 }
 .entry-nav-rail__btn-icon > svg {
   width: 18px;
@@ -1667,50 +1439,6 @@
   color: var(--accent-strong);
   font-weight: 600;
 }
-.entry-settings-menu__theme {
-  appearance: none;
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--text);
-  min-width: 0;
-  min-height: 30px;
-  border-radius: var(--radius);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 0 8px;
-  font-size: 12px;
-  cursor: pointer;
-  transition: background-color 120ms var(--ease-out), border-color 120ms var(--ease-out),
-    color 120ms var(--ease-out);
-}
-.entry-settings-menu__theme span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.entry-settings-menu__theme:hover {
-  background: var(--bg-panel);
-  border-color: var(--border);
-  color: var(--text-strong);
-}
-.entry-settings-menu__theme.is-active {
-  background: var(--bg-panel);
-  border-color: color-mix(in srgb, var(--accent) 26%, var(--border));
-  color: var(--accent-strong);
-  box-shadow: var(--shadow-xs);
-}
-.entry-settings-menu__theme-row {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 4px;
-  padding: 3px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius);
-  background: var(--bg-subtle);
-}
 .entry-settings-menu__divider {
   height: 1px;
   margin: 0 4px;
@@ -2325,7 +2053,12 @@
   border: 0;
   background: transparent;
   text-align: left;
-  padding: 12px;
+  /* 8px above the title line and below the cost line (dogfood 2026-07-28).
+     height:auto releases the global button primitive's 36px clamp — a row
+     with a cost/meta line is two lines tall, and the clamp made the text
+     overflow the plate instead of sitting 8px inside it. */
+  height: auto;
+  padding: 8px 12px;
   border-radius: var(--radius);
   display: flex;
   flex-direction: column;
@@ -2700,29 +2433,6 @@
 }
 
 .lang-pill--compact:hover {
-  color: var(--text-strong);
-}
-
-.onboarding-cloud__theme {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  background: var(--bg-panel);
-  color: var(--text);
-  cursor: pointer;
-  transition:
-    color 160ms cubic-bezier(0.23, 1, 0.32, 1),
-    border-color 160ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-
-.onboarding-cloud__theme:hover:not(:disabled) {
-  background: var(--bg-panel);
-  border-color: var(--text-muted);
   color: var(--text-strong);
 }
 
@@ -5554,6 +5264,27 @@
   margin: auto 0 0;
   padding-top: var(--spacing-10);
 }
+/* Unread-messages red dot riding the account avatar's top-right corner. */
+.entry-nav-rail__account-avatar-dot {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--red);
+  /* Panel-colored ring separates the dot from the avatar artwork. */
+  box-shadow: 0 0 0 2px var(--bg-panel);
+}
+/* Matching dot on the account menu's 消息中心 row, pushed to the far edge. */
+.entry-nav-rail__menu-item-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--red);
+  margin-left: auto;
+  flex: 0 0 auto;
+}
 .entry-nav-rail__account-trigger {
   appearance: none;
   border: 0;
@@ -5580,11 +5311,12 @@
   background: color-mix(in srgb, var(--text) 5%, transparent);
 }
 .entry-nav-rail__account-avatar {
+  position: relative;
   width: 25px;
   height: 25px;
-  /* Squircle silhouette (superellipse defined in EntryNavRail's SVG defs);
-     no border-radius on top — a circle would clip tighter than the squircle. */
-  clip-path: url(#od-avatar-squircle);
+  /* Rounded square (8px), replacing the squircle clip-path — a clip-path
+     would also swallow the unread dot that overflows the top-right corner. */
+  border-radius: 8px;
   background: linear-gradient(135deg, #87ea5c, #0d5400);
   color: #fff;
   display: grid;
@@ -5936,7 +5668,7 @@
   grid-row: 1 / span 2;
   width: 34px;
   height: 34px;
-  clip-path: url(#od-avatar-squircle);
+  border-radius: 8px;
   background: linear-gradient(135deg, #87ea5c, #0d5400);
   color: #fff;
   display: grid;

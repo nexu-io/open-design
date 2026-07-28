@@ -259,7 +259,7 @@ test('[P0] switching between projects restores each project workspace to its las
   await expect(alphaPrimaryTab).toHaveAttribute('aria-selected', 'true');
   await expect(alphaSecondaryTab).toHaveAttribute('aria-selected', 'false');
 
-  await page.getByRole('button', { name: /back to projects/i }).click();
+  await leaveProjectForEntry(page);
   await expectProjectsView(page);
 
   await createPrototypeProject(page, betaName);
@@ -3402,6 +3402,31 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+/**
+ * Leave the open project through the UI and land back on the entry surface.
+ *
+ * This used to be `getByRole('button', { name: /back to projects/i })`, which
+ * no longer resolves to anything on a project surface. #5517 (884ed1085) gave
+ * ChatPane's top-left slot to the pane-collapse control — `onCollapse` wins
+ * over `onBack` there, and ProjectView passes both — and the standalone
+ * `AppChromeHeader` that owned the `app-chrome-back` "Back to projects" button
+ * is no longer mounted anywhere (only its portal-id constants are still
+ * imported). The single remaining "Back to projects" label lives inside the
+ * avatar menu's popover, which is closed by default, so the old locator just
+ * hung until the test timed out.
+ *
+ * The surviving way out of a project is the pinned entry tab in the workspace
+ * tabs bar: `WorkspaceTabsBar.openTab` always sends that tab home, whatever
+ * entry section it last showed. Coverage is unchanged — the project-switching
+ * journey still leaves through real chrome rather than a URL jump.
+ */
+async function leaveProjectForEntry(page: Page) {
+  const pinnedEntryTab = page.locator('.workspace-tab.is-pinned');
+  await expect(pinnedEntryTab).toBeVisible();
+  await pinnedEntryTab.locator('.workspace-tab__main').click();
+  await expect(page.getByTestId('file-workspace')).toHaveCount(0);
+}
+
 function isCreateRunResponse(resp: Response): boolean {
   const url = new URL(resp.url());
   return url.pathname === '/api/runs' && resp.request().method() === 'POST';
@@ -3716,6 +3741,15 @@ function uniqueProjectName(base: string): string {
   return `${base} ${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+/**
+ * Assert we are on a surface that lists the workspace's projects.
+ *
+ * #5517 deleted the rail's Projects destination (`entry-nav-projects`), so the
+ * project list a user actually reaches is Home's recent-projects strip, or the
+ * team workspace's 全部项目 grid. Both branches stay here because the strip is
+ * suppressed while the workspace has no projects at all; a signed-in team
+ * workspace then answers with the grid instead.
+ */
 async function expectProjectsView(page: Page) {
   const legacyProjectsToolbar = page.locator('.tab-panel-toolbar');
   const homeRecentProjects = page.getByRole('heading', { name: /recent projects|最近项目/i });
@@ -3723,13 +3757,6 @@ async function expectProjectsView(page: Page) {
   if (await homeRecentProjects.isVisible().catch(() => false)) return;
 
   await ensureRailOpen(page);
-  const projectsNav = page.getByTestId('entry-nav-projects');
-  if (await projectsNav.isVisible().catch(() => false)) {
-    await projectsNav.click();
-    await expect(legacyProjectsToolbar).toBeVisible();
-    return;
-  }
-
   const allProjectsNav = page.getByTestId('entry-nav-all-projects');
   if (await allProjectsNav.isVisible().catch(() => false)) {
     await allProjectsNav.click();

@@ -1194,18 +1194,6 @@ button.df-card-thumb:focus:not(:disabled) {
   inset: 0;
   overflow: hidden;
 }
-/* Cover zoom on hover — mirrors the home recent-projects cards: the thumb
-   clips (overflow hidden) and the media scales in place. Page previews scale
-   the host div (the iframe's responsive fit transform is inline, so it can't
-   compose in CSS); raster thumbs (images / sketches) scale the img itself. */
-.df-card-thumb img,
-.df-thumb-scale-host {
-  transition: transform 320ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-.df-card:hover .df-card-thumb img,
-.df-card:hover .df-thumb-scale-host {
-  transform: scale(1.04);
-}
 .df-card-meta {
   display: flex;
   align-items: center;

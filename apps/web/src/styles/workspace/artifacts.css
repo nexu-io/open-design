@@ -1152,17 +1152,11 @@
 .settings-general-block .section-head {
   display: none;
 }
-.settings-general-block--appearance .settings-section {
-  padding: 0;
-}
 .settings-general-block .seg-control {
   max-width: 100%;
   min-width: 0;
   border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--bg-subtle) 58%, var(--bg-panel));
-}
-.settings-general-block--appearance .seg-control {
-  width: 100%;
 }
 .settings-general-block .project-locations-section,
 .settings-general-block .project-location-card,
@@ -2195,13 +2189,16 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 6px;
   flex: 0 0 auto;
   min-height: 32px;
   padding: 0 14px;
   border: 1px solid transparent;
   border-radius: var(--radius-pill);
   background: var(--accent);
-  color: var(--green, #00aa54);
+  /* 品牌主色 #00ff04 (opendesign spec), not the theme --green: the label and
+     its sparkle icon share currentColor on the ink fill. */
+  color: #00ff04;
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
@@ -2872,7 +2869,12 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
   border: 0;
   background: transparent;
   text-align: left;
-  padding: 12px;
+  /* 8px above the title line and below the cost line (dogfood 2026-07-28).
+     height:auto releases the global button primitive's 36px clamp — a row
+     with a cost/meta line is two lines tall, and the clamp made the text
+     overflow the plate instead of sitting 8px inside it. */
+  height: auto;
+  padding: 8px 12px;
   border-radius: var(--radius);
   display: flex;
   flex-direction: column;

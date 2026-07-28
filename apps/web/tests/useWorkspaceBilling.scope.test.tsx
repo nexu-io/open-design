@@ -17,6 +17,7 @@ import {
   useWorkspaceBillingResponse,
   workspaceBillingBalanceUsd,
   workspaceBillingSnapshotForContext,
+  workspaceBillingSummaryForContext,
 } from '../src/collab/useWorkspaceContext';
 
 function teamContext(workspaceId: string): WorkspaceCollabContext {
@@ -108,6 +109,99 @@ class MockWorkspaceEventSource {
 
   close(): void {}
 }
+
+describe('workspaceBillingSummaryForContext — plan is partitioned like money', () => {
+  function snapshotFor(
+    workspaceId: string,
+    billing: { billingState: string | null; planId: string | null },
+  ) {
+    return {
+      schemaVersion: 1 as const,
+      workspaceId,
+      workspaceMemberId: `member-${workspaceId}`,
+      billingScopeVersion: 2 as const,
+      billing,
+      wallet: { balanceUsd: '0', expiresAt: null, updatedAt: null },
+      revisions: { billing: 'b', wallet: 'w' },
+    } as unknown as WorkspaceBillingResponse['workspaceSnapshot'];
+  }
+
+  const personalPlusAccount = {
+    ...billingResponse('workspace-a', '0').summary,
+    membershipTier: 'plus',
+  };
+
+  // The reported bug: `summary` is an ACCOUNT read, so a personal Plus cannot
+  // name a team workspace's subscription however many times it is re-fetched.
+  it('never lets a personal account tier name a team workspace plan', () => {
+    const projected = workspaceBillingSummaryForContext(
+      {
+        summary: personalPlusAccount,
+        workspaceBalance: null,
+        workspaceSnapshot: snapshotFor('workspace-a', {
+          billingState: 'free',
+          planId: null,
+        }),
+      } as WorkspaceBillingResponse,
+      teamContext('workspace-a'),
+    );
+    expect(projected?.membershipTier).toBe('free');
+  });
+
+  it('blanks a personal account tier when no authorized snapshot exists', () => {
+    const projected = workspaceBillingSummaryForContext(
+      { summary: personalPlusAccount, workspaceBalance: null } as WorkspaceBillingResponse,
+      teamContext('workspace-a'),
+    );
+    // '' is the contract's "this source does not know", so `resolvePlanTier`
+    // falls through to the workspace-scoped context hint.
+    expect(projected?.membershipTier).toBe('');
+  });
+
+  it('rejects a snapshot proven for a different workspace', () => {
+    const projected = workspaceBillingSummaryForContext(
+      {
+        summary: personalPlusAccount,
+        workspaceBalance: null,
+        workspaceSnapshot: snapshotFor('workspace-b', {
+          billingState: 'active',
+          planId: 'team_max',
+        }),
+      } as WorkspaceBillingResponse,
+      teamContext('workspace-a'),
+    );
+    expect(projected?.membershipTier).toBe('');
+  });
+
+  // 飞书 P0 counterpart: B omits planId/billingState for a non-owner, and
+  // `workspaceSnapshot` is an additive capability, so a team-namespaced account
+  // tier is the only evidence a paying MEMBER's team is subscribed.
+  it('keeps a team-namespaced account tier as the member fallback', () => {
+    const projected = workspaceBillingSummaryForContext(
+      {
+        summary: { ...personalPlusAccount, membershipTier: 'team_plus' },
+        workspaceBalance: null,
+      } as WorkspaceBillingResponse,
+      teamContext('workspace-a'),
+    );
+    expect(projected?.membershipTier).toBe('team_plus');
+  });
+
+  // A personal workspace IS the account scope, and `hasTeamPlan` deliberately
+  // offers team surfaces to a personal workspace holding a team plan.
+  it('passes the account summary through untouched on a personal workspace', () => {
+    const personalContext = {
+      workspaceId: 'personal-a',
+      workspaceType: 'personal',
+      workspaceMemberId: 'member-personal',
+    } as unknown as WorkspaceCollabContext;
+    const projected = workspaceBillingSummaryForContext(
+      { summary: personalPlusAccount, workspaceBalance: null } as WorkspaceBillingResponse,
+      personalContext,
+    );
+    expect(projected?.membershipTier).toBe('plus');
+  });
+});
 
 describe('useWorkspaceBilling explicit scope', () => {
   it.each(['fresh', 'stale', 'refreshing', 'error'] as const)(

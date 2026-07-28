@@ -76,9 +76,10 @@ body::before {
    wallpaper blurs through the window, so the painted pastel blobs step aside.
    html/body go fully transparent and the wash collapses to a translucent
    cream scrim that keeps content readable over arbitrary wallpapers — the
-   Craft look. The .workspace-shell--desktop marker comes from the host
-   bridge (App.tsx data-client-type). Browsers never match this block. */
-html:has(.workspace-shell--desktop) {
+   Craft look. The desktop and darwin markers come from the host bridge
+   (App.tsx data-client-type/data-host-platform). Windows desktop windows are
+   opaque, so they intentionally keep the normal pastel wash. */
+html:has(.workspace-shell--desktop[data-host-platform='darwin']) {
   /* Focused window: a firm scrim so content sits on a mostly solid ground.
      The unfocused state below thins this back to ~21% (0.34 × 62%), which
      preserves the airy see-through look while the window is in the back. */
@@ -88,17 +89,17 @@ html:has(.workspace-shell--desktop) {
   );
   background: transparent;
 }
-html:has(.workspace-shell--desktop) body {
+html:has(.workspace-shell--desktop[data-host-platform='darwin']) body {
   background: transparent;
 }
 /* Focus response: while the window is unfocused (App.tsx toggles
    .is-window-blurred on <html> in desktop mode) the scrim thins out so the
    wallpaper reads clearly through the glass; regaining focus fades it back
    to full strength. Browsers never get the class, so web mode is untouched. */
-html:has(.workspace-shell--desktop) body::before {
+html:has(.workspace-shell--desktop[data-host-platform='darwin']) body::before {
   transition: opacity 240ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-html.is-window-blurred:has(.workspace-shell--desktop) body::before {
+html.is-window-blurred:has(.workspace-shell--desktop[data-host-platform='darwin']) body::before {
   opacity: 0.34;
 }
 /* The top project tab strip stays flush and seamless with the page below it:
@@ -126,8 +127,8 @@ html.is-window-blurred:has(.workspace-shell--desktop) body::before {
     --veil-canvas: var(--bg);
     --veil-panel: var(--bg-panel);
   }
-  html:has(.workspace-shell--desktop),
-  html:has(.workspace-shell--desktop) body {
+  html:has(.workspace-shell--desktop[data-host-platform='darwin']),
+  html:has(.workspace-shell--desktop[data-host-platform='darwin']) body {
     background: var(--bg-app);
   }
 }
@@ -143,8 +144,8 @@ html.is-window-blurred:has(.workspace-shell--desktop) body::before {
     --veil-canvas: var(--bg);
     --veil-panel: var(--bg-panel);
   }
-  html:has(.workspace-shell--desktop),
-  html:has(.workspace-shell--desktop) body {
+  html:has(.workspace-shell--desktop[data-host-platform='darwin']),
+  html:has(.workspace-shell--desktop[data-host-platform='darwin']) body {
     background: var(--bg-app);
   }
 }

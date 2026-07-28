@@ -289,7 +289,10 @@
 }
 .plus-menu__plugin-pane .plus-menu__preview {
   flex: 1 1 auto;
-  padding-left: 8px;
+  /* The flyout's own padding is a tight 5px; the detail column needs more
+     air than the list rows, so it carries its own inset — top and sides
+     (dogfood 2026-07-28). */
+  padding: 10px 10px 6px 14px;
   border-left: 1px solid var(--border);
 }
 .plus-menu__preview-hero {
@@ -367,8 +370,9 @@
 .plus-menu__popup--flyout-contained .plus-menu__preview {
   border-left: 0;
   border-top: 1px solid var(--border);
-  padding-left: 0;
-  padding-top: 8px;
+  /* Stacked layout: the side-column inset above doesn't apply — full-width
+     preview under the list, breathing room on top only. */
+  padding: 8px 0 0;
 }
 .plus-menu__popup--flyout-contained .plus-menu__preview-hero .plugins-home__preview {
   max-height: 160px;
@@ -492,6 +496,12 @@
   width: 16px;
   height: 16px;
 }
+/* Selected pill keeps the same 16px glyph as the neutral trigger
+   (dogfood 2026-07-28 icon-size pass). */
+.composer-mode.is-selected .composer-mode__icon svg {
+  width: 16px;
+  height: 16px;
+}
 /* In the home composer footer, match the "+" button chrome exactly: a 36px
    circular outlined button (panel fill + border + soft shadow, muted glyph)
    instead of the bare 32px borderless icon. */
@@ -522,8 +532,11 @@
   gap: 0;
   padding: 0 4px 0 0;
   border-radius: var(--radius-pill, 999px);
-  background: var(--green-bg);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--green) 22%, transparent);
+  /* Neutral chip (dogfood 2026-07-28): no green plate, no green ring — the
+     selected mode reads in the same muted ink as the design-system palette
+     icon beside it. */
+  background: transparent;
+  box-shadow: none;
 }
 .home-hero__input-card .composer-mode.is-selected .composer-mode__trigger,
 .composer-mode.is-selected .composer-mode__trigger {
@@ -536,21 +549,21 @@
   border-radius: var(--radius-pill, 999px);
   background: transparent;
   box-shadow: none;
-  color: var(--green);
+  color: var(--text-muted);
 }
 .home-hero__input-card .composer-mode.is-selected .composer-mode__trigger:hover:not(:disabled),
 .composer-mode.is-selected .composer-mode__trigger:hover:not(:disabled),
 .composer-mode.is-selected .composer-mode__trigger.is-open {
   background: transparent;
   border: none;
-  color: var(--green);
+  color: var(--text);
 }
 .composer-mode__label {
   font-size: 13px;
   font-weight: 600;
   line-height: 1;
   white-space: nowrap;
-  color: var(--green);
+  color: var(--text-muted);
 }
 .composer-mode__clear {
   appearance: none;
@@ -564,13 +577,13 @@
   border: none;
   border-radius: var(--radius-pill, 999px);
   background: transparent;
-  color: color-mix(in srgb, var(--green) 78%, var(--text-strong));
+  color: var(--text-muted);
   cursor: pointer;
   transition: background-color 120ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 .composer-mode__clear:hover {
-  background: color-mix(in srgb, var(--green) 16%, transparent);
-  color: var(--green);
+  background: var(--bg-subtle);
+  color: var(--text);
 }
 
 .composer-mode-menu {
