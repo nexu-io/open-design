@@ -536,7 +536,7 @@ test('[P0] separate projects keep daemon artifacts isolated across recent-projec
   const alpha = await currentProjectContext(page);
   await expectProjectFilesToContain(page, alpha.projectId, [GENERATED_FILE]);
 
-  await page.getByRole('button', { name: /back to projects/i }).click();
+  await leaveProjectForEntry(page);
 
   await createProject(page, 'Real daemon isolation beta');
   await expectWorkspaceReady(page);
@@ -545,14 +545,14 @@ test('[P0] separate projects keep daemon artifacts isolated across recent-projec
   await expectProjectFilesToContain(page, beta.projectId, [FOLLOW_UP_FILE]);
   expect(beta.projectId).not.toBe(alpha.projectId);
 
-  await page.getByRole('button', { name: /back to projects/i }).click();
+  await leaveProjectForEntry(page);
   await openProjectFromProjectsView(page, alpha.projectId);
   await expectWorkspaceReady(page);
   await expect(page.getByTestId('file-workspace').getByText(GENERATED_FILE, { exact: true })).toBeVisible();
   await expect(page.getByText(FOLLOW_UP_FILE, { exact: true })).toHaveCount(0);
   expect((await listProjectFiles(page, alpha.projectId)).map((file) => file.name)).toEqual([GENERATED_FILE]);
 
-  await page.getByRole('button', { name: /back to projects/i }).click();
+  await leaveProjectForEntry(page);
   await openProjectFromProjectsView(page, beta.projectId);
   await expectWorkspaceReady(page);
   await expect(page.getByTestId('file-workspace').getByText(FOLLOW_UP_FILE, { exact: true })).toBeVisible();
@@ -770,6 +770,32 @@ async function createProjectViaApi(page: Page, projectId: string, name: string) 
 async function openProjectFromProjectsView(page: Page, projectId: string) {
   await page.goto(`/projects/${projectId}`, { waitUntil: 'domcontentloaded' });
   await waitForLoadingToClear(page);
+}
+
+/**
+ * Leave the open project through the UI and land back on the entry surface.
+ *
+ * This used to be `getByRole('button', { name: /back to projects/i })`, which
+ * no longer resolves to anything on a project surface. #5517 (884ed1085) gave
+ * ChatPane's top-left slot to the pane-collapse control — `onCollapse` wins
+ * over `onBack` there, and ProjectView passes both — and the standalone
+ * `AppChromeHeader` that owned the `app-chrome-back` "Back to projects" button
+ * is no longer mounted anywhere (only its portal-id constants are still
+ * imported). The single remaining "Back to projects" label lives inside the
+ * avatar menu's popover, which is closed by default, so the old locator just
+ * hung until the test timed out.
+ *
+ * The surviving way out of a project is the pinned entry tab in the workspace
+ * tabs bar: `WorkspaceTabsBar.openTab` always sends that tab home, whatever
+ * entry section it last showed. Coverage is unchanged — this still exercises
+ * "leave the project through real chrome", which is what the isolation
+ * journey below depends on.
+ */
+async function leaveProjectForEntry(page: Page) {
+  const pinnedEntryTab = page.locator('.workspace-tab.is-pinned');
+  await expect(pinnedEntryTab).toBeVisible();
+  await pinnedEntryTab.locator('.workspace-tab__main').click();
+  await expect(page.getByTestId('file-workspace')).toHaveCount(0);
 }
 
 async function gotoEntryHome(page: Page) {

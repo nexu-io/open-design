@@ -1,3 +1,4 @@
+import type { WorkspaceCollabContext } from '@open-design/contracts';
 import { expect, test } from '@/playwright/suite';
 import { T } from '@/timeouts';
 import {
@@ -14,6 +15,34 @@ import {
 } from '@/playwright/visual';
 
 test.describe.configure({ timeout: T.xlong });
+
+// The auto-provisioned personal workspace every signed-in identity has. Typed
+// against the contract so a new required permission bit or context field fails
+// typecheck here instead of drifting into a fixture that silently misrepresents
+// a real member. Permission bits mirror
+// `buildWorkspacePermissions({ role: 'owner', lifecycleState: 'active' })`.
+const VISUAL_PERSONAL_WORKSPACE_CONTEXT: WorkspaceCollabContext = {
+  workspaceId: 'visual-ws-personal',
+  workspaceType: 'personal',
+  workspaceMemberId: 'visual-wm-owner',
+  role: 'owner',
+  memberStatus: 'active',
+  lifecycleState: 'active',
+  billingState: 'active',
+  planId: null,
+  providerMode: 'platform_credits',
+  seatSummary: { seatLimit: 1, usedSeats: 1, availableSeats: 0, isSeatFull: true },
+  permissions: {
+    canManageMembers: true,
+    canManageBilling: true,
+    canInviteMembers: true,
+    canManageAutoRecharge: true,
+    canShareProjects: true,
+    canWriteSyncedFiles: true,
+    canViewWorkspaceSettings: true,
+    canManageSharedResources: true,
+  },
+};
 
 test('[P2] captures the settings execution surface', async ({ page }) => {
   await configureVisualPage(page);
@@ -39,6 +68,19 @@ test('[P1] captures the settings Open Design account balance surface', async ({ 
     },
   });
   await mockSignedInVelaAccount(page);
+  // A signed-in vela account is no longer sufficient for the upgrade entry:
+  // `SettingsDialog`'s `amrCardCanUpgrade` also requires
+  // `workspaceContext.permissions.canManageBilling` (recvqfYKutwWlQ — a team
+  // member whose plan is upgradeable still can't act on billing, which is
+  // owner-only), and this lane never established a workspace context, so the
+  // gate correctly closed on an unrepresented identity. Stub the personal
+  // workspace every signed-in user has: `buildWorkspacePermissions` resolves
+  // `canManageBilling` true for its owner, which is who the upgrade entry is
+  // for. `planId` stays null so `resolvePlanTier` keeps falling through to the
+  // account plan the balance/plan assertions below read.
+  await page.route('**/api/workspace/context', async (route) => {
+    await route.fulfill({ json: { context: VISUAL_PERSONAL_WORKSPACE_CONTEXT } });
+  });
   await gotoVisualHome(page);
   await gotoVisualWorkspace(page);
 

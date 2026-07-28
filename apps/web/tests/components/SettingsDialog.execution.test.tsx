@@ -4853,136 +4853,17 @@ describe('SettingsDialog notifications interactions', () => {
   });
 });
 
-describe('SettingsDialog appearance interactions', () => {
+// Was 'SettingsDialog appearance interactions'. The eight theme/accent cases
+// this block opened with are retired: the product removed theme selection
+// outright ("主题设置不要了，因为 workspace 功能不支持暗色主题，要干掉"), which
+// also formally overturns the NON-ALIGNMENT #9 note that had argued for keeping
+// the segmented control as the last "follow system" entry point. The document
+// theme/accent teardown went with them — nothing here writes those any more.
+// What survives is the AMR draft-reconciliation coverage that merely happened
+// to live in this block.
+describe('SettingsDialog draft reconciliation', () => {
   afterEach(() => {
     cleanup();
-    document.documentElement.removeAttribute('data-theme');
-    document.documentElement.style.removeProperty('--accent');
-    document.documentElement.style.removeProperty('--accent-strong');
-    document.documentElement.style.removeProperty('--accent-soft');
-    document.documentElement.style.removeProperty('--accent-tint');
-    document.documentElement.style.removeProperty('--accent-hover');
-  });
-
-  // #5517 drops the accent-colour swatches from Appearance but keeps the
-  // 系统/浅色/深色 segmented control (its own comment calls the removal
-  // *temporary*, and the account menu no longer carries a 切换主题 row, so this
-  // is the product's only "follow system" entry point — NON-ALIGNMENT #9).
-  it('offers the theme segmented control, and System leaves the document theme unset', () => {
-    const { container } = renderSettingsDialog(
-      { theme: 'system' },
-      { initialSection: 'appearance' },
-    );
-
-    const group = screen.getByRole('group', { name: 'Appearance' });
-    expect(container.querySelector('.seg-control[aria-label="Appearance"]')).toBeTruthy();
-    expect(within(group).getByRole('button', { name: 'System' }).getAttribute('aria-pressed')).toBe('true');
-    expect(within(group).getByRole('button', { name: 'Light' }).getAttribute('aria-pressed')).toBe('false');
-    expect(within(group).getByRole('button', { name: 'Dark' }).getAttribute('aria-pressed')).toBe('false');
-
-    // Regression guard: the accent swatches must not come back — #5517 removed
-    // that control, and `accentColor` is now a stored value with no editor.
-    expect(screen.queryByRole('radiogroup', { name: 'Accent color' })).toBeNull();
-    expect(screen.queryByLabelText('Custom color')).toBeNull();
-
-    // `system` means "no explicit document theme", so the OS media query keeps
-    // ownership.
-    expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
-  });
-
-  it('applies the stored default accent color even though the picker is gone', () => {
-    renderSettingsDialog(
-      { theme: 'system' },
-      { initialSection: 'appearance' },
-    );
-
-    expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#353535');
-  });
-
-  it('writes the picked theme to the document and autosaves it', async () => {
-    const { onPersist } = renderSettingsDialog(
-      { mode: 'daemon', agentId: 'codex', theme: 'system' },
-      { initialSection: 'appearance' },
-    );
-
-    const group = screen.getByRole('group', { name: 'Appearance' });
-    fireEvent.click(within(group).getByRole('button', { name: 'Dark' }));
-    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
-
-    await waitForPersist(onPersist, expect.objectContaining({ theme: 'dark' }), {});
-  });
-
-  // The section still runs the live appearance preview on mount; it just reads
-  // the theme instead of letting the user set it. Opening Settings after the
-  // account menu flipped the theme must show that theme, and an explicit
-  // theme/`system` must keep producing/removing `data-theme` respectively.
-  // Each mount is one preview pass, so this drives the three modes by
-  // remounting rather than by clicking the removed segmented control.
-  it('live previews the configured theme on open, and System leaves no explicit document theme', () => {
-    renderSettingsDialog({ theme: 'dark' }, { initialSection: 'appearance' });
-    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
-    cleanup();
-
-    renderSettingsDialog({ theme: 'light' }, { initialSection: 'appearance' });
-    expect(document.documentElement.getAttribute('data-theme')).toBe('light');
-    cleanup();
-
-    renderSettingsDialog({ theme: 'system' }, { initialSection: 'appearance' });
-    expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
-  });
-
-  // The close-time revert is unchanged: SettingsDialog's cleanup re-applies the
-  // LAST SAVED appearance, so a preview the user never saved is rolled back.
-  // The stored accent is asserted too, because cleanup re-applies theme AND
-  // accent together and must not drop either on the way back.
-  it('reverts an unsaved appearance preview back to the saved appearance when the dialog closes', () => {
-    const first = renderSettingsDialog(
-      { theme: 'dark', accentColor: '#2563eb' },
-      { initialSection: 'appearance' },
-    );
-
-    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
-    expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#2563eb');
-
-    // Autosave is debounced (400ms), so closing immediately leaves this edit
-    // unsaved — exactly the case the revert exists for.
-    const group = screen.getByRole('group', { name: 'Appearance' });
-    fireEvent.click(within(group).getByRole('button', { name: 'Light' }));
-    expect(document.documentElement.getAttribute('data-theme')).toBe('light');
-
-    fireEvent.click(first.container.querySelector('.settings-close') as HTMLElement);
-    expect(first.onClose).toHaveBeenCalledTimes(1);
-
-    first.unmount();
-    expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#2563eb');
-    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
-  });
-
-  it('persists System mode explicitly and preserves accent variables without an explicit document theme', async () => {
-    const { onPersist } = renderSettingsDialog(
-      { mode: 'daemon', agentId: 'codex', theme: 'light', accentColor: '#2563eb' },
-      { initialSection: 'appearance' },
-    );
-
-    expect(document.documentElement.getAttribute('data-theme')).toBe('light');
-    expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#2563eb');
-
-    // `system` must be persisted EXPLICITLY (not dropped to undefined), and it
-    // must keep the stored accent variables applied while leaving the document
-    // theme to the OS media query.
-    const group = screen.getByRole('group', { name: 'Appearance' });
-    fireEvent.click(within(group).getByRole('button', { name: 'System' }));
-    expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
-    expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#2563eb');
-
-    await waitForPersist(
-      onPersist,
-      expect.objectContaining({
-        theme: 'system',
-        accentColor: '#2563eb',
-      }),
-      {},
-    );
   });
 
   it('reconciles the open settings draft when the parent agent CLI env changes', async () => {
@@ -4990,7 +4871,14 @@ describe('SettingsDialog appearance interactions', () => {
       {
         mode: 'daemon',
         agentId: 'amr',
-        theme: 'dark',
+        // Seeded on so the one click below is a real state change: the
+        // completion-sound pills are no-ops when clicked in their current state.
+        notifications: {
+          soundEnabled: true,
+          successSoundId: 'chime',
+          failureSoundId: 'two-tone-down',
+          desktopEnabled: false,
+        },
         agentModels: {
           amr: {
             model: 'prod-only-model',
@@ -5005,7 +4893,7 @@ describe('SettingsDialog appearance interactions', () => {
           },
         },
       },
-      { initialSection: 'appearance', agents: [amrAgent, ...availableAgents] },
+      { initialSection: 'notifications', agents: [amrAgent, ...availableAgents] },
     );
 
     view.rerender(
@@ -5014,7 +4902,12 @@ describe('SettingsDialog appearance interactions', () => {
           ...baseConfig,
           mode: 'daemon',
           agentId: 'amr',
-          theme: 'dark',
+          notifications: {
+            soundEnabled: true,
+            successSoundId: 'chime',
+            failureSoundId: 'two-tone-down',
+            desktopEnabled: false,
+          },
           agentCliEnv: {
             amr: {
               OPEN_DESIGN_AMR_PROFILE: 'local',
@@ -5025,7 +4918,7 @@ describe('SettingsDialog appearance interactions', () => {
         agents={[amrAgent, ...availableAgents]}
         daemonLive={true}
         appVersionInfo={null}
-        initialSection="appearance"
+        initialSection="notifications"
         onPersist={view.onPersist}
         onPersistComposioKey={view.onPersistComposioKey}
         onClose={view.onClose}
@@ -5034,15 +4927,19 @@ describe('SettingsDialog appearance interactions', () => {
     );
 
     // Any committed edit will do — this test is about what the draft carries
-    // when it autosaves, not about which control fired it.
+    // when it autosaves, not about which control fired it. It used to ride the
+    // Appearance theme control; with theme selection removed, the notifications
+    // completion-sound toggle is the equivalent one-click persisted edit.
     fireEvent.click(
-      within(screen.getByRole('group', { name: 'Appearance' })).getByRole('button', { name: 'Light' }),
+      within(screen.getByRole('group', { name: 'Completion sound' })).getByRole('button', {
+        name: 'inactive',
+      }),
     );
 
     await waitForPersist(
       view.onPersist,
       expect.objectContaining({
-        theme: 'light',
+        notifications: expect.objectContaining({ soundEnabled: false }),
         agentModels: {},
         agentCliEnv: {
           codex: { CODEX_BIN: '/tmp/codex-dev' },
@@ -5116,64 +5013,6 @@ describe('SettingsDialog appearance interactions', () => {
         AMR_API_BASE_URL: 'https://draft.example.test',
       },
     });
-  });
-
-  // #5517 removed the accent-colour editor from Settings, so a stored accent is
-  // now read-only from this surface: it must still be applied on open and
-  // survive a save driven by any other Appearance control, and it must not be
-  // rewritten to the default just because nothing edits it any more.
-  it('keeps a stored non-default accent applied and carries it through an autosave', async () => {
-    const view = renderSettingsDialog(
-      { mode: 'daemon', agentId: 'codex', theme: 'light', accentColor: '#2563eb' },
-      { initialSection: 'appearance' },
-    );
-
-    expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#2563eb');
-
-    fireEvent.click(
-      within(screen.getByRole('group', { name: 'Appearance' })).getByRole('button', { name: 'Dark' }),
-    );
-
-    await waitForPersist(
-      view.onPersist,
-      expect.objectContaining({
-        theme: 'dark',
-        accentColor: '#2563eb',
-      }),
-      {},
-    );
-
-    fireEvent.click(view.container.querySelector('.settings-close') as HTMLElement);
-    expect(view.onClose).toHaveBeenCalledTimes(1);
-
-    view.unmount();
-    expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#2563eb');
-  });
-
-  it('localizes the theme controls in Chinese', () => {
-    render(
-      <I18nProvider initial="zh-CN">
-        <SettingsDialog
-          initial={{ ...baseConfig, theme: 'light' }}
-          agents={availableAgents}
-          daemonLive={true}
-          appVersionInfo={null}
-          initialSection="appearance"
-          onPersist={vi.fn()}
-          onPersistComposioKey={vi.fn()}
-          onClose={vi.fn()}
-          onRefreshAgents={vi.fn()}
-        />
-      </I18nProvider>,
-    );
-
-    const group = screen.getByRole('group', { name: '外观' });
-    expect(within(group).getByRole('button', { name: '系统' })).toBeTruthy();
-    expect(within(group).getByRole('button', { name: '浅色' })).toBeTruthy();
-    expect(within(group).getByRole('button', { name: '深色' })).toBeTruthy();
-    // The accent picker and its Chinese labels are gone with it.
-    expect(screen.queryByRole('radiogroup', { name: '主题色' })).toBeNull();
-    expect(screen.queryByLabelText('自定义颜色')).toBeNull();
   });
 });
 
@@ -5623,17 +5462,26 @@ describe('SettingsDialog about interactions', () => {
         mode: 'daemon',
         agentId: 'codex',
         onboardingCompleted: true,
-        theme: 'system',
+        // Seeded on so the one click below is a real state change.
+        notifications: {
+          soundEnabled: true,
+          successSoundId: 'chime',
+          failureSoundId: 'two-tone-down',
+          desktopEnabled: false,
+        },
       },
       {
-        initialSection: 'appearance',
+        initialSection: 'notifications',
         onResetOnboarding,
       },
     );
 
+    // The subject is the pending-autosave drop, not which control queued it.
+    // Theme selection is gone, so the completion-sound toggle stands in as the
+    // one-click persisted edit that leaves a debounced save in flight.
     fireEvent.click(
-      within(screen.getByRole('group', { name: 'Appearance' })).getByRole('button', {
-        name: 'Dark',
+      within(screen.getByRole('group', { name: 'Completion sound' })).getByRole('button', {
+        name: 'inactive',
       }),
     );
     expect(screen.getByText('Saving…')).toBeTruthy();
@@ -5646,7 +5494,7 @@ describe('SettingsDialog about interactions', () => {
     expect(onResetOnboarding).toHaveBeenCalledWith(
       expect.objectContaining({
         onboardingCompleted: false,
-        theme: 'dark',
+        notifications: expect.objectContaining({ soundEnabled: false }),
       }),
     );
   });
@@ -6109,7 +5957,7 @@ describe('SettingsDialog about interactions', () => {
   it('still autosaves an unrelated edit that lands during a silent-update save', async () => {
     // Regression: success must only advance autosaveLastSavedRef for
     // allowSilentUpdates. Spreading the whole latest draft would mark a
-    // concurrent theme (etc.) change as already saved and skip onPersist.
+    // concurrent unrelated change as already saved and skip onPersist.
     let resolveSave: (() => void) | null = null;
     const onSilentUpdatePreferenceChange = vi.fn(
       () => new Promise<void>((resolve) => {
@@ -6121,8 +5969,13 @@ describe('SettingsDialog about interactions', () => {
         mode: 'daemon',
         agentId: 'codex',
         allowSilentUpdates: false,
-        theme: 'light',
-        accentColor: '#2563eb',
+        // Seeded on so the concurrent click below is a real state change.
+        notifications: {
+          soundEnabled: true,
+          successSoundId: 'chime',
+          failureSoundId: 'two-tone-down',
+          desktopEnabled: false,
+        },
       },
       {
         initialSection: 'about',
@@ -6147,18 +6000,18 @@ describe('SettingsDialog about interactions', () => {
     expect(onPersist).not.toHaveBeenCalled();
 
     // Concurrent persisted edit while the silent-update request is in flight.
-    // #5517 dropped the accent-colour picker from Appearance, so the theme
-    // segmented control is now the section's persisted-edit vehicle. The
-    // invariant under test is the autosave bookkeeping, not the accent field.
-    fireEvent.click(screen.getByRole('button', { name: /Appearance/i }));
+    // The invariant under test is the autosave bookkeeping, not the field that
+    // carries it — theme selection was the old vehicle and is gone, so this
+    // reaches for the notifications completion-sound toggle instead.
+    fireEvent.click(screen.getByRole('button', { name: /General/i }));
     fireEvent.click(
-      within(screen.getByRole('group', { name: 'Appearance' })).getByRole('button', {
-        name: 'Dark',
+      within(screen.getByRole('group', { name: 'Completion sound' })).getByRole('button', {
+        name: 'inactive',
       }),
     );
 
     // Resolve silent-update AFTER the concurrent edit is in draft. The success
-    // path must not stamp this theme into autosaveLastSavedRef.
+    // path must not stamp this edit into autosaveLastSavedRef.
     await act(async () => {
       resolveSave?.();
       await Promise.resolve();
@@ -6167,7 +6020,7 @@ describe('SettingsDialog about interactions', () => {
     await waitForPersist(
       onPersist,
       expect.objectContaining({
-        theme: 'dark',
+        notifications: expect.objectContaining({ soundEnabled: false }),
       }),
       {},
     );
