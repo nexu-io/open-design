@@ -111,3 +111,6 @@ deploy/agent-bins/
 
 # Local brainstorming companion state and mockups.
 .superpowers/
+
+# Local implementation worktrees.
+.worktrees/
