@@ -60,7 +60,7 @@ import {
   notifyWorkspaceContextRefresh,
 } from '../collab/useWorkspaceContext';
 import { hasTeamPlan, resolvePlanLabelTier } from '../collab/team-plan';
-import { amrPlansUrlForProfile } from '../runtime/amr-guidance';
+import { AMR_CONSOLE_UPGRADE_INTENT, amrPlansUrlForProfile } from '../runtime/amr-guidance';
 import type { EntryHomeView } from '../router';
 
 const REPO_URL = 'https://github.com/nexu-io/open-design';
@@ -191,38 +191,35 @@ export function teamConsoleUrl(
   // deep-link param depends on it.
   options?: { hasActivePlan?: boolean },
 ): string {
-  // B's console routes: members live at /team, the (global) wallet backs the
-  // billing entry. The settings URL the context carries includes the
-  // ?workspaceId deep-link param; URL parsing preserves it, so the target page
-  // opens on the SAME workspace this client is pinned to (B asks the user to
-  // confirm if their account-level selection differs).
+  // B's console routes: members live at /team, everything account/billing
+  // shaped reports on the dashboard. The settings URL the context carries
+  // includes the ?workspaceId deep-link param; URL parsing preserves it, so
+  // the target page opens on the SAME workspace this client is pinned to (B
+  // asks the user to confirm if their account-level selection differs).
   //
-  // `upgrade` lands on the team dashboard AND opens a subscription dialog, but
-  // WHICH dialog depends on whether the team has ever checked out before — B's
-  // `team-dashboard.tsx` gates them on mutually exclusive conditions:
-  //   - `billing=checkout` opens the first-subscription dialog, gated by
-  //     `canUpgradeTeam`, which requires the team's `subscriptionSummary
-  //     .billingState` to be one of free/inactive/locked (never subscribed, or
-  //     lapsed). For a team that already has an active plan this gate is
-  //     false, so `billing=checkout` silently opens nothing — confirmed via a
-  //     real recording (recvpSQKna0LwR) landing on the bare Overview page for
-  //     an already-subscribed "Team Pro" workspace.
-  //   - `billing=plan` opens the CHANGE-plan dialog, gated by
-  //     `ownerBillingActionsAvailable`, which requires `billingState ===
-  //     'active'` — the mirror-image condition, for a team that already pays.
-  // `options.hasActivePlan` (callers pass `hasTeamPlan(context, billing)` from
-  // `collab/team-plan.ts`) picks the branch that actually matches the team's
-  // current subscription state instead of hardcoding the never-subscribed one.
-  // `plans` is the PERSONAL upgrade deep link: the wallet page with B's
-  // pricing modal auto-opened (`view=plans`) — verified live to auto-open for
-  // a personal-workspace session (recvpYEiH019cD). For a TEAM workspace B
-  // redirects this exact URL into `dashboard?billing=checkout` itself
-  // (vela wallet.tsx `teamWalletCheckoutRedirectPath`), so even a misrouted
-  // team session degrades to the first-checkout dialog, not a dead page.
+  // `billing` (the 「额度」 row) is a plain dashboard visit. It used to open a
+  // wallet page; that route still answers on B's side but is no longer part of
+  // the product's information architecture — balance, manual top-up and the
+  // auto-recharge policy were rehomed onto the dashboard (vela #1055).
+  //
+  // `upgrade` and `plans` both land on the dashboard AND ask it to open an
+  // upgrade dialog. B resolves `billing=plan` against the workspace's own
+  // subscription state, so one intent covers all three states: a personal
+  // owner gets the personal plan modal (the same one the console's 「升级订阅」
+  // hero button opens), a never-subscribed team gets first-checkout, and a
+  // subscribed team gets change-plan.
+  //
+  // `upgrade` additionally still passes `billing=checkout` for a team the
+  // caller knows has never subscribed (`options.hasActivePlan`, from
+  // `hasTeamPlan(context, billing)` in `collab/team-plan.ts`). That is now a
+  // hint rather than a requirement: B honors it when first-checkout is really
+  // available and otherwise falls back to the dialog that does match, so a
+  // stale `hasActivePlan` can no longer strand the user on a bare Overview
+  // page the way it did in recvpSQKna0LwR.
   const path =
     section === 'members' ? 'team'
-    : section === 'billing' ? 'wallet'
-    : section === 'plans' ? 'wallet'
+    : section === 'billing' ? 'dashboard'
+    : section === 'plans' ? 'dashboard'
     : section === 'upgrade' ? 'dashboard'
     : section === 'create-team' || section === 'invite' ? 'dashboard'
     : section;
@@ -236,9 +233,12 @@ export function teamConsoleUrl(
     }
     url.pathname = `/${segments.join('/')}`;
     if (section === 'upgrade') {
-      url.searchParams.set('billing', options?.hasActivePlan ? 'plan' : 'checkout');
+      url.searchParams.set(
+        'billing',
+        options?.hasActivePlan ? AMR_CONSOLE_UPGRADE_INTENT : 'checkout',
+      );
     }
-    if (section === 'plans') url.searchParams.set('view', 'plans');
+    if (section === 'plans') url.searchParams.set('billing', AMR_CONSOLE_UPGRADE_INTENT);
     // Vela owns the final invite action because only its dashboard has the
     // authoritative subscription + seat state needed to choose between
     // upgrading to Team, buying seats, and sending an invite. `invite=auto`
@@ -274,11 +274,12 @@ export function teamConsoleUrl(
  * error state ("Team plan unavailable" / 3-seat minimum). recvpYEiH019cD,
  * verified live with a real personal-workspace session.
  *
- *   - personal (or type unknown) → `wallet?view=plans`, B's personal pricing
- *     modal — verified live to auto-open for the same session.
+ *   - personal (or type unknown) → `dashboard?billing=plan`, B's personal plan
+ *     modal — the same dialog the console's own 「升级订阅」 hero button opens.
  *   - team, never subscribed → `dashboard?billing=checkout` (first-checkout
  *     dialog); team, already subscribed → `dashboard?billing=plan`
- *     (change-plan dialog). See `teamConsoleUrl` for why B needs the split.
+ *     (change-plan dialog). See `teamConsoleUrl` for why the team branch still
+ *     sends the more specific hint even though B can now resolve either.
  *   - a resolved workspace without `canManageBilling` → null. Billing is
  *     owner-only, so admin/member surfaces hide the action rather than linking
  *     to an operation B will reject.
@@ -574,15 +575,17 @@ export function EntryNavRail({
   const [inviteOpen, setInviteOpen] = useState(false);
   const inviteTarget = resolveWorkspaceInviteTarget(context);
   // One decision for both of this rail's upgrade entries (credits chip and
-  // the invite dialog's seat-gate): personal → the wallet pricing modal,
-  // team → checkout vs change-plan by subscription state. See
+  // the invite dialog's seat-gate): personal → the console's personal plan
+  // modal, team → checkout vs change-plan by subscription state. See
   // `workspaceUpgradeUrl` for why the axis is the workspace TYPE.
   const upgradeUrl = workspaceUpgradeUrl(context, billing);
   const billingUpgradeUrl =
     context?.billingRecovery?.recoveryUrl?.trim() || upgradeUrl;
-  // #62: the 积分 row links straight OUT to B's wallet page (usage detail lives
-  // there) — no intermediate credits popover in the client, matching #5517.
-  const billingWalletUrl = workspaceSettingsUrl
+  // #62: the 积分 row links straight OUT to B's console dashboard (usage detail
+  // lives there) — no intermediate credits popover in the client, matching
+  // #5517. It used to open a wallet page; balance, top-up and the auto-recharge
+  // policy were rehomed onto the dashboard (vela #1055).
+  const billingConsoleUrl = workspaceSettingsUrl
     ? teamConsoleUrl(workspaceSettingsUrl, 'billing')
     : null;
   // Product decision: plan selection / payment lives in Vela Web. The local
@@ -735,7 +738,7 @@ export function EntryNavRail({
                     ) : null}
                   </div>
                   {/* #5517 billing card: plan (+badge) + 升级 CTA + USD balance.
-                      The balance row links out to B's wallet page. It receives
+                      The balance row links out to B's console. It receives
                       only an explicitly scoped money value; raw credits are
                       never formatted as dollars here. */}
                   {billing || balanceLabel ? (
@@ -759,7 +762,7 @@ export function EntryNavRail({
                         ) : null}
                       </div>
                       {/* #62 (product ruling): clicking the balance jumps straight to
-                          B's web wallet page for the usage detail — there is
+                          B's console dashboard for the usage detail — there is
                           NO intermediate credits popover in the client. */}
                       <button
                         type="button"
@@ -767,8 +770,8 @@ export function EntryNavRail({
                         data-testid="entry-nav-credits-row"
                         onClick={() => {
                           setAccountOpen(false);
-                          if (billingWalletUrl) {
-                            window.open(billingWalletUrl, '_blank', 'noopener,noreferrer');
+                          if (billingConsoleUrl) {
+                            window.open(billingConsoleUrl, '_blank', 'noopener,noreferrer');
                           }
                         }}
                       >

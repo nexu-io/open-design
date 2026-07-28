@@ -1640,7 +1640,7 @@ export function SettingsDialog({
   // The 「升级」 buttons on the AMR model card route through
   // `workspaceUpgradeUrl` — the one decision point every upgrade affordance
   // shares (see its docblock in `EntryNavRail.tsx`): personal workspace →
-  // B's wallet pricing modal (`view=plans`, recvpYEiH019cD); team → the
+  // B's personal plan modal (`billing=plan`, recvpYEiH019cD); team → the
   // checkout vs change-plan dashboard dialog by subscription state
   // (recvpSQKna0LwR). The profile fallback keeps the buttons alive after a
   // signed-out/no-context read; while that read is still loading, hide them so

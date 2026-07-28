@@ -3,10 +3,10 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   DEFAULT_AMR_RECHARGE_URL,
+  amrConsoleUrlForWorkspace,
   amrPlansUrlForWorkspace,
   amrProfileBadgeLabel,
   amrRechargeUrlForProfile,
-  amrWalletUrlForWorkspace,
   resolveRunFailureUi,
   setRuntimeAmrConsoleOrigin,
 } from '../../src/runtime/amr-guidance';
@@ -21,13 +21,20 @@ afterEach(() => {
 });
 
 describe('amrRechargeUrlForProfile', () => {
-  it('matches the selected AMR profile wallet origin', () => {
+  // Product decision: there is no wallet page in the console's information
+  // architecture any more — balance, top-up and the auto-recharge policy all
+  // report on the dashboard (vela #1055 rehomed them there). Every console
+  // entry this module builds therefore targets `/dashboard`, not `/wallet`.
+  it('targets the console dashboard on every AMR profile', () => {
+    expect(DEFAULT_AMR_RECHARGE_URL).toBe(
+      'https://open-design.ai/amr/dashboard?source=open_design',
+    );
     expect(amrRechargeUrlForProfile('prod')).toBe(DEFAULT_AMR_RECHARGE_URL);
     expect(amrRechargeUrlForProfile('test')).toBe(
-      'https://vela.powerformer.net/wallet?source=open_design',
+      'https://vela.powerformer.net/dashboard?source=open_design',
     );
     expect(amrRechargeUrlForProfile('local')).toBe(
-      'http://localhost:5173/wallet?source=open_design',
+      'http://localhost:5173/dashboard?source=open_design',
     );
     expect(amrRechargeUrlForProfile(' unknown ')).toBe(DEFAULT_AMR_RECHARGE_URL);
     expect(amrRechargeUrlForProfile(null)).toBe(DEFAULT_AMR_RECHARGE_URL);
@@ -47,21 +54,21 @@ describe('amrRechargeUrlForProfile', () => {
   it('uses the runtime console origin the daemon reported for a non-prod profile', () => {
     setRuntimeAmrConsoleOrigin(RUNTIME_CONSOLE_ORIGIN);
     expect(amrRechargeUrlForProfile('feature-test')).toBe(
-      `${RUNTIME_CONSOLE_ORIGIN}/wallet?source=open_design`,
+      `${RUNTIME_CONSOLE_ORIGIN}/dashboard?source=open_design`,
     );
   });
 
   it('tolerates a trailing slash and blank runtime origins', () => {
     setRuntimeAmrConsoleOrigin(`${RUNTIME_CONSOLE_ORIGIN}/`);
     expect(amrRechargeUrlForProfile('feature-test')).toBe(
-      `${RUNTIME_CONSOLE_ORIGIN}/wallet?source=open_design`,
+      `${RUNTIME_CONSOLE_ORIGIN}/dashboard?source=open_design`,
     );
     setRuntimeAmrConsoleOrigin('   ');
     expect(amrRechargeUrlForProfile('feature-test')).toBe(DEFAULT_AMR_RECHARGE_URL);
   });
 
   // prod's console is the public product URL. A runtime origin must never be
-  // able to redirect a production user's wallet/upgrade links elsewhere.
+  // able to redirect a production user's console/upgrade links elsewhere.
   it('never lets a runtime origin override the prod console', () => {
     setRuntimeAmrConsoleOrigin(RUNTIME_CONSOLE_ORIGIN);
     expect(amrRechargeUrlForProfile('prod')).toBe(DEFAULT_AMR_RECHARGE_URL);
@@ -89,19 +96,23 @@ describe('amr-guidance origin literals', () => {
 });
 
 describe('workspace-scoped AMR URLs', () => {
-  it('pins wallet and plans links to the exact workspace', () => {
+  // `billing=plan` is the console's own state-aware upgrade intent: its
+  // dashboard resolves it against the workspace's real subscription state
+  // (personal → the personal plan modal, team → checkout or change-plan), so
+  // this client does not have to guess which dialog to ask for.
+  it('pins console and plans links to the exact workspace', () => {
     setRuntimeAmrConsoleOrigin(RUNTIME_CONSOLE_ORIGIN);
-    expect(amrWalletUrlForWorkspace('feature-test', ' workspace-a ')).toBe(
-      `${RUNTIME_CONSOLE_ORIGIN}/wallet?source=open_design&workspaceId=workspace-a`,
+    expect(amrConsoleUrlForWorkspace('feature-test', ' workspace-a ')).toBe(
+      `${RUNTIME_CONSOLE_ORIGIN}/dashboard?source=open_design&workspaceId=workspace-a`,
     );
     expect(amrPlansUrlForWorkspace('feature-test', ' workspace-a ')).toBe(
-      `${RUNTIME_CONSOLE_ORIGIN}/wallet?source=open_design&workspaceId=workspace-a&view=plans`,
+      `${RUNTIME_CONSOLE_ORIGIN}/dashboard?source=open_design&workspaceId=workspace-a&billing=plan`,
     );
   });
 
   it('fails closed when the workspace identity is absent', () => {
-    expect(amrWalletUrlForWorkspace('feature-test', null)).toBeNull();
-    expect(amrWalletUrlForWorkspace('feature-test', '   ')).toBeNull();
+    expect(amrConsoleUrlForWorkspace('feature-test', null)).toBeNull();
+    expect(amrConsoleUrlForWorkspace('feature-test', '   ')).toBeNull();
     expect(amrPlansUrlForWorkspace('feature-test', undefined)).toBeNull();
   });
 });

@@ -138,8 +138,8 @@ describe('account menu billing card — workspace-aware upgrade routing', () => 
         planId: null,
       } satisfies Partial<WorkspaceCollabContext>,
       billing: { membershipTier: '', subscriptionStatus: '' } satisfies Partial<WorkspaceBillingSummary>,
-      path: '/console/wallet',
-      param: ['view', 'plans'],
+      path: '/console/dashboard',
+      param: ['billing', 'plan'],
     },
     {
       name: 'free team owner',
@@ -215,11 +215,13 @@ describe('account menu billing card — workspace-aware upgrade routing', () => 
   );
 });
 
-describe('account menu billing card — 积分 row opens the web wallet (#62)', () => {
-  // Product ruling: clicking 积分 must jump straight to B's wallet page for the
+describe('account menu billing card — 积分 row opens the web console (#62)', () => {
+  // Product ruling: clicking 积分 must jump straight to B's console for the
   // usage detail — there is NO intermediate credits popover in the client
-  // (the reference #5517 has no such panel either).
-  it('opens the wallet console URL in a new tab instead of an in-client panel', () => {
+  // (the reference #5517 has no such panel either). The destination is the
+  // console dashboard: the wallet page is no longer part of B's information
+  // architecture (balance/top-up were rehomed onto the dashboard, vela #1055).
+  it('opens the console dashboard URL in a new tab instead of an in-client panel', () => {
     const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
     renderRail({
       context: context({
@@ -233,9 +235,9 @@ describe('account menu billing card — 积分 row opens the web wallet (#62)', 
 
     expect(openSpy).toHaveBeenCalledTimes(1);
     const [url, target] = openSpy.mock.calls[0]!;
-    // teamConsoleUrl(base, 'billing') → the console's /wallet page, keeping the
-    // ?workspaceId deep-link param.
-    expect(String(url)).toContain('/console/wallet');
+    // teamConsoleUrl(base, 'billing') → the console's /dashboard page, keeping
+    // the ?workspaceId deep-link param.
+    expect(String(url)).toContain('/console/dashboard');
     expect(String(url)).toContain('workspaceId=ws-new');
     expect(target).toBe('_blank');
     // No intermediate panel appears.
@@ -244,7 +246,7 @@ describe('account menu billing card — 积分 row opens the web wallet (#62)', 
 });
 
 describe('account menu billing card — no 附加积分 row (#112 superseded)', () => {
-  it('never renders a bonus/top-up credits row, however the wallet splits its balance', () => {
+  it('never renders a bonus/top-up credits row, however the console splits its balance', () => {
     renderRail({
       context: context({ billingState: 'active', planId: 'team_plus' } as Partial<WorkspaceCollabContext>),
       billing: billing({

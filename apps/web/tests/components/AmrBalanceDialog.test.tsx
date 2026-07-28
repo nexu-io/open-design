@@ -147,10 +147,10 @@ describe('AmrBalanceDialog', () => {
   // personal account onto the team dashboard's `billing=checkout` deep link,
   // which opens the Upgrade-Personal-workspace-to-Team dialog in an error
   // state ("Team plan unavailable" / 3-seat minimum). The axis is the
-  // workspace TYPE: personal lands on B's wallet pricing modal (`view=plans`,
-  // verified live to auto-open for the same session), never a team billing
-  // deep link.
-  it('lands the upgrade CTA on the personal pricing modal for a personal workspace', async () => {
+  // workspace TYPE: personal lands on B's personal plan modal — the same
+  // dialog the console's own 「升级订阅」 hero button opens, which its dashboard
+  // resolves from `billing=plan` against the workspace's real state.
+  it('lands the upgrade CTA on the personal plan modal for a personal workspace', async () => {
     const open = vi.spyOn(window, 'open').mockImplementation(() => null);
     vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
       const url = String(input);
@@ -191,10 +191,10 @@ describe('AmrBalanceDialog', () => {
       fireEvent.click(screen.getByTestId('amr-balance-dialog-plans'));
       expect(open).toHaveBeenCalled();
       const target = new URL(String(open.mock.calls.at(-1)?.[0]));
-      expect(target.pathname).toBe('/console/wallet');
-      expect(target.searchParams.get('view')).toBe('plans');
-      // Never a team billing deep link for a personal workspace.
-      expect(target.searchParams.get('billing')).toBeNull();
+      expect(target.pathname).toBe('/console/dashboard');
+      // B resolves this one intent per workspace state, so a personal owner can
+      // no longer be handed the Upgrade-to-Team dialog's error state.
+      expect(target.searchParams.get('billing')).toBe('plan');
       // The deep link keeps the workspace this client is pinned to.
       expect(target.searchParams.get('workspaceId')).toBe('ws-p');
     });
@@ -250,8 +250,8 @@ describe('AmrBalanceDialog', () => {
 
   // No workspace console URL (context read has not landed / signed out): the
   // CTA must still go somewhere, not become a dead end — and it must land on
-  // the pricing modal (`view=plans`), not the bare wallet page, otherwise the
-  // user has to hunt for the upgrade dialog themselves (dogfood acceptance
+  // the plan modal (`billing=plan`), not the bare console dashboard, otherwise
+  // the user has to hunt for the upgrade dialog themselves (dogfood acceptance
   // regression: recvpYEiH019cD).
   it('falls back to the profile plans deep link when no console URL is known', async () => {
     const open = vi.spyOn(window, 'open').mockImplementation(() => null);
@@ -273,7 +273,7 @@ describe('AmrBalanceDialog', () => {
     fireEvent.click(await screen.findByTestId('amr-balance-dialog-plans'));
 
     const target = new URL(String(open.mock.calls.at(-1)?.[0]));
-    expect(target.pathname).toBe('/amr/wallet');
-    expect(target.searchParams.get('view')).toBe('plans');
+    expect(target.pathname).toBe('/amr/dashboard');
+    expect(target.searchParams.get('billing')).toBe('plan');
   });
 });

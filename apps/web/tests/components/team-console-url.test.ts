@@ -13,7 +13,7 @@ afterEach(() => {
 
 // The context's settings URL carries B's ?workspaceId deep-link param; section
 // derivation must land on B's REAL console routes (members live at /team, the
-// billing entry is the global wallet) and keep the pinned workspace param.
+// billing entry is the dashboard) and keep the pinned workspace param.
 describe('teamConsoleUrl', () => {
   const base = 'https://web.example/settings?workspaceId=ws-1';
 
@@ -25,7 +25,14 @@ describe('teamConsoleUrl', () => {
     expect(teamConsoleUrl(base, 'settings')).toBe(
       'https://web.example/settings?workspaceId=ws-1',
     );
-    expect(teamConsoleUrl(base, 'billing')).toBe('https://web.example/wallet?workspaceId=ws-1');
+  });
+
+  // Product decision: the console has no wallet page in its information
+  // architecture any more. The team 「额度」 row opens the console dashboard,
+  // which is where balance, top-up and the auto-recharge policy now report
+  // (vela #1055 rehomed them off the wallet route).
+  it('sends the team billing row to the console dashboard, not a wallet page', () => {
+    expect(teamConsoleUrl(base, 'billing')).toBe('https://web.example/dashboard?workspaceId=ws-1');
   });
 
   // "Upgrade" must land ON a subscription dialog, not on a billing page where
@@ -69,13 +76,16 @@ describe('teamConsoleUrl', () => {
     );
   });
 
-  // recvpYEiH019cD: the personal upgrade path is the wallet page with B's
-  // pricing modal auto-opened. (For a TEAM workspace B redirects this exact
-  // URL into `dashboard?billing=checkout` itself, so even a misrouted team
-  // session degrades to the first-checkout dialog rather than a dead page.)
-  it('deep-links plans into the wallet pricing modal', () => {
+  // The personal upgrade path is the console dashboard with B's plan modal
+  // auto-opened. `billing=plan` is B's ONE state-aware upgrade intent: its
+  // dashboard resolves it against the workspace's real subscription state, so
+  // a personal owner gets the personal plan modal (the same one the console's
+  // own 「升级订阅」 hero button opens) while a team owner gets checkout or
+  // change-plan — this client no longer has to guess which dialog to request,
+  // and a wrong guess can no longer silently open nothing (recvpSQKna0LwR).
+  it('deep-links plans into the console plan modal', () => {
     expect(teamConsoleUrl(base, 'plans')).toBe(
-      'https://web.example/wallet?workspaceId=ws-1&view=plans',
+      'https://web.example/dashboard?workspaceId=ws-1&billing=plan',
     );
   });
 
@@ -127,13 +137,17 @@ describe('workspaceUpgradeUrl', () => {
     workspaceBalance: null,
   });
 
-  it('sends a personal workspace to the wallet pricing modal, never a team billing deep link', () => {
+  // Product requirement: the free-tier 「升级」 button lands on `/dashboard`
+  // and opens the SAME modal the console's own 「升级订阅」 hero button opens.
+  // `billing=plan` on a personal workspace is exactly that modal
+  // (`setPlanSelectionAudience('creator')` in B's `team-dashboard.tsx`).
+  it('sends a personal workspace to the dashboard plan modal, never a team billing deep link', () => {
     const context: WorkspaceCollabContext = {
       ...baseContext,
       workspaceType: 'personal',
     };
     expect(workspaceUpgradeUrl(context, null)).toBe(
-      'https://web.example/wallet?workspaceId=ws-1&view=plans',
+      'https://web.example/dashboard?workspaceId=ws-1&billing=plan',
     );
   });
 
@@ -186,7 +200,7 @@ describe('workspaceUpgradeUrl', () => {
   it('falls back to the profile plans deep link for CTA callers that must always link somewhere', () => {
     setRuntimeAmrConsoleOrigin(RUNTIME_CONSOLE_ORIGIN);
     expect(workspaceUpgradeUrl(null, null, { fallbackProfile: 'feature-test' })).toBe(
-      `${RUNTIME_CONSOLE_ORIGIN}/wallet?source=open_design&view=plans`,
+      `${RUNTIME_CONSOLE_ORIGIN}/dashboard?source=open_design&billing=plan`,
     );
   });
 });

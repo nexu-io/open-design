@@ -614,7 +614,9 @@ describe('AvatarMenu', () => {
     expect(onAgentModelChange).not.toHaveBeenCalled();
     const target = new URL(openExternalUrlMock.mock.calls[0]![0]);
     expect(target.searchParams.get('workspaceId')).toBe('workspace-a');
-    expect(target.searchParams.get('view')).toBe('plans');
+    // `billing=plan` is B's state-aware upgrade intent, replacing the wallet
+    // page's fixed `view=plans` pricing modal.
+    expect(target.searchParams.get('billing')).toBe('plan');
   });
 
 });

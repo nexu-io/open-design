@@ -347,9 +347,9 @@ export function RecentProjectsStrip({
     (workspaceContextHasTeamIdentity(workspaceContext) &&
       workspaceContext?.permissions.canShareProjects === true);
   const canAccessInviteFlow = canAccessWorkspaceInviteFlow(workspaceContext);
-  // The invite dialog's seat-gate upgrade CTA: personal workspace → B's wallet
-  // pricing modal, team → checkout vs change-plan by subscription state. One
-  // shared decision point — see `workspaceUpgradeUrl` in EntryNavRail.tsx
+  // The invite dialog's seat-gate upgrade CTA: personal workspace → B's
+  // personal plan modal, team → checkout vs change-plan by subscription state.
+  // One shared decision point — see `workspaceUpgradeUrl` in EntryNavRail.tsx
   // (recvpYEiH019cD).
   const inviteUpgradeUrl = workspaceUpgradeUrl(workspaceContext, workspaceBilling);
   const inviteTarget = resolveWorkspaceInviteTarget(workspaceContext);
