@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   deriveStoreScreenshotPage,
   storeScreenshotTemplates,
+  StoreScreenshotTemplateIdSchema,
   type StoreScreenshotDocument,
 } from '../src/index.js';
 
@@ -35,6 +36,7 @@ describe('store screenshot templates', () => {
       'gradient-device',
       'editorial-split',
     ]);
+    expect(Object.keys(storeScreenshotTemplates)).toEqual(StoreScreenshotTemplateIdSchema.options);
     expect(storeScreenshotTemplates['minimal-center'].headlineAlign).toBe('center');
     expect(storeScreenshotTemplates['gradient-device'].background).toBe('gradient');
     expect(storeScreenshotTemplates['editorial-split'].accentLabel).toBe(true);

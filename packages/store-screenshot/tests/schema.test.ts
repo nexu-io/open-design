@@ -1,11 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import {
   StoreScreenshotDocumentSchema,
+  StoreScreenshotTemplateIdSchema,
   assertPlatformPageCount,
   platformSpecs,
 } from '../src/index.js';
 
 describe('StoreScreenshotDocument', () => {
+  it('通过唯一领域模板 Schema 验证页面模板', () => {
+    expect(StoreScreenshotTemplateIdSchema.options).toEqual([
+      'minimal-center',
+      'gradient-device',
+      'editorial-split',
+    ]);
+    expect(StoreScreenshotTemplateIdSchema.safeParse('unregistered-template').success).toBe(false);
+  });
+
   it('接受版本化规范文档并拒绝悬空素材引用', () => {
     const result = StoreScreenshotDocumentSchema.safeParse({
       schemaVersion: 1,

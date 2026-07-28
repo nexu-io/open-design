@@ -2,6 +2,14 @@ import { z } from 'zod';
 
 export type StorePlatform = 'appStore' | 'googlePlay';
 
+export const StoreScreenshotTemplateIdSchema = z.enum([
+  'minimal-center',
+  'gradient-device',
+  'editorial-split',
+]);
+
+export type StoreScreenshotTemplateId = z.infer<typeof StoreScreenshotTemplateIdSchema>;
+
 export interface StoreScreenshotPosition {
   x: number;
   y: number;
@@ -30,7 +38,7 @@ export interface StoreScreenshotProduct {
 export interface StoreScreenshotPage {
   id: string;
   order: number;
-  templateId: 'minimal-center' | 'gradient-device' | 'editorial-split';
+  templateId: StoreScreenshotTemplateId;
   headline: string;
   body?: string;
   screenshotAssetId?: string;
@@ -100,7 +108,7 @@ const StoreScreenshotOverrideSchema = z.object({
 export const StoreScreenshotPageSchema = z.object({
   id: z.string().min(1),
   order: z.number().int().nonnegative(),
-  templateId: z.enum(['minimal-center', 'gradient-device', 'editorial-split']),
+  templateId: StoreScreenshotTemplateIdSchema,
   headline: z.string(),
   body: z.string().optional(),
   screenshotAssetId: z.string().min(1).optional(),

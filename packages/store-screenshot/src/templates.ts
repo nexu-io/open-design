@@ -1,4 +1,4 @@
-export type StoreScreenshotTemplateId = 'minimal-center' | 'gradient-device' | 'editorial-split';
+import type { StoreScreenshotTemplateId } from './schema.js';
 
 export interface StoreScreenshotTemplate {
   id: StoreScreenshotTemplateId;

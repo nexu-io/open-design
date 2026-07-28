@@ -4,14 +4,11 @@ import {
   StoreScreenshotChangeSetSchema,
   StoreScreenshotDocumentSchema,
   StoreScreenshotProductSchema,
+  StoreScreenshotTemplateIdSchema,
 } from '@launch-studio/store-screenshot';
 import { z } from 'zod';
 
-export const StoreScreenshotTemplateIdSchema = z.enum([
-  'minimal-center',
-  'gradient-device',
-  'editorial-split',
-]);
+export { StoreScreenshotTemplateIdSchema } from '@launch-studio/store-screenshot';
 
 export const CreateStoreScreenshotDocumentRequestSchema = z.object({
   product: StoreScreenshotProductSchema,
@@ -82,18 +79,15 @@ export const GenerateStoreScreenshotPlanRequestSchema = z.object({
   prompt: z.string().min(1).optional(),
 }).strict();
 
-export const StoreScreenshotChangeSetPreviewRequestSchema = z.object({
-  changeSet: StoreScreenshotChangeSetSchema,
-}).strict();
+export const PreviewStoreScreenshotChangeSetRequestSchema = StoreScreenshotChangeSetSchema;
+export const StoreScreenshotChangeSetPreviewRequestSchema = PreviewStoreScreenshotChangeSetRequestSchema;
 
 export const StoreScreenshotChangeSetPreviewResponseSchema = z.object({
   changeSet: StoreScreenshotChangeSetSchema,
   affectedPageIds: z.array(z.string().min(1)),
 }).strict();
 
-export const ApplyStoreScreenshotChangeSetRequestSchema = z.object({
-  changeSet: StoreScreenshotChangeSetSchema,
-}).strict();
+export const ApplyStoreScreenshotChangeSetRequestSchema = StoreScreenshotChangeSetSchema;
 
 export const StoreScreenshotValidationRequestSchema = z.object({
   platforms: z.array(StorePlatformSchema).min(1).optional(),

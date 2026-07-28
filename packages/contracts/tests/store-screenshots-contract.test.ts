@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest';
 import {
   API_ERROR_CODES,
   CreateStoreScreenshotDocumentRequestSchema,
+  ApplyStoreScreenshotChangeSetRequestSchema,
   ScreenshotPlanSchema,
+  StoreScreenshotChangeSetPreviewRequestSchema,
   StoreScreenshotChangeSetPreviewResponseSchema,
   StoreScreenshotJobSchema,
   StoreScreenshotValidationResultSchema,
@@ -33,6 +35,19 @@ describe('store screenshot API contracts', () => {
   });
 
   it('uses the domain change-set schema for previews and plans', () => {
+    const changeSet = {
+      baseVersion: 1,
+      operations: [{
+        op: 'setText' as const,
+        pageId: 'page-1',
+        field: 'headline' as const,
+        value: '新标题',
+      }],
+    };
+
+    expect(StoreScreenshotChangeSetPreviewRequestSchema.parse(changeSet)).toEqual(changeSet);
+    expect(ApplyStoreScreenshotChangeSetRequestSchema.parse(changeSet)).toEqual(changeSet);
+
     expect(ScreenshotPlanSchema.parse({
       strategy: '从痛点到结果',
       pages: [{
@@ -44,15 +59,7 @@ describe('store screenshot API contracts', () => {
     }).pages).toHaveLength(1);
 
     expect(StoreScreenshotChangeSetPreviewResponseSchema.parse({
-      changeSet: {
-        baseVersion: 1,
-        operations: [{
-          op: 'setText',
-          pageId: 'page-1',
-          field: 'headline',
-          value: '新标题',
-        }],
-      },
+      changeSet,
       affectedPageIds: ['page-1'],
     }).changeSet.baseVersion).toBe(1);
   });
