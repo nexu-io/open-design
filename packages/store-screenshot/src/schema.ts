@@ -7,6 +7,12 @@ export interface StoreScreenshotPosition {
   y: number;
 }
 
+export interface StoreScreenshotTransform extends StoreScreenshotPosition {
+  scale: number;
+}
+
+export type StoreScreenshotColorField = 'background' | 'accent' | 'text';
+
 export interface StoreScreenshotAsset {
   id: string;
   color?: string;
@@ -29,6 +35,9 @@ export interface StoreScreenshotPage {
   body?: string;
   screenshotAssetId?: string;
   logoAssetId?: string;
+  colors?: Partial<Record<StoreScreenshotColorField, string>>;
+  transform?: StoreScreenshotTransform;
+  hidden?: boolean;
   overrides: Partial<Record<StorePlatform, {
     headline?: string;
     body?: string;
@@ -56,6 +65,16 @@ export const StorePlatformSchema = z.enum(['appStore', 'googlePlay']);
 export const StoreScreenshotPositionSchema = z.object({
   x: FiniteNumberSchema,
   y: FiniteNumberSchema,
+});
+
+export const StoreScreenshotTransformSchema = StoreScreenshotPositionSchema.extend({
+  scale: FiniteNumberSchema,
+});
+
+const StoreScreenshotColorsSchema = z.object({
+  background: HexColorSchema.optional(),
+  accent: HexColorSchema.optional(),
+  text: HexColorSchema.optional(),
 });
 
 export const StoreScreenshotAssetSchema = z.object({
@@ -86,6 +105,9 @@ export const StoreScreenshotPageSchema = z.object({
   body: z.string().optional(),
   screenshotAssetId: z.string().min(1).optional(),
   logoAssetId: z.string().min(1).optional(),
+  colors: StoreScreenshotColorsSchema.optional(),
+  transform: StoreScreenshotTransformSchema.optional(),
+  hidden: z.boolean().optional(),
   overrides: z.record(StorePlatformSchema, StoreScreenshotOverrideSchema),
   lockedFields: z.array(z.enum(['headline', 'body', 'template', 'screenshot', 'layout'])),
 });
