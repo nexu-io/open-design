@@ -587,4 +587,88 @@ describe("desktop updater install-mode candidate selection", () => {
       rmSync(root, { force: true, recursive: true });
     }
   });
+
+  it("reselects the payload when pref changes to automatic after an installer is downloaded", async () => {
+    const root = makeRoot();
+    const fixture = await createPayloadFixtureServer({ version: "1.0.0-beta.2" });
+    const currentVersion = "1.0.0-beta.1";
+    let mode: "automatic" | "manual" = "manual";
+    let extractCount = 0;
+    const installerLaunches: Array<{ installerPath: string; root: string }> = [];
+    const payloadLaunches: Array<{ launchPath: string; root: string }> = [];
+    try {
+      const { launcherLaunchPath, launcherRoot, launcherRuntimePath, namespace } =
+        await writeValidLauncherContext(root, currentVersion);
+
+      const updater = createDesktopUpdater(
+        {
+          arch: "x64",
+          currentVersion,
+          downloadRoot: join(root, "updates"),
+          env: {
+            ...updaterEnv(fixture.metadataUrl, "win32"),
+            [DESKTOP_UPDATE_ENV.CURRENT_VERSION]: currentVersion,
+            [DESKTOP_UPDATE_ENV.OPEN_DRY_RUN]: "0",
+          },
+          launcherLaunchPath,
+          launcherRoot,
+          launcherRuntimePath,
+          namespace,
+          source: SIDECAR_SOURCES.PACKAGED,
+        },
+        {
+          readUpdateInstallMode: async () => mode,
+          extractLauncherPayloadArchive: async ({ destinationRoot }) => {
+            extractCount += 1;
+            await mkdir(join(destinationRoot, "payload", "resources", "open-design"), { recursive: true });
+            await writeFile(join(destinationRoot, "payload", "Open Design Beta.exe"), "");
+            await writeFile(
+              join(destinationRoot, "manifest.json"),
+              `${JSON.stringify({
+                channel: "beta",
+                entry: { cwd: "payload", executable: "payload/Open Design Beta.exe" },
+                namespace,
+                payloadRoot: "payload",
+                platform: "win32",
+                schemaVersion: LAUNCHER_SCHEMA_VERSION,
+                version: "1.0.0-beta.2",
+              })}\n`,
+            );
+            await writeFile(
+              join(destinationRoot, "payload", "resources", "open-design-config.json"),
+              "{}\n",
+            );
+          },
+          launchAppAfterQuit: async (input) => {
+            payloadLaunches.push({ launchPath: input.launchPath, root: input.root });
+            return {};
+          },
+          launchInstallerAfterQuit: async (input) => {
+            installerLaunches.push({ installerPath: input.installerPath, root: input.root });
+            return "";
+          },
+          processPid: 4242,
+        },
+      );
+
+      const checked = await updater.checkForUpdates();
+      expect(checked.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
+      expect(checked.artifact?.type).toBe("installer");
+
+      mode = "automatic";
+      const installed = await updater.installUpdate();
+
+      expect(installed.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
+      expect(installed.artifact?.type).toBe("payload");
+      expect(installed.capabilities.canApplyInPlace).toBe(true);
+      expect(installed.capabilities.requiresManualInstall).toBe(false);
+      expect(installed.installResult?.path).toBeDefined();
+      expect(payloadLaunches).toHaveLength(1);
+      expect(installerLaunches).toEqual([]);
+      expect(extractCount).toBe(1);
+    } finally {
+      await fixture.close();
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
 });

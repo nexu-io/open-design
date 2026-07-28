@@ -2956,18 +2956,40 @@ export function createDesktopUpdater(
     return { ...result, launchPath };
   }
 
-  async function reconcileManualModeBeforePayloadInstall(): Promise<DesktopUpdateStatusSnapshot | null> {
-    if (activeRelease?.ref.artifact.type !== "payload") return null;
+  async function reconcileInstallModeBeforeInstall(): Promise<DesktopUpdateStatusSnapshot | null> {
+    if (activeRelease == null) return null;
+    const activeIsPayload = activeRelease.ref.artifact.type === "payload";
     const pref = await currentUpdateInstallMode();
-    if (pref !== "manual") return null;
+    const wantsManual = pref === "manual";
+    // Proceed only when the current preference disagrees with the artifact
+    // type of the already-downloaded activeRelease. wantsManual === activeIsPayload
+    // marks exactly the two mismatch cases:
+    //   wantsManual=true,  activeIsPayload=true  -> Automatic->Manual (existing case)
+    //   wantsManual=false, activeIsPayload=false -> Manual->Automatic (new case)
+    if (wantsManual !== activeIsPayload) return null;
+
+    if (!wantsManual) {
+      // Automatic direction: only worth reconciling if a payload candidate is
+      // actually reachable (hasValidLauncherPayloadContext is a filesystem-only
+      // check, no network — cheap even when it's a no-op). Without a valid
+      // launcher context, automatic mode legitimately falls back to the
+      // installer/DMG that's already active; there's nothing to reconcile, and
+      // forcing a network reselect here would turn an offline automatic-mode
+      // install into a hard "metadata-unreachable" error, which is a regression.
+      const canUsePayload = await hasValidLauncherPayloadContext(config);
+      if (!canUsePayload) return null;
+    }
 
     logUpdateEvent("install-reselect-manual-artifact", {
       key: activeRelease.ref.key,
       version: activeRelease.ref.version,
+      wantsManual,
     });
     const reselected = await checkForCandidate({ autoDownload: true });
-    if (reselected.state === DESKTOP_UPDATE_STATES.DOWNLOADED && reselected.artifact?.type !== "payload") {
-      return reselected.installResult == null ? null : reselected;
+    if (reselected.installResult != null) return reselected;
+    const reselectedIsPayload = reselected.artifact?.type === "payload";
+    if (reselected.state === DESKTOP_UPDATE_STATES.DOWNLOADED && reselectedIsPayload !== wantsManual) {
+      return null;
     }
     return reselected;
   }
@@ -2985,7 +3007,7 @@ export function createDesktopUpdater(
         return setState(DESKTOP_UPDATE_STATES.ERROR, createError("update-not-downloaded", "no downloaded update package is available"));
       }
     }
-    const reconciledManualMode = await reconcileManualModeBeforePayloadInstall();
+    const reconciledManualMode = await reconcileInstallModeBeforeInstall();
     if (reconciledManualMode != null) return reconciledManualMode;
     const opened = await openStore();
     if (!opened.ok) return opened.status;
