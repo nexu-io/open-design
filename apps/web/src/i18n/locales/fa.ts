@@ -84,8 +84,6 @@ export const fa: Dict = {
   'chat.amrBalanceGate.signedOutMessage': 'شما از ایجنت Open Design Cloud استفاده می‌کنید — وارد شوید تا این وظیفه بلافاصله شروع شود.',
   'chat.amrBalanceGate.signInCta': 'ورود',
   'chat.amrBalanceGate.watchingWallet': 'به‌محض به‌روزرسانی موجودی، به‌طور خودکار ادامه می‌دهیم.',
-  'chat.amrScopeGate.signedOutMessage': 'به Open Design Cloud وارد نشده‌اید، بنابراین فضای کاری‌ای برای اجرای این پروژه وجود ندارد.',
-  'chat.amrScopeGate.unresolvedMessage': 'نتوانستیم تأیید کنیم این پروژه در کدام فضای کاری اجرا می‌شود، بنابراین کارهای Open Design Cloud متوقف شده است.',
   'chat.amrLowBalance.title': 'اعتبار رو به اتمام است',
   'chat.amrLowBalance.message': 'فقط {balance} باقی مانده است — احتمالاً برای اتمام این وظیفه کافی نیست. ابتدا شارژ کنید یا طرح خود را ارتقا دهید.',
   'chat.amrLowBalance.rechargeCta': 'شارژ کنید',

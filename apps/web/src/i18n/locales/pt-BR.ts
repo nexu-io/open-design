@@ -84,8 +84,6 @@ export const ptBR: Dict = {
   'chat.amrBalanceGate.signedOutMessage': 'Você está usando o agente Open Design Cloud — entre e esta tarefa pode começar na hora.',
   'chat.amrBalanceGate.signInCta': 'Entrar',
   'chat.amrBalanceGate.watchingWallet': 'Continuaremos automaticamente assim que seu saldo for atualizado.',
-  'chat.amrScopeGate.signedOutMessage': 'Você não está conectado ao Open Design Cloud, então este projeto não tem um espaço de trabalho para ser executado.',
-  'chat.amrScopeGate.unresolvedMessage': 'Não foi possível confirmar em qual espaço de trabalho este projeto é executado, então as tarefas do Open Design Cloud estão pausadas.',
   'chat.amrLowBalance.title': 'Créditos acabando',
   'chat.amrLowBalance.message': 'Restam apenas {balance} — provavelmente não é o bastante para concluir esta tarefa. Recarregue ou faça upgrade antes.',
   'chat.amrLowBalance.rechargeCta': 'Recarregar',

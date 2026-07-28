@@ -85,7 +85,6 @@ describe('useProjectWorkspaceScope', () => {
         loading: false,
         scope: null,
         failure: 'unsupported',
-        revalidate: expect.any(Function),
       });
     });
     oldDaemon.unmount();
@@ -98,7 +97,6 @@ describe('useProjectWorkspaceScope', () => {
         loading: false,
         scope: null,
         failure: 'forbidden',
-        revalidate: expect.any(Function),
       });
     });
     revoked.unmount();
@@ -111,7 +109,6 @@ describe('useProjectWorkspaceScope', () => {
         loading: false,
         scope: null,
         failure: 'unavailable',
-        revalidate: expect.any(Function),
       });
     });
     outage.unmount();
@@ -206,11 +203,7 @@ describe('useProjectWorkspaceScope', () => {
     });
 
     hook.rerender({ projectId: 'project-b' });
-    expect(hook.result.current).toEqual({
-      loading: true,
-      scope: null,
-      revalidate: expect.any(Function),
-    });
+    expect(hook.result.current).toEqual({ loading: true, scope: null });
   });
 
   it('revalidates the same project when the signed-in workspace member changes', async () => {
@@ -236,11 +229,7 @@ describe('useProjectWorkspaceScope', () => {
     act(() => {
       window.dispatchEvent(new Event(WORKSPACE_CONTEXT_REFRESH_EVENT));
     });
-    expect(hook.result.current).toEqual({
-      loading: true,
-      scope: null,
-      revalidate: expect.any(Function),
-    });
+    expect(hook.result.current).toEqual({ loading: true, scope: null });
 
     await act(async () => {
       memberNew.resolve(new Response(

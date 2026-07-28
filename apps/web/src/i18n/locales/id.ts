@@ -84,8 +84,6 @@ export const id: Dict = {
   'chat.amrBalanceGate.signedOutMessage': 'Anda menggunakan agen Open Design Cloud — masuk dan tugas ini bisa langsung dimulai.',
   'chat.amrBalanceGate.signInCta': 'Masuk',
   'chat.amrBalanceGate.watchingWallet': 'Kami akan melanjutkan otomatis begitu saldo Anda diperbarui.',
-  'chat.amrScopeGate.signedOutMessage': 'Anda belum masuk ke Open Design Cloud, jadi proyek ini tidak punya ruang kerja untuk dijalankan.',
-  'chat.amrScopeGate.unresolvedMessage': 'Kami tidak dapat memastikan ruang kerja tempat proyek ini dijalankan, jadi tugas Open Design Cloud dijeda.',
   'chat.amrLowBalance.title': 'Kredit hampir habis',
   'chat.amrLowBalance.message': 'Hanya tersisa {balance} — kemungkinan tidak cukup untuk menyelesaikan tugas ini. Isi ulang atau tingkatkan paket dulu.',
   'chat.amrLowBalance.rechargeCta': 'Isi ulang',

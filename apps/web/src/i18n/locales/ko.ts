@@ -84,8 +84,6 @@ export const ko: Dict = {
   'chat.amrBalanceGate.signedOutMessage': 'Open Design Cloud 에이전트를 사용 중입니다. 로그인하면 이 작업을 바로 시작할 수 있습니다.',
   'chat.amrBalanceGate.signInCta': '로그인',
   'chat.amrBalanceGate.watchingWallet': '잔액이 반영되면 자동으로 계속됩니다.',
-  'chat.amrScopeGate.signedOutMessage': 'Open Design Cloud에 로그인되어 있지 않아 이 프로젝트를 실행할 워크스페이스가 없습니다.',
-  'chat.amrScopeGate.unresolvedMessage': '이 프로젝트가 어느 워크스페이스에서 실행되는지 확인할 수 없어 Open Design Cloud 작업이 일시 중지되었습니다.',
   'chat.amrLowBalance.title': '크레딧이 얼마 남지 않았습니다',
   'chat.amrLowBalance.message': '잔액이 {balance}만 남아 이 작업을 끝내기에 부족할 수 있습니다. 먼저 충전하거나 요금제를 업그레이드하세요.',
   'chat.amrLowBalance.rechargeCta': '충전하기',

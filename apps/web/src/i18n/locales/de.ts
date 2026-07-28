@@ -84,8 +84,6 @@ export const de: Dict = {
   'chat.amrBalanceGate.signedOutMessage': 'Du verwendest den Open Design Cloud-Agenten — melde dich an und diese Aufgabe kann sofort starten.',
   'chat.amrBalanceGate.signInCta': 'Anmelden',
   'chat.amrBalanceGate.watchingWallet': 'Sobald dein Guthaben aktualisiert ist, geht es automatisch weiter.',
-  'chat.amrScopeGate.signedOutMessage': 'Du bist nicht bei Open Design Cloud angemeldet, daher gibt es für dieses Projekt keinen Workspace zum Ausführen.',
-  'chat.amrScopeGate.unresolvedMessage': 'Wir konnten nicht bestätigen, in welchem Workspace dieses Projekt läuft — Open Design Cloud-Aufgaben sind pausiert.',
   'chat.amrLowBalance.title': 'Guthaben wird knapp',
   'chat.amrLowBalance.message': 'Nur noch {balance} übrig — vermutlich nicht genug für diese Aufgabe. Lade vorher auf oder upgrade deinen Plan.',
   'chat.amrLowBalance.rechargeCta': 'Aufladen',

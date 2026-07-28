@@ -87,8 +87,6 @@ export const zhCN: Dict = {
   "chat.amrBalanceGate.signedOutMessage": "当前使用的是 Open Design Cloud 智能体，登录后这个任务马上就能开始。",
   "chat.amrBalanceGate.signInCta": "立即登录",
   "chat.amrBalanceGate.watchingWallet": "额度更新后将自动继续。",
-  "chat.amrScopeGate.signedOutMessage": "Open Design Cloud 尚未登录，这个项目暂时没有可用的工作区，任务无法开始。",
-  "chat.amrScopeGate.unresolvedMessage": "暂时无法确认这个项目归属哪个工作区，Open Design Cloud 任务已暂停。",
   "chat.amrLowBalance.title": "额度不多了",
   "chat.amrLowBalance.message": "额度仅剩 {balance}，可能不够完成这个任务，建议先充值或升级套餐。",
   "chat.amrLowBalance.rechargeCta": "去充值",

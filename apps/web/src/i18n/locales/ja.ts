@@ -84,8 +84,6 @@ export const ja: Dict = {
   'chat.amrBalanceGate.signedOutMessage': 'Open Design Cloud エージェントを使用中です。サインインすれば、このタスクをすぐに開始できます。',
   'chat.amrBalanceGate.signInCta': 'サインイン',
   'chat.amrBalanceGate.watchingWallet': '残高が反映されると自動的に続行します。',
-  'chat.amrScopeGate.signedOutMessage': 'Open Design Cloud にサインインしていないため、このプロジェクトを実行するワークスペースがありません。',
-  'chat.amrScopeGate.unresolvedMessage': 'このプロジェクトがどのワークスペースで実行されるか確認できないため、Open Design Cloud のタスクを一時停止しています。',
   'chat.amrLowBalance.title': 'クレジット残量が少なくなっています',
   'chat.amrLowBalance.message': '残高はあと {balance} です。このタスクを最後まで実行できない可能性があります。先にチャージまたはプランのアップグレードをおすすめします。',
   'chat.amrLowBalance.rechargeCta': 'チャージする',

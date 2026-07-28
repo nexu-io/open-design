@@ -84,8 +84,6 @@ export const uk: Dict = {
   'chat.amrBalanceGate.signedOutMessage': 'Ви використовуєте агент Open Design Cloud — увійдіть, і це завдання одразу запуститься.',
   'chat.amrBalanceGate.signInCta': 'Увійти',
   'chat.amrBalanceGate.watchingWallet': 'Продовжимо автоматично, щойно баланс оновиться.',
-  'chat.amrScopeGate.signedOutMessage': 'Ви не увійшли в Open Design Cloud, тож для цього проєкту немає робочого простору для запуску.',
-  'chat.amrScopeGate.unresolvedMessage': 'Не вдалося визначити, у якому робочому просторі виконується цей проєкт, тому завдання Open Design Cloud призупинено.',
   'chat.amrLowBalance.title': 'Кредити закінчуються',
   'chat.amrLowBalance.message': 'Залишилося лише {balance} — ймовірно, не вистачить, щоб завершити завдання. Спершу поповніть баланс або покращте тариф.',
   'chat.amrLowBalance.rechargeCta': 'Поповнити',

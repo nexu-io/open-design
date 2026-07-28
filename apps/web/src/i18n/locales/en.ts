@@ -84,8 +84,6 @@ export const en: Dict = {
   'chat.amrBalanceGate.signedOutMessage': 'You\'re using the Open Design Cloud agent — sign in and this task can start right away.',
   'chat.amrBalanceGate.signInCta': 'Sign in',
   'chat.amrBalanceGate.watchingWallet': 'We\'ll continue automatically once your allowance updates.',
-  'chat.amrScopeGate.signedOutMessage': 'Open Design Cloud isn\'t signed in, so this project has no workspace to run under.',
-  'chat.amrScopeGate.unresolvedMessage': 'We couldn\'t confirm which workspace this project runs under, so Open Design Cloud tasks are paused.',
   'chat.amrLowBalance.title': 'Running low on allowance',
   'chat.amrLowBalance.message': 'Only {balance} of allowance remains — likely not enough to finish this task. Top up or upgrade your plan first.',
   'chat.amrLowBalance.rechargeCta': 'Top up',

@@ -84,8 +84,6 @@ export const tr: Dict = {
   'chat.amrBalanceGate.signedOutMessage': 'Open Design Cloud ajanını kullanıyorsunuz — oturum açın, bu görev hemen başlayabilir.',
   'chat.amrBalanceGate.signInCta': 'Oturum aç',
   'chat.amrBalanceGate.watchingWallet': 'Bakiyeniz güncellenince otomatik olarak devam edeceğiz.',
-  'chat.amrScopeGate.signedOutMessage': 'Open Design Cloud\'da oturum açmadınız, bu nedenle bu projenin çalışacağı bir çalışma alanı yok.',
-  'chat.amrScopeGate.unresolvedMessage': 'Bu projenin hangi çalışma alanında çalıştığı doğrulanamadı, bu yüzden Open Design Cloud görevleri duraklatıldı.',
   'chat.amrLowBalance.title': 'Krediniz azalıyor',
   'chat.amrLowBalance.message': 'Yalnızca {balance} kaldı — bu görevi bitirmeye yetmeyebilir. Önce bakiye yükleyin veya planınızı yükseltin.',
   'chat.amrLowBalance.rechargeCta': 'Bakiye yükle',

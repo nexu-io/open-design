@@ -84,8 +84,6 @@ export const ar: Dict = {
   'chat.amrBalanceGate.signedOutMessage': 'أنت تستخدم وكيل Open Design Cloud — سجّل الدخول وستبدأ هذه المهمة فورًا.',
   'chat.amrBalanceGate.signInCta': 'تسجيل الدخول',
   'chat.amrBalanceGate.watchingWallet': 'سنتابع تلقائيًا فور تحديث رصيدك.',
-  'chat.amrScopeGate.signedOutMessage': 'لم يتم تسجيل الدخول إلى Open Design Cloud، لذا لا توجد مساحة عمل لتشغيل هذا المشروع.',
-  'chat.amrScopeGate.unresolvedMessage': 'لم نتمكن من تأكيد مساحة العمل التي يعمل فيها هذا المشروع، لذا تم إيقاف مهام Open Design Cloud مؤقتًا.',
   'chat.amrLowBalance.title': 'رصيدك على وشك النفاد',
   'chat.amrLowBalance.message': 'لم يتبقَّ سوى {balance} — قد لا يكفي لإتمام هذه المهمة. اشحن أو قم بترقية باقتك أولًا.',
   'chat.amrLowBalance.rechargeCta': 'اشحن الرصيد',

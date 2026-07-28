@@ -84,8 +84,6 @@ export const th: Dict = {
   'chat.amrBalanceGate.signedOutMessage': 'คุณกำลังใช้เอเจนต์ Open Design Cloud — ลงชื่อเข้าใช้แล้วงานนี้จะเริ่มได้ทันที',
   'chat.amrBalanceGate.signInCta': 'ลงชื่อเข้าใช้',
   'chat.amrBalanceGate.watchingWallet': 'เมื่อยอดเงินอัปเดตแล้วจะดำเนินการต่อโดยอัตโนมัติ',
-  'chat.amrScopeGate.signedOutMessage': 'ยังไม่ได้ลงชื่อเข้าใช้ Open Design Cloud จึงไม่มีพื้นที่ทำงานสำหรับรันโปรเจกต์นี้',
-  'chat.amrScopeGate.unresolvedMessage': 'ไม่สามารถยืนยันได้ว่าโปรเจกต์นี้รันอยู่ในพื้นที่ทำงานใด งาน Open Design Cloud จึงถูกหยุดไว้',
   'chat.amrLowBalance.title': 'เครดิตใกล้หมดแล้ว',
   'chat.amrLowBalance.message': 'เหลือเพียง {balance} อาจไม่พอสำหรับงานนี้ แนะนำให้เติมเงินหรืออัปเกรดแพ็กเกจก่อน',
   'chat.amrLowBalance.rechargeCta': 'เติมเงิน',

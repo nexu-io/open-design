@@ -124,7 +124,6 @@ import {
   isAmrBalanceGateScope,
   type AmrBalanceGateScope,
 } from '../runtime/amr-balance-gate';
-import { amrWorkspaceScopeBlock } from '../runtime/amr-workspace-scope-gate';
 import { isPaidAmrPlan, resolveAmrPlan } from '../runtime/amr-low-balance-plan';
 import { AmrBalanceDialog } from './AmrBalanceDialog';
 import { AmrLowBalanceDialog, type AmrLowBalanceDecision } from './AmrLowBalanceDialog';
@@ -1548,15 +1547,6 @@ export function ProjectView({
   const projectRunWorkspaceScopeReady =
     !projectRunRequiresWorkspaceScope ||
     projectWorkspaceScopeAuthorizesAmr(projectWorkspaceScopeState.scope);
-  // Holding the send closed above is deliberate; holding it closed silently is
-  // not. This classifies the block so the composer can name the reason and offer
-  // the remedy that clears it. It never feeds back into
-  // `projectRunWorkspaceScopeReady` — the gate stays exactly as strict.
-  const projectRunAmrScopeBlock = amrWorkspaceScopeBlock({
-    requiresWorkspaceScope: projectRunRequiresWorkspaceScope,
-    projectScope: projectWorkspaceScopeState,
-    workspaceIdentity: workspaceContextState,
-  });
   // Onboarding first-generation funnel (spec §11.1). Consume the pending entry
   // (set by the Home recommendation) exactly once on mount; the refs guard the
   // two lifecycle events so each fires only for the genuine first send / first
@@ -9179,13 +9169,6 @@ export function ProjectView({
               // A read-only viewer of a team-shared project cannot drive artifact
               // changes through chat (comments go through the separate overlay).
               sendDisabled={currentConversationSendDisabled || projectCollab.viewerOnly}
-              // Reason + remedy for a send the AMR workspace-scope gate closed.
-              // Suppressed for a read-only viewer: their composer is disabled by
-              // ownership, and an Open Design Cloud sign-in would not change that.
-              amrScopeBlock={
-                projectCollab.viewerOnly ? null : projectRunAmrScopeBlock
-              }
-              onRetryWorkspaceScope={projectWorkspaceScopeState.revalidate}
               viewerOnly={projectCollab.viewerOnly}
               composerPlaceholder={
                 projectCollab.viewerOnly

@@ -69,8 +69,6 @@ import {
 import nextStepStyles from './NextStepActions.module.css';
 import { AmrGuidance } from './AmrGuidance';
 import { AmrLoginPill } from './AmrLoginPill';
-import { AmrScopeBlockedNotice } from './AmrScopeBlockedNotice';
-import type { AmrWorkspaceScopeBlock } from '../runtime/amr-workspace-scope-gate';
 import {
   AMR_LOGIN_STATUS_EVENT,
   amrLoginStatusEventReason,
@@ -509,13 +507,6 @@ interface Props {
   hasActiveDesignSystem?: boolean;
   activeDesignSystem?: DesignSystemSummary | null;
   sendDisabled?: boolean;
-  // Why an Open Design Cloud send is held closed, when that is what disabled it.
-  // Non-null renders the composer-adjacent reason + remedy (see
-  // AmrScopeBlockedNotice); it never affects `sendDisabled` itself, which stays
-  // ProjectView's decision.
-  amrScopeBlock?: AmrWorkspaceScopeBlock | null;
-  /** Re-read the project's workspace authority — the `unresolved` remedy. */
-  onRetryWorkspaceScope?: () => void;
   // Read-only viewer of a team-shared project. Beyond `sendDisabled` (which only
   // blocks the send action), this also disables the composer input itself and
   // hides the empty-state starter cards, since a member cannot start a
@@ -836,8 +827,6 @@ export function ChatPane({
   streaming,
   loading = false,
   sendDisabled = false,
-  amrScopeBlock = null,
-  onRetryWorkspaceScope,
   viewerOnly = false,
   queuedItems = [],
   error,
@@ -2292,23 +2281,6 @@ export function ChatPane({
     />
     </>
   );
-  // The blocked-send reason travels WITH the composer rather than sitting beside
-  // it in the slot: the composer is portaled into a fixed layer whenever the
-  // workspace pane owns the bottom of the screen, and a sibling left behind in
-  // the slot would be stranded under that layer.
-  const composerWithGateNotice = amrScopeBlock ? (
-    <>
-      <AmrScopeBlockedNotice
-        block={amrScopeBlock}
-        metricsConsent={config?.telemetry?.metrics === true}
-        installationId={config?.installationId}
-        onRetryWorkspaceScope={onRetryWorkspaceScope}
-      />
-      {composerNode}
-    </>
-  ) : (
-    composerNode
-  );
   const shouldPortalComposer =
     tab === 'chat'
     && composerPortalTarget !== null
@@ -2912,7 +2884,7 @@ export function ChatPane({
             style={composerSlotStyle}
             aria-hidden={shouldPortalComposer ? true : undefined}
           >
-            {shouldPortalComposer ? null : composerWithGateNotice}
+            {shouldPortalComposer ? null : composerNode}
           </div>
           {shouldPortalComposer && composerPortalTarget && composerPortalRect
             ? createPortal(
@@ -2925,7 +2897,7 @@ export function ChatPane({
                     width: composerPortalRect.width,
                   }}
                 >
-                  {composerWithGateNotice}
+                  {composerNode}
                 </div>,
                 composerPortalTarget,
               )

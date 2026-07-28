@@ -84,8 +84,6 @@ export const hu: Dict = {
   'chat.amrBalanceGate.signedOutMessage': 'Az Open Design Cloud agentet használod — jelentkezz be, és ez a feladat azonnal indulhat.',
   'chat.amrBalanceGate.signInCta': 'Bejelentkezés',
   'chat.amrBalanceGate.watchingWallet': 'Az egyenleg frissülése után automatikusan folytatjuk.',
-  'chat.amrScopeGate.signedOutMessage': 'Nem vagy bejelentkezve az Open Design Cloudba, így ennek a projektnek nincs munkaterülete a futtatáshoz.',
-  'chat.amrScopeGate.unresolvedMessage': 'Nem sikerült megállapítani, melyik munkaterületen fut ez a projekt, ezért az Open Design Cloud feladatok szünetelnek.',
   'chat.amrLowBalance.title': 'Fogytán a kereted',
   'chat.amrLowBalance.message': 'Már csak {balance} maradt — valószínűleg nem elég a feladat befejezéséhez. Előbb tölts fel vagy válts csomagot.',
   'chat.amrLowBalance.rechargeCta': 'Feltöltés',

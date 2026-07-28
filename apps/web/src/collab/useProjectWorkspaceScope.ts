@@ -17,13 +17,6 @@ export interface ProjectWorkspaceScopeState {
   loading: boolean;
   scope: ProjectWorkspaceScope | null;
   failure?: 'unsupported' | 'forbidden' | 'unavailable';
-  /**
-   * Force a fresh read of this project's scope — the same revalidation an
-   * identity change / reconnect / `pageshow` triggers, exposed so a UI that has
-   * to tell the user "we could not resolve this" can also offer them the retry.
-   * Optional so fixtures can describe a state without owning the read.
-   */
-  revalidate?: () => void;
 }
 
 export function projectWorkspaceContext(
@@ -224,12 +217,11 @@ export function useProjectWorkspaceScope(projectId: string): ProjectWorkspaceSco
     state.resolvedRevision !== refreshRevision ||
     (state.scope !== null && state.scope.projectId !== projectId)
   ) {
-    return { loading: true, scope: null, revalidate };
+    return { loading: true, scope: null };
   }
   return {
     loading: state.loading,
     scope: state.scope,
-    revalidate,
     ...(state.failure ? { failure: state.failure } : {}),
   };
 }
