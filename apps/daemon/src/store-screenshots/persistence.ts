@@ -1,4 +1,5 @@
 import type Database from 'better-sqlite3';
+import { createHash } from 'node:crypto';
 import {
   StoreScreenshotChangeSetSchema,
   StoreScreenshotDocumentSchema,
@@ -62,6 +63,210 @@ export interface StoreScreenshotPersistenceOptions {
 
 const DOCUMENT_PATH = 'store-screenshots/document.json';
 const VERSION_PATH_PREFIX = 'store-screenshots/versions';
+const DATABASE_CANONICAL_WRITE_TAILS = new WeakMap<
+  Database.Database,
+  Map<string, Promise<void>>
+>();
+
+async function withCanonicalWriteLock<T>(
+  db: Database.Database,
+  projectId: string,
+  operation: () => Promise<T>,
+): Promise<T> {
+  let projectTails = DATABASE_CANONICAL_WRITE_TAILS.get(db);
+  if (!projectTails) {
+    projectTails = new Map<string, Promise<void>>();
+    DATABASE_CANONICAL_WRITE_TAILS.set(db, projectTails);
+  }
+  const previous = projectTails.get(projectId) ?? Promise.resolve();
+  let release = (): void => {};
+  const current = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const tail = previous.then(() => current, () => current);
+  projectTails.set(projectId, tail);
+  await previous.catch(() => undefined);
+  try {
+    return await operation();
+  } finally {
+    release();
+    if (projectTails.get(projectId) === tail) {
+      projectTails.delete(projectId);
+    }
+  }
+}
+
+type ForeignKeyRow = {
+  id: number;
+  seq: number;
+  table: string;
+  from: string;
+  to: string;
+  on_delete: string;
+};
+
+function foreignKeys(db: Database.Database, table: string): ForeignKeyRow[] {
+  return db.prepare(`PRAGMA foreign_key_list(${table})`).all() as ForeignKeyRow[];
+}
+
+function hasDocumentForeignKey(
+  db: Database.Database,
+  table: 'store_screenshot_versions' | 'store_screenshot_assets',
+): boolean {
+  return foreignKeys(db, table).some((foreignKey) => (
+    foreignKey.table === 'store_screenshot_documents'
+    && foreignKey.from === 'document_id'
+    && foreignKey.to === 'document_id'
+    && foreignKey.on_delete.toUpperCase() === 'CASCADE'
+  ));
+}
+
+function hasJobDocumentPairForeignKey(db: Database.Database): boolean {
+  const pairs = foreignKeys(db, 'store_screenshot_jobs').filter((foreignKey) => (
+    foreignKey.table === 'store_screenshot_documents'
+    && foreignKey.on_delete.toUpperCase() === 'CASCADE'
+  ));
+  return (
+    pairs.length === 2
+    && pairs[0]?.id === pairs[1]?.id
+    && pairs.some((foreignKey) => (
+      foreignKey.from === 'project_id' && foreignKey.to === 'project_id'
+    ))
+    && pairs.some((foreignKey) => (
+      foreignKey.from === 'document_id' && foreignKey.to === 'document_id'
+    ))
+  );
+}
+
+function upgradeLegacyStoreScreenshotChildTables(db: Database.Database): void {
+  if (!hasDocumentForeignKey(db, 'store_screenshot_versions')) {
+    db.transaction(() => {
+      db.exec(`
+        DROP TABLE IF EXISTS store_screenshot_versions_next;
+        CREATE TABLE store_screenshot_versions_next (
+          document_id TEXT NOT NULL,
+          version INTEGER NOT NULL,
+          source TEXT NOT NULL,
+          changeset_json TEXT,
+          relative_path TEXT NOT NULL,
+          created_at INTEGER NOT NULL,
+          PRIMARY KEY (document_id, version),
+          FOREIGN KEY(document_id)
+            REFERENCES store_screenshot_documents(document_id)
+            ON DELETE CASCADE
+        );
+        INSERT INTO store_screenshot_versions_next
+          (document_id, version, source, changeset_json, relative_path, created_at)
+        SELECT
+          version.document_id,
+          version.version,
+          version.source,
+          version.changeset_json,
+          version.relative_path,
+          version.created_at
+        FROM store_screenshot_versions AS version
+        INNER JOIN store_screenshot_documents AS document
+          ON document.document_id = version.document_id;
+        DROP TABLE store_screenshot_versions;
+        ALTER TABLE store_screenshot_versions_next
+          RENAME TO store_screenshot_versions;
+      `);
+    })();
+  }
+
+  if (!hasDocumentForeignKey(db, 'store_screenshot_assets')) {
+    db.transaction(() => {
+      db.exec(`
+        DROP TABLE IF EXISTS store_screenshot_assets_next;
+        CREATE TABLE store_screenshot_assets_next (
+          id TEXT PRIMARY KEY,
+          document_id TEXT NOT NULL,
+          relative_path TEXT NOT NULL,
+          mime TEXT NOT NULL,
+          width INTEGER NOT NULL,
+          height INTEGER NOT NULL,
+          content_hash TEXT NOT NULL,
+          created_at INTEGER NOT NULL,
+          UNIQUE (document_id, content_hash),
+          FOREIGN KEY(document_id)
+            REFERENCES store_screenshot_documents(document_id)
+            ON DELETE CASCADE
+        );
+        INSERT INTO store_screenshot_assets_next
+          (id, document_id, relative_path, mime, width, height, content_hash, created_at)
+        SELECT
+          asset.id,
+          asset.document_id,
+          asset.relative_path,
+          asset.mime,
+          asset.width,
+          asset.height,
+          asset.content_hash,
+          asset.created_at
+        FROM store_screenshot_assets AS asset
+        INNER JOIN store_screenshot_documents AS document
+          ON document.document_id = asset.document_id
+        WHERE asset.rowid = (
+          SELECT MIN(candidate.rowid)
+          FROM store_screenshot_assets AS candidate
+          WHERE candidate.document_id = asset.document_id
+            AND candidate.content_hash = asset.content_hash
+        );
+        DROP TABLE store_screenshot_assets;
+        ALTER TABLE store_screenshot_assets_next
+          RENAME TO store_screenshot_assets;
+      `);
+    })();
+  }
+
+  if (!hasJobDocumentPairForeignKey(db)) {
+    db.transaction(() => {
+      db.exec(`
+        DROP TABLE IF EXISTS store_screenshot_jobs_next;
+        CREATE TABLE store_screenshot_jobs_next (
+          id TEXT PRIMARY KEY,
+          project_id TEXT NOT NULL,
+          document_id TEXT NOT NULL,
+          type TEXT NOT NULL,
+          status TEXT NOT NULL,
+          progress_json TEXT NOT NULL,
+          result_json TEXT,
+          error_json TEXT,
+          created_at INTEGER NOT NULL,
+          started_at INTEGER,
+          ended_at INTEGER,
+          updated_at INTEGER NOT NULL,
+          FOREIGN KEY(project_id, document_id)
+            REFERENCES store_screenshot_documents(project_id, document_id)
+            ON DELETE CASCADE
+        );
+        INSERT INTO store_screenshot_jobs_next
+          (id, project_id, document_id, type, status, progress_json,
+           result_json, error_json, created_at, started_at, ended_at, updated_at)
+        SELECT
+          job.id,
+          job.project_id,
+          job.document_id,
+          job.type,
+          job.status,
+          job.progress_json,
+          job.result_json,
+          job.error_json,
+          job.created_at,
+          job.started_at,
+          job.ended_at,
+          job.updated_at
+        FROM store_screenshot_jobs AS job
+        INNER JOIN store_screenshot_documents AS document
+          ON document.project_id = job.project_id
+         AND document.document_id = job.document_id;
+        DROP TABLE store_screenshot_jobs;
+        ALTER TABLE store_screenshot_jobs_next
+          RENAME TO store_screenshot_jobs;
+      `);
+    })();
+  }
+}
 
 export function migrateStoreScreenshots(db: Database.Database): void {
   db.exec(`
@@ -71,8 +276,13 @@ export function migrateStoreScreenshots(db: Database.Database): void {
       current_version INTEGER NOT NULL,
       relative_path TEXT NOT NULL,
       created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL
+      updated_at INTEGER NOT NULL,
+      UNIQUE (project_id, document_id)
     );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_store_screenshot_documents_document_id
+      ON store_screenshot_documents(document_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_store_screenshot_documents_project_document
+      ON store_screenshot_documents(project_id, document_id);
 
     CREATE TABLE IF NOT EXISTS store_screenshot_versions (
       document_id TEXT NOT NULL,
@@ -81,7 +291,10 @@ export function migrateStoreScreenshots(db: Database.Database): void {
       changeset_json TEXT,
       relative_path TEXT NOT NULL,
       created_at INTEGER NOT NULL,
-      PRIMARY KEY (document_id, version)
+      PRIMARY KEY (document_id, version),
+      FOREIGN KEY(document_id)
+        REFERENCES store_screenshot_documents(document_id)
+        ON DELETE CASCADE
     );
 
     CREATE TABLE IF NOT EXISTS store_screenshot_assets (
@@ -93,7 +306,10 @@ export function migrateStoreScreenshots(db: Database.Database): void {
       height INTEGER NOT NULL,
       content_hash TEXT NOT NULL,
       created_at INTEGER NOT NULL,
-      UNIQUE (document_id, content_hash)
+      UNIQUE (document_id, content_hash),
+      FOREIGN KEY(document_id)
+        REFERENCES store_screenshot_documents(document_id)
+        ON DELETE CASCADE
     );
 
     CREATE TABLE IF NOT EXISTS store_screenshot_jobs (
@@ -108,9 +324,16 @@ export function migrateStoreScreenshots(db: Database.Database): void {
       created_at INTEGER NOT NULL,
       started_at INTEGER,
       ended_at INTEGER,
-      updated_at INTEGER NOT NULL
+      updated_at INTEGER NOT NULL,
+      FOREIGN KEY(project_id, document_id)
+        REFERENCES store_screenshot_documents(project_id, document_id)
+        ON DELETE CASCADE
     );
+  `);
 
+  upgradeLegacyStoreScreenshotChildTables(db);
+
+  db.exec(`
     CREATE INDEX IF NOT EXISTS idx_store_screenshot_versions_document
       ON store_screenshot_versions(document_id, version DESC);
     CREATE INDEX IF NOT EXISTS idx_store_screenshot_assets_document
@@ -126,29 +349,6 @@ export function createStoreScreenshotPersistence(
   options: StoreScreenshotPersistenceOptions = {},
 ) {
   const now = options.now ?? Date.now;
-  const projectOperationTails = new Map<string, Promise<void>>();
-
-  async function withProjectLock<T>(
-    projectId: string,
-    operation: () => Promise<T>,
-  ): Promise<T> {
-    const previous = projectOperationTails.get(projectId) ?? Promise.resolve();
-    let release = (): void => {};
-    const current = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    const tail = previous.then(() => current, () => current);
-    projectOperationTails.set(projectId, tail);
-    await previous.catch(() => undefined);
-    try {
-      return await operation();
-    } finally {
-      release();
-      if (projectOperationTails.get(projectId) === tail) {
-        projectOperationTails.delete(projectId);
-      }
-    }
-  }
 
   function getDocumentIndex(projectId: string): DocumentIndexRow | null {
     return (db.prepare(`
@@ -175,6 +375,14 @@ export function createStoreScreenshotPersistence(
     return indexed;
   }
 
+  function documentIdExists(documentId: string): boolean {
+    return Boolean(db.prepare(`
+      SELECT 1
+      FROM store_screenshot_documents
+      WHERE document_id = ?
+    `).get(documentId));
+  }
+
   function validateDocument(
     projectId: string,
     document: StoreScreenshotDocument,
@@ -189,18 +397,48 @@ export function createStoreScreenshotPersistence(
     return document;
   }
 
-  async function writeDocumentFiles(
+  async function writeDocumentCandidate(
     projectId: string,
     document: StoreScreenshotDocument,
-  ): Promise<{ documentPath: string; versionPath: string }> {
+  ): Promise<{ body: Buffer; versionPath: string }> {
     const body = Buffer.from(`${JSON.stringify(document, null, 2)}\n`, 'utf8');
-    const versionPath = `${VERSION_PATH_PREFIX}/${document.version}.json`;
-    // The immutable snapshot is written first. If the canonical write fails,
-    // the database still points at the previous version and the orphan
-    // snapshot is harmless; no absolute storage path enters SQLite.
+    const contentHash = createHash('sha256').update(body).digest('hex');
+    const versionPath = `${VERSION_PATH_PREFIX}/${document.version}-${contentHash}.json`;
     await projectStorage.writeFile(projectId, versionPath, body);
-    await projectStorage.writeFile(projectId, DOCUMENT_PATH, body);
-    return { documentPath: DOCUMENT_PATH, versionPath };
+    return { body, versionPath };
+  }
+
+  async function deleteCandidateUnlessIndexed(
+    projectId: string,
+    versionPath: string,
+  ): Promise<void> {
+    const indexed = db.prepare(`
+      SELECT 1 FROM store_screenshot_documents WHERE relative_path = ?
+      UNION ALL
+      SELECT 1 FROM store_screenshot_versions WHERE relative_path = ?
+      LIMIT 1
+    `).get(versionPath, versionPath);
+    if (!indexed) {
+      await projectStorage.deleteFile(projectId, versionPath);
+    }
+  }
+
+  async function writeCanonicalIfCurrent(
+    projectId: string,
+    document: StoreScreenshotDocument,
+    versionPath: string,
+    body: Buffer,
+  ): Promise<void> {
+    await withCanonicalWriteLock(db, projectId, async () => {
+      const current = getDocumentIndex(projectId);
+      if (
+        current?.documentId === document.id
+        && current.currentVersion === document.version
+        && current.relativePath === versionPath
+      ) {
+        await projectStorage.writeFile(projectId, DOCUMENT_PATH, body);
+      }
+    });
   }
 
   async function readIndexedDocument(
@@ -220,7 +458,7 @@ export function createStoreScreenshotPersistence(
     return validateDocument(projectId, candidate as StoreScreenshotDocument);
   }
 
-  const createUnlocked = async (
+  const create = async (
     projectId: string,
     document: StoreScreenshotDocument,
   ): Promise<StoreScreenshotDocument> => {
@@ -231,37 +469,63 @@ export function createStoreScreenshotPersistence(
         'A new store screenshot document must start at version 1',
       );
     }
-    if (getDocumentIndex(projectId)) {
+    if (getDocumentIndex(projectId) || documentIdExists(parsed.id)) {
       throw new StoreScreenshotPersistenceError(
         'DOCUMENT_EXISTS',
         `Store screenshot document already exists for project ${projectId}`,
       );
     }
     const timestamp = now();
-    const paths = await writeDocumentFiles(projectId, parsed);
-    db.transaction(() => {
-      db.prepare(`
-        INSERT INTO store_screenshot_documents
-          (project_id, document_id, current_version, relative_path, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `).run(
-        projectId,
-        parsed.id,
-        parsed.version,
-        paths.documentPath,
-        timestamp,
-        timestamp,
+    const candidate = await writeDocumentCandidate(projectId, parsed);
+    try {
+      db.transaction(() => {
+        db.prepare(`
+          INSERT INTO store_screenshot_documents
+            (project_id, document_id, current_version, relative_path, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `).run(
+          projectId,
+          parsed.id,
+          parsed.version,
+          candidate.versionPath,
+          timestamp,
+          timestamp,
+        );
+        db.prepare(`
+          INSERT INTO store_screenshot_versions
+            (document_id, version, source, changeset_json, relative_path, created_at)
+          VALUES (?, ?, ?, NULL, ?, ?)
+        `).run(
+          parsed.id,
+          parsed.version,
+          'template',
+          candidate.versionPath,
+          timestamp,
+        );
+      })();
+    } catch {
+      await deleteCandidateUnlessIndexed(projectId, candidate.versionPath);
+      if (getDocumentIndex(projectId) || documentIdExists(parsed.id)) {
+        throw new StoreScreenshotPersistenceError(
+          'DOCUMENT_EXISTS',
+          'Store screenshot document already exists',
+        );
+      }
+      throw new StoreScreenshotPersistenceError(
+        'INVALID_DOCUMENT',
+        'Store screenshot document metadata could not be created',
       );
-      db.prepare(`
-        INSERT INTO store_screenshot_versions
-          (document_id, version, source, changeset_json, relative_path, created_at)
-        VALUES (?, ?, ?, NULL, ?, ?)
-      `).run(parsed.id, parsed.version, 'template', paths.versionPath, timestamp);
-    })();
+    }
+    await writeCanonicalIfCurrent(
+      projectId,
+      parsed,
+      candidate.versionPath,
+      candidate.body,
+    );
     return parsed;
   };
 
-  const readUnlocked = async (projectId: string): Promise<StoreScreenshotDocument> => {
+  const read = async (projectId: string): Promise<StoreScreenshotDocument> => {
     const indexed = requireDocumentIndex(projectId);
     const document = await readIndexedDocument(projectId, indexed.relativePath);
     if (
@@ -276,7 +540,7 @@ export function createStoreScreenshotPersistence(
     return document;
   };
 
-  const saveUnlocked = async (
+  const save = async (
     projectId: string,
     document: StoreScreenshotDocument,
     changeSet: StoreScreenshotChangeSet | null,
@@ -312,66 +576,77 @@ export function createStoreScreenshotPersistence(
       );
     }
     const timestamp = now();
-    const paths = await writeDocumentFiles(projectId, parsed);
-    db.transaction(() => {
-      const update = db.prepare(`
-        UPDATE store_screenshot_documents
-        SET current_version = ?, relative_path = ?, updated_at = ?
-        WHERE project_id = ? AND current_version = ?
-      `).run(
-        parsed.version,
-        paths.documentPath,
-        timestamp,
-        projectId,
-        indexed.currentVersion,
-      );
-      if (update.changes !== 1) {
+    const candidate = await writeDocumentCandidate(projectId, parsed);
+    try {
+      db.transaction(() => {
+        const update = db.prepare(`
+          UPDATE store_screenshot_documents
+          SET current_version = ?, relative_path = ?, updated_at = ?
+          WHERE project_id = ? AND document_id = ? AND current_version = ?
+        `).run(
+          parsed.version,
+          candidate.versionPath,
+          timestamp,
+          projectId,
+          parsed.id,
+          indexed.currentVersion,
+        );
+        if (update.changes !== 1) {
+          throw new StoreScreenshotPersistenceError(
+            'VERSION_CONFLICT',
+            'Store screenshot document changed while saving',
+          );
+        }
+        db.prepare(`
+          INSERT INTO store_screenshot_versions
+            (document_id, version, source, changeset_json, relative_path, created_at)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `).run(
+          parsed.id,
+          parsed.version,
+          source,
+          parsedChangeSet === null ? null : JSON.stringify(parsedChangeSet.data),
+          candidate.versionPath,
+          timestamp,
+        );
+      })();
+    } catch (error) {
+      await deleteCandidateUnlessIndexed(projectId, candidate.versionPath);
+      if (error instanceof StoreScreenshotPersistenceError) {
+        throw error;
+      }
+      const current = getDocumentIndex(projectId);
+      if (
+        current?.documentId !== indexed.documentId
+        || current.currentVersion !== indexed.currentVersion
+      ) {
         throw new StoreScreenshotPersistenceError(
           'VERSION_CONFLICT',
           'Store screenshot document changed while saving',
         );
       }
-      db.prepare(`
-        INSERT INTO store_screenshot_versions
-          (document_id, version, source, changeset_json, relative_path, created_at)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `).run(
-        parsed.id,
-        parsed.version,
-        source,
-        parsedChangeSet === null ? null : JSON.stringify(parsedChangeSet.data),
-        paths.versionPath,
-        timestamp,
+      throw new StoreScreenshotPersistenceError(
+        'INVALID_DOCUMENT',
+        'Store screenshot document metadata could not be saved',
       );
-    })();
+    }
+    await writeCanonicalIfCurrent(
+      projectId,
+      parsed,
+      candidate.versionPath,
+      candidate.body,
+    );
     return parsed;
   };
 
   return {
-    create: (
-      projectId: string,
-      document: StoreScreenshotDocument,
-    ): Promise<StoreScreenshotDocument> => withProjectLock(
-      projectId,
-      () => createUnlocked(projectId, document),
-    ),
-    read: (projectId: string): Promise<StoreScreenshotDocument> => withProjectLock(
-      projectId,
-      () => readUnlocked(projectId),
-    ),
-    save: (
-      projectId: string,
-      document: StoreScreenshotDocument,
-      changeSet: StoreScreenshotChangeSet | null,
-      source: StoreScreenshotVersionSource,
-    ): Promise<StoreScreenshotDocument> => withProjectLock(
-      projectId,
-      () => saveUnlocked(projectId, document, changeSet, source),
-    ),
+    create,
+    read,
+    save,
     restore: async (
       projectId: string,
       version: number,
-    ): Promise<StoreScreenshotDocument> => withProjectLock(projectId, async () => {
+    ): Promise<StoreScreenshotDocument> => {
       if (!Number.isInteger(version) || version < 1) {
         throw new StoreScreenshotPersistenceError(
           'VERSION_NOT_FOUND',
@@ -397,16 +672,16 @@ export function createStoreScreenshotPersistence(
         );
       }
       const snapshot = await readIndexedDocument(projectId, target.relativePath);
-      return saveUnlocked(projectId, {
+      return save(projectId, {
         ...snapshot,
         version: indexed.currentVersion + 1,
       }, null, 'restore');
-    }),
-    listVersions: (projectId: string): Promise<Array<{
+    },
+    listVersions: async (projectId: string): Promise<Array<{
       version: number;
       source: StoreScreenshotVersionSource;
       createdAt: number;
-    }>> => withProjectLock(projectId, async () => {
+    }>> => {
       const indexed = requireDocumentIndex(projectId);
       return (db.prepare(`
         SELECT
@@ -425,6 +700,6 @@ export function createStoreScreenshotPersistence(
         source: item.source,
         createdAt: Number(item.createdAt),
       }));
-    }),
+    },
   };
 }
