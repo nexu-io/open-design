@@ -3,7 +3,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { closeDatabase, getProject, openDatabase } from '../../src/db.js';
+import {
+  closeDatabase,
+  getProject,
+  listWorkspaceProjects,
+  openDatabase,
+} from '../../src/db.js';
 import {
   getTeamProjectMaterialization,
   latestTeamProjectMaterializationVersion,
@@ -191,5 +196,54 @@ describe('authorized team mirror SQLite materialization', () => {
     ).toThrow('receipt resource conflict');
 
     expect(getProject(db, input.id)).toBeNull();
+  });
+});
+
+/**
+ * The project card's time. `RecentProjectsStrip` renders one relative time per
+ * card and `GET /api/workspaces/:id/projects` answers it as
+ * `MAX(p.updated_at, wp.updated_at)` (see `normalizeWorkspaceProjectRow`'s
+ * `lastActivityAt` in routes/project/index.ts, and `listWorkspaceProjects`'
+ * own `ORDER BY` in db.ts). So BOTH halves have to answer "when did a person
+ * last change this project's content" — a pull that stamps either one with
+ * `Date.now()` is indistinguishable from a real edit.
+ *
+ * Reported by the owner: a member who opens the client hours later and pulls a
+ * shared project sees 「刚刚更新」 on a project nobody touched. Materialization
+ * already carries the origin's `updatedAt` into `projects`; the
+ * `workspace_projects` binding written in the same transaction did not, and
+ * `MAX` then surfaced the pull's own clock.
+ */
+describe('a team-mirror pull reports the origin content time, not the pull clock', () => {
+  /** What the client renders for this project's card. */
+  function displayedUpdatedAt(db: Awaited<ReturnType<typeof database>>) {
+    const row = listWorkspaceProjects(db, scope.workspaceId).find(
+      (candidate) => candidate.id === input.id,
+    ) as { updatedAt: number; workspaceUpdatedAt: number | null } | undefined;
+    if (!row) throw new Error('project is not listed in the workspace');
+    return Math.max(row.updatedAt, row.workspaceUpdatedAt ?? 0);
+  }
+
+  it('does not advance the card time on a first pull', async () => {
+    const db = await database();
+
+    materializePulledTeamMirror(db, input, scope, receipt());
+
+    expect(getProject(db, input.id)?.updatedAt).toBe(input.updatedAt);
+    expect(displayedUpdatedAt(db)).toBe(input.updatedAt);
+  });
+
+  it('does not advance the card time on a re-pull of an already-bound mirror', async () => {
+    const db = await database();
+
+    materializePulledTeamMirror(db, input, scope, receipt());
+    materializePulledTeamMirror(db, input, scope, {
+      ...receipt(),
+      version: 8,
+      versionId: 'version-8',
+    });
+
+    expect(getProject(db, input.id)?.updatedAt).toBe(input.updatedAt);
+    expect(displayedUpdatedAt(db)).toBe(input.updatedAt);
   });
 });

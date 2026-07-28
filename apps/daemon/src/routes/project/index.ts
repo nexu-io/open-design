@@ -50,6 +50,7 @@ import { connectorService } from '../../connectors/service.js';
 import type { RouteDeps } from '../../server-context.js';
 import { listSkills } from '../../skills.js';
 import { isSafeId } from '../../projects.js';
+import { SYNC_KEEPS_UPDATED_AT } from '../../db.js';
 import {
   BUILT_IN_PROJECT_LOCATION_ID,
   allProjectLocations,
@@ -1869,6 +1870,10 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         resourceHubResourceId: remote.resourceId,
         cloudTombstonedAt: null,
         syncState: 'synced',
+        // This runs INSIDE the list read, against B's catalog — nobody changed
+        // the project, so it must not restamp `lastActivityAt` below (which is
+        // `MAX(p.updated_at, wp.updated_at)`). See SYNC_KEEPS_UPDATED_AT.
+        updatedAt: SYNC_KEEPS_UPDATED_AT,
       });
       return;
     }
@@ -1889,6 +1894,8 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       updatedByWorkspaceMemberId: ctx.workspaceMemberId,
       resourceHubResourceId: remote.resourceId,
       syncState: 'synced',
+      // Same reason as the canEdit branch above: reconciliation, not activity.
+      updatedAt: SYNC_KEEPS_UPDATED_AT,
     });
   }
   /**

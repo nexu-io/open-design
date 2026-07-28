@@ -261,6 +261,13 @@ export function materializePulledTeamMirror(
       resourceHubResourceId,
       cloudTombstonedAt: null,
       syncState: 'synced' as const,
+      // The ORIGIN's content time, exactly like the project row above — never
+      // this pull's clock. The project list answers a card's one relative time
+      // as `MAX(p.updated_at, wp.updated_at)`, so carrying the origin into the
+      // project row alone was not enough: the binding written in this same
+      // transaction defaulted to `Date.now()` and `MAX` surfaced it, which is
+      // why a member's card read 「刚刚更新」 hours after a background pull.
+      updatedAt: input.updatedAt,
     };
     if (existingBinding) {
       rebindWorkspaceProject(db, input.id, patch);

@@ -184,9 +184,14 @@ export async function listProjects(options?: {
       return [project];
     });
   }
-  // Coalesce identical in-flight reads: a burst of tab switches or several
-  // separately-mounted grids asking for the same workspace+view collapses to a
-  // single vela-backed request instead of spawning one CLI subprocess each.
+  // No resolved workspace identity at all — either the context has not landed
+  // yet or this daemon has no workspace plane. The key is a constant on
+  // purpose: it caches the ONE unscoped `/api/projects` answer, and it is
+  // unreachable once a context exists (the workspace branch above returns
+  // first), so it can never serve one workspace's rows to another. The
+  // workspace-scoped read's own key is built in
+  // `listWorkspaceProjectSummaries` below and carries workspace + member +
+  // role + status + lifecycle + view.
   try {
     return await coalescedGet('local-projects', async () => {
       const resp = await fetch('/api/projects');

@@ -300,10 +300,20 @@ type ProjectListRequest = {
   scopeKey: string;
 };
 
+/**
+ * The scope key for a caller with NO resolved workspace identity — either the
+ * context has not landed yet (every fresh boot passes through this) or the
+ * daemon has no workspace plane at all. It is deliberately NOT treated as "a
+ * workspace you left": a boot that lists projects before the context resolves
+ * did not read another workspace's data, so promoting `local` → `ws:member`
+ * must not discard the list it just loaded.
+ */
+const UNRESOLVED_PROJECT_LIST_SCOPE = 'local';
+
 function projectListScopeKey(context: WorkspaceCollabContext | null): string {
   return context
     ? `${context.workspaceId}:${context.workspaceMemberId}`
-    : 'local';
+    : UNRESOLVED_PROJECT_LIST_SCOPE;
 }
 
 export function projectViewAuthorizationLifetimeKey(
@@ -841,6 +851,34 @@ function AppInner() {
   const [skillsLoading, setSkillsLoading] = useState(true);
   const [dsLoading, setDsLoading] = useState(true);
   const [projectsLoading, setProjectsLoading] = useState(true);
+  // A loaded project list describes exactly ONE workspace identity, so leaving
+  // that workspace INVALIDATES it — it does not merely make it stale.
+  //
+  // Everything downstream of `projects` (the home 最近项目 strip, the 全部项目 and
+  // 草稿 grids) renders whatever this array holds, and the re-list on switch is
+  // an effect: effects run after the commit, so the browser paints the previous
+  // workspace's cards under the new workspace's identity first and only swaps
+  // them when the new list lands. That is the reported 「总是要慢一拍」 — the
+  // strip presenting one workspace's projects as another's, which is worse than
+  // showing nothing. Dropping the list here, during the render that first
+  // observes the new scope, means no frame ever shows the wrong workspace's
+  // data. (`reconcileFetchedProjects` already refuses to APPLY a response whose
+  // scope has moved on; the missing half was discarding what is already on
+  // screen.)
+  //
+  // Nothing is refetched: the switch effect below owns that, and its request is
+  // already keyed on the resolved workspace, so this is not a backend problem
+  // and needs no extra round-trip.
+  const projectListScopeRef = useRef(currentProjectListScope);
+  if (projectListScopeRef.current !== currentProjectListScope) {
+    const leftAResolvedWorkspace =
+      projectListScopeRef.current !== UNRESOLVED_PROJECT_LIST_SCOPE;
+    projectListScopeRef.current = currentProjectListScope;
+    if (leftAResolvedWorkspace) {
+      setProjects([]);
+      setProjectsLoading(true);
+    }
+  }
   const [promptTemplatesLoading, setPromptTemplatesLoading] = useState(true);
   // Goes true once the daemon-persisted config (agentId/designSystemId/etc.)
   // has merged into local state. Auto-selection effects below wait on this

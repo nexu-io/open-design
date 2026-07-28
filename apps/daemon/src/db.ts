@@ -1126,6 +1126,42 @@ export function getWorkspaceProjectByProjectId(db: SqliteDb, projectId: string) 
 }
 
 /**
+ * The `updatedAt` a writer passes when its write is SYNC, not a local person's
+ * change: keep the row's existing answer instead of stamping "now".
+ *
+ * A project's `updated_at` answers exactly one question for the UI — when did a
+ * person last change this project's conversations, files, or name? The project
+ * card renders it as one relative time and the list sorts by it, folding the
+ * project row and its `workspace_projects` binding together with
+ * `MAX(p.updated_at, wp.updated_at)` (see `listWorkspaceProjects` below and
+ * `normalizeWorkspaceProjectRow` in routes/project/index.ts). So BOTH rows have
+ * to answer it, and only a local action may answer it with `Date.now()`.
+ *
+ * Sync writes rows without anything having changed: materializing a teammate's
+ * pulled content, clearing a revocation or placeholder flag once that pull
+ * lands, advancing `sync_state` after a background upload, reconciling a
+ * binding against the team catalog. A writer on one of those paths must either
+ * carry the ORIGIN's timestamp when it has one (as `materializePulledTeamMirror`
+ * does) or pass this marker. Letting them fall through to "now" is what made a
+ * member's card read 「刚刚更新」 hours after a background pull they never asked
+ * for — the reported bug.
+ */
+export const SYNC_KEEPS_UPDATED_AT = '__od.sync-keeps-updated-at__' as const;
+
+/**
+ * Resolve a patch's `updatedAt` for a row that already exists: an explicit
+ * number wins, {@link SYNC_KEEPS_UPDATED_AT} keeps `existing`, and anything
+ * else (a patch that simply omits it) stamps now.
+ */
+function nextUpdatedAt(patched: unknown, existing: unknown): number {
+  if (typeof patched === 'number') return patched;
+  if (patched === SYNC_KEEPS_UPDATED_AT && typeof existing === 'number') {
+    return existing;
+  }
+  return Date.now();
+}
+
+/**
  * Bind a project to a workspace, or return the binding it already has.
  *
  * Deliberately keyed on the PROJECT, not on `(workspace, project)`: a project
@@ -1134,11 +1170,24 @@ export function getWorkspaceProjectByProjectId(db: SqliteDb, projectId: string) 
  * of one back-fill per workspace visited — and it is also what the narrowed
  * primary key now enforces, so an accidental second insert throws instead of
  * silently duplicating.
+ *
+ * A fresh binding's `updated_at` falls back to the PROJECT's own `updated_at`,
+ * not to now: the project list reports `MAX(p.updated_at, wp.updated_at)` as one
+ * "last changed" time, so a binding written while syncing an old project must
+ * not claim the project just changed (see {@link SYNC_KEEPS_UPDATED_AT}). A
+ * caller that genuinely means "now" — a brand-new project — gets the same answer
+ * either way, because its project row was stamped now a moment ago.
  */
 export function ensureWorkspaceProject(db: SqliteDb, input: DbRow) {
   const now = Date.now();
   const existing = getWorkspaceProjectByProjectId(db, input.projectId);
   if (existing) return existing;
+  const boundProjectUpdatedAt = getProject(db, input.projectId)?.updatedAt;
+  const insertedUpdatedAt = typeof input.updatedAt === 'number'
+    ? input.updatedAt
+    : typeof boundProjectUpdatedAt === 'number'
+      ? boundProjectUpdatedAt
+      : now;
   db.prepare(
     `INSERT INTO workspace_projects
        (project_id, workspace_id, visibility, resource_state,
@@ -1158,7 +1207,7 @@ export function ensureWorkspaceProject(db: SqliteDb, input: DbRow) {
     input.syncState ?? 'local_only',
     input.version ?? 1,
     input.createdAt ?? now,
-    input.updatedAt ?? now,
+    insertedUpdatedAt,
   );
   return getWorkspaceProject(db, input.workspaceId, input.projectId);
 }
@@ -1175,7 +1224,7 @@ export function updateWorkspaceProject(db: SqliteDb, workspaceId: string, projec
     cloudTombstonedAt: patch.cloudTombstonedAt === undefined
       ? existing.cloudTombstonedAt
       : patch.cloudTombstonedAt,
-    updatedAt: typeof patch.updatedAt === 'number' ? patch.updatedAt : Date.now(),
+    updatedAt: nextUpdatedAt(patch.updatedAt, existing.updatedAt),
   };
   db.prepare(
     `UPDATE workspace_projects
@@ -1239,7 +1288,7 @@ export function rebindWorkspaceProject(db: SqliteDb, projectId: string, patch: D
     cloudTombstonedAt: patch.cloudTombstonedAt === undefined
       ? existing.cloudTombstonedAt
       : patch.cloudTombstonedAt,
-    updatedAt: typeof patch.updatedAt === 'number' ? patch.updatedAt : Date.now(),
+    updatedAt: nextUpdatedAt(patch.updatedAt, existing.updatedAt),
   };
   db.prepare(
     `UPDATE workspace_projects
@@ -1725,7 +1774,7 @@ export function updateProject(db: SqliteDb, id: string, patch: DbRow) {
   const merged = {
     ...existing,
     ...patch,
-    updatedAt: typeof patch.updatedAt === 'number' ? patch.updatedAt : Date.now(),
+    updatedAt: nextUpdatedAt(patch.updatedAt, existing.updatedAt),
   };
   db.prepare(
     `UPDATE projects

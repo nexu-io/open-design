@@ -597,6 +597,7 @@ import {
   openDatabase,
   reorderPreviewComment,
   setTabs,
+  SYNC_KEEPS_UPDATED_AT,
   updateConversation,
   updatePreviewCommentAnchor,
   updatePreviewCommentStatus,
@@ -2973,7 +2974,12 @@ export async function startServer({
     syncState: 'synced' | 'sync_failed',
   ) {
     if (!workspaceId) return;
-    updateWorkspaceProject(db, workspaceId, projectId, { syncState });
+    // Where a background upload got to is sync bookkeeping, not a change to the
+    // project — see SYNC_KEEPS_UPDATED_AT.
+    updateWorkspaceProject(db, workspaceId, projectId, {
+      syncState,
+      updatedAt: SYNC_KEEPS_UPDATED_AT,
+    });
   }
   function persistWorkspaceProjectVisibility(
     input: {
@@ -3109,6 +3115,9 @@ export async function startServer({
         resourceHubResourceId: null,
         cloudTombstonedAt: null,
         syncState: 'local_only',
+        // A startup heal of a row that was never valid; nobody changed the
+        // project — see SYNC_KEEPS_UPDATED_AT.
+        updatedAt: SYNC_KEEPS_UPDATED_AT,
       });
     }
     return broken.length;
@@ -3401,10 +3410,17 @@ export async function startServer({
         // has never locally bound at all needs `ensureWorkspaceProject`
         // instead, seeded with the same patch so the fresh row is correct on
         // arrival.
-        if (rebindWorkspaceProject(db, projectId, patch)) return;
-        ensureWorkspaceProject(db, { projectId, ...patch });
+        //
+        // Reconciling a binding against B's catalog changes no project content,
+        // so it must not restamp "last changed" — see SYNC_KEEPS_UPDATED_AT.
+        const synced = { ...patch, updatedAt: SYNC_KEEPS_UPDATED_AT };
+        if (rebindWorkspaceProject(db, projectId, synced)) return;
+        ensureWorkspaceProject(db, { projectId, ...synced });
       },
-      applyDemote: (workspaceId, projectId, patch) => updateWorkspaceProject(db, workspaceId, projectId, patch),
+      applyDemote: (workspaceId, projectId, patch) => updateWorkspaceProject(db, workspaceId, projectId, {
+        ...patch,
+        updatedAt: SYNC_KEEPS_UPDATED_AT,
+      }),
       onError: (error) => console.warn('[od] workspace-projects reconciliation error:', error),
     });
   const resolveSharedProject = async (
@@ -3619,7 +3635,9 @@ export async function startServer({
         if (!metadata.teamMirrorRevokedAt) return;
         delete metadata.teamMirrorRevokedAt;
       }
-      updateProject(db, projectId, { metadata });
+      // A revocation flag the pull gate raises/lowers on this daemon's behalf;
+      // the project's own content is untouched — see SYNC_KEEPS_UPDATED_AT.
+      updateProject(db, projectId, { metadata, updatedAt: SYNC_KEEPS_UPDATED_AT });
     },
     // Set/clear the unmaterialized shared-project placeholder stamp (the
     // recvqzaDvUU6B3 fresh-install wipe guard) — same non-destructive
@@ -3635,7 +3653,11 @@ export async function startServer({
         if (!metadata[SHARED_PROJECT_PLACEHOLDER_METADATA_KEY]) return;
         delete metadata[SHARED_PROJECT_PLACEHOLDER_METADATA_KEY];
       }
-      updateProject(db, projectId, { metadata });
+      // Raised on placeholder registration and lowered the moment a pull
+      // materializes real content. Both are sync steps on someone else's
+      // project — see SYNC_KEEPS_UPDATED_AT. This is the flag that made a
+      // member's very first open of a shared project read 「刚刚更新」.
+      updateProject(db, projectId, { metadata, updatedAt: SYNC_KEEPS_UPDATED_AT });
     },
     // Retracted-share heal (飞书 recvqA6qhV7St1): delete a placeholder record
     // whose backing hub resource turned out to be tombstoned. Re-checks the
