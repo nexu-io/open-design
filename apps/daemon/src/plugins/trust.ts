@@ -91,6 +91,7 @@ const KNOWN_TOP_LEVEL_CAPABILITIES = new Set<string>([
   'bash',
   'network',
   'connector',
+  'pipeline:*',
   // Plan §3.K3 / spec §10.3.5 — plugin-bundled React component
   // surfaces require an explicit capability so a restricted plugin
   // cannot smuggle arbitrary UI through the GenUI layer.

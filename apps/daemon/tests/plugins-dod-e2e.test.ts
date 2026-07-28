@@ -219,11 +219,12 @@ describe('Plan §8 e2e — daemon-side anchors', () => {
       '---\nname: connector-plugin\ndescription: requires slack\n---\n# Connector\n',
     );
     // Install as restricted (the GitHub-style default for non-local
-    // sources). We simulate that by overriding sourceKind via the
-    // already-installed registry record.
+    // sources). Simulate that tier and its persisted default grants on
+    // the already-installed registry record.
     await installLocal(folder);
-    db.prepare('UPDATE installed_plugins SET trust = ? WHERE id = ?')
-      .run('restricted', 'connector-plugin');
+    db.prepare(
+      'UPDATE installed_plugins SET trust = ?, capabilities_granted = ? WHERE id = ?',
+    ).run('restricted', JSON.stringify(['prompt:inject']), 'connector-plugin');
     const plugin = getInstalledPlugin(db, 'connector-plugin')!;
 
     // Apply via the resolver — restricted + missing capability →

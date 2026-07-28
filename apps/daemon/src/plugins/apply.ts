@@ -33,7 +33,7 @@ import {
   type PluginProjectMetadataPatch,
   type TrustTier,
 } from '@open-design/contracts';
-import { resolveCapabilitiesGranted, requiredCapabilities } from './trust.js';
+import { requiredCapabilities } from './trust.js';
 import {
   deriveAutoOAuthPrompts,
   mergeAutoOAuthPrompts,
@@ -117,7 +117,8 @@ export function applyPlugin(input: ApplyInput): ApplyComputed {
   const { resolved: connectorsResolved, required: connectorsRequired } =
     resolveConnectorBindings(manifest, input.connectorProbe);
   const required = requiredCapabilities(manifest);
-  const granted = resolveCapabilitiesGranted({ manifest, trust });
+  // Persisted grants are authoritative; recomputing defaults here would undo revocations.
+  const granted = Array.from(new Set([...input.plugin.capabilitiesGranted, 'prompt:inject']));
   const taskKind = (manifest.od?.taskKind ?? 'new-generation') as AppliedPluginSnapshot['taskKind'];
 
   // Spec §23.3.3: when the plugin omits `od.pipeline`, fall back to
