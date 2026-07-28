@@ -229,7 +229,10 @@ import { localizePluginTitle } from './plugins-home/localization';
 import { DesignSystemPicker } from './DesignSystemPicker';
 import { PresenceBar } from '../collab/PresenceBar';
 import { useProjectCollab } from '../collab/useProjectCollab';
-import { useWorkspaceContext } from '../collab/useWorkspaceContext';
+import {
+  useWorkspaceContext,
+  workspaceIdentityCanBillAmr,
+} from '../collab/useWorkspaceContext';
 import {
   projectWorkspaceContext,
   projectWorkspaceScopeAuthorizesAmr,
@@ -1544,8 +1547,28 @@ export function ProjectView({
   );
   const projectRunRequiresWorkspaceScope =
     config.mode === 'daemon' && config.agentId === 'amr';
-  const projectRunWorkspaceScopeReady =
+  // An Open Design Cloud run needs a wallet, and the ONLY client-side veto is
+  // "there is no billing principal at all". Either witness suffices: the
+  // caller's own cloud identity, or a project scope that already names an
+  // explicit personal/team principal.
+  //
+  // What this deliberately stops doing is requiring the PROJECT's scope to
+  // resolve. An `unbound` project, or one whose membership-directory read
+  // transiently failed (offline / 504 / timeout, all collapsed into one
+  // `ok: false` upstream), or one pinned to a team the caller has left, says
+  // nothing about whether the signed-in user can pay — they are spending their
+  // own quota. Withholding the send on those turned a request the server would
+  // have answered into a dead, unexplained button (21f452ffe, which landed as
+  // a defensive default with no stated product requirement). Whether the run is
+  // actually permitted stays the server's call: the daemon's
+  // `WORKSPACE_CONTEXT_REQUIRED` 401 plus vela's own billing check are the
+  // enforcement points, and an honest server error beats a dead button.
+  //
+  // Strictly a widening: every state this admits was previously blocked, and
+  // nothing previously admitted becomes blocked.
+  const projectRunHasBillableAmrPrincipal =
     !projectRunRequiresWorkspaceScope ||
+    workspaceIdentityCanBillAmr(workspaceContextState) ||
     projectWorkspaceScopeAuthorizesAmr(projectWorkspaceScopeState.scope);
   // Onboarding first-generation funnel (spec §11.1). Consume the pending entry
   // (set by the Home recommendation) exactly once on mount; the refs guard the
@@ -2127,7 +2150,7 @@ export function ProjectView({
     currentConversationHasActiveRun
     && !currentConversationStreaming
     && !currentConversationHasProgrammaticBrandExtractionRun;
-  const currentConversationSendDisabled = !projectRunWorkspaceScopeReady
+  const currentConversationSendDisabled = !projectRunHasBillableAmrPrincipal
     || currentConversationLoading
     || failedMessagesConversationId === activeConversationId
     || currentConversationAwaitingActiveRunAttach;
@@ -5296,7 +5319,7 @@ export function ProjectView({
       // run can start. Local CLI and BYOK runtimes do not consume the Vela
       // wallet, so old daemons without this endpoint and directory outages
       // must not disable those runtimes.
-      if (!projectRunWorkspaceScopeReady) return false;
+      if (!projectRunHasBillableAmrPrincipal) return false;
       const effectiveAttachments = mergeChatAttachments(
         attachments,
         ...commentAttachments.map((attachment) =>
@@ -6674,7 +6697,7 @@ export function ProjectView({
       byokVideoModelOptionsPV,
       byokSpeechModelOptionsPV,
       projectRunWorkspaceContext,
-      projectRunWorkspaceScopeReady,
+      projectRunHasBillableAmrPrincipal,
     ],
   );
 
@@ -8986,7 +9009,7 @@ export function ProjectView({
   useEffect(() => {
     if (autoSentRef.current) return;
     if (!activeConversationId) return;
-    if (!projectRunWorkspaceScopeReady) return;
+    if (!projectRunHasBillableAmrPrincipal) return;
     // Wait for the initial listMessages DB read to land. Without this gate
     // the auto-send fires before the in-flight DB response, which then
     // arrives with `setMessages([])` and wipes the freshly-pushed user +
@@ -9051,7 +9074,7 @@ export function ProjectView({
     project.metadata,
     initialDraft,
     project.pendingPrompt,
-    projectRunWorkspaceScopeReady,
+    projectRunHasBillableAmrPrincipal,
     handleSend,
   ]);
 

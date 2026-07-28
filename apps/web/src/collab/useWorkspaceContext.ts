@@ -40,6 +40,40 @@ export interface WorkspaceContextState {
   failure?: 'unsupported' | 'unavailable';
 }
 
+/**
+ * Whether an Open Design Cloud (AMR) run has a cloud identity that could pay
+ * for it.
+ *
+ * AMR bills the caller's OWN wallet — their current workspace. The only state
+ * in which it genuinely cannot run is "there is no cloud identity at all": a
+ * settled, authoritative read that came back with no workspace. Every other
+ * state is the user spending their own quota, and whether they may is the
+ * server's call — the daemon's `WORKSPACE_CONTEXT_REQUIRED` 401 and vela's
+ * own billing check are the enforcement points. A client-side veto on a
+ * weaker signal cannot add safety; it can only turn a request the server
+ * would have answered into a dead, unexplained button.
+ *
+ * Deliberately NOT treated as "cannot be billed":
+ *
+ * - `loading` — the read holds no answer yet. Reporting "signed out" on a
+ *   frame that has not heard back is the bug shape this replaces.
+ * - `failure: 'unavailable'` — a transient outage. Offline, a 504, and a
+ *   timeout all collapse into one `ok: false` upstream, so nothing was
+ *   learned about the user's identity.
+ * - `failure: 'unsupported'` — an old daemon with no workspace endpoint,
+ *   which keeps its legal pre-workspace behavior.
+ *
+ * Note this asks about the CALLER's identity, not about the project. A
+ * project whose own workspace scope is `unbound` or `unavailable` says
+ * nothing about whether the signed-in user has a wallet.
+ */
+export function workspaceIdentityCanBillAmr(state: WorkspaceContextState): boolean {
+  if (state.context !== null) return true;
+  if (state.loading) return true;
+  if (state.failure) return true;
+  return false;
+}
+
 /** Coalescing key for `GET /api/workspace/context`; shared so an identity
  *  change can evict exactly this read instead of the whole cache. */
 const WORKSPACE_CONTEXT_COALESCE_KEY = 'workspace-context';

@@ -47,6 +47,8 @@ const showCompletionNotification = vi.fn();
 const analyticsTrackMock = vi.fn();
 const workspaceScopeMocks = vi.hoisted(() => ({
   ambientContext: null as WorkspaceCollabContext | null,
+  ambientLoading: false,
+  ambientFailure: null as 'unsupported' | 'unavailable' | null,
   projectScope: {
     loading: false,
     scope: {
@@ -85,8 +87,18 @@ vi.mock('../../src/providers/anthropic', () => ({
 vi.mock('../../src/collab/useWorkspaceContext', () => ({
   useWorkspaceContext: () => ({
     context: workspaceScopeMocks.ambientContext,
-    loading: false,
+    loading: workspaceScopeMocks.ambientLoading,
+    ...(workspaceScopeMocks.ambientFailure
+      ? { failure: workspaceScopeMocks.ambientFailure }
+      : {}),
   }),
+  // Mirrors the real predicate: only a settled, authoritative "no workspace"
+  // read means AMR has no wallet.
+  workspaceIdentityCanBillAmr: (state: {
+    context: unknown;
+    loading: boolean;
+    failure?: string;
+  }) => state.context !== null || state.loading || Boolean(state.failure),
   useWorkspaceBilling: () => null,
 }));
 
@@ -651,6 +663,8 @@ describe('ProjectView conversation run isolation', () => {
   beforeEach(() => {
     window.localStorage.clear();
     workspaceScopeMocks.ambientContext = null;
+    workspaceScopeMocks.ambientLoading = false;
+    workspaceScopeMocks.ambientFailure = null;
     workspaceScopeMocks.projectScope = {
       loading: false,
       scope: {
@@ -783,6 +797,133 @@ describe('ProjectView conversation run isolation', () => {
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
   });
 
+  // An Open Design Cloud run is billed to the CALLER's own wallet. The gate must
+  // therefore ask about the caller's identity, not about this project's
+  // workspace scope — a project whose scope is unresolved says nothing about
+  // whether the signed-in user can pay, and holding the send closed there just
+  // produced a dead button (21f452ffe). Cases below pin the narrowed rule.
+  const amrAgents = [{
+    id: 'amr',
+    name: 'AMR',
+    bin: 'amr',
+    available: true,
+    models: [{ id: 'glm-5', label: 'GLM 5' }],
+  }];
+
+  it.each([
+    [
+      'an unbound project',
+      {
+        loading: false,
+        scope: {
+          kind: 'unbound' as const,
+          projectId: project.id,
+          workspaceId: null,
+          context: null,
+        },
+      },
+    ],
+    [
+      'a project pinned to a workspace the caller is not in',
+      {
+        loading: false,
+        scope: {
+          kind: 'unavailable' as const,
+          projectId: project.id,
+          workspaceId: 'workspace-elsewhere',
+          visibility: 'personal' as const,
+          context: null,
+        },
+      },
+    ],
+    [
+      'a workspace-directory outage',
+      { loading: false, scope: null, failure: 'unavailable' as const },
+    ],
+  ])(
+    'lets a signed-in user send an AMR run with %s — they are spending their own quota',
+    async (_label, projectScope) => {
+      conversationAMessages = [];
+      // Signed in: there IS a wallet. This is the whole difference from the
+      // signed-out case below.
+      workspaceScopeMocks.ambientContext = teamWorkspaceContext(
+        'workspace-team',
+        'member-team',
+      );
+      workspaceScopeMocks.projectScope = projectScope;
+
+      renderProjectView({ ...config, agentId: 'amr' }, project, amrAgents);
+
+      await waitFor(() =>
+        expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'),
+      );
+      await waitFor(() =>
+        expect(screen.getByTestId('send-message')).toHaveProperty('disabled', false),
+      );
+      fireEvent.click(screen.getByTestId('send-message'));
+      await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    },
+  );
+
+  it('still blocks an AMR run for a genuinely signed-out caller', async () => {
+    conversationAMessages = [];
+    // A settled, authoritative read that came back with no workspace: there is
+    // no wallet at all, so the run cannot be billed and cannot succeed.
+    workspaceScopeMocks.ambientContext = null;
+    workspaceScopeMocks.ambientLoading = false;
+    workspaceScopeMocks.ambientFailure = null;
+    workspaceScopeMocks.projectScope = {
+      loading: false,
+      scope: {
+        kind: 'unbound',
+        projectId: project.id,
+        workspaceId: null,
+        context: null,
+      },
+    };
+
+    renderProjectView({ ...config, agentId: 'amr' }, project, amrAgents);
+
+    await waitFor(() =>
+      expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'),
+    );
+    expect(screen.getByTestId('send-message')).toHaveProperty('disabled', true);
+    fireEvent.click(screen.getByTestId('send-message'));
+    expect(streamViaDaemon).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['an identity read still in flight', { loading: true, failure: null }],
+    ['a transient identity outage', { loading: false, failure: 'unavailable' as const }],
+    ['an old daemon with no workspace endpoint', { loading: false, failure: 'unsupported' as const }],
+  ])(
+    'does not disable the AMR send on %s — an unsettled read is not a signed-out user',
+    async (_label, identity) => {
+      conversationAMessages = [];
+      workspaceScopeMocks.ambientContext = null;
+      workspaceScopeMocks.ambientLoading = identity.loading;
+      workspaceScopeMocks.ambientFailure = identity.failure;
+      workspaceScopeMocks.projectScope = {
+        loading: false,
+        scope: {
+          kind: 'unbound',
+          projectId: project.id,
+          workspaceId: null,
+          context: null,
+        },
+      };
+
+      renderProjectView({ ...config, agentId: 'amr' }, project, amrAgents);
+
+      await waitFor(() =>
+        expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'),
+      );
+      await waitFor(() =>
+        expect(screen.getByTestId('send-message')).toHaveProperty('disabled', false),
+      );
+    },
+  );
+
   it.each([
     [
       'an unbound project',
@@ -804,8 +945,12 @@ describe('ProjectView conversation run isolation', () => {
       'a workspace-directory outage',
       { loading: false, scope: null, failure: 'unavailable' as const },
     ],
-  ])('fails closed for AMR with %s', async (_label, projectScope) => {
+  ])(
+    'fails closed for a SIGNED-OUT AMR caller with %s',
+    async (_label, projectScope) => {
     conversationAMessages = [];
+    // `ambientContext` stays null from beforeEach: no cloud identity, so no
+    // wallet. The project's own scope is not what closes the gate here.
     workspaceScopeMocks.projectScope = projectScope;
 
     renderProjectView(
@@ -828,7 +973,8 @@ describe('ProjectView conversation run isolation', () => {
     expect(screen.getByTestId('send-message')).toHaveProperty('disabled', true);
     fireEvent.click(screen.getByTestId('send-message'));
     expect(streamViaDaemon).not.toHaveBeenCalled();
-  });
+  },
+  );
 
   it('uses the project-bound workspace instead of the ambient workspace for run authorization', async () => {
     conversationAMessages = [];
