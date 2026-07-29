@@ -38,7 +38,7 @@
     "scenario": "frontend-design",
     "useCase": {
       "query": {
-        "en": "Use Design Taste Libraries to choose the right source-backed design library before designing, critiquing, or rebuilding a frontend artifact. Select by surface, cite the library used, then generate or critique with visual proof gates."
+        "en": "Use Design Taste Libraries for this {{surface}} request: {{brief}}\n\nChoose the smallest source-backed library set, cite the local Open Design plugin ids used, then generate or critique with visual proof gates."
       }
     },
     "context": {
