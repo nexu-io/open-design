@@ -173,6 +173,7 @@ describe('store screenshot renderer', () => {
       issues: [{
         severity: 'error',
         code: 'PAGE_COUNT_OUT_OF_RANGE',
+        message: 'googlePlay requires 4 to 8 visible screenshots',
         platform: 'googlePlay',
       }],
     } satisfies Partial<StoreScreenshotExportValidationError>);
@@ -367,9 +368,11 @@ describe('store screenshot renderer', () => {
         }),
       },
     );
-    const withoutLogoDocument = {
+    const withoutLogoPage = { ...document.pages[0]! };
+    delete withoutLogoPage.logoAssetId;
+    const withoutLogoDocument: StoreScreenshotDocument = {
       ...document,
-      pages: [{ ...document.pages[0]!, logoAssetId: undefined }],
+      pages: [withoutLogoPage],
     };
     const withoutLogo = await renderStoreScreenshotPage(
       withoutLogoDocument,

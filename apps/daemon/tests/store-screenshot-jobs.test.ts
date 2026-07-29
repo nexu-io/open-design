@@ -301,6 +301,53 @@ describe('store screenshot export jobs', () => {
     expect(pixel[2]).toBeLessThan(100);
   });
 
+  it('fails the production job when persisted asset bytes do not match the indexed hash', async () => {
+    const body = await sharp({
+      create: {
+        width: 40,
+        height: 80,
+        channels: 3,
+        background: '#F02030',
+      },
+    }).png().toBuffer();
+    const actualHash = createHash('sha256').update(body).digest('hex');
+    const relativePath = `store-screenshots/assets/${actualHash}.png`;
+    await storage.writeFile('project-1', relativePath, body);
+    db.prepare(`
+      INSERT INTO store_screenshot_assets
+        (id, document_id, relative_path, mime, width, height, content_hash, created_at)
+      VALUES ('asset-1', 'document-1', ?, 'image/png', 40, 80, ?, 100)
+    `).run(relativePath, '0'.repeat(64));
+    const document = await persistence.read('project-1');
+    await persistence.save('project-1', {
+      ...document,
+      version: 2,
+      assets: [{ id: 'asset-1' }],
+      pages: document.pages.map((page, index) => (
+        index === 0 ? { ...page, screenshotAssetId: 'asset-1' } : page
+      )),
+    }, null, 'manual');
+
+    const operations = jobs();
+    await operations.startExport(
+      { projectId: 'project-1', documentId: 'document-1', documentVersion: 2 },
+      { platforms: ['appStore'] },
+    );
+    await scheduled[0]!();
+
+    expect(await operations.get('project-1', 'document-1', 'job-1')).toMatchObject({
+      status: 'failed',
+      error: {
+        code: 'INVALID_ASSET',
+      },
+    });
+    expect(await operations.resolveDownload('project-1', 'document-1', 'job-1')).toBeNull();
+    expect(await storage.statFile(
+      'project-1',
+      'store-screenshots/exports/job-1/store-screenshots.zip',
+    )).toBeNull();
+  });
+
   it.each([
     ['cross-document asset', 'ASSET_OWNER_MISMATCH'],
     ['missing asset file', 'ASSET_FILE_MISSING'],
