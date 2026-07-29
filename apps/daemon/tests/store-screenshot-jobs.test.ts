@@ -1,8 +1,10 @@
 import Database from 'better-sqlite3';
+import { createHash } from 'node:crypto';
 import JSZip from 'jszip';
 import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import sharp from 'sharp';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { StoreScreenshotDocument } from '@launch-studio/store-screenshot';
@@ -247,5 +249,100 @@ describe('store screenshot export jobs', () => {
     const download = await service.readJobDownload('project-1', 'job-1');
     expect(download.fileName).toBe('store-screenshots.zip');
     expect(await JSZip.loadAsync(download.body)).toBeInstanceOf(JSZip);
+  });
+
+  it('renders persisted uploaded asset bytes through the production export job', async () => {
+    const body = await sharp({
+      create: {
+        width: 40,
+        height: 80,
+        channels: 3,
+        background: '#F02030',
+      },
+    }).png().toBuffer();
+    const contentHash = createHash('sha256').update(body).digest('hex');
+    const relativePath = `store-screenshots/assets/${contentHash}.png`;
+    await storage.writeFile('project-1', relativePath, body);
+    db.prepare(`
+      INSERT INTO store_screenshot_assets
+        (id, document_id, relative_path, mime, width, height, content_hash, created_at)
+      VALUES ('asset-1', 'document-1', ?, 'image/png', 40, 80, ?, 100)
+    `).run(relativePath, contentHash);
+    const document = await persistence.read('project-1');
+    await persistence.save('project-1', {
+      ...document,
+      version: 2,
+      assets: [{ id: 'asset-1' }],
+      pages: document.pages.map((page, index) => (
+        index === 0 ? { ...page, screenshotAssetId: 'asset-1' } : page
+      )),
+    }, null, 'manual');
+
+    const operations = jobs();
+    await operations.startExport(
+      { projectId: 'project-1', documentId: 'document-1', documentVersion: 2 },
+      { platforms: ['appStore'] },
+    );
+    await scheduled[0]!();
+
+    expect(await operations.get('project-1', 'document-1', 'job-1')).toMatchObject({
+      status: 'done',
+    });
+    const png = await storage.readFile(
+      'project-1',
+      'store-screenshots/exports/job-1/app-store/01.png',
+    );
+    const pixel = await sharp(png)
+      .extract({ left: 640, top: 1800, width: 1, height: 1 })
+      .raw()
+      .toBuffer();
+    expect(pixel[0]).toBeGreaterThan(220);
+    expect(pixel[1]).toBeLessThan(80);
+    expect(pixel[2]).toBeLessThan(100);
+  });
+
+  it.each([
+    ['cross-document asset', 'ASSET_OWNER_MISMATCH'],
+    ['missing asset file', 'ASSET_FILE_MISSING'],
+    ['unsafe asset path', 'UNSAFE_ASSET_PATH'],
+  ])('fails the export job with a structured error for %s', async (scenario, expectedCode) => {
+    if (scenario === 'cross-document asset') {
+      await persistence.create('project-2', documentFixture('project-2', 'document-2'));
+    }
+    const document = await persistence.read('project-1');
+    await persistence.save('project-1', {
+      ...document,
+      version: 2,
+      assets: [{ id: 'asset-1' }],
+      pages: document.pages.map((page, index) => (
+        index === 0 ? { ...page, screenshotAssetId: 'asset-1' } : page
+      )),
+    }, null, 'manual');
+    const ownerDocumentId = scenario === 'cross-document asset'
+      ? 'document-2'
+      : 'document-1';
+    const relativePath = scenario === 'unsafe asset path'
+      ? 'store-screenshots/assets/../escape.png'
+      : 'store-screenshots/assets/asset-1.png';
+    db.prepare(`
+      INSERT INTO store_screenshot_assets
+        (id, document_id, relative_path, mime, width, height, content_hash, created_at)
+      VALUES ('asset-1', ?, ?, 'image/png', 10, 20, ?, 100)
+    `).run(ownerDocumentId, relativePath, 'a'.repeat(64));
+
+    const operations = jobs();
+    await operations.startExport(
+      { projectId: 'project-1', documentId: 'document-1', documentVersion: 2 },
+      { platforms: ['appStore'] },
+    );
+    await scheduled[0]!();
+
+    expect(await operations.get('project-1', 'document-1', 'job-1')).toMatchObject({
+      status: 'failed',
+      error: {
+        code: expectedCode,
+      },
+    });
+    expect(await operations.resolveDownload('project-1', 'document-1', 'job-1')).toBeNull();
   });
 });

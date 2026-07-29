@@ -12,6 +12,7 @@ import type {
 import {
   exportStoreScreenshots,
   StoreScreenshotExportValidationError,
+  StoreScreenshotRenderError,
 } from './renderer.js';
 import type { createStoreScreenshotPersistence } from './persistence.js';
 import type {
@@ -164,6 +165,11 @@ export function createStoreScreenshotJobs(
         code: 'VALIDATION_FAILED',
         message: error.message,
       }
+      : error instanceof StoreScreenshotRenderError
+        ? {
+          code: error.code,
+          message: error.message,
+        }
       : {
         code: 'EXPORT_FAILED',
         message: error instanceof Error ? error.message : String(error),
@@ -198,6 +204,8 @@ export function createStoreScreenshotJobs(
     try {
       const exported = await exportStoreScreenshots(document, platforms, {
         now: () => new Date(now()),
+        projectStorage: deps.projectStorage,
+        lookupAsset: deps.persistence.findAsset,
         onRendered: (completed, renderTotal) => {
           updateProgress(jobId, completed, renderTotal);
         },

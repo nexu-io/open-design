@@ -1,7 +1,10 @@
 import { createHash } from 'node:crypto';
 import JSZip from 'jszip';
+import { mkdtemp, rm } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import sharp from 'sharp';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type {
   StorePlatform,
@@ -12,6 +15,7 @@ import {
   renderStoreScreenshotPage,
   StoreScreenshotExportValidationError,
 } from '../src/store-screenshots/renderer.js';
+import { LocalProjectStorage } from '../src/storage/project-storage.js';
 
 function documentFixture(): StoreScreenshotDocument {
   return {
@@ -66,6 +70,18 @@ function documentFixture(): StoreScreenshotDocument {
 }
 
 describe('store screenshot renderer', () => {
+  let root: string;
+  let storage: LocalProjectStorage;
+
+  beforeEach(async () => {
+    root = await mkdtemp(path.join(os.tmpdir(), 'od-store-renderer-assets-'));
+    storage = new LocalProjectStorage(root);
+  });
+
+  afterEach(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+
   it.each([
     ['appStore', 1290, 2796],
     ['googlePlay', 1080, 1920],
@@ -160,5 +176,213 @@ describe('store screenshot renderer', () => {
         platform: 'googlePlay',
       }],
     } satisfies Partial<StoreScreenshotExportValidationError>);
+  });
+
+  it.each([
+    ['png', 'image/png', '#E02020', 'red'],
+    ['jpeg', 'image/jpeg', '#20C040', 'green'],
+    ['webp', 'image/webp', '#2040E0', 'blue'],
+  ] as const)(
+    'composites real %s screenshot pixels into the expected page region',
+    async (format, mime, color, dominantChannel) => {
+      const document = documentFixture();
+      document.assets = [{ id: 'screen-1' }];
+      document.pages[0] = {
+        ...document.pages[0]!,
+        screenshotAssetId: 'screen-1',
+      };
+      const body = await sharp({
+        create: {
+          width: 240,
+          height: 480,
+          channels: 3,
+          background: color,
+        },
+      })[format]().toBuffer();
+      const relativePath = `store-screenshots/assets/screen-1.${format === 'jpeg' ? 'jpg' : format}`;
+      await storage.writeFile('project-1', relativePath, body);
+      const renderOptions = {
+        projectStorage: storage,
+        lookupAsset: async () => ({
+          id: 'screen-1',
+          projectId: 'project-1',
+          documentId: 'document-1',
+          relativePath,
+          mime,
+          width: 240,
+          height: 480,
+          contentHash: createHash('sha256').update(body).digest('hex'),
+        }),
+      };
+
+      const first = await renderStoreScreenshotPage(
+        document,
+        'page-1',
+        'appStore',
+        renderOptions,
+      );
+      const second = await renderStoreScreenshotPage(
+        document,
+        'page-1',
+        'appStore',
+        renderOptions,
+      );
+      expect(first.equals(second)).toBe(true);
+      const pixel = await sharp(first)
+        .extract({ left: 640, top: 1800, width: 1, height: 1 })
+        .raw()
+        .toBuffer();
+      const means = {
+        red: pixel[0]!,
+        green: pixel[1]!,
+        blue: pixel[2]!,
+      };
+      expect(means[dominantChannel]).toBeGreaterThan(180);
+      expect(means[dominantChannel]).toBeGreaterThan(
+        Math.max(...Object.entries(means)
+          .filter(([channel]) => channel !== dominantChannel)
+          .map(([, value]) => value)) + 80,
+      );
+    },
+  );
+
+  it('produces different final PNGs for different uploaded screenshot pixels', async () => {
+    const document = documentFixture();
+    document.assets = [{ id: 'screen-1' }];
+    document.pages[0] = {
+      ...document.pages[0]!,
+      screenshotAssetId: 'screen-1',
+    };
+    const red = await sharp({
+      create: { width: 20, height: 40, channels: 3, background: '#ff0000' },
+    }).png().toBuffer();
+    const blue = await sharp({
+      create: { width: 20, height: 40, channels: 3, background: '#0000ff' },
+    }).png().toBuffer();
+    const pathA = 'store-screenshots/assets/red.png';
+    const pathB = 'store-screenshots/assets/blue.png';
+    await storage.writeFile('project-1', pathA, red);
+    await storage.writeFile('project-1', pathB, blue);
+    const render = (relativePath: string) => renderStoreScreenshotPage(
+      document,
+      'page-1',
+      'appStore',
+      {
+        projectStorage: storage,
+        lookupAsset: async () => ({
+          id: 'screen-1',
+          projectId: 'project-1',
+          documentId: 'document-1',
+          relativePath,
+          mime: 'image/png' as const,
+          width: 20,
+          height: 40,
+          contentHash: createHash('sha256')
+            .update(relativePath === pathA ? red : blue)
+            .digest('hex'),
+        }),
+      },
+    );
+
+    expect((await render(pathA)).equals(await render(pathB))).toBe(false);
+  });
+
+  it('flattens transparent uploaded pixels deterministically into a three-channel PNG', async () => {
+    const document = documentFixture();
+    document.assets = [{ id: 'screen-1' }];
+    document.pages[0] = {
+      ...document.pages[0]!,
+      screenshotAssetId: 'screen-1',
+    };
+    const body = await sharp({
+      create: {
+        width: 20,
+        height: 40,
+        channels: 4,
+        background: { r: 255, g: 0, b: 0, alpha: 0.5 },
+      },
+    }).png().toBuffer();
+    const relativePath = 'store-screenshots/assets/transparent.png';
+    await storage.writeFile('project-1', relativePath, body);
+    const options = {
+      projectStorage: storage,
+      lookupAsset: async () => ({
+        id: 'screen-1',
+        projectId: 'project-1',
+        documentId: 'document-1',
+        relativePath,
+        mime: 'image/png' as const,
+        width: 20,
+        height: 40,
+        contentHash: createHash('sha256').update(body).digest('hex'),
+      }),
+    };
+
+    const first = await renderStoreScreenshotPage(document, 'page-1', 'appStore', options);
+    const second = await renderStoreScreenshotPage(document, 'page-1', 'appStore', options);
+    expect(first.equals(second)).toBe(true);
+    expect(await sharp(first).metadata()).toMatchObject({ channels: 3 });
+    const pixel = await sharp(first)
+      .extract({ left: 640, top: 1800, width: 1, height: 1 })
+      .raw()
+      .toBuffer();
+    expect(pixel[0]).toBeGreaterThan(120);
+    expect(pixel[0]).toBeLessThan(230);
+    expect(pixel[2]).toBeGreaterThan(70);
+  });
+
+  it('composites logoAssetId pixels into the deterministic logo region', async () => {
+    const document = documentFixture();
+    document.assets = [{ id: 'logo-1' }];
+    document.pages[0] = {
+      ...document.pages[0]!,
+      logoAssetId: 'logo-1',
+    };
+    const logo = await sharp({
+      create: {
+        width: 200,
+        height: 80,
+        channels: 3,
+        background: '#FF00CC',
+      },
+    }).png().toBuffer();
+    const relativePath = 'store-screenshots/assets/logo.png';
+    await storage.writeFile('project-1', relativePath, logo);
+
+    const withLogo = await renderStoreScreenshotPage(
+      document,
+      'page-1',
+      'appStore',
+      {
+        projectStorage: storage,
+        lookupAsset: async () => ({
+          id: 'logo-1',
+          projectId: 'project-1',
+          documentId: 'document-1',
+          relativePath,
+          mime: 'image/png' as const,
+          width: 200,
+          height: 80,
+          contentHash: createHash('sha256').update(logo).digest('hex'),
+        }),
+      },
+    );
+    const withoutLogoDocument = {
+      ...document,
+      pages: [{ ...document.pages[0]!, logoAssetId: undefined }],
+    };
+    const withoutLogo = await renderStoreScreenshotPage(
+      withoutLogoDocument,
+      'page-1',
+      'appStore',
+    );
+    expect(withLogo.equals(withoutLogo)).toBe(false);
+    const pixel = await sharp(withLogo)
+      .extract({ left: 200, top: 160, width: 1, height: 1 })
+      .raw()
+      .toBuffer();
+    expect(pixel[0]).toBeGreaterThan(220);
+    expect(pixel[2]).toBeGreaterThan(160);
+    expect(pixel[1]).toBeLessThan(60);
   });
 });

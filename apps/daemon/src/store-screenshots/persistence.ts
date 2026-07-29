@@ -44,6 +44,17 @@ type VersionIndexRow = {
   createdAt: number;
 };
 
+export interface StoreScreenshotAssetIndex {
+  id: string;
+  projectId: string;
+  documentId: string;
+  relativePath: string;
+  mime: 'image/png' | 'image/jpeg' | 'image/webp';
+  width: number;
+  height: number;
+  contentHash: string;
+}
+
 export type {
   StoreScreenshotChangeSet,
   StoreScreenshotDocument,
@@ -651,6 +662,28 @@ export function createStoreScreenshotPersistence(
         documentId: indexed.documentId,
         version: indexed.currentVersion,
       };
+    },
+    findAsset: async (assetId: string): Promise<StoreScreenshotAssetIndex | null> => {
+      const row = db.prepare(`
+        SELECT
+          asset.id,
+          document.project_id AS projectId,
+          asset.document_id AS documentId,
+          asset.relative_path AS relativePath,
+          asset.mime,
+          asset.width,
+          asset.height,
+          asset.content_hash AS contentHash
+        FROM store_screenshot_assets AS asset
+        INNER JOIN store_screenshot_documents AS document
+          ON document.document_id = asset.document_id
+        WHERE asset.id = ?
+      `).get(assetId) as StoreScreenshotAssetIndex | undefined;
+      return row ? {
+        ...row,
+        width: Number(row.width),
+        height: Number(row.height),
+      } : null;
     },
     save,
     restore: async (
