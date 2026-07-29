@@ -62,6 +62,7 @@ const ALL_PAGE_LOCKS = [
 
 const JOB_POLL_INTERVAL_MS = 1_000;
 const MAX_CONSECUTIVE_JOB_POLL_FAILURES = 3;
+const EXPORT_PLATFORMS = ['appStore', 'googlePlay'] as const satisfies readonly StoreScreenshotPlatform[];
 
 function jobIsPending(job: StoreScreenshotJob | null): job is StoreScreenshotJob {
   return job?.status === 'queued' || job?.status === 'running';
@@ -230,7 +231,7 @@ export function StoreScreenshotWorkspace({
     if (!document) return;
     let cancelled = false;
     setValidation({ status: 'checking' });
-    void validateStoreScreenshotDocument(projectId, [platform])
+    void validateStoreScreenshotDocument(projectId, [...EXPORT_PLATFORMS])
       .then((result) => {
         if (cancelled) return;
         setValidation({ status: result.valid ? 'ready' : 'issues' });
@@ -241,7 +242,7 @@ export function StoreScreenshotWorkspace({
     return () => {
       cancelled = true;
     };
-  }, [document, platform, projectId]);
+  }, [document, projectId]);
 
   useEffect(() => {
     if (
@@ -295,7 +296,7 @@ export function StoreScreenshotWorkspace({
     setExportSubmitting(true);
     setActionError(null);
     try {
-      const job = await exportStoreScreenshots(projectId, { platforms: ['appStore', 'googlePlay'] });
+      const job = await exportStoreScreenshots(projectId, { platforms: [...EXPORT_PLATFORMS] });
       setExportJob(job);
       const failure = terminalJobError(job);
       if (failure) setActionError(failure);
@@ -501,7 +502,7 @@ export function StoreScreenshotWorkspace({
           <div className={styles.jobNotice} role="status">
             <Icon name="check" size={14} />
             <span>{t('storeScreenshots.exportReady')}</span>
-            {exportJob.type === 'export' && exportJob.result ? (
+            {exportJob.type === 'export' && exportJob.result && 'manifest' in exportJob.result ? (
               <span>{t('storeScreenshots.exportFilesValidated', { n: exportJob.result.manifest.files.length })}</span>
             ) : null}
             <a

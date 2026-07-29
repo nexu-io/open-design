@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { expect, test } from '@/playwright/suite';
 import { T } from '@/timeouts';
 import type { Page, Response } from '@playwright/test';
+import documentFixture from '../resources/store-screenshot-document.json' with { type: 'json' };
 
 test.setTimeout(T.xlong);
 
@@ -13,6 +14,8 @@ test('[P2] captures default, platforms, review, editor, history, and no-provider
       onboardingCompleted: true, agentModels: {}, privacyDecisionAt: 1,
       telemetry: { metrics: false, content: false, artifactManifest: false },
     }));
+    window.localStorage.setItem('open-design:locale', 'en');
+    window.localStorage.setItem('open-design:locale-source', 'manual');
   });
   const projectId = await createVisualProject(page);
   await page.goto(`/projects/${projectId}`, { waitUntil: 'domcontentloaded' });
@@ -52,8 +55,7 @@ async function createVisualProject(page: Page): Promise<string> {
   } });
   expect(project.ok(), await project.text()).toBe(true);
   const document = await page.request.post(`/api/projects/${id}/store-screenshots`, { data: {
-    product: { name: 'Focus Atlas', summary: 'Plan focused work with a calm daily rhythm.', audience: 'Independent creators', features: ['Plan', 'Focus', 'Review', 'Momentum'] },
-    designSystemId: 'neutral-modern', templateId: 'minimal-center', pageCount: 4, platforms: ['appStore', 'googlePlay'],
+    ...documentFixture,
   } });
   expect(document.ok(), await document.text()).toBe(true);
   return id;

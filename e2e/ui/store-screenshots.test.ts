@@ -1,8 +1,11 @@
 import { randomUUID } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 
+import JSZip from 'jszip';
 import { expect, test } from '@/playwright/suite';
 import { T } from '@/timeouts';
 import type { Page, Response } from '@playwright/test';
+import documentFixture from '../resources/store-screenshot-document.json' with { type: 'json' };
 
 const STORAGE_KEY = 'open-design:config';
 const TINY_PNG = Buffer.from(
@@ -70,8 +73,18 @@ test('[P1] no-provider workspace switches platforms, reviews a real edit, restor
   await page.getByRole('button', { name: 'Export' }).click();
   expect((await exportStarted).ok()).toBe(true);
   await expect(page.getByText('Export complete.')).toBeVisible({ timeout: T.long });
-  await expect(page.getByRole('link', { name: 'Download ZIP' })).toBeVisible();
+  const downloadLink = page.getByRole('link', { name: 'Download ZIP' });
+  await expect(downloadLink).toBeVisible();
   await expect(page.getByText('8 files validated')).toBeVisible();
+  const downloadPromise = page.waitForEvent('download');
+  await downloadLink.click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe('store-screenshots.zip');
+  const downloadPath = await download.path();
+  expect(downloadPath).toBeTruthy();
+  const zip = await JSZip.loadAsync(await readFile(downloadPath!));
+  expect(zip.file('manifest.json')).not.toBeNull();
+  expect(Object.keys(zip.files).filter((name) => name.endsWith('.png'))).toHaveLength(8);
 });
 
 async function createStoreScreenshotProject(page: Page): Promise<string> {
@@ -90,16 +103,7 @@ async function createStoreScreenshotProject(page: Page): Promise<string> {
 
   const document = await page.request.post(`/api/projects/${projectId}/store-screenshots`, {
     data: {
-      product: {
-        name: 'Focus Atlas',
-        summary: 'Plan focused work with a calm daily rhythm.',
-        audience: 'Independent creators',
-        features: ['Plan the day', 'Focus deeply', 'Review progress', 'Build momentum'],
-      },
-      designSystemId: 'neutral-modern',
-      templateId: 'minimal-center',
-      pageCount: 4,
-      platforms: ['appStore', 'googlePlay'],
+      ...documentFixture,
     },
   });
   expect(document.ok(), await document.text()).toBe(true);

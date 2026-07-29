@@ -29,5 +29,6 @@ export default defineConfig({
     screenshot: 'off',
     viewport: { width: 1440, height: 900 },
     deviceScaleFactor: 1,
+    locale: 'en-US',
   },
 });

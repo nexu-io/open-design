@@ -27,6 +27,25 @@ afterEach(() => {
 });
 
 describe('StoreScreenshotWorkspace', () => {
+  it('keeps export disabled when Google Play is invalid even if App Store is the active tab', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async (input) => {
+      if (String(input).endsWith('/validate')) {
+        return jsonResponse({
+          valid: false,
+          issues: [{ severity: 'error', code: 'PAGE_COUNT_OUT_OF_RANGE', message: 'Google Play requires 4 to 8 visible screenshots', platform: 'googlePlay' }],
+        });
+      }
+      return jsonResponse(documentResponse);
+    }));
+
+    render(<StoreScreenshotWorkspace projectId="project-1" aiGenerationEnabled={false} />);
+
+    await screen.findAllByTestId('store-screenshot-card');
+    expect(screen.getByRole('tab', { name: 'App Store' })).toHaveAttribute('aria-selected', 'true');
+    expect(await screen.findByText('Validation needs attention')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Export' })).toBeDisabled();
+  });
+
   it('shows platform switching and the four-page gallery', async () => {
     vi.stubGlobal('fetch', vi.fn<typeof fetch>(async (input) => {
       if (String(input).endsWith('/validate')) {

@@ -126,14 +126,18 @@ describe('store screenshot main spec', () => {
           platforms: Record<string, { targetSize: { width: number; height: number }; pageCount: number }>;
         };
         expect(manifest.files).toHaveLength(8);
+        const manifestPngFiles = manifest.files.map(({ fileName }) => fileName);
+        const zipPngFiles = Object.keys(zip.files).filter((name) => name.endsWith('.png'));
+        expect(new Set(manifestPngFiles).size).toBe(8);
+        expect([...manifestPngFiles].sort()).toEqual([...zipPngFiles].sort());
         expect(manifest.platforms.appStore).toEqual({ targetSize: { width: 1290, height: 2796 }, pageCount: 4, ruleVersion: 1 });
         expect(manifest.platforms.googlePlay).toEqual({ targetSize: { width: 1080, height: 1920 }, pageCount: 4, ruleVersion: 1 });
         for (const file of manifest.files) {
           const body = await zip.file(file.fileName)!.async('nodebuffer');
           const decoded = PNG.sync.read(body);
+          expect(readPngIhdr(body)).toEqual({ bitDepth: 8, colorType: 2 });
           expect(decoded.width).toBe(file.width);
           expect(decoded.height).toBe(file.height);
-          expect(decoded.data.length).toBe(file.width * file.height * 4);
           expect(createHash('sha256').update(body).digest('hex')).toBe(file.sha256);
         }
 
@@ -152,6 +156,13 @@ describe('store screenshot main spec', () => {
 
 function storePath(projectId: string): string {
   return `/api/projects/${encodeURIComponent(projectId)}/store-screenshots`;
+}
+
+function readPngIhdr(body: Buffer): { bitDepth: number; colorType: number } {
+  expect(body.subarray(0, 8)).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+  expect(body.readUInt32BE(8)).toBe(13);
+  expect(body.subarray(12, 16).toString('ascii')).toBe('IHDR');
+  return { bitDepth: body[24]!, colorType: body[25]! };
 }
 
 async function runStoreScreenshotCli<T>(args: string[], daemonUrl: string): Promise<T> {
