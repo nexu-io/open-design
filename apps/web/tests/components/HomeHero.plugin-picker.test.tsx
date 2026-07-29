@@ -11,11 +11,6 @@ import type {
   SkillSummary,
   TrustTier,
 } from '@open-design/contracts';
-
-vi.mock('../../src/components/home-hero/PlaceholderCarousel', () => ({
-  PlaceholderCarousel: () => null,
-}));
-
 import { HomeHero } from '../../src/components/HomeHero';
 import { I18nProvider } from '../../src/i18n';
 import {
@@ -741,70 +736,5 @@ describe('HomeHero plugin picker', () => {
     const activeChipText = screen.getByTestId('home-hero-active-plugin').textContent;
     expect(activeChipText).toContain('Prototype');
     expect(activeChipText).not.toContain('Plugin');
-  });
-
-  it('shows a clear button on the active plugin chip for an explicit plugin pick (example prompt), even with a task chip set', () => {
-    // Example-prompt presets bind a specific plugin AND set a task chipId. The
-    // chip shows the plugin's own title and must own its clear (×) button, just
-    // like a Community pick — not hide it behind the footer task chip.
-    const onClearActivePlugin = vi.fn();
-    const active = makePlugin('cinematic-portal', 'Cinematic Portal');
-    render(
-      <HomeHero
-        prompt="A motion-heavy landing page"
-        onPromptChange={() => undefined}
-        onSubmit={() => undefined}
-        activePluginTitle="Cinematic Portal"
-        activePluginRecord={active}
-        activeChipId="prototype"
-        activePluginIsExplicit
-        onClearActivePlugin={onClearActivePlugin}
-        onOpenPluginDetails={() => undefined}
-        pluginOptions={[]}
-        pluginsLoading={false}
-        pendingPluginId={null}
-        pendingChipId={null}
-        onPickPlugin={() => undefined}
-        onPickChip={() => undefined}
-        contextItemCount={0}
-        error={null}
-      />,
-    );
-
-    const chip = screen.getByTestId('home-hero-active-plugin');
-    const clear = chip.querySelector('.home-hero__active-clear') as HTMLButtonElement | null;
-    expect(clear).toBeTruthy();
-    fireEvent.click(clear!);
-    expect(onClearActivePlugin).toHaveBeenCalled();
-  });
-
-  it('hides the active plugin chip clear button when it stands in for a task chip default plugin', () => {
-    // Plain task-chip pick: the chip shows the task label and the footer
-    // ActiveTypeChip owns the clear affordance, so the plugin chip has none.
-    const active = makePlugin('prototype-plugin', 'Prototype Plugin');
-    render(
-      <HomeHero
-        prompt="Build a prototype"
-        onPromptChange={() => undefined}
-        onSubmit={() => undefined}
-        activePluginTitle="Prototype"
-        activePluginRecord={active}
-        activeChipId="prototype"
-        activePluginIsExplicit={false}
-        onClearActivePlugin={() => undefined}
-        onOpenPluginDetails={() => undefined}
-        pluginOptions={[]}
-        pluginsLoading={false}
-        pendingPluginId={null}
-        pendingChipId={null}
-        onPickPlugin={() => undefined}
-        onPickChip={() => undefined}
-        contextItemCount={0}
-        error={null}
-      />,
-    );
-
-    const chip = screen.getByTestId('home-hero-active-plugin');
-    expect(chip.querySelector('.home-hero__active-clear')).toBeNull();
   });
 });

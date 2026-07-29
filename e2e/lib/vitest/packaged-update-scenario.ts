@@ -1,11 +1,4 @@
-import {
-  formatReleaseVersion,
-  isReleaseChannel,
-  parseReleaseVersion,
-  type ReleaseChannel,
-} from '@open-design/release';
-
-export type PackagedUpdateChannel = ReleaseChannel;
+export type PackagedUpdateChannel = 'stable' | 'beta' | 'nightly' | 'preview';
 
 export type PackagedUpdateScenario = {
   channel: PackagedUpdateChannel;
@@ -61,12 +54,13 @@ export function applyPackagedUpdateEnv(
 }
 
 function parseChannel(value: string): PackagedUpdateChannel {
-  if (isReleaseChannel(value)) return value;
+  if (value === 'stable' || value === 'beta' || value === 'nightly' || value === 'preview') return value;
   throw new Error(`unsupported release channel for packaged updater smoke: ${value}`);
 }
 
 function nextFixtureVersion(channel: PackagedUpdateChannel, version: string): string {
   if (channel === 'stable') return nextStablePatch(version);
+  if (channel === 'nightly') return nextDottedPrerelease(version, 'nightly');
   return nextHyphenPrerelease(version, channel);
 }
 
@@ -78,13 +72,18 @@ function nextStablePatch(version: string): string {
   return `${match[1]}.${match[2]}.${Number(match[3]) + 1}`;
 }
 
-function nextHyphenPrerelease(version: string, label: string): string {
-  if (label !== 'beta' && label !== 'betas' && label !== 'prerelease' && label !== 'preview') {
-    throw new Error(`unsupported counted release channel: ${label}`);
+function nextDottedPrerelease(version: string, label: string): string {
+  const match = new RegExp(`^(\\d+\\.\\d+\\.\\d+)\\.${label}\\.(\\d+)$`).exec(version);
+  if (match?.[1] == null || match[2] == null) {
+    throw new Error(`${label} release version must be x.y.z.${label}.N; got ${version}`);
   }
-  const parsed = parseReleaseVersion(version, label);
-  if (parsed.channel === 'stable') {
+  return `${match[1]}.${label}.${Number(match[2]) + 1}`;
+}
+
+function nextHyphenPrerelease(version: string, label: string): string {
+  const match = new RegExp(`^(\\d+\\.\\d+\\.\\d+)-${label}\\.(\\d+)$`).exec(version);
+  if (match?.[1] == null || match[2] == null) {
     throw new Error(`${label} release version must be x.y.z-${label}.N; got ${version}`);
   }
-  return formatReleaseVersion(label, parsed.baseVersion, parsed.number + 1);
+  return `${match[1]}-${label}.${Number(match[2]) + 1}`;
 }

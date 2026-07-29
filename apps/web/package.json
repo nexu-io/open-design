@@ -1,6 +1,6 @@
 {
   "name": "@open-design/web",
-  "version": "0.16.1",
+  "version": "0.10.0",
   "private": true,
   "type": "module",
   "exports": {
@@ -25,11 +25,10 @@
     "build": "next build",
     "build:sidecar": "tsc -p tsconfig.sidecar.json",
     "typecheck": "tsc -b --noEmit",
-    "test": "vitest run -c vitest.config.ts --maxWorkers=2"
+    "test": "vitest run -c vitest.config.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.32.1",
-    "@excalidraw/excalidraw": "0.18.1",
     "@formkit/auto-animate": "0.9.0",
     "@lexical/react": "0.36.2",
     "@lexical/utils": "0.36.2",
@@ -41,12 +40,8 @@
     "@open-design/sidecar-proto": "workspace:*",
     "@xterm/addon-fit": "0.10.0",
     "@xterm/xterm": "5.5.0",
-    "dompurify": "3.4.2",
-    "jspdf": "4.2.1",
     "lexical": "0.36.2",
     "lucide-react": "1.16.0",
-    "micromark": "4.0.2",
-    "micromark-extension-gfm": "3.0.0",
     "motion": "12.40.0",
     "next": "16.2.6",
     "openai": "6.38.0",
@@ -57,7 +52,6 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.3.0",
-    "@testing-library/jest-dom": "6.9.1",
     "@testing-library/react": "16.3.2",
     "@types/jsdom": "28.0.3",
     "@types/node": "20.19.39",

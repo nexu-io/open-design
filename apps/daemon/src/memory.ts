@@ -4,7 +4,7 @@
 // Layout (under <dataDir>/memory/):
 //   MEMORY.md            ← short index; one bullet per fact file
 //   <type>_<slug>.md     ← per-fact body + frontmatter
-//   .config.json         ← switches: { "enabled": true, "chatExtractionEnabled": false }
+//   .config.json         ← switches: { "enabled": true, "chatExtractionEnabled": true }
 //
 // Frontmatter format (matches Claude Code's auto-memory pattern):
 //   ---
@@ -23,8 +23,7 @@
 import { promises as fsp } from 'node:fs';
 import path from 'node:path';
 import { EventEmitter } from 'node:events';
-import { MEMORY_TYPES, PROFILE_MEMORY_ID, parseFormAnswers } from '@open-design/contracts';
-import { parseFrontmatter } from './design-systems/frontmatter.js';
+import { parseFrontmatter } from './frontmatter.js';
 // Imported lazily through the memory-extractions module by the call
 // sites below so a future test-only build of memory.ts that stubs the
 // store can still tree-shake the ring buffer. We use a static import
@@ -59,31 +58,10 @@ export interface MemoryChangeEvent {
   // pass. Lets the toast say "Memory updated (3 new)" instead of three
   // separate toasts.
   count?: number;
-  source?: MemoryEntrySource;
+  source?: 'heuristic' | 'llm' | 'manual';
   enabled?: boolean;
   at: number;
 }
-
-// Writer provenance. Persisted into entry frontmatter (`source:`) so later
-// audits, migrations, and per-pipeline stats can tell an auto-extracted fact
-// from one the user typed by hand. Entries written before this field existed
-// have no marker and must be classified by content fingerprints instead.
-export type MemoryEntrySource =
-  | 'heuristic'
-  | 'llm'
-  | 'manual'
-  | 'connector'
-  | 'brand'
-  | 'annotation';
-
-const VALID_SOURCES = new Set<string>([
-  'heuristic',
-  'llm',
-  'manual',
-  'connector',
-  'brand',
-  'annotation',
-]);
 
 function emitChange(event: Omit<MemoryChangeEvent, 'at'>): void {
   memoryEvents.emit('change', { ...event, at: Date.now() });
@@ -92,11 +70,7 @@ function emitChange(event: Omit<MemoryChangeEvent, 'at'>): void {
 const INDEX_FILE = 'MEMORY.md';
 const CONFIG_FILE = '.config.json';
 
-// Sourced from the shared contract's MEMORY_TYPES so the new `profile` /
-// `rule` buckets can't drift out of sync with the type union the web UI and
-// od-card payloads already speak. Canonical order: [profile, user, feedback,
-// project, reference, rule].
-const VALID_TYPES = new Set<string>(MEMORY_TYPES);
+const VALID_TYPES = new Set(['user', 'feedback', 'project', 'reference']);
 
 const DEFAULT_INDEX = `# Memory
 
@@ -201,43 +175,22 @@ export async function readMemoryConfig(dataDir) {
     const parsed = JSON.parse(raw);
     return {
       enabled: parsed?.enabled !== false,
-      // Chat auto-extraction (regex pack + chat-form profile capture + LLM
-      // extractor) is retired by default: it minted junk facts from ordinary
-      // chat text ("我在…" progressive-aspect sentences became "user
-      // location"). Only an explicit opt-in (`=== true`) re-enables it;
-      // injection of existing/manual memory stays governed by `enabled`.
-      chatExtractionEnabled: parsed?.chatExtractionEnabled === true,
-      // Two-loop memory per-hook flags. All default-ON (`!== false`) so a
-      // config written before these existed still injects the profile,
-      // rewrites short queries, and self-verifies output.
-      profileEnabled: parsed?.profileEnabled !== false,
-      rewriteEnabled: parsed?.rewriteEnabled !== false,
-      verifyEnabled: parsed?.verifyEnabled !== false,
+      chatExtractionEnabled: parsed?.chatExtractionEnabled !== false,
       extraction: normalizeExtractionPatch(parsed?.extraction),
     };
   } catch {
-    // Injection defaults on — the whole point of the feature is to surface
-    // user context across runs. Chat auto-extraction defaults OFF (see the
-    // parse path above): writing memory is opt-in, reading it is not.
-    return {
-      enabled: true,
-      chatExtractionEnabled: false,
-      profileEnabled: true,
-      rewriteEnabled: true,
-      verifyEnabled: true,
-      extraction: null,
-    };
+    // Default-on. The whole point of the feature is to surface user
+    // context across runs; making it opt-in would mean the first 3
+    // chats happen with no memory and no warning.
+    return { enabled: true, chatExtractionEnabled: true, extraction: null };
   }
 }
 
 // Patch shape:
-//   { enabled?: boolean, chatExtractionEnabled?: boolean,
-//     profileEnabled?: boolean, rewriteEnabled?: boolean,
-//     verifyEnabled?: boolean, extraction?: object | null }
+//   { enabled?: boolean, chatExtractionEnabled?: boolean, extraction?: object | null }
 // `extraction: null` clears the override (reverting to auto-pick); an
 // object replaces it whole; an absent key leaves the existing override
-// untouched. The three per-hook booleans default-on and only flip when an
-// explicit boolean is supplied.
+// untouched.
 export async function writeMemoryConfig(dataDir, patch) {
   const current = await readMemoryConfig(dataDir);
   const next = {
@@ -247,20 +200,6 @@ export async function writeMemoryConfig(dataDir, patch) {
       typeof patch?.chatExtractionEnabled === 'boolean'
         ? patch.chatExtractionEnabled
         : current.chatExtractionEnabled,
-    // Per-hook flags carry forward when the patch omits them, and only flip
-    // when the patch sends an explicit boolean.
-    profileEnabled:
-      typeof patch?.profileEnabled === 'boolean'
-        ? patch.profileEnabled
-        : current.profileEnabled,
-    rewriteEnabled:
-      typeof patch?.rewriteEnabled === 'boolean'
-        ? patch.rewriteEnabled
-        : current.rewriteEnabled,
-    verifyEnabled:
-      typeof patch?.verifyEnabled === 'boolean'
-        ? patch.verifyEnabled
-        : current.verifyEnabled,
     extraction: current.extraction,
   };
   if (Object.prototype.hasOwnProperty.call(patch || {}, 'extraction')) {
@@ -270,20 +209,13 @@ export async function writeMemoryConfig(dataDir, patch) {
   }
   if (typeof next.enabled !== 'boolean') next.enabled = true;
   if (typeof next.chatExtractionEnabled !== 'boolean') {
-    next.chatExtractionEnabled = false;
+    next.chatExtractionEnabled = true;
   }
-  // Default-on if a prior config or a malformed patch left these undefined.
-  if (typeof next.profileEnabled !== 'boolean') next.profileEnabled = true;
-  if (typeof next.rewriteEnabled !== 'boolean') next.rewriteEnabled = true;
-  if (typeof next.verifyEnabled !== 'boolean') next.verifyEnabled = true;
   await ensureDir(memoryDir(dataDir));
   await fsp.writeFile(configPath(dataDir), JSON.stringify(next, null, 2));
   if (
     current.enabled !== next.enabled
     || current.chatExtractionEnabled !== next.chatExtractionEnabled
-    || current.profileEnabled !== next.profileEnabled
-    || current.rewriteEnabled !== next.rewriteEnabled
-    || current.verifyEnabled !== next.verifyEnabled
   ) {
     emitChange({ kind: 'config', enabled: next.enabled });
   }
@@ -334,9 +266,6 @@ function summarize(id, raw, mtime) {
       name: typeof data?.name === 'string' && data.name ? data.name : id,
       description: typeof data?.description === 'string' ? data.description : '',
       type,
-      // Absent on files written before provenance landed; those must be
-      // classified by content fingerprints, never assumed manual.
-      source: VALID_SOURCES.has(data?.source) ? data.source : undefined,
       updatedAt: mtime,
     },
     body: typeof body === 'string' ? body.trimStart() : '',
@@ -375,9 +304,7 @@ export async function listMemoryEntries(dataDir) {
   return out;
 }
 
-// Mirror the canonical contract order so the tree folders render
-// profile-first … rule-last, matching the prompt-section order below.
-const MEMORY_TREE_TYPES = [...MEMORY_TYPES];
+const MEMORY_TREE_TYPES = ['user', 'feedback', 'project', 'reference'];
 
 function memoryTreeFolderId(type) {
   return `folder:${type}`;
@@ -473,13 +400,12 @@ export async function readMemoryEntry(dataDir, id) {
   return { ...summary, body };
 }
 
-function renderEntryFile(name, description, type, body, source) {
+function renderEntryFile(name, description, type, body) {
   const safeName = String(name || 'Untitled').replace(/\r?\n/g, ' ').trim();
   const safeDesc = String(description || '').replace(/\r?\n/g, ' ').trim();
   const safeType = isValidType(type) ? type : 'user';
-  const safeSource = VALID_SOURCES.has(source) ? source : 'manual';
   const trimmedBody = String(body || '').replace(/^\s+/, '');
-  return `---\nname: ${safeName}\ndescription: ${safeDesc}\ntype: ${safeType}\nsource: ${safeSource}\n---\n\n${trimmedBody}\n`;
+  return `---\nname: ${safeName}\ndescription: ${safeDesc}\ntype: ${safeType}\n---\n\n${trimmedBody}\n`;
 }
 
 export async function updateMemoryTreeNode(dataDir, id, patch) {
@@ -515,7 +441,7 @@ export async function upsertMemoryEntry(dataDir, input, options) {
   await ensureDir(memoryDir(dataDir));
   await fsp.writeFile(
     entryPath(dataDir, id),
-    renderEntryFile(name, description, type, body, options?.source ?? 'manual'),
+    renderEntryFile(name, description, type, body),
   );
   await ensureIndexHasEntry(dataDir, id, name, description);
   const entry = await readMemoryEntry(dataDir, id);
@@ -632,54 +558,10 @@ export async function composeMemoryBody(dataDir) {
     list.push(e);
     grouped.set(e.type, list);
   }
-  // Canonical section order: profile FIRST (the foundational "who I am / how I
-  // work" facts the intent gateway expands a query against), the original four
-  // in the middle, and rule LAST (the verified checks the self-verify pass
-  // reads as a rubric). `profile` is gated on the per-hook `profileEnabled`
-  // flag so a user can keep the rest of memory on while suppressing the
-  // structured profile injection.
-  const ordered = [...MEMORY_TYPES].filter((t) => {
-    if (t === 'profile' && cfg.profileEnabled === false) return false;
-    return grouped.has(t);
-  });
+  const ordered = ['user', 'feedback', 'project', 'reference']
+    .filter((t) => grouped.has(t));
   const parts = [];
   for (const type of ordered) {
-    if (type === 'profile') {
-      // Render the profile as a structured KEY/VALUE block of facts, not
-      // prose. The body is already line-per-field (e.g. `- Role: …`), so we
-      // surface those lines directly under a single heading rather than the
-      // `**name** — description` shape the other buckets use.
-      parts.push('### Profile');
-      for (const e of grouped.get(type) ?? []) {
-        const body = await readEntryBodyById(dataDir, e.id);
-        if (!body) continue;
-        const lines = body.trim().split(/\r?\n/);
-        for (const line of lines) {
-          if (line.trim().length > 0) parts.push(line.trimEnd());
-        }
-      }
-      parts.push('');
-      continue;
-    }
-    if (type === 'rule') {
-      // Render verified rules as a rubric the self-verify (POST) pass can read
-      // back: each rule shows its name plus the `Assertion:` / `Check:` lines
-      // from its body so the verifier can score the output against the Check.
-      parts.push('### Verified rules');
-      for (const e of grouped.get(type) ?? []) {
-        const body = await readEntryBodyById(dataDir, e.id);
-        if (!body) continue;
-        parts.push(`- **${e.name}** — ${e.description || '(no description)'}`);
-        const indented = body
-          .trim()
-          .split(/\r?\n/)
-          .map((l) => `  ${l}`)
-          .join('\n');
-        if (indented.length > 0) parts.push(indented);
-      }
-      parts.push('');
-      continue;
-    }
     parts.push(`### ${capitalize(type)}`);
     for (const e of grouped.get(type) ?? []) {
       const body = await readEntryBodyById(dataDir, e.id);
@@ -700,30 +582,6 @@ export async function composeMemoryBody(dataDir) {
 async function readEntryBodyById(dataDir, id) {
   const entry = await readMemoryEntry(dataDir, id);
   return entry?.body ?? '';
-}
-
-// Return the `rule` memory entries that are ACTIVE — i.e. linked in MEMORY.md
-// — with their bodies. The POST self-verify enforcement (memory-verify.ts)
-// reads these as the rubric an artifact turn must be checked against. We honor
-// the same active-set gate composeMemoryBody uses so a rule the user removed
-// from the index stops being enforced without deleting the file. Returns an
-// empty array when memory is disabled (the master switch turns enforcement
-// off for free).
-export async function listActiveRuleEntries(dataDir) {
-  const cfg = await readMemoryConfig(dataDir);
-  if (!cfg.enabled) return [];
-  const allEntries = await listMemoryEntries(dataDir);
-  const rules = allEntries.filter((e) => e.type === 'rule');
-  if (rules.length === 0) return [];
-  const indexBody = await readMemoryIndex(dataDir);
-  const linkedIds = parseIndexLinkIds(indexBody);
-  const active = rules.filter((e) => linkedIds.has(e.id));
-  const out = [];
-  for (const e of active) {
-    const body = await readEntryBodyById(dataDir, e.id);
-    out.push({ id: e.id, name: e.name, description: e.description, body });
-  }
-  return out;
 }
 
 function capitalize(s) {
@@ -903,182 +761,6 @@ function applyTemplate(template, captured) {
   return String(template || '').replace(/\$1/g, String(captured));
 }
 
-// ----- Heuristic-artifact fingerprinting -----------------------------------
-
-function escapeRegExp(s) {
-  return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-// One matcher per retired regex-pack pattern: the entry's display `name`
-// must equal the pattern's fixed name AND the body must be an instance of
-// its bodyTemplate (template `$1` slots widened to a wildcard). Entries from
-// before source provenance landed carry no `source:` frontmatter, so this
-// content fingerprint is the only reliable classifier for them.
-const HEURISTIC_ARTIFACT_MATCHERS = REMEMBER_PATTERNS.map((pattern) => ({
-  name: pattern.name,
-  bodyRe: new RegExp(
-    `^${escapeRegExp(pattern.bodyTemplate.trim()).replace(/\\\$1/g, '[\\s\\S]*')}$`,
-  ),
-}));
-
-/**
- * True when a memory entry is provably an artifact of the retired chat
- * regex pack — its name matches one of the pack's fixed display names and
- * its body is an instance of that pattern's fill-in template. Used by the
- * one-time cleanup migration; LLM, connector, and hand-written entries never
- * match because their bodies are free prose, not template instances.
- */
-export function isHeuristicExtractionArtifact(entry) {
-  const name = typeof entry?.name === 'string' ? entry.name : '';
-  const body = typeof entry?.body === 'string' ? entry.body.trim() : '';
-  if (!name || !body) return false;
-  return HEURISTIC_ARTIFACT_MATCHERS.some(
-    (m) => m.name === name && m.bodyRe.test(body),
-  );
-}
-
-// ----- Onboarding → structured profile ------------------------------------
-
-// Form ids that should seed / update the singleton `user_profile`. Discovery
-// briefs, task-type forms, and any explicitly profile-tagged form all feed the
-// "who I am / how I work" facts the intent gateway expands a short query
-// against. An empty id (a bare `[form answers]` header with no tag) also
-// qualifies — the onboarding flow doesn't always stamp an id.
-function isProfileFormId(id) {
-  const lower = typeof id === 'string' ? id.trim().toLowerCase() : '';
-  if (lower.length === 0) return true;
-  return (
-    lower.includes('discovery')
-    || lower.includes('profile')
-    || lower.includes('task')
-  );
-}
-
-// Parse an existing profile body (line-per-field `- Label: value`) into an
-// ordered label→value map so later answers ADD or overwrite individual fields
-// instead of wiping unrelated ones. Lines that don't match the `- Label: …`
-// shape are dropped on rewrite — the profile is a structured fact block, not
-// free prose.
-const PROFILE_FIELD_LINE_RE = /^\s*-\s+([^:]+):\s*(.*)$/;
-
-// Canonical profile field labels — kept in sync with the web profile editor
-// (apps/web/src/components/MemoryProfilePanel.tsx PROFILE_FIELDS). Incoming
-// labels are matched case-insensitively to a canonical label so a hand-typed
-// or differently-cased answer ("role") updates the existing field ("Role")
-// rather than creating a duplicate entry in the merged map.
-const CANONICAL_PROFILE_LABELS = [
-  'Role',
-  'Organization size',
-  'Use cases',
-  'Discovery source',
-  'Company / Team',
-  'Domain',
-  'Primary audience',
-  'Aesthetic / taste',
-  'Default deliverables',
-  'Locale / Language',
-  'Current goals',
-];
-
-function canonicalProfileLabel(label) {
-  const trimmed = String(label || '').trim();
-  if (!trimmed) return '';
-  const lower = trimmed.toLowerCase();
-  const match = CANONICAL_PROFILE_LABELS.find(
-    (canonical) => canonical.toLowerCase() === lower,
-  );
-  return match ?? trimmed;
-}
-
-function parseProfileBody(body) {
-  const map = new Map();
-  for (const line of String(body || '').split(/\r?\n/)) {
-    const m = PROFILE_FIELD_LINE_RE.exec(line);
-    if (!m) continue;
-    const label = canonicalProfileLabel(m[1] ?? '');
-    const value = (m[2] ?? '').trim();
-    if (!label) continue;
-    map.set(label, value);
-  }
-  return map;
-}
-
-function renderProfileBody(map) {
-  const lines = [];
-  for (const [label, value] of map) {
-    lines.push(`- ${label}: ${value}`);
-  }
-  return lines.join('\n');
-}
-
-/**
- * Reduce a user_profile body to the canonical field set the settings-panel
- * profile editor writes (`CANONICAL_PROFILE_LABELS`). Rows under any other
- * label were accumulated by the retired chat-form capture — per-project
- * discovery answers re-keyed by whatever the form question's wording was
- * ("要做什么？", "What should I build?", …) — and are dropped. Returns null
- * when no canonical row survives, i.e. the whole profile was form residue.
- */
-export function pruneProfileBodyToCanonical(body) {
-  const canonical = new Set(CANONICAL_PROFILE_LABELS.map((l) => l.toLowerCase()));
-  const kept = new Map();
-  for (const line of String(body || '').split(/\r?\n/)) {
-    const m = PROFILE_FIELD_LINE_RE.exec(line);
-    if (!m) continue;
-    const label = canonicalProfileLabel(m[1] ?? '');
-    if (!canonical.has(label.toLowerCase())) continue;
-    const value = (m[2] ?? '').trim();
-    if (!value) continue;
-    kept.set(label, value);
-  }
-  if (kept.size === 0) return null;
-  return renderProfileBody(kept);
-}
-
-// Merge freshly-answered form pairs into the existing profile, by label, and
-// upsert the singleton `user_profile` entry. Runs synchronously pre-turn so
-// the profile is visible to the SAME turn's prompt composition. Returns the
-// written entry summary, or null when there was nothing to write or the
-// profile hook is disabled.
-async function captureProfileFromForm(dataDir, parsed) {
-  if (!parsed || !Array.isArray(parsed.pairs) || parsed.pairs.length === 0) {
-    return null;
-  }
-  // Read the existing profile (if any) and merge by label so a later
-  // discovery answer adds/overwrites individual fields rather than clobbering
-  // the whole block.
-  const existing = await readMemoryEntry(dataDir, PROFILE_MEMORY_ID);
-  const merged = parseProfileBody(existing?.body ?? '');
-  for (const pair of parsed.pairs) {
-    const label = canonicalProfileLabel(typeof pair?.label === 'string' ? pair.label : '');
-    const value = typeof pair?.value === 'string' ? pair.value.trim() : '';
-    if (!label) continue;
-    merged.set(label, value);
-  }
-  if (merged.size === 0) return null;
-  const entry = await upsertMemoryEntry(
-    dataDir,
-    {
-      id: PROFILE_MEMORY_ID,
-      type: 'profile',
-      name: 'Work profile',
-      description:
-        'Role, audience, domain, and delivery defaults captured at onboarding.',
-      body: renderProfileBody(merged),
-    },
-    // Silence the per-entry event; the batched 'extract' emit in
-    // extractFromMessage produces exactly one toast for the turn.
-    { silent: true, source: 'heuristic' },
-  );
-  return {
-    id: entry.id,
-    name: entry.name,
-    description: entry.description,
-    type: entry.type,
-    updatedAt: entry.updatedAt,
-  };
-}
-
 export async function extractFromMessage(dataDir, userMessage) {
   // Mirror the LLM extractor's skip surface so the settings panel shows
   // both extractors for the same turn — even when there's nothing to
@@ -1099,23 +781,6 @@ export async function extractFromMessage(dataDir, userMessage) {
   }
   const seen = new Set();
   const changed = [];
-  // Onboarding → profile capture. When the user's message is the round-tripped
-  // answer block from a discovery / task-type / profile question-form, seed (or
-  // merge into) the singleton `user_profile` BEFORE the regex pack runs so the
-  // structured profile is available to this same turn's prompt. Gated on the
-  // per-hook `profileEnabled` flag — when off we skip the profile write but
-  // still let the ordinary heuristics below run.
-  if (cfg.profileEnabled !== false) {
-    const parsedForm = parseFormAnswers(userMessage);
-    if (parsedForm && isProfileFormId(parsedForm.id)) {
-      try {
-        const profileEntry = await captureProfileFromForm(dataDir, parsedForm);
-        if (profileEntry) changed.push(profileEntry);
-      } catch (err) {
-        console.warn('[memory] profile capture failed', err);
-      }
-    }
-  }
   for (const pattern of REMEMBER_PATTERNS) {
     const m = pattern.re.exec(userMessage);
     if (!m) continue;

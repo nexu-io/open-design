@@ -7,7 +7,6 @@ import {
 } from '../analytics/events';
 import type { TrackingProjectKind } from '@open-design/contracts/analytics';
 import { recordAmrEntry, type TrackingAmrEntrySource } from '../analytics/amr-attribution';
-import { UserActionCard } from './UserActionCard';
 
 export interface AmrGuidanceProps {
   errorCode: string;
@@ -17,7 +16,6 @@ export interface AmrGuidanceProps {
   assistantMessageId: string;
   runId: string | null;
   sourceDetail: TrackingAmrEntrySource;
-  metricsConsent?: boolean;
   // Switch the run to AMR and retry. The `ui_click` analytics event is fired
   // here first; the host performs the switch + arms the auto-retry.
   onActivate: () => void;
@@ -37,7 +35,6 @@ export function AmrGuidance({
   assistantMessageId,
   runId,
   sourceDetail,
-  metricsConsent = false,
   onActivate,
 }: AmrGuidanceProps) {
   const t = useT();
@@ -68,14 +65,20 @@ export function AmrGuidance({
   ]);
 
   return (
-    <UserActionCard
-      dataKind="hosted-agent-suggestion"
-      testId="amr-guidance"
-      icon="sparkles"
-      tone="brand"
-      title={t('chat.amrCard.switchTitle')}
-      detailsLabel={t('brand.viewDetails')}
-      actions={
+    <div className="amr-card amr-card--switch" data-testid="amr-guidance">
+      <div className="amr-card__head">
+        <span className="amr-card__icon" aria-hidden="true">
+          !
+        </span>
+        <strong className="amr-card__title">{t('chat.amrCard.switchTitle')}</strong>
+      </div>
+      <p className="amr-card__body">{t('chat.amrCard.switchBody')}</p>
+      <div className="amr-card__chips" aria-hidden="true">
+        <span className="amr-card__chip">{t('chat.amrCard.chipOfficial')}</span>
+        <span className="amr-card__chip">{t('chat.amrCard.chipNoKey')}</span>
+        <span className="amr-card__chip">{t('chat.amrCard.chipAutoRetry')}</span>
+      </div>
+      <div className="amr-card__actions">
         <button
           type="button"
           className="amr-card__cta"
@@ -85,25 +88,13 @@ export function AmrGuidance({
               area: 'chat_panel',
               element: 'go_amr',
             });
-            recordAmrEntry(analytics.track, sourceDetail, new Date(), {
-              metricsConsent,
-            });
+            recordAmrEntry(analytics.track, sourceDetail);
             onActivate();
           }}
         >
           {t('chat.amrCard.switchCta')}
         </button>
-      }
-      details={
-        <>
-          <p className="amr-card__body">{t('chat.amrCard.switchBody')}</p>
-          <div className="amr-card__chips" aria-hidden="true">
-            <span className="amr-card__chip">{t('chat.amrCard.chipOfficial')}</span>
-            <span className="amr-card__chip">{t('chat.amrCard.chipNoKey')}</span>
-            <span className="amr-card__chip">{t('chat.amrCard.chipAutoRetry')}</span>
-          </div>
-        </>
-      }
-    />
+      </div>
+    </div>
   );
 }

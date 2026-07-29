@@ -34,18 +34,15 @@ import {
   mergeProxyAwareEnv,
   resolveSystemProxyEnv,
 } from '@open-design/platform';
-import { attachAcpSession } from './agent-protocol/index.js';
-import { attachPiRpcSession } from './agent-protocol/index.js';
-import { createClaudeStreamHandler } from './runtimes/claude-stream.js';
+import { attachAcpSession } from './acp.js';
+import { attachPiRpcSession } from './pi-rpc.js';
+import { createClaudeStreamHandler } from './claude-stream.js';
 import { diagnoseClaudeCliFailure } from './claude-diagnostics.js';
 import { createCopilotStreamHandler } from './copilot-stream.js';
-import { createJsonEventStreamHandler } from './runtimes/json-event-stream.js';
+import { createJsonEventStreamHandler } from './json-event-stream.js';
 import { agentCliEnvForAgent, validateAgentCliEnv } from './app-config.js';
 import {
-  antigravityAuthGuidance,
-  antigravityQuotaGuidance,
   classifyAgentAuthFailure,
-  classifyAgentServiceFailure,
   cursorAuthGuidance,
   probeAgentAuthStatus,
 } from './runtimes/auth.js';
@@ -55,20 +52,18 @@ import {
   buildMaxCompletionTokensParam,
   buildOpenAIChatTokenParam,
   isUnsupportedMaxTokensError,
-} from './integrations/openai-chat-token-params.js';
-import { aihubmixHeaders } from './integrations/aihubmix.js';
+} from './openai-chat-token-params.js';
+import { aihubmixHeaders } from './aihubmix.js';
 import type { AgentCliEnvPrefs } from './app-config.js';
 import type { RuntimeAgentDef } from './runtimes/types.js';
+import { resolveModelForAgent } from './runtimes/models.js';
 import { preparePromptFileForAgent, type PreparedPromptFile } from './runtimes/prompt-file.js';
-import { configuredAllowedInternalHosts } from './origin-validation.js';
 import {
-  isAllowlistedInternalHost,
   isBlockedExternalApiHostname,
   isLoopbackApiHost,
   validateBaseUrl,
   type AgentTestRequest,
   type BaseUrlValidationResult,
-  type ValidateBaseUrlOptions,
   type ConnectionTestDiagnostics,
   type ConnectionTestKind,
   type ConnectionTestPhase,
@@ -77,24 +72,8 @@ import {
   type ParsedBaseUrl,
   type ProviderTestRequest,
 } from '@open-design/contracts/api/connectionTest';
-import { googleGenerateContentUrl } from './integrations/google-models.js';
-import { readVelaCredentialRevision, resolveAmrProfile } from './integrations/vela.js';
-import { amrModelLoadingCache } from './runtimes/amr-model-cache.js';
-import { buildAmrModelCacheKey } from './runtimes/amr-model-probe.js';
-import {
-  fetchVelaPresetModels,
-  fetchVelaRemoteModelsWithRetry,
-} from './runtimes/defs/amr.js';
-import {
-  getRememberedLiveModels,
-  preferFreshLiveModels,
-  resolveDefaultModelFromOptions,
-  resolveModelForAgent,
-} from './runtimes/models.js';
-import {
-  BYOK_OPENCODE_PROVIDER_ID,
-  buildOpenCodeByokProviderConfig,
-} from './runtimes/byok-opencode.js';
+import { googleGenerateContentUrl } from './google-models.js';
+import { resolveAmrProfile } from './integrations/vela.js';
 
 export { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
 
@@ -134,18 +113,12 @@ function looksLikeIpLiteral(hostname: string): boolean {
 export async function validateBaseUrlResolved(
   baseUrl: string,
   lookup: DnsLookupFn = defaultDnsLookup,
-  options: ValidateBaseUrlOptions = {},
 ): Promise<BaseUrlValidationResult> {
-  const sync = validateBaseUrl(baseUrl, options);
+  const sync = validateBaseUrl(baseUrl);
   if (sync.error || !sync.parsed) return sync;
 
   const hostname = sync.parsed.hostname.toLowerCase();
   if (isLoopbackApiHost(hostname)) return sync;
-  // Issue #3225 — an operator who trusts this hostname has opted it out of the
-  // guard entirely, so skip the resolved-IP block even though it points into
-  // private space. The sync check above already honored a literal-IP allowlist
-  // entry; this covers the hostname-that-resolves-private case.
-  if (isAllowlistedInternalHost(hostname, options.allowedInternalHosts)) return sync;
   if (looksLikeIpLiteral(hostname)) return sync;
 
   let addresses: DnsLookupAddress[];
@@ -158,38 +131,12 @@ export async function validateBaseUrlResolved(
   for (const addr of addresses) {
     const ip = String(addr.address).toLowerCase();
     if (isLoopbackApiHost(ip)) continue;
-    // A resolved address the operator explicitly allowlisted (they listed the
-    // IP rather than the hostname) is permitted; everything else in private
-    // space is still blocked.
-    if (isAllowlistedInternalHost(ip, options.allowedInternalHosts)) continue;
     if (isBlockedExternalApiHostname(ip)) {
       return { error: 'Internal IPs blocked', forbidden: true };
     }
   }
 
   return sync;
-}
-
-/**
- * Validate a base URL that the USER deliberately configured as a provider
- * endpoint (connection test, model discovery, BYOK chat dispatch). Identical
- * to {@link validateBaseUrlResolved} except it honors the operator's
- * `OD_ALLOWED_INTERNAL_HOSTS` allowlist (issue #3225), so an internally hosted
- * gateway on an RFC1918 address can be reached when — and only when — the
- * operator opted in.
- *
- * INVARIANT: use this ONLY for user-configured endpoints. URLs that arrive
- * inside an upstream response (image/video download links) are
- * attacker-controllable and MUST stay on the strict {@link assertExternalAssetUrl}
- * / {@link validateBaseUrlResolved} path, which never consults the allowlist.
- */
-export function validateUserProviderBaseUrl(
-  baseUrl: string,
-  lookup: DnsLookupFn = defaultDnsLookup,
-): Promise<BaseUrlValidationResult> {
-  return validateBaseUrlResolved(baseUrl, lookup, {
-    allowedInternalHosts: configuredAllowedInternalHosts(),
-  });
 }
 
 /**
@@ -258,7 +205,6 @@ const LOOPBACK_NO_PROXY_TOKENS = ['localhost', '127.0.0.1', '[::1]'] as const;
 // run, so 45 s leaves headroom without making a hung child invisible.
 // Override with OD_CONNECTION_TEST_AGENT_TIMEOUT_MS.
 const DEFAULT_AGENT_TIMEOUT_MS = 45_000;
-const AGENT_STDOUT_DRAIN_MS = 25;
 // Node's `setTimeout` silently clamps any delay above this to ~1 ms
 // (with a TimeoutOverflowWarning), so an override meant to *extend*
 // the budget — e.g. `OD_CONNECTION_TEST_AGENT_TIMEOUT_MS=3000000000` —
@@ -761,31 +707,6 @@ function isLikelyModelErrorText(text: string): boolean {
   );
 }
 
-function isLikelyAuthErrorText(text: string): boolean {
-  return /(?:api[_ -]?key|x-goog-api-key|unauthorized|unauthenticated|permission denied|invalid credentials|authentication credentials|access denied|invalid key)/i.test(
-    text,
-  );
-}
-
-const GOOGLE_GEMINI_DEFAULT_BASE_URL = 'https://generativelanguage.googleapis.com';
-
-function normalizeProviderTestInput(
-  input: ProviderConnectionInput,
-): ProviderConnectionInput {
-  const baseUrl = String(input.baseUrl ?? '').trim();
-  if (input.protocol === 'google' && !baseUrl) {
-    return { ...input, baseUrl: GOOGLE_GEMINI_DEFAULT_BASE_URL };
-  }
-  return input;
-}
-
-function googleBaseUrlMismatchDetail(hostname: string): string | null {
-  if (hostname === 'api.anthropic.com' || hostname === 'api.openai.com') {
-    return `Base URL points to ${hostname}. For Google Gemini use ${GOOGLE_GEMINI_DEFAULT_BASE_URL}.`;
-  }
-  return null;
-}
-
 function smokeFailureDetail(sample: string): string {
   return sample
     ? `Expected smoke test reply "ok"; got "${sample}"`
@@ -856,24 +777,12 @@ function inspectProviderCompletion(
     };
   }
 
-  if (protocol === 'bedrock') {
-    return {
-      valid: false,
-      kind: 'unknown',
-      detail: 'AWS Bedrock BYOK connection tests need AWS credential signing, which is not supported by the current API-key smoke test.',
-    };
-  }
-
   return { valid: false };
 }
 
 function statusToKind(status: number, detailText = ''): ConnectionTestKind {
-  if (status === 401 || (status === 400 && isLikelyAuthErrorText(detailText))) {
-    return 'auth_failed';
-  }
-  if (status === 403) {
-    return isLikelyAuthErrorText(detailText) ? 'auth_failed' : 'forbidden';
-  }
+  if (status === 401) return 'auth_failed';
+  if (status === 403) return 'forbidden';
   if (status === 404) {
     return isLikelyModelErrorText(detailText)
       ? 'not_found_model'
@@ -882,55 +791,6 @@ function statusToKind(status: number, detailText = ''): ConnectionTestKind {
   if (status === 429) return 'rate_limited';
   if (status >= 500) return 'upstream_unavailable';
   return 'unknown';
-}
-
-function isNvidiaDegradedProviderError(detailText: string): boolean {
-  return /\bDEGRADED\b/i.test(detailText) && /\bfunction\s+id\b/i.test(detailText);
-}
-
-function providerHttpErrorOverride(
-  protocol: ConnectionTestProtocol,
-  hostname: string,
-  status: number,
-  detailText: string,
-): { kind: ConnectionTestKind; detail: string } | null {
-  if (
-    protocol === 'openai' &&
-    status === 400 &&
-    hostname.toLowerCase() === 'integrate.api.nvidia.com' &&
-    isNvidiaDegradedProviderError(detailText)
-  ) {
-    return {
-      kind: 'upstream_unavailable',
-      detail:
-        'The selected NVIDIA model instance is currently unavailable at the provider. Try a different model or retry later.',
-    };
-  }
-  return null;
-}
-
-function classifyProviderHttpFailure(
-  protocol: ConnectionTestProtocol,
-  hostname: string,
-  status: number,
-  detailText: string,
-  secrets: string[],
-): { kind: ConnectionTestKind; detail: string } {
-  const redactedDetail = redactSecrets(detailText.slice(0, 240), secrets);
-  const override = providerHttpErrorOverride(
-    protocol,
-    hostname,
-    status,
-    redactedDetail,
-  );
-  if (override) return override;
-  const kind = statusToKind(status, redactedDetail);
-  const detail =
-    redactedDetail ||
-    (status === 404
-      ? 'HTTP 404 from provider; check the Base URL path.'
-      : '');
-  return { kind, detail };
 }
 
 function extractOpenAiModelIds(data: unknown): string[] {
@@ -952,27 +812,6 @@ function extractProviderErrorDetail(data: unknown, rawText: string): string {
   const message = obj ? (obj as { message?: unknown }).message : null;
   if (typeof message === 'string' && message.trim()) return message;
   return rawText.trim().slice(0, 240);
-}
-
-/**
- * Compose the `detail` for a transport failure so the real cause survives.
- *
- * undici reports DNS/TLS/connect failures as a `TypeError` whose message is the
- * generic `fetch failed`, with the actual reason only on `cause.code`. Since
- * `networkErrorToKind` maps just an allowlist to `invalid_base_url`, everything
- * else — `DEPTH_ZERO_SELF_SIGNED_CERT`, `SELF_SIGNED_CERT_IN_CHAIN`,
- * `UNABLE_TO_GET_ISSUER_CERT_LOCALLY`, `EPROTO` — became `kind: unknown` with
- * `detail: "fetch failed"`, i.e. a failure the user sees and we cannot name.
- * That is the bulk of the 776 unattributed connection tests / 196 devices a day.
- *
- * The cause code is an OpenSSL/libuv constant, never user content, so appending
- * it is safe; the message still goes through `redactSecrets`.
- */
-function networkErrorDetail(err: unknown, secrets: (string | undefined)[]): string {
-  const message = redactSecrets(err instanceof Error ? err.message : String(err), secrets);
-  const code = (err as { cause?: { code?: unknown } } | null | undefined)?.cause?.code;
-  if (typeof code !== 'string' || !code) return message;
-  return message.includes(code) ? message : `${message} (${code})`;
 }
 
 function networkErrorToKind(err: unknown): ConnectionTestKind {
@@ -1087,7 +926,9 @@ async function validateSenseAudioNonChatModel(
       kind,
       latencyMs,
       model: input.model,
-      detail: networkErrorDetail(err, [input.apiKey]),
+      detail: redactSecrets(err instanceof Error ? err.message : String(err), [
+        input.apiKey,
+      ]),
     };
   }
 
@@ -1165,73 +1006,6 @@ interface ProviderCallShape {
   retryBodyOnUnsupportedMaxTokens?: unknown;
 }
 
-export function resolveOpenAIConnectionTestRunProviderPackage(
-  input: Pick<ProviderTestRequest, 'protocol' | 'baseUrl' | 'apiKey' | 'apiVersion' | 'model'>,
-): string | null {
-  if (input.protocol !== 'openai') return null;
-  const providerConfig = {
-    protocol: input.protocol,
-    baseUrl: input.baseUrl,
-    apiKey: input.apiKey,
-    ...(input.apiVersion !== undefined ? { apiVersion: input.apiVersion } : {}),
-  };
-  const byokConfig = buildOpenCodeByokProviderConfig(
-    providerConfig,
-    input.model,
-  );
-  const providerEntries = byokConfig?.config.provider;
-  if (!providerEntries || typeof providerEntries !== 'object') return null;
-  const provider = (providerEntries as Record<string, unknown>)[BYOK_OPENCODE_PROVIDER_ID];
-  if (!provider || typeof provider !== 'object') return null;
-  const npm = (provider as { npm?: unknown }).npm;
-  return typeof npm === 'string' ? npm : null;
-}
-
-function openAIChatCompletionsProviderCall(
-  baseUrl: string,
-  apiKey: string,
-  model: string,
-): ProviderCallShape {
-  return {
-    url: appendVersionedApiPath(baseUrl, '/chat/completions'),
-    headers: {
-      'content-type': 'application/json',
-      authorization: `Bearer ${apiKey}`,
-      ...(new URL(baseUrl).hostname === 'openrouter.ai' ? {
-        'HTTP-Referer': 'https://opendesign.dev',
-        'X-Title': 'Open Design',
-      } : {}),
-    },
-    body: {
-      model,
-      ...buildOpenAIChatTokenParam(model, PROVIDER_MAX_TOKENS),
-      messages: [{ role: 'user', content: SMOKE_PROMPT }],
-      stream: false,
-    },
-    extractText: extractOpenAIMessageText,
-  };
-}
-
-function openAIResponsesProviderCall(
-  baseUrl: string,
-  apiKey: string,
-  model: string,
-): ProviderCallShape {
-  return {
-    url: appendVersionedApiPath(baseUrl, '/responses'),
-    headers: {
-      'content-type': 'application/json',
-      authorization: `Bearer ${apiKey}`,
-    },
-    body: {
-      model,
-      input: SMOKE_PROMPT,
-      max_output_tokens: PROVIDER_MAX_TOKENS,
-    },
-    extractText: extractOpenAIResponsesText,
-  };
-}
-
 function buildProviderCall(input: ProviderTestRequest): ProviderCallShape {
   const baseUrl = String(input.baseUrl);
   const apiKey = String(input.apiKey);
@@ -1292,16 +1066,24 @@ function buildProviderCall(input: ProviderTestRequest): ProviderCallShape {
       // smoke test reuses the same call shape. We default the base URL
       // upstream-side in chat-routes; this layer assumes the caller passed
       // a concrete URL via the BYOK form.
-      if (input.protocol === 'openai') {
-        const runProviderPackage = resolveOpenAIConnectionTestRunProviderPackage(input);
-        if (runProviderPackage === '@ai-sdk/openai') {
-          return openAIResponsesProviderCall(baseUrl, apiKey, model);
-        }
-        if (runProviderPackage === '@ai-sdk/openai-compatible') {
-          return openAIChatCompletionsProviderCall(baseUrl, apiKey, model);
-        }
-      }
-      return openAIChatCompletionsProviderCall(baseUrl, apiKey, model);
+      return {
+        url: appendVersionedApiPath(baseUrl, '/chat/completions'),
+        headers: {
+          'content-type': 'application/json',
+          authorization: `Bearer ${apiKey}`,
+          ...(new URL(baseUrl).hostname === 'openrouter.ai' ? {
+            'HTTP-Referer': 'https://opendesign.dev',
+            'X-Title': 'Open Design',
+          } : {}),
+        },
+        body: {
+          model,
+          ...buildOpenAIChatTokenParam(model, PROVIDER_MAX_TOKENS),
+          messages: [{ role: 'user', content: SMOKE_PROMPT }],
+          stream: false,
+        },
+        extractText: extractOpenAIMessageText,
+      };
     case 'azure': {
       const url = new URL(baseUrl);
       const basePath = url.pathname.replace(/\/+$/, '');
@@ -1343,9 +1125,8 @@ function buildProviderCall(input: ProviderTestRequest): ProviderCallShape {
       };
     }
     case 'google': {
-      const effectiveBaseUrl = baseUrl.trim() || GOOGLE_GEMINI_DEFAULT_BASE_URL;
       return {
-        url: googleGenerateContentUrl(effectiveBaseUrl, model),
+        url: googleGenerateContentUrl(baseUrl, model),
         headers: {
           'content-type': 'application/json',
           'x-goog-api-key': apiKey,
@@ -1392,10 +1173,6 @@ function buildProviderCall(input: ProviderTestRequest): ProviderCallShape {
         },
       };
     }
-    case 'bedrock':
-      throw new Error(
-        'AWS Bedrock BYOK requires AWS credential signing; the current provider smoke test only supports API-key based providers.',
-      );
     default:
       throw new Error(`Unknown protocol: ${(input as { protocol?: string }).protocol}`);
   }
@@ -1415,29 +1192,12 @@ function extractOpenAIMessageText(data: unknown): string {
   return '';
 }
 
-function extractOpenAIResponsesText(data: unknown): string {
-  const outputText = (data as { output_text?: unknown }).output_text;
-  if (typeof outputText === 'string') return outputText;
-  const output = (data as { output?: unknown }).output;
-  if (!Array.isArray(output)) return '';
-  for (const item of output) {
-    const content = (item as { content?: unknown } | undefined)?.content;
-    if (!Array.isArray(content)) continue;
-    for (const block of content) {
-      const text = (block as { text?: unknown } | undefined)?.text;
-      if (typeof text === 'string') return text;
-    }
-  }
-  return '';
-}
-
 export async function testProviderConnection(
   input: ProviderConnectionInput,
 ): Promise<ConnectionTestResponse> {
   const start = Date.now();
   const model = String(input.model ?? '');
-  const normalizedInput = normalizeProviderTestInput(input);
-  const validated = await validateUserProviderBaseUrl(normalizedInput.baseUrl);
+  const validated = await validateBaseUrlResolved(input.baseUrl);
   if (validated.error || !validated.parsed) {
     const kind: ConnectionTestKind = validated.forbidden ? 'forbidden' : 'invalid_base_url';
     return {
@@ -1449,31 +1209,18 @@ export async function testProviderConnection(
     };
   }
 
-  if (normalizedInput.protocol === 'google') {
-    const mismatch = googleBaseUrlMismatchDetail(
-      validated.parsed.hostname.toLowerCase(),
-    );
-    if (mismatch) {
-      return {
-        ok: false,
-        kind: 'invalid_base_url',
-        latencyMs: Date.now() - start,
-        model,
-        detail: mismatch,
-      };
-    }
-  }
-
   let call: ProviderCallShape;
   try {
-    call = buildProviderCall(normalizedInput);
+    call = buildProviderCall(input);
   } catch (err) {
     return {
       ok: false,
       kind: 'unknown',
       latencyMs: Date.now() - start,
       model,
-      detail: networkErrorDetail(err, [input.apiKey]),
+      detail: redactSecrets(err instanceof Error ? err.message : String(err), [
+        input.apiKey,
+      ]),
     };
   }
 
@@ -1490,7 +1237,7 @@ export async function testProviderConnection(
   try {
     proxyDispatcher = proxyDispatcherRequestInit();
     const modelError = await validateLocalOpenAiModel(
-      normalizedInput,
+      input,
       validated.parsed,
       controller.signal,
       start,
@@ -1499,7 +1246,7 @@ export async function testProviderConnection(
     if (modelError) return modelError;
 
     const senseAudioNonChatResult = await validateSenseAudioNonChatModel(
-      normalizedInput,
+      input,
       controller.signal,
       start,
       proxyDispatcher.requestInit,
@@ -1538,13 +1285,15 @@ export async function testProviderConnection(
         });
         latencyMs = Date.now() - start;
       } else {
-        const { kind, detail } = classifyProviderHttpFailure(
-          input.protocol,
-          validated.parsed.hostname,
-          response.status,
-          detailText,
-          [input.apiKey],
-        );
+        const redactedDetail = redactSecrets(detailText.slice(0, 240), [
+          input.apiKey,
+        ]);
+        const kind = statusToKind(response.status, redactedDetail);
+        const detail =
+          redactedDetail ||
+          (response.status === 404
+            ? 'HTTP 404 from provider; check the Base URL path.'
+            : '');
         console.warn(
           `[test:provider] ${input.protocol} ${validated.parsed.hostname} model=${input.model} → ${response.status} in ${latencyMs}ms (${kind})${detail ? ` ${detail}` : ''}`,
         );
@@ -1620,22 +1369,17 @@ export async function testProviderConnection(
         };
       }
       if (!rawSample && !completion.valid) {
-        const providerError = extractProviderErrorDetail(data, rawText);
         const detail = redactSecrets(
-          providerError || smokeFailureDetail(rawSample),
+          extractProviderErrorDetail(data, rawText) ||
+            smokeFailureDetail(rawSample),
           [input.apiKey],
         );
-        const kind: ConnectionTestKind = isLikelyAuthErrorText(providerError)
-          ? 'auth_failed'
-          : isLikelyModelErrorText(providerError)
-            ? 'not_found_model'
-            : 'unknown';
         console.warn(
           `[test:provider] ${input.protocol} ${validated.parsed.hostname} model=${input.model} → ${response.status} in ${latencyMs}ms (unexpected_sample)${detail ? ` ${detail}` : ''}`,
         );
         return {
           ok: false,
-          kind,
+          kind: 'unknown',
           latencyMs,
           model,
           status: response.status,
@@ -1670,13 +1414,15 @@ export async function testProviderConnection(
     } catch {
       // Ignore — we still report the status code.
     }
-    const { kind, detail } = classifyProviderHttpFailure(
-      input.protocol,
-      validated.parsed.hostname,
-      response.status,
-      detailText,
-      [input.apiKey],
-    );
+    const redactedDetail = redactSecrets(detailText.slice(0, 240), [
+      input.apiKey,
+    ]);
+    const kind = statusToKind(response.status, redactedDetail);
+    const detail =
+      redactedDetail ||
+      (response.status === 404
+        ? 'HTTP 404 from provider; check the Base URL path.'
+        : '');
     console.warn(
       `[test:provider] ${input.protocol} ${validated.parsed.hostname} model=${input.model} → ${response.status} in ${latencyMs}ms (${kind})${detail ? ` ${detail}` : ''}`,
     );
@@ -1700,7 +1446,7 @@ export async function testProviderConnection(
       kind,
       latencyMs,
       model,
-      detail: networkErrorDetail(err, [input.apiKey]),
+      detail: redactSecrets(message, [input.apiKey]),
     };
   } finally {
     clearTimeout(timer);
@@ -1724,56 +1470,14 @@ interface AgentSink {
   getText: () => string;
   getStderrTail: () => string;
   appendRawStdout: (chunk: string) => void;
-  getRawStdout: () => string;
   getRawStdoutTail: () => string;
-  sawTerminalCompletion: () => boolean;
   dispose: () => void;
-}
-
-function isTerminalCompletionStopReason(value: unknown): boolean {
-  return typeof value === 'string' && value.length > 0 && value !== 'tool_use';
-}
-
-function parseClaudeResultFrame(stdout: string): {
-  resultText: string;
-  stopReason: string | null;
-  isError: boolean;
-  subtype: string | null;
-} | null {
-  let parsed: {
-    resultText: string;
-    stopReason: string | null;
-    isError: boolean;
-    subtype: string | null;
-  } | null = null;
-  for (const line of stdout.split(/\r?\n/u)) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    try {
-      const obj = JSON.parse(trimmed) as Record<string, unknown>;
-      if (obj.type !== 'result') continue;
-      parsed = {
-        resultText: typeof obj.result === 'string' ? obj.result.trim() : '',
-        stopReason:
-          (typeof obj.stop_reason === 'string' && obj.stop_reason) ||
-          (typeof obj.terminal_reason === 'string' && obj.terminal_reason) ||
-          null,
-        isError: Boolean(obj.is_error),
-        subtype: typeof obj.subtype === 'string' ? obj.subtype : null,
-      };
-    } catch {
-      // Non-JSON stdout falls back to the normal diagnostic path.
-    }
-  }
-  return parsed;
 }
 
 export function createAgentSink(): AgentSink {
   let buffer = '';
   let stderrTail = '';
-  let rawStdout = '';
   let rawStdoutTail = '';
-  let terminalCompletionSeen = false;
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
   let resolveResult!: (value: AgentSinkResult) => void;
   let resolveStreamError!: (value: Error) => void;
@@ -1820,7 +1524,6 @@ export function createAgentSink(): AgentSink {
 
   const appendRawStdout = (chunk: string) => {
     if (typeof chunk === 'string' && chunk.length > 0) {
-      rawStdout = (rawStdout + chunk).slice(-16_384);
       rawStdoutTail = (rawStdoutTail + chunk).slice(-400);
     }
   };
@@ -1851,11 +1554,6 @@ export function createAgentSink(): AgentSink {
         consumeText(delta);
       } else if (type === 'text' && typeof text === 'string') {
         consumeText(text);
-      } else if (
-        (type === 'turn_end' || type === 'usage') &&
-        isTerminalCompletionStopReason(data.stopReason)
-      ) {
-        terminalCompletionSeen = true;
       }
       return;
     }
@@ -1885,9 +1583,7 @@ export function createAgentSink(): AgentSink {
     getText: () => buffer,
     getStderrTail: () => stderrTail,
     appendRawStdout,
-    getRawStdout: () => rawStdout,
     getRawStdoutTail: () => rawStdoutTail,
-    sawTerminalCompletion: () => terminalCompletionSeen,
     dispose: () => {
       if (debounceTimer) {
         clearTimeout(debounceTimer);
@@ -1895,67 +1591,6 @@ export function createAgentSink(): AgentSink {
       }
     },
   };
-}
-
-function extractOpenCodeTextFromRawStdout(stdout: string): string {
-  const text: string[] = [];
-  for (const line of stdout.split(/\r?\n/u)) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    try {
-      const parsed = JSON.parse(trimmed) as unknown;
-      if (
-        parsed &&
-        typeof parsed === 'object' &&
-        (parsed as { type?: unknown }).type === 'text'
-      ) {
-        const part = (parsed as { part?: unknown }).part;
-        if (
-          part &&
-          typeof part === 'object' &&
-          typeof (part as { text?: unknown }).text === 'string'
-        ) {
-          text.push((part as { text: string }).text);
-        }
-      }
-    } catch {
-      // Non-JSON stdout is handled by the normal diagnostics path.
-    }
-  }
-  return text.join('');
-}
-
-const OPENCODE_OUTDATED_CLI_DETAIL =
-  'OpenCode CLI appears to be outdated or incompatible with this connection test. Update it with `npm i -g opencode-ai@latest`, then retry the OpenCode connection test.';
-const OPENCODE_PROVIDER_CONNECTIVITY_DETAIL_MAX_LENGTH = 240;
-
-function openCodeOutdatedCliDetail(output: string): string | null {
-  const value = output.toLowerCase();
-  const looksLikeOpenCodeHelp =
-    /\bopencode\b/u.test(value) && /\b(?:usage|commands|options):/u.test(value);
-  const looksLikeUnsupportedArgs =
-    /\b(?:unknown option|unknown argument|unexpected argument|unrecognized option|invalid option|incompatible opencode args)\b/u.test(value);
-
-  return looksLikeOpenCodeHelp || looksLikeUnsupportedArgs
-    ? OPENCODE_OUTDATED_CLI_DETAIL
-    : null;
-}
-
-function openCodeProviderConnectivityDetail(output: string): string | null {
-  for (const rawLine of output.split(/\r?\n/u)) {
-    const line = rawLine.replace(/\s+/gu, ' ').trim();
-    if (!line) continue;
-    const match = /\bCannot connect to API:[^"'`\r\n]+/iu.exec(line) ??
-      /\bUnable to connect[^"'`\r\n]+/iu.exec(line) ??
-      /\bWas there a typo in the url or port\?/iu.exec(line);
-    if (!match) continue;
-    const detail = match[0].trim();
-    const boundedDetail = detail.length > OPENCODE_PROVIDER_CONNECTIVITY_DETAIL_MAX_LENGTH
-      ? `${detail.slice(0, OPENCODE_PROVIDER_CONNECTIVITY_DETAIL_MAX_LENGTH - 3).trimEnd()}...`
-      : detail;
-    return `OpenCode reported a provider connectivity failure before the connection test timed out: ${boundedDetail}`;
-  }
-  return null;
 }
 
 interface AgentSpawnHandle {
@@ -1984,15 +1619,7 @@ function attachAgentStreamHandlers(
   child.stdout?.setEncoding('utf8');
   child.stderr?.setEncoding('utf8');
   if (def.streamFormat === 'claude-stream-json') {
-    const claude = createClaudeStreamHandler((ev: unknown) => {
-      const data = (ev ?? {}) as { type?: unknown; terminal?: unknown };
-      // Terminal result-frame errors are already classified by this sink's own
-      // result-frame parse (#4501) with the accurate `output_parse` phase;
-      // forwarding the parser's error event would race it into the generic
-      // spawn-phase stream-error path first.
-      if (data.type === 'error' && data.terminal === true) return;
-      send('agent', ev);
-    });
+    const claude = createClaudeStreamHandler((ev: unknown) => send('agent', ev));
     child.stdout?.on('data', (chunk: string) => {
       appendRawStdout?.(chunk);
       claude.feed(chunk);
@@ -2016,9 +1643,12 @@ function attachAgentStreamHandlers(
       child,
       prompt,
       cwd,
-      // Same substitution as the chat-run path in server.ts: omitted models can
-      // resolve to a concrete fallback, while an explicit 'default' is preserved
-      // so ACP runtimes can use their upstream configured default.
+      // Same substitution as the chat-run path in server.ts — adapters whose
+      // CLI rejects the synthetic 'default' (e.g. AMR / vela, which forces
+      // session/set_model before session/prompt) need the def's first
+      // concrete fallback id here too, otherwise Test connection deadlocks
+      // on the same `session/set_model must be called before session/prompt`
+      // error the chat-run path already handles.
       model: resolveModelForAgent(def as never, model ?? null, modelEnv, liveModelScope),
       mcpServers: [],
       send,
@@ -2040,10 +1670,7 @@ function attachAgentStreamHandlers(
         send('agent', ev);
       },
     );
-    child.stdout?.on('data', (chunk: string) => {
-      appendRawStdout?.(chunk);
-      handler.feed(chunk);
-    });
+    child.stdout?.on('data', (chunk: string) => handler.feed(chunk));
     child.on('close', () => handler.flush());
   } else {
     child.stdout?.on('data', (chunk: string) => send('stdout', { chunk }));
@@ -2064,73 +1691,11 @@ function delay(ms: number): Promise<void> {
   });
 }
 
-function runQuietCommand(command: string, args: string[], cwd: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
-      cwd,
-      stdio: 'ignore',
-      shell: false,
-    });
-    child.once('error', reject);
-    child.once('close', (code, signal) => {
-      if (code === 0 && !signal) {
-        resolve();
-        return;
-      }
-      reject(new Error(`${command} ${args.join(' ')} exited with ${signal || code}`));
-    });
-  });
-}
-
-async function prepareOpenCodeConnectionTestCwd(tempDir: string): Promise<void> {
-  await fsp.writeFile(
-    path.join(tempDir, 'README.md'),
-    'Open Design OpenCode connection test.\n',
-    'utf8',
-  );
-  try {
-    await runQuietCommand('git', ['init'], tempDir);
-  } catch {
-    // OpenCode responds more reliably inside a git worktree, but a missing or
-    // misconfigured local git binary must not sink an otherwise healthy CLI.
-  }
-}
-
-async function resolveConnectionTestModelForAgent(
-  def: RuntimeAgentDef,
-  requestedModel: string | null,
-  env: NodeJS.ProcessEnv,
-  liveModelScope: string | null,
-  launchPath?: string | null,
-): Promise<string | null> {
-  const resolved = resolveModelForAgent(def, requestedModel, env, liveModelScope);
-  if (def.id !== 'amr' || resolved !== 'default' || !launchPath) return resolved;
-
-  try {
-    const cacheKey = buildAmrModelCacheKey({
-      launchPath,
-      env,
-      credentialRevision: readVelaCredentialRevision(env),
-    });
-    const catalog = await amrModelLoadingCache.get(cacheKey, {
-      fetchPreset: () => fetchVelaPresetModels(launchPath, env),
-      fetchRemote: () => fetchVelaRemoteModelsWithRetry(launchPath, env),
-    });
-    const liveModels = preferFreshLiveModels(
-      catalog.models ?? [],
-      getRememberedLiveModels(def.id, liveModelScope),
-    );
-    return resolveDefaultModelFromOptions(liveModels) ?? resolved;
-  } catch {
-    return resolved;
-  }
-}
-
 async function testAgentConnectionInternal(
   input: AgentConnectionInput,
 ): Promise<ConnectionTestResponse> {
   const start = Date.now();
-  let model =
+  const model =
     typeof input.model === 'string' && input.model.trim()
       ? input.model.trim()
       : 'default';
@@ -2164,17 +1729,6 @@ async function testAgentConnectionInternal(
   }
 
   const tempDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-conn-test-'));
-  // Antigravity's print mode is silent on stdout/stderr for both
-  // missing-auth and quota-exhausted failures — it exits 0 without
-  // echoing the upstream error. The only place that failure shape
-  // surfaces is agy's `--log-file`, so hand the smoke test a temp log
-  // path under `tempDir` (cleaned up with the rest of the dir) and let
-  // the exit handler grep it for auth / quota signals (#4281). Non-agy
-  // adapters ignore `agentLogFilePath`.
-  const antigravityLogFilePath =
-    def.id === 'antigravity'
-      ? path.join(tempDir, 'agy-connection-test.log')
-      : null;
   let child: AgentChild | null = null;
   let childExit: Promise<AgentChildExit> | null = null;
   let childClosed = false;
@@ -2314,23 +1868,6 @@ async function testAgentConnectionInternal(
     kind: 'timeout' | 'aborted',
   ): ConnectionTestResponse => {
     const latencyMs = Date.now() - start;
-    if (kind === 'timeout' && input.agentId === 'opencode') {
-      const rawDetail = `${sink.getStderrTail()}\n${sink.getRawStdoutTail()}`;
-      const providerDetail = openCodeProviderConnectivityDetail(rawDetail);
-      if (providerDetail) {
-        const detail = redactSecrets(providerDetail);
-        console.warn(`[test:agent] ${def.name} → upstream_unavailable: ${detail}`);
-        return {
-          ok: false,
-          kind: 'upstream_unavailable',
-          latencyMs,
-          model,
-          agentName: def.name,
-          detail,
-          diagnostics: buildDiagnostics({ phase: 'connection_smoke_test' }),
-        };
-      }
-    }
     console.warn(`[test:agent] ${def.name} → ${kind} in ${(latencyMs / 1000).toFixed(1)}s`);
     return {
       ok: false,
@@ -2343,9 +1880,6 @@ async function testAgentConnectionInternal(
   };
 
   try {
-    if (input.agentId === 'opencode' || input.agentId === 'mimo') {
-      if (input.agentId === 'opencode') await prepareOpenCodeConnectionTestCwd(tempDir);
-    }
     let args: string[];
     try {
       promptFile = await preparePromptFileForAgent(def, SMOKE_PROMPT, 'connection-test');
@@ -2353,29 +1887,12 @@ async function testAgentConnectionInternal(
         SMOKE_PROMPT,
         [],
         [],
-        {
-          model: input.model ?? null,
-          reasoning: input.reasoning ?? null,
-          serviceTier: input.serviceTier ?? null,
-        },
+        { model: input.model ?? null, reasoning: input.reasoning ?? null },
         {
           cwd: tempDir,
           ...(promptFile ? { promptFilePath: promptFile.path } : {}),
-          ...(antigravityLogFilePath
-            ? { agentLogFilePath: antigravityLogFilePath }
-            : {}),
         },
       );
-      // Connection tests should validate the adapter's core CLI path, not
-      // fail on unrelated user-installed OpenCode plugins. `opencode run
-      // --pure` keeps the smoke test isolated while regular chat runs retain
-      // the user's full plugin environment.
-      if ((input.agentId === 'opencode' || input.agentId === 'mimo') && !args.includes('--pure')) {
-        args.push('--pure');
-      }
-      if ((input.agentId === 'opencode' || input.agentId === 'mimo') && !args.includes('--title')) {
-        args.push('--title', 'Connection test');
-      }
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
       // buildArgs runs *after* binary resolution but *before* spawn, so
@@ -2419,13 +1936,6 @@ async function testAgentConnectionInternal(
       ...baseEnv,
       ...(mmdRouteLaunchEnv || {}),
     }, executableResolution);
-    model = await resolveConnectionTestModelForAgent(
-      def,
-      model,
-      env,
-      liveModelScope,
-      executableResolution.launchPath,
-    ) ?? model;
     const auth = await probeAgentAuthStatus(def, executableResolution.launchPath, env);
     if (auth?.status === 'missing') {
       // Preflight auth probe runs after binary resolution but before the
@@ -2483,16 +1993,16 @@ async function testAgentConnectionInternal(
       child,
       SMOKE_PROMPT,
       tempDir,
-      model,
+      input.model,
       env,
       liveModelScope,
       sink.send,
       sink.appendRawStdout,
     );
 
-    const resultFromChildExit = async (
+    const resultFromChildExit = (
       winner: AgentChildExit,
-    ): Promise<ConnectionTestResponse> => {
+    ): ConnectionTestResponse => {
       if (winner.kind === 'spawnError') {
         const latencyMs = Date.now() - start;
         const detail = redactSecrets(winner.error.message);
@@ -2521,150 +2031,40 @@ async function testAgentConnectionInternal(
         };
       }
 
-      // On Windows, short-lived JSON-stream CLIs can deliver the process
-      // close event before all stdout chunks have reached the parser.
-      await delay(AGENT_STDOUT_DRAIN_MS);
       const latencyMs = Date.now() - start;
       const buffered = sink.getText().trim();
-      const claudeResult = input.agentId === 'claude'
-        ? parseClaudeResultFrame(sink.getRawStdout())
-        : null;
-      const claudeReportedSuccess =
-        !!claudeResult &&
-        !claudeResult.isError &&
-        claudeResult.subtype === 'success';
-      const claudeLateExitOne =
-        input.agentId === 'claude' &&
-        winner.code === 1 &&
-        winner.signal === null;
-      const parsedClaudeResultText =
-        claudeReportedSuccess ? claudeResult.resultText.trim() : '';
-      const visibleText = buffered || parsedClaudeResultText;
-      // ACP agents that don't shut down on stdin.end() are terminated after a
-      // clean prompt completion. Depending on the ACP bridge, this can surface
-      // either as SIGTERM or as a normal code 130 teardown. For those exact
-      // forced-shutdown shapes we trust the ACP-level success signal so
-      // connection tests don't report `agent_spawn_failed` despite a healthy
-      // assistant response (see #1265 / #1286).
+      // ACP agents that don't shut down on stdin.end() (e.g. Devin for
+      // Terminal) are now SIGTERM'd from attachAcpSession after a clean
+      // prompt completion, which sets `winner.signal === 'SIGTERM'`. For
+      // that exact forced-shutdown shape we trust the ACP-level success
+      // signal so connection tests don't report `agent_spawn_failed`
+      // despite a healthy assistant response (see #1265 / #1286).
       //
-      // Scope the override narrowly: only the known daemon-triggered ACP
-      // teardown shapes plus `acpCleanCompletion` count as a clean forced
-      // shutdown. Any other post-response process failure (code 1, SIGKILL,
-      // SIGSEGV, etc.) still falls through to `agent_spawn_failed`, preserving
-      // the existing connection-test failure behavior for genuine
-      // post-response problems.
+      // Scope the override narrowly: only `code === null` AND
+      // `signal === 'SIGTERM'` AND `acpCleanCompletion` count as a clean
+      // forced shutdown. Any other post-response process failure (non-zero
+      // exit code, SIGKILL, SIGSEGV, etc.) still falls through to
+      // `agent_spawn_failed`, preserving the existing connection-test
+      // failure behavior for genuine post-response problems.
       const acpCleanCompletion =
         typeof acpSession?.completedSuccessfully === 'function' &&
         acpSession.completedSuccessfully();
       const acpForcedShutdown =
-        acpCleanCompletion &&
-        (
-          (winner.code === null && winner.signal === 'SIGTERM') ||
-          (winner.code === 130 && winner.signal === null)
-        );
-      const claudeCompletedTurn =
-        claudeLateExitOne &&
-        claudeReportedSuccess &&
-        (
-          sink.sawTerminalCompletion() ||
-          (
-            isTerminalCompletionStopReason(claudeResult.stopReason)
-          )
-        );
+        winner.code === null &&
+        winner.signal === 'SIGTERM' &&
+        acpCleanCompletion;
       const exitedCleanly =
-        (winner.code === 0 && !winner.signal) || acpForcedShutdown || claudeCompletedTurn;
-      if (visibleText) {
-        const rawSample = truncateSample(visibleText);
+        (winner.code === 0 && !winner.signal) || acpForcedShutdown;
+      if (buffered) {
+        const rawSample = truncateSample(buffered);
         const exitInfo = { code: winner.code, signal: winner.signal };
         if (rawSample && isLikelyModelErrorText(rawSample)) {
-          return resultFromAgentText(visibleText, exitInfo);
+          return resultFromAgentText(buffered, exitInfo);
         }
-        if (exitedCleanly) return resultFromAgentText(visibleText, exitInfo);
+        if (exitedCleanly) return resultFromAgentText(buffered, exitInfo);
       }
       const stderrTail = sink.getStderrTail().trim();
       const rawStdoutTail = sink.getRawStdoutTail().trim();
-      if ((input.agentId === 'opencode' || input.agentId === 'mimo') && exitedCleanly && rawStdoutTail) {
-        const recoveredText = extractOpenCodeTextFromRawStdout(rawStdoutTail).trim();
-        if (recoveredText) {
-          return resultFromAgentText(recoveredText, {
-            code: winner.code,
-            signal: winner.signal,
-          });
-        }
-      }
-      // Antigravity print-mode empty-output guard. agy exits cleanly
-      // (code 0) with no assistant text for BOTH missing-auth and
-      // quota-exhausted failures, so without this the connection test
-      // collapses every such failure into a useless `unknown` / "Test
-      // failed: exit 0" (#4281). Mirror the chat-run guard in
-      // server.ts: fold agy's `--log-file` tail into the classifier
-      // input and route to the specific auth / quota result so Settings
-      // can show actionable re-authentication or quota guidance. Only
-      // runs when agy produced no visible text — a healthy `ok` reply
-      // returns above before reaching here.
-      if (input.agentId === 'antigravity' && !visibleText) {
-        let combinedDetail = `${stderrTail}\n${rawStdoutTail}`;
-        if (antigravityLogFilePath) {
-          try {
-            const logContent = await fsp.readFile(antigravityLogFilePath, 'utf8');
-            // Keep the last 8 KB — quota / auth lines land near the tail,
-            // after the spawn / model-config preamble.
-            combinedDetail = `${combinedDetail}\n${logContent.slice(-8192)}`;
-          } catch {
-            // Missing log file (agy never wrote it, read-only tmp, etc.)
-            // is fine — fall through to the clean-exit auth fallback below.
-          }
-        }
-        const antigravityAuth = classifyAgentAuthFailure('antigravity', combinedDetail);
-        const serviceFailure = classifyAgentServiceFailure(combinedDetail);
-        // Empirically a silent agy print-mode exit almost always means
-        // missing OAuth; quota is the only other silent path and it is
-        // caught by the log-file grep above. Apply the auth fallback only
-        // on a clean exit so a genuine crash still reports as a spawn
-        // failure with its exit code.
-        const isAuth =
-          antigravityAuth?.status === 'missing' ||
-          serviceFailure === 'AGENT_AUTH_REQUIRED' ||
-          (!antigravityAuth && !serviceFailure && exitedCleanly);
-        if (isAuth) {
-          console.warn(
-            `[test:agent] ${def.name} → auth_required (silent exit ${winner.code ?? 'null'})`,
-          );
-          return {
-            ok: false,
-            kind: 'agent_auth_required',
-            latencyMs,
-            model,
-            agentName: def.name,
-            detail: antigravityAuth?.message ?? antigravityAuthGuidance(),
-            diagnostics: buildDiagnostics({
-              phase: 'connection_smoke_test',
-              exitCode: winner.code,
-              signal: winner.signal,
-            }),
-          };
-        }
-        if (serviceFailure === 'RATE_LIMITED') {
-          console.warn(
-            `[test:agent] ${def.name} → rate_limited (silent exit ${winner.code ?? 'null'})`,
-          );
-          return {
-            ok: false,
-            kind: 'rate_limited',
-            latencyMs,
-            model,
-            agentName: def.name,
-            detail: antigravityQuotaGuidance(),
-            diagnostics: buildDiagnostics({
-              phase: 'connection_smoke_test',
-              exitCode: winner.code,
-              signal: winner.signal,
-            }),
-          };
-        }
-        // UPSTREAM_UNAVAILABLE or a non-clean exit with no recognizable
-        // signal falls through to the generic exit-detail path below.
-      }
       const acpFatal = Boolean(acpSession?.hasFatalError?.());
       const rawDetail = [
         winner.code != null ? `exit ${winner.code}` : null,
@@ -2676,27 +2076,6 @@ async function testAgentConnectionInternal(
       ]
         .filter(Boolean)
         .join(' · ');
-      if (input.agentId === 'opencode') {
-        const outdatedCliDetail = openCodeOutdatedCliDetail(rawDetail);
-        if (outdatedCliDetail) {
-          console.warn(
-            `[test:agent] ${def.name} → outdated_cli: ${redactSecrets(rawDetail)}`,
-          );
-          return {
-            ok: false,
-            kind: 'agent_spawn_failed',
-            latencyMs,
-            model,
-            agentName: def.name,
-            detail: outdatedCliDetail,
-            diagnostics: buildDiagnostics({
-              phase: 'spawn',
-              exitCode: winner.code,
-              signal: winner.signal,
-            }),
-          };
-        }
-      }
       const auth = classifyAgentAuthFailure(input.agentId, rawDetail);
       if (auth?.status === 'missing') {
         console.warn(`[test:agent] ${def.name} → auth_required: ${redactSecrets(rawDetail)}`);
@@ -2719,7 +2098,7 @@ async function testAgentConnectionInternal(
         exitCode: winner.code,
         signal: winner.signal,
         stderrTail,
-        stdoutTail: sink.getRawStdout() || rawStdoutTail || visibleText,
+        stdoutTail: rawStdoutTail || buffered,
         env,
         resolvedBin: executableResolution.selectedPath,
       });
@@ -2813,7 +2192,7 @@ async function testAgentConnectionInternal(
       if (completion.kind === 'timeout' || completion.kind === 'aborted') {
         return resultFromCancellation(completion.kind);
       }
-      return await resultFromChildExit(completion);
+      return resultFromChildExit(completion);
     }
     if (winner.kind === 'streamError') {
       return resultFromStreamError(winner.error);
@@ -2821,7 +2200,7 @@ async function testAgentConnectionInternal(
     if (winner.kind === 'timeout' || winner.kind === 'aborted') {
       return resultFromCancellation(winner.kind);
     }
-    return await resultFromChildExit(winner);
+    return resultFromChildExit(winner);
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
     // Outer catch — the failure may have happened at any phase between

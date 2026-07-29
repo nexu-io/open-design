@@ -8,7 +8,6 @@ import {
   SIDECAR_DEFAULTS,
 } from "@open-design/sidecar-proto";
 import { resolveNamespace } from "@open-design/sidecar";
-import { releaseChannelFromVersion, releaseNamespace } from "@open-design/release";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -19,14 +18,13 @@ export type ToolPackBuildOutput = "all" | "app" | "appimage" | "dir" | "dmg" | "
 export type ToolPackMacCompression = "store" | "normal" | "maximum";
 export type ToolPackWebOutputMode = "server" | "standalone";
 export type ToolPackAmrProfile = "prod" | "test" | "local";
+type ToolPackPrereleaseChannel = "beta" | "nightly" | "preview";
 
 export type ToolPackCliOptions = {
   appVersion?: string;
   cacheDir?: string;
   containerized?: boolean;
   dir?: string;
-  diagnoseAttempts?: string | number;
-  expectedVersion?: string;
   expr?: string;
   headless?: boolean;
   json?: boolean;
@@ -34,9 +32,7 @@ export type ToolPackCliOptions = {
   notarize?: boolean;
   namespace?: string;
   path?: string;
-  payloadPath?: string;
   portable?: boolean;
-  removeCache?: boolean;
   removeData?: boolean;
   removeLogs?: boolean;
   removeProductUserData?: boolean;
@@ -44,8 +40,6 @@ export type ToolPackCliOptions = {
   requireVelaCli?: boolean;
   signed?: boolean;
   silent?: boolean;
-  statusPollCount?: string | number;
-  statusPollIntervalMs?: string | number;
   to?: string;
   updateAction?: string;
 };
@@ -76,7 +70,6 @@ export type ToolPackConfig = {
   namespace: string;
   platform: ToolPackPlatform;
   portable: boolean;
-  removeCache?: boolean;
   removeData: boolean;
   removeLogs: boolean;
   removeProductUserData: boolean;
@@ -153,11 +146,20 @@ function resolveToolPackAppVersion(value: string | undefined): string | undefine
   return normalized;
 }
 
+function channelFromAppVersion(value: string | undefined): ToolPackPrereleaseChannel | null {
+  if (value == null || value.length === 0) return null;
+  if (/(?:^|[-.])beta(?:[-.]|$)/i.test(value)) return "beta";
+  if (/(?:^|[-.])nightly(?:[-.]|$)/i.test(value)) return "nightly";
+  if (/(?:^|[-.])preview(?:[-.]|$)/i.test(value)) return "preview";
+  return null;
+}
+
 function defaultNamespaceForAppVersion(platform: ToolPackPlatform, appVersion: string | undefined): string {
-  const channel = releaseChannelFromVersion(appVersion);
+  const channel = channelFromAppVersion(appVersion);
   if (channel == null) return SIDECAR_DEFAULTS.namespace;
 
-  return releaseNamespace(channel, platform);
+  const namespace = `release-${channel}`;
+  return platform === "mac" ? namespace : `${namespace}-${platform}`;
 }
 
 function resolveToolPackWebOutputMode(platform: ToolPackPlatform, value: string | undefined): ToolPackWebOutputMode {
@@ -312,9 +314,8 @@ export function resolveToolPackConfig(
     env: process.env,
     namespace: options.namespace ?? defaultNamespaceForAppVersion(platform, appVersion),
   });
-  const defaultToolPackRoot = join(WORKSPACE_ROOT, ".tmp", "tools-pack");
-  const toolPackRoot = resolve(options.dir ?? defaultToolPackRoot);
-  const cacheRoot = resolve(options.cacheDir ?? join(defaultToolPackRoot, "cache"));
+  const toolPackRoot = resolve(options.dir ?? join(WORKSPACE_ROOT, ".tmp", "tools-pack"));
+  const cacheRoot = resolve(options.cacheDir ?? join(toolPackRoot, "cache"));
   const outputRoot = join(toolPackRoot, "out");
   const outputPlatformRoot = join(outputRoot, platform);
   const outputNamespaceRoot = join(outputPlatformRoot, "namespaces", namespace);
@@ -345,7 +346,6 @@ export function resolveToolPackConfig(
       cacheRoot,
       toolPackRoot,
     },
-    removeCache: options.removeCache === true,
     removeData: options.removeData === true,
     removeLogs: options.removeLogs === true,
     removeProductUserData: options.removeProductUserData === true,

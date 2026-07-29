@@ -48,7 +48,7 @@ To start a fresh project:
 ## Files
 
 ```text
-design-templates/kami-deck/
+skills/kami-deck/
 ├── SKILL.md      # ← agent contract (read this first)
 ├── README.md     # ← you are here
 └── example.html  # canonical Open Design rendering (9 slides)

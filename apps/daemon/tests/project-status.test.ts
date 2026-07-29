@@ -11,7 +11,6 @@ import {
   insertProject,
   getConversation,
   listConversations,
-  listLatestConversationRunStatuses,
   listLatestProjectRunStatuses,
   listProjectsAwaitingInput,
   openDatabase,
@@ -78,17 +77,6 @@ test('unanswered structured question marks project as awaiting input', () => {
   assert.deepEqual([...listProjectsAwaitingInput(db)], ['project-a']);
 });
 
-test('ask-question alias of question-form also marks project as awaiting input', () => {
-  const db = createDb();
-  const conversationId = seedProject(db, 'project-a-alias');
-
-  // <ask-question> is an accepted alias for <question-form>; an alias-form
-  // turn must mark the project awaiting input just like the canonical tag.
-  addMessage(db, conversationId, 'assistant-question', 'assistant', 'Need one choice\n<ask-question id="q1">');
-
-  assert.deepEqual([...listProjectsAwaitingInput(db)], ['project-a-alias']);
-});
-
 test('user reply after structured question clears awaiting input', () => {
   const db = createDb();
   const conversationId = seedProject(db, 'project-b');
@@ -134,44 +122,6 @@ test('conversation latest run follows assistant message position', () => {
 
   assert.equal(listConversations(db, 'project-latest')[0]?.latestRun?.status, 'running');
   assert.equal(getConversation(db, conversationId)?.latestRun?.status, 'running');
-});
-
-test('conversation latest run status breaks timestamp ties by message position', () => {
-  const db = createDb();
-  insertProject(db, {
-    id: 'project-conversation-status-tie',
-    name: 'project-conversation-status-tie',
-    createdAt: 1,
-    updatedAt: 1,
-  });
-  insertConversation(db, {
-    id: 'conversation-status-tie',
-    projectId: 'project-conversation-status-tie',
-    title: null,
-    createdAt: 1,
-    updatedAt: 1,
-  });
-  upsertMessage(db, 'conversation-status-tie', {
-    id: 'conversation-status-tie-failed',
-    role: 'assistant',
-    content: 'failed',
-    runId: 'conversation-status-tie-failed-run',
-    runStatus: 'failed',
-    endedAt: 50,
-  });
-  upsertMessage(db, 'conversation-status-tie', {
-    id: 'conversation-status-tie-succeeded',
-    role: 'assistant',
-    content: 'succeeded',
-    runId: 'conversation-status-tie-succeeded-run',
-    runStatus: 'succeeded',
-    endedAt: 50,
-  });
-
-  const runStatuses = listLatestConversationRunStatuses(db);
-
-  assert.equal(runStatuses.get('conversation-status-tie')?.value, 'succeeded');
-  assert.equal(runStatuses.get('conversation-status-tie')?.runId, 'conversation-status-tie-succeeded-run');
 });
 
 test('conversation summaries expose cumulative completed run duration', () => {

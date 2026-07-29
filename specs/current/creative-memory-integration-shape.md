@@ -218,13 +218,11 @@ agent identity, or feature flag.
 - Critique theater addendum — gated on `cfg.enabled`, suppressed on media.
 - Active-design visual-direction override — gated on the brand being bound.
 - Connected external MCP directive — gated on connected MCP servers.
-- Mid-conversation `<question-form>` clarification guidance — available to
-  every agent because the form is UI-parsed assistant-text markup, not a
-  native tool call.
+- Claude-only `AskUserQuestion` clarifying-questions block — gated on
+  agent identity.
 
-Source: the tail assembly in `buildSystemPrompt` in
-`apps/daemon/src/prompts/system.ts`. The exact line numbers are unstable; the
-gating conditions and order are the durable shape.
+Source: `apps/daemon/src/prompts/system.ts:430-650`. The exact line numbers
+are unstable; the gating conditions and order are the durable shape.
 
 The existing precedence rule, declared in the `## Personal memory` block's
 own narrative, is: **personal memory is preferences, not hard rules; brand
@@ -364,11 +362,11 @@ The engine defaults to `<package install dir>/memory/<userId>/preferences.json`
 overridable via `MEMORY_STORAGE_ROOT`. For Open Design integration, two
 decisions:
 
-- **Default ownership.** Memory is daemon-managed state. The integration must
-  receive an explicit storage root derived from the daemon's already-resolved
-  `RUNTIME_DATA_DIR`; it must not independently reinterpret `OD_DATA_DIR` or
-  choose a cwd-relative fallback. The exact daemon path is intentionally left
-  to root [`AGENTS.md`](../../AGENTS.md) → **Daemon data directory contract**.
+- **Default location.** Lean: `<OD_DATA_DIR>/memory/<userId>/preferences.json`
+  so memory follows the same `OD_DATA_DIR` precedence as other daemon state
+  (`AGENTS.md` FAQ "Where is data written?"). Packaged installs and Home
+  Manager / NixOS modules already point `OD_DATA_DIR` at a writable directory;
+  memory should ride that contract.
 - **Portability.** `od memory export --to <path>` and `od memory import <path>`
   for moving memory across machines without a cloud sync layer. The engine's
   storage is already plain JSON; this is just CLI plumbing.
@@ -392,18 +390,25 @@ integration boundaries.
 
 | Option | Where raw events live | Implication |
 |---|---|---|
-| A. Engine package owns raw events | Engine-owned storage alongside `preferences.json` | Engine boundary expands to include event log. Re-derivation runs inside the package. |
-| B. Daemon owns raw events | Daemon-managed storage | Engine becomes a pure derivation function over an event slice handed in by the daemon. |
-| C. Hybrid — daemon writes, engine reads | Daemon writes through its storage contract; engine reads through a typed accessor | Decouples write path (event capture is a host concern) from derivation (engine concern). |
+| A. Engine package owns raw events | `<storage_root>/<userId>/raw_events.jsonl` alongside `preferences.json` | Engine boundary expands to include event log. Re-derivation runs inside the package. |
+| B. Daemon owns raw events | `<OD_DATA_DIR>/memory/<userId>/raw_events.jsonl`, or a `raw_events` table inside `<OD_DATA_DIR>/app.sqlite` | Engine becomes a pure derivation function over an event slice handed in by the daemon. |
+| C. Hybrid — daemon writes, engine reads | Daemon appends under the `OD_DATA_DIR` precedence; engine reads through a typed accessor | Decouples write path (event capture is a host concern) from derivation (engine concern). |
 
-This spec MUST NOT define daemon data paths. Before documenting or changing
-daemon storage, read root [`AGENTS.md`](../../AGENTS.md) → **Daemon data
-directory contract**.
+`<OD_DATA_DIR>` here means the resolved daemon data root: `OD_DATA_DIR` if
+set, otherwise `<projectRoot>/.od`. The path is resolved with `~/` expansion
+and relative paths anchored to `<projectRoot>`. Packaged installs and Home
+Manager / NixOS modules already point `OD_DATA_DIR` at a writable directory
+because the install root may be read-only; raw events must ride that
+contract rather than hard-code a repo-rooted `.od/` path.
 
-Media config storage is outside this spec. Read the same root contract before
-documenting any storage exception. Raw events are general daemon runtime data
-and must follow the daemon storage contract; an implementation that routes
-preference event data into credentials storage would use the wrong contract.
+`OD_MEDIA_CONFIG_DIR` is **not** part of this precedence. Per
+[`AGENTS.md`](../../AGENTS.md) FAQ "Where is data written?",
+`OD_MEDIA_CONFIG_DIR` is a narrower override that relocates *only*
+`media-config.json` (API credentials). Raw events are general daemon
+runtime data and follow the daemon data-root contract above; an
+implementation that respected `OD_MEDIA_CONFIG_DIR` for raw events would
+route preference event data into the credentials directory, which is the
+wrong contract.
 
 Lean: **C**. Event capture is intrinsically a host concern — the daemon is
 where the pipeline events fire from, where debounce/coalesce happens, and where

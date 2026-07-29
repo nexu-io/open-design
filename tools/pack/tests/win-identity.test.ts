@@ -1,15 +1,8 @@
-import { execFile } from "node:child_process";
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { promisify } from "node:util";
+import { readFile } from "node:fs/promises";
 
 import { describe, expect, it } from "vitest";
 
-import { createLauncherRuntimeSyncPowerShellScript } from "../src/win/custom-installer.js";
 import { resolveWinInstallIdentity } from "../src/win/identity.js";
-
-const execFileAsync = promisify(execFile);
 
 describe("resolveWinInstallIdentity", () => {
   it("keeps the default namespace on the canonical Windows display name", () => {
@@ -60,20 +53,20 @@ describe("resolveWinInstallIdentity", () => {
     });
   });
 
-  it("uses first-class prerelease display identity for prerelease release versions and namespaces", () => {
+  it("uses first-class nightly display identity for nightly release versions and namespaces", () => {
     expect(resolveWinInstallIdentity({
-      appVersion: "0.8.0-prerelease.2",
+      appVersion: "0.8.0.nightly.2",
       namespace: "release-stable-win",
     })).toMatchObject({
-      appPathsKey: "Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\Open Design Prerelease.exe",
-      displayName: "Open Design Prerelease",
+      appPathsKey: "Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\Open Design Nightly.exe",
+      displayName: "Open Design Nightly",
       registryKey: "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Open Design-release-stable-win",
-      shortcutName: "Open Design Prerelease.lnk",
-      uninstallerName: "Uninstall Open Design Prerelease.exe",
+      shortcutName: "Open Design Nightly.lnk",
+      uninstallerName: "Uninstall Open Design Nightly.exe",
     });
-    expect(resolveWinInstallIdentity({ namespace: "release-prerelease-win" })).toMatchObject({
-      displayName: "Open Design Prerelease",
-      shortcutName: "Open Design Prerelease.lnk",
+    expect(resolveWinInstallIdentity({ namespace: "release-nightly-win" })).toMatchObject({
+      displayName: "Open Design Nightly",
+      shortcutName: "Open Design Nightly.lnk",
     });
   });
 
@@ -96,16 +89,14 @@ describe("resolveWinInstallIdentity", () => {
   it("syncs launcher runtime metadata after a successful Windows install", async () => {
     const source = await readFile(new URL("../src/win/custom-installer.ts", import.meta.url), "utf8");
     expect(source).toContain("Function SyncLauncherRuntime");
-    expect(source).toContain("sync-launcher-runtime.ps1");
-    expect(source).toContain("-CleanupPath");
-    expect(source).toContain("current-bound-package");
-    expect(source).toContain("older-than-bound-package");
-    expect(source).toContain("[System.IO.File]::WriteAllText($CleanupPath");
+    expect(source).toContain("buildInitialLauncherRuntimeDescriptor(config, packagedVersion)");
     expect(source).toContain('Push "event=launcher_runtime_after_write path=${escapedRuntimePath}"');
     expect(source.indexOf('Push "event=registry_after_write key=${registryKey} appPathsKey=${appPathsKey}"')).toBeLessThan(
       source.indexOf("Call SyncLauncherRuntime"),
     );
     expect(source.indexOf("Call SyncLauncherRuntime")).toBeLessThan(source.indexOf('Push "install section done"'));
+<<<<<<< HEAD
+=======
   });
 
   it.skipIf(process.platform !== "win32")("writes cleanup metadata when installer runtime sync supersedes an older runtime", async () => {
@@ -185,6 +176,7 @@ describe("resolveWinInstallIdentity", () => {
     } finally {
       await rm(root, { force: true, recursive: true });
     }
+>>>>>>> upstream/main
   });
 
   it("keeps installer diagnostic log events ASCII-only for silent overwrite", async () => {

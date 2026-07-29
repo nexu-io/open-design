@@ -3,7 +3,7 @@ import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises
 import os from 'node:os';
 import path from 'node:path';
 
-import { auditDesignSystemPackage, runConnectorsToolCli } from '../src/tools-connectors-cli.js';
+import { runConnectorsToolCli } from '../src/tools-connectors-cli.js';
 
 const ORIGINAL_ENV = { ...process.env };
 
@@ -163,15 +163,6 @@ Load colors_and_type.css, inspect preview/, reuse ui_kits/app/, and preserve com
 - Interaction: subtle hover, active, focus, and disabled states for dense productivity UI.
 `;
 
-// Same complete, reusable SKILL.md as AUDIT_SKILL, but with the two reuse
-// headings worded exactly as the skill_missing_reuse_sections warning instructs
-// authors to write them — "What is inside" and "design-system highlights".
-// Following the warning text must satisfy the validator, or an agent running
-// --fail-on-warnings loops forever re-spelling these headings (#4435).
-const SKILL_WITH_WARNING_WORDED_SECTIONS = AUDIT_SKILL
-  .replace("**What's inside:**", '**What is inside:**')
-  .replace('**Design system highlights:**', '**Design-system highlights:**');
-
 const SKILL_WITHOUT_REUSE_SECTIONS = `---
 name: cherry-studio-design
 description: Use this skill when creating Open Design artifacts that should match the Cherry Studio desktop AI chat workspace.
@@ -276,23 +267,6 @@ const AUDIT_TOKENS_CSS = `@font-face {
 }
 
 ${UNBOUND_FONT_AUDIT_TOKENS_CSS}`;
-
-const SPLIT_AUDIT_COLORS_AND_TYPE_CSS = AUDIT_TOKENS_CSS
-  .replace(/^  --cherry-(?:radius|space)-.*\n/gmu, '')
-  .replace(
-    /\n\}\n$/u,
-    '\n  --cherry-font-size-body: 16px;\n  --cherry-line-height-body: 1.5;\n}\n',
-  );
-
-const SPLIT_AUDIT_LAYOUT_TOKENS_CSS = `:root {
-  --cherry-radius-sm: 6px;
-  --cherry-radius-md: 10px;
-  --cherry-space-1: 4px;
-  --cherry-space-2: 8px;
-  --cherry-space-3: 12px;
-  --cherry-space-4: 16px;
-}
-`;
 
 const AUDIT_COMPONENT_FILES = [
   'App.jsx',
@@ -903,20 +877,6 @@ exit 128
     await cleanupTempDir(tmpDir);
   });
 
-  it('accepts tokens.css as a companion for spacing and radius token validation', async () => {
-    const tmpDir = await mkdtemp(path.join(os.tmpdir(), 'od-package-audit-split-tokens-'));
-    await writeFile(path.join(tmpDir, 'colors_and_type.css'), SPLIT_AUDIT_COLORS_AND_TYPE_CSS);
-    await writeFile(path.join(tmpDir, 'tokens.css'), SPLIT_AUDIT_LAYOUT_TOKENS_CSS);
-
-    const audit = await auditDesignSystemPackage(tmpDir);
-
-    expect(audit.errors).not.toEqual(expect.arrayContaining([
-      expect.objectContaining({ code: 'thin_token_css' }),
-    ]));
-
-    await cleanupTempDir(tmpDir);
-  });
-
   it('fails a design-system package audit when manifest docs point at old scaffold paths', async () => {
     const tmpDir = await mkdtemp(path.join(os.tmpdir(), 'od-package-audit-stale-docs-'));
     process.chdir(tmpDir);
@@ -1088,46 +1048,6 @@ exit 128
         message: expect.stringContaining('reusable Claude Design skill package'),
       }),
     ]));
-
-    await cleanupTempDir(tmpDir);
-  });
-
-  it('accepts SKILL.md reuse sections worded exactly as the audit warning instructs (#4435)', async () => {
-    const tmpDir = await mkdtemp(path.join(os.tmpdir(), 'od-package-audit-skill-wording-'));
-    process.chdir(tmpDir);
-    await mkdir(path.join(tmpDir, 'preview'), { recursive: true });
-    await mkdir(path.join(tmpDir, 'ui_kits/app/components'), { recursive: true });
-    await writeFile(path.join(tmpDir, 'DESIGN.md'), AUDIT_DESIGN_MD);
-    await writeFile(path.join(tmpDir, 'README.md'), AUDIT_README);
-    await writeFile(path.join(tmpDir, 'SKILL.md'), SKILL_WITH_WARNING_WORDED_SECTIONS);
-    await writeFile(path.join(tmpDir, 'colors_and_type.css'), AUDIT_TOKENS_CSS);
-    for (const fileName of [
-      'colors-primary.html',
-      'colors-theme-light.html',
-      'typography-specimens.html',
-      'spacing-tokens.html',
-      'components-buttons.html',
-      'brand-assets.html',
-    ]) {
-      await writeFile(path.join(tmpDir, 'preview', fileName), auditHtml(fileName));
-    }
-    await writeFile(path.join(tmpDir, 'ui_kits/app/index.html'), auditUiKitIndex());
-    await writeFile(path.join(tmpDir, 'ui_kits/app/README.md'), AUDIT_UI_KIT_README);
-    for (const componentName of AUDIT_COMPONENT_FILES) {
-      await writeFile(
-        path.join(tmpDir, 'ui_kits/app/components', componentName),
-        auditUiKitComponent(componentName),
-      );
-    }
-
-    const result = await runConnectorsToolCli(['design-system-package-audit', '--path', tmpDir]);
-
-    expect(result.exitCode).toBe(0);
-    const warnings = JSON.parse(stdoutOutput.join('')).warnings ?? [];
-    const reuseWarnings = warnings.filter(
-      (warning: { code?: string }) => warning.code === 'skill_missing_reuse_sections',
-    );
-    expect(reuseWarnings).toEqual([]);
 
     await cleanupTempDir(tmpDir);
   });

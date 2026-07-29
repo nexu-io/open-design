@@ -262,7 +262,7 @@ interface ConnectorsBrowserProps {
    *  (SettingsDialog uses the settings page family instead), no event
    *  is fired. */
   onConnectorsTabClick?: (
-    element: 'provider_chip' | 'search_connectors' | 'gate_card',
+    element: 'provider_chip' | 'search_connectors',
   ) => void;
   /** Analytics hook for the per-connector authorization result. The
    *  daemon emits its own server-side telemetry but the click→outcome
@@ -1004,23 +1004,13 @@ export function ConnectorsBrowser({
               aria-label={t('connectors.gateTitle')}
               data-testid="connector-gate"
             >
-              <a
-                className="connector-gate-card"
-                href="https://app.composio.dev"
-                target="_blank"
-                rel="noreferrer"
-                onClick={() => onConnectorsTabClick?.('gate_card')}
-              >
+              <div className="connector-gate-card">
                 <div className="connector-gate-icon" aria-hidden>
                   <Icon name="settings" size={20} />
                 </div>
                 <h3 className="connector-gate-title">{t('connectors.gateTitle')}</h3>
                 <p className="connector-gate-body">{t('connectors.gateBody')}</p>
-                <span className="connector-gate-cta">
-                  {t('settings.connectorsGetApiKey')}
-                  <Icon name="external-link" size={12} />
-                </span>
-              </a>
+              </div>
             </div>
           ) : null}
         </div>

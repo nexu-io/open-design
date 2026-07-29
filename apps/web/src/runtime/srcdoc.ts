@@ -14,12 +14,9 @@
  *   { type: 'od:slide-state', active: number, count: number }
  * after every navigation so the host can render its own counter / dots.
  */
-import { injectDeckStageFallback } from '@open-design/contracts/runtime/deck-stage-fallback';
-
 import {
   buildManualEditBridge,
   buildManualEditBridgeStyle,
-  buildManualEditKeyboardGuard,
   MANUAL_EDIT_DISCOVERY_SELECTOR,
   MANUAL_EDIT_SOURCE_PATH_ATTR,
 } from '../edit-mode/bridge';
@@ -28,8 +25,6 @@ export type SrcdocOptions = {
   deck?: boolean;
   baseHref?: string;
   initialSlideIndex?: number;
-  hideDeckChrome?: boolean;
-  deckClickNavigation?: boolean;
   commentBridge?: boolean;
   inspectBridge?: boolean;
   selectionBridge?: boolean;
@@ -37,321 +32,7 @@ export type SrcdocOptions = {
   paletteBridge?: boolean;
   initialPalette?: string | null;
   previewFocusGuard?: boolean;
-  /**
-   * Force every CSS animation/transition to complete instantly so the
-   * document settles at its final visual state and stops repainting. Meant
-   * for static miniatures (deck thumbnail rail): a looping deck animation in
-   * N thumbnail iframes otherwise keeps N compositor layers rasterizing
-   * forever.
-   */
-  freezeMotion?: boolean;
-  /** Monotonically-increasing reload counter. When provided, it is embedded as
-   * a `data-od-reload-key` attribute on `<html>` so that the srcdoc string
-   * differs across reloads even when the underlying HTML bytes are identical.
-   * This guarantees that the iframe's `srcdoc` attribute is updated in the DOM
-   * and the browser re-parses the document (issue #4650). */
-  reloadKey?: number;
 };
-
-// --- Redirect-loop guard -------------------------------------------------
-//
-// A generated (or hand-edited) artifact can carry a self-redirecting "script"
-// — most reliably a `<meta http-equiv="refresh">` that reloads the same
-// document, or a chain of meta refreshes that cycles (A → B → A → …). In the
-// preview iframe that redirect fires forever, pegging the main thread until the
-// whole design workspace freezes (nexu-io/open-design#710). buildSrcdoc always
-// injects `injectPreviewRedirectGuard`, an in-iframe circuit breaker that:
-//
-//   1. counts meta-refresh navigations across reloads (persisted in
-//      `window.name`, the one store that survives an iframe navigating itself),
-//   2. resets that count once a full window passes with no further refresh, so
-//      a slow, legitimate auto-refresh never accumulates (the timeout half of
-//      the safeguard), and
-//   3. once the count crosses `PREVIEW_REDIRECT_GUARD_MAX_HOPS` inside the
-//      window — or immediately for a near-instant self-refresh, which can only
-//      loop in a static preview — strips the offending `<meta>` and posts
-//      `PREVIEW_REDIRECT_LOOP_MESSAGE` to the host so it can park the iframe.
-//
-// The message is the reliable stop: the browser makes `window.location`
-// unforgeable, so a JS `location.reload()` storm can only be halted host-side
-// by swapping the iframe to static content (see FileViewer). The in-iframe half
-// still fully covers the canonical meta-refresh redirect loop on its own.
-
-/** Meta-refresh hops allowed inside one window before the loop is broken. */
-export const PREVIEW_REDIRECT_GUARD_MAX_HOPS = 15;
-/** Sliding window (ms). A refresh landing after this many ms with no prior
- *  refresh restarts the count from zero, so a slow auto-refresh never trips. */
-export const PREVIEW_REDIRECT_GUARD_WINDOW_MS = 4000;
-/** A self-refresh (reload the same document) whose delay is at or under this
- *  threshold is a guaranteed freeze in a static preview and is killed on the
- *  first hop, without waiting for the hop budget. */
-export const PREVIEW_REDIRECT_GUARD_SELF_REFRESH_MIN_DELAY_MS = 2000;
-/** postMessage type the injected guard sends the host when it trips. */
-export const PREVIEW_REDIRECT_LOOP_MESSAGE = 'od:redirect-loop-blocked';
-
-export interface RedirectGuardState {
-  /** Meta-refresh navigations counted in the current window. */
-  hops: number;
-  /** Timestamp (ms) the current window started at. */
-  windowStart: number;
-}
-
-/**
- * Pure hop-accounting used by the injected guard (and exercised directly in
- * tests). Given the previous state (or `null` on the first refresh) and the
- * current time, return the next state and whether the hop budget is now
- * exceeded. The window resets whenever more than `windowMs` has elapsed since
- * it started, so only a tight burst of refreshes accumulates toward the cap.
- */
-export function nextRedirectGuardState(
-  prev: RedirectGuardState | null,
-  now: number,
-  opts: { maxHops?: number; windowMs?: number } = {},
-): { state: RedirectGuardState; tripped: boolean } {
-  const maxHops = opts.maxHops ?? PREVIEW_REDIRECT_GUARD_MAX_HOPS;
-  const windowMs = opts.windowMs ?? PREVIEW_REDIRECT_GUARD_WINDOW_MS;
-  const withinWindow =
-    prev != null &&
-    Number.isFinite(prev.windowStart) &&
-    now - prev.windowStart <= windowMs;
-  const windowStart = withinWindow ? prev!.windowStart : now;
-  const hops = (withinWindow ? prev!.hops : 0) + 1;
-  return { state: { hops, windowStart }, tripped: hops > maxHops };
-}
-
-/**
- * A static, self-contained document the host swaps into the preview iframe once
- * a redirect loop is detected. It carries no meta refresh and no script, so it
- * ends the loop the moment it loads; the user re-runs the artifact with the
- * viewer's existing reload control.
- */
-export function buildRedirectLoopBlockedDoc(): string {
-  return `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <style>
-      html, body { height: 100%; margin: 0; }
-      body {
-        display: flex; align-items: center; justify-content: center;
-        font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-        background: #0d1117; color: #e6edf3; text-align: center; padding: 24px;
-      }
-      .card { max-width: 420px; }
-      h1 { font-size: 15px; font-weight: 600; margin: 0 0 8px; }
-      p { font-size: 13px; line-height: 1.5; margin: 0; color: #9ba7b4; }
-    </style>
-  </head>
-  <body>
-    <div class="card">
-      <h1>Preview stopped: redirect loop detected</h1>
-      <p>This document kept redirecting to itself, which would freeze the
-      preview. Reload the preview to try again.</p>
-    </div>
-  </body>
-</html>`;
-}
-
-/**
- * Sanitize a document title string so the resulting PDF filename is accepted by
- * Microsoft Teams. Teams rejects filenames that contain any of:
- *   : # % & * { } \ < > ? / + | "
- * as well as leading/trailing spaces and the prefix sequence "~$".
- *
- * Each disallowed character (or run of disallowed characters) is replaced with
- * a single hyphen. The result is trimmed of leading and trailing whitespace.
- * Titles that are already safe pass through unchanged.
- *
- * Invariant: the returned string contains none of the Teams-disallowed
- * characters and has no leading or trailing spaces, and does not start
- * with the ~$ prefix.
- */
-export function sanitizePreviewTitle(text: string): string {
-  // Trim first so that leading whitespace cannot hide a ~$ prefix from the
-  // anchor-based check below (e.g. "  ~$Invoice" would otherwise survive).
-  let result = text.trim();
-  // Remove every leading ~$ prefix. A single replace(/^~\$/, '') is not
-  // enough when the prefix is doubled ("~$~$Doc"). Loop until stable, then
-  // re-trim in case a space followed the prefix ("~$ Invoice" → " Invoice").
-  let prev: string;
-  do {
-    prev = result;
-    result = result.replace(/^~\$/, '').trim();
-  } while (result !== prev);
-  // Replace each disallowed character (or run of them) with a single hyphen.
-  // Character class: : # % & * { } \ < > ? / + | "
-  // eslint-disable-next-line no-useless-escape
-  result = result.replace(/[:#%&*{}\\<>?/+|"]+/g, '-');
-  // Final trim to remove any spaces exposed by the substitution.
-  return result.trim();
-}
-
-/**
- * A small set of common named non-ASCII entities that appear in real-world
- * titles (e.g. &ccedil; → ç, &eacute; → é). Keeping this narrow avoids
- * shipping a full HTML entity table while still preventing the "orphaned
- * name;" garbage that results when & is stripped before entity detection.
- * Characters produced here that are Teams-disallowed get cleaned up by the
- * subsequent sanitizePreviewTitle pass.
- */
-const NAMED_ENTITY_MAP: Record<string, string> = {
-  // Latin-1 letters most likely to appear in design/business titles
-  agrave: 'à', aacute: 'á', acirc: 'â', atilde: 'ã', auml: 'ä', aring: 'å',
-  aelig: 'æ', ccedil: 'ç',
-  egrave: 'è', eacute: 'é', ecirc: 'ê', euml: 'ë',
-  igrave: 'ì', iacute: 'í', icirc: 'î', iuml: 'ï',
-  eth: 'ð', ntilde: 'ñ',
-  ograve: 'ò', oacute: 'ó', ocirc: 'ô', otilde: 'õ', ouml: 'ö', oslash: 'ø',
-  ugrave: 'ù', uacute: 'ú', ucirc: 'û', uuml: 'ü',
-  yacute: 'ý', thorn: 'þ', yuml: 'ÿ',
-  Agrave: 'À', Aacute: 'Á', Acirc: 'Â', Atilde: 'Ã', Auml: 'Ä', Aring: 'Å',
-  AElig: 'Æ', Ccedil: 'Ç',
-  Egrave: 'È', Eacute: 'É', Ecirc: 'Ê', Euml: 'Ë',
-  Igrave: 'Ì', Iacute: 'Í', Icirc: 'Î', Iuml: 'Ï',
-  ETH: 'Ð', Ntilde: 'Ñ',
-  Ograve: 'Ò', Oacute: 'Ó', Ocirc: 'Ô', Otilde: 'Õ', Ouml: 'Ö', Oslash: 'Ø',
-  Ugrave: 'Ù', Uacute: 'Ú', Ucirc: 'Û', Uuml: 'Ü',
-  Yacute: 'Ý', THORN: 'Þ',
-  // Common punctuation / symbols that can appear in business document titles
-  ndash: '–', mdash: '—', lsquo: '‘', rsquo: '’',
-  ldquo: '“', rdquo: '”', hellip: '…', trade: '™', reg: '®',
-  copy: '©', deg: '°', euro: '€', pound: '£', yen: '¥',
-};
-
-/**
- * Safe wrapper around String.fromCodePoint that returns U+FFFD for
- * out-of-range values instead of throwing RangeError.
- */
-function safeFromCodePoint(cp: number): string {
-  if (cp < 0 || cp > 0x10ffff) return '�';
-  return String.fromCodePoint(cp);
-}
-
-/**
- * Decode the minimal HTML entities that browsers render in <title> text:
- * &amp; → & , &lt; → < , &gt; → > , &quot; → " , &apos; → ' , &#N; / &#xN;
- * Also decodes a small set of common named non-ASCII entities (e.g. &ccedil;)
- * so they do not leave orphaned "name;" fragments after the & is sanitized.
- * Numeric entities with out-of-range code points fall back to U+FFFD instead
- * of throwing RangeError.
- */
-function decodeHtmlEntitiesForTitle(encoded: string): string {
-  return encoded
-    // Named non-ASCII entities first — before the standard 5 named entities
-    // below, so &amp; still converts to & (not left as a lookup miss).
-    .replace(/&([A-Za-z]+);/g, (match, name: string) => NAMED_ENTITY_MAP[name] ?? match)
-    // Standard 5 named entities.
-    .replace(/&amp;/gi, '&')
-    .replace(/&lt;/gi, '<')
-    .replace(/&gt;/gi, '>')
-    .replace(/&quot;/gi, '"')
-    .replace(/&apos;/gi, "'")
-    // Numeric entities — range-checked to avoid RangeError on huge code points.
-    .replace(/&#(\d+);/g, (_, n: string) => safeFromCodePoint(Number(n)))
-    .replace(/&#x([0-9a-f]+);/gi, (_, h: string) => safeFromCodePoint(parseInt(h, 16)));
-}
-
-/**
- * Find the character offset of the first real `<title>` tag in an HTML string
- * that is not inside an HTML comment (`<!-- … -->`), a `<script>` block, or a
- * `<style>` block. Returns -1 when no real title is found.
- *
- * The scan is O(n) over the head region. It keeps track of whether the current
- * cursor is inside a comment / script / style and skips any `<title>` found
- * within those contexts.
- */
-function findRealTitleOffset(html: string, searchLimit: number): number {
-  let i = 0;
-  const limit = Math.min(html.length, searchLimit);
-  while (i < limit) {
-    // Check for HTML comment start
-    if (html.charCodeAt(i) === 60 /* < */ && html.slice(i, i + 4) === '<!--') {
-      const end = html.indexOf('-->', i + 4);
-      if (end < 0) return -1; // unclosed comment — no title after this
-      i = end + 3;
-      continue;
-    }
-    // Check for <script or <style (case-insensitive)
-    if (html.charCodeAt(i) === 60 /* < */) {
-      const tagMatch = /^<(script|style)\b/i.exec(html.slice(i, i + 20));
-      if (tagMatch) {
-        const closingTag = `</${tagMatch[1]}`;
-        const end = html.toLowerCase().indexOf(closingTag.toLowerCase(), i + tagMatch[0].length);
-        if (end < 0) return -1; // unclosed script/style — no title after this
-        const closeEnd = html.indexOf('>', end);
-        i = closeEnd >= 0 ? closeEnd + 1 : end + closingTag.length;
-        continue;
-      }
-    }
-    // Check for <title (case-insensitive)
-    if (html.charCodeAt(i) === 60 /* < */) {
-      if (/^<title[\s>]/i.test(html.slice(i, i + 8))) {
-        return i;
-      }
-    }
-    i++;
-  }
-  return -1;
-}
-
-/**
- * Rewrite the <title> element in an HTML string so its text content is
- * Teams-filename-safe. Only the real `<title>` in the `<head>` region is
- * changed — `<title>` occurrences inside HTML comments, `<script>` blocks,
- * or `<style>` blocks are left untouched.
- *
- * Strategy:
- *   1. Locate the `<head>`…`</head>` region (or the area before `<body>`).
- *   2. Within that region, scan past comments and script/style blocks to find
- *      the first unambiguous `<title>` start tag.
- *   3. Decode HTML entities in its text, sanitize, and splice back.
- *
- * Pure string operations — no DOMParser — so it works identically in Node
- * test environments and in the browser.
- *
- * @public — exported for daemon-side URL-load title sanitization.
- */
-export function sanitizeTitleInDoc(html: string): string {
-  const lower = html.toLowerCase();
-
-  // Find the end of the <head> region. Use the last </head> before <body>
-  // (mirrors injectBeforeHeadEnd logic) so we don't pick up </head> literals
-  // inside <script>/<style>.
-  const bodyStart = lower.indexOf('<body');
-  const headEnd = lower.lastIndexOf('</head>', bodyStart >= 0 ? bodyStart - 1 : lower.length - 1);
-
-  // The region to search: up to (and including) </head> if found, otherwise
-  // up to <body> if found, otherwise the entire document.
-  const searchLimit = headEnd >= 0
-    ? headEnd + 7 // include the </head> tag itself
-    : bodyStart >= 0
-      ? bodyStart
-      : html.length;
-
-  // Find the real <title> start offset, skipping comments and script/style.
-  const titleStart = findRealTitleOffset(html, searchLimit);
-  if (titleStart < 0) return html;
-
-  // Locate the end of the <title> open tag.
-  const openTagEnd = html.indexOf('>', titleStart);
-  if (openTagEnd < 0) return html;
-
-  // Locate the matching </title>.
-  const closingTagStart = html.toLowerCase().indexOf('</title>', openTagEnd + 1);
-  if (closingTagStart < 0) return html;
-  const closingTagEnd = html.indexOf('>', closingTagStart);
-  if (closingTagEnd < 0) return html;
-
-  const openTag = html.slice(titleStart, openTagEnd + 1);
-  const rawContent = html.slice(openTagEnd + 1, closingTagStart);
-  const closeTag = html.slice(closingTagStart, closingTagEnd + 1);
-
-  const decoded = decodeHtmlEntitiesForTitle(rawContent);
-  const safe = sanitizePreviewTitle(decoded);
-
-  return html.slice(0, titleStart) + openTag + safe + closeTag + html.slice(closingTagEnd + 1);
-}
 
 export function buildSrcdoc(
   html: string,
@@ -369,38 +50,12 @@ export function buildSrcdoc(
   </head>
   <body>${html}</body>
 </html>`;
-  // Sanitize <title> text before any other transformation so that when the
-  // user prints the preview iframe (Cmd+P → Save as PDF), Chromium uses the
-  // sanitized title as the default filename — one that Microsoft Teams will
-  // accept. Only the title text changes; visible page content is untouched.
-  const withSafeTitle = sanitizeTitleInDoc(wrapped);
-  const withOdIds = annotateMissingOdIds(withSafeTitle);
+  const withOdIds = annotateMissingOdIds(wrapped);
   const withSourcePaths = options.editBridge ? annotateManualEditSourcePaths(withOdIds) : withOdIds;
   const withBase = options.baseHref ? injectBaseHref(withSourcePaths, options.baseHref) : withSourcePaths;
   const withShim = injectSandboxShim(withBase);
-  const blockLoadTimeScriptRedirect = htmlHasLoadTimeLocationNavigation(withBase);
-  // Always on: a redirect loop can freeze ANY previewed artifact, and the guard
-  // is inert on documents that never self-redirect. Injected right after the
-  // sandbox shim so it is installed before any author script or meta refresh.
-  const withRedirectGuard = injectPreviewRedirectGuard(withShim, { blockLoadTimeScriptRedirect });
-  const withKeydownRegistry = options.deck ? injectDeckKeydownRegistryHook(withRedirectGuard) : withRedirectGuard;
-  const withFocusGuard = options.previewFocusGuard
-    ? injectPreviewFocusGuard(withKeydownRegistry)
-    : withKeydownRegistry;
-  const withMotionFreeze = options.freezeMotion ? injectMotionFreeze(withFocusGuard) : withFocusGuard;
-  const withDeckStageFallback = options.deck
-    ? injectDeckStageFallback(withMotionFreeze)
-    : withMotionFreeze;
-  const withDeckChrome = options.deck && options.hideDeckChrome
-    ? injectDeckStageShadowChromeHiding(injectDeckChromeHiding(withDeckStageFallback))
-    : withDeckStageFallback;
-  const withDeck = options.deck
-    ? injectDeckBridge(withDeckChrome, {
-        initialSlideIndex: options.initialSlideIndex,
-        clickNavigation: !!options.deckClickNavigation,
-        artifactHasKeydownNavigation: detectArtifactKeyboardNavigation(html),
-      })
-    : withDeckChrome;
+  const withFocusGuard = options.previewFocusGuard ? injectPreviewFocusGuard(withShim) : withShim;
+  const withDeck = options.deck ? injectDeckBridge(withFocusGuard, options.initialSlideIndex) : withFocusGuard;
   // Comment + Inspect share an element-selection bridge: both pick a
   // [data-od-id] / [data-screen-label] node and route the host's reply
   // to either the comment popover (annotate) or the inspect panel
@@ -424,15 +79,7 @@ export function buildSrcdoc(
   // it to a per-call option would force iframe srcdoc regeneration (and a
   // visible flash) every time the host toggle flips.
   const withTweaks = injectTweaksBridge(withEdit);
-  const withTransport = injectSrcdocTransportActivationBridge(
-    injectExportCaptureBridge(injectSnapshotBridge(injectPreviewContentSizeBridge(withTweaks))),
-  );
-  // Embed the reload counter so the srcdoc string differs across reloads even
-  // when the underlying HTML bytes are identical.  This ensures the browser
-  // sees a changed `srcdoc` attribute and re-parses the document (issue #4650).
-  return options.reloadKey !== undefined
-    ? withTransport.replace(/(<html\b)([^>]*>)/i, `$1 data-od-reload-key="${options.reloadKey}"$2`)
-    : withTransport;
+  return injectSrcdocTransportActivationBridge(injectSnapshotBridge(withTweaks));
 }
 
 /**
@@ -646,255 +293,66 @@ function injectSnapshotBridge(doc: string): string {
       return samples > 8;
     } catch (_) { return false; }
   }
-  // Rasterize the current view (or the whole document, when opts.full) via an
-  // SVG <foreignObject>. Returns a Promise so it can be reused by both the
-  // od:snapshot message handler AND the export-capture bridge (image export /
-  // PDF) — the foreignObject path is fast and never blocks on external
-  // image network loads the way a DOM-cloning rasterizer does.
-  function captureSnapshot(opts){
-    opts = opts || {};
-    return new Promise(function(resolve, reject){
-      var w = Math.max(1, window.innerWidth || document.documentElement.clientWidth || 1);
-      var h = Math.max(1, window.innerHeight || document.documentElement.clientHeight || 1);
-      var dpr = window.devicePixelRatio || 1;
-      var bgColor = snapshotBackgroundColor();
-      var docW = Math.max(w, document.documentElement.scrollWidth || 0, document.body ? document.body.scrollWidth : 0);
-      var docH = Math.max(h, document.documentElement.scrollHeight || 0, document.body ? document.body.scrollHeight : 0);
-      var full = !!opts.full;
-      var capW = full ? docW : w;
-      var capH = full ? docH : h;
-      var clone = document.documentElement.cloneNode(true);
-      clone.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
-      inlineSnapshotStyles(document.documentElement, clone);
-      pruneHiddenSnapshotNodes(document.documentElement, clone);
-      var scroll = full ? { x: 0, y: 0 } : scrollOffset();
-      var cloneBody = clone.querySelector('body');
-      var rootStyle = clone.getAttribute('style') || '';
-      var bodyStyle = cloneBody ? cloneBody.getAttribute('style') || '' : '';
-      var bodyContent = cloneBody ? cloneBody.innerHTML : clone.innerHTML;
-      var wrapperStyle = rootStyle + bodyStyle +
-        'margin:0;position:relative;left:' + (-scroll.x) + 'px;top:' + (-scroll.y) + 'px;' +
-        'width:' + docW + 'px;height:' + docH + 'px;overflow:visible;';
-      var html = '<div xmlns="http://www.w3.org/1999/xhtml" style="' + escapeAttribute(wrapperStyle) + '">' + bodyContent + '</div>';
-      var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + capW + '" height="' + capH + '" viewBox="0 0 ' + capW + ' ' + capH + '">' +
-        '<foreignObject x="0" y="0" width="' + docW + '" height="' + docH + '">' +
-        html +
-        '</foreignObject></svg>';
-      var img = new Image();
-      img.onload = function(){
-        try {
-          var canvas = document.createElement('canvas');
-          canvas.width = Math.max(1, Math.floor(capW * dpr));
-          canvas.height = Math.max(1, Math.floor(capH * dpr));
-          var ctx = canvas.getContext('2d');
-          if (!ctx) throw new Error('no 2d context');
-          ctx.scale(dpr, dpr);
-          // Opaque base so a transparent (un-painted) raster never flattens to
-          // pure black in clipboards / PNG viewers.
-          ctx.fillStyle = bgColor;
-          ctx.fillRect(0, 0, capW, capH);
-          ctx.drawImage(img, 0, 0, capW, capH);
-          if (canvasLooksBlank(ctx, canvas.width, canvas.height)) {
-            reject(new Error('empty-render'));
-            return;
-          }
-          resolve({ dataUrl: canvas.toDataURL('image/png'), w: canvas.width, h: canvas.height });
-        } catch (err) {
-          reject(err instanceof Error ? err : new Error(String(err && err.message || err)));
+  function renderSnapshot(id){
+    var w = Math.max(1, window.innerWidth || document.documentElement.clientWidth || 1);
+    var h = Math.max(1, window.innerHeight || document.documentElement.clientHeight || 1);
+    var dpr = window.devicePixelRatio || 1;
+    var bgColor = snapshotBackgroundColor();
+    var docW = Math.max(w, document.documentElement.scrollWidth || 0, document.body ? document.body.scrollWidth : 0);
+    var docH = Math.max(h, document.documentElement.scrollHeight || 0, document.body ? document.body.scrollHeight : 0);
+    var clone = document.documentElement.cloneNode(true);
+    clone.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
+    inlineSnapshotStyles(document.documentElement, clone);
+    pruneHiddenSnapshotNodes(document.documentElement, clone);
+    var scroll = scrollOffset();
+    var cloneBody = clone.querySelector('body');
+    var rootStyle = clone.getAttribute('style') || '';
+    var bodyStyle = cloneBody ? cloneBody.getAttribute('style') || '' : '';
+    var bodyContent = cloneBody ? cloneBody.innerHTML : clone.innerHTML;
+    var wrapperStyle = rootStyle + bodyStyle +
+      'margin:0;position:relative;left:' + (-scroll.x) + 'px;top:' + (-scroll.y) + 'px;' +
+      'width:' + docW + 'px;height:' + docH + 'px;overflow:visible;';
+    var html = '<div xmlns="http://www.w3.org/1999/xhtml" style="' + escapeAttribute(wrapperStyle) + '">' + bodyContent + '</div>';
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '">' +
+      '<foreignObject x="0" y="0" width="' + docW + '" height="' + docH + '">' +
+      html +
+      '</foreignObject></svg>';
+    var img = new Image();
+    img.onload = function(){
+      try {
+        var canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.floor(w * dpr));
+        canvas.height = Math.max(1, Math.floor(h * dpr));
+        var ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error('no 2d context');
+        ctx.scale(dpr, dpr);
+        // Opaque base so a transparent (un-painted) raster never flattens to
+        // pure black in clipboards / PNG viewers.
+        ctx.fillStyle = bgColor;
+        ctx.fillRect(0, 0, w, h);
+        ctx.drawImage(img, 0, 0, w, h);
+        if (canvasLooksBlank(ctx, canvas.width, canvas.height)) {
+          window.parent.postMessage({ type: 'od:snapshot:result', id: id, error: 'empty-render' }, '*');
+          return;
         }
-      };
-      img.onerror = function(){ reject(new Error('snapshot image failed')); };
-      img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
-    });
+        window.parent.postMessage({ type: 'od:snapshot:result', id: id, dataUrl: canvas.toDataURL('image/png'), w: canvas.width, h: canvas.height }, '*');
+      } catch (err) {
+        window.parent.postMessage({ type: 'od:snapshot:result', id: id, error: String(err && err.message || err) }, '*');
+      }
+    };
+    function encodedSvgDataUrl(){
+      var encoded = encodeURIComponent(svg);
+      return 'data:image/svg+xml;charset=utf-8,' + encoded;
+    }
+    img.onerror = function(){
+      window.parent.postMessage({ type: 'od:snapshot:result', id: id, error: 'snapshot image failed' }, '*');
+    };
+    img.src = encodedSvgDataUrl();
   }
-  // Exposed so the export-capture bridge (same document) can reuse this renderer.
-  window.__odCaptureSnapshot = function(opts){
-    return waitForImages().then(function(){ return captureSnapshot(opts || {}); });
-  };
   window.addEventListener('message', function(ev){
     var data = ev && ev.data;
     if (!data || data.type !== 'od:snapshot' || !data.id) return;
-    window.__odCaptureSnapshot({ full: !!data.full }).then(function(res){
-      window.parent.postMessage({ type: 'od:snapshot:result', id: String(data.id), dataUrl: res.dataUrl, w: res.w, h: res.h }, '*');
-    }, function(err){
-      window.parent.postMessage({ type: 'od:snapshot:result', id: String(data.id), error: String(err && err.message || err) }, '*');
-    });
-  });
-})();</script>`;
-  return injectBeforeBodyEnd(doc, script);
-}
-
-function injectPreviewContentSizeBridge(doc: string): string {
-  const script = `<script data-od-preview-content-size-bridge>(function(){
-  if (window.__odPreviewContentSizeBridge) return;
-  window.__odPreviewContentSizeBridge = true;
-  var pending = false;
-  function measure(){
-    var root = document.documentElement;
-    var body = document.body || root;
-    if (!root) return null;
-    var values = [
-      root.scrollWidth,
-      body && body.scrollWidth,
-      root.offsetWidth,
-      body && body.offsetWidth,
-      root.clientWidth,
-      body && body.clientWidth
-    ];
-    var width = 0;
-    for (var i = 0; i < values.length; i += 1) {
-      var next = Number(values[i] || 0);
-      if (Number.isFinite(next) && next > width) width = next;
-    }
-    return width > 0 ? Math.ceil(width) : null;
-  }
-  function post(){
-    try { window.parent.postMessage({ type: 'od:preview-content-size', width: measure() }, '*'); } catch (_) {}
-  }
-  function schedule(){
-    if (pending) return;
-    pending = true;
-    window.requestAnimationFrame(function(){
-      pending = false;
-      post();
-    });
-  }
-  window.addEventListener('message', function(ev){
-    var data = ev && ev.data;
-    if (!data || data.type !== 'od:preview-content-size-request') return;
-    schedule();
-  });
-  window.addEventListener('resize', schedule);
-  if (typeof ResizeObserver !== 'undefined') {
-    try {
-      var observer = new ResizeObserver(schedule);
-      observer.observe(document.documentElement);
-      if (document.body) observer.observe(document.body);
-    } catch (_) {}
-  }
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', schedule);
-  } else {
-    setTimeout(schedule, 0);
-  }
-  setTimeout(schedule, 80);
-  setTimeout(schedule, 260);
-  if (document.fonts && document.fonts.ready) {
-    document.fonts.ready.then(schedule).catch(function(){});
-  }
-})();</script>`;
-  return injectBeforeBodyEnd(doc, script);
-}
-
-// Export-capture bridge: the in-iframe half of the programmatic PDF /
-// image exporters (apps/web/src/runtime/exports.ts). The preview iframe is
-// sandbox="allow-scripts" WITHOUT allow-same-origin, so the host cannot read
-// iframe.contentDocument — capture must run inside the frame, exactly like the
-// snapshot bridge above. The orchestrator (host) creates a hidden, full-
-// resolution export iframe, posts `od:export-capture`, and assembles the
-// returned per-slide images with jsPDF.
-//
-// Protocol:
-//   in:  { type:'od:export-capture', id, mode:'image', deck:boolean,
-//          single?:boolean, delay:number }
-//   out: { type:'od:export-capture:slide', id, index, total,
-//          dataUrl, w, h, notes }   (one per slide)
-//   out: { type:'od:export-capture:done',  id, total }
-//   out: { type:'od:export-capture:error', id, error }
-//
-// Slides are enumerated/navigated through the existing deck bridge
-// (window.__odDeckSlideState + an `od:slide` self-postMessage), so any deck the
-// on-screen preview can drive, the exporter can too. Image capture reuses the
-// shared SVG-foreignObject renderer (window.__odCaptureSnapshot from the
-// snapshot bridge) — fast and free of any external script load or network wait.
-function injectExportCaptureBridge(doc: string): string {
-  const script = `<script data-od-export-capture-bridge>(function(){
-  function raf(){ return new Promise(function(r){ requestAnimationFrame(function(){ r(); }); }); }
-  function settle(){
-    var fonts = (document.fonts && document.fonts.ready) ? document.fonts.ready.catch(function(){}) : Promise.resolve();
-    var imgs = Promise.all(Array.prototype.slice.call(document.images||[]).map(function(img){
-      if (img.complete) return Promise.resolve();
-      return new Promise(function(r){ img.addEventListener('load', r, {once:true}); img.addEventListener('error', r, {once:true}); });
-    }));
-    return Promise.all([fonts, imgs]).then(raf).then(raf);
-  }
-  function deckState(){
-    try { if (typeof window.__odDeckSlideState === 'function') return window.__odDeckSlideState(); } catch(_){}
-    return { active: 0, count: 1 };
-  }
-  function navTo(index, delay){
-    return new Promise(function(resolve){
-      try { window.postMessage({ type:'od:slide', action:'go', index: index }, '*'); } catch(_){}
-      var tries = 0;
-      function check(){
-        tries++;
-        if (deckState().active === index || tries > 14) { resolve(); return; }
-        setTimeout(check, 80);
-      }
-      setTimeout(check, Math.max(60, delay||0));
-    });
-  }
-  function captureImage(deck){
-    // Reuse the shared SVG-foreignObject renderer (injectSnapshotBridge). For a
-    // deck the active slide fills the viewport, so a viewport capture IS the
-    // slide; a non-deck page captures the full document.
-    if (typeof window.__odCaptureSnapshot !== 'function') {
-      return Promise.reject(new Error('snapshot renderer unavailable'));
-    }
-    return window.__odCaptureSnapshot({ full: !deck });
-  }
-  function notes(){
-    var el = document.getElementById('speaker-notes');
-    if (el) {
-      var t = el.textContent || '';
-      try { var j = JSON.parse(t); if (Array.isArray(j)) return j; } catch(_){}
-      var plain = t.replace(/\\s+/g,' ').trim();
-      if (plain) return plain;
-    }
-    var list = [];
-    // Match every .slide in document order — per-slide notes must line up
-    // 1:1 with the slide list regardless of the deck's container nesting.
-    var slideNodes = document.querySelectorAll('.slide');
-    for (var i = 0; i < slideNodes.length; i++) {
-      var noteEl = slideNodes[i].querySelector('.notes');
-      list.push(noteEl ? (noteEl.textContent || '').replace(/\\s+/g, ' ').trim() : '');
-    }
-    return list.length ? list : '';
-  }
-  function send(msg){ try { window.parent.postMessage(msg, '*'); } catch(_){} }
-  function run(req){
-    var id = req.id;
-    var deck = !!req.deck;
-    var single = !!req.single;
-    var delay = req.delay || 350;
-    Promise.resolve().then(function(){
-      var st = deckState();
-      var total = (!single && deck && st.count > 1) ? st.count : 1;
-      var notesAll = notes();
-      function noteFor(i){ return Array.isArray(notesAll) ? (notesAll[i]||'') : (i===0 ? notesAll : ''); }
-      var idx = 0;
-      function step(){
-        if (idx >= total){ send({ type:'od:export-capture:done', id:id, total: total }); return; }
-        var i = idx;
-        var navP = (!single && deck && total > 1) ? navTo(i, delay) : Promise.resolve();
-        navP.then(settle).then(function(){
-          try {
-            captureImage(deck).then(function(img){
-              send({ type:'od:export-capture:slide', id:id, index:i, total:total, dataUrl: img.dataUrl, w: img.w, h: img.h, notes: noteFor(i) });
-              idx++; setTimeout(step, 0);
-            }).catch(function(err){ send({ type:'od:export-capture:error', id:id, error: String(err && err.message || err) }); });
-          } catch(err){ send({ type:'od:export-capture:error', id:id, error: String(err && err.message || err) }); }
-        });
-      }
-      step();
-    }).catch(function(err){
-      send({ type:'od:export-capture:error', id:id, error: String(err && err.message || err) });
-    });
-  }
-  window.addEventListener('message', function(ev){
-    var data = ev && ev.data;
-    if (!data || data.type !== 'od:export-capture' || !data.id) return;
-    run(data);
+    waitForImages().then(function(){ renderSnapshot(String(data.id)); });
   });
 })();</script>`;
   return injectBeforeBodyEnd(doc, script);
@@ -1177,14 +635,8 @@ function annotateMissingOdIds(doc: string): string {
 }
 
 function injectManualEditBridge(doc: string): string {
-  const withGuard = injectAfterHeadOpen(doc, buildManualEditKeyboardGuard());
-  const withStyle = injectBeforeHeadEnd(withGuard, buildManualEditBridgeStyle());
+  const withStyle = injectBeforeHeadEnd(doc, buildManualEditBridgeStyle());
   return injectBeforeBodyEnd(withStyle, buildManualEditBridge(false));
-}
-
-function injectAfterHeadOpen(doc: string, payload: string): string {
-  if (/<head[^>]*>/i.test(doc)) return doc.replace(/<head[^>]*>/i, (m) => `${m}${payload}`);
-  return payload + doc;
 }
 
 function injectBeforeHeadEnd(doc: string, payload: string): string {
@@ -1363,166 +815,6 @@ function injectPreviewFocusGuard(doc: string): string {
       }
     });
   } catch (_) {}
-})();</script>`;
-  if (/<head[^>]*>/i.test(doc))
-    return doc.replace(/<head[^>]*>/i, (m) => `${m}${script}`);
-  if (/<body[^>]*>/i.test(doc))
-    return doc.replace(/<body[^>]*>/i, (m) => `${m}${script}`);
-  return script + doc;
-}
-
-// In-iframe redirect-loop circuit breaker. See the "Redirect-loop guard"
-// section near the top of this file for the full rationale. The script mirrors
-// `nextRedirectGuardState` for the hop accounting; both must stay in sync (the
-// constants are interpolated so they never drift). It reads/writes `window.name`
-// because that is the only per-context store that survives the iframe navigating
-// itself, and it runs its check on DOMContentLoaded so the author's `<meta>`
-// tags (parsed after this head script) are already in the DOM.
-function htmlHasLoadTimeLocationNavigation(source: string): boolean {
-  if (/\blocation\s*\.\s*(?:reload|replace|assign)\s*\(/i.test(source)) return true;
-  if (/\blocation\s*\.\s*href\s*=[^=]/i.test(source)) return true;
-  if (/\b(?:window|document|self|top|parent)\s*\.\s*location\s*=[^=]/i.test(source)) return true;
-  return false;
-}
-
-function injectPreviewRedirectGuard(
-  doc: string,
-  opts: { blockLoadTimeScriptRedirect?: boolean } = {},
-): string {
-  const script = `<script data-od-preview-redirect-guard>(function(){
-  var NAME_PREFIX = '__odRedirectGuard=';
-  var MAX_HOPS = ${PREVIEW_REDIRECT_GUARD_MAX_HOPS};
-  var WINDOW_MS = ${PREVIEW_REDIRECT_GUARD_WINDOW_MS};
-  var SELF_MIN_DELAY_MS = ${PREVIEW_REDIRECT_GUARD_SELF_REFRESH_MIN_DELAY_MS};
-  var MESSAGE_TYPE = ${JSON.stringify(PREVIEW_REDIRECT_LOOP_MESSAGE)};
-  var BLOCK_LOAD_TIME_SCRIPT_REDIRECT = ${opts.blockLoadTimeScriptRedirect ? 'true' : 'false'};
-  function nowMs(){ try { return Date.now(); } catch (_) { return 0; } }
-  function readState(){
-    try {
-      var raw = window.name;
-      if (typeof raw === 'string' && raw.indexOf(NAME_PREFIX) === 0) {
-        var parsed = JSON.parse(raw.slice(NAME_PREFIX.length));
-        if (parsed && typeof parsed.hops === 'number' && typeof parsed.windowStart === 'number') return parsed;
-      }
-    } catch (_) {}
-    return null;
-  }
-  function writeState(state){
-    try { window.name = NAME_PREFIX + JSON.stringify({ hops: state.hops, windowStart: state.windowStart }); } catch (_) {}
-  }
-  function clearState(){
-    try { if (typeof window.name === 'string' && window.name.indexOf(NAME_PREFIX) === 0) window.name = ''; } catch (_) {}
-  }
-  function nextState(){
-    var t = nowMs();
-    var prev = readState();
-    var withinWindow = prev && (t - prev.windowStart) <= WINDOW_MS;
-    return { hops: (withinWindow ? prev.hops : 0) + 1, windowStart: withinWindow ? prev.windowStart : t };
-  }
-  function scheduleCandidateReset(state){
-    try {
-      if (typeof setTimeout !== 'function') return;
-      setTimeout(function(){
-        try {
-          var current = readState();
-          if (current && current.hops === state.hops && current.windowStart === state.windowStart) clearState();
-        } catch (_) {}
-      }, WINDOW_MS + 1);
-    } catch (_) {}
-  }
-  function recordScriptRedirectCandidate(){
-    if (!BLOCK_LOAD_TIME_SCRIPT_REDIRECT) return;
-    var state = nextState();
-    if (state.hops > MAX_HOPS) {
-      clearState();
-      report(state.hops);
-      return;
-    }
-    writeState(state);
-    scheduleCandidateReset(state);
-  }
-  function metaRefreshes(){
-    var out = [];
-    try {
-      var metas = document.getElementsByTagName('meta');
-      for (var i = 0; i < metas.length; i++) {
-        var equiv = metas[i].getAttribute ? metas[i].getAttribute('http-equiv') : null;
-        if (equiv && String(equiv).toLowerCase() === 'refresh') out.push(metas[i]);
-      }
-    } catch (_) {}
-    return out;
-  }
-  function parseContent(meta){
-    var content = '';
-    try { content = String(meta.getAttribute('content') || ''); } catch (_) {}
-    var delayMatch = content.match(/^\\s*([0-9]+(?:\\.[0-9]+)?)/);
-    var delayMs = delayMatch ? Math.round(parseFloat(delayMatch[1]) * 1000) : 0;
-    var urlMatch = content.match(/[;,]\\s*url\\s*=\\s*['"]?\\s*([^'"\\s]+)/i);
-    return { delayMs: delayMs, url: urlMatch ? urlMatch[1] : '' };
-  }
-  function currentArtifactHref(){
-    try {
-      var href = String(location.href || '');
-      if (href === 'about:srcdoc') {
-        return String(document.baseURI || href);
-      }
-      return href;
-    } catch (_) {
-      return '';
-    }
-  }
-  function isSelfTarget(url){
-    if (!url) return true; // no url => refresh the current document
-    try {
-      var base = (document.baseURI) || location.href;
-      return new URL(url, base).href === currentArtifactHref();
-    } catch (_) { return false; }
-  }
-  function isFastSrcdocUrlHop(parsed){
-    if (!parsed.url || parsed.delayMs > SELF_MIN_DELAY_MS) return false;
-    try { return String(location.href || '') === 'about:srcdoc'; } catch (_) { return false; }
-  }
-  function neutralize(metas){
-    for (var i = 0; i < metas.length; i++) {
-      try { metas[i].parentNode && metas[i].parentNode.removeChild(metas[i]); } catch (_) {}
-    }
-    try { if (window.stop) window.stop(); } catch (_) {}
-  }
-  function report(hops){
-    try {
-      if (window.parent && window.parent !== window) {
-        window.parent.postMessage({ type: MESSAGE_TYPE, hops: hops }, '*');
-      }
-    } catch (_) {}
-  }
-  function evaluate(){
-    var metas = metaRefreshes();
-    if (!metas.length) {
-      // No refresh directive: this document breaks any accumulating chain.
-      if (!BLOCK_LOAD_TIME_SCRIPT_REDIRECT) clearState();
-      return;
-    }
-    var selfLoop = false;
-    for (var i = 0; i < metas.length; i++) {
-      var parsed = parseContent(metas[i]);
-      if (parsed.delayMs <= SELF_MIN_DELAY_MS && isSelfTarget(parsed.url)) { selfLoop = true; break; }
-      if (isFastSrcdocUrlHop(parsed)) { selfLoop = true; break; }
-    }
-    var state = nextState();
-    if (selfLoop || state.hops > MAX_HOPS) {
-      neutralize(metas);
-      clearState();
-      report(state.hops);
-      return;
-    }
-    writeState(state);
-  }
-  recordScriptRedirectCandidate();
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', evaluate);
-  } else {
-    evaluate();
-  }
 })();</script>`;
   if (/<head[^>]*>/i.test(doc))
     return doc.replace(/<head[^>]*>/i, (m) => `${m}${script}`);
@@ -2400,184 +1692,11 @@ html[data-od-inspect-mode] body iframe { pointer-events: none !important; }
 // the scaled stage lands ~1000px off-screen and the user sees a mostly-
 // black preview with a sliver of slide content in the top-left. Skip the
 // override whenever the framework's marker id is present.
-// Near-zero durations (not `animation-play-state: paused`) are deliberate:
-// pausing an entry animation at t=0 leaves `fill-mode: both` content stuck
-// invisible, while collapsing the duration lets every animation run to its
-// final keyframe immediately — the thumbnail shows the slide's settled state
-// and the compositor never re-rasterizes the frame again.
-// Bare CSS bodies (no `<style>` wrapper) so the shadow-root thumbnail renderer
-// (`DeckSlideThumbnail`) can adopt the exact same rules the iframe path injects,
-// keeping a single source of truth for freeze + chrome-hiding behavior.
-export const DECK_MOTION_FREEZE_CSS = `*, *::before, *::after {
-  animation-duration: 0.001s !important;
-  animation-delay: 0s !important;
-  animation-iteration-count: 1 !important;
-  transition-duration: 0.001s !important;
-  transition-delay: 0s !important;
-  scroll-behavior: auto !important;
-}`;
-
-export const DECK_CHROME_HIDE_CSS = `.deck-counter,
-.deck-hint,
-.deck-nav,
-.deck-floating-nav,
-.deck-floating-reset,
-.deck-controls,
-.slide-nav,
-.slides-nav,
-.slide-controls,
-.slide-counter,
-.presentation-nav,
-.presentation-controls,
-[role="navigation"][aria-label*="Deck"],
-[role="navigation"][aria-label*="deck"],
-[role="navigation"][aria-label*="Slide"],
-[role="navigation"][aria-label*="slide"],
-[data-deck-nav],
-[data-slide-nav] {
-  display: none !important;
-  visibility: hidden !important;
-  pointer-events: none !important;
-}`;
-
-function injectMotionFreeze(doc: string): string {
-  return injectBeforeHeadEnd(doc, `<style data-od-motion-freeze>
-${DECK_MOTION_FREEZE_CSS}
-</style>`);
-}
-
-function injectDeckChromeHiding(doc: string): string {
-  return injectBeforeHeadEnd(doc, `<style data-od-deck-chrome-hidden>
-${DECK_CHROME_HIDE_CSS}
-</style>`);
-}
-
-function injectDeckStageShadowChromeHiding(doc: string): string {
-  return injectBeforeBodyEnd(doc, `<script data-od-deck-stage-shadow-chrome-hidden>(function(){
-  var HIDE_ID = 'od-deck-stage-shadow-chrome-hidden';
-  var CSS = '.overlay,.tapzones{display:none!important;visibility:hidden!important;pointer-events:none!important;}';
-  function hideStage(stage){
-    try {
-      if (!stage || !stage.shadowRoot) return false;
-      if (stage.shadowRoot.getElementById(HIDE_ID)) return true;
-      var style = document.createElement('style');
-      style.id = HIDE_ID;
-      style.textContent = CSS;
-      stage.shadowRoot.appendChild(style);
-      return true;
-    } catch (_) {
-      return false;
-    }
-  }
-  function hideAll(){
-    var pending = false;
-    var stages = document.querySelectorAll('deck-stage');
-    for (var i = 0; i < stages.length; i += 1) {
-      if (!hideStage(stages[i])) pending = true;
-    }
-    return pending;
-  }
-  function schedule(){
-    if (!hideAll()) return;
-    setTimeout(schedule, 50);
-  }
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', schedule, { once: true });
-  } else {
-    schedule();
-  }
-  if (typeof MutationObserver !== 'undefined') {
-    new MutationObserver(schedule).observe(document.documentElement, { childList: true, subtree: true });
-  }
-})();</script>`);
-}
-
-// Screens keydown listeners for keyboard slide navigation by their source
-// text, the same way odMaybeHandlesSlideMessages screens message listeners:
-// od bridges and artifact shortcut helpers register keydown listeners of
-// their own, and counting those would put every deck on the key-probe path.
-// Shared between the head-start registry hook and the deck bridge's own
-// addEventListener patches.
-const NAV_KEYDOWN_LISTENER_PROBE = `function odLooksLikeNavKeydownListener(listener) {
-    try {
-      var source = '';
-      if (typeof listener === 'function') source = String(listener);
-      else if (listener && typeof listener.handleEvent === 'function') source = String(listener.handleEvent);
-      return /\\bArrow(?:Right|Left)\\b|\\bPage(?:Up|Down)\\b|\\bkeyCode\\b/.test(source);
-    } catch (_) {
-      return false;
-    }
-  }`;
-
-// Records artifact keydown registrations that happen BEFORE the deck bridge
-// executes at the end of <body>. Decks that load their keyboard runtime from
-// an external script (design-templates/html-ppt wires ../assets/runtime.js
-// via <script src>) register listeners too early for the bridge's own
-// addEventListener patches to see, and external script bytes are invisible
-// to the build-time source scan — so this hook must run before any artifact
-// script, at the start of <head>. The deck bridge marks its own top-of-file
-// keydown listeners via __odDeckBridgeOwnListenerInstall so they are not
-// mistaken for artifact navigation.
-function injectDeckKeydownRegistryHook(doc: string): string {
-  const hook = `<script data-od-deck-keydown-registry>(function(){
-  ${NAV_KEYDOWN_LISTENER_PROBE}
-  function wrap(target){
-    try {
-      var original = target.addEventListener;
-      target.addEventListener = function(type, listener, options){
-        if (
-          type === 'keydown' &&
-          window.__odDeckBridgeOwnListenerInstall !== true &&
-          odLooksLikeNavKeydownListener(listener)
-        ) {
-          window.__odArtifactKeydownNavigation = true;
-        }
-        return original.call(this, type, listener, options);
-      };
-    } catch (_) {}
-  }
-  wrap(window);
-  wrap(document);
-})();</script>`;
-  if (/<head[^>]*>/i.test(doc)) return doc.replace(/<head[^>]*>/i, (m) => `${m}${hook}`);
-  if (/<body[^>]*>/i.test(doc)) return doc.replace(/<body[^>]*>/i, (m) => `${m}${hook}`);
-  return hook + doc;
-}
-
-// Whether the artifact ships its own keyboard slide navigation, judged from
-// the artifact source. Must be evaluated BEFORE any od bridge is injected:
-// injected bridges (preview focus guard, edit bridge) register keydown
-// listeners of their own, and matching those would put every deck on the
-// key-probe path. Requiring a navigation-key token alongside the keydown
-// registration keeps unrelated keyboard handling (shortcuts, form helpers)
-// from triggering probes, mirroring how odMaybeHandlesSlideMessages screens
-// message listeners. This scan only sees inline bytes; keyboard runtimes in
-// external scripts are caught at runtime by injectDeckKeydownRegistryHook.
-function detectArtifactKeyboardNavigation(artifactHtml: string): boolean {
-  const registersKeydown =
-    /addEventListener\s*\(\s*['"]keydown['"]/i.test(artifactHtml) ||
-    /\bonkeydown\b/i.test(artifactHtml);
-  if (!registersKeydown) return false;
-  return /\bArrow(?:Right|Left)\b|\bPage(?:Up|Down)\b|\bkeyCode\b/.test(artifactHtml);
-}
-
-function injectDeckBridge(
-  doc: string,
-  options: {
-    initialSlideIndex?: number;
-    clickNavigation?: boolean;
-    artifactHasKeydownNavigation?: boolean;
-  } = {},
-): string {
-  const initialSlideIndex = options.initialSlideIndex ?? 0;
+function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
   const safeInitialSlideIndex = Number.isFinite(initialSlideIndex)
     ? Math.max(0, Math.floor(initialSlideIndex))
     : 0;
-  const hasInlineSlideMessageListener =
-    /addEventListener\s*\(\s*['"]message['"]/i.test(doc) && /\bod:slide\b/.test(doc);
-  const hasInlineKeydownListener = !!options.artifactHasKeydownNavigation;
   const isFrameworkDeck = /\bid\s*=\s*["']deck-stage["']/i.test(doc);
-  const clickNavigation = !!options.clickNavigation && !isFrameworkDeck;
   const styleFix = isFrameworkDeck
     ? ''
     : `<style data-od-deck-fix>
@@ -2586,47 +1705,13 @@ function injectDeckBridge(
   const script = `<script data-od-deck-bridge>(function(){
   var initialSlideIndex = ${safeInitialSlideIndex};
   var didRestoreInitialSlide = initialSlideIndex <= 0;
-  // The framework branch's own listener source mentions navigation keys, so
-  // without this marker the head-start registry hook would classify every
-  // framework deck as artifact-keyboard-navigable.
-  window.__odDeckBridgeOwnListenerInstall = true;
-  if (${JSON.stringify(isFrameworkDeck)}) {
-    window.addEventListener('keydown', function(ev){
-      var key = ev && ev.key;
-      if (key === 'Escape') {
-        try { window.parent.postMessage({ type: 'od:present-escape' }, '*'); } catch (_) {}
-        return;
-      }
-      if (ev.metaKey || ev.ctrlKey || ev.altKey || ev.shiftKey) return;
-      if (
-        key !== 'ArrowRight' &&
-        key !== 'PageDown' &&
-        key !== ' ' &&
-        key !== 'ArrowLeft' &&
-        key !== 'PageUp' &&
-        key !== 'Home' &&
-        key !== 'End' &&
-        String(key).toLowerCase() !== 'r'
-      ) return;
-      var t = ev.target;
-      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
-      ev.stopPropagation();
-    }, true);
-  } else {
-    window.addEventListener('keydown', function(ev){
-      if (ev && ev.key === 'Escape') {
-        try { window.parent.postMessage({ type: 'od:present-escape' }, '*'); } catch (_) {}
-      }
-    }, true);
-  }
-  window.__odDeckBridgeOwnListenerInstall = false;
   function slides(){
     // Structured selectors first so decorative .slide markup in non-deck
     // pages (icons, badges, code samples) is not counted as deck slides;
     // fall back to all .slide only when nothing structured matched, so
     // freeform decks that nest slides under an extra wrapper still report
     // the real count instead of leaving the host counter at 1 / 0.
-    var structured = document.querySelectorAll('deck-stage > .slide, .deck > .slide, .deck-stage > .slide, .deck-shell > .slide, body > .slide');
+    var structured = document.querySelectorAll('.deck > .slide, .deck-stage > .slide, .deck-shell > .slide, body > .slide');
     if (structured.length) return structured;
     return document.querySelectorAll('.slide');
   }
@@ -2855,25 +1940,15 @@ function injectDeckBridge(
     var usesInlineDisplay = false;
     var usesInlineVisibility = false;
     var usesHidden = false;
-    // Many reveal-animation decks (the frontend-slides family) gate their
-    // staggered entrances on a SEPARATE \`.visible\` class — \`.slide.visible
-    // .reveal { opacity: 1 }\` — that the deck's own show() adds alongside
-    // \`.active\`. Driving navigation by flipping only the active class shows
-    // the slide chrome but leaves every .reveal child stuck at opacity:0, so
-    // the body renders blank. Mirror \`.visible\` in lock-step with the active
-    // slide (only for decks that actually use it, so it is a no-op elsewhere).
-    var usesVisibleClass = false;
     for (var j=0; j<list.length; j++) {
       usesInlineDisplay = usesInlineDisplay || list[j].style.display === 'none';
       usesInlineVisibility = usesInlineVisibility || list[j].style.visibility === 'hidden';
       usesHidden = usesHidden || list[j].hasAttribute('hidden');
-      usesVisibleClass = usesVisibleClass || (list[j].classList && list[j].classList.contains('visible'));
     }
     for (var k=0; k<list.length; k++) {
       if (list[k].classList) {
         list[k].classList.remove('active', 'is-active', 'current');
         if (k === target) list[k].classList.add(activeClass);
-        if (usesVisibleClass) list[k].classList.toggle('visible', k === target);
       }
       if (usesHidden) {
         if (k === target) list[k].removeAttribute('hidden');
@@ -2912,190 +1987,36 @@ function injectDeckBridge(
     if (action === 'last') return list.length - 1;
     return i;
   }
-  function keyForAction(action){
-    if (action === 'next') return 'ArrowRight';
-    if (action === 'prev') return 'ArrowLeft';
-    if (action === 'first') return 'Home';
-    if (action === 'last') return 'End';
-    return null;
-  }
-  // Deck navigation must prefer the artifact's own keyboard handler over
-  // direct DOM mutation: generated decks track their slide index inside that
-  // handler and render their own page counter / dots / progress from it, so
-  // flipping classes or transforms from the bridge moves the canvas while the
-  // artifact's chrome (and its internal position) stays frozen on the first
-  // slide. Handlers may defer their state update (requestAnimationFrame or
-  // setTimeout), so the probe is asynchronous: after dispatching the key it
-  // waits one bounded mutation window for the deck to move before concluding
-  // the artifact did not handle it. Falling back synchronously would
-  // double-drive the deck — the bridge mutates the DOM immediately and the
-  // deferred artifact handler still runs afterwards, advancing a second time
-  // and desyncing the artifact's internal index from the visible slide.
-  var KEY_PROBE_WINDOW_MS = 48;
-  var preferredKeyTarget = null;
-  // Seeded from a source scan (inline artifact scripts run before this
-  // bridge); the addEventListener patches below catch later registrations.
-  // Decks with no keyboard handling at all skip the probe entirely, so their
-  // direct-DOM fallback stays synchronous.
-  var odHasArtifactKeydownListener = ${JSON.stringify(hasInlineKeydownListener)};
-  function artifactHasKeydownNavigation(){
-    if (odHasArtifactKeydownListener) return true;
-    // Set by the head-start registry hook, which sees registrations made
-    // before this bridge executes (external-script keyboard runtimes).
-    try { return window.__odArtifactKeydownNavigation === true; } catch (_) { return false; }
-  }
-  function trackTransformSnapshot(){
-    var track = transformTrack(slides());
-    return track ? (track.style.transform || '') : '';
-  }
-  function deckMovedSince(beforeIndex, beforeTrack){
-    return activeIndex(slides()) !== beforeIndex || trackTransformSnapshot() !== beforeTrack;
-  }
-  function waitForDeckMove(beforeIndex, beforeTrack, onDone){
-    if (deckMovedSince(beforeIndex, beforeTrack)) { onDone(true); return; }
-    var settled = false;
-    var observer = null;
-    var timer = null;
-    function finish(moved){
-      if (settled) return;
-      settled = true;
-      if (observer) { try { observer.disconnect(); } catch (_) {} }
-      if (timer) clearTimeout(timer);
-      onDone(moved);
-    }
-    try {
-      observer = new MutationObserver(function(){
-        if (deckMovedSince(beforeIndex, beforeTrack)) finish(true);
-      });
-      observer.observe(document.body, {
-        subtree: true,
-        attributes: true,
-        attributeFilter: ['class', 'style', 'hidden'],
-      });
-    } catch (_) {}
-    timer = setTimeout(function(){ finish(deckMovedSince(beforeIndex, beforeTrack)); }, KEY_PROBE_WINDOW_MS);
-  }
-  function dispatchKeysTo(target, key){
-    var init = { key: key, code: key, bubbles: true, cancelable: true, composed: true };
-    try {
-      target.dispatchEvent(new KeyboardEvent('keydown', init));
-      target.dispatchEvent(new KeyboardEvent('keyup', init));
-    } catch (_) {}
-  }
-  function goViaArtifactKeys(key, onDone){
-    if (!key || !artifactHasKeydownNavigation()) { onDone(false); return; }
-    var beforeIndex = activeIndex(slides());
-    var beforeTrack = trackTransformSnapshot();
-    // Once a dispatch target has proven responsive, keep using it: probing
-    // window first on every keypress would tax document-listening decks one
-    // probe window per navigation.
-    if (preferredKeyTarget) {
-      dispatchKeysTo(preferredKeyTarget, key);
-      waitForDeckMove(beforeIndex, beforeTrack, onDone);
-      return;
-    }
-    // Window first, then document, waiting out each stage before the next:
-    // events dispatched at document also propagate to window listeners, so
-    // dispatching the second stage while the first stage's possibly deferred
-    // handler is still pending turns one host "next" request into two moves.
-    dispatchKeysTo(window, key);
-    waitForDeckMove(beforeIndex, beforeTrack, function(moved){
-      if (moved) { preferredKeyTarget = window; onDone(true); return; }
-      dispatchKeysTo(document, key);
-      waitForDeckMove(beforeIndex, beforeTrack, function(movedViaDocument){
-        if (movedViaDocument) preferredKeyTarget = document;
-        onDone(movedViaDocument);
-      });
-    });
-  }
-  function stepToIndexViaKeys(target, onDone){
-    var guard = slides().length + 4;
-    function step(){
-      var current = activeIndex(slides());
-      if (current === target) { onDone(true); return; }
-      if (guard <= 0) { onDone(false); return; }
-      guard -= 1;
-      goViaArtifactKeys(target > current ? 'ArrowRight' : 'ArrowLeft', function(moved){
-        if (!moved) { onDone(false); return; }
-        step();
-      });
-    }
-    step();
-  }
   function go(action){
     var list = slides();
     if (!list.length) return;
+    var target = Math.max(0, Math.min(list.length - 1, targetFor(action, list)));
     if (isScrollDeck()) {
-      scrollGo(Math.max(0, Math.min(list.length - 1, targetFor(action, list))));
+      scrollGo(target);
       return;
     }
-    goViaArtifactKeys(keyForAction(action), function(moved){
-      if (moved) { report(); return; }
-      // Recompute the target at fallback time: rapid host requests can have
-      // several probes in flight, and each fallback must step from the deck's
-      // position as it is now, not as it was when its probe started.
-      var now = slides();
-      var target = Math.max(0, Math.min(now.length - 1, targetFor(action, now)));
-      if (canSetActive(now) && setActive(target)) return;
-      if (transformGo(target)) return;
-      setTimeout(report, 280);
-    });
+    if (canSetActive(list) && setActive(target)) return;
+    if (transformGo(target)) return;
+    if (action === 'next') dispatchKey('ArrowRight');
+    else if (action === 'prev') dispatchKey('ArrowLeft');
+    else if (action === 'first') dispatchKey('Home');
+    else if (action === 'last') dispatchKey('End');
+    setTimeout(report, 280);
   }
   function gotoIndex(i){
     var list = slides();
     if (!list.length) return;
     var target = Math.max(0, Math.min(list.length - 1, i));
     if (isScrollDeck()) { scrollGo(target); return; }
-    if (activeIndex(list) === target) { report(); return; }
-    stepToIndexViaKeys(target, function(stepped){
-      if (stepped) { report(); return; }
-      var now = slides();
-      if (canSetActive(now) && setActive(target)) return;
-      if (transformGo(target)) return;
-      var current = activeIndex(slides());
-      var diff = target - current;
-      if (!diff) { report(); return; }
-      var key = diff > 0 ? 'ArrowRight' : 'ArrowLeft';
-      var n = Math.abs(diff);
-      for (var k = 0; k < n; k++) dispatchKey(key);
-      setTimeout(report, 320);
-    });
-  }
-  function isInteractiveClickTarget(target){
-    while (target && target !== document.body && target !== document.documentElement) {
-      if (!target.tagName) break;
-      var tag = String(target.tagName || '').toUpperCase();
-      if (
-        tag === 'A' ||
-        tag === 'BUTTON' ||
-        tag === 'INPUT' ||
-        tag === 'TEXTAREA' ||
-        tag === 'SELECT' ||
-        tag === 'SUMMARY' ||
-        tag === 'LABEL' ||
-        tag === 'IFRAME' ||
-        target.isContentEditable ||
-        target.getAttribute('role') === 'button' ||
-        target.getAttribute('role') === 'link'
-      ) {
-        return true;
-      }
-      target = target.parentElement;
-    }
-    return false;
-  }
-  if (${JSON.stringify(clickNavigation)}) {
-    document.addEventListener('click', function(ev){
-      if (ev.defaultPrevented) return;
-      if (ev.button !== undefined && ev.button !== 0) return;
-      if (ev.metaKey || ev.ctrlKey || ev.altKey || ev.shiftKey) return;
-      if (isInteractiveClickTarget(ev.target)) return;
-      var list = slides();
-      if (!list.length) return;
-      ev.preventDefault();
-      if (ev.clientX < window.innerWidth / 2) go('prev');
-      else go('next');
-    }, true);
+    if (canSetActive(list) && setActive(target)) return;
+    if (transformGo(target)) return;
+    var current = activeIndex(list);
+    var diff = target - current;
+    if (!diff) { report(); return; }
+    var key = diff > 0 ? 'ArrowRight' : 'ArrowLeft';
+    var n = Math.abs(diff);
+    for (var k = 0; k < n; k++) dispatchKey(key);
+    setTimeout(report, 320);
   }
   var lastCommentTargetSlideIndex = -1;
   function report(){
@@ -3104,7 +2025,6 @@ function injectDeckBridge(
       var i = activeIndex(list);
       var count = list.length;
       var progressWidth = count ? ((i + 1) / count * 100) + '%' : '0';
-      updateDeckChrome(i, count);
       window.parent.postMessage({
         type: 'od:slide-state',
         active: i,
@@ -3139,94 +2059,11 @@ function injectDeckBridge(
     didRestoreInitialSlide = true;
     gotoIndex(initialSlideIndex);
   }
-  var odSlideMessageBeforeIndex = -1;
-  var odDeckBridgeInstallingMessageListener = false;
-  var odHasExternalSlideMessageListener = ${JSON.stringify(hasInlineSlideMessageListener)};
-  function odMaybeHandlesSlideMessages(listener) {
-    try {
-      var source = '';
-      if (typeof listener === 'function') source = String(listener);
-      else if (listener && typeof listener.handleEvent === 'function') source = String(listener.handleEvent);
-      if (/\\bod:slide\\b/.test(source)) return true;
-      return /slide/i.test(source) && /message/i.test(source);
-    } catch (_) {
-      return false;
-    }
-  }
-  ${NAV_KEYDOWN_LISTENER_PROBE}
-  try {
-    var odOriginalAddEventListener = window.addEventListener;
-    window.addEventListener = function(type, listener, options) {
-      if (
-        type === 'message' &&
-        !odDeckBridgeInstallingMessageListener &&
-        odMaybeHandlesSlideMessages(listener)
-      ) {
-        odHasExternalSlideMessageListener = true;
-      }
-      if (type === 'keydown' && odLooksLikeNavKeydownListener(listener)) {
-        odHasArtifactKeydownListener = true;
-      }
-      return odOriginalAddEventListener.call(this, type, listener, options);
-    };
-  } catch (_) {}
-  try {
-    var odOriginalDocumentAddEventListener = document.addEventListener;
-    document.addEventListener = function(type, listener, options) {
-      if (type === 'keydown' && odLooksLikeNavKeydownListener(listener)) {
-        odHasArtifactKeydownListener = true;
-      }
-      return odOriginalDocumentAddEventListener.call(this, type, listener, options);
-    };
-  } catch (_) {}
-  function addOdSlideMessageListener(listener, options) {
-    odDeckBridgeInstallingMessageListener = true;
-    try { window.addEventListener('message', listener, options); }
-    finally { odDeckBridgeInstallingMessageListener = false; }
-  }
-  addOdSlideMessageListener(function(ev){
+  window.addEventListener('message', function(ev){
     var data = ev && ev.data;
     if (!data || data.type !== 'od:slide') return;
-    var before = activeIndex(slides());
-    odSlideMessageBeforeIndex = before;
-    setTimeout(function(){
-      if (activeIndex(slides()) !== before) report();
-    }, 0);
-  }, true);
-  addOdSlideMessageListener(function(ev){
-    var data = ev && ev.data;
-    if (!data || data.type !== 'od:slide') return;
-    var before = odSlideMessageBeforeIndex;
-    odSlideMessageBeforeIndex = -1;
-    function applyBridgeFallback() {
-      var current = activeIndex(slides());
-      if (data.action === 'go' && typeof data.index === 'number') {
-        if (current === data.index) {
-          report();
-          return;
-        }
-        gotoIndex(data.index);
-        return;
-      }
-      // Some generated decks ship their own od:slide listener. Let every
-      // listener for this message event settle first; then, if the artifact
-      // already moved from the captured index, report instead of applying the
-      // same command again.
-      if (before >= 0 && current !== before) {
-        report();
-        return;
-      }
-      go(data.action);
-    }
-    if (before >= 0 && activeIndex(slides()) !== before) {
-      report();
-      return;
-    }
-    if (odHasExternalSlideMessageListener) {
-      setTimeout(applyBridgeFallback, 0);
-      return;
-    }
-    applyBridgeFallback();
+    if (data.action === 'go' && typeof data.index === 'number') gotoIndex(data.index);
+    else go(data.action);
   });
   function ownDeckButton(id, action){
     var btn = document.getElementById(id);
@@ -3294,12 +2131,6 @@ function injectDeckBridge(
       for (var i = 0; i < list.length; i++) {
         mo.observe(list[i], { attributes: true, attributeFilter: ['class', 'style', 'hidden', 'aria-hidden'] });
       }
-      // Transform-track decks translate a shared parent instead of mutating
-      // slide attributes, so the artifact's own keyboard handler would never
-      // trip the observer above and the host counter would drift. Watch the
-      // track's style too.
-      var track = transformTrack(list);
-      if (track) mo.observe(track, { attributes: true, attributeFilter: ['style'] });
     } catch (e) {}
     setTimeout(restoreInitialSlide, 100);
   }

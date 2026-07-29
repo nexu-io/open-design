@@ -5,39 +5,34 @@ import {
   SIDECAR_SOURCES,
   type SidecarStamp,
 } from "@open-design/sidecar-proto";
+<<<<<<< HEAD
+import { parseLauncherAfterQuitArgs } from "@open-design/launcher-proto";
+=======
 import {
   parseLauncherAfterQuitArgs,
   parseLauncherDelegatedArgs,
   parseLauncherHandoffResumeArgs,
 } from "@open-design/launcher-proto";
+>>>>>>> upstream/main
 import {
   bootstrapSidecarRuntime,
   createSidecarLaunchEnv,
   resolveAppIpcPath,
 } from "@open-design/sidecar";
-import { applyOsLocaleSwitch, createSplashWindow, setSplashStage } from "@open-design/desktop/main";
+import { applyOsLocaleSwitch, createSplashWindow } from "@open-design/desktop/main";
 import { readProcessStamp } from "@open-design/platform";
 import { join } from "node:path";
 import { app, dialog } from "electron";
 
 import { readPackagedConfig } from "./config.js";
-import {
-  claimPackagedDownloadAttribution,
-  discoverPackagedDownloadAttribution,
-} from "./download-attribution.js";
 import { writePackagedDesktopIdentity } from "./identity.js";
 import { PackagedPathAccessError } from "./errors.js";
-import {
-  exitPackagedLauncherForExistingDesktop,
-  inspectExistingDesktopForLauncher,
-  waitForLauncherAfterQuit,
-} from "./launcher-after-quit.js";
+import { inspectExistingDesktopForLauncher, waitForLauncherAfterQuit } from "./launcher-after-quit.js";
 import { confirmPackagedLauncherRuntime, resolvePackagedLauncherRuntime } from "./launcher-runtime.js";
 import {
   applyPackagedElectronPathOverrides,
   claimPackagedSingleInstanceLock,
   ensurePackagedNamespacePaths,
-  stabilizePackagedWorkingDirectory,
 } from "./launch.js";
 import {
   attachPackagedDesktopProcessLogging,
@@ -45,34 +40,13 @@ import {
   type PackagedDesktopLogger,
 } from "./logging.js";
 import { resolvePackagedNamespacePaths } from "./paths.js";
-import { createObsoleteInstalledOuterRetirement } from "./obsolete-installed-outer.js";
-import { launchPackagedPayloadDesktop } from "./payload-desktop-launch.js";
 import { packagedEntryUrl, registerOdProtocol } from "./protocol.js";
 import { startPackagedSidecars } from "./sidecars.js";
-import { reportStartupFailure, resolveStartupDistinctId } from "./startup-telemetry.js";
-import { resolvePackagedWindowTitle } from "./window-title.js";
 import { syncWindowsUninstallDisplayVersion } from "./windows-lifecycle.js";
 
 let packagedLogger: PackagedDesktopLogger | null = null;
 let pendingSecondInstanceFocus = false;
 let showExistingDesktop: (() => void) | null = null;
-
-// Telemetry context for the fatal-exit path. Populated once config + launcher
-// runtime are resolved so the `main().catch` below can report a startup failure
-// even though the daemon (the PostHog host) never came up. Null until then —
-// failures earlier than config resolution simply skip telemetry. See
-// `startup-telemetry.ts` for the zero-startup-side-effect contract.
-let startupTelemetryContext:
-  | {
-      posthogKey: string | null;
-      posthogHost: string | null;
-      appVersion: string | null;
-      namespace: string;
-      source: string;
-      installationRoot: string;
-      nativeModulePath: string | null;
-    }
-  | null = null;
 
 function createPackagedDesktopStamp(namespace: string): SidecarStamp {
   return {
@@ -116,21 +90,23 @@ async function main(): Promise<void> {
 
   const config = await readPackagedConfig();
   const afterQuit = parseLauncherAfterQuitArgs(process.argv.slice(1));
+<<<<<<< HEAD
+=======
   const handoffResume = parseLauncherHandoffResumeArgs(process.argv.slice(1));
   const delegated = parseLauncherDelegatedArgs(process.argv.slice(1));
+>>>>>>> upstream/main
   const argvStamp = readProcessStamp(process.argv.slice(1), OPEN_DESIGN_SIDECAR_CONTRACT);
   const namespace = argvStamp?.namespace ?? config.namespace;
   const namespaceConfig = namespace === config.namespace ? config : { ...config, namespace };
   const initialPaths = resolvePackagedNamespacePaths(namespaceConfig, namespace, process.env);
-  if (!await waitForLauncherAfterQuit(afterQuit, initialPaths)) {
-    app.exit(1);
-    return;
-  }
+  await waitForLauncherAfterQuit(afterQuit, initialPaths);
   const existingDesktop = await inspectExistingDesktopForLauncher(namespace, {
-    incomingVersion: namespaceConfig.appVersion,
     logger: console,
     paths: initialPaths,
   });
+<<<<<<< HEAD
+  if (existingDesktop.action === "exit") {
+=======
   if (exitPackagedLauncherForExistingDesktop(existingDesktop, (code) => app.exit(code))) {
     return;
   }
@@ -141,54 +117,17 @@ async function main(): Promise<void> {
   });
   if (await launchPackagedPayloadDesktop(launcherRuntime, stamp)) {
     app.exit(0);
+>>>>>>> upstream/main
     return;
   }
+  const launcherRuntime = await resolvePackagedLauncherRuntime(namespaceConfig, initialPaths);
   const activeConfig = launcherRuntime.config;
   const paths = launcherRuntime.paths;
-
-  // Arm fatal-exit telemetry now that we know the channel key/version. The
-  // startPackagedSidecars call below is THE failure this covers (daemon/web
-  // dying before reporting status, e.g. issue #4638's missing better-sqlite3).
-  startupTelemetryContext = {
-    posthogKey: activeConfig.posthogKey,
-    posthogHost: activeConfig.posthogHost,
-    appVersion: activeConfig.appVersion,
-    namespace,
-    source: SIDECAR_SOURCES.PACKAGED,
-    // Pass installationRoot explicitly: OD_INSTALLATION_DIR is only set in the
-    // daemon child env, not this parent process (see startup-telemetry.ts).
-    installationRoot: paths.installationRoot,
-    // Absolute path where the daemon's better-sqlite3 binding ships in the
-    // packaged bundle (`Contents/Resources/app/node_modules/...` — layout
-    // verified against the shipped 0.13.0 DMG). The fatal-exit report probes
-    // this to record whether the .node actually exists on the crashing machine.
-    nativeModulePath: join(
-      app.getAppPath(),
-      "node_modules",
-      "better-sqlite3",
-      "build",
-      "Release",
-      "better_sqlite3.node",
-    ),
-  };
+  const stamp = argvStamp ?? createPackagedDesktopStamp(namespace);
 
   await ensurePackagedNamespacePaths(paths);
-  stabilizePackagedWorkingDirectory(paths);
-  const downloadAttribution = await discoverPackagedDownloadAttribution(paths, console).catch((error: unknown) => {
-    console.warn("[attribution] failed to discover packaged download attribution", error);
-    return null;
-  });
   packagedLogger = createPackagedDesktopLogger(paths);
   attachPackagedDesktopProcessLogging({ logger: packagedLogger, paths, stamp });
-  const retireObsoleteInstalledOuter = createObsoleteInstalledOuterRetirement({
-    currentExecutablePath: process.execPath,
-    currentPid: process.pid,
-    installedLaunchPath: launcherRuntime.installedLaunchPath,
-    logger: packagedLogger,
-    payloadDesktopProcess: launcherRuntime.payloadDesktopProcess,
-    payloadExecutablePath: launcherRuntime.desktopExecutablePath,
-    platform: process.platform,
-  });
   applyPackagedElectronPathOverrides(paths);
   applyPackagedUpdaterEnv(activeConfig.updateMetadataUrl);
   if (!claimPackagedSingleInstanceLock(app, () => {
@@ -225,7 +164,6 @@ async function main(): Promise<void> {
     amrProfile: activeConfig.amrProfile,
     daemonCliEntry: activeConfig.daemonCliEntry,
     daemonSidecarEntry: activeConfig.daemonSidecarEntry,
-    electronNodeCommand: launcherRuntime.electronNodeCommand,
     nodeCommand: activeConfig.nodeCommand,
     telemetryRelayUrl: activeConfig.telemetryRelayUrl,
     posthogKey: activeConfig.posthogKey,
@@ -238,34 +176,7 @@ async function main(): Promise<void> {
     webSidecarEntry: activeConfig.webSidecarEntry,
     webStandaloneRoot: activeConfig.webStandaloneRoot,
     webOutputMode: activeConfig.webOutputMode,
-    // Surface each sidecar boot phase on the splash status line so a slow
-    // cold start (Defender scans, native module loads) never reads as a hang.
-    // Both the "spawning" and "ready" edges are mapped so the step counter
-    // advances the instant each long native wait clears.
-    onPhase(phase) {
-      const stage =
-        phase === "daemon-spawning"
-          ? "engine"
-          : phase === "daemon-ready"
-            ? "engineReady"
-            : phase === "web-spawning"
-              ? "interface"
-              : "interfaceReady";
-      setSplashStage(splash.window, stage);
-    },
   });
-  if (sidecars.daemon.url) {
-    void claimPackagedDownloadAttribution({
-      attribution: downloadAttribution,
-      daemonUrl: sidecars.daemon.url,
-      installerObservationRoot: paths.installerObservationRoot,
-      logger: packagedLogger,
-    });
-  }
-  // Sidecars are up; the remaining wait is the hidden main window loading and
-  // mounting the web bundle (the runtime re-asserts this stage at its reveal
-  // gate, which is a no-op when the label is already current).
-  setSplashStage(splash.window, "workspace");
   registerOdProtocol(sidecars.web.url ?? "http://127.0.0.1:0");
 
   const { runDesktopMain } = await import("@open-design/desktop/main");
@@ -274,13 +185,9 @@ async function main(): Promise<void> {
     splashStartedAt: splash.startedAt,
     async beforeShutdown() {
       try {
-        await retireObsoleteInstalledOuter();
+        await sidecars.close();
       } finally {
-        try {
-          await sidecars.close();
-        } finally {
-          await identity.close();
-        }
+        await identity.close();
       }
     },
     async discoverWebUrl() {
@@ -292,10 +199,6 @@ async function main(): Promise<void> {
     // Electron's protocol handler.
     async discoverDaemonUrl() {
       return sidecars.daemon.url;
-    },
-    windowTitle: resolvePackagedWindowTitle(activeConfig),
-    async onExternalShow() {
-      await retireObsoleteInstalledOuter();
     },
     onDesktopReady(controls) {
       void confirmPackagedLauncherRuntime(launcherRuntime).catch((error: unknown) => {
@@ -325,9 +228,8 @@ async function main(): Promise<void> {
   });
 }
 
-void main().catch(async (error: unknown) => {
-  const isPathAccess = error instanceof PackagedPathAccessError;
-  if (isPathAccess) {
+void main().catch((error: unknown) => {
+  if (error instanceof PackagedPathAccessError) {
     try {
       dialog.showErrorBox(error.title, error.message);
     } catch {
@@ -336,26 +238,5 @@ void main().catch(async (error: unknown) => {
   }
   packagedLogger?.error("packaged runtime failed", { error });
   console.error("packaged runtime failed", error);
-  // Best-effort crash telemetry on the way out. This is the ONLY new behavior
-  // on the failure path; the happy path never reaches here. reportStartupFailure
-  // self-caps its runtime (Promise.race timeout) and swallows all errors, so it
-  // can neither block nor crash the exit. No-op when telemetry isn't armed yet
-  // or the build has no PostHog key.
-  if (startupTelemetryContext) {
-    await reportStartupFailure({
-      error,
-      isPathAccess,
-      posthogKey: startupTelemetryContext.posthogKey,
-      posthogHost: startupTelemetryContext.posthogHost,
-      distinctId: resolveStartupDistinctId(
-        startupTelemetryContext.namespace,
-        startupTelemetryContext.installationRoot,
-      ),
-      appVersion: startupTelemetryContext.appVersion,
-      namespace: startupTelemetryContext.namespace,
-      source: startupTelemetryContext.source,
-      nativeModulePath: startupTelemetryContext.nativeModulePath,
-    });
-  }
   process.exit(1);
 });

@@ -25,7 +25,7 @@ import {
   legacyDirHasPayload,
   migrateLegacyDataDirSync,
   promoteStaged,
-} from '../src/migration/index.js';
+} from '../src/legacy-data-migrator.js';
 
 interface SilentLogger {
   info(message: string): void;

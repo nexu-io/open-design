@@ -33,17 +33,6 @@ export type QuestionType =
   | 'select'
   | 'text'
   | 'textarea'
-  | 'number'
-  | 'range'
-  | 'date'
-  | 'time'
-  | 'datetime-local'
-  | 'color'
-  | 'url'
-  | 'email'
-  | 'tel'
-  | 'file'
-  | 'switch'
   | 'direction-cards';
 
 /**
@@ -87,22 +76,6 @@ export interface FormQuestion {
   defaultValue?: string | string[];
   /** Only applies when `type === 'checkbox'`. Caps the number of selected options. */
   maxSelections?: number;
-  /**
-   * For finite-choice controls, show a free-form override beside the generated
-   * options so the user can take over a choice instead of being trapped by the
-   * model's presets.
-   */
-  allowCustom?: boolean;
-  customLabel?: string;
-  customPlaceholder?: string;
-  /** Numeric/range inputs only. */
-  min?: number;
-  max?: number;
-  step?: number;
-  /** File inputs only. The answer serializes selected file names, not bytes. */
-  multiple?: boolean;
-  /** File inputs only. Mirrors the native file input accept attribute. */
-  accept?: string;
   /** Only present when `type === 'direction-cards'`. Mapped to options by `id`. */
   cards?: DirectionCard[];
 }
@@ -113,21 +86,11 @@ export interface QuestionForm {
   description?: string;
   questions: FormQuestion[];
   submitLabel?: string;
-  /**
-   * BCP-47 tag of the language the model localized the form into (e.g.
-   * "zh-CN"). Host-rendered strings inside the form card (the "Other" chip,
-   * custom input copy) follow this language so a Chinese form in an English
-   * UI doesn't mix scripts; absent → the app UI locale.
-   */
-  lang?: string;
 }
 
 export type FormSegment =
   | { kind: 'text'; text: string }
   | { kind: 'form'; form: QuestionForm; raw: string };
-
-const INVALID_QUESTION_FORM_FALLBACK =
-  'The assistant sent a question form that could not be rendered. Please ask it to resend the questions.';
 
 // `question-form` is the canonical tag; `ask-question` is an alias the
 // model occasionally drifts to (issue #1194). The close tag must match
@@ -140,9 +103,8 @@ export function splitOnQuestionForms(input: string): FormSegment[] {
   const out: FormSegment[] = [];
   let cursor = 0;
   // Scan repeatedly for question-form / ask-question opens; for each,
-  // locate the matching close tag and try to parse the JSON body. Complete
-  // protocol blocks that fail parsing render a safe fallback instead of
-  // leaking their raw JSON into prose.
+  // locate the matching close tag and try to parse the JSON body.
+  // Anything that doesn't parse cleanly stays in the prose stream.
   while (cursor < input.length) {
     const slice = input.slice(cursor);
     const m = OPEN_RE.exec(slice);
@@ -156,22 +118,7 @@ export function splitOnQuestionForms(input: string): FormSegment[] {
     const openEnd = openStart + m[0].length;
     const closeIdx = findCloseTag(input, openEnd, closeTag);
     if (closeIdx === -1) {
-      // No matching close tag found for this open tag name. The body may
-      // contain an open tag of the other name (e.g. prose mentioned
-      // <ask-question> but the real form uses <question-form>). Try to
-      // unwind to an inner open before giving up.
-      const remainder = input.slice(openEnd);
-      const nestedOpen = OPEN_RE.exec(remainder);
-      if (nestedOpen) {
-        const resumeAt = openEnd + nestedOpen.index;
-        if (openStart > cursor) {
-          out.push({ kind: 'text', text: input.slice(cursor, openStart) });
-        }
-        out.push({ kind: 'text', text: input.slice(openStart, resumeAt) });
-        cursor = resumeAt;
-        continue;
-      }
-      // Genuinely unterminated — leave the rest as prose.
+      // Unterminated — leave the rest as prose so we don't swallow it.
       out.push({ kind: 'text', text: slice });
       break;
     }
@@ -180,37 +127,21 @@ export function splitOnQuestionForms(input: string): FormSegment[] {
     }
     const body = input.slice(openEnd, closeIdx);
     const attrs = parseAttrs(m[2] ?? '');
-    const parseResult = parseForm(body, attrs);
+    const form = tryParseForm(body, attrs);
     const blockEnd = closeIdx + closeTag.length;
-    if (parseResult.form) {
-      out.push({ kind: 'form', form: parseResult.form, raw: input.slice(openStart, blockEnd) });
-      cursor = blockEnd;
+    if (form) {
+      out.push({ kind: 'form', form, raw: input.slice(openStart, blockEnd) });
     } else {
-      // The body between this open tag and the matched close tag isn't valid
-      // JSON. If the body itself contains another question-form / ask-question
-      // open tag, the outer match was a false positive (e.g. the model
-      // mentioned the tag name inside backtick-quoted prose). Unwind to the
-      // nested open so it gets a clean parse on the next iteration.
-      const nestedOpen = OPEN_RE.exec(body);
-      if (nestedOpen) {
-        const resumeAt = openEnd + nestedOpen.index;
-        // Text before the false-positive tag was already emitted above.
-        // Slice from openStart so only the tag and the gap up to the
-        // nested open are emitted — no duplication.
-        out.push({ kind: 'text', text: input.slice(openStart, resumeAt) });
-        cursor = resumeAt;
-      } else {
-        recordQuestionFormParseFailure(parseResult.reason, tagName, body);
-        out.push({ kind: 'text', text: INVALID_QUESTION_FORM_FALLBACK });
-        cursor = blockEnd;
-      }
+      // Malformed — keep raw text so the user can still see it.
+      out.push({ kind: 'text', text: input.slice(openStart, blockEnd) });
     }
+    cursor = blockEnd;
   }
   return out;
 }
 
-// First parseable form in a message, used by callers that need to inspect the
-// active discovery form without duplicating the renderer's split logic.
+// First parseable form in a message, used to surface the active discovery
+// form in the right-hand Questions tab instead of inline in the chat.
 export function findFirstQuestionForm(
   input: string,
 ): { form: QuestionForm; raw: string } | null {
@@ -273,20 +204,9 @@ function parseAttrs(raw: string): Record<string, string> {
   return out;
 }
 
-type FormParseFailureReason =
-  | 'empty-body'
-  | 'invalid-json'
-  | 'unsupported-payload'
-  | 'empty-questions';
-
-interface FormParseResult {
-  form: QuestionForm | null;
-  reason?: FormParseFailureReason;
-}
-
-function parseForm(body: string, attrs: Record<string, string>): FormParseResult {
+function tryParseForm(body: string, attrs: Record<string, string>): QuestionForm | null {
   const trimmed = body.trim();
-  if (!trimmed) return { form: null, reason: 'empty-body' };
+  if (!trimmed) return null;
   // Allow the JSON to be wrapped in a fenced ```json block — common when
   // the model echoes its own indented body.
   const stripped = trimmed
@@ -297,37 +217,29 @@ function parseForm(body: string, attrs: Record<string, string>): FormParseResult
   try {
     data = JSON.parse(stripped);
   } catch {
-    return { form: null, reason: 'invalid-json' };
+    return null;
   }
-  if (!data || typeof data !== 'object') return { form: null, reason: 'unsupported-payload' };
-  const obj = Array.isArray(data) ? {} : (data as Record<string, unknown>);
-  const rawQuestions = Array.isArray(data)
-    ? data
-    : Array.isArray(obj.questions)
-      ? obj.questions
-      : null;
-  if (!rawQuestions) return { form: null, reason: 'unsupported-payload' };
+  if (!data || typeof data !== 'object') return null;
+  const obj = data as Record<string, unknown>;
+  const rawQuestions = Array.isArray(obj.questions) ? obj.questions : null;
+  if (!rawQuestions) return null;
   const questions: FormQuestion[] = [];
   rawQuestions.forEach((q, i) => {
     const mapped = mapRawQuestion(q, i);
     if (mapped) questions.push(mapped);
   });
-  if (questions.length === 0) return { form: null, reason: 'empty-questions' };
+  if (questions.length === 0) return null;
   const id = attrs.id ?? (typeof obj.id === 'string' ? obj.id : 'discovery');
   const title =
     attrs.title ?? (typeof obj.title === 'string' ? obj.title : 'A few quick questions');
   const description = typeof obj.description === 'string' ? obj.description : undefined;
   const submitLabel = typeof obj.submitLabel === 'string' ? obj.submitLabel : undefined;
-  const lang = typeof obj.lang === 'string' && obj.lang.trim().length > 0 ? obj.lang.trim() : undefined;
   return {
-    form: {
-      id,
-      title,
-      questions,
-      ...(description ? { description } : {}),
-      ...(submitLabel ? { submitLabel } : {}),
-      ...(lang ? { lang } : {}),
-    },
+    id,
+    title,
+    questions,
+    ...(description ? { description } : {}),
+    ...(submitLabel ? { submitLabel } : {}),
   };
 }
 
@@ -336,14 +248,9 @@ function mapRawQuestion(q: unknown, index: number): FormQuestion | null {
   const qo = q as Record<string, unknown>;
   const id =
     typeof qo.id === 'string' && qo.id.trim().length > 0 ? qo.id.trim() : `q${index + 1}`;
+  const label = typeof qo.label === 'string' ? qo.label : id;
+  const type = normalizeType(qo.type);
   const options = parseOptions(qo.options);
-  const label =
-    typeof qo.label === 'string'
-      ? qo.label
-      : typeof qo.prompt === 'string'
-        ? qo.prompt
-        : id;
-  const type = normalizeType(qo.type, options);
   const placeholder = typeof qo.placeholder === 'string' ? qo.placeholder : undefined;
   const help = typeof qo.help === 'string' ? qo.help : undefined;
   const required = qo.required === true;
@@ -355,20 +262,6 @@ function mapRawQuestion(q: unknown, index: number): FormQuestion | null {
       : undefined;
   const cards = parseDirectionCards(qo.cards);
   const defaultValue = parseDefaultValue(qo, options);
-  const allowCustom =
-    qo.allowCustom === false
-      ? false
-      : qo.allowCustom === true || qo.custom === true
-        ? true
-        : undefined;
-  const customLabel = typeof qo.customLabel === 'string' ? qo.customLabel : undefined;
-  const customPlaceholder =
-    typeof qo.customPlaceholder === 'string' ? qo.customPlaceholder : undefined;
-  const min = parseNumberAttr(qo.min);
-  const max = parseNumberAttr(qo.max);
-  const step = parseNumberAttr(qo.step);
-  const multiple = qo.multiple === true;
-  const accept = typeof qo.accept === 'string' ? qo.accept : undefined;
   return {
     id,
     label,
@@ -379,14 +272,6 @@ function mapRawQuestion(q: unknown, index: number): FormQuestion | null {
     ...(required ? { required } : {}),
     ...(defaultValue !== undefined ? { defaultValue } : {}),
     ...(maxSelections !== undefined && type === 'checkbox' ? { maxSelections } : {}),
-    ...(allowCustom !== undefined ? { allowCustom } : {}),
-    ...(customLabel ? { customLabel } : {}),
-    ...(customPlaceholder ? { customPlaceholder } : {}),
-    ...(min !== undefined ? { min } : {}),
-    ...(max !== undefined ? { max } : {}),
-    ...(step !== undefined ? { step } : {}),
-    ...(multiple && type === 'file' ? { multiple } : {}),
-    ...(accept && type === 'file' ? { accept } : {}),
     ...(cards ? { cards } : {}),
   };
 }
@@ -396,9 +281,9 @@ function mapRawQuestion(q: unknown, index: number): FormQuestion | null {
  * {@link tryParseForm} it does not require valid, complete JSON: it reads the
  * title/id from the open tag's attrs (available the instant the tag streams in)
  * and extracts however many *complete* question objects have arrived so far.
- * This lets the chat render a frame immediately and fill questions in
- * progressively as the model streams them, instead of flashing raw JSON and
- * then a finished form. Returns null only when no open tag is present.
+ * This lets the Questions tab render a frame immediately and fill questions in
+ * progressively as the model streams them, instead of flashing a skeleton and
+ * then a finished table. Returns null only when no open tag is present.
  */
 export function parsePartialQuestionForm(input: string): QuestionForm | null {
   const m = OPEN_RE.exec(input);
@@ -441,10 +326,6 @@ export function parsePartialQuestionForm(input: string): QuestionForm | null {
   // omitting it here makes a custom CTA flicker in only once the close tag
   // arrives.
   const submitLabel = typeof top.submitLabel === 'string' ? top.submitLabel : undefined;
-  // Adopt `lang` only once its string literal is fully terminated (same
-  // churn-avoidance as `id`): a partially streamed "zh-C" would briefly
-  // resolve to the wrong dictionary.
-  const lang = completeTopLevelString(body, 'lang');
   const questions = shapeStreamingQuestions(top.questions, countClosedQuestionObjects(body));
   return {
     id,
@@ -452,7 +333,6 @@ export function parsePartialQuestionForm(input: string): QuestionForm | null {
     questions,
     ...(description ? { description } : {}),
     ...(submitLabel ? { submitLabel } : {}),
-    ...(lang ? { lang } : {}),
   };
 }
 
@@ -490,7 +370,7 @@ function endsInsideJsonString(s: string): boolean {
 // Unlike a complete-objects-only pass, the repaired prefix (see
 // `parsePartialJson`) means a question shows the moment its `label` (prompt)
 // text exists and its options grow in one at a time — true token-by-token
-// streaming, matching the question-form card. The trailing in-flight object
+// streaming, matching the AskUserQuestion card. The trailing in-flight object
 // with no label yet is held back (no "q1" placeholder flicker); it appears
 // once its label lands.
 // Return a top-level (depth-1) string field's value ONLY if its string literal
@@ -581,17 +461,7 @@ function shapeStreamingQuestions(rawQuestions: unknown, closedCount: number): Fo
     const hasId = typeof q.id === 'string' && q.id.trim().length > 0;
     if (!isClosed && !hasId) return;
     const mapped = mapRawQuestion(raw, index);
-    if (mapped) {
-      // The trailing in-flight object may hold a MID-STREAM `default`: the
-      // partial-JSON repair terminates it early ("单位教育" → "单位教",
-      // ["历史背景与经过", "抗战精神…"] → ["历史背景与经过", "抗战精"]).
-      // The card adopts a streamed default only while the answer is still
-      // empty, so surfacing a truncated one would freeze garbage the
-      // completed value can never overwrite. A closed object's braces are
-      // balanced, so its default is complete — only then expose it.
-      if (!isClosed && mapped.defaultValue !== undefined) delete mapped.defaultValue;
-      out.push(mapped);
-    }
+    if (mapped) out.push(mapped);
   });
   return out;
 }
@@ -641,30 +511,13 @@ function extractBalancedObject(s: string, start: number): string | null {
   return null;
 }
 
-function normalizeType(raw: unknown, options?: FormOption[]): QuestionType {
-  if (typeof raw !== 'string') return options && options.length > 0 ? 'radio' : 'text';
+function normalizeType(raw: unknown): QuestionType {
+  if (typeof raw !== 'string') return 'text';
   const lower = raw.toLowerCase().trim();
   if (lower === 'radio' || lower === 'single' || lower === 'choice') return 'radio';
   if (lower === 'checkbox' || lower === 'multi' || lower === 'multiple') return 'checkbox';
   if (lower === 'select' || lower === 'dropdown') return 'select';
   if (lower === 'textarea' || lower === 'long' || lower === 'paragraph') return 'textarea';
-  if (lower === 'number' || lower === 'numeric') return 'number';
-  if (lower === 'range' || lower === 'slider') return 'range';
-  if (lower === 'date') return 'date';
-  if (lower === 'time') return 'time';
-  if (
-    lower === 'datetime-local' ||
-    lower === 'datetime' ||
-    lower === 'date-time' ||
-    lower === 'datetime_local'
-  )
-    return 'datetime-local';
-  if (lower === 'color' || lower === 'colour' || lower === 'color-picker') return 'color';
-  if (lower === 'url' || lower === 'link') return 'url';
-  if (lower === 'email') return 'email';
-  if (lower === 'tel' || lower === 'phone') return 'tel';
-  if (lower === 'file' || lower === 'upload' || lower === 'attachment') return 'file';
-  if (lower === 'switch' || lower === 'toggle' || lower === 'boolean') return 'switch';
   if (
     lower === 'direction-cards' ||
     lower === 'directions' ||
@@ -673,25 +526,6 @@ function normalizeType(raw: unknown, options?: FormOption[]): QuestionType {
   )
     return 'direction-cards';
   return 'text';
-}
-
-function recordQuestionFormParseFailure(
-  reason: FormParseFailureReason | undefined,
-  tagName: string,
-  body: string,
-): void {
-  console.warn('[question-form] failed to render inline question form', {
-    reason: reason ?? 'unsupported-payload',
-    tagName,
-    bodyLength: body.length,
-  });
-}
-
-function parseNumberAttr(raw: unknown): number | undefined {
-  if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
-  if (typeof raw !== 'string') return undefined;
-  const n = Number(raw);
-  return Number.isFinite(n) ? n : undefined;
 }
 
 function parseOptions(raw: unknown): FormOption[] | undefined {
@@ -714,8 +548,6 @@ function parseOption(raw: unknown): FormOption | null {
   const value =
     typeof obj.value === 'string' && obj.value.trim().length > 0
       ? obj.value.trim()
-      : typeof obj.id === 'string' && obj.id.trim().length > 0
-        ? obj.id.trim()
       : label;
   const description =
     typeof obj.description === 'string' && obj.description.trim().length > 0
@@ -735,12 +567,8 @@ function parseDefaultValue(
   const raw =
     typeof question.defaultValue === 'string' || Array.isArray(question.defaultValue)
       ? question.defaultValue
-      : typeof question.defaultValue === 'number' || typeof question.defaultValue === 'boolean'
-        ? String(question.defaultValue)
-      : typeof question.default === 'string' || Array.isArray(question.default)
+      : typeof question.default === 'string'
         ? question.default
-        : typeof question.default === 'number' || typeof question.default === 'boolean'
-          ? String(question.default)
         : undefined;
   if (typeof raw === 'string') return formOptionValueForLabel({ options }, raw);
   if (Array.isArray(raw)) {

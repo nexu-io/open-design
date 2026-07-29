@@ -1,7 +1,8 @@
 // Modal wrapper around NewProjectPanel.
 //
-// Reuses the existing NewProjectPanel surface so all of the per-kind
-// tabs (prototype / live-artifact / deck / template / image / video /
+// Triggered by the "+" button on the entry nav rail. Reuses the
+// existing NewProjectPanel surface so all of the per-kind tabs
+// (prototype / live-artifact / deck / template / image / video /
 // audio / other) and their connector / template / design-system
 // pickers carry over without duplication. The modal closes itself
 // when the panel calls onCreate and it completes (success path) or when the user
@@ -30,7 +31,6 @@ import {
 interface Props {
   open: boolean;
   skills: SkillSummary[];
-  designTemplates?: SkillSummary[];
   designSystems: DesignSystemSummary[];
   defaultDesignSystemId: string | null;
   templates: ProjectTemplate[];
@@ -68,7 +68,6 @@ export function NewProjectModal({ open, ...rest }: Props) {
 
 function NewProjectModalBody({
   skills,
-  designTemplates,
   designSystems,
   defaultDesignSystemId,
   templates,
@@ -167,7 +166,6 @@ function NewProjectModalBody({
         <div className="new-project-modal__body">
           <NewProjectPanel
             skills={skills}
-            {...(designTemplates ? { designTemplates } : {})}
             designSystems={designSystems}
             defaultDesignSystemId={defaultDesignSystemId}
             templates={templates}

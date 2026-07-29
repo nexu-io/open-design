@@ -3,9 +3,9 @@ import { writeFile } from "node:fs/promises";
 import { BrowserWindow, dialog } from "electron";
 import type { DesktopExportPdfInput, DesktopExportPdfResult } from "@open-design/sidecar-proto";
 
-export type PageSize = { height: number; width: number };
+type PageSize = { height: number; width: number };
 
-export const DECK_PAGE_SIZE: PageSize = { width: 13.333333, height: 7.5 };
+const DECK_PAGE_SIZE: PageSize = { width: 13.333333, height: 7.5 };
 const MAX_PAGE_INCHES = 200;
 
 export type PrintReadyPdfOptions = {
@@ -19,7 +19,7 @@ type PrintToPdfOptions = {
   printBackground: boolean;
 };
 
-export const DECK_PRINT_CSS = `
+const DECK_PRINT_CSS = `
 @media print {
   @page { size: 1920px 1080px; margin: 0; }
   html, body {
@@ -45,12 +45,6 @@ export const DECK_PRINT_CSS = `
     transform: none !important;
     position: relative !important;
     overflow: hidden !important;
-    /* Decks commonly show one slide at a time via opacity; without this the
-       inactive slides print as blank pages. */
-    opacity: 1 !important;
-    visibility: visible !important;
-    animation: none !important;
-    transition: none !important;
   }
   .slide:last-child, [data-screen-label]:last-child { page-break-after: auto; break-after: auto; }
   .deck-counter, .deck-hint, .deck-nav,
@@ -68,7 +62,6 @@ export async function exportPdfFromHtml(input: DesktopExportPdfInput): Promise<D
       { name: "All Files", extensions: ["*"] },
     ],
     title: "Save PDF",
-    properties: ["dontAddToRecent"],
   });
   if (save.canceled || !save.filePath) return { canceled: true, ok: true };
 
@@ -86,7 +79,6 @@ export async function exportPdfFromHtml(input: DesktopExportPdfInput): Promise<D
   try {
     await window.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(buildPrintableDocument(input))}`);
     await waitForPrintableContent(window);
-    if (input.deck) await unhideDeckSlidesForPrint(window);
     const pageSize = input.deck ? DECK_PAGE_SIZE : await inferPageSize(window);
     const pdf = await window.webContents.printToPDF(printToPdfOptions(pageSize));
     await writeFile(save.filePath, pdf);
@@ -196,7 +188,6 @@ export function createElectronPdfTarget(): PrintReadyPdfTarget {
           { name: "All Files", extensions: ["*"] },
         ],
         title: "Save PDF",
-        properties: ["dontAddToRecent"],
       });
       return save.canceled || !save.filePath ? null : save.filePath;
     },
@@ -277,25 +268,6 @@ function injectPrintStylesheet(doc: string, css: string): string {
   if (/<\/head>/i.test(doc)) return doc.replace(/<\/head>/i, `${tag}</head>`);
   if (/<head[^>]*>/i.test(doc)) return doc.replace(/<head[^>]*>/i, (match) => `${match}${tag}`);
   return `${tag}${doc}`;
-}
-
-// Marks every deck slide "active" before printing so the deck's own
-// `.slide.active` styling applies to ALL slides, not just the one its runtime
-// left active. Decks commonly gate visibility with
-// `.slide:not(.active){display:none!important}` (specificity 0,2,0); the host
-// DECK_PRINT_CSS `.slide{}` rule (0,1,0) loses that cascade, so without this the
-// vector PDF collapses to a single page (only the active slide). Mirrors the
-// active-class set the screenshot path toggles in deck-capture's showSlide.
-// `[data-deck-active]` shadow-DOM decks are handled by their own `@media print`.
-async function unhideDeckSlidesForPrint(window: BrowserWindow): Promise<void> {
-  try {
-    await window.webContents.executeJavaScript(
-      `(function(){document.querySelectorAll('.slide, [data-screen-label], .deck-slide, .ppt-slide').forEach(function(el){['active','visible','is-active','current'].forEach(function(c){el.classList.add(c)});});})()`,
-      true,
-    );
-  } catch {
-    // Best-effort — print proceeds even if the un-gate fails.
-  }
 }
 
 export async function waitForPrintableContent(window: BrowserWindow): Promise<void> {
@@ -390,27 +362,9 @@ export async function waitForPrintReadyHandshake(webContents: Electron.WebConten
   await Promise.race([handshake, timeout]);
 }
 
-export async function inferPageSize(window: BrowserWindow): Promise<PageSize> {
+async function inferPageSize(window: BrowserWindow): Promise<PageSize> {
   const size = await window.webContents.executeJavaScript(
-    // Prefer the content size the artifact reported through the print-ready
-    // handshake (window.__odPrintSize, cached by injectParentPrintReadyCache
-    // in apps/web/src/runtime/exports.ts). For the sandboxed-preview export
-    // path the loaded document is a wrapper whose <body> is `overflow:hidden`
-    // around a 100%x100% sandboxed <iframe>, so measuring the wrapper here only
-    // ever yields the window viewport — never the artifact's true dimensions —
-    // which sizes the page to a single viewport and clips (or blanks, when the
-    // visible content sits below the fold) taller artifacts. The iframe is
-    // `sandbox="allow-scripts"` with no `allow-same-origin`, so the wrapper
-    // cannot read iframe.contentDocument; the size must come from inside the
-    // artifact, which is exactly what the handshake reports. Fall back to the
-    // direct measurement for the daemon-backed exportPdfFromHtml() path, where
-    // the artifact itself is the loaded document and no handshake runs.
     `(() => {
-      const reported = window.__odPrintSize;
-      if (reported && Number.isFinite(reported.width) && Number.isFinite(reported.height)
-        && reported.width > 0 && reported.height > 0) {
-        return { width: reported.width, height: reported.height };
-      }
       const de = document.documentElement;
       const body = document.body || de;
       return {

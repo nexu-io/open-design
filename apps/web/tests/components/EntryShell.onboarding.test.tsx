@@ -8,7 +8,6 @@ import { EntryShell } from '../../src/components/EntryShell';
 import { AMR_LOGIN_TIMEOUT_MS } from '../../src/components/amrLoginPolling';
 import { I18nProvider } from '../../src/i18n';
 import type { AgentInfo, AppConfig } from '../../src/types';
-import { setHomeHeroPrompt } from '../helpers/home-hero-lexical';
 
 const analyticsMocks = vi.hoisted(() => ({
   track: vi.fn(),
@@ -30,13 +29,6 @@ vi.mock('../../src/analytics/provider', async (importOriginal) => {
 });
 
 const originalFetch = globalThis.fetch;
-const originalResizeObserver = globalThis.ResizeObserver;
-
-class ResizeObserverMock {
-  observe() {}
-  disconnect() {}
-  unobserve() {}
-}
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -146,9 +138,8 @@ function renderOnboarding(
 
 function renderHome(
   overrides: Partial<React.ComponentProps<typeof EntryShell>> = {},
-  path = '/',
 ) {
-  window.history.replaceState(null, '', path);
+  window.history.replaceState(null, '', '/');
   const props: React.ComponentProps<typeof EntryShell> = {
     skills: [],
     designTemplates: [],
@@ -218,31 +209,15 @@ function findTrackedEvent<T extends Record<string, unknown>>(
   return payload as T;
 }
 
-function chooseOnboardingOption(label: string, option: string | RegExp) {
-  const chipField = screen
-    .getAllByText(label)
-    .map((node) => node.closest('.onboarding-chip-field'))
-    .find((node): node is HTMLElement => node instanceof HTMLElement);
-  if (chipField) {
-    const matcher = option instanceof RegExp ? option : new RegExp(option, 'i');
-    const chip = Array.from(chipField.querySelectorAll<HTMLButtonElement>('button')).find((button) =>
-      matcher.test(button.textContent ?? ''),
-    );
-    if (!(chip instanceof HTMLButtonElement)) {
-      throw new Error(`profile chip not found: ${label} / ${String(option)}`);
-    }
-    fireEvent.click(chip);
-    return;
-  }
-
-  const dropdownField = screen
+function chooseDropdownOption(label: string, option: string | RegExp) {
+  const field = screen
     .getAllByText(label)
     .map((node) => node.closest('.onboarding-view__select-field'))
     .find((node): node is HTMLElement => node instanceof HTMLElement);
-  if (!dropdownField) throw new Error(`profile field not found: ${label}`);
-  const trigger = dropdownField.querySelector('button');
+  if (!field) throw new Error(`dropdown field not found: ${label}`);
+  const trigger = field.querySelector('button');
   if (!(trigger instanceof HTMLButtonElement)) {
-    throw new Error(`profile field trigger not found: ${label}`);
+    throw new Error(`dropdown trigger not found: ${label}`);
   }
   fireEvent.click(trigger);
   fireEvent.click(
@@ -252,34 +227,9 @@ function chooseOnboardingOption(label: string, option: string | RegExp) {
   );
 }
 
-async function clickSignedInCloudContinue() {
-  const continueButton = await screen.findByRole('button', { name: /Continue \(signed in\)/i });
-  fireEvent.click(continueButton);
-  await waitFor(() => {
-    expect(screen.getByRole('heading', { name: 'About you' })).toBeTruthy();
-  });
-}
-
-async function clickCloudSignIn() {
-  const signIn = await findCloudSignInButton();
-  fireEvent.click(signIn);
-  return signIn;
-}
-
-async function findCloudSignInButton() {
-  return screen.findByRole('button', { name: /Sign in to Open Design/i });
-}
-
-function openLocalRuntimeSetup() {
-  expect(screen.getByRole('heading', { name: 'Sign in to Open Design' })).toBeTruthy();
-  fireEvent.click(screen.getByRole('button', { name: /Local coding agent/i }));
-  expect(screen.getByText('Local CLI')).toBeTruthy();
-}
-
 afterEach(() => {
   cleanup();
   globalThis.fetch = originalFetch;
-  globalThis.ResizeObserver = originalResizeObserver;
   vi.useRealTimers();
   analyticsMocks.track.mockReset();
   window.sessionStorage.clear();
@@ -287,7 +237,6 @@ afterEach(() => {
 
 beforeEach(() => {
   globalThis.fetch = originalFetch;
-  globalThis.ResizeObserver = ResizeObserverMock as typeof ResizeObserver;
   analyticsMocks.track.mockReset();
 });
 
@@ -329,248 +278,11 @@ describe('EntryShell settings menu', () => {
     expect(screen.getByText('Appearance')).toBeTruthy();
     expect(screen.getByRole('menuitem', { name: /Join Discord/i })).toBeTruthy();
     expect(screen.getByRole('menuitem', { name: /1.2k online/i })).toBeTruthy();
-    expect(
-      screen.getByRole('menuitem', { name: /Follow @OpenDesignHQ on X/i }).getAttribute('href'),
-    ).toBe('https://x.com/OpenDesignHQ');
-    expect(
-      screen.getByRole('menuitem', { name: /Follow Open Design on Threads/i }).getAttribute('href'),
-    ).toBe('https://www.threads.com/@opendesign.ai');
-    expect(
-      screen.getByRole('menuitem', { name: /Open Design on YouTube/i }).getAttribute('href'),
-    ).toBe('https://www.youtube.com/@Open-Design-ai');
+    expect(screen.getByRole('menuitem', { name: /Follow @nexudotio on X/i })).toBeTruthy();
 
     fireEvent.click(screen.getByTestId('entry-settings-open-details'));
 
     expect(props.onOpenSettings).toHaveBeenCalledWith();
-  });
-});
-
-describe('EntryShell design systems view', () => {
-  it('refreshes the design-system catalog when the view is active', async () => {
-    const onDesignSystemsRefresh = vi.fn();
-    renderHome({ onDesignSystemsRefresh }, '/design-systems');
-
-    await waitFor(() => expect(onDesignSystemsRefresh).toHaveBeenCalledTimes(1));
-  });
-});
-
-describe('EntryShell route scroll isolation', () => {
-  afterEach(() => {
-    window.localStorage.removeItem('od.entry.railOpen');
-  });
-
-  function entryScrollContainer(): HTMLElement {
-    const scrollContainer = document.querySelector('.entry-main--scroll');
-    expect(scrollContainer).toBeInstanceOf(HTMLElement);
-    if (!(scrollContainer instanceof HTMLElement)) {
-      throw new Error('entry scroll container not found');
-    }
-    return scrollContainer;
-  }
-
-  it('resets the shared scroll offset when navigating from Home to Projects', async () => {
-    window.localStorage.setItem('od.entry.railOpen', 'true');
-    renderHome();
-
-    const scrollContainer = entryScrollContainer();
-    scrollContainer.scrollTop = 280;
-    fireEvent.click(screen.getByTestId('entry-nav-projects'));
-
-    await waitFor(() => {
-      expect(screen.getByTestId('entry-view-projects').getAttribute('data-active')).toBe('true');
-    });
-    expect(scrollContainer.scrollTop).toBe(0);
-  });
-
-  it('resets the shared scroll offset when navigating from Projects to Home', async () => {
-    window.localStorage.setItem('od.entry.railOpen', 'true');
-    renderHome({}, '/projects');
-
-    const scrollContainer = entryScrollContainer();
-    scrollContainer.scrollTop = 360;
-    fireEvent.click(screen.getByTestId('entry-nav-home'));
-
-    await waitFor(() => {
-      expect(screen.getByTestId('entry-view-home').getAttribute('data-active')).toBe('true');
-    });
-    expect(scrollContainer.scrollTop).toBe(0);
-  });
-});
-
-describe('EntryShell new project rail', () => {
-  it('creates a blank project directly from the rail plus', async () => {
-    window.localStorage.setItem('od.entry.railOpen', 'false');
-    const fetchMock = vi.fn(
-      async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
-        const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
-        if (url.endsWith('/api/projects') && init?.method === 'POST') {
-          return jsonResponse({
-            project: {
-              id: 'blank-project-1',
-              name: 'Untitled',
-              createdAt: Date.now(),
-              updatedAt: Date.now(),
-            },
-            conversationId: 'conversation-1',
-          });
-        }
-        if (url.endsWith('/api/community/discord')) {
-          return jsonResponse({
-            inviteCode: 'mHAjSMV6gz',
-            inviteUrl: 'https://discord.gg/mHAjSMV6gz',
-            onlineCount: 0,
-            memberCount: 0,
-            fetchedAt: Date.now(),
-            stale: false,
-          });
-        }
-        if (url.endsWith('/api/github/open-design')) {
-          return jsonResponse({
-            repo: 'nexu-io/open-design',
-            stargazers_count: 0,
-            fetchedAt: Date.now(),
-            stale: false,
-          });
-        }
-        return jsonResponse({});
-      });
-    globalThis.fetch = fetchMock as typeof fetch;
-    const props = renderHome();
-
-    fireEvent.click(screen.getByTestId('entry-rail-toggle'));
-    fireEvent.click(screen.getByTestId('entry-nav-new-project'));
-
-    await waitFor(() => {
-      expect(screen.getByTestId('new-project-modal')).toBeTruthy();
-    });
-    expect(screen.getByTestId('new-project-panel')).toBeTruthy();
-    expect(props.onOpenProject).not.toHaveBeenCalled();
-    expect(props.onCreateProject).not.toHaveBeenCalled();
-    const createCall = fetchMock.mock.calls.find(
-      ([input, init]) => input === '/api/projects' && init?.method === 'POST',
-    );
-    expect(createCall).toBeUndefined();
-    expect(analyticsMocks.track).toHaveBeenCalledWith(
-      'ui_click',
-      expect.objectContaining({
-        page_name: 'home',
-        area: 'nav',
-        element: 'new_project_plus',
-      }),
-      undefined,
-    );
-  });
-
-  it('opens the new project modal from the Projects tab button', async () => {
-    window.localStorage.setItem('od.entry.railOpen', 'false');
-    const fetchMock = vi.fn(
-      async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
-        const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
-        if (url === '/api/projects' && init?.method === 'POST') {
-          return jsonResponse({
-            project: {
-              id: 'blank-project-from-projects',
-              name: 'Untitled',
-              createdAt: Date.now(),
-              updatedAt: Date.now(),
-            },
-            conversationId: 'conversation-2',
-          });
-        }
-        if (url.endsWith('/api/projects/project-existing/files')) {
-          return jsonResponse({ files: [] });
-        }
-        if (url.endsWith('/api/live-artifacts?projectId=project-existing')) {
-          return jsonResponse({ liveArtifacts: [] });
-        }
-        if (url.endsWith('/api/community/discord')) {
-          return jsonResponse({
-            inviteCode: 'mHAjSMV6gz',
-            inviteUrl: 'https://discord.gg/mHAjSMV6gz',
-            onlineCount: 0,
-            memberCount: 0,
-            fetchedAt: Date.now(),
-            stale: false,
-          });
-        }
-        if (url.endsWith('/api/github/open-design')) {
-          return jsonResponse({
-            repo: 'nexu-io/open-design',
-            stargazers_count: 0,
-            fetchedAt: Date.now(),
-            stale: false,
-          });
-        }
-        return jsonResponse({});
-      });
-    globalThis.fetch = fetchMock as typeof fetch;
-    const props = renderHome({
-      projects: [
-        {
-          id: 'project-existing',
-          name: 'Existing project',
-          skillId: null,
-          designSystemId: null,
-          createdAt: 1,
-          updatedAt: 2,
-          status: { value: 'not_started' },
-        },
-      ],
-    });
-
-    fireEvent.click(screen.getByTestId('entry-rail-toggle'));
-    fireEvent.click(screen.getByTestId('entry-nav-projects'));
-    fireEvent.click(screen.getByTestId('designs-new-project'));
-
-    await waitFor(() => {
-      expect(screen.getByTestId('new-project-modal')).toBeTruthy();
-    });
-    expect(screen.getByTestId('new-project-panel')).toBeTruthy();
-    expect(props.onOpenProject).not.toHaveBeenCalled();
-    expect(props.onCreateProject).not.toHaveBeenCalled();
-    const createCall = fetchMock.mock.calls.find(
-      ([input, init]) => input === '/api/projects' && init?.method === 'POST',
-    );
-    expect(createCall).toBeUndefined();
-    expect(analyticsMocks.track).toHaveBeenCalledWith(
-      'ui_click',
-      expect.objectContaining({
-        page_name: 'projects',
-        area: 'list_controls',
-        element: 'create_project',
-      }),
-      undefined,
-    );
-  });
-});
-
-describe('EntryShell Home submit handoff', () => {
-  it('keeps the Home run button in sending state until project creation resolves', async () => {
-    globalThis.fetch = vi.fn(async (input: Parameters<typeof fetch>[0]) => {
-      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
-      if (url.endsWith('/api/plugins')) return jsonResponse({ plugins: [] });
-      if (url.endsWith('/api/mcp/servers')) return jsonResponse({ servers: [] });
-      if (url.endsWith('/api/community/discord')) return jsonResponse({ stale: true });
-      if (url.endsWith('/api/github/open-design')) return jsonResponse({ stale: true });
-      return jsonResponse({});
-    }) as typeof fetch;
-    let resolveCreate: (accepted: boolean) => void = () => undefined;
-    const onCreateProject = vi.fn(
-      () => new Promise<boolean>((resolve) => { resolveCreate = resolve; }),
-    );
-    renderHome({ onCreateProject });
-
-    await screen.findByTestId('home-hero-input');
-    setHomeHeroPrompt('Build a landing page');
-    const submit = await screen.findByTestId('home-hero-submit') as HTMLButtonElement;
-    fireEvent.click(submit);
-
-    await waitFor(() => expect(onCreateProject).toHaveBeenCalledTimes(1));
-    expect(submit.disabled).toBe(true);
-    expect(submit.textContent).toContain('Sending…');
-
-    resolveCreate(true);
-    await waitFor(() => expect(submit.disabled).toBe(false));
   });
 });
 
@@ -584,10 +296,8 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
       onRefreshAgents: vi.fn(() => [cliAgent()]),
     });
 
-    expect(await screen.findByRole('heading', { name: 'Sign in to Open Design' })).toBeTruthy();
-    expect(await findCloudSignInButton()).toBeTruthy();
-    openLocalRuntimeSetup();
     expect(screen.queryByRole('button', { name: /Open Design AMR/i })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /Local coding agent/i }));
 
     await waitFor(() => {
       expect(props.onAgentChange).not.toHaveBeenCalledWith('amr');
@@ -596,26 +306,28 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     expect(screen.queryByText('Sign in to continue')).toBeNull();
   });
 
-  it('shows Open Design Cloud as the default connect surface when AMR is available', async () => {
+  it('shows Open Design AMR as the recommended default when AMR is available', async () => {
     globalThis.fetch = vi.fn(async () =>
       jsonResponse({ loggedIn: false, profile: 'prod', user: null, configPath: '/x' }),
     ) as typeof fetch;
-    renderOnboarding();
+    const props = renderOnboarding();
 
-    expect(screen.getByRole('heading', { name: 'Sign in to Open Design' })).toBeTruthy();
-    expect(await findCloudSignInButton()).toBeTruthy();
-    // No runtime card, no AMR version text, no "Sign in to continue" CTA.
-    expect(screen.queryByRole('button', { name: /Open Design AMR/i })).toBeNull();
-    expect(screen.queryByText('AMR v0.1.0')).toBeNull();
-    expect(screen.queryByRole('button', { name: /Sign in to continue/i })).toBeNull();
+    const amrCloud = screen.getByRole('button', { name: /Open Design AMR/i });
+    expect(amrCloud.getAttribute('aria-pressed')).toBe('true');
+    expect(amrCloud.textContent).toContain('Officially recommended');
+    expect(amrCloud.textContent).toContain('No deploy needed');
+    expect(amrCloud.textContent).toContain('Supports Claude Opus 4.8');
+    expect(amrCloud.textContent).toContain('SOTA Harness');
+    expect(amrCloud.textContent).toContain('Coming soon');
+    expect(amrCloud.textContent).toContain('AMR v0.1.0');
     expect(screen.queryByRole('link', { name: /Authorize AMR/i })).toBeNull();
-    // The secondary runtime links remain available on the landing.
-    expect(screen.getByRole('button', { name: /Local coding agent/i })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Bring your own key/i })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /Open Design AMR/i })).toBeNull();
-    expect(screen.queryByRole('link', { name: /Authorize AMR/i })).toBeNull();
+    expect(screen.getByRole('button', { name: /Sign in to continue/i })).toBeTruthy();
     expect(screen.queryByText('Not signed in')).toBeNull();
     expect(screen.queryByRole('button', { name: /^Sign in$/i })).toBeNull();
+    await waitFor(() => {
+      expect(props.onModeChange).toHaveBeenCalledWith('daemon');
+      expect(props.onAgentChange).toHaveBeenCalledWith('amr');
+    });
   });
 
   it('excludes AMR from the Local CLI agent list', async () => {
@@ -625,96 +337,12 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     ) as typeof fetch;
     renderOnboarding();
 
-    openLocalRuntimeSetup();
+    fireEvent.click(screen.getByRole('button', { name: /Local coding agent/i }));
     await vi.advanceTimersByTimeAsync(300);
 
     const localPanel = screen.getByText('Local CLI').closest('.onboarding-view__setup-panel');
     expect(localPanel?.textContent).toContain('Claude Code');
     expect(localPanel?.textContent).not.toContain('AMR');
-  });
-
-  it('tests the selected Local CLI agent from onboarding', async () => {
-    const fetchMock = vi.fn(async (input, init) => {
-      const url = String(input);
-      if (url.endsWith('/api/integrations/vela/status')) {
-        return jsonResponse({ loggedIn: false, profile: 'prod', user: null, configPath: '/x' });
-      }
-      if (url.endsWith('/api/test/connection') && init?.method === 'POST') {
-        return jsonResponse({
-          ok: true,
-          kind: 'success',
-          latencyMs: 12,
-          model: 'sonnet',
-          sample: 'pong',
-          agentName: 'Claude Code',
-        });
-      }
-      throw new Error(`unexpected fetch: ${url}`);
-    });
-    globalThis.fetch = fetchMock as typeof fetch;
-    renderOnboarding({
-      config: baseConfig({
-        agentId: 'claude-code',
-        agentCliEnv: { 'claude-code': { OPEN_DESIGN_TEST: '1' } },
-        agentModels: { 'claude-code': { model: 'sonnet', reasoning: 'high' } },
-      }),
-      agents: [amrAgent(), cliAgent()],
-      onRefreshAgents: vi.fn(() => [amrAgent(), cliAgent()]),
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: /Local coding agent/i }));
-    await waitFor(() => {
-      expect(screen.getByText('Claude Code')).toBeTruthy();
-    });
-    fireEvent.click(screen.getByRole('button', { name: /^Test$/i }));
-
-    await waitFor(() => {
-      expect(screen.getByText(/Claude Code replied in 12 ms/i)).toBeTruthy();
-    });
-    const connectionTestCalls = fetchMock.mock.calls.filter(([url]) =>
-      String(url).endsWith('/api/test/connection'),
-    );
-    expect(connectionTestCalls).toHaveLength(1);
-    expect(JSON.parse(String(connectionTestCalls[0]?.[1]?.body))).toMatchObject({
-      mode: 'agent',
-      agentId: 'claude-code',
-      model: 'sonnet',
-      reasoning: 'high',
-      agentCliEnv: { 'claude-code': { OPEN_DESIGN_TEST: '1' } },
-    });
-  });
-
-  it('renders Local CLI test failures as alerts in onboarding', async () => {
-    const fetchMock = vi.fn(async (input, init) => {
-      const url = String(input);
-      if (url.endsWith('/api/integrations/vela/status')) {
-        return jsonResponse({ loggedIn: false, profile: 'prod', user: null, configPath: '/x' });
-      }
-      if (url.endsWith('/api/test/connection') && init?.method === 'POST') {
-        return jsonResponse({
-          ok: false,
-          kind: 'agent_not_installed',
-          latencyMs: 0,
-          agentName: 'Claude Code',
-        });
-      }
-      throw new Error(`unexpected fetch: ${url}`);
-    });
-    globalThis.fetch = fetchMock as typeof fetch;
-    renderOnboarding({
-      config: baseConfig({ agentId: 'claude-code' }),
-      agents: [amrAgent(), cliAgent()],
-      onRefreshAgents: vi.fn(() => [amrAgent(), cliAgent()]),
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: /Local coding agent/i }));
-    await waitFor(() => {
-      expect(screen.getByText('Claude Code')).toBeTruthy();
-    });
-    fireEvent.click(screen.getByRole('button', { name: /^Test$/i }));
-
-    const alert = await screen.findByRole('alert');
-    expect(alert.textContent).toContain('Claude Code is not installed or not in PATH.');
   });
 
   it('keeps AMR login pending while device authorization is waiting', async () => {
@@ -731,7 +359,7 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     globalThis.fetch = fetchMock as typeof fetch;
     const props = renderOnboarding();
 
-    const signIn = await findCloudSignInButton();
+    const signIn = await screen.findByRole('button', { name: /Sign in to continue/i });
     vi.useFakeTimers();
     fireEvent.click(signIn);
     await act(async () => {});
@@ -753,7 +381,7 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
       attribution: {
         entryId: expect.stringMatching(/^od-amr-/u),
         sourceProduct: 'open_design',
-        sourceDetail: 'onboarding_amr_card',
+        sourceDetail: 'onboarding_amr_sign_in_continue',
       },
     });
     expect(screen.getByText('Signing in…')).toBeTruthy();
@@ -762,7 +390,7 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     await vi.advanceTimersByTimeAsync(2000);
     expect(screen.getByText('Signing in…')).toBeTruthy();
     expect(props.onCompleteOnboarding).not.toHaveBeenCalled();
-    expect(screen.getByRole('button', { name: /Cancel sign-in/i })).toBeTruthy();
+    expect(screen.getByText('Connect')).toBeTruthy();
   });
 
   it('shows daemon startup errors when AMR sign-in fails immediately', async () => {
@@ -780,16 +408,20 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     globalThis.fetch = fetchMock as typeof fetch;
     renderOnboarding();
 
-    await clickCloudSignIn();
+    fireEvent.click(await screen.findByRole('button', { name: /Sign in to continue/i }));
 
     await waitFor(() => {
       expect(screen.getByRole('alert').textContent).toBe(startupError);
     });
-    expect(screen.queryByText('Sign-in failed.')).toBeNull();
+    expect(screen.queryByText('AMR sign-in failed.')).toBeNull();
     expect(screen.queryByText('Signing in…')).toBeNull();
   });
 
+<<<<<<< HEAD
+  it('clears AMR login pending when the user switches to another runtime', async () => {
+=======
   it('clears AMR login pending when canceled and allows a fresh sign-in attempt', async () => {
+>>>>>>> upstream/main
     const fetchMock = vi.fn(async (input, init) => {
       const url = String(input);
       if (url.endsWith('/api/integrations/vela/status')) {
@@ -803,16 +435,20 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     globalThis.fetch = fetchMock as typeof fetch;
     renderOnboarding();
 
-    const signIn = await findCloudSignInButton();
+    const signIn = await screen.findByRole('button', { name: /Sign in to continue/i });
+    vi.useFakeTimers();
     fireEvent.click(signIn);
     await act(async () => {});
     expect(screen.getByText('Signing in…')).toBeTruthy();
     expect(signIn.hasAttribute('disabled')).toBe(true);
 
-    fireEvent.click(screen.getByRole('button', { name: /Cancel sign-in/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Local coding agent/i }));
     await act(async () => {});
 
     expect(screen.queryByText('Signing in…')).toBeNull();
+<<<<<<< HEAD
+    expect(screen.getByRole('button', { name: /^Continue$/i }).hasAttribute('disabled')).toBe(false);
+=======
     // The landing CTA returns to its signed-out copy and is enabled again,
     // and the secondary runtime links are available once more.
     const cloudButton = await screen.findByRole('button', {
@@ -829,6 +465,7 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
         String(input).endsWith('/api/integrations/vela/login') && init?.method === 'POST',
     );
     expect(loginCalls).toHaveLength(2);
+>>>>>>> upstream/main
   });
 
   it('cancels AMR login and re-enables onboarding after the login timeout', async () => {
@@ -857,7 +494,7 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     globalThis.fetch = fetchMock as typeof fetch;
     const props = renderOnboarding();
 
-    const signIn = await findCloudSignInButton();
+    const signIn = await screen.findByRole('button', { name: /Sign in to continue/i });
     vi.useFakeTimers();
     fireEvent.click(signIn);
 
@@ -880,13 +517,9 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
       await vi.advanceTimersByTimeAsync(AMR_LOGIN_TIMEOUT_MS);
     });
     expect(fetchMock).toHaveBeenCalledWith('/api/integrations/vela/login/cancel', { method: 'POST' });
-    expect(screen.getByText('Sign-in failed.')).toBeTruthy();
+    expect(screen.getByText('AMR sign-in failed.')).toBeTruthy();
     expect(screen.queryByText('Signing in…')).toBeNull();
-    expect(
-      screen
-        .getByRole('button', { name: /Sign in to Open Design/i })
-        .hasAttribute('disabled'),
-    ).toBe(false);
+    expect(screen.getByRole('button', { name: /Sign in to continue/i }).hasAttribute('disabled')).toBe(false);
     expect(props.onCompleteOnboarding).not.toHaveBeenCalled();
   });
 
@@ -915,7 +548,7 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     globalThis.fetch = fetchMock as typeof fetch;
     renderOnboarding();
 
-    const signIn = await findCloudSignInButton();
+    const signIn = await screen.findByRole('button', { name: /Sign in to continue/i });
     vi.useFakeTimers();
     fireEvent.click(signIn);
     await act(async () => {});
@@ -953,7 +586,7 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     globalThis.fetch = fetchMock as typeof fetch;
     renderOnboarding();
 
-    const signIn = await findCloudSignInButton();
+    const signIn = await screen.findByRole('button', { name: /Sign in to continue/i });
     vi.useFakeTimers();
     fireEvent.click(signIn);
     await act(async () => {});
@@ -979,53 +612,15 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     ) as typeof fetch;
     renderOnboarding();
 
-    expect(await screen.findByRole('button', { name: /Continue \(signed in\)/i })).toBeTruthy();
+    expect(await screen.findByText('AMR v0.1.0')).toBeTruthy();
     expect(screen.queryByText('user@example.com')).toBeNull();
     expect(screen.queryByText('Authorized')).toBeNull();
     expect(screen.queryByRole('link', { name: /Authorize AMR/i })).toBeNull();
 
-    await clickSignedInCloudContinue();
-  });
+    const continueButton = await screen.findByRole('button', { name: /^Continue$/i });
+    fireEvent.click(continueButton);
 
-  it('does not show a memory-saved callout on the About you step before choices are submitted', async () => {
-    globalThis.fetch = vi.fn(async () =>
-      jsonResponse({
-        loggedIn: true,
-        profile: 'prod',
-        configPath: '/x',
-        user: { id: 'u', email: 'user@example.com' },
-      }),
-    ) as typeof fetch;
-    renderOnboarding();
-
-    await clickSignedInCloudContinue();
-    expect(screen.queryByText('Saved to your Memory')).toBeNull();
-  });
-
-  it('shows a Back control on the brand extraction onboarding step', async () => {
-    globalThis.fetch = vi.fn(async () =>
-      jsonResponse({
-        loggedIn: true,
-        profile: 'prod',
-        configPath: '/x',
-        user: { id: 'u', email: 'user@example.com' },
-      }),
-    ) as typeof fetch;
-    renderOnboarding();
-
-    await clickSignedInCloudContinue();
-    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
-    await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Stay in the loop' })).toBeTruthy();
-    });
-    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
-
-    await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Create once, build everywhere' })).toBeTruthy();
-    });
-    expect(screen.getByRole('button', { name: /^Back$/i })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Build a design system' })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /Skip for now/i })).toBeNull();
+    expect(screen.getByRole('heading', { name: 'About you' })).toBeTruthy();
   });
 
   it('tracks onboarding page views and about-you submission payload on completion', async () => {
@@ -1039,28 +634,24 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     ) as typeof fetch;
     const props = renderOnboarding();
 
-    await clickSignedInCloudContinue();
-
-    chooseOnboardingOption('Your role', 'Engineer');
-    chooseOnboardingOption('Organization size', /Growth company/i);
-    chooseOnboardingOption('Use case', /Product design/i);
-    chooseOnboardingOption('Where did you hear about us?', /Search/i);
-    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /^Continue$/i }));
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Stay in the loop' })).toBeTruthy();
+      expect(screen.getByRole('heading', { name: 'About you' })).toBeTruthy();
     });
+
+    chooseDropdownOption('Your role', 'Engineer');
+    chooseDropdownOption('Organization size', /Growth company/i);
+    chooseDropdownOption('Use case', /Product design/i);
+    chooseDropdownOption('Where did you hear about us?', /Search/i);
+    // About you is no longer the last step — advance to the newsletter step.
+    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
     await waitFor(() => {
       expect(document.querySelector('.onboarding-view__email-input')).toBeTruthy();
     });
-    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
-    await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Create once, build everywhere' })).toBeTruthy();
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Build a design system' }));
+    // Finish from the newsletter step.
+    fireEvent.click(screen.getByRole('button', { name: /Finish setup/i }));
 
-    await waitFor(() => {
-      expect(props.onCompleteOnboarding).toHaveBeenCalledTimes(1);
-    });
+    expect(props.onCompleteOnboarding).toHaveBeenCalledTimes(1);
 
     const pageViews = trackedEvents('page_view').map(([, payload]) => payload);
     expect(pageViews).toEqual(
@@ -1083,20 +674,16 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
           step_index: '3',
           step_name: 'newsletter',
         }),
-        expect.objectContaining({
-          page_name: 'onboarding',
-          area: 'design_system',
-          step_index: '4',
-          step_name: 'design_system',
-        }),
       ]),
     );
 
-    // The About-you survey snapshot fires when the user continues past
-    // the About-you step and carries the role/org/use-case/source picks.
+    // The About-you survey snapshot now fires on Finish from the newsletter
+    // step (the new last step), so it carries area: 'newsletter'. The payload
+    // — the user's role/org/use-case/source picks — is what matters and is
+    // still intact.
     expect(findTrackedEvent('ui_click', (payload) => payload.element === 'about_you_submit')).toMatchObject({
       page_name: 'onboarding',
-      area: 'about_you',
+      area: 'newsletter',
       element: 'about_you_submit',
       action: 'continue',
       role: 'engineer',
@@ -1109,10 +696,7 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
       page_name: 'onboarding',
       area: 'onboarding',
       result: 'completed',
-      exit_step_name: 'design_system',
-      // This flow clicks "Build a design system" at the final step, so the
-      // completion records the with-DS fork (C2 — tracking spec §3.1).
-      completion_type: 'completed_with_design_system',
+      completion_type: 'completed_without_design_system',
       runtime_type: 'amr_cloud',
       has_about_you: true,
       has_design_system_request: false,
@@ -1123,58 +707,7 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     });
   });
 
-  it('never ships the "Other" free-text to analytics on either survey-snapshot carrier', async () => {
-    globalThis.fetch = vi.fn(async () =>
-      jsonResponse({
-        loggedIn: true,
-        profile: 'prod',
-        configPath: '/x',
-        user: { id: 'u', email: 'user@example.com' },
-      }),
-    ) as typeof fetch;
-    renderOnboarding();
-
-    await clickSignedInCloudContinue();
-
-    chooseOnboardingOption('Where did you hear about us?', /Other/i);
-    const otherInput = document.querySelector<HTMLInputElement>(
-      '.onboarding-chip-field__other-input',
-    );
-    expect(otherInput).toBeTruthy();
-    fireEvent.change(otherInput as HTMLInputElement, {
-      target: { value: 'Design podcast' },
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
-    await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Stay in the loop' })).toBeTruthy();
-    });
-    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
-    await waitFor(() => {
-      expect(
-        screen.getByRole('heading', { name: 'Create once, build everywhere' }),
-      ).toBeTruthy();
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Build a design system' }));
-
-    // Both carriers of the survey snapshot — the about_you_submit click and
-    // the onboarding_complete_result fallback — carry only the enumerated
-    // `other` bucket. The raw channel the user typed must NEVER reach analytics
-    // (it lives solely in the app-owned Memory note); analytics events stay
-    // free-text/PII-free.
-    const submit = findTrackedEvent(
-      'ui_click',
-      (payload) => payload.element === 'about_you_submit',
-    );
-    expect(submit).toMatchObject({ discovery_source: 'other' });
-    expect(submit).not.toHaveProperty('discovery_source_other');
-
-    const complete = latestTrackedEvent('onboarding_complete_result');
-    expect(complete).toMatchObject({ discovery_source: 'other' });
-    expect(complete).not.toHaveProperty('discovery_source_other');
-  });
-
-  it('submits the optional newsletter email when finishing onboarding', async () => {
+  it('submits the optional newsletter email when finishing the About-you step', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       void init;
       const url = String(input);
@@ -1194,12 +727,13 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     globalThis.fetch = fetchMock as typeof fetch;
     renderOnboarding();
 
-    // Connect -> About you -> Newsletter -> Brand
-    await clickSignedInCloudContinue();
-    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
+    // Connect -> About you
+    fireEvent.click(await screen.findByRole('button', { name: /^Continue$/i }));
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Stay in the loop' })).toBeTruthy();
+      expect(screen.getByRole('heading', { name: 'About you' })).toBeTruthy();
     });
+    // About you -> newsletter step (where the email field now lives)
+    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
     await waitFor(() => {
       expect(document.querySelector('.onboarding-view__email-input')).toBeTruthy();
     });
@@ -1211,11 +745,7 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     fireEvent.change(emailInput as HTMLInputElement, {
       target: { value: '  Tester@Studio.com  ' },
     });
-    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
-    await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Create once, build everywhere' })).toBeTruthy();
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Build a design system' }));
+    fireEvent.click(screen.getByRole('button', { name: /Finish setup/i }));
 
     const subscribeCall = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/subscribe'));
     expect(subscribeCall).toBeTruthy();
@@ -1248,307 +778,18 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     globalThis.fetch = fetchMock as typeof fetch;
     renderOnboarding();
 
-    await clickSignedInCloudContinue();
+    fireEvent.click(await screen.findByRole('button', { name: /^Continue$/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'About you' })).toBeTruthy();
+    });
+    // Advance to the newsletter step, then finish without typing an email.
     fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
     await waitFor(() => {
       expect(document.querySelector('.onboarding-view__email-input')).toBeTruthy();
     });
-    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
-    await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Create once, build everywhere' })).toBeTruthy();
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Build a design system' }));
+    fireEvent.click(screen.getByRole('button', { name: /Finish setup/i }));
 
     expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/subscribe'))).toBe(false);
-  });
-
-  it('persists about-you selections to the work profile memory', async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      if (url.endsWith('/api/integrations/vela/status')) {
-        return jsonResponse({
-          loggedIn: true,
-          profile: 'prod',
-          configPath: '/x',
-          user: { id: 'u', email: 'user@example.com' },
-        });
-      }
-      if (url === '/api/memory/user_profile' && init?.method === 'PUT') {
-        return jsonResponse({
-          entry: {
-            id: 'user_profile',
-            name: 'Work profile',
-            description: 'Role and defaults',
-            type: 'profile',
-            updatedAt: Date.now(),
-            body: JSON.parse(String(init.body)).body,
-          },
-        });
-      }
-      throw new Error(`unexpected fetch: ${url}`);
-    });
-    globalThis.fetch = fetchMock as typeof fetch;
-    renderOnboarding();
-
-    await clickSignedInCloudContinue();
-    chooseOnboardingOption('Your role', 'Engineer');
-    chooseOnboardingOption('Organization size', 'Growth company');
-    chooseOnboardingOption('Use case', 'Product design');
-    chooseOnboardingOption('Where did you hear about us?', 'Search');
-
-    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
-
-    await waitFor(() => {
-      expect(fetchMock.mock.calls.some(([url]) => String(url) === '/api/memory/user_profile')).toBe(true);
-    });
-    const memoryCall = fetchMock.mock.calls.find(([url]) => String(url) === '/api/memory/user_profile');
-    const payload = JSON.parse(String(memoryCall?.[1]?.body));
-    expect(memoryCall?.[1]).toMatchObject({
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-    });
-    expect(payload).toMatchObject({
-      type: 'profile',
-      name: 'Work profile',
-    });
-    expect(payload.body).toContain('- Role: Engineer');
-    expect(payload.body).toContain('- Organization size: Growth company');
-    expect(payload.body).toContain('- Use cases: Product design');
-    expect(payload.body).toContain('- Discovery source: Search');
-    expect(payload.body).not.toContain('user@example.com');
-  });
-
-  it('keeps the typed "Other" channel in the memory note when finishing immediately after typing', async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      if (url.endsWith('/api/integrations/vela/status')) {
-        return jsonResponse({
-          loggedIn: true,
-          profile: 'prod',
-          configPath: '/x',
-          user: { id: 'u', email: 'user@example.com' },
-        });
-      }
-      if (url === '/api/memory/user_profile' && init?.method === 'PUT') {
-        return jsonResponse({
-          entry: {
-            id: 'user_profile',
-            name: 'Work profile',
-            description: 'Role and defaults',
-            type: 'profile',
-            updatedAt: Date.now(),
-            body: JSON.parse(String(init.body)).body,
-          },
-        });
-      }
-      throw new Error(`unexpected fetch: ${url}`);
-    });
-    globalThis.fetch = fetchMock as typeof fetch;
-    renderOnboarding();
-
-    await clickSignedInCloudContinue();
-    chooseOnboardingOption('Where did you hear about us?', /Other/i);
-    const otherInput = document.querySelector<HTMLInputElement>(
-      '.onboarding-chip-field__other-input',
-    );
-    expect(otherInput).toBeTruthy();
-    // Type the custom channel and advance in one act() batch. This is a
-    // behavioral guard that the typed "Other" value reaches the memory note
-    // (its only remaining sink) — it does not reproduce the real-browser race
-    // itself, since jsdom/RTL always flush the state→ref sync effect before the
-    // async memory PUT reads the ref. The fix (mirroring the value into
-    // profileRef synchronously in the input's onChange) removes that timing
-    // dependency by construction.
-    await act(async () => {
-      fireEvent.change(otherInput as HTMLInputElement, {
-        target: { value: 'Design podcast' },
-      });
-      fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
-    });
-
-    await waitFor(() => {
-      expect(
-        fetchMock.mock.calls.some(([url]) => String(url) === '/api/memory/user_profile'),
-      ).toBe(true);
-    });
-    const memoryCall = fetchMock.mock.calls.find(
-      ([url]) => String(url) === '/api/memory/user_profile',
-    );
-    const payload = JSON.parse(String(memoryCall?.[1]?.body));
-    expect(payload.body).toContain('- Discovery source: Other (Design podcast)');
-  });
-
-  it('drops the stale "Other" text from the memory note when switching to another source chip', async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      if (url.endsWith('/api/integrations/vela/status')) {
-        return jsonResponse({
-          loggedIn: true,
-          profile: 'prod',
-          configPath: '/x',
-          user: { id: 'u', email: 'user@example.com' },
-        });
-      }
-      if (url === '/api/memory/user_profile' && init?.method === 'PUT') {
-        return jsonResponse({
-          entry: {
-            id: 'user_profile',
-            name: 'Work profile',
-            description: 'Role and defaults',
-            type: 'profile',
-            updatedAt: Date.now(),
-            body: JSON.parse(String(init.body)).body,
-          },
-        });
-      }
-      throw new Error(`unexpected fetch: ${url}`);
-    });
-    globalThis.fetch = fetchMock as typeof fetch;
-    renderOnboarding();
-
-    await clickSignedInCloudContinue();
-    // Pick Other, type a channel, then switch the chip to Search and finish in
-    // one batch: the note must reflect the visible chip (Search), never the
-    // abandoned Other free-text, because updateProfile clears sourceOther into
-    // the live ref synchronously.
-    chooseOnboardingOption('Where did you hear about us?', /Other/i);
-    const otherInput = document.querySelector<HTMLInputElement>(
-      '.onboarding-chip-field__other-input',
-    );
-    fireEvent.change(otherInput as HTMLInputElement, {
-      target: { value: 'Design podcast' },
-    });
-    await act(async () => {
-      chooseOnboardingOption('Where did you hear about us?', /Search/i);
-      fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
-    });
-
-    await waitFor(() => {
-      expect(
-        fetchMock.mock.calls.some(([url]) => String(url) === '/api/memory/user_profile'),
-      ).toBe(true);
-    });
-    const memoryCall = fetchMock.mock.calls.find(
-      ([url]) => String(url) === '/api/memory/user_profile',
-    );
-    const payload = JSON.parse(String(memoryCall?.[1]?.body));
-    expect(payload.body).toContain('- Discovery source: Search');
-    expect(payload.body).not.toContain('Other (Design podcast)');
-  });
-
-  it('reports about_you_submit exactly once when advancing to the newsletter step', async () => {
-    globalThis.fetch = vi.fn(async () =>
-      jsonResponse({
-        loggedIn: true,
-        profile: 'prod',
-        configPath: '/x',
-        user: { id: 'u', email: 'user@example.com' },
-      }),
-    ) as typeof fetch;
-    renderOnboarding();
-
-    await clickSignedInCloudContinue();
-    chooseOnboardingOption('Your role', 'Engineer');
-
-    // Advance to the newsletter step via Continue (the stepper no longer
-    // allows forward jumps past the current step). The survey snapshot must
-    // still fire exactly once — on the final Finish — not zero times.
-    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
-    await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Stay in the loop' })).toBeTruthy();
-    });
-    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
-    await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Create once, build everywhere' })).toBeTruthy();
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Build a design system' }));
-
-    const aboutYouSubmits = trackedEvents('ui_click')
-      .map(([, payload]) => payload as Record<string, unknown>)
-      .filter((payload) => payload.element === 'about_you_submit');
-    expect(aboutYouSubmits).toHaveLength(1);
-    expect(aboutYouSubmits[0]).toMatchObject({ role: 'engineer' });
-  });
-
-  it('reports about_you_submit exactly once across a Back-then-Continue detour', async () => {
-    globalThis.fetch = vi.fn(async () =>
-      jsonResponse({
-        loggedIn: true,
-        profile: 'prod',
-        configPath: '/x',
-        user: { id: 'u', email: 'user@example.com' },
-      }),
-    ) as typeof fetch;
-    renderOnboarding();
-
-    await clickSignedInCloudContinue();
-    chooseOnboardingOption('Your role', 'Engineer');
-
-    // About you -> Newsletter
-    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
-    await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Stay in the loop' })).toBeTruthy();
-    });
-    // Back -> About you
-    fireEvent.click(screen.getByRole('button', { name: /^Back$/i }));
-    await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'About you' })).toBeTruthy();
-    });
-    // Continue -> Newsletter again, then Brand and finish.
-    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
-    await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Stay in the loop' })).toBeTruthy();
-    });
-    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
-    await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Create once, build everywhere' })).toBeTruthy();
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Build a design system' }));
-
-    // The detour crosses the About-you step twice, but the snapshot must
-    // not double-fire.
-    const aboutYouSubmits = trackedEvents('ui_click')
-      .map(([, payload]) => payload as Record<string, unknown>)
-      .filter((payload) => payload.element === 'about_you_submit');
-    expect(aboutYouSubmits).toHaveLength(1);
-  });
-
-  it('uses provider preferences instead of the first upstream model during BYOK onboarding', async () => {
-    globalThis.fetch = vi.fn(async (input, init) => {
-      const url = String(input);
-      if (url.endsWith('/api/integrations/vela/status')) {
-        return jsonResponse({ loggedIn: false, profile: 'prod', user: null, configPath: '/x' });
-      }
-      if (url.endsWith('/api/provider/models') && init?.method === 'POST') {
-        return jsonResponse({
-          ok: true,
-          kind: 'success',
-          latencyMs: 10,
-          models: [
-            { id: 'upstream-first', label: 'Upstream First' },
-            { id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5' },
-          ],
-        });
-      }
-      throw new Error(`unexpected fetch: ${url}`);
-    }) as typeof fetch;
-    const props = renderOnboarding({
-      config: baseConfig({
-        apiProtocol: 'anthropic',
-        apiKey: 'test-api-key',
-        baseUrl: 'https://api.anthropic.com',
-        model: '',
-        apiProviderBaseUrl: 'https://api.anthropic.com',
-      }),
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: /Bring your own key/i }));
-    fireEvent.click(screen.getByRole('button', { name: /Fetch models/i }));
-
-    await waitFor(() => {
-      expect(props.onApiModelChange).toHaveBeenCalledWith('claude-sonnet-4-5');
-    });
-    expect(props.onApiModelChange).not.toHaveBeenCalledWith('upstream-first');
   });
 
   it('persists the BYOK config before finishing onboarding', async () => {
@@ -1588,7 +829,7 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     await waitFor(() => {
       expect(screen.getByText('Fetched 2 models.')).toBeTruthy();
     });
-    chooseOnboardingOption('Model', /claude-opus-4-8/i);
+    chooseDropdownOption('Model', /claude-opus-4-8/i);
     fireEvent.click(screen.getByRole('button', { name: /^Test$/i }));
     await waitFor(() => {
       expect(screen.getByText(/Connected\. Replied in 12 ms/i)).toBeTruthy();
@@ -1598,22 +839,17 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'About you' })).toBeTruthy();
     });
+    // About you -> newsletter step
     fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
     await waitFor(() => {
       expect(document.querySelector('.onboarding-view__email-input')).toBeTruthy();
     });
-    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
-    await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Create once, build everywhere' })).toBeTruthy();
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Build a design system' }));
+    fireEvent.click(screen.getByRole('button', { name: /Finish setup/i }));
 
     expect(props.onModeChange).toHaveBeenCalledWith('api');
     expect(props.onApiModelChange).toHaveBeenCalledWith('claude-opus-4-8');
     expect(props.onConfigPersist).toHaveBeenCalled();
-    await waitFor(() => {
-      expect(props.onCompleteOnboarding).toHaveBeenCalledTimes(1);
-    });
+    expect(props.onCompleteOnboarding).toHaveBeenCalledTimes(1);
     expect((props.onConfigPersist as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0]).toMatchObject({
       mode: 'api',
       apiProtocol: 'anthropic',
@@ -1624,73 +860,30 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     });
   });
 
-  it('keeps the cloud sign-in landing stable while AMR detection is still in flight', async () => {
-    globalThis.fetch = vi.fn(async () =>
-      jsonResponse({ loggedIn: false, profile: 'prod', user: null, configPath: '/x' }),
-    ) as typeof fetch;
-    renderOnboarding({
-      agents: [cliAgent()], // AMR has not surfaced from the stream yet
-      agentsLoading: true, // cold-start detection stream still running
-      onRefreshAgents: vi.fn(() => [cliAgent()]),
-    });
-
-    expect(screen.getByRole('heading', { name: 'Sign in to Open Design' })).toBeTruthy();
-    const primary = screen.getByRole('button', { name: /Loading/i });
-    expect(primary).toBeTruthy();
-    expect(primary.getAttribute('aria-busy')).toBe('true');
-    expect((primary as HTMLButtonElement).disabled).toBe(true);
-    expect(document.querySelector('.onboarding-view__card--skeleton')).toBeNull();
-    expect(screen.queryByRole('button', { name: /Open Design AMR/i })).toBeNull();
-    expect(screen.getByRole('button', { name: /Local coding agent/i })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Bring your own key/i })).toBeTruthy();
-  });
-
-  it('renders the cloud sign-in CTA and no legacy AMR card once AMR is available', async () => {
-    globalThis.fetch = vi.fn(async () =>
-      jsonResponse({ loggedIn: false, profile: 'prod', user: null, configPath: '/x' }),
-    ) as typeof fetch;
-    renderOnboarding({ agentsLoading: false });
-
-    expect(await findCloudSignInButton()).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /Open Design AMR/i })).toBeNull();
-    expect(document.querySelector('.onboarding-view__card--skeleton')).toBeNull();
-  });
-
-  it('keeps the cloud sign-in CTA visible after detection settles without surfacing AMR', async () => {
-    globalThis.fetch = vi.fn(async () =>
-      jsonResponse({ loggedIn: false, profile: 'prod', user: null, configPath: '/x' }),
-    ) as typeof fetch;
-    renderOnboarding({
-      agents: [cliAgent()],
-      agentsLoading: false,
-      onRefreshAgents: vi.fn(() => [cliAgent()]),
-    });
-
-    expect(
-      await screen.findByRole('button', { name: /Sign in to Open Design/i }),
-    ).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /Open Design AMR/i })).toBeNull();
-    expect(document.querySelector('.onboarding-view__card--skeleton')).toBeNull();
-  });
-
-  it('shows no Skip affordance on the Connect step', async () => {
+  it('lets Skip exit onboarding without starting AMR login', async () => {
     const fetchMock = vi.fn(async (_input: RequestInfo | URL) =>
       jsonResponse({ loggedIn: false, profile: 'prod', user: null, configPath: '/x' }),
     );
     globalThis.fetch = fetchMock as typeof fetch;
     const props = renderOnboarding();
-    await act(async () => {});
 
-    // "Skip for now" was removed — Connect is a required step. The Connect
-    // step exposes no secondary Skip/Back button, onboarding is not completed
-    // from here, and no skip telemetry fires.
-    expect(screen.queryByRole('button', { name: /Skip/i })).toBeNull();
-    expect(screen.queryByRole('button', { name: /^Back$/i })).toBeNull();
-    expect(props.onCompleteOnboarding).not.toHaveBeenCalled();
-    const skipClicks = trackedEvents('ui_click')
-      .map(([, payload]) => payload as Record<string, unknown>)
-      .filter((payload) => payload.element === 'skip');
-    expect(skipClicks).toHaveLength(0);
-    expect(trackedEvents('onboarding_complete_result')).toHaveLength(0);
+    fireEvent.click(screen.getByRole('button', { name: /Skip/i }));
+
+    expect(props.onCompleteOnboarding).toHaveBeenCalledTimes(1);
+    expect(props.onConfigPersist).not.toHaveBeenCalled();
+    expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/api/integrations/vela/login'))).toBe(false);
+    expect(findTrackedEvent('ui_click', (payload) => payload.element === 'skip')).toMatchObject({
+      page_name: 'onboarding',
+      area: 'runtime',
+      element: 'skip',
+      action: 'skip',
+    });
+    expect(latestTrackedEvent('onboarding_complete_result')).toMatchObject({
+      page_name: 'onboarding',
+      area: 'onboarding',
+      result: 'skipped',
+      completion_type: 'skipped',
+      runtime_type: 'amr_cloud',
+    });
   });
 });

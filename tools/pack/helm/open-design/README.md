@@ -1,17 +1,15 @@
 # Open Design Helm chart
 
 > Spec §15.5 reference deployment.
-> Status: **values, templates, and per-cloud override files shipped.**
+> Status: **values + templates shipped; per-cloud override files pending.**
 
 The chart's `templates/` covers the canonical Kubernetes shape:
-Deployment, Service, Secret, ConfigMap, persistent storage, and an optional
-Ingress. Before documenting or changing daemon storage paths, you MUST read
-root [`AGENTS.md`](../../../../AGENTS.md) → **Daemon data directory contract**.
-This README MUST NOT restate it. Every parameter is exposed in `values.yaml` so
-the per-cloud override files stay small (volume + secret backend differences
-only).
+Deployment, Service, Secret, ConfigMap, two PVCs (`/data/od` +
+`/data/config`), and an optional Ingress. Every parameter is
+exposed in `values.yaml` so the per-cloud override files can stay
+small (volume + secret backend differences only).
 
-## Cloud overrides
+## Cloud overrides (planned values files)
 
 ```text
 values-aws.yaml      persistence.backend=efs       secrets.backend=secrets-manager
@@ -23,7 +21,7 @@ values-huawei.yaml   persistence.backend=sfs       secrets.backend=kms
 values-self.yaml     persistence.backend=hostPath  secrets.backend=env
 ```
 
-## Installing
+## Installing once the templates land
 
 ```bash
 helm repo add open-design https://open-design.ai/charts

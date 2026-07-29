@@ -31,7 +31,6 @@ interface InitConfig {
 
 let lastInitConfig: InitConfig | null = null;
 let lastRegisterPayload: Record<string, unknown> | null = null;
-let lastPersonProperties: Record<string, unknown> | null = null;
 
 vi.mock('posthog-js', () => {
   const stub = {
@@ -45,9 +44,6 @@ vi.mock('posthog-js', () => {
     },
     register: (payload: Record<string, unknown>) => {
       lastRegisterPayload = payload;
-    },
-    setPersonProperties: (payload: Record<string, unknown>) => {
-      lastPersonProperties = payload;
     },
     opt_in_capturing: () => undefined,
     opt_out_capturing: () => undefined,
@@ -63,7 +59,6 @@ describe('PostHog session replay configuration', () => {
   beforeEach(() => {
     lastInitConfig = null;
     lastRegisterPayload = null;
-    lastPersonProperties = null;
     vi.resetModules();
     globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
       const url =
@@ -132,27 +127,6 @@ describe('PostHog session replay configuration', () => {
     await initClient();
     expect(lastRegisterPayload).toMatchObject({
       env: 'local_development',
-    });
-  });
-
-  it('flushes person properties staged before PostHog init finishes', async () => {
-    const { getAnalyticsClient, setAnalyticsPersonProperties } = await import('../src/analytics/client');
-    setAnalyticsPersonProperties({
-      od_app_user_id: 'usr_amr_42',
-      od_source_resolved: 'social',
-    });
-
-    await getAnalyticsClient({
-      anonymousId: 'anon-1',
-      sessionId: 'sess-1',
-      clientType: 'web',
-      locale: 'en',
-      appVersion: '1.2.3',
-    });
-
-    expect(lastPersonProperties).toEqual({
-      od_app_user_id: 'usr_amr_42',
-      od_source_resolved: 'social',
     });
   });
 });

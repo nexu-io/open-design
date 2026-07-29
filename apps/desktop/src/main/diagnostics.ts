@@ -1,48 +1,103 @@
 import { writeFile } from "node:fs/promises";
+import { homedir, userInfo } from "node:os";
+import { dirname, join } from "node:path";
 
-import { BrowserWindow, dialog, ipcMain, shell } from "electron";
+import { BrowserWindow, app, dialog, ipcMain, shell } from "electron";
 
-import { DIAGNOSTICS_FILENAME_PREFIX, diagnosticsFileName } from "@open-design/diagnostics";
-
-import { fetchDiagnosticsBundle } from "./diagnostics-fetch.js";
+import {
+  APP_KEYS,
+  OPEN_DESIGN_SIDECAR_CONTRACT,
+  SIDECAR_MODES,
+  type SidecarStamp,
+} from "@open-design/sidecar-proto";
+import {
+  resolveLogFilePath,
+  resolveRuntimeNamespaceRoot,
+  type SidecarRuntimeContext,
+} from "@open-design/sidecar";
+import {
+  DIAGNOSTICS_FILENAME_PREFIX,
+  buildDiagnosticsZip,
+  diagnosticsFileName,
+  type LogSource,
+} from "@open-design/diagnostics";
 
 export const DESKTOP_DIAGNOSTICS_IPC_CHANNEL = "diagnostics:export-to-file";
+
+const TAIL_BYTES_PER_LOG = 4 * 1024 * 1024;
 
 export type DesktopDiagnosticsExportResult =
   | { ok: true; path: string }
   | { ok: false; cancelled: true }
   | { ok: false; cancelled: false; message: string };
 
-export interface DesktopDiagnosticsDeps {
-  /**
-   * Resolve the daemon base URL the bundle is fetched from. Mirrors the
-   * app-config base-URL discovery (daemon URL → web URL → sidecar web
-   * discovery) so the export targets the same daemon the rest of the desktop
-   * talks to. Throws when no URL is available.
-   */
-  discoverDaemonBaseUrl: () => Promise<string>;
+function safeUsername(): string | undefined {
+  try {
+    const info = userInfo();
+    return info?.username && info.username.length > 0 ? info.username : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function buildSidecarLogSources(runtime: SidecarRuntimeContext<SidecarStamp>): LogSource[] {
+  // In packaged builds `runtime.base` is `<namespaceRoot>/runtime`, so the log
+  // tree lives a level UP at `<namespaceRoot>/logs`; `resolveRuntimeNamespaceRoot`
+  // accounts for that (a plain `resolveNamespaceRoot` here resolved every
+  // daemon/web log to an ENOENT phantom path and captured none of them).
+  const namespaceRoot = resolveRuntimeNamespaceRoot({
+    contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+    runtime,
+    runtimeMode: SIDECAR_MODES.RUNTIME,
+  });
+  const apps = [APP_KEYS.DAEMON, APP_KEYS.WEB, APP_KEYS.DESKTOP];
+  const sources: LogSource[] = [];
+  for (const appKey of apps) {
+    const absolutePath = resolveLogFilePath({
+      app: appKey,
+      contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+      runtimeRoot: namespaceRoot,
+    });
+    sources.push({
+      name: `logs/${appKey}/latest.log`,
+      absolutePath,
+      kind: "text",
+      tailBytes: TAIL_BYTES_PER_LOG,
+    });
+    // Only desktop runs an Electron renderer that writes `renderer.log`
+    // (see apps/desktop/src/main/runtime.ts). daemon and web are pure Node
+    // services with no renderer process, so listing the file there only
+    // produces missing-file placeholders and manifest warnings.
+    if (appKey === APP_KEYS.DESKTOP) {
+      sources.push({
+        name: `logs/${appKey}/renderer.log`,
+        absolutePath: join(dirname(absolutePath), "renderer.log"),
+        kind: "text",
+        tailBytes: TAIL_BYTES_PER_LOG,
+      });
+    }
+  }
+  return sources;
 }
 
 export async function exportDiagnosticsToFile(
-  deps: DesktopDiagnosticsDeps,
+  runtime: SidecarRuntimeContext<SidecarStamp>,
   parentWindow: BrowserWindow | null,
 ): Promise<DesktopDiagnosticsExportResult> {
   const filename = diagnosticsFileName(DIAGNOSTICS_FILENAME_PREFIX);
-  // Seed only the filename, never a directory. Forcing `defaultPath` into the
-  // Downloads folder made the native Windows Save dialog open *inside* it, and
-  // when Downloads is OneDrive-backed the shell's folder-type discovery +
-  // cloud-provider status enumeration can stall the dialog's UI thread long
-  // enough for Windows to flag the owner window "not responding" (AppHangB1).
-  // The PDF/PPTX save flows already pass a bare filename; match them and let
-  // the OS restore the user's last-used, already-warm location.
-  // `dontAddToRecent` further avoids shell recent-items writes against that
-  // same slow folder. ponytail: mitigates the trigger; a fully wedged OneDrive
-  // shell is an OS-side stall no app option can unblock.
+  const downloadsDir = (() => {
+    try {
+      return app.getPath("downloads");
+    } catch {
+      return homedir();
+    }
+  })();
+  const defaultPath = join(downloadsDir, filename);
+
   const dialogOptions = {
     title: "Export Open Design diagnostics",
-    defaultPath: filename,
+    defaultPath,
     filters: [{ name: "Zip archive", extensions: ["zip"] }],
-    properties: ["dontAddToRecent" as const],
   };
   const choice = parentWindow != null
     ? await dialog.showSaveDialog(parentWindow, dialogOptions)
@@ -53,14 +108,33 @@ export async function exportDiagnosticsToFile(
   }
 
   try {
-    // Delegate the bundle to the daemon's own export endpoint instead of
-    // rebuilding it here with a guessed data dir. The daemon owns its real
-    // RUNTIME_DATA_DIR, so the bundle's run-event logs (`runs/<id>/events.jsonl`)
-    // and AMR/agent CLI logs resolve correctly in dev, packaged, and
-    // OD_DATA_DIR-override setups alike. See diagnostics-fetch.ts.
-    const baseUrl = await deps.discoverDaemonBaseUrl();
-    const zip = await fetchDiagnosticsBundle(baseUrl);
-    await writeFile(choice.filePath, zip);
+    const result = await buildDiagnosticsZip({
+      context: {
+        app: { name: "open-design", version: app.getVersion(), packaged: app.isPackaged },
+        source: "desktop-ipc",
+        namespace: runtime.namespace,
+        extra: {
+          electronVersion: process.versions.electron,
+          chromiumVersion: process.versions.chrome,
+          base: runtime.base,
+          mode: runtime.mode,
+          sourceTag: runtime.source,
+        },
+      },
+      sources: buildSidecarLogSources(runtime),
+      redaction: { username: safeUsername() },
+      crashReports: {
+        // Restrict to Open Design's own process names. A generic "Electron"
+        // substring would sweep up crash reports from any other Electron app
+        // on the host (VS Code, Slack, …) and leak unrelated user data into
+        // the support bundle.
+        matchSubstrings: ["Open Design", "open-design"],
+        withinDays: 7,
+        maxReports: 10,
+        homeDir: homedir(),
+      },
+    });
+    await writeFile(choice.filePath, result.zip);
     // Reveal the saved file in Finder (macOS) / Explorer (Windows) / file
     // manager (Linux) so the user can drag it into Slack / email without
     // having to navigate manually. Failures here are non-fatal.
@@ -76,10 +150,10 @@ export async function exportDiagnosticsToFile(
   }
 }
 
-export function registerDesktopDiagnosticsIpc(deps: DesktopDiagnosticsDeps): () => void {
+export function registerDesktopDiagnosticsIpc(runtime: SidecarRuntimeContext<SidecarStamp>): () => void {
   const handler = async (event: Electron.IpcMainInvokeEvent): Promise<DesktopDiagnosticsExportResult> => {
     const senderWindow = BrowserWindow.fromWebContents(event.sender);
-    return await exportDiagnosticsToFile(deps, senderWindow);
+    return await exportDiagnosticsToFile(runtime, senderWindow);
   };
   ipcMain.handle(DESKTOP_DIAGNOSTICS_IPC_CHANNEL, handler);
   return () => {

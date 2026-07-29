@@ -14,7 +14,6 @@ import {
 } from "./mac/index.js";
 import {
   cleanupPackedWinNamespace,
-  diagnosePackedWinIpc,
   installPackedWinApp,
   inspectPackedWinApp,
   listPackedWinNamespaces,
@@ -24,7 +23,6 @@ import {
   startPackedWinApp,
   stopPackedWinApp,
   uninstallPackedWinApp,
-  validateWinLauncherPayloadArchive,
 } from "./win/index.js";
 import {
   cleanupPackedLinuxNamespace,
@@ -64,16 +62,19 @@ type CacCommand = ReturnType<CAC["command"]>;
 
 function addSharedOptions(command: CacCommand) {
   return command
-    .option("--cache-dir <path>", "advanced escape hatch for relocating tools-pack cache")
-    .option("--dir <path>", "tools-pack output/runtime root directory")
-    .option("--diagnose-attempts <count>", "diagnose-ipc: start/poll/stop attempts")
+    .option("--cache-dir <path>", "tools-pack cache directory")
+    .option("--dir <path>", "tools-pack root directory")
     .option("--json", "print JSON")
     .option("--namespace <name>", "runtime namespace")
     .option("--expr <expression>", "desktop inspect eval expression")
     .option("--path <path>", "desktop inspect screenshot path")
+<<<<<<< HEAD
+    .option("--update-action <action>", "desktop update action: status|check|download|install");
+=======
     .option("--status-poll-count <count>", "inspect: poll desktop/daemon/web STATUS this many times")
     .option("--status-poll-interval-ms <ms>", "inspect: delay between STATUS poll samples")
     .option("--update-action <action>", "desktop update action: status|check|clear-cache|download|install");
+>>>>>>> upstream/main
 }
 
 // Per-platform `--to` help text mirroring resolveToolPackBuildOutput in
@@ -102,9 +103,6 @@ function addMacBuildOptions(command: CacCommand) {
 
 function addWinLifecycleOptions(command: CacCommand) {
   return command
-    .option("--expected-version <version>", "validate-payload: expected launcher payload version")
-    .option("--payload-path <path>", "validate-payload: launcher payload archive path")
-    .option("--remove-cache", "remove packaged download/cache data during uninstall/reset/cleanup")
     .option("--remove-data", "remove packaged data during uninstall/reset/cleanup")
     .option("--remove-logs", "remove packaged logs during uninstall/reset/cleanup")
     .option("--remove-product-user-data", "remove the public Electron app userData root during Windows uninstall/reset/cleanup")
@@ -153,7 +151,7 @@ addWinLifecycleOptions(
     addSharedOptions(
       cli.command(
         "win <action>",
-        "Windows packaging commands: build|install|start|stop|logs|uninstall|cleanup|list|reset|inspect|diagnose-ipc|validate-payload",
+        "Windows packaging commands: build|install|start|stop|logs|uninstall|cleanup|list|reset|inspect",
       ),
     ),
     "win",
@@ -191,24 +189,6 @@ addWinLifecycleOptions(
     case "inspect":
       printJson(await inspectPackedWinApp(config, options));
       return;
-    case "diagnose-ipc":
-      printJson(await diagnosePackedWinIpc(config, options));
-      return;
-    case "validate-payload": {
-      if (options.payloadPath == null || options.payloadPath.length === 0) {
-        throw new Error("win validate-payload requires --payload-path");
-      }
-      if (options.expectedVersion == null || options.expectedVersion.length === 0) {
-        throw new Error("win validate-payload requires --expected-version");
-      }
-      printJson(await validateWinLauncherPayloadArchive({
-        expectedVersion: options.expectedVersion,
-        namespace: config.namespace,
-        payloadPath: options.payloadPath,
-        workspaceRoot: config.workspaceRoot,
-      }));
-      return;
-    }
     default:
       throw new Error(`unsupported win action: ${action}`);
   }

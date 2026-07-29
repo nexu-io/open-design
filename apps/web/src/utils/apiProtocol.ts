@@ -9,7 +9,6 @@ const API_PROTOCOL_LABELS: Record<ApiProtocol, string> = {
   ollama: 'Ollama Cloud API',
   senseaudio: 'SenseAudio API',
   aihubmix: 'AIHubMix API',
-  bedrock: 'AWS Bedrock',
 };
 
 const API_PROTOCOL_AGENT_IDS: Record<ApiProtocol, string> = {
@@ -20,7 +19,6 @@ const API_PROTOCOL_AGENT_IDS: Record<ApiProtocol, string> = {
   ollama: 'ollama-cloud-api',
   senseaudio: 'senseaudio-api',
   aihubmix: 'aihubmix-api',
-  bedrock: 'bedrock-api',
 };
 
 export function apiProtocolLabel(protocol: ApiProtocol | undefined): string {
@@ -31,7 +29,7 @@ export function apiProtocolModelLabel(
   protocol: ApiProtocol | undefined,
   model: string,
 ): string {
-  const label = `${apiProtocolLabel(protocol)} via OpenCode`;
+  const label = apiProtocolLabel(protocol);
   const trimmed = model.trim();
   return trimmed ? `${label} · ${trimmed}` : label;
 }
@@ -47,7 +45,6 @@ export function usesAnthropicProxy(cfg: AppConfig): boolean {
     cfg.apiProtocol === 'google' ||
     cfg.apiProtocol === 'senseaudio' ||
     cfg.apiProtocol === 'aihubmix' ||
-    cfg.apiProtocol === 'bedrock' ||
     cfg.apiProtocol === 'openai'
   ) {
     return false;

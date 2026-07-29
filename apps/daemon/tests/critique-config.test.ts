@@ -1,12 +1,36 @@
 import { describe, it, expect } from 'vitest';
 import { defaultCritiqueConfig } from '@open-design/contracts/critique';
+import { loadLoopConfigFromEnv } from '../src/critique/config-loop.js';
 import { loadCritiqueConfigFromEnv } from '../src/critique/config.js';
 
 describe('loadCritiqueConfigFromEnv', () => {
   it('returns defaults when env is empty', () => {
     const cfg = loadCritiqueConfigFromEnv({});
     const defaults = defaultCritiqueConfig();
-    expect(cfg).toEqual(defaults);
+    expect(cfg).toEqual({
+      ...defaults,
+      loop: loadLoopConfigFromEnv({}),
+    });
+  });
+
+  it('loads Critique Loop environment settings', () => {
+    const cfg = loadCritiqueConfigFromEnv({
+      OD_CRITIQUE_LOOP_ENABLED: '1',
+      OD_CRITIQUE_LOOP_MAX_ITERATIONS: '3',
+      OD_CRITIQUE_LOOP_STRATEGY: 'mustFix_only',
+      OD_CRITIQUE_LOOP_FIX_TIMEOUT_MS: '60000',
+      OD_CRITIQUE_LOOP_TOTAL_TIMEOUT_MS: '120000',
+      OD_CRITIQUE_LOOP_FEEDBACK_AGGREGATION: 'last_round',
+    });
+
+    expect(cfg.loop).toEqual({
+      enabled: true,
+      maxIterations: 3,
+      loopStrategy: 'mustFix_only',
+      fixTimeoutMs: 60000,
+      loopTotalTimeoutMs: 120000,
+      feedbackAggregation: 'last_round',
+    });
   });
 
   it('OD_CRITIQUE_ENABLED=true enables the feature', () => {

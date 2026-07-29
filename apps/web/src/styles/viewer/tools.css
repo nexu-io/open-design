@@ -1,3 +1,95 @@
+/*
+ * Inline rendering of Claude's AskUserQuestion tool. Question text reads
+ * like a normal assistant message, options live as a row of chip buttons
+ * the user picks from. Once an answer ships (or the user has moved past
+ * the turn) the card locks into a read only state: chips remain visible
+ * but unclickable so the user can see what was asked.
+ */
+.op-ask-question .op-card-head { padding-bottom: 4px; }
+.op-ask-question-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 4px 12px 12px;
+}
+/* The question fields + option chips now reuse the QuestionForm visual
+   language (.qf-field / .qf-options / .qf-chip — see composio.css) so the
+   inline AskUserQuestion card and the right-side Questions panel read as one
+   surface. Only the card frame (head / body / foot / submit / typing) keeps
+   its op-ask-question styling here. */
+.op-ask-question-foot {
+  display: flex;
+  justify-content: flex-end;
+  padding: 4px 12px 12px;
+}
+/* Match the composer's Send button styling so the two actions read as
+ * the same control family. The composer-send is bordered with the
+ * accent color and uses the same padding/typography; we drop the icon
+ * by skipping the gap/svg children entirely. */
+.op-ask-question-submit {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  color: white;
+  font-weight: 500;
+  padding: 4px 14px;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.op-ask-question-submit:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+.op-ask-question-submit:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+/*
+ * Streaming state: the tool's input JSON is still arriving token-by-token
+ * (rendered from the live `tool_input_delta` accumulation, before the full
+ * tool_use lands). The card frame paints immediately; each question field and
+ * option mounts the moment its text settles in the partial parse and animates
+ * in once. The live card is replaced by the interactive (persisted) card when
+ * the tool_use completes, so the reveal never replays.
+ */
+@keyframes op-auq-reveal {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+.op-ask-question-streaming .qf-field,
+.op-ask-question-streaming .qf-chip {
+  animation: op-auq-reveal 200ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+/* Three pulsing dots standing in for the "still writing" status pill — no
+ * text, so it needs no translation. */
+.op-ask-question-typing {
+  display: inline-flex;
+  gap: 3px;
+  margin-left: auto;
+  align-items: center;
+}
+.op-ask-question-typing i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  animation: op-auq-typing 1s ease-in-out infinite;
+}
+.op-ask-question-typing i:nth-child(2) { animation-delay: 0.15s; }
+.op-ask-question-typing i:nth-child(3) { animation-delay: 0.3s; }
+@keyframes op-auq-typing {
+  0%, 100% { opacity: 0.25; transform: translateY(0); }
+  50% { opacity: 0.9; transform: translateY(-2px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .op-ask-question-streaming .qf-field,
+  .op-ask-question-streaming .qf-chip { animation: none; }
+  .op-ask-question-typing i { animation: none; opacity: 0.6; }
+}
+
 .op-meta { color: var(--text-muted); font-size: 11.5px; }
 .op-desc { font-style: italic; }
 .op-path {
@@ -27,12 +119,9 @@
   font-size: 12px;
 }
 .op-status-running { color: var(--purple); }
+.op-status-awaiting { color: var(--purple); }
 .op-status-ok { color: var(--green); }
 .op-status-error { color: var(--red); }
-.op-status-category {
-  border-color: transparent;
-  background: var(--bg-panel);
-}
 .op-toggle {
   font-size: 10.5px;
   padding: 2px 8px;
@@ -70,13 +159,7 @@
   margin-bottom: 6px;
   font-weight: 500;
 }
-.produced-files-list {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  max-height: min(34vh, 260px);
-  overflow-y: auto;
-}
+.produced-files-list { display: flex; flex-direction: column; gap: 2px; }
 .produced-file {
   display: flex;
   align-items: center;
@@ -175,10 +258,6 @@
   padding-top: 0;
   border-top: none;
 }
-.plugin-action-panel > .plugin-action-card:only-child {
-  padding-top: 0;
-  border-top: none;
-}
 .plugin-action-card__main {
   display: flex;
   align-items: center;
@@ -257,7 +336,6 @@
   filter: brightness(0.85);
 }
 .plugin-action-card__notice {
-  margin-top: 8px;
   padding: 6px 8px;
   border-radius: var(--radius-sm);
   background: var(--bg-panel);
@@ -273,21 +351,9 @@
   word-break: break-all;
 }
 
-.plugin-action-candidate__details {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 9px;
-}
-
-.plugin-action-candidate__details p {
-  flex: 1 1 240px;
-  margin: 0;
-}
-
-/* "Files this turn" summary — derived from file operation tool_use events.
-   Show up to four files as part of the answer; larger batches stay compact
-   until the user opens the disclosure. */
+/* "Files this turn" summary — derived from Read/Write/Edit tool_use events
+   so users can scan every file the agent touched without expanding tool-
+   group disclosures. Compact pill while streaming, full list once done. */
 .file-ops {
   display: flex;
   flex-direction: column;
@@ -296,18 +362,15 @@
   background: var(--bg-panel);
   overflow: hidden;
 }
-.file-ops-head {
-  display: flex;
-  align-items: center;
-  min-width: 0;
+.file-ops.is-streaming {
+  border-style: dashed;
+  background: var(--bg-subtle);
 }
 .file-ops-toggle {
   display: flex;
   align-items: center;
   gap: 8px;
   width: 100%;
-  min-width: 0;
-  flex: 1 1 auto;
   padding: 7px 10px;
   background: transparent;
   border: 0;
@@ -318,8 +381,6 @@
   min-width: 0;
 }
 .file-ops-toggle:hover { background: var(--bg-subtle); }
-.file-ops-toggle--static { cursor: default; }
-.file-ops-toggle--static:hover { background: transparent; }
 .file-ops-icon { display: inline-flex; color: var(--text-muted); }
 .file-ops-label {
   font-size: 10.5px;
@@ -337,19 +398,21 @@
   font-variant-numeric: tabular-nums;
   color: var(--text-muted);
 }
-.file-ops-more {
+.file-ops-count {
   font-size: 10.5px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: var(--text-muted);
-  white-space: nowrap;
+  padding: 1px 6px;
+  border-radius: var(--radius);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
 }
-.file-ops-chev {
-  display: inline-flex;
-  color: var(--text-muted);
-  transition: transform 120ms var(--ease-out);
+.file-ops.is-streaming .file-ops-count {
+  color: var(--accent);
+  border-color: color-mix(in oklab, var(--accent) 30%, var(--border));
 }
-.file-ops-chev.is-expanded { transform: rotate(180deg); }
+.file-ops-chev { display: inline-flex; color: var(--text-muted); }
 .file-ops-list {
   list-style: none;
   margin: 0;
@@ -357,44 +420,18 @@
   display: flex;
   flex-direction: column;
   gap: 3px;
-  max-height: min(34vh, 260px);
-  overflow-y: auto;
   border-top: 1px solid var(--border-soft, var(--border));
 }
-.file-ops-list--single {
-  padding: 0;
-  border-top: 0;
-  overflow: visible;
-}
 .file-ops-row {
-  display: block;
-  padding: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
   border-radius: var(--radius-sm);
   font-size: 12px;
   min-width: 0;
 }
 .file-ops-row:hover { background: var(--bg-subtle); }
-.file-ops-row-main {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  min-width: 0;
-  padding: 5px 8px;
-  border: 0;
-  border-radius: inherit;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-}
-.file-ops-row-main--action {
-  cursor: pointer;
-}
-.file-ops-row-main--action:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 38%, transparent);
-  outline-offset: 1px;
-}
 .file-ops-row--running { color: var(--text); }
 .file-ops-row--error { color: var(--text); }
 .file-ops-row-badges { display: inline-flex; gap: 3px; flex-shrink: 0; }
@@ -435,11 +472,6 @@
   border-color: color-mix(in oklab, #b26500 35%, var(--border));
   background: color-mix(in oklab, #b26500 8%, var(--bg-subtle));
 }
-.file-ops-badge--delete {
-  color: #b42318;
-  border-color: color-mix(in oklab, #b42318 35%, var(--border));
-  background: color-mix(in oklab, #b42318 8%, var(--bg-subtle));
-}
 .file-ops-row-path {
   flex: 1;
   min-width: 0;
@@ -474,22 +506,19 @@
   color: #c0392b;
   background: color-mix(in oklab, #c0392b 12%, transparent);
 }
-.file-ops-row-open-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+.file-ops-row-open {
+  font-size: 11px;
+  padding: 3px 9px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  cursor: pointer;
   flex-shrink: 0;
-  color: var(--text-faint);
-  opacity: 0;
-  transform: translateX(-2px);
-  transition:
-    opacity 140ms cubic-bezier(0.23, 1, 0.32, 1),
-    transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.file-ops-row-main--action:hover .file-ops-row-open-icon,
-.file-ops-row-main--action:focus-visible .file-ops-row-open-icon {
-  opacity: 1;
-  transform: translateX(0);
+.file-ops-row-open:hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .op-bash .op-command,
@@ -498,15 +527,13 @@
   padding: 8px 12px;
   background: #1c1b1a;
   color: #f0eee9;
-  border-radius: var(--radius-md);
   font-family: var(--mono);
   font-size: 11px;
   line-height: 1.55;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   max-height: 220px;
-  overflow: auto;
-  scrollbar-width: thin;
+  overflow-y: auto;
 }
 .op-bash .op-output { background: #2a2926; }
 
@@ -618,18 +645,6 @@
   justify-content: center;
   color: var(--text-muted);
   font-size: 12px;
-}
-.present-menu-copy {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-.present-menu-copy small {
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 1.2;
 }
 
 .share-menu { position: relative; display: inline-block; }
@@ -1030,72 +1045,6 @@
 }
 .image-export-format-text span {
   display: none;
-}
-.pptx-export-mode-options {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  width: 100%;
-}
-.pptx-export-mode-option {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 12px 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg-subtle);
-  cursor: pointer;
-  transition:
-    border-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
-    background 140ms cubic-bezier(0.23, 1, 0.32, 1),
-    box-shadow 140ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-.pptx-export-mode-option:hover {
-  background: color-mix(in srgb, var(--bg-panel) 70%, transparent);
-}
-.pptx-export-mode-option.active {
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
-  background: var(--bg-panel);
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--text) 8%, transparent);
-}
-.pptx-export-mode-option input[type="radio"] {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  margin: 0;
-  opacity: 0;
-  cursor: pointer;
-}
-.pptx-export-mode-option:has(input[type="radio"]:focus-visible) {
-  outline: 2px solid color-mix(in srgb, var(--accent) 42%, transparent);
-  outline-offset: 2px;
-}
-.pptx-export-mode-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.pptx-export-mode-title {
-  color: var(--text);
-  font-size: 13.5px;
-  font-weight: 600;
-}
-.pptx-export-mode-badge {
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 1;
-  padding: 3px 7px;
-  border-radius: 999px;
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-}
-.pptx-export-mode-desc {
-  color: color-mix(in srgb, var(--text) 58%, transparent);
-  font-size: 12px;
-  line-height: 1.45;
 }
 .image-export-modal .modal-foot {
   padding: 14px 24px 20px;

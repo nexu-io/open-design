@@ -1,7 +1,11 @@
 // @vitest-environment node
 
 import { execFile } from 'node:child_process';
+<<<<<<< HEAD
+import { access, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+=======
 import { access, chmod, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+>>>>>>> upstream/main
 import { dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
@@ -10,19 +14,18 @@ import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 
 import { createPackagedSmokeReport } from '@/vitest/packaged-report';
 import { releaseAppVersionArgs } from '@/vitest/packaged-release-version';
+import { startPackagedPayloadUpdateFixture, type PackagedPayloadUpdateFixture } from '@/vitest/packaged-payload-update-fixture';
 import {
   applyPackagedUpdateEnv,
   resolvePackagedUpdateScenario,
 } from '@/vitest/packaged-update-scenario';
-import { resolvePackagedSmokeNamespace } from '@/vitest/suite';
-import { startToolsServeUpdaterFixture, type ToolsServeUpdaterFixture } from '@/vitest/tools-serve-updater-fixture';
 import { createDesktopHarness, STORAGE_KEY, waitFor } from '../lib/desktop/desktop-test-helpers.ts';
 
 const execFileAsync = promisify(execFile);
 const e2eRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const workspaceRoot = dirname(e2eRoot);
 const toolsPackDir = resolveFromWorkspace(process.env.OD_PACKAGED_E2E_TOOLS_PACK_DIR ?? '.tmp/tools-pack');
-const namespace = resolvePackagedSmokeNamespace('mac');
+const namespace = process.env.OD_PACKAGED_E2E_NAMESPACE ?? 'release-beta';
 const releaseChannel = process.env.OD_PACKAGED_E2E_RELEASE_CHANNEL;
 const releaseVersion = process.env.OD_PACKAGED_E2E_RELEASE_VERSION;
 const updateScenario = resolvePackagedUpdateScenario({ releaseChannel, releaseVersion });
@@ -34,7 +37,6 @@ const verifyCoreOnly = smokeProfile === 'core';
 const updateMetadataUrl = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_MAC_UPDATE_METADATA_URL);
 const updateVersion = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_MAC_UPDATE_VERSION);
 const updateBuildJsonPath = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_MAC_UPDATE_BUILD_JSON_PATH);
-const updateFixture = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_MAC_UPDATE_FIXTURE);
 
 const outputNamespaceRoot = join(toolsPackDir, 'out', 'mac', 'namespaces', namespace);
 const runtimeNamespaceRoot = join(toolsPackDir, 'runtime', 'mac', 'namespaces', namespace);
@@ -49,56 +51,6 @@ const healthExpression = `
     };
   })()
 `;
-const upgradePersistenceProjectId = `packaged-upgrade-persistence-${Date.now().toString(36)}`;
-const upgradePersistenceSeedExpression = `
-  (async () => {
-    const projectId = ${JSON.stringify(upgradePersistenceProjectId)};
-    const html = '<!doctype html><html><head><style>' +
-      'html,body{margin:0}.slide{width:1920px;height:1080px;display:flex;align-items:center;justify-content:center;font:96px sans-serif;color:white}' +
-      '.slide:first-child{background:#17324d}.slide:last-child{background:#8b3a2b}' +
-      '</style></head><body><section class="slide">Upgrade From Outer</section><section class="slide">Persistence Check</section></body></html>';
-    const created = await fetch('/api/projects', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: projectId, name: 'Packaged upgrade persistence' }),
-    });
-    const written = created.ok
-      ? await fetch('/api/projects/' + encodeURIComponent(projectId) + '/files', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: 'deck.html', content: html }),
-        })
-      : null;
-    return {
-      createdOk: created.ok,
-      createdStatus: created.status,
-      projectId,
-      writtenOk: written?.ok ?? false,
-      writtenStatus: written?.status ?? null,
-    };
-  })()
-`;
-
-function existingProjectPptxExportExpression(projectId: string): string {
-  return `
-  (async () => {
-    const projectId = ${JSON.stringify(projectId)};
-    const exported = await fetch('/api/projects/' + encodeURIComponent(projectId) + '/export/pptx', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fileName: 'deck.html' }),
-    });
-    const bytes = new Uint8Array(await exported.arrayBuffer());
-    return {
-      byteLength: bytes.length,
-      contentType: exported.headers.get('content-type'),
-      magic: String.fromCharCode(...bytes.slice(0, 2)),
-      projectId,
-      status: exported.status,
-    };
-  })()
-  `;
-}
 const updaterPopupExpression = `
   (() => {
     const popup = document.querySelector('[data-testid="updater-popup"]');
@@ -129,35 +81,6 @@ const clickUpdaterRailExpression = `
     if (button.getAttribute('aria-disabled') === 'true') return { clicked: false, reason: 'updater-rail-disabled' };
     button.click();
     return { clicked: true };
-  })()
-`;
-const packagedOnboardingExpression = `
-  (() => {
-    const onboardingShell = document.querySelector('.entry-shell--onboarding');
-    const onboardingModal = document.querySelector('.entry-onboarding-modal');
-    // Redesigned connect step: a cloud sign-in landing (primary CTA + two
-    // secondary runtime links) replaces the old selectable runtime cards.
-    const cloudSignIn = document.querySelector('.onboarding-cloud__primary');
-    const secondaryLinks = Array.from(
-      document.querySelectorAll('.onboarding-cloud__secondary'),
-    );
-    const localLink = secondaryLinks[0] ?? null;
-    const byokLink = secondaryLinks[1] ?? null;
-    const backToCloud = document.querySelector('.onboarding-view__back-to-cloud');
-    const setupPanel = document.querySelector('.onboarding-view__setup-panel');
-
-    return {
-      backVisible: backToCloud instanceof HTMLElement,
-      byokLinkVisible: byokLink instanceof HTMLElement,
-      cloudSignInVisible: cloudSignIn instanceof HTMLElement,
-      href: location.href,
-      inputCount: setupPanel instanceof HTMLElement ? setupPanel.querySelectorAll('input').length : 0,
-      localLinkVisible: localLink instanceof HTMLElement,
-      onboardingVisible: onboardingShell instanceof HTMLElement && onboardingModal instanceof HTMLElement,
-      setupPanelVisible: setupPanel instanceof HTMLElement,
-      text: onboardingModal?.textContent?.trim().slice(0, 2000) ?? null,
-      title: document.title,
-    };
   })()
 `;
 
@@ -252,8 +175,6 @@ type LauncherSnapshot = {
   channel: string;
   error?: string;
   exists: boolean;
-  handoff: unknown | null;
-  handoffPath: string;
   lastSuccessful: LauncherPointer | null;
   namespace: string;
   root: string;
@@ -284,41 +205,6 @@ type HealthEvalValue = {
   title: string;
 };
 
-type PptxExportEvalValue = {
-  byteLength: number;
-  contentType: string | null;
-  magic: string;
-  projectId: string;
-  status: number;
-};
-
-type UpgradePersistenceSeed = {
-  createdOk: boolean;
-  createdStatus: number;
-  projectId: string;
-  writtenOk: boolean;
-  writtenStatus: number | null;
-};
-
-type DesktopIdentityMarker = {
-  appPath: string;
-  executablePath: string;
-  pid: number;
-  version: number;
-};
-
-type PayloadRuntimeAcceptance = {
-  coldStart: {
-    health: HealthEvalValue;
-    identity: DesktopIdentityMarker;
-    launcher: LauncherSnapshot;
-    pptx: PptxExportEvalValue;
-    start: MacStartResult;
-  };
-  identity: DesktopIdentityMarker;
-  pptx: PptxExportEvalValue;
-};
-
 type UpdaterPopupEvalValue = {
   installButtonVisible: boolean;
   reinstallLinkVisible: boolean;
@@ -332,6 +218,8 @@ type UpdaterClickEvalValue = {
   reason?: string;
 };
 
+<<<<<<< HEAD
+=======
 type UpdaterRecoverySummary = {
   cleared: NonNullable<MacInspectResult['update']>;
   downloadedBeforeClear: NonNullable<MacInspectResult['update']>;
@@ -358,11 +246,9 @@ type PackagedOnboardingEvalValue = {
   title: string;
 };
 
+>>>>>>> upstream/main
 const shouldRunPackagedMacSmoke = process.platform === 'darwin' && process.env.OD_PACKAGED_E2E_MAC === '1';
 const macDescribe = shouldRunPackagedMacSmoke ? describe : describe.skip;
-const shouldRunPackagedMacOnboardingSmoke =
-  shouldRunPackagedMacSmoke && process.env.OD_PACKAGED_E2E_MAC_ONBOARDING_SMOKE === '1';
-const macOnboardingDescribe = shouldRunPackagedMacOnboardingSmoke ? describe : describe.skip;
 const shouldRunDesktopMacSmoke = process.platform === 'darwin' && process.env.OD_DESKTOP_SMOKE === '1';
 const desktopMacDescribe = shouldRunDesktopMacSmoke ? describe : describe.skip;
 
@@ -373,16 +259,23 @@ macDescribe('packaged mac runtime smoke', () => {
   test('installs, starts, inspects, stops, and uninstalls the built mac artifact', async () => {
     const report = await createPackagedSmokeReport('mac');
     const updateEnv = captureUpdateEnv();
+<<<<<<< HEAD
+    let payloadFixture: PackagedPayloadUpdateFixture | null = null;
+=======
     let payloadFixture: ToolsServeUpdaterFixture | null = null;
     let recoveryFixture: ToolsServeUpdaterFixture | null = null;
     let recoveryPayloadPath: string | null = null;
+>>>>>>> upstream/main
     let logs: LogsResult | { skipped: true } = { skipped: true };
     let popup: UpdaterPopupEvalValue | { skipped: true } = { skipped: true };
     let updateInstall: NonNullable<MacInspectResult['update']> | { skipped: true } = { skipped: true };
     let updateStatus: NonNullable<MacInspectResult['update']> | { skipped: true } = { skipped: true };
+<<<<<<< HEAD
+=======
     let payloadRuntime: PayloadRuntimeAcceptance | { skipped: true } = { skipped: true };
     let updaterRecovery: UpdaterRecoverySummary | { skipped: true } = { skipped: true };
     let upgradePersistence: UpgradePersistenceSeed | { skipped: true } = { skipped: true };
+>>>>>>> upstream/main
     let passed = false;
     try {
       await resetPackagedRuntimeState();
@@ -399,19 +292,20 @@ macDescribe('packaged mac runtime smoke', () => {
       let expectedPayloadUpdateVersion: string | null = updateVersion;
       if (!verifyCoreOnly) {
         if (updateMetadataUrl != null && updateMetadataUrl !== '') {
-          assertUpdateVersionPresent('mac', updateVersion);
           applyPackagedUpdateEnv(process.env, updateScenario, updateMetadataUrl, { openDryRun: false });
         } else {
-          assertToolsServeFixtureEnabled('mac', updateFixture);
           const localPayload = await resolveLocalPayloadUpdateFixture();
           expectedPayloadUpdateVersion = localPayload.targetVersion;
+<<<<<<< HEAD
+          payloadFixture = await startPackagedPayloadUpdateFixture({
+=======
           recoveryPayloadPath = localPayload.payloadPath;
           payloadFixture = await startToolsServeUpdaterFixture({
+>>>>>>> upstream/main
             channel: updateScenario.channel,
             payloadPath: localPayload.payloadPath,
             platform: 'mac',
             version: localPayload.targetVersion,
-            workspaceRoot,
           });
           applyPackagedUpdateEnv(process.env, updateScenario, payloadFixture.info.metadataUrl, { openDryRun: false });
         }
@@ -455,12 +349,6 @@ macDescribe('packaged mac runtime smoke', () => {
         if (updaterVersion == null || updaterVersion.length === 0) {
           throw new Error('full packaged mac payload smoke requires an update target version');
         }
-        const persistenceInspect = await runToolsPackJson<MacInspectResult>('inspect', [
-          '--expr',
-          upgradePersistenceSeedExpression,
-        ]);
-        const persistence = assertUpgradePersistenceSeed(persistenceInspect.eval?.value);
-        upgradePersistence = persistence;
         const readyUpdate = await waitForUpdaterStatus(
           (status) =>
             status.update?.state === 'downloaded' &&
@@ -499,26 +387,16 @@ macDescribe('packaged mac runtime smoke', () => {
         expect(postUpdateHealth.status).toBe(200);
         expect(postUpdateHealth.health.ok).toBe(true);
         expect(postUpdateHealth.health.version).toBe(updaterVersion);
-        const confirmedGeneration = settledLauncherGeneration(postUpdateInspect.launcher, updaterVersion);
-        if (confirmedGeneration == null) throw new Error('post-update launcher did not settle on the target version');
-        assertLauncherPointer(
-          postUpdateInspect.launcher.active,
-          updaterVersion,
-          confirmedGeneration,
-          'post-relaunch active',
-        );
-        assertLauncherPointer(
-          postUpdateInspect.launcher.lastSuccessful,
-          updaterVersion,
-          confirmedGeneration,
-          'post-relaunch lastSuccessful',
-        );
+        assertLauncherPointer(postUpdateInspect.launcher.active, updaterVersion, 1, 'post-relaunch active');
+        assertLauncherPointer(postUpdateInspect.launcher.lastSuccessful, updaterVersion, 1, 'post-relaunch lastSuccessful');
         const terminalUpdate = await waitForUpdaterStatus(
           (status) => status.update?.state === 'not-available' && status.update.currentVersion === updaterVersion,
           'post-relaunch updater terminal state',
         );
         if (terminalUpdate.update == null) throw new Error('mac terminal update status is missing');
         updateInstall = terminalUpdate.update;
+<<<<<<< HEAD
+=======
 
         const identity = await readDesktopIdentityMarker();
         assertPayloadDesktopIdentity(identity, postUpdateInspect.launcher, updaterVersion);
@@ -663,6 +541,7 @@ macDescribe('packaged mac runtime smoke', () => {
             recovered: recovered.update,
           };
         }
+>>>>>>> upstream/main
       }
 
       await mkdir(dirname(screenshotPath), { recursive: true });
@@ -698,7 +577,6 @@ macDescribe('packaged mac runtime smoke', () => {
         },
         logs: 'skipped' in logs ? logs : summarizeLogs(logs),
         namespace,
-        payloadRuntime,
         screenshot: report.screenshotRelpath,
         start: {
           appPath: start.appPath,
@@ -715,8 +593,11 @@ macDescribe('packaged mac runtime smoke', () => {
           status: updateStatus,
           install: updateInstall,
         },
+<<<<<<< HEAD
+=======
         updaterRecovery,
         upgradePersistence,
+>>>>>>> upstream/main
       });
       passed = true;
     } finally {
@@ -741,6 +622,8 @@ macDescribe('packaged mac runtime smoke', () => {
         installedAppPath = null;
       }
     }
+<<<<<<< HEAD
+=======
   }, 360_000);
 
   // Silent startup update acceptance: with the daemon-owned allowSilentUpdates
@@ -1109,6 +992,7 @@ macOnboardingDescribe('packaged mac onboarding AMR smoke', () => {
         console.error('failed to reset packaged mac onboarding runtime data during cleanup', error);
       });
     }
+>>>>>>> upstream/main
   }, 180_000);
 });
 
@@ -1159,7 +1043,7 @@ desktopMacDescribe('mac desktop settings smoke', () => {
       mode: 'api',
       apiKey: 'sk-test',
       baseUrl: 'https://api.deepseek.com',
-      model: 'deepseek-v4-flash',
+      model: 'deepseek-chat',
       agentId: null,
       skillId: null,
       designSystemId: null,
@@ -1186,7 +1070,7 @@ desktopMacDescribe('mac desktop settings smoke', () => {
       expect(snapshot.selectedProtocol).toBe('Anthropic API');
       expect(snapshot.quickFillProvider).toBe('DeepSeek — Anthropic');
       expect(snapshot.baseUrl).toBe('https://api.deepseek.com/anthropic');
-      expect(snapshot.model).toBe('deepseek-v4-flash');
+      expect(snapshot.model).toBe('deepseek-chat');
     });
   }, 45_000);
 
@@ -1272,7 +1156,7 @@ desktopMacDescribe('mac desktop settings smoke', () => {
       mode: 'daemon',
       apiKey: 'sk-test',
       baseUrl: 'https://api.deepseek.com',
-      model: 'deepseek-v4-flash',
+      model: 'deepseek-chat',
       apiProtocol: 'openai',
       apiProviderBaseUrl: 'https://api.deepseek.com',
       agentId: 'codex',
@@ -1298,7 +1182,7 @@ desktopMacDescribe('mac desktop settings smoke', () => {
       expect(snapshot.selectedProtocol).toBe('OpenAI API');
       expect(snapshot.quickFillProvider).toBe('DeepSeek — OpenAI');
       expect(snapshot.baseUrl).toBe('https://api.deepseek.com');
-      expect(snapshot.model).toBe('deepseek-v4-flash');
+      expect(snapshot.model).toBe('deepseek-chat');
     });
 
     await clickDesktopExecutionModeTab(desktop, 'Local CLI');
@@ -1318,7 +1202,7 @@ desktopMacDescribe('mac desktop settings smoke', () => {
       expect(snapshot.selectedProtocol).toBe('OpenAI API');
       expect(snapshot.quickFillProvider).toBe('DeepSeek — OpenAI');
       expect(snapshot.baseUrl).toBe('https://api.deepseek.com');
-      expect(snapshot.model).toBe('deepseek-v4-flash');
+      expect(snapshot.model).toBe('deepseek-chat');
     });
   }, 45_000);
 
@@ -1982,18 +1866,6 @@ function resolveFallbackUpdateBuildJsonPath(): string | null {
   return join(dirname(resolveFromWorkspace(mainBuildJsonPath)), 'mac-tools-pack-update-build.json');
 }
 
-function assertToolsServeFixtureEnabled(platformName: string, value: string | null): void {
-  if (value === 'tools-serve') return;
-  throw new Error(
-    `full packaged ${platformName} payload smoke requires explicit tools-serve fixture; set OD_PACKAGED_E2E_MAC_UPDATE_FIXTURE=tools-serve or provide OD_PACKAGED_E2E_MAC_UPDATE_METADATA_URL`,
-  );
-}
-
-function assertUpdateVersionPresent(platformName: string, value: string | null): asserts value is string {
-  if (value != null && value.length > 0) return;
-  throw new Error(`full packaged ${platformName} payload smoke requires an explicit update target version with external update metadata`);
-}
-
 async function readLatestMacYmlVersion(latestMacYmlPath: string): Promise<string | null> {
   const latestMacYml = await readFile(resolveFromWorkspace(latestMacYmlPath), 'utf8').catch(() => null);
   if (latestMacYml == null) return null;
@@ -2476,8 +2348,12 @@ async function waitForHealthyDesktopVersion(
           value?.status === 200 &&
           value.health.ok === true &&
           value.health.version === expectedVersion &&
+<<<<<<< HEAD
+          (previousPid == null || inspect.status.pid !== previousPid)
+=======
           (previousPid == null || inspect.status.pid !== previousPid) &&
           (!requireSettledLauncher || settledLauncherGeneration(inspect.launcher, expectedVersion) != null)
+>>>>>>> upstream/main
         ) {
           return inspect;
         }
@@ -2489,47 +2365,6 @@ async function waitForHealthyDesktopVersion(
   }
 
   throw new Error(`packaged mac runtime did not relaunch healthy on ${expectedVersion}: ${formatUnknown(lastResult)}`);
-}
-
-async function waitForPackagedOnboarding(
-  predicate: (value: PackagedOnboardingEvalValue) => boolean,
-  label: string,
-  timeoutMs = 90_000,
-): Promise<PackagedOnboardingEvalValue> {
-  const startedAt = Date.now();
-  let lastResult: unknown = null;
-
-  while (Date.now() - startedAt < timeoutMs) {
-    try {
-      const inspect = await runToolsPackJson<MacInspectResult>('inspect', ['--expr', packagedOnboardingExpression]);
-      lastResult = inspect;
-      if (inspect.status?.state === 'running' && inspect.eval?.ok === true) {
-        const value = asPackagedOnboardingEvalValue(inspect.eval.value);
-        if (value != null && predicate(value)) return value;
-      }
-    } catch (error) {
-      lastResult = error;
-    }
-    await delay(1000);
-  }
-
-  throw new Error(`${label}: packaged onboarding timed out: ${formatUnknown(lastResult)}`);
-}
-
-async function clickPackagedOnboardingRuntime(runtime: OnboardingRuntime): Promise<void> {
-  const inspect = await runToolsPackJson<MacInspectResult>('inspect', ['--expr', clickPackagedOnboardingRuntimeExpression(runtime)]);
-  const value = inspect.eval?.value;
-  if (!isRecord(value) || value.clicked !== true) {
-    throw new Error(`failed to click packaged onboarding ${runtime} runtime: ${formatUnknown(value)}`);
-  }
-}
-
-async function clickPackagedOnboardingBack(): Promise<void> {
-  const inspect = await runToolsPackJson<MacInspectResult>('inspect', ['--expr', clickPackagedOnboardingBackExpression()]);
-  const value = inspect.eval?.value;
-  if (!isRecord(value) || value.clicked !== true) {
-    throw new Error(`failed to click packaged onboarding back: ${formatUnknown(value)}`);
-  }
 }
 
 async function waitForUpdaterStatus(
@@ -2710,74 +2545,6 @@ async function waitForUpdaterPopupMatching(
   throw new Error(`${label}: updater popup timed out: ${formatUnknown(lastResult)}`);
 }
 
-async function readDesktopIdentityMarker(): Promise<DesktopIdentityMarker> {
-  const markerPath = join(runtimeNamespaceRoot, 'runtime', 'desktop-root.json');
-  const value = JSON.parse(await readFile(markerPath, 'utf8')) as unknown;
-  if (
-    !isRecord(value) ||
-    typeof value.appPath !== 'string' ||
-    typeof value.executablePath !== 'string' ||
-    typeof value.pid !== 'number' ||
-    value.version !== 1
-  ) {
-    throw new Error(`invalid packaged desktop identity at ${markerPath}: ${formatUnknown(value)}`);
-  }
-  return value as DesktopIdentityMarker;
-}
-
-function assertPayloadDesktopIdentity(
-  identity: DesktopIdentityMarker,
-  launcher: LauncherSnapshot,
-  version: string,
-): void {
-  const payloadRoot = join(launcher.versionsRoot, version, 'payload');
-  expect(identity.pid).toBeGreaterThan(0);
-  expectPathInside(identity.appPath, payloadRoot);
-  expectPathInside(identity.executablePath, payloadRoot);
-}
-
-function assertPptxExportEvalValue(value: unknown): PptxExportEvalValue {
-  if (
-    !isRecord(value) ||
-    typeof value.byteLength !== 'number' ||
-    (value.contentType != null && typeof value.contentType !== 'string') ||
-    typeof value.magic !== 'string' ||
-    typeof value.projectId !== 'string' ||
-    typeof value.status !== 'number'
-  ) {
-    throw new Error(`unexpected PPTX export eval value: ${formatUnknown(value)}`);
-  }
-  expect(value.status).toBe(200);
-  expect(value.contentType).toContain(
-    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-  );
-  expect(value.byteLength).toBeGreaterThan(0);
-  expect(value.magic).toBe('PK');
-  return value as PptxExportEvalValue;
-}
-
-function assertUpgradePersistenceSeed(value: unknown): UpgradePersistenceSeed {
-  if (
-    !isRecord(value) ||
-    typeof value.createdOk !== 'boolean' ||
-    typeof value.createdStatus !== 'number' ||
-    typeof value.projectId !== 'string' ||
-    typeof value.writtenOk !== 'boolean' ||
-    (value.writtenStatus != null && typeof value.writtenStatus !== 'number')
-  ) {
-    throw new Error(`unexpected upgrade persistence seed value: ${formatUnknown(value)}`);
-  }
-  expect(value.createdOk).toBe(true);
-  expect(value.writtenOk).toBe(true);
-  return value as UpgradePersistenceSeed;
-}
-
-function assertSettledDesktopHandoff(value: unknown | null): void {
-  if (value == null) return;
-  if (!isRecord(value)) throw new Error(`invalid launcher desktop handoff: ${formatUnknown(value)}`);
-  expect(value.state).toBe('confirmed');
-}
-
 function assertLauncherPointer(
   pointer: LauncherPointer | null,
   expectedVersion: string,
@@ -2788,25 +2555,6 @@ function assertLauncherPointer(
     generation: expectedGeneration,
     version: expectedVersion,
   });
-}
-
-function settledLauncherGeneration(launcher: LauncherSnapshot, expectedVersion: string): number | null {
-  const active = launcher.active;
-  const lastSuccessful = launcher.lastSuccessful;
-  if (
-    active == null ||
-    lastSuccessful == null ||
-    active.version !== expectedVersion ||
-    lastSuccessful.version !== expectedVersion ||
-    active.generation !== lastSuccessful.generation ||
-    launcher.attempt != null
-  ) {
-    return null;
-  }
-  if (launcher.handoff != null && (!isRecord(launcher.handoff) || launcher.handoff.state !== 'confirmed')) {
-    return null;
-  }
-  return active.generation;
 }
 
 function assertLogPathsAndContent(result: LogsResult): void {
@@ -2862,59 +2610,11 @@ function assertUpdaterClickEvalValue(value: unknown): UpdaterClickEvalValue {
   return normalized;
 }
 
-function clickPackagedOnboardingRuntimeExpression(runtime: OnboardingRuntime): string {
-  // Secondary runtime links on the cloud landing, in DOM order: [0] Local,
-  // [1] BYOK. Clicking one expands its setup panel.
-  const index = runtime === 'local' ? 0 : 1;
-  return `
-    (async () => {
-      const links = Array.from(document.querySelectorAll('.onboarding-cloud__secondary'));
-      const target = links[${index}] ?? null;
-      if (!(target instanceof HTMLElement)) {
-        return { clicked: false, reason: 'missing-runtime-link', runtime: ${JSON.stringify(runtime)} };
-      }
-      target.click();
-      await new Promise((resolve) => setTimeout(resolve, 250));
-      return { clicked: true, runtime: ${JSON.stringify(runtime)} };
-    })()
-  `;
-}
-
-function clickPackagedOnboardingBackExpression(): string {
-  // Collapse an expanded runtime setup panel back to the cloud sign-in landing.
-  return `
-    (async () => {
-      const target = document.querySelector('.onboarding-view__back-to-cloud');
-      if (!(target instanceof HTMLElement)) {
-        return { clicked: false, reason: 'missing-back' };
-      }
-      target.click();
-      await new Promise((resolve) => setTimeout(resolve, 250));
-      return { clicked: true };
-    })()
-  `;
-}
-
 function asHealthEvalValue(value: unknown): HealthEvalValue | null {
   if (!isRecord(value)) return null;
   if (typeof value.href !== 'string' || typeof value.status !== 'number' || typeof value.title !== 'string') return null;
   if (!isRecord(value.health)) return null;
   return value as HealthEvalValue;
-}
-
-function asPackagedOnboardingEvalValue(value: unknown): PackagedOnboardingEvalValue | null {
-  if (!isRecord(value)) return null;
-  if (typeof value.backVisible !== 'boolean') return null;
-  if (typeof value.byokLinkVisible !== 'boolean') return null;
-  if (typeof value.cloudSignInVisible !== 'boolean') return null;
-  if (typeof value.href !== 'string') return null;
-  if (typeof value.inputCount !== 'number') return null;
-  if (typeof value.localLinkVisible !== 'boolean') return null;
-  if (typeof value.onboardingVisible !== 'boolean') return null;
-  if (typeof value.setupPanelVisible !== 'boolean') return null;
-  if (value.text != null && typeof value.text !== 'string') return null;
-  if (typeof value.title !== 'string') return null;
-  return value as PackagedOnboardingEvalValue;
 }
 
 function asUpdaterPopupEvalValue(value: unknown): UpdaterPopupEvalValue | null {
@@ -2960,10 +2660,6 @@ async function seedPackagedOnboardingComplete(): Promise<void> {
   const configPath = join(runtimeNamespaceRoot, 'data', 'app-config.json');
   await mkdir(dirname(configPath), { recursive: true });
   await writeFile(configPath, `${JSON.stringify({ onboardingCompleted: true }, null, 2)}\n`, 'utf8');
-}
-
-async function resetPackagedMacRuntimeData(): Promise<void> {
-  await rm(runtimeNamespaceRoot, { force: true, recursive: true });
 }
 
 function resolveFromWorkspace(filePath: string): string {

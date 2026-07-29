@@ -3,7 +3,6 @@
 import { act, cleanup, render, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProjectView } from '../../src/components/ProjectView';
-import type { QuestionForm } from '../../src/artifacts/question-form';
 
 const listConversations = vi.fn();
 const listMessages = vi.fn();
@@ -32,14 +31,8 @@ const saveTabs = vi.fn();
 // regression we want to pin).
 const chatPaneProps: {
   onDeleteConversation?: (id: string) => Promise<void> | void;
-  onSubmitQuestionForm?: (text: string) => void;
-  questionFormSubmitDisabled?: boolean;
   activeConversationId?: string | null;
   conversations?: Array<{ id: string; title?: string | null }>;
-} = {};
-
-const fileWorkspaceProps: {
-  questionForm?: QuestionForm | null;
 } = {};
 
 vi.mock('../../src/i18n', () => ({
@@ -59,7 +52,6 @@ vi.mock('../../src/providers/daemon', () => ({
   fetchChatRunStatus: (...args: unknown[]) => fetchChatRunStatus(...args),
   listActiveChatRuns: (...args: unknown[]) => listActiveChatRuns(...args),
   listProjectRuns: (...args: unknown[]) => listProjectRuns(...args),
-  publishDaemonRunFinishedEvent: vi.fn(),
   reattachDaemonRun: (...args: unknown[]) => reattachDaemonRun(...args),
   streamViaDaemon: vi.fn(),
 }));
@@ -104,14 +96,10 @@ vi.mock('../../src/components/AvatarMenu', () => ({
 vi.mock('../../src/components/ChatPane', () => ({
   ChatPane: (props: {
     onDeleteConversation?: (id: string) => Promise<void> | void;
-    onSubmitQuestionForm?: (text: string) => void;
-    questionFormSubmitDisabled?: boolean;
     activeConversationId?: string | null;
     conversations?: Array<{ id: string; title?: string | null }>;
   }) => {
     chatPaneProps.onDeleteConversation = props.onDeleteConversation;
-    chatPaneProps.onSubmitQuestionForm = props.onSubmitQuestionForm;
-    chatPaneProps.questionFormSubmitDisabled = props.questionFormSubmitDisabled;
     chatPaneProps.activeConversationId = props.activeConversationId;
     chatPaneProps.conversations = props.conversations;
     return null;
@@ -119,13 +107,7 @@ vi.mock('../../src/components/ChatPane', () => ({
 }));
 
 vi.mock('../../src/components/FileWorkspace', () => ({
-  DESIGN_SYSTEM_TAB: '__design_system__',
-  FileWorkspace: (props: {
-    questionForm?: QuestionForm | null;
-  }) => {
-    fileWorkspaceProps.questionForm = props.questionForm;
-    return null;
-  },
+  FileWorkspace: () => null,
 }));
 
 vi.mock('../../src/components/Loading', () => ({
@@ -166,11 +148,8 @@ describe('ProjectView conversation delete', () => {
     cleanup();
     vi.clearAllMocks();
     chatPaneProps.onDeleteConversation = undefined;
-    chatPaneProps.onSubmitQuestionForm = undefined;
-    chatPaneProps.questionFormSubmitDisabled = undefined;
     chatPaneProps.activeConversationId = undefined;
     chatPaneProps.conversations = undefined;
-    fileWorkspaceProps.questionForm = undefined;
   });
 
   // Issue #1202: the home `Needs input` badge is rendered from the
@@ -309,6 +288,8 @@ describe('ProjectView conversation delete', () => {
     await waitFor(() => expect(chatPaneProps.activeConversationId).toBe('conv-fresh'));
     expect(chatPaneProps.conversations?.map((conversation) => conversation.id)).toEqual(['conv-fresh']);
   });
+<<<<<<< HEAD
+=======
 
   it('keeps the latest unanswered question form in chat instead of the workspace panel', async () => {
     const form: QuestionForm = {
@@ -359,4 +340,5 @@ describe('ProjectView conversation delete', () => {
     await waitFor(() => expect(chatPaneProps.questionFormSubmitDisabled).toBe(false));
     expect(fileWorkspaceProps.questionForm).toBeUndefined();
   });
+>>>>>>> upstream/main
 });

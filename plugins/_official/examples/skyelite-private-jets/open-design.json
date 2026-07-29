@@ -1,0 +1,90 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-skyelite-private-jets",
+  "title": "SkyElite Private Jets",
+  "title_i18n": {
+    "zh-CN": "SkyElite 私人飞机 — 高端落地页 Hero",
+    "en": "SkyElite Private Jets"
+  },
+  "version": "0.1.0",
+  "description": "Premium private-jet landing hero: a fullscreen autoplay CloudFront video background, a max-w-7xl nav with a Lucide hamburger mobile dropdown, and a centered overlapping two-line headline (Premium. / Accessible.) with Discover + Book Now pill CTAs.",
+  "description_i18n": {
+    "zh-CN": "高端私人飞机落地页 Hero：全屏自动播放的 CloudFront 视频背景、max-w-7xl 导航栏配 Lucide 汉堡菜单移动端下拉，以及居中重叠的双行标题（Premium. / Accessible.）和 Discover + Book Now 胶囊按钮。",
+    "en": "Premium private-jet landing hero: a fullscreen autoplay CloudFront video background, a max-w-7xl nav with a Lucide hamburger mobile dropdown, and a centered overlapping two-line headline (Premium. / Accessible.) with Discover + Book Now pill CTAs."
+  },
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "Eli"
+  },
+  "homepage": "https://motionsites.ai/sections",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "design",
+    "web",
+    "desktop",
+    "landing-page",
+    "hero",
+    "video-background",
+    "luxury"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "design",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Create a premium private jet landing page hero section with the following specifications:\n\nVideo Background:\nUse this exact CloudFront video URL: https://plugin-assets.open-design.ai/plugins/skyelite-private-jets/hf_20260328_091828_e240eb17-6edc-4129-ad9d-98678e3fd238-86655b.mp4\nVideo should autoplay, be muted, loop continuously, and include playsInline attribute\nVideo covers entire viewport (100vh) using object-cover\n\nNavigation Bar:\nBrand name \"SkyElite\" on the left (text-2xl, font-semibold, text-gray-900)\nDesktop menu items (hidden on mobile, visible md:flex): Start, Story, Rates, Benefits, FAQ\nNavigation links in gray-900 with hover:text-gray-700 transition\nMobile hamburger menu button using Lucide React icons (Menu/X)\nMobile menu appears as dropdown with white/95 opacity background, backdrop blur, rounded corners, shadow\nMax width 7xl, centered with px-8 py-6\n\nHero Content (centered, -mt-80 to pull up):\nSmall uppercase label: \"PRIVATE JETS\" (text-sm, font-semibold, gray-600, tracking-wider, mb-4)\nLarge two-line heading with overlapping effect:\nLine 1: \"Premium.\" (text-6xl md:text-7xl lg:text-8xl, font-normal, text-gray-500, leading-none, tracking-tighter)\nLine 2: \"Accessible.\" (same size, color: #202A36, negative margin-top: -12px for overlap)\nSubtitle: \"Your dedication deserves recognition.\" (text-lg md:text-xl, gray-600, mb-6, max-w-2xl)\nTwo call-to-action buttons (gap-4, centered):\n\"Discover\" button: px-4 py-2, rounded-full, bg-gray-300, text-gray-800, font-medium, hover:bg-gray-400\n\"Book Now\" button: px-4 py-2, rounded-full, white text, bg-color #202A36, hover color #1a2229 with smooth transitions\n\nTypography:\nUse Inter font (import from Google Fonts: 400, 500, 600, 700 weights)\nApply to entire body via CSS\n\nTechnical Setup:\nReact with TypeScript\nTailwind CSS for styling\nLucide React for icons\nuseState hook for mobile menu toggle\nFull screen height container (h-screen)\nResponsive breakpoints: mobile-first, md, lg\nAll transitions use transition-colors class\n\nLayout Structure:\nOuter container: min-h-screen, bg-gray-50\nHero section: relative, h-screen, overflow-hidden\nContent wrapper: relative, h-full, flex flex-col\nMain content area: flex-1, flex items-center justify-center\n\nMake it clean, modern, and premium-looking with smooth interactions.\n\nA complete single-file reference implementation ships beside this plugin at example.html — match its tokens, video URL, nav, overlapping headline, and responsive behavior. Keep the CloudFront video URL exactly as given (it is a large stable CDN asset and stays remote). Do not introduce any remote avatar hosts.",
+        "zh-CN": "高端私人飞机落地页 Hero（全屏 CloudFront 视频背景、Lucide 汉堡菜单、重叠双行标题、Discover/Book Now 胶囊按钮）。完整规格以 en 字段为准，并以随附的 example.html 为保真锚点。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "SkyElite Private Jets"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write",
+      "network"
+    ]
+  }
+}

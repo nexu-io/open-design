@@ -40,18 +40,15 @@ For `streamFormat: 'acp-json-rpc'`, Open Design currently drives a session with 
 1. `initialize`
    - Sent first.
    - Includes Open Design client metadata and `clientCapabilities`.
-2. `session/new` or `session/load`
-   - Creates a working session, or resumes the durable upstream session from a
-     prior turn when Open Design has a saved session handle.
+2. `session/new`
+   - Creates a working session.
    - Includes the project working directory.
-   - `session/new` may include MCP server descriptors when the runtime is
-     allowed to use Open Design-provided tools.
+   - May include MCP server descriptors when the runtime is allowed to use Open Design-provided tools.
 3. `session/set_config_option` or `session/set_model` *(optional)*
    - Sent when the user selected a non-default model.
    - Open Design prefers `session/set_config_option` when `session/new` reports a model config option; otherwise it falls back to `session/set_model`.
 4. `session/prompt`
-   - Sends the composed user/system prompt as a text block, followed by
-     `resource_link` blocks for staged image attachments when present.
+   - Sends the composed user/system prompt as text content.
    - A successful response marks the prompt as complete.
 5. `session/cancel`
    - Sent on user cancellation when a session exists and stdin is still writable.
@@ -61,19 +58,14 @@ For `streamFormat: 'acp-json-rpc'`, Open Design currently drives a session with 
 The runtime should support the corresponding JSON-RPC responses and notifications:
 
 1. Response to `initialize`.
-2. Response to `session/new` or `session/load`.
+2. Response to `session/new`.
    - Must include a usable `sessionId`.
-   - A new session may also return the durable upstream session handle that
-     Open Design records for the next turn.
    - Should report the current model if available.
    - Should report model config options if model selection is supported through config options.
 3. Notifications using `session/update`.
    - Open Design currently maps:
      - `agent_thought_chunk` to thinking output.
      - `agent_message_chunk` to assistant text output.
-     - `tool_call` and `tool_call_update` to tool-use/result events, including
-       artifact-write accounting when the update carries a real file path.
-     - Other update kinds to bounded status/diagnostic events.
 4. Optional `session/request_permission` requests.
    - Open Design auto-selects an approve/allow-style option when available.
    - If no acceptable option is present, the turn fails fast.
@@ -106,8 +98,7 @@ export const myAgentDef = {
 } satisfies RuntimeAgentDef;
 ```
 
-Current examples include AMR, Devin, Hermes, Kimi, Kiro, Kilo, Reasonix, Trae CLI,
-and Vibe runtime definitions under `apps/daemon/src/runtimes/defs/`.
+Existing examples include Devin, Hermes, Kimi, Kiro, Kilo, and Vibe runtime definitions under `apps/daemon/src/runtimes/defs/`.
 
 ## Fact sources
 
@@ -120,6 +111,6 @@ and Vibe runtime definitions under `apps/daemon/src/runtimes/defs/`.
   - Describes Streamable HTTP / WebSocket as the proposed remote transport direction.
   - Notes that ACP's standard transport has historically been stdio and that a standard remote transport is still being defined.
 - Open Design implementation:
-  - `apps/daemon/src/agent-protocol/acp/session.ts` implements the ACP JSON-RPC session lifecycle and is exposed through `apps/daemon/src/agent-protocol/index.ts`.
+  - `apps/daemon/src/acp.ts` implements the ACP JSON-RPC session lifecycle.
   - `apps/daemon/src/server.ts` spawns ACP runtimes as child processes with piped stdio.
   - `apps/daemon/src/runtimes/defs/*.ts` contains existing ACP runtime definitions using `streamFormat: 'acp-json-rpc'`.

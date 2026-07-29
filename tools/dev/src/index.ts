@@ -65,15 +65,12 @@ import {
   waitForDesktopRuntime,
   waitForWebRuntime,
 } from "./sidecar-client.js";
-import { rewriteCliArgsForDefaultStart } from "./cli-args.js";
 import { ensureDaemonGateForDesktop } from "./desktop-auth-gate.js";
 import { loadWorkspaceLocalEnv } from "./local-env.js";
 import { resolveSharedPortsFromRunningState } from "./shared-ports.js";
 
 type CliOptions = ToolDevOptions & {
-  envFile?: string | string[];
   expr?: string;
-  noEnvFile?: boolean;
   parentPid?: number;
   path?: string;
   selector?: string;
@@ -94,6 +91,8 @@ function exitWithError(error: unknown): never {
 
 process.on("uncaughtException", exitWithError);
 process.on("unhandledRejection", exitWithError);
+
+loadWorkspaceLocalEnv({ workspaceRoot: WORKSPACE_ROOT });
 
 function printJson(payload: unknown): void {
   process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
@@ -323,7 +322,6 @@ async function runLoggedCommand(request: {
   const child = spawn(request.command, request.args, {
     cwd: request.cwd,
     env: request.env,
-    shell: false,
     stdio: ["ignore", request.logFd, request.logFd],
     windowsHide: process.platform === "win32",
     windowsVerbatimArguments: request.windowsVerbatimArguments,
@@ -524,8 +522,6 @@ async function latestMtimeMs(filePath: string): Promise<number> {
 }
 
 async function ensureDaemonCliBuild(config: ToolDevConfig, logHandle: FileHandle): Promise<void> {
-  await ensureContractsBuild(config, logHandle);
-
   const daemonRoot = path.join(config.workspaceRoot, "apps/daemon");
   const distCliPath = path.join(daemonRoot, "dist/cli.js");
   const distMtime = await latestMtimeMs(distCliPath);
@@ -539,33 +535,6 @@ async function ensureDaemonCliBuild(config: ToolDevConfig, logHandle: FileHandle
   const reason = distMtime > 0 ? "source is newer than apps/daemon/dist/cli.js" : "apps/daemon/dist/cli.js is missing";
   await logHandle.write(`\n[tools-dev] building @open-design/daemon because ${reason} at ${new Date().toISOString()}\n`);
   const invocation = createPackageManagerInvocation(["--filter", "@open-design/daemon", "build"], process.env);
-  await runLoggedCommand({
-    args: invocation.args,
-    command: invocation.command,
-    cwd: config.workspaceRoot,
-    env: process.env,
-    logFd: logHandle.fd,
-    windowsVerbatimArguments: invocation.windowsVerbatimArguments,
-  });
-}
-
-async function ensureContractsBuild(config: ToolDevConfig, logHandle: FileHandle): Promise<void> {
-  const contractsRoot = path.join(config.workspaceRoot, "packages/contracts");
-  const distDeclarationPath = path.join(contractsRoot, "dist/index.d.ts");
-  const distMtime = await latestMtimeMs(distDeclarationPath);
-  const sourceMtime = Math.max(
-    await latestMtimeMs(path.join(contractsRoot, "src")),
-    await latestMtimeMs(path.join(contractsRoot, "package.json")),
-    await latestMtimeMs(path.join(contractsRoot, "tsconfig.json")),
-    await latestMtimeMs(path.join(contractsRoot, "esbuild.config.mjs")),
-  );
-  if (distMtime > 0 && distMtime >= sourceMtime) return;
-
-  const reason = distMtime > 0
-    ? "source is newer than packages/contracts/dist/index.d.ts"
-    : "packages/contracts/dist/index.d.ts is missing";
-  await logHandle.write(`\n[tools-dev] building @open-design/contracts because ${reason} at ${new Date().toISOString()}\n`);
-  const invocation = createPackageManagerInvocation(["--filter", "@open-design/contracts", "build"], process.env);
   await runLoggedCommand({
     args: invocation.args,
     command: invocation.command,
@@ -1122,8 +1091,6 @@ function addSharedOptions(command: ReturnType<typeof cli.command>) {
   return command
     .option("--namespace <name>", "runtime namespace (default: default)")
     .option("--tools-dev-root <path>", "tools-dev runtime root")
-    .option("--env-file <path>", "load env file before resolving tools-dev config; repeatable")
-    .option("--no-env-file", "skip automatic .env file loading", { default: false })
     .option("--json", "print JSON");
 }
 
@@ -1218,11 +1185,10 @@ cli.help();
 
 const rawCliArgs = process.argv.slice(2);
 const cliArgs = rawCliArgs[0] === "--" ? rawCliArgs.slice(1) : rawCliArgs;
-loadWorkspaceLocalEnv({
-  args: cliArgs,
-  log: (message) => process.stderr.write(`${message}\n`),
-  workspaceRoot: WORKSPACE_ROOT,
-});
-process.argv.splice(2, process.argv.length - 2, ...rewriteCliArgsForDefaultStart(cliArgs));
+process.argv.splice(2, process.argv.length - 2, ...cliArgs);
+
+if (cliArgs.length === 0 || (cliArgs[0]?.startsWith("-") && cliArgs[0] !== "--help" && cliArgs[0] !== "-h")) {
+  process.argv.splice(2, 0, "start");
+}
 
 cli.parse();

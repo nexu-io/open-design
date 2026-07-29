@@ -1,5 +1,7 @@
 import { emptyManualEditStyles, MANUAL_EDIT_STYLE_PROPS, type ManualEditFields, type ManualEditPatch, type ManualEditStyles } from './types';
 
+<<<<<<< HEAD
+=======
 const MANUAL_EDIT_RUNTIME_OVERRIDES_ID = 'od-manual-edit-runtime-overrides';
 const MANUAL_EDIT_RUNTIME_APPLY_ID = 'od-manual-edit-runtime-apply';
 const RUNTIME_OVERRIDE_APPLIER_SOURCE = `
@@ -107,6 +109,7 @@ interface RuntimeContentOverrides {
 
 type ManualEditElementPatch = Extract<ManualEditPatch, { id: string }>;
 
+>>>>>>> upstream/main
 export interface ManualEditPatchResult {
   ok: boolean;
   source: string;
@@ -127,6 +130,9 @@ export function applyManualEditPatch(source: string, patch: ManualEditPatch): Ma
   }
 
   const el = findEditableElement(doc, patch.id);
+<<<<<<< HEAD
+  if (!el) return { ok: false, source, error: `Target not found: ${patch.id}` };
+=======
   if (!el) {
     if (patch.kind === 'insert-html' || patch.kind === 'duplicate-element') {
       return {
@@ -140,6 +146,7 @@ export function applyManualEditPatch(source: string, patch: ManualEditPatch): Ma
       ? { ok: true, source: serializeSource(doc, source) }
       : { ok: false, source, error: `Target not found: ${patch.id}` };
   }
+>>>>>>> upstream/main
 
   if (patch.kind === 'set-text') {
     if (hasElementChildren(el)) {
@@ -198,8 +205,8 @@ export function applyManualEditPatch(source: string, patch: ManualEditPatch): Ma
     if (!el.parentElement) {
       return { ok: false, source, error: 'Cannot remove the root element.' };
     }
-    if (el.parentElement === doc.body && isLastRenderableBodyChild(doc, el)) {
-      return { ok: false, source, error: 'Cannot remove the last rendered element in the document.' };
+    if (el.parentElement === doc.body && doc.body.children.length === 1) {
+      return { ok: false, source, error: 'Cannot remove the last element in the document.' };
     }
     el.remove();
   }
@@ -491,6 +498,8 @@ function findEditableElement(doc: Document, id: string): Element | null {
   );
 }
 
+<<<<<<< HEAD
+=======
 function applyDynamicBrandKitPatch(doc: Document, patch: ManualEditPatch): { ok: boolean } {
   if (!doc.getElementById('od-brand-payload')) return { ok: false };
   if (patch.kind === 'set-style') {
@@ -812,6 +821,7 @@ function removeRuntimeStyleRule(css: string, selector: string): string {
   return css.replace(new RegExp(`\\n?${escaped}\\s*\\{[^}]*\\}\\s*`, 'g'), '\n').trim();
 }
 
+>>>>>>> upstream/main
 function findElementByPath(doc: Document, id: string): Element | null {
   if (!id.startsWith('path-')) return null;
   const indexes = id
@@ -931,19 +941,6 @@ function replaceOuterHtml(doc: Document, el: Element, html: string): { ok: true 
   return { ok: true };
 }
 
-function isLastRenderableBodyChild(doc: Document, el: Element): boolean {
-  const renderableBodyChildren = Array.from(doc.body.children).filter((child) => {
-    if (child === el) return true;
-    return !isNonRenderableBodyChild(child);
-  });
-  return renderableBodyChildren.length === 1 && renderableBodyChildren[0] === el;
-}
-
-function isNonRenderableBodyChild(el: Element): boolean {
-  const tag = el.tagName.toLowerCase();
-  return tag === 'script' || tag === 'style' || tag === 'template' || tag === 'noscript';
-}
-
 function setCssToken(doc: Document, token: string, value: string): boolean {
   const styles = Array.from(doc.querySelectorAll('style'));
   const pattern = new RegExp(`(${escapeRegExp(token)}\\s*:\\s*)([^;]+)(;)`);
@@ -959,10 +956,6 @@ function setCssToken(doc: Document, token: string, value: string): boolean {
 function cssEscape(value: string): string {
   if (typeof CSS !== 'undefined' && CSS.escape) return CSS.escape(value);
   return value.replace(/"/g, '\\"');
-}
-
-function cssStringEscape(value: string): string {
-  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
 function escapeRegExp(value: string): string {

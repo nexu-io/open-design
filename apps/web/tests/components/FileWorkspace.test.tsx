@@ -1,8 +1,6 @@
 // @vitest-environment jsdom
 
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -13,7 +11,6 @@ import {
   FileWorkspace,
   scrollWorkspaceTabsWithWheel,
 } from '../../src/components/FileWorkspace';
-import { I18nProvider } from '../../src/i18n';
 import { DesignFilesPanel } from '../../src/components/DesignFilesPanel';
 import { projectSplitClassName, projectSplitStyle } from '../../src/components/ProjectView';
 import {
@@ -32,7 +29,6 @@ vi.mock('../../src/providers/registry', async () => {
     ...actual,
     fetchProjectFileText: vi.fn(),
     uploadProjectFiles: vi.fn(),
-    writeProjectBase64File: vi.fn(),
     writeProjectTextFile: vi.fn(),
     fetchProjectFolders: vi.fn().mockResolvedValue([]),
   };
@@ -43,63 +39,18 @@ vi.mock('../../src/components/DesignBrowserPanel', () => ({
     initialIconUrl,
     initialTitle,
     initialUrl,
-    navigateRequest,
-    onPageSnapshotToast,
   }: {
     initialIconUrl?: string;
     initialTitle?: string;
     initialUrl?: string;
-    navigateRequest?: { url: string; nonce: number };
-    onPageSnapshotToast?: (event: {
-      actionFileName?: string;
-      actionLabel?: string;
-      actionTarget?: 'design-files' | 'file';
-      elapsedSeconds?: number;
-      message: string;
-      status: 'loading' | 'success' | 'error' | 'canceled';
-      tabId: string;
-      ttlMs?: number;
-    }) => void;
   }) => (
     <div
       data-testid="design-browser-panel"
       data-initial-icon-url={initialIconUrl ?? ''}
       data-initial-title={initialTitle ?? ''}
       data-initial-url={initialUrl ?? ''}
-      data-navigate-url={navigateRequest?.url ?? ''}
-      data-navigate-nonce={navigateRequest?.nonce ?? ''}
-    >
-      <button
-        type="button"
-        data-testid="emit-browser-snapshot-success"
-        onClick={() => onPageSnapshotToast?.({
-          actionFileName: 'browser-archive/example/manifest.json',
-          actionLabel: 'View Design Files',
-          actionTarget: 'design-files',
-          elapsedSeconds: 0,
-          message: 'Saved page snapshot (HTML + CSS).',
-          status: 'success',
-          tabId: '__browser__:1',
-          ttlMs: 8000,
-        })}
-      >
-        emit snapshot success
-      </button>
-    </div>
+    />
   ),
-  labelFromUrl: (url: string) => {
-    try {
-      return new URL(url).hostname.replace(/^www\./, '') || url;
-    } catch {
-      return url;
-    }
-  },
-  normalizeBrowserAddress: (rawAddress: string) => {
-    const value = rawAddress.trim();
-    if (/^https?:\/\//i.test(value)) return value;
-    if (/^[\w.-]+\.[a-z]{2,}/i.test(value)) return `https://${value}`;
-    return value || 'about:blank';
-  },
 }));
 
 vi.mock('../../src/components/workspace/TerminalViewer', () => ({
@@ -107,63 +58,6 @@ vi.mock('../../src/components/workspace/TerminalViewer', () => ({
     <div data-testid="terminal-viewer">{terminalId}</div>
   ),
 }));
-
-const { excalidrawWorkspaceMock } = vi.hoisted(() => ({
-  excalidrawWorkspaceMock: {
-    lastProps: null as Record<string, any> | null,
-  },
-}));
-
-vi.mock('@excalidraw/excalidraw', async () => {
-  const React = await import('react');
-  const MainMenu = Object.assign(
-    (props: Record<string, any>) => React.createElement('div', null, props.children),
-    {
-      Item: ({ children, disabled, icon, onClick, ...rest }: Record<string, any>) => React.createElement(
-        'button',
-        {
-          ...rest,
-          type: 'button',
-          disabled,
-          onClick,
-        },
-        icon,
-        children,
-      ),
-      DefaultItems: {
-        SearchMenu: () => null,
-        Help: () => null,
-        ClearCanvas: () => null,
-        ChangeCanvasBackground: () => null,
-      },
-      Separator: () => null,
-    },
-  );
-  return {
-    Excalidraw: (props: Record<string, any>) => {
-      excalidrawWorkspaceMock.lastProps = props;
-      React.useEffect(() => {
-        props.excalidrawAPI?.({
-          getSceneElementsIncludingDeleted: () => [{ id: 'workspace-element', type: 'freedraw', isDeleted: false }],
-          getAppState: () => ({ viewBackgroundColor: '#ffffff' }),
-          getFiles: () => ({}),
-          updateScene: vi.fn(),
-          setOpenDialog: vi.fn(),
-        });
-      }, [props]);
-      return React.createElement(
-        'div',
-        { 'data-testid': 'excalidraw' },
-        React.createElement('canvas'),
-        props.renderTopRightUI?.(false, {}),
-        props.children,
-      );
-    },
-    MainMenu,
-    convertToExcalidrawElements: vi.fn((elements: unknown[]) => elements),
-    exportToBlob: vi.fn(async () => new Blob(['mock image'], { type: 'image/png' })),
-  };
-});
 
 // Records the `folders` prop DesignFilesPanel receives on EVERY render (still
 // renders the real component). Lets a test observe the first render after a
@@ -192,12 +86,9 @@ vi.mock('../../src/components/DesignFilesPanel', async () => {
 const mockedFetchProjectFileText = vi.mocked(fetchProjectFileText);
 const mockedUploadProjectFiles = vi.mocked(uploadProjectFiles);
 const mockedWriteProjectTextFile = vi.mocked(writeProjectTextFile);
-const chatCss = readFileSync(join(process.cwd(), 'src/styles/chat.css'), 'utf8');
-const routinesCss = readFileSync(join(process.cwd(), 'src/styles/viewer/routines.css'), 'utf8');
 
 let root: Root | null = null;
 let host: HTMLDivElement | null = null;
-let composerCssStyle: HTMLStyleElement | null = null;
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -216,15 +107,10 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
-  excalidrawWorkspaceMock.lastProps = null;
   if (root) {
     act(() => root?.unmount());
     root = null;
   }
-  document.body.classList.remove('od-quick-switcher-open');
-  document.querySelectorAll('.chat-composer-fixed-layer').forEach((node) => node.remove());
-  composerCssStyle?.remove();
-  composerCssStyle = null;
   host?.remove();
   host = null;
   vi.clearAllMocks();
@@ -256,65 +142,6 @@ function workspaceFile(name: string): ProjectFile {
     kind: name.endsWith('.html') ? 'html' : 'text',
     mime: name.endsWith('.html') ? 'text/html' : 'text/plain',
   };
-}
-
-function cssDeclarations(css: string, selector: string): string {
-  const blocks: string[] = [];
-  const rulePattern = /([^{}]+)\{([^}]*)\}/g;
-  const cssWithoutComments = css.replace(/\/\*[\s\S]*?\*\//g, '');
-  let match: RegExpExecArray | null;
-  while ((match = rulePattern.exec(cssWithoutComments)) !== null) {
-    const selectors = (match[1] ?? '').split(',').map((item) => item.trim());
-    if (selectors.includes(selector)) blocks.push(match[2] ?? '');
-  }
-  if (blocks.length === 0) throw new Error(`Missing CSS block for ${selector}`);
-  return blocks.join('\n');
-}
-
-function installComposerIsolationCss() {
-  const rules = [
-    ['.chat-composer-fixed-layer', chatCss],
-    ['.chat-composer-fixed-layer .composer', chatCss],
-    ['.composer-input-wrap', chatCss],
-    ['.composer-input-wrap:focus-within', chatCss],
-    ['.composer-input-editor .composer-editable', chatCss],
-    ['.composer-input-placeholder', chatCss],
-    ['.chat-composer-fixed-layer .composer-shell', routinesCss],
-    ['.chat-composer-fixed-layer .composer.drag-active .composer-shell', routinesCss],
-    ['.chat-composer-fixed-layer .composer-input-wrap', routinesCss],
-    ['body.od-quick-switcher-open .chat-composer-fixed-layer', routinesCss],
-    ['body.od-quick-switcher-open .chat-composer-fixed-layer .composer', routinesCss],
-    ['body.od-quick-switcher-open .chat-composer-fixed-layer .composer-shell', routinesCss],
-    ['body.od-quick-switcher-open .chat-composer-fixed-layer .composer.drag-active .composer-shell', routinesCss],
-    ['body.od-quick-switcher-open .chat-composer-fixed-layer .composer-input-wrap', routinesCss],
-    ['body.od-quick-switcher-open .chat-composer-fixed-layer .composer-input-wrap:focus-within', routinesCss],
-    ['body.od-quick-switcher-open .chat-composer-fixed-layer .composer-input-editor .composer-editable', routinesCss],
-    ['body.od-quick-switcher-open .chat-composer-fixed-layer .composer-input-placeholder', routinesCss],
-    ['body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context-row', routinesCss],
-    ['body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context-picker--design-system .project-ds-picker-trigger', routinesCss],
-    ['body.od-quick-switcher-open .chat-composer-fixed-layer .staged-chip', routinesCss],
-    ['body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context', routinesCss],
-    ['body.od-quick-switcher-open .chat-composer-fixed-layer .staged-order', routinesCss],
-    ['body.od-quick-switcher-open .chat-composer-fixed-layer .staged-comment button', routinesCss],
-    ['body.od-quick-switcher-open .chat-composer-fixed-layer .staged-name', routinesCss],
-    ['body.od-quick-switcher-open .chat-composer-fixed-layer .staged-comment .staged-name strong', routinesCss],
-    ['body.od-quick-switcher-open .chat-composer-fixed-layer .staged-comment .staged-name span', routinesCss],
-    ['body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context .staged-icon', routinesCss],
-    ['body.od-quick-switcher-open .chat-composer-fixed-layer .staged-chip .staged-icon', routinesCss],
-    ['body.od-quick-switcher-open .chat-composer-fixed-layer .staged-chip .staged-remove', routinesCss],
-    ['body.od-quick-switcher-open .chat-composer-fixed-layer .composer-active-file', routinesCss],
-    ['body.od-quick-switcher-open .chat-composer-fixed-layer .composer-row .icon-btn', routinesCss],
-    ['body.od-quick-switcher-open .chat-composer-fixed-layer .composer-row .session-mode-toggle__trigger', routinesCss],
-    ['body.od-quick-switcher-open .chat-composer-fixed-layer .composer-row .avatar-agent-trigger', routinesCss],
-    ['body.od-quick-switcher-open .chat-composer-fixed-layer .composer-row .avatar-btn', routinesCss],
-    ['body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send', routinesCss],
-    ['body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled', routinesCss],
-  ] as const;
-  composerCssStyle = document.createElement('style');
-  composerCssStyle.textContent = rules
-    .map(([selector, css]) => `${selector} {${cssDeclarations(css, selector)}}`)
-    .join('\n');
-  document.head.appendChild(composerCssStyle);
 }
 
 function renderWorkspace(element: React.ReactElement) {
@@ -407,195 +234,6 @@ function renderDesignFilesPanel(overrides: Partial<React.ComponentProps<typeof D
   return render(<DesignFilesPanel {...props} />);
 }
 
-describe('FileWorkspace quick switcher visual isolation', () => {
-  it('moves focus into quick search and marks the document while the overlay is open', async () => {
-    installComposerIsolationCss();
-
-    const composerLayer = document.createElement('div');
-    composerLayer.className = 'chat-composer-fixed-layer';
-    composerLayer.innerHTML = `
-      <div class="composer drag-active">
-        <div class="composer-shell">
-          <div class="staged-row staged-context-row">
-            <div class="staged-context-picker staged-context-picker--design-system">
-              <button class="project-ds-picker-trigger picked" type="button">Choose design system</button>
-            </div>
-            <div class="staged-chip staged-context staged-context--workspace">
-              <span class="staged-icon">F</span>
-              <span class="staged-name">
-                <span class="staged-context-kind">Current</span>manual-edit.html
-              </span>
-              <button class="staged-remove" type="button">x</button>
-            </div>
-            <div class="staged-chip staged-file">
-              <span class="staged-order">1</span>
-              <span class="staged-icon">F</span>
-              <span class="staged-name">hero.png</span>
-              <button class="staged-remove" type="button">x</button>
-            </div>
-            <div class="staged-chip staged-comment">
-              <span class="staged-name"><strong>Hero</strong><span>Needs tweak</span></span>
-              <button class="staged-remove" type="button">x</button>
-            </div>
-          </div>
-          <div class="composer-active-file">
-            <span class="composer-active-file__label">Current</span>
-            <span class="composer-active-file__name">manual-edit.html</span>
-          </div>
-          <div class="composer-input-wrap">
-            <div class="composer-input-editor">
-              <div class="composer-editable" contenteditable="true" tabindex="0">Mock focused composer control</div>
-              <div class="composer-input-placeholder">Describe what you want to generate...</div>
-            </div>
-          </div>
-          <div class="composer-row">
-            <button class="icon-btn" type="button">+</button>
-            <button class="avatar-agent-trigger" type="button">
-              <span class="avatar-btn">A</span>
-            </button>
-            <button class="session-mode-toggle__trigger" type="button">Design</button>
-            <button class="composer-send" type="button" disabled>Send</button>
-          </div>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(composerLayer);
-
-    const composer = composerLayer.querySelector<HTMLElement>('.composer');
-    const composerShell = composerLayer.querySelector<HTMLElement>('.composer-shell');
-    const composerInputWrap = composerLayer.querySelector<HTMLElement>('.composer-input-wrap');
-    const composerControl = composerLayer.querySelector<HTMLElement>('.composer-editable');
-    const composerPlaceholder = composerLayer.querySelector<HTMLElement>('.composer-input-placeholder');
-    const designSystemTrigger = composerLayer.querySelector<HTMLElement>('.project-ds-picker-trigger');
-    const stagedContext = composerLayer.querySelector<HTMLElement>('.staged-context');
-    const stagedContextKind = composerLayer.querySelector<HTMLElement>('.staged-context-kind');
-    const stagedIcon = composerLayer.querySelector<HTMLElement>('.staged-context .staged-icon');
-    const stagedRemove = composerLayer.querySelector<HTMLElement>('.staged-context .staged-remove');
-    const stagedFile = composerLayer.querySelector<HTMLElement>('.staged-file');
-    const stagedOrder = composerLayer.querySelector<HTMLElement>('.staged-file .staged-order');
-    const stagedFileIcon = composerLayer.querySelector<HTMLElement>('.staged-file > .staged-icon');
-    const stagedFileRemove = composerLayer.querySelector<HTMLElement>('.staged-file > .staged-remove');
-    const stagedFileName = composerLayer.querySelector<HTMLElement>('.staged-file .staged-name');
-    const stagedComment = composerLayer.querySelector<HTMLElement>('.staged-comment');
-    const stagedCommentButton = composerLayer.querySelector<HTMLElement>('.staged-comment button');
-    const stagedCommentStrong = composerLayer.querySelector<HTMLElement>('.staged-comment .staged-name strong');
-    const stagedCommentSpan = composerLayer.querySelector<HTMLElement>('.staged-comment .staged-name span');
-    const activeFileChip = composerLayer.querySelector<HTMLElement>('.composer-active-file');
-    const toolbarIcon = composerLayer.querySelector<HTMLElement>('.icon-btn');
-    const toolbarAvatar = composerLayer.querySelector<HTMLElement>('.avatar-agent-trigger');
-    const toolbarAvatarButton = composerLayer.querySelector<HTMLElement>('.avatar-btn');
-    const toolbarMode = composerLayer.querySelector<HTMLElement>('.session-mode-toggle__trigger');
-    const toolbarSend = composerLayer.querySelector<HTMLElement>('.composer-send');
-    if (!composer) throw new Error('Missing mock composer');
-    if (!composerShell) throw new Error('Missing mock composer shell');
-    if (!composerInputWrap) throw new Error('Missing mock composer input wrapper');
-    if (!composerControl) throw new Error('Missing mock composer control');
-    if (!composerPlaceholder) throw new Error('Missing mock composer placeholder');
-    if (!designSystemTrigger) throw new Error('Missing mock design-system trigger');
-    if (!stagedContext) throw new Error('Missing mock staged context');
-    if (!stagedContextKind) throw new Error('Missing mock staged context kind');
-    if (!stagedIcon) throw new Error('Missing mock staged context icon');
-    if (!stagedRemove) throw new Error('Missing mock staged context remove');
-    if (!stagedFile) throw new Error('Missing mock staged file');
-    if (!stagedOrder) throw new Error('Missing mock staged order');
-    if (!stagedFileIcon) throw new Error('Missing mock staged file icon');
-    if (!stagedFileRemove) throw new Error('Missing mock staged file remove');
-    if (!stagedFileName) throw new Error('Missing mock staged file name');
-    if (!stagedComment) throw new Error('Missing mock staged comment');
-    if (!stagedCommentButton) throw new Error('Missing mock staged comment button');
-    if (!stagedCommentStrong) throw new Error('Missing mock staged comment strong text');
-    if (!stagedCommentSpan) throw new Error('Missing mock staged comment span text');
-    if (!activeFileChip) throw new Error('Missing mock active file chip');
-    if (!toolbarIcon) throw new Error('Missing mock toolbar icon');
-    if (!toolbarAvatar) throw new Error('Missing mock toolbar avatar');
-    if (!toolbarAvatarButton) throw new Error('Missing mock toolbar avatar button');
-    if (!toolbarMode) throw new Error('Missing mock toolbar mode');
-    if (!toolbarSend) throw new Error('Missing mock toolbar send');
-
-    expect(getComputedStyle(composerLayer).pointerEvents).toBe('none');
-    expect(getComputedStyle(composer).pointerEvents).toBe('auto');
-    expect(getComputedStyle(composerControl).pointerEvents).toBe('auto');
-
-    composerControl.focus();
-    expect(document.activeElement).toBe(composerControl);
-
-    render(
-      <FileWorkspace
-        projectId="project-1"
-        projectKind="prototype"
-        files={[workspaceFile('index.html')]}
-        liveArtifacts={[]}
-        onRefreshFiles={vi.fn()}
-        isDeck={false}
-        tabsState={{ tabs: [], active: null }}
-        onTabsStateChange={vi.fn()}
-      />,
-    );
-
-    fireEvent.keyDown(window, { key: 'p', ctrlKey: true });
-
-    await waitFor(() => {
-      expect(document.body.classList.contains('od-quick-switcher-open')).toBe(true);
-    });
-    const quickSearchInput = screen.getByRole('textbox');
-    await waitFor(() => {
-      expect(document.activeElement).toBe(quickSearchInput);
-    });
-    await waitFor(() => {
-      expect(getComputedStyle(composer).pointerEvents).toBe('none');
-    });
-    expect(getComputedStyle(composerLayer).pointerEvents).toBe('none');
-    expect(getComputedStyle(composerLayer).opacity).toBe('0.58');
-    expect(getComputedStyle(composerControl).pointerEvents).toBe('none');
-    expect(getComputedStyle(composerShell).boxShadow).toBe('none');
-    expect(getComputedStyle(composerShell).borderColor).toBe('rgba(0, 0, 0, 0)');
-    expect(getComputedStyle(composerInputWrap).background).toBe('var(--bg-fill-tertiary)');
-    expect(getComputedStyle(composerInputWrap).borderColor).toBe('rgba(0, 0, 0, 0)');
-    expect(getComputedStyle(composerInputWrap).boxShadow).toBe('none');
-    expect(getComputedStyle(composerControl).color).toBe('var(--text-muted)');
-    expect(getComputedStyle(composerControl).caretColor).toBe('rgba(0, 0, 0, 0)');
-    expect(getComputedStyle(composerPlaceholder).color).toBe('color-mix(in srgb, var(--text-muted) 72%, transparent)');
-    for (const toolbarControl of [
-      designSystemTrigger,
-      stagedContext,
-      stagedIcon,
-      stagedRemove,
-      stagedFile,
-      stagedOrder,
-      stagedFileIcon,
-      stagedFileRemove,
-      stagedComment,
-      stagedCommentButton,
-      activeFileChip,
-      toolbarIcon,
-      toolbarAvatar,
-      toolbarAvatarButton,
-      toolbarMode,
-      toolbarSend,
-    ]) {
-      expect(getComputedStyle(toolbarControl).backgroundColor).toBe('rgba(0, 0, 0, 0)');
-      expect(getComputedStyle(toolbarControl).borderColor).toBe('rgba(0, 0, 0, 0)');
-      expect(getComputedStyle(toolbarControl).boxShadow).toBe('none');
-    }
-    expect(getComputedStyle(stagedContextKind).color).toBe('var(--text-muted)');
-    expect(getComputedStyle(stagedFileName).color).toBe('var(--text-muted)');
-    expect(getComputedStyle(stagedCommentStrong).color).toBe('var(--text-muted)');
-    expect(getComputedStyle(stagedCommentSpan).color).toBe('var(--text-muted)');
-
-    fireEvent.keyDown(window, { key: 'Escape' });
-
-    await waitFor(() => {
-      expect(document.body.classList.contains('od-quick-switcher-open')).toBe(false);
-    });
-    await waitFor(() => {
-      expect(getComputedStyle(composer).pointerEvents).toBe('auto');
-    });
-    expect(getComputedStyle(composerControl).pointerEvents).toBe('auto');
-    expect(getComputedStyle(composerLayer).opacity).not.toBe('0.58');
-    expect(getComputedStyle(composerInputWrap).background).toBe('var(--bg-panel)');
-  });
-});
-
 function unreadableDropDataTransfer(fallbackFiles: File[] = []) {
   return {
     files: fallbackFiles,
@@ -631,255 +269,6 @@ describe('FileWorkspace upload input', () => {
 
     expect(markup).toContain('data-testid="design-files-upload-input"');
     expect(markup).not.toContain('accept=');
-  });
-
-  it('auto-saves a newly created sketch into project files', async () => {
-    const onRefreshFiles = vi.fn();
-    const onTabsStateChange = vi.fn();
-    mockedWriteProjectTextFile.mockImplementation(async (_projectId, name) => ({
-      name,
-      path: name,
-      type: 'file',
-      size: 128,
-      mtime: 1710000000,
-      kind: 'sketch',
-      mime: 'application/json',
-    }));
-
-    render(
-      <FileWorkspace
-        projectId="project-1"
-        projectKind="prototype"
-        files={[]}
-        liveArtifacts={[]}
-        onRefreshFiles={onRefreshFiles}
-        isDeck={false}
-        tabsState={{ tabs: [], active: null }}
-        onTabsStateChange={onTabsStateChange}
-      />,
-    );
-
-    fireEvent.click(screen.getByTestId('design-files-empty-new-sketch'));
-
-    await waitFor(() => expect(mockedWriteProjectTextFile).toHaveBeenCalledTimes(1));
-    const [projectId, name, content] = mockedWriteProjectTextFile.mock.calls[0]!;
-    expect(projectId).toBe('project-1');
-    expect(name).toMatch(/^sketch-.*\.sketch\.json$/);
-    expect(JSON.parse(content as string)).toMatchObject({
-      type: 'excalidraw',
-      version: 2,
-    });
-    await waitFor(() => expect(onRefreshFiles).toHaveBeenCalledTimes(1));
-    await waitFor(() =>
-      expect(onTabsStateChange).toHaveBeenCalledWith(
-        expect.objectContaining({
-          tabs: [name],
-          active: name,
-        }),
-      ),
-    );
-  });
-
-  it('creates slide template pages without default speaker notes', async () => {
-    const onRefreshFiles = vi.fn();
-    const onTabsStateChange = vi.fn();
-    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url === '/api/plugins') {
-        return new Response(JSON.stringify({
-          plugins: [{
-            id: 'clean-deck',
-            title: 'Clean Deck',
-            version: '0.1.0',
-            sourceKind: 'bundled',
-            source: '/tmp',
-            trust: 'bundled',
-            capabilitiesGranted: [],
-            manifest: {
-              name: 'clean-deck',
-              version: '0.1.0',
-              title: 'Clean Deck',
-              od: {
-                kind: 'scenario',
-                mode: 'deck',
-                inputs: [{ name: 'audience', label: 'Audience', default: 'founder teams' }],
-                preview: { type: 'html', entry: './preview.html' },
-                useCase: { query: 'Create a clean launch deck for {{audience}}.' },
-              },
-            },
-            fsPath: '/tmp',
-            installedAt: 0,
-            updatedAt: 0,
-          }],
-        }), { headers: { 'content-type': 'application/json' } });
-      }
-      if (url === '/api/plugins/clean-deck/preview') {
-        return new Response(
-          '<!doctype html><html><body><main>Clean Deck</main><script type="application/json" id="speaker-notes">["Use speaker notes"]</script></body></html>',
-          { headers: { 'content-type': 'text/html' } },
-        );
-      }
-      return new Response('', { status: 404 });
-    }));
-    mockedWriteProjectTextFile.mockImplementation(async (_projectId, name) => workspaceFile(name));
-
-    render(
-      <FileWorkspace
-        projectId="project-1"
-        projectKind="slide_deck"
-        files={[]}
-        liveArtifacts={[]}
-        onRefreshFiles={onRefreshFiles}
-        isDeck={false}
-        tabsState={{ tabs: [], active: null }}
-        onTabsStateChange={onTabsStateChange}
-      />,
-    );
-
-    fireEvent.click(screen.getByTestId('workspace-pages-menu-trigger'));
-    fireEvent.click(screen.getByRole('menuitem', { name: /New blank page/i }));
-    const title = await screen.findByText('Clean Deck');
-    const card = title.closest('article');
-    expect(card).not.toBeNull();
-    fireEvent.click(within(card as HTMLElement).getByRole('button', { name: 'Use' }));
-
-    await waitFor(() => expect(mockedWriteProjectTextFile).toHaveBeenCalledTimes(1));
-    const [projectId, name, content, options] = mockedWriteProjectTextFile.mock.calls[0]!;
-    expect(projectId).toBe('project-1');
-    expect(name).toBe('clean-deck.html');
-    expect(content).not.toContain('id="speaker-notes"');
-    expect(content).not.toContain('Use speaker notes');
-    expect(options).toMatchObject({
-      versionSource: 'manual',
-      versionPrompt: 'Create a clean launch deck for founder teams.',
-    });
-    await waitFor(() => expect(onRefreshFiles).toHaveBeenCalledTimes(1));
-  });
-
-  it('localizes page creator content and saves template query as the first version prompt', async () => {
-    const onRefreshFiles = vi.fn();
-    const onTabsStateChange = vi.fn();
-    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url === '/api/plugins') {
-        return new Response(JSON.stringify({
-          plugins: [{
-            id: 'html-ppt-pitch-deck',
-            title: 'Write a Demo Day Pitch like a Top Accelerator Group Partner',
-            version: '0.1.0',
-            sourceKind: 'bundled',
-            source: '/tmp',
-            trust: 'bundled',
-            capabilitiesGranted: [],
-            manifest: {
-              name: 'html-ppt-pitch-deck',
-              version: '0.1.0',
-              title: 'Write a Demo Day Pitch like a Top Accelerator Group Partner',
-              title_i18n: { 'zh-CN': '像顶级加速器合伙人一样写 Demo Day 路演' },
-              description: 'For fundraising pitch work: turn a startup story into growth, moat, and fundraise narrative that earns another meeting.',
-              description_i18n: { 'zh-CN': '融资/路演场景：围绕 core query「series-a-pitch-deck」把粗糙材料整理成可购买、可复用的专业 Deck。' },
-              tags: ['pitch-deck', 'fundraising-pitch', 'series-a-pitch-deck', 'commercial-slide-agent'],
-              od: {
-                kind: 'scenario',
-                mode: 'deck',
-                preview: { type: 'html', entry: './preview.html' },
-                useCase: {
-                  query: {
-                    en: 'Create "Write a Demo Day Pitch like a Top Accelerator Group Partner" as a Fundraising pitch deck.',
-                    'zh-CN': '像顶级加速器合伙人一样写 Demo Day 路演。先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。',
-                  },
-                },
-              },
-            },
-            fsPath: '/tmp',
-            installedAt: 0,
-            updatedAt: 0,
-          }],
-        }), { headers: { 'content-type': 'application/json' } });
-      }
-      if (url === '/api/plugins/html-ppt-pitch-deck/preview') {
-        return new Response(
-          '<!doctype html><html><body><main>Write a Demo Day Pitch like a Top Accelerator Group Partner</main></body></html>',
-          { headers: { 'content-type': 'text/html' } },
-        );
-      }
-      return new Response('', { status: 404 });
-    }));
-    mockedWriteProjectTextFile.mockImplementation(async (_projectId, name) => workspaceFile(name));
-
-    render(
-      <I18nProvider initial="zh-CN">
-        <FileWorkspace
-          projectId="project-1"
-          projectKind="slide_deck"
-          files={[]}
-          liveArtifacts={[]}
-          onRefreshFiles={onRefreshFiles}
-          isDeck={false}
-          tabsState={{ tabs: [], active: null }}
-          onTabsStateChange={onTabsStateChange}
-        />
-      </I18nProvider>,
-    );
-
-    fireEvent.click(screen.getByTestId('workspace-pages-menu-trigger'));
-    fireEvent.click(screen.getByRole('menuitem', { name: /新建空白页面/ }));
-
-    const dialog = await screen.findByRole('dialog', { name: '新建页面' });
-    const dialogScope = within(dialog);
-    expect(dialogScope.getByRole('tab', { name: /全部 幻灯片/ })).toBeTruthy();
-    // The deck's commercial scene ("融资路演" / fundraising-pitch) is now the
-    // sub-category tab, resolved from its category tag — the filter row and the
-    // per-card 品类 chip share one taxonomy.
-    expect(await dialogScope.findByRole('tab', { name: /融资路演/ })).toBeTruthy();
-    const title = await dialogScope.findByText('像顶级加速器合伙人一样写 Demo Day 路演');
-    const card = title.closest('article');
-    expect(card).not.toBeNull();
-    expect(within(card as HTMLElement).getByText('融资/路演场景：围绕 core query「series-a-pitch-deck」把粗糙材料整理成可购买、可复用的专业 Deck。')).toBeTruthy();
-    fireEvent.click(within(card as HTMLElement).getByRole('button', { name: '使用' }));
-
-    await waitFor(() => expect(mockedWriteProjectTextFile).toHaveBeenCalledTimes(1));
-    const [projectId, name, , options] = mockedWriteProjectTextFile.mock.calls[0]!;
-    expect(projectId).toBe('project-1');
-    expect(name).toBe('像顶级加速器合伙人一样写-demo-day-路演.html');
-    expect(options).toMatchObject({
-      versionSource: 'manual',
-      versionPrompt: '像顶级加速器合伙人一样写 Demo Day 路演。先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。',
-    });
-    await waitFor(() =>
-      expect(onTabsStateChange).toHaveBeenCalledWith(
-        expect.objectContaining({
-          tabs: ['像顶级加速器合伙人一样写-demo-day-路演.html'],
-          active: '像顶级加速器合伙人一样写-demo-day-路演.html',
-        }),
-      ),
-    );
-    await waitFor(() => expect(onRefreshFiles).toHaveBeenCalledTimes(1));
-  });
-
-  it('hides blank cards and media category entries in the page creator dialog', async () => {
-    render(
-      <FileWorkspace
-        projectId="project-1"
-        projectKind="slide_deck"
-        files={[]}
-        liveArtifacts={[]}
-        onRefreshFiles={vi.fn()}
-        isDeck={false}
-        tabsState={{ tabs: [], active: null }}
-        onTabsStateChange={vi.fn()}
-      />,
-    );
-
-    fireEvent.click(screen.getByTestId('workspace-pages-menu-trigger'));
-    fireEvent.click(screen.getByRole('menuitem', { name: /New blank page/i }));
-
-    const dialog = await screen.findByRole('dialog', { name: 'Create page' });
-    const dialogScope = within(dialog);
-    expect(dialogScope.queryByText('New blank page')).toBeNull();
-    expect(dialogScope.queryByRole('button', { name: /^Image\b/i })).toBeNull();
-    expect(dialogScope.queryByRole('button', { name: /^Video\b/i })).toBeNull();
-    expect(dialogScope.queryByRole('button', { name: /^Audio\b/i })).toBeNull();
   });
 
   it('hides upload failure details during in-panel preview and restores them after closing preview', async () => {
@@ -1003,7 +392,7 @@ describe('FileWorkspace upload input', () => {
       />,
     );
 
-    expect(container.querySelector('.df-breadcrumb-current')?.textContent).toBe('All project files');
+    expect(container.querySelector('.df-breadcrumb-current')?.textContent).toBe('project');
     expect(screen.getByTestId('design-file-row-home.html')).toBeTruthy();
   });
 
@@ -1122,51 +511,6 @@ describe('FileWorkspace upload input', () => {
     expect(screen.queryByTestId('upload-error-banner')).toBeNull();
   });
 
-  it('uploads files pasted from the clipboard in Design Files', () => {
-    const pastedFile = new File(['mock'], 'clipboard.png', { type: 'image/png' });
-    const onUploadFiles = vi.fn();
-    const onClearUploadError = vi.fn();
-    renderDesignFilesPanel({ onUploadFiles, onClearUploadError });
-
-    const event = new Event('paste', { bubbles: true, cancelable: true }) as ClipboardEvent;
-    Object.defineProperty(event, 'clipboardData', {
-      value: {
-        files: [pastedFile],
-        items: [],
-      },
-    });
-
-    window.dispatchEvent(event);
-
-    expect(event.defaultPrevented).toBe(true);
-    expect(onClearUploadError).toHaveBeenCalledTimes(1);
-    expect(onUploadFiles).toHaveBeenCalledWith([pastedFile]);
-  });
-
-  it('does not steal clipboard files from text inputs', () => {
-    const pastedFile = new File(['mock'], 'clipboard.png', { type: 'image/png' });
-    const onUploadFiles = vi.fn();
-    renderDesignFilesPanel({ onUploadFiles });
-    const textarea = document.createElement('textarea');
-    document.body.appendChild(textarea);
-
-    try {
-      const event = new Event('paste', { bubbles: true, cancelable: true }) as ClipboardEvent;
-      Object.defineProperty(event, 'clipboardData', {
-        value: {
-          files: [pastedFile],
-          items: [],
-        },
-      });
-      textarea.dispatchEvent(event);
-
-      expect(event.defaultPrevented).toBe(false);
-      expect(onUploadFiles).not.toHaveBeenCalled();
-    } finally {
-      textarea.remove();
-    }
-  });
-
   it('shows a recoverable read error when a dragged entry disappears before import', async () => {
     const onUploadFiles = vi.fn();
     const { container } = renderDesignFilesPanel({ onUploadFiles });
@@ -1226,26 +570,6 @@ describe('FileWorkspace upload input', () => {
     // direction matches where the chat pane re-emerges from.
     expect(markup).toMatch(
       /<div class="ws-tabs-shell">\s*<button[^>]*data-testid="workspace-focus-toggle"[\s\S]*?<\/button>\s*<div class="ws-tabs-bar"/,
-    );
-  });
-
-  it('keeps the pages switcher before opened file tabs', () => {
-    const markup = renderToStaticMarkup(
-      <FileWorkspace
-        projectId="project-1"
-        projectKind="prototype"
-        files={[workspaceFile('artifact.html')]}
-        liveArtifacts={[]}
-        onRefreshFiles={vi.fn()}
-        isDeck={false}
-        tabsState={{ tabs: ['artifact.html'], active: 'artifact.html' }}
-        onTabsStateChange={vi.fn()}
-      />,
-    );
-
-    expect(markup).toContain('class="ws-tabs-bar"');
-    expect(markup).toMatch(
-      /role="tablist"[\s\S]*data-testid="workspace-pages-menu-trigger"[\s\S]*artifact\.html/,
     );
   });
 
@@ -1342,9 +666,6 @@ describe('FileWorkspace launcher tab creation', () => {
 
     expect(screen.queryByRole('button', { name: /New Terminal/i })).toBeNull();
     expect(screen.getByRole('button', { name: /New Browser/i })).toBeTruthy();
-    expect(
-      screen.getByText('Sketch rough layouts and notes for the agent to use as design context'),
-    ).toBeTruthy();
     expect(screen.getByText('Create new')).toBeTruthy();
   });
 
@@ -1381,99 +702,12 @@ describe('FileWorkspace launcher tab creation', () => {
       />,
     );
 
-    expect(screen.getByTestId('workspace-pages-menu-trigger').textContent).toContain('Pages');
-    expect(renderedTabLabels()).toEqual(['Browser', 'New Terminal', 'Side chat']);
-  });
-
-  it('opens Design Files from the browser snapshot toast action instead of the manifest file', async () => {
-    const onTabsStateChange = vi.fn();
-    const browserTab = {
-      id: '__browser__:1',
-      insertAfter: '__design_files__',
-      label: 'Browser',
-      title: 'Example',
-      url: 'https://example.com',
-    };
-
-    render(
-      <FileWorkspace
-        projectId="project-1"
-        projectKind="prototype"
-        files={[]}
-        liveArtifacts={[]}
-        onRefreshFiles={vi.fn()}
-        isDeck={false}
-        tabsState={{
-          tabs: [],
-          active: '__browser__:1',
-          browserTabs: [browserTab],
-        }}
-        onTabsStateChange={onTabsStateChange}
-      />,
-    );
-
-    fireEvent.click(screen.getByTestId('emit-browser-snapshot-success'));
-    await screen.findByRole('button', { name: 'View Design Files' });
-    const toastAnchor = document.querySelector('.workspace-toast-anchor');
-    expect(toastAnchor).toBeTruthy();
-    expect(toastAnchor?.querySelector('.od-toast-browser-snapshot')).toBeTruthy();
-    const toastAction = document.querySelector<HTMLButtonElement>('.od-toast-action');
-    if (!toastAction) throw new Error('Could not find browser snapshot toast action');
-    await act(async () => {
-      fireEvent.click(toastAction);
-    });
-
-    await waitFor(() => {
-      expect(onTabsStateChange).toHaveBeenCalledWith({
-        tabs: [],
-        active: DESIGN_FILES_TAB,
-        browserTabs: [browserTab],
-      });
-    });
-    expect(onTabsStateChange).not.toHaveBeenCalledWith(
-      expect.objectContaining({ active: 'browser-archive/example/manifest.json' }),
-    );
-  });
-
-  it('anchors the browser snapshot toast inside the workspace pane', async () => {
-    // The Download Page progress/result toast is workspace-owned UI. Rendered
-    // as a bare fixed .od-toast it centers on the whole viewport, drifting
-    // over the chat pane and covering the composer send area in split view;
-    // the anchor scopes it to the workspace pane instead.
-    const browserTab = {
-      id: '__browser__:1',
-      insertAfter: '__design_files__',
-      label: 'Browser',
-      title: 'Example',
-      url: 'https://example.com',
-    };
-
-    render(
-      <FileWorkspace
-        projectId="project-1"
-        projectKind="prototype"
-        files={[]}
-        liveArtifacts={[]}
-        onRefreshFiles={vi.fn()}
-        isDeck={false}
-        tabsState={{
-          tabs: [],
-          active: '__browser__:1',
-          browserTabs: [browserTab],
-        }}
-        onTabsStateChange={vi.fn()}
-      />,
-    );
-
-    fireEvent.click(screen.getByTestId('emit-browser-snapshot-success'));
-
-    const toast = await waitFor(() => {
-      const node = document.querySelector<HTMLElement>('.od-toast');
-      expect(node?.textContent).toContain('Saved page snapshot');
-      return node as HTMLElement;
-    });
-    expect(toast.closest('.workspace-toast-anchor')).toBeTruthy();
-    expect(toast.closest('[data-testid="file-workspace"]')).toBeTruthy();
+    expect(renderedTabLabels()).toEqual([
+      'Design Files',
+      'Browser',
+      'New Terminal',
+      'Side chat',
+    ]);
   });
 
   it('anchors a new browser after the visible tab tail', async () => {
@@ -1699,44 +933,6 @@ describe('FileWorkspace launcher tab creation', () => {
     });
   });
 
-  it('creates and navigates a browser tab from a browser open request', async () => {
-    const onTabsStateChange = vi.fn();
-
-    render(
-      <FileWorkspace
-        projectId="project-1"
-        projectKind="prototype"
-        files={[workspaceFile('cover.html')]}
-        liveArtifacts={[]}
-        onRefreshFiles={vi.fn()}
-        isDeck={false}
-        tabsState={{ tabs: ['cover.html'], active: 'cover.html' }}
-        browserOpenRequest={{ tabId: '__browser__:1', url: 'https://economist.com/', nonce: 7 }}
-        onTabsStateChange={onTabsStateChange}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(onTabsStateChange).toHaveBeenCalledWith({
-        tabs: ['cover.html'],
-        active: '__browser__:1',
-        browserTabs: [
-          {
-            id: '__browser__:1',
-            insertAfter: 'cover.html',
-            label: 'Browser',
-            title: 'economist.com',
-            url: 'https://economist.com/',
-          },
-        ],
-      });
-    });
-    await waitFor(() => {
-      expect(screen.getByTestId('design-browser-panel').getAttribute('data-navigate-url'))
-        .toBe('https://economist.com/');
-    });
-  });
-
   it('opens a share request without dropping existing browser tabs', async () => {
     const onTabsStateChange = vi.fn();
     const browserTabs = [
@@ -1758,35 +954,6 @@ describe('FileWorkspace launcher tab creation', () => {
         isDeck={false}
         tabsState={{ tabs: ['cover.html'], active: '__browser__:1', browserTabs }}
         shareRequest={{ name: 'landing.html', nonce: 1 }}
-        onTabsStateChange={onTabsStateChange}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(onTabsStateChange).toHaveBeenCalledWith({
-        tabs: ['cover.html', 'landing.html'],
-        active: 'landing.html',
-        browserTabs,
-      });
-    });
-  });
-
-  it('opens and activates the target file for a download request', async () => {
-    const onTabsStateChange = vi.fn();
-    const browserTabs = [
-      { id: '__browser__:1', label: 'Browser 1', title: 'Dribbble', url: 'https://dribbble.com/' },
-    ];
-
-    render(
-      <FileWorkspace
-        projectId="project-1"
-        projectKind="prototype"
-        files={[workspaceFile('cover.html'), workspaceFile('landing.html')]}
-        liveArtifacts={[]}
-        onRefreshFiles={vi.fn()}
-        isDeck={false}
-        tabsState={{ tabs: ['cover.html'], active: '__browser__:1', browserTabs }}
-        downloadRequest={{ name: 'landing.html', nonce: 1 }}
         onTabsStateChange={onTabsStateChange}
       />,
     );
@@ -2068,6 +1235,79 @@ describe('FileWorkspace tab reordering', () => {
   });
 });
 
+describe('FileWorkspace Questions tab', () => {
+  const discoveryForm = {
+    id: 'discovery',
+    title: 'Quick brief',
+    questions: [
+      {
+        id: 'platform',
+        label: 'Platform',
+        type: 'radio' as const,
+        options: [
+          { label: 'Mobile', value: 'Mobile' },
+          { label: 'Desktop web', value: 'Desktop web' },
+        ],
+        required: true,
+      },
+    ],
+  };
+
+  it('shows the Questions tab while the form is unanswered', () => {
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        questionForm={discoveryForm}
+      />,
+    );
+
+    expect(screen.getByTestId('questions-tab')).toBeTruthy();
+  });
+
+  it('closes the Questions preview after submit, then lets the answered form reopen', async () => {
+    const baseProps: React.ComponentProps<typeof FileWorkspace> = {
+      projectId: 'project-1',
+      projectKind: 'prototype',
+      files: [],
+      liveArtifacts: [],
+      onRefreshFiles: vi.fn(),
+      isDeck: false,
+      tabsState: { tabs: [], active: null },
+      onTabsStateChange: vi.fn(),
+      questionForm: discoveryForm,
+      focusQuestionsRequest: { nonce: 1 },
+    };
+    const { rerender } = render(<FileWorkspace {...baseProps} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Quick brief')).toBeTruthy();
+    });
+
+    rerender(
+      <FileWorkspace
+        {...baseProps}
+        questionFormSubmittedAnswers={{ platform: 'Mobile' }}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByText('Quick brief')).toBeNull();
+    });
+    expect(screen.getByTestId('questions-tab')).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('questions-tab'));
+    expect(screen.getByText('Quick brief')).toBeTruthy();
+    expect(screen.getByText('Mobile')).toBeTruthy();
+  });
+});
+
 describe('projectSplitClassName', () => {
   it('marks the project split as focused so the chat pane can collapse globally', () => {
     expect(projectSplitClassName(false)).toBe('split');
@@ -2241,103 +1481,6 @@ describe('scrollWorkspaceTabsWithWheel', () => {
 });
 
 describe('FileWorkspace sketch save', () => {
-  it('opens a persisted sketch through the editor path without rendering the static preview first', async () => {
-    const file: ProjectFile = {
-      name: 'test.sketch.json',
-      path: 'test.sketch.json',
-      type: 'file',
-      size: 100,
-      mtime: 1700000000,
-      kind: 'sketch',
-      mime: 'application/json',
-    };
-
-    mockedFetchProjectFileText.mockResolvedValue(
-      JSON.stringify({
-        type: 'excalidraw',
-        version: 2,
-        elements: [{ id: 'box', type: 'rectangle', isDeleted: false }],
-        appState: { viewBackgroundColor: '#ffffff' },
-        files: {},
-      }),
-    );
-
-    const { container } = render(
-      <FileWorkspace
-        projectId="project-1"
-        projectKind="prototype"
-        files={[file]}
-        liveArtifacts={[]}
-        onRefreshFiles={vi.fn()}
-        isDeck={false}
-        tabsState={{ tabs: ['test.sketch.json'], active: 'test.sketch.json' }}
-        onTabsStateChange={vi.fn()}
-      />,
-    );
-
-    expect(screen.getByText('Loading sketch…')).toBeTruthy();
-    expect(container.querySelector('[data-testid="sketch-preview-svg"]')).toBeNull();
-
-    await waitFor(() => {
-      expect(screen.getByTestId('excalidraw')).toBeTruthy();
-    });
-
-    expect(mockedFetchProjectFileText).toHaveBeenCalledTimes(1);
-    expect(mockedFetchProjectFileText).toHaveBeenCalledWith('project-1', 'test.sketch.json');
-    expect(container.querySelector('[data-testid="sketch-preview-svg"]')).toBeNull();
-  });
-
-  it('preloads persisted sketches before the tab is opened', async () => {
-    const file: ProjectFile = {
-      name: 'test.sketch.json',
-      path: 'test.sketch.json',
-      type: 'file',
-      size: 100,
-      mtime: 1700000000,
-      kind: 'sketch',
-      mime: 'application/json',
-    };
-
-    mockedFetchProjectFileText.mockResolvedValue(
-      JSON.stringify({
-        type: 'excalidraw',
-        version: 2,
-        elements: [{ id: 'box', type: 'rectangle', isDeleted: false }],
-        appState: { viewBackgroundColor: '#ffffff' },
-        files: {},
-      }),
-    );
-
-    const baseProps: React.ComponentProps<typeof FileWorkspace> = {
-      projectId: 'project-1',
-      projectKind: 'prototype',
-      files: [file],
-      liveArtifacts: [],
-      onRefreshFiles: vi.fn(),
-      isDeck: false,
-      tabsState: { tabs: [], active: null },
-      onTabsStateChange: vi.fn(),
-    };
-    const { rerender } = render(
-      <FileWorkspace {...baseProps} />,
-    );
-
-    await waitFor(() => {
-      expect(mockedFetchProjectFileText).toHaveBeenCalledWith('project-1', 'test.sketch.json');
-    });
-
-    rerender(
-      <FileWorkspace
-        {...baseProps}
-        tabsState={{ tabs: ['test.sketch.json'], active: 'test.sketch.json' }}
-      />,
-    );
-
-    expect(screen.queryByText('Loading sketch…')).toBeNull();
-    expect(screen.getByTestId('excalidraw')).toBeTruthy();
-    expect(mockedFetchProjectFileText).toHaveBeenCalledTimes(1);
-  });
-
   it('keeps saving state visible for at least 500ms', async () => {
     // Simulate user doing some edits in the workspace
     const file: ProjectFile = {
@@ -2402,384 +1545,6 @@ describe('FileWorkspace sketch save', () => {
     });
     expect(btn.textContent).not.toBe('Saving…');
     expect(btn.querySelector('svg')).not.toBeNull();
-  });
-
-  it('autosaves an empty sketch when clear happens before a pending sketch autosave', async () => {
-    const file: ProjectFile = {
-      name: 'test.sketch.json',
-      path: 'test.sketch.json',
-      type: 'file',
-      size: 100,
-      mtime: 1700000000,
-      kind: 'sketch',
-      mime: 'application/json',
-    };
-
-    mockedFetchProjectFileText.mockResolvedValue(
-      JSON.stringify({
-        type: 'excalidraw',
-        version: 2,
-        elements: [],
-        appState: { viewBackgroundColor: '#ffffff' },
-        files: {},
-      }),
-    );
-    mockedWriteProjectTextFile.mockResolvedValue(file);
-
-    render(
-      <FileWorkspace
-        projectId="project-1"
-        projectKind="prototype"
-        files={[file]}
-        liveArtifacts={[]}
-        onRefreshFiles={vi.fn()}
-        isDeck={false}
-        tabsState={{ tabs: ['test.sketch.json'], active: 'test.sketch.json' }}
-        onTabsStateChange={vi.fn()}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(screen.getByTestId('excalidraw')).toBeTruthy();
-    });
-
-    vi.useFakeTimers();
-    const props = excalidrawWorkspaceMock.lastProps;
-    if (!props?.onChange) throw new Error('expected Excalidraw onChange');
-
-    act(() => {
-      props.onChange(
-        [{ id: 'baseline', type: 'rectangle', isDeleted: false }],
-        { viewBackgroundColor: '#ffffff' },
-        {},
-      );
-      props.onChange(
-        [{ id: 'drawn-before-clear', type: 'rectangle', isDeleted: false }],
-        { viewBackgroundColor: '#ffffff' },
-        {},
-      );
-    });
-
-    const clearButton = screen.getByRole('button', { name: 'Clear' }) as HTMLButtonElement;
-    expect(clearButton.disabled).toBe(false);
-    act(() => {
-      fireEvent.click(clearButton);
-    });
-
-    await act(async () => {
-      vi.advanceTimersByTime(800);
-      await Promise.resolve();
-    });
-
-    expect(mockedWriteProjectTextFile).toHaveBeenCalledTimes(1);
-    const savedText = mockedWriteProjectTextFile.mock.calls[0]?.[2];
-    if (typeof savedText !== 'string') throw new Error('expected saved sketch JSON');
-    const saved = JSON.parse(savedText) as { elements?: unknown[] };
-    expect(saved.elements).toEqual([]);
-  });
-
-  it('serializes overlapping sketch autosaves so the latest scene wins', async () => {
-    const file: ProjectFile = {
-      name: 'test.sketch.json',
-      path: 'test.sketch.json',
-      type: 'file',
-      size: 100,
-      mtime: 1700000000,
-      kind: 'sketch',
-      mime: 'application/json',
-    };
-    let resolveFirstSave!: (file: ProjectFile) => void;
-    const firstSave = new Promise<ProjectFile>((resolve) => {
-      resolveFirstSave = resolve;
-    });
-    const savedTexts: string[] = [];
-
-    mockedFetchProjectFileText.mockResolvedValue(
-      JSON.stringify({
-        type: 'excalidraw',
-        version: 2,
-        elements: [],
-        appState: { viewBackgroundColor: '#ffffff' },
-        files: {},
-      }),
-    );
-    mockedWriteProjectTextFile.mockImplementation(async (_projectId, _name, text) => {
-      savedTexts.push(text);
-      return savedTexts.length === 1 ? firstSave : file;
-    });
-
-    render(
-      <FileWorkspace
-        projectId="project-1"
-        projectKind="prototype"
-        files={[file]}
-        liveArtifacts={[]}
-        onRefreshFiles={vi.fn()}
-        isDeck={false}
-        tabsState={{ tabs: ['test.sketch.json'], active: 'test.sketch.json' }}
-        onTabsStateChange={vi.fn()}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(screen.getByTestId('excalidraw')).toBeTruthy();
-    });
-
-    vi.useFakeTimers();
-    const props = excalidrawWorkspaceMock.lastProps;
-    if (!props?.onChange) throw new Error('expected Excalidraw onChange');
-
-    act(() => {
-      props.onChange(
-        [{ id: 'baseline', type: 'rectangle', isDeleted: false }],
-        { viewBackgroundColor: '#ffffff' },
-        {},
-      );
-      props.onChange(
-        [{ id: 'autosave-a', type: 'rectangle', isDeleted: false }],
-        { viewBackgroundColor: '#ffffff' },
-        {},
-      );
-    });
-    await act(async () => {
-      vi.advanceTimersByTime(800);
-      await Promise.resolve();
-    });
-
-    expect(mockedWriteProjectTextFile).toHaveBeenCalledTimes(1);
-
-    act(() => {
-      props.onChange(
-        [{ id: 'autosave-b', type: 'rectangle', isDeleted: false }],
-        { viewBackgroundColor: '#ffffff' },
-        {},
-      );
-    });
-    await act(async () => {
-      vi.advanceTimersByTime(800);
-      await Promise.resolve();
-    });
-
-    expect(mockedWriteProjectTextFile).toHaveBeenCalledTimes(1);
-
-    await act(async () => {
-      resolveFirstSave(file);
-      await firstSave;
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(mockedWriteProjectTextFile).toHaveBeenCalledTimes(2);
-    const firstSaved = JSON.parse(savedTexts[0]!) as { elements?: Array<{ id?: string }> };
-    const secondSaved = JSON.parse(savedTexts[1]!) as { elements?: Array<{ id?: string }> };
-    expect(firstSaved.elements?.[0]?.id).toBe('autosave-a');
-    expect(secondSaved.elements?.[0]?.id).toBe('autosave-b');
-  });
-
-  it('does not wire Excalidraw library item changes into sketch autosave', async () => {
-    const file: ProjectFile = {
-      name: 'test.sketch.json',
-      path: 'test.sketch.json',
-      type: 'file',
-      size: 100,
-      mtime: 1700000000,
-      kind: 'sketch',
-      mime: 'application/json',
-    };
-
-    mockedFetchProjectFileText.mockResolvedValue(
-      JSON.stringify({
-        type: 'excalidraw',
-        version: 2,
-        elements: [],
-        appState: { viewBackgroundColor: '#ffffff' },
-        files: {},
-        libraryItems: [],
-      }),
-    );
-    mockedWriteProjectTextFile.mockResolvedValue(file);
-
-    render(
-      <FileWorkspace
-        projectId="project-1"
-        projectKind="prototype"
-        files={[file]}
-        liveArtifacts={[]}
-        onRefreshFiles={vi.fn()}
-        isDeck={false}
-        tabsState={{ tabs: ['test.sketch.json'], active: 'test.sketch.json' }}
-        onTabsStateChange={vi.fn()}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(screen.getByTestId('excalidraw')).toBeTruthy();
-    });
-
-    const props = excalidrawWorkspaceMock.lastProps;
-    expect(props?.onLibraryChange).toBeUndefined();
-    expect(props?.initialData?.libraryItems).toBeUndefined();
-    expect(mockedWriteProjectTextFile).not.toHaveBeenCalled();
-  });
-
-  it('flushes pending sketch autosaves when the workspace unmounts before debounce', async () => {
-    const file: ProjectFile = {
-      name: 'test.sketch.json',
-      path: 'test.sketch.json',
-      type: 'file',
-      size: 100,
-      mtime: 1700000000,
-      kind: 'sketch',
-      mime: 'application/json',
-    };
-
-    mockedFetchProjectFileText.mockResolvedValue(
-      JSON.stringify({
-        type: 'excalidraw',
-        version: 2,
-        elements: [],
-        appState: { viewBackgroundColor: '#ffffff' },
-        files: {},
-        libraryItems: [],
-      }),
-    );
-    mockedWriteProjectTextFile.mockResolvedValue(file);
-
-    const { unmount } = render(
-      <FileWorkspace
-        projectId="project-1"
-        projectKind="prototype"
-        files={[file]}
-        liveArtifacts={[]}
-        onRefreshFiles={vi.fn()}
-        isDeck={false}
-        tabsState={{ tabs: ['test.sketch.json'], active: 'test.sketch.json' }}
-        onTabsStateChange={vi.fn()}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(screen.getByTestId('excalidraw')).toBeTruthy();
-    });
-
-    const props = excalidrawWorkspaceMock.lastProps;
-    if (!props?.onChange) throw new Error('expected Excalidraw onChange');
-
-    act(() => {
-      props.onChange([], { viewBackgroundColor: '#ffffff' }, {});
-      props.onChange(
-        [{ id: 'scene-before-unmount', type: 'rectangle', isDeleted: false }],
-        { viewBackgroundColor: '#ffffff' },
-        {},
-      );
-      unmount();
-    });
-
-    await waitFor(() => {
-      expect(mockedWriteProjectTextFile).toHaveBeenCalledTimes(1);
-    });
-    const savedText = mockedWriteProjectTextFile.mock.calls[0]?.[2];
-    if (typeof savedText !== 'string') throw new Error('expected saved sketch JSON');
-    const saved = JSON.parse(savedText) as { elements?: Array<{ id?: string }>; libraryItems?: unknown[] };
-    expect(saved.elements?.map((item) => item.id)).toEqual(['scene-before-unmount']);
-    expect(saved.libraryItems).toBeUndefined();
-  });
-
-  it('preserves a newer sketch scene while its autosave is still debouncing', async () => {
-    const file: ProjectFile = {
-      name: 'test.sketch.json',
-      path: 'test.sketch.json',
-      type: 'file',
-      size: 100,
-      mtime: 1700000000,
-      kind: 'sketch',
-      mime: 'application/json',
-    };
-    const writes: Array<{
-      text: string;
-      resolve: (file: ProjectFile | null) => void;
-    }> = [];
-
-    mockedFetchProjectFileText.mockResolvedValue(
-      JSON.stringify({
-        type: 'excalidraw',
-        version: 2,
-        elements: [],
-        appState: { viewBackgroundColor: '#ffffff' },
-        files: {},
-      }),
-    );
-    mockedWriteProjectTextFile.mockImplementation((_projectId, _name, text) => new Promise((resolve) => {
-      if (typeof text !== 'string') throw new Error('expected saved sketch JSON');
-      writes.push({ text, resolve });
-    }));
-
-    render(
-      <FileWorkspace
-        projectId="project-1"
-        projectKind="prototype"
-        files={[file]}
-        liveArtifacts={[]}
-        onRefreshFiles={vi.fn()}
-        isDeck={false}
-        tabsState={{ tabs: ['test.sketch.json'], active: 'test.sketch.json' }}
-        onTabsStateChange={vi.fn()}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(screen.getByTestId('excalidraw')).toBeTruthy();
-    });
-
-    vi.useFakeTimers();
-    const props = excalidrawWorkspaceMock.lastProps;
-    if (!props?.onChange) throw new Error('expected Excalidraw onChange');
-
-    act(() => {
-      props.onChange(
-        [{ id: 'baseline', type: 'rectangle', isDeleted: false }],
-        { viewBackgroundColor: '#ffffff' },
-        {},
-      );
-      props.onChange(
-        [{ id: 'older-scene', type: 'rectangle', isDeleted: false }],
-        { viewBackgroundColor: '#ffffff' },
-        {},
-      );
-    });
-
-    await act(async () => {
-      vi.advanceTimersByTime(800);
-      await Promise.resolve();
-    });
-    expect(writes).toHaveLength(1);
-
-    act(() => {
-      props.onChange(
-        [{ id: 'latest-scene', type: 'rectangle', isDeleted: false }],
-        { viewBackgroundColor: '#ffffff' },
-        {},
-      );
-    });
-
-    await act(async () => {
-      writes[0]?.resolve(file);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(writes).toHaveLength(2);
-
-    await act(async () => {
-      writes[1]?.resolve(file);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    const firstSaved = JSON.parse(writes[0]?.text ?? '{}') as { elements?: Array<{ id?: string }> };
-    const latestSaved = JSON.parse(writes[1]?.text ?? '{}') as { elements?: Array<{ id?: string }> };
-    expect(firstSaved.elements?.map((element) => element.id)).toEqual(['older-scene']);
-    expect(latestSaved.elements?.map((element) => element.id)).toEqual(['latest-scene']);
   });
 });
 
@@ -2988,53 +1753,6 @@ describe('FileWorkspace add-module menu', () => {
     });
   });
 
-  it('keeps the pinned brand browser tab mounted while another tab is active', () => {
-    const browserTabs = [
-      {
-        id: '__browser__:1',
-        label: 'Browser',
-        title: 'The Economist',
-        url: 'https://www.economist.com/',
-      },
-    ];
-
-    // Without the pin, a browser tab that was never activated this session is
-    // not mounted while a file tab is active, so its live (post-wall) DOM can't
-    // be read — this is the failure the pin fixes.
-    const { unmount } = render(
-      <FileWorkspace
-        projectId="project-1"
-        projectKind="prototype"
-        files={[workspaceFile('brand.html')]}
-        liveArtifacts={[]}
-        onRefreshFiles={vi.fn()}
-        isDeck={false}
-        tabsState={{ tabs: ['brand.html'], active: 'brand.html', browserTabs }}
-        onTabsStateChange={vi.fn()}
-      />,
-    );
-    expect(screen.queryByTestId('design-browser-panel')).toBeNull();
-    unmount();
-
-    // With the pin, the same inactive browser tab stays mounted so the chat
-    // "Continue extraction" handler can read its post-wall DOM.
-    render(
-      <FileWorkspace
-        projectId="project-1"
-        projectKind="prototype"
-        files={[workspaceFile('brand.html')]}
-        liveArtifacts={[]}
-        onRefreshFiles={vi.fn()}
-        isDeck={false}
-        tabsState={{ tabs: ['brand.html'], active: 'brand.html', browserTabs }}
-        pinnedBrowserTabId="__browser__:1"
-        onTabsStateChange={vi.fn()}
-      />,
-    );
-    const panel = screen.getByTestId('design-browser-panel');
-    expect(panel.dataset.initialTitle).toBe('The Economist');
-  });
-
 });
 
 describe('FileWorkspace empty-project generation contract', () => {
@@ -3080,6 +1798,8 @@ describe('FileWorkspace empty-project generation contract', () => {
       expect(screen.getByTestId('design-files-empty')).toBeTruthy();
     },
   );
+<<<<<<< HEAD
+=======
 
   it('keeps delivery recovery in Chat without mounting status over existing preview files', () => {
     render(
@@ -3171,4 +1891,5 @@ describe('FileWorkspace empty-project generation contract', () => {
 
     expect(screen.queryByTestId('preview-run-status')).toBeNull();
   });
+>>>>>>> upstream/main
 });

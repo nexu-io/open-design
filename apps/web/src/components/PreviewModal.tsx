@@ -54,11 +54,11 @@ export interface PreviewView {
 }
 
 export interface PreviewSidebar {
-  // Accessible label for the side pane and its stage-edge handles.
+  // Header label and toggle button label.
   label: string;
   // Side-pane content — caller renders whatever it likes (markdown source
-  // view, swatch grid, etc.). When the sidebar prop is absent, its stage-edge
-  // handles are not shown.
+  // view, swatch grid, etc.). Always optional; when absent the toggle is
+  // not shown.
   content: ReactNode;
   // Default open state on first mount. Defaults to false.
   defaultOpen?: boolean;
@@ -78,13 +78,6 @@ export interface PreviewSidebar {
 // the whole modal layout. Stays optional so existing callers
 // (DesignSystemPreviewModal, ExamplesTab) can keep their current
 // chrome unchanged.
-export interface PreviewPrimaryActionMenuItem {
-  label: string;
-  description?: string;
-  onClick: () => void;
-  testId?: string;
-}
-
 export interface PreviewPrimaryAction {
   label: string;
   onClick: () => void;
@@ -92,11 +85,6 @@ export interface PreviewPrimaryAction {
   busyLabel?: string;
   disabled?: boolean;
   testId?: string;
-  // When present, the primary button becomes a split button: clicking the
-  // main face still runs `onClick`, while a caret toggle opens this menu of
-  // secondary variants (e.g. "Use plugin" vs "Use with query"). Mirrors the
-  // plugin-card use-menu so the modal offers the same affordance.
-  menu?: PreviewPrimaryActionMenuItem[];
 }
 
 export interface PreviewShareTarget {
@@ -112,19 +100,6 @@ type SocialSharePlatform =
   | 'linkedin'
   | 'instagram'
   | 'xiaohongshu';
-
-// Every clickable item inside the merged Share popover — social intents,
-// copy actions and file exports. Callers receive these verbatim as
-// analytics `element` values (already snake_case).
-export type PreviewSharePopoverItem =
-  | SocialSharePlatform
-  | 'copy_link'
-  | 'copy_share_text'
-  | 'pdf'
-  | 'zip'
-  | 'html'
-  | 'image'
-  | 'open_in_new_tab';
 
 const SOCIAL_SHARE_PLATFORMS: Array<{
   platform: SocialSharePlatform;
@@ -211,8 +186,8 @@ interface Props {
   // into a half-broken responsive breakpoint. Defaults to 1280 — wide
   // enough that desktop-shaped showcases keep their intended layout.
   designWidth?: number;
-  // Accent CTA rendered before the remaining header actions (Share / Close).
-  // Plugin detail wrappers use this to expose "Use plugin".
+  // Accent CTA rendered before the ghost actions (Sidebar / Fullscreen /
+  // Share / Close). Plugin detail wrappers use this to expose "Use plugin".
   primaryAction?: PreviewPrimaryAction;
   // Optional extra controls rendered after Share and before the Close
   // button — used by plugin detail wrappers to surface the
@@ -224,16 +199,21 @@ interface Props {
   // recipient-openable URL before the modal exposes copy/social actions.
   shareTarget?: PreviewShareTarget;
   // Optional analytics callbacks. Fires when the user clicks the
-  // chrome-level affordances (fullscreen, share trigger, stage-edge sidebar
-  // handle). Callers wire these to their surface's tracking helper.
+  // chrome-level affordances (fullscreen, share trigger, sidebar
+  // toggle). Callers wire these to their surface's tracking helper.
   onFullscreenClick?: () => void;
   onShareClick?: () => void;
   onSidebarToggleClick?: (open: boolean) => void;
-  // Fires when the user picks any share-popover item — social platforms,
-  // "copy_link" / "copy_share_text" and the file exports ("pdf" / "zip" /
-  // "html" / "image" / "open_in_new_tab"). Used by callers that want to
-  // track popover-level clicks separately from the share trigger.
-  onSharePopoverItemClick?: (item: PreviewSharePopoverItem) => void;
+  // Hide the header sidebar-toggle button (the plugin detail opens its
+  // collapsed info panel via the preview-edge handle instead). Other
+  // variants — design-system "DESIGN.md", media, scenario — keep it.
+  hideSidebarToggle?: boolean;
+  // Fires when the user picks a share-menu item ("pdf" / "zip" / "html"
+  // / "image" / "open_in_new_tab"). Used by callers that want to track popover-
+  // level clicks separately from the share trigger.
+  onSharePopoverItemClick?: (
+    item: 'pdf' | 'zip' | 'html' | 'image' | 'open_in_new_tab',
+  ) => void;
 }
 
 // A full-screen overlay that renders an iframe of arbitrary HTML, with an
@@ -253,6 +233,7 @@ export function PreviewModal({
   primaryAction,
   headerExtras,
   shareTarget,
+  hideSidebarToggle = false,
   onFullscreenClick,
   onShareClick,
   onSidebarToggleClick,
@@ -264,7 +245,6 @@ export function PreviewModal({
     : views[0]?.id ?? '';
   const [activeId, setActiveId] = useState<string>(initial);
   const [templateShareOpen, setTemplateShareOpen] = useState(false);
-  const [primaryMenuOpen, setPrimaryMenuOpen] = useState(false);
   const [copyShareFeedback, setCopyShareFeedback] = useState<{
     key: string;
     ok: boolean;
@@ -274,7 +254,6 @@ export function PreviewModal({
     sidebar?.defaultOpen ?? false,
   );
   const templateShareRef = useRef<HTMLDivElement | null>(null);
-  const primaryMenuRef = useRef<HTMLDivElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const stageFrameRef = useRef<HTMLDivElement | null>(null);
   const previewIframeRef = useRef<HTMLIFrameElement | null>(null);
@@ -358,28 +337,6 @@ export function PreviewModal({
       document.removeEventListener('keydown', onKey);
     };
   }, [templateShareOpen]);
-
-  // Same outside-click / Escape dismissal for the primary-action split menu.
-  useEffect(() => {
-    if (!primaryMenuOpen) return;
-    const onDoc = (e: MouseEvent) => {
-      const target = e.target as Node;
-      if (!primaryMenuRef.current?.contains(target)) {
-        setPrimaryMenuOpen(false);
-      }
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setPrimaryMenuOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', onDoc);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDoc);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [primaryMenuOpen]);
 
   // Lock body scroll while open.
   useEffect(() => {
@@ -581,90 +538,38 @@ export function PreviewModal({
             ) : null}
             <div className="ds-modal-actions">
               {primaryAction ? (
-                primaryAction.menu && primaryAction.menu.length > 0 ? (
-                  <div
-                    className="ds-modal-primary-action-group"
-                    ref={primaryMenuRef}
-                  >
-                    <button
-                      type="button"
-                      className="ds-modal-primary-action ds-modal-primary-action--split"
-                      onClick={primaryAction.onClick}
-                      disabled={primaryAction.disabled || primaryAction.busy}
-                      aria-busy={primaryAction.busy ? 'true' : undefined}
-                      {...(primaryAction.testId
-                        ? { 'data-testid': primaryAction.testId }
-                        : {})}
-                    >
-                      {primaryAction.busy
-                        ? primaryAction.busyLabel ?? primaryAction.label
-                        : primaryAction.label}
-                    </button>
-                    <button
-                      type="button"
-                      className="ds-modal-primary-action ds-modal-primary-action-caret"
-                      onClick={() => setPrimaryMenuOpen((v) => !v)}
-                      disabled={primaryAction.disabled || primaryAction.busy}
-                      aria-haspopup="menu"
-                      aria-expanded={primaryMenuOpen}
-                      aria-label={`More ways to ${primaryAction.label}`}
-                      {...(primaryAction.testId
-                        ? { 'data-testid': `${primaryAction.testId}-menu` }
-                        : {})}
-                    >
-                      <Icon name="chevron-down" size={12} />
-                    </button>
-                    {primaryMenuOpen ? (
-                      <div
-                        className="share-menu-popover ds-modal-primary-action-popover"
-                        role="menu"
-                      >
-                        {primaryAction.menu.map((item, index) => (
-                          <button
-                            key={item.testId ?? `${item.label}-${index}`}
-                            type="button"
-                            role="menuitem"
-                            className="share-menu-item ds-modal-primary-action-option"
-                            onMouseDown={(e) => e.preventDefault()}
-                            onClick={() => {
-                              setPrimaryMenuOpen(false);
-                              item.onClick();
-                            }}
-                            {...(item.testId
-                              ? { 'data-testid': item.testId }
-                              : {})}
-                          >
-                            <span className="ds-modal-primary-action-option__body">
-                              <span className="ds-modal-primary-action-option__label">
-                                {item.label}
-                              </span>
-                              {item.description ? (
-                                <span className="ds-modal-primary-action-option__desc">
-                                  {item.description}
-                                </span>
-                              ) : null}
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    className="ds-modal-primary-action"
-                    onClick={primaryAction.onClick}
-                    disabled={primaryAction.disabled || primaryAction.busy}
-                    aria-busy={primaryAction.busy ? 'true' : undefined}
-                    {...(primaryAction.testId
-                      ? { 'data-testid': primaryAction.testId }
-                      : {})}
-                  >
-                    {primaryAction.busy
-                      ? primaryAction.busyLabel ?? primaryAction.label
-                      : primaryAction.label}
-                  </button>
-                )
+                <button
+                  type="button"
+                  className="ds-modal-primary-action"
+                  onClick={primaryAction.onClick}
+                  disabled={primaryAction.disabled || primaryAction.busy}
+                  aria-busy={primaryAction.busy ? 'true' : undefined}
+                  {...(primaryAction.testId
+                    ? { 'data-testid': primaryAction.testId }
+                    : {})}
+                >
+                  {primaryAction.busy
+                    ? primaryAction.busyLabel ?? primaryAction.label
+                    : primaryAction.label}
+                </button>
+              ) : null}
+              {sidebar ? (
+                <button
+                  className={`ghost ${sidebarOpen ? 'is-active' : ''}${
+                    hideSidebarToggle ? ' ds-modal-sidebar-toggle--compact-only' : ''
+                  }`}
+                  onClick={() => {
+                    setSidebarOpen((v) => {
+                      const next = !v;
+                      onSidebarToggleClick?.(next);
+                      return next;
+                    });
+                  }}
+                  aria-pressed={sidebarOpen}
+                  title={sidebar.label}
+                >
+                  {sidebar.label}
+                </button>
               ) : null}
               {showTemplateShareMenu ? (
                 <div className="share-menu template-share-menu" ref={templateShareRef}>
@@ -715,7 +620,6 @@ export function PreviewModal({
                                       event.preventDefault();
                                       return;
                                     }
-                                    onSharePopoverItemClick?.(item.platform);
                                     if (item.mode === 'copy-open') {
                                       event.preventDefault();
                                       const shareWindow = window.open('about:blank', '_blank');
@@ -755,10 +659,7 @@ export function PreviewModal({
                               type="button"
                               className="share-menu-item"
                               role="menuitem"
-                              onClick={() => {
-                                onSharePopoverItemClick?.('copy_link');
-                                void copyPreviewShare(previewShareUrl, 'link');
-                              }}
+                              onClick={() => copyPreviewShare(previewShareUrl, 'link')}
                             >
                               <span className="share-menu-icon">
                                 <Icon
@@ -784,10 +685,7 @@ export function PreviewModal({
                               type="button"
                               className="share-menu-item"
                               role="menuitem"
-                              onClick={() => {
-                                onSharePopoverItemClick?.('copy_share_text');
-                                void copyPreviewShare(previewShareCopy, 'text');
-                              }}
+                              onClick={() => copyPreviewShare(previewShareCopy, 'text')}
                             >
                               <span className="share-menu-icon">
                                 <Icon
@@ -969,7 +867,7 @@ export function PreviewModal({
             ) : null}
             {isCustomView ? (
               // Caller-rendered ReactNode (e.g. plugin media player).
-              // The modal still owns chrome (header, sidebar handles,
+              // The modal still owns chrome (header, sidebar toggle,
               // fullscreen, close) so every plugin variant shares the
               // same layout language.
               <div className="ds-modal-stage-custom">{activeCustom}</div>
@@ -1085,7 +983,7 @@ export function PreviewModal({
               >
                 <span aria-hidden="true">›</span>
               </button>
-              <div className="ds-modal-sidebar-body">{sidebar.content}</div>
+              {sidebar.content}
             </aside>
           ) : null}
         </div>

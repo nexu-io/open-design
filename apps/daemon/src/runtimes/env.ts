@@ -1,4 +1,3 @@
-import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -27,18 +26,30 @@ const RUNTIME_MODULE_PROJECT_ROOT = resolveProjectRootFromNestedModule(
 
 // Build the env passed to spawn() for a given agent adapter.
 //
-// Auth/config precedence for Local CLI launches:
+// The claude adapter strips Anthropic API credentials so Claude Code's own auth
+// resolution (claude login / Pro/Max plan) wins instead of silently
+// falling back to API-key billing whenever the daemon happened to be
+// launched from a shell that exported the key for SDK or scripting use.
+// See issue #398.
 //
-// 1. Provider BYOK is separate. It is used by Open Design's direct provider
-//    API calls and is not automatically mapped into Local CLI launches.
-// 2. The inherited launch env represents the user's local CLI setup
-//    (OAuth/login files, CLI homes, or user-owned API-key env). Preserve it
-//    so Claude Code/Codex behave like they do in the user's terminal.
-// 3. `configuredEnv` comes from Settings -> Local CLI ->
-//    "Advanced: proxy & custom paths". It is an explicit low-level CLI env
-//    override, so it wins over inherited env, including API-key variables.
-//    BASE_URL is optional: when omitted, the underlying CLI uses its own
-//    official default endpoint.
+// However, when ANTHROPIC_BASE_URL is set the user is intentionally
+// routing Claude Code to a custom endpoint (e.g. a Kimi/Moonshot proxy).
+// In that case claude login is meaningless, so preserve the credential so
+// the child can authenticate against the custom base URL.
+//
+// The codex adapter has the symmetric problem: a stale BYOK
+// OPENAI_API_KEY / CODEX_API_KEY left behind in app-config.json silently
+// outranks Codex CLI's own `~/.codex/auth.json` (codex login) and trips
+// 401 invalid_api_key whenever execution mode is switched back to
+// Local CLI. Strip both keys unless the user has also configured a
+// custom OPENAI_BASE_URL — i.e. they are intentionally routing Codex
+// CLI through a third-party OpenAI-compatible gateway. See issue #2420.
+//
+// Windows env-var names are case-insensitive at the kernel level
+// (`GetEnvironmentVariable`), but spreading `process.env` into a plain
+// object loses Node's case-insensitive accessor — `Anthropic_Api_Key`
+// would survive a literal `delete env.ANTHROPIC_API_KEY` and still reach
+// the child. Iterate keys and compare case-insensitively to close that.
 // When the daemon launches the vela (amr) CLI, forward this installation's id
 // so vela's analytics can be correlated back to it. spawnEnvForAgent is
 // synchronous, so this uses readAppConfigSync — the synchronous mirror of
@@ -73,51 +84,18 @@ export function spawnEnvForAgent(
   baseEnv: RuntimeEnvMap,
   configuredEnv: unknown = {},
   systemProxyEnv: RuntimeEnvMap = resolveSystemProxyEnv(),
-  _options: SpawnEnvOptions = {},
+  options: SpawnEnvOptions = {},
 ): NodeJS.ProcessEnv {
   const sandboxRuntime = sandboxRuntimeConfigForBaseEnv(baseEnv);
-  const expandedConfiguredEnv = expandConfiguredEnv(configuredEnv);
   const env = mergeProxyAwareEnv(
     process.platform,
     systemProxyEnv,
     baseEnv,
-    expandedConfiguredEnv,
+    expandConfiguredEnv(configuredEnv),
   );
   if (agentId === 'amr') {
     Object.assign(env, amrVelaProfileEnv(env));
     Object.assign(env, amrAnalyticsIdentityEnv(env));
-    // `execAgentFile` REPLACES the child environment (execFile with `env`
-    // set), so anything missing here is genuinely absent for vela. `vela model
-    // list` resolves its config home up front and exits non-zero with
-    // "$HOME is not defined" when HOME is unset — while `vela model preset`
-    // and `vela --version` do not need it. A packaged daemon spawned with a
-    // stripped env (or any caller that did not forward HOME) would therefore
-    // detect AMR and seed the picker from preset, yet fail every run's remote
-    // catalog probe. Backfill HOME from the OS so the authoritative catalog
-    // call is never silently decapitated by a missing home dir.
-    if (!env.HOME?.trim()) {
-      const home = os.homedir();
-      if (home) env.HOME = home;
-    }
-    // Identify Open Design as the host so the vela CLI tags its command +
-    // model_request analytics with source=open_design (revenue attribution).
-    // Not PII (unlike the installation id above), so set it regardless of the
-    // telemetry-consent gate that amrAnalyticsIdentityEnv applies.
-    if (!env.AMR_CLIENT_SOURCE?.trim()) {
-      env.AMR_CLIENT_SOURCE = 'open_design';
-    }
-    // AMR runs through Vela's private OpenCode server. The server inherits
-    // this flag, which enables OpenCode's built-in, keyless Exa websearch
-    // tool for AMR without changing the standalone Vela CLI default.
-    if (!env.OPENCODE_ENABLE_EXA?.trim()) {
-      env.OPENCODE_ENABLE_EXA = '1';
-    }
-    // Vela owns the private OpenCode config and intentionally discards a
-    // parent OPENCODE_CONFIG_CONTENT. Its explicit opt-in lets AMR mount the
-    // keyless Parallel Search MCP (web_search + web_fetch) alongside Exa.
-    if (!env.VELA_ENABLE_PARALLEL_MCP?.trim()) {
-      env.VELA_ENABLE_PARALLEL_MCP = '1';
-    }
     if (!env.OPENCODE_TEST_HOME?.trim() && env.OD_DATA_DIR?.trim()) {
       env.OPENCODE_TEST_HOME = path.join(
         env.OD_DATA_DIR.trim(),
@@ -129,51 +107,25 @@ export function spawnEnvForAgent(
       const opencodeBin = resolveAmrOpenCodeExecutable(env);
       if (opencodeBin) env.VELA_OPENCODE_BIN = opencodeBin;
     }
-    return finalizeRuntimeEnv(env, sandboxRuntime);
+    return reapplySandboxRuntimeEnv(env, sandboxRuntime);
   }
   if (agentId === 'claude') {
-    return finalizeRuntimeEnv(env, sandboxRuntime);
+    if (!isOpenClaudeExecutable(options.resolvedBin)) {
+      stripUnlessCustomBaseUrl(env, 'ANTHROPIC_BASE_URL', [
+        'ANTHROPIC_API_KEY',
+        'ANTHROPIC_AUTH_TOKEN',
+      ]);
+    }
+    return reapplySandboxRuntimeEnv(env, sandboxRuntime);
   }
   if (agentId === 'codex') {
-    return finalizeRuntimeEnv(env, sandboxRuntime);
-  }
-  if (agentId === 'opencode' || agentId === 'byok-opencode') {
-    stripKeysCaseInsensitive(env, [
-      'OPENCODE',
-      'OPENCODE_PID',
-      'OPENCODE_RUN_ID',
-      'OPENCODE_SERVER_PASSWORD',
+    stripUnlessCustomBaseUrl(env, 'OPENAI_BASE_URL', [
+      'OPENAI_API_KEY',
+      'CODEX_API_KEY',
     ]);
-    // OpenCode is bun-based and, left to its defaults, walks up from its cwd to
-    // the nearest project root and runs `bun install` there at startup to set up
-    // local plugins. When that root is a pnpm workspace (the daemon's own repo,
-    // or a project nested inside it), the install replaces the pnpm `.pnpm` store
-    // with a bun `node_modules/.bun` + `bun.lock` and breaks the workspace.
-    // Disable project-config discovery (and its install) so OpenCode only honors
-    // the config the daemon injects via OPENCODE_CONFIG_CONTENT — this is exactly
-    // what the AMR path already does for its private OpenCode server.
-    if (!env.OPENCODE_DISABLE_PROJECT_CONFIG?.trim()) {
-      env.OPENCODE_DISABLE_PROJECT_CONFIG = 'true';
-    }
-    return finalizeRuntimeEnv(env, sandboxRuntime);
+    return reapplySandboxRuntimeEnv(env, sandboxRuntime);
   }
-  if (agentId === 'mimo') {
-    stripKeysCaseInsensitive(env, [
-      'MIMOCODE',
-      'MIMOCODE_PID',
-      'MIMOCODE_RUN_ID',
-      'MIMOCODE_SERVER_PASSWORD',
-    ]);
-    // MiMo builds on the same toolchain as OpenCode and has the same
-    // workspace-corruption risk when project-config discovery walks up from
-    // cwd to a pnpm workspace root and runs its own install. Disable it so
-    // MiMo only honors the config injected through MIMOCODE_CONFIG_CONTENT.
-    if (!env.MIMOCODE_DISABLE_PROJECT_CONFIG?.trim()) {
-      env.MIMOCODE_DISABLE_PROJECT_CONFIG = 'true';
-    }
-    return finalizeRuntimeEnv(env, sandboxRuntime);
-  }
-  return finalizeRuntimeEnv(env, sandboxRuntime);
+  return reapplySandboxRuntimeEnv(env, sandboxRuntime);
 }
 
 export function openDesignAmrTraceEnv(input: {
@@ -200,6 +152,15 @@ export function openDesignAmrTraceEnv(input: {
   };
 }
 
+function isOpenClaudeExecutable(resolvedBin: string | null | undefined): boolean {
+  if (typeof resolvedBin !== 'string' || !resolvedBin.trim()) return false;
+  const base = path
+    .basename(resolvedBin.trim().replace(/\\/g, '/'))
+    .replace(/\.(exe|cmd|bat)$/i, '')
+    .toLowerCase();
+  return base === 'openclaude';
+}
+
 function sandboxRuntimeConfigForBaseEnv(
   baseEnv: RuntimeEnvMap,
 ): SandboxRuntimeConfig | null {
@@ -221,68 +182,26 @@ function reapplySandboxRuntimeEnv(
   return applySandboxRuntimeEnv(env, sandboxRuntime);
 }
 
-function finalizeRuntimeEnv(
+// Remove `secretKeys` from `env` unless `baseUrlKey` is set to a non-empty
+// value — in which case the user is intentionally routing the CLI through
+// a custom endpoint and the secret is the credential that authenticates
+// against it. Comparison is case-insensitive so Windows env names with
+// mixed casing (`Openai_Api_Key`) cannot slip past a literal `delete`.
+function stripUnlessCustomBaseUrl(
   env: NodeJS.ProcessEnv,
-  sandboxRuntime: SandboxRuntimeConfig | null,
-): NodeJS.ProcessEnv {
-  const finalizedEnv = reapplySandboxRuntimeEnv(env, sandboxRuntime);
-  applyWindowsUserCacheEnv(finalizedEnv);
-  return finalizedEnv;
-}
-
-function stripKeysCaseInsensitive(
-  env: NodeJS.ProcessEnv,
-  keysToStrip: readonly string[],
+  baseUrlKey: string,
+  secretKeys: readonly string[],
 ): void {
-  const keysUpper = new Set(keysToStrip.map((key) => key.toUpperCase()));
+  const baseUrlKeyUpper = baseUrlKey.toUpperCase();
+  const hasCustomBaseUrl = Object.keys(env).some(
+    (k) =>
+      k.toUpperCase() === baseUrlKeyUpper &&
+      typeof env[k] === 'string' &&
+      env[k].trim() !== '',
+  );
+  if (hasCustomBaseUrl) return;
+  const secretKeysUpper = new Set(secretKeys.map((k) => k.toUpperCase()));
   for (const key of Object.keys(env)) {
-    if (keysUpper.has(key.toUpperCase())) delete env[key];
+    if (secretKeysUpper.has(key.toUpperCase())) delete env[key];
   }
-}
-
-function applyWindowsUserCacheEnv(env: NodeJS.ProcessEnv): void {
-  if (process.platform !== 'win32') return;
-
-  // GUI-launched Windows daemons can inherit enough PATH to resolve a CLI
-  // while still missing the profile/cache variables CLIs use at startup.
-  const userProfile =
-    envValue(env, 'USERPROFILE') ||
-    envValue(env, 'HOME') ||
-    os.homedir();
-  if (!userProfile) return;
-
-  setEnvIfMissing(env, 'USERPROFILE', userProfile);
-  const localAppData =
-    envValue(env, 'LOCALAPPDATA') ||
-    path.win32.join(userProfile, 'AppData', 'Local');
-  setEnvIfMissing(env, 'LOCALAPPDATA', localAppData);
-  setEnvIfMissing(
-    env,
-    'APPDATA',
-    path.win32.join(userProfile, 'AppData', 'Roaming'),
-  );
-  const tempDir = path.win32.join(localAppData, 'Temp');
-  setEnvIfMissing(env, 'TEMP', tempDir);
-  setEnvIfMissing(env, 'TMP', tempDir);
-}
-
-function envValue(env: NodeJS.ProcessEnv, key: string): string | null {
-  const existingKey = Object.keys(env).find(
-    (candidate) => candidate.toUpperCase() === key.toUpperCase(),
-  );
-  const value = existingKey ? env[existingKey] : undefined;
-  const trimmed = typeof value === 'string' ? value.trim() : '';
-  return trimmed ? (value as string) : null;
-}
-
-function setEnvIfMissing(
-  env: NodeJS.ProcessEnv,
-  key: string,
-  value: string,
-): void {
-  if (envValue(env, key)) return;
-  const existingKey = Object.keys(env).find(
-    (candidate) => candidate.toUpperCase() === key.toUpperCase(),
-  );
-  env[existingKey ?? key] = value;
 }

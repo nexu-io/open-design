@@ -53,6 +53,5 @@ contains at least one step.
 
 ## Status
 
-Implemented by the daemon runner in
-`apps/daemon/src/plugins/atoms/rewrite-plan.ts`. It classifies ownership and
-writes `plan.md`, `steps.json`, and `ownership.json`.
+Reserved id, prompt-only fragment in v1. The component-mapping
+heuristic + ownership classifier land in spec §16 Phase 7.

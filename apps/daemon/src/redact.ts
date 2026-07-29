@@ -54,14 +54,8 @@ const PATTERNS: readonly Pattern[] = [
   // signals a paste happened.
   { name: 'aws_access_key', regex: /\bAKIA[0-9A-Z]{16}\b/g },
 
-  // Google API keys — legacy AIza… (Maps / AI Studio) and service-account-
-  // bound AQ.… keys AI Studio now issues. AQ. must run before the generic
-  // sk_ rule would mis-label unrelated tokens.
-  { name: 'google_api_key', regex: /\bAQ\.[A-Za-z0-9_-]{20,}\b/g },
+  // Google API keys (Firebase / Maps / etc.).
   { name: 'google_api_key', regex: /\bAIza[0-9A-Za-z_-]{35}\b/g },
-
-  // NVIDIA NGC / inference API keys.
-  { name: 'nvidia_api_key', regex: /\bnvapi-[A-Za-z0-9_-]{20,}\b/g },
 
   // Slack tokens.
   { name: 'slack_token', regex: /\bxox[abprs]-[0-9A-Za-z-]{10,}\b/g },

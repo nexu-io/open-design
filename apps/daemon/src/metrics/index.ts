@@ -126,3 +126,18 @@ export function __resetCritiqueMetricsForTests(): void {
   critiqueParserErrorsTotal.reset();
   critiqueProtocolVersion.reset();
 }
+
+// ============================================================================
+// Critique Loop Metrics (Loop Engineering)
+// ============================================================================
+
+export {
+  critiqueLoopTotal,
+  critiqueLoopConvergedTotal,
+  critiqueLoopExhaustedTotal,
+  critiqueLoopIterationsTotal,
+  critiqueLoopFixDurationMs,
+  critiqueLoopTotalDurationMs,
+  critiqueLoopEnabled,
+  critiqueLoopActiveCount,
+} from '../critique/metrics-loop.js';

@@ -14,7 +14,7 @@ import {
   fetchPromptTemplates,
   fetchSkills,
 } from '../../src/providers/registry';
-import { fetchAmrModels, fetchVelaLoginStatus } from '../../src/providers/daemon';
+import { fetchAmrModels } from '../../src/providers/daemon';
 import { listProjects, listTemplates } from '../../src/state/projects';
 
 vi.mock('../../src/router', () => ({
@@ -28,7 +28,7 @@ vi.mock('../../src/components/EntryView', () => ({
     config,
     onOpenSettings,
   }: {
-    agents: Array<{ id: string; models?: Array<{ id: string }>; authStatus?: string }>;
+    agents: Array<{ id: string; models?: Array<{ id: string }> }>;
     config: AppConfig;
     onOpenSettings: () => void;
   }) => (
@@ -41,9 +41,6 @@ vi.mock('../../src/components/EntryView', () => ({
       </div>
       <div data-testid="amr-profile">
         {config.agentCliEnv?.amr?.OPEN_DESIGN_AMR_PROFILE ?? 'none'}
-      </div>
-      <div data-testid="codex-auth">
-        {agents.find((agent) => agent.id === 'codex')?.authStatus ?? 'none'}
       </div>
       <button onClick={() => onOpenSettings()}>open settings</button>
     </>
@@ -88,15 +85,13 @@ vi.mock('../../src/components/SettingsDialog', () => ({
         rescan agents
       </button>
       <button
-        onClick={() => {
-          window.dispatchEvent(new CustomEvent('od:amr-login-status-change'));
+        onClick={() =>
           onAmrLoginStatusChange?.({
             loggedIn: true,
             profile: 'default',
             user: null,
             configPath: '/tmp/amr-config.json',
-          });
-        }}
+          })}
       >
         mark amr signed in
       </button>
@@ -126,7 +121,6 @@ vi.mock('../../src/providers/daemon', async () => {
   return {
     ...actual,
     fetchAmrModels: vi.fn(),
-    fetchVelaLoginStatus: vi.fn(),
   };
 });
 
@@ -169,7 +163,6 @@ const mockedFetchDesignSystems = vi.mocked(fetchDesignSystems);
 const mockedFetchPromptTemplates = vi.mocked(fetchPromptTemplates);
 const mockedFetchSkills = vi.mocked(fetchSkills);
 const mockedFetchAmrModels = vi.mocked(fetchAmrModels);
-const mockedFetchVelaLoginStatus = vi.mocked(fetchVelaLoginStatus);
 const mockedListProjects = vi.mocked(listProjects);
 const mockedListTemplates = vi.mocked(listTemplates);
 const mockedLoadConfig = vi.mocked(loadConfig);
@@ -228,7 +221,6 @@ describe('App AMR polling', () => {
     mockedFetchDesignSystems.mockResolvedValue([]);
     mockedFetchPromptTemplates.mockResolvedValue([]);
     mockedFetchAppVersionInfo.mockResolvedValue(null);
-    mockedFetchVelaLoginStatus.mockResolvedValue(null);
     mockedListProjects.mockResolvedValue([]);
     mockedListTemplates.mockResolvedValue([]);
     mockedLoadConfig.mockReturnValue({ ...baseConfig });
@@ -282,45 +274,6 @@ describe('App AMR polling', () => {
     expect(mockedFetchAmrModels).toHaveBeenCalledTimes(3);
   });
 
-  it('refreshes AMR status and model catalog when returning from an external upgrade flow', async () => {
-    mockedFetchAmrModels.mockReset();
-    mockedFetchAmrModels
-      .mockResolvedValueOnce({
-        source: 'remote',
-        refreshing: false,
-        models: [{ id: 'locked-model', label: 'locked-model', enabled: false }],
-      })
-      .mockResolvedValueOnce({
-        source: 'remote',
-        refreshing: false,
-        models: [{ id: 'unlocked-model', label: 'unlocked-model', enabled: true }],
-      });
-    mockedFetchVelaLoginStatus.mockResolvedValue({
-      loggedIn: true,
-      loginInFlight: false,
-      profile: 'local',
-      user: null,
-      configPath: '/tmp/amr-config.json',
-      account: { plan: 'pro' },
-    });
-
-    render(<App />);
-
-    await waitFor(() => {
-      expect(screen.getByTestId('amr-model').textContent).toBe('locked-model');
-    });
-
-    fireEvent(window, new Event('focus'));
-
-    await waitFor(() => {
-      expect(mockedFetchVelaLoginStatus).toHaveBeenCalledWith({ refresh: true });
-    });
-    await waitFor(() => {
-      expect(screen.getByTestId('amr-model').textContent).toBe('unlocked-model');
-    });
-    expect(mockedFetchAmrModels).toHaveBeenCalledTimes(2);
-  });
-
   it('starts AMR preset polling before the agent probe resolves', { timeout: 10_000 }, async () => {
     let resolveAgents!: (value: Array<{
       id: string;
@@ -363,6 +316,11 @@ describe('App AMR polling', () => {
     });
   });
 
+<<<<<<< HEAD
+  it('restarts AMR polling after sign-in when preset refresh previously stopped on a remote error', {
+    timeout: 10_000,
+  }, async () => {
+=======
   it('rescans agents on window focus so external CLI auth changes are detected', async () => {
     const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(0);
     mockedFetchAmrModels.mockReset();
@@ -421,6 +379,7 @@ describe('App AMR polling', () => {
 
   it('restarts AMR polling after sign-in when preset refresh previously stopped on a remote error', async () => {
     vi.useFakeTimers();
+>>>>>>> upstream/main
     mockedFetchAmrModels.mockReset();
     mockedFetchAmrModels
       .mockResolvedValueOnce({
@@ -446,18 +405,20 @@ describe('App AMR polling', () => {
     expect(mockedFetchAmrModels).toHaveBeenCalledTimes(1);
     expect(screen.getByTestId('amr-model').textContent).toBe('preset-a');
 
+<<<<<<< HEAD
+    await waitFor(() => {
+      expect(mockedFetchAmrModels).toHaveBeenCalledTimes(2);
+    }, { timeout: 4_000 });
+
+    await new Promise((resolve) => setTimeout(resolve, 1_500));
+=======
     await advanceTestClock(1_000);
     expect(mockedFetchAmrModels).toHaveBeenCalledTimes(2);
     expect(screen.getByTestId('amr-model').textContent).toBe('preset-a');
+>>>>>>> upstream/main
 
     await advanceTestClock(1_500);
     expect(mockedFetchAmrModels).toHaveBeenCalledTimes(2);
-    mockedFetchVelaLoginStatus.mockResolvedValue({
-      loggedIn: true,
-      profile: 'default',
-      user: null,
-      configPath: '/tmp/amr-config.json',
-    });
 
     fireEvent.click(screen.getByText('open settings'));
     expect(screen.getByText('mark amr signed in')).toBeTruthy();
@@ -468,6 +429,11 @@ describe('App AMR polling', () => {
     expect(screen.getByTestId('amr-model').textContent).toBe('remote-a');
   });
 
+<<<<<<< HEAD
+  it('stops polling after the preset retry budget is exhausted when remote never arrives', {
+    timeout: 20_000,
+  }, async () => {
+=======
   it('does not restart AMR model polling for repeated signed-in status snapshots', async () => {
     mockedFetchAmrModels.mockReset();
     mockedFetchAmrModels.mockResolvedValue({
@@ -501,6 +467,7 @@ describe('App AMR polling', () => {
 
   it('stops polling after the preset retry budget is exhausted when remote never arrives', async () => {
     vi.useFakeTimers();
+>>>>>>> upstream/main
     mockedFetchAmrModels.mockReset();
     mockedFetchAmrModels.mockImplementation(async () => ({
       source: 'preset',

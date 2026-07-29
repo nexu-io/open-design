@@ -11,7 +11,7 @@ variables:
   deploymentName: open-design-aci
   location: eastus
   templateFile: deploy/azure/container-instance.bicep
-  openDesignImage: ghcr.io/nexu-io/od:latest
+  openDesignImage: docker.io/vanjayak/open-design:latest
   dnsNameLabel: open-design-$(Build.BuildId)
   browserOrigin: https://od.example.com
 

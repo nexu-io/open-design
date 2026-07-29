@@ -145,11 +145,15 @@ export class MentionNode extends TextNode {
     }
   }
 
-  // Token mode keeps the mention indivisible. Text must still be insertable on
-  // either side as sibling text nodes so users can click/arrow around a pill
-  // and continue writing inline.
+  // Nothing may merge into or split a mention — keeps the token indivisible.
   isToken(): true {
     return true;
+  }
+  canInsertTextBefore(): boolean {
+    return false;
+  }
+  canInsertTextAfter(): boolean {
+    return false;
   }
 
   exportJSON(): SerializedMentionNode {

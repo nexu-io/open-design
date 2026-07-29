@@ -53,7 +53,7 @@ interface TabDragTarget {
 interface Props {
   route: Route;
   projects: Project[];
-  // Once onboarding is finished, the permanent entry
+  // Once onboarding is finished (completed or skipped), the permanent entry
   // tab must never linger on the 'onboarding' (Welcome) view — some completion
   // paths navigate straight to a new project/design-system and leave the entry
   // tab showing Welcome in the background. This flips it back to Home.
@@ -213,37 +213,6 @@ function normalizeTabsState(state: WorkspaceTabsState): WorkspaceTabsState {
     // section the user was on is preserved.
     sourceTabs = sourceTabs.filter(
       (tab) => tab.kind !== 'entry' || tab.id === canonicalEntry!.id,
-    );
-  }
-
-  // Coalesce duplicate project tabs (one-project/one-tab invariant): a
-  // workspace restored from localStorage can already hold several tabs for the
-  // same projectId if the user hit the duplicate-tab bug before upgrading.
-  // Keep one canonical tab per projectId — the active match, else the newest —
-  // and drop the rest. This runs on every normalize, so it repairs persisted
-  // state as well as preventing new corruption. See issue #2641.
-  const projectTabs = sourceTabs.filter((tab) => tab.kind === 'project');
-  if (projectTabs.length > 0) {
-    const canonicalByProject = new Map<string, WorkspaceChromeTab>();
-    for (const tab of projectTabs) {
-      const existing = canonicalByProject.get(tab.projectId);
-      if (!existing) {
-        canonicalByProject.set(tab.projectId, tab);
-        continue;
-      }
-      // Prefer the currently active tab; otherwise keep the most recently used.
-      const tabIsActive = tab.id === state.activeTabId;
-      const existingIsActive = existing.id === state.activeTabId;
-      const keepTab =
-        (tabIsActive && !existingIsActive) ||
-        (!existingIsActive && tab.lastActiveAt > existing.lastActiveAt);
-      if (keepTab) canonicalByProject.set(tab.projectId, tab);
-    }
-    const canonicalProjectIds = new Set(
-      Array.from(canonicalByProject.values()).map((tab) => tab.id),
-    );
-    sourceTabs = sourceTabs.filter(
-      (tab) => tab.kind !== 'project' || canonicalProjectIds.has(tab.id),
     );
   }
 
@@ -449,22 +418,11 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
   const popoverRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const hoverTimerRef = useRef<number | null>(null);
-  const previousOnboardingCompletedRef = useRef(onboardingCompleted);
-  const resetEntryToHomeAfterOnboardingRef = useRef(false);
   const dragSuppressClickRef = useRef(false);
   const draggingTabIdRef = useRef<string | null>(null);
   const dragHapticTargetRef = useRef<string | null>(null);
   const [draggingTabId, setDraggingTabId] = useState<string | null>(null);
   const [dragOverTarget, setDragOverTarget] = useState<TabDragTarget | null>(null);
-
-  // While the app is on the onboarding (Welcome) route, opening a new tab
-  // would navigate away from onboarding and bypass the Connect gate. Key off
-  // the live `route` (the URL truth), NOT `onboardingCompleted` and NOT the
-  // internal tab `view`: a user who finished onboarding before (completion
-  // persisted) can still land on /onboarding, and the entry tab's view can be
-  // mid-rewrite by the post-completion effect. Gating in `createNewTab` blocks
-  // both the "+" button and the Cmd/Ctrl+T shortcut from one place.
-  const onboardingActive = route.kind === 'home' && route.view === 'onboarding';
 
   function clearHoverTimer() {
     if (hoverTimerRef.current !== null) {
@@ -525,57 +483,27 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
     setState((current) => syncStateToRoute(current, route));
   }, [route]);
 
-  useEffect(() => {
-    if (!previousOnboardingCompletedRef.current && onboardingCompleted) {
-      resetEntryToHomeAfterOnboardingRef.current = true;
-    }
-    previousOnboardingCompletedRef.current = onboardingCompleted;
-  }, [onboardingCompleted]);
-
   // Auto-close the Welcome tab once onboarding ends: rewrite any entry tab
   // still parked on the 'onboarding' view back to 'home'. This catches every
-  // finish path uniformly — last-step Continue and any future route that
-  // navigates away while leaving the entry tab on Welcome in the background.
+  // finish path uniformly — Skip, last-step Continue, and the design-system
+  // Generate route that navigates to a fresh project while leaving the entry
+  // tab on Welcome in the background.
   useEffect(() => {
     if (!onboardingCompleted) return;
-    // Don't rewrite the tab back to 'home' while the user is *still* on the
-    // onboarding route — a previously-completed user who re-opens /onboarding
-    // should keep the "Onboarding" tab label, not flip to "Home". The rewrite
-    // still fires the moment they navigate away (onboardingActive turns false).
-    if (onboardingActive) return;
-    const resetDesignSystemsEntry =
-      resetEntryToHomeAfterOnboardingRef.current && route.kind === 'project';
-    if (resetDesignSystemsEntry) {
-      resetEntryToHomeAfterOnboardingRef.current = false;
-    }
     setState((current) => {
-      if (!current.tabs.some((tab) =>
-        tab.kind === 'entry' &&
-        (tab.view === 'onboarding' || (resetDesignSystemsEntry && tab.view === 'design-systems')),
-      )) {
+      if (!current.tabs.some((tab) => tab.kind === 'entry' && tab.view === 'onboarding')) {
         return current;
       }
       return normalizeTabsState({
         ...current,
         tabs: current.tabs.map((tab) =>
-          tab.kind === 'entry' &&
-          (tab.view === 'onboarding' || (resetDesignSystemsEntry && tab.view === 'design-systems'))
+          tab.kind === 'entry' && tab.view === 'onboarding'
             ? { ...tab, view: 'home' }
             : tab,
         ),
       });
     });
-  }, [onboardingCompleted, onboardingActive, route.kind]);
-
-  // Close the Search-tabs popover whenever onboarding becomes active. The
-  // trigger button is hidden during onboarding, so a popover left open across
-  // a route flip to /onboarding (e.g. browser back/forward, which bypasses
-  // activateTab/createNewTab) would otherwise float over the first-run flow
-  // with no visible control to dismiss it. The portal is also gated on
-  // !onboardingActive below so it never renders for the frame before this runs.
-  useEffect(() => {
-    if (onboardingActive) setTabsMenuOpen(false);
-  }, [onboardingActive]);
+  }, [onboardingCompleted]);
 
   // Scroll the active tab into view when it changes. The strip itself
   // is native-scrollable horizontally (see CSS), so we just nudge the
@@ -587,33 +515,9 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
       const detail = (event as CustomEvent<{ route?: Route }>).detail;
       const nextRoute = detail?.route;
       if (!nextRoute) return;
+      const nextTab = tabFromRoute(nextRoute);
       setState((current) => {
         const normalized = normalizeTabsState(current);
-        // Mirror syncStateToRoute: reuse an existing project tab for the same
-        // projectId instead of appending a duplicate on repeated opens.
-        if (nextRoute.kind === 'project') {
-          const existingProjectTab = normalized.tabs.find(
-            (tab) => tab.kind === 'project' && tab.projectId === nextRoute.projectId,
-          );
-          if (existingProjectTab) {
-            const timestamp = Date.now();
-            return normalizeTabsState({
-              ...normalized,
-              tabs: normalized.tabs.map((tab) =>
-                tab.id === existingProjectTab.id
-                  ? {
-                      ...tab,
-                      conversationId: nextRoute.conversationId ?? null,
-                      fileName: nextRoute.fileName,
-                      lastActiveAt: timestamp,
-                    }
-                  : tab,
-              ),
-              activeTabId: existingProjectTab.id,
-            });
-          }
-        }
-        const nextTab = tabFromRoute(nextRoute);
         return normalizeTabsState({
           tabs: [...normalized.tabs, nextTab],
           activeTabId: nextTab.id,
@@ -815,9 +719,6 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
   }
 
   function createNewTab() {
-    // Onboarding gate — see `onboardingActive`. Covers the "+" button and the
-    // Cmd/Ctrl+T keyboard shortcut, since both funnel through here.
-    if (onboardingActive) return;
     const normalized = normalizeTabsState(state);
     const existingEntryTab = normalized.tabs.find((tab) => tab.kind === 'entry');
     if (existingEntryTab) {
@@ -1029,8 +930,11 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
             >
               <button
                 type="button"
-                className="workspace-tab__main"
+                className="workspace-tab__main od-tooltip"
                 onClick={() => openTab(tab)}
+                title={display.title}
+                data-tooltip={display.title}
+                data-tooltip-placement="bottom"
                 onFocus={(event) => scheduleHoverPreview(tab.id, event.currentTarget.parentElement ?? event.currentTarget)}
                 onBlur={dismissHoverPreview}
               >
@@ -1063,14 +967,11 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
           data-tooltip="New tab"
           data-tooltip-placement="bottom"
           aria-label="New tab"
-          data-testid="workspace-tabs-new-tab"
-          disabled={onboardingActive}
         >
           <Icon name="plus" size={14} />
         </button>
       </div>
       <div className="workspace-tabs-actions" ref={menuRef}>
-        {onboardingActive ? null : (
         <button
           type="button"
           className={`workspace-tabs-icon-btn od-tooltip${tabsMenuOpen ? ' is-active' : ''}`}
@@ -1084,8 +985,7 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
         >
           <Icon name="search" size={15} />
         </button>
-        )}
-        {tabsMenuOpen && !onboardingActive && typeof document !== 'undefined'
+        {tabsMenuOpen && typeof document !== 'undefined'
           ? createPortal(
               <div
                 className="workspace-tabs-popover"
@@ -1167,7 +1067,7 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
               const previewDisplay = displayTabById.get(previewTab.id)
                 ?? displayTabFor(previewTab, projectById, t);
               const previewDetail = describePreviewDetail(previewTab, projectById);
-              const previewWidth = Math.max(220, Math.round(hoverPreview.anchorWidth));
+              const previewWidth = Math.max(1, Math.round(hoverPreview.anchorWidth));
               const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1024;
               const left = Math.max(
                 0,
@@ -1250,8 +1150,6 @@ function displayTabFor(
     tasks: t('entry.navTasks'),
     plugins: t('entry.navPlugins'),
     'design-systems': t('entry.navDesignSystems'),
-    library: 'Library',
-    brands: t('entry.navBrands'),
     integrations: t('entry.navIntegrations'),
   };
   const entryIcon: Record<EntryHomeView, IconName> = {
@@ -1261,8 +1159,6 @@ function displayTabFor(
     tasks: 'kanban',
     plugins: 'grid',
     'design-systems': 'blocks',
-    library: 'image',
-    brands: 'blocks',
     integrations: 'link',
   };
   return {

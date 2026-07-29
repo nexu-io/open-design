@@ -722,6 +722,8 @@ describe('FileViewer manual edit regressions', () => {
     });
     expect(document.querySelector('.manual-edit-workspace')).not.toBeNull();
   });
+<<<<<<< HEAD
+=======
 
   it('saves text typed in the inspector while an inline text session is active', async () => {
     const source = '<!doctype html><html><body><main data-od-id="hero">Hero</main></body></html>';
@@ -2053,6 +2055,7 @@ describe('FileViewer manual edit regressions', () => {
       expect(banner.textContent).toContain('Could not save the undo result (422 ARTIFACT_REGRESSION): stub body regression');
     });
   });
+>>>>>>> upstream/main
 });
 
 function heroTarget(): ManualEditTarget {

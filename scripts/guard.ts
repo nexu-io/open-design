@@ -1,19 +1,19 @@
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import ts from "typescript";
 
+<<<<<<< HEAD
+=======
 import { checkCertainExemptConsumption } from "./check-certain-exempt-consumption.ts";
 import { checkCrossAppImports } from "./check-cross-app-imports.ts";
 import { checkPackagedLeafBoundary } from "./check-packaged-leaf-boundary.ts";
 import { checkTsNocheckImports } from "./check-ts-nocheck-imports.ts";
+>>>>>>> upstream/main
 import { checkDesignSystemManifests } from "./check-design-system-manifests.ts";
 import { checkDesignSystemPackageQuality } from "./check-design-system-package-quality.ts";
 import { checkDesignSystemComponentFixtureReport } from "./check-components-fixtures.ts";
 import { checkDesignSystemFlagParity } from "./check-design-system-flag-parity.ts";
 import { checkComponentsManifestExtraction } from "./check-components-manifest-extraction.ts";
-import { checkPluginPreviewManifest } from "./check-plugin-preview-manifest.ts";
-import { validatePlaywrightSuiteTopology } from "../e2e/lib/playwright/suites.ts";
 import {
   checkDesignSystemA1RequiredTokens,
   checkDesignSystemA2DefaultsParity,
@@ -22,7 +22,6 @@ import {
   checkDesignSystemTokenFixtureSync,
   checkDesignSystemUnknownTokens,
 } from "./check-tokens-fixture-sync.ts";
-import { checkCraftReferences } from "./lint-craft-references.ts";
 import { collectCssHardcodedColorMatches, cssWideAndSpecialColorKeywords, realNamedColors } from "./style-policy.ts";
 import { checkScriptsLibraryArchitecture } from "./lib/guard/architecture.ts";
 import { runGuardChecks, type GuardCheck, type GuardContext } from "./lib/guard/core.ts";
@@ -89,30 +88,9 @@ const residualAllowedExactPaths = new Set([
   "apps/packaged/esbuild.config.mjs",
   // Browser service workers must be served as JavaScript files.
   "apps/web/public/od-notifications-sw.js",
-  // Vendored dom-to-pptx browser bundle used by the packaged desktop renderer
-  // for editable PPTX export. It is loaded into the off-screen Chromium page as
-  // an upstream browser asset, not compiled as project-owned TypeScript.
-  "apps/desktop/vendor/dom-to-pptx/dom-to-pptx.bundle.js",
-  // Shared nav enhancer for the landing-page static `/community/` pages,
-  // which are verbatim HTML served straight from `public/` (not Astro-
-  // compiled). It must ship as a browser-loadable `.js` asset, same as the
-  // web notifications service worker above.
-  "apps/landing-page/public/community/_site-nav.js",
   // PostCSS loads Tailwind through a web-local .mjs compatibility config entry.
   "apps/web/postcss.config.mjs",
   "scripts/bake-html-ppt-examples.mjs",
-  // CI-only plugin-preview renderer. Kept .mjs and run directly by Node so its
-  // runtime deps (puppeteer-core + a headless Chrome + ffmpeg) are provided by
-  // the CI environment and never pulled into the daemon/web TS build or bundle.
-  "scripts/bake-plugin-previews.mjs",
-  // Manifest diff guard + its node:test coverage. Run directly by Node from the
-  // bake workflows (no TS build step there) to decide whether a `previews` entry
-  // actually changed, ignoring the per-run `generatedAt` timestamp.
-  "scripts/plugin-previews-diff.mjs",
-  "scripts/plugin-previews-diff.test.mjs",
-  // CI-only R2 garbage collector for orphaned preview clips + its node:test.
-  "scripts/plugin-previews-gc.mjs",
-  "scripts/plugin-previews-gc.test.mjs",
   "scripts/scaffold-html-ppt-skills.mjs",
   "scripts/sync-hyperframes-skill.mjs",
   "scripts/verify-media-models.mjs",
@@ -128,9 +106,6 @@ const residualAllowedExactPaths = new Set([
   "tools/dev/esbuild.config.mjs",
   "tools/pack/bin/tools-pack.mjs",
   "tools/pack/esbuild.config.mjs",
-  // Checked-in bin shim so pnpm can link `tools-release` before dist output exists.
-  "tools/release/bin/tools-release.mjs",
-  "tools/release/esbuild.config.mjs",
   "tools/serve/bin/tools-serve.mjs",
   "tools/serve/esbuild.config.mjs",
   "tools/pack/resources/mac/notarize.cjs",
@@ -153,18 +128,10 @@ const residualAllowedPathPrefixes = [
   "e2e/ui/test-results/",
   // Vendored upstream HyperFrames helper scripts (design template).
   "design-templates/hyperframes/scripts/",
-  // Vendored upstream Web Clone skill helper scripts. These are portable
-  // Node-run skill utilities executed from user workspaces via explicit script
-  // paths, and stay as `.mjs` to preserve the upstream skill packaging.
-  "skills/web-clone/scripts/",
   // Vendored upstream Last30Days runtime helper used by the engine (design template).
   "design-templates/last30days/scripts/lib/vendor/",
   // Vendored upstream html-ppt runtime assets (lewislulu/html-ppt-skill, design template).
   "design-templates/html-ppt/assets/",
-  // Vendored upstream website-clone recon/mirror/audit helpers
-  // (Jane-xiaoer/claude-skill-web-clone). Global skill assets staged into the
-  // project cwd for direct `node scripts/...` execution by the agent.
-  "skills/web-clone/scripts/",
   // Replay-based mock CLIs that impersonate the agent CLIs OD spawns
   // (opencode/claude/codex/gemini/cursor-agent + ACP family). Need to
   // be directly executable via Node so `child_process.spawn` from test
@@ -176,16 +143,6 @@ const residualAllowedPathPrefixes = [
   "mocks/lib/",
   "mocks/mock-agent.mjs",
   "mocks/scripts/",
-  // OD Clipper - a standalone Chrome MV3 extension subproject (not a pnpm
-  // workspace package, no build step). It ships hand-written browser-loadable
-  // JavaScript (service worker, content script, popup) the same way as the
-  // web notifications service worker; it must not be retypecast to TypeScript.
-  "clipper/",
-  // OD Figma Import - a standalone Figma plugin subproject (no build step,
-  // not a pnpm workspace package). Figma plugins load hand-written
-  // browser-loadable JavaScript (`code.js` sandbox + `ui.html`); same
-  // precedent as the clipper, and it must not be retypecast to TypeScript.
-  "figma-plugin/",
   "test-results/",
   "vendor/",
 ];
@@ -805,187 +762,12 @@ async function checkWebTestLayout(): Promise<boolean> {
   return true;
 }
 
-const webImportIsolationSourcePrefixes = ["apps/web/app/", "apps/web/src/"];
-const webImportIsolationExtensions = new Set([".ts", ".tsx"]);
-const webImportIsolationSkippedDirectories = new Set([
-  ".next",
-  "dist",
-  "node_modules",
-  "out",
-  "reports",
-  "test-results",
-]);
-const webImportIsolationForbiddenPackages = [
-  "@open-design/platform",
-  "@open-design/sidecar",
-  "@open-design/sidecar-proto",
-];
-const webImportIsolationForbiddenDaemonRoots = [
-  "apps/daemon/src",
-  "apps/daemon/tests",
-];
-const webImportIsolationForbiddenPackageRoots = [
-  "packages/platform",
-  "packages/sidecar",
-  "packages/sidecar-proto",
-];
-
-type WebImportIsolationViolation = {
-  filePath: string;
-  lineNumber: number;
-  specifier: string;
-  reason: string;
-};
-
-type SourceImportSpecifier = {
-  lineNumber: number;
-  specifier: string;
-};
-
-export function isWebImportIsolationSourcePath(repositoryPath: string): boolean {
-  return (
-    webImportIsolationSourcePrefixes.some((prefix) => repositoryPath.startsWith(prefix)) &&
-    webImportIsolationExtensions.has(path.extname(repositoryPath))
-  );
-}
-
-function pushStringSpecifier(
-  imports: SourceImportSpecifier[],
-  sourceFile: ts.SourceFile,
-  node: ts.Node | undefined,
-): void {
-  if (!node) return;
-  if (!ts.isStringLiteral(node) && !ts.isNoSubstitutionTemplateLiteral(node)) return;
-
-  imports.push({
-    lineNumber: sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1,
-    specifier: node.text,
-  });
-}
-
-function collectImportSpecifiersFromSource(repositoryPath: string, source: string): SourceImportSpecifier[] {
-  const sourceFile = ts.createSourceFile(
-    repositoryPath,
-    source,
-    ts.ScriptTarget.Latest,
-    true,
-    repositoryPath.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
-  );
-  const imports: SourceImportSpecifier[] = [];
-
-  const visit = (node: ts.Node): void => {
-    if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
-      pushStringSpecifier(imports, sourceFile, node.moduleSpecifier);
-    } else if (ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument)) {
-      pushStringSpecifier(imports, sourceFile, node.argument.literal);
-    } else if (
-      ts.isCallExpression(node) &&
-      (node.expression.kind === ts.SyntaxKind.ImportKeyword ||
-        (ts.isIdentifier(node.expression) && node.expression.text === "require"))
-    ) {
-      pushStringSpecifier(imports, sourceFile, node.arguments[0]);
-    }
-
-    ts.forEachChild(node, visit);
-  };
-
-  visit(sourceFile);
-  return imports;
-}
-
-function isPackageOrSubpath(specifier: string, packageName: string): boolean {
-  return specifier === packageName || specifier.startsWith(`${packageName}/`);
-}
-
-function isPathOrDescendant(repositoryPath: string, root: string): boolean {
-  return repositoryPath === root || repositoryPath.startsWith(`${root}/`);
-}
-
-function resolveWebImportRepositoryPath(fromRepositoryPath: string, specifier: string): string | null {
-  const pathOnly = specifier.split(/[?#]/, 1)[0];
-  if (!pathOnly) return null;
-
-  if (pathOnly.startsWith("@/")) {
-    return path.posix.normalize(path.posix.join("apps/web", pathOnly.slice("@/".length)));
-  }
-
-  if (!pathOnly.startsWith(".")) return null;
-  return path.posix.normalize(path.posix.join(path.posix.dirname(fromRepositoryPath), pathOnly));
-}
-
-function webImportIsolationViolationReason(fromRepositoryPath: string, specifier: string): string | null {
-  if (webImportIsolationForbiddenPackages.some((packageName) => isPackageOrSubpath(specifier, packageName))) {
-    return "apps/web must not import sidecar or platform control-plane packages directly";
-  }
-
-  const resolvedPath = resolveWebImportRepositoryPath(fromRepositoryPath, specifier);
-  if (!resolvedPath) return null;
-
-  if (webImportIsolationForbiddenDaemonRoots.some((root) => isPathOrDescendant(resolvedPath, root))) {
-    return "apps/web must use daemon HTTP APIs or @open-design/contracts instead of daemon private source";
-  }
-
-  if (webImportIsolationForbiddenPackageRoots.some((root) => isPathOrDescendant(resolvedPath, root))) {
-    return "apps/web must not import sidecar or platform control-plane source directly";
-  }
-
-  return null;
-}
-
-export function collectWebImportIsolationViolationsFromSource(
-  repositoryPath: string,
-  source: string,
-): WebImportIsolationViolation[] {
-  if (!isWebImportIsolationSourcePath(repositoryPath)) return [];
-
-  return collectImportSpecifiersFromSource(repositoryPath, source).flatMap((sourceImport) => {
-    const reason = webImportIsolationViolationReason(repositoryPath, sourceImport.specifier);
-    if (!reason) return [];
-    return [{
-      filePath: repositoryPath,
-      lineNumber: sourceImport.lineNumber,
-      specifier: sourceImport.specifier,
-      reason,
-    }];
-  });
-}
-
-async function checkWebImportIsolation(): Promise<boolean> {
-  const violations: WebImportIsolationViolation[] = [];
-
-  for (const repositoryPrefix of webImportIsolationSourcePrefixes) {
-    const repositoryDirectory = repositoryPrefix.replace(/\/$/, "");
-    if (!(await repositoryDirectoryExists(repositoryDirectory))) continue;
-
-    for (const repositoryPath of await collectRepositoryFiles(
-      path.join(repoRoot, repositoryDirectory),
-      webImportIsolationSkippedDirectories,
-    )) {
-      if (!isWebImportIsolationSourcePath(repositoryPath)) continue;
-      const source = await readFile(path.join(repoRoot, repositoryPath), "utf8");
-      violations.push(...collectWebImportIsolationViolationsFromSource(repositoryPath, source));
-    }
-  }
-
-  if (violations.length > 0) {
-    console.error("Web import isolation violations found:");
-    for (const violation of violations) {
-      console.error(`- ${violation.filePath}:${violation.lineNumber} \`${violation.specifier}\` -> ${violation.reason}`);
-    }
-    return false;
-  }
-
-  console.log("Web import isolation check passed: web runtime imports stay behind contracts and daemon HTTP APIs.");
-  return true;
-}
-
 const toolsRootAllowlist = new Map<string, "directory" | "file">([
   // Keep top-level tools intentionally small. `tools/launcher` was an incoming
   // Windows shim experiment from PR #683 and is not an active repo boundary.
   ["AGENTS.md", "file"],
   ["dev", "directory"],
   ["pack", "directory"],
-  ["release", "directory"],
   ["serve", "directory"],
 ]);
 
@@ -1000,7 +782,7 @@ async function checkToolsLayout(): Promise<boolean> {
     const repositoryPath = `tools/${entry.name}${entry.isDirectory() ? "/" : ""}`;
 
     if (expected == null) {
-      violations.push(`${repositoryPath} -> tools/ top-level entries are allowlisted; expected only AGENTS.md, dev/, pack/, release/, and serve/`);
+      violations.push(`${repositoryPath} -> tools/ top-level entries are allowlisted; expected only AGENTS.md, dev/, pack/, and serve/`);
       continue;
     }
 
@@ -1294,6 +1076,8 @@ async function checkStylePolicy(): Promise<boolean> {
   return true;
 }
 
+<<<<<<< HEAD
+=======
 async function checkCiTopology(): Promise<boolean> {
   const ciWorkflow = await readFile(path.join(repoRoot, ".github/workflows/ci.yml"), "utf8");
   const errors = [
@@ -1340,6 +1124,7 @@ async function checkDaemonCoreBoundary(context: GuardContext): Promise<boolean> 
   return crossAppImportsPass && scopeBoundaryPass;
 }
 
+>>>>>>> upstream/main
 const checks: GuardCheck[] = [
   { name: "residual JavaScript", run: checkResidualJavaScript },
   { name: "certain-exempt surface consumption", run: checkCertainExemptConsumption },
@@ -1348,19 +1133,18 @@ const checks: GuardCheck[] = [
   { name: "UI P0 shadow contract", run: checkUiP0ShadowContract },
   { name: "package dependency specs", run: checkPackageDependencySpecs },
   { name: "product neutrality", run: checkProductNeutrality },
+<<<<<<< HEAD
+=======
   { name: "cross-app imports", run: checkCrossAppImportsOnce },
   { name: "@ts-nocheck import resolution", run: checkTsNocheckImports },
+>>>>>>> upstream/main
   { name: "test layout", run: checkTestLayout },
   { name: "scripts test-free", run: checkScriptsTestFree },
   { name: "scripts library architecture", run: checkScriptsLibraryArchitecture },
   { name: "e2e layout", run: checkE2eLayout },
   { name: "web test layout", run: checkWebTestLayout },
-  { name: "web import isolation", run: checkWebImportIsolation },
   { name: "tools layout", run: checkToolsLayout },
   { name: "style policy", run: checkStylePolicy },
-  { name: "CI topology", run: checkCiTopology },
-  { name: "craft references", run: checkCraftReferences },
-  { name: "plugin preview manifest", run: checkPluginPreviewManifest },
   { name: "design system manifests", run: checkDesignSystemManifests },
   { name: "design system package quality", run: checkDesignSystemPackageQuality },
   { name: "design system component fixture report", run: checkDesignSystemComponentFixtureReport },

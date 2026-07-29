@@ -1,5 +1,5 @@
 import type { ExecFileOptions } from 'node:child_process';
-import type { AgentDiagnostic, ModelMetadata } from '@open-design/contracts';
+import type { AgentDiagnostic } from '@open-design/contracts';
 
 export type { AgentDiagnostic } from '@open-design/contracts';
 
@@ -8,13 +8,6 @@ export type RuntimeEnv = NodeJS.ProcessEnv | Record<string, string>;
 export type RuntimeModelOption = {
   id: string;
   label: string;
-  enabled?: boolean;
-  default?: boolean;
-  inputPriceUsdPerMillion?: number;
-  outputPriceUsdPerMillion?: number;
-  metadata?: ModelMetadata;
-  additionalSpeedTiers?: string[];
-  serviceTierOptions?: RuntimeModelOption[];
 };
 
 export type RuntimeModelSource = 'live' | 'fallback';
@@ -24,7 +17,6 @@ export type RuntimeReasoningOption = RuntimeModelOption;
 export type RuntimeBuildOptions = {
   model?: string | null;
   reasoning?: string | null;
-  serviceTier?: string | null;
 };
 
 export type RuntimeContext = {
@@ -155,12 +147,9 @@ export type RuntimeAgentDef = {
   //                            schema and hand it through
   //                            `OPENCODE_CONFIG_CONTENT` in the spawn
   //                            env.
-  //   'mimo-env-content'      — same schema as opencode-env-content
-  //                            but emitted as `MIMOCODE_CONFIG_CONTENT`
-  //                            under MiMo's env namespace.
   //
   // Leave undefined for adapters that have no native MCP transport
-  // wired yet (codex, cursor-agent, copilot, qoder, pi). The
+  // wired yet (codex, gemini, cursor-agent, copilot, qoder, pi). The
   // settings UI reads this field to surface an explicit "external MCP
   // is not forwarded to <agent>; configure servers in <agent>'s own
   // config file instead" hint, replacing the previous silent-failure
@@ -168,8 +157,7 @@ export type RuntimeAgentDef = {
   externalMcpInjection?:
     | 'claude-mcp-json'
     | 'acp-merge'
-    | 'opencode-env-content'
-    | 'mimo-env-content';
+    | 'opencode-env-content';
   installUrl?: string;
   docsUrl?: string;
   // When `false`, the Settings model picker hides the "Custom (fill below)"
@@ -187,26 +175,6 @@ export type RuntimeAgentDef = {
   // RuntimeContext.hasPriorAssistantTurn comment for why double-context
   // is the discovery-form loop's root cause.
   resumesSessionViaCli?: boolean;
-  // How the resumable session id is obtained, for `resumesSessionViaCli`
-  // adapters. The default (undefined/false) is "specify-style": the daemon
-  // mints `RuntimeContext.newSessionId` and the CLI is told to use it (claude
-  // `--session-id`), so the id the daemon stores is the id it generated. When
-  // `true` the adapter is "capture-style": the CLI generates its OWN session
-  // id and reports it on the stream (codex `thread.started.thread_id`), so the
-  // daemon must capture that id from the parsed stream (surfaced as a
-  // `status` event's `sessionId`) and persist THAT as the resume handle —
-  // `newSessionId` is not passed to the CLI. See server.ts capture-and-store
-  // path and `agent-cli-session-resume.md`.
-  capturesSessionIdFromStream?: boolean;
-  // ACP-runtime analogue of capture-style resume: the agent talks `acp-json-rpc`
-  // (today only AMR/vela) and supports resuming via `session/load`. The daemon
-  // captures the durable upstream session handle from the ACP session
-  // (`getDurableSessionId()`) and persists THAT, drives `session/load` on a
-  // resume turn, and maps the agent's structured `resume_failed` error onto the
-  // reseed path. Kept distinct from `resumesSessionViaCli` /
-  // `capturesSessionIdFromStream` because the capture + resume transport is the
-  // ACP result, not a `--session-id` flag or a stream `status` event.
-  resumesSessionViaAcpLoad?: boolean;
   // Optional name of a daemon-process environment variable that overrides
   // the default model id when the chat run reaches the spawn layer with
   // null or the synthetic 'default'. Used by adapters whose CLI rejects
@@ -216,14 +184,6 @@ export type RuntimeAgentDef = {
   // present in the daemon's `process.env`; Settings-UI per-agent env
   // values only reach the spawned child and are NOT consulted here.
   defaultModelEnvVar?: string;
-  // Agent-recommended override for the chat-run inactivity watchdog.
-  // The watchdog observes child stdout/stderr/SSE activity, not real
-  // CPU progress, so agents whose CLIs go silent for long stretches
-  // during legitimate work (e.g. Copilot's deck-generation thinking
-  // phase from #2467) need a longer ceiling than the 10-minute global
-  // default. Operators can still override per-process via
-  // `OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS` — that env wins.
-  inactivityTimeoutMs?: number;
   // Declarative authentication probe. When set, detection spawns
   // `<bin> <args>` after the version check and classifies the combined
   // stdout/stderr to derive `authStatus`. This replaces the previous
@@ -235,21 +195,7 @@ export type RuntimeAgentDef = {
   authProbe?: {
     args: string[];
     timeoutMs?: number;
-    // Agent id whose tailored auth classifier + API-key short-circuit should
-    // be used for this probe when it differs from the runtime agent id. Local
-    // profiles (local-profiles.ts) inherit a base adapter's `authProbe` but run
-    // under the profile id; carrying the base id here keeps the base adapter's
-    // auth semantics (e.g. Claude's JSON-aware parser) instead of falling
-    // through to the generic classifier. Defaults to the def id when unset.
-    classifierAgentId?: string;
   };
-  // Format for the `env` field in ACP `session/new` → `mcpServers[].env`.
-  // `'array'` (default) emits `[{name, value}]` — used by Hermes, Kimi,
-  // Kilo, Kiro, Vibe, and Devin.  `'map'` emits `{"KEY": "val"}` — used
-  // by reasonix ≥ 1.0 (Go) whose ACP implementation expects the standard
-  // MCP `map[string]string` shape. Leave `undefined` (defaults to 'array')
-  // for all other agents — the existing behavior is unchanged.
-  acpMcpEnvFormat?: 'array' | 'map';
 };
 
 export type DetectedAgent = Omit<
@@ -264,13 +210,6 @@ export type DetectedAgent = Omit<
   | 'versionProbeTimeoutMs'
   | 'maxPromptArgBytes'
   | 'env'
-  // `inactivityTimeoutMs` is a spawn-time-only hint consumed by the
-  // chat-run watchdog. It is not part of the public `/api/agents`
-  // contract (`packages/contracts/src/api/registry.ts#AgentInfo`), so
-  // omitting it here keeps the daemon response aligned with that
-  // shared web/CLI shape — agents pick it up by reading the runtime
-  // def directly, the registry payload stays unchanged.
-  | 'inactivityTimeoutMs'
   | 'authProbe'
 > & {
   models: RuntimeModelOption[];

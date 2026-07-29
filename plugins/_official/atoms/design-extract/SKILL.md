@@ -61,7 +61,4 @@ empty case by skipping its mapping pass.
 
 ## Status
 
-Implemented by the daemon runner in
-`apps/daemon/src/plugins/atoms/design-extract.ts`. It scans the indexed
-source files, extracts CSS, Tailwind, and JavaScript token evidence, and
-writes `code/tokens.json`.
+Reserved id, prompt-only fragment in v1.

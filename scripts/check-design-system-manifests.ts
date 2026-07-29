@@ -30,12 +30,6 @@ const designSystemsRoot = path.join(repoRoot, "design-systems");
 const craftRoot = path.join(repoRoot, "craft");
 const SKIPPED_DIRECTORIES = new Set(["_schema"]);
 
-/** Normalize CRLF→LF so byte-exact generated-file comparisons are EOL-agnostic
- *  (Windows core.autocrlf=true checks generated LF files out as CRLF). See #5175. */
-function normalizeEol(text: string): string {
-  return text.replace(/\r\n/g, "\n");
-}
-
 function toRepositoryPath(filePath: string): string {
   return path.relative(repoRoot, filePath).split(path.sep).join("/");
 }
@@ -216,7 +210,7 @@ export async function validateDesignTokensJson(
     bindings: report.tokens,
     report,
   });
-  if (normalizeEol(actualText) !== normalizeEol(expected)) {
+  if (actualText !== expected) {
     violations.push(`${repositoryManifestPath}: ${designTokensPath} is stale; regenerate it from ${reportPath}`);
   }
 
@@ -283,7 +277,7 @@ export async function validateTailwindV4Css(
   const expectedCss = renderTailwindV4Css(
     Array.from(parseRootTokenDeclarations(tokensCss).keys(), (name) => ({ name })),
   );
-  if (normalizeEol(actualCss) !== normalizeEol(expectedCss)) {
+  if (actualCss !== expectedCss) {
     violations.push(`${repositoryManifestPath}: ${tailwindPath} is stale; regenerate it from ${tokensPath}`);
   }
 }

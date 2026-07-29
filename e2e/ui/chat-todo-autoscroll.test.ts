@@ -1,15 +1,15 @@
-import { expect, test } from '@/playwright/suite';
+import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { routeAgents } from '@/playwright/mock-factory';
 
-// Verifies that the chat-log stays pinned to the bottom when its inline
-// conversation TodoCard grows (scenario A) and that a deliberate scroll-up is
-// not overridden by a subsequent TodoWrite snapshot (scenario B).
+// Verifies that the chat-log stays pinned to the bottom when the PinnedTodoSlot
+// grows (scenario A) and that a deliberate scroll-up is not overridden by a
+// subsequent TodoWrite snapshot (scenario B).
 //
 // jsdom cannot exercise ResizeObserver or real flex-layout geometry, so these
 // assertions must run in a real browser via Playwright. The Vitest unit spec
 // in apps/web/tests/components/chat-todo-autoscroll.test.tsx confirms that
-// inline message growth is observed; this spec confirms that the resulting
+// the pinned-todo element is observed; this spec confirms that the resulting
 // scroll behaviour is correct end-to-end.
 
 const STORAGE_KEY = 'open-design:config';
@@ -206,39 +206,40 @@ async function chatLogScrollableHeight(page: Page): Promise<number> {
   });
 }
 
-// Simulate what happens when the inline conversation TodoCard grows by manually
-// setting the chat-log's scrollTop to mimic a browser that does not compensate
-// for the additional scroll height.
+// Simulate what happens when the .chat-pinned-todo element grows by manually
+// setting the chat-log's scrollTop to mimic the drift that occurs in production
+// environments where scroll-anchoring may not compensate fully for a flex-layout
+// reflow caused by a sibling growing outside the scroll container.
 //
 // The mechanism:
 //  1. Verify the chat-log is currently pinned to the bottom.
-//  2. Grow the inline `.op-card.op-todo` (increasing `.chat-log.scrollHeight`).
+//  2. Grow .chat-pinned-todo (reducing .chat-log.clientHeight in the flex layout).
 //  3. Manually set scrollTop to its pre-grow value (i.e. do NOT adjust for the
-//     added content). This leaves the user `extraPx` above the new bottom.
+//     reduced clientHeight). This leaves the user `extraPx` above the new bottom.
 //  4. Wait one rAF cycle. On the fix branch, the ResizeObserver on
-//     the rendered message fires followLatestIfPinned, which snaps scrollTop
-//     back to the bottom. Without that observation, the drift persists.
-async function growInlineTodoCard(page: Page, extraPx: number) {
+//     .chat-pinned-todo fires followLatestIfPinned which snaps scrollTop back
+//     to scrollHeight. On main the observer does not fire, so the drift persists.
+async function growPinnedTodo(page: Page, extraPx: number) {
   await page.evaluate((px) => {
     const logEl = document.querySelector<HTMLElement>('.chat-log');
     if (!logEl) throw new Error('No .chat-log element found');
 
-    const el = document.querySelector<HTMLElement>('.chat-log .op-card.op-todo');
-    if (!el) throw new Error('No inline TodoCard element found');
+    const el = document.querySelector<HTMLElement>('.chat-pinned-todo');
+    if (!el) throw new Error('No .chat-pinned-todo element found');
 
     // Snapshot the current scrollTop (user is at the bottom, so this equals
     // scrollHeight - clientHeight approximately).
     const scrollTopBefore = logEl.scrollTop;
 
-    // Grow the inline card. This increases the chat log's scrollHeight by ~px.
+    // Grow the element. The flex reflow reduces logEl.clientHeight by ~px.
     el.style.minHeight = `${el.offsetHeight + px}px`;
-    // Force layout so scrollHeight is updated synchronously.
-    void logEl.scrollHeight;
+    // Force layout so clientHeight is updated synchronously.
+    void logEl.clientHeight;
 
     // Re-apply the pre-grow scrollTop. This cancels any scroll-anchoring
     // adjustment the browser made, leaving the user drifted above the bottom.
-    // ChatPane's message ResizeObserver corrects this only while the user is
-    // still considered pinned.
+    // The ChatPane's followLatestIfPinned (if its ResizeObserver fires) will
+    // correct this; on main it won't because the observer is not on this element.
     logEl.scrollTop = scrollTopBefore;
   }, extraPx);
   // Give the browser two rAF cycles to flush ResizeObserver callbacks and the
@@ -246,14 +247,14 @@ async function growInlineTodoCard(page: Page, extraPx: number) {
   await page.waitForTimeout(100);
 }
 
-test.describe('chat pane autoscroll on inline TodoCard growth', () => {
+test.describe('chat pane autoscroll on TodoCard growth', () => {
   test.describe.configure({ timeout: 45_000 });
 
   test.beforeEach(async ({ page }) => {
     await seedAppConfig(page);
   });
 
-  test('[P2] scenario A: pinned user stays at bottom after inline TodoCard grows', async ({
+  test('[P2] scenario A: pinned user stays at bottom after PinnedTodoCard grows', async ({
     page,
   }) => {
     const { projectId, conversationId } = await seedProjectWithTodos(page, {
@@ -283,32 +284,32 @@ test.describe('chat pane autoscroll on inline TodoCard growth', () => {
       `seed more filler messages if this fires`,
     ).toBeGreaterThan(50);
 
-    // Verify the canonical conversation TodoCard rendered inline.
-    await expect(page.locator('.chat-log .op-card.op-todo')).toBeVisible({ timeout: 5_000 });
+    // Verify the PinnedTodoSlot rendered.
+    await expect(page.locator('.chat-pinned-todo')).toBeVisible({ timeout: 5_000 });
 
-    // Capture scrollHeight before growing so we can assert the grow step
+    // Capture clientHeight before growing so we can assert the grow step
     // actually changed the layout this test is designed to protect against.
-    const scrollHeightBeforeGrow = await page.evaluate(
-      () => document.querySelector<HTMLElement>('.chat-log')?.scrollHeight ?? -1,
+    const clientHeightBeforeGrow = await page.evaluate(
+      () => document.querySelector<HTMLElement>('.chat-log')?.clientHeight ?? -1,
     );
 
-    // Grow the inline TodoCard by 80 px (simulates a new TodoWrite snapshot with
+    // Grow the pinned-todo card by 80 px (simulates a new TodoWrite snapshot with
     // more items) and verify the chat-log snaps back to the bottom.
-    await growInlineTodoCard(page, 80);
+    await growPinnedTodo(page, 80);
 
-    // Hard precondition: the grow step must have increased scrollHeight. If a
-    // layout change stops the card from changing `.chat-log.scrollHeight`,
+    // Hard precondition: the grow step must have reduced clientHeight. If a
+    // layout change stops .chat-pinned-todo from shrinking .chat-log.clientHeight,
     // distanceAfterGrow < 20 passes vacuously and the regression detector is
     // defeated — fail fast instead.
-    const scrollHeightAfterGrow = await page.evaluate(
-      () => document.querySelector<HTMLElement>('.chat-log')?.scrollHeight ?? -1,
+    const clientHeightAfterGrow = await page.evaluate(
+      () => document.querySelector<HTMLElement>('.chat-log')?.clientHeight ?? -1,
     );
     expect(
-      scrollHeightAfterGrow,
-      `expected grow step to increase chat-log scrollHeight ` +
-      `(before=${scrollHeightBeforeGrow} after=${scrollHeightAfterGrow}); ` +
-      `increase extraPx in growInlineTodoCard or check the layout if this fires`,
-    ).toBeGreaterThan(scrollHeightBeforeGrow);
+      clientHeightAfterGrow,
+      `expected grow step to reduce chat-log clientHeight ` +
+      `(before=${clientHeightBeforeGrow} after=${clientHeightAfterGrow}); ` +
+      `increase extraPx in growPinnedTodo or check the layout if this fires`,
+    ).toBeLessThan(clientHeightBeforeGrow);
 
     const distanceAfterGrow = await chatLogBottomDistance(page);
     expect(
@@ -317,7 +318,7 @@ test.describe('chat pane autoscroll on inline TodoCard growth', () => {
     ).toBeLessThan(20);
   });
 
-  test('[P2] scenario B: user scroll-up is preserved when inline TodoCard grows', async ({
+  test('[P2] scenario B: user scroll-up is preserved when PinnedTodoCard grows', async ({
     page,
   }) => {
     const { projectId, conversationId } = await seedProjectWithTodos(page, {
@@ -330,8 +331,8 @@ test.describe('chat pane autoscroll on inline TodoCard growth', () => {
     });
     await waitForChatReady(page);
 
-    // Verify the canonical conversation TodoCard rendered inline.
-    await expect(page.locator('.chat-log .op-card.op-todo')).toBeVisible({ timeout: 5_000 });
+    // Verify PinnedTodoSlot is mounted.
+    await expect(page.locator('.chat-pinned-todo')).toBeVisible({ timeout: 5_000 });
 
     // Scroll the chat-log up by 150 px to break the pinned-to-bottom invariant.
     // We scroll by at least 80 px (the pinnedToBottomRef threshold) to ensure
@@ -359,32 +360,33 @@ test.describe('chat pane autoscroll on inline TodoCard growth', () => {
       `seed more filler messages or increase the scroll offset if this fires`,
     ).toBeGreaterThan(80);
 
-    // Capture scrollTop and scrollHeight before growing — the invariant is that
+    // Capture scrollTop and clientHeight before growing — the invariant is that
     // scrollTop (not distance-to-bottom) is preserved. Distance-to-bottom
-    // naturally increases by ~extraPx because the inline card adds scrollable
-    // content while scrollTop stays fixed.
+    // naturally increases by ~extraPx because growPinnedTodo reduces clientHeight
+    // while holding scrollTop fixed, so comparing distances before/after would
+    // fail on correct behavior.
     const scrollTopBeforeGrow = await page.evaluate(
       () => document.querySelector<HTMLElement>('.chat-log')?.scrollTop ?? -1,
     );
-    const scrollHeightBeforeGrow = await page.evaluate(
-      () => document.querySelector<HTMLElement>('.chat-log')?.scrollHeight ?? -1,
+    const clientHeightBeforeGrow = await page.evaluate(
+      () => document.querySelector<HTMLElement>('.chat-log')?.clientHeight ?? -1,
     );
 
     // Now grow the todo card — the non-pinned user should NOT be dragged back.
-    await growInlineTodoCard(page, 80);
+    await growPinnedTodo(page, 80);
 
-    // Hard precondition: the grow step must have actually changed scrollHeight.
+    // Hard precondition: the grow step must have actually changed clientHeight.
     // If this fails, the layout changed and the test no longer exercises the
     // "user scrolled away, do not yank them back" path — fail fast.
-    const scrollHeightAfterGrow = await page.evaluate(
-      () => document.querySelector<HTMLElement>('.chat-log')?.scrollHeight ?? -1,
+    const clientHeightAfterGrow = await page.evaluate(
+      () => document.querySelector<HTMLElement>('.chat-log')?.clientHeight ?? -1,
     );
     expect(
-      scrollHeightAfterGrow,
-      `expected grow step to increase chat-log scrollHeight ` +
-      `(before=${scrollHeightBeforeGrow} after=${scrollHeightAfterGrow}); ` +
-      `increase extraPx in growInlineTodoCard or check the layout if this fires`,
-    ).toBeGreaterThan(scrollHeightBeforeGrow);
+      clientHeightAfterGrow,
+      `expected grow step to reduce chat-log clientHeight ` +
+      `(before=${clientHeightBeforeGrow} after=${clientHeightAfterGrow}); ` +
+      `increase extraPx in growPinnedTodo or check the layout if this fires`,
+    ).toBeLessThan(clientHeightBeforeGrow);
 
     // Core invariant: scrollTop must be preserved. A regression where
     // followLatestIfPinned fires and snaps the user back to the bottom would

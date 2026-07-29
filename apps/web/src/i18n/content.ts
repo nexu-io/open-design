@@ -236,6 +236,7 @@ const DE_SKILL_COPY: Record<string, LocalizedSkillCopy> = {
   },
   'html-ppt': {},
   'html-ppt-course-module': {},
+  'html-ppt-dir-key-nav-minimal': {},
   'html-ppt-graphify-dark-graph': {},
   'html-ppt-hermes-cyber-terminal': {},
   'html-ppt-knowledge-arch-blueprint': {},
@@ -247,6 +248,7 @@ const DE_SKILL_COPY: Record<string, LocalizedSkillCopy> = {
   'html-ppt-testing-safety-alert': {},
   'html-ppt-weekly-report': {},
   'html-ppt-xhs-pastel-card': {},
+  'html-ppt-xhs-post': {},
   'html-ppt-xhs-white-editorial': {},
   'hyperframes': {
     examplePrompt:

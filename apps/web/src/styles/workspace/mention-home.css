@@ -275,6 +275,82 @@
   background: color-mix(in oklab, var(--accent) 14%, var(--bg-subtle));
 }
 
+.project-instructions {
+  position: relative;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.project-instructions__add,
+.project-instructions__preview,
+.project-instructions__button {
+  appearance: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-panel);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+}
+.project-instructions__add {
+  height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.project-instructions__preview {
+  max-width: 260px;
+  height: 30px;
+  padding: 0 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  text-align: left;
+}
+.project-instructions__add:hover,
+.project-instructions__preview:hover,
+.project-instructions__button:hover {
+  border-color: var(--border-strong);
+}
+.project-instructions--editing {
+  display: grid;
+  gap: 6px;
+  width: min(360px, calc(100vw - 48px));
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-sm);
+}
+.project-instructions__textarea {
+  width: 100%;
+  min-height: 64px;
+  resize: vertical;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  padding: 8px;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.project-instructions__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.project-instructions__button {
+  height: 26px;
+  padding: 0 9px;
+  font-size: 12px;
+}
+.project-instructions__button--primary {
+  border-color: color-mix(in oklab, var(--accent) 48%, var(--border));
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
 /* ===========================================================
    Modal / Settings
    =========================================================== */
@@ -320,10 +396,10 @@
 .modal .row { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
 
 .updater-popup {
-  z-index: 80;
   position: absolute;
   top: 0;
   left: calc(100% + 12px);
+  z-index: 80;
   width: min(360px, calc(100vw - var(--entry-rail-width, 56px) - 24px));
   display: grid;
   grid-template-columns: 44px minmax(0, 1fr);
@@ -382,8 +458,9 @@
 }
 
 .updater-popup__error {
-  margin: 0;
   color: var(--red) !important;
+<<<<<<< HEAD
+=======
   font-size: 12px;
   line-height: 1.35;
 }
@@ -450,14 +527,14 @@
   white-space: normal;
   overflow-wrap: break-word;
   word-break: normal;
+>>>>>>> upstream/main
 }
 
 .updater-popup__actions {
+  grid-column: 1 / -1;
   display: flex;
-  flex: 0 0 auto;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   justify-content: flex-end;
-  align-items: center;
   gap: 8px;
   min-height: 34px;
 }
@@ -614,11 +691,6 @@
   background: rgba(28, 138, 115, 0.12);
   border-color: rgba(28, 138, 115, 0.28);
 }
-.design-card-tag.tag-brand {
-  color: var(--purple);
-  background: var(--purple-bg);
-  border-color: var(--purple-border);
-}
 .design-card-tag.tag-design-system {
   color: var(--red);
   background: color-mix(in srgb, var(--red) 9%, var(--bg-panel));
@@ -651,16 +723,10 @@
      would escape to the viewport on long-scrolling sections. */
   position: relative;
 }
-.modal-settings.settings-fullscreen {
-  width: calc(100vw - 24px);
-  height: calc(100vh - 24px);
-}
 @media (max-height: 600px) {
   .modal-settings { height: 90vh; }
-  .modal-settings.settings-fullscreen { height: calc(100vh - 12px); }
 }
 .modal-settings .modal-body {
-  position: relative;
   overflow: hidden;
   flex: 1;
   min-height: 0;
@@ -669,9 +735,6 @@
   gap: 0;
   margin: 0;
   padding: 0;
-}
-.modal-settings.settings-sidebar-collapsed .modal-body {
-  grid-template-columns: minmax(0, 1fr);
 }
 .modal-head {
   display: flex;
@@ -724,12 +787,12 @@
    save settles. */
 .settings-chrome {
   position: absolute;
-  top: 24px;
-  right: 24px;
+  top: 14px;
+  right: 14px;
   z-index: 10;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 .settings-chrome > * {
   pointer-events: auto;
@@ -740,7 +803,7 @@
    Sized to read as a passive corner control rather than a primary
    CTA — the autosave indicator next to it carries any system
    feedback the user might need. */
-.settings-chrome-btn {
+.settings-close {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -756,31 +819,22 @@
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
 }
-.settings-fullscreen-toggle {
-  border-color: color-mix(in srgb, var(--border) 72%, transparent);
-  background: color-mix(in srgb, var(--bg-panel) 76%, transparent);
-}
-.settings-chrome-btn:hover {
+.settings-close:hover {
   color: var(--text);
   border-color: color-mix(in srgb, var(--text) 22%, var(--border));
   background: var(--bg-panel);
-  transform: translateY(-1px);
+  transform: scale(1.04);
 }
-.settings-chrome-btn:active {
-  transform: translateY(0);
+.settings-close:active {
+  transform: scale(0.96);
 }
-.settings-chrome-btn:focus-visible {
+.settings-close:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
   color: var(--text);
 }
-.settings-fullscreen-toggle[aria-pressed='true'] {
-  color: var(--accent);
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
-  background: color-mix(in srgb, var(--accent) 10%, var(--bg-panel));
-}
 @media (prefers-reduced-motion: reduce) {
-  .settings-chrome-btn { transition: color 80ms linear, border-color 80ms linear; transform: none !important; }
+  .settings-close { transition: color 80ms linear, border-color 80ms linear; transform: none !important; }
 }
 
 /* Autosave status pill. Lives in the chrome strip now (next to the
@@ -867,7 +921,7 @@
 .modal-settings .modal-head {
   position: relative;
   z-index: 2;
-  padding: var(--modal-padding) calc(var(--modal-padding) + 92px) var(--modal-padding) var(--modal-padding);
+  padding-right: calc(var(--modal-padding) + 56px);
   background: var(--bg-elevated);
 }
 
@@ -1147,74 +1201,6 @@
   overflow-y: auto;
   overscroll-behavior: contain;
 }
-.modal-settings.settings-sidebar-collapsed .settings-sidebar {
-  display: none;
-}
-.settings-sidebar-toggle {
-  position: absolute;
-  z-index: 4;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  top: 50%;
-  left: 240px;
-  width: 18px;
-  height: 46px;
-  padding: 0;
-  transform: translate(-50%, -50%);
-  border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--bg-panel) 78%, transparent);
-  color: var(--text-muted);
-  cursor: pointer;
-  opacity: 0;
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--shadow-color, #000) 8%, transparent);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  transition:
-    opacity 140ms var(--ease-out),
-    color 140ms var(--ease-out),
-    border-color 140ms var(--ease-out),
-    background-color 140ms var(--ease-out),
-    box-shadow 140ms var(--ease-out),
-    transform 140ms var(--ease-out);
-}
-.settings-sidebar-toggle::before {
-  content: none;
-}
-.settings-sidebar-toggle svg {
-  position: relative;
-  z-index: 1;
-  width: 13px;
-  height: 13px;
-  opacity: 0.84;
-  stroke-width: 1.8;
-}
-.settings-sidebar-toggle:focus-visible {
-  opacity: 0.86;
-}
-.settings-sidebar-toggle:hover,
-.settings-sidebar-toggle:focus-visible {
-  opacity: 1;
-  color: var(--text);
-  transform: translate(-50%, -50%) scale(1.02);
-  border-color: color-mix(in srgb, var(--text) 18%, var(--border));
-  background: var(--bg-panel);
-  box-shadow: 0 4px 14px color-mix(in srgb, var(--shadow-color, #000) 12%, transparent);
-}
-.settings-sidebar-toggle:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-.modal-settings.settings-sidebar-collapsed .settings-sidebar-toggle {
-  left: 18px;
-}
-@media (prefers-reduced-motion: reduce) {
-  .settings-sidebar-toggle {
-    transition: opacity 80ms linear, color 80ms linear;
-    transform: translate(-50%, -50%) !important;
-  }
-}
 /* Sidebar items follow the ChatGPT-style settings rhythm: single line,
    icon + label only, gray pill fill on active. The `<small>` description
    that ships in the JSX is hidden — the label alone is the navigation
@@ -1282,28 +1268,12 @@
   flex-direction: column;
   gap: 18px;
 }
-.modal-settings.settings-sidebar-collapsed .settings-content {
-  padding-left: calc(var(--modal-padding) + 16px);
-}
 @media (max-width: 760px) {
   .modal-settings {
     width: min(560px, calc(100vw - 24px));
   }
-  .modal-settings.settings-fullscreen {
-    width: calc(100vw - 12px);
-    height: calc(100vh - 12px);
-  }
   .modal-settings .modal-body {
     grid-template-columns: 1fr;
-  }
-  .settings-sidebar-toggle {
-    display: none;
-  }
-  .modal-settings.settings-sidebar-collapsed .settings-sidebar {
-    display: flex;
-  }
-  .modal-settings.settings-sidebar-collapsed .settings-content {
-    padding-left: var(--modal-padding);
   }
   .settings-sidebar {
     flex-direction: row;
@@ -1423,30 +1393,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   transition: background 120ms var(--ease-out), color 120ms var(--ease-out), border-color 120ms var(--ease-out), box-shadow 120ms var(--ease-out);
-}
-.protocol-chip--provider {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.protocol-chip-status {
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
-  flex: 0 0 auto;
-  background: var(--text-disabled, #94a3b8);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--text-disabled, #94a3b8) 16%, transparent);
-}
-.protocol-chip-status.is-configured {
-  background: var(--success, #22c55e);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--success, #22c55e) 18%, transparent);
-}
-.protocol-chip-status.is-unset {
-  background: var(--text-disabled, #94a3b8);
-}
-.protocol-chip.active .protocol-chip-status {
-  background: currentColor;
-  box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 22%, transparent);
 }
 .protocol-chip:hover:not(.active) {
   background: var(--bg-subtle);

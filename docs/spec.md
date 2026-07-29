@@ -1,14 +1,7 @@
-# Open Design — Historical Product Spec
+# Open Design — Product Spec
 
-**Status:** Archived Draft v0.1 · 2026-04-24
+**Status:** Draft v0.1 · 2026-04-24
 **Scope:** Product definition, scenarios, non-goals, high-level modules, and positioning against both [Anthropic's Claude Design][cd] and the existing open-source alternative ([Open CoDesign][ocod]).
-
-> **Historical baseline:** This document predates the implemented desktop and
-> packaged runtimes, plugin marketplace, expanded creation surfaces, runtime
-> registry, and current CLI. Its product bets are retained to explain the
-> project's origin; assertions below are not a source of current behavior.
-> Consult the root `README.md`, `AGENTS.md`, [`architecture.md`](architecture.md),
-> [`agent-adapters.md`](agent-adapters.md), and `specs/current/` instead.
 
 [cd]: https://x.com/claudeai/status/2045156267690213649
 [ocod]: https://github.com/OpenCoworkAI/open-codesign
@@ -101,7 +94,7 @@ Module responsibilities:
 - **Daemon** — long-running local process. Detects agents, registers skills, manages artifacts on disk, resolves the active design system, and brokers REST/SSE requests.
 - **Agent adapters** — one adapter per supported CLI; see [`agent-adapters.md`](agent-adapters.md).
 - **Skill registry** — scans `~/.claude/skills/`, `./skills/`, and `./.claude/skills/`; merges and exposes a typed catalog.
-- **Artifact store** — daemon-managed storage for generated files, version snapshots, and per-artifact metadata. Current data-path rules are not specified in this draft; contributors must read root `AGENTS.md` → **Daemon data directory contract** before documenting or changing storage paths.
+- **Artifact store** — project-scoped folder (default `./.od/`) holding generated files, version snapshots (git-friendly), and per-artifact metadata.
 - **Design-system resolver** — loads the active `DESIGN.md`, injects it as skill context.
 - **Automations** — templates that orchestrate schedules, connectors, ingestion, memory updates, skill crystallization, design-system extraction, token compression, and review gates; source packets enter through the Automations page, `/api/automation-ingestions`, and `od automation source`, while evolution proposals are reviewable through `/api/automation-proposals` and `od automation proposal`.
 - **Memory / evolution store** — editable Markdown-backed memory tree exposed through Settings, `/api/memory/tree`, and `od memory tree`; accepted tree nodes feed future daemon and BYOK/API-mode agent prompts, and accepted proposals can write reviewed memory, skill, and design-system drafts into user-owned runtime roots.
@@ -150,7 +143,7 @@ In short: Claude Design is a product; OD is a **substrate**.
 ## 10. Open questions (to resolve before coding)
 
 - **Daemon ↔ Vercel bridge.** Do we ship a reverse-tunnel helper (like `cloudflared`), require the user to set one up, or punt to "run locally for now"? My current lean: punt for MVP, helper in v1.
-- **Artifact versioning.** Git, or SQLite, or both? [Open CoDesign][ocod] uses SQLite; that's easier but less reviewable. This draft does not define the current daemon data path; root `AGENTS.md` → **Daemon data directory contract** is the mandatory source of truth.
+- **Artifact versioning.** Git, or SQLite, or both? [Open CoDesign][ocod] uses SQLite; that's easier but less reviewable. Lean: write artifacts as plain files + a `.od/history.jsonl` log. Git is the user's business.
 - **Comment mode on non-Claude-Code agents.** Claude Code supports surgical edits via its tool loop. Codex and Gemini CLI are less graceful. Do we degrade to "regenerate whole file" for weaker agents? Lean: yes, document clearly in the adapter table.
 - **Skill trust model.** Skills can shell out via the agent. We should at minimum warn on install, and probably sandbox the agent's cwd to the project directory. Claude Code's permission mode handles this for us if we use it; Codex is looser. Needs a per-adapter note.
 

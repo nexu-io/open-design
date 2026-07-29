@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { streamViaDaemon } from '../../providers/daemon';
 import { listMessages, saveMessage } from '../../state/projects';
-import { appendErrorStatusEvent, runFailureFieldsFromError } from '../../runtime/chat-events';
+import { appendErrorStatusEvent } from '../../runtime/chat-events';
 import { agentModelDisplayName } from '../../utils/agentLabels';
 import { randomUUID } from '../../utils/uuid';
 import { effectiveAgentModelChoice } from '../agentModelSelection';
@@ -257,18 +257,15 @@ export function useConversationChat(
           textBuffer.flush();
           const endedAt = Date.now();
           const code = (err as Error & { code?: string }).code;
-          const resumable = (err as Error & { resumable?: boolean }).resumable === true;
-          const failure = runFailureFieldsFromError(err);
           setError(err.message);
           setMessages((curr) => {
             const next = curr.map((m) => {
               if (m.id !== assistantId) return m;
-              const withError = appendErrorStatusEvent(m, err.message, code, failure);
+              const withError = appendErrorStatusEvent(m, err.message, code);
               return {
                 ...withError,
                 endedAt,
                 runStatus: 'failed' as const,
-                resumable,
               };
             });
             const finalized = next.find((m) => m.id === assistantId);
@@ -296,7 +293,6 @@ export function useConversationChat(
         commentAttachments: userMsg.commentAttachments ?? [],
         model: choice?.model ?? null,
         reasoning: choice?.reasoning ?? null,
-        serviceTier: choice?.serviceTier ?? null,
         locale: loc,
         sessionMode,
         onRunCreated: (runId) => {

@@ -25,7 +25,6 @@ export const API_ERROR_CODES = [
   'AMR_MODEL_UNAVAILABLE',
   'AMR_AUTH_REQUIRED',
   'AMR_INSUFFICIENT_BALANCE',
-  'AMR_TIER_UPGRADE_REQUIRED',
   // The agent emitted a fabricated Markdown role marker
   // (`## user` / `## assistant` / `## system`) inside its own response.
   // The chat host parses those lowercase lines as real turn
@@ -38,26 +37,6 @@ export const API_ERROR_CODES = [
   // `server.ts::abortForRoleMarker` alongside the existing
   // `fabricated_role_marker` warning event. Retryable.
   'ROLE_MARKER_HALLUCINATION',
-  // The agent got stuck repeating failing tool calls (e.g. re-running the same
-  // Edit that errors "string not found", or the same shell command that keeps
-  // exiting non-zero) without making progress. The daemon's tool-loop guard
-  // (`tool-loop-guard.ts`) counts consecutive failures and repeats of the same
-  // failing action. Only emitted when OD_TOOL_LOOP_GUARD=halt is enabled: at
-  // the hard ceiling the guard terminates the run so the agent cannot grind
-  // through dozens more identical attempts. The default mode is `warn`, which
-  // only surfaces a heads-up `tool_loop` event and never emits this error. The
-  // caller should re-check the actual target (the file, the element, the
-  // command) before retrying rather than resubmitting the same turn.
-  // OD_TOOL_LOOP_GUARD accepts warn|halt|off. Retryable.
-  'TOOL_LOOP_DETECTED',
-  // The selected runtime agent def (apps/daemon/src/runtimes/defs/*) has
-  // a checked-in field that fails strict source-config validation — e.g.
-  // a non-integer, NaN, Infinity, or negative `inactivityTimeoutMs`
-  // (issue #2467 review on PR #2579). The bug is in the source file;
-  // the operator cannot recover the run, the daemon must abort it and
-  // surface the def-correctness error so it shows up in dev rather
-  // than silently disabling the agent-specific watchdog.
-  'AGENT_RUNTIME_DEF_INVALID',
   'PROJECT_NOT_FOUND',
   // Handoff (`POST /api/projects/:id/handoff`): the requested conversation
   // is not in the project, or has no messages to synthesize a handoff from.
@@ -92,9 +71,6 @@ export const API_ERROR_CODES = [
   'TOOL_TOKEN_EXPIRED',
   'TOOL_ENDPOINT_DENIED',
   'TOOL_OPERATION_DENIED',
-  'MEDIA_EXECUTION_DISABLED',
-  'MEDIA_SURFACE_DENIED',
-  'MEDIA_MODEL_DENIED',
   // Live artifact validation, storage, preview, and refresh failures.
   'LIVE_ARTIFACT_NOT_FOUND',
   'LIVE_ARTIFACT_INVALID',

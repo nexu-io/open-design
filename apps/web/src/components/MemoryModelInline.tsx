@@ -129,12 +129,6 @@ function chatProtocolFromAgent(
   return null;
 }
 
-function memoryProviderFromApiProtocol(
-  protocol: ApiProtocol,
-): MemoryExtractionProvider | null {
-  return protocol === 'bedrock' ? null : protocol;
-}
-
 function cliAgentLabel(agentId: string | null | undefined): string | null {
   if (!agentId) return null;
   const id = agentId.trim().toLowerCase();
@@ -231,9 +225,8 @@ export function MemoryModelInline({
   // derived from the agent id (claude → anthropic, codex → openai,
   // …), while the "Same as chat" default can still run the selected
   // local CLI directly on daemon-supported adapters.
-  const apiMemoryProvider = memoryProviderFromApiProtocol(apiProtocol);
   const effectiveChatProtocol: MemoryExtractionProvider | null =
-    mode === 'api' ? apiMemoryProvider : chatProtocolFromAgent(cliAgentId);
+    mode === 'api' ? apiProtocol : chatProtocolFromAgent(cliAgentId);
   const sameAsChatCliLabel =
     mode === 'daemon' ? cliAgentLabel(cliAgentId) : null;
 
@@ -280,12 +273,8 @@ export function MemoryModelInline({
     (modelId: string): MemoryExtractionConfigShape => {
       const trimmedModel = modelId.trim();
       if (mode === 'api') {
-        const provider = memoryProviderFromApiProtocol(apiProtocol);
-        if (!provider) {
-          throw new Error('Memory extraction is not available for AWS Bedrock BYOK yet.');
-        }
         return {
-          provider,
+          provider: apiProtocol,
           model: trimmedModel,
           baseUrl: chatBaseUrl.trim(),
           apiKey: chatApiKey,
@@ -353,7 +342,6 @@ export function MemoryModelInline({
   // so we don't spam PATCH /api/memory/config on every character.
   useEffect(() => {
     if (mode !== 'api') return;
-    if (!apiMemoryProvider) return;
     if (busy) return;
     if (customEditing) return;
     if (!config || !config.model) return;
@@ -361,7 +349,7 @@ export function MemoryModelInline({
     const newTail = (chatApiKey || '').slice(-4);
     const azureVersion = apiProtocol === 'azure' ? chatApiVersion.trim() : '';
     const drift =
-      config.provider !== apiMemoryProvider
+      config.provider !== apiProtocol
       || config.baseUrl !== trimmedBaseUrl
       || config.apiVersion !== azureVersion
       || config.apiKeyTail !== newTail;
@@ -373,7 +361,6 @@ export function MemoryModelInline({
   }, [
     mode,
     apiProtocol,
-    apiMemoryProvider,
     chatApiKey,
     chatBaseUrl,
     chatApiVersion,
@@ -401,20 +388,18 @@ export function MemoryModelInline({
         setCustomDraft(savedModel || '');
         return;
       }
-      if (mode === 'api' && !apiMemoryProvider) return;
       setCustomEditing(false);
       await persist(buildOverride(value));
     },
-    [mode, apiMemoryProvider, persist, buildOverride, savedModel],
+    [persist, buildOverride, savedModel],
   );
 
   const onSaveCustom = useCallback(async () => {
     const trimmed = customDraft.trim();
     if (!trimmed) return;
-    if (mode === 'api' && !apiMemoryProvider) return;
     await persist(buildOverride(trimmed));
     setCustomEditing(false);
-  }, [customDraft, mode, apiMemoryProvider, persist, buildOverride]);
+  }, [customDraft, persist, buildOverride]);
 
   // Stable unique id for the labelling span so multiple instances of
   // this picker (or instances rendered alongside other Memory pickers)
@@ -484,7 +469,7 @@ export function MemoryModelInline({
         popoverClassName="settings-byok-select-popover"
         models={selectOptions}
         value={selectValue}
-        disabled={busy || (mode === 'api' && !apiMemoryProvider)}
+        disabled={busy}
         onChange={(value) => void onSelectChange(value)}
       />
       {customActive ? (

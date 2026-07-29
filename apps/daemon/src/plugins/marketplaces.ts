@@ -14,7 +14,6 @@
 // unless `--trust` is passed.
 
 import { randomUUID } from 'node:crypto';
-import { safeExternalFetch } from './plugin-asset-cache.js';
 import type Database from 'better-sqlite3';
 import {
   parseMarketplace,
@@ -394,7 +393,7 @@ export async function refreshMarketplace(
 }
 
 async function defaultFetcher(url: string) {
-  const response = await safeExternalFetch(url);
+  const response = await fetch(url, { redirect: 'follow' });
   return {
     ok: response.ok,
     status: response.status,

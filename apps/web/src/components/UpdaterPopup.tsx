@@ -10,11 +10,8 @@ import {
   openUpdaterInstaller,
   quitAfterUpdaterInstallerOpen,
   readUpdaterStatus,
-  restartSafetyFromActionResult,
-  restartSafetyFromUpdaterStatus,
   subscribeToUpdaterStatus,
   type UpdaterModel,
-  type UpdaterRestartSafety,
 } from '../lib/updater';
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
@@ -28,19 +25,8 @@ import {
 
 const INSTALL_HANDOFF_WATCHDOG_MS = 10_000;
 
-type InstallState = 'idle' | 'opening' | 'handoff' | 'quitting' | 'recoverable';
+type InstallState = 'idle' | 'opening' | 'handoff' | 'recoverable';
 type Translator = (key: keyof Dict, vars?: Record<string, string | number>) => string;
-type UpdaterPopupProps = {
-  allowSilentUpdates?: boolean;
-  /**
-   * True after daemon app-config has been fetched and merged. The silent-update
-   * preference is daemon-owned and stripped from localStorage, so `undefined`
-   * only means "no preference" once this flag is true — before that it may
-   * still be hydrating a saved false.
-   */
-  silentUpdatePreferenceReady?: boolean;
-  onAllowSilentUpdatesChange?: (allowSilentUpdates: boolean) => Promise<void> | void;
-};
 
 function versionText(t: Translator, model: UpdaterModel): string {
   const version = model.availableVersion;
@@ -64,8 +50,8 @@ function channelLabelFor(channel: string | null | undefined): string | null {
   switch (channel) {
     case 'beta':
       return 'Beta channel';
-    case 'prerelease':
-      return 'Prerelease channel';
+    case 'nightly':
+      return 'Nightly channel';
     case 'preview':
       return 'Preview channel';
     case 'stable':
@@ -86,22 +72,7 @@ function updaterErrorCode(model: UpdaterModel): string | undefined {
   return model.status?.error?.code;
 }
 
-/**
- * User-facing copy for a restart-safety preflight denial. The popup keeps
- * these denials hard-blocked (no force path — that lives in the app-menu
- * UpdateDialog), but the copy must say why instead of a generic failure.
- */
-function restartSafetyText(t: Translator, safety: UpdaterRestartSafety): string {
-  return safety.state === 'blocked'
-    ? t('updater.activeRunsBody', { count: safety.activeRunCount })
-    : t('updater.activeRunsUnknownBody');
-}
-
-export function UpdaterPopup({
-  allowSilentUpdates,
-  silentUpdatePreferenceReady = false,
-  onAllowSilentUpdatesChange,
-}: UpdaterPopupProps) {
+export function UpdaterPopup() {
   const t = useT();
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const actionInFlightRef = useRef(false);
@@ -109,22 +80,6 @@ export function UpdaterPopup({
   const [model, setModel] = useState<UpdaterModel>(() => deriveUpdaterModel(null));
   const [panelOpen, setPanelOpen] = useState(false);
   const [installState, setInstallState] = useState<InstallState>('idle');
-  const [installError, setInstallError] = useState<string | null>(null);
-  const [allowSilentUpdatesChecked, setAllowSilentUpdatesChecked] = useState(() => allowSilentUpdates ?? true);
-  const [silentUpdatesPersistError, setSilentUpdatesPersistError] = useState<string | null>(null);
-  const [silentUpdatesPersisting, setSilentUpdatesPersisting] = useState(false);
-  // Seed bookkeeping must outlive effect dependency churn: a successful
-  // parent setConfig(true) re-runs the seed effect mid-flight; we must not
-  // cancel the in-flight finally (that stranded the checkbox disabled).
-  const seedInFlightRef = useRef(false);
-  const mountedRef = useRef(true);
-
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
 
   const clearHandoffWatchdog = useCallback(() => {
     if (handoffWatchdogRef.current == null) return;
@@ -149,70 +104,6 @@ export function UpdaterPopup({
   useEffect(() => clearHandoffWatchdog, [clearHandoffWatchdog]);
 
   useEffect(() => {
-    if (installState !== 'idle') return;
-    // Until a successful daemon GET has landed, undefined may still mean
-    // "loading a saved false" — keep the optimistic default only for display.
-    if (!silentUpdatePreferenceReady && allowSilentUpdates === undefined) return;
-    setAllowSilentUpdatesChecked(allowSilentUpdates ?? true);
-    setSilentUpdatesPersistError(null);
-  }, [allowSilentUpdates, installState, silentUpdatePreferenceReady]);
-
-  // Prompt show-up seed: only after a *successful* daemon config fetch.
-  // If the preference is still undefined then, write the default (true) once.
-  // Bookkeeping uses a ref so a successful parent re-render mid-flight does
-  // not cancel clearing `silentUpdatesPersisting`.
-  useEffect(() => {
-    if (!panelOpen) return;
-    if (!silentUpdatePreferenceReady) return;
-    if (allowSilentUpdates !== undefined) return;
-    if (onAllowSilentUpdatesChange == null) return;
-    if (seedInFlightRef.current) return;
-
-    seedInFlightRef.current = true;
-    setAllowSilentUpdatesChecked(true);
-    setSilentUpdatesPersistError(null);
-    setSilentUpdatesPersisting(true);
-    void Promise.resolve(onAllowSilentUpdatesChange(true))
-      .catch(() => {
-        if (!mountedRef.current) return;
-        setSilentUpdatesPersistError(t('settings.autosaveError'));
-      })
-      .finally(() => {
-        seedInFlightRef.current = false;
-        if (!mountedRef.current) return;
-        setSilentUpdatesPersisting(false);
-      });
-  }, [
-    allowSilentUpdates,
-    onAllowSilentUpdatesChange,
-    panelOpen,
-    silentUpdatePreferenceReady,
-    t,
-  ]);
-
-  const handleSilentUpdatesChange = useCallback(
-    async (next: boolean) => {
-      const previous = allowSilentUpdatesChecked;
-      setAllowSilentUpdatesChecked(next);
-      setSilentUpdatesPersistError(null);
-      if (onAllowSilentUpdatesChange == null) return;
-      setSilentUpdatesPersisting(true);
-      try {
-        // Parent must be non-optimistic for this daemon-owned key: only
-        // commit app-wide config after the daemon write succeeds.
-        await onAllowSilentUpdatesChange(next);
-      } catch {
-        if (!mountedRef.current) return;
-        setAllowSilentUpdatesChecked(previous);
-        setSilentUpdatesPersistError(t('settings.autosaveError'));
-      } finally {
-        if (mountedRef.current) setSilentUpdatesPersisting(false);
-      }
-    },
-    [allowSilentUpdatesChecked, onAllowSilentUpdatesChange, t],
-  );
-
-  useEffect(() => {
     let mounted = true;
     const applyStatus = (status: OpenDesignHostUpdaterStatusSnapshot) => {
       if (!mounted) return;
@@ -234,16 +125,10 @@ export function UpdaterPopup({
   }, []);
 
   const ready = model.environment === 'desktop' && model.shouldShowControl;
-  const installBusy = installState === 'opening' || installState === 'handoff' || installState === 'quitting';
-  const quitRecoverable = installState === 'recoverable' || installState === 'quitting';
+  const installBusy = installState === 'opening' || installState === 'handoff';
   const canStartInstall = ready || installState === 'recoverable';
   const showControl = ready || installState !== 'idle';
-  const installFailureText = model.canOpenInstaller ? t('updater.openFailedFallback') : t('updater.failed');
-  const controlLabel = quitRecoverable
-    ? t('updater.quitButton')
-    : model.updateKind === 'payload'
-      ? t('updater.installRestart')
-      : t('updater.openInstaller');
+  const controlLabel = model.updateKind === 'payload' ? t('updater.installRestart') : t('updater.openInstaller');
   const channelLabel = channelLabelFor(model.status?.channel);
   const analytics = useAnalytics();
   const appVersionBefore = useAppVersion();
@@ -318,7 +203,6 @@ export function UpdaterPopup({
     if (actionInFlightRef.current || !canStartInstall) return;
     actionInFlightRef.current = true;
     clearHandoffWatchdog();
-    setInstallError(null);
     setInstallState('opening');
     setPanelOpen(true);
     trackUpdateIndicatorClick(analytics.track, {
@@ -329,17 +213,9 @@ export function UpdaterPopup({
       ...versionProps,
     });
     try {
-      if (onAllowSilentUpdatesChange != null) {
-        try {
-          await onAllowSilentUpdatesChange(allowSilentUpdatesChecked);
-        } catch {
-          // Installing the update is more important than persisting this preference.
-        }
-      }
       const result = await openUpdaterInstaller({ payload: { source: 'updater-prompt' } });
       if (!result.ok) {
         actionInFlightRef.current = false;
-        setInstallError(installFailureText);
         setInstallState('idle');
         trackUpdateInstallResult(analytics.track, {
           page_name: 'home',
@@ -351,9 +227,7 @@ export function UpdaterPopup({
         return;
       }
       if (result.model.errorMessage != null) {
-        const safety = restartSafetyFromUpdaterStatus(result.status);
         actionInFlightRef.current = false;
-        setInstallError(safety == null ? installFailureText : restartSafetyText(t, safety));
         setInstallState('idle');
         trackUpdateInstallResult(analytics.track, {
           page_name: 'home',
@@ -365,7 +239,6 @@ export function UpdaterPopup({
         return;
       }
       setModel(result.model);
-      setInstallError(null);
       setInstallState('handoff');
       startHandoffWatchdog();
       trackUpdateInstallResult(analytics.track, {
@@ -376,8 +249,6 @@ export function UpdaterPopup({
       });
       const quitResult = await quitAfterUpdaterInstallerOpen({ payload: { source: 'updater-prompt' } });
       if (!quitResult.ok) {
-        const quitSafety = restartSafetyFromActionResult(quitResult);
-        if (quitSafety != null) setInstallError(restartSafetyText(t, quitSafety));
         clearHandoffWatchdog();
         actionInFlightRef.current = false;
         setInstallState('recoverable');
@@ -386,7 +257,6 @@ export function UpdaterPopup({
     } catch (error) {
       clearHandoffWatchdog();
       actionInFlightRef.current = false;
-      setInstallError(installFailureText);
       setInstallState('idle');
       trackUpdateInstallResult(analytics.track, {
         page_name: 'home',
@@ -396,24 +266,6 @@ export function UpdaterPopup({
         ...versionProps,
       });
     }
-  };
-
-  const retryQuit = async () => {
-    if (actionInFlightRef.current || installState !== 'recoverable') return;
-    actionInFlightRef.current = true;
-    clearHandoffWatchdog();
-    setInstallState('quitting');
-    startHandoffWatchdog();
-    try {
-      const quitResult = await quitAfterUpdaterInstallerOpen({ payload: { source: 'updater-prompt' } });
-      if (quitResult.ok) return;
-    } catch {
-      // Keep the explicit quit recovery action available.
-    }
-    clearHandoffWatchdog();
-    actionInFlightRef.current = false;
-    setInstallState('recoverable');
-    setPanelOpen(true);
   };
 
   if (!showControl) return null;
@@ -451,33 +303,48 @@ export function UpdaterPopup({
       </button>
       <AnimatePresence>
         {panelOpen ? (
-          <UpdaterPopupPanel
-            allowSilentUpdatesChecked={allowSilentUpdatesChecked}
-            channelLabel={channelLabel}
-            installError={installError}
-            installBusy={installBusy}
-            model={model}
-            quitRecoverable={quitRecoverable}
-            silentUpdatesPersistError={silentUpdatesPersistError}
-            silentUpdatesPersisting={silentUpdatesPersisting}
-            t={t}
-            onClose={close}
-            onInstall={() => {
-              if (installState === 'recoverable') {
-                void retryQuit();
-              } else {
-                void installAndQuit();
-              }
-            }}
-            onSilentUpdatesChange={(next) => {
-              void handleSilentUpdatesChange(next);
-            }}
-          />
+          <motion.section
+            aria-labelledby="updater-popup-title"
+            className="updater-popup is-ready"
+            data-testid="updater-popup"
+            role="dialog"
+            variants={popoverIn}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+          >
+            <div className="updater-popup__icon">
+              <Icon name="arrow-up" size={20} strokeWidth={2.2} />
+            </div>
+            <div className="updater-popup__body">
+              <h2 id="updater-popup-title">{t('updater.ready')}</h2>
+              <p>{versionText(t, model)}</p>
+              {channelLabel != null ? <span className="updater-popup__badge">{channelLabel}</span> : null}
+            </div>
+            <div className="updater-popup__actions">
+              <button className="updater-popup__button" disabled={installBusy} type="button" onClick={close}>
+                {t('updater.later')}
+              </button>
+              <button
+                className="updater-popup__button updater-popup__button--primary"
+                data-testid="updater-install-button"
+                disabled={installBusy}
+                type="button"
+                onClick={() => {
+                  void installAndQuit();
+                }}
+              >
+                {installActionText(t, model, installBusy)}
+              </button>
+            </div>
+          </motion.section>
         ) : null}
       </AnimatePresence>
     </div>
   );
 }
+<<<<<<< HEAD
+=======
 
 function ReinstallLearnMoreLink({ t, url }: { t: Translator; url: string }) {
   return (
@@ -585,3 +452,4 @@ function UpdaterPopupPanel({
     </motion.section>
   );
 }
+>>>>>>> upstream/main

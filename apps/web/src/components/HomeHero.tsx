@@ -9,10 +9,8 @@
 
 import {
   forwardRef,
-  useCallback,
   useEffect,
   useImperativeHandle,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -31,7 +29,6 @@ import type {
   InputFieldSpec,
   InstalledPluginRecord,
   McpServerConfig,
-  WorkspaceContextItem,
 } from '@open-design/contracts';
 import { DesignSystemPicker } from './DesignSystemPicker';
 import type { SkillSummary } from '../types';
@@ -39,21 +36,14 @@ import { Icon, type IconName } from './Icon';
 import { useAnalytics } from '../analytics/provider';
 import {
   trackComposerSessionModeClick,
-  trackContextLinkResult,
-  trackFigmaHelpModalSurfaceView,
   trackHomeChatComposerClick,
-  trackProjectReferenceModalSurfaceView,
 } from '../analytics/events';
 import { sessionModeToTracking } from '@open-design/contracts/analytics';
 import {
   chipsForGroup,
-  orderedCreateChips,
   type ChipGroup,
   type HomeHeroChip,
 } from './home-hero/chips';
-import { homeHeroChipLabel } from './home-hero/chip-labels';
-import { ScenarioArt } from './home-hero/ScenarioArt';
-import { useEdgeAutoScroll, EdgeScrollZones } from './home-hero/EdgeAutoScroll';
 import {
   isSubChipParent,
   subChipsForChip,
@@ -65,56 +55,24 @@ import {
 } from '../utils/inlineMentions';
 import { useI18n, useT } from '../i18n';
 import { localizePluginDescription, localizePluginTitle } from './plugins-home/localization';
-import {
-  examplePresetSeedPrompt,
-  pluginPresetQuery,
-  renderPluginPresetQuery,
-  promptLocaleKind,
-  type PromptLocaleKind,
-} from './plugins-home/presetSeedPrompt';
 import type { Locale } from '../i18n/types';
 import {
   localizeSkillDescription,
   localizeSkillName,
 } from '../i18n/content';
 import { PreviewSurface } from './plugins-home/cards/PreviewSurface';
-import { canDuplicatePluginPreview } from './plugins-home/duplicate';
-import { pluginCategoryLabel } from './plugins-home/categoryLabel';
-import { readHomeGuideStage, writeHomeGuideStage } from './home-hero/firstRunGuide';
 import { curatedPluginPriorityForChip } from './plugins-home/curatedPriority';
-import { comparePluginGalleryOrder } from './plugins-home/pluginPopularity';
 import { sortByVisualAppeal } from './plugins-home/visualScore';
 import { applyFacetSelection } from './plugins-home/facets';
 import { inferPluginPreview } from './plugins-home/preview';
-import { pluginSubfacetLabel } from './plugins-home/subfacetLabel';
-import { useDeckPreviewScale } from '../lib/use-deck-preview-scale';
-import { ComposerPlusMenu, PLUS_SUBMENU_RESOURCE_KIND } from './ComposerPlusMenu';
-import { ContextChipHoverCard } from './ContextChipHoverCard';
-import { workspaceContextDetailLine, workspaceContextKindLabel } from './workspace-context';
-import { FigmaHelpModal } from './FigmaHelpModal';
-import { TemplatePicker } from './home-hero/TemplatePicker';
-import { LibraryPicker } from './LibraryPicker';
 import { SessionModeToggle } from './SessionModeToggle';
-import { assetTitle } from './LibraryAssetMeta';
-import { libraryAssetRawUrl } from '../providers/registry';
-import type { LibraryAsset } from '@open-design/contracts';
-import { WorkingDirPicker } from './WorkingDirPicker';
-import {
-  ProjectReferenceModal,
-  type ProjectReferenceSelection,
-} from './ProjectReferenceModal';
+import { ComposerPlusMenu } from './ComposerPlusMenu';
 import {
   LexicalComposerInput,
   type LexicalComposerInputHandle,
   type CaretRect,
 } from './composer/LexicalComposerInput';
 import { CaretFloatingLayer } from './composer/CaretFloatingLayer';
-import { PlaceholderCarousel } from './home-hero/PlaceholderCarousel';
-import {
-  buildPlaceholderScenarios,
-  PLACEHOLDER_BASE_HINT_KEY,
-  type PlaceholderScenario,
-} from './home-hero/placeholderScenarios';
 
 export interface HomeHeroSubmitHandler {
   (): void;
@@ -127,9 +85,6 @@ export interface HomeHeroSubmitHandler {
 export interface HomeHeroHandle {
   focus(): void;
   focusEnd(): void;
-  // Flash the send button twice — fired after a plugin Use action or an
-  // example-prompt card seeds the composer, to pull the eye to the next step.
-  pulseSend(): void;
 }
 
 export interface ExamplePromptInfo {
@@ -140,32 +95,18 @@ export interface ExamplePromptInfo {
 
 interface Props {
   active?: boolean;
-  // Arms the first-run guidance trail (prototype chip → first preset
-  // card sheen). Tri-state: true = brand-new user (no projects), false =
-  // existing user, undefined = projects still loading — the guide neither
-  // arms nor completes until the answer is known.
-  firstRunGuide?: boolean;
   prompt: string;
   onPromptChange: (value: string) => void;
   onSubmit: HomeHeroSubmitHandler;
-  // Send pressed on an EMPTY composer while the placeholder carousel is
-  // showing: the host seeds the prompt with `scenario.text`, binds the
-  // scenario's template, and creates the project -- one-click "just start".
-  onSubmitScenario?: (scenario: PlaceholderScenario) => void;
   sessionMode?: ChatSessionMode;
   onSessionModeChange?: (mode: ChatSessionMode) => void;
   activePluginTitle: string | null;
-  // True when the active plugin chip shows a user-picked plugin (Community card
-  // or example-prompt preset) rather than a task-type chip's default plugin —
-  // an explicit pick owns its own clear (×) button even when a task chip is set.
-  activePluginIsExplicit?: boolean;
   activePluginRecord?: InstalledPluginRecord | null;
   activeChipId: string | null;
   onClearActivePlugin: () => void;
   onClearActiveChip?: () => void;
   activeSkillId?: string | null;
   activeSkillTitle?: string | null;
-  activeSkillRecord?: SkillSummary | null;
   onClearActiveSkill?: () => void;
   selectedPluginContexts?: InstalledPluginRecord[];
   selectedMcpContexts?: McpServerConfig[];
@@ -177,17 +118,13 @@ interface Props {
   contextOnlyPlugins?: InstalledPluginRecord[];
   contextOnlyMcpServers?: McpServerConfig[];
   contextOnlyConnectors?: ConnectorDetail[];
-  contextWorkspaceItems?: WorkspaceContextItem[];
   onRemovePluginContext?: (pluginId: string) => void;
   onRemoveMcpContext?: (serverId: string) => void;
   onRemoveConnectorContext?: (connectorId: string) => void;
-  onAddWorkspaceContext?: (item: WorkspaceContextItem) => void;
-  onRemoveWorkspaceContext?: (id: string) => void;
   onAddPlugin?: () => void;
   onAddConnector?: () => void;
   onAddMcp?: () => void;
   onOpenPluginDetails?: (record: InstalledPluginRecord) => void;
-  onOpenSkillDetails?: (skill: SkillSummary) => void;
   pluginInputFields?: InputFieldSpec[];
   pluginInputValues?: Record<string, unknown>;
   pluginInputTemplate?: string | null;
@@ -195,16 +132,9 @@ interface Props {
   inlineEditableInputNames?: string[];
   footerInputNames?: string[];
   designSystems?: DesignSystemSummary[];
-  // Persistent design-system selection, surfaced as a borderless picker in the
-  // row below the composer (next to the working-directory picker) so it is
-  // available for every product kind. `null` = "No design system".
-  selectedDesignSystemId?: string | null;
-  onDesignSystemChange?: (id: string | null) => void;
   stagedFiles?: File[];
   onAddFiles?: (files: File[]) => void;
   onRemoveFile?: (index: number) => void;
-  /** Opens the "Import from Figma" dialog; omit to hide the menu entry. */
-  onImportFigma?: () => void;
   pluginOptions: InstalledPluginRecord[];
   pluginsLoading: boolean;
   skillOptions?: SkillSummary[];
@@ -215,14 +145,8 @@ interface Props {
   pendingPluginId: string | null;
   pendingChipId: string | null;
   submitDisabled?: boolean;
-  // True while the submitted run is still creating its project/conversation
-  // (#4082). Distinct from `submitDisabled`: it swaps the send button into a
-  // visible Sending… state instead of leaving it silently idle.
-  submitting?: boolean;
   onPickPlugin: (record: InstalledPluginRecord, nextPrompt: string | null) => void;
   onPickExamplePlugin?: (record: InstalledPluginRecord, chipId: string, promptText: string) => void;
-  onDuplicateExamplePlugin?: (record: InstalledPluginRecord) => void;
-  pendingDuplicatePluginId?: string | null;
   onPickSkill?: (skill: SkillSummary, nextPrompt: string | null) => void;
   onPickMcp?: (server: McpServerConfig, nextPrompt: string) => void;
   onPickConnector?: (connector: ConnectorDetail, nextPrompt: string) => void;
@@ -231,20 +155,10 @@ interface Props {
   error: string | null;
   showActivePluginChip?: boolean;
   workingDir?: string | null;
-  recentDirs?: string[];
-  onPickWorkingDir?: () => Promise<string | null> | string | null | void;
-  onPickLocalCodeDir?: () => Promise<string | null> | string | null | void;
-  onSelectRecentWorkingDir?: (dir: string) => void;
+  onPickWorkingDir?: () => void;
   onClearWorkingDir?: () => void;
   onExamplePromptStatusChange?: (info: ExamplePromptInfo | null) => void;
-  // "…or start a blank project" — creates an empty project directly (no dialog,
-  // no design system / template / prompt) and enters it. Omit to hide the link.
-  onStartBlankProject?: () => void;
   executionSwitcher?: ReactNode;
-  // Personalized first-run starting point (spec §7). Rendered directly under
-  // the composer card — before the template section — so a brand-new user sees
-  // their recommended entry without scrolling.
-  recommendationSlot?: ReactNode;
 }
 
 type HomeMentionTab = 'all' | 'files' | 'plugins' | 'skills' | 'mcp' | 'connectors';
@@ -289,7 +203,6 @@ const EMPTY_STAGED_FILES: File[] = [];
 const EMPTY_SKILLS: SkillSummary[] = [];
 const EMPTY_MCP_OPTIONS: McpServerConfig[] = [];
 const EMPTY_CONNECTOR_OPTIONS: ConnectorDetail[] = [];
-const EMPTY_WORKSPACE_ITEMS: WorkspaceContextItem[] = [];
 
 export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   {
@@ -297,16 +210,12 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     prompt,
     onPromptChange,
     onSubmit,
-    onSubmitScenario = () => undefined,
     sessionMode = 'design',
     onSessionModeChange,
-    firstRunGuide,
     activePluginTitle,
-    activePluginIsExplicit = false,
     activePluginRecord = null,
     activeSkillId = null,
     activeSkillTitle = null,
-    activeSkillRecord = null,
     activeChipId,
     onClearActivePlugin,
     onClearActiveChip = onClearActivePlugin,
@@ -315,27 +224,20 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     contextOnlyPlugins = EMPTY_PLUGIN_CONTEXTS,
     contextOnlyMcpServers = EMPTY_MCP_OPTIONS,
     contextOnlyConnectors = EMPTY_CONNECTOR_OPTIONS,
-    contextWorkspaceItems = EMPTY_WORKSPACE_ITEMS,
     onRemovePluginContext = () => undefined,
     onRemoveMcpContext = () => undefined,
     onRemoveConnectorContext = () => undefined,
-    onAddWorkspaceContext = () => undefined,
-    onRemoveWorkspaceContext = () => undefined,
     onAddPlugin = () => undefined,
     onAddConnector = () => undefined,
     onAddMcp = () => undefined,
     onOpenPluginDetails = () => undefined,
-    onOpenSkillDetails = () => undefined,
     pluginInputFields = EMPTY_INPUT_FIELDS,
     pluginInputValues = EMPTY_PLUGIN_INPUT_VALUES,
     onPluginInputValuesChange = () => undefined,
     footerInputNames = EMPTY_INPUT_NAMES,
     designSystems = EMPTY_DESIGN_SYSTEMS,
-    selectedDesignSystemId = null,
-    onDesignSystemChange,
     stagedFiles = EMPTY_STAGED_FILES,
     onAddFiles = () => undefined,
-    onImportFigma,
     onRemoveFile = () => undefined,
     pluginOptions,
     pluginsLoading,
@@ -347,11 +249,8 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     pendingPluginId,
     pendingChipId,
     submitDisabled = false,
-    submitting = false,
     onPickPlugin,
     onPickExamplePlugin = () => undefined,
-    onDuplicateExamplePlugin = () => undefined,
-    pendingDuplicatePluginId = null,
     onPickSkill = () => undefined,
     onPickMcp = () => undefined,
     onPickConnector = () => undefined,
@@ -360,15 +259,10 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     error,
     showActivePluginChip = true,
     workingDir = null,
-    recentDirs = [],
     onPickWorkingDir,
-    onPickLocalCodeDir,
-    onSelectRecentWorkingDir,
     onClearWorkingDir,
     onExamplePromptStatusChange,
-    onStartBlankProject,
     executionSwitcher,
-    recommendationSlot,
   },
   ref,
 ) {
@@ -378,32 +272,11 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   const [mentionTab, setMentionTab] = useState<HomeMentionTab>('all');
   const [hoveredPlugin, setHoveredPlugin] = useState<InstalledPluginRecord | null>(null);
   const [dragActive, setDragActive] = useState(false);
-  const [libraryPickerOpen, setLibraryPickerOpen] = useState(false);
-  const [projectReferenceOpen, setProjectReferenceOpen] = useState(false);
-  const [figmaHelpOpen, setFigmaHelpOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
-  const homeHeroRef = useRef<HTMLElement | null>(null);
-  // Two-flash attention pulse on the send button; armed via the
-  // imperative `pulseSend()` handle, cleared when the animation ends.
-  const [sendAttention, setSendAttention] = useState(false);
-  // First-run guidance trail (see home-hero/firstRunGuide.ts): which rail
-  // chip is pulsing, and whether the first example-prompt card is pulsing.
-  const [guidePulseChipId, setGuidePulseChipId] = useState<string | null>(null);
-  const [guidePulseFirstPreset, setGuidePulseFirstPreset] = useState(false);
   // Selected second-level sub-category slug (Prototype / Slide deck rail).
   // Local-only: it filters the example-prompt cards below the rail. It never
   // binds a plugin or stamps an active badge.
   const [selectedSubcategory, setSelectedSubcategory] = useState<string | null>(null);
-  // Footer Template pill preview: the create-rail card the pointer is over,
-  // so hovering a card below previews it in the pill (cleared on rail-leave).
-  const [previewTemplateId, setPreviewTemplateId] = useState<string | null>(null);
-  // A committed pick or Clear must win over a lingering hover-preview. The rail
-  // that sets previewTemplateId unmounts the instant a template becomes active,
-  // so its onMouseLeave never fires; without this reset the stale preview keeps
-  // the pill showing the old template even after Clear nulls the value.
-  useEffect(() => {
-    setPreviewTemplateId(null);
-  }, [activeChipId]);
   const [selectedPromptExample, setSelectedPromptExample] = useState<SelectedPromptExample | null>(null);
   const [previewHomeFileKey, setPreviewHomeFileKey] = useState<string | null>(null);
   const [stagedFilePreviewUrls, setStagedFilePreviewUrls] = useState<Map<string, string>>(() => new Map());
@@ -411,16 +284,12 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   // getContextMention regex) + the caret box the popover anchors to.
   const [mentionTrigger, setMentionTrigger] = useState<{ query: string } | null>(null);
   const [caretRect, setCaretRect] = useState<CaretRect | null>(null);
-  // The scenario the placeholder carousel is currently showing. A Send on an
-  // empty composer submits THIS scenario's text + template (see handleSend).
-  const [carouselScenario, setCarouselScenario] = useState<PlaceholderScenario | null>(null);
   const editorRef = useRef<LexicalComposerInputHandle | null>(null);
   const promptEditorRef = useRef<HTMLDivElement | null>(null);
   const mentionPickerRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const shortcutsMenuRef = useRef<HTMLDivElement>(null);
-  const canSubmit =
-    (prompt.trim().length > 0 || stagedFiles.length > 0) && !submitDisabled && !submitting;
+  const canSubmit = (prompt.trim().length > 0 || stagedFiles.length > 0) && !submitDisabled;
   const previewHomeFile = useMemo(() => {
     if (!previewHomeFileKey) return null;
     return stagedFiles.find((file, index) => homeFileKey(file, index) === previewHomeFileKey) ?? null;
@@ -431,56 +300,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     : t('homeHero.placeholder');
   const mentionActive = Boolean(mentionTrigger);
   const mentionQuery = mentionTrigger?.query ?? '';
-  // Scenarios the carousel cycles, with copy resolved through `t()` so the
-  // typed placeholder AND the submitted query follow the locale. With a
-  // create-template chip selected we narrow to that template's scenarios (so
-  // the suggestions match the picked output and a submit keeps that template);
-  // with nothing bound we cycle the full set. Memoised by chip + locale so the
-  // reference only changes on a real switch, which restarts the carousel.
-  const carouselScenarios = useMemo<PlaceholderScenario[]>(() => {
-    return buildPlaceholderScenarios({
-      activeChipId,
-      resolveTextKey: (key) => t(key),
-      examplesForChip: (chipId) => homeHeroChipPromptExamples(chipId, locale),
-      fallbackForChip: (chipId) => fallbackPlaceholderScenarioText(chipId, locale, t),
-    });
-  }, [activeChipId, locale, t]);
-  // The placeholder carousel runs while the composer is empty and nothing
-  // OTHER than a create-template chip is bound. A selected template keeps it
-  // alive (showing that template's scenarios); only an explicit plugin/skill
-  // pick — which owns its own placeholder — or a non-empty composer stops it.
-  // Template types without curated carousel lines fall back to their localized
-  // prompt examples, then to a localized chip-label prompt. That keeps every
-  // create template submittable from an empty composer instead of silently
-  // disabling Send.
-  const carouselActive =
-    active &&
-    !submitting &&
-    !submitDisabled &&
-    prompt.trim().length === 0 &&
-    stagedFiles.length === 0 &&
-    !activeSkillTitle &&
-    !activePluginIsExplicit &&
-    !mentionActive &&
-    carouselScenarios.length > 0;
-  // Empty composer, but the carousel is offering a runnable scenario from the
-  // CURRENT pool: Send stays highlighted and submits that scenario instead of
-  // sitting disabled. The membership check guards the brief window after a
-  // template switch before the carousel reports the new pool's first scenario.
-  const carouselSubmittable =
-    carouselActive &&
-    !pluginsLoading &&
-    carouselScenario !== null &&
-    carouselScenarios.some((scenario) => scenario.id === carouselScenario.id);
-  const sendEnabled = canSubmit || carouselSubmittable;
-  function handleSend() {
-    if (submitting || submitDisabled) return;
-    if (canSubmit) {
-      onSubmit();
-      return;
-    }
-    if (carouselSubmittable && carouselScenario) onSubmitScenario(carouselScenario);
-  }
   const fileMatches = useMemo(
     () =>
       mentionActive
@@ -625,7 +444,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
         mcpOptions,
         pluginOptions,
         connectorOptions,
-        contextWorkspaceItems,
         selectedPluginContexts,
         stagedFiles,
         skillOptions,
@@ -637,7 +455,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
       mcpOptions,
       pluginOptions,
       connectorOptions,
-      contextWorkspaceItems,
       selectedPluginContexts,
       stagedFiles,
       skillOptions,
@@ -662,14 +479,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
       ? chipsForGroup('create').find((chip) => chip.id === activeChipId) ?? null
       : null,
     [activeChipId],
-  );
-  // Footer Template picker options: the ordered create-scenario chips (pure
-  // project-type templates — Slides / Prototype / Wireframe / Document / …).
-  // Excludes action chips (Brand Kit / Figma) that navigate away instead of
-  // seeding a template, so the dropdown matches the rail's template set.
-  const templateChips = useMemo(
-    () => orderedCreateChips().filter((chip) => chip.action.kind === 'apply-scenario'),
-    [],
   );
   const activeExamplePlugins = useMemo(
     () =>
@@ -703,57 +512,12 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
       applyFacetSelection(pool, { category: activeChipId, subcategory: selectedSubcategory }),
     );
   }, [activeExamplePlugins, activeChipId, selectedSubcategory, pluginOptions]);
-
-  // First-run guide, beat 1: pulse the Prototype chip for brand-new users.
-  // The settle delay lets the hero finish its entrance before the sheen.
-  useEffect(() => {
-    if (firstRunGuide !== true) return;
-    if (readHomeGuideStage() !== 'chip') return;
-    const arm = window.setTimeout(() => setGuidePulseChipId('prototype'), 900);
-    const disarm = window.setTimeout(() => setGuidePulseChipId(null), 3600);
-    return () => {
-      window.clearTimeout(arm);
-      window.clearTimeout(disarm);
-    };
-  }, [firstRunGuide]);
-
-  // Users with existing projects never see the trail — complete ANY
-  // unfinished stage silently. A chip pick during the loading window can
-  // move the stage to 'card' before we know the user is not new, so 'chip'
-  // alone is not enough to close off.
-  useEffect(() => {
-    if (firstRunGuide !== false) return;
-    if (readHomeGuideStage() !== 'done') writeHomeGuideStage('done');
-  }, [firstRunGuide]);
-
   const activePromptExamples = useMemo(
     () => activeChipId && activeExamplePlugins.length === 0
       ? homeHeroChipPromptExamples(activeChipId, locale)
       : [],
     [activeChipId, activeExamplePlugins.length, locale],
   );
-
-  // Beat 2: once the picked chip's example cards render, pulse the first
-  // card exactly once, then the trail is done (the send pulse takes over
-  // after a card pick).
-  useEffect(() => {
-    if (firstRunGuide !== true) return;
-    if (readHomeGuideStage() !== 'card') return;
-    // Either card surface counts: plugin preset tiles, or the static
-    // prompt-example fallback a presetless chip renders instead.
-    const hasExampleCards =
-      filteredExamplePlugins.length > 0 || activePromptExamples.length > 0;
-    if (!activeChipId || !hasExampleCards) return;
-    const arm = window.setTimeout(() => {
-      setGuidePulseFirstPreset(true);
-      writeHomeGuideStage('done');
-    }, 500);
-    const disarm = window.setTimeout(() => setGuidePulseFirstPreset(false), 3200);
-    return () => {
-      window.clearTimeout(arm);
-      window.clearTimeout(disarm);
-    };
-  }, [firstRunGuide, activeChipId, filteredExamplePlugins.length, activePromptExamples.length]);
   const authoringLayoutActive =
     activeChipId === 'create-plugin' || pendingChipId === 'create-plugin';
   const promptMaxHeight = authoringLayoutActive
@@ -813,10 +577,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     const closeOnPointer = (event: PointerEvent) => {
       const target = event.target;
       if (target instanceof Node && shortcutsMenuRef.current?.contains(target)) return;
-      // The dropdown is portaled to <body>, so it's outside shortcutsMenuRef;
-      // recognize it explicitly or a click on a menu item would close the menu
-      // before the item's handler runs.
-      if (target instanceof Element && target.closest('[data-shortcuts-panel]')) return;
       setShortcutsOpen(false);
     };
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -857,17 +617,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [previewHomeFileKey]);
 
-  // Shared by the imperative pulseSend() handle (plugin Use / preset picks
-  // routed through HomeView) and the component-internal static
-  // prompt-example path — every "composer just got seeded" flow shows the
-  // same Send cue.
-  function triggerSendAttention() {
-    // Drop the class for a frame so a pulse requested mid-animation
-    // restarts instead of being swallowed.
-    setSendAttention(false);
-    requestAnimationFrame(() => setSendAttention(true));
-  }
-
   useImperativeHandle(
     ref,
     (): HomeHeroHandle => ({
@@ -876,9 +625,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
       },
       focusEnd() {
         editorRef.current?.focus();
-      },
-      pulseSend() {
-        triggerSendAttention();
       },
     }),
     [],
@@ -939,92 +685,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
       token,
     });
     onPickConnector(connector, next);
-  }
-
-  function insertInlineMentionSeparator() {
-    const current = editorRef.current?.getText() ?? prompt;
-    if (current.trim() && !/\s$/.test(current)) {
-      editorRef.current?.insertText(' ');
-    }
-  }
-
-  function appendWorkspacePrompt(item: WorkspaceContextItem) {
-    onAddWorkspaceContext(item);
-    insertInlineMentionSeparator();
-    editorRef.current?.insertMention({
-      token: inlineMentionToken(item.label),
-      entity: { id: item.id, kind: 'workspace', label: item.label },
-    });
-    onPromptChange(editorRef.current?.getText() ?? prompt);
-    dismissMentionPicker();
-    requestAnimationFrame(() => editorRef.current?.focus());
-  }
-
-  function handleReferenceProjects(selections: ProjectReferenceSelection[]) {
-    for (const selection of selections) {
-      const path = selection.resolvedDir.trim();
-      const label = selection.project.name || selection.project.id;
-      appendWorkspacePrompt(
-        {
-          id: `project:${selection.project.id}`,
-          kind: 'project',
-          label,
-          title: label,
-          path: selection.project.id,
-          ...(path ? { absolutePath: path } : {}),
-        }
-      );
-    }
-    setProjectReferenceOpen(false);
-    trackContextLinkResult(analytics.track, {
-      page_name: 'home',
-      area: 'chat_composer',
-      context_kind: 'project',
-      result: 'success',
-      count: selections.length,
-    });
-  }
-
-  async function handleLinkLocalCodeContext() {
-    const selected = await onPickLocalCodeDir?.();
-    if (!selected) {
-      trackContextLinkResult(analytics.track, {
-        page_name: 'home',
-        area: 'chat_composer',
-        context_kind: 'local_code',
-        result: 'cancelled',
-      });
-      return;
-    }
-    const label = selected.split(/[/\\]/).filter(Boolean).pop() || selected;
-    appendWorkspacePrompt(
-      {
-        id: `local-code:${selected}`,
-        kind: 'local-code',
-        label,
-        title: label,
-        path: selected,
-        absolutePath: selected,
-      }
-    );
-    trackContextLinkResult(analytics.track, {
-      page_name: 'home',
-      area: 'chat_composer',
-      context_kind: 'local_code',
-      result: 'success',
-      count: 1,
-    });
-  }
-
-  function openDesignSystemPicker() {
-    const trigger = homeHeroRef.current?.querySelector<HTMLButtonElement>(
-      '[data-testid="home-hero-design-system-trigger"]',
-    );
-    if (!trigger || trigger.disabled) return;
-    window.requestAnimationFrame(() => {
-      if (trigger.getAttribute('aria-expanded') !== 'true') trigger.click();
-      trigger.focus({ preventScroll: true });
-    });
   }
 
   // Lexical reports the active @-trigger derived from the caret. HomeHero
@@ -1101,18 +761,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     onAddFiles(files);
   }
 
-  // "Import from library": the home composer has no project yet, so we fetch
-  // each picked asset's bytes and stage them as regular files. They ride the
-  // existing upload-on-submit path into the new project's design files.
-  async function importLibraryAssets(assets: LibraryAsset[]) {
-    const files: File[] = [];
-    for (const asset of assets) {
-      const file = await fileFromLibraryAsset(asset);
-      if (file) files.push(file);
-    }
-    handleFiles(files);
-  }
-
   function removeFileChip(index: number, file: File) {
     const nextPrompt = stripHomeMentionToken(prompt, file.name);
     if (nextPrompt !== prompt) onPromptChange(nextPrompt);
@@ -1139,7 +787,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     editorRef.current?.setText(example);
     setSelectedIndex(0);
     requestAnimationFrame(() => editorRef.current?.focus());
-    triggerSendAttention();
   }
 
   function pickExamplePluginPreset(record: InstalledPluginRecord, chipId: string, promptText: string) {
@@ -1172,12 +819,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
       element: 'task_chip',
       chip_id: chip.id,
     });
-    // First chip pick completes the guide's first beat; the preset-card
-    // pulse arms once the example cards for this chip render.
-    if (readHomeGuideStage() === 'chip') {
-      writeHomeGuideStage('card');
-      setGuidePulseChipId(null);
-    }
     onPickChip(chip);
   }
 
@@ -1193,40 +834,23 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     if (activePluginRecord) onOpenPluginDetails(activePluginRecord);
   }
 
-  function openActiveSkillDetails() {
-    if (activeSkillRecord) onOpenSkillDetails(activeSkillRecord);
-  }
-
-  // Inline-backed plugin/MCP/connector contexts already render as @mention pills
-  // in the editor. This row should mount only for content that has a visible chip
-  // here; the aggregate context count is just an aria label when the row exists.
-  const showActivePluginRow = Boolean(showActivePluginChip && activePluginTitle);
+  // plugin/MCP/connector contexts now render as inline @mention pills in the
+  // composer, so they no longer drive this top row — only staged files (which
+  // have no inline representation) and the active plugin/skill/example chips do.
   const showActiveContextRow =
-    stagedFiles.length > 0 ||
-    showActivePluginRow ||
-    Boolean(activeSkillTitle) ||
-    contextOnlyPlugins.length > 0 ||
-    contextOnlyMcpServers.length > 0 ||
-    contextOnlyConnectors.length > 0 ||
-    contextWorkspaceItems.length > 0;
-  const blankProjectEntry = onStartBlankProject ? (
-    <button
-      type="button"
-      className="home-hero__blank-project"
-      data-testid="home-hero-blank-project"
-      onClick={onStartBlankProject}
-    >
-      {t('homeHero.startBlankProject')}
-      <Icon name="chevron-right" size={13} aria-hidden />
-    </button>
-  ) : null;
+    contextItemCount > 0 ||
+    (showActivePluginChip && activePluginTitle) ||
+    activeSkillTitle ||
+    stagedFiles.length > 0;
 
   let optionRenderIndex = 0;
 
   return (
-    <section ref={homeHeroRef} className="home-hero" data-testid="home-hero">
+    <section className="home-hero" data-testid="home-hero">
       <div className="home-hero__brand" aria-hidden>
-        <span className="home-hero__brand-mark od-brand-glyph" />
+        <span className="home-hero__brand-mark">
+          <img src="/app-icon.svg" alt="" draggable={false} />
+        </span>
         <span className="home-hero__brand-name">Open Design</span>
       </div>
       <h1 className="home-hero__title">{t('homeHero.title')}</h1>
@@ -1293,9 +917,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                       className="home-hero__active-chip home-hero__active-chip--context home-hero__active-chip--file"
                       title={`${file.name} · ${formatFileSize(file.size)}`}
                     >
-                      <span className="home-hero__active-order" aria-label={`Attachment ${index + 1}`}>
-                        {index + 1}
-                      </span>
                       {previewUrl ? (
                         <button
                           type="button"
@@ -1325,7 +946,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 })}
               </span>
             ) : null}
-            {showActivePluginRow ? (
+            {showActivePluginChip && activePluginTitle ? (
               <span className="home-hero__active-chip" data-testid="home-hero-active-plugin">
                 <button
                   type="button"
@@ -1347,19 +968,11 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                   </span>
                   <span className="home-hero__active-label">{activePluginTitle}</span>
                 </button>
-                {activeCreateChip && !activePluginIsExplicit ? null : (
+                {activeCreateChip ? null : (
                   <button
                     type="button"
                     className="home-hero__active-clear od-tooltip"
-                    onClick={() => {
-                      trackHomeChatComposerClick(analytics.track, {
-                        page_name: 'home',
-                        area: 'chat_composer',
-                        element: 'plugin_chip_clear',
-                        chip_id: activePluginRecord?.id,
-                      });
-                      onClearActivePlugin();
-                    }}
+                    onClick={onClearActivePlugin}
                     aria-label={t('homeHero.clearActivePlugin')}
                     title={t('homeHero.clearActivePlugin')}
                     data-tooltip={t('homeHero.clearActivePlugin')}
@@ -1374,26 +987,10 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 className="home-hero__active-chip home-hero__active-chip--skill"
                 data-testid="home-hero-active-skill"
               >
-                <button
-                  type="button"
-                  className="home-hero__active-chip-body"
-                  onPointerDown={(event) => {
-                    event.preventDefault();
-                    openActiveSkillDetails();
-                  }}
-                  onMouseDown={(event) => {
-                    event.preventDefault();
-                    openActiveSkillDetails();
-                  }}
-                  onClick={openActiveSkillDetails}
-                  disabled={!activeSkillRecord}
-                  title={activeSkillRecord ? activeSkillRecord.description || activeSkillTitle : undefined}
-                >
-                  <span className="home-hero__active-icon" aria-hidden>
-                    <Icon name="sparkles" size={12} />
-                  </span>
-                  <span className="home-hero__active-label">{t('homeHero.skillPrefix', { title: activeSkillTitle })}</span>
-                </button>
+                <span className="home-hero__active-icon" aria-hidden>
+                  <Icon name="sparkles" size={12} />
+                </span>
+                <span className="home-hero__active-label">{t('homeHero.skillPrefix', { title: activeSkillTitle })}</span>
                 <button
                   type="button"
                   className="home-hero__active-clear od-tooltip"
@@ -1407,12 +1004,10 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
               </span>
             ) : null}
             {contextOnlyPlugins.map((plugin) => (
-              <ContextChipHoverCard
+              <span
                 key={`ctx-plugin-${plugin.id}`}
                 className="home-hero__active-chip home-hero__active-chip--context"
                 data-testid={`home-hero-context-plugin-${plugin.id}`}
-                typeLabel="Plugin"
-                detail={plugin.id}
               >
                 <span className="home-hero__active-icon" aria-hidden>
                   <Icon name="sliders" size={12} />
@@ -1421,16 +1016,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 <button
                   type="button"
                   className="home-hero__active-clear od-tooltip"
-                  onClick={() => {
-                    trackHomeChatComposerClick(analytics.track, {
-                      page_name: 'home',
-                      area: 'chat_composer',
-                      element: 'context_remove',
-                      resource_kind: 'plugin',
-                      resource_id: plugin.id,
-                    });
-                    onRemovePluginContext(plugin.id);
-                  }}
+                  onClick={() => onRemovePluginContext(plugin.id)}
                   aria-label={t('chat.removeAria', { name: plugin.title })}
                   title={t('common.close')}
                   data-tooltip={t('common.close')}
@@ -1438,17 +1024,15 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 >
                   <Icon name="close" size={9} />
                 </button>
-              </ContextChipHoverCard>
+              </span>
             ))}
             {contextOnlyMcpServers.map((server) => {
               const label = server.label || server.id;
               return (
-                <ContextChipHoverCard
+                <span
                   key={`ctx-mcp-${server.id}`}
                   className="home-hero__active-chip home-hero__active-chip--context"
                   data-testid={`home-hero-context-mcp-${server.id}`}
-                  typeLabel="MCP server"
-                  detail={server.url || server.id}
                 >
                   <span className="home-hero__active-icon" aria-hidden>
                     <Icon name="sliders" size={12} />
@@ -1457,16 +1041,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                   <button
                     type="button"
                     className="home-hero__active-clear od-tooltip"
-                    onClick={() => {
-                      trackHomeChatComposerClick(analytics.track, {
-                        page_name: 'home',
-                        area: 'chat_composer',
-                        element: 'context_remove',
-                        resource_kind: 'mcp',
-                        resource_id: server.id,
-                      });
-                      onRemoveMcpContext(server.id);
-                    }}
+                    onClick={() => onRemoveMcpContext(server.id)}
                     aria-label={t('chat.removeAria', { name: label })}
                     title={t('common.close')}
                     data-tooltip={t('common.close')}
@@ -1474,16 +1049,14 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                   >
                     <Icon name="close" size={9} />
                   </button>
-                </ContextChipHoverCard>
+                </span>
               );
             })}
             {contextOnlyConnectors.map((connector) => (
-              <ContextChipHoverCard
+              <span
                 key={`ctx-connector-${connector.id}`}
                 className="home-hero__active-chip home-hero__active-chip--context"
                 data-testid={`home-hero-context-connector-${connector.id}`}
-                typeLabel="Connector"
-                detail={connector.provider || connector.id}
               >
                 <span className="home-hero__active-icon" aria-hidden>
                   <Icon name="link" size={12} />
@@ -1492,16 +1065,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 <button
                   type="button"
                   className="home-hero__active-clear od-tooltip"
-                  onClick={() => {
-                    trackHomeChatComposerClick(analytics.track, {
-                      page_name: 'home',
-                      area: 'chat_composer',
-                      element: 'context_remove',
-                      resource_kind: 'connector',
-                      resource_id: connector.id,
-                    });
-                    onRemoveConnectorContext(connector.id);
-                  }}
+                  onClick={() => onRemoveConnectorContext(connector.id)}
                   aria-label={t('chat.removeAria', { name: connector.name })}
                   title={t('common.close')}
                   data-tooltip={t('common.close')}
@@ -1509,43 +1073,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 >
                   <Icon name="close" size={9} />
                 </button>
-              </ContextChipHoverCard>
-            ))}
-            {contextWorkspaceItems.map((item) => (
-              <ContextChipHoverCard
-                key={`ctx-workspace-${item.id}`}
-                className="home-hero__active-chip home-hero__active-chip--context"
-                data-testid={`home-hero-context-workspace-${item.id}`}
-                typeLabel={workspaceContextKindLabel(item.kind)}
-                detail={workspaceContextDetailLine(item)}
-              >
-                <span className="home-hero__active-icon" aria-hidden>
-                  <Icon name={item.kind === 'local-code' ? 'terminal' : 'folder'} size={12} />
-                </span>
-                <span className="home-hero__active-label">{item.label}</span>
-                <button
-                  type="button"
-                  className="home-hero__active-clear od-tooltip"
-                  onClick={() => {
-                    trackHomeChatComposerClick(analytics.track, {
-                      page_name: 'home',
-                      area: 'chat_composer',
-                      element: 'context_remove',
-                      resource_kind: 'workspace',
-                      resource_id: item.id,
-                    });
-                    const nextPrompt = stripHomeMentionToken(prompt, item.label);
-                    if (nextPrompt !== prompt) onPromptChange(nextPrompt);
-                    onRemoveWorkspaceContext(item.id);
-                  }}
-                  aria-label={t('chat.removeAria', { name: item.label })}
-                  title={t('common.close')}
-                  data-tooltip={t('common.close')}
-                  data-testid={`home-hero-context-clear-${item.id}`}
-                >
-                  <Icon name="close" size={9} />
-                </button>
-              </ContextChipHoverCard>
+              </span>
             ))}
           </div>
         ) : null}
@@ -1555,11 +1083,8 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
               ref={editorRef}
               testId="home-hero-input"
               draft={prompt}
-              // While the carousel animates, blank the editor's own placeholder
-              // so it doesn't double under the overlay; keep the base hint as
-              // the accessible/tooltip label.
-              placeholder={carouselActive ? '' : placeholder}
-              title={carouselActive ? t(PLACEHOLDER_BASE_HINT_KEY) : placeholder}
+              placeholder={placeholder}
+              title={placeholder}
               knownEntities={promptMentionEntities}
               onChange={(plainText) => {
                 // A programmatic seed (host setPrompt → draft prop →
@@ -1578,7 +1103,9 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 }
               }}
               onTrigger={handleTrigger}
-              onEnterSend={handleSend}
+              onEnterSend={() => {
+                if (canSubmit) onSubmit();
+              }}
               onPasteFiles={handleFiles}
               popoverOpen={pickerOpen && visiblePickerOptions.length > 0}
               onPopoverKey={handlePopoverKey}
@@ -1586,11 +1113,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 expanded: pickerOpen,
                 activeId: pickerOpen ? `home-hero-option-${selectedIndex}` : null,
               }}
-            />
-            <PlaceholderCarousel
-              active={carouselActive}
-              scenarios={carouselScenarios}
-              onScenarioChange={setCarouselScenario}
             />
           </div>
         </div>
@@ -1725,7 +1247,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
           <div className="home-hero__foot-left">
             <ComposerPlusMenu
               triggerTestId="home-hero-plus-trigger"
-              placementPreference="down"
               onOpen={() =>
                 trackHomeChatComposerClick(analytics.track, {
                   page_name: 'home',
@@ -1733,23 +1254,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                   element: 'plus_menu_open',
                 })
               }
-              onSubmenuOpen={(submenu) => {
-                if (submenu === 'toolbox') return;
-                trackHomeChatComposerClick(analytics.track, {
-                  page_name: 'home',
-                  area: 'chat_composer',
-                  element: 'plus_submenu_open',
-                  resource_kind: PLUS_SUBMENU_RESOURCE_KIND[submenu],
-                });
-              }}
-              onSearchUsed={(submenu) => {
-                trackHomeChatComposerClick(analytics.track, {
-                  page_name: 'home',
-                  area: 'chat_composer',
-                  element: 'plus_search',
-                  resource_kind: PLUS_SUBMENU_RESOURCE_KIND[submenu],
-                });
-              }}
               connectors={connectorOptions}
               onPickConnector={(connector) => {
                 trackHomeChatComposerClick(analytics.track, {
@@ -1790,17 +1294,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 });
                 onAddPlugin();
               }}
-              skills={skillOptions}
-              onPickSkill={(skill) => {
-                trackHomeChatComposerClick(analytics.track, {
-                  page_name: 'home',
-                  area: 'chat_composer',
-                  element: 'plus_pick',
-                  resource_kind: 'skill',
-                  resource_id: skill.id,
-                });
-                pickSkill(skill);
-              }}
               mcpServers={mcpOptions}
               onPickMcp={(server) => {
                 trackHomeChatComposerClick(analytics.track, {
@@ -1829,110 +1322,50 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 });
                 fileInputRef.current?.click();
               }}
-              onReferenceProject={() => {
-                trackHomeChatComposerClick(analytics.track, {
-                  page_name: 'home',
-                  area: 'chat_composer',
-                  element: 'plus_pick',
-                  resource_kind: 'workspace',
-                  resource_id: 'reference-project',
-                });
-                trackProjectReferenceModalSurfaceView(analytics.track, {
-                  page_name: 'home',
-                  area: 'project_reference_modal',
-                });
-                setProjectReferenceOpen(true);
-              }}
-              onLinkLocalCode={onPickLocalCodeDir ? () => {
-                trackHomeChatComposerClick(analytics.track, {
-                  page_name: 'home',
-                  area: 'chat_composer',
-                  element: 'plus_pick',
-                  resource_kind: 'workspace',
-                  resource_id: 'local-code',
-                });
-                void handleLinkLocalCodeContext();
-              } : undefined}
-              onSelectFromLibrary={() => {
-                trackHomeChatComposerClick(analytics.track, {
-                  page_name: 'home',
-                  area: 'chat_composer',
-                  element: 'library',
-                });
-                setLibraryPickerOpen(true);
-              }}
-              onImportFigma={onImportFigma ? () => {
-                trackHomeChatComposerClick(analytics.track, {
-                  page_name: 'home',
-                  area: 'chat_composer',
-                  element: 'figma_import',
-                });
-                onImportFigma();
-              } : undefined}
-              onShowFigmaHelp={() => {
-                trackHomeChatComposerClick(analytics.track, {
-                  page_name: 'home',
-                  area: 'chat_composer',
-                  element: 'figma_help',
-                });
-                trackFigmaHelpModalSurfaceView(analytics.track, {
-                  page_name: 'home',
-                  area: 'figma_help_modal',
-                });
-                setFigmaHelpOpen(true);
-              }}
-              onOpenDesignSystems={onDesignSystemChange ? () => {
-                trackHomeChatComposerClick(analytics.track, {
-                  page_name: 'home',
-                  area: 'chat_composer',
-                  element: 'design_system_open',
-                });
-                openDesignSystemPicker();
-              } : undefined}
             />
-            {libraryPickerOpen ? (
-              <LibraryPicker
-                onClose={() => setLibraryPickerOpen(false)}
-                onConfirm={(assets) => importLibraryAssets(assets)}
-              />
+            {onPickWorkingDir ? (
+              <div className="home-hero__working-dir-wrap">
+                <button
+                  type="button"
+                  className={`home-hero__working-dir od-tooltip${workingDir ? ' picked' : ''}`}
+                  onClick={() => {
+                    trackHomeChatComposerClick(analytics.track, {
+                      page_name: 'home',
+                      area: 'chat_composer',
+                      element: 'working_dir',
+                    });
+                    onPickWorkingDir?.();
+                  }}
+                  title={workingDir ?? t('workingDirPicker.homeTitle')}
+                  data-tooltip={workingDir ?? t('workingDirPicker.homeTitle')}
+                >
+                  <Icon name="folder" size={13} />
+                  <span>
+                    {workingDir ? workingDir.split(/[/\\]/).filter(Boolean).pop() : t('workingDirPicker.select')}
+                  </span>
+                </button>
+                {workingDir ? (
+                  <button
+                    type="button"
+                    className="home-hero__working-dir-clear"
+                    onClick={() => {
+                      trackHomeChatComposerClick(analytics.track, {
+                        page_name: 'home',
+                        area: 'chat_composer',
+                        element: 'working_dir_clear',
+                      });
+                      onClearWorkingDir?.();
+                    }}
+                    aria-label={t('workingDirPicker.clearAria')}
+                  >
+                    <Icon name="close" size={10} />
+                  </button>
+                ) : null}
+              </div>
             ) : null}
-            {projectReferenceOpen ? (
-              <ProjectReferenceModal
-                onClose={() => {
-                  // Only the dismiss paths (X / backdrop / Escape / Cancel)
-                  // land here — a confirmed pick closes via
-                  // handleReferenceProjects, which reports 'success'.
-                  trackContextLinkResult(analytics.track, {
-                    page_name: 'home',
-                    area: 'chat_composer',
-                    context_kind: 'project',
-                    result: 'cancelled',
-                  });
-                  setProjectReferenceOpen(false);
-                }}
-                onSelect={handleReferenceProjects}
-              />
+            {activeCreateChip ? (
+              <ActiveTypeChip chip={activeCreateChip} onClear={onClearActiveChip} />
             ) : null}
-            {figmaHelpOpen ? (
-              <FigmaHelpModal onClose={() => setFigmaHelpOpen(false)} />
-            ) : null}
-            <TemplatePicker
-              templates={templateChips}
-              activeChipId={activeChipId}
-              previewChipId={previewTemplateId}
-              disabled={pluginsLoading}
-              pickDisabled={pluginsLoading || pendingChipId !== null || pendingPluginId !== null}
-              labelFor={(id) => homeHeroChipLabel(id, t)}
-              descriptionFor={(id) => homeHeroChipDescription(id, t)}
-              onPick={handlePickTaskChip}
-              onClear={() => {
-                // Drop any lingering hover-preview too: when the rail card was
-                // hovered but the active chip is still null, clearing the chip
-                // alone is a no-op and the pill would stay on the preview.
-                setPreviewTemplateId(null);
-                onClearActiveChip();
-              }}
-            />
             {footerInputFields.length > 0 ? (
               <div className="home-hero__footer-options" data-testid="home-hero-footer-options">
                 {footerInputFields.map((field) => (
@@ -1954,23 +1387,22 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
             ) : null}
           </div>
           <div className="home-hero__foot-right">
-            <div className="home-hero__mode-switcher">
-              <SessionModeToggle
-                mode={sessionMode}
-                onChange={(next) => {
-                  if (next !== sessionMode) {
-                    trackComposerSessionModeClick(analytics.track, {
-                      page_name: 'home',
-                      area: 'chat_composer',
-                      element: 'session_mode_toggle',
-                      mode_before: sessionModeToTracking(sessionMode),
-                      mode_after: sessionModeToTracking(next),
-                    });
-                  }
-                  onSessionModeChange?.(next);
-                }}
-              />
-            </div>
+            <SessionModeToggle
+              mode={sessionMode}
+              onChange={(next) => {
+                if (next !== sessionMode) {
+                  trackComposerSessionModeClick(analytics.track, {
+                    page_name: 'home',
+                    area: 'chat_composer',
+                    element: 'session_mode_toggle',
+                    mode_before: sessionModeToTracking(sessionMode),
+                    mode_after: sessionModeToTracking(next),
+                  });
+                }
+                onSessionModeChange?.(next);
+              }}
+              disabled={Boolean(submitDisabled)}
+            />
             {executionSwitcher ? (
               <div className="home-hero__execution-switcher">
                 {executionSwitcher}
@@ -1978,102 +1410,45 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
             ) : null}
             <button
               type="button"
-              className={`home-hero__submit od-tooltip${sendAttention ? ' home-hero__attention-sheen' : ''}${submitting ? ' is-sending' : ''}`}
+              className="home-hero__submit od-tooltip"
               data-testid="home-hero-submit"
-              onClick={handleSend}
-              onAnimationEnd={() => setSendAttention(false)}
-              disabled={!sendEnabled}
-              title={submitting ? t('chat.comments.sending') : sendEnabled ? t('homeHero.run') : t('homeHero.typeSomethingToRun')}
-              data-tooltip={submitting ? t('chat.comments.sending') : sendEnabled ? t('homeHero.run') : t('homeHero.typeSomethingToRun')}
-              aria-label={submitting ? t('chat.comments.sending') : t('homeHero.run')}
-              aria-busy={submitting}
+              onClick={onSubmit}
+              disabled={!canSubmit}
+              title={canSubmit ? t('homeHero.run') : t('homeHero.typeSomethingToRun')}
+              data-tooltip={canSubmit ? t('homeHero.run') : t('homeHero.typeSomethingToRun')}
+              aria-label={t('homeHero.run')}
             >
-              <Icon name="send" size={16} />
-              <span>{submitting ? t('chat.comments.sending') : t('chat.send')}</span>
+              <Icon name="send" size={13} />
+              <span>{t('chat.send')}</span>
             </button>
           </div>
         </div>
       </div>
 
-      {onDesignSystemChange || onPickWorkingDir ? (
-        <div className="home-hero__workdir-row">
-          {onDesignSystemChange ? (
-            <DesignSystemPicker
-              variant="home"
-              designSystems={designSystems}
-              selectedId={selectedDesignSystemId}
-              onChange={onDesignSystemChange}
-            />
-          ) : null}
-          {onDesignSystemChange && onPickWorkingDir ? (
-            <span className="home-hero__workdir-divider" aria-hidden />
-          ) : null}
-          {onPickWorkingDir ? (
-            <WorkingDirPicker
-              workingDir={workingDir}
-              recentDirs={recentDirs}
-              onPickDirectory={() => {
-                trackHomeChatComposerClick(analytics.track, {
-                  page_name: 'home',
-                  area: 'chat_composer',
-                  element: 'working_dir',
-                });
-                void onPickWorkingDir();
-              }}
-              onSelectRecent={(dir) => {
-                trackHomeChatComposerClick(analytics.track, {
-                  page_name: 'home',
-                  area: 'chat_composer',
-                  element: 'working_dir_recent',
-                });
-                onSelectRecentWorkingDir?.(dir);
-              }}
-              onClear={() => {
-                trackHomeChatComposerClick(analytics.track, {
-                  page_name: 'home',
-                  area: 'chat_composer',
-                  element: 'working_dir_clear',
-                });
-                onClearWorkingDir?.();
-              }}
-            />
-          ) : null}
-        </div>
-      ) : null}
-
-      {recommendationSlot}
-
       {activeCreateChip ? null : (
-        <div className="home-hero__template-section" data-testid="home-hero-template-section">
-          <div className="home-hero__template-heading">
-            {t('homeHero.startWithTemplate')}
-          </div>
-          <RailGroup
-            group="create"
+        <RailGroup
+          group="create"
+          activeChipId={activeChipId}
+          pendingChipId={pendingChipId}
+          pendingPluginId={pendingPluginId}
+          pluginsLoading={pluginsLoading}
+          onPickChip={handlePickTaskChip}
+          variant="tabs"
+        >
+          <ShortcutsMenu
             activeChipId={activeChipId}
             pendingChipId={pendingChipId}
             pendingPluginId={pendingPluginId}
             pluginsLoading={pluginsLoading}
-            onPickChip={handlePickTaskChip}
-            variant="tabs"
-            pulseChipId={guidePulseChipId}
-            onHoverChip={setPreviewTemplateId}
-          >
-            <ShortcutsMenu
-              activeChipId={activeChipId}
-              pendingChipId={pendingChipId}
-              pendingPluginId={pendingPluginId}
-              pluginsLoading={pluginsLoading}
-              open={shortcutsOpen}
-              refNode={shortcutsMenuRef}
-              onOpenChange={setShortcutsOpen}
-              onPickChip={(chip) => {
-                setShortcutsOpen(false);
-                handlePickTaskChip(chip);
-              }}
-            />
-          </RailGroup>
-        </div>
+            open={shortcutsOpen}
+            refNode={shortcutsMenuRef}
+            onOpenChange={setShortcutsOpen}
+            onPickChip={(chip) => {
+              setShortcutsOpen(false);
+              handlePickTaskChip(chip);
+            }}
+          />
+        </RailGroup>
       )}
 
       {activeSubChips.length > 0 && isSubChipParent(activeChipId) ? (
@@ -2110,12 +1485,8 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
           plugins={filteredExamplePlugins}
           activePluginId={activePluginRecord?.id ?? null}
           pendingPluginId={pendingPluginId}
-          pendingDuplicatePluginId={pendingDuplicatePluginId}
           locale={locale}
           onPick={pickExamplePluginPreset}
-          onPreview={onOpenPluginDetails}
-          onDuplicate={onDuplicateExamplePlugin}
-          pulseFirstPreset={guidePulseFirstPreset}
         />
       ) : activePromptExamples.length > 0 ? (
         <div
@@ -2125,34 +1496,21 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
           <div className="home-hero__prompt-examples-title">
             {t('homeHero.promptExamples')}
           </div>
-          <div
-            className={`home-hero__prompt-examples-grid${activeChipId === 'web-clone' ? ' home-hero__prompt-examples-grid--sites' : ''}`}
-          >
-            {activePromptExamples.map((example, index) =>
-              webCloneExampleSite(example) ? (
-                <WebClonePromptExampleCard
-                  key={example}
-                  example={example}
-                  pulse={guidePulseFirstPreset && index === 0}
-                  onPick={usePromptExample}
-                />
-              ) : (
-                <button
-                  key={example}
-                  type="button"
-                  className={`home-hero__prompt-example${guidePulseFirstPreset && index === 0 ? ' home-hero__attention-sheen' : ''}`}
-                  data-testid="home-hero-prompt-example"
-                  onClick={() => usePromptExample(example)}
-                >
-                  <span>{example}</span>
-                </button>
-              ),
-            )}
+          <div className="home-hero__prompt-examples-grid">
+            {activePromptExamples.map((example) => (
+              <button
+                key={example}
+                type="button"
+                className="home-hero__prompt-example"
+                data-testid="home-hero-prompt-example"
+                onClick={() => usePromptExample(example)}
+              >
+                <span>{example}</span>
+              </button>
+            ))}
           </div>
         </div>
       ) : null}
-
-      {blankProjectEntry}
 
       {error ? (
         <div role="alert" className="home-hero__error">
@@ -2197,29 +1555,17 @@ function PluginPromptPresets({
   chipId,
   locale,
   onPick,
-  onPreview,
-  onDuplicate,
-  pendingDuplicatePluginId,
   pendingPluginId,
   plugins,
-  pulseFirstPreset = false,
 }: {
   activePluginId: string | null;
   chipId: string;
   locale: Locale;
   onPick: (record: InstalledPluginRecord, chipId: string, promptText: string) => void;
-  onPreview: (record: InstalledPluginRecord) => void;
-  onDuplicate: (record: InstalledPluginRecord) => void;
-  pendingDuplicatePluginId: string | null;
   pendingPluginId: string | null;
   plugins: InstalledPluginRecord[];
-  // First-run guide: the first card carries the attention sheen.
-  pulseFirstPreset?: boolean;
 }) {
   const { t } = useI18n();
-  // Same edge hover/click auto-scroll as the scenario rail, so this row is
-  // reachable without a trackpad when it overflows.
-  const edgeScroll = useEdgeAutoScroll(plugins.length);
   return (
     <div
       className="home-hero__prompt-examples home-hero__plugin-presets-wrap"
@@ -2228,111 +1574,21 @@ function PluginPromptPresets({
       <div className="home-hero__prompt-examples-title">
         {t('homeHero.promptExamples')}
       </div>
-      <div className="home-hero__rail-scroller">
-        <div
-          ref={edgeScroll.scrollRef}
-          className="home-hero__plugin-presets"
-          role="list"
-        >
-          {plugins.map((record, index) => (
-            <PluginPromptPresetCard
-              key={record.id}
-              chipId={chipId}
-              locale={locale}
-              record={record}
-              active={activePluginId === record.id}
-              pending={pendingPluginId === record.id}
-              disabled={pendingPluginId !== null}
-              duplicatePending={pendingDuplicatePluginId === record.id}
-              duplicateDisabled={pendingDuplicatePluginId !== null || pendingPluginId !== null}
-              pulse={pulseFirstPreset && index === 0}
-              onPick={onPick}
-              onPreview={onPreview}
-              onDuplicate={onDuplicate}
-            />
-          ))}
-        </div>
-        <EdgeScrollZones {...edgeScroll} />
+      <div className="home-hero__plugin-presets" role="list">
+        {plugins.map((record) => (
+          <PluginPromptPresetCard
+            key={record.id}
+            chipId={chipId}
+            locale={locale}
+            record={record}
+            active={activePluginId === record.id}
+            pending={pendingPluginId === record.id}
+            disabled={pendingPluginId !== null}
+            onPick={onPick}
+          />
+        ))}
       </div>
     </div>
-  );
-}
-
-const FIRST_PARTY_WEB_CLONE_SITE_ICONS: Record<string, string> = {
-  'open-design.ai': '/logo.svg',
-};
-
-function webCloneFaviconUrl(domain: string): string {
-  return `https://www.google.com/s2/favicons?sz=128&domain=${encodeURIComponent(domain)}`;
-}
-
-// A Website-clone text example ("Website URL to clone: https://open-design.ai") —
-// pull the site out so the card can show the site's own mark + bare domain
-// instead of the raw prompt line. First-party bundled examples use local assets
-// so the first screen is stable without waiting on a remote favicon service.
-// Returns null for non-URL examples so the generic text card renders unchanged.
-function webCloneExampleSite(example: string): { domain: string; iconUrl: string; fallbackIconUrl?: string } | null {
-  const match = example.match(/https?:\/\/[^\s"'<>]+/i);
-  if (!match) return null;
-  let hostname: string;
-  try {
-    hostname = new URL(match[0]).hostname.replace(/^www\./, '');
-  } catch {
-    return null;
-  }
-  if (!hostname || !hostname.includes('.')) return null;
-  const firstPartyIcon = FIRST_PARTY_WEB_CLONE_SITE_ICONS[hostname];
-  return {
-    domain: hostname,
-    iconUrl: firstPartyIcon ?? webCloneFaviconUrl(hostname),
-    ...(firstPartyIcon ? { fallbackIconUrl: webCloneFaviconUrl(hostname) } : {}),
-  };
-}
-
-function WebClonePromptExampleCard({
-  example,
-  pulse,
-  onPick,
-}: {
-  example: string;
-  pulse: boolean;
-  onPick: (example: string) => void;
-}) {
-  const [iconStage, setIconStage] = useState<'primary' | 'fallback' | 'failed'>('primary');
-  const site = webCloneExampleSite(example);
-  const domain = site?.domain ?? example;
-  const monogram = (domain.replace(/[^a-z0-9]/i, '')[0] ?? '?').toUpperCase();
-  let iconUrl: string | null = null;
-  if (site && iconStage === 'primary') {
-    iconUrl = site.iconUrl;
-  } else if (site && iconStage === 'fallback') {
-    iconUrl = site.fallbackIconUrl ?? null;
-  }
-  return (
-    <button
-      type="button"
-      className={`home-hero__prompt-example home-hero__prompt-example--site${pulse ? ' home-hero__attention-sheen' : ''}`}
-      data-testid="home-hero-prompt-example"
-      onClick={() => onPick(example)}
-      title={domain}
-    >
-      <span className="home-hero__site-badge" aria-hidden>
-        {site && iconUrl ? (
-          <img
-            src={iconUrl}
-            alt=""
-            loading="eager"
-            fetchPriority="high"
-            onError={() => {
-              setIconStage((stage) => (stage === 'primary' && site.fallbackIconUrl ? 'fallback' : 'failed'));
-            }}
-          />
-        ) : (
-          <span className="home-hero__site-monogram">{monogram}</span>
-        )}
-      </span>
-      <span className="home-hero__site-domain">{domain}</span>
-    </button>
   );
 }
 
@@ -2340,117 +1596,47 @@ function PluginPromptPresetCard({
   active,
   chipId,
   disabled,
-  duplicateDisabled,
-  duplicatePending,
   locale,
-  onDuplicate,
   onPick,
-  onPreview,
   pending,
-  pulse = false,
   record,
 }: {
   active: boolean;
   chipId: string;
   disabled: boolean;
-  duplicateDisabled: boolean;
-  duplicatePending: boolean;
   locale: Locale;
-  onDuplicate: (record: InstalledPluginRecord) => void;
   onPick: (record: InstalledPluginRecord, chipId: string, promptText: string) => void;
-  // Preview the template in the detail modal (the card body opens this; Use
-  // seeds the composer input, Remix forks a new project).
-  onPreview: (record: InstalledPluginRecord) => void;
   pending: boolean;
-  pulse?: boolean;
   record: InstalledPluginRecord;
 }) {
-  const { t } = useI18n();
-  // Example-prompt preset tiles are thumbnails too — prefer the cheap baked
-  // hover-pan clip when one exists (same as the gallery cards).
-  const preview = useMemo(() => inferPluginPreview(record, { preferBaked: true }), [record]);
-  // Home cards keep their richer structured-preview path as the last-resort
-  // fallback (the detail modal injects a simpler one).
-  const seedPrompt = examplePresetSeedPrompt(record, locale, () =>
-    pluginPresetPromptPreview(record, locale, chipId),
-  ).text;
-  // Deck preset thumbnails render the iframe at a fixed 1280 design width scaled
-  // to fit the preview cell (see useDeckPreviewScale), so a template's first
-  // slide previews proportionally instead of overflowing. The baked-clip path
-  // (preferBaked) is already proportional; this fixes the live-HTML fallback.
-  const odMode = (record.manifest?.od as { mode?: unknown } | undefined)?.mode;
-  const presetPreviewRef = useRef<HTMLSpanElement>(null);
-  useDeckPreviewScale(presetPreviewRef, odMode === 'deck' && preview.kind === 'html');
-  const title = localizePluginTitle(locale, record);
-  // Commercial category ("品类") chip — same signal the gallery tile and the
-  // Create page picker show, so the example row reads like the reference
-  // template galleries. Null for records without a known category.
-  const categoryLabel = pluginCategoryLabel(record, t);
-  const canDuplicate = canDuplicatePluginPreview(record);
+  const preview = useMemo(() => inferPluginPreview(record), [record]);
+  const seedPrompt = examplePresetSeedPrompt(record, locale, chipId);
   return (
-    <span className="home-hero__plugin-preset-cell" role="listitem">
-      <button
-        type="button"
-        className={`home-hero__plugin-preset${active ? ' is-active' : ''}${pending ? ' is-pending' : ''}${pulse ? ' home-hero__attention-sheen' : ''}`}
-        data-testid="home-hero-plugin-preset"
-        data-plugin-id={record.id}
-        {...(typeof odMode === 'string' ? { 'data-od-mode': odMode } : {})}
-        onClick={() => onPreview(record)}
-      >
-        <span className="home-hero__plugin-preset-preview" aria-hidden ref={presetPreviewRef}>
-          <PreviewSurface
-            pluginId={record.id}
-            pluginTitle={title}
-            preview={preview}
-            eager={odMode === 'deck'}
-          />
-          {active ? (
-            <span className="home-hero__plugin-preset-check" aria-hidden>
-              <Icon name="check" size={12} />
-            </span>
-          ) : null}
-        </span>
-        <span className="home-hero__plugin-preset-meta">
-          {categoryLabel ? (
-            <span
-              className="home-hero__plugin-preset-category"
-              data-testid={`home-hero-plugin-preset-category-${record.id}`}
-            >
-              {categoryLabel}
-            </span>
-          ) : null}
-          <span className="home-hero__plugin-preset-title">
-            {title}
+    <button
+      type="button"
+      className={`home-hero__plugin-preset${active ? ' is-active' : ''}${pending ? ' is-pending' : ''}`}
+      data-testid="home-hero-plugin-preset"
+      data-plugin-id={record.id}
+      role="listitem"
+      disabled={disabled}
+      onClick={() => onPick(record, chipId, seedPrompt)}
+    >
+      <span className="home-hero__plugin-preset-preview" aria-hidden>
+        <PreviewSurface
+          pluginId={record.id}
+          pluginTitle={localizePluginTitle(locale, record)}
+          preview={preview}
+        />
+        {active ? (
+          <span className="home-hero__plugin-preset-check" aria-hidden>
+            <Icon name="check" size={12} />
           </span>
-        </span>
-      </button>
-      <span className="home-hero__plugin-preset-actions">
-        <button
-          type="button"
-          className="home-hero__plugin-preset-action home-hero__plugin-preset-action--primary"
-          onClick={() => onPick(record, chipId, seedPrompt)}
-          disabled={disabled}
-          aria-busy={pending ? 'true' : undefined}
-          data-testid={`home-hero-plugin-preset-use-${record.id}`}
-        >
-          <Icon name={pending ? 'spinner' : 'play'} size={12} />
-          <span>{pending ? t('pluginCard.applying') : t('pluginCard.use')}</span>
-        </button>
-        {canDuplicate ? (
-          <button
-            type="button"
-            className="home-hero__plugin-preset-action"
-            onClick={() => onDuplicate(record)}
-            disabled={duplicateDisabled}
-            aria-busy={duplicatePending ? 'true' : undefined}
-            data-testid={`home-hero-plugin-preset-duplicate-${record.id}`}
-          >
-            <Icon name={duplicatePending ? 'spinner' : 'copy'} size={12} />
-            <span>{duplicatePending ? t('pluginCard.duplicating') : t('pluginCard.duplicate')}</span>
-          </button>
         ) : null}
       </span>
-    </span>
+      <span className="home-hero__plugin-preset-title">
+        {localizePluginTitle(locale, record)}
+      </span>
+    </button>
   );
 }
 
@@ -2463,45 +1649,6 @@ function promptExampleChipLabel(example: string): string {
 
 function homeFileKey(file: File, index: number): string {
   return `${file.name}-${file.size}-${file.lastModified}-${index}`;
-}
-
-const LIBRARY_MIME_EXT: Record<string, string> = {
-  'image/png': 'png',
-  'image/jpeg': 'jpg',
-  'image/gif': 'gif',
-  'image/webp': 'webp',
-  'image/svg+xml': 'svg',
-  'image/avif': 'avif',
-  'video/mp4': 'mp4',
-  'video/webm': 'webm',
-  'text/html': 'html',
-  'text/css': 'css',
-  'text/plain': 'txt',
-  'application/json': 'json',
-  'font/woff2': 'woff2',
-  'font/woff': 'woff',
-  'font/ttf': 'ttf',
-  'font/otf': 'otf',
-};
-
-/** Fetch a library asset's bytes and wrap them in a named File for staging. */
-async function fileFromLibraryAsset(asset: LibraryAsset): Promise<File | null> {
-  try {
-    const resp = await fetch(libraryAssetRawUrl(asset.id));
-    if (!resp.ok) return null;
-    const blob = await resp.blob();
-    let name =
-      asset.relPath?.split('/').pop() ||
-      assetTitle(asset).replace(/[\\/:*?"<>|]+/g, '_').replace(/\s+/g, ' ').trim().slice(0, 80) ||
-      `library-${asset.id.slice(0, 8)}`;
-    if (!/\.[a-z0-9]{1,8}$/i.test(name)) {
-      const ext = LIBRARY_MIME_EXT[(blob.type || asset.mime || '').toLowerCase()];
-      if (ext) name = `${name}.${ext}`;
-    }
-    return new File([blob], name, { type: blob.type || asset.mime || 'application/octet-stream' });
-  } catch {
-    return null;
-  }
 }
 
 function isImageFile(file: File): boolean {
@@ -2524,6 +1671,9 @@ function formatFileSize(bytes: number): string {
 
 const HOME_HERO_PROMPT_MAX_HEIGHT = 180;
 const HOME_HERO_AUTHORING_PROMPT_MAX_HEIGHT = 132;
+// `{{name}}` plugin-input placeholder — still used when rendering plugin
+// preset query previews (renderPluginPresetQuery).
+const INPUT_PLACEHOLDER_PATTERN = /\{\{\s*([a-zA-Z_][\w-]*)\s*\}\}/g;
 
 function pluginMentionText(record: InstalledPluginRecord): string {
   return inlineMentionToken(record.title);
@@ -2534,7 +1684,6 @@ function buildHomeMentionEntities({
   activeSkillId,
   activeSkillTitle,
   connectorOptions,
-  contextWorkspaceItems,
   mcpOptions,
   pluginOptions,
   selectedPluginContexts,
@@ -2545,7 +1694,6 @@ function buildHomeMentionEntities({
   activeSkillId: string | null;
   activeSkillTitle: string | null;
   connectorOptions: ConnectorDetail[];
-  contextWorkspaceItems: WorkspaceContextItem[];
   mcpOptions: McpServerConfig[];
   pluginOptions: InstalledPluginRecord[];
   selectedPluginContexts: InstalledPluginRecord[];
@@ -2553,15 +1701,6 @@ function buildHomeMentionEntities({
   skillOptions: SkillSummary[];
 }): InlineMentionEntity[] {
   const entities: InlineMentionEntity[] = [];
-  for (const item of contextWorkspaceItems) {
-    entities.push({
-      id: item.id,
-      kind: 'workspace',
-      label: item.label,
-      token: inlineMentionToken(item.label),
-      title: `Workspace: ${item.label}`,
-    });
-  }
   const fileSeen = new Set<string>();
   for (const file of stagedFiles) {
     if (fileSeen.has(file.name)) continue;
@@ -3278,11 +2417,6 @@ interface RailGroupProps {
   pluginsLoading: boolean;
   onPickChip: (chip: HomeHeroChip) => void;
   variant?: 'rail' | 'tabs';
-  // First-run guide: this chip carries the attention sheen.
-  pulseChipId?: string | null;
-  // Hover-preview hook: the create rail reports which chip the pointer is over
-  // (or null on leave) so the footer Template picker can preview it.
-  onHoverChip?: (chipId: string | null) => void;
   children?: ReactNode;
 }
 
@@ -3294,158 +2428,58 @@ function RailGroup({
   pluginsLoading,
   onPickChip,
   variant = 'rail',
-  pulseChipId = null,
-  onHoverChip,
   children,
 }: RailGroupProps) {
   const t = useT();
-  // The inline create rail leads with the slide deck and runs through the core
-  // build scenarios in a fixed order (see `orderedCreateChips`); every other
-  // group renders in catalog order.
-  const chips = useMemo(
-    () => (group === 'create' ? orderedCreateChips() : chipsForGroup(group)),
-    [group],
-  );
+  const chips = useMemo(() => chipsForGroup(group), [group]);
   const isTabs = variant === 'tabs';
-
-  // Edge auto-scroll so the overflowing scenario rail stays reachable without a
-  // trackpad (see EdgeAutoScroll). Only the tabs variant scrolls; for the
-  // legacy rail variant scrollRef stays unattached and the hook is inert.
-  const edgeScroll = useEdgeAutoScroll(chips.length);
-
-  const cards = chips.map((chip) => {
-    const isActive = activeChipId === chip.id;
-    const isPending = pendingChipId === chip.id;
-    const disabled = pluginsLoading || isPending || pendingPluginId !== null;
-    const nextStep = homeHeroChipTitle(chip, t);
-    // Card variant (the default create rail): an illustrated scenario card —
-    // an intent thumbnail (ScenarioArt) + title + one-line description. The
-    // full "what happens next" sentence stays on the native `title` tooltip
-    // instead of an inline line that resized the card on hover. The legacy
-    // `rail`/pill markup is kept for any caller that still asks for `variant="rail"`.
-    if (isTabs) {
-      const description = homeHeroChipDescription(chip.id, t);
-      const cardCls = ['home-hero__type-tab', `home-hero__type-tab--${group}`, 'home-hero__scenario-card'];
-      if (isActive) cardCls.push('is-active');
-      if (isPending) cardCls.push('is-pending');
-      if (pulseChipId === chip.id) cardCls.push('home-hero__attention-sheen');
-      return (
-        <button
-          key={chip.id}
-          type="button"
-          className={cardCls.join(' ')}
-          data-chip-id={chip.id}
-          data-testid={`home-hero-rail-${chip.id}`}
-          onClick={() => onPickChip(chip)}
-          onMouseEnter={() => onHoverChip?.(chip.id)}
-          disabled={disabled}
-          role="tab"
-          aria-selected={isActive}
-          title={nextStep}
-        >
-          <span className="home-hero__scenario-card-art" aria-hidden>
-            <ScenarioArt chipId={chip.id} fallbackIcon={chip.icon} />
-          </span>
-          <span className="home-hero__scenario-card-body">
-            <span className="home-hero__scenario-card-title home-hero__type-tab-label">
-              {homeHeroChipLabel(chip.id, t)}
-            </span>
-            {description ? (
-              <span className="home-hero__scenario-card-desc">{description}</span>
-            ) : null}
-          </span>
-        </button>
-      );
-    }
-    const cls = ['home-hero__rail-chip', `home-hero__rail-chip--${group}`];
-    if (isActive) cls.push('is-active');
-    if (isPending) cls.push('is-pending');
-    if (pulseChipId === chip.id) cls.push('home-hero__attention-sheen');
-    return (
-      <button
-        key={chip.id}
-        type="button"
-        className={cls.join(' ')}
-        data-chip-id={chip.id}
-        data-testid={`home-hero-rail-${chip.id}`}
-        onClick={() => onPickChip(chip)}
-        disabled={disabled}
-        aria-pressed={isActive}
-        title={nextStep}
-      >
-        <Icon
-          name={chip.icon}
-          size={14}
-          className="home-hero__rail-chip-icon"
-        />
-        <span className="home-hero__rail-chip-label">
-          {homeHeroChipLabel(chip.id, t)}
-        </span>
-      </button>
-    );
-  });
-
-  if (isTabs) {
-    return (
-      <div
-        className="home-hero__scenario-cards-wrap"
-        onMouseLeave={() => onHoverChip?.(null)}
-      >
-        <div
-          ref={edgeScroll.scrollRef}
-          className={`home-hero__type-tabs home-hero__type-tabs--${group} home-hero__scenario-cards`}
-          data-testid="home-hero-type-tabs"
-          data-rail-group={group}
-          role="tablist"
-          aria-label={t('homeHero.railAria')}
-        >
-          {cards}
-          {children}
-        </div>
-        <EdgeScrollZones {...edgeScroll} />
-      </div>
-    );
-  }
-
   return (
     <div
-      className={`home-hero__rail-group home-hero__rail-group--${group}`}
+      className={
+        isTabs
+          ? `home-hero__type-tabs home-hero__type-tabs--${group}`
+          : `home-hero__rail-group home-hero__rail-group--${group}`
+      }
+      data-testid={isTabs ? 'home-hero-type-tabs' : undefined}
       data-rail-group={group}
+      role={isTabs ? 'tablist' : undefined}
+      aria-label={isTabs ? t('homeHero.railAria') : undefined}
     >
-      {cards}
+      {chips.map((chip) => {
+        const isActive = activeChipId === chip.id;
+        const isPending = pendingChipId === chip.id;
+        const cls = isTabs
+          ? ['home-hero__type-tab', `home-hero__type-tab--${group}`]
+          : ['home-hero__rail-chip', `home-hero__rail-chip--${group}`];
+        if (isActive) cls.push('is-active');
+        if (isPending) cls.push('is-pending');
+        return (
+          <button
+            key={chip.id}
+            type="button"
+            className={cls.join(' ')}
+            data-chip-id={chip.id}
+            data-testid={`home-hero-rail-${chip.id}`}
+            onClick={() => onPickChip(chip)}
+            disabled={pluginsLoading || isPending || pendingPluginId !== null}
+            role={isTabs ? 'tab' : undefined}
+            aria-selected={isTabs ? isActive : undefined}
+            aria-pressed={isTabs ? undefined : isActive}
+            title={homeHeroChipTitle(chip, t)}
+          >
+            <Icon
+              name={chip.icon}
+              size={14}
+              className={isTabs ? 'home-hero__type-tab-icon' : 'home-hero__rail-chip-icon'}
+            />
+            <span className={isTabs ? 'home-hero__type-tab-label' : 'home-hero__rail-chip-label'}>
+              {homeHeroChipLabel(chip.id, t)}
+            </span>
+          </button>
+        );
+      })}
       {children}
     </div>
-  );
-}
-
-function SubTypeChip({
-  sub,
-  isActive,
-  pluginsLoading,
-  onPick,
-}: {
-  sub: HomeHeroSubChip;
-  isActive: boolean;
-  pluginsLoading: boolean;
-  onPick: (sub: HomeHeroSubChip) => void;
-}) {
-  const t = useT();
-  return (
-    <button
-      type="button"
-      className={`home-hero__subtype-chip${isActive ? ' is-active' : ''}`}
-      data-sub-chip-id={sub.slug}
-      data-testid={`home-hero-subtype-${sub.slug}`}
-      onClick={() => onPick(sub)}
-      disabled={pluginsLoading}
-      role="tab"
-      aria-selected={isActive}
-    >
-      <Icon name={sub.icon} size={13} className="home-hero__subtype-chip-icon" />
-      <span className="home-hero__subtype-chip-label">
-        {pluginSubfacetLabel(sub.slug, sub.label, t)}
-      </span>
-    </button>
   );
 }
 
@@ -3464,176 +2498,68 @@ function SubTypeRow({
 }) {
   const t = useT();
   const allActive = selectedSlug === null;
-  const rowRef = useRef<HTMLDivElement | null>(null);
-  const measureRef = useRef<HTMLDivElement | null>(null);
-  // How many sub-chips fit on one line after the always-present "All" chip;
-  // the rest collapse into a "More" dropdown so the row never wraps.
-  const [visibleCount, setVisibleCount] = useState(subChips.length);
-  const [moreOpen, setMoreOpen] = useState(false);
-  const moreRef = useRef<HTMLDivElement | null>(null);
-
-  // Measure against the always-full hidden ghost row so chip widths are stable
-  // no matter what the visible row currently shows, then pick the largest
-  // prefix that fits (reserving room for the More button when it's needed).
-  const measure = useCallback(() => {
-    const row = rowRef.current;
-    const ghost = measureRef.current;
-    if (!row || !ghost) return;
-    const avail = row.clientWidth;
-    if (avail <= 0) return;
-    const gap = 5;
-    const allWidth = ghost.querySelector<HTMLElement>('[data-measure="all"]')?.offsetWidth ?? 0;
-    const moreWidth = ghost.querySelector<HTMLElement>('[data-measure="more"]')?.offsetWidth ?? 0;
-    const chipEls = Array.from(ghost.querySelectorAll<HTMLElement>('[data-measure="chip"]'));
-    // Everything (All + every chip) fits: no More button needed.
-    let full = allWidth;
-    for (const el of chipEls) full += gap + el.offsetWidth;
-    if (full <= avail) {
-      setVisibleCount(chipEls.length);
-      return;
-    }
-    // Overflow: reserve the More button and count the fitting prefix.
-    const budget = avail - gap - moreWidth;
-    let used = allWidth;
-    let count = 0;
-    for (let i = 0; i < chipEls.length; i++) {
-      const next = used + gap + chipEls[i]!.offsetWidth;
-      if (next <= budget) {
-        used = next;
-        count = i + 1;
-      } else {
-        break;
-      }
-    }
-    setVisibleCount(count);
-  }, []);
-
-  useLayoutEffect(() => {
-    measure();
-    const row = rowRef.current;
-    if (!row || typeof ResizeObserver === 'undefined') return undefined;
-    const ro = new ResizeObserver(measure);
-    ro.observe(row);
-    return () => ro.disconnect();
-  }, [measure, subChips]);
-
-  // Close the More menu on outside pointer / Escape.
-  useEffect(() => {
-    if (!moreOpen) return undefined;
-    function onDown(e: MouseEvent) {
-      if (moreRef.current && !moreRef.current.contains(e.target as Node)) setMoreOpen(false);
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setMoreOpen(false);
-    }
-    window.addEventListener('mousedown', onDown, true);
-    window.addEventListener('keydown', onKey, true);
-    return () => {
-      window.removeEventListener('mousedown', onDown, true);
-      window.removeEventListener('keydown', onKey, true);
-    };
-  }, [moreOpen]);
-
-  const visibleChips = subChips.slice(0, visibleCount);
-  const overflowChips = subChips.slice(visibleCount);
-  const overflowActive = overflowChips.some((sub) => sub.slug === selectedSlug);
-  const allChip = (
-    <button
-      type="button"
-      className={`home-hero__subtype-chip${allActive ? ' is-active' : ''}`}
-      data-sub-chip-id="all"
-      data-testid="home-hero-subtype-all"
-      onClick={onSelectAll}
-      disabled={pluginsLoading}
-      role="tab"
-      aria-selected={allActive}
-    >
-      <span className="home-hero__subtype-chip-label">{t('common.all')}</span>
-    </button>
-  );
-
   return (
     <div
-      ref={rowRef}
       className="home-hero__subtype-row"
       data-testid="home-hero-subtype-row"
       role="tablist"
       aria-label={t('homeHero.subTypeAria')}
     >
-      {allChip}
-      {visibleChips.map((sub) => (
-        <SubTypeChip
-          key={sub.slug}
-          sub={sub}
-          isActive={sub.slug === selectedSlug}
-          pluginsLoading={pluginsLoading}
-          onPick={onPickSubChip}
-        />
-      ))}
-      {overflowChips.length > 0 ? (
-        <div className="home-hero__subtype-more" ref={moreRef}>
+      <button
+        type="button"
+        className={`home-hero__subtype-chip${allActive ? ' is-active' : ''}`}
+        data-sub-chip-id="all"
+        data-testid="home-hero-subtype-all"
+        onClick={onSelectAll}
+        disabled={pluginsLoading}
+        role="tab"
+        aria-selected={allActive}
+      >
+        <span className="home-hero__subtype-chip-label">{t('common.all')}</span>
+      </button>
+      {subChips.map((sub) => {
+        const isActive = sub.slug === selectedSlug;
+        const cls = ['home-hero__subtype-chip'];
+        if (isActive) cls.push('is-active');
+        return (
           <button
+            key={sub.slug}
             type="button"
-            className={`home-hero__subtype-chip home-hero__subtype-more-btn${overflowActive ? ' is-active' : ''}`}
-            data-testid="home-hero-subtype-more"
-            onClick={() => setMoreOpen((open) => !open)}
+            className={cls.join(' ')}
+            data-sub-chip-id={sub.slug}
+            data-testid={`home-hero-subtype-${sub.slug}`}
+            onClick={() => onPickSubChip(sub)}
             disabled={pluginsLoading}
-            aria-haspopup="menu"
-            aria-expanded={moreOpen}
+            role="tab"
+            aria-selected={isActive}
           >
-            <span className="home-hero__subtype-chip-label">{t('homeHero.subTypeMore')}</span>
-            <Icon name="chevron-down" size={12} className="home-hero__subtype-chip-icon" />
-          </button>
-          {moreOpen ? (
-            <div className="home-hero__subtype-more-menu" role="menu" aria-label={t('homeHero.subTypeMore')}>
-              {overflowChips.map((sub) => {
-                const isActive = sub.slug === selectedSlug;
-                return (
-                  <button
-                    key={sub.slug}
-                    type="button"
-                    role="menuitemradio"
-                    aria-checked={isActive}
-                    className={`home-hero__subtype-more-item${isActive ? ' is-active' : ''}`}
-                    data-testid={`home-hero-subtype-more-${sub.slug}`}
-                    disabled={pluginsLoading}
-                    onClick={() => {
-                      setMoreOpen(false);
-                      onPickSubChip(sub);
-                    }}
-                  >
-                    <Icon name={sub.icon} size={13} className="home-hero__subtype-chip-icon" />
-                    <span className="home-hero__subtype-chip-label">
-                      {pluginSubfacetLabel(sub.slug, sub.label, t)}
-                    </span>
-                    {isActive ? <Icon name="check" size={13} /> : null}
-                  </button>
-                );
-              })}
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-      {/* Hidden ghost row: always the full set, used only to measure chip
-          widths so the visible row can compute how many fit. */}
-      <div className="home-hero__subtype-measure" aria-hidden ref={measureRef}>
-        <span className="home-hero__subtype-chip" data-measure="all">
-          <span className="home-hero__subtype-chip-label">{t('common.all')}</span>
-        </span>
-        {subChips.map((sub) => (
-          <span key={sub.slug} className="home-hero__subtype-chip" data-measure="chip">
             <Icon name={sub.icon} size={13} className="home-hero__subtype-chip-icon" />
-            <span className="home-hero__subtype-chip-label">
-              {pluginSubfacetLabel(sub.slug, sub.label, t)}
-            </span>
-          </span>
-        ))}
-        <span className="home-hero__subtype-chip home-hero__subtype-more-btn" data-measure="more">
-          <span className="home-hero__subtype-chip-label">{t('homeHero.subTypeMore')}</span>
-          <Icon name="chevron-down" size={12} className="home-hero__subtype-chip-icon" />
-        </span>
-      </div>
+            <span className="home-hero__subtype-chip-label">{sub.label}</span>
+          </button>
+        );
+      })}
     </div>
+  );
+}
+
+function ActiveTypeChip({ chip, onClear }: { chip: HomeHeroChip; onClear: () => void }) {
+  const t = useT();
+  return (
+    <button
+      type="button"
+      className="home-hero__active-type-chip"
+      data-testid="home-hero-active-type-chip"
+      data-chip-id={chip.id}
+      title={homeHeroChipTitle(chip, t)}
+      aria-label={`${homeHeroChipLabel(chip.id, t)} ${t('common.delete')}`}
+      onClick={onClear}
+    >
+      <span className="home-hero__active-type-chip-icon" aria-hidden>
+        <Icon name={chip.icon} size={13} />
+      </span>
+      <span>{homeHeroChipLabel(chip.id, t)}</span>
+      <Icon name="close" size={12} className="home-hero__active-type-chip-close" />
+    </button>
   );
 }
 
@@ -3669,39 +2595,6 @@ function ShortcutsMenu({
     hasActiveShortcut ? 'is-active' : '',
     hasPendingShortcut ? 'is-pending' : '',
   ].filter(Boolean).join(' ');
-
-  // The trigger lives inside the horizontally-scrolling rail, whose
-  // `overflow-x: auto` also clips vertically — so an in-flow dropdown gets
-  // truncated. Portal the panel to the body with fixed positioning anchored to
-  // the trigger, and keep it aligned as the rail scrolls or the window resizes.
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const [panelPos, setPanelPos] = useState<{ top: number; right: number } | null>(
-    null,
-  );
-  useEffect(() => {
-    if (!open) {
-      setPanelPos(null);
-      return;
-    }
-    const update = () => {
-      const el = triggerRef.current;
-      if (!el) return;
-      const rect = el.getBoundingClientRect();
-      setPanelPos({
-        top: Math.round(rect.bottom + 6),
-        right: Math.round(window.innerWidth - rect.right),
-      });
-    };
-    update();
-    window.addEventListener('resize', update);
-    // Capture phase: scroll events don't bubble, so this is how the panel
-    // follows the trigger when the rail itself scrolls.
-    window.addEventListener('scroll', update, true);
-    return () => {
-      window.removeEventListener('resize', update);
-      window.removeEventListener('scroll', update, true);
-    };
-  }, [open]);
   return (
     <div
       ref={refNode}
@@ -3710,7 +2603,6 @@ function ShortcutsMenu({
       data-rail-group="migrate"
     >
       <button
-        ref={triggerRef}
         type="button"
         className={triggerClass}
         data-testid="home-hero-shortcuts-trigger"
@@ -3723,16 +2615,12 @@ function ShortcutsMenu({
       >
         <Icon name="more-horizontal" size={16} className="home-hero__type-tab-icon" />
       </button>
-      {open && panelPos
-        ? createPortal(
+      {open ? (
         <div
           className="home-hero__shortcut-menu-panel"
           role="menu"
           aria-label={t('homeHero.moreShortcuts')}
           data-testid="home-hero-shortcuts-menu"
-          data-shortcuts-panel=""
-          data-rail-group="migrate"
-          style={{ position: 'fixed', top: panelPos.top, right: panelPos.right }}
         >
           {shortcuts.map((chip) => {
             const isActive = activeChipId === chip.id;
@@ -3757,70 +2645,32 @@ function ShortcutsMenu({
               </button>
             );
           })}
-        </div>,
-          document.body,
-        )
-        : null}
+        </div>
+      ) : null}
     </div>
   );
 }
 
-// Scenario subtitle shown under the title on the illustrated card rail.
-function homeHeroChipDescription(chipId: string, t: ReturnType<typeof useT>): string {
+function homeHeroChipLabel(chipId: string, t: ReturnType<typeof useT>): string {
   switch (chipId) {
-    case 'prototype': return t('homeHero.chip.prototypeDesc');
-    case 'web-clone': return t('homeHero.chip.webCloneDesc');
-    case 'wireframe': return t('homeHero.chip.wireframeDesc');
-    case 'mobile': return t('homeHero.chip.mobileDesc');
-    case 'deck': return t('homeHero.chip.deckDesc');
-    case 'document': return t('homeHero.chip.documentDesc');
-    case 'image': return t('homeHero.chip.imageDesc');
-    case 'video': return t('homeHero.chip.videoDesc');
-    case 'audio': return t('homeHero.chip.audioDesc');
-    case 'hyperframes': return t('homeHero.chip.hyperframesDesc');
-    case 'webgl': return t('homeHero.chip.webglDesc');
-    case 'live-artifact': return t('homeHero.chip.liveArtifactDesc');
-    case 'create-brand-kit': return t('homeHero.chip.createBrandKitDesc');
-    default: return '';
+    case 'prototype': return t('homeHero.chip.prototype');
+    case 'live-artifact': return t('homeHero.chip.liveArtifact');
+    case 'deck': return t('homeHero.chip.deck');
+    case 'image': return t('homeHero.chip.image');
+    case 'video': return t('homeHero.chip.video');
+    case 'hyperframes': return t('homeHero.chip.hyperframes');
+    case 'audio': return t('homeHero.chip.audio');
+    case 'create-plugin': return t('homeHero.chip.createPlugin');
+    case 'figma': return t('homeHero.chip.figma');
+    case 'template': return t('homeHero.chip.template');
+    default: return chipId;
   }
 }
 
-function fallbackPlaceholderScenarioText(
-  chipId: string,
-  locale: Locale,
-  t: ReturnType<typeof useT>,
-): string | null {
-  const label = homeHeroChipLabel(chipId, t).trim();
-  if (!label || label === chipId) return null;
-  const description = homeHeroChipDescription(chipId, t).trim();
-  const kind = promptLocaleKind(locale);
-  if (kind === 'zh') {
-    return description ? `创建一个${label}：${description}` : `创建一个${label}`;
-  }
-  if (kind === 'ja') {
-    return description ? `${label}を作成する：${description}` : `${label}を作成する`;
-  }
-  return description
-    ? `Create ${englishArticle(label)} ${label}: ${description}`
-    : `Create ${englishArticle(label)} ${label}`;
-}
-
-// The hover "what happens next" line — describes how the scenario will be
-// consumed once picked (e.g. "Open a chat that builds a clickable prototype").
 function homeHeroChipTitle(chip: HomeHeroChip, t: ReturnType<typeof useT>): string {
   switch (chip.id) {
-    case 'prototype': return t('homeHero.chip.prototypeNext');
-    case 'web-clone': return t('homeHero.chip.webCloneNext');
-    case 'wireframe': return t('homeHero.chip.wireframeNext');
-    case 'mobile': return t('homeHero.chip.mobileNext');
-    case 'deck': return t('homeHero.chip.deckNext');
-    case 'document': return t('homeHero.chip.documentNext');
-    case 'image': return t('homeHero.chip.imageNext');
-    case 'video': return t('homeHero.chip.videoNext');
-    case 'audio': return t('homeHero.chip.audioNext');
     case 'live-artifact': return t('homeHero.chip.liveArtifactHint');
     case 'hyperframes': return t('homeHero.chip.hyperframesHint');
-    case 'create-brand-kit': return t('homeHero.chip.createBrandKitHint');
     case 'create-plugin': return t('homeHero.chip.createPluginHint');
     case 'figma': return t('homeHero.chip.figmaHint');
     case 'template': return t('homeHero.chip.templateHint');
@@ -3828,36 +2678,12 @@ function homeHeroChipTitle(chip: HomeHeroChip, t: ReturnType<typeof useT>): stri
   }
 }
 
-// Generic catch-all scenario routers are not real "example" templates: they
-// ship no concrete seed for the gallery and only exist as the silent default
-// binding a media surface carries (see scenario-defaults.ts). Keep them out of
-// the example-prompt presets so e.g. the "Media generation (default scenario)"
-// card never appears under the audio/image/video chips — and, because the
-// example card's selected state is keyed on the active plugin id, never shows
-// up pre-selected when a media mode is entered.
-//
-// `example-web-clone` is the Website clone chip's own base scenario, not a
-// concrete example. The per-site examples are plain text prompt cards (from
-// HOME_PROMPT_EXAMPLES) rather than plugins, so hide the base plugin to keep the
-// preset rail empty for web-clone and let those text cards show instead.
-const EXAMPLE_PRESET_HIDDEN_PLUGIN_IDS = new Set<string>([
-  'od-media-generation',
-  'example-web-clone',
-]);
-
-export function homeHeroExamplePluginsForChip(
+function homeHeroExamplePluginsForChip(
   chipId: string,
   plugins: InstalledPluginRecord[],
   locale: Locale,
 ): InstalledPluginRecord[] {
-  // The top-level rail is a curated showcase capped at 18 for most chips. The
-  // deck chip is the exception: surface the FULL slide-template library so every
-  // bundled deck is reachable as an example prompt straight from "All" (without
-  // first picking a sub-category), keeping the rail in parity with the Community
-  // section's "Slides" count.
-  const showcaseLimit = chipId === 'deck' ? Number.POSITIVE_INFINITY : 18;
   const presets = plugins
-    .filter((plugin) => !EXAMPLE_PRESET_HIDDEN_PLUGIN_IDS.has(plugin.id))
     .filter((plugin) => (
       pluginMatchesExampleChip(plugin, chipId) ||
       curatedPluginPriorityForChip(plugin, chipId) !== null
@@ -3867,7 +2693,7 @@ export function homeHeroExamplePluginsForChip(
       curatedPluginPriorityForChip(plugin, chipId) !== null
     ))
     .sort((a, b) => comparePluginPresetOrder(a, b, chipId))
-    .slice(0, showcaseLimit);
+    .slice(0, 18);
   if (chipId === 'image') {
     return movePluginPresetToEnd(presets, 'example-hatch-pet');
   }
@@ -3879,13 +2705,6 @@ function comparePluginPresetOrder(
   b: InstalledPluginRecord,
   chipId: string,
 ): number {
-  // Gallery order (OPEND-449): pins first, default seeds + no-preview tiles sunk
-  // to the bottom, then usage popularity for non-prototype chips. The prototype
-  // chip stays curation-governed, so popularity is skipped and it keeps its
-  // curated order.
-  const curationGoverned = chipId === 'prototype';
-  const gallery = comparePluginGalleryOrder(a.id, b.id, curationGoverned, curationGoverned);
-  if (gallery !== 0) return gallery;
   const aCurated = curatedPluginPriorityForChip(a, chipId);
   const bCurated = curatedPluginPriorityForChip(b, chipId);
   if (aCurated !== null || bCurated !== null) {
@@ -3912,7 +2731,7 @@ function movePluginPresetToEnd(
   ];
 }
 
-export function pluginMatchesExampleChip(record: InstalledPluginRecord, chipId: string): boolean {
+function pluginMatchesExampleChip(record: InstalledPluginRecord, chipId: string): boolean {
   const slugs = pluginRecordSlugs(record);
   const has = (...values: string[]) => values.some((value) => slugs.has(value));
   const hasPart = (...values: string[]) => {
@@ -3924,63 +2743,18 @@ export function pluginMatchesExampleChip(record: InstalledPluginRecord, chipId: 
   switch (chipId) {
     case 'prototype':
       return has('prototype') || hasPart('web-prototype');
-    case 'web-clone':
-      // Website reproduction flows (e.g. example-web-clone / site-clone kits).
-      return has('web-clone', 'website-clone', 'site-clone') || hasPart('web-clone', 'website-clone');
-    case 'wireframe':
-      // Lo-fi / sketch / whiteboard explorations (e.g. wireframe-sketch).
-      return (
-        hasPart('wireframe') ||
-        has('low-fidelity', 'lo-fi-mockup', 'sketch-wireframe', 'whiteboard-sketch', 'hand-drawn')
-      );
-    case 'mobile':
-      // Native mobile app prototypes: iOS / Android phone screens.
-      return (
-        (hasPart('mobile') ||
-          has('ios-app', 'android-app', 'phone-screen', 'app-mockup', 'app-ui')) &&
-        !hasPart('video', 'audio', 'image', 'hyperframes')
-      );
-    case 'document':
-      // Documents: resumes, reports, invoices, papers, briefs, PDFs.
-      return (
-        (has('resume', 'cv', 'invoice', 'document', 'docs', 'report', 'paper') ||
-          hasPart(
-            'resume',
-            'documentation',
-            'invoice',
-            'report',
-            'whitepaper',
-            'academic-paper',
-            'case-report',
-            'meeting-notes',
-            'runbook',
-            'eguide',
-            'letter',
-            'dossier',
-            'memo',
-          )) &&
-        !hasPart('video', 'audio', 'hyperframes', 'deck', 'slides')
-      );
     case 'deck':
       return has('deck', 'slides', 'slide-deck') || hasPart('slide', 'deck');
     case 'hyperframes':
       return hasPart('hyperframes', 'hyperframe');
     case 'live-artifact':
       return has('live-artifact') || hasPart('live-artifact');
-    case 'webgl':
-      return (
-        has('webgl', 'webgl2', 'shader', 'gpu') ||
-        hasPart('webgl', 'shader', 'gpu')
-      );
     case 'image':
       return (has('image') || hasPart('image-template')) && !hasPart('video', 'audio', 'live-artifact');
     case 'video':
       return (has('video') || hasPart('video-template')) && !hasPart('hyperframes', 'audio');
     case 'audio':
-      // Exclude video / HyperFrames templates that merely carry an
-      // `audio-reactive` tag (substring-matched by hasPart('audio')): their
-      // home is the Video / HyperFrames chips, not the audio gallery.
-      return (has('audio') || hasPart('audio')) && !hasPart('video', 'hyperframes');
+      return has('audio') || hasPart('audio');
     default:
       return false;
   }
@@ -4038,6 +2812,91 @@ function pluginPresetPromptPreview(
     ? renderPluginPresetQuery(record, query)
     : localizePluginDescription(locale, record);
   return textPromptForPluginPreset(record, rendered, chipId, locale);
+}
+
+// The seed text dropped into the composer when a preset card is picked.
+// The full build spec now rides along as plugin context (SKILL.md +
+// example.html injected once the plugin is applied), so the textarea only
+// needs a short, human-readable, editable hook — not the verbatim spec.
+function examplePresetSeedPrompt(
+  record: InstalledPluginRecord,
+  locale: Locale,
+  chipId: string,
+): string {
+  const description = localizePluginDescription(locale, record).trim();
+  // zh: the localized useCase.query is a generator-facing meta-instruction
+  // ("follow the en field verbatim; start from example.html"), useless as a
+  // human seed — surface the curated one-line description instead.
+  if (promptLocaleKind(locale) === 'zh' && description) return description;
+  const query = pluginPresetQuery(record, locale);
+  if (query) {
+    const head = firstPromptParagraph(renderPluginPresetQuery(record, query));
+    // Skip meta-instructions that reference fields/assets the model can't see
+    // from the textarea; fall back to the description.
+    if (head && !isMetaInstructionSeed(head)) return head;
+  }
+  if (description) return description;
+  return pluginPresetPromptPreview(record, locale, chipId);
+}
+
+function firstPromptParagraph(value: string): string {
+  const normalized = value.replace(/\r\n/g, '\n').trim();
+  if (!normalized) return '';
+  // First paragraph = text up to the first blank line / markdown rule fence.
+  const [head] = normalized.split(/\n\s*\n/);
+  return (head ?? normalized).trim();
+}
+
+function isMetaInstructionSeed(value: string): boolean {
+  return /逐字注入|以\s*en\s*字段为准|verbatim|example\.html/iu.test(value);
+}
+
+function pluginPresetQuery(record: InstalledPluginRecord, locale: Locale): string | null {
+  const query = record.manifest?.od?.useCase?.query;
+  if (typeof query === 'string') return query;
+  if (query && typeof query === 'object') {
+    const localized = query as Record<string, unknown>;
+    const exact = localized[locale];
+    if (typeof exact === 'string') return exact;
+    const language = locale.split('-')[0];
+    const languageMatch = Object.entries(localized).find(([key, value]) => (
+      key.toLowerCase().startsWith(`${language}-`) && typeof value === 'string'
+    ));
+    if (typeof languageMatch?.[1] === 'string') return languageMatch[1];
+    for (const key of ['zh-CN', 'en', 'default']) {
+      if (typeof localized[key] === 'string') return localized[key];
+    }
+    const first = Object.values(localized).find((value) => typeof value === 'string');
+    if (typeof first === 'string') return first;
+  }
+  return null;
+}
+
+function renderPluginPresetQuery(record: InstalledPluginRecord, query: string): string {
+  const fields = record.manifest?.od?.inputs ?? [];
+  const valueByName = new Map<string, string>();
+  for (const field of fields) {
+    const value = field.default ?? field.placeholder ?? field.label ?? field.name;
+    valueByName.set(field.name, String(value));
+  }
+  return query
+    .replace(
+      HOME_ESCAPED_ARGUMENT_PLACEHOLDER_PATTERN,
+      (_placeholder, _name: string | undefined, defaultValue: string | undefined) => defaultValue ?? '',
+    )
+    .replace(
+      HOME_ARGUMENT_PLACEHOLDER_PATTERN,
+      (
+        _placeholder,
+        _doubleName: string | undefined,
+        _singleName: string | undefined,
+        doubleDefault: string | undefined,
+        singleDefault: string | undefined,
+      ) => doubleDefault ?? singleDefault ?? '',
+    )
+    .replace(INPUT_PLACEHOLDER_PATTERN, (_placeholder, key: string) => (
+      valueByName.get(key) ?? key
+    ));
 }
 
 function textPromptForPluginPreset(
@@ -4216,34 +3075,19 @@ function fallbackPluginPresetPrompt(
   return `Create ${englishArticle(artifact)} ${artifact} with the "${title}" preset${description ? `: ${description}` : '.'}`;
 }
 
+const HOME_ESCAPED_ARGUMENT_PLACEHOLDER_PATTERN =
+  /\{argument\s+name=\\"([^"]+)\\"\s+default=\\"([^"]*)\\"[^}]*\}/g;
+
+const HOME_ARGUMENT_PLACEHOLDER_PATTERN =
+  /\{argument\s+name=(?:"([^"]+)"|'([^']+)')\s+default=(?:"([^"]*)"|'([^']*)')[^}]*\}/g;
+
 const HOME_PROMPT_EXAMPLES: Record<Locale, Record<string, string[]>> = {
   "en": {
-    "web-clone": [
-      "Website URL to clone: https://open-design.ai",
-    ],
     prototype: [
       "Design a high-converting website for an AI CRM with a clear hero, feature story, proof points, and trial CTA",
       "Create a desktop dashboard for a team knowledge base with search, recent updates, permissions, and collaboration entry points",
       "Redesign onboarding for a financial SaaS product so new users can connect data, finish setup, and see first value fast",
       "Prototype a mobile fitness coaching app covering goal setup, weekly plans, workout check-ins, and progress review",
-    ],
-    wireframe: [
-      "Wireframe a SaaS dashboard with navigation, key metrics, a data table, and an empty state",
-      "Sketch the lo-fi flow for a checkout: cart, shipping, payment, and confirmation screens",
-      "Lay out a content management screen with list, detail, and edit states in greybox fidelity",
-      "Wireframe an onboarding wizard covering account, workspace, invite, and first-run steps",
-    ],
-    mobile: [
-      "Design a mobile banking app with home balance, transactions, transfer, and card management screens",
-      "Lay out a food delivery app covering browse, restaurant detail, cart, and order tracking",
-      "Prototype a habit-tracker app with today view, streak detail, add-habit, and stats screens",
-      "Design a messaging app with chat list, conversation, profile, and settings screens",
-    ],
-    document: [
-      "Draft a one-page resume for a senior product designer with summary, experience, skills, and selected work",
-      "Write a polished project proposal with problem, approach, timeline, and budget sections",
-      "Create a product one-pager covering the pitch, key features, pricing, and a call to action",
-      "Generate a tidy meeting brief with agenda, decisions, owners, and next steps",
     ],
     deck: [
       "Research the market opportunity for a product launch, including competitors, target users, pricing hypotheses, and launch narrative",
@@ -4353,9 +3197,6 @@ const HOME_PROMPT_EXAMPLES: Record<Locale, Record<string, string[]>> = {
     ],
   },
   "zh-CN": {
-    "web-clone": [
-      "想要复刻的网站链接：https://open-design.ai",
-    ],
     prototype: [
       "为 AI CRM 设计一个高转化官网，包含首屏、功能卖点、客户案例和清晰的试用入口",
       "为团队知识库做一个桌面端仪表盘，突出搜索、最近更新、权限状态和协作入口",
@@ -4985,19 +3826,18 @@ function homeHeroChipPromptExamples(chipId: string, locale: Locale): string[] {
   return homeHeroChipPromptExamplesForLocale(chipId, locale);
 }
 
+type PromptLocaleKind = 'zh' | 'ja' | 'en';
+
+function promptLocaleKind(locale: Locale): PromptLocaleKind {
+  if (locale === 'zh-CN' || locale === 'zh-TW') return 'zh';
+  if (locale === 'ja') return 'ja';
+  return 'en';
+}
 
 function briefForChipId(chipId: string): Record<string, string> {
   switch (chipId) {
     case 'prototype':
       return { artifact_type: 'web prototype', audience: 'product evaluators', fidelity: 'high-fidelity' };
-    case 'web-clone':
-      return { artifact_type: 'website clone', source: 'target URL', fidelity: 'source-first visual reproduction' };
-    case 'wireframe':
-      return { artifact_type: 'lo-fi wireframe', audience: 'product team', fidelity: 'wireframe' };
-    case 'mobile':
-      return { artifact_type: 'mobile app prototype', audience: 'product evaluators', platform: 'iOS & Android' };
-    case 'document':
-      return { artifact_type: 'document (resume / report / PDF)', audience: 'readers' };
     case 'deck':
       return { artifact_type: 'pitch deck / presentation', audience: 'decision makers', slide_count: '10-15 pages' };
     case 'image':

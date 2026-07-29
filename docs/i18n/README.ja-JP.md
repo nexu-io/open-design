@@ -1,40 +1,46 @@
 <h1 align="center">Open Design: オープンソースの Claude Design 代替ツール</h1>
 
+<<<<<<< HEAD
+> 🔥 **Open Design 0.9.0 が登場——セットアップなしで創作を。** [公式 Model Router](https://open-design.ai/amr) がアプリに直接組み込まれました。追加設定も、インストールする CLI も、用意する API キーも不要。アプリを開いてサインインするだけで、すぐにデザインと創作を始められます。[0.9.0 をダウンロード](https://github.com/nexu-io/open-design/releases) · [ディスカッションに参加](https://github.com/nexu-io/open-design/discussions/3524)
+>
+> 🏅 **Open Design Fellow プログラムの募集を開始しました。** あなたもデザインはオープンであるべきだと信じるなら——Open Design Fellow となり、コアチームとともにプロダクトを形づくり、より多くの人がデザインの未来を定義することに参加できるよう手助けしてください。詳細 → [`MAINTAINERS.md`](../../MAINTAINERS.md) と [Discord](https://discord.gg/qhbcCH8Am4)。
+=======
 > ⚡ **Open Design Cloud——公式モデルサービス。** 一度のチャージで、Open Design の中で GPT、Claude、Gemini、DeepSeek をそのまま利用可能。20+ のフラッグシップモデル、設定ゼロ、実トークン使用量ベースの課金。[Open Design Cloud を試す](https://open-design.ai/cloud/)
 >
 > 🏅 **Open Design Fellow プログラムの募集を開始しました。** あなたもデザインはオープンであるべきだと信じるなら——Open Design Fellow となり、コアチームとともにプロダクトを形づくり、より多くの人がデザインの未来を定義することに参加できるよう手助けしてください。詳細 → [`MAINTAINERS.md`](../../MAINTAINERS.md) と [Discord](https://discord.gg/mHAjSMV6gz)。
+>>>>>>> upstream/main
 
 <p align="center">
-  <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="Open Design hero banner" width="100%" />
+  <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="Open Design — The open-source Claude Design alternative · 150 Design Systems · 261 Plugins · 21 Coding Agents · 14 Media Providers" width="100%" />
 </p>
 
 <p align="center">
   <a href="https://open-design.ai/">ウェブサイト</a> ·
   <a href="https://open-design.ai/">ダウンロード</a> ·
-  <a href="https://open-design.ai/cloud/">Open Design Cloud</a> ·
-  <a href="https://discord.gg/mHAjSMV6gz">Discord</a> ·
-  <a href="https://x.com/OpenDesignHQ">@OpenDesignHQ をフォロー</a>
+  <a href="https://discord.gg/qhbcCH8Am4">Discord</a> ·
+  <a href="https://x.com/nexudotio">@nexudotio をフォロー</a>
 </p>
 
 <p align="center">
   <a href="https://github.com/nexu-io/open-design/releases"><img alt="release" src="https://img.shields.io/github/v/release/nexu-io/open-design?style=flat&color=blueviolet&label=release&include_prereleases&display_name=tag" /></a>
   <a href="../../LICENSE"><img alt="license" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=flat" /></a>
-  <a href="https://discord.gg/mHAjSMV6gz"><img alt="discord" src="https://img.shields.io/discord/1479002485040480266?style=flat&logo=discord&logoColor=white&label=discord&color=5865F2&cacheSeconds=3600" /></a>
+  <a href="https://discord.gg/qhbcCH8Am4"><img alt="discord" src="https://img.shields.io/discord/1479002485040480266?style=flat&logo=discord&logoColor=white&label=discord&color=5865F2&cacheSeconds=3600" /></a>
   <a href="QUICKSTART.ja-JP.md"><img alt="quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat" /></a>
 </p>
 
-<p align="center"><a href="../../README.md">English</a> · <a href="README.es.md">Español</a> · <a href="README.pt-BR.md">Português</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <b>日本語</b> · <a href="README.ar.md">العربية</a> · <a href="README.ru.md">Русский</a> · <a href="README.uk.md">Українська</a> · <a href="README.tr.md">Türkçe</a> · <a href="README.th.md">ภาษาไทย</a></p>
+<p align="center"><a href="../../README.md">English</a> · <a href="README.es.md">Español</a> · <a href="README.pt-BR.md">Português</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <b>日本語</b> · <a href="README.ar.md">العربية</a> · <a href="README.ru.md">Русский</a> · <a href="README.uk.md">Українська</a> · <a href="README.tr.md">Türkçe</a></p>
 
 ---
 
 ## Open Design とは
 
-🎨 **ローカルファーストでオープンソースの Claude Design 代替ツール。** &nbsp;🖥️ **macOS と Windows 向けのネイティブデスクトップアプリ。** &nbsp;⚡ **100 種類以上の機能スキル + 独立したレンダリングテンプレートカタログ** · ✨ **151 のデザインシステムパッケージ** · 📦 **277 のすぐ使えるプラグイン。** &nbsp;🖼️ **ウェブ · デスクトップ · モバイルのプロトタイプ**、**ライブダッシュボード／アーティファクト**、**スライド**、**画像**、**動画**、さらに **HyperFrames** のモーショングラフィックスを生成。🔒 サンドボックス化された iframe プレビュー · HTML / PDF / PPTX / MP4 エクスポート。&nbsp;🤖 **25 種類のローカル CLI 実行ファイル上で動作**、もしくは BYOK 経由で任意の OpenAI 互換エンドポイント上でも動作します。
+🎨 **ローカルファーストでオープンソースの [Claude Design][cd] 代替ツール。** &nbsp;🖥️ **macOS と Windows 向けのネイティブデスクトップアプリ。** &nbsp;⚡ **100 種類以上のスキル** · ✨ **150 のブランドグレード `DESIGN.md` システム** · 📦 **261 のすぐ使えるプラグイン。** &nbsp;🖼️ **ウェブ · デスクトップ · モバイルのプロトタイプ**、**ライブダッシュボード／アーティファクト**、**スライド**、**画像**、**動画**、さらに **HyperFrames** のモーショングラフィックスを生成。🔒 サンドボックス化された iframe プレビュー · HTML / PDF / PPTX / MP4 エクスポート。&nbsp;🤖 **Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Hermes · Kimi · Antigravity および 21 のローカル CLI 上で動作**、もしくは BYOK 経由で任意の OpenAI 互換エンドポイント上でも動作します。
 
-Open Design は、そのループをエージェントが読み書きできる **機能スキル・レンダリングデザインテンプレート・デザインシステム・プラグインのファイルシステム** にします。
+Open Design は、Anthropic が Claude Design とともに送り出した **エージェントネイティブ**なループ——ブリーフを探り、方向性を確定し、アーティファクトをストリーミングし、批評し、納品する——がクローズドであることをやめ、ラップトップにすでにあるコーディングエージェントが読み・書き・リミックスできる **スキル・デザインシステム・プラグインのファイルシステム** になったときに得られるものです。あなたの CLI がデザインエンジンに、ラップトップがスタジオに、そしてチームの `DESIGN.md` がブランドの契約書になります。
 
 これはまた、**エージェント時代の Figma 代替ツール**でもあります——キャンバス上でピクセルを動かす代わりに、本物の CSS、本物のフォント、本物のコンポーネントによる単一ページのアーティファクトを納品し、HTML / PDF / PPTX / MP4 へ直接エクスポートします。すでにあなたのデザインシステムによって形づくられ、すでに日常的に使うエージェントの中で実行可能です。
 
+[cd]: https://x.com/claudeai/status/2045156267690213649
 
 ---
 
@@ -113,18 +119,24 @@ Open Design が何であり、何ができるのかを手早く見ていきま�
 |---|:---:|---|
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | ✅ 対応済み | `od mcp install claude` |
 | [Codex CLI](https://github.com/openai/codex) | ✅ 対応済み | `od mcp install codex` |
+<<<<<<< HEAD
+| [Cursor](https://www.cursor.com/cli) | ✅ 対応済み | `od mcp install cursor` |
+| [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ 対応済み | `od mcp install copilot` |
+| [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ 対応済み | `od mcp install copilot` |
+| Gemini CLI | ✅ 対応済み | `od mcp install gemini` |
+=======
 | [DeepSeek Reasonix](https://github.com/esengine/DeepSeek-Reasonix) | ✅ 対応済み | `od mcp install reasonix` |
 | [Raven](https://github.com/EverMind-AI/Raven) | ✅ 対応済み | `od mcp install raven` |
 | [Cursor](https://www.cursor.com/cli) | ✅ 対応済み | `od mcp install cursor` |
 | [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ 対応済み | `od mcp install copilot` |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ 対応済み | `od mcp install copilot` |
+>>>>>>> upstream/main
 | [OpenCode](https://opencode.ai/) | ✅ 対応済み | `od mcp install opencode` |
 | [OpenClaw](https://github.com/openclaw/openclaw) | ✅ 対応済み | `od mcp install openclaw` |
 | [Antigravity](https://antigravity.google) | ✅ 対応済み | `od mcp install antigravity` |
 | [Cline](https://github.com/cline/cline) | ✅ 対応済み | `od mcp install cline` |
 | [Trae](https://www.trae.ai/) | ✅ 対応済み | `od mcp install trae` |
-| [Kimi CLI](https://github.com/MoonshotAI/kimi-cli) | ✅ 対応済み | `od mcp install kimi` |
-| [Kiro](https://kiro.dev) | ✅ 対応済み | `od mcp install kiro` |
+| Kimi CLI | ✅ 対応済み | `od mcp install kimi` |
 | [Pi Agent](https://github.com/badlogic/pi-mono) | ✅ 対応済み | `od mcp install pi` |
 | [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | ✅ 対応済み | `od mcp install vibe` |
 | [Hermes Agent](https://github.com/nousresearch/hermes-agent) | ✅ 対応済み | `od mcp install hermes` |
@@ -132,12 +144,12 @@ Open Design が何であり、何ができるのかを手早く見ていきま�
 `od mcp install <agent> --print` でドライランのプレビュー · `--uninstall` で削除 · 完全な一覧は `od mcp install --help` で確認できます。
 
 <p align="center">
-  <img src="https://repo-assets.open-design.ai/resources/images/coding-agents.png" alt="The 25 coding-agent CLIs Open Design supports — Claude Code · Codex · OpenCode · Hermes · Antigravity · Vela · Grok Build · Kimi · Cursor Agent · Qwen · Qoder · GitHub Copilot · Pi · Kiro · Kilo · Mistral Vibe · DeepSeek · Reasonix · Aider · Amp · CodeBuddy · Mimo · AtomCode · Devin · Trae" width="100%" />
+  <img src="https://repo-assets.open-design.ai/resources/images/coding-agents.png" alt="The 21 coding-agent CLIs Open Design supports — Claude Code · Codex · OpenCode · Hermes · Antigravity · Gemini · Grok Build · Kimi · Cursor Agent · Qwen · Qoder · GitHub Copilot · Pi · Kiro · Kilo · Mistral Vibe · DeepSeek · Reasonix · Aider · Devin · Trae" width="100%" />
 </p>
 
 **CLI を一つもインストールしていない場合は？** `POST /api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream` の BYOK プロキシが同じループ（プロセスのスポーンなし）を提供します——`baseUrl` + `apiKey` + `model` を貼り付けるだけで、OpenAI、Anthropic、Azure OpenAI、Google Gemini、Ollama、LM Studio、vLLM、または任意の OpenAI 互換エンドポイントに対応します。ターゲットごとの SSRF 保護が、内部 IP／リンクローカル／CGNAT をデーモンのエッジでブロックします。
 
-Runtime 定義は [`apps/daemon/src/runtimes/defs/`](../../apps/daemon/src/runtimes/defs/) に置き、`runtimes/registry.ts` に登録します。新しい parser が必要なのは新しい wire format の場合だけです——[`docs/agent-adapters.md`](../../docs/agent-adapters.md) を参照してください。
+アダプターの契約とストリームパーサーは [`apps/daemon/src/agents.ts`](../../apps/daemon/src/agents.ts) にあります。新しい CLI の追加はエントリー 1 つだけです——[`docs/agent-adapters.md`](../../docs/agent-adapters.md) を参照してください。
 
 ---
 
@@ -257,26 +269,26 @@ Runtime 定義は [`apps/daemon/src/runtimes/defs/`](../../apps/daemon/src/runti
 
 ## なぜ Open Design なのか
 
-> **2026 年 4 月、Anthropic は Claude Design をリリースしました——LLM が散文を書くのをやめ、デザインアーティファクトを直接納品し始めた初めての出来事でした。** これは一気に広まりました。しかし、それはクローズドソースのまま、有料のみ、クラウドのみで、Anthropic のモデル、Anthropic のスキル、Anthropic のサーフェスに縛られていました。チェックアウトもなく、セルフホストもなく、Vercel デプロイもなく、自前のエージェントへの差し替えもできません。
+> **2026 年 4 月、Anthropic は [Claude Design][cd] をリリースしました——LLM が散文を書くのをやめ、デザインアーティファクトを直接納品し始めた初めての出来事でした。** これは一気に広まりました。しかし、それはクローズドソースのまま、有料のみ、クラウドのみで、Anthropic のモデル、Anthropic のスキル、Anthropic のサーフェスに縛られていました。チェックアウトもなく、セルフホストもなく、Vercel デプロイもなく、自前のエージェントへの差し替えもできません。
 
 Open Design (OD) はそのオープンソースの代替ツールです。同じループ、同じアーティファクトファーストのメンタルモデル、ロックインは一切なし:
 
 - 🤖 **エージェントネイティブ、モデル非依存。** 私たちはエージェントを同梱しません。すでにあなたの `PATH` にある `claude` / `codex` / `cursor-agent` / `copilot` / `hermes` / `kimi` がデザインエンジンです。ワンクリックで差し替えられます。
-- 🧠 **デフォルトでブランドグレード。** すべてのレンダリングは、アクティブなパッケージの `DESIGN.md` を中核のブランド契約として読み取ります。151 のデザインシステムパッケージが同梱され、従来のパッケージは `DESIGN.md` だけでも、新しいパッケージは `manifest.json`、`tokens.css`、コンポーネント、アセット、出典情報を追加できます。フォルダをドロップすればピッカーが見つけます。
-- 🖥️ **ローカルファースト、あらゆるレイヤーで BYOK。** ネイティブデスクトップアプリはクラウドへの往復なしにローカルファーストのままです。デーモンデータパスを説明する前に、ルートの `AGENTS.md` にある **Daemon data directory contract** を必ず読んでください。
-- 🌍 **4 つの平面で組み合わせ可能。** **プラグイン**はワークフロー、**機能スキル**はエージェント動作、**デザインテンプレート**はレンダリング設計図、**デザインシステム**はブランドを担います。
+- 🧠 **デフォルトでブランドグレード。** すべてのレンダリングはアクティブな `DESIGN.md` を読み取ります——パレット、タイポグラフィ、スペーシング、モーション、ボイス、アンチパターンをカバーする 9 セクションのスキーマです。150 のシステムがリポジトリに同梱されています（Linear、Stripe、Vercel、Airbnb、Apple、Tesla、Notion、Anthropic、Cursor、Supabase、Figma…）。フォルダをドロップすれば、ピッカーがそれを見つけます。
+- 🖥️ **ローカルファースト、あらゆるレイヤーで BYOK。** macOS（Apple Silicon + Intel）と Windows（x64）向けのネイティブデスクトップアプリ。Linux AppImage はオプションのリリースレーンで提供。SQLite は `.od/app.sqlite`、ファイルは `.od/projects/<id>/` に置かれ、テレメトリもクラウドへの往復もありません。
+- 🌍 **3 つの平面で組み合わせ可能。** **プラグイン**は実行可能なワークフローを運び · **スキル**はエージェントのデザインの審美眼を運び · **デザインシステム**はブランドを運びます。これら 3 つはすべて、誰もが作成・バージョン管理・公開できるプレーンファイルです。
 - 🔁 **既存のコードベースをリフレッシュ。** `git` リポジトリ + `DESIGN.md` をエージェントに渡せば、あなたの実際のコンポーネントをブランド仕様にリファクタリングします。専用のプラグインが Figma / Pencil のワークフローを React / Next.js / Vue のコードへと移行します。
 - 🔒 **信念としてのプライバシー。** すべてがあなたのデータのある場所——あなたのラップトップ、チームのサーバー、Vercel プロジェクト——で動作します。ネットワークが必要なときも、BYOK プロキシは SSRF からガードされています。
 
 ### 比較
 
-| | Claude Design | Figma | Lovable / v0 / Bolt | **Open Design** |
+| | [Claude Design][cd] | Figma | Lovable / v0 / Bolt | **Open Design** |
 |---|---|---|---|---|
 | オープンソース | ❌ | ❌ | ❌ | **✅ Apache-2.0** |
-| セルフホスト／デスクトップ | ❌ | ❌ | ❌ | **✅ macOS + Windows + Docker** |
-| エージェントネイティブ（あなたの CLI で動作） | Anthropic のみ | ❌ | クラウドエージェントのみ | **✅ 25 CLI + BYOK** |
-| ブランドグレードの `DESIGN.md` | プロプライエタリ | テーマ JSON | 限定的なトークン | **✅ 151 システム同梱** |
-| スキル／プラグイン／テンプレート | クローズド | プラグインストア | クローズド | **✅ 100 種類以上の機能スキル · 独立したレンダリングテンプレートカタログ · 277 プラグイン** |
+| セルフホスト／デスクトップ | ❌ | ❌ | ❌ | **✅ macOS + Windows + Vercel** |
+| エージェントネイティブ（あなたの CLI で動作） | Anthropic のみ | ❌ | クラウドエージェントのみ | **✅ 21 CLI + BYOK** |
+| ブランドグレードの `DESIGN.md` | プロプライエタリ | テーマ JSON | 限定的なトークン | **✅ 150 システム同梱** |
+| スキル／プラグイン／テンプレート | クローズド | プラグインストア | クローズド | **✅ 100 種類以上のスキル · 261 プラグイン** |
 | HyperFrames（HTML→MP4） | ❌ | ❌ | ❌ | **✅ 第一級対応** |
 | 既存リポジトリをブランドにリフレッシュ | ❌ | ❌ | ❌ | **✅ エージェント + `DESIGN.md` 経由** |
 | 最低限の課金 | Pro / Max / Team | Pro / Org | Pro / Team | **BYOK · 任意の互換エンドポイント** |
@@ -293,7 +305,7 @@ Open Design を使う最も速い方法。Node も、pnpm も、クローンも�
 - **Windows**（x64）→ [**open-design.ai**](https://open-design.ai/) または [GitHub Releases](https://github.com/nexu-io/open-design/releases)
 - **Linux**（AppImage、オプションのレーン）→ [GitHub Releases](https://github.com/nexu-io/open-design/releases)
 
-インストール後: アプリはあなたの `PATH` 上のすべてのコーディングエージェント CLI を自動検出し、100 種類以上の機能スキル、独立したレンダリングテンプレートカタログ、151 のデザインシステムパッケージを読み込み、エントリービューでブリーフを入力できるようにします。
+インストール後: アプリはあなたの `PATH` 上のすべてのコーディングエージェント CLI を自動検出し、100 種類以上のスキルと 150 のデザインシステムを読み込み、エントリービューでブリーフを入力できるようにします。
 
 ### 🤖 コーディングエージェントにインストール（UI なし）
 
@@ -301,9 +313,15 @@ GUI を一度も開くことなく Open Design を使えます——Claude Code�
 
 ```bash
 # One-line install into the agent you're using:
+<<<<<<< HEAD
+curl -fsSL https://open-design.ai/install.sh | sh -s <agent>
+# <agent> = claude | codex | cursor | copilot | openclaw | antigravity | gemini
+#         | pi | vibe | hermes | cline | kimi | trae | opencode
+=======
 od mcp install <agent>
 # <agent> = claude | codex | reasonix | raven | cursor | copilot | openclaw | antigravity
 #         | pi | vibe | hermes | cline | kimi | kiro | trae | opencode
+>>>>>>> upstream/main
 ```
 
 そして、エージェントの内部で:
@@ -312,7 +330,7 @@ od mcp install <agent>
 > Use open-design to generate a landing page with the Linear design system
 ```
 
-ファイルシステム対応のローカル CLI 実行では、エージェントが選択した機能スキルまたはデザインテンプレートと `DESIGN.md` を合成し、正規プロジェクトファイルを書き、Open Design がそれをプレビューします。ファイルツールのない BYOK/API 実行は、完全な `<artifact>` ブロックを 1 つ返します。
+エージェントは `skills/` を読み取り、適切な `SKILL.md` を選び、あなたが指定した `DESIGN.md` をバインドし、`http://localhost:7456` でプレビューできる `<artifact>` を発行します。
 
 ### 🐳 Docker で実行
 
@@ -325,12 +343,6 @@ docker compose up -d
 # open http://localhost:7456
 ```
 
-### 🚀 Sealos にデプロイ
-
-[![Deploy on Sealos](https://sealos.io/Deploy-on-Sealos.svg)](https://sealos.io/products/app-store/open-design/)
-
-Sealos App Store テンプレートは、公開済みの Open Design Docker イメージを永続的なワークスペースストレージと公開プロキシの Basic Auth 付きで実行します。独自の公開または共有 Docker デプロイでは、[`deploy/README.md`](../../deploy/README.md#local-compose) のリバースプロキシと `OPEN_DESIGN_ALLOWED_ORIGINS` の手順に従ってください。
-
 ### 🧑‍💻 ソースから実行
 
 ```bash
@@ -340,8 +352,6 @@ corepack enable && pnpm install
 pnpm tools-dev run web
 ```
 
-`tools-dev` が表示した URL を開いてください。明示的なポートフラグがなければ、開発ポートは動的に割り当てられます。
-
 Node `~24`、pnpm `10.33.x`。Windows ユーザーは [`docs/windows-troubleshooting.md`](../../docs/windows-troubleshooting.md) を参照してください。完全なクイックスタート、環境変数、Nix flake、パッケージ化されたビルドフロー → [`QUICKSTART.ja-JP.md`](QUICKSTART.ja-JP.md)。
 
 ### 完全なワークフロー — ブリーフからアーティファクトまで
@@ -350,7 +360,7 @@ Node `~24`、pnpm `10.33.x`。Windows ユーザーは [`docs/windows-troubleshoo
 
 1. **PM がブリーフを提出します。** プラグインピッカーが、ランディングページ · ピッチデック · ダッシュボード · ソーシャル投稿 · PM スペック · OKR スコアカード… を提案します。
 2. **デザイナー（またはエージェント）が方向性を確定します。** ブランドがない？ 5 つの厳選された方向性から選びます。ブランドがある？ スクリーンショット／URL をドロップ → エージェントが GitHub に接続し、Figma をインポートし、再利用可能な `DESIGN.md` に体系化します。
-3. **エージェントが最初の成果物を作ります。** ファイルシステム対応 CLI は正規ファイルを書き、ファイルツールのない BYOK/API は完全な `<artifact>` ブロックを返します。
+3. **エージェントが最初の `<artifact>` を発行します。** プラグイン + スキル + `DESIGN.md` がバインドされます。それはサンドボックス化された iframe にストリーミングされ、その場で編集可能です——「ゼロから再生成」ではありません。
 4. **エンジニアリングへ引き渡します。** アーティファクトは本物の HTML/CSS です——Cursor、Codex、または Claude Code にドロップして、コードとして開発を続けられます。あるいは PPTX / PDF / MP4 をマーケティングへ直接エクスポートできます。
 5. **Open Design は使うほど賢くなります。** あなたのスクリーンショット、フォント、パレット、確定したアーティファクトは、次回のセッションのデフォルトとして蓄積されます。やり直しは減り、ブレも減ります。
 
@@ -362,14 +372,14 @@ Open Design は **stdio MCP サーバー**とエージェントごとの**イン
 
 ```bash
 # One-line install (16+ CLIs supported):
-od mcp install <agent>
+curl -fsSL https://open-design.ai/install.sh | sh -s <agent>
 
 # Then the agent can:
-od project list --json
-od files list <project-id> --json
-od files read <project-id> <relative-path>
-od plugin list --json
-od skills list --json
+od search-files "primary button"      # search files across projects
+od get-file design-systems/linear-app/DESIGN.md
+od get-artifact <slug>                # latest rendered artifact
+od plugin run web-prototype --brief "..."
+od skill list --scenario marketing
 ```
 
 **なぜ MCP なのか？** イテレーションのたびに zip をエクスポートして再アタッチすると、フローが途切れます。MCP はデザインソースを直接公開します——エージェントは常にライブのファイルを見ます。
@@ -380,13 +390,13 @@ od skills list --json
 
 ---
 
-## スキルとデザインテンプレート
+## スキル
 
-**100 種類以上の機能スキルは [`skills/`](../../skills/) にあり**、再利用可能なエージェント動作・参照・ツールを提供します。レンダリング可能なスターターは [`design-templates/`](../../design-templates/) に分離され、機能スキルレジストリではなくテンプレートカタログに表示されます。
+**100 種類以上のスキルが標準で同梱されています**——それぞれが [`skills/`](../../skills/) 配下のフォルダで、Claude Code の [`SKILL.md`][skill] 規約に従い、`od:` フロントマター（`mode`、`platform`、`scenario`、`preview.type`、`design_system.requires`、`default_for`、`fidelity`、`example_prompt`）で拡張されています。フォルダをドロップしてデーモンを再起動すれば、ピッカーに表示されます。
 
-2 つの**モード**がテンプレートカタログの軸です: `prototype` と `deck`。ほかに `image`、`video`、`audio`、utility サーフェス向けテンプレートがあります。
+2 つの**モード**がカタログの軸になります: `prototype`（ウェブ／モバイル／デスクトップの単一ページアーティファクト）と `deck`（横スワイプのプレゼンテーション）。さらに `image`、`video`、`audio`、`template`、`design-system`、`utility` の各モードもあります。**`scenario`** フィールドは、それらを対象者ごとにグループ化します: `design` · `marketing` · `operation` · `engineering` · `product` · `finance` · `hr` · `sale` · `personal`。
 
-| デザインテンプレート | モード | シナリオ | 生成するもの |
+| スキル | モード | シナリオ | 生成するもの |
 |---|---|---|---|
 | [`web-prototype`](../../design-templates/web-prototype/) | prototype | design | デフォルトのランディングページ／ヒーロー |
 | [`saas-landing`](../../design-templates/saas-landing/) | prototype | marketing | ヒーロー／機能／価格／CTA |
@@ -409,13 +419,13 @@ od skills list --json
 | [`critique`](../../design-templates/critique/) | utility | design | 5 次元の自己批評スコアシート |
 | [`tweaks`](../../design-templates/tweaks/) | utility | design | AI が発行する tweaks パネルのマニフェスト |
 
-プロトコルとディレクトリ分割 → [`docs/skills-protocol.md`](../../docs/skills-protocol.md)。機能スキルは `GET /api/skills`、テンプレートは `GET /api/design-templates`。
+完全なスキルプロトコル → [`docs/skills-protocol.md`](../../docs/skills-protocol.md)。スキルレジストリのエンドポイント: `GET /api/skills`。
 
 ---
 
 ## デザインシステム
 
-**`DESIGN.md` を中心とする 151 のデザインシステムパッケージ**を同梱します。旧パッケージは Markdown 契約のみの場合がありますが、新しいパッケージは `manifest.json`、コンパイル済み `tokens.css`、コンポーネント fixture、アセット、由来証拠も持てます。上流由来とプロジェクト独自の追加が混在し、[`design-systems/README.md`](../../design-systems/README.md) が形と由来を記録します。
+**150 のブランドグレード `DESIGN.md` システム**がリポジトリに同梱されています——それぞれが 9 セクションのスキーマ（カラー、タイポグラフィ、スペーシング、レイアウト、コンポーネント、モーション、ボイス、ブランド、アンチパターン）を持つ単一の Markdown ファイルで、[`VoltAgent/awesome-design-md`][acd2] からのものです。システムを切り替える → 次のレンダリングは新しいトークンを使います。テーマ JSON は不要です。
 
 <details>
 <summary><b>完全なカタログ（クリックで展開）</b></summary>
@@ -448,16 +458,16 @@ od skills list --json
 
 ## プラグイン
 
-**277 の公式プラグインと 183 のリミックス可能な例**が [`plugins/_official/`](../../plugins/_official/) にあります。各エントリは `open-design.json` と型固有 payload を持つポータブルディレクトリです。workflow は `SKILL.md`、メディアテンプレートは `template.json`、デザインシステムは `DESIGN.md` を使います。
+**261 の公式プラグイン**が [`plugins/_official/`](../../plugins/_official/) にあります。各プラグインは**ポータブルなエージェントスキルのフォルダ**です——`SKILL.md`（Agent Skills をサポートする任意のエージェントが読める）に加え、Open Design にマーケットプレイスのメタデータ、入力、プレビュー、パイプライン、機能宣言を与える任意の `open-design.json` マニフェストを備えています。カテゴリーに直接ジャンプ:
 
 | カテゴリー | 数 | 内容 |
 |---|---|---|
-| [`scenarios/`](../../plugins/_official/scenarios/) | 13 | 完全なデザインシナリオ — [`od-default`](../../plugins/_official/scenarios/od-default/), [`od-design-refine`](../../plugins/_official/scenarios/od-design-refine/), [`od-figma-migration`](../../plugins/_official/scenarios/od-figma-migration/), [`od-code-migration`](../../plugins/_official/scenarios/od-code-migration/), [`od-react-export`](../../plugins/_official/scenarios/od-react-export/), [`od-nextjs-export`](../../plugins/_official/scenarios/od-nextjs-export/), [`od-vue-export`](../../plugins/_official/scenarios/od-vue-export/), [`od-media-generation`](../../plugins/_official/scenarios/od-media-generation/), [`od-new-generation`](../../plugins/_official/scenarios/od-new-generation/), [`od-tune-collab`](../../plugins/_official/scenarios/od-tune-collab/), [`od-plugin-authoring`](../../plugins/_official/scenarios/od-plugin-authoring/), [`od-share-to-community`](../../plugins/_official/scenarios/od-share-to-community/), [`od-web-effect-extractor`](../../plugins/_official/scenarios/od-web-effect-extractor/) |
+| [`scenarios/`](../../plugins/_official/scenarios/) | 11 | 完全なデザインシナリオ — [`od-default`](../../plugins/_official/scenarios/od-default/), [`od-design-refine`](../../plugins/_official/scenarios/od-design-refine/), [`od-figma-migration`](../../plugins/_official/scenarios/od-figma-migration/), [`od-code-migration`](../../plugins/_official/scenarios/od-code-migration/), [`od-react-export`](../../plugins/_official/scenarios/od-react-export/), [`od-nextjs-export`](../../plugins/_official/scenarios/od-nextjs-export/), [`od-vue-export`](../../plugins/_official/scenarios/od-vue-export/), [`od-media-generation`](../../plugins/_official/scenarios/od-media-generation/), [`od-new-generation`](../../plugins/_official/scenarios/od-new-generation/), [`od-tune-collab`](../../plugins/_official/scenarios/od-tune-collab/), [`od-plugin-authoring`](../../plugins/_official/scenarios/od-plugin-authoring/) |
 | [`image-templates/`](../../plugins/_official/image-templates/) | 45 | ワンショットの画像プロンプト — エディトリアル、シネマティック、プロダクト、ポートレート |
-| [`video-templates/`](../../plugins/_official/video-templates/) | 63 | HyperFrames / Seedance / Veo のモーションテンプレート |
-| [`design-systems/`](../../plugins/_official/design-systems/) | 143 | プラグインとしてラップされたブランド `DESIGN.md` |
+| [`video-templates/`](../../plugins/_official/video-templates/) | 50 | HyperFrames / Seedance / Veo のモーションテンプレート |
+| [`design-systems/`](../../plugins/_official/design-systems/) | 142 | プラグインとしてラップされたブランド `DESIGN.md` |
 | [`atoms/`](../../plugins/_official/atoms/) | 13 | 再利用可能な UI フラグメント（ボタン、ヒーロー、KPI カード） |
-| [`examples/`](../../plugins/_official/examples/) | 183 | リミックス可能なリファレンス出力 |
+| [`examples/`](../../plugins/_official/examples/) | 140 | リミックス可能なリファレンス出力 |
 
 コミュニティプラグインは [`plugins/community/`](../../plugins/community/)、公開フローは [`plugins/registry/`](../../plugins/registry/) もご覧ください。
 
@@ -490,18 +500,18 @@ od plugin uninstall od-default       # uninstall
 
 ### プラグインを作る
 
-Open Design プラグインには `open-design.json` と型固有 payload が必要です。スキルとシナリオは `SKILL.md` も含み、ほかの型は独自 payload を使います:
+プラグインは **最低限 `SKILL.md` が 1 つあれば成り立ちます**。Open Design のマーケットプレイスに掲載するには `open-design.json` を追加します:
 
 ```
 my-plugin/
-├── open-design.json    ← required: marketplace metadata + inputs + pipeline + capabilities
-├── SKILL.md            ← required for agent-skill/scenario entries; omit for other plugin types
+├── SKILL.md            ← required: YAML frontmatter (name · description) + trigger phrasing + workflow (aim for < 500 lines)
+├── open-design.json    ← needed to list: marketplace metadata + inputs + pipeline + capabilities
 ├── README.md           ← optional: usage, install, registry links
 ├── preview/            ← optional: index.html / poster.png (strongly recommended for visual plugins)
 └── examples/           ← optional: concrete use cases
 ```
 
-主要フィールドは `specVersion`、`name`、`version`、Agent Skill を公開する場合だけ任意の `compat.agentSkills[].path`、そして `od.kind`、`od.taskKind`、`od.mode`、`od.capabilities[]`、`od.inputs[]` です。
+`open-design.json` の主要フィールド: `specVersion`（現在は `1.0.0`）、`name`（安定した ID）、`version`（semver）、`compat.agentSkills[].path`（`./SKILL.md` を指す）、`od.kind`（`skill` / `scenario` / `atom` / `bundle`）、`od.taskKind`（`new-generation` / `figma-migration` / `code-migration` / `tune-collab`）、`od.mode`（出力サーフェス、例: `prototype` / `deck` / `live-artifact` / `image` / `video` / `hyperframes` / `audio` / `design-system` / `scenario`）、`od.capabilities[]`（**最小限を宣言する**——制限付きインストールはデフォルトで `prompt:inject` のみを付与します）、`od.inputs[]`（適用時のパラメーター）。
 
 ローカルでスキャフォールド + 検証:
 
@@ -535,7 +545,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
    ┌─────────────────────────────────┐   /api/proxy/{provider}/stream (SSE)
    │  local daemon (Express+SQLite)  │   ─→ any OpenAI-compatible BYOK,
    │                                  │       SSRF-guarded at the edge
-   │  /api/skills    /api/design-templates    /api/plugins    │
+   │  /api/skills    /api/plugins    │
    │  /api/design-systems            │
    │  /api/chat (SSE)   /api/proxy/* │
    │  /api/projects/:id/files/...    │
@@ -543,13 +553,13 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
    │  /api/import/claude-design      │
    │  MCP stdio server                │
    └─────────┬───────────────────────┘
-             │ spawn(cli, [...], { cwd: managed project cwd })
+             │ spawn(cli, [...], { cwd: .od/projects/<id> })
              ▼
    ┌──────────────────────────────────────────────────────────────────┐
-   │  Base registry: 26 runtime definitions (including byok-opencode),       │
-   │  backed by 25 distinct local CLI executables because byok-opencode      │
-   │  shares the OpenCode executable.                                        │
-   │  Composes a functional skill or design template + DESIGN.md; writes files │
+   │  claude · codex · cursor-agent · copilot · openclaw · antigravity ·│
+   │  gemini · opencode · qwen · qoder · hermes (ACP) · kimi (ACP) ·    │
+   │  pi (RPC) · kiro · kilo · vibe (ACP) · cline · trae · deepseek     │
+   │  reads SKILL.md + DESIGN.md, writes artifacts to disk             │
    └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -557,8 +567,8 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 |---|---|
 | フロントエンド | Next.js 16 App Router + React 18 + TypeScript |
 | デーモン | Node 24 · Express · SSE ストリーミング · `better-sqlite3` |
-| ストレージ | デーモンのストレージパスを変更または文書化する前に、ルートの `AGENTS.md` にある **Daemon data directory contract** を必ず読んでください。この README でそれを繰り返してはいけません。 |
-| プレビュー | filesystem 実行は正規ファイルを描画し、BYOK/API は完全な `<artifact>` ブロックを sandbox `srcdoc` iframe に解析します |
+| ストレージ | ファイルは `.od/projects/<id>/` + SQLite は `.od/app.sqlite` + `media-config.json`（gitignore 対象、自動作成）。`OD_DATA_DIR` ですべてを再配置できます。 |
+| プレビュー | サンドボックス化された `srcdoc` iframe + ストリーミング `<artifact>` パーサー |
 | エクスポート | HTML（インライン化） · PDF（ブラウザ印刷） · PPTX（エージェント駆動） · ZIP · Markdown · MP4（HyperFrames） |
 | デスクトップ | Electron シェル + サンドボックス化されたレンダラー + サイドカー IPC（STATUS · EVAL · SCREENSHOT · CONSOLE · CLICK · SHUTDOWN） |
 | ライフサイクル | 単一のエントリーポイント: `pnpm tools-dev`（start / stop / run / status / logs / inspect / check） |
@@ -569,16 +579,16 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 
 ## ロードマップ
 
-- [x] デーモン + 25 種類の CLI 実行ファイル上の 26 runtime 定義 + スキル/テンプレートレジストリ + デザインシステムカタログ
+- [x] デーモン + 21 のコーディングエージェント CLI アダプター + スキルレジストリ + デザインシステムカタログ
 - [x] ウェブアプリ + チャット + 質問フォーム + 5 方向ピッカー + todo 進捗 + サンドボックス化プレビュー
-- [x] 100 種類以上の機能スキル · 独立テンプレートカタログ · 151 のデザインシステムパッケージ · 5 つのビジュアル方向性 · 5 つのデバイスフレーム
+- [x] 100 種類以上のスキル · 150 のデザインシステム · 5 つのビジュアル方向性 · 5 つのデバイスフレーム
 - [x] SQLite を裏に持つプロジェクト · 会話 · メッセージ · タブ · テンプレート
 - [x] マルチプロバイダー BYOK プロキシ（`/api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream`）+ SSRF ガード
 - [x] Claude Design ZIP インポート（`/api/import/claude-design`）
 - [x] サイドカープロトコル + Electron デスクトップ + IPC 自動化
 - [x] アーティファクト lint API + 5 次元の自己批評による発行前ゲート
 - [x] **0.8.0** — プラグインマーケットプレイスのインフラ（261 の公式プラグイン、マニフェスト仕様、エージェントごとのインストールスクリプト）
-- [x] **0.9.0** — Open Design Cloud（アプリに組み込まれた公式 Model Router: 設定ゼロ、ワンクリックのサインイン）
+- [x] **0.9.0** — Open Design AMR（アプリに組み込まれた公式 Model Router: 設定ゼロ、ワンクリックのサインイン）
 - [x] パッケージ化された Electron ビルド — macOS（Apple Silicon + Intel） + Windows（x64） + Linux AppImage（オプションのレーン）
 - [ ] コメントモードの外科的な編集 — 一部提供済み。信頼性の高いターゲット指定のパッチ適用は進行中
 - [ ] AI が発行する tweaks パネルの UX — 未実装
@@ -595,8 +605,8 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 
 すべてのチャネルの裏側には、本物の人がいます。
 
-- 💬 **Discord** — 日々のチャット、プラグインの共有、質問 → [**discord.gg/mHAjSMV6gz**](https://discord.gg/mHAjSMV6gz)
-- 🐦 **X / Twitter** — リリースノート、マイルストーン、舞台裏 → [**@OpenDesignHQ**](https://x.com/OpenDesignHQ)
+- 💬 **Discord** — 日々のチャット、プラグインの共有、質問 → [**discord.gg/qhbcCH8Am4**](https://discord.gg/qhbcCH8Am4)
+- 🐦 **X / Twitter** — リリースノート、マイルストーン、舞台裏 → [**@nexudotio**](https://x.com/nexudotio)
 - 🗣️ **GitHub Discussions** — 深い Q&A、RFC、「成果を見せて」 → [**Discussions**](https://github.com/nexu-io/open-design/discussions)
 - 🐛 **GitHub Issues** — バグ報告、機能リクエスト → [**Issues**](https://github.com/nexu-io/open-design/issues)
 
@@ -613,9 +623,9 @@ Open Design が動き続けるのは、貢献者——デザイナー、エン�
 | 出したいもの… | 方法 | 場所 |
 |---|---|---|
 | 新しい**スキル** | `SKILL.md` + `assets/` + `references/` を備えたフォルダをドロップ | [`skills/`](../../skills/) · 仕様は [`docs/skills-protocol.md`](../../docs/skills-protocol.md) |
-| 新しい**デザインシステム** | `DESIGN.md` を中心とするパッケージをドロップし、必要に応じて `manifest.json`、`tokens.css`、コンポーネント、アセット、出典情報を追加 | [`design-systems/<brand>/`](../../design-systems/) |
-| 新しい**プラグイン** | カテゴリーフォルダの下に `open-design.json` + 種類固有のペイロードをドロップ | [`plugins/community/`](../../plugins/community/) · 仕様は [`plugins/spec/SPEC.md`](../../plugins/spec/SPEC.md) · エージェント開発ガイドは [`plugins/spec/AGENT-DEVELOPMENT.md`](../../plugins/spec/AGENT-DEVELOPMENT.md) |
-| 新しい**コーディングエージェント CLI** をサポート | Runtime 定義 + registry entry。新しい wire format のみ parser を追加 | [`apps/daemon/src/runtimes/defs/`](../../apps/daemon/src/runtimes/defs/) |
+| 新しい**デザインシステム** | 9 セクションのスキーマを使った `DESIGN.md` をドロップ | [`design-systems/<brand>/`](../../design-systems/) |
+| 新しい**プラグイン** | カテゴリーフォルダの下に `open-design.json` + マニフェストをドロップ | [`plugins/community/`](../../plugins/community/) · 仕様は [`plugins/spec/SPEC.md`](../../plugins/spec/SPEC.md) · エージェント開発ガイドは [`plugins/spec/AGENT-DEVELOPMENT.md`](../../plugins/spec/AGENT-DEVELOPMENT.md) |
+| 新しい**コーディングエージェント CLI** をサポート | アダプターエントリー 1 つ + ストリームパーサー | [`apps/daemon/src/agents.ts`](../../apps/daemon/src/agents.ts) |
 | バグ修正や UI の磨き上げ | [`good-first-issue`](https://github.com/nexu-io/open-design/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) ラベルを閲覧 | [Issues →](https://github.com/nexu-io/open-design/issues) |
 | ドキュメントを翻訳 | `README.<lang>.md` ファイルを更新 | [`TRANSLATIONS.md`](../../TRANSLATIONS.md) |
 
@@ -645,7 +655,7 @@ gh pr create --fill
 
 ### 🏅 Open Design Fellow プログラム
 
-私たちは世界中で **Open Design Fellow** を募集しています——Fellow はコアチームとともにプロダクトを形づくり、各地域で Open Design を公式に代表し、資金面のサポート（$1,000 / MR）、無料の LLM クレジット、直通のレビュートラックに支えられながら、ローカルでコミュニティを育てます。詳細 → [`MAINTAINERS.md`](../../MAINTAINERS.md) と [Discord](https://discord.gg/mHAjSMV6gz) のアナウンス。
+私たちは世界中で **Open Design Fellow** を募集しています——Fellow はコアチームとともにプロダクトを形づくり、各地域で Open Design を公式に代表し、資金面のサポート（$1,000 / MR）、無料の LLM クレジット、直通のレビュートラックに支えられながら、ローカルでコミュニティを育てます。詳細 → [`MAINTAINERS.md`](../../MAINTAINERS.md) と [Discord](https://discord.gg/qhbcCH8Am4) のアナウンス。
 
 ---
 
@@ -679,7 +689,7 @@ gh pr create --fill
 参加してくださったすべての方に感謝します——コード、ドキュメント、フィードバック、鋭い issue、新しいスキル、新しいデザインシステム。
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&max=500&columns=20&anon=1&cache_bust=2026-07-17" alt="Open Design contributors" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&max=500&columns=20&anon=1&cache_bust=2026-05-30" alt="Open Design contributors" />
 </a>
 
 ---
@@ -704,9 +714,9 @@ gh pr create --fill
 
 <a href="https://star-history.com/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-07-17" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-07-17" />
-    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-07-17" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-28" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-28" />
+    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-28" />
   </picture>
 </a>
 
@@ -716,13 +726,13 @@ gh pr create --fill
 
 | プロジェクト | 役割 |
 |---|---|
-| Claude Design | このリポジトリがオープンソースの代替ツールとなっている、クローズドソースのプロダクト。 |
+| [Claude Design][cd] | このリポジトリがオープンソースの代替ツールとなっている、クローズドソースのプロダクト。 |
 | [`alchaincyf/huashu-design`](https://github.com/alchaincyf/huashu-design) | デザイン哲学の羅針盤——ジュニアデザイナーのワークフロー、ブランドアセットのプロトコル、アンチ AI スロップのチェックリスト、5 次元の批評。 |
 | [`op7418/guizang-ppt-skill`](https://github.com/op7418/guizang-ppt-skill) | 雑誌風のウェブ PPT スキルで、[`design-templates/guizang-ppt/`](../../design-templates/guizang-ppt/) の下にそのままバンドルされています。deck モードのデフォルト。 |
 | [`lewislulu/html-ppt-skill`](https://github.com/lewislulu/html-ppt-skill) | HTML PPT Studio ファミリー——15 のスライドテンプレート、36 のテーマ、31 のページレイアウト、アニメーションランタイム、マグネティックカードのプレゼンターモード。 |
 | [`OpenCoworkAI/open-codesign`](https://github.com/OpenCoworkAI/open-codesign) | 最初のオープンソース Claude Design 代替ツール。私たちが借用している UX パターン（ストリーミングアーティファクトのループ、サンドボックス化された iframe、ライブエージェントパネル）。 |
 | [`multica-ai/multica`](https://github.com/multica-ai/multica) | デーモン + アダプターのアーキテクチャ——PATH スキャンによるエージェント検出、唯一の特権プロセスとしてのローカルデーモン。 |
-| [`VoltAgent/awesome-design-md`](https://github.com/VoltAgent/awesome-design-md) | 当初の 9 セクション `DESIGN.md` スキーマと upstream 由来 70 システムの歴史的な出典。現在のパッケージはこの基盤を拡張できます。 |
+| [`VoltAgent/awesome-design-md`](https://github.com/VoltAgent/awesome-design-md) | 9 セクションの `DESIGN.md` スキーマと 70 のプロダクトシステムの出典。 |
 | [`bergside/awesome-design-skills`](https://github.com/bergside/awesome-design-skills) | `design-systems/` の下に追加された 57 のデザインスキルの出典。 |
 | [`heygen-com/hyperframes`](https://github.com/heygen-com/hyperframes) | HTML→MP4 のモーショングラフィックスフレームワークで、Open Design に第一級の `hyperframes-html` として統合されています。 |
 | [Claude Code skills][skill] | 私たちがそのまま採用している `SKILL.md` 規約。 |

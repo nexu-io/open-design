@@ -24,18 +24,6 @@ const codexAgent: AgentInfo = {
   ],
 };
 
-const codexFastAgent: AgentInfo = {
-  ...codexAgent,
-  models: [
-    { id: 'default', label: 'Default (CLI config)' },
-    {
-      id: 'gpt-5.5',
-      label: 'gpt-5.5',
-      serviceTierOptions: [{ id: 'priority', label: 'Fast' }],
-    },
-  ],
-};
-
 const claudeAgent: AgentInfo = {
   id: 'claude',
   name: 'Claude Code',
@@ -70,7 +58,7 @@ type ModeChangeHandler = (mode: ExecMode) => void;
 type AgentChangeHandler = (id: string) => void;
 type AgentModelChangeHandler = (
   id: string,
-  choice: { model?: string; reasoning?: string; serviceTier?: string },
+  choice: { model?: string; reasoning?: string },
 ) => void;
 type VoidHandler = () => void;
 type OpenSettingsHandler = (section?: 'execution') => void;
@@ -123,49 +111,7 @@ function openMenu() {
 describe('AvatarMenu', () => {
   afterEach(() => {
     cleanup();
-    vi.unstubAllGlobals();
-    window.localStorage.clear();
     vi.clearAllMocks();
-  });
-
-  // Regression for: the composer's compact provider trigger kept showing the
-  // last-used local CLI agent's icon after switching to `Use API · BYOK`,
-  // because the icon was picked purely from `currentAgent` (derived from
-  // `config.agentId`) without checking `config.mode` — the same check every
-  // other mode-aware element in this file (and InlineModelSwitcher's chip)
-  // already makes.
-  it('shows the BYOK glyph, not the stale CLI agent icon, once mode switches to api', () => {
-    const trigger = () => screen.getByRole('button', { name: 'avatar.title' });
-
-    const { rerender } = render(
-      <AvatarMenu
-        config={baseConfig}
-        agents={[codexAgent, claudeAgent]}
-        daemonLive
-        onModeChange={vi.fn()}
-        onAgentChange={vi.fn()}
-        onAgentModelChange={vi.fn()}
-        onOpenSettings={vi.fn()}
-        onRefreshAgents={vi.fn()}
-      />,
-    );
-    expect(trigger().querySelector('img.agent-icon')).toBeTruthy();
-    expect(trigger().querySelector('.ri-link')).toBeNull();
-
-    rerender(
-      <AvatarMenu
-        config={{ ...baseConfig, mode: 'api' }}
-        agents={[codexAgent, claudeAgent]}
-        daemonLive
-        onModeChange={vi.fn()}
-        onAgentChange={vi.fn()}
-        onAgentModelChange={vi.fn()}
-        onOpenSettings={vi.fn()}
-        onRefreshAgents={vi.fn()}
-      />,
-    );
-    expect(trigger().querySelector('img.agent-icon')).toBeNull();
-    expect(trigger().querySelector('.ri-link')).toBeTruthy();
   });
 
   it('opens execution settings when Local CLI is selected while the daemon is offline', () => {
@@ -191,47 +137,6 @@ describe('AvatarMenu', () => {
     );
 
     expect(onOpenSettings).toHaveBeenCalledWith('execution');
-  });
-
-  it('pins Open Design to the top of the CLI picker', async () => {
-    const amrAgent: AgentInfo = {
-      id: 'amr',
-      name: 'Open Design AMR',
-      bin: 'vela',
-      available: true,
-      models: [{ id: 'default', label: 'Default (CLI config)' }],
-    };
-    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
-      const url = input.toString();
-      if (url === '/api/integrations/vela/status') {
-        return new Response(
-          JSON.stringify({
-            loggedIn: false,
-            loginInFlight: false,
-            profile: 'test',
-            user: null,
-            configPath: '/Users/test/.amr/config.json',
-          }),
-          { status: 200, headers: { 'content-type': 'application/json' } },
-        );
-      }
-      return new Response('{}', { status: 200 });
-    }));
-
-    renderMenu({ agents: [codexAgent, claudeAgent, amrAgent] });
-    const menu = openMenu();
-
-    await waitFor(() => {
-      expect(screen.getByTestId('avatar-agent-option-amr')).toBeTruthy();
-    });
-    expect(
-      Array.from(menu.querySelectorAll('[data-testid^="avatar-agent-option-"]'))
-        .map((row) => row.getAttribute('data-testid')),
-    ).toEqual([
-      'avatar-agent-option-amr',
-      'avatar-agent-option-codex',
-      'avatar-agent-option-claude',
-    ]);
   });
 
   it('rescans agents and re-renders newly available CLI entries', async () => {
@@ -281,40 +186,6 @@ describe('AvatarMenu', () => {
     });
   });
 
-  it('routes service tier selection changes through onAgentModelChange', () => {
-    const onAgentModelChange = vi.fn();
-    renderMenu({
-      config: {
-        ...baseConfig,
-        agentModels: {
-          codex: { model: 'gpt-5.5', reasoning: 'default' },
-        },
-      },
-      agents: [codexFastAgent, claudeAgent],
-      onAgentModelChange,
-    });
-
-    openMenu();
-    const tierSelect = screen.getAllByRole('combobox')[2] as HTMLSelectElement;
-    expect(Array.from(tierSelect.options).map((option) => option.textContent)).toEqual([
-      'common.default',
-      'Fast',
-    ]);
-
-    fireEvent.change(tierSelect, { target: { value: 'priority' } });
-
-    expect(onAgentModelChange).toHaveBeenCalledWith('codex', {
-      serviceTier: 'priority',
-    });
-
-    onAgentModelChange.mockClear();
-    fireEvent.change(tierSelect, { target: { value: 'default' } });
-
-    expect(onAgentModelChange).toHaveBeenCalledWith('codex', {
-      serviceTier: undefined,
-    });
-  });
-
   it('keeps a custom saved model visible when it is not in the declared agent model list', () => {
     renderMenu({
       config: {
@@ -338,96 +209,16 @@ describe('AvatarMenu', () => {
     ).toBeTruthy();
   });
 
-  it('renders the signed-in plan/balance and stamps the avatar upgrade link', async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      const url = input.toString();
-      if (url === '/api/integrations/vela/status') {
-        return new Response(
-          JSON.stringify({
-            loggedIn: true,
-            loginInFlight: false,
-            profile: 'test',
-            user: { id: 'u1', email: 'a@b.c' },
-            account: { plan: 'plus', balanceUsd: '247.5087' },
-            configPath: '/Users/test/.amr/config.json',
-          }),
-          { status: 200, headers: { 'content-type': 'application/json' } },
-        );
-      }
-      return new Response('{}', { status: 202 });
-    });
-    vi.stubGlobal('fetch', fetchMock);
-
+  it('routes the AMR account shortcut through the active AMR profile', () => {
     renderMenu({
       config: {
         ...baseConfig,
         agentId: 'amr',
-        telemetry: { metrics: true },
-        installationId: 'od-install-abc',
-        agentCliEnv: { amr: { OPEN_DESIGN_AMR_PROFILE: 'test' } },
-      },
-      agents: [
-        {
-          id: 'amr',
-          name: 'Open Design AMR',
-          bin: 'vela',
-          available: true,
-          models: [{ id: 'default', label: 'Default (CLI config)' }],
+        agentCliEnv: {
+          amr: {
+            OPEN_DESIGN_AMR_PROFILE: 'test',
+          },
         },
-      ],
-    });
-
-    const dialog = openMenu();
-    // Plan badge + balance render once the signed-in status resolves.
-    expect(await screen.findByText('Plus')).toBeTruthy();
-    expect(dialog.textContent).toContain('$247.51');
-    const amrRow = screen.getByTestId('avatar-agent-option-amr');
-    expect(amrRow.querySelector('.avatar-amr-row__stat-label')?.textContent).toBe(
-      'settings.amrBalance',
-    );
-    expect(amrRow.querySelector('.avatar-amr-row__stat-value')?.textContent).toBe(
-      '$247.51',
-    );
-
-    expect(screen.queryByRole('link', { name: 'avatar.amrConsole' })).toBeNull();
-    const upgrade = screen.getByRole('link', {
-      name: 'settings.amrUpgrade',
-    }) as HTMLAnchorElement;
-    fireEvent.click(upgrade);
-    const url = new URL(upgrade.href);
-    expect(url.searchParams.get('view')).toBe('plans');
-    expect(url.searchParams.get('od_entry_source')).toBe('avatar_amr_upgrade');
-    expect(url.searchParams.get('source')).toBe('open_design');
-    expect(url.searchParams.get('od_device_id')).toBe('od-install-abc');
-  });
-
-  it('omits wallet and upgrade links for non-upgradeable plans', async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      const url = input.toString();
-      if (url === '/api/integrations/vela/status') {
-        return new Response(
-          JSON.stringify({
-            loggedIn: true,
-            loginInFlight: false,
-            profile: 'test',
-            user: { id: 'u1', email: 'a@b.c' },
-            account: { plan: 'max', balanceUsd: '247.5087' },
-            configPath: '/Users/test/.amr/config.json',
-          }),
-          { status: 200, headers: { 'content-type': 'application/json' } },
-        );
-      }
-      return new Response('{}', { status: 202 });
-    });
-    vi.stubGlobal('fetch', fetchMock);
-
-    renderMenu({
-      config: {
-        ...baseConfig,
-        agentId: 'amr',
-        telemetry: { metrics: true },
-        installationId: 'od-install-abc',
-        agentCliEnv: { amr: { OPEN_DESIGN_AMR_PROFILE: 'test' } },
       },
       agents: [
         {
@@ -441,172 +232,11 @@ describe('AvatarMenu', () => {
     });
 
     openMenu();
-    expect(await screen.findByText('Max')).toBeTruthy();
-    expect(screen.queryByRole('link', { name: 'settings.amrUpgrade' })).toBeNull();
-    expect(screen.queryByRole('link', { name: 'avatar.amrConsole' })).toBeNull();
-  });
 
-  it('falls back to the wallet snapshot when signed-in status has no account balance', async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      const url = input.toString();
-      if (url === '/api/integrations/vela/status') {
-        return new Response(
-          JSON.stringify({
-            loggedIn: true,
-            loginInFlight: false,
-            profile: 'test',
-            user: { id: 'u1', email: 'a@b.c' },
-            configPath: '/Users/test/.amr/config.json',
-          }),
-          { status: 200, headers: { 'content-type': 'application/json' } },
-        );
-      }
-      if (url === '/api/integrations/vela/wallet') {
-        return new Response(
-          JSON.stringify({
-            status: 'available',
-            profile: 'test',
-            user: { id: 'u1', email: 'a@b.c' },
-            balanceUsd: '31.0089',
-            updatedAt: '2026-06-29T08:00:00.000Z',
-            fetchedAt: '2026-06-29T08:00:01.000Z',
-            stale: false,
-            source: 'vela_api',
-          }),
-          { status: 200, headers: { 'content-type': 'application/json' } },
-        );
-      }
-      return new Response('{}', { status: 202 });
-    });
-    vi.stubGlobal('fetch', fetchMock);
-
-    renderMenu({
-      config: {
-        ...baseConfig,
-        agentId: 'amr',
-      },
-      agents: [
-        {
-          id: 'amr',
-          name: 'Open Design AMR',
-          bin: 'vela',
-          available: true,
-          models: [{ id: 'default', label: 'Default (CLI config)' }],
-        },
-      ],
-    });
-
-    openMenu();
-    expect(await screen.findByText('$31.01')).toBeTruthy();
-    expect(fetchMock).toHaveBeenCalledWith('/api/integrations/vela/wallet', {
-      cache: 'no-store',
-    });
-  });
-
-  it('uses the signed-in status profile for avatar console and upgrade links', async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      const url = input.toString();
-      if (url === '/api/integrations/vela/status') {
-        return new Response(
-          JSON.stringify({
-            loggedIn: true,
-            loginInFlight: false,
-            profile: 'test',
-            user: { id: 'u1', email: 'a@b.c' },
-            account: { plan: 'plus', balanceUsd: '247.5087' },
-            configPath: '/Users/test/.amr/config.json',
-          }),
-          { status: 200, headers: { 'content-type': 'application/json' } },
-        );
-      }
-      return new Response('{}', { status: 202 });
-    });
-    vi.stubGlobal('fetch', fetchMock);
-
-    renderMenu({
-      config: {
-        ...baseConfig,
-        agentId: 'amr',
-        telemetry: { metrics: true },
-        installationId: 'od-install-abc',
-      },
-      agents: [
-        {
-          id: 'amr',
-          name: 'Open Design AMR',
-          bin: 'vela',
-          available: true,
-          models: [{ id: 'default', label: 'Default (CLI config)' }],
-        },
-      ],
-    });
-
-    openMenu();
-    expect(await screen.findByText('Plus')).toBeTruthy();
-
-    expect(screen.queryByRole('link', { name: 'avatar.amrConsole' })).toBeNull();
-    const upgrade = screen.getByRole('link', {
-      name: 'settings.amrUpgrade',
-    }) as HTMLAnchorElement;
-    fireEvent.click(upgrade);
-    const upgradeUrl = new URL(upgrade.href);
-    expect(upgradeUrl.origin).toBe('https://vela.powerformer.net');
-    expect(upgradeUrl.searchParams.get('view')).toBe('plans');
-  });
-
-  it('clears stale AMR account data before refreshing on reopen', async () => {
-    let statusCalls = 0;
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      const url = input.toString();
-      if (url === '/api/integrations/vela/status') {
-        statusCalls += 1;
-        if (statusCalls === 1) {
-          return new Response(
-            JSON.stringify({
-              loggedIn: true,
-              loginInFlight: false,
-              profile: 'test',
-              user: { id: 'u1', email: 'old@example.com' },
-              account: { plan: 'plus', balanceUsd: '247.51' },
-              configPath: '/Users/test/.amr/config.json',
-            }),
-            { status: 200, headers: { 'content-type': 'application/json' } },
-          );
-        }
-        throw new Error('status unavailable');
-      }
-      return new Response('{}', { status: 202 });
-    });
-    vi.stubGlobal('fetch', fetchMock);
-
-    renderMenu({
-      config: {
-        ...baseConfig,
-        agentId: 'amr',
-        agentCliEnv: { amr: { OPEN_DESIGN_AMR_PROFILE: 'test' } },
-      },
-      agents: [
-        {
-          id: 'amr',
-          name: 'Open Design AMR',
-          bin: 'vela',
-          available: true,
-          models: [{ id: 'default', label: 'Default (CLI config)' }],
-        },
-      ],
-    });
-
-    const trigger = screen.getByRole('button', { name: 'avatar.title' });
-    fireEvent.click(trigger);
-    expect(await screen.findByText('Plus')).toBeTruthy();
-    expect(screen.getByRole('dialog', { name: 'avatar.title' }).textContent).toContain('$247.51');
-
-    fireEvent.click(trigger);
-    fireEvent.click(trigger);
-
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
-    const dialog = screen.getByRole('dialog', { name: 'avatar.title' });
-    expect(within(dialog).queryByText('Plus')).toBeNull();
-    expect(dialog.textContent).not.toContain('$247.51');
+    expect(
+      screen
+        .getByRole('link', { name: 'avatar.amrConsoleavatar.amrConsoleMeta' })
+        .getAttribute('href'),
+    ).toBe('https://vela.powerformer.net/wallet');
   });
 });

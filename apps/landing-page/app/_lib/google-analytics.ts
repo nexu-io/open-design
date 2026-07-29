@@ -1,7 +1,4 @@
-export function googleAnalyticsHeadHtml(
-  measurementId: string | undefined,
-  pageName = 'landing_home',
-): string {
+export function googleAnalyticsHeadHtml(measurementId: string | undefined): string {
   if (!measurementId) return '';
   return `<!-- Google tag (gtag.js) -->
 <script>
@@ -25,10 +22,8 @@ export function googleAnalyticsHeadHtml(
     var lowerHref = href.toLowerCase();
     var lowerLabel = label.toLowerCase();
     var cta = null;
-    var downloadTarget = null;
 
-    if (lowerHref.includes('github.com/nexu-io/open-design/releases')) { cta = 'download_desktop'; downloadTarget = 'direct'; }
-    else if (link.getAttribute('data-download-page') !== null || (link.pathname && /\\/download\\/?$/.test(link.pathname.toLowerCase()))) { cta = 'download_desktop'; downloadTarget = 'download_page'; }
+    if (lowerHref.includes('github.com/nexu-io/open-design/releases')) cta = 'download_desktop';
     else if (lowerHref === 'https://github.com/nexu-io/open-design' || lowerLabel.includes('star')) cta = 'star_github';
     else if (lowerHref.includes('discord.gg/')) cta = 'join_discord';
     else if (lowerHref.includes('github.com/nexu-io/open-design/issues')) cta = 'open_issue';
@@ -36,17 +31,11 @@ export function googleAnalyticsHeadHtml(
     else if (link.pathname && link.pathname.startsWith('/tutorials/')) cta = 'tutorial_cta';
 
     if (!cta) return;
-    var payload = {
+    gtag('event', 'cta_click', {
       cta_name: cta,
-      page_name: ${JSON.stringify(pageName)},
       link_url: href,
       link_text: label.slice(0, 120),
-    };
-    if (downloadTarget) payload.download_target = downloadTarget;
-    // Distinguish the hero / cta / nav desktop-download buttons.
-    var placement = link.getAttribute('data-download-placement');
-    if (placement) payload.placement = placement;
-    gtag('event', 'cta_click', payload);
+    });
   });
 </script>`;
 }

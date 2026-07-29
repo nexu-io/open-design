@@ -40,7 +40,6 @@ type SubscribeRecord = {
 const ALLOWED_ORIGINS = [
   "https://open-design.ai",
   "https://www.open-design.ai",
-  "od://app",
   "tauri://localhost",
   "http://localhost",
   "http://127.0.0.1",
@@ -416,7 +415,6 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 };
 
 export const __newsletterSubscribeTest = {
-  corsHeaders,
   persistNewsletterSubscription,
   shouldAttemptWelcomeEmail,
 };

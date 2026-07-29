@@ -2,8 +2,10 @@
 title: "31 skills, 72 systems: how the Open Design library works"
 date: 2026-05-13
 category: "Guides"
-readingTime: 8
+readingTime: 6
 summary: "A walk through the four primitives that make Open Design composable: skills, systems, adapters, and the daemon. With concrete examples of how a Markdown file becomes a pixel-perfect deliverable."
+<<<<<<< HEAD
+=======
 i18n:
   zh:
     title: "31 个 skill、72 个 system：Open Design 库是怎么运作的"
@@ -2301,6 +2303,7 @@ i18n:
       <li><a href="/blog/byok-design-workflow-claude-codex-qwen/">BYOK-робочий процес дизайну: запускайте Claude, Codex чи Qwen на власному ключі</a> — як адаптери з’єднуються з агентом, за якого ви вже платите</li>
       <li><a href="/blog/layout-layer-canvas-used-to-hide/">Рівень макета, який полотно колись приховувало</a> — чому правила постави в DESIGN.md перевершують перетягування блоків на полотні</li>
       </ul>
+>>>>>>> upstream/main
 ---
 
 Open Design is, mechanically, four primitives stacked on top of each other:
@@ -2310,15 +2313,11 @@ Open Design is, mechanically, four primitives stacked on top of each other:
 3. **Adapters** — which agent does the work
 4. **The daemon** — the loop that wires them together
 
-Each primitive is a folder of files. None of them require a database, a plugin runtime, or a hosted service. That's the whole library — there is no fifth concept hiding behind a login wall. This post walks through each in turn and shows what happens when you point your agent at a real brief. If you want the argument for *why* we shaped it this way before the *how*, start with [why we built Open Design as a skill layer, not a product](/blog/why-we-built-open-design-as-a-skill-layer/).
+Each primitive is a folder of files. None of them require a database, a plugin runtime, or a hosted service. This post walks through each in turn and shows what happens when you point your agent at a real brief.
 
 ## Skills: the unit of capability
 
-A skill is a folder containing one `SKILL.md` and zero or more supporting files. The Markdown file is the agent's contract — everything else in the folder is there to help the agent hit it.
-
-### Anatomy of a skill folder
-
-A typical skill looks like this:
+A skill is a folder containing one `SKILL.md` and zero or more supporting files. The Markdown file is the agent's contract. A typical skill looks like this:
 
 ```
 skills/
@@ -2331,37 +2330,13 @@ skills/
       pitch-deck.html
 ```
 
-`SKILL.md` declares the skill's name, the trigger conditions, the input shape, the output shape, and any inline guidance for the agent. The `templates/` and `examples/` folders are optional but pull a lot of weight: examples are known-good artifacts the agent can pattern-match against, which is the difference between "make me a deck" producing something coherent versus something improvised.
+`SKILL.md` declares the skill's name, the trigger conditions, the input shape, the output shape, and any inline guidance for the agent. When the daemon boots, it scans `skills/` and registers every folder containing a `SKILL.md`. There is no plugin manifest. There is no version field. There is the file, and the file is the source of truth.
 
-The front matter is the part the daemon reads to register the skill; the body is the part the agent reads to execute it:
-
-```
----
-name: guizang-ppt
-trigger: a deck, slide presentation, or pitch
-output: HTML (exportable to PDF, PPTX)
----
-
-Build a horizontal slide deck. One idea per slide.
-Lead with a cover, close with a call to action.
-Respect the locked-in design system for color, type, and spacing.
-Pattern-match against examples/ for layout density and rhythm.
-```
-
-### Why the file is the registry
-
-When the daemon boots, it scans `skills/` and registers every folder containing a `SKILL.md`. There is no plugin manifest. There is no version field. There is no upload step, no review queue, no build. There is the file, and the file is the source of truth. Drop a new folder in, restart the daemon, and the skill appears in the picker. Delete it, and it's gone — no orphaned registry entry pointing at code that no longer exists.
-
-We currently ship 31 skills. Some are deck generators, some produce mobile mockups, some build editorial pages, some write office documents (Word, Excel, PowerPoint). Each one is a folder you can fork, edit, or replace. Because the contract is plain text, "writing a skill" and "reading a skill to understand what it does" are the same activity — you audit it by opening it.
-
-<figure>
-  <img src="/blog/31-skills-72-systems-how-the-library-works-inline.webp" alt="A single plain-text skill card with a labeled header and a few lines, selected in a green frame on a near-white editorial ground" />
-  <figcaption>A skill is the atomic unit of capability — one plain file an agent can pick up, read, and run.</figcaption>
-</figure>
+We currently ship 31 skills. Some are deck generators, some produce mobile mockups, some build editorial pages, some write office documents (Word, Excel, PowerPoint). Each one is a folder you can fork, edit, or replace.
 
 ## Systems: the unit of taste
 
-If a skill describes *what to make*, a system describes *what it should look like*. A system is a `DESIGN.md` file plus optional reference assets. It describes a visual identity in machine-readable form:
+A system is a `DESIGN.md` file plus optional reference assets. It describes a visual identity in machine-readable form:
 
 - **Color** — OKLch values for foreground, background, accent, error, and so on
 - **Type** — font stack, weights, the type ramp, line-height conventions
@@ -2369,61 +2344,37 @@ If a skill describes *what to make*, a system describes *what it should look lik
 - **Layout posture** — grid choices, asymmetry rules, density preferences
 - **Voice** — typography of words: tone, vocabulary, sentence rhythm
 
-### A DESIGN.md is a contract, not a component library
+We ship 72 systems out of the box, including portable versions of Linear, Vercel, Stripe, Apple, Cursor, Figma, and a long tail of editorial and brand systems.
 
-In practice a `DESIGN.md` reads like a short, opinionated brand brief that an agent can't misinterpret:
-
-```
-## Color
---bg: oklch(98% 0.01 95);
---ink: oklch(20% 0.02 260);
---accent: oklch(72% 0.19 35);
-
-## Type
-Display — Albert Sans, 600, -0.02em
-Body — Albert Sans, 400, 1.7 line-height
-
-## Posture
-Generous whitespace. One accent, used sparingly. No drop shadows.
-```
-
-The colors are OKLch so they stay perceptually even across light and dark surfaces; the type ramp is a ladder the agent won't drift off of; the posture rules are the difference between ten generated screens that feel like one product and ten that feel like ten different interns. The agent reads this once and respects it for the whole job.
-
-A system is not a Figma library. There are no components, no variants, no nested instances, no binary format standing between you and the rules. It is a contract that any agent can read and any human can audit. We ship 72 systems out of the box, including portable versions of Linear, Vercel, Stripe, Apple, Cursor, Figma, and a long tail of editorial and brand systems.
-
-### Mix, fork, own
-
-Because a system is just text, you can fork one and edit it in place, ship a variant, or write your own from scratch in roughly 30 minutes of focused work. You can even mix systems mid-project — typography from Linear, color logic from Vercel, layout from an in-house spec — because nothing is locked into a proprietary binary. The split between the `skills/` and `design-systems/` folders is deliberate: capability and taste are orthogonal, so any skill can run under any system, and any system can drive any skill.
+A system is not a Figma library. There are no components, no variants, no nested instances. It is a contract that any agent can read and any human can audit. The cost of writing your own is roughly 30 minutes of focused work.
 
 ## Adapters: the unit of agent
 
-Skills and systems are inert text. Adapters are the small amount of code that connects them to the agent actually doing the work. An adapter is a short TypeScript file in `adapters/` that knows how to:
+An adapter is a small TypeScript file in `adapters/` that knows how to:
 
 - detect whether the agent is installed on the user's `$PATH`
 - start a session with that agent
 - pipe a skill invocation in
 - collect the output back
 
+<<<<<<< HEAD
+We ship adapters for 12 agents today: Claude, Codex, Gemini, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro, Qwen. The daemon auto-detects which ones are present and offers them as a dropdown on first boot.
+=======
 We ship adapters for 25 local CLI runtimes today, including Claude, Codex, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro, Qwen, and more. The daemon auto-detects which ones are present and offers them as a dropdown on first boot — you don't configure anything, you just see the agents you already have.
+>>>>>>> upstream/main
 
-| Primitive | Lives in | File | Source of truth |
-| --- | --- | --- | --- |
-| Skill | `skills/` | `SKILL.md` | the file on disk |
-| System | `design-systems/` | `DESIGN.md` | the file on disk |
-| Adapter | `adapters/` | one `.ts` file | a `register()` call |
-
-If you want to add a new adapter, the file is roughly 80 lines of TypeScript and a single `register()` call. No SDK to learn, no permission to request, no central registry to publish to. The same agent you already trust on your laptop becomes the engine — Open Design never replaces it. (The companion piece [BYOK design workflow](/blog/byok-design-workflow-claude-codex-qwen/) walks through pointing an adapter at your own key.)
+If you want to add a new adapter, the file is roughly 80 lines of TypeScript and a single `register()` call. No SDK to learn, no permission to request.
 
 ## The daemon: the loop that ties it together
 
-The daemon is the only running process in the system. It's a small Node process you start with `pnpm tools-dev`, and it does four things in sequence:
+The daemon is a small Node process you start with `pnpm tools-dev`. It does four things:
 
 1. **Detect** — scans `$PATH` for installed agents and `skills/` for installed skills, on boot
 2. **Discover** — opens an interactive question form to pin down surface, audience, tone, scale, and brand context for the current brief
 3. **Direct** — presents 5 deterministic visual directions (palette in OKLch, font stack, layout posture cues) and asks the user to pick one
 4. **Deliver** — invokes the selected skill with the locked-in system, lets the agent write to disk, and previews the output in a sandboxed iframe
 
-The whole loop fits in roughly 1500 lines of code. It is intentionally small. The cleverness is in the skills, not in the runtime — the daemon's job is to scan folders, route a brief through the four steps, and stay out of the way. That smallness is the point: there is very little here that can rot, and almost nothing that can hold your work hostage.
+The whole loop fits in roughly 1500 lines of code. It is intentionally small. The cleverness is in the skills, not in the runtime.
 
 ## What it feels like in practice
 
@@ -2436,18 +2387,12 @@ Suppose you want a launch deck for a new product feature. Here's the flow:
 5. You're shown 5 visual directions — different palettes, type pairings, layout postures. You pick one.
 6. The agent writes to disk. A sandboxed iframe shows the result. You can export to HTML, PDF, PPTX, ZIP, or Markdown.
 
-Trace it back through the primitives and the whole thing is legible: step 3 chose a **skill**, step 5 locked a **system**, the agent behind it came through an **adapter**, and the **daemon** ran the four-step loop. The output is real. The files are yours. You can edit them in any editor, hand them to a designer, or feed them back into another skill.
+The output is real. The files are yours. You can edit them in any editor, hand them to a designer, or feed them back into another skill.
 
 ## Why files, not a database
 
 Every primitive — skills, systems, adapters — is a folder of text files. There is no central database. There is no "Open Design account." There is no hosted service that has to keep working for your work to keep working.
 
-This is a deliberate trade. We give up the ability to do clever cross-user analytics, cross-project memory, or hosted collaboration. We get back: portability, longevity, auditability, and the ability for anyone to fork the entire library and ship their own variant. A `SKILL.md` written today reads identically to an agent two years from now and to a human with no tooling at all — the same can't be said of a plugin pinned to last year's API.
+This is a deliberate trade. We give up the ability to do clever cross-user analytics, cross-project memory, or hosted collaboration. We get back: portability, longevity, auditability, and the ability for anyone to fork the entire library and ship their own variant.
 
 If you've watched a generation of design tools die taking your files with them, you'll understand why this trade is worth it.
-
-## Related reading
-
-- [Why we built Open Design as a skill layer, not a product](/blog/why-we-built-open-design-as-a-skill-layer/) — the bet behind the four primitives
-- [BYOK design workflow: run Claude, Codex, or Qwen on your own key](/blog/byok-design-workflow-claude-codex-qwen/) — how adapters connect to the agent you already pay for
-- [The layout layer the canvas used to hide](/blog/layout-layer-canvas-used-to-hide/) — why posture rules in a DESIGN.md beat dragging boxes on a canvas

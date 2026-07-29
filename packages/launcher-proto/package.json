@@ -1,6 +1,6 @@
 {
   "name": "@open-design/launcher-proto",
-  "version": "0.16.1",
+  "version": "0.10.0",
   "private": true,
   "type": "module",
   "main": "./dist/index.mjs",
@@ -20,7 +20,6 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
   },
   "dependencies": {
-    "@open-design/release": "workspace:*",
     "@open-design/sidecar-proto": "workspace:*"
   },
   "devDependencies": {

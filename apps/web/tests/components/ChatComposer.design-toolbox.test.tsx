@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { createRef, type ComponentProps } from 'react';
+import type { ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ChatComposer, type ChatComposerHandle } from '../../src/components/ChatComposer';
+import { ChatComposer } from '../../src/components/ChatComposer';
 import { CONNECTORS_CHANGED_EVENT } from '../../src/components/connectors-events';
 import { composerText, flushMounts } from '../helpers/lexical-composer';
 
@@ -111,16 +111,11 @@ const GMAIL_CONNECTOR = {
 
 let fetchMock: ReturnType<typeof vi.fn>;
 
-// The design toolbox left the "+" menu; it now opens as a standalone popover
-// driven by the composer's imperative handle (the assistant "next step" card
-// calls this in the real app). Tests open it the same way.
 function renderComposer(
   overrides: Partial<ComponentProps<typeof ChatComposer>> = {},
 ) {
-  const ref = createRef<ChatComposerHandle>();
-  const result = render(
+  return render(
     <ChatComposer
-      ref={ref}
       projectId="project-1"
       projectFiles={[
         {
@@ -157,13 +152,6 @@ function renderComposer(
       {...overrides}
     />,
   );
-  return { ...result, ref };
-}
-
-function openToolbox(ref: { current: ChatComposerHandle | null }) {
-  act(() => {
-    ref.current?.openDesignToolbox();
-  });
 }
 
 beforeEach(() => {
@@ -222,10 +210,12 @@ afterEach(() => {
 describe('ChatComposer design toolbox', () => {
   it('stages a one-turn follow-up skill without patching the project skill', async () => {
     const onSend = vi.fn();
-    const { ref } = renderComposer({ onSend });
+    renderComposer({ onSend });
     await flushMounts();
 
-    openToolbox(ref);
+    // The design toolbox is now a submenu of the composer "+" menu.
+    fireEvent.click(screen.getByTestId('chat-plus-trigger'));
+    fireEvent.click(screen.getByRole('menuitem', { name: /Design toolbox/i }));
 
     await waitFor(() => expect(screen.getByText('Remove AI feel')).toBeTruthy());
     fireEvent.click(screen.getByText('Remove AI feel'));
@@ -250,7 +240,7 @@ describe('ChatComposer design toolbox', () => {
   });
 
   it('gives creative director a searchable index across all resource types', async () => {
-    const { ref } = renderComposer({
+    renderComposer({
       skills: [
         DESIGN_TASTE_SKILL,
         GSAP_SKILL,
@@ -260,7 +250,8 @@ describe('ChatComposer design toolbox', () => {
     });
     await flushMounts();
 
-    openToolbox(ref);
+    fireEvent.click(screen.getByTestId('chat-plus-trigger'));
+    fireEvent.click(screen.getByRole('menuitem', { name: /Design toolbox/i }));
 
     const search = screen.getByLabelText('Search design toolbox resources');
     fireEvent.change(search, { target: { value: 'research' } });
@@ -285,10 +276,11 @@ describe('ChatComposer design toolbox', () => {
   });
 
   it('refreshes connected connectors when connector auth changes in another surface', async () => {
-    const { ref } = renderComposer();
+    renderComposer();
     await flushMounts();
 
-    openToolbox(ref);
+    fireEvent.click(screen.getByTestId('chat-plus-trigger'));
+    fireEvent.click(screen.getByRole('menuitem', { name: /Design toolbox/i }));
     await waitFor(() => {
       expect(screen.getByText('Figma')).toBeTruthy();
     });

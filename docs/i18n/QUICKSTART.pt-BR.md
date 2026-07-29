@@ -1,6 +1,6 @@
 # Início rápido
 
-<p align="center"><a href="../../QUICKSTART.md">English</a> · <b>Português (Brasil)</b> · <a href="QUICKSTART.de.md">Deutsch</a> · <a href="QUICKSTART.fr.md">Français</a> · <a href="QUICKSTART.ja-JP.md">日本語</a> · <a href="QUICKSTART.ko.md">한국어</a> · <a href="QUICKSTART.zh-CN.md">简体中文</a> · <a href="QUICKSTART.zh-TW.md">繁體中文</a> · <a href="QUICKSTART.th.md">ภาษาไทย</a></p>
+<p align="center"><a href="../../QUICKSTART.md">English</a> · <b>Português (Brasil)</b> · <a href="QUICKSTART.de.md">Deutsch</a> · <a href="QUICKSTART.fr.md">Français</a> · <a href="QUICKSTART.ja-JP.md">日本語</a> · <a href="QUICKSTART.zh-CN.md">简体中文</a> · <a href="QUICKSTART.zh-TW.md">繁體中文</a></p>
 
 Rode o produto inteiro localmente.
 
@@ -9,7 +9,7 @@ Rode o produto inteiro localmente.
 - **Node.js:** `~24` (Node 24.x). O repo força isso via `package.json#engines`.
 - **pnpm:** `10.33.x`. O repo fixa `pnpm@10.33.2` via `packageManager`; use Corepack para selecionar a versão fixada automaticamente.
 - **SO:** macOS, Linux e WSL2 são os caminhos principais. Windows nativo costuma funcionar para a maioria dos fluxos, mas WSL2 é a base mais segura.
-- **CLI de agente local (opcional):** O Open Design mantém um registro de runtimes locais, incluindo Claude Code, Codex, Devin for Terminal, OpenCode, Cursor Agent, Qwen, Qoder CLI, GitHub Copilot CLI e outros. A lista atual fica em [`apps/daemon/src/runtimes/registry.ts`](../../apps/daemon/src/runtimes/registry.ts). Sem nenhum instalado, use um runtime BYOK configurado em Settings.
+- **CLI de agente local (opcional):** Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen, GitHub Copilot CLI etc. Sem nenhum instalado, use o modo BYOK API em Settings.
 
 `nvm` / `fnm` são ferramentas opcionais de conveniência, não são parte obrigatória do setup do projeto. Se você usa um deles, instale/selecione o Node 24 antes de rodar pnpm:
 
@@ -45,11 +45,16 @@ Para a shell desktop e todos os sidecars gerenciados em background:
 pnpm tools-dev # starts daemon + web + desktop in the background
 ```
 
-No primeiro carregamento, o app detecta os runtimes locais disponíveis e também oferece runtimes BYOK configurados em Settings. Escolha um runtime, uma design template e um design system, digite um prompt e clique em **Send**. Runtimes locais estruturados escrevem os arquivos canônicos do projeto e transmitem eventos de arquivo/ferramenta; o workspace de arquivos e o preview se atualizam a partir dessas escritas. Execuções somente texto e BYOK retornam, em vez disso, um bloco `<artifact>` completo para o host parsear. Antes de documentar ou alterar qualquer caminho de armazenamento de artifact, você DEVE ler o `AGENTS.md` na raiz, seção **Daemon data directory contract**.
+No primeiro carregamento, o app detecta o CLI de agente instalado (Claude Code / Codex / Devin for Terminal / Gemini / OpenCode / Cursor Agent / Qwen), seleciona automaticamente e usa por padrão o skill `web-prototype` + design system `Neutral Modern`. Digite um prompt e clique em **Send**. O agente faz streaming no painel da esquerda; a tag `<artifact>` é parseada e o HTML é renderizado ao vivo na direita. Ao terminar, clique em **Save to disk** para persistir o artifact em `./.od/artifacts/<timestamp>-<slug>/index.html`.
 
-O catálogo **Design systems** é carregado diretamente dos pacotes `DESIGN.md` em [`design-systems/`](../../design-systems/). Escolha um para aplicar a linguagem visual da marca ao artefato.
+O dropdown **Design system** vem com **129 design systems** — 2 starters escritos à mão (Neutral Modern, Warm Editorial), 70 sistemas de produto bundled e 57 design skills vindos de [`awesome-design-skills`](https://github.com/bergside/awesome-design-skills). Escolha um para vestir cada protótipo na estética daquela marca.
 
-O catálogo **Templates** vem de [`design-templates/`](../../design-templates/) e agrupa formatos de prototype, deck, documento, imagem, vídeo e áudio. [`skills/`](../../skills/) fica reservado às capacidades funcionais que o agente invoca durante o trabalho. Combine uma template com um design system para produzir um artefato na linguagem visual escolhida.
+O dropdown **Skill** agrupa por modo (Prototype / Deck / Template / Design system) e exibe o skill default de cada modo com um sufixo `· default`. Skills bundled:
+
+- **Prototype** — `web-prototype` (genérico), `saas-landing`, `dashboard`, `pricing-page`, `docs-page`, `blog-post`, `mobile-app`.
+- **Deck / PPT** — `simple-deck` (swipe horizontal de arquivo único) e `magazine-web-ppt` (o bundle `guizang-ppt` de [`op7418/guizang-ppt-skill`](https://github.com/op7418/guizang-ppt-skill) — default do modo deck, traz seus próprios assets/template + 4 referências). Skills com arquivos auxiliares ganham um preâmbulo automático "Skill root (absolute)" para que o agente resolva `assets/template.html` e `references/*.md` contra o caminho real em disco em vez do CWD.
+
+Combine um skill com um design system e um único prompt produz um protótipo ou deck com layout adequado, na linguagem visual escolhida.
 
 ## Outros scripts
 
@@ -180,7 +185,7 @@ OPEN_DESIGN_MEM_LIMIT=384m
 OPEN_DESIGN_ALLOWED_ORIGINS=https://yourdomain.com
 
 # Tag da imagem Docker
-OPEN_DESIGN_IMAGE=ghcr.io/nexu-io/od:latest
+OPEN_DESIGN_IMAGE=docker.io/vanjayak/open-design:latest
 
 # Token de API obrigatório para segurança do daemon
 # Gere um com: openssl rand -hex 32
@@ -191,9 +196,25 @@ OD_API_TOKEN=
 
 ## Armazenamento persistente
 
-Antes de documentar, alterar ou escolher qualquer caminho persistente de armazenamento do daemon,
-você DEVE ler o `AGENTS.md` na raiz, seção **Daemon data directory contract**.
-Este Quickstart NÃO DEVE repetir esse contrato nem definir caminhos de armazenamento.
+O Open Design armazena projetos e dados SQLite dentro de um volume Docker:
+
+```text
+open_design_data
+```
+
+O volume é montado em:
+
+```text
+/app/.od
+```
+
+Os dados persistem entre reinicializações de contêineres e atualizações de imagem.
+
+Inspecione o volume:
+
+```bash
+docker volume inspect open-design_open_design_data
+```
 
 ---
 
@@ -262,17 +283,17 @@ location /api/ {
 
 | Modo | Valor no picker | Como uma requisição flui |
 |---|---|---|
-| **Local CLI** (default quando o daemon detecta um agente) | "Local CLI" | Frontend → daemon `/api/chat` → `spawn(<agent>, ...)` → eventos estruturados de ferramenta/arquivo via SSE → arquivos do projeto → preview. CLIs plain-stream usam o caminho text-artifact. |
-| **API mode** (fallback / sem CLI) | "Anthropic API" / "OpenAI API" / "Atlas Cloud" / "Azure OpenAI" / "Google Gemini" | Frontend → daemon `/api/proxy/{provider}/stream` → SSE do provider normalizado para `delta/end/error` → parser de `<artifact>` → preview |
+| **Local CLI** (default quando o daemon detecta um agente) | "Local CLI" | Frontend → daemon `/api/chat` → `spawn(<agent>, ...)` → stdout → SSE → parser de artifact → preview |
+| **API mode** (fallback / sem CLI) | "Anthropic API" / "OpenAI API" / "Azure OpenAI" / "Google Gemini" | Frontend → daemon `/api/proxy/{provider}/stream` → SSE do provider normalizado para `delta/end/error` → parser de artifact → preview |
 
-Os dois modos terminam no mesmo workspace de arquivos e preview sandboxed, mas usam contratos de entrega diferentes. Runtimes com filesystem escrevem os arquivos canônicos e não repetem seu código-fonte em `<artifact>`. Execuções plain/somente texto e BYOK não têm ferramentas de arquivo; o resultado canônico é o HTML completo em `<artifact>`. O perfil de execução é selecionado pelo transporte do runtime.
+Os dois modos alimentam o **mesmo** parser de `<artifact>` e o **mesmo** iframe sandboxed. A única diferença é o transporte e a entrega do system prompt (CLIs locais não têm um canal de sistema separado, então o prompt composto é dobrado dentro da mensagem do usuário).
 
 ## Composição de prompt
 
 A cada envio, o app monta um system prompt a partir de três camadas e o envia ao provider:
 
 ```
-BASE_SYSTEM_PROMPT   (entrega por arquivo ou <artifact> conforme o perfil de execução)
+BASE_SYSTEM_PROMPT   (output contract: wrap in <artifact>, no code fences)
    + active design system body  (DESIGN.md — palette/type/layout)
    + active skill body          (SKILL.md — workflow and output rules)
 ```
@@ -288,12 +309,9 @@ open-design/
 │   │   └── src/
 │   │       ├── cli.ts             # `od` bin entry
 │   │       ├── server.ts          # /api/* + static serving
-│   │       ├── agents.ts          # exports de compatibilidade dos módulos de runtime
-│   │       ├── runtimes/
-│   │       │   ├── registry.ts    # registro dos runtimes suportados
-│   │       │   └── defs/          # definições de launch e argumentos por runtime
+│   │       ├── agents.ts          # PATH scanner for claude/codex/devin/gemini/opencode/cursor-agent/qwen/copilot
 │   │       ├── skills.ts          # SKILL.md loader (frontmatter parser)
-│   │       └── design-systems/    # DESIGN.md loader e serviços
+│   │       └── design-systems.ts  # DESIGN.md loader
 │   │   ├── sidecar/           # tools-dev daemon sidecar wrapper
 │   │   └── tests/             # daemon package tests
 │   ├── web/                   # Next.js 16 App Router + React client
@@ -302,7 +320,7 @@ open-design/
 │       │   ├── App.tsx        # orchestrates mode / skill / DS pickers + send
 │       │   ├── providers/     # daemon + BYOK API transports
 │       │   ├── prompts/       # system, discovery, directions, deck framework
-│       │   ├── artifacts/     # parsing de text-artifact + manifests de artifacts
+│       │   ├── artifacts/     # streaming <artifact> parser + manifests
 │       │   ├── runtime/       # iframe srcdoc, markdown, export helpers
 │       │   └── state/         # localStorage + daemon-backed project state
 │       ├── sidecar/           # tools-dev web sidecar wrapper
@@ -315,28 +333,47 @@ open-design/
 │   └── platform/              # generic process/platform primitives
 ├── tools/dev/                 # `pnpm tools-dev` lifecycle and inspect CLI
 ├── e2e/                       # Playwright UI + external integration/Vitest harness
-├── skills/                    # capacidades funcionais invocadas durante o trabalho
-├── design-templates/          # catálogo de renderização para prototypes, decks, docs e mídia
-├── design-systems/            # pacotes de marca baseados em DESIGN.md
+├── skills/                    # SKILL.md — drops in from any Claude Code skill repo
+│   ├── web-prototype/         # generic single-screen prototype (default for prototype mode)
+│   ├── saas-landing/          # marketing page (hero / features / pricing / CTA)
+│   ├── dashboard/             # admin / analytics dashboard
+│   ├── pricing-page/          # standalone pricing + comparison
+│   ├── docs-page/             # 3-column documentation layout
+│   ├── blog-post/             # editorial long-form
+│   ├── mobile-app/            # phone-frame single screen
+│   ├── simple-deck/           # minimal horizontal-swipe deck
+│   └── guizang-ppt/           # magazine-web-ppt — bundled deck/PPT default
+│       ├── SKILL.md
+│       ├── assets/template.html
+│       └── references/{themes,layouts,components,checklist}.md
+├── design-systems/            # DESIGN.md — 9-section schema (awesome-claude-design)
+│   ├── default/               # Neutral Modern (starter)
+│   ├── warm-editorial/        # Warm Editorial (starter)
+│   ├── README.md              # catalog overview
+│   └── …129 systems           # 2 starters · 70 product systems · 57 design skills
 ├── scripts/sync-design-systems.ts    # re-import from upstream getdesign tarball
 ├── docs/                      # product vision + spec
+├── .od/                       # runtime data (gitignored, auto-created)
+│   ├── app.sqlite              #   projects / conversations / messages / tabs
+│   ├── artifacts/              #   one-off "Save to disk" renders
+│   └── projects/<id>/          #   per-project working dir + agent cwd
 ├── pnpm-workspace.yaml        # apps/* + packages/* + tools/* + e2e
 └── package.json               # root quality scripts + `od` bin
 ```
 
 ## Solução de problemas
 
-- **"no agents found on PATH"** — instale um dos runtimes locais registrados em [`apps/daemon/src/runtimes/registry.ts`](../../apps/daemon/src/runtimes/registry.ts), confirme que o executável está visível para o daemon e use **Rescan** em **Settings → Execution mode**. Ou configure um runtime BYOK em Settings.
-- **daemon 500 em /api/chat** — confira o terminal do daemon para a tail de stderr; geralmente o CLI rejeitou os args. CLIs diferentes aceitam formatos de argv diferentes; veja a definição correspondente em `apps/daemon/src/runtimes/defs/` se precisar ajustar.
+- **"no agents found on PATH"** — instale um destes: `claude`, `codex`, `devin`, `gemini`, `opencode`, `cursor-agent`, `qwen`, `copilot`. Ou troque para o modo API em Settings e cole uma chave de provider.
+- **daemon 500 em /api/chat** — confira o terminal do daemon para a tail de stderr; geralmente o CLI rejeitou os args. CLIs diferentes aceitam formatos de argv diferentes; veja `buildArgs` em `apps/daemon/src/agents.ts` se precisar ajustar.
 - **geração de mídia diz que `OD_BIN` está faltando ou que a URL do daemon é `:0`** — rode as verificações do dispatcher de mídia acima. Não retome a sessão antiga do CLI; reabra o projeto pelo app Open Design para o daemon injetar variáveis `OD_*` novas.
 - **Codex carrega muito contexto de plugin** — suba o Open Design com `OD_CODEX_DISABLE_PLUGINS=1 pnpm tools-dev` para que processos Codex spawnados pelo daemon rodem com `--disable plugins`.
-- **artifact nunca renderiza** — primeiro identifique o perfil de entrega. Em um runtime local com filesystem, confirme que o agente criou um arquivo de projeto que pode ser pré-visualizado e que os eventos de arquivo chegaram ao daemon; o código-fonte não deve estar em `<artifact>`. Em execução plain/somente texto ou BYOK, confirme um único bloco `<artifact>` completo e procure no log do daemon a primeira fronteira que falhou.
+- **artifact nunca renderiza** — o modelo emitiu texto sem empacotar em `<artifact>`. Confirme que o system prompt está chegando (cheque o log do daemon) e considere trocar para um modelo mais capaz ou um skill mais estrito.
 
 ## Voltando à visão
 
 Este Início rápido é a semente executável da spec em [`docs/`](../../docs/). A spec descreve para onde isso evolui (veja [`docs/roadmap.md`](../../docs/roadmap.md)). Destaques:
 
 - `docs/architecture.md` descreve a stack entregue: Next.js 16 App Router na frente, daemon local atrás, e os rewrites de `apps/web/next.config.ts` em dev mantendo o navegador conversando com a mesma superfície `/api`.
-- `docs/skills-protocol.md` descreve o frontmatter atual de `SKILL.md`/`od:` e a separação entre skills funcionais e templates de renderização. O parser e a normalização em `apps/daemon/src/skills.ts` são a fonte de verdade da implementação.
-- `docs/agent-adapters.md` descreve o contrato dos adapters. Configurações de launch, argumentos, modelos e stream específicas de cada runtime ficam em `apps/daemon/src/runtimes/defs/`, com registro em `apps/daemon/src/runtimes/registry.ts`; `apps/daemon/src/agents.ts` é uma superfície de exports de compatibilidade.
-- `docs/modes.md` distingue as seis abas de New Project dos sete modos normalizados do registro (`prototype`, `deck`, `template`, `design-system`, `image`, `video`, `audio`).
+- `docs/skills-protocol.md` descreve o frontmatter `od:` completo (inputs tipados, sliders, gating de capacidades). Este MVP lê apenas `name` / `description` / `triggers` / `od.mode` / `od.design_system.requires` — estenda `apps/daemon/src/skills.ts` para cobrir o resto.
+- `docs/agent-adapters.md` prevê dispatch mais rico (detecção de capacidade, tool-calls em streaming). Nosso `apps/daemon/src/agents.ts` é um dispatcher mínimo — suficiente para provar a fiação.
+- `docs/modes.md` lista quatro modos: prototype / deck / template / design-system. Entregamos skills para os dois primeiros; o picker já filtra por `mode`.

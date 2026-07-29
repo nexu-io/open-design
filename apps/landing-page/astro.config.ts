@@ -1,8 +1,9 @@
 import sitemap, { type SitemapItem } from '@astrojs/sitemap';
 import { appendFileSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import type { AstroIntegration, AstroUserConfig } from 'astro';
+import type { AstroUserConfig } from 'astro';
 import { defineConfig } from 'astro/config';
+import type { AstroIntegration } from 'astro';
 import {
   DEFAULT_LOCALE,
   LANDING_LOCALES,
@@ -167,38 +168,8 @@ export default defineConfig({
   trailingSlash: 'always',
   vite: {
     define: {
-      // Staging / PR-preview builds set OD_LANDING_NOINDEX=1. SeoHead reads
-      // this compile-time constant (frontmatter can't read process.env).
       __OD_LANDING_NOINDEX__: JSON.stringify(landingNoindex),
     },
-    server: {
-      // The project path contains a space + emoji ("open design-👌"), which can
-      // break native fsevents file-watching and leave the dev server serving
-      // stale inlined CSS. Poll instead so edits (globals.css etc.) reliably
-      // hot-reload without needing a manual restart.
-      watch: { usePolling: true, interval: 250 },
-    },
-    plugins: [
-      {
-        // `/community/` is a static page served verbatim from
-        // `public/community/index.html`. Cloudflare Pages maps directory
-        // URLs to their index.html in production, but the Vite dev server
-        // does not — without this rewrite every /community/ link 404s
-        // locally. Dev-only; build output is untouched.
-        name: 'community-static-dir-index',
-        apply: 'serve' as const,
-        configureServer(server) {
-          server.middlewares.use((req, _res, next) => {
-            const [path = '', query] = (req.url ?? '').split('?');
-            if (path.startsWith('/community') && !path.includes('.')) {
-              const rewritten = `${path.endsWith('/') ? path : `${path}/`}index.html`;
-              req.url = query ? `${rewritten}?${query}` : rewritten;
-            }
-            next();
-          });
-        },
-      },
-    ],
   },
   build: {
     // Inline every emitted stylesheet directly into the HTML <head>.
@@ -250,15 +221,6 @@ export default defineConfig({
       filter: (page) => {
         if (page.includes('/og/')) return false;
         const path = new URL(page).pathname;
-        // Legacy catalog routes (/skills, /systems, /templates) now live
-        // under /plugins/* and are 301-redirected by `public/_redirects`,
-        // and legacy region-cased locale codes (zh-CN, zh-TW, es-ES, pt-BR)
-        // 301 to their canonical lowercase locale (/zh/, /es/). Their old
-        // page routes still build, so without this guard `@astrojs/sitemap`
-        // lists ~460 redirecting URLs. A sitemap must carry only final 200
-        // canonical URLs — never redirects — so drop these legacy prefixes.
-        if (/^\/(skills|systems|templates)\//.test(path)) return false;
-        if (/^\/(zh-CN|zh-TW|es-ES|pt-BR)\//.test(path)) return false;
         const localeMatch = path.match(/^\/([a-z]{2}(?:-[a-z]{2})?)\//);
         if (localeMatch) {
           const code = localeMatch[1];
@@ -297,10 +259,6 @@ export default defineConfig({
         } else if (
           path === '/craft/' ||
           path === '/plugins/' ||
-          // Canonical section hubs that the legacy /skills, /systems, and
-          // /templates roots now 301 to — keep them on the elevated catalog
-          // crawl hint (0.7 / weekly) rather than letting them fall through
-          // to the generic 0.5 / monthly default.
           path === '/plugins/skills/' ||
           path === '/plugins/systems/' ||
           path === '/plugins/templates/'

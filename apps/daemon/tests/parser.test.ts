@@ -11,7 +11,7 @@ import {
 
 function fixture(name: string): string {
   return readFileSync(
-    join(__dirname, '..', 'src', 'critique', '__fixtures__', 'v1', name),
+    join(__dirname, 'critique', '__fixtures__', 'v1', name),
     'utf8',
   );
 }

@@ -5,13 +5,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   ProjectView,
   computeProducedFiles,
-  computeTraceObjectFiles,
-  extractTouchedFilePathsFromEvents,
-  findSameTurnHtmlWriteForRecoveredArtifact,
   mergeRecoveredArtifact,
-  resolveAgentTouchedFileNames,
 } from '../../src/components/ProjectView';
-import { resolvePersistedArtifactHtml } from '../../src/artifacts/recover';
 import type { ChatMessage } from '../../src/types';
 
 const listConversations = vi.fn();
@@ -28,23 +23,12 @@ const fetchChatRunStatus = vi.fn();
 const listActiveChatRuns = vi.fn();
 const listProjectRuns = vi.fn();
 const reattachDaemonRun = vi.fn();
-const publishDaemonRunFinishedEvent = vi.fn();
 const streamViaDaemon = vi.fn();
 const saveMessage = vi.fn();
 const createConversation = vi.fn();
 const patchConversation = vi.fn();
 const patchProject = vi.fn();
 const saveTabs = vi.fn();
-
-const chatPaneHarness = vi.hoisted(() => ({
-  onSend: null as null | ((
-    prompt: string,
-    attachments: unknown[],
-    commentAttachments?: unknown[],
-    meta?: unknown,
-  ) => unknown),
-  onStop: null as null | (() => void),
-}));
 
 vi.mock('../../src/i18n', () => ({
   // ProjectView calls useI18n() (for locale/t); mock it like the other
@@ -62,12 +46,9 @@ vi.mock('../../src/providers/anthropic', () => ({
 }));
 
 vi.mock('../../src/providers/daemon', () => ({
-  GENERIC_DAEMON_DISCONNECT_CODE: 'GENERIC_DAEMON_DISCONNECT',
-  GENERIC_DAEMON_DISCONNECT_MESSAGE: 'daemon stream disconnected before run completed',
   fetchChatRunStatus: (...args: unknown[]) => fetchChatRunStatus(...args),
   listActiveChatRuns: (...args: unknown[]) => listActiveChatRuns(...args),
   listProjectRuns: (...args: unknown[]) => listProjectRuns(...args),
-  publishDaemonRunFinishedEvent: (...args: unknown[]) => publishDaemonRunFinishedEvent(...args),
   reattachDaemonRun: (...args: unknown[]) => reattachDaemonRun(...args),
   streamViaDaemon: (...args: unknown[]) => streamViaDaemon(...args),
 }));
@@ -95,7 +76,6 @@ vi.mock('../../src/router', () => ({
 }));
 
 vi.mock('../../src/state/projects', () => ({
-  cacheTabsLocally: vi.fn((projectId: string, tabs: unknown) => ({ projectId, tabs })),
   createConversation: (...args: unknown[]) => createConversation(...args),
   deleteConversation: vi.fn(),
   getTemplate: (...args: unknown[]) => getTemplate(...args),
@@ -104,7 +84,6 @@ vi.mock('../../src/state/projects', () => ({
   loadTabs: (...args: unknown[]) => loadTabs(...args),
   patchConversation: (...args: unknown[]) => patchConversation(...args),
   patchProject: (...args: unknown[]) => patchProject(...args),
-  persistTabsToDaemonNow: vi.fn(),
   saveMessage: (...args: unknown[]) => saveMessage(...args),
   saveTabs: (...args: unknown[]) => saveTabs(...args),
 }));
@@ -118,21 +97,10 @@ vi.mock('../../src/components/AvatarMenu', () => ({
 }));
 
 vi.mock('../../src/components/ChatPane', () => ({
-  ChatPane: ({
-    onSend,
-    onStop,
-  }: {
-    onSend: typeof chatPaneHarness.onSend;
-    onStop: typeof chatPaneHarness.onStop;
-  }) => {
-    chatPaneHarness.onSend = onSend;
-    chatPaneHarness.onStop = onStop;
-    return null;
-  },
+  ChatPane: () => null,
 }));
 
 vi.mock('../../src/components/FileWorkspace', () => ({
-  DESIGN_SYSTEM_TAB: '__design_system__',
   FileWorkspace: () => null,
 }));
 
@@ -212,93 +180,6 @@ describe('computeProducedFiles', () => {
   });
 });
 
-describe('computeTraceObjectFiles', () => {
-  it('includes existing files touched by successful write tools', () => {
-    const before = ['existing.html'];
-    const next = [
-      { name: 'existing.html', path: 'existing.html', size: 10, mtime: 2, kind: 'html', mime: 'text/html' },
-      { name: 'new.pptx', path: 'new.pptx', size: 20, mtime: 3, kind: 'presentation', mime: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' },
-    ];
-
-    const files = computeTraceObjectFiles(before, next as never, ['existing.html']);
-
-    expect(files?.map((file) => [file.name, file.traceObjectReason])).toEqual([
-      ['new.pptx', 'new'],
-      ['existing.html', 'modified'],
-    ]);
-  });
-
-  it('ignores slash-containing external paths that only share a basename with a project file', () => {
-    const before = ['existing.html'];
-    const next = [
-      { name: 'existing.html', path: 'existing.html', size: 10, mtime: 2, kind: 'html', mime: 'text/html' },
-    ];
-
-    const files = computeTraceObjectFiles(before, next as never, ['/tmp/existing.html'], 'project-1');
-
-    expect(files).toEqual([]);
-  });
-
-  it('ignores managed-project aliases that belong to a different project', () => {
-    const before = ['existing.html'];
-    const next = [
-      { name: 'existing.html', path: 'existing.html', size: 10, mtime: 2, kind: 'html', mime: 'text/html' },
-    ];
-
-    const files = computeTraceObjectFiles(
-      before,
-      next as never,
-      ['.od/projects/project-2/existing.html'],
-      'project-1',
-    );
-
-    expect(files).toEqual([]);
-  });
-
-  it('includes existing files touched through the current managed-project alias', () => {
-    const before = ['existing.html'];
-    const next = [
-      { name: 'existing.html', path: 'existing.html', size: 10, mtime: 2, kind: 'html', mime: 'text/html' },
-    ];
-    const touchedPaths = ['.od/projects/project-1/existing.html'];
-
-    const files = computeTraceObjectFiles(before, next as never, touchedPaths, 'project-1');
-
-    expect(files?.map((file) => [file.name, file.traceObjectReason])).toEqual([
-      ['existing.html', 'modified'],
-    ]);
-    expect(resolveAgentTouchedFileNames(touchedPaths, next as never, 'project-1')).toEqual(
-      new Set(['existing.html']),
-    );
-  });
-
-  it('recovers successful write paths from persisted tool events', () => {
-    const touched = extractTouchedFilePathsFromEvents([
-      { kind: 'tool_use', id: 'tool-1', name: 'Edit', input: { file_path: 'existing.html' } },
-      { kind: 'tool_result', toolUseId: 'tool-1', isError: false },
-      { kind: 'tool_use', id: 'tool-2', name: 'Write', input: { file_path: 'failed.html' } },
-      { kind: 'tool_result', toolUseId: 'tool-2', isError: true },
-    ] as never);
-
-    expect(touched).toEqual(['existing.html']);
-  });
-
-  it('recovers supported write/edit aliases with path inputs from persisted tool events', () => {
-    const touched = extractTouchedFilePathsFromEvents([
-      { kind: 'tool_use', id: 'tool-1', name: 'create_file', input: { path: 'created.html' } },
-      { kind: 'tool_result', toolUseId: 'tool-1', isError: false },
-      { kind: 'tool_use', id: 'tool-2', name: 'str_replace_edit', input: { path: 'edited.html' } },
-      { kind: 'tool_result', toolUseId: 'tool-2', isError: false },
-      { kind: 'tool_use', id: 'tool-3', name: 'MultiEdit', input: { path: 'multi.html' } },
-      { kind: 'tool_result', toolUseId: 'tool-3', isError: false },
-      { kind: 'tool_use', id: 'tool-4', name: 'multi_edit', input: { path: 'failed.html' } },
-      { kind: 'tool_result', toolUseId: 'tool-4', isError: true },
-    ] as never);
-
-    expect(touched).toEqual(['created.html', 'edited.html', 'multi.html']);
-  });
-});
-
 describe('mergeRecoveredArtifact', () => {
   const fileA = { name: 'helper.txt', path: '/p/helper.txt', size: 1, updatedAt: 0 };
   const artifact = { name: 'deck.html', path: '/p/deck.html', size: 9, updatedAt: 0 };
@@ -319,137 +200,10 @@ describe('mergeRecoveredArtifact', () => {
   });
 });
 
-describe('findSameTurnHtmlWriteForRecoveredArtifact', () => {
-  const html = '<!doctype html><html><head><title>Demo</title></head><body><main><h1>Demo</h1></main></body></html>';
-
-  it('returns the same-turn HTML file when fallback content matches a Write output', async () => {
-    const indexFile = {
-      name: 'index.html',
-      path: 'index.html',
-      size: html.length,
-      mtime: 2,
-      kind: 'html',
-      mime: 'text/html',
-    };
-    const readProjectHtml = vi.fn(async (name: string) =>
-      name === 'index.html' ? `\uFEFF${html}\r\n` : null,
-    );
-
-    await expect(findSameTurnHtmlWriteForRecoveredArtifact({
-      artifactHtml: `\n${html}\n`,
-      producedFiles: [indexFile] as never,
-      readProjectHtml,
-    })).resolves.toBe(indexFile);
-  });
-
-  // #4308: agent-agnostic recovery is the *normalized exact content match* —
-  // it already binds for any filesystem-backed CLI (not just Claude) when the
-  // written file and the echoed artifact are the same document. We deliberately
-  // do NOT bind on a content *mismatch*: a same-turn HTML file whose content
-  // differs from the echo is a genuinely different document and must persist on
-  // its own. (A blind single-file bind also mis-fired across queued runs, where
-  // a prior run's artifact is still reported as "produced this turn" — the
-  // app-restoration regression that motivated dropping it.)
-  it('does not bind a single same-turn HTML file whose content differs from the echo', async () => {
-    const indexFile = {
-      name: 'index.html',
-      path: 'index.html',
-      size: html.length,
-      mtime: 2,
-      kind: 'html',
-      mime: 'text/html',
-    };
-
-    await expect(findSameTurnHtmlWriteForRecoveredArtifact({
-      artifactHtml: html,
-      producedFiles: [indexFile] as never,
-      readProjectHtml: vi.fn(async () => html.replace('Demo</h1>', 'Other</h1>')),
-    })).resolves.toBeNull();
-  });
-
-  // ...and never bind when several same-turn HTML files all differ from the
-  // echo — binding the wrong one could clobber the user's other in-flight work.
-  it('avoids selection when multiple same-turn HTML files differ from the echo', async () => {
-    const a = { name: 'a.html', path: 'a.html', kind: 'html', mime: 'text/html' };
-    const b = { name: 'b.html', path: 'b.html', kind: 'html', mime: 'text/html' };
-
-    await expect(findSameTurnHtmlWriteForRecoveredArtifact({
-      artifactHtml: html,
-      producedFiles: [a, b] as never,
-      readProjectHtml: vi.fn(async (name: string) =>
-        name === 'a.html' ? html.replace('Demo', 'AAA') : html.replace('Demo', 'BBB'),
-      ),
-    })).resolves.toBeNull();
-  });
-
-  // When multiple same-turn HTML files exist, bind the one whose normalized
-  // content matches the echo — unambiguous regardless of which agent ran.
-  it('binds the exact normalized match among multiple same-turn HTML files', async () => {
-    const a = { name: 'a.html', path: 'a.html', kind: 'html', mime: 'text/html' };
-    const b = { name: 'b.html', path: 'b.html', kind: 'html', mime: 'text/html' };
-
-    await expect(findSameTurnHtmlWriteForRecoveredArtifact({
-      artifactHtml: html,
-      producedFiles: [a, b] as never,
-      readProjectHtml: vi.fn(async (name: string) =>
-        name === 'b.html' ? `﻿${html}\r\n` : html.replace('Demo', 'AAA'),
-      ),
-    })).resolves.toBe(b);
-  });
-
-  it('ignores non-HTML same-turn files', async () => {
-    const readProjectHtml = vi.fn(async () => html);
-
-    await expect(findSameTurnHtmlWriteForRecoveredArtifact({
-      artifactHtml: html,
-      producedFiles: [{ name: 'notes.md', path: 'notes.md', kind: 'text' }] as never,
-      readProjectHtml,
-    })).resolves.toBeNull();
-    expect(readProjectHtml).not.toHaveBeenCalled();
-  });
-});
-
-// #4318: when the model emits a prose-only <artifact> next to a complete
-// same-turn <html> document, the call site must resolve the persisted HTML
-// (recovering the preceding document) BEFORE the dedup lookup. Feeding the raw
-// prose summary makes the normalized exact-match miss the same-turn Write file
-// and the recovered document persists a second time as a duplicate artifact.
-describe('same-turn dedup for recovered prose-only artifacts (#4318)', () => {
-  const realHtml = '<!doctype html><html><head><title>Recovered</title></head><body><main><h1>Recovered</h1></main></body></html>';
-  const proseSummary = '(The complete document above is the delivered artifact.)';
-  const sourceText = `${realHtml}\n<artifact identifier="page" type="text/html">${proseSummary}</artifact>`;
-  const indexFile = { name: 'index.html', path: 'index.html', kind: 'html', mime: 'text/html' };
-  const readProjectHtml = () =>
-    vi.fn(async (name: string) => (name === 'index.html' ? realHtml : null));
-
-  it('binds the same-turn HTML write once the persisted HTML is resolved', async () => {
-    const persistedHtml = resolvePersistedArtifactHtml({
-      artifactHtml: proseSummary,
-      identifier: 'page',
-      sourceText,
-    });
-    await expect(findSameTurnHtmlWriteForRecoveredArtifact({
-      artifactHtml: persistedHtml,
-      producedFiles: [indexFile] as never,
-      readProjectHtml: readProjectHtml(),
-    })).resolves.toBe(indexFile);
-  });
-
-  it('misses the match when fed the raw prose summary (the pre-fix regression)', async () => {
-    await expect(findSameTurnHtmlWriteForRecoveredArtifact({
-      artifactHtml: proseSummary,
-      producedFiles: [indexFile] as never,
-      readProjectHtml: readProjectHtml(),
-    })).resolves.toBeNull();
-  });
-});
-
 describe('ProjectView daemon reattach restore', () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
-    chatPaneHarness.onSend = null;
-    chatPaneHarness.onStop = null;
     window.sessionStorage.clear();
   });
 
@@ -541,9 +295,6 @@ describe('ProjectView daemon reattach restore', () => {
     renderProjectView();
 
     await waitFor(() => expect(reattachDaemonRun).toHaveBeenCalledTimes(1));
-    expect(reattachDaemonRun).toHaveBeenCalledWith(expect.objectContaining({
-      publishRunFinishedEvent: true,
-    }));
     expect(capturedHandlers).not.toBeNull();
 
     capturedHandlers!.onDelta('hello ');
@@ -558,490 +309,6 @@ describe('ProjectView daemon reattach restore', () => {
         .at(-1);
       expect(lastWithProduced?.producedFiles?.map((f) => f.name)).toEqual(['new.pptx']);
       expect(lastWithProduced?.runStatus).toBe('succeeded');
-    });
-  });
-
-  it('does not publish a run-finished event while replaying a historical success', async () => {
-    const startedAt = Date.now() - 10_000;
-    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
-    listMessages.mockResolvedValue([
-      {
-        id: 'msg-historical-replay',
-        role: 'assistant',
-        content: '',
-        createdAt: startedAt,
-        startedAt,
-        runId: 'run-historical-replay',
-        runStatus: 'succeeded',
-        preTurnFileNames: [],
-      } satisfies ChatMessage,
-    ]);
-    fetchPreviewComments.mockResolvedValue([]);
-    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
-    fetchProjectFiles.mockResolvedValue([]);
-    fetchLiveArtifacts.mockResolvedValue([]);
-    fetchSkill.mockResolvedValue(null);
-    fetchDesignSystem.mockResolvedValue(null);
-    getTemplate.mockResolvedValue(null);
-    fetchChatRunStatus.mockResolvedValue({
-      id: 'run-historical-replay',
-      status: 'succeeded',
-      createdAt: startedAt,
-      updatedAt: startedAt + 1_000,
-      exitCode: 0,
-      signal: null,
-      artifactCount: 1,
-    });
-    reattachDaemonRun.mockImplementation(async () => new Promise<void>(() => {}));
-
-    renderProjectView();
-
-    await waitFor(() => expect(reattachDaemonRun).toHaveBeenCalledTimes(1));
-    expect(reattachDaemonRun).toHaveBeenCalledWith(expect.objectContaining({
-      publishRunFinishedEvent: false,
-    }));
-    expect(publishDaemonRunFinishedEvent).not.toHaveBeenCalled();
-  });
-
-  it('finalizes reattached telemetry only after trace object files are restored', async () => {
-    const startedAt = Date.now();
-    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
-    listMessages.mockResolvedValue([
-      {
-        id: 'msg-reattach-trace',
-        role: 'assistant',
-        content: '',
-        createdAt: startedAt,
-        startedAt,
-        runId: 'run-trace',
-        runStatus: 'running',
-        preTurnFileNames: ['existing.html'],
-        events: [
-          {
-            kind: 'tool_use',
-            id: 'tool-edit',
-            name: 'str_replace_edit',
-            input: { path: 'existing.html' },
-          },
-          { kind: 'tool_result', toolUseId: 'tool-edit', content: '', isError: false },
-        ],
-      } satisfies ChatMessage,
-    ]);
-    fetchPreviewComments.mockResolvedValue([]);
-    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
-    const beforeFiles = [
-      { name: 'existing.html', path: '/p/existing.html', size: 1, updatedAt: 0 },
-    ];
-    const afterFiles = [
-      { name: 'existing.html', path: '/p/existing.html', size: 2, updatedAt: 1 },
-    ];
-    fetchProjectFiles.mockResolvedValueOnce(beforeFiles).mockResolvedValue(afterFiles);
-    fetchLiveArtifacts.mockResolvedValue([]);
-    fetchSkill.mockResolvedValue(null);
-    fetchDesignSystem.mockResolvedValue(null);
-    getTemplate.mockResolvedValue(null);
-    fetchChatRunStatus.mockResolvedValue({
-      id: 'run-trace',
-      status: 'running',
-      createdAt: startedAt,
-      updatedAt: startedAt,
-      exitCode: null,
-      signal: null,
-    });
-    listActiveChatRuns.mockResolvedValue([]);
-
-    let captured: {
-      onAgentEvent: (ev: unknown) => void;
-      onDone: () => void;
-    } | null = null;
-    reattachDaemonRun.mockImplementation(async (options: any) => {
-      captured = {
-        onAgentEvent: options.handlers.onAgentEvent,
-        onDone: options.handlers.onDone,
-      };
-      return new Promise<void>(() => {});
-    });
-
-    renderProjectView();
-
-    await waitFor(() => expect(reattachDaemonRun).toHaveBeenCalledTimes(1));
-    expect(captured).not.toBeNull();
-    captured!.onAgentEvent({
-      kind: 'tool_use',
-      id: 'tool-edit',
-      name: 'str_replace_edit',
-      input: { path: 'existing.html' },
-    });
-    captured!.onAgentEvent({
-      kind: 'tool_result',
-      toolUseId: 'tool-edit',
-      content: '',
-      isError: false,
-    });
-    captured!.onDone();
-
-    await waitFor(() => {
-      const saves = saveMessage.mock.calls
-        .map((call) => ({
-          message: call[2] as ChatMessage,
-          options: call[3] as { telemetryFinalized?: boolean } | undefined,
-        }))
-        .filter(({ message }) => message?.id === 'msg-reattach-trace');
-      const firstFinalizedIndex = saves.findIndex(
-        ({ options }) => options?.telemetryFinalized === true,
-      );
-      expect(firstFinalizedIndex).toBeGreaterThan(-1);
-      expect(saves[firstFinalizedIndex]!.message.traceObjectFiles?.map((file) => [
-        file.name,
-        file.traceObjectReason,
-      ])).toEqual([['existing.html', 'modified']]);
-      expect(
-        saves.slice(0, firstFinalizedIndex).some(
-          ({ options }) => options?.telemetryFinalized === true,
-        ),
-      ).toBe(false);
-    });
-  });
-
-  it('uses replayed events for trace object files during a full reattach replay', async () => {
-    const startedAt = Date.now();
-    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
-    listMessages.mockResolvedValue([
-      {
-        id: 'msg-reattach-full-replay-trace',
-        role: 'assistant',
-        content: '',
-        createdAt: startedAt,
-        startedAt,
-        runId: 'run-full-replay-trace',
-        runStatus: 'running',
-        preTurnFileNames: ['existing.html'],
-        events: [],
-      } satisfies ChatMessage,
-    ]);
-    fetchPreviewComments.mockResolvedValue([]);
-    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
-    const beforeFiles = [
-      { name: 'existing.html', path: '/p/existing.html', size: 1, updatedAt: 0 },
-    ];
-    const afterFiles = [
-      { name: 'existing.html', path: '/p/existing.html', size: 2, updatedAt: 1 },
-    ];
-    fetchProjectFiles.mockResolvedValueOnce(beforeFiles).mockResolvedValue(afterFiles);
-    fetchLiveArtifacts.mockResolvedValue([]);
-    fetchSkill.mockResolvedValue(null);
-    fetchDesignSystem.mockResolvedValue(null);
-    getTemplate.mockResolvedValue(null);
-    fetchChatRunStatus.mockResolvedValue({
-      id: 'run-full-replay-trace',
-      status: 'running',
-      createdAt: startedAt,
-      updatedAt: startedAt,
-      exitCode: null,
-      signal: null,
-    });
-    listActiveChatRuns.mockResolvedValue([]);
-
-    let captured: {
-      onAgentEvent: (ev: unknown) => void;
-      onDone: () => void;
-    } | null = null;
-    reattachDaemonRun.mockImplementation(async (options: any) => {
-      captured = {
-        onAgentEvent: options.handlers.onAgentEvent,
-        onDone: options.handlers.onDone,
-      };
-      return new Promise<void>(() => {});
-    });
-
-    renderProjectView();
-
-    await waitFor(() => expect(reattachDaemonRun).toHaveBeenCalledTimes(1));
-    expect(captured).not.toBeNull();
-    captured!.onAgentEvent({
-      kind: 'tool_use',
-      id: 'tool-edit',
-      name: 'str_replace_edit',
-      input: { path: 'existing.html' },
-    });
-    captured!.onAgentEvent({
-      kind: 'tool_result',
-      toolUseId: 'tool-edit',
-      content: '',
-      isError: false,
-    });
-    captured!.onDone();
-
-    await waitFor(() => {
-      const finalized = saveMessage.mock.calls
-        .map((call) => ({
-          message: call[2] as ChatMessage,
-          options: call[3] as { telemetryFinalized?: boolean } | undefined,
-        }))
-        .filter(
-          ({ message, options }) =>
-            message?.id === 'msg-reattach-full-replay-trace' &&
-            options?.telemetryFinalized === true,
-        )
-        .at(-1);
-      expect(finalized?.message.traceObjectFiles?.map((file) => [
-        file.name,
-        file.traceObjectReason,
-      ])).toEqual([['existing.html', 'modified']]);
-    });
-  });
-
-  it('clears touched-file paths after a failed run before the next successful run finalizes', async () => {
-    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
-    listMessages.mockResolvedValue([]);
-    fetchPreviewComments.mockResolvedValue([]);
-    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
-    fetchLiveArtifacts.mockResolvedValue([]);
-    fetchSkill.mockResolvedValue(null);
-    fetchDesignSystem.mockResolvedValue(null);
-    getTemplate.mockResolvedValue(null);
-    listActiveChatRuns.mockResolvedValue([]);
-
-    const projectFiles = [
-      { name: 'existing.html', path: 'existing.html', size: 10, mtime: 1, kind: 'html', mime: 'text/html' },
-    ];
-    fetchProjectFiles.mockResolvedValue(projectFiles);
-    streamViaDaemon
-      .mockImplementationOnce(async (options: any) => {
-        options.onRunCreated('run-failed');
-        options.handlers.onAgentEvent({
-          kind: 'tool_use',
-          id: 'tool-1',
-          name: 'str_replace_edit',
-          input: { path: 'existing.html' },
-        });
-        options.handlers.onAgentEvent({
-          kind: 'tool_result',
-          toolUseId: 'tool-1',
-          content: '',
-          isError: false,
-        });
-        options.onRunStatus('failed');
-        options.handlers.onError(new Error('failed after edit'));
-      })
-      .mockImplementationOnce(async (options: any) => {
-        options.onRunCreated('run-succeeded');
-        options.handlers.onDelta('done');
-        options.handlers.onDone('done');
-      });
-
-    renderProjectView();
-    await waitFor(() => expect(chatPaneHarness.onSend).toBeTruthy());
-
-    await chatPaneHarness.onSend!('first run', [], []);
-    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
-    await waitFor(() => {
-      const failed = saveMessage.mock.calls
-        .map((call) => call[2] as ChatMessage)
-        .find((m) => m?.runId === 'run-failed' && m.runStatus === 'failed');
-      expect(failed).toBeTruthy();
-    });
-
-    await chatPaneHarness.onSend!('second run', [], []);
-    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(2));
-
-    await waitFor(() => {
-      const secondRunFinal = saveMessage.mock.calls
-        .map((call) => call[2] as ChatMessage)
-        .filter((m) => m?.runId === 'run-succeeded' && Array.isArray(m.traceObjectFiles))
-        .at(-1);
-      expect(secondRunFinal?.traceObjectFiles).toEqual([]);
-    });
-  });
-
-  it('keeps touched-file paths isolated when a previous successful run finalizes late', async () => {
-    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
-    listMessages.mockResolvedValue([]);
-    fetchPreviewComments.mockResolvedValue([]);
-    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
-    fetchLiveArtifacts.mockResolvedValue([]);
-    fetchSkill.mockResolvedValue(null);
-    fetchDesignSystem.mockResolvedValue(null);
-    getTemplate.mockResolvedValue(null);
-    listActiveChatRuns.mockResolvedValue([]);
-
-    const projectFiles = [
-      { name: 'first.html', path: 'first.html', size: 10, mtime: 1, kind: 'html', mime: 'text/html' },
-      { name: 'second.html', path: 'second.html', size: 10, mtime: 1, kind: 'html', mime: 'text/html' },
-    ];
-    fetchProjectFiles.mockResolvedValue(projectFiles);
-
-    streamViaDaemon
-      .mockImplementationOnce(async (options: any) => {
-        options.onRunCreated('run-first');
-        options.handlers.onAgentEvent({
-          kind: 'tool_use',
-          id: 'tool-first',
-          name: 'str_replace_edit',
-          input: { path: 'first.html' },
-        });
-        options.handlers.onAgentEvent({
-          kind: 'tool_result',
-          toolUseId: 'tool-first',
-          content: '',
-          isError: false,
-        });
-        options.handlers.onDelta('first done');
-        options.handlers.onDone('first done');
-      })
-      .mockImplementationOnce(async (options: any) => {
-        options.onRunCreated('run-second');
-        options.handlers.onAgentEvent({
-          kind: 'tool_use',
-          id: 'tool-second',
-          name: 'str_replace_edit',
-          input: { path: 'second.html' },
-        });
-        options.handlers.onAgentEvent({
-          kind: 'tool_result',
-          toolUseId: 'tool-second',
-          content: '',
-          isError: false,
-        });
-        options.handlers.onDelta('second done');
-        options.handlers.onDone('second done');
-      });
-
-    renderProjectView();
-    await waitFor(() => expect(chatPaneHarness.onSend).toBeTruthy());
-    await waitFor(() => expect(fetchProjectFiles).toHaveBeenCalled());
-
-    let resolveFirstFinalRefresh: ((files: typeof projectFiles) => void) | null = null;
-    let resolveSecondFinalRefresh: ((files: typeof projectFiles) => void) | null = null;
-    let refreshCall = 0;
-    fetchProjectFiles.mockClear();
-    fetchProjectFiles.mockImplementation(() => {
-      refreshCall += 1;
-      if (refreshCall === 2) {
-        return new Promise<typeof projectFiles>((resolve) => {
-          resolveFirstFinalRefresh = resolve;
-        });
-      }
-      if (refreshCall === 4) {
-        return new Promise<typeof projectFiles>((resolve) => {
-          resolveSecondFinalRefresh = resolve;
-        });
-      }
-      return Promise.resolve(projectFiles);
-    });
-
-    await chatPaneHarness.onSend!('first run', [], []);
-    await waitFor(() => expect(resolveFirstFinalRefresh).toBeTruthy());
-
-    await waitFor(() => {
-      const started = chatPaneHarness.onSend!('second run', [], []);
-      expect(started).toBeTruthy();
-    });
-    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(2));
-    await waitFor(() => expect(resolveSecondFinalRefresh).toBeTruthy());
-
-    resolveFirstFinalRefresh!(projectFiles);
-    await Promise.resolve();
-    resolveSecondFinalRefresh!(projectFiles);
-
-    await waitFor(() => {
-      const secondRunFinal = saveMessage.mock.calls
-        .map((call) => call[2] as ChatMessage)
-        .filter((m) => m?.runId === 'run-second' && Array.isArray(m.traceObjectFiles))
-        .at(-1);
-      expect(secondRunFinal?.traceObjectFiles?.map((file) => file.name)).toEqual(['second.html']);
-    });
-  });
-
-  it('keeps replacement touched files when a superseded run emits a late colliding tool result', async () => {
-    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
-    listMessages.mockResolvedValue([]);
-    fetchPreviewComments.mockResolvedValue([]);
-    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
-    fetchLiveArtifacts.mockResolvedValue([]);
-    fetchSkill.mockResolvedValue(null);
-    fetchDesignSystem.mockResolvedValue(null);
-    getTemplate.mockResolvedValue(null);
-    listActiveChatRuns.mockResolvedValue([]);
-
-    const projectFiles = [
-      { name: 'first.html', path: 'first.html', size: 10, mtime: 1, kind: 'html', mime: 'text/html' },
-      { name: 'second.html', path: 'second.html', size: 10, mtime: 1, kind: 'html', mime: 'text/html' },
-    ];
-    fetchProjectFiles.mockResolvedValue(projectFiles);
-
-    let firstHandlers: {
-      onAgentEvent: (ev: unknown) => void;
-    } | null = null;
-    let secondHandlers: {
-      onAgentEvent: (ev: unknown) => void;
-      onDelta: (text: string) => void;
-      onDone: (text?: string) => void;
-    } | null = null;
-
-    streamViaDaemon
-      .mockImplementationOnce(async (options: any) => {
-        options.onRunCreated('run-first');
-        firstHandlers = options.handlers;
-        options.handlers.onAgentEvent({
-          kind: 'tool_use',
-          id: 'tool-collide',
-          name: 'str_replace_edit',
-          input: { path: 'first.html' },
-        });
-        return new Promise<void>(() => {});
-      })
-      .mockImplementationOnce(async (options: any) => {
-        options.onRunCreated('run-second');
-        secondHandlers = options.handlers;
-        options.handlers.onAgentEvent({
-          kind: 'tool_use',
-          id: 'tool-collide',
-          name: 'str_replace_edit',
-          input: { path: 'second.html' },
-        });
-        return new Promise<void>(() => {});
-      });
-
-    renderProjectView();
-    await waitFor(() => expect(chatPaneHarness.onSend).toBeTruthy());
-    await waitFor(() => expect(chatPaneHarness.onStop).toBeTruthy());
-
-    void chatPaneHarness.onSend!('first run', [], []);
-    await waitFor(() => expect(firstHandlers).toBeTruthy());
-
-    chatPaneHarness.onStop!();
-    await waitFor(() => {
-      const stopped = saveMessage.mock.calls
-        .map((call) => call[2] as ChatMessage)
-        .find((m) => m?.runId === 'run-first' && m.runStatus === 'canceled');
-      expect(stopped).toBeTruthy();
-    });
-
-    void chatPaneHarness.onSend!('second run', [], []);
-    await waitFor(() => expect(secondHandlers).toBeTruthy());
-
-    firstHandlers!.onAgentEvent({
-      kind: 'tool_result',
-      toolUseId: 'tool-collide',
-      content: '',
-      isError: false,
-    });
-    secondHandlers!.onAgentEvent({
-      kind: 'tool_result',
-      toolUseId: 'tool-collide',
-      content: '',
-      isError: false,
-    });
-    secondHandlers!.onDelta('second done');
-    secondHandlers!.onDone('second done');
-
-    await waitFor(() => {
-      const secondRunFinal = saveMessage.mock.calls
-        .map((call) => call[2] as ChatMessage)
-        .filter((m) => m?.runId === 'run-second' && Array.isArray(m.traceObjectFiles))
-        .at(-1);
-      expect(secondRunFinal?.traceObjectFiles?.map((file) => file.name)).toEqual(['second.html']);
     });
   });
 
@@ -1209,12 +476,11 @@ describe('ProjectView daemon reattach restore', () => {
         .map((call) => call[2] as ChatMessage)
         .filter((m) => m?.id === 'msg-amr-balance' && m.runStatus === 'failed')
         .at(-1);
-      const errorEvent = finalSave?.events?.find(
-        (event) => event.kind === 'status' && event.label === 'error',
-      ) as { code?: string } | undefined;
-      expect(errorEvent).toMatchObject({
-        code: 'AMR_INSUFFICIENT_BALANCE',
-      });
+      expect(finalSave?.events?.some(
+        (event) => event.kind === 'status'
+          && event.label === 'error'
+          && (event as { code?: string }).code === 'AMR_INSUFFICIENT_BALANCE',
+      )).toBe(true);
     });
   });
 

@@ -41,8 +41,6 @@ describe('MentionNode', () => {
         expect($isMentionNode(node)).toBe(true);
         expect(node.isToken()).toBe(true);
         expect(node.getMode()).toBe('token');
-        expect(node.canInsertTextBefore()).toBe(true);
-        expect(node.canInsertTextAfter()).toBe(true);
       },
       { discrete: true },
     );

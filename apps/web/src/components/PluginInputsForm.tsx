@@ -16,12 +16,6 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { InputFieldSpec } from '@open-design/contracts';
-import { useI18n } from '../i18n';
-import {
-  localizePluginDisplayValue,
-  localizePluginInputLabel,
-  localizePluginPlaceholder,
-} from '../i18n/plugin-content';
 
 interface Props {
   fields: InputFieldSpec[];
@@ -31,7 +25,6 @@ interface Props {
 }
 
 export function PluginInputsForm(props: Props) {
-  const { locale } = useI18n();
   const fields = props.fields ?? [];
   const onValidityChangeRef = useRef(props.onValidityChange);
   const lastValidityRef = useRef<boolean | null>(null);
@@ -97,10 +90,10 @@ export function PluginInputsForm(props: Props) {
           data-filled={hasFieldValue(values[field.name]) ? 'true' : 'false'}
         >
           <span className="plugin-inputs-form__label">
-            {localizePluginInputLabel(locale, field)}
+            {field.label ?? field.name}
             {field.required ? <span className="plugin-inputs-form__required">*</span> : null}
           </span>
-          {renderField(field, values[field.name], (v) => update(field.name, v), locale)}
+          {renderField(field, values[field.name], (v) => update(field.name, v))}
         </label>
       ))}
     </div>
@@ -111,7 +104,6 @@ function renderField(
   field: InputFieldSpec,
   value: unknown,
   onChange: (value: unknown) => void,
-  locale: ReturnType<typeof useI18n>['locale'],
 ) {
   const type = fieldType(field);
   if (type === 'select' && Array.isArray(field.options)) {
@@ -123,10 +115,10 @@ function renderField(
         onChange={(e) => onChange(e.target.value)}
         data-field-name={field.name}
       >
-        <option value="">{localizePluginPlaceholder(locale, field.placeholder, 'Select…')}</option>
+        <option value="">{field.placeholder ?? 'Select…'}</option>
         {field.options.map((opt) => (
           <option key={opt} value={opt}>
-            {localizePluginDisplayValue(locale, optionLabels[opt] ?? opt)}
+            {optionLabels[opt] ?? opt}
           </option>
         ))}
       </select>
@@ -138,7 +130,7 @@ function renderField(
         type="number"
         className="plugin-inputs-form__input"
         value={value === undefined || value === null ? '' : String(value)}
-        placeholder={localizePluginPlaceholder(locale, field.placeholder)}
+        placeholder={field.placeholder ?? ''}
         onChange={(e) => {
           const raw = e.target.value;
           if (raw === '') return onChange(undefined);
@@ -175,7 +167,7 @@ function renderField(
           {...(typeof field.accept === 'string' ? { accept: field.accept } : {})}
         />
         <span className="plugin-inputs-form__file-label">
-          {fileValue ?? localizePluginPlaceholder(locale, field.placeholder, 'Choose file…')}
+          {fileValue ?? field.placeholder ?? 'Choose file…'}
         </span>
       </span>
     );
@@ -186,7 +178,7 @@ function renderField(
         className="plugin-inputs-form__input plugin-inputs-form__input--textarea"
         rows={3}
         value={value === undefined || value === null ? '' : String(value)}
-        placeholder={localizePluginPlaceholder(locale, field.placeholder)}
+        placeholder={field.placeholder ?? ''}
         onChange={(e) => onChange(e.target.value)}
         data-field-name={field.name}
       />
@@ -197,7 +189,7 @@ function renderField(
       type="text"
       className="plugin-inputs-form__input"
       value={value === undefined || value === null ? '' : String(value)}
-      placeholder={localizePluginPlaceholder(locale, field.placeholder)}
+      placeholder={field.placeholder ?? ''}
       onChange={(e) => onChange(e.target.value)}
       data-field-name={field.name}
     />

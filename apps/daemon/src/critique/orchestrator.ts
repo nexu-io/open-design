@@ -87,19 +87,19 @@ export interface OrchestratorParams {
    * Optional abort signal. Aborting causes the orchestrator to flush
    * best-so-far state and emit critique.interrupted before returning.
    */
-  signal?: AbortSignal;
+  signal?: AbortSignal | undefined;
   /**
    * Optional handle to the spawned child process. When provided the
    * orchestrator calls child.kill('SIGTERM') on every non-clean termination
    * path (timeout, abort, parser error, child non-zero exit).
    */
-  child?: Pick<ChildProcess, 'kill'>;
+  child?: Pick<ChildProcess, 'kill'> | undefined;
   /**
    * Resolves when the child process exits. Used to race parser completion
    * against an early child exit so a non-zero exit code is classified as
    * 'failed' rather than waiting for the parser to time out.
    */
-  childExitPromise?: Promise<{ code: number | null; signal: string | null }>;
+  childExitPromise?: Promise<{ code: number | null; signal: string | null }> | undefined;
 }
 
 export interface OrchestratorResult {
@@ -109,6 +109,7 @@ export interface OrchestratorResult {
   status: CritiqueRunStatus;
   composite: number | null;
   rounds: CritiqueRunRow['rounds'];
+  events: PanelEvent[];
   transcriptPath: string | null;
   artifactPath: string | null;
 }
@@ -802,6 +803,7 @@ export async function runOrchestrator(
     status: finalStatus,
     composite: finalComposite,
     rounds: roundsSummary,
+    events: collectedEvents,
     transcriptPath,
     artifactPath,
   };

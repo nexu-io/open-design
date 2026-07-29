@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Write an Urban Green-Space Policy Brief like a City Sustainability Director - Government &amp; policy</title>
+    <title>Grove Presentation</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -15,7 +15,7 @@
         4. Noto Serif SC / Noto Sans SC — Chinese fallbacks for every role
     -->
     <link
-      href="https://fonts.googleapis.com/css2?family=Jost:wght@300;400&family=Playfair+Display:ital,wght@0,400;1,400&family=JetBrains+Mono:wght@300;400&family=Noto+Serif+SC:wght@400&family=Noto+Sans+SC:wght@300;400&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Jost:wght@200;300;400;500&family=Playfair+Display:ital,wght@0,400;0,500;1,400;1,500&family=JetBrains+Mono:wght@300;400&family=Noto+Serif+SC:wght@300;400;500&family=Noto+Sans+SC:wght@300;400;500&display=swap"
       rel="stylesheet"
     />
 
@@ -40,24 +40,19 @@
 
         /* Primary text on dark: warm cream, never pure white */
         --c-fg: #d4cfbf;
-        /* Secondary text on dark: muted cream at 66% opacity (AA on forest) */
-        --c-fg-2: rgba(212, 207, 191, 0.66);
+        /* Secondary text on dark: muted cream at 60% opacity */
+        --c-fg-2: rgba(212, 207, 191, 0.6);
         /* Tertiary / hint text on dark: 32% opacity — near-invisible */
         --c-fg-3: rgba(212, 207, 191, 0.32);
         /* Primary text on light: forest green near-black */
         --c-fg-light: #192b1b;
-        /* Secondary text on light: 68% green clears AA on parchment */
-        --c-fg-light-2: rgba(25, 43, 27, 0.68);
+        /* Secondary text on light */
+        --c-fg-light-2: rgba(25, 43, 27, 0.58);
         /* Tertiary text on light */
         --c-fg-light-3: rgba(25, 43, 27, 0.33);
 
         /* Accent: terracotta coral — the single warm note; used sparingly */
         --c-accent: #c8524a;
-        /* Lifted coral for SMALL text on dark surfaces (kickers, mono labels).
-           Base coral reads ~3.5:1 on forest green; this variant clears AA. */
-        --c-accent-up: #dd7f72;
-        /* Deepened coral for SMALL text on parchment; clears AA on light. */
-        --c-accent-down: #a63f38;
         /* Dividers on dark: faint cream border at 12% opacity */
         --c-border: rgba(212, 207, 191, 0.12);
         /* Dividers on light: faint green border at 14% opacity */
@@ -80,11 +75,10 @@
         --sz-h1: 5.5vw; /* chapter and statement titles */
         --sz-h2: 3.2vw; /* slide headlines */
         --sz-h3: 2vw; /* sub-headlines, compare panel titles */
-        /* px floors keep small text legible on narrow viewports */
-        --sz-lead: max(1.45vw, 16px); /* lead paragraph */
-        --sz-body: max(1.05vw, 14px); /* body text, bullets */
-        --sz-caption: max(0.82vw, 11px); /* captions, footnotes, chart sources */
-        --sz-label: max(0.7vw, 10px); /* chrome labels, kickers, mono metadata */
+        --sz-lead: 1.45vw; /* lead paragraph */
+        --sz-body: 1.05vw; /* body text, bullets */
+        --sz-caption: 0.82vw; /* captions, footnotes, chart sources */
+        --sz-label: 0.7vw; /* chrome labels, kickers, mono metadata */
 
         /* ── Spacing ─────────────────────────────────────────────────────── */
         /* Grove is intentionally spacious — breathing room is the aesthetic */
@@ -267,14 +261,12 @@
         gap: 7px;
         z-index: 100;
       }
-      /* Neutral olive reads on both forest and parchment slides;
-         the active dot takes the coral accent (visible on both). */
       .nav-dot {
         width: 5px;
         height: 5px;
         border-radius: 50%;
         border: none;
-        background: rgba(141, 139, 117, 0.55);
+        background: rgba(255, 255, 255, 0.22);
         cursor: pointer;
         transition:
           background 0.3s,
@@ -282,7 +274,7 @@
         padding: 0;
       }
       .nav-dot.is-active {
-        background: var(--c-accent);
+        background: rgba(255, 255, 255, 0.8);
         transform: scale(1.4);
       }
 
@@ -309,14 +301,12 @@
         font-size: var(--sz-h1);
         font-weight: 400;
         line-height: 1.1;
-        letter-spacing: -0.01em;
       }
       .h2 {
         font-family: var(--f-heading);
         font-size: var(--sz-h2);
         font-weight: 400;
         line-height: 1.2;
-        letter-spacing: -0.01em;
       }
       .h3 {
         font-family: var(--f-heading);
@@ -362,12 +352,8 @@
       .muted {
         color: var(--c-fg-2);
       }
-      /* Small accent text uses the lifted/deepened coral for AA contrast */
       .accent {
-        color: var(--c-accent-up);
-      }
-      .light .accent {
-        color: var(--c-accent-down);
+        color: var(--c-accent);
       }
       .light .muted {
         color: var(--c-fg-light-2);
@@ -390,15 +376,11 @@
         grid-template-columns: 2em 1fr;
         gap: 0.5em;
       }
-      /* Coral hairline leader replaces the bullet point: drawn as a rule,
-         not an em-dash glyph, so the leader stays crisp at every size */
+      /* Coral em-dash replaces bullet point */
       .bullet-list li::before {
-        content: "";
-        width: 1.25em;
-        height: 1px;
-        background: var(--c-accent);
-        margin-top: 0.8em;
-        justify-self: start;
+        content: "—";
+        color: var(--c-accent);
+        font-family: var(--f-mono);
       }
 
       /* ╔══════════════════════════════════════════════════════════════════════╗
@@ -472,6 +454,9 @@
       .grove-sidebar {
         display: none !important;
       }
+      .light .grove-sidebar {
+        color: var(--c-fg-light-3);
+      }
 
       /* ── Grove: stat card ────────────────────────────────────────────────── */
       /* Spacious layout: large serif number in coral, mono label beneath, border-bottom rule */
@@ -482,13 +467,10 @@
         padding-bottom: var(--gap-md);
         border-bottom: 1px solid var(--c-border);
       }
-      /* Large serif stat value in terracotta coral.
-         Raised from 4.5vw: at that size the three numbers read as body
-         furniture and the stats slide's lower half sat empty. min() caps
-         against viewport height so short windows can't clip the row. */
+      /* Large serif stat value in terracotta coral */
       .grove-stat-val {
         font-family: var(--f-display);
-        font-size: min(7vw, 13vh);
+        font-size: 4.5vw;
         font-weight: 400;
         line-height: 1;
         color: var(--c-accent);
@@ -514,27 +496,23 @@
       }
 
       /* ── Image placeholder ────────────────────────────────────────────── */
-      /* Used in place of <img> tags — marks where real images will go.
-         Hairline border + centered mono label; the label was lifted from
-         the 32% tertiary tone (illegible) to the secondary tone. */
+      /* Used in place of <img> tags — marks where real images will go */
       .img-placeholder {
         background: var(--c-bg-alt);
-        border: 1px solid var(--c-border);
         display: flex;
         align-items: center;
         justify-content: center;
         font-family: var(--f-mono);
         font-size: var(--sz-label);
         letter-spacing: 0.1em;
-        color: var(--c-fg-2);
+        color: var(--c-fg-3);
         width: 100%;
         flex: 1;
         min-height: 30vh;
       }
       .light .img-placeholder {
-        background: var(--c-bg-light-alt);
-        border-color: var(--c-border-light);
-        color: var(--c-fg-light-2);
+        background: var(--c-border-light);
+        color: var(--c-fg-light-3);
       }
 
       /* ── Decorative rule lines ────────────────────────────────────────── */
@@ -553,16 +531,12 @@
       }
 
       /* ── Kicker label (above headlines) ──────────────────────────────── */
-      /* Small mono text takes the lifted coral on dark, deepened on light */
       .kicker {
         font-family: var(--f-mono);
         font-size: var(--sz-label);
         letter-spacing: 0.14em;
         text-transform: uppercase;
-        color: var(--c-accent-up);
-      }
-      .light .kicker {
-        color: var(--c-accent-down);
+        color: var(--c-accent);
       }
 
       /* ── 1. COVER ───────────────────────────────────────────────────────── */
@@ -579,13 +553,13 @@
         flex-direction: column;
         justify-content: center;
       }
-      /* Mono kicker above chapter title — lifted coral for AA on forest */
+      /* Mono kicker above chapter title */
       .chapter-num {
         font-family: var(--f-mono);
         font-size: var(--sz-label);
         letter-spacing: 0.2em;
         text-transform: uppercase;
-        color: var(--c-accent-up);
+        color: var(--c-accent);
         margin-bottom: var(--gap-md);
       }
       /* Short coral rule between kicker and title */
@@ -684,17 +658,14 @@
         margin-bottom: var(--gap-md);
         font-weight: 400;
       }
-      /* Large italic serif quote body.
-         Raised from 3.2vw: the quote is the deck's emotional centerpiece and
-         deserves the register of a chapter title. Height-capped so a 3-line
-         quote still clears the attribution on short viewports. */
+      /* Large italic serif quote body */
       .quote-text {
         font-family: var(--f-display);
-        font-size: min(4vw, 7vh);
+        font-size: 3.2vw;
         font-weight: 400;
-        line-height: 1.3;
+        line-height: 1.35;
         letter-spacing: -0.01em;
-        max-width: 82%;
+        max-width: 75%;
         margin-bottom: var(--gap-lg);
         font-style: italic;
       }
@@ -737,10 +708,7 @@
         border-bottom: 1px solid var(--c-border);
       }
       .compare-label.after {
-        color: var(--c-accent-up);
-      }
-      .light .compare-label.after {
-        color: var(--c-accent-down);
+        color: var(--c-accent);
       }
       .light .compare-label {
         border-color: var(--c-border-light);
@@ -775,13 +743,9 @@
         justify-content: flex-end;
         min-height: 0;
       }
-      /* Bars aligned to a left spine line.
-         Track height raised from 30vh: at 30vh the bars filled barely a third
-         of the slide and left a dead zone between headline and chart. Bar
-         heights below scale proportionally (0.55vh per plugin), so the data
-         relationships are unchanged — the chart simply uses its room. */
+      /* Bars aligned to a left spine line */
       .bar-track {
-        height: 42vh;
+        height: 30vh;
         display: flex;
         align-items: flex-end;
         gap: 4vw;
@@ -836,9 +800,9 @@
         font-weight: 300;
         color: var(--c-fg-2);
       }
-      /* Highlighted bar value: lifted coral, slightly bolder */
+      /* Highlighted bar value: coral and slightly bolder */
       .bar-val.hi {
-        color: var(--c-accent-up);
+        color: var(--c-accent);
         font-weight: 400;
       }
       .light .bar-val {
@@ -854,38 +818,17 @@
       .light .chart-baseline {
         background: var(--c-border-light);
       }
-      /* Source attribution below chart.
-         Lifted from --c-fg-3 (32% opacity) to --c-fg-2: at caption size the
-         32% reading fell well below AA and was effectively invisible,
-         the same problem already fixed on .bar-x-label above. */
+      /* Source attribution below chart */
       .chart-source {
         flex-shrink: 0;
         font-family: var(--f-mono);
         font-size: var(--sz-caption);
-        color: var(--c-fg-2);
+        color: var(--c-fg-3);
         letter-spacing: 0.06em;
         margin-top: var(--gap-sm);
       }
       .light .chart-source {
-        color: var(--c-fg-light-2);
-      }
-
-      /* ── Reduced motion ──────────────────────────────────────────────── */
-      /* Honor the OS preference: no slide pan, no entrance keyframes.
-         Content appears immediately; navigation still works. */
-      @media (prefers-reduced-motion: reduce) {
-        #deck {
-          transition: none;
-        }
-        [data-anim] {
-          opacity: 1;
-        }
-        .slide.is-active [data-anim] {
-          animation: none;
-        }
-        .nav-dot {
-          transition: none;
-        }
+        color: var(--c-fg-light-3);
       }
     </style>
   </head>
@@ -908,7 +851,7 @@
       <section class="slide dark slide--cover">
         <!-- Vertical sidebar label: rotated text on the left edge -->
         <div class="grove-sidebar" data-anim="fade-in" data-delay="0">
-          Government &amp; Policy · Council Briefing
+          Strategy · Presentation
         </div>
         <!-- Watermark number: near-invisible serif "01" in background -->
         <div class="grove-num">01</div>
@@ -925,7 +868,7 @@
         >
           <!-- Studio name kicker: mono uppercase, coral -->
           <div class="kicker" data-anim="fade-in" data-delay="1">
-            Office of Sustainability · City of Riverton · 2026
+            [Studio Name] · [Year]
           </div>
           <!-- Short coral rule revealing right -->
           <div
@@ -941,18 +884,16 @@
             data-anim="fade-up"
             data-delay="3"
           >
-            Closing the canopy gap: a <em>funded</em> path to 30% tree cover by
-            2032
+            [Presentation Title Goes <em>Here</em>]
           </h1>
           <!-- Lead subtitle: Jost 300, muted, generous line-height -->
           <p
             class="lead muted"
-            style="max-width: 46%; margin-top: var(--gap-md)"
+            style="max-width: 40%; margin-top: var(--gap-md)"
             data-anim="fade-up"
             data-delay="4"
           >
-            An urban tree-canopy ordinance and funding package for Council
-            review — the public need, the evidence, and the decision ahead.
+            A [type of work] for [audience or occasion]. [Month, Year].
           </p>
         </div>
 
@@ -967,8 +908,8 @@
           data-anim="fade-in"
           data-delay="5"
         >
-          <span class="label muted">Prepared by Dept. of Sustainability</span>
-          <span class="label muted">Council Session · July 14, 2026</span>
+          <span class="label muted">[Prepared by]</span>
+          <span class="label muted">[Confidential]</span>
         </div>
       </section>
 
@@ -992,8 +933,7 @@
           data-anim="fade-up"
           data-delay="2"
         >
-          Riverton's canopy has fallen to 19% while heat-related ER visits
-          are up <em>41%</em> in five years.
+          The landscape has shifted. Now we must decide where to <em>stand</em>.
         </h1>
         <!-- Supporting line: Jost 300 muted -->
         <p
@@ -1002,8 +942,8 @@
           data-anim="fade-up"
           data-delay="3"
         >
-          An honest look at where the city's tree canopy stands in 2026, and
-          why the current voluntary-planting model can't close the gap.
+          An honest assessment of where the market is, and where the opportunity
+          lies.
         </p>
       </section>
 
@@ -1018,7 +958,7 @@
         <!-- Chrome bar: section name left, page number right -->
         <div class="slide-chrome">
           <span class="label muted" data-anim="fade-in" data-delay="0"
-            >Public Need</span
+            >Core Insight</span
           >
           <span class="label muted" data-anim="fade-in" data-delay="0">03</span>
         </div>
@@ -1026,7 +966,7 @@
         <div class="slide-body">
           <div class="statement-body">
             <div class="kicker" data-anim="fade-in" data-delay="1">
-              The Public Need
+              The Argument
             </div>
             <div class="rule" data-anim="reveal-right" data-delay="2"></div>
             <!-- Main thesis: large serif, generous white space around it -->
@@ -1036,9 +976,9 @@
               data-anim="fade-up"
               data-delay="3"
             >
-              Neighborhoods below 15% canopy run 8°F hotter and see twice the
-              heat-related ED visits. The deficit tracks income, not
-              <em>geography</em>.
+              The brands that will lead the next decade are not the ones with
+              the best product. They are the ones with the deepest
+              <em>understanding</em>.
             </h1>
           </div>
         </div>
@@ -1062,7 +1002,7 @@
             style="color: var(--c-fg-light-2)"
             data-anim="fade-in"
             data-delay="0"
-            >Canopy Survey · 2025</span
+            >Research · Insight</span
           >
           <span
             class="label"
@@ -1076,49 +1016,47 @@
         <div class="slide-body">
           <!-- Left: text content -->
           <div class="split-text" data-anim="fade-up" data-delay="1">
-            <div class="kicker">What The LiDAR Survey Found</div>
+            <div class="kicker">What We Found</div>
             <h2 class="h2">
-              The canopy gap tracks income, not <em>geography</em>
+              Audiences have outgrown the stories being told about <em>them</em>
             </h2>
             <p class="lead" style="color: var(--c-fg-light-2)">
-              The 2025 citywide LiDAR canopy survey, cross-referenced against
-              census tracts, shows the same pattern in every ward: the
-              lowest-canopy blocks are also the lowest-income blocks.
+              Three years of primary research across six markets revealed a
+              consistent pattern: the gap between how brands communicate and how
+              people actually live is widening.
             </p>
             <ul class="bullet-list" style="color: var(--c-fg-light)">
               <li>
-                East Riverton and the Mill District average 12% canopy versus
-                34% in the northern hillside wards
+                Authenticity is valued over aspiration in all categories tested
               </li>
+              <li>Trust is earned through consistency, not campaigns</li>
               <li>
-                Surface temperatures in low-canopy tracts run 6–8°F hotter on
-                summer afternoons than the citywide average
-              </li>
-              <li>
-                Zip codes below 15% canopy account for 61% of heat-related
-                emergency-department visits despite holding 38% of the
-                population
+                Communities form around shared values, not product features
               </li>
             </ul>
           </div>
 
           <!-- Right: image placeholder fills the column -->
-          <div class="split-image" data-anim="fade-in" data-delay="3">
+          <div
+            data-anim="fade-in"
+            data-delay="3"
+            style="
+              display: flex;
+              flex-direction: column;
+              gap: var(--gap-sm);
+              height: 100%;
+            "
+          >
             <div class="img-placeholder">[IMAGE PLACEHOLDER]</div>
-            <!-- Caption lifted from the 33% tertiary tone (below AA, near
-                 invisible on parchment) to the secondary tone, matching the
-                 contrast fixes already applied to .bar-x-label and
-                 .chart-source. -->
             <p
               class="caption"
               style="
-                color: var(--c-fg-light-2);
+                color: var(--c-fg-light-3);
                 font-family: var(--f-mono);
                 letter-spacing: 0.08em;
               "
             >
-              2025 citywide canopy LiDAR overlay — Dept. of Sustainability GIS
-              team
+              [Caption: research context or visual annotation]
             </p>
           </div>
         </div>
@@ -1138,7 +1076,7 @@
         <div class="grove-sidebar">By The Numbers</div>
         <div class="slide-chrome">
           <span class="label muted" data-anim="fade-in" data-delay="0"
-            >Canopy · Cost · Health</span
+            >Market · Metrics</span
           >
           <span class="label muted" data-anim="fade-in" data-delay="0">05</span>
         </div>
@@ -1146,43 +1084,41 @@
         <div class="slide-body">
           <!-- Section headline above stats -->
           <h2 class="h2" data-anim="fade-up" data-delay="1">
-            Three numbers that define the <em>case</em>
+            Three numbers that define the <em>opportunity</em>
           </h2>
 
-          <!-- Three stat cards — spacious, no crowding.
-               Staggered individually (delays 2/3/4) so the row reads as a
-               left-to-right cadence instead of one monolithic fade. -->
-          <div class="stats-row">
-            <div class="grove-stat" data-anim="fade-up" data-delay="2">
-              <!-- Serif stat value in coral: 19% citywide canopy -->
-              <div class="grove-stat-val">19<em>%</em></div>
+          <!-- Three stat cards — spacious, no crowding -->
+          <div class="stats-row" data-anim="fade-up" data-delay="2">
+            <div class="grove-stat">
+              <!-- Serif stat value in coral: 73 + italic % suffix -->
+              <div class="grove-stat-val">73<em>%</em></div>
               <div class="grove-stat-label">
-                Citywide canopy · down from 26% in 2010
+                Of consumers distrust brand-created content
               </div>
             </div>
-            <div class="grove-stat" data-anim="fade-up" data-delay="3">
-              <div class="grove-stat-val">8<em>°F</em></div>
+            <div class="grove-stat">
+              <div class="grove-stat-val">4.8<em>×</em></div>
               <div class="grove-stat-label">
-                Summer surface-temp gap, lowest- vs. highest-canopy tracts
+                Higher engagement for community-driven campaigns
               </div>
             </div>
-            <div class="grove-stat" data-anim="fade-up" data-delay="4">
-              <div class="grove-stat-val">$3.20</div>
+            <div class="grove-stat">
+              <div class="grove-stat-val">#1</div>
               <div class="grove-stat-label">
-                Return per $1 of canopy investment over 20 years
+                Driver of purchase decisions: peer recommendation
               </div>
             </div>
           </div>
 
-          <!-- Source line below stats — lands after the last stat card -->
+          <!-- Source line below stats -->
           <p
             class="caption muted"
             style="font-family: var(--f-mono); letter-spacing: 0.08em"
             data-anim="fade-in"
-            data-delay="5"
+            data-delay="3"
           >
-            Source: Dept. of Sustainability 2025 canopy survey · Riverton
-            Public Health Dept. · county stormwater cost-benefit study
+            Source: [Primary Research] · [Year] · N=[sample size] across
+            [geographies]
           </p>
         </div>
 
@@ -1198,14 +1134,14 @@
            Light parchment — feels like a printed document.
            ══════════════════════════════════════════════════════════════════ -->
       <section class="slide light slide--list">
-        <div class="grove-sidebar">The Policy Option</div>
+        <div class="grove-sidebar">Our Approach</div>
         <div class="slide-chrome">
           <span
             class="label"
             style="color: var(--c-fg-light-2)"
             data-anim="fade-in"
             data-delay="0"
-            >Ordinance Package</span
+            >Framework</span
           >
           <span
             class="label"
@@ -1219,14 +1155,13 @@
         <div class="slide-body">
           <!-- Left: heading and intro -->
           <div class="list-head" data-anim="fade-up" data-delay="1">
-            <div class="kicker">The Proposed Ordinance</div>
+            <div class="kicker">What Changes</div>
             <h2 class="h2">
-              One package, <em>five</em> provisions
+              Five principles that <em>reframe</em> how we think about brand
             </h2>
             <p class="body" style="color: var(--c-fg-light-2)">
-              Each provision targets a specific failure of the current
-              voluntary program — together they replace hope with a funded
-              plan.
+              These are not tactics. They are the underlying commitments that
+              make everything else possible.
             </p>
           </div>
 
@@ -1238,24 +1173,21 @@
             data-delay="2"
           >
             <li>
-              Canopy overlay zoning — mandatory minimum canopy ratios for new
-              development in the eight lowest-canopy wards
+              Start with the community, not the product — earn presence before
+              claiming it
             </li>
             <li>
-              Dedicated funding — a $0.35 monthly stormwater-fee surcharge
-              feeding a ring-fenced Urban Forest Fund
+              Replace broadcast with conversation — listen before speaking
             </li>
             <li>
-              Priority planting — 6,000 trees per year targeted first to the
-              eight wards below 15% canopy
+              Make the values visible in operations, not just in messaging
             </li>
             <li>
-              Maintenance endowment — three years of contracted watering and
-              pruning per tree, ending the "plant and abandon" pattern
+              Treat long-term relationship as the primary metric, not reach
             </li>
             <li>
-              Public canopy dashboard — ward-level tracking published
-              annually, reviewed by Council each budget cycle
+              Give audiences ownership of the narrative — participation over
+              performance
             </li>
           </ul>
         </div>
@@ -1273,18 +1205,18 @@
            ══════════════════════════════════════════════════════════════════ -->
       <section class="slide dark slide--quote">
         <!-- Large decorative opening quote mark in terracotta coral -->
-        <div class="quote-mark" data-anim="fade-in" data-delay="0">&#8220;</div>
+        <div class="quote-mark" data-anim="fade-in" data-delay="0">"</div>
 
         <!-- Quote body: italic Playfair, spacious line-height -->
         <p class="quote-text" data-anim="fade-up" data-delay="1">
-          We treat heat like weather. It isn't. It's infrastructure — and
-          right now, half this city doesn't have it.
+          The most radical thing a brand can do right now is simply tell the
+          truth about what it is, and what it is not.
         </p>
 
         <!-- Attribution: coral name, muted role -->
         <div class="quote-attr" data-anim="fade-up" data-delay="3">
-          <span class="label accent">Dr. Marisol Ferrante</span>
-          <span class="label muted">Riverton Public Health Dept. · 2026</span>
+          <span class="label accent">[Author Name]</span>
+          <span class="label muted">[Title] · [Year]</span>
         </div>
       </section>
 
@@ -1301,7 +1233,7 @@
             style="color: var(--c-fg-light-2)"
             data-anim="fade-in"
             data-delay="0"
-            >Risk Control</span
+            >The Shift</span
           >
           <span
             class="label"
@@ -1316,42 +1248,42 @@
           <!-- Left panel: the old way — muted label, no coral -->
           <div class="compare-panel left" data-anim="fade-up" data-delay="1">
             <div class="compare-label" style="color: var(--c-fg-light-2)">
-              Status Quo · Voluntary Program
+              The Old Model
             </div>
-            <h3 class="h3">Grants and goodwill — canopy shrinks anyway</h3>
+            <h3 class="h3">Brand as broadcaster — pushing messages outward</h3>
             <p class="lead" style="color: var(--c-fg-light-2)">
-              Trees go where nonprofits already have relationships, not where
-              heat risk is highest. No dedicated fund means planting stalls
-              whenever the general fund tightens.
+              The organization speaks. The audience receives. Feedback is
+              collected in annual surveys and processed into next year's
+              messaging brief.
             </p>
             <ul
               class="bullet-list"
               style="font-size: var(--sz-body); color: var(--c-fg-light)"
             >
-              <li>No maintenance budget — 1-in-3 saplings die within 2 years</li>
-              <li>Funding competes yearly against every other line item</li>
-              <li>No enforcement on new-development canopy loss</li>
+              <li>Campaigns replace conversations</li>
+              <li>Reach is the primary metric</li>
+              <li>Community is a distribution channel</li>
             </ul>
           </div>
 
           <!-- Right panel: the new way — coral label, italic emphasis -->
           <div class="compare-panel right" data-anim="fade-up" data-delay="2">
-            <div class="compare-label after">Proposed Ordinance</div>
+            <div class="compare-label after">The New Model</div>
             <h3 class="h3">
-              Funded, targeted, and <em>reviewed</em> every year
+              Brand as participant — embedded in the <em>community</em>
             </h3>
             <p class="lead" style="color: var(--c-fg-light-2)">
-              A ring-fenced fee funds planting and three years of maintenance
-              per tree. A sunset clause and annual Council review cap the
-              city's exposure if results fall short.
+              The organization listens first and speaks in response. Feedback is
+              constant, not a project. The community owns the story as much as
+              the brand does.
             </p>
             <ul
               class="bullet-list"
               style="font-size: var(--sz-body); color: var(--c-fg-light)"
             >
-              <li>Fee is capped at $0.35/month and reviewed every 3 years</li>
-              <li>Phased rollout — 2 wards in Year 1, citywide by Year 4</li>
-              <li>5-year sunset clause forces a re-authorization vote</li>
+              <li>Relationships replace campaigns</li>
+              <li>Trust is the primary metric</li>
+              <li>Community is the source of strategy</li>
             </ul>
           </div>
         </div>
@@ -1369,7 +1301,7 @@
         <!-- Watermark: massive near-invisible "02" -->
         <div class="grove-num">02</div>
         <div class="chapter-num" data-anim="fade-in" data-delay="0">
-          02 / Decision
+          02 / Recommendation
         </div>
         <div class="chapter-rule" data-anim="reveal-right" data-delay="1"></div>
         <h1
@@ -1378,7 +1310,7 @@
           data-anim="fade-up"
           data-delay="2"
         >
-          What we're asking Council to <em>approve</em>
+          What we propose — and why we believe it will <em>work</em>
         </h1>
         <p
           class="lead muted"
@@ -1386,8 +1318,8 @@
           data-anim="fade-up"
           data-delay="3"
         >
-          A funding ordinance, a zoning overlay, and a phased four-year
-          rollout — with risk controlled at every step.
+          A practical framework built on the evidence, with clear priorities and
+          measurable outcomes.
         </p>
       </section>
 
@@ -1403,7 +1335,7 @@
             style="color: var(--c-fg-light-2)"
             data-anim="fade-in"
             data-delay="0"
-            >Council Decision</span
+            >Strategic Direction</span
           >
           <span
             class="label"
@@ -1427,8 +1359,7 @@
               data-anim="fade-up"
               data-delay="3"
             >
-              Stop planting reactively. Start budgeting for canopy like
-              <em>infrastructure</em>.
+              Stop managing perception. Start <em>deserving</em> it.
             </h1>
             <p
               class="lead"
@@ -1440,9 +1371,9 @@
               data-anim="fade-up"
               data-delay="4"
             >
-              We're asking Council to adopt Ordinance 26-114, establishing the
-              Urban Forest Fund and the canopy overlay zoning district for a
-              first vote on July 14.
+              The organizations that win the next decade will earn trust slowly,
+              through consistent action — not through the perfection of their
+              messaging.
             </p>
           </div>
         </div>
@@ -1462,7 +1393,7 @@
         <div class="grove-sidebar">The Data</div>
         <div class="slide-chrome">
           <span class="label muted" data-anim="fade-in" data-delay="0"
-            >Urban Forest Fund · $8.6M over 4 Years</span
+            >Trust Index · Category Benchmarks</span
           >
           <span class="label muted" data-anim="fade-in" data-delay="0">11</span>
         </div>
@@ -1471,10 +1402,10 @@
           <!-- Chart header: headline left, unit annotation right -->
           <div class="chart-header">
             <h2 class="h2" data-anim="fade-up" data-delay="1">
-              Funding by <em>source</em>
+              Consumer trust by <em>category</em>
             </h2>
             <span class="caption muted" data-anim="fade-in" data-delay="1"
-              >$ millions, 4-year total · FY2027–FY2030</span
+              >Score out of 100 · [Year] · N=[X]</span
             >
           </div>
 
@@ -1482,30 +1413,30 @@
           <div class="chart-wrapper" data-anim="fade-up" data-delay="2">
             <div class="bar-track">
               <div class="bar-col">
-                <span class="bar-val">0.4</span>
-                <div class="bar-fill" style="height: 3vh"></div>
-                <span class="bar-x-label">State Grant</span>
+                <span class="bar-val">38</span>
+                <div class="bar-fill" style="height: 12vh"></div>
+                <span class="bar-x-label">Finance</span>
               </div>
               <div class="bar-col">
-                <span class="bar-val">0.9</span>
-                <div class="bar-fill" style="height: 6.5vh"></div>
-                <span class="bar-x-label">Federal Grant</span>
+                <span class="bar-val">44</span>
+                <div class="bar-fill" style="height: 15vh"></div>
+                <span class="bar-x-label">Media</span>
               </div>
               <div class="bar-col">
-                <span class="bar-val">1.6</span>
-                <div class="bar-fill" style="height: 11.5vh"></div>
-                <span class="bar-x-label">Development Fee</span>
+                <span class="bar-val">56</span>
+                <div class="bar-fill" style="height: 18vh"></div>
+                <span class="bar-x-label">Retail</span>
               </div>
               <div class="bar-col">
-                <span class="bar-val">1.7</span>
-                <div class="bar-fill" style="height: 12.2vh"></div>
-                <span class="bar-x-label">General Fund</span>
+                <span class="bar-val">62</span>
+                <div class="bar-fill" style="height: 21vh"></div>
+                <span class="bar-x-label">Healthcare</span>
               </div>
               <!-- Highest bar: coral accent fill, coral value label -->
               <div class="bar-col">
-                <span class="bar-val hi">4.0</span>
-                <div class="bar-fill accent" style="height: 28.5vh"></div>
-                <span class="bar-x-label">Stormwater Fee</span>
+                <span class="bar-val hi">79</span>
+                <div class="bar-fill accent" style="height: 27vh"></div>
+                <span class="bar-x-label">Community</span>
               </div>
             </div>
             <!-- Thin baseline rule below all bars -->
@@ -1514,13 +1445,12 @@
 
           <!-- Source attribution -->
           <p class="chart-source" data-anim="fade-in" data-delay="3">
-            Source: Ordinance 26-114 fiscal note · Office of Budget & Finance ·
-            2026
+            Source: [Research Institute] · Consumer Trust Index · [Year]
           </p>
         </div>
 
         <div class="slide-foot">
-          <span class="label muted">Dept. of Sustainability · 2026</span>
+          <span class="label muted">[Organization] · [Year]</span>
           <span class="label muted">11 / 12</span>
         </div>
       </section>
@@ -1536,7 +1466,7 @@
 
         <!-- Organization kicker -->
         <div class="kicker" data-anim="fade-in" data-delay="0">
-          Office of Sustainability
+          [Organization]
         </div>
 
         <!-- Short coral rule -->
@@ -1549,7 +1479,7 @@
           data-anim="fade-up"
           data-delay="2"
         >
-          The ordinance takes effect the day it's <em>signed</em>.
+          The work begins when the presentation <em>ends</em>.
         </h1>
 
         <!-- Contact information: lead size, muted, spacious -->
@@ -1559,8 +1489,7 @@
           data-anim="fade-up"
           data-delay="3"
         >
-          Requesting a first vote at the July 14 session — questions to
-          sustainability@riverton.gov
+          [Author Name] · [author@organization.com] · [organization.com]
         </p>
 
         <!-- Small follow-up line: mono, very muted -->
@@ -1570,7 +1499,7 @@
           data-anim="fade-in"
           data-delay="4"
         >
-          Ordinance 26-114 · Council Briefing · July 2026
+          [Deck version] · [Date] · [Confidentiality note]
         </p>
       </section>
     </div>
@@ -1743,7 +1672,5 @@
         init();
       })();
     </script>
-
-
-</body>
+  </body>
 </html>

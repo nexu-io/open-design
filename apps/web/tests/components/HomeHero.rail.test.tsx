@@ -12,11 +12,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { InstalledPluginRecord } from '@open-design/contracts';
 
-vi.mock('../../src/components/home-hero/PlaceholderCarousel', () => ({
-  PlaceholderCarousel: () => null,
-}));
-
-import { HomeHero, homeHeroExamplePluginsForChip } from '../../src/components/HomeHero';
+import { HomeHero } from '../../src/components/HomeHero';
 import {
   HOME_HERO_CHIPS,
   findChip,
@@ -75,7 +71,6 @@ function renderHero(overrides: Partial<React.ComponentProps<typeof HomeHero>> = 
   const onPickChip = vi.fn();
   const onPickPlugin = vi.fn();
   const onPickExamplePlugin = vi.fn();
-  const onOpenPluginDetails = vi.fn();
   const onClearActiveChip = vi.fn();
   render(
     <HomeHero
@@ -91,7 +86,6 @@ function renderHero(overrides: Partial<React.ComponentProps<typeof HomeHero>> = 
       pendingChipId={null}
       onPickPlugin={onPickPlugin}
       onPickExamplePlugin={onPickExamplePlugin}
-      onOpenPluginDetails={onOpenPluginDetails}
       onPickChip={onPickChip}
       onClearActiveChip={onClearActiveChip}
       contextItemCount={0}
@@ -99,7 +93,7 @@ function renderHero(overrides: Partial<React.ComponentProps<typeof HomeHero>> = 
       {...overrides}
     />,
   );
-  return { onPickChip, onPickPlugin, onPickExamplePlugin, onOpenPluginDetails, onClearActiveChip };
+  return { onPickChip, onPickPlugin, onPickExamplePlugin, onClearActiveChip };
 }
 
 describe('HomeHero intent rail', () => {
@@ -149,106 +143,15 @@ describe('HomeHero intent rail', () => {
     renderHero({ activeChipId: 'video' });
     expect(screen.queryByTestId('home-hero-type-tabs')).toBeNull();
     expect(screen.queryByTestId('home-hero-rail-video')).toBeNull();
-    const node = screen.getByTestId('home-hero-template-trigger');
+    const node = screen.getByTestId('home-hero-active-type-chip');
+    expect(node.getAttribute('data-chip-id')).toBe('video');
     expect(node.textContent).toContain('Video');
-  });
-
-  it('keeps the blank project entry visible after a template is selected', () => {
-    const onStartBlankProject = vi.fn();
-    renderHero({ activeChipId: 'deck', onStartBlankProject });
-
-    expect(screen.queryByTestId('home-hero-template-section')).toBeNull();
-    const promptExamples = screen.getByTestId('home-hero-prompt-examples');
-    const blankProject = screen.getByTestId('home-hero-blank-project');
-    expect(blankProject.textContent).toContain('start a blank project');
-    expect(
-      promptExamples.compareDocumentPosition(blankProject) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-
-    fireEvent.click(blankProject);
-    expect(onStartBlankProject).toHaveBeenCalledTimes(1);
-  });
-
-  it('does not reserve an empty active-context row for a hidden chip-bound plugin', () => {
-    renderHero({
-      activeChipId: 'wireframe',
-      activePluginTitle: 'Wireframe',
-      showActivePluginChip: false,
-      contextItemCount: 3,
-    });
-
-    expect(document.querySelector('.home-hero__active')).toBeNull();
-    expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Wireframe');
   });
 
   it('lets the active creation chip be removed from the composer', () => {
     const { onClearActiveChip } = renderHero({ activeChipId: 'prototype' });
-    fireEvent.click(screen.getByTestId('home-hero-template-trigger'));
-    fireEvent.click(screen.getByTestId('home-hero-template-clear'));
+    fireEvent.click(screen.getByTestId('home-hero-active-type-chip'));
     expect(onClearActiveChip).toHaveBeenCalledTimes(1);
-  });
-
-  it('clears the template pill to None even after a hovered rail card was picked', () => {
-    // The rail owns the hover-preview and unmounts the instant a template
-    // becomes active, so its mouseleave never fires — the preview must not
-    // outlive the committed selection or Clear leaves a stale pill (issue: the
-    // pill stayed "Slide deck" after Clear).
-    const baseProps = {
-      prompt: '',
-      onPromptChange: () => undefined,
-      onSubmit: () => undefined,
-      activePluginTitle: null,
-      activeChipId: null,
-      onClearActivePlugin: () => undefined,
-      pluginOptions: [],
-      pluginsLoading: false,
-      pendingPluginId: null,
-      pendingChipId: null,
-      onPickPlugin: vi.fn(),
-      onPickExamplePlugin: vi.fn(),
-      onPickChip: vi.fn(),
-      onClearActiveChip: vi.fn(),
-      contextItemCount: 0,
-      error: null,
-    } as React.ComponentProps<typeof HomeHero>;
-
-    const { rerender } = render(<HomeHero {...baseProps} activeChipId={null} />);
-
-    // Hover the Slide deck card → the footer pill previews it.
-    fireEvent.mouseEnter(screen.getByTestId('home-hero-rail-deck'));
-    expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Slide deck');
-
-    // Pick commits the chip; the rail unmounts without firing mouseleave.
-    rerender(<HomeHero {...baseProps} activeChipId="deck" />);
-    expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Slide deck');
-
-    // Clear nulls the active chip — the pill must fall back to None.
-    rerender(<HomeHero {...baseProps} activeChipId={null} />);
-    const trigger = screen.getByTestId('home-hero-template-trigger');
-    expect(trigger.textContent).toContain('None');
-    expect(trigger.textContent).not.toContain('Slide deck');
-  });
-
-  it('clears the template pill to None when Clear is pressed on a stale hover-preview', () => {
-    // Hovering a rail card previews it in the footer pill while the active chip
-    // is still null. The reset that drops the preview keys on the *committed*
-    // chip changing, so when the pointer never leaves the card (or the rail
-    // unmounts mid-hover) the preview outlives the hover with activeChipId still
-    // null. Pressing Clear there is a no-op on the active chip, so the pill must
-    // drop the preview itself or it stays stuck on the hovered template.
-    // (Reported: pill stayed on the picked template after Clear.)
-    const { onClearActiveChip } = renderHero({ activeChipId: null });
-
-    fireEvent.mouseEnter(screen.getByTestId('home-hero-rail-deck'));
-    expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Slide deck');
-
-    fireEvent.click(screen.getByTestId('home-hero-template-trigger'));
-    fireEvent.click(screen.getByTestId('home-hero-template-clear'));
-
-    expect(onClearActiveChip).toHaveBeenCalledTimes(1);
-    const trigger = screen.getByTestId('home-hero-template-trigger');
-    expect(trigger.textContent).toContain('None');
-    expect(trigger.textContent).not.toContain('Slide deck');
   });
 
   it('uses the active creation chip as the only clear control for a chip-bound plugin', () => {
@@ -261,7 +164,7 @@ describe('HomeHero intent rail', () => {
     });
 
     expect(screen.getByTestId('home-hero-active-plugin')).toBeTruthy();
-    expect(screen.getByTestId('home-hero-template-trigger').textContent).not.toContain('None');
+    expect(screen.getByTestId('home-hero-active-type-chip')).toBeTruthy();
     expect(screen.queryByLabelText('Clear active plugin')).toBeNull();
   });
 
@@ -302,7 +205,7 @@ describe('HomeHero intent rail', () => {
   it('shows matching plugin presets in the example prompt area for the selected tab', () => {
     const deckPlugin = makePlugin('example-deck-a', 'deck', 'Investor deck');
     const imagePlugin = makePlugin('example-image-a', 'image', 'Product image');
-    const { onPickExamplePlugin, onOpenPluginDetails } = renderHero({
+    const { onPickExamplePlugin } = renderHero({
       activeChipId: 'deck',
       pluginOptions: [deckPlugin, imagePlugin],
     });
@@ -310,42 +213,15 @@ describe('HomeHero intent rail', () => {
     const presets = screen.getAllByTestId('home-hero-plugin-preset');
     expect(presets).toHaveLength(1);
     // The preset card is now a thumbnail + name only; the prompt blurb was
-    // dropped from the card face but is still passed through on Use below.
+    // dropped from the card face but is still passed through on click below.
     expect(presets[0]?.textContent).toContain('Investor deck');
 
-    // Clicking the card body opens the preview (detail modal), not the seed.
     fireEvent.click(presets[0]!);
-    expect(onOpenPluginDetails).toHaveBeenCalledWith(deckPlugin);
-    expect(onPickExamplePlugin).not.toHaveBeenCalled();
-
-    // The Use button is what seeds the composer with the preset's brief.
-    fireEvent.click(screen.getByTestId('home-hero-plugin-preset-use-example-deck-a'));
     expect(onPickExamplePlugin).toHaveBeenCalledWith(
       deckPlugin,
       'deck',
       'Create with a focused brief using Investor deck',
     );
-  });
-
-  it('maps powered WebGL presets to the WebGL chip without exposing a Worker chip', () => {
-    const webgl = makePlugin('example-webgl-experience', 'prototype', 'WebGL Experience', [
-      'webgl',
-      'webgl2',
-      'shader',
-      'gpu',
-      'powered-preview',
-    ]);
-    const worker = makePlugin('example-worker-visualizer', 'prototype', 'Worker Visualizer', [
-      'web-worker',
-      'worker',
-      'sharedarraybuffer',
-      'offscreencanvas',
-      'powered-preview',
-    ]);
-    const unrelated = makePlugin('example-web-prototype', 'prototype', 'Prototype');
-
-    expect(homeHeroExamplePluginsForChip('webgl', [webgl, unrelated, worker], 'en')).toEqual([webgl]);
-    expect(findChip('worker')).toBeUndefined();
   });
 
   it('orders curated example presets first for the selected artifact type', () => {
@@ -470,14 +346,12 @@ describe('HomeHero intent rail', () => {
     });
 
     presets = screen.getAllByTestId('home-hero-plugin-preset');
-    // Order within a facet is now usage/sink-driven (OPEND-449); this test is
-    // about which presets route into Live Artifact, so assert membership only.
-    expect(presets.map((preset) => preset.getAttribute('data-plugin-id')).sort()).toEqual([
-      'example-live-artifact',
+    expect(presets.map((preset) => preset.getAttribute('data-plugin-id'))).toEqual([
       'example-live-dashboard',
+      'image-template-notion-team-dashboard-live-artifact',
       'example-social-media-matrix-tracker-template',
       'example-trading-analysis-dashboard-template',
-      'image-template-notion-team-dashboard-live-artifact',
+      'example-live-artifact',
     ]);
   });
 
@@ -519,13 +393,6 @@ describe('HomeHero intent rail', () => {
     expect(findChip('figma')?.action).toMatchObject({ kind: 'apply-figma-migration' });
     expect(findChip('folder')).toBeUndefined();
     expect(findChip('template')?.action).toMatchObject({ kind: 'open-template-picker' });
-  });
-
-  it('leads the create group with the Brand Kit chip and its own action discriminator', () => {
-    const createChips = HOME_HERO_CHIPS.filter((chip) => chip.group === 'create');
-    expect(createChips[0]?.id).toBe('create-brand-kit');
-    expect(findChip('create-brand-kit')?.action).toMatchObject({ kind: 'create-brand-kit' });
-    expect(findChip('create-brand-kit')?.icon).toBe('swatchbook');
   });
 
   it('media chips route to od-media-generation with the matching project kind', () => {

@@ -1,14 +1,17 @@
-import { expect, test } from '@/playwright/suite';
-import { openNewProjectModal as openNewProjectModalFromProjects } from '@/playwright/rail';
+import { expect, test } from '@playwright/test';
+import { ensureRailOpen } from '@/playwright/rail';
 import { routeAgents } from '@/playwright/mock-factory';
+<<<<<<< HEAD
+=======
 import { clickDeckNextSlide, openAllProjectFiles } from '@/playwright/workspace';
+>>>>>>> upstream/main
 import type { Page } from '@playwright/test';
 import { T } from '@/timeouts';
 
 const STORAGE_KEY = 'open-design:config';
 const ACTIVE_ARTIFACT_PREVIEW_SELECTOR = '[data-testid="artifact-preview-frame"]:visible, [data-testid="artifact-preview-frame-url-load"]:visible, [data-testid="artifact-preview-frame-srcdoc"]:visible, [data-testid="live-artifact-preview-frame"]:visible';
 
-test.describe.configure({ timeout: T.long });
+test.describe.configure({ timeout: 30_000 });
 
 function artifactPreview(page: Page) {
   return page.locator(ACTIVE_ARTIFACT_PREVIEW_SELECTOR).first();
@@ -146,6 +149,9 @@ async function selectPreviewElementThroughBridge(
   section: string,
 ) {
   await expect(frame.locator('html[data-od-edit-mode]')).toHaveCount(1);
+<<<<<<< HEAD
+  await frame.locator(selector).click();
+=======
   // Entering manual-edit mode re-injects the edit bridge and re-emits its targets
   // for a beat (`setTimeout(postTargets, 0)` in edit-mode/bridge.ts), and the
   // preview iframe can still settle (srcDoc swap / target re-emit) at the moment we
@@ -161,9 +167,87 @@ async function selectPreviewElementThroughBridge(
   // Element clicks raise only the lightweight selection chrome; the full
   // inspector opens through the action bar's "Edit parameters" button.
   await page.getByTestId('manual-edit-open-inspector').click();
+>>>>>>> upstream/main
   await expect(page.locator('.manual-edit-modal')).toContainText(section);
+  await expect(frame.locator(`${selector}[data-od-edit-selected="true"]`)).toHaveCount(1);
 }
 
+<<<<<<< HEAD
+async function selectStyleRowInput(
+  page: Page,
+  frame: ReturnType<Page['frameLocator']>,
+  selector: string,
+  section: string,
+  label: string,
+) {
+  await frame.locator(selector).evaluate((el) => {
+    const element = el as HTMLElement;
+    const rect = element.getBoundingClientRect();
+    const styles = window.getComputedStyle(element);
+    window.parent.postMessage({
+      type: 'od-edit-select',
+      target: {
+        id: element.dataset.odId ?? element.id,
+        kind: 'text',
+        label: element.textContent?.trim() || element.tagName.toLowerCase(),
+        tagName: element.tagName.toLowerCase(),
+        className: typeof element.className === 'string' ? element.className : '',
+        text: element.textContent?.trim() ?? '',
+        rect: {
+          x: Math.round(rect.x),
+          y: Math.round(rect.y),
+          width: Math.round(rect.width),
+          height: Math.round(rect.height),
+        },
+        fields: { text: element.textContent?.trim() ?? '' },
+        attributes: Object.fromEntries(Array.from(element.attributes).map((attr) => [attr.name, attr.value])),
+        styles: {
+          fontFamily: styles.fontFamily,
+          fontSize: styles.fontSize,
+          fontWeight: styles.fontWeight,
+          color: styles.color,
+          textAlign: styles.textAlign,
+          lineHeight: styles.lineHeight,
+          letterSpacing: styles.letterSpacing,
+          width: styles.width,
+          height: styles.height,
+          minHeight: styles.minHeight,
+          gap: styles.gap,
+          flexDirection: styles.flexDirection,
+          justifyContent: styles.justifyContent,
+          alignItems: styles.alignItems,
+          backgroundColor: styles.backgroundColor,
+          opacity: styles.opacity,
+          padding: styles.padding,
+          paddingTop: styles.paddingTop,
+          paddingRight: styles.paddingRight,
+          paddingBottom: styles.paddingBottom,
+          paddingLeft: styles.paddingLeft,
+          margin: styles.margin,
+          marginTop: styles.marginTop,
+          marginRight: styles.marginRight,
+          marginBottom: styles.marginBottom,
+          marginLeft: styles.marginLeft,
+          border: styles.border,
+          borderTopWidth: styles.borderTopWidth,
+          borderRightWidth: styles.borderRightWidth,
+          borderBottomWidth: styles.borderBottomWidth,
+          borderLeftWidth: styles.borderLeftWidth,
+          borderStyle: styles.borderStyle,
+          borderColor: styles.borderColor,
+          borderRadius: styles.borderRadius,
+        },
+        isLayoutContainer: false,
+        outerHtml: element.outerHTML,
+      },
+    }, '*');
+  });
+  await expect(page.locator('.manual-edit-modal')).toContainText('TYPOGRAPHY');
+  const row = inspectorSection(page, section).locator('.cc-row').filter({ hasText: label }).locator('input');
+  await expect(row).toBeVisible();
+  return row;
+}
+=======
 test('[P0] @critical preview toolbar keeps share, download, comment, and zoom actions reachable', async ({ page }) => {
   await routeMockAgents(page);
   const projectId = await createEmptyProject(page, 'Preview toolbar smoke');
@@ -533,6 +617,7 @@ test('[P1] first-loop onboarding completes once after a successful artifact expo
   const completedCount = analyticsBodies.join('\n').match(/onboarding_completed/g)?.length ?? 0;
   expect(completedCount).toBe(1);
 });
+>>>>>>> upstream/main
 
 test('[P0] manual edit mode keeps deck navigation available for deck-shaped HTML', async ({ page }) => {
   await routeMockAgents(page);
@@ -543,10 +628,66 @@ test('[P0] manual edit mode keeps deck navigation available for deck-shaped HTML
 
   const frame = artifactPreviewFrame(page);
   await expect(frame.getByText('Slide One')).toBeVisible();
-  await clickDeckNextSlide(page);
+  await page.getByLabel('Next slide').click();
   await expect(frame.getByText('Slide Two')).toBeVisible();
 });
 
+<<<<<<< HEAD
+
+test('[P0] simple deck keeps the active slide stable across preview mode switches', async ({ page }) => {
+  await routeMockAgents(page);
+  const projectId = await createEmptyProject(page, 'Simple deck navigation state');
+  await seedDeckArtifact(page, projectId, 'simple-deck.html', 'Simple Deck', ['Slide One', 'Slide Two', 'Slide Three']);
+  await page.goto(`/projects/${projectId}/files/simple-deck.html`);
+  await openDesignFile(page, 'simple-deck.html');
+
+  const frame = artifactPreviewFrame(page);
+  const viewModeTabs = page.getByRole('tablist', { name: 'View mode' });
+
+  await expect(frame.getByText('Slide One')).toBeVisible();
+  await page.getByLabel('Next slide').click();
+  await expect(frame.getByText('Slide Two')).toBeVisible();
+
+  await viewModeTabs.getByRole('tab', { name: 'Code' }).click();
+  await expect(page.locator('.viewer-source')).toContainText('Slide Three');
+  await viewModeTabs.getByRole('tab', { name: 'Preview' }).click();
+
+  await expect(frame.getByText('Slide Two')).toBeVisible();
+  await page.getByLabel('Next slide').click();
+  await expect(frame.getByText('Slide Three')).toBeVisible();
+});
+
+test('[P0] @critical HTML preview stays rendered after switching from Preview to Code and back', async ({ page }) => {
+  await routeMockAgents(page);
+  const projectId = await createEmptyProject(page, 'HTML preview toggle regression');
+  await seedHtmlArtifact(
+    page,
+    projectId,
+    'toggle-preview.html',
+    '<!doctype html><html><body><main><h1>Toggle Preview Stable</h1><p>Still visible after tab switches.</p></main></body></html>',
+  );
+  await page.goto(`/projects/${projectId}`);
+  await openDesignFile(page, 'toggle-preview.html');
+
+  const previewFrame = artifactPreview(page);
+  await expect(previewFrame).toBeVisible();
+  await expect(
+    artifactPreviewFrame(page).getByRole('heading', { name: 'Toggle Preview Stable' }),
+  ).toBeVisible();
+
+  const viewModeTabs = page.getByRole('tablist', { name: 'View mode' });
+  await viewModeTabs.getByRole('tab', { name: 'Code' }).click();
+  await expect(page.locator('.viewer-source')).toContainText('Toggle Preview Stable');
+
+  await viewModeTabs.getByRole('tab', { name: 'Preview' }).click();
+  await expect(previewFrame).toBeVisible();
+  await expect(
+    artifactPreviewFrame(page).getByRole('heading', { name: 'Toggle Preview Stable' }),
+  ).toBeVisible();
+  await expect(
+    artifactPreviewFrame(page).getByText('Still visible after tab switches.'),
+  ).toBeVisible();
+=======
 test('[P0] @critical edited HTML file restores selected tab and preview after reload', async ({ page }) => {
   await routeMockAgents(page);
   const projectId = await createEmptyProject(page, 'File edit restore smoke');
@@ -602,6 +743,7 @@ test('[P0] @critical edited HTML file restores selected tab and preview after re
   await expect(restoredTitle).toBeVisible();
   await expect.poll(async () => restoredTitle.evaluate((el) => getComputedStyle(el).fontSize)).toBe('52px');
   await expect(restoredTitle).toHaveCSS('color', 'rgb(37, 99, 235)');
+>>>>>>> upstream/main
 });
 
 async function routeMockAgents(page: Page) {
@@ -630,26 +772,6 @@ async function createEmptyProject(page: Page, name: string): Promise<string> {
   return projectId;
 }
 
-async function createProjectViaApi(page: Page, name: string): Promise<string> {
-  await gotoEntryHome(page);
-  const id = `playwright-export-${Date.now()}`;
-  const response = await page.request.post('/api/projects', {
-    data: {
-      id,
-      name,
-      skillId: null,
-      designSystemId: null,
-      metadata: { kind: 'prototype' },
-    },
-    timeout: 15_000,
-  });
-  expect(response.ok()).toBeTruthy();
-  const body = (await response.json()) as { project?: { id?: string } };
-  const projectId = body.project?.id;
-  if (!projectId) throw new Error(`project create response missing id: ${JSON.stringify(body)}`);
-  return projectId;
-}
-
 async function gotoEntryHome(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await waitForLoadingToClear(page);
@@ -663,7 +785,10 @@ async function gotoEntryHome(page: Page) {
 }
 
 async function openNewProjectModal(page: Page) {
-  await openNewProjectModalFromProjects(page);
+  await ensureRailOpen(page);
+  await page.getByTestId('entry-nav-new-project').click();
+  await expect(page.getByTestId('new-project-modal')).toBeVisible();
+  await expect(page.getByTestId('new-project-panel')).toBeVisible();
 }
 
 async function seedHtmlArtifact(page: Page, projectId: string, fileName: string, content: string) {
@@ -688,189 +813,29 @@ async function seedHtmlArtifact(page: Page, projectId: string, fileName: string,
   expect(resp.ok()).toBeTruthy();
 }
 
-async function latestConversationId(page: Page, projectId: string): Promise<string> {
-  const response = await page.request.get(`/api/projects/${projectId}/conversations`, { timeout: 15_000 });
-  expect(response.ok()).toBeTruthy();
-  const { conversations } = (await response.json()) as {
-    conversations: Array<{ id: string; updatedAt: number }>;
-  };
-  const latest = [...conversations].sort((a, b) => b.updatedAt - a.updatedAt)[0];
-  if (!latest) throw new Error(`no conversations found for project ${projectId}`);
-  return latest.id;
-}
-
-async function holdNextRunOpen(page: Page) {
-  let runCount = 0;
-  await page.route('**/api/runs', async (route) => {
-    runCount += 1;
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: JSON.stringify({ runId: `preview-tools-run-${runCount}` }),
-    });
-  });
-  await page.route('**/api/runs/*/events', async () => {
-    await new Promise(() => undefined);
-  });
-}
-
-async function sendPrompt(page: Page, prompt: string) {
-  const input = page.getByTestId('chat-composer-input');
-  const sendButton = page.getByTestId('chat-send');
-  await expect(input).toBeVisible({ timeout: T.short });
-  await input.click();
-  await input.fill(prompt);
-  await expect(input).toHaveText(prompt, { timeout: T.short });
-  await expect(sendButton).toBeEnabled({ timeout: T.short });
-  await Promise.all([
-    page.waitForResponse(isCreateRunResponse, { timeout: 5_000 }),
-    sendButton.evaluate((button: HTMLButtonElement) => button.click()),
-  ]);
-}
-
-function isCreateRunResponse(resp: { url(): string; request(): { method(): string } }): boolean {
-  const url = new URL(resp.url());
-  return url.pathname === '/api/runs' && resp.request().method() === 'POST';
-}
-
-function withSnapshotBridge(html: string): string {
-  const bridge = `
-<script>
-window.addEventListener('message', (event) => {
-  const data = event.data || {};
-  if (data.type !== 'od:snapshot') return;
-  event.source?.postMessage({
-    type: 'od:snapshot:result',
-    id: data.id,
-    dataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=',
-    w: 1,
-    h: 1,
-  }, '*');
-});
-</script>`;
-  return html.replace('</body>', `${bridge}</body>`);
-}
-
-function poweredWebglHtml(): string {
-  return `<!doctype html>
-<html>
-<head>
-  <title>Powered WebGL Smoke</title>
-  <style>
-    body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #0f172a; color: #f8fafc; font-family: sans-serif; }
-    main { display: grid; gap: 12px; justify-items: center; }
-    canvas { width: 160px; height: 96px; border: 1px solid #38bdf8; background: #111827; }
-  </style>
-</head>
-<body>
-  <main>
-    <h1>Powered WebGL Smoke</h1>
-    <canvas id="scene" width="160" height="96"></canvas>
-    <p data-testid="powered-status">booting</p>
-  </main>
-  <script>
-    document.createElement('canvas').getContext('webgl2');
-    const canvas = document.getElementById('scene');
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#22c55e';
-    ctx.fillRect(16, 20, 128, 56);
-    ctx.fillStyle = '#0f172a';
-    ctx.font = '18px sans-serif';
-    ctx.fillText('OD', 66, 55);
-    document.querySelector('[data-testid="powered-status"]').textContent =
-      window.crossOriginIsolated ? 'isolated' : 'not-isolated';
-  </script>
-</body>
-</html>`;
-}
-
 async function seedDeckArtifact(
   page: Page,
   projectId: string,
   fileName: string,
   title: string,
   slides: string[],
-  options: {
-    selfHandlesSlideMessages?: boolean;
-    mentionsSlideMessageProtocol?: boolean;
-    stopsSlideMessagePropagation?: boolean;
-    handlesKeyboard?: boolean;
-    frameworkDeck?: boolean;
-  } = {},
 ) {
   const slideHtml = slides
     .map((slide, index) => `<section class="slide" data-od-id="slide-${index + 1}"${index === 0 ? '' : ' hidden'}><h1>${slide}</h1></section>`)
     .join('\n');
-  const deckHtml = options.frameworkDeck
-    ? `<div class="deck-stage" id="deck-stage">${slideHtml}</div>`
-    : slideHtml;
-  const deckChrome = options.stopsSlideMessagePropagation
-    ? '<nav><span id="deck-cur">01</span> / <span id="deck-total">03</span></nav>'
-    : '';
-  const slideScript =
-    options.selfHandlesSlideMessages || options.stopsSlideMessagePropagation || options.handlesKeyboard
-    ? `<script>
-    (() => {
-      let active = 0;
-      const slides = Array.from(document.querySelectorAll('.slide'));
-      function render() {
-        slides.forEach((slide, index) => {
-          slide.style.display = index === active ? '' : 'none';
-          slide.toggleAttribute('hidden', index !== active);
-        });
-        const cur = document.getElementById('deck-cur');
-        const total = document.getElementById('deck-total');
-        if (cur) cur.textContent = String(active + 1).padStart(2, '0');
-        if (total) total.textContent = String(slides.length).padStart(2, '0');
-      }
-      window.addEventListener('message', (event) => {
-        if (!event.data || event.data.type !== 'od:slide') return;
-        ${options.stopsSlideMessagePropagation ? 'event.stopImmediatePropagation();' : ''}
-        if (event.data.action === 'next') active = Math.min(slides.length - 1, active + 1);
-        if (event.data.action === 'prev') active = Math.max(0, active - 1);
-        if (event.data.action === 'first') active = 0;
-        if (event.data.action === 'last') active = slides.length - 1;
-        if (event.data.action === 'go' && typeof event.data.index === 'number') {
-          active = Math.max(0, Math.min(slides.length - 1, event.data.index));
-        }
-        render();
-        ${options.stopsSlideMessagePropagation ? '' : "window.parent.postMessage({ type: 'od:slide-state', active, count: slides.length }, '*');"}
-      });
-      ${
-        options.handlesKeyboard
-          ? `function onKey(event) {
-        if (event.key !== 'ArrowRight') return;
-        event.preventDefault();
-        active = Math.min(slides.length - 1, active + 1);
-        render();
-      }
-      window.addEventListener('keydown', onKey, true);
-      document.addEventListener('keydown', onKey, true);
-      document.body.setAttribute('tabindex', '-1');
-      document.body.focus();`
-          : ''
-      }
-      render();
-      ${options.stopsSlideMessagePropagation ? '' : "window.parent.postMessage({ type: 'od:slide-state', active, count: slides.length }, '*');"}
-    })();
-    </script>`
-    : '';
-  const protocolText = options.mentionsSlideMessageProtocol
-    ? '<p>Protocol token: od:slide</p>'
-    : '';
   const resp = await page.request.post(
     `/api/projects/${projectId}/files`,
     {
       data: {
         name: fileName,
-        content: `<!doctype html><html><body>${deckChrome}${deckHtml}${protocolText}${slideScript}</body></html>`,
+        content: `<!doctype html><html><body>${slideHtml}</body></html>`,
         artifactManifest: {
           version: 1,
           kind: 'deck',
           title,
           entry: fileName,
           renderer: 'deck-html',
-          exports: ['html', 'pdf'],
+          exports: ['html', 'pptx'],
         },
       },
       timeout: 15_000,
@@ -881,42 +846,34 @@ async function seedDeckArtifact(
 
 async function openDesignFile(page: Page, fileName: string) {
   const preview = artifactPreview(page);
-  await waitForLoadingToClear(page);
-  const activePath = new URL(page.url()).pathname;
-  if (activePath.endsWith(`/files/${encodeURIComponent(fileName)}`) && await preview.isVisible().catch(() => false)) {
+  try {
+    await preview.waitFor({ state: 'visible', timeout: 5_000 });
     return;
+  } catch {
+    // Not yet visible; try opening via tab or file list
   }
+
   const filePattern = new RegExp(fileName.replace(/\./g, '\\.'), 'i');
   const fileTabButton = page.getByRole('tab', { name: filePattern }).first();
   let tabFound = true;
   try {
-    await fileTabButton.waitFor({ state: 'visible', timeout: 5_000 });
+    await fileTabButton.waitFor({ state: 'visible', timeout: 2_000 });
   } catch {
     tabFound = false;
   }
 
   if (tabFound) {
-    const isSelected = await fileTabButton.getAttribute('aria-selected');
-    if (isSelected !== 'true') {
-      await fileTabButton.click();
-    }
+    await fileTabButton.click();
   } else {
-    const fileButton = page.getByRole('button', { name: filePattern }).first();
+    const fileButton = page.getByRole('button', { name: filePattern });
     await fileButton.click();
-    if (!(await preview.isVisible().catch(() => false))) {
-      const openButton = page.getByTestId('design-file-preview').getByRole('button', { name: 'Open' });
-      if (await openButton.isVisible().catch(() => false)) {
-        await openButton.click();
-      } else {
-        await fileButton.dblclick();
-      }
-    }
+    await page.getByTestId('design-file-preview').getByRole('button', { name: 'Open' }).click();
   }
   await expect(preview).toBeVisible();
 }
 
 async function waitForLoadingToClear(page: Page) {
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
+  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.medium });
 }
 
 async function expectFileSource(page: Page, projectId: string, fileName: string, snippets: string[]) {
@@ -951,19 +908,6 @@ function inspectorSection(page: Page, title: string) {
 
 function inspectSaveButton(page: Page) {
   return page.locator('.manual-edit-modal').getByRole('button', { name: /^Save$/ });
-}
-
-function tabBySuffix(page: Page, name: string) {
-  return page
-    .getByRole('tab')
-    .filter({
-      hasText: new RegExp(`${escapeRegExp(name)}$`),
-    })
-    .first();
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function manualEditHtml(): string {

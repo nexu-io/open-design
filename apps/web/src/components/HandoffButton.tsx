@@ -2,7 +2,7 @@
 // current design project folder in a local editor, while the dropdown also
 // exposes copy-to-CLI prompts for handing the same local folder to code agents.
 
-import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type {
   AgentInfo,
   HostEditor,
@@ -15,8 +15,6 @@ import {
 } from '@open-design/contracts/analytics';
 import { fetchHostEditors, openProjectInEditor } from '../providers/registry';
 import { useAnalytics } from '../analytics/provider';
-import { getResolvedDeviceId } from '../analytics/client';
-import { amrHandoffDeviceId, attributedAmrUrl, recordAmrEntry } from '../analytics/amr-attribution';
 import { trackHandoffClick } from '../analytics/events';
 import { useT } from '../i18n';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
@@ -83,11 +81,12 @@ const CLI_ORDER = [
 ];
 
 const FALLBACK_CLI_TARGETS: CliTarget[] = [
-  { id: 'amr', name: 'Open Design', bin: 'vela', available: false },
+  { id: 'amr', name: 'Open Design AMR', bin: 'vela', available: false },
   { id: 'claude', name: 'Claude Code', bin: 'claude', available: false },
   { id: 'codex', name: 'Codex CLI', bin: 'codex', available: false },
   { id: 'opencode', name: 'OpenCode', bin: 'opencode-cli', available: false },
   { id: 'cursor-agent', name: 'Cursor Agent', bin: 'cursor-agent', available: false },
+  { id: 'gemini', name: 'Gemini CLI', bin: 'gemini', available: false },
   { id: 'qwen', name: 'Qwen Code', bin: 'qwen', available: false },
   { id: 'qoder', name: 'Qoder CLI', bin: 'qodercli', available: false },
   { id: 'copilot', name: 'GitHub Copilot CLI', bin: 'copilot', available: false },
@@ -116,8 +115,6 @@ interface Props {
   // Undefined when no artifact tab is active.
   artifactId?: string;
   artifactKind?: TrackingArtifactKind;
-  metricsConsent?: boolean;
-  installationId?: string | null;
   // Optional fallback "always open in OS file manager" — falls back to the
   // existing shell.openPath bridge in case the daemon catalogue is empty
   // (highly unlikely on macOS / Win / Linux but harmless to support).
@@ -161,7 +158,7 @@ function writePreferredFramework(id: string): void {
 }
 
 function cliDisplayName(agent: Pick<CliTarget, 'id' | 'name'>): string {
-  return agent.id === 'amr' ? 'Open Design' : agent.name;
+  return agent.id === 'amr' ? 'Open Design AMR' : agent.name;
 }
 
 function mergeCliTargets(agents: AgentInfo[] | undefined): CliTarget[] {
@@ -293,8 +290,6 @@ export function HandoffButton({
   agents,
   artifactId,
   artifactKind,
-  metricsConsent = false,
-  installationId,
   onRequestRevealInFinder,
 }: Props) {
   const t = useT();
@@ -329,23 +324,6 @@ export function HandoffButton({
   const [error, setError] = useState<string | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const copiedTimerRef = useRef<number | null>(null);
-
-  const handleAmrWebsiteClick = (event: ReactMouseEvent<HTMLAnchorElement>) => {
-    fireHandoff({ element: 'amr_website', handoff_tab: 'cli' });
-    const attribution = recordAmrEntry(analytics.track, 'handoff_amr_website', new Date(), {
-      metricsConsent,
-    });
-    const deviceId = amrHandoffDeviceId({
-      metricsConsent,
-      resolvedDeviceId: getResolvedDeviceId(),
-      installationId,
-    });
-    event.currentTarget.href = attributedAmrUrl(
-      AMR_WEBSITE_URL,
-      attribution,
-      deviceId,
-    );
-  };
 
   useEffect(() => {
     let cancelled = false;
@@ -763,7 +741,7 @@ export function HandoffButton({
                 href={AMR_WEBSITE_URL}
                 target="_blank"
                 rel="noreferrer"
-                onClick={handleAmrWebsiteClick}
+                onClick={() => fireHandoff({ element: 'amr_website', handoff_tab: 'cli' })}
               >
                 <AgentIcon id="amr" size={18} />
                 <span>{t('handoff.amrWebsite')}</span>

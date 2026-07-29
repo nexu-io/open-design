@@ -1,7 +1,7 @@
 ---
 title: 'Another Open Source Repo Just Cloned Claude Design'
 youtubeId: BGQ9i3fvNds
-summary: A structured first-look at Open Design — install it, run a demo, tour the built-in design systems and templates, and reach a candid verdict on whether it's worth your time. Based on Chase AI's hands-on walkthrough.
+summary: Chase AI takes Open Design through install, demo, design systems, and dashboard in one structured tutorial — with a candid verdict on whether it's worth your time today.
 date: 2026-05-01
 category: Tutorial
 durationSeconds: 827
@@ -9,13 +9,18 @@ author: Chase AI
 official: false
 ---
 
-This guide is a structured first-look at Open Design: install it, run a quick demo, tour the built-in design systems and templates, and end with an honest read on where it shines and where it is still rough. It follows the path **Chase AI** took in [his hands-on walkthrough](https://www.youtube.com/watch?v=BGQ9i3fvNds), rewritten and brought up to date with the current release so you can follow along step by step. Watch the video above for the live run, or read on for the written version.
+Chase AI's structured tutorial on Open Design — every section gated by a timestamp so you can skip straight to whichever piece you want to learn.
 
-![The Open Design workspace — what you land on after install.](/tutorials/open-design-install-demo-systems-chase-ai/01-workspace.webp)
-*The Open Design workspace — a calm, familiar canvas with prototypes, slide decks, images, and video all in one place.*
+Chapter map:
 
-## What is Open Design?
+- 00:00 — Open Design
+- 03:17 — Install + demo
+- 08:31 — Design systems
+- 12:40 — Final verdict
 
+<<<<<<< HEAD
+Chase frames Open Design as building on the foundation laid by Huashu Design — same surface area, but with a GUI that mirrors Claude Design's UX.
+=======
 Open Design is an open-source, local-first design platform that runs **on top of the coding agent you already use**. Instead of locking you into one model provider, it detects the supported CLIs already on your machine — Claude Code, Codex, Cursor, Copilot, OpenCode, Qwen, and a couple dozen more — and lets that agent drive generation. Chase calls it "bring your own agent," and that is exactly the point: you are not paying separate API fees on top of a subscription you already have, because generation runs through your own CLI.
 
 A few things that make it worth a look:
@@ -133,3 +138,4 @@ Same familiar feel, but open-source, local-first, and agent-pluggable across 21+
 ---
 
 *This written guide is based on Chase AI's hands-on walkthrough. Watch the full video above, and [subscribe to Chase AI](https://www.youtube.com/watch?v=BGQ9i3fvNds) for more practical AI-tool breakdowns.*
+>>>>>>> upstream/main

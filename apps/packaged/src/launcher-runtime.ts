@@ -1,28 +1,21 @@
-import { createHash } from "node:crypto";
-import { access, lstat, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
-import { basename, dirname, join, resolve, sep } from "node:path";
+import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 
 import {
   LAUNCHER_SCHEMA_VERSION,
-  compareLauncherVersions,
   type LauncherChannel,
-  type LauncherDesktopHandoffDescriptor,
-  type LauncherHandoffResumeRequest,
   type LauncherPaths,
   type LauncherRuntimeDescriptor,
   type LauncherVersionPaths,
-  type LauncherVersionPointer,
   normalizeLauncherChannel,
   normalizeLauncherVersion,
   resolveLauncherPaths,
   resolveLauncherVersionPaths,
   selectLauncherRuntimeTarget,
-  validateLauncherDesktopHandoffDescriptor,
   validateLauncherRuntimeDescriptor,
   type LauncherAttemptDescriptor,
   type LauncherTargetSelection,
 } from "@open-design/launcher-proto";
-import { releaseChannelFromNamespace, releaseChannelFromVersion } from "@open-design/release";
 
 import type { PackagedConfig, PackagedWebOutputMode, RawPackagedConfig } from "./config.js";
 import type { PackagedNamespacePaths } from "./paths.js";
@@ -42,13 +35,10 @@ type LauncherPayloadManifest = {
 
 export type PackagedLauncherRuntime = {
   config: PackagedConfig;
-  desktopExecutablePath: string | null;
   descriptor: LauncherRuntimeDescriptor;
-  electronNodeCommand: string | null;
   installedLaunchPath: string | null;
   launcherPaths: LauncherPaths;
   paths: PackagedNamespacePaths;
-  payloadDesktopProcess: boolean;
   selection: LauncherTargetSelection;
   source: "current-package" | "payload";
   targetVersion: string | null;
@@ -62,6 +52,8 @@ type LauncherInstallDescriptor = {
   updatedAt?: string;
 };
 
+<<<<<<< HEAD
+=======
 type LauncherCleanupDescriptor = {
   channel: LauncherChannel;
   currentVersion: string;
@@ -96,6 +88,7 @@ export type ResolvePackagedLauncherRuntimeOptions = {
   resume?: LauncherHandoffResumeRequest | null;
 };
 
+>>>>>>> upstream/main
 async function pathExists(path: string): Promise<boolean> {
   try {
     await access(path);
@@ -106,9 +99,16 @@ async function pathExists(path: string): Promise<boolean> {
 }
 
 function inferLauncherChannel(config: Pick<PackagedConfig, "appVersion" | "namespace">): LauncherChannel {
-  return releaseChannelFromVersion(config.appVersion)
-    ?? releaseChannelFromNamespace(config.namespace, "default")
-    ?? "stable";
+  const version = config.appVersion;
+  if (version != null) {
+    if (/-preview\./.test(version)) return "preview";
+    if (/-beta\.|beta-nightly\./.test(version)) return "beta";
+    if (/-nightly\.|\.nightly\./.test(version)) return "nightly";
+  }
+  if (config.namespace.includes("preview")) return "preview";
+  if (config.namespace.includes("nightly")) return "nightly";
+  if (config.namespace.includes("beta")) return "beta";
+  return "stable";
 }
 
 function parsePayloadManifest(raw: unknown, expected: {
@@ -206,92 +206,17 @@ async function resolveOptionalPayloadEntry(resourcesPath: string, relative: stri
   return (await pathExists(entry)) ? entry : null;
 }
 
-async function resolveOptionalVersionEntry(versionRoot: string, relative: string | undefined): Promise<string | null> {
-  if (relative == null || relative.length === 0) return null;
-  const entry = join(versionRoot, relative);
-  return (await pathExists(entry)) ? entry : null;
-}
-
-function containsPath(root: string, target: string): boolean {
-  const normalizedRoot = resolve(root);
-  const normalizedTarget = resolve(target);
-  return normalizedTarget === normalizedRoot || normalizedTarget.startsWith(`${normalizedRoot}${sep}`);
-}
-
-async function resolvePayloadDesktopExecutable(
-  versionPaths: LauncherVersionPaths,
-  relative: string,
-): Promise<string | null> {
-  const executablePath = resolve(versionPaths.versionRoot, relative);
-  if (!containsPath(versionPaths.versionRoot, executablePath)) return null;
-  const entry = await lstat(executablePath).catch(() => null);
-  if (entry == null || !entry.isFile() || entry.isSymbolicLink()) return null;
-  return executablePath;
-}
-
-function sameExecutablePath(left: string, right: string): boolean {
-  const normalizedLeft = resolve(left);
-  const normalizedRight = resolve(right);
-  return process.platform === "win32"
-    ? normalizedLeft.toLowerCase() === normalizedRight.toLowerCase()
-    : normalizedLeft === normalizedRight;
-}
-
-async function resolveWindowsPayloadDirectoryAlias(
-  versionPaths: LauncherVersionPaths,
-  kind: string,
-  targetRoot: string | null,
-): Promise<string | null> {
-  if (targetRoot == null) return null;
-  if (process.platform !== "win32") return targetRoot;
-
-  const aliasId = createHash("sha256").update(targetRoot).digest("hex").slice(0, 16);
-  const aliasRoot = join(versionPaths.root, kind, aliasId);
-  if (await pathExists(aliasRoot)) return aliasRoot;
-
-  try {
-    await mkdir(dirname(aliasRoot), { recursive: true });
-    await symlink(targetRoot, aliasRoot, "junction");
-    return aliasRoot;
-  } catch {
-    return targetRoot;
-  }
-}
-
-async function resolveWindowsElectronNodeCommand(versionPaths: LauncherVersionPaths, executablePath: string | null): Promise<string | null> {
-  const executableRoot = executablePath == null ? null : dirname(executablePath);
-  const aliasRoot = await resolveWindowsPayloadDirectoryAlias(versionPaths, "en", executableRoot);
-  return executablePath == null || aliasRoot == null
-    ? null
-    : join(aliasRoot, basename(executablePath));
-}
-
-async function resolveWindowsWebStandaloneRoot(
-  versionPaths: LauncherVersionPaths,
-  platform: LauncherPayloadManifest["platform"],
-  webStandaloneRoot: string | null,
-): Promise<string | null> {
-  return platform === "win32"
-    ? await resolveWindowsPayloadDirectoryAlias(versionPaths, "ws", webStandaloneRoot)
-    : webStandaloneRoot;
-}
-
 async function resolvePayloadConfig(
   config: PackagedConfig,
   versionPaths: LauncherVersionPaths,
   channel: LauncherChannel,
-): Promise<ResolvedPayloadConfig | null> {
+): Promise<PackagedConfig | null> {
   if (!(await pathExists(versionPaths.manifestPath))) return null;
   const manifest = parsePayloadManifest(await readJsonFile<unknown>(versionPaths.manifestPath), {
     channel,
     namespace: config.namespace,
     version: versionPaths.version,
   });
-  const desktopExecutablePath = await resolvePayloadDesktopExecutable(
-    versionPaths,
-    manifest.entry.executable,
-  );
-  if (desktopExecutablePath == null) return null;
   const resourcesPath = manifest.platform === "darwin"
     ? join(versionPaths.versionRoot, manifest.entry.cwd, "Contents", "Resources")
     : join(versionPaths.versionRoot, manifest.payloadRoot, "resources");
@@ -309,33 +234,17 @@ async function resolvePayloadConfig(
       ? join("open-design", "bin", process.platform === "win32" ? "node.exe" : "node")
       : raw.nodeCommandRelative;
   const nodeCommand = await resolveOptionalPayloadEntry(resourcesPath, relativeNodeCommand);
-  const electronNodeCommand = manifest.platform === "win32"
-    ? await resolveWindowsElectronNodeCommand(
-      versionPaths,
-      await resolveOptionalVersionEntry(versionPaths.versionRoot, manifest.entry.executable),
-    )
-    : null;
-  const rawWebStandaloneRoot = raw.webStandaloneRoot == null || raw.webStandaloneRoot.length === 0
-    ? webOutputMode === "standalone" ? join(resourcesPath, "open-design-web-standalone") : null
-    : raw.webStandaloneRoot;
-  const webStandaloneRoot = await resolveWindowsWebStandaloneRoot(
-    versionPaths,
-    manifest.platform,
-    rawWebStandaloneRoot,
-  );
   return {
-    config: {
-      ...config,
-      appVersion: raw.appVersion?.trim() || manifest.version,
-      daemonSidecarEntry: await resolveOptionalPayloadEntry(resourcesPath, raw.daemonSidecarEntryRelative),
-      nodeCommand,
-      resourceRoot,
-      webOutputMode: webOutputMode as PackagedWebOutputMode,
-      webSidecarEntry: await resolveOptionalPayloadEntry(resourcesPath, raw.webSidecarEntryRelative),
-      webStandaloneRoot,
-    },
-    desktopExecutablePath,
-    electronNodeCommand,
+    ...config,
+    appVersion: raw.appVersion?.trim() || manifest.version,
+    daemonSidecarEntry: await resolveOptionalPayloadEntry(resourcesPath, raw.daemonSidecarEntryRelative),
+    nodeCommand,
+    resourceRoot,
+    webOutputMode: webOutputMode as PackagedWebOutputMode,
+    webSidecarEntry: await resolveOptionalPayloadEntry(resourcesPath, raw.webSidecarEntryRelative),
+    webStandaloneRoot: raw.webStandaloneRoot == null || raw.webStandaloneRoot.length === 0
+      ? webOutputMode === "standalone" ? join(resourcesPath, "open-design-web-standalone") : null
+      : raw.webStandaloneRoot,
   };
 }
 
@@ -371,79 +280,9 @@ async function readOrCreateRuntimeDescriptor(
   return descriptor;
 }
 
-function maxRuntimePointer(runtime: LauncherRuntimeDescriptor): string | null {
-  const pointers = [runtime.active, runtime.lastSuccessful].filter((pointer): pointer is LauncherVersionPointer => pointer != null);
-  if (pointers.length === 0) return null;
-  return pointers.reduce((latest, pointer) => (
-    compareLauncherVersions(pointer.version, latest.version) > 0 ? pointer : latest
-  )).version;
-}
-
-function cleanupEntriesForSupersededRuntime(
-  runtime: LauncherRuntimeDescriptor,
-  boundVersion: string,
-  updatedAt: string,
-): LauncherCleanupEntry[] {
-  const byVersion = new Map<string, LauncherCleanupEntry>();
-  for (const pointer of [runtime.active, runtime.lastSuccessful]) {
-    if (pointer == null) continue;
-    if (compareLauncherVersions(pointer.version, boundVersion) >= 0) continue;
-    const existing = byVersion.get(pointer.version);
-    byVersion.set(pointer.version, {
-      generation: Math.max(existing?.generation ?? 0, pointer.generation),
-      reason: "older-than-bound-package",
-      state: "deprecated",
-      updatedAt,
-      version: pointer.version,
-    });
-  }
-  byVersion.set(boundVersion, {
-    generation: 0,
-    reason: "current-bound-package",
-    state: "retained",
-    updatedAt,
-    version: boundVersion,
-  });
-  return [...byVersion.values()].sort((left, right) => compareLauncherVersions(left.version, right.version) || left.version.localeCompare(right.version));
-}
-
-async function reconcileRuntimeWithBoundPackage(
-  config: PackagedConfig,
-  descriptor: LauncherRuntimeDescriptor,
-  launcherPaths: LauncherPaths,
-  channel: LauncherChannel,
-): Promise<LauncherRuntimeDescriptor> {
-  const boundVersion = config.appVersion == null ? null : normalizeLauncherVersion(config.appVersion);
-  if (boundVersion == null) return descriptor;
-  const maxPersistedVersion = maxRuntimePointer(descriptor);
-  if (maxPersistedVersion != null && compareLauncherVersions(boundVersion, maxPersistedVersion) <= 0) return descriptor;
-  const pointer = { generation: 0, version: boundVersion };
-  const updatedAt = new Date().toISOString();
-  const next: LauncherRuntimeDescriptor = {
-    active: pointer,
-    channel,
-    lastSuccessful: pointer,
-    namespace: config.namespace,
-    schemaVersion: LAUNCHER_SCHEMA_VERSION,
-    updatedAt,
-  };
-  await writeJsonFile(launcherPaths.runtimePath, next);
-  await rm(launcherPaths.attemptsPath, { force: true });
-  await writeJsonFile(launcherPaths.cleanupPath, {
-    channel,
-    currentVersion: boundVersion,
-    namespace: config.namespace,
-    updatedAt,
-    version: 1,
-    versions: cleanupEntriesForSupersededRuntime(descriptor, boundVersion, updatedAt),
-  } satisfies LauncherCleanupDescriptor);
-  return next;
-}
-
 export async function resolvePackagedLauncherRuntime(
   config: PackagedConfig,
   paths: PackagedNamespacePaths,
-  options: ResolvePackagedLauncherRuntimeOptions = {},
 ): Promise<PackagedLauncherRuntime> {
   const channel = inferLauncherChannel(config);
   const launcherPaths = resolveLauncherPaths({
@@ -451,13 +290,11 @@ export async function resolvePackagedLauncherRuntime(
     namespace: config.namespace,
     root: paths.installationRoot,
   });
-  const descriptor = await reconcileRuntimeWithBoundPackage(
-    config,
-    await readOrCreateRuntimeDescriptor(config, launcherPaths, channel),
-    launcherPaths,
-    channel,
-  );
+  const descriptor = await readOrCreateRuntimeDescriptor(config, launcherPaths, channel);
   const attempted = await readLauncherAttempt(launcherPaths, channel, config.namespace).catch(() => null);
+<<<<<<< HEAD
+  const selection = selectLauncherRuntimeTarget({ attempted, runtime: descriptor });
+=======
   const currentExecutablePath = options.currentExecutablePath ?? process.execPath;
   const handoff = options.resume == null
     ? null
@@ -484,6 +321,7 @@ export async function resolvePackagedLauncherRuntime(
     resume: requestedResume,
     runtime: descriptor,
   });
+>>>>>>> upstream/main
   const persistedInstall = await readLauncherInstallDescriptor(launcherPaths, channel, config.namespace).catch(() => null);
   const currentPackageLaunchPath = stableAppLaunchPathFromExecutable(process.execPath);
 
@@ -496,23 +334,7 @@ export async function resolvePackagedLauncherRuntime(
     });
     const payloadConfig = await resolvePayloadConfig(config, versionPaths, channel);
     if (payloadConfig != null) {
-      const payloadDesktopProcess = sameExecutablePath(
-        currentExecutablePath,
-        payloadConfig.desktopExecutablePath,
-      );
-      if (
-        selection.reason === "active-resume" &&
-        (handoff == null || !payloadDesktopProcess || !sameExecutablePath(
-          handoff.payloadExecutablePath,
-          payloadConfig.desktopExecutablePath,
-        ))
-      ) {
-        return await resolvePackagedLauncherRuntime(config, paths, {
-          currentExecutablePath,
-          resume: null,
-        });
-      }
-      if (selection.reason === "active" && payloadDesktopProcess) {
+      if (selection.reason === "active") {
         await writeJsonFile(launcherPaths.attemptsPath, {
           channel,
           generation: selection.pointer.generation,
@@ -523,14 +345,11 @@ export async function resolvePackagedLauncherRuntime(
         } satisfies LauncherAttemptDescriptor);
       }
       return {
-        config: payloadConfig.config,
-        desktopExecutablePath: payloadConfig.desktopExecutablePath,
+        config: payloadConfig,
         descriptor,
-        electronNodeCommand: payloadConfig.electronNodeCommand,
         installedLaunchPath: persistedInstall?.launchPath ?? currentPackageLaunchPath,
         launcherPaths,
-        paths: { ...paths, resourceRoot: payloadConfig.config.resourceRoot },
-        payloadDesktopProcess,
+        paths: { ...paths, resourceRoot: payloadConfig.resourceRoot },
         selection,
         source: "payload",
         targetVersion: selection.pointer.version,
@@ -540,9 +359,7 @@ export async function resolvePackagedLauncherRuntime(
 
   return {
     config,
-    desktopExecutablePath: null,
     descriptor,
-    electronNodeCommand: null,
     installedLaunchPath: (await writeLauncherInstallDescriptor(
       launcherPaths,
       channel,
@@ -551,7 +368,6 @@ export async function resolvePackagedLauncherRuntime(
     )).launchPath,
     launcherPaths,
     paths,
-    payloadDesktopProcess: false,
     selection,
     source: "current-package",
     targetVersion: null,
@@ -563,6 +379,11 @@ async function writeJsonFile(path: string, payload: unknown): Promise<void> {
   await writeFile(path, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
 }
 
+<<<<<<< HEAD
+export async function confirmPackagedLauncherRuntime(runtime: PackagedLauncherRuntime): Promise<void> {
+  if (runtime.source !== "payload") return;
+  if (!runtime.selection.selected || runtime.selection.reason !== "active") return;
+=======
 /**
  * Arm attempt.json for a normal active delegation BEFORE the payload spawns.
  * A payload that dies before reaching its own launcher bookkeeping then still
@@ -602,41 +423,13 @@ export async function confirmPackagedLauncherRuntime(runtime: PackagedLauncherRu
     runtime.selection.reason !== "active-resume"
   )) return;
   const confirmedAt = new Date().toISOString();
+>>>>>>> upstream/main
   const next: LauncherRuntimeDescriptor = {
     ...runtime.descriptor,
     active: runtime.selection.pointer,
     lastSuccessful: runtime.selection.pointer,
-    updatedAt: confirmedAt,
+    updatedAt: new Date().toISOString(),
   };
-  const handoff = await readJsonFile<LauncherDesktopHandoffDescriptor>(runtime.launcherPaths.handoffPath)
-    .then((value) => validateLauncherDesktopHandoffDescriptor(value, runtime.launcherPaths))
-    .catch(() => null);
-  const canConfirmResumeBinding =
-    runtime.selection.reason === "active-resume" &&
-    handoff?.state === "armed" &&
-    handoff.target != null &&
-    handoff.target.generation === runtime.selection.pointer.generation &&
-    handoff.target.version === runtime.selection.pointer.version;
-  const canRefreshConfirmedBinding = handoff?.state === "confirmed";
-  if (handoff != null && (canConfirmResumeBinding || canRefreshConfirmedBinding)) {
-    const advancesConfirmedBinding =
-      canRefreshConfirmedBinding &&
-      (
-        handoff.source.generation !== runtime.selection.pointer.generation ||
-        handoff.source.version !== runtime.selection.pointer.version
-      );
-    await writeJsonFile(runtime.launcherPaths.handoffPath, {
-      ...handoff,
-      payloadExecutablePath: runtime.desktopExecutablePath,
-      previous: advancesConfirmedBinding && runtime.descriptor.lastSuccessful != null
-        ? runtime.descriptor.lastSuccessful
-        : handoff.previous,
-      source: runtime.selection.pointer,
-      state: "confirmed",
-      target: runtime.selection.pointer,
-      updatedAt: confirmedAt,
-    } satisfies LauncherDesktopHandoffDescriptor);
-  }
-  await rm(runtime.launcherPaths.attemptsPath, { force: true });
   await writeJsonFile(runtime.launcherPaths.runtimePath, next);
+  await rm(runtime.launcherPaths.attemptsPath, { force: true });
 }

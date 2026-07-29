@@ -39,16 +39,6 @@ describe('redactSecrets', () => {
     expect(redactSecrets('GMAPS=AIzaSyD-Aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1')).toBe(
       'GMAPS=[REDACTED:google_api_key]',
     );
-    expect(
-      redactSecrets('GEMINI=AQ.TestKeyForUnitTests01234567890123456789012'),
-    ).toBe('GEMINI=[REDACTED:google_api_key]');
-  });
-
-  it('redacts NVIDIA API keys even when they are not in a Bearer header', () => {
-    const providerKey = ['nvapi', 'A'.repeat(48)].join('-');
-    expect(redactSecrets(`NVIDIA_API_KEY=${providerKey}`)).toBe(
-      'NVIDIA_API_KEY=[REDACTED:nvidia_api_key]',
-    );
   });
 
   it('redacts Slack and Stripe tokens', () => {

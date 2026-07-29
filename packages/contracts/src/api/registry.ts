@@ -1,29 +1,6 @@
-export type ModelCost = 'low' | 'medium' | 'high' | 'very_high';
-
-export type ModelCapability = 'standard' | 'advanced' | 'best_quality';
-
-export interface ModelMetadata {
-  cost?: ModelCost;
-  capability?: ModelCapability;
-}
-
 export interface AgentModelOption {
   id: string;
   label: string;
-  /** Whether the current account/tier can use this model. */
-  enabled?: boolean;
-  /** Whether this is the default model for the current account/tier. */
-  default?: boolean;
-  /** USD price per 1M input tokens when reported by the provider/catalog. */
-  inputPriceUsdPerMillion?: number;
-  /** USD price per 1M output tokens when reported by the provider/catalog. */
-  outputPriceUsdPerMillion?: number;
-  /** Provider/catalog-owned model picker metadata. */
-  metadata?: ModelMetadata;
-  /** Raw Codex `additional_speed_tiers` values, when the CLI catalog exposes them. */
-  additionalSpeedTiers?: string[];
-  /** Service tiers supported by this model, keyed by Codex config id. */
-  serviceTierOptions?: AgentModelOption[];
 }
 
 /**
@@ -347,8 +324,6 @@ export interface DesignSystemPackageInfo {
     };
     assetsDir?: string;
   };
-  /** Package-relative files the daemon confirmed exist and can be served via /static. */
-  availableFiles?: string[];
   sourceEvidence?: {
     scannedFileCount?: number;
     tokenCount?: number;
@@ -378,7 +353,6 @@ export interface DesignSystemResponse {
 
 export interface DesignSystemProvenance {
   companyBlurb?: string;
-  sourceUrls?: string[];
   githubUrls?: string[];
   localCodeFiles?: string[];
   figFiles?: string[];

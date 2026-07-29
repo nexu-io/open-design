@@ -9,12 +9,8 @@ export interface RunContextSelection {
 export type WorkspaceContextKind =
   | 'design-files'
   | 'design-system'
-  | 'project'
-  | 'local-code'
   | 'file'
   | 'folder'
-  | 'project'
-  | 'local-code'
   | 'browser'
   | 'terminal'
   | 'side-chat'

@@ -1,7 +1,7 @@
 ---
 title: 'Open Design in 20 Minutes — Full Setup + Demo'
 youtubeId: QOqWZzecjuY
-summary: A complete getting-started walkthrough — install Open Design, connect your coding agent, tour the workspace, and build your first high-fidelity prototype. Based on CodingMenace's hands-on first-impressions video.
+summary: CodingMenace's hands-on tour from first impressions through full installation, then walks you through creating prototypes — a complete getting-started session in just over 20 minutes.
 date: 2026-05-05
 category: Getting started
 durationSeconds: 1324
@@ -9,13 +9,19 @@ author: CodingMenace
 official: false
 ---
 
-This guide walks you through your first 20 minutes with Open Design — from a clean install to your first generated prototype. It follows the path CodingMenace (Dennis) took in [his hands-on first-impressions video](https://www.youtube.com/watch?v=QOqWZzecjuY), rewritten and updated to match the current release so you can follow along step by step. Watch the video above for the live walkthrough, or read on for the written version.
+CodingMenace's hands-on getting-started session — from first impressions through install to your first generated prototype, all inside 22 minutes.
 
-![The Open Design home page — an open-source, local, agent-native Claude Design alternative.](/tutorials/open-design-in-20-minutes/01-open-design-home.webp)
-*Open Design positions itself as the open-source Claude Design alternative — desktop-first, agent-native, Apache-2.0.*
+Chapter map:
 
-## What is Open Design?
+- 00:00 — First impressions
+- 01:23 — Exploring features
+- 07:31 — Installing Open Design
+- 13:02 — Creating prototypes
+- 21:31 — Closing thoughts
 
+<<<<<<< HEAD
+If you'd rather watch one video before deciding whether to clone the repo, this is the one.
+=======
 Open Design is an open-source, local-first design platform — an agent-native alternative to Claude Design and Figma. Instead of locking you into one model provider, it runs **on top of the coding agent you already use**: Claude Code, Codex, Cursor, Copilot, OpenCode, Qwen, and a dozen more. It is "bring your own agent" rather than just bring your own key.
 
 A few things that make it worth a look:
@@ -138,3 +144,4 @@ Same familiar feel, but open-source, local-first, and agent-pluggable — plus e
 ---
 
 *This written guide is based on CodingMenace's first-impressions walkthrough. Watch the full video above, and [subscribe to CodingMenace](https://www.youtube.com/watch?v=QOqWZzecjuY) for more hands-on AI-tool videos.*
+>>>>>>> upstream/main

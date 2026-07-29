@@ -17,14 +17,7 @@ type CacheState = {
   lastRemoteError: string | null;
 };
 
-// The AMR model catalog changes rarely (new models land on the order of days),
-// and a cached remote list is returned immediately while a refresh runs in the
-// background — `get()` never blocks on the network when a cached entry exists.
-// The per-run preflight now also reads this cache, so a tight interval would
-// spawn `vela model list` far more often than the catalog actually changes.
-// Refresh at most once every 10 minutes per cache key; callers always get the
-// last-known catalog instantly in between.
-const DEFAULT_REMOTE_REFRESH_INTERVAL_MS = 10 * 60_000;
+const DEFAULT_REMOTE_REFRESH_INTERVAL_MS = 60_000;
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error ?? 'unknown error');
@@ -62,10 +55,6 @@ export class AmrModelLoadingCache {
 
   warm(cacheKey: string, fetchRemote: () => Promise<RuntimeModelOption[]>): void {
     this.startRefresh(this.stateFor(cacheKey), fetchRemote);
-  }
-
-  invalidate(cacheKey: string): void {
-    this.states.delete(cacheKey);
   }
 
   resetForTests(): void {

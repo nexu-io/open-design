@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { renderDiscoveryAndPhilosophy } from '../../src/prompts/discovery.js';
-
-const DISCOVERY_AND_PHILOSOPHY = renderDiscoveryAndPhilosophy('filesystem');
+import { DISCOVERY_AND_PHILOSOPHY } from '../../src/prompts/discovery.js';
 
 // The default-router exception in `discovery.ts` emits a single `<question-form
 // id="task-type">` on turn 1 that combines the routing question (which Open
@@ -22,8 +20,6 @@ describe('discovery.ts task-type form (single-shot brief)', () => {
     expect(DISCOVERY_AND_PHILOSOPHY).toContain('"id": "audience"');
     expect(DISCOVERY_AND_PHILOSOPHY).toContain('"id": "brand"');
     expect(DISCOVERY_AND_PHILOSOPHY).toContain('"id": "scale"');
-    expect(DISCOVERY_AND_PHILOSOPHY).toContain('"id": "speakerNotes"');
-    expect(DISCOVERY_AND_PHILOSOPHY).toContain('"type": "switch"');
     expect(DISCOVERY_AND_PHILOSOPHY).toContain('"id": "constraints"');
   });
 
@@ -69,14 +65,6 @@ describe('discovery.ts task-type form (single-shot brief)', () => {
     );
   });
 
-  it('requires the discovery question form before any tool use', () => {
-    expect(DISCOVERY_AND_PHILOSOPHY).toContain('No native tool calls');
-    expect(DISCOVERY_AND_PHILOSOPHY).toContain(
-      'Do not call TodoWrite, write files, or invoke any native tool before emitting the complete `<question-form>...</question-form>` block',
-    );
-    expect(DISCOVERY_AND_PHILOSOPHY).toContain('the form itself is the next action');
-  });
-
   it('teaches RULE 2 to accept the task-type answer marker alongside discovery', () => {
     // RULE 2's first sentence enumerates the answer markers it routes on. The
     // single-shot brief means `[form answers — task-type]` must be a valid
@@ -85,46 +73,5 @@ describe('discovery.ts task-type form (single-shot brief)', () => {
     expect(DISCOVERY_AND_PHILOSOPHY).toMatch(
       /\[form answers — discovery\][^.]*\[form answers — task-type\]/,
     );
-  });
-});
-
-describe('discovery.ts form prefill contract', () => {
-  // Every emitted <question-form> ships a brief-inferred recommended `default`
-  // per question so the user can submit the form unchanged. The web renderer
-  // already honours `default`/`defaultValue` (question-form.ts parseDefaultValue
-  // + QuestionForm initial state); these markers keep the instruction side and
-  // the example anchors from regressing.
-  it('instructs a recommended default prefill on every question', () => {
-    expect(DISCOVERY_AND_PHILOSOPHY).toContain(
-      'Prefill every question with a recommended `default`',
-    );
-    expect(DISCOVERY_AND_PHILOSOPHY).toContain(
-      'a form the user can submit unchanged and still get a sensible build',
-    );
-  });
-
-  it('prefills the router form too, without loosening its verbatim guard', () => {
-    expect(DISCOVERY_AND_PHILOSOPHY).toContain(
-      'Do not rename, tailor, drop, reorder, or rewrite the `taskType` options',
-    );
-    expect(DISCOVERY_AND_PHILOSOPHY).toContain(
-      "set each question's `default` to your brief-inferred recommendation",
-    );
-  });
-
-  it('exempts the verbatim task-type router form from the 5-question cap', () => {
-    // Reviewer finding on #5603: the hard cap said "never more than 5" while
-    // the locked router form above it carries six fields — two frozen
-    // instructions the model could not satisfy at once. The cap now names the
-    // router form as its one sanctioned exception; both must stay present.
-    expect(DISCOVERY_AND_PHILOSOPHY).toContain('**Hard cap: 5 questions per form — never more.**');
-    expect(DISCOVERY_AND_PHILOSOPHY).toContain(
-      'The one sanctioned exception is the verbatim `<question-form id="task-type">` router form',
-    );
-    expect(DISCOVERY_AND_PHILOSOPHY).toContain('never a reason to trim the router form');
-  });
-
-  it('anchors the pattern with a concrete default in the example forms', () => {
-    expect(DISCOVERY_AND_PHILOSOPHY).toContain('"default": "pick_direction"');
   });
 });

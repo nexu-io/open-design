@@ -14,10 +14,8 @@ export {
 export {
   collectLogSource,
   collectLogSources,
-  findCrashDumps,
   findMacOSCrashReports,
   type CollectedFile,
-  type CrashDumpLookup,
   type CrashReportLookup,
   type LogSource,
   type LogSourceKind,
@@ -38,9 +36,3 @@ export {
   type DiagnosticsExportInput,
   type DiagnosticsExportResult,
 } from "./zip.js";
-
-export {
-  buildRunEventLogSources,
-  buildAgentCliLogSources,
-  type AgentCliLogOptions,
-} from "./agent-logs.js";

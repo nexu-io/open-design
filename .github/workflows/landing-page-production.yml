@@ -46,26 +46,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6.0.2
         with:
-          # The job-level gate above ensures this dispatch came from main.
-          # Pin checkout to the dispatch SHA, not floating main, so the
-          # workflow_run.head_sha used by follow-up QA/reporting jobs is exactly
-          # the commit that production shipped.
-          ref: ${{ github.sha }}
-
-      - name: Verify production checkout commit
-        run: |
-          set -euo pipefail
-          deployed_sha="$(git rev-parse HEAD)"
-          if [ "$deployed_sha" != "$GITHUB_SHA" ]; then
-            echo "::error::production checkout resolved $deployed_sha but workflow dispatch SHA is $GITHUB_SHA"
-            exit 1
-          fi
-          main_sha="$(git ls-remote origin refs/heads/main | awk '{print $1}')"
-          if [ "$GITHUB_SHA" != "$main_sha" ]; then
-            echo "::error::refusing production deploy for stale workflow SHA $GITHUB_SHA; current origin/main is $main_sha"
-            echo "::error::dispatch a fresh production workflow from current main, or add an explicit rollback path instead of rerunning an old deploy."
-            exit 1
-          fi
+          # Production always ships `main`. workflow_dispatch can be launched
+          # from any ref via the Actions "Use workflow from" dropdown, so pin
+          # the checkout to main — the deployed artifact must equal reviewed
+          # main, never whatever branch/tag the operator happened to select.
+          ref: main
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v5
@@ -145,20 +130,14 @@ jobs:
           }
           NODE
 
-      - name: Verify homepage ships optimized WebP art
+      - name: Verify Cloudflare image resizing URLs
         run: |
           node <<'NODE'
           const { readFileSync } = require('node:fs');
           const html = readFileSync('apps/landing-page/out/index.html', 'utf8');
-          // The homepage serves its hero / gallery / method art as optimized,
-          // origin-hosted WebP (each kept <1MB by the changed-file blob guard)
-          // instead of Cloudflare Image Resizing variants — see PR #4158, the
-          // local-first homepage design refresh. Require the same floor of 16
-          // optimized references so a regression that reintroduces raw,
-          // unoptimized art (or drops the gallery) is still caught.
-          const webpRefs = html.match(/\/[A-Za-z0-9/_-]+\.webp/g) ?? [];
-          if (webpRefs.length < 16) {
-            console.error(`Expected at least 16 optimized WebP image references, found ${webpRefs.length}`);
+          const resizedUrls = html.match(/https:\/\/static\.open-design\.ai\/cdn-cgi\/image\//g) ?? [];
+          if (resizedUrls.length < 16) {
+            console.error(`Expected at least 16 Cloudflare resized image URLs, found ${resizedUrls.length}`);
             process.exit(1);
           }
           if (/(?:src|content)=["']\/assets\/[A-Za-z0-9_.-]+\.png/.test(html)) {
@@ -167,32 +146,8 @@ jobs:
           }
           NODE
 
-      - name: Verify deploy file count under Cloudflare Pages cap
-        run: |
-          # Cloudflare Pages rejects deployments over 20,000 files. Localized
-          # routes (especially per-locale catalog detail pages) can silently
-          # multiply the output, so fail well before the hard cap — a regression
-          # is caught here instead of at the wrangler deploy step. `out/`
-          # already includes the generated previews at this point.
-          count=$(find apps/landing-page/out -type f | wc -l | tr -d '[:space:]')
-          echo "landing-page deploy file count: $count"
-          if [ "$count" -ge 19000 ]; then
-            echo "::error::landing-page build emitted $count files; Cloudflare Pages caps deployments at 20,000. Reduce per-locale page fan-out (see PR #4158)."
-            exit 1
-          fi
-
       # `--branch=main` IS the Cloudflare Pages production branch, so this
       # publishes to the production domain (open-design.ai).
-      - name: Apply attribution ledger migrations (production)
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: apps/landing-page
-          packageManager: npm
-          wranglerVersion: "4.110.0"
-          command: d1 migrations apply open-design-landing-attribution --remote
-
       - name: Deploy to Cloudflare Pages (production)
         uses: cloudflare/wrangler-action@v3
         with:
@@ -204,52 +159,3 @@ jobs:
             pages deploy out
             --project-name=open-design-landing
             --branch=main
-
-  # Post a Feishu card to the landing group once the promotion settles. Runs on
-  # BOTH success and failure (a failed production deploy is exactly when people
-  # need a ping), but only when `deploy` actually ran — a dispatch from a
-  # non-main ref skips `deploy`, and we don't want a "deploy failed" card for a
-  # job that never started. Reuses the landing webhook (falling back to the
-  # release webhook), same as landing-page-daily-feishu.
-  notify:
-    name: Notify Feishu (landing production deploy)
-    needs: deploy
-    if: ${{ github.repository == 'nexu-io/open-design' && always() && needs.deploy.result != 'skipped' && needs.deploy.result != 'cancelled' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      # actions:read lets the card find the previous successful production run
-      # to compute the changelog baseline; contents:read for the checkout.
-      contents: read
-      actions: read
-    steps:
-      - name: Checkout deployed commit
-        uses: actions/checkout@v6.0.2
-        with:
-          # Anchor on the exact commit production shipped and fetch full history
-          # so the changelog range (previous deploy .. this deploy) resolves.
-          ref: ${{ github.sha }}
-          fetch-depth: 0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
-
-      - name: Check landing deploy Feishu script
-        run: node --experimental-strip-types .github/scripts/landing-page-deploy-feishu.ts self-check
-
-      - name: Post landing deploy card to Feishu
-        env:
-          FEISHU_WEBHOOK: ${{ secrets.FEISHU_LANDING_WEBHOOK || secrets.FEISHU_RELEASE_WEBHOOK }}
-          FEISHU_SIGN_SECRET: ${{ secrets.FEISHU_LANDING_SIGN_SECRET || secrets.FEISHU_RELEASE_SIGN_SECRET }}
-          GH_TOKEN: ${{ github.token }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          DEPLOY_RESULT: ${{ needs.deploy.result }}
-          DEPLOY_SHA: ${{ github.sha }}
-          ACTOR: ${{ github.actor }}
-          REASON: ${{ github.event.inputs.reason }}
-          PRODUCTION_URL: https://open-design.ai
-          RUN_ID: ${{ github.run_id }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: node --experimental-strip-types .github/scripts/landing-page-deploy-feishu.ts

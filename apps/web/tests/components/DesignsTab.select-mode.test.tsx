@@ -9,12 +9,7 @@ import type { Project } from '../../src/types';
 vi.mock('../../src/providers/registry', () => ({
   deleteLiveArtifact: vi.fn(),
   fetchLiveArtifacts: vi.fn(async () => []),
-  fetchProjectFiles: vi.fn(async (projectId: string) => {
-    if (projectId === 'project-html-scan') {
-      return [{ name: 'index.html', kind: 'html', mtime: 300 }];
-    }
-    return [];
-  }),
+  fetchProjectFiles: vi.fn(async () => []),
   liveArtifactPreviewUrl: (projectId: string, artifactId: string) =>
     `/api/projects/${projectId}/live-artifacts/${artifactId}/preview`,
   projectFileUrl: (projectId: string, fileName: string) =>
@@ -30,16 +25,6 @@ const project: Project = {
   updatedAt: 2,
   status: { value: 'not_started' },
 };
-
-function stubCoverProbe(status = 200, statusText = 'OK') {
-  const fetchMock = vi.fn(async () => ({
-    ok: status >= 200 && status < 300,
-    status,
-    statusText,
-  }) as Response);
-  vi.stubGlobal('fetch', fetchMock);
-  return fetchMock;
-}
 
 describe('DesignsTab select mode', () => {
   beforeAll(() => {
@@ -58,199 +43,10 @@ describe('DesignsTab select mode', () => {
 
   beforeEach(() => {
     window.localStorage.clear();
-    stubCoverProbe();
   });
 
   afterEach(() => {
-    vi.useRealTimers();
-    vi.restoreAllMocks();
-    vi.unstubAllGlobals();
     cleanup();
-  });
-
-  it('refreshes the projects list from the toolbar button', async () => {
-    const onRefresh = vi.fn().mockResolvedValue(undefined);
-    render(
-      <DesignsTab
-        projects={[project]}
-        skills={[]}
-        designSystems={[]}
-        onOpen={vi.fn()}
-        onOpenLiveArtifact={vi.fn()}
-        onDelete={vi.fn()}
-        onRename={vi.fn()}
-        onRefresh={onRefresh}
-        isActive={false}
-      />,
-    );
-
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
-
-    await waitFor(() => {
-      expect(onRefresh).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  it('renders HTML entry files inside project cards with a refreshable URL', async () => {
-    const htmlProject: Project = {
-      ...project,
-      id: 'project-html',
-      name: 'WebGL Experience',
-      updatedAt: 700,
-      metadata: { kind: 'prototype', entryFile: 'index.html' },
-    };
-    const { container } = render(
-      <DesignsTab
-        projects={[htmlProject]}
-        skills={[]}
-        designSystems={[]}
-        onOpen={vi.fn()}
-        onOpenLiveArtifact={vi.fn()}
-        onDelete={vi.fn()}
-        onRename={vi.fn()}
-        isActive={false}
-      />,
-    );
-
-    const thumb = container.querySelector('.project-thumb-html');
-    expect(thumb).toBeTruthy();
-    await waitFor(() => {
-      expect(thumb?.querySelector('iframe')?.getAttribute('src')).toBe(
-        '/api/projects/project-html/files/index.html?v=700',
-      );
-      expect(thumb?.querySelector('.project-thumb-glyph')).toBeNull();
-    });
-  });
-
-  it('uses the same HTML cover source as the recent projects strip when scanning files', async () => {
-    const htmlProject: Project = {
-      ...project,
-      id: 'project-html-scan',
-      name: 'Scanned HTML',
-      metadata: { kind: 'prototype' },
-    };
-    const { container } = render(
-      <DesignsTab
-        projects={[htmlProject]}
-        skills={[]}
-        designSystems={[]}
-        onOpen={vi.fn()}
-        onOpenLiveArtifact={vi.fn()}
-        onDelete={vi.fn()}
-        onRename={vi.fn()}
-        isActive={false}
-      />,
-    );
-
-    await waitFor(() => {
-      const frame = container.querySelector<HTMLIFrameElement>('.project-thumb-html iframe');
-      expect(frame).toBeTruthy();
-      expect(frame?.getAttribute('src')).toBe('/api/projects/project-html-scan/files/index.html?v=300');
-      expect(container.querySelector('.project-thumb-html .project-thumb-glyph')).toBeNull();
-    });
-  });
-
-  it('contains refresh failures and returns the toolbar button to idle', async () => {
-    const onRefresh = vi.fn().mockRejectedValue(new Error('daemon unavailable'));
-    render(
-      <DesignsTab
-        projects={[project]}
-        skills={[]}
-        designSystems={[]}
-        onOpen={vi.fn()}
-        onOpenLiveArtifact={vi.fn()}
-        onDelete={vi.fn()}
-        onRename={vi.fn()}
-        onRefresh={onRefresh}
-        isActive={false}
-      />,
-    );
-
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
-
-    await waitFor(() => {
-      expect(screen.getByRole('alert').textContent).toContain(
-        'Refresh request failed. Check your connection and try again.',
-      );
-    });
-    expect(
-      (screen.getByRole('button', { name: 'Refresh' }) as HTMLButtonElement)
-        .disabled,
-    ).toBe(false);
-  });
-
-  it('auto-refreshes while the projects tab is active', async () => {
-    let intervalCallback: TimerHandler | undefined;
-    const originalSetInterval = window.setInterval.bind(window);
-    const featureIntervalHandle = originalSetInterval(
-      () => {},
-      2147483647,
-    ) as unknown as ReturnType<typeof setInterval>;
-    const setIntervalSpy = vi.spyOn(window, 'setInterval').mockImplementation((handler, timeout) => {
-      if (timeout !== 15000) {
-        return originalSetInterval(handler, timeout) as unknown as ReturnType<typeof setInterval>;
-      }
-      intervalCallback = handler;
-      return featureIntervalHandle;
-    });
-    const onRefresh = vi.fn().mockResolvedValue(undefined);
-    render(
-      <DesignsTab
-        projects={[project]}
-        skills={[]}
-        designSystems={[]}
-        onOpen={vi.fn()}
-        onOpenLiveArtifact={vi.fn()}
-        onDelete={vi.fn()}
-        onRename={vi.fn()}
-        onRefresh={onRefresh}
-        isActive
-      />,
-    );
-
-    await waitFor(() => {
-      expect(onRefresh).toHaveBeenCalledTimes(1);
-    });
-    expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 15000);
-
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
-    expect(onRefresh).toHaveBeenCalledTimes(1);
-
-    onRefresh.mockClear();
-
-    await act(async () => {
-      if (typeof intervalCallback === 'function') intervalCallback();
-      await Promise.resolve();
-    });
-
-    expect(onRefresh).toHaveBeenCalledTimes(1);
-  });
-
-  it('does not auto-refresh while the projects tab is inactive', () => {
-    vi.useFakeTimers();
-    const onRefresh = vi.fn().mockResolvedValue(undefined);
-    render(
-      <DesignsTab
-        projects={[project]}
-        skills={[]}
-        designSystems={[]}
-        onOpen={vi.fn()}
-        onOpenLiveArtifact={vi.fn()}
-        onDelete={vi.fn()}
-        onRename={vi.fn()}
-        onRefresh={onRefresh}
-        isActive={false}
-      />,
-    );
-
-    act(() => {
-      vi.advanceTimersByTime(15000);
-    });
-
-    expect(onRefresh).not.toHaveBeenCalled();
   });
 
   it('only exposes select mode in grid view', () => {

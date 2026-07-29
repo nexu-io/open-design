@@ -1,12 +1,9 @@
-import { expect, test } from '@/playwright/suite';
-import { ensureRailOpen, openNewProjectModal } from '@/playwright/rail';
+import { expect, test } from '@playwright/test';
+import { ensureRailOpen } from '@/playwright/rail';
 import { routeAgents } from '@/playwright/mock-factory';
-import { T } from '@/timeouts';
 import type { Locator, Page } from '@playwright/test';
 
 const STORAGE_KEY = 'open-design:config';
-
-test.describe.configure({ timeout: T.xlong });
 
 const CONNECTORS = [
   {
@@ -119,7 +116,10 @@ test('[P1] prompt template retry preserves the edited body in project metadata',
   });
 
   await gotoEntryHome(page);
-  await openNewProjectModal(page);
+  await ensureRailOpen(page);
+  await page.getByTestId('entry-nav-new-project').click();
+  await expect(page.getByTestId('new-project-modal')).toBeVisible();
+  await expect(page.getByTestId('new-project-panel')).toBeVisible();
   await page.getByTestId('new-project-tab-media').click();
   await page.getByTestId('new-project-media-surface-image').click();
   await page.getByTestId('new-project-name').fill('Prompt template retry metadata');
@@ -161,7 +161,10 @@ test('[P1] live artifact empty connector CTA opens the gated connector setup pat
   await routeComposioConfig(page, { configured: false, apiKeyTail: '' });
 
   await gotoEntryHome(page);
-  await openNewProjectModal(page);
+  await ensureRailOpen(page);
+  await page.getByTestId('entry-nav-new-project').click();
+  await expect(page.getByTestId('new-project-modal')).toBeVisible();
+  await expect(page.getByTestId('new-project-panel')).toBeVisible();
   await page.getByTestId('new-project-tab-live-artifact').click();
   await expect(page.getByTestId('new-project-connectors')).toBeVisible();
 
@@ -364,9 +367,8 @@ async function routeConnectors(page: Page, connectors: typeof CONNECTORS) {
 
 async function gotoEntryHome(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
-  await expect(page.getByTestId('home-hero')).toBeVisible({ timeout: T.long });
-  await expect(page.getByTestId('home-hero-input')).toBeVisible({ timeout: T.long });
+  await expect(page.getByTestId('home-hero')).toBeVisible();
+  await expect(page.getByTestId('home-hero-input')).toBeVisible();
 }
 
 async function openIntegrationsConnectors(page: Page): Promise<Locator> {

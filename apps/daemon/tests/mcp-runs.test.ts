@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { buildProjectRawFileUrl } from '@open-design/contracts';
 
 import { _resetWebBaseUrlCache, handleMcpToolCall } from '../src/mcp.js';
 
@@ -51,19 +50,16 @@ describe('public MCP discovery + generation tools', () => {
       inputs: { tone: 'bold' },
       agent: 'claude',
       model: 'claude-opus-4-7',
-      serviceTier: 'priority',
     });
 
     const postBody = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body));
     expect(postBody).toEqual({
       projectId: 'project-1',
       message: 'A 5-slide seed pitch deck',
-      currentPrompt: 'A 5-slide seed pitch deck',
       pluginId: 'pitch-deck',
       pluginInputs: { tone: 'bold' },
       agentId: 'claude',
       model: 'claude-opus-4-7',
-      serviceTier: 'priority',
     });
     expect(JSON.parse(firstText(result))).toMatchObject({ runId: 'run-42' });
   });
@@ -80,11 +76,7 @@ describe('public MCP discovery + generation tools', () => {
     const result = await handleMcpToolCall('http://127.0.0.1:17456', 'start_run', { prompt: 'iterate' });
 
     const postBody = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body));
-    expect(postBody).toMatchObject({
-      projectId: 'active-1',
-      message: 'iterate',
-      currentPrompt: 'iterate',
-    });
+    expect(postBody).toMatchObject({ projectId: 'active-1', message: 'iterate' });
     expect(JSON.parse(firstText(result))).toMatchObject({
       runId: 'run-7',
       usedActiveContext: { projectId: 'active-1' },
@@ -183,7 +175,7 @@ describe('public MCP discovery + generation tools', () => {
     const result = await handleMcpToolCall('http://127.0.0.1:17456', 'get_run', { runId: 'run-42' });
     const parsed = JSON.parse(firstText(result));
     expect(parsed).toMatchObject({ id: 'run-42', status: 'succeeded' });
-    expect(parsed.previewUrl).toBe(buildProjectRawFileUrl('http://127.0.0.1:17456', 'project-1', 'index.html'));
+    expect(parsed.previewUrl).toBe('http://127.0.0.1:17456/api/projects/project-1/raw/index.html');
   });
 
   it('get_run does not add a previewUrl while the run is still running', async () => {
@@ -419,7 +411,7 @@ describe('public MCP discovery + generation tools', () => {
     const result = await handleMcpToolCall('http://127.0.0.1:17456', 'get_project', { project: PROJECT_UUID });
     const parsed = JSON.parse(firstText(result));
     expect(parsed.entryFile).toBe('index.html');
-    expect(parsed.previewUrl).toBe(buildProjectRawFileUrl('http://127.0.0.1:17456', PROJECT_UUID, 'index.html'));
+    expect(parsed.previewUrl).toBe(`http://127.0.0.1:17456/api/projects/${PROJECT_UUID}/raw/index.html`);
   });
 
   it('get_project omits previewUrl when the project has no entry file', async () => {
@@ -459,7 +451,7 @@ describe('public MCP discovery + generation tools', () => {
 
     const result = await handleMcpToolCall('http://127.0.0.1:17456', 'get_project', { project: PROJECT_UUID });
     const parsed = JSON.parse(firstText(result));
-    expect(parsed.previewUrl).toBe(buildProjectRawFileUrl('http://127.0.0.1:17456', PROJECT_UUID, 'index.html'));
+    expect(parsed.previewUrl).toBe(`http://127.0.0.1:17456/api/projects/${PROJECT_UUID}/raw/index.html`);
   });
 
   it('get_project falls back to the only *.html when no index.html and no entryFile', async () => {
@@ -478,7 +470,7 @@ describe('public MCP discovery + generation tools', () => {
 
     const result = await handleMcpToolCall('http://127.0.0.1:17456', 'get_project', { project: PROJECT_UUID });
     const parsed = JSON.parse(firstText(result));
-    expect(parsed.previewUrl).toBe(buildProjectRawFileUrl('http://127.0.0.1:17456', PROJECT_UUID, 'deck.html'));
+    expect(parsed.previewUrl).toBe(`http://127.0.0.1:17456/api/projects/${PROJECT_UUID}/raw/deck.html`);
   });
 
   it('get_project does not guess when there are multiple HTML files and no entryFile', async () => {
@@ -565,7 +557,7 @@ describe('public MCP discovery + generation tools', () => {
 
     const result = await handleMcpToolCall('http://127.0.0.1:17456', 'get_run', { runId: 'run-42' });
     const parsed = JSON.parse(firstText(result));
-    expect(parsed.previewUrl).toBe(buildProjectRawFileUrl('http://127.0.0.1:17456', 'project-1', 'index.html'));
+    expect(parsed.previewUrl).toBe('http://127.0.0.1:17456/api/projects/project-1/raw/index.html');
     expect(parsed.agentMessage).toBe('Done — see index.html.');
   });
 
@@ -587,7 +579,7 @@ describe('public MCP discovery + generation tools', () => {
     const result = await handleMcpToolCall('http://127.0.0.1:17456', 'get_run', { runId: 'run-42' });
     const parsed = JSON.parse(firstText(result));
     expect(parsed.status).toBe('succeeded');
-    expect(parsed.previewUrl).toBe(buildProjectRawFileUrl('http://127.0.0.1:17456', 'project-1', 'index.html'));
+    expect(parsed.previewUrl).toBe('http://127.0.0.1:17456/api/projects/project-1/raw/index.html');
     expect(parsed.agentMessage).toBeUndefined();
   });
 

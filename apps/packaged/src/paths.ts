@@ -1,5 +1,5 @@
 import { homedir } from "node:os";
-import { join, posix, win32 } from "node:path";
+import { isAbsolute, join, win32 } from "node:path";
 
 import { APP_KEYS, normalizeNamespace } from "@open-design/sidecar-proto";
 
@@ -60,7 +60,7 @@ function resolvePackagedDataRoot(
     const expanded = expandHomePrefix(odDataDir);
     const isAbs = process.platform === "win32"
       ? win32.isAbsolute(expanded)
-      : posix.isAbsolute(expanded);
+      : isAbsolute(expanded);
     if (!isAbs) {
       throw new PackagedPathAccessError(
         [
@@ -107,7 +107,7 @@ export function resolvePackagedNamespacePaths(
   const dataRoot = resolvePackagedDataRoot(config, normalizedNamespace, env);
   // Channel root = parent of the `namespaces/` directory. With the default
   // packaged layout this resolves to `<electronApp.userData>` — e.g.
-  // `~/Library/Application Support/Open Design Prerelease/` on mac. Custom
+  // `~/Library/Application Support/Open Design Nightly/` on mac. Custom
   // `namespaceBaseRoot` overrides (tests, multi-namespace deployments)
   // still get a usable parent here.
   const installationRoot = join(config.namespaceBaseRoot, "..");

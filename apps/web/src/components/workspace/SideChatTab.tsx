@@ -37,6 +37,7 @@ export interface ActiveConversationChatState {
   ) => void;
   onRetry?: (assistantMessage: ChatMessage) => void;
   onStop: () => void;
+  onSubmitForm?: (text: string) => void;
   onRemoveQueuedSend?: (id: string) => void;
   // Editing a queued send replaces its full payload (prompt + attachments +
   // comment attachments + meta), matching ChatPane's QueuedSendUpdate, not just
@@ -71,9 +72,6 @@ interface Props {
   /** Project files for the composer's @-mention picker and produced-file chips. */
   projectFiles: ProjectFile[];
   projectFileNames?: Set<string>;
-  /** Daemon-resolved on-disk working directory of the project — positive-proof
-   *  anchor for chat file-link routing (see AssistantMessage). */
-  projectResolvedDir?: string | null;
   /** Conversation list + selection callbacks, shared with the header menu so a
    *  side chat is just another conversation the user can browse/switch. */
   conversations: Conversation[];
@@ -100,7 +98,6 @@ export function SideChatTab({
   locale,
   projectFiles,
   projectFileNames,
-  projectResolvedDir,
   conversations,
   onSelectConversation,
   onDeleteConversation,
@@ -150,11 +147,14 @@ export function SideChatTab({
           onSessionModeChange={(mode) => onSessionModeChange?.(conversationId, mode)}
           projectFiles={projectFiles}
           projectFileNames={projectFileNames}
-          projectResolvedDir={projectResolvedDir}
           onEnsureProject={async () => projectId}
           onSend={controlledChat?.onSend ?? chat.onSend}
           onRetry={controlledChat?.onRetry ?? chat.onRetry}
           onStop={controlledChat?.onStop ?? chat.onStop}
+          onSubmitForm={(text) => {
+            if (controlledChat?.onSubmitForm) controlledChat.onSubmitForm(text);
+            else chat.onSend(text, [], []);
+          }}
           onAssistantFeedback={controlledChat?.onAssistantFeedback}
           onRequestOpenFile={onRequestOpenFile}
           conversations={conversations}

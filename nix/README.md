@@ -57,9 +57,7 @@ What this wires up:
   `open-design-web.service`. `systemctl --user status open-design`.
 - macOS: `launchd` agents `io.nexu.open-design` and (optionally)
   `io.nexu.open-design-web`. `launchctl print gui/$UID/io.nexu.open-design`.
-- Before documenting or changing daemon storage, you MUST read root
-  [`AGENTS.md`](../AGENTS.md) → **Daemon data directory contract**. This README
-  MUST NOT restate it.
+- Data lives in `$HOME/.od/` by default — override `dataDir` to relocate.
 
 ## (2) NixOS — for shared/server installs
 
@@ -241,18 +239,23 @@ installing the workspace.
 
 ## CI
 
-Nix validation is a **standalone** workflow (`.github/workflows/nix.yml`), not
-part of core merge validation (`ci.yml` / `Validate workspace` / merge queue).
-It runs `nix flake check` on pull requests and `main` pushes that touch flake,
-lock, or `nix/**` inputs (plus manual `workflow_dispatch`).
+`.github/workflows/nix-check.yml` runs `nix flake check` on pushes to
+`main` and can also be started manually with `workflow_dispatch`.
 
-Refresh a stale `nix/pnpm-deps.nix` locally:
+Pull requests that touch Nix inputs, daemon/web Nix build closures, or the
+generated hash maintenance workflows are validated earlier in
+`.github/workflows/ci.yml` via the required `Validate workspace` gate.
+That PR path runs `nix flake check` for `flake.*`, `nix/**`, root lock and
+workspace manifests, and files that are actually in the daemon/web Nix
+closures. The flake also filters each derivation down to only the workspace
+packages it actually installs, so unrelated package/tool changes stay off the
+slower Nix path and do not churn the other derivation's pnpm store hash.
 
-```bash
-pnpm nix:update-hash
-nix flake check --print-build-logs --keep-going
-```
+When a PR run fails because `nix/pnpm-deps.nix` is stale, the CI job also
+tries to regenerate a hash-only patch:
 
-The flake filters each derivation down to only the workspace packages it
-actually installs, so unrelated package/tool changes stay off the slower Nix
-path and do not churn the other derivation's pnpm store hash.
+- same-repo PRs get a bot-authored commit pushed back to the PR branch when
+  the generated patch only touches `nix/pnpm-deps.nix`;
+- fork PRs get a PR comment plus a workflow artifact containing the patch;
+- the failing run still stays red until the generated patch lands and a
+  fresh validation run passes.

@@ -1,8 +1,6 @@
-import { expect, test } from '@/playwright/suite';
-import { openNewProjectModal as openNewProjectModalFromProjects } from '@/playwright/rail';
-import { runErrorCard } from '@/playwright/chat';
-import { openAllProjectFiles } from '@/playwright/workspace';
-import type { Locator, Page, Request, Response } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import { ensureRailOpen } from '@/playwright/rail';
+import type { Page, Request, Response } from '@playwright/test';
 import {
   createFakeAgentRuntimes,
   FAKE_AGENT_RUNTIME_IDS,
@@ -14,15 +12,10 @@ const STORAGE_KEY = 'open-design:config';
 const ACTIVE_ARTIFACT_PREVIEW_SELECTOR = '[data-testid="artifact-preview-frame"]:visible, [data-testid="artifact-preview-frame-url-load"]:visible, [data-testid="artifact-preview-frame-srcdoc"]:visible, [data-testid="live-artifact-preview-frame"]:visible';
 const GENERATED_FILE = 'real-daemon-smoke.html';
 const GENERATED_HEADING = 'Real Daemon Smoke';
-const EDITED_GENERATED_HEADING = 'Real Daemon Smoke Edited';
 const CHUNKED_FILE = 'chunked-daemon-smoke.html';
 const CHUNKED_HEADING = 'Chunked Daemon Smoke';
-const PLAIN_STREAM_FILE = 'fake-agent-runtime-qwen.html';
-const PLAIN_STREAM_HEADING = 'Fake Agent Runtime qwen';
 const DELAYED_FILE = 'delayed-daemon-smoke.html';
 const DELAYED_HEADING = 'Delayed Daemon Smoke';
-const SLOW_RELOAD_FILE = 'slow-reload-daemon-smoke.html';
-const SLOW_RELOAD_HEADING = 'Slow Reload Daemon Smoke';
 const FOLLOW_UP_FILE = 'follow-up-daemon-smoke.html';
 let fakeRuntimes: Awaited<ReturnType<typeof createFakeAgentRuntimes>>;
 
@@ -34,18 +27,14 @@ function artifactPreviewFrame(page: Page) {
   return page.frameLocator(ACTIVE_ARTIFACT_PREVIEW_SELECTOR);
 }
 
-// No serial mode: every test performs its full setup in beforeEach (config
-// reset, localStorage seed, fake agent config) and creates its own project,
-// so tests hold order-independent. Keeping the file splittable matters for
-// the CI shard matrix — a serial group is atomic within one shard and this
-// file's chain alone would floor the UI wall time.
+test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(async () => {
   fakeRuntimes = await createFakeAgentRuntimes();
 });
 
 test.beforeEach(async ({ page }) => {
-  test.setTimeout(T.xlong);
+  test.setTimeout(60_000);
 
   await resetDaemonAppConfig(page);
 
@@ -96,12 +85,6 @@ test('[P0] real daemon run streams, persists, and previews an artifact', async (
   expect(await rawResponse.text()).toContain(GENERATED_HEADING);
 
   await expectProjectFileToContain(page, projectId, GENERATED_FILE, GENERATED_HEADING);
-
-  await page.reload({ waitUntil: 'domcontentloaded' });
-  await waitForLoadingToClear(page);
-  await expect(artifactPreview(page)).toBeVisible();
-  await expect(artifactPreviewFrame(page).getByRole('heading', { name: GENERATED_HEADING })).toBeVisible();
-  await expectProjectFileToContain(page, projectId, GENERATED_FILE, GENERATED_HEADING);
 });
 
 test('[P0] real daemon run persists an artifact streamed across multiple chunks', async ({ page }) => {
@@ -118,6 +101,8 @@ test('[P0] real daemon run persists an artifact streamed across multiple chunks'
   await expectProjectFileToContain(page, projectId, CHUNKED_FILE, CHUNKED_HEADING);
 });
 
+<<<<<<< HEAD
+=======
 test('[P1] plain stdout daemon runtime persists artifact tags into project files and preview', async ({ page }) => {
   await createProject(page, 'Plain stream artifact smoke', 'qwen');
   await expectWorkspaceReady(page);
@@ -131,14 +116,15 @@ test('[P1] plain stdout daemon runtime persists artifact tags into project files
   await expectProjectFileToContain(page, projectId, PLAIN_STREAM_FILE, PLAIN_STREAM_HEADING);
 });
 
+>>>>>>> upstream/main
 test('[P0] real daemon run surfaces process/parser errors in chat', async ({ page }) => {
   await createProject(page, 'Daemon error smoke');
   await expectWorkspaceReady(page);
 
   await sendPrompt(page, 'Return an intentional daemon smoke failure');
 
-  await expect(runErrorCard(page)).toContainText('intentional fake codex failure', { timeout: 15_000 });
-  await expect(runErrorCard(page)).toContainText('intentional fake codex failure');
+  await expect(page.locator('.msg.error')).toContainText('intentional fake codex failure', { timeout: 15_000 });
+  await expect(page.locator('.msg.error')).toContainText('intentional fake codex failure');
 });
 
 test('[P0] real daemon run classifies a Claude mid-stream socket drop as a retryable connection error', async ({ page }) => {
@@ -151,7 +137,7 @@ test('[P0] real daemon run classifies a Claude mid-stream socket drop as a retry
   // classified as AGENT_CONNECTION_DROPPED and the error card shows the
   // localized chat.connectionDropped copy (en locale here) instead of echoing
   // the raw SDK string verbatim.
-  await expect(runErrorCard(page)).toContainText('connection to the model service dropped', {
+  await expect(page.locator('.msg.error')).toContainText('connection to the model service dropped', {
     timeout: 15_000,
   });
 });
@@ -175,6 +161,8 @@ test('[P0] real daemon run supports a follow-up turn in the same project', async
   await expectProjectFileToContain(page, projectId, FOLLOW_UP_FILE, 'Generated after an earlier daemon turn.');
 });
 
+<<<<<<< HEAD
+=======
 test('[P1] real daemon run treats an in-place artifact edit as produced work', async ({ page }) => {
   await createProject(page, 'Daemon artifact edit smoke', 'claude');
   await expectWorkspaceReady(page);
@@ -335,6 +323,7 @@ test('[P1] Plan mode regeneration re-opens the existing generated HTML file', as
   await expect(htmlTab).toHaveAttribute('aria-selected', 'true', { timeout: 15_000 });
 });
 
+>>>>>>> upstream/main
 test('[P0] real daemon run restores a delayed artifact turn after reload', async ({ page }) => {
   await createProject(page, 'Delayed daemon reload smoke');
   await expectWorkspaceReady(page);
@@ -351,7 +340,7 @@ test('[P0] real daemon run restores a delayed artifact turn after reload', async
   await expect(frame.getByRole('heading', { name: DELAYED_HEADING })).toBeVisible();
 
   const files = await listProjectFiles(page, projectId);
-  expect(files.map((file) => file.name)).toEqual(expect.arrayContaining([DELAYED_FILE]));
+  expect(files.map((file) => file.name)).toEqual([DELAYED_FILE]);
   await expectProjectFileToContain(page, projectId, DELAYED_FILE, 'Generated after a delayed daemon turn.');
 
   await expectRestoredDelayedAssistantMessage(page, projectId, conversationId, {
@@ -360,6 +349,8 @@ test('[P0] real daemon run restores a delayed artifact turn after reload', async
   });
 });
 
+<<<<<<< HEAD
+=======
 test('[P1] real daemon run reconnects after reload while the run is still active', async ({ page }) => {
   test.setTimeout(90_000);
 
@@ -463,6 +454,7 @@ test('[P1] artifact persistence survives page reload during an active real daemo
   await expect(artifactPreviewFrame(page).getByRole('heading', { name: SLOW_RELOAD_HEADING })).toBeVisible({ timeout: 15_000 });
 });
 
+>>>>>>> upstream/main
 test('[P1] real daemon run survives reload before the create response reaches the browser', async ({ page }) => {
   await createProject(page, 'Delayed daemon create-response reload smoke');
   await expectWorkspaceReady(page);
@@ -491,7 +483,7 @@ test('[P0] empty daemon output fails cleanly, persists after reload, and does no
 
   const expectedError = 'Agent completed without producing any output.';
   await expect(page.getByText(expectedError, { exact: false }).first()).toBeVisible({ timeout: 15_000 });
-  await expect(runErrorCard(page)).toContainText(expectedError);
+  await expect(page.locator('.msg.error')).toContainText(expectedError);
 
   const { projectId, conversationId } = await currentProjectContext(page);
   await expect.poll(async () => {
@@ -503,6 +495,9 @@ test('[P0] empty daemon output fails cleanly, persists after reload, and does no
   await page.reload({ waitUntil: 'domcontentloaded' });
   await expectWorkspaceReady(page);
   await expect(page.getByText(expectedError, { exact: false }).first()).toBeVisible();
+<<<<<<< HEAD
+  await expect(page.locator('.msg.error')).toContainText(expectedError);
+=======
   await expect(runErrorCard(page)).toContainText(expectedError);
   expect(await listProjectFiles(page, projectId)).toEqual([]);
 });
@@ -526,6 +521,7 @@ test('[P1] plain stdout daemon runtime surfaces stderr-only failures without gho
   await page.reload({ waitUntil: 'domcontentloaded' });
   await expectWorkspaceReady(page);
   await expect(runErrorCard(page)).toContainText(expectedError);
+>>>>>>> upstream/main
   expect(await listProjectFiles(page, projectId)).toEqual([]);
 });
 
@@ -577,42 +573,6 @@ test('[P0] real daemon run previews an artifact from a fake OpenCode runtime', a
   await expectProjectFileToContain(page, projectId, fileName, heading);
 });
 
-test('[P1] BYOK OpenCode run is blocked before spawn when provider config is missing', async ({ page }) => {
-  await createByokOpenCodeProject(page, 'BYOK OpenCode missing provider smoke');
-  await expectWorkspaceReady(page);
-
-  // The client-side BYOK preflight (apps/web byok/preflight) catches a missing
-  // provider before any POST: it blocks the submit and opens the execution
-  // Settings section for the user to complete the config. So "fails clearly
-  // before spawn" now means no create-run request is issued and the preflight
-  // surfaces the fix, not a daemon-side failed run.
-  let createRunRequestSent = false;
-  page.on('request', (request) => {
-    if (isCreateRunRequest(request)) createRunRequestSent = true;
-  });
-
-  const { projectId } = await currentProjectContext(page);
-  const input = page.getByTestId('chat-composer-input');
-  await input.click();
-  await input.fill('Create a BYOK OpenCode missing provider smoke artifact');
-  await expect(input).toHaveText('Create a BYOK OpenCode missing provider smoke artifact');
-  await page.getByTestId('chat-send').click();
-
-  // The preflight opens the execution-mode Settings section.
-  await expect(
-    page.getByRole('dialog').filter({ hasText: 'Execution mode' }),
-  ).toBeVisible({ timeout: 15_000 });
-
-  // No run was created and no artifact was produced — the block is pre-spawn.
-  await page.waitForTimeout(1_000);
-  expect(createRunRequestSent).toBe(false);
-  expect(await listProjectFiles(page, projectId)).toEqual([]);
-
-  await page.reload({ waitUntil: 'domcontentloaded' });
-  await expectWorkspaceReady(page);
-  expect(await listProjectFiles(page, projectId)).toEqual([]);
-});
-
 test('[P1] plugin authoring produces a generated-plugin scaffold with action cards', async ({ page }) => {
   await configureFakeAgent(page, 'codex');
   await installBrowserAgentConfig(page, 'codex');
@@ -625,15 +585,8 @@ test('[P1] plugin authoring produces a generated-plugin scaffold with action car
   await expectBrowserAgentConfig(page, 'codex');
   await dismissPrivacyDialog(page);
 
-  // Enter plugin authoring through the Plugins page create button. It drives
-  // the same queuePluginAuthoring flow as the home shortcuts menu, and this
-  // spec's oracle is the generated scaffold plus its action cards — not the
-  // menu chrome. The shortcuts trigger itself sits disabled on CI runners
-  // while a home plugin apply hangs; that anomaly is tracked as its own
-  // follow-up rather than blocking this journey.
-  await page.goto('/plugins', { waitUntil: 'domcontentloaded' });
-  await waitForLoadingToClear(page);
-  await page.getByTestId('plugins-create-button').click();
+  await page.getByTestId('home-hero-shortcuts-trigger').click();
+  await page.getByTestId('home-hero-rail-create-plugin').click();
   await expect(page.getByTestId('home-hero-input')).toHaveText(/Create an Open Design plugin for:/);
 
   const projectRequestPromise = page.waitForRequest(isCreateProjectRequest);
@@ -669,9 +622,6 @@ test('[P1] plugin authoring produces a generated-plugin scaffold with action car
   await expect(page.getByTestId('assistant-plugin-publish-generated-plugin')).toBeVisible();
   await expect(page.getByTestId('assistant-plugin-contribute-generated-plugin')).toBeVisible();
 
-  // The run auto-opens the produced file tab; the plugin-folder card lives in
-  // the Design Files ("All project files") view, so navigate there first.
-  await openAllProjectFiles(page);
   await expect(page.getByTestId('design-plugin-folder-generated-plugin')).toBeVisible();
   await expect(page.getByTestId('design-plugin-folder-install-generated-plugin')).toBeVisible();
   await expect(page.getByTestId('design-plugin-folder-publish-generated-plugin')).toBeVisible();
@@ -714,6 +664,12 @@ async function createProject(page: Page, name: string, agentId: FakeAgentId = 'c
   await waitForLoadingToClear(page);
   await expectBrowserAgentConfig(page, agentId);
   await dismissPrivacyDialog(page);
+<<<<<<< HEAD
+  await ensureRailOpen(page);
+  await page.getByTestId('entry-nav-new-project').click();
+  await expect(page.getByTestId('new-project-modal')).toBeVisible();
+  await expect(page.getByTestId('new-project-panel')).toBeVisible();
+=======
 }
 
 async function createByokOpenCodeProject(page: Page, name: string) {
@@ -728,6 +684,7 @@ async function createByokOpenCodeProject(page: Page, name: string) {
   await expectBrowserAgentConfig(page, 'byok-opencode');
   await dismissPrivacyDialog(page);
   await openNewProjectModalFromProjects(page);
+>>>>>>> upstream/main
   await page.getByTestId('new-project-tab-prototype').click();
   await page.getByTestId('new-project-name').fill(name);
   await page.getByTestId('create-project').click();
@@ -756,20 +713,8 @@ async function openProjectFromProjectsView(page: Page, projectId: string) {
 }
 
 async function gotoEntryHome(page: Page) {
-  // Hold until the async projects list settles: its late resolution re-renders
-  // the home hero (recent-projects strip mounting), which keeps controls like
-  // the shortcuts trigger unstable under CI timing. Arm before navigating.
-  const projectsSettled = page
-    .waitForResponse(
-      (response) =>
-        new URL(response.url()).pathname === '/api/projects' &&
-        response.request().method() === 'GET',
-      { timeout: 10_000 },
-    )
-    .catch(() => null);
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await waitForLoadingToClear(page);
-  await projectsSettled;
   const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
   if (await privacyDialog.isVisible()) {
     await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
@@ -787,20 +732,6 @@ async function expectWorkspaceReady(page: Page) {
   await expect(page.getByTestId('file-workspace')).toBeVisible();
 }
 
-async function selectComposerSessionMode(page: Page, modeTitle: 'Ask mode' | 'Plan mode' | 'Design mode') {
-  const trigger = page.getByTestId('chat-composer').getByTestId('session-mode-trigger');
-  await expect(trigger).toBeVisible();
-  await trigger.click();
-
-  const menu = page.locator('.session-mode-toggle__menu[role="menu"]');
-  await expect(menu).toBeVisible();
-  await expect(menu.getByRole('menuitemradio', { name: 'Ask mode' })).toBeVisible();
-  await expect(menu.getByRole('menuitemradio', { name: 'Plan mode' })).toBeVisible();
-  await expect(menu.getByRole('menuitemradio', { name: 'Design mode' })).toBeVisible();
-  await menu.getByRole('menuitemradio', { name: modeTitle }).click();
-  await expect(trigger).toHaveAttribute('aria-label', modeTitle);
-}
-
 async function sendPrompt(page: Page, prompt: string) {
   const input = page.getByTestId('chat-composer-input');
   const sendButton = page.getByTestId('chat-send');
@@ -809,32 +740,15 @@ async function sendPrompt(page: Page, prompt: string) {
   await input.fill(prompt);
   await expect(input).toHaveText(prompt);
   await expect(sendButton).toBeEnabled();
-  // Split the diagnosis on timeout: track whether the create-run POST was
-  // ever issued, so a failure distinguishes "the click never produced a
-  // request" (composer/overlay problem) from "the daemon did not answer in
-  // time" (runtime problem).
-  let createRunRequestSent = false;
-  const markRequest = (request: Request) => {
-    if (isCreateRunRequest(request)) createRunRequestSent = true;
-  };
-  page.on('request', markRequest);
-  try {
-    const [response] = await Promise.all([
-      page.waitForResponse(isCreateRunResponse, { timeout: T.medium }),
-      sendButton.click(),
-    ]);
-    expect(response.ok()).toBeTruthy();
-    return response;
-  } catch (error) {
-    throw new Error(
-      `sendPrompt did not observe a create-run response (POST /api/runs ${
-        createRunRequestSent ? 'was sent but not answered in time' : 'was never issued'
-      })`,
-      { cause: error },
-    );
-  } finally {
-    page.off('request', markRequest);
-  }
+  const response = await Promise.race([
+    page.waitForResponse(isCreateRunResponse, { timeout: 10_000 }),
+    (async () => {
+      await sendButton.click();
+      return page.waitForResponse(isCreateRunResponse, { timeout: 10_000 });
+    })(),
+  ]);
+  expect(response.ok()).toBeTruthy();
+  return response;
 }
 
 async function sendPromptAndReloadBeforeCreateResponse(page: Page, prompt: string) {
@@ -875,7 +789,10 @@ async function openNewProjectModal(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await waitForLoadingToClear(page);
   await dismissPrivacyDialog(page);
-  await openNewProjectModalFromProjects(page);
+  await ensureRailOpen(page);
+  await page.getByTestId('entry-nav-new-project').click();
+  await expect(page.getByTestId('new-project-modal')).toBeVisible();
+  await expect(page.getByTestId('new-project-panel')).toBeVisible();
 }
 
 async function dismissPrivacyDialog(page: Page) {
@@ -887,12 +804,7 @@ async function dismissPrivacyDialog(page: Page) {
 }
 
 async function waitForLoadingToClear(page: Page) {
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
-}
-
-async function clickVisible(locator: Locator) {
-  await expect(locator).toBeVisible({ timeout: T.medium });
-  await locator.evaluate((element: HTMLElement) => element.click());
+  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.medium });
 }
 
 async function configureFakeAgent(page: Page, agentId: FakeAgentId) {
@@ -910,36 +822,10 @@ async function configureFakeAgent(page: Page, agentId: FakeAgentId) {
   expect(response.ok()).toBeTruthy();
 }
 
-async function configureByokOpenCodeWithoutProvider(page: Page) {
-  const response = await page.request.put('/api/app-config', {
-    data: {
-      onboardingCompleted: true,
-      agentId: 'byok-opencode',
-      agentModels: { 'byok-opencode': { model: 'default', reasoning: 'default' } },
-      // byok-opencode availability resolves through the `opencode` agent's
-      // configured cli env (daemon detection maps byok-opencode → opencode).
-      // Point it at the fake runtime binary: runners without a real
-      // `opencode` on PATH otherwise report the agent unavailable and the
-      // web composer refuses to POST /api/runs at all. The run still fails
-      // pre-spawn on the missing provider config — this spec's oracle — so
-      // the fake binary is never executed.
-      agentCliEnv: { opencode: fakeRuntimes.opencode.env },
-      skillId: null,
-      designSystemId: null,
-    },
-  });
-  expect(response.ok()).toBeTruthy();
-}
-
 async function setBrowserAgentConfig(page: Page, agentId: FakeAgentId) {
   const payload = { key: STORAGE_KEY, id: agentId, env: fakeRuntimes[agentId].env };
   await installBrowserAgentConfig(page, agentId);
   await page.evaluate(installConfig, payload);
-}
-
-async function setBrowserByokOpenCodeConfig(page: Page) {
-  await installBrowserByokOpenCodeConfig(page);
-  await page.evaluate(installByokOpenCodeConfig, { key: STORAGE_KEY });
 }
 
 async function installBrowserAgentConfig(page: Page, agentId: FakeAgentId) {
@@ -948,10 +834,6 @@ async function installBrowserAgentConfig(page: Page, agentId: FakeAgentId) {
     id: agentId,
     env: fakeRuntimes[agentId].env,
   });
-}
-
-async function installBrowserByokOpenCodeConfig(page: Page) {
-  await page.addInitScript(installByokOpenCodeConfig, { key: STORAGE_KEY });
 }
 
 function installConfig({ key, id, env }: { key: string; id: FakeAgentId; env: Record<string, string> }) {
@@ -972,25 +854,7 @@ function installConfig({ key, id, env }: { key: string; id: FakeAgentId; env: Re
   );
 }
 
-function installByokOpenCodeConfig({ key }: { key: string }) {
-  window.localStorage.setItem(
-    key,
-    JSON.stringify({
-      mode: 'daemon',
-      apiKey: '',
-      baseUrl: '',
-      model: 'default',
-      agentId: 'byok-opencode',
-      skillId: null,
-      designSystemId: null,
-      onboardingCompleted: true,
-      agentModels: { 'byok-opencode': { model: 'default', reasoning: 'default' } },
-      agentCliEnv: {},
-    }),
-  );
-}
-
-async function expectBrowserAgentConfig(page: Page, agentId: string) {
+async function expectBrowserAgentConfig(page: Page, agentId: FakeAgentId) {
   await expect
     .poll(async () => page.evaluate(({ key }) => {
       const raw = window.localStorage.getItem(key);
@@ -1133,12 +997,7 @@ async function expectRestoredDelayedAssistantMessage(
   page: Page,
   projectId: string,
   conversationId: string,
-  options: {
-    expectedUserMessages?: number;
-    requireRunId?: boolean;
-    expectedThinking?: boolean;
-    producedFiles?: string[];
-  } = {},
+  options: { expectedUserMessages?: number; requireRunId?: boolean; expectedThinking?: boolean } = {},
 ) {
   await expect
     .poll(async () => {
@@ -1158,7 +1017,7 @@ async function expectRestoredDelayedAssistantMessage(
       assistantMessages: 1,
       hasRunId: options.requireRunId ? true : expect.any(Boolean),
       runStatus: 'succeeded',
-      producedFiles: options.producedFiles ?? [DELAYED_FILE],
+      producedFiles: [DELAYED_FILE],
       hasThinking: options.expectedThinking ?? true,
     });
 }
@@ -1180,8 +1039,6 @@ async function listConversationMessages(
       runStatus?: string;
       events?: Array<{ kind: string }>;
       producedFiles?: Array<{ name: string }>;
-      traceObjectFiles?: Array<{ name: string }>;
-      resultDeliveryState?: string;
     }>;
   };
   return body.messages;
@@ -1202,7 +1059,7 @@ function isCreateProjectRequest(request: Request): boolean {
   return url.pathname === '/api/projects' && request.method() === 'POST';
 }
 
-function expectCreateRunAgentId(response: Response, agentId: string) {
+function expectCreateRunAgentId(response: Response, agentId: FakeAgentId) {
   expect(response.request().postDataJSON()).toMatchObject({ agentId });
 }
 

@@ -1,14 +1,17 @@
 import { cac } from "cac";
-import type { ReleaseChannel } from "@open-design/release";
 
 import { startReleaseStorageFixtureServer } from "./release-storage-fixture.js";
 import { startUpdaterFixtureServer } from "./updater-fixture.js";
 
 type CliOptions = {
   artifactPath?: string;
+<<<<<<< HEAD
+  channel?: "stable" | "beta" | "nightly" | "preview";
+=======
   channel?: ReleaseChannel;
   controlLauncherVersionMin?: string;
   controlLauncherVersionUrl?: string;
+>>>>>>> upstream/main
   host?: string;
   json?: boolean;
   platform?: "mac" | "win";
@@ -97,9 +100,13 @@ const cli = cac("tools-serve");
 cli
   .command("start <service>", "Start a local fixture service")
   .option("--artifact-path <path>", "Serve a local update artifact file")
+<<<<<<< HEAD
+  .option("--channel <channel>", "Updater channel: stable|beta|nightly|preview", { default: "stable" })
+=======
   .option("--channel <channel>", "Updater channel: stable|beta|betas|prerelease|preview", { default: "stable" })
   .option("--control-launcher-version-min <version>", "Publish control.launcher.version.min in fixture metadata")
   .option("--control-launcher-version-url <url>", "Publish control.launcher.version.url in fixture metadata")
+>>>>>>> upstream/main
   .option("--host <host>", "Host to bind", { default: "127.0.0.1" })
   .option("--json", "Print JSON")
   .option("--include-payload", "Include launcher payload metadata")

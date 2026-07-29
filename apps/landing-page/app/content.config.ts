@@ -72,15 +72,9 @@ const designTemplates = defineCollection({
 // human-meaningful fields (H1, `> Category:`, palette hex codes) at
 // page-render time.
 const systems = defineCollection({
-  // `DESIGN.md` is the English source; `DESIGN.<locale>.md` (e.g.
-  // `DESIGN.zh.md`) are optional localized bodies for a curated subset of
-  // popular brands. The catalog reads only the English entries (so cards
-  // aren't duplicated); the detail page prefers the locale entry and falls
-  // back to English. Astro strips the final `.md`, so ids are `<slug>/DESIGN`
-  // or `<slug>/DESIGN.<locale>`.
   loader: glob({
     base: '../../design-systems',
-    pattern: '*/DESIGN*.md',
+    pattern: '*/DESIGN.md',
   }),
   schema: z.object({ i18n: localizedContentSchema }).passthrough(),
 });
@@ -120,34 +114,9 @@ const blog = defineCollection({
     .object({
       title: z.string(),
       date: z.coerce.date(),
-      category: z.enum(['Product', 'Guides', 'Use cases', 'Community', 'Tools & Skills']),
+      category: z.enum(['Product', 'Guides', 'Use cases', 'Community']),
       readingTime: z.number().int().positive(),
       summary: z.string(),
-      author: z.string().optional(),
-      socialImage: z.string().optional(),
-      ctaKind: z.enum(['download-app', 'event-register']).optional(),
-      /**
-       * Keep the generated `/{locale}/blog/<slug>/` variants out of the search
-       * index (the English post stays indexable).
-       *
-       * Set this on posts whose subject is a language-neutral proper noun — a
-       * product name like `marp` or `slidev`. Google treats those queries as
-       * navigational and ranks every translated copy against the *same*
-       * English-language SERP, so the localized variants accumulate large
-       * impression counts at a click-through rate of ~0.02% while adding
-       * nothing a searcher wants. Left alone they drown out the rest of the
-       * site's Search Console data and read as thin duplicate coverage.
-       *
-       * When set, `blog/[slug].astro` emits `noindex, follow` on the localized
-       * variants (outbound link equity still flows) and suppresses the hreflang
-       * cluster on all variants including English, since hreflang must not
-       * point at noindexed URLs.
-       */
-      noindexLocaleVariants: z.boolean().optional(),
-      ctaHref: z.string().url().optional(),
-      ctaTitle: z.string().min(1).optional(),
-      ctaBody: z.string().min(1).optional(),
-      ctaLabel: z.string().min(1).optional(),
       i18n: z
         .record(
           z.string(),
@@ -158,29 +127,10 @@ const blog = defineCollection({
               category: z.string().optional(),
               body: z.string().optional(),
               bodyHtml: z.string().optional(),
-              // Optional per-locale reading time. Set this when a localized
-              // `bodyHtml` differs in length from the English Markdown (e.g. a
-              // translation that hasn't caught up to an expanded English body)
-              // so non-English readers see an accurate estimate instead of the
-              // shared English `readingTime`.
-              readingTime: z.number().int().positive().optional(),
             })
             .passthrough(),
         )
         .optional(),
-    })
-    .superRefine((data, ctx) => {
-      if (data.ctaKind !== 'event-register') return;
-
-      for (const field of ['ctaHref', 'ctaTitle', 'ctaBody', 'ctaLabel'] as const) {
-        if (!data[field]) {
-          ctx.addIssue({
-            code: 'custom',
-            path: [field],
-            message: `${field} is required when ctaKind is event-register`,
-          });
-        }
-      }
     })
     .passthrough(),
 });
@@ -195,15 +145,14 @@ const tutorials = defineCollection({
   }),
   schema: z.object({
     title: z.string(),
-    youtubeId: z.string().regex(/^[\w-]{11}$/, 'youtubeId must be 11 chars').optional(),
+    youtubeId: z.string().regex(/^[\w-]{11}$/, 'youtubeId must be 11 chars'),
     summary: z.string(),
     date: z.coerce.date(),
     category: z.enum(['Getting started', 'Tutorial', 'Demo', 'Review', 'Community']),
-    durationSeconds: z.number().int().positive().optional(),
+    durationSeconds: z.number().int().positive(),
     author: z.string(),
-    publicFormat: z.enum(['video', 'article']).default('video'),
     official: z.boolean().default(false),
-    thumbnail: z.string().optional(),
+    thumbnail: z.string().url().optional(),
   }),
 });
 

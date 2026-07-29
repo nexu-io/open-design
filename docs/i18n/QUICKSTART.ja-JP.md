@@ -1,6 +1,6 @@
 # クイックスタート
 
-<p align="center"><a href="../../QUICKSTART.md">English</a> · <a href="QUICKSTART.pt-BR.md">Português (Brasil)</a> · <a href="QUICKSTART.de.md">Deutsch</a> · <a href="QUICKSTART.fr.md">Français</a> · <b>日本語</b> · <a href="QUICKSTART.ko.md">한국어</a> · <a href="QUICKSTART.zh-CN.md">简体中文</a> · <a href="QUICKSTART.zh-TW.md">繁體中文</a> · <a href="QUICKSTART.th.md">ภาษาไทย</a></p>
+<p align="center"><a href="../../QUICKSTART.md">English</a> · <a href="QUICKSTART.pt-BR.md">Português (Brasil)</a> · <a href="QUICKSTART.de.md">Deutsch</a> · <a href="QUICKSTART.fr.md">Français</a> · <b>日本語</b> · <a href="QUICKSTART.zh-CN.md">简体中文</a> · <a href="QUICKSTART.zh-TW.md">繁體中文</a></p>
 
 製品全体をローカルで実行します。
 
@@ -9,7 +9,7 @@
 - **Node.js:** `~24`（Node 24.x）。リポジトリは `package.json#engines` を通じてこれを強制しています。
 - **pnpm:** `10.33.x`。リポジトリは `packageManager` を通じて `pnpm@10.33.2` をピン留めしています。Corepack を使用すれば、ピン留めされたバージョンが自動的に選択されます。
 - **OS:** macOS、Linux、WSL2 が主要なパスです。Windows ネイティブはほとんどのフローで動作するはずですが、WSL2 のほうが安全なベースラインです。
-- **オプションのローカルエージェント CLI:** Open Design は、Claude Code、Codex、Devin for Terminal、OpenCode、Cursor Agent、Qwen、Qoder CLI、GitHub Copilot CLI などのローカルランタイムをレジストリで管理しています。現在の一覧は [`apps/daemon/src/runtimes/registry.ts`](../../apps/daemon/src/runtimes/registry.ts) にあります。何もインストールされていない場合は、Settings で設定した BYOK ランタイムを使用してください。
+- **オプションのローカルエージェント CLI:** Claude Code、Codex、Devin for Terminal、Gemini CLI、OpenCode、Cursor Agent、Qwen、GitHub Copilot CLI など。何もインストールされていない場合は、設定から BYOK API モードを使用してください。
 
 `nvm` / `fnm` はオプションの便利なツールであり、必須のプロジェクトセットアップではありません。使用する場合は、pnpm を実行する前に Node 24 をインストール／選択してください。
 
@@ -45,11 +45,16 @@ pnpm tools-dev run web # daemon と web をフォアグラウンドで起動し�
 pnpm tools-dev # daemon + web + desktop をバックグラウンドで起動します
 ```
 
-初回起動時、アプリは利用可能なローカルランタイムを検出し、Settings で設定された BYOK ランタイムも提示します。ランタイム、デザインテンプレート、デザインシステムを選び、プロンプトを入力して **Send** を押してください。構造化されたローカルランタイムは正規のプロジェクトファイルを書き込み、ファイル／ツールイベントをストリーミングします。ファイルワークスペースとプレビューはその書き込みから更新されます。テキスト専用および BYOK 実行は、代わりにホストが解析する完全な `<artifact>` ブロックを返します。アーティファクトの保存パスを文書化または変更する前に、ルートの `AGENTS.md` にある **Daemon data directory contract** を必ず読んでください。
+初回起動時、アプリはインストール済みのコードエージェント CLI（Claude Code / Codex / Devin for Terminal / Gemini / OpenCode / Cursor Agent / Qwen）を検出して自動選択し、デフォルトで `web-prototype` スキルと `Neutral Modern` デザインシステムを採用します。プロンプトを入力して **Send** を押してください。エージェントが左ペインにストリーミングし、`<artifact>` タグが解析されて HTML が右側にライブレンダリングされます。完了したら **Save to disk** をクリックして、アーティファクトを `./.od/artifacts/<timestamp>-<slug>/index.html` に永続化します。
 
-**Design systems** カタログは、[`design-systems/`](../../design-systems/) 配下の `DESIGN.md` パッケージから直接読み込まれます。1 つ選ぶと、そのブランドの視覚言語がアーティファクトに適用されます。
+**Design system** ドロップダウンには **129 のデザインシステム** が同梱されています — 手作りのスターター 2 種（Neutral Modern、Warm Editorial）、バンドルされた製品システム 70 種、[`awesome-design-skills`](https://github.com/bergside/awesome-design-skills) から取得した 57 のデザインスキルです。1 つを選ぶと、すべてのプロトタイプがそのブランドの美学でスキニングされます。
 
-**Templates** カタログは [`design-templates/`](../../design-templates/) から読み込まれ、プロトタイプ、デッキ、ドキュメント、画像、動画、音声のアーティファクト形式をまとめています。[`skills/`](../../skills/) は、作業中にエージェントが呼び出す機能的な能力のために使われます。テンプレートとデザインシステムを組み合わせると、選択した視覚言語でアーティファクトを生成できます。
+**Skill** ドロップダウンはモード（Prototype / Deck / Template / Design system）でグループ化され、モードごとのデフォルトスキルには `· default` サフィックスが付きます。バンドルされているスキル：
+
+- **Prototype** — `web-prototype`（汎用）、`saas-landing`、`dashboard`、`pricing-page`、`docs-page`、`blog-post`、`mobile-app`。
+- **Deck / PPT** — `simple-deck`（単一ファイルの横スワイプ）と `magazine-web-ppt`（[`op7418/guizang-ppt-skill`](https://github.com/op7418/guizang-ppt-skill) からの `guizang-ppt` バンドル — deck モードのデフォルト。独自のアセット／テンプレート + 4 つのリファレンスを同梱）。サイドファイルを持つスキルには自動的に「Skill root (absolute)」のプリアンブルが付与され、エージェントが CWD ではなく実際のディスク上のパスに対して `assets/template.html` や `references/*.md` を解決できるようになります。
+
+スキルとデザインシステムを組み合わせれば、単一のプロンプトから選択した視覚言語でレイアウトに適したプロトタイプまたはデッキが生成されます。
 
 ## その他のスクリプト
 
@@ -180,7 +185,7 @@ OPEN_DESIGN_MEM_LIMIT=384m
 OPEN_DESIGN_ALLOWED_ORIGINS=https://yourdomain.com
 
 # Docker イメージタグ
-OPEN_DESIGN_IMAGE=ghcr.io/nexu-io/od:latest
+OPEN_DESIGN_IMAGE=docker.io/vanjayak/open-design:latest
 
 # Daemon セキュリティに必要な API トークン
 # 次のコマンドで生成：openssl rand -hex 32
@@ -191,9 +196,25 @@ OD_API_TOKEN=
 
 ## 永続ストレージ
 
-永続的なデーモン保存パスを文書化、変更、または選択する前に、
-ルートの `AGENTS.md` にある **Daemon data directory contract** を必ず読んでください。
-この Quickstart でその契約を繰り返したり、保存パスを定義したりしてはいけません。
+Open Design はプロジェクトと SQLite データを Docker ボリュームに保存します：
+
+```text
+open_design_data
+```
+
+ボリュームは以下にマウントされます：
+
+```text
+/app/.od
+```
+
+データはコンテナの再起動とイメージ更新後も保持されます。
+
+ボリュームを確認：
+
+```bash
+docker volume inspect open-design_open_design_data
+```
 
 ---
 
@@ -262,17 +283,17 @@ location /api/ {
 
 | モード | ピッカーの値 | リクエストの流れ |
 |---|---|---|
-| **Local CLI**（daemon がエージェントを検出した場合のデフォルト） | "Local CLI" | フロントエンド → daemon `/api/chat` → `spawn(<agent>, ...)` → 構造化されたツール／ファイルイベントを SSE 配信 → プロジェクトファイル → プレビュー。plain-stream CLI は text-artifact 経路を使用します。 |
-| **API モード**（フォールバック / CLI なし） | "Anthropic API" / "OpenAI API" / "Atlas Cloud" / "Azure OpenAI" / "Google Gemini" | フロントエンド → daemon `/api/proxy/{provider}/stream` → provider SSE を `delta/end/error` に正規化 → `<artifact>` パーサー → プレビュー |
+| **Local CLI**（daemon がエージェントを検出した場合のデフォルト） | "Local CLI" | フロントエンド → daemon `/api/chat` → `spawn(<agent>, ...)` → stdout → SSE → アーティファクトパーサー → プレビュー |
+| **Anthropic API**（フォールバック / CLI なし） | "Anthropic API · BYOK" | フロントエンド → `@anthropic-ai/sdk` 直接呼び出し（`dangerouslyAllowBrowser`） → アーティファクトパーサー → プレビュー |
 
-両モードは同じファイルワークスペースとサンドボックス化されたプレビューに到達しますが、引き渡し契約は異なります。ファイルシステム対応ランタイムは正規ファイルを書き込み、そのソースを `<artifact>` に再出力しません。plain／テキスト専用および BYOK 実行にはファイルツールがないため、完全な HTML を `<artifact>` に入れたものが正規の成果物です。実行プロファイルはランタイムのトランスポートから選択されます。
+両モードとも **同じ** `<artifact>` パーサーと **同じ** サンドボックス化された iframe にデータを供給します。異なるのはトランスポートとシステムプロンプトの配信方法だけです（ローカル CLI には独立したシステムチャンネルがないため、合成プロンプトはユーザーメッセージに折り込まれます）。
 
 ## プロンプトの構成
 
 送信ごとに、アプリは 3 つのレイヤーからシステムプロンプトを構築してプロバイダーに送信します：
 
 ```
-BASE_SYSTEM_PROMPT   （実行プロファイル別のファイルまたは <artifact> 引き渡し）
+BASE_SYSTEM_PROMPT   （出力契約：<artifact> でラップ、コードフェンスなし）
    + アクティブなデザインシステム本文  （DESIGN.md — パレット／タイポ／レイアウト）
    + アクティブなスキル本文          （SKILL.md — ワークフローと出力ルール）
 ```
@@ -288,12 +309,9 @@ open-design/
 │   │   └── src/
 │   │       ├── cli.ts             # `od` bin エントリ
 │   │       ├── server.ts          # /api/* + 静的配信
-│   │       ├── agents.ts          # ランタイムモジュールの互換エクスポート
-│   │       ├── runtimes/
-│   │       │   ├── registry.ts    # サポート対象ランタイムのレジストリ
-│   │       │   └── defs/          # ランタイム別の起動／引数定義
+│   │       ├── agents.ts          # claude/codex/devin/gemini/opencode/cursor-agent/qwen/copilot 用 PATH スキャナ
 │   │       ├── skills.ts          # SKILL.md ローダー（フロントマターパーサー）
-│   │       └── design-systems/    # DESIGN.md ローダーとサービス
+│   │       └── design-systems.ts  # DESIGN.md ローダー
 │   │   ├── sidecar/           # tools-dev daemon sidecar ラッパー
 │   │   └── tests/             # daemon パッケージのテスト
 │   ├── web/                   # Next.js 16 App Router + React クライアント
@@ -302,7 +320,7 @@ open-design/
 │       │   ├── App.tsx        # mode / skill / DS ピッカー + send をオーケストレーション
 │       │   ├── providers/     # daemon + BYOK API トランスポート
 │       │   ├── prompts/       # system、discovery、directions、deck フレームワーク
-│       │   ├── artifacts/     # text-artifact 解析 + アーティファクトマニフェスト
+│       │   ├── artifacts/     # ストリーミング <artifact> パーサー + マニフェスト
 │       │   ├── runtime/       # iframe srcdoc、markdown、エクスポートヘルパー
 │       │   └── state/         # localStorage + daemon バックエンドのプロジェクト状態
 │       ├── sidecar/           # tools-dev web sidecar ラッパー
@@ -315,28 +333,47 @@ open-design/
 │   └── platform/              # 汎用プロセス／プラットフォームプリミティブ
 ├── tools/dev/                 # `pnpm tools-dev` ライフサイクルと inspect CLI
 ├── e2e/                       # Playwright UI + 外部統合／Vitest ハーネス
-├── skills/                    # 作業中に呼び出す機能的な能力
-├── design-templates/          # プロトタイプ、デッキ、文書、メディアのレンダリングカタログ
-├── design-systems/            # DESIGN.md を基点とするブランドパッケージ
+├── skills/                    # SKILL.md — 任意の Claude Code スキルリポジトリからドロップイン
+│   ├── web-prototype/         # 汎用シングルスクリーンプロトタイプ（prototype モードのデフォルト）
+│   ├── saas-landing/          # マーケティングページ（hero / features / pricing / CTA）
+│   ├── dashboard/             # 管理／分析ダッシュボード
+│   ├── pricing-page/          # 独立した pricing + 比較
+│   ├── docs-page/             # 3 列ドキュメンテーションレイアウト
+│   ├── blog-post/             # エディトリアル長文
+│   ├── mobile-app/            # 電話フレームのシングルスクリーン
+│   ├── simple-deck/           # 最小限の横スワイプデッキ
+│   └── guizang-ppt/           # magazine-web-ppt — バンドルされた deck/PPT デフォルト
+│       ├── SKILL.md
+│       ├── assets/template.html
+│       └── references/{themes,layouts,components,checklist}.md
+├── design-systems/            # DESIGN.md — 9 セクションスキーマ（awesome-claude-design）
+│   ├── default/               # Neutral Modern（スターター）
+│   ├── warm-editorial/        # Warm Editorial（スターター）
+│   ├── README.md              # カタログ概要
+│   └── …129 systems           # スターター 2 種 · 製品システム 70 種 · デザインスキル 57 種
 ├── scripts/sync-design-systems.ts    # 上流の getdesign tarball から再インポート
 ├── docs/                      # 製品ビジョン + 仕様
+├── .od/                       # ランタイムデータ（gitignore 済み、自動作成）
+│   ├── app.sqlite              #   projects / conversations / messages / tabs
+│   ├── artifacts/              #   ワンショット "Save to disk" レンダリング
+│   └── projects/<id>/          #   プロジェクトごとの作業ディレクトリ + エージェント cwd
 ├── pnpm-workspace.yaml        # apps/* + packages/* + tools/* + e2e
 └── package.json               # root quality スクリプト + `od` bin
 ```
 
 ## トラブルシューティング
 
-- **「no agents found on PATH」** — [`apps/daemon/src/runtimes/registry.ts`](../../apps/daemon/src/runtimes/registry.ts) に登録されているローカルランタイムのいずれかをインストールし、その実行ファイルが daemon から見えることを確認してから、**Settings → Execution mode** で **Rescan** を実行してください。または、Settings で BYOK ランタイムを設定します。
-- **/api/chat で daemon が 500 を返す** — daemon ターミナルで stderr の末尾を確認してください。通常は CLI が引数を拒否しています。CLI ごとに argv の形式が異なります。調整が必要な場合は `apps/daemon/src/runtimes/defs/` の対応する定義を参照してください。
+- **「no agents found on PATH」** — `claude`、`codex`、`devin`、`gemini`、`opencode`、`cursor-agent`、`qwen`、`copilot` のいずれかをインストールしてください。または、トップバーで「Anthropic API · BYOK」に切り替え、**設定** にキーを貼り付けます。
+- **/api/chat で daemon が 500 を返す** — daemon ターミナルで stderr の末尾を確認してください。通常は CLI が引数を拒否しています。CLI ごとに argv の形式が異なります。調整が必要な場合は `apps/daemon/src/agents.ts` の `buildArgs` を参照してください。
 - **メディア生成で `OD_BIN` が欠落、または daemon URL が `:0`** — 上記のメディアディスパッチャーチェックを実行してください。古い CLI セッションを再開せず、Open Design アプリからプロジェクトを再度開いて、daemon が新しい `OD_*` 変数を注入できるようにしてください。
 - **Codex がプラグインコンテキストを多く読み込みすぎる** — `OD_CODEX_DISABLE_PLUGINS=1 pnpm tools-dev` で Open Design を起動すると、daemon から起動された Codex プロセスが `--disable plugins` で実行されます。
-- **アーティファクトがレンダリングされない** — まず引き渡しプロファイルを確認します。ファイルシステム対応のローカルランタイムでは、プレビュー可能なプロジェクトファイルが作成され、ファイルイベントが daemon に届いたかを確認してください。ソースを `<artifact>` に入れる経路ではありません。plain／テキスト専用または BYOK 実行では、完全な `<artifact>` ブロックが 1 つあることを確認し、daemon ログで最初に失敗した境界を探します。
+- **アーティファクトがレンダリングされない** — モデルが `<artifact>` でラップせずにテキストを生成しました。システムプロンプトが通っていることを確認し（daemon ログを確認）、より高性能なモデルまたは厳格なスキルへの切り替えを検討してください。
 
 ## ビジョンへのマッピング
 
 このクイックスタートは [`docs/`](../../docs/) にある仕様の実行可能なシードです。仕様は、これがどこへ成長するかを記述しています（[`docs/roadmap.md`](../../docs/roadmap.md) を参照）。ハイライト：
 
 - `docs/architecture.md` は、出荷されたスタックを説明しています：前面に Next.js 16 App Router、その背後にローカル daemon、そして `apps/web/next.config.ts` の dev 時 rewrites によってブラウザが同じ `/api` 表面と通信し続けるようにします。
-- `docs/skills-protocol.md` は現在の `SKILL.md`／`od:` フロントマターと、機能スキルとレンダリングテンプレートの分離を説明します。パーサーと正規化の実装上の真実は `apps/daemon/src/skills.ts` です。
-- `docs/agent-adapters.md` はアダプター契約を説明しています。ランタイム固有の起動、引数、モデル、ストリーム設定は `apps/daemon/src/runtimes/defs/` にあり、`apps/daemon/src/runtimes/registry.ts` で登録されます。`apps/daemon/src/agents.ts` は互換エクスポート面です。
-- `docs/modes.md` は 6 つの New Project タブと 7 つの正規化レジストリモード（`prototype`、`deck`、`template`、`design-system`、`image`、`video`、`audio`）を区別します。
+- `docs/skills-protocol.md` は、完全な `od:` フロントマター（型付き入力、スライダー、機能ゲーティング）について説明しています。この MVP は `name` / `description` / `triggers` / `od.mode` / `od.design_system.requires` のみを読み取ります — 残りを追加するには `apps/daemon/src/skills.ts` を拡張してください。
+- `docs/agent-adapters.md` はより豊かなディスパッチ（機能検出、ストリーミングツール呼び出し）を予見しています。`apps/daemon/src/agents.ts` は最小限のディスパッチャーです — 配線を証明するには十分です。
+- `docs/modes.md` は 4 つのモード（prototype / deck / template / design-system）を列挙しています。最初の 2 つのスキルを出荷しています。ピッカーはすでに `mode` でフィルタリングしています。

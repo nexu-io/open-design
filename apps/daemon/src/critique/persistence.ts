@@ -5,6 +5,8 @@ import {
   type CritiqueRoundSummary,
   type CritiqueRunStatus,
 } from '@open-design/contracts/critique';
+import { migrateLoopSchema } from './persistence-loop.js';
+import { migrateLessonSchema } from './lessons-loop.js';
 
 /**
  * Re-export the public contract types and enumeration so existing
@@ -196,6 +198,10 @@ export function migrateCritique(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_critique_runs_status
       ON critique_runs(status);
   `);
+
+  // Critique Theater Loop Engineering 表
+  migrateLoopSchema(db);
+  migrateLessonSchema(db);
 }
 
 export function insertCritiqueRun(

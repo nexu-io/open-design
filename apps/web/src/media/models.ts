@@ -29,7 +29,6 @@ import type { AudioKind, MediaAspect } from '../types';
  */
 export type MediaProviderId =
   | 'openai'
-  | 'codex'
   | 'volcengine'
   | 'grok'
   | 'hyperframes'
@@ -91,14 +90,6 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
     integrated: true,
     defaultBaseUrl: 'https://api.openai.com/v1',
     docsUrl: 'https://platform.openai.com/api-keys',
-  },
-  {
-    id: 'codex',
-    label: 'Codex Subscription',
-    hint: 'gpt-image-2 via local Codex CLI login',
-    integrated: true,
-    credentialsRequired: false,
-    docsUrl: 'https://developers.openai.com/codex',
   },
   {
     id: 'volcengine',
@@ -229,7 +220,7 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
   {
     id: 'minimax',
     label: 'MiniMax',
-    hint: 'TTS / image-01 / video-01',
+    hint: 'TTS / video-01',
     integrated: true,
     defaultBaseUrl: 'https://api.minimaxi.chat/v1',
     docsUrl: 'https://platform.minimaxi.com',
@@ -370,13 +361,6 @@ export const IMAGE_MODELS: MediaModel[] = [
     provider: 'openai',
     caps: ['t2i'],
   },
-  {
-    id: 'codex-gpt-image-2',
-    label: 'gpt-image-2 (Codex)',
-    hint: 'Codex Subscription · local CLI imagegen',
-    provider: 'codex',
-    caps: ['t2i', 'i2i'],
-  },
 
   // Volcengine — Doubao Seedream image generation.
   {
@@ -433,17 +417,6 @@ export const IMAGE_MODELS: MediaModel[] = [
     hint: 'AIHubMix · OpenAI DALL·E 3',
     provider: 'aihubmix',
     caps: ['t2i'],
-  },
-
-  // MiniMax — synchronous /v1/image_generation, Bearer auth, base_resp envelope.
-  // The wire name `image-01` is mapped from the catalog id `minimax-image-01` in
-  // the renderer (see MINIMAX_IMAGE_MODEL_MAP in apps/daemon/src/media.ts).
-  {
-    id: 'minimax-image-01',
-    label: 'image-01',
-    hint: 'MiniMax · text + image-to-image',
-    provider: 'minimax',
-    caps: ['t2i', 'i2i'],
   },
 
   // xAI Grok Imagine — text-to-image (1k/2k, 11+ aspect ratios).

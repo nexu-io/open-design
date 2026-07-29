@@ -1,3 +1,6 @@
+<<<<<<< HEAD
+export const MANUAL_EDIT_DISCOVERY_SELECTOR = 'main, nav, section, article, header, footer, div, h1, h2, h3, p, a, button, img, strong, span';
+=======
 // Chrome-devtools-style picking: the click/hover resolver walks up from the
 // hit node to the nearest source-mapped element matching this selector, so
 // every tag listed here is a pickable depth level. Keep leaf/graphic tags
@@ -6,6 +9,7 @@
 // select its container instead.
 export const MANUAL_EDIT_DISCOVERY_SELECTOR =
   'main, nav, section, article, aside, header, footer, div, h1, h2, h3, h4, h5, h6, p, a, button, img, ul, ol, li, dl, dt, dd, table, thead, tbody, tfoot, tr, td, th, caption, blockquote, figure, figcaption, label, summary, pre, code, strong, em, b, i, small, mark, span, u, s, strike, sub, sup, abbr, font, cite, q, kbd, samp, var, ins, del, dfn, time, address, hr, canvas, svg, video, audio, picture';
+>>>>>>> upstream/main
 export const MANUAL_EDIT_SOURCE_PATH_ATTR = 'data-od-source-path';
 export const MANUAL_EDIT_HOST_NODE_SELECTOR = [
   '[data-od-sandbox-shim]',
@@ -16,8 +20,6 @@ export const MANUAL_EDIT_HOST_NODE_SELECTOR = [
   '[data-od-edit-bridge-style]',
   '[data-od-deck-fix]',
 ].join(',');
-
-export type ManualEditKind = 'text' | 'link' | 'image' | 'container';
 
 export function manualEditDomPathForElement(el: Element): string {
   const parts: number[] = [];
@@ -49,10 +51,11 @@ export function isMeaningfulManualEditElement(el: Element, rect: Pick<DOMRect, '
 }
 
 export function isSourceMappableManualEditElement(el: Element): boolean {
-  if (isManualEditHostNode(el)) return false;
   return el.hasAttribute('data-od-id') || el.hasAttribute(MANUAL_EDIT_SOURCE_PATH_ATTR);
 }
 
+<<<<<<< HEAD
+=======
 /**
  * Inline formatting tags that keep an element "text-like": a caret can drop
  * into it and the commit round-trips through the source patcher. Elements
@@ -189,6 +192,7 @@ export function buildManualEditKeyboardGuard(): string {
 })();</script>`;
 }
 
+>>>>>>> upstream/main
 export function buildManualEditBridge(enabled: boolean): string {
   return `<script data-od-edit-bridge>(function(){
   var enabled = ${JSON.stringify(enabled)};
@@ -220,6 +224,9 @@ export function buildManualEditBridge(enabled: boolean): string {
     return generated || 'unknown';
   }
   function isSourceMappable(el){
+<<<<<<< HEAD
+    return !!(el && el.hasAttribute && (el.hasAttribute('data-od-id') || el.hasAttribute(sourcePathAttr)));
+=======
     if (!el || !el.hasAttribute || isHostNode(el)) return false;
     return !!(el.hasAttribute('data-od-id') || el.hasAttribute(sourcePathAttr));
   }
@@ -312,10 +319,13 @@ export function buildManualEditBridge(enabled: boolean): string {
       markBrandKitTarget(el.querySelector('.asset-name'), 'brand-asset-name-' + i, 'text');
       markBrandKitTarget(el.querySelector('.asset-desc'), 'brand-asset-desc-' + i, 'text');
     });
+>>>>>>> upstream/main
   }
   function isDiscoveryTarget(el){
     return !!(el && el.matches && el.matches(discoverySelector));
   }
+<<<<<<< HEAD
+=======
   function inlineSubtreeOk(el){
     for (var i = 0; i < el.children.length; i++) {
       var tag = el.children[i].tagName ? el.children[i].tagName.toLowerCase() : '';
@@ -329,14 +339,15 @@ export function buildManualEditBridge(enabled: boolean): string {
     if (!text) return false;
     return inlineSubtreeOk(el);
   }
+>>>>>>> upstream/main
   function inferKind(el){
     var explicit = el.getAttribute('data-od-edit');
     if (explicit) return explicit;
     var tag = el.tagName ? el.tagName.toLowerCase() : '';
     if (tag === 'a') return 'link';
     if (tag === 'img') return 'image';
-    if (isTextLeaf(el)) return 'text';
-    return 'container';
+    if (['section','main','nav','div','article','header','footer'].indexOf(tag) >= 0) return 'container';
+    return 'text';
   }
   function labelFor(el, id, kind){
     var explicit = el.getAttribute('data-od-label');
@@ -498,11 +509,10 @@ export function buildManualEditBridge(enabled: boolean): string {
       styles: stylesFor(el),
       isLayoutContainer: isLayoutContainer(el),
       isHidden: hidden,
-      outerHtml: includeOuterHtml ? (el.outerHTML || '').replace(/\\sdata-od-runtime-id="[^"]*"/g, '').replace(/\\sdata-od-source-path="[^"]*"/g, '').replace(/\\sdata-od-id="path-[^"]*"/g, '').replace(/\\sdata-od-edit-selected="[^"]*"/g, '') : ''
+      outerHtml: includeOuterHtml ? (el.outerHTML || '').replace(/\\sdata-od-runtime-id="[^"]*"/g, '').replace(/\\sdata-od-source-path="[^"]*"/g, '').replace(/\\sdata-od-edit-selected="[^"]*"/g, '') : ''
     };
   }
   function allTargets(){
-    annotateBrandKitRuntimeTargets();
     var nodes = document.body ? document.body.querySelectorAll(discoverySelector) : [];
     var targets = [];
     parentProbeCache = typeof Map === 'function' ? new Map() : null;
@@ -541,7 +551,6 @@ export function buildManualEditBridge(enabled: boolean): string {
     if (el) el.setAttribute('data-od-edit-selected', 'true');
   }
   function closestTarget(event){
-    annotateBrandKitRuntimeTargets();
     var el = event.target;
     while (el && el !== document.documentElement) {
       if (el !== document.body && el !== document.documentElement && isSourceMappable(el) && isDiscoveryTarget(el)) {
@@ -581,6 +590,10 @@ export function buildManualEditBridge(enabled: boolean): string {
       sel.addRange(range);
     } catch (e) {}
   }
+<<<<<<< HEAD
+  function makeEditable(el, clickEvent){
+    if (!el || el.getAttribute('contenteditable') === 'true') return;
+=======
   var guard = window.__odEditGuard || null;
   // A single in-flight inline text edit. The session is deliberately NOT tied
   // to iframe blur: moving the pointer to the host's floating inspector blurs
@@ -732,22 +745,41 @@ export function buildManualEditBridge(enabled: boolean): string {
     }
     if (activeTextEdit) finishActiveTextEdit(true);
     if (el.getAttribute('contenteditable') === 'true') return;
+>>>>>>> upstream/main
     var originalText = el.textContent || '';
     var originalHtml = el.innerHTML;
     clearSelectedTarget();
     el.setAttribute('contenteditable', 'plaintext-only');
     el.setAttribute('data-od-editing', 'true');
-    if (guard) guard.editingEl = el;
     try { el.focus(); } catch (e) {}
     placeCaretFromClick(clickEvent, el);
+    function finish(commit){
+      el.removeAttribute('contenteditable');
+      el.removeAttribute('data-od-editing');
+      el.removeEventListener('blur', onBlur);
+      el.removeEventListener('keydown', onKey);
+      var value = (el.textContent || '').trim();
+      if (commit && value !== originalText.trim()) {
+        window.parent.postMessage({
+          type: 'od-edit-text-commit',
+          id: stableId(el),
+          value: value
+        }, '*');
+      } else if (!commit) {
+        el.textContent = originalText;
+      }
+    }
+    function onBlur(){ finish(true); }
     function onKey(ev){
       if (ev.key === 'Enter' && !ev.shiftKey) {
         ev.preventDefault();
-        finishActiveTextEdit(true);
+        finish(true);
+        try { el.blur(); } catch (e) {}
       }
       if (ev.key === 'Escape') {
         ev.preventDefault();
-        finishActiveTextEdit(false);
+        finish(false);
+        try { el.blur(); } catch (e) {}
       }
       if (ev.key === 'Home' || ev.key === 'End') {
         // Chromium double-books Home/End inside a contenteditable: the caret
@@ -798,9 +830,12 @@ export function buildManualEditBridge(enabled: boolean): string {
         }
       }
     }
+<<<<<<< HEAD
+    el.addEventListener('blur', onBlur);
+=======
     activeTextEdit = { el: el, originalText: originalText, originalHtml: originalHtml, onKey: onKey };
+>>>>>>> upstream/main
     el.addEventListener('keydown', onKey);
-    postTextSession(el, true);
   }
   function camelToKebab(name){ return String(name).replace(/[A-Z]/g, function(m){ return '-' + m.toLowerCase(); }); }
   function cssEscapeId(value){ if (typeof CSS !== 'undefined' && CSS.escape) return CSS.escape(value); return String(value).replace(/"/g, '\\\\"'); }
@@ -862,12 +897,7 @@ export function buildManualEditBridge(enabled: boolean): string {
     if (ev.data.type === 'od-edit-mode') {
       enabled = !!ev.data.enabled;
       document.documentElement.toggleAttribute('data-od-edit-mode', enabled);
-      if (!enabled) {
-        // Leaving edit mode commits the pending inline edit rather than
-        // dropping it (the #3647 exit-path regression).
-        finishActiveTextEdit(true);
-        clearSelectedTarget();
-      }
+      if (!enabled) clearSelectedTarget();
       if (enabled) setTimeout(postTargets, 0);
       return;
     }
@@ -885,6 +915,8 @@ export function buildManualEditBridge(enabled: boolean): string {
       applyPreviewStyles(ev.data.id, ev.data.styles || {}, ev.data.version, !!ev.data.measureRect);
       return;
     }
+<<<<<<< HEAD
+=======
     if (ev.data.type === 'od-edit-text-finish') {
       finishActiveTextEdit(ev.data.commit !== false);
       return;
@@ -1010,6 +1042,7 @@ export function buildManualEditBridge(enabled: boolean): string {
       if (applyOk) setTimeout(postTargets, 0);
       return;
     }
+>>>>>>> upstream/main
   });
   // One-shot timer armed by the Cmd/Ctrl+V shortcut; any real paste event
   // disarms it (see the paste listener) so the two channels never double-fire.
@@ -1102,16 +1135,10 @@ export function buildManualEditBridge(enabled: boolean): string {
     var el = closestTarget(ev);
     if (!el) {
       // Clicking empty canvas (no source-mapped ancestor) is the gesture for
-      // page-level styles; commit any in-flight edit first so the host and
-      // iframe stay in sync, then let the host decide whether to surface the
-      // page-styles card.
-      if (activeTextEdit) finishActiveTextEdit(true);
+      // page-level styles; the host decides whether to surface the card.
       window.parent.postMessage({ type: 'od-edit-background' }, '*');
       return;
     }
-    // Switching to a different target commits the in-flight edit first, so the
-    // previous edit is never silently dropped.
-    if (activeTextEdit && activeTextEdit.el !== el) finishActiveTextEdit(true);
     var kind = inferKind(el);
     // The FIRST click only selects — it must not enter inline editing. Making a
     // text box contenteditable reflows it (a deck's line-clamped / height-capped
@@ -1130,9 +1157,6 @@ export function buildManualEditBridge(enabled: boolean): string {
   }, true);
   window.addEventListener('pointerover', function(ev){
     if (!enabled) return;
-    // While editing, hovering must not retarget the inspector or surface a new
-    // affordance — that's the other half of the #3646 instability.
-    if (activeTextEdit) return;
     if (ev.target && ev.target.closest && ev.target.closest('[data-od-editing="true"]')) return;
     var el = closestTarget(ev);
     if (!el) return;
@@ -1248,6 +1272,10 @@ export function buildManualEditBridge(enabled: boolean): string {
     postImagePayload(dropAnchor ? stableId(dropAnchor) : '', droppedImage);
   }, true);
   window.addEventListener('resize', postTargets);
+<<<<<<< HEAD
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', postTargets);
+  else setTimeout(postTargets, 0);
+=======
   // A freshly pasted/dropped image can be 0x0 during the immediate target
   // pass after insertion and is intentionally filtered out by allTargets().
   // Image load does not mutate the DOM, so MutationObserver cannot announce
@@ -1268,6 +1296,7 @@ export function buildManualEditBridge(enabled: boolean): string {
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bootEditBridge);
   else setTimeout(bootEditBridge, 0);
+>>>>>>> upstream/main
   document.documentElement.toggleAttribute('data-od-edit-mode', enabled);
 })();</script>`;
 }
@@ -1281,9 +1310,18 @@ export function buildManualEditBridgeStyle(): string {
   return `<style data-od-edit-bridge-style>
 html[data-od-edit-mode], html[data-od-edit-mode] body { overflow-anchor: none !important; }
 html[data-od-edit-mode] body * { cursor: pointer !important; }
+<<<<<<< HEAD
+html[data-od-edit-mode] [data-od-id],
+html[data-od-edit-mode] [data-od-runtime-id],
+html[data-od-edit-mode] [data-od-source-path] { outline: 1px dashed rgba(37, 99, 235, 0.35); outline-offset: 3px; }
+html[data-od-edit-mode] [data-od-id]:hover,
+html[data-od-edit-mode] [data-od-runtime-id]:hover,
+html[data-od-edit-mode] [data-od-source-path]:hover { outline: 2px solid #2563eb; }
+=======
 html[data-od-edit-mode] [data-od-id]:hover:not([data-od-edit-selected]),
 html[data-od-edit-mode] [data-od-runtime-id]:hover:not([data-od-edit-selected]),
 html[data-od-edit-mode] [data-od-source-path]:hover:not([data-od-edit-selected]) { outline: 1.5px dashed rgba(37, 99, 235, 0.65) !important; outline-offset: 2px !important; }
+>>>>>>> upstream/main
 html[data-od-edit-mode] [data-od-edit-selected] {
   outline: 1px solid rgba(37, 99, 235, 0.4) !important;
   outline-offset: 2px;

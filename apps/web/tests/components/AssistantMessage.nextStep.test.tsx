@@ -2,17 +2,14 @@
 
 /**
  * Gate coverage for the "next step" affordance under the last assistant
- * message. The surface is reserved for successful, artifact-backed delivery;
- * pure answers, interruptions, and incomplete work stay compact.
+ * message. Iteration chips should appear for the last successful turn even
+ * without a previewable artifact; the Share action still needs HTML.
  */
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { AssistantMessage } from '../../src/components/AssistantMessage';
-import {
-  PROJECT_GENERATE_ARTIFACT_PROMPT,
-} from '../../src/components/NextStepActions';
 import { en } from '../../src/i18n/locales/en';
 import type { ChatMessage, ProjectFile } from '../../src/types';
 
@@ -61,12 +58,11 @@ function producedFile(name: string, kind: ProjectFile['kind'] = 'html'): Project
 
 const handlers = () => ({
   onArtifactShare: vi.fn(),
-  onToolboxAction: vi.fn(),
-  onNextStepPromptAction: vi.fn(),
+  onArtifactChip: vi.fn(),
 });
 
 describe('AssistantMessage next-step affordance', () => {
-  it('routes Share through the More → Share cascade with the file name', () => {
+  it('renders for the last successful turn with an HTML artifact and routes Share with the file name', () => {
     const h = handlers();
     render(
       <AssistantMessage
@@ -77,11 +73,8 @@ describe('AssistantMessage next-step affordance', () => {
         {...h}
       />,
     );
-    expect(screen.getByRole('group', { name: en['nextStep.title'] })).toBeTruthy();
-    expect(screen.queryByText(en['nextStep.title'])).toBeNull();
-    fireEvent.mouseEnter(screen.getByTestId('next-step-toolbox-more'));
-    fireEvent.mouseEnter(screen.getByTestId('next-step-more-share'));
-    fireEvent.click(screen.getByTestId('next-step-share-share'));
+    expect(screen.getByTestId('next-step-actions')).toBeTruthy();
+    fireEvent.click(screen.getByText(en['nextStep.share']));
     expect(h.onArtifactShare).toHaveBeenCalledWith('landing.html');
   });
 
@@ -98,151 +91,68 @@ describe('AssistantMessage next-step affordance', () => {
     expect(screen.queryByTestId('next-step-actions')).toBeNull();
   });
 
-  it('reaches Contribute (share to Open Design) through the More → Share cascade', () => {
-    const onShareToOpenDesign = vi.fn();
+  it('keeps the busy Share to Open Design row mounted on the source turn after it is no longer last', () => {
     render(
       <AssistantMessage
         message={baseMessage({ producedFiles: [producedFile('landing.html')] })}
         streaming={false}
         projectId="proj-1"
-        isLast
+        isLast={false}
         onFeedback={vi.fn()}
-        onShareToOpenDesign={onShareToOpenDesign}
+        onShareToOpenDesign={vi.fn()}
+        shareToOpenDesignBusy
         {...handlers()}
       />,
     );
-    fireEvent.mouseEnter(screen.getByTestId('next-step-toolbox-more'));
-    fireEvent.mouseEnter(screen.getByTestId('next-step-more-share'));
-    fireEvent.click(screen.getByTestId('next-step-share-contribute'));
-    expect(onShareToOpenDesign).toHaveBeenCalledTimes(1);
+
+    const button = screen.getByTestId<HTMLButtonElement>('assistant-share-to-od');
+    expect(screen.getByTestId('next-step-actions')).toBeTruthy();
+    expect(button.disabled).toBe(true);
+    expect(button.textContent).toBe(en['assistant.shareToOpenDesignBusy']);
+    expect(screen.queryByTestId('next-step-options-row')).toBeNull();
+    expect(screen.queryByText(en['nextStep.chipPolishVisual'])).toBeNull();
   });
 
-  it('does not render after a simple answer with no deliverable', () => {
-    render(
-      <AssistantMessage
-        message={baseMessage({ producedFiles: [] })}
-        streaming={false}
-        projectId="proj-1"
-        isLast
-        {...handlers()}
-      />,
-    );
-    expect(screen.queryByTestId('next-step-actions')).toBeNull();
-  });
-
-  it('does not render for a simple answer without a project id', () => {
-    render(
-      <AssistantMessage
-        message={baseMessage({ producedFiles: [] })}
-        streaming={false}
-        isLast
-        {...handlers()}
-      />,
-    );
-    expect(screen.queryByTestId('next-step-actions')).toBeNull();
-  });
-
-  it('renders project recovery actions when the turn produced no previewable artifact', () => {
-    const h = handlers();
+  it('renders iteration chips without the Share action when the turn produced no previewable HTML artifact', () => {
     render(
       <AssistantMessage
         message={baseMessage({ producedFiles: [producedFile('notes.md', 'text')] })}
         streaming={false}
         projectId="proj-1"
         isLast
-        {...h}
-      />,
-    );
-    expect(screen.getByTestId('file-ops-summary')).toBeTruthy();
-    expect(screen.getByTestId('file-ops-row-notes.md')).toBeTruthy();
-    expect(screen.getByTestId('next-step-actions')).toBeTruthy();
-    expect(screen.getByText(en['nextStep.projectGenerateArtifactTitle'])).toBeTruthy();
-    fireEvent.click(screen.getByTestId('next-step-project-action-project-generate-artifact'));
-    expect(h.onNextStepPromptAction).toHaveBeenCalledWith(PROJECT_GENERATE_ARTIFACT_PROMPT);
-  });
-
-  it('does not reuse an earlier artifact for a pure-answer turn', () => {
-    render(
-      <AssistantMessage
-        message={baseMessage({ producedFiles: [] })}
-        streaming={false}
-        projectId="proj-1"
-        isLast
-        projectFiles={[producedFile('landing.html')]}
         {...handlers()}
       />,
     );
-    expect(screen.queryByTestId('next-step-actions')).toBeNull();
+    expect(screen.getByTestId('next-step-actions')).toBeTruthy();
+    expect(screen.queryByText(en['nextStep.share'])).toBeNull();
+    expect(screen.getByText(en['nextStep.chipPolishVisual'])).toBeTruthy();
   });
 
-  it('does not render incomplete brand extraction next steps after cancellation', () => {
-    const h = handlers();
-    const onContinueExtraction = vi.fn();
-    const onContinueAiExtraction = vi.fn();
+  it('keeps Share to Open Design separated after the regular next-step actions', () => {
     render(
       <AssistantMessage
-        message={baseMessage({
-          runStatus: 'canceled',
-          content: 'Stopped.',
-          producedFiles: [],
-        })}
+        message={baseMessage({ producedFiles: [producedFile('notes.md', 'text')] })}
         streaming={false}
-        projectId="proj-brand"
+        projectId="proj-1"
         isLast
-        nextStepVariant="brand-extraction"
-        onNextStepContinueExtraction={onContinueExtraction}
-        onNextStepContinueAiExtraction={onContinueAiExtraction}
-        {...h}
+        onFeedback={vi.fn()}
+        onShareToOpenDesign={vi.fn()}
+        {...handlers()}
       />,
     );
 
-    expect(screen.queryByTestId('next-step-actions')).toBeNull();
-    expect(onContinueExtraction).not.toHaveBeenCalled();
-    expect(onContinueAiExtraction).not.toHaveBeenCalled();
-  });
+    const nextSteps = screen.getByTestId('next-step-actions');
+    const optionsRow = screen.getByTestId('next-step-options-row');
+    const divider = screen.getByTestId('next-step-open-design-divider');
+    const shareToOd = screen.getByTestId('assistant-share-to-od-panel');
 
-  it('refreshes the brand continuation busy state on memoized rows', () => {
-    const h = handlers();
-    const onContinueExtraction = vi.fn();
-    const message = baseMessage({
-      runStatus: 'succeeded',
-      content: 'Done.',
-      producedFiles: [producedFile('brand.html')],
-    });
-    const view = render(
-      <AssistantMessage
-        message={message}
-        streaming={false}
-        projectId="proj-brand"
-        isLast
-        nextStepVariant="brand-programmatic-incomplete"
-        onNextStepContinueExtraction={onContinueExtraction}
-        nextStepContinueExtractionBusy={false}
-        {...h}
-      />,
-    );
-
-    const firstButton = screen.getByTestId('next-step-brand-action-brand-continue-extraction');
-    fireEvent.click(firstButton);
-    expect(onContinueExtraction).toHaveBeenCalledTimes(1);
-
-    view.rerender(
-      <AssistantMessage
-        message={message}
-        streaming={false}
-        projectId="proj-brand"
-        isLast
-        nextStepVariant="brand-programmatic-incomplete"
-        onNextStepContinueExtraction={onContinueExtraction}
-        nextStepContinueExtractionBusy
-        {...h}
-      />,
-    );
-
-    const busyButton = screen.getByTestId('next-step-brand-action-brand-continue-extraction');
-    expect((busyButton as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.click(busyButton);
-    expect(onContinueExtraction).toHaveBeenCalledTimes(1);
+    expect(nextSteps).toBeTruthy();
+    expect(screen.getByText(en['nextStep.chipBrand'])).toBeTruthy();
+    expect(shareToOd).toBeTruthy();
+    expect(nextSteps.contains(shareToOd)).toBe(true);
+    expect(optionsRow.contains(shareToOd)).toBe(false);
+    expect(optionsRow.compareDocumentPosition(divider) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(divider.compareDocumentPosition(shareToOd) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('does not render when the handlers are not wired', () => {
@@ -255,117 +165,5 @@ describe('AssistantMessage next-step affordance', () => {
       />,
     );
     expect(screen.queryByTestId('next-step-actions')).toBeNull();
-  });
-
-  it('does not render after a failed turn', () => {
-    render(
-      <AssistantMessage
-        message={baseMessage({ producedFiles: [], runStatus: 'failed' })}
-        streaming={false}
-        projectId="proj-1"
-        isLast
-        {...handlers()}
-      />,
-    );
-    expect(screen.queryByTestId('next-step-actions')).toBeNull();
-  });
-
-  it('does not render after a canceled turn', () => {
-    render(
-      <AssistantMessage
-        message={baseMessage({ producedFiles: [], runStatus: 'canceled' })}
-        streaming={false}
-        projectId="proj-1"
-        isLast
-        {...handlers()}
-      />,
-    );
-    expect(screen.queryByTestId('next-step-actions')).toBeNull();
-  });
-});
-
-// A clarification turn ends the run while its inline <question-form> is still
-// waiting for the user; the next-step card must hold back until
-// the answers (or a skip-all, which submits through the same path) arrive as
-// the following user message.
-describe('AssistantMessage next-step affordance during the question phase', () => {
-  const QUESTION_FORM_CONTENT = [
-    'Got it — a couple of quick questions first.',
-    '',
-    '<question-form id="discovery" title="Brief">',
-    '{"questions":[{"id":"studio","label":"Studio name","type":"text","required":true}]}',
-    '</question-form>',
-  ].join('\n');
-
-  function questionFormMessage(content = QUESTION_FORM_CONTENT): ChatMessage {
-    return baseMessage({
-      content,
-      events: [{ kind: 'text', text: content } as NonNullable<ChatMessage['events']>[number]],
-      producedFiles: [producedFile('brief.html')],
-    });
-  }
-
-  it('does not render while the question form is still unanswered', () => {
-    render(
-      <AssistantMessage
-        message={questionFormMessage()}
-        streaming={false}
-        projectId="proj-1"
-        isLast
-        {...handlers()}
-      />,
-    );
-    expect(screen.getByText('Brief')).toBeTruthy();
-    expect(screen.getByText('Studio name')).toBeTruthy();
-    expect(screen.queryByTestId('next-step-actions')).toBeNull();
-  });
-
-  it('does not render while an unterminated question form is pending', () => {
-    const content = 'Quick brief first.\n\n<question-form id="discovery" title="Brief">\n{"questions":[';
-    render(
-      <AssistantMessage
-        message={questionFormMessage(content)}
-        streaming={false}
-        projectId="proj-1"
-        isLast
-        {...handlers()}
-      />,
-    );
-    expect(screen.queryByTestId('next-step-actions')).toBeNull();
-  });
-
-  it('renders once the next user message submits the form answers', () => {
-    render(
-      <AssistantMessage
-        message={questionFormMessage()}
-        streaming={false}
-        projectId="proj-1"
-        isLast
-        nextUserContent={'[form answers — discovery]\n- Studio name: Cobalt Studio'}
-        {...handlers()}
-      />,
-    );
-    expect(screen.getByTestId('next-step-actions')).toBeTruthy();
-  });
-
-  it('ignores a suppressed direction form (locked design system) when gating', () => {
-    const content = [
-      'Pick a direction.',
-      '',
-      '<question-form id="direction" title="Visual direction">',
-      '{"questions":[{"id":"dir","label":"Direction","type":"direction-cards","options":["A","B"]}]}',
-      '</question-form>',
-    ].join('\n');
-    render(
-      <AssistantMessage
-        message={questionFormMessage(content)}
-        streaming={false}
-        projectId="proj-1"
-        isLast
-        suppressDirectionForms
-        {...handlers()}
-      />,
-    );
-    expect(screen.getByTestId('next-step-actions')).toBeTruthy();
   });
 });

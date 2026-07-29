@@ -3,21 +3,11 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('../src/integrations/vela-errors.js', () => ({
   classifyAmrAccountFailure(text: string) {
     const value = String(text || '').toLowerCase();
-    // Mirror the real detector's signals exercised by these tests, including
-    // the Chinese vela pre-charge text (see integrations/vela-errors.test.ts).
-    if (
-      value.includes('insufficient balance') ||
-      value.includes('预扣费额度失败') ||
-      value.includes('余额不足') ||
-      value.includes('额度不足')
-    ) {
+    if (value.includes('insufficient balance')) {
       return { code: 'AMR_INSUFFICIENT_BALANCE' as const };
     }
     if (value.includes('authentication required') || value.includes('not authenticated') || value.includes('unauthorized')) {
       return { code: 'AMR_AUTH_REQUIRED' as const };
-    }
-    if (value.includes('tier_model_not_entitled') || value.includes('tier_request_kind_not_entitled')) {
-      return { code: 'AMR_TIER_UPGRADE_REQUIRED' as const };
     }
     return null;
   },
@@ -26,11 +16,7 @@ vi.mock('../src/integrations/vela-errors.js', () => ({
 vi.mock('../src/runtimes/auth.js', () => ({
   classifyAgentServiceFailure(text: string) {
     const value = String(text || '').toLowerCase();
-    if (
-      value.includes('authentication required') ||
-      value.includes('not authenticated') ||
-      value.includes('invalid_api_key')
-    ) {
+    if (value.includes('authentication required') || value.includes('not authenticated')) {
       return 'AGENT_AUTH_REQUIRED' as const;
     }
     if (value.includes('http 429') || value.includes('too many requests') || value.includes('session limit')) {
@@ -45,7 +31,6 @@ vi.mock('../src/runtimes/auth.js', () => ({
 
 import {
   classifyRunFailure,
-  isResumableFailure,
   type RunEventForFailureClassification,
 } from '../src/run-failure-classification.js';
 
@@ -67,8 +52,7 @@ function errorEvent(
   };
 }
 
-function classifyForAgent(
-  agentId: string,
+function classify(
   code: string | null,
   message = '',
   events: RunEventForFailureClassification[] = code
@@ -85,19 +69,9 @@ function classifyForAgent(
       signal: null,
     },
     ...(code ? { errorCode: code } : {}),
-    agentId,
+    agentId: 'claude',
     events,
   });
-}
-
-function classify(
-  code: string | null,
-  message = '',
-  events: RunEventForFailureClassification[] = code
-    ? [errorEvent(code, message)]
-    : [],
-) {
-  return classifyForAgent('claude', code, message, events);
 }
 
 describe('classifyRunFailure', () => {
@@ -119,7 +93,7 @@ describe('classifyRunFailure', () => {
     ).toEqual({
       failure_category: 'user_cancel',
       failure_detail: 'user_cancelled',
-      failure_stage: 'first_token_wait',
+      failure_stage: 'finalize',
       retryable: false,
       user_action: 'none',
     });
@@ -149,12 +123,14 @@ describe('classifyRunFailure', () => {
     ).toEqual({
       failure_category: 'user_cancel',
       failure_detail: 'user_cancelled',
-      failure_stage: 'first_token_wait',
+      failure_stage: 'finalize',
       retryable: false,
       user_action: 'none',
     });
   });
 
+<<<<<<< HEAD
+=======
   it('uses phase evidence for cancelled runs with tool activity', () => {
     expect(
       classifyRunFailure({
@@ -171,6 +147,7 @@ describe('classifyRunFailure', () => {
     });
   });
 
+>>>>>>> upstream/main
   it('prefers structured model-unavailable codes over timeout-like free text', () => {
     expect(
       classify(
@@ -312,27 +289,6 @@ describe('classifyRunFailure', () => {
     });
   });
 
-  it('does not let retryable hints override session-limit hard quota text', () => {
-    expect(
-      classify(
-        'RATE_LIMITED',
-        "You've hit your session limit; resets at 3:10am.",
-        [
-          errorEvent(
-            'RATE_LIMITED',
-            "You've hit your session limit; resets at 3:10am.",
-            true,
-          ),
-        ],
-      ),
-    ).toMatchObject({
-      failure_category: 'rate_limit',
-      failure_detail: 'hard_quota',
-      retryable: false,
-      user_action: 'none',
-    });
-  });
-
   it('maps upstream failures to retry guidance', () => {
     expect(classify('UPSTREAM_UNAVAILABLE', 'HTTP 503 upstream unavailable')).toMatchObject({
       failure_category: 'upstream_unavailable',
@@ -378,119 +334,6 @@ describe('classifyRunFailure', () => {
       failure_stage: 'first_token_wait',
       retryable: true,
       user_action: 'retry',
-    });
-  });
-
-  it('promotes AMR exit 130 connection resets into upstream stream disconnects', () => {
-    expect(
-      classify(
-        'AGENT_EXIT_130',
-        'json-rpc id 4: Connection reset by server',
-      ),
-    ).toMatchObject({
-      failure_category: 'upstream_unavailable',
-      failure_detail: 'stream_disconnected',
-      failure_stage: 'first_token_wait',
-      retryable: true,
-      user_action: 'retry',
-    });
-  });
-
-  it('promotes opencode API 4xx session errors out of process-exit fallback', () => {
-    expect(
-      classify(
-        'AGENT_EXIT_130',
-        'json-rpc id 4: opencode event stream: opencode session error: {"sessionID":"ses_16a081173ffeQy9mUJTmYowj5p","error":{"name":"APIError","data":{"message":"Not Found","statusCode":404,"isRetryable":false,"responseBody":"<html><head><title>404 Not Found</title></head>"}}}',
-      ),
-    ).toMatchObject({
-      failure_category: 'upstream_unavailable',
-      failure_detail: 'upstream_client_error',
-      failure_stage: 'first_token_wait',
-      retryable: false,
-      user_action: 'none',
-    });
-
-    expect(
-      classify(
-        'AGENT_EXIT_130',
-        'json-rpc id 4: opencode event stream: opencode session error: {"error":{"name":"APIError","data":{"message":"Bad Request","statusCode":400,"isRetryable":false,"responseBody":"<html><head><title>400 Bad Request</title></head>"}}}',
-      ),
-    ).toMatchObject({
-      failure_category: 'upstream_unavailable',
-      failure_detail: 'upstream_client_error',
-      retryable: false,
-      user_action: 'none',
-    });
-  });
-
-  it('uses structured opencode API error data when raw error text is sparse', () => {
-    expect(
-      classifyRunFailure({
-        result: 'failed',
-        status: {
-          status: 'failed',
-          error: null,
-          errorCode: 'AGENT_EXIT_130',
-          exitCode: 130,
-          signal: null,
-        },
-        errorCode: 'AGENT_EXIT_130',
-        agentId: 'opencode',
-        events: [
-          {
-            event: 'error',
-            data: {
-              error: {
-                name: 'APIError',
-                data: {
-                  message: 'Not Found',
-                  statusCode: 404,
-                  isRetryable: false,
-                },
-              },
-            },
-          },
-        ],
-      }),
-    ).toMatchObject({
-      failure_category: 'upstream_unavailable',
-      failure_detail: 'upstream_client_error',
-      failure_stage: 'first_token_wait',
-      retryable: false,
-      user_action: 'none',
-    });
-  });
-
-  it('maps AMR model catalog outages to provider routing failures', () => {
-    expect(
-      classify(
-        'AGENT_EXIT_130',
-        'json-rpc id 2: AMR model catalog is unavailable.',
-      ),
-    ).toMatchObject({
-      failure_category: 'upstream_unavailable',
-      failure_detail: 'provider_routing_error',
-      failure_stage: 'first_token_wait',
-      retryable: true,
-      user_action: 'retry',
-    });
-  });
-
-  it('maps AMR model catalog credential failures to auth instead of retryable routing', () => {
-    expect(
-      classify(
-        'AGENT_EXECUTION_FAILED',
-        [
-          'json-rpc id 2: AMR model catalog is unavailable.',
-          'Error: list Link models: API request failed with status 401: invalid_api_key',
-        ].join('\n'),
-      ),
-    ).toMatchObject({
-      failure_category: 'auth',
-      failure_detail: 'auth_required',
-      failure_stage: 'session_init',
-      retryable: false,
-      user_action: 'login',
     });
   });
 
@@ -673,51 +516,6 @@ describe('classifyRunFailure', () => {
     });
   });
 
-  it('maps invalid agent config to fix-config guidance', () => {
-    expect(
-      classify(
-        'AGENT_EXECUTION_FAILED',
-        'Error loading config.toml: unknown variant `priority`, expected `fast` or `flex`\nin `service_tier`',
-      ),
-    ).toMatchObject({
-      failure_category: 'process_exit',
-      failure_detail: 'agent_config_invalid',
-      failure_stage: 'session_init',
-      retryable: false,
-      user_action: 'fix_config',
-    });
-  });
-
-  it('maps fabricated role marker termination to a retryable protocol guard detail', () => {
-    expect(
-      classify(
-        'AGENT_EXECUTION_FAILED',
-        'Run terminated: model emitted fabricated role marker (`## user`). No further tokens or tool calls accepted from this turn.',
-      ),
-    ).toMatchObject({
-      failure_category: 'process_exit',
-      failure_detail: 'fabricated_role_marker',
-      failure_stage: 'child_close',
-      retryable: true,
-      user_action: 'retry',
-    });
-  });
-
-  it('maps missing generated plugin artifacts to artifact-write tool failures', () => {
-    expect(
-      classify(
-        'AGENT_EXECUTION_FAILED',
-        'Plugin authoring ended before generating the required generated-plugin artifacts.',
-      ),
-    ).toMatchObject({
-      failure_category: 'tool_error',
-      failure_detail: 'plugin_artifact_missing',
-      failure_stage: 'artifact_write',
-      retryable: false,
-      user_action: 'none',
-    });
-  });
-
   it('keeps process exits as an explicit fallback category', () => {
     expect(classify('AGENT_EXIT_1', 'process exited with code 1')).toMatchObject({
       failure_category: 'process_exit',
@@ -892,6 +690,8 @@ describe('classifyRunFailure — signal and interrupt attribution', () => {
       user_action: 'retry',
     });
   });
+<<<<<<< HEAD
+=======
 
   it('uses artifact phase evidence for timeout after artifact output', () => {
     expect(
@@ -2006,4 +1806,5 @@ describe('classifyRunFailure — sampled 0.15.1 provider request failures', () =
     expect(result).toMatchObject(expected);
     expect(isResumableFailure(result)).toBe(resumable);
   });
+>>>>>>> upstream/main
 });

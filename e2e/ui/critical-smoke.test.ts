@@ -1,10 +1,10 @@
-import { expect, test } from '@/playwright/suite';
-import { ensureRailOpen, openNewProjectModal as openNewProjectModalFromProjects } from '@/playwright/rail';
-import type { Locator, Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import { ensureRailOpen } from '@/playwright/rail';
+import type { Page } from '@playwright/test';
 import { applyStandardMocks } from '@/playwright/mock-factory';
 import { T } from '@/timeouts';
 
-test.describe.configure({ timeout: T.xlong });
+test.describe.configure({ timeout: 30_000 });
 
 test.beforeEach(async ({ page }) => {
   await applyStandardMocks(page);
@@ -28,8 +28,8 @@ test('[P0] @critical settings dialog is reachable from home', async ({ page }) =
 
   // The home settings entry is a menu: open it, then the "Settings" item
   // opens the full execution-mode dialog.
-  await clickVisible(page.getByTestId('entry-settings-menu-trigger'));
-  await clickVisible(page.getByTestId('entry-settings-open-details'));
+  await page.getByTestId('entry-settings-menu-trigger').click();
+  await page.getByTestId('entry-settings-open-details').click();
   const settingsDialog = page.getByRole('dialog');
   await expect(settingsDialog).toBeVisible();
   await expect(settingsDialog.getByRole('heading', { name: 'Execution mode' })).toBeVisible();
@@ -58,12 +58,13 @@ async function gotoEntryHome(page: Page) {
 }
 
 async function openNewProjectModal(page: Page) {
-  await openNewProjectModalFromProjects(page);
-}
-
-async function clickVisible(locator: Locator) {
-  await expect(locator).toBeVisible({ timeout: T.medium });
-  await locator.evaluate((element: HTMLElement) => element.click());
+  // The nav rail is collapsed by default; expand it before the rail's
+  // "New project" entry becomes interactable.
+  await page.getByTestId('entry-rail-toggle').click();
+  await ensureRailOpen(page);
+  await page.getByTestId('entry-nav-new-project').click();
+  await expect(page.getByTestId('new-project-modal')).toBeVisible();
+  await expect(page.getByTestId('new-project-panel')).toBeVisible();
 }
 
 async function expectWorkspaceReady(page: Page) {
@@ -75,5 +76,5 @@ async function expectWorkspaceReady(page: Page) {
 }
 
 async function waitForLoadingToClear(page: Page) {
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
+  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.medium });
 }

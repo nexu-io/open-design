@@ -1,6 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
-import { Dialog, DialogDescription, DialogFooter, DialogTitle } from '@open-design/components';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createTabToTracking } from '@open-design/contracts/analytics';
 import { isOpenDesignHostAvailable, pickHostWorkingDir } from '@open-design/host';
 import type { OpenDesignHostProjectImportSuccess } from '@open-design/host';
@@ -18,8 +16,7 @@ import type {
   TrackingDesignSystemStatusValue,
 } from '@open-design/contracts/analytics';
 
-import { useI18n, useT } from '../i18n';
-import { localizeSkillDescription, localizeSkillName } from '../i18n/content';
+import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { fetchPromptTemplate, openFolderDialog } from '../providers/registry';
 import { isStoredMediaProviderEntryPresent } from '../state/config';
@@ -56,8 +53,6 @@ import {
   useAIHubMixAudioModels,
 } from '../media/aihubmix-image-models';
 import { formatPickAndImportFailure } from '../utils/pickAndImportError';
-import { useBrandsByDesignSystemId } from '../runtime/brands';
-import { BrandPreviewCard } from './BrandPreviewCard';
 import { Icon } from './Icon';
 import { Skeleton } from './Loading';
 import { Toast } from './Toast';
@@ -76,14 +71,6 @@ const SFX_AUDIO_DURATIONS_SEC = AUDIO_DURATIONS_SEC.filter((sec) => sec <= 30);
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 
 type NewProjectPlatform = Exclude<ProjectPlatform, 'auto'>;
-
-function folderPickerErrorDetails(err: unknown): string | undefined {
-  if (!(err instanceof Error)) return undefined;
-  const message = err.message.trim();
-  if (!message) return undefined;
-  const detail = message.replace(/^Could not open folder picker:\s*/i, '').trim();
-  return detail || message;
-}
 
 const DESIGN_PLATFORMS: Array<{
   value: NewProjectPlatform;
@@ -139,10 +126,6 @@ export type ImportClaudeDesignOutcome =
 
 interface Props {
   skills: SkillSummary[];
-  // Renderable design templates only (from /api/design-templates). Feeds the
-  // per-tab "Start from" rail; `skills` stays the id-lookup union so create
-  // routing keeps working when this list is absent.
-  designTemplates?: SkillSummary[];
   designSystems: DesignSystemSummary[];
   defaultDesignSystemId: string | null;
   templates: ProjectTemplate[];
@@ -249,13 +232,9 @@ export function defaultDesignSystemSelection(
   designSystems: DesignSystemSummary[],
 ): string[] {
   if (!defaultDesignSystemId) return [];
-  return designSystems.some((d) => d.id === defaultDesignSystemId && (d.status ?? 'published') !== 'draft')
+  return designSystems.some((d) => d.id === defaultDesignSystemId)
     ? [defaultDesignSystemId]
     : [];
-}
-
-function isSelectableProjectDesignSystem(system: DesignSystemSummary): boolean {
-  return system.status !== 'draft';
 }
 
 export function buildDesignSystemCreateSelection(
@@ -272,7 +251,6 @@ export function buildDesignSystemCreateSelection(
 
 export function NewProjectPanel({
   skills,
-  designTemplates = [],
   designSystems,
   defaultDesignSystemId,
   templates,
@@ -290,7 +268,6 @@ export function NewProjectPanel({
   initialTab = 'prototype',
 }: Props) {
   const t = useT();
-  const { locale } = useI18n();
   const analytics = useAnalytics();
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const [importing, setImporting] = useState(false);
@@ -329,13 +306,9 @@ export function NewProjectPanel({
   // Design-system selection is now an *array* internally so the same
   // component can drive both single-select and multi-select modes without
   // duplicating state. Single-select coerces to length 0/1.
-  const selectableDesignSystems = useMemo(
-    () => designSystems.filter(isSelectableProjectDesignSystem),
-    [designSystems],
-  );
   const initialDefaultDsSelection = useMemo(
-    () => defaultDesignSystemSelection(defaultDesignSystemId, selectableDesignSystems),
-    [defaultDesignSystemId, selectableDesignSystems],
+    () => defaultDesignSystemSelection(defaultDesignSystemId, designSystems),
+    [defaultDesignSystemId, designSystems],
   );
   const [selectedDsIds, setSelectedDsIds] = useState<string[]>(
     () => initialDefaultDsSelection,
@@ -354,10 +327,6 @@ export function NewProjectPanel({
   const [speakerNotes, setSpeakerNotes] = useState(false);
   const [animations, setAnimations] = useState(false);
   const [templateId, setTemplateId] = useState<string | null>(null);
-  // "Start from" pick on the scenario tabs (prototype / deck). `null` is the
-  // Blank card: create routes through the tab's default skill. A template id
-  // routes the project through that design template's SKILL.md instead.
-  const [startTemplateId, setStartTemplateId] = useState<string | null>(null);
   const [imageModel, setImageModel] = useState(DEFAULT_IMAGE_MODEL);
   const [imageAspect, setImageAspect] = useState<MediaAspect>('1:1');
   const [videoModel, setVideoModel] = useState(DEFAULT_VIDEO_MODEL);
@@ -395,16 +364,6 @@ export function NewProjectPanel({
   // still honor the user's configured default design system even when a
   // non-Orbit default skill does not require one.
   const tabDefaultSkillForcesNoDs = useMemo(() => {
-    // A "Start from" template pick overrides the tab default, so the DS
-    // decision must follow the picked template's own declaration.
-    if (startTemplateId) {
-      const picked =
-        designTemplates.find((x) => x.id === startTemplateId)
-        ?? skills.find((x) => x.id === startTemplateId);
-      return picked
-        ? picked.scenario === 'orbit' && picked.designSystemRequired === false
-        : false;
-    }
     const tabSkillId = ((): string | null => {
       if (tab === 'prototype' || tab === 'live-artifact') {
         const list = skills.filter((s) => s.mode === 'prototype');
@@ -423,7 +382,7 @@ export function NewProjectPanel({
     return s
       ? s.scenario === 'orbit' && s.designSystemRequired === false
       : false;
-  }, [tab, skills, startTemplateId, designTemplates]);
+  }, [tab, skills]);
   const showDesignSystemPicker =
     tabSupportsDesignSystem && !tabDefaultSkillForcesNoDs;
 
@@ -447,7 +406,7 @@ export function NewProjectPanel({
     if (!primary) return;
     if (autoSelectFiredForRef.current === primary) return;
     autoSelectFiredForRef.current = primary;
-    const picked = selectableDesignSystems.find((d) => d.id === primary);
+    const picked = designSystems.find((d) => d.id === primary);
     trackDesignSystemApplyResult(analytics.track, {
       page_name: 'home',
       area: 'design_system_picker',
@@ -466,9 +425,9 @@ export function NewProjectPanel({
     });
   }, [
     analytics.track,
+    designSystems,
     dsSelectionTouched,
     initialDefaultDsSelection,
-    selectableDesignSystems,
     showDesignSystemPicker,
     tab,
   ]);
@@ -535,27 +494,6 @@ export function NewProjectPanel({
     }
     return null;
   }, [tab, mediaSurface, skills, videoModel]);
-
-  // Renderable scenario templates for the active tab's "Start from" rail.
-  // Blank (no template) is always the first card; these fill the rest.
-  const startTemplates = useMemo(() => {
-    const mode =
-      tab === 'prototype' ? 'prototype' : tab === 'deck' ? 'deck' : null;
-    if (!mode) return [];
-    return designTemplates
-      .filter((s) => s.mode === mode && !s.aggregatesExamples)
-      .sort(
-        (a, b) =>
-          (b.featured ?? 0) - (a.featured ?? 0) ||
-          localizeSkillName(locale, a).localeCompare(localizeSkillName(locale, b)),
-      );
-  }, [designTemplates, tab, locale]);
-
-  // Each tab has its own notion of Blank (a different default skill), so a
-  // pick made on one tab must not silently carry over to another.
-  useEffect(() => {
-    setStartTemplateId(null);
-  }, [tab]);
 
   // When the user picks a curated prompt template, propagate the template's
   // declared `model` and `aspect` onto the actual project state. Without
@@ -765,7 +703,7 @@ export function NewProjectPanel({
     );
     onCreate({
       name: trimmedName || autoName(tab, mediaSurface, t),
-      skillId: startTemplateId ?? skillIdForTab,
+      skillId: skillIdForTab,
       designSystemId: primaryDs,
       metadata: {
         ...metadata,
@@ -795,17 +733,10 @@ export function NewProjectPanel({
         });
         return;
       }
-      try {
-        const picked = await openFolderDialog({ throwOnError: true });
-        if (picked) {
-          setWorkingDir(picked);
-          setWorkingDirToken(null);
-        }
-      } catch (err) {
-        setWorkingDirError({
-          message: t('chat.linkedFolderPickError'),
-          details: folderPickerErrorDetails(err),
-        });
+      const picked = await openFolderDialog();
+      if (picked) {
+        setWorkingDir(picked);
+        setWorkingDirToken(null);
       }
     } finally {
       setWorkingDirPicking(false);
@@ -898,14 +829,6 @@ export function NewProjectPanel({
           ) : null}
         </h3>
 
-        {startTemplates.length > 0 ? (
-          <StartFromPicker
-            templates={startTemplates}
-            value={startTemplateId}
-            onChange={setStartTemplateId}
-          />
-        ) : null}
-
         <div className="newproj-name-row">
           <input
             className="newproj-name"
@@ -951,7 +874,7 @@ export function NewProjectPanel({
 
         {showDesignSystemPicker ? (
           <DesignSystemPicker
-            designSystems={selectableDesignSystems}
+            designSystems={designSystems}
             defaultDesignSystemId={defaultDesignSystemId}
             selectedIds={selectedDsIds}
             multi={dsMulti}
@@ -1239,7 +1162,7 @@ function PlatformPicker({
 
   return (
     <div
-      className={`newproj-section ds-picker platform-picker${open ? ' open' : ''}`}
+      className="newproj-section ds-picker platform-picker"
       ref={wrapRef}
     >
       <label className="newproj-label">Target platforms</label>
@@ -1589,77 +1512,6 @@ function ToggleRow({
   );
 }
 
-/* ============================================================
-   "Start from" rail — the scenario tabs (prototype / deck) open with
-   a Blank-first card row, mirroring template galleries where a blank
-   canvas is always the first choice. Blank keeps the tab's default
-   skill (each scenario resolves its own seed SKILL.md / HTML
-   template); picking a card reroutes create to that design template.
-   ============================================================ */
-function StartFromPicker({
-  templates,
-  value,
-  onChange,
-}: {
-  templates: SkillSummary[];
-  value: string | null;
-  onChange: (id: string | null) => void;
-}) {
-  const t = useT();
-  const { locale } = useI18n();
-  return (
-    <div className="newproj-section">
-      <label className="newproj-label">{t('newproj.startFromLabel')}</label>
-      <div
-        className="newproj-start-row"
-        role="radiogroup"
-        aria-label={t('newproj.startFromLabel')}
-      >
-        <button
-          type="button"
-          role="radio"
-          aria-checked={value == null}
-          data-testid="newproj-start-blank"
-          className={`newproj-start-card blank${value == null ? ' active' : ''}`}
-          title={t('newproj.startBlankHint')}
-          onClick={() => onChange(null)}
-        >
-          <span className="newproj-start-thumb" aria-hidden="true">
-            <Icon name="plus" size={18} strokeWidth={1.8} />
-          </span>
-          <span className="newproj-start-name">{t('newproj.startBlank')}</span>
-        </button>
-        {templates.map((tpl) => {
-          const name = localizeSkillName(locale, tpl);
-          const active = value === tpl.id;
-          return (
-            <button
-              key={tpl.id}
-              type="button"
-              role="radio"
-              aria-checked={active}
-              data-testid={`newproj-start-${tpl.id}`}
-              className={`newproj-start-card${active ? ' active' : ''}`}
-              title={localizeSkillDescription(locale, tpl)}
-              onClick={() => onChange(active ? null : tpl.id)}
-            >
-              <span
-                className={`newproj-start-thumb mode-${tpl.mode}`}
-                aria-hidden="true"
-              >
-                <span className="newproj-start-glyph">
-                  {name.charAt(0).toUpperCase()}
-                </span>
-              </span>
-              <span className="newproj-start-name">{name}</span>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 function TemplatePicker({
   templates,
   value,
@@ -1672,7 +1524,6 @@ function TemplatePicker({
   onDelete?: (id: string) => Promise<boolean>;
 }) {
   const t = useT();
-  const deleteTemplateTitleId = useId();
   const [confirmDelete, setConfirmDelete] = useState<
     { id: string; name: string } | null
   >(null);
@@ -1738,36 +1589,41 @@ function TemplatePicker({
         </div>
       )}
       {confirmDelete ? (
-        <Dialog
-          className="modal-confirm"
-          role="alertdialog"
-          onClose={deleting ? undefined : closeConfirm}
-          ariaLabelledBy={deleteTemplateTitleId}
+        <div
+          className="modal-backdrop"
+          onClick={deleting ? undefined : closeConfirm}
         >
-          <DialogTitle id={deleteTemplateTitleId}>{t('newproj.deleteTemplateTitle')}</DialogTitle>
-          <DialogDescription className="modal-confirm-message">
-            {t('newproj.deleteTemplateConfirm', { name: confirmDelete.name })}
-          </DialogDescription>
-          {deleteError ? (
-            <p className="modal-confirm-error" role="alert">
-              {t('newproj.deleteTemplateError')}
+          <div
+            className="modal modal-confirm"
+            onClick={(e) => e.stopPropagation()}
+            role="alertdialog"
+            aria-modal="true"
+          >
+            <h2>{t('newproj.deleteTemplateTitle')}</h2>
+            <p className="modal-confirm-message">
+              {t('newproj.deleteTemplateConfirm', { name: confirmDelete.name })}
             </p>
-          ) : null}
-          <DialogFooter className="row">
-            <button type="button" onClick={closeConfirm} disabled={deleting}>
-              {t('common.cancel')}
-            </button>
-            <button
-              type="button"
-              className="primary danger"
-              autoFocus
-              disabled={deleting}
-              onClick={runDelete}
-            >
-              {t('newproj.deleteTemplateConfirmCta')}
-            </button>
-          </DialogFooter>
-        </Dialog>
+            {deleteError ? (
+              <p className="modal-confirm-error" role="alert">
+                {t('newproj.deleteTemplateError')}
+              </p>
+            ) : null}
+            <div className="row">
+              <button type="button" onClick={closeConfirm} disabled={deleting}>
+                {t('common.cancel')}
+              </button>
+              <button
+                type="button"
+                className="primary danger"
+                autoFocus
+                disabled={deleting}
+                onClick={runDelete}
+              >
+                {t('newproj.deleteTemplateConfirmCta')}
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </div>
   );
@@ -2137,27 +1993,8 @@ function DesignSystemPicker({
   const t = useT();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const [hoveredId, setHoveredId] = useState<string | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
-  const triggerRef = useRef<HTMLButtonElement | null>(null);
-  const popoverRef = useRef<HTMLDivElement | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
-  const [anchor, setAnchor] = useState<{
-    top?: number;
-    bottom?: number;
-    left: number;
-    width: number;
-    maxHeight: number;
-    // Fixed viewport x for the brand preview flyout, placed beside the
-    // portaled popover (right when there is room, else left).
-    flyoutLeft: number;
-  } | null>(null);
-
-  // Upgrade the popover's thin list to the rich Brand Kit card whenever the
-  // hovered / selected row is a finalized brand (`user:<id>` design system).
-  // Fetched lazily on first open; non-brand systems are absent and the popover
-  // stays a plain list. See `DesignSystemPicker.tsx` for the same wiring.
-  const brandsByDesignSystem = useBrandsByDesignSystemId(open);
 
   const byId = useMemo(() => {
     const map = new Map<string, DesignSystemSummary>();
@@ -2174,7 +2011,7 @@ function DesignSystemPicker({
       .filter((d): d is DesignSystemSummary => Boolean(d));
     const pickedSet = new Set(picked.map((d) => d.id));
     const rest = designSystems
-      .filter((d) => (d.status ?? 'published') !== 'draft' && !pickedSet.has(d.id))
+      .filter((d) => !pickedSet.has(d.id))
       .sort((a, b) => {
         if (a.id === defaultDesignSystemId) return -1;
         if (b.id === defaultDesignSystemId) return 1;
@@ -2199,87 +2036,15 @@ function DesignSystemPicker({
   }, [ordered, query]);
 
   useEffect(() => {
-    if (!open) {
-      setHoveredId(null);
-      return;
-    }
+    if (!open) return;
     const t = window.setTimeout(() => searchRef.current?.focus(), 30);
     return () => window.clearTimeout(t);
-  }, [open]);
-
-  useLayoutEffect(() => {
-    if (!open) {
-      setAnchor(null);
-      return undefined;
-    }
-
-    function updateAnchor() {
-      const trigger = triggerRef.current;
-      if (!trigger) return;
-      const rect = trigger.getBoundingClientRect();
-      const width = Math.max(280, rect.width);
-      const left = Math.max(8, Math.min(window.innerWidth - width - 8, rect.left));
-      const gap = 6;
-      const margin = 12;
-      const preferredMin = 200;
-      const preferredMax = 440;
-      const spaceBelow = window.innerHeight - rect.bottom - gap - margin;
-      const spaceAbove = rect.top - gap - margin;
-      const openUp = spaceBelow < preferredMin + 80 && spaceAbove > spaceBelow;
-      const maxHeight = Math.max(0, Math.min(preferredMax, openUp ? spaceAbove : spaceBelow));
-
-      // Place the brand preview flyout beside the (portaled) popover: to its
-      // right when the 320px card fits, otherwise flipped to its left, then
-      // clamped into the viewport. Without this the flyout kept its old
-      // inline `position: absolute` against the trigger wrapper and was
-      // re-clipped by the modal body once the popover itself moved to a body
-      // portal.
-      const flyoutWidth = 320;
-      const rightLeft = left + width + 8;
-      const leftLeft = left - flyoutWidth - 8;
-      let flyoutLeft: number;
-      if (rightLeft + flyoutWidth <= window.innerWidth - 8) {
-        flyoutLeft = rightLeft;
-      } else if (leftLeft >= 8) {
-        flyoutLeft = leftLeft;
-      } else {
-        flyoutLeft = Math.max(8, window.innerWidth - flyoutWidth - 8);
-      }
-
-      if (openUp) {
-        setAnchor({
-          bottom: window.innerHeight - rect.top + gap,
-          left,
-          width,
-          maxHeight,
-          flyoutLeft,
-        });
-      } else {
-        setAnchor({
-          top: rect.bottom + gap,
-          left,
-          width,
-          maxHeight,
-          flyoutLeft,
-        });
-      }
-    }
-
-    updateAnchor();
-    window.addEventListener('resize', updateAnchor);
-    window.addEventListener('scroll', updateAnchor, true);
-    return () => {
-      window.removeEventListener('resize', updateAnchor);
-      window.removeEventListener('scroll', updateAnchor, true);
-    };
   }, [open]);
 
   useEffect(() => {
     if (!open) return;
     function onPointer(e: MouseEvent) {
-      const target = e.target as Node;
-      if (wrapRef.current?.contains(target)) return;
-      if (popoverRef.current?.contains(target)) return;
+      if (wrapRef.current?.contains(e.target as Node)) return;
       setOpen(false);
     }
     function onKey(e: KeyboardEvent) {
@@ -2326,12 +2091,6 @@ function DesignSystemPicker({
   const extraCount = Math.max(0, selectedIds.length - 1);
   const isDefault = !!primary && primary.id === defaultDesignSystemId;
 
-  // The hovered row wins over the current selection so scrubbing the list
-  // previews each brand; falling back to the primary pick keeps the rich card
-  // visible while the pointer rests outside the list.
-  const previewId = hoveredId ?? primaryId;
-  const previewBrand = previewId ? brandsByDesignSystem.get(previewId) ?? null : null;
-
   if (loading && designSystems.length === 0) {
     return (
       <div className="newproj-section">
@@ -2342,14 +2101,9 @@ function DesignSystemPicker({
   }
 
   return (
-    <div
-      className={`newproj-section ds-picker${open ? ' open' : ''}`}
-      data-testid="design-system-picker"
-      ref={wrapRef}
-    >
+    <div className="newproj-section ds-picker" data-testid="design-system-picker" ref={wrapRef}>
       <label className="newproj-label">{t('newproj.designSystem')}</label>
       <button
-        ref={triggerRef}
         type="button"
         data-testid="design-system-trigger"
         className={`ds-picker-trigger${open ? ' open' : ''}${primary ? '' : ' empty'}`}
@@ -2380,21 +2134,8 @@ function DesignSystemPicker({
           style={{ transform: open ? 'rotate(180deg)' : undefined }}
         />
       </button>
-      {open && anchor && typeof document !== 'undefined'
-        ? createPortal(
-        <div
-          ref={popoverRef}
-          className="ds-picker-popover ds-picker-popover-portal"
-          role="listbox"
-          data-placement={anchor.bottom !== undefined ? 'up' : 'down'}
-          style={{
-            top: anchor.top ?? 'auto',
-            bottom: anchor.bottom ?? 'auto',
-            left: anchor.left,
-            width: anchor.width,
-            maxHeight: anchor.maxHeight,
-          }}
-        >
+      {open ? (
+        <div className="ds-picker-popover" role="listbox">
           <div className="ds-picker-head">
             <input
               ref={searchRef}
@@ -2456,8 +2197,6 @@ function DesignSystemPicker({
                     multi={multi}
                     order={order}
                     onClick={() => toggle(d.id)}
-                    onMouseEnter={() => setHoveredId(d.id)}
-                    onMouseLeave={() => setHoveredId(null)}
                     avatar={<DesignSystemAvatar system={d} />}
                     title={d.title}
                     badge={
@@ -2488,28 +2227,8 @@ function DesignSystemPicker({
               </button>
             </div>
           ) : null}
-        </div>,
-          document.body,
-        )
-        : null}
-      {open && previewBrand && anchor && typeof document !== 'undefined'
-        ? createPortal(
-        <aside
-          className="ds-picker-brand-flyout ds-picker-brand-flyout-portal"
-          data-testid="new-project-ds-brand-flyout"
-          aria-label={t('brandDetail.identity')}
-          style={{
-            top: anchor.top ?? 'auto',
-            bottom: anchor.bottom ?? 'auto',
-            left: anchor.flyoutLeft,
-            maxHeight: anchor.maxHeight,
-          }}
-        >
-          <BrandPreviewCard variant="compact" summary={previewBrand} />
-        </aside>,
-          document.body,
-        )
-        : null}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -2519,8 +2238,6 @@ function DsPickerItem({
   multi,
   order,
   onClick,
-  onMouseEnter,
-  onMouseLeave,
   avatar,
   title,
   subtitle,
@@ -2530,8 +2247,6 @@ function DsPickerItem({
   multi: boolean;
   order?: number;
   onClick: () => void;
-  onMouseEnter?: () => void;
-  onMouseLeave?: () => void;
   avatar: React.ReactNode;
   title: string;
   subtitle: string;
@@ -2544,9 +2259,6 @@ function DsPickerItem({
       aria-selected={active}
       className={`ds-picker-item${active ? ' active' : ''}`}
       onClick={onClick}
-      onMouseEnter={onMouseEnter}
-      onFocus={onMouseEnter}
-      onMouseLeave={onMouseLeave}
     >
       <span className="ds-picker-item-avatar">{avatar}</span>
       <span className="ds-picker-item-text">
@@ -2755,7 +2467,7 @@ function MediaProjectOptions(props:
 
 export function supportedModels(surface: 'image' | 'video' | 'audio', models: MediaModel[]): MediaModel[] {
   const supportedProviders: Record<'image' | 'video' | 'audio', Set<string>> = {
-    image: new Set(['openai', 'codex', 'volcengine', 'grok', 'nanobanana', 'openrouter', 'imagerouter', 'leonardo', 'custom-image', 'aihubmix', 'minimax']),
+    image: new Set(['openai', 'volcengine', 'grok', 'nanobanana', 'openrouter', 'imagerouter', 'leonardo', 'custom-image', 'aihubmix']),
     video: new Set(['volcengine', 'hyperframes', 'grok', 'openrouter', 'imagerouter', 'aihubmix']),
     audio: new Set(['minimax', 'fishaudio', 'senseaudio', 'elevenlabs', 'openai', 'volcengine', 'aihubmix']),
   };
@@ -2792,8 +2504,6 @@ function MediaModelCards({
       providerId: string;
       providerLabel: string;
       status: 'configured' | 'integrated' | 'unsupported';
-      sortIndex: number;
-      sortPriority: number;
       models: MediaModel[];
     }> = [];
     for (const model of models) {
@@ -2801,7 +2511,9 @@ function MediaModelCards({
       const providerId = provider?.id ?? model.provider;
       if (!isMediaProviderPickerReady(providerId, mediaProviders)) continue;
       const entry = mediaProviders?.[providerId];
-      const configured = provider?.credentialsRequired !== false && isStoredMediaProviderEntryPresent(entry);
+      const configured =
+        provider?.credentialsRequired === false ||
+        isStoredMediaProviderEntryPresent(entry);
       let group = out.find((g) => g.providerId === providerId);
       if (!group) {
         group = {
@@ -2812,15 +2524,13 @@ function MediaModelCards({
             : provider?.integrated
               ? 'integrated'
               : 'unsupported',
-          sortIndex: out.length,
-          sortPriority: configured ? 0 : provider?.credentialsRequired === false ? 1 : 2,
           models: [],
         };
         out.push(group);
       }
       group.models.push(model);
     }
-    return out.sort((a, b) => a.sortPriority - b.sortPriority || a.sortIndex - b.sortIndex);
+    return out;
   }, [models, mediaProviders]);
 
   const selected = useMemo(() => {

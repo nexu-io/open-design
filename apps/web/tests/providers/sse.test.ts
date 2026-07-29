@@ -2,12 +2,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   buildDaemonTranscript,
-  DAEMON_RUN_FINISHED_EVENT,
   latestUserPromptFromHistory,
   reattachDaemonRun,
   sanitizePriorAssistantTurnForTranscript,
   streamViaDaemon,
-  type DaemonRunFinishedEventDetail,
 } from '../../src/providers/daemon';
 import { streamMessageOpenAI } from '../../src/providers/openai-compatible';
 import { parseSseFrame } from '../../src/providers/sse';
@@ -70,226 +68,6 @@ describe('streamViaDaemon', () => {
     expect(body.currentPrompt).toBe('post-consent revision');
   });
 
-  it('publishes an authoritative successful run with an artifact to the app gate', async () => {
-    const handlers = createDaemonHandlers();
-    const eventTarget = new EventTarget();
-    const published: DaemonRunFinishedEventDetail[] = [];
-    eventTarget.addEventListener(DAEMON_RUN_FINISHED_EVENT, (event) => {
-      published.push((event as CustomEvent<DaemonRunFinishedEventDetail>).detail);
-    });
-    vi.stubGlobal('window', eventTarget);
-    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url === '/api/runs') return jsonResponse({ runId: 'run-artifact-success' });
-      if (url === '/api/runs/run-artifact-success/events') {
-        return sseResponse(
-          'event: end\ndata: {"code":0,"status":"succeeded","artifactCount":2}\n\n',
-        );
-      }
-      throw new Error(`unexpected fetch ${url}`);
-    }));
-
-    await streamViaDaemon({
-      agentId: 'mock',
-      history: [{ id: '1', role: 'user', content: 'make a design' }],
-      systemPrompt: '',
-      signal: new AbortController().signal,
-      handlers,
-      projectId: 'project-1',
-      conversationId: 'conversation-1',
-    });
-
-    expect(published).toEqual([{
-      runId: 'run-artifact-success',
-      projectId: 'project-1',
-      conversationId: 'conversation-1',
-      result: 'success',
-      artifactCount: 2,
-    }]);
-  });
-
-  it.each([
-    ['no artifact', '{"code":0,"status":"succeeded","artifactCount":0}'],
-    ['failed', '{"code":1,"status":"failed","artifactCount":1}'],
-    ['canceled', '{"code":null,"signal":"SIGTERM","status":"canceled","artifactCount":1}'],
-    ['implicit success', '{"code":0,"artifactCount":1}'],
-  ])('does not publish a run-finished upgrade event for %s', async (_label, payload) => {
-    const handlers = createDaemonHandlers();
-    const eventTarget = new EventTarget();
-    const published: DaemonRunFinishedEventDetail[] = [];
-    eventTarget.addEventListener(DAEMON_RUN_FINISHED_EVENT, (event) => {
-      published.push((event as CustomEvent<DaemonRunFinishedEventDetail>).detail);
-    });
-    vi.stubGlobal('window', eventTarget);
-    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url === '/api/runs') return jsonResponse({ runId: 'run-not-eligible' });
-      if (url === '/api/runs/run-not-eligible/events') {
-        return sseResponse(`event: end\ndata: ${payload}\n\n`);
-      }
-      throw new Error(`unexpected fetch ${url}`);
-    }));
-
-    await streamViaDaemon({
-      agentId: 'mock',
-      history: [{ id: '1', role: 'user', content: 'make a design' }],
-      systemPrompt: '',
-      signal: new AbortController().signal,
-      handlers,
-      projectId: 'project-1',
-      conversationId: 'conversation-1',
-    });
-
-    expect(published).toEqual([]);
-  });
-
-  it('does not surface an error when a still-running same-run retry later succeeds', async () => {
-    // The daemon emits the `error` frame for the failed first attempt BEFORE it
-    // decides to retry. At that moment the run status is still `running` (the
-    // retry is in flight — it may be slow). The consumer must NOT surface the
-    // transient error; it keeps consuming and the later `end` frame resolves the
-    // run as a success. Surfacing here (or on a poll timeout) would turn a
-    // recovered run into a visible failure and drop the successful stream.
-    const handlers = createDaemonHandlers();
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
-      if (url === '/api/runs/run-1/events') {
-        return sseResponse(
-          'event: error\ndata: {"code":"AGENT_EXECUTION_FAILED","message":"upstream drop","retryable":true}\n\n' +
-          'event: end\ndata: {"code":0,"status":"succeeded"}\n\n',
-        );
-      }
-      if (url === '/api/runs/run-1') {
-        // Retry still in flight when the error frame is observed.
-        return jsonResponse({ id: 'run-1', status: 'running' });
-      }
-      throw new Error(`unexpected fetch ${url}`);
-    });
-    vi.stubGlobal('fetch', fetchMock);
-
-    await streamViaDaemon({
-      agentId: 'mock',
-      history: [{ id: '1', role: 'user', content: 'do the thing' }],
-      systemPrompt: '',
-      signal: new AbortController().signal,
-      handlers,
-    });
-
-    expect(handlers.onError).not.toHaveBeenCalled();
-    expect(handlers.onDone).toHaveBeenCalledTimes(1);
-  });
-
-  it('keeps consuming when a same-run retry succeeds after the transient error status briefly reads failed', async () => {
-    // Regression for #5110: the daemon can emit an empty-output error for a
-    // failed first attempt, then recover the SAME run through the retry path.
-    // If the status probe observes the transient failed state and returns
-    // immediately, the browser never sees the later successful write/text/end
-    // frames and the chat keeps showing the stale empty-output failure.
-    const handlers = createDaemonHandlers();
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
-      if (url === '/api/runs/run-1/events') {
-        return sseResponse(
-          'event: error\ndata: {"code":"AGENT_EXECUTION_FAILED","message":"Agent completed without producing any output.","retryable":true}\n\n' +
-          'event: agent\ndata: {"type":"tool_use","id":"call_1","name":"write","input":{"filePath":"index.html"}}\n\n' +
-          'event: agent\ndata: {"type":"tool_result","toolUseId":"call_1","content":"Wrote file successfully.","isError":false}\n\n' +
-          'event: agent\ndata: {"type":"text_delta","delta":"Landing page saved to `index.html`."}\n\n' +
-          'event: end\ndata: {"code":0,"status":"succeeded"}\n\n',
-        );
-      }
-      if (url === '/api/runs/run-1') {
-        return jsonResponse({ id: 'run-1', status: 'failed' });
-      }
-      throw new Error(`unexpected fetch ${url}`);
-    });
-    vi.stubGlobal('fetch', fetchMock);
-
-    await streamViaDaemon({
-      agentId: 'opencode',
-      history: [{ id: '1', role: 'user', content: 'make a landing page' }],
-      systemPrompt: '',
-      signal: new AbortController().signal,
-      handlers,
-    });
-
-    expect(handlers.onError).not.toHaveBeenCalled();
-    expect(handlers.onDelta).toHaveBeenCalledWith('Landing page saved to `index.html`.');
-    expect(handlers.onDone).toHaveBeenCalledWith('Landing page saved to `index.html`.');
-  });
-
-  it('prefers a structured daemon error over the lifecycle exit fallback when the run later fails', async () => {
-    const handlers = createDaemonHandlers();
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
-      if (url === '/api/runs/run-1/events') {
-        return sseResponse(
-          [
-            'event: error',
-            'data: {"code":"AGENT_EXECUTION_FAILED","message":"intentional fake codex failure","retryable":false}',
-            '',
-            'event: end',
-            'data: {"code":1,"status":"failed"}',
-            '',
-            '',
-          ].join('\n'),
-        );
-      }
-      if (url === '/api/runs/run-1') {
-        return jsonResponse({ id: 'run-1', status: 'running' });
-      }
-      throw new Error(`unexpected fetch ${url}`);
-    });
-    vi.stubGlobal('fetch', fetchMock);
-
-    await streamViaDaemon({
-      agentId: 'mock',
-      history: [{ id: '1', role: 'user', content: 'do the thing' }],
-      systemPrompt: '',
-      signal: new AbortController().signal,
-      handlers,
-    });
-
-    expect(handlers.onError).toHaveBeenCalledWith(
-      expect.objectContaining({ message: 'intentional fake codex failure' }),
-    );
-    expect(handlers.onError).not.toHaveBeenCalledWith(new Error('agent exited with code 1'));
-    expect(handlers.onDone).not.toHaveBeenCalled();
-  });
-
-  it('surfaces a terminal failure with the finalized resumable flag', async () => {
-    const handlers = createDaemonHandlers();
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
-      if (url === '/api/runs/run-1/events') {
-        return sseResponse(
-          'event: error\ndata: {"code":"AGENT_EXECUTION_FAILED","message":"upstream drop","retryable":true}\n\n',
-        );
-      }
-      if (url === '/api/runs/run-1') {
-        return jsonResponse({ id: 'run-1', status: 'failed', resumable: true });
-      }
-      throw new Error(`unexpected fetch ${url}`);
-    });
-    vi.stubGlobal('fetch', fetchMock);
-
-    await streamViaDaemon({
-      agentId: 'mock',
-      history: [{ id: '1', role: 'user', content: 'do the thing' }],
-      systemPrompt: '',
-      signal: new AbortController().signal,
-      handlers,
-    });
-
-    expect(handlers.onDone).not.toHaveBeenCalled();
-    expect(handlers.onError).toHaveBeenCalledTimes(1);
-    const err = handlers.onError.mock.calls[0]![0] as Error & { resumable?: boolean };
-    expect(err.resumable).toBe(true);
-  });
-
   it('sends run-scoped media execution policy to the daemon', async () => {
     const handlers = createDaemonHandlers();
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
@@ -322,32 +100,6 @@ describe('streamViaDaemon', () => {
       allowedSurfaces: ['image'],
       allowedModels: ['doubao-seedream-3-0-t2i-250415'],
     });
-  });
-
-  it('requests title generation when enabled', async () => {
-    const handlers = createDaemonHandlers();
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
-      if (url === '/api/runs/run-1/events') {
-        return sseResponse('event: end\ndata: {"code":0,"status":"succeeded"}\n\n');
-      }
-      throw new Error(`unexpected fetch ${url}`);
-    });
-    vi.stubGlobal('fetch', fetchMock);
-
-    await streamViaDaemon({
-      agentId: 'mock',
-      history: [{ id: '1', role: 'user', content: 'name this conversation' }],
-      systemPrompt: '',
-      signal: new AbortController().signal,
-      handlers,
-      titleGeneration: { enabled: true },
-    });
-
-    const [, createRunInit] = fetchMock.mock.calls[0] as unknown as [RequestInfo | URL, RequestInit];
-    const body = JSON.parse(String(createRunInit.body));
-    expect(body.titleGeneration).toEqual({ enabled: true });
   });
 
   it('sends the applied plugin snapshot id to the daemon', async () => {
@@ -430,26 +182,6 @@ describe('streamViaDaemon', () => {
     expect(transcript).toContain('first gemini request');
     expect(transcript).toContain('gemini response');
     expect(transcript).toContain('second gemini request');
-  });
-
-  it('keeps legacy API-mode assistant context when routing through BYOK OpenCode', () => {
-    const transcript = buildDaemonTranscript(
-      [
-        { id: '1', role: 'user', content: 'draft the registration flow' },
-        {
-          id: '2',
-          role: 'assistant',
-          content: 'openai api response with design decisions',
-          agentId: 'openai-api',
-        },
-        { id: '3', role: 'user', content: 'make the second step clearer' },
-      ],
-      'byok-opencode',
-    );
-
-    expect(transcript).toContain('draft the registration flow');
-    expect(transcript).toContain('openai api response with design decisions');
-    expect(transcript).toContain('make the second step clearer');
   });
 
   it('extracts only the latest user prompt for telemetry', () => {
@@ -540,7 +272,7 @@ describe('streamViaDaemon', () => {
     expect(sanitized).toBe(original);
   });
 
-  it('replaces a persisted prior-turn <artifact> with a one-line summary (the deliverable lives on disk)', () => {
+  it('preserves <artifact> blocks — only question-form is stripped, the deliverable stays intact', () => {
     const original = [
       'Build summary below.',
       '',
@@ -549,181 +281,11 @@ describe('streamViaDaemon', () => {
       '<html><body>slide content</body></html>',
       '</artifact>',
     ].join('\n');
-    const sanitized = sanitizePriorAssistantTurnForTranscript(original, [
-      { name: 'deck.html', identifier: 'deck' },
-    ]);
+    const sanitized = sanitizePriorAssistantTurnForTranscript(original);
 
-    // The HTML body is gone — no point re-sending it, the agent reads it from disk.
-    expect(sanitized).not.toContain('<!doctype html>');
-    expect(sanitized).not.toContain('slide content');
-    expect(sanitized).not.toContain('</artifact>');
-    // The summary keeps the metadata the agent needs to locate the file.
-    expect(sanitized).toContain('artifact emitted on a prior turn');
-    expect(sanitized).toContain('identifier="deck"');
-    expect(sanitized).toContain('title="Pitch deck"');
-    expect(sanitized).toContain('"deck.html"');
-    // Surrounding prose is preserved.
-    expect(sanitized).toContain('Build summary below.');
-  });
-
-  it('keeps an <artifact> body verbatim when its save is NOT confirmed (failed/refused persist path)', () => {
-    // persistArtifact has refusal (validateHtmlArtifact) and write-failure
-    // (writeProjectTextFile → null) branches. On those paths the transcript
-    // copy is the ONLY surviving artifact body — summarizing it would strand
-    // the next turn with no content to inspect or repair.
-    const original = [
-      '<artifact identifier="deck" type="text/html" title="Pitch deck">',
-      '<html><body>only surviving copy</body></html>',
-      '</artifact>',
-    ].join('\n');
-    // No producedFiles recorded for this artifact → no confirmed persistence.
-    expect(sanitizePriorAssistantTurnForTranscript(original, [])).toBe(original);
-    // A produced file that does not match the artifact also must not trigger
-    // summarization for it.
-    expect(
-      sanitizePriorAssistantTurnForTranscript(original, [{ name: 'other.html', identifier: 'other' }]),
-    ).toBe(original);
-  });
-
-  it('matches persistence by manifest identifier even when collision-suffix renames changed the file name', () => {
-    const original =
-      '<artifact identifier="deck" type="text/html" title="Pitch deck"><html>v3</html></artifact>';
-    const sanitized = sanitizePriorAssistantTurnForTranscript(original, [
-      { name: 'deck-3.html', identifier: 'deck' },
-    ]);
-    expect(sanitized).toContain('artifact emitted on a prior turn');
-    expect(sanitized).toContain('"deck-3.html"');
-    expect(sanitized).not.toContain('v3');
-  });
-
-  it('matches persistence by derived file name when the manifest carries no identifier (legacy files)', () => {
-    const original =
-      '<artifact identifier="deck" type="text/html" title="Pitch deck"><html>legacy</html></artifact>';
-    const sanitized = sanitizePriorAssistantTurnForTranscript(original, [{ name: 'deck.html' }]);
-    expect(sanitized).toContain('artifact emitted on a prior turn');
-    expect(sanitized).not.toContain('legacy');
-  });
-
-  it('summarizes only the persisted <artifact> when a turn emits multiple and one save failed', () => {
-    const sanitized = sanitizePriorAssistantTurnForTranscript(
-      [
-        '<artifact identifier="a" type="text/html" title="A"><html>aaa</html></artifact>',
-        'and',
-        '<artifact identifier="b" type="text/html" title="B"><html>bbb</html></artifact>',
-      ].join('\n'),
-      [{ name: 'a.html', identifier: 'a' }],
-    );
-    // `a` is confirmed on disk → summarized.
-    expect(sanitized).not.toContain('aaa');
-    expect(sanitized).toContain('identifier="a"');
-    // `b` never persisted → its body must survive in the transcript.
-    expect(sanitized).toContain('bbb');
-    expect((sanitized.match(/artifact emitted on a prior turn/g) ?? []).length).toBe(1);
-  });
-
-  it('leaves a literal <artifact> recited inside a code fence intact (not a real protocol block)', () => {
-    const original = [
-      'Here is how the artifact protocol looks:',
-      '',
-      '```html',
-      '<artifact identifier="x" type="text/html" title="X">...</artifact>',
-      '```',
-    ].join('\n');
-    const sanitized = sanitizePriorAssistantTurnForTranscript(original, [
-      { name: 'x.html', identifier: 'x' },
-    ]);
-    // Inside a fenced code block → a literal recitation, must survive.
     expect(sanitized).toBe(original);
-  });
-
-  it('summarizes via buildDaemonTranscript using the message producedFiles as persistence evidence', () => {
-    const transcript = buildDaemonTranscript([
-      {
-        id: '1',
-        role: 'assistant',
-        content:
-          '<artifact identifier="deck" type="text/html" title="Pitch deck"><html>slide content</html></artifact>',
-        producedFiles: [
-          {
-            name: 'deck.html',
-            size: 100,
-            mtime: 1,
-            kind: 'html',
-            mime: 'text/html',
-            artifactManifest: {
-              version: 1,
-              kind: 'html',
-              title: 'Pitch deck',
-              entry: 'deck.html',
-              renderer: 'html',
-              exports: [],
-              metadata: { identifier: 'deck' },
-            },
-          },
-        ],
-      },
-    ]);
-    expect(transcript).toContain('artifact emitted on a prior turn');
-    expect(transcript).not.toContain('slide content');
-  });
-
-  it('does NOT treat an unrelated same-named tool-written file as artifact persistence evidence', () => {
-    // Regression for the producedFiles-evidence review: producedFiles is the
-    // whole per-turn diff, not just persistArtifact outputs. When the
-    // artifact save fails but a tool wrote `deck.html` in the same turn
-    // (surfacing with no manifest, or a daemon-inferred one), the filename
-    // coincidence must NOT summarize the <artifact> block — its transcript
-    // body is still the only surviving copy.
-    const artifactTurn =
-      '<artifact identifier="deck" type="text/html" title="Pitch deck"><html>only copy</html></artifact>';
-    const toolWrittenNoManifest = {
-      id: '1',
-      role: 'assistant' as const,
-      content: artifactTurn,
-      producedFiles: [
-        { name: 'deck.html', size: 10, mtime: 1, kind: 'html' as const, mime: 'text/html' },
-      ],
-    };
-    const toolWrittenInferredManifest = {
-      ...toolWrittenNoManifest,
-      id: '2',
-      producedFiles: [
-        {
-          name: 'deck.html',
-          size: 10,
-          mtime: 1,
-          kind: 'html' as const,
-          mime: 'text/html',
-          artifactManifest: {
-            version: 1 as const,
-            kind: 'html' as const,
-            title: 'deck.html',
-            entry: 'deck.html',
-            renderer: 'html' as const,
-            exports: ['html' as const],
-            metadata: { inferred: true },
-          },
-        },
-      ],
-    };
-    for (const message of [toolWrittenNoManifest, toolWrittenInferredManifest]) {
-      const transcript = buildDaemonTranscript([message]);
-      expect(transcript).toContain('only copy');
-      expect(transcript).not.toContain('artifact emitted on a prior turn');
-    }
-  });
-
-  it('does NOT summarize <artifact> in user messages (only assistant turns) via buildDaemonTranscript', () => {
-    const transcript = buildDaemonTranscript([
-      {
-        id: '1',
-        role: 'user',
-        content: 'Can you explain what <artifact identifier="z" type="text/html" title="Z">...</artifact> means?',
-      },
-    ]);
-    // User content is never sanitized — their artifact mention survives verbatim.
-    expect(transcript).toContain('<artifact identifier="z" type="text/html" title="Z">');
-    expect(transcript).not.toContain('artifact emitted on a prior turn');
+    expect(sanitized).toContain('<artifact');
+    expect(sanitized).toContain('<!doctype html>');
   });
 
   it('sanitizes ONLY assistant content inside buildDaemonTranscript — user messages quoting <question-form> stay verbatim', () => {
@@ -751,28 +313,6 @@ describe('streamViaDaemon', () => {
     // Assistant's emission is replaced with the placeholder.
     expect(transcript).toContain('question-form was emitted here on a prior turn');
     expect(transcript).not.toContain('<question-form id="discovery" title="Brief">');
-  });
-
-  it('scrubs the <ask-question> alias from a prior assistant turn so it does not replay into the next send', () => {
-    // `<ask-question>` is an accepted alias for `<question-form>`. If the
-    // sanitizer only matched the canonical tag, an alias-form turn would
-    // replay verbatim on the follow-up send and re-trigger the form loop
-    // sanitizePriorAssistantTurnForTranscript() exists to break.
-    const transcript = buildDaemonTranscript([
-      {
-        id: '1',
-        role: 'assistant',
-        content: [
-          '<ask-question id="discovery" title="Brief">',
-          '{ "questions": [] }',
-          '</ask-question>',
-        ].join('\n'),
-      },
-      { id: '2', role: 'user', content: 'react native' },
-    ]);
-
-    expect(transcript).toContain('question-form was emitted here on a prior turn');
-    expect(transcript).not.toContain('<ask-question id="discovery" title="Brief">');
   });
 
   it('escapes role delimiter lines in prior message content', () => {
@@ -1097,7 +637,7 @@ describe('streamViaDaemon', () => {
       }),
     );
     const message = (handlers.onError.mock.calls[0]?.[0] as Error).message;
-    expect(message).toContain('Open Design link URL or model route');
+    expect(message).toContain('AMR Link URL or model route');
     expect(message).not.toContain('json-rpc id 4');
     expect(message).not.toContain('https://example.invalid');
     expect(handlers.onDone).not.toHaveBeenCalled();
@@ -1455,7 +995,7 @@ describe('streamViaDaemon', () => {
 
     expect(handlers.onError).toHaveBeenCalledWith(expect.any(Error));
     const message = (handlers.onError.mock.calls[0]?.[0] as Error).message;
-    expect(message).toContain('Open Design started, but the run did not complete');
+    expect(message).toContain('AMR/OpenCode started, but the run did not complete');
     expect(message).not.toContain('sqlite-migration');
     expect(message).not.toContain('OPENCODE_SERVER_PASSWORD');
     expect(message).not.toContain('opencode server listening');
@@ -1910,12 +1450,7 @@ describe('streamViaDaemon', () => {
     });
 
     expect(fetchMock).not.toHaveBeenCalledWith('/api/runs/run-1/cancel', { method: 'POST' });
-    expect(handlers.onError).toHaveBeenCalledWith(
-      expect.objectContaining({
-        message: 'daemon stream disconnected before run completed',
-        code: 'DAEMON_STREAM_DISCONNECTED',
-      }),
-    );
+    expect(handlers.onError).toHaveBeenCalledWith(new Error('daemon stream disconnected before run completed'));
     expect(handlers.onDone).not.toHaveBeenCalled();
   });
 
@@ -1954,12 +1489,7 @@ describe('streamViaDaemon', () => {
 
     expect(fetchMock.mock.calls.some(([input]) => String(input) === '/api/runs/run-1')).toBe(true);
     expect(onRunStatus).toHaveBeenCalledWith('failed');
-    expect(handlers.onError).toHaveBeenCalledWith(
-      expect.objectContaining({
-        message: 'daemon stream disconnected before run completed',
-        code: 'DAEMON_STREAM_DISCONNECTED',
-      }),
-    );
+    expect(handlers.onError).toHaveBeenCalledWith(new Error('daemon stream disconnected before run completed'));
     expect(handlers.onDone).not.toHaveBeenCalled();
   });
 
@@ -2058,31 +1588,6 @@ describe('streamViaDaemon', () => {
       kind: 'status',
       label: 'researching',
       detail: 'tavily · shallow',
-    });
-  });
-
-  it('forwards agent-generated conversation title events', async () => {
-    const handlers = createDaemonHandlers();
-    vi.stubGlobal('fetch', vi.fn()
-      .mockResolvedValueOnce(jsonResponse({ runId: 'run-1' }))
-      .mockResolvedValueOnce(
-        sseResponse(
-          'event: agent\ndata: {"type":"conversation_title","title":"Infographic Habits"}\n\n' +
-            'event: end\ndata: {"code":0,"status":"succeeded"}\n\n',
-        ),
-      ));
-
-    await streamViaDaemon({
-      agentId: 'mock',
-      history: [{ id: '1', role: 'user', content: 'hello' }],
-      systemPrompt: '',
-      signal: new AbortController().signal,
-      handlers,
-    });
-
-    expect(handlers.onAgentEvent).toHaveBeenCalledWith({
-      kind: 'conversation_title',
-      title: 'Infographic Habits',
     });
   });
 

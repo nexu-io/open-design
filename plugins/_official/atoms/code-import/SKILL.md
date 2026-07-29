@@ -36,7 +36,7 @@ project-cwd/
 ```
 
 `code/index.json` is the input every other Phase 7 atom reads. The
-walk respects the runner's `budgetMs` option (default 60s) so
+walk respects a budget (`OD_CODE_IMPORT_BUDGET_MS`, default 60s) so
 large monorepos don't burn an entire run on import.
 
 ## Convergence
@@ -56,7 +56,5 @@ user re-imports.
 
 ## Status
 
-Implemented by the daemon runner in
-`apps/daemon/src/plugins/atoms/code-import.ts`. The walker enforces its
-exclusions and time budget, detects framework evidence, and writes
-`code/index.json`.
+Reserved id, prompt-only fragment in v1. The walker + framework
+detector land in spec §16 Phase 7.

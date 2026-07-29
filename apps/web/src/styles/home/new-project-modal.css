@@ -6,25 +6,22 @@
   position: fixed;
   inset: 0;
   z-index: 920;
-  background: rgba(28, 27, 26, 0.48);
-  backdrop-filter: blur(8px) saturate(1.1);
+  background: rgba(28, 27, 26, 0.42);
+  backdrop-filter: blur(2px);
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding: 48px 32px 32px;
+  padding: 56px 32px 32px;
   overflow: hidden;
 }
 .new-project-modal {
   width: 100%;
-  max-width: 840px;
-  max-height: calc(100vh - 80px);
+  max-width: 760px;
+  max-height: calc(100vh - 88px);
   background: var(--bg-panel);
-  border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
-  border-radius: 20px;
-  box-shadow:
-    0 32px 80px -20px rgba(28, 27, 26, 0.32),
-    0 8px 24px -8px rgba(28, 27, 26, 0.12),
-    0 1px 2px rgba(28, 27, 26, 0.05);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -34,22 +31,22 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20px 24px 6px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
   flex: 0 0 auto;
 }
 .new-project-modal__title {
   margin: 0;
   font-family: var(--serif);
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 600;
-  letter-spacing: -0.01em;
   color: var(--text-strong);
 }
 .new-project-modal__close {
   appearance: none;
   width: 32px;
   height: 32px;
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-sm);
   border: 1px solid transparent;
   background: transparent;
   color: var(--text-muted);
@@ -58,7 +55,6 @@
   align-items: center;
   justify-content: center;
   padding: 0;
-  transition: background 140ms var(--ease-out), color 140ms var(--ease-out);
 }
 .new-project-modal__close svg {
   display: block;
@@ -77,7 +73,7 @@
 .new-project-modal__body {
   flex: 1 1 auto;
   min-height: 0;
-  padding: 10px 0 20px;
+  padding: 16px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -92,7 +88,7 @@
 }
 .new-project-modal__status {
   flex: 0 0 auto;
-  margin: 10px 24px 0;
+  margin-top: 10px;
   padding: 9px 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);

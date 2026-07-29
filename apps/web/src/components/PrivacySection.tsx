@@ -27,7 +27,6 @@ export function PrivacySection({ cfg, setCfg }: Props): JSX.Element {
   // the anonymous reporting id and can be rotated by Delete my data without
   // making the first-run banner appear again.
   const hasMadeConsentDecision = cfg.privacyDecisionAt != null;
-  const sharingEnabled = telemetry.metrics === true || telemetry.content === true;
 
   function patchTelemetry(patch: Partial<TelemetryConfig>): void {
     setCfg((c) => {
@@ -36,9 +35,9 @@ export function PrivacySection({ cfg, setCfg }: Props): JSX.Element {
       return {
         ...c,
         installationId:
-          shouldHaveId
-            ? c.installationId ?? generateInstallationId()
-            : null,
+          shouldHaveId && !c.installationId
+            ? generateInstallationId()
+            : c.installationId,
         privacyDecisionAt: Date.now(),
         telemetry: nextTelemetry,
       };
@@ -48,9 +47,9 @@ export function PrivacySection({ cfg, setCfg }: Props): JSX.Element {
   function shareUsage(): void {
     setCfg((c) => ({
       ...c,
-      installationId: c.installationId ?? generateInstallationId(),
+      installationId: generateInstallationId(),
       privacyDecisionAt: Date.now(),
-      telemetry: { ...(c.telemetry ?? {}), metrics: true, content: true },
+      telemetry: { metrics: true, content: true, artifactManifest: false },
     }));
   }
 
@@ -59,7 +58,7 @@ export function PrivacySection({ cfg, setCfg }: Props): JSX.Element {
       ...c,
       installationId: null,
       privacyDecisionAt: Date.now(),
-      telemetry: { ...(c.telemetry ?? {}), metrics: false, content: false },
+      telemetry: { metrics: false, content: false, artifactManifest: false },
     }));
   }
 
@@ -68,18 +67,15 @@ export function PrivacySection({ cfg, setCfg }: Props): JSX.Element {
       ...c,
       installationId: generateInstallationId(),
       privacyDecisionAt: c.privacyDecisionAt ?? Date.now(),
-      telemetry: { metrics: false, content: false },
+      telemetry: { metrics: false, content: false, artifactManifest: false },
     }));
   }
 
   return (
     <section className="settings-section">
-      <ConsentCard
-        onShare={shareUsage}
-        onDecline={declineUsage}
-        sharingEnabled={hasMadeConsentDecision ? sharingEnabled : undefined}
-      />
-      {hasMadeConsentDecision ? (
+      {!hasMadeConsentDecision ? (
+        <ConsentCard onShare={shareUsage} onDecline={declineUsage} />
+      ) : (
         <>
           <div className="settings-privacy-toggles">
             <ToggleRow
@@ -108,6 +104,20 @@ export function PrivacySection({ cfg, setCfg }: Props): JSX.Element {
                   conversation_and_tool_content_status: v ? 'on' : 'off',
                 });
                 patchTelemetry({ content: v });
+              }}
+            />
+            <ToggleRow
+              label={t('settings.privacyArtifacts')}
+              hint={t('settings.privacyArtifactsHint')}
+              checked={telemetry.artifactManifest === true}
+              onChange={(v) => {
+                trackSettingsPrivacyClick(analytics.track, {
+                  page_name: 'settings',
+                  area: 'privacy',
+                  element: 'project_artifacts_manifest',
+                  project_artifacts_manifest_status: v ? 'on' : 'off',
+                });
+                patchTelemetry({ artifactManifest: v });
               }}
             />
           </div>
@@ -145,7 +155,7 @@ export function PrivacySection({ cfg, setCfg }: Props): JSX.Element {
             </button>
           </div>
         </>
-      ) : null}
+      )}
     </section>
   );
 }
@@ -180,10 +190,9 @@ function ToggleRow({ label, hint, checked, onChange }: ToggleRowProps): JSX.Elem
 interface ConsentProps {
   onShare: () => void;
   onDecline: () => void;
-  sharingEnabled?: boolean;
 }
 
-function ConsentCard({ onShare, onDecline, sharingEnabled }: ConsentProps): JSX.Element {
+function ConsentCard({ onShare, onDecline }: ConsentProps): JSX.Element {
   const t = useT();
   return (
     <div className="settings-subsection">
@@ -212,20 +221,10 @@ function ConsentCard({ onShare, onDecline, sharingEnabled }: ConsentProps): JSX.
         role="group"
         aria-label={t('settings.privacyConsentKicker')}
       >
-        <button
-          type="button"
-          className={`privacy-consent-action${sharingEnabled === false ? ' is-active' : ''}`}
-          aria-pressed={sharingEnabled === false}
-          onClick={onDecline}
-        >
+        <button type="button" className="privacy-consent-action" onClick={onDecline}>
           {t('settings.privacyConsentDecline')}
         </button>
-        <button
-          type="button"
-          className={`privacy-consent-action privacy-consent-action--primary${sharingEnabled === true ? ' is-active' : ''}`}
-          aria-pressed={sharingEnabled === true}
-          onClick={onShare}
-        >
+        <button type="button" className="privacy-consent-action" onClick={onShare}>
           {t('settings.privacyConsentShare')}
         </button>
       </div>

@@ -8,7 +8,7 @@
 // blocker for the feature; this spec is the regression boundary.
 
 import { randomUUID } from 'node:crypto';
-import { expect, test } from '@/playwright/suite';
+import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { routeAgents } from '@/playwright/mock-factory';
 
@@ -121,21 +121,24 @@ test('[P1] chat composer switches the project design system mid-chat', async ({ 
     data: { designSystemId: null },
   });
 
-  await openDesignSystemPicker(page);
+  await openImportTab(page);
 
-  await expect(page.getByTestId('project-ds-picker-popover')).toBeVisible();
+  const dsEntry = page.getByTestId('composer-import-design-systems');
+  await expect(dsEntry).toBeEnabled();
+  await dsEntry.click();
+
+  await expect(page.getByTestId('composer-ds-picker')).toBeVisible();
   await page
-    .getByTestId('project-ds-picker-search')
+    .getByTestId('composer-ds-picker-search')
     .fill('editorial');
-  await page.getByTestId('project-ds-picker-option-editorial').click();
+  await page.getByTestId('composer-ds-picker-item-editorial').click();
 
   // The composer closes the popover on a successful switch, so the
   // picker disappears and the project mirrors the new DS.
-  await expect(page.getByTestId('project-ds-picker-popover')).toHaveCount(0);
+  await expect(page.getByTestId('composer-ds-picker')).toHaveCount(0);
 
-  await expect
-    .poll(async () => (await fetchCurrentProject(page)).designSystemId)
-    .toBe('editorial');
+  const after = await fetchCurrentProject(page);
+  expect(after.designSystemId).toBe('editorial');
 
   // The regression boundary: send a chat turn and assert the outbound
   // run carries the *switched* design system. If the composer kept
@@ -157,10 +160,13 @@ test('[P1] chat composer switches the project design system mid-chat', async ({ 
   expect(runRequestBodies[0]?.designSystemId).toBe('editorial');
 });
 
-async function openDesignSystemPicker(page: Page) {
-  const composer = page.getByTestId('chat-composer');
-  await composer.getByTestId('chat-plus-trigger').click();
-  await page.getByTestId('composer-plus-design-system').click();
+async function openImportTab(page: Page) {
+  // The leading "tools" button in the composer host the import menu.
+  await page.getByLabel(/Open CLI and model settings/i).click();
+  const importTab = page.getByRole('tab', { name: /import/i });
+  if (await importTab.isVisible().catch(() => false)) {
+    await importTab.click();
+  }
 }
 
 async function createProject(page: Page, projectName: string): Promise<void> {

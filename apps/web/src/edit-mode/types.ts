@@ -172,6 +172,8 @@ export interface ManualEditTextCommitMessage {
   value: string;
 }
 
+<<<<<<< HEAD
+=======
 export interface ManualEditTextSessionMessage {
   type: 'od-edit-text-session';
   id: string;
@@ -282,12 +284,16 @@ export interface ManualEditApplyDomResultMessage {
   ok: boolean;
 }
 
+>>>>>>> upstream/main
 export type ManualEditBridgeMessage =
   | ManualEditTargetMessage
   | ManualEditSelectMessage
   | ManualEditHoverMessage
   | ManualEditBackgroundMessage
   | ManualEditPreviewAppliedMessage
+<<<<<<< HEAD
+  | ManualEditTextCommitMessage;
+=======
   | ManualEditTextCommitMessage
   | ManualEditTextSessionMessage
   | ManualEditHtmlCommitMessage
@@ -299,6 +305,7 @@ export type ManualEditBridgeMessage =
   | ManualEditPasteRequestMessage
   | ManualEditPasteImageMessage
   | ManualEditApplyDomResultMessage;
+>>>>>>> upstream/main
 
 export const MANUAL_EDIT_STYLE_PROPS: readonly (keyof ManualEditStyles)[] = [
   'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'textDecorationLine',

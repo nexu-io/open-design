@@ -17,26 +17,14 @@ import {
   useT,
   type Locale,
 } from '../i18n';
-import { useAnalytics } from '../analytics/provider';
-import {
-  trackSettingsPopoverClick,
-  trackSettingsPopoverSurfaceView,
-} from '../analytics/events';
 import { createSocialSharePayload } from '../providers/registry';
 import type { AppConfig, AppTheme } from '../types';
 import { formatDiscordPresenceCount, useDiscordPresence } from './useDiscordPresence';
 import { Icon } from './Icon';
 import { SocialShareGrid } from './SocialShareGrid';
-import { enterpriseUrl } from './enterpriseUrl';
 
 const DISCORD_URL = 'https://discord.gg/mHAjSMV6gz';
-const X_URL = 'https://x.com/OpenDesignHQ';
-const THREADS_URL = 'https://www.threads.com/@opendesign.ai';
-const YOUTUBE_URL = 'https://www.youtube.com/@Open-Design-ai';
-const INSTAGRAM_URL = 'https://www.instagram.com/opendesign.ai/';
-const LINKEDIN_URL = 'https://www.linkedin.com/company/open-design-ai/';
-const XIAOHONGSHU_URL =
-  'https://www.xiaohongshu.com/user/profile/691effad000000003002978f';
+const X_URL = 'https://x.com/nexudotio';
 
 export type EntrySettingsSection =
   | 'execution'
@@ -73,9 +61,6 @@ interface Props {
   // emit the `artifact_header` / `settings` ui_click; the home/entry shell
   // leaves it undefined so that context is not mislabelled as `artifact`.
   onTrackTriggerClick?: () => void;
-  // The popover is mounted both on the home header and the in-project
-  // artifact header; defaults to 'home' so existing call sites stay correct.
-  trackingPageName?: 'home' | 'artifact';
 }
 
 export function EntrySettingsMenu({
@@ -83,10 +68,7 @@ export function EntrySettingsMenu({
   onThemeChange,
   onOpenSettings,
   onTrackTriggerClick,
-  trackingPageName,
 }: Props) {
-  const pageName = trackingPageName ?? 'home';
-  const analytics = useAnalytics();
   const t = useT();
   const { locale, setLocale } = useI18n();
   const discordPresence = useDiscordPresence();
@@ -153,16 +135,6 @@ export function EntrySettingsMenu({
       document.removeEventListener('keydown', onKey);
     };
   }, [open]);
-
-  // surface_view — fire once each time the settings popover opens so the
-  // share / language / appearance funnels have a denominator.
-  useEffect(() => {
-    if (!open) return;
-    trackSettingsPopoverSurfaceView(analytics.track, {
-      page_name: pageName,
-      area: 'settings_popover',
-    });
-  }, [open, analytics.track, pageName]);
 
   useEffect(() => {
     if (!open) return;
@@ -254,13 +226,6 @@ export function EntrySettingsMenu({
                             active ? ' is-active' : ''
                           }`}
                           onClick={() => {
-                            trackSettingsPopoverClick(analytics.track, {
-                              page_name: pageName,
-                              area: 'settings_popover',
-                              element: 'language_select',
-                              // kebab-case locales (zh-CN) → snake_case (zh_cn).
-                              value: code.toLowerCase().replace(/-/g, '_'),
-                            });
                             setLocale(code as Locale);
                             setLangOpen(false);
                             setOpen(false);
@@ -303,12 +268,6 @@ export function EntrySettingsMenu({
                       active ? ' is-active' : ''
                     }`}
                     onClick={() => {
-                      trackSettingsPopoverClick(analytics.track, {
-                        page_name: pageName,
-                        area: 'settings_popover',
-                        element: 'appearance',
-                        value: option.value,
-                      });
                       onThemeChange(option.value);
                       setOpen(false);
                     }}
@@ -329,14 +288,6 @@ export function EntrySettingsMenu({
             <SocialShareGrid
               share={openDesignShare ?? fallbackOpenDesignShare}
               className="entry-settings-social-share"
-              onShare={(platform) => {
-                trackSettingsPopoverClick(analytics.track, {
-                  page_name: pageName,
-                  area: 'settings_popover',
-                  element: 'share_channel',
-                  channel: platform,
-                });
-              }}
               onAfterShare={() => setOpen(false)}
             />
           </section>
@@ -345,39 +296,11 @@ export function EntrySettingsMenu({
 
           <a
             className="entry-settings-menu__item"
-            href={enterpriseUrl(locale)}
-            target="_blank"
-            rel="noreferrer noopener"
-            role="menuitem"
-            onClick={() => {
-              trackSettingsPopoverClick(analytics.track, {
-                page_name: pageName,
-                area: 'settings_popover',
-                element: 'workspace_teams',
-              });
-              setOpen(false);
-            }}
-          >
-            <span className="entry-settings-menu__item-icon" aria-hidden>
-              <Icon name="sparkles" size={14} />
-            </span>
-            <span>{t('entry.workspaceTeamsLabel')}</span>
-            <Icon name="external-link" size={12} className="entry-settings-menu__item-end" />
-          </a>
-          <a
-            className="entry-settings-menu__item"
             href={DISCORD_URL}
             target="_blank"
             rel="noreferrer noopener"
             role="menuitem"
-            onClick={() => {
-              trackSettingsPopoverClick(analytics.track, {
-                page_name: pageName,
-                area: 'settings_popover',
-                element: 'join_discord',
-              });
-              setOpen(false);
-            }}
+            onClick={() => setOpen(false)}
           >
             <span className="entry-settings-menu__item-icon" aria-hidden>
               <Icon name="discord" size={14} />
@@ -396,14 +319,7 @@ export function EntrySettingsMenu({
             target="_blank"
             rel="noreferrer noopener"
             role="menuitem"
-            onClick={() => {
-              trackSettingsPopoverClick(analytics.track, {
-                page_name: pageName,
-                area: 'settings_popover',
-                element: 'follow_x',
-              });
-              setOpen(false);
-            }}
+            onClick={() => setOpen(false)}
           >
             <span
               className="entry-settings-menu__item-icon entry-settings-menu__x-mark"
@@ -412,126 +328,6 @@ export function EntrySettingsMenu({
               X
             </span>
             <span>{t('entry.followXLabel')}</span>
-            <Icon name="external-link" size={12} className="entry-settings-menu__item-end" />
-          </a>
-          <a
-            className="entry-settings-menu__item"
-            href={THREADS_URL}
-            target="_blank"
-            rel="noreferrer noopener"
-            role="menuitem"
-            onClick={() => {
-              trackSettingsPopoverClick(analytics.track, {
-                page_name: pageName,
-                area: 'settings_popover',
-                element: 'follow_threads',
-              });
-              setOpen(false);
-            }}
-          >
-            <span
-              className="entry-settings-menu__item-icon entry-settings-menu__x-mark"
-              aria-hidden
-            >
-              @
-            </span>
-            <span>{t('entry.followThreadsLabel')}</span>
-            <Icon name="external-link" size={12} className="entry-settings-menu__item-end" />
-          </a>
-          <a
-            className="entry-settings-menu__item"
-            href={YOUTUBE_URL}
-            target="_blank"
-            rel="noreferrer noopener"
-            role="menuitem"
-            onClick={() => {
-              trackSettingsPopoverClick(analytics.track, {
-                page_name: pageName,
-                area: 'settings_popover',
-                element: 'open_youtube',
-              });
-              setOpen(false);
-            }}
-          >
-            <span
-              className="entry-settings-menu__item-icon entry-settings-menu__x-mark"
-              aria-hidden
-            >
-              YT
-            </span>
-            <span>{t('entry.youtubeLabel')}</span>
-            <Icon name="external-link" size={12} className="entry-settings-menu__item-end" />
-          </a>
-          <a
-            className="entry-settings-menu__item"
-            href={INSTAGRAM_URL}
-            target="_blank"
-            rel="noreferrer noopener"
-            role="menuitem"
-            onClick={() => {
-              trackSettingsPopoverClick(analytics.track, {
-                page_name: pageName,
-                area: 'settings_popover',
-                element: 'follow_instagram',
-              });
-              setOpen(false);
-            }}
-          >
-            <span
-              className="entry-settings-menu__item-icon entry-settings-menu__x-mark"
-              aria-hidden
-            >
-              IG
-            </span>
-            <span>{t('entry.followInstagramLabel')}</span>
-            <Icon name="external-link" size={12} className="entry-settings-menu__item-end" />
-          </a>
-          <a
-            className="entry-settings-menu__item"
-            href={LINKEDIN_URL}
-            target="_blank"
-            rel="noreferrer noopener"
-            role="menuitem"
-            onClick={() => {
-              trackSettingsPopoverClick(analytics.track, {
-                page_name: pageName,
-                area: 'settings_popover',
-                element: 'follow_linkedin',
-              });
-              setOpen(false);
-            }}
-          >
-            <span
-              className="entry-settings-menu__item-icon entry-settings-menu__x-mark"
-              aria-hidden
-            >
-              in
-            </span>
-            <span>{t('entry.followLinkedinLabel')}</span>
-            <Icon name="external-link" size={12} className="entry-settings-menu__item-end" />
-          </a>
-          <a
-            className="entry-settings-menu__item"
-            href={XIAOHONGSHU_URL}
-            target="_blank"
-            rel="noreferrer noopener"
-            role="menuitem"
-            onClick={() => {
-              trackSettingsPopoverClick(analytics.track, {
-                page_name: pageName,
-                area: 'settings_popover',
-                element: 'follow_xiaohongshu',
-              });
-              setOpen(false);
-            }}
-          >
-            <span
-              className="entry-settings-menu__item-icon entry-settings-menu__x-mark"
-              aria-hidden
-            >
-              RED
-            </span>
-            <span>{t('entry.followXiaohongshuLabel')}</span>
             <Icon name="external-link" size={12} className="entry-settings-menu__item-end" />
           </a>
 
@@ -543,11 +339,6 @@ export function EntrySettingsMenu({
             data-testid="entry-settings-open-details"
             role="menuitem"
             onClick={() => {
-              trackSettingsPopoverClick(analytics.track, {
-                page_name: pageName,
-                area: 'settings_popover',
-                element: 'open_settings',
-              });
               setOpen(false);
               onOpenSettings();
             }}

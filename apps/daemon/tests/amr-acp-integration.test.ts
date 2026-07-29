@@ -15,14 +15,18 @@
  */
 
 import { spawn, type ChildProcess } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
+<<<<<<< HEAD
+import { attachAcpSession, detectAcpModels } from '../src/acp.js';
+=======
 import { attachAcpSession, detectAcpModels } from '../src/agent-protocol/index.js';
 import { acpTelemetryToolCallId } from '../src/agent-protocol/acp/updates.js';
+>>>>>>> upstream/main
 import { classifyAmrAccountFailure } from '../src/integrations/vela-errors.js';
 import { AmrModelLoadingCache } from '../src/runtimes/amr-model-cache.js';
 import {
@@ -49,82 +53,6 @@ function spawnFixtureScript(source: string): ChildProcess {
     stdio: ['pipe', 'pipe', 'pipe'],
     env: process.env,
   });
-}
-
-function spawnAcpUpdateFixture(updates: unknown[], usage: unknown = {}): ChildProcess {
-  return spawnFixtureScript(`
-    const updates = ${JSON.stringify(updates)};
-    const usage = ${JSON.stringify(usage)};
-    function write(obj) { process.stdout.write(JSON.stringify(obj) + '\\n'); }
-    process.stdin.setEncoding('utf8');
-    let buffer = '';
-    process.stdin.on('data', (chunk) => {
-      buffer += chunk;
-      const lines = buffer.split('\\n');
-      buffer = lines.pop() || '';
-      for (const raw of lines) {
-        const line = raw.trim();
-        if (!line) continue;
-        const msg = JSON.parse(line);
-        if (msg.method === 'initialize') {
-          write({ jsonrpc: '2.0', id: msg.id, result: { protocolVersion: 1 } });
-        } else if (msg.method === 'session/new') {
-          write({ jsonrpc: '2.0', id: msg.id, result: { sessionId: 's1', models: { currentModelId: null, availableModels: [] } } });
-        } else if (msg.method === 'session/set_model' || msg.method === 'session/set_config_option') {
-          write({ jsonrpc: '2.0', id: msg.id, result: {} });
-        } else if (msg.method === 'session/prompt') {
-          for (const update of updates) {
-            write({ jsonrpc: '2.0', method: 'session/update', params: { sessionId: 's1', update } });
-          }
-          write({ jsonrpc: '2.0', id: msg.id, result: { stopReason: 'end_turn', usage } });
-        } else if (msg.method === 'session/cancel') {
-          write({ jsonrpc: '2.0', id: msg.id, result: {} });
-        }
-      }
-    });
-    process.stdin.on('end', () => process.exit(0));
-  `);
-}
-
-function spawnAcpStderrRetryFixture(stderrChunks: string | string[]): ChildProcess {
-  return spawnFixtureScript(`
-    const stderrChunks = ${JSON.stringify(
-      typeof stderrChunks === 'string' ? [stderrChunks] : stderrChunks,
-    )};
-    function write(obj) { process.stdout.write(JSON.stringify(obj) + '\\n'); }
-    process.stdin.setEncoding('utf8');
-    let buffer = '';
-    process.stdin.on('data', (chunk) => {
-      buffer += chunk;
-      const lines = buffer.split('\\n');
-      buffer = lines.pop() || '';
-      for (const raw of lines) {
-        const line = raw.trim();
-        if (!line) continue;
-        const msg = JSON.parse(line);
-        if (msg.method === 'initialize') {
-          write({ jsonrpc: '2.0', id: msg.id, result: { protocolVersion: 1 } });
-        } else if (msg.method === 'session/new') {
-          write({ jsonrpc: '2.0', id: msg.id, result: { sessionId: 's1', models: { currentModelId: null, availableModels: [] } } });
-        } else if (msg.method === 'session/set_model' || msg.method === 'session/set_config_option') {
-          write({ jsonrpc: '2.0', id: msg.id, result: {} });
-        } else if (msg.method === 'session/prompt') {
-          stderrChunks.forEach((stderrChunk, index) => {
-            setTimeout(() => {
-              process.stderr.write(stderrChunk);
-              if (index === stderrChunks.length - 1) {
-                process.stderr.write('\\n');
-                setTimeout(() => process.exit(0), 25);
-              }
-            }, index * 5);
-          });
-        } else if (msg.method === 'session/cancel') {
-          write({ jsonrpc: '2.0', id: msg.id, result: {} });
-        }
-      }
-    });
-    process.stdin.on('end', () => process.exit(0));
-  `);
 }
 
 async function waitForExit(child: ChildProcess): Promise<void> {
@@ -168,7 +96,6 @@ describe('AMR runtime def', () => {
   it('normalizes Vela public model ids to link-canonical ACP model ids', () => {
     expect(normalizeVelaModelId('public_model_deepseek_v3_2')).toBe('deepseek-v3.2');
     expect(normalizeVelaModelId('public_model_kimi_k2_6')).toBe('kimi-k2.6');
-    expect(normalizeVelaModelId('public_model_kimi_k2_7_code')).toBe('kimi-k2.7-code');
     expect(normalizeVelaModelId('public_model_gemini_2_5_flash')).toBe('gemini-2.5-flash');
     expect(normalizeVelaModelId('public_model_gemini_3_1_flash_lite_preview')).toBe(
       'gemini-3.1-flash-lite-preview',
@@ -206,9 +133,9 @@ describe('AMR runtime def', () => {
     ].join('\n'));
     expect(models).toEqual([
       { id: 'deepseek-v4-flash', label: 'deepseek-v4-flash' },
-      { id: 'claude-opus-4.6', label: 'claude-opus-4.6' },
       { id: 'deepseek-v3.2', label: 'deepseek-v3.2' },
       { id: 'glm-5.1', label: 'glm-5.1' },
+      { id: 'claude-opus-4.6', label: 'claude-opus-4.6' },
       { id: 'kimi-k2.6', label: 'kimi-k2.6' },
     ]);
     expect(models.every((model) => !model.label.includes('vela/'))).toBe(true);
@@ -216,128 +143,22 @@ describe('AMR runtime def', () => {
     expect(models.map((model) => model.id)).not.toContain('seedance-2');
   });
 
-  it('parses Vela JSON catalog ids through normalizeVelaModelId on the live AMR path', () => {
+  it('parses Vela preset and remote JSON without legacy id normalization', () => {
     const models = parseVelaModelJson(JSON.stringify({
       source: 'remote',
       data: [
-        { id: 'public_model_kimi_k2_7_code', enabled: false },
         { id: 'public_model_deepseek_v3_2' },
-        {
-          id: 'deepseek-v4-flash',
-          enabled: true,
-          default: true,
-          cost: { input: 0.14, output: 0.28 },
-          metadata: { cost: 'low', capability: 'standard' },
-        },
+        { id: 'deepseek-v4-flash' },
         { id: 'gpt-image-2' },
         { id: 'deepseek-v4-flash' },
       ],
     }), 'remote');
     expect(models).toEqual([
-      {
-        id: 'deepseek-v4-flash',
-        label: 'deepseek-v4-flash',
-        enabled: true,
-        default: true,
-        inputPriceUsdPerMillion: 0.14,
-        outputPriceUsdPerMillion: 0.28,
-        metadata: { cost: 'low', capability: 'standard' },
-      },
-      { id: 'deepseek-v3.2', label: 'deepseek-v3.2' },
-      { id: 'kimi-k2.7-code', label: 'kimi-k2.7-code', enabled: false },
+      { id: 'deepseek-v4-flash', label: 'deepseek-v4-flash' },
+      { id: 'public_model_deepseek_v3_2', label: 'public_model_deepseek_v3_2' },
     ]);
-    expect(models.map((m) => m.id)).not.toContain('gpt-image-2');
-    expect(models.map((m) => m.id)).not.toContain('public_model_kimi_k2_7_code');
     expect(() => parseVelaModelJson(JSON.stringify({ source: 'preset', data: [] }), 'remote'))
       .toThrow(/expected remote/);
-  });
-
-  it('enriches Vela models from the AMR OpenCode model-price cache', async () => {
-    const tempDir = mkdtempSync(path.join(tmpdir(), 'od-amr-model-prices-'));
-    try {
-      const cacheDir = path.join(tempDir, 'opencode');
-      mkdirSync(cacheDir, { recursive: true });
-      writeFileSync(
-        path.join(cacheDir, 'models.json'),
-        JSON.stringify({
-          opencode: {
-            models: {
-              'claude-fable-5': {
-                id: 'claude-fable-5',
-                cost: { input: 10, output: 50 },
-              },
-              'claude-opus-4-6': {
-                id: 'claude-opus-4-6',
-                cost: { input: 5, output: 25 },
-              },
-            },
-          },
-          'opencode-go': {
-            models: {
-              'mimo-v2.5-pro': {
-                id: 'mimo-v2.5-pro',
-                cost: { input: 1.74, output: 3.48 },
-              },
-            },
-          },
-          openrouter: {
-            models: {
-              'google/gemini-3-flash-preview': {
-                id: 'google/gemini-3-flash-preview',
-                cost: { input: 0.5, output: 3 },
-              },
-            },
-          },
-        }),
-        'utf8',
-      );
-      const models = await amrAgentDef.fetchModels?.(FAKE_VELA, {
-        ...process.env,
-        OPENCODE_TEST_HOME: tempDir,
-        FAKE_VELA_MODEL_LIST_JSON: JSON.stringify({
-          source: 'remote',
-          data: [
-            { id: 'claude-fable-5', metadata: { cost: 'medium', capability: 'best_quality' } },
-            { id: 'claude-opus-4.6' },
-            { id: 'mimo-v2.5-pro' },
-            { id: 'gemini-3-flash-preview' },
-          ],
-        }),
-      });
-
-      expect(models).toEqual([
-        {
-          id: 'claude-fable-5',
-          label: 'claude-fable-5',
-          inputPriceUsdPerMillion: 10,
-          outputPriceUsdPerMillion: 50,
-          metadata: { cost: 'medium', capability: 'best_quality' },
-        },
-        {
-          id: 'claude-opus-4.6',
-          label: 'claude-opus-4.6',
-          inputPriceUsdPerMillion: 5,
-          outputPriceUsdPerMillion: 25,
-          metadata: { cost: 'very_high' },
-        },
-        {
-          id: 'gemini-3-flash-preview',
-          label: 'gemini-3-flash-preview',
-          inputPriceUsdPerMillion: 0.5,
-          outputPriceUsdPerMillion: 3,
-          metadata: { cost: 'low' },
-        },
-        {
-          id: 'mimo-v2.5-pro',
-          label: 'mimo-v2.5-pro',
-          inputPriceUsdPerMillion: 1.74,
-          outputPriceUsdPerMillion: 3.48,
-          metadata: { cost: 'high' },
-        },
-      ]);
-    } finally {
-      rmSync(tempDir, { recursive: true, force: true });
-    }
   });
 
   it('fetches AMR preset models from `vela model preset --format json`', async () => {
@@ -345,8 +166,8 @@ describe('AMR runtime def', () => {
     expect(models).toEqual([
       { id: 'deepseek-v4-flash', label: 'deepseek-v4-flash' },
       { id: 'deepseek-v3.2', label: 'deepseek-v3.2' },
-      { id: 'gemini-2.5-flash', label: 'gemini-2.5-flash' },
       { id: 'glm-5.1', label: 'glm-5.1' },
+      { id: 'gemini-2.5-flash', label: 'gemini-2.5-flash' },
     ]);
   });
 
@@ -354,67 +175,19 @@ describe('AMR runtime def', () => {
     const models = await amrAgentDef.fetchModels?.(FAKE_VELA, process.env);
     expect(models).toEqual([
       { id: 'deepseek-v4-flash', label: 'deepseek-v4-flash' },
-      { id: 'deepseek-v4-pro', label: 'deepseek-v4-pro' },
       { id: 'deepseek-v3.2', label: 'deepseek-v3.2' },
+      { id: 'glm-5.1', label: 'glm-5.1' },
       { id: 'gemini-2.5-flash', label: 'gemini-2.5-flash' },
+      { id: 'deepseek-v4-pro', label: 'deepseek-v4-pro' },
       { id: 'gemini-3.1-flash-lite-preview', label: 'gemini-3.1-flash-lite-preview' },
       { id: 'gemini-3.1-pro-preview', label: 'gemini-3.1-pro-preview' },
-      { id: 'glm-5', label: 'glm-5' },
-      { id: 'glm-5.1', label: 'glm-5.1' },
       { id: 'gpt-5.4', label: 'gpt-5.4' },
       { id: 'gpt-5.4-mini', label: 'gpt-5.4-mini' },
+      { id: 'glm-5', label: 'glm-5' },
       { id: 'kimi-k2.6', label: 'kimi-k2.6' },
       { id: 'minimax-m2.7', label: 'minimax-m2.7' },
       { id: 'qwen3-235b-a22b', label: 'qwen3-235b-a22b' },
     ]);
-  });
-
-  it('regression #4410: normalizes kimi_k2_7_code from live catalog and routes it via session/set_model', async () => {
-    const rawListJson = JSON.stringify({
-      source: 'remote',
-      data: [
-        { id: 'public_model_kimi_k2_7_code' },
-        { id: 'deepseek-v4-flash' },
-      ],
-    });
-
-    // Step 1: live catalog path normalizes the raw id to the canonical form.
-    const models = await amrAgentDef.fetchModels?.(FAKE_VELA, {
-      ...process.env,
-      FAKE_VELA_MODEL_LIST_JSON: rawListJson,
-    });
-    const ids = (models ?? []).map((m) => m.id);
-    expect(ids).toContain('kimi-k2.7-code');
-    expect(ids).not.toContain('public_model_kimi_k2_7_code');
-    expect(ids).not.toContain('kimi-k2-7-code');
-
-    // Step 2: the normalized id survives the full ACP session/set_model flow.
-    const child = spawnFakeVela({
-      FAKE_VELA_TEXT: 'K2.7 response.',
-      FAKE_VELA_MODEL_LIST_JSON: rawListJson,
-    });
-    const events: Array<{ event: string; payload: unknown }> = [];
-    try {
-      const session = attachAcpSession({
-        child: child as never,
-        prompt: 'Hello',
-        cwd: process.cwd(),
-        model: 'kimi-k2.7-code',
-        mcpServers: [],
-        modelUnavailableErrorCode: 'AMR_MODEL_UNAVAILABLE',
-        send: (event, payload) => events.push({ event, payload }),
-      });
-      await waitForExit(child);
-      expect(session.hasFatalError()).toBe(false);
-      expect(session.completedSuccessfully()).toBe(true);
-    } finally {
-      if (child.exitCode === null) child.kill('SIGTERM');
-    }
-
-    const textDeltas = events
-      .filter((e) => e.event === 'agent' && (e.payload as { type?: unknown }).type === 'text_delta')
-      .map((e) => (e.payload as { delta?: unknown }).delta);
-    expect(textDeltas.join('')).toBe('K2.7 response.');
   });
 
   it('retries transient `vela model list --format json` failures before succeeding', async () => {
@@ -467,44 +240,6 @@ child.on('exit', (code) => {
       expect(existsSync(stateFile)).toBe(true);
       const attempts = JSON.parse(readFileSync(stateFile, 'utf8')) as { attempts: number };
       expect(attempts.attempts).toBe(3);
-    } finally {
-      rmSync(tempDir, { recursive: true, force: true });
-    }
-  });
-
-  it('does not retry credential failures from `vela model list --format json`', async () => {
-    const tempDir = mkdtempSync(path.join(tmpdir(), 'od-amr-invalid-key-'));
-    const stateFile = path.join(tempDir, 'invalid-key-state.json');
-    const wrapperPath = path.join(tempDir, 'vela-wrapper');
-    const wrapperSource = `#!/usr/bin/env node
-const { existsSync, readFileSync, writeFileSync } = require('node:fs');
-const stateFile = process.env.RETRY_STATE_FILE;
-const args = process.argv.slice(2);
-if (args[0] === 'model' && args[1] === 'list') {
-  const state = stateFile && existsSync(stateFile)
-    ? JSON.parse(readFileSync(stateFile, 'utf8'))
-    : { attempts: 0 };
-  state.attempts += 1;
-  if (stateFile) writeFileSync(stateFile, JSON.stringify(state), 'utf8');
-  process.stderr.write('Error: list Link models: API request failed with status 401: invalid_api_key\\n');
-  process.exit(1);
-}
-process.stderr.write('unexpected argv: ' + args.join(' ') + '\\n');
-process.exit(2);
-`;
-    writeFileSync(wrapperPath, wrapperSource, 'utf8');
-    chmodSync(wrapperPath, 0o755);
-    try {
-      await expect(amrAgentDef.fetchModels?.(
-        wrapperPath,
-        {
-          ...process.env,
-          RETRY_STATE_FILE: stateFile,
-        },
-      )).rejects.toThrow(/invalid_api_key/);
-      expect(existsSync(stateFile)).toBe(true);
-      const attempts = JSON.parse(readFileSync(stateFile, 'utf8')) as { attempts: number };
-      expect(attempts.attempts).toBe(1);
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }
@@ -579,36 +314,6 @@ describe('AMR model loading cache', () => {
     });
   });
 
-  it('surfaces stale remote auth failures without dropping the last usable model list', async () => {
-    const cache = new AmrModelLoadingCache(0);
-    cache.warm('vela:prod', async () => [{ id: 'gemini-3-flash-preview', label: 'gemini-3-flash-preview' }]);
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
-    const stale = await cache.get('vela:prod', {
-      fetchPreset: async () => [{ id: 'deepseek-v4-flash', label: 'deepseek-v4-flash' }],
-      fetchRemote: async () => {
-        throw new Error('API request failed with status 401: invalid_api_key');
-      },
-    });
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    const afterFailure = await cache.get('vela:prod', {
-      fetchPreset: async () => [{ id: 'deepseek-v4-flash', label: 'deepseek-v4-flash' }],
-      fetchRemote: async () => {
-        throw new Error('API request failed with status 401: invalid_api_key');
-      },
-    });
-
-    expect(stale.models).toEqual([
-      { id: 'gemini-3-flash-preview', label: 'gemini-3-flash-preview' },
-    ]);
-    expect(afterFailure).toMatchObject({
-      source: 'remote',
-      stale: true,
-      remoteError: 'API request failed with status 401: invalid_api_key',
-      models: [{ id: 'gemini-3-flash-preview', label: 'gemini-3-flash-preview' }],
-    });
-  });
-
   it('keeps remote catalogs isolated per resolved Vela environment', async () => {
     const cache = new AmrModelLoadingCache(60_000);
     cache.warm('vela:local', async () => [{ id: 'remote-local', label: 'remote-local' }]);
@@ -623,36 +328,6 @@ describe('AMR model loading cache', () => {
       source: 'preset',
       models: [{ id: 'preset-prod', label: 'preset-prod' }],
       refreshing: true,
-    });
-  });
-
-  it('drops a cached remote catalog for a single environment when invalidated', async () => {
-    const cache = new AmrModelLoadingCache(60_000);
-    cache.warm('vela:local', async () => [{ id: 'locked-old', label: 'locked-old', enabled: false }]);
-    cache.warm('vela:prod', async () => [{ id: 'remote-prod', label: 'remote-prod' }]);
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
-    cache.invalidate('vela:local');
-
-    const local = await cache.get('vela:local', {
-      fetchPreset: async () => [{ id: 'preset-local', label: 'preset-local' }],
-      fetchRemote: async () => [{ id: 'remote-local-new', label: 'remote-local-new', enabled: true }],
-    });
-    const prod = await cache.get('vela:prod', {
-      fetchPreset: async () => {
-        throw new Error('prod preset should not be required');
-      },
-      fetchRemote: async () => [{ id: 'remote-prod-new', label: 'remote-prod-new' }],
-    });
-
-    expect(local).toMatchObject({
-      source: 'preset',
-      models: [{ id: 'preset-local', label: 'preset-local' }],
-      refreshing: true,
-    });
-    expect(prod).toMatchObject({
-      source: 'remote',
-      models: [{ id: 'remote-prod', label: 'remote-prod' }],
     });
   });
 });
@@ -705,54 +380,6 @@ describe('AMR ACP transport — end-to-end against fake vela stub', () => {
       })
       .map((e) => (e.payload as { delta?: unknown }).delta);
     expect(thinkingDeltas.join('')).toBe('thinking-chunk');
-  });
-
-  it('resumes a prior session via session/load and captures the durable handle', async () => {
-    const child = spawnFakeVela({ FAKE_VELA_TEXT: 'Resumed.' });
-    try {
-      const session = attachAcpSession({
-        child: child as never,
-        prompt: 'continue',
-        cwd: process.cwd(),
-        model: 'deepseek-v3.2',
-        // A stored durable handle drives session/load instead of session/new.
-        resumeSessionId: 'oc-prev-handle',
-        mcpServers: [],
-        send: () => {},
-      });
-      await waitForExit(child);
-      expect(session.hasFatalError()).toBe(false);
-      expect(session.completedSuccessfully()).toBe(true);
-      // The fake echoes the requested handle back as the durable id; the daemon
-      // would persist this to resume again next turn.
-      expect(session.getDurableSessionId()).toBe('oc-prev-handle');
-    } finally {
-      if (child.exitCode === null) child.kill('SIGTERM');
-    }
-  });
-
-  it('surfaces resume_failed (no completion) when the resumed session is gone', async () => {
-    const child = spawnFakeVela({ FAKE_VELA_RESUME_FAILED: '1' });
-    const events: Array<{ event: string; payload: unknown }> = [];
-    try {
-      const session = attachAcpSession({
-        child: child as never,
-        prompt: 'continue',
-        cwd: process.cwd(),
-        model: 'deepseek-v3.2',
-        resumeSessionId: 'oc-gone',
-        mcpServers: [],
-        send: (event, payload) => events.push({ event, payload }),
-      });
-      await waitForExit(child);
-      expect(session.completedSuccessfully()).toBe(false);
-    } finally {
-      if (child.exitCode === null) child.kill('SIGTERM');
-    }
-    // The structured resume_failed marker reaches the host (the daemon matches
-    // it on stdout to clear the stale handle and reseed). It must never look
-    // like a successful turn.
-    expect(JSON.stringify(events)).toContain('resume_failed');
   });
 
   it('regression: stub mirrors real vela by rejecting session/prompt before session/set_model', async () => {
@@ -960,180 +587,7 @@ describe('AMR ACP transport — end-to-end against fake vela stub', () => {
     expect(classifyAmrAccountFailure(message)).toMatchObject({
       code: 'AMR_INSUFFICIENT_BALANCE',
       action: 'recharge',
-      actionUrl: 'https://open-design.ai/amr/wallet?source=open_design',
-    });
-  });
-
-  it('promotes ACP retry status insufficient-balance updates to AMR recharge failures', async () => {
-    const child = spawnAcpUpdateFixture([
-      {
-        sessionUpdate: 'status',
-        type: 'retry',
-        status: 'retry',
-        message: '[code=insufficient_balance] insufficient wallet balance',
-      },
-    ]);
-    const errors: Array<{ event: string; payload: unknown }> = [];
-    try {
-      const session = attachAcpSession({
-        child: child as never,
-        prompt: 'Say hello',
-        cwd: process.cwd(),
-        model: 'claude-opus-4-6',
-        mcpServers: [],
-        modelUnavailableErrorCode: 'AMR_MODEL_UNAVAILABLE',
-        send: (event, payload) => {
-          if (event === 'error') errors.push({ event, payload });
-        },
-      });
-
-      await waitForExit(child);
-      expect(session.hasFatalError()).toBe(true);
-      expect(session.completedSuccessfully()).toBe(false);
-    } finally {
-      if (child.exitCode === null) child.kill('SIGTERM');
-    }
-
-    const payload = errors[0]?.payload as {
-      message?: unknown;
-      error?: { code?: unknown; retryable?: unknown; details?: Record<string, unknown> };
-    };
-    expect(payload?.error?.code).toBe('AMR_INSUFFICIENT_BALANCE');
-    expect(payload?.error?.retryable).toBe(false);
-    expect(payload?.error?.details).toMatchObject({
-      kind: 'amr_account',
-      action: 'recharge',
-    });
-    expect(String(payload?.message ?? '')).toContain('AMR Cloud reported insufficient balance');
-  });
-
-  it('promotes structured manual-topup recovery retry updates to AMR recharge failures', async () => {
-    const child = spawnAcpUpdateFixture([
-      {
-        sessionUpdate: 'status',
-        type: 'retry',
-        status: 'retry',
-        recovery: {
-          status: 'waiting_payment',
-          manualTopupRequired: true,
-          pauseReason: 'insufficient_balance',
-          error: {
-            code: 'insufficient_balance',
-            message: 'insufficient wallet balance',
-          },
-        },
-      },
-    ]);
-    const errors: Array<{ event: string; payload: unknown }> = [];
-    try {
-      const session = attachAcpSession({
-        child: child as never,
-        prompt: 'Say hello',
-        cwd: process.cwd(),
-        model: 'claude-opus-4-6',
-        mcpServers: [],
-        modelUnavailableErrorCode: 'AMR_MODEL_UNAVAILABLE',
-        send: (event, payload) => {
-          if (event === 'error') errors.push({ event, payload });
-        },
-      });
-
-      await waitForExit(child);
-      expect(session.hasFatalError()).toBe(true);
-      expect(session.completedSuccessfully()).toBe(false);
-    } finally {
-      if (child.exitCode === null) child.kill('SIGTERM');
-    }
-
-    const payload = errors[0]?.payload as {
-      message?: unknown;
-      error?: { code?: unknown; retryable?: unknown; details?: Record<string, unknown> };
-    };
-    expect(payload?.error?.code).toBe('AMR_INSUFFICIENT_BALANCE');
-    expect(payload?.error?.retryable).toBe(false);
-    expect(payload?.error?.details).toMatchObject({
-      kind: 'amr_account',
-      action: 'recharge',
-      promoted_by: 'open_design_acp_retry_status',
-    });
-    expect(String(payload?.message ?? '')).toContain('AMR Cloud reported insufficient balance');
-  });
-
-  it('promotes OpenCode stderr retry status insufficient-balance logs to AMR recharge failures', async () => {
-    const child = spawnAcpStderrRetryFixture(
-      'opencode_event_stream_failure: phase=event_stream session=ses_123 error="{\\"id\\":\\"evt_123\\",\\"properties\\":{\\"sessionID\\":\\"ses_123\\",\\"status\\":{\\"attempt\\":1,\\"message\\":\\"[code=insufficient_balance] insufficient wallet balance\\",\\"next\\":1782915664490,\\"type\\":\\"retry\\"}},\\"type\\":\\"session.status\\"}"',
-    );
-    const errors: Array<{ event: string; payload: unknown }> = [];
-    try {
-      const session = attachAcpSession({
-        child: child as never,
-        prompt: 'Say hello',
-        cwd: process.cwd(),
-        model: 'claude-opus-4-6',
-        mcpServers: [],
-        modelUnavailableErrorCode: 'AMR_MODEL_UNAVAILABLE',
-        send: (event, payload) => {
-          if (event === 'error') errors.push({ event, payload });
-        },
-      });
-
-      await waitForExit(child);
-      expect(session.hasFatalError()).toBe(true);
-      expect(session.completedSuccessfully()).toBe(false);
-    } finally {
-      if (child.exitCode === null) child.kill('SIGTERM');
-    }
-
-    const payload = errors[0]?.payload as {
-      message?: unknown;
-      error?: { code?: unknown; retryable?: unknown; details?: Record<string, unknown> };
-    };
-    expect(payload?.error?.code).toBe('AMR_INSUFFICIENT_BALANCE');
-    expect(payload?.error?.retryable).toBe(false);
-    expect(payload?.error?.details).toMatchObject({
-      kind: 'amr_account',
-      action: 'recharge',
-      promoted_by: 'open_design_acp_stderr_retry_status',
-    });
-    expect(String(payload?.message ?? '')).toContain('AMR Cloud reported insufficient balance');
-  });
-
-  it('promotes OpenCode stderr retry status when the balance log is split across chunks', async () => {
-    const child = spawnAcpStderrRetryFixture([
-      'opencode_event_stream_failure: phase=event_stream session=ses_123 error="{\\"id\\":\\"evt_123\\",\\"properties\\":{\\"sessionID\\":\\"ses_123\\",\\"status\\":{\\"attempt\\":1,\\"message\\":\\"[code=',
-      'insufficient_balance] insufficient wallet balance\\",\\"next\\":1782915664490,\\"type\\":\\"retry\\"}},\\"type\\":\\"session.status\\"}"',
-    ]);
-    const errors: Array<{ event: string; payload: unknown }> = [];
-    try {
-      const session = attachAcpSession({
-        child: child as never,
-        prompt: 'Say hello',
-        cwd: process.cwd(),
-        model: 'claude-opus-4-6',
-        mcpServers: [],
-        modelUnavailableErrorCode: 'AMR_MODEL_UNAVAILABLE',
-        send: (event, payload) => {
-          if (event === 'error') errors.push({ event, payload });
-        },
-      });
-
-      await waitForExit(child);
-      expect(session.hasFatalError()).toBe(true);
-      expect(session.completedSuccessfully()).toBe(false);
-    } finally {
-      if (child.exitCode === null) child.kill('SIGTERM');
-    }
-
-    const payload = errors[0]?.payload as {
-      message?: unknown;
-      error?: { code?: unknown; retryable?: unknown; details?: Record<string, unknown> };
-    };
-    expect(payload?.error?.code).toBe('AMR_INSUFFICIENT_BALANCE');
-    expect(payload?.error?.retryable).toBe(false);
-    expect(payload?.error?.details).toMatchObject({
-      kind: 'amr_account',
-      action: 'recharge',
-      promoted_by: 'open_design_acp_stderr_retry_status',
+      actionUrl: 'https://open-design.ai/amr/wallet',
     });
   });
 
@@ -1163,11 +617,7 @@ describe('AMR ACP transport — end-to-end against fake vela stub', () => {
   });
 
   it('maps AMR empty-text completions to AMR_MODEL_UNAVAILABLE', async () => {
-    const child = spawnAcpUpdateFixture([], {
-      inputTokens: 12,
-      outputTokens: 0,
-      totalTokens: 12,
-    });
+    const child = spawnFakeVela({ FAKE_VELA_TEXT: '' });
     const errors: Array<{ event: string; payload: unknown }> = [];
     try {
       const session = attachAcpSession({
@@ -1200,6 +650,8 @@ describe('AMR ACP transport — end-to-end against fake vela stub', () => {
     expect(payload?.error?.code).toBe('AMR_MODEL_UNAVAILABLE');
   });
 
+<<<<<<< HEAD
+=======
   it('fails AMR turns that report activity but produce no visible text or concrete tool event', async () => {
     const child = spawnAcpUpdateFixture(
       [
@@ -1538,6 +990,7 @@ describe('AMR ACP transport — end-to-end against fake vela stub', () => {
     );
   });
 
+>>>>>>> upstream/main
   it('surfaces an actionable error when the ACP child exits before initialize completes', async () => {
     const child = spawnFixtureScript(
       "process.stdout.write('not-json\\n'); setTimeout(() => process.exit(0), 20);",

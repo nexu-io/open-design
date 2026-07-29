@@ -2,51 +2,7 @@
 
 Open Design runs on Windows natively, but the path is less travelled than macOS, Linux, or WSL2. This guide covers the most common errors you will hit on a fresh Windows machine and the exact fix for each.
 
-> **Tip:** If your coding-agent CLIs run inside WSL2, use the dedicated [`WSL2 setup guide`](wsl-setup.md). This guide is for native Windows (PowerShell).
-
----
-
-## Installing the desktop app: "Windows protected your PC"
-
-### Symptom
-
-When you run the downloaded installer (for example `open-design-0.11.0-win-x64-setup.exe`), a blue Windows Defender SmartScreen dialog appears:
-
-```text
-Windows protected your PC
-Microsoft Defender SmartScreen prevented an unrecognized app from starting.
-App:       open-design-x.y.z-win-x64-setup.exe
-Publisher: Unknown publisher
-```
-
-The first dialog only shows a **Don't run** button. The **Run anyway** button is hidden until you click **More info**.
-
-### Why this happens
-
-This is expected and does not mean the app is unsafe or broken. SmartScreen warns about any installer that is not signed with a code-signing certificate it already recognizes. Open Design ships unsigned Windows builds today, so the installer reports `Publisher: Unknown publisher` and SmartScreen flags it until a given signed binary builds up download reputation. The warning is about verifying who published the file, not about detecting a threat.
-
-### Fix
-
-If you downloaded the installer from an official source, you can proceed:
-
-1. Click **More info** in the dialog.
-2. Click **Run anyway**.
-3. Continue through the installer as normal.
-
-### Verify the download first
-
-Only run the installer if you got it from an official source:
-
-- [open-design.ai](https://open-design.ai/), or
-- [GitHub Releases](https://github.com/nexu-io/open-design/releases) on the `nexu-io/open-design` repository.
-
-Do not run an installer from a mirror, a re-upload, or a link you cannot trace back to one of those two sources. If a release publishes a SHA-256 checksum, you can confirm the file is intact before running it:
-
-```powershell
-Get-FileHash .\open-design-x.y.z-win-x64-setup.exe -Algorithm SHA256
-```
-
-Compare the printed hash against the checksum listed on the release page. They must match exactly.
+> **Tip:** If you already have WSL2 set up, that is the smoothest path on Windows. This guide is for native Windows (PowerShell).
 
 ---
 
@@ -98,21 +54,27 @@ If running `nvm version` or `node -v` pops up a Windows dialog that asks *"How d
 pnpm : The term 'pnpm' is not recognized as the name of a cmdlet...
 ```
 
-### Fix (npm global — Windows native)
+### Fix (Corepack — recommended)
 
-The repo pins `pnpm@10.33.2` in `packageManager`, but `corepack enable` on a
-normal Windows Node installation tries to write shims under
-`C:\Program Files\nodejs` and fails with `EPERM`. Install the pinned pnpm
-version globally instead:
+The repo pins `pnpm@10.33.2` in `packageManager`. Corepack selects that exact version automatically:
+
+```powershell
+corepack enable
+corepack pnpm --version   # should print 10.33.2
+```
+
+> **Note:** If `corepack enable` fails with `EPERM` or `EACCES` (common when Node is installed under `C:\Program Files\nodejs`), use the npm-global fallback in the next section instead.
+
+
+
+### Fix (npm global — alternative)
+
+If Corepack is not available:
 
 ```powershell
 npm install -g pnpm@10.33.2
 pnpm -v   # should print 10.33.2
 ```
-
-Use Corepack in macOS, Linux, and WSL2 as documented in the root Quickstart;
-do not treat a Windows-native `corepack enable` permission failure as a broken
-Node installation.
 
 ---
 
@@ -142,11 +104,7 @@ Approve any packages that appear in the list (commonly `better-sqlite3`, `electr
 pnpm install
 ```
 
-> **Expected on Windows native:** `better-sqlite3` does not publish a win32
-> prebuilt binary for Node 24, so `pnpm install` compiles it from source with
-> node-gyp (often around two minutes). Install Visual Studio Build Tools 2022
-> or newer as described in step 4 *before* running `pnpm install`. Compilation
-> output by itself is not a Node-version incompatibility.
+> **Note:** `better-sqlite3` may fall back to compiling from source on Windows. If `pnpm install` hangs or fails on this package, make sure the Visual Studio Build Tools (step 4) are installed *before* running `pnpm install`.
 
 ---
 

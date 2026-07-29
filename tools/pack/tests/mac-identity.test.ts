@@ -82,25 +82,25 @@ describe("resolveMacInstallIdentity", () => {
     expect(resolveMacPaths(config).appPath).toMatch(/Open Design Preview\.app$/);
   });
 
-  it("uses first-class prerelease app identity for prerelease release versions and namespaces", () => {
-    const prereleaseVersionConfig = {
+  it("uses first-class nightly app identity for nightly release versions and namespaces", () => {
+    const nightlyVersionConfig = {
       ...makeConfig("/work", "release-stable"),
-      appVersion: "0.8.0-prerelease.2",
+      appVersion: "0.8.0.nightly.2",
     };
-    const prereleaseNamespaceConfig = makeConfig("/work", "release-prerelease");
+    const nightlyNamespaceConfig = makeConfig("/work", "release-nightly");
 
-    expect(resolveMacInstallIdentity(prereleaseVersionConfig)).toEqual({
-      appId: "io.open-design.desktop.prerelease",
-      executableName: "Open Design Prerelease",
-      installerTitle: "Open Design Prerelease",
-      productName: "Open Design Prerelease",
-      publicAppBundleName: "Open Design Prerelease.app",
-      systemAppBundleName: "Open Design Prerelease.app",
+    expect(resolveMacInstallIdentity(nightlyVersionConfig)).toEqual({
+      appId: "io.open-design.desktop.nightly",
+      executableName: "Open Design Nightly",
+      installerTitle: "Open Design Nightly",
+      productName: "Open Design Nightly",
+      publicAppBundleName: "Open Design Nightly.app",
+      systemAppBundleName: "Open Design Nightly.app",
     });
-    expect(resolveMacPaths(prereleaseVersionConfig).appPath).toMatch(/Open Design Prerelease\.app$/);
-    expect(resolveMacInstallIdentity(prereleaseNamespaceConfig)).toMatchObject({
-      productName: "Open Design Prerelease",
-      publicAppBundleName: "Open Design Prerelease.app",
+    expect(resolveMacPaths(nightlyVersionConfig).appPath).toMatch(/Open Design Nightly\.app$/);
+    expect(resolveMacInstallIdentity(nightlyNamespaceConfig)).toMatchObject({
+      productName: "Open Design Nightly",
+      publicAppBundleName: "Open Design Nightly.app",
     });
   });
 });

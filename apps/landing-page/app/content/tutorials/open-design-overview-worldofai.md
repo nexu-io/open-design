@@ -1,7 +1,7 @@
 ---
 title: 'Open Source Claude Design — Fully Free AI Design System'
 youtubeId: 8XcbyliBwc4
-summary: WorldofAI breaks down what Open Design is, why it blew up on GitHub, and how to use it to generate landing pages, pitch decks, and mobile apps on top of the coding agent you already run — no single-model lock-in, no paid subscription.
+summary: WorldofAI breaks down how Open Design works, why the project blew up on GitHub, and how to use it to generate landing pages, pitch decks, and mobile apps without locking into a single model or paid subscription.
 date: 2026-05-05
 category: Demo
 durationSeconds: 707
@@ -9,11 +9,16 @@ author: WorldofAI
 official: false
 ---
 
-This guide is the written companion to WorldofAI's overview of Open Design — less an install walkthrough, more a "here's what this thing actually is and why it matters" breakdown. We follow the framing from [WorldofAI's video](https://www.youtube.com/watch?v=8XcbyliBwc4), rewritten and brought up to date with the current release. Watch above for the live tour, or read on for the concept-first version: what Open Design is, why it took off, what you can build, and how to get started.
+WorldofAI's overview of Open Design as the open-source alternative to Claude Design — what it is, who it's for, and what shipping with it actually looks like.
 
-![The Open Design workspace — pick what you want to design.](/tutorials/open-design-overview-worldofai/01-workspace.webp)
-*The Open Design workspace: prototypes, slide decks, images, and video all start from one place.*
+The video covers:
 
+<<<<<<< HEAD
+- Why Open Design changes the calculus for developers and designers building with AI
+- Generating stunning landing pages, pitch decks, and mobile apps from a single prompt
+- The model-portability story: Claude, Codex, Cursor, Gemini CLI, DeepSeek
+- Live walkthrough of a real prototype generated end-to-end
+=======
 ## What is Open Design?
 
 Open Design is an open-source, local-first design platform — an agent-native alternative to Claude Design and Figma. The core idea is simple but unusual: instead of being a closed app wired to one model provider, Open Design runs **on top of the coding agent you already use**.
@@ -105,3 +110,4 @@ No. The same workspace produces landing pages, slide and pitch decks, magazine l
 ---
 
 *This written guide is based on WorldofAI's overview of Open Design. Watch the full video above, and [subscribe to WorldofAI](https://www.youtube.com/watch?v=8XcbyliBwc4) for more of the latest AI tools and workflows.*
+>>>>>>> upstream/main

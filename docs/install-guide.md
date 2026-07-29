@@ -1,6 +1,6 @@
 # One-Click Install Guide
 
-**Parent:** [`spec.md`](spec.md) · **Related:** [`deployment/docker.md`](deployment/docker.md) · [`deploy/README.md`](../deploy/README.md)
+**Parent:** [`spec.md`](spec.md) · **Siblings:** [`self-hosting.md`](self-hosting.md) · [`network-security.md`](network-security.md)
 
 Deploy Open Design on Linux or macOS with a single command. The installer wraps the existing Docker Compose stack — no build step required.
 
@@ -16,7 +16,7 @@ bash deploy/scripts/install.sh
 
 ## Prerequisites
 
-The supported Linux path requires Docker with the Compose v2 plugin. On macOS, the installer can also detect Podman, although Docker Desktop remains the documented path.
+The only requirement is Docker with the Compose plugin.
 
 | Platform | Minimum version | Install |
 |----------|----------------|---------|
@@ -24,7 +24,7 @@ The supported Linux path requires Docker with the Compose v2 plugin. On macOS, t
 | Docker Compose plugin | 2.20 | Bundled with Docker Desktop; `apt install docker-compose-plugin` on Linux |
 | Docker Desktop (macOS/Windows) | 4.25 | [docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop/) |
 
-The installer checks for Docker or Podman and, on Ubuntu/Debian, Fedora, and macOS with Homebrew, offers to install Docker after confirmation; otherwise it prints the manual installation guidance. Use `--skip-docker-install` to skip the prompt. Linux uses the Docker Compose v2 override and therefore requires `docker compose` v2.17 or later.
+The installer checks for Docker and offers to install it automatically on Ubuntu/Debian, Fedora, and macOS (via Homebrew). Use `--skip-docker-install` to skip this step.
 
 > **MCP note:** Docker/Compose installs run the daemon inside the container. The MCP client snippets shown in Settings are stdio/local-path based and require a local/source install for now. Container-friendly MCP transport will be added in a follow-up.
 
@@ -42,12 +42,12 @@ Running the installer without flags launches an interactive wizard:
 [open-design] Docker: Docker version 26.1.3, build b72abbb
 [open-design] Compose: Docker Compose version v2.27.1
 
-Docker image [ghcr.io/nexu-io/od:latest]:
+Docker image [docker.io/vanjayak/open-design:latest]:
 Port [7456]:
 Allowed origins (CORS, comma-separated, or empty) []:
 Memory limit [384m]:
 
-[open-design] Pulling image: ghcr.io/nexu-io/od:latest
+[open-design] Pulling image: docker.io/vanjayak/open-design:latest
 [open-design] Starting Open Design...
 [open-design] Waiting for health check (up to 60s)...
 [open-design] Daemon is healthy (200 OK)
@@ -57,14 +57,14 @@ Memory limit [384m]:
 
 | Prompt | Default | Notes |
 |--------|---------|-------|
-| **Docker image** | `ghcr.io/nexu-io/od:latest` | Use `:latest` for the newest stable image, `:<version>` for a pinned release, or `@sha256:<digest>` for reproducibility |
+| **Docker image** | `docker.io/vanjayak/open-design:latest` | Pin a digest for reproducibility: `docker.io/vanjayak/open-design@sha256:<digest>` |
 | **Port** | `7456` | The port the daemon listens on. Must not be in use. |
-| **Allowed origins** | _(empty)_ | CORS origins for reverse-proxy setups. See [`deploy/README.md`](../deploy/README.md). Leave empty for localhost-only use. |
+| **Allowed origins** | _(empty)_ | CORS origins for reverse-proxy setups. See [`network-security.md`](network-security.md). Leave empty for localhost-only use. |
 | **Memory limit** | `384m` | Container memory cap. Raise for large concurrent agent runs. |
 
 After you confirm, the installer:
 
-1. Writes a `deploy/.env` file (backs up any existing one) and generates a fresh `OD_API_TOKEN`.
+1. Writes a `deploy/.env` file (backs up any existing one).
 2. Runs `docker compose pull` to fetch the image.
 3. Runs `docker compose up -d --no-build` to start the container.
 4. Polls `/api/health` for up to 60 seconds to confirm the daemon is ready.
@@ -141,7 +141,7 @@ bash deploy/scripts/update.sh
 To update to a specific image:
 
 ```bash
-bash deploy/scripts/update.sh --image=ghcr.io/nexu-io/od@sha256:<digest>
+bash deploy/scripts/update.sh --image=docker.io/vanjayak/open-design@sha256:<digest>
 ```
 
 The update script:
@@ -153,19 +153,19 @@ The update script:
 ## Uninstall
 
 ```bash
-# Remove containers and persistent daemon storage
+# Remove containers and data
 bash deploy/scripts/uninstall.sh
 
-# Remove containers but keep persistent daemon storage
+# Remove containers but keep data volume
 bash deploy/scripts/uninstall.sh --keep-data
 ```
 
 The uninstaller:
-1. Stops and removes containers (`docker compose down`), then removes persistent daemon storage separately.
+1. Stops and removes containers (`docker compose down`), then removes the data volume separately.
 2. On Linux: disables and removes the systemd unit.
 3. Removes `deploy/.env`.
 
-> **Data:** Before documenting, changing, deleting, or preserving persistent daemon storage, you MUST read root [`AGENTS.md`](../AGENTS.md) → **Daemon data directory contract**. This guide MUST NOT restate that contract or define storage paths.
+> **Data:** By default, the `open_design_data` volume (projects, artifacts, config) is also deleted. Pass `--keep-data` to preserve it. Remove the volume manually later: `docker volume rm open_design_data`.
 
 ## Configuration
 
@@ -173,13 +173,13 @@ All settings live in `deploy/.env`. Edit it directly or re-run the installer to 
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `OPEN_DESIGN_IMAGE` | `ghcr.io/nexu-io/od:latest` | Full image reference |
+| `OPEN_DESIGN_IMAGE` | `docker.io/vanjayak/open-design:latest` | Full image reference |
 | `OPEN_DESIGN_PORT` | `7456` | Host-side port (bound to `127.0.0.1`) |
 | `OPEN_DESIGN_ALLOWED_ORIGINS` | _(empty)_ | CORS origins for reverse-proxy setups |
 | `OPEN_DESIGN_MEM_LIMIT` | `384m` | Container memory cap |
 | `NODE_OPTIONS` | `--max-old-space-size=192` | Node.js heap cap inside the container |
 
-The container always binds `127.0.0.1:<port>:7456` — the daemon is never directly exposed to the network. To allow remote access, put an authenticated reverse proxy in front. See [`deploy/README.md`](../deploy/README.md) for the authentication and allowed-origin contract.
+The container always binds `127.0.0.1:<port>:7456` — the daemon is never directly exposed to the network. To allow remote access, put an authenticated reverse proxy in front. See [`network-security.md`](network-security.md).
 
 ## Troubleshooting
 
@@ -199,5 +199,5 @@ The container always binds `127.0.0.1:<port>:7456` — the daemon is never direc
 
 - Docker Compose config: [`deploy/docker-compose.yml`](../deploy/docker-compose.yml)
 - Environment template: [`deploy/.env.example`](../deploy/.env.example)
-- Beginner Docker walkthrough: [`docs/deployment/docker.md`](deployment/docker.md)
-- Authentication, remote access, and Linux CLI mounts: [`deploy/README.md`](../deploy/README.md)
+- Self-hosting topologies (PM2, systemd native): [`docs/self-hosting.md`](self-hosting.md)
+- Network security and remote access: [`docs/network-security.md`](network-security.md)

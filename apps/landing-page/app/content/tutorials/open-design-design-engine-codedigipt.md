@@ -1,7 +1,11 @@
 ---
-title: 'Open Design — Turn the Agent You Already Have Into a Design Engine'
+title: 'Open Design — Turn AI Agents Into a Full Design Engine'
 youtubeId: Z9_ruLqDJkM
+<<<<<<< HEAD
+summary: Codedigipt walks through Open Design as an open-source alternative to Claude Design — covering multi-AI tool support, the built-in design systems library, and how reusable skills compose into a full design engine.
+=======
 summary: A practical guide to the part of Open Design most tutorials skip — choosing and swapping the model behind it. Your coding agent is the engine; the model you point it at is the quality knob. Codedigipt's recording wires up Gemini CLI or Claude; current releases replace the retired direct Gemini runtime with Google Gemini through BYOK. Based on Codedigipt's hands-on walkthrough.
+>>>>>>> upstream/main
 date: 2026-05-03
 category: Demo
 durationSeconds: 924
@@ -9,11 +13,16 @@ author: Codedigipt
 official: false
 ---
 
-This guide focuses on the part of Open Design most walkthroughs gloss over: **the engine**. Open Design itself is the design surface — the real generation is done by whatever coding agent and model you point it at, and that choice is the single biggest lever on output quality. It follows the setup **Codedigipt** runs in [his hands-on walkthrough](https://www.youtube.com/watch?v=Z9_ruLqDJkM), rewritten and brought up to date with the current release. Watch the video above for the live run, or read on for the written version.
+Codedigipt's longer-form walkthrough of Open Design, focused on the "AI agents as a design engine" angle.
 
-![The Open Design workspace — describe what you want and pick a mode.](/tutorials/open-design-design-engine-codedigipt/workspace-home.webp)
-*The Open Design workspace: describe what you want to build, pick a mode, and your agent does the rest.*
+What's covered:
 
+<<<<<<< HEAD
+- Multi-AI tool support — Claude, Codex, Cursor, Gemini CLI, DeepSeek
+- Built-in design systems and how they translate prompts into brand-faithful UI
+- Reusable skills as a composable layer above the agent
+- A full end-to-end demo from prompt to output
+=======
 ## What is Open Design?
 
 Open Design is an open-source, local-first design platform that runs **on top of the coding agent you already use**. It doesn't ship its own model — it scans your machine for the supported CLIs you already have (Claude Code, Codex, Cursor, Copilot, OpenCode, Qwen, and a couple of dozen more) and uses that agent as the design engine. So the work runs on the subscription or free credits you already have, not a second design bill.
@@ -99,3 +108,4 @@ The app is open source under Apache-2.0 and free to run locally. You only pay fo
 ---
 
 *This written guide is based on Codedigipt's hands-on walkthrough. Watch the full video above, and [subscribe to Codedigipt](https://www.youtube.com/watch?v=Z9_ruLqDJkM) for more practical AI-tool setups.*
+>>>>>>> upstream/main

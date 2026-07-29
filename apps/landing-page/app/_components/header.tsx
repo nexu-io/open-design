@@ -4,103 +4,79 @@
  * scripts on each Astro page, so this marketing page ships no React runtime
  * to the browser.
  *
- * The primary resource link points to the Skill catalog. Catalog counts are
- * still accepted by the public prop shape because sub-pages pass them through.
+ * The nav links go to internal multi-page routes (`/skills/`, `/systems/`,
+ * `/templates/`, `/craft/`) so Google sees a real site hierarchy. Numbers
+ * reflect the live counts of the canonical Markdown bundles in the repo
+ * root and are kept in sync with `getCatalogCounts()` at build time.
  */
 
 import {
   DEFAULT_LOCALE,
+  LANDING_LOCALES,
   getCommonCopy,
   getHeaderProductMenuCopy,
+  getLocaleDefinition,
+  localePath,
   localizedHref,
+  stripLocaleFromPath,
   type HeaderCopy,
   type LandingLocaleCode,
 } from '../i18n';
-import { getSolutionPageCopy } from '../solution-pages-i18n';
-import type { SolutionPageKey } from '../solution-pages-i18n/types';
+import {
+  getSolutionPageCopy,
+  type SolutionPageKey,
+} from '../solution-pages-i18n';
 
 const REPO = 'https://github.com/nexu-io/open-design';
-const REPO_DISCUSSIONS = `${REPO}/discussions`;
-const DISCORD = 'https://discord.gg/mHAjSMV6gz';
-const X_PROFILE = 'https://x.com/OpenDesignHQ';
-
-// Open Design Cloud endpoints for the header account module.
-// Production defaults; overridable at build time via PUBLIC_* env so a
-// preview/staging build can point at a non-prod cloud. These are surfaced to
-// the runtime via `data-*` on `.nav-account` because the auth logic lives in
-// `header-enhancer.astro`'s `<script is:inline>` (NOT processed by Vite, so it
-// cannot read `import.meta.env` itself).
-const env = import.meta.env as Record<string, string | undefined>;
-const CLOUD_API_BASE =
-  env.PUBLIC_CLOUD_API_BASE ?? env.PUBLIC_AMR_API_BASE ?? 'https://amr-api.open-design.ai';
-const CLOUD_CONSOLE_URL =
-  env.PUBLIC_CLOUD_CONSOLE_URL ??
-  env.PUBLIC_AMR_CONSOLE_URL ??
-  'https://open-design.ai/cloud/wallet?source=open_design';
-
-// Solution → Use cases / Roles. Hrefs mirror upstream main's header 1:1 and
-// pair positionally with the localized `useCaseItems` / `roleItems` tuples.
-const USE_CASE_HREFS = [
-  '/solutions/prototype/',
-  '/solutions/dashboard/',
-  '/solutions/slides/',
-  '/solutions/image/',
-  '/solutions/video/',
-  '/solutions/design-system/',
-] as const;
-
-const ROLE_HREFS = [
-  '/solutions/solo-builder/',
-  '/solutions/designer/',
-  '/solutions/engineering/',
-  '/solutions/product-managers/',
-  '/solutions/marketing/',
-] as const;
-
-// Solution → Tools. AI generator pages. Labels come from the solution-page
-// copy (the page breadcrumb) so the dropdown and the hub cards share one
-// translation source and cannot drift apart.
-const TOOL_ENTRIES: ReadonlyArray<{ href: string; key: SolutionPageKey }> = [
-  { href: '/solutions/ai-wireframe-generator/', key: 'aiWireframeGenerator' },
-  { href: '/solutions/ai-ui-generator/', key: 'aiUiGenerator' },
-  { href: '/solutions/ai-prototype-generator/', key: 'aiPrototypeGenerator' },
-  { href: '/solutions/ai-landing-page-generator/', key: 'aiLandingPageGenerator' },
-  { href: '/solutions/design-to-code/', key: 'designToCode' },
-  { href: '/solutions/figma-to-code/', key: 'figmaToCode' },
-  { href: '/solutions/screenshot-to-code/', key: 'screenshotToCode' },
-  { href: '/solutions/html-to-ppt/', key: 'htmlToPpt' },
-];
-
-// Agent column — the coding agents with a dedicated long-form design page
-// upstream. Routes stay in lockstep with main's /agents/ hub.
-const AGENTS: ReadonlyArray<{ name: string; route: string }> = [
-  { name: 'Codex', route: 'codex-design' },
-  { name: 'Cursor Agent', route: 'cursor-design' },
-  { name: 'Claude Code', route: 'claude-code-design' },
-  { name: 'OpenCode', route: 'opencode-design' },
-  { name: 'Gemini CLI', route: 'gemini-design' },
-  { name: 'GitHub Copilot CLI', route: 'copilot-design' },
-  { name: 'Qwen Code', route: 'qwen-design' },
-  { name: 'Grok Build', route: 'grok-design' },
-  { name: 'Kimi CLI', route: 'kimi-design' },
-  { name: 'DeepSeek TUI', route: 'deepseek-design' },
-  { name: 'Trae CLI', route: 'trae-cli-design' },
-  { name: 'Aider', route: 'aider-design' },
-  { name: 'Antigravity', route: 'antigravity-design' },
-  { name: 'DeepSeek Reasonix', route: 'reasonix-design' },
-  { name: 'Hermes', route: 'hermes-design' },
-  { name: 'Devin for Terminal', route: 'devin-design' },
-  { name: 'Pi', route: 'pi-design' },
-  { name: 'Kiro CLI', route: 'kiro-design' },
-  { name: 'Kilo', route: 'kilo-design' },
-  { name: 'Mistral Vibe CLI', route: 'vibe-cli-design' },
-  { name: 'Qoder CLI', route: 'qoder-design' },
-];
+const DISCORD = 'https://discord.gg/9ptkbbqRu';
+const X_TWITTER = 'https://x.com/nexudotio';
+// Canonical AMR destination. Exported so the homepage AMR band CTA
+// (app/page.tsx) links to the same URL the nav uses, without a second
+// hand-maintained copy of the literal.
+export const AMR_URL = 'https://open-design.ai/amr/';
 
 const ext = {
   target: '_blank',
   rel: 'noreferrer noopener',
 } as const;
+
+/*
+ * Nav structure mirrors the agreed Header spec 1:1 (see od-landing nav doc).
+ * Sub-item display names are kept verbatim from that spec and are not
+ * localized — product names and SEO use-case phrases stay in their canonical
+ * English form regardless of UI locale. `href` values are placeholders today
+ * (Solution use-case / Roles pages are a later milestone) and point at an
+ * existing surface so nothing 404s; they get repointed as each page ships.
+ */
+
+// Solution → Use cases. Placeholder hrefs until the dedicated pages ship.
+// Solution → Use cases. `key` maps to the solution page's copy block so the
+// dropdown label is the page's localized breadcrumb (single source of truth,
+// 18 locales) rather than a hard-coded English string.
+const SOLUTION_USE_CASES: ReadonlyArray<{
+  key: SolutionPageKey;
+  href: string;
+}> = [
+  { key: 'prototype', href: '/solutions/prototype/' },
+  { key: 'dashboard', href: '/solutions/dashboard/' },
+  { key: 'slides', href: '/solutions/slides/' },
+  { key: 'image', href: '/solutions/image/' },
+  { key: 'video', href: '/solutions/video/' },
+  { key: 'designSystem', href: '/solutions/design-system/' },
+];
+
+// Solution → Roles. Same `key`→localized-breadcrumb pattern as use cases.
+const SOLUTION_ROLES: ReadonlyArray<{
+  key: SolutionPageKey;
+  href: string;
+}> = [
+  { key: 'roleSoloBuilder', href: '/solutions/solo-builder/' },
+  { key: 'roleDesigner', href: '/solutions/designer/' },
+  { key: 'roleEngineering', href: '/solutions/engineering/' },
+  { key: 'roleProductManagers', href: '/solutions/product-managers/' },
+  { key: 'roleMarketing', href: '/solutions/marketing/' },
+];
+
 
 export interface HeaderProps {
   /** Nav highlight target. `'home'` is the default for `/`. */
@@ -109,25 +85,29 @@ export interface HeaderProps {
     | 'product'
     | 'html-anything'
     | 'html-video'
+<<<<<<< HEAD
+=======
     | 'codex-slides'
     | 'solution'
     | 'agent'
+>>>>>>> upstream/main
     | 'plugins'
-    | 'pricing'
+    /*
+     * `library` is kept as an alias for the dropdown trigger so older
+     * pages that still pass `active="library"` keep working. New pages
+     * should pass `active="plugins"`.
+     */
     | 'library'
     | 'skills'
     | 'systems'
     | 'templates'
     | 'craft'
+    | 'solution'
+    | 'agent'
     | 'resources'
     | 'blog'
-    | 'stories'
     | 'tutorials'
-    | 'download'
-    | 'community'
-    // Standalone landing pages (e.g. /enterprise/) that intentionally do not
-    // belong under any top-nav tab — pass this so no tab renders as active.
-    | 'enterprise';
+    | 'community';
   /**
    * Live counts from the Markdown catalogs. Required so we can never
    * silently render stale fallback numbers when a caller forgets to
@@ -144,37 +124,45 @@ export interface HeaderProps {
   github?: {
     starsLabel: string;
   };
-  localeSwitcher?: {
-    label: string;
-    prefix: string;
-    shortLabel: string;
-    options: ReadonlyArray<{
-      code: LandingLocaleCode;
-      href: string;
-      htmlLang: string;
-      label: string;
-    }>;
-  };
   /** UI locale for nav labels and accessibility text. */
   locale?: LandingLocaleCode;
   /** Optional override for callers that already resolved localized chrome. */
   copy?: HeaderCopy;
-  /** Brand link target — `#top` on the homepage, `/` on sub-pages. */
+  /** Brand link target — `/` (home) everywhere; callers may override. */
   brandHref?: string;
+  /**
+   * Current request pathname (e.g. `/zh/blog/x/`). Used to build the
+   * language-switcher hrefs server-side so each option points at the
+   * localized version of the CURRENT page rather than the homepage.
+   * Defaults to `/` (correct for the homepage); sub-page callers thread
+   * `Astro.url.pathname` through. The client script in
+   * `locale-switcher-script.astro` then only handles persistence + menu
+   * behavior instead of patching wrong hrefs.
+   */
+  currentPath?: string;
 }
 
 export function Header({
   active = 'home',
+  counts,
   github,
-  localeSwitcher,
   locale = DEFAULT_LOCALE,
   copy,
-  brandHref = '#top',
+  brandHref = '/',
+  currentPath = '/',
 }: HeaderProps) {
+  const linkClass = (key: NonNullable<HeaderProps['active']>) =>
+    active === key ? 'is-active' : undefined;
   const headerCopy = copy ?? getCommonCopy(locale).header;
   const href = (path: string) => localizedHref(path, locale);
   const homeBrandHref = brandHref === '/' ? href('/') : brandHref;
   const productMenuCopy = getHeaderProductMenuCopy(locale);
+  const localeDef = getLocaleDefinition(locale);
+  const localeBasePath = stripLocaleFromPath(currentPath).pathname;
+  const localeOptions = LANDING_LOCALES.map((entry) => ({
+    ...entry,
+    href: localePath(entry.code, localeBasePath),
+  }));
 
   return (
     <header className='nav' data-od-id='nav'>
@@ -182,10 +170,10 @@ export function Header({
         <a href={homeBrandHref} className='brand'>
           <img
             className='brand-logo'
-            src='/logo-lockup.svg'
+            src='/open-design-logo-new.svg'
             alt='Open Design'
-            width={225}
-            height={83}
+            width={150}
+            height={61}
           />
         </a>
         {/*
@@ -207,33 +195,43 @@ export function Header({
         </button>
         <nav id='primary-nav' data-nav-primary>
           <ul className='nav-links'>
-            {/* Product — a mega menu whose columns are top-level categories:
-                the Open Design product family and the Agent catalog today,
-                with room to add more (e.g. Feature) as its own column later.
-                The trigger is a <button> (not a link) so it never navigates —
-                Product used to bounce to the homepage — but its panel is
-                revealed by the SAME pure-CSS :hover / :focus-within rule as
-                the hub menus, so it works with no JS (first paint / script
-                failure) and on touch (tapping focuses the button →
-                :focus-within). It lights up for the whole product family AND
-                for /agents/ pages now that Agent lives inside it. */}
             <li className='has-dropdown'>
-              <button
-                type='button'
+              {/*
+                Product menu — top-level group exposing the Open Design family.
+                CSS-only dropdown via :hover / :focus-within (no JS), so this
+                still renders correctly under static export with no React
+                runtime on the client. The trigger is a focusable <a> rather
+                than a button so it remains a keyboard tab stop, with
+                aria-haspopup signaling the submenu to assistive tech.
+              */}
+              <a
+                href={href('/')}
                 className={
-                  'nav-trigger' +
-                  (active === 'product' ||
+                  active === 'product' ||
                   active === 'home' ||
                   active === 'html-anything' ||
+<<<<<<< HEAD
+                  active === 'html-video'
+                    ? 'is-active'
+                    : undefined
+=======
                   active === 'html-video' ||
                   active === 'codex-slides' ||
                   active === 'agent'
                     ? ' is-active'
                     : '')
+>>>>>>> upstream/main
                 }
+                aria-haspopup='true'
+                aria-expanded='false'
               >
                 {productMenuCopy.product}
                 <span className='dropdown-caret' aria-hidden='true'>▾</span>
+<<<<<<< HEAD
+              </a>
+              <ul className='nav-dropdown' role='menu'>
+                <li role='none'>
+=======
               </button>
               <ul
                 className='nav-dropdown nav-dropdown-mega'
@@ -284,85 +282,124 @@ export function Header({
                     own height and scrolls so 21 rows never run the panel
                     off-screen; the shorter Products column stays static. */}
                 <li className='nav-mega-col nav-mega-col-agent'>
+>>>>>>> upstream/main
                   <a
-                    href={href('/agents/')}
+                    role='menuitem'
+                    href={href('/')}
                     className={
-                      'nav-mega-col-head' + (active === 'agent' ? ' is-active' : '')
+                      active === 'home' || active === 'product'
+                        ? 'is-active'
+                        : undefined
                     }
                   >
-                    {productMenuCopy.agent}
+                    <span className='dropdown-name'>{productMenuCopy.openDesignName}</span>
+                    <span className='dropdown-blurb'>
+                      {productMenuCopy.openDesignBlurb}
+                    </span>
                   </a>
-                  <ul className='nav-mega-list nav-mega-list-scroll'>
-                    {AGENTS.map((agent) => (
-                      <li key={agent.route}>
-                        <a href={href(`/agents/${agent.route}/`)}>
-                          <span className='dropdown-name'>{agent.name}</span>
-                        </a>
-                      </li>
-                    ))}
-                  </ul>
                 </li>
-                {/* Future category columns (e.g. Feature) drop in here as
-                    another <li className='nav-mega-col'> with its own head +
-                    list; the panel widens automatically. */}
+                <li role='none'>
+                  <a
+                    role='menuitem'
+                    href={href('/html-anything/')}
+                    className={linkClass('html-anything')}
+                  >
+                    <span className='dropdown-name'>{productMenuCopy.htmlAnythingName}</span>
+                    <span className='dropdown-blurb'>
+                      {productMenuCopy.htmlAnythingBlurb}
+                    </span>
+                  </a>
+                </li>
+                <li role='none'>
+                  <a
+                    role='menuitem'
+                    href={href('/html-video/')}
+                    className={linkClass('html-video')}
+                  >
+                    <span className='dropdown-name'>{productMenuCopy.htmlVideoName}</span>
+                    <span className='dropdown-blurb'>
+                      {productMenuCopy.htmlVideoBlurb}
+                    </span>
+                  </a>
+                </li>
+                {/* AMR is no longer listed here — per the Header spec it now
+                  heads the Agent dropdown (the design Agent above the coding
+                  agents). Listing it in both places would be redundant. */}
               </ul>
             </li>
-
-            {/* Solution — Use cases + Roles. */}
+            {/*
+              Solution — two labeled groups per the Header spec: Use cases
+              (Prototype / Dashboard / Slides / Image / Video / Design System)
+              and Roles (Solo Builder / Designer / Engineering / Product
+              Managers / Marketing). Sub-item hrefs are placeholders until each
+              dedicated page ships; sub-item names are verbatim from the spec
+              and not localized. Same CSS-only dropdown mechanic as Product.
+            */}
             <li className='has-dropdown'>
               <a
                 href={href('/solutions/')}
                 className={active === 'solution' ? 'is-active' : undefined}
+                aria-haspopup='true'
+                aria-expanded='false'
               >
-                {productMenuCopy.solution}
+                {headerCopy.nav.solution}
                 <span className='dropdown-caret' aria-hidden='true'>▾</span>
               </a>
-              <ul
-                className='nav-dropdown nav-dropdown-solution'
-                aria-label={productMenuCopy.solution}
-              >
-                <li className='nav-dropdown-group'>
-                  <span className='nav-dropdown-group-label'>
-                    {productMenuCopy.useCases}
-                  </span>
+              <ul className='nav-dropdown nav-dropdown-solution' role='menu'>
+                <li role='none' className='nav-dropdown-group'>
+                  <span className='nav-dropdown-group-label'>{headerCopy.nav.useCases}</span>
                 </li>
-                {productMenuCopy.useCaseItems.map((name, index) => (
-                  <li key={name}>
-                    <a href={href(USE_CASE_HREFS[index]!)}>
-                      <span className='dropdown-name'>{name}</span>
+                {SOLUTION_USE_CASES.map((item) => (
+                  <li role='none' key={`uc-${item.key}`}>
+                    <a role='menuitem' href={href(item.href)}>
+                      <span className='dropdown-name'>{getSolutionPageCopy(locale, item.key).breadcrumb}</span>
                     </a>
                   </li>
                 ))}
-                <li className='nav-dropdown-group'>
-                  <span className='nav-dropdown-group-label'>
-                    {productMenuCopy.roles}
-                  </span>
+                <li role='none' className='nav-dropdown-group'>
+                  <span className='nav-dropdown-group-label'>{headerCopy.nav.roles}</span>
                 </li>
-                {productMenuCopy.roleItems.map((name, index) => (
-                  <li key={name}>
-                    <a href={href(ROLE_HREFS[index]!)}>
-                      <span className='dropdown-name'>{name}</span>
-                    </a>
-                  </li>
-                ))}
-                <li className='nav-dropdown-group'>
-                  <span className='nav-dropdown-group-label'>
-                    {productMenuCopy.tools}
-                  </span>
-                </li>
-                {TOOL_ENTRIES.map(({ href: toolHref, key }) => (
-                  <li key={key}>
-                    <a href={href(toolHref)}>
-                      <span className='dropdown-name'>
-                        {getSolutionPageCopy(locale, key).breadcrumb}
-                      </span>
+                {SOLUTION_ROLES.map((item) => (
+                  <li role='none' key={`role-${item.key}`}>
+                    <a role='menuitem' href={href(item.href)}>
+                      <span className='dropdown-name'>{getSolutionPageCopy(locale, item.key).breadcrumb}</span>
                     </a>
                   </li>
                 ))}
               </ul>
             </li>
-
-            {/* Plugins — the three composable catalogs. */}
+            {/*
+              Agent — for now this dropdown lists only AMR (the design Agent).
+              The 17 first-party coding-agent adapters and their per-agent
+              /agents/ hub anchors are intentionally held back for a later
+              pass; the trigger already links to the /agents/ hub.
+            */}
+            <li className='has-dropdown'>
+              <a
+                href={href('/agents/')}
+                className={active === 'agent' ? 'is-active' : undefined}
+                aria-haspopup='true'
+                aria-expanded='false'
+              >
+                {headerCopy.nav.agent}
+                <span className='dropdown-caret' aria-hidden='true'>▾</span>
+              </a>
+              <ul className='nav-dropdown' role='menu'>
+                <li role='none'>
+                  <a role='menuitem' href={AMR_URL}>
+                    <span className='dropdown-name'>{productMenuCopy.amrName}</span>
+                    <span className='dropdown-blurb'>{productMenuCopy.amrBlurb}</span>
+                  </a>
+                </li>
+              </ul>
+            </li>
+            {/*
+              Plugins — catalog facets (Templates / Skills / Systems / Craft)
+              collapsed under one parent. Each row keeps its count badge
+              inside the panel and the trigger highlights when any of the
+              four facet pages is active. Same CSS-only :hover /
+              :focus-within mechanic from Product.
+            */}
             <li className='has-dropdown'>
               <a
                 href={href('/plugins/')}
@@ -376,354 +413,260 @@ export function Header({
                     ? 'is-active'
                     : undefined
                 }
+                aria-haspopup='true'
+                aria-expanded='false'
               >
-                {productMenuCopy.plugins}
+                {headerCopy.nav.plugins}
                 <span className='dropdown-caret' aria-hidden='true'>▾</span>
               </a>
-              <ul className='nav-dropdown' aria-label={productMenuCopy.plugins}>
-                <li>
-                  <a href={href('/plugins/templates/')}>
-                    <span className='dropdown-name'>
-                      {productMenuCopy.pluginItems.templates}
-                    </span>
-                  </a>
-                </li>
-                <li>
-                  <a href={href('/plugins/skills/')}>
-                    <span className='dropdown-name'>
-                      {productMenuCopy.pluginItems.skills}
-                    </span>
-                  </a>
-                </li>
-                <li>
-                  <a href={href('/plugins/systems/')}>
-                    <span className='dropdown-name'>
-                      {productMenuCopy.pluginItems.systems}
-                    </span>
-                  </a>
-                </li>
-              </ul>
-            </li>
-
-            {/* Pricing — localized page. The plan numbers it renders stay in
-                sync with the vela commerce app at runtime (see
-                app/_lib/pricing.ts); the card copy mirrors vela's subscription
-                modal (see app/_lib/pricing-content.ts). */}
-            <li>
-              <a
-                href={href('/pricing/')}
-                className={active === 'pricing' ? 'is-active' : undefined}
-              >
-                {productMenuCopy.pricing}
-              </a>
-            </li>
-
-            {/* Resources — a category label (Blog / Tutorials / Compare), not
-                a page; a <button> so it never navigates (it used to bounce to
-                /blog/), with its dropdown revealed by the same pure-CSS
-                :hover / :focus-within rule as the hub menus (see Product). */}
-            <li className='has-dropdown'>
-              <button
-                type='button'
-                className={
-                  'nav-trigger' +
-                  (active === 'resources' ||
-                  active === 'blog' ||
-                  active === 'stories' ||
-                  active === 'tutorials' ||
-                  active === 'download'
-                    ? ' is-active'
-                    : '')
-                }
-              >
-                {productMenuCopy.resources}
-                <span className='dropdown-caret' aria-hidden='true'>▾</span>
-              </button>
-              <ul className='nav-dropdown' aria-label={productMenuCopy.resources}>
-                <li>
-                  <a href={href('/blog/')}>
-                    <span className='dropdown-name'>
-                      {productMenuCopy.resourceItems.blog}
-                    </span>
-                  </a>
-                </li>
-                <li>
-                  <a href={href('/stories/')}>
-                    <span className='dropdown-name'>
-                      {productMenuCopy.resourceItems.stories}
-                    </span>
-                  </a>
-                </li>
-                <li>
-                  <a href={href('/tutorials/')}>
-                    <span className='dropdown-name'>
-                      {productMenuCopy.resourceItems.tutorials}
-                    </span>
-                  </a>
-                </li>
-                <li>
-                  <a href={href('/compare/')}>
-                    <span className='dropdown-name'>
-                      {productMenuCopy.resourceItems.compare}
-                    </span>
-                  </a>
-                </li>
-                {/* Weekly Newsletter is intentionally not listed — upstream
-                    main dropped it from Resources until the subscribe page
-                    ships. */}
-                <li>
+              {/* Labels come from the localized nav copy (Templates / Skills /
+                Systems) so the dropdown is translated in every locale. */}
+              <ul className='nav-dropdown' role='menu'>
+                <li role='none'>
                   <a
-                    href={href('/download/')}
-                    className={active === 'download' ? 'is-active' : undefined}
+                    role='menuitem'
+                    href={href('/plugins/templates/')}
+                    className={linkClass('templates')}
                   >
-                    <span className='dropdown-name'>
-                      {productMenuCopy.resourceItems.download}
-                    </span>
+                    <span className='dropdown-name'>{headerCopy.nav.templates}</span>
+                  </a>
+                </li>
+                <li role='none'>
+                  <a
+                    role='menuitem'
+                    href={href('/plugins/skills/')}
+                    className={linkClass('skills')}
+                  >
+                    <span className='dropdown-name'>{headerCopy.nav.skills}</span>
+                  </a>
+                </li>
+                <li role='none'>
+                  <a
+                    role='menuitem'
+                    href={href('/plugins/systems/')}
+                    className={linkClass('systems')}
+                  >
+                    <span className='dropdown-name'>{headerCopy.nav.systems}</span>
                   </a>
                 </li>
               </ul>
             </li>
-
-            {/* Community — Contributors / Ambassadors / Moderators / Events. These
-                pages are now localized Astro routes, so link through `href()`
-                to keep visitors on their language variant. */}
+            {/*
+              Resources — Blog, Tutorials, Download. Blog/Tutorials were
+              standalone top-level items before; folding them here frees slots
+              for the new Solution/Agent dropdowns. (Weekly Newsletter was
+              dropped — no product yet; re-add when the subscribe page ships.)
+            */}
             <li className='has-dropdown'>
               <a
-                href={href('/community/')}
-                className={active === 'community' ? 'is-active' : undefined}
+                href={href('/blog/')}
+                className={
+                  active === 'resources' ||
+                  active === 'blog' ||
+                  active === 'tutorials'
+                    ? 'is-active'
+                    : undefined
+                }
+                aria-haspopup='true'
+                aria-expanded='false'
               >
-                {productMenuCopy.community}
+                {headerCopy.nav.resources}
                 <span className='dropdown-caret' aria-hidden='true'>▾</span>
               </a>
-              <ul className='nav-dropdown' aria-label={productMenuCopy.community}>
-                <li>
-                  <a href={href('/community/contributors/')}>
-                    <span className='dropdown-name'>
-                      {productMenuCopy.communityItems.contributors}
-                    </span>
+              <ul className='nav-dropdown' role='menu'>
+                <li role='none'>
+                  <a
+                    role='menuitem'
+                    href={href('/blog/')}
+                    className={linkClass('blog')}
+                  >
+                    <span className='dropdown-name'>{headerCopy.nav.blog}</span>
                   </a>
                 </li>
-                <li>
-                  <a href={href('/community/ambassadors/')}>
-                    <span className='dropdown-name'>
-                      {productMenuCopy.communityItems.ambassadors}
-                    </span>
+                <li role='none'>
+                  <a
+                    role='menuitem'
+                    href={href('/tutorials/')}
+                    className={linkClass('tutorials')}
+                  >
+                    <span className='dropdown-name'>{headerCopy.nav.tutorials}</span>
                   </a>
                 </li>
-                <li>
-                  <a href={href('/community/moderators/')}>
-                    <span className='dropdown-name'>
-                      {productMenuCopy.communityItems.moderators}
-                    </span>
+                <li role='none'>
+                  <a role='menuitem' href={href('/download/')}>
+                    <span className='dropdown-name'>{headerCopy.download}</span>
                   </a>
                 </li>
-                <li>
-                  <a href={href('/community/events/')}>
-                    <span className='dropdown-name'>Events</span>
+              </ul>
+            </li>
+            {/*
+              Community — dropdown per the Header spec: Contributors,
+              Ambassadors, Moderators, Discord, Discussions. The first three
+              are anchors on the static `/community/` page (served verbatim
+              from `public/community/index.html`); Discord and Discussions are
+              external. Hrefs are the literal `/community/...` — the page is a
+              single non-locale-aware destination, so `/zh/community/` would
+              404 against the `[locale]/[...path].astro` catch-all.
+            */}
+            <li className='has-dropdown'>
+              <a
+                href='/community/'
+                className={
+                  active === 'community' ? 'is-active' : undefined
+                }
+                aria-haspopup='true'
+                aria-expanded='false'
+              >
+                {headerCopy.nav.community}
+                <span className='dropdown-caret' aria-hidden='true'>▾</span>
+              </a>
+              <ul className='nav-dropdown' role='menu'>
+                <li role='none'>
+                  <a role='menuitem' href='/community/#contributors'>
+                    <span className='dropdown-name'>{headerCopy.nav.contributors}</span>
                   </a>
                 </li>
-                <li>
-                  <a href={DISCORD} {...ext}>
+                <li role='none'>
+                  <a role='menuitem' href='/community/#ambassadors'>
+                    <span className='dropdown-name'>{headerCopy.nav.ambassadors}</span>
+                  </a>
+                </li>
+                <li role='none'>
+                  <a role='menuitem' href='/community/#moderators'>
+                    <span className='dropdown-name'>{headerCopy.nav.moderators}</span>
+                  </a>
+                </li>
+                <li role='none'>
+                  <a role='menuitem' href={DISCORD} {...ext}>
                     <span className='dropdown-name'>Discord</span>
                   </a>
                 </li>
-                <li>
-                  <a href={REPO_DISCUSSIONS} {...ext}>
-                    <span className='dropdown-name'>
-                      {productMenuCopy.communityItems.discussions}
-                    </span>
-                  </a>
-                </li>
-                <li>
-                  <a href={X_PROFILE} {...ext}>
-                    <span className='dropdown-name'>X</span>
+                <li role='none'>
+                  <a role='menuitem' href={`${REPO}/discussions`} {...ext}>
+                    <span className='dropdown-name'>Discussions</span>
                   </a>
                 </li>
               </ul>
             </li>
-
+            {/*
+              Contact intentionally NOT exposed in the top nav: it's a
+              page-internal anchor (`#contact` on the homepage CTA section)
+              that the footer already surfaces. Keeping it out of the bar
+              frees a slot at narrow widths where the row was overflowing.
+            */}
           </ul>
         </nav>
         <div className='nav-side'>
-          {localeSwitcher ? (
-            <details className='locale-switch nav-locale-switch' data-locale-switch>
-              <summary
-                className='locale-trigger locale-trigger-iconic'
-                aria-label={localeSwitcher.label}
-                title={localeSwitcher.label}
-              >
-                {/* Language switcher rendered as the skill's Remix Icon
-                    "translate-2" glyph (\f226) instead of the 语言 · 简中 text. */}
-                <span className='locale-trigger-icon' aria-hidden='true' />
-                {/* Dropdown caret as the skill's Remix Icon "arrow-down-s-line"
-                    glyph () instead of an inline SVG path. */}
-                <span className='locale-trigger-caret ri-glyph' aria-hidden='true'>
-                  {''}
-                </span>
-              </summary>
-              <div className='locale-menu' role='menu'>
-                {localeSwitcher.options.map((entry) => (
-                  <a
-                    className={`locale-menu-item${
-                      entry.code === locale ? ' is-active' : ''
-                    }`}
-                    role='menuitem'
-                    data-locale-link
-                    data-locale-code={entry.code}
-                    href={entry.href}
-                    lang={entry.htmlLang}
-                    aria-current={entry.code === locale ? 'true' : undefined}
-                    key={entry.code}
-                  >
-                    <span className='locale-menu-code'>
-                      {entry.code.toUpperCase()}
-                    </span>
-                    <span className='locale-menu-label'>{entry.label}</span>
-                  </a>
-                ))}
-              </div>
-            </details>
-          ) : null}
           <a
-            className='nav-cta ghost'
+            className='nav-amr'
+            href={AMR_URL}
+            aria-label={`${productMenuCopy.amrName}: ${productMenuCopy.amrBlurb}`}
+          >
+            <img src='/amr-nav-logo.svg' alt='' width={66} height={24} aria-hidden='true' />
+          </a>
+          {/*
+            Discord + X icon buttons live near Download / Star so the
+            community channels are reachable from every page without
+            burning a nav text slot. The icons are aria-labeled and
+            otherwise unlabeled. At ≤1080px they collapse alongside the
+            ghost Download CTA and the text-only nav <ul> (the latter
+            moves into the hamburger panel) — only the Star CTA stays
+            visible in the bar.
+          */}
+          <a
+            className='nav-icon'
+            href={DISCORD}
+            aria-label='Join Open Design on Discord'
+            title='Discord'
+            {...ext}
+          >
+            <svg viewBox='0 0 24 24' width='18' height='18' fill='currentColor' aria-hidden='true'>
+              <path d='M19.27 5.33A18 18 0 0 0 14.72 4l-.2.4a13.7 13.7 0 0 0-5.04 0L9.27 4a18 18 0 0 0-4.54 1.33C2.4 8.94 1.78 12.45 2.09 15.9a18.4 18.4 0 0 0 5.6 2.83l1.13-1.55a11.6 11.6 0 0 1-1.78-.86l.44-.34a13 13 0 0 0 11.04 0l.44.34c-.55.33-1.16.61-1.78.86l1.13 1.55a18.3 18.3 0 0 0 5.6-2.83c.45-4.05-.5-7.53-2.64-10.57ZM9.5 14.07c-1.07 0-1.95-.99-1.95-2.21 0-1.22.86-2.22 1.95-2.22 1.1 0 1.97 1 1.95 2.22 0 1.22-.86 2.21-1.95 2.21Zm5 0c-1.07 0-1.95-.99-1.95-2.21 0-1.22.87-2.22 1.96-2.22 1.1 0 1.96 1 1.95 2.22 0 1.22-.86 2.21-1.96 2.21Z' />
+            </svg>
+          </a>
+          <a
+            className='nav-icon'
+            href={X_TWITTER}
+            aria-label='Follow Open Design on X'
+            title='X / Twitter'
+            {...ext}
+          >
+            <svg viewBox='0 0 24 24' width='16' height='16' fill='currentColor' aria-hidden='true'>
+              <path d='M17.53 3H21l-7.39 8.45L22 21h-6.83l-5.36-6.99L3.7 21H.23l7.9-9.04L0 3h7l4.85 6.41L17.53 3Zm-2.39 16h2.04L5.96 4.9H3.78L15.14 19Z' />
+            </svg>
+          </a>
+          <a
+            className='nav-cta ghost is-star'
+            href={REPO}
+            aria-label={headerCopy.starAria}
+            title={headerCopy.starTitle}
+            {...ext}
+          >
+            {headerCopy.starPrefix} ·{' '}
+            <span data-github-stars>{github?.starsLabel ?? '40K+'}</span>
+          </a>
+          <a
+            className='nav-cta ghost is-download'
             href={href('/download/')}
             aria-label={headerCopy.downloadAria}
             title={headerCopy.downloadTitle}
             data-download-cta
             data-download-page
-            data-download-placement='nav'
           >
+            {/*
+              The CPU-arch chip (（Apple Silicon）/（Apple Intel）) is
+              intentionally NOT rendered in the nav CTA — at mid widths it
+              pushed the row over the available space and crowded the bar.
+              The arch suffix still appears on the homepage hero download
+              button (page.tsx) and the /download/ page, where there is room.
+            */}
             {headerCopy.download}
           </a>
-          {/*
-            Open Design Cloud account entry. Signed-out visitors only see the
-            download CTA above; the avatar menu stays `hidden` until the
-            enhancer confirms a live cloud session via
-            `GET {api}/api/auth/get-session`. Config flows through `data-*`
-            because the enhancer script cannot read `import.meta.env`.
-          */}
-          <div
-            className='nav-account'
-            data-amr-account
-            data-amr-api={CLOUD_API_BASE}
-            data-amr-console={CLOUD_CONSOLE_URL}
-          >
-            <details className='nav-account-menu' data-amr-menu hidden>
-              <summary
-                className='nav-account-trigger'
-                aria-label={headerCopy.accountAria}
-                title={headerCopy.accountAria}
+          <details className='locale-switch nav-locale' data-locale-switch>
+            <summary
+              className='locale-trigger'
+              aria-label={getCommonCopy(locale).topbar.languageSwitcherLabel}
+            >
+              <span className='locale-trigger-code'>{localeDef.shortLabel}</span>
+              <svg
+                className='locale-trigger-caret'
+                viewBox='0 0 8 5'
+                aria-hidden='true'
+                focusable='false'
               >
-                <img className='nav-avatar' alt='' data-amr-avatar />
-                <span
-                  className='nav-avatar-fallback'
-                  data-amr-avatar-fallback
-                  aria-hidden='true'
+                <path
+                  d='M0.5 0.75 L4 4 L7.5 0.75'
+                  fill='none'
+                  stroke='currentColor'
+                  strokeWidth='1'
+                  strokeLinecap='square'
                 />
-              </summary>
-              <div className='nav-account-dropdown' role='menu'>
-                <div className='nav-account-id'>
-                  <span className='nav-account-name' data-amr-name />
-                  <span className='nav-account-email' data-amr-email />
-                </div>
+              </svg>
+            </summary>
+            <div className='locale-menu' role='menu'>
+              {localeOptions.map((entry) => (
                 <a
-                  className='nav-account-item'
+                  className={`locale-menu-item${
+                    entry.code === locale ? ' is-active' : ''
+                  }`}
                   role='menuitem'
-                  href={CLOUD_CONSOLE_URL}
-                  target='_blank'
-                  rel='noreferrer noopener'
-                  data-amr-console-link
+                  data-locale-link
+                  data-locale-code={entry.code}
+                  href={entry.href}
+                  lang={entry.htmlLang}
+                  aria-current={entry.code === locale ? 'true' : undefined}
+                  key={entry.code}
                 >
-                  {headerCopy.menuConsole}
+                  <span className='locale-menu-code'>
+                    {entry.code.toUpperCase()}
+                  </span>
+                  <span className='locale-menu-label'>{entry.label}</span>
                 </a>
-                <button
-                  type='button'
-                  className='nav-account-item nav-account-signout'
-                  role='menuitem'
-                  data-amr-signout
-                >
-                  {headerCopy.menuSignOut}
-                </button>
-              </div>
-            </details>
-          </div>
+              ))}
+            </div>
+          </details>
         </div>
       </div>
-      {/*
-        Liquid Glass material — SVG displacement filter (chromatic edge
-        refraction) ported 1:1 from Inspira UI's LiquidGlass.vue. Referenced
-        by the nav's `backdrop-filter` once the bar condenses on scroll. The
-        displacement map (the `feImage`) is generated and sized to the live
-        bar by the inline script in `header-enhancer.astro` (ResizeObserver).
-        Chromium-only; Safari/Firefox fall back to the plain `blur()` declared
-        in globals.css, per the component's own browser-support note.
-      */}
-      <svg
-        className='nav-glass-defs'
-        aria-hidden='true'
-        focusable='false'
-        width='0'
-        height='0'
-      >
-        <defs>
-          <filter id='nav-liquid-glass' colorInterpolationFilters='sRGB'>
-            <feImage
-              x='0'
-              y='0'
-              width='100%'
-              height='100%'
-              preserveAspectRatio='none'
-              result='map'
-              data-nav-glass-map
-            />
-            <feDisplacementMap
-              in='SourceGraphic'
-              in2='map'
-              xChannelSelector='R'
-              yChannelSelector='B'
-              scale='-50'
-              result='dispRed'
-            />
-            <feColorMatrix
-              in='dispRed'
-              type='matrix'
-              values='1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0'
-              result='red'
-            />
-            <feDisplacementMap
-              in='SourceGraphic'
-              in2='map'
-              xChannelSelector='R'
-              yChannelSelector='B'
-              scale='-47'
-              result='dispGreen'
-            />
-            <feColorMatrix
-              in='dispGreen'
-              type='matrix'
-              values='0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 1 0'
-              result='green'
-            />
-            <feDisplacementMap
-              in='SourceGraphic'
-              in2='map'
-              xChannelSelector='R'
-              yChannelSelector='B'
-              scale='-44'
-              result='dispBlue'
-            />
-            <feColorMatrix
-              in='dispBlue'
-              type='matrix'
-              values='0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 1 0'
-              result='blue'
-            />
-            <feBlend in='red' in2='green' mode='screen' result='rg' />
-            <feBlend in='rg' in2='blue' mode='screen' result='output' />
-            <feGaussianBlur in='output' stdDeviation='0.7' />
-          </filter>
-        </defs>
-      </svg>
     </header>
   );
 }

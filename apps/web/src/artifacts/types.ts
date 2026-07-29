@@ -24,6 +24,7 @@ export type ArtifactExportKind =
   | 'html'
   | 'pdf'
   | 'zip'
+  | 'pptx'
   | 'jsx'
   | 'md'
   | 'svg'

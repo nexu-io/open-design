@@ -23,7 +23,6 @@
 // scrolling doesn't re-probe the same plugin.
 
 import { useEffect, useState } from 'react';
-import { isVisualStabilityMode } from '../../../utils/visualStability';
 import type { HtmlPreviewSpec } from '../preview';
 
 interface Props {
@@ -72,7 +71,7 @@ async function probe(url: string): Promise<'ok' | 'unreachable'> {
 
 export function HtmlSurface({ preview, pluginId, pluginTitle, inView, eager = false }: Props) {
   const [armed, setArmed] = useState(false);
-  const [shouldProbe, setShouldProbe] = useState(() => isVisualStabilityMode());
+  const [shouldProbe, setShouldProbe] = useState(false);
   const [probeState, setProbeState] = useState<ProbeState>(() => {
     const cached = probeCache.get(preview.src);
     return cached ?? 'idle';
@@ -80,17 +79,13 @@ export function HtmlSurface({ preview, pluginId, pluginTitle, inView, eager = fa
 
   useEffect(() => {
     setArmed(false);
-    setShouldProbe(isVisualStabilityMode());
+    setShouldProbe(false);
     const cached = probeCache.get(preview.src);
     setProbeState(cached ?? 'idle');
   }, [preview.src]);
 
   useEffect(() => {
     if (!inView) return;
-    if (isVisualStabilityMode()) {
-      setShouldProbe(true);
-      return;
-    }
     if (probeCache.has(preview.src)) {
       setShouldProbe(true);
       return;
@@ -125,10 +120,6 @@ export function HtmlSurface({ preview, pluginId, pluginTitle, inView, eager = fa
   // that linger get the live preview without requiring hover.
   useEffect(() => {
     if (probeState !== 'ok') return;
-    if (isVisualStabilityMode()) {
-      if (inView) setArmed(true);
-      return;
-    }
     if (eager) {
       if (inView) setArmed(true);
       return;

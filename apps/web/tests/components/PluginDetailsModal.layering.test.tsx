@@ -80,7 +80,6 @@ describe('PluginDetailsModal layering', () => {
 
     const backdrop = document.body.querySelector('.plugin-details-modal-backdrop');
     expect(backdrop).toBeTruthy();
-    expect(backdrop?.className).toBe('plugin-details-modal-backdrop');
     expect(backdrop?.parentElement).toBe(document.body);
     expect(host.querySelector('.plugin-details-modal-backdrop')).toBeNull();
   });

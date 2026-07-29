@@ -5,7 +5,7 @@ import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as platform from '@open-design/platform';
 import {
-  assert, chmodSync, detectAgents, detectAgentsStream, inspectAgentExecutableResolution, join, minimalAgentDef, mkdirSync, mkdtempSync, opencode, resolveAgentExecutable, rmSync, spawnEnvForAgent, tmpdir, withEnvSnapshot, withPlatform, writeFileSync,
+  assert, chmodSync, detectAgents, inspectAgentExecutableResolution, join, minimalAgentDef, mkdirSync, mkdtempSync, opencode, resolveAgentExecutable, rmSync, spawnEnvForAgent, tmpdir, withEnvSnapshot, withPlatform, writeFileSync,
 } from './helpers/test-helpers.js';
 import { isCursorAuthFailureText } from '../../src/runtimes/auth.js';
 import { getRememberedLiveModels } from '../../src/runtimes/models.js';
@@ -13,10 +13,10 @@ import { getRememberedLiveModels } from '../../src/runtimes/models.js';
 const fsTest = process.platform === 'win32' ? test.skip : test;
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..');
 
-// Claude Code owns its own auth resolution. Preserve credentials from the
-// inherited environment so users who run the local CLI with API-key auth get
-// the same behavior through Open Design.
-test('spawnEnvForAgent preserves inherited Anthropic API credentials for the claude adapter', () => {
+// Issue #398: Claude Code prefers Anthropic API credentials over `claude login`
+// credentials, silently billing API usage. Strip them for the claude
+// adapter so the user's subscription wins.
+test('spawnEnvForAgent strips Anthropic API credentials for the claude adapter', () => {
   const env = spawnEnvForAgent('claude', {
     ANTHROPIC_API_KEY: 'sk-leak',
     ANTHROPIC_AUTH_TOKEN: 'sk-token-leak',
@@ -24,13 +24,13 @@ test('spawnEnvForAgent preserves inherited Anthropic API credentials for the cla
     OD_DAEMON_URL: 'http://127.0.0.1:7456',
   });
 
-  assert.equal(env.ANTHROPIC_API_KEY, 'sk-leak');
-  assert.equal(env.ANTHROPIC_AUTH_TOKEN, 'sk-token-leak');
+  assert.equal('ANTHROPIC_API_KEY' in env, false);
+  assert.equal('ANTHROPIC_AUTH_TOKEN' in env, false);
   assert.equal(env.PATH, '/usr/bin');
   assert.equal(env.OD_DAEMON_URL, 'http://127.0.0.1:7456');
 });
 
-test('spawnEnvForAgent applies configured Claude Code env without stripping inherited auth', () => {
+test('spawnEnvForAgent applies configured Claude Code env before auth stripping', () => {
   const env = spawnEnvForAgent(
     'claude',
     {
@@ -44,27 +44,8 @@ test('spawnEnvForAgent applies configured Claude Code env without stripping inhe
   );
 
   assert.equal(env.CLAUDE_CONFIG_DIR, '/Users/test/.claude-2');
-  assert.equal(env.ANTHROPIC_API_KEY, 'sk-leak');
-  assert.equal(env.ANTHROPIC_AUTH_TOKEN, 'sk-token-leak');
-  assert.equal(env.PATH, '/usr/bin');
-});
-
-test('spawnEnvForAgent lets configured Claude Code API credentials override inherited auth', () => {
-  const env = spawnEnvForAgent(
-    'claude',
-    {
-      ANTHROPIC_API_KEY: 'sk-inherited-stale',
-      ANTHROPIC_AUTH_TOKEN: 'sk-inherited-token',
-      PATH: '/usr/bin',
-    },
-    {
-      ANTHROPIC_API_KEY: 'sk-configured',
-      ANTHROPIC_AUTH_TOKEN: 'sk-configured-token',
-    },
-  );
-
-  assert.equal(env.ANTHROPIC_API_KEY, 'sk-configured');
-  assert.equal(env.ANTHROPIC_AUTH_TOKEN, 'sk-configured-token');
+  assert.equal('ANTHROPIC_API_KEY' in env, false);
+  assert.equal('ANTHROPIC_AUTH_TOKEN' in env, false);
   assert.equal(env.PATH, '/usr/bin');
 });
 
@@ -80,60 +61,6 @@ test('spawnEnvForAgent applies configured Codex env without mutating the base en
   assert.equal(env.PATH, '/usr/bin');
   assert.equal('CODEX_HOME' in base, false);
   assert.equal('CODEX_BIN' in base, false);
-});
-
-test('spawnEnvForAgent backfills Windows cache directory env for Trae CLI launches', () => {
-  const env = withPlatform('win32', () =>
-    spawnEnvForAgent(
-      'trae-cli',
-      {
-        Path: 'C:\\Windows\\System32',
-        USERPROFILE: 'C:\\Users\\ai',
-      },
-      {},
-      {},
-    ),
-  );
-
-  assert.equal(env.USERPROFILE, 'C:\\Users\\ai');
-  assert.equal(env.APPDATA, 'C:\\Users\\ai\\AppData\\Roaming');
-  assert.equal(env.LOCALAPPDATA, 'C:\\Users\\ai\\AppData\\Local');
-  assert.equal(env.TEMP, 'C:\\Users\\ai\\AppData\\Local\\Temp');
-  assert.equal(env.TMP, 'C:\\Users\\ai\\AppData\\Local\\Temp');
-});
-
-test('spawnEnvForAgent keeps Windows cache directory env inside sandbox roots', () => {
-  const dataDir = mkdtempSync(join(tmpdir(), 'od-agent-env-sandbox-win-cache-'));
-  try {
-    const env = withPlatform('win32', () =>
-      spawnEnvForAgent(
-        'trae-cli',
-        {
-          OD_DATA_DIR: dataDir,
-          OD_SANDBOX_MODE: '1',
-          Path: 'C:\\Windows\\System32',
-          USERPROFILE: 'C:\\Users\\ai',
-        },
-        {},
-        {},
-      ),
-    );
-
-    const agentHome = join(dataDir, 'sandbox', 'agent-home');
-    const tempDir = join(dataDir, 'sandbox', 'tmp');
-    const normalize = (value: string | undefined): string =>
-      (value ?? '').replaceAll('\\', '/');
-
-    assert.equal(env.USERPROFILE, agentHome);
-    assert.ok(normalize(env.APPDATA).startsWith(`${normalize(agentHome)}/`));
-    assert.ok(normalize(env.LOCALAPPDATA).startsWith(`${normalize(agentHome)}/`));
-    assert.equal(env.TEMP, tempDir);
-    assert.equal(env.TMP, tempDir);
-    assert.ok(!normalize(env.APPDATA).includes('C:/Users/ai'));
-    assert.ok(!normalize(env.LOCALAPPDATA).includes('C:/Users/ai'));
-  } finally {
-    rmSync(dataDir, { recursive: true, force: true });
-  }
 });
 
 test('spawnEnvForAgent reapplies sandbox state roots after configured env overrides', () => {
@@ -245,7 +172,7 @@ test('spawnEnvForAgent resolves relative OD_DATA_DIR before applying sandbox roo
 
 test('spawnEnvForAgent applies system proxy env to all agent runtimes before base env overrides', () => {
   const env = spawnEnvForAgent(
-    'opencode',
+    'gemini',
     {
       HTTPS_PROXY: 'http://user-env:9000',
       PATH: '/usr/bin',
@@ -275,7 +202,7 @@ test('spawnEnvForAgent resolves system proxy env for each default agent launch',
   });
 
   try {
-    const env = spawnEnvForAgent('opencode', { PATH: '/usr/bin' });
+    const env = spawnEnvForAgent('gemini', { PATH: '/usr/bin' });
 
     assert.deepEqual(proxySpy.mock.calls, [[]]);
     assert.equal(env.HTTPS_PROXY, 'http://system-https:7891');
@@ -287,7 +214,7 @@ test('spawnEnvForAgent resolves system proxy env for each default agent launch',
 
 test('spawnEnvForAgent lets explicit lowercase proxy env override system uppercase proxy env', () => {
   const env = spawnEnvForAgent(
-    'opencode',
+    'gemini',
     {
       https_proxy: 'http://user-lowercase:9000',
       PATH: '/usr/bin',
@@ -307,7 +234,7 @@ test('spawnEnvForAgent lets explicit lowercase proxy env override system upperca
 
 test('spawnEnvForAgent enables Node env proxy support for inherited lowercase proxy env', () => {
   const env = spawnEnvForAgent(
-    'opencode',
+    'gemini',
     {
       http_proxy: 'http://user-lowercase:9000',
       PATH: '/usr/bin',
@@ -350,21 +277,6 @@ test('spawnEnvForAgent injects the resolved AMR profile after configured env', (
   assert.equal(env.VELA_PROFILE, 'test');
   assert.equal(env.OPEN_DESIGN_AMR_PROFILE, 'test');
   assert.equal(env.PATH, '/usr/bin');
-});
-
-test('spawnEnvForAgent enables OpenCode web search providers for AMR by default', () => {
-  const env = spawnEnvForAgent('amr', { PATH: '/usr/bin' });
-
-  assert.equal(env.OPENCODE_ENABLE_EXA, '1');
-  assert.equal(env.VELA_ENABLE_PARALLEL_MCP, '1');
-
-  const overridden = spawnEnvForAgent('amr', {
-    OPENCODE_ENABLE_EXA: '0',
-    VELA_ENABLE_PARALLEL_MCP: '0',
-    PATH: '/usr/bin',
-  });
-  assert.equal(overridden.OPENCODE_ENABLE_EXA, '0');
-  assert.equal(overridden.VELA_ENABLE_PARALLEL_MCP, '0');
 });
 
 test('spawnEnvForAgent gives AMR a stable OpenCode home under OD_DATA_DIR', () => {
@@ -481,6 +393,7 @@ test('inspectAgentExecutableResolution reports configured and PATH Codex binarie
 test('resolveAgentExecutable supports configured binary overrides for non-Codex adapters', () => {
   const cases: Array<[string, string, string]> = [
     ['claude', 'claude', 'CLAUDE_BIN'],
+    ['gemini', 'gemini', 'GEMINI_BIN'],
     ['opencode', 'opencode', 'OPENCODE_BIN'],
     ['cursor-agent', 'cursor-agent', 'CURSOR_AGENT_BIN'],
     ['qwen', 'qwen', 'QWEN_BIN'],
@@ -545,14 +458,9 @@ test('detectAgents includes sanitized install and docs metadata from split runti
       process.env.OD_AGENT_HOME = dir;
 
       const agents = await detectAgents();
-      const amr = agents.find((agent) => agent.id === 'amr');
       const qoder = agents.find((agent) => agent.id === 'qoder');
       const deepseek = agents.find((agent) => agent.id === 'deepseek');
-      const kimi = agents.find((agent) => agent.id === 'kimi');
 
-      assert.ok(amr);
-      assert.equal(amr.available, false);
-      assert.equal(amr.installUrl, 'https://open-design.ai/amr');
       assert.ok(qoder);
       assert.equal(qoder.available, false);
       assert.equal(qoder.installUrl, 'https://qoder.com/download');
@@ -562,55 +470,6 @@ test('detectAgents includes sanitized install and docs metadata from split runti
         deepseek.docsUrl,
         'https://github.com/Hmbown/CodeWhale/blob/main/README.md',
       );
-      assert.ok(kimi);
-      assert.equal(
-        kimi.docsUrl,
-        'https://www.kimi.com/code/docs/en/kimi-cli/guides/getting-started.html?aff=open-design',
-      );
-    });
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-fsTest('detectAgents keeps Kimi available when ACP model discovery fails', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'od-detect-kimi-modern-'));
-  try {
-    return await withEnvSnapshot(['PATH', 'OD_AGENT_HOME'], async () => {
-      const kimiBin = join(dir, 'kimi');
-      writeFileSync(
-        kimiBin,
-        [
-          '#!/usr/bin/env node',
-          'const args = process.argv.slice(2);',
-          "if (args.includes('acp')) {",
-          "  console.error('error: too many arguments. Expected 0 arguments but got 1.');",
-          '  process.exit(1);',
-          '}',
-          "if (args.length === 1 && args[0] === '--version') {",
-          "  console.log('kimi 0.6.0');",
-          '  process.exit(0);',
-          '}',
-          "console.error('unexpected args: ' + JSON.stringify(args));",
-          'process.exit(1);',
-          '',
-        ].join('\n'),
-      );
-      chmodSync(kimiBin, 0o755);
-
-      process.env.PATH = dir;
-      process.env.OD_AGENT_HOME = dir;
-
-      const agents = await detectAgents();
-      const kimi = agents.find((agent) => agent.id === 'kimi');
-
-      assert.ok(kimi);
-      assert.equal(kimi.available, true);
-      assert.equal(kimi.version, 'kimi 0.6.0');
-      assert.equal(kimi.models[0]?.id, 'default');
-      assert.equal(kimi.models[1]?.id, 'kimi-k2-turbo-preview');
-      assert.equal(kimi.models[2]?.id, 'moonshot-v1-8k');
-      assert.equal(kimi.models[3]?.id, 'moonshot-v1-32k');
     });
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -997,48 +856,6 @@ test('detectAgents applies configured env while probing the CLI', async () => {
   }
 });
 
-test('detectAgents reuses the opencode configured env for byok-opencode availability', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'od-byok-opencode-detect-'));
-  try {
-    await withEnvSnapshot(['PATH', 'OD_AGENT_HOME'], async () => {
-      const bin = join(dir, process.platform === 'win32' ? 'opencode.cmd' : 'opencode');
-      if (process.platform === 'win32') {
-        writeFileSync(
-          bin,
-          '@echo off\r\nif "%~1"=="--version" echo byok-opencode-test& exit /b 0\r\nif "%~1"=="models" echo openai/gpt-5& exit /b 0\r\nexit /b 0\r\n',
-        );
-      } else {
-        writeFileSync(
-          bin,
-          '#!/bin/sh\nif [ "$1" = "--version" ]; then echo byok-opencode-test; exit 0; fi\nif [ "$1" = "models" ]; then echo openai/gpt-5; exit 0; fi\nexit 0\n',
-        );
-        chmodSync(bin, 0o755);
-      }
-      process.env.PATH = '';
-      process.env.OD_AGENT_HOME = dir;
-
-      const configuredEnv = { opencode: { OPENCODE_BIN: bin } };
-      const agents = await detectAgents(configuredEnv);
-      const detected = agents.find((agent) => agent.id === 'byok-opencode');
-
-      assert.equal(detected?.available, true);
-      assert.equal(detected?.path, bin);
-      assert.equal(detected?.version, 'byok-opencode-test');
-
-      const streamed: string[] = [];
-      for await (const agent of detectAgentsStream(configuredEnv)) {
-        if (agent.id === 'byok-opencode') {
-          streamed.push(`${agent.available}:${agent.path}:${agent.version}`);
-        }
-      }
-
-      assert.deepEqual(streamed, [`true:${bin}:byok-opencode-test`]);
-    });
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
 test('detectAgents marks Cursor Agent auth ok when cursor-agent status succeeds', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'od-cursor-auth-ok-'));
   try {
@@ -1244,20 +1061,22 @@ test('antigravity auth matcher covers agy print-mode + log-file auth signals', a
   );
 });
 
-test('spawnEnvForAgent preserves configured Anthropic credentials for the claude adapter', () => {
-  const env = spawnEnvForAgent(
-    'claude',
-    {
-      PATH: '/usr/bin',
-    },
-    {
-      ANTHROPIC_API_KEY: 'sk-configured',
-      ANTHROPIC_AUTH_TOKEN: 'sk-token-configured',
-    },
-  );
+// Windows env-var names are case-insensitive at the kernel level, but
+// spreading process.env into a plain object loses Node's case-insensitive
+// accessor — a `Anthropic_Api_Key` key would survive a literal
+// `delete env.ANTHROPIC_API_KEY` and still reach Claude Code on Windows.
+test('spawnEnvForAgent strips Anthropic credentials case-insensitively for the claude adapter', () => {
+  const env = spawnEnvForAgent('claude', {
+    Anthropic_Api_Key: 'sk-mixed-case',
+    anthropic_api_key: 'sk-lower-case',
+    Anthropic_Auth_Token: 'sk-token-mixed-case',
+    PATH: '/usr/bin',
+  });
 
-  assert.equal(env.ANTHROPIC_API_KEY, 'sk-configured');
-  assert.equal(env.ANTHROPIC_AUTH_TOKEN, 'sk-token-configured');
+  const remaining = Object.keys(env).filter(
+    (k) => k.toUpperCase() === 'ANTHROPIC_API_KEY' || k.toUpperCase() === 'ANTHROPIC_AUTH_TOKEN',
+  );
+  assert.deepEqual(remaining, []);
   assert.equal(env.PATH, '/usr/bin');
 });
 
@@ -1280,7 +1099,7 @@ test('spawnEnvForAgent preserves Anthropic credentials when claude resolves to O
 });
 
 test('spawnEnvForAgent preserves Anthropic credentials for non-claude adapters', () => {
-  for (const agentId of ['codex', 'opencode', 'devin']) {
+  for (const agentId of ['codex', 'gemini', 'opencode', 'devin']) {
     const env = spawnEnvForAgent(agentId, {
       ANTHROPIC_API_KEY: 'sk-keep',
       ANTHROPIC_AUTH_TOKEN: 'sk-token-keep',
@@ -1299,32 +1118,36 @@ test('spawnEnvForAgent preserves Anthropic credentials for non-claude adapters',
   }
 });
 
-// Codex CLI owns its own auth resolution. Preserve credentials from the
-// inherited environment so users who run the local CLI with API-key auth get
-// the same behavior through Open Design.
-test('spawnEnvForAgent preserves inherited OPENAI_API_KEY for the codex adapter', () => {
+// Issue #2420: Codex CLI prefers OPENAI_API_KEY / CODEX_API_KEY over its own
+// `codex login` OAuth credentials when both are set. When the user has not
+// pointed Codex at a custom proxy via OPENAI_BASE_URL, a stale BYOK key
+// silently outranks `~/.codex/auth.json` and trips 401 invalid_api_key.
+// Strip the API keys in that case so Codex CLI's own auth resolution wins —
+// mirroring the existing ANTHROPIC_API_KEY behavior the claude adapter has
+// for issue #398.
+test('spawnEnvForAgent strips OPENAI_API_KEY for the codex adapter when OPENAI_BASE_URL is absent', () => {
   const env = spawnEnvForAgent('codex', {
     OPENAI_API_KEY: 'sk-stale-byok',
     PATH: '/usr/bin',
     OD_DAEMON_URL: 'http://127.0.0.1:7456',
   });
 
-  assert.equal(env.OPENAI_API_KEY, 'sk-stale-byok');
+  assert.equal('OPENAI_API_KEY' in env, false);
   assert.equal(env.PATH, '/usr/bin');
   assert.equal(env.OD_DAEMON_URL, 'http://127.0.0.1:7456');
 });
 
-test('spawnEnvForAgent preserves inherited CODEX_API_KEY for the codex adapter', () => {
+test('spawnEnvForAgent strips CODEX_API_KEY for the codex adapter when OPENAI_BASE_URL is absent', () => {
   const env = spawnEnvForAgent('codex', {
     CODEX_API_KEY: 'sk-stale-byok',
     PATH: '/usr/bin',
   });
 
-  assert.equal(env.CODEX_API_KEY, 'sk-stale-byok');
+  assert.equal('CODEX_API_KEY' in env, false);
   assert.equal(env.PATH, '/usr/bin');
 });
 
-test('spawnEnvForAgent preserves inherited Codex API keys when OPENAI_BASE_URL is empty', () => {
+test('spawnEnvForAgent strips Codex API keys when OPENAI_BASE_URL is empty', () => {
   const env = spawnEnvForAgent('codex', {
     OPENAI_API_KEY: 'sk-stale-byok',
     CODEX_API_KEY: 'sk-stale-byok',
@@ -1332,19 +1155,19 @@ test('spawnEnvForAgent preserves inherited Codex API keys when OPENAI_BASE_URL i
     PATH: '/usr/bin',
   });
 
-  assert.equal(env.OPENAI_API_KEY, 'sk-stale-byok');
-  assert.equal(env.CODEX_API_KEY, 'sk-stale-byok');
+  assert.equal('OPENAI_API_KEY' in env, false);
+  assert.equal('CODEX_API_KEY' in env, false);
   assert.equal(env.PATH, '/usr/bin');
 });
 
-test('spawnEnvForAgent preserves inherited Codex API keys when OPENAI_BASE_URL is whitespace', () => {
+test('spawnEnvForAgent strips Codex API keys when OPENAI_BASE_URL is whitespace', () => {
   const env = spawnEnvForAgent('codex', {
     OPENAI_API_KEY: 'sk-stale-byok',
     OPENAI_BASE_URL: '   ',
     PATH: '/usr/bin',
   });
 
-  assert.equal(env.OPENAI_API_KEY, 'sk-stale-byok');
+  assert.equal('OPENAI_API_KEY' in env, false);
   assert.equal(env.PATH, '/usr/bin');
 });
 
@@ -1371,25 +1194,27 @@ test('spawnEnvForAgent preserves CODEX_API_KEY when OPENAI_BASE_URL is set to a 
   assert.equal(env.OPENAI_BASE_URL, 'https://proxy.example.com/v1');
 });
 
-test('spawnEnvForAgent preserves configured Codex API keys', () => {
-  const env = spawnEnvForAgent(
-    'codex',
-    {
-      PATH: '/usr/bin',
-    },
-    {
-      OPENAI_API_KEY: 'sk-configured-openai',
-      CODEX_API_KEY: 'sk-configured-codex',
-    },
-  );
+test('spawnEnvForAgent strips Codex API keys case-insensitively when OPENAI_BASE_URL is absent', () => {
+  const env = spawnEnvForAgent('codex', {
+    Openai_Api_Key: 'sk-mixed-case',
+    openai_api_key: 'sk-lower-case',
+    Codex_Api_Key: 'sk-mixed-case',
+    PATH: '/usr/bin',
+  });
 
-  assert.equal(env.OPENAI_API_KEY, 'sk-configured-openai');
-  assert.equal(env.CODEX_API_KEY, 'sk-configured-codex');
+  const remainingOpenAi = Object.keys(env).filter(
+    (k) => k.toUpperCase() === 'OPENAI_API_KEY',
+  );
+  const remainingCodex = Object.keys(env).filter(
+    (k) => k.toUpperCase() === 'CODEX_API_KEY',
+  );
+  assert.deepEqual(remainingOpenAi, []);
+  assert.deepEqual(remainingCodex, []);
   assert.equal(env.PATH, '/usr/bin');
 });
 
 test('spawnEnvForAgent preserves Codex API keys for non-codex adapters', () => {
-  for (const agentId of ['claude', 'opencode', 'devin']) {
+  for (const agentId of ['claude', 'gemini', 'opencode', 'devin']) {
     const env = spawnEnvForAgent(agentId, {
       OPENAI_API_KEY: 'sk-keep',
       CODEX_API_KEY: 'sk-keep',
@@ -1408,7 +1233,12 @@ test('spawnEnvForAgent preserves Codex API keys for non-codex adapters', () => {
   }
 });
 
-test('spawnEnvForAgent applies configured codex base URL and API key', () => {
+// When the user has explicitly configured a BYOK Codex base URL through the
+// Settings → Execution mode → Local CLI form, the configured API key in
+// `agentCliEnv.codex.OPENAI_API_KEY` (or CODEX_API_KEY) flows through to the
+// spawn alongside the base URL. The stripping helper must keep both in sync
+// so the configured proxy actually authenticates.
+test('spawnEnvForAgent applies configured codex env and preserves API key when base URL is configured', () => {
   const env = spawnEnvForAgent(
     'codex',
     { PATH: '/usr/bin' },
@@ -1422,26 +1252,28 @@ test('spawnEnvForAgent applies configured codex base URL and API key', () => {
   assert.equal(env.OPENAI_API_KEY, 'sk-configured');
 });
 
-test('spawnEnvForAgent lets configured Codex API credentials override inherited auth', () => {
+// The dual-key shape every BYOK Codex user hits in production: prior session
+// left OPENAI_API_KEY in the daemon's app-config, the user cleared the BYOK
+// dialog but never opened Settings → Local CLI → Codex env to also clear
+// OPENAI_API_KEY, then switched execution mode back to Local CLI. spawnEnv
+// must strip the stale BYOK key so Codex CLI's own `codex login` wins.
+test('spawnEnvForAgent strips stale configured OPENAI_API_KEY when configured base URL was also cleared', () => {
   const env = spawnEnvForAgent(
     'codex',
+    { PATH: '/usr/bin' },
     {
-      OPENAI_API_KEY: 'sk-inherited-stale',
-      CODEX_API_KEY: 'sk-inherited-codex',
-      PATH: '/usr/bin',
-    },
-    {
-      OPENAI_API_KEY: 'sk-configured-openai',
-      CODEX_API_KEY: 'sk-configured-codex',
+      // Empty OPENAI_BASE_URL — i.e. user is on Local CLI mode without a
+      // custom proxy. validateAgentCliEnv would drop the empty string in
+      // practice; we pass it explicitly here to lock the spawn-side guard.
+      OPENAI_API_KEY: 'sk-stale-byok',
     },
   );
 
-  assert.equal(env.OPENAI_API_KEY, 'sk-configured-openai');
-  assert.equal(env.CODEX_API_KEY, 'sk-configured-codex');
+  assert.equal('OPENAI_API_KEY' in env, false);
   assert.equal(env.PATH, '/usr/bin');
 });
 
-test('spawnEnvForAgent preserves inherited Anthropic API credentials when ANTHROPIC_BASE_URL is set', () => {
+test('spawnEnvForAgent preserves Anthropic API credentials when ANTHROPIC_BASE_URL is set', () => {
   const env = spawnEnvForAgent('claude', {
     ANTHROPIC_API_KEY: 'sk-kimi',
     ANTHROPIC_AUTH_TOKEN: 'sk-token',
@@ -1455,7 +1287,7 @@ test('spawnEnvForAgent preserves inherited Anthropic API credentials when ANTHRO
   assert.equal(env.PATH, '/usr/bin');
 });
 
-test('spawnEnvForAgent preserves inherited Anthropic API credentials when ANTHROPIC_BASE_URL is empty', () => {
+test('spawnEnvForAgent strips Anthropic API credentials when ANTHROPIC_BASE_URL is empty', () => {
   const env = spawnEnvForAgent('claude', {
     ANTHROPIC_API_KEY: 'sk-leak',
     ANTHROPIC_AUTH_TOKEN: 'sk-token-leak',
@@ -1463,12 +1295,12 @@ test('spawnEnvForAgent preserves inherited Anthropic API credentials when ANTHRO
     PATH: '/usr/bin',
   });
 
-  assert.equal(env.ANTHROPIC_API_KEY, 'sk-leak');
-  assert.equal(env.ANTHROPIC_AUTH_TOKEN, 'sk-token-leak');
+  assert.equal('ANTHROPIC_API_KEY' in env, false);
+  assert.equal('ANTHROPIC_AUTH_TOKEN' in env, false);
   assert.equal(env.PATH, '/usr/bin');
 });
 
-test('spawnEnvForAgent preserves inherited Anthropic API credentials when ANTHROPIC_BASE_URL is whitespace', () => {
+test('spawnEnvForAgent strips Anthropic API credentials when ANTHROPIC_BASE_URL is whitespace', () => {
   const env = spawnEnvForAgent('claude', {
     ANTHROPIC_API_KEY: 'sk-leak',
     ANTHROPIC_AUTH_TOKEN: 'sk-token-leak',
@@ -1476,8 +1308,8 @@ test('spawnEnvForAgent preserves inherited Anthropic API credentials when ANTHRO
     PATH: '/usr/bin',
   });
 
-  assert.equal(env.ANTHROPIC_API_KEY, 'sk-leak');
-  assert.equal(env.ANTHROPIC_AUTH_TOKEN, 'sk-token-leak');
+  assert.equal('ANTHROPIC_API_KEY' in env, false);
+  assert.equal('ANTHROPIC_AUTH_TOKEN' in env, false);
   assert.equal(env.PATH, '/usr/bin');
 });
 
@@ -1487,57 +1319,4 @@ test('spawnEnvForAgent does not mutate the input env', () => {
 
   assert.equal(original.ANTHROPIC_API_KEY, 'sk-leak');
   assert.notEqual(env, original);
-});
-
-test('spawnEnvForAgent strips inherited MIMOCODE_* env for mimo', () => {
-  const env = spawnEnvForAgent('mimo', {
-    MIMOCODE: '/leak/mimo',
-    MIMOCODE_PID: 'pid-leak',
-    MIMOCODE_RUN_ID: 'run-id-leak',
-    MIMOCODE_SERVER_PASSWORD: 'password-leak',
-    PATH: '/usr/bin',
-    OD_DAEMON_URL: 'http://127.0.0.1:7456',
-  });
-
-  assert.equal('MIMOCODE' in env, false);
-  assert.equal('MIMOCODE_PID' in env, false);
-  assert.equal('MIMOCODE_RUN_ID' in env, false);
-  assert.equal('MIMOCODE_SERVER_PASSWORD' in env, false);
-  assert.equal(env.OD_DAEMON_URL, 'http://127.0.0.1:7456');
-  assert.equal(env.PATH, '/usr/bin');
-});
-
-test('spawnEnvForAgent forces MIMOCODE_DISABLE_PROJECT_CONFIG=true for mimo when unset', () => {
-  const env = spawnEnvForAgent('mimo', {
-    PATH: '/usr/bin',
-  });
-
-  assert.equal(env.MIMOCODE_DISABLE_PROJECT_CONFIG, 'true');
-  assert.equal(env.PATH, '/usr/bin');
-});
-
-test('spawnEnvForAgent forces MIMOCODE_DISABLE_PROJECT_CONFIG=true for mimo when empty', () => {
-  const env = spawnEnvForAgent('mimo', {
-    MIMOCODE_DISABLE_PROJECT_CONFIG: '',
-    PATH: '/usr/bin',
-  });
-
-  assert.equal(env.MIMOCODE_DISABLE_PROJECT_CONFIG, 'true');
-  assert.equal(env.PATH, '/usr/bin');
-});
-
-test('spawnEnvForAgent preserves a configured MIMOCODE_DISABLE_PROJECT_CONFIG override for mimo', () => {
-  const env = spawnEnvForAgent(
-    'mimo',
-    {
-      MIMOCODE_DISABLE_PROJECT_CONFIG: '',
-      PATH: '/usr/bin',
-    },
-    {
-      MIMOCODE_DISABLE_PROJECT_CONFIG: '0',
-    },
-  );
-
-  assert.equal(env.MIMOCODE_DISABLE_PROJECT_CONFIG, '0');
-  assert.equal(env.PATH, '/usr/bin');
 });

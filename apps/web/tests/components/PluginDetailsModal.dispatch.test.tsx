@@ -76,10 +76,7 @@ function make(args: MakeArgs): InstalledPluginRecord {
 
 function render(
   record: InstalledPluginRecord,
-  options: {
-    hideUseAction?: boolean;
-    onDuplicate?: (record: InstalledPluginRecord) => void;
-  } = {},
+  options: { hideUseAction?: boolean } = {},
 ): string {
   return renderToStaticMarkup(
     <I18nProvider>
@@ -87,7 +84,6 @@ function render(
         record={record}
         onClose={() => {}}
         onUse={() => {}}
-        onDuplicate={options.onDuplicate}
         hideUseAction={options.hideUseAction}
       />
     </I18nProvider>,
@@ -229,57 +225,6 @@ describe('PluginDetailsModal dispatch', () => {
     expect(html).toContain('plugin-details-use-outside-chat');
     expect(html).toContain('Use plugin');
   });
-
-  it('offers the use/use-with-query split menu in the scenario fallback when the plugin has a query', () => {
-    // Regression (#3997 review): a text/scenario plugin with `od.useCase.query`
-    // must still offer "Use without prompt" vs prompt-loading "Use", same as the
-    // html/design/media variants — not a single plain `use` button.
-    const html = render(
-      make({
-        id: 'scenario-query',
-        title: 'Scenario With Query',
-        mode: 'prototype',
-        query: 'Draft a {{topic}} brief.',
-      }),
-    );
-    expect(html).toContain('data-detail-variant="scenario"');
-    expect(html).toContain('plugin-details-use-scenario-query');
-    // The caret that opens the use-with-query menu only exists in the split form.
-    expect(html).toContain('plugin-details-use-scenario-query-menu');
-  });
-
-  it('keeps a single use button in the scenario fallback when there is no query', () => {
-    const html = render(
-      make({ id: 'scenario-noquery', title: 'No Query', mode: 'prototype' }),
-    );
-    expect(html).toContain('data-detail-variant="scenario"');
-    expect(html).toContain('plugin-details-use-scenario-noquery');
-    expect(html).not.toContain('plugin-details-use-scenario-noquery-menu');
-  });
-
-  it('only offers duplicate in the detail menu for duplicable HTML previews', () => {
-    const duplicate = () => {};
-    const html = render(
-      make({
-        id: 'html-duplicable',
-        title: 'HTML Duplicable',
-        preview: { type: 'html', entry: './example.html' },
-      }),
-      { onDuplicate: duplicate },
-    );
-    expect(html).toContain('plugin-details-use-html-duplicable-menu');
-
-    const image = render(
-      make({
-        id: 'image-only',
-        title: 'Image Only',
-        preview: { type: 'image', entry: './final/spritesheet.png' },
-      }),
-      { onDuplicate: duplicate },
-    );
-    expect(image).toContain('plugin-details-use-image-only');
-    expect(image).not.toContain('plugin-details-use-image-only-menu');
-  });
 });
 
 describe('PluginDetailsModal common metadata coverage', () => {
@@ -362,34 +307,6 @@ describe('PluginDetailsModal common metadata coverage', () => {
     // Workflow / Capabilities / Source live after the disclosure opens.
     expect(html.indexOf('plugin-meta-advanced')).toBeLessThan(html.indexOf('Workflow'));
     expect(html.indexOf('plugin-meta-advanced')).toBeLessThan(html.indexOf('Capabilities'));
-  });
-
-  it('localizes plugin metadata chrome in Chinese', () => {
-    const html = renderToStaticMarkup(
-      <I18nProvider initial="zh-CN">
-        <PluginMetaSections
-          record={pluginWithMeta({
-            id: 'localized-meta',
-            query: 'Generate a {style} hero for {brand}.',
-          })}
-          omit={{ description: true }}
-          compact
-          heading="插件信息"
-          variant="minimal"
-        />
-      </I18nProvider>,
-    );
-
-    expect(html).toContain('插件信息');
-    expect(html).toContain('示例请求');
-    expect(html).toContain('开发者详情');
-    expect(html).toContain('输入项');
-    expect(html).toContain('工作流');
-    expect(html).toContain('能力');
-    expect(html).toContain('来源');
-    expect(html).not.toContain('Plugin info');
-    expect(html).not.toContain('Example query');
-    expect(html).not.toContain('Developer details');
   });
 
   it('surfaces Plugin info first in the design-system sidebar, with DESIGN.md below', () => {

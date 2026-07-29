@@ -274,28 +274,6 @@ describe('classifyChatRunCloseStatus (#1451 close-handler classification)', () =
     ).toBe('succeeded');
   });
 
-  it('returns succeeded on Vela ACP code 130 after clean ACP completion', () => {
-    expect(
-      classifyChatRunCloseStatus({
-        ...base,
-        code: 130,
-        signal: null,
-        acpCleanCompletion: true,
-      }),
-    ).toBe('succeeded');
-  });
-
-  it('returns failed on Vela ACP code 130 before clean ACP completion', () => {
-    expect(
-      classifyChatRunCloseStatus({
-        ...base,
-        code: 130,
-        signal: null,
-        acpCleanCompletion: false,
-      }),
-    ).toBe('failed');
-  });
-
   it('returns failed when ACP shutdown was via SIGKILL (not the narrow override)', () => {
     expect(
       classifyChatRunCloseStatus({
@@ -483,9 +461,10 @@ describe('classifyChatRunCloseStatus (#1451 close-handler classification)', () =
 });
 
 describe('applyClaudeStreamJsonRunBookkeeping', () => {
-  it('records clean completion without re-ending an already-closed stdin', () => {
+  it('records clean completion when the host-answer path already closed stdin', () => {
     const run = {
       stdinOpen: false,
+      pendingHostAnswers: new Set<string>(),
       turnCompletedCleanly: false,
       child: {
         stdin: {
@@ -504,9 +483,10 @@ describe('applyClaudeStreamJsonRunBookkeeping', () => {
     expect(run.child.stdin.end).not.toHaveBeenCalled();
   });
 
-  it('closes stdin and records clean completion on a non-tool_use terminal turn', () => {
+  it('keeps waiting when a terminal event arrives with host answers still pending', () => {
     const run = {
       stdinOpen: true,
+      pendingHostAnswers: new Set(['toolu_1']),
       turnCompletedCleanly: false,
       child: {
         stdin: {
@@ -519,126 +499,10 @@ describe('applyClaudeStreamJsonRunBookkeeping', () => {
     applyClaudeStreamJsonRunBookkeeping(run, {
       type: 'turn_end',
       stopReason: 'end_turn',
-    });
-
-    expect(run.turnCompletedCleanly).toBe(true);
-    expect(run.stdinOpen).toBe(false);
-    expect(run.child.stdin.end).toHaveBeenCalled();
-  });
-
-  it('keeps stdin open when the turn ended on a tool_use stop reason', () => {
-    const run = {
-      stdinOpen: true,
-      turnCompletedCleanly: false,
-      child: {
-        stdin: {
-          destroyed: false,
-          end: vi.fn(),
-        },
-      },
-    };
-
-    applyClaudeStreamJsonRunBookkeeping(run, {
-      type: 'turn_end',
-      stopReason: 'tool_use',
     });
 
     expect(run.turnCompletedCleanly).toBe(false);
     expect(run.stdinOpen).toBe(true);
     expect(run.child.stdin.end).not.toHaveBeenCalled();
-  });
-
-  it('keeps stdin open when usage reports a tool_use stop reason', () => {
-    const run = {
-      stdinOpen: true,
-      turnCompletedCleanly: false,
-      child: {
-        stdin: {
-          destroyed: false,
-          end: vi.fn(),
-        },
-      },
-    };
-
-    applyClaudeStreamJsonRunBookkeeping(run, {
-      type: 'usage',
-      usage: { input_tokens: 6, output_tokens: 40831 },
-      stopReason: 'tool_use',
-    });
-
-    expect(run.turnCompletedCleanly).toBe(false);
-    expect(run.stdinOpen).toBe(true);
-    expect(run.child.stdin.end).not.toHaveBeenCalled();
-  });
-
-  it('closes stdin without recording clean completion when usage reports an error termination', () => {
-    // Real Claude CLI error terminations (error_during_execution,
-    // error_max_turns, resume failures — the #4275 fixture family) emit a
-    // result frame with is_error true and stop_reason null. The turn IS over,
-    // so stdin must close — but it did not complete cleanly: marking it clean
-    // lets classifyChatRunCloseStatus translate the CLI's exit code 1 into
-    // 'succeeded' and the run fails silently with no error surfaced.
-    const run = {
-      stdinOpen: true,
-      turnCompletedCleanly: false,
-      child: {
-        stdin: {
-          destroyed: false,
-          end: vi.fn(),
-        },
-      },
-    };
-
-    applyClaudeStreamJsonRunBookkeeping(run, {
-      type: 'usage',
-      usage: null,
-      stopReason: null,
-      isError: true,
-    });
-
-    expect(run.stdinOpen).toBe(false);
-    expect(run.child.stdin.end).toHaveBeenCalled();
-    expect(run.turnCompletedCleanly).toBe(false);
-
-    expect(classifyChatRunCloseStatus({
-      cancelRequested: false,
-      code: 1,
-      signal: null,
-      acpCleanCompletion: false,
-      artifactQuietShutdownRequested: false,
-      turnCompletedCleanly: run.turnCompletedCleanly,
-      artifactProducedThisRun: false,
-    })).toBe('failed');
-  });
-
-  it('closes stdin and records clean completion after an AskUserQuestion tool_use followed by end_turn (#4273)', () => {
-    // Regression test: the dead AskUserQuestion detection branch used to add
-    // the tool_use id to pendingHostAnswers and return early, preventing stdin
-    // from ever closing when the subsequent turn_end arrived.
-    const run = {
-      stdinOpen: true,
-      turnCompletedCleanly: false,
-      child: {
-        stdin: {
-          destroyed: false,
-          end: vi.fn(),
-        },
-      },
-    };
-
-    applyClaudeStreamJsonRunBookkeeping(run, {
-      type: 'tool_use',
-      name: 'AskUserQuestion',
-      id: 'auq_123',
-    });
-
-    applyClaudeStreamJsonRunBookkeeping(run, {
-      type: 'turn_end',
-      stopReason: 'end_turn',
-    });
-
-    expect(run.turnCompletedCleanly).toBe(true);
-    expect(run.stdinOpen).toBe(false);
-    expect(run.child.stdin.end).toHaveBeenCalled();
   });
 });

@@ -11,36 +11,17 @@ import {
   DESKTOP_UPDATE_CHANNELS,
   DESKTOP_UPDATE_MODES,
   DESKTOP_UPDATE_STATES,
-  type DesktopExportArtifactInput,
-  type DesktopExportArtifactResult,
   type DesktopExportPdfInput,
   type DesktopExportPdfResult,
-  type DesktopRenderSlidesInput,
-  type DesktopRenderSlidesResult,
   type DesktopUpdateStatusSnapshot,
 } from "@open-design/sidecar-proto";
-import type {
-  OpenDesignHostActionResult,
-  OpenDesignHostCaptureResult,
-  OpenDesignHostUpdaterActionOptions,
-  OpenDesignHostUpdaterMenuLabels,
-  OpenDesignHostUpdaterOpenDialogRequest,
-} from "@open-design/host";
+import type { OpenDesignHostActionResult, OpenDesignHostCaptureResult, OpenDesignHostUpdaterActionOptions } from "@open-design/host";
 
-import { renderDeckSlides } from "./deck-capture.js";
 import { openValidatedDirectory } from "./open-path.js";
-import { exportArtifact as exportArtifactFromHtml } from "./artifact-export.js";
 import { createElectronPdfTarget, exportPdfFromHtml, savePrintReadyDocumentAsPdf } from "./pdf-export.js";
 import { SPLASH_VIDEO_DATA_URL } from "./splash-video.js";
-import { RendererCrashLoopBreaker } from "./renderer-crash-loop.js";
 import type { PrintReadyPdfOptions } from "./pdf-export.js";
 import type { DesktopUpdater } from "./updater.js";
-import { parseDesktopUpdateMenuLabels } from "./update-menu.js";
-import {
-  checkUpdateRestartSafety,
-  parseUpdateActionRequest,
-  updateRestartSafetyError,
-} from "./update-preflight.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -237,22 +218,9 @@ export function signDesktopImportToken(
   return [options.nonce, options.exp, signature].join(DESKTOP_IMPORT_TOKEN_FIELD_SEP);
 }
 
-/**
- * An HTTP 5xx main-frame document is a failed load. Electron resolves
- * `loadURL` for any response that carries a body — `did-fail-load` fires
- * only for net::ERR_* failures — so an error document (e.g. the packaged
- * od:// proxy's synthetic 502) parks the renderer on a dead page the
- * recovery loop never sees. Route it into the same renderer-failed
- * reload path as a network failure. Electron reports non-HTTP
- * navigations with 0 / -1, which must never trip this.
- */
-export function isRendererFailureHttpStatus(httpResponseCode: number): boolean {
-  return httpResponseCode >= 500;
-}
-
 const PENDING_POLL_MS = 120;
 const RUNNING_POLL_MS = 2000;
-// Minimum time the light splash window stays on screen before we reveal the main
+// Minimum time the white splash window stays on screen before we reveal the main
 // window. It is sized to outlast the ~1.7s clip so the brand animation always
 // plays through. The splash is shown immediately and in parallel with the
 // daemon/web boot (see the packaged entry), so this time overlaps startup rather
@@ -269,16 +237,11 @@ const WEB_MOUNT_POLL_MS = 80;
 const WEB_MOUNT_REVEAL_TIMEOUT_MS = 15000;
 
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
-const summarizeExpression = (expression: string): Record<string, unknown> => ({
-  expressionLength: expression.length,
-  expressionPreview: expression.length > 120 ? `${expression.slice(0, 120)}...` : expression,
-});
 const MAX_CONSOLE_ENTRIES = 200;
 const DESKTOP_PET_WINDOW_WIDTH = 360;
 const DESKTOP_PET_WINDOW_HEIGHT = 300;
 const DESKTOP_PET_WINDOW_MARGIN = 24;
 const UPDATER_STATUS_EVENT = "od:update:status-changed";
-const UPDATER_OPEN_DIALOG_EVENT = "od:update:open-dialog";
 const DESIGN_BROWSER_PARTITION = "persist:open-design-design-browser";
 const UPDATER_IPC_CHANNELS = [
   "od:update:status",
@@ -287,7 +250,6 @@ const UPDATER_IPC_CHANNELS = [
   "od:update:download",
   "od:update:install",
   "od:update:quit",
-  "od:update:set-menu-labels",
 ] as const;
 
 export type DesktopEvalInput = {
@@ -351,10 +313,7 @@ export type DesktopRuntime = {
   click(input: DesktopClickInput): Promise<DesktopClickResult>;
   console(): DesktopConsoleResult;
   eval(input: DesktopEvalInput): Promise<DesktopEvalResult>;
-  exportArtifact(input: DesktopExportArtifactInput): Promise<DesktopExportArtifactResult>;
   exportPdf(input: DesktopExportPdfInput): Promise<DesktopExportPdfResult>;
-  openUpdateDialog(request: OpenDesignHostUpdaterOpenDialogRequest): void;
-  renderSlides(input: DesktopRenderSlidesInput): Promise<DesktopRenderSlidesResult>;
   screenshot(input: DesktopScreenshotInput): Promise<DesktopScreenshotResult>;
   show(): void;
   status(): DesktopStatusSnapshot;
@@ -392,12 +351,6 @@ export type DesktopRuntimeOptions = {
   osLocale?: string;
   preloadPath?: string;
   /**
-   * User-visible app/window name. Packaged release channels pass their
-   * channel-specific product name here so concurrent installs remain
-   * distinguishable in the OS window switcher.
-   */
-  windowTitle?: string;
-  /**
    * Round-5 (lefarcen P1, mrcfps): lazy re-handshake hook. The runtime
    * calls this when the daemon answers `503 DESKTOP_AUTH_PENDING` so a
    * daemon-restart-mid-session, or a missed startup-window race, no
@@ -432,15 +385,6 @@ export type DesktopRuntimeOptions = {
    */
   splashStartedAt?: number;
   updater?: DesktopUpdater;
-  /**
-   * Fired once the main window is actually revealed (the web app mounted and
-   * the window is shown) — the real "app is running" moment, distinct from
-   * `createDesktopRuntime` returning (which starts async bootstrap via
-   * `void tick()` and returns before the first load). Used to mark the session
-   * as having reached running for abnormal-exit detection.
-   */
-  onRevealed?: () => void;
-  onUpdateMenuLabels?: (labels: OpenDesignHostUpdaterMenuLabels) => void;
 };
 
 const DESKTOP_IMPORT_TOKEN_HEADER = "X-OD-Desktop-Import-Token";
@@ -848,13 +792,11 @@ const MAC_WINDOW_CHROME_CSS = `
   }
 `;
 
-// Light-background startup splash shown while the web runtime boots. It plays
+// White-background startup splash shown while the web runtime boots. It plays
 // the brand intro clip once and then holds on its final settled logo frame until
 // the main window is ready. The clip is embedded as a base64 data URL so it
 // renders identically in dev and in packaged builds (see `splash-video.ts`).
 function createPendingHtml(): string {
-  const start = splashStagePayload("starting");
-  const initialPct = Math.max(0, Math.min(100, Math.round((start.step / start.total) * 100)));
   return `data:text/html;charset=utf-8,${encodeURIComponent(`<!doctype html>
 <html>
   <head>
@@ -863,7 +805,7 @@ function createPendingHtml(): string {
     <style>
       html,
       body {
-        background: #f2f4f5;
+        background: #ffffff;
         height: 100%;
         margin: 0;
         overflow: hidden;
@@ -874,60 +816,11 @@ function createPendingHtml(): string {
         justify-content: center;
       }
       video {
-        background: #f2f4f5;
+        background: #ffffff;
         height: auto;
         max-height: 100%;
         max-width: 100%;
         width: auto;
-      }
-      .boot-stage {
-        bottom: 56px;
-        color: #7a838a;
-        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-        font-size: 13px;
-        left: 0;
-        letter-spacing: 0.02em;
-        position: fixed;
-        right: 0;
-        text-align: center;
-        transition: opacity 200ms cubic-bezier(0.23, 1, 0.32, 1);
-        user-select: none;
-      }
-      .boot-stage-swapping {
-        opacity: 0;
-        transition-duration: 140ms;
-      }
-      .boot-stage-step {
-        color: #9aa2a8;
-        font-variant-numeric: tabular-nums;
-        margin-right: 7px;
-      }
-      .boot-progress {
-        background: rgba(122, 131, 138, 0.18);
-        border-radius: 999px;
-        bottom: 84px;
-        height: 3px;
-        left: 50%;
-        overflow: hidden;
-        position: fixed;
-        transform: translateX(-50%);
-        width: 200px;
-      }
-      .boot-progress-fill {
-        background: #7a838a;
-        border-radius: 999px;
-        height: 100%;
-        transition: width 320ms cubic-bezier(0.23, 1, 0.32, 1);
-      }
-      .boot-dots .dot {
-        animation: boot-dot 1.4s cubic-bezier(0.23, 1, 0.32, 1) infinite;
-        display: inline-block;
-      }
-      .boot-dots .dot:nth-child(2) { animation-delay: 0.2s; }
-      .boot-dots .dot:nth-child(3) { animation-delay: 0.4s; }
-      @keyframes boot-dot {
-        0%, 60%, 100% { opacity: 0.25; }
-        30% { opacity: 1; }
       }
     </style>
   </head>
@@ -940,12 +833,6 @@ function createPendingHtml(): string {
       disablepictureinpicture
       src="${SPLASH_VIDEO_DATA_URL}"
     ></video>
-    <div class="boot-progress" aria-hidden="true">
-      <div class="boot-progress-fill" id="boot-progress-fill" data-pct="${initialPct}" style="width: ${initialPct}%;"></div>
-    </div>
-    <div class="boot-stage" id="boot-stage" aria-live="polite">
-      <span class="boot-stage-step" id="boot-stage-step">${start.step}/${start.total}</span><span id="boot-stage-text">${start.label}</span><span class="boot-dots" aria-hidden="true"><span class="dot">.</span><span class="dot">.</span><span class="dot">.</span></span>
-    </div>
     <script>
       (function () {
         var video = document.getElementById("splash");
@@ -958,435 +845,9 @@ function createPendingHtml(): string {
         video.addEventListener("loadeddata", play);
         play();
       })();
-      // Accepts the structured { step, total, label } payload (and tolerates a
-      // bare label string for back-compat). The step counter + progress bar give
-      // a slow cold boot a sense of how far along it is; the bar only ever grows
-      // so a re-asserted earlier stage cannot make it lurch backwards.
-      window.__odSplashSetStage = function (info) {
-        var data = (typeof info === "string") ? { label: info } : (info || {});
-        var wrap = document.getElementById("boot-stage");
-        var text = document.getElementById("boot-stage-text");
-        var stepEl = document.getElementById("boot-stage-step");
-        var fill = document.getElementById("boot-progress-fill");
-        if (!wrap || !text) return;
-        var step = (typeof data.step === "number") ? data.step : null;
-        var total = (typeof data.total === "number" && data.total > 0) ? data.total : null;
-        if (fill && step != null && total != null) {
-          var pct = Math.max(0, Math.min(100, Math.round((step / total) * 100)));
-          var prev = parseFloat(fill.getAttribute("data-pct")) || 0;
-          if (pct >= prev) {
-            fill.style.width = pct + "%";
-            fill.setAttribute("data-pct", String(pct));
-          }
-        }
-        var label = (typeof data.label === "string") ? data.label : null;
-        var stepText = (step != null && total != null) ? (step + "/" + total) : null;
-        var labelSame = (label == null) || text.textContent === label;
-        var stepSame = (stepText == null) || !stepEl || stepEl.textContent === stepText;
-        if (labelSame && stepSame) return;
-        wrap.classList.add("boot-stage-swapping");
-        setTimeout(function () {
-          if (label != null) text.textContent = label;
-          if (stepEl && stepText != null) stepEl.textContent = stepText;
-          wrap.classList.remove("boot-stage-swapping");
-        }, 140);
-      };
     </script>
   </body>
 </html>`)}`;
-}
-
-/**
- * Last-resort error screen shown when the renderer crash-loop breaker opens.
- * A deterministic renderer crash reloads-and-crashes forever, leaving a blank
- * window; parking here gives the user a calm explanation instead. It is a
- * fully static, dependency-free page (no daemon, no preload, no network) so it
- * renders even when everything else is wedged, and the failing app bundle
- * cannot take it down. Recovery is automatic (the poll loop re-arms after a
- * quiet cooldown); reinstalling is the manual escape hatch.
- */
-interface RendererCrashScreenContext {
-  appVersion: string;
-  platform: NodeJS.Platform;
-  osVersion: string;
-  reason: string;
-  exitCode: number | null;
-}
-
-const CRASH_REPORT_ISSUES_URL = "https://github.com/nexu-io/open-design/issues/new";
-const SUPPORT_EMAIL = "support@open-design.ai";
-
-// Narrow allowlist for the crash screen's "Email us" action: only a mailto
-// addressed to our own support address, carrying nothing but the crash-screen's
-// own `subject`/`body`, opens. Validating just protocol+pathname is not enough —
-// `mailto:support@open-design.ai?bcc=attacker@example.com` (or `?to=`/`?cc=`)
-// keeps `pathname === "support@open-design.ai"` yet smuggles extra recipients
-// and headers through to `shell.openExternal`. Because this predicate widens the
-// renderer-exposed `shell:open-external` bridge past http, a compromised
-// renderer could otherwise launch the mail client with arbitrary recipients, so
-// reject any `to`/`cc`/`bcc`/unknown query key.
-export function isSupportMailtoUrl(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-    if (parsed.protocol !== "mailto:") return false;
-    if (parsed.pathname.toLowerCase() !== SUPPORT_EMAIL) return false;
-    for (const [key, value] of parsed.searchParams) {
-      if (key !== "subject" && key !== "body") return false;
-      // Reject a decoded CR/LF in the value: `subject=ok%0D%0ABcc:attacker@…`
-      // would otherwise smuggle a header past the key allowlist and inject an
-      // extra recipient once the mail client parses the mailto.
-      if (/[\r\n]/.test(value)) return false;
-    }
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function osLabelForReport(platform: NodeJS.Platform): string {
-  if (platform === "darwin") return "macOS";
-  if (platform === "win32") return "Windows";
-  if (platform === "linux") return "Linux";
-  return platform;
-}
-
-function formatRendererExitCode(code: number | null): string {
-  if (code == null) return "unknown";
-  // Renderer exit codes are signed 32-bit; the unsigned hex form (e.g.
-  // 0x80000003 = a V8/Chromium CHECK/breakpoint) is how they're recognizable,
-  // so show both the raw number and the hex.
-  return `${code} (0x${(code >>> 0).toString(16).toUpperCase()})`;
-}
-
-// Prefilled GitHub new-issue URL. The daemon is still alive on a renderer
-// crash, so the "Save logs…" button can produce a diagnostics bundle; this
-// report body asks the user to attach it (neither an issue URL nor mailto can
-// carry a file attachment) and auto-fills the version/OS/exit-code that a
-// triager always needs.
-function buildCrashReportUrl(ctx: RendererCrashScreenContext): string {
-  const title = `Desktop app keeps crashing (renderer ${ctx.reason})`;
-  const body = [
-    "**What happened**",
-    "The Open Design desktop window crashed several times in a row and showed the recovery screen.",
-    "",
-    "**What I was doing when it started** (please add any detail):",
-    "",
-    "",
-    "> Please attach the diagnostics file you saved with the “Save logs…” button on the recovery screen — it has the logs we need.",
-    "",
-    "---",
-    "_Auto-filled:_",
-    `- App version: ${ctx.appVersion}`,
-    `- OS: ${osLabelForReport(ctx.platform)} ${ctx.osVersion}`,
-    `- Renderer exit: ${ctx.reason}, code ${formatRendererExitCode(ctx.exitCode)}`,
-  ].join("\n");
-  return `${CRASH_REPORT_ISSUES_URL}?${new URLSearchParams({ title, body }).toString()}`;
-}
-
-// Prefilled mailto for the "Email us" action — same auto-filled diagnostics as
-// the issue, for users who'd rather email than open a GitHub account.
-function buildCrashMailtoUrl(ctx: RendererCrashScreenContext): string {
-  const subject = `Open Design keeps crashing (renderer ${ctx.reason})`;
-  const body = [
-    "The Open Design desktop app crashed several times in a row on my device.",
-    "",
-    "(If possible, attach the diagnostics file you saved with the “Save logs…” button.)",
-    "",
-    `App version: ${ctx.appVersion}`,
-    `OS: ${osLabelForReport(ctx.platform)} ${ctx.osVersion}`,
-    `Renderer exit: ${ctx.reason}, code ${formatRendererExitCode(ctx.exitCode)}`,
-  ].join("\n");
-  return `mailto:${SUPPORT_EMAIL}?${new URLSearchParams({ subject, body }).toString()}`;
-}
-
-function createRendererCrashHtml(ctx: RendererCrashScreenContext): string {
-  const issueUrl = buildCrashReportUrl(ctx);
-  const mailtoUrl = buildCrashMailtoUrl(ctx);
-  return `data:text/html;charset=utf-8,${encodeURIComponent(`<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>Open Design</title>
-    <style>
-      /* Palette mirrors the app's neutral design tokens (apps/web tokens.css):
-         warm off-white + near-black, no accent color — matching the black/white
-         onboarding rather than a stray blue. */
-      :root { color-scheme: light dark; }
-      html, body {
-        background: #faf9f7;
-        color: #1a1916;
-        height: 100%;
-        margin: 0;
-        overflow: hidden;
-      }
-      body {
-        align-items: center;
-        display: flex;
-        justify-content: center;
-        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-        -webkit-user-select: none;
-        user-select: none;
-      }
-      .panel {
-        max-width: 460px;
-        padding: 32px;
-        text-align: center;
-      }
-      .title {
-        font-size: 17px;
-        font-weight: 600;
-        margin: 0 0 10px;
-      }
-      .body {
-        color: #57534d;
-        font-size: 14px;
-        line-height: 1.55;
-        margin: 0 0 6px;
-      }
-      .actions {
-        display: flex;
-        gap: 10px;
-        justify-content: center;
-        margin: 22px 0 0;
-      }
-      button {
-        font: inherit;
-        font-size: 13px;
-        font-weight: 500;
-        border-radius: 8px;
-        padding: 9px 16px;
-        cursor: pointer;
-        border: 1px solid transparent;
-        transition: background 200ms cubic-bezier(0.23, 1, 0.32, 1),
-          border-color 200ms cubic-bezier(0.23, 1, 0.32, 1);
-      }
-      button:disabled { cursor: default; opacity: 0.6; }
-      /* Monochrome primary: near-black on the warm off-white. */
-      .primary { background: #1a1916; color: #faf9f7; }
-      .primary:hover { background: #0d0c0a; }
-      .secondary { background: transparent; color: #1a1916; border-color: rgba(26, 25, 22, 0.2); }
-      .secondary:hover { border-color: rgba(26, 25, 22, 0.36); }
-      .status {
-        color: #8f8b84;
-        font-size: 12px;
-        line-height: 1.5;
-        margin: 12px 0 0;
-        min-height: 16px;
-      }
-      .email {
-        color: #8f8b84;
-        font-size: 13px;
-        line-height: 1.5;
-        margin: 14px 0 0;
-      }
-      .email a { color: #1a1916; text-decoration: underline; text-underline-offset: 2px; }
-      .hint {
-        color: #8f8b84;
-        font-size: 13px;
-        line-height: 1.5;
-        margin: 16px 0 0;
-      }
-      @media (prefers-color-scheme: dark) {
-        html, body { background: #1a1917; color: #e8e4dc; }
-        .body { color: #9a9690; }
-        .hint, .status, .email { color: #6e6b65; }
-        /* Dark inverts the monochrome pair — a near-black button would vanish
-           against the dark bg, so use a light button with dark text. */
-        .primary { background: #e8e4dc; color: #1a1917; }
-        .primary:hover { background: #f2ede4; }
-        .secondary { color: #e8e4dc; border-color: rgba(232, 228, 220, 0.28); }
-        .secondary:hover { border-color: rgba(232, 228, 220, 0.5); }
-        .email a { color: #e8e4dc; }
-      }
-    </style>
-  </head>
-  <body>
-    <div class="panel">
-      <p class="title">Open Design keeps closing on this device</p>
-      <p class="body">The app window crashed several times in a row, so it has paused to avoid getting stuck reloading.</p>
-      <p class="body">It will try to recover on its own in a few minutes.</p>
-      <div class="actions">
-        <button id="report" class="primary">Report a problem</button>
-        <button id="logs" class="secondary">Save logs…</button>
-      </div>
-      <p class="hint" id="diag-note">Saved logs include a crash memory snapshot so we can find the cause. Nothing is sent unless you choose to share it.</p>
-      <p class="status" id="status" aria-live="polite"></p>
-      <p class="email" id="email-line">Prefer email? <a href="#" id="email">Contact ${SUPPORT_EMAIL}</a></p>
-      <p class="hint">If this keeps happening, quitting and reinstalling Open Design usually resolves it.</p>
-    </div>
-    <script>
-      (function () {
-        var issueUrl = ${JSON.stringify(issueUrl)};
-        var mailtoUrl = ${JSON.stringify(mailtoUrl)};
-        var host = window.__od__;
-        var diag = window.openDesignDesktop;
-        var report = document.getElementById("report");
-        var logs = document.getElementById("logs");
-        var emailLine = document.getElementById("email-line");
-        var email = document.getElementById("email");
-        var status = document.getElementById("status");
-        function say(t) { if (status) status.textContent = t; }
-        var canOpen = host && typeof host.openExternal === "function";
-        // Actions reuse IPC the preload already exposes; if the bridge is
-        // missing (preload failed to load) hide the dead control instead of a
-        // no-op.
-        if (report) {
-          if (canOpen) {
-            report.addEventListener("click", function () { host.openExternal(issueUrl); });
-          } else { report.style.display = "none"; }
-        }
-        if (email) {
-          if (canOpen) {
-            email.addEventListener("click", function (e) { e.preventDefault(); host.openExternal(mailtoUrl); });
-          } else if (emailLine) { emailLine.style.display = "none"; }
-        }
-        if (logs) {
-          if (diag && typeof diag.exportDiagnostics === "function") {
-            logs.addEventListener("click", function () {
-              logs.disabled = true;
-              say("Saving logs…");
-              Promise.resolve(diag.exportDiagnostics()).then(function (r) {
-                if (r && r.ok) say("Logs saved — please attach that file to your report.");
-                else if (r && r.cancelled) say("");
-                else say("Could not save logs.");
-              }).catch(function () { say("Could not save logs."); }).then(function () { logs.disabled = false; });
-            });
-          } else { logs.style.display = "none"; }
-        }
-      })();
-    </script>
-  </body>
-</html>`)}`;
-}
-
-/**
- * Boot phases surfaced as a muted status line under the splash logo. The cold
- * boot on a slow machine can hold the splash's settled final frame for many
- * seconds; the stage text, the step counter ("3/7"), the filling progress bar,
- * and the continuously pulsing dots are what tell the user the app is working,
- * not hung. Stage transitions follow the repo animation philosophy: 140ms
- * ease-out fade out, 200ms ease-out fade in.
- *
- * The set is intentionally fine-grained: a slow first run spends most of its
- * time in the two long native waits (daemon coming online, web server coming
- * online), so we mark BOTH the "starting X" edge and the "X ready" edge of each
- * so the counter visibly advances right after each long wait clears. More steps
- * = the wait reads as forward motion instead of one frozen label.
- */
-export type SplashBootStage =
-  | "starting"
-  | "engine"
-  | "engineReady"
-  | "interface"
-  | "interfaceReady"
-  | "workspace"
-  | "finishing";
-
-/**
- * Canonical boot order. The index in this array drives the "N/total" step
- * counter and the progress-bar fill, so keep it in the real chronological order
- * the stages fire. `setSplashStage` clamps progress so a re-asserted earlier
- * stage (e.g. the idempotent "workspace" re-fire at the reveal gate) can never
- * make the bar jump backwards.
- */
-const SPLASH_STAGE_SEQUENCE: readonly SplashBootStage[] = [
-  "starting",
-  "engine",
-  "engineReady",
-  "interface",
-  "interfaceReady",
-  "workspace",
-  "finishing",
-];
-
-const SPLASH_STAGE_LABELS: Record<SplashBootStage, string> = {
-  starting: "Starting Open Design",
-  engine: "Starting the local engine",
-  engineReady: "Local engine ready",
-  interface: "Preparing the interface",
-  interfaceReady: "Interface ready",
-  workspace: "Opening your workspace",
-  finishing: "Almost ready",
-};
-
-const SPLASH_STAGE_TOTAL = SPLASH_STAGE_SEQUENCE.length;
-
-/** Step/label payload handed to the renderer's `__odSplashSetStage`. */
-function splashStagePayload(stage: SplashBootStage): { step: number; total: number; label: string } {
-  const index = SPLASH_STAGE_SEQUENCE.indexOf(stage);
-  return {
-    step: index < 0 ? 1 : index + 1,
-    total: SPLASH_STAGE_TOTAL,
-    label: SPLASH_STAGE_LABELS[stage],
-  };
-}
-
-/**
- * Narrow view of the splash window that the stage updater needs. A real
- * `BrowserWindow` satisfies this structurally; tests pass a mock so the
- * load-ready/replay logic is exercisable without a live Electron renderer.
- */
-export type SplashStageSurface = {
-  isDestroyed(): boolean;
-  webContents: {
-    executeJavaScript(code: string, userGesture?: boolean): Promise<unknown>;
-    once(event: "did-finish-load", listener: () => void): void;
-  };
-};
-
-type SplashStageState = { ready: boolean; pending: SplashBootStage | null };
-
-// Per-splash readiness + the latest stage requested before the page finished
-// loading. Keyed weakly so a closed splash is collected without bookkeeping.
-const splashStageState = new WeakMap<SplashStageSurface, SplashStageState>();
-
-function applySplashStage(splash: SplashStageSurface, stage: SplashBootStage): void {
-  void splash.webContents
-    .executeJavaScript(
-      `window.__odSplashSetStage && window.__odSplashSetStage(${JSON.stringify(splashStagePayload(stage))});`,
-      true,
-    )
-    .catch(() => undefined);
-}
-
-/**
- * Arm load-ready tracking for a freshly created splash. MUST be called before
- * `loadURL` so the `did-finish-load` listener cannot miss the event. Until the
- * splash data-URL has loaded (and defined `window.__odSplashSetStage`), stage
- * updates are stashed rather than executed against a renderer that has no
- * setter yet — otherwise the first update (the daemon phase, fired right after
- * window creation on a cold boot) is silently dropped. The latest stashed
- * stage is replayed once the page reports it has loaded.
- */
-export function registerSplashStageTracking(splash: SplashStageSurface): void {
-  const state: SplashStageState = { ready: false, pending: null };
-  splashStageState.set(splash, state);
-  splash.webContents.once("did-finish-load", () => {
-    state.ready = true;
-    if (state.pending != null) {
-      const stage = state.pending;
-      state.pending = null;
-      applySplashStage(splash, stage);
-    }
-  });
-}
-
-/**
- * Update the splash status line. Safe to call with a destroyed/absent window
- * and idempotent for repeated stages, so callers can fire-and-forget at each
- * boot phase boundary (packaged sidecar spawns, runtime reveal gate). Stage
- * updates that arrive before the splash page has loaded are deferred and
- * replayed on load (see `registerSplashStageTracking`); a window with no
- * tracking registered (e.g. an unmanaged test surface) applies immediately.
- */
-export function setSplashStage(splash: SplashStageSurface | null, stage: SplashBootStage): void {
-  if (splash == null || splash.isDestroyed()) return;
-  const state = splashStageState.get(splash);
-  if (state == null || state.ready) {
-    applySplashStage(splash, stage);
-    return;
-  }
-  state.pending = stage;
 }
 
 export type SplashWindowHandle = {
@@ -1403,7 +864,7 @@ export type SplashWindowHandle = {
 };
 
 /**
- * Create and immediately show the light brand-splash window. The packaged entry
+ * Create and immediately show the white brand-splash window. The packaged entry
  * calls this BEFORE awaiting the daemon/web sidecars so the animation masks the
  * whole cold boot (no black no-window gap); the desktop runtime then adopts it
  * via `DesktopRuntimeOptions.splashWindow` + `splashStartedAt` and closes it
@@ -1415,7 +876,7 @@ export function createSplashWindow(): SplashWindowHandle {
   const startedAt = Date.now();
   const splash = new BrowserWindow({
     autoHideMenuBar: true,
-    backgroundColor: "#f2f4f5",
+    backgroundColor: "#ffffff",
     frame: false,
     height: 900,
     resizable: false,
@@ -1428,10 +889,6 @@ export function createSplashWindow(): SplashWindowHandle {
       sandbox: true,
     },
   });
-  // Arm stage tracking before loadURL so a stage update fired before the
-  // page loads is deferred and replayed rather than dropped (see
-  // `registerSplashStageTracking`).
-  registerSplashStageTracking(splash);
   void splash.loadURL(createPendingHtml());
   return { startedAt, window: splash };
 }
@@ -1700,51 +1157,33 @@ export function hideWindowExitingFullscreen(window: WindowFullscreenSurface): vo
   window.hide();
 }
 
-// Some image exports reach the renderer through a normal `<a download>` link.
-// Without this hook Electron writes the bytes straight to the OS Downloads
-// folder, so the user never gets to pick a destination. setSaveDialogOptions
-// makes Electron show the native Save As panel before the download starts.
+// Some exports reach the renderer through a normal `<a download>` link
+// (server-written PPTX, browser-generated image blobs). Without this hook
+// Electron writes the bytes straight to the OS Downloads folder, so the user
+// never gets to pick a destination. setSaveDialogOptions makes Electron show
+// the native Save As panel before the download starts.
 const IMAGE_SAVE_AS_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp"]);
-// Every programmatic export that streams a download must prompt Save As, incl.
-// the screenshot PDF (the default Export PDF flow) — otherwise it silently lands
-// in the OS Downloads folder while PPTX/images prompt correctly.
-const SAVE_AS_EXTENSIONS = new Set([".pptx", ".pdf", ...IMAGE_SAVE_AS_EXTENSIONS]);
-
-interface SaveAsDialogOptions {
-  title: string;
-  defaultPath: string;
-  filters: Array<{ name: string; extensions: string[] }>;
-  properties: Array<"dontAddToRecent">;
-}
-
-// Pure: the Save As dialog options for a downloaded filename, or null when the
-// extension isn't one we intercept. Exported for tests.
-export function saveAsDialogOptionsForFilename(filename: string): SaveAsDialogOptions | null {
-  const dot = filename.lastIndexOf(".");
-  const ext = dot >= 0 ? filename.slice(dot).toLowerCase() : "";
-  if (!SAVE_AS_EXTENSIONS.has(ext)) return null;
-  const filters = IMAGE_SAVE_AS_EXTENSIONS.has(ext)
-    ? [
-        { name: "Images", extensions: ["png", "jpg", "jpeg", "webp"] },
-        { name: "All Files", extensions: ["*"] },
-      ]
-    : ext === ".pdf"
-      ? [
-          { name: "PDF Document", extensions: ["pdf"] },
-          { name: "All Files", extensions: ["*"] },
-        ]
-      : [
-          { name: "PowerPoint Presentation", extensions: ["pptx"] },
-          { name: "All Files", extensions: ["*"] },
-        ];
-  return { title: "Save As", defaultPath: filename, filters, properties: ["dontAddToRecent"] };
-}
+const SAVE_AS_EXTENSIONS = new Set([".pptx", ...IMAGE_SAVE_AS_EXTENSIONS]);
 
 function attachDownloadSaveAsDialog(window: BrowserWindow): void {
   window.webContents.session.on("will-download", (_event, item) => {
-    const options = saveAsDialogOptionsForFilename(item.getFilename());
-    if (!options) return;
-    item.setSaveDialogOptions(options);
+    const filename = item.getFilename();
+    const dot = filename.lastIndexOf(".");
+    const ext = dot >= 0 ? filename.slice(dot).toLowerCase() : "";
+    if (!SAVE_AS_EXTENSIONS.has(ext)) return;
+    item.setSaveDialogOptions({
+      title: "Save As",
+      defaultPath: filename,
+      filters: IMAGE_SAVE_AS_EXTENSIONS.has(ext)
+        ? [
+            { name: "Images", extensions: ["png", "jpg", "jpeg", "webp"] },
+            { name: "All Files", extensions: ["*"] },
+          ]
+        : [
+            { name: "PowerPoint Presentation", extensions: ["pptx"] },
+            { name: "All Files", extensions: ["*"] },
+          ],
+    });
   });
 }
 
@@ -1822,16 +1261,7 @@ function checkOptionsFromHost(options: unknown): { autoDownload?: boolean } | un
 
 async function reportRendererCrash(
   options: DesktopRuntimeOptions,
-  properties: {
-    reason: string;
-    exit_code: number | null;
-    loop_tripped?: boolean;
-    // Set on the bounded "recovery-attempt" signal (reason === "recovery-attempt"):
-    // the Nth time the breaker re-armed and tried to actively recover this
-    // session. Lets triage see chronic loopers (index keeps climbing) apart from
-    // devices that recovered (no further recovery-attempt events).
-    recovery_attempt?: number;
-  },
+  properties: { reason: string; exit_code: number | null },
 ): Promise<void> {
   try {
     // discoverDaemonUrl returns the real http://127.0.0.1:<port> URL the
@@ -1850,11 +1280,6 @@ async function reportRendererCrash(
         properties: {
           reason: properties.reason,
           exit_code: properties.exit_code,
-          // Marks the single crash that tripped the loop breaker, so a crash
-          // loop is one flagged event instead of thousands of anonymous ones.
-          loop_tripped: properties.loop_tripped ?? false,
-          // Present on the bounded recovery-attempt signal; null on real crashes.
-          recovery_attempt: properties.recovery_attempt ?? null,
         },
       }),
     });
@@ -1862,31 +1287,6 @@ async function reportRendererCrash(
     // Best-effort. The user is already in a degraded state — failing to
     // report the crash must not cascade into another failure path.
   }
-}
-
-/**
- * Native directory picker, parented to the renderer window that initiated
- * the IPC call. Parenting makes the dialog window-modal and hands it
- * keyboard focus (most visibly on Windows): without a parent the focus
- * stays on the Electron window, so pressing Esc falls through to the web
- * app and closes the in-app modal *behind* the still-open native picker.
- * With a parent the picker owns Esc and cancels itself.
- */
-async function showDirectoryPickerForSender(
-  sender: Electron.WebContents,
-): Promise<Electron.OpenDialogReturnValue> {
-  const parent =
-    BrowserWindow.fromWebContents(sender) ?? BrowserWindow.getFocusedWindow();
-  const pickerOptions: Electron.OpenDialogOptions = {
-    // `dontAddToRecent` avoids shell recent-items / jump-list writes against
-    // the browsed folder. Combined with not seeding a cloud-backed default
-    // location, this trims the shell work that stalls the native picker on
-    // OneDrive-backed folders (see AppHangB1 note in diagnostics.ts).
-    properties: ["openDirectory", "createDirectory", "dontAddToRecent"],
-  };
-  return parent
-    ? dialog.showOpenDialog(parent, pickerOptions)
-    : dialog.showOpenDialog(pickerOptions);
 }
 
 export async function createDesktopRuntime(options: DesktopRuntimeOptions): Promise<DesktopRuntime> {
@@ -1909,9 +1309,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     ipcMain.removeHandler(channel);
   }
   ipcMain.handle("shell:open-external", async (_event, url: string) => {
-    // http(s) as before, plus a mailto strictly to our support address (the
-    // crash screen's "Email us"); no other scheme opens.
-    if (!isHttpUrl(url) && !isSupportMailtoUrl(url)) return false;
+    if (!isHttpUrl(url)) return false;
     try {
       await shell.openExternal(url);
       return true;
@@ -1935,7 +1333,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   // import boundary while leaving web-only deployments untouched.
   ipcMain.handle(
     "dialog:pick-and-import",
-    async (event, init?: { name?: string; skillId?: string | null; designSystemId?: string | null }) => {
+    async (_event, init?: { name?: string; skillId?: string | null; designSystemId?: string | null }) => {
       // Defensive failsafe for non-production runtimes (test harnesses
       // that construct createDesktopRuntime without a secret). Round-5
       // production wiring in runDesktopMain ALWAYS passes the per-process
@@ -1958,7 +1356,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       if (!apiBaseUrl) {
         return { ok: false, reason: "daemon API URL not available" };
       }
-      const result = await showDirectoryPickerForSender(event.sender);
+      const result = await dialog.showOpenDialog({ properties: ["openDirectory", "createDirectory"] });
       if (result.canceled || result.filePaths.length === 0) {
         return { ok: false, canceled: true };
       }
@@ -1987,7 +1385,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   // POST are a single main-process transaction.
   ipcMain.handle(
     "dialog:pick-and-replace-working-dir",
-    async (event, init?: { projectId?: string }) => {
+    async (_event, init?: { projectId?: string }) => {
       if (options.desktopAuthSecret == null) {
         return { ok: false, reason: "desktop auth secret not registered" };
       }
@@ -2001,7 +1399,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       if (!apiBaseUrl) {
         return { ok: false, reason: "daemon API URL not available" };
       }
-      const result = await showDirectoryPickerForSender(event.sender);
+      const result = await dialog.showOpenDialog({ properties: ["openDirectory", "createDirectory"] });
       if (result.canceled || result.filePaths.length === 0) {
         return { ok: false, canceled: true };
       }
@@ -2024,11 +1422,11 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   // spends the token on POST /api/projects/:id/working-dir once the project
   // exists. Main remains the single source of filesystem paths crossing into
   // the daemon (same trust boundary as dialog:pick-and-replace-working-dir).
-  ipcMain.handle("dialog:pick-working-dir", async (event) => {
+  ipcMain.handle("dialog:pick-working-dir", async () => {
     if (options.desktopAuthSecret == null) {
       return { ok: false, reason: "desktop auth secret not registered" };
     }
-    const result = await showDirectoryPickerForSender(event.sender);
+    const result = await dialog.showOpenDialog({ properties: ["openDirectory", "createDirectory"] });
     if (result.canceled || result.filePaths.length === 0) {
       return { ok: false, canceled: true };
     }
@@ -2091,32 +1489,8 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     }
   });
 
-  let currentUrl: string | null = null;
-  let currentPetUrl: string | null = null;
-  let pendingUrl: string | null = null;
-  let stopped = false;
-  let timer: NodeJS.Timeout | null = null;
-  // Set when the main-frame load fails or the renderer process is gone. The
-  // poll loop reloads the current URL to recover instead of leaving a blank app.
-  let rendererFailed = false;
-  // True while a `tick()` is mid-flight, so load failures do not schedule two
-  // independent polling loops.
-  let ticking = false;
-  // Bounds the reload loop when the renderer crashes deterministically (a
-  // GPU/V8 CHECK, a corrupt profile): without it a wedged device reloads →
-  // crashes → reloads forever, staying blank and flooding telemetry (one
-  // 0.14.0 machine logged 26k renderer-crash events in a day). When it opens we
-  // park on a recoverable error screen and re-arm after a quiet cooldown.
-  const rendererCrashLoop = new RendererCrashLoopBreaker();
-  // Monotonic per session: how many times the breaker re-armed and tried to
-  // recover (a passive reload). Not reset on a successful load, so a chronic
-  // looper's index keeps climbing while a recovered device simply stops
-  // emitting recovery-attempt events.
-  let rendererRecoveryAttempts = 0;
-
   const consoleEntries: DesktopConsoleEntry[] = [];
   const petWindow = createDesktopPetWindow(preloadPath, options.osLocale);
-  const windowTitle = options.windowTitle ?? "Open Design";
   const window = new BrowserWindow({
     height: 900,
     icon: resolveDesktopIconPath(),
@@ -2131,7 +1505,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     // mounted (see `revealWhenReady` below), so there is never a flash of the
     // web's own "Loading Open Design…" shell.
     show: false,
-    title: windowTitle,
+    title: "Open Design",
     autoHideMenuBar: true,
     ...MAC_WINDOW_CHROME,
     webPreferences: {
@@ -2148,50 +1522,6 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   installWindowChromeCssHook(window);
   showWindowButtons(window);
   attachDownloadSaveAsDialog(window);
-  window.on("page-title-updated", (event) => {
-    event.preventDefault();
-    window.setTitle(windowTitle);
-  });
-  window.webContents.on("did-start-loading", () => {
-    console.info("[open-design desktop] main window did-start-loading", {
-      pendingUrl,
-      url: window.webContents.getURL(),
-    });
-  });
-  window.webContents.on("dom-ready", () => {
-    console.info("[open-design desktop] main window dom-ready", {
-      title: window.getTitle(),
-      url: window.webContents.getURL(),
-    });
-  });
-  window.webContents.on("did-finish-load", () => {
-    console.info("[open-design desktop] main window did-finish-load", {
-      title: window.getTitle(),
-      url: window.webContents.getURL(),
-    });
-  });
-  window.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
-    console.error("[open-design desktop] main window did-fail-load", {
-      errorCode,
-      errorDescription,
-      isMainFrame,
-      pendingUrl,
-      validatedURL,
-      url: window.webContents.getURL(),
-    });
-  });
-  window.on("unresponsive", () => {
-    console.error("[open-design desktop] main window unresponsive", {
-      pendingUrl,
-      url: window.webContents.getURL(),
-    });
-  });
-  window.on("responsive", () => {
-    console.info("[open-design desktop] main window responsive", {
-      pendingUrl,
-      url: window.webContents.getURL(),
-    });
-  });
 
   // Renderer-process crashes are completely invisible to the web bundle's
   // own analytics surface (the renderer is dead — no JS can run, no
@@ -2201,79 +1531,10 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   // PostHog with `device_id = installationId`. Best-effort: a failure to
   // reach the daemon must not block the crash recovery flow.
   window.webContents.on("render-process-gone", (_event, details) => {
-    // During app quit / teardown the renderer goes away and the window (and its
-    // webContents) can already be destroyed when this fires. Reading getURL()
-    // then throws "Object has been destroyed" as a fatal uncaught exception, so
-    // guard the same way `sendUpdaterStatus` does below and skip crash-report /
-    // recovery work once the window is already on its way out.
-    const gone = window.isDestroyed() || window.webContents.isDestroyed();
-    console.error("[open-design desktop] main window render-process-gone", {
-      exitCode: details.exitCode,
+    void reportRendererCrash(options, {
       reason: details.reason,
-      url: gone ? null : window.webContents.getURL(),
+      exit_code: typeof details.exitCode === "number" ? details.exitCode : null,
     });
-    // During app quit / teardown the window is already destroyed; skip all
-    // crash-loop bookkeeping, telemetry, and recovery (mirrors the getURL guard
-    // above — a clean teardown must not look like a crash).
-    if (gone) return;
-    // A clean-exit is intentional teardown; only a crash / OOM / OS kill feeds
-    // the crash-loop breaker and triggers recovery.
-    const isCrash = details.reason !== "clean-exit";
-    const outcome = isCrash
-      ? rendererCrashLoop.recordCrash(Date.now())
-      : { tripped: false, suppressTelemetry: rendererCrashLoop.isOpen(), justOpened: false };
-    // Report every crash up to and including the one that trips the breaker so
-    // the loop is visible in analytics, then go quiet — one wedged device must
-    // not emit tens of thousands of identical events.
-    if (!outcome.suppressTelemetry) {
-      void reportRendererCrash(options, {
-        reason: details.reason,
-        exit_code: typeof details.exitCode === "number" ? details.exitCode : null,
-        loop_tripped: outcome.tripped,
-      });
-    }
-    if (!isCrash) return;
-    if (outcome.tripped) {
-      // Breaker open: stop the poll loop from cycling a deterministic crash.
-      // Show the recoverable error screen once (on the opening crash) instead
-      // of reloading into another blank window; the loop re-arms and attempts
-      // one passive recovery reload after a quiet cooldown.
-      if (outcome.justOpened) {
-        console.warn(
-          "[open-design desktop] renderer crash-loop breaker OPEN — parking; will attempt recovery after cooldown",
-          { reason: details.reason, exitCode: details.exitCode },
-        );
-        showRendererCrashScreen({
-          reason: details.reason,
-          exitCode: typeof details.exitCode === "number" ? details.exitCode : null,
-        });
-      }
-      return;
-    }
-    // A crash / OOM / OS kill of a backgrounded renderer leaves the window
-    // blank, so flag it for the poll loop to reload the app.
-    markRendererFailed();
-  });
-  // A failed main-frame navigation parks the renderer on chrome-error:// (blank
-  // white) with no auto-retry. errorCode -3 (ABORTED) is a normal navigation
-  // cancel (a new load started), so ignore it and sub-frame failures; anything
-  // else means the load to the web server failed and needs a retry.
-  window.webContents.on("did-fail-load", (_event, errorCode, _description, _url, isMainFrame) => {
-    if (isMainFrame && errorCode !== -3) markRendererFailed();
-  });
-  // `did-fail-load` never fires for an HTTP error *document* — a 5xx response
-  // with a body is a successful load to Electron — so a 502 page (e.g. the
-  // packaged od:// proxy's exhaustion fallback) would otherwise sit on screen
-  // until a manual reload. `did-navigate` is main-frame-only and carries the
-  // HTTP status (-1 for non-HTTP navigations); in-page SPA routing emits
-  // `did-navigate-in-page` instead, so app navigation never trips this.
-  window.webContents.on("did-navigate", (_event, url, httpResponseCode) => {
-    if (!isRendererFailureHttpStatus(httpResponseCode)) return;
-    console.error("[open-design desktop] main window loaded an HTTP error document", {
-      httpResponseCode,
-      url,
-    });
-    markRendererFailed();
   });
 
   const sendUpdaterStatus = (status = options.updater?.snapshot() ?? unavailableUpdaterStatus()) => {
@@ -2285,20 +1546,6 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     if (event.sender !== window.webContents) {
       throw new Error("host IPC is only available to the main Open Design window");
     }
-  };
-  const discoverUpdateDaemonBaseUrl = async (): Promise<string> => {
-    const daemonUrl = await options.discoverDaemonUrl?.();
-    const baseUrl = daemonUrl ?? await options.discoverUrl();
-    if (baseUrl == null) throw new Error("daemon URL is unavailable");
-    return baseUrl;
-  };
-  const guardedUpdaterStatus = async (rawOptions: unknown): Promise<DesktopUpdateStatusSnapshot | null> => {
-    const request = parseUpdateActionRequest(rawOptions);
-    if (request.force) return null;
-    const safety = await checkUpdateRestartSafety({ discoverDaemonBaseUrl: discoverUpdateDaemonBaseUrl });
-    if (safety.state === "clear") return null;
-    const status = await (options.updater?.status() ?? unavailableUpdaterStatus());
-    return { ...status, error: updateRestartSafetyError(safety) };
   };
   window.webContents.on("will-attach-webview", (event, webPreferences, params) => {
     const src = typeof params.src === "string" ? params.src : "";
@@ -2384,26 +1631,14 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     sendUpdaterStatus(status);
     return status;
   });
-  ipcMain.handle("od:update:install", async (event, updaterOptions: unknown) => {
+  ipcMain.handle("od:update:install", async (event) => {
     requireMainWindowSender(event);
-    const blocked = await guardedUpdaterStatus(updaterOptions);
-    if (blocked != null) {
-      // Preflight denials travel only on the IPC response. The updater store
-      // itself is still healthy, so broadcasting the synthetic error through
-      // the shared status channel would make unrelated subscribers observe a
-      // failure that never happened.
-      return blocked;
-    }
     const status = await (options.updater?.installUpdate() ?? unavailableUpdaterStatus());
     sendUpdaterStatus(status);
     return status;
   });
-  ipcMain.handle("od:update:quit", async (event, updaterOptions: unknown): Promise<OpenDesignHostActionResult> => {
+  ipcMain.handle("od:update:quit", async (event): Promise<OpenDesignHostActionResult> => {
     requireMainWindowSender(event);
-    const blocked = await guardedUpdaterStatus(updaterOptions);
-    if (blocked?.error != null) {
-      return { details: blocked.error.details, ok: false, reason: blocked.error.code };
-    }
     const status = await (options.updater?.status() ?? unavailableUpdaterStatus());
     if (status.installResult == null) {
       return { ok: false, reason: "installer has not been opened" };
@@ -2412,13 +1647,6 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       return { ok: false, reason: "desktop quit is not available" };
     }
     setTimeout(() => options.requestQuit?.(), 0);
-    return { ok: true };
-  });
-  ipcMain.handle("od:update:set-menu-labels", async (event, rawLabels: unknown): Promise<OpenDesignHostActionResult> => {
-    requireMainWindowSender(event);
-    const labels = parseDesktopUpdateMenuLabels(rawLabels);
-    if (labels == null) return { ok: false, reason: "invalid updater menu labels" };
-    options.onUpdateMenuLabels?.(labels);
     return { ok: true };
   });
 
@@ -2470,6 +1698,12 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       return { ok: false, reason: error instanceof Error ? error.message : String(error) };
     }
   });
+
+  let currentUrl: string | null = null;
+  let currentPetUrl: string | null = null;
+  let pendingUrl: string | null = null;
+  let stopped = false;
+  let timer: NodeJS.Timeout | null = null;
 
   window.on("focus", () => showWindowButtons(window));
   window.on("blur", () => showWindowButtons(window));
@@ -2570,7 +1804,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     void persistRendererEntry(entry);
   });
 
-  // The splash window carries the light brand animation. In packaged builds the
+  // The splash window carries the white brand animation. In packaged builds the
   // entry hands us one it created BEFORE the sidecars booted (so it overlaps the
   // whole cold start); otherwise we create our own. The main window above stays
   // hidden behind it until the real app has mounted.
@@ -2587,7 +1821,6 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     splashStartedAt = created.startedAt;
   }
 
-  let pendingUpdateDialogRequest: OpenDesignHostUpdaterOpenDialogRequest | null = null;
   let revealed = false;
   let revealing = false;
 
@@ -2598,18 +1831,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     window.show();
     window.focus();
     ensureWindowVisible(window);
-    if (pendingUpdateDialogRequest != null) {
-      window.webContents.send(UPDATER_OPEN_DIALOG_EVENT, pendingUpdateDialogRequest);
-      pendingUpdateDialogRequest = null;
-    }
     if (splash != null && !splash.isDestroyed()) splash.close();
-    // The app is now truly up (mounted + shown). Fire once — revealed guards
-    // re-entry — so callers can mark "reached running".
-    try {
-      options.onRevealed?.();
-    } catch {
-      // A callback fault must not break reveal.
-    }
   };
 
   // Hold the splash until BOTH (a) the web bundle reports it has mounted — it
@@ -2621,9 +1843,6 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   const revealWhenReady = async (): Promise<void> => {
     if (revealing || revealed) return;
     revealing = true;
-    // The web bundle is loading in the hidden main window from here on; let
-    // the splash status line reflect that final phase while we poll for mount.
-    setSplashStage(splash, "workspace");
     const deadline = Date.now() + WEB_MOUNT_REVEAL_TIMEOUT_MS;
     while (!stopped && !window.isDestroyed() && Date.now() < deadline) {
       const mounted = await window.webContents
@@ -2632,11 +1851,6 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       if (mounted === true) break;
       await delay(WEB_MOUNT_POLL_MS);
     }
-    // The real UI has mounted behind the splash; the only thing left is the
-    // minimum-hold so the brand clip plays through. Advance the counter to its
-    // final step so the user sees the boot reach completion, not stall at
-    // "Opening your workspace".
-    setSplashStage(splash, "finishing");
     const remaining = MIN_SPLASH_MS - (Date.now() - splashStartedAt);
     if (remaining > 0) await delay(remaining);
     revealMainWindow();
@@ -2649,108 +1863,16 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     }, delayMs);
   };
 
-  // Flag the renderer as needing a reload and poll again promptly, rather than
-  // waiting up to RUNNING_POLL_MS. The next `tick` re-loads the current URL (see
-  // the `rendererFailed` branch) and clears the flag once the load succeeds. If
-  // the web server is still unreachable, discovery returns null and the loop
-  // naturally backs off to RUNNING_POLL_MS until it returns.
-  // Park the wedged window on a static, self-contained error page (trivial HTML
-  // that the failing app renderer cannot take down) instead of an endless blank
-  // reload. The page tells the user recovery is automatic, and offers two
-  // actions wired to IPC the preload already exposes — "Report a problem" opens
-  // a prefilled GitHub issue, "Save logs…" exports the diagnostics bundle (the
-  // daemon is still alive on a renderer crash, so the bundle is available).
-  const showRendererCrashScreen = (crash: { reason: string; exitCode: number | null }) => {
-    if (stopped || window.isDestroyed()) return;
-    // Loading the crash screen resets currentUrl so the next successful reload
-    // (after re-arm) is treated as a fresh navigation.
-    currentUrl = null;
-    pendingUrl = null;
-    void window
-      .loadURL(
-        createRendererCrashHtml({
-          appVersion: app.getVersion(),
-          platform: process.platform,
-          osVersion: release(),
-          reason: crash.reason,
-          exitCode: crash.exitCode,
-        }),
-      )
-      .catch(() => undefined);
-    // Make the crash screen the revealed, active window and tear down the
-    // splash. Without this, a crash loop that trips DURING startup (before
-    // revealWhenReady() set revealed=true) would leave the splash open, and the
-    // runtime's show() keeps focusing the splash while !revealed — so a user
-    // re-focusing the app during a startup crash loop is sent back to the boot
-    // splash instead of this recovery screen. revealMainWindow() no-ops when the
-    // app already revealed normally (the common crash-after-boot case).
-    revealMainWindow();
-  };
-
-  const markRendererFailed = () => {
-    if (stopped || window.isDestroyed()) return;
-    // Breaker open: stay parked on the crash screen; the tick's cooldown re-arm
-    // is the only path back to reloading.
-    if (rendererCrashLoop.isOpen()) return;
-    rendererFailed = true;
-    // Mid-tick failures (a rejecting loadURL) are rescheduled by the tick's own
-    // catch/success path; scheduling here too would spawn a second poll loop.
-    if (ticking) return;
-    if (timer) {
-      clearTimeout(timer);
-      timer = null;
-    }
-    schedule(PENDING_POLL_MS);
-  };
-
   const tick = async () => {
     if (stopped || window.isDestroyed()) return;
 
-    ticking = true;
     try {
-      // Crash-loop breaker open: park on the crash screen instead of reloading a
-      // deterministically-crashing renderer. Re-arm once the cooldown has
-      // elapsed with no further crash, then fall through for one reload attempt.
-      // The retry is intentionally PASSIVE: mutating a wedged device's state
-      // (clearing caches/storage) on every cooldown risked amplifying the churn
-      // without helping a GPU/V8-CHECK crash, so we only stop the loop and let a
-      // transient fault clear on its own. The attempt is still logged + counted
-      // so the recovery is observable.
-      if (rendererCrashLoop.isOpen()) {
-        if (rendererCrashLoop.rearmIfCooledDown(Date.now())) {
-          rendererRecoveryAttempts += 1;
-          console.info(
-            "[open-design desktop] renderer crash-loop cooldown elapsed — attempting recovery reload",
-            { attempt: rendererRecoveryAttempts },
-          );
-          void reportRendererCrash(options, {
-            reason: "recovery-attempt",
-            exit_code: null,
-            recovery_attempt: rendererRecoveryAttempts,
-          });
-          rendererFailed = true;
-        } else {
-          schedule(RUNNING_POLL_MS);
-          return;
-        }
-      }
       const url = await options.discoverUrl();
-      // Reload when the discovered URL changes, OR when the renderer is in a
-      // failed/blank state (URL unchanged but the page died), so a window
-      // restored from the background recovers instead of staying blank.
-      if (url != null && (url !== currentUrl || rendererFailed)) {
+      if (url != null && url !== currentUrl) {
         pendingUrl = url;
-        // Clear the failure flag BEFORE the load: `did-navigate` (which
-        // re-flags an HTTP 5xx error document) fires before `loadURL`'s
-        // promise resolves, so clearing afterwards would clobber a failure
-        // detected mid-load. A rejecting `loadURL` re-flags via
-        // `did-fail-load`, so net-error behavior is unchanged.
-        rendererFailed = false;
         // Load the web app into the still-hidden main window as soon as it is
         // discovered; it mounts behind the splash so the swap is instant.
-        console.info("[open-design desktop] main window loadURL start", { currentUrl, url });
         await window.loadURL(url);
-        console.info("[open-design desktop] main window loadURL success", { url });
         currentUrl = url;
         pendingUrl = null;
         const nextPetUrl = desktopPetUrl(url);
@@ -2766,16 +1888,11 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       } else if (url == null) {
         pendingUrl = null;
       }
-      // A renderer still flagged failed (e.g. the document that just "loaded"
-      // was an HTTP 5xx error page) re-polls at the same prompt cadence as the
-      // connection-refused recovery path.
-      schedule(currentUrl == null || rendererFailed ? PENDING_POLL_MS : RUNNING_POLL_MS);
+      schedule(currentUrl == null ? PENDING_POLL_MS : RUNNING_POLL_MS);
     } catch (error) {
       pendingUrl = null;
       console.error("desktop web discovery failed", error);
       schedule(PENDING_POLL_MS);
-    } finally {
-      ticking = false;
     }
   };
 
@@ -2816,49 +1933,15 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     },
     async eval(input) {
       if (window.isDestroyed()) return { error: "desktop window is destroyed", ok: false };
-      const startedAt = Date.now();
-      console.info("[open-design desktop] eval executeJavaScript start", {
-        ...summarizeExpression(input.expression),
-        statusUrl: resolveDesktopStatusUrl(currentUrl, pendingUrl),
-        webContentsUrl: window.webContents.getURL(),
-      });
       try {
         const value = await window.webContents.executeJavaScript(input.expression, true);
-        console.info("[open-design desktop] eval executeJavaScript success", {
-          durationMs: Date.now() - startedAt,
-          statusUrl: resolveDesktopStatusUrl(currentUrl, pendingUrl),
-          valueType: typeof value,
-          webContentsUrl: window.webContents.getURL(),
-        });
         return { ok: true, value };
       } catch (error) {
-        console.error("[open-design desktop] eval executeJavaScript failed", {
-          durationMs: Date.now() - startedAt,
-          error: error instanceof Error ? error.message : String(error),
-          statusUrl: resolveDesktopStatusUrl(currentUrl, pendingUrl),
-          webContentsUrl: window.webContents.getURL(),
-        });
         return { error: error instanceof Error ? error.message : String(error), ok: false };
       }
     },
-    exportArtifact(input) {
-      return exportArtifactFromHtml(input);
-    },
     exportPdf(input) {
       return exportPdfFromHtml(input);
-    },
-    openUpdateDialog(request) {
-      if (window.isDestroyed()) return;
-      if (!revealed) {
-        pendingUpdateDialogRequest = request;
-        return;
-      }
-      window.webContents.send(UPDATER_OPEN_DIALOG_EVENT, request);
-      window.show();
-      window.focus();
-    },
-    renderSlides(input) {
-      return renderDeckSlides(input);
     },
     async screenshot(input) {
       if (window.isDestroyed()) throw new Error("desktop window is destroyed");

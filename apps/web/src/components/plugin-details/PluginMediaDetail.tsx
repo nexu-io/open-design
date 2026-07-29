@@ -14,32 +14,19 @@ import type {
   InstalledPluginRecord,
   PluginManifest,
 } from '@open-design/contracts';
-import { useI18n } from '../../i18n';
-import { localizePluginChrome } from '../../i18n/plugin-content';
+import { useT } from '../../i18n';
 import { resolvePluginQueryFallback } from '../../state/projects';
 import { Icon } from '../Icon';
-import { localizePluginDescription, localizePluginTitle } from '../plugins-home/localization';
-import {
-  PreviewModal,
-  type PreviewSharePopoverItem,
-  type PreviewView,
-} from '../PreviewModal';
+import { PreviewModal, type PreviewView } from '../PreviewModal';
 import { PluginMetaSections } from './PluginMetaSections';
 import { buildPluginShareUrl, PluginShareMenu } from './PluginShareMenu';
-import { buildPluginUseMenu, pluginUsePrimaryAction } from './pluginUseMenu';
-import type { PluginUseAction } from '../plugins-home/useActions';
 
 interface Props {
   record: InstalledPluginRecord;
   onClose: () => void;
-  onUse: (record: InstalledPluginRecord, action: PluginUseAction) => void;
-  onDuplicate?: (record: InstalledPluginRecord) => void;
+  onUse: (record: InstalledPluginRecord) => void;
   isApplying?: boolean;
   hideUseAction?: boolean;
-  // Analytics — forwarded to PreviewModal's share popover. Does NOT cover
-  // the headerExtras PluginShareMenu (copy install command), which is a
-  // separate menu.
-  onSharePopoverItemClick?: (item: PreviewSharePopoverItem) => void;
 }
 
 interface MediaPreview {
@@ -89,19 +76,15 @@ export function PluginMediaDetail({
   record,
   onClose,
   onUse,
-  onDuplicate,
   isApplying,
   hideUseAction,
-  onSharePopoverItemClick,
 }: Props) {
-  const { t, locale } = useI18n();
+  const t = useT();
   const [copied, setCopied] = useState(false);
 
   const manifest: PluginManifest = record.manifest ?? ({} as PluginManifest);
   const od = manifest.od ?? {};
-  const localizedTitle = localizePluginTitle(locale, record);
-  const description = localizePluginDescription(locale, record);
-  const pluginInfoLabel = localizePluginChrome(locale, 'pluginInfo');
+  const description = manifest.description ?? '';
   const query = resolvePluginQueryFallback(od.useCase?.query);
   const media = useMemo(() => readMedia(record), [record]);
   const hasAsset = Boolean(media.poster || media.videoUrl || media.audioUrl);
@@ -149,7 +132,7 @@ export function PluginMediaDetail({
             <img
               className="plugin-media-stage__audio-poster"
               src={media.poster}
-              alt={localizedTitle}
+              alt={record.title}
               referrerPolicy="no-referrer"
               loading="lazy"
             />
@@ -172,7 +155,7 @@ export function PluginMediaDetail({
         <img
           className="plugin-media-stage__image"
           src={media.poster}
-          alt={localizedTitle}
+          alt={record.title}
           loading="lazy"
           referrerPolicy="no-referrer"
         />
@@ -183,11 +166,7 @@ export function PluginMediaDetail({
   const views: PreviewView[] = [
     {
       id: 'media',
-      label: media.isVideo
-        ? localizePluginChrome(locale, 'video')
-        : media.isAudio
-          ? localizePluginChrome(locale, 'audio')
-          : localizePluginChrome(locale, 'image'),
+      label: media.isVideo ? 'Video' : media.isAudio ? 'Audio' : 'Image',
       custom: stage,
     },
   ];
@@ -222,25 +201,25 @@ export function PluginMediaDetail({
         record={record}
         omit={{ description: true, query: true }}
         compact
-        heading={pluginInfoLabel}
+        heading="Plugin info"
       />
     </div>
   );
 
   return (
     <PreviewModal
-      title={localizedTitle}
+      title={record.title}
       subtitle={description || undefined}
       views={views}
-      exportTitleFor={() => localizedTitle}
+      exportTitleFor={() => record.title}
       shareTarget={{
-        title: localizedTitle,
+        title: record.title,
         description: description || undefined,
         url: buildPluginShareUrl(record),
       }}
       onClose={onClose}
       sidebar={{
-        label: pluginInfoLabel,
+        label: 'Plugin info',
         defaultOpen: true,
         contentKey: record.id,
         content: sidebar,
@@ -248,15 +227,13 @@ export function PluginMediaDetail({
       primaryAction={hideUseAction
         ? undefined
         : {
-            label: pluginUsePrimaryAction(record, t).label,
-            onClick: () => onUse(record, pluginUsePrimaryAction(record, t).action),
+            label: 'Use plugin',
+            onClick: () => onUse(record),
             busy: !!isApplying,
-            busyLabel: localizePluginChrome(locale, 'applying'),
+            busyLabel: 'Applying…',
             testId: `plugin-details-use-${record.id}`,
-            menu: buildPluginUseMenu(record, onUse, t, onDuplicate),
           }}
       headerExtras={<PluginShareMenu record={record} variant="inline" />}
-      onSharePopoverItemClick={onSharePopoverItemClick}
     />
   );
 }

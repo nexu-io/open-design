@@ -17,45 +17,22 @@ import {
   type Dispatch,
   type SetStateAction,
 } from 'react';
-import type { AmrWalletSnapshot } from '@open-design/contracts';
 import { useT } from '../i18n';
-import {
-  agentIdToTracking,
-  byokProtocolToTracking,
-  modelIdForTracking,
-} from '@open-design/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
-import {
-  amrHandoffDeviceId,
-  attributedAmrUrl,
-  recordAmrEntry,
-  type AmrEntryAttribution,
-} from '../analytics/amr-attribution';
-import { amrPlansUrlForProfile } from '../runtime/amr-guidance';
-import { getResolvedDeviceId } from '../analytics/client';
-import { trackExecutionSettingsPopoverClick } from '../analytics/events';
-import {
-  beginAmrAuthTracking,
-  resolveAmrAuthTracking,
-} from '../analytics/amr-auth';
+import { recordAmrEntry, type AmrEntryAttribution } from '../analytics/amr-attribution';
 import { KNOWN_PROVIDERS } from '../state/config';
 import { fetchProviderModels } from '../providers/provider-models';
 import { SUGGESTED_MODELS_BY_PROTOCOL } from '../state/apiProtocols';
 import {
-  canUpgradeVelaPlan,
   cancelVelaLogin,
-  fetchAmrWalletSnapshot,
   fetchVelaLoginStatus,
-  formatVelaBalanceUsd,
   startVelaLogin,
   type VelaLoginStatus,
 } from '../providers/daemon';
 import type { AgentInfo, ApiProtocol, AppConfig, ExecMode } from '../types';
 import { apiProtocolLabel } from '../utils/apiProtocol';
-import { isVisibleLocalCliAgent } from '../utils/visibleAgents';
 import { AgentIcon } from './AgentIcon';
 import { Icon } from './Icon';
-import { PlanBadge } from './PlanBadge';
 import {
   AMR_LOGIN_STATUS_EVENT,
   AMR_LOGIN_POLL_INTERVAL_MS,
@@ -64,16 +41,8 @@ import {
   amrLoginStatusEventReason,
   notifyAmrLoginStatusChanged,
 } from './amrLoginPolling';
-import { orderAgentsWithOpenDesignFirst } from './agentOrdering';
-import {
-  defaultAgentModelId,
-  effectiveAgentModelChoice,
-  normalizeAgentModelChoice,
-} from './agentModelSelection';
-import {
-  orderModelOptionsByAvailability,
-  SearchableModelSelect,
-} from './modelOptions';
+import { normalizeAgentModelChoice } from './agentModelSelection';
+import { SearchableModelSelect } from './modelOptions';
 import {
   mergeProviderModelOptions,
   providerModelsCacheKey,
@@ -90,7 +59,7 @@ interface Props {
   onAgentChange: (id: string) => void;
   onAgentModelChange: (
     id: string,
-    choice: { model?: string; reasoning?: string; serviceTier?: string },
+    choice: { model?: string; reasoning?: string },
   ) => void;
   onApiProtocolChange: (protocol: ApiProtocol) => void;
   onApiModelChange: (model: string) => void;
@@ -147,11 +116,11 @@ function markAmrReminderSeen(): void {
 }
 
 function displayAgentName(agent: Pick<AgentInfo, 'id' | 'name'>): string {
-  return agent.id === 'amr' ? 'Open Design' : agent.name;
+  return agent.id === 'amr' ? 'Open Design AMR' : agent.name;
 }
 
 function displayAgentChipName(agent: Pick<AgentInfo, 'id' | 'name'>): string {
-  return agent.id === 'amr' ? 'Open Design' : displayAgentName(agent);
+  return agent.id === 'amr' ? 'AMR' : displayAgentName(agent);
 }
 
 export function InlineModelSwitcher({
@@ -172,12 +141,8 @@ export function InlineModelSwitcher({
   const analytics = useAnalytics();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
-  const chipRef = useRef<HTMLButtonElement | null>(null);
   const providerModelsFetchingRef = useRef<Set<string>>(new Set());
   const [amrStatus, setAmrStatus] = useState<VelaLoginStatus | null>(null);
-  const [amrWalletSnapshot, setAmrWalletSnapshot] =
-    useState<AmrWalletSnapshot | null>(null);
-  const [amrWalletReady, setAmrWalletReady] = useState(false);
   const [amrLoginPending, setAmrLoginPending] = useState(false);
   const [amrLoginError, setAmrLoginError] = useState<string | null>(null);
   const [amrReminderSeen, setAmrReminderSeen] = useState(readAmrReminderSeen);
@@ -185,28 +150,6 @@ export function InlineModelSwitcher({
     useState(false);
   const amrPollRef = useRef<number | null>(null);
   const amrLoginStartedAtRef = useRef<number | null>(null);
-
-  const getModelPopoverBoundary = useCallback(() => {
-    const scrollContainer = wrapRef.current?.closest<HTMLElement>(
-      '.entry-main--scroll',
-    );
-    const scrollRect = scrollContainer?.getBoundingClientRect();
-    const topbarRect = scrollContainer
-      ?.querySelector<HTMLElement>('.entry-main__topbar')
-      ?.getBoundingClientRect();
-    return {
-      top: Math.max(8, (topbarRect?.bottom ?? scrollRect?.top ?? 0) + 8),
-      right: Math.min(
-        window.innerWidth - 8,
-        (scrollRect?.right ?? window.innerWidth) - 8,
-      ),
-      bottom: Math.min(
-        window.innerHeight - 8,
-        (scrollRect?.bottom ?? window.innerHeight) - 8,
-      ),
-      left: Math.max(8, (scrollRect?.left ?? 0) + 8),
-    };
-  }, []);
 
   const stopAmrPolling = useCallback(() => {
     if (amrPollRef.current !== null) {
@@ -242,10 +185,6 @@ export function InlineModelSwitcher({
       const next = await refreshAmrStatus();
       const outcome = amrLoginPollOutcome(next, startedAt);
       if (outcome === 'signed-in') {
-        resolveAmrAuthTracking(analytics.track, 'success', undefined, {
-          signedInUserId: next?.user?.id ?? null,
-        });
-        notifyAmrLoginStatusChanged();
         stopAmrPolling();
         amrLoginStartedAtRef.current = null;
         setAmrLoginPending(false);
@@ -254,12 +193,9 @@ export function InlineModelSwitcher({
       if (outcome === 'stopped' || outcome === 'timed-out') {
         stopAmrPolling();
         if (outcome === 'timed-out') {
-          resolveAmrAuthTracking(analytics.track, 'timeout', 'login_timeout');
           void cancelVelaLogin().then(() =>
             notifyAmrLoginStatusChanged('login-canceled'),
           );
-        } else {
-          resolveAmrAuthTracking(analytics.track, 'failed', 'login_stopped');
         }
         amrLoginStartedAtRef.current = null;
         setAmrLoginPending(false);
@@ -269,7 +205,7 @@ export function InlineModelSwitcher({
     amrPollRef.current = window.setInterval(() => {
       void tick();
     }, AMR_LOGIN_POLL_INTERVAL_MS);
-  }, [analytics.track, refreshAmrStatus, stopAmrPolling, t]);
+  }, [refreshAmrStatus, stopAmrPolling, t]);
 
   const handleAmrSignIn = useCallback(async (
     attribution?: AmrEntryAttribution | null,
@@ -278,15 +214,8 @@ export function InlineModelSwitcher({
     amrLoginStartedAtRef.current = startedAt;
     setAmrLoginError(null);
     setAmrLoginPending(true);
-    beginAmrAuthTracking(attribution, startedAt);
-    const odDeviceId = amrHandoffDeviceId({
-      metricsConsent: config.telemetry?.metrics === true,
-      resolvedDeviceId: getResolvedDeviceId(),
-      installationId: config.installationId,
-    });
-    const result = await startVelaLogin(attribution, odDeviceId);
+    const result = await startVelaLogin(attribution);
     if (!result.ok && !result.alreadyRunning) {
-      resolveAmrAuthTracking(analytics.track, 'failed', 'spawn_failed');
       amrLoginStartedAtRef.current = null;
       setAmrLoginPending(false);
       setAmrLoginError(result.error || t('settings.amrLoginErrorCompact'));
@@ -294,16 +223,9 @@ export function InlineModelSwitcher({
     }
     notifyAmrLoginStatusChanged('login-started');
     startAmrPolling(startedAt);
-  }, [
-    analytics.track,
-    config.installationId,
-    config.telemetry?.metrics,
-    startAmrPolling,
-    t,
-  ]);
+  }, [startAmrPolling, t]);
 
   const handleAmrCancelLogin = useCallback(async () => {
-    resolveAmrAuthTracking(analytics.track, 'cancelled');
     stopAmrPolling();
     amrLoginStartedAtRef.current = null;
     setAmrLoginError(null);
@@ -311,16 +233,10 @@ export function InlineModelSwitcher({
     await cancelVelaLogin();
     notifyAmrLoginStatusChanged('login-canceled');
     await refreshAmrStatus();
-  }, [analytics.track, refreshAmrStatus, stopAmrPolling]);
+  }, [refreshAmrStatus, stopAmrPolling]);
 
   const handleAgentButtonClick = useCallback(
     async (agentId: string) => {
-      trackExecutionSettingsPopoverClick(analytics.track, {
-        page_name: 'home',
-        area: 'execution_settings_popover',
-        element: 'agent_card',
-        cli_provider_id: agentIdToTracking(agentId),
-      });
       onAgentChange?.(agentId);
       if (agentId !== 'amr') return;
       if (amrLoginPending) {
@@ -330,8 +246,6 @@ export function InlineModelSwitcher({
       const attribution = recordAmrEntry(
         analytics.track,
         'inline_model_switcher_amr_row',
-        new Date(),
-        { metricsConsent: config.telemetry?.metrics === true },
       );
       const latest = await refreshAmrStatus();
       if (latest?.loggedIn) return;
@@ -378,51 +292,6 @@ export function InlineModelSwitcher({
   }, [open]);
 
   useEffect(() => {
-    if (!open) return;
-    const scrollContainer = wrapRef.current?.closest('.entry-main--scroll');
-    if (!(scrollContainer instanceof HTMLElement)) return;
-    let frame = 0;
-    const updateAnchorVisibility = () => {
-      frame = 0;
-      const trigger = chipRef.current;
-      const triggerRect = trigger?.getBoundingClientRect();
-      if (!triggerRect) return;
-      const scrollRect = scrollContainer.getBoundingClientRect();
-      const topbar = scrollContainer.querySelector<HTMLElement>('.entry-main__topbar');
-      const anchorInTopbar = trigger ? topbar?.contains(trigger) === true : false;
-      const topbarBottom = topbar?.getBoundingClientRect().bottom;
-      const safeTop = anchorInTopbar
-        ? scrollRect.top
-        : Math.max(scrollRect.top, topbarBottom ?? scrollRect.top);
-      const safeBottom = Math.min(window.innerHeight, scrollRect.bottom);
-      const safeLeft = Math.max(0, scrollRect.left);
-      const safeRight = Math.min(window.innerWidth, scrollRect.right);
-      if (
-        triggerRect.bottom <= safeTop ||
-        triggerRect.top >= safeBottom ||
-        triggerRect.right <= safeLeft ||
-        triggerRect.left >= safeRight
-      ) {
-        setOpen(false);
-      }
-    };
-    const scheduleVisibilityUpdate = () => {
-      if (frame !== 0) return;
-      frame = window.requestAnimationFrame(updateAnchorVisibility);
-    };
-    updateAnchorVisibility();
-    scrollContainer.addEventListener('scroll', scheduleVisibilityUpdate, {
-      passive: true,
-    });
-    window.addEventListener('resize', scheduleVisibilityUpdate);
-    return () => {
-      if (frame !== 0) window.cancelAnimationFrame(frame);
-      scrollContainer.removeEventListener('scroll', scheduleVisibilityUpdate);
-      window.removeEventListener('resize', scheduleVisibilityUpdate);
-    };
-  }, [open]);
-
-  useEffect(() => {
     if (open && agents.some((agent) => agent.id === 'amr' && agent.available)) {
       void refreshAmrStatus();
     }
@@ -459,10 +328,7 @@ export function InlineModelSwitcher({
   }, [refreshAmrStatus, startAmrPolling, stopAmrPolling]);
 
   const installedAgents = useMemo(
-    () =>
-      orderAgentsWithOpenDesignFirst(
-        agents.filter((a) => a.available && isVisibleLocalCliAgent(a)),
-      ),
+    () => agents.filter((a) => a.available),
     [agents],
   );
   const currentAgent = useMemo(
@@ -476,122 +342,59 @@ export function InlineModelSwitcher({
 
   const currentChoice =
     (config.agentId && config.agentModels?.[config.agentId]) || {};
-  const normalizedCurrentChoice = normalizeAgentModelChoice(currentAgent, currentChoice);
-  const effectiveCurrentChoice = effectiveAgentModelChoice(currentAgent, currentChoice) ?? currentChoice;
+  const normalizedCurrentChoice = normalizeAgentModelChoice(
+    currentAgent,
+    currentChoice,
+  );
   const currentAgentId = currentAgent?.id ?? null;
   const normalizedCurrentModelId = normalizedCurrentChoice?.model ?? null;
   const normalizedCurrentReasoning = normalizedCurrentChoice?.reasoning;
-  const normalizedCurrentServiceTier = normalizedCurrentChoice?.serviceTier;
   const currentAgentModelIds = currentAgent?.models?.map((m) => m.id) ?? [];
   const configuredModelId =
-    typeof effectiveCurrentChoice.model === 'string' && effectiveCurrentChoice.model
-      ? effectiveCurrentChoice.model
+    typeof currentChoice.model === 'string' && currentChoice.model
+      ? currentChoice.model
       : null;
   const currentModelId =
     currentAgent?.id === 'amr' &&
     configuredModelId &&
-    configuredModelId !== 'default' &&
     !currentAgentModelIds.includes(configuredModelId)
-      ? defaultAgentModelId(currentAgent)
-      : configuredModelId ?? defaultAgentModelId(currentAgent);
-  const currentModelOption =
-    currentAgent?.models?.find((m) => m.id === currentModelId) ?? null;
+      ? currentAgent?.models?.[0]?.id ?? null
+      : configuredModelId ?? currentAgent?.models?.[0]?.id ?? null;
 
   useEffect(() => {
     if (!currentAgentId || !normalizedCurrentModelId) return;
-    const nextChoice: {
-      model: string;
-      reasoning?: string;
-      serviceTier?: string;
-    } = {
+    onAgentModelChange(currentAgentId, {
       model: normalizedCurrentModelId,
       reasoning: normalizedCurrentReasoning,
-    };
-    if (normalizedCurrentServiceTier !== undefined) {
-      nextChoice.serviceTier = normalizedCurrentServiceTier;
-    }
-    onAgentModelChange(currentAgentId, nextChoice);
+    });
   }, [
     currentAgentId,
     normalizedCurrentModelId,
     normalizedCurrentReasoning,
-    normalizedCurrentServiceTier,
     onAgentModelChange,
   ]);
 
   const currentModelLabel =
-    currentModelOption?.label ?? null;
-  const inlineAgentModelOptions = useMemo(() => {
-    const models = currentAgent?.models ?? [];
-    if (currentAgent?.id !== 'amr') return models;
-    return orderModelOptionsByAvailability(models);
-  }, [currentAgent]);
-  const currentServiceTierOptions = currentModelOption?.serviceTierOptions ?? [];
-  const currentServiceTierId =
-    currentServiceTierOptions.some((tier) => tier.id === currentChoice.serviceTier)
-      ? currentChoice.serviceTier!
-      : 'default';
+    currentAgent?.models?.find((m) => m.id === currentModelId)?.label ?? null;
   const amrLoggedIn = amrStatus?.loggedIn === true;
-
-  useEffect(() => {
-    if (!amrLoggedIn) {
-      setAmrWalletSnapshot(null);
-      setAmrWalletReady(false);
-      return;
-    }
-    let cancelled = false;
-    setAmrWalletReady(false);
-    void fetchAmrWalletSnapshot().then((next) => {
-      if (cancelled) return;
-      setAmrWalletSnapshot(next);
-      setAmrWalletReady(true);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    amrLoggedIn,
-    amrStatus?.profile,
-    amrStatus?.user?.id,
-    amrStatus?.user?.email,
-  ]);
-
-  // Signed-in rows show the current plan instead of a redundant "Signed in" +
-  // check mark. When the plan can't be resolved (free user, stale local config,
-  // upstream not yet fetched), show no status at all. Signed-in-without-plan is
-  // distinguished from signed-out (which keeps the sign-in CTA) by `amrLoggedIn`,
-  // never by plan presence.
-  const amrPlanLabel = amrLoggedIn
-    ? amrStatus?.account?.plan?.trim() || null
-    : null;
-  const amrBalanceLabel = amrLoggedIn
-    ? formatVelaBalanceUsd(amrStatus?.account?.balanceUsd) ??
-      (amrWalletSnapshot?.status === 'available'
-        ? formatVelaBalanceUsd(amrWalletSnapshot.balanceUsd)
-        : null)
-    : null;
-  const amrBalanceDisplayLabel = amrLoggedIn
-    ? amrBalanceLabel ??
-      (amrWalletReady ? t('settings.amrWalletUnavailable') : t('common.loading'))
-    : null;
-  const amrCanUpgrade =
-    amrLoggedIn && canUpgradeVelaPlan(amrStatus?.account?.plan);
   const amrActionLabel = amrLoginPending
     ? t('settings.amrSigningIn')
     : amrLoggedIn
-      ? amrPlanLabel ?? ''
+      ? t('settings.amrSignedIn')
       : t('settings.amrSignIn');
   const amrPendingHoverLabel = t('settings.amrCancelSignIn');
-  // Visually hidden state for screen readers keeps announcing "signed in" even
-  // when no plan label is shown.
   const amrInlineStatus = amrLoginError
     ? amrLoginError
     : amrLoggedIn
-      ? amrPlanLabel ?? t('settings.amrSignedIn')
+      ? t('settings.amrSignedIn')
       : amrLoginPending
         ? t('settings.amrSigningIn')
         : t('settings.amrSignIn');
-  const amrStatusIconName = amrLoginPending ? 'spinner' : null;
+  const amrStatusIconName = amrLoggedIn
+      ? 'check'
+      : amrLoginPending
+        ? 'spinner'
+        : null;
 
   const apiProtocol = config.apiProtocol ?? 'anthropic';
   const providerForProtocol = useMemo(
@@ -673,8 +476,8 @@ export function InlineModelSwitcher({
     () =>
       Array.from(
         new Set(
-          providerForProtocol?.preferredModels.length
-            ? providerForProtocol.preferredModels
+          providerForProtocol?.models?.length
+            ? providerForProtocol.models
             : SUGGESTED_MODELS_BY_PROTOCOL[apiProtocol],
         ),
       ),
@@ -689,7 +492,7 @@ export function InlineModelSwitcher({
     [apiModelOptions],
   );
   const apiModelChoices = useMemo(
-    () => apiModelOptions.map((model) => ({ ...model, label: model.label })),
+    () => apiModelOptions.map((model) => ({ id: model.id, label: model.label })),
     [apiModelOptions],
   );
 
@@ -737,10 +540,9 @@ export function InlineModelSwitcher({
       data-testid="inline-model-switcher"
     >
       <button
-        ref={chipRef}
         type="button"
         className={
-          'inline-switcher__chip od-tooltip' +
+          'inline-switcher__chip' +
           (showAmrReminder ? ' has-amr-reminder' : '')
         }
         data-testid="inline-model-switcher-chip"
@@ -748,8 +550,8 @@ export function InlineModelSwitcher({
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={`${chipMode} · ${chipPrimary} · ${chipModel}`}
+        title={`${chipMode} · ${chipPrimary} · ${chipModel}`}
         data-tooltip={`${chipMode} · ${chipPrimary} · ${chipModel}`}
-        data-tooltip-placement="bottom"
       >
         {showAmrReminder ? (
           <span
@@ -807,11 +609,6 @@ export function InlineModelSwitcher({
                 data-testid="inline-model-switcher-mode-daemon"
                 disabled={!daemonLive && config.mode !== 'daemon'}
                 onClick={() => {
-                  trackExecutionSettingsPopoverClick(analytics.track, {
-                    page_name: 'home',
-                    area: 'execution_settings_popover',
-                    element: 'mode_local_cli',
-                  });
                   // Optional-call so a transient Fast Refresh state where a
                   // parent has not yet re-rendered with the new prop signature
                   // does not crash the entire entry view. The same defensive
@@ -839,14 +636,7 @@ export function InlineModelSwitcher({
                   (config.mode === 'api' ? ' is-active' : '')
                 }
                 data-testid="inline-model-switcher-mode-api"
-                onClick={() => {
-                  trackExecutionSettingsPopoverClick(analytics.track, {
-                    page_name: 'home',
-                    area: 'execution_settings_popover',
-                    element: 'mode_byok',
-                  });
-                  onModeChange?.('api');
-                }}
+                onClick={() => onModeChange?.('api')}
                 title={t('inlineSwitcher.useByok')}
               >
                 {t('inlineSwitcher.chipByok')}
@@ -869,9 +659,7 @@ export function InlineModelSwitcher({
                     className="inline-switcher__agent-grid"
                     role="radiogroup"
                   >
-                    {installedAgents
-                      .filter((a) => a.id !== 'amr')
-                      .map((a) => {
+                    {installedAgents.map((a) => {
                       const active = config.agentId === a.id;
                       const agentName = displayAgentChipName(a);
                       const showAgentReminder =
@@ -918,131 +706,46 @@ export function InlineModelSwitcher({
                             <span className="inline-switcher__agent-name">
                               {agentName}
                             </span>
+                            {a.id === 'amr' ? (
+                              <span className="inline-switcher__agent-status">
+                                {amrStatusIconName ? (
+                                  <span
+                                    className={
+                                      'inline-switcher__agent-status-icon' +
+                                      (amrLoginPending ? ' is-pending' : '') +
+                                      (amrLoggedIn ? ' is-signed-in' : '') +
+                                      (!amrLoginPending && !amrLoggedIn ? ' is-signed-out' : '')
+                                    }
+                                  >
+                                    <Icon name={amrStatusIconName} size={13} />
+                                  </span>
+                                ) : null}
+                                <span
+                                  className={
+                                    'inline-switcher__agent-action-label' +
+                                    (amrLoginPending ? ' is-cancelable' : '')
+                                  }
+                                >
+                                  <span className="inline-switcher__agent-action-default">
+                                    {amrActionLabel}
+                                  </span>
+                                  {amrLoginPending ? (
+                                    <span
+                                      className="inline-switcher__agent-action-hover"
+                                      aria-hidden="true"
+                                    >
+                                      {amrPendingHoverLabel}
+                                    </span>
+                                  ) : null}
+                                </span>
+                              </span>
+                            ) : null}
                           </button>
                         </div>
                       );
                     })}
                   </div>
                 )}
-
-              {amrInstalled ? (
-                <div
-                  className={
-                    'inline-switcher__account' +
-                    (config.agentId === 'amr' ? ' is-active' : '')
-                  }
-                >
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={config.agentId === 'amr'}
-                    aria-label={`Open Design ${amrInlineStatus}`}
-                    className="inline-switcher__account-id inline-switcher__account-select"
-                    data-testid="inline-model-switcher-agent-amr"
-                    title={amrLoginPending ? amrPendingHoverLabel : undefined}
-                    onClick={() => void handleAgentButtonClick('amr')}
-                  >
-                    <span className="inline-switcher__account-id-icon">
-                      <AgentIcon id="amr" size={24} />
-                      {showAmrReminderInPopover && config.agentId !== 'amr' ? (
-                        <span
-                          className="inline-switcher__amr-reminder-dot inline-switcher__amr-reminder-dot--account"
-                          data-testid="inline-model-switcher-account-amr-reminder"
-                          aria-hidden="true"
-                        />
-                      ) : null}
-                    </span>
-                    <span className="inline-switcher__account-text">
-                      <span className="inline-switcher__account-name-row">
-                        <span className="inline-switcher__account-name">
-                          Open Design
-                        </span>
-                        {amrLoggedIn ? (
-                          <PlanBadge plan={amrPlanLabel} size="md" />
-                        ) : null}
-                      </span>
-                      {amrLoggedIn && amrBalanceDisplayLabel ? (
-                        <span className="inline-switcher__account-subtitle">
-                          <span className="inline-switcher__account-stat">
-                            <span className="inline-switcher__account-stat-label">
-                              {t('settings.amrBalance')}
-                            </span>
-                            <span className="inline-switcher__account-stat-value">
-                              {amrBalanceDisplayLabel}
-                            </span>
-                          </span>
-                        </span>
-                      ) : null}
-                    </span>
-                  </button>
-                  {amrLoginError ? (
-                    <span className="inline-switcher__account-status is-error">
-                      {amrLoginError}
-                    </span>
-                  ) : amrLoggedIn ? (
-                    amrCanUpgrade ? (
-                      <button
-                        type="button"
-                        className="inline-switcher__account-upgrade"
-                        data-testid="inline-model-switcher-account-upgrade"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const attribution = recordAmrEntry(
-                            analytics.track,
-                            'inline_amr_upgrade',
-                            new Date(),
-                            { metricsConsent: config.telemetry?.metrics === true },
-                          );
-                          const deviceId = amrHandoffDeviceId({
-                            metricsConsent: config.telemetry?.metrics === true,
-                            resolvedDeviceId: getResolvedDeviceId(),
-                            installationId: config.installationId,
-                          });
-                          window.open(
-                            attributedAmrUrl(
-                              amrPlansUrlForProfile(
-                                amrStatus?.profile ??
-                                  config.agentCliEnv?.amr?.OPEN_DESIGN_AMR_PROFILE,
-                              ),
-                              attribution,
-                              deviceId,
-                            ),
-                            '_blank',
-                            'noopener,noreferrer',
-                          );
-                        }}
-                      >
-                        {t('settings.amrUpgrade')}
-                      </button>
-                    ) : null
-                  ) : (
-                    <button
-                      type="button"
-                      className="inline-switcher__account-action"
-                      data-testid="inline-model-switcher-account-action"
-                      title={amrLoginPending ? amrPendingHoverLabel : undefined}
-                      onClick={() => {
-                        if (amrLoginPending) {
-                          void handleAmrCancelLogin();
-                          return;
-                        }
-                        const attribution = recordAmrEntry(
-                          analytics.track,
-                          'inline_model_switcher_amr_row',
-                          new Date(),
-                          { metricsConsent: config.telemetry?.metrics === true },
-                        );
-                        void handleAmrSignIn(attribution);
-                      }}
-                    >
-                      {amrStatusIconName ? (
-                        <Icon name={amrStatusIconName} size={13} />
-                      ) : null}
-                      {amrActionLabel}
-                    </button>
-                  )}
-                </div>
-              ) : null}
               </div>
 
               {currentAgent &&
@@ -1058,23 +761,14 @@ export function InlineModelSwitcher({
                     searchInputTestId="inline-model-switcher-agent-model-search"
                     popoverTestId="inline-model-switcher-agent-model-popover"
                     searchPlaceholder={t('designs.searchPlaceholder')}
-                    getPopoverBoundary={getModelPopoverBoundary}
                     aria-label={t('inlineSwitcher.modelLabel')}
-                    models={inlineAgentModelOptions}
+                    models={currentAgent.models}
                     value={currentModelId ?? ''}
-                    onChange={(nextValue) => {
-                      trackExecutionSettingsPopoverClick(analytics.track, {
-                        page_name: 'home',
-                        area: 'execution_settings_popover',
-                        element: 'model_dropdown',
-                        execution_mode: 'local_cli',
-                        model_id: modelIdForTracking(nextValue),
-                      });
+                    onChange={(nextValue) =>
                       onAgentModelChange?.(currentAgent.id, {
                         model: nextValue,
-                        serviceTier: undefined,
-                      });
-                    }}
+                      })
+                    }
                     additionalOptions={
                       currentAgent.id !== 'amr' &&
                       currentModelId &&
@@ -1087,81 +781,7 @@ export function InlineModelSwitcher({
                           ]
                         : undefined
                     }
-                    disabledOptionHint={
-                      currentAgent?.id === 'amr'
-                        ? (option) =>
-                            option.enabled === false
-                              ? t('settings.amrModelUpgradeHint')
-                              : null
-                        : undefined
-                    }
-                    onDisabledOptionUpgrade={
-                      currentAgent?.id === 'amr'
-                        ? () => {
-                            const attribution = recordAmrEntry(
-                              analytics.track,
-                              'inline_amr_upgrade',
-                              new Date(),
-                              {
-                                metricsConsent:
-                                  config.telemetry?.metrics === true,
-                              },
-                            );
-                            const deviceId = amrHandoffDeviceId({
-                              metricsConsent:
-                                config.telemetry?.metrics === true,
-                              resolvedDeviceId: getResolvedDeviceId(),
-                              installationId: config.installationId,
-                            });
-                            window.open(
-                              attributedAmrUrl(
-                                amrPlansUrlForProfile(
-                                  amrStatus?.profile ??
-                                    config.agentCliEnv?.amr
-                                      ?.OPEN_DESIGN_AMR_PROFILE,
-                                ),
-                                attribution,
-                                deviceId,
-                              ),
-                              '_blank',
-                              'noopener,noreferrer',
-                            );
-                          }
-                        : undefined
-                    }
                   />
-                </div>
-              ) : null}
-              {currentAgent && currentServiceTierOptions.length > 0 ? (
-                <div className="inline-switcher__row">
-                  <span className="inline-switcher__label">
-                    {t('avatar.serviceTierLabel')}
-                  </span>
-                  <select
-                    aria-label={t('avatar.serviceTierLabel')}
-                    className="inline-switcher__select"
-                    data-testid="inline-model-switcher-service-tier"
-                    value={currentServiceTierId}
-                    onChange={(e) => {
-                      trackExecutionSettingsPopoverClick(analytics.track, {
-                        page_name: 'home',
-                        area: 'execution_settings_popover',
-                        element: 'model_dropdown',
-                        execution_mode: 'local_cli',
-                      });
-                      onAgentModelChange?.(currentAgent.id, {
-                        serviceTier:
-                          e.target.value === 'default' ? undefined : e.target.value,
-                      });
-                    }}
-                  >
-                    <option value="default">{t('common.default')}</option>
-                    {currentServiceTierOptions.map((tier) => (
-                      <option key={tier.id} value={tier.id}>
-                        {tier.label}
-                      </option>
-                    ))}
-                  </select>
                 </div>
               ) : null}
             </>
@@ -1185,19 +805,7 @@ export function InlineModelSwitcher({
                           (active ? ' is-active' : '')
                         }
                         data-testid={`inline-model-switcher-provider-${tab.id}`}
-                        onClick={() => {
-                          // Unlike Settings (which skips unmapped protocols),
-                          // report the click even when the protocol has no v2
-                          // provider_id (e.g. aihubmix) — just omit the field.
-                          trackExecutionSettingsPopoverClick(analytics.track, {
-                            page_name: 'home',
-                            area: 'execution_settings_popover',
-                            element: 'byok_provider_tab',
-                            provider_id:
-                              byokProtocolToTracking(tab.id) ?? undefined,
-                          });
-                          onApiProtocolChange?.(tab.id);
-                        }}
+                        onClick={() => onApiProtocolChange?.(tab.id)}
                       >
                         {tab.title}
                       </button>
@@ -1217,22 +825,10 @@ export function InlineModelSwitcher({
                     searchInputTestId="inline-model-switcher-api-model-search"
                     popoverTestId="inline-model-switcher-api-model-popover"
                     searchPlaceholder={t('designs.searchPlaceholder')}
-                    getPopoverBoundary={getModelPopoverBoundary}
                     aria-label={t('inlineSwitcher.modelLabel')}
                     models={apiModelChoices}
                     value={config.model}
-                    onChange={(nextValue) => {
-                      trackExecutionSettingsPopoverClick(analytics.track, {
-                        page_name: 'home',
-                        area: 'execution_settings_popover',
-                        element: 'model_dropdown',
-                        execution_mode: 'byok',
-                        provider_id:
-                          byokProtocolToTracking(apiProtocol) ?? undefined,
-                        model_id: modelIdForTracking(nextValue),
-                      });
-                      onApiModelChange?.(nextValue);
-                    }}
+                    onChange={(nextValue) => onApiModelChange?.(nextValue)}
                     additionalOptions={
                       config.model && !apiModelIds.includes(config.model)
                         ? [
@@ -1264,11 +860,6 @@ export function InlineModelSwitcher({
             className="inline-switcher__more"
             data-testid="inline-model-switcher-open-settings"
             onClick={() => {
-              trackExecutionSettingsPopoverClick(analytics.track, {
-                page_name: 'home',
-                area: 'execution_settings_popover',
-                element: 'open_execution_settings',
-              });
               setOpen(false);
               onOpenSettings?.('execution');
             }}

@@ -23,10 +23,6 @@ export const claudeAgentDef = {
     // — issue #235) get auto-detected without writing wrapper scripts.
     fallbackBins: ['openclaude'],
     versionArgs: ['--version'],
-    authProbe: {
-      args: ['auth', 'status'],
-      timeoutMs: 5000,
-    },
     helpArgs: ['-p', '--help'],
     capabilityFlags: {
       // Flag string -> capability key. After probing `--help`, we set
@@ -52,10 +48,12 @@ export const claudeAgentDef = {
     buildArgs: (_prompt, _imagePaths, extraAllowedDirs = [], options = {}, runtimeContext = {}) => {
       const caps = agentCapabilities.get('claude') || {};
       // `--input-format stream-json` lets the daemon stream multiple JSONL
-      // messages into stdin instead of closing it after the initial prompt,
-      // keeping the turn open so the daemon can stream further user messages
-      // mid-conversation. Paired with `--output-format stream-json` so the
-      // adapter parses structured events (see claude-stream.ts).
+      // messages into stdin instead of closing it after the initial prompt.
+      // This is what lets us answer Claude's `AskUserQuestion` tool calls
+      // with a real `tool_result` block — without it claude-code auto errors
+      // the tool because it cannot prompt the user interactively in headless
+      // mode, and the model falls back to a markdown duplicate of the same
+      // options.
       const args = ['-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose'];
       // `--include-partial-messages` lands richer streaming events but only
       // exists in newer Claude Code builds. Older installs reject it with

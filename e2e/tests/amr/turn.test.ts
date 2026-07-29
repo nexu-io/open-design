@@ -14,8 +14,13 @@
  *      `agentId: 'amr'` through `attachAcpSession` (not the legacy
  *      json-event-stream parser the old `incongruous-megaraptor` branch
  *      used).
- *   2. The synthetic `'default'` model id is preserved so vela can use the
- *      upstream account default without an explicit `session/set_model`.
+ *   2. AMR preflight refreshes `vela models` and substitutes the synthetic
+ *      `'default'` model id with the first live model (`glm-5`), so vela
+ *      receives a real `session/set_model` before `session/prompt` — a
+ *      regression here would manifest as
+ *      `session/set_model must be called before session/prompt` on the
+ *      real `vela` binary, but the fake here enforces the same gate
+ *      so it surfaces locally without a vela install.
  *   3. The full ACP transport (`initialize` → `session/new` →
  *      `session/set_model` → `session/prompt` → `session/update*`) flows
  *      between the daemon and a spawned subprocess that respects vela's
@@ -31,7 +36,7 @@ import { describe, expect, test } from 'vitest';
 import { requestJson } from '@/vitest/http';
 import { listMessages } from '@/vitest/messages';
 import { startRun, waitForRunStatus } from '@/vitest/runs';
-import { createSmokeSuite } from '@/vitest/suite';
+import { createSmokeSuite } from '@/vitest/smoke-suite';
 
 type ProjectResponse = {
   conversationId: string;
@@ -83,8 +88,8 @@ if (argv[2] === 'login') {
       [profile]: {
         runtimeKey: 'fake-runtime-key-0000000000000000000000',
         controlKey: 'fake-control-key-0000000000000000000000',
-        apiUrl: env.FAKE_VELA_API_URL || 'http://localhost:18080',
-        linkUrl: env.FAKE_VELA_LINK_URL || 'http://localhost:18081',
+        apiUrl: 'http://localhost:18080',
+        linkUrl: 'http://localhost:18081',
         user: { id: 'fake-user-id', email: 'e2e@example.com', plan: 'free' },
       },
     },
@@ -155,6 +160,14 @@ function handle(msg) {
   }
   if (method === 'session/prompt') {
     const sid = (params && params.sessionId) || SESSION_ID;
+    if (!sessionsWithModel.has(sid)) {
+      writeMessage({
+        jsonrpc: '2.0',
+        id,
+        error: { code: -32602, message: 'session/set_model must be called before session/prompt' },
+      });
+      return;
+    }
     writeNotification('session/update', {
       sessionId: sid,
       update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: ASSISTANT_TEXT } },
@@ -204,8 +217,8 @@ describe('AMR chat-run end-to-end', () => {
               local: {
                 runtimeKey: 'fake-runtime-key',
                 controlKey: 'fake-control-key',
-                apiUrl: suite.amr.apiUrl,
-                linkUrl: suite.amr.linkUrl,
+                apiUrl: 'http://localhost:18080',
+                linkUrl: 'http://localhost:18081',
                 user: { id: 'fake-user-id', email: 'e2e@example.com', plan: 'free' },
               },
             },
@@ -222,10 +235,9 @@ describe('AMR chat-run end-to-end', () => {
         body: {
           agentCliEnv: {
             amr: {
-              FAKE_VELA_API_URL: suite.amr.apiUrl,
-              FAKE_VELA_LINK_URL: suite.amr.linkUrl,
               VELA_BIN: velaBin,
-              ...suite.amr.runtimeEnv(),
+              VELA_LINK_URL: 'http://localhost:18081',
+              VELA_RUNTIME_KEY: 'fake-runtime-key',
             },
           },
           agentId: 'amr',

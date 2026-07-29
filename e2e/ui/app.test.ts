@@ -1,7 +1,6 @@
-import { expect, test } from '@/playwright/suite';
-import { openNewProjectModal as openNewProjectModalFromProjects } from '@/playwright/rail';
+import { expect, test } from '@playwright/test';
+import { ensureRailOpen } from '@/playwright/rail';
 import { routeAgents } from '@/playwright/mock-factory';
-import { clickDeckNextSlide, clickDeckPreviousSlide, openAllProjectFiles } from '@/playwright/workspace';
 import type { Dialog, Locator, Page, Request, Response } from '@playwright/test';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -33,12 +32,6 @@ const CRITICAL_SCENARIO_IDS = new Set([
   'deep-link-preview',
   'file-upload-send',
   'conversation-delete-recovery',
-]);
-const MERGE_EXTRA_SCENARIO_IDS = new Set([
-  'prototype-basic',
-  'deck-basic',
-  'file-mention',
-  'deep-link-preview',
 ]);
 test.describe.configure({ timeout: 45_000 });
 
@@ -100,7 +93,7 @@ test.beforeEach(async ({ page }) => {
 for (const entry of automatedUiScenarios().filter(
   (scenario) => !APP_OWNED_SCENARIO_FLOWS.has(scenario.flow ?? ''),
 )) {
-  test(`[${scenarioPriority(entry)}]${criticalScenarioTag(entry)}${mergeExtraScenarioTag(entry)} ${entry.id}: ${entry.title}`, async ({ page }) => {
+  test(`[${scenarioPriority(entry)}]${criticalScenarioTag(entry)} ${entry.id}: ${entry.title}`, async ({ page }) => {
     await routeMockAgents(page);
 
     if (entry.flow === 'example-use-prompt') {
@@ -210,7 +203,7 @@ for (const entry of automatedUiScenarios().filter(
       });
     }
 
-    if (entry.flow === 'question-form-single-selection') {
+    if (entry.flow === 'question-form-selection-limit') {
       await page.route('**/api/runs', async (route) => {
         await route.fulfill({ status: 202, contentType: 'application/json', body: '{"runId":"mock-run"}' });
       });
@@ -223,8 +216,9 @@ for (const entry of automatedUiScenarios().filter(
               questions: [
                 {
                   id: 'tone',
-                  label: 'Visual tone',
-                  type: 'radio',
+                  label: 'Visual tone (pick up to two)',
+                  type: 'checkbox',
+                  maxSelections: 2,
                   options: ['Editorial / magazine', 'Modern minimal', 'Soft / warm'],
                   required: true,
                 },
@@ -276,8 +270,9 @@ for (const entry of automatedUiScenarios().filter(
                     questions: [
                       {
                         id: 'tone',
-                        label: 'Visual tone',
-                        type: 'radio',
+                        label: 'Visual tone (pick up to two)',
+                        type: 'checkbox',
+                        maxSelections: 2,
                         options: ['Editorial / magazine', 'Modern minimal', 'Soft / warm'],
                         required: true,
                       },
@@ -366,8 +361,8 @@ for (const entry of automatedUiScenarios().filter(
       await runConversationDeleteRecoveryFlow(page, entry);
       return;
     }
-    if (entry.flow === 'question-form-single-selection') {
-      await runQuestionFormSingleSelectionFlow(page, entry);
+    if (entry.flow === 'question-form-selection-limit') {
+      await runQuestionFormSelectionLimitFlow(page, entry);
       return;
     }
     if (entry.flow === 'question-form-submit-persistence') {
@@ -518,10 +513,7 @@ test('[P0] @critical sending preview comments attaches structured context and op
   expect(revisedFileName).not.toBe('');
   await page.goto(`/projects/${projectId}/files/${revisedFileName}`, { waitUntil: 'domcontentloaded' });
   await waitForLoadingToClear(page);
-  const escapedRevisedFileName = revisedFileName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  await expect(page).toHaveURL(
-    new RegExp(`/projects/${projectId}(?:/conversations/[^/]+)?/files/${escapedRevisedFileName}$`),
-  );
+  await expect(page).toHaveURL(new RegExp(`/projects/${projectId}/files/${revisedFileName.replace('.', '\\.')}$`));
   await expect(artifactPreview(page)).toBeVisible();
   await expectProjectFileToContain(page, projectId, revisedFileName, 'Revised headline');
   await expectProjectFileToContain(page, projectId, revisedFileName, 'Preview copy refreshed after comment send.');
@@ -560,7 +552,7 @@ function scenarioPriority(entry: UiScenario): 'P0' | 'P1' | 'P2' {
     case 'deck-pagination-next-prev-correctness':
     case 'deck-pagination-per-file-isolated':
       return 'P1';
-    case 'question-form-single-selection':
+    case 'question-form-selection-limit':
       return 'P2';
     default:
       return 'P1';
@@ -569,10 +561,6 @@ function scenarioPriority(entry: UiScenario): 'P0' | 'P1' | 'P2' {
 
 function criticalScenarioTag(entry: UiScenario): string {
   return CRITICAL_SCENARIO_IDS.has(entry.id) ? ' @critical' : '';
-}
-
-function mergeExtraScenarioTag(entry: UiScenario): string {
-  return MERGE_EXTRA_SCENARIO_IDS.has(entry.id) ? ' @merge-extra' : '';
 }
 
 async function routeMockSuccessfulRun(page: Page, runId: string) {
@@ -644,7 +632,7 @@ async function seedHtmlArtifact(
 }
 
 async function openDesignFile(page: Page, fileName: string) {
-  await openAllProjectFiles(page);
+  await page.getByTestId('design-files-tab').click();
   const fileRow = page.locator('[data-testid^="design-file-row-"]', {
     hasText: fileName,
   });
@@ -728,7 +716,6 @@ async function expectWorkspaceReady(page: Page) {
   await expect(page).toHaveURL(/\/projects\//);
   await expect(page.getByTestId('chat-composer')).toBeVisible();
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
-  await expect(page.locator('.chat-loading-state')).toHaveCount(0, { timeout: T.medium });
   await expect(page.getByTestId('file-workspace')).toBeVisible();
 }
 
@@ -746,7 +733,7 @@ async function sendPrompt(page: Page, prompt: string) {
   await input.click();
   await input.fill(prompt);
   await expect(input).toHaveText(prompt, { timeout: T.short });
-  await expect(sendButton).toBeEnabled({ timeout: T.medium });
+  await expect(sendButton).toBeEnabled({ timeout: T.short });
   await Promise.all([
     page.waitForResponse(isCreateRunResponse, { timeout: 5_000 }),
     sendButton.evaluate((button: HTMLButtonElement) => button.click()),
@@ -965,27 +952,41 @@ async function runLiveArtifactProjectRoutingFlow(
 }
 
 
-async function runQuestionFormSingleSelectionFlow(
+async function runQuestionFormSelectionLimitFlow(
   page: Page,
   entry: UiScenario,
 ) {
   await sendPrompt(page, entry.prompt);
 
-  const toneQuestion = page.locator('.qf-field', { has: page.getByText('Visual tone') });
+  const toneQuestion = page.locator('.qf-field', {
+    has: page.getByText('Visual tone (pick up to two)'),
+  });
   await expect(toneQuestion).toBeVisible();
 
-  const editorial = toneQuestion.getByRole('radio', { name: 'Content-led product' });
-  const modern = toneQuestion.getByRole('radio', { name: 'Quiet SaaS' });
-  const editorialCard = toneQuestion.locator('label.qf-visual-card[title="Content-led product"]');
-  const modernCard = toneQuestion.locator('label.qf-visual-card[title="Quiet SaaS"]');
+  const editorialChip = toneQuestion.locator('label.qf-chip', {
+    has: page.getByText('Editorial / magazine'),
+  });
+  const modernChip = toneQuestion.locator('label.qf-chip', {
+    has: page.getByText('Modern minimal'),
+  });
+  const softChip = toneQuestion.locator('label.qf-chip', {
+    has: page.getByText('Soft / warm'),
+  });
+  const editorial = editorialChip.locator('input[type="checkbox"]');
+  const modern = modernChip.locator('input[type="checkbox"]');
+  const soft = softChip.locator('input[type="checkbox"]');
 
-  await editorialCard.click();
+  await editorialChip.click();
+  await modernChip.click();
+
   await expect(editorial).toBeChecked();
-  await modernCard.click();
-
-  await expect(editorial).not.toBeChecked();
   await expect(modern).toBeChecked();
-  await expect(toneQuestion.locator('input[type="radio"]:checked')).toHaveCount(1);
+  await expect(soft).toBeDisabled();
+
+  const checkedOptions = toneQuestion.locator('input[type="checkbox"]:checked');
+  await expect(checkedOptions).toHaveCount(2);
+  await expect(soft).not.toBeChecked();
+  await expect(checkedOptions).toHaveCount(2);
 }
 
 async function runQuestionFormSubmitPersistenceFlow(
@@ -997,25 +998,20 @@ async function runQuestionFormSubmitPersistenceFlow(
   const firstRunBody = (await firstRunRequestPromise).postDataJSON() as Record<string, unknown>;
   expectScenarioRunRequest(firstRunBody, entry);
 
-  // Studio discovery renders the clarification form inline in the chat flow
-  // (the legacy Questions workspace tab is gone), so locate the form directly.
   const form = page.locator('.question-form').first();
   await expect(form).toBeVisible();
 
-  const toneQuestion = form.locator('.qf-field', { has: page.getByText('Visual tone') });
-  const modern = toneQuestion.getByRole('radio', { name: 'Quiet SaaS' });
-  await toneQuestion.locator('label.qf-visual-card[title="Quiet SaaS"]').click();
-  await expect(modern).toBeChecked();
+  const toneQuestion = form.locator('.qf-field', {
+    has: page.getByText('Visual tone (pick up to two)'),
+  });
+  await toneQuestion.locator('label.qf-chip', { has: page.getByText('Editorial / magazine') }).click();
+  await toneQuestion.locator('label.qf-chip', { has: page.getByText('Modern minimal') }).click();
 
   await form.getByRole('button', { name: 'Send answers' }).click();
 
-  const summary = page.getByTestId('question-form-summary');
-  await expect(summary).toBeVisible();
-  await expect(summary.getByText('Questions answered')).toBeVisible();
-  await expect(summary.getByText('Visual tone')).toBeVisible();
-  // The summary echoes the picked visual-style card (its title), not the
-  // underlying option label.
-  await expect(summary.getByText('Quiet SaaS')).toBeVisible();
+  await expect(page.getByText('[form answers — discovery]', { exact: false })).toBeVisible();
+  await expect(form.getByText('answered', { exact: true })).toBeVisible();
+  await expect(form.getByText('Answers sent — agent is using these for the rest of the session.')).toBeVisible();
 
   const { projectId, conversationId } = await getCurrentProjectContext(page);
   const messagesResponse = await page.request.get(
@@ -1025,18 +1021,13 @@ async function runQuestionFormSubmitPersistenceFlow(
   const { messages } = (await messagesResponse.json()) as { messages: Array<{ role: string; content: string }> };
   const formAnswerMessage = messages.find((message) => message.role === 'user' && message.content.includes('[form answers — discovery]'));
   expect(formAnswerMessage).toBeTruthy();
-  // Inline discovery submits the picked visual-style card and its value id,
-  // not the raw option labels.
-  expect(formAnswerMessage?.content).toContain('Visual tone: Quiet SaaS');
-  expect(formAnswerMessage?.content).toContain('[value: prototype-quiet-saas]');
 
   await page.reload();
-  await expectWorkspaceReady(page);
-  const restoredSummary = page.getByTestId('question-form-summary');
-  await expect(restoredSummary).toBeVisible();
-  await expect(restoredSummary.getByText('Visual tone')).toBeVisible();
-  await expect(restoredSummary.getByText('Quiet SaaS')).toBeVisible();
-  await expect(page.locator('.question-form')).toHaveCount(0);
+  const restoredForm = page.locator('.question-form').first();
+  await expect(restoredForm).toBeVisible();
+  await expect(restoredForm.getByText('answered', { exact: true })).toBeVisible();
+  await expect(restoredForm.locator('input[type="checkbox"]:checked')).toHaveCount(2);
+  await expect(restoredForm.getByRole('button', { name: 'Send answers' })).toHaveCount(0);
 }
 
 async function runGenerationDoesNotCreateExtraFileFlow(
@@ -1132,11 +1123,11 @@ async function runDeckPaginationNextPrevCorrectnessFlow(page: Page) {
 
   const frame = artifactPreviewFrame(page);
   await expect(frame.getByText('Slide One')).toBeVisible();
-  await clickDeckNextSlide(page);
+  await page.getByLabel('Next slide').click();
   await expect(frame.getByText('Slide Two')).toBeVisible();
-  await clickDeckNextSlide(page);
+  await page.getByLabel('Next slide').click();
   await expect(frame.getByText('Slide Three')).toBeVisible();
-  await clickDeckPreviousSlide(page);
+  await page.getByLabel('Previous slide').click();
   await expect(frame.getByText('Slide Two')).toBeVisible();
 }
 
@@ -1149,13 +1140,13 @@ async function runDeckPaginationPerFileIsolatedFlow(page: Page) {
   await openDesignFile(page, 'deck-alpha.html');
   const frame = artifactPreviewFrame(page);
   await expect(frame.getByText('Alpha One')).toBeVisible();
-  await clickDeckNextSlide(page);
+  await page.getByLabel('Next slide').click();
   await expect(frame.getByText('Alpha Two')).toBeVisible();
 
-  await openAllProjectFiles(page);
+  await page.getByTestId('design-files-tab').click();
   await openDesignFile(page, 'deck-beta.html');
   await expect(frame.getByText('Beta One')).toBeVisible();
-  await clickDeckNextSlide(page);
+  await page.getByLabel('Next slide').click();
   await expect(frame.getByText('Beta Two')).toBeVisible();
 
   await page.getByRole('tab', { name: /deck-alpha\.html/i }).click();
@@ -1186,7 +1177,7 @@ async function seedDeckArtifact(
       title,
       entry: fileName,
       renderer: 'deck-html',
-      exports: ['html', 'pdf'],
+      exports: ['html', 'pptx'],
     },
   );
 }
@@ -1217,12 +1208,10 @@ async function createProjectNameOnly(
   await openNewProjectModal(page);
   await expect(page.getByTestId('new-project-panel')).toBeVisible();
   if (entry.create.tab) {
-    await clickVisible(page.getByTestId(`new-project-tab-${entry.create.tab}`));
-    await expect(page.getByTestId(`new-project-tab-${entry.create.tab}`)).toHaveAttribute('aria-selected', 'true');
+    await page.getByTestId(`new-project-tab-${entry.create.tab}`).click();
   }
   if (entry.create.tab === 'media' && entry.create.mediaSurface) {
-    await clickVisible(page.getByTestId(`new-project-media-surface-${entry.create.mediaSurface}`));
-    await expect(page.getByTestId(`new-project-media-surface-${entry.create.mediaSurface}`)).toHaveAttribute('aria-selected', 'true');
+    await page.getByTestId(`new-project-media-surface-${entry.create.mediaSurface}`).click();
   }
   if (entry.create.tab === 'media' && entry.create.mediaSurface === 'video' && entry.create.videoModel) {
     await page.getByTestId('model-picker-trigger').click();
@@ -1232,11 +1221,6 @@ async function createProjectNameOnly(
     await page.getByRole('button', { name: 'SFX' }).click();
   }
   await page.getByTestId('new-project-name').fill(entry.create.projectName);
-}
-
-async function clickVisible(locator: Locator) {
-  await expect(locator).toBeVisible({ timeout: T.medium });
-  await locator.evaluate((element: HTMLElement) => element.click());
 }
 
 async function gotoEntryHome(page: Page) {
@@ -1252,11 +1236,14 @@ async function gotoEntryHome(page: Page) {
 }
 
 async function openNewProjectModal(page: Page) {
-  await openNewProjectModalFromProjects(page);
+  await ensureRailOpen(page);
+  await page.getByTestId('entry-nav-new-project').click();
+  await expect(page.getByTestId('new-project-modal')).toBeVisible();
+  await expect(page.getByTestId('new-project-panel')).toBeVisible();
 }
 
 async function waitForLoadingToClear(page: Page) {
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
+  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.medium });
 }
 
 async function getCurrentProjectContext(
@@ -1493,7 +1480,12 @@ async function runConversationPersistenceFlow(
   const historyList = page.getByTestId('conversation-list');
   await expect(historyList).toBeVisible();
   await expect(historyList.locator('.chat-conv-item')).toHaveCount(2);
-  await historyList.getByTestId(`conversation-select-${firstConversationId}`).click();
+  await historyList
+    .locator('.chat-conv-item')
+    .filter({ hasText: entry.prompt })
+    .first()
+    .locator('[data-testid^="conversation-select-"]')
+    .click();
 
   await expect(page.locator('.msg.user').getByText(entry.prompt, { exact: true })).toBeVisible();
   await expect(page.locator('.msg.user').getByText(nextPrompt, { exact: true })).toHaveCount(0);

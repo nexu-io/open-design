@@ -1,5 +1,3 @@
-import type { ReasoningExecutionRequestFields } from './reasoningExecution';
-
 export type ProxyMessageRole = 'system' | 'user' | 'assistant' | 'tool';
 
 export type ProxyMessageContent =
@@ -25,7 +23,7 @@ export interface ProxyMessage {
   content: ProxyMessageContent;
 }
 
-export interface ProxyStreamRequest extends ReasoningExecutionRequestFields {
+export interface ProxyStreamRequest {
   baseUrl: string;
   apiKey: string;
   model: string;

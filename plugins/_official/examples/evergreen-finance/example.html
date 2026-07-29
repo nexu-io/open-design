@@ -1,0 +1,627 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Kova — Evergreen Finance</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <!-- Cooper BT W01 (Light + Medium) from onlinewebfonts -->
+  <link rel="stylesheet" href="https://db.onlinewebfonts.com/c/53077f9a3eee9c479d37d6af20394ded?family=Cooper+BT+W01+Light">
+  <link rel="stylesheet" href="https://db.onlinewebfonts.com/c/5ade3423145f3b9f7031574333ca0b73?family=Cooper+BT+W01+Medium">
+  <style>
+    :root {
+      --dark-green: #08150C;
+      --hover-green: #1a2e1f;
+      --cream: #FDF5EB;
+      --beige-card: #EBE4DC;
+      --beige-inner: #F4F1EC;
+      --stone-500: #78716c;
+      --stone-600: #57534e;
+      --stone-700: #44403c;
+      --stone-800: #292524;
+      --stone-200: #e7e5e4;
+      --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { overflow-x: hidden; }
+    body {
+      font-family: 'Inter', -apple-system, system-ui, sans-serif;
+      color: var(--stone-800);
+      background: #fff;
+    }
+    .font-cooper { font-family: 'Cooper BT W01 Light', 'Georgia', serif; }
+    .font-cooper-medium {
+      font-family: 'Cooper BT W01 Medium', 'Cooper BT W01 Light', 'Georgia', serif;
+      font-weight: 500;
+    }
+    img, svg, canvas, video { display: block; }
+    button { font: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+    a { text-decoration: none; color: inherit; }
+
+    /* ───── FadeUp ───── */
+    .fade {
+      opacity: 0;
+      transform: translateY(24px);
+      filter: blur(8px);
+      transition: opacity 0.7s var(--ease), transform 0.7s var(--ease), filter 0.7s var(--ease);
+    }
+    .fade.visible {
+      opacity: 1;
+      transform: translateY(0);
+      filter: blur(0px);
+    }
+
+    /* ───── Buttons ───── */
+    .btn-dark {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: var(--dark-green); color: #fff;
+      font-size: 0.875rem; font-weight: 500;
+      padding: 10px 20px; border-radius: 12px;
+      transition: background 0.2s ease;
+    }
+    .btn-dark:hover { background: var(--hover-green); }
+    .btn-light {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: rgba(255,255,255,0.8); backdrop-filter: blur(8px);
+      color: var(--stone-800); border: 1px solid var(--stone-200);
+      font-size: 0.875rem; font-weight: 500;
+      padding: 10px 20px; border-radius: 12px;
+      transition: background 0.2s ease;
+    }
+    .btn-light:hover { background: rgba(255,255,255,0.95); }
+
+    /* ───── HERO ───── */
+    .hero {
+      position: relative;
+      min-height: 100vh;
+      overflow: hidden;
+      display: flex; flex-direction: column;
+      background: #fff;
+    }
+    .boomerang-wrap {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      transform: scale(1.08); transform-origin: center;
+      z-index: 0;
+    }
+    .boomerang-wrap video, .boomerang-wrap canvas {
+      width: 100%; height: 100%; object-fit: cover;
+    }
+    .boomerang-wrap canvas { display: none; }
+
+    .hero-inner {
+      position: relative; z-index: 2;
+      flex: 1; display: flex; flex-direction: column; justify-content: space-between;
+    }
+
+    /* navbar */
+    .navbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 20px 20px;
+    }
+    .brand { font-size: 1.25rem; letter-spacing: -0.02em; color: var(--dark-green); }
+    .nav-links { display: none; gap: 28px; align-items: center; }
+    .nav-links a {
+      position: relative; font-size: 0.875rem; color: var(--stone-700);
+      transition: color 0.2s ease;
+    }
+    .nav-links a:hover { color: var(--dark-green); }
+    .nav-links a.active { font-weight: 500; color: var(--dark-green); }
+    .nav-links a.active .underbar {
+      position: absolute; left: 0; right: 0; bottom: -4px; height: 2px;
+      background: var(--dark-green); border-radius: 9999px;
+    }
+    .nav-cta { display: none; }
+    .hamburger { display: inline-flex; }
+    .mobile-menu {
+      position: absolute; top: 64px; left: 16px; right: 16px; z-index: 30;
+      background: rgba(255,255,255,0.95); backdrop-filter: blur(12px);
+      border-radius: 16px; box-shadow: 0 12px 40px rgba(0,0,0,0.12);
+      padding: 16px; flex-direction: column; gap: 12px; display: none;
+    }
+    .mobile-menu.open { display: flex; }
+    .mobile-menu a { font-size: 0.95rem; color: var(--stone-700); padding: 6px 4px; }
+
+    /* hero content */
+    .hero-content {
+      display: flex; flex-direction: column; align-items: center; text-align: center;
+      padding: 32px 20px 32px;
+    }
+    .hero-title {
+      font-size: 2.2rem; line-height: 1.1; letter-spacing: -0.02em;
+      color: var(--dark-green); max-width: 64rem;
+    }
+    .hero-sub {
+      margin-top: 16px; font-size: 0.875rem; color: var(--stone-600);
+      max-width: 24rem; line-height: 1.625;
+    }
+    .hero-ctas { display: flex; flex-direction: column; gap: 12px; margin-top: 24px; }
+
+    /* dashboard cards row */
+    .cards-row {
+      display: flex; align-items: flex-end; justify-content: center; gap: 8px;
+      padding: 0 16px 40px;
+    }
+    .dash-card {
+      background: rgba(255,255,255,0.95); backdrop-filter: blur(10px);
+      border-radius: 16px; box-shadow: 0 18px 50px rgba(8,21,12,0.12);
+      padding: 16px;
+    }
+    .card-outer { display: none; }
+    .card-savings { width: 11rem; }
+    .card-others { width: 11rem; }
+    .card-bills { width: 11rem; }
+    .pill-dd {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 0.7rem; color: var(--stone-600);
+      background: #f5f5f4; border-radius: 9999px; padding: 4px 10px;
+    }
+    .badge-green {
+      font-size: 0.7rem; font-weight: 600; color: #059669;
+      background: #d1fae5; border-radius: 9999px; padding: 3px 8px;
+    }
+    .badge-red {
+      font-size: 0.7rem; font-weight: 600; color: #dc2626;
+      background: #fee2e2; border-radius: 9999px; padding: 3px 8px;
+    }
+    .card-label { font-size: 0.8rem; font-weight: 600; color: var(--stone-800); }
+    .stat-row { display: flex; justify-content: space-between; font-size: 0.72rem; color: var(--stone-600); margin: 4px 0; }
+    .stat-row b { color: var(--stone-800); }
+    .barchart { display: flex; align-items: flex-end; gap: 3px; height: 44px; margin-top: 10px; }
+    .barchart span { flex: 1; border-radius: 3px 3px 0 0; }
+    .months { display: flex; justify-content: space-between; font-size: 0.62rem; color: var(--stone-500); margin-top: 6px; }
+
+    /* ───── SECTION (cream) ───── */
+    .section-cream { background: var(--cream); padding: 56px 20px; }
+    .container { max-width: 80rem; margin: 0 auto; }
+
+    .testimonial-grid {
+      display: grid; grid-template-columns: 1fr; gap: 40px; align-items: center;
+    }
+    .t-heading {
+      font-size: 1.5rem; line-height: 1.35; color: var(--dark-green); margin-bottom: 24px;
+    }
+    .company-badge { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; }
+    .company-badge .sq {
+      width: 28px; height: 28px; border-radius: 6px; background: var(--dark-green);
+      color: #fff; display: grid; place-items: center; font-size: 0.8rem; font-weight: 600;
+    }
+    .company-badge span.name { font-size: 0.95rem; color: var(--stone-800); font-weight: 500; }
+    .quote {
+      color: var(--stone-700); font-size: 1.125rem; line-height: 1.625; margin-bottom: 20px;
+    }
+    .attrib { margin-bottom: 24px; }
+    .attrib .who { font-size: 0.875rem; font-weight: 600; color: var(--stone-800); }
+    .attrib .role { font-size: 0.75rem; color: var(--stone-500); }
+    .t-video-wrap { max-width: 20rem; }
+    .t-video-wrap video {
+      width: 100%; border-radius: 16px; object-fit: cover; aspect-ratio: 1 / 1;
+    }
+
+    /* features */
+    .features-header {
+      display: flex; flex-direction: column; gap: 16px; align-items: flex-start;
+      justify-content: space-between; margin-bottom: 32px;
+    }
+    .f-heading { font-size: 1.5rem; line-height: 1.35; color: var(--dark-green); }
+    .cards-grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
+    .feature-card {
+      position: relative; aspect-ratio: 3 / 4; border-radius: 16px; overflow: hidden;
+    }
+    .feature-card .bg-img {
+      position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+    }
+    .feature-card .overlay {
+      position: absolute; inset: 0;
+      background: linear-gradient(to top, rgba(8,21,12,0.8), rgba(8,21,12,0.2) 50%, transparent);
+    }
+    .feature-card .top-label {
+      position: absolute; top: 20px; left: 20px; right: 20px; z-index: 2;
+      display: flex; align-items: center; gap: 8px;
+      color: #fff; font-size: 0.875rem; font-weight: 500;
+    }
+    .feature-card .bottom-text {
+      position: absolute; bottom: 20px; left: 20px; right: 20px; z-index: 2;
+      color: rgba(255,255,255,0.8); font-size: 0.875rem; line-height: 1.5;
+    }
+    /* Card 3 — Spend Insights (solid) */
+    .insight-card {
+      position: relative; aspect-ratio: 3 / 4; border-radius: 16px; overflow: hidden;
+      background: var(--beige-card); padding: 20px;
+      display: flex; flex-direction: column;
+    }
+    .insight-card .top-label {
+      display: flex; align-items: center; gap: 8px;
+      color: var(--stone-700); font-size: 0.875rem; font-weight: 500; margin-bottom: 14px;
+    }
+    .insight-inner {
+      background: var(--beige-inner); border-radius: 16px; padding: 16px;
+      flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;
+    }
+    .insight-inner .ititle { font-size: 0.875rem; font-weight: 600; color: var(--stone-800); }
+    .insight-inner .isub { font-size: 0.75rem; color: var(--stone-500); margin-bottom: 12px; }
+    .donut-wrap { position: relative; width: 120px; height: 120px; }
+    .donut-wrap svg { transform: rotate(-90deg); width: 100%; height: 100%; }
+    .donut-center {
+      position: absolute; inset: 0; display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+    }
+    .donut-center .pct { font-size: 1.25rem; font-weight: 700; color: var(--stone-800); }
+    .donut-center .lbl { font-size: 0.65rem; color: var(--stone-500); }
+
+    /* ───── Responsive ───── */
+    @media (min-width: 640px) {
+      .navbar { padding: 20px 40px; }
+      .hero-content { padding: 56px 40px; }
+      .hero-title { font-size: 3rem; }
+      .hero-sub { font-size: 1rem; max-width: 28rem; }
+      .hero-ctas { flex-direction: row; }
+      .cards-row { gap: 16px; }
+      .card-outer { display: block; }
+      .card-savings { width: 16rem; }
+      .card-others { width: 18rem; }
+      .card-bills { width: 16rem; }
+      .barchart { height: 56px; }
+      .section-cream { padding: 80px 40px; }
+      .t-heading { font-size: 1.875rem; }
+      .quote { font-size: 1.25rem; }
+      .t-video-wrap { max-width: 24rem; }
+      .f-heading { font-size: 1.875rem; }
+      .features-header { flex-direction: row; align-items: center; }
+      .cards-grid { grid-template-columns: 1fr 1fr; }
+    }
+    @media (min-width: 768px) {
+      .nav-links { display: flex; }
+      .nav-cta { display: inline-flex; }
+      .hamburger { display: none; }
+      .hero-title { font-size: 3.75rem; }
+      .testimonial-grid { grid-template-columns: 3fr 2fr; gap: 64px; }
+      .f-heading { font-size: 2.25rem; }
+    }
+    @media (min-width: 1024px) {
+      .navbar { padding: 20px 64px; }
+      .section-cream { padding: 80px 80px; }
+      .hero-title { font-size: 4.5rem; }
+      .cards-grid { grid-template-columns: repeat(4, 1fr); }
+    }
+  </style>
+</head>
+<body>
+  <!-- ════════ SECTION 1 — HERO ════════ -->
+  <section class="hero">
+    <div class="boomerang-wrap">
+      <video id="bm-video" muted playsinline crossorigin="anonymous"
+        src="https://plugin-assets.open-design.ai/plugins/evergreen-finance/hf_20260517_070729_32a7eb4e-d6e2-4571-badc-91b4dab1ecbe-2db9b1.mp4"></video>
+      <canvas id="bm-canvas"></canvas>
+    </div>
+
+    <div class="hero-inner">
+      <!-- navbar -->
+      <nav class="navbar fade" data-immediate>
+        <div class="brand font-cooper">Kova</div>
+        <div class="nav-links">
+          <a href="#">Explore</a>
+          <a href="#" class="active">Pricing<span class="underbar"></span></a>
+          <a href="#">Perks</a>
+          <a href="#">Reach</a>
+        </div>
+        <a href="#" class="btn-dark nav-cta">Get Started</a>
+        <button class="hamburger" id="hamburger" aria-label="Menu">
+          <svg id="ic-menu" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#08150C" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          <svg id="ic-x" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#08150C" stroke-width="2" stroke-linecap="round" style="display:none"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+        <div class="mobile-menu" id="mobile-menu">
+          <a href="#">Explore</a>
+          <a href="#">Pricing</a>
+          <a href="#">Perks</a>
+          <a href="#">Reach</a>
+          <a href="#" class="btn-dark" style="justify-content:center">Get Started</a>
+        </div>
+      </nav>
+
+      <!-- hero content -->
+      <div class="hero-content">
+        <h1 class="hero-title font-cooper fade" data-immediate data-delay="100">Own your money and build the wealth you deserve</h1>
+        <p class="hero-sub fade" data-immediate data-delay="250">Step into a smarter way to bank, right from your pocket. Kova gives you instant control over your money, wherever you are.</p>
+        <div class="hero-ctas fade" data-immediate data-delay="400">
+          <button class="btn-light">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="#292524" stroke="#292524" stroke-width="2" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            Watch 30s Demo
+          </button>
+          <button class="btn-dark">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Get the App
+          </button>
+        </div>
+      </div>
+
+      <!-- dashboard cards -->
+      <div class="cards-row">
+        <!-- Savings card (outer, hidden mobile) -->
+        <div class="dash-card card-savings card-outer fade" data-immediate data-delay="550">
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <span class="card-label">Savings</span>
+            <span class="badge-green">+25%</span>
+          </div>
+          <div style="margin-top:6px"><span class="badge-green" style="background:#ecfdf5">+12%</span></div>
+          <svg viewBox="0 0 240 70" style="width:100%;height:48px;margin-top:8px" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="savfill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#10b981" stop-opacity="0.35"/>
+                <stop offset="100%" stop-color="#10b981" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+            <polygon points="0,55 40,45 80,50 120,30 160,35 200,15 240,20 240,70 0,70" fill="url(#savfill)"/>
+            <polyline points="0,55 40,45 80,50 120,30 160,35 200,15 240,20" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <div class="months"><span>Jan</span><span>Feb</span><span>Mar</span><span>Apr</span></div>
+        </div>
+
+        <!-- Others card (center) -->
+        <div class="dash-card card-others fade" data-immediate data-delay="650">
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <span class="card-label">Others</span>
+            <span class="pill-dd">Monthly
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </span>
+          </div>
+          <div class="stat-row"><span>Groceries</span><b>78%</b></div>
+          <div class="stat-row"><span>Entertain.</span><b>43%</b></div>
+          <div class="stat-row"><span>Transport</span><b>23%</b></div>
+          <div class="barchart" id="bar-others"></div>
+        </div>
+
+        <!-- Bill Pay card (outer, hidden mobile) -->
+        <div class="dash-card card-bills card-outer fade" data-immediate data-delay="750">
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <span class="card-label">Bill Pay</span>
+            <span class="pill-dd">Monthly
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </span>
+          </div>
+          <div style="margin-top:6px"><span class="badge-red">-8%</span></div>
+          <div class="barchart" id="bar-bills"></div>
+          <div class="months"><span>Jan</span><span>Mar</span><span>May</span><span>Jul</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════ SECTION 2 — TESTIMONIAL ════════ -->
+  <section class="section-cream">
+    <div class="container testimonial-grid">
+      <div class="t-left">
+        <h2 class="t-heading font-cooper-medium fade">Trusted by ambitious, fast-moving teams</h2>
+        <div class="company-badge fade" data-delay="100">
+          <div class="sq font-cooper-medium">A</div>
+          <span class="name">Arcvex</span>
+        </div>
+        <p class="quote font-cooper fade" data-delay="200">With Kova, I have full visibility into our team's spending in real time. It feels like having a sharp financial advisor available at every hour, helping us stay on budget and make wiser calls.</p>
+        <div class="attrib fade" data-delay="300">
+          <div class="who">Maya Reeves</div>
+          <div class="role">Director, Arcvex</div>
+        </div>
+        <button class="btn-dark fade" data-delay="400">
+          All Stories
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        </button>
+      </div>
+      <div class="t-right fade" data-delay="150">
+        <div class="t-video-wrap">
+          <video autoplay muted loop playsinline
+            src="https://plugin-assets.open-design.ai/plugins/evergreen-finance/hf_20260517_074029_c7a854bd-2d6e-4b62-96b3-ae8c16311e44-59f9be.mp4"></video>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════ SECTION 3 — FEATURES ════════ -->
+  <section class="section-cream">
+    <div class="container">
+      <div class="features-header">
+        <h2 class="f-heading font-cooper-medium fade">Designed to sharpen every decision</h2>
+        <button class="btn-dark fade" data-delay="100">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="#fff" stroke="#fff" stroke-width="2" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          Watch Demo
+        </button>
+      </div>
+
+      <div class="cards-grid">
+        <!-- Card 1 — Smart Budgeting -->
+        <div class="feature-card fade" data-delay="50">
+          <img class="bg-img" src="https://plugin-assets.open-design.ai/plugins/evergreen-finance/hf_20260517_061249_f20dfeda-1033-45ce-a3ee-070965599cbf-6c6b7e.webp&w=1280&q=85" alt="">
+          <div class="overlay"></div>
+          <div class="top-label">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.8L20 10l-6.1 1.2L12 17l-1.9-5.8L4 10l6.1-1.2z"/></svg>
+            Smart Budgeting
+          </div>
+          <div class="bottom-text">Let AI reshape how you plan your spending. Kova adapts to your…</div>
+        </div>
+
+        <!-- Card 2 — Bank-Grade Security -->
+        <div class="feature-card fade" data-delay="150">
+          <img class="bg-img" src="https://plugin-assets.open-design.ai/plugins/evergreen-finance/hf_20260517_061305_db631f5f-185f-4fda-a7a8-1dd7359ef2ea-4b7cdd.webp&w=1280&q=85" alt="">
+          <div class="overlay"></div>
+          <div class="top-label">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
+            Bank-Grade Security
+          </div>
+          <div class="bottom-text">Keep your money safe with end-to-end encryption, live fraud alerts, and two-factor auth…</div>
+        </div>
+
+        <!-- Card 3 — Spend Insights (solid) -->
+        <div class="insight-card fade" data-delay="250">
+          <div class="top-label">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#44403c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>
+            Spend Insights
+          </div>
+          <div class="insight-inner">
+            <div class="ititle">Monthly Spend</div>
+            <div class="isub">1 Apr – 30 May 2026</div>
+            <div class="donut-wrap">
+              <svg viewBox="0 0 36 36">
+                <circle cx="18" cy="18" r="14" fill="none" stroke="#C46B2D" stroke-width="5" stroke-dasharray="26.4 61.56" stroke-dashoffset="0"/>
+                <circle cx="18" cy="18" r="14" fill="none" stroke="#7A8C3E" stroke-width="5" stroke-dasharray="22 65.96" stroke-dashoffset="-26.4"/>
+                <circle cx="18" cy="18" r="14" fill="none" stroke="#A8B87A" stroke-width="5" stroke-dasharray="17.6 70.36" stroke-dashoffset="-48.4"/>
+                <circle cx="18" cy="18" r="14" fill="none" stroke="#B8AFA4" stroke-width="5" stroke-dasharray="22 65.96" stroke-dashoffset="-66"/>
+              </svg>
+              <div class="donut-center">
+                <span class="pct">50%</span>
+                <span class="lbl">of budget</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 4 — Wealth Building -->
+        <div class="feature-card fade" data-delay="350">
+          <img class="bg-img" src="https://plugin-assets.open-design.ai/plugins/evergreen-finance/hf_20260517_061316_50e651f8-02d0-4add-9ddb-7d81d15ac02e-24edde.webp&w=1280&q=85" alt="">
+          <div class="overlay"></div>
+          <div class="top-label">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+            Wealth Building
+          </div>
+          <div class="bottom-text">Grow your net worth with tools that help you set targets, monitor gains, and act…</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    // ───── FadeUp: immediate (mount) + scroll-triggered (IntersectionObserver) ─────
+    (function () {
+      var immediate = document.querySelectorAll('.fade[data-immediate]');
+      immediate.forEach(function (el) {
+        var d = parseInt(el.getAttribute('data-delay') || '0', 10);
+        setTimeout(function () { el.classList.add('visible'); }, 80 + d);
+      });
+
+      var scrollEls = [];
+      document.querySelectorAll('.fade:not([data-immediate])').forEach(function (el) { scrollEls.push(el); });
+      if ('IntersectionObserver' in window) {
+        var io = new IntersectionObserver(function (entries) {
+          entries.forEach(function (entry) {
+            if (entry.isIntersecting) {
+              var el = entry.target;
+              var d = parseInt(el.getAttribute('data-delay') || '0', 10);
+              setTimeout(function () { el.classList.add('visible'); }, d);
+              io.unobserve(el);
+            }
+          });
+        }, { rootMargin: '-60px', threshold: 0.01 });
+        scrollEls.forEach(function (el) { io.observe(el); });
+      } else {
+        scrollEls.forEach(function (el) { el.classList.add('visible'); });
+      }
+    })();
+
+    // ───── Bar charts ─────
+    (function () {
+      function buildBars(id, count, accentIndex, accentColor, baseColor) {
+        var wrap = document.getElementById(id);
+        if (!wrap) return;
+        for (var i = 0; i < count; i++) {
+          var bar = document.createElement('span');
+          var h = 25 + Math.round((Math.sin(i * 1.3) * 0.5 + 0.5) * 65);
+          bar.style.height = h + '%';
+          bar.style.background = (i === accentIndex) ? accentColor : baseColor;
+          wrap.appendChild(bar);
+        }
+      }
+      // Others: 12 bars, 5th (index 4) orange, rest gray
+      buildBars('bar-others', 12, 4, '#f97316', '#d1d5db');
+      // Bill Pay: 12 bars, 7th (index 6) dark green, rest light gray
+      buildBars('bar-bills', 12, 6, '#08150C', '#e5e7eb');
+    })();
+
+    // ───── Hamburger menu ─────
+    (function () {
+      var btn = document.getElementById('hamburger');
+      var menu = document.getElementById('mobile-menu');
+      var icMenu = document.getElementById('ic-menu');
+      var icX = document.getElementById('ic-x');
+      if (!btn) return;
+      btn.addEventListener('click', function () {
+        var open = menu.classList.toggle('open');
+        icMenu.style.display = open ? 'none' : 'block';
+        icX.style.display = open ? 'block' : 'none';
+      });
+    })();
+
+    // ───── Boomerang video → canvas frame capture + forward/reverse playback ─────
+    (function () {
+      var video = document.getElementById('bm-video');
+      var canvas = document.getElementById('bm-canvas');
+      if (!video || !canvas) return;
+      var ctx = canvas.getContext('2d');
+      var frames = [];
+      var MAX_W = 960;
+      var capturing = true;
+      var scale = 1, cw = 0, ch = 0;
+
+      function setSize() {
+        if (!video.videoWidth) return;
+        scale = Math.min(1, MAX_W / video.videoWidth);
+        cw = Math.round(video.videoWidth * scale);
+        ch = Math.round(video.videoHeight * scale);
+      }
+
+      function captureFrame() {
+        if (!capturing || !cw) return;
+        var off = document.createElement('canvas');
+        off.width = cw; off.height = ch;
+        try {
+          off.getContext('2d').drawImage(video, 0, 0, cw, ch);
+          frames.push(off);
+        } catch (e) { /* tainted canvas / cross-origin — fall back to leaving video visible */ }
+      }
+
+      function onFrame() {
+        captureFrame();
+        if (capturing && 'requestVideoFrameCallback' in video) {
+          video.requestVideoFrameCallback(onFrame);
+        }
+      }
+
+      video.addEventListener('loadedmetadata', function () {
+        setSize();
+        canvas.width = cw; canvas.height = ch;
+      });
+
+      video.addEventListener('play', function () {
+        if ('requestVideoFrameCallback' in video) {
+          video.requestVideoFrameCallback(onFrame);
+        } else {
+          (function rafLoop() {
+            if (!capturing) return;
+            captureFrame();
+            requestAnimationFrame(rafLoop);
+          })();
+        }
+      });
+
+      video.addEventListener('ended', function () {
+        capturing = false;
+        if (frames.length < 2) return; // capture failed (likely CORS) — keep showing video
+        video.style.display = 'none';
+        canvas.style.display = 'block';
+        var idx = 0, dir = 1, last = 0, interval = 1000 / 30;
+        function loop(ts) {
+          if (ts - last >= interval) {
+            last = ts;
+            ctx.drawImage(frames[idx], 0, 0);
+            idx += dir;
+            if (idx >= frames.length - 1) { idx = frames.length - 1; dir = -1; }
+            else if (idx <= 0) { idx = 0; dir = 1; }
+          }
+          requestAnimationFrame(loop);
+        }
+        requestAnimationFrame(loop);
+      });
+
+      var p = video.play();
+      if (p && p.catch) { p.catch(function () {}); }
+    })();
+  </script>
+</body>
+</html>

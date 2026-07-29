@@ -59,11 +59,6 @@ describe('composeSystemPrompt — API mode (#313)', () => {
       const prompt = composeSystemPrompt({});
       expect(prompt).not.toMatch(/API mode — no tools available/i);
     });
-
-    it('carries the mid-conversation clarification guidance for daemon mode too', () => {
-      const prompt = composeSystemPrompt({});
-      expect(prompt).toContain('Clarifying questions mid-conversation');
-    });
   });
 
   describe('API mode (streamFormat: plain)', () => {
@@ -111,13 +106,6 @@ describe('composeSystemPrompt — API mode (#313)', () => {
       expect(prompt).toMatch(/state.*plan.*prose|describe.*plan.*prose|plan.*as prose/i);
     });
 
-    it('keeps tool-unavailable details out of user-visible prose', () => {
-      const prompt = composeSystemPrompt({ streamFormat: 'plain' });
-      expect(prompt).toContain('Do not mention tool unavailability to the user');
-      expect(prompt).toContain('Avoid phrases such as "TodoWrite is unavailable"');
-      expect(prompt).toContain('without mentioning missing tools');
-    });
-
     it('explicitly invalidates later "call TodoWrite" / tool-use instructions', () => {
       const prompt = composeSystemPrompt({ streamFormat: 'plain' });
       // The override must say "ignore later instructions that tell you to
@@ -132,21 +120,6 @@ describe('composeSystemPrompt — API mode (#313)', () => {
       expect(prompt).toMatch(/<artifact>/);
     });
 
-    // Regression coverage for the unified ask-user flow: API/BYOK mode must
-    // route mid-conversation clarification through the same `<question-form>`
-    // Questions-tab surface as daemon mode, not fall back to plain-text
-    // markdown option lists. The API-mode allowed-output list must NOT scope
-    // `<question-form>` to turn-1 only, and the composer must carry the
-    // daemon-mirrored "Clarifying questions mid-conversation" guidance.
-    it('permits mid-conversation clarification forms, not just turn-1 discovery', () => {
-      const prompt = composeSystemPrompt({ streamFormat: 'plain' });
-      expect(prompt).toContain('Clarifying questions mid-conversation');
-      expect(prompt).toMatch(/discovery \(turn 1\) and for mid-conversation clarification/);
-      // The old turn-1-only allowance must be gone so it can't re-scope the
-      // form back to discovery in BYOK/API runs.
-      expect(prompt).not.toContain('blocks for discovery on turn 1, exactly');
-    });
-
     it('honors metadata.skipDiscoveryBrief before the discovery rules', () => {
       const prompt = composeSystemPrompt({
         streamFormat: 'plain',
@@ -157,7 +130,7 @@ describe('composeSystemPrompt — API mode (#313)', () => {
       expect(skipIdx).toBeGreaterThanOrEqual(0);
       expect(skipIdx).toBeLessThan(discoveryIdx);
       expect(prompt).toMatch(/do NOT emit `?<question-form id="discovery">`?/i);
-      expect(prompt).toContain('Do not emit any question form');
+      expect(prompt).toContain('Do not call AskUserQuestion');
       expect(prompt).toContain('choose reasonable defaults for any missing details');
     });
   });

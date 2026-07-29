@@ -1,17 +1,8 @@
-# Historical roadmap (2026-04 baseline)
+# Roadmap
 
 **Parent:** [`spec.md`](spec.md) · **Siblings:** [`architecture.md`](architecture.md) · [`skills-protocol.md`](skills-protocol.md) · [`agent-adapters.md`](agent-adapters.md) · [`modes.md`](modes.md)
 
-> **Archived plan:** This file records the pre-implementation roadmap written on
-> 2026-04-24. The repository has since shipped the daemon, web app, Electron
-> desktop and packaged runtimes, cross-platform packaging, plugins, media, and
-> later release channels. Statements below such as "spec-only," "No code yet,"
-> and "No Electron" are preserved as dated decisions, not current product or
-> contributor guidance. Use the root `README.md`, `AGENTS.md`,
-> [`architecture.md`](architecture.md), and `specs/current/` for current state.
-
-The original phased plan ran from "spec-only" to "usable MVP" to "published
-v1." Its estimates and checkboxes are retained as historical context.
+Phased plan from "spec-only today" to "usable MVP" to "published v1." All estimates assume one focused developer; multiply by 0.6 for two and 0.4 for three.
 
 ---
 
@@ -97,7 +88,7 @@ v1." Its estimates and checkboxes are retained as historical context.
 3. Without Claude Code installed: API-fallback produces prototypes (not decks — guizang-ppt-skill needs native skill loading).
 4. A user can drop a DESIGN.md into the project root and subsequent generations respect it.
 5. A third party can publish a skill repo; `od skill add <url>` installs it and it works.
-6. Artifacts are plain files. This roadmap MUST NOT define daemon data paths; read the root `AGENTS.md` section **Daemon data directory contract** before changing or documenting artifact storage.
+6. Artifacts are plain files; `git add ./.od/artifacts/` and `git log` tell a sensible story.
 7. No Electron, no Tauri, no desktop packaging anywhere in the repo.
 
 ---

@@ -7,15 +7,17 @@ import {
   SIDECAR_MESSAGES,
   SIDECAR_MODES,
   SIDECAR_SOURCES,
+<<<<<<< HEAD
+=======
   isDesktopUpdateAction,
   type DaemonStatusSnapshot,
+>>>>>>> upstream/main
   type DesktopEvalResult,
   type DesktopScreenshotResult,
   type DesktopStatusSnapshot,
   type DesktopUpdateAction,
   type DesktopUpdateResult,
   type SidecarStamp,
-  type WebStatusSnapshot,
 } from "@open-design/sidecar-proto";
 import { createSidecarLaunchEnv, requestJsonIpc, resolveAppIpcPath } from "@open-design/sidecar";
 import {
@@ -45,13 +47,9 @@ import {
 import { cleanupWinRegistryResidues, queryWinRegistryEntries, resolveWinRegisteredPaths } from "./registry.js";
 import type {
   WinCleanupResult,
-  WinIpcDiagnoseAttempt,
-  WinIpcDiagnoseResult,
   WinInspectResult,
   WinInstallResult,
   WinInstallPayloadReport,
-  WinInspectStatusPollResult,
-  WinInspectStatusPollSample,
   WinLifecycleTiming,
   WinListResult,
   WinResetResult,
@@ -73,10 +71,6 @@ function desktopStamp(config: ToolPackConfig): SidecarStamp {
     namespace: config.namespace,
     source: SIDECAR_SOURCES.TOOLS_PACK,
   };
-}
-
-function appIpcPath(config: ToolPackConfig, app: SidecarStamp["app"]): string {
-  return resolveAppIpcPath({ app, contract: OPEN_DESIGN_SIDECAR_CONTRACT, namespace: config.namespace });
 }
 
 function desktopLogPath(config: ToolPackConfig): string {
@@ -242,7 +236,7 @@ async function resolveStartTarget(config: ToolPackConfig): Promise<{ configPath:
   throw new Error(`no windows app executable found for namespace=${config.namespace}; run tools-pack win build first or tools-pack win install after building an NSIS installer`);
 }
 
-export async function startPackedWinApp(config: ToolPackConfig, options: { waitForStatus?: boolean } = {}): Promise<WinStartResult> {
+export async function startPackedWinApp(config: ToolPackConfig): Promise<WinStartResult> {
   const target = await resolveStartTarget(config);
   const stamp = desktopStamp(config);
   const logPath = desktopLogPath(config);
@@ -264,27 +258,14 @@ export async function startPackedWinApp(config: ToolPackConfig, options: { waitF
     }),
     logFd: null,
   });
-  return {
-    executablePath: target.executablePath,
-    logPath,
-    namespace: config.namespace,
-    pid: spawned.pid,
-    source: target.source,
-    status: options.waitForStatus === false ? null : await waitForDesktopStatus(config),
-  };
+  return { executablePath: target.executablePath, logPath, namespace: config.namespace, pid: spawned.pid, source: target.source, status: await waitForDesktopStatus(config) };
 }
 
 async function findManagedDesktopProcessTree(config: ToolPackConfig): Promise<number[]> {
   const processes = await listProcessSnapshots();
   const stampedRootPids = processes
     .filter((processInfo) =>
-      [SIDECAR_SOURCES.TOOLS_PACK, SIDECAR_SOURCES.PACKAGED].some((source) =>
-        matchesStampedProcess(
-          processInfo,
-          { mode: SIDECAR_MODES.RUNTIME, namespace: config.namespace, source },
-          OPEN_DESIGN_SIDECAR_CONTRACT,
-        )
-      ),
+      matchesStampedProcess(processInfo, { mode: SIDECAR_MODES.RUNTIME, namespace: config.namespace, source: SIDECAR_SOURCES.TOOLS_PACK }, OPEN_DESIGN_SIDECAR_CONTRACT),
     )
     .map((processInfo) => processInfo.pid);
   return collectProcessTreePids(processes, stampedRootPids);
@@ -362,7 +343,6 @@ export async function uninstallPackedWinApp(config: ToolPackConfig): Promise<Win
     registryResiduesRemoved,
     uninstalledAt: new Date().toISOString(),
   }).catch(() => undefined));
-  const removedCacheRoot = removalPlan.some((target) => target.scope === "cache" && target.willRemove && target.exists);
   const removedDataRoot = removalPlan.some((target) => target.scope === "data" && target.willRemove && target.exists);
   const removedLogsRoot = removalPlan.some((target) => target.scope === "logs" && target.willRemove && target.exists);
   const removedSidecarRoot = removalPlan.some((target) => target.scope === "sidecars" && target.willRemove && target.exists);
@@ -375,7 +355,6 @@ export async function uninstallPackedWinApp(config: ToolPackConfig): Promise<Win
     markerPath: paths.uninstallMarkerPath,
     namespace: config.namespace,
     nsisLogPath: paths.nsisLogPath,
-    removedCacheRoot,
     registryResiduesRemoved,
     removedDataRoot,
     removedLogsRoot,
@@ -401,7 +380,6 @@ export async function cleanupPackedWinNamespace(config: ToolPackConfig): Promise
   const removedOutputRoot = await pathExists(config.roots.output.namespaceRoot);
   const removedRuntimeNamespaceRoot = await pathExists(config.roots.runtime.namespaceRoot);
   const removedLauncherNamespaceRoot = await pathExists(launcher.paths.namespaceRoot);
-  const removedCacheRoot = removalPlan.some((target) => target.scope === "cache" && target.willRemove && target.exists);
   const removedProductUserDataRoot = removalPlan.some((target) => target.scope === "product-user-data" && target.willRemove && target.exists);
   await cleanupWinRegistryResidues(registeredPaths, config);
   for (const target of removalPlan) {
@@ -413,7 +391,6 @@ export async function cleanupPackedWinNamespace(config: ToolPackConfig): Promise
   return {
     namespace: config.namespace,
     removedLauncherNamespaceRoot,
-    removedCacheRoot,
     removedOutputRoot,
     removedProductUserDataRoot,
     removedRuntimeNamespaceRoot,
@@ -483,95 +460,19 @@ function resolveUpdateAction(value: string | undefined): DesktopUpdateAction | n
   throw new Error("--update-action must be status, check, clear-cache, download, or install");
 }
 
-async function requestDesktopEval(
-  ipc: string,
-  expression: string,
-): Promise<DesktopEvalResult> {
-  try {
-    return await requestJsonIpc<DesktopEvalResult>(
-      ipc,
-      { input: { expression }, type: SIDECAR_MESSAGES.EVAL },
-      { timeoutMs: 5000 },
-    );
-  } catch (error) {
-    return {
-      error: error instanceof Error ? error.message : String(error),
-      ok: false,
-    };
-  }
-}
-
-async function requestStatusSnapshot<T>(ipc: string): Promise<{ error?: string; status: T | null }> {
-  try {
-    return { status: await requestJsonIpc<T>(ipc, { type: SIDECAR_MESSAGES.STATUS }, { timeoutMs: 2000 }) };
-  } catch (error) {
-    return {
-      error: error instanceof Error ? error.message : String(error),
-      status: null,
-    };
-  }
-}
-
-function resolveOptionalPositiveInteger(value: string | number | undefined, label: string): number | null {
-  if (value == null) return null;
-  const parsed = typeof value === "number" ? value : Number.parseInt(value, 10);
-  if (!Number.isInteger(parsed) || parsed < 1) throw new Error(`${label} must be a positive integer`);
-  return parsed;
-}
-
-async function delay(ms: number): Promise<void> {
-  await new Promise((resolveDelay) => setTimeout(resolveDelay, ms));
-}
-
-async function pollWinInspectStatus(config: ToolPackConfig, count: number, intervalMs: number): Promise<WinInspectStatusPollResult> {
-  const samples: WinInspectStatusPollSample[] = [];
-  const desktopIpc = desktopStamp(config).ipc;
-  const daemonIpc = appIpcPath(config, APP_KEYS.DAEMON);
-  const webIpc = appIpcPath(config, APP_KEYS.WEB);
-  for (let attempt = 1; attempt <= count; attempt += 1) {
-    const startedAtMs = Date.now();
-    const startedAt = new Date(startedAtMs).toISOString();
-    const [desktopSnapshot, daemonSnapshot, webSnapshot] = await Promise.all([
-      requestStatusSnapshot<DesktopStatusSnapshot>(desktopIpc),
-      requestStatusSnapshot<DaemonStatusSnapshot>(daemonIpc),
-      requestStatusSnapshot<WebStatusSnapshot>(webIpc),
-    ]);
-    samples.push({
-      attempt,
-      daemonStatus: daemonSnapshot.status,
-      ...(daemonSnapshot.error == null ? {} : { daemonStatusError: daemonSnapshot.error }),
-      durationMs: Date.now() - startedAtMs,
-      startedAt,
-      status: desktopSnapshot.status,
-      ...(desktopSnapshot.error == null ? {} : { statusError: desktopSnapshot.error }),
-      webStatus: webSnapshot.status,
-      ...(webSnapshot.error == null ? {} : { webStatusError: webSnapshot.error }),
-    });
-    if (attempt < count) await delay(intervalMs);
-  }
-  return { count, intervalMs, samples };
-}
-
-export async function inspectPackedWinApp(
-  config: ToolPackConfig,
-  options: { expr?: string; path?: string; statusPollCount?: string | number; statusPollIntervalMs?: string | number; updateAction?: string },
-): Promise<WinInspectResult> {
+export async function inspectPackedWinApp(config: ToolPackConfig, options: { expr?: string; path?: string; updateAction?: string }): Promise<WinInspectResult> {
   const stamp = desktopStamp(config);
-  const [desktopSnapshot, daemonSnapshot, webSnapshot] = await Promise.all([
-    requestStatusSnapshot<DesktopStatusSnapshot>(stamp.ipc),
-    requestStatusSnapshot<DaemonStatusSnapshot>(appIpcPath(config, APP_KEYS.DAEMON)),
-    requestStatusSnapshot<WebStatusSnapshot>(appIpcPath(config, APP_KEYS.WEB)),
-  ]);
+  const status = await requestJsonIpc<DesktopStatusSnapshot>(stamp.ipc, { type: SIDECAR_MESSAGES.STATUS }, { timeoutMs: 2000 }).catch(() => null);
   const updateAction = resolveUpdateAction(options.updateAction);
-  const statusPollCount = resolveOptionalPositiveInteger(options.statusPollCount, "--status-poll-count");
-  const statusPollIntervalMs = resolveOptionalPositiveInteger(options.statusPollIntervalMs, "--status-poll-interval-ms") ?? 500;
   const launcher = await readToolPackLauncherRuntimeSnapshot(config);
   const updateCache = await readToolPackUpdateCacheLifecycleSnapshot(config);
   return {
-    daemonStatus: daemonSnapshot.status,
-    ...(daemonSnapshot.error == null ? {} : { daemonStatusError: daemonSnapshot.error }),
     ...(options.expr == null ? {} : {
-      eval: await requestDesktopEval(stamp.ipc, options.expr),
+      eval: await requestJsonIpc<DesktopEvalResult>(
+        stamp.ipc,
+        { input: { expression: options.expr }, type: SIDECAR_MESSAGES.EVAL },
+        { timeoutMs: 5000 },
+      ),
     }),
     launcher,
     launcherSource: {
@@ -599,53 +500,6 @@ export async function inspectPackedWinApp(
         { timeoutMs: UPDATE_ACTION_TIMEOUT_MS },
       ),
     }),
-    status: desktopSnapshot.status,
-    ...(desktopSnapshot.error == null ? {} : { statusError: desktopSnapshot.error }),
-    ...(statusPollCount == null ? {} : {
-      statusPoll: await pollWinInspectStatus(config, statusPollCount, statusPollIntervalMs),
-    }),
-    webStatus: webSnapshot.status,
-    ...(webSnapshot.error == null ? {} : { webStatusError: webSnapshot.error }),
-  };
-}
-
-export async function diagnosePackedWinIpc(
-  config: ToolPackConfig,
-  options: { diagnoseAttempts?: string | number; statusPollCount?: string | number; statusPollIntervalMs?: string | number },
-): Promise<WinIpcDiagnoseResult> {
-  const attempts = resolveOptionalPositiveInteger(options.diagnoseAttempts, "--diagnose-attempts") ?? 10;
-  const statusPollCount = resolveOptionalPositiveInteger(options.statusPollCount, "--status-poll-count") ?? 20;
-  const statusPollIntervalMs = resolveOptionalPositiveInteger(options.statusPollIntervalMs, "--status-poll-interval-ms") ?? 250;
-  const previousTrace = process.env.OD_JSON_IPC_TRACE;
-  process.env.OD_JSON_IPC_TRACE = "1";
-  const results: WinIpcDiagnoseAttempt[] = [];
-  try {
-    for (let attempt = 1; attempt <= attempts; attempt += 1) {
-      await stopPackedWinApp(config);
-      const startedAt = Date.now();
-      const start = await startPackedWinApp(config, { waitForStatus: false });
-      const statusPoll = await pollWinInspectStatus(config, statusPollCount, statusPollIntervalMs);
-      const stop = await stopPackedWinApp(config);
-      results.push({
-        attempt,
-        durationMs: Date.now() - startedAt,
-        start,
-        statusPoll,
-        stop,
-      });
-    }
-  } finally {
-    if (previousTrace == null) {
-      delete process.env.OD_JSON_IPC_TRACE;
-    } else {
-      process.env.OD_JSON_IPC_TRACE = previousTrace;
-    }
-  }
-  return {
-    attempts: results,
-    namespace: config.namespace,
-    statusPollCount,
-    statusPollIntervalMs,
-    traceEnabled: true,
+    status,
   };
 }

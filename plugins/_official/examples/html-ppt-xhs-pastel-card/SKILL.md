@@ -1,34 +1,17 @@
 ---
 name: html-ppt-xhs-pastel-card
-en_name: "Write a Personal Manifesto Talk like a Narrative Podcast Producer"
-zh_name: "像叙事播客制作人一样写个人宣言演讲"
-description: |
-  A personal manifesto: a year of saying yes — the premise, the scenes, the turn, and the meaning that lands. Built as a decision-grade story deck for community, talk audience.
-en_description: |
-  A personal manifesto: a year of saying yes — the premise, the scenes, the turn, and the meaning that lands. Built as a decision-grade story deck for community, talk audience.
-zh_description: |
-  像叙事播客制作人一样写个人宣言演讲——一份可商业交付的生活故事 Deck，围绕真实主题、证据链与决策目标组织。
-tags:
-  - "life"
-  - "travel-photo-essay-deck"
-  - "personal"
-  - "story"
-  - "photo-essay"
-  - "decision-deck"
-  - "commercial-slide-agent"
-  - "html-ppt-xhs-pastel-card"
+description: 柔和马卡龙慢生活 deck — 奶油 #fef8f1 底 + 三个柔光 blob、Playfair 斜体衬线 display 标题混 sans 正文、28px 圆角马卡龙卡片（桃 / 薄荷 / 天 / 紫 / 柠 / 玫）、Playfair 斜体 01-04 序号、SVG donut 图、chip+page 顶栏。适合生活方式 / 个人成长 / 慢生活 / 情绪类内容，"杂志、手作、不太科技"的感觉。
 triggers:
-  - "travel-photo-essay-deck"
-  - "life"
-  - "Write a Personal Manifesto Talk like a Narrative Podcast Producer"
-  - "像叙事播客制作人一样写个人宣言演讲"
-  - "story"
-  - "personal"
-  - "photo-essay"
-  - "html deck"
-  - "html slides"
+  - "pastel"
+  - "macaron"
+  - "lifestyle"
+  - "slow living"
+  - "慢生活"
+  - "生活方式"
+  - "个人成长"
 od:
   mode: deck
+  scenario: personal
   featured: 33
   upstream: "https://github.com/lewislulu/html-ppt-skill"
   preview:
@@ -38,9 +21,7 @@ od:
     requires: false
   speaker_notes: true
   animations: true
-  category: "life"
-  scenario: "personal"
-  example_prompt: "Create \"Write a Personal Manifesto Talk like a Narrative Podcast Producer\" as a decision-grade Life & story deck in this template's own visual system. Subject: A personal manifesto: a year of saying yes — the premise, the scenes, the turn, and the meaning that lands. Audience: community, talk audience. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would someone retell the story after seeing it once."
+  example_prompt: "用 html-ppt-xhs-pastel-card 模板做一份慢生活主题图文。奶油底 + 马卡龙圆角卡片 + Playfair 斜体序号 + donut 图。先告诉我主题（休息 / 暂停 / 自我照顾…）和 5-7 个想说的点。"
 ---
 # HTML PPT · 柔和马卡龙慢生活
 
@@ -53,23 +34,23 @@ The Examples gallery wires "Use this prompt" to the example_prompt above. When y
 ## How to author the deck
 
 1. **Read the master skill first.** All authoring rules live in
-   [`design-templates/html-ppt/SKILL.md`](../html-ppt/SKILL.md) — content/audience checklist,
+   [`skills/html-ppt/SKILL.md`](../html-ppt/SKILL.md) — content/audience checklist,
    token rules, layout reuse, presenter mode, the keyboard runtime, and the
    "never put presenter-only text on the slide" rule.
 2. **Start from the matching template folder:**
-   `design-templates/html-ppt/templates/full-decks/xhs-pastel-card/` — copy `index.html` and
+   `skills/html-ppt/templates/full-decks/xhs-pastel-card/` — copy `index.html` and
    `style.css` into the project, keep the `.tpl-xhs-pastel-card` body class.
 3. **Bring the shared runtime with the template.** The upstream
    `index.html` links the shared CSS/JS via `../../../assets/...` because it
-   sits three folders deep inside `design-templates/html-ppt/templates/full-decks/`.
+   sits three folders deep inside `skills/html-ppt/templates/full-decks/`.
    Once you copy `index.html` into the project, those parent-relative URLs
    no longer resolve and `base.css`, `animations.css`, and `runtime.js`
    will 404 — meaning the deck never activates and slide navigation is
    dead. Pick one of these two recipes per project:
    - **Recipe A — copy + rewrite (preferred):** copy
-     `design-templates/html-ppt/assets/fonts.css`, `design-templates/html-ppt/assets/base.css`,
-     `design-templates/html-ppt/assets/animations/animations.css`, and
-     `design-templates/html-ppt/assets/runtime.js` into a project-local
+     `skills/html-ppt/assets/fonts.css`, `skills/html-ppt/assets/base.css`,
+     `skills/html-ppt/assets/animations/animations.css`, and
+     `skills/html-ppt/assets/runtime.js` into a project-local
      `assets/` (with `assets/animations/animations.css`), then rewrite the
      four `<link>`/`<script>` tags in `index.html` from
      `../../../assets/...` to the matching project-local paths
@@ -84,7 +65,7 @@ The Examples gallery wires "Use this prompt" to the example_prompt above. When y
    Either way, do not ship the upstream `../../../assets/...` URLs
    verbatim into a project artifact — they only work in-tree.
 4. **Pick a theme.** Default tokens look fine; if the user wants a different
-   feel, swap in any of the 36 themes from `design-templates/html-ppt/assets/themes/*.css`
+   feel, swap in any of the 36 themes from `skills/html-ppt/assets/themes/*.css`
    via `<link id="theme-link">` and let `T` cycle.
 5. **Replace demo content, not classes.** The `.tpl-xhs-pastel-card` scoped CSS only
    recognises the structural classes shipped in the template — keep them.
@@ -94,5 +75,5 @@ The Examples gallery wires "Use this prompt" to the example_prompt above. When y
 
 Visual system, layouts, themes and the runtime keyboard model come from
 the upstream MIT-licensed [`lewislulu/html-ppt-skill`](https://github.com/lewislulu/html-ppt-skill). The
-LICENSE file ships at `design-templates/html-ppt/LICENSE`; please keep it in place when
+LICENSE file ships at `skills/html-ppt/LICENSE`; please keep it in place when
 redistributing.

@@ -1,6 +1,12 @@
 name: ui-extended-main
 
 on:
+  push:
+    branches:
+      - main
+  schedule:
+    # 02:00 UTC = 10:00 Asia/Shanghai
+    - cron: "0 2 * * *"
   workflow_dispatch:
     inputs:
       suite:
@@ -21,60 +27,78 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  p0_runners:
-    name: Resolve UI runner profiles
-    if: ${{ github.repository == 'nexu-io/open-design' }}
-    runs-on: ubuntu-24.04
-    outputs:
-      runs_on: ${{ steps.runners.outputs.runs_on }}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6.0.2
-
-      - name: Resolve runner profiles
-        id: runners
-        env:
-          OD_CI_RUNNER_MODE: ${{ vars.OD_CI_RUNNER_MODE }}
-        run: python3 .github/scripts/runners.py
-
   ui_p0:
     name: UI P0 (${{ matrix.name }})
-    needs: [p0_runners]
-    if: ${{ github.repository == 'nexu-io/open-design' && github.event_name == 'workflow_dispatch' && inputs.suite != 'full' }}
-    runs-on: ${{ fromJSON(needs.p0_runners.outputs.runs_on).ui_hot }}
+    if: ${{ github.repository == 'nexu-io/open-design' && (github.event_name == 'push' || github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.suite != 'full')) }}
+    runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
         include:
-          - name: entry-settings
-            shard: entry-settings
+          - name: entry-onboarding
+            smoke_command: >-
+              pnpm -C e2e exec playwright test -c playwright.config.ts
+              ui/critical-smoke.test.ts
+              --grep '\[P0\]'
+            command: >-
+              pnpm -C e2e exec playwright test -c playwright.config.ts
+              ui/critical-smoke.test.ts
+              ui/entry-chrome-flows.test.ts
+              ui/entry-configuration-flows.test.ts
+              ui/amr-onboarding.test.ts
+              ui/api-empty-response.test.ts
+              --grep '\[P0\]'
           - name: project-workspace
-            shard: project-workspace
-          - name: project-runtime
-            shard: project-runtime
-          - name: workspace-restoration
-            shard: workspace-restoration
+            smoke_command: >-
+              pnpm -C e2e exec playwright test -c playwright.config.ts
+              ui/critical-smoke.test.ts
+              --grep '\[P0\]'
+            command: >-
+              pnpm -C e2e exec playwright test -c playwright.config.ts
+              ui/app.test.ts
+              ui/app-restoration.test.ts
+              ui/app-design-files.test.ts
+              ui/app-manual-edit.test.ts
+              ui/project-management-flows.test.ts
+              ui/workspace-keyboard-flows.test.ts
+              --grep '\[P0\]'
+          - name: runtime-recovery
+            smoke_command: >-
+              pnpm -C e2e exec playwright test -c playwright.config.ts
+              ui/critical-smoke.test.ts
+              --grep '\[P0\]'
+            command: >-
+              pnpm -C e2e exec playwright test -c playwright.config.ts
+              ui/real-daemon-run.test.ts
+              ui/amr-run-failure-recovery.test.ts
+              ui/amr-logout-requires-relogin.test.ts
+              ui/settings-local-cli-codex-fallback.test.ts
+              --grep '\[P0\]'
+          - name: settings-connectors
+            smoke_command: >-
+              pnpm -C e2e exec playwright test -c playwright.config.ts
+              ui/critical-smoke.test.ts
+              --grep '\[P0\].*settings dialog'
+            command: >-
+              pnpm -C e2e exec playwright test -c playwright.config.ts
+              ui/settings-api-protocol.test.ts
+              ui/settings-connectors-auth-happy-path.test.ts
+              ui/settings-connectors-auth-recovery.test.ts
+              --grep '\[P0\]'
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
 
-      - name: Configure CI parallelism
-        uses: ./.github/actions/configure-ci-parallelism
-
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
-        with:
-          runner-labels: ${{ toJSON(fromJSON(needs.p0_runners.outputs.runs_on).ui_hot) }}
 
       - name: Setup Playwright
         uses: ./.github/actions/setup-playwright
         with:
           package-json-path: e2e/package.json
           install-command: pnpm -C e2e exec playwright install --with-deps chromium
-          runner-labels: ${{ toJSON(fromJSON(needs.p0_runners.outputs.runs_on).ui_hot) }}
 
       - name: Prebuild workspace type declarations
         run: |
@@ -85,31 +109,17 @@ jobs:
       - name: Clean Playwright state
         run: pnpm -C e2e exec tsx scripts/playwright.ts clean
 
+      - name: Run UI shell smoke
+        run: ${{ matrix.smoke_command }}
+
       - name: Run UI P0 domain
-        run: pnpm -C e2e exec tsx scripts/playwright.ts run-ui-group ${{ matrix.shard }}
-
-      - name: Preserve project-runtime domain artifact
-        if: ${{ success() && matrix.shard == 'project-runtime' }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: ui-extended-main-${{ github.run_id }}-p0-${{ matrix.name }}-domain
-          path: |
-            e2e/ui/reports/playwright-html-report
-            e2e/ui/reports/test-results
-            e2e/ui/reports/results.json
-            e2e/ui/test-results
-          if-no-files-found: ignore
-          retention-days: 7
-
-      - name: Run UI critical extras
-        if: ${{ matrix.shard == 'project-runtime' }}
-        run: pnpm -C e2e exec tsx scripts/playwright.ts run-ui-group critical-extras
+        run: ${{ matrix.command }}
 
       - name: Upload Playwright debug artifact
         if: ${{ always() }}
         uses: actions/upload-artifact@v7
         with:
-          name: ui-extended-main-${{ github.run_id }}-p0-${{ matrix.name }}
+          name: ui-p0-${{ github.run_id }}-${{ matrix.name }}
           path: |
             e2e/ui/reports/playwright-html-report
             e2e/ui/reports/test-results
@@ -120,7 +130,7 @@ jobs:
 
   ui_extended:
     name: UI P1 (${{ matrix.name }})
-    if: ${{ github.repository == 'nexu-io/open-design' && github.event_name == 'workflow_dispatch' && inputs.suite == 'p0p1' }}
+    if: ${{ github.repository == 'nexu-io/open-design' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.suite == 'p0p1')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
@@ -129,10 +139,10 @@ jobs:
         include:
           - name: P1 shard 1
             part: p1
-            command: pnpm -C e2e exec playwright test -c playwright.config.ts ui --grep '\[P1\]' --grep-invert '@merge-extra' --shard=1/2
+            command: pnpm -C e2e exec playwright test -c playwright.config.ts ui --grep '\[P1\]' --shard=1/2
           - name: P1 shard 2
             part: p1
-            command: pnpm -C e2e exec playwright test -c playwright.config.ts ui --grep '\[P1\]' --grep-invert '@merge-extra' --shard=2/2
+            command: pnpm -C e2e exec playwright test -c playwright.config.ts ui --grep '\[P1\]' --shard=2/2
 
     steps:
       - name: Checkout
@@ -172,35 +182,24 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-  ui_full:
-    name: Full UI (shard ${{ matrix.shard }}/12)
-    needs: [p0_runners]
+  ui_full_manual:
+    name: Full UI regression
     if: ${{ github.repository == 'nexu-io/open-design' && github.event_name == 'workflow_dispatch' && inputs.suite == 'full' }}
-    runs-on: ${{ fromJSON(needs.p0_runners.outputs.runs_on).ui_hot }}
-    timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
 
-      - name: Configure CI parallelism
-        uses: ./.github/actions/configure-ci-parallelism
-
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
-        with:
-          runner-labels: ${{ toJSON(fromJSON(needs.p0_runners.outputs.runs_on).ui_hot) }}
 
       - name: Setup Playwright
         uses: ./.github/actions/setup-playwright
         with:
           package-json-path: e2e/package.json
           install-command: pnpm -C e2e exec playwright install --with-deps chromium
-          runner-labels: ${{ toJSON(fromJSON(needs.p0_runners.outputs.runs_on).ui_hot) }}
 
       - name: Prebuild workspace type declarations
         run: |
@@ -211,19 +210,14 @@ jobs:
       - name: Clean Playwright state
         run: pnpm -C e2e exec tsx scripts/playwright.ts clean
 
-      - name: Run full UI shard
-        # Worker count comes from configure-ci-parallelism (nproc/2, so two
-        # on the four-core ui_hot profile); fully-parallel stays on for
-        # test-granularity sharding.
-        env:
-          OD_PLAYWRIGHT_FULLY_PARALLEL: "1"
-        run: pnpm -C e2e exec playwright test -c playwright.config.ts ui --shard=${{ matrix.shard }}/12
+      - name: Run full UI
+        run: pnpm -C e2e test:ui
 
-      - name: Upload full UI shard artifact
+      - name: Upload Playwright debug artifact
         if: ${{ always() }}
         uses: actions/upload-artifact@v7
         with:
-          name: ui-full-${{ github.run_id }}-shard-${{ matrix.shard }}-of-12
+          name: ui-full-manual-${{ github.run_id }}
           path: |
             e2e/ui/reports/playwright-html-report
             e2e/ui/reports/test-results

@@ -109,12 +109,9 @@ describe('HomeView plugin i18n', () => {
     scrollContainer.scrollTop = 240;
 
     // Home Community renders gallery tiles with no inline Use button — the
-    // plugin is used from its detail modal. For query-bearing plugins the
-    // primary CTA now loads the prompt; plain structure-only Use without prompt
-    // lives behind the caret menu.
+    // plugin is used from its detail modal. Open the tile, then "Use plugin".
     fireEvent.click(await waitFor(() => screen.getByTestId('plugins-home-details-localized-plugin')));
-    fireEvent.click(await screen.findByTestId('plugin-details-use-localized-plugin-menu'));
-    fireEvent.click(await screen.findByTestId('plugin-details-use-option-localized-plugin'));
+    fireEvent.click(await screen.findByTestId('plugin-details-use-localized-plugin'));
 
     // Plain "Use" now routes the plugin as the active driver (so its own
     // pipeline + context apply on submit) and applies it, surfacing the

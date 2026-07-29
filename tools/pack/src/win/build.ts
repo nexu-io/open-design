@@ -12,7 +12,7 @@ import {
 } from "./app.js";
 import { PRODUCT_NAME } from "./constants.js";
 import { pathExists } from "./fs.js";
-import { materializeCachedUnpackedForInstaller, runElectronBuilder } from "./builder.js";
+import { runElectronBuilder } from "./builder.js";
 import {
   readBuiltAppManifest,
   readPackagedVersion,
@@ -65,7 +65,6 @@ export async function packWin(config: ToolPackConfig): Promise<WinPackResult> {
   const segments: WinPackTiming[] = [];
   const hasNsisTarget = shouldBuildWinNsisInstaller(config.to);
   const hasZipTarget = shouldBuildWinPortableZip(config.to);
-  const hasLauncherPayloadTarget = hasNsisTarget || hasZipTarget;
   const runPhase = async <T>(phase: string, task: () => Promise<T>): Promise<T> => {
     const startedAt = Date.now();
     logWinBuildProgress("phase:start", { phase });
@@ -120,22 +119,11 @@ export async function packWin(config: ToolPackConfig): Promise<WinPackResult> {
   await runPhase("latest-yml", async () => {
     await writeLocalLatestYml(config, paths);
   });
-  let builtApp = await readBuiltAppManifest(paths);
-  if (hasLauncherPayloadTarget) {
-    builtApp = await runPhase("payload-unpacked-materialize", async () => {
-      if (builtApp == null) throw new Error("cannot build Windows launcher payload without a built app manifest");
-      const packagedVersion = await readPackagedVersion(config);
-      return builtApp.unpackedRoot === paths.unpackedRoot
-        ? materializeCachedUnpackedForInstaller(paths, packagedVersion)
-        : materializeCachedUnpackedForInstaller(builtApp.unpackedRoot, paths, packagedVersion);
-    });
-    await runPhase("payload-artifact", async () => {
-      if (builtApp == null) throw new Error("cannot build Windows launcher payload without a built app manifest");
-      segments.push(...await buildWinLauncherPayloadArchive(config, paths, builtApp, cache, {
-        seedFromInstallerPayload: hasNsisTarget,
-      }));
-    });
-  }
+  const builtApp = await readBuiltAppManifest(paths);
+  await runPhase("payload-artifact", async () => {
+    if (builtApp == null) throw new Error("cannot build Windows launcher payload without a built app manifest");
+    segments.push(...await buildWinLauncherPayloadArchive(config, paths, builtApp, cache));
+  });
   const sizeReport = await runPhase("size-report", async () => collectWinSizeReport(config, paths, builtApp));
   return {
     blockmapPath: (await pathExists(paths.blockmapPath)) ? paths.blockmapPath : null,

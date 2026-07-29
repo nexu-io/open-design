@@ -2,8 +2,6 @@ import { describe, expect, it, vi } from 'vitest';
 import { JSDOM } from 'jsdom';
 import {
   buildManualEditBridge,
-  buildManualEditBridgeStyle,
-  buildManualEditKeyboardGuard,
   isMeaningfulManualEditElement,
   isManualEditHostNode,
   isSourceMappableManualEditElement,
@@ -247,7 +245,7 @@ describe('manual edit bridge target normalization', () => {
     dom.window.close();
   });
 
-  it('does not expose runtime-only path targets unless they carry a source marker', () => {
+  it('does not expose path targets unless they carry a source path marker', () => {
     const dom = new JSDOM('<main><h1>Runtime title</h1><p data-od-source-path="path-0-1">Source text</p></main>');
     const runtimeTitle = dom.window.document.querySelector('h1')!;
     const sourceText = dom.window.document.querySelector('p')!;
@@ -265,123 +263,6 @@ describe('manual edit bridge target normalization', () => {
     expect(bridge).toContain('if (!isSourceMappable(nodes[i])) continue;');
     expect(bridge).toContain('return el;');
     expect(bridge).not.toContain('if (isPrimaryTarget(el)) return el;');
-  });
-
-  it('selects and announces ordinary HTML elements after srcdoc source-path annotation', () => {
-    const dom = new JSDOM(
-      `<main data-od-source-path="path-0"><section data-od-source-path="path-0-0"><h1 data-od-source-path="path-0-0-0">Plain title</h1><p data-od-source-path="path-0-0-1">Plain body</p></section></main>${buildManualEditBridge(true)}`,
-      { runScripts: 'dangerously', url: 'http://localhost' },
-    );
-    const title = dom.window.document.querySelector('h1') as HTMLElement;
-    title.getBoundingClientRect = () => ({
-      x: 0, y: 0, width: 160, height: 36,
-      top: 0, right: 160, bottom: 36, left: 0,
-      toJSON: () => ({}),
-    } as DOMRect);
-    const postMessage = vi.spyOn(dom.window.parent, 'postMessage');
-
-    title.dispatchEvent(new dom.window.Event('pointerover', { bubbles: true }));
-    title.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
-
-    expect(title.getAttribute('data-od-runtime-id')).toBe('path-0-0-0');
-    expect(postMessage).toHaveBeenCalledWith({
-      type: 'od-edit-hover',
-      target: expect.objectContaining({ id: 'path-0-0-0', label: 'Plain title' }),
-    }, '*');
-    expect(postMessage).toHaveBeenCalledWith({
-      type: 'od-edit-select',
-      target: expect.objectContaining({ id: 'path-0-0-0', kind: 'text' }),
-    }, '*');
-
-    dom.window.close();
-  });
-
-  it('ignores runtime-inserted elements that are not present in source', () => {
-    const dom = new JSDOM(
-      `<main data-od-source-path="path-0"><h1 data-od-source-path="path-0-0">Source title</h1></main>${buildManualEditBridge(true)}`,
-      { runScripts: 'dangerously', url: 'http://localhost' },
-    );
-    const runtimePill = dom.window.document.createElement('span');
-    runtimePill.className = 'status-pill ready';
-    runtimePill.textContent = 'Brand ready';
-    dom.window.document.body.appendChild(runtimePill);
-    const postMessage = vi.spyOn(dom.window.parent, 'postMessage');
-
-    runtimePill.dispatchEvent(new dom.window.Event('pointerover', { bubbles: true }));
-    runtimePill.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
-
-    expect(runtimePill.hasAttribute('data-od-runtime-id')).toBe(false);
-    expect(postMessage).not.toHaveBeenCalledWith(expect.objectContaining({
-      type: 'od-edit-hover',
-    }), '*');
-    expect(postMessage).toHaveBeenCalledWith({ type: 'od-edit-background' }, '*');
-
-    dom.window.close();
-  });
-
-  it('selects runtime-inserted brand kit elements that carry stable data-od-id markers', () => {
-    const dom = new JSDOM(
-      `<main data-od-source-path="path-0"><div id="root"></div></main>${buildManualEditBridge(true)}`,
-      { runScripts: 'dangerously', url: 'http://localhost' },
-    );
-    const title = dom.window.document.createElement('h1');
-    title.setAttribute('data-od-id', 'brand-name');
-    title.setAttribute('data-od-edit', 'text');
-    title.textContent = 'Runtime brand';
-    title.getBoundingClientRect = () => ({
-      x: 0, y: 0, width: 180, height: 42,
-      top: 0, right: 180, bottom: 42, left: 0,
-      toJSON: () => ({}),
-    } as DOMRect);
-    dom.window.document.getElementById('root')?.appendChild(title);
-    const postMessage = vi.spyOn(dom.window.parent, 'postMessage');
-
-    title.dispatchEvent(new dom.window.Event('pointerover', { bubbles: true }));
-    title.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
-
-    expect(postMessage).toHaveBeenCalledWith({
-      type: 'od-edit-hover',
-      target: expect.objectContaining({ id: 'brand-name', label: 'Runtime brand' }),
-    }, '*');
-    expect(postMessage).toHaveBeenCalledWith({
-      type: 'od-edit-select',
-      target: expect.objectContaining({ id: 'brand-name', kind: 'text' }),
-    }, '*');
-
-    dom.window.close();
-  });
-
-  it('adds stable ids to legacy runtime brand kit elements before selection', () => {
-    const dom = new JSDOM(
-      `<script id="od-brand-payload" type="application/json">{"brand":{"name":"Runtime brand"}}</script><main data-od-source-path="path-0"><div id="root"></div></main>${buildManualEditBridge(true)}`,
-      { runScripts: 'dangerously', url: 'http://localhost' },
-    );
-    const title = dom.window.document.createElement('h1');
-    title.className = 'kit-title';
-    title.textContent = 'Runtime brand';
-    title.getBoundingClientRect = () => ({
-      x: 0, y: 0, width: 180, height: 42,
-      top: 0, right: 180, bottom: 42, left: 0,
-      toJSON: () => ({}),
-    } as DOMRect);
-    dom.window.document.getElementById('root')?.appendChild(title);
-    const postMessage = vi.spyOn(dom.window.parent, 'postMessage');
-
-    title.dispatchEvent(new dom.window.Event('pointerover', { bubbles: true }));
-    title.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
-
-    expect(title.getAttribute('data-od-id')).toBe('brand-name');
-    expect(title.getAttribute('data-od-edit')).toBe('text');
-    expect(postMessage).toHaveBeenCalledWith({
-      type: 'od-edit-hover',
-      target: expect.objectContaining({ id: 'brand-name', label: 'Runtime brand' }),
-    }, '*');
-    expect(postMessage).toHaveBeenCalledWith({
-      type: 'od-edit-select',
-      target: expect.objectContaining({ id: 'brand-name', kind: 'text' }),
-    }, '*');
-
-    dom.window.close();
   });
 
   it('prefers the deepest source-mapped child over an annotated group on hover', async () => {
@@ -443,6 +324,8 @@ describe('manual edit bridge target normalization', () => {
     expect(bridge).toContain("ok: false, error: 'Target not found'");
   });
 
+<<<<<<< HEAD
+=======
   it('restores iframe scroll when a live style preview reflows content', () => {
     const dom = new JSDOM(
       `<main><h1 data-od-id="hero">A wrapping title</h1></main>${buildManualEditBridge(true)}`,
@@ -534,6 +417,7 @@ describe('manual edit bridge target normalization', () => {
     expect(style).toMatch(/\[data-od-edit-selected\]\s*\{\s*\n\s*outline: 1px solid/);
   });
 
+>>>>>>> upstream/main
   it('moves the runtime selected marker between selected targets', () => {
     const dom = new JSDOM(
       `<main>
@@ -603,7 +487,7 @@ describe('manual edit bridge target normalization', () => {
     expect(bridge).toContain("display.indexOf('flex') >= 0 || display.indexOf('grid') >= 0");
   });
 
-  it('turns text targets into inline editors and commits changed text on explicit finish', () => {
+  it('turns text targets into inline editors and commits changed text', () => {
     const dom = new JSDOM(
       `<main><h1 data-od-id="title">Original title</h1></main>${buildManualEditBridge(true)}`,
       { runScripts: 'dangerously', url: 'http://localhost' },
@@ -629,10 +513,7 @@ describe('manual edit bridge target normalization', () => {
     }, '*');
 
     title.textContent = 'Edited title';
-
-    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
-      data: { type: 'od-edit-text-finish', commit: true },
-    }));
+    title.dispatchEvent(new dom.window.FocusEvent('blur', { bubbles: false }));
 
     expect(title.hasAttribute('contenteditable')).toBe(false);
     expect(title.hasAttribute('data-od-editing')).toBe(false);
@@ -641,6 +522,8 @@ describe('manual edit bridge target normalization', () => {
       id: 'title',
       value: 'Edited title',
     }, '*');
+<<<<<<< HEAD
+=======
     expect(postMessage).toHaveBeenCalledWith({
       type: 'od-edit-text-session',
       id: 'title',
@@ -774,6 +657,7 @@ describe('manual edit bridge target normalization', () => {
     }), '*');
     expect(postMessage).toHaveBeenCalledWith({ type: 'od-edit-background' }, '*');
     expect(title.hasAttribute('contenteditable')).toBe(false);
+>>>>>>> upstream/main
 
     dom.window.close();
   });
@@ -798,182 +682,6 @@ describe('manual edit bridge target normalization', () => {
     expect(postMessage).not.toHaveBeenCalledWith(expect.objectContaining({
       type: 'od-edit-text-commit',
     }), '*');
-
-    dom.window.close();
-  });
-
-  it('removes a window keydown listener registered with the original callback, so the wrapper is not left firing', () => {
-    const guardHtml = buildManualEditKeyboardGuard();
-    const dom = new JSDOM(
-      `<!DOCTYPE html><html><body>${guardHtml}</body></html>`,
-      { runScripts: 'dangerously', url: 'http://localhost' },
-    );
-    const listener = vi.fn();
-
-    dom.window.addEventListener('keydown', listener);
-    dom.window.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'a' }));
-    expect(listener).toHaveBeenCalledTimes(1);
-
-    dom.window.removeEventListener('keydown', listener);
-    dom.window.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'a' }));
-    expect(listener).toHaveBeenCalledTimes(1);
-
-    dom.window.close();
-  });
-
-  it('removes a document keydown listener registered with the original callback, so the wrapper is not left firing', () => {
-    const guardHtml = buildManualEditKeyboardGuard();
-    const dom = new JSDOM(
-      `<!DOCTYPE html><html><body>${guardHtml}</body></html>`,
-      { runScripts: 'dangerously', url: 'http://localhost' },
-    );
-    const listener = vi.fn();
-
-    dom.window.document.addEventListener('keydown', listener);
-    dom.window.document.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'a' }));
-    expect(listener).toHaveBeenCalledTimes(1);
-
-    dom.window.document.removeEventListener('keydown', listener);
-    dom.window.document.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'a' }));
-    expect(listener).toHaveBeenCalledTimes(1);
-
-    dom.window.close();
-  });
-
-  it('treats duplicate addEventListener with the same callback and capture as a no-op, matching native behavior', () => {
-    const guardHtml = buildManualEditKeyboardGuard();
-    const dom = new JSDOM(
-      `<!DOCTYPE html><html><body>${guardHtml}</body></html>`,
-      { runScripts: 'dangerously', url: 'http://localhost' },
-    );
-    const listener = vi.fn();
-
-    dom.window.addEventListener('keydown', listener, true);
-    dom.window.addEventListener('keydown', listener, true); // duplicate — should be no-op
-    dom.window.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'a' }));
-    expect(listener).toHaveBeenCalledTimes(1); // fires once, not twice
-
-    dom.window.removeEventListener('keydown', listener, true); // single remove clears it
-    dom.window.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'a' }));
-    expect(listener).toHaveBeenCalledTimes(1); // no longer fires
-
-    dom.window.close();
-  });
-
-  it('matches the capture flag when removing a wrapped keydown listener', () => {
-    const guardHtml = buildManualEditKeyboardGuard();
-    const dom = new JSDOM(
-      `<!DOCTYPE html><html><body>${guardHtml}</body></html>`,
-      { runScripts: 'dangerously', url: 'http://localhost' },
-    );
-    const bubbleListener = vi.fn();
-    const captureListener = vi.fn();
-
-    dom.window.addEventListener('keydown', bubbleListener, false);
-    dom.window.addEventListener('keydown', captureListener, true);
-
-    dom.window.removeEventListener('keydown', bubbleListener, false);
-    dom.window.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'a' }));
-    expect(bubbleListener).not.toHaveBeenCalled();
-    expect(captureListener).toHaveBeenCalledTimes(1);
-
-    dom.window.close();
-  });
-
-  it('cleans up wrapped entry after a once:true listener fires, allowing re-registration', () => {
-    const guardHtml = buildManualEditKeyboardGuard();
-    const dom = new JSDOM(
-      `<!DOCTYPE html><html><body>${guardHtml}</body></html>`,
-      { runScripts: 'dangerously', url: 'http://localhost' },
-    );
-    const listener = vi.fn();
-
-    dom.window.addEventListener('keydown', listener, { once: true, capture: true });
-    dom.window.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'a' }));
-    expect(listener).toHaveBeenCalledTimes(1); // once fires once
-
-    // After once fires, the browser removed the handler; re-adding the same callback should work
-    dom.window.addEventListener('keydown', listener, { once: true, capture: true });
-    dom.window.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'b' }));
-    expect(listener).toHaveBeenCalledTimes(2); // re-registered and fired again
-
-    dom.window.close();
-  });
-
-  it('cleans up wrapped entry when an AbortSignal aborts, allowing re-registration', () => {
-    const guardHtml = buildManualEditKeyboardGuard();
-    const dom = new JSDOM(
-      `<!DOCTYPE html><html><body>${guardHtml}</body></html>`,
-      { runScripts: 'dangerously', url: 'http://localhost' },
-    );
-    const listener = vi.fn();
-    const controller = new dom.window.AbortController();
-
-    dom.window.addEventListener('keydown', listener, { signal: controller.signal, capture: true });
-    dom.window.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'a' }));
-    expect(listener).toHaveBeenCalledTimes(1);
-
-    controller.abort(); // browser removes the handler; our bookkeeping must also drop the entry
-
-    // Re-adding the same callback/capture should now succeed (not be treated as a duplicate)
-    const controller2 = new dom.window.AbortController();
-    dom.window.addEventListener('keydown', listener, { signal: controller2.signal, capture: true });
-    dom.window.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'b' }));
-    expect(listener).toHaveBeenCalledTimes(2);
-
-    dom.window.close();
-  });
-
-  it('allows re-adding a once listener after it was suppressed by the edit guard', () => {
-    const guardHtml = buildManualEditKeyboardGuard();
-    const dom = new JSDOM(
-      `<!DOCTYPE html><html><body>${guardHtml}</body></html>`,
-      { runScripts: 'dangerously', url: 'http://localhost' },
-    );
-    const listener = vi.fn();
-
-    // Set editingEl so shouldBlock() returns true for events inside it
-    const editable = dom.window.document.createElement('div');
-    editable.setAttribute('data-od-editing', 'true');
-    dom.window.document.body.appendChild(editable);
-    (dom.window as any).__odEditGuard.editingEl = editable;
-
-    // Register a once listener on window (capture phase) — dispatch from inside editable so guard suppresses it
-    dom.window.addEventListener('keydown', listener, { once: true, capture: true });
-    editable.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'a', bubbles: true }));
-    expect(listener).not.toHaveBeenCalled(); // suppressed by guard
-
-    // The once handler was consumed (both by browser and our bookkeeping)
-    // Re-adding the same callback should work
-    (dom.window as any).__odEditGuard.editingEl = null; // clear guard so next event fires
-    dom.window.addEventListener('keydown', listener, { once: true, capture: true });
-    dom.window.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'b' }));
-    expect(listener).toHaveBeenCalledTimes(1); // re-registered and fired
-
-    dom.window.close();
-  });
-
-  it('does not leave a stale entry when addEventListener is called with an already-aborted signal', () => {
-    const guardHtml = buildManualEditKeyboardGuard();
-    const dom = new JSDOM(
-      `<!DOCTYPE html><html><body>${guardHtml}</body></html>`,
-      { runScripts: 'dangerously', url: 'http://localhost' },
-    );
-    const listener = vi.fn();
-    const controller = new dom.window.AbortController();
-    controller.abort(); // already aborted before registration
-
-    // Registering with an already-aborted signal should not leave a stale entry
-    dom.window.addEventListener('keydown', listener, { signal: controller.signal, capture: true });
-
-    // The listener should not fire (browser ignores registration with aborted signal)
-    dom.window.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'a' }));
-    expect(listener).not.toHaveBeenCalled();
-
-    // Re-registering the same callback/capture should succeed (not be blocked by a stale dedup entry)
-    dom.window.addEventListener('keydown', listener, { capture: true });
-    dom.window.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'b' }));
-    expect(listener).toHaveBeenCalledTimes(1);
 
     dom.window.close();
   });

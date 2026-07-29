@@ -17,10 +17,7 @@ import { useT } from '../i18n';
 import { modalOverlay, modalContent } from '../motion';
 import type { Dict } from '../i18n/types';
 import {
-  agentGuideSnippetUsesMcpInstallInfo,
   buildAgentGuideMarkdown,
-  renderAgentGuideSnippetBody,
-  type AgentGuideMcpInstallInfo,
   type AgentGuideOptions,
 } from './use-everywhere/agent-guide';
 import {
@@ -150,43 +147,14 @@ export function UseEverywhereGuidePanel({
   const [activeId, setActiveId] = useState<GuideSection['id']>('overview');
   const [guideCopy, setGuideCopy] = useState<CopyState>('idle');
   const [snippetCopy, setSnippetCopy] = useState<{ key: string; state: CopyState } | null>(null);
-  const [mcpInstallInfo, setMcpInstallInfo] = useState<AgentGuideMcpInstallInfo | null>(null);
-  const mcpInstallInfoRequestRef = useRef<Promise<AgentGuideMcpInstallInfo | null> | null>(null);
   const guideSections = useMemo(() => localizeGuideSections(t), [t]);
-
-  function loadMcpInstallInfo(): Promise<AgentGuideMcpInstallInfo | null> {
-    if (!mcpInstallInfoRequestRef.current) {
-      mcpInstallInfoRequestRef.current = fetch('/api/mcp/install-info')
-        .then(async (res) => {
-          if (!res.ok) throw new Error(`daemon ${res.status}`);
-          const data = (await res.json()) as unknown;
-          if (isAgentGuideMcpInstallInfo(data)) return data;
-          return null;
-        })
-        .catch(() => null);
-    }
-    return mcpInstallInfoRequestRef.current;
-  }
-
-  useEffect(() => {
-    let cancelled = false;
-    loadMcpInstallInfo()
-      .then((data) => {
-        if (cancelled) return;
-        setMcpInstallInfo(data);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const guideOptions: AgentGuideOptions = useMemo(() => {
     const opts: AgentGuideOptions = {};
     if (daemonUrl) opts.daemonUrl = daemonUrl;
     if (versionHint) opts.versionHint = versionHint;
-    if (mcpInstallInfo) opts.mcpInstallInfo = mcpInstallInfo;
     return opts;
-  }, [daemonUrl, mcpInstallInfo, versionHint]);
+  }, [daemonUrl, versionHint]);
 
   const fullGuide = useMemo(
     () => buildAgentGuideMarkdown(guideOptions),
@@ -209,14 +177,7 @@ export function UseEverywhereGuidePanel({
   }, [activeId, guideSections]);
 
   async function onCopyGuide() {
-    const installInfo = mcpInstallInfo ?? await loadMcpInstallInfo();
-    if (installInfo && installInfo !== mcpInstallInfo) {
-      setMcpInstallInfo(installInfo);
-    }
-    const guide = installInfo
-      ? buildAgentGuideMarkdown({ ...guideOptions, mcpInstallInfo: installInfo })
-      : fullGuide;
-    const state = await copyText(guide);
+    const state = await copyText(fullGuide);
     setGuideCopy(state);
     if (state !== 'idle') {
       window.setTimeout(() => setGuideCopy('idle'), COPY_RESET_MS);
@@ -229,17 +190,7 @@ export function UseEverywhereGuidePanel({
       area: 'use_everywhere_tab',
       element: 'copy',
     });
-    let installInfo = mcpInstallInfo;
-    if (agentGuideSnippetUsesMcpInstallInfo(snippet) && !installInfo) {
-      installInfo = await loadMcpInstallInfo();
-      if (installInfo && installInfo !== mcpInstallInfo) {
-        setMcpInstallInfo(installInfo);
-      }
-    }
-    const text = renderAgentGuideSnippetBody(snippet, {
-      daemonUrl,
-      mcpInstallInfo: installInfo,
-    });
+    const text = applyDaemonUrl(snippet.body, daemonUrl);
     const state = await copyText(text);
     setSnippetCopy({ key, state });
     if (state !== 'idle') {
@@ -279,7 +230,6 @@ export function UseEverywhereGuidePanel({
         <SectionView
           section={activeSection}
           daemonUrl={daemonUrl}
-          mcpInstallInfo={mcpInstallInfo}
           snippetCopy={snippetCopy}
           onCopySnippet={onCopySnippet}
         />
@@ -333,16 +283,6 @@ export function UseEverywhereGuidePanel({
   );
 }
 
-function isAgentGuideMcpInstallInfo(data: unknown): data is AgentGuideMcpInstallInfo {
-  if (!data || typeof data !== 'object') return false;
-  const candidate = data as Partial<AgentGuideMcpInstallInfo>;
-  return (
-    typeof candidate.command === 'string' &&
-    Array.isArray(candidate.args) &&
-    candidate.args.every((arg) => typeof arg === 'string')
-  );
-}
-
 async function copyText(text: string): Promise<CopyState> {
   if (typeof navigator === 'undefined' || !navigator.clipboard) {
     return 'failed';
@@ -358,7 +298,6 @@ async function copyText(text: string): Promise<CopyState> {
 interface SectionViewProps {
   section: GuideSection;
   daemonUrl: string | undefined;
-  mcpInstallInfo: AgentGuideMcpInstallInfo | null;
   snippetCopy: { key: string; state: CopyState } | null;
   onCopySnippet: (key: string, snippet: CodeSnippet) => void;
 }
@@ -366,7 +305,6 @@ interface SectionViewProps {
 function SectionView({
   section,
   daemonUrl,
-  mcpInstallInfo,
   snippetCopy,
   onCopySnippet,
 }: SectionViewProps) {
@@ -418,12 +356,7 @@ function SectionView({
                 className="use-everywhere-snippet__pre"
                 data-language={snippet.language}
               >
-                <code>
-                  {renderAgentGuideSnippetBody(snippet, {
-                    daemonUrl,
-                    mcpInstallInfo,
-                  })}
-                </code>
+                <code>{applyDaemonUrl(snippet.body, daemonUrl)}</code>
               </pre>
             </div>
           );

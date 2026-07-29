@@ -10,7 +10,7 @@ import {
   normalizeUpdateObservationChannel,
   observePendingInstallerApplyAttempts,
   type InstallerObservationSummary,
-} from '../src/migration/index.js';
+} from '../src/update-apply-observations.js';
 
 function pendingSummary(overrides: Partial<InstallerObservationSummary> = {}): InstallerObservationSummary {
   return {
@@ -76,19 +76,17 @@ describe('update apply observations', () => {
     });
   });
 
-  it('normalizes prerelease and preview observation channels without collapsing them to beta', () => {
-    expect(normalizeUpdateObservationChannel('0.8.0-prerelease.2')).toBe('prerelease');
+  it('normalizes nightly and preview observation channels without collapsing them to beta', () => {
+    expect(normalizeUpdateObservationChannel('0.8.0.nightly.2')).toBe('nightly');
     expect(normalizeUpdateObservationChannel('0.8.0-preview.2')).toBe('preview');
-    expect(normalizeUpdateObservationChannel('0.8.0', 'prerelease')).toBe('prerelease');
+    expect(normalizeUpdateObservationChannel('0.8.0', 'nightly')).toBe('nightly');
   });
 
-  it.each(['installer', 'payload'] as const)(
-    'submits one sanitized %s analytics event and marks delivery metadata',
-    async (artifactType) => {
+  it('submits one sanitized analytics event and marks delivery metadata', async () => {
     const dataRoot = await mkdtemp(path.join(tmpdir(), 'od-update-observe-'));
     const capture = vi.fn();
     try {
-      const summaryPath = await writeSummary(dataRoot, pendingSummary({ artifactType }));
+      const summaryPath = await writeSummary(dataRoot, pendingSummary());
 
       await expect(observePendingInstallerApplyAttempts({
         analytics: { capture },
@@ -112,7 +110,7 @@ describe('update apply observations', () => {
         insertId: 'update_apply_observed:flow-1',
         properties: {
           arch: 'x64',
-          artifact_type: artifactType,
+          artifact_type: 'installer',
           channel: 'beta',
           elapsed_bucket: 'lt_5m',
           flow_id: 'flow-1',

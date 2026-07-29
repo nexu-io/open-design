@@ -5,7 +5,7 @@ commonLabels:
   app.kubernetes.io/environment: "production"
 
 image:
-  repository: ghcr.io/nexu-io/od
+  repository: vanjayak/open-design
   pullPolicy: IfNotPresent
   tag: "latest"
 

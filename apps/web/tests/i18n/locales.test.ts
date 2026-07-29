@@ -32,7 +32,7 @@ async function loadDict(locale: Locale): Promise<Dict> {
 
 function explicitLocaleKeys(locale: Locale): string[] {
   const source = readFileSync(new URL(`../../src/i18n/locales/${locale}.ts`, import.meta.url), 'utf8');
-  return Array.from(source.matchAll(/^\s*['"]([^'"]+)['"]:/gm), (match) => match[1] ?? '').filter(Boolean);
+  return Array.from(source.matchAll(/'([^']+)':/g), (match) => match[1] ?? '').filter(Boolean);
 }
 
 describe('i18n locales', () => {
@@ -155,18 +155,6 @@ describe('i18n locales', () => {
       expect(zhCN[key], `zh-CN.${key}`).not.toBe(en[key]);
       expect(zhTW[key], `zh-TW.${key}`).not.toBe(en[key]);
     }
-  });
-
-  it('explains BYOK draft activation in English and Chinese', () => {
-    expect(en['settings.byokDraftNotice']).toBe(
-      'This setup remains a draft until the required fields are complete. Your current execution setup stays active.',
-    );
-    expect(zhCN['settings.byokDraftNotice']).toBe(
-      '必填项补全前，此配置只会保存为草稿；当前执行配置将继续保持生效。',
-    );
-    expect(zhTW['settings.byokDraftNotice']).toBe(
-      '必填項補齊前，此設定只會儲存為草稿；目前的執行設定將繼續維持生效。',
-    );
   });
 
   it('keeps Routines settings page copy translated in Chinese (issue #1372)', () => {

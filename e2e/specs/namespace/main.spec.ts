@@ -8,7 +8,7 @@ import { promisify } from 'node:util';
 import { describe, expect, test } from 'vitest';
 
 import { requestJson } from '@/vitest/http';
-import { createSmokeSuite, e2eWorkspaceRoot } from '@/vitest/suite';
+import { createSmokeSuite, e2eWorkspaceRoot } from '@/vitest/smoke-suite';
 
 const execFileAsync = promisify(execFile);
 

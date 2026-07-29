@@ -4,7 +4,7 @@ Thanks for thinking about contributing. OD is small on purpose — most of the v
 
 This guide tells you exactly where to look for each type of contribution and what bar a PR has to clear before we merge it.
 
-<p align="center"><b>English</b> · <a href="docs/i18n/CONTRIBUTING.pt-BR.md">Português (Brasil)</a> · <a href="docs/i18n/CONTRIBUTING.de.md">Deutsch</a> · <a href="docs/i18n/CONTRIBUTING.fr.md">Français</a> · <a href="docs/i18n/CONTRIBUTING.zh-CN.md">简体中文</a> · <a href="docs/i18n/CONTRIBUTING.ja-JP.md">日本語</a> · <a href="docs/i18n/CONTRIBUTING.ko.md">한국어</a> · <a href="docs/i18n/CONTRIBUTING.th.md">ภาษาไทย</a></p>
+<p align="center"><b>English</b> · <a href="docs/i18n/CONTRIBUTING.pt-BR.md">Português (Brasil)</a> · <a href="docs/i18n/CONTRIBUTING.de.md">Deutsch</a> · <a href="docs/i18n/CONTRIBUTING.fr.md">Français</a> · <a href="docs/i18n/CONTRIBUTING.zh-CN.md">简体中文</a> · <a href="docs/i18n/CONTRIBUTING.ja-JP.md">日本語</a></p>
 
 ---
 
@@ -12,10 +12,9 @@ This guide tells you exactly where to look for each type of contribution and wha
 
 | If you want to… | You're really adding | Where it lives | Ship size |
 |---|---|---|---|
-| Make OD render a new kind of artifact (an invoice, an iOS Settings screen, a one-pager…) | a **Design template** | [`design-templates/<your-template>/`](design-templates/) | one folder with `SKILL.md` plus its rendering assets |
-| Add a functional capability agents invoke during a task | a **Skill** | [`skills/<your-skill>/`](skills/) | one folder with `SKILL.md` and optional resources |
-| Make OD speak a new brand's visual language | a **Design System** | [`design-systems/<brand>/`](design-systems/) | one package: `manifest.json`, `DESIGN.md`, and `tokens.css` |
-| Hook up a new coding-agent CLI | an **Agent adapter** | [`apps/daemon/src/runtimes/defs/`](apps/daemon/src/runtimes/defs/) | one definition plus a registry entry |
+| Make OD render a new kind of artifact (an invoice, an iOS Settings screen, a one-pager…) | a **Skill** | [`skills/<your-skill>/`](skills/) | one folder, ~2 files |
+| Make OD speak a new brand's visual language | a **Design System** | [`design-systems/<brand>/DESIGN.md`](design-systems/) | one Markdown file |
+| Hook up a new coding-agent CLI | an **Agent adapter** | [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts) | ~10 lines in one array |
 | Add a feature, fix a bug, lift a UX pattern from [`open-codesign`][ocod] | code | `apps/web/src/`, `apps/daemon/` | normal PR |
 | Improve docs, port a section to Français / Deutsch / 中文, fix typos | docs | `README.md`, `docs/i18n/README.fr.md`, `docs/i18n/README.de.md`, `docs/i18n/README.zh-CN.md`, `docs/`, `QUICKSTART.md` | one PR |
 
@@ -89,7 +88,7 @@ Create a `deploy/.env` file:
 OPEN_DESIGN_PORT=7456
 OPEN_DESIGN_MEM_LIMIT=384m
 OPEN_DESIGN_ALLOWED_ORIGINS=https://yourdomain.com
-OPEN_DESIGN_IMAGE=ghcr.io/nexu-io/od:latest
+OPEN_DESIGN_IMAGE=docker.io/vanjayak/open-design:latest
 ```
 
 > Projects and database data are persisted automatically using Docker volumes.
@@ -100,101 +99,93 @@ For the full Docker guide and advanced configuration, see `QUICKSTART.md`.
 
 ---
 
-## Adding a new Design template
+## Adding a new Skill
 
-A design template is a folder under [`design-templates/`](design-templates/) with a `SKILL.md` at the root, following Claude Code's [`SKILL.md` convention][skill] plus our optional `od:` extension. It packages the shape and rendering resources for an artifact shown in the Templates gallery.
+A skill is a folder under [`skills/`](skills/) with a `SKILL.md` at the root, following Claude Code's [`SKILL.md` convention][skill] plus our optional `od:` extension. **No registration step.** Drop the folder in, restart the daemon, the picker shows it.
 
 ### → See [`docs/skills-contributing.md`](docs/skills-contributing.md) for the full guide
 
 That file walks through:
 
-- **Quick start** — clone → copy the closest existing template → run `pnpm tools-dev run web` → see the picker → open PR.
-- **What a design template IS / IS NOT** — saves you a week if your idea turns out to be a feature or vendor integration in disguise.
-- **Design-template anatomy** — minimum folder layout and `SKILL.md` frontmatter cheat sheet.
+- **Quick start** — clone → copy a closest existing skill → run `pnpm tools-dev run web` → see the picker → open PR.
+- **What a skill IS / IS NOT** — saves you a week if your idea turns out to be a feature or vendor integration in disguise.
+- **Skill anatomy** — minimum folder layout and `SKILL.md` frontmatter cheat sheet.
 - **Running locally** — the four commands that actually matter.
 - **Merge bar** — copy-pasteable checklist of every thing a reviewer will check.
 - **PR description template** — drop into your PR body and fill in.
 - **Common rejection patterns** — the close reasons we've used recently, with concrete examples.
 
-The protocol spec (active frontmatter grammar, craft references, and testing primitives) lives separately in [`docs/skills-protocol.md`](docs/skills-protocol.md); older portable fields such as `od.inputs`, `od.parameters`, and `od.capabilities_required` may still appear in external bundles but are not consumed by the skill/template registry.
-
----
-
-## Adding a functional Skill
-
-A functional skill is a capability the agent invokes during a task to work on user input. Start with [`skills/README.md`](skills/README.md) for the ownership split and [`skills/AGENTS.md`](skills/AGENTS.md) for the folder contract; the shared `SKILL.md` grammar lives in [`docs/skills-protocol.md`](docs/skills-protocol.md). The daemon's lazy scanner walks the skill roots on the next `/api/skills` request, so a new local skill needs neither a rebuild nor a daemon restart.
+The protocol spec (full frontmatter grammar — typed inputs, slider parameters, craft references, testing primitives) lives separately in [`docs/skills-protocol.md`](docs/skills-protocol.md).
 
 ---
 
 ## Adding a new Design System
 
-A new repository design system is a package under [`design-systems/<slug>/`](design-systems/), not a standalone Markdown file. All 151 bundled systems now use the package contract below. The daemon still accepts legacy `DESIGN.md`-only folders as a compatibility path for older or user-installed content, but do not author new bundled systems in that shape. The catalog is scanned on each `/api/design-systems` request, so refresh the Design System surface after editing; no daemon restart is required.
+A design system is a single [`DESIGN.md`](design-systems/README.md) file under `design-systems/<slug>/`. **One file, no code.** Drop it in, restart the daemon, the picker shows it grouped by category.
 
-### Minimum package layout
+### Design system folder layout
 
 ```text
 design-systems/your-brand/
-├── manifest.json
-├── DESIGN.md
-└── tokens.css
+└── DESIGN.md
 ```
-
-`manifest.json` owns the stable id, display name, category, description, provenance, and declared package paths. `DESIGN.md` explains design intent for agents. `tokens.css` is the canonical compiled semantic-token stylesheet. See [`docs/design-systems.md`](docs/design-systems.md) and [`design-systems/_schema/AGENTS.md`](design-systems/_schema/AGENTS.md) for the full manifest, token, rich-package, and legacy-compatibility contracts.
 
 ### `DESIGN.md` shape
 
-There is no fixed nine-section schema. The package-quality guard requires at least seven substantive H2 sections, without prescribing their names, order, or numbering. Use headings that fit the actual system; a useful package usually covers theme, color, typography, layout, components, motion, accessibility, and anti-patterns.
-
 ```markdown
-# YourBrand Design System
+# Design System Inspired by YourBrand
 
-## Visual theme
+> Category: Developer Tools
+> One-line summary that shows in the picker preview.
+
+## 1. Visual Theme & Atmosphere
 …
 
-## Color roles
+## 2. Color
+- Primary: `#hex` / `oklch(...)`
+- …
+
+## 3. Typography
 …
 
-## Typography
-…
-
-## Layout and spacing
-## Components and states
-## Motion and interaction
-## Accessibility
-## Anti-patterns
+## 4. Spacing & Grid
+## 5. Layout & Composition
+## 6. Components
+## 7. Motion & Interaction
+## 8. Voice & Brand
+## 9. Anti-patterns
 ```
+
+The 9-section schema is fixed — that's what skill bodies grep for. The first H1 becomes the picker label (the `Design System Inspired by` prefix is stripped automatically), and the `> Category: …` line decides which group it lands in. Existing categories are listed in [`design-systems/README.md`](design-systems/README.md); if your brand truly doesn't fit, you can introduce a new one, but **try existing categories first**.
 
 ### Bar for merging a new design system
 
-1. **Ship all three required files.** The folder slug and `manifest.id` match and use normalized ASCII (`linear.app` → `linear-app`, `x.ai` → `x-ai`).
-2. **Write at least seven substantive H2 sections.** Do not add empty headings merely to satisfy the count.
-3. **Keep prose and tokens consistent.** Colors, type, spacing, and motion named in `DESIGN.md` must agree with `tokens.css`, which must pass the shared token guards.
-4. **Use real evidence and clear provenance.** Sample from the source product or site, not memory or AI guesses, and record the source in the manifest/package evidence.
-5. **Keep catalog copy useful.** `manifest.name`, `category`, and `description` are the primary picker metadata; avoid marketing fluff.
+1. **All 9 sections present.** Empty section bodies are fine for hard-to-find data (e.g. motion tokens), but the headings have to be there or the prompt grep breaks.
+2. **Hex codes are real.** Sample directly from the brand's site or product, not from memory or AI guesses. The README's "brand-spec extraction" 5-step protocol applies to maintainers too.
+3. **OKLch values for accent colors** are nice-to-have. They make palettes lerp predictably across light/dark.
+4. **No marketing fluff.** The brand's tagline is not a design token. Cut it.
+5. **Slug uses ASCII** — `linear.app` becomes `linear-app`, `x.ai` becomes `x-ai`. The 69 imported systems already follow this convention; mirror it.
 
-The upstream-derived product systems are imported from [`VoltAgent/awesome-design-md`][acd2] via [`scripts/sync-design-systems.ts`](scripts/sync-design-systems.ts). If your brand belongs upstream, **send the PR there first** — we'll pick it up automatically on the next sync. The `design-systems/` folder also carries project-owned additions that do not fit upstream.
+The 69 product systems we ship are imported from [`VoltAgent/awesome-design-md`][acd2] via [`scripts/sync-design-systems.ts`](scripts/sync-design-systems.ts). If your brand belongs upstream, **send the PR there first** — we'll pick it up automatically on the next sync. The `design-systems/` folder is for systems that don't fit upstream, plus our two hand-authored starters.
 
 ---
 
 ## Adding a new coding-agent CLI
 
-Hooking up a new agent (e.g. some new shop's `foo-coder` CLI) starts with one definition under [`apps/daemon/src/runtimes/defs/`](apps/daemon/src/runtimes/defs/) and one import/entry in [`runtimes/registry.ts`](apps/daemon/src/runtimes/registry.ts):
+Hooking up a new agent (e.g. some new shop's `foo-coder` CLI) is one entry in [`apps/daemon/src/agents.ts`](apps/daemon/src/agents.ts):
 
-```ts
-import type { RuntimeAgentDef } from '../types.js';
-
-export const fooAgentDef = {
+```javascript
+{
   id: 'foo',
   name: 'Foo Coder',
   bin: 'foo',
   versionArgs: ['--version'],
-  fallbackModels: [{ id: 'default', label: 'Default', default: true }],
   buildArgs: (prompt) => ['exec', '-p', prompt],
   streamFormat: 'plain',           // or 'claude-stream-json' if it speaks that
-} satisfies RuntimeAgentDef;
+}
 ```
 
-Import the definition into [`runtimes/registry.ts`](apps/daemon/src/runtimes/registry.ts) and add it to `BASE_AGENT_DEFS`; the shared engine will detect it on `PATH`, expose it in the picker, and build its invocation. Reuse an existing `streamFormat` whenever the wire shape matches. A genuinely new wire format also needs a parser under [`apps/daemon/src/runtimes/`](apps/daemon/src/runtimes/) or [`apps/daemon/src/agent-protocol/`](apps/daemon/src/agent-protocol/), parser tests, and a matching dispatch branch in [`server.ts`](apps/daemon/src/server.ts).
+That's it — daemon will detect it on `PATH`, the picker shows it, the chat path works. If the CLI emits **typed events** (like Claude Code's `--output-format stream-json`), wire a parser in [`apps/daemon/src/claude-stream.ts`](apps/daemon/src/claude-stream.ts) and set `streamFormat: 'claude-stream-json'`.
 
 Bar for merging:
 
@@ -253,7 +244,7 @@ Beyond that:
 ## Commits & pull requests
 
 - **One concern per PR.** Adding a skill + refactoring the parser + bumping a dep is three PRs.
-- **Title is imperative + scope.** `add dating-web skill`, `fix daemon SSE backpressure when CLI hangs`, `docs: clarify storage contract`.
+- **Title is imperative + scope.** `add dating-web skill`, `fix daemon SSE backpressure when CLI hangs`, `docs: clarify .od layout`.
 - **Use the PR template.** Fill every section of [`.github/pull_request_template.md`](.github/pull_request_template.md) — Why, What users will see, Surface area, Screenshots (if UI), Bug fix verification (if bug fix), Validation. Empty sections earn a "please fill in" reply.
 - **Body explains the why.** "What does this do" is usually obvious from the diff; "why does this need to exist" rarely is.
 - **Reference an issue** if there is one. If there isn't and the PR is non-trivial, open one first so we can agree the change is wanted before you spend the time.
@@ -292,11 +283,7 @@ To keep the project focused, please don't open PRs that:
 - **Vendor a model runtime.** OD's whole bet is "your existing CLI is enough". We don't ship `pi-ai`, OpenAI keys, or model loaders.
 - **Rewrite the frontend away from the current stack without prior discussion.** Next.js 16 App Router + React 18 + TS is the line. No Astro, Solid, Svelte, or other framework rewrites unless maintainers explicitly want that migration.
 - **Replace the daemon with a serverless function.** The daemon's whole point is owning a real `cwd` and spawning a real CLI. Vercel deployment of the SPA is fine; the daemon stays a daemon.
-- **Add telemetry or outbound data collection outside the privacy contract.**
-  Product analytics and masked session replay are consent-gated; scrubbed
-  safety/reliability telemetry is always enabled in configured builds. Any new
-  event, field, or destination must preserve the consent, minimization, and
-  scrubbing boundaries documented in [`PRIVACY.md`](PRIVACY.md).
+- **Add telemetry / analytics / phone-home.** OD is local-first. The only outbound calls are to providers the user explicitly configured.
 - **Bundle a binary** without a license file and authorship attribution next to it.
 
 If you're not sure whether your idea fits, open a discussion before writing the code.
@@ -315,13 +302,13 @@ If you've been contributing consistently and want to know what the path to becom
 The tl;dr: ship good PRs, review thoughtfully, hang out in [Discussions][discussions] / [Discord][discord], and the rest takes care of itself.
 
 [discussions]: https://github.com/nexu-io/open-design/discussions
-[discord]: https://discord.gg/mHAjSMV6gz
+[discord]: https://discord.gg/qhbcCH8Am4
 
 ---
 
 ## License
 
-By contributing, you agree your contribution is licensed under the [Apache-2.0 License](LICENSE) of this repository, except where a bundled skill or template carries its own `LICENSE` file. Known MIT-licensed exceptions include [`design-templates/guizang-ppt/`](design-templates/guizang-ppt/), which retains authorship attribution to [op7418](https://github.com/op7418), and [`skills/web-clone/`](skills/web-clone/), which retains authorship attribution to [Jane Xiaoer](https://github.com/Jane-xiaoer).
+By contributing, you agree your contribution is licensed under the [Apache-2.0 License](LICENSE) of this repository, with the exception of files inside [`skills/guizang-ppt/`](skills/guizang-ppt/), which retain their original MIT license and authorship attribution to [op7418](https://github.com/op7418).
 
 [skill]: https://docs.anthropic.com/en/docs/claude-code/skills
 [guizang]: https://github.com/op7418/guizang-ppt-skill

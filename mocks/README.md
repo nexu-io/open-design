@@ -1,6 +1,10 @@
 # `mocks/` — replay-based mock CLIs and protocol fixtures
 
+<<<<<<< HEAD
+A drop-in replacement for the real agent CLIs (`claude`, `opencode`,
+=======
 A PATH-overlay replay harness for selected agent CLI contracts (`amp`, `claude`, `opencode`,
+>>>>>>> upstream/main
 `codex`, `gemini`, `cursor-agent`, `deepseek`, `qwen`, `grok`, the
 ACP family `devin` / `hermes` / `kilo` / `kimi` / `kiro` / `vibe`, and
 the AMR `vela` CLI) that replays pre-recorded sessions in each CLI's
@@ -16,8 +20,8 @@ Used by:
 
 - **E2E tests** in `apps/daemon/tests/` — run the full chat-server
   pipeline against a known agent trace, assert UI events / artifacts.
-- **Local self-tests during development** — iterate on `routes/chat.ts`,
-  `runtimes/claude-stream.ts`, `runtimes/json-event-stream.ts` parser changes without
+- **Local self-tests during development** — iterate on `chat-routes.ts`,
+  `claude-stream.ts`, `json-event-stream.ts` parser changes without
   burning provider budget.
 - **Demo / onboarding** — show what a 17-tool `claude` editing session
   looks like end-to-end, offline.
@@ -153,6 +157,15 @@ replay gaps:
 
 | CLI | OD streamFormat | Parser source |
 |---|---|---|
+<<<<<<< HEAD
+| `opencode`        | `json-event-stream` (opencode kind)     | `json-event-stream.ts:handleOpenCodeEvent`   |
+| `codex`           | `json-event-stream` (codex kind)        | `json-event-stream.ts:handleCodexEvent`      |
+| `claude`          | `claude-stream-json`                    | `claude-stream.ts:createClaudeStreamHandler` |
+| `gemini`          | `json-event-stream` (gemini kind)       | `json-event-stream.ts:handleGeminiEvent`     |
+| `cursor-agent`    | `json-event-stream` (cursor-agent kind) | `json-event-stream.ts:handleCursorEvent`     |
+| `deepseek` `qwen` `grok` | `plain`                          | `server.ts` (raw stdout = final assistant text) |
+| `devin` `hermes` `kilo` `kimi` `kiro` `vibe` | `acp-json-rpc` | `acp.ts:attachAcpSession`                       |
+=======
 | `opencode`        | `json-event-stream` (opencode kind)     | `runtimes/json-event-stream.ts:handleOpenCodeEvent`   |
 | `codex`           | `json-event-stream` (codex kind)        | `runtimes/json-event-stream.ts:handleCodexEvent`      |
 | `amp` `claude`    | `claude-stream-json`                    | `runtimes/claude-stream.ts:createClaudeStreamHandler` |
@@ -161,6 +174,7 @@ replay gaps:
 | `deepseek` `qwen` `grok` | `plain`                          | `server.ts` (raw stdout = final assistant text) |
 | `kimi`            | `acp-json-rpc` in the live daemon; the replay wrapper still uses obsolete `json-event-stream` | `agent-protocol/acp/session.ts:attachAcpSession` |
 | `devin` `hermes` `kilo` `kiro` `vibe` | `acp-json-rpc` | `agent-protocol/acp/session.ts:attachAcpSession`         |
+>>>>>>> upstream/main
 | `vela` (AMR) | `acp-json-rpc` + `login` / `models` subcommands | `runtimes/defs/amr.ts` + `apps/daemon/tests/fixtures/fake-vela.mjs` (sibling stub) |
 
 > **Note on `cursor-agent`**: OD's parser does NOT recognize tool-call
@@ -170,7 +184,11 @@ replay gaps:
 > The retained `gemini` parser and renderer recognize `stream-json` tool_use /
 > tool_result frames and replay recorded tool calls through that envelope.
 
+<<<<<<< HEAD
+> **Note on ACP agents** (`devin` / `hermes` / `kilo` / `kimi` / `kiro` /
+=======
 > **Note on live ACP agents** (`devin` / `hermes` / `kilo` / `kimi` / `kiro` /
+>>>>>>> upstream/main
 > `vibe`): These do NOT stream stdout — they speak JSON-RPC v2 over stdio.
 > OD's daemon sends `initialize` → `session/new` → (optional `session/set_model`)
 > → `session/prompt`; the mock responds in order, streams text via
@@ -181,11 +199,14 @@ replay gaps:
 > current generic ACP mock emits only message-chunk text, so it does not cover
 > that part of the live contract.
 
+<<<<<<< HEAD
+=======
 > **Note on `kimi`**: Open Design's registered runtime now launches `kimi acp`
 > and uses ACP JSON-RPC. The current `mocks/bin/kimi` replay wrapper still
 > models the retired prompt-mode stream-json contract; do not treat it as live
 > Kimi contract coverage until the wrapper and its smoke test are migrated.
 
+>>>>>>> upstream/main
 > **Note on `vela` (AMR)**: vela is the bin OD's AMR runtime spawns. It
 > extends the generic ACP shape with `agentCapabilities` + `models`
 > blocks in `initialize` / `session/new`, plus a **strict set_model gate**
@@ -434,16 +455,19 @@ mocks/
 │   ├── format-gemini.mjs         ← matches handleGeminiEvent
 │   ├── format-cursor-agent.mjs   ← matches handleCursorEvent
 │   ├── format-acp.mjs            ← JSON-RPC server matching attachAcpSession
+<<<<<<< HEAD
+=======
 │   ├── format-kimi.mjs           ← retained obsolete Kimi stream-json renderer
+>>>>>>> upstream/main
 │   ├── format-vela.mjs           ← AMR vela: ACP + models block + set_model gate
 │   ├── vela-subcommands.mjs      ← `vela login` + `vela models` handlers
 │   └── format-plain.mjs          ← raw stdout (deepseek/qwen/grok)
 ├── bin/
-│   ├── amp  claude  codex  opencode  opencode-cli
+│   ├── opencode  claude  codex
 │   ├── gemini    cursor-agent
 │   ├── deepseek  qwen    grok
-│   ├── devin hermes kilo kimi kiro kiro-cli vibe vibe-acp
-│   └── vela                       ← 19 PATH-overlay wrappers
+│   ├── devin hermes kilo kimi kiro vibe
+│   └── vela                       ← 15 bash wrappers, PATH-overlay
 ├── manifest.json                 ← committed: 179 entries' metadata + sha256 + provenance + R2 storage hints
 ├── golden/                       ← committed: daemon-event regression snapshots
 │   ├── README.md
@@ -471,9 +495,8 @@ under any Node ≥18.
   rendered as their native protocols — they fall back to the plain
   renderer for now. If you need them, add a `format-<agent>.mjs`
   following the same pattern as `format-codex.mjs`; the parsers are
-  in `apps/daemon/src/copilot-stream.ts`,
-  `apps/daemon/src/runtimes/qoder-stream.ts`, and
-  `apps/daemon/src/agent-protocol/pi-rpc/session.ts`.
+  in `apps/daemon/src/{copilot-stream,qoder-stream}.ts` and the pi-rpc
+  handler inside `apps/daemon/src/server.ts`.
 - The mock does not honor CLI flags that change semantics (`--model`,
   `--permission-mode`, `--allowed-tools`). They're silently ignored.
 

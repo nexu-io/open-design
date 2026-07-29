@@ -9,8 +9,6 @@ import type { ToolPackConfig } from "../src/config.js";
 import { prepareResourceTree } from "../src/win/resources.js";
 import type { WinPaths } from "../src/win/types.js";
 
-const RESOURCE_TREE_CACHE_TEST_TIMEOUT_MS = 15_000;
-
 async function writeFakeOpenCodeCompanion(
   source: string,
   content = "#!/bin/sh\nexit 0\n",
@@ -54,14 +52,6 @@ async function createWorkspaceFixture(workspaceRoot: string): Promise<void> {
   await mkdir(join(workspaceRoot, "prompt-templates", "image"), {
     recursive: true,
   });
-  await mkdir(join(workspaceRoot, "data", "plugin-previews"), {
-    recursive: true,
-  });
-  await writeFile(
-    join(workspaceRoot, "data", "plugin-previews", "manifest.json"),
-    "{\"previews\":{}}\n",
-    "utf8",
-  );
   await mkdir(join(workspaceRoot, "plugins", "registry", "official"), {
     recursive: true,
   });
@@ -112,53 +102,7 @@ describe("prepareResourceTree", () => {
     } finally {
       await rm(root, { force: true, recursive: true });
     }
-  }, RESOURCE_TREE_CACHE_TEST_TIMEOUT_MS);
-
-  it("invalidates the Windows resource tree cache when the plugin-preview manifest changes", async () => {
-    const root = await mkdtemp(join(tmpdir(), "open-design-win-previews-"));
-    const workspaceRoot = join(root, "workspace");
-    const resourceRoot = join(root, "materialized", "open-design");
-    const cache = new ToolPackCache(join(root, "cache"));
-    const config = { workspaceRoot } as ToolPackConfig;
-    const paths = { resourceRoot } as WinPaths;
-    const manifestPath = join(
-      workspaceRoot,
-      "data",
-      "plugin-previews",
-      "manifest.json",
-    );
-    const materializedManifestPath = join(
-      resourceRoot,
-      "data",
-      "plugin-previews",
-      "manifest.json",
-    );
-
-    try {
-      await createWorkspaceFixture(workspaceRoot);
-      await writeFile(manifestPath, "{\"previews\":{\"a\":1}}\n", "utf8");
-
-      await prepareResourceTree(config, paths, cache, { materialize: true });
-
-      await expect(readFile(materializedManifestPath, "utf8")).resolves.toBe(
-        "{\"previews\":{\"a\":1}}\n",
-      );
-
-      await writeFile(manifestPath, "{\"previews\":{\"a\":2}}\n", "utf8");
-
-      await prepareResourceTree(config, paths, cache, { materialize: true });
-
-      await expect(readFile(materializedManifestPath, "utf8")).resolves.toBe(
-        "{\"previews\":{\"a\":2}}\n",
-      );
-      expect(cache.report().entries.map((entry) => entry.status)).toEqual([
-        "miss",
-        "miss",
-      ]);
-    } finally {
-      await rm(root, { force: true, recursive: true });
-    }
-  }, RESOURCE_TREE_CACHE_TEST_TIMEOUT_MS);
+  });
 
   it("copies a configured Vela CLI binary into the Windows resource tree", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-win-vela-"));
@@ -262,5 +206,5 @@ describe("prepareResourceTree", () => {
       else process.env.OPEN_DESIGN_VELA_CLI_BIN = originalVelaBin;
       await rm(root, { force: true, recursive: true });
     }
-  }, RESOURCE_TREE_CACHE_TEST_TIMEOUT_MS);
+  });
 });

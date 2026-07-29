@@ -6,16 +6,11 @@
 // multi-namespace runs isolated). This survives browser storage resets and
 // origin changes so onboarding and agent selection don't reappear unexpectedly.
 //
-// `agentCliEnv` is intentionally limited by allowlist below. It is the
-// explicit low-level launch environment for Local CLI runs, separate from
-// provider BYOK. API-key entries here configure the underlying CLI itself;
-// BASE_URL is optional and, when omitted, the CLI uses its default endpoint.
-// `agentCliEnvIntent` records when API-key entries were saved under that new
-// CLI-override contract. Older builds labeled the same fields as proxy-only,
-// so legacy standalone keys without a base URL are dropped unless this marker
-// or a matching base URL proves that the user intended to activate them.
-// These values are local-only and should not be logged or returned outside
-// this machine.
+// `agentCliEnv` is intentionally limited by allowlist below. It may include
+// proxy/auth overrides for local CLIs (for example ANTHROPIC_BASE_URL +
+// ANTHROPIC_AUTH_TOKEN for Claude Code, or OPENAI_BASE_URL + OPENAI_API_KEY
+// for Codex). Those values are local-only and should not be logged or
+// returned outside this machine.
 
 import { readFileSync } from 'node:fs';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
@@ -77,11 +72,9 @@ export function readPluginEnvKnobs(): PluginEnvKnobs {
 export interface AgentModelPrefs {
   model?: string;
   reasoning?: string;
-  serviceTier?: string;
 }
 
 export type AgentCliEnvPrefs = Record<string, Record<string, string>>;
-export type AgentCliEnvIntentPrefs = Record<string, { apiKeyOverride?: boolean }>;
 
 export interface TelemetryPrefs {
   metrics?: boolean;
@@ -106,7 +99,6 @@ export interface AppConfigPrefs {
   agentId?: string | null;
   agentModels?: Record<string, AgentModelPrefs>;
   agentCliEnv?: AgentCliEnvPrefs;
-  agentCliEnvIntent?: AgentCliEnvIntentPrefs;
   skillId?: string | null;
   designSystemId?: string | null;
   disabledSkills?: string[];
@@ -114,28 +106,17 @@ export interface AppConfigPrefs {
   installationId?: string | null;
   telemetry?: TelemetryPrefs;
   privacyDecisionAt?: number | null;
-  allowSilentUpdates?: boolean;
   orbit?: OrbitConfigPrefs;
   customInstructions?: string | null;
   projectLocations?: ProjectLocationPrefs[];
   defaultProjectLocationId?: string | null;
-  // Most-recently-used local working directories the user granted the agent
-  // read access to from the Home composer. Become a project's
-  // `metadata.linkedDirs` (read-only `--add-dir` awareness, no Design Files
-  // import). Stored most-recent-first; capped at RECENT_LINKED_DIRS_MAX.
-  recentLinkedDirs?: string[];
 }
-
-// Cap on how many recent working directories we remember. Keeps the picker's
-// "Recent" submenu short and the config file bounded.
-export const RECENT_LINKED_DIRS_MAX = 5;
 
 const ALLOWED_KEYS: ReadonlySet<keyof AppConfigPrefs> = new Set([
   'onboardingCompleted',
   'agentId',
   'agentModels',
   'agentCliEnv',
-  'agentCliEnvIntent',
   'skillId',
   'designSystemId',
   'disabledSkills',
@@ -143,33 +124,17 @@ const ALLOWED_KEYS: ReadonlySet<keyof AppConfigPrefs> = new Set([
   'installationId',
   'telemetry',
   'privacyDecisionAt',
-  'allowSilentUpdates',
   'orbit',
   'customInstructions',
   'projectLocations',
   'defaultProjectLocationId',
-  'recentLinkedDirs',
 ] as const);
 
 function configFile(dataDir: string): string {
   return path.join(dataDir, 'app-config.json');
 }
 
-export function appConfigDir(projectRoot: string, env: NodeJS.ProcessEnv = process.env): string {
-  const raw = env.OD_DATA_DIR;
-  if (typeof raw !== 'string' || raw.trim().length === 0) {
-    return path.join(projectRoot, '.od');
-  }
-  const expanded = expandHomePrefix(raw.trim());
-  return path.isAbsolute(expanded) ? expanded : path.resolve(projectRoot, expanded);
-}
-
-const AGENT_MODEL_KEYS: ReadonlySet<string> = new Set([
-  'model',
-  'reasoning',
-  'serviceTier',
-]);
-const RETIRED_AGENT_IDS: ReadonlySet<string> = new Set(['gemini']);
+const AGENT_MODEL_KEYS: ReadonlySet<string> = new Set(['model', 'reasoning']);
 
 const TELEMETRY_KEYS: ReadonlySet<string> = new Set([
   'metrics',
@@ -192,7 +157,6 @@ function validateTelemetry(raw: unknown): TelemetryPrefs | undefined {
 const AGENT_CLI_ENV_KEYS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   ['amr', new Set([
     'VELA_BIN',
-    'VELA_API_URL',
     'VELA_LINK_URL',
     'VELA_RUNTIME_KEY',
     'VELA_OPENCODE_BIN',
@@ -206,7 +170,7 @@ const AGENT_CLI_ENV_KEYS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   ['cursor-agent', new Set(['CURSOR_AGENT_BIN'])],
   ['deepseek', new Set(['DEEPSEEK_BIN'])],
   ['devin', new Set(['DEVIN_BIN'])],
-  ['mimo', new Set(['MIMO_BIN'])],
+  ['gemini', new Set(['GEMINI_BIN'])],
   ['hermes', new Set(['HERMES_BIN'])],
   ['kimi', new Set(['KIMI_BIN'])],
   ['kiro', new Set(['KIRO_BIN'])],
@@ -217,20 +181,6 @@ const AGENT_CLI_ENV_KEYS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   ['qwen', new Set(['QWEN_BIN'])],
   ['trae-cli', new Set(['TRAE_CLI_BIN'])],
   ['vibe', new Set(['VIBE_BIN'])],
-]);
-
-const AGENT_CLI_AUTH_ENV_KEYS: ReadonlyMap<string, {
-  auth: ReadonlySet<string>;
-  baseUrl: ReadonlySet<string>;
-}> = new Map([
-  ['claude', {
-    auth: new Set(['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN']),
-    baseUrl: new Set(['ANTHROPIC_BASE_URL']),
-  }],
-  ['codex', {
-    auth: new Set(['CODEX_API_KEY', 'OPENAI_API_KEY']),
-    baseUrl: new Set(['OPENAI_BASE_URL']),
-  }],
 ]);
 
 function isValidAgentModelEntry(v: unknown): v is AgentModelPrefs {
@@ -277,22 +227,6 @@ export function validateAgentCliEnv(raw: unknown): AgentCliEnvPrefs | undefined 
       env[envKey] = trimmed;
     }
     if (Object.keys(env).length > 0) result[agentId] = env;
-  }
-  return Object.keys(result).length > 0 ? result : undefined;
-}
-
-export function validateAgentCliEnvIntent(raw: unknown): AgentCliEnvIntentPrefs | undefined {
-  if (raw === undefined || raw === null) return undefined;
-  if (typeof raw !== 'object' || Array.isArray(raw)) return undefined;
-  const result: AgentCliEnvIntentPrefs = Object.create(null);
-  for (const [agentId, value] of Object.entries(raw as Record<string, unknown>)) {
-    if (agentId === '__proto__' || agentId === 'constructor') continue;
-    if (!AGENT_CLI_ENV_KEYS.has(agentId)) continue;
-    if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
-    const obj = value as Record<string, unknown>;
-    if (obj.apiKeyOverride === true) {
-      result[agentId] = { apiKeyOverride: true };
-    }
   }
   return Object.keys(result).length > 0 ? result : undefined;
 }
@@ -369,137 +303,9 @@ export function agentCliEnvForAgent(
   agentId: string,
 ): Record<string, string> {
   if (!prefs || typeof agentId !== 'string') return {};
-  const env = prefs[agentId === 'byok-opencode' ? 'opencode' : agentId];
+  const env = prefs[agentId];
   if (!env || typeof env !== 'object' || Array.isArray(env)) return {};
   return { ...env };
-}
-
-function normalizeAgentCliEnvPrefs(prefs: AppConfigPrefs): AppConfigPrefs {
-  const agentCliEnv = prefs.agentCliEnv;
-  if (!agentCliEnv) {
-    if (!prefs.agentCliEnvIntent) return prefs;
-    const next = { ...prefs };
-    delete next.agentCliEnvIntent;
-    return next;
-  }
-
-  let nextAgentCliEnv = agentCliEnv;
-  let changed = false;
-
-  for (const [agentId, keys] of AGENT_CLI_AUTH_ENV_KEYS) {
-    const env = nextAgentCliEnv[agentId];
-    if (!env) continue;
-    const hasBaseUrl = Object.keys(env).some((key) => keys.baseUrl.has(key));
-    const hasExplicitApiKeyIntent = prefs.agentCliEnvIntent?.[agentId]?.apiKeyOverride === true;
-    if (hasBaseUrl || hasExplicitApiKeyIntent) continue;
-
-    let nextEnv = env;
-    for (const authKey of keys.auth) {
-      if (!Object.prototype.hasOwnProperty.call(nextEnv, authKey)) continue;
-      if (nextEnv === env) nextEnv = { ...env };
-      delete nextEnv[authKey];
-      changed = true;
-    }
-    if (nextEnv === env) continue;
-    nextAgentCliEnv = { ...nextAgentCliEnv };
-    if (Object.keys(nextEnv).length > 0) {
-      nextAgentCliEnv[agentId] = nextEnv;
-    } else {
-      delete nextAgentCliEnv[agentId];
-    }
-  }
-
-  let nextAgentCliEnvIntent = prefs.agentCliEnvIntent;
-  if (nextAgentCliEnvIntent) {
-    for (const agentId of Object.keys(nextAgentCliEnvIntent)) {
-      if (nextAgentCliEnv[agentId]) continue;
-      nextAgentCliEnvIntent = { ...nextAgentCliEnvIntent };
-      delete nextAgentCliEnvIntent[agentId];
-      changed = true;
-    }
-  }
-
-  const normalizedAgentCliEnv = Object.keys(nextAgentCliEnv).length > 0 ? nextAgentCliEnv : undefined;
-  const normalizedIntent = nextAgentCliEnvIntent && Object.keys(nextAgentCliEnvIntent).length > 0
-    ? nextAgentCliEnvIntent
-    : undefined;
-
-  if (
-    !changed &&
-    normalizedAgentCliEnv === prefs.agentCliEnv &&
-    normalizedIntent === prefs.agentCliEnvIntent
-  ) {
-    return prefs;
-  }
-
-  const next = { ...prefs };
-  if (normalizedAgentCliEnv) {
-    next.agentCliEnv = normalizedAgentCliEnv;
-  } else {
-    delete next.agentCliEnv;
-  }
-  if (normalizedIntent) {
-    next.agentCliEnvIntent = normalizedIntent;
-  } else {
-    delete next.agentCliEnvIntent;
-  }
-  return next;
-}
-
-function normalizeRetiredAgentPrefs(prefs: AppConfigPrefs): AppConfigPrefs {
-  let changed = false;
-  let next = prefs;
-
-  if (typeof next.agentId === 'string' && RETIRED_AGENT_IDS.has(next.agentId)) {
-    next = { ...next };
-    delete next.agentId;
-    changed = true;
-  }
-
-  if (next.agentModels) {
-    let nextAgentModels = next.agentModels;
-    for (const agentId of RETIRED_AGENT_IDS) {
-      if (!Object.prototype.hasOwnProperty.call(nextAgentModels, agentId)) continue;
-      if (nextAgentModels === next.agentModels) nextAgentModels = { ...next.agentModels };
-      delete nextAgentModels[agentId];
-      changed = true;
-    }
-    const normalizedAgentModels = Object.keys(nextAgentModels).length > 0 ? nextAgentModels : undefined;
-    if (normalizedAgentModels !== next.agentModels) {
-      next = next === prefs ? { ...next } : next;
-      if (normalizedAgentModels) {
-        next.agentModels = normalizedAgentModels;
-      } else {
-        delete next.agentModels;
-      }
-    }
-  }
-
-  return changed ? next : prefs;
-}
-
-function inferAgentCliEnvIntentForExplicitEnvWrite(prefs: AppConfigPrefs): AppConfigPrefs {
-  if (!prefs.agentCliEnv) return prefs;
-  let nextAgentCliEnvIntent = prefs.agentCliEnvIntent;
-  let changed = false;
-
-  for (const [agentId, keys] of AGENT_CLI_AUTH_ENV_KEYS) {
-    const env = prefs.agentCliEnv[agentId];
-    if (!env) continue;
-    const hasBaseUrl = Object.keys(env).some((key) => keys.baseUrl.has(key));
-    if (hasBaseUrl) continue;
-    const hasAuthKey = Object.keys(env).some((key) => keys.auth.has(key));
-    if (!hasAuthKey) continue;
-    if (nextAgentCliEnvIntent?.[agentId]?.apiKeyOverride === true) continue;
-    nextAgentCliEnvIntent = {
-      ...(nextAgentCliEnvIntent ?? {}),
-      [agentId]: { apiKeyOverride: true },
-    };
-    changed = true;
-  }
-
-  if (!changed || !nextAgentCliEnvIntent) return prefs;
-  return { ...prefs, agentCliEnvIntent: nextAgentCliEnvIntent };
 }
 
 function applyConfigValue(
@@ -531,14 +337,6 @@ function applyConfigValue(
       delete target[key];
     }
   }
-  if (key === 'agentCliEnvIntent') {
-    const validated = validateAgentCliEnvIntent(value);
-    if (validated !== undefined) {
-      target[key] = validated;
-    } else {
-      delete target[key];
-    }
-  }
   if (key === 'disabledSkills' || key === 'disabledDesignSystems') {
     if (Array.isArray(value) && value.every((v) => typeof v === 'string')) {
       target[key] = value;
@@ -563,14 +361,6 @@ function applyConfigValue(
       value === null ||
       (typeof value === 'number' && Number.isFinite(value) && value >= 0)
     ) {
-      target[key] = value;
-    } else {
-      delete target[key];
-    }
-    return;
-  }
-  if (key === 'allowSilentUpdates') {
-    if (typeof value === 'boolean') {
       target[key] = value;
     } else {
       delete target[key];
@@ -612,29 +402,6 @@ function applyConfigValue(
     }
     return;
   }
-  if (key === 'recentLinkedDirs') {
-    if (Array.isArray(value)) {
-      // Keep non-empty strings, trim, de-dupe preserving most-recent-first
-      // order, and cap the list. Path existence/safety is enforced later by
-      // validateLinkedDirs when the dir is actually attached to a project, so
-      // a folder that was since deleted simply drops out at use time rather
-      // than corrupting the whole config write here.
-      const seen = new Set<string>();
-      const cleaned: string[] = [];
-      for (const entry of value) {
-        if (typeof entry !== 'string') continue;
-        const trimmed = entry.trim();
-        if (!trimmed || seen.has(trimmed)) continue;
-        seen.add(trimmed);
-        cleaned.push(trimmed);
-        if (cleaned.length >= RECENT_LINKED_DIRS_MAX) break;
-      }
-      target[key] = cleaned;
-    } else {
-      delete target[key];
-    }
-    return;
-  }
 }
 
 function filterAllowedKeys(obj: Record<string, unknown>): AppConfigPrefs {
@@ -644,7 +411,7 @@ function filterAllowedKeys(obj: Record<string, unknown>): AppConfigPrefs {
       applyConfigValue(result, key as keyof AppConfigPrefs, obj[key]);
     }
   }
-  return normalizeRetiredAgentPrefs(normalizeAgentCliEnvPrefs(result as AppConfigPrefs));
+  return result as AppConfigPrefs;
 }
 
 // Fill in telemetry defaults when the saved config has no `telemetry`
@@ -661,7 +428,7 @@ function applyTelemetryDefaults(prefs: AppConfigPrefs): AppConfigPrefs {
   if (prefs.telemetry === undefined) {
     return {
       ...prefs,
-      telemetry: { metrics: true, content: true },
+      telemetry: { metrics: true, content: true, artifactManifest: false },
     };
   }
   return prefs;
@@ -786,47 +553,24 @@ async function doWrite(
     if (!ALLOWED_KEYS.has(key as keyof AppConfigPrefs)) continue;
     applyConfigValue(next, key as keyof AppConfigPrefs, partial[key]);
   }
-  const nextWithInferredIntent = Object.prototype.hasOwnProperty.call(partial, 'agentCliEnv')
-    ? inferAgentCliEnvIntentForExplicitEnvWrite(next as AppConfigPrefs)
-    : next as AppConfigPrefs;
-  const normalizedNext = normalizeAgentCliEnvPrefs(nextWithInferredIntent);
-  const normalizedNextWithoutRetiredAgents = normalizeRetiredAgentPrefs(normalizedNext);
   const file = configFile(dataDir);
   await mkdir(path.dirname(file), { recursive: true });
   const tmp = file + '.' + randomBytes(4).toString('hex') + '.tmp';
-  await writeFile(tmp, JSON.stringify(normalizedNextWithoutRetiredAgents, null, 2), 'utf8');
+  await writeFile(tmp, JSON.stringify(next, null, 2), 'utf8');
   await rename(tmp, file);
-  const installationIdWasExplicitlyReset = Object.prototype.hasOwnProperty.call(partial, 'installationId')
-    && (partial.installationId == null || (
-      typeof existing.installationId === 'string'
-      && typeof normalizedNextWithoutRetiredAgents.installationId === 'string'
-      && existing.installationId !== normalizedNextWithoutRetiredAgents.installationId
-    ));
-  const metricsWereExplicitlyDisabled = isMetricsExplicitlyDisabled(partial.telemetry);
-  const shouldClearAttribution = installationIdWasExplicitlyReset || metricsWereExplicitlyDisabled;
   // Mirror the identity bits to the channel-root installation file so they
   // survive a namespace-scoped data-dir wipe. Only fires when the caller
-  // explicitly touches installation identity or consent lifecycle state
-  // (avoiding noisy writes on every unrelated app-config update). A write
-  // failure here doesn't roll back the app-config write — the next read
-  // merges them transparently.
-  if (Object.prototype.hasOwnProperty.call(partial, 'installationId') || shouldClearAttribution) {
-    const id = normalizedNextWithoutRetiredAgents.installationId;
+  // explicitly touched `installationId` (avoiding noisy writes on every
+  // unrelated app-config update). A write failure here doesn't roll back
+  // the app-config write — the next read merges them transparently.
+  if (Object.prototype.hasOwnProperty.call(partial, 'installationId')) {
+    const id = next.installationId;
     // Caller explicitly touched installationId — mirror the outcome
     // (including the clear case) to installation.json so a future read
     // doesn't keep serving the old value out of the channel-root file.
     // "Delete my data" relies on this clear path.
     const installPatch: InstallationFilePatch = {
-      ...(Object.prototype.hasOwnProperty.call(partial, 'installationId')
-        ? { installationId: typeof id === 'string' && id.length > 0 ? id : null }
-        : {}),
-      ...(shouldClearAttribution
-        ? {
-            pendingAttribution: null,
-            attributionClaimedAt: null,
-            attributionClaimResultAt: null,
-          }
-        : {}),
+      installationId: typeof id === 'string' && id.length > 0 ? id : null,
     };
     try {
       await writeInstallationFile(resolveInstallationDir(dataDir), installPatch);
@@ -835,12 +579,5 @@ async function doWrite(
       // app-config write already succeeded.
     }
   }
-  return normalizedNextWithoutRetiredAgents;
-}
-
-function isMetricsExplicitlyDisabled(value: unknown): boolean {
-  return value != null
-    && typeof value === 'object'
-    && !Array.isArray(value)
-    && (value as Record<string, unknown>).metrics === false;
+  return next as AppConfigPrefs;
 }

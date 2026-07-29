@@ -16,7 +16,6 @@
 // translation.
 
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
-import { realpathSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 
@@ -412,9 +411,7 @@ export function buildAcpMcpServers(servers: McpServerConfig[]): AcpMcpServer[] {
  * inline JSON string). The env-var path is what lets a launcher like the
  * Open Design daemon hand servers to a single `opencode run` invocation
  * without writing into the user's global config or leaving a temp file
- * around on crash. We also use the same payload to grant `external_directory`
- * access to daemon-selected absolute paths (project cwd, staged skill dirs,
- * etc.) so headless OpenCode runs do not auto-reject them.
+ * around on crash.
  *
  * Schema (verified against the dev branch of `sst/opencode`'s
  * `packages/opencode/src/config/config.ts` and the public docs at
@@ -448,17 +445,12 @@ export function buildAcpMcpServers(servers: McpServerConfig[]): AcpMcpServer[] {
  * works the same way for OpenCode users without forcing them to
  * re-authenticate inside OpenCode.
  */
-export interface OpenCodeConfigBuildOptions {
-  allowedDirectories?: string[];
-  extraConfig?: Record<string, unknown>;
-}
-
 export function buildOpenCodeMcpConfigContent(
   servers: McpServerConfig[],
   tokens: Record<string, string> = {},
-  options: OpenCodeConfigBuildOptions = {},
 ): string | null {
   const enabled = servers.filter((s) => s.enabled);
+  if (enabled.length === 0) return null;
   const mcp: Record<string, Record<string, unknown>> = {};
   for (const s of enabled) {
     if (s.transport === 'stdio') {
@@ -489,73 +481,8 @@ export function buildOpenCodeMcpConfigContent(
       mcp[s.id] = entry;
     }
   }
-  const externalDirectory = buildOpenCodeExternalDirectoryAllowlist(
-    options.allowedDirectories,
-  );
-  const extraConfig = options.extraConfig ?? {};
-  if (
-    Object.keys(mcp).length === 0 &&
-    !externalDirectory &&
-    Object.keys(extraConfig).length === 0
-  ) return null;
-
-  const config: Record<string, unknown> = { ...extraConfig };
-  if (Object.keys(mcp).length > 0) config.mcp = mcp;
-  if (externalDirectory) {
-    const priorPermission =
-      config.permission && typeof config.permission === 'object' && !Array.isArray(config.permission)
-        ? config.permission as Record<string, unknown>
-        : {};
-    config.permission = {
-      ...priorPermission,
-      external_directory: externalDirectory,
-    };
-  }
-  return JSON.stringify(config);
-}
-
-function buildOpenCodeExternalDirectoryAllowlist(
-  directories: string[] | undefined,
-): Record<string, 'allow'> | null {
-  const normalized = Array.from(
-    new Set(
-      (directories ?? [])
-        .filter((dir) => typeof dir === 'string' && dir.trim().length > 0)
-        .filter((dir) => path.isAbsolute(dir))
-        .flatMap((dir) => normalizeAllowedDirectoryVariants(dir)),
-    ),
-  );
-  if (normalized.length === 0) return null;
-
-  const allowlist: Record<string, 'allow'> = {};
-  for (const dir of normalized) {
-    allowlist[dir] = 'allow';
-    allowlist[joinPermissionGlob(dir, '*')] = 'allow';
-    allowlist[joinPermissionGlob(dir, '**')] = 'allow';
-  }
-  return allowlist;
-}
-
-function normalizeAllowedDirectory(dir: string): string {
-  const resolved = path.resolve(dir);
-  const root = path.parse(resolved).root;
-  if (resolved === root) return root;
-  return resolved.replace(/[\\/]+$/, '');
-}
-
-function normalizeAllowedDirectoryVariants(dir: string): string[] {
-  const normalized = normalizeAllowedDirectory(dir);
-  let real: string | null = null;
-  try {
-    real = normalizeAllowedDirectory(realpathSync.native(dir));
-  } catch {
-    real = null;
-  }
-  return real && real !== normalized ? [normalized, real] : [normalized];
-}
-
-function joinPermissionGlob(dir: string, suffix: '*' | '**'): string {
-  return dir.endsWith(path.sep) ? `${dir}${suffix}` : `${dir}${path.sep}${suffix}`;
+  if (Object.keys(mcp).length === 0) return null;
+  return JSON.stringify({ mcp });
 }
 
 // ───────────────────────────────────────────────────────────────────────

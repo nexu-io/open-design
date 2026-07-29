@@ -1,9 +1,8 @@
 import { test } from 'vitest';
 import {
-  AGENT_DEFS, amp, assert, chmodSync, claude, codex, cursorAgent, detectAgents, grokBuild, join, mkdtempSync, rmSync, tmpdir, withEnvSnapshot, withPlatform, writeFileSync,
+  AGENT_DEFS, assert, chmodSync, codex, cursorAgent, detectAgents, grokBuild, join, mkdtempSync, rmSync, tmpdir, withEnvSnapshot, withPlatform, writeFileSync,
 } from './helpers/test-helpers.js';
 import { codexNeedsDangerFullAccessSandbox } from '../../src/runtimes/defs/codex.js';
-import { isKnownServiceTier } from '../../src/runtimes/models.js';
 import { readLocalAgentProfileDefs } from '../../src/runtimes/registry.js';
 
 test('AGENT_DEFS ids are unique', () => {
@@ -61,7 +60,6 @@ test('local agent profiles inherit a base adapter and can pin the default model'
         ZCODE_ROUTE: 'design',
         RETRIES: '2',
       });
-      assert.equal(profile.authProbe, undefined);
 
       const defaultArgs = profile.buildArgs('', [], [], {});
       assert.deepEqual(defaultArgs.slice(0, 2), ['run', '-p']);
@@ -137,7 +135,7 @@ test('codex args disable plugins when OD_CODEX_DISABLE_PLUGINS is 1', () => {
     withPlatform('darwin', () => {
       const args = codex.buildArgs('', [], [], {}, { cwd: '/tmp/od-project' });
 
-      assert.deepEqual(args.slice(0, 9), [
+      assert.deepEqual(args.slice(0, 11), [
         'exec',
         '--json',
         '--skip-git-repo-check',
@@ -145,6 +143,8 @@ test('codex args disable plugins when OD_CODEX_DISABLE_PLUGINS is 1', () => {
         'workspace-write',
         '-c',
         'sandbox_workspace_write.network_access=true',
+        '-c',
+        'default_permissions=":workspace"',
         '--disable',
         'plugins',
       ]);
@@ -173,7 +173,10 @@ test('codex args use workspace-write sandbox on macOS and Linux', () => {
           args.includes('-c'),
           true,
         );
-        assert.equal(args.some((arg) => arg.includes('default_permissions')), false);
+        assert.equal(
+          args.includes('default_permissions=":workspace"'),
+          true,
+        );
       });
     }
   });
@@ -194,7 +197,7 @@ test('codex args use danger-full-access sandbox on WSL because workspace-write s
         '--sandbox',
         'danger-full-access',
       ]);
-      assert.equal(args.some((arg) => arg.includes('default_permissions')), false);
+      assert.equal(args.includes('default_permissions=":workspace"'), true);
     });
   });
 });
@@ -271,7 +274,7 @@ test('codex args use danger-full-access sandbox on Windows because workspace-wri
         args.includes('sandbox_workspace_write.network_access=true'),
         false,
       );
-      assert.equal(args.some((arg) => arg.includes('default_permissions')), false);
+      assert.equal(args.includes('default_permissions=":workspace"'), true);
     });
   });
 });
@@ -320,10 +323,6 @@ test('codex model picker includes current OpenAI choices in priority order', asy
   ];
 
   assert.deepEqual(codex.fallbackModels.map((m) => m.id), expectedModels);
-  assert.deepEqual(
-    codex.fallbackModels.find((m) => m.id === 'gpt-5.5')?.serviceTierOptions,
-    [{ id: 'priority', label: 'Fast' }],
-  );
   assert.ok(codex.reasoningOptions, 'codex must define reasoningOptions');
   assert.deepEqual(codex.reasoningOptions.map((o) => o.id), [
     'default',
@@ -346,15 +345,6 @@ test('codex model picker includes current OpenAI choices in priority order', asy
   assert.ok(args.includes('gpt-5.5'));
   assert.ok(args.includes('model_reasoning_effort="xhigh"'));
 
-  const fastArgs = codex.buildArgs(
-    '',
-    [],
-    [],
-    { model: 'gpt-5.5', serviceTier: 'priority' },
-    { cwd: '/tmp/od-project' },
-  );
-  assert.ok(fastArgs.includes('service_tier="priority"'));
-
   const dir = mkdtempSync(join(tmpdir(), 'od-agents-codex-models-'));
   try {
     await withEnvSnapshot(['PATH', 'OD_AGENT_HOME', 'CODEX_BIN'], async () => {
@@ -375,228 +365,6 @@ test('codex model picker includes current OpenAI choices in priority order', asy
       assert.equal(detected.available, true);
       assert.equal(detected.version, 'codex 1.0.0');
       assert.deepEqual(detected.models.map((m: { id: string }) => m.id), expectedModels);
-    });
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test('codex derives service tiers from live speed tiers when service_tiers is absent', () => {
-  assert.ok(codex.listModels, 'codex must define live model discovery');
-  const parsed = codex.listModels.parse(JSON.stringify({
-    models: [
-      {
-        slug: 'gpt-5.5',
-        display_name: 'GPT 5.5',
-        visibility: 'list',
-        additional_speed_tiers: ['fast'],
-      },
-    ],
-  }));
-
-  assert.deepEqual(parsed, [
-    { id: 'default', label: 'Default (CLI config)' },
-    {
-      id: 'gpt-5.5',
-      label: 'GPT 5.5',
-      additionalSpeedTiers: ['fast'],
-      serviceTierOptions: [{ id: 'priority', label: 'Fast' }],
-    },
-  ]);
-});
-
-test('codex preserves explicit live service tiers from debug models JSON', () => {
-  assert.ok(codex.listModels, 'codex must define live model discovery');
-  const parsed = codex.listModels.parse(JSON.stringify({
-    models: [
-      {
-        slug: 'gpt-6-codex',
-        display_name: 'GPT-6 Codex',
-        visibility: 'list',
-        service_tiers: [
-          { id: 'priority', name: 'Fast' },
-          { id: 'standard', name: 'Standard' },
-        ],
-      },
-    ],
-  }));
-
-  assert.deepEqual(parsed, [
-    { id: 'default', label: 'Default (CLI config)' },
-    {
-      id: 'gpt-6-codex',
-      label: 'GPT-6 Codex',
-      serviceTierOptions: [
-        { id: 'priority', label: 'Fast' },
-        { id: 'standard', label: 'Standard' },
-      ],
-    },
-  ]);
-});
-
-test('codex live model metadata falls back to static service tiers', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'od-agents-codex-live-tier-'));
-  try {
-    await withEnvSnapshot(['PATH', 'OD_AGENT_HOME', 'CODEX_BIN'], async () => {
-      const codexBin = join(dir, 'codex');
-      writeFileSync(
-        codexBin,
-        `#!/bin/sh
-if [ "$1" = "--version" ]; then echo "codex-cli 9.9.9"; exit 0; fi
-if [ "$1" = "debug" ] && [ "$2" = "models" ]; then
-  printf '%s\\n' '{"models":[{"slug":"gpt-5.5","display_name":"GPT 5.5","visibility":"list"}]}'
-  exit 0
-fi
-if [ "$1" = "login" ] && [ "$2" = "status" ]; then echo "Logged in using ChatGPT"; exit 0; fi
-exit 2
-`,
-      );
-      chmodSync(codexBin, 0o755);
-      process.env.OD_AGENT_HOME = dir;
-      process.env.PATH = dir;
-      delete process.env.CODEX_BIN;
-
-      const agents = await detectAgents();
-      const detected = agents.find((agent) => agent.id === 'codex');
-      const model = detected?.models.find((m: { id: string }) => m.id === 'gpt-5.5');
-
-      assert.deepEqual(model?.serviceTierOptions, [{ id: 'priority', label: 'Fast' }]);
-      assert.equal(isKnownServiceTier(codex, 'gpt-5.5', 'priority'), true);
-    });
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test('claude probes auth status so rescans reflect CLI auth changes', async () => {
-  assert.deepEqual(claude.authProbe, {
-    args: ['auth', 'status'],
-    timeoutMs: 5000,
-  });
-
-  const dir = mkdtempSync(join(tmpdir(), 'od-agents-claude-auth-'));
-  try {
-    await withEnvSnapshot(['PATH', 'OD_AGENT_HOME', 'CLAUDE_BIN'], async () => {
-      const claudeBin = join(dir, 'claude');
-      writeFileSync(
-        claudeBin,
-        `#!/bin/sh
-if [ "$1" = "--version" ]; then echo "2.1.168 (Claude Code)"; exit 0; fi
-if [ "$1" = "-p" ] && [ "$2" = "--help" ]; then echo "--include-partial-messages --add-dir"; exit 0; fi
-if [ "$1" = "auth" ] && [ "$2" = "status" ]; then echo '{"authenticated":true,"source":"claude.ai"}'; exit 0; fi
-exit 0
-`,
-      );
-      chmodSync(claudeBin, 0o755);
-      process.env.OD_AGENT_HOME = dir;
-      process.env.PATH = dir;
-      delete process.env.CLAUDE_BIN;
-
-      const agents = await detectAgents();
-      const detected = agents.find((agent) => agent.id === 'claude');
-
-      assert.ok(detected);
-      assert.equal(detected.available, true);
-      assert.equal(detected.authStatus, 'ok');
-    });
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test('claude API key env satisfies auth probe without requiring local login', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'od-agents-claude-api-key-auth-'));
-  try {
-    await withEnvSnapshot(['PATH', 'OD_AGENT_HOME', 'CLAUDE_BIN', 'ANTHROPIC_API_KEY'], async () => {
-      const claudeBin = join(dir, 'claude');
-      writeFileSync(
-        claudeBin,
-        `#!/bin/sh
-if [ "$1" = "--version" ]; then echo "2.1.168 (Claude Code)"; exit 0; fi
-if [ "$1" = "-p" ] && [ "$2" = "--help" ]; then echo "--include-partial-messages --add-dir"; exit 0; fi
-if [ "$1" = "auth" ] && [ "$2" = "status" ]; then echo '{"authenticated":false}'; exit 1; fi
-exit 0
-`,
-      );
-      chmodSync(claudeBin, 0o755);
-      process.env.OD_AGENT_HOME = dir;
-      process.env.PATH = dir;
-      process.env.ANTHROPIC_API_KEY = 'sk-anthropic';
-      delete process.env.CLAUDE_BIN;
-
-      const agents = await detectAgents();
-      const detected = agents.find((agent) => agent.id === 'claude');
-
-      assert.ok(detected);
-      assert.equal(detected.available, true);
-      assert.equal(detected.authStatus, 'ok');
-    });
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test('codex probes login status so rescans reflect CLI auth changes', async () => {
-  assert.deepEqual(codex.authProbe, {
-    args: ['login', 'status'],
-    timeoutMs: 5000,
-  });
-
-  const dir = mkdtempSync(join(tmpdir(), 'od-agents-codex-auth-'));
-  try {
-    await withEnvSnapshot(['PATH', 'OD_AGENT_HOME', 'CODEX_BIN'], async () => {
-      const codexBin = join(dir, 'codex');
-      writeFileSync(
-        codexBin,
-        `#!/bin/sh
-if [ "$1" = "--version" ]; then echo "codex-cli 9.9.9"; exit 0; fi
-if [ "$1" = "login" ] && [ "$2" = "status" ]; then echo "Logged in using ChatGPT"; exit 0; fi
-exit 0
-`,
-      );
-      chmodSync(codexBin, 0o755);
-      process.env.OD_AGENT_HOME = dir;
-      process.env.PATH = dir;
-      delete process.env.CODEX_BIN;
-
-      const agents = await detectAgents();
-      const detected = agents.find((agent) => agent.id === 'codex');
-
-      assert.ok(detected);
-      assert.equal(detected.available, true);
-      assert.equal(detected.authStatus, 'ok');
-    });
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test('codex API key env satisfies auth probe without requiring local login', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'od-agents-codex-api-key-auth-'));
-  try {
-    await withEnvSnapshot(['PATH', 'OD_AGENT_HOME', 'CODEX_BIN', 'CODEX_API_KEY'], async () => {
-      const codexBin = join(dir, 'codex');
-      writeFileSync(
-        codexBin,
-        `#!/bin/sh
-if [ "$1" = "--version" ]; then echo "codex-cli 9.9.9"; exit 0; fi
-if [ "$1" = "debug" ] && [ "$2" = "models" ]; then echo '{"models":[]}'; exit 0; fi
-if [ "$1" = "login" ] && [ "$2" = "status" ]; then echo "Not logged in"; exit 1; fi
-exit 0
-`,
-      );
-      chmodSync(codexBin, 0o755);
-      process.env.OD_AGENT_HOME = dir;
-      process.env.PATH = dir;
-      process.env.CODEX_API_KEY = 'sk-codex';
-      delete process.env.CODEX_BIN;
-
-      const agents = await detectAgents();
-      const detected = agents.find((agent) => agent.id === 'codex');
-
-      assert.ok(detected);
-      assert.equal(detected.available, true);
-      assert.equal(detected.authStatus, 'ok');
     });
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -632,80 +400,6 @@ test('codex parses live model catalog from debug models JSON', () => {
   ]);
 });
 
-test('codex derives service tiers from live speed tiers when service_tiers is absent', () => {
-  assert.ok(codex.listModels, 'codex must define live model discovery');
-  const parsed = codex.listModels.parse(JSON.stringify({
-    models: [
-      {
-        slug: 'gpt-5.5',
-        display_name: 'GPT-5.5',
-        visibility: 'list',
-        additional_speed_tiers: ['fast'],
-      },
-    ],
-  }));
-
-  assert.deepEqual(parsed, [
-    { id: 'default', label: 'Default (CLI config)' },
-    {
-      id: 'gpt-5.5',
-      label: 'GPT-5.5',
-      additionalSpeedTiers: ['fast'],
-      serviceTierOptions: [{ id: 'priority', label: 'Fast' }],
-    },
-  ]);
-});
-
-test('codex preserves explicit live service tiers from debug models JSON', () => {
-  assert.ok(codex.listModels, 'codex must define live model discovery');
-  const parsed = codex.listModels.parse(JSON.stringify({
-    models: [
-      {
-        slug: 'gpt-6-codex',
-        display_name: 'GPT-6 Codex',
-        visibility: 'list',
-        service_tiers: [
-          { id: 'priority', name: 'Fast' },
-          { id: 'standard', name: 'Standard' },
-        ],
-      },
-    ],
-  }));
-
-  assert.deepEqual(parsed, [
-    { id: 'default', label: 'Default (CLI config)' },
-    {
-      id: 'gpt-6-codex',
-      label: 'GPT-6 Codex',
-      serviceTierOptions: [
-        { id: 'priority', label: 'Fast' },
-        { id: 'standard', label: 'Standard' },
-      ],
-    },
-  ]);
-});
-
-test('codex preserves service tier labels from bare-array debug models JSON', () => {
-  assert.ok(codex.listModels, 'codex must define live model discovery');
-  const parsed = codex.listModels.parse(JSON.stringify([
-    {
-      slug: 'gpt-5.5',
-      display_name: 'GPT-5.5',
-      visibility: 'list',
-      service_tiers: [{ id: 'priority', label: 'Fast' }],
-    },
-  ]));
-
-  assert.deepEqual(parsed, [
-    { id: 'default', label: 'Default (CLI config)' },
-    {
-      id: 'gpt-5.5',
-      label: 'GPT-5.5',
-      serviceTierOptions: [{ id: 'priority', label: 'Fast' }],
-    },
-  ]);
-});
-
 test('codex detection surfaces live debug models separately from fallback models', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'od-agents-codex-live-models-'));
   try {
@@ -719,7 +413,6 @@ if [ "$1" = "debug" ] && [ "$2" = "models" ]; then
   printf '%s\\n' '{"models":[{"slug":"gpt-6-codex","display_name":"GPT-6 Codex","visibility":"list"}]}'
   exit 0
 fi
-if [ "$1" = "login" ] && [ "$2" = "status" ]; then echo "Logged in using ChatGPT"; exit 0; fi
 exit 2
 `,
       );
@@ -738,47 +431,6 @@ exit 2
         'default',
         'gpt-6-codex',
       ]);
-    });
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test('codex detection enriches sparse live GPT-5.5 metadata from fallback tiers', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'od-agents-codex-sparse-live-models-'));
-  try {
-    await withEnvSnapshot(['PATH', 'OD_AGENT_HOME', 'CODEX_BIN'], async () => {
-      const codexBin = join(dir, 'codex');
-      writeFileSync(
-        codexBin,
-        `#!/bin/sh
-if [ "$1" = "--version" ]; then echo "codex-cli 9.9.9"; exit 0; fi
-if [ "$1" = "debug" ] && [ "$2" = "models" ]; then
-  printf '%s\\n' '{"models":[{"slug":"gpt-5.5","display_name":"GPT-5.5","visibility":"list"}]}'
-  exit 0
-fi
-exit 2
-`,
-      );
-      chmodSync(codexBin, 0o755);
-      process.env.OD_AGENT_HOME = dir;
-      process.env.PATH = dir;
-      delete process.env.CODEX_BIN;
-
-      const agents = await detectAgents();
-      const detected = agents.find((agent) => agent.id === 'codex');
-      const gpt55 = detected?.models.find((model) => model.id === 'gpt-5.5');
-
-      assert.ok(detected);
-      assert.equal(detected.available, true);
-      assert.equal(detected.modelsSource, 'live');
-      assert.deepEqual(gpt55, {
-        id: 'gpt-5.5',
-        label: 'GPT-5.5',
-        additionalSpeedTiers: ['fast'],
-        serviceTierOptions: [{ id: 'priority', label: 'Fast' }],
-      });
-      assert.equal(isKnownServiceTier(codex, 'gpt-5.5', 'priority'), true);
     });
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -883,29 +535,4 @@ test('codex args pass valid extraAllowedDirs with repeatable --add-dir flags', (
     args.filter((arg, index) => arg === '--add-dir' || args[index - 1] === '--add-dir'),
     ['--add-dir', '/repo/skills', '--add-dir', '/tmp/codex/generated_images'],
   );
-});
-
-test('amp uses headless execute mode with the Claude-compatible stream parser', () => {
-  assert.equal(amp.streamFormat, 'claude-stream-json');
-  assert.equal(amp.promptViaStdin, true);
-  // Plain-text stdin (default): the daemon writes the composed prompt and
-  // closes stdin for a clean one-shot turn. We must NOT opt into
-  // stream-json input mode (that keeps stdin open for tool_result loops).
-  assert.notEqual(amp.promptInputFormat, 'stream-json');
-  assert.equal(amp.supportsCustomModel, false);
-
-  const base = amp.buildArgs('', [], [], {});
-  assert.deepEqual(base, ['-x', '--stream-json', '--dangerously-allow-all']);
-
-  // The synthetic 'default' model must not leak a flag.
-  const def = amp.buildArgs('', [], [], { model: 'default' });
-  assert.equal(def.includes('--mode'), false);
-
-  // A known mode maps onto Amp's `--mode`.
-  const smart = amp.buildArgs('', [], [], { model: 'smart' });
-  assert.deepEqual(smart, ['-x', '--stream-json', '--dangerously-allow-all', '--mode', 'smart']);
-
-  // An unknown model id is ignored rather than passed as a bogus mode.
-  const bogus = amp.buildArgs('', [], [], { model: 'gpt-5' });
-  assert.equal(bogus.includes('--mode'), false);
 });

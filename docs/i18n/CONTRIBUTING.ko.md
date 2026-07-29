@@ -4,7 +4,7 @@
 
 이 문서는 어떤 종류의 기여를 어디서 시작해야 하는지, 그리고 PR이 머지되려면 어떤 기준을 넘어야 하는지 정확히 알려줍니다.
 
-<p align="center"><a href="../../CONTRIBUTING.md">English</a> · <a href="CONTRIBUTING.pt-BR.md">Português (Brasil)</a> · <a href="CONTRIBUTING.de.md">Deutsch</a> · <a href="CONTRIBUTING.fr.md">Français</a> · <a href="CONTRIBUTING.zh-CN.md">简体中文</a> · <a href="CONTRIBUTING.ja-JP.md">日本語</a> · <b>한국어</b> · <a href="CONTRIBUTING.th.md">ภาษาไทย</a></p>
+<p align="center"><a href="CONTRIBUTING.md">English</a> · <a href="CONTRIBUTING.pt-BR.md">Português (Brasil)</a> · <a href="CONTRIBUTING.de.md">Deutsch</a> · <a href="CONTRIBUTING.fr.md">Français</a> · <a href="CONTRIBUTING.zh-CN.md">简体中文</a> · <a href="CONTRIBUTING.ja-JP.md">日本語</a> · <b>한국어</b></p>
 
 ---
 
@@ -12,10 +12,9 @@
 
 | 하고 싶은 일 | 실제로 추가하는 것 | 위치 | 규모 |
 |---|---|---|---|
-| OD가 새로운 종류의 artifact를 렌더링하게 만들기 (청구서, iOS 설정 화면, 한 장짜리 문서 등) | **Design template** | [`design-templates/<your-template>/`](../../design-templates/) | `SKILL.md`와 렌더링 asset을 담은 폴더 하나 |
-| 작업 중 agent가 호출하는 기능 추가하기 | **Skill** | [`skills/<your-skill>/`](../../skills/) | `SKILL.md`와 선택적 리소스를 담은 폴더 하나 |
-| OD가 새 브랜드의 비주얼 언어를 구사하게 만들기 | **Design System** | [`design-systems/<brand>/`](../../design-systems/) | 하나의 package: `manifest.json`, `DESIGN.md`, `tokens.css` |
-| 새 coding-agent CLI 연결하기 | **Agent adapter** | [`apps/daemon/src/runtimes/defs/`](../../apps/daemon/src/runtimes/defs/) | 정의 하나와 registry entry 하나 |
+| OD가 새로운 종류의 artifact를 렌더링하게 만들기 (청구서, iOS 설정 화면, 한 장짜리 문서 등) | **Skill** | [`skills/<your-skill>/`](../../skills/) | 폴더 하나, 파일 약 2개 |
+| OD가 새 브랜드의 비주얼 언어를 구사하게 만들기 | **Design System** | [`design-systems/<brand>/DESIGN.md`](../../design-systems/) | Markdown 파일 하나 |
+| 새 coding-agent CLI 연결하기 | **Agent adapter** | [`apps/daemon/src/agents.ts`](../../apps/daemon/src/agents.ts) | 배열 하나에 약 10줄 |
 | 기능 추가, 버그 수정, [`open-codesign`][ocod]에서 UX 패턴 가져오기 | 코드 | `apps/web/src/`, `apps/daemon/` | 일반 PR |
 | 문서 개선, 일부 섹션을 Français / Deutsch / 中文로 번역, 오타 수정 | 문서 | `README.md`, `README.fr.md`, `README.de.md`, `README.zh-CN.md`, `docs/`, `QUICKSTART.md` | PR 한 건 |
 
@@ -89,7 +88,7 @@ docker compose up -d
 OPEN_DESIGN_PORT=7456
 OPEN_DESIGN_MEM_LIMIT=384m
 OPEN_DESIGN_ALLOWED_ORIGINS=https://yourdomain.com
-OPEN_DESIGN_IMAGE=ghcr.io/nexu-io/od:latest
+OPEN_DESIGN_IMAGE=docker.io/vanjayak/open-design:latest
 ```
 
 > 프로젝트와 데이터베이스 데이터는 Docker 볼륨에 자동으로 보존됩니다.
@@ -100,101 +99,93 @@ OPEN_DESIGN_IMAGE=ghcr.io/nexu-io/od:latest
 
 ---
 
-## 새 Design template 추가하기
+## 새 Skill 추가하기
 
-Design template은 [`design-templates/`](../../design-templates/) 아래에 두는 폴더로, 루트에 `SKILL.md`를 두고 Claude Code의 [`SKILL.md` 규약][skill]에 우리의 선택적 `od:` 확장을 더한 형태입니다. Templates gallery에 표시할 artifact의 형태와 렌더링 리소스를 묶습니다.
+skill은 [`skills/`](../../skills/) 아래에 두는 폴더로, 루트에 `SKILL.md`를 두고 Claude Code의 [`SKILL.md` 규약][skill]에 우리의 선택적 `od:` 확장을 더한 형태입니다. **등록 절차는 없습니다.** 폴더를 넣고 daemon을 재시작하면 picker에 바로 나타납니다.
 
 ### → 전체 가이드는 [`docs/skills-contributing.md`](../../docs/skills-contributing.md)를 보세요
 
 이 문서가 다음 내용을 단계별로 안내합니다.
 
-- **빠른 시작** — 저장소 클론 → 가장 비슷한 기존 template 복사 → `pnpm tools-dev run web` 실행 → picker 확인 → PR 열기.
-- **design template이란 무엇이고 무엇이 아닌가** — 당신의 아이디어가 사실은 기능이나 vendor 연동이었다면, 일주일을 아껴줍니다.
-- **design template 구조** — 최소한의 폴더 구성과 `SKILL.md` frontmatter 치트시트.
+- **빠른 시작** — 저장소 클론 → 가장 비슷한 기존 skill 복사 → `pnpm tools-dev run web` 실행 → picker 확인 → PR 열기.
+- **skill이란 무엇이고 무엇이 아닌가** — 당신의 아이디어가 사실은 기능이나 vendor 연동이었다면, 일주일을 아껴줍니다.
+- **skill 구조** — 최소한의 폴더 구성과 `SKILL.md` frontmatter 치트시트.
 - **로컬 실행** — 실제로 중요한 네 가지 명령어.
 - **머지 기준** — 리뷰어가 확인할 항목을 그대로 복사해 쓸 수 있는 체크리스트.
 - **PR 설명 템플릿** — PR 본문에 붙여넣고 채우면 됩니다.
 - **자주 거절되는 패턴** — 최근 실제로 사용한 거절 사유와 구체적인 예시.
 
-프로토콜 명세(전체 active frontmatter 문법과 registry가 실제로 읽는 필드)는 [`docs/skills-protocol.md`](../../docs/skills-protocol.md)에 별도로 정리되어 있습니다. `od.inputs`, `od.parameters`, `od.capabilities_required` 같은 오래된 portable 필드는 외부 번들에 남아 있을 수 있지만, skill/template registry는 더 이상 이를 소비하지 않습니다.
-
----
-
-## Functional Skill 추가하기
-
-Functional Skill은 작업 중 agent가 사용자 입력을 다루기 위해 호출하는 기능입니다. 책임 경계는 [`skills/README.md`](../../skills/README.md), 폴더 계약은 [`skills/AGENTS.md`](../../skills/AGENTS.md), 공통 `SKILL.md` 문법은 [`docs/skills-protocol.md`](../../docs/skills-protocol.md)를 참고하세요. daemon의 lazy scanner는 다음 `/api/skills` 요청에서 Skill root를 다시 훑으므로, 로컬에서는 rebuild도 daemon 재시작도 필요하지 않습니다.
+프로토콜 명세(전체 frontmatter 문법 — 타입이 지정된 입력, 슬라이더 파라미터, craft 참조, 테스트 프리미티브)는 [`docs/skills-protocol.md`](../../docs/skills-protocol.md)에 별도로 정리되어 있습니다.
 
 ---
 
 ## 새 Design System 추가하기
 
-저장소에 추가하는 새 design system은 [`design-systems/<slug>/`](../../design-systems/) 아래의 package이며, Markdown 파일 하나가 아닙니다. 현재 번들된 151개 system은 모두 아래 package contract로 마이그레이션되었습니다. Daemon은 예전 콘텐츠나 사용자가 설치한 콘텐츠와의 호환성을 위해 `DESIGN.md`만 있는 폴더도 계속 허용하지만, 새 번들 system은 이 legacy 형태로 작성하면 안 됩니다. Catalog는 `/api/design-systems` 요청마다 다시 스캔되므로 편집 후 Design System surface를 새로 고치면 되며 daemon 재시작은 필요하지 않습니다.
+design system은 `design-systems/<slug>/` 아래에 두는 [`DESIGN.md`](../../design-systems/README.md) 파일 하나입니다. **파일 하나뿐, 코드는 없습니다.** 넣고 daemon을 재시작하면 picker에 카테고리별로 묶여 나타납니다.
 
-### 최소 package 구성
+### design system 폴더 구성
 
 ```text
 design-systems/your-brand/
-├── manifest.json
-├── DESIGN.md
-└── tokens.css
+└── DESIGN.md
 ```
-
-`manifest.json`은 안정적인 id, 표시 이름, category, description, provenance와 선언된 package path를 보유합니다. `DESIGN.md`는 agent에게 design intent를 설명하고, `tokens.css`는 canonical compiled semantic-token stylesheet입니다. 전체 contract는 [`docs/design-systems.md`](../../docs/design-systems.md)와 [`design-systems/_schema/AGENTS.md`](../../design-systems/_schema/AGENTS.md)를 참고하세요.
 
 ### `DESIGN.md` 형식
 
 ```markdown
-# YourBrand Design System
+# Design System Inspired by YourBrand
 
-## Visual Theme
+> Category: Developer Tools
+> One-line summary that shows in the picker preview.
+
+## 1. Visual Theme & Atmosphere
 …
 
-## Color Roles
+## 2. Color
+- Primary: `#hex` / `oklch(...)`
+- …
+
+## 3. Typography
 …
 
-## Typography
-…
-
-## Layout and Spacing
-## Components and States
-## Motion and Interaction
-## Accessibility
-## Anti-patterns
+## 4. Spacing & Grid
+## 5. Layout & Composition
+## 6. Components
+## 7. Motion & Interaction
+## 8. Voice & Brand
+## 9. Anti-patterns
 ```
 
-고정된 9개 section schema는 없습니다. Package quality guard는 내용이 있는 H2 section을 7개 이상 요구하지만 이름, 순서, 번호는 지정하지 않습니다. 실제 system에 맞는 제목을 사용하세요.
+9개 섹션 구조는 고정입니다. skill 본문이 이 구조를 grep으로 찾기 때문입니다. 첫 H1이 picker 라벨이 되고(`Design System Inspired by` 접두사는 자동으로 제거됩니다), `> Category: …` 줄이 어느 그룹에 들어갈지 결정합니다. 기존 카테고리는 [`design-systems/README.md`](../../design-systems/README.md)에 정리되어 있습니다. 브랜드가 정말 어디에도 안 맞으면 새 카테고리를 만들 수 있지만, **먼저 기존 카테고리부터 검토하세요**.
 
 ### 새 design system 머지 기준
 
-1. **필수 파일 3개를 모두 포함하세요.** Folder slug와 `manifest.id`를 일치시키고 정규화된 ASCII를 사용합니다(`linear.app` → `linear-app`, `x.ai` → `x-ai`).
-2. **내용이 있는 H2 section을 7개 이상 작성하세요.** 개수만 채우는 빈 제목은 허용되지 않습니다.
-3. **Prose와 token을 일치시키세요.** `DESIGN.md`의 color, type, spacing, motion 결정은 `tokens.css`와 같아야 하고 공용 token guard를 통과해야 합니다.
-4. **실제 evidence와 명확한 provenance를 사용하세요.** Source product나 site에서 직접 추출하고 manifest/package evidence에 출처를 기록합니다.
-5. **유용한 catalog copy를 작성하세요.** `manifest.name`, `category`, `description`이 picker의 기본 metadata입니다. Marketing fluff는 넣지 마세요.
+1. **9개 섹션이 모두 있어야 합니다.** 찾기 어려운 데이터(예: motion 토큰)는 섹션 본문이 비어 있어도 괜찮지만, 제목은 반드시 있어야 합니다. 없으면 프롬프트의 grep이 깨집니다.
+2. **hex 코드는 실제 값이어야 합니다.** 기억이나 AI 추측이 아니라 브랜드의 사이트나 제품에서 직접 추출하세요. README의 "brand-spec extraction" 5단계 프로토콜은 maintainer에게도 똑같이 적용됩니다.
+3. **강조 색상의 OKLch 값**은 있으면 좋습니다. 라이트/다크 모드에서 팔레트가 예측 가능하게 보간됩니다.
+4. **마케팅 문구는 빼세요.** 브랜드 슬로건은 design 토큰이 아닙니다. 잘라내세요.
+5. **slug는 ASCII로 작성하세요.** `linear.app`은 `linear-app`이 되고 `x.ai`는 `x-ai`가 됩니다. 이미 가져온 69개 시스템이 이 규칙을 따르니 그대로 맞추세요.
 
-upstream에서 유래한 제품 시스템은 [`scripts/sync-design-systems.ts`](../../scripts/sync-design-systems.ts)를 통해 [`VoltAgent/awesome-design-md`][acd2]에서 가져옵니다. 브랜드가 그 upstream에 속한다면 **그쪽에 먼저 PR을 보내세요.** 다음 동기화 때 자동으로 반영됩니다. `design-systems/` 폴더에는 upstream에 맞지 않는 프로젝트 소유의 추가 시스템도 들어 있습니다.
+우리가 제공하는 69개 제품 시스템은 [`scripts/sync-design-systems.ts`](../../scripts/sync-design-systems.ts)를 통해 [`VoltAgent/awesome-design-md`][acd2]에서 가져온 것입니다. 브랜드가 그 upstream에 속한다면 **그쪽에 먼저 PR을 보내세요.** 다음 동기화 때 자동으로 반영됩니다. `design-systems/` 폴더는 upstream에 맞지 않는 시스템과, 우리가 직접 작성한 스타터 2개를 위한 곳입니다.
 
 ---
 
 ## 새 coding-agent CLI 추가하기
 
-새 agent(예: 어느 신생 업체의 `foo-coder` CLI)를 연결하려면 [`apps/daemon/src/runtimes/defs/`](../../apps/daemon/src/runtimes/defs/)에 정의를 추가하고 `runtimes/registry.ts`에 등록합니다.
+새 agent(예: 어느 신생 업체의 `foo-coder` CLI)를 연결하는 일은 [`apps/daemon/src/agents.ts`](../../apps/daemon/src/agents.ts)에 항목 하나를 추가하는 것입니다.
 
-```ts
-import type { RuntimeAgentDef } from '../types.js';
-
-export const fooAgentDef = {
+```javascript
+{
   id: 'foo',
   name: 'Foo Coder',
   bin: 'foo',
   versionArgs: ['--version'],
-  fallbackModels: [{ id: 'default', label: 'Default', default: true }],
   buildArgs: (prompt) => ['exec', '-p', prompt],
   streamFormat: 'plain',           // 또는 해당 형식을 지원하면 'claude-stream-json'
-} satisfies RuntimeAgentDef;
+}
 ```
 
-정의를 [`runtimes/registry.ts`](../../apps/daemon/src/runtimes/registry.ts)로 import해 `BASE_AGENT_DEFS`에 추가하면, 공용 엔진이 `PATH`에서 감지하고 picker에 표시하며 invocation을 구성합니다. wire shape가 같다면 기존 `streamFormat`을 재사용하세요. 완전히 새로운 wire format이라면 [`apps/daemon/src/runtimes/`](../../apps/daemon/src/runtimes/) 또는 [`apps/daemon/src/agent-protocol/`](../../apps/daemon/src/agent-protocol/) 아래의 parser, parser test, 그리고 [`server.ts`](../../apps/daemon/src/server.ts)의 해당 dispatch branch도 필요합니다.
+이게 전부입니다. daemon이 `PATH`에서 감지하고, picker에 나타나며, 채팅 경로가 동작합니다. CLI가 (Claude Code의 `--output-format stream-json`처럼) **타입이 지정된 이벤트**를 내보낸다면 [`apps/daemon/src/claude-stream.ts`](../../apps/daemon/src/claude-stream.ts)에 파서를 연결하고 `streamFormat: 'claude-stream-json'`으로 설정하세요.
 
 머지 기준:
 
@@ -253,7 +244,7 @@ node --experimental-strip-types scripts/sync-litellm-models.ts
 ## 커밋과 pull request
 
 - **PR 하나에 관심사 하나.** skill 추가 + 파서 리팩터링 + 의존성 버전 업은 PR 세 개입니다.
-- **제목은 명령형 + 범위.** `add dating-web skill`, `fix daemon SSE backpressure when CLI hangs`, `docs: clarify storage contract`처럼 씁니다.
+- **제목은 명령형 + 범위.** `add dating-web skill`, `fix daemon SSE backpressure when CLI hangs`, `docs: clarify .od layout`처럼 씁니다.
 - **PR 템플릿을 사용하세요.** [`.github/pull_request_template.md`](../../.github/pull_request_template.md)의 모든 섹션(Why, What users will see, Surface area, Screenshots(UI인 경우), Bug fix verification(버그 수정인 경우), Validation)을 채우세요. 빈 섹션에는 "채워주세요" 답변이 달립니다.
 - **본문에는 이유를 적으세요.** "이게 뭘 하는지"는 보통 diff만 봐도 알 수 있습니다. 정작 드러나지 않는 것은 "이게 왜 있어야 하는지"입니다.
 - **issue가 있다면 연결하세요.** issue가 없고 PR이 사소하지 않다면 먼저 issue를 열어주세요. 시간을 쏟기 전에 그 변경을 원하는지 합의할 수 있습니다.
@@ -292,7 +283,7 @@ CLA는 요구하지 않습니다. Apache-2.0으로 충분하며, 당신의 기�
 - **모델 런타임을 vendor로 포함.** OD의 핵심 베팅은 "이미 쓰고 있는 CLI면 충분하다"입니다. `pi-ai`나 OpenAI 키, 모델 로더를 제공하지 않습니다.
 - **사전 논의 없이 현재 스택에서 벗어나는 프론트엔드 재작성.** Next.js 16 App Router + React 18 + TS가 기준선입니다. maintainer가 명시적으로 그 마이그레이션을 원하지 않는 한 Astro, Solid, Svelte 같은 다른 프레임워크로의 재작성은 받지 않습니다.
 - **daemon을 serverless 함수로 대체.** daemon의 존재 이유는 실제 `cwd`를 소유하고 실제 CLI를 spawn하는 것입니다. SPA를 Vercel에 배포하는 것은 괜찮지만, daemon은 daemon으로 남습니다.
-- **개인정보 보호 계약 밖의 텔레메트리 또는 외부 데이터 수집 추가.** 제품 분석과 마스킹된 세션 리플레이는 동의가 필요하며, 구성된 빌드에서는 스크러빙된 안전성/신뢰성 텔레메트리가 항상 활성화됩니다. 새 이벤트, 필드, 전송 대상은 [`PRIVACY.md`](../../PRIVACY.md)의 동의·최소화·스크러빙 경계를 지켜야 합니다.
+- **텔레메트리 / 분석 / phone-home 추가.** OD는 local-first입니다. 외부로 나가는 호출은 사용자가 명시적으로 설정한 provider로 향하는 것뿐입니다.
 - **바이너리 번들링** 시 라이선스 파일과 저작자 표기를 옆에 두지 않는 경우.
 
 아이디어가 적합한지 모르겠다면 코드를 작성하기 전에 discussion을 열어주세요.
@@ -311,7 +302,7 @@ CLA는 요구하지 않습니다. Apache-2.0으로 충분하며, 당신의 기�
 요컨대 좋은 PR을 내고, 사려 깊게 리뷰하고, [Discussions][discussions]와 [Discord][discord]에서 어울리다 보면 나머지는 알아서 따라옵니다.
 
 [discussions]: https://github.com/nexu-io/open-design/discussions
-[discord]: https://discord.gg/mHAjSMV6gz
+[discord]: https://discord.gg/qhbcCH8Am4
 
 ---
 

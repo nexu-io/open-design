@@ -1,7 +1,7 @@
 ---
 title: 'Open Design Is Every Vibe Coder''s Dream'
 youtubeId: MmTBkDmunk4
-summary: A vibe-coder's playbook for Open Design — bring your own agent, pick a design system to kill AI slop, prompt for a structure that converts, and turn rough PRDs into a landing page, a mobile app, and a desktop app in minutes. Based on Sean Kochel's hands-on demos.
+summary: Sean Kochel demos the new open-source competitor to Claude Design across landing page, mobile app, and desktop app prototypes — turning rough PRDs into shippable UI in minutes.
 date: 2026-05-04
 category: Demo
 durationSeconds: 815
@@ -9,11 +9,21 @@ author: Sean Kochel
 official: false
 ---
 
-This guide is a vibe-coder's playbook for Open Design: bring the agent you already use, pick a design system so your output doesn't scream "AI generated," prompt for a structure that actually converts, then iterate by conversation. It follows the three back-to-back builds **Sean Kochel** runs in [his hands-on demos](https://www.youtube.com/watch?v=MmTBkDmunk4) — a landing page, a mobile app, and a desktop app — rewritten and brought up to date with the current release. Watch the video above for the live run, or read on for the written version.
+Sean Kochel runs Open Design through three back-to-back demos — landing page, mobile app, desktop app — to show how a vibe-coding workflow plugs into the project.
 
-![The Open Design workspace — what you land on after install.](/tutorials/open-design-vibe-coders-dream-sean-kochel/01-workspace.webp)
-*The Open Design workspace — prototypes, slide decks, images, and video in one calm, familiar canvas.*
+Chapter map:
 
+<<<<<<< HEAD
+- 00:00 — Intro
+- 00:14 — Repo overview
+- 02:56 — Landing page demo
+- 05:15 — Results
+- 06:32 — Mobile app demo
+- 08:02 — Results
+- 09:46 — Mobile app option 2
+- 10:47 — Desktop app demo
+- 11:34 — Results
+=======
 ## What is Open Design?
 
 Open Design is an open-source, local-first design platform that runs **on top of the coding agent you already use**. It detects the CLIs already on your machine — Claude Code, Codex, Cursor, Copilot, OpenCode, Qwen, and a couple of dozen more — and lets that agent drive generation. As Sean puts it: there's a CLI layer where you configure your agent, a system prompt that drives the quality, and then the parts that make it valuable — skill support and a deep library of design systems. The outputs are real HTML files, so whatever you make drops straight into your actual project.
@@ -112,3 +122,4 @@ The app is open source under Apache-2.0 and free to run locally. You only pay fo
 ---
 
 *This written guide is based on Sean Kochel's hands-on demos. Watch the full video above, and [subscribe to Sean Kochel](https://www.youtube.com/watch?v=MmTBkDmunk4) for more AI build workflows.*
+>>>>>>> upstream/main

@@ -18,14 +18,12 @@ import {
   ListToolsRequestSchema,
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { buildProjectRawFileUrl } from '@open-design/contracts';
 import { randomUUID } from 'node:crypto';
 
-import { postCreateArtifactRequest } from './artifacts/create.js';
+import { postCreateArtifactRequest } from './artifact-create.js';
 
 const SERVER_NAME = 'open-design';
 const SERVER_VERSION = '0.2.0';
-const MCP_STDIO_IDLE_EXIT_MS = 30 * 60 * 1000;
 
 type JsonObject = Record<string, unknown>;
 interface RunMcpOptions { daemonUrl: string | URL }
@@ -40,73 +38,10 @@ interface ProjectPayload { project?: ProjectSummary; id?: string; name?: string;
 interface ActiveContext { active?: boolean; projectId?: string; projectName?: string | null; fileName?: string | null; ageMs?: number | null }
 type ResolvedProject = { id: string; name: string; source: 'uuid' | 'id' | 'exact' | 'slug' | 'substring' };
 interface ProjectListCache { baseUrl: string; t: number; list: ProjectSummary[] }
-interface McpArgs extends JsonObject { project?: unknown; entry?: unknown; include?: unknown; maxBytes?: unknown; path?: unknown; offset?: unknown; limit?: unknown; since?: unknown; query?: unknown; pattern?: unknown; max?: unknown; name?: unknown; content?: unknown; encoding?: unknown; artifactManifest?: unknown; confirm?: unknown; prompt?: unknown; plugin?: unknown; inputs?: unknown; agent?: unknown; model?: unknown; serviceTier?: unknown; runId?: unknown; id?: unknown; designSystem?: unknown; skill?: unknown; includeUnavailable?: unknown }
+interface McpArgs extends JsonObject { project?: unknown; entry?: unknown; include?: unknown; maxBytes?: unknown; path?: unknown; offset?: unknown; limit?: unknown; since?: unknown; query?: unknown; pattern?: unknown; max?: unknown; name?: unknown; content?: unknown; encoding?: unknown; artifactManifest?: unknown; confirm?: unknown; prompt?: unknown; plugin?: unknown; inputs?: unknown; agent?: unknown; model?: unknown; runId?: unknown; id?: unknown; designSystem?: unknown; skill?: unknown; includeUnavailable?: unknown }
 interface ProjectFileBundleEntry { name: string; mime: string; size: number | null; content: string | null; binary: boolean }
 interface BundleInput { project: ProjectPayload | ProjectSummary; entry: string; files: ProjectFileBundleEntry[]; truncated: boolean; active: ActiveContext | null; resolved?: ResolvedProject | null }
 interface ErrorWithCode { message?: string; code?: string; cause?: { code?: string } }
-
-interface McpIdleExitControllerOptions {
-  idleMs: number;
-  onIdle: () => void;
-}
-
-export function _createMcpIdleExitController({
-  idleMs,
-  onIdle,
-}: McpIdleExitControllerOptions) {
-  let timer: ReturnType<typeof setTimeout> | null = null;
-  let inFlight = 0;
-  let disposed = false;
-
-  const clear = () => {
-    if (timer) {
-      clearTimeout(timer);
-      timer = null;
-    }
-  };
-
-  const schedule = () => {
-    if (disposed) return;
-    clear();
-    timer = setTimeout(() => {
-      timer = null;
-      if (disposed) return;
-      if (inFlight > 0) {
-        schedule();
-        return;
-      }
-      disposed = true;
-      onIdle();
-    }, idleMs);
-  };
-
-  schedule();
-
-  return {
-    noteActivity() {
-      schedule();
-    },
-    async trackRequest<T>(fn: () => T | Promise<T>): Promise<T> {
-      if (disposed) {
-        return fn();
-      }
-      inFlight += 1;
-      schedule();
-      try {
-        return await fn();
-      } finally {
-        inFlight -= 1;
-        if (inFlight === 0) {
-          schedule();
-        }
-      }
-    },
-    dispose() {
-      disposed = true;
-      clear();
-    },
-  };
-}
 
 // Mimes whose body we surface as MCP `text` content. Everything else
 // returns a clear error directing the caller at list_files for
@@ -440,15 +375,11 @@ const TOOL_DEFS = [
         },
         agent: {
           type: 'string',
-          description: "Which agent Open Design should run, e.g. 'claude' | 'codex' | 'opencode'. Optional; defaults to the user's configured agent.",
+          description: "Which agent Open Design should run, e.g. 'claude' | 'codex' | 'gemini'. Optional; defaults to the user's configured agent.",
         },
         model: {
           type: 'string',
           description: 'Model id override for the run. Optional.',
-        },
-        serviceTier: {
-          type: 'string',
-          description: "Service tier override for the selected model, e.g. 'priority' for Codex Fast. Optional.",
         },
       },
       additionalProperties: false,
@@ -502,15 +433,6 @@ const TOOL_DEFS = [
 
 export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
   const baseUrl = String(daemonUrl).replace(/\/$/, '');
-  let closeTransportForIdle: (() => void) | null = null;
-  const idleExit = _createMcpIdleExitController({
-    idleMs: MCP_STDIO_IDLE_EXIT_MS,
-    onIdle: () => closeTransportForIdle?.(),
-  });
-  const withMcpActivity =
-    <Args extends unknown[], Result>(handler: (...args: Args) => Result | Promise<Result>) =>
-      (...args: Args) =>
-        idleExit.trackRequest(() => handler(...args));
 
   const server = new Server(
     { name: SERVER_NAME, version: SERVER_VERSION },
@@ -559,7 +481,7 @@ export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
         'read/edit files), commission a run - you do not run skills yourself:',
         ' - list_skills / list_plugins to see what you can ask OD to make.',
         ' - list_agents when you need to pass start_run.agent — do not',
-        '    guess "claude" / "codex" / "opencode"; only agents in the',
+        '    guess "claude" / "codex" / "gemini"; only agents in the',
         '    returned list will actually spawn on this machine.',
         ' - create_project(name) first if you need a fresh project to',
         '    generate into; start_run requires an existing project.',
@@ -610,11 +532,11 @@ export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
     },
   );
 
-  server.setRequestHandler(ListToolsRequestSchema, withMcpActivity(async () => ({
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: TOOL_DEFS,
-  })));
+  }));
 
-  server.setRequestHandler(ListResourcesRequestSchema, withMcpActivity(async () => {
+  server.setRequestHandler(ListResourcesRequestSchema, async () => {
     const [skillsData, dsData] = await Promise.all([
       getJson<SkillsPayload>(`${baseUrl}/api/skills`).catch((): SkillsPayload => ({ skills: [] })),
       getJson<DesignSystemsPayload>(`${baseUrl}/api/design-systems`).catch((): DesignSystemsPayload => ({ designSystems: [] })),
@@ -644,9 +566,9 @@ export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
       });
     }
     return { resources };
-  }));
+  });
 
-  server.setRequestHandler(ReadResourceRequestSchema, withMcpActivity(async (req) => {
+  server.setRequestHandler(ReadResourceRequestSchema, async (req) => {
     const uri = req.params?.uri;
     if (uri === 'od://focus/active') {
       const data = await getJson<ActiveContext>(`${baseUrl}/api/active`);
@@ -686,54 +608,27 @@ export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
         },
       ],
     };
-  }));
+  });
 
-  server.setRequestHandler(CallToolRequestSchema, withMcpActivity(async (req) => {
+  server.setRequestHandler(CallToolRequestSchema, async (req) => {
     const name = req.params?.name;
     const args: McpArgs = (req.params?.arguments ?? {}) as McpArgs;
     return handleMcpToolCall(baseUrl, name, args);
-  }));
+  });
 
   const transport = new StdioServerTransport();
-  try {
-    closeTransportForIdle = () => {
-      void transport.close().catch(() => {});
-    };
-    await server.connect(transport);
+  await server.connect(transport);
 
-    const sdkOnMessage = transport.onmessage;
-    transport.onmessage = (...args) => {
-      idleExit.noteActivity();
-      sdkOnMessage?.(...args);
-    };
-
-    // server.connect() only *starts* the transport; it resolves once the
-    // stdio reader is wired up, not when the stream closes. Hold the
-    // process open until the client disconnects (stdin EOF) so the cli.ts
-    // top-level `process.exit(0)` doesn't kill us mid-handshake.
-    await new Promise<void>((resolve) => {
-      const sdkOnClose = transport.onclose;
-      let finished = false;
-      const done = () => {
-        if (finished) return;
-        finished = true;
-        idleExit.dispose();
-        resolve();
-      };
-      transport.onclose = () => {
-        sdkOnClose?.();
-        done();
-      };
-      const closeTransportForStdin = () => {
-        void transport.close().catch(() => done());
-      };
-      process.stdin.once('end', closeTransportForStdin);
-      process.stdin.once('close', closeTransportForStdin);
-    });
-  } finally {
-    idleExit.dispose();
-    closeTransportForIdle = null;
-  }
+  // server.connect() only *starts* the transport; it resolves once the
+  // stdio reader is wired up, not when the stream closes. Hold the
+  // process open until the client disconnects (stdin EOF) so the cli.ts
+  // top-level `process.exit(0)` doesn't kill us mid-handshake.
+  await new Promise<void>((resolve) => {
+    const done = () => resolve();
+    transport.onclose = done;
+    process.stdin.once('end', done);
+    process.stdin.once('close', done);
+  });
 }
 
 function ok(payload: unknown) {
@@ -1078,17 +973,11 @@ function slugifyProjectId(name: string): string {
 async function startRun(baseUrl: string, args: McpArgs) {
   const { id, resolved, active } = await resolveProjectArg(baseUrl, args.project);
   const body: JsonObject = { projectId: id };
-  if (typeof args.prompt === 'string' && args.prompt.length > 0) {
-    body.message = args.prompt;
-    body.currentPrompt = args.prompt;
-  }
+  if (typeof args.prompt === 'string' && args.prompt.length > 0) body.message = args.prompt;
   if (typeof args.skill === 'string' && args.skill.length > 0) body.skillId = args.skill;
   if (typeof args.plugin === 'string' && args.plugin.length > 0) body.pluginId = args.plugin;
   if (typeof args.agent === 'string' && args.agent.length > 0) body.agentId = args.agent;
   if (typeof args.model === 'string' && args.model.length > 0) body.model = args.model;
-  if (typeof args.serviceTier === 'string' && args.serviceTier.length > 0) {
-    body.serviceTier = args.serviceTier;
-  }
   if (args.inputs !== undefined) {
     if (args.inputs === null || typeof args.inputs !== 'object' || Array.isArray(args.inputs)) {
       throw new Error('inputs must be an object');
@@ -1323,7 +1212,9 @@ async function resolveProjectEntry(baseUrl: string, projectId: string, declared:
 // UI). Returns null when there's no entry file. Pure: no I/O, so
 // get_project can call it from project data it already has.
 function rawPreviewUrl(baseUrl: string, projectId: string, entry: unknown): string | null {
-  return buildProjectRawFileUrl(baseUrl, projectId, entry);
+  if (typeof entry !== 'string' || entry.length === 0) return null;
+  const segments = entry.split('/').filter((s) => s.length > 0).map(encodeURIComponent).join('/');
+  return `${baseUrl}/api/projects/${encodeURIComponent(projectId)}/raw/${segments}`;
 }
 
 // Best-effort variant for get_run, which only has a projectId: fetch the

@@ -8,7 +8,7 @@ import { writeFakeVelaBin } from '@/amr';
 import { createAmrProject, putAmrAppConfig } from '@/vitest/amr';
 import { listMessages } from '@/vitest/messages';
 import { readRunEvents, startRun, waitForRunTerminal } from '@/vitest/runs';
-import { createSmokeSuite } from '@/vitest/suite';
+import { createSmokeSuite } from '@/vitest/smoke-suite';
 
 describe('AMR auth error convergence', () => {
   test('marks the run and assistant message as failed when fake vela returns an auth error during prompt', { timeout: 180_000 }, async () => {
@@ -16,10 +16,8 @@ describe('AMR auth error convergence', () => {
 
     await suite.with.toolsDev(async ({ webUrl }) => {
       const velaBin = await writeFakeVelaBin(join(suite.scratchDir, 'fake-vela-auth-error'), {
-        endpoints: suite.amr,
         failAuthAtPrompt: true,
         requireLoginConfig: false,
-        requireSetModel: false,
       });
 
       await putAmrAppConfig(webUrl, {
@@ -27,7 +25,8 @@ describe('AMR auth error convergence', () => {
         agentCliEnv: {
           amr: {
             VELA_BIN: velaBin,
-            ...suite.amr.runtimeEnv(),
+            VELA_LINK_URL: 'http://localhost:18081',
+            VELA_RUNTIME_KEY: 'fake-runtime-key',
           },
         },
       });

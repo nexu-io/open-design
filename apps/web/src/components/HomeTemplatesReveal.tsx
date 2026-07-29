@@ -10,7 +10,6 @@
 // When the user already has projects, this wrapper is a no-op pass-through —
 // HomeView renders the gallery directly.
 
-import { Button } from '@open-design/components';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Icon } from './Icon';
 import { useT } from '../i18n';
@@ -74,21 +73,21 @@ export function HomeTemplatesReveal({ enabled, children }: Props) {
         className="home-templates-reveal__body"
         aria-hidden={!revealed}
       >
-        <div className="home-templates-reveal__inner">{children}</div>
+        {children}
       </div>
 
       {revealed ? (
-        <Button
-          variant="subtle"
+        <button
+          type="button"
           className="home-templates-reveal__collapse"
           onClick={() => setRevealed(false)}
         >
           <Icon name="chevron-down" size={16} />
           <span>{t('homeHero.templatesCollapse')}</span>
-        </Button>
+        </button>
       ) : (
-        <Button
-          variant="ghost"
+        <button
+          type="button"
           className="home-templates-reveal__hint"
           onClick={() => setRevealed(true)}
           data-testid="home-templates-hint"
@@ -99,7 +98,7 @@ export function HomeTemplatesReveal({ enabled, children }: Props) {
             className="home-templates-reveal__hint-arrow"
           />
           <span>{t('homeHero.templatesScrollHint')}</span>
-        </Button>
+        </button>
       )}
     </div>
   );

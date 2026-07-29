@@ -1,9 +1,5 @@
-import type { Express, Response } from 'express';
-import { PROJECT_EXPORT_MANIFEST_SCHEMA, isExportFormat } from '@open-design/contracts';
+import type { Express } from 'express';
 import nodePath from 'node:path';
-import os from 'node:os';
-import { readFile, rm } from 'node:fs/promises';
-import { isBlocked as isBlockedSystemDir } from './linked-dirs.js';
 import type { RouteDeps } from './server-context.js';
 import {
   InlineAssetsLimitError,
@@ -11,18 +7,7 @@ import {
   inlineRelativeAssets,
   type InlineAssetReader,
 } from './inline-assets.js';
-import {
-  buildDeckRenderInput,
-  buildScreenshotPdf,
-  buildScreenshotPptx,
-  decodeSlideDataUrls,
-  readSlideFiles,
-  type BuildDeckRenderInputOptions,
-} from './deck-export.js';
-import { readProjectFileVersion } from './project-file-versions.js';
-import { authorizeReasoningEgress, sendReasoningEgressDenial } from './reasoning-egress.js';
-import { sandboxImportedProjectRootUnavailableReason } from './sandbox-mode.js';
-import { parseOrchestratorWorkspace } from './workspace-contract.js';
+import { isSandboxModeEnabled } from './sandbox-mode.js';
 
 export interface RegisterImportRoutesDeps extends RouteDeps<'db' | 'http' | 'uploads' | 'node' | 'ids' | 'paths' | 'imports' | 'auth' | 'projectStore' | 'conversations' | 'projectFiles' | 'validation'> {}
 
@@ -33,28 +18,6 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
   const { fs, path } = ctx.node;
   const { randomId } = ctx.ids;
   const { PROJECTS_DIR, RUNTIME_DATA_DIR_CANONICAL } = ctx.paths;
-
-  // A project root (imported folder OR a working-dir rebind) must not point at a
-  // system directory or a credential store. Binding it at $HOME / ~/.ssh / etc.
-  // would let the project file API read or delete the user's private keys and
-  // credentials. `isBlockedSystemDir` covers /etc, /proc, …; credential dirs use
-  // a prefix match; the home ROOT only exact-matches so legitimate subfolders
-  // (e.g. ~/Projects) stay usable. Shared by both entry points so neither can
-  // be used to bypass the other. Returns a rejection reason, or null if allowed.
-  async function blockedProjectRootReason(normalizedPath: string): Promise<string | null> {
-    let homeReal = os.homedir();
-    try { homeReal = await fs.promises.realpath(homeReal); } catch { /* keep as-is */ }
-    const credentialDirs = ['.ssh', '.aws', '.gnupg', '.kube', '.docker'].map((d) =>
-      path.join(homeReal, d),
-    );
-    const inCredentialDir = credentialDirs.some(
-      (dir) => normalizedPath === dir || normalizedPath.startsWith(dir + path.sep),
-    );
-    if (isBlockedSystemDir(normalizedPath) || normalizedPath === homeReal || inCredentialDir) {
-      return 'cannot use a system or credential directory as a project root';
-    }
-    return null;
-  }
   const { importClaudeDesignZip, projectDir, detectEntryFile } = ctx.imports;
   const {
     consumedImportNonces,
@@ -67,6 +30,11 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
   const { insertConversation } = ctx.conversations;
   const { setTabs } = ctx.projectFiles;
   const { validateProjectDesignSystemId } = ctx.validation;
+  const rejectSandboxFolderImport = () =>
+    isSandboxModeEnabled(process.env)
+      ? 'folder imports are disabled when OD_SANDBOX_MODE is enabled'
+      : null;
+
   app.post(
     '/api/import/claude-design',
     importUpload.single('file'),
@@ -142,21 +110,14 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
       if (!existing) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       }
-      const { baseDir, orchestratorWorkspace } = req.body || {};
+      const { baseDir } = req.body || {};
       if (typeof baseDir !== 'string' || !baseDir.trim()) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'baseDir required');
       }
-      const parsedOrchestratorWorkspace =
-        parseOrchestratorWorkspace(orchestratorWorkspace);
-      if (!parsedOrchestratorWorkspace.ok) {
-        return sendApiError(
-          res,
-          400,
-          'BAD_REQUEST',
-          parsedOrchestratorWorkspace.message,
-        );
+      const sandboxReason = rejectSandboxFolderImport();
+      if (sandboxReason) {
+        return sendApiError(res, 400, 'BAD_REQUEST', sandboxReason);
       }
-      const normalizedOrchestratorWorkspace = parsedOrchestratorWorkspace.value;
       let trustedPickerImport = false;
       if (isDesktopAuthGateActive()) {
         const secret = desktopAuthSecret();
@@ -224,30 +185,15 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
       ) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'cannot point at the data directory');
       }
-      const workingDirBlockReason = await blockedProjectRootReason(normalizedPath);
-      if (workingDirBlockReason) {
-        return sendApiError(res, 400, 'BAD_REQUEST', workingDirBlockReason);
-      }
-      const sandboxReason = normalizedOrchestratorWorkspace && trustedPickerImport
-        ? null
-        : sandboxImportedProjectRootUnavailableReason(normalizedPath);
-      if (sandboxReason) {
-        return sendApiError(res, 400, 'BAD_REQUEST', sandboxReason);
-      }
 
       const entryFile = await detectEntryFile(normalizedPath);
       const existingMeta = existing.metadata ?? {};
-      const { orchestratorWorkspace: _existingOrchestratorWorkspace, ...preservedMeta } =
-        existingMeta;
       const nextMeta = {
-        ...preservedMeta,
+        ...existingMeta,
         kind: existingMeta.kind ?? 'prototype',
         baseDir: normalizedPath,
         importedFrom: 'folder' as const,
         entryFile,
-        ...(normalizedOrchestratorWorkspace
-          ? { orchestratorWorkspace: normalizedOrchestratorWorkspace }
-          : {}),
         ...(trustedPickerImport ? { fromTrustedPicker: true as const } : {}),
       };
       const updated = updateProject(db, projectId, { metadata: nextMeta });
@@ -262,27 +208,20 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
       const body = { project: updated, baseDir: normalizedPath, entryFile };
       res.json(body);
     } catch (err: any) {
-      sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
+      sendApiError(res, 400, 'BAD_REQUEST', String(err));
     }
   });
 
   app.post('/api/import/folder', async (req, res) => {
     try {
-      const { baseDir, name, skillId, designSystemId, orchestratorWorkspace } = req.body || {};
+      const { baseDir, name, skillId, designSystemId } = req.body || {};
       if (typeof baseDir !== 'string' || !baseDir.trim()) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'baseDir required');
       }
-      const parsedOrchestratorWorkspace =
-        parseOrchestratorWorkspace(orchestratorWorkspace);
-      if (!parsedOrchestratorWorkspace.ok) {
-        return sendApiError(
-          res,
-          400,
-          'BAD_REQUEST',
-          parsedOrchestratorWorkspace.message,
-        );
+      const sandboxReason = rejectSandboxFolderImport();
+      if (sandboxReason) {
+        return sendApiError(res, 400, 'BAD_REQUEST', sandboxReason);
       }
-      const normalizedOrchestratorWorkspace = parsedOrchestratorWorkspace.value;
       let trustedPickerImport = false;
       if (isDesktopAuthGateActive()) {
         const secret = desktopAuthSecret();
@@ -362,16 +301,6 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
       ) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'cannot import the data directory');
       }
-      const importBlockReason = await blockedProjectRootReason(normalizedPath);
-      if (importBlockReason) {
-        return sendApiError(res, 400, 'BAD_REQUEST', importBlockReason);
-      }
-      const sandboxReason = normalizedOrchestratorWorkspace && trustedPickerImport
-        ? null
-        : sandboxImportedProjectRootUnavailableReason(normalizedPath);
-      if (sandboxReason) {
-        return sendApiError(res, 400, 'BAD_REQUEST', sandboxReason);
-      }
 
       const id = randomId();
       const now = Date.now();
@@ -389,6 +318,7 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
           designSystemValidation.message,
         );
       }
+
       const project = insertProject(db, {
         id,
         name: projectName,
@@ -400,9 +330,6 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
           baseDir: normalizedPath,
           importedFrom: 'folder',
           entryFile,
-          ...(normalizedOrchestratorWorkspace
-            ? { orchestratorWorkspace: normalizedOrchestratorWorkspace }
-            : {}),
           ...(trustedPickerImport ? { fromTrustedPicker: true as const } : {}),
         },
         createdAt: now,
@@ -425,20 +352,18 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
       const body = { project, conversationId: cid, entryFile };
       res.json(body);
     } catch (err: any) {
-      sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
+      sendApiError(res, 400, 'BAD_REQUEST', String(err));
     }
   });
 
 }
 
-export interface RegisterProjectExportRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'node' | 'ids' | 'projectStore' | 'exports' | 'projectFiles' | 'validation'> {}
+export interface RegisterProjectExportRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'projectStore' | 'exports' | 'projectFiles' | 'validation'> {}
 
 export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectExportRoutesDeps) {
   const { db } = ctx;
   const { sendApiError } = ctx.http;
-  const { PROJECTS_DIR, RUNTIME_DATA_DIR_CANONICAL } = ctx.paths;
-  const { fs, path } = ctx.node;
-  const { randomId } = ctx.ids;
+  const { PROJECTS_DIR } = ctx.paths;
   const { getProject } = ctx.projectStore;
   const { listFiles, readProjectFile, resolveProjectFilePath } = ctx.projectFiles;
   const { isSafeId } = ctx.validation;
@@ -446,410 +371,10 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
     buildProjectArchive,
     buildBatchArchive,
     buildDesktopPdfExportInput,
-    buildDesktopArtifactExportInput,
     desktopPdfExporter,
-    desktopSlideRenderer,
-    desktopArtifactExporter,
     daemonUrlRef,
     sanitizeArchiveFilename,
   } = ctx.exports;
-
-  function isNoSlideDeckRenderError(rendered: { ok: boolean; error?: string }): boolean {
-    return !rendered.ok && typeof rendered.error === 'string' && /no slide surfaces found/i.test(rendered.error);
-  }
-
-  function normalizeExportVersionId(raw: unknown): string | undefined {
-    if (typeof raw !== 'string') return undefined;
-    const value = raw.trim();
-    return value.length > 0 ? value : undefined;
-  }
-
-  async function readExportVersionSource(
-    projectId: string,
-    fileName: string,
-    versionId: string | undefined,
-    metadata: unknown,
-  ): Promise<string | undefined> {
-    if (!versionId) return undefined;
-    const result = await readProjectFileVersion(
-      PROJECTS_DIR,
-      projectId,
-      fileName,
-      versionId,
-      metadata,
-    );
-    return result.content;
-  }
-
-  function screenshotRenderClientError(
-    rendered: { ok: boolean; error?: string; errorCode?: string },
-    format: 'pptx' | 'pdf' | 'image',
-  ): { message: string; status: 400 | 422 } | null {
-    if (rendered.ok) return null;
-    if (rendered.errorCode === 'NO_SLIDES' || (format === 'pptx' && isNoSlideDeckRenderError(rendered))) {
-      return {
-        status: 422,
-        message: 'this artifact is not a slide deck — export it as PDF or an image instead',
-      };
-    }
-    if (rendered.errorCode === 'SLIDE_INDEX_OUT_OF_RANGE') {
-      return {
-        status: 422,
-        message: rendered.error || 'slide index is out of range',
-      };
-    }
-    if (rendered.errorCode === 'PAGE_TOO_TALL') {
-      return {
-        status: 422,
-        message: rendered.error || 'page is too tall to export as one image',
-      };
-    }
-    return null;
-  }
-
-  // Shared screenshot-export flow: render the deck to one PNG per slide via the
-  // desktop's Electron Chromium, then assemble the requested binary. Both the
-  // .pptx and raster-.pdf routes funnel through here. Like the PDF route, it
-  // requires the desktop runtime — there is no headless renderer in a bare
-  // daemon yet, so a web-only deployment gets a clear 501.
-  async function handleScreenshotExport(
-    res: Response,
-    format: 'pptx' | 'pdf' | 'image',
-    projectId: string,
-    body: any,
-  ) {
-    let renderOutputDir: string | null = null;
-    try {
-      const { fileName, title, index, imageFormat, width, height } = body || {};
-      if (typeof fileName !== 'string' || fileName.length === 0) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'fileName required');
-      }
-      const project = getProject(db, projectId);
-      const metadata = project?.metadata ?? null;
-      const versionId = normalizeExportVersionId(body?.versionId);
-      const sourceHtml = await readExportVersionSource(projectId, fileName, versionId, metadata);
-      if (format === 'image' && imageFormat != null && imageFormat !== 'png' && imageFormat !== 'jpeg') {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'imageFormat must be png or jpeg');
-      }
-      if (width != null && (typeof width !== 'number' || !Number.isFinite(width) || width <= 0)) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'width must be a positive number');
-      }
-      if (height != null && (typeof height !== 'number' || !Number.isFinite(height) || height <= 0)) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'height must be a positive number');
-      }
-      if (typeof desktopSlideRenderer !== 'function') {
-        if (format === 'image' && typeof desktopArtifactExporter === 'function') {
-          const input = await buildDesktopArtifactExportInput({
-            daemonUrl: daemonUrlRef.current,
-            fileName,
-            format,
-            metadata,
-            projectId,
-            projectsRoot: PROJECTS_DIR,
-            ...(sourceHtml !== undefined ? { sourceHtml } : {}),
-            ...(typeof title === 'string' ? { title } : {}),
-            ...(typeof body?.deck === 'boolean' ? { deck: body.deck } : {}),
-            ...(format === 'image' && imageFormat === 'jpeg' ? { imageFormat: 'jpeg' } : {}),
-            ...(typeof width === 'number' ? { width } : {}),
-            ...(typeof height === 'number' ? { height } : {}),
-          });
-          let result;
-          try {
-            result = await desktopArtifactExporter(input);
-          } catch (err: any) {
-            return sendApiError(
-              res,
-              502,
-              'UPSTREAM_UNAVAILABLE',
-              `desktop renderer unavailable: ${err?.message || String(err)}`,
-            );
-          }
-          if (!result.ok || typeof result.path !== 'string') {
-            return sendApiError(
-              res,
-              502,
-              'UPSTREAM_UNAVAILABLE',
-              result.error || 'desktop renderer returned no artifact',
-            );
-          }
-          try {
-            const buffer = await fs.promises.readFile(result.path);
-            const contentType =
-              result.mime || (imageFormat === 'jpeg' ? 'image/jpeg' : 'image/png');
-            const ext = contentType.includes('jpeg') || contentType.includes('jpg') ? 'jpg' : 'png';
-            const titleBase =
-              typeof title === 'string' && title.trim().length > 0
-                ? title.trim()
-                : path.basename(fileName, path.extname(fileName)) || 'artifact';
-            const filename = `${sanitizeArchiveFilename(titleBase) || 'artifact'}.${ext}`;
-            const asciiFallback =
-              filename.replace(/[^\x20-\x7e]/g, '_').replace(/"/g, '_') || `artifact.${ext}`;
-            res.setHeader('Content-Type', contentType);
-            res.setHeader(
-              'Content-Disposition',
-              `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
-            );
-            return res.send(buffer);
-          } finally {
-            await fs.promises.rm(result.path, { force: true }).catch(() => {});
-          }
-        }
-        return sendApiError(
-          res,
-          501,
-          'UPSTREAM_UNAVAILABLE',
-          'screenshot export is only available in the desktop runtime',
-        );
-      }
-      // Scratch dir under the daemon data root: the desktop renderer writes the
-      // rendered images here and returns their file paths, so large images never
-      // cross the JSON IPC channel as base64. The daemon owns it and deletes it in
-      // the finally below. Derived from RUNTIME_DATA_DIR per the data-dir contract.
-      const outputDir = path.join(RUNTIME_DATA_DIR_CANONICAL, 'export-render', randomId());
-      renderOutputDir = outputDir;
-      const renderOptions: BuildDeckRenderInputOptions = {
-        daemonUrl: daemonUrlRef.current,
-        fileName,
-        // Imported-folder projects keep their workspace under metadata.baseDir;
-        // thread it through so readProjectFile resolves the real file instead of
-        // 404ing on <data>/projects/:id.
-        metadata,
-        outputDir,
-        projectId,
-        projectsRoot: PROJECTS_DIR,
-      };
-      if (sourceHtml !== undefined) renderOptions.sourceHtml = sourceHtml;
-      if (typeof title === 'string') renderOptions.title = title;
-      if (typeof width === 'number') renderOptions.width = width;
-      if (typeof height === 'number') renderOptions.height = height;
-      // Page-vs-deck is the caller's call, not a `.slide`-count guess: PPTX is
-      // deck-only; image/PDF take the web's `effectiveDeck` signal so an ordinary
-      // page that happens to contain `.slide` markup is still captured full-page.
-      if (format === 'pptx') {
-        renderOptions.deck = true;
-        // Editable PPTX (native shapes/text via dom-to-pptx) vs the default
-        // screenshot PPTX (one image per slide).
-        if (body?.editable === true) renderOptions.editable = true;
-      } else if (typeof body?.deck === 'boolean') {
-        renderOptions.deck = body.deck;
-      }
-      // Image export = "the whole artifact as one picture": a deck becomes all
-      // slides stitched into one tall image; an ordinary page is its full-page
-      // capture. (A specific slide index is still honored if explicitly given.)
-      if (format === 'image') {
-        if (typeof index === 'number' && Number.isInteger(index) && index >= 0) {
-          renderOptions.index = index;
-        } else {
-          renderOptions.stitch = true;
-        }
-      }
-      // A non-deck page exported to PDF paginates into one PDF page per viewport
-      // (a long scrolling site becomes a readable multi-page PDF instead of one
-      // giant page). The desktop renderer uses JPEG only after it has decided
-      // page mode; auto-detected decks stay PNG for crisp slide text.
-      if (format === 'pdf' && body?.deck !== true) renderOptions.paginate = true;
-      // Image export defaults to PNG unless the caller explicitly asks for JPEG
-      // (CLI --image-format).
-      if (format === 'image' && imageFormat === 'jpeg') renderOptions.pageImageFormat = 'jpeg';
-      const tStart = Date.now();
-      const { input, title: resolvedTitle, defaultFilename } =
-        await buildDeckRenderInput(renderOptions);
-      // The renderer call is a cross-process IPC (requestJsonIpc, 600s). A
-      // missing desktop process, broken socket, or timeout is an upstream
-      // renderer outage — surface it as 502 UPSTREAM_UNAVAILABLE (matching the
-      // `!rendered.ok` branch below), not the outer 400 BAD_REQUEST which is for
-      // genuine request-validation / assembly errors.
-      let rendered;
-      try {
-        rendered = await desktopSlideRenderer(input);
-      } catch (err: any) {
-        return sendApiError(
-          res,
-          502,
-          'UPSTREAM_UNAVAILABLE',
-          `desktop renderer unavailable: ${err?.message || String(err)}`,
-        );
-      }
-      const tRendered = Date.now();
-
-      const clientError = screenshotRenderClientError(rendered, format);
-      if (clientError) {
-        return sendApiError(res, clientError.status, 'BAD_REQUEST', clientError.message);
-      }
-
-      // Editable PPTX: the renderer wrote a finished .pptx (native shapes/text)
-      // to the scratch dir. Stream it directly — no image assembly. Confine the
-      // path to the scratch dir, same defense as the image handoff.
-      if (renderOptions.editable) {
-        if (!rendered.ok || typeof rendered.pptxFile !== 'string') {
-          return sendApiError(
-            res,
-            502,
-            'UPSTREAM_UNAVAILABLE',
-            rendered.error || 'editable PPTX renderer returned no file',
-          );
-        }
-        const canonicalDir = await fs.promises.realpath(renderOutputDir).catch(() => renderOutputDir);
-        const realPptx = await fs.promises.realpath(rendered.pptxFile).catch(() => null);
-        if (!realPptx || (realPptx !== canonicalDir && !realPptx.startsWith(canonicalDir + path.sep))) {
-          return sendApiError(
-            res,
-            502,
-            'UPSTREAM_UNAVAILABLE',
-            'renderer returned a pptx path outside the export scratch directory',
-          );
-        }
-        const pptxBuffer = await fs.promises.readFile(realPptx);
-        // eslint-disable-next-line no-console
-        console.info('[od-export] assemble', {
-          format: 'pptx-editable',
-          via: 'file',
-          bytes: pptxBuffer.length,
-          rendererMs: tRendered - tStart,
-          totalMs: Date.now() - tStart,
-        });
-        const editableName = `${defaultFilename}.pptx`;
-        const editableAscii =
-          editableName.replace(/[^\x20-\x7e]/g, '_').replace(/"/g, '_') || 'deck.pptx';
-        res.setHeader(
-          'Content-Type',
-          'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-        );
-        res.setHeader(
-          'Content-Disposition',
-          `attachment; filename="${editableAscii}"; filename*=UTF-8''${encodeURIComponent(editableName)}`,
-        );
-        return res.send(pptxBuffer);
-      }
-
-      const hasFiles = Array.isArray(rendered.slideFiles) && rendered.slideFiles.length > 0;
-      const hasDataUrls = Array.isArray(rendered.slides) && rendered.slides.length > 0;
-      if (!rendered.ok || (!hasFiles && !hasDataUrls)) {
-        return sendApiError(
-          res,
-          502,
-          'UPSTREAM_UNAVAILABLE',
-          rendered.error || 'desktop renderer returned no slides',
-        );
-      }
-      // PPTX is slide-based: an ordinary page (no `.slide` sections) has no
-      // slide model, so refuse rather than emit a one-giant-slide deck.
-      if (format === 'pptx' && rendered.mode === 'page') {
-        return sendApiError(
-          res,
-          422,
-          'BAD_REQUEST',
-          'this artifact is not a slide deck — export it as PDF or an image instead',
-        );
-      }
-      // Prefer the on-disk file handoff; fall back to base64 data URLs for older
-      // desktop builds that don't honor outputDir. Confine the handoff files to
-      // the canonical scratch dir before reading — a malformed renderer response
-      // must not make the daemon read & stream back arbitrary files (path
-      // traversal / symlink escape), since cleanup only removes renderOutputDir.
-      let images: Awaited<ReturnType<typeof readSlideFiles>>;
-      if (hasFiles) {
-        const canonicalDir = await fs.promises.realpath(renderOutputDir).catch(() => renderOutputDir);
-        const safeFiles: string[] = [];
-        for (const candidate of rendered.slideFiles as string[]) {
-          const real =
-            typeof candidate === 'string'
-              ? await fs.promises.realpath(candidate).catch(() => null)
-              : null;
-          if (!real || (real !== canonicalDir && !real.startsWith(canonicalDir + path.sep))) {
-            return sendApiError(
-              res,
-              502,
-              'UPSTREAM_UNAVAILABLE',
-              'renderer returned a slide path outside the export scratch directory',
-            );
-          }
-          safeFiles.push(real);
-        }
-        images = await readSlideFiles(safeFiles);
-      } else {
-        images = decodeSlideDataUrls(rendered.slides as string[]);
-      }
-      const tRead = Date.now();
-      let buffer: Buffer;
-      let contentType: string;
-      let ext: string;
-      if (format === 'pptx') {
-        // Derive the slide aspect from the rendered pixel dims so non-16:9 decks
-        // get a correctly-proportioned PPTX layout instead of a forced 16:9 one.
-        const aspect =
-          typeof rendered.width === 'number' &&
-          typeof rendered.height === 'number' &&
-          rendered.height > 0
-            ? rendered.width / rendered.height
-            : undefined;
-        buffer = await buildScreenshotPptx(images, {
-          title: resolvedTitle,
-          ...(aspect ? { aspect } : {}),
-        });
-        contentType = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
-        ext = 'pptx';
-      } else if (format === 'pdf') {
-        buffer = await buildScreenshotPdf(images);
-        contentType = 'application/pdf';
-        ext = 'pdf';
-      } else {
-        // image: exactly one image (the requested slide, stitched deck, or whole
-        // page). A multi-image renderer result is a contract violation; never
-        // silently stream images[0], which would truncate a too-tall JPEG page to
-        // its first chunk.
-        if (images.length !== 1) {
-          return sendApiError(
-            res,
-            502,
-            'UPSTREAM_UNAVAILABLE',
-            `image renderer returned ${images.length} images for a single-image export`,
-          );
-        }
-        const first = images[0]!;
-        buffer = first.buffer;
-        contentType = first.jpeg ? 'image/jpeg' : 'image/png';
-        ext = first.jpeg ? 'jpg' : 'png';
-      }
-      // One-line export timing: renderer (desktop capture+encode+IPC) vs read
-      // (file handoff / base64 decode) vs assemble (pptx/pdf build). Pair with
-      // the desktop `[od-export] render` line for the full picture.
-      // eslint-disable-next-line no-console
-      console.info('[od-export] assemble', {
-        format,
-        via: hasFiles ? 'file' : 'dataurl',
-        slides: images.length,
-        bytes: buffer.length,
-        rendererMs: tRendered - tStart,
-        readMs: tRead - tRendered,
-        assembleMs: Date.now() - tRead,
-        totalMs: Date.now() - tStart,
-      });
-      const filename = `${defaultFilename}.${ext}`;
-      const asciiFallback =
-        filename.replace(/[^\x20-\x7e]/g, '_').replace(/"/g, '_') || `deck.${ext}`;
-      res.setHeader('Content-Type', contentType);
-      res.setHeader(
-        'Content-Disposition',
-        `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
-      );
-      res.send(buffer);
-    } catch (err: any) {
-      const status = err && err.code === 'ENOENT' ? 404 : 400;
-      sendApiError(
-        res,
-        status,
-        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
-        String(err?.message || err),
-      );
-    } finally {
-      // Remove the scratch render dir regardless of success — these files are
-      // pure transient handoff, never served or persisted.
-      if (renderOutputDir) {
-        await fs.promises.rm(renderOutputDir, { recursive: true, force: true }).catch(() => {});
-      }
-    }
-  }
   // Streams a ZIP of the project's on-disk tree so the "Download as .zip"
   // share menu can hand the user the actual files they uploaded — e.g. the
   // imported `ui-design/` folder — instead of a one-file snapshot of the
@@ -967,18 +492,12 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
       if (typeof fileName !== 'string' || fileName.length === 0) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'fileName required');
       }
-      const project = getProject(db, req.params.id);
-      const metadata = project?.metadata ?? null;
-      const versionId = normalizeExportVersionId(req.body?.versionId);
-      const sourceHtml = await readExportVersionSource(req.params.id, fileName, versionId, metadata);
       const input = await buildDesktopPdfExportInput({
         daemonUrl: daemonUrlRef.current,
         deck: deck === true,
         fileName,
-        metadata,
         projectId: req.params.id,
         projectsRoot: PROJECTS_DIR,
-        ...(sourceHtml !== undefined ? { sourceHtml } : {}),
         title: typeof title === 'string' ? title : undefined,
       });
       const result = await desktopPdfExporter(input);
@@ -992,59 +511,6 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
         String(err?.message || err),
       );
     }
-  });
-
-  // Programmatic screenshot-based PPTX: render each deck slide to a pixel-perfect
-  // PNG and assemble a one-image-per-slide .pptx. Replaces the old "send a prompt
-  // to the agent and hope it runs python-pptx" path with a deterministic export.
-  app.post('/api/projects/:id/export/pptx', async (req, res) => {
-    await handleScreenshotExport(res, 'pptx', req.params.id, req.body);
-  });
-
-  // Programmatic screenshot-based (raster) PDF: one pixel-perfect page per slide.
-  // The print-ready vector PDF stays on POST /export/pdf; this is the "exactly
-  // what you see" counterpart that shares the slide renderer with PPTX.
-  app.post('/api/projects/:id/export/pdf-image', async (req, res) => {
-    await handleScreenshotExport(res, 'pdf', req.params.id, req.body);
-  });
-
-  // Programmatic image export: a single pixel-perfect PNG. For a deck it renders
-  // the requested slide (`index`) at 1920x1080; for an ordinary page it renders
-  // the whole document at natural size. Viewport-independent — unlike the
-  // host-compositor snapshot, the size never depends on the preview pane.
-  app.post('/api/projects/:id/export/image', async (req, res) => {
-    await handleScreenshotExport(res, 'image', req.params.id, req.body);
-  });
-
-  // Generic programmatic export (PDF / image / PPTX) for the `od export` CLI and
-  // any caller using the shared `ExportRequest` contract. EVERY format rasterizes
-  // through the desktop screenshot renderer — `pdf` is the raster screenshot PDF
-  // (one page per deck slide / per viewport for a long page), exactly like the
-  // dedicated /export/{pptx,pdf-image,image} routes and what the web UI uses.
-  // There is deliberately NO vector printToPDF path here: it drops CJK glyphs in
-  // the packaged runtime, which is the fidelity bug this feature exists to avoid.
-  // handleScreenshotExport owns validation, the 404/400/422 error mapping, and
-  // scratch-dir cleanup.
-  app.post('/api/projects/:id/export', async (req, res) => {
-    const { fileName, title, deck, format, imageFormat, width, height, versionId } = req.body || {};
-    if (typeof fileName !== 'string' || fileName.length === 0) {
-      return sendApiError(res, 400, 'BAD_REQUEST', 'fileName required');
-    }
-    if (!isExportFormat(format)) {
-      return sendApiError(res, 400, 'BAD_REQUEST', 'invalid export format');
-    }
-    await handleScreenshotExport(res, format, req.params.id, {
-      fileName,
-      // pptx is deck-only (handleScreenshotExport forces it); pdf/image honor the
-      // caller's deck flag when one is supplied. Omitted stays omitted so the
-      // renderer can auto-detect deck artifacts.
-      ...(typeof deck === 'boolean' ? { deck } : {}),
-      ...(typeof imageFormat === 'string' ? { imageFormat } : {}),
-      ...(width != null ? { width } : {}),
-      ...(height != null ? { height } : {}),
-      ...(typeof title === 'string' ? { title } : {}),
-      ...(typeof versionId === 'string' ? { versionId } : {}),
-    });
   });
 
   // Export endpoint: serves an HTML body with every same-project
@@ -1093,7 +559,6 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
       const project = getProject(db, req.params.id);
       const splatParam = (req.params as { splat?: string | string[] }).splat;
       const relPath = Array.isArray(splatParam) ? splatParam.join('/') : String(splatParam ?? '');
-      const versionId = normalizeExportVersionId(req.query.versionId);
 
       // PR #1312 round-5 (lefarcen P2): stat the owner file BEFORE
       // readProjectFile so a 100 MiB owner HTML is rejected after a
@@ -1108,82 +573,53 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
       // as defense-in-depth: it still catches direct in-process callers
       // that skip the route and any future drift in the size reported
       // by stat vs the bytes actually returned by readFile.
-      let ownerHtml: string;
-      if (versionId) {
-        try {
-          ownerHtml = await readExportVersionSource(
-            req.params.id,
-            relPath,
-            versionId,
-            project?.metadata,
-          ) ?? '';
-        } catch (err: any) {
-          const status = err && err.code === 'ENOENT' ? 404 : 400;
-          return sendApiError(
-            res,
-            status,
-            status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
-            String(err),
-          );
-        }
-        const ownerBytes = Buffer.byteLength(ownerHtml, 'utf8');
-        if (ownerBytes > MAX_INLINE_OWNER_BYTES) {
-          return sendApiError(
-            res,
-            413,
-            'PAYLOAD_TOO_LARGE',
-            `owner html ${ownerBytes} bytes exceeds MAX_INLINE_OWNER_BYTES ${MAX_INLINE_OWNER_BYTES}`,
-          );
-        }
-      } else {
-        let ownerMeta;
-        try {
-          ownerMeta = await resolveProjectFilePath(
-            PROJECTS_DIR,
-            req.params.id,
-            relPath,
-            project?.metadata,
-          );
-        } catch (err: any) {
-          const status = err && err.code === 'ENOENT' ? 404 : 400;
-          return sendApiError(
-            res,
-            status,
-            status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
-            String(err),
-          );
-        }
+      let ownerMeta;
+      try {
+        ownerMeta = await resolveProjectFilePath(
+          PROJECTS_DIR,
+          req.params.id,
+          relPath,
+          project?.metadata,
+        );
+      } catch (err: any) {
+        const status = err && err.code === 'ENOENT' ? 404 : 400;
+        return sendApiError(
+          res,
+          status,
+          status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
+          String(err),
+        );
+      }
 
-        if (ownerMeta.size > MAX_INLINE_OWNER_BYTES) {
-          return sendApiError(
-            res,
-            413,
-            'PAYLOAD_TOO_LARGE',
-            `owner html ${ownerMeta.size} bytes exceeds MAX_INLINE_OWNER_BYTES ${MAX_INLINE_OWNER_BYTES}`,
-          );
-        }
+      if (ownerMeta.size > MAX_INLINE_OWNER_BYTES) {
+        return sendApiError(
+          res,
+          413,
+          'PAYLOAD_TOO_LARGE',
+          `owner html ${ownerMeta.size} bytes exceeds MAX_INLINE_OWNER_BYTES ${MAX_INLINE_OWNER_BYTES}`,
+        );
+      }
 
-        if (!ownerMeta.mime.startsWith('text/html')) {
-          return sendApiError(
-            res,
-            415,
-            'UNSUPPORTED_MEDIA_TYPE',
-            'export endpoint only supports HTML files',
-          );
-        }
+      if (!ownerMeta.mime.startsWith('text/html')) {
+        return sendApiError(
+          res,
+          415,
+          'UNSUPPORTED_MEDIA_TYPE',
+          'export endpoint only supports HTML files',
+        );
+      }
 
-        try {
-          const file = await readProjectFile(PROJECTS_DIR, req.params.id, relPath, project?.metadata);
-          ownerHtml = file.buffer.toString('utf8');
-        } catch (err: any) {
-          const status = err && err.code === 'ENOENT' ? 404 : 400;
-          return sendApiError(
-            res,
-            status,
-            status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
-            String(err),
-          );
-        }
+      let file;
+      try {
+        file = await readProjectFile(PROJECTS_DIR, req.params.id, relPath, project?.metadata);
+      } catch (err: any) {
+        const status = err && err.code === 'ENOENT' ? 404 : 400;
+        return sendApiError(
+          res,
+          status,
+          status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
+          String(err),
+        );
       }
 
       // PR #1312 round-4 (lefarcen P2): stat first, then read. This
@@ -1225,7 +661,7 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
         projectId: req.params.id,
         projectsRoot: PROJECTS_DIR,
         relPath,
-        html: ownerHtml,
+        html: file.buffer.toString('utf8'),
         metadata: project?.metadata,
         readProjectFile,
         resolveProjectFilePath,
@@ -1389,7 +825,7 @@ function buildProjectExportManifestResponse({
   note(entryFile, 'project-entry-file');
 
   return {
-    schema: PROJECT_EXPORT_MANIFEST_SCHEMA,
+    schema: 'open-design.project-export-manifest.v1',
     projectId,
     projectName: typeof project?.name === 'string' ? project.name : null,
     generatedAt: new Date().toISOString(),
@@ -1495,7 +931,7 @@ export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutes
     redactSecrets,
   } = ctx.finalize;
   app.post('/api/projects/:id/finalize/:provider', async (req, res) => {
-    const { apiKey, baseUrl, model, maxTokens, apiVersion, protocol: bodyProtocol, reasoningExecution } = req.body || {};
+    const { apiKey, baseUrl, model, maxTokens, apiVersion, protocol: bodyProtocol } = req.body || {};
     try {
       // Centralized path-traversal guard. `isSafeId` (apps/daemon/src/projects.ts)
       // rejects pure-dot ids (`.`, `..`, etc.) which would otherwise pass
@@ -1545,14 +981,6 @@ export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutes
           validated.error,
         );
       }
-      const reasoningDenial = authorizeReasoningEgress({
-        policy: reasoningExecution,
-        routeKind: 'finalize',
-        provider: protocol,
-        resolvedBaseUrl: effectiveBaseUrl,
-        model,
-      });
-      if (reasoningDenial) return sendReasoningEgressDenial(res, reasoningDenial);
       if (maxTokens !== undefined && (typeof maxTokens !== 'number' || maxTokens <= 0)) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'maxTokens must be a positive number when provided');
       }

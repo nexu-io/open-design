@@ -1,6 +1,6 @@
 {
   "name": "@open-design/desktop",
-  "version": "0.16.1",
+  "version": "0.10.0",
   "private": true,
   "type": "module",
   "main": "./dist/main/index.js",
@@ -24,7 +24,6 @@
     "@open-design/host": "workspace:*",
     "@open-design/launcher-proto": "workspace:*",
     "@open-design/platform": "workspace:*",
-    "@open-design/release": "workspace:*",
     "@open-design/sidecar": "workspace:*",
     "@open-design/sidecar-proto": "workspace:*"
   },

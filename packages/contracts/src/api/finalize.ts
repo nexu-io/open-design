@@ -1,4 +1,4 @@
-import type { ReasoningExecutionRequestFields } from './reasoningExecution';
+import type { ConnectionTestProtocol } from './connectionTest';
 
 // Shared DTOs for the `/api/projects/:id/finalize/<provider>` family of
 // synthesis endpoints. `/finalize/anthropic` was introduced first; the
@@ -15,16 +15,9 @@ export const FINALIZE_SCHEMA_VERSION = 1;
 
 /**
  * Provider ids supported by the finalized-design synthesis path.
- * Matches the daemon/web finalize allowlists. This is intentionally narrower
- * than connection-test/provider-model protocols because some transports can be
- * tested or listed before finalized-design synthesis supports them.
+ * Matches the BYOK protocols exposed by Settings and connection tests.
  */
-export type FinalizeProviderProtocol =
-  | 'anthropic'
-  | 'openai'
-  | 'azure'
-  | 'google'
-  | 'ollama';
+export type FinalizeProviderProtocol = ConnectionTestProtocol;
 
 /**
  * Request body for `POST /api/projects/:id/finalize/<provider>`.
@@ -35,7 +28,7 @@ export type FinalizeProviderProtocol =
  * the proxy, which requires it for some providers) — standard provider
  * defaults are applied by the daemon when possible.
  */
-export interface FinalizeProviderRequest extends ReasoningExecutionRequestFields {
+export interface FinalizeProviderRequest {
   /**
    * BYOK protocol selected in Settings. Omitted means `anthropic` for
    * backward compatibility with the original `/finalize/anthropic` caller.

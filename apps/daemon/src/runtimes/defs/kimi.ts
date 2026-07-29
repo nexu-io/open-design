@@ -6,12 +6,6 @@ export const kimiAgentDef = {
     name: 'Kimi CLI',
     bin: 'kimi',
     versionArgs: ['--version'],
-    fallbackModels: [
-      DEFAULT_MODEL_OPTION,
-      { id: 'kimi-k2-turbo-preview', label: 'kimi-k2-turbo-preview' },
-      { id: 'moonshot-v1-8k', label: 'moonshot-v1-8k' },
-      { id: 'moonshot-v1-32k', label: 'moonshot-v1-32k' },
-    ],
     fetchModels: async (resolvedBin, env) =>
       detectAcpModels({
         bin: resolvedBin,
@@ -20,6 +14,12 @@ export const kimiAgentDef = {
         timeoutMs: 15_000,
         defaultModelOption: DEFAULT_MODEL_OPTION,
       }),
+    fallbackModels: [
+      DEFAULT_MODEL_OPTION,
+      { id: 'kimi-k2-turbo-preview', label: 'kimi-k2-turbo-preview' },
+      { id: 'moonshot-v1-8k', label: 'moonshot-v1-8k' },
+      { id: 'moonshot-v1-32k', label: 'moonshot-v1-32k' },
+    ],
     buildArgs: () => ['acp'],
     streamFormat: 'acp-json-rpc',
     mcpDiscovery: 'mature-acp',

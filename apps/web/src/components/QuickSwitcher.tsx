@@ -37,11 +37,11 @@ export function QuickSwitcher({
   const t = useT();
   const [query, setQuery] = useState('');
   const [cursor, setCursor] = useState(0);
-  const inputRef = useRef<HTMLInputElement | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
-  const setInputRef = useCallback((node: HTMLInputElement | null) => {
-    inputRef.current = node;
-    node?.focus();
+
+  useEffect(() => {
+    inputRef.current?.focus();
   }, []);
 
   const matches = useMemo<QuickSwitcherResult[]>(() => {
@@ -159,7 +159,7 @@ export function QuickSwitcher({
         exit="exit"
       >
         <input
-          ref={setInputRef}
+          ref={inputRef}
           className="qs-input"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -312,10 +312,6 @@ function workspaceContextKindLabel(kind: WorkspaceContextItem['kind']): string {
       return 'Design system';
     case 'folder':
       return 'Folder';
-    case 'project':
-      return 'Project';
-    case 'local-code':
-      return 'Local code';
     case 'terminal':
       return 'Terminal';
     case 'side-chat':

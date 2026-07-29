@@ -27,10 +27,6 @@ import type {
   PipelineStage,
 } from '@open-design/contracts';
 import type { UntilSignals } from '../until.js';
-import {
-  scanRunEventsForUsageAnalytics,
-  type RunEventForAnalyticsObservability,
-} from '../../run-analytics-observability.js';
 
 type SqliteDb = Database.Database;
 
@@ -42,7 +38,6 @@ export interface AtomWorkerContext {
   stage:          PipelineStage;
   iteration:      number;
   snapshot:       AppliedPluginSnapshot;
-  runEvents?:     RunEventForAnalyticsObservability[];
 }
 
 export interface AtomOutcome {
@@ -98,7 +93,6 @@ export interface StageRegistryOutcome {
   critiqueSummary: string | null;
   notes:           string[];
   observedAtoms:   string[];
-  tokensUsed?:     number | null;
 }
 
 // Walk every atom in the stage, invoke its registered worker (if
@@ -137,16 +131,7 @@ export async function runStageWithRegistry(
     critiqueSummary: notes.length > 0 ? notes.join('\n') : null,
     notes,
     observedAtoms:   observed,
-    tokensUsed:      tokensUsedFromRunEvents(ctx.runEvents),
   };
-}
-
-function tokensUsedFromRunEvents(
-  events: RunEventForAnalyticsObservability[] | undefined,
-): number | null {
-  if (!events?.length) return null;
-  const usage = scanRunEventsForUsageAnalytics(events, null, 0);
-  return usage.total_tokens ?? null;
 }
 
 // Pessimistic merge between multiple workers contributing to the

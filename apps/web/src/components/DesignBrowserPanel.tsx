@@ -14,12 +14,6 @@ import {
   clearHostBrowserData,
   isOpenDesignHostAvailable,
 } from '@open-design/host';
-import type { TrackingReferenceBoardCategory } from '@open-design/contracts/analytics';
-import { useAnalytics } from '../analytics/provider';
-import {
-  trackReferenceBoardClick,
-  trackReferenceBoardSurfaceView,
-} from '../analytics/events';
 import {
   openExternalUrl,
   projectRawUrl,
@@ -28,11 +22,6 @@ import {
 } from '../providers/registry';
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
-import {
-  registerBrandBrowser,
-  type BrandBrowserHandle,
-  type BrandBrowserPageSnapshotResult,
-} from '../runtime/brand-browser-bridge';
 import { captureHostRegionSnapshot } from '../runtime/exports';
 import { buildBoardCommentAttachments, commentsToAttachments } from '../comments';
 import type {
@@ -43,13 +32,8 @@ import type {
 } from '../types';
 import {
   BROWSER_CANCEL_PICKER_SCRIPT,
-  BROWSER_CAPTURE_PAGE_ARCHIVE_SCRIPT,
-  BROWSER_PAGE_ARCHIVE_INDEX_FILE,
-  BROWSER_PAGE_ARCHIVE_SCHEMA,
   BROWSER_SERIALIZE_HTML_SCRIPT,
   BROWSER_VIEWPORT_PRESETS,
-  type BrowserPageArchiveCapture,
-  type BrowserPageArchiveManifest,
   type BrowserElementSnapshot,
   browserApplyStyleScript,
   browserApplyTextScript,
@@ -178,25 +162,6 @@ type PageBrief = {
 };
 
 type BrowserTool = 'comment' | 'inspect' | 'edit';
-type BrowserSavingAction = 'archive' | 'brief' | 'screenshot';
-type BrowserStatusMessage = string | {
-  actionFileName?: string;
-  actionLabel?: string;
-  actionTarget?: 'design-files' | 'file';
-  message: string;
-  source?: 'page-snapshot';
-};
-export interface BrowserPageSnapshotToastEvent {
-  actionFileName?: string;
-  actionLabel?: string;
-  actionTarget?: 'design-files' | 'file';
-  elapsedSeconds?: number;
-  message: string;
-  onCancel?: () => void;
-  status: 'loading' | 'success' | 'error' | 'canceled';
-  tabId: string;
-  ttlMs?: number;
-}
 type BrowserStyleDraft = Required<Pick<
   PreviewAnnotationStyle,
   'backgroundColor' | 'borderRadius' | 'color' | 'fontSize' | 'fontWeight' | 'lineHeight' | 'paddingTop' | 'textAlign'
@@ -215,7 +180,6 @@ type WebviewElement = HTMLElement & {
   loadURL?(url: string): void | Promise<void>;
   reload(): void;
   reloadIgnoringCache(): void;
-  stop?(): void;
 };
 
 type WebviewNavigationEvent = Event & {
@@ -232,34 +196,13 @@ type WebviewFaviconEvent = Event & {
   favicons?: string[];
 };
 
-function isPromiseLike<T = unknown>(value: unknown): value is PromiseLike<T> {
-  return (
-    typeof value === 'object'
-    && value !== null
-    && typeof (value as { then?: unknown }).then === 'function'
-  );
-}
-
-function isBenignWebviewLoadAbort(error: unknown): boolean {
-  const message =
-    error instanceof Error
-      ? error.message
-      : typeof error === 'string'
-        ? error
-        : '';
-  return /\bERR_ABORTED\b|loading ['"][^'"]+['"] was aborted/i.test(message);
-}
-
 interface DesignBrowserPanelProps {
   initialIconUrl?: string;
   initialTitle?: string;
   initialUrl?: string;
-  navigateRequest?: { url: string; nonce: number };
-  attentionRequest?: { action: 'download-page'; nonce: number };
   projectId: string;
   resolvedDir?: string | null;
   onOpenFile: (name: string) => void;
-  onOpenDesignFiles?: () => void;
   onRefreshFiles: () => Promise<void> | void;
   onPageInfoChange?: (info: BrowserPageInfo) => void;
   previewComments?: PreviewComment[];
@@ -267,12 +210,7 @@ interface DesignBrowserPanelProps {
   onRemovePreviewComment?: (commentId: string) => Promise<void>;
   onSendBoardCommentAttachments?: (attachments: ChatCommentAttachment[], images?: File[]) => Promise<boolean | void> | boolean | void;
   onRequestBrowserUsePrompt?: (prompt: string) => void;
-  onPageSnapshotToast?: (event: BrowserPageSnapshotToastEvent) => void;
   sendDisabled?: boolean;
-  /** Workspace tab id. When set, this panel registers its live webview in the
-   *  brand-browser bridge so the chat can read the rendered DOM (e.g. to
-   *  re-extract a brand after the user clears an anti-bot wall). */
-  browserTabId?: string;
 }
 
 export interface BrowserPageInfo {
@@ -293,46 +231,6 @@ const warmedOrigins = new Map<string, HTMLLinkElement[]>();
 
 function browserHomeNavigationEntry(): BrowserNavigationEntry {
   return { title: 'Reference Board', url: EMPTY_URL };
-}
-
-function referenceGroupTitleKey(group: ReferenceGroup): keyof Dict {
-  return `designBrowser.reference.group.${group.id}` as keyof Dict;
-}
-
-function referenceSiteDetailKey(site: ReferenceSite): keyof Dict {
-  return `designBrowser.reference.site.${referenceSiteId(site.url)}.detail` as keyof Dict;
-}
-
-function localizedReferenceGroupTitle(
-  group: ReferenceGroup,
-  t?: (key: keyof Dict) => string,
-): string {
-  return t ? t(referenceGroupTitleKey(group)) : group.title;
-}
-
-function localizedReferenceSiteDetail(
-  site: ReferenceSite,
-  t?: (key: keyof Dict) => string,
-): string {
-  return t ? t(referenceSiteDetailKey(site)) : site.detail;
-}
-
-function browserViewportLabel(
-  t: (key: keyof Dict) => string,
-  viewport: BrowserViewportId,
-): string {
-  if (viewport === 'tablet') return t('fileViewer.viewportTablet');
-  if (viewport === 'mobile') return t('fileViewer.viewportMobile');
-  return t('fileViewer.viewportDesktop');
-}
-
-function browserViewportTitle(
-  t: (key: keyof Dict) => string,
-  viewport: BrowserViewportId,
-): string {
-  if (viewport === 'tablet') return t('fileViewer.viewportTabletTitle');
-  if (viewport === 'mobile') return t('fileViewer.viewportMobileTitle');
-  return t('fileViewer.viewportDesktopTitle');
 }
 
 function initialBrowserState(initialUrl?: string, initialTitle?: string): {
@@ -548,23 +446,18 @@ export function filterReferenceGroups(
   groups: ReferenceGroup[],
   category: string,
   query: string,
-  t?: (key: keyof Dict) => string,
 ): ReferenceGroup[] {
   const needle = query.trim().toLocaleLowerCase();
   return groups
     .filter((group) => category === 'all' || group.id === category)
     .map((group) => {
       if (!needle) return group;
-      const groupTitle = localizedReferenceGroupTitle(group, t);
-      if (`${group.title} ${groupTitle}`.toLocaleLowerCase().includes(needle)) return group;
+      if (group.title.toLocaleLowerCase().includes(needle)) return group;
       const sites = group.sites.filter(
         (site) =>
-          [
-            site.label,
-            site.detail,
-            localizedReferenceSiteDetail(site, t),
-            hostnameFromUrl(site.url),
-          ].join(' ').toLocaleLowerCase().includes(needle),
+          site.label.toLocaleLowerCase().includes(needle) ||
+          site.detail.toLocaleLowerCase().includes(needle) ||
+          hostnameFromUrl(site.url).toLocaleLowerCase().includes(needle),
       );
       return { ...group, sites };
     })
@@ -794,12 +687,9 @@ export function DesignBrowserPanel({
   initialIconUrl,
   initialTitle,
   initialUrl,
-  navigateRequest,
-  attentionRequest,
   projectId,
   resolvedDir,
   onOpenFile,
-  onOpenDesignFiles,
   onPageInfoChange,
   onRefreshFiles,
   previewComments = EMPTY_PREVIEW_COMMENTS,
@@ -807,9 +697,7 @@ export function DesignBrowserPanel({
   onRemovePreviewComment,
   onSendBoardCommentAttachments,
   onRequestBrowserUsePrompt,
-  onPageSnapshotToast,
   sendDisabled = false,
-  browserTabId,
 }: DesignBrowserPanelProps) {
   const t = useT();
   const desktopHostAvailable = isOpenDesignHostAvailable();
@@ -848,14 +736,8 @@ export function DesignBrowserPanel({
   const [browserLiveCommentTargets, setBrowserLiveCommentTargets] = useState<Map<string, BrowserElementSnapshot>>(() => new Map());
   const [textDraft, setTextDraft] = useState('');
   const [captureChromeHidden, setCaptureChromeHidden] = useState(false);
-  const [statusMessage, setStatusMessage] = useState<BrowserStatusMessage | null>(null);
-  const [savingActions, setSavingActions] = useState<Record<BrowserSavingAction, boolean>>({
-    archive: false,
-    brief: false,
-    screenshot: false,
-  });
-  const [archiveElapsedSeconds, setArchiveElapsedSeconds] = useState(0);
-  const [downloadAttentionNonce, setDownloadAttentionNonce] = useState<number | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [savingAction, setSavingAction] = useState<'brief' | 'screenshot' | null>(null);
   const addressInputRef = useRef<HTMLInputElement | null>(null);
   const chromeRef = useRef<HTMLDivElement | null>(null);
   const pickerRequestIdRef = useRef(0);
@@ -864,54 +746,8 @@ export function DesignBrowserPanel({
   const navigationStackRef = useRef<BrowserNavigationEntry[]>(initialState.navigationStack);
   const navigationIndexRef = useRef(initialState.navigationIndex);
   const pendingLoadTargetRef = useRef<string | null>(null);
-  const lastNavigateRequestNonceRef = useRef<number | null>(null);
-  const archiveRunIdRef = useRef(0);
-  const archiveRunRef = useRef<{ controller: AbortController; id: number; startedAt: number } | null>(null);
-  const pageSnapshotToastRef = useRef(onPageSnapshotToast);
-  const browserTabIdRef = useRef(browserTabId ?? '');
-  const archiveSaving = savingActions.archive;
-  const briefSaving = savingActions.brief;
-  const screenshotSaving = savingActions.screenshot;
   const canGoBack = navigationIndex > 0;
   const canGoForward = navigationIndex >= 0 && navigationIndex < navigationStack.length - 1;
-
-  const setSavingAction = useCallback((action: BrowserSavingAction, saving: boolean) => {
-    setSavingActions((current) => (
-      current[action] === saving ? current : { ...current, [action]: saving }
-    ));
-  }, []);
-
-  const cancelPageSnapshot = useCallback(() => {
-    archiveRunRef.current?.controller.abort();
-  }, []);
-
-  useEffect(() => {
-    pageSnapshotToastRef.current = onPageSnapshotToast;
-    browserTabIdRef.current = browserTabId ?? '';
-  }, [browserTabId, onPageSnapshotToast]);
-
-  const emitPageSnapshotToast = useCallback((event: Omit<BrowserPageSnapshotToastEvent, 'tabId'>) => {
-    pageSnapshotToastRef.current?.({
-      ...event,
-      tabId: browserTabIdRef.current,
-    });
-  }, []);
-
-  // Publish a handle to this tab's live webview so the chat can read the rendered
-  // DOM (brand browser-assist re-extraction). The cross-origin <iframe> fallback
-  // can't expose guest DOM, so `isDesktopWebview` gates that path off there.
-  useEffect(() => {
-    if (!browserTabId) return undefined;
-    const handle: BrandBrowserHandle = {
-      isDesktopWebview: desktopHostAvailable && Boolean(webviewNode),
-      getURL: () => webviewNode?.getURL?.() ?? currentUrl,
-      executeJavaScript: (code, gesture) =>
-        webviewNode ? webviewNode.executeJavaScript(code, gesture) : null,
-      downloadPageSnapshot: () => savePageSnapshot({ openAfterSave: false }),
-    };
-    registerBrandBrowser(projectId, browserTabId, handle);
-    return () => registerBrandBrowser(projectId, browserTabId, null);
-  }, [browserTabId, projectId, webviewNode, currentUrl, desktopHostAvailable]);
   const assignWebviewNode = useCallback((node: HTMLWebViewElement | null) => {
     // Set `allowpopups` imperatively rather than as a JSX prop. React's DOM
     // renderer does not treat `allowpopups` as a known boolean attribute, so
@@ -955,46 +791,9 @@ export function DesignBrowserPanel({
 
   useEffect(() => {
     if (!statusMessage) return;
-    // Keep the status pinned while the page-snapshot download runs: it can take
-    // several seconds, and a 2.6s auto-dismiss would leave the user staring at a
-    // disabled Download Page action with no sign it's still working. When saving
-    // ends, the effect re-runs and the success/failure message dismisses normally.
-    if (archiveSaving) return;
-    const hasAction = typeof statusMessage === 'object' && Boolean(statusMessage.actionFileName);
-    const timer = window.setTimeout(() => setStatusMessage(null), hasAction ? 8000 : 2600);
+    const timer = window.setTimeout(() => setStatusMessage(null), 2600);
     return () => window.clearTimeout(timer);
-  }, [statusMessage, archiveSaving]);
-
-  // Latest snapshot-progress publisher, kept in a ref so the 1s ticker effect
-  // below can depend only on `archiveSaving`. `emitPageSnapshotToast` and `t`
-  // get a fresh identity on every parent render (FileWorkspace passes a new
-  // `onPageSnapshotToast` each render), so listing them as effect deps made the
-  // effect tear down and re-run every render — and its immediate publish() then
-  // set state on each run, re-rendering in a tight loop until React aborted with
-  // "Maximum update depth exceeded". Reading the ref sidesteps that, and the
-  // single stable interval also stops the parent toast from being replaced ~60×
-  // a second (which rendered as overlapping/duplicate snapshot toasts).
-  const publishSnapshotProgressRef = useRef<() => void>(() => {});
-  publishSnapshotProgressRef.current = () => {
-    const run = archiveRunRef.current;
-    if (!run) return;
-    const elapsedSeconds = Math.max(0, Math.floor((Date.now() - run.startedAt) / 1000));
-    setArchiveElapsedSeconds(elapsedSeconds);
-    emitPageSnapshotToast({
-      elapsedSeconds,
-      message: t('designBrowser.status.pageSnapshotStarted'),
-      onCancel: cancelPageSnapshot,
-      status: 'loading',
-      ttlMs: 0,
-    });
-  };
-
-  useEffect(() => {
-    if (!archiveSaving || !archiveRunRef.current) return;
-    publishSnapshotProgressRef.current();
-    const interval = window.setInterval(() => publishSnapshotProgressRef.current(), 1000);
-    return () => window.clearInterval(interval);
-  }, [archiveSaving]);
+  }, [statusMessage]);
 
   useEffect(() => {
     if (!menuOpen && !suggestionsOpen && !browserUseOpen) return;
@@ -1123,15 +922,9 @@ export function DesignBrowserPanel({
     }
     try {
       const result = webviewNode.loadURL?.(url);
-      if (isPromiseLike(result)) {
-        void result.catch((error) => {
-          if (isBenignWebviewLoadAbort(error)) return;
-          setLoadUrl(url);
-        });
-      }
+      if (result instanceof Promise) void result.catch(() => setLoadUrl(url));
       else if (!webviewNode.loadURL) setLoadUrl(url);
-    } catch (error) {
-      if (isBenignWebviewLoadAbort(error)) return;
+    } catch {
       setLoadUrl(url);
     }
   }, [loadUrl, webviewNode]);
@@ -1155,41 +948,6 @@ export function DesignBrowserPanel({
     }
     if (nextUrl !== EMPTY_URL) loadWebviewUrl(nextUrl);
   }, [commitHistory, loadWebviewUrl, recordNavigation]);
-
-  useEffect(() => {
-    if (!navigateRequest) return;
-    if (lastNavigateRequestNonceRef.current === navigateRequest.nonce) return;
-    lastNavigateRequestNonceRef.current = navigateRequest.nonce;
-    navigateTo(navigateRequest.url);
-  }, [navigateRequest, navigateTo]);
-
-  useEffect(() => {
-    if (!attentionRequest || attentionRequest.action !== 'download-page') return;
-    setBrowserUseOpen(false);
-    setSuggestionsOpen(false);
-    setMenuOpen(true);
-    setDownloadAttentionNonce(attentionRequest.nonce);
-    setStatusMessage(null);
-  }, [attentionRequest]);
-
-  const syncFromFallbackFrame = useCallback((frame: HTMLIFrameElement | null) => {
-    if (!frame || loadUrl === EMPTY_URL) return;
-    let nextUrl = loadUrl;
-    let nextTitle = '';
-    try {
-      nextUrl = frame.contentWindow?.location.href || loadUrl;
-      nextTitle = frame.contentDocument?.title?.trim() || '';
-    } catch {
-      // Cross-origin iframe content is expected to reject here. Keep the URL
-      // context and let the display fall back to labelFromUrl().
-    }
-    setCurrentUrl(nextUrl);
-    if (!addressEditing) setAddressValue(nextUrl);
-    commitHistory(nextUrl, { title: nextTitle }, { countVisit: false });
-    recordNavigation(nextUrl, nextTitle, { replacePendingTarget: true });
-    updateCurrentNavigationTitle(nextTitle);
-    setIsLoading(false);
-  }, [addressEditing, commitHistory, loadUrl, recordNavigation, updateCurrentNavigationTitle]);
 
   const updateLoadingState = useCallback((node: WebviewElement | null = webviewNode) => {
     if (!node) {
@@ -1294,12 +1052,11 @@ export function DesignBrowserPanel({
     const showDefaultSuggestions = addressEditing && currentUrl !== EMPTY_URL && sameUrl(addressValue.trim(), currentUrl);
     const referenceSuggestions = REFERENCE_GROUPS.flatMap((group) =>
       group.sites.map((site) => ({
-        detail: `${localizedReferenceGroupTitle(group, t)} - ${localizedReferenceSiteDetail(site, t)}`,
+        detail: `${group.title} - ${site.detail}`,
         id: `site:${site.url}`,
         iconUrl: referenceIconUrl(site.url),
         label: site.label,
-        type: 'reference' as const,
-        typeLabel: t('designBrowser.suggestion.reference'),
+        type: 'Reference' as const,
         url: site.url,
       })),
     );
@@ -1308,8 +1065,7 @@ export function DesignBrowserPanel({
       id: `history:${entry.url}`,
       iconUrl: entry.iconUrl || faviconUrl(entry.url),
       label: entry.title || labelFromUrl(entry.url),
-      type: 'history' as const,
-      typeLabel: t('designBrowser.suggestion.history'),
+      type: 'History' as const,
       url: entry.url,
     }));
     const all = [...historySuggestions, ...referenceSuggestions];
@@ -1319,7 +1075,7 @@ export function DesignBrowserPanel({
         `${item.label} ${item.url} ${item.detail}`.toLocaleLowerCase().includes(query),
       )
       .slice(0, HISTORY_SUGGESTION_LIMIT + referenceSuggestions.length);
-  }, [addressEditing, addressValue, currentUrl, history, t]);
+  }, [addressEditing, addressValue, currentUrl, history]);
 
   const pageHistoryEntry = history.find((entry) => sameUrl(entry.url, currentUrl));
   const pageTitle = pageHistoryEntry?.title || restoredTitleRef.current || labelFromUrl(currentUrl);
@@ -1463,17 +1219,17 @@ export function DesignBrowserPanel({
   async function copyCurrentUrl() {
     const text = isBlank ? '' : currentUrl;
     if (!text) {
-      setStatusMessage(t('designBrowser.status.noUrlToCopy'));
+      setStatusMessage('No URL to copy');
       return;
     }
     await copyText(text);
-    setStatusMessage(t('designBrowser.status.urlCopied'));
+    setStatusMessage('URL copied');
     setMenuOpen(false);
   }
 
   async function openCurrentExternally() {
     if (isBlank || !isHttpLikeUrl(currentUrl)) {
-      setStatusMessage(t('designBrowser.status.openHttpFirst'));
+      setStatusMessage('Open an http URL first');
       return;
     }
     await openExternalUrl(currentUrl);
@@ -1482,10 +1238,10 @@ export function DesignBrowserPanel({
 
   async function takeScreenshot() {
     if (!webviewNode || isBlank) {
-      setStatusMessage(t('designBrowser.status.openBeforeScreenshot'));
+      setStatusMessage('Open a page before taking a screenshot');
       return;
     }
-    setSavingAction('screenshot', true);
+    setSavingAction('screenshot');
     // Close the dropdown first so it cannot appear in a host compositor capture
     // (which screenshots the on-screen window region, not the guest surface).
     setMenuOpen(false);
@@ -1496,7 +1252,7 @@ export function DesignBrowserPanel({
         requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
       );
       const dataUrl = await captureBrowserPageDataUrl();
-      if (!dataUrl) throw new Error(t('designBrowser.status.screenshotFailed'));
+      if (!dataUrl) throw new Error('screenshot capture failed');
       // Put the capture on the clipboard first so it is paste-ready (e.g. into
       // the chat composer) the instant it is taken; the project file is the
       // durable artifact, the clipboard is the fast path.
@@ -1507,21 +1263,17 @@ export function DesignBrowserPanel({
         browserFileName('browser-capture', currentUrl, 'png'),
         base64,
       );
-      if (!file) throw new Error(t('designBrowser.status.screenshotFailed'));
+      if (!file) throw new Error('screenshot save failed');
       await onRefreshFiles();
       // Stay on the browser so the confirmation toast is visible and the page
       // remains in view; the capture is reachable from Design Files. Show
       // whether it reached the clipboard so the user knows it is paste-ready.
-      setStatusMessage(
-        copied
-          ? t('fileViewer.screenshotCopied')
-          : t('designBrowser.status.screenshotSaved'),
-      );
+      setStatusMessage(copied ? 'Screenshot copied to clipboard' : 'Screenshot saved to project');
     } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : t('designBrowser.status.screenshotFailed'));
+      setStatusMessage(error instanceof Error ? error.message : 'Screenshot failed');
     } finally {
       setCaptureChromeHidden(false);
-      setSavingAction('screenshot', false);
+      setSavingAction(null);
       setMenuOpen(false);
     }
   }
@@ -1581,10 +1333,10 @@ export function DesignBrowserPanel({
 
   async function savePageBrief() {
     if (!webviewNode || isBlank) {
-      setStatusMessage(t('designBrowser.status.openBeforeBrief'));
+      setStatusMessage('Open a page before saving a brief');
       return;
     }
-    setSavingAction('brief', true);
+    setSavingAction('brief');
     try {
       const brief = await webviewNode.executeJavaScript<PageBrief>(PAGE_BRIEF_SCRIPT, true);
       const file = await writeProjectTextFile(
@@ -1592,171 +1344,24 @@ export function DesignBrowserPanel({
         browserFileName('browser-brief', currentUrl, 'md'),
         pageBriefMarkdown(brief, currentUrl),
       );
-      if (!file) throw new Error(t('designBrowser.status.briefSaveFailed'));
+      if (!file) throw new Error('brief save failed');
       await onRefreshFiles();
       onOpenFile(file.name);
     } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : t('designBrowser.status.briefSaveFailed'));
+      setStatusMessage(error instanceof Error ? error.message : 'Brief save failed');
     } finally {
-      setSavingAction('brief', false);
+      setSavingAction(null);
       setMenuOpen(false);
-    }
-  }
-
-  async function savePageSnapshot(
-    options: { openAfterSave?: boolean } = {},
-  ): Promise<BrandBrowserPageSnapshotResult> {
-    if (!webviewNode || isBlank) {
-      const message = t('designBrowser.status.openBeforeDownload');
-      setStatusMessage(message);
-      return { ok: false, message };
-    }
-    const controller = new AbortController();
-    const run = {
-      controller,
-      id: archiveRunIdRef.current + 1,
-      startedAt: Date.now(),
-    };
-    archiveRunIdRef.current = run.id;
-    archiveRunRef.current = run;
-    setArchiveElapsedSeconds(0);
-    setSavingAction('archive', true);
-    setDownloadAttentionNonce(null);
-    setMenuOpen(false);
-    // A page that never finishes loading (perpetual spinner) leaves the
-    // capture waiting forever. Halt the pending load first so we snapshot the
-    // DOM that already rendered instead of blocking on a load that may never
-    // settle — what the user would otherwise do by hand via the Stop button.
-    stopLoading();
-    setStatusMessage({
-      message: t('designBrowser.status.pageSnapshotStarted'),
-      source: 'page-snapshot',
-    });
-    try {
-      const capture = await abortablePageSnapshotPromise(
-        webviewNode.executeJavaScript<BrowserPageArchiveCapture>(
-          BROWSER_CAPTURE_PAGE_ARCHIVE_SCRIPT,
-          true,
-        ),
-        controller.signal,
-      );
-      if (!isBrowserPageArchiveCapture(capture)) {
-        throw new Error(t('designBrowser.status.pageSnapshotUnsupported'));
-      }
-      const dir = browserPageArchiveDir(currentUrl);
-      const htmlFile = `${dir}/page.html`;
-      const cssFile = `${dir}/styles.css`;
-      const manifestFile = `${dir}/manifest.json`;
-      const htmlSaved = await abortablePageSnapshotPromise(
-        writeProjectTextFile(projectId, htmlFile, capture.html),
-        controller.signal,
-      );
-      if (!htmlSaved) throw new Error(t('designBrowser.status.pageSnapshotFailed'));
-      const cssSaved = await abortablePageSnapshotPromise(
-        writeProjectTextFile(projectId, cssFile, capture.css ?? ''),
-        controller.signal,
-      );
-      if (!cssSaved) throw new Error(t('designBrowser.status.pageSnapshotFailed'));
-
-      // The snapshot's only consumer is design-system extraction, which reads
-      // back nothing but page.html + styles.css (see ProjectView's
-      // readLocalBrowserPageArchiveSnapshot → extract-from-html, which POSTs
-      // only { html, css, baseUrl }). The daemon then harvests logos/fonts
-      // itself, server-side, from refs inside that HTML/CSS. Downloading the
-      // page's images/fonts/scripts/video here added nothing extraction reads
-      // yet cost a 12s+ fan-out, so we persist the two text files and stop.
-      const manifest: BrowserPageArchiveManifest = {
-        schema: BROWSER_PAGE_ARCHIVE_SCHEMA,
-        capturedAt: Date.now(),
-        title: capture.title || pageTitle,
-        url: capture.url || currentUrl,
-        baseUrl: capture.url || currentUrl,
-        htmlFile,
-        cssFile,
-        manifestFile,
-        resources: [],
-      };
-      const manifestText = JSON.stringify(manifest, null, 2);
-      const savedManifest = await abortablePageSnapshotPromise(
-        writeProjectTextFile(projectId, manifestFile, manifestText),
-        controller.signal,
-      );
-      const savedIndex = await abortablePageSnapshotPromise(
-        writeProjectTextFile(projectId, BROWSER_PAGE_ARCHIVE_INDEX_FILE, manifestText),
-        controller.signal,
-      );
-      if (!savedManifest || !savedIndex) throw new Error(t('designBrowser.status.pageSnapshotFailed'));
-      await abortablePageSnapshotPromise(Promise.resolve(onRefreshFiles()), controller.signal);
-      if (options.openAfterSave !== false) onOpenFile(manifestFile);
-      const message = t('designBrowser.status.pageSnapshotSaved');
-      const elapsedSeconds = pageSnapshotRunElapsedSeconds(run);
-      const canOpenDesignFiles = Boolean(onOpenDesignFiles);
-      setStatusMessage({
-        actionFileName: manifestFile,
-        actionLabel: canOpenDesignFiles
-          ? t('designBrowser.status.viewDesignFiles')
-          : t('workspace.designFiles'),
-        actionTarget: canOpenDesignFiles ? 'design-files' : 'file',
-        message,
-        source: 'page-snapshot',
-      });
-      emitPageSnapshotToast({
-        actionFileName: manifestFile,
-        actionLabel: t('designBrowser.status.viewDesignFiles'),
-        actionTarget: 'design-files',
-        elapsedSeconds,
-        message,
-        status: 'success',
-        ttlMs: 8000,
-      });
-      return {
-        ok: true,
-        baseUrl: manifest.baseUrl,
-        cssFile,
-        htmlFile,
-        indexFile: BROWSER_PAGE_ARCHIVE_INDEX_FILE,
-        manifestFile,
-        message,
-      };
-    } catch (error) {
-      const canceled = isPageSnapshotAbortError(error) || controller.signal.aborted;
-      const message = canceled
-        ? t('designs.status.canceled')
-        : error instanceof Error ? error.message : t('designBrowser.status.pageSnapshotFailed');
-      const elapsedSeconds = pageSnapshotRunElapsedSeconds(run);
-      setStatusMessage({
-        message,
-        source: 'page-snapshot',
-      });
-      emitPageSnapshotToast({
-        elapsedSeconds,
-        message,
-        status: canceled ? 'canceled' : 'error',
-        ttlMs: canceled ? 3000 : 8000,
-      });
-      return { ok: false, message };
-    } finally {
-      if (archiveRunRef.current?.id === run.id) {
-        archiveRunRef.current = null;
-        setSavingAction('archive', false);
-        setMenuOpen(false);
-      }
     }
   }
 
   async function clearCookies(storage: boolean) {
     if (!desktopHostAvailable) {
-      setStatusMessage(t('designBrowser.status.desktopDataUnavailable'));
+      setStatusMessage('Desktop browser data is unavailable here');
       return;
     }
     const result = await clearHostBrowserData({ cookies: true, storage });
-    setStatusMessage(
-      result.ok
-        ? t('designBrowser.status.browserDataCleared')
-        : 'reason' in result
-          ? result.reason
-          : t('designBrowser.status.browserDataClearFailed'),
-    );
+    setStatusMessage(result.ok ? 'Browser data cleared' : 'reason' in result ? result.reason : 'Browser data clear failed');
     if (storage) {
       setHistory([]);
       setLoadUrl(EMPTY_URL);
@@ -1773,7 +1378,7 @@ export function DesignBrowserPanel({
   function clearHistoryOnly() {
     setHistory([]);
     saveHistory(projectId, []);
-    setStatusMessage(t('designBrowser.status.historyCleared'));
+    setStatusMessage('History cleared');
     setMenuOpen(false);
   }
 
@@ -1819,21 +1424,6 @@ export function DesignBrowserPanel({
     setMenuOpen(false);
   }
 
-  // Halt any pending navigation/load, the way Chrome's address-bar X does. A
-  // page stuck mid-load (perpetual spinner) otherwise blocks the user from
-  // acting on what already rendered — and can wedge the snapshot capture below.
-  function stopLoading() {
-    if (!webviewNode) return;
-    try {
-      // <webview>.stop() throws if the guest hasn't attached yet; guard like
-      // reload() does.
-      webviewNode.stop?.();
-    } catch {
-      // Pre-dom-ready: nothing to stop.
-    }
-    setIsLoading(false);
-  }
-
   async function cancelBrowserPicker() {
     pickerRequestIdRef.current += 1;
     try {
@@ -1857,7 +1447,7 @@ export function DesignBrowserPanel({
 
   async function pickBrowserElement(tool: BrowserTool) {
     if (isBlank || !webviewNode) {
-      setStatusMessage(t('designBrowser.status.openPageBeforeTools'));
+      setStatusMessage('Open a page before using browser tools');
       return;
     }
     const requestId = pickerRequestIdRef.current + 1;
@@ -1872,11 +1462,7 @@ export function DesignBrowserPanel({
     setTextDraft('');
     setDrawOverlayOpen(false);
     setMenuOpen(false);
-    setStatusMessage(
-      tool === 'comment'
-        ? t('designBrowser.status.clickElementToComment')
-        : t('designBrowser.status.clickElementToTune'),
-    );
+    setStatusMessage(tool === 'comment' ? 'Click an element to comment' : 'Click an element to tune');
     try {
       await webviewNode.executeJavaScript(BROWSER_CANCEL_PICKER_SCRIPT, true);
       const result = await webviewNode.executeJavaScript<unknown>(
@@ -1886,7 +1472,7 @@ export function DesignBrowserPanel({
       if (pickerRequestIdRef.current !== requestId) return;
       const snapshot = browserSnapshotFromUnknown(result, browserFilePath);
       if (!snapshot) {
-        setStatusMessage(t('designBrowser.status.noElementSelected'));
+        setStatusMessage('No browser element selected');
         setActiveTool(null);
         return;
       }
@@ -1895,14 +1481,14 @@ export function DesignBrowserPanel({
       setActiveTool(tool);
       setStatusMessage(
         tool === 'comment'
-          ? t('designBrowser.status.addBrowserComment')
+          ? 'Add a browser comment'
           : editableProjectHtml
-            ? t('designBrowser.status.tuneElementThenSaveHtml')
-            : t('designBrowser.status.tuneLiveOnly'),
+            ? 'Tune the element, then save HTML'
+            : 'Tune is live only for non-project pages',
       );
     } catch (error) {
       if (pickerRequestIdRef.current !== requestId) return;
-      setStatusMessage(error instanceof Error ? error.message : t('designBrowser.status.pickerFailed'));
+      setStatusMessage(error instanceof Error ? error.message : 'Browser element picker failed');
       setActiveTool(null);
     }
   }
@@ -1956,7 +1542,7 @@ export function DesignBrowserPanel({
         await webviewNode.executeJavaScript(browserApplyStyleScript(target.selector, item, value), true);
       }
     } catch {
-      setStatusMessage(t('designBrowser.status.applyStyleFailed'));
+      setStatusMessage('Could not apply style in browser page');
     }
   }
 
@@ -1968,7 +1554,7 @@ export function DesignBrowserPanel({
     try {
       await webviewNode.executeJavaScript(browserApplyTextScript(target.selector, value), true);
     } catch {
-      setStatusMessage(t('designBrowser.status.editTextFailed'));
+      setStatusMessage('Could not edit text in browser page');
     }
   }
 
@@ -1976,18 +1562,18 @@ export function DesignBrowserPanel({
     if (!webviewNode) return;
     const relativePath = projectRelativePathFromBrowserUrl(currentUrl, resolvedDir);
     if (!relativePath) {
-      setStatusMessage(t('designBrowser.status.onlyProjectHtmlCanSave'));
+      setStatusMessage('Only project-local HTML pages can be saved');
       return;
     }
     setSavingDomEdit(true);
     try {
       const html = await webviewNode.executeJavaScript<string>(BROWSER_SERIALIZE_HTML_SCRIPT, true);
       const file = await writeProjectTextFile(projectId, relativePath, html);
-      if (!file) throw new Error(t('designBrowser.status.htmlSaveFailed'));
+      if (!file) throw new Error('HTML save failed');
       await onRefreshFiles();
-      setStatusMessage(t('designBrowser.status.htmlSaved'));
+      setStatusMessage('HTML changes saved');
     } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : t('designBrowser.status.htmlSaveFailed'));
+      setStatusMessage(error instanceof Error ? error.message : 'HTML save failed');
     } finally {
       setSavingDomEdit(false);
     }
@@ -2017,7 +1603,7 @@ export function DesignBrowserPanel({
 
   async function saveBrowserComment() {
     if (!activeCommentTarget || !onSavePreviewComment) {
-      setStatusMessage(t('designBrowser.status.commentSavingUnavailable'));
+      setStatusMessage('Comment saving is unavailable');
       return;
     }
     const note = commentDraft.trim();
@@ -2031,7 +1617,7 @@ export function DesignBrowserPanel({
         setQueuedCommentNotes([]);
         setBrowserImages([]);
         setBrowserPreviewIndex(null);
-        setStatusMessage(t('designBrowser.status.commentSaved'));
+        setStatusMessage('Browser comment saved');
       }
     } finally {
       setSendingComment(false);
@@ -2040,7 +1626,7 @@ export function DesignBrowserPanel({
 
   async function sendBrowserCommentBatch() {
     if (!activeCommentTarget || !onSendBoardCommentAttachments) {
-      setStatusMessage(t('designBrowser.status.commentSendingUnavailable'));
+      setStatusMessage('Comment sending is unavailable');
       return;
     }
     const notes = [...queuedCommentNotes];
@@ -2157,43 +1743,32 @@ export function DesignBrowserPanel({
       commenting
     />
   ) : null;
-  const statusBaseText = typeof statusMessage === 'string' ? statusMessage : statusMessage?.message ?? '';
-  const statusText = archiveSaving && statusBaseText
-    ? `${statusBaseText} · ${formatBrowserSnapshotElapsed(archiveElapsedSeconds)}`
-    : statusBaseText;
-  const statusAction = statusMessage && typeof statusMessage === 'object' && statusMessage.actionFileName
-    ? statusMessage
-    : null;
-  const statusIsPageSnapshot = Boolean(
-    statusMessage && typeof statusMessage === 'object' && statusMessage.source === 'page-snapshot',
-  );
-  const showStatusMessage = Boolean(statusMessage) && !(statusIsPageSnapshot && onPageSnapshotToast);
 
   return (
-    <section className="design-browser" aria-label={t('designBrowser.aria')}>
+    <section className="design-browser" aria-label="Design Browser">
       <div className="db-chrome" ref={chromeRef}>
         <div className="db-nav">
           <IconTooltipButton
-            label={t('designBrowser.goBack')}
+            label="Go Back"
             disabled={!canGoBack}
             onClick={() => navigateHistoryBy(-1)}
           >
             <Icon name="chevron-left" size={16} />
           </IconTooltipButton>
           <IconTooltipButton
-            label={t('designBrowser.goForward')}
+            label="Go Forward"
             disabled={!canGoForward}
             onClick={() => navigateHistoryBy(1)}
           >
             <Icon name="chevron-right" size={16} />
           </IconTooltipButton>
           <IconTooltipButton
-            label={isLoading ? t('designBrowser.stopLoading') : t('designBrowser.reload')}
+            label={isLoading ? 'Loading...' : 'Reload'}
             className={isLoading ? 'is-spinning' : ''}
             disabled={isBlank}
-            onClick={() => (isLoading ? stopLoading() : reload(false))}
+            onClick={() => reload(false)}
           >
-            <Icon name={isLoading ? 'close' : 'reload'} size={isLoading ? 16 : 15} />
+            <Icon name="reload" size={15} />
           </IconTooltipButton>
           <BrowserViewportControls
             viewport={viewport}
@@ -2228,8 +1803,8 @@ export function DesignBrowserPanel({
                 setSuggestionsOpen(false);
                 window.setTimeout(() => setAddressEditing(false), 80);
               }}
-              placeholder={addressDisplayParts.url ? '' : t('designBrowser.addressPlaceholder')}
-              aria-label={t('designBrowser.addressAria')}
+              placeholder={addressDisplayParts.url ? '' : 'Enter URL or search...'}
+              aria-label="Browser address"
               autoComplete="off"
               spellCheck={false}
             />
@@ -2258,7 +1833,7 @@ export function DesignBrowserPanel({
                 >
                   <span className="db-suggestion-icon">
                     <BrowserSiteIcon
-                      fallback={item.type === 'history' ? 'history' : 'globe'}
+                      fallback={item.type === 'History' ? 'history' : 'globe'}
                       iconUrl={item.iconUrl}
                     />
                   </span>
@@ -2266,7 +1841,7 @@ export function DesignBrowserPanel({
                     <span>{item.label}</span>
                     <small>{item.detail}</small>
                   </span>
-                  <span className="db-suggestion-type">{item.typeLabel}</span>
+                  <span className="db-suggestion-type">{item.type}</span>
                 </button>
               ))}
             </div>
@@ -2277,7 +1852,7 @@ export function DesignBrowserPanel({
             <IconTooltipButton
               label={t('fileViewer.screenshot')}
               wrapperClassName="db-action-item db-action-secondary db-action-screenshot"
-              disabled={isBlank || screenshotSaving}
+              disabled={isBlank || savingAction != null}
               onClick={takeScreenshot}
             >
               <RemixIcon name="screenshot-2-line" size={15} />
@@ -2299,15 +1874,15 @@ export function DesignBrowserPanel({
             <BrowserUseMenu onPick={requestBrowserUsePrompt} />
           ) : null}
           <IconTooltipButton
-            label={t('designBrowser.savePageBrief')}
+            label="Save page brief"
             wrapperClassName="db-action-item db-action-secondary db-action-save"
-            disabled={isBlank || briefSaving}
+            disabled={isBlank || savingAction != null}
             onClick={savePageBrief}
           >
             <Icon name="file-code" size={15} />
           </IconTooltipButton>
           <IconTooltipButton
-            label={t('designBrowser.menu')}
+            label="Browser menu"
             wrapperClassName="db-action-item db-action-menu"
             onClick={() => {
               setMenuOpen((open) => !open);
@@ -2319,91 +1894,44 @@ export function DesignBrowserPanel({
           </IconTooltipButton>
           {menuOpen ? (
             <div className="db-menu" role="menu">
-              <button type="button" role="menuitem" onClick={takeScreenshot} disabled={isBlank || screenshotSaving}>
+              <button type="button" role="menuitem" onClick={takeScreenshot} disabled={isBlank || savingAction != null}>
                 <Icon name="image" size={14} />
-                {t('designBrowser.menu.copyScreenshot')}
+                Copy Screenshot
               </button>
               <button type="button" role="menuitem" onClick={() => reload(true)} disabled={isBlank}>
                 <Icon name="reload" size={14} />
-                {t('designBrowser.menu.hardReload')}
+                Hard Reload
               </button>
               <button type="button" role="menuitem" onClick={copyCurrentUrl} disabled={isBlank}>
                 <Icon name="copy" size={14} />
-                {t('designBrowser.menu.copyUrl')}
+                Copy URL
               </button>
               <button type="button" role="menuitem" onClick={openCurrentExternally} disabled={isBlank || !isHttpLikeUrl(currentUrl)}>
                 <Icon name="external-link" size={14} />
-                {t('designBrowser.menu.openInBrowser')}
+                Open in Browser
               </button>
               <span className="db-menu-separator" />
-              <button
-                type="button"
-                role="menuitem"
-                className={downloadAttentionNonce != null ? 'is-attention' : undefined}
-                onClick={() => void savePageSnapshot({ openAfterSave: false })}
-                disabled={isBlank || archiveSaving}
-                aria-busy={archiveSaving ? true : undefined}
-              >
-                <Icon name="download" size={14} />
-                {t('designBrowser.downloadPage')}
-              </button>
-              <button type="button" role="menuitem" onClick={savePageBrief} disabled={isBlank || briefSaving}>
+              <button type="button" role="menuitem" onClick={savePageBrief} disabled={isBlank || savingAction != null}>
                 <Icon name="file" size={14} />
-                {t('designBrowser.menu.savePageBrief')}
+                Save Page Brief
               </button>
               <button type="button" role="menuitem" onClick={clearHistoryOnly}>
                 <Icon name="history" size={14} />
-                {t('designBrowser.menu.clearBrowsingHistory')}
+                Clear Browsing History
               </button>
               <button type="button" role="menuitem" onClick={() => void clearCookies(false)}>
                 <Icon name="trash" size={14} />
-                {t('designBrowser.menu.clearCookies')}
+                Clear Cookies
               </button>
               <button type="button" role="menuitem" onClick={() => void clearCookies(true)}>
                 <Icon name="trash" size={14} />
-                {t('designBrowser.menu.clearAllData')}
+                Clear All Data
               </button>
             </div>
           ) : null}
         </div>
       </div>
-      {downloadAttentionNonce != null ? (
-        <div className="db-download-assist" role="status">
-          <span className="db-download-assist-icon" aria-hidden>
-            <Icon name="download" size={14} />
-          </span>
-          <span>{t('designBrowser.status.downloadAssistHint')}</span>
-        </div>
-      ) : null}
-      {showStatusMessage ? (
-        <div className="db-status" role="status">
-          <span>{statusText}</span>
-          {archiveSaving ? (
-            <button
-              type="button"
-              className="db-status-action"
-              onClick={cancelPageSnapshot}
-            >
-              {t('common.cancel')}
-            </button>
-          ) : statusAction ? (
-            <button
-              type="button"
-              className="db-status-action"
-              onClick={() => {
-                if (statusAction.actionTarget === 'design-files' && onOpenDesignFiles) {
-                  onOpenDesignFiles();
-                } else {
-                  onOpenFile(statusAction.actionFileName ?? '');
-                }
-                setStatusMessage(null);
-              }}
-            >
-              {statusAction.actionLabel ?? t('fileViewer.open')}
-            </button>
-          ) : null}
-        </div>
-      ) : null}
+      {statusMessage ? <div className="db-status">{statusMessage}</div> : null}
       {browserPreviewImageModal}
       <div className={`db-content db-content-viewport-${isBlank ? 'desktop' : viewport}`}>
         <PreviewDrawOverlay
@@ -2425,7 +1953,6 @@ export function DesignBrowserPanel({
             {isBlank ? (
               <DesignBrowserStart
                 onNavigate={navigateTo}
-                projectId={projectId}
               />
             ) : desktopHostAvailable ? (
               <webview
@@ -2437,11 +1964,7 @@ export function DesignBrowserPanel({
               />
             ) : (
               <div className="db-fallback">
-                <iframe
-                  title={pageTitle}
-                  src={loadUrl}
-                  onLoad={(event) => syncFromFallbackFrame(event.currentTarget)}
-                />
+                <iframe title={pageTitle} src={loadUrl} />
               </div>
             )}
             {commentComposer}
@@ -2461,9 +1984,7 @@ export function DesignBrowserPanel({
           </div>
           {!isBlank && activeTool && !activeCommentTarget ? (
             <div className="db-tool-hint" role="status">
-              {activeTool === 'comment'
-                ? t('designBrowser.status.clickElementToComment')
-                : t('designBrowser.status.clickElementToTune')}
+              {activeTool === 'comment' ? 'Click an element to comment' : 'Click an element to tune'}
             </div>
           ) : null}
         </PreviewDrawOverlay>
@@ -2582,7 +2103,6 @@ function BrowserViewportControls({
   onViewport: (viewport: BrowserViewportId) => void;
   viewport: BrowserViewportId;
 }) {
-  const t = useT();
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const activePreset =
@@ -2607,7 +2127,7 @@ function BrowserViewportControls({
   return (
     <div className="db-viewport-switcher" ref={menuRef}>
       <IconTooltipButton
-        label={browserViewportTitle(t, activePreset.id)}
+        label={activePreset.title}
         disabled={disabled}
         className={open ? 'is-active' : ''}
         onClick={() => setOpen((value) => !value)}
@@ -2617,11 +2137,11 @@ function BrowserViewportControls({
           size={14}
           className="db-viewport-icon"
         />
-        <span className="db-viewport-label">{browserViewportLabel(t, activePreset.id)}</span>
+        <span className="db-viewport-label">{activePreset.label}</span>
         <RemixIcon name="arrow-down-s-line" size={13} />
       </IconTooltipButton>
       {open ? (
-        <div className="db-viewport-menu" role="listbox" aria-label={t('designBrowser.viewportAria')}>
+        <div className="db-viewport-menu" role="listbox" aria-label="Browser viewport">
           {BROWSER_VIEWPORT_PRESETS.map((preset) => (
             <button
               key={preset.id}
@@ -2636,7 +2156,7 @@ function BrowserViewportControls({
             >
               <span className="db-viewport-menu-label">
                 <RemixIcon name={browserViewportIcon(preset.id)} size={14} />
-                <span>{browserViewportLabel(t, preset.id)}</span>
+                <span>{preset.label}</span>
               </span>
               {preset.id === viewport ? <Icon name="check" size={13} /> : null}
             </button>
@@ -2658,10 +2178,9 @@ function BrowserCommentMarkers({
   liveTargets: Map<string, BrowserElementSnapshot>;
   onOpen: (comment: PreviewComment) => void;
 }) {
-  const t = useT();
   if (comments.length === 0) return null;
   return (
-    <div className="db-comment-layer" aria-label={t('designBrowser.comments.aria')}>
+    <div className="db-comment-layer" aria-label="Browser comments">
       {comments.map((comment, index) => {
         const snapshot = liveTargets.get(`comment:${comment.id}`) ?? browserSnapshotFromComment(comment, comment.filePath);
         const bounds = browserOverlayBounds(snapshot);
@@ -2679,7 +2198,7 @@ function BrowserCommentMarkers({
               height: bounds.height,
             }}
             title={`${index + 1}. ${label}: ${comment.note}`}
-            aria-label={t('designBrowser.comments.openFor', { label })}
+            aria-label={`Open browser comment for ${label}`}
             onClick={() => onOpen(comment)}
           >
             <span>{index + 1}</span>
@@ -2747,15 +2266,14 @@ function BrowserCommentComposer({
   sending: boolean;
   target: BrowserElementSnapshot;
 }) {
-  const t = useT();
   return (
-    <div className="comment-popover db-comment-popover" role="dialog" aria-label={t('designBrowser.comment.dialog')}>
+    <div className="comment-popover db-comment-popover" role="dialog" aria-label="Browser comment">
       <div className="comment-popover-head">
         <div>
-          <strong title={target.label}>{target.label || t('designBrowser.comment.elementFallback')}</strong>
+          <strong title={target.label}>{target.label || 'Browser element'}</strong>
           <span title={target.selector}>{target.selector}</span>
         </div>
-        <button type="button" className="ghost" onClick={onClose} aria-label={t('designBrowser.comment.close')}>
+        <button type="button" className="ghost" onClick={onClose} aria-label="Close browser comment">
           <Icon name="close" size={12} />
         </button>
       </div>
@@ -2765,35 +2283,35 @@ function BrowserCommentComposer({
             <div key={`${note}:${index}`} className="board-note-item">
               <span>{note}</span>
               <button type="button" className="ghost" onClick={() => onRemoveQueuedNote(index)}>
-                {t('common.delete')}
+                Remove
               </button>
             </div>
           ))}
         </div>
       ) : null}
       <textarea
-        aria-label={t('designBrowser.comment.noteAria')}
+        aria-label="Browser comment note"
         value={draft}
         onChange={(event) => onDraft(event.target.value)}
-        placeholder={t('designBrowser.comment.placeholder')}
+        placeholder="Describe the change or issue..."
       />
       <div className="comment-popover-actions">
         <div className="comment-popover-actions-start">
           {existing && onDeleteComment ? (
             <button type="button" className="ghost comment-popover-delete" disabled={sending} onClick={() => void onDeleteComment(existing.id)}>
-              {t('common.delete')}
+              Delete
             </button>
           ) : null}
           <button type="button" className="ghost" disabled={sending || !draft.trim()} onClick={onAddDraft}>
-            {t('designBrowser.comment.addNote')}
+            Add note
           </button>
         </div>
         <div className="comment-popover-actions-end">
           <button type="button" className="ghost" disabled={sending || (!draft.trim() && !existing)} onClick={onSaveComment}>
-            {t('designBrowser.comment.saveComment')}
+            Save comment
           </button>
           <button type="button" className="primary" disabled={sending || sendDisabled || (!draft.trim() && notes.length === 0 && !existing)} onClick={onSendBatch}>
-            {sending ? t('designBrowser.comment.sending') : t('designBrowser.comment.sendToChat')}
+            {sending ? 'Sending...' : 'Send to chat'}
           </button>
         </div>
       </div>
@@ -2822,7 +2340,6 @@ function BrowserInspectPanel({
   target: BrowserElementSnapshot;
   textDraft: string;
 }) {
-  const t = useT();
   const draft = browserStyleDraftFromTarget(target);
   const fontSize = parsePx(draft.fontSize, 16);
   const padding = parsePx(draft.paddingTop, 0);
@@ -2832,20 +2349,18 @@ function BrowserInspectPanel({
     <aside className="inspect-panel db-inspect-panel" data-testid="browser-inspect-panel">
       <header className="inspect-panel-head">
         <div className="inspect-panel-title">
-          <strong title={target.label}>
-            {mode === 'edit' ? t('designBrowser.inspect.editTitle') : t('designBrowser.inspect.tuneTitle')}
-          </strong>
+          <strong title={target.label}>{mode === 'edit' ? 'Edit HTML element' : 'Tune browser element'}</strong>
           <code title={target.selector}>{target.label || target.selector}</code>
         </div>
-        <button type="button" className="ghost" onClick={onClose} aria-label={t('designBrowser.inspect.closeTune')}>
+        <button type="button" className="ghost" onClick={onClose} aria-label="Close browser tune">
           <Icon name="close" size={12} />
         </button>
       </header>
 
       <section className="inspect-section">
-        <div className="inspect-section-label">{t('designBrowser.inspect.colors')}</div>
+        <div className="inspect-section-label">Colors</div>
         <div className="inspect-row">
-          <label htmlFor="db-inspect-color">{t('designBrowser.inspect.text')}</label>
+          <label htmlFor="db-inspect-color">Text</label>
           <input
             id="db-inspect-color"
             type="color"
@@ -2855,7 +2370,7 @@ function BrowserInspectPanel({
           <span className="inspect-row-value">{cssColorToHex(draft.color, '#1f1f1f')}</span>
         </div>
         <div className="inspect-row">
-          <label htmlFor="db-inspect-bg">{t('designBrowser.inspect.fill')}</label>
+          <label htmlFor="db-inspect-bg">Fill</label>
           <input
             id="db-inspect-bg"
             type="color"
@@ -2867,9 +2382,9 @@ function BrowserInspectPanel({
       </section>
 
       <section className="inspect-section">
-        <div className="inspect-section-label">{t('designBrowser.inspect.type')}</div>
+        <div className="inspect-section-label">Type</div>
         <div className="inspect-row">
-          <label htmlFor="db-inspect-font-size">{t('designBrowser.inspect.size')}</label>
+          <label htmlFor="db-inspect-font-size">Size</label>
           <input
             id="db-inspect-font-size"
             type="range"
@@ -2881,7 +2396,7 @@ function BrowserInspectPanel({
           <span className="inspect-row-value">{fontSize}px</span>
         </div>
         <div className="inspect-row">
-          <label htmlFor="db-inspect-weight">{t('designBrowser.inspect.weight')}</label>
+          <label htmlFor="db-inspect-weight">Weight</label>
           <select
             id="db-inspect-weight"
             value={draft.fontWeight}
@@ -2899,9 +2414,9 @@ function BrowserInspectPanel({
       </section>
 
       <section className="inspect-section">
-        <div className="inspect-section-label">{t('designBrowser.inspect.spacing')}</div>
+        <div className="inspect-section-label">Spacing</div>
         <div className="inspect-row">
-          <label htmlFor="db-inspect-padding">{t('designBrowser.inspect.pad')}</label>
+          <label htmlFor="db-inspect-padding">Pad</label>
           <input
             id="db-inspect-padding"
             type="range"
@@ -2913,7 +2428,7 @@ function BrowserInspectPanel({
           <span className="inspect-row-value">{padding}px</span>
         </div>
         <div className="inspect-row">
-          <label htmlFor="db-inspect-radius">{t('designBrowser.inspect.radius')}</label>
+          <label htmlFor="db-inspect-radius">Radius</label>
           <input
             id="db-inspect-radius"
             type="range"
@@ -2928,9 +2443,9 @@ function BrowserInspectPanel({
 
       {mode === 'edit' ? (
         <section className="inspect-section">
-          <div className="inspect-section-label">{t('designBrowser.inspect.content')}</div>
+          <div className="inspect-section-label">Content</div>
           <textarea
-            aria-label={t('designBrowser.inspect.elementText')}
+            aria-label="Element text"
             className="db-inspect-text"
             value={textDraft}
             onChange={(event) => onTextDraft(event.target.value)}
@@ -2939,13 +2454,9 @@ function BrowserInspectPanel({
       ) : null}
 
       <footer className="inspect-panel-footer">
-        <button type="button" className="ghost" onClick={onClose}>{t('common.close')}</button>
+        <button type="button" className="ghost" onClick={onClose}>Close</button>
         <button type="button" className="primary" disabled={!canSave || saving} onClick={onSave}>
-          {saving
-            ? t('designBrowser.inspect.saving')
-            : canSave
-              ? t('designBrowser.inspect.saveHtml')
-              : t('designBrowser.inspect.liveOnly')}
+          {saving ? 'Saving...' : canSave ? 'Save HTML' : 'Live only'}
         </button>
       </footer>
     </aside>
@@ -3075,28 +2586,16 @@ const REFERENCE_ALL_CATEGORY = 'all';
 
 function DesignBrowserStart({
   onNavigate,
-  projectId,
 }: {
   onNavigate: (url: string) => void;
-  projectId?: string;
 }) {
-  const t = useT();
-  const analytics = useAnalytics();
   const [activeCategory, setActiveCategory] = useState<string>(REFERENCE_ALL_CATEGORY);
   const [query, setQuery] = useState('');
   const searchRef = useRef<HTMLInputElement | null>(null);
 
-  useEffect(() => {
-    trackReferenceBoardSurfaceView(analytics.track, {
-      page_name: 'file_manager',
-      area: 'reference_board',
-      ...(projectId ? { project_id: projectId } : {}),
-    });
-  }, [analytics.track, projectId]);
-
   const visibleGroups = useMemo(
-    () => filterReferenceGroups(REFERENCE_GROUPS, activeCategory, query, t),
-    [activeCategory, query, t],
+    () => filterReferenceGroups(REFERENCE_GROUPS, activeCategory, query),
+    [activeCategory, query],
   );
   const trimmedQuery = query.trim();
   const hasQuery = trimmedQuery.length > 0;
@@ -3107,36 +2606,16 @@ function DesignBrowserStart({
     searchRef.current?.focus();
   };
 
-  const selectCategory = (categoryId: string) => {
-    setActiveCategory(categoryId);
-    trackReferenceBoardClick(analytics.track, {
-      page_name: 'file_manager',
-      area: 'reference_board',
-      element: 'category_chip',
-      category_id: categoryId as TrackingReferenceBoardCategory,
-      ...(projectId ? { project_id: projectId } : {}),
-    });
-  };
-
-  const openSite = (site: ReferenceSite) => {
-    trackReferenceBoardClick(analytics.track, {
-      page_name: 'file_manager',
-      area: 'reference_board',
-      element: 'open_site',
-      site_id: referenceSiteId(site.url),
-      ...(projectId ? { project_id: projectId } : {}),
-    });
-    onNavigate(site.url);
-  };
-
   return (
     <div className="db-start">
       <div className="db-start-hero">
         <div className="db-start-hero-copy">
-          <div className="db-kicker">{t('designBrowser.reference.kicker')}</div>
-          <h2>{t('designBrowser.reference.title')}</h2>
+          <div className="db-kicker">Open Design browser</div>
+          <h2>Reference Board</h2>
           <p className="db-start-sub">
-            {t('designBrowser.reference.subtitle')}
+            A curated set of references across inspiration, real product UI,
+            motion, color, type, assets, and design systems. Open one to browse
+            it live while gathering design language for the next artifact.
           </p>
         </div>
       </div>
@@ -3145,16 +2624,16 @@ function DesignBrowserStart({
         <div
           className="db-reference-chips"
           role="tablist"
-          aria-label={t('designBrowser.reference.categoryAria')}
+          aria-label="Reference category"
         >
           <button
             type="button"
             role="tab"
             aria-selected={activeCategory === REFERENCE_ALL_CATEGORY}
             className={`db-reference-chip${activeCategory === REFERENCE_ALL_CATEGORY ? ' is-active' : ''}`}
-            onClick={() => selectCategory(REFERENCE_ALL_CATEGORY)}
+            onClick={() => setActiveCategory(REFERENCE_ALL_CATEGORY)}
           >
-            {t('common.all')}
+            All
             <span className="db-reference-chip-count">{REFERENCE_TOTAL}</span>
           </button>
           {REFERENCE_GROUPS.map((group) => (
@@ -3164,9 +2643,9 @@ function DesignBrowserStart({
               role="tab"
               aria-selected={activeCategory === group.id}
               className={`db-reference-chip${activeCategory === group.id ? ' is-active' : ''}`}
-              onClick={() => selectCategory(group.id)}
+              onClick={() => setActiveCategory(group.id)}
             >
-              {localizedReferenceGroupTitle(group, t)}
+              {group.title}
               <span className="db-reference-chip-count">{group.sites.length}</span>
             </button>
           ))}
@@ -3180,16 +2659,6 @@ function DesignBrowserStart({
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            onFocus={() => {
-              // Tracked on focus rather than every keystroke so each
-              // engagement counts once.
-              trackReferenceBoardClick(analytics.track, {
-                page_name: 'file_manager',
-                area: 'reference_board',
-                element: 'search_input',
-                ...(projectId ? { project_id: projectId } : {}),
-              });
-            }}
             onKeyDown={(event) => {
               if (event.key === 'Escape' && query) {
                 event.preventDefault();
@@ -3197,14 +2666,14 @@ function DesignBrowserStart({
                 setQuery('');
               }
             }}
-            placeholder={t('designBrowser.reference.searchPlaceholder')}
-            aria-label={t('designBrowser.reference.searchAria')}
+            placeholder="Search references…"
+            aria-label="Search references"
           />
           {hasQuery ? (
             <button
               type="button"
               className="db-reference-search-clear"
-              aria-label={t('designBrowser.reference.clearSearch')}
+              aria-label="Clear search"
               onClick={() => {
                 setQuery('');
                 searchRef.current?.focus();
@@ -3219,14 +2688,14 @@ function DesignBrowserStart({
       {visibleGroups.length === 0 ? (
         <div className="db-reference-empty" role="status">
           <p className="db-reference-empty-title">
-            {t('designBrowser.reference.noMatches', { query: trimmedQuery })}
+            No references match “{trimmedQuery}”.
           </p>
           <button
             type="button"
             className="db-reference-empty-action"
             onClick={resetFilters}
           >
-            {t('designBrowser.reference.clearFilters')}
+            Clear filters
           </button>
         </div>
       ) : (
@@ -3234,7 +2703,7 @@ function DesignBrowserStart({
           {visibleGroups.map((group) => (
             <section key={group.id} className="db-reference-group">
               <h3>
-                {localizedReferenceGroupTitle(group, t)}
+                {group.title}
                 <span className="db-reference-group-count">{group.sites.length}</span>
               </h3>
               <div className="db-reference-list">
@@ -3244,7 +2713,7 @@ function DesignBrowserStart({
                     className="db-reference-card"
                     onPointerEnter={() => warmBrowserOrigin(site.url)}
                   >
-                    <button type="button" onClick={() => openSite(site)}>
+                    <button type="button" onClick={() => onNavigate(site.url)}>
                       <BrowserSiteIcon
                         className="db-reference-icon"
                         fallback="globe"
@@ -3255,11 +2724,11 @@ function DesignBrowserStart({
                         <small>{hostnameFromUrl(site.url)}</small>
                       </span>
                     </button>
-                    <p>{localizedReferenceSiteDetail(site, t)}</p>
+                    <p>{site.detail}</p>
                     <div className="db-reference-actions">
-                      <button type="button" onClick={() => openSite(site)}>
+                      <button type="button" onClick={() => onNavigate(site.url)}>
                         <Icon name="globe" size={13} />
-                        {t('designBrowser.reference.open')}
+                        Open
                       </button>
                     </div>
                   </article>
@@ -3373,7 +2842,7 @@ export function formatAddressDisplayParts(url: string, title?: string): AddressD
   if (!cleanTitle) return { url };
   const fallback = labelFromUrl(url);
   if (cleanTitle === fallback || cleanTitle === url) return { url };
-  return { url: url.replace(/\/+$/, ''), title: cleanTitle };
+  return { url, title: cleanTitle };
 }
 
 export function formatAddressDisplay(url: string, title?: string): string {
@@ -3389,19 +2858,6 @@ export function hostnameFromUrl(url: string): string {
   } catch {
     return url;
   }
-}
-
-// Slugs a reference site URL into the snake_case `site_id` reported by
-// reference-board analytics: hostname minus the TLD, non-alphanumerics
-// folded into underscores (`land-book.com` → `land_book`,
-// `fonts.google.com` → `fonts_google`).
-function referenceSiteId(url: string): string {
-  const labels = hostnameFromUrl(url).toLowerCase().split('.');
-  const slug = (labels.length > 1 ? labels.slice(0, -1) : labels)
-    .join('_')
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '');
-  return slug || 'unknown';
 }
 
 export function faviconUrl(url: string): string | undefined {
@@ -3522,68 +2978,6 @@ export function browserFileName(prefix: string, url: string, extension: 'md' | '
   const host = labelFromUrl(url).replace(/[^a-z0-9._-]+/gi, '-').replace(/^-+|-+$/g, '') || 'page';
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   return `browser/${prefix}-${host}-${stamp}.${extension}`;
-}
-
-function pageSnapshotAbortError(): Error {
-  const error = new Error('Page snapshot canceled.');
-  error.name = 'AbortError';
-  return error;
-}
-
-function isPageSnapshotAbortError(error: unknown): boolean {
-  return error instanceof Error && error.name === 'AbortError';
-}
-
-function throwIfPageSnapshotAborted(signal?: AbortSignal): void {
-  if (signal?.aborted) throw pageSnapshotAbortError();
-}
-
-function abortablePageSnapshotPromise<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
-  if (signal.aborted) return Promise.reject(pageSnapshotAbortError());
-  return new Promise<T>((resolve, reject) => {
-    let settled = false;
-    const settle = (callback: () => void) => {
-      if (settled) return;
-      settled = true;
-      signal.removeEventListener('abort', onAbort);
-      callback();
-    };
-    const onAbort = () => settle(() => reject(pageSnapshotAbortError()));
-    signal.addEventListener('abort', onAbort, { once: true });
-    promise.then(
-      (value) => settle(() => resolve(value)),
-      (error: unknown) => settle(() => reject(error)),
-    );
-  });
-}
-
-function pageSnapshotRunElapsedSeconds(run: { startedAt: number }): number {
-  return Math.max(0, Math.floor((Date.now() - run.startedAt) / 1000));
-}
-
-function formatBrowserSnapshotElapsed(seconds: number): string {
-  const safe = Math.max(0, Math.floor(seconds));
-  if (safe < 60) return `${safe}s`;
-  const minutes = Math.floor(safe / 60);
-  const remainder = safe % 60;
-  return remainder === 0 ? `${minutes}m` : `${minutes}m ${String(remainder).padStart(2, '0')}s`;
-}
-
-function browserPageArchiveDir(url: string, date = new Date()): string {
-  const host = labelFromUrl(url).replace(/[^a-z0-9._-]+/gi, '-').replace(/^-+|-+$/g, '') || 'page';
-  const stamp = date.toISOString().replace(/[:.]/g, '-');
-  return `browser/snapshots/${host}-${stamp}`;
-}
-
-function isBrowserPageArchiveCapture(value: unknown): value is BrowserPageArchiveCapture {
-  if (!value || typeof value !== 'object') return false;
-  const capture = value as Partial<BrowserPageArchiveCapture>;
-  return (
-    typeof capture.url === 'string' &&
-    typeof capture.html === 'string' &&
-    typeof capture.css === 'string' &&
-    Array.isArray(capture.resources)
-  );
 }
 
 export function pageBriefMarkdown(brief: PageBrief, fallbackUrl: string): string {

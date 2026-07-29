@@ -8,30 +8,24 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { InstalledPluginRecord } from '@open-design/contracts';
 import { useI18n } from '../../i18n';
-import { localizePluginChrome } from '../../i18n/plugin-content';
 import { localizePluginDescription, localizePluginTitle } from '../plugins-home/localization';
 import {
   fetchPluginExampleHtml,
   fetchPluginPreviewHtml,
   type SkillExampleResult,
 } from '../../providers/registry';
-import { PreviewModal, type PreviewSharePopoverItem } from '../PreviewModal';
+import { PreviewModal } from '../PreviewModal';
 import { buildPluginShareUrl } from './PluginShareMenu';
 import { PluginMetaSections } from './PluginMetaSections';
-import { buildPluginUseMenu, pluginUsePrimaryAction } from './pluginUseMenu';
-import type { PluginUseAction } from '../plugins-home/useActions';
 
 interface Props {
   record: InstalledPluginRecord;
   /** When set, fetch this specific example stem; otherwise hit /preview. */
   exampleStem?: string | null;
   onClose: () => void;
-  onUse: (record: InstalledPluginRecord, action: PluginUseAction) => void;
-  onDuplicate?: (record: InstalledPluginRecord) => void;
+  onUse: (record: InstalledPluginRecord) => void;
   isApplying?: boolean;
   hideUseAction?: boolean;
-  // Analytics — forwarded to PreviewModal's share popover.
-  onSharePopoverItemClick?: (item: PreviewSharePopoverItem) => void;
 }
 
 export function PluginExampleDetail({
@@ -39,14 +33,11 @@ export function PluginExampleDetail({
   exampleStem,
   onClose,
   onUse,
-  onDuplicate,
   isApplying,
   hideUseAction,
-  onSharePopoverItemClick,
 }: Props) {
   const { t, locale } = useI18n();
   const localizedTitle = localizePluginTitle(locale, record);
-  const pluginInfoLabel = localizePluginChrome(locale, 'pluginInfo');
   const [html, setHtml] = useState<string | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const [unavailableKind, setUnavailableKind] = useState<string | null>(null);
@@ -135,7 +126,7 @@ export function PluginExampleDetail({
         // developer manifest detail tucked behind a "Developer details"
         // disclosure (variant="minimal"). Fullscreen still gives an
         // immersive view when needed.
-        label: pluginInfoLabel,
+        label: 'Plugin info',
         defaultOpen: false,
         contentKey: record.id,
         content: (
@@ -144,7 +135,7 @@ export function PluginExampleDetail({
               record={record}
               omit={{ description: true }}
               compact
-              heading={pluginInfoLabel}
+              heading="Plugin info"
               variant="minimal"
             />
           </div>
@@ -153,14 +144,13 @@ export function PluginExampleDetail({
       primaryAction={hideUseAction
         ? undefined
         : {
-            label: pluginUsePrimaryAction(record, t).label,
-            onClick: () => onUse(record, pluginUsePrimaryAction(record, t).action),
+            label: 'Use plugin',
+            onClick: () => onUse(record),
             busy: !!isApplying,
-            busyLabel: localizePluginChrome(locale, 'applying'),
+            busyLabel: 'Applying…',
             testId: `plugin-details-use-${record.id}`,
-            menu: buildPluginUseMenu(record, onUse, t, onDuplicate),
           }}
-      onSharePopoverItemClick={onSharePopoverItemClick}
+      hideSidebarToggle
     />
   );
 }

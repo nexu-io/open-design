@@ -7,7 +7,6 @@ import {
   isContentToolName,
   isPartialRedactToolName,
   readLangfuseConfig,
-  readRunTelemetrySinkConfig,
   readTelemetrySinkConfig,
   reportRunCompleted,
   reportRunFeedback,
@@ -17,7 +16,6 @@ import {
   type LangfuseConfig,
   type ReportContext,
   type TelemetrySinkConfig,
-  type VelaTelemetrySinkConfig,
 } from '../src/langfuse-trace.js';
 import { buildPromptStackTelemetry } from '../src/prompt-telemetry.js';
 
@@ -192,17 +190,6 @@ describe('readTelemetrySinkConfig', () => {
     });
   });
 
-  it('migrates the legacy self-host test relay hostname', () => {
-    const cfg = readTelemetrySinkConfig({
-      OPEN_DESIGN_TELEMETRY_RELAY_URL:
-        'https://telemetry-selfhost.open-design.ai/api/langfuse',
-    });
-    expect(cfg).toMatchObject({
-      kind: 'relay',
-      relayUrl: 'https://telemetry-test.open-design.ai/api/langfuse',
-    });
-  });
-
   it('falls back to direct Langfuse config for local smoke tests', () => {
     const cfg = readTelemetrySinkConfig({
       LANGFUSE_PUBLIC_KEY: 'pk',
@@ -211,45 +198,6 @@ describe('readTelemetrySinkConfig', () => {
     expect(cfg).toMatchObject({
       kind: 'langfuse',
       baseUrl: 'https://us.cloud.langfuse.com',
-    });
-  });
-});
-
-describe('readRunTelemetrySinkConfig', () => {
-  it('uses Vela only for completed-run telemetry when a Control Key exists', () => {
-    const cfg = readRunTelemetrySinkConfig(
-      {
-        OPEN_DESIGN_TELEMETRY_RELAY_URL:
-          'https://telemetry.open-design.ai/api/langfuse',
-      },
-      {
-        VELA_CONTROL_KEY: 'ck_test',
-        VELA_API_URL: 'https://vela.example.test/',
-      },
-    );
-
-    expect(cfg).toEqual({
-      kind: 'vela',
-      apiUrl: 'https://vela.example.test',
-      controlKey: 'ck_test',
-      timeoutMs: 20_000,
-      retries: 1,
-    });
-  });
-
-  it('falls back to the anonymous resolver when Vela telemetry is disabled', () => {
-    const cfg = readRunTelemetrySinkConfig(
-      {
-        OPEN_DESIGN_VELA_TELEMETRY: 'off',
-        OPEN_DESIGN_TELEMETRY_RELAY_URL:
-          'https://telemetry.open-design.ai/api/langfuse',
-      },
-      { VELA_CONTROL_KEY: 'ck_test' },
-    );
-
-    expect(cfg).toMatchObject({
-      kind: 'relay',
-      relayUrl: 'https://telemetry.open-design.ai/api/langfuse',
     });
   });
 });
@@ -564,97 +512,6 @@ describe('buildTracePayload', () => {
     );
   });
 
-  it('adds prompt-stack byte and cache-token blame metadata for TTFT diagnosis', () => {
-    const promptTelemetry = buildPromptStackTelemetry({
-      composedPrompt: ['a'.repeat(1000), 'b'.repeat(500), 'c'.repeat(100)].join('\n'),
-      sections: [
-        { kind: 'daemonSystemPrompt', content: 'a'.repeat(1000) },
-        { kind: 'pluginStagePrompt', content: 'b'.repeat(500) },
-        { kind: 'userRequest', content: 'c'.repeat(100) },
-      ],
-    });
-    const ctx = makeCtx({
-      prefs: { metrics: true, content: true, artifactManifest: false },
-      promptTelemetry,
-    });
-    ctx.run = {
-      ...ctx.run,
-      timings: {
-        tool_call_count: 0,
-        total_duration_ms: 89_162,
-        time_to_first_token_ms: 26_613,
-        spawn_to_first_token_ms: 26_491,
-      },
-    };
-
-    const batch = buildTracePayload(ctx);
-    const trace = bodyOf(batch, 'trace-create');
-    const generation = bodyOf(batch, 'generation-create', 'llm');
-
-    expect(trace.metadata.promptStack_topSectionsByBytes).toEqual([
-      expect.objectContaining({
-        kind: 'daemonSystemPrompt',
-        rawBytes: 1000,
-        redactedBytes: 1000,
-        attributionBytes: 1000,
-        attributionShare: 0.625,
-        estimatedInputEffectiveTokens: 929,
-        estimatedCacheCreationInputTokens: 32,
-        estimatedCacheReadInputTokens: 126,
-        estimatedUncachedInputTokens: 772,
-      }),
-      expect.objectContaining({
-        kind: 'pluginStagePrompt',
-        rawBytes: 500,
-        attributionShare: 0.3125,
-        estimatedCacheCreationInputTokens: 15,
-      }),
-      expect.objectContaining({
-        kind: 'userRequest',
-        rawBytes: 100,
-        attributionShare: 0.0625,
-        estimatedCacheCreationInputTokens: 3,
-      }),
-    ]);
-    expect(trace.metadata.cacheCreationTokensBySection).toEqual([
-      {
-        kind: 'daemonSystemPrompt',
-        ordinal: 0,
-        attributionBytes: 1000,
-        estimatedCacheCreationInputTokens: 32,
-      },
-      {
-        kind: 'pluginStagePrompt',
-        ordinal: 1,
-        attributionBytes: 500,
-        estimatedCacheCreationInputTokens: 15,
-      },
-      {
-        kind: 'userRequest',
-        ordinal: 2,
-        attributionBytes: 100,
-        estimatedCacheCreationInputTokens: 3,
-      },
-    ]);
-    expect(trace.metadata.promptStack_ttftAttribution).toMatchObject({
-      method: 'proportional_by_prompt_section_redacted_bytes',
-      time_to_first_token_ms: 26_613,
-      spawn_to_first_token_ms: 26_491,
-      totalAttributionBytes: 1600,
-      sectionCount: 3,
-      primarySectionKind: 'daemonSystemPrompt',
-      primarySectionAttributionShare: 0.625,
-      primarySectionEstimatedCacheCreationInputTokens: 32,
-      cacheTokenSource: 'anthropic',
-    });
-    expect(generation.metadata.promptStack_topSectionsByBytes).toEqual(
-      trace.metadata.promptStack_topSectionsByBytes,
-    );
-    expect(generation.metadata.promptStack_ttftAttribution).toEqual(
-      trace.metadata.promptStack_ttftAttribution,
-    );
-  });
-
   it('omits prompt-stack redactedContent when metrics or content consent is off', () => {
     const promptTelemetry = buildPromptStackTelemetry({
       composedPrompt: '# User request\n\nBuild a card',
@@ -782,10 +639,10 @@ describe('buildTracePayload', () => {
     expect(trace.metadata.manifest_completeness).toBeUndefined();
   });
 
-  it('includes trace-safe object manifests when content telemetry is on', () => {
+  it('includes trace-safe object manifests when the artifact manifest gate is on', () => {
     const batch = buildTracePayload(
       makeCtx({
-        prefs: { metrics: true, content: true },
+        prefs: { metrics: true, content: false, artifactManifest: true },
         attachmentManifest: [
           {
             attachment_id: 'att-1',
@@ -877,7 +734,7 @@ describe('buildTracePayload', () => {
     const batch = buildTracePayload(
       makeCtx({
         artifacts: many,
-        prefs: { metrics: true, content: true },
+        prefs: { metrics: true, content: false, artifactManifest: true },
       }),
     );
     const trace = (batch[0] as any).body;
@@ -910,7 +767,7 @@ describe('buildTracePayload', () => {
       makeCtx({
         artifactManifest: many,
         manifestCompleteness: 'complete',
-        prefs: { metrics: true, content: true },
+        prefs: { metrics: true, content: false, artifactManifest: true },
       }),
     );
     const trace = (batch[0] as any).body;
@@ -945,7 +802,7 @@ describe('buildTracePayload', () => {
       makeCtx({
         attachmentManifest: many,
         manifestCompleteness: 'complete',
-        prefs: { metrics: true, content: true },
+        prefs: { metrics: true, content: false, artifactManifest: true },
         run: {
           runId: 'run-1',
           status: 'succeeded',
@@ -1085,21 +942,6 @@ describe('buildTracePayload', () => {
   it('mirrors runtime + turn fields into trace metadata for query / export', () => {
     const batch = buildTracePayload(
       makeCtx({
-        run: {
-          runId: 'run-1',
-          status: 'succeeded',
-          startedAt: 1_700_000_000_000,
-          endedAt: 1_700_000_004_500,
-          retryAttemptCount: 1,
-          retryFinalResult: 'success',
-          retryOriginalFailure: {
-            failure_category: 'upstream_unavailable',
-            failure_detail: 'stream_disconnected',
-            failure_stage: 'first_token_wait',
-            retryable: true,
-            user_action: 'retry',
-          },
-        },
         turn: { model: 'claude-sonnet-4-5', skillId: 'landing-page' },
         runtime: {
           os: 'linux',
@@ -1109,14 +951,10 @@ describe('buildTracePayload', () => {
           appChannel: 'beta',
           packaged: true,
           clientType: 'web',
-          agentCliVersion: 'claude 3.4.5',
-          runtimeCompanionName: 'opencode',
-          runtimeCompanionVersion: '1.2.3',
         },
       }),
     );
-    const trace = (batch[0] as any).body;
-    const m = trace.metadata;
+    const m = (batch[0] as any).body.metadata;
     expect(m.model).toBe('claude-sonnet-4-5');
     expect(m.skillId).toBe('landing-page');
     expect(m.os).toBe('linux');
@@ -1126,20 +964,8 @@ describe('buildTracePayload', () => {
     expect(m.appChannel).toBe('beta');
     expect(m.packaged).toBe(true);
     expect(m.clientType).toBe('web');
-    expect(m.agentCliVersion).toBe('claude 3.4.5');
-    expect(m.runtimeCompanionName).toBe('opencode');
-    expect(m.runtimeCompanionVersion).toBe('1.2.3');
-    expect(m.retryAttemptCount).toBe(1);
-    expect(m.retryFinalResult).toBe('success');
-    expect(m.retryOriginalFailureCategory).toBe('upstream_unavailable');
-    expect(m.retryOriginalFailureDetail).toBe('stream_disconnected');
-    expect(m.retryOriginalFailureStage).toBe('first_token_wait');
     expect(m.projectId).toBe('proj-1');
     expect(m.agent).toBe('claude');
-    expect(trace.release).toBe('0.5.0');
-    expect(trace.version).toBe('claude 3.4.5');
-    expect(bodyOf(batch, 'span-create', 'agent-run').version).toBe('claude 3.4.5');
-    expect(bodyOf(batch, 'generation-create', 'llm').version).toBe('claude 3.4.5');
   });
 
   it('marks generation.level=ERROR when run failed', () => {
@@ -1163,36 +989,6 @@ describe('buildTracePayload', () => {
     expect(bodyOf(batch, 'event-create', 'run-error').statusMessage).toBe('boom');
     expect((batch[0] as any).body.metadata.error).toBe('boom');
     expect((batch[0] as any).body.metadata.success).toBe(false);
-  });
-
-  it('redacts secrets from every failed-run error field sent to Langfuse', () => {
-    const providerToken = ['nvapi', 'A'.repeat(48)].join('-');
-    const rawError = `Header has invalid value: Bearer ${providerToken}`;
-    const batch = buildTracePayload(
-      makeCtx({
-        run: {
-          runId: 'run-secret-error',
-          status: 'failed',
-          startedAt: 1,
-          endedAt: 2,
-          error: rawError,
-        },
-      }),
-    );
-    const redactedError =
-      'Header has invalid value: Bearer [REDACTED:nvidia_api_key]';
-
-    expect(bodyOf(batch, 'span-create', 'agent-run').statusMessage).toBe(
-      redactedError,
-    );
-    expect(bodyOf(batch, 'generation-create', 'llm').statusMessage).toBe(
-      redactedError,
-    );
-    expect(bodyOf(batch, 'event-create', 'run-error').statusMessage).toBe(
-      redactedError,
-    );
-    expect((batch[0] as any).body.metadata.error).toBe(redactedError);
-    expect(JSON.stringify(batch)).not.toContain(providerToken);
   });
 
   it('uses an agent-runtime span instead of an llm generation for session-init failures with no model usage', () => {
@@ -1556,62 +1352,6 @@ describe('buildTracePayload', () => {
     });
   });
 
-  it('nests agent diagnostics under agent-call without requiring message content', () => {
-    const batch = buildTracePayload(
-      makeCtx({
-        run: {
-          runId: 'run-agent-diagnostics',
-          status: 'succeeded',
-          startedAt: 1_700_000_000_000,
-          endedAt: 1_700_000_004_500,
-          timingMarks: {
-            modelCallStartAt: 1_700_000_000_420,
-          },
-        },
-        agentEvents: [
-          {
-            id: 'diagnostic-acp_artifact_text_suppression-0',
-            name: 'agent-diagnostic:acp_artifact_text_suppression',
-            timestamp: 1_700_000_003_000,
-            input: { source: 'amr', event_type: 'diagnostic' },
-            output: {
-              name: 'acp_artifact_text_suppression',
-              source: 'acp-json-rpc',
-              reason: 'artifact_echo',
-              suppressed_chars: 4096,
-              opened_blocks: 1,
-              closed_blocks: 1,
-            },
-            metadata: {
-              diagnostic_name: 'acp_artifact_text_suppression',
-            },
-          },
-        ],
-      }),
-    );
-
-    expect(
-      bodyOf(batch, 'event-create', 'agent-diagnostic:acp_artifact_text_suppression'),
-    ).toMatchObject({
-      parentObservationId: 'run-agent-diagnostics-phase-agent-call',
-      input: {
-        source: 'amr',
-        event_type: 'diagnostic',
-      },
-      output: {
-        name: 'acp_artifact_text_suppression',
-        source: 'acp-json-rpc',
-        reason: 'artifact_echo',
-        suppressed_chars: 4096,
-        opened_blocks: 1,
-        closed_blocks: 1,
-      },
-      metadata: {
-        diagnostic_name: 'acp_artifact_text_suppression',
-      },
-    });
-  });
-
   it('emits cost and performance diagnostics for cost governance', () => {
     const batch = buildTracePayload(
       makeCtx({
@@ -1826,162 +1566,6 @@ describe('reportRunCompleted', () => {
   afterEach(() => {
     warnSpy.mockRestore();
     vi.restoreAllMocks();
-    vi.unstubAllEnvs();
-  });
-
-  it('posts completed-run telemetry to the authenticated Vela endpoint', async () => {
-    const velaConfig: VelaTelemetrySinkConfig = {
-      kind: 'vela',
-      apiUrl: 'https://vela.example.test',
-      controlKey: 'ck_secret',
-      timeoutMs: 1_000,
-      retries: 0,
-    };
-    const fetchSpy = vi.fn().mockResolvedValue(new Response('', { status: 202 }));
-
-    const result = await reportRunCompleted(
-      makeCtx({
-        prefs: { metrics: true, content: true, artifactManifest: false },
-      }),
-      { config: velaConfig, fetchImpl: fetchSpy as any },
-    );
-
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
-    const [url, init] = fetchSpy.mock.calls[0]!;
-    expect(url).toBe('https://vela.example.test/api/v1/open-design/telemetry');
-    expect(init.headers.Authorization).toBe('Bearer ck_secret');
-    expect(init.headers['Idempotency-Key']).toMatch(/^[a-f0-9]{64}$/);
-    const envelope = JSON.parse(init.body);
-    expect(envelope.version).toBe(1);
-    expect(envelope.installationId).toBe('install-uuid-1');
-    expect(envelope.events.map((event: any) => event.kind)).toEqual([
-      'trace',
-      'span',
-      'generation',
-      'span',
-      'span',
-    ]);
-    expect(envelope.events.every((event: any) => event.kind !== 'score')).toBe(true);
-    expect(result).toEqual({
-      langfuse_expected: true,
-      langfuse_delivery_status: 'accepted',
-    });
-  });
-
-  it('reuses one Vela idempotency key across transport retries', async () => {
-    const fetchSpy = vi
-      .fn()
-      .mockRejectedValueOnce(new Error('network down'))
-      .mockResolvedValueOnce(new Response('', { status: 202 }));
-
-    await reportRunCompleted(
-      makeCtx({
-        prefs: { metrics: true, content: true, artifactManifest: false },
-      }),
-      {
-        config: {
-          kind: 'vela',
-          apiUrl: 'https://vela.example.test',
-          controlKey: 'ck_secret',
-          timeoutMs: 1_000,
-          retries: 1,
-        },
-        fetchImpl: fetchSpy as any,
-      },
-    );
-
-    expect(fetchSpy).toHaveBeenCalledTimes(2);
-    expect(fetchSpy.mock.calls[0]![1].headers['Idempotency-Key']).toBe(
-      fetchSpy.mock.calls[1]![1].headers['Idempotency-Key'],
-    );
-  });
-
-  it('keeps the Vela key stable when the same completed run is rebuilt', async () => {
-    const fetchSpy = vi.fn().mockResolvedValue(new Response('', { status: 202 }));
-    const context = makeCtx({
-      prefs: { metrics: true, content: true, artifactManifest: false },
-    });
-    const opts = {
-      config: {
-        kind: 'vela' as const,
-        apiUrl: 'https://vela.example.test',
-        controlKey: 'ck_secret',
-        timeoutMs: 1_000,
-        retries: 0,
-      },
-      fetchImpl: fetchSpy as any,
-    };
-
-    await reportRunCompleted(context, opts);
-    await reportRunCompleted(context, opts);
-
-    expect(fetchSpy.mock.calls[0]![1].headers['Idempotency-Key']).toBe(
-      fetchSpy.mock.calls[1]![1].headers['Idempotency-Key'],
-    );
-  });
-
-  it('falls back anonymously on an explicit Vela auth rejection', async () => {
-    vi.stubEnv(
-      'OPEN_DESIGN_TELEMETRY_RELAY_URL',
-      'https://telemetry.open-design.ai/api/langfuse',
-    );
-    const fetchSpy = vi
-      .fn()
-      .mockResolvedValueOnce(new Response('', { status: 401 }))
-      .mockResolvedValueOnce(new Response('{}', { status: 200 }));
-
-    const result = await reportRunCompleted(
-      makeCtx({
-        prefs: { metrics: true, content: true, artifactManifest: false },
-      }),
-      {
-        config: {
-          kind: 'vela',
-          apiUrl: 'https://vela.example.test',
-          controlKey: 'ck_expired',
-          timeoutMs: 1_000,
-          retries: 0,
-        },
-        fetchImpl: fetchSpy as any,
-      },
-    );
-
-    expect(fetchSpy.mock.calls.map((call) => call[0])).toEqual([
-      'https://vela.example.test/api/v1/open-design/telemetry',
-      'https://telemetry.open-design.ai/api/langfuse',
-    ]);
-    expect(result.langfuse_delivery_status).toBe('accepted');
-  });
-
-  it('does not anonymously overwrite a throttled Vela delivery', async () => {
-    vi.stubEnv(
-      'OPEN_DESIGN_TELEMETRY_RELAY_URL',
-      'https://telemetry.open-design.ai/api/langfuse',
-    );
-    const fetchSpy = vi.fn().mockResolvedValue(new Response('', { status: 429 }));
-
-    const result = await reportRunCompleted(
-      makeCtx({
-        prefs: { metrics: true, content: true, artifactManifest: false },
-      }),
-      {
-        config: {
-          kind: 'vela',
-          apiUrl: 'https://vela.example.test',
-          controlKey: 'ck_secret',
-          timeoutMs: 1_000,
-          retries: 0,
-        },
-        fetchImpl: fetchSpy as any,
-      },
-    );
-
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
-    expect(result).toEqual({
-      langfuse_expected: true,
-      langfuse_delivery_status: 'failed',
-      langfuse_drop_reason: 'vela_429',
-    });
   });
 
   it('does nothing when metrics gate is off', async () => {
@@ -2004,7 +1588,7 @@ describe('reportRunCompleted', () => {
     const fetchSpy = vi.fn();
     const result = await reportRunCompleted(
       makeCtx({
-        prefs: { metrics: true, content: false },
+        prefs: { metrics: true, content: false, artifactManifest: true },
       }),
       { config: TEST_CONFIG, fetchImpl: fetchSpy as any },
     );
@@ -2569,78 +2153,6 @@ describe('reportRunFeedback', () => {
 
   beforeEach(() => {
     vi.useRealTimers();
-  });
-
-  afterEach(() => {
-    vi.unstubAllEnvs();
-  });
-
-  it('posts feedback scores to Vela when completed-run telemetry uses Vela', async () => {
-    vi.stubEnv('VELA_CONTROL_KEY', 'ck_secret');
-    vi.stubEnv('VELA_API_URL', 'https://vela.example.test');
-    vi.stubEnv(
-      'OPEN_DESIGN_TELEMETRY_RELAY_URL',
-      'https://telemetry.open-design.ai/api/langfuse',
-    );
-    const fetchSpy = vi.fn().mockResolvedValue(new Response(
-      JSON.stringify({
-        ok: true,
-        idempotencyKey: 'feedback-key',
-        receipt: {
-          clientTraceId: 'run-feedback-1',
-          scopedTraceId: 'scoped-run-feedback-1',
-        },
-      }),
-      { status: 202 },
-    ));
-
-    await reportRunFeedback(
-      makeFeedbackCtx({ reasonCodes: ['matched_request'] }),
-      { fetchImpl: fetchSpy as any },
-    );
-
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
-    const [url, init] = fetchSpy.mock.calls[0]!;
-    expect(url).toBe('https://vela.example.test/api/v1/open-design/telemetry');
-    expect(init.headers.Authorization).toBe('Bearer ck_secret');
-    const envelope = JSON.parse(init.body);
-    expect(envelope.installationId).toBe('install-uuid-1');
-    expect(envelope.events.map((event: { kind: string }) => event.kind)).toEqual([
-      'score',
-      'score',
-    ]);
-    expect(envelope.events[0].data).toMatchObject({
-      id: 'run-feedback-1-rating',
-      traceId: 'run-feedback-1',
-      name: 'user_rating',
-      value: 1,
-    });
-    expect(envelope.events[1].data).toMatchObject({
-      id: 'run-feedback-1-reason-matched_request',
-      traceId: 'run-feedback-1',
-      name: 'user_rating_reason',
-      value: 'matched_request',
-    });
-  });
-
-  it('does not fall back anonymously when Vela rejects feedback auth', async () => {
-    vi.stubEnv('VELA_CONTROL_KEY', 'ck_expired');
-    vi.stubEnv('VELA_API_URL', 'https://vela.example.test');
-    vi.stubEnv(
-      'OPEN_DESIGN_TELEMETRY_RELAY_URL',
-      'https://telemetry.open-design.ai/api/langfuse',
-    );
-    const fetchSpy = vi.fn().mockResolvedValue(new Response('', { status: 401 }));
-
-    await reportRunFeedback(
-      makeFeedbackCtx({ reasonCodes: ['matched_request'] }),
-      { fetchImpl: fetchSpy as any },
-    );
-
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
-    expect(fetchSpy.mock.calls[0]![0]).toBe(
-      'https://vela.example.test/api/v1/open-design/telemetry',
-    );
   });
 
   it('skips when metrics consent is off', async () => {

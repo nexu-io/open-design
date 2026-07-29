@@ -14,7 +14,6 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import process from "node:process";
 
-import { domToPptxBundleResource } from "../src/dom-to-pptx-resource.js";
 import { copyBundledResourceTrees } from "../src/resources.js";
 import { copyOptionalVelaCliBinary, resolveOptionalVelaCliBinary } from "../src/vela-cli.js";
 
@@ -28,29 +27,6 @@ async function writeFakeOpenCodeCompanion(
   await chmod(companion, 0o755);
   return companion;
 }
-
-describe("domToPptxBundleResource", () => {
-  it("derives the vendored bundle path from the workspace root, not the caller cwd", async () => {
-    const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-resource-"));
-    const workspaceRoot = join(root, "workspace");
-    const callerCwd = join(root, "caller");
-    const previousCwd = process.cwd();
-
-    try {
-      await mkdir(workspaceRoot, { recursive: true });
-      await mkdir(callerCwd, { recursive: true });
-      process.chdir(callerCwd);
-
-      expect(domToPptxBundleResource({ workspaceRoot })).toEqual({
-        from: join(workspaceRoot, "apps", "desktop", "vendor", "dom-to-pptx", "dom-to-pptx.bundle.js.gz"),
-        to: "dom-to-pptx.bundle.js.gz",
-      });
-    } finally {
-      process.chdir(previousCwd);
-      await rm(root, { force: true, recursive: true });
-    }
-  });
-});
 
 describe("copyBundledResourceTrees", () => {
   it("includes daemon resource trees", async () => {
@@ -111,15 +87,7 @@ describe("copyBundledResourceTrees", () => {
       await mkdir(join(workspaceRoot, "prompt-templates", "image"), {
         recursive: true,
       });
-      await mkdir(join(workspaceRoot, "data", "plugin-previews"), {
-        recursive: true,
-      });
       await writeFile(promptTemplatePath, "{\"id\":\"sample\"}\n", "utf8");
-      await writeFile(
-        join(workspaceRoot, "data", "plugin-previews", "manifest.json"),
-        "{\"previews\":{}}\n",
-        "utf8",
-      );
       await writeFile(designTemplatePath, "# Orbit General\n", "utf8");
       await writeFile(communityPetPath, "{\"name\":\"sample\"}\n", "utf8");
       await writeFile(
@@ -137,15 +105,6 @@ describe("copyBundledResourceTrees", () => {
           "utf8",
         ),
       ).resolves.toBe("{\"id\":\"sample\"}\n");
-      // The baked plugin-preview manifest must land under data/plugin-previews so
-      // the packaged daemon can map plugins to their R2 clips; without it the
-      // gallery silently falls back to live iframes.
-      await expect(
-        readFile(
-          join(resourceRoot, "data", "plugin-previews", "manifest.json"),
-          "utf8",
-        ),
-      ).resolves.toBe("{\"previews\":{}}\n");
       await expect(
         readFile(
           join(resourceRoot, "design-templates", "orbit-general", "SKILL.md"),
@@ -199,8 +158,7 @@ describe("copyOptionalVelaCliBinary", () => {
       const target = join(resourceRoot, "bin", process.platform === "win32" ? "vela.exe" : "vela");
       expect(copied?.target).toBe(target);
       await expect(access(target)).resolves.toBeUndefined();
-      const openCodeName = process.platform === "win32" ? "opencode.exe" : "opencode";
-      await expect(access(join(resourceRoot, "bin", "libexec", "opencode", openCodeName))).resolves.toBeUndefined();
+      await expect(access(join(resourceRoot, "bin", "libexec", "opencode", "opencode"))).resolves.toBeUndefined();
     } finally {
       await rm(root, { force: true, recursive: true });
     }

@@ -151,11 +151,6 @@ export const PluginManifestSchema = z.object({
   }).passthrough().optional(),
   license:  z.string().optional(),
   homepage: z.string().optional(),
-  // ISO 8601 timestamp of when the plugin was first published to its
-  // catalog. Shipped metadata — unlike the installed-record timestamps it
-  // does not depend on when a particular machine seeded its database, so
-  // recency ordering survives fresh installs and catalog re-stamps.
-  publishedAt: z.string().optional(),
   icon:     z.string().optional(),
   tags:     z.array(z.string()).optional(),
   compat: z.object({
@@ -177,10 +172,6 @@ export const PluginManifestSchema = z.object({
       poster: z.string().optional(),
       video:  z.string().optional(),
       gif:    z.string().optional(),
-      // How the gallery bakes this HTML preview's hover clip: 'scroll' (vertical
-      // pan), 'deck' (walk a horizontal slideshow), 'static' (hold a single
-      // screen). Omit to auto-detect from the page's scroll height.
-      motion: z.enum(['scroll', 'deck', 'static']).optional(),
     }).passthrough().optional(),
     useCase: z.object({
       query: z.union([z.string(), LocalizedTextSchema]).optional(),

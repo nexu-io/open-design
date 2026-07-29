@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Dialog } from '@open-design/components';
 import {
   PLUGIN_SHARE_ACTION_PLUGIN_IDS,
   resolveLocalizedText,
@@ -10,9 +9,6 @@ import {
 import { useAnalytics } from '../analytics/provider';
 import {
   trackPageView,
-  trackPluginImportModalClick,
-  trackPluginImportModalSurfaceView,
-  trackPluginImportResult,
   trackPluginsAvailableTabClick,
   trackPluginsInstalledTabClick,
   trackPluginsSourcesTabClick,
@@ -22,7 +18,6 @@ import {
 import {
   addPluginMarketplace,
   applyPlugin,
-  duplicatePluginAsProject,
   installPluginSource,
   listPluginMarketplaces,
   listPlugins,
@@ -48,7 +43,6 @@ import { localizePluginDescription, localizePluginTitle } from './plugins-home/l
 import { copyToClipboard } from '../lib/copy-to-clipboard';
 import type { PluginUseAction } from './plugins-home/useActions';
 import { AnimatePresence } from 'motion/react';
-import { navigate } from '../router';
 
 type PluginsTab = 'installed' | 'available' | 'sources' | 'team';
 
@@ -133,7 +127,6 @@ export function PluginsView({
   const [activeTab, setActiveTab] = useState<PluginsTab>('installed');
   const [importOpen, setImportOpen] = useState(false);
   const [pendingApplyId, setPendingApplyId] = useState<string | null>(null);
-  const [pendingDuplicatePluginId, setPendingDuplicatePluginId] = useState<string | null>(null);
   const [pendingInstallEntry, setPendingInstallEntry] = useState<string | null>(null);
   const [pendingSourceAction, setPendingSourceAction] = useState<string | null>(null);
   const [pendingShareAction, setPendingShareAction] = useState<{
@@ -222,30 +215,6 @@ export function PluginsView({
       ok: true,
       message: `${record.title} is ready. Use it from Home with @ search or pick it from the gallery.`,
     });
-  }
-
-  async function handleDuplicatePlugin(record: InstalledPluginRecord) {
-    setPendingDuplicatePluginId(record.id);
-    setNotice(null);
-    try {
-      const result = await duplicatePluginAsProject(record.id, {
-        name: localizePluginTitle(locale, record),
-      });
-      setDetailsRecord(null);
-      navigate({
-        kind: 'project',
-        projectId: result.projectId,
-        conversationId: result.conversationId,
-        fileName: result.relPath,
-      });
-    } catch {
-      setNotice({
-        ok: false,
-        message: t('pluginCard.duplicateFailed'),
-      });
-    } finally {
-      setPendingDuplicatePluginId(null);
-    }
   }
 
   async function handleCreatePluginShareTask(
@@ -409,7 +378,6 @@ export function PluginsView({
             loading={false}
             activePluginId={activePlugin?.record.id ?? null}
             pendingApplyId={pendingApplyId}
-            pendingDuplicateId={pendingDuplicatePluginId}
             pendingShareAction={pendingShareAction}
             onUse={(record, action) => {
               trackPluginsInstalledTabClick(analytics.track, {
@@ -438,7 +406,6 @@ export function PluginsView({
               }
               void handleUsePlugin(record, action);
             }}
-            onDuplicate={(record) => void handleDuplicatePlugin(record)}
             onOpenDetails={(record) => {
               trackPluginsInstalledTabClick(analytics.track, {
                 page_name: 'plugins',
@@ -574,8 +541,7 @@ export function PluginsView({
           <PluginDetailsModal
             record={detailsRecord}
             onClose={() => setDetailsRecord(null)}
-            onUse={(record, action) => void handleUsePlugin(record, action)}
-            onDuplicate={(record) => void handleDuplicatePlugin(record)}
+            onUse={(record) => void handleUsePlugin(record, 'use')}
             isApplying={pendingApplyId === detailsRecord.id}
           />
         ) : null}
@@ -649,14 +615,17 @@ function PluginShareConfirmModal({
   const stagedPath = `plugin-source/${pluginShareSlug(sourceRecord.id)}`;
 
   return (
-    <Dialog
-      backdropClassName="plugin-details-modal-backdrop plugin-share-confirm"
-      className="plugin-details-modal plugin-share-confirm__panel"
-      includeChromeClassName={false}
-      ariaLabel={`${actionTitle} for ${sourceRecord.title}`}
-      onClose={pending ? undefined : onClose}
+    <div
+      className="plugin-details-modal-backdrop plugin-share-confirm"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${actionTitle} for ${sourceRecord.title}`}
+      onClick={(event) => {
+        if (!pending && event.target === event.currentTarget) onClose();
+      }}
       data-testid="plugin-share-confirm-modal"
     >
+      <div className="plugin-details-modal plugin-share-confirm__panel">
         <header className="plugin-details-modal__head">
           <div className="plugin-details-modal__head-titles">
             <div className="plugin-details-modal__head-row">
@@ -762,7 +731,8 @@ function PluginShareConfirmModal({
             {pending ? 'Starting…' : details.confirmLabel}
           </button>
         </footer>
-    </Dialog>
+      </div>
+    </div>
   );
 }
 
@@ -1545,58 +1515,22 @@ function PluginImportModal({
   onUploadZip: (file: File) => Promise<PluginInstallOutcome>;
   onUploadFolder: (files: File[]) => Promise<PluginInstallOutcome>;
 }) {
-  const analytics = useAnalytics();
-  const importModalViewFiredRef = useRef(false);
-  useEffect(() => {
-    if (importModalViewFiredRef.current) return;
-    importModalViewFiredRef.current = true;
-    trackPluginImportModalSurfaceView(analytics.track, {
-      page_name: 'plugins',
-      area: 'import_modal',
-    });
-  }, [analytics.track]);
   const [kind, setKind] = useState<ImportKind>('github');
   const [source, setSource] = useState('');
   const [zipFile, setZipFile] = useState<File | null>(null);
   const [folderFiles, setFolderFiles] = useState<File[]>([]);
   const [working, setWorking] = useState(false);
 
-  function selectKind(next: ImportKind) {
-    trackPluginImportModalClick(analytics.track, {
-      page_name: 'plugins',
-      area: 'import_modal',
-      element: 'source_tab',
-      import_source: next,
-    });
-    setKind(next);
-  }
-
   async function runImport() {
-    trackPluginImportModalClick(analytics.track, {
-      page_name: 'plugins',
-      area: 'import_modal',
-      element: 'import',
-      import_source: kind,
-    });
     setWorking(true);
     try {
-      let outcome: PluginInstallOutcome | null = null;
       if (kind === 'github') {
         const trimmed = source.trim();
-        if (trimmed) outcome = await onInstallSource(trimmed);
+        if (trimmed) await onInstallSource(trimmed);
       } else if (kind === 'zip' && zipFile) {
-        outcome = await onUploadZip(zipFile);
+        await onUploadZip(zipFile);
       } else if (kind === 'folder' && folderFiles.length > 0) {
-        outcome = await onUploadFolder(folderFiles);
-      }
-      if (outcome) {
-        trackPluginImportResult(analytics.track, {
-          page_name: 'plugins',
-          area: 'import_modal',
-          import_source: kind,
-          result: outcome.ok ? 'success' : 'failed',
-          ...(outcome.ok ? {} : { error_code: outcome.message ?? 'unknown' }),
-        });
+        await onUploadFolder(folderFiles);
       }
     } finally {
       setWorking(false);
@@ -1638,21 +1572,21 @@ function PluginImportModal({
             icon="github"
             title="From GitHub"
             body="Install github:owner/repo paths."
-            onClick={() => selectKind('github')}
+            onClick={() => setKind('github')}
           />
           <ImportChoice
             active={kind === 'zip'}
             icon="upload"
             title="Upload zip"
             body="Upload a plugin archive."
-            onClick={() => selectKind('zip')}
+            onClick={() => setKind('zip')}
           />
           <ImportChoice
             active={kind === 'folder'}
             icon="folder"
             title="Upload folder"
             body="Upload a plugin directory."
-            onClick={() => selectKind('folder')}
+            onClick={() => setKind('folder')}
           />
         </nav>
 
@@ -1724,14 +1658,7 @@ function PluginImportModal({
           <button
             type="button"
             className="plugins-view__secondary"
-            onClick={() => {
-              trackPluginImportModalClick(analytics.track, {
-                page_name: 'plugins',
-                area: 'import_modal',
-                element: 'cancel',
-              });
-              onClose();
-            }}
+            onClick={onClose}
           >
             Cancel
           </button>

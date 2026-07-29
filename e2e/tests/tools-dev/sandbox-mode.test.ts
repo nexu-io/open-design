@@ -8,7 +8,7 @@ import { describe, expect, test } from 'vitest';
 
 import { requestJson } from '@/vitest/http';
 import { startRun, waitForRunStatus } from '@/vitest/runs';
-import { createSmokeSuite } from '@/vitest/suite';
+import { createSmokeSuite } from '@/vitest/smoke-suite';
 
 type DaemonStatusResponse = {
   dataDir?: string;

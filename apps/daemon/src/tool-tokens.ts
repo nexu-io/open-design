@@ -11,8 +11,6 @@ export const CHAT_TOOL_ENDPOINTS = [
   '/api/tools/connectors/execute',
   '/api/tools/design-systems/read',
   '/api/tools/media/generate',
-  '/api/tools/library/search',
-  '/api/tools/library/apply',
 ] as const;
 
 export const CHAT_TOOL_OPERATIONS = [
@@ -24,8 +22,6 @@ export const CHAT_TOOL_OPERATIONS = [
   'connectors:execute',
   'design-systems:read',
   'media:generate',
-  'library:search',
-  'library:apply',
 ] as const;
 
 export type ToolEndpoint = (typeof CHAT_TOOL_ENDPOINTS)[number] | (string & {});

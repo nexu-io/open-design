@@ -9,7 +9,6 @@ import type {
   ObjectManifestCompleteness,
 } from './langfuse-trace.js';
 import { INPUT_MAX_BYTES } from './langfuse-trace.js';
-import { normalizeOpenDesignTelemetryRelayUrl } from './integrations/telemetry-relay.js';
 import { mimeFor, readProjectFile, resolveProjectFilePath } from './projects.js';
 
 const OBJECT_RELAY_MARKER_HEADER = 'X-Open-Design-Telemetry';
@@ -137,19 +136,7 @@ function storageRef(projectId: string, runId: string, objectClass: ObjectClass, 
 
 function inferRelayUrl(env: NodeJS.ProcessEnv): string | null {
   const explicit = env.OPEN_DESIGN_OBJECT_RELAY_URL?.trim();
-  if (explicit) return normalizeOpenDesignTelemetryRelayUrl(explicit);
-  const rawTelemetryRelayUrl = env.OPEN_DESIGN_TELEMETRY_RELAY_URL?.trim();
-  if (!rawTelemetryRelayUrl) return null;
-  const telemetryRelayUrl = normalizeOpenDesignTelemetryRelayUrl(rawTelemetryRelayUrl);
-  try {
-    const url = new URL(telemetryRelayUrl);
-    if (!/\/api\/langfuse\/?$/u.test(url.pathname)) return null;
-    url.pathname = url.pathname.replace(/\/api\/langfuse\/?$/u, '/api/objects/batch');
-    return url.toString().replace(/\/+$/, '');
-  } catch {
-    const derived = telemetryRelayUrl.replace(/\/api\/langfuse\/?$/u, '/api/objects/batch');
-    return derived === telemetryRelayUrl ? null : derived.replace(/\/+$/, '');
-  }
+  if (explicit) return explicit.replace(/\/+$/, '');
   return null;
 }
 
@@ -644,7 +631,8 @@ export async function buildTraceObjectManifests(
 ): Promise<TraceObjectUploadManifests | undefined> {
   if (
     opts.prefs.metrics !== true ||
-    opts.prefs.content !== true
+    opts.prefs.content !== true ||
+    opts.prefs.artifactManifest !== true
   ) {
     return undefined;
   }

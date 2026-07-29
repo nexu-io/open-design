@@ -1,26 +1,17 @@
 // @vitest-environment jsdom
 
-import type { ComponentProps } from 'react';
-import { act, cleanup, render, waitFor } from '@testing-library/react';
+import { cleanup, render, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ProjectView,
   clearStreamingConversationMarker,
   finalizeActiveAssistantMessagesOnStop,
   findExistingArtifactProjectFile,
-  findExistingNonHtmlArtifactProjectFile,
-  findSameTurnNonHtmlWriteForRecoveredArtifact,
-  hasRecoverableArtifactMessage,
   resolveRetryTarget,
   resolveSucceededRunStatus,
   selectPrimaryProjectFile,
   shouldClearActiveRunRefs,
-  shouldReplayTerminalRunMessage,
 } from '../../src/components/ProjectView';
-import {
-  BRAND_BROWSER_TAB_ID,
-  registerBrandBrowser,
-} from '../../src/runtime/brand-browser-bridge';
 import type { Artifact, ChatMessage, ProjectFile } from '../../src/types';
 
 const listConversations = vi.fn();
@@ -42,13 +33,8 @@ const saveMessage = vi.fn();
 const createConversation = vi.fn();
 const patchConversation = vi.fn();
 const patchProject = vi.fn();
-const patchPreviewCommentStatus = vi.fn();
 const saveTabs = vi.fn();
 const writeProjectTextFile = vi.fn();
-const fetchProjectFileText = vi.fn();
-const cancelBrandExtraction = vi.fn();
-const continueBrandExtraction = vi.fn();
-const originalFetch = globalThis.fetch;
 
 const replayArtifact: Artifact = {
   identifier: 'real-daemon-smoke',
@@ -96,18 +82,6 @@ function projectFile(
   };
 }
 
-async function createGenericDisconnectError() {
-  const { createGenericDaemonDisconnectError } = await import('../../src/providers/daemon');
-  return createGenericDaemonDisconnectError();
-}
-
-async function createCodeOnlyGenericDisconnectError(message = 'code-only generic disconnect') {
-  const { GENERIC_DAEMON_DISCONNECT_CODE } = await import('../../src/providers/daemon');
-  const error = new Error(message) as Error & { code?: string };
-  error.code = GENERIC_DAEMON_DISCONNECT_CODE;
-  return error;
-}
-
 vi.mock('../../src/i18n', () => ({
   useI18n: () => ({
     locale: 'en',
@@ -121,19 +95,13 @@ vi.mock('../../src/providers/anthropic', () => ({
   streamMessage: vi.fn(),
 }));
 
-vi.mock('../../src/providers/daemon', async () => {
-  const actual = await vi.importActual<typeof import('../../src/providers/daemon')>(
-    '../../src/providers/daemon',
-  );
-  return {
-    ...actual,
+vi.mock('../../src/providers/daemon', () => ({
   fetchChatRunStatus: (...args: unknown[]) => fetchChatRunStatus(...args),
   listActiveChatRuns: (...args: unknown[]) => listActiveChatRuns(...args),
   listProjectRuns: (...args: unknown[]) => listProjectRuns(...args),
   reattachDaemonRun: (...args: unknown[]) => reattachDaemonRun(...args),
   streamViaDaemon: (...args: unknown[]) => streamViaDaemon(...args),
-  };
-});
+}));
 
 vi.mock('../../src/providers/registry', () => ({
   deletePreviewComment: vi.fn(),
@@ -142,9 +110,8 @@ vi.mock('../../src/providers/registry', () => ({
   fetchProjectDesignSystemPackageAudit: (...args: unknown[]) => fetchProjectDesignSystemPackageAudit(...args),
   fetchLiveArtifacts: (...args: unknown[]) => fetchLiveArtifacts(...args),
   fetchProjectFiles: (...args: unknown[]) => fetchProjectFiles(...args),
-  fetchProjectFileText: (...args: unknown[]) => fetchProjectFileText(...args),
   fetchSkill: (...args: unknown[]) => fetchSkill(...args),
-  patchPreviewCommentStatus: (...args: unknown[]) => patchPreviewCommentStatus(...args),
+  patchPreviewCommentStatus: vi.fn(),
   upsertPreviewComment: vi.fn(),
   writeProjectTextFile: (...args: unknown[]) => writeProjectTextFile(...args),
 }));
@@ -152,15 +119,6 @@ vi.mock('../../src/providers/registry', () => ({
 vi.mock('../../src/providers/project-events', () => ({
   useProjectFileEvents: vi.fn(),
 }));
-
-vi.mock('../../src/runtime/brands', async () => {
-  const actual = await vi.importActual<typeof import('../../src/runtime/brands')>('../../src/runtime/brands');
-  return {
-    ...actual,
-    cancelBrandExtraction: (...args: unknown[]) => cancelBrandExtraction(...args),
-    continueBrandExtraction: (...args: unknown[]) => continueBrandExtraction(...args),
-  };
-});
 
 vi.mock('../../src/router', () => ({
   navigate: vi.fn(),
@@ -193,19 +151,12 @@ const chatPaneSpy = vi.fn();
 vi.mock('../../src/components/ChatPane', () => ({
   ChatPane: (props: Record<string, unknown>) => {
     chatPaneSpy(props);
-    return (
-      <div className="pane">
-        <div className={`chat-log-wrap${props.chatLogTray ? ' has-chat-log-tray' : ''}`}>
-          {props.chatLogTray as ComponentProps<'div'>['children']}
-        </div>
-      </div>
-    );
+    return null;
   },
 }));
 
 const fileWorkspaceSpy = vi.fn();
 vi.mock('../../src/components/FileWorkspace', () => ({
-  DESIGN_SYSTEM_TAB: '__design_system__',
   FileWorkspace: (props: Record<string, unknown>) => {
     fileWorkspaceSpy(props);
     return null;
@@ -222,13 +173,6 @@ async function waitForReadyChatPaneProps() {
     expect(chatPaneSpy.mock.calls.at(-1)?.[0]?.sendDisabled).toBe(false);
   });
   return chatPaneSpy.mock.calls.at(-1)?.[0] as {
-    onBrandBrowserAssistConfirm?: (card: {
-      brandId: string;
-      browserTabId?: string;
-      reason?: string;
-      url?: string;
-    }) => Promise<{ ok: boolean; action?: string; message?: string } | void> | { ok: boolean; action?: string; message?: string } | void;
-    onContinueBrandExtraction?: () => void;
     onSend?: (prompt: string, attachments: unknown[], comments: unknown[]) => Promise<void>;
     initialDraft?: string;
   };
@@ -256,140 +200,6 @@ describe('terminal replay artifact recovery', () => {
       .toBeNull();
     expect(findExistingArtifactProjectFile(replayArtifact, [stale, current], { minMtime: runCreatedAt }))
       .toBe(current);
-  });
-
-  it('only reuses html pointer targets created at or after the current run started', () => {
-    const runCreatedAt = 1_000;
-    const pointerArtifact: Artifact = {
-      identifier: 'real-daemon-smoke',
-      artifactType: 'text/html',
-      title: 'Real Daemon Smoke',
-      html: 'See index.html',
-    };
-    const staleTarget = projectFile('index.html', 'html', runCreatedAt - 1);
-    const currentTarget = projectFile('index.html', 'html', runCreatedAt + 1);
-
-    expect(
-      findExistingArtifactProjectFile(
-        pointerArtifact,
-        [staleTarget],
-        { minMtime: runCreatedAt },
-      ),
-    ).toBeNull();
-    expect(
-      findExistingArtifactProjectFile(
-        pointerArtifact,
-        [staleTarget, currentTarget],
-        { minMtime: runCreatedAt },
-      ),
-    ).toBe(currentTarget);
-  });
-
-  it('reuses same-turn non-html artifact files with their declared extension after content matches', async () => {
-    const cssArtifact: Artifact = {
-      identifier: 'theme',
-      artifactType: 'text/css',
-      title: 'Theme',
-      html: 'body { color: red; }',
-    };
-    const cssFile = projectFile('theme.css', 'code', 1_000);
-
-    expect(findExistingArtifactProjectFile(cssArtifact, [cssFile])).toBeNull();
-    expect(findExistingNonHtmlArtifactProjectFile(cssArtifact, [cssFile])).toBeNull();
-    await expect(
-      findSameTurnNonHtmlWriteForRecoveredArtifact({
-        artifact: cssArtifact,
-        producedFiles: [cssFile],
-        readProjectText: async () => 'body { color: red; }',
-      }),
-    ).resolves.toBe(cssFile);
-  });
-
-  it('reuses same-turn non-html artifact files with collision suffixes after content matches', async () => {
-    const cssArtifact: Artifact = {
-      identifier: '',
-      artifactType: 'text/css',
-      title: 'Theme',
-      html: 'body { color: red; }',
-    };
-    const cssFile = projectFile('theme-2.css', 'code', 1_000);
-
-    expect(findExistingArtifactProjectFile(cssArtifact, [cssFile])).toBeNull();
-    expect(findExistingNonHtmlArtifactProjectFile(cssArtifact, [cssFile])).toBeNull();
-    await expect(
-      findSameTurnNonHtmlWriteForRecoveredArtifact({
-        artifact: cssArtifact,
-        producedFiles: [cssFile],
-        readProjectText: async () => 'body { color: red; }',
-      }),
-    ).resolves.toBe(cssFile);
-  });
-
-  it('does not reuse same-turn non-html filename matches when contents differ', async () => {
-    const cssArtifact: Artifact = {
-      identifier: '',
-      artifactType: 'text/css',
-      title: 'Theme',
-      html: 'body { color: red; }',
-    };
-    const cssFile = projectFile('theme.css', 'code', 1_000);
-
-    await expect(
-      findSameTurnNonHtmlWriteForRecoveredArtifact({
-        artifact: cssArtifact,
-        producedFiles: [cssFile],
-        readProjectText: async () => 'body { color: blue; }',
-      }),
-    ).resolves.toBeNull();
-  });
-
-  it('reuses same-turn non-html collision suffixes only when contents match', async () => {
-    const cssArtifact: Artifact = {
-      identifier: '',
-      artifactType: 'text/css',
-      title: 'Theme',
-      html: 'body { color: red; }',
-    };
-    const cssFile = projectFile('theme-2.css', 'code', 1_000);
-
-    await expect(
-      findSameTurnNonHtmlWriteForRecoveredArtifact({
-        artifact: cssArtifact,
-        producedFiles: [cssFile],
-        readProjectText: async () => 'body { color: red; }',
-      }),
-    ).resolves.toBe(cssFile);
-  });
-
-  it('does not reuse same-turn html files before checking recovered content', () => {
-    const htmlArtifact: Artifact = {
-      identifier: 'landing',
-      artifactType: 'text/html',
-      title: 'Landing',
-      html: '<!doctype html><html><body>final artifact</body></html>',
-    };
-    const sameNameHtmlFile = projectFile('landing.html', 'html', 1_000);
-
-    expect(findExistingArtifactProjectFile(htmlArtifact, [sameNameHtmlFile]))
-      .toBe(sameNameHtmlFile);
-    expect(findExistingNonHtmlArtifactProjectFile(htmlArtifact, [sameNameHtmlFile]))
-      .toBeNull();
-  });
-
-  it('treats standalone HTML terminal assistant messages as recoverable', () => {
-    expect(
-      hasRecoverableArtifactMessage({
-        id: 'msg-standalone-html',
-        role: 'assistant',
-        content:
-          '<!doctype html><html><head><title>Standalone</title></head>' +
-          '<body><h1>Standalone</h1><p>Recovered artifact output.</p></body></html>',
-        createdAt: Date.now(),
-        runId: 'run-standalone-html',
-        runStatus: 'succeeded',
-        producedFiles: [],
-      }),
-    ).toBe(true);
   });
 });
 
@@ -449,13 +259,11 @@ describe('retry target resolution', () => {
     });
   });
 
-  it('keeps earlier delivery-failure retry attempts visible while reusing the original user turn', () => {
+  it('keeps earlier failed retry attempts visible while reusing the original user turn', () => {
     const firstFailure: ChatMessage = {
       ...failedAssistant,
       id: 'assistant-1',
       content: 'First attempt produced partial output',
-      runStatus: 'succeeded',
-      resultDeliveryState: 'no_result',
       events: [{ kind: 'text', text: 'thinking before failure' }],
       producedFiles: [
         {
@@ -471,8 +279,6 @@ describe('retry target resolution', () => {
       ...failedAssistant,
       id: 'assistant-2',
       content: 'Retry failed too',
-      runStatus: 'succeeded',
-      resultDeliveryState: 'delivery_failed',
     };
 
     expect(resolveRetryTarget([userMessage, firstFailure, secondFailure], secondFailure.id)).toEqual({
@@ -495,14 +301,11 @@ describe('retry target resolution', () => {
 describe('ProjectView daemon cleanup', () => {
   beforeEach(() => {
     listProjectRuns.mockResolvedValue([]);
-    cancelBrandExtraction.mockResolvedValue({ ok: true, status: 'failed' });
   });
 
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
-    vi.useRealTimers();
-    globalThis.fetch = originalFetch;
     window.sessionStorage.clear();
   });
 
@@ -583,31 +386,6 @@ describe('ProjectView daemon cleanup', () => {
     expect(resolveSucceededRunStatus(undefined)).toBe('succeeded');
     expect(resolveSucceededRunStatus('failed')).toBe('failed');
     expect(resolveSucceededRunStatus('canceled')).toBe('canceled');
-  });
-
-  it('replays an unverified terminal Design-mode result after reload', () => {
-    expect(
-      shouldReplayTerminalRunMessage({
-        id: 'msg-unverified-delivery',
-        role: 'assistant',
-        content: 'I finished the design.',
-        runId: 'run-unverified-delivery',
-        runStatus: 'succeeded',
-        sessionMode: 'design',
-        startedAt: 1,
-      }),
-    ).toBe(true);
-    expect(
-      shouldReplayTerminalRunMessage({
-        id: 'msg-chat-answer',
-        role: 'assistant',
-        content: 'Here is the answer.',
-        runId: 'run-chat-answer',
-        runStatus: 'succeeded',
-        sessionMode: 'chat',
-        startedAt: 1,
-      }),
-    ).toBe(false);
   });
 
   // Regression: a phantom 'running' row in DB (no runId, no matching active
@@ -899,354 +677,6 @@ describe('ProjectView daemon cleanup', () => {
     }
   });
 
-  it('reloads an empty brand-extraction transcript without auto-sending the fallback prompt', async () => {
-    const programmaticMessages: ChatMessage[] = [
-      {
-        id: 'brand-user-1',
-        role: 'user',
-        content: 'Extract a design system from https://refly.ai/.',
-        createdAt: 1,
-      },
-      {
-        id: 'brand-assistant-1',
-        role: 'assistant',
-        content: 'Programmatic design-system extraction started from https://refly.ai/.',
-        createdAt: 1,
-        startedAt: 1,
-        runStatus: 'running',
-      },
-    ];
-    listConversations.mockResolvedValue([{ id: 'conv-brand', title: 'Conversation' }]);
-    listMessages
-      .mockResolvedValueOnce([])
-      .mockResolvedValue(programmaticMessages);
-    fetchPreviewComments.mockResolvedValue([]);
-    loadTabs.mockResolvedValue({ tabs: ['brand.html'], activeTabId: 'brand.html' });
-    fetchProjectFiles.mockResolvedValue([]);
-    fetchLiveArtifacts.mockResolvedValue([]);
-    fetchSkill.mockResolvedValue(null);
-    fetchDesignSystem.mockResolvedValue(null);
-    getTemplate.mockResolvedValue(null);
-    listActiveChatRuns.mockResolvedValue([]);
-    streamViaDaemon.mockResolvedValue(undefined);
-
-    window.sessionStorage.setItem('od:auto-send-first:brand-project', '1');
-
-    render(
-      <ProjectView
-        project={{
-          id: 'brand-project',
-          name: 'refly.ai Design System',
-          skillId: null,
-          designSystemId: null,
-          pendingPrompt: 'Extract refly.ai into a design system.',
-          metadata: {
-            kind: 'brand',
-            importedFrom: 'brand-extraction',
-            brandId: 'refly-ai',
-            brandSourceUrl: 'https://refly.ai/',
-          },
-          createdAt: 1,
-          updatedAt: 1,
-        } as never}
-        routeFileName={null}
-        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
-        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
-        skills={[]}
-        designTemplates={[]}
-        designSystems={[]}
-        daemonLive
-        onModeChange={() => {}}
-        onAgentChange={() => {}}
-        onAgentModelChange={() => {}}
-        onRefreshAgents={() => {}}
-        onOpenSettings={() => {}}
-        onBack={() => {}}
-        onClearPendingPrompt={() => {}}
-        onTouchProject={() => {}}
-        onProjectChange={() => {}}
-        onProjectsRefresh={() => {}}
-      />,
-    );
-
-    await waitFor(() => expect(listMessages).toHaveBeenCalledTimes(2));
-    await waitFor(() => {
-      expect(chatPaneSpy.mock.calls.at(-1)?.[0]?.messages).toEqual(programmaticMessages);
-    });
-    expect(chatPaneSpy.mock.calls.at(-1)?.[0]?.streaming).toBe(true);
-    expect(chatPaneSpy.mock.calls.at(-1)?.[0]?.sendDisabled).toBe(false);
-    const latestChatPaneProps = chatPaneSpy.mock.calls.at(-1)?.[0] as {
-      onStop?: () => void;
-    };
-    latestChatPaneProps.onStop?.();
-    await waitFor(() => expect(cancelBrandExtraction).toHaveBeenCalledWith('refly-ai'));
-    await waitFor(() => {
-      expect(saveMessage).toHaveBeenCalledWith(
-        'brand-project',
-        'conv-brand',
-        expect.objectContaining({
-          id: 'brand-assistant-1',
-          runStatus: 'canceled',
-        }),
-        expect.objectContaining({ telemetryFinalized: true }),
-      );
-    });
-    expect(streamViaDaemon).not.toHaveBeenCalled();
-    expect(window.sessionStorage.getItem('od:auto-send-first:brand-project')).toBeNull();
-  });
-
-  it('opens browser assist without adding a global download-guide toast', async () => {
-    listConversations.mockResolvedValue([{ id: 'conv-brand', title: 'Conversation' }]);
-    listMessages.mockResolvedValue([]);
-    fetchPreviewComments.mockResolvedValue([]);
-    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
-    fetchProjectFiles.mockResolvedValue([]);
-    fetchLiveArtifacts.mockResolvedValue([]);
-    fetchSkill.mockResolvedValue(null);
-    fetchDesignSystem.mockResolvedValue(null);
-    getTemplate.mockResolvedValue(null);
-    listActiveChatRuns.mockResolvedValue([]);
-    streamViaDaemon.mockResolvedValue(undefined);
-
-    chatPaneSpy.mockClear();
-    fileWorkspaceSpy.mockClear();
-
-    render(
-      <ProjectView
-        project={{
-          id: 'brand-project',
-          name: 'Refly Design System',
-          skillId: null,
-          designSystemId: null,
-          metadata: {
-            kind: 'brand',
-            importedFrom: 'brand-extraction',
-            brandId: 'refly-ai',
-            brandSourceUrl: 'https://refly.ai/',
-          },
-          createdAt: 1,
-          updatedAt: 1,
-        } as never}
-        routeFileName={null}
-        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
-        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
-        skills={[]}
-        designTemplates={[]}
-        designSystems={[]}
-        daemonLive
-        onModeChange={() => {}}
-        onAgentChange={() => {}}
-        onAgentModelChange={() => {}}
-        onRefreshAgents={() => {}}
-        onOpenSettings={() => {}}
-        onBack={() => {}}
-        onClearPendingPrompt={() => {}}
-        onTouchProject={() => {}}
-        onProjectChange={() => {}}
-        onProjectsRefresh={() => {}}
-      />,
-    );
-
-    const chatProps = await waitForReadyChatPaneProps();
-    expect(chatProps.onBrandBrowserAssistConfirm).toBeTypeOf('function');
-
-    let result: { ok: boolean; action?: string; message?: string } | void = undefined;
-    await act(async () => {
-      result = await chatProps.onBrandBrowserAssistConfirm?.({
-        brandId: 'refly-ai',
-        browserTabId: 'brand-browser-tab',
-        reason: 'Cloudflare',
-        url: 'https://refly.ai/',
-      });
-    });
-
-    expect(result).toMatchObject({ ok: true, action: 'opened' });
-    await waitFor(() => {
-      expect(fileWorkspaceSpy.mock.calls.at(-1)?.[0]?.browserOpenRequest).toMatchObject({
-        tabId: 'brand-browser-tab',
-        url: 'https://refly.ai/',
-        attentionAction: 'download-page',
-      });
-    });
-
-    expect(document.querySelector('.project-actions-toast-anchor .od-toast')).toBeNull();
-  });
-
-  it('anchors continue-extraction snapshot errors in the chat pane', async () => {
-    // Continue extraction snapshot failures should stay between the transcript
-    // and the composer, without resurrecting the long download-guide details
-    // that now live beside the Browser download action.
-    listConversations.mockResolvedValue([{ id: 'conv-brand', title: 'Conversation' }]);
-    listMessages.mockResolvedValue([]);
-    fetchPreviewComments.mockResolvedValue([]);
-    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
-    fetchProjectFiles.mockResolvedValue([]);
-    fetchLiveArtifacts.mockResolvedValue([]);
-    fetchSkill.mockResolvedValue(null);
-    fetchDesignSystem.mockResolvedValue(null);
-    getTemplate.mockResolvedValue(null);
-    listActiveChatRuns.mockResolvedValue([]);
-    streamViaDaemon.mockResolvedValue(undefined);
-    // No saved page archive on disk…
-    fetchProjectFileText.mockResolvedValue(null);
-    // …and the daemon cannot finish programmatically either.
-    continueBrandExtraction.mockResolvedValue({ ok: false, error: 'still walled' });
-
-    // A mounted desktop Browser tab whose live DOM and page-snapshot download
-    // both fail, so the flow lands on a contained snapshot error toast.
-    registerBrandBrowser('brand-project', BRAND_BROWSER_TAB_ID, {
-      executeJavaScript: () => null,
-      downloadPageSnapshot: async () => ({ ok: false, message: 'snapshot save failed' }),
-      getURL: () => 'https://refly.ai/',
-      isDesktopWebview: true,
-    });
-
-    chatPaneSpy.mockClear();
-    fileWorkspaceSpy.mockClear();
-
-    try {
-      render(
-        <ProjectView
-          project={{
-            id: 'brand-project',
-            name: 'Refly Design System',
-            skillId: null,
-            designSystemId: null,
-            metadata: {
-              kind: 'brand',
-              importedFrom: 'brand-extraction',
-              brandId: 'refly-ai',
-              brandSourceUrl: 'https://refly.ai/',
-            },
-            createdAt: 1,
-            updatedAt: 1,
-          } as never}
-          routeFileName={null}
-          config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
-          agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
-          skills={[]}
-          designTemplates={[]}
-          designSystems={[]}
-          daemonLive
-          onModeChange={() => {}}
-          onAgentChange={() => {}}
-          onAgentModelChange={() => {}}
-          onRefreshAgents={() => {}}
-          onOpenSettings={() => {}}
-          onBack={() => {}}
-          onClearPendingPrompt={() => {}}
-          onTouchProject={() => {}}
-          onProjectChange={() => {}}
-          onProjectsRefresh={() => {}}
-        />,
-      );
-
-      const chatProps = await waitForReadyChatPaneProps();
-      expect(chatProps.onContinueBrandExtraction).toBeTypeOf('function');
-
-      await act(async () => {
-        chatProps.onContinueBrandExtraction?.();
-      });
-
-      const toast = await waitFor(() => {
-        const node = document.querySelector('.od-toast');
-        expect(node?.textContent).toContain('snapshot save failed');
-        return node as HTMLElement;
-      });
-      expect(toast.textContent).not.toContain('chat.brandBrowserAssistDownloadGuideDetails');
-      expect(toast.closest('.project-actions-toast-anchor')).toBeTruthy();
-      expect(toast.closest('.split-chat-slot')).toBeTruthy();
-      expect(toast.closest('.chat-log-wrap')?.className).toContain('has-chat-log-tray');
-    } finally {
-      registerBrandBrowser('brand-project', BRAND_BROWSER_TAB_ID, null);
-    }
-  });
-
-  it('waits for pendingPrompt hydration before consuming an auto-send flag', async () => {
-    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
-    listMessages.mockResolvedValue([]);
-    fetchPreviewComments.mockResolvedValue([]);
-    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
-    fetchProjectFiles.mockResolvedValue([]);
-    fetchLiveArtifacts.mockResolvedValue([]);
-    fetchSkill.mockResolvedValue(null);
-    fetchDesignSystem.mockResolvedValue(null);
-    getTemplate.mockResolvedValue(null);
-    listActiveChatRuns.mockResolvedValue([]);
-    streamViaDaemon.mockResolvedValue(undefined);
-
-    chatPaneSpy.mockClear();
-    const onClearPendingPrompt = vi.fn();
-    window.sessionStorage.setItem('od:auto-send-first:project-hydrating', '1');
-
-    const baseProps = {
-      project: {
-        id: 'project-hydrating',
-        name: 'Ramp.com Design System',
-        skillId: null,
-        designSystemId: null,
-      } as never,
-      routeFileName: null,
-      config: { mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never,
-      agents: [{ id: 'agent-1', name: 'OpenCode', models: [] } as never],
-      skills: [],
-      designTemplates: [],
-      designSystems: [],
-      daemonLive: true,
-      onModeChange: () => {},
-      onAgentChange: () => {},
-      onAgentModelChange: () => {},
-      onRefreshAgents: () => {},
-      onOpenSettings: () => {},
-      onBack: () => {},
-      onClearPendingPrompt,
-      onTouchProject: () => {},
-      onProjectChange: () => {},
-      onProjectsRefresh: () => {},
-    } satisfies ComponentProps<typeof ProjectView>;
-
-    try {
-      const view = render(<ProjectView {...baseProps} />);
-
-      await waitFor(() => {
-        expect(chatPaneSpy).toHaveBeenCalled();
-        expect(chatPaneSpy.mock.calls.at(-1)?.[0]?.sendDisabled).toBe(false);
-      });
-      expect(streamViaDaemon).not.toHaveBeenCalled();
-      expect(onClearPendingPrompt).not.toHaveBeenCalled();
-      expect(window.sessionStorage.getItem('od:auto-send-first:project-hydrating')).toBe('1');
-
-      view.rerender(
-        <ProjectView
-          {...baseProps}
-          project={{
-            id: 'project-hydrating',
-            name: 'Ramp.com Design System',
-            skillId: null,
-            designSystemId: null,
-            createdAt: 1,
-            updatedAt: 1,
-            pendingPrompt: 'Extract ramp.com into a design system.',
-          }}
-        />,
-      );
-
-      await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
-      expect(onClearPendingPrompt).toHaveBeenCalledTimes(1);
-      expect(streamViaDaemon.mock.calls[0]?.[0]).toMatchObject({
-        history: [
-          expect.objectContaining({
-            role: 'user',
-            content: 'Extract ramp.com into a design system.',
-          }),
-        ],
-      });
-      expect(window.sessionStorage.getItem('od:auto-send-first:project-hydrating')).toBeNull();
-    } finally {
-      window.sessionStorage.removeItem('od:auto-send-first:project-hydrating');
-    }
-  });
-
   it('auto-sends Home-staged design files as first-turn daemon attachments', async () => {
     listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
     listMessages.mockResolvedValue([]);
@@ -1318,96 +748,6 @@ describe('ProjectView daemon cleanup', () => {
     } finally {
       window.sessionStorage.removeItem('od:auto-send-first:project-files');
       window.sessionStorage.removeItem('od:auto-send-attachments:project-files');
-    }
-  });
-
-  it('passes Home-staged workspace contexts into the project composer during auto-send', async () => {
-    const workspaceItems = [
-      {
-        id: 'project:reference-a',
-        kind: 'project',
-        label: 'Reference A',
-        title: 'Reference A',
-        path: 'reference-a',
-        absolutePath: '/Users/me/reference-a',
-      },
-      {
-        id: 'project:reference-b',
-        kind: 'project',
-        label: 'Reference B',
-        title: 'Reference B',
-        path: 'reference-b',
-        absolutePath: '/Users/me/reference-b',
-      },
-    ];
-    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
-    listMessages.mockResolvedValue([]);
-    fetchPreviewComments.mockResolvedValue([]);
-    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
-    fetchProjectFiles.mockResolvedValue([]);
-    fetchLiveArtifacts.mockResolvedValue([]);
-    fetchSkill.mockResolvedValue(null);
-    fetchDesignSystem.mockResolvedValue(null);
-    getTemplate.mockResolvedValue(null);
-    listActiveChatRuns.mockResolvedValue([]);
-    streamViaDaemon.mockResolvedValue(undefined);
-
-    chatPaneSpy.mockClear();
-    window.sessionStorage.setItem('od:auto-send-first:project-context', '1');
-    window.sessionStorage.setItem(
-      'od:auto-send-context:project-context',
-      JSON.stringify({ workspaceItems }),
-    );
-
-    try {
-      render(
-        <ProjectView
-          project={{
-            id: 'project-context',
-            name: 'Project',
-            skillId: null,
-            designSystemId: null,
-            pendingPrompt: 'Inspect the reference dir.',
-            metadata: { kind: 'prototype', linkedDirs: ['/Users/me/reference-a', '/Users/me/reference-b'] },
-          } as never}
-          routeFileName={null}
-          config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
-          agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
-          skills={[]}
-          designTemplates={[]}
-          designSystems={[]}
-          daemonLive
-          onModeChange={() => {}}
-          onAgentChange={() => {}}
-          onAgentModelChange={() => {}}
-          onRefreshAgents={() => {}}
-          onOpenSettings={() => {}}
-          onBack={() => {}}
-          onClearPendingPrompt={() => {}}
-          onTouchProject={() => {}}
-          onProjectChange={() => {}}
-          onProjectsRefresh={() => {}}
-        />,
-      );
-
-      const chatProps = await waitForReadyChatPaneProps() as {
-        initialWorkspaceContexts?: unknown[];
-      };
-      expect(chatProps.initialWorkspaceContexts).toEqual(workspaceItems);
-
-      await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
-      expect(streamViaDaemon.mock.calls[0]?.[0]).toMatchObject({
-        history: [
-          expect.objectContaining({
-            content: 'Inspect the reference dir.',
-            runContext: { workspaceItems },
-          }),
-        ],
-      });
-      expect(window.sessionStorage.getItem('od:auto-send-context:project-context')).toBeNull();
-    } finally {
-      window.sessionStorage.removeItem('od:auto-send-first:project-context');
-      window.sessionStorage.removeItem('od:auto-send-context:project-context');
     }
   });
 
@@ -1594,93 +934,6 @@ describe('ProjectView daemon cleanup', () => {
         && event.detail?.includes('Package audit found 1 error'),
       ),
     )).toBe(true);
-  });
-
-  it('does not seed audit repair prompt for manual design-system runs without auto-repair budget', async () => {
-    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
-    listMessages.mockResolvedValue([]);
-    fetchPreviewComments.mockResolvedValue([]);
-    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
-    fetchProjectFiles.mockResolvedValue([]);
-    fetchLiveArtifacts.mockResolvedValue([]);
-    fetchSkill.mockResolvedValue(null);
-    fetchDesignSystem.mockResolvedValue(null);
-    getTemplate.mockResolvedValue(null);
-    listActiveChatRuns.mockResolvedValue([]);
-    fetchProjectDesignSystemPackageAudit.mockResolvedValue({
-      ok: false,
-      projectPath: '/tmp/ds',
-      filesInspected: 12,
-      errors: [{
-        severity: 'error',
-        code: 'ui_kit_index_missing_runtime_bootstrap',
-        message: 'ui_kits/app/index.html must mount the kit.',
-        path: 'ui_kits/app/index.html',
-      }],
-      warnings: [],
-    });
-    streamViaDaemon.mockImplementation(async (options: {
-      handlers: { onDone: () => void };
-      onRunCreated?: (runId: string) => void;
-    }) => {
-      options.onRunCreated?.('run-ds-manual');
-      options.handlers.onDone();
-    });
-
-    chatPaneSpy.mockClear();
-
-    render(
-      <ProjectView
-        project={{
-          id: 'project-ds-manual',
-          name: 'Manual Design System',
-          skillId: null,
-          designSystemId: 'user:manual-ds',
-          metadata: {
-            importedFrom: 'design-system',
-            entryFile: 'DESIGN.md',
-            sourceFileName: 'user:manual-ds',
-          },
-        } as never}
-        routeFileName={null}
-        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
-        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
-        skills={[]}
-        designTemplates={[]}
-        designSystems={[]}
-        daemonLive
-        onModeChange={() => {}}
-        onAgentChange={() => {}}
-        onAgentModelChange={() => {}}
-        onRefreshAgents={() => {}}
-        onOpenSettings={() => {}}
-        onBack={() => {}}
-        onClearPendingPrompt={() => {}}
-        onTouchProject={() => {}}
-        onProjectChange={() => {}}
-        onProjectsRefresh={() => {}}
-      />,
-    );
-
-    const chatProps = await waitForReadyChatPaneProps();
-    await chatProps.onSend!('Update the design system', [], []);
-
-    await waitFor(() => expect(fetchProjectDesignSystemPackageAudit).toHaveBeenCalledWith('project-ds-manual'));
-    await waitFor(() => {
-      expect(saveMessage.mock.calls.some((call) =>
-        call[2]?.role === 'assistant'
-        && call[2]?.events?.some((event: { kind?: string; label?: string; detail?: string }) =>
-          event.kind === 'status'
-          && event.label === 'audit'
-          && event.detail?.includes('Package audit found 1 error'),
-        ),
-      )).toBe(true);
-    });
-    expect(window.sessionStorage.getItem('od:design-system-audit-auto-repair:project-ds-manual')).toBeNull();
-    expect(chatPaneSpy.mock.calls.some(
-      (call) => typeof call[0]?.initialDraft === 'string'
-        && call[0].initialDraft.includes('Fix the design-system package audit findings below.'),
-    )).toBe(false);
   });
 
   it('clears design-system auto-repair budget when the first audit passes', async () => {
@@ -2032,81 +1285,6 @@ describe('ProjectView daemon cleanup', () => {
     });
   });
 
-  it('threads the resumable flag from a live daemon failure onto the assistant message', async () => {
-    // Regression: a transient failure that arrives on the live streamViaDaemon
-    // onError path (not just reattach/status-fetch) must carry `resumable` onto
-    // the assistant message, otherwise ChatPane's Continue CTA never appears on
-    // the primary surface until a reload re-fetches run status.
-    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
-    listMessages.mockResolvedValue([]);
-    fetchPreviewComments.mockResolvedValue([]);
-    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
-    fetchProjectFiles.mockResolvedValue([]);
-    fetchLiveArtifacts.mockResolvedValue([]);
-    fetchSkill.mockResolvedValue(null);
-    fetchDesignSystem.mockResolvedValue(null);
-    getTemplate.mockResolvedValue(null);
-    listActiveChatRuns.mockResolvedValue([]);
-    streamViaDaemon.mockImplementation(async (options: {
-      onRunCreated?: (runId: string) => void;
-      handlers: { onError: (error: Error) => void };
-    }) => {
-      options.onRunCreated?.('run-resumable-1');
-      const err = new Error('Upstream request failed: stream disconnected.') as Error & {
-        resumable?: boolean;
-      };
-      err.resumable = true;
-      options.handlers.onError(err);
-    });
-
-    chatPaneSpy.mockClear();
-
-    render(
-      <ProjectView
-        project={{ id: 'project-resumable', name: 'Project', skillId: null, designSystemId: null } as never}
-        routeFileName={null}
-        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
-        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
-        skills={[]}
-        designTemplates={[]}
-        designSystems={[]}
-        daemonLive
-        onModeChange={() => {}}
-        onAgentChange={() => {}}
-        onAgentModelChange={() => {}}
-        onRefreshAgents={() => {}}
-        onOpenSettings={() => {}}
-        onBack={() => {}}
-        onClearPendingPrompt={() => {}}
-        onTouchProject={() => {}}
-        onProjectChange={() => {}}
-        onProjectsRefresh={() => {}}
-      />,
-    );
-
-    const sendProps = await waitForReadyChatPaneProps();
-    await sendProps!.onSend!('do the thing', [], []);
-
-    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
-    // The failed assistant row carries `resumable: true` (persisted + rendered).
-    await waitFor(() => {
-      const resumableFailedSave = saveMessage.mock.calls.find(
-        (call) =>
-          call[2]?.role === 'assistant' &&
-          call[2]?.runStatus === 'failed' &&
-          call[2]?.resumable === true,
-      );
-      expect(resumableFailedSave).toBeTruthy();
-    });
-    // And ChatPane receives that resumable failed message so the CTA can gate on it.
-    const latest = chatPaneSpy.mock.calls.at(-1)?.[0] as {
-      messages?: Array<{ role: string; runStatus?: string; resumable?: boolean }>;
-    };
-    expect(
-      latest?.messages?.some((m) => m.role === 'assistant' && m.runStatus === 'failed' && m.resumable === true),
-    ).toBe(true);
-  });
-
   it('does not replay a terminal succeeded row with empty produced files', async () => {
     const runCreatedAt = Date.now();
     const existingArtifact = {
@@ -2207,6 +1385,8 @@ describe('ProjectView daemon cleanup', () => {
     );
     expect(writeProjectTextFile).not.toHaveBeenCalled();
   });
+<<<<<<< HEAD
+=======
 
   it('replays a legacy terminal succeeded row when agent events still contain the artifact', async () => {
     const runCreatedAt = Date.now();
@@ -5015,4 +4195,5 @@ describe('ProjectView daemon cleanup', () => {
     // `prev.endedAt` moments earlier.
     expect(recoveredSave?.[2]?.endedAt).toBe(daemonTerminalUpdatedAt);
   });
+>>>>>>> upstream/main
 });

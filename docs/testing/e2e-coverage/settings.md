@@ -7,8 +7,6 @@
 - Automations / Orbit 页面
 - Language 页面
 - Pets 页面
-- Integrations 的 Skills 标签页
-- Settings 的 Design systems 页面
 - API protocol 迁移与切换回归
 - 国际化内容注册完整性
 
@@ -17,7 +15,6 @@
 - `e2e/ui/settings-api-protocol.test.ts`
 - `e2e/ui/settings-media-providers.test.ts`
 - `e2e/ui/settings-memory-routines.test.ts`
-- `e2e/ui/settings-design-systems.test.ts`
 - `e2e/tests/localized-content.test.ts`
 - `apps/web/tests/components/App.connectors.test.tsx`
 - `apps/web/tests/components/App.mediaProviders.test.tsx`
@@ -25,8 +22,6 @@
 - `apps/web/tests/components/SettingsDialog.test.ts`
 - `apps/web/tests/components/SettingsDialog.execution.test.tsx`
 - `apps/web/tests/components/SettingsDialog.orbit.test.tsx`
-- `apps/web/tests/components/SkillsSection.test.tsx`
-- `apps/web/tests/components/DesignSystemsSection.test.tsx`
 
 ## 已自动化
 
@@ -95,10 +90,10 @@
 | SET-060 | 已领养宠物的 `Wake / Tuck away` 状态切换会即时更新页面，并在保存时正确落到 `pet.enabled` | `SettingsDialog.execution.test.tsx` |
 | SET-061 | Community 标签页支持 `Refresh` 和 `Download community pets`，并展示同步完成状态文案 | `SettingsDialog.execution.test.tsx` |
 | SET-062 | Community 标签页的 hatch prompt 会带上当前 concept，支持复制到剪贴板并展示 `Copied!` 反馈 | `SettingsDialog.execution.test.tsx` |
-| SET-063 | Integrations 的 Skills 标签页展示 functional skills，支持按 type/category 筛选并结合搜索缩小结果 | `SettingsDialog.execution.test.tsx`, `SkillsSection.test.tsx` |
-| SET-064 | Integrations 的 Skills 标签页支持展开详情，并可通过 toggle 把 skill 加入 `disabledSkills` 保存 | `SettingsDialog.execution.test.tsx`, `SkillsSection.test.tsx` |
-| SET-065 | Settings 的独立 Design systems 页面支持按 category 筛选、展开详情，并保存 `disabledDesignSystems` | `SettingsDialog.execution.test.tsx`, `DesignSystemsSection.test.tsx` |
-| SET-066 | Integrations 的 Skills 标签页在筛选或搜索无匹配时展示空结果提示 | `SettingsDialog.execution.test.tsx` |
+| SET-063 | Skills & Design Systems 页面默认展示 Skills 库，支持按 mode 筛选并结合搜索缩小结果 | `SettingsDialog.execution.test.tsx` |
+| SET-064 | Skills 库支持展开预览详情，并可通过 toggle 把 skill 加入 `disabledSkills` 保存 | `SettingsDialog.execution.test.tsx` |
+| SET-065 | 切换到 Design Systems 库后，支持按 category 筛选、展开详情预览，并保存 `disabledDesignSystems` | `SettingsDialog.execution.test.tsx` |
+| SET-066 | Skills & Design Systems 搜索无匹配时，会展示空结果提示 | `SettingsDialog.execution.test.tsx` |
 | SET-067 | About 页面会正确展示 `Version / Channel / Runtime / Platform / Architecture` 五项只读版本信息 | `SettingsDialog.execution.test.tsx` |
 | SET-068 | About 页面在 `appVersionInfo` 缺失时，会展示版本信息不可用的降级空态 | `SettingsDialog.execution.test.tsx` |
 | SET-069 | About 页面是只读信息页；关闭按钮或遮罩关闭不会产生保存动作或脏状态 | `SettingsDialog.execution.test.tsx` |
@@ -127,14 +122,15 @@
 
 | ID | 场景 | 原因 |
 | --- | --- | --- |
-| SET-C03 | Media providers 配置被下游视频/音频生成请求实际消费的端到端回归 | 图片生成请求链路已由 `settings-media-providers.test.ts` 覆盖；视频/音频仍可在对应生成入口稳定后补 |
+| SET-C03 | Media providers 配置被下游图片/视频/音频生成请求实际消费的端到端回归 | New Project 的 model picker 已覆盖跨页面 `Configured` 消费，但真正的生成请求链路还没补 |
 | SET-C05 | MCP server 的 Cursor deeplink / 多平台路径差异（macOS/Linux/Windows） | 适合自动化，但需要更细的环境 mock 或浏览器 scheme 行为校验，适合后续补 |
 | SET-C06 | Notifications 在 ProjectView 中收到真实任务完成事件后，是否按 success/failure 正确播放声音和发送桌面通知 | 适合自动化，但需要结合流式消息完成态和窗口焦点状态做更完整联动断言 |
 | SET-C07 | `theme=system` 时在系统亮/暗偏好切换下，页面是否通过 `matchMedia` 或宿主环境同步实时跟随 | 适合自动化，但要先确认当前实现是否真的监听系统主题变化 |
 | SET-C08 | Pets 页面上传 sprite、导入 Codex atlas、裁剪单行或保留 full atlas 的文件处理链路 | 适合自动化，但依赖文件输入、图片读取、canvas 裁剪和 atlas 预处理，维护成本更高 |
 | SET-C09 | Built-in / Community 宠物的一键领养路径：下载 spritesheet、准备 atlas、写入 custom slot 并在 overlay 中真实生效 | 适合自动化，但需要补齐 fetch/blob/image 级 mock 或浏览器级联动验证 |
-| SET-C10 | Skills / Design Systems 在 ProjectView / runtime 生成流中被真实消费：禁用项不会进入可用内容库或生成上下文 | Entry 创建入口已由 `settings-design-systems.test.ts` 覆盖；ProjectView / runtime 生成上下文仍可后续补 |
+| SET-C10 | Skills / Design Systems 在 App 启动后被真实消费：禁用项不会出现在入口页、新建项目或生成流的可用内容库中 | 适合自动化，但需要补齐 Settings 与 Entry / ProjectView / runtime 的跨页面联动验证 |
 | SET-C11 | Memory 的 `Import from apps` 真实多步授权回流：外部浏览器完成 OAuth 后通过宿主/弹窗回调返回，再次打开 Settings 时是否能正确恢复到最新 connected 状态 | 现在 E2E 已覆盖页面内 callback、mixed state、断连/重连收敛，但还没覆盖更接近真实宿主环境的跨窗口回流 |
+| SET-C12 | Memory tree 中编辑既有 node、删除条目，以及分类 filters 与 tree 计数的联动回归 | `Refresh / Clear` extractions 已进 E2E，但 tree 内部编辑/删除仍主要依赖组件测试 |
 
 ## 手工保留
 

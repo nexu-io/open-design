@@ -1,35 +1,17 @@
 ---
 name: html-ppt-course-module
-en_name: "Build a New-Hire Onboarding Module like a Top Enablement Lead"
-zh_name: "像顶级赋能负责人一样做新人培训模块"
-description: |
-  A first-30-days onboarding module for new hospitality hires — the behaviors, the practice, the checks, and the manager follow-up. Built as a decision-grade professional training deck for new hires, managers.
-en_description: |
-  A first-30-days onboarding module for new hospitality hires — the behaviors, the practice, the checks, and the manager follow-up. Built as a decision-grade professional training deck for new hires, managers.
-zh_description: |
-  像顶级赋能负责人一样做新人培训模块——一份可商业交付的培训交付 Deck，围绕真实主题、证据链与决策目标组织。
-tags:
-  - "professional-training"
-  - "employee-onboarding-deck"
-  - "education"
-  - "training-deck"
-  - "workshop"
-  - "course-module"
-  - "decision-deck"
-  - "commercial-slide-agent"
-  - "html-ppt-course-module"
+description: Online-course / workshop module deck — warm paper background + Playfair serif, persistent left sidebar of learning objectives, MCQ self-check page. Use for teaching modules, training materials, workshop slides.
 triggers:
-  - "employee-onboarding-deck"
-  - "professional-training"
-  - "Build a New-Hire Onboarding Module like a Top Enablement Lead"
-  - "像顶级赋能负责人一样做新人培训模块"
-  - "training-deck"
+  - "course module"
+  - "course slides"
   - "workshop"
-  - "course-module"
-  - "html deck"
-  - "html slides"
+  - "training deck"
+  - "lesson"
+  - "教学"
+  - "课件"
 od:
   mode: deck
+  scenario: education
   upstream: "https://github.com/lewislulu/html-ppt-skill"
   preview:
     type: html
@@ -38,9 +20,7 @@ od:
     requires: false
   speaker_notes: true
   animations: true
-  category: "professional-training"
-  scenario: "education"
-  example_prompt: "Create \"Build a New-Hire Onboarding Module like a Top Enablement Lead\" as a decision-grade Professional training deck in this template's own visual system. Subject: A first-30-days onboarding module for new hospitality hires — the behaviors, the practice, the checks, and the manager follow-up. Audience: new hires, managers. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can a learner perform the target task the next day."
+  example_prompt: "Use the html-ppt-course-module template to build a 7-slide module deck. Confirm: module title, 3-5 learning objectives (these stick on the left rail), and the MCQ self-check question. Then assemble the deck with serif headings on warm paper."
 ---
 # HTML PPT · Course Module
 
@@ -53,23 +33,23 @@ The Examples gallery wires "Use this prompt" to the example_prompt above. When y
 ## How to author the deck
 
 1. **Read the master skill first.** All authoring rules live in
-   [`design-templates/html-ppt/SKILL.md`](../html-ppt/SKILL.md) — content/audience checklist,
+   [`skills/html-ppt/SKILL.md`](../html-ppt/SKILL.md) — content/audience checklist,
    token rules, layout reuse, presenter mode, the keyboard runtime, and the
    "never put presenter-only text on the slide" rule.
 2. **Start from the matching template folder:**
-   `design-templates/html-ppt/templates/full-decks/course-module/` — copy `index.html` and
+   `skills/html-ppt/templates/full-decks/course-module/` — copy `index.html` and
    `style.css` into the project, keep the `.tpl-course-module` body class.
 3. **Bring the shared runtime with the template.** The upstream
    `index.html` links the shared CSS/JS via `../../../assets/...` because it
-   sits three folders deep inside `design-templates/html-ppt/templates/full-decks/`.
+   sits three folders deep inside `skills/html-ppt/templates/full-decks/`.
    Once you copy `index.html` into the project, those parent-relative URLs
    no longer resolve and `base.css`, `animations.css`, and `runtime.js`
    will 404 — meaning the deck never activates and slide navigation is
    dead. Pick one of these two recipes per project:
    - **Recipe A — copy + rewrite (preferred):** copy
-     `design-templates/html-ppt/assets/fonts.css`, `design-templates/html-ppt/assets/base.css`,
-     `design-templates/html-ppt/assets/animations/animations.css`, and
-     `design-templates/html-ppt/assets/runtime.js` into a project-local
+     `skills/html-ppt/assets/fonts.css`, `skills/html-ppt/assets/base.css`,
+     `skills/html-ppt/assets/animations/animations.css`, and
+     `skills/html-ppt/assets/runtime.js` into a project-local
      `assets/` (with `assets/animations/animations.css`), then rewrite the
      four `<link>`/`<script>` tags in `index.html` from
      `../../../assets/...` to the matching project-local paths
@@ -84,7 +64,7 @@ The Examples gallery wires "Use this prompt" to the example_prompt above. When y
    Either way, do not ship the upstream `../../../assets/...` URLs
    verbatim into a project artifact — they only work in-tree.
 4. **Pick a theme.** Default tokens look fine; if the user wants a different
-   feel, swap in any of the 36 themes from `design-templates/html-ppt/assets/themes/*.css`
+   feel, swap in any of the 36 themes from `skills/html-ppt/assets/themes/*.css`
    via `<link id="theme-link">` and let `T` cycle.
 5. **Replace demo content, not classes.** The `.tpl-course-module` scoped CSS only
    recognises the structural classes shipped in the template — keep them.
@@ -94,5 +74,5 @@ The Examples gallery wires "Use this prompt" to the example_prompt above. When y
 
 Visual system, layouts, themes and the runtime keyboard model come from
 the upstream MIT-licensed [`lewislulu/html-ppt-skill`](https://github.com/lewislulu/html-ppt-skill). The
-LICENSE file ships at `design-templates/html-ppt/LICENSE`; please keep it in place when
+LICENSE file ships at `skills/html-ppt/LICENSE`; please keep it in place when
 redistributing.
