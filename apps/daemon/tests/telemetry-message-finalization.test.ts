@@ -140,8 +140,9 @@ describe('Langfuse message finalization gate', () => {
 
     // The form-answer transition still fires — that drives RULE 2 / 3.
     expect(prompt).toContain('The user has answered the discovery form.');
-    // The latest user turn is preserved verbatim.
-    expect(prompt).toContain(currentPrompt);
+    // The latest user turn should appear only once on the resume path.
+    expect(prompt.match(/\[form answers — discovery\]/g)).toHaveLength(1);
+    expect(prompt.match(/Pick a direction for me \[value: pick_direction\]/g)).toHaveLength(1);
     // The transcript header is dropped — it was misleading because the
     // body underneath is no longer a transcript.
     expect(prompt).not.toContain('## Full conversation transcript');

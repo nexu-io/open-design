@@ -1465,7 +1465,10 @@ export function composeChatUserRequestForAgent(
   const transition = formAnswerTransitionForCurrentPrompt(currentPrompt);
   if (!transition) return body;
   if (skip) {
-    return [transition, body].join('\n\n');
+    // Resume-capable CLIs already carry the latest user turn in upstream
+    // session memory. The transition block embeds `currentPrompt`, so
+    // appending `body` here duplicates the submitted form answers.
+    return transition;
   }
   return [
     transition,
