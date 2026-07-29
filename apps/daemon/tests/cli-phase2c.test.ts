@@ -11,7 +11,7 @@ import { createJsonIpcServer } from '@open-design/sidecar';
 import { SIDECAR_ENV, SIDECAR_MESSAGES, normalizeDaemonSidecarMessage } from '@open-design/sidecar-proto';
 
 import { createAgentRuntimeEnv, startServer } from '../src/server.js';
-import { resetDesktopAuthForTests, setDesktopAuthSecret } from '../src/desktop-auth.js';
+import { resetDesktopAuthForTests, setDesktopAuthSecret } from '../src/auth/index.js';
 import { mintImportTokenForCli } from '../src/sidecar/server.js';
 
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url));

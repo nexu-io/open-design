@@ -31,7 +31,7 @@ import {
   isDesktopAuthRegistered,
   setDesktopAuthSecret,
   signDesktopImportToken,
-} from "../desktop-auth.js";
+} from "../auth/index.js";
 
 /**
  * PR #974 round 6 (mrcfps): pure wrapper that overlays the live

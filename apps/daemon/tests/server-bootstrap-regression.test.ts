@@ -11,7 +11,7 @@ import {
   startServer,
   type StartServerResult,
 } from '../src/server.js';
-import { isLocalSameOrigin } from '../src/origin-validation.js';
+import { isLocalSameOrigin } from '../src/auth/index.js';
 import { registerDesignSystemRoutes } from '../src/routes/design-systems.js';
 import { registerStaticResourceRoutes } from '../src/routes/static-resource.js';
 

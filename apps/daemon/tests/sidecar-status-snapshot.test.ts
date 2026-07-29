@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { DaemonStatusSnapshot } from '@open-design/sidecar-proto';
 
-import { resetDesktopAuthForTests, setDesktopAuthSecret } from '../src/desktop-auth.js';
+import { resetDesktopAuthForTests, setDesktopAuthSecret } from '../src/auth/index.js';
 import { withCurrentDesktopAuthGate } from '../src/sidecar/server.js';
 
 /**

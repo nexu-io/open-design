@@ -33,7 +33,7 @@ import { getInstalledPlugin } from '../src/plugins/registry.js';
 import { createSnapshot, getSnapshot } from '../src/plugins/snapshots.js';
 import { resolvePluginSnapshot, capabilitiesRequiredError } from '../src/plugins/resolve-snapshot.js';
 import { renderPluginBlock } from '@open-design/contracts';
-import { checkConnectorAccess, ToolTokenRegistry } from '../src/tool-tokens.js';
+import { checkConnectorAccess, ToolTokenRegistry } from '../src/auth/index.js';
 import { FIRST_PARTY_ATOMS, type AtomCatalogEntry } from '../src/plugins/atoms.js';
 
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url));

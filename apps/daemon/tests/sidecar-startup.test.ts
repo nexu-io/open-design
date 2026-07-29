@@ -23,17 +23,17 @@ vi.mock('../src/daemon-startup.js', () => ({
 describe('daemon sidecar startup', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
-    const { resetDesktopAuthForTests } = await import('../src/desktop-auth.js');
+    const { resetDesktopAuthForTests } = await import('../src/auth/index.js');
     resetDesktopAuthForTests();
   });
 
   afterEach(async () => {
-    const { resetDesktopAuthForTests } = await import('../src/desktop-auth.js');
+    const { resetDesktopAuthForTests } = await import('../src/auth/index.js');
     resetDesktopAuthForTests();
   });
 
   it('starts through the shared daemon startup path and reports live auth state', async () => {
-    const { setDesktopAuthSecret } = await import('../src/desktop-auth.js');
+    const { setDesktopAuthSecret } = await import('../src/auth/index.js');
     const { startDaemonSidecar } = await import('../src/sidecar/server.js');
     const root = await mkdtemp(join(tmpdir(), 'od-daemon-sidecar-'));
     const handle = await startDaemonSidecar({

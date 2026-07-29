@@ -13,7 +13,7 @@ import {
   checkConnectorAccess,
   ToolTokenRegistry,
   type ToolTokenGrant,
-} from '../src/tool-tokens.js';
+} from '../src/auth/index.js';
 
 function mintGrant(registry: ToolTokenRegistry, overrides: Partial<{
   pluginSnapshotId: string;

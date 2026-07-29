@@ -1,4 +1,4 @@
-import type { ToolTokenGrant } from '../tool-tokens.js';
+import type { ToolTokenGrant } from '../auth/index.js';
 
 import { classifyConnectorToolSafety, connectorDefinitionToDetail, type ConnectorCatalogDefinition, type ConnectorToolDetail, type ConnectorToolSafety, type ConnectorToolUseCase } from '../connectors/catalog.js';
 import { connectorService, ConnectorService, type ConnectorExecuteRequest } from '../connectors/service.js';

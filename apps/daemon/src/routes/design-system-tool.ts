@@ -1,6 +1,6 @@
 import type { Express, Request, Response } from 'express';
 
-import type { ToolTokenGrant } from '../tool-tokens.js';
+import type { ToolTokenGrant } from '../auth/index.js';
 import { readDesignSystemPullFile } from '../design-systems/index.js';
 
 type ProjectRecord = {

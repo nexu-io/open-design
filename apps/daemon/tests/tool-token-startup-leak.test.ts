@@ -6,7 +6,7 @@ import path from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
 
 import { startServer } from '../src/server.js';
-import { toolTokenRegistry } from '../src/tool-tokens.js';
+import { toolTokenRegistry } from '../src/auth/index.js';
 
 // Force a deterministic failure in the run startup phase, AFTER the tool token
 // is minted but BEFORE the child process is spawned. `preparePromptFileForAgent`

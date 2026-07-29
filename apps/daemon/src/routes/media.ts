@@ -16,7 +16,7 @@ import {
   type AIHubMixCatalogType,
 } from '../integrations/aihubmix.js';
 import { isSandboxModeEnabled } from '../sandbox-mode.js';
-import type { ToolTokenGrant } from '../tool-tokens.js';
+import type { ToolTokenGrant } from '../auth/index.js';
 
 const LONG_MEDIA_PROXY_TIMEOUT_MS = 10 * 60 * 1000;
 

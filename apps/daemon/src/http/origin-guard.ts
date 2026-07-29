@@ -1,6 +1,6 @@
 import type { Request } from 'express';
 import { createApiError } from '@open-design/contracts';
-import { isLocalSameOrigin } from '../origin-validation.js';
+import { isLocalSameOrigin } from '../auth/index.js';
 import { err, ok, type Result } from './types.js';
 
 export interface OriginContext {

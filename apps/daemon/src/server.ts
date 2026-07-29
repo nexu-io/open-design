@@ -242,7 +242,7 @@ import {
   setDesktopAuthSecret,
   signDesktopImportToken,
   verifyDesktopImportToken,
-} from './desktop-auth.js';
+} from './auth/index.js';
 import { normalizeDaemonBindHost } from './daemon-startup.js';
 export {
   isDesktopAuthGateActive,
@@ -251,7 +251,7 @@ export {
   setDesktopAuthSecret,
   signDesktopImportToken,
   verifyDesktopImportToken,
-} from './desktop-auth.js';
+} from './auth/index.js';
 import { readCurrentAppVersionInfo } from './app-version.js';
 import {
   findSkillById,
@@ -648,7 +648,7 @@ import { assertServerContextSatisfiesRoutes } from './route-context-contract.js'
 import { configureConnectorCredentialStore, connectorService, FileConnectorCredentialStore } from './connectors/service.js';
 import { composioConnectorProvider } from './connectors/composio.js';
 import { configureComposioConfigStore } from './connectors/composio-config.js';
-import { CHAT_TOOL_ENDPOINTS, CHAT_TOOL_OPERATIONS, toolTokenRegistry } from './tool-tokens.js';
+import { CHAT_TOOL_ENDPOINTS, CHAT_TOOL_OPERATIONS, toolTokenRegistry } from './auth/index.js';
 import {
   buildDeployFileSet,
   checkDeploymentUrl,
@@ -679,14 +679,14 @@ import {
   isLocalSameOrigin,
   isZeroConfigClipperLibraryRequest,
   parseHostHeader,
-} from './origin-validation.js';
+} from './auth/index.js';
 import { registerLibraryRoutes } from './routes/library.js';
 import {
   libraryExtensionAllowedOrigins,
   seedLibraryExtensionOrigins,
 } from './library-tokens.js';
 import { listLibraryTokenOrigins } from './library-store.js';
-import { apiTokenFromEnv, isApiAuthDisabled, isApiTokenMiddlewareEnabled } from './api-token-auth.js';
+import { apiTokenFromEnv, isApiAuthDisabled, isApiTokenMiddlewareEnabled } from './auth/index.js';
 import { createOpenDesignPublicMetadataService } from './services/open-design-public-metadata.js';
 import { createWhatsNewService } from './services/whats-new.js';
 import { execCommandViaLoginShell } from './services/login-shell.js';

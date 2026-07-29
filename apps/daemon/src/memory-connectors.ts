@@ -14,7 +14,7 @@ import {
   type ConnectorService,
 } from './connectors/service.js';
 import { listConnectorTools } from './tools/connectors.js';
-import type { ToolTokenGrant } from './tool-tokens.js';
+import type { ToolTokenGrant } from './auth/index.js';
 
 const DEFAULT_CONNECTOR_MEMORY_QUERY =
   '设计思路 设计偏好 UI UX 视觉风格 品牌 logo 设计系统 OpenDesign';

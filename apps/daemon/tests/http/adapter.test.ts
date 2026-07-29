@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApiError } from '@open-design/contracts';
 import { defineJsonRoute, err, mountJsonRoute, ok } from '../../src/http/index.js';
-import { isLocalSameOrigin } from '../../src/origin-validation.js';
+import { isLocalSameOrigin } from '../../src/auth/index.js';
 
-vi.mock('../../src/origin-validation.js', () => ({
+vi.mock('../../src/auth/index.js', () => ({
   isLocalSameOrigin: vi.fn(() => true),
 }));
 
