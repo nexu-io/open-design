@@ -548,6 +548,53 @@ describe('od config byok CLI', () => {
     });
   });
 
+  it('reads the selected non-secret provider metadata', async () => {
+    const result = await runCli([
+      'config', 'byok', 'get', '--daemon-url', stub.baseUrl,
+    ]);
+
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual({
+      protocol: 'openai',
+      baseUrl: 'https://apihub.agnes-ai.com/v1',
+      model: 'agnes-2.0-flash',
+    });
+    expect(stub.requests).toEqual([
+      expect.objectContaining({ method: 'GET', url: '/api/app-config' }),
+    ]);
+  });
+
+  it('keeps the BYOK get JSON output machine-readable when explicitly requested', async () => {
+    const result = await runCli([
+      'config', 'byok', 'get', '--json', '--daemon-url', stub.baseUrl,
+    ]);
+
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual({
+      protocol: 'openai',
+      baseUrl: 'https://apihub.agnes-ai.com/v1',
+      model: 'agnes-2.0-flash',
+    });
+    expect(result.stderr).toBe('');
+  });
+
+  it('rejects missing set values and malformed BYOK actions before making a request', async () => {
+    const missingValue = await runCli([
+      'config', 'byok', 'set', 'openai', 'https://apihub.agnes-ai.com/v1',
+      '--daemon-url', stub.baseUrl,
+    ]);
+    expect(missingValue.code).toBe(2);
+    expect(missingValue.stderr).toContain('exactly three non-secret values');
+    expect(stub.requests).toHaveLength(0);
+
+    const malformedAction = await runCli([
+      'config', 'byok', 'replace', '--daemon-url', stub.baseUrl,
+    ]);
+    expect(malformedAction.code).toBe(2);
+    expect(malformedAction.stderr).toContain('Usage: od config byok get');
+    expect(stub.requests).toHaveLength(0);
+  });
+
   it('rejects a fourth positional value so an API key cannot be accepted as provider metadata', async () => {
     const result = await runCli([
       'config', 'byok', 'set', 'openai', 'https://apihub.agnes-ai.com/v1', 'agnes-2.0-flash',
