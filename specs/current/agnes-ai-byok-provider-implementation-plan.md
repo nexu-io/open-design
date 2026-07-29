@@ -237,7 +237,10 @@ git commit -m "feat: add Agnes AI BYOK provider preset"
 ```bash
 corepack pnpm --filter @open-design/contracts build
 corepack pnpm --filter @open-design/contracts typecheck
-corepack pnpm --filter @open-design/web exec vitest run -c vitest.config.ts tests/state/config.test.ts
+corepack pnpm --filter @open-design/web exec vitest run -c vitest.config.ts \
+  tests/state/config.test.ts \
+  tests/components/EntryShell.onboarding.test.tsx \
+  tests/components/SettingsDialog.execution.test.tsx
 corepack pnpm --filter @open-design/daemon exec vitest run -c vitest.config.ts tests/app-config.test.ts tests/cli-templates.test.ts tests/server-persistence-smoke.test.ts
 corepack pnpm --filter @open-design/web typecheck
 corepack pnpm --filter @open-design/daemon exec tsc -p tsconfig.json --noEmit
