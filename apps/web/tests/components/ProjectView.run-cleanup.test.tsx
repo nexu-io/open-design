@@ -3766,6 +3766,7 @@ describe('ProjectView daemon cleanup', () => {
         'conv-1',
         'comment-1',
         'needs_review',
+        null,
       );
     });
   });

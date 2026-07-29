@@ -465,11 +465,17 @@ describe('ProjectView API empty response handling', () => {
     await sendTestPrompt();
 
     await waitFor(() => {
+      // `patchPreviewCommentStatus` takes the acting workspace context as a
+      // fifth argument (1c15574c2), so the daemon can authorize the comment
+      // mutation. This harness has no cloud identity, so it is `null` — but the
+      // argument must still be matched: a four-argument matcher cannot match a
+      // five-argument call at all.
       expect(mockedPatchPreviewCommentStatus).toHaveBeenCalledWith(
         project.id,
         'conv-project-1',
         'comment-1',
         'failed',
+        null,
       );
     });
     await waitFor(() => {

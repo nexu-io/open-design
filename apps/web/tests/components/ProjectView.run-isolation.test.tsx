@@ -1726,6 +1726,7 @@ describe('ProjectView conversation run isolation', () => {
         'conv-a',
         previewComment.id,
         'applying',
+        null,
       ),
     );
     patchPreviewCommentStatus.mockClear();
@@ -1740,11 +1741,15 @@ describe('ProjectView conversation run isolation', () => {
     await waitFor(() => expect(screen.getByTestId('streaming-state').textContent).toBe('streaming'));
     expect(screen.getByTestId('workspace-streaming-state').textContent).toBe('streaming');
     expect(screen.getByTestId('conversation-latest-runs').textContent).toContain('conv-a:running');
+    // The workspace-context argument matters MOST on a negative assertion: a
+    // four-argument matcher can never match the real five-argument call, so
+    // omitting it would make this pass no matter what the code did.
     expect(patchPreviewCommentStatus).not.toHaveBeenCalledWith(
       'project-1',
       'conv-a',
       previewComment.id,
       'needs_review',
+      null,
     );
     expect(fetchProjectFiles).not.toHaveBeenCalled();
     expect(streamViaDaemon).toHaveBeenLastCalledWith(expect.objectContaining({
@@ -1973,6 +1978,9 @@ describe('ProjectView conversation run isolation', () => {
         expect.anything(),
         previewComment.id,
         'applying',
+        // Explicit `null`, not `expect.anything()`: that matcher rejects
+        // null/undefined, so it would never match this harness's context.
+        null,
       ),
     );
     await waitFor(() => expect(screen.getByTestId('send-queued-0')).toBeTruthy());
@@ -1986,11 +1994,13 @@ describe('ProjectView conversation run isolation', () => {
     fireEvent.click(screen.getByTestId('send-queued-0'));
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalled());
 
+    // Arity matters on the negative assertion — see the note above.
     expect(patchPreviewCommentStatus).not.toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),
       previewComment.id,
       'open',
+      null,
     );
   });
 
