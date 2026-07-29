@@ -220,4 +220,103 @@ describe('ExtensionsMarketplace 团队 scope visibility', () => {
       vi.mocked(fetchSkills).mock.calls.map(([context]) => context?.workspaceId),
     ).toEqual(['ws-a', 'ws-b']);
   });
+
+  it('replaces shared IDs and metadata on an identity change and discards late results', async () => {
+    const sharedA = {
+      plugins: deferred<Response>(),
+      skills: deferred<Response>(),
+    };
+    const sharedB = {
+      plugins: deferred<Response>(),
+      skills: deferred<Response>(),
+    };
+    const counts = { plugins: 0, skills: 0 };
+    workspaceContext = { ...FREE_TEAM_CONTEXT, workspaceId: 'ws-a', teamId: 'ws-a' };
+    globalThis.fetch = vi.fn((input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url.endsWith('/workspace/plugins/team')) {
+        counts.plugins += 1;
+        return counts.plugins === 1 ? sharedA.plugins.promise : sharedB.plugins.promise;
+      }
+      if (url.endsWith('/workspace/skills/team')) {
+        counts.skills += 1;
+        return counts.skills === 1 ? sharedA.skills.promise : sharedB.skills.promise;
+      }
+      if (url.startsWith('/api/plugins')) {
+        return Promise.resolve(jsonResponse({ plugins: [] }));
+      }
+      if (url.startsWith('/api/marketplaces')) {
+        return Promise.resolve(jsonResponse({ marketplaces: [] }));
+      }
+      return Promise.resolve(jsonResponse({}));
+    }) as typeof fetch;
+
+    const view = renderMarketplace();
+    await waitFor(() => expect(counts).toEqual({ plugins: 1, skills: 1 }));
+
+    workspaceContext = { ...FREE_TEAM_CONTEXT, workspaceId: 'ws-b', teamId: 'ws-b' };
+    view.rerender(
+      <I18nProvider initial="en">
+        <ExtensionsMarketplace onCreatePlugin={vi.fn()} onUsePlugin={vi.fn()} />
+      </I18nProvider>,
+    );
+    await waitFor(() => expect(counts).toEqual({ plugins: 2, skills: 2 }));
+
+    await act(async () => {
+      sharedB.plugins.resolve(jsonResponse({
+        ids: ['plugin-from-b'],
+        resources: [{
+          id: 'plugin-from-b',
+          title: 'Plugin from B',
+          description: 'Metadata from B',
+          canUnshare: true,
+          ownerMemberId: 'mem-1',
+        }],
+      }));
+      sharedB.skills.resolve(jsonResponse({
+        ids: ['skill-from-b'],
+        resources: [{
+          id: 'skill-from-b',
+          title: 'Skill from B',
+          description: 'Skill metadata from B',
+          canUnshare: true,
+          ownerMemberId: 'mem-1',
+        }],
+      }));
+      await Promise.resolve();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Team' }));
+    await waitFor(() => expect(screen.getByText('Plugin from B')).toBeTruthy());
+    expect(screen.getByText('Metadata from B')).toBeTruthy();
+
+    await act(async () => {
+      sharedA.plugins.resolve(jsonResponse({
+        ids: ['plugin-from-a'],
+        resources: [{
+          id: 'plugin-from-a',
+          title: 'Plugin from A',
+          description: 'Metadata from A',
+          canUnshare: true,
+          ownerMemberId: 'mem-1',
+        }],
+      }));
+      sharedA.skills.resolve(jsonResponse({
+        ids: ['skill-from-a'],
+        resources: [{
+          id: 'skill-from-a',
+          title: 'Skill from A',
+          description: 'Skill metadata from A',
+          canUnshare: true,
+          ownerMemberId: 'mem-1',
+        }],
+      }));
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText('Plugin from B')).toBeTruthy();
+    expect(screen.queryByText('Plugin from A')).toBeNull();
+    expect(screen.getByText('Metadata from B')).toBeTruthy();
+    expect(screen.queryByText('Metadata from A')).toBeNull();
+  });
 });

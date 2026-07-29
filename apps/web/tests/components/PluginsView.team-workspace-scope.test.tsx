@@ -1,7 +1,11 @@
 // @vitest-environment jsdom
 
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import type { SkillSummary, WorkspaceCollabContext } from '@open-design/contracts';
+import type {
+  InstalledPluginRecord,
+  SkillSummary,
+  WorkspaceCollabContext,
+} from '@open-design/contracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { PluginsView } from '../../src/components/PluginsView';
@@ -69,6 +73,22 @@ function skill(id: string): SkillSummary {
     mode: 'prototype',
     source: 'user',
   } as unknown as SkillSummary;
+}
+
+function plugin(id: string): InstalledPluginRecord {
+  return {
+    id,
+    title: id,
+    version: '1.0.0',
+    sourceKind: 'local',
+    source: `/local/${id}`,
+    trust: 'restricted',
+    capabilitiesGranted: [],
+    manifest: { name: id, title: id, version: '1.0.0' },
+    fsPath: `/local/${id}`,
+    installedAt: 0,
+    updatedAt: 0,
+  } as InstalledPluginRecord;
 }
 
 function deferred<T>() {
@@ -165,6 +185,53 @@ describe('PluginsView Team panel workspace scope', () => {
     expect(
       vi.mocked(fetchSkills).mock.calls.map(([context]) => context?.workspaceId),
     ).toEqual(['ws-a', 'ws-b']);
+  });
+
+  it('discards late parent plugin rows from the previous workspace', async () => {
+    const readA = deferred<InstalledPluginRecord[]>();
+    const readB = deferred<InstalledPluginRecord[]>();
+    vi.mocked(fetchSkills).mockResolvedValue([]);
+    vi.mocked(listPlugins).mockImplementation((options = {}) =>
+      options.workspaceContext?.workspaceId === 'ws-b' ? readB.promise : readA.promise,
+    );
+
+    const view = renderPluginsView();
+    fireEvent.click(await screen.findByTestId('plugins-tab-team'));
+    await waitFor(() =>
+      expect(
+        vi.mocked(listPlugins).mock.calls.filter(
+          ([options]) => options?.workspaceContext?.workspaceId === 'ws-a',
+        ),
+      ).toHaveLength(2),
+    );
+
+    currentWorkspaceContext = workspaceContext('ws-b');
+    view.rerender(
+      <I18nProvider initial="en">
+        <PluginsView />
+      </I18nProvider>,
+    );
+    await waitFor(() =>
+      expect(
+        vi.mocked(listPlugins).mock.calls.filter(
+          ([options]) => options?.workspaceContext?.workspaceId === 'ws-b',
+        ),
+      ).toHaveLength(2),
+    );
+
+    await act(async () => {
+      readB.resolve([plugin('plugin-from-b')]);
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(screen.getByText('plugin-from-b')).toBeTruthy());
+
+    await act(async () => {
+      readA.resolve([plugin('plugin-from-a')]);
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText('plugin-from-b')).toBeTruthy();
+    expect(screen.queryByText('plugin-from-a')).toBeNull();
   });
 
   it('discards late shared IDs issued for the previous workspace', async () => {

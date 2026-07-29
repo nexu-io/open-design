@@ -224,6 +224,9 @@ export function PluginsView({
   // not fan out an extra fetch.
   const pluginsWorkspaceContextState = useWorkspaceContext();
   const { context: pluginsWorkspaceContext } = pluginsWorkspaceContextState;
+  const pluginsContextRef = useRef(pluginsWorkspaceContext);
+  pluginsContextRef.current = pluginsWorkspaceContext;
+  const pluginsIdentity = workspaceIdentityCacheKey(pluginsWorkspaceContext);
   const pluginsPageViewFiredRef = useRef(false);
   useEffect(() => {
     if (pluginsPageViewFiredRef.current) return;
@@ -258,12 +261,14 @@ export function PluginsView({
   const [notice, setNotice] = useState<PluginInstallOutcome | { ok: boolean; message: string } | null>(null);
 
   async function refresh() {
+    const read = beginWorkspaceScopedRead(pluginsContextRef.current);
     setLoading(true);
     const [rows, allRows, catalogs] = await Promise.all([
-      listPlugins({ workspaceContext: pluginsWorkspaceContext }),
-      listPlugins({ includeHidden: true, workspaceContext: pluginsWorkspaceContext }),
+      listPlugins({ workspaceContext: read.context }),
+      listPlugins({ includeHidden: true, workspaceContext: read.context }),
       listPluginMarketplaces(),
     ]);
+    if (!read.isStillCurrent(pluginsContextRef.current)) return;
     setPlugins(rows);
     setAllInstalledPlugins(allRows);
     setMarketplaces(catalogs);
@@ -277,7 +282,7 @@ export function PluginsView({
     // Re-run on workspace switch (not just mount) so "installed" reflects the
     // newly active workspace's binding — see `pluginsWorkspaceContext` above.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pluginsWorkspaceContext?.workspaceId]);
+  }, [pluginsIdentity]);
 
   const userPlugins = useMemo(
     () => plugins.filter(isPersonalPluginRecord),
@@ -1191,6 +1196,7 @@ export function ExtensionsMarketplace({
   }, [workspaceContextLoading, marketplaceIdentity]);
 
   const refreshSharedResources = useCallback(async () => {
+    const read = beginWorkspaceScopedRead(emContextRef.current);
     const loadShared = async (
       basePath: string,
       setter: Dispatch<SetStateAction<ReadonlySet<string>>>,
@@ -1200,6 +1206,7 @@ export function ExtensionsMarketplace({
         const res = await fetch(`/api/workspace/${basePath}/team`, { cache: 'no-store' });
         if (!res.ok) return;
         const body = (await res.json()) as { ids?: unknown; resources?: unknown };
+        if (!read.isStillCurrent(emContextRef.current)) return;
         if (Array.isArray(body.ids)) {
           const nextIds = new Set(body.ids.filter((id): id is string => typeof id === 'string'));
           setter((prev) => setsEqual(prev, nextIds) ? prev : nextIds);
@@ -1253,7 +1260,7 @@ export function ExtensionsMarketplace({
       window.removeEventListener('pageshow', refreshVisible);
       document.removeEventListener('visibilitychange', refreshVisible);
     };
-  }, [refreshSharedResources]);
+  }, [refreshSharedResources, marketplaceIdentity]);
 
   const userPlugins = useMemo(
     () => plugins.filter(isPersonalPluginRecord),
