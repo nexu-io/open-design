@@ -334,7 +334,10 @@ describe('store screenshot planner', () => {
       ...plan,
       pages: plan.pages.slice(0, 3),
     };
-    const generateJson = vi.fn(async () => threePages);
+    const generateJson = vi.fn(async (
+      _request: StructuredJsonRequest<ScreenshotPlan>,
+      _context: Pick<GenerateStoreScreenshotPlanRequest, 'byokProvider'>,
+    ) => threePages);
     const planner = createStoreScreenshotPlanner({ generateJson });
 
     await expect(planner.plan({
@@ -417,15 +420,21 @@ describe('store screenshot planner', () => {
 
   it('preserves locked values and never deletes a page with any lock', () => {
     const before = document();
+    const firstPage = before.pages[0];
+    if (!firstPage) throw new Error('expected first page');
+    const {
+      screenshotAssetId: omittedScreenshotAssetId,
+      ...firstPageWithoutScreenshot
+    } = firstPage;
+    void omittedScreenshotAssetId;
     const locked: StoreScreenshotDocument = {
       ...before,
       pages: before.pages.map((page, index) => index === 0
         ? {
-          ...page,
+          ...firstPageWithoutScreenshot,
           headline: '锁定标题',
           body: '锁定正文',
           templateId: 'gradient-device',
-          screenshotAssetId: undefined,
           lockedFields: ['headline', 'body', 'layout', 'screenshot'],
         }
         : index === 3

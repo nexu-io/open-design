@@ -134,7 +134,9 @@ describe('generateStructuredJson', () => {
       { text: `{"title":"${secret}"}`, sensitiveValues: [secret] },
       { text: '{"title":"Safe"}', sensitiveValues: [secret] },
     ];
-    const generateText = vi.fn(async () => outputs.shift() ?? null);
+    const generateText = vi.fn(async (
+      _request: StructuredJsonTextRequest,
+    ) => outputs.shift() ?? null);
 
     await expect(generateStructuredJson({
       system: 'Return one object.',
