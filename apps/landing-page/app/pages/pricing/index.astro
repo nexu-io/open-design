@@ -229,20 +229,26 @@ const jsonLd = [
       <h1 class="pr-hero-heading">{L.heroTitle}</h1>
       <div class="pr-audience-toggle" role="tablist" aria-label={teamContent.audienceTabsLabel}>
         <button
+          id="pr-audience-creator"
           type="button"
           class="pr-audience-btn is-active"
           role="tab"
           data-audience-btn="creator"
+          aria-controls="pr-creator-panel"
           aria-selected="true"
+          tabindex="0"
         >
           {teamContent.creatorTab}
         </button>
         <button
+          id="pr-audience-team"
           type="button"
           class="pr-audience-btn"
           role="tab"
           data-audience-btn="team"
+          aria-controls="pr-team-panel"
           aria-selected="false"
+          tabindex="-1"
         >
           {teamContent.teamTab}
         </button>
@@ -258,7 +264,12 @@ const jsonLd = [
       </div>
     </header>
 
-    <div data-audience-panel="creator">
+    <div
+      id="pr-creator-panel"
+      role="tabpanel"
+      aria-labelledby="pr-audience-creator"
+      data-audience-panel="creator"
+    >
     <section class="pr-grid" aria-label={teamContent.creatorTab}>
       {/* Free card — content-only (not part of the paid pricing contract).
           The CTA points at the auth-gated cloud console: signed-in visitors
@@ -412,7 +423,14 @@ const jsonLd = [
     <p class="pr-foot" set:html={footnoteHtml} />
     </div>
 
-    <div class="pr-team-panel" data-audience-panel="team" hidden>
+    <div
+      id="pr-team-panel"
+      class="pr-team-panel"
+      role="tabpanel"
+      aria-labelledby="pr-audience-team"
+      data-audience-panel="team"
+      hidden
+    >
       <div class="pr-team-grid">
         <section class="pr-team-card" aria-labelledby="pr-team-title">
           <svg class="pr-team-decoration" viewBox="0 0 24 24" aria-hidden="true">
@@ -439,16 +457,55 @@ const jsonLd = [
           </p>
 
           <div class="pr-team-controls">
-            <label class="pr-team-field">
-              <span>{teamContent.creditLabel}</span>
-              <select data-team-tier>
+            <div class="pr-team-field">
+              <span id="pr-team-tier-label">{teamContent.creditLabel}</span>
+              <div class="pr-team-select" data-team-tier-select>
+                <button
+                  type="button"
+                  class="pr-team-select-trigger"
+                  data-team-tier
+                  data-value={initialTeamTier.tier}
+                  role="combobox"
+                  aria-labelledby="pr-team-tier-label pr-team-tier-value"
+                  aria-controls="pr-team-tier-options"
+                  aria-haspopup="listbox"
+                  aria-expanded="false"
+                >
+                  <span id="pr-team-tier-value" data-team-tier-value>
+                    {teamCreditOption(initialTeamTier)}
+                  </span>
+                  <svg viewBox="0 0 20 20" aria-hidden="true">
+                    <path d="m6 8 4 4 4-4" />
+                  </svg>
+                </button>
+                <ul
+                  id="pr-team-tier-options"
+                  class="pr-team-select-options"
+                  data-team-tier-options
+                  role="listbox"
+                  aria-labelledby="pr-team-tier-label"
+                  hidden
+                >
                 {teamTiers.map((tier) => (
-                  <option value={tier.tier} selected={tier.tier === initialTeamTier.tier}>
-                    {teamCreditOption(tier)}
-                  </option>
+                  <li
+                    id={`pr-team-tier-${tier.tier}`}
+                    class:list={[
+                      'pr-team-select-option',
+                      { 'is-selected': tier.tier === initialTeamTier.tier },
+                    ]}
+                    data-team-tier-option
+                    data-value={tier.tier}
+                    role="option"
+                    aria-selected={tier.tier === initialTeamTier.tier ? 'true' : 'false'}
+                    tabindex="-1"
+                  >
+                    <span>{teamCreditOption(tier)}</span>
+                    <span class="pr-team-select-check" aria-hidden="true">✓</span>
+                  </li>
                 ))}
-              </select>
-            </label>
+                </ul>
+              </div>
+            </div>
 
             <div class="pr-team-field">
               <span>{teamContent.seats}</span>
@@ -462,13 +519,6 @@ const jsonLd = [
           <p class="pr-team-min-seats" data-team-min>
             {fillTemplate(teamContent.minSeatsNote, { count: String(initialTeamTier.minSeats) })}
           </p>
-
-          <div class="pr-team-total" data-team-total>
-            {fillTemplate(teamContent.yearlyTotal, {
-              count: String(initialTeamSeats),
-              amount: initialTeamView.intervalTotal,
-            })}
-          </div>
 
           <ul class="pr-team-feature-list">
             {teamContent.teamFeatures.map((feature) => <li>{feature}</li>)}
@@ -631,6 +681,7 @@ const jsonLd = [
           const active = button.getAttribute('data-audience-btn') === audience;
           button.classList.toggle('is-active', active);
           button.setAttribute('aria-selected', active ? 'true' : 'false');
+          button.setAttribute('tabindex', active ? '0' : '-1');
         }
         for (const panel of root.querySelectorAll('[data-audience-panel]')) {
           panel.hidden = panel.getAttribute('data-audience-panel') !== audience;
@@ -640,6 +691,20 @@ const jsonLd = [
       for (const button of root.querySelectorAll('[data-audience-btn]')) {
         button.addEventListener('click', () => {
           activateAudience(button.getAttribute('data-audience-btn'));
+        });
+        button.addEventListener('keydown', (event) => {
+          const buttons = Array.from(root.querySelectorAll('[data-audience-btn]'));
+          const current = buttons.indexOf(button);
+          let next = current;
+          if (event.key === 'ArrowRight') next = (current + 1) % buttons.length;
+          else if (event.key === 'ArrowLeft') next = (current - 1 + buttons.length) % buttons.length;
+          else if (event.key === 'Home') next = 0;
+          else if (event.key === 'End') next = buttons.length - 1;
+          else return;
+          event.preventDefault();
+          const nextButton = buttons[next];
+          activateAudience(nextButton.getAttribute('data-audience-btn'));
+          nextButton.focus();
         });
       }
 
@@ -667,13 +732,55 @@ const jsonLd = [
       }
 
       // ── Static Team snapshot controls ───────────────────────────────────
-      const teamTierSelect = root.querySelector('[data-team-tier]');
+      const teamTierTrigger = root.querySelector('[data-team-tier]');
+      const teamTierSelect = root.querySelector('[data-team-tier-select]');
+      const teamTierOptions = root.querySelector('[data-team-tier-options]');
+      const teamTierValue = root.querySelector('[data-team-tier-value]');
+      const teamTierOptionList = Array.from(root.querySelectorAll('[data-team-tier-option]'));
       const teamSeatsOutput = root.querySelector('[data-team-seats]');
       const teamSeatsDec = root.querySelector('[data-team-seats-dec]');
       const teamSeatsInc = root.querySelector('[data-team-seats-inc]');
       let teamSeats = Number(teamSeatsOutput?.textContent || 3);
       const teamTier = () =>
-        teamTiers.find((tier) => tier.tier === teamTierSelect?.value) || teamTiers[0];
+        teamTiers.find((tier) => tier.tier === teamTierTrigger?.getAttribute('data-value')) ||
+        teamTiers[0];
+
+      const closeTeamTierMenu = (restoreFocus) => {
+        if (!teamTierTrigger || !teamTierOptions) return;
+        teamTierOptions.hidden = true;
+        teamTierTrigger.setAttribute('aria-expanded', 'false');
+        if (restoreFocus) teamTierTrigger.focus();
+      };
+      const openTeamTierMenu = (focusIndex) => {
+        if (!teamTierTrigger || !teamTierOptions) return;
+        teamTierOptions.hidden = false;
+        teamTierTrigger.setAttribute('aria-expanded', 'true');
+        const selectedIndex = Math.max(
+          0,
+          teamTierOptionList.findIndex((option) => option.getAttribute('aria-selected') === 'true'),
+        );
+        const index =
+          typeof focusIndex === 'number'
+            ? Math.max(0, Math.min(teamTierOptionList.length - 1, focusIndex))
+            : selectedIndex;
+        teamTierOptionList[index]?.focus();
+      };
+      const selectTeamTier = (option) => {
+        const value = option?.getAttribute('data-value');
+        const tier = teamTiers.find((candidate) => candidate.tier === value);
+        if (!tier || !teamTierTrigger) return;
+        teamTierTrigger.setAttribute('data-value', tier.tier);
+        if (teamTierValue) teamTierValue.textContent = option.querySelector('span')?.textContent || '';
+        for (const candidate of teamTierOptionList) {
+          const selected = candidate === option;
+          candidate.classList.toggle('is-selected', selected);
+          candidate.setAttribute('aria-selected', selected ? 'true' : 'false');
+        }
+        teamSeats = Math.max(tier.minSeats, teamSeats);
+        closeTeamTierMenu(true);
+        updateTeamPlan();
+        track('pricing_team_tier_change', { tier: tier.tier });
+      };
 
       const fillTeam = (template, values) =>
         template.replace(/\{(\w+)\}/g, (_, key) =>
@@ -722,23 +829,54 @@ const jsonLd = [
         );
         set(
           '[data-audience-panel="team"]',
-          '[data-team-total]',
-          fillTeam(
-            interval === 'yearly' ? teamCopy.yearlyTotal : teamCopy.monthlyTotal,
-            { count: String(teamSeats), amount: total },
-          ),
-        );
-        set(
-          '[data-audience-panel="team"]',
           '[data-team-min]',
           fillTeam(teamCopy.minSeatsNote, { count: String(tier.minSeats) }),
         );
       };
 
-      teamTierSelect?.addEventListener('change', () => {
-        teamSeats = Math.max(teamTier()?.minSeats || 3, teamSeats);
-        updateTeamPlan();
-        track('pricing_team_tier_change', { tier: teamTierSelect.value });
+      teamTierTrigger?.addEventListener('click', () => {
+        const isOpen = teamTierTrigger.getAttribute('aria-expanded') === 'true';
+        if (isOpen) closeTeamTierMenu(false);
+        else openTeamTierMenu();
+      });
+      teamTierTrigger?.addEventListener('keydown', (event) => {
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+          event.preventDefault();
+          openTeamTierMenu(event.key === 'ArrowUp' ? teamTierOptionList.length - 1 : undefined);
+        } else if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          openTeamTierMenu();
+        } else if (event.key === 'Escape') {
+          closeTeamTierMenu(false);
+        }
+      });
+      for (const option of teamTierOptionList) {
+        option.addEventListener('click', () => selectTeamTier(option));
+        option.addEventListener('keydown', (event) => {
+          const current = teamTierOptionList.indexOf(option);
+          let next = current;
+          if (event.key === 'ArrowDown') next = (current + 1) % teamTierOptionList.length;
+          else if (event.key === 'ArrowUp') {
+            next = (current - 1 + teamTierOptionList.length) % teamTierOptionList.length;
+          } else if (event.key === 'Home') next = 0;
+          else if (event.key === 'End') next = teamTierOptionList.length - 1;
+          else if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            selectTeamTier(option);
+            return;
+          } else if (event.key === 'Escape') {
+            event.preventDefault();
+            closeTeamTierMenu(true);
+            return;
+          } else {
+            return;
+          }
+          event.preventDefault();
+          teamTierOptionList[next]?.focus();
+        });
+      }
+      document.addEventListener('pointerdown', (event) => {
+        if (teamTierSelect && !teamTierSelect.contains(event.target)) closeTeamTierMenu(false);
       });
       teamSeatsDec?.addEventListener('click', () => {
         teamSeats = Math.max(teamTier()?.minSeats || 3, teamSeats - 1);
@@ -900,7 +1038,6 @@ const jsonLd = [
   }
 
   /* ---- Audience + billing toggles ---- */
-  .pr-audience-toggle,
   .pr-toggle {
     margin-top: 22px;
     display: inline-flex;
@@ -910,9 +1047,15 @@ const jsonLd = [
     border: 1px solid var(--border, rgba(0, 0, 0, 0.12));
     background: var(--surface, rgba(255, 255, 255, 0.5));
   }
-  .pr-audience-toggle { margin-top: 28px; }
+  .pr-audience-toggle {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    width: min(900px, 100%);
+    margin-top: 28px;
+    border-bottom: 1px solid var(--border, rgba(0, 0, 0, 0.12));
+  }
   .pr-toggle { margin-top: 12px; }
-  .pr-audience-btn,
   .pr-toggle-btn {
     display: inline-flex;
     align-items: center;
@@ -927,8 +1070,33 @@ const jsonLd = [
     border-radius: 999px;
     transition: background-color 200ms cubic-bezier(0.23, 1, 0.32, 1), color 200ms;
   }
-  .pr-audience-btn.is-active,
   .pr-toggle-btn.is-active { background: var(--ink); color: #fff; }
+  .pr-audience-btn {
+    position: relative;
+    min-width: 120px;
+    padding: 12px 20px 14px;
+    border: 0;
+    background: transparent;
+    color: var(--ink-soft, #777);
+    font: inherit;
+    font-size: 0.92rem;
+    cursor: pointer;
+    transition: color 200ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+  .pr-audience-btn.is-active {
+    color: var(--ink);
+    font-weight: 650;
+  }
+  .pr-audience-btn.is-active::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    bottom: -1px;
+    left: 0;
+    height: 2px;
+    border-radius: 2px 2px 0 0;
+    background: var(--ink);
+  }
   .pr-toggle-save {
     font-size: 0.66rem;
     font-weight: 600;
@@ -945,6 +1113,7 @@ const jsonLd = [
 
   /* ---- Grid ---- */
   .pr-grid {
+    padding: 0;
     margin-top: 40px;
     display: grid;
     grid-template-columns: repeat(4, 1fr);
@@ -1225,7 +1394,7 @@ const jsonLd = [
     font-size: 0.8rem;
     font-weight: 600;
   }
-  .pr-team-field select,
+  .pr-team-select-trigger,
   .pr-team-stepper {
     box-sizing: border-box;
     width: 100%;
@@ -1236,7 +1405,65 @@ const jsonLd = [
     color: var(--ink);
     font: inherit;
   }
-  .pr-team-field select { padding: 0 12px; }
+  .pr-team-select {
+    position: relative;
+    min-width: 0;
+  }
+  .pr-team-select-trigger {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 0 12px;
+    cursor: pointer;
+    text-align: left;
+  }
+  .pr-team-select-trigger svg {
+    width: 18px;
+    height: 18px;
+    flex: 0 0 auto;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    transition: transform 200ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+  .pr-team-select-trigger[aria-expanded='true'] svg { transform: rotate(180deg); }
+  .pr-team-select-options {
+    position: absolute;
+    z-index: 20;
+    top: calc(100% + 6px);
+    right: 0;
+    left: 0;
+    max-height: 250px;
+    margin: 0;
+    padding: 6px;
+    overflow-y: auto;
+    list-style: none;
+    border: 1px solid var(--border, rgba(0, 0, 0, 0.14));
+    border-radius: 10px;
+    background: var(--surface, #fff);
+    box-shadow: 0 18px 40px -22px rgba(0, 0, 0, 0.48);
+  }
+  .pr-team-select-option {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 9px 10px;
+    border-radius: 7px;
+    color: var(--ink);
+    cursor: pointer;
+    font-weight: 500;
+    outline: none;
+  }
+  .pr-team-select-option:hover,
+  .pr-team-select-option:focus-visible {
+    background: var(--line, rgba(0, 0, 0, 0.05));
+  }
+  .pr-team-select-check { visibility: hidden; color: var(--olive, #218c00); }
+  .pr-team-select-option.is-selected .pr-team-select-check { visibility: visible; }
   .pr-team-stepper {
     display: grid;
     grid-template-columns: 1fr auto 1fr;
@@ -1252,18 +1479,9 @@ const jsonLd = [
   }
   .pr-team-stepper button:disabled { cursor: not-allowed; opacity: 0.35; }
   .pr-team-stepper output { min-width: 2ch; text-align: center; color: var(--ink); }
-  .pr-team-total {
-    margin-top: 18px;
-    padding: 12px;
-    border-radius: 8px;
-    background: var(--line, rgba(0, 0, 0, 0.04));
-    color: var(--ink);
-    font-size: 0.9rem;
-    font-weight: 650;
-  }
   .pr-team-feature-list {
     list-style: none;
-    margin: 24px 0 0;
+    margin: 20px 0 0;
     padding: 0;
     display: flex;
     flex-direction: column;
@@ -1299,6 +1517,7 @@ const jsonLd = [
   @media (max-width: 520px) {
     .pr-team-card { padding: 22px; }
     .pr-team-controls { grid-template-columns: 1fr; }
+    .pr-audience-btn { min-width: 0; flex: 1; }
   }
 
   /* ---- Customer story ---- */

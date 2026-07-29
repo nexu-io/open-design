@@ -209,6 +209,30 @@ describe("pricing contract", () => {
     assert.match(page, /data-audience-panel="team"/);
   });
 
+  it("keeps the pricing controls on the Vela-aligned custom UI", async () => {
+    const page = await readFile(PRICING_PAGE_PATH, "utf8");
+
+    // Pricing grids are nested inside audience panels, so the generic global
+    // `section { padding: 130px 0 }` rule must be cancelled on the grid itself.
+    assert.match(page, /\.pr-grid\s*\{[^}]*padding:\s*0;/s);
+
+    // Creator/Team uses the wide underline tabs from the Vela pricing dialog,
+    // while billing interval remains its own compact control.
+    assert.match(page, /class="pr-audience-toggle"[^>]*role="tablist"/);
+    assert.match(page, /\.pr-audience-toggle\s*\{[^}]*border-bottom:/s);
+    assert.match(page, /\.pr-audience-btn\.is-active::after/);
+
+    // The visible Team tier control must never open the OS-native select popup.
+    assert.doesNotMatch(page, /<select[^>]*data-team-tier/);
+    assert.match(page, /data-team-tier[^>]*role="combobox"/);
+    assert.match(page, /data-team-tier-options[^>]*role="listbox"/);
+    assert.match(page, /data-team-tier-option[^>]*role="option"/);
+
+    // QA explicitly removed the redundant grey total strip.
+    assert.doesNotMatch(page, /class="pr-team-total"/);
+    assert.doesNotMatch(page, /data-team-total/);
+  });
+
   it("localizes the flagship Pricing structure for every active locale", () => {
     const activeLocales = LANDING_LOCALES.map((locale) => locale.code);
 
