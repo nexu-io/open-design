@@ -216,7 +216,7 @@ const PROJECT_STRING_FLAGS = new Set([
   'prompt-file', 'path', 'dir', 'as',
   'agent', 'model', 'service-tier', 'snapshot-id', 'inputs', 'grant-caps', 'editor',
   'title', 'label', 'against', 'seed-from', 'fork-after', 'mode',
-  'source',
+  'source', 'out',
 ]);
 const PROJECT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'follow']);
 // `od templates …` mirrors NewProjectPanel / ExamplesTab. Same surface,
@@ -6019,6 +6019,9 @@ async function runProject(args) {
                     [--design-system <id>] [--json]
   od project list                         List projects.
   od project info <id>                    Print one project.
+  od project download <id> [--out <path>] [--json]
+                    Download the project's files as a .zip (same archive as
+                    the web Download action).
   od project delete <id>                  Delete a project.
   od project editors                      List locally-installed editors that
                                           can open a project (hand-off targets).
@@ -6072,6 +6075,55 @@ Common options:
       if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
       const data = await resp.json();
       process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      return;
+    }
+    // `od project download` is the CLI twin of the web hand-off Download
+    // action (#787): both consume GET /api/projects/:id/archive, the same
+    // whole-project .zip the Design Files panel produces. Mirrors
+    // `od design-systems download`.
+    case 'download': {
+      const id = rest.find((a) => !a.startsWith('-'));
+      if (!id) {
+        console.error('Usage: od project download <id> [--out <path>] [--json]');
+        process.exit(2);
+      }
+      let resp;
+      try {
+        resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}/archive`);
+      } catch (err) {
+        surfaceFetchError(err, base);
+        process.exit(3);
+      }
+      if (resp.status === 404) {
+        // The archive route 404s for an unknown project AND for a known
+        // project with no on-disk files yet; relay the server message so
+        // the two read differently.
+        const detail = await resp.json().then((d) => d?.error?.message).catch(() => null);
+        console.error(`nothing to download for project ${id}${detail ? ` (${detail})` : ''}`);
+        process.exit(4);
+      }
+      if (!resp.ok) return structuredHttpFailure(resp);
+      const buffer = Buffer.from(await resp.arrayBuffer());
+      let out = typeof flags.out === 'string' ? flags.out : null;
+      if (!out) {
+        const cd = resp.headers.get('content-disposition') || '';
+        const star = /filename\*=UTF-8''([^;]+)/i.exec(cd);
+        const plain = /filename="([^"]+)"/i.exec(cd);
+        if (star && star[1]) {
+          try { out = decodeURIComponent(star[1]); } catch { out = plain && plain[1] ? plain[1] : null; }
+        } else if (plain && plain[1]) {
+          out = plain[1];
+        }
+        if (!out) out = 'project.zip';
+      }
+      const { writeFile } = await import('node:fs/promises');
+      await writeFile(out, buffer);
+      if (flags.json) {
+        return process.stdout.write(
+          JSON.stringify({ ok: true, id, out, bytes: buffer.length }, null, 2) + '\n',
+        );
+      }
+      console.log(`Downloaded ${id} -> ${out} (${buffer.length} bytes)`);
       return;
     }
     case 'create': {
@@ -7587,6 +7639,11 @@ async function runDaemonStart(flags) {
     logListening: false,
     openBrowser: !headless,
     port,
+    // Headless / --serve-web is the container/Web deployment shape: the
+    // browsing user cannot see this host's desktop, so GET /api/editors
+    // reports canRevealFolder=false and the web UI degrades Open Folder to
+    // Copy Path / Download / Remote Open (#787).
+    revealFolderCapable: !headless,
   });
   console.log(`[od] listening on ${runtime.url} (${headless ? 'headless' : 'desktop'})`);
 

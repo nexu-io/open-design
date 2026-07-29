@@ -39,6 +39,7 @@ describe('HandoffButton zero-editors fallback', () => {
     fetchHostEditors.mockResolvedValue({
       platform: 'darwin',
       editors: [],
+      canRevealFolder: true,
     });
     openProjectInEditor.mockResolvedValue(undefined);
 
@@ -55,13 +56,13 @@ describe('HandoffButton zero-editors fallback', () => {
   });
 
   it('surfaces a daemon spawn failure inline so the fallback is not a silent no-op', async () => {
-    // The production caller (`ProjectView`) mounts `<HandoffButton projectId={…} />`
-    // with no `onRequestRevealInFinder` callback, so a rejected
-    // `openProjectInEditor` would otherwise leave users with a CTA that
-    // advertises Finder/Explorer/File Manager but does nothing visible.
+    // A rejected `openProjectInEditor` would otherwise leave users with a
+    // CTA that advertises Finder/Explorer/File Manager but does nothing
+    // visible, so the failure must surface inline.
     fetchHostEditors.mockResolvedValue({
       platform: 'darwin',
       editors: [],
+      canRevealFolder: true,
     });
     openProjectInEditor.mockRejectedValue(new Error('daemon refused: ENOENT'));
 
@@ -90,6 +91,7 @@ describe('HandoffButton zero-editors fallback', () => {
           available: true,
         },
       ],
+      canRevealFolder: true,
     });
     copyToClipboard.mockResolvedValue(true);
     const agents: AgentInfo[] = [
@@ -162,6 +164,7 @@ describe('HandoffButton zero-editors fallback', () => {
           available: true,
         },
       ],
+      canRevealFolder: true,
     });
     copyToClipboard.mockResolvedValue(true);
     const projectDir = '/tmp/open-design/Landing';

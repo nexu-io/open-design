@@ -240,7 +240,7 @@ import { buildRepoImportPrompt, designSystemNeedsRepoConnect } from './design-sy
 import { isDesignSystemProject, resolveProjectDesignSystemId } from './design-system-project';
 import { collectReferencedJsxNames } from '../runtime/jsx-module-refs';
 import { KNOWN_PROVIDERS } from '../state/config';
-import { DESIGN_SYSTEM_TAB, FileWorkspace, type BrowserOpenRequest } from './FileWorkspace';
+import { DESIGN_FILES_TAB, DESIGN_SYSTEM_TAB, FileWorkspace, type BrowserOpenRequest } from './FileWorkspace';
 import {
   type PluginFolderAgentAction,
 } from './design-files/pluginFolderActions';
@@ -8862,6 +8862,10 @@ export function ProjectView({
                 artifactKind={headerArtifact.artifact_kind}
                 metricsConsent={config.telemetry?.metrics === true}
                 installationId={config.installationId}
+                // "Remote Open" (container/Web daemon, canRevealFolder=false):
+                // focus the Design Files tab — the web-native stand-in for a
+                // local Finder reveal.
+                onOpenInWebFiles={() => requestOpenFile(DESIGN_FILES_TAB)}
               />
               <MessageCenter
                 onOpenNotificationSettings={() => onOpenSettings('notifications')}

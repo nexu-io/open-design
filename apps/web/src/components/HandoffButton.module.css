@@ -1,0 +1,25 @@
+/* Layouts for the web-native hand-off actions (Copy Path / Download / Remote
+   Open) shown when the daemon reports canRevealFolder === false. The buttons
+   themselves reuse the shared .handoff-path-button contract from
+   styles/viewer/routines.css so they match the existing Copy path row. */
+
+/* Side-by-side inside the dropdown's path row. */
+.webActionsRow {
+  display: flex;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+}
+
+.webActionsRow > * {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* Stacked list inside the zero-editor fallback menu. */
+.webActionsStack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}

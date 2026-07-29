@@ -1247,6 +1247,12 @@ export interface Dict {
   'handoff.promptProjectId': string;
   'handoff.notInstalled': string;
   'handoff.notDetectedTitle': string;
+  'handoff.download': string;
+  'handoff.downloadFailed': string;
+  'handoff.remoteOpen': string;
+  'handoff.remoteOpenTitle': string;
+  'handoff.webActionsTitle': string;
+  'handoff.openFolderUnavailable': string;
   'designSystemPicker.select': string;
   'designSystemPicker.loading': string;
   'designSystemPicker.searchPlaceholder': string;

@@ -1,8 +1,15 @@
 // Hand-off menu in the ChatPane header. The left split button opens the
 // current design project folder in a local editor, while the dropdown also
 // exposes copy-to-CLI prompts for handing the same local folder to code agents.
+//
+// When the daemon reports `canRevealFolder: false` (container / remote / Web
+// deployment — the user cannot see the daemon host's desktop), the local
+// folder-opener surface degrades to web-native actions: Copy Path, Download
+// (.zip via /api/projects/:id/archive), and Remote Open (focus the project in
+// the web Design Files view). See #787.
 
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
+import { FOLDER_OPENER_EDITOR_IDS } from '@open-design/contracts';
 import type {
   AgentInfo,
   HostEditor,
@@ -20,14 +27,17 @@ import { amrHandoffDeviceId, attributedAmrUrl, recordAmrEntry } from '../analyti
 import { trackHandoffClick } from '../analytics/events';
 import { useT } from '../i18n';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
+import { downloadProjectArchive } from '../runtime/exports';
 import { Icon } from './Icon';
 import { EditorIcon } from './EditorIcon';
 import { AgentIcon } from './AgentIcon';
+import styles from './HandoffButton.module.css';
 
 const PREFERRED_EDITOR_KEY = 'open-design:preferred-editor';
 const PREFERRED_FRAMEWORK_KEY = 'open-design:handoff-framework';
 const AMR_WEBSITE_URL = 'https://open-design.ai/amr';
 const PROJECT_PATH_COPY_ID = 'project-path';
+const PROJECT_DOWNLOAD_ID = 'project-download';
 
 type HandoffTab = 'editor' | 'cli';
 type FrameworkId = 'react' | 'vue' | 'svelte' | 'solid' | 'next' | 'vanilla';
@@ -118,10 +128,12 @@ interface Props {
   artifactKind?: TrackingArtifactKind;
   metricsConsent?: boolean;
   installationId?: string | null;
-  // Optional fallback "always open in OS file manager" — falls back to the
-  // existing shell.openPath bridge in case the daemon catalogue is empty
-  // (highly unlikely on macOS / Win / Linux but harmless to support).
-  onRequestRevealInFinder?: () => void;
+  // "Remote Open": focus the project in the web Design Files view — the
+  // web-native equivalent of a local Finder reveal when the daemon reports
+  // canRevealFolder === false. Wired by ProjectView, which owns the
+  // workspace tab state; the action is hidden when the callback is absent so
+  // the menu never advertises a no-op.
+  onOpenInWebFiles?: () => void;
 }
 
 function readPreferred(): HostEditorId | null {
@@ -295,7 +307,7 @@ export function HandoffButton({
   artifactKind,
   metricsConsent = false,
   installationId,
-  onRequestRevealInFinder,
+  onOpenInWebFiles,
 }: Props) {
   const t = useT();
   const analytics = useAnalytics();
@@ -319,6 +331,10 @@ export function HandoffButton({
   };
   const [editors, setEditors] = useState<HostEditor[]>([]);
   const [platform, setPlatform] = useState<HostEditorsResponse['platform']>('unknown');
+  // Whether the daemon can reveal a local folder to the current user.
+  // Older daemons omit the field — treat `undefined` as `true` so a web
+  // bundle upgraded ahead of its daemon keeps the local desktop behavior.
+  const [canRevealFolder, setCanRevealFolder] = useState(true);
   const [loaded, setLoaded] = useState(false);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState<HostEditorId | null>(null);
@@ -354,6 +370,7 @@ export function HandoffButton({
         if (cancelled) return;
         setEditors(resp.editors);
         setPlatform(resp.platform);
+        setCanRevealFolder(resp.canRevealFolder !== false);
         setLoaded(true);
       })
       .catch(() => {
@@ -391,8 +408,14 @@ export function HandoffButton({
     };
   }, []);
 
-  const available = editors.filter((e) => e.available);
-  const unavailable = editors.filter((e) => !e.available);
+  // In a non-revealable environment the OS folder openers are hidden — even
+  // ones probed as available (e.g. xdg-open inside a container): they would
+  // open a window on the daemon host, not for the user browsing the web UI.
+  const visibleEditors = canRevealFolder
+    ? editors
+    : editors.filter((e) => !FOLDER_OPENER_EDITOR_IDS.has(e.id));
+  const available = visibleEditors.filter((e) => e.available);
+  const unavailable = visibleEditors.filter((e) => !e.available);
   const preferred = readPreferred();
   const primary =
     available.find((e) => e.id === preferred) ?? available[0] ?? null;
@@ -428,15 +451,6 @@ export function HandoffButton({
       setError(msg);
       setOpen(true);
       setActiveTab('editor');
-      // Fallback: if Finder is the user's pick and the daemon spawn
-      // failed, try the renderer-side reveal-in-finder bridge.
-      if (editor.id === 'finder' && onRequestRevealInFinder) {
-        try {
-          onRequestRevealInFinder();
-        } catch {
-          // ignore
-        }
-      }
     } finally {
       setBusy(null);
     }
@@ -524,6 +538,94 @@ export function HandoffButton({
     }
   }
 
+  async function downloadProject() {
+    fireHandoff({ element: 'download' });
+    setError(null);
+    setCopyBusy(PROJECT_DOWNLOAD_ID);
+    try {
+      const ok = await downloadProjectArchive({
+        projectId,
+        fallbackTitle: projectName?.trim() || projectId,
+      });
+      if (!ok) {
+        setError(t('handoff.downloadFailed'));
+      }
+    } finally {
+      setCopyBusy(null);
+    }
+  }
+
+  function openInWebFiles() {
+    fireHandoff({ element: 'remote_open' });
+    setError(null);
+    onOpenInWebFiles?.();
+    setOpen(false);
+  }
+
+  // Copy Path / Download / Remote Open — the web-native replacements for the
+  // local folder openers when the daemon reports canRevealFolder === false.
+  function renderWebActions(layout: 'row' | 'stack') {
+    const copied = copiedCliId === PROJECT_PATH_COPY_ID;
+    return (
+      <div
+        className={layout === 'row' ? styles.webActionsRow : styles.webActionsStack}
+        data-testid="handoff-web-actions"
+      >
+        <button
+          type="button"
+          className={`handoff-path-button${copied ? ' copied' : ''}`}
+          data-testid="handoff-web-action-copy-path"
+          onClick={() => void copyProjectPath()}
+          disabled={copyBusy === PROJECT_PATH_COPY_ID || !projectDir}
+          title={projectDir ?? t('handoff.projectPathUnavailable')}
+          aria-label={copied ? t('handoff.copied') : t('designFiles.copyPath')}
+        >
+          <span className="handoff-path-button-main">
+            <span className="handoff-path-button-icon" aria-hidden>
+              <Icon name={copied ? 'check' : 'copy'} size={13} />
+            </span>
+            <span className="handoff-path-button-label">
+              {copied ? t('handoff.copied') : t('designFiles.copyPath')}
+            </span>
+          </span>
+        </button>
+        <button
+          type="button"
+          className="handoff-path-button"
+          data-testid="handoff-web-action-download"
+          onClick={() => void downloadProject()}
+          disabled={copyBusy === PROJECT_DOWNLOAD_ID}
+          title={t('handoff.download')}
+          aria-label={t('handoff.download')}
+        >
+          <span className="handoff-path-button-main">
+            <span className="handoff-path-button-icon" aria-hidden>
+              <Icon name="download" size={13} />
+            </span>
+            <span className="handoff-path-button-label">{t('handoff.download')}</span>
+          </span>
+        </button>
+        {onOpenInWebFiles ? (
+          <button
+            type="button"
+            className="handoff-path-button"
+            data-testid="handoff-web-action-remote-open"
+            onClick={openInWebFiles}
+            title={t('handoff.remoteOpenTitle')}
+            aria-label={t('handoff.remoteOpen')}
+          >
+            <span className="handoff-path-button-main">
+              <span className="handoff-path-button-icon" aria-hidden>
+                <Icon name="external-link" size={13} />
+              </span>
+              <span className="handoff-path-button-label">{t('handoff.remoteOpen')}</span>
+            </span>
+          </button>
+        ) : null}
+      </div>
+    );
+  }
+
   function chooseFramework(id: FrameworkId) {
     fireHandoff({ element: 'framework', framework: id, handoff_tab: 'cli' });
     setFrameworkId(id);
@@ -538,6 +640,53 @@ export function HandoffButton({
 
   if (!loaded) {
     return null;
+  }
+
+  // No available editors and no way to reveal a local folder — the old
+  // Finder/Explorer/File-Manager fallback would only fail (409 / 500 /
+  // silent no-op on the daemon host). Offer the web-native actions instead:
+  // Copy Path / Download / Remote Open.
+  if (available.length === 0 && !canRevealFolder) {
+    return (
+      <div
+        className={`handoff-wrap handoff-wrap--solo${open ? ' open' : ''}`}
+        ref={wrapRef}
+        data-testid="handoff-wrap"
+      >
+        <button
+          type="button"
+          className="handoff-trigger handoff-trigger--solo od-tooltip"
+          data-testid="handoff-web-actions-trigger"
+          title={t('handoff.openFolderUnavailable')}
+          data-tooltip={t('handoff.openFolderUnavailable')}
+          data-tooltip-placement="bottom"
+          aria-expanded={open}
+          onClick={() => {
+            fireHandoff({ element: 'trigger' });
+            setOpen((v) => !v);
+          }}
+        >
+          <Icon name="folder" size={20} />
+          <span className="handoff-trigger-label">{t('handoff.webActionsTitle')}</span>
+        </button>
+        {open ? (
+          <div
+            className="handoff-menu"
+            role="dialog"
+            aria-label={t('handoff.webActionsTitle')}
+            data-testid="handoff-web-actions-menu"
+          >
+            {renderWebActions('stack')}
+            {error ? (
+              <>
+                <div className="handoff-menu-divider" />
+                <div className="handoff-menu-error" role="alert">{error}</div>
+              </>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    );
   }
 
   // No available editors — render a Finder/Explorer/File-Manager single-button
@@ -564,8 +713,8 @@ export function HandoffButton({
             // The fallback opens the project folder in the OS file manager.
             // finder / explorer / file-manager are real entries in the daemon's
             // open-in catalogue (open / explorer / xdg-open), so this performs a
-            // genuine reveal rather than a no-op; the renderer reveal bridge is a
-            // secondary fallback if the daemon spawn fails.
+            // genuine reveal rather than a no-op; a daemon spawn failure
+            // surfaces inline below.
             fireHandoff({
               element: 'open_editor',
               target_id: handoffTargetIdToTracking(fallbackId),
@@ -577,7 +726,6 @@ export function HandoffButton({
             void openProjectInEditor(projectId, fallbackId)
               .catch((err) => {
                 setError(err instanceof Error ? err.message : String(err));
-                onRequestRevealInFinder?.();
               })
               .finally(() => setBusy(null));
           }}
@@ -694,23 +842,29 @@ export function HandoffButton({
             </button>
           </div>
           <div className="handoff-path-row" data-testid="handoff-project-path">
-            <button
-              type="button"
-              className={`handoff-path-button${copiedCliId === PROJECT_PATH_COPY_ID ? ' copied' : ''}`}
-              onClick={() => void copyProjectPath()}
-              disabled={copyBusy === PROJECT_PATH_COPY_ID || !projectDir}
-              title={projectDir ?? t('handoff.projectPathUnavailable')}
-              aria-label={copiedCliId === PROJECT_PATH_COPY_ID ? t('handoff.copied') : t('designFiles.copyPath')}
-            >
-              <span className="handoff-path-button-main">
-                <span className="handoff-path-button-icon" aria-hidden>
-                  <Icon name={copiedCliId === PROJECT_PATH_COPY_ID ? 'check' : 'copy'} size={13} />
+            {canRevealFolder ? (
+              <button
+                type="button"
+                className={`handoff-path-button${copiedCliId === PROJECT_PATH_COPY_ID ? ' copied' : ''}`}
+                onClick={() => void copyProjectPath()}
+                disabled={copyBusy === PROJECT_PATH_COPY_ID || !projectDir}
+                title={projectDir ?? t('handoff.projectPathUnavailable')}
+                aria-label={copiedCliId === PROJECT_PATH_COPY_ID ? t('handoff.copied') : t('designFiles.copyPath')}
+              >
+                <span className="handoff-path-button-main">
+                  <span className="handoff-path-button-icon" aria-hidden>
+                    <Icon name={copiedCliId === PROJECT_PATH_COPY_ID ? 'check' : 'copy'} size={13} />
+                  </span>
+                  <span className="handoff-path-button-label">
+                    {copiedCliId === PROJECT_PATH_COPY_ID ? t('handoff.copied') : t('designFiles.copyPath')}
+                  </span>
                 </span>
-                <span className="handoff-path-button-label">
-                  {copiedCliId === PROJECT_PATH_COPY_ID ? t('handoff.copied') : t('designFiles.copyPath')}
-                </span>
-              </span>
-            </button>
+              </button>
+            ) : (
+              // The local folder openers are hidden in this environment, so
+              // the path row carries all three web-native actions instead.
+              renderWebActions('row')
+            )}
           </div>
           {activeTab === 'editor' ? (
             <section className="handoff-menu-block" role="tabpanel">

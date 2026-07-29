@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve as pathResolve } from 'node:path';
@@ -19,6 +19,10 @@ interface CapturedRequest {
   url: string;
   body: string;
 }
+
+// Not a real zip — `od project download` writes the response bytes verbatim,
+// so any distinctive payload proves the passthrough.
+const ARCHIVE_BYTES = Buffer.from('PKfake-archive-payload', 'binary');
 
 interface StubServer {
   baseUrl: string;
@@ -50,6 +54,23 @@ async function startProjectStubServer(): Promise<StubServer> {
         body: raw,
       };
       requests.push(captured);
+
+      if (captured.method === 'GET' && captured.url === '/api/projects/dl-project/archive') {
+        res.statusCode = 200;
+        res.setHeader('content-type', 'application/zip');
+        res.setHeader(
+          'content-disposition',
+          `attachment; filename="Landing_page.zip"; filename*=UTF-8''${encodeURIComponent('Landing päge.zip')}`,
+        );
+        res.end(ARCHIVE_BYTES);
+        return;
+      }
+      if (captured.method === 'GET' && captured.url === '/api/projects/empty-project/archive') {
+        res.statusCode = 404;
+        res.setHeader('content-type', 'application/json');
+        res.end(JSON.stringify({ error: { code: 'FILE_NOT_FOUND', message: 'archive root does not exist' } }));
+        return;
+      }
 
       res.setHeader('content-type', 'application/json');
       if (captured.method === 'POST' && captured.url === '/api/projects/source-project/design-system-copy') {
@@ -88,12 +109,15 @@ async function startProjectStubServer(): Promise<StubServer> {
   };
 }
 
-async function runCli(args: string[]): Promise<{ stdout: string; stderr: string; code: number | null }> {
+async function runCli(
+  args: string[],
+  cwd: string = DAEMON_ROOT,
+): Promise<{ stdout: string; stderr: string; code: number | null }> {
   const env: NodeJS.ProcessEnv = { ...process.env };
   delete env.NODE_OPTIONS;
   try {
     const { stdout, stderr } = await execFileP(process.execPath, [TSX_CLI, CLI_SRC, ...args], {
-      cwd: DAEMON_ROOT,
+      cwd,
       env,
       timeout: 15_000,
       maxBuffer: 4 * 1024 * 1024,
@@ -171,5 +195,70 @@ describe('od project CLI', () => {
       url: '/api/projects/source-project/duplicate',
     });
     expect(JSON.parse(stub.requests[0]!.body)).toEqual({ name: 'Duplicate Copy' });
+  });
+
+  // `od project download` (#787) — CLI twin of the web hand-off Download
+  // action; both consume GET /api/projects/:id/archive.
+  it('downloads the project archive to --out and reports it as JSON', async () => {
+    stub = await startProjectStubServer();
+    tempRoot = mkdtempSync(join(tmpdir(), 'od-project-cli-'));
+    const outPath = join(tempRoot, 'delivery.zip');
+
+    const result = await runCli([
+      'project',
+      'download',
+      'dl-project',
+      '--out',
+      outPath,
+      '--json',
+      '--daemon-url',
+      stub.baseUrl,
+    ]);
+
+    expect(result.code).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(JSON.parse(result.stdout)).toEqual({
+      ok: true,
+      id: 'dl-project',
+      out: outPath,
+      bytes: ARCHIVE_BYTES.length,
+    });
+    expect(readFileSync(outPath)).toEqual(ARCHIVE_BYTES);
+    expect(stub.requests).toHaveLength(1);
+    expect(stub.requests[0]).toMatchObject({
+      method: 'GET',
+      url: '/api/projects/dl-project/archive',
+    });
+  });
+
+  it('derives the output filename from Content-Disposition when --out is omitted', async () => {
+    stub = await startProjectStubServer();
+    tempRoot = mkdtempSync(join(tmpdir(), 'od-project-cli-'));
+
+    const result = await runCli(
+      ['project', 'download', 'dl-project', '--daemon-url', stub.baseUrl],
+      tempRoot,
+    );
+
+    expect(result.code).toBe(0);
+    expect(result.stderr).toBe('');
+    // RFC 5987 `filename*` wins over the ASCII fallback.
+    expect(readFileSync(join(tempRoot, 'Landing päge.zip'))).toEqual(ARCHIVE_BYTES);
+  });
+
+  it('relays the archive 404 detail instead of a bare not-found', async () => {
+    stub = await startProjectStubServer();
+
+    const result = await runCli([
+      'project',
+      'download',
+      'empty-project',
+      '--daemon-url',
+      stub.baseUrl,
+    ]);
+
+    expect(result.code).toBe(4);
+    expect(result.stderr).toContain('nothing to download for project empty-project');
+    expect(result.stderr).toContain('archive root does not exist');
   });
 });

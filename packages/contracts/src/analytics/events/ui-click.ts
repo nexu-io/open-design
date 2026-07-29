@@ -1218,6 +1218,12 @@ export interface HandoffClickProps {
     | 'open_editor'
     // Copy the hand-off prompt for a specific CLI agent.
     | 'copy_cli_prompt'
+    // Download the whole project as a .zip (container/Web degraded surface
+    // where the daemon reports canRevealFolder=false).
+    | 'download'
+    // "Remote Open": focus the project in the web Design Files view (the
+    // web-native stand-in for a local Finder reveal).
+    | 'remote_open'
     // Open the Open Design AMR website link.
     | 'amr_website';
   // Bounded enum id of the editor / CLI target, present for `open_editor`,

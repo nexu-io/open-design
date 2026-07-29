@@ -22,6 +22,18 @@ export type HostEditorId =
   | 'terminal'
   | 'warp';
 
+// Catalogue entries that reveal a directory in the daemon host's OS file
+// manager (open -R / explorer / xdg-open) rather than opening it in an
+// editor. Shared vocabulary between the daemon (their availability is the
+// "opener on $PATH" conjunct of `canRevealFolder`) and the web UI (they are
+// hidden when `canRevealFolder === false` — launching them would act on the
+// daemon host, invisible to the browsing user).
+export const FOLDER_OPENER_EDITOR_IDS: ReadonlySet<HostEditorId> = new Set<HostEditorId>([
+  'finder',
+  'explorer',
+  'file-manager',
+]);
+
 export interface HostEditor {
   id: HostEditorId;
   label: string;
@@ -46,6 +58,14 @@ export interface HostEditor {
 export interface HostEditorsResponse {
   editors: HostEditor[];
   platform: 'darwin' | 'win32' | 'linux' | 'unknown';
+  // True iff the daemon can reveal a local folder to the current user:
+  //   a directory opener (open / explorer / xdg-open) was probed on $PATH
+  //   AND sandbox mode (OD_SANDBOX_MODE) is off
+  //   AND the daemon was not started headless (--headless / --serve-web).
+  // Older daemons omit this field; clients must treat `undefined` as `true`
+  // (keep the native Open Folder button) so a web bundle upgraded ahead of
+  // its daemon does not hide Open Folder from local desktop users.
+  canRevealFolder: boolean;
 }
 
 export interface OpenProjectInEditorRequest {

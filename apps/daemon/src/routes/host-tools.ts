@@ -18,16 +18,25 @@ import { access, constants as fsConstants } from 'node:fs/promises';
 import path from 'node:path';
 import { createCommandInvocation } from '@open-design/platform';
 import type { Express } from 'express';
+import { FOLDER_OPENER_EDITOR_IDS } from '@open-design/contracts';
 import type {
   HostEditor,
   HostEditorId,
   HostEditorsResponse,
   OpenProjectInEditorResponse,
 } from '@open-design/contracts';
+import { isSandboxModeEnabled } from '../sandbox-mode.js';
 import type { RouteDeps } from '../server-context.js';
 
 export interface RegisterHostToolsRoutesDeps
-  extends RouteDeps<'db' | 'http' | 'paths' | 'projectStore' | 'projectFiles'> {}
+  extends RouteDeps<'db' | 'http' | 'paths' | 'projectStore' | 'projectFiles'> {
+  // Runtime-mode signal for `canRevealFolder`: false when the daemon was
+  // started headless (`od daemon start --headless/--serve-web`), i.e. the
+  // container/Web deployment shape where the user browsing the web UI cannot
+  // see the daemon host's desktop. Defaults to true — desktop and sidecar
+  // entrypoints are local GUI sessions and keep the native Open Folder.
+  revealFolderCapable?: boolean;
+}
 
 export type RealPlatform = 'darwin' | 'win32' | 'linux';
 export type Platform = RealPlatform | 'unknown';
@@ -300,6 +309,7 @@ export function registerHostToolsRoutes(app: Express, ctx: RegisterHostToolsRout
   const { PROJECTS_DIR } = ctx.paths;
   const { getProject } = ctx.projectStore;
   const { resolveProjectDir } = ctx.projectFiles;
+  const revealFolderCapable = ctx.revealFolderCapable ?? true;
 
   app.get('/api/editors', async (_req, res) => {
     try {
@@ -318,7 +328,18 @@ export function registerHostToolsRoutes(app: Express, ctx: RegisterHostToolsRout
           };
         }),
       );
-      const body: HostEditorsResponse = { editors, platform };
+      // Whether "open a local folder" is a meaningful action for the current
+      // user is the daemon's call — the client cannot distinguish a localhost
+      // browser talking to a local daemon from a remote container daemon.
+      // Conjunction of opener-on-$PATH × not-sandboxed × not-headless.
+      // Known blind spot (documented, accepted): an opener on $PATH inside a
+      // display-less container that was NOT started via --headless/--serve-web
+      // still reports true; launching then spawns but shows nothing (#787 §6).
+      const canRevealFolder =
+        editors.some((e) => FOLDER_OPENER_EDITOR_IDS.has(e.id) && e.available)
+        && !isSandboxModeEnabled(process.env)
+        && revealFolderCapable;
+      const body: HostEditorsResponse = { editors, platform, canRevealFolder };
       res.json(body);
     } catch (err) {
       sendApiError(res, 500, 'INTERNAL_ERROR', String(err));
