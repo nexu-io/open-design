@@ -102,7 +102,11 @@ interface CreateProjectResult {
 interface StoreScreenshotCreationRecord {
   result?: CreateProjectResult;
   inFlight?: Promise<CreateProjectResult>;
+  expiresAt: number;
 }
+
+const STORE_SCREENSHOT_RECOVERY_TTL_MS = 5 * 60 * 1_000;
+const MAX_STORE_SCREENSHOT_RECOVERY_RECORDS = 32;
 
 const pendingStoreScreenshotProjects = new Map<
   string,
@@ -129,21 +133,46 @@ function canonicalizeJson(value: unknown): unknown {
 
 function storeScreenshotCreationKey(input: CreateProjectInput): string | null {
   if (input.metadata?.intent !== 'store-screenshot') return null;
-  return JSON.stringify(canonicalizeJson({
-    ...input,
-    name: input.name.trim(),
-    projectLocationId: input.projectLocationId ?? null,
-    skillId: input.skillId ?? null,
-    designSystemId: input.designSystemId ?? null,
-    pendingPrompt: input.pendingPrompt ?? null,
-    metadata: input.metadata ?? null,
-    conversationMode: input.conversationMode ?? null,
-    pluginId: input.pluginId ?? null,
-    appliedPluginSnapshotId: input.appliedPluginSnapshotId ?? null,
-    pluginInputs: input.pluginInputs ?? null,
-    customInstructions: input.customInstructions ?? null,
-    skipDiscoveryBrief: input.skipDiscoveryBrief ?? null,
-  }));
+  const requestValue = JSON.parse(JSON.stringify(input)) as unknown;
+  return JSON.stringify(canonicalizeJson(requestValue));
+}
+
+function deleteExpiredStoreScreenshotRecoveryRecords(now: number): void {
+  for (const [key, record] of pendingStoreScreenshotProjects) {
+    if (!record.inFlight && record.expiresAt <= now) {
+      pendingStoreScreenshotProjects.delete(key);
+    }
+  }
+}
+
+function touchStoreScreenshotRecoveryRecord(
+  key: string,
+  record: StoreScreenshotCreationRecord,
+  now: number,
+): void {
+  record.expiresAt = now + STORE_SCREENSHOT_RECOVERY_TTL_MS;
+  pendingStoreScreenshotProjects.delete(key);
+  pendingStoreScreenshotProjects.set(key, record);
+}
+
+function enforceStoreScreenshotRecoveryCapacity(): void {
+  if (
+    pendingStoreScreenshotProjects.size
+    <= MAX_STORE_SCREENSHOT_RECOVERY_RECORDS
+  ) {
+    return;
+  }
+  for (const [key, record] of pendingStoreScreenshotProjects) {
+    if (
+      pendingStoreScreenshotProjects.size
+      <= MAX_STORE_SCREENSHOT_RECOVERY_RECORDS
+    ) {
+      break;
+    }
+    if (!record.inFlight) {
+      pendingStoreScreenshotProjects.delete(key);
+    }
+  }
 }
 
 async function initializeStoreScreenshotProject(
@@ -232,10 +261,20 @@ export async function createProject(input: CreateProjectInput): Promise<CreatePr
     const recoveryKey = storeScreenshotCreationKey(input);
     if (!recoveryKey) return await postProject(input);
 
+    const now = Date.now();
+    deleteExpiredStoreScreenshotRecoveryRecords(now);
     let record = pendingStoreScreenshotProjects.get(recoveryKey);
-    if (record?.inFlight) return await record.inFlight;
+    if (record) {
+      touchStoreScreenshotRecoveryRecord(recoveryKey, record, now);
+    }
+    if (record?.inFlight) {
+      enforceStoreScreenshotRecoveryCapacity();
+      return await record.inFlight;
+    }
     if (!record) {
-      record = {};
+      record = {
+        expiresAt: now + STORE_SCREENSHOT_RECOVERY_TTL_MS,
+      };
       pendingStoreScreenshotProjects.set(recoveryKey, record);
     }
 
@@ -243,6 +282,7 @@ export async function createProject(input: CreateProjectInput): Promise<CreatePr
       () => runStoreScreenshotCreation(record, input),
     );
     record.inFlight = operation;
+    enforceStoreScreenshotRecoveryCapacity();
     try {
       const result = await operation;
       if (pendingStoreScreenshotProjects.get(recoveryKey) === record) {
@@ -254,6 +294,15 @@ export async function createProject(input: CreateProjectInput): Promise<CreatePr
         record.inFlight = undefined;
         if (!record.result) {
           pendingStoreScreenshotProjects.delete(recoveryKey);
+        } else {
+          const failureTime = Date.now();
+          deleteExpiredStoreScreenshotRecoveryRecords(failureTime);
+          touchStoreScreenshotRecoveryRecord(
+            recoveryKey,
+            record,
+            failureTime,
+          );
+          enforceStoreScreenshotRecoveryCapacity();
         }
       }
       throw error;

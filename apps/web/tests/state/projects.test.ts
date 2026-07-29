@@ -85,6 +85,7 @@ describe('listProjects', () => {
 
 describe('createProject', () => {
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 
@@ -447,6 +448,234 @@ describe('createProject', () => {
 
     expect(projectPostCalls(fetchMock)).toHaveLength(1);
     expect(documentPosts).toBe(2);
+  });
+
+  it('fingerprints the JSON request value produced by toJSON inputs', async () => {
+    let projectPosts = 0;
+    let documentPosts = 0;
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input);
+      if (url === '/api/projects') {
+        projectPosts += 1;
+        return projectCreateResponse(
+          `project-request-equivalent-${projectPosts}`,
+          'Request equivalent',
+        );
+      }
+      if (init?.method !== 'POST') {
+        return apiErrorResponse(404, 'DOCUMENT_NOT_FOUND', 'document not found');
+      }
+      documentPosts += 1;
+      if (documentPosts === 1) {
+        return apiErrorResponse(503, 'INTERNAL_ERROR', 'initialization unavailable');
+      }
+      const projectId = url.split('/')[3]!;
+      return jsonResponse(storeScreenshotDocumentResponse(projectId), 201);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const first = storeScreenshotProjectInput('Request equivalent');
+    first.pluginInputs = {
+      capturedAt: new Date('2026-07-29T12:00:00.000Z'),
+    };
+    const requestEquivalent = storeScreenshotProjectInput('Request equivalent');
+    requestEquivalent.pluginInputs = {
+      capturedAt: '2026-07-29T12:00:00.000Z',
+    };
+
+    await expect(createProject(first)).rejects.toThrow('initialization unavailable');
+    await expect(createProject(requestEquivalent)).resolves.toMatchObject({
+      project: { id: 'project-request-equivalent-1' },
+    });
+
+    expect(projectPosts).toBe(1);
+    expect(documentPosts).toBe(2);
+  });
+
+  it('does not reuse a recovery project when name whitespace changes the request payload', async () => {
+    let projectPosts = 0;
+    let firstProjectDocumentPosts = 0;
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input);
+      if (url === '/api/projects') {
+        projectPosts += 1;
+        const request = JSON.parse(String(init?.body)) as { name: string };
+        return projectCreateResponse(`project-name-space-${projectPosts}`, request.name);
+      }
+      if (url.includes('/project-name-space-1/') && init?.method === 'POST') {
+        firstProjectDocumentPosts += 1;
+        if (firstProjectDocumentPosts === 1) {
+          return apiErrorResponse(503, 'INTERNAL_ERROR', 'initialization unavailable');
+        }
+      }
+      if (init?.method !== 'POST') {
+        return apiErrorResponse(404, 'DOCUMENT_NOT_FOUND', 'document not found');
+      }
+      const projectId = url.split('/')[3]!;
+      return jsonResponse(storeScreenshotDocumentResponse(projectId), 201);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      createProject(storeScreenshotProjectInput(' Focus ')),
+    ).rejects.toThrow('initialization unavailable');
+    await expect(
+      createProject(storeScreenshotProjectInput('Focus')),
+    ).resolves.toMatchObject({
+      project: { id: 'project-name-space-2' },
+    });
+
+    expect(projectPostCalls(fetchMock)).toHaveLength(2);
+    expect(projectPostCalls(fetchMock).map(([, init]) => (
+      (JSON.parse(String(init?.body)) as { name: string }).name
+    ))).toEqual([' Focus ', 'Focus']);
+    expect(fetchMock.mock.calls
+      .filter(([url, init]) => (
+        String(url).includes('/store-screenshots')
+        && init?.method === 'POST'
+      ))
+      .map(([, init]) => (
+        (JSON.parse(String(init?.body)) as { product: { name: string } }).product.name
+      ))).toEqual([' Focus ', 'Focus']);
+  });
+
+  it('expires a failed recovery project after five minutes', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(Date.now());
+    let projectPosts = 0;
+    const documentPosts = new Map<string, number>();
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input);
+      if (url === '/api/projects') {
+        projectPosts += 1;
+        return projectCreateResponse(`project-registry-ttl-${projectPosts}`, 'Registry TTL');
+      }
+      if (init?.method !== 'POST') {
+        return apiErrorResponse(404, 'DOCUMENT_NOT_FOUND', 'document not found');
+      }
+      const projectId = url.split('/')[3]!;
+      const attempts = (documentPosts.get(projectId) ?? 0) + 1;
+      documentPosts.set(projectId, attempts);
+      if (projectId === 'project-registry-ttl-1' && attempts === 1) {
+        return apiErrorResponse(503, 'INTERNAL_ERROR', 'initialization unavailable');
+      }
+      return jsonResponse(storeScreenshotDocumentResponse(projectId), 201);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const input = storeScreenshotProjectInput('Registry TTL');
+
+    await expect(createProject(input)).rejects.toThrow('initialization unavailable');
+    vi.advanceTimersByTime(5 * 60 * 1_000 + 1);
+    await expect(createProject(input)).resolves.toMatchObject({
+      project: { id: 'project-registry-ttl-2' },
+    });
+
+    expect(projectPosts).toBe(2);
+  });
+
+  it('evicts the least recently used failed recovery when capacity is exceeded', async () => {
+    const projectPostsByName = new Map<string, number>();
+    const documentPostsByProject = new Map<string, number>();
+    let lruGets = 0;
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input);
+      if (url === '/api/projects') {
+        const request = JSON.parse(String(init?.body)) as { name: string };
+        const attempt = (projectPostsByName.get(request.name) ?? 0) + 1;
+        projectPostsByName.set(request.name, attempt);
+        return projectCreateResponse(
+          `${request.name}-project-${attempt}`,
+          request.name,
+        );
+      }
+      const projectId = url.split('/')[3]!;
+      if (init?.method !== 'POST') {
+        if (projectId === 'registry-lru-project-1') {
+          lruGets += 1;
+          if (lruGets === 1) {
+            return apiErrorResponse(500, 'INTERNAL_ERROR', 'touch failed recovery');
+          }
+        }
+        return apiErrorResponse(404, 'DOCUMENT_NOT_FOUND', 'document not found');
+      }
+      const attempts = (documentPostsByProject.get(projectId) ?? 0) + 1;
+      documentPostsByProject.set(projectId, attempts);
+      if (projectId.endsWith('-project-2') || attempts > 1) {
+        return jsonResponse(storeScreenshotDocumentResponse(projectId), 201);
+      }
+      return apiErrorResponse(503, 'INTERNAL_ERROR', 'initialization unavailable');
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const lruInput = storeScreenshotProjectInput('registry-lru');
+    const oldestInput = storeScreenshotProjectInput('registry-oldest');
+
+    await expect(createProject(lruInput)).rejects.toThrow('initialization unavailable');
+    await expect(createProject(oldestInput)).rejects.toThrow('initialization unavailable');
+    for (let index = 0; index < 30; index += 1) {
+      await expect(
+        createProject(storeScreenshotProjectInput(`registry-filler-${index}`)),
+      ).rejects.toThrow('initialization unavailable');
+    }
+
+    await expect(createProject(lruInput)).rejects.toThrow('touch failed recovery');
+    await expect(
+      createProject(storeScreenshotProjectInput('registry-overflow')),
+    ).rejects.toThrow('initialization unavailable');
+
+    await expect(createProject(oldestInput)).resolves.toMatchObject({
+      project: { id: 'registry-oldest-project-2' },
+    });
+    await expect(createProject(lruInput)).resolves.toMatchObject({
+      project: { id: 'registry-lru-project-1' },
+    });
+
+    expect(projectPostsByName.get('registry-oldest')).toBe(2);
+    expect(projectPostsByName.get('registry-lru')).toBe(1);
+  });
+
+  it('keeps an in-flight creation single-flighted while failed recoveries exceed capacity', async () => {
+    let resolveTargetProject!: (response: Response) => void;
+    const targetProjectResponse = new Promise<Response>((resolve) => {
+      resolveTargetProject = resolve;
+    });
+    let targetProjectPosts = 0;
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input);
+      if (url === '/api/projects') {
+        const request = JSON.parse(String(init?.body)) as { name: string };
+        if (request.name === 'registry-in-flight') {
+          targetProjectPosts += 1;
+          return targetProjectResponse;
+        }
+        return projectCreateResponse(`${request.name}-project-1`, request.name);
+      }
+      if (url.includes('/registry-in-flight-project-1/')) {
+        return jsonResponse(
+          storeScreenshotDocumentResponse('registry-in-flight-project-1'),
+          201,
+        );
+      }
+      return apiErrorResponse(503, 'INTERNAL_ERROR', 'initialization unavailable');
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const targetInput = storeScreenshotProjectInput('registry-in-flight');
+
+    const first = createProject(targetInput);
+    await Promise.resolve();
+    for (let index = 0; index < 33; index += 1) {
+      await expect(
+        createProject(storeScreenshotProjectInput(`registry-pressure-${index}`)),
+      ).rejects.toThrow('initialization unavailable');
+    }
+    const second = createProject(targetInput);
+
+    resolveTargetProject(
+      projectCreateResponse('registry-in-flight-project-1', 'registry-in-flight'),
+    );
+    const [firstResult, secondResult] = await Promise.all([first, second]);
+
+    expect(firstResult.project.id).toBe('registry-in-flight-project-1');
+    expect(secondResult.project.id).toBe('registry-in-flight-project-1');
+    expect(targetProjectPosts).toBe(1);
   });
 
   it('single-flights concurrent identical project creation and initialization', async () => {
