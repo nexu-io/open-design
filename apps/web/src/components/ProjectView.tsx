@@ -1544,12 +1544,13 @@ export function ProjectView({
   const workspaceContextState = useWorkspaceContext();
   const { context: workspaceContext } = workspaceContextState;
   const projectWorkspaceScopeState = useProjectWorkspaceScope(project.id);
-  // The project's resolved scope when there is one, else the caller's own
-  // workspace — a send always names its caller, like every other project write
-  // here. See `runWorkspaceIdentity`.
+  // The project's resolved scope when there is one. While that first read is
+  // pending, the persisted project binding may witness the matching caller;
+  // answered unavailable states deliberately do not borrow it.
   const projectRunWorkspaceContext = runWorkspaceIdentity(
     projectWorkspaceScopeState,
     workspaceContext,
+    project.workspaceId,
   );
   // The AMR pre-run balance gate keeps EXACTLY its previous derivation — the
   // project's resolved scope, nothing borrowed. It is not the run's identity: it

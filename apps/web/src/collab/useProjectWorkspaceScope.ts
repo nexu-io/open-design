@@ -42,51 +42,46 @@ export function projectWorkspaceScopeReady(
 /**
  * The workspace identity a run creation asserts to the daemon.
  *
- * INVARIANT: **a send always names the caller.** The project's own resolved scope
- * wins when there is one — it is the authority for which workspace the run writes
- * into and which wallet pays — and otherwise the caller's current workspace
- * stands, unconditionally.
+ * The project's resolved scope wins: it is the authority for which workspace
+ * the run writes into and which wallet pays. Before the first scope answer,
+ * Home may auto-send, so the caller is a safe temporary witness only when the
+ * project's persisted binding already names that same workspace. That binding
+ * lives on the project read model and survives ProjectView's authorization-key
+ * remount; unlike hook-local "first read" state it therefore cannot turn an
+ * A-bound project into workspace B during a switch.
  *
- * There is deliberately no "may I name myself yet" question here any more, and
- * that took three review rounds to arrive at. The scope arrives over the wire and
- * a Home auto-send fires before it lands, so this used to return null in that
- * window, `POST /api/runs` went out with no `x-od-workspace-*`, and the daemon
- * refused it with 401 WORKSPACE_CONTEXT_REQUIRED. Every attempt to name the safe
- * window instead — "only while loading", "only on the first read", "only when the
- * project's binding agrees" — was really working around ONE daemon asymmetry: a
- * resource no workspace had claimed was mutable by a headerless caller but
- * refused to a caller that identified itself. That asymmetry is now gone
- * (`enforceWorkspaceResourceMutation`), so the client no longer has to model it.
+ * Once the endpoint answers `unavailable`, or a scope read settles as failed,
+ * the caller is no longer evidence for the project and the request stays
+ * headerless. In particular, `/workspace-scope` can observe a membership
+ * removal before the mutation gate's deliberately lagging `lastKnown()` cache;
+ * sending stale active caller headers after that fresh answer would add an
+ * assertion the server has already disproved. This does not claim to eliminate
+ * the daemon's existing headerless/lastKnown lag — it merely does not widen it.
  *
- * Why unconditional is safe:
- *
- *   - Projects are workspace-isolated. `App.tsx` keys `ProjectView` on
- *     `projectViewAuthorizationLifetimeKey(projectId, context)`, so a workspace
- *     switch remounts the surface and the previous workspace's project does not
- *     come along; the no-scope catalog lists only unbound projects. A caller
- *     acting on a project bound to a workspace they are not in is not a state the
- *     product produces.
- *   - Naming a workspace is not the same as being granted it. The daemon resolves
- *     the row inside the workspace the request names and still applies
- *     `withLastKnownMembership`, so a stale claim is narrowed against
- *     daemon-owned state. A project bound elsewhere still refuses.
- *   - Billing does not follow these headers. The wallet an AMR run is charged to
- *     is resolved server-side from the project's persisted binding
- *     (`runtimes/project-amr-trace-env.ts` reads `getWorkspaceProjectByProjectId`),
- *     never from the caller's assertion — so this cannot move a charge. What it
- *     DOES fix is the client-side pre-flight: `checkAmrBalanceGate` was handed
- *     `undefined` here and priced the run against the account wallet instead of
- *     the team's.
- *   - It matches every other project write in `ProjectView` — `patchProject`,
- *     `uploadProjectFiles`, the comment mutations all assert the caller's context
- *     unconditionally. Run creation was the lone exception, and being the
- *     exception is what produced the bug.
+ * An answered `unbound` scope may name the caller. No workspace has claimed
+ * that resource, and the daemon's mutation gate now deliberately treats an
+ * identified caller the same as a headerless caller without persisting any
+ * retroactive binding.
  */
 export function runWorkspaceIdentity(
   state: ProjectWorkspaceScopeState,
   caller: WorkspaceCollabContext | null,
+  persistedProjectWorkspaceId: string | null | undefined,
 ): WorkspaceCollabContext | null {
-  return projectWorkspaceContext(state.scope) ?? caller;
+  const resolved = projectWorkspaceContext(state.scope);
+  if (resolved) return resolved;
+  if (state.scope?.kind === 'unbound') return caller;
+  if (
+    state.loading &&
+    state.scope === null &&
+    state.failure === undefined &&
+    caller &&
+    typeof persistedProjectWorkspaceId === 'string' &&
+    persistedProjectWorkspaceId.trim() === caller.workspaceId
+  ) {
+    return caller;
+  }
+  return null;
 }
 
 /** AMR must resolve an explicit personal/team billing principal. Unbound,

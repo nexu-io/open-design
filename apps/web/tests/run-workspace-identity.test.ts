@@ -56,8 +56,8 @@ describe('runWorkspaceIdentity', () => {
   // message reads land; it does not wait for `GET /api/projects/:id/
   // workspace-scope`. The caller's identity is known the whole time, and every
   // other project write in ProjectView already asserts it.
-  it('names the caller while the project scope read is in flight', () => {
-    expect(runWorkspaceIdentity(UNREAD, CALLER)).toEqual(CALLER);
+  it('names the caller while its matching persisted project scope is unread', () => {
+    expect(runWorkspaceIdentity(UNREAD, CALLER, TEAM_WORKSPACE)).toEqual(CALLER);
   });
 
   // The project's resolved scope is the authority for which workspace the run
@@ -71,36 +71,58 @@ describe('runWorkspaceIdentity', () => {
       context: teamContext() as WorkspaceCollabContext & { workspaceType: 'team' },
     };
     expect(
-      runWorkspaceIdentity({ loading: false, scope }, teamContext('ws-somewhere-else')),
+      runWorkspaceIdentity(
+        { loading: false, scope },
+        teamContext('ws-somewhere-else'),
+        TEAM_WORKSPACE,
+      ),
     ).toEqual(scope.context);
+  });
+
+  it('does not borrow workspace B while an A-bound project is unread after remount', () => {
+    expect(
+      runWorkspaceIdentity(UNREAD, teamContext('ws-b'), TEAM_WORKSPACE),
+    ).toBeNull();
   });
 
   // Signed out / no workspace plane: nothing to name, so the request stays
   // headerless and keeps its legal pre-workspace behavior. This is the branch
   // that preserves 「未登录也可以用自己 cli 修改未登录态下的那些 project」.
   it('asserts nothing when the caller has no identity', () => {
-    expect(runWorkspaceIdentity(UNREAD, null)).toBeNull();
+    expect(runWorkspaceIdentity(UNREAD, null, TEAM_WORKSPACE)).toBeNull();
     expect(
-      runWorkspaceIdentity({ loading: false, scope: null, failure: 'unsupported' }, null),
+      runWorkspaceIdentity(
+        { loading: false, scope: null, failure: 'unsupported' },
+        null,
+        TEAM_WORKSPACE,
+      ),
     ).toBeNull();
   });
 
-  // Every unresolved scope state now behaves identically, which is the point: the
-  // client no longer holds a per-state theory about when it may identify itself.
-  // `unbound` is allowed by the daemon (no workspace has claimed the resource);
-  // `unavailable` and a failed read are judged by the daemon against its own
-  // membership cache, which is the only place that judgement can be trusted.
+  it('names the caller after the daemon confirms that the project is unbound', () => {
+    expect(
+      runWorkspaceIdentity(
+        {
+          loading: false,
+          scope: {
+            kind: 'unbound',
+            projectId: PROJECT_ID,
+            workspaceId: null,
+            context: null,
+          },
+        },
+        CALLER,
+        null,
+      ),
+    ).toEqual(CALLER);
+  });
+
+  // `/workspace-scope` is fresher than the mutation gate's accepted-lag
+  // `lastKnown()` cache in this scenario: membership removal is already
+  // authoritative here while the old caller object still says active. Do not
+  // add that stale assertion to the request after the daemon has answered.
   it.each([
-    ['an unbound project', {
-      loading: false,
-      scope: {
-        kind: 'unbound' as const,
-        projectId: PROJECT_ID,
-        workspaceId: null,
-        context: null,
-      },
-    }],
-    ['a project whose membership could not be resolved', {
+    ['an unavailable project scope', {
       loading: false,
       scope: {
         kind: 'unavailable' as const,
@@ -112,7 +134,8 @@ describe('runWorkspaceIdentity', () => {
     }],
     ['a failed scope read', { loading: false, scope: null, failure: 'unavailable' as const }],
     ['a refused scope read', { loading: false, scope: null, failure: 'forbidden' as const }],
-  ])('names the caller for %s and lets the daemon decide', (_label, state) => {
-    expect(runWorkspaceIdentity(state, CALLER)).toEqual(CALLER);
+    ['an unsupported scope read', { loading: false, scope: null, failure: 'unsupported' as const }],
+  ])('does not borrow the stale caller for %s', (_label, state) => {
+    expect(runWorkspaceIdentity(state, CALLER, TEAM_WORKSPACE)).toBeNull();
   });
 });
