@@ -23,6 +23,8 @@ import {
 import {
   createStoreScreenshotService,
   StoreScreenshotServiceError,
+  type StoreScreenshotGenerateOperations,
+  type StoreScreenshotJobOperations,
 } from '../src/store-screenshots/service.js';
 import {
   createStoreScreenshotPersistence,
@@ -52,6 +54,11 @@ type JsonResponse = {
   body: Record<string, any>;
 };
 
+type GenerateStart = StoreScreenshotGenerateOperations['start'];
+type ExportStart = StoreScreenshotJobOperations['startExport'];
+type GetJob = StoreScreenshotJobOperations['get'];
+type ResolveDownload = StoreScreenshotJobOperations['resolveDownload'];
+
 describe('store screenshot routes', () => {
   let db: Database.Database;
   let root: string;
@@ -62,10 +69,10 @@ describe('store screenshot routes', () => {
   let projectStorage: LocalProjectStorage;
   let assetSave: ReturnType<typeof vi.fn>;
   let uploadAsset: ReturnType<typeof vi.fn>;
-  let generateStart: ReturnType<typeof vi.fn>;
-  let exportStart: ReturnType<typeof vi.fn>;
-  let getJob: ReturnType<typeof vi.fn>;
-  let resolveDownload: ReturnType<typeof vi.fn>;
+  let generateStart: ReturnType<typeof vi.fn<GenerateStart>>;
+  let exportStart: ReturnType<typeof vi.fn<ExportStart>>;
+  let getJob: ReturnType<typeof vi.fn<GetJob>>;
+  let resolveDownload: ReturnType<typeof vi.fn<ResolveDownload>>;
   let ownedJob: {
     projectId: string;
     documentId: string;
@@ -88,19 +95,19 @@ describe('store screenshot routes', () => {
     assetSave = vi.spyOn(assets, 'save');
     downloadPath = undefined;
     ownedJob = undefined;
-    generateStart = vi.fn(async () => {
+    generateStart = vi.fn<GenerateStart>(async () => {
       throw new StoreScreenshotServiceError(
         'NOT_IMPLEMENTED',
         'Store screenshot generation is not implemented',
       );
     });
-    exportStart = vi.fn(async () => {
+    exportStart = vi.fn<ExportStart>(async () => {
       throw new StoreScreenshotServiceError(
         'NOT_IMPLEMENTED',
         'Store screenshot export is not implemented',
       );
     });
-    getJob = vi.fn(async (...args: unknown[]) => {
+    getJob = vi.fn<GetJob>(async (...args) => {
       if (!ownedJob) {
         throw new StoreScreenshotServiceError(
           'NOT_IMPLEMENTED',
@@ -120,7 +127,7 @@ describe('store screenshot routes', () => {
         progress: { completed: 1, total: 1 },
       };
     });
-    resolveDownload = vi.fn(async (...args: unknown[]) => {
+    resolveDownload = vi.fn<ResolveDownload>(async (...args) => {
       if (downloadPath) return { relativePath: downloadPath };
       if (!ownedJob) {
         throw new StoreScreenshotServiceError(
