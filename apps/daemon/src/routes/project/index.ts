@@ -92,7 +92,7 @@ import { resolveProjectWorkspaceScopeForCaller } from '../../collab/project-work
 import {
   authorizeCreatedProjectWorkspace,
   bindCreatedProjectToWorkspace,
-  createdProjectWorkspaceHome,
+  createCreatedProjectWorkspaceResolver,
   sendCreatedProjectWorkspaceError,
   type GetAmbientWorkspace,
 } from '../../collab/created-project-workspace.js';
@@ -1615,6 +1615,23 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
    * rather than becoming an orphan.
    */
   const getAmbientWorkspace: GetAmbientWorkspace = () => ctx.workspaceContext?.lastKnown?.() ?? null;
+  /**
+   * Where a created project belongs when the request has no authorization gate
+   * of its own — the duplicate / design-system-copy pair and the
+   * project-location scan importer. Verifies an asserted identity through the
+   * SAME directory lookup `POST /api/projects` gates on, then degrades to the
+   * ambient workspace rather than refusing. See
+   * `createdProjectWorkspaceHome`.
+   */
+  const resolveCreatedProjectHome = createCreatedProjectWorkspaceResolver({
+    getAmbientWorkspace,
+    ...(ctx.fetchProjectCreationWorkspaceDirectory
+      ? { fetchWorkspaceDirectory: ctx.fetchProjectCreationWorkspaceDirectory }
+      : {}),
+    ...(lastKnownWorkspaceMembership(ctx.workspaceContext)
+      ? { getLastKnownMembership: lastKnownWorkspaceMembership(ctx.workspaceContext)! }
+      : {}),
+  });
   function sendMissingWorkspaceContext(res: Response) {
     return sendApiError(res, 401, 'WORKSPACE_CONTEXT_REQUIRED', 'workspace context is required');
   }
@@ -2067,8 +2084,8 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
    * produce exactly the orphan `reconcileUnboundProjectBeforeMutation` below
    * was later written to repair.
    */
-  function bindDuplicateIntoRequestWorkspace(req: any, targetProjectId: string, now: number) {
-    const ctx = createdProjectWorkspaceHome(req, getAmbientWorkspace);
+  async function bindDuplicateIntoRequestWorkspace(req: any, targetProjectId: string, now: number) {
+    const ctx = await resolveCreatedProjectHome(req);
     if (ctx === null) return;
     ensureWorkspaceProject(db, {
       projectId: targetProjectId,
@@ -2451,7 +2468,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
             // that does get through.
             bindCreatedProjectToWorkspace(
               (input) => ensureWorkspaceProject(db, input),
-              createdProjectWorkspaceHome(req, getAmbientWorkspace),
+              await resolveCreatedProjectHome(req),
               manifest.id,
               now,
             );
@@ -3229,7 +3246,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
           updatedAt: now,
         });
         insertedProject = true;
-        bindDuplicateIntoRequestWorkspace(req, targetProjectId, now);
+        await bindDuplicateIntoRequestWorkspace(req, targetProjectId, now);
         const conversationId = randomId();
         insertConversation(db, {
           id: conversationId,
@@ -3371,7 +3388,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
           updatedAt: now,
         });
         insertedProject = true;
-        bindDuplicateIntoRequestWorkspace(req, targetProjectId, now);
+        await bindDuplicateIntoRequestWorkspace(req, targetProjectId, now);
         const conversationId = randomId();
         insertConversation(db, {
           id: conversationId,

@@ -77,7 +77,7 @@ export type GetLastKnownWorkspaceMembership = () => WorkspaceMembershipSnapshot 
  * "we don't have cached info yet" into a denial, or every route gated by this
  * check would fail-closed on daemon startup / a workspace switch.
  */
-function withLastKnownMembership(
+export function withLastKnownMembership(
   ctx: WorkspaceResourceContext,
   getLastKnownMembership: GetLastKnownWorkspaceMembership | undefined,
 ): WorkspaceResourceContext {

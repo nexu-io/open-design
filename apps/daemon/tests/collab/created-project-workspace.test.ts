@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   authorizeCreatedProjectWorkspace,
+  createdProjectWorkspaceHome,
   type CreatedProjectWorkspaceResolution,
 } from '../../src/collab/created-project-workspace.js';
 
@@ -144,5 +145,129 @@ describe('authorizeCreatedProjectWorkspace', () => {
 
     expectDenied(result, 400, 'WORKSPACE_CONTEXT_INCOMPLETE');
     expect(fetchDirectory).not.toHaveBeenCalled();
+  });
+});
+
+// `x-od-workspace-*` headers are an UNAUTHENTICATED hint. Any local caller — the
+// `od` CLI, a plain curl, a compromised page — can assert an arbitrary
+// workspace/member pair. The creation paths with no authorization gate of their
+// own (duplicate, design-system-copy, project-location scan, the library
+// capture-as-page exit, brand extraction, the plugin share-project task) must
+// therefore VERIFY an asserted identity before persisting it, and must still
+// never answer 4xx — they ship today and answer 200 today.
+//
+// So: verify, then degrade. Never reject, never trust.
+describe('createdProjectWorkspaceHome', () => {
+  const AMBIENT = {
+    workspaceId: 'workspace-ambient',
+    workspaceType: 'personal' as const,
+    workspaceMemberId: 'member-ambient',
+    role: 'owner' as const,
+    memberStatus: 'active' as const,
+    lifecycleState: 'active' as const,
+    permissions: { canShareProjects: true, canWriteSyncedFiles: true },
+  };
+  const ambient = () => AMBIENT;
+  /** Headers naming a workspace/member pair the caller has no membership in. */
+  const FOREIGN_HEADERS: Record<string, string> = {
+    ...ACTIVE_HEADERS,
+    'x-od-workspace-id': 'workspace-foreign',
+    'x-od-workspace-member-id': 'member-foreign',
+  };
+
+  it('binds an asserted identity the directory confirms, using the DIRECTORY context', async () => {
+    const home = await createdProjectWorkspaceHome(request(), ambient, async () => ({
+      ok: true,
+      items: [directoryItem()],
+    }));
+
+    expect(home).toMatchObject({
+      workspaceId: 'workspace-a',
+      workspaceMemberId: 'member-a',
+      memberStatus: 'active',
+    });
+  });
+
+  it('refuses to persist an asserted workspace the caller has no membership in', async () => {
+    const home = await createdProjectWorkspaceHome(
+      request(FOREIGN_HEADERS),
+      ambient,
+      async () => ({ ok: true, items: [directoryItem()] }),
+    );
+
+    // The unverifiable claim is never written...
+    expect(home?.workspaceId).not.toBe('workspace-foreign');
+    expect(home?.workspaceMemberId).not.toBe('member-foreign');
+    // ...and creation is NOT refused: it degrades to what the daemon can vouch for.
+    expect(home).toMatchObject({
+      workspaceId: AMBIENT.workspaceId,
+      workspaceMemberId: AMBIENT.workspaceMemberId,
+    });
+  });
+
+  it('leaves the project unbound when an unverifiable claim has no ambient workspace to fall back to', async () => {
+    const home = await createdProjectWorkspaceHome(
+      request(FOREIGN_HEADERS),
+      () => null,
+      async () => ({ ok: true, items: [directoryItem()] }),
+    );
+
+    // Unbound is strictly better than a fabricated binding.
+    expect(home).toBeNull();
+  });
+
+  it('treats an unreadable membership authority as CANNOT CONFIRM, not as valid', async () => {
+    const home = await createdProjectWorkspaceHome(request(), ambient, async () => ({
+      ok: false,
+      items: [],
+    }));
+
+    expect(home?.workspaceId).not.toBe('workspace-a');
+    expect(home).toMatchObject({ workspaceId: AMBIENT.workspaceId });
+  });
+
+  it('degrades an authority that throws outright, rather than propagating', async () => {
+    const home = await createdProjectWorkspaceHome(request(), ambient, async () => {
+      throw new Error('authority exploded');
+    });
+
+    expect(home).toMatchObject({ workspaceId: AMBIENT.workspaceId });
+  });
+
+  it('does not persist a claim the daemon last-known state says was removed', async () => {
+    const home = await createdProjectWorkspaceHome(
+      request(),
+      ambient,
+      async () => ({ ok: true, items: [directoryItem()] }),
+      () => ({ workspaceId: 'workspace-a', memberStatus: 'removed' }),
+    );
+
+    expect(home?.workspaceId).not.toBe('workspace-a');
+    expect(home).toMatchObject({ workspaceId: AMBIENT.workspaceId });
+  });
+
+  it('binds the ambient workspace when the request asserts nothing at all', async () => {
+    const fetchDirectory = vi.fn(async () => ({ ok: true, items: [directoryItem()] }));
+    const home = await createdProjectWorkspaceHome(request({}), ambient, fetchDirectory);
+
+    expect(home).toMatchObject({ workspaceId: AMBIENT.workspaceId });
+    // A headerless caller asserts nothing, so there is nothing to verify.
+    expect(fetchDirectory).not.toHaveBeenCalled();
+  });
+
+  it('stays unbound for a signed-out daemon with no identity anywhere', async () => {
+    const home = await createdProjectWorkspaceHome(request({}), () => null);
+
+    expect(home).toBeNull();
+  });
+
+  it('never binds an ambient workspace the daemon itself reports as unusable', async () => {
+    for (const broken of [
+      { ...AMBIENT, memberStatus: 'removed' as const },
+      { ...AMBIENT, lifecycleState: 'locked' as const },
+      { ...AMBIENT, permissions: { canShareProjects: true, canWriteSyncedFiles: false } },
+    ]) {
+      expect(await createdProjectWorkspaceHome(request({}), () => broken)).toBeNull();
+    }
   });
 });

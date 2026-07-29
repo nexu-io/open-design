@@ -283,6 +283,64 @@ describe('a created project is bound to the workspace the daemon is signed in to
   );
 });
 
+describe('an asserted workspace identity is verified before it is persisted', () => {
+  test(
+    'a create asserting a workspace the caller has no membership in does not bind to it',
+    { timeout: 300_000 },
+    async () => {
+      const suite = await createSmokeSuite('collab-created-project-unverified-claim');
+
+      // `OD_WORKSPACE_CONTEXT_SOURCE=vela` is what makes the daemon's
+      // project-creation membership authority exist at all
+      // (`fetchProjectCreationWorkspaceDirectory` is undefined otherwise — the
+      // documented local/dev compatibility path). The mock directory below lists
+      // AMBIENT and EXPLICIT_TEAM and deliberately does NOT list the foreign
+      // pair the request asserts.
+      await suite.with.toolsDev(
+        async ({ webUrl }) => {
+          const source = await createProject(webUrl, 'Claim source');
+
+          // Duplicate is one of the paths with no authorization gate of its own,
+          // so it is where an unverified header claim used to be written
+          // straight into `workspace_projects`.
+          const copy = await requestJson<CreatedProject>(
+            webUrl,
+            `/api/projects/${encodeURIComponent(source)}/duplicate`,
+            {
+              body: { name: 'Claim copy' },
+              headers: workspaceHeaders({
+                workspaceId: 'ws-bind-foreign',
+                workspaceMemberId: 'mem-bind-foreign',
+                workspaceType: 'team',
+              }),
+              method: 'POST',
+            },
+          );
+
+          const copyScope = await readScope(webUrl, copy.project.id);
+          // The claim is never persisted...
+          expect(
+            copyScope.workspaceId,
+            'an unverifiable header claim must not be written as a binding',
+          ).not.toBe('ws-bind-foreign');
+          // ...and with no ambient workspace behind this daemon there is nothing
+          // to degrade to, so `unbound` is the honest answer. Creation still
+          // returned 200 — the point is that it degrades, never refuses.
+          expect(copyScope.kind).toBe('unbound');
+        },
+        {
+          env: {
+            AMR_HOME: await emptyAmrHome(suite.scratchDir),
+            OD_WORKSPACE_CONTEXT_SOURCE: 'vela',
+            VELA_API_URL: directoryUrl,
+            VELA_CONTROL_KEY: 'e2e-binding-control-key',
+          },
+        },
+      );
+    },
+  );
+});
+
 /**
  * Create a project from whichever bundled plugin the daemon can actually
  * duplicate. Not every plugin exposes a duplicable HTML preview

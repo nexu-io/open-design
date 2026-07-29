@@ -49,8 +49,7 @@ import { fetchExternalBrandAsset } from '../brands/safe-fetch.js';
 import { ensureProjectSubdir } from '../projects.js';
 import {
   bindCreatedProjectToWorkspace,
-  createdProjectWorkspaceHome,
-  type GetAmbientWorkspace,
+  type CreatedProjectWorkspaceResolver,
 } from '../collab/created-project-workspace.js';
 import {
   confirmPairing,
@@ -64,11 +63,12 @@ export interface RegisterLibraryRoutesDeps
     'db' | 'http' | 'paths' | 'projectStore' | 'projectFiles' | 'conversations' | 'auth'
   > {
   /**
-   * The workspace this daemon is signed in to, so a capture opened as an
-   * editable project gets a home workspace like any other created project. See
-   * `createdProjectWorkspaceHome` in `collab/created-project-workspace.ts`.
+   * Where a capture opened as an editable project belongs. Verifies an asserted
+   * workspace identity, then degrades to the daemon's own signed-in workspace
+   * rather than refusing — see `createdProjectWorkspaceHome` in
+   * `collab/created-project-workspace.ts`.
    */
-  getAmbientWorkspace?: GetAmbientWorkspace;
+  resolveCreatedProjectHome?: CreatedProjectWorkspaceResolver;
 }
 
 const MAX_REMOTE_BYTES = 25 * 1024 * 1024;
@@ -651,7 +651,7 @@ export function registerLibraryRoutes(app: Express, ctx: RegisterLibraryRoutesDe
       // created project gets — an unbound one is denied its first run outright.
       bindCreatedProjectToWorkspace(
         (input) => ensureWorkspaceProject(db, input),
-        createdProjectWorkspaceHome(req, ctx.getAmbientWorkspace),
+        ctx.resolveCreatedProjectHome ? await ctx.resolveCreatedProjectHome(req) : null,
         projectId,
         now,
       );

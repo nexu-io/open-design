@@ -26,10 +26,7 @@ import {
   listProjectsAwaitingInput,
   type insertProject,
 } from './db.js';
-import {
-  createdProjectWorkspaceHome,
-  type GetAmbientWorkspace,
-} from './collab/created-project-workspace.js';
+import type { CreatedProjectWorkspaceResolver } from './collab/created-project-workspace.js';
 import { resolveProjectDir } from './projects.js';
 import {
   continueBrandExtraction,
@@ -61,11 +58,12 @@ export interface BrandRoutesDeps {
   /** `<dataDir>/projects` — backing brand-extraction projects. */
   projectsRoot: string;
   /**
-   * The workspace this daemon is signed in to, for an extraction request that
-   * carries no workspace identity of its own. See `createdProjectWorkspaceHome`
-   * in `collab/created-project-workspace.ts`.
+   * Where a brand-extraction project belongs. Verifies an asserted workspace
+   * identity, then degrades to the daemon's own signed-in workspace rather than
+   * refusing — see `createdProjectWorkspaceHome` in
+   * `collab/created-project-workspace.ts`.
    */
-  getAmbientWorkspace?: GetAmbientWorkspace;
+  resolveCreatedProjectHome?: CreatedProjectWorkspaceResolver;
   /** Skills root — the agent-driven kit page is rendered from the bundled
    *  `brand-extract` template under here. */
   skillsRoot: string;
@@ -144,8 +142,10 @@ export function registerBrandRoutes(app: Application, deps: BrandRoutesDeps): vo
    * `enforceWorkspaceResourceMutation` already passes straight through (see its
    * `requestCtx === null` branch).
    */
-  function bindBrandProjectIntoRequestWorkspace(req: Request, projectId: string, now: number): void {
-    const ctx = createdProjectWorkspaceHome(req, deps.getAmbientWorkspace);
+  async function bindBrandProjectIntoRequestWorkspace(req: Request, projectId: string, now: number): Promise<void> {
+    const ctx = deps.resolveCreatedProjectHome
+      ? await deps.resolveCreatedProjectHome(req)
+      : null;
     if (!ctx || ctx.memberStatus !== 'active') return;
     ensureWorkspaceProject(db, {
       projectId,
@@ -321,7 +321,7 @@ export function registerBrandRoutes(app: Application, deps: BrandRoutesDeps): vo
       const transcriptAgent = await deps.resolveTranscriptAgent?.().catch(() => null);
       if (transcriptAgent) startOptions.transcriptAgent = transcriptAgent;
       const result = await startBrandExtraction(startOptions);
-      bindBrandProjectIntoRequestWorkspace(req, result.projectId, Date.now());
+      await bindBrandProjectIntoRequestWorkspace(req, result.projectId, Date.now());
       const backgroundExtraction = backgroundExtractionRef.current;
       trackProgrammaticBrandExtraction(result.id, programmaticAbortController, backgroundExtraction);
       res.json(result);

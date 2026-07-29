@@ -321,7 +321,7 @@ import { prepareDesignTokenContractRebuild } from './design-systems/token-contra
 import { registerBrandRoutes } from './brand-routes.js';
 import {
   bindCreatedProjectToWorkspace,
-  createdProjectWorkspaceHome,
+  createCreatedProjectWorkspaceResolver,
   type GetAmbientWorkspace,
 } from './collab/created-project-workspace.js';
 import {
@@ -2994,6 +2994,25 @@ export async function startServer({
    * resolved no workspace at all still binds nothing.
    */
   const getAmbientWorkspace: GetAmbientWorkspace = () => workspaceContext.lastKnown?.() ?? null;
+  /**
+   * Where a created project belongs for the surfaces with no authorization gate
+   * of their own (the plugin share-project task, the library capture-as-page
+   * exit, brand extraction). Verifies an asserted workspace identity through the
+   * SAME directory lookup `POST /api/projects` gates on, then degrades to the
+   * ambient workspace rather than refusing. See `createdProjectWorkspaceHome`.
+   */
+  const resolveCreatedProjectHome = createCreatedProjectWorkspaceResolver({
+    getAmbientWorkspace,
+    ...(fetchProjectCreationWorkspaceDirectory
+      ? { fetchWorkspaceDirectory: fetchProjectCreationWorkspaceDirectory }
+      : {}),
+    getLastKnownMembership: () => {
+      const known = workspaceContext.lastKnown?.() ?? null;
+      return known
+        ? { workspaceId: known.workspaceId, memberStatus: known.memberStatus }
+        : null;
+    },
+  });
   function persistWorkspaceProjectSyncState(
     projectId: string,
     workspaceId: string | null | undefined,
@@ -5324,7 +5343,7 @@ export async function startServer({
     projectFiles: projectFileDeps,
     conversations: conversationDeps,
     auth: authDeps,
-    getAmbientWorkspace,
+    resolveCreatedProjectHome,
   });
   app.post('/api/projects/:id/figma/import', (req, res) => {
     figmaUpload.single('file')(req, res, async (err) => {
@@ -5596,7 +5615,7 @@ export async function startServer({
     generationJobs: designSystemGenerationJobs,
   });
   registerBrandRoutes(app, {
-    getAmbientWorkspace,
+    resolveCreatedProjectHome,
     brandsRoot: BRANDS_DIR,
     userDesignSystemsRoot: USER_DESIGN_SYSTEMS_DIR,
     resolveDesignSystemWorkspaceId: resolveDesignSystemWorkspaceScope,
@@ -5849,7 +5868,7 @@ export async function startServer({
         // user immediately runs. `createPluginShareProject` (apps/web) mints no
         // workspace headers at all, so this was permanently unbound, not merely
         // racy: the very first turn 403s on the workspace gate.
-        bindCreatedProjectToWorkspace((input) => ensureWorkspaceProject(db, input), createdProjectWorkspaceHome(req, getAmbientWorkspace), id, now);
+        bindCreatedProjectToWorkspace((input) => ensureWorkspaceProject(db, input), await resolveCreatedProjectHome(req), id, now);
         const registry = await loadPluginRegistryView(); const connectorProbe = buildConnectorProbe(connectorService); const resolved = resolvePluginSnapshot({ db, body: { pluginId: actionPluginId, pluginInputs: { source_plugin_id: sourcePlugin.id, source_plugin_title: sourcePlugin.title || sourcePlugin.id, source_plugin_version: sourcePlugin.version, source_plugin_path: sourcePlugin.fsPath, plugin_context_path: stagedPath }, locale: typeof body.locale === 'string' ? body.locale : undefined }, projectId: id, conversationId: cid, registry, connectorProbe });
         if (resolved && !resolved.ok) return res.status(resolved.status).json(resolved.body);
         const project = getProject(db, id); if (!project) return sendApiError(res, 500, 'INTERNAL_ERROR', 'created project could not be loaded');
