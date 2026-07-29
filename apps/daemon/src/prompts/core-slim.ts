@@ -187,9 +187,11 @@ export const PLATFORM_CONTRACTS_BLOCK = `## Platform delivery contracts
  */
 export function renderSlimCoreCharter(
   executionProfile: ExecutionProfile = 'filesystem',
+  options: { includeTurnOneDiscoveryPolicy?: boolean } = {},
 ): string {
   const isTextArtifact = executionProfile === 'text_artifact';
-  return SLIM_CORE_CHARTER
+  const includeTurnOneDiscoveryPolicy = options.includeTurnOneDiscoveryPolicy !== false;
+  let charter = SLIM_CORE_CHARTER
     .replace(
       EXECUTION_CONTEXT_PLACEHOLDER,
       isTextArtifact ? TEXT_ARTIFACT_EXECUTION_CONTEXT : FILESYSTEM_EXECUTION_CONTEXT,
@@ -198,4 +200,15 @@ export function renderSlimCoreCharter(
       HANDOFF_PLACEHOLDER,
       isTextArtifact ? TEXT_ARTIFACT_HANDOFF : FILESYSTEM_HANDOFF,
     );
+
+  if (!includeTurnOneDiscoveryPolicy) {
+    charter = charter
+      .replace(
+        /### Turn 1: one line, one form, then stop\n[\s\S]*?### When to skip or inherit the form\n[\s\S]*?(?=### Writing the form — shape & tailoring)/,
+        '',
+      )
+      .replace(/\n{3,}/g, '\n\n');
+  }
+
+  return charter;
 }
