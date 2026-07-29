@@ -62,7 +62,7 @@ import {
   notifyWorkspaceBillingRefresh,
   notifyWorkspaceContextRefresh,
 } from '../collab/useWorkspaceContext';
-import { hasTeamPlan, resolvePlanLabelTier } from '../collab/team-plan';
+import { canUpgradeFromPlanTier, hasTeamPlan, resolvePlanLabelTier } from '../collab/team-plan';
 import { AMR_CONSOLE_UPGRADE_INTENT, amrPlansUrlForProfile } from '../runtime/amr-guidance';
 import type { EntryHomeView } from '../router';
 
@@ -620,7 +620,16 @@ export function EntryNavRail({
   // Product decision: plan selection / payment lives in Vela Web. The local
   // client opens that billing surface, then refreshes billing + context when
   // focus returns so direct web upgrades sync plan, credits, seats and gates.
-  const canUpgrade = Boolean(billingUpgradeUrl && permissions?.canManageBilling);
+  //
+  // The gate needs all three answers, and used to ask only the last two: a
+  // destination exists, the caller may act on billing, AND the tier actually has
+  // somewhere to go. Without the tier question a 团队版 Max owner — the top tier,
+  // nothing above it — was offered 升级 that could only reopen the plan they
+  // already hold. It reads the tier the card LABELS, so the button and the
+  // nameplate next to it can never disagree.
+  const canUpgrade =
+    Boolean(billingUpgradeUrl && permissions?.canManageBilling)
+    && canUpgradeFromPlanTier(labelTier);
   const currentWorkspaceItem = context
     ? workspaceItems.find((item) => item.workspaceId === context.workspaceId) ?? null
     : null;

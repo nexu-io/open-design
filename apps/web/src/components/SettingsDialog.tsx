@@ -48,7 +48,6 @@ import {
   amrLoginStatusEventReason,
 } from './amrLoginPolling';
 import {
-  canUpgradeVelaPlan,
   fetchAmrWalletSnapshot,
   fetchVelaLoginStatus,
   formatVelaBalanceUsd,
@@ -160,7 +159,7 @@ import {
   workspaceBillingBalanceUsd,
   workspaceBillingSummaryForContext,
 } from '../collab/useWorkspaceContext';
-import { resolvePlanTier } from '../collab/team-plan';
+import { canUpgradeFromPlanTier, resolvePlanTier } from '../collab/team-plan';
 import { planBadgeTierForLabel } from './PlanWordmark';
 import { workspaceUpgradeUrl } from './EntryNavRail';
 import { canShowWorkspaceSettings } from '../collab/settings-access';
@@ -4653,9 +4652,21 @@ export function SettingsDialog({
                           // workspaces always resolve `canManageBilling` true
                           // (the user is their own owner), so this does not
                           // affect the personal-workspace upgrade path.
+                          //
+                          // The TIER half asks `canUpgradeFromPlanTier` — the
+                          // one rule the account menu's billing card shares —
+                          // about `amrCardResolvedPlan`, the SAME resolved tier
+                          // the badge above renders. It used to ask a
+                          // personal-ladder question about
+                          // `account.plan` instead: that projection is
+                          // ACCOUNT-scoped and reports `free` for a user whose
+                          // entitlement is held by a team workspace, so a
+                          // 团队版 Max owner was measured as "free" and offered
+                          // an upgrade to the top tier they already hold, while
+                          // the badge beside it correctly read Max.
                           const amrCardCanUpgrade =
                             isAmrAgent && active && amrCardStatus?.loggedIn
-                              ? canUpgradeVelaPlan(amrCardStatus.account?.plan) &&
+                              ? canUpgradeFromPlanTier(amrCardResolvedPlan) &&
                                 Boolean(workspaceContext?.permissions?.canManageBilling)
                               : false;
                           const amrRevealPendingCancelAction =
