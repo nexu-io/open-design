@@ -5,7 +5,7 @@
   nixpkgs,
   system,
   nodejs,
-  pnpm_10,
+  pnpm,
   fetchPnpmDeps,
   pnpmConfigHook,
   src,
@@ -39,7 +39,7 @@ in
 
     nativeBuildInputs = [
       nodejs
-      pnpm_10
+      pnpm
       pnpmConfigHook
     ];
 
@@ -48,11 +48,11 @@ in
       src = pnpmDepsSrc;
       hash = pnpmDepsHash;
       # Force the deps-fetch derivation to use the flake's pinned
-      # pnpm_10 as well. fetchPnpmDeps defaults to `pkgs.pnpm` when
+      # pnpm as well. fetchPnpmDeps defaults to `pkgs.pnpm` when
       # the `pnpm` arg is omitted.
-      pnpm = pnpm_10;
+      pnpm = pnpm;
       pnpmWorkspaces = pnpmWorkspaceFilters;
-      fetcherVersion = 3;
+      fetcherVersion = 4;
     };
 
     env = {

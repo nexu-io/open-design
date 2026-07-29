@@ -37,7 +37,7 @@ pnpm typecheck            # tsc -b --noEmit
 pnpm --filter @open-design/web build  # build do pacote web quando necessário
 ```
 
-Node `~24` e pnpm `10.33.x` são obrigatórios. `nvm` / `fnm` são opcionais; use `nvm install 24 && nvm use 24` ou `fnm install 24 && fnm use 24` se preferir gerenciar Node assim. macOS, Linux e WSL2 são os caminhos principais. Windows nativo é suportado; veja [`docs/windows-troubleshooting.md`](../../docs/windows-troubleshooting.md) para os tropeços de configuração mais comuns.
+Node `~24` e pnpm `11.15.x` são obrigatórios. `nvm` / `fnm` são opcionais; use `nvm install 24 && nvm use 24` ou `fnm install 24 && fnm use 24` se preferir gerenciar Node assim. macOS, Linux e WSL2 são os caminhos principais. Windows nativo é suportado; veja [`docs/windows-troubleshooting.md`](../../docs/windows-troubleshooting.md) para os tropeços de configuração mais comuns.
 
 Você não precisa de nenhum CLI de agente no `PATH` para desenvolver o próprio OD — o daemon dirá "no agents found" e cairá no caminho **Anthropic API · BYOK**, que é o loop de dev mais rápido de qualquer jeito.
 

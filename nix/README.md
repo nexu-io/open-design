@@ -14,7 +14,7 @@ both.
 | `packages.<system>.daemon`                 | The `@open-design/daemon` package — produces `bin/od`. Default output.                 |
 | `packages.<system>.web`                    | The Next.js static export (`apps/web/out/`) ready to drop into any static file server. |
 | `apps.<system>.default`                    | `nix run github:nexu-io/open-design` — boots the daemon.                               |
-| `devShells.<system>.default`               | Node 24 + Corepack-pinned pnpm 10.33 — reproduces `pnpm install` locally.              |
+| `devShells.<system>.default`               | Node 24 + Corepack-pinned pnpm 11.15 — reproduces `pnpm install` locally.              |
 | `homeManagerModules.{default,open-design}` | Home Manager module — primary individual-developer interface.                          |
 | `nixosModules.{default,open-design}`       | NixOS module — secondary, for shared/server installs.                                  |
 

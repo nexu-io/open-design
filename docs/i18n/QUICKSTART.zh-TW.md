@@ -7,7 +7,7 @@
 ## 環境要求
 
 - **Node.js：** `~24`（Node 24.x）。程式碼庫在 `package.json#engines` 中強制要求該版本。
-- **pnpm：** `10.33.x`。程式碼庫透過 `packageManager` 固定為 `pnpm@10.33.2`；若使用 Corepack，該固定版本將被自動選中。
+- **pnpm：** `11.15.x`。程式碼庫透過 `packageManager` 固定為 `pnpm@11.15.0`；若使用 Corepack，該固定版本將被自動選中。
 - **作業系統：** 主要支援 macOS、Linux、WSL2。Windows 原生環境大部分流程也可執行，但 WSL2 是更穩定的基準。
 - **可選的本地 agent CLI：** Open Design 透過 registry 支援 Claude Code、Codex、Devin for Terminal、OpenCode、Cursor Agent、Qwen、Qoder CLI、GitHub Copilot CLI 等本地 runtime；目前清單以 [`apps/daemon/src/runtimes/registry.ts`](../../apps/daemon/src/runtimes/registry.ts) 為準。即使未安裝任何本地 runtime，也可使用在 Settings 中設定的 BYOK runtime。
 
@@ -27,7 +27,7 @@ fnm use 24
 
 ```bash
 corepack enable
-corepack pnpm --version   # 應輸出 10.33.2
+corepack pnpm --version   # 應輸出 11.15.0
 ```
 
 ## 一條指令（dev 模式）

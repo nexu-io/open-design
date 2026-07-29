@@ -31,12 +31,12 @@ require_command() {
 ensure_pnpm() {
   require_command corepack
   corepack enable
-  corepack prepare pnpm@10.33.2 --activate
+  corepack prepare pnpm@11.15.0 --activate
   hash -r
   local pnpm_version
   pnpm_version="$(pnpm --version)"
-  if [ "$pnpm_version" != "10.33.2" ]; then
-    echo "expected pnpm 10.33.2, got $pnpm_version" >&2
+  if [ "$pnpm_version" != "11.15.0" ]; then
+    echo "expected pnpm 11.15.0, got $pnpm_version" >&2
     exit 1
   fi
 }

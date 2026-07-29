@@ -7,7 +7,7 @@
 ## 環境要件
 
 - **Node.js:** `~24`（Node 24.x）。リポジトリは `package.json#engines` を通じてこれを強制しています。
-- **pnpm:** `10.33.x`。リポジトリは `packageManager` を通じて `pnpm@10.33.2` をピン留めしています。Corepack を使用すれば、ピン留めされたバージョンが自動的に選択されます。
+- **pnpm:** `11.15.x`。リポジトリは `packageManager` を通じて `pnpm@11.15.0` をピン留めしています。Corepack を使用すれば、ピン留めされたバージョンが自動的に選択されます。
 - **OS:** macOS、Linux、WSL2 が主要なパスです。Windows ネイティブはほとんどのフローで動作するはずですが、WSL2 のほうが安全なベースラインです。
 - **オプションのローカルエージェント CLI:** Open Design は、Claude Code、Codex、Devin for Terminal、OpenCode、Cursor Agent、Qwen、Qoder CLI、GitHub Copilot CLI などのローカルランタイムをレジストリで管理しています。現在の一覧は [`apps/daemon/src/runtimes/registry.ts`](../../apps/daemon/src/runtimes/registry.ts) にあります。何もインストールされていない場合は、Settings で設定した BYOK ランタイムを使用してください。
 
@@ -27,7 +27,7 @@ fnm use 24
 
 ```bash
 corepack enable
-corepack pnpm --version   # 10.33.2 が表示されるはずです
+corepack pnpm --version   # 11.15.0 が表示されるはずです
 ```
 
 ## ワンショット（dev モード）

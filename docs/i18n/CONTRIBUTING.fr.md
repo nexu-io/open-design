@@ -45,7 +45,7 @@ pnpm typecheck            # tsc -b --noEmit
 pnpm --filter @open-design/web build  # build du paquet web si nécessaire
 ```
 
-Node `~24` et pnpm `10.33.x` sont requis. `nvm` / `fnm` sont optionnels ;
+Node `~24` et pnpm `11.15.x` sont requis. `nvm` / `fnm` sont optionnels ;
 utilisez `nvm install 24 && nvm use 24` ou `fnm install 24 && fnm use 24` si
 vous gérez Node comme cela. macOS, Linux et WSL2 sont les environnements
 principaux pris en charge.

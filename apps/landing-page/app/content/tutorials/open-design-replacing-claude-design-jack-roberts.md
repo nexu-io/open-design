@@ -34,7 +34,7 @@ Three ways in:
 | Path | Best for | Requirements |
 | --- | --- | --- |
 | **Desktop app** | Most people — zero config | None. Just download and open. |
-| **Run from source** | Developers who want to read or modify the code | Node `~24`, pnpm `10.33.x` |
+| **Run from source** | Developers who want to read or modify the code | Node `~24`, pnpm `11.15.x` |
 | **Install into your agent** | People who live in the terminal | An existing coding-agent CLI |
 
 The simplest path is the **desktop app** from [open-design.ai/download](https://open-design.ai/download) — it auto-detects your installed agent CLIs. In the video, Jack does the developer route by handing the repo to his agent and letting it clone and run:

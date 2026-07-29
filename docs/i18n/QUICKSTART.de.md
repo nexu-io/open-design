@@ -7,7 +7,7 @@ Führen Sie das vollständige Produkt lokal aus.
 ## Umgebungsanforderungen
 
 - **Node.js:** `~24` (Node 24.x). Das Repository erzwingt dies über `package.json#engines`.
-- **pnpm:** `10.33.x`. Das Repository pinnt `pnpm@10.33.2` über `packageManager`; verwenden Sie Corepack, damit automatisch die gepinnte Version gewählt wird.
+- **pnpm:** `11.15.x`. Das Repository pinnt `pnpm@11.15.0` über `packageManager`; verwenden Sie Corepack, damit automatisch die gepinnte Version gewählt wird.
 - **OS:** macOS, Linux und WSL2 sind die primären Pfade. Windows nativ sollte für die meisten Abläufe funktionieren, WSL2 ist aber die sicherere Basis.
 - **Optionale lokale Agent-CLI:** Open Design unterstützt eine Registry lokaler Runtimes, darunter Claude Code, Codex, Devin for Terminal, OpenCode, Cursor Agent, Qwen, Qoder CLI, GitHub Copilot CLI und weitere. Die aktuelle Liste steht in [`apps/daemon/src/runtimes/registry.ts`](../../apps/daemon/src/runtimes/registry.ts). Wenn keine installiert ist, verwenden Sie eine in den Einstellungen konfigurierte BYOK-Runtime.
 
@@ -27,7 +27,7 @@ Aktivieren Sie dann Corepack und lassen Sie das Repository pnpm auswählen:
 
 ```bash
 corepack enable
-corepack pnpm --version   # sollte 10.33.2 ausgeben
+corepack pnpm --version   # sollte 11.15.0 ausgeben
 ```
 
 ## One-shot (Dev-Modus)

@@ -20,7 +20,7 @@ git clone git@github.com:<your-username>/open-design.git
 cd open-design
 git checkout -b template/<your-template-name>
 
-# 2. Bootstrap (Node 24, pnpm 10.33.x)
+# 2. Bootstrap (Node 24, pnpm 11.15.x)
 corepack enable
 pnpm install
 

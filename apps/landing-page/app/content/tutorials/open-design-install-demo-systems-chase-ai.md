@@ -35,7 +35,7 @@ You have three ways to install Open Design. Pick the one that fits you:
 | Path | Best for | Requirements |
 | --- | --- | --- |
 | **Desktop app** | Most people — zero config | None. Just download and open. |
-| **Run from source** | Developers who want to read or modify the code | Node `~24`, pnpm `10.33.x` |
+| **Run from source** | Developers who want to read or modify the code | Node `~24`, pnpm `11.15.x` |
 | **Install into your agent** | People who live in the terminal | An existing coding-agent CLI |
 
 Chase shows the terminal route in his video, but the **desktop app is the recommended path** today — no Node, no pnpm, no clone, and it auto-detects your agents for you.
@@ -57,7 +57,7 @@ corepack enable && pnpm install
 pnpm tools-dev run web
 ```
 
-Then open the local URL it prints in your terminal. It resolves a dynamic port, so don't hardcode one — just click whatever address it shows. You need Node `~24` and pnpm `10.33.x`; Corepack will select the pinned pnpm version for you. (If a dev server doesn't come up, you can tell your agent "spin up the Open Design dev server" and let it handle the command.)
+Then open the local URL it prints in your terminal. It resolves a dynamic port, so don't hardcode one — just click whatever address it shows. You need Node `~24` and pnpm `11.15.x`; Corepack will select the pinned pnpm version for you. (If a dev server doesn't come up, you can tell your agent "spin up the Open Design dev server" and let it handle the command.)
 
 ### Option C — Install into your coding agent
 

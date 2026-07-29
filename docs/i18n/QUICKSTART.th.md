@@ -7,7 +7,7 @@
 ## ข้อกำหนดของ environment
 
 - **Node.js:** `~24` (Node 24.x). Repo บังคับเวอร์ชันนี้ผ่าน `package.json#engines`.
-- **pnpm:** `10.33.x`. Repo pin `pnpm@10.33.2` ผ่าน `packageManager`; ใช้ Corepack เพื่อให้เลือกเวอร์ชันที่ pin ไว้อัตโนมัติ.
+- **pnpm:** `11.15.x`. Repo pin `pnpm@11.15.0` ผ่าน `packageManager`; ใช้ Corepack เพื่อให้เลือกเวอร์ชันที่ pin ไว้อัตโนมัติ.
 - **OS:** macOS, Linux และ WSL2 เป็น path หลัก. Windows native รองรับด้วย; ดูปัญหา setup ที่พบบ่อยใน [`docs/windows-troubleshooting.md`](../../docs/windows-troubleshooting.md).
 - **Optional local agent CLI:** Open Design รองรับ registry ของ local runtimes เช่น Claude Code, Codex, Devin for Terminal, OpenCode, Cursor Agent, Qwen, Qoder CLI, GitHub Copilot CLI และอื่น ๆ. รายการปัจจุบันอยู่ใน [`apps/daemon/src/runtimes/registry.ts`](../../apps/daemon/src/runtimes/registry.ts). ถ้าไม่ได้ติดตั้ง runtime ใดเลย ให้ใช้ BYOK runtime ที่ตั้งค่าไว้ใน Settings.
 
@@ -31,7 +31,7 @@ fnm use 24
 
 ```bash
 corepack enable
-corepack pnpm --version   # should print 10.33.2
+corepack pnpm --version   # should print 11.15.0
 ```
 
 ## Docker Setup

@@ -102,11 +102,11 @@
         pnpmDepsBaseInputs ++ workspacePackageManifests webWorkspacePaths
       );
 
-      # nixpkgs ships pnpm 10.33.0; the repo's package.json declares
-      # `engines.pnpm: ">=10.33.2 <11"` and pnpm refuses to install
-      # against an older binary. Override the upstream tarball to
-      # the exact version pinned by `packageManager`. Bump the url
-      # + hash in lockstep with package.json#packageManager.
+      # nixpkgs may ship a pnpm older or newer than the repo's
+      # `engines.pnpm` floor/ceiling, and pnpm refuses to install when
+      # the binary does not satisfy `engines.pnpm`. Override the upstream
+      # tarball to the exact version pinned by `packageManager`. Bump the
+      # url + hash in lockstep with package.json#packageManager.
       #
       # When bumping versions, run the following to get a new hash:
       #
@@ -114,22 +114,25 @@
       # nix store prefetch-file --hash-type sha256 \
       #   https://registry.npmjs.org/pnpm/-/pnpm-${NEW_VERSION}.tgz
       # ```
-      pnpm_10 = pkgs.pnpm_10.overrideAttrs (_old: rec {
-        version = "10.33.2";
+      pnpm = pkgs.pnpm.overrideAttrs (old: rec {
+        version = "11.15.0";
         src = pkgs.fetchurl {
           url = "https://registry.npmjs.org/pnpm/-/pnpm-${version}.tgz";
-          hash = "sha256-envPE9f2zrOUbAOXg3PZm+n94cr8MAC9/tTE95EWdhA=";
+          hash = "sha256-dy+OAPcZr7viJQJxfPl0V4gEYw0C51frPeu8CKD4+Do=";
         };
+        postInstall = (old.postInstall or "") + ''
+          chmod +x $out/bin/pnpm
+        '';
       });
 
       daemon = pkgs.callPackage ./nix/package-daemon.nix {
-        inherit dream2nix nixpkgs system nodejs pnpm_10;
+        inherit dream2nix nixpkgs system nodejs pnpm;
         src = daemonSrc;
         pnpmDepsSrc = daemonPnpmDepsSrc;
         workspacePaths = daemonWorkspacePaths;
       };
       web = pkgs.callPackage ./nix/package-web.nix {
-        inherit dream2nix nixpkgs system nodejs pnpm_10;
+        inherit dream2nix nixpkgs system nodejs pnpm;
         src = webSrc;
         pnpmDepsSrc = webPnpmDepsSrc;
         workspacePaths = webWorkspacePaths;
@@ -159,7 +162,7 @@
       devShells.default = pkgs.mkShell {
         packages = [
           nodejs
-          pnpm_10
+          pnpm
         ];
         shellHook = ''
           echo "🎨 Open Design dev shell loaded!"

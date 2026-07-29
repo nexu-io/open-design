@@ -37,7 +37,7 @@ pnpm typecheck            # tsc -b --noEmit
 pnpm --filter @open-design/web build  # web package build when needed
 ```
 
-ต้องใช้ Node `~24` และ pnpm `10.33.x`. `nvm` / `fnm` เป็น optional; ใช้ `nvm install 24 && nvm use 24` หรือ `fnm install 24 && fnm use 24` ถ้าคุณชอบจัดการ Node ด้วยวิธีนั้น. macOS, Linux และ WSL2 เป็น path หลัก. Windows native รองรับด้วย; ดู gotchas การ setup ที่พบบ่อยใน [`docs/windows-troubleshooting.md`](../../docs/windows-troubleshooting.md).
+ต้องใช้ Node `~24` และ pnpm `11.15.x`. `nvm` / `fnm` เป็น optional; ใช้ `nvm install 24 && nvm use 24` หรือ `fnm install 24 && fnm use 24` ถ้าคุณชอบจัดการ Node ด้วยวิธีนั้น. macOS, Linux และ WSL2 เป็น path หลัก. Windows native รองรับด้วย; ดู gotchas การ setup ที่พบบ่อยใน [`docs/windows-troubleshooting.md`](../../docs/windows-troubleshooting.md).
 
 ## Docker Setup
 

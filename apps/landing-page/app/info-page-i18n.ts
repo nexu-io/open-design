@@ -454,7 +454,7 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
     quickstart: {
       title: 'Open Design quickstart — Install in three commands (Node 24, pnpm)',
       description:
-        'Install Open Design locally with three commands. Requirements (Node 24, pnpm 10.33.2), commands, expected output, troubleshooting, and how to generate your first design artifact with Claude Code, Codex, Cursor, Gemini, OpenCode, or Qwen.',
+        'Install Open Design locally with three commands. Requirements (Node 24, pnpm 11.15.0), commands, expected output, troubleshooting, and how to generate your first design artifact with Claude Code, Codex, Cursor, Gemini, OpenCode, or Qwen.',
       breadcrumb: 'Quickstart',
       label: 'Install · Nº 01',
       heading: 'Open Design quickstart.',
@@ -464,7 +464,7 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
       requirementsTitle: 'Requirements',
       requirements: [
         { label: 'Node.js 24', body: 'install via your platform package manager or nodejs.org. Node 22 is not supported.' },
-        { label: 'pnpm 10.33.2', body: 'enabled through Corepack so the lockfile-pinned version is used.' },
+        { label: 'pnpm 11.15.0', body: 'enabled through Corepack so the lockfile-pinned version is used.' },
         { label: 'git', body: 'any recent version.' },
         { label: 'An agent', body: 'Claude Code, Codex, Cursor, Gemini CLI, OpenCode, or Qwen.' },
       ],
@@ -474,7 +474,7 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
         {
           name: 'Clone and install',
           text:
-            'Clone the open-design repository and install workspace dependencies with pnpm. Requires Node 24 and pnpm 10.33.2.',
+            'Clone the open-design repository and install workspace dependencies with pnpm. Requires Node 24 and pnpm 11.15.0.',
           code: QUICKSTART_CODE.install,
         },
         {
@@ -3980,7 +3980,7 @@ INFO_PAGE_COPY.zh = {
     ...INFO_PAGE_COPY.en!.quickstart,
     title: 'Open Design 快速开始 —— 三条命令安装（Node 24、pnpm）',
     description:
-      '用三条命令在本地安装 Open Design。包含 Node 24、pnpm 10.33.2 要求、命令、预期输出、排障和首次生成设计 artifact 的步骤。',
+      '用三条命令在本地安装 Open Design。包含 Node 24、pnpm 11.15.0 要求、命令、预期输出、排障和首次生成设计 artifact 的步骤。',
     breadcrumb: '快速开始',
     label: '安装 · Nº 01',
     heading: 'Open Design 快速开始。',
@@ -3989,7 +3989,7 @@ INFO_PAGE_COPY.zh = {
     requirementsTitle: '环境要求',
     requirements: [
       { label: 'Node.js 24', body: '通过系统包管理器或 nodejs.org 安装。不支持 Node 22。' },
-      { label: 'pnpm 10.33.2', body: '通过 Corepack 启用，使用 lockfile 固定版本。' },
+      { label: 'pnpm 11.15.0', body: '通过 Corepack 启用，使用 lockfile 固定版本。' },
       { label: 'git', body: '任意较新的版本即可。' },
       { label: '一个 Agent', body: 'Claude Code、Codex、Cursor、Gemini CLI、OpenCode 或 Qwen。' },
     ],
@@ -3998,7 +3998,7 @@ INFO_PAGE_COPY.zh = {
     steps: [
       {
         name: '克隆并安装',
-        text: '克隆 open-design 仓库，并用 pnpm 安装 workspace 依赖。需要 Node 24 和 pnpm 10.33.2。',
+        text: '克隆 open-design 仓库，并用 pnpm 安装 workspace 依赖。需要 Node 24 和 pnpm 11.15.0。',
         code: QUICKSTART_CODE.install,
       },
       {
@@ -4464,7 +4464,7 @@ INFO_PAGE_COPY['zh-tw'] = {
     ...INFO_PAGE_COPY.zh!.quickstart,
     title: 'Open Design 快速開始 —— 三條命令安裝（Node 24、pnpm）',
     description:
-      '用三條命令在本地安裝 Open Design。包含 Node 24、pnpm 10.33.2 要求、命令、預期輸出、排障與首次生成設計 artifact 的步驟。',
+      '用三條命令在本地安裝 Open Design。包含 Node 24、pnpm 11.15.0 要求、命令、預期輸出、排障與首次生成設計 artifact 的步驟。',
     breadcrumb: '快速開始',
     heading: 'Open Design 快速開始。',
     lead: 'Open Design 完全執行在你的機器上。三條命令就能從乾淨 checkout 到本地 daemon、Web UI 和第一個設計 artifact。',
@@ -4472,7 +4472,7 @@ INFO_PAGE_COPY['zh-tw'] = {
     requirementsTitle: '環境要求',
     requirements: [
       { label: 'Node.js 24', body: '透過系統套件管理器或 nodejs.org 安裝。不支援 Node 22。' },
-      { label: 'pnpm 10.33.2', body: '透過 Corepack 啟用，使用 lockfile 固定版本。' },
+      { label: 'pnpm 11.15.0', body: '透過 Corepack 啟用，使用 lockfile 固定版本。' },
       { label: 'git', body: '任意較新的版本即可。' },
       { label: '一個 Agent', body: 'Claude Code、Codex、Cursor、Gemini CLI、OpenCode 或 Qwen。' },
     ],
@@ -4481,7 +4481,7 @@ INFO_PAGE_COPY['zh-tw'] = {
     steps: [
       {
         name: 'clone 並安裝',
-        text: 'clone open-design repo，並用 pnpm 安裝 workspace 依賴。需要 Node 24 與 pnpm 10.33.2。',
+        text: 'clone open-design repo，並用 pnpm 安裝 workspace 依賴。需要 Node 24 與 pnpm 11.15.0。',
         code: QUICKSTART_CODE.install,
       },
       {
