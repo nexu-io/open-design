@@ -38,6 +38,7 @@ export type DtcgDiagnosticCode =
   | 'missing-reference'
   | 'missing-type'
   | 'non-normative-schema-property'
+  | 'profile-mismatch'
   | 'reference-type-mismatch'
   | 'schema-divergence'
   | 'unknown-reserved-property';
@@ -349,6 +350,14 @@ function validateGroupStructure(
       if (root && name === '$schema') {
         if (typeof value !== 'string') {
           addDiagnostic(diagnostics, 'error', 'invalid-metadata', [...path, name], '$schema must be a string.');
+        } else if (value !== DTCG_FORMAT_SCHEMA_URL) {
+          addDiagnostic(
+            diagnostics,
+            'error',
+            'profile-mismatch',
+            [...path, name],
+            `Document carries $schema ${value}, which does not identify the stable DTCG 2025.10 Format profile.`,
+          );
         } else {
           addDiagnostic(
             diagnostics,
@@ -558,7 +567,7 @@ function materializeGroup(
   for (const [name, child] of Object.entries(local)) {
     if (name.startsWith('$') || !isRecord(child) || isTokenNode(child)) continue;
     const materializedChild = materializeGroup(child, [...path, name], document, diagnostics, active);
-    if (materializedChild !== undefined) local[name] = materializedChild;
+    if (materializedChild !== undefined) defineJsonProperty(local, name, materializedChild);
   }
 
   let output = local;
@@ -606,9 +615,9 @@ function mergeGroups(inherited: JsonRecord, local: JsonRecord): JsonRecord {
       && !isTokenNode(inheritedValue)
       && !isTokenNode(localValue)
     ) {
-      output[key] = mergeGroups(inheritedValue, localValue);
+      defineJsonProperty(output, key, mergeGroups(inheritedValue, localValue));
     } else {
-      output[key] = cloneJson(localValue);
+      defineJsonProperty(output, key, cloneJson(localValue));
     }
   }
   return output;
@@ -794,25 +803,51 @@ function validateNestedReferenceTypes(
   const check = (type: DtcgTokenType, child: DtcgJsonValue | undefined, childPath: string[]) => {
     validateNestedReferenceTypes(type, child, entries, resolveToken, diagnostics, childPath);
   };
+  const checkPointerSyntax = (child: DtcgJsonValue | undefined, childPath: string[]) => {
+    if (typeof child === 'string' && looksLikeCurlyReference(child)) {
+      addDiagnostic(
+        diagnostics,
+        'error',
+        'invalid-reference',
+        childPath,
+        'Curly-brace references are not allowed at this value position; only JSON Pointer references are supported here.',
+      );
+    }
+  };
   switch (expectedType) {
     case 'color':
       if (isRecord(value)) {
+        checkPointerSyntax(value.colorSpace, [...path, 'colorSpace']);
         if (Array.isArray(value.components)) {
-          value.components.forEach((component, index) => check('number', component, [...path, 'components', String(index)]));
+          value.components.forEach((component, index) => {
+            checkPointerSyntax(component, [...path, 'components', String(index)]);
+          });
+        } else {
+          checkPointerSyntax(value.components, [...path, 'components']);
         }
-        check('number', value.alpha, [...path, 'alpha']);
+        checkPointerSyntax(value.alpha, [...path, 'alpha']);
+        checkPointerSyntax(value.hex, [...path, 'hex']);
       }
       break;
     case 'dimension':
     case 'duration':
-      if (isRecord(value)) check('number', value.value, [...path, 'value']);
+      if (isRecord(value)) {
+        checkPointerSyntax(value.value, [...path, 'value']);
+        checkPointerSyntax(value.unit, [...path, 'unit']);
+      }
       break;
     case 'cubicBezier':
-      if (Array.isArray(value)) value.forEach((coordinate, index) => check('number', coordinate, [...path, String(index)]));
+      if (Array.isArray(value)) {
+        value.forEach((coordinate, index) => checkPointerSyntax(coordinate, [...path, String(index)]));
+      }
       break;
     case 'strokeStyle':
-      if (isRecord(value) && Array.isArray(value.dashArray)) {
-        value.dashArray.forEach((dash, index) => check('dimension', dash, [...path, 'dashArray', String(index)]));
+      if (isRecord(value)) {
+        checkPointerSyntax(value.dashArray, [...path, 'dashArray']);
+        if (Array.isArray(value.dashArray)) {
+          value.dashArray.forEach((dash, index) => check('dimension', dash, [...path, 'dashArray', String(index)]));
+        }
+        checkPointerSyntax(value.lineCap, [...path, 'lineCap']);
       }
       break;
     case 'border':
@@ -841,6 +876,7 @@ function validateNestedReferenceTypes(
           check('dimension', shadow.offsetY, [...shadowPath, 'offsetY']);
           check('dimension', shadow.blur, [...shadowPath, 'blur']);
           check('dimension', shadow.spread, [...shadowPath, 'spread']);
+          checkPointerSyntax(shadow.inset, [...shadowPath, 'inset']);
         }
       });
       break;
@@ -859,7 +895,11 @@ function validateNestedReferenceTypes(
       break;
     case 'typography':
       if (isRecord(value)) {
-        check('fontFamily', value.fontFamily, [...path, 'fontFamily']);
+        if (Array.isArray(value.fontFamily)) {
+          value.fontFamily.forEach((family, index) => checkPointerSyntax(family, [...path, 'fontFamily', String(index)]));
+        } else {
+          check('fontFamily', value.fontFamily, [...path, 'fontFamily']);
+        }
         check('dimension', value.fontSize, [...path, 'fontSize']);
         check('fontWeight', value.fontWeight, [...path, 'fontWeight']);
         check('dimension', value.letterSpacing, [...path, 'letterSpacing']);
@@ -867,6 +907,10 @@ function validateNestedReferenceTypes(
       }
       break;
     case 'fontFamily':
+      if (Array.isArray(value)) {
+        value.forEach((family, index) => checkPointerSyntax(family, [...path, String(index)]));
+      }
+      break;
     case 'fontWeight':
     case 'number':
       break;
@@ -975,9 +1019,20 @@ function resolveNestedReferences(
       [...diagnosticPath, key],
       activePointers,
     );
-    if (resolved !== undefined) output[key] = resolved;
+    if (resolved !== undefined) defineJsonProperty(output, key, resolved);
   }
   return output;
+}
+
+function defineJsonProperty(record: JsonRecord, key: string, value: DtcgJsonValue): void {
+  // Plain assignment would trigger the legacy __proto__ setter for a
+  // schema-valid group or token named "__proto__" and silently drop the key.
+  Object.defineProperty(record, key, {
+    value,
+    enumerable: true,
+    writable: true,
+    configurable: true,
+  });
 }
 
 function resolveJsonPointerValue(
@@ -1040,9 +1095,9 @@ function validateAndNormalizeTypeValue(
     case 'number':
       return requireNumber(value, path, diagnostics) ? value : undefined;
     case 'strokeStyle':
-      return validateStrokeStyle(value, path, diagnostics) ? value : undefined;
+      return validateStrokeStyle(value, path, diagnostics);
     case 'border':
-      return validateBorder(value, path, diagnostics) ? value : undefined;
+      return validateBorder(value, path, diagnostics);
     case 'transition':
       return validateTransition(value, path, diagnostics) ? value : undefined;
     case 'shadow':
@@ -1146,9 +1201,18 @@ function validateUnitObject(
 
 function validateFontFamily(value: DtcgJsonValue, path: string[], diagnostics: DtcgDiagnostic[]): boolean {
   if (typeof value === 'string') return true;
-  if (!Array.isArray(value) || value.length === 0 || value.some((family) => typeof family !== 'string')) {
-    invalidValue(diagnostics, path, 'fontFamily must be a string or a non-empty array of strings.');
+  if (!Array.isArray(value) || value.some((family) => typeof family !== 'string')) {
+    invalidValue(diagnostics, path, 'fontFamily must be a string or an array of strings.');
     return false;
+  }
+  if (value.length === 0) {
+    addDiagnostic(
+      diagnostics,
+      'warning',
+      'schema-divergence',
+      path,
+      'The normative report permits an empty fontFamily array, but the official schema requires at least one item.',
+    );
   }
   return true;
 }
@@ -1172,13 +1236,16 @@ function validateCubicBezier(value: DtcgJsonValue, path: string[], diagnostics: 
   return validX;
 }
 
-function validateStrokeStyle(value: DtcgJsonValue, path: string[], diagnostics: DtcgDiagnostic[]): boolean {
+function validateStrokeStyle(value: DtcgJsonValue, path: string[], diagnostics: DtcgDiagnostic[]): DtcgJsonValue | undefined {
   if (typeof value === 'string') {
     const valid = STROKE_STYLE_KEYWORDS.has(value);
-    if (!valid) invalidValue(diagnostics, path, 'Unknown strokeStyle keyword.');
-    return valid;
+    if (!valid) {
+      invalidValue(diagnostics, path, 'Unknown strokeStyle keyword.');
+      return undefined;
+    }
+    return value;
   }
-  if (!requireRecord(value, path, diagnostics)) return false;
+  if (!requireRecord(value, path, diagnostics)) return undefined;
   let valid = exactKeys(value, ['dashArray', 'lineCap'], path, diagnostics);
   if (!Array.isArray(value.dashArray)) {
     invalidValue(diagnostics, [...path, 'dashArray'], 'strokeStyle dashArray must be an array.');
@@ -1192,16 +1259,30 @@ function validateStrokeStyle(value: DtcgJsonValue, path: string[], diagnostics: 
     invalidValue(diagnostics, [...path, 'lineCap'], 'strokeStyle lineCap must be round, butt, or square.');
     valid = false;
   }
-  return valid;
+  // Format 9.3.2: an odd number of dashArray values is repeated to yield an
+  // even number of values.
+  const sourceDashArray = value.dashArray as DtcgJsonValue;
+  const dashArray: DtcgJsonValue = Array.isArray(sourceDashArray)
+    ? sourceDashArray.length % 2 === 1 ? [...sourceDashArray, ...sourceDashArray] : sourceDashArray
+    : sourceDashArray;
+  return valid ? { ...value, dashArray } : undefined;
 }
 
-function validateBorder(value: DtcgJsonValue, path: string[], diagnostics: DtcgDiagnostic[]): boolean {
-  if (!requireRecord(value, path, diagnostics)) return false;
+function validateBorder(value: DtcgJsonValue, path: string[], diagnostics: DtcgDiagnostic[]): DtcgJsonValue | undefined {
+  if (!requireRecord(value, path, diagnostics)) return undefined;
   let valid = exactKeys(value, ['color', 'width', 'style'], path, diagnostics);
-  if (!validateColor(value.color as DtcgJsonValue, [...path, 'color'], diagnostics)) valid = false;
-  if (!validateDimension(value.width as DtcgJsonValue, [...path, 'width'], diagnostics)) valid = false;
-  if (!validateStrokeStyle(value.style as DtcgJsonValue, [...path, 'style'], diagnostics)) valid = false;
-  return valid;
+  const color: DtcgJsonValue | undefined = validateColor(value.color as DtcgJsonValue, [...path, 'color'], diagnostics)
+    ? (value.color as DtcgJsonValue)
+    : undefined;
+  if (color === undefined) valid = false;
+  const width: DtcgJsonValue | undefined = validateDimension(value.width as DtcgJsonValue, [...path, 'width'], diagnostics)
+    ? (value.width as DtcgJsonValue)
+    : undefined;
+  if (width === undefined) valid = false;
+  const style = validateStrokeStyle(value.style as DtcgJsonValue, [...path, 'style'], diagnostics);
+  if (style === undefined) valid = false;
+  if (!valid || color === undefined || width === undefined || style === undefined) return undefined;
+  return { color, width, style };
 }
 
 function validateTransition(value: DtcgJsonValue, path: string[], diagnostics: DtcgDiagnostic[]): boolean {
