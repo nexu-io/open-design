@@ -94,6 +94,45 @@ describe('ChangeSetReview', () => {
     expect(screen.getByRole('button', { name: 'Apply changes' })).toBeDisabled();
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it('derives the affected Google Play override, visibility, transform, and real asset thumbnail', () => {
+    const document = structuredClone(documentResponse.document);
+    document.assets = [{ id: 'asset-1' }, { id: 'asset-2' }];
+    document.pages[0]!.screenshotAssetId = 'asset-1';
+    document.pages[0]!.transform = { x: 0, y: 0, scale: 1 };
+    const changeSet: StoreScreenshotChangeSet = {
+      baseVersion: 1,
+      operations: [
+        { op: 'setText', pageId: 'page-1', field: 'headline', value: 'GP override', platform: 'googlePlay' },
+        { op: 'setVisibility', pageId: 'page-1', visible: false, platform: 'googlePlay' },
+        { op: 'setTransform', pageId: 'page-1', x: 42, y: -12, scale: 1.25 },
+        { op: 'setAsset', pageId: 'page-1', assetId: 'asset-2' },
+      ],
+    };
+    render(
+      <ChangeSetReview
+        projectId="project-1"
+        document={document}
+        changeSet={changeSet}
+        affectedPageIds={['page-1']}
+        onApplied={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    const previews = screen.getAllByTestId('change-preview-page-1-googlePlay');
+    expect(previews).toHaveLength(2);
+    expect(previews[0]).toHaveAttribute('data-hidden', 'false');
+    expect(previews[1]).toHaveAttribute('data-hidden', 'true');
+    expect(previews[0]).toHaveTextContent('Google Play page 1');
+    expect(previews[1]).toHaveTextContent('GP override');
+    const images = screen.getAllByAltText(/Product screenshot/);
+    const [beforeImage, afterImage] = images;
+    if (!beforeImage || !afterImage) throw new Error('Expected before and after product screenshots');
+    expect(beforeImage).toHaveAttribute('data-asset-id', 'asset-1');
+    expect(afterImage).toHaveAttribute('data-asset-id', 'asset-2');
+    expect(beforeImage.getAttribute('style')).not.toBe(afterImage.getAttribute('style'));
+  });
 });
 
 describe('VersionHistory', () => {

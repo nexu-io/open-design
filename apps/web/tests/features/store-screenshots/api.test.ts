@@ -10,6 +10,7 @@ import {
   generateStoreScreenshots,
   previewStoreScreenshotChangeSet,
   restoreStoreScreenshotVersion,
+  storeScreenshotAssetRawUrl,
   StoreScreenshotApiError,
   validateStoreScreenshotDocument,
 } from '../../../src/features/store-screenshots/api';
@@ -87,5 +88,11 @@ describe('store screenshot API response contracts', () => {
       code: 'DOCUMENT_NOT_FOUND',
       message: 'Store screenshot document not found',
     });
+  });
+
+  it('uses encoded same-origin URLs for raw screenshot assets', () => {
+    expect(storeScreenshotAssetRawUrl('project / one', 'asset/one?two')).toBe(
+      '/api/projects/project%20%2F%20one/store-screenshots/assets/asset%2Fone%3Ftwo/raw',
+    );
   });
 });

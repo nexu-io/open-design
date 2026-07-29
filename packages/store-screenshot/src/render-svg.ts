@@ -1,4 +1,5 @@
 import type { DerivedStoreScreenshotPage } from './derive.js';
+import { placeDerivedStoreScreenshotAsset } from './placement.js';
 
 export function compileStoreScreenshotSvg(page: DerivedStoreScreenshotPage): string {
   const { width, height } = page.size;
@@ -29,15 +30,10 @@ function backgroundSvgFor(page: DerivedStoreScreenshotPage, width: number, heigh
 }
 
 function screenshotSvg(page: DerivedStoreScreenshotPage, width: number, height: number, fallbackColor: string): string {
-  if (page.screenshotAsset === undefined) return '';
-  const scale = page.transform.scale;
-  const screenshotWidth = width * 0.8 * scale;
-  const screenshotHeight = height * 0.54 * scale;
-  const x = page.template.devicePlacement === 'right' ? width - screenshotWidth - width * 0.06 : (width - screenshotWidth) / 2;
-  const y = height - screenshotHeight - height * 0.07;
-  const position = page.screenshotAsset.position ?? { x: 0, y: 0 };
+  const placement = placeDerivedStoreScreenshotAsset(page);
+  if (!placement || page.screenshotAsset === undefined) return '';
   const color = page.screenshotAsset.color ?? fallbackColor;
-  return `<rect x="${number(x + position.x + page.transform.x)}" y="${number(y + position.y + page.transform.y)}" width="${number(screenshotWidth)}" height="${number(screenshotHeight)}" fill="${escapeXml(color)}" rx="${number(page.template.screenshotRadius)}"/>`;
+  return `<rect x="${number(placement.left)}" y="${number(placement.top)}" width="${number(placement.width)}" height="${number(placement.height)}" fill="${escapeXml(color)}" rx="${number(placement.radius)}"/>`;
 }
 
 function number(value: number): string {

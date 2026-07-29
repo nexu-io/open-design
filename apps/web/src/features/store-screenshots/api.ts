@@ -235,3 +235,7 @@ export function storeScreenshotJobDownloadUrl(
     `/jobs/${encodeURIComponent(jobId)}/download`,
   );
 }
+
+export function storeScreenshotAssetRawUrl(projectId: string, assetId: string): string {
+  return storeScreenshotUrl(projectId, `/assets/${encodeURIComponent(assetId)}/raw`);
+}

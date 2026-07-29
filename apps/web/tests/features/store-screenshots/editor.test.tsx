@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { StoreScreenshotDocument } from '../../../src/features/store-screenshots/api';
@@ -38,6 +38,12 @@ const fabricHarness = vi.hoisted(() => {
     constructor(text: string, options: Record<string, unknown> = {}) {
       super(options);
       this.text = text;
+    }
+  }
+
+  class FabricImage extends FabricObject {
+    static async fromURL(url: string, options: Record<string, unknown> = {}) {
+      return new FabricImage({ sourceUrl: url, ...options });
     }
   }
 
@@ -80,7 +86,7 @@ const fabricHarness = vi.hoisted(() => {
     }
   }
 
-  return { Canvas, FabricObject, IText, Rect };
+  return { Canvas, FabricImage, FabricObject, IText, Rect };
 });
 
 vi.mock('fabric', () => fabricHarness);
@@ -92,12 +98,12 @@ afterEach(() => {
 });
 
 describe('StoreScreenshotEditor', () => {
-  it('converts a product screenshot drag into one current-page setTransform change', () => {
+  it('converts a product screenshot drag into one current-page setTransform change', async () => {
     const onPreviewChangeSet = vi.fn();
     renderEditor({ onPreviewChangeSet });
 
     const canvas = requiredCanvas();
-    const productShot = requiredObject(canvas, 'product-shot');
+    const productShot = await requiredObject(canvas, 'product-shot');
     productShot.left += 20;
     productShot.top += 30;
     canvas.emit('object:modified', productShot);
@@ -114,12 +120,12 @@ describe('StoreScreenshotEditor', () => {
     });
   });
 
-  it('converts a product screenshot scale into one current-page setTransform change', () => {
+  it('converts a product screenshot scale into one current-page setTransform change', async () => {
     const onPreviewChangeSet = vi.fn();
     renderEditor({ onPreviewChangeSet });
 
     const canvas = requiredCanvas();
-    const productShot = requiredObject(canvas, 'product-shot');
+    const productShot = await requiredObject(canvas, 'product-shot');
     productShot.scaleX = 1.25;
     productShot.scaleY = 1.25;
     canvas.emit('object:modified', productShot);
@@ -129,8 +135,8 @@ describe('StoreScreenshotEditor', () => {
       operations: [{
         op: 'setTransform',
         pageId: 'page-1',
-        x: 0,
-        y: 0,
+        x: 129,
+        y: 377.46,
         scale: 1.25,
       }],
     });
@@ -183,14 +189,14 @@ describe('StoreScreenshotEditor', () => {
     ]);
   });
 
-  it('keeps locked layout and screenshot nodes inert', () => {
+  it('keeps locked layout and screenshot nodes inert', async () => {
     const onPreviewChangeSet = vi.fn();
     const document = editorDocument();
     document.pages[0]!.lockedFields = ['layout', 'screenshot'];
     renderEditor({ document, onPreviewChangeSet });
 
     const canvas = requiredCanvas();
-    const productShot = requiredObject(canvas, 'product-shot');
+    const productShot = await requiredObject(canvas, 'product-shot');
     expect(productShot.selectable).toBe(false);
     productShot.left += 50;
     productShot.scaleX = 2;
@@ -223,6 +229,7 @@ function renderEditor({
 }) {
   return render(
     <StoreScreenshotEditor
+      projectId="project-1"
       document={document}
       page={document.pages[0]!}
       platform="appStore"
@@ -244,10 +251,13 @@ function requiredCanvas(): InstanceType<typeof fabricHarness.Canvas> {
   return canvas;
 }
 
-function requiredObject(
+async function requiredObject(
   canvas: InstanceType<typeof fabricHarness.Canvas>,
   nodeId: string,
-): InstanceType<typeof fabricHarness.FabricObject> {
+): Promise<InstanceType<typeof fabricHarness.FabricObject>> {
+  await waitFor(() => expect(canvas.objects.some((candidate) => (
+    (candidate.data.storeScreenshotNode as { id?: string } | undefined)?.id === nodeId
+  ))).toBe(true));
   const object = canvas.objects.find((candidate) => (
     (candidate.data.storeScreenshotNode as { id?: string } | undefined)?.id === nodeId
   ));

@@ -599,6 +599,7 @@ export function StoreScreenshotWorkspace({
           />
         ) : document && mode === 'editor' && selectedPage ? (
           <StoreScreenshotEditor
+            projectId={projectId}
             document={document}
             page={selectedPage}
             platform={platform}

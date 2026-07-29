@@ -94,6 +94,8 @@ function mapRouteError(
       JOB_NOT_FOUND: [404, 'JOB_NOT_FOUND'],
       NOT_IMPLEMENTED: [501, 'NOT_IMPLEMENTED'],
       UNSAFE_DOWNLOAD: [400, 'BAD_REQUEST'],
+      ASSET_NOT_FOUND: [404, 'NOT_FOUND'],
+      UNSAFE_ASSET: [400, 'BAD_REQUEST'],
     };
     const [status, code] = mapping[error.code];
     return sendApiError(res, status, code, error.message);
@@ -200,6 +202,24 @@ export function registerStoreScreenshotRoutes(
         mapRouteError(caught, res, sendApiError);
       }
     });
+  });
+
+  app.get(`${BASE_PATH}/assets/:assetId/raw`, async (req, res) => {
+    if (!requireProject(req, res)) return;
+    try {
+      const asset = await ctx.storeScreenshots.readAssetRaw(
+        req.params.projectId!,
+        req.params.assetId!,
+      );
+      res
+        .status(200)
+        .type(asset.mime)
+        .setHeader('Cache-Control', 'no-store')
+        .setHeader('X-Content-Type-Options', 'nosniff')
+        .send(asset.body);
+    } catch (error) {
+      mapRouteError(error, res, sendApiError);
+    }
   });
 
   app.post(`${BASE_PATH}/changes/preview`, requireLocalDaemonRequest, async (req, res) => {

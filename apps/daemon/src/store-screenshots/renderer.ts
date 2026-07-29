@@ -4,6 +4,7 @@ import sharp from 'sharp';
 import {
   compileStoreScreenshotSvg,
   deriveStoreScreenshotPage,
+  placeDerivedStoreScreenshotAsset,
   platformSpecs,
   type StorePlatform,
   type StoreScreenshotDocument,
@@ -316,14 +317,10 @@ async function assetComposites(
 
   if (page.screenshotAssetId) {
     const { body } = await resolve(page.screenshotAssetId);
-    const { width, height } = derivedPage.size;
-    const screenshotWidth = Math.round(width * 0.8 * derivedPage.transform.scale);
-    const screenshotHeight = Math.round(height * 0.54 * derivedPage.transform.scale);
-    const baseX = derivedPage.template.devicePlacement === 'right'
-      ? width - screenshotWidth - width * 0.06
-      : (width - screenshotWidth) / 2;
-    const baseY = height - screenshotHeight - height * 0.07;
-    const position = derivedPage.screenshotAsset?.position ?? { x: 0, y: 0 };
+    const placement = placeDerivedStoreScreenshotAsset(derivedPage);
+    if (!placement) return composites;
+    const screenshotWidth = Math.round(placement.width);
+    const screenshotHeight = Math.round(placement.height);
     composites.push({
       input: await resizedOverlay(
         body,
@@ -332,8 +329,8 @@ async function assetComposites(
         'cover',
         derivedPage.template.screenshotRadius,
       ),
-      left: Math.round(baseX + position.x + derivedPage.transform.x),
-      top: Math.round(baseY + position.y + derivedPage.transform.y),
+      left: Math.round(placement.left),
+      top: Math.round(placement.top),
       blend: 'over',
     });
   }

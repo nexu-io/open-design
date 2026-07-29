@@ -18,6 +18,7 @@ import {
   type StoreScreenshotChangeSet,
   type StoreScreenshotDocument,
 } from '@launch-studio/store-screenshot';
+import { createHash } from 'node:crypto';
 
 import type { createStoreScreenshotAssetStore, SaveStoreScreenshotAssetInput } from './assets.js';
 import type { createStoreScreenshotPersistence } from './persistence.js';
@@ -27,7 +28,9 @@ export type StoreScreenshotServiceErrorCode =
   | 'INVALID_CHANGE_SET'
   | 'JOB_NOT_FOUND'
   | 'NOT_IMPLEMENTED'
-  | 'UNSAFE_DOWNLOAD';
+  | 'UNSAFE_DOWNLOAD'
+  | 'ASSET_NOT_FOUND'
+  | 'UNSAFE_ASSET';
 
 export class StoreScreenshotServiceError extends Error {
   constructor(
@@ -179,6 +182,21 @@ function assertControlledDownloadPath(relativePath: string): void {
   }
 }
 
+function assertControlledAssetPath(relativePath: string, contentHash: string): void {
+  const extension = relativePath.split('.').at(-1);
+  if (
+    !/^[a-f0-9]{64}$/.test(contentHash)
+    || !extension
+    || !['png', 'jpg', 'webp'].includes(extension)
+    || relativePath !== `store-screenshots/assets/${contentHash}.${extension}`
+  ) {
+    throw new StoreScreenshotServiceError(
+      'UNSAFE_ASSET',
+      'Store screenshot asset path is not a controlled asset path',
+    );
+  }
+}
+
 async function readDocumentIdentity(
   persistence: ReturnType<typeof createStoreScreenshotPersistence>,
   projectId: string,
@@ -219,6 +237,33 @@ export function createStoreScreenshotService(deps: CreateStoreScreenshotServiceD
         }, null, 'asset-replacement');
       }
       return asset;
+    },
+
+    readAssetRaw: async (
+      projectId: string,
+      assetId: string,
+    ): Promise<{ body: Buffer; mime: 'image/png' | 'image/jpeg' | 'image/webp' }> => {
+      const document = await deps.persistence.read(projectId);
+      const asset = await deps.persistence.findAsset(assetId);
+      if (
+        !asset
+        || asset.projectId !== projectId
+        || asset.documentId !== document.id
+        || !document.assets.some(({ id }) => id === assetId)
+      ) {
+        throw new StoreScreenshotServiceError('ASSET_NOT_FOUND', 'Store screenshot asset not found');
+      }
+      assertControlledAssetPath(asset.relativePath, asset.contentHash);
+      let body: Buffer;
+      try {
+        body = await deps.projectStorage.readFile(projectId, asset.relativePath);
+      } catch {
+        throw new StoreScreenshotServiceError('ASSET_NOT_FOUND', 'Store screenshot asset not found');
+      }
+      if (createHash('sha256').update(body).digest('hex') !== asset.contentHash) {
+        throw new StoreScreenshotServiceError('ASSET_NOT_FOUND', 'Store screenshot asset not found');
+      }
+      return { body, mime: asset.mime };
     },
 
     previewChanges: async (

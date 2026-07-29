@@ -298,6 +298,7 @@ describe('store screenshot routes', () => {
       { method: 'POST', path: '/api/projects/:projectId/store-screenshots' },
       { method: 'GET', path: '/api/projects/:projectId/store-screenshots' },
       { method: 'POST', path: '/api/projects/:projectId/store-screenshots/assets' },
+      { method: 'GET', path: '/api/projects/:projectId/store-screenshots/assets/:assetId/raw' },
       { method: 'POST', path: '/api/projects/:projectId/store-screenshots/changes/preview' },
       { method: 'POST', path: '/api/projects/:projectId/store-screenshots/changes/apply' },
       { method: 'GET', path: '/api/projects/:projectId/store-screenshots/versions' },
@@ -342,6 +343,44 @@ describe('store screenshot routes', () => {
     const document = (await json('GET', basePath)).body.document;
     expect(document.version).toBe(2);
     expect(document.assets).toEqual([{ id: uploaded.asset.id }]);
+  });
+
+  it('serves only the owning project’s uploaded image with fixed safe headers', async () => {
+    const basePath = `/api/projects/${PROJECT_ID}/store-screenshots`;
+    const otherPath = `/api/projects/${PROJECT_B_ID}/store-screenshots`;
+    expect((await json('POST', basePath, createBody)).status).toBe(201);
+    expect((await json('POST', otherPath, createBody)).status).toBe(201);
+    const png = await sharp({
+      create: { width: 2, height: 2, channels: 3, background: '#ff00aa' },
+    }).png().toBuffer();
+    const form = new FormData();
+    form.append('file', new Blob([png], { type: 'image/png' }), 'screen.png');
+    const uploaded = await (await fetch(`${baseUrl}${basePath}/assets`, {
+      method: 'POST', body: form,
+    })).json() as { asset: { id: string } };
+
+    const raw = await fetch(`${baseUrl}${basePath}/assets/${uploaded.asset.id}/raw`);
+    expect(raw.status).toBe(200);
+    expect(raw.headers.get('content-type')).toContain('image/png');
+    expect(raw.headers.get('cache-control')).toBe('no-store');
+    expect(raw.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(Buffer.from(await raw.arrayBuffer()).equals(png)).toBe(true);
+
+    const crossProject = await fetch(`${baseUrl}${otherPath}/assets/${uploaded.asset.id}/raw`);
+    expect(crossProject.status).toBe(404);
+    const traversal = await fetch(`${baseUrl}${basePath}/assets/..%2Fsecret/raw`);
+    expect(traversal.status).toBe(404);
+
+    const indexed = db.prepare(`
+      SELECT relative_path AS relativePath
+      FROM store_screenshot_assets
+      WHERE id = ?
+    `).get(uploaded.asset.id) as { relativePath: string };
+    await projectStorage.writeFile(PROJECT_ID, indexed.relativePath, Buffer.from('tampered'));
+    expect((await fetch(`${baseUrl}${basePath}/assets/${uploaded.asset.id}/raw`)).status).toBe(404);
+    db.prepare(`UPDATE store_screenshot_assets SET relative_path = ? WHERE id = ?`)
+      .run('../not-an-asset.png', uploaded.asset.id);
+    expect((await fetch(`${baseUrl}${basePath}/assets/${uploaded.asset.id}/raw`)).status).toBe(400);
   });
 
   it('validates multipart asset metadata with the shared request schema', async () => {

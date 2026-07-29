@@ -74,6 +74,7 @@
 
 .pagePreview {
   position: relative;
+  height: 300px;
   padding: 18px 14px;
   display: grid;
   align-content: start;
@@ -98,12 +99,26 @@
 
 .previewDevice {
   position: absolute;
-  left: 18%;
-  right: 18%;
-  bottom: -12%;
-  height: 60%;
   border: 6px solid #171717;
-  border-radius: 14px 14px 0 0;
+  object-fit: cover;
+  box-sizing: border-box;
+}
+
+.previewPlatform,
+.hiddenState {
+  position: relative;
+  z-index: 1;
+  width: fit-content;
+  padding: 2px 5px;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--bg) 80%, transparent);
+  border-radius: 4px;
+  font-size: 9px;
+  line-height: 1.2;
+}
+
+.pagePreview[data-hidden='true'] {
+  opacity: 0.55;
 }
 
 .emptyPreview {

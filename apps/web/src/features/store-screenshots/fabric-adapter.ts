@@ -1,10 +1,12 @@
-import { IText, Rect, type FabricObject } from 'fabric';
+import { FabricImage, IText, Rect, type FabricObject } from 'fabric';
 import {
   deriveStoreScreenshotPage,
+  placeStoreScreenshotAsset,
   type ChangeOperation,
   type StorePlatform,
   type StoreScreenshotDocument,
   type StoreScreenshotPage,
+  type StoreScreenshotTemplate,
 } from '@launch-studio/store-screenshot';
 
 export type StoreScreenshotFabricNodeId =
@@ -17,8 +19,11 @@ interface StoreScreenshotFabricNode {
   id: StoreScreenshotFabricNodeId;
   pageId: string;
   viewportScale: number;
-  baseLeft?: number;
-  baseTop?: number;
+  assetPlacement?: {
+    size: { width: number; height: number };
+    template: Pick<StoreScreenshotTemplate, 'devicePlacement' | 'screenshotRadius'>;
+    assetPosition?: { x: number; y: number };
+  };
   textField?: 'headline' | 'body';
 }
 
@@ -28,12 +33,13 @@ export type StoreScreenshotFabricObject = FabricObject & {
   };
 };
 
-export function storeScreenshotPageToFabricObjects(
+export async function storeScreenshotPageToFabricObjects(
   document: StoreScreenshotDocument,
   page: StoreScreenshotPage,
   platform: StorePlatform,
   viewportWidth: number,
-): StoreScreenshotFabricObject[] {
+  assetUrl?: string,
+): Promise<StoreScreenshotFabricObject[]> {
   const derived = deriveStoreScreenshotPage(document, page.id, platform);
   const viewportScale = viewportWidth / derived.size.width;
   const viewportHeight = derived.size.height * viewportScale;
@@ -74,12 +80,7 @@ export function storeScreenshotPageToFabricObjects(
       lockMovementX: true,
       lockMovementY: true,
     }),
-    {
-      id: 'headline',
-      pageId: page.id,
-      viewportScale,
-      textField: 'headline',
-    },
+    { id: 'headline', pageId: page.id, viewportScale, textField: 'headline' },
   );
   const objects = [background, headline];
 
@@ -101,55 +102,59 @@ export function storeScreenshotPageToFabricObjects(
         lockMovementX: true,
         lockMovementY: true,
       }),
-      {
-        id: 'body',
-        pageId: page.id,
-        viewportScale,
-        textField: 'body',
-      },
+      { id: 'body', pageId: page.id, viewportScale, textField: 'body' },
     ));
   }
 
   if (derived.screenshotAsset !== undefined) {
-    const screenshotWidth = derived.size.width * 0.8;
-    const screenshotHeight = derived.size.height * 0.54;
-    const assetPosition = derived.screenshotAsset.position ?? { x: 0, y: 0 };
-    const baseLeft = (
-      derived.template.devicePlacement === 'right'
-        ? derived.size.width - screenshotWidth - derived.size.width * 0.06
-        : (derived.size.width - screenshotWidth) / 2
-    ) + assetPosition.x;
-    const baseTop = (
-      derived.size.height - screenshotHeight - derived.size.height * 0.07
-    ) + assetPosition.y;
+    if (!assetUrl) throw new Error('The selected product screenshot has no render URL');
     const layoutLocked = locked.has('layout');
-    objects.push(tagged(
-      new Rect({
-        left: (baseLeft + derived.transform.x) * viewportScale,
-        top: (baseTop + derived.transform.y) * viewportScale,
-        width: screenshotWidth * viewportScale,
-        height: screenshotHeight * viewportScale,
-        scaleX: derived.transform.scale,
-        scaleY: derived.transform.scale,
-        fill: derived.screenshotAsset.color ?? derived.colors.accent,
-        rx: derived.template.screenshotRadius * viewportScale,
-        ry: derived.template.screenshotRadius * viewportScale,
+    const placement = placeStoreScreenshotAsset({
+      size: derived.size,
+      template: derived.template,
+      assetPosition: derived.screenshotAsset.position,
+      transform: derived.transform,
+    });
+    const image = await FabricImage.fromURL(assetUrl, { crossOrigin: 'anonymous' });
+    const baseWidth = derived.size.width * 0.8 * viewportScale;
+    const baseHeight = derived.size.height * 0.54 * viewportScale;
+    image.set({
+      left: placement.left * viewportScale,
+      top: placement.top * viewportScale,
+      width: baseWidth,
+      height: baseHeight,
+      scaleX: derived.transform.scale,
+      scaleY: derived.transform.scale,
+      originX: 'left',
+      originY: 'top',
+      selectable: !layoutLocked,
+      evented: !layoutLocked,
+      hasControls: !layoutLocked,
+      lockRotation: true,
+      lockScalingFlip: true,
+      lockUniScaling: true,
+      clipPath: new Rect({
+        left: 0,
+        top: 0,
+        width: baseWidth,
+        height: baseHeight,
+        rx: placement.radius * viewportScale,
+        ry: placement.radius * viewportScale,
         originX: 'left',
         originY: 'top',
-        selectable: !layoutLocked,
-        evented: !layoutLocked,
-        hasControls: !layoutLocked,
-        lockRotation: true,
-        lockScalingFlip: true,
+        absolutePositioned: false,
       }),
-      {
-        id: 'product-shot',
-        pageId: page.id,
-        viewportScale,
-        baseLeft: baseLeft * viewportScale,
-        baseTop: baseTop * viewportScale,
+    });
+    objects.push(tagged(image, {
+      id: 'product-shot',
+      pageId: page.id,
+      viewportScale,
+      assetPlacement: {
+        size: derived.size,
+        template: derived.template,
+        assetPosition: derived.screenshotAsset.position,
       },
-    ));
+    }));
   }
 
   return objects;
@@ -160,23 +165,24 @@ export function fabricObjectToTransformOperation(
   object: FabricObject,
 ): Extract<ChangeOperation, { op: 'setTransform' }> | null {
   const node = readNode(object);
-  if (
-    !node
-    || node.id !== 'product-shot'
-    || node.pageId !== pageId
-    || node.baseLeft === undefined
-    || node.baseTop === undefined
-  ) {
+  if (!node || node.id !== 'product-shot' || node.pageId !== pageId || !node.assetPlacement) {
     return null;
   }
   const scaleX = object.scaleX ?? 1;
   const scaleY = object.scaleY ?? scaleX;
+  if (!Number.isFinite(scaleX) || !Number.isFinite(scaleY) || Math.abs(scaleX - scaleY) > 0.0001) {
+    return null;
+  }
+  const anchor = placeStoreScreenshotAsset({
+    ...node.assetPlacement,
+    transform: { x: 0, y: 0, scale: scaleX },
+  });
   return {
     op: 'setTransform',
     pageId,
-    x: roundCanonical(((object.left ?? node.baseLeft) - node.baseLeft) / node.viewportScale),
-    y: roundCanonical(((object.top ?? node.baseTop) - node.baseTop) / node.viewportScale),
-    scale: roundCanonical((scaleX + scaleY) / 2),
+    x: roundCanonical((object.left ?? anchor.left * node.viewportScale) / node.viewportScale - anchor.left),
+    y: roundCanonical((object.top ?? anchor.top * node.viewportScale) / node.viewportScale - anchor.top),
+    scale: roundCanonical(scaleX),
   };
 }
 
@@ -186,27 +192,13 @@ export function fabricObjectToTextOperation(
   object: FabricObject,
 ): Extract<ChangeOperation, { op: 'setText' }> | null {
   const node = readNode(object);
-  if (
-    !node?.textField
-    || node.pageId !== pageId
-    || !('text' in object)
-    || typeof object.text !== 'string'
-  ) {
+  if (!node?.textField || node.pageId !== pageId || !('text' in object) || typeof object.text !== 'string') {
     return null;
   }
-  return {
-    op: 'setText',
-    pageId,
-    field: node.textField,
-    value: object.text,
-    platform,
-  };
+  return { op: 'setText', pageId, field: node.textField, value: object.text, platform };
 }
 
-function tagged(
-  object: FabricObject,
-  node: StoreScreenshotFabricNode,
-): StoreScreenshotFabricObject {
+function tagged(object: FabricObject, node: StoreScreenshotFabricNode): StoreScreenshotFabricObject {
   const taggedObject = object as StoreScreenshotFabricObject;
   taggedObject.data = { storeScreenshotNode: node };
   return taggedObject;

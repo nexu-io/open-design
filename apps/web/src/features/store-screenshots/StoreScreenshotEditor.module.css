@@ -105,6 +105,16 @@
   line-height: 1.4;
 }
 
+.assetError {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  color: var(--danger-text, #b42318);
+  background: color-mix(in srgb, var(--danger-text, #b42318) 8%, transparent);
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  font-size: 11px;
+}
+
 @media (max-width: 860px) {
   .editor {
     grid-template-columns: 1fr;

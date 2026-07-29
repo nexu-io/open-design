@@ -18,6 +18,7 @@ import type {
   StoreScreenshotDocument,
   StoreScreenshotPlatform,
 } from './api';
+import { storeScreenshotAssetRawUrl } from './api';
 import {
   fabricObjectToTextOperation,
   fabricObjectToTransformOperation,
@@ -26,6 +27,7 @@ import {
 import styles from './StoreScreenshotEditor.module.css';
 
 interface Props {
+  projectId: string;
   document: StoreScreenshotDocument;
   page: StoreScreenshotDocument['pages'][number];
   platform: StoreScreenshotPlatform;
@@ -35,6 +37,7 @@ interface Props {
 const EDITOR_WIDTH = 360;
 
 export function StoreScreenshotEditor({
+  projectId,
   document,
   page,
   platform,
@@ -44,6 +47,7 @@ export function StoreScreenshotEditor({
   const canvasElementRef = useRef<HTMLCanvasElement | null>(null);
   const [headline, setHeadline] = useState(page.overrides[platform]?.headline ?? page.headline);
   const [body, setBody] = useState(page.overrides[platform]?.body ?? page.body ?? '');
+  const [assetError, setAssetError] = useState(false);
   const locks = useMemo(() => new Set(page.lockedFields), [page.lockedFields]);
   const templateColors = storeScreenshotTemplates[page.templateId].colors;
   const visible = !(page.overrides[platform]?.hidden ?? page.hidden ?? false);
@@ -64,14 +68,8 @@ export function StoreScreenshotEditor({
       selection: false,
       preserveObjectStacking: true,
     });
-    const objects = storeScreenshotPageToFabricObjects(
-      document,
-      page,
-      platform,
-      EDITOR_WIDTH,
-    );
-    canvas.add(...objects);
-    canvas.renderAll();
+    let active = true;
+    setAssetError(false);
 
     const handleObjectModified = ({ target }: { target?: FabricObject }) => {
       if (!target || locks.has('layout')) return;
@@ -85,8 +83,25 @@ export function StoreScreenshotEditor({
     };
     canvas.on('object:modified', handleObjectModified);
     canvas.on('text:editing:exited', handleTextEditingExited);
+    const assetUrl = page.screenshotAssetId
+      ? storeScreenshotAssetRawUrl(projectId, page.screenshotAssetId)
+      : undefined;
+    void storeScreenshotPageToFabricObjects(
+      document,
+      page,
+      platform,
+      EDITOR_WIDTH,
+      assetUrl,
+    ).then((objects) => {
+      if (!active) return;
+      canvas.add(...objects);
+      canvas.renderAll();
+    }).catch(() => {
+      if (active) setAssetError(true);
+    });
 
     return () => {
+      active = false;
       canvas.off('object:modified', handleObjectModified);
       canvas.off('text:editing:exited', handleTextEditingExited);
       void canvas.dispose();
@@ -105,6 +120,7 @@ export function StoreScreenshotEditor({
     onPreviewChangeSet,
     page,
     platform,
+    projectId,
   ]);
 
   const emit = (operation: StoreScreenshotChangeSet['operations'][number]) => {
@@ -139,6 +155,7 @@ export function StoreScreenshotEditor({
           aria-label={t('storeScreenshots.editorCanvas')}
           data-testid="store-screenshot-editor-canvas"
         />
+        {assetError ? <p className={styles.assetError} role="alert">{t('storeScreenshots.previewFailed')}</p> : null}
       </div>
 
       <aside className={styles.inspector} aria-label={t('storeScreenshots.editorInspector')}>
