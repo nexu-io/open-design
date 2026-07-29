@@ -1,16 +1,18 @@
 {
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
-  "name": "design-taste-libraries",
+  "name": "community-design-taste-libraries",
   "title": "Design Taste Libraries",
   "version": "0.1.0",
   "description": "General Open Design skill that routes agents through high-quality design, UI, dashboard, mobile, shadcn, and motion libraries before generating or critiquing frontend work.",
   "license": "MIT",
   "author": {
-    "name": "Konstantin Baltsat"
+    "name": "Konstantin Baltsat",
+    "url": "https://github.com/Baltsat"
   },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/community/design-taste-libraries",
   "tags": [
-    "local",
+    "community",
     "design",
     "frontend",
     "taste",
