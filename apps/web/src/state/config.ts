@@ -1,8 +1,9 @@
-import type {
-  AppConfigPrefs,
-  ByokCredentialProfile,
-  ByokCredentialProfilesResponse,
-  UpsertByokCredentialProfileRequest,
+import {
+  isByokProviderProtocol,
+  type AppConfigPrefs,
+  type ByokCredentialProfile,
+  type ByokCredentialProfilesResponse,
+  type UpsertByokCredentialProfileRequest,
 } from '@open-design/contracts';
 import { MEDIA_PROVIDERS } from '../media/models';
 import { isOpenAICompatible } from '../providers/openai-compatible';
@@ -1575,24 +1576,33 @@ export function mergeDaemonConfig(
       provider.protocol === daemonByokProvider.protocol &&
       provider.baseUrl === daemonByokProvider.baseUrl,
   );
-  if (knownDaemonByokProvider && daemonByokProvider.model.trim()) {
+  if (
+    daemonByokProvider &&
+    isByokProviderProtocol(daemonByokProvider.protocol) &&
+    daemonByokProvider.model.trim()
+  ) {
+    const sameProviderIdentity =
+      localConfig.mode === 'api' &&
+      localConfig.apiProtocol === daemonByokProvider.protocol &&
+      localConfig.baseUrl === daemonByokProvider.baseUrl;
+    const apiKey = sameProviderIdentity ? localConfig.apiKey : '';
     const apiConfig: ApiProtocolConfig = {
-      apiKey: '',
-      baseUrl: knownDaemonByokProvider.baseUrl,
+      apiKey,
+      baseUrl: daemonByokProvider.baseUrl,
       model: daemonByokProvider.model.trim(),
       apiVersion: '',
-      apiProviderBaseUrl: knownDaemonByokProvider.baseUrl,
+      apiProviderBaseUrl: knownDaemonByokProvider?.baseUrl ?? null,
     };
     next.mode = 'api';
-    next.apiProtocol = knownDaemonByokProvider.protocol;
-    next.apiKey = '';
+    next.apiProtocol = daemonByokProvider.protocol;
+    next.apiKey = apiKey;
     next.baseUrl = apiConfig.baseUrl;
     next.model = apiConfig.model;
     next.apiVersion = '';
     next.apiProviderBaseUrl = apiConfig.apiProviderBaseUrl;
     next.apiProtocolConfigs = {
       ...(next.apiProtocolConfigs ?? {}),
-      [knownDaemonByokProvider.protocol]: apiConfig,
+      [daemonByokProvider.protocol]: apiConfig,
     };
   }
 
@@ -1779,7 +1789,7 @@ export async function fetchDaemonConfig(): Promise<AppConfigPrefs | null> {
 
 export async function syncConfigToDaemon(
   config: AppConfig,
-  options?: { throwOnError?: boolean },
+  options?: { throwOnError?: boolean; byokProviderIntent?: 'clear' },
 ): Promise<void> {
   const prefs: AppConfigPrefs = {
     onboardingCompleted: config.onboardingCompleted,
@@ -1805,7 +1815,7 @@ export async function syncConfigToDaemon(
         baseUrl: config.baseUrl,
         model: config.model,
       }
-      : undefined,
+      : options?.byokProviderIntent === 'clear' ? null : undefined,
   };
   try {
     const response = await fetch('/api/app-config', {

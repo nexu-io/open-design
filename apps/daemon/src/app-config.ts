@@ -30,6 +30,7 @@ import {
   writeInstallationFile,
   type InstallationFilePatch,
 } from './installation.js';
+import { isByokProviderProtocol, type ByokProviderPrefs as SharedByokProviderPrefs } from '@open-design/contracts';
 
 // Plugin-system env knobs. See docs/plans/plugins-implementation.md F6 / F9.
 // Phase 1 only reads them; the GC worker that enforces snapshot expiry lands
@@ -101,10 +102,14 @@ export interface ProjectLocationPrefs {
   path: string;
 }
 
-export interface ByokProviderPrefs {
-  protocol: string;
-  baseUrl: string;
-  model: string;
+export type ByokProviderPrefs = SharedByokProviderPrefs;
+
+export class InvalidByokProviderError extends Error {
+  readonly code = 'INVALID_BYOK_PROVIDER';
+
+  constructor() {
+    super('invalid BYOK provider selection');
+  }
 }
 
 export interface AppConfigPrefs {
@@ -171,7 +176,7 @@ function validateByokProvider(raw: unknown): ByokProviderPrefs | undefined {
   const protocol = value.protocol.trim();
   const baseUrl = value.baseUrl.trim();
   const model = value.model.trim();
-  if (!protocol || !baseUrl || !model) return undefined;
+  if (!protocol || !baseUrl || !model || !isByokProviderProtocol(protocol)) return undefined;
   try {
     const url = new URL(baseUrl);
     if (url.protocol !== 'https:' && url.protocol !== 'http:') return undefined;
@@ -820,6 +825,13 @@ async function doWrite(
   dataDir: string,
   partial: Record<string, unknown>,
 ): Promise<AppConfigPrefs> {
+  if (
+    Object.prototype.hasOwnProperty.call(partial, 'byokProvider') &&
+    partial.byokProvider !== null &&
+    validateByokProvider(partial.byokProvider) === undefined
+  ) {
+    throw new InvalidByokProviderError();
+  }
   const existing = await readAppConfig(dataDir);
   const next: Record<string, unknown> = { ...existing };
   for (const key of Object.keys(partial)) {

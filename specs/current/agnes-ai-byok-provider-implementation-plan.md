@@ -6,7 +6,7 @@
 
 **目标：** 在 Open Design 的 BYOK 提供方列表中增加可直接选择的 Agnes AI，并自动填入官方 OpenAI-compatible Base URL 与 `agnes-2.0-flash` 模型。
 
-**架构：** 复用 `apps/web/src/state/config.ts` 中的 canonical provider catalogue 和由其派生的 BYOK preset，不新增 `ApiProtocol`、daemon endpoint 或请求实现。现有 Settings/Onboarding UI 会从 `BYOK_PROVIDER_PRESETS` 自动获得入口，现有 `openai` protocol 继续负责连接测试和聊天请求。
+**架构：** Agnes UI 入口仍复用 `apps/web/src/state/config.ts` 的 canonical provider catalogue 和派生 BYOK preset；但为了满足 UI/CLI 双轨配置，`packages/contracts/src/api/app-config.ts` 现在定义共享的非秘密 `byokProvider` 协议、Base URL 与模型语义。daemon 的 `/api/app-config` 写入路径在落盘前校验该选择，并向 CLI 暴露相同状态；API Key 始终只留在浏览器现有凭据流中。web 启动时可水合已知或受支持的自定义端点：同一 provider identity 保留本地 Key，身份变化或 CLI 首次水合则保持空 Key。用户明确从 BYOK 切换至 Local CLI 时发送 `byokProvider: null`；例行启动同步则省略该字段，避免覆盖 CLI 已写入、尚待水合的选择。
 
 **技术栈：** Node.js 24、pnpm 10.33.2、TypeScript、React 18、Vitest 4、Electron tools-dev runtime。
 
@@ -19,21 +19,29 @@
 - 默认模型必须是 `agnes-2.0-flash`。
 - 不接入 Agnes 图像、视频或专用模型发现逻辑。
 - 不在源码、测试、日志、命令参数或截图中放入真实 API Key。
-- 不新增依赖、不修改 contracts、不修改 daemon route、不增加 i18n key。
+- 不新增依赖、不新增 i18n key；允许修改 shared contract、daemon app-config 验证与 CLI，以保持 UI/CLI 双轨闭环。
 - 根级开发生命周期只能使用 `corepack pnpm tools-dev`。
 - 完成前必须通过 web 测试、web typecheck、web build、`pnpm guard` 和根 `pnpm typecheck`。
 
 ## 文件边界
 
-- 修改 `apps/web/src/state/config.ts`
+- 修改 `packages/contracts/src/api/app-config.ts`
+  - 定义受支持的 BYOK protocol enum 与非秘密 provider metadata 合同。
+- 修改 `apps/daemon/src/app-config.ts`、`apps/daemon/src/routes/media.ts`、`apps/daemon/src/cli.ts`
+  - 校验 protocol、HTTP(S) Base URL 与非空 model；无效选择通过 `/api/app-config` 返回 400，且不修改原有选择。
+  - `od config byok get/set` 只读写非秘密 metadata，并在 daemon 拒绝时非零退出。
+- 修改 `apps/web/src/state/config.ts`、`apps/web/src/App.tsx`
   - 在 `KNOWN_PROVIDERS` 中定义 Agnes AI 的 canonical provider metadata。
   - 在 `BYOK_PROVIDER_PRESET_SPECS` 中暴露稳定的 `agnes-ai` 快捷入口。
+  - 水合 provider metadata 时以 protocol + Base URL 判断同一身份，保留同一身份的浏览器本地 Key；支持自定义受支持端点。
+  - 区分显式 Local CLI 切换（发送 `null`）与例行 daemon-mode 同步（省略字段）。
 - 修改 `apps/web/tests/state/config.test.ts`
-  - 锁定 Agnes provider 与 preset 的唯一性、协议、Base URL 和默认模型。
+  - 锁定 Agnes provider/preset、密钥保留、自定义端点水合和显式清除语义。
+- 修改 `apps/daemon/tests/server-persistence-smoke.test.ts`、`apps/daemon/tests/cli-templates.test.ts`
+  - 覆盖真实 daemon 400 路径、保留既有选择，以及 CLI 错误退出。
 - 不修改 `SettingsDialog.tsx`
   - 该组件已经从 `BYOK_PROVIDER_PRESETS` 渲染 provider 入口并复用现有切换逻辑。
-- 不修改 daemon/CLI
-  - `od config` 已经通过 `/api/app-config` 表达同一份 OpenAI-compatible 配置。
+- daemon/CLI 变更仅限 shared non-secret `byokProvider` metadata；不得增加 API Key 参数、持久化或回显。
 
 ---
 

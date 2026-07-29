@@ -595,6 +595,21 @@ describe('od config byok CLI', () => {
     expect(stub.requests).toHaveLength(0);
   });
 
+  it('exits nonzero when the daemon rejects an invalid BYOK selection', async () => {
+    stub.setResponder(() => ({
+      status: 400,
+      body: { error: 'invalid BYOK provider selection' },
+    }));
+
+    const result = await runCli([
+      'config', 'byok', 'set', 'unsupported', 'https://example.test/v1', 'custom-model',
+      '--daemon-url', stub.baseUrl,
+    ]);
+
+    expect(result.code).not.toBe(0);
+    expect(result.stderr).toContain('invalid BYOK provider selection');
+  });
+
   it('rejects a fourth positional value so an API key cannot be accepted as provider metadata', async () => {
     const result = await runCli([
       'config', 'byok', 'set', 'openai', 'https://apihub.agnes-ai.com/v1', 'agnes-2.0-flash',

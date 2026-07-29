@@ -85,6 +85,48 @@ it('[P0] starts on an existing data dir with legacy app config and persisted pro
     agentId: 'claude',
     agentModels: { claude: { model: 'claude-legacy-config-smoke' } },
   });
+
+  const agnes = {
+    protocol: 'openai',
+    baseUrl: 'https://apihub.agnes-ai.com/v1',
+    model: 'agnes-2.0-flash',
+  };
+  const validAgnes = await fetch(`${started.url}/api/app-config`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ byokProvider: agnes }),
+  });
+  expect(validAgnes.status).toBe(200);
+
+  for (const byokProvider of [
+    { ...agnes, protocol: 'unsupported' },
+    { ...agnes, baseUrl: 'not-a-url' },
+    { ...agnes, model: '   ' },
+  ]) {
+    const response = await fetch(`${started.url}/api/app-config`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ byokProvider }),
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ error: 'invalid BYOK provider selection' });
+    expect((await fetchJson<{ config: { byokProvider?: unknown } }>(
+      `${started.url}/api/app-config`,
+    )).config.byokProvider).toEqual(agnes);
+  }
+
+  const custom = {
+    protocol: 'openai',
+    baseUrl: 'https://custom.example.test/v1',
+    model: 'custom-model',
+  };
+  const validCustom = await fetch(`${started.url}/api/app-config`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ byokProvider: custom }),
+  });
+  expect(validCustom.status).toBe(200);
+  expect((await validCustom.json()).config.byokProvider).toEqual(custom);
 }, 60_000);
 
 async function startIsolatedServer(root: string): Promise<StartedServer> {

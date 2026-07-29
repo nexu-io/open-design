@@ -254,6 +254,64 @@ describe('syncConfigToDaemon', () => {
     expect(merged.apiProtocolConfigs?.openai?.apiKey).toBe('');
   });
 
+  it('preserves a browser-local key when daemon metadata identifies the active Agnes provider', () => {
+    const localApiKey = ['browser', 'credential'].join('-');
+    const merged = mergeDaemonConfig(
+      {
+        ...DEFAULT_CONFIG,
+        mode: 'api',
+        apiProtocol: 'openai',
+        apiKey: localApiKey,
+        baseUrl: 'https://apihub.agnes-ai.com/v1',
+        model: 'stale-model',
+        apiProtocolConfigs: {
+          openai: {
+            apiKey: localApiKey,
+            baseUrl: 'https://apihub.agnes-ai.com/v1',
+            model: 'stale-model',
+            apiVersion: '',
+          },
+        },
+      },
+      {
+        byokProvider: {
+          protocol: 'openai',
+          baseUrl: 'https://apihub.agnes-ai.com/v1',
+          model: 'agnes-2.0-flash',
+        },
+      },
+    );
+
+    expect(merged.apiKey).toBe(localApiKey);
+    expect(merged.apiProtocolConfigs?.openai?.apiKey).toBe(localApiKey);
+    expect(merged).toMatchObject({
+      baseUrl: 'https://apihub.agnes-ai.com/v1',
+      model: 'agnes-2.0-flash',
+    });
+  });
+
+  it('hydrates a valid custom BYOK endpoint without treating it as a known provider', () => {
+    const merged = mergeDaemonConfig(
+      { ...DEFAULT_CONFIG, mode: 'daemon' },
+      {
+        byokProvider: {
+          protocol: 'openai',
+          baseUrl: 'https://custom.example.test/v1',
+          model: 'custom-model',
+        },
+      },
+    );
+
+    expect(merged).toMatchObject({
+      mode: 'api',
+      apiProtocol: 'openai',
+      apiKey: '',
+      baseUrl: 'https://custom.example.test/v1',
+      model: 'custom-model',
+      apiProviderBaseUrl: null,
+    });
+  });
+
   it('does not clear daemon BYOK selection during routine daemon-mode sync', async () => {
     const fetchMock = vi.fn(async () => new Response('{}', { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
@@ -262,6 +320,23 @@ describe('syncConfigToDaemon', () => {
 
     const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(JSON.parse(String(init.body))).not.toHaveProperty('byokProvider');
+  });
+
+  it('clears daemon BYOK selection only for an explicit Local CLI mode switch', async () => {
+    const fetchMock = vi.fn(async () => new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await syncConfigToDaemon(
+      { ...DEFAULT_CONFIG, mode: 'daemon' },
+      { byokProviderIntent: 'clear' },
+    );
+
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toMatchObject({ byokProvider: null });
+    expect(mergeDaemonConfig(
+      { ...DEFAULT_CONFIG, mode: 'daemon' },
+      { byokProvider: null },
+    ).mode).toBe('daemon');
   });
 
   it('syncs CLI API key env values and intent to daemon app config while localStorage strips them', async () => {

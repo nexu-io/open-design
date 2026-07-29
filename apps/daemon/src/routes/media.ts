@@ -492,6 +492,9 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       onAppConfigWritten?.(config);
       res.json({ config });
     } catch (err: any) {
+      if (err?.code === 'INVALID_BYOK_PROVIDER') {
+        return res.status(400).json({ error: err.message });
+      }
       res
         .status(500)
         .json({ error: String(err && err.message ? err.message : err) });

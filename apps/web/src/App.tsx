@@ -1306,6 +1306,7 @@ function AppInner() {
     //
     // allowSilentUpdates is daemon-owned and must not be applied optimistically:
     // keep the previous value in memory until the daemon write succeeds.
+    const previousMode = latestPersistedConfigRef.current.mode;
     const prevSilent = latestPersistedConfigRef.current.allowSilentUpdates;
     const nextSilent = next.allowSilentUpdates;
     const silentChanged = nextSilent !== prevSilent;
@@ -1324,6 +1325,7 @@ function AppInner() {
     const daemonPayload = silentChanged
       ? { ...persisted, allowSilentUpdates: nextSilent }
       : persisted;
+    const shouldClearByokProvider = previousMode === 'api' && persisted.mode === 'daemon';
     await Promise.all([
       shouldSyncMediaProviders
         ? syncMediaProvidersToDaemon(persisted.mediaProviders, {
@@ -1332,7 +1334,10 @@ function AppInner() {
             throwOnError: options?.forceMediaProviderSync,
           })
         : Promise.resolve(),
-      syncConfigToDaemon(daemonPayload, { throwOnError: true }),
+      syncConfigToDaemon(daemonPayload, {
+        throwOnError: true,
+        ...(shouldClearByokProvider ? { byokProviderIntent: 'clear' as const } : {}),
+      }),
     ]);
     if (silentChanged) {
       latestPersistedConfigRef.current = {
@@ -1386,9 +1391,16 @@ function AppInner() {
 
   const handleModeChange = useCallback(
     (mode: AppConfig['mode']) => {
-      const next = { ...latestPersistedConfigRef.current, mode };
+      const previous = latestPersistedConfigRef.current;
+      const next = { ...previous, mode };
       latestPersistedConfigRef.current = next;
       saveConfig(next);
+      void syncConfigToDaemon(
+        next,
+        previous.mode === 'api' && mode === 'daemon'
+          ? { byokProviderIntent: 'clear' }
+          : undefined,
+      );
       setConfig(next);
     },
     [],
