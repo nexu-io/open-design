@@ -648,6 +648,10 @@ import { getRouteRegistrationInventory, installRouteRegistrationGuard } from './
 import { assertServerContextSatisfiesRoutes } from './route-context-contract.js';
 import { resolveProjectStorage } from './storage/project-storage.js';
 import { createStoreScreenshotAssetStore } from './store-screenshots/assets.js';
+import {
+  createStoreScreenshotJobs,
+  reconcileStoreScreenshotJobsOnBoot,
+} from './store-screenshots/jobs.js';
 import { createStoreScreenshotPersistence } from './store-screenshots/persistence.js';
 import { createStoreScreenshotService } from './store-screenshots/service.js';
 import { configureConnectorCredentialStore, connectorService, FileConnectorCredentialStore } from './connectors/service.js';
@@ -2397,6 +2401,13 @@ export async function startServer({
         `deleted ${mediaReconcile.deleted} expired terminal task(s)`,
     );
   }
+  const storeScreenshotJobReconcile = reconcileStoreScreenshotJobsOnBoot(db);
+  if (storeScreenshotJobReconcile.interrupted > 0) {
+    console.warn(
+      `[store-screenshots] interrupted ${storeScreenshotJobReconcile.interrupted} `
+        + 'export job(s) after daemon restart',
+    );
+  }
   mediaTaskStore.mediaTasks.clear();
   for (const row of listRecentMediaTasks(db, { terminalTtlMs: TASK_TTL_AFTER_DONE_MS })) {
     mediaTaskStore.hydrateMediaTask(row);
@@ -2833,11 +2844,21 @@ export async function startServer({
     projectsRoot: PROJECTS_DIR,
     env: process.env,
   });
+  const storeScreenshotPersistence = createStoreScreenshotPersistence(
+    db,
+    storeScreenshotStorage,
+  );
   const storeScreenshots = createStoreScreenshotService({
-    persistence: createStoreScreenshotPersistence(db, storeScreenshotStorage),
+    persistence: storeScreenshotPersistence,
     assets: createStoreScreenshotAssetStore(db, storeScreenshotStorage),
     projectStorage: storeScreenshotStorage,
     createId: randomUUID,
+    jobs: createStoreScreenshotJobs({
+      db,
+      persistence: storeScreenshotPersistence,
+      projectStorage: storeScreenshotStorage,
+      createId: randomUUID,
+    }),
   });
   const conversationDeps = {
     insertConversation,

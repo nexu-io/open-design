@@ -10,6 +10,7 @@ import type {
 } from '@open-design/contracts';
 import {
   applyChangeSet,
+  platformSpecs,
   StoreScreenshotChangeSetSchema,
   StoreScreenshotDocumentSchema,
   type StorePlatform,
@@ -138,15 +139,11 @@ function validatePlatforms(
   platforms: readonly StorePlatform[],
 ): StoreScreenshotValidationResult {
   const issues: StoreScreenshotValidationResult['issues'] = [];
-  const limits: Record<StorePlatform, { min: number; max: number }> = {
-    appStore: { min: 1, max: 10 },
-    googlePlay: { min: 4, max: 8 },
-  };
   for (const platform of platforms) {
     const visiblePageCount = document.pages.filter((page) => (
       !(page.overrides[platform]?.hidden ?? page.hidden ?? false)
     )).length;
-    const { min, max } = limits[platform];
+    const { min, max } = platformSpecs[platform].pageCount;
     if (visiblePageCount < min || visiblePageCount > max) {
       issues.push({
         severity: 'error',
