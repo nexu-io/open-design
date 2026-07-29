@@ -109,7 +109,12 @@ it('[P0] starts on an existing data dir with legacy app config and persisted pro
       body: JSON.stringify({ byokProvider }),
     });
     expect(response.status).toBe(400);
-    expect(await response.json()).toMatchObject({ error: 'invalid BYOK provider selection' });
+    expect(await response.json()).toMatchObject({
+      error: {
+        code: 'missing-input',
+        message: 'invalid BYOK provider selection',
+      },
+    });
     expect((await fetchJson<{ config: { byokProvider?: unknown } }>(
       `${started.url}/api/app-config`,
     )).config.byokProvider).toEqual(agnes);

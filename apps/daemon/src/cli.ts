@@ -8663,6 +8663,14 @@ Common options:
     case 'byok': {
       const action = rest[0];
       if (action === 'get') {
+        const positional = rest.slice(1).filter(
+          (arg, index, values) =>
+            !arg.startsWith('-') && values[index - 1] !== '--daemon-url',
+        );
+        if (positional.length !== 0) {
+          console.error('Usage: od config byok get');
+          process.exit(2);
+        }
         const provider = (await fetchConfig())?.byokProvider ?? null;
         process.stdout.write(JSON.stringify(provider, null, 2) + '\n');
         return;

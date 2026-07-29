@@ -578,6 +578,16 @@ describe('od config byok CLI', () => {
     expect(result.stderr).toBe('');
   });
 
+  it('rejects extra BYOK get positional input before making a request', async () => {
+    const result = await runCli([
+      'config', 'byok', 'get', 'unexpected', '--daemon-url', stub.baseUrl,
+    ]);
+
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain('Usage: od config byok get');
+    expect(stub.requests).toHaveLength(0);
+  });
+
   it('rejects missing set values and malformed BYOK actions before making a request', async () => {
     const missingValue = await runCli([
       'config', 'byok', 'set', 'openai', 'https://apihub.agnes-ai.com/v1',
@@ -598,7 +608,12 @@ describe('od config byok CLI', () => {
   it('exits nonzero when the daemon rejects an invalid BYOK selection', async () => {
     stub.setResponder(() => ({
       status: 400,
-      body: { error: 'invalid BYOK provider selection' },
+      body: {
+        error: {
+          code: 'missing-input',
+          message: 'invalid BYOK provider selection',
+        },
+      },
     }));
 
     const result = await runCli([
@@ -606,8 +621,13 @@ describe('od config byok CLI', () => {
       '--daemon-url', stub.baseUrl,
     ]);
 
-    expect(result.code).not.toBe(0);
-    expect(result.stderr).toContain('invalid BYOK provider selection');
+    expect(result.code).toBe(67);
+    expect(JSON.parse(result.stderr.trim())).toMatchObject({
+      error: {
+        code: 'missing-input',
+        message: 'invalid BYOK provider selection',
+      },
+    });
   });
 
   it('rejects a fourth positional value so an API key cannot be accepted as provider metadata', async () => {

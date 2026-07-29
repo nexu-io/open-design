@@ -493,7 +493,12 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       res.json({ config });
     } catch (err: any) {
       if (err?.code === 'INVALID_BYOK_PROVIDER') {
-        return res.status(400).json({ error: err.message });
+        return res.status(400).json({
+          error: {
+            code: 'missing-input',
+            message: err.message,
+          },
+        });
       }
       res
         .status(500)
