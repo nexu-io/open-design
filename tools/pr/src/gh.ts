@@ -21,7 +21,30 @@ import type {
 
 const execFile = promisify(execFileCallback);
 
+// Archive-only doctrine (2026-07-29, Keith — a prior GHL sub-account deletion
+// caused real business damage). gh() is a generic `gh` CLI passthrough; every
+// current call site in this file passes fixed, read-only args, but it's
+// exported and callable with anything. Refuse destructive-shaped invocations
+// unconditionally, no override, before they ever reach execFile.
+const DESTRUCTIVE_GH_ARGS_RE =
+  /^(repo|secret|workflow|release|variable)$/i;
+const DESTRUCTIVE_GH_SUBCOMMAND_RE = /^(delete|remove|disable)$/i;
+
+function looksDestructive(args: string[]): boolean {
+  for (let i = 0; i < args.length - 1; i++) {
+    if (DESTRUCTIVE_GH_ARGS_RE.test(args[i]) && DESTRUCTIVE_GH_SUBCOMMAND_RE.test(args[i + 1])) {
+      return true;
+    }
+  }
+  return args.some((a) => /^--delete$|^-X$|^--method$/i.test(a) && args.includes("DELETE"));
+}
+
 async function ghOnce<T>(args: string[]): Promise<T> {
+  if (looksDestructive(args)) {
+    throw new Error(
+      `Refused: gh ${args.join(" ")} looks destructive. Archive-only doctrine — no override.`,
+    );
+  }
   const { stdout } = await execFile("gh", args, { maxBuffer: 64 * 1024 * 1024 });
   return JSON.parse(stdout) as T;
 }
