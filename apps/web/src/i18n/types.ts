@@ -4430,4 +4430,26 @@ export interface Dict {
   'questions.uploadNeedsProject': string;
   'questions.uploadPartialFailed': string;
   'questions.uploadFailed': string;
+  'runCost.toggle': string;
+  'runCost.loading': string;
+  'runCost.unavailable': string;
+  'runCost.estimateNote': string;
+  'runCost.calls': string;
+  'runCost.peakContext': string;
+  'runCost.preamble': string;
+  'runCost.preambleHint': string;
+  'runCost.transcript': string;
+  'runCost.cacheWrite': string;
+  'runCost.uncachedInput': string;
+  'runCost.output': string;
+  'runCost.total': string;
+  'runCost.cacheHealth': string;
+  'runCost.cacheHealthSummary': string;
+  'runCost.noCacheWrites': string;
+  'runCost.cacheHealthNotComparable': string;
+  'runCost.step': string;
+  'runCost.outputComposition': string;
+  'runCost.prose': string;
+  'runCost.intake': string;
+  'runCost.intakeHint': string;
 }

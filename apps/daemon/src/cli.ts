@@ -297,6 +297,18 @@ const BRAND_STRING_FLAGS = new Set([
 const BRAND_BOOLEAN_FLAGS = new Set([
   'help', 'h', 'json',
 ]);
+// Hoisted for the same reason: `runRun` reaches `printRunCostReport` through
+// the top-of-file SUBCOMMAND_MAP dispatch during module evaluation, so this map
+// declared next to that printer would still be in TDZ when a run with no
+// recoverable event log takes the unavailable branch.
+const RUN_COST_UNAVAILABLE = {
+  'no-event-log': 'no event log on disk for this run (pruned, or it predates event persistence)',
+  // Zero frames has two causes and this must not assert the wrong one: the run
+  // may never have reached a model call, OR the agent's stream family may not
+  // emit per-call usage at all. Verified on json-event-stream runs, whose logs
+  // do carry a frame per call; other families are not guaranteed to.
+  'no-usage-frames': 'the event log carries no per-call usage — either the run made no model call, or this agent stream does not report usage',
+};
 // Hoisted because `runAutomation` is reachable through the top-of-file
 // SUBCOMMAND_MAP dispatch, which runs during module evaluation —
 // any `const` declared further down would still be in TDZ when
@@ -6323,6 +6335,114 @@ Common options:
   }
 }
 
+function fmtUsd(value) {
+  return `$${(value ?? 0).toFixed(4)}`;
+}
+
+function fmtInt(value) {
+  return Number(value ?? 0).toLocaleString('en-US');
+}
+
+function fmtBytes(value) {
+  const n = Number(value ?? 0);
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+/**
+ * Human-readable rendering of `GET /api/runs/:id/cost`.
+ *
+ * Ordered so the answer to "where did the money go" is the first thing on
+ * screen, with the shares next to the dollars — an absolute figure alone never
+ * tells you whether a term is worth attacking.
+ */
+function printRunCostReport(body) {
+  const report = body?.report;
+  if (!report) {
+    const reason = RUN_COST_UNAVAILABLE[body?.unavailableReason] ?? 'no cost data available';
+    console.log(`Run ${body?.runId ?? '?'}: ${reason}`);
+    return;
+  }
+  const { steps, usd, terms, cacheHealth, anomalies, output, intake, rates } = report;
+  const share = (value) => (usd.total > 0 ? `${((value / usd.total) * 100).toFixed(1)}%` : '—');
+  // Peak, not first -> last: a run closes with a summary frame reporting no
+  // cached read, so "first -> last" renders a healthy run as "0 -> 0".
+  const peakContext = steps.reduce((max, step) => Math.max(max, step.contextTokens), 0);
+
+  console.log(`Run ${body.runId}`);
+  console.log(`  ${steps.length} model calls   context peaked at ${fmtInt(peakContext)} tokens`);
+  console.log(
+    `\n  Cost — ESTIMATED at $${rates.inputPerMTok}/$${rates.cachedReadPerMTok}/$${rates.cacheWritePerMTok}/$${rates.outputPerMTok} per 1M`,
+  );
+  console.log('  (input / cached read / cache write / output — not a billing figure)');
+  const row = (label, value, extra) =>
+    console.log(`    ${label.padEnd(22)}${fmtUsd(value).padStart(10)}  ${share(value).padStart(6)}  ${extra ?? ''}`);
+  row('preamble re-read', usd.preamble, `${fmtInt(terms.preambleTokens)} tok — a context split does NOT reduce this`);
+  row('transcript', usd.transcript, `${fmtInt(terms.transcriptTokens)} tok`);
+  row('cache write', usd.cacheWrite, `${fmtInt(terms.cacheWriteTokens)} tok`);
+  row('uncached input', usd.uncachedInput, `${fmtInt(terms.uncachedInputTokens)} tok`);
+  row('output', usd.output, `${fmtInt(terms.outputTokens)} tok`);
+  console.log(`    ${'total'.padEnd(22)}${fmtUsd(usd.total).padStart(10)}`);
+
+  if (cacheHealth.comparableSteps === 0) {
+    // Zero comparable steps has TWO causes and the message must not assert the
+    // wrong one. A write is only judgeable against the NEXT step's context
+    // growth, so a run with a single model call has nothing to compare even
+    // when it wrote a large cache. Separately, some adapters fold cache writes
+    // into plain input and never report a write at all. Claiming "no cache
+    // writes" for the first case contradicts the cache-write line printed just
+    // above it.
+    console.log(
+      terms.cacheWriteTokens > 0
+        ? '\n  Cache health: too few model calls to judge — a write is only comparable against the next call'
+        : '\n  Cache health: this adapter reported no cache writes — nothing to judge',
+    );
+  } else {
+    console.log(
+      `\n  Cache health: ${cacheHealth.incrementalSteps}/${cacheHealth.comparableSteps} steps incremental` +
+        `, ${fmtInt(cacheHealth.rewrittenTokens)} tokens rewritten`,
+    );
+    if (anomalies.length === 0) {
+      console.log('    no anomalies — every write matched the next step\'s context growth');
+    }
+  }
+  for (const anomaly of anomalies) {
+    console.log(`    ! [${anomaly.kind}] step ${anomaly.stepIndex}: ${anomaly.detail}`);
+  }
+
+  console.log('\n  Output composition — what the model emitted');
+  for (const tool of output.byTool.slice(0, 5)) {
+    console.log(
+      `    ${tool.tool.padEnd(14)}${fmtBytes(tool.bytes).padStart(10)}  ${(tool.share * 100).toFixed(1).padStart(5)}%`,
+    );
+  }
+  const proseShare = output.totalBytes > 0 ? (output.proseBytes / output.totalBytes) * 100 : 0;
+  const thinkShare = output.totalBytes > 0 ? (output.thinkingBytes / output.totalBytes) * 100 : 0;
+  console.log(`    ${'prose'.padEnd(14)}${fmtBytes(output.proseBytes).padStart(10)}  ${proseShare.toFixed(1).padStart(5)}%`);
+  console.log(`    ${'thinking'.padEnd(14)}${fmtBytes(output.thinkingBytes).padStart(10)}  ${thinkShare.toFixed(1).padStart(5)}%`);
+
+  console.log('\n  Intake — pulled into context, then re-read by every later step');
+  for (const tool of intake.byTool.slice(0, 5)) {
+    console.log(
+      `    ${tool.tool.padEnd(14)}${fmtBytes(tool.bytes).padStart(10)}  ${(tool.share * 100).toFixed(1).padStart(5)}%`,
+    );
+  }
+  if (intake.duplicateCalls > 0) {
+    console.log(
+      `    ! ${intake.duplicateCalls} call(s) repeated an identical input, re-paying ${fmtBytes(intake.duplicateBytes)}`,
+    );
+  }
+  if (intake.items.length > 0) {
+    console.log('    heaviest drag (bytes x steps that re-read it):');
+    for (const item of intake.items.slice(0, 5)) {
+      console.log(
+        `      ${fmtBytes(item.dragBytes).padStart(10)}  ${fmtBytes(item.bytes).padStart(9)} at step ${String(item.stepIndex).padStart(2)}  ${item.tool}: ${item.label.slice(-56)}`,
+      );
+    }
+  }
+}
+
 async function runRun(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
@@ -6338,6 +6458,10 @@ async function runRun(args) {
   od run info   <runId>                     One run's status.
   od run result-package <runId> [--json]    Inspect run outputs and workspace
                                             provenance without applying them.
+  od run cost   <runId> [--json]            Decompose what a finished run cost:
+                                            preamble vs transcript vs cache
+                                            write vs output, cache health, and
+                                            which intake is dragged furthest.
 
 Common options:
   --daemon-url <url>   Open Design daemon HTTP base.
@@ -6373,6 +6497,19 @@ Common options:
       if (!resp.ok) return structuredHttpFailure(resp, 'run-not-found');
       const data = await resp.json();
       process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      return;
+    }
+    case 'cost': {
+      const id = rest.find((a) => !a.startsWith('-'));
+      if (!id) {
+        console.error('Usage: od run cost <runId> [--json]');
+        process.exit(2);
+      }
+      const resp = await fetch(`${base}/api/runs/${encodeURIComponent(id)}/cost`);
+      if (!resp.ok) return structuredHttpFailure(resp, 'run-not-found');
+      const data = await resp.json();
+      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      printRunCostReport(data);
       return;
     }
     case 'result-package': {

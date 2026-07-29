@@ -1,0 +1,109 @@
+/* Run cost disclosure. Component-owned styles per the web CSS ownership rule:
+   new UI defaults to a CSS Module beside its component rather than growing a
+   global stylesheet. */
+
+.panel {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border, rgba(128, 128, 128, 0.25));
+  border-radius: 8px;
+  background: var(--surface-2, rgba(128, 128, 128, 0.06));
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.note {
+  margin: 0 0 8px;
+  opacity: 0.7;
+  font-size: 11px;
+}
+
+.section {
+  margin-top: 10px;
+}
+
+.sectionTitle {
+  margin: 0 0 4px;
+  font-weight: 600;
+  opacity: 0.85;
+}
+
+.rows {
+  display: grid;
+  /* label / value / share — share stays right-aligned so terms are comparable
+     down the column, which is the entire point of the breakdown. */
+  grid-template-columns: 1fr auto auto;
+  gap: 2px 12px;
+  align-items: baseline;
+}
+
+.label {
+  opacity: 0.85;
+}
+
+.value {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.share {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  opacity: 0.65;
+  min-width: 3.5em;
+}
+
+.total {
+  font-weight: 600;
+  opacity: 1;
+}
+
+.hint {
+  grid-column: 1 / -1;
+  margin: 2px 0 0;
+  font-size: 11px;
+  opacity: 0.6;
+}
+
+.anomaly {
+  margin: 3px 0 0;
+  padding-left: 14px;
+  text-indent: -14px;
+  color: var(--warning-fg, #b45309);
+}
+
+.dragList {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 2px;
+}
+
+.dragItem {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  gap: 8px;
+  align-items: baseline;
+  font-variant-numeric: tabular-nums;
+}
+
+.dragLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.75;
+  direction: rtl;
+  text-align: left;
+}
+
+.status {
+  margin: 0;
+  opacity: 0.7;
+}
+
+/* Wide content must scroll inside its own container so the page body never
+   scrolls horizontally. */
+.scroll {
+  overflow-x: auto;
+}
