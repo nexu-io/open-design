@@ -186,6 +186,35 @@ describe('PreviewDrawOverlay', () => {
     }
   });
 
+  it('limits drawing to an inset visual preview surface', () => {
+    const observer = installResizeObserver();
+    try {
+      const { container } = render(
+        <PreviewDrawOverlay
+          active
+          drawSurface={{ left: 48, top: 16, width: 400, height: 300 }}
+        >
+          <div style={{ width: 800, height: 600 }} />
+        </PreviewDrawOverlay>,
+      );
+
+      const canvas = container.querySelector<HTMLCanvasElement>('canvas')!;
+      const textLayer = container.querySelector<HTMLElement>('.preview-draw-text-layer')!;
+      observer.trigger();
+
+      expect(canvas.style.left).toBe('48px');
+      expect(canvas.style.top).toBe('16px');
+      expect(canvas.style.width).toBe('400px');
+      expect(canvas.style.height).toBe('300px');
+      expect(textLayer.style.left).toBe('48px');
+      expect(textLayer.style.top).toBe('16px');
+      expect(textLayer.style.width).toBe('400px');
+      expect(textLayer.style.height).toBe('300px');
+    } finally {
+      observer.restore();
+    }
+  });
+
   it('keeps the draw toolbar responsive inside narrow preview surfaces', () => {
     const { container, getByRole } = render(
       <PreviewDrawOverlay active>
@@ -1059,6 +1088,52 @@ describe('PreviewDrawOverlay', () => {
       await waitFor(() => expect(captureSnapshot).toHaveBeenCalledTimes(1));
       await waitFor(() => expect(annotation).toHaveBeenCalledTimes(1));
       expect(container.querySelector<HTMLElement>('.preview-draw-toolbar')?.style.visibility).toBe('');
+    } finally {
+      window.removeEventListener('opendesign:annotation', annotation);
+      restoreCompositeMocks();
+    }
+  });
+
+  it('uses the visual target bounds while preserving guest viewport coordinates', async () => {
+    const restoreCompositeMocks = installImageCompositeMocks();
+    const annotation = vi.fn((event: Event) => {
+      const detail = (event as CustomEvent<{ ack?: (result: { ok: boolean }) => void }>).detail;
+      detail.ack?.({ ok: true });
+    });
+    window.addEventListener('opendesign:annotation', annotation);
+
+    try {
+      const target = {
+        filePath: 'browser:https://example.com',
+        elementId: 'hero',
+        selector: '#hero',
+        label: 'Hero',
+        text: 'Hero',
+        position: { x: 600, y: 200, width: 240, height: 120 },
+        htmlHint: '<section id="hero">',
+      };
+      const displayPosition = { x: 310, y: 110, width: 120, height: 60 };
+      const { getByRole } = render(
+        <PreviewDrawOverlay
+          active
+          captureTarget={target}
+          captureTargetDisplayPosition={displayPosition}
+          captureSnapshot={async () => ({ dataUrl: 'data:image/png;base64,cG5n', w: 400, h: 300 })}
+          captureFrameRect={() => ({ left: 0, top: 0, width: 800, height: 600 })}
+        >
+          <div style={{ width: 400, height: 300 }} />
+        </PreviewDrawOverlay>,
+      );
+
+      fireEvent.click(getByRole('button', { name: 'Send' }));
+
+      await waitFor(() => expect(annotation).toHaveBeenCalledTimes(1));
+      const detail = (annotation.mock.calls[0]?.[0] as CustomEvent).detail as {
+        bounds?: typeof displayPosition;
+        target?: typeof target;
+      };
+      expect(detail.bounds).toEqual(displayPosition);
+      expect(detail.target?.position).toEqual(target.position);
     } finally {
       window.removeEventListener('opendesign:annotation', annotation);
       restoreCompositeMocks();

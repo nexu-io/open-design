@@ -741,7 +741,7 @@
     #0b0b0d;
   overflow: hidden;
 }
-.preview-viewport:not(.preview-viewport-desktop).comment-preview-layer-with-deck-rail {
+.preview-viewport-fixed.comment-preview-layer-with-deck-rail {
   --deck-device-frame-radius: 18px;
   --deck-compact-rail-width: 56px;
   display: flex;
@@ -751,7 +751,7 @@
 .preview-viewport-mobile.comment-preview-layer-with-deck-rail {
   --deck-device-frame-radius: 28px;
 }
-.preview-viewport:not(.preview-viewport-desktop).comment-preview-layer-with-deck-rail .deck-thumbnail-rail {
+.preview-viewport-fixed.comment-preview-layer-with-deck-rail .deck-thumbnail-rail {
   flex: 0 0 var(--deck-compact-rail-width);
   width: var(--deck-compact-rail-width);
   height: calc(var(--preview-viewport-height) * var(--preview-scale, 1));
@@ -760,29 +760,29 @@
   border-radius: var(--deck-device-frame-radius) 0 0 var(--deck-device-frame-radius);
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.22);
 }
-.preview-viewport:not(.preview-viewport-desktop).comment-preview-layer-with-deck-rail .comment-preview-canvas {
+.preview-viewport-fixed.comment-preview-layer-with-deck-rail .comment-preview-canvas {
   border-left: 0;
   border-radius: 0 var(--deck-device-frame-radius) var(--deck-device-frame-radius) 0;
 }
-.preview-viewport:not(.preview-viewport-desktop).comment-preview-layer-with-deck-rail.comment-preview-layer-deck-rail-collapsed .comment-preview-canvas {
+.preview-viewport-fixed.comment-preview-layer-with-deck-rail.comment-preview-layer-deck-rail-collapsed .comment-preview-canvas {
   border-left: 1px solid var(--border-strong);
   border-radius: var(--deck-device-frame-radius);
 }
-.preview-viewport:not(.preview-viewport-desktop).comment-preview-layer-with-deck-rail .deck-thumbnail-list {
+.preview-viewport-fixed.comment-preview-layer-with-deck-rail .deck-thumbnail-list {
   gap: 6px;
   padding: 20px 8px;
   overflow-x: hidden;
 }
-.preview-viewport:not(.preview-viewport-desktop).comment-preview-layer-with-deck-rail .deck-thumbnail-button {
+.preview-viewport-fixed.comment-preview-layer-with-deck-rail .deck-thumbnail-button {
   grid-template-columns: 1fr;
   justify-items: center;
   gap: 0;
   min-height: 30px;
 }
-.preview-viewport:not(.preview-viewport-desktop).comment-preview-layer-with-deck-rail .deck-thumbnail-frame {
+.preview-viewport-fixed.comment-preview-layer-with-deck-rail .deck-thumbnail-frame {
   display: none;
 }
-.preview-viewport:not(.preview-viewport-desktop).comment-preview-layer-with-deck-rail .deck-thumbnail-number {
+.preview-viewport-fixed.comment-preview-layer-with-deck-rail .deck-thumbnail-number {
   box-sizing: border-box;
   width: 28px;
   height: 28px;
@@ -793,10 +793,10 @@
   border-radius: 999px;
   line-height: 1;
 }
-.preview-viewport:not(.preview-viewport-desktop).comment-preview-layer-with-deck-rail .deck-thumbnail-button:hover:not(:disabled) .deck-thumbnail-number {
+.preview-viewport-fixed.comment-preview-layer-with-deck-rail .deck-thumbnail-button:hover:not(:disabled) .deck-thumbnail-number {
   background: rgba(255, 255, 255, 0.07);
 }
-.preview-viewport:not(.preview-viewport-desktop).comment-preview-layer-with-deck-rail .deck-thumbnail-button.active .deck-thumbnail-number {
+.preview-viewport-fixed.comment-preview-layer-with-deck-rail .deck-thumbnail-button.active .deck-thumbnail-number {
   border-color: color-mix(in srgb, var(--accent) 62%, transparent);
   background: color-mix(in srgb, var(--accent) 10%, transparent);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 28%, transparent);

@@ -68,6 +68,38 @@ function getAddressDisplay(container: HTMLElement) {
 }
 
 describe('DesignBrowserPanel <webview> navigation', () => {
+  it('uses exact fixed and custom viewport dimensions', () => {
+    const { container } = render(
+      <DesignBrowserPanel
+        projectId="proj-webview-viewports"
+        initialTitle="Example"
+        initialUrl="https://example.com"
+        onOpenFile={() => {}}
+        onRefreshFiles={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Full-width desktop preview' }));
+    fireEvent.click(screen.getByRole('option', { name: 'Tablet 820 × 1180' }));
+
+    const viewportFrame = container.querySelector<HTMLElement>('.db-viewport-frame');
+    expect(viewportFrame?.style.getPropertyValue('--db-viewport-width')).toBe('820px');
+    expect(viewportFrame?.style.getPropertyValue('--db-viewport-height')).toBe('1180px');
+    expect(viewportFrame?.classList.contains('db-viewport-fixed')).toBe(true);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Tablet 820 × 1180' }));
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Viewport width' }), {
+      target: { value: '1280' },
+    });
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Viewport height' }), {
+      target: { value: '800' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Apply custom viewport' }));
+
+    expect(viewportFrame?.style.getPropertyValue('--db-viewport-width')).toBe('1280px');
+    expect(viewportFrame?.style.getPropertyValue('--db-viewport-height')).toBe('800px');
+  });
+
   it('keeps external browser mutation and annotation tools hidden', () => {
     render(
       <DesignBrowserPanel

@@ -1362,8 +1362,7 @@
   top: calc(100% + 6px);
   right: 0;
   z-index: 80;
-  width: max-content;
-  min-width: 144px;
+  width: min(264px, calc(100vw - 24px));
   padding: 4px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -1439,14 +1438,14 @@
   padding: 8px;
   overflow: hidden;
 }
-.preview-viewport:not(.preview-viewport-desktop).comment-preview-layer-with-side-dock {
+.preview-viewport-fixed.comment-preview-layer-with-side-dock {
   display: grid;
   align-items: stretch;
   justify-content: stretch;
   padding: 24px;
   overflow: hidden;
 }
-.preview-viewport:not(.preview-viewport-desktop).comment-preview-layer-side-dock-stacked {
+.preview-viewport-fixed.comment-preview-layer-side-dock-stacked {
   padding: 8px;
 }
 .comment-preview-layer-with-side-dock.comment-preview-layer-dock-collapsed {
@@ -1473,7 +1472,7 @@
   border-radius: var(--radius-md);
   background: var(--bg-panel);
 }
-.preview-viewport:not(.preview-viewport-desktop) {
+.preview-viewport-fixed {
   overflow: auto;
   display: flex;
   align-items: flex-start;
@@ -1489,9 +1488,9 @@
   background-size: 16px 16px;
   background-position: 0 0, 0 8px, 8px -8px, -8px 0;
 }
-.preview-viewport:not(.preview-viewport-desktop) .preview-frame-clip,
-.preview-viewport:not(.preview-viewport-desktop):not(.comment-preview-layer-with-side-dock) .comment-preview-canvas,
-.preview-viewport:not(.preview-viewport-desktop).manual-edit-workspace .manual-edit-canvas {
+.preview-viewport-fixed .preview-frame-clip,
+.preview-viewport-fixed:not(.comment-preview-layer-with-side-dock) .comment-preview-canvas,
+.preview-viewport-fixed.manual-edit-workspace .manual-edit-canvas {
   width: calc(var(--preview-viewport-width) * var(--preview-scale, 1));
   height: calc(var(--preview-viewport-height) * var(--preview-scale, 1));
   max-width: none;
@@ -1503,18 +1502,18 @@
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.22);
   background: var(--bg-panel);
 }
-.preview-viewport:not(.preview-viewport-desktop).comment-preview-layer-with-side-dock .comment-preview-canvas {
+.preview-viewport-fixed.comment-preview-layer-with-side-dock .comment-preview-canvas {
   width: auto;
   height: auto;
 }
-.preview-viewport:not(.preview-viewport-desktop) .preview-frame-clip > div,
-.preview-viewport:not(.preview-viewport-desktop) .comment-frame-clip > div,
-.preview-viewport:not(.preview-viewport-desktop) .comment-preview-canvas > .comment-frame-clip > div,
-.preview-viewport:not(.preview-viewport-desktop).manual-edit-workspace .manual-edit-canvas > div {
+.preview-viewport-fixed .preview-frame-clip > div,
+.preview-viewport-fixed .comment-frame-clip > div,
+.preview-viewport-fixed .comment-preview-canvas > .comment-frame-clip > div,
+.preview-viewport-fixed.manual-edit-workspace .manual-edit-canvas > div {
   will-change: transform;
 }
-.preview-viewport:not(.preview-viewport-desktop) .preview-frame-clip,
-.preview-viewport:not(.preview-viewport-desktop).manual-edit-workspace .manual-edit-canvas {
+.preview-viewport-fixed .preview-frame-clip,
+.preview-viewport-fixed.manual-edit-workspace .manual-edit-canvas {
   position: relative;
   inset: auto;
 }
@@ -3310,7 +3309,7 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   min-height: 0;
   overflow: hidden;
   /* Desktop preview is full-bleed like a real browser viewport; the device
-     modes draw their own inset "stage" (see the :not(.preview-viewport-desktop)
+     modes draw their own inset "stage" (see the .preview-viewport-fixed
      rule below), so no outer padding is needed here. */
   padding: 0;
   background: var(--bg-panel);
@@ -3352,7 +3351,7 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   height: 100%;
   min-height: 0;
 }
-.file-version-preview .preview-viewport:not(.preview-viewport-desktop) {
+.file-version-preview .preview-viewport-fixed {
   align-items: center;
   justify-content: center;
   overflow: hidden;
@@ -3361,10 +3360,8 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
      same 12px gutter it reserves here (24 total = 12 top + 12 bottom). */
   padding: 12px;
 }
-/* Desktop frame-clip is flat/full-bleed (a browser viewport). The device modes
-   keep their rounded bezel + shadow via the more specific global
-   `.preview-viewport:not(.preview-viewport-desktop) .preview-frame-clip` rule,
-   so stripping chrome here only affects desktop. */
+/* Fluid desktop previews are flat/full-bleed. Fixed presets restore their
+   exact frame geometry in the more-specific rule below. */
 .file-version-preview .preview-frame-clip {
   position: relative;
   inset: auto;
@@ -3376,18 +3373,26 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   overflow: hidden;
   box-shadow: none;
 }
-/* Tighten the device bezel shadow inside the modal so the frame can fill the
-   stage without the soft halo getting clipped by the stage's `overflow: hidden`.
-   4 classes → wins over the global 3-class device frame-clip rule. */
-.file-version-preview .preview-viewport:not(.preview-viewport-desktop) .preview-frame-clip {
+/* Restore fixed-frame geometry after the full-bleed rule above, and tighten the
+   shadow so the frame can fill the modal stage without clipping its soft halo. */
+.file-version-preview .preview-viewport-fixed .preview-frame-clip {
+  width: calc(var(--preview-viewport-width) * var(--preview-scale, 1));
+  height: calc(var(--preview-viewport-height) * var(--preview-scale, 1));
+  max-width: none;
+  max-height: none;
+  border: 1px solid var(--border-strong);
+  border-radius: 18px;
   box-shadow: 0 10px 34px rgba(15, 23, 42, 0.16);
+}
+.file-version-preview .preview-viewport-mobile .preview-frame-clip {
+  border-radius: 28px;
 }
 /* Decks are 16:9. In desktop mode a full-bleed iframe lets the slide bottom-
    anchor in a taller pane with a black letterbox on top. Instead, center the
    deck in a 16:9 stage box: `100cqh * 16/9` gives the width that fits the pane
    height, capped at 100% for narrow panes — so the slide fills the box with no
    distortion and no letterbox, centered both axes. */
-.file-version-preview .preview-viewport-desktop.preview-viewport-deck {
+.file-version-preview .preview-viewport-fluid.preview-viewport-deck {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3395,7 +3400,7 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   padding: 20px;
   background: var(--bg-subtle);
 }
-.file-version-preview .preview-viewport-desktop.preview-viewport-deck .preview-frame-clip {
+.file-version-preview .preview-viewport-fluid.preview-viewport-deck .preview-frame-clip {
   flex: 0 0 auto;
   width: min(100%, calc(100cqh * 16 / 9));
   height: auto;

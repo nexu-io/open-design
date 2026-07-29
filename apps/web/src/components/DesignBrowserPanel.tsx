@@ -47,7 +47,6 @@ import {
   BROWSER_PAGE_ARCHIVE_INDEX_FILE,
   BROWSER_PAGE_ARCHIVE_SCHEMA,
   BROWSER_SERIALIZE_HTML_SCRIPT,
-  BROWSER_VIEWPORT_PRESETS,
   type BrowserPageArchiveCapture,
   type BrowserPageArchiveManifest,
   type BrowserElementSnapshot,
@@ -59,12 +58,18 @@ import {
   browserSnapshotFromUnknown,
   isProjectHtmlBrowserUrl,
   projectRelativePathFromBrowserUrl,
-  type BrowserViewportId,
 } from './design-browser-tools';
 import { Icon } from './Icon';
 import { BoardComposerPopover } from './BoardComposerPopover';
 import { PreviewDrawOverlay } from './PreviewDrawOverlay';
 import { RemixIcon } from './RemixIcon';
+import { ViewportDimensionControls } from './ViewportDimensionControls';
+import {
+  DEFAULT_PREVIEW_VIEWPORT,
+  PREVIEW_VIEWPORT_PRESETS,
+  isFixedPreviewViewport,
+  type PreviewViewport,
+} from './preview-viewports';
 
 type BrowserHistoryEntry = {
   iconUrl?: string;
@@ -79,9 +84,10 @@ type BrowserNavigationEntry = {
   url: string;
 };
 
-function browserViewportIcon(viewport: BrowserViewportId): string {
-  if (viewport === 'tablet') return 'tablet-line';
-  if (viewport === 'mobile') return 'smartphone-line';
+function browserViewportIcon(viewport: PreviewViewport): string {
+  if (viewport.device === 'tablet') return 'tablet-line';
+  if (viewport.device === 'mobile') return 'smartphone-line';
+  if (viewport.device === 'custom') return 'aspect-ratio-line';
   return 'computer-line';
 }
 
@@ -319,19 +325,25 @@ function localizedReferenceSiteDetail(
 
 function browserViewportLabel(
   t: (key: keyof Dict) => string,
-  viewport: BrowserViewportId,
+  viewport: PreviewViewport,
 ): string {
-  if (viewport === 'tablet') return t('fileViewer.viewportTablet');
-  if (viewport === 'mobile') return t('fileViewer.viewportMobile');
-  return t('fileViewer.viewportDesktop');
+  const deviceLabel = viewport.device === 'tablet'
+    ? t('fileViewer.viewportTablet')
+    : viewport.device === 'mobile'
+      ? t('fileViewer.viewportMobile')
+      : viewport.device === 'custom'
+        ? t('fileViewer.viewportCustom')
+        : t('fileViewer.viewportDesktop');
+  return isFixedPreviewViewport(viewport)
+    ? `${deviceLabel} ${viewport.width} × ${viewport.height}`
+    : deviceLabel;
 }
 
 function browserViewportTitle(
   t: (key: keyof Dict) => string,
-  viewport: BrowserViewportId,
+  viewport: PreviewViewport,
 ): string {
-  if (viewport === 'tablet') return t('fileViewer.viewportTabletTitle');
-  if (viewport === 'mobile') return t('fileViewer.viewportMobileTitle');
+  if (isFixedPreviewViewport(viewport)) return browserViewportLabel(t, viewport);
   return t('fileViewer.viewportDesktopTitle');
 }
 
@@ -834,7 +846,9 @@ export function DesignBrowserPanel({
   const [isLoading, setIsLoading] = useState(false);
   const [webviewNode, setWebviewNode] = useState<WebviewElement | null>(null);
   const [drawOverlayOpen, setDrawOverlayOpen] = useState(false);
-  const [viewport, setViewport] = useState<BrowserViewportId>('desktop');
+  const [viewport, setViewport] = useState<PreviewViewport>(DEFAULT_PREVIEW_VIEWPORT);
+  const [viewportHostNode, setViewportHostNode] = useState<HTMLDivElement | null>(null);
+  const [viewportHostSize, setViewportHostSize] = useState({ width: 0, height: 0 });
   const [activeTool, setActiveTool] = useState<BrowserTool | null>(null);
   const [activeCommentTarget, setActiveCommentTarget] = useState<BrowserElementSnapshot | null>(null);
   const [activePreviewCommentId, setActivePreviewCommentId] = useState<string | null>(null);
@@ -2080,19 +2094,78 @@ export function DesignBrowserPanel({
     }
   }
 
-  const viewportPreset =
-    BROWSER_VIEWPORT_PRESETS.find((preset) => preset.id === viewport) ?? BROWSER_VIEWPORT_PRESETS[0]!;
-  const viewportStyle = viewportPreset.width
+  useEffect(() => {
+    if (!viewportHostNode) return undefined;
+    const updateSize = () => {
+      setViewportHostSize({
+        width: viewportHostNode.clientWidth,
+        height: viewportHostNode.clientHeight,
+      });
+    };
+    updateSize();
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(viewportHostNode);
+    return () => observer.disconnect();
+  }, [viewportHostNode]);
+
+  const fixedViewport = !isBlank && isFixedPreviewViewport(viewport);
+  const viewportScale = fixedViewport && viewportHostSize.width > 32 && viewportHostSize.height > 32
+    ? Math.min(
+        1,
+        (viewportHostSize.width - 32) / viewport.width,
+        (viewportHostSize.height - 32) / viewport.height,
+      )
+    : 1;
+  const viewportStyle = fixedViewport
     ? {
-        '--db-viewport-width': `${viewportPreset.width}px`,
-        '--db-viewport-height': `${viewportPreset.height}px`,
+        '--db-viewport-width': `${viewport.width}px`,
+        '--db-viewport-height': `${viewport.height}px`,
+        '--db-viewport-scale': viewportScale,
       } as CSSProperties
     : undefined;
-  const browserPopoverBounds = (() => {
+  const viewportDevice = isBlank ? 'desktop' : viewport.device;
+  const viewportSizing = !isBlank && fixedViewport ? 'fixed' : 'fluid';
+  const viewportFrameBounds = fixedViewport
+    ? {
+        left: Math.max(0, (viewportHostSize.width - viewport.width * viewportScale) / 2),
+        top: 16,
+        width: viewport.width * viewportScale,
+        height: viewport.height * viewportScale,
+      }
+    : {
+        left: 0,
+        top: 0,
+        width: viewportHostSize.width,
+        height: viewportHostSize.height,
+      };
+  const browserPopoverBounds = viewportFrameBounds.width > 0 && viewportFrameBounds.height > 0
+    ? {
+        width: viewportFrameBounds.width,
+        height: viewportFrameBounds.height,
+        scrollLeft: viewportFrameBounds.left,
+        scrollTop: viewportFrameBounds.top,
+      }
+    : undefined;
+  const browserPopoverOffset = {
+    x: viewportFrameBounds.left,
+    y: viewportFrameBounds.top,
+  };
+  const browserCaptureTargetDisplayPosition = activeCommentTarget
+    ? {
+        x: activeCommentTarget.position.x * viewportScale,
+        y: activeCommentTarget.position.y * viewportScale,
+        width: activeCommentTarget.position.width * viewportScale,
+        height: activeCommentTarget.position.height * viewportScale,
+      }
+    : null;
+  const browserCaptureFrameRect = () => {
     const rect = webviewNode?.getBoundingClientRect();
-    if (!rect || rect.width <= 0 || rect.height <= 0) return undefined;
-    return { width: rect.width, height: rect.height };
-  })();
+    if (!rect || rect.width <= 0 || rect.height <= 0) return null;
+    return fixedViewport
+      ? { left: rect.left, top: rect.top, width: viewport.width, height: viewport.height }
+      : rect;
+  };
   const activeBrowserPreviewImage =
     browserPreviewIndex !== null ? browserImagePreviews[browserPreviewIndex] ?? null : null;
   const browserPreviewImageModal = activeBrowserPreviewImage
@@ -2152,8 +2225,9 @@ export function DesignBrowserPanel({
       queueOnSend={sendDisabled && Boolean(onSendBoardCommentAttachments)}
       sendDisabled={!onSendBoardCommentAttachments}
       t={t}
-      scale={1}
+      scale={viewportScale}
       bounds={browserPopoverBounds}
+      offset={browserPopoverOffset}
       commenting
     />
   ) : null;
@@ -2405,13 +2479,20 @@ export function DesignBrowserPanel({
         </div>
       ) : null}
       {browserPreviewImageModal}
-      <div className={`db-content db-content-viewport-${isBlank ? 'desktop' : viewport}`}>
+      <div
+        className={`db-content db-content-viewport-${viewportDevice} db-content-viewport-${viewportSizing}`}
+        ref={setViewportHostNode}
+      >
         <PreviewDrawOverlay
           active={drawOverlayOpen}
           captureTarget={activeCommentTarget ? browserTargetFromSnapshot(activeCommentTarget) : null}
+          captureTargetDisplayPosition={browserCaptureTargetDisplayPosition}
           captureViewport={!isBlank}
           captureSnapshot={desktopHostAvailable ? captureBrowserSnapshot : undefined}
-          captureFrameRect={() => webviewNode?.getBoundingClientRect() ?? null}
+          captureFrameRect={browserCaptureFrameRect}
+          drawSurface={fixedViewport && viewportFrameBounds.width > 0 && viewportFrameBounds.height > 0
+            ? viewportFrameBounds
+            : undefined}
           filePath={isBlank ? undefined : currentUrl}
           hideChrome={captureChromeHidden}
           onActiveChange={setDrawOverlayOpen}
@@ -2419,7 +2500,7 @@ export function DesignBrowserPanel({
           sendDisabledReason={t('chat.annotationSendDisabledReason')}
         >
           <div
-            className={`db-viewport-frame db-viewport-${isBlank ? 'desktop' : viewport}`}
+            className={`db-viewport-frame db-viewport-${viewportDevice} db-viewport-${viewportSizing}`}
             style={isBlank ? undefined : viewportStyle}
           >
             {isBlank ? (
@@ -2444,21 +2525,21 @@ export function DesignBrowserPanel({
                 />
               </div>
             )}
-            {commentComposer}
-            {(activeTool === 'inspect' || activeTool === 'edit') && activeCommentTarget ? (
-              <BrowserInspectPanel
-                mode={activeTool}
-                target={activeCommentTarget}
-                textDraft={textDraft}
-                canSave={editableProjectHtml}
-                saving={savingDomEdit}
-                onApplyStyle={(prop, value) => { void applyBrowserStyle(prop, value); }}
-                onTextDraft={(value) => { void applyBrowserText(value); }}
-                onSave={() => { void saveBrowserDomEdit(); }}
-                onClose={clearBrowserTool}
-              />
-            ) : null}
           </div>
+          {commentComposer}
+          {(activeTool === 'inspect' || activeTool === 'edit') && activeCommentTarget ? (
+            <BrowserInspectPanel
+              mode={activeTool}
+              target={activeCommentTarget}
+              textDraft={textDraft}
+              canSave={editableProjectHtml}
+              saving={savingDomEdit}
+              onApplyStyle={(prop, value) => { void applyBrowserStyle(prop, value); }}
+              onTextDraft={(value) => { void applyBrowserText(value); }}
+              onSave={() => { void saveBrowserDomEdit(); }}
+              onClose={clearBrowserTool}
+            />
+          ) : null}
           {!isBlank && activeTool && !activeCommentTarget ? (
             <div className="db-tool-hint" role="status">
               {activeTool === 'comment'
@@ -2579,14 +2660,12 @@ function BrowserViewportControls({
   viewport,
 }: {
   disabled?: boolean;
-  onViewport: (viewport: BrowserViewportId) => void;
-  viewport: BrowserViewportId;
+  onViewport: (viewport: PreviewViewport) => void;
+  viewport: PreviewViewport;
 }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
-  const activePreset =
-    BROWSER_VIEWPORT_PRESETS.find((preset) => preset.id === viewport) ?? BROWSER_VIEWPORT_PRESETS[0]!;
 
   useEffect(() => {
     if (!open) return;
@@ -2607,40 +2686,51 @@ function BrowserViewportControls({
   return (
     <div className="db-viewport-switcher" ref={menuRef}>
       <IconTooltipButton
-        label={browserViewportTitle(t, activePreset.id)}
+        label={browserViewportTitle(t, viewport)}
         disabled={disabled}
         className={open ? 'is-active' : ''}
         onClick={() => setOpen((value) => !value)}
       >
         <RemixIcon
-          name={browserViewportIcon(activePreset.id)}
+          name={browserViewportIcon(viewport)}
           size={14}
           className="db-viewport-icon"
         />
-        <span className="db-viewport-label">{browserViewportLabel(t, activePreset.id)}</span>
+        <span className="db-viewport-label">{browserViewportLabel(t, viewport)}</span>
         <RemixIcon name="arrow-down-s-line" size={13} />
       </IconTooltipButton>
       {open ? (
-        <div className="db-viewport-menu" role="listbox" aria-label={t('designBrowser.viewportAria')}>
-          {BROWSER_VIEWPORT_PRESETS.map((preset) => (
-            <button
-              key={preset.id}
-              type="button"
-              role="option"
-              aria-selected={preset.id === viewport}
-              className={preset.id === viewport ? 'active' : ''}
-              onClick={() => {
-                onViewport(preset.id);
-                setOpen(false);
-              }}
-            >
-              <span className="db-viewport-menu-label">
-                <RemixIcon name={browserViewportIcon(preset.id)} size={14} />
-                <span>{browserViewportLabel(t, preset.id)}</span>
-              </span>
-              {preset.id === viewport ? <Icon name="check" size={13} /> : null}
-            </button>
-          ))}
+        <div className="db-viewport-menu">
+          <div role="listbox" aria-label={t('designBrowser.viewportAria')}>
+            {PREVIEW_VIEWPORT_PRESETS.map((preset) => (
+              <button
+                key={preset.id}
+                type="button"
+                role="option"
+                aria-selected={preset.id === viewport.id
+                  && preset.width === viewport.width
+                  && preset.height === viewport.height}
+                className={`db-viewport-menu-item ${preset.id === viewport.id
+                  && preset.width === viewport.width
+                  && preset.height === viewport.height ? 'active' : ''}`}
+                onClick={() => {
+                  onViewport(preset);
+                  setOpen(false);
+                }}
+              >
+                <span className="db-viewport-menu-label">
+                  <RemixIcon name={browserViewportIcon(preset)} size={14} />
+                  <span>{browserViewportLabel(t, preset)}</span>
+                </span>
+                {preset.id === viewport.id
+                  && preset.width === viewport.width
+                  && preset.height === viewport.height
+                  ? <Icon name="check" size={13} />
+                  : null}
+              </button>
+            ))}
+          </div>
+          <ViewportDimensionControls onViewport={onViewport} viewport={viewport} />
         </div>
       ) : null}
     </div>

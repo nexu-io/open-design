@@ -3623,6 +3623,11 @@ export interface Dict {
   'fileViewer.viewportTabletTitle': string;
   'fileViewer.viewportMobile': string;
   'fileViewer.viewportMobileTitle': string;
+  'fileViewer.viewportCustom': string;
+  'fileViewer.viewportWidth': string;
+  'fileViewer.viewportHeight': string;
+  'fileViewer.viewportSwapOrientation': string;
+  'fileViewer.viewportApplyCustom': string;
   'fileViewer.reloadAria': string;
   'fileViewer.previousSlide': string;
   'fileViewer.nextSlide': string;

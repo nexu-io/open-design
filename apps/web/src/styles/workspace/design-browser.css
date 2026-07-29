@@ -152,7 +152,7 @@
   top: calc(100% + 8px);
   left: 0;
   z-index: 720;
-  width: 156px;
+  width: min(264px, calc(100vw - 24px));
   padding: 6px;
   border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
   border-radius: var(--radius-lg);
@@ -160,7 +160,7 @@
   box-shadow: var(--shadow-lg);
   animation: db-pop 160ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.db-viewport-menu button {
+.db-viewport-menu-item {
   width: 100%;
   min-height: 34px;
   display: grid;
@@ -176,8 +176,8 @@
   font-size: 12px;
   cursor: pointer;
 }
-.db-viewport-menu button:hover,
-.db-viewport-menu button.active {
+.db-viewport-menu-item:hover,
+.db-viewport-menu-item.active {
   background: var(--bg-subtle);
 }
 /* ---- Address omnibox ----------------------------------------------------- */
@@ -660,8 +660,7 @@
   background: var(--bg);
   overflow: hidden;
 }
-.db-content-viewport-tablet,
-.db-content-viewport-mobile {
+.db-content-viewport-fixed {
   background:
     linear-gradient(45deg, color-mix(in srgb, var(--border) 26%, transparent) 25%, transparent 25%),
     linear-gradient(-45deg, color-mix(in srgb, var(--border) 26%, transparent) 25%, transparent 25%),
@@ -680,15 +679,15 @@
   overflow: hidden;
   background: #fff;
 }
-.db-viewport-tablet,
-.db-viewport-mobile {
+.db-viewport-fixed {
   inset: 16px auto auto 50%;
-  width: min(var(--db-viewport-width), calc(100% - 32px));
-  height: min(var(--db-viewport-height), calc(100% - 32px));
-  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  width: var(--db-viewport-width);
+  height: var(--db-viewport-height);
+  outline: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
   border-radius: 18px;
   box-shadow: 0 16px 44px rgba(28, 27, 26, 0.16);
-  transform: translateX(-50%);
+  transform: translateX(-50%) scale(var(--db-viewport-scale, 1));
+  transform-origin: top center;
 }
 .db-viewport-mobile {
   border-radius: 24px;

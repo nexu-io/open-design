@@ -57,6 +57,7 @@ const STYLELESS_HOOKS = new Set([
   'db-viewport-height',
   'db-viewport-icon',
   'db-viewport-menu-label',
+  'db-viewport-scale',
   'db-viewport-width',
 ]);
 

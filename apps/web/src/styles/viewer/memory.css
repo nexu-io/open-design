@@ -815,7 +815,7 @@
 .cc-disclosure { font-size: 11px; color: var(--text-muted); }
 .cc-disclosure > summary { cursor: pointer; padding: 4px 0; }
 
-.manual-edit-workspace.preview-viewport:not(.preview-viewport-desktop) {
+.manual-edit-workspace.preview-viewport-fixed {
   justify-content: center;
 }
 

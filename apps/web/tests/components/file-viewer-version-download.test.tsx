@@ -137,13 +137,17 @@ function setupVersionFetch(file = htmlFile()) {
   return { currentVersion, fetchMock, file, priorContent, priorVersion };
 }
 
-async function renderVersionDialog(file = htmlFile(), selected: 'current' | 'prior' = 'prior') {
+async function renderVersionDialog(
+  file = htmlFile(),
+  selected: 'current' | 'prior' = 'prior',
+  liveHtml = '<html><body><h1>Current</h1></body></html>',
+) {
   render(
     <FileViewer
       projectId="project-1"
       projectKind="prototype"
       file={file}
-      liveHtml="<html><body><h1>Current</h1></body></html>"
+      liveHtml={liveHtml}
     />,
   );
 
@@ -285,6 +289,7 @@ describe('FileViewer version download actions', () => {
     const { file } = setupVersionFetch();
     const versionDialog = await renderVersionDialog(file);
 
+    fireEvent.click(within(versionDialog).getByRole('button', { name: 'Desktop 1440 × 900' }));
     openVersionDownloadMenu(versionDialog);
     fireEvent.click(within(versionDialog).getByRole('menuitem', { name: 'Export as image' }));
 
@@ -300,6 +305,8 @@ describe('FileViewer version download actions', () => {
         fileName: 'index.html',
         projectId: 'project-1',
         versionId: 'v1',
+        width: 1440,
+        height: 900,
       }));
     });
     expect(imageDataUrlToBlobMock).toHaveBeenCalledWith('data:image/png;base64,c25hcHNob3Q=', 'png');
@@ -320,6 +327,165 @@ describe('FileViewer version download actions', () => {
     });
     expect(await screen.findByRole('dialog', { name: 'Export as image' })).toBeTruthy();
     expect(requestPreviewSnapshotMock).not.toHaveBeenCalled();
+  });
+
+  it('applies the version viewport to current-version image fallback capture', async () => {
+    let capturedViewport: { className: string; width: string; height: string } | null = null;
+    captureHostIframeSnapshotMock.mockResolvedValueOnce(null);
+    requestPreviewSnapshotMock.mockImplementationOnce(async (iframe: HTMLIFrameElement) => {
+      const viewport = iframe?.closest<HTMLElement>('.preview-viewport') ?? null;
+      capturedViewport = viewport
+        ? {
+            className: viewport.className,
+            width: viewport.style.getPropertyValue('--preview-viewport-width'),
+            height: viewport.style.getPropertyValue('--preview-viewport-height'),
+          }
+        : null;
+      return { dataUrl: 'data:image/png;base64,c25hcHNob3Q=', w: 1440, h: 900 };
+    });
+    imageDataUrlToBlobMock.mockResolvedValueOnce(new Blob(['snapshot'], { type: 'image/png' }));
+    prepareImageExportTargetMock.mockResolvedValueOnce({
+      filename: 'index.png',
+      method: 'download',
+      save: vi.fn(),
+    });
+    const { file } = setupVersionFetch();
+    const versionDialog = await renderVersionDialog(file, 'current');
+
+    fireEvent.click(within(versionDialog).getByRole('button', { name: 'Desktop 1440 × 900' }));
+    openVersionDownloadMenu(versionDialog, 2);
+    fireEvent.click(within(versionDialog).getByRole('menuitem', { name: 'Export as image' }));
+
+    const imageDialog = await screen.findByRole('dialog', { name: 'Export as image' });
+    fireEvent.click(within(imageDialog).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => {
+      expect(downloadImageDataUrlMock).toHaveBeenCalledWith(
+        'data:image/png;base64,c25hcHNob3Q=',
+        'index.png',
+      );
+    });
+    expect(capturedViewport).toEqual({
+      className: expect.stringContaining('preview-viewport-fixed'),
+      width: '1440px',
+      height: '900px',
+    });
+    expect(captureHostIframeSnapshotMock).toHaveBeenCalled();
+    expect(requestPreviewSnapshotMock).toHaveBeenCalled();
+    const mainPreview = screen.getByTestId('comment-preview-layout');
+    expect(mainPreview.classList.contains('preview-viewport-fluid')).toBe(true);
+    expect(mainPreview.style.getPropertyValue('--preview-viewport-width')).toBe('');
+    expect(mainPreview.style.getPropertyValue('--preview-viewport-height')).toBe('');
+    expect(exportProjectImageDataUrlMock).not.toHaveBeenCalled();
+  });
+
+  it('restores the main viewport when current-version Web fallback capture throws', async () => {
+    captureHostIframeSnapshotMock.mockResolvedValueOnce(null);
+    requestPreviewSnapshotMock.mockRejectedValueOnce(new Error('bridge capture failed'));
+    const { file } = setupVersionFetch();
+    const versionDialog = await renderVersionDialog(file, 'current');
+
+    fireEvent.click(within(versionDialog).getByRole('button', { name: 'Desktop 1440 × 900' }));
+    openVersionDownloadMenu(versionDialog, 2);
+    fireEvent.click(within(versionDialog).getByRole('menuitem', { name: 'Export as image' }));
+    const imageDialog = await screen.findByRole('dialog', { name: 'Export as image' });
+    fireEvent.click(within(imageDialog).getByRole('button', { name: 'Save' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('bridge capture failed');
+    const mainPreview = screen.getByTestId('comment-preview-layout');
+    expect(mainPreview.classList.contains('preview-viewport-fluid')).toBe(true);
+    expect(mainPreview.style.getPropertyValue('--preview-viewport-width')).toBe('');
+    expect(mainPreview.style.getPropertyValue('--preview-viewport-height')).toBe('');
+    expect(prepareImageExportTargetMock).not.toHaveBeenCalled();
+  });
+
+  it('does not overwrite a viewport selected while Web fallback capture is running', async () => {
+    let resolveSnapshot!: (snapshot: { dataUrl: string; w: number; h: number }) => void;
+    captureHostIframeSnapshotMock.mockResolvedValueOnce(null);
+    requestPreviewSnapshotMock.mockReturnValueOnce(new Promise((resolve) => {
+      resolveSnapshot = resolve;
+    }));
+    imageDataUrlToBlobMock.mockResolvedValueOnce(new Blob(['snapshot'], { type: 'image/png' }));
+    prepareImageExportTargetMock.mockResolvedValueOnce({
+      filename: 'index.png',
+      method: 'download',
+      save: vi.fn(),
+    });
+    const { file } = setupVersionFetch();
+    const versionDialog = await renderVersionDialog(file, 'current');
+
+    fireEvent.click(within(versionDialog).getByRole('button', { name: 'Desktop 1440 × 900' }));
+    openVersionDownloadMenu(versionDialog, 2);
+    fireEvent.click(within(versionDialog).getByRole('menuitem', { name: 'Export as image' }));
+    const imageDialog = await screen.findByRole('dialog', { name: 'Export as image' });
+    fireEvent.click(within(imageDialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => {
+      expect(requestPreviewSnapshotMock).toHaveBeenCalled();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Preview viewport' }));
+    fireEvent.click(screen.getByRole('option', { name: /Mobile/ }));
+    resolveSnapshot({ dataUrl: 'data:image/png;base64,c25hcHNob3Q=', w: 1440, h: 900 });
+
+    await waitFor(() => {
+      expect(downloadImageDataUrlMock).toHaveBeenCalledWith(
+        'data:image/png;base64,c25hcHNob3Q=',
+        'index.png',
+      );
+    });
+    const mainPreview = screen.getByTestId('comment-preview-layout');
+    expect(mainPreview.classList.contains('preview-viewport-mobile')).toBe(true);
+    expect(mainPreview.style.getPropertyValue('--preview-viewport-width')).toBe('390px');
+    expect(mainPreview.style.getPropertyValue('--preview-viewport-height')).toBe('844px');
+  });
+
+  it('keeps deck Web fallback capture on the main viewport', async () => {
+    let capturedViewport: { className: string; width: string; height: string } | null = null;
+    captureHostIframeSnapshotMock.mockResolvedValueOnce(null);
+    requestPreviewSnapshotMock.mockImplementationOnce(async (iframe: HTMLIFrameElement) => {
+      const viewport = iframe?.closest<HTMLElement>('.preview-viewport') ?? null;
+      capturedViewport = viewport
+        ? {
+            className: viewport.className,
+            width: viewport.style.getPropertyValue('--preview-viewport-width'),
+            height: viewport.style.getPropertyValue('--preview-viewport-height'),
+          }
+        : null;
+      return { dataUrl: 'data:image/png;base64,ZGVjaw==', w: 1280, h: 720 };
+    });
+    imageDataUrlToBlobMock.mockResolvedValueOnce(new Blob(['deck'], { type: 'image/png' }));
+    prepareImageExportTargetMock.mockResolvedValueOnce({
+      filename: 'index.png',
+      method: 'download',
+      save: vi.fn(),
+    });
+    const { file } = setupVersionFetch();
+    const versionDialog = await renderVersionDialog(
+      file,
+      'current',
+      '<deck-stage><section data-screen-label="Cover">Cover</section></deck-stage>',
+    );
+    const mainPreviewBeforeExport = screen.getByTestId('comment-preview-layout');
+    const mainViewportBeforeExport = {
+      className: mainPreviewBeforeExport.className,
+      width: mainPreviewBeforeExport.style.getPropertyValue('--preview-viewport-width'),
+      height: mainPreviewBeforeExport.style.getPropertyValue('--preview-viewport-height'),
+    };
+
+    fireEvent.click(within(versionDialog).getByRole('button', { name: 'Desktop 1440 × 900' }));
+    openVersionDownloadMenu(versionDialog, 2);
+    fireEvent.click(within(versionDialog).getByRole('menuitem', { name: 'Export as image' }));
+    const imageDialog = await screen.findByRole('dialog', { name: 'Export as image' });
+    fireEvent.click(within(imageDialog).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => {
+      expect(downloadImageDataUrlMock).toHaveBeenCalledWith(
+        'data:image/png;base64,ZGVjaw==',
+        'index.png',
+      );
+    });
+    expect(capturedViewport).toEqual(mainViewportBeforeExport);
+    expect(exportProjectImageDataUrlMock).not.toHaveBeenCalled();
   });
 
   it('routes version HTML and ZIP actions through the selected version content', async () => {
@@ -400,5 +566,19 @@ describe('FileViewer version download actions', () => {
     expect(Number(cssValue(cssRule(css, '.od-toast.file-version-export-toast.placement-top'), 'z-index'))).toBeGreaterThan(
       Number(cssValue(cssRule(css, '.file-version-backdrop.modal-backdrop'), 'z-index')),
     );
+  });
+
+  it('keeps fixed version previews at their scaled preset dimensions', () => {
+    const css = readExpandedIndexCss();
+    const fixedFrame = cssRule(css, '.file-version-preview .preview-viewport-fixed .preview-frame-clip');
+
+    expect(cssValue(fixedFrame, 'width')).toBe('calc(var(--preview-viewport-width) * var(--preview-scale, 1))');
+    expect(cssValue(fixedFrame, 'height')).toBe('calc(var(--preview-viewport-height) * var(--preview-scale, 1))');
+    expect(cssValue(fixedFrame, 'border')).toBe('1px solid var(--border-strong)');
+    expect(cssValue(fixedFrame, 'border-radius')).toBe('18px');
+    expect(cssValue(
+      cssRule(css, '.file-version-preview .preview-viewport-mobile .preview-frame-clip'),
+      'border-radius',
+    )).toBe('28px');
   });
 });

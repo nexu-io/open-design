@@ -338,6 +338,46 @@ describe('FileViewer image export', () => {
     });
   });
 
+  it('passes custom viewport dimensions to the off-screen image exporter', async () => {
+    isOpenDesignHostAvailableMock.mockReturnValue(true);
+    exportProjectImageDataUrlMock.mockResolvedValueOnce({
+      ok: true,
+      snapshot: {
+        dataUrl: 'data:image/png;base64,custom',
+        w: 1024,
+        h: 768,
+      },
+    });
+    imageDataUrlToBlobMock.mockResolvedValueOnce(new Blob(['png'], { type: 'image/png' }));
+    prepareImageExportTargetMock.mockResolvedValueOnce({
+      filename: 'workspace.png',
+      method: 'download',
+      save: saveImageBlobMock,
+    });
+
+    renderHtmlPreview();
+    fireEvent.click(screen.getByRole('button', { name: 'Preview viewport' }));
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Viewport width' }), {
+      target: { value: '1024' },
+    });
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Viewport height' }), {
+      target: { value: '768' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Apply custom viewport' }));
+    await openImageExportDialog();
+    await clickSave();
+
+    await waitFor(() => {
+      expect(exportProjectImageDataUrlMock).toHaveBeenCalledWith(expect.objectContaining({
+        projectId: 'project-1',
+        fileName: 'workspace.html',
+        deck: false,
+        width: 1024,
+        height: 768,
+      }));
+    });
+  });
+
   it('keeps desktop page exports on the renderer defaults', async () => {
     isOpenDesignHostAvailableMock.mockReturnValue(true);
     exportProjectImageDataUrlMock.mockResolvedValueOnce({
@@ -352,7 +392,7 @@ describe('FileViewer image export', () => {
 
     renderHtmlPreview();
     fireEvent.click(screen.getByRole('button', { name: 'Preview viewport' }));
-    fireEvent.click(screen.getByRole('option', { name: /desktop/i }));
+    fireEvent.click(screen.getByRole('option', { name: 'Desktop' }));
     await openImageExportDialog();
     await clickSave();
 
