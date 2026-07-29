@@ -12,10 +12,12 @@
 // `workspaceContextHasTeamIdentity`.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import type { SkillSummary } from '@open-design/contracts';
 
 import { ExtensionsMarketplace } from '../../src/components/PluginsView';
 import { I18nProvider } from '../../src/i18n';
+import { fetchSkills } from '../../src/providers/registry';
 
 vi.mock('../../src/analytics/provider', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../src/analytics/provider')>();
@@ -49,12 +51,26 @@ const PERSONAL_CONTEXT = {
 };
 
 let workspaceContext: unknown = FREE_TEAM_CONTEXT;
+let workspaceContextLoading = false;
 
-vi.mock('../../src/collab/useWorkspaceContext', () => ({
-  useWorkspaceContext: () => ({ context: workspaceContext, loading: false, refresh: vi.fn() }),
+// Spread the real module: this component also calls its PURE helpers
+// (beginWorkspaceScopedRead / workspaceIdentityCacheKey), and a mock that
+// replaces the whole module leaves them undefined at call time.
+vi.mock('../../src/collab/useWorkspaceContext', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/collab/useWorkspaceContext')>()),
+  useWorkspaceContext: () => ({
+    context: workspaceContext,
+    loading: workspaceContextLoading,
+    refresh: vi.fn(),
+  }),
   // Deliberately reports no paid plan — the fix must NOT consult this to decide
   // whether the team scope is offered.
   useWorkspaceBilling: () => ({ membershipTier: '' }),
+}));
+
+vi.mock('../../src/providers/registry', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/providers/registry')>()),
+  fetchSkills: vi.fn(),
 }));
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -65,6 +81,8 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 beforeEach(() => {
+  vi.clearAllMocks();
+  vi.mocked(fetchSkills).mockResolvedValue([]);
   globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
     const url = typeof input === 'string' ? input : input.toString();
     if (url === '/api/skills') return jsonResponse({ skills: [] });
@@ -79,6 +97,7 @@ afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
   workspaceContext = FREE_TEAM_CONTEXT;
+  workspaceContextLoading = false;
 });
 
 function renderMarketplace() {
@@ -94,6 +113,25 @@ function scopeLabels(container: HTMLElement): string[] {
   return [...container.querySelectorAll('.plugin-marketplace__filters button')].map(
     (button) => (button.textContent ?? '').trim(),
   );
+}
+
+function skill(id: string): SkillSummary {
+  return {
+    id,
+    name: id,
+    description: id,
+    triggers: [],
+    mode: 'prototype',
+    source: 'builtin',
+  } as unknown as SkillSummary;
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
 }
 
 describe('ExtensionsMarketplace 团队 scope visibility', () => {
@@ -121,5 +159,65 @@ describe('ExtensionsMarketplace 团队 scope visibility', () => {
       expect(container.querySelector('.plugin-marketplace__filters')).toBeTruthy();
     });
     expect(scopeLabels(container)).not.toContain('Team');
+  });
+
+  it('waits for cold-mount identity, then discards the previous workspace response', async () => {
+    const readA = deferred<SkillSummary[]>();
+    const readB = deferred<SkillSummary[]>();
+    workspaceContext = null;
+    workspaceContextLoading = true;
+    vi.mocked(fetchSkills).mockImplementation((context) =>
+      context?.workspaceId === 'ws-b' ? readB.promise : readA.promise,
+    );
+
+    const view = renderMarketplace();
+    await act(async () => {
+      await Promise.resolve();
+    });
+    // No headerless cold-mount read: the identity has not settled yet.
+    expect(fetchSkills).not.toHaveBeenCalled();
+
+    workspaceContext = { ...FREE_TEAM_CONTEXT, workspaceId: 'ws-a', teamId: 'ws-a' };
+    workspaceContextLoading = false;
+    view.rerender(
+      <I18nProvider initial="en">
+        <ExtensionsMarketplace onCreatePlugin={vi.fn()} onUsePlugin={vi.fn()} />
+      </I18nProvider>,
+    );
+    await waitFor(() =>
+      expect(
+        vi.mocked(fetchSkills).mock.calls.some(([context]) => context?.workspaceId === 'ws-a'),
+      ).toBe(true),
+    );
+
+    workspaceContext = { ...FREE_TEAM_CONTEXT, workspaceId: 'ws-b', teamId: 'ws-b' };
+    view.rerender(
+      <I18nProvider initial="en">
+        <ExtensionsMarketplace onCreatePlugin={vi.fn()} onUsePlugin={vi.fn()} />
+      </I18nProvider>,
+    );
+    await waitFor(() =>
+      expect(
+        vi.mocked(fetchSkills).mock.calls.some(([context]) => context?.workspaceId === 'ws-b'),
+      ).toBe(true),
+    );
+
+    await act(async () => {
+      readB.resolve([skill('skill-from-b')]);
+      await Promise.resolve();
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Skills' }));
+    await waitFor(() => expect(screen.getByTestId('plugins-card-skill-from-b')).toBeTruthy());
+
+    await act(async () => {
+      readA.resolve([skill('skill-from-a')]);
+      await Promise.resolve();
+    });
+
+    expect(screen.getByTestId('plugins-card-skill-from-b')).toBeTruthy();
+    expect(screen.queryByTestId('plugins-card-skill-from-a')).toBeNull();
+    expect(
+      vi.mocked(fetchSkills).mock.calls.map(([context]) => context?.workspaceId),
+    ).toEqual(['ws-a', 'ws-b']);
   });
 });

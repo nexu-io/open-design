@@ -20,7 +20,9 @@ vi.mock('../../src/analytics/provider', async (importOriginal) => {
   return { ...actual, useAnalytics: () => ({ track: vi.fn() }) };
 });
 
-vi.mock('../../src/collab/useWorkspaceContext', () => ({
+// Spread the real module — see the note in ExtensionsMarketplace.team-scope.test.tsx.
+vi.mock('../../src/collab/useWorkspaceContext', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/collab/useWorkspaceContext')>()),
   useWorkspaceContext: () => ({ context: null, loading: false, refresh: vi.fn() }),
   useWorkspaceBilling: () => null,
 }));

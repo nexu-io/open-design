@@ -52,7 +52,9 @@ const TEAM_CONTEXT = {
 
 let workspaceContext: unknown = null;
 
-vi.mock('../../src/collab/useWorkspaceContext', () => ({
+// Spread the real module — see the note in ExtensionsMarketplace.team-scope.test.tsx.
+vi.mock('../../src/collab/useWorkspaceContext', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/collab/useWorkspaceContext')>()),
   useWorkspaceContext: () => ({ context: workspaceContext, loading: false, refresh: vi.fn() }),
   useWorkspaceBilling: () => null,
 }));

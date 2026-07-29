@@ -1467,8 +1467,12 @@ function AppInner() {
         markSkillRegistryReady('templates');
       });
 
+      const designSystemsRead = beginWorkspaceScopedRead(workspaceContextRef.current);
       void fetchDesignSystems().then((list) => {
-        if (cancelled) return;
+        if (
+          cancelled ||
+          !designSystemsRead.isStillCurrent(workspaceContextRef.current)
+        ) return;
         setDesignSystems(list);
         setDsLoading(false);
       });
@@ -1744,7 +1748,15 @@ function AppInner() {
   ]);
 
   const refreshDesignSystems = useCallback(async () => {
+    // `fetchDesignSystems()` takes no context — the daemon resolves the scope
+    // from its OWN vela session (`resolveWorkspaceScope`), not from request
+    // headers. That makes no difference here: the identity this guard is about
+    // is the COMMIT-time one. The response still describes whichever workspace
+    // was active when the request was issued, so a slow read for the workspace
+    // the user has left would still restore its library over the current one.
+    const read = beginWorkspaceScopedRead(workspaceContextRef.current);
     const list = await fetchDesignSystems();
+    if (!read.isStillCurrent(workspaceContextRef.current)) return;
     setDesignSystems(list);
     // Bootstrap and this workspace-scoped refresh can overlap on launch.
     // Either response is a complete catalog for the active daemon identity,
@@ -2953,7 +2965,7 @@ function AppInner() {
 
   const handleDesignSystemsChanged = useCallback(
     (affectedDesignSystemId?: string) => {
-      void fetchDesignSystems().then((list) => setDesignSystems(list));
+      void refreshDesignSystems();
       iframeKeepAlivePool.evictMatching(
         (entry) => {
           const proj = projectsRef.current.find((p) => p.id === entry.projectId);
@@ -2966,7 +2978,7 @@ function AppInner() {
         { includeActive: true },
       );
     },
-    [iframeKeepAlivePool],
+    [iframeKeepAlivePool, refreshDesignSystems],
   );
   const handleDesignSystemImportRebuildJob = useCallback(
     (designSystemId: string, job: DesignSystemGenerationJob) => {

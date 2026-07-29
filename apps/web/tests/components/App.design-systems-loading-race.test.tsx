@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
-import type { DesignSystemSummary } from '@open-design/contracts';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import type { DesignSystemSummary, WorkspaceCollabContext } from '@open-design/contracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from '../../src/App';
@@ -24,6 +24,12 @@ import {
 } from '../../src/state/config';
 import { listProjects, listTemplates } from '../../src/state/projects';
 import type { AppConfig } from '../../src/types';
+import {
+  notifyWorkspaceContextRefresh,
+  resetTeamProjectsCache,
+  resetWorkspaceContextCache,
+} from '../../src/collab/useWorkspaceContext';
+import { resetCoalescedGet } from '../../src/lib/coalesced-get';
 
 vi.mock('../../src/router', () => ({
   navigate: vi.fn(),
@@ -138,7 +144,52 @@ const readySystem: DesignSystemSummary = {
   isEditable: true,
 };
 
+function workspaceContext(workspaceId: string): WorkspaceCollabContext {
+  return {
+    workspaceId,
+    workspaceType: 'team',
+    workspaceMemberId: `member-${workspaceId}`,
+    role: 'member',
+    memberStatus: 'active',
+    lifecycleState: 'active',
+    billingState: 'active',
+    planId: null,
+    providerMode: 'platform_credits',
+    seatSummary: { seatLimit: 5, usedSeats: 1, availableSeats: 4, isSeatFull: false },
+    permissions: {
+      canManageMembers: false,
+      canManageBilling: false,
+      canInviteMembers: false,
+      canManageAutoRecharge: false,
+      canShareProjects: true,
+      canWriteSyncedFiles: true,
+      canViewWorkspaceSettings: false,
+      canManageSharedResources: false,
+    },
+    displayName: workspaceId,
+  };
+}
+
+function designSystem(id: string): DesignSystemSummary {
+  return {
+    ...readySystem,
+    id,
+    title: id,
+  };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
 beforeEach(() => {
+  resetWorkspaceContextCache();
+  resetTeamProjectsCache();
+  resetCoalescedGet();
   vi.mocked(daemonIsLive).mockResolvedValue(true);
   vi.mocked(fetchAgentsStream).mockResolvedValue([]);
   vi.mocked(fetchAppVersionInfo).mockResolvedValue(null);
@@ -166,6 +217,9 @@ afterEach(() => {
   cleanup();
   vi.clearAllMocks();
   vi.unstubAllGlobals();
+  resetWorkspaceContextCache();
+  resetTeamProjectsCache();
+  resetCoalescedGet();
 });
 
 describe('App design-system catalog loading race', () => {
@@ -188,5 +242,77 @@ describe('App design-system catalog loading race', () => {
     });
 
     expect(screen.getByTestId('design-systems-state').dataset.loading).toBe('false');
+  });
+
+  it('discards a late catalog response for the workspace the user has left', async () => {
+    const readA = deferred<DesignSystemSummary[]>();
+    const readB = deferred<DesignSystemSummary[]>();
+    let activeContext = workspaceContext('ws-initial');
+    type ReadPhase = 'startup' | 'a' | 'b';
+    let phase: ReadPhase = 'startup';
+    const readPhases: ReadPhase[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const pathname = new URL(String(input), 'http://d.local').pathname;
+        return {
+          ok: true,
+          json: async () =>
+            pathname.endsWith('/workspace/context')
+              ? { context: activeContext }
+              : {},
+        } as Response;
+      }),
+    );
+    notifyWorkspaceContextRefresh({ context: activeContext });
+    vi.mocked(fetchDesignSystems).mockImplementation(() => {
+      readPhases.push(phase);
+      if (phase === 'a') return readA.promise;
+      if (phase === 'b') return readB.promise;
+      return Promise.resolve([]);
+    });
+
+    render(<App />);
+
+    // Let every pre-existing launch read settle before creating the race, so
+    // call order among bootstrap and the two home effects is irrelevant.
+    await waitFor(() =>
+      expect(readPhases.filter((readPhase) => readPhase === 'startup').length)
+        .toBeGreaterThanOrEqual(3),
+    );
+
+    phase = 'a';
+    await act(async () => {
+      activeContext = workspaceContext('ws-a');
+      notifyWorkspaceContextRefresh({ context: activeContext });
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(readPhases.filter((readPhase) => readPhase === 'a')).toHaveLength(1));
+
+    phase = 'b';
+    await act(async () => {
+      activeContext = workspaceContext('ws-b');
+      notifyWorkspaceContextRefresh({ context: activeContext });
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(readPhases.filter((readPhase) => readPhase === 'b')).toHaveLength(1));
+
+    // Resolve in reverse order: the active workspace lands first.
+    await act(async () => {
+      readB.resolve([designSystem('system-from-b')]);
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(screen.getByText('system-from-b')).toBeTruthy());
+
+    // The abandoned workspace answers last and must not overwrite ws-b.
+    await act(async () => {
+      readA.resolve([designSystem('system-from-a')]);
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText('system-from-b')).toBeTruthy();
+    expect(screen.queryByText('system-from-a')).toBeNull();
+    // One request per switch; the guard does not add a retry or another read.
+    expect(readPhases.filter((readPhase) => readPhase !== 'startup')).toEqual(['a', 'b']);
   });
 });

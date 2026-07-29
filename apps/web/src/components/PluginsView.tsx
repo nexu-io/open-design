@@ -18,6 +18,7 @@ import {
   type InstalledPluginRecord,
   type PluginSourceKind,
   type SkillSummary,
+  type WorkspaceCollabContext,
 } from '@open-design/contracts';
 import {
   fetchSkills,
@@ -77,7 +78,11 @@ import { copyToClipboard } from '../lib/copy-to-clipboard';
 import type { PluginUseAction } from './plugins-home/useActions';
 import { AnimatePresence } from 'motion/react';
 import { navigate } from '../router';
-import { useWorkspaceContext } from '../collab/useWorkspaceContext';
+import {
+  beginWorkspaceScopedRead,
+  useWorkspaceContext,
+  workspaceIdentityCacheKey,
+} from '../collab/useWorkspaceContext';
 
 type PluginsTab = 'installed' | 'available' | 'sources' | 'team';
 
@@ -665,7 +670,13 @@ export function PluginsView({
           />
         ) : null}
 
-        {activeTab === 'team' ? <TeamPanel t={t} plugins={userPlugins} /> : null}
+        {activeTab === 'team' ? (
+          <TeamPanel
+            t={t}
+            plugins={userPlugins}
+            workspaceContext={pluginsWorkspaceContext}
+          />
+        ) : null}
       </div>
 
       <AnimatePresence>
@@ -907,7 +918,13 @@ export function ExtensionsMarketplace({
   const { locale, t } = useI18n();
   const analytics = useAnalytics();
   // My own member id, to keep the Personal tab to resources I actually own.
-  const { context: workspaceContext } = useWorkspaceContext();
+  const { context: workspaceContext, loading: workspaceContextLoading } = useWorkspaceContext();
+  // The LATEST context, for `refresh()`'s commit guard. `refresh` is recreated
+  // every render, but the mount effect below captures one closure — so the guard
+  // must compare against a ref, not the captured prop, or it compares the
+  // identity the read was issued for against itself and never fires.
+  const emContextRef = useRef(workspaceContext);
+  emContextRef.current = workspaceContext;
   const myMemberId = workspaceContext?.workspaceMemberId ?? null;
   // The 团队 scope is a team-workspace surface backed by the resource hub: it
   // lists the resources shared into the team and offers a share-to-team action.
@@ -1117,6 +1134,7 @@ export function ExtensionsMarketplace({
   }
 
   async function refresh() {
+    const read = beginWorkspaceScopedRead(emContextRef.current);
     setLoading(true);
     const [rows, allRows, catalogs, skillRows] = await Promise.all([
       listPlugins(),
@@ -1126,8 +1144,13 @@ export function ExtensionsMarketplace({
       // its workspace-scoped filter — mirrors `listPlugins`'s
       // `workspaceContext` in `PluginsView` above (routes/plugins/index.ts's
       // `GET /api/plugins`).
-      fetchSkills(workspaceContext),
+      fetchSkills(read.context),
     ]);
+    // Discard an answer for an identity the user has left. `setLoading(false)` is
+    // deliberately skipped too: a stale response is not evidence that the CURRENT
+    // identity's catalog has arrived, and the successor read the effect below
+    // guarantees for every identity change owns clearing it.
+    if (!read.isStillCurrent(emContextRef.current)) return;
     setPlugins(rows);
     setAllInstalledPlugins(allRows);
     setMarketplaces(catalogs);
@@ -1135,11 +1158,37 @@ export function ExtensionsMarketplace({
     setLoading(false);
   }
 
+  // `open-design:plugins-changed` re-reads on mutation. Re-registered per
+  // identity so the handler always closes over a current `refresh`.
+  const marketplaceIdentity = workspaceIdentityCacheKey(workspaceContext);
   useEffect(() => {
+    const onPluginsChanged = () => {
+      void refresh();
+    };
+    window.addEventListener('open-design:plugins-changed', onPluginsChanged);
+    return () => window.removeEventListener('open-design:plugins-changed', onPluginsChanged);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [marketplaceIdentity]);
+
+  // The initial read waits for the workspace context to SETTLE. This effect used
+  // to have `[]` deps, which meant the mount closure ran with whatever context
+  // existed on the first render — `null` on a cold open, since
+  // `useWorkspaceContext` seeds from a module cache that a fresh load has not
+  // filled yet. So the marketplace asked `GET /api/skills` headerless and the
+  // daemon answered fail-closed, hiding every workspace-claimed skill; and
+  // because the deps were empty, nothing ever re-read it for the real identity.
+  //
+  // Keyed on the identity digest and guarded by a ref, so a cold mount spends
+  // exactly ONE read (once the context lands) rather than one per render, and a
+  // later workspace switch spends exactly one more.
+  const refreshedIdentityRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (workspaceContextLoading) return;
+    if (refreshedIdentityRef.current === marketplaceIdentity) return;
+    refreshedIdentityRef.current = marketplaceIdentity;
     void refresh();
-    window.addEventListener('open-design:plugins-changed', refresh);
-    return () => window.removeEventListener('open-design:plugins-changed', refresh);
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaceContextLoading, marketplaceIdentity]);
 
   const refreshSharedResources = useCallback(async () => {
     const loadShared = async (
@@ -3692,11 +3741,24 @@ function normalizePluginName(name: string): string {
 function TeamPanel({
   t,
   plugins,
+  workspaceContext,
 }: {
   t: ReturnType<typeof useI18n>['t'];
   plugins: InstalledPluginRecord[];
+  /** The acting workspace, passed down from `PluginsView` (which already holds
+   *  it) rather than read again here, so this panel and the plugin list it sits
+   *  beside can never disagree about who is asking. */
+  workspaceContext: WorkspaceCollabContext | null;
 }) {
   const { locale } = useI18n();
+  // The LATEST context, for async work to compare against. `refreshTeamPanelShared`
+  // is a `useCallback` with `[]` deps — it closes over the FIRST render's props
+  // forever, so reading `workspaceContext` directly inside it would pin whatever
+  // was there on mount (typically `null`) and a commit guard built on it would
+  // compare that stale value against itself and pass unconditionally.
+  const contextRef = useRef(workspaceContext);
+  contextRef.current = workspaceContext;
+  const workspaceIdentityKey = workspaceIdentityCacheKey(workspaceContext);
   const [skills, setSkills] = useState<SkillSummary[]>([]);
   const [sharedPluginIds, setSharedPluginIds] = useState<ReadonlySet<string>>(() => new Set());
   const [sharedSkillIds, setSharedSkillIds] = useState<ReadonlySet<string>>(() => new Set());
@@ -3704,6 +3766,7 @@ function TeamPanel({
   const [failed, setFailed] = useState(false);
 
   const refreshTeamPanelShared = useCallback(async (cancelled: () => boolean = () => false) => {
+    const read = beginWorkspaceScopedRead(contextRef.current);
     const loadShared = async (
       basePath: string,
       setter: (ids: ReadonlySet<string>) => void,
@@ -3712,15 +3775,27 @@ function TeamPanel({
         const res = await fetch(`/api/workspace/${basePath}/team`, { cache: 'no-store' });
         if (!res.ok) return;
         const body = (await res.json()) as { ids?: unknown };
-        if (!cancelled() && Array.isArray(body.ids)) {
+        if (
+          !cancelled()
+          && read.isStillCurrent(contextRef.current)
+          && Array.isArray(body.ids)
+        ) {
           setter(new Set(body.ids.filter((id): id is string => typeof id === 'string')));
         }
       } catch {
         // Off-team / offline → leave the collection empty.
       }
     };
-    const userSkills = (await fetchSkills()).filter((s) => s.source === 'user');
-    if (!cancelled()) setSkills(userSkills);
+    // Scoped: this list drives which of MY skills can be shared to the team, so
+    // reading it without workspace headers made the daemon answer fail-closed —
+    // `GET /api/skills` hides every workspace-claimed skill from a headerless
+    // reader (`skills.ts`: `if (!scopeId) return !ownerId;`), including skills
+    // claimed by the very workspace being shared into.
+    const userSkills = (await fetchSkills(read.context)).filter((s) => s.source === 'user');
+    // `cancelled()` covers the identity-keyed effect cleanup, but a manual share
+    // refresh uses the default predicate and overlapping refreshes can still
+    // outlive the identity they were issued for.
+    if (!cancelled() && read.isStillCurrent(contextRef.current)) setSkills(userSkills);
     await Promise.all([
       loadShared('plugins', setSharedPluginIds),
       loadShared('skills', setSharedSkillIds),
@@ -3744,7 +3819,7 @@ function TeamPanel({
       window.removeEventListener('pageshow', refreshVisible);
       document.removeEventListener('visibilitychange', refreshVisible);
     };
-  }, [refreshTeamPanelShared]);
+  }, [refreshTeamPanelShared, workspaceIdentityKey]);
 
   async function share(
     basePath: string,
