@@ -105,6 +105,12 @@ User-facing capabilities must be reachable through both:
 
 When adding a user-facing capability, close the loop in one change: contract type, daemon route, web surface if applicable, and CLI command with `--json` plus `--prompt-file <path|->` for long prompts where relevant.
 
+## MCP Daemon Discovery
+
+- `od mcp` must treat the daemon URL as sidecar/runtime state, not a process-lifetime constant, unless the user supplied an explicit fixed `--daemon-url`.
+- Sidecar discovery changes belong in `src/daemon-url.ts`; MCP request-time base URL behavior belongs in `src/mcp.ts`. Keep both paths covered by focused tests in `tests/daemon-url.test.ts` and `tests/mcp-base-url-resolver.test.ts`.
+- Do not edit generated `dist/` output for MCP behavior changes. Source changes plus tests are the durable path; local `dist/` sync is only a temporary runtime workaround outside PR scope.
+
 ## Runtime and Agent Changes
 
 - Parser changes belong beside the matching runtime stream helper and should include focused parser tests.

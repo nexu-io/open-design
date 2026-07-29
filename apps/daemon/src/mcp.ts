@@ -5,7 +5,7 @@
 // export-zip-import dance.
 //
 // The server itself holds no state and never touches the filesystem;
-// every tool resolves to a fetch() against `OD_DAEMON_URL`. Spawn the
+// every tool resolves to a fetch() against the discovered daemon URL. Spawn the
 // MCP server with no daemon running and tool calls return a clear
 // "daemon not reachable" error - the server itself still launches so
 // the client can list its tool schema.
@@ -28,10 +28,12 @@ const SERVER_VERSION = '0.2.0';
 const MCP_STDIO_IDLE_EXIT_MS = 30 * 60 * 1000;
 
 type JsonObject = Record<string, unknown>;
-interface RunMcpOptions { daemonUrl: string | URL }
+type DaemonUrlResolver = () => string | URL | Promise<string | URL>;
+type RunMcpOptions =
+  | { readonly daemonUrl: string | URL; readonly resolveDaemonUrl?: never }
+  | { readonly resolveDaemonUrl: DaemonUrlResolver; readonly daemonUrl?: never };
 interface CatalogItem { id: string; name?: string; title?: string; description?: string; summary?: string }
 interface SkillsPayload { skills?: CatalogItem[] }
-interface PluginsPayload { plugins?: CatalogItem[] }
 interface DesignSystemsPayload { designSystems?: CatalogItem[] }
 interface ResourcePayload { skill?: { body?: string; content?: string }; designSystem?: { body?: string; content?: string }; body?: string; content?: string }
 interface ProjectSummary { id: string; name: string; metadata?: JsonObject }
@@ -48,6 +50,21 @@ interface ErrorWithCode { message?: string; code?: string; cause?: { code?: stri
 interface McpIdleExitControllerOptions {
   idleMs: number;
   onIdle: () => void;
+}
+
+function normalizeBaseUrl(daemonUrl: string | URL): string {
+  return String(daemonUrl).replace(/\/$/, '');
+}
+
+export function _createMcpBaseUrlResolver({ daemonUrl, resolveDaemonUrl }: RunMcpOptions): () => Promise<string> {
+  if (resolveDaemonUrl) {
+    return async () => normalizeBaseUrl(await resolveDaemonUrl());
+  }
+  if (daemonUrl !== undefined) {
+    const baseUrl = normalizeBaseUrl(daemonUrl);
+    return async () => baseUrl;
+  }
+  throw new Error('runMcpStdio requires daemonUrl or resolveDaemonUrl');
 }
 
 export function _createMcpIdleExitController({
@@ -500,8 +517,8 @@ const TOOL_DEFS = [
   },
 ];
 
-export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
-  const baseUrl = String(daemonUrl).replace(/\/$/, '');
+export async function runMcpStdio(options: RunMcpOptions): Promise<void> {
+  const getBaseUrl = _createMcpBaseUrlResolver(options);
   let closeTransportForIdle: (() => void) | null = null;
   const idleExit = _createMcpIdleExitController({
     idleMs: MCP_STDIO_IDLE_EXIT_MS,
@@ -615,6 +632,7 @@ export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
   })));
 
   server.setRequestHandler(ListResourcesRequestSchema, withMcpActivity(async () => {
+    const baseUrl = await getBaseUrl();
     const [skillsData, dsData] = await Promise.all([
       getJson<SkillsPayload>(`${baseUrl}/api/skills`).catch((): SkillsPayload => ({ skills: [] })),
       getJson<DesignSystemsPayload>(`${baseUrl}/api/design-systems`).catch((): DesignSystemsPayload => ({ designSystems: [] })),
@@ -647,6 +665,7 @@ export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
   }));
 
   server.setRequestHandler(ReadResourceRequestSchema, withMcpActivity(async (req) => {
+    const baseUrl = await getBaseUrl();
     const uri = req.params?.uri;
     if (uri === 'od://focus/active') {
       const data = await getJson<ActiveContext>(`${baseUrl}/api/active`);
@@ -689,6 +708,7 @@ export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
   }));
 
   server.setRequestHandler(CallToolRequestSchema, withMcpActivity(async (req) => {
+    const baseUrl = await getBaseUrl();
     const name = req.params?.name;
     const args: McpArgs = (req.params?.arguments ?? {}) as McpArgs;
     return handleMcpToolCall(baseUrl, name, args);

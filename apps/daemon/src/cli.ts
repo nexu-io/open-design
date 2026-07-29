@@ -1461,10 +1461,8 @@ async function runMcp(args) {
     return;
   }
 
-  const daemonUrl = await cliDaemonUrl(flags);
-
   const { runMcpStdio } = await import('./mcp.js');
-  await runMcpStdio({ daemonUrl });
+  await runMcpStdio({ resolveDaemonUrl: () => cliDaemonUrl(flags) });
 }
 
 function printMcpHelp() {
@@ -1479,13 +1477,10 @@ every iteration.
 Options:
   --daemon-url <url>   Open Design daemon HTTP base URL. Resolution
                        order: this flag, OD_DAEMON_URL, OD_SIDECAR_IPC_PATH,
-                       then http://127.0.0.1:7456. Each new MCP spawn
-                       discovers the live daemon URL at startup, so
-                       MCP client configs stay valid across daemon
-                       restarts even when the port is ephemeral. A
-                       running MCP server caches the URL; restart the
-                       MCP client after a daemon restart to pick up a
-                       new port.
+                       then http://127.0.0.1:7456. MCP tool calls re-resolve
+                       the live daemon URL, so sidecar-based client configs
+                       stay valid across daemon restarts even when the port
+                       is ephemeral.
 
 Tools exposed:
   list_projects                  list every Open Design project
