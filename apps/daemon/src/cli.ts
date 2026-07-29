@@ -8668,10 +8668,13 @@ Common options:
         return;
       }
       if (action === 'set') {
-        const positional = rest.slice(1).filter((arg) => !arg.startsWith('-'));
+        const positional = rest.slice(1).filter(
+          (arg, index, values) =>
+            !arg.startsWith('-') && values[index - 1] !== '--daemon-url',
+        );
         const [protocol, baseUrl, model] = positional;
-        if (!protocol || !baseUrl || !model) {
-          console.error('Usage: od config byok set <protocol> <base-url> <model>');
+        if (!protocol || !baseUrl || !model || positional.length !== 3) {
+          console.error('Usage: od config byok set <protocol> <base-url> <model> (exactly three non-secret values)');
           process.exit(2);
         }
         const written = await writeConfig({ byokProvider: { protocol, baseUrl, model } });

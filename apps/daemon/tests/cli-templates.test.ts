@@ -547,4 +547,16 @@ describe('od config byok CLI', () => {
       },
     });
   });
+
+  it('rejects a fourth positional value so an API key cannot be accepted as provider metadata', async () => {
+    const result = await runCli([
+      'config', 'byok', 'set', 'openai', 'https://apihub.agnes-ai.com/v1', 'agnes-2.0-flash',
+      'accidental-secret', '--daemon-url', stub.baseUrl,
+    ]);
+
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain('exactly three non-secret values');
+    expect(result.stderr).not.toContain('accidental-secret');
+    expect(stub.requests).toHaveLength(0);
+  });
 });

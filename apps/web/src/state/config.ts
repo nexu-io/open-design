@@ -1569,6 +1569,33 @@ export function mergeDaemonConfig(
   const next = { ...localConfig };
   if (!daemonConfig) return next;
 
+  const daemonByokProvider = daemonConfig.byokProvider;
+  const knownDaemonByokProvider = daemonByokProvider && KNOWN_PROVIDERS.find(
+    (provider) =>
+      provider.protocol === daemonByokProvider.protocol &&
+      provider.baseUrl === daemonByokProvider.baseUrl,
+  );
+  if (knownDaemonByokProvider && daemonByokProvider.model.trim()) {
+    const apiConfig: ApiProtocolConfig = {
+      apiKey: '',
+      baseUrl: knownDaemonByokProvider.baseUrl,
+      model: daemonByokProvider.model.trim(),
+      apiVersion: '',
+      apiProviderBaseUrl: knownDaemonByokProvider.baseUrl,
+    };
+    next.mode = 'api';
+    next.apiProtocol = knownDaemonByokProvider.protocol;
+    next.apiKey = '';
+    next.baseUrl = apiConfig.baseUrl;
+    next.model = apiConfig.model;
+    next.apiVersion = '';
+    next.apiProviderBaseUrl = apiConfig.apiProviderBaseUrl;
+    next.apiProtocolConfigs = {
+      ...(next.apiProtocolConfigs ?? {}),
+      [knownDaemonByokProvider.protocol]: apiConfig,
+    };
+  }
+
   if (daemonConfig.onboardingCompleted != null) {
     next.onboardingCompleted = daemonConfig.onboardingCompleted;
   }
@@ -1778,7 +1805,7 @@ export async function syncConfigToDaemon(
         baseUrl: config.baseUrl,
         model: config.model,
       }
-      : null,
+      : undefined,
   };
   try {
     const response = await fetch('/api/app-config', {

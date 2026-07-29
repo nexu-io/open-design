@@ -227,6 +227,43 @@ describe('syncConfigToDaemon', () => {
     expect(JSON.stringify(body)).not.toContain('browser-only-key');
   });
 
+  it('hydrates a daemon-selected Agnes provider without importing a credential', () => {
+    const merged = mergeDaemonConfig(
+      {
+        ...DEFAULT_CONFIG,
+        mode: 'daemon',
+        apiKey: 'local-openai-key',
+      },
+      {
+        byokProvider: {
+          protocol: 'openai',
+          baseUrl: 'https://apihub.agnes-ai.com/v1',
+          model: 'agnes-2.0-flash',
+        },
+      },
+    );
+
+    expect(merged).toMatchObject({
+      mode: 'api',
+      apiProtocol: 'openai',
+      apiKey: '',
+      baseUrl: 'https://apihub.agnes-ai.com/v1',
+      model: 'agnes-2.0-flash',
+      apiProviderBaseUrl: 'https://apihub.agnes-ai.com/v1',
+    });
+    expect(merged.apiProtocolConfigs?.openai?.apiKey).toBe('');
+  });
+
+  it('does not clear daemon BYOK selection during routine daemon-mode sync', async () => {
+    const fetchMock = vi.fn(async () => new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await syncConfigToDaemon({ ...DEFAULT_CONFIG, mode: 'daemon' });
+
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).not.toHaveProperty('byokProvider');
+  });
+
   it('syncs CLI API key env values and intent to daemon app config while localStorage strips them', async () => {
     const fetchMock = vi.fn(async () => new Response('{}', { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
