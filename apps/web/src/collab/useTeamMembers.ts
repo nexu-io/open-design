@@ -5,6 +5,7 @@ import type {
   CollabCloudMembersResponse,
   WorkspaceCollabContext,
 } from '@open-design/contracts';
+import { useWorkspaceContext, workspaceIdentityCacheKey } from './useWorkspaceContext';
 import { useWorkspaceInvalidation } from './workspace-events';
 
 // Poll cadence for the collab-cloud member directory. ~15s is light enough to
@@ -81,28 +82,51 @@ export function useTeamMembers(
 ): TeamMembersState {
   const [members, setMembers] = useState<CollabCloudMemberDirectoryEntry[]>([]);
   const mountedRef = useRef(true);
+  // A workspace switch makes an in-flight roster read describe an identity the
+  // user has left. Ordering is local to this hook instance so the late answer
+  // cannot redefine the roster the newer read already resolved.
+  const requestEpochRef = useRef(0);
+
+  // `GET /api/workspace/members` answers for whichever workspace the DAEMON is
+  // currently active in and reads nothing off the request, so the roster is a
+  // per-workspace answer with no per-workspace URL. The identity therefore has to
+  // live in the cache key, and it has to be reactive: when it changes, the key
+  // changes and this hook re-reads the new workspace's roster immediately instead
+  // of waiting out the 15-60s poll.
+  //
+  // This is not the duplicate GET `currentUserDirectoryEntry` warns about —
+  // `useWorkspaceContext` shares one coalesced request and one module-level cache
+  // across every mounted consumer, and both call sites of this hook already mount
+  // it themselves.
+  const { context: workspaceContext } = useWorkspaceContext();
+  const membersCacheKey = `workspace-members:${workspaceIdentityCacheKey(workspaceContext)}`;
 
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      requestEpochRef.current += 1;
     };
   }, []);
 
   const load = useCallback(async () => {
+    const requestEpoch = ++requestEpochRef.current;
+    const settle = (next: CollabCloudMemberDirectoryEntry[]) => {
+      if (mountedRef.current && requestEpochRef.current === requestEpoch) setMembers(next);
+    };
     try {
-      const members = await coalescedGet('workspace-members', async () => {
+      const members = await coalescedGet(membersCacheKey, async () => {
         const res = await fetch('/api/workspace/members');
         if (!res.ok) throw new Error(`members ${res.status}`);
         const body = (await res.json()) as CollabCloudMembersResponse;
         return body.members ?? [];
       });
-      if (mountedRef.current) setMembers(members);
+      settle(members);
     } catch {
       // Personal / offline / daemon without the collab cloud: no directory.
-      if (mountedRef.current) setMembers([]);
+      settle([]);
     }
-  }, []);
+  }, [membersCacheKey]);
 
   // Collab realtime hop-2: subscribe to the workspace SSE and re-fetch on a
   // pushed `members-changed` (someone joined/left/changed role). The daemon's

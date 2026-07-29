@@ -208,15 +208,34 @@ describe('useProjectWorkspaceScope', () => {
 
   it('revalidates the same project when the signed-in workspace member changes', async () => {
     const memberNew = deferred<Response>();
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
+    const scopeResponses: (() => Response | Promise<Response>)[] = [
+      () =>
         new Response(
           JSON.stringify(teamScope('project-a', 'workspace-a', 'member-old')),
           { status: 200, headers: { 'content-type': 'application/json' } },
         ),
-      )
-      .mockReturnValueOnce(memberNew.promise);
+      () => memberNew.promise,
+    ];
+    const scopeCalls: string[] = [];
+    const fetchMock = vi.fn((input: RequestInfo | URL): Promise<Response> => {
+      const url = String(input);
+      // The hook resolves the caller's own workspace identity before it can ask
+      // what this project's scope is FOR that caller. This case is about the
+      // scope read, so answer "no workspace" and keep the context read out of
+      // the scope response sequence.
+      if (url.includes('/api/workspace/context')) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ context: null }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          }),
+        );
+      }
+      scopeCalls.push(url);
+      const next = scopeResponses.shift();
+      if (!next) throw new Error(`Unexpected scope fetch: ${url}`);
+      return Promise.resolve(next());
+    });
     vi.stubGlobal('fetch', fetchMock);
 
     const hook = renderHook(() => useProjectWorkspaceScope('project-a'));
@@ -242,6 +261,6 @@ describe('useProjectWorkspaceScope', () => {
         context: { workspaceMemberId: 'member-new' },
       });
     });
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(scopeCalls).toHaveLength(2);
   });
 });

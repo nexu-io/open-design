@@ -4,11 +4,17 @@ import type {
   ProjectWorkspaceScopeResponse,
   WorkspaceCollabContext,
 } from '@open-design/contracts';
-import { WORKSPACE_CONTEXT_REFRESH_EVENT } from './useWorkspaceContext';
+import {
+  WORKSPACE_CONTEXT_REFRESH_EVENT,
+  useWorkspaceContext,
+  workspaceIdentityCacheKey,
+  type WorkspaceContextState,
+} from './useWorkspaceContext';
 import {
   forceSharedCancellableGet,
   sharedCancellableGet,
 } from '../lib/shared-cancellable-get';
+import { workspaceProjectHeaders } from '../state/projects';
 import { useWorkspaceInvalidation } from './workspace-events';
 
 const PROJECT_SCOPE_RETRY_MS = 5_000;
@@ -67,8 +73,24 @@ function validScopeForProject(
   );
 }
 
+/**
+ * Whether the caller's own identity is settled enough to ask "what is this
+ * project's scope for ME".
+ *
+ * The daemon resolves an unbound project against the workspace the REQUEST names,
+ * so a read issued before the shell knows who is asking is answered `unbound` and
+ * then immediately re-read once the identity lands — two requests per project
+ * open, the first of them wrong. A context read always settles (success and
+ * failure both clear `loading`), so this can only delay the scope read, never
+ * suppress it.
+ */
+function callerIdentityIsSettled(state: WorkspaceContextState): boolean {
+  return !state.loading || state.context !== null;
+}
+
 async function fetchProjectWorkspaceScope(
   projectId: string,
+  caller: WorkspaceCollabContext | null,
   signal: AbortSignal,
   options?: { fresh?: boolean },
 ): Promise<ProjectWorkspaceScope> {
@@ -77,13 +99,27 @@ async function fetchProjectWorkspaceScope(
   // read is aborted when nobody is left awaiting it. Identity-change
   // revalidations pass `fresh` to evict the burst cache first (once per
   // broadcast burst).
+  //
+  // The key carries the CALLER's identity because the answer now depends on it:
+  // an unbound project resolves to the requesting workspace, and the scope hands
+  // back the `workspaceMemberId` that pays for that project's runs. A shared key
+  // would serve one member the wallet of another — and `forceSharedCancellableGet`
+  // does not save us, since it deliberately treats everything inside its 250ms
+  // burst window as one identity change.
   const get = options?.fresh ? forceSharedCancellableGet : sharedCancellableGet;
   return get(
-    `project-workspace-scope:${projectId}`,
+    `project-workspace-scope:${projectId}:${workspaceIdentityCacheKey(caller)}`,
     async (sharedSignal): Promise<ProjectWorkspaceScope> => {
       const response = await fetch(
         `/api/projects/${encodeURIComponent(projectId)}/workspace-scope`,
-        { cache: 'no-store', signal: sharedSignal },
+        {
+          cache: 'no-store',
+          signal: sharedSignal,
+          // Same headers every other workspace-aware project read sends. Without
+          // them the daemon cannot tell who is asking and answers `unbound` for
+          // an unbound project no matter who reads it.
+          ...(caller ? { headers: workspaceProjectHeaders(caller) } : {}),
+        },
       );
       if (!response.ok) {
         throw new ProjectWorkspaceScopeFetchError(
@@ -112,12 +148,24 @@ export function useProjectWorkspaceScope(projectId: string): ProjectWorkspaceSco
   const epochRef = useRef(0);
   const deferredRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [refreshRevision, setRefreshRevision] = useState(0);
+  const workspaceContextState = useWorkspaceContext();
+  const { context: workspaceContext } = workspaceContextState;
+  // `callerIdentity` is a string digest of every field the request carries, so it
+  // is stable across the context poll's fresh-but-equal objects. Read the context
+  // itself through a ref: depending on the OBJECT would re-run the effect (and
+  // re-read the scope) on every 30s poll for an identity that never changed.
+  const callerContextRef = useRef(workspaceContext);
+  callerContextRef.current = workspaceContext;
+  const callerIdentity = workspaceIdentityCacheKey(workspaceContext);
+  const callerSettled = callerIdentityIsSettled(workspaceContextState);
   const [state, setState] = useState<ProjectWorkspaceScopeState & {
     resolvedRevision: number;
+    resolvedIdentity: string | null;
   }>({
     loading: true,
     scope: null,
     resolvedRevision: -1,
+    resolvedIdentity: null,
   });
 
   const revalidate = useCallback(() => {
@@ -153,6 +201,10 @@ export function useProjectWorkspaceScope(projectId: string): ProjectWorkspaceSco
   }, [revalidate]);
 
   useEffect(() => {
+    // Nothing to ask on behalf of a caller whose own identity has not landed yet.
+    // The hook stays in its loading state and this effect re-runs the moment the
+    // context settles.
+    if (!callerSettled) return;
     const epoch = ++epochRef.current;
     const controller = new AbortController();
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -164,21 +216,28 @@ export function useProjectWorkspaceScope(projectId: string): ProjectWorkspaceSco
           loading: true,
           scope: null,
           resolvedRevision: refreshRevision,
+          resolvedIdentity: callerIdentity,
         });
         firstAttempt = false;
       }
       try {
-        const scope = await fetchProjectWorkspaceScope(projectId, controller.signal, {
-          // Revision 0 is the initial mount read; anything later is an
-          // explicit revalidation (identity change, reconnect, pageshow,
-          // deferred TTL re-read) and must not be served from the burst cache.
-          fresh: refreshRevision > 0,
-        });
+        const scope = await fetchProjectWorkspaceScope(
+          projectId,
+          callerContextRef.current,
+          controller.signal,
+          {
+            // Revision 0 is the initial mount read; anything later is an
+            // explicit revalidation (identity change, reconnect, pageshow,
+            // deferred TTL re-read) and must not be served from the burst cache.
+            fresh: refreshRevision > 0,
+          },
+        );
         if (controller.signal.aborted || epoch !== epochRef.current) return;
         setState({
           loading: false,
           scope,
           resolvedRevision: refreshRevision,
+          resolvedIdentity: callerIdentity,
         });
         if (scope.kind === 'unavailable') {
           retryTimer = setTimeout(() => void load(), PROJECT_SCOPE_RETRY_MS);
@@ -193,6 +252,7 @@ export function useProjectWorkspaceScope(projectId: string): ProjectWorkspaceSco
           loading: false,
           scope: null,
           resolvedRevision: refreshRevision,
+          resolvedIdentity: callerIdentity,
           failure,
         });
         // An old daemon has no endpoint to recover on a timer. Identity-change
@@ -208,13 +268,17 @@ export function useProjectWorkspaceScope(projectId: string): ProjectWorkspaceSco
       controller.abort();
       if (retryTimer) clearTimeout(retryTimer);
     };
-  }, [projectId, refreshRevision]);
+  }, [projectId, refreshRevision, callerIdentity, callerSettled]);
 
   // React preserves hook state across a ProjectView A→B prop change until the
   // effect above runs. Never expose A's already-resolved scope during that
   // transition frame: it could briefly enable B's composer with A's wallet.
+  // The caller's identity is held to the same rule: a scope resolved for the
+  // workspace the user just left names the wallet they just left with it, and an
+  // ambient context refresh can change the identity without bumping the revision.
   if (
     state.resolvedRevision !== refreshRevision ||
+    state.resolvedIdentity !== callerIdentity ||
     (state.scope !== null && state.scope.projectId !== projectId)
   ) {
     return { loading: true, scope: null };

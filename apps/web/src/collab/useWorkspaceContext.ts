@@ -74,9 +74,82 @@ export function workspaceIdentityCanBillAmr(state: WorkspaceContextState): boole
   return false;
 }
 
-/** Coalescing key for `GET /api/workspace/context`; shared so an identity
- *  change can evict exactly this read instead of the whole cache. */
-const WORKSPACE_CONTEXT_COALESCE_KEY = 'workspace-context';
+/**
+ * The identity a per-caller read cache must be keyed on.
+ *
+ * `coalescedGet` / `sharedCancellableGet` are CACHES (1s share window) as well as
+ * single-flight dedupers, so any read whose answer depends on WHO is asking must
+ * put that identity in its key or the previous identity's answer is served to the
+ * next one.
+ *
+ * This is `listWorkspaceProjectSummaries`' key tuple — workspace, member, role,
+ * member status, lifecycle — plus workspace type and the two permission bits, so
+ * it digests EXACTLY the eight fields `workspaceProjectHeaders` puts on the wire.
+ * A key coarser than the request it caches is the bug this helper exists to
+ * prevent; a key that changes for a field the request does not carry would only
+ * cost a redundant fetch.
+ *
+ * Deliberately excludes the money/plan fields (`planId`, `billingState`,
+ * `seatSummary`, ...): they ride along in the context response but no request is
+ * scoped by them, so keying on them would re-fetch every read on a balance
+ * change. Reads that DO depend on money key themselves (see
+ * `useWorkspaceBillingResponse`'s `billingRequestKey`).
+ *
+ * Returns `'none'` for a caller with no resolved workspace identity, which is a
+ * distinct cache partition from any real one, not a wildcard that matches them.
+ */
+export function workspaceIdentityCacheKey(
+  context: WorkspaceCollabContext | null | undefined,
+): string {
+  if (!context) return 'none';
+  return [
+    context.workspaceId,
+    context.workspaceType,
+    context.workspaceMemberId,
+    context.role,
+    context.memberStatus,
+    context.lifecycleState,
+    String(context.permissions.canShareProjects),
+    String(context.permissions.canWriteSyncedFiles),
+  ].join(':');
+}
+
+/**
+ * `GET /api/workspace/context` is the read that ESTABLISHES the caller's
+ * identity, so — unlike every other workspace read — it cannot be keyed on the
+ * identity it is fetching, and it takes no workspace argument the key could
+ * borrow instead (the switch is a separate `PUT /api/workspace/active`).
+ *
+ * What it CAN be keyed on is which identity generation the caller is asking
+ * about. This token names that generation: it advances once per deliberate
+ * identity change (a workspace switch or a sign-in) and never on ambient
+ * revalidation, so:
+ *
+ *  - Every mounted consumer reacting to ONE broadcast computes the same token
+ *    and shares one request — the thundering herd `forceCoalescedGet` exists to
+ *    prevent stays prevented.
+ *  - Two switches inside that 250ms burst window are two generations, so the
+ *    second is no longer mistaken for a second consumer of the first and served
+ *    the answer fetched for the workspace the user already left.
+ *
+ * Cross-tab, the token is the shared `localStorage` stamp the acting tab wrote,
+ * so every listening consumer in a passive tab advances to the SAME value and
+ * still collapses to one request.
+ */
+let workspaceContextRequestToken = 'initial';
+let localIdentityChangeSeq = 0;
+
+function advanceWorkspaceContextRequestToken(sharedToken?: string | null): void {
+  const next = sharedToken?.trim() || `local:${++localIdentityChangeSeq}`;
+  if (next === workspaceContextRequestToken) return;
+  workspaceContextRequestToken = next;
+}
+
+/** Coalescing key for `GET /api/workspace/context`: this read alone, partitioned
+ *  by the identity generation above. */
+function workspaceContextCoalesceKey(): string {
+  return `workspace-context:${workspaceContextRequestToken}`;
+}
 
 // Last successfully-resolved workspace context, kept at module scope so it
 // survives a component unmount/remount. Returning to the home view remounts the
@@ -91,6 +164,8 @@ let workspaceContextRevision = 0;
 export function resetWorkspaceContextCache(): void {
   cachedWorkspaceContext = null;
   workspaceContextRevision = 0;
+  workspaceContextRequestToken = 'initial';
+  localIdentityChangeSeq = 0;
 }
 
 /**
@@ -190,9 +265,10 @@ export function useWorkspaceContext(): WorkspaceContextState {
       // them to one request. The nav shell tolerates sub-second staleness.
       // An explicit identity-change refresh forces a fresh read instead of
       // sharing a settled answer that predates the change.
+      const coalesceKey = workspaceContextCoalesceKey();
       const body = options.markLoading
-        ? await forceCoalescedGet(WORKSPACE_CONTEXT_COALESCE_KEY, fetchContext)
-        : await coalescedGet(WORKSPACE_CONTEXT_COALESCE_KEY, fetchContext);
+        ? await forceCoalescedGet(coalesceKey, fetchContext)
+        : await coalescedGet(coalesceKey, fetchContext);
       if (!mountedRef.current || requestEpochRef.current !== requestEpoch) return;
       // A successful read is the only thing that redefines "signed in": persist it
       // (including an explicit null for a genuinely signed-out response) so the
@@ -258,7 +334,14 @@ export function useWorkspaceContext(): WorkspaceContextState {
       if (document.visibilityState === 'visible') refresh();
     };
     const onStorage = (event: StorageEvent) => {
-      if (event.key === WORKSPACE_CONTEXT_REFRESH_STORAGE_KEY) refreshAfterIdentityChange();
+      if (event.key !== WORKSPACE_CONTEXT_REFRESH_STORAGE_KEY) return;
+      // The acting tab advanced its own token inside `notifyWorkspaceContextRefresh`;
+      // a passive tab learns of the change only here. Advancing to the stamp the
+      // acting tab WROTE keeps this idempotent across the many mounted consumers
+      // that all hear the same storage event — they converge on one key, so one
+      // change still costs one request.
+      advanceWorkspaceContextRequestToken(event.newValue);
+      refreshAfterIdentityChange();
     };
     window.addEventListener('focus', refresh);
     window.addEventListener('pageshow', refresh);
@@ -286,9 +369,15 @@ const WORKSPACE_CONTEXT_REFRESH_STORAGE_KEY = 'od.workspaceContext.refreshAt';
 
 export function notifyWorkspaceContextRefresh(): void {
   if (typeof window === 'undefined') return;
+  const stamp = String(Date.now());
+  // Advance BEFORE dispatching: this call is the one place that knows a genuine
+  // identity change just happened, and every handler the dispatch below runs must
+  // read the new generation's key. Doing it per handler instead would turn one
+  // change into one request per mounted consumer.
+  advanceWorkspaceContextRequestToken();
   window.dispatchEvent(new Event(WORKSPACE_CONTEXT_REFRESH_EVENT));
   try {
-    window.localStorage.setItem(WORKSPACE_CONTEXT_REFRESH_STORAGE_KEY, String(Date.now()));
+    window.localStorage.setItem(WORKSPACE_CONTEXT_REFRESH_STORAGE_KEY, stamp);
   } catch {
     // The in-window event is enough when localStorage is unavailable.
   }
