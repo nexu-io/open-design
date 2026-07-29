@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi, type MockedFunction } from 'vitest';
 import type { StoreScreenshotDocumentResponse } from '@open-design/contracts';
 import {
   applyPlugin,
@@ -201,7 +201,10 @@ describe('createProject', () => {
       }
       if (init?.method !== 'POST') {
         return new Response(JSON.stringify({
-          error: { message: 'document not found' },
+          error: {
+            code: 'DOCUMENT_NOT_FOUND',
+            message: 'document not found',
+          },
         }), {
           status: 404,
           headers: { 'content-type': 'application/json' },
@@ -248,7 +251,285 @@ describe('createProject', () => {
       && init?.method === 'POST'
     ))).toHaveLength(2);
   });
+
+  it('does not retry document creation when recovery lookup returns a server error', async () => {
+    let documentPosts = 0;
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input);
+      if (url === '/api/projects') {
+        return projectCreateResponse('project-store-get-500', 'Recovery GET 500');
+      }
+      if (init?.method === 'POST') {
+        documentPosts += 1;
+        return apiErrorResponse(
+          documentPosts === 1 ? 503 : 201,
+          documentPosts === 1 ? 'INTERNAL_ERROR' : 'CONFLICT',
+          documentPosts === 1 ? 'initialization unavailable' : 'unexpected retry',
+        );
+      }
+      return apiErrorResponse(500, 'INTERNAL_ERROR', 'lookup unavailable');
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const input = storeScreenshotProjectInput('Recovery GET 500');
+
+    await expect(createProject(input)).rejects.toThrow('initialization unavailable');
+    await expect(createProject(input)).rejects.toThrow('lookup unavailable');
+
+    expect(documentPosts).toBe(1);
+    expect(projectPostCalls(fetchMock)).toHaveLength(1);
+  });
+
+  it('does not retry document creation when recovery lookup returns malformed success data', async () => {
+    let documentPosts = 0;
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input);
+      if (url === '/api/projects') {
+        return projectCreateResponse('project-store-get-malformed', 'Recovery malformed');
+      }
+      if (init?.method === 'POST') {
+        documentPosts += 1;
+        if (documentPosts === 1) {
+          return apiErrorResponse(503, 'INTERNAL_ERROR', 'initialization unavailable');
+        }
+        return jsonResponse(storeScreenshotDocumentResponse('project-store-get-malformed'), 201);
+      }
+      return jsonResponse({ unexpected: true });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const input = storeScreenshotProjectInput('Recovery malformed');
+
+    await expect(createProject(input)).rejects.toThrow('initialization unavailable');
+    await expect(createProject(input)).rejects.toThrow(
+      'Invalid store screenshot API response',
+    );
+
+    expect(documentPosts).toBe(1);
+    expect(projectPostCalls(fetchMock)).toHaveLength(1);
+  });
+
+  it('does not retry document creation when recovery lookup has a network failure', async () => {
+    let documentPosts = 0;
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input);
+      if (url === '/api/projects') {
+        return projectCreateResponse('project-store-get-network', 'Recovery network');
+      }
+      if (init?.method === 'POST') {
+        documentPosts += 1;
+        return apiErrorResponse(503, 'INTERNAL_ERROR', 'initialization unavailable');
+      }
+      throw new TypeError('network unavailable');
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const input = storeScreenshotProjectInput('Recovery network');
+
+    await expect(createProject(input)).rejects.toThrow('initialization unavailable');
+    await expect(createProject(input)).rejects.toThrow('network unavailable');
+
+    expect(documentPosts).toBe(1);
+    expect(projectPostCalls(fetchMock)).toHaveLength(1);
+  });
+
+  it('does not retry document creation for a 404 with the wrong business code', async () => {
+    let documentPosts = 0;
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input);
+      if (url === '/api/projects') {
+        return projectCreateResponse('project-store-wrong-404', 'Recovery wrong 404');
+      }
+      if (init?.method === 'POST') {
+        documentPosts += 1;
+        return apiErrorResponse(503, 'INTERNAL_ERROR', 'initialization unavailable');
+      }
+      return apiErrorResponse(404, 'PROJECT_NOT_FOUND', 'project disappeared');
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const input = storeScreenshotProjectInput('Recovery wrong 404');
+
+    await expect(createProject(input)).rejects.toThrow('initialization unavailable');
+    await expect(createProject(input)).rejects.toThrow('project disappeared');
+
+    expect(documentPosts).toBe(1);
+  });
+
+  it.each([
+    ['name', (input: Parameters<typeof createProject>[0]) => ({ ...input, name: `${input.name} changed` })],
+    ['project location', (input: Parameters<typeof createProject>[0]) => ({ ...input, projectLocationId: 'alternate-location' })],
+    ['skill', (input: Parameters<typeof createProject>[0]) => ({ ...input, skillId: 'alternate-skill' })],
+    ['design system', (input: Parameters<typeof createProject>[0]) => ({ ...input, designSystemId: 'alternate-system' })],
+    ['pending prompt', (input: Parameters<typeof createProject>[0]) => ({ ...input, pendingPrompt: 'alternate prompt' })],
+    ['conversation mode', (input: Parameters<typeof createProject>[0]) => ({ ...input, conversationMode: 'chat' as const })],
+    ['plugin id', (input: Parameters<typeof createProject>[0]) => ({ ...input, pluginId: 'alternate-plugin' })],
+    ['plugin snapshot', (input: Parameters<typeof createProject>[0]) => ({ ...input, appliedPluginSnapshotId: 'alternate-snapshot' })],
+    ['plugin inputs', (input: Parameters<typeof createProject>[0]) => ({ ...input, pluginInputs: { theme: 'light', nested: { density: 2 } } })],
+    ['custom instructions', (input: Parameters<typeof createProject>[0]) => ({ ...input, customInstructions: 'Use a compact layout' })],
+    ['skip discovery brief', (input: Parameters<typeof createProject>[0]) => ({ ...input, skipDiscoveryBrief: true })],
+    ['metadata baseDir', (input: Parameters<typeof createProject>[0]) => ({
+      ...input,
+      metadata: { ...input.metadata!, baseDir: '/alternate/workspace' },
+    })],
+    ['metadata', (input: Parameters<typeof createProject>[0]) => ({
+      ...input,
+      metadata: { ...input.metadata!, platform: 'mobile-android' as const },
+    })],
+  ])('does not reuse a recovery project when %s changes', async (label, mutate) => {
+    let projectPosts = 0;
+    const slug = label.replaceAll(' ', '-');
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input);
+      if (url === '/api/projects') {
+        projectPosts += 1;
+        return projectCreateResponse(
+          `project-fingerprint-${slug}-${projectPosts}`,
+          `Fingerprint ${label}`,
+        );
+      }
+      if (init?.method === 'POST') {
+        if (url.includes(`-${slug}-1/`)) {
+          return apiErrorResponse(503, 'INTERNAL_ERROR', 'initialization unavailable');
+        }
+        const projectId = url.split('/')[3]!;
+        return jsonResponse(storeScreenshotDocumentResponse(projectId), 201);
+      }
+      return apiErrorResponse(404, 'DOCUMENT_NOT_FOUND', 'document not found');
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const original = storeScreenshotProjectInput(`Fingerprint ${label}`);
+
+    await expect(createProject(original)).rejects.toThrow('initialization unavailable');
+    await expect(createProject(mutate(original))).resolves.toBeTruthy();
+
+    expect(projectPosts).toBe(2);
+  });
+
+  it('uses stable object serialization for semantically identical recovery inputs', async () => {
+    let documentPosts = 0;
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input);
+      if (url === '/api/projects') {
+        return projectCreateResponse('project-stable-fingerprint', 'Stable fingerprint');
+      }
+      if (init?.method !== 'POST') {
+        return apiErrorResponse(404, 'DOCUMENT_NOT_FOUND', 'document not found');
+      }
+      documentPosts += 1;
+      if (documentPosts === 1) {
+        return apiErrorResponse(503, 'INTERNAL_ERROR', 'initialization unavailable');
+      }
+      return jsonResponse(storeScreenshotDocumentResponse('project-stable-fingerprint'), 201);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const first = storeScreenshotProjectInput('Stable fingerprint');
+    first.pluginInputs = {
+      theme: 'dark',
+      screens: [{ density: 1, contrast: 'high' }],
+      tags: ['productivity', 'mobile'],
+    };
+    const reordered: Parameters<typeof createProject>[0] = {
+      ...first,
+      metadata: {
+        platformTargets: ['mobile-ios', 'mobile-android'],
+        platform: 'mobile-ios',
+        intent: 'store-screenshot',
+        kind: 'image',
+      },
+      pluginInputs: {
+        tags: ['productivity', 'mobile'],
+        screens: [{ contrast: 'high', density: 1 }],
+        theme: 'dark',
+      },
+    };
+
+    await expect(createProject(first)).rejects.toThrow('initialization unavailable');
+    await expect(createProject(reordered)).resolves.toMatchObject({
+      project: { id: 'project-stable-fingerprint' },
+    });
+
+    expect(projectPostCalls(fetchMock)).toHaveLength(1);
+    expect(documentPosts).toBe(2);
+  });
+
+  it('single-flights concurrent identical project creation and initialization', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input);
+      if (url === '/api/projects') {
+        return projectCreateResponse('project-single-flight', 'Single flight');
+      }
+      return jsonResponse(storeScreenshotDocumentResponse('project-single-flight'), 201);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const input = storeScreenshotProjectInput('Single flight');
+
+    const [first, second] = await Promise.all([
+      createProject(input),
+      createProject(input),
+    ]);
+
+    expect(first.project.id).toBe('project-single-flight');
+    expect(second.project.id).toBe('project-single-flight');
+    expect(projectPostCalls(fetchMock)).toHaveLength(1);
+    expect(fetchMock.mock.calls.filter(([url]) => (
+      String(url) === '/api/projects/project-single-flight/store-screenshots'
+    ))).toHaveLength(1);
+  });
 });
+
+function storeScreenshotProjectInput(
+  name: string,
+): Parameters<typeof createProject>[0] {
+  return {
+    name,
+    projectLocationId: 'default',
+    skillId: 'store-screenshot-skill',
+    designSystemId: 'clay',
+    pendingPrompt: 'Create a store listing',
+    conversationMode: 'design',
+    pluginId: 'store-screenshot-plugin',
+    appliedPluginSnapshotId: 'snapshot-1',
+    pluginInputs: {
+      theme: 'dark',
+      nested: { density: 1 },
+    },
+    metadata: {
+      kind: 'image',
+      intent: 'store-screenshot',
+      platform: 'mobile-ios',
+      platformTargets: ['mobile-ios', 'mobile-android'],
+    },
+  };
+}
+
+function projectCreateResponse(projectId: string, name: string): Response {
+  return jsonResponse({
+    project: {
+      id: projectId,
+      name,
+      skillId: 'store-screenshot-skill',
+      designSystemId: 'clay',
+      metadata: {
+        kind: 'image',
+        intent: 'store-screenshot',
+        platformTargets: ['mobile-ios', 'mobile-android'],
+      },
+    },
+    conversationId: `conversation-${projectId}`,
+  }, 201);
+}
+
+function apiErrorResponse(status: number, code: string, message: string): Response {
+  return jsonResponse({ error: { code, message } }, status);
+}
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  });
+}
+
+function projectPostCalls(fetchMock: MockedFunction<typeof fetch>) {
+  return fetchMock.mock.calls.filter(([url]) => String(url) === '/api/projects');
+}
 
 function storeScreenshotDocumentResponse(
   projectId: string,

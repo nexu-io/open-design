@@ -180,6 +180,117 @@ describe('StoreScreenshotWorkspace', () => {
     rendered.unmount();
   });
 
+  it('recovers from a transient poll failure without losing the pending job', async () => {
+    vi.useFakeTimers();
+    let jobPolls = 0;
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/validate')) {
+        return jsonResponse({ valid: true, issues: [] });
+      }
+      if (url.endsWith('/generate') && init?.method === 'POST') {
+        return jsonResponse(queuedJobResponse('generate'), 202);
+      }
+      if (url.endsWith('/jobs/generate-job-1')) {
+        jobPolls += 1;
+        if (jobPolls === 1) {
+          return apiErrorResponse(503, 'INTERNAL_ERROR', 'poll temporarily unavailable');
+        }
+        return jsonResponse(completedGenerateJobResponse);
+      }
+      return jsonResponse(documentResponse);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<StoreScreenshotWorkspace projectId="project-1" aiGenerationEnabled />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Generate with AI' }));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000);
+    });
+
+    expect(screen.getByText('poll temporarily unavailable')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Generating…' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Generating…' }));
+    expect(fetchMock.mock.calls.filter(([input]) => (
+      String(input).endsWith('/generate')
+    ))).toHaveLength(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
+
+    expect(jobPolls).toBe(2);
+    expect(screen.getByText('Generation complete. Ready for preview.')).toBeTruthy();
+    expect(screen.queryByText('poll temporarily unavailable')).toBeNull();
+  });
+
+  it('keeps an exhausted poll job pending until the user retries its query', async () => {
+    vi.useFakeTimers();
+    let jobPolls = 0;
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/validate')) {
+        return jsonResponse({ valid: true, issues: [] });
+      }
+      if (url.endsWith('/generate') && init?.method === 'POST') {
+        return jsonResponse(queuedJobResponse('generate'), 202);
+      }
+      if (url.endsWith('/jobs/generate-job-1')) {
+        jobPolls += 1;
+        if (jobPolls <= 3) {
+          return apiErrorResponse(503, 'INTERNAL_ERROR', `poll failure ${jobPolls}`);
+        }
+        return jsonResponse(completedGenerateJobResponse);
+      }
+      return jsonResponse(documentResponse);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<StoreScreenshotWorkspace projectId="project-1" aiGenerationEnabled />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Generate with AI' }));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4_000);
+    });
+
+    expect(jobPolls).toBe(3);
+    expect(screen.getByText('poll failure 3')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Generating…' })).toBeDisabled();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
+    expect(jobPolls).toBe(3);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(jobPolls).toBe(4);
+    expect(screen.getByText('Generation complete. Ready for preview.')).toBeTruthy();
+    expect(fetchMock.mock.calls.filter(([input]) => (
+      String(input).endsWith('/generate')
+    ))).toHaveLength(1);
+  });
+
   it('shows a terminal job failure and clears the pending state', async () => {
     vi.useFakeTimers();
     vi.stubGlobal('fetch', vi.fn<typeof fetch>(async (input, init) => {
@@ -279,6 +390,48 @@ describe('StoreScreenshotWorkspace', () => {
       String(input).endsWith('/jobs/generate-job-1')
     ))).toBe(false);
   });
+
+  it('cancels a scheduled backoff retry when the workspace unmounts', async () => {
+    vi.useFakeTimers();
+    let jobPolls = 0;
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/validate')) {
+        return jsonResponse({ valid: true, issues: [] });
+      }
+      if (url.endsWith('/generate') && init?.method === 'POST') {
+        return jsonResponse(queuedJobResponse('generate'), 202);
+      }
+      if (url.endsWith('/jobs/generate-job-1')) {
+        jobPolls += 1;
+        return apiErrorResponse(503, 'INTERNAL_ERROR', 'poll temporarily unavailable');
+      }
+      return jsonResponse(documentResponse);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const rendered = render(
+      <StoreScreenshotWorkspace projectId="project-1" aiGenerationEnabled />,
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Generate with AI' }));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000);
+    });
+    expect(jobPolls).toBe(1);
+
+    rendered.unmount();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
+
+    expect(jobPolls).toBe(1);
+  });
 });
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -286,4 +439,8 @@ function jsonResponse(body: unknown, status = 200): Response {
     status,
     headers: { 'content-type': 'application/json' },
   });
+}
+
+function apiErrorResponse(status: number, code: string, message: string): Response {
+  return jsonResponse({ error: { code, message } }, status);
 }

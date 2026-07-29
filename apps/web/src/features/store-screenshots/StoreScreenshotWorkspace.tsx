@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from 'react';
 import { Button } from '@open-design/components';
 import type {
   GenerateStoreScreenshotPlanRequest,
@@ -33,14 +40,115 @@ type ValidationState =
   | { status: 'unavailable' };
 
 const JOB_POLL_INTERVAL_MS = 1_000;
+const MAX_CONSECUTIVE_JOB_POLL_FAILURES = 3;
 
-function jobIsPending(job: StoreScreenshotJob | null): boolean {
+function jobIsPending(job: StoreScreenshotJob | null): job is StoreScreenshotJob {
   return job?.status === 'queued' || job?.status === 'running';
 }
 
 function terminalJobError(job: StoreScreenshotJob): string | null {
   if (job.status !== 'failed' && job.status !== 'interrupted') return null;
   return job.error?.message ?? 'Store screenshot job failed';
+}
+
+interface JobPollState {
+  jobId: string | null;
+  failedAttempts: number;
+  error: string | null;
+  manualRetryRequested: boolean;
+}
+
+function useStoreScreenshotJobPolling(
+  projectId: string,
+  job: StoreScreenshotJob | null,
+  updateJob: Dispatch<SetStateAction<StoreScreenshotJob | null>>,
+  setActionError: Dispatch<SetStateAction<string | null>>,
+) {
+  const [pollState, setPollState] = useState<JobPollState>({
+    jobId: null,
+    failedAttempts: 0,
+    error: null,
+    manualRetryRequested: false,
+  });
+  const activePollState = pollState.jobId === job?.id
+    ? pollState
+    : {
+        jobId: job?.id ?? null,
+        failedAttempts: 0,
+        error: null,
+        manualRetryRequested: false,
+      };
+
+  useEffect(() => {
+    if (!jobIsPending(job)) return;
+    if (
+      activePollState.failedAttempts >= MAX_CONSECUTIVE_JOB_POLL_FAILURES
+      && !activePollState.manualRetryRequested
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    const delay = activePollState.manualRetryRequested
+      ? 0
+      : JOB_POLL_INTERVAL_MS * (2 ** activePollState.failedAttempts);
+    const timer = window.setTimeout(() => {
+      void fetchStoreScreenshotJob(projectId, job.id)
+        .then((nextJob) => {
+          if (cancelled) return;
+          updateJob(nextJob);
+          setPollState({
+            jobId: nextJob.id,
+            failedAttempts: 0,
+            error: null,
+            manualRetryRequested: false,
+          });
+          const failure = terminalJobError(nextJob);
+          if (failure) setActionError(failure);
+        })
+        .catch((error: unknown) => {
+          if (cancelled) return;
+          setPollState((current) => ({
+            jobId: job.id,
+            failedAttempts: (
+              current.jobId === job.id
+                ? current.failedAttempts
+                : 0
+            ) + 1,
+            error: error instanceof Error ? error.message : String(error),
+            manualRetryRequested: false,
+          }));
+        });
+    }, delay);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [
+    activePollState.failedAttempts,
+    activePollState.manualRetryRequested,
+    job,
+    projectId,
+    setActionError,
+    updateJob,
+  ]);
+
+  const retry = useCallback(() => {
+    if (!jobIsPending(job)) return;
+    setPollState((current) => ({
+      jobId: job.id,
+      failedAttempts: 0,
+      error: current.jobId === job.id ? current.error : null,
+      manualRetryRequested: true,
+    }));
+  }, [job]);
+
+  return {
+    error: activePollState.error,
+    retry,
+    retrying: activePollState.manualRetryRequested,
+  };
 }
 
 export function StoreScreenshotWorkspace({
@@ -62,6 +170,18 @@ export function StoreScreenshotWorkspace({
   const [actionError, setActionError] = useState<string | null>(null);
   const generating = generateSubmitting || jobIsPending(generateJob);
   const exporting = exportSubmitting || jobIsPending(exportJob);
+  const generatePolling = useStoreScreenshotJobPolling(
+    projectId,
+    generateJob,
+    setGenerateJob,
+    setActionError,
+  );
+  const exportPolling = useStoreScreenshotJobPolling(
+    projectId,
+    exportJob,
+    setExportJob,
+    setActionError,
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -97,43 +217,6 @@ export function StoreScreenshotWorkspace({
       cancelled = true;
     };
   }, [document, platform, projectId]);
-
-  useEffect(() => {
-    const pendingJobs = [
-      generateJob && jobIsPending(generateJob)
-        ? { job: generateJob, update: setGenerateJob }
-        : null,
-      exportJob && jobIsPending(exportJob)
-        ? { job: exportJob, update: setExportJob }
-        : null,
-    ].filter((entry): entry is {
-      job: StoreScreenshotJob;
-      update: typeof setGenerateJob;
-    } => entry !== null);
-    if (pendingJobs.length === 0) return;
-
-    let cancelled = false;
-    const timer = window.setTimeout(() => {
-      void Promise.all(pendingJobs.map(async ({ job, update }) => {
-        try {
-          const nextJob = await fetchStoreScreenshotJob(projectId, job.id);
-          if (cancelled) return;
-          update(nextJob);
-          const failure = terminalJobError(nextJob);
-          if (failure) setActionError(failure);
-        } catch (error) {
-          if (cancelled) return;
-          update(null);
-          setActionError(error instanceof Error ? error.message : String(error));
-        }
-      }));
-    }, JOB_POLL_INTERVAL_MS);
-
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
-  }, [exportJob, generateJob, projectId]);
 
   const validationLabel = useMemo(() => {
     switch (validation.status) {
@@ -260,6 +343,30 @@ export function StoreScreenshotWorkspace({
         ) : null}
         {actionError ? (
           <p className={styles.actionError} role="alert">{actionError}</p>
+        ) : null}
+        {generatePolling.error ? (
+          <div className={styles.pollError} role="alert">
+            <span>{generatePolling.error}</span>
+            <Button
+              variant="ghost"
+              disabled={generatePolling.retrying}
+              onClick={generatePolling.retry}
+            >
+              {t('storeScreenshots.retry')}
+            </Button>
+          </div>
+        ) : null}
+        {exportPolling.error ? (
+          <div className={styles.pollError} role="alert">
+            <span>{exportPolling.error}</span>
+            <Button
+              variant="ghost"
+              disabled={exportPolling.retrying}
+              onClick={exportPolling.retry}
+            >
+              {t('storeScreenshots.retry')}
+            </Button>
+          </div>
         ) : null}
         {generateJob?.status === 'done' ? (
           <div className={styles.jobNotice} role="status">

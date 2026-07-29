@@ -11,6 +11,7 @@ import type {
   ChatSessionMode,
   CreateConversationRequest,
   CreateDesignSystemProjectFromProjectResponse,
+  CreateProjectRequest,
   DuplicateProjectResponse,
   CreatePluginShareProjectResponse,
   CreateTerminalRequest,
@@ -27,13 +28,13 @@ import { randomUUID } from '../utils/uuid';
 import {
   createStoreScreenshotDocument,
   fetchStoreScreenshotDocument,
+  StoreScreenshotApiError,
 } from '../features/store-screenshots/api';
 import type {
   ChatMessage,
   Conversation,
   OpenTabsState,
   Project,
-  ProjectMetadata,
   ProjectTemplate,
 } from '../types';
 
@@ -87,21 +88,10 @@ export async function getProjectDetail(
   }
 }
 
-interface CreateProjectInput {
-  name: string;
-  projectLocationId?: string;
+type CreateProjectInput = Omit<CreateProjectRequest, 'skillId' | 'designSystemId'> & {
   skillId: string | null;
   designSystemId: string | null;
-  pendingPrompt?: string;
-  metadata?: ProjectMetadata;
-  conversationMode?: ChatSessionMode;
-  // Plan §3.A1 / spec §11.5 — POST /api/projects accepts a pluginId
-  // (or pre-applied snapshot id) to resolve and pin a plugin to the new
-  // project. Used by the PluginLoopHome flow on Home.
-  pluginId?: string;
-  appliedPluginSnapshotId?: string;
-  pluginInputs?: Record<string, unknown>;
-}
+};
 
 interface CreateProjectResult {
   project: Project;
@@ -109,17 +99,51 @@ interface CreateProjectResult {
   appliedPluginSnapshotId?: string;
 }
 
-const pendingStoreScreenshotProjects = new Map<string, CreateProjectResult>();
+interface StoreScreenshotCreationRecord {
+  result?: CreateProjectResult;
+  inFlight?: Promise<CreateProjectResult>;
+}
+
+const pendingStoreScreenshotProjects = new Map<
+  string,
+  StoreScreenshotCreationRecord
+>();
+
+function canonicalizeJson(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(canonicalizeJson);
+  }
+  if (value && typeof value === 'object') {
+    return Object.keys(value)
+      .sort()
+      .reduce<Record<string, unknown>>((result, key) => {
+        const nextValue = (value as Record<string, unknown>)[key];
+        if (nextValue !== undefined) {
+          result[key] = canonicalizeJson(nextValue);
+        }
+        return result;
+      }, {});
+  }
+  return value;
+}
 
 function storeScreenshotCreationKey(input: CreateProjectInput): string | null {
   if (input.metadata?.intent !== 'store-screenshot') return null;
-  return JSON.stringify({
-    name: input.name,
+  return JSON.stringify(canonicalizeJson({
+    ...input,
+    name: input.name.trim(),
     projectLocationId: input.projectLocationId ?? null,
-    skillId: input.skillId,
-    designSystemId: input.designSystemId,
-    metadata: input.metadata,
-  });
+    skillId: input.skillId ?? null,
+    designSystemId: input.designSystemId ?? null,
+    pendingPrompt: input.pendingPrompt ?? null,
+    metadata: input.metadata ?? null,
+    conversationMode: input.conversationMode ?? null,
+    pluginId: input.pluginId ?? null,
+    appliedPluginSnapshotId: input.appliedPluginSnapshotId ?? null,
+    pluginInputs: input.pluginInputs ?? null,
+    customInstructions: input.customInstructions ?? null,
+    skipDiscoveryBrief: input.skipDiscoveryBrief ?? null,
+  }));
 }
 
 async function initializeStoreScreenshotProject(
@@ -132,9 +156,14 @@ async function initializeStoreScreenshotProject(
     try {
       await fetchStoreScreenshotDocument(result.project.id);
       return;
-    } catch {
-      // The original initialization may have failed before persistence.
-      // Retry the create call against the same project below.
+    } catch (error) {
+      if (
+        !(error instanceof StoreScreenshotApiError)
+        || error.status !== 404
+        || error.code !== 'DOCUMENT_NOT_FOUND'
+      ) {
+        throw error;
+      }
     }
   }
   await createStoreScreenshotDocument(result.project.id, {
@@ -151,57 +180,84 @@ async function initializeStoreScreenshotProject(
   });
 }
 
+async function postProject(input: CreateProjectInput): Promise<CreateProjectResult> {
+  // `randomUUID` falls back to `crypto.getRandomValues` / `Math.random`
+  // when `crypto.randomUUID` is unavailable. Open Design served over
+  // plain HTTP on a LAN IP (Docker / unRAID self-hosting) is a
+  // non-secure context, where `crypto.randomUUID` is undefined.
+  const id = randomUUID();
+  const resp = await fetch('/api/projects', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id, ...input }),
+  });
+  if (!resp.ok) {
+    let message = 'Could not create project';
+    try {
+      const body = await resp.json() as { error?: unknown };
+      if (
+        body.error &&
+        typeof body.error === 'object' &&
+        'message' in body.error &&
+        typeof body.error.message === 'string' &&
+        body.error.message.trim()
+      ) {
+        message = body.error.message;
+      }
+    } catch {
+      // Keep the generic fallback when the error body is absent or invalid.
+    }
+    throw new Error(message);
+  }
+  return (await resp.json()) as CreateProjectResult;
+}
+
+async function runStoreScreenshotCreation(
+  record: StoreScreenshotCreationRecord,
+  input: CreateProjectInput,
+): Promise<CreateProjectResult> {
+  const recovering = record.result !== undefined;
+  if (!record.result) {
+    record.result = await postProject(input);
+  }
+  await initializeStoreScreenshotProject(record.result, input, recovering);
+  return record.result;
+}
+
 export async function createProject(input: CreateProjectInput): Promise<CreateProjectResult> {
   try {
     if (input.metadata?.intent === 'store-screenshot' && !input.designSystemId) {
       throw new Error('A design system is required for store screenshot projects');
     }
     const recoveryKey = storeScreenshotCreationKey(input);
-    const pendingResult = recoveryKey
-      ? pendingStoreScreenshotProjects.get(recoveryKey)
-      : undefined;
-    if (pendingResult && recoveryKey) {
-      await initializeStoreScreenshotProject(pendingResult, input, true);
-      pendingStoreScreenshotProjects.delete(recoveryKey);
-      return pendingResult;
+    if (!recoveryKey) return await postProject(input);
+
+    let record = pendingStoreScreenshotProjects.get(recoveryKey);
+    if (record?.inFlight) return await record.inFlight;
+    if (!record) {
+      record = {};
+      pendingStoreScreenshotProjects.set(recoveryKey, record);
     }
-    // `randomUUID` falls back to `crypto.getRandomValues` / `Math.random`
-    // when `crypto.randomUUID` is unavailable. Open Design served over
-    // plain HTTP on a LAN IP (Docker / unRAID self-hosting) is a
-    // non-secure context, where `crypto.randomUUID` is undefined and
-    // calling it directly throws — the surrounding try/catch then turns
-    // the Create button into a silent no-op (issue #849).
-    const id = randomUUID();
-    const resp = await fetch('/api/projects', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, ...input }),
-    });
-    if (!resp.ok) {
-      let message = 'Could not create project';
-      try {
-        const body = await resp.json() as { error?: unknown };
-        if (
-          body.error &&
-          typeof body.error === 'object' &&
-          'message' in body.error &&
-          typeof body.error.message === 'string' &&
-          body.error.message.trim()
-        ) {
-          message = body.error.message;
-        }
-      } catch {
-        // Keep the generic fallback when the error body is absent or invalid.
+
+    const operation = Promise.resolve().then(
+      () => runStoreScreenshotCreation(record, input),
+    );
+    record.inFlight = operation;
+    try {
+      const result = await operation;
+      if (pendingStoreScreenshotProjects.get(recoveryKey) === record) {
+        pendingStoreScreenshotProjects.delete(recoveryKey);
       }
-      throw new Error(message);
+      return result;
+    } catch (error) {
+      if (pendingStoreScreenshotProjects.get(recoveryKey) === record) {
+        record.inFlight = undefined;
+        if (!record.result) {
+          pendingStoreScreenshotProjects.delete(recoveryKey);
+        }
+      }
+      throw error;
     }
-    const result = (await resp.json()) as CreateProjectResult;
-    if (recoveryKey) {
-      pendingStoreScreenshotProjects.set(recoveryKey, result);
-      await initializeStoreScreenshotProject(result, input, false);
-      pendingStoreScreenshotProjects.delete(recoveryKey);
-    }
-    return result;
   } catch (err) {
     throw err instanceof Error ? err : new Error('Could not create project');
   }

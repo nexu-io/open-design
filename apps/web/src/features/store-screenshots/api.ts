@@ -16,11 +16,24 @@ import {
 export type StoreScreenshotDocument = StoreScreenshotDocumentResponse['document'];
 export type StoreScreenshotPlatform = 'appStore' | 'googlePlay';
 
+export class StoreScreenshotApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code: string | null,
+  ) {
+    super(message);
+    this.name = 'StoreScreenshotApiError';
+  }
+}
+
 function storeScreenshotUrl(projectId: string, suffix = ''): string {
   return `/api/projects/${encodeURIComponent(projectId)}/store-screenshots${suffix}`;
 }
 
 async function readApiError(response: Response, fallback: string): Promise<Error> {
+  let message = fallback;
+  let code: string | null = null;
   try {
     const body = await response.json() as { error?: unknown };
     if (
@@ -30,12 +43,21 @@ async function readApiError(response: Response, fallback: string): Promise<Error
       && typeof body.error.message === 'string'
       && body.error.message.trim()
     ) {
-      return new Error(body.error.message);
+      message = body.error.message;
+    }
+    if (
+      body.error
+      && typeof body.error === 'object'
+      && 'code' in body.error
+      && typeof body.error.code === 'string'
+      && body.error.code.trim()
+    ) {
+      code = body.error.code;
     }
   } catch {
     // Keep the stable fallback for empty or non-JSON error responses.
   }
-  return new Error(fallback);
+  return new StoreScreenshotApiError(message, response.status, code);
 }
 
 async function requestJson<T>(

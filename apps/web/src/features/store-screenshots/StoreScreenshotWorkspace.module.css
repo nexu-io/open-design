@@ -142,9 +142,16 @@
 }
 
 .providerNotice,
-.jobNotice {
+.jobNotice,
+.pollError {
   min-width: 0;
   gap: 7px;
+}
+
+.pollError {
+  display: flex;
+  align-items: center;
+  color: var(--danger-text, #b42318);
 }
 
 .jobNotice {

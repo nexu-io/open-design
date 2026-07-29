@@ -6,6 +6,7 @@ import {
   fetchStoreScreenshotJob,
   fetchStoreScreenshotDocument,
   generateStoreScreenshots,
+  StoreScreenshotApiError,
   validateStoreScreenshotDocument,
 } from '../../../src/features/store-screenshots/api';
 
@@ -49,5 +50,28 @@ describe('store screenshot API response contracts', () => {
     await expect(fetchStoreScreenshotDocument('project-1')).rejects.toThrow(
       'Invalid store screenshot API response',
     );
+  });
+
+  it('preserves HTTP status and daemon business code on API errors', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response(
+      JSON.stringify({
+        error: {
+          code: 'DOCUMENT_NOT_FOUND',
+          message: 'Store screenshot document not found',
+        },
+      }),
+      { status: 404, headers: { 'content-type': 'application/json' } },
+    )));
+
+    const error = await fetchStoreScreenshotDocument('project-1').catch(
+      (cause: unknown) => cause,
+    );
+
+    expect(error).toBeInstanceOf(StoreScreenshotApiError);
+    expect(error).toMatchObject({
+      status: 404,
+      code: 'DOCUMENT_NOT_FOUND',
+      message: 'Store screenshot document not found',
+    });
   });
 });
