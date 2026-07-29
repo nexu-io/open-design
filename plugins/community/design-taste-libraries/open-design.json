@@ -54,6 +54,7 @@
         "name": "surface",
         "label": "Surface",
         "type": "select",
+        "required": true,
         "options": ["web app", "mobile app", "dashboard", "landing page", "motion prototype"],
         "default": "web app"
       },
@@ -61,6 +62,7 @@
         "name": "brief",
         "label": "Brief",
         "type": "text",
+        "required": true,
         "placeholder": "What should the design accomplish?"
       }
     ],
