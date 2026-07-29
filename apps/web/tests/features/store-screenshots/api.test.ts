@@ -1,11 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  applyStoreScreenshotChangeSet,
   createStoreScreenshotDocument,
   exportStoreScreenshots,
   fetchStoreScreenshotJob,
   fetchStoreScreenshotDocument,
+  fetchStoreScreenshotVersions,
   generateStoreScreenshots,
+  previewStoreScreenshotChangeSet,
+  restoreStoreScreenshotVersion,
   StoreScreenshotApiError,
   validateStoreScreenshotDocument,
 } from '../../../src/features/store-screenshots/api';
@@ -32,6 +36,16 @@ describe('store screenshot API response contracts', () => {
     ['start generation', () => generateStoreScreenshots('project-1', {})],
     ['start export', () => exportStoreScreenshots('project-1', { platforms: ['appStore'] })],
     ['fetch job', () => fetchStoreScreenshotJob('project-1', 'job-1')],
+    ['preview changes', () => previewStoreScreenshotChangeSet('project-1', {
+      baseVersion: 1,
+      operations: [],
+    })],
+    ['apply changes', () => applyStoreScreenshotChangeSet('project-1', {
+      baseVersion: 1,
+      operations: [],
+    })],
+    ['fetch versions', () => fetchStoreScreenshotVersions('project-1')],
+    ['restore version', () => restoreStoreScreenshotVersion('project-1', 1)],
   ])('rejects a malformed 2xx response from %s', async (_label, request) => {
     vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response(
       JSON.stringify({ unexpected: true }),

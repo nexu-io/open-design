@@ -1,16 +1,21 @@
 import type {
+  ApplyStoreScreenshotChangeSetRequest,
   CreateStoreScreenshotDocumentRequest,
   ExportStoreScreenshotRequest,
   GenerateStoreScreenshotPlanRequest,
   StoreScreenshotJob,
+  StoreScreenshotChangeSetPreviewResponse,
   StoreScreenshotDocumentResponse,
   StoreScreenshotJobResponse,
   StoreScreenshotValidationResult,
+  StoreScreenshotVersion,
 } from '@open-design/contracts';
 import {
+  StoreScreenshotChangeSetPreviewResponseSchema,
   StoreScreenshotDocumentResponseSchema,
   StoreScreenshotJobResponseSchema,
   StoreScreenshotValidationResultSchema,
+  StoreScreenshotVersionsResponseSchema,
 } from '@open-design/contracts';
 
 export type StoreScreenshotDocument = StoreScreenshotDocumentResponse['document'];
@@ -169,6 +174,56 @@ export async function fetchStoreScreenshotJob(
     StoreScreenshotJobResponseSchema,
   );
   return response.job;
+}
+
+export function previewStoreScreenshotChangeSet(
+  projectId: string,
+  changeSet: ApplyStoreScreenshotChangeSetRequest,
+): Promise<StoreScreenshotChangeSetPreviewResponse> {
+  return requestJson<StoreScreenshotChangeSetPreviewResponse>(
+    storeScreenshotUrl(projectId, '/changes/preview'),
+    jsonRequest(changeSet),
+    'Could not preview the store screenshot changes',
+    StoreScreenshotChangeSetPreviewResponseSchema,
+  );
+}
+
+export async function applyStoreScreenshotChangeSet(
+  projectId: string,
+  changeSet: ApplyStoreScreenshotChangeSetRequest,
+): Promise<StoreScreenshotDocument> {
+  const response = await requestJson<StoreScreenshotDocumentResponse>(
+    storeScreenshotUrl(projectId, '/changes/apply'),
+    jsonRequest(changeSet),
+    'Could not apply the store screenshot changes',
+    StoreScreenshotDocumentResponseSchema,
+  );
+  return response.document;
+}
+
+export async function fetchStoreScreenshotVersions(
+  projectId: string,
+): Promise<StoreScreenshotVersion[]> {
+  const response = await requestJson<{ versions: StoreScreenshotVersion[] }>(
+    storeScreenshotUrl(projectId, '/versions'),
+    undefined,
+    'Could not load store screenshot versions',
+    StoreScreenshotVersionsResponseSchema,
+  );
+  return response.versions;
+}
+
+export async function restoreStoreScreenshotVersion(
+  projectId: string,
+  version: number,
+): Promise<StoreScreenshotDocument> {
+  const response = await requestJson<StoreScreenshotDocumentResponse>(
+    storeScreenshotUrl(projectId, `/versions/${encodeURIComponent(String(version))}/restore`),
+    jsonRequest({ version }),
+    'Could not restore the store screenshot version',
+    StoreScreenshotDocumentResponseSchema,
+  );
+  return response.document;
 }
 
 export function storeScreenshotJobDownloadUrl(

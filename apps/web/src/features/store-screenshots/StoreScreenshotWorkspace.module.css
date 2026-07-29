@@ -6,8 +6,9 @@
     "header"
     "platforms"
     "feedback"
+    "page-actions"
     "content";
-  grid-template-rows: auto auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto auto minmax(0, 1fr);
   background: var(--bg);
   color: var(--text);
   overflow: hidden;
@@ -180,6 +181,29 @@
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
   overflow: hidden;
+}
+
+.contentSingle {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.pageActions {
+  grid-area: page-actions;
+  min-width: 0;
+  padding: 7px 16px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+
+.pageActions button {
+  flex: none;
+  min-height: 28px;
+  padding-inline: 8px;
+  font-size: 11px;
 }
 
 .gallery {

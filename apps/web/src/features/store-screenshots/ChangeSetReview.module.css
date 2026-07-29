@@ -1,0 +1,129 @@
+.dialog {
+  width: min(840px, calc(100vw - 40px));
+  max-height: min(760px, calc(100vh - 40px));
+}
+
+.body {
+  min-height: 0;
+  overflow: auto;
+}
+
+.summary {
+  margin: 0 0 14px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.lockNotice,
+.error {
+  margin: 0 0 12px;
+  padding: 9px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.lockNotice {
+  color: var(--text-muted);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+}
+
+.error {
+  color: var(--danger-text, #b42318);
+  background: color-mix(in srgb, var(--danger-text, #b42318) 8%, transparent);
+}
+
+.differences {
+  display: grid;
+  gap: 14px;
+}
+
+.difference {
+  position: relative;
+  padding: 12px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-subtle);
+}
+
+.previewColumn {
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+}
+
+.previewLabel {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.2;
+  font-weight: 600;
+}
+
+.pagePreview,
+.emptyPreview {
+  min-height: 210px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.pagePreview {
+  position: relative;
+  padding: 18px 14px;
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  text-align: center;
+}
+
+.pagePreview strong {
+  position: relative;
+  z-index: 1;
+  font-size: 15px;
+  line-height: 1.15;
+}
+
+.pagePreview > span:not(.previewDevice) {
+  position: relative;
+  z-index: 1;
+  opacity: 0.7;
+  font-size: 9px;
+  line-height: 1.3;
+}
+
+.previewDevice {
+  position: absolute;
+  left: 18%;
+  right: 18%;
+  bottom: -12%;
+  height: 60%;
+  border: 6px solid #171717;
+  border-radius: 14px 14px 0 0;
+}
+
+.emptyPreview {
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+  background: var(--bg);
+  font-size: 11px;
+}
+
+.unchanged {
+  position: absolute;
+  right: 18px;
+  top: 10px;
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+@media (max-width: 680px) {
+  .difference {
+    grid-template-columns: 1fr;
+  }
+}

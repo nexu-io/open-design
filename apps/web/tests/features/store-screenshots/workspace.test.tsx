@@ -140,6 +140,117 @@ describe('StoreScreenshotWorkspace', () => {
     expect(screen.getByRole('button', { name: 'Generate with AI' })).toBeEnabled();
   });
 
+  it('opens AI output in ChangeSet review and applies only after confirmation', async () => {
+    const completed = structuredClone(completedGenerateJobResponse);
+    if (completed.job.type !== 'generate' || completed.job.status !== 'done') {
+      throw new Error('Expected completed generate fixture');
+    }
+    if (!('preview' in completed.job.result!)) {
+      throw new Error('Expected a generation job result');
+    }
+    completed.job.result.preview = {
+      changeSet: {
+        baseVersion: 1,
+        operations: [{
+          op: 'setText',
+          pageId: 'page-1',
+          field: 'headline',
+          value: 'AI reviewed headline',
+        }],
+      },
+      affectedPageIds: ['page-1'],
+    };
+    const applied = structuredClone(documentResponse);
+    applied.document.version = 2;
+    applied.document.pages[0]!.headline = 'AI reviewed headline';
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/validate')) return jsonResponse({ valid: true, issues: [] });
+      if (url.endsWith('/generate') && init?.method === 'POST') {
+        return jsonResponse(queuedJobResponse('generate'), 202);
+      }
+      if (url.endsWith('/jobs/generate-job-1')) return jsonResponse(completed);
+      if (url.endsWith('/changes/apply')) return jsonResponse(applied);
+      if (url.endsWith('/versions')) return jsonResponse({ versions: [] });
+      return jsonResponse(documentResponse);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<StoreScreenshotWorkspace projectId="project-1" aiGenerationEnabled />);
+    await screen.findAllByTestId('store-screenshot-card');
+    fireEvent.click(screen.getByRole('button', { name: 'Generate with AI' }));
+
+    expect(await screen.findByRole(
+      'dialog',
+      { name: 'Review changes' },
+      { timeout: 2_000 },
+    )).toBeTruthy();
+    expect(fetchMock.mock.calls.some(([input]) => String(input).endsWith('/changes/apply'))).toBe(false);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Apply changes' }));
+
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([input]) => (
+        String(input).endsWith('/changes/apply')
+      ))).toBe(true);
+      expect(screen.getAllByText('AI reviewed headline').length).toBeGreaterThan(0);
+    });
+  });
+
+  it('routes page add, duplicate, delete, order, and lock operations through preview', async () => {
+    const previewedOperations: unknown[] = [];
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/validate')) return jsonResponse({ valid: true, issues: [] });
+      if (url.endsWith('/versions')) return jsonResponse({ versions: [] });
+      if (url.endsWith('/changes/preview') && init?.body) {
+        const changeSet = JSON.parse(String(init.body)) as {
+          operations: unknown[];
+        };
+        previewedOperations.push(changeSet.operations[0]);
+        const operation = changeSet.operations[0] as {
+          op: string;
+          pageId?: string;
+          page?: { id: string };
+        };
+        return jsonResponse({
+          changeSet,
+          affectedPageIds: [operation.pageId ?? operation.page?.id],
+        });
+      }
+      return jsonResponse(documentResponse);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<StoreScreenshotWorkspace projectId="project-1" />);
+    await screen.findAllByTestId('store-screenshot-card');
+
+    for (const action of [
+      'Add page',
+      'Duplicate page',
+      'Move page right',
+      'Lock page',
+      'Delete page',
+    ]) {
+      fireEvent.click(screen.getByRole('button', { name: action }));
+      await screen.findByRole('dialog', { name: 'Review changes' });
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    }
+
+    expect(previewedOperations.map((operation) => (
+      (operation as { op: string }).op
+    ))).toEqual([
+      'insertPage',
+      'duplicatePage',
+      'movePage',
+      'setLocks',
+      'deletePage',
+    ]);
+    expect(fetchMock.mock.calls.filter(([input]) => (
+      String(input).endsWith('/changes/apply')
+    ))).toHaveLength(0);
+  });
+
   it('prevents duplicate generation while the start request is unresolved', async () => {
     let resolveGeneration!: (response: Response) => void;
     const generationResponse = new Promise<Response>((resolve) => {

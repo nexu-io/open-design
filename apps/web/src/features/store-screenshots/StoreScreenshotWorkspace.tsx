@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type Dispatch,
   type SetStateAction,
@@ -11,6 +12,7 @@ import type {
   GenerateStoreScreenshotPlanRequest,
   StoreScreenshotJob,
 } from '@open-design/contracts';
+import type { StoreScreenshotChangeSet } from '@launch-studio/store-screenshot';
 
 import { Icon } from '../../components/Icon';
 import { useT } from '../../i18n';
@@ -19,12 +21,16 @@ import {
   fetchStoreScreenshotJob,
   fetchStoreScreenshotDocument,
   generateStoreScreenshots,
+  previewStoreScreenshotChangeSet,
   storeScreenshotJobDownloadUrl,
   validateStoreScreenshotDocument,
   type StoreScreenshotDocument,
   type StoreScreenshotPlatform,
 } from './api';
 import { StoreScreenshotGallery } from './StoreScreenshotGallery';
+import { StoreScreenshotEditor } from './StoreScreenshotEditor';
+import { ChangeSetReview } from './ChangeSetReview';
+import { VersionHistory } from './VersionHistory';
 import styles from './StoreScreenshotWorkspace.module.css';
 
 interface Props {
@@ -38,6 +44,21 @@ type ValidationState =
   | { status: 'ready' }
   | { status: 'issues' }
   | { status: 'unavailable' };
+
+type WorkspaceMode = 'gallery' | 'editor' | 'versions';
+
+interface ChangeReviewState {
+  changeSet: StoreScreenshotChangeSet;
+  affectedPageIds: string[];
+}
+
+const ALL_PAGE_LOCKS = [
+  'headline',
+  'body',
+  'template',
+  'screenshot',
+  'layout',
+] as const;
 
 const JOB_POLL_INTERVAL_MS = 1_000;
 const MAX_CONSECUTIVE_JOB_POLL_FAILURES = 3;
@@ -160,6 +181,9 @@ export function StoreScreenshotWorkspace({
   const [document, setDocument] = useState<StoreScreenshotDocument | null>(null);
   const [platform, setPlatform] = useState<StoreScreenshotPlatform>('appStore');
   const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
+  const [mode, setMode] = useState<WorkspaceMode>('gallery');
+  const [changeReview, setChangeReview] = useState<ChangeReviewState | null>(null);
+  const [previewSubmitting, setPreviewSubmitting] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [validation, setValidation] = useState<ValidationState>({ status: 'idle' });
@@ -168,6 +192,7 @@ export function StoreScreenshotWorkspace({
   const [generateSubmitting, setGenerateSubmitting] = useState(false);
   const [exportSubmitting, setExportSubmitting] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const reviewedGenerateJobIdRef = useRef<string | null>(null);
   const generating = generateSubmitting || jobIsPending(generateJob);
   const exporting = exportSubmitting || jobIsPending(exportJob);
   const generatePolling = useStoreScreenshotJobPolling(
@@ -218,6 +243,21 @@ export function StoreScreenshotWorkspace({
     };
   }, [document, platform, projectId]);
 
+  useEffect(() => {
+    if (
+      generateJob?.type !== 'generate'
+      || generateJob.status !== 'done'
+      || reviewedGenerateJobIdRef.current === generateJob.id
+      || !generateJob.result
+      || !('preview' in generateJob.result)
+      || generateJob.result.preview.changeSet.operations.length === 0
+    ) {
+      return;
+    }
+    reviewedGenerateJobIdRef.current = generateJob.id;
+    setChangeReview(generateJob.result.preview);
+  }, [generateJob]);
+
   const validationLabel = useMemo(() => {
     switch (validation.status) {
       case 'ready':
@@ -266,6 +306,71 @@ export function StoreScreenshotWorkspace({
     }
   }, [exporting, platform, projectId, validation.status]);
 
+  const selectedPage = document?.pages.find(({ id }) => id === selectedPageId)
+    ?? document?.pages[0]
+    ?? null;
+  const selectedPageIndex = selectedPage && document
+    ? [...document.pages]
+        .sort((left, right) => left.order - right.order)
+        .findIndex(({ id }) => id === selectedPage.id)
+    : -1;
+
+  const requestChangeReview = useCallback(async (
+    changeSet: StoreScreenshotChangeSet,
+  ) => {
+    if (previewSubmitting) return;
+    setPreviewSubmitting(true);
+    setActionError(null);
+    try {
+      setChangeReview(await previewStoreScreenshotChangeSet(projectId, changeSet));
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setPreviewSubmitting(false);
+    }
+  }, [previewSubmitting, projectId]);
+
+  const reviewOperation = (
+    operation: StoreScreenshotChangeSet['operations'][number],
+  ) => {
+    if (!document) return;
+    void requestChangeReview({
+      baseVersion: document.version,
+      operations: [operation],
+    });
+  };
+
+  const handleDocumentUpdated = (nextDocument: StoreScreenshotDocument) => {
+    setDocument(nextDocument);
+    setChangeReview(null);
+    setGenerateJob(null);
+    setSelectedPageId((current) => (
+      nextDocument.pages.some(({ id }) => id === current)
+        ? current
+        : nextDocument.pages[0]?.id ?? null
+    ));
+  };
+
+  const addPage = () => {
+    if (!document) return;
+    const id = nextPageId(document);
+    const orderedPages = [...document.pages].sort((left, right) => left.order - right.order);
+    const lastPage = orderedPages.at(-1);
+    reviewOperation({
+      op: 'insertPage',
+      ...(lastPage ? { afterPageId: lastPage.id } : {}),
+      page: {
+        id,
+        order: document.pages.length,
+        templateId: selectedPage?.templateId ?? 'minimal-center',
+        headline: document.product.features[document.pages.length] ?? document.product.name,
+        ...(document.product.summary ? { body: document.product.summary } : {}),
+        overrides: {},
+        lockedFields: [],
+      },
+    });
+  };
+
   if (loadError) {
     return (
       <section className={styles.workspace} data-testid="store-screenshot-workspace">
@@ -295,6 +400,24 @@ export function StoreScreenshotWorkspace({
         </div>
 
         <div className={styles.actions}>
+          <Button
+            variant="ghost"
+            disabled={!selectedPage || mode === 'versions'}
+            onClick={() => setMode(mode === 'editor' ? 'gallery' : 'editor')}
+          >
+            {mode === 'editor'
+              ? t('storeScreenshots.closeEditor')
+              : t('storeScreenshots.fineEdit')}
+          </Button>
+          <Button
+            variant="ghost"
+            disabled={!document}
+            onClick={() => setMode(mode === 'versions' ? 'gallery' : 'versions')}
+          >
+            {mode === 'versions'
+              ? t('storeScreenshots.closeVersions')
+              : t('storeScreenshots.versionHistory')}
+          </Button>
           <Button
             variant="ghost"
             disabled={!document || !aiGenerationEnabled || generating}
@@ -389,8 +512,80 @@ export function StoreScreenshotWorkspace({
         ) : null}
       </div>
 
-      <div className={styles.content}>
-        {document ? (
+      {document && mode === 'gallery' ? (
+        <div className={styles.pageActions} aria-label={t('storeScreenshots.pageActions')}>
+          <Button variant="ghost" disabled={previewSubmitting} onClick={addPage}>
+            {t('storeScreenshots.addPage')}
+          </Button>
+          <Button
+            variant="ghost"
+            disabled={!selectedPage || previewSubmitting}
+            onClick={() => selectedPage && reviewOperation({
+              op: 'duplicatePage',
+              pageId: selectedPage.id,
+            })}
+          >
+            {t('storeScreenshots.duplicatePage')}
+          </Button>
+          <Button
+            variant="ghost"
+            disabled={!selectedPage || selectedPageIndex <= 0 || previewSubmitting}
+            onClick={() => selectedPage && reviewOperation({
+              op: 'movePage',
+              pageId: selectedPage.id,
+              toIndex: selectedPageIndex - 1,
+            })}
+          >
+            {t('storeScreenshots.movePageLeft')}
+          </Button>
+          <Button
+            variant="ghost"
+            disabled={
+              !selectedPage
+              || !document
+              || selectedPageIndex >= document.pages.length - 1
+              || previewSubmitting
+            }
+            onClick={() => selectedPage && reviewOperation({
+              op: 'movePage',
+              pageId: selectedPage.id,
+              toIndex: selectedPageIndex + 1,
+            })}
+          >
+            {t('storeScreenshots.movePageRight')}
+          </Button>
+          <Button
+            variant="ghost"
+            disabled={!selectedPage || previewSubmitting}
+            onClick={() => selectedPage && reviewOperation({
+              op: 'setLocks',
+              pageId: selectedPage.id,
+              fields: selectedPage.lockedFields.length === ALL_PAGE_LOCKS.length
+                ? []
+                : [...ALL_PAGE_LOCKS],
+            })}
+          >
+            {selectedPage?.lockedFields.length === ALL_PAGE_LOCKS.length
+              ? t('storeScreenshots.unlockPage')
+              : t('storeScreenshots.lockPage')}
+          </Button>
+          <Button
+            variant="ghost"
+            disabled={!selectedPage || document.pages.length <= 1 || previewSubmitting}
+            onClick={() => selectedPage && reviewOperation({
+              op: 'deletePage',
+              pageId: selectedPage.id,
+            })}
+          >
+            {t('storeScreenshots.deletePage')}
+          </Button>
+        </div>
+      ) : null}
+
+      <div
+        className={`${styles.content}${mode === 'gallery' ? '' : ` ${styles.contentSingle}`}`}
+      >
+        {document && mode === 'gallery' ? (
           <StoreScreenshotGallery
             document={document}
             platform={platform}
@@ -402,6 +597,22 @@ export function StoreScreenshotWorkspace({
                 : t('storeScreenshots.page', { n: pageNumber })
             )}
           />
+        ) : document && mode === 'editor' && selectedPage ? (
+          <StoreScreenshotEditor
+            document={document}
+            page={selectedPage}
+            platform={platform}
+            onPreviewChangeSet={(changeSet) => void requestChangeReview(changeSet)}
+          />
+        ) : document && mode === 'versions' ? (
+          <VersionHistory
+            projectId={projectId}
+            currentVersion={document.version}
+            onRestored={(nextDocument) => {
+              handleDocumentUpdated(nextDocument);
+              setMode('gallery');
+            }}
+          />
         ) : (
           <div className={styles.loadingGrid} aria-label={t('common.loading')}>
             {Array.from({ length: 4 }, (_, index) => (
@@ -410,6 +621,28 @@ export function StoreScreenshotWorkspace({
           </div>
         )}
       </div>
+
+      {document && changeReview ? (
+        <ChangeSetReview
+          projectId={projectId}
+          document={document}
+          changeSet={changeReview.changeSet}
+          affectedPageIds={changeReview.affectedPageIds}
+          onApplied={handleDocumentUpdated}
+          onCancel={() => setChangeReview(null)}
+        />
+      ) : null}
     </section>
   );
+}
+
+function nextPageId(document: StoreScreenshotDocument): string {
+  const prefix = `page-${document.version}-${document.pages.length + 1}`;
+  let id = prefix;
+  let suffix = 1;
+  while (document.pages.some((page) => page.id === id)) {
+    suffix += 1;
+    id = `${prefix}-${suffix}`;
+  }
+  return id;
 }

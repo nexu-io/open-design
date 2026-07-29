@@ -1,0 +1,117 @@
+.editor {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(300px, 1fr) 248px;
+  background: var(--bg);
+}
+
+.canvasStage {
+  min-width: 0;
+  min-height: 0;
+  padding: 24px;
+  display: grid;
+  place-items: center;
+  overflow: auto;
+  background:
+    linear-gradient(45deg, var(--bg-muted) 25%, transparent 25%) 0 0 / 16px 16px,
+    linear-gradient(-45deg, var(--bg-muted) 25%, transparent 25%) 0 8px / 16px 16px,
+    linear-gradient(45deg, transparent 75%, var(--bg-muted) 75%) 8px -8px / 16px 16px,
+    linear-gradient(-45deg, transparent 75%, var(--bg-muted) 75%) -8px 0 / 16px 16px,
+    var(--bg-subtle);
+}
+
+.canvasStage :global(.canvas-container) {
+  flex: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+
+.inspector {
+  min-height: 0;
+  padding: 16px;
+  display: grid;
+  align-content: start;
+  gap: 16px;
+  overflow: auto;
+  border-left: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+
+.field,
+.colorField {
+  display: grid;
+  gap: 6px;
+}
+
+.field > span,
+.colorField > span,
+.colorFields legend {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.3;
+  font-weight: 600;
+}
+
+.field input,
+.field textarea,
+.field select {
+  width: 100%;
+  font-size: 12px;
+}
+
+.colorFields {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  border: 0;
+}
+
+.colorFields legend {
+  margin-bottom: 7px;
+}
+
+.colorField input {
+  width: 100%;
+  min-height: 32px;
+  padding: 3px;
+}
+
+.checkboxField {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.checkboxField input {
+  width: 16px;
+  height: 16px;
+}
+
+.lockNotice {
+  margin: 0;
+  padding: 9px 10px;
+  color: var(--text-muted);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+@media (max-width: 860px) {
+  .editor {
+    grid-template-columns: 1fr;
+  }
+
+  .inspector {
+    border-top: 1px solid var(--border);
+    border-left: 0;
+  }
+}
