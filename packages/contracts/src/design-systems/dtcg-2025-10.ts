@@ -38,6 +38,7 @@ export type DtcgDiagnosticCode =
   | 'missing-reference'
   | 'missing-type'
   | 'non-normative-schema-property'
+  | 'profile-mismatch'
   | 'reference-type-mismatch'
   | 'schema-divergence'
   | 'unknown-reserved-property';
@@ -349,6 +350,14 @@ function validateGroupStructure(
       if (root && name === '$schema') {
         if (typeof value !== 'string') {
           addDiagnostic(diagnostics, 'error', 'invalid-metadata', [...path, name], '$schema must be a string.');
+        } else if (value !== DTCG_FORMAT_SCHEMA_URL) {
+          addDiagnostic(
+            diagnostics,
+            'error',
+            'profile-mismatch',
+            [...path, name],
+            `Document carries $schema ${value}, which does not identify the stable DTCG 2025.10 Format profile.`,
+          );
         } else {
           addDiagnostic(
             diagnostics,
@@ -1146,9 +1155,18 @@ function validateUnitObject(
 
 function validateFontFamily(value: DtcgJsonValue, path: string[], diagnostics: DtcgDiagnostic[]): boolean {
   if (typeof value === 'string') return true;
-  if (!Array.isArray(value) || value.length === 0 || value.some((family) => typeof family !== 'string')) {
-    invalidValue(diagnostics, path, 'fontFamily must be a string or a non-empty array of strings.');
+  if (!Array.isArray(value) || value.some((family) => typeof family !== 'string')) {
+    invalidValue(diagnostics, path, 'fontFamily must be a string or an array of strings.');
     return false;
+  }
+  if (value.length === 0) {
+    addDiagnostic(
+      diagnostics,
+      'warning',
+      'schema-divergence',
+      path,
+      'The normative report permits an empty fontFamily array, but the official schema requires at least one item.',
+    );
   }
   return true;
 }
