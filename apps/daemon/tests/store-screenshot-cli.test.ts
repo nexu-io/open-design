@@ -123,6 +123,65 @@ function daemonArgs(baseUrl: string): string[] {
   return ['--daemon-url', baseUrl, '--json'];
 }
 
+function documentFixture(version = 1) {
+  return {
+    schemaVersion: 1,
+    id: 'document-1',
+    projectId: 'project-1',
+    version,
+    product: {
+      name: 'Focus',
+      summary: 'Focus without noise',
+      audience: 'Independent developers',
+      features: ['Focus', 'Weekly review'],
+    },
+    designSystemId: 'clay',
+    assets: [],
+    pages: [{
+      id: 'page-1',
+      order: 0,
+      templateId: 'minimal-center',
+      headline: 'Focus on what matters',
+      overrides: {},
+      lockedFields: [],
+    }],
+  };
+}
+
+function uploadedAssetFixture() {
+  return {
+    id: 'asset-1',
+    mime: 'image/png',
+    width: 1290,
+    height: 2796,
+    contentHash: 'a'.repeat(64),
+    relativePath: `store-screenshots/assets/${'a'.repeat(64)}.png`,
+  };
+}
+
+function exportResultFixture() {
+  return {
+    downloadPath: 'store-screenshots/exports/job-export/store-screenshots.zip',
+    files: [],
+    manifest: {
+      schemaVersion: 1,
+      documentId: 'document-1',
+      documentVersion: 1,
+      exportedAt: '2026-07-29T08:00:00.000Z',
+      platforms: {
+        appStore: {
+          ruleVersion: 1,
+          targetSize: { width: 1290, height: 2796 },
+          pageCount: 0,
+        },
+      },
+      files: [],
+      errors: [],
+      warnings: [],
+    },
+  };
+}
+
 describe('od store-screenshot CLI', () => {
   it('reads a long generate prompt from stdin once and outputs JSON', async () => {
     stub = await startStubServer();
@@ -179,9 +238,10 @@ describe('od store-screenshot CLI', () => {
       pageCount: 4,
       platforms: ['appStore'],
     };
+    const document = documentFixture();
     stub.setResponder(() => ({
       status: 201,
-      body: { document: { id: 'document-1', version: 1 } },
+      body: { document },
     }));
 
     const result = await runCli([
@@ -196,7 +256,7 @@ describe('od store-screenshot CLI', () => {
     expect(result.exitCode).toBe(0);
     expect(JSON.parse(result.stdout)).toEqual({
       ok: true,
-      document: { id: 'document-1', version: 1 },
+      document,
     });
     expect(JSON.parse(stub.requests[0]!.body.toString('utf8'))).toEqual(input);
   });
@@ -208,9 +268,10 @@ describe('od store-screenshot CLI', () => {
     const filePath = join(root, 'screen.png');
     const fileBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a]);
     await writeFile(filePath, fileBytes);
+    const asset = uploadedAssetFixture();
     stub.setResponder(() => ({
       status: 201,
-      body: { asset: { id: 'asset-1', relativePath: 'store-screenshots/assets/hash.png' } },
+      body: { asset },
     }));
 
     const result = await runCli([
@@ -224,7 +285,7 @@ describe('od store-screenshot CLI', () => {
     expect(result.exitCode).toBe(0);
     expect(JSON.parse(result.stdout)).toEqual({
       ok: true,
-      asset: { id: 'asset-1', relativePath: 'store-screenshots/assets/hash.png' },
+      asset,
     });
     expect(stub.requests[0]?.method).toBe('POST');
     expect(stub.requests[0]?.url).toBe('/api/projects/project-1/store-screenshots/assets');
@@ -282,7 +343,7 @@ describe('od store-screenshot CLI', () => {
       }
       return {
         status: 200,
-        body: { document: { id: 'document-1', version: 3 } },
+        body: { document: documentFixture(3) },
       };
     });
 
@@ -317,7 +378,7 @@ describe('od store-screenshot CLI', () => {
     });
     expect(JSON.parse(restore.stdout)).toEqual({
       ok: true,
-      document: { id: 'document-1', version: 3 },
+      document: documentFixture(3),
     });
     expect(stub.requests.map(({ method, url }) => ({ method, url }))).toEqual([
       {
@@ -368,11 +429,7 @@ describe('od store-screenshot CLI', () => {
             status: statusReads === 1 ? 'running' : 'done',
             progress: { completed: statusReads === 1 ? 2 : 4, total: 4 },
             ...(statusReads === 1 ? {} : {
-              result: {
-                downloadPath: 'store-screenshots/exports/job-export/store-screenshots.zip',
-                files: [],
-                manifest: {},
-              },
+              result: exportResultFixture(),
             }),
           },
         },
@@ -454,7 +511,7 @@ describe('od store-screenshot CLI', () => {
             type: 'export',
             status: 'done',
             progress: { completed: 1, total: 1 },
-            result: { downloadPath: 'ignored-server-name.zip' },
+            result: exportResultFixture(),
           },
         },
       };
@@ -472,7 +529,7 @@ describe('od store-screenshot CLI', () => {
 
     expect(result.exitCode).toBe(1);
     expect(JSON.parse(result.stderr)).toMatchObject({
-      error: { code: 'CLI_ERROR' },
+      error: { code: 'FILE_ERROR' },
     });
     expect(await readFile(outputPath, 'utf8')).toBe('keep me');
   });
@@ -488,7 +545,7 @@ describe('od store-screenshot CLI', () => {
           type: 'export',
           status: reads === 1 ? 'running' : 'done',
           progress: { completed: reads === 1 ? 1 : 2, total: 2 },
-          ...(reads === 1 ? {} : { result: { downloadPath: 'safe.zip' } }),
+          ...(reads === 1 ? {} : { result: exportResultFixture() }),
         },
       }), {
         status: 200,
@@ -575,5 +632,189 @@ describe('od store-screenshot CLI', () => {
     expect(invalidVersion.exitCode).toBe(2);
     expect(invalidVersion.stderr).toContain('positive integer');
     expect(stub.requests).toHaveLength(0);
+  });
+
+  it('requires create --input and emits a JSON argument error when --json precedes the command', async () => {
+    stub = await startStubServer();
+
+    const result = await runCli([
+      '--json',
+      'store-screenshot',
+      'create',
+      'project-1',
+      '--daemon-url',
+      stub.baseUrl,
+    ]);
+
+    expect(result.exitCode).toBe(2);
+    expect(result.stdout).toBe('');
+    expect(JSON.parse(result.stderr)).toMatchObject({
+      ok: false,
+      error: {
+        code: 'INVALID_ARGUMENT',
+        message: expect.stringContaining('--input <json>'),
+        details: {},
+      },
+    });
+    expect(stub.requests).toHaveLength(0);
+  });
+
+  it('distinguishes explicit help from a missing command under --json', async () => {
+    const help = await runCli(['store-screenshot', '--help']);
+    const missing = await runCli(['store-screenshot', '--json']);
+
+    expect(help.exitCode).toBe(0);
+    expect(help.stdout).toContain('od store-screenshot create <project-id> --input <json>');
+    expect(missing.exitCode).toBe(2);
+    expect(missing.stdout).toBe('');
+    expect(JSON.parse(missing.stderr)).toMatchObject({
+      ok: false,
+      error: {
+        code: 'INVALID_ARGUMENT',
+        message: expect.stringContaining('command'),
+        details: {},
+      },
+    });
+  });
+
+  it.each([
+    ['flag from another command', ['create', 'project-1', '--platform', 'all', '--json']],
+    ['unknown flag', ['versions', 'project-1', '--bogus', '--json']],
+    ['duplicate boolean flag', ['versions', 'project-1', '--json', '--json']],
+    ['duplicate string flag', ['validate', 'project-1', '--platform', 'all', '--platform', 'app-store', '--json']],
+  ])('rejects %s before making HTTP requests', async (_label, args) => {
+    stub = await startStubServer();
+
+    const result = await runCli([
+      'store-screenshot',
+      ...args,
+      '--daemon-url',
+      stub.baseUrl,
+    ]);
+
+    expect(result.exitCode).toBe(2);
+    expect(result.stdout).toBe('');
+    expect(JSON.parse(result.stderr)).toMatchObject({
+      ok: false,
+      error: {
+        code: 'INVALID_ARGUMENT',
+        message: expect.any(String),
+        details: expect.any(Object),
+      },
+    });
+    expect(stub.requests).toHaveLength(0);
+  });
+
+  it.each([
+    ['invalid create JSON', ['create', 'project-1', '--input', '{', '--json'], 'INVALID_JSON'],
+    ['invalid create request', ['create', 'project-1', '--input', '{}', '--json'], 'INVALID_INPUT'],
+    ['missing prompt file', ['generate', 'project-1', '--json'], 'INVALID_ARGUMENT'],
+    ['invalid platform', ['validate', 'project-1', '--platform', 'windows-store', '--json'], 'INVALID_ARGUMENT'],
+    ['invalid version', ['restore', 'project-1', '../2', '--json'], 'INVALID_ARGUMENT'],
+    ['missing upload file', ['upload', 'project-1', '/does/not/exist.png', '--json'], 'FILE_ERROR'],
+  ])('emits one machine-readable local error for %s', async (_label, args, code) => {
+    stub = await startStubServer();
+
+    const result = await runCli([
+      'store-screenshot',
+      ...args,
+      '--daemon-url',
+      stub.baseUrl,
+    ]);
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stdout).toBe('');
+    expect(result.stderr.trim().split('\n').length).toBeGreaterThan(0);
+    expect(JSON.parse(result.stderr)).toMatchObject({
+      ok: false,
+      error: {
+        code,
+        message: expect.any(String),
+        details: expect.any(Object),
+      },
+    });
+    expect(stub.requests).toHaveLength(0);
+  });
+
+  it('returns a non-zero structured result when validation issues are present', async () => {
+    stub = await startStubServer();
+    const issues = [{
+      severity: 'error',
+      code: 'PAGE_COUNT',
+      message: 'App Store requires at least one visible screenshot',
+      platform: 'appStore',
+    }];
+    stub.setResponder(() => ({
+      status: 200,
+      body: { valid: false, issues },
+    }));
+
+    const result = await runCli([
+      'store-screenshot',
+      'validate',
+      'project-1',
+      ...daemonArgs(stub.baseUrl),
+    ]);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toBe('');
+    expect(JSON.parse(result.stderr)).toEqual({
+      ok: false,
+      error: {
+        code: 'VALIDATION_FAILED',
+        message: 'Store screenshot validation failed',
+        details: { issues },
+      },
+    });
+
+    const humanResult = await runCli([
+      'store-screenshot',
+      'validate',
+      'project-1',
+      '--daemon-url',
+      stub.baseUrl,
+    ]);
+    expect(humanResult.exitCode).toBe(1);
+    expect(humanResult.stderr).toContain('Store screenshot validation failed');
+    expect(humanResult.stderr).toContain('PAGE_COUNT');
+    expect(humanResult.stderr).toContain(issues[0]!.message);
+  });
+
+  it.each([
+    ['document', ['create', 'project-1', '--input', JSON.stringify({
+      product: { name: 'Focus', summary: '', audience: '', features: [] },
+      designSystemId: 'clay',
+      templateId: 'minimal-center',
+      pageCount: 1,
+    })]],
+    ['asset', ['upload', 'project-1', '__UPLOAD_FILE__']],
+    ['job', ['status', 'project-1', 'job-1']],
+    ['versions', ['versions', 'project-1']],
+    ['validation', ['validate', 'project-1']],
+  ])('rejects a malformed successful %s response as a protocol error', async (_kind, rawArgs) => {
+    stub = await startStubServer();
+    const root = await mkdtemp(join(tmpdir(), 'od-store-screenshot-cli-protocol-'));
+    tempRoots.push(root);
+    const uploadPath = join(root, 'screen.png');
+    await writeFile(uploadPath, Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    const args = rawArgs.map((arg) => arg === '__UPLOAD_FILE__' ? uploadPath : arg);
+    stub.setResponder(() => ({ status: 200, body: {} }));
+
+    const result = await runCli([
+      'store-screenshot',
+      ...args,
+      ...daemonArgs(stub.baseUrl),
+    ]);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toBe('');
+    expect(JSON.parse(result.stderr)).toMatchObject({
+      ok: false,
+      error: {
+        code: 'PROTOCOL_ERROR',
+        message: expect.stringContaining('invalid'),
+        details: { issues: expect.any(Array) },
+      },
+    });
   });
 });

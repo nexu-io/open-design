@@ -3,6 +3,16 @@ import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { basename, join, resolve } from 'node:path';
 
+import {
+  CreateStoreScreenshotDocumentRequestSchema,
+  StoreScreenshotDocumentResponseSchema,
+  StoreScreenshotJobResponseSchema,
+  StoreScreenshotValidationResultSchema,
+  StoreScreenshotVersionsResponseSchema,
+  UploadStoreScreenshotAssetResponseSchema,
+  type StoreScreenshotJob,
+} from '@open-design/contracts';
+
 import { resolveDaemonUrl } from '../daemon-url.js';
 
 type StoreScreenshotCommand =
@@ -16,14 +26,6 @@ type StoreScreenshotCommand =
   | 'restore';
 
 type StoreScreenshotApiPlatform = 'appStore' | 'googlePlay';
-
-interface StoreScreenshotJob {
-  id: string;
-  status: 'queued' | 'running' | 'done' | 'failed' | 'interrupted';
-  progress?: { completed: number; total: number };
-  error?: { code?: string; message?: string };
-  [key: string]: unknown;
-}
 
 interface ParsedStoreScreenshotArgs {
   command: string | undefined;
@@ -42,6 +44,38 @@ interface ParsedStoreScreenshotArgs {
 
 interface StoreScreenshotCliResult {
   exitCode: number;
+}
+
+interface StoreScreenshotCliError {
+  code: string;
+  message: string;
+  details: Record<string, unknown>;
+  exitCode: number;
+}
+
+interface ParsedStoreScreenshotSuccess {
+  ok: true;
+  value: ParsedStoreScreenshotArgs;
+}
+
+interface ParsedStoreScreenshotFailure {
+  ok: false;
+  error: StoreScreenshotCliError;
+  json: boolean;
+}
+
+type ParsedStoreScreenshotResult =
+  | ParsedStoreScreenshotSuccess
+  | ParsedStoreScreenshotFailure;
+
+interface StrictSchema<T> {
+  safeParse(value: unknown):
+    | { success: true; data: T }
+    | { success: false; error: { issues: Array<{
+      code: string;
+      message: string;
+      path: PropertyKey[];
+    }> } };
 }
 
 export type StoreScreenshotCliFetch = (
@@ -77,7 +111,7 @@ interface StoreScreenshotRequestDeps {
 }
 
 const USAGE = `Usage:
-  od store-screenshot create <project-id> [--input <json>] [--json]
+  od store-screenshot create <project-id> --input <json> [--json]
   od store-screenshot upload <project-id> <file> [--json]
   od store-screenshot generate <project-id> --prompt-file <path|-> [--json]
   od store-screenshot validate <project-id> [--platform app-store|google-play|all] [--json]
@@ -91,50 +125,188 @@ Options:
   --json                   Emit a machine-readable result envelope.
 `;
 
-function parseArgs(args: string[]): ParsedStoreScreenshotArgs | { error: string } {
-  const [command, ...rest] = args;
+const STORE_SCREENSHOT_COMMANDS = new Set<StoreScreenshotCommand>([
+  'create',
+  'upload',
+  'generate',
+  'validate',
+  'export',
+  'status',
+  'versions',
+  'restore',
+]);
+
+const STRING_FLAGS = new Set([
+  'daemon-url',
+  'input',
+  'prompt-file',
+  'platform',
+  'output',
+]);
+const BOOLEAN_FLAGS = new Set(['json', 'wait', 'help']);
+const COMMON_FLAGS = new Set(['daemon-url', 'json', 'help']);
+const COMMAND_FLAGS: Record<StoreScreenshotCommand, ReadonlySet<string>> = {
+  create: new Set([...COMMON_FLAGS, 'input']),
+  upload: COMMON_FLAGS,
+  generate: new Set([...COMMON_FLAGS, 'prompt-file']),
+  validate: new Set([...COMMON_FLAGS, 'platform']),
+  export: new Set([...COMMON_FLAGS, 'platform', 'output', 'wait']),
+  status: COMMON_FLAGS,
+  versions: COMMON_FLAGS,
+  restore: COMMON_FLAGS,
+};
+
+function cliError(
+  code: string,
+  message: string,
+  details: Record<string, unknown> = {},
+  exitCode = 2,
+): StoreScreenshotCliError {
+  return { code, message, details, exitCode };
+}
+
+function parseArgs(args: string[]): ParsedStoreScreenshotResult {
+  const jsonRequested = args.some((arg) => arg === '--json' || arg.startsWith('--json='));
+  const commandIndex = args.findIndex((arg) => STORE_SCREENSHOT_COMMANDS.has(
+    arg as StoreScreenshotCommand,
+  ));
+  const command = commandIndex >= 0 ? args[commandIndex] : undefined;
   const parsed: ParsedStoreScreenshotArgs = {
     command,
     positionals: [],
     flags: {
       json: false,
       wait: false,
-      help: command === 'help' || command === '-h' || command === '--help',
+      help: false,
     },
   };
-  for (let index = 0; index < rest.length; index += 1) {
-    const arg = rest[index];
+  const allowedFlags = command && STORE_SCREENSHOT_COMMANDS.has(command as StoreScreenshotCommand)
+    ? COMMAND_FLAGS[command as StoreScreenshotCommand]
+    : COMMON_FLAGS;
+  const seenFlags = new Set<string>();
+  for (let index = 0; index < args.length; index += 1) {
+    if (index === commandIndex) continue;
+    const arg = args[index];
     if (arg == null) continue;
-    if (arg === '--help' || arg === '-h') {
-      parsed.flags.help = true;
-      continue;
-    }
     if (!arg.startsWith('--')) {
+      if (arg === '-h') {
+        if (seenFlags.has('help')) {
+          return {
+            ok: false,
+            json: jsonRequested,
+            error: cliError('INVALID_ARGUMENT', 'duplicate flag: --help', { flag: 'help' }),
+          };
+        }
+        seenFlags.add('help');
+        parsed.flags.help = true;
+        continue;
+      }
+      if (arg.startsWith('-')) {
+        return {
+          ok: false,
+          json: jsonRequested,
+          error: cliError(
+            'INVALID_ARGUMENT',
+            `unknown flag: ${arg}. Run with --help for accepted flags.`,
+            { flag: arg },
+          ),
+        };
+      }
+      if (arg === 'help' && commandIndex < 0) {
+        parsed.flags.help = true;
+        continue;
+      }
       parsed.positionals.push(arg);
       continue;
     }
-    if (arg === '--json') {
-      parsed.flags.json = true;
+    const equalsIndex = arg.indexOf('=');
+    const flag = (equalsIndex >= 0 ? arg.slice(2, equalsIndex) : arg.slice(2));
+    const inlineValue = equalsIndex >= 0 ? arg.slice(equalsIndex + 1) : undefined;
+    if (!STRING_FLAGS.has(flag) && !BOOLEAN_FLAGS.has(flag)) {
+      return {
+        ok: false,
+        json: jsonRequested,
+        error: cliError(
+          'INVALID_ARGUMENT',
+          `unknown flag: --${flag}. Run with --help for accepted flags.`,
+          { flag },
+        ),
+      };
+    }
+    if (!allowedFlags.has(flag)) {
+      return {
+        ok: false,
+        json: jsonRequested,
+        error: cliError(
+          'INVALID_ARGUMENT',
+          `--${flag} is not valid for store-screenshot ${command ?? '(missing command)'}`,
+          { command: command ?? null, flag },
+        ),
+      };
+    }
+    if (seenFlags.has(flag)) {
+      return {
+        ok: false,
+        json: jsonRequested,
+        error: cliError('INVALID_ARGUMENT', `duplicate flag: --${flag}`, { flag }),
+      };
+    }
+    seenFlags.add(flag);
+    if (BOOLEAN_FLAGS.has(flag)) {
+      if (inlineValue !== undefined) {
+        return {
+          ok: false,
+          json: jsonRequested,
+          error: cliError(
+            'INVALID_ARGUMENT',
+            `flag --${flag} does not accept a value`,
+            { flag },
+          ),
+        };
+      }
+      if (flag === 'json') parsed.flags.json = true;
+      else if (flag === 'wait') parsed.flags.wait = true;
+      else parsed.flags.help = true;
       continue;
     }
-    if (arg === '--wait') {
-      parsed.flags.wait = true;
-      continue;
+    const nextIndex = index + 1;
+    const value = inlineValue ?? (
+      nextIndex === commandIndex ? undefined : args[nextIndex]
+    );
+    const stdinPromptValue = flag === 'prompt-file' && value === '-';
+    if (
+      value == null
+      || (inlineValue === undefined && value.startsWith('-') && !stdinPromptValue)
+    ) {
+      return {
+        ok: false,
+        json: jsonRequested,
+        error: cliError(
+          'INVALID_ARGUMENT',
+          `flag --${flag} requires a value`,
+          { flag },
+        ),
+      };
     }
-    const option = arg.includes('=') ? arg.slice(0, arg.indexOf('=')) : arg;
-    const inlineValue = arg.includes('=') ? arg.slice(arg.indexOf('=') + 1) : undefined;
-    const value = inlineValue ?? rest[++index];
-    if (value == null || (inlineValue === undefined && value.startsWith('--'))) {
-      return { error: `${option} requires a value` };
-    }
-    if (option === '--daemon-url') parsed.flags.daemonUrl = value;
-    else if (option === '--input') parsed.flags.input = value;
-    else if (option === '--prompt-file') parsed.flags.promptFile = value;
-    else if (option === '--platform') parsed.flags.platform = value;
-    else if (option === '--output') parsed.flags.output = value;
-    else return { error: `unknown flag: ${option}. Run with --help for accepted flags.` };
+    if (inlineValue === undefined) index = nextIndex;
+    if (flag === 'daemon-url') parsed.flags.daemonUrl = value;
+    else if (flag === 'input') parsed.flags.input = value;
+    else if (flag === 'prompt-file') parsed.flags.promptFile = value;
+    else if (flag === 'platform') parsed.flags.platform = value;
+    else if (flag === 'output') parsed.flags.output = value;
   }
-  return parsed;
+  if (commandIndex < 0 && parsed.positionals.length > 0 && !parsed.flags.help) {
+    return {
+      ok: false,
+      json: jsonRequested,
+      error: cliError(
+        'INVALID_ARGUMENT',
+        `unknown subcommand: od store-screenshot ${parsed.positionals[0]}`,
+        { command: parsed.positionals[0] },
+      ),
+    };
+  }
+  return { ok: true, value: parsed };
 }
 
 function writeJson(
@@ -144,22 +316,65 @@ function writeJson(
   stream.write(`${JSON.stringify(value, null, 2)}\n`);
 }
 
-function fail(
-  message: string,
+function writeCliError(
+  error: StoreScreenshotCliError,
+  json: boolean,
   stderr: Pick<NodeJS.WriteStream, 'write'>,
-  exitCode = 2,
 ): StoreScreenshotCliResult {
-  stderr.write(`${message}\n`);
-  return { exitCode };
+  if (json) {
+    writeJson({
+      ok: false,
+      error: {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+      },
+    }, stderr);
+  } else {
+    stderr.write(`${error.message}\n`);
+    const issues = Array.isArray(error.details.issues) ? error.details.issues : [];
+    for (const issue of issues) {
+      if (!issue || typeof issue !== 'object') continue;
+      const code = 'code' in issue ? String(issue.code) : 'ISSUE';
+      const message = 'message' in issue ? String(issue.message) : '';
+      stderr.write(`  [${code}] ${message}\n`);
+    }
+  }
+  return { exitCode: error.exitCode };
 }
 
-function failStructured(
-  code: string,
-  message: string,
-  stderr: Pick<NodeJS.WriteStream, 'write'>,
-): StoreScreenshotCliResult {
-  writeJson({ error: { code, message, data: {} } }, stderr);
-  return { exitCode: 1 };
+class StoreScreenshotCliException extends Error {
+  constructor(readonly cliError: StoreScreenshotCliError) {
+    super(cliError.message);
+    this.name = 'StoreScreenshotCliException';
+  }
+}
+
+function schemaIssueDetails(
+  issues: Array<{ code: string; message: string; path: PropertyKey[] }>,
+): { issues: Array<{ code: string; message: string; path: string }> } {
+  return {
+    issues: issues.map((issue) => ({
+      code: issue.code,
+      message: issue.message,
+      path: issue.path.map(String).join('.'),
+    })),
+  };
+}
+
+function parseStrictResponse<T>(
+  schema: StrictSchema<T>,
+  value: unknown,
+  label: string,
+): T {
+  const parsed = schema.safeParse(value);
+  if (parsed.success) return parsed.data;
+  throw new StoreScreenshotCliException(cliError(
+    'PROTOCOL_ERROR',
+    `Daemon returned an invalid ${label} response`,
+    schemaIssueDetails(parsed.error.issues),
+    1,
+  ));
 }
 
 function platformsFromFlag(
@@ -174,21 +389,6 @@ function platformsFromFlag(
 
 function encodedBasePath(projectId: string): string {
   return `/api/projects/${encodeURIComponent(projectId)}/store-screenshots`;
-}
-
-function readJob(payload: unknown): StoreScreenshotJob | null {
-  if (!payload || typeof payload !== 'object') return null;
-  const job = (payload as { job?: unknown }).job;
-  if (!job || typeof job !== 'object') return null;
-  const id = (job as { id?: unknown }).id;
-  const status = (job as { status?: unknown }).status;
-  if (
-    typeof id !== 'string'
-    || !['queued', 'running', 'done', 'failed', 'interrupted'].includes(String(status))
-  ) {
-    return null;
-  }
-  return job as StoreScreenshotJob;
 }
 
 async function defaultSleep(milliseconds: number): Promise<void> {
@@ -220,7 +420,19 @@ async function requestJson(
   deps: StoreScreenshotRequestDeps,
   baseUrl: string,
 ): Promise<unknown> {
-  return request(url, init, deps, baseUrl).then((response) => response.json());
+  const response = await request(url, init, deps, baseUrl);
+  let raw = '';
+  try {
+    raw = await response.text();
+    return JSON.parse(raw) as unknown;
+  } catch {
+    throw new StoreScreenshotCliException(cliError(
+      'PROTOCOL_ERROR',
+      'Daemon returned invalid JSON',
+      { status: response.status },
+      1,
+    ));
+  }
 }
 
 function jsonPost(body: unknown): RequestInit {
@@ -235,8 +447,17 @@ async function readPrompt(
   promptFile: string,
   readStdin: () => Promise<string>,
 ): Promise<string> {
-  if (promptFile === '-') return readStdin();
-  return readFile(promptFile, 'utf8');
+  try {
+    if (promptFile === '-') return await readStdin();
+    return await readFile(promptFile, 'utf8');
+  } catch (error) {
+    throw new StoreScreenshotCliException(cliError(
+      'FILE_ERROR',
+      `Unable to read prompt file: ${error instanceof Error ? error.message : String(error)}`,
+      { path: promptFile },
+      1,
+    ));
+  }
 }
 
 function mimeForUpload(filePath: string): string | null {
@@ -249,16 +470,25 @@ function mimeForUpload(filePath: string): string | null {
 
 async function writeDownloadSafely(outputDir: string, body: Buffer): Promise<string> {
   const directory = resolve(outputDir);
-  await mkdir(directory, { recursive: true });
   const destination = join(directory, 'store-screenshots.zip');
   const temporary = join(directory, `.store-screenshots.${process.pid}.${randomUUID()}.tmp`);
   try {
+    await mkdir(directory, { recursive: true });
     await writeFile(temporary, body, { flag: 'wx', mode: 0o600 });
     await link(temporary, destination);
+    return destination;
+  } catch (error) {
+    throw new StoreScreenshotCliException(cliError(
+      'FILE_ERROR',
+      `Unable to write store screenshot export: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+      { outputPath: destination },
+      1,
+    ));
   } finally {
     await rm(temporary, { force: true });
   }
-  return destination;
 }
 
 function outputSuccess(
@@ -295,8 +525,22 @@ export async function pollStoreScreenshotJob({
       await onHttpFailure(response);
       throw new Error('structured HTTP failure handler unexpectedly returned');
     }
-    const job = readJob(await response.json());
-    if (!job) throw new Error('Daemon returned an invalid store screenshot job');
+    let payload: unknown;
+    try {
+      payload = JSON.parse(await response.text()) as unknown;
+    } catch {
+      throw new StoreScreenshotCliException(cliError(
+        'PROTOCOL_ERROR',
+        'Daemon returned invalid JSON',
+        { status: response.status },
+        1,
+      ));
+    }
+    const { job } = parseStrictResponse(
+      StoreScreenshotJobResponseSchema,
+      payload,
+      'store screenshot job',
+    );
     if (job.status !== 'queued' && job.status !== 'running') return job;
     await sleep(intervalMs);
   }
@@ -308,81 +552,134 @@ export async function runStoreScreenshotCli(
 ): Promise<StoreScreenshotCliResult> {
   const stdout = deps.stdout ?? process.stdout;
   const stderr = deps.stderr ?? process.stderr;
-  const parsed = parseArgs(args);
-  if ('error' in parsed) return fail(parsed.error, stderr);
-  if (parsed.flags.help || !parsed.command) {
-    stdout.write(USAGE);
-    return { exitCode: parsed.command ? 0 : 2 };
+  const parsedResult = parseArgs(args);
+  if (!parsedResult.ok) {
+    return writeCliError(parsedResult.error, parsedResult.json, stderr);
   }
-  if (![
-    'create',
-    'upload',
-    'generate',
-    'validate',
-    'export',
-    'status',
-    'versions',
-    'restore',
-  ].includes(parsed.command)) {
-    return fail(`unknown subcommand: od store-screenshot ${parsed.command}`, stderr);
+  const parsed = parsedResult.value;
+  if (parsed.flags.help) {
+    stdout.write(USAGE);
+    return { exitCode: 0 };
+  }
+  if (!parsed.command) {
+    return writeCliError(cliError(
+      'INVALID_ARGUMENT',
+      'store-screenshot command is required',
+      {},
+    ), parsed.flags.json, stderr);
   }
   const command = parsed.command as StoreScreenshotCommand;
   const [projectId, secondPositional, ...extraPositionals] = parsed.positionals;
   if (!projectId || extraPositionals.length > 0) {
-    return fail(`Invalid arguments.\n${USAGE}`, stderr);
+    return writeCliError(cliError(
+      'INVALID_ARGUMENT',
+      'Invalid positional arguments. Run `od store-screenshot --help` for usage.',
+      { command, received: parsed.positionals },
+    ), parsed.flags.json, stderr);
   }
   if (command === 'upload' || command === 'status' || command === 'restore') {
-    if (!secondPositional) return fail(`Invalid arguments.\n${USAGE}`, stderr);
+    if (!secondPositional) {
+      return writeCliError(cliError(
+        'INVALID_ARGUMENT',
+        `store-screenshot ${command} requires a second positional argument`,
+        { command },
+      ), parsed.flags.json, stderr);
+    }
   } else if (secondPositional) {
-    return fail(`Invalid arguments.\n${USAGE}`, stderr);
+    return writeCliError(cliError(
+      'INVALID_ARGUMENT',
+      `store-screenshot ${command} accepts only <project-id>`,
+      { command, received: parsed.positionals },
+    ), parsed.flags.json, stderr);
+  }
+  if (command === 'create' && !parsed.flags.input) {
+    return writeCliError(cliError(
+      'INVALID_ARGUMENT',
+      'store-screenshot create requires --input <json>',
+      { command },
+    ), parsed.flags.json, stderr);
+  }
+  if (command === 'generate' && !parsed.flags.promptFile) {
+    return writeCliError(cliError(
+      'INVALID_ARGUMENT',
+      'store-screenshot generate requires --prompt-file <path|->',
+      { command },
+    ), parsed.flags.json, stderr);
   }
   if (parsed.flags.output && (!parsed.flags.wait || command !== 'export')) {
-    return fail('--output requires `store-screenshot export --wait`', stderr);
+    return writeCliError(cliError(
+      'INVALID_ARGUMENT',
+      '--output requires `store-screenshot export --wait`',
+      { command },
+    ), parsed.flags.json, stderr);
   }
   const platforms = platformsFromFlag(parsed.flags.platform);
   if ((command === 'validate' || command === 'export') && !platforms) {
-    return fail('--platform must be one of: app-store | google-play | all', stderr);
+    return writeCliError(cliError(
+      'INVALID_ARGUMENT',
+      '--platform must be one of: app-store | google-play | all',
+      { platform: parsed.flags.platform },
+    ), parsed.flags.json, stderr);
   }
-  if (
-    parsed.flags.platform
-    && command !== 'validate'
-    && command !== 'export'
-  ) {
-    return fail('--platform is only valid with validate or export', stderr);
-  }
-  const daemonUrl = await resolveDaemonUrl(
-    parsed.flags.daemonUrl ? { flagUrl: parsed.flags.daemonUrl } : {},
-  );
-  const baseUrl = daemonUrl.replace(/\/$/, '');
-  const basePath = encodedBasePath(projectId);
-  const requestDeps = {
-    fetchFn: deps.fetchFn,
-    onHttpFailure: deps.onHttpFailure,
-    onNetworkFailure: deps.onNetworkFailure,
-  };
 
   try {
+    let createInput: unknown;
     if (command === 'create') {
-      let input: unknown = {};
-      if (parsed.flags.input != null) {
-        try {
-          input = JSON.parse(parsed.flags.input) as unknown;
-        } catch (error) {
-          return fail(
-            `--input must be valid JSON: ${error instanceof Error ? error.message : String(error)}`,
-            stderr,
-          );
-        }
-        if (!input || typeof input !== 'object' || Array.isArray(input)) {
-          return fail('--input must be a JSON object', stderr);
-        }
+      try {
+        createInput = JSON.parse(parsed.flags.input!) as unknown;
+      } catch (error) {
+        throw new StoreScreenshotCliException(cliError(
+          'INVALID_JSON',
+          `--input must be valid JSON: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+          {},
+        ));
       }
-      const payload = await requestJson(
+      const validated = CreateStoreScreenshotDocumentRequestSchema.safeParse(createInput);
+      if (!validated.success) {
+        throw new StoreScreenshotCliException(cliError(
+          'INVALID_INPUT',
+          '--input does not match the store screenshot create contract',
+          schemaIssueDetails(validated.error.issues),
+        ));
+      }
+      createInput = validated.data;
+    }
+    const version = command === 'restore' ? Number(secondPositional) : null;
+    if (
+      command === 'restore'
+      && (!Number.isInteger(version) || Number(version) <= 0 || String(version) !== secondPositional)
+    ) {
+      throw new StoreScreenshotCliException(cliError(
+        'INVALID_ARGUMENT',
+        'restore version must be a positive integer',
+        { version: secondPositional },
+      ));
+    }
+    const daemonUrl = await resolveDaemonUrl(
+      parsed.flags.daemonUrl ? { flagUrl: parsed.flags.daemonUrl } : {},
+    );
+    const baseUrl = daemonUrl.replace(/\/$/, '');
+    const basePath = encodedBasePath(projectId);
+    const requestDeps: StoreScreenshotRequestDeps = {
+      fetchFn: deps.fetchFn,
+      onHttpFailure: deps.onHttpFailure,
+      onNetworkFailure: deps.onNetworkFailure,
+    };
+
+    if (command === 'create') {
+      const rawPayload = await requestJson(
         `${baseUrl}${basePath}`,
-        jsonPost(input),
+        jsonPost(createInput),
         requestDeps,
         baseUrl,
-      ) as { document?: unknown };
+      );
+      const payload = parseStrictResponse(
+        StoreScreenshotDocumentResponseSchema,
+        rawPayload,
+        'store screenshot document',
+      );
       return outputSuccess(
         { document: payload.document },
         parsed.flags.json,
@@ -394,16 +691,39 @@ export async function runStoreScreenshotCli(
     if (command === 'upload') {
       const filePath = secondPositional!;
       const mime = mimeForUpload(filePath);
-      if (!mime) return fail('upload file must be PNG, JPEG, or WebP', stderr);
-      const bytes = await readFile(filePath);
+      if (!mime) {
+        throw new StoreScreenshotCliException(cliError(
+          'INVALID_ARGUMENT',
+          'upload file must be PNG, JPEG, or WebP',
+          { path: filePath },
+        ));
+      }
+      let bytes: Buffer;
+      try {
+        bytes = await readFile(filePath);
+      } catch (error) {
+        throw new StoreScreenshotCliException(cliError(
+          'FILE_ERROR',
+          `Unable to read upload file: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+          { path: filePath },
+          1,
+        ));
+      }
       const form = new FormData();
       form.append('file', new Blob([bytes], { type: mime }), basename(filePath));
-      const payload = await requestJson(
+      const rawPayload = await requestJson(
         `${baseUrl}${basePath}/assets`,
         { method: 'POST', body: form },
         requestDeps,
         baseUrl,
-      ) as { asset?: unknown };
+      );
+      const payload = parseStrictResponse(
+        UploadStoreScreenshotAssetResponseSchema,
+        rawPayload,
+        'store screenshot asset',
+      );
       return outputSuccess(
         { asset: payload.asset },
         parsed.flags.json,
@@ -413,22 +733,28 @@ export async function runStoreScreenshotCli(
     }
 
     if (command === 'generate') {
-      if (!parsed.flags.promptFile) {
-        return fail('generate requires --prompt-file <path|->', stderr);
-      }
       const prompt = await readPrompt(
-        parsed.flags.promptFile,
+        parsed.flags.promptFile!,
         deps.readStdin ?? (async () => readFileSync(0, 'utf8')),
       );
-      if (!prompt) return fail('--prompt-file must not be empty', stderr);
-      const payload = await requestJson(
+      if (!prompt) {
+        throw new StoreScreenshotCliException(cliError(
+          'INVALID_ARGUMENT',
+          '--prompt-file must not be empty',
+          { path: parsed.flags.promptFile },
+        ));
+      }
+      const rawPayload = await requestJson(
         `${baseUrl}${basePath}/generate`,
         jsonPost({ prompt }),
         requestDeps,
         baseUrl,
       );
-      const job = readJob(payload);
-      if (!job) return failStructured('INVALID_RESPONSE', 'Daemon returned an invalid job', stderr);
+      const { job } = parseStrictResponse(
+        StoreScreenshotJobResponseSchema,
+        rawPayload,
+        'store screenshot job',
+      );
       return outputSuccess(
         { jobId: job.id, job },
         parsed.flags.json,
@@ -438,32 +764,45 @@ export async function runStoreScreenshotCli(
     }
 
     if (command === 'validate') {
-      const payload = await requestJson(
+      const rawPayload = await requestJson(
         `${baseUrl}${basePath}/validate`,
         jsonPost({ platforms }),
         requestDeps,
         baseUrl,
-      ) as Record<string, unknown>;
-      const valid = payload.valid === true;
+      );
+      const payload = parseStrictResponse(
+        StoreScreenshotValidationResultSchema,
+        rawPayload,
+        'store screenshot validation',
+      );
+      if (!payload.valid) {
+        return writeCliError(cliError(
+          'VALIDATION_FAILED',
+          'Store screenshot validation failed',
+          { issues: payload.issues },
+          1,
+        ), parsed.flags.json, stderr);
+      }
       return outputSuccess(
         payload,
         parsed.flags.json,
         stdout,
-        `[store-screenshot] validation ${valid ? 'passed' : 'failed'}`,
+        '[store-screenshot] validation passed',
       );
     }
 
     if (command === 'export') {
-      const payload = await requestJson(
+      const rawPayload = await requestJson(
         `${baseUrl}${basePath}/export`,
         jsonPost({ platforms }),
         requestDeps,
         baseUrl,
       );
-      const queuedJob = readJob(payload);
-      if (!queuedJob) {
-        return failStructured('INVALID_RESPONSE', 'Daemon returned an invalid job', stderr);
-      }
+      const { job: queuedJob } = parseStrictResponse(
+        StoreScreenshotJobResponseSchema,
+        rawPayload,
+        'store screenshot job',
+      );
       if (!parsed.flags.wait) {
         return outputSuccess(
           { jobId: queuedJob.id, job: queuedJob },
@@ -482,11 +821,12 @@ export async function runStoreScreenshotCli(
         onNetworkFailure: deps.onNetworkFailure,
       });
       if (job.status === 'failed' || job.status === 'interrupted') {
-        return failStructured(
+        return writeCliError(cliError(
           job.error?.code ?? 'JOB_FAILED',
           job.error?.message ?? `Store screenshot export job ${job.status}`,
-          stderr,
-        );
+          { jobId: job.id, status: job.status },
+          1,
+        ), parsed.flags.json, stderr);
       }
       let output: { outputPath?: string; bytes?: number } = {};
       if (parsed.flags.output) {
@@ -511,14 +851,17 @@ export async function runStoreScreenshotCli(
     }
 
     if (command === 'status') {
-      const payload = await requestJson(
+      const rawPayload = await requestJson(
         `${baseUrl}${basePath}/jobs/${encodeURIComponent(secondPositional!)}`,
         undefined,
         requestDeps,
         baseUrl,
       );
-      const job = readJob(payload);
-      if (!job) return failStructured('INVALID_RESPONSE', 'Daemon returned an invalid job', stderr);
+      const { job } = parseStrictResponse(
+        StoreScreenshotJobResponseSchema,
+        rawPayload,
+        'store screenshot job',
+      );
       return outputSuccess(
         { job },
         parsed.flags.json,
@@ -528,12 +871,17 @@ export async function runStoreScreenshotCli(
     }
 
     if (command === 'versions') {
-      const payload = await requestJson(
+      const rawPayload = await requestJson(
         `${baseUrl}${basePath}/versions`,
         undefined,
         requestDeps,
         baseUrl,
-      ) as { versions?: unknown };
+      );
+      const payload = parseStrictResponse(
+        StoreScreenshotVersionsResponseSchema,
+        rawPayload,
+        'store screenshot versions',
+      );
       return outputSuccess(
         { versions: payload.versions },
         parsed.flags.json,
@@ -544,16 +892,17 @@ export async function runStoreScreenshotCli(
       );
     }
 
-    const version = Number(secondPositional);
-    if (!Number.isInteger(version) || version <= 0 || String(version) !== secondPositional) {
-      return fail('restore version must be a positive integer', stderr);
-    }
-    const payload = await requestJson(
+    const rawPayload = await requestJson(
       `${baseUrl}${basePath}/versions/${version}/restore`,
       jsonPost({}),
       requestDeps,
       baseUrl,
-    ) as { document?: unknown };
+    );
+    const payload = parseStrictResponse(
+      StoreScreenshotDocumentResponseSchema,
+      rawPayload,
+      'store screenshot document',
+    );
     return outputSuccess(
       { document: payload.document },
       parsed.flags.json,
@@ -561,10 +910,14 @@ export async function runStoreScreenshotCli(
       `[store-screenshot] restored version ${version}`,
     );
   } catch (error) {
-    return failStructured(
+    if (error instanceof StoreScreenshotCliException) {
+      return writeCliError(error.cliError, parsed.flags.json, stderr);
+    }
+    return writeCliError(cliError(
       'CLI_ERROR',
       error instanceof Error ? error.message : String(error),
-      stderr,
-    );
+      {},
+      1,
+    ), parsed.flags.json, stderr);
   }
 }
