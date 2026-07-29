@@ -234,8 +234,8 @@ import {
   workspaceIdentityCanBillAmr,
 } from '../collab/useWorkspaceContext';
 import {
-  projectWorkspaceContext,
   projectWorkspaceScopeAuthorizesAmr,
+  runWorkspaceIdentity,
   useProjectWorkspaceScope,
 } from '../collab/useProjectWorkspaceScope';
 import { CollabProvider, type CollabContextValue } from '../collab/collab-context';
@@ -1543,8 +1543,14 @@ export function ProjectView({
   const workspaceContextState = useWorkspaceContext();
   const { context: workspaceContext } = workspaceContextState;
   const projectWorkspaceScopeState = useProjectWorkspaceScope(project.id);
-  const projectRunWorkspaceContext = projectWorkspaceContext(
-    projectWorkspaceScopeState.scope,
+  // Falls back to the caller's own identity while the project's binding is
+  // still unread, so a Home auto-send is not refused 401
+  // WORKSPACE_CONTEXT_REQUIRED for having no identity to name. See
+  // `runWorkspaceIdentity` for which answered scope states deliberately keep
+  // asserting nothing.
+  const projectRunWorkspaceContext = runWorkspaceIdentity(
+    projectWorkspaceScopeState,
+    workspaceContext,
   );
   const projectRunRequiresWorkspaceScope =
     config.mode === 'daemon' && config.agentId === 'amr';

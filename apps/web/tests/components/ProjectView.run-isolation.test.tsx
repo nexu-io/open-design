@@ -113,6 +113,19 @@ vi.mock('../../src/collab/useProjectWorkspaceScope', () => ({
   projectWorkspaceScopeAuthorizesAmr: (
     scope: ProjectWorkspaceScopeState['scope'],
   ) => scope?.kind === 'personal' || scope?.kind === 'team',
+  // Mirrors the real `runWorkspaceIdentity`: the project's resolved scope wins,
+  // and the caller's own identity stands in ONLY while the first answer is still
+  // outstanding. Every answered or failed state stays headerless so the daemon
+  // judges it on its own state.
+  runWorkspaceIdentity: (
+    state: ProjectWorkspaceScopeState,
+    caller: WorkspaceCollabContext | null,
+  ) => {
+    const scope = state.scope;
+    if (scope?.kind === 'personal' || scope?.kind === 'team') return scope.context;
+    if (!state.loading || scope !== null || state.failure) return null;
+    return caller;
+  },
 }));
 
 vi.mock('../../src/providers/daemon', () => ({

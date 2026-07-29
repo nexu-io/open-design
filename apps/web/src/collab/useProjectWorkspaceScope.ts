@@ -39,6 +39,70 @@ export function projectWorkspaceScopeReady(
   return scope?.kind === 'unbound' || scope?.kind === 'personal' || scope?.kind === 'team';
 }
 
+/**
+ * The workspace identity a run creation asserts to the daemon.
+ *
+ * INVARIANT: **a send names its caller whenever the project's binding is still
+ * UNREAD; it never overrides an answer the daemon actually gave.**
+ *
+ * The project's own resolved scope wins when there is one — it is the authority
+ * for which workspace the run writes into and which wallet pays, and it must
+ * beat the caller's own current workspace. But that scope arrives over the wire,
+ * and a Home auto-send fires before it lands (its gate is the conversation and
+ * message reads, never the scope). `projectWorkspaceContext` alone is null in
+ * that window, and a run POST with no `x-od-workspace-*` is refused
+ * `401 WORKSPACE_CONTEXT_REQUIRED` by `enforceWorkspaceResourceMutation` on any
+ * workspace-bound project — which is every project a signed-in user creates
+ * since #6201. Being unable to name the PROJECT's workspace yet is not the same
+ * as having no identity: every other project write in `ProjectView`
+ * (`patchProject`, `uploadProjectFiles`, the comment mutations) already asserts
+ * the caller's own context, and run creation was the one write that did not.
+ *
+ * Deliberately NOT a blanket `?? caller`. Three answered states must keep
+ * asserting nothing, because for them a headerless request is judged on
+ * daemon-owned state while an asserted one is judged on client-controlled
+ * headers:
+ *
+ *   - `unbound` — `headerlessMutationAllowed` short-circuits on "no row
+ *     anywhere" BEFORE asking for an identity, so a headerless caller may
+ *     mutate an unbound project. An asserted identity takes the other path,
+ *     where a missing row is a refusal, so asserting here would turn a working
+ *     200 into a 403 and break 「未登录也可以用自己 cli 修改未登录态下的那些
+ *     project」 (`e2e/tests/collab/headerless-mutation.test.ts`).
+ *   - `unavailable` — the daemon's `resolveProjectWorkspaceScope` returns this
+ *     BOTH for an unreadable membership directory AND for a directory that
+ *     answered with no active membership, i.e. a proven "you were removed".
+ *     Asserting would hand a removed member their own stale
+ *     `memberStatus: 'active'` header, which `withLastKnownMembership` narrows
+ *     only when the daemon's cache covers that same workspace.
+ *   - `forbidden` / `unsupported` — an outright refused read, and an old daemon
+ *     whose legal behavior is headerless.
+ *
+ * A FAILED read (`failure: 'unavailable'`) does not fall back either, and that is
+ * a deliberate narrowing rather than an oversight. This identity also picks the
+ * wallet the AMR pre-run balance gate prices against, and when the scope read
+ * itself failed we know nothing about the project's binding — pre-checking the
+ * caller's TEAM wallet on that guess blocks a send the daemon would have
+ * answered, which is the dead-button shape 21f452ffe already had to undo
+ * ("lets a signed-in user send an AMR run with a workspace-directory outage" in
+ * `ProjectView.run-isolation.test.tsx` pins it). The daemon stays the decider
+ * there, exactly as before.
+ *
+ * So the fallback is scoped to the single window the refusal actually came from:
+ * the answer has not arrived YET.
+ */
+export function runWorkspaceIdentity(
+  state: ProjectWorkspaceScopeState,
+  caller: WorkspaceCollabContext | null,
+): WorkspaceCollabContext | null {
+  const resolved = projectWorkspaceContext(state.scope);
+  if (resolved) return resolved;
+  // Anything other than "still waiting for the first answer" keeps the
+  // pre-existing headerless behavior, so the daemon judges it on its own state.
+  if (!state.loading || state.scope !== null || state.failure) return null;
+  return caller;
+}
+
 /** AMR must resolve an explicit personal/team billing principal. Unbound,
  * revoked, loading and directory-outage states all fail closed. */
 export function projectWorkspaceScopeAuthorizesAmr(
