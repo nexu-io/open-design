@@ -862,6 +862,30 @@ export async function reportChatRunFeedback(req: {
   }
 }
 
+export type AnswerRunPermissionResult = 'ok' | 'not_found' | 'conflict' | 'error';
+
+// Answers a pending ACP `permission_request` for a run (see acp.ts's
+// `replyPermission`). The daemon resolves whatever single pending request
+// exists for `runId` -- `choice` must be one of the `choices` the matching
+// `permission_request` event offered. Distinguishes 404 (run gone) from 409
+// (already answered or timed out) so the UI can show "already answered"
+// instead of a generic failure on a stale click.
+export async function answerRunPermission(runId: string, choice: string): Promise<AnswerRunPermissionResult> {
+  try {
+    const resp = await fetch(`/api/runs/${encodeURIComponent(runId)}/permission`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ choice }),
+    });
+    if (resp.ok) return 'ok';
+    if (resp.status === 404) return 'not_found';
+    if (resp.status === 409) return 'conflict';
+    return 'error';
+  } catch {
+    return 'error';
+  }
+}
+
 export async function listActiveChatRuns(
   projectId: string,
   conversationId: string,
@@ -1277,6 +1301,18 @@ function translateAgentEvent(data: DaemonAgentPayload): AgentEvent | null {
         ? `Run stopped: the agent repeated a failing ${toolName} call ${count}× without progress. Re-check the actual target before retrying.`
         : `Heads up — the agent has repeated a failing ${toolName} call ${count}× and may be stuck.`;
     return { kind: 'status', label: 'warning', detail };
+  }
+  if (t === 'permission_request' && typeof data.requestId === 'string') {
+    return {
+      kind: 'permission_request',
+      requestId: data.requestId,
+      title: data.title,
+      description: data.description,
+      choices: Array.isArray(data.choices) ? data.choices : [],
+    };
+  }
+  if (t === 'permission_resolved' && typeof data.requestId === 'string') {
+    return { kind: 'permission_resolved', requestId: data.requestId, choice: data.choice };
   }
   if (t === 'raw' && typeof data.line === 'string') {
     return { kind: 'raw', line: data.line };

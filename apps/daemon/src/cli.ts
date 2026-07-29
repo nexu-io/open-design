@@ -5055,6 +5055,10 @@ async function runRun(args) {
                [--agent claude] [--model <id>] [--follow] [--json]
   od run watch  <runId>                     ND-JSON event stream on stdout.
   od run cancel <runId>                     Request cancellation.
+  od run permission <runId> --choice <c>    Answer a pending ACP permission
+               [--json]                     request (watch for a
+                                            "permission_request" agent event
+                                            on the run's event stream first).
   od run list   [--project <id>]            List recent runs.
   od run info   <runId>                     One run's status.
   od run result-package <runId> [--json]    Inspect run outputs and workspace
@@ -5129,6 +5133,22 @@ Common options:
       const resp = await fetch(`${base}/api/runs/${encodeURIComponent(id)}/cancel`, { method: 'POST' });
       if (!resp.ok) return structuredHttpFailure(resp, 'run-not-found');
       console.log(`[run] cancelled ${id}`);
+      return;
+    }
+    case 'permission': {
+      const id = rest.find((a) => !a.startsWith('-'));
+      if (!id || !flags.choice) {
+        console.error('Usage: od run permission <runId> --choice <choice> [--json]');
+        process.exit(2);
+      }
+      const resp = await fetch(`${base}/api/runs/${encodeURIComponent(id)}/permission`, {
+        method:  'POST',
+        headers: { 'content-type': 'application/json' },
+        body:    JSON.stringify({ choice: flags.choice }),
+      });
+      if (!resp.ok) return structuredHttpFailure(resp, 'run-not-found');
+      if (flags.json) return process.stdout.write(JSON.stringify({ ok: true }, null, 2) + '\n');
+      console.log(`[run] answered pending permission request on ${id}: ${flags.choice}`);
       return;
     }
     case 'watch': {

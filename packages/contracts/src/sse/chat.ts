@@ -114,6 +114,16 @@ export type DaemonAgentPayload =
       signature: string;
       count: number;
     }
+  /**
+   * A gated ACP tool call is waiting on a human answer (see
+   * `apps/daemon/src/acp.ts`'s `replyPermission`). `choices` is only the
+   * option set Hermes actually offered for this specific request -- do not
+   * invent an option that isn't in the list. Fails closed (deny) if nothing
+   * answers `POST /api/runs/:id/permission` within the daemon's timeout.
+   */
+  | { type: 'permission_request'; requestId: string; title: string; description: string; choices: string[] }
+  /** The matching `permission_request` (by `requestId`) has been answered, by a human or by timeout. */
+  | { type: 'permission_resolved'; requestId: string; choice: string }
   | { type: 'raw'; line: string };
 
 export type ChatSseEvent =

@@ -441,6 +441,8 @@ export type PersistedAgentEvent =
       draftPath?: string | null;
     }
   | { kind: 'usage'; inputTokens?: number; outputTokens?: number; costUsd?: number; durationMs?: number }
+  | { kind: 'permission_request'; requestId: string; title: string; description: string; choices: string[] }
+  | { kind: 'permission_resolved'; requestId: string; choice: string }
   | { kind: 'raw'; line: string };
 
 export interface ChatMessage {

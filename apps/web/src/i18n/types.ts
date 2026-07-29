@@ -3000,6 +3000,21 @@ export interface Dict {
   'questions.skipAll': string;
   'questions.autoSkipHint': string;
 
+  // Permission request (ACP session/request_permission human-approval gate)
+  'permission.title': string;
+  'permission.approve.once': string;
+  'permission.approve.session': string;
+  'permission.approve.always': string;
+  'permission.deny': string;
+  'permission.expiresIn': string;
+  'permission.expired': string;
+  'permission.resolvedApproved': string;
+  'permission.resolvedDenied': string;
+  'permission.sending': string;
+  'permission.notFound': string;
+  'permission.conflict': string;
+  'permission.error': string;
+
   // Pet (Codex-style floating companion)
   'pet.title': string;
   'pet.subtitle': string;

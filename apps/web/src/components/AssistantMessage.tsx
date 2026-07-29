@@ -40,6 +40,9 @@ import {
 } from "./design-files/pluginFolders";
 import type { PluginFolderAgentAction } from "./design-files/pluginFolderActions";
 import { Icon } from "./Icon";
+import { Button } from "@open-design/components";
+import { answerRunPermission } from "../providers/daemon";
+import permissionCardStyles from "./PermissionRequestCard.module.css";
 import { NextStepActions } from "./NextStepActions";
 import type { DesignToolboxActionId } from "../runtime/design-toolbox";
 import { copyToClipboard } from "../lib/copy-to-clipboard";
@@ -245,6 +248,115 @@ function SkillPluginCandidateCard({
           ) : null}
         </div>
       </div>
+    </div>
+  );
+}
+
+type PermissionRequestBlock = Extract<Block, { kind: "permission-request" }>;
+
+// Mirrors apps/daemon/src/acp.ts's PERMISSION_ANSWER_TIMEOUT_MS. The daemon
+// is the sole authority on the real deadline (this is a soft, informational
+// countdown only) -- the SSE payload doesn't carry an expiresAt/timeoutMs
+// field, so there's nothing to read the real value from client-side.
+const PERMISSION_ANSWER_TIMEOUT_SECONDS = 55;
+
+function permissionChoiceLabel(t: TranslateFn, choice: string): string {
+  if (choice === "once") return t("permission.approve.once");
+  if (choice === "session") return t("permission.approve.session");
+  if (choice === "always") return t("permission.approve.always");
+  if (choice === "deny") return t("permission.deny");
+  // Choices are whatever the agent actually offered for this request (see
+  // acp.ts) -- don't assume the option set above is exhaustive.
+  return choice.charAt(0).toUpperCase() + choice.slice(1).replace(/_/g, " ");
+}
+
+function PermissionRequestCard({
+  block,
+  runId,
+}: {
+  block: PermissionRequestBlock;
+  runId: string | null;
+}) {
+  const t = useT();
+  const [localChoice, setLocalChoice] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  // The persisted/live-stream resolution (a real permission_resolved event)
+  // always wins over the optimistic local answer once it arrives.
+  const resolvedChoice = block.resolvedChoice ?? localChoice;
+  const resolved = resolvedChoice != null;
+
+  const [remaining, setRemaining] = useState(PERMISSION_ANSWER_TIMEOUT_SECONDS);
+  useEffect(() => {
+    if (resolved) return;
+    const id = window.setInterval(() => {
+      setRemaining((s) => Math.max(0, s - 1));
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [resolved]);
+
+  async function answer(choice: string) {
+    if (!runId || sending || resolved) return;
+    setSending(true);
+    setNotice(null);
+    const result = await answerRunPermission(runId, choice);
+    setSending(false);
+    if (result === "ok") setLocalChoice(choice);
+    else if (result === "not_found") setNotice(t("permission.notFound"));
+    else if (result === "conflict") setNotice(t("permission.conflict"));
+    else setNotice(t("permission.error"));
+  }
+
+  const expired = !resolved && remaining <= 0;
+
+  return (
+    <div className={permissionCardStyles.card} data-testid={`permission-request-${block.requestId}`}>
+      <div className={permissionCardStyles.header}>
+        <Icon name="alert-triangle" size={13} />
+        <span>{t("permission.title")}</span>
+        {!resolved && !expired ? (
+          <span className={permissionCardStyles.countdown}>
+            {t("permission.expiresIn", { s: remaining })}
+          </span>
+        ) : null}
+      </div>
+      <div className={permissionCardStyles.description}>{block.description || block.title}</div>
+      {resolved ? (
+        <div
+          className={[
+            permissionCardStyles.status,
+            resolvedChoice === "deny" ? permissionCardStyles.statusDenied : permissionCardStyles.statusApproved,
+          ].join(" ")}
+        >
+          <Icon name={resolvedChoice === "deny" ? "close" : "check"} size={13} />
+          <span>
+            {resolvedChoice === "deny"
+              ? t("permission.resolvedDenied")
+              : t("permission.resolvedApproved", { choice: permissionChoiceLabel(t, resolvedChoice) })}
+          </span>
+        </div>
+      ) : expired ? (
+        <div className={[permissionCardStyles.status, permissionCardStyles.statusDenied].join(" ")}>
+          <Icon name="close" size={13} />
+          <span>{t("permission.expired")}</span>
+        </div>
+      ) : (
+        <div className={permissionCardStyles.actions}>
+          {block.choices.map((choice) => (
+            <Button
+              key={choice}
+              variant={choice === "deny" ? "default" : choice === "once" ? "primary" : "default"}
+              className={choice === "deny" ? permissionCardStyles.denyButton : undefined}
+              disabled={!runId || sending}
+              onClick={() => void answer(choice)}
+            >
+              {sending ? <Icon name="spinner" size={13} /> : null}
+              {permissionChoiceLabel(t, choice)}
+            </Button>
+          ))}
+        </div>
+      )}
+      {notice ? <div className={permissionCardStyles.notice}>{notice}</div> : null}
     </div>
   );
 }
@@ -677,6 +789,9 @@ function AssistantMessageImpl({
                 onRequestOpenFile={onRequestOpenFile}
               />
             );
+          }
+          if (b.kind === "permission-request") {
+            return <PermissionRequestCard key={b.requestId} block={b} runId={message.runId ?? null} />;
           }
           if (b.kind === "status") {
             // Suppress this message's gray error pill ONLY when ChatPane is
@@ -2618,6 +2733,14 @@ type Block =
       confidence?: number | undefined;
       draftPath?: string | null | undefined;
     }
+  | {
+      kind: "permission-request";
+      requestId: string;
+      title: string;
+      description: string;
+      choices: string[];
+      resolvedChoice?: string | undefined;
+    }
   | { kind: "status"; label: string; detail?: string | undefined };
 
 /**
@@ -2689,8 +2812,10 @@ function buildBlocks(events: AgentEvent[]): Block[] {
     string,
     Extract<AgentEvent, { kind: "tool_result" }>
   >();
+  const permissionChoiceByRequestId = new Map<string, string>();
   for (const ev of events) {
     if (ev.kind === "tool_result") resultByToolId.set(ev.toolUseId, ev);
+    if (ev.kind === "permission_resolved") permissionChoiceByRequestId.set(ev.requestId, ev.choice);
   }
   for (const ev of events) {
     if (ev.kind === "text") {
@@ -2730,6 +2855,18 @@ function buildBlocks(events: AgentEvent[]): Block[] {
         description: ev.description,
         confidence: ev.confidence,
         draftPath: ev.draftPath,
+      });
+      continue;
+    }
+    if (ev.kind === "permission_resolved") continue;
+    if (ev.kind === "permission_request") {
+      out.push({
+        kind: "permission-request",
+        requestId: ev.requestId,
+        title: ev.title,
+        description: ev.description,
+        choices: ev.choices,
+        resolvedChoice: permissionChoiceByRequestId.get(ev.requestId),
       });
       continue;
     }

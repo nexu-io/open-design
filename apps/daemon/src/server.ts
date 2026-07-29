@@ -2675,6 +2675,18 @@ export function daemonAgentPayloadToPersistedAgentEvent(data) {
         : `Heads up — the agent has repeated a failing ${toolName} call ${count}× and may be stuck.`;
     return { kind: 'status', label: 'warning', detail };
   }
+  if (type === 'permission_request' && typeof data.requestId === 'string') {
+    return {
+      kind: 'permission_request',
+      requestId: data.requestId,
+      title: String(data.title ?? ''),
+      description: String(data.description ?? ''),
+      choices: Array.isArray(data.choices) ? data.choices.filter((c) => typeof c === 'string') : [],
+    };
+  }
+  if (type === 'permission_resolved' && typeof data.requestId === 'string') {
+    return { kind: 'permission_resolved', requestId: data.requestId, choice: String(data.choice ?? '') };
+  }
   if (type === 'raw' && typeof data.line === 'string') return { kind: 'raw', line: data.line };
   return null;
 }

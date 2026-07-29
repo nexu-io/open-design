@@ -1,0 +1,88 @@
+/* ACP session/request_permission human-approval card. A gated tool call is
+   blocked on the daemon side (see acp.ts's replyPermission, fail-closed on a
+   55s timeout) until this card's buttons post an answer back. */
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 6px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong, var(--border));
+  border-left: 3px solid var(--warning, #d9a441);
+  border-radius: var(--radius);
+  background: var(--bg-subtle, var(--bg-panel));
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.header svg {
+  flex: 0 0 auto;
+  color: var(--warning, #d9a441);
+}
+
+.description {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-muted, var(--text));
+  word-break: break-word;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.denyButton {
+  color: var(--danger, #e5484d);
+  border-color: color-mix(in srgb, var(--danger, #e5484d) 40%, var(--border));
+}
+
+.denyButton:hover {
+  background: color-mix(in srgb, var(--danger, #e5484d) 10%, transparent);
+  border-color: var(--danger, #e5484d);
+}
+
+.countdown {
+  margin-left: auto;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted, var(--text));
+  opacity: 0.8;
+  transition: opacity 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--text-muted, var(--text));
+}
+
+.status svg {
+  flex: 0 0 auto;
+}
+
+.statusApproved svg {
+  color: var(--success, #4caf50);
+}
+
+.statusDenied svg {
+  color: var(--danger, #e5484d);
+}
+
+.notice {
+  font-size: 11px;
+  color: var(--danger, #e5484d);
+}
