@@ -295,7 +295,7 @@ export function StoreScreenshotWorkspace({
     setExportSubmitting(true);
     setActionError(null);
     try {
-      const job = await exportStoreScreenshots(projectId, { platforms: [platform] });
+      const job = await exportStoreScreenshots(projectId, { platforms: ['appStore', 'googlePlay'] });
       setExportJob(job);
       const failure = terminalJobError(job);
       if (failure) setActionError(failure);
@@ -501,6 +501,9 @@ export function StoreScreenshotWorkspace({
           <div className={styles.jobNotice} role="status">
             <Icon name="check" size={14} />
             <span>{t('storeScreenshots.exportReady')}</span>
+            {exportJob.type === 'export' && exportJob.result ? (
+              <span>{t('storeScreenshots.exportFilesValidated', { n: exportJob.result.manifest.files.length })}</span>
+            ) : null}
             <a
               className={styles.downloadLink}
               href={storeScreenshotJobDownloadUrl(projectId, exportJob.id)}

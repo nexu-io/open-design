@@ -17,6 +17,7 @@ export const storeScreenshotEnglishFallback = {
   'storeScreenshots.exporting': 'Exporting…',
   'storeScreenshots.generationReadyForPreview': 'Generation complete. Ready for preview.',
   'storeScreenshots.exportReady': 'Export complete.',
+  'storeScreenshots.exportFilesValidated': '{n} files validated',
   'storeScreenshots.downloadZip': 'Download ZIP',
   'storeScreenshots.providerRequired': 'Connect a Provider to generate with AI. You can keep editing manually.',
   'storeScreenshots.page': 'Page {n}',

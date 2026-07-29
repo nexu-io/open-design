@@ -1602,6 +1602,7 @@ export const zhCN: Dict = {
   "storeScreenshots.exporting": "正在导出…",
   "storeScreenshots.generationReadyForPreview": "生成完成，等待预览。",
   "storeScreenshots.exportReady": "导出完成。",
+  "storeScreenshots.exportFilesValidated": "已校验 {n} 个文件",
   "storeScreenshots.downloadZip": "下载 ZIP",
   "storeScreenshots.providerRequired": "连接 Provider 后可使用 AI 生成；你仍可继续手工编辑。",
   "storeScreenshots.page": "第 {n} 页",

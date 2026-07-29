@@ -2015,6 +2015,7 @@ export interface Dict {
   'storeScreenshots.exporting': string;
   'storeScreenshots.generationReadyForPreview': string;
   'storeScreenshots.exportReady': string;
+  'storeScreenshots.exportFilesValidated': string;
   'storeScreenshots.downloadZip': string;
   'storeScreenshots.providerRequired': string;
   'storeScreenshots.page': string;

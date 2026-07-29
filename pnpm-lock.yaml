@@ -451,6 +451,9 @@ importers:
       '@types/pngjs':
         specifier: 6.0.5
         version: 6.0.5
+      jszip:
+        specifier: 3.10.1
+        version: 3.10.1
       pixelmatch:
         specifier: 7.2.0
         version: 7.2.0
