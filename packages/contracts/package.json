@@ -58,6 +58,10 @@
       "types": "./dist/design-systems/derived-token-outputs.d.ts",
       "default": "./dist/design-systems/derived-token-outputs.mjs"
     },
+    "./design-systems/dtcg-2025-10": {
+      "types": "./dist/design-systems/dtcg-2025-10.d.ts",
+      "default": "./dist/design-systems/dtcg-2025-10.mjs"
+    },
     "./design-systems/token-schema": {
       "types": "./dist/design-systems/token-schema.d.ts",
       "default": "./dist/design-systems/token-schema.mjs"
@@ -81,6 +85,7 @@
     "zod": "3.25.76"
   },
   "devDependencies": {
+    "ajv": "8.20.0",
     "esbuild": "0.28.0",
     "typescript": "5.9.3",
     "vitest": "4.1.6"

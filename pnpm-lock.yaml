@@ -510,6 +510,9 @@ importers:
         specifier: 3.25.76
         version: 3.25.76
     devDependencies:
+      ajv:
+        specifier: 8.20.0
+        version: 8.20.0
       esbuild:
         specifier: 0.28.0
         version: 0.28.0
