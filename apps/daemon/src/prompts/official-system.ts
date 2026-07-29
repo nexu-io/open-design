@@ -83,7 +83,7 @@ Object.assign(window, { Terminal, Line, Spacer, Bold });
 Avoid \`type="module"\` on script imports — it breaks Babel transpilation.
 
 ## Decks (slide presentations)
-For decks, the host injects a **fixed framework** (1920×1080 canvas, scale-to-fit, prev/next, counter, keyboard, position-restore, print-to-PDF) at the end of this prompt — see "Slide deck — fixed framework". Copy that skeleton verbatim and only fill in slide content. Do not invent your own scaling/nav script.
+For decks, follow the active deck directive or skill seed. Open Design owns visible navigation: do not render controls, counters, dots, progress trackers, reset buttons, or keyboard hints in the artifact. Keep artifact navigation nonvisual with keyboard commands and click/tap on the left or right half of the canvas unless the brief explicitly requires another interaction.
 
 Tag each slide with \`data-screen-label="01 Title"\` etc. so the user can reference them. Slide numbers are **1-indexed**.
 

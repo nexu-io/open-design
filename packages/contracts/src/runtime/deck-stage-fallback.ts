@@ -1,5 +1,10 @@
 const DECK_STAGE_OPEN_TAG_RE = /<deck-stage\b/i;
 const DECK_STAGE_FALLBACK_MARKER = 'data-od-deck-stage-fallback';
+const CANONICAL_DECK_STAGE_ID_RE = /<[a-z][^>]*\sid\s*=\s*(["'])deck-stage\1[^>]*>/i;
+
+/** Host/runtime state shared by preview, thumbnails, exports, and deck-stage. */
+export const DECK_ACTIVE_ATTRIBUTE = 'data-od-deck-active';
+export const DECK_ACTIVE_CLASSES = ['active', 'is-active', 'current', 'visible'] as const;
 
 /**
  * The selector family that identifies a deck's slide elements. Single source of
@@ -9,12 +14,32 @@ const DECK_STAGE_FALLBACK_MARKER = 'data-od-deck-stage-fallback';
  */
 export const DECK_SLIDE_SELECTOR = '.slide, [data-screen-label], .deck-slide, .ppt-slide';
 
+/**
+ * Direct-child deck containers used before the generic selector. Keeping this
+ * beside DECK_SLIDE_SELECTOR prevents the host counter, iframe bridge, and
+ * thumbnail parser from recognizing different page sets.
+ */
+export const DECK_STRUCTURED_SLIDE_SELECTOR = [
+  'deck-stage',
+  '#deck-stage',
+  '[data-od-id="deck-stage"]',
+  '.stage',
+  '.deck',
+  '.deck-stage',
+  '.deck-shell',
+  '#deck',
+  'body',
+].flatMap((container) =>
+  DECK_SLIDE_SELECTOR.split(', ').map((slide) => `${container} > ${slide}`),
+).join(', ');
+
 const DECK_STAGE_FALLBACK_SCRIPT = `<script data-od-deck-stage-fallback>(function(){
   if (window.__odDeckStageFallbackInstalled) return;
   window.__odDeckStageFallbackInstalled = true;
   if (!window.customElements || window.customElements.get('deck-stage')) return;
 
-  var ACTIVE_ATTR = 'data-od-deck-active';
+  var ACTIVE_ATTR = ${JSON.stringify(DECK_ACTIVE_ATTRIBUTE)};
+  var ACTIVE_CLASSES = ${JSON.stringify(DECK_ACTIVE_CLASSES)};
   var SLIDE_SELECTOR = ${JSON.stringify(DECK_SLIDE_SELECTOR)};
 
   function numeric(value, fallback) {
@@ -123,7 +148,11 @@ const DECK_STAGE_FALLBACK_SCRIPT = `<script data-od-deck-stage-fallback>(functio
     _initialIndex(slides) {
       for (var i = 0; i < slides.length; i++) {
         var cl = slides[i].classList;
-        if (cl && (cl.contains('active') || cl.contains('is-active') || cl.contains('current'))) return i;
+        if (cl) {
+          for (var j = 0; j < ACTIVE_CLASSES.length; j++) {
+            if (cl.contains(ACTIVE_CLASSES[j])) return i;
+          }
+        }
         if (slides[i].hasAttribute(ACTIVE_ATTR)) return i;
       }
       return 0;
@@ -150,10 +179,9 @@ const DECK_STAGE_FALLBACK_SCRIPT = `<script data-od-deck-stage-fallback>(functio
         slide.toggleAttribute('hidden', false);
         slide.setAttribute('aria-hidden', on ? 'false' : 'true');
         if (slide.classList) {
-          slide.classList.toggle('active', on);
-          slide.classList.toggle('is-active', on);
-          slide.classList.toggle('current', on);
-          slide.classList.toggle('visible', on);
+          for (var j = 0; j < ACTIVE_CLASSES.length; j++) {
+            slide.classList.toggle(ACTIVE_CLASSES[j], on);
+          }
         }
       }
       postSlideState(this._index, slides.length);
@@ -231,6 +259,15 @@ const DECK_STAGE_FALLBACK_SCRIPT = `<script data-od-deck-stage-fallback>(functio
 
 export function htmlUsesDeckStageElement(html: string): boolean {
   return DECK_STAGE_OPEN_TAG_RE.test(html);
+}
+
+/**
+ * Canonical generated decks own their fit/navigation runtime behind the exact
+ * `id="deck-stage"` marker. Attribute names such as
+ * `data-od-id="deck-stage"` are edit/comment metadata, not framework identity.
+ */
+export function htmlUsesCanonicalDeckFramework(html: string): boolean {
+  return CANONICAL_DECK_STAGE_ID_RE.test(html);
 }
 
 export function injectDeckStageFallback(html: string): string {

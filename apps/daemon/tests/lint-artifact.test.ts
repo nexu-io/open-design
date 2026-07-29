@@ -1222,3 +1222,101 @@ describe('trust-gradient', () => {
     expect(findings.find((f) => f.id === 'trust-gradient')).toBeDefined();
   });
 });
+
+describe('deck surface hierarchy', () => {
+  it('does not require implementation-specific theme classes or surface alternation', () => {
+    const html = `
+      <section class="slide" data-screen-label="01 Cover"></section>
+      <section class="slide" data-screen-label="02 Problem"></section>
+      <section class="slide" data-screen-label="03 Evidence"></section>
+      <section class="slide" data-screen-label="04 Solution"></section>
+    `;
+    const findings = lintArtifact(html);
+
+    expect(findings.find((finding) => finding.id === 'slide-theme-missing')).toBeUndefined();
+    expect(findings.find((finding) => finding.id === 'slide-rhythm')).toBeUndefined();
+  });
+});
+
+describe('deck-responsive-canvas', () => {
+  it('flags a structured deck whose stage and slides size themselves from the viewport', () => {
+    const html = `
+      <style>
+        .deck { width: 100vw; height: 100vh; overflow: hidden; }
+        .slide {
+          width: min(100vw, calc(100vh * 16 / 9));
+          height: min(100vh, calc(100vw * 9 / 16));
+        }
+      </style>
+      <main class="deck">
+        <section class="slide active" data-screen-label="01 Cover"></section>
+        <section class="slide" data-screen-label="02 Problem"></section>
+      </main>
+    `;
+
+    const hit = requiredFinding(lintArtifact(html), 'deck-responsive-canvas');
+    expect(hit.severity).toBe('P0');
+    expect(hit.snippet).toContain('.slide');
+  });
+
+  it('accepts one fixed 1920×1080 stage with viewport units limited to its shell', () => {
+    const html = `
+      <style>
+        .deck-viewport { width: 100vw; height: 100vh; overflow: hidden; }
+        .deck-stage {
+          position: absolute;
+          width: 1920px;
+          height: 1080px;
+          transform-origin: top left;
+        }
+        .slide {
+          position: absolute;
+          inset: 0;
+          width: 1920px;
+          height: 1080px;
+        }
+      </style>
+      <div class="deck-viewport">
+        <main class="deck-stage" data-od-id="deck-stage">
+          <section class="slide active" data-screen-label="01 Cover"></section>
+          <section class="slide" data-screen-label="02 Problem"></section>
+        </main>
+      </div>
+    `;
+
+    expect(
+      lintArtifact(html).find((finding) => finding.id === 'deck-responsive-canvas'),
+    ).toBeUndefined();
+  });
+
+  it('accepts a responsive outer deck shell when a fixed stage owns slide geometry', () => {
+    const html = `
+      <style>
+        .deck { width: 100vw; height: 100vh; overflow: hidden; }
+        .deck-stage { width: 1920px; height: 1080px; }
+        .slide { position: absolute; inset: 0; width: 100%; height: 100%; }
+      </style>
+      <div class="deck">
+        <main class="deck-stage">
+          <section class="slide active" data-screen-label="01 Cover"></section>
+          <section class="slide" data-screen-label="02 Problem"></section>
+        </main>
+      </div>
+    `;
+
+    expect(
+      lintArtifact(html).find((finding) => finding.id === 'deck-responsive-canvas'),
+    ).toBeUndefined();
+  });
+
+  it('does not apply deck canvas rules to an ordinary responsive page', () => {
+    const html = `
+      <style>.slide { width: 100vw; height: 100vh; }</style>
+      <section class="slide">A single-page carousel panel</section>
+    `;
+
+    expect(
+      lintArtifact(html).find((finding) => finding.id === 'deck-responsive-canvas'),
+    ).toBeUndefined();
+  });
+});

@@ -6,7 +6,9 @@ auto-enforced by the daemon's `lint-artifact` linter — failing an
 enforced rule is not a style preference, it is a regression. The
 rest are guidance for agents and reviewers and are flagged inline as
 "(guidance, not auto-checked)" so the contract with the linter stays
-honest.
+honest. Explicit visual decisions in the active `DESIGN.md` override
+non-linted aesthetic guidance; P0 linter rules and factual-integrity gates
+remain binding.
 
 > Adapted from [refero_skill](https://github.com/referodesign/refero_skill)
 > (MIT), tightened to match Open Design's lint surface.

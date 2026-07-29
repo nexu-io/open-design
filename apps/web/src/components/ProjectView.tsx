@@ -296,6 +296,8 @@ type ProjectChatSendMeta = ChatSendMeta & {
   queueOnly?: boolean;
   retryOfAssistantId?: string;
   sessionMode?: ChatSessionMode;
+  /** Internal request contract for entry points that promise artifact delivery. */
+  artifactDeliveryRequired?: boolean;
   /** Overrides the run_created / run_finished `entry_from` analytics prop for
    *  this send (e.g. 'resume_continue' from the resumable-failure Continue
    *  action). Behavior never depends on it; it only shapes PostHog props. */
@@ -313,6 +315,19 @@ type ProjectChatSendMeta = ChatSendMeta & {
    *  so the user is never double-prompted for one task. */
   amrGatePrechecked?: boolean;
 };
+
+function artifactDeliveryRequiredForSend(meta: ProjectChatSendMeta | undefined): boolean {
+  if (typeof meta?.artifactDeliveryRequired === 'boolean') {
+    return meta.artifactDeliveryRequired;
+  }
+  return (
+    meta?.entryFrom === 'comment' ||
+    meta?.entryFrom === 'mark' ||
+    meta?.entryFrom === 'next_step' ||
+    meta?.entryFrom === 'regenerate_from_review' ||
+    meta?.entryFrom === 'resume_continue'
+  );
+}
 
 export function mergeSavedPreviewComment(current: PreviewComment[], saved: PreviewComment): PreviewComment[] {
   const existingIndex = current.findIndex((comment) => comment.id === saved.id);
@@ -5908,6 +5923,7 @@ export function ProjectView({
           conversationId: runConversationId,
           assistantMessageId: assistantId,
           clientRequestId: randomUUID(),
+          artifactDeliveryRequired: artifactDeliveryRequiredForSend(meta),
           skillId: project.skillId ?? null,
           skillIds: Array.isArray(meta?.skillIds) ? meta.skillIds : [],
           context: runContext,
@@ -6069,6 +6085,7 @@ export function ProjectView({
           conversationId: runConversationId,
           assistantMessageId: assistantId,
           clientRequestId: randomUUID(),
+          artifactDeliveryRequired: artifactDeliveryRequiredForSend(meta),
           skillId: project.skillId ?? null,
           skillIds: Array.isArray(meta?.skillIds) ? meta.skillIds : [],
           context: runContext,
@@ -8447,6 +8464,7 @@ export function ProjectView({
     autoSendAttachmentsRef.current = [];
     void handleSend(seed, attachments, [], {
       ...(context ? { context } : {}),
+      artifactDeliveryRequired: true,
       // The home submit already gated this exact task (and the user answered
       // any soft warning there); asking again would double-prompt.
       ...(autoSendAmrGateOkRef.current ? { amrGatePrechecked: true } : {}),
@@ -8611,6 +8629,7 @@ export function ProjectView({
                 if (currentConversationActionDisabled) return false;
                 return handleSend(text, attachments, [], {
                   entryFrom: 'question_answer',
+                  artifactDeliveryRequired: activeSessionMode === 'design',
                   ...(context ? { context } : {}),
                 });
               }}

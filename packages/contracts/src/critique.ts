@@ -55,6 +55,37 @@ export const CritiqueConfigSchema = z.object({
 
 export type CritiqueConfig = z.infer<typeof CritiqueConfigSchema>;
 
+export interface CritiqueRunEligibilityInput {
+  enabled: boolean;
+  hasBrand: boolean;
+  hasSkill: boolean;
+  sessionMode?: 'chat' | 'design' | 'plan' | undefined;
+  isMediaSurface: boolean;
+  streamFormat?: string | undefined;
+}
+
+/**
+ * Single eligibility gate shared by prompt composition and daemon execution.
+ * Critique Theater's v1 protocol produces an HTML artifact over plain stdout,
+ * so it is valid only for non-media Design runs.
+ */
+export function isCritiqueRunEligible({
+  enabled,
+  hasBrand,
+  hasSkill,
+  sessionMode,
+  isMediaSurface,
+  streamFormat,
+}: CritiqueRunEligibilityInput): boolean {
+  const isDesignMode = sessionMode !== 'chat' && sessionMode !== 'plan';
+  return enabled
+    && hasBrand
+    && hasSkill
+    && isDesignMode
+    && !isMediaSurface
+    && (streamFormat ?? 'plain') === 'plain';
+}
+
 export function defaultCritiqueConfig(): CritiqueConfig {
   return {
     enabled: false,

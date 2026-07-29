@@ -13,19 +13,24 @@
 //
 // It is intentionally pure and synchronous (DOMParser only) so it memoizes on
 // the source string and is unit-testable. Decks it cannot faithfully render
-// statically (external layout CSS, viewport-unit slides, script-built content)
-// report `renderable: false` with a reason, and the caller keeps the old
-// iframe thumbnail for that deck.
+// statically (external layout CSS or runtime-rendered media) report
+// `renderable: false` with a reason, and the caller keeps the old iframe
+// thumbnail for that deck.
 
 import DOMPurify from 'dompurify';
 
-import { DECK_SLIDE_SELECTOR } from '@open-design/contracts/runtime/deck-stage-fallback';
+import {
+  DECK_ACTIVE_CLASSES,
+  DECK_SLIDE_SELECTOR,
+  DECK_STRUCTURED_SLIDE_SELECTOR,
+} from '@open-design/contracts/runtime/deck-stage-fallback';
 
 export type DeckThumbnailFallbackReason =
   | 'no-dom-parser'
   | 'no-slides'
   | 'no-styles'
-  | 'external-stylesheet';
+  | 'external-stylesheet'
+  | 'runtime-rendered-content';
 
 /** One reconstructed wrapper element between the shadow root and the slide. */
 export interface DeckThumbnailAncestor {
@@ -39,8 +44,8 @@ export interface ParsedDeckThumbnails {
   reason?: DeckThumbnailFallbackReason;
   /** `outerHTML` of each slide, in document order. */
   slides: string[];
-  /** Concatenated deck stylesheets, `:root`/`html`/`body` rewritten to `:host`,
-   *  `@font-face` stripped (see `fontFaces`), relative `url()` absolutized. */
+  /** Concatenated deck stylesheets, root selectors rewritten for the shadow
+   *  root shims, `@font-face` stripped, relative `url()` absolutized. */
   styleText: string;
   /** `@font-face` blocks lifted out of `styleText` — must live in the host
    *  document, since `@font-face` inside a shadow root is ignored. */
@@ -51,6 +56,13 @@ export interface ParsedDeckThumbnails {
   /** Wrapper chain from outermost→innermost (excludes `<html>`/`<body>` and the
    *  slide itself), e.g. `[.deck-shell, .deck-stage]` or `[deck-stage]`. */
   ancestors: DeckThumbnailAncestor[];
+  /** Sanitized attributes restored on inert html/body proxy elements. */
+  rootAttributes: {
+    html: Array<[string, string]>;
+    body: Array<[string, string]>;
+  };
+  /** Active-state classes the deck actually uses for its slide protocol. */
+  stateClasses: string[];
   designWidth: number;
   designHeight: number;
 }
@@ -63,12 +75,6 @@ const MAX_SLIDES = 200;
 // srcdoc.ts: prefer slides that are direct children of a recognized stage so
 // decorative `.slide` markup elsewhere isn't miscounted, then fall back to the
 // shared selector.
-const STRUCTURED_SLIDE_SELECTOR =
-  'deck-stage > .slide, .deck > .slide, .deck-stage > .slide, .deck-shell > .slide, ' +
-  '#deck > .slide, body > .slide, ' +
-  'deck-stage > [data-screen-label], .deck-stage > [data-screen-label], ' +
-  '#deck > [data-screen-label], body > [data-screen-label]';
-
 const FONT_HOSTS = new Set([
   'fonts.googleapis.com',
   'fonts.gstatic.com',
@@ -93,7 +99,13 @@ function isApprovedFontHref(href: string): boolean {
   return url.protocol === 'https:' && FONT_HOSTS.has(url.hostname.toLowerCase());
 }
 
-function unrenderable(reason: DeckThumbnailFallbackReason): ParsedDeckThumbnails {
+function unrenderable(
+  reason: DeckThumbnailFallbackReason,
+  designSize: DesignSize = {
+    width: DEFAULT_DESIGN_WIDTH,
+    height: DEFAULT_DESIGN_HEIGHT,
+  },
+): ParsedDeckThumbnails {
   return {
     renderable: false,
     reason,
@@ -102,8 +114,10 @@ function unrenderable(reason: DeckThumbnailFallbackReason): ParsedDeckThumbnails
     fontFaces: '',
     fontLinks: [],
     ancestors: [],
-    designWidth: DEFAULT_DESIGN_WIDTH,
-    designHeight: DEFAULT_DESIGN_HEIGHT,
+    rootAttributes: { html: [], body: [] },
+    stateClasses: [],
+    designWidth: designSize.width,
+    designHeight: designSize.height,
   };
 }
 
@@ -120,6 +134,10 @@ export function parseDeckThumbnails(html: string, baseHref?: string): ParsedDeck
 
   const slideEls = collectSlideElements(doc);
   if (slideEls.length === 0) return unrenderable('no-slides');
+  const hasRuntimeRenderedContent = slideEls.some((slide) =>
+    slide.matches('canvas, video, iframe, object, embed')
+    || slide.querySelector('canvas, video, iframe, object, embed'),
+  ) || hasScriptBuiltSlideContent(doc, slideEls);
 
   // External layout CSS we cannot inline means the static clone would be
   // unstyled. Font stylesheets are the exception — we re-load those in the host
@@ -140,7 +158,7 @@ export function parseDeckThumbnails(html: string, baseHref?: string): ParsedDeck
 
   // Strip CSS comments once, up-front. Every downstream rewrite here (viewport
   // units, url() absolutizing, @font-face lifting, and crucially the
-  // `:root`/`html`/`body` → `:host` rewrite) is regex-based and treats a comment
+  // root-selector rewrite) is regex-based and treats a comment
   // as opaque selector text. A banner comment immediately before the custom
   // property block — `/* === VIEWPORT BASE === */\n:root { … }`, which real
   // decks routinely emit — would otherwise leave `:root` unrewritten; `:root`
@@ -148,14 +166,24 @@ export function parseDeckThumbnails(html: string, baseHref?: string): ParsedDeck
   // and each `var(--slide-bg)` resolves to transparent, painting nothing over
   // the near-black thumbnail host (black thumbnails). Comments are inert, so
   // removing them changes only which selectors the rewrites can see.
-  const rawStyle = stripCssComments(
+  const rawStyleWithImports = stripCssComments(
     Array.from(doc.querySelectorAll('style'))
       .map((el) => el.textContent || '')
       .join('\n'),
   );
+  const importedStyles = extractCssImports(rawStyleWithImports);
+  if (!importedStyles.valid) return unrenderable('external-stylesheet');
+  for (const href of importedStyles.hrefs) {
+    if (!isApprovedFontHref(href)) return unrenderable('external-stylesheet');
+    if (!fontLinks.includes(href)) fontLinks.push(href);
+  }
+  const rawStyle = importedStyles.css;
   if (!rawStyle.trim()) return unrenderable('no-styles');
 
-  const designSize = resolveDesignSize(doc, rawStyle);
+  const designSize = resolveDesignSize(doc, rawStyle, slideEls[0]!);
+  if (hasRuntimeRenderedContent) {
+    return unrenderable('runtime-rendered-content', designSize);
+  }
 
   // Rewrite viewport units to their px-equivalent against the design canvas so
   // `4vh` on a 1080-tall slide becomes `calc(4 * 10.8px)`. Inside a shadow root
@@ -169,6 +197,11 @@ export function parseDeckThumbnails(html: string, baseHref?: string): ParsedDeck
   const styleText = rewriteRootSelectors(withoutFonts);
 
   const ancestors = collectAncestors(slideEls[0]!);
+  const rootAttributes = {
+    html: sanitizeThumbnailAttributes(doc.documentElement),
+    body: sanitizeThumbnailAttributes(doc.body),
+  };
+  const stateClasses = collectSlideStateClasses(slideEls, rawStyle);
   const slides = slideEls
     .slice(0, MAX_SLIDES)
     .map((el) => processSlideHtml(el, baseHref, designSize.width, designSize.height));
@@ -180,6 +213,8 @@ export function parseDeckThumbnails(html: string, baseHref?: string): ParsedDeck
     fontFaces,
     fontLinks,
     ancestors,
+    rootAttributes,
+    stateClasses,
     designWidth: designSize.width,
     designHeight: designSize.height,
   };
@@ -205,9 +240,88 @@ function rewriteViewportUnits(css: string, width: number, height: number): strin
 }
 
 function collectSlideElements(doc: Document): Element[] {
-  const structured = Array.from(doc.querySelectorAll(STRUCTURED_SLIDE_SELECTOR));
+  const structured = Array.from(doc.querySelectorAll(DECK_STRUCTURED_SLIDE_SELECTOR));
   if (structured.length > 0) return structured;
   return Array.from(doc.querySelectorAll(DECK_SLIDE_SELECTOR));
+}
+
+const SCRIPT_CONTENT_MUTATION_RE =
+  /(?:\.innerHTML\s*=|\.outerHTML\s*=|\.textContent\s*=|\.appendChild\s*\(|\.append\s*\(|\.prepend\s*\(|\.replaceChildren\s*\(|\.insertAdjacentHTML\s*\()/;
+
+function escapeScriptRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function scriptMutatesBinding(source: string, binding: string): boolean {
+  const access = `\\b${escapeScriptRegex(binding)}\\s*(?:\\?\\.|\\.)\\s*`;
+  return new RegExp(
+    `(?:${access}(?:innerHTML|outerHTML|textContent)\\s*=|${access}(?:appendChild|append|prepend|replaceChildren|insertAdjacentHTML)\\s*\\()`,
+  ).test(source);
+}
+
+/**
+ * Static thumbnails cannot reproduce DOM that a deck builds at runtime.
+ * Detect only high-confidence cases: a script binds a slide-owned element and
+ * then content-mutates that same binding. Keeping lookup and mutation coupled
+ * matters: deck navigation often queries every slide while separately updating
+ * an outside counter, which must stay on the cheap static thumbnail path.
+ */
+function hasScriptBuiltSlideContent(doc: Document, slides: Element[]): boolean {
+  const belongsToSlide = (target: Element): boolean =>
+    slides.some((slide) => slide === target || slide.contains(target));
+
+  for (const script of Array.from(doc.querySelectorAll('script'))) {
+    const type = (script.getAttribute('type') || '').trim().toLowerCase();
+    if (type && type !== 'module' && type !== 'text/javascript' && type !== 'application/javascript') {
+      continue;
+    }
+    const source = script.textContent || '';
+    if (!SCRIPT_CONTENT_MUTATION_RE.test(source)) continue;
+
+    const lookupBinding =
+      /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*document\.(getElementById|querySelector)\s*\(\s*(['"])([^'"]+)\3\s*\)/g;
+    let bindingMatch: RegExpExecArray | null;
+    while ((bindingMatch = lookupBinding.exec(source))) {
+      const binding = bindingMatch[1] || '';
+      if (!scriptMutatesBinding(source, binding)) continue;
+      try {
+        const target = bindingMatch[2] === 'getElementById'
+          ? doc.getElementById(bindingMatch[4] || '')
+          : doc.querySelector(bindingMatch[4] || '');
+        if (target && belongsToSlide(target)) return true;
+      } catch {
+        // Invalid or dynamically escaped selectors are not high-confidence
+        // evidence; the iframe fallback remains available for known media.
+      }
+    }
+
+    const directLookupMutation =
+      /document\.(getElementById|querySelector)\s*\(\s*(['"])([^'"]+)\2\s*\)\s*(?:\?\.|\.)\s*(?:(?:innerHTML|outerHTML|textContent)\s*=|(?:appendChild|append|prepend|replaceChildren|insertAdjacentHTML)\s*\()/g;
+    let directMatch: RegExpExecArray | null;
+    while ((directMatch = directLookupMutation.exec(source))) {
+      try {
+        const target = directMatch[1] === 'getElementById'
+          ? doc.getElementById(directMatch[3] || '')
+          : doc.querySelector(directMatch[3] || '');
+        if (target && belongsToSlide(target)) return true;
+      } catch {
+        // Same high-confidence rule as bound lookups above.
+      }
+    }
+  }
+  return false;
+}
+
+function collectSlideStateClasses(slides: Element[], css: string): string[] {
+  const selectors = Array.from(iterateRuleBlocks(css), (block) => block.selector);
+  return DECK_ACTIVE_CLASSES.filter((className) => {
+    if (slides.some((slide) => slide.classList.contains(className))) return true;
+    const classToken = new RegExp(`\\.${className}(?![\\w-])`);
+    return selectors.some((selector) =>
+      /(?:\.slide(?![\w-])|\[data-screen-label\b|deck-stage\b)/.test(selector)
+      && classToken.test(selector),
+    );
+  });
 }
 
 // Walk from the slide's parent up to (but excluding) <body>/<html>, so
@@ -233,27 +347,53 @@ interface DesignSize {
   height: number;
 }
 
-// Design canvas size (viewport-unit decks are already excluded upstream):
-// explicit `<deck-stage width height>`, then an explicit px `width`+`height` on
-// a stage/slide rule, else the 1920×1080 default.
-const STAGE_SIZE_SELECTOR_RE =
-  /(?:\bdeck-stage\b|\.deck-stage\b|\.canvas\b|#deck\b|\.deck\b|\.slide\b|\.ppt-slide\b|\.deck-slide\b|\[data-screen-label\])/i;
+const MIN_DESIGN_DIMENSION = 180;
 
-function resolveDesignSize(doc: Document, css: string): DesignSize {
-  const stage = doc.querySelector('deck-stage[width][height]');
+function isPlausibleDesignSize(width: number, height: number): boolean {
+  return width >= MIN_DESIGN_DIMENSION
+    && height >= MIN_DESIGN_DIMENSION;
+}
+
+// Design canvas size: explicit `<deck-stage width height>`, then an explicit
+// px width/height rule that matches the first slide's real ancestor chain or
+// the slide itself, else the 1920×1080 default. Matching actual elements avoids
+// mistaking descendant decoration rules such as
+// `.slide-title .accent-dot { width:10px; height:10px }` for the canvas.
+function resolveDesignSize(doc: Document, css: string, slide: Element): DesignSize {
+  const stage = slide.closest('deck-stage[width][height]')
+    ?? doc.querySelector('deck-stage[width][height]');
   if (stage) {
     const w = Number(stage.getAttribute('width'));
     const h = Number(stage.getAttribute('height'));
-    if (Number.isFinite(w) && w > 0 && Number.isFinite(h) && h > 0) {
+    if (Number.isFinite(w) && Number.isFinite(h) && isPlausibleDesignSize(w, h)) {
       return { width: w, height: h };
     }
   }
 
-  for (const block of iterateRuleBlocks(css)) {
-    if (!STAGE_SIZE_SELECTOR_RE.test(block.selector)) continue;
-    const width = matchPxLength(block.body, 'width');
-    const height = matchPxLength(block.body, 'height');
-    if (width && height) return { width, height };
+  const candidates: Element[] = [];
+  let node = slide.parentElement;
+  while (node) {
+    const tag = node.tagName.toLowerCase();
+    if (tag === 'body' || tag === 'html') break;
+    candidates.push(node);
+    node = node.parentElement;
+  }
+  candidates.push(slide);
+
+  const blocks = Array.from(iterateRuleBlocks(css));
+  for (const candidate of candidates) {
+    for (const block of blocks) {
+      try {
+        if (!candidate.matches(block.selector)) continue;
+      } catch {
+        continue;
+      }
+      const width = matchPxLength(block.body, 'width');
+      const height = matchPxLength(block.body, 'height');
+      if (width !== null && height !== null && isPlausibleDesignSize(width, height)) {
+        return { width, height };
+      }
+    }
   }
 
   return { width: DEFAULT_DESIGN_WIDTH, height: DEFAULT_DESIGN_HEIGHT };
@@ -292,13 +432,51 @@ function stripCssComments(css: string): string {
   return css.replace(/\/\*[\s\S]*?\*\//g, '');
 }
 
-// Rewrite `:root`, `html`, and `body` (as standalone selectors in a selector
-// list) to `:host`, so the deck's custom properties, base font, and base color
-// land on the shadow host and inherit into the re-parented slide. Compound
-// selectors like `body.dark` are left untouched (they'd match nothing, but
-// forcing them onto `:host` risks unwanted rules).
+interface CssImportExtraction {
+  css: string;
+  hrefs: string[];
+  valid: boolean;
+}
+
+// Constructable stylesheets ignore @import, while the main preview iframe
+// loads it normally. Pull the common quoted font-import forms into the host
+// document and reject anything else instead of silently rendering a different
+// thumbnail. Keeping the URL quoted lets the expression safely include the
+// semicolons used by Google Fonts axis queries such as `wght@400;700`.
+function extractCssImports(css: string): CssImportExtraction {
+  const hrefs: string[] = [];
+  const stripped = css.replace(
+    /(^|})\s*@import\s+(?:url\(\s*)?(['"])([^'"]+)\2\s*\)?\s*;/gim,
+    (_statement, boundary: string, _quote: string, href: string) => {
+      hrefs.push(href.trim());
+      return `${boundary}\n`;
+    },
+  );
+  if (/@import\b/i.test(stripped) || hrefs.some((href) => !href)) {
+    return { css, hrefs: [], valid: false };
+  }
+  return { css: stripped, hrefs, valid: true };
+}
+
+// Keep `:root` variables on the shadow host, and redirect html/body selectors
+// to inert proxy elements reconstructed by DeckSlideThumbnail. Rewriting the
+// selector prelude (rather than arbitrary CSS text) preserves compound theme
+// selectors such as `html.dark body[data-theme]` and root pseudo-elements
+// without touching declaration values.
 function rewriteRootSelectors(css: string): string {
-  return css.replace(/(^|[{};,])(\s*)(:root|html|body)(\s*)(?=[,{])/g, '$1$2:host$4');
+  return css.replace(
+    /(^|[{}])(\s*)(?!@)([^{}]+?)(\s*)\{/g,
+    (whole, boundary: string, leading: string, selector: string, trailing: string) => {
+      const rewritten = selector.replace(
+        /(^|[\s>+~,(])(:root|html|body)(?=$|[.#:\[\s>+~,{)])/g,
+        (_token, prefix: string, root: string) => {
+          if (root === ':root') return `${prefix}:host`;
+          return `${prefix}[data-od-thumb-${root}]`;
+        },
+      );
+      return `${boundary}${leading}${rewritten}${trailing}{`;
+    },
+  );
 }
 
 // Lift `@font-face` blocks out; they're ignored inside a shadow root and must be
@@ -359,6 +537,20 @@ function sanitizeThumbnailMarkup(html: string): Element | null {
   }) as unknown as HTMLElement;
   if (body.children.length !== 1) return null;
   return body.firstElementChild;
+}
+
+function sanitizeThumbnailAttributes(node: Element): Array<[string, string]> {
+  const shell = node.ownerDocument.createElement('div');
+  for (const attr of Array.from(node.attributes)) {
+    try {
+      shell.setAttribute(attr.name, attr.value);
+    } catch {
+      // Invalid source attributes are omitted from the inert proxy.
+    }
+  }
+  const clean = sanitizeThumbnailMarkup(shell.outerHTML);
+  if (!clean) return [];
+  return Array.from(clean.attributes).map((attr) => [attr.name, attr.value]);
 }
 
 // Sanitize a single reconstructed wrapper element (tag + attributes only). An

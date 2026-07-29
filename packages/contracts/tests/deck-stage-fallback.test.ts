@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  DECK_STRUCTURED_SLIDE_SELECTOR,
+  htmlUsesCanonicalDeckFramework,
   htmlUsesDeckStageElement,
   injectDeckStageFallback,
 } from '../src/runtime/deck-stage-fallback.js';
@@ -11,6 +13,20 @@ describe('deck-stage fallback runtime injection', () => {
 
     expect(htmlUsesDeckStageElement(html)).toBe(false);
     expect(injectDeckStageFallback(html)).toBe(html);
+  });
+
+  it('recognizes only the exact canonical deck-stage id as framework identity', () => {
+    expect(htmlUsesCanonicalDeckFramework('<div id="deck-stage"></div>')).toBe(true);
+    expect(htmlUsesCanonicalDeckFramework("<div ID = 'deck-stage'></div>")).toBe(true);
+    expect(
+      htmlUsesCanonicalDeckFramework('<div class="stage" data-od-id="deck-stage"></div>'),
+    ).toBe(false);
+    expect(htmlUsesCanonicalDeckFramework('<div data-id="deck-stage"></div>')).toBe(false);
+  });
+
+  it('keeps freeform stage metadata in the shared structured selector family', () => {
+    expect(DECK_STRUCTURED_SLIDE_SELECTOR).toContain('.stage > .slide');
+    expect(DECK_STRUCTURED_SLIDE_SELECTOR).toContain('[data-od-id="deck-stage"] > .slide');
   });
 
   it('injects a fallback custom element runtime before body close', () => {

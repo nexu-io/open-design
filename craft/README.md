@@ -12,11 +12,13 @@ ones into the system prompt above the active skill body.
 | `skills/` | Functional capabilities invoked while doing work | `design-brief`, `brand-extract`, `imagegen` |
 | `design-templates/` | Packaged artifact shapes | `saas-landing`, `dashboard`, `pricing-page` |
 | `design-systems/` | Brand package: prose, token contract, and optional rich resources | `linear-app`, `apple`, `notion` |
-| `craft/` | **Universal** craft knowledge — true regardless of brand | letter-spacing rules, accent-overuse caps, anti-AI-slop |
+| `craft/` | Brand-agnostic craft defaults and objective quality gates | letter-spacing defaults, accent-discipline guidance, anti-AI-slop |
 
 `DESIGN.md` tells the agent which colors and fonts a brand uses. `craft/`
-tells the agent the universal rules a competent designer applies on top —
-e.g. ALL CAPS always needs ≥0.06em tracking, regardless of the brand.
+fills gaps with professional defaults and objective quality checks. Explicit
+visual decisions in `DESIGN.md` override aesthetic craft defaults; legibility,
+contrast, overflow safety, factual integrity, and auto-checked P0 rules remain
+binding.
 
 ## How a skill opts in
 

@@ -9,9 +9,11 @@
   that the naive version silently breaks (see comments in the script).
 
   Theme tokens at the top mirror the web-prototype seed; bind them to the
-  active DESIGN.md and stop. A deck has TWO surfaces — `.slide.light` and
-  `.slide.dark` — that swap fg / bg without touching the accent. Use both;
-  alternating creates the rhythm that prevents visual fatigue.
+  active DESIGN.md and stop. A deck offers TWO surfaces — `.slide.light` and
+  `.slide.dark` — that swap fg / bg without touching the accent. Choose one
+  dominant surface unless the user or active DESIGN.md explicitly requires
+  another surface program. Use the inverse only for a named narrative role;
+  it is optional, and you should never alternate by slide index or quota.
 -->
 <html lang="en">
 <head>
@@ -207,38 +209,6 @@
     .ph-img.wide { aspect-ratio: 16 / 9; }
     .ph-img.tall { aspect-ratio: 3 / 4; }
 
-    /* ─── chrome (counter, hint, progress) — fixed, never scrolls ──── */
-    .deck-counter {
-      position: fixed;
-      bottom: 24px; right: 32px;
-      font-family: var(--font-mono);
-      font-size: 12px;
-      color: var(--fg);
-      background: var(--surface);
-      padding: 6px 12px;
-      border-radius: 999px;
-      border: 1px solid var(--border);
-      letter-spacing: 0.04em;
-      z-index: 10;
-    }
-    .deck-hint {
-      position: fixed;
-      bottom: 24px; left: 32px;
-      font-family: var(--font-mono);
-      font-size: 11px;
-      color: var(--muted);
-      letter-spacing: 0.04em;
-      z-index: 10;
-    }
-    .deck-progress {
-      position: fixed;
-      top: 0; left: 0;
-      height: 3px;
-      background: var(--accent);
-      width: 0;
-      z-index: 10;
-      transition: width 0.18s ease;
-    }
   </style>
 </head>
 <body>
@@ -247,8 +217,9 @@
     │  PASTE SLIDES FROM references/layouts.md HERE.                 │
     │  ► Each `<section class="slide">` must include a class from:    │
     │    light | dark | hero light | hero dark                        │
-    │  ► No 3+ same-theme in a row.                                   │
-    │  ► For 8+ slides: ≥ 1 `hero dark` AND ≥ 1 `hero light`.         │
+    │  ► Choose one dominant surface from the brand / direction.      │
+    │  ► Inverse slides need a named narrative purpose.               │
+    │  ► Never alternate surfaces by slide index or quota.            │
     │  ► End with a clear CTA / takeaway slide.                       │
     └─────────────────────────────────────────────────────────────────┘
   -->
@@ -270,28 +241,21 @@
     <h2 class="h-hero">[REPLACE] The take-away.</h2>
   </section>
 
-  <!-- chrome -->
-  <div class="deck-progress" id="deck-progress" aria-hidden></div>
-  <div class="deck-counter"  id="deck-counter">1 / 3</div>
-  <div class="deck-hint">← / → · scroll · swipe</div>
-
   <script>
     /*
-      Five hard rules for deck nav inside an iframe (the OD preview is one).
+      Six hard rules for chrome-free deck navigation inside an iframe.
       The naive `document.body.scrollLeft` pattern silently fails: clicks
-      register, but keyboard does nothing, and the counter freezes at "1 / N"
-      while the user is on slide 6.
+      register, but keyboard and scroll state can silently diverge.
 
       1. Detect the real scroller — body OR documentElement, depending.
       2. Listen for scroll on BOTH window and document, capture phase.
       3. Listen for keydown on BOTH window and document, capture phase.
       4. Auto-focus body so arrow keys work without an upfront click.
       5. Never use Element.scrollIntoView — it can yank the host page.
+      6. Keep the artifact chrome-free; click either half to navigate.
     */
     (function () {
       var slides   = document.querySelectorAll('.slide');
-      var counter  = document.getElementById('deck-counter');
-      var progress = document.getElementById('deck-progress');
       var KEY      = 'od-deck-pos';
       var active   = 0;
 
@@ -340,8 +304,6 @@
       }
       function setActive(i) {
         active = i;
-        if (counter)  counter.textContent  = (i + 1) + ' / ' + slides.length;
-        if (progress) progress.style.width = (((i + 1) / slides.length) * 100) + '%';
         try { localStorage.setItem(KEY, String(i)); } catch (_) {}
       }
       function go(i) {
@@ -362,10 +324,24 @@
         else if (e.key === 'Home')                                                        { e.preventDefault(); go(0); }
         else if (e.key === 'End')                                                         { e.preventDefault(); go(slides.length - 1); }
       }
+      function onClick(e) {
+        if (e.defaultPrevented) return;
+        var root = document.documentElement;
+        if (root.hasAttribute('data-od-comment-mode') ||
+            root.hasAttribute('data-od-inspect-mode') ||
+            root.hasAttribute('data-od-edit-mode')) return;
+        var target = e.target;
+        if (target && target.closest &&
+            target.closest('a,button,input,textarea,select,summary,[contenteditable],[role="button"],[role="link"]')) return;
+        var selection = window.getSelection && window.getSelection();
+        if (selection && !selection.isCollapsed) return;
+        go(e.clientX < window.innerWidth / 2 ? active - 1 : active + 1);
+      }
 
       // listen on both surfaces, capture phase
       window.addEventListener('keydown', onKey, true);
       document.addEventListener('keydown', onKey, true);
+      document.addEventListener('click', onClick);
       document.addEventListener('scroll', syncFromScroll, { passive: true, capture: true });
       window.addEventListener('scroll', syncFromScroll,   { passive: true });
 

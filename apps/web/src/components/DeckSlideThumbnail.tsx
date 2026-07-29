@@ -14,6 +14,10 @@
 // iframe thumbnail for that item.
 
 import { memo, useEffect, useLayoutEffect, useRef } from 'react';
+import {
+  DECK_ACTIVE_ATTRIBUTE,
+  DECK_ACTIVE_CLASSES,
+} from '@open-design/contracts/runtime/deck-stage-fallback';
 import { DECK_CHROME_HIDE_CSS, DECK_MOTION_FREEZE_CSS } from '../runtime/srcdoc';
 import type { ParsedDeckThumbnails } from '../runtime/deck-thumbnail-parser';
 
@@ -23,11 +27,12 @@ const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffec
 // - `[data-od-thumb-wrap]`: make every reconstructed wrapper fill the canvas and
 //   drop the runtime transform / drop-shadow the deck's own JS would set.
 // - `[data-od-thumb-slide]`: pin the single slide to the full canvas and force
-//   it visible regardless of the deck's active-slide toggle.
+//   non-display visibility without changing its authored grid/flex/block mode.
 // - `.overlay/.tapzones`: template decks (`deck-stage.js`) name their nav this
 //   way — belt-and-suspenders on top of DECK_CHROME_HIDE_CSS.
-const THUMB_OVERRIDE_CSS = `[data-od-thumb-wrap]{display:block!important;position:absolute!important;inset:0!important;width:100%!important;height:100%!important;margin:0!important;padding:0!important;transform:none!important;box-shadow:none!important;visibility:visible!important;opacity:1!important;}
-[data-od-thumb-slide]{display:block!important;position:absolute!important;inset:0!important;margin:0!important;visibility:visible!important;opacity:1!important;pointer-events:none!important;}
+const THUMB_OVERRIDE_CSS = `[data-od-thumb-html],[data-od-thumb-body]{position:relative;width:100%;height:100%;}
+[data-od-thumb-wrap]{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;margin:0!important;padding:0!important;transform:none!important;box-shadow:none!important;visibility:visible!important;opacity:1!important;}
+[data-od-thumb-slide]{position:absolute!important;inset:0!important;margin:0!important;visibility:visible!important;opacity:1!important;pointer-events:none!important;}
 .overlay,.tapzones{display:none!important;visibility:hidden!important;pointer-events:none!important;}`;
 
 interface DeckCssEntry {
@@ -98,6 +103,16 @@ export interface DeckSlideThumbnailProps {
   onReady?: () => void;
 }
 
+function applyAttributes(element: HTMLElement, attributes: Array<[string, string]>): void {
+  for (const [name, value] of attributes) {
+    try {
+      element.setAttribute(name, value);
+    } catch {
+      // Ignore invalid attribute names carried over from the source.
+    }
+  }
+}
+
 export const DeckSlideThumbnail = memo(function DeckSlideThumbnail({
   parsed,
   index,
@@ -143,19 +158,24 @@ export const DeckSlideThumbnail = memo(function DeckSlideThumbnail({
         `position:absolute;top:0;left:0;transform-origin:top left;overflow:hidden;` +
         `width:${parsed.designWidth}px;height:${parsed.designHeight}px;`;
 
-      let mountPoint: HTMLElement = canvas;
+      const htmlRoot = document.createElement('div');
+      applyAttributes(htmlRoot, parsed.rootAttributes.html);
+      htmlRoot.setAttribute('data-od-thumb-html', '');
+      const bodyRoot = document.createElement('div');
+      applyAttributes(bodyRoot, parsed.rootAttributes.body);
+      bodyRoot.setAttribute('data-od-thumb-body', '');
+      canvas.appendChild(htmlRoot);
+      htmlRoot.appendChild(bodyRoot);
+
+      const wrappers: HTMLElement[] = [htmlRoot, bodyRoot];
+      let mountPoint: HTMLElement = bodyRoot;
       for (const ancestor of parsed.ancestors) {
         const el = document.createElement(ancestor.tag);
-        for (const [name, value] of ancestor.attributes) {
-          try {
-            el.setAttribute(name, value);
-          } catch {
-            // Ignore invalid attribute names carried over from the source.
-          }
-        }
+        applyAttributes(el, ancestor.attributes);
         el.setAttribute('data-od-thumb-wrap', '');
         mountPoint.appendChild(el);
         mountPoint = el;
+        wrappers.push(el);
       }
 
       const template = document.createElement('template');
@@ -164,8 +184,9 @@ export const DeckSlideThumbnail = memo(function DeckSlideThumbnail({
       if (!slide) throw new Error('deck thumbnail: empty slide markup');
       // Inert already (parsed via <template>), but drop scripts defensively.
       slide.querySelectorAll('script').forEach((s) => s.remove());
-      slide.classList.add('active', 'is-active', 'current', 'visible');
-      slide.setAttribute('data-od-deck-active', '');
+      slide.classList.remove(...DECK_ACTIVE_CLASSES);
+      slide.classList.add(...parsed.stateClasses);
+      slide.setAttribute(DECK_ACTIVE_ATTRIBUTE, '');
       slide.setAttribute('data-od-thumb-slide', '');
       slide.removeAttribute('hidden');
       slide.setAttribute('aria-hidden', 'false');
@@ -180,6 +201,11 @@ export const DeckSlideThumbnail = memo(function DeckSlideThumbnail({
         canvas.style.transform = `scale(${scale})`;
         canvas.style.left = `${(w - parsed.designWidth * scale) / 2}px`;
         canvas.style.top = `${(h - parsed.designHeight * scale) / 2}px`;
+        for (const element of [...wrappers, slide]) {
+          if (window.getComputedStyle(element).display === 'none') {
+            element.style.setProperty('display', 'block', 'important');
+          }
+        }
         markReady();
       };
       apply();

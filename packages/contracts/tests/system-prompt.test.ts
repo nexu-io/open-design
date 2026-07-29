@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { composeSystemPrompt } from '../src/prompts/system.js';
+import { composeSystemPrompt as composePrompt } from '../src/prompts/system.js';
 import { DISCOVERY_AND_PHILOSOPHY } from '../src/prompts/discovery.js';
+
+const composeSystemPrompt = (input: Parameters<typeof composePrompt>[0]) =>
+  composePrompt({ ...input, promptCoreVariant: 'classic' });
 
 // Guard: the contracts copy of DISCOVERY_AND_PHILOSOPHY must have the same
 // cap removal as apps/daemon/src/prompts/discovery.ts. The web app imports
@@ -51,15 +54,14 @@ describe('DISCOVERY_AND_PHILOSOPHY (contracts copy) — TodoWrite plan item coun
     const prompt = composeSystemPrompt({ sessionMode: 'plan', metadata: { kind: 'prototype' } as any });
 
     expect(prompt).toContain('# Plan mode — editable document first');
-    expect(prompt).toContain('do NOT emit `<question-form id="discovery">`');
-    expect(prompt).toContain('`<question-form id="task-type">`');
+    expect(prompt).toContain('default artifact-discovery forms `discovery` or `task-type`');
     expect(prompt).toContain('Quick brief — 30 seconds');
-    expect(prompt).toContain('<question-form id="plan-brief">');
-    expect(prompt).toContain('substantial plan-document work still starts with a real TodoWrite/task-list tool call');
-    expect(prompt).toContain('show progress through the Todo card');
-    expect(prompt.indexOf('# Plan mode — editable document first')).toBeLessThan(
-      prompt.indexOf(DISCOVERY_AND_PHILOSOPHY),
-    );
+    expect(prompt).toContain('id `plan-brief`');
+    expect(prompt).toContain("For substantial plan-document work, start with the runtime's real TodoWrite/task-list tool");
+    expect(prompt).toContain('show progress through the host UI');
+    expect(prompt).toContain('Plan mode produces only the planning deliverable');
+    expect(prompt).not.toContain(DISCOVERY_AND_PHILOSOPHY);
+    expect(prompt).not.toContain('## Semantic output file names');
   });
 });
 
@@ -96,43 +98,86 @@ describe('DISCOVERY_AND_PHILOSOPHY (contracts copy) — prompt routing parity', 
     );
   });
 
-  it('defaults generated deliverables to semantic filenames after active skills', () => {
-    const prompt = composeSystemPrompt({
+  it('keeps standalone semantic-filename guidance in classic only', () => {
+    const classic = composeSystemPrompt({
       skillName: 'simple-deck',
       skillBody: 'Copy assets/template.html to index.html, then fill the deck.',
+      promptCoreVariant: 'classic',
+    });
+    const slim = composePrompt({
+      skillName: 'simple-deck',
+      skillBody: 'Copy assets/template.html to index.html, then fill the deck.',
+      promptCoreVariant: 'slim',
     });
 
-    expect(prompt).toContain('## Semantic output file names');
-    expect(prompt).toContain('Do not call every new artifact `index.html`');
-    expect(prompt).toContain('adapt the destination to a semantic filename');
-    expect(prompt.indexOf('## Semantic output file names')).toBeGreaterThan(
-      prompt.indexOf('## Active skill — simple-deck'),
+    expect(classic).toContain('## Semantic output file names');
+    expect(classic).toContain('Do not call every new artifact `index.html`');
+    expect(classic).toContain('adapt the destination to a semantic filename');
+    expect(classic.indexOf('## Semantic output file names')).toBeGreaterThan(
+      classic.indexOf('## Active skill — simple-deck'),
     );
+    expect(slim).not.toContain('## Semantic output file names');
+    expect(slim).toContain('Use short semantic names from the brief');
   });
 
-  it('does not make index.html the fixed deck-framework destination', () => {
+  it('omits semantic filename guidance from media and plain text-artifact runs', () => {
+    const media = composeSystemPrompt({ metadata: { kind: 'image' } as any });
+    const plain = composeSystemPrompt({
+      metadata: { kind: 'prototype' } as any,
+      streamFormat: 'plain',
+    });
+
+    expect(media).not.toContain('## Semantic output file names');
+    expect(plain).not.toContain('## Semantic output file names');
+  });
+
+  it('does not make index.html a fixed deck destination', () => {
     const prompt = composeSystemPrompt({ skillMode: 'deck' });
 
     expect(prompt).not.toContain('Copy the canonical skeleton below as index.html');
-    expect(prompt).toContain('semantically named deck HTML file');
+    expect(prompt).toContain('# Deck delivery contract');
+    expect(prompt).toContain('Deliver one complete HTML deck');
   });
 
-  it('pins the data chart discipline inside the deck framework (#907)', () => {
+  it('pins outcome-based quantitative chart integrity into deck runs (#907)', () => {
     const prompt = composeSystemPrompt({ skillMode: 'deck' });
 
-    expect(prompt).toContain('## Data chart discipline');
-    expect(prompt).toContain('calc(var(--v) / var(--max)');
-    expect(prompt).toContain('visible category label AND value label');
-    expect(prompt).toContain('Mentally spot-check two bars');
+    expect(prompt).toContain('**Charts/diagrams:**');
+    expect(prompt).toContain('Derive proportions from actual values');
+    expect(prompt).toContain('label categories and values');
   });
 
-  it('pins the mermaid theme discipline inside the deck framework (dark decks)', () => {
+  it('pins background-aware chart and diagram legibility into deck runs', () => {
     const prompt = composeSystemPrompt({ skillMode: 'deck' });
 
-    expect(prompt).toContain('## Mermaid diagram theme discipline');
-    expect(prompt).toContain("theme: 'dark'");
-    expect(prompt).toContain('themeVariables');
-    expect(prompt).toContain('no dark-on-dark labels');
+    expect(prompt).toContain('**Charts/diagrams:**');
+    expect(prompt).toContain('match the slide background');
+    expect(prompt).toContain('legible at presentation distance');
+  });
+});
+
+describe('media prompt ownership', () => {
+  it('loads HyperFrames guidance only for the selected HyperFrames model', () => {
+    const regularVideo = composeSystemPrompt({
+      metadata: { kind: 'video', videoModel: 'doubao-seedance-2-0-260128' } as any,
+    });
+    const hyperframes = composeSystemPrompt({
+      metadata: { kind: 'video', videoModel: 'hyperframes-html' } as any,
+    });
+
+    expect(regularVideo).not.toContain('Special case: `hyperframes-html`');
+    expect(hyperframes.match(/Special case: `hyperframes-html`/g)).toHaveLength(1);
+  });
+
+  it('lets an active HyperFrames skill own its authoring recipe', () => {
+    const prompt = composeSystemPrompt({
+      skillMode: 'video',
+      skillBody: 'Create the composition with `npx hyperframes init`, then edit it.',
+      metadata: { kind: 'video', videoModel: 'hyperframes-html' } as any,
+    });
+
+    expect(prompt.match(/npx hyperframes init/g)).toHaveLength(1);
+    expect(prompt).not.toContain('Special case: `hyperframes-html`');
   });
 });
 

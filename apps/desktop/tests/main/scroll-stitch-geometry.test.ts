@@ -107,6 +107,10 @@ describe('deck capture DOM prep', () => {
     expect(HIDE_CHROME_SELECTOR).toContain('.notes-overlay');
     expect(HIDE_CHROME_SELECTOR).toContain('aside.notes');
     expect(HIDE_CHROME_SELECTOR).toContain('.speaker-notes');
+    expect(HIDE_CHROME_SELECTOR).toContain('.data-deck-nav');
+    expect(HIDE_CHROME_SELECTOR).toContain('[data-deck-nav]');
+    expect(HIDE_CHROME_SELECTOR).toContain('[data-od-id="deck-nav"]');
+    expect(HIDE_CHROME_SELECTOR).toContain('[data-slide-nav]');
   });
 
   test('off-stage slide fallback offsets the capture clone instead of clearing transforms', () => {

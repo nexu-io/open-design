@@ -34,6 +34,8 @@ import type { ParsedDeckThumbnails } from '../runtime/deck-thumbnail-parser';
  * for very long decks.
  */
 export const MOUNTED_THUMBNAIL_CAP = 16;
+/** Full-deck iframe fallbacks are much heavier than inert shadow thumbnails. */
+export const IFRAME_MOUNTED_THUMBNAIL_CAP = 6;
 
 /**
  * Pure LRU step for the set of thumbnail indices that keep a live iframe.
@@ -84,6 +86,7 @@ interface DeckThumbnailItemProps {
    * full-deck iframe built by `getSrcDoc`.
    */
   parsedDeck: ParsedDeckThumbnails | null;
+  aspectRatio?: string;
   getSrcDoc: (index: number) => string;
   onSelect: (index: number) => void;
   onVisibilityChange: (index: number, inView: boolean) => void;
@@ -96,6 +99,7 @@ const DeckThumbnailItem = memo(function DeckThumbnailItem({
   label,
   listRef,
   parsedDeck,
+  aspectRatio,
   getSrcDoc,
   onSelect,
   onVisibilityChange,
@@ -107,7 +111,7 @@ const DeckThumbnailItem = memo(function DeckThumbnailItem({
   // fold.
   const { ref, inView } = useInView<HTMLButtonElement>({
     once: false,
-    rootMargin: '320px',
+    rootMargin: parsedDeck ? '320px' : '80px',
     root: listRef,
   });
   useEffect(() => {
@@ -130,14 +134,37 @@ const DeckThumbnailItem = memo(function DeckThumbnailItem({
   const thumbnailSource = useShadow ? parsedDeck : getSrcDoc;
   const [readySource, setReadySource] = useState<typeof thumbnailSource | null>(null);
   const thumbnailReady = mounted && readySource === thumbnailSource;
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
   useEffect(() => {
     if (!mounted) setReadySource(null);
   }, [mounted]);
-  const handleThumbnailReady = useCallback(() => setReadySource(thumbnailSource), [thumbnailSource]);
+  const handleThumbnailReady = useCallback(
+    () => setReadySource(() => thumbnailSource),
+    [thumbnailSource],
+  );
   const handleShadowError = useCallback(() => {
     setReadySource(null);
     setShadowFailed(true);
   }, []);
+  useEffect(() => {
+    if (!mounted || useShadow) return;
+    function onSlideState(ev: MessageEvent) {
+      if (ev.source !== iframeRef.current?.contentWindow) return;
+      const data = ev.data as { type?: string; active?: number } | null;
+      if (!data || data.type !== 'od:slide-state' || data.active !== index) return;
+      handleThumbnailReady();
+    }
+    window.addEventListener('message', onSlideState);
+    return () => window.removeEventListener('message', onSlideState);
+  }, [handleThumbnailReady, index, mounted, useShadow]);
+  const handleIframeLoad = useCallback(() => {
+    // The bridge's initial restore is asynchronous. Ask for this index again
+    // after load, and keep the cover until the child confirms the active slide.
+    iframeRef.current?.contentWindow?.postMessage(
+      { type: 'od:slide', action: 'go', index },
+      '*',
+    );
+  }, [index]);
 
   return (
     <button
@@ -149,7 +176,11 @@ const DeckThumbnailItem = memo(function DeckThumbnailItem({
       onClick={() => onSelect(index)}
     >
       <span className="deck-thumbnail-number">{index + 1}</span>
-      <span className="deck-thumbnail-frame" aria-hidden="true">
+      <span
+        className="deck-thumbnail-frame"
+        aria-hidden="true"
+        style={aspectRatio ? { aspectRatio } : undefined}
+      >
         {mounted ? (
           useShadow ? (
             <DeckSlideThumbnail
@@ -160,11 +191,12 @@ const DeckThumbnailItem = memo(function DeckThumbnailItem({
             />
           ) : (
             <iframe
+              ref={iframeRef}
               title={label}
               sandbox="allow-scripts allow-downloads"
               srcDoc={getSrcDoc(index)}
               tabIndex={-1}
-              onLoad={handleThumbnailReady}
+              onLoad={handleIframeLoad}
             />
           )
         ) : null}
@@ -194,6 +226,8 @@ export interface DeckThumbnailRailProps {
    * thumbnail uses the iframe fallback (decks we can't statically render).
    */
   parsedDeck?: ParsedDeckThumbnails | null;
+  /** Analyzed deck canvas ratio, including decks using the iframe fallback. */
+  aspectRatio?: string;
   onSelect: (index: number) => void;
 }
 
@@ -203,6 +237,7 @@ export const DeckThumbnailRail = memo(function DeckThumbnailRail({
   labelTotal,
   buildThumbSrcDoc,
   parsedDeck = null,
+  aspectRatio,
   onSelect,
 }: DeckThumbnailRailProps) {
   const t = useT();
@@ -221,8 +256,9 @@ export const DeckThumbnailRail = memo(function DeckThumbnailRail({
   }, []);
 
   useEffect(() => {
-    setMountedOrder((prev) => nextMountedThumbnails(prev, visible, activeIndex, count));
-  }, [visible, activeIndex, count]);
+    const cap = parsedDeck ? MOUNTED_THUMBNAIL_CAP : IFRAME_MOUNTED_THUMBNAIL_CAP;
+    setMountedOrder((prev) => nextMountedThumbnails(prev, visible, activeIndex, count, cap));
+  }, [visible, activeIndex, count, parsedDeck]);
 
   // Render-phase memo cache: one srcdoc per slide per deck source. A plain
   // Map (not per-item useMemo) so slides share the cache across LRU
@@ -254,6 +290,7 @@ export const DeckThumbnailRail = memo(function DeckThumbnailRail({
             })}
             listRef={listRef}
             parsedDeck={parsedDeck}
+            aspectRatio={aspectRatio}
             getSrcDoc={getSrcDoc}
             onSelect={onSelect}
             onVisibilityChange={onVisibilityChange}

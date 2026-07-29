@@ -72,8 +72,21 @@ describe('injectDeckBridge — framework-deck detection (#deck-stage)', () => {
   it('keeps injecting the place-content fix for legacy / non-framework decks', () => {
     const out = buildSrcdoc(legacyDeckHtml(), { deck: true });
     expect(out).toMatch(/<style[^>]*data-od-deck-fix/);
-    expect(out).toContain('.stage, .deck-stage, .deck-shell { place-content: center !important; }');
+    expect(out).toContain(
+      '.stage, .deck-stage, .deck-shell { flex: none !important; place-content: center !important; }',
+    );
     expect(out).toMatch(/<script[^>]*data-od-deck-bridge/);
+  });
+
+  it('does not mistake editable data-od-id metadata for canonical framework identity', () => {
+    const html = legacyDeckHtml().replace(
+      '<div class="stage">',
+      '<div class="stage" data-od-id="deck-stage">',
+    );
+    const out = buildSrcdoc(html, { deck: true, deckClickNavigation: true });
+
+    expect(out).toMatch(/<style[^>]*data-od-deck-fix/);
+    expect(out).toContain('if (true) {');
   });
 
   it('can hide generated deck chrome so host preview chrome owns navigation', () => {
@@ -82,6 +95,9 @@ describe('injectDeckBridge — framework-deck detection (#deck-stage)', () => {
     expect(out).toMatch(/<style[^>]*data-od-deck-chrome-hidden/);
     expect(out).toContain('.deck-counter,');
     expect(out).toContain('.deck-hint,');
+    expect(out).toContain('.data-deck-nav,');
+    expect(out).toContain('[data-deck-nav],');
+    expect(out).toContain('[data-od-id="deck-nav"],');
     expect(out).toContain('display: none !important');
   });
 

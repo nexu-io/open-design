@@ -1,21 +1,30 @@
 // Characterization test for renderMetadataBlock (internal to system.ts).
-// composeSystemPrompt pushes the metadata block as its final part and gates
-// every later part behind `!isAskMode`, so composing in 'chat' (ask) mode and slicing
-// from the "## Project metadata" marker yields exactly the metadata block.
+// composeSystemPrompt pushes the metadata block before the shared host-runtime
+// tail. Compose an explicit classic Design prompt, then slice from the metadata marker to the next
+// section separator so these snapshots continue to characterize metadata only.
 // These snapshots pin the block across kinds/flags so the decomposition of
 // renderMetadataBlock into per-concern helpers is provably behavior-preserving.
 
 import { describe, expect, it } from 'vitest';
-import { composeSystemPrompt } from '../src/prompts/system.js';
+import { composeSystemPrompt as composePrompt } from '../src/prompts/system.js';
 import type { ProjectMetadata, ProjectTemplate } from '../src/api/projects.js';
 
+const composeSystemPrompt = (input: Parameters<typeof composePrompt>[0]) =>
+  composePrompt({ ...input, promptCoreVariant: 'classic' });
+
 function metadataBlock(metadata: ProjectMetadata, template?: ProjectTemplate): string {
-  const out = composeSystemPrompt({ metadata, template, sessionMode: 'chat' });
+  const out = composeSystemPrompt({ metadata, template });
   const idx = out.indexOf('\n\n## Project metadata');
-  return idx === -1 ? '' : out.slice(idx);
+  if (idx === -1) return '';
+  const separators = [
+    out.indexOf('\n\n---\n\n', idx),
+    out.indexOf('\n---\n\n', idx),
+  ].filter((position) => position >= 0);
+  const end = separators.length > 0 ? Math.min(...separators) : -1;
+  return end === -1 ? out.slice(idx) : out.slice(idx, end);
 }
 
-describe('renderMetadataBlock (characterization via composeSystemPrompt chat-mode)', () => {
+describe('renderMetadataBlock (characterization via classic Design composition)', () => {
   it('prototype with platform, cross-platform targets, and flags', () => {
     const block = metadataBlock({
       kind: 'prototype',

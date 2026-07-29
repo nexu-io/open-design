@@ -1,8 +1,9 @@
 # Color craft rules
 
-Universal color rules applied on top of the active `DESIGN.md`. The
-design system supplies the palette tokens; this file enforces how to
-*use* them.
+Color defaults for details the active design system does not specify.
+Explicit palette and color-usage decisions in the active `DESIGN.md` take precedence,
+including accent roles, gradients, surface proportions, and semantic colors.
+Objective contrast and state-legibility gates still apply.
 
 > Adapted from [refero_skill](https://github.com/referodesign/refero_skill)
 > (MIT). All examples reference Open Design's standard tokens
@@ -22,9 +23,10 @@ A coherent palette has four layers. Plan all four before writing any CSS.
 ## Accent discipline
 
 The single biggest readability failure in AI-generated UIs is accent
-overuse. Hard caps:
+overuse. Unless the active `DESIGN.md` defines another accent system, use
+these default caps:
 
-- **At most 2 visible uses of `--accent` per screen.** Typical pair:
+- **By default, at most 2 visible uses of `--accent` per screen.** Typical pair:
   one eyebrow / chip + one primary CTA. Or one accent card + one tab
   pill. Pick a pair, not a flood.
 - Links count as accent; demote to `--fg` underline if you also have a

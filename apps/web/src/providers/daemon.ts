@@ -286,6 +286,7 @@ export interface DaemonStreamOptions {
   projectId?: string | null;
   conversationId?: string | null;
   sessionMode?: ChatSessionMode;
+  artifactDeliveryRequired?: boolean;
   assistantMessageId?: string | null;
   clientRequestId?: string | null;
   skillId?: string | null;
@@ -635,6 +636,7 @@ export async function streamViaDaemon({
   projectId,
   conversationId,
   sessionMode,
+  artifactDeliveryRequired,
   assistantMessageId,
   clientRequestId,
   skillId,
@@ -674,6 +676,7 @@ export async function streamViaDaemon({
     projectId: projectId ?? null,
     conversationId: conversationId ?? null,
     sessionMode,
+    ...(artifactDeliveryRequired ? { artifactDeliveryRequired: true } : {}),
     assistantMessageId: assistantMessageId ?? null,
     clientRequestId: clientRequestId ?? null,
     skillId: skillId ?? null,

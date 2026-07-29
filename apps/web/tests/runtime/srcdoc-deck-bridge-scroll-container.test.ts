@@ -204,4 +204,86 @@ describe('deck bridge - scroll container fallback', () => {
     expect(win.document.documentElement.scrollLeft).toBe(2000);
     expect(lastSlideState(parentPostMessage)).toMatchObject({ active: 2, count: 3 });
   });
+
+  it('tracks a nested horizontal slide scroller instead of leaving host state at slide one', async () => {
+    const bodyHtml = `
+      <style>
+        #deck-viewport {
+          display: flex;
+          overflow-x: auto;
+          scroll-snap-type: x mandatory;
+        }
+        .slide {
+          flex: 0 0 100vw;
+          scroll-snap-align: start;
+        }
+      </style>
+      <div id="deck-viewport">
+        <section class="slide">One</section>
+        <section class="slide">Two</section>
+        <section class="slide">Three</section>
+      </div>
+    `;
+    const srcdoc = buildSrcdoc(`<!doctype html><html><body>${bodyHtml}</body></html>`, {
+      deck: true,
+    });
+    const script = extractDeckBridgeScript(srcdoc);
+    const dom = new JSDOM(`<!doctype html><html><body>${bodyHtml}</body></html>`, {
+      runScripts: 'outside-only',
+      pretendToBeVisual: true,
+    });
+    const win = dom.window;
+    const parentPostMessage = vi.fn();
+    Object.defineProperty(win, 'parent', {
+      configurable: true,
+      value: { postMessage: parentPostMessage },
+    });
+    Object.defineProperty(win, 'innerWidth', {
+      configurable: true,
+      value: 1000,
+    });
+    const viewport = win.document.getElementById('deck-viewport') as HTMLElement;
+    Object.defineProperty(viewport, 'scrollWidth', {
+      configurable: true,
+      value: 1800,
+    });
+    Object.defineProperty(viewport, 'clientWidth', {
+      configurable: true,
+      value: 600,
+    });
+    let viewportScrollLeft = 0;
+    Object.defineProperty(viewport, 'scrollLeft', {
+      configurable: true,
+      get: () => viewportScrollLeft,
+      set: (value: number) => {
+        viewportScrollLeft = value;
+      },
+    });
+    Object.defineProperty(viewport, 'scrollTo', {
+      configurable: true,
+      value: ({ left }: { left?: number }) => {
+        if (typeof left === 'number') viewport.scrollLeft = left;
+      },
+    });
+
+    const evaluate = new win.Function(script);
+    evaluate.call(win);
+    win.dispatchEvent(new win.Event('load'));
+
+    win.dispatchEvent(new win.MessageEvent('message', {
+      data: { type: 'od:slide', action: 'next' },
+    }));
+    await new Promise<void>((resolve) => win.setTimeout(resolve, 420));
+
+    expect(viewport.scrollLeft).toBe(600);
+    expect(lastSlideState(parentPostMessage)).toMatchObject({ active: 1, count: 3 });
+
+    win.dispatchEvent(new win.MessageEvent('message', {
+      data: { type: 'od:slide', action: 'next' },
+    }));
+    await new Promise<void>((resolve) => win.setTimeout(resolve, 420));
+
+    expect(viewport.scrollLeft).toBe(1200);
+    expect(lastSlideState(parentPostMessage)).toMatchObject({ active: 2, count: 3 });
+  });
 });

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { JSDOM } from 'jsdom';
+import { DECK_STRUCTURED_SLIDE_SELECTOR } from '@open-design/contracts/runtime/deck-stage-fallback';
 import { buildSrcdoc } from '../../src/runtime/srcdoc';
 
 const deckHtml = `<!doctype html>
@@ -133,7 +134,7 @@ describe('buildSrcdoc', () => {
     expect(srcdoc).toContain('data-od-deck-stage-fallback');
     expect(srcdoc).toContain("window.customElements.define('deck-stage'");
     expect(srcdoc).toContain(
-      "document.querySelectorAll('deck-stage > .slide, .deck > .slide, .deck-stage > .slide, .deck-shell > .slide, body > .slide')",
+      `document.querySelectorAll(${JSON.stringify(DECK_STRUCTURED_SLIDE_SELECTOR)})`,
     );
     expect(srcdoc.indexOf('data-od-deck-stage-fallback')).toBeLessThan(
       srcdoc.indexOf('data-od-deck-bridge'),

@@ -1,9 +1,12 @@
 /**
- * Stable deck framework injected into the system prompt when the active skill
- * mode is `deck`. The whole point: stop regenerating the scale-to-fit JS, the
- * keyboard handler, the slide visibility toggle, the counter, and the print
- * rules each turn — every regeneration has subtly different bugs (focus is
- * wrong, scaling drifts inside the iframe wrapper, arrow keys swallowed).
+ * Legacy fixed deck framework retained for internal compatibility. The
+ * production directive is defined below as a minimal delivery contract plus
+ * outcome quality rules.
+ *
+ * The legacy framework's purpose was to stop regenerating the scale-to-fit JS,
+ * keyboard handler, slide visibility toggle, counter, and print rules each turn
+ * — every regeneration has subtly different bugs (focus is wrong, scaling
+ * drifts inside the iframe wrapper, arrow keys swallowed).
  *
  * Two pieces ship together:
  *   - DECK_SKELETON_HTML : the literal scaffold the model copies verbatim.
@@ -42,6 +45,8 @@
  *     producing a multi-page vertical PDF on Save-as-PDF.
  */
 
+import type { ExecutionProfile } from '../execution-profile.js';
+
 export const DECK_SKELETON_HTML = `<!doctype html>
 <html lang="en">
 <head>
@@ -57,8 +62,9 @@ export const DECK_SKELETON_HTML = `<!doctype html>
        Contract this framework provides:
          - 1920×1080 fixed canvas, scaled to fit the viewport
          - Only .slide.active is visible at a time
-         - Prev/next + counter rendered outside the scaled stage
-         - Keyboard (← → space PgUp PgDn Home End), click, and stored
+         - Programmatic prev/next + counter elements kept outside the scaled
+           stage but hidden by default so the host can render the UI chrome
+         - Keyboard (← → space PgUp PgDn Home End R), half-slide click, and stored
            position survive iframe focus quirks
          - "Save as PDF" produces a multi-page vertical PDF, one slide
            per page, by toggling every slide visible under @media print
@@ -117,14 +123,15 @@ export const DECK_SKELETON_HTML = `<!doctype html>
        specific. The hide rule above still wins for inactive slides. */
     :where(.slide.active) { display: flex; flex-direction: column; }
 
-    /* Chrome — counter + prev/next live outside the scaled stage so they
-       don't shrink with it. Do not relocate them inside .deck-stage. */
+    /* Programmatic chrome — counter + prev/next live outside the scaled
+       stage so the host bridge can read/update them, but they stay hidden
+       in preview, presentation, fullscreen, and new-tab modes. */
     .deck-counter {
       position: fixed;
       bottom: 22px;
       left: 50%;
       transform: translateX(-50%);
-      display: inline-flex;
+      display: none;
       align-items: center;
       gap: 4px;
       background: rgba(10, 14, 26, 0.92);
@@ -168,6 +175,7 @@ export const DECK_SKELETON_HTML = `<!doctype html>
       text-transform: uppercase;
       z-index: 999;
       pointer-events: none;
+      display: none;
     }
 
     /* Print / PDF stitching — every slide stacks top-to-bottom, one per
@@ -240,7 +248,7 @@ export const DECK_SKELETON_HTML = `<!doctype html>
     <span class="deck-count"><span id="deck-cur">01</span> <span class="total">/ <span id="deck-total">01</span></span></span>
     <button type="button" id="deck-next" aria-label="Next slide">›</button>
   </nav>
-  <div class="deck-hint">← / → · space</div>
+  <div class="deck-hint">← / → · space · R reset</div>
 
   <script>
     (function () {
@@ -290,9 +298,10 @@ export const DECK_SKELETON_HTML = `<!doctype html>
         if (e.__odDeckKeyHandled) return;
         var t = e.target;
         if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+        if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
         if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { e.__odDeckKeyHandled = true; e.preventDefault(); go(idx + 1); }
         else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.__odDeckKeyHandled = true; e.preventDefault(); go(idx - 1); }
-        else if (e.key === 'Home') { e.__odDeckKeyHandled = true; e.preventDefault(); go(0); }
+        else if (e.key === 'Home' || String(e.key).toLowerCase() === 'r') { e.__odDeckKeyHandled = true; e.preventDefault(); go(0); }
         else if (e.key === 'End') { e.__odDeckKeyHandled = true; e.preventDefault(); go(slides.length - 1); }
       }
       // Capture phase + listen on both targets — inside the OD iframe,
@@ -302,6 +311,29 @@ export const DECK_SKELETON_HTML = `<!doctype html>
       document.addEventListener('keydown', onKey, true);
       if (prev) prev.addEventListener('click', function () { go(idx - 1); });
       if (next) next.addEventListener('click', function () { go(idx + 1); });
+      document.addEventListener('click', function (e) {
+        if (e.defaultPrevented) return;
+        if (e.button !== undefined && e.button !== 0) return;
+        if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+        var t = e.target;
+        while (t && t !== document.body && t !== document.documentElement) {
+          var tag = String(t.tagName || '').toUpperCase();
+          if (
+            tag === 'A' ||
+            tag === 'BUTTON' ||
+            tag === 'INPUT' ||
+            tag === 'TEXTAREA' ||
+            tag === 'SELECT' ||
+            t.isContentEditable ||
+            t.getAttribute('role') === 'button' ||
+            t.getAttribute('role') === 'link'
+          ) return;
+          t = t.parentElement;
+        }
+        focusDeck();
+        if (e.clientX < window.innerWidth / 2) go(idx - 1);
+        else go(idx + 1);
+      }, true);
 
       // Auto-focus body so arrow keys work without an initial click.
       document.body.setAttribute('tabindex', '-1');
@@ -325,9 +357,13 @@ export const DECK_SKELETON_HTML = `<!doctype html>
 </body>
 </html>`;
 
-export const DECK_FRAMEWORK_DIRECTIVE = `# Slide deck — fixed framework (this is non-negotiable for deck mode)
+const DECK_HANDOFF_STEP_PLACEHOLDER = '%%OD_DECK_HANDOFF_STEP%%';
+const DECK_HANDOFF_CHECK_HEADING_PLACEHOLDER = '%%OD_DECK_HANDOFF_CHECK_HEADING%%';
+const DECK_HANDOFF_CHECK_ACTION_PLACEHOLDER = '%%OD_DECK_HANDOFF_CHECK_ACTION%%';
 
-Decks regress when each turn re-authors the scale-to-fit logic, the keyboard handler, the slide visibility toggle, the counter, and the print rules. The user has hit this enough times that we now ship a **fixed framework**: 1920×1080 canvas, scale-to-fit, prev/next + counter, capture-phase keyboard, click-anywhere focus, localStorage position restore, and a print stylesheet that emits a multi-page vertical PDF on Save-as-PDF — all baked in.
+const DECK_FRAMEWORK_DIRECTIVE_TEMPLATE = `# Slide deck — fixed framework (this is non-negotiable for deck mode)
+
+Decks regress when each turn re-authors the scale-to-fit logic, the keyboard handler, the slide visibility toggle, the counter, and the print rules. The user has hit this enough times that we now ship a **fixed framework**: 1920×1080 canvas, scale-to-fit, hidden programmatic prev/next + counter, capture-phase keyboard with R reset-to-first-slide, half-slide click navigation, localStorage position restore, and a print stylesheet that emits a multi-page vertical PDF on Save-as-PDF — all baked in.
 
 **You do not write any of that. You do not modify any of that.** Your job is to fill content slots only.
 
@@ -338,18 +374,18 @@ When the user asks for slides, your TodoWrite plan **must** start with "copy the
 \`\`\`
 1.  Bind the active direction's palette + fonts to :root in the framework
 2.  Copy the canonical skeleton below as a semantically named deck HTML file, such as \`investor-pitch-deck.html\` (nothing else first)
-3.  Plan the slide arc and theme rhythm (state aloud before writing)
+3.  Plan the slide arc and surface hierarchy (state the dominant surface and each inversion's narrative role aloud before writing)
 4.  Add per-deck classes inside the second <style> block
 5.  Replace each <section class="slide"> SLOT with real content
 6.  Self-check (no rewriting framework chrome / @media print / nav script)
-7.  Emit single <artifact>
+7.  ${DECK_HANDOFF_STEP_PLACEHOLDER}
 \`\`\`
 
 If you find yourself writing \`<style>\` rules for \`.deck-shell\`, \`.deck-stage\`, \`.slide\`, \`.canvas\`, \`fit()\`, \`@media print\`, or a keyboard handler — STOP. The framework already has them. Re-read this directive, then keep going from "fill SLOT content".
 
 ## The contract
 
-When you start a new deck, your output is a single semantically named HTML file built from the canonical skeleton below. **Copy the skeleton verbatim**, including its first \`<style>\` block, the \`.deck-shell\` / \`.deck-stage\` / \`.deck-counter\` / \`.deck-hint\` chrome, and the entire trailing \`<script>\`. Do not name every deck \`index.html\`; use \`index.html\` only if the user is editing an existing \`index.html\` deck or a fixed runtime convention requires that path.
+When you start a new deck, your output is a single semantically named HTML file built from the canonical skeleton below. **Copy the skeleton verbatim**, including its first \`<style>\` block, the \`.deck-shell\` / \`.deck-stage\` / hidden \`.deck-counter\` / \`.deck-hint\` programmatic chrome, and the entire trailing \`<script>\`. Do not name every deck \`index.html\`; use \`index.html\` only if the user is editing an existing \`index.html\` deck or a fixed runtime convention requires that path.
 
 You may edit only inside slots marked \`SLOT:\`:
 - \`SLOT: deck title\` — the \`<title>\` element.
@@ -357,6 +393,10 @@ You may edit only inside slots marked \`SLOT:\`:
 - \`SLOT: per-deck styles\` — the second \`<style>\` block. Define classes used by your slide content (e.g. \`.title\`, \`.big-stat\`, \`.grid-3\`, custom typography). **Never redefine** \`.deck-shell\`, \`.deck-stage\`, \`.slide\`, \`.deck-counter\`, \`.deck-hint\`, or anything inside \`@media print\`.
 - \`SLOT: slides\` — the \`<section class="slide">\` blocks. Add as many as the brief calls for. The first slide MUST be \`<section class="slide active" …>\`; the rest are \`<section class="slide" …>\` (no \`active\`). The script auto-counts them.
 - \`SLOT: slide N content\` — content inside each \`<section>\`.
+
+## Surface hierarchy — narrative first
+
+Unless the user or active design system explicitly requires a different surface program, choose one dominant slide surface from the active brand or direction. Consecutive slides may share it. Use an inverse surface only when it marks a named narrative role such as a chapter break, key reveal, proof point, or closing. A single-surface deck is valid; never alternate light and dark by slide index or quota. Create rhythm through layout, scale, density, imagery, and typography before changing the background.
 
 ## Common drift modes — DO NOT DO THESE
 
@@ -366,7 +406,7 @@ These are the failure patterns we just spent days debugging. Each one looks "equ
 - ❌ Don't use \`transform-origin: center center\` on the stage. The framework uses \`top left\` plus an explicit translate so scaled content lands at the same place every render.
 - ❌ Don't use \`document.addEventListener('keydown', …)\` alone. Inside an iframe, focus is sometimes on window. The framework adds capture-phase listeners on **both** targets — replacing this with a single listener silently swallows arrow keys.
 - ❌ Don't replace the localStorage key, the slide-visibility toggle (\`.slide.active\`), or the counter element IDs (\`#deck-cur\`, \`#deck-total\`, \`#deck-prev\`, \`#deck-next\`). The framework reads them by ID.
-- ❌ Don't put the prev/next buttons or the counter **inside** \`.deck-stage\`. They must live outside the scaled element so they stay legible at any viewport size.
+- ❌ Don't put the prev/next buttons or the counter **inside** \`.deck-stage\`. They must live outside the scaled element so the host bridge can manage slides without scaling or clipping the control surface.
 - ❌ Don't redefine \`.slide\`, \`.slide.active\`, or \`.slide:not(.active)\` directly. The framework owns the visibility toggle through those exact selectors. If you want a non-flex layout on a slide, **add a variant class to the same \`<section class="slide …">\` element** (e.g. \`.s-cold\`, \`.s-magazine\`) and declare \`display: grid\` / \`display: block\` on the variant. The framework's active default is wrapped in \`:where(...)\` so it has zero specificity — your variant always wins for the active slide. Variant classes do NOT need to be more specific than \`.slide.active\`. (The inactive-hide rule still wins because it uses \`:not(.active) { display: none !important; }\`.)
 - ❌ Don't strip or "tidy" the \`@media print\` block. It is how Share → PDF stitches every slide into a multi-page document. Without it, PDF export collapses to a single screenshot.
 
@@ -466,7 +506,7 @@ Rules — same weight as the density rules above:
 - ❌ Don't pass \`var(--fg)\` strings into \`themeVariables\` — Mermaid needs literal colors.
 - ❌ Don't hand-recolor a single label to "fix" contrast; theme the whole diagram.
 
-## Pre-emit self-check — run this BEFORE writing the \`<artifact>\` tag
+## ${DECK_HANDOFF_CHECK_HEADING_PLACEHOLDER}
 
 For every \`<section class="slide">\`, mentally render at 1920×1080 and answer:
 
@@ -478,11 +518,13 @@ For every \`<section class="slide">\`, mentally render at 1920×1080 and answer:
 - [ ] Are bar lengths computed from \`--v\` / \`--max\` so proportions match the data? (Mentally spot-check two bars.)
 - [ ] If the slide embeds a Mermaid diagram: is \`mermaid.initialize\` themed to the slide background (dark background → \`dark\`/\`base\` theme), leaving no dark-on-dark labels?
 
-If any answer is "no", redesign the slide BEFORE emitting. Decks that overflow are the most common single failure mode reported by users; the user has rejected one before and will reject one again.
+If any answer is "no", redesign the slide BEFORE ${DECK_HANDOFF_CHECK_ACTION_PLACEHOLDER}. Decks that overflow are the most common single failure mode reported by users; the user has rejected one before and will reject one again.
 
 ## Prefer the simple-deck skill's layout vocabulary when reachable
 
 If \`plugins/_official/examples/simple-deck/assets/template.html\` and its \`references/layouts.md\` are readable from the project workspace, **prefer those layouts over inventing your own**. The simple-deck skill ships eight paste-ready slide skeletons (cover, body, big-stat, three-point row, pipeline, dark quote, before/after, closing) with tested type scales, density rules, and a P0/P1/P2 checklist. Re-inventing those layouts is the source of most density / overflow bugs the framework can't catch.
+
+Use the layout vocabulary, not the examples' surface sequence. The deck-level surface hierarchy above remains authoritative unless the user, active design system, or an explicitly selected specialized template defines a different surface program.
 
 ## Canonical skeleton (this is exactly what the file you write looks like)
 
@@ -492,3 +534,132 @@ ${DECK_SKELETON_HTML}
 
 When the brief is "make me a deck", your output is this skeleton with theme tokens tuned, per-deck classes added, and \`<section class="slide">\` blocks filled in — nothing more, nothing less. Skill-specific guidance (typography, theme presets, layout vocabulary) layers *on top of* this framework, not in place of it.
 `;
+
+export function renderDeckFrameworkDirective(
+  executionProfile: ExecutionProfile = 'filesystem',
+): string {
+  const isTextArtifact = executionProfile === 'text_artifact';
+  return DECK_FRAMEWORK_DIRECTIVE_TEMPLATE
+    .replace(
+      DECK_HANDOFF_STEP_PLACEHOLDER,
+      isTextArtifact
+        ? 'Emit one complete `<artifact>` block containing the deck HTML'
+        : 'Summarize the written or changed deck file in a short ordinary assistant message',
+    )
+    .replace(
+      DECK_HANDOFF_CHECK_HEADING_PLACEHOLDER,
+      isTextArtifact
+        ? 'Pre-emit self-check — run this BEFORE writing the `<artifact>` tag'
+        : 'Pre-handoff self-check — run this BEFORE the final file summary',
+    )
+    .replace(
+      DECK_HANDOFF_CHECK_ACTION_PLACEHOLDER,
+      isTextArtifact ? 'emitting the artifact' : 'handoff',
+    );
+}
+
+export const DECK_DELIVERY_CONTRACT_DIRECTIVE = `# Deck delivery contract
+
+These rules define the Open Design delivery boundary, not a visual style.
+
+1. **Complete artifact.** Deliver one complete HTML deck under the active execution contract. If the brief requests N slides/pages, emit exactly N top-level \`.slide\` sections, including the closing slide. For ordinary edits, preserve a compatible existing runtime.
+2. **Slide DOM.** Each slide is one top-level \`<section class="slide" data-screen-label="NN Title">\` in order. Labels stay unique and stable; the first slide is visible on load; all slides remain in the DOM for host navigation, thumbnails, annotation, and export.
+3. **Canvas.** Default to fixed 16:9 at 1920×1080. Keep every slide inside its bounds with no scrolling. Define an explicit background on \`html\`/\`body\` and on every slide, or on a preserved stage ancestor that paints it; never rely on a transparent/default host canvas.
+4. **Navigation.** Open Design owns visible navigation. Do not render controls, counters, dots, progress trackers, reset buttons, or keyboard hints anywhere in the artifact; exported slides must remain chrome-free. Keep navigation nonvisual with keyboard commands and click/tap on the left or right half of the canvas unless the brief explicitly requires another interaction.
+5. **Settled state.** Essential content is complete, visible, legible, and exportable without hover, clicks, or unfinished entrance animation.
+6. **Explicit exceptions.** Honor a requested aspect ratio, orientation, or interaction; preserve slide discoverability and disclose any remaining preview/export limitation.
+
+Before handoff, verify count/order, first-slide visibility, bounds, navigation, thumbnail discovery, and multi-page export wherever those capabilities are available. Fix failures in the artifact.`;
+
+export const DECK_FIXED_CANVAS_EXECUTION_DIRECTIVE = `## Fixed-canvas execution baseline
+
+For a new deck without a compatible existing runtime, use one authored coordinate system. Responsive fitting belongs outside the slide canvas.
+
+\`\`\`html
+<div class="deck-viewport">
+  <main class="deck-stage" data-od-id="deck-stage">
+    <section class="slide active" data-screen-label="01 Title">...</section>
+  </main>
+</div>
+\`\`\`
+
+\`\`\`css
+html, body, .deck-viewport { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+.deck-viewport { position: fixed; inset: 0; }
+.deck-stage { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: top left; }
+.slide { position: absolute; inset: 0; width: 1920px; height: 1080px; overflow: hidden; display: none; }
+.slide.active { display: block; }
+\`\`\`
+
+Author all slide geometry and typography against that fixed 1920×1080 stage. Do not use \`vw\`, \`vh\`, \`vmin\`, \`vmax\`, or viewport-based \`clamp()\` inside the stage, and do not make each slide responsive independently. Open Design preview and export own the one uniform scale and centering transform for the stage. Keep authored stage transforms and visible navigation out of a new deck. Preserve a compatible seed or existing runtime instead of replacing it with this baseline.`;
+
+export const DECK_OUTCOME_RULES_DIRECTIVE = `# Deck outcome quality rules
+
+Apply these as result criteria for the deck and for every slide. They constrain the outcome, not the implementation technique.
+
+1. **One narrative job and claim per slide.** Advance one deliberate argument. Each title states the conclusion to retain, not merely the topic; remove or rewrite any slide whose absence would not weaken the story.
+2. **Purposeful close.** End by reinforcing the takeaway and intended next step: ask, action, recommendation, decision, contact, Q&A, or a thank-you only when gratitude has real relational, ceremonial, or brand value. The requested count includes this slide; no empty "Thank you."
+3. **Claim → evidence → implication.** Support the title with the strongest relevant fact, example, comparison, mechanism, or proof and show why it matters. No unsupported conclusion or evidence without a takeaway.
+4. **Structure carries meaning.** Use parallel groups for peers, flows for causality, timelines for sequence, comparisons for choices, and charts for quantities. Do not force unrelated ideas into equal cards or decorate prose with meaningless diagrams.
+5. **Intentional canvas.** Whitespace must create hierarchy, pacing, direction, grouping, or emphasis. When sparse content is stranded in one corner, enlarge, recenter, redistribute, or pair it with meaningful evidence or imagery; never fill the gap with arbitrary decoration.
+6. **Local contrast over imagery.** Judge text contrast against the exact region behind it, not the image's average tone. Place copy on a visually quiet region, adjust the crop, or add a deliberate scrim, gradient, or solid plate; if none yields reliable legibility, move the copy off the image.
+7. **Container-content fit.** Size cards and panels to their payload. Do not stretch containers merely to occupy the slide; empty interior space must create deliberate focus or carry meaningful visual, data, process, or state content. Otherwise shorten or remove the container.
+8. **Presentation distance.** At thumbnail scale, the claim, primary evidence, and reading order remain clear. On 1920×1080, use headlines ≥ 36px and body ≥ 24px unless an explicit brief or trusted seed defines another safe scale.
+9. **Epistemic honesty.** Distinguish sourced/user-provided facts, assumptions, and recommendations. Never invent metrics, traction, quotes, customers, or research; use labelled placeholders or qualitative framing.
+
+## Presentation presence
+
+- **Brief fidelity.** Treat explicit composition constraints—such as full-bleed imagery, text/image alternation, grid system, typographic devices, or density pattern—as acceptance criteria across the deck, not motifs to sample once or omit.
+- **Deck-wide visual system.** Before composing, establish one coherent grammar: canvas and safe area, grid and alignment, type scale, palette, visual treatment, and only restrained recurring anchors that aid continuity. Reuse it across a small family of content-fit layouts so slides clearly belong together without repeating one composition. Treat a master as a system, not a frame: add no border, logo, header, footer, or control by default; never let repeated chrome compete with content. Preserve an active template or design system.
+- **Live-delivery composition.** Use the full canvas, not a narrow document column or dashboard panels. Vary silhouettes with content roles inside the shared system; repetition is valid for direct comparison or sequence.
+- **Narrative rhythm.** Vary surface, density, and layout only when the story changes mode. Concentrate richness at opening, reveal, proof, transition, and close; use calmer workhorse slides between peaks.
+- **One dominant, fitting medium.** Give each slide one center of gravity. Use product views for product proof, charts for quantities, flows/relationships for mechanisms, comparisons for change, imagery for emotion/context, and expressive type for reveals. Keep supporting elements subordinate; assets must be high-fidelity and composed into the slide.
+- **Every element earns its place.** Lines, borders, containers, icons, imagery, and decoration must aid comprehension, emphasis, pacing, atmosphere, or brand recognition. Remove arbitrary chrome and repeated boundaries.
+- **Shareable payoff.** The deck needs at least one screenshot-ready slide that communicates a clear point with finished visual expression; redesign if it has none.
+
+Only when relevant:
+
+- **Charts/diagrams:** Derive proportions from actual values, label categories and values, match the slide background, and keep every label legible at presentation distance.
+
+Before handoff, review once at thumbnail scale and once slide by slide. Rewrite any unclear claim, unsupported evidence, hidden reading order, narrative dead end, clipping, overflow, or scrolling.`;
+
+const FILESYSTEM_DECK_RENDERED_VERIFICATION = `
+
+## Rendered verification — filesystem decks
+
+A new deck remains visually unverified until you inspect one real host render. Before handoff, use the deck's single permitted preview:
+
+\`"$OD_NODE_BIN" "$OD_BIN" export <deck-file> --project "$OD_PROJECT_ID" --format image --deck --out <review-image>\`
+
+The export stitches all slides into one review image. Inspect the overview and any suspicious slide; source inspection or "mental rendering" is insufficient. Fix collapse, clipping, overflow, undersized text, broken hierarchy, or unintended empty space without starting a screenshot loop. If the renderer still fails after one targeted fix/retry, complete static checks and state that rendered verification was unavailable.`;
+
+export function renderDeckVNextDirective(
+  executionProfile: ExecutionProfile = 'filesystem',
+): string {
+  const qualityDirective = renderDeckQualityDirective(executionProfile);
+  return `${DECK_DELIVERY_CONTRACT_DIRECTIVE}
+
+${DECK_FIXED_CANVAS_EXECUTION_DIRECTIVE}
+
+---
+
+${qualityDirective}`;
+}
+
+export function renderDeckQualityDirective(
+  executionProfile: ExecutionProfile = 'filesystem',
+): string {
+  if (executionProfile !== 'filesystem') {
+    return DECK_OUTCOME_RULES_DIRECTIVE;
+  }
+  return `${FILESYSTEM_DECK_RENDERED_VERIFICATION}
+
+---
+
+${DECK_OUTCOME_RULES_DIRECTIVE}`;
+}
+
+export const DECK_VNEXT_DIRECTIVE = renderDeckVNextDirective('filesystem');
+
+/** Filesystem compatibility constant for existing imports. */
+export const DECK_FRAMEWORK_DIRECTIVE = renderDeckFrameworkDirective('filesystem');

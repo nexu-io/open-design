@@ -17,7 +17,11 @@ import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
 import net from 'node:net';
-import { executionProfileFromStreamFormat, PLUGIN_SHARE_ACTION_PLUGIN_IDS } from '@open-design/contracts';
+import {
+  executionProfileFromStreamFormat,
+  isCritiqueRunEligible,
+  PLUGIN_SHARE_ACTION_PLUGIN_IDS,
+} from '@open-design/contracts';
 import { isTodoWriteToolName, stopReasonIsTruncation, todoItemsFromTodoWriteInput } from '@open-design/contracts';
 import {
   composeSystemPrompt,
@@ -28,6 +32,12 @@ import {
   renderConnectedExternalMcpDirective,
   resolveExclusiveSurface,
 } from './prompts/system.js';
+import {
+  DEFAULT_ROUTER_PLUGIN_ID,
+  submittedFormIdFromPrompt,
+  shouldIncludeAutomaticScenarioCraft,
+  shouldIncludeDefaultRouterSkill,
+} from './prompts/automatic-scenario-context.js';
 import {
   computeStableSectionHashes,
   serializeStableSections,
@@ -134,6 +144,7 @@ import {
   scanRunEventsForFinishedProps,
   scanRunEventsForRetrySideEffects,
 } from './runtimes/run-lifecycle-analytics.js';
+import { runAskedUserQuestion } from './runtimes/run-artifacts.js';
 export {
   composeLiveInstructionPrompt,
   formatDesignFilesWorkspaceHint,
@@ -1362,8 +1373,6 @@ export function telemetryPromptFromRunRequest(message, currentPrompt) {
   return typeof currentPrompt === 'string' ? currentPrompt : message;
 }
 
-const FORM_ANSWERS_HEADER_RE = /^\s*\[form answers\s+(?:\u2014|-)\s*([^\]\r\n]+)\]/i;
-
 // Aggressive OVERRIDE for weak / medium-strength plain agents (e.g.
 // GPT-OSS-120B Medium, Gemini 3.5 Flash) that otherwise echo RULE 1's
 // fenced form example back at the user on follow-up turns even when
@@ -1410,14 +1419,20 @@ user instruction and respond accordingly.
 
 `;
 
+export function formAnsweredSystemOverrideForCurrentPrompt(currentPrompt) {
+  const formId = submittedFormIdFromPrompt(currentPrompt)?.toLowerCase() ?? null;
+  if (formId === 'discovery' || formId === 'task-type') {
+    return FORM_ANSWERED_SYSTEM_OVERRIDE;
+  }
+  return formId !== null ? FORM_ANSWERED_GENERIC_OVERRIDE : '';
+}
+
 function formAnswerTransitionForCurrentPrompt(currentPrompt) {
   if (typeof currentPrompt !== 'string') return null;
   const trimmed = currentPrompt.trim();
   if (!trimmed) return null;
-  const match = FORM_ANSWERS_HEADER_RE.exec(trimmed);
-  if (!match) return null;
-  const rawFormId = (match[1] || 'form').trim() || 'form';
-  const formId = rawFormId.replace(/[^\w.-]/g, '') || 'form';
+  const formId = submittedFormIdFromPrompt(trimmed);
+  if (!formId) return null;
   const lines = [
     '## Latest user turn - form answers submitted',
     trimmed,
@@ -3576,6 +3591,9 @@ export async function startServer({
     appliedPluginSnapshotId,
     mediaExecution,
     byokMediaDefaults,
+    isInitialProjectTurn,
+    isInitialConversationTurn,
+    submittedFormId,
     freeformDeckSignal,
     mediaHintSignal,
     platformHintSignal,
@@ -3653,6 +3671,8 @@ export async function startServer({
     let skillMode;
     const skillModes = new Set<NonNullable<Parameters<typeof composeSystemPrompt>[0]['skillMode']>>();
     let skillCraftRequires = [];
+    const automaticScenarioCraftRequires = [];
+    let automaticDefaultRouterSkill = false;
     let activeSkillDir = null;
     const activeSkillDirs: string[] = [];
     // Per-skill Critique Theater override sourced from
@@ -3754,6 +3774,9 @@ export async function startServer({
       }
     }
 
+    const skillBodyWithoutAutomaticScenario = skillBody;
+    const skillNameWithoutAutomaticScenario = skillName;
+
     // Stage A of plugin-driven-flow-plan: when the run is bound to a
     // plugin snapshot, prefer the plugin's local SKILL.md (declared via
     // `od.context.skills[{ path: './SKILL.md' }]`) over the global
@@ -3767,9 +3790,13 @@ export async function startServer({
       try {
         const snap = getSnapshot(db, appliedPluginSnapshotId);
         if (snap?.pluginId) {
+          const isDefaultRouter = snap.pluginId === DEFAULT_ROUTER_PLUGIN_ID;
           const { getSnapshotContextCraft } = await import('./plugins/context-craft.js');
           for (const craft of getSnapshotContextCraft(snap)) {
-            if (!skillCraftRequires.includes(craft)) skillCraftRequires.push(craft);
+            const destination = isDefaultRouter
+              ? automaticScenarioCraftRequires
+              : skillCraftRequires;
+            if (!destination.includes(craft)) destination.push(craft);
           }
           const plugin = getInstalledPlugin(db, snap.pluginId);
           if (plugin) {
@@ -3778,6 +3805,7 @@ export async function startServer({
             if (local) {
               skillBody = local.body + composedSkillBlocks;
               skillName = local.name;
+              automaticDefaultRouterSkill = isDefaultRouter;
               activeSkillDir = local.dir;
               registerSkillDir(local.dir);
             } else {
@@ -3799,6 +3827,7 @@ export async function startServer({
                 if (refSkill) {
                   skillBody = refSkill.body + composedSkillBlocks;
                   skillName = refSkill.name;
+                  automaticDefaultRouterSkill = isDefaultRouter;
                   activeSkillDir = refSkill.dir;
                   registerPrimarySkillMode(refSkill.mode);
                   registerSkillDir(refSkill.dir);
@@ -3808,7 +3837,10 @@ export async function startServer({
                   );
                   if (Array.isArray(refSkill.craftRequires)) {
                     for (const craft of refSkill.craftRequires) {
-                      if (!skillCraftRequires.includes(craft)) skillCraftRequires.push(craft);
+                      const destination = isDefaultRouter
+                        ? automaticScenarioCraftRequires
+                        : skillCraftRequires;
+                      if (!destination.includes(craft)) destination.push(craft);
                     }
                   }
                 }
@@ -3881,6 +3913,7 @@ export async function startServer({
     let designSystemComponentsManifest;
     let designSystemFixtureHtml;
     let designSystemPullIndex;
+    let designSystemCorePullIndex;
     let designSystemImportMode;
     let designSystemCraftApplies = [];
     let designSystemCraftExemptions = [];
@@ -3916,6 +3949,7 @@ export async function startServer({
         designSystemComponentsManifest = assets.componentsManifest;
         designSystemFixtureHtml = assets.fixtureHtml;
         designSystemPullIndex = assets.pullIndex;
+        designSystemCorePullIndex = assets.corePullIndex;
         designSystemImportMode = assets.importMode;
         designSystemCraftApplies = Array.isArray(assets.craftApplies) ? assets.craftApplies : [];
         designSystemCraftExemptions = Array.isArray(assets.craftExemptions) ? assets.craftExemptions : [];
@@ -3930,18 +3964,51 @@ export async function startServer({
             componentsManifest: designSystemComponentsManifest,
             fixtureHtml: designSystemFixtureHtml,
             pullIndex: designSystemPullIndex,
+            corePullIndex: designSystemCorePullIndex,
             importMode: designSystemImportMode,
           });
         }
       }
     }
 
+    const normalizedSessionMode = normalizeConversationSessionMode(sessionMode);
+    const resolvedExclusiveSurface = resolveExclusiveSurface({
+      metadata,
+      skillMode,
+      skillModes: skillModes.size > 0 ? Array.from(skillModes) : undefined,
+      freeformDeckSignal,
+    });
+    const includeDefaultRouterSkill = shouldIncludeDefaultRouterSkill({
+      sessionMode: normalizedSessionMode,
+      resolvedSurface: resolvedExclusiveSurface,
+      isInitialConversationTurn,
+      submittedFormId,
+    });
+    const promptSkillBody =
+      automaticDefaultRouterSkill && !includeDefaultRouterSkill
+        ? skillBodyWithoutAutomaticScenario
+        : skillBody;
+    const promptSkillName =
+      automaticDefaultRouterSkill && !includeDefaultRouterSkill
+        ? skillNameWithoutAutomaticScenario
+        : skillName;
+    const includedAutomaticCraft = shouldIncludeAutomaticScenarioCraft(
+      normalizedSessionMode,
+      includeDefaultRouterSkill,
+    )
+      ? automaticScenarioCraftRequires
+      : [];
+
     const excludedCraft = new Set(designSystemCraftExemptions);
     // Web-clone fidelity exemption — see `isWebCloneRun` above.
     const requestedCraft = isWebCloneRun
       ? []
       : Array.from(
-          new Set([...skillCraftRequires, ...designSystemCraftApplies]),
+          new Set([
+            ...skillCraftRequires,
+            ...includedAutomaticCraft,
+            ...designSystemCraftApplies,
+          ]),
         ).filter((slug) => !excludedCraft.has(slug));
     if (requestedCraft.length > 0) {
       const loaded = await loadCraftSections(CRAFT_DIR, requestedCraft);
@@ -4027,27 +4094,21 @@ export async function startServer({
     // panel addendum has to be suppressed here too: otherwise the model
     // is instructed to emit Critique Theater tags that no orchestrator
     // consumes.
-    const resolvedExclusiveSurface = resolveExclusiveSurface({
-      metadata,
-      skillMode,
-      skillModes: skillModes.size > 0 ? Array.from(skillModes) : undefined,
-    });
     const isMediaSurface =
       resolvedExclusiveSurface === 'image'
       || resolvedExclusiveSurface === 'video'
       || resolvedExclusiveSurface === 'audio';
-    const isPlainAdapter = (streamFormat ?? 'plain') === 'plain';
-    const critiqueShouldRun = critiqueEnabledForRun
-      && critiqueBrand !== undefined
-      && critiqueSkill !== undefined
-      && !isMediaSurface
-      && isPlainAdapter;
-    // Only thread the critique fields when the run is actually eligible;
-    // otherwise the composer's own internal eligibility check (cfg.enabled
-    // && brand && skill && !isMediaSurface) might still fire on
-    // non-plain adapters and we'd emit the panel for a run the orchestrator
-    // skips. Gating the threading itself keeps composer + orchestrator in
-    // exact lockstep regardless of which side enforces eligibility.
+    const critiqueShouldRun = isCritiqueRunEligible({
+      enabled: critiqueEnabledForRun,
+      hasBrand: critiqueBrand !== undefined,
+      hasSkill: critiqueSkill !== undefined,
+      sessionMode: normalizedSessionMode,
+      isMediaSurface,
+      streamFormat,
+    });
+    // Only thread the critique fields when the shared eligibility predicate
+    // passes. The composer repeats the same predicate defensively; gating the
+    // inputs here keeps prompt and orchestrator behavior in exact lockstep.
     let pluginBlock;
     if (
       typeof appliedPluginSnapshotId === 'string'
@@ -4055,7 +4116,15 @@ export async function startServer({
     ) {
       try {
         const snap = getSnapshot(db, appliedPluginSnapshotId);
-        if (snap) pluginBlock = pluginPromptBlock(snap);
+        if (
+          snap
+          && (
+            snap.pluginId !== DEFAULT_ROUTER_PLUGIN_ID
+            || includeDefaultRouterSkill
+          )
+        ) {
+          pluginBlock = pluginPromptBlock(snap);
+        }
       } catch (err) {
         console.warn(
           `[plugins] pluginBlock build failed: ${err?.message ?? err}`,
@@ -4079,13 +4148,25 @@ export async function startServer({
     ) {
       try {
         const snap = getSnapshot(db, appliedPluginSnapshotId);
-        const stages = snap?.pipeline?.stages ?? [];
+        const stages =
+          snap?.pluginId === DEFAULT_ROUTER_PLUGIN_ID && !includeDefaultRouterSkill
+            ? []
+            : snap?.pipeline?.stages ?? [];
         if (stages.length > 0) {
-          const { loadAtomBodies } = await import('./plugins/atom-bodies.js');
+          const {
+            filterAtomIdsForPrompt,
+            loadAtomBodies,
+          } = await import('./plugins/atom-bodies.js');
           const { renderActiveStageBlock } = await import('@open-design/contracts');
           const blocks = [];
           for (const stage of stages) {
-            const bodies = await loadAtomBodies(db, stage.atoms ?? []);
+            const atomIds = filterAtomIdsForPrompt(stage.atoms ?? [], {
+              sessionMode: normalizedSessionMode,
+              mediaSurface: isMediaSurface ? resolvedExclusiveSurface : null,
+              projectIntent: metadata?.intent,
+              critiqueEnabled: critiqueShouldRun,
+            });
+            const bodies = await loadAtomBodies(db, atomIds);
             const block = renderActiveStageBlock({ stageId: stage.id, bodies });
             if (block.trim().length > 0) blocks.push(block);
           }
@@ -4103,8 +4184,8 @@ export async function startServer({
     const systemPromptInputs = {
       agentId,
       includeCodexImagegenOverride: false,
-      skillBody,
-      skillName,
+      skillBody: promptSkillBody,
+      skillName: promptSkillName,
       skillMode,
       skillModes: skillModes.size > 0 ? Array.from(skillModes) : undefined,
       designSystemBody,
@@ -4114,6 +4195,7 @@ export async function startServer({
       designSystemComponentsManifest,
       designSystemFixtureHtml,
       designSystemPullIndex,
+      designSystemCorePullIndex,
       designSystemImportMode,
       craftBody,
       craftSections,
@@ -4136,7 +4218,8 @@ export async function startServer({
       critiqueBrand: critiqueShouldRun ? critiqueBrand : undefined,
       critiqueSkill: critiqueShouldRun ? critiqueSkill : undefined,
       locale: typeof locale === 'string' ? locale : undefined,
-      sessionMode: normalizeConversationSessionMode(sessionMode),
+      sessionMode: normalizedSessionMode,
+      isInitialProjectTurn,
       mediaExecution,
       byokMediaDefaults,
       streamFormat,
@@ -4147,15 +4230,27 @@ export async function startServer({
       freeformDeckSignal,
       mediaHintSignal,
       platformHintSignal,
-      // VALIDATION DEFAULT — feat/system-prompt integration branch only.
-      // Slim is the default here so packaged beta builds exercise the
-      // rewritten charter without env plumbing (the packaged sidecar env
-      // allowlist does not forward OD_PROMPT_CORE); OD_PROMPT_CORE=classic
-      // restores the classic stack. main keeps classic as the default —
-      // do NOT carry this flip into a PR against main.
-      promptCoreVariant: process.env.OD_PROMPT_CORE === 'classic' ? undefined : 'slim',
+      // Slim is the daemon default, including packaged builds whose sidecar
+      // environment does not forward OD_PROMPT_CORE. OD_PROMPT_CORE=classic
+      // explicitly restores the legacy Design doctrine for comparison and
+      // rollback; Ask, Plan, and media keep their mode-specific contracts.
+      promptCoreVariant: process.env.OD_PROMPT_CORE === 'classic' ? 'classic' : 'slim',
     };
     const prompt = composeSystemPrompt(systemPromptInputs);
+    const stableSectionInputs = {
+      ...systemPromptInputs,
+      // Raw turn number is not itself prompt content. Attribute it only when
+      // one of the two initial-turn-only directives can actually change the
+      // composed bytes; otherwise a memory-only miss would falsely report an
+      // additional `intent` change after every first turn.
+      initialTurnDirectiveActive:
+        normalizedSessionMode === 'design'
+        && isInitialProjectTurn
+        && (
+          metadata?.examplePrompt === true
+          || metadata?.skipDiscoveryBrief === true
+        ),
+    };
     // The chat handler also needs to know where the active skill lives
     // on disk so it can stage a per-project copy of its side files
     // before spawning the agent. Returning that here avoids a second
@@ -4174,7 +4269,7 @@ export async function startServer({
         digest: designSystemDigest,
       },
       promptTelemetryParts: {
-        skillPrompt: skillBody ?? '',
+        skillPrompt: promptSkillBody ?? '',
         designSystemPrompt: designSystemBody ?? '',
         pluginStagePrompt: [pluginBlock, ...(activeStageBlocks ?? [])]
           .filter((part) => typeof part === 'string' && part.trim().length > 0)
@@ -4183,7 +4278,7 @@ export async function startServer({
       // Diagnostic only. The caller merges its own stable inputs
       // (runtimeToolPrompt, the client system prompt) in before hashing, so the
       // section map covers the whole fingerprint rather than just this half.
-      stableSectionInputs: systemPromptInputs,
+      stableSectionInputs,
     };
   };
 
@@ -4663,6 +4758,36 @@ export async function startServer({
       !legacyIntentSignalScan && typeof run.conversationId === 'string' && run.conversationId
         ? latchConversationIntentSignals(db, run.conversationId, freshIntentSignals)
         : freshIntentSignals;
+    const isInitialProjectTurn =
+      typeof projectId !== 'string'
+      || !projectId
+      || !Boolean(
+        db.prepare(
+          `SELECT 1
+             FROM messages AS m
+             JOIN conversations AS c ON c.id = m.conversation_id
+            WHERE c.project_id = ?
+              AND m.role = 'assistant'
+              AND COALESCE(m.content, '') <> ''
+              AND m.id <> COALESCE(?, '')
+            LIMIT 1`,
+        ).get(projectId, run.assistantMessageId ?? ''),
+      );
+    const isInitialConversationTurn =
+      typeof run.conversationId !== 'string'
+      || !run.conversationId
+      || !Boolean(
+        db.prepare(
+          `SELECT 1
+             FROM messages
+            WHERE conversation_id = ?
+              AND role = 'assistant'
+              AND COALESCE(content, '') <> ''
+              AND id <> COALESCE(?, '')
+            LIMIT 1`,
+        ).get(run.conversationId, run.assistantMessageId ?? ''),
+      );
+    const submittedFormId = submittedFormIdFromPrompt(currentPrompt);
 
     const {
       prompt: daemonSystemPrompt,
@@ -4681,6 +4806,9 @@ export async function startServer({
         streamFormat: def?.streamFormat ?? 'plain',
         locale,
         sessionMode: runSessionMode,
+        isInitialProjectTurn,
+        isInitialConversationTurn,
+        submittedFormId,
         mediaExecution: run?.mediaExecution,
         byokMediaDefaults,
         // Plan §3.M2 / §3.V1 — forward the run's snapshot id so the
@@ -4840,6 +4968,31 @@ export async function startServer({
         ...(promptInfo.promptSource ? { promptSource: promptInfo.promptSource } : {}),
         metadata: projectRecord?.metadata,
       });
+    };
+    const requiresArtifactDeliveryForRun = () => {
+      return executionProfile === 'filesystem' && run.artifactDeliveryRequired === true;
+    };
+    const maybeFailSucceededRunWithoutArtifact = (status, code) => {
+      if (status !== 'succeeded') return { status, code };
+      if (!requiresArtifactDeliveryForRun()) return { status, code };
+      if (runAskedUserQuestion(run.events)) return { status, code };
+      const outcome = resolveRunArtifactOutcomeBeforeFinish();
+      const produced =
+        (outcome?.artifactCount ?? 0) > 0 ||
+        outcome?.designSystemCreated === true ||
+        (outcome?.previewModuleCount ?? 0) > 0;
+      if (produced) return { status, code };
+      const message = 'Agent finished without producing a project artifact.';
+      run.error = run.error || message;
+      run.errorCode = run.errorCode || 'NO_ARTIFACT_PRODUCED';
+      run.forceEndedWithUnfinishedWork = true;
+      design.runs.emit(run, 'diagnostic', {
+        type: 'artifact_delivery_missing',
+        source: 'daemon-run-finalize',
+        projectKind: projectRecord?.metadata?.kind ?? null,
+        artifactCount: outcome?.artifactCount ?? 0,
+      });
+      return { status: 'failed', code: typeof code === 'number' && code !== 0 ? code : 1 };
     };
     // Chain onto the run service's terminal chokepoint so startup rejection,
     // direct cancellation, shutdown, and every explicit finish path all consume
@@ -5114,18 +5267,7 @@ export async function startServer({
     // instructions and request) — see server.ts:9920 composer notes.
     const ECHO_GUARD =
       '\n\n(Do not quote, restate, or echo the # Instructions block above in your reply. Begin your response with the answer to the # User request below.)';
-    const formAnswerMatch = FORM_ANSWERS_HEADER_RE.exec(
-      typeof currentPrompt === 'string' ? currentPrompt : '',
-    );
-    const formIdForOverride = formAnswerMatch
-      ? ((formAnswerMatch[1] || 'form').trim().replace(/[^\w.-]/g, '') || 'form').toLowerCase()
-      : null;
-    const formOverride =
-      formIdForOverride === 'discovery' || formIdForOverride === 'task-type'
-        ? FORM_ANSWERED_SYSTEM_OVERRIDE
-        : formIdForOverride !== null
-          ? FORM_ANSWERED_GENERIC_OVERRIDE
-          : '';
+    const formOverride = formAnsweredSystemOverrideForCurrentPrompt(currentPrompt);
     const promptImagePaths = selectPromptImagePaths(
       def.id,
       safeImages,
@@ -5507,6 +5649,7 @@ export async function startServer({
         ...(signal ? { signal } : {}),
       });
       pendingRpcCloseReason = null;
+      ({ status, code } = maybeFailSucceededRunWithoutArtifact(status, code));
       const result = runResultFromStatus(status);
       const errorCode = deriveRunErrorCode({
         status,

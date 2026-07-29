@@ -16,6 +16,10 @@ import {
   type TrackingProjectKind,
   type TrackingDeployProvider,
 } from '@open-design/contracts/analytics';
+import {
+  DECK_SLIDE_SELECTOR,
+  DECK_STRUCTURED_SLIDE_SELECTOR,
+} from '@open-design/contracts/runtime/deck-stage-fallback';
 import { useAnalytics } from '../analytics/provider';
 import { exportErrorCode } from '../analytics/export-error-code';
 import { deployErrorCode } from '../analytics/deploy-error-code';
@@ -2697,6 +2701,23 @@ function sourceLooksLikeDeckPreview(source: string | null | undefined): boolean 
     /class\s*=\s*['"](?:[^'"]*\s)?slide(?:\s|['"])/i.test(source) ||
     sourceLooksLikeExportableDeck(source)
   );
+}
+
+export function countDeckSlidesInSource(source: string | null | undefined): number {
+  if (!source) return 0;
+  if (typeof DOMParser !== 'undefined') {
+    try {
+      const doc = new DOMParser().parseFromString(source, 'text/html');
+      const structured = doc.querySelectorAll(DECK_STRUCTURED_SLIDE_SELECTOR);
+      if (structured.length > 0) return structured.length;
+      return doc.querySelectorAll(DECK_SLIDE_SELECTOR).length;
+    } catch {
+      // Fall through to the cheap string count below.
+    }
+  }
+  const slideClassCount = source.match(/class\s*=\s*['"][^'"]*\bslide\b[^'"]*['"]/gi)?.length ?? 0;
+  const screenLabelCount = source.match(/\bdata-screen-label\s*=/gi)?.length ?? 0;
+  return Math.max(slideClassCount, screenLabelCount);
 }
 
 export function fileVersionPreviewOptions(
@@ -7203,10 +7224,16 @@ function HtmlViewer({
     slideState?.active ??
     htmlPreviewSlideState.get(previewStateKey)?.active ??
     0;
+  const detectedDeckSlideCount = useMemo(
+    () => (effectiveDeck ? countDeckSlidesInSource(source ?? routingHtmlSource) : 0),
+    [effectiveDeck, source, routingHtmlSource],
+  );
   const deckSlideCount =
-    slideState?.count ??
-    htmlPreviewSlideState.get(previewStateKey)?.count ??
-    0;
+    Math.max(
+      slideState?.count ?? 0,
+      htmlPreviewSlideState.get(previewStateKey)?.count ?? 0,
+      detectedDeckSlideCount,
+    );
   const speakerNotes = useMemo(
     () => extractSpeakerNotesFromHtml(source, deckSlideCount),
     [source, deckSlideCount],
@@ -7710,13 +7737,21 @@ function HtmlViewer({
   // renderable, DeckThumbnailRail mounts a single cloned slide per thumbnail
   // instead of a full-deck iframe — no scripts, no deck bridge, no N documents
   // saturating the main thread on entry. Decks we can't statically render
-  // (external CSS, viewport-sized slides, no inline styles) keep the iframe
-  // fallback via `parsedDeck = null`.
-  const parsedDeckThumbnails = useMemo(() => {
+  // (external layout CSS, runtime-built content, or no inline styles) keep the
+  // iframe fallback, while the analysis still supplies their real aspect ratio.
+  const deckThumbnailAnalysis = useMemo(() => {
     if (!effectiveDeck || !deckVisualSource) return null;
-    const parsed = parseDeckThumbnails(deckVisualSource, projectRawUrl(projectId, baseDirFor(file.name)));
-    return parsed.renderable ? parsed : null;
+    return parseDeckThumbnails(
+      deckVisualSource,
+      projectRawUrl(projectId, baseDirFor(file.name)),
+    );
   }, [effectiveDeck, deckVisualSource, projectId, file.name]);
+  const parsedDeckThumbnails = deckThumbnailAnalysis?.renderable
+    ? deckThumbnailAnalysis
+    : null;
+  const deckThumbnailAspectRatio = deckThumbnailAnalysis
+    ? `${deckThumbnailAnalysis.designWidth} / ${deckThumbnailAnalysis.designHeight}`
+    : undefined;
   // Stable thunk so HtmlViewer's frequent re-renders (slide state, streaming
   // edits) never invalidate the memoized rail; the ref always calls the
   // freshest goToSlide closure.
@@ -8027,7 +8062,16 @@ function HtmlViewer({
       setSlideState(null);
       return;
     }
-    setSlideState(htmlPreviewSlideState.get(previewStateKey) ?? null);
+    setSlideState((current) => {
+      const cached = htmlPreviewSlideState.get(previewStateKey) ?? current;
+      if (!cached || detectedDeckSlideCount <= 0) return cached;
+      const next = {
+        active: Math.max(0, Math.min(cached.active, detectedDeckSlideCount - 1)),
+        count: detectedDeckSlideCount,
+      };
+      setSlideStateCached(previewStateKey, next);
+      return next;
+    });
     function onMessage(ev: MessageEvent) {
       if (!isOurPreviewIframeSource(ev.source)) return;
       if (!isActivePreviewIframeSource(ev.source)) return;
@@ -8042,7 +8086,13 @@ function HtmlViewer({
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [effectiveDeck, isActivePreviewIframeSource, isOurPreviewIframeSource, previewStateKey]);
+  }, [
+    detectedDeckSlideCount,
+    effectiveDeck,
+    isActivePreviewIframeSource,
+    isOurPreviewIframeSource,
+    previewStateKey,
+  ]);
 
   useEffect(() => {
     const win = iframeRef.current?.contentWindow;
@@ -9948,6 +9998,29 @@ function HtmlViewer({
         slide_count: deckSlideTotal,
       });
     }
+    const current = activeDeckSlideIndex;
+    const knownCount = Math.max(deckSlideTotal, deckSlideCount, slideState?.count ?? 0, current + 1, 1);
+    let target: number | null = null;
+    let nextCount = knownCount;
+    if (action === 'go') {
+      if (typeof index === 'number' && Number.isFinite(index) && index >= 0) {
+        target = Math.floor(index);
+        nextCount = Math.max(knownCount, target + 1);
+      }
+    } else if (action === 'next') {
+      target = Math.min(current + 1, knownCount - 1);
+    } else if (action === 'prev') {
+      target = Math.max(current - 1, 0);
+    } else if (action === 'first') {
+      target = 0;
+    } else if (action === 'last') {
+      target = knownCount - 1;
+    }
+    if (target !== null) {
+      const next = { active: target, count: nextCount };
+      setSlideStateCached(previewStateKey, next);
+      setSlideState(next);
+    }
     const win = iframeRef.current?.contentWindow;
     if (!win) return;
     win.postMessage({
@@ -10230,7 +10303,15 @@ function HtmlViewer({
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [effectiveDeck, mode]);
+  }, [
+    activeDeckSlideIndex,
+    deckSlideCount,
+    deckSlideTotal,
+    effectiveDeck,
+    mode,
+    previewStateKey,
+    slideState?.count,
+  ]);
 
   useEffect(() => {
     function onPresenterMessage(ev: MessageEvent) {
@@ -11349,6 +11430,7 @@ function HtmlViewer({
       filePath: file.name,
       fallbackHtml: context?.content ?? source ?? '',
       fallbackTitle: context?.title ?? exportTitle,
+      deck: deckExportSignalForContext(context),
       ...(context?.versionId ? { versionId: context.versionId } : {}),
     }));
   }
@@ -13277,6 +13359,7 @@ function HtmlViewer({
                 labelTotal={deckNavTotal}
                 buildThumbSrcDoc={buildDeckThumbnailSrcDoc}
                 parsedDeck={parsedDeckThumbnails}
+                aspectRatio={deckThumbnailAspectRatio}
                 onSelect={(index) => {
                   fireDeckViewerClick('thumbnail_select', {
                     slide_index: index,

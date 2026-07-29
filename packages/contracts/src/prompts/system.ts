@@ -14,27 +14,56 @@
  *      (`assets/template.html`) and references (`references/layouts.md`,
  *      `references/checklist.md`), we inject a hard pre-flight rule above
  *      the skill body so the agent reads them BEFORE writing any code.
- *   4. For decks (skillMode === 'deck' OR metadata.kind === 'deck'), the
- *      deck framework directive (./deck-framework.ts) is pinned LAST so it
- *      overrides any softer slide-handling wording earlier in the stack —
- *      this is the load-bearing nav / counter / scroll JS / print
- *      stylesheet contract that PDF stitching depends on. We also fire on
- *      the metadata path so deck-kind projects without a bound skill
- *      (skill_id null) still get a framework, instead of having the agent
- *      re-author scaling / nav / print logic from scratch each turn. When
- *      the active skill ships its own seed (skill body references
- *      `assets/template.html`), we defer to that seed and skip the generic
- *      skeleton — the skill's framework wins to avoid double-injection.
+ *   4. For decks (skillMode === 'deck' OR metadata.kind === 'deck'), outcome
+ *      quality rules are pinned LAST. Decks without a skill seed also receive
+ *      the shared delivery contract. When a skill supplies
+ *      `assets/template.html`, its framework owns implementation details while
+ *      the shared quality and rendered-verification criteria still apply.
  *
  * The composed string is what the daemon sees as `systemPrompt` and what
  * the Anthropic path sends as `system`.
  */
 import type { ChatSessionMode } from '../api/chat.js';
+import type { MediaSurface } from '../api/media.js';
 import type { ProjectMetadata, ProjectTemplate } from '../api/projects.js';
 import { OFFICIAL_DESIGNER_PROMPT, renderOfficialDesignerPrompt } from './official-system.js';
 import { DISCOVERY_AND_PHILOSOPHY } from './discovery.js';
-import { DECK_FRAMEWORK_DIRECTIVE } from './deck-framework.js';
-import { MEDIA_GENERATION_CONTRACT } from './media-contract.js';
+import {
+  renderDeckQualityDirective,
+  renderDeckVNextDirective,
+} from './deck-framework.js';
+import { renderDirectionSpecBlock } from './directions.js';
+import { renderMediaGenerationContract } from './media-contract.js';
+import { HOST_QUESTION_FORM_PROTOCOL } from './question-form-runtime.js';
+import {
+  ASK_MODE_BOUNDARY,
+  HOST_ROLE_MARKER_GUARD,
+  INITIAL_SKIP_DISCOVERY_BRIEF_DIRECTIVE,
+  PLAN_MODE_BOUNDARY,
+  renderApiModeDirective,
+  renderAskModeDirective,
+  renderDynamicContextModeScope,
+  renderInitialExamplePromptDirective,
+  renderPlanModeDirective,
+  resolveActiveSkillPromptScope,
+} from './host-runtime.js';
+import {
+  renderDesignSystemPromptBlocks,
+  type DesignSystemImportMode,
+} from './design-system-runtime.js';
+import { renderUiLocalePrompt } from './locale-runtime.js';
+import { renderSlimMemoryBlocks } from './memory-runtime.js';
+import {
+  HOST_CLARIFICATION_GATE,
+  PROMPT_INJECTION_RESISTANCE,
+  renderPlatformContractsBlock,
+  renderSlimCoreCharter,
+  renderSlimPlanFoundation,
+} from './core-slim.js';
+import {
+  executionProfileFromStreamFormat,
+  type ExecutionProfile,
+} from '../execution-profile.js';
 
 export const BASE_SYSTEM_PROMPT = OFFICIAL_DESIGNER_PROMPT;
 const ELEVENLABS_VOICE_PROMPT_OPTION_LIMIT = 100;
@@ -66,38 +95,6 @@ const PROMPT_SAFE_HTTP_STATUS_LABELS: Record<string, string> = {
   '504': 'Gateway Timeout',
 };
 
-function renderUiLocalePrompt(locale: string | undefined): string {
-  const normalized = locale?.trim();
-  if (!normalized || normalized.toLowerCase() === 'en') return '';
-  const languageName = normalized === 'zh-CN'
-    ? 'Simplified Chinese'
-    : normalized === 'zh-TW'
-      ? 'Traditional Chinese'
-      : normalized;
-  const lines = [
-    '# UI locale override',
-    '',
-    `The Open Design UI locale for this run is \`${normalized}\` (${languageName}). All user-visible chat prose and generated UI controls must follow this locale, especially \`<question-form>\` titles, descriptions, labels, placeholders, helper text, and option labels. Keep machine-readable ids and object option \`value\` fields exact and unlocalized.`,
-    'Exception: for the default task-type form, keep the `taskType` option labels as the canonical routing choices: `Prototype`, `Live artifact`, `Slide deck`, `Image`, `Video`, `HyperFrames`, `Audio`, `Other`. Do not translate, reorder, or rewrite those option labels.',
-  ];
-  if (normalized === 'zh-CN') {
-    lines.push(
-      '',
-      'For the default quick brief in Simplified Chinese, use copy like:',
-      '- title: `快速简报 — 30 秒`',
-      '- description: `开始生成前我会先确认这些信息。不适用的可以跳过，我会补上默认值。`',
-      '- output label/options: `我们要做什么？` / `幻灯片 / 路演稿`, `单页网页原型 / 落地页`, `多屏应用原型`, `数据看板 / 工具界面`, `编辑式 / 营销页面`, `其他 — 我来描述`',
-      '- platform label/options: `目标平台` / `响应式网页`, `桌面网页`, `iOS 应用`, `Android 应用`, `平板应用`, `桌面应用`, `固定画布 (1920×1080)`',
-      '- audience label/placeholder: `目标用户` / `例如：早期投资人、开发者工具采购者、内部高管评审`',
-      '- tone label/options: `视觉调性` / `编辑 / 杂志感`, `现代极简`, `活泼 / 插画感`, `科技 / 工具型`, `奢华 / 精致`, `粗野 / 实验性`, `人性化 / 亲切`',
-      '- brand label/options: `品牌背景` / `帮我选一个方向`, `我有品牌规范 — 稍后分享`, `参考网站 / 截图 — 稍后附上`',
-      '- scale label/placeholder: `大概需要多少内容？` / `例如：8 页幻灯片、1 个落地页 + 3 个子页面、4 个移动端界面`',
-      '- constraints label/placeholder: `还有什么需要知道的吗？` / `真实文案、必须使用的字体、需要避免的内容、截止时间…`',
-    );
-  }
-  return lines.join('\n');
-}
-
 function normalizePromptText(value: string): string {
   return value
     .replace(/[\r\n]+/g, ' ')
@@ -128,38 +125,9 @@ export function formatElevenLabsVoiceOptionsErrorForPrompt(
   return `${ELEVENLABS_VOICE_OPTIONS_PROMPT_PREFIX}. Tell the user to retry the lookup or paste a voice id manually.`;
 }
 
-export const SKIP_DISCOVERY_BRIEF_OVERRIDE = `# Automated project mode — skip discovery form
+export const SKIP_DISCOVERY_BRIEF_OVERRIDE = INITIAL_SKIP_DISCOVERY_BRIEF_DIRECTIVE;
 
-This project was created through the daemon API with \`skipDiscoveryBrief: true\`. Override the discovery rules below: do NOT emit \`<question-form id="discovery">\`, do NOT show "Quick brief — 30 seconds", and do NOT ask a first-turn clarification form. Do not emit any question form or choice card, and do not wait for user input. Treat the user's first message and project metadata as the brief, choose reasonable defaults for any missing details, then proceed directly to planning/building under the normal artifact workflow.`;
-
-export function buildExamplePromptOverride(
-  title?: string | null,
-  brief?: Record<string, string> | null,
-): string {
-  let text = `# Example prompt mode — full-quality direct generation
-
-The user selected a curated example prompt from the gallery and sent it without modification. This prompt is a complete, self-contained creative brief that has been carefully designed to produce a showcase-quality artifact.`;
-
-  if (title) {
-    text += `\n\nSelected example: "${title}"`;
-  }
-
-  if (brief && Object.keys(brief).length > 0) {
-    text += `\n\nPre-filled creative brief (treat as if the user already answered all discovery questions):`;
-    for (const [key, value] of Object.entries(brief)) {
-      text += `\n- ${key.replace(/_/g, ' ')}: ${value}`;
-    }
-  }
-
-  text += `\n\nRules:
-1. Do NOT emit \`<question-form id="discovery">\`, do NOT show "Quick brief — 30 seconds", and do NOT ask any clarifying questions.
-2. Treat the user's message as the FULL specification — it contains all visual direction, content themes, and structural intent needed.
-3. Generate the artifact at your absolute highest quality. This is a showcase piece — match or exceed the standard of a hand-crafted design.
-4. Infer any unspecified details (copy, layout choices, imagery descriptions) in a way that is maximally coherent with the stated creative direction.
-5. Proceed directly to planning and building. Output your TodoWrite plan and then the artifact immediately.`;
-
-  return text;
-}
+export const buildExamplePromptOverride = renderInitialExamplePromptDirective;
 
 const ACTIVE_DESIGN_SYSTEM_VISUAL_DIRECTION_OVERRIDE = `
 
@@ -189,6 +157,18 @@ export interface ComposeInput {
     | undefined;
   designSystemBody?: string | undefined;
   designSystemTitle?: string | undefined;
+  // Optional compact package guide. Ask and visual-media surfaces use its
+  // `## Design Highlights` section instead of injecting the full DESIGN.md.
+  designSystemUsageMd?: string | undefined;
+  // Optional compiled design-system assets. The pure contracts composer can
+  // render the same portable blocks as the daemon when the fallback caller
+  // supplies these strings; filesystem-only pull indexes remain optional.
+  designSystemTokensCss?: string | undefined;
+  designSystemComponentsManifest?: string | undefined;
+  designSystemFixtureHtml?: string | undefined;
+  designSystemPullIndex?: string | undefined;
+  designSystemCorePullIndex?: string | undefined;
+  designSystemImportMode?: DesignSystemImportMode | undefined;
   // Personal-memory block (auto-extracted facts + the hand-edited
   // MEMORY.md index). The daemon side composes this on disk and the
   // BYOK side fetches it from `GET /api/memory/system-prompt`; either
@@ -242,6 +222,9 @@ export interface ComposeInput {
   // chat mode keeps the same context/tools but answers like a standard
   // multi-turn assistant unless the user explicitly asks to build.
   sessionMode?: ChatSessionMode | undefined;
+  // True only for the first assistant-producing turn in the project. Initial
+  // gallery/automation shortcuts must not persist into later conversations.
+  isInitialProjectTurn?: boolean | undefined;
   // UI locale selected by the client. User-visible generated form copy
   // must follow this locale even when the user's initial prompt is brief.
   locale?: string | undefined;
@@ -251,6 +234,17 @@ export interface ComposeInput {
   // Free-form instructions the user set on this specific project.
   // Injected after user-level instructions and before the design system.
   projectInstructions?: string | undefined;
+  // True only when the visible request actually reads as a deck brief.
+  // Deck-kind projects remain unconditional; a positive signal promotes an
+  // otherwise untyped freeform run to the deck surface.
+  freeformDeckSignal?: boolean | undefined;
+  // Shared Design-doctrine variant. Slim is the default for BYOK/API too;
+  // classic is retained only as an explicit Design-mode rollback path.
+  promptCoreVariant?: 'classic' | 'slim' | undefined;
+  executionProfile?: ExecutionProfile | undefined;
+  // Turn-level platform intent detected by the caller. Metadata remains the
+  // stable source; this signal covers a platform first named in conversation.
+  platformHintSignal?: boolean | undefined;
 }
 
 export function composeSystemPrompt({
@@ -259,6 +253,13 @@ export function composeSystemPrompt({
   skillMode,
   designSystemBody,
   designSystemTitle,
+  designSystemUsageMd,
+  designSystemTokensCss,
+  designSystemComponentsManifest,
+  designSystemFixtureHtml,
+  designSystemPullIndex,
+  designSystemCorePullIndex,
+  designSystemImportMode,
   memoryBody,
   memoryHooks,
   metadata,
@@ -269,15 +270,20 @@ export function composeSystemPrompt({
   audioVoiceOptionsError,
   streamFormat,
   sessionMode,
+  isInitialProjectTurn = true,
   locale,
   userInstructions,
   projectInstructions,
+  freeformDeckSignal,
+  promptCoreVariant = 'slim',
+  executionProfile,
+  platformHintSignal,
 }: ComposeInput): string {
-  // Discovery + philosophy goes FIRST so its hard rules ("emit a form on
-  // turn 1", "branch on brand on turn 2", "TodoWrite on turn 3", run
-  // checklist + critique before <artifact>) win precedence over softer
-  // wording later in the official base prompt.
+  // Build the prompt in authority order. Slim mode supplies its own
+  // mode-specific head; explicit classic Design keeps the legacy discovery
+  // layer above the official base prompt.
   const parts: string[] = [];
+  const turnVariableParts: string[] = [];
   const activeDesignSystemBody = designSystemBody?.trim();
   // Website Clone runs reproduce an existing site, so its palette/typography must
   // win — an active design system being declared "authoritative" would pull the
@@ -292,59 +298,126 @@ export function composeSystemPrompt({
     metadata?.kind === 'image' ||
     metadata?.kind === 'video' ||
     metadata?.kind === 'audio';
+  const resolvedMediaSurface: MediaSurface | null =
+    metadata?.kind === 'image' || metadata?.kind === 'video' || metadata?.kind === 'audio'
+      ? metadata.kind
+      : skillMode === 'image' || skillMode === 'video' || skillMode === 'audio'
+        ? skillMode
+        : null;
+  const isAskMode = sessionMode === 'chat';
+  const isClassicDesignCore =
+    promptCoreVariant === 'classic'
+    && !isAskMode
+    && sessionMode !== 'plan'
+    && !isMediaSurfaceEarly;
+  const isSlimCore = !isClassicDesignCore;
+  const isSlimPlanHead = isSlimCore && sessionMode === 'plan';
+  const isSlimCharterHead =
+    isSlimCore && !isAskMode && !isMediaSurfaceEarly && !isSlimPlanHead;
+  const resolvedExecutionProfile =
+    executionProfile ?? executionProfileFromStreamFormat(streamFormat);
+  const isPlanMode = sessionMode === 'plan';
+  const apiModeDirective = renderApiModeDirective({
+    sessionMode,
+    mediaSurface: resolvedMediaSurface,
+  });
+  const askModeDirective = renderAskModeDirective(resolvedExecutionProfile);
 
   // API/BYOK mode (streamFormat === 'plain'): no tools are wired through
-  // to the model, but the discovery layer + base prompt below still tell
-  // it to call TodoWrite/Read/Write/Edit/Bash/WebFetch. Without an
-  // explicit top-anchored override, the model invents pseudo-tool markup
-  // (`<todo-list>`, `[读取 X]`) instead of producing real progress
-  // events — see #313. Pin this preamble ABOVE DISCOVERY_AND_PHILOSOPHY
-  // so it beats the discovery layer's own "these override anything
-  // later" header.
+  // to the model, while both core variants contain planning, file, or
+  // delivery instructions that need a no-tools interpretation. Without a
+  // top-anchored override, the model may invent pseudo-tool markup
+  // (`<todo-list>`, `[读取 X]`) instead of producing real progress events —
+  // see #313. Pin this preamble above the active core: it must beat the
+  // classic discovery layer's "override anything later" header and scope
+  // the slim charter's generic plan/build instructions.
   if (streamFormat === 'plain') {
-    parts.push(API_MODE_OVERRIDE);
+    parts.push(apiModeDirective);
     parts.push('\n\n---\n\n');
   }
 
+  if (isSlimPlanHead) {
+    parts.push(renderSlimPlanFoundation(resolvedExecutionProfile), '\n\n---\n\n');
+  } else if (isSlimCharterHead) {
+    parts.push(
+      renderSlimCoreCharter(resolvedExecutionProfile, {
+        webCloneFidelity: isWebCloneRun,
+      }),
+      '\n\n---\n\n',
+    );
+  } else if (isSlimCore && !isAskMode) {
+    parts.push(PROMPT_INJECTION_RESISTANCE, '\n\n---\n\n');
+  }
+
   // Ask mode (`chat`) is the deliberately bare conversation mode: the
-  // CHAT_MODE_OVERRIDE below IS the whole charter, and the artifact-oriented
+  // The Ask directive below IS the whole charter, and the artifact-oriented
   // blocks (the discovery layer, the full identity/workflow charter, deck
   // framework, media generation contract, DS visual-direction override) are
   // gated off so the turn stays cheap. Memory, custom instructions, the active
   // design system, attached skills, and the clarifying-questions surface are
   // still composed in — Ask mode is light, not amnesiac. Mirror the daemon
   // composer's `isAskMode` gating.
-  const isAskMode = sessionMode === 'chat';
+  const canExecuteMedia =
+    !isAskMode
+    && sessionMode !== 'plan'
+    && streamFormat !== 'plain'
+    && resolvedExecutionProfile === 'filesystem';
 
   if (sessionMode === 'plan') {
-    parts.push(PLAN_MODE_OVERRIDE);
+    parts.push(renderPlanModeDirective(resolvedExecutionProfile));
     parts.push('\n\n---\n\n');
   } else if (sessionMode === 'chat') {
-    parts.push(CHAT_MODE_OVERRIDE);
+    parts.push(askModeDirective);
     parts.push('\n\n---\n\n');
+    if (isSlimCore) parts.push(PROMPT_INJECTION_RESISTANCE, '\n\n---\n\n');
   }
 
-  if (metadata?.examplePrompt === true) {
+  if (isInitialProjectTurn && !isAskMode && !isPlanMode && metadata?.examplePrompt === true) {
     parts.push(buildExamplePromptOverride(metadata.examplePromptTitle, metadata.examplePromptBrief));
     parts.push('\n\n---\n\n');
-  } else if (metadata?.skipDiscoveryBrief === true) {
+  } else if (
+    isInitialProjectTurn
+    && !isAskMode
+    && !isPlanMode
+    && metadata?.skipDiscoveryBrief === true
+  ) {
     parts.push(SKIP_DISCOVERY_BRIEF_OVERRIDE);
     parts.push('\n\n---\n\n');
   }
 
-  const localePrompt = renderUiLocalePrompt(locale);
+  const localePrompt = renderUiLocalePrompt(locale, {
+    includeQuickBriefSamples: !isSlimCore,
+  });
   if (localePrompt) {
     parts.push(localePrompt);
     parts.push('\n\n---\n\n');
   }
 
-  if (!isMediaSurfaceEarly && !isAskMode) {
+  if (!isSlimCore && !isMediaSurfaceEarly && !isAskMode) {
     parts.push(DISCOVERY_AND_PHILOSOPHY, '\n\n---\n\n');
   }
 
+  if (isSlimCharterHead && !activeDesignSystemBody) {
+    // Contracts/BYOK cannot call the daemon's pull CLI, so keep the full
+    // direction specs inline when the slim charter asks the model to choose.
+    parts.push(renderDirectionSpecBlock(), '\n\n---\n\n');
+  }
+
+  if (isSlimCharterHead) {
+    const metadataPlatformSignal =
+      typeof metadata?.platform === 'string'
+      || (metadata?.platformTargets?.length ?? 0) > 0;
+    const platformContracts = renderPlatformContractsBlock(resolvedExecutionProfile);
+    if (metadataPlatformSignal) {
+      parts.push(platformContracts, '\n\n---\n\n');
+    } else if (platformHintSignal === true) {
+      turnVariableParts.push(`\n\n---\n\n${platformContracts}`);
+    }
+  }
+
   // Ask mode skips the multi-thousand-token designer charter entirely — the
-  // CHAT_MODE_OVERRIDE above is its self-contained identity. Plan/Design keep it.
-  if (!isAskMode) {
+  // The Ask directive above is its self-contained identity. Plan/Design keep it.
+  if (!isSlimCore && !isAskMode) {
     // Website Clone runs swap the "don't recreate copyrighted designs" guardrail
     // for a faithful-reproduction + pre-deploy-checklist rule, mirroring the
     // daemon prompt so API/BYOK-backed web-clone runs behave identically.
@@ -354,17 +427,10 @@ export function composeSystemPrompt({
     );
   }
 
-  // Mid-conversation clarification reuses the same `<question-form>` flow as
-  // turn-1 discovery (DISCOVERY_AND_PHILOSOPHY) so the host keeps ONE unified
-  // questions surface: the form renders inline in the originating assistant
-  // message, and answers return as the next user message. Mirrors the
-  // daemon-side composer's "## Clarifying questions mid-conversation" section
-  // in apps/daemon/src/prompts/system.ts — keep both in sync so a daemon chat
-  // and a BYOK/API chat route follow-up choices through the same surface
-  // instead of drifting back to plain markdown option lists.
-  parts.push(
-    "\n\n---\n\n## Clarifying questions mid-conversation\n\nWhen you need a clarification AFTER turn 1 and the answer benefits from structured input, emit a `<question-form>` block — the same markup turn-1 discovery uses — instead of writing a bulleted list of options in markdown. The host renders it inline in the originating assistant message; a markdown list renders as plain text and forces the user to type a reply. Use the richest appropriate web form controls (`radio`, `checkbox`, `select`, `text`, `textarea`, `number`, `range`, `date`, `time`, `datetime-local`, `color`, `url`, `email`, `tel`, `file`, `switch`, or `direction-cards`). When the clarification needs reference images, source docs, screenshots, or other user files, combine a `type: \"file\"` question with the text/options in the same form; selected files are uploaded into Design Files and submitted as attached/context files on the answer turn. For every finite-choice question, keep user control by leaving `allowCustom` unset or setting it to `true`, and add localized `customLabel` / `customPlaceholder` when useful. Use free-form prose questions only when a form would add no structure. Do NOT also duplicate the form's questions as markdown text alongside it.\n\n`<question-form>` is assistant text for the Open Design UI, not a native tool call. If you need to clarify direction, emit the complete `<question-form>...</question-form>` block directly in the assistant message before any TodoWrite, file write/edit, Bash, or other native tool call. Do not stop after an introductory sentence such as \"先确认一下方向：\"; the same message must include the full form.",
-  );
+  const dynamicContextModeScope = renderDynamicContextModeScope(sessionMode);
+  if (dynamicContextModeScope) {
+    parts.push(dynamicContextModeScope, '\n\n---\n\n');
+  }
 
   // Mirrors the daemon-side composer in apps/daemon/src/prompts/system.ts —
   // keep both copies of this preamble in sync so a CLI chat and a BYOK
@@ -373,7 +439,18 @@ export function composeSystemPrompt({
   // are still authoritative for tone+terminology" framing is what
   // stops the model from treating remembered preferences as harder
   // than the active design system.
-  if (memoryBody && memoryBody.trim().length > 0) {
+  if (isSlimCore && memoryBody && memoryBody.trim().length > 0) {
+    parts.push(
+      ...renderSlimMemoryBlocks(
+        memoryBody,
+        memoryHooks,
+        sessionMode,
+        resolvedMediaSurface,
+      ),
+    );
+  }
+
+  if (!isSlimCore && memoryBody && memoryBody.trim().length > 0) {
     parts.push(
       `\n\n## Personal memory (auto-extracted from past chats)\n\nThe following facts have been sedimented from this user's previous conversations and edited in the settings panel. Treat them as preferences and context, NOT hard rules: when they collide with the active design system tokens, the brand wins; when they collide with the active skill's workflow, the skill wins. They are still authoritative for tone, voice, terminology, and what the user already told you about themselves and their goals — never re-ask the user about something already captured here.\n\nUse memory as a task-intent gateway. When the user's request is short or underspecified, silently expand it into an internal task brief before acting: infer the task type, user/profile background, project/artifact context, delivery preferences, known feedback meanings, constraints, and validation/finish line. Proceed from that richer brief so the user does not need to repeat setup. Ask a clarifying question only when a critical target, permission, or conflict cannot be resolved from the current request plus memory. Do not dump the full internal brief unless the user asks to inspect it. Expanding intent this way changes only WHAT you know going in; it never shortcuts the standard build flow — you still plan with TodoWrite and still run the anti-slop / brand self-check on every artifact-producing turn.\n\n${memoryBody.trim()}`,
     );
@@ -415,20 +492,48 @@ export function composeSystemPrompt({
     );
   }
 
-  if (!isWebCloneRun && activeDesignSystemBody && activeDesignSystemBody.length > 0) {
+  if (!isWebCloneRun && activeDesignSystemBody) {
     parts.push(
-      `\n\n## Active design system${designSystemTitle ? ` — ${designSystemTitle}` : ''}\n\nTreat the following DESIGN.md as authoritative for color, typography, spacing, and component rules. Do not invent tokens outside this palette. When you copy the active skill's seed template, bind these tokens into its \`:root\` block before generating any layout.\n\n${activeDesignSystemBody}`,
+      ...renderDesignSystemPromptBlocks({
+        title: designSystemTitle,
+        body: activeDesignSystemBody,
+        usageMd: designSystemUsageMd,
+        tokensCss: designSystemTokensCss,
+        componentsManifest: designSystemComponentsManifest,
+        fixtureHtml: designSystemFixtureHtml,
+        pullIndex: designSystemPullIndex,
+        corePullIndex: designSystemCorePullIndex,
+        importMode: designSystemImportMode,
+        sessionMode,
+        mediaSurface: resolvedMediaSurface,
+        executionProfile: resolvedExecutionProfile,
+      }),
     );
   }
 
   if (skillBody && skillBody.trim().length > 0) {
-    const preflight = derivePreflight(skillBody);
+    const scope = resolveActiveSkillPromptScope({
+      sessionMode,
+      mediaSurface: resolvedMediaSurface,
+      executionProfile: resolvedExecutionProfile,
+    });
+    const preflight = scope.derivePreflight ? derivePreflight(skillBody) : '';
+    const skillInstruction = `${scope.instruction}${preflight}`;
+    const trimmedSkillBody = skillBody.trim();
+    const scopedSkillBody = scope.placement === 'after'
+      ? `${trimmedSkillBody}\n\n${skillInstruction}`
+      : `${skillInstruction}\n\n${trimmedSkillBody}`;
     parts.push(
-      `\n\n## Active skill${skillName ? ` — ${skillName}` : ''}\n\nFollow this skill's workflow exactly.${preflight}\n\n${skillBody.trim()}`,
+      `\n\n## Active skill${skillName ? ` — ${skillName}` : ''}\n\n${scopedSkillBody}`,
     );
   }
 
-  if (!isAskMode) {
+  if (
+    !isAskMode
+    && !isSlimCore
+    && resolvedExecutionProfile === 'filesystem'
+    && !isMediaSurfaceEarly
+  ) {
     parts.push(`\n\n${SEMANTIC_OUTPUT_FILE_NAMES}`);
   }
 
@@ -436,7 +541,13 @@ export function composeSystemPrompt({
     parts.push(pluginBlock);
   }
 
-  if (Array.isArray(activeStageBlocks) && activeStageBlocks.length > 0) {
+  if (
+    !isAskMode
+    && !isPlanMode
+    && !isMediaSurfaceEarly
+    && Array.isArray(activeStageBlocks)
+    && activeStageBlocks.length > 0
+  ) {
     for (const block of activeStageBlocks) {
       if (typeof block === 'string' && block.trim().length > 0) {
         parts.push(block);
@@ -444,157 +555,105 @@ export function composeSystemPrompt({
     }
   }
 
-  const metaBlock = renderMetadataBlock(metadata, template, audioVoiceOptions, audioVoiceOptionsError);
+  const metaBlock = renderMetadataBlock(
+    metadata,
+    template,
+    audioVoiceOptions,
+    audioVoiceOptionsError,
+    isSlimCore ? 'facts' : 'classic',
+    sessionMode,
+  );
   if (metaBlock) parts.push(metaBlock);
 
-  // Decks have a load-bearing framework (nav, counter, scroll JS, print
-  // stylesheet for PDF stitching). Pin it last so it overrides any softer
-  // wording earlier in the stack ("write a script that handles arrows…").
-  //
-  // We fire on either (a) the active skill is a deck skill OR (b) the
-  // project metadata declares kind=deck. Case (b) catches projects created
-  // without a skill (skill_id null) — without this, a deck-kind project
-  // with no bound skill gets neither a skill seed nor the framework
-  // skeleton, and the agent writes scaling / nav / print logic from scratch
-  // with the same buggy `place-items: center` + transform pattern we keep
-  // having to fix at runtime. Skill seeds (when present) win — they
-  // already define their own opinionated framework (simple-deck's
-  // scroll-snap, guizang-ppt's magazine layout) and re-pinning the generic
-  // skeleton would conflict. The skill-seed path takes over via
-  // `derivePreflight` above, so we only fire the generic skeleton when no
-  // skill seed is on offer.
-  const isDeckProject = skillMode === 'deck' || metadata?.kind === 'deck';
-  const isFreeformProject = !skillMode && (!metadata || metadata.kind === 'other');
+  // Deck outcome quality and rendered verification stay binding for every
+  // deck project. A skill seed owns its template/runtime, while unseeded decks
+  // also receive the shared delivery contract.
+  const isDeckProject =
+    skillMode === 'deck'
+    || metadata?.kind === 'deck'
+    || (
+      freeformDeckSignal === true
+      && !skillMode
+      && (!metadata || metadata.kind === 'other')
+    );
   const hasSkillSeed =
     !!skillBody && /assets\/template\.html/.test(skillBody);
-  if (!isAskMode && isDeckProject && !hasSkillSeed) {
-    parts.push(`\n\n---\n\n${DECK_FRAMEWORK_DIRECTIVE}`);
-  } else if (!isAskMode && isFreeformProject && !hasSkillSeed) {
-    // Freeform / kind=other projects skip the kind picker entirely and
-    // land here. If the user's brief is a deck/keynote/slides ("讲解",
-    // "presentation", "make a deck"), the agent used to invent its own
-    // scale-to-fit + slide visibility + nav script from scratch and
-    // shipped subtle CSS specificity bugs (per-slide layout classes
-    // overriding `.slide { display:none }`). Inject the same framework
-    // here, prefixed with a one-line conditional so the agent only
-    // adopts it when the brief actually is a deck — otherwise the
-    // directive is read as background reference and ignored.
+  if (!isAskMode && sessionMode !== 'plan' && isDeckProject) {
+    const deckDirective = hasSkillSeed
+      ? renderDeckQualityDirective(resolvedExecutionProfile)
+      : renderDeckVNextDirective(resolvedExecutionProfile);
     parts.push(
-      `\n\n---\n\n## If this brief is a slide deck / keynote / presentation\n\nThe user did not pre-select a "Slide deck" surface, but their request may still call for one. **If — and only if — the brief reads as slides, keynote, presentation, deck, PPT, or 讲解, follow the framework below.** Otherwise ignore everything in this section and continue with the freeform output you would have written anyway.\n\n${DECK_FRAMEWORK_DIRECTIVE}`,
+      `\n\n---\n\n${deckDirective}`,
     );
   }
 
-  if (!isAskMode && isMediaSurfaceEarly) {
-    parts.push(MEDIA_GENERATION_CONTRACT);
+  if (canExecuteMedia && resolvedMediaSurface) {
+    parts.push(renderMediaGenerationContract(
+      resolvedMediaSurface,
+      metadata?.audioKind,
+      metadata?.videoModel === 'hyperframes-html'
+        && !skillBody?.includes('npx hyperframes init'),
+    ));
   }
 
-  if (!isAskMode && !isWebCloneRun && activeDesignSystemBody && activeDesignSystemBody.length > 0) {
+  // Keep conversation-derived prompt sections after project-stable metadata
+  // and dynamic workflow blocks, matching the daemon's cache boundary.
+  parts.push(...turnVariableParts);
+
+  if (!isSlimCore && !isAskMode && !isWebCloneRun && activeDesignSystemBody && activeDesignSystemBody.length > 0) {
     parts.push(ACTIVE_DESIGN_SYSTEM_VISUAL_DIRECTION_OVERRIDE);
   }
 
+  // Dynamic skill/plugin/stage content is now complete. Pin mode and host
+  // boundaries after it so recency cannot re-enable forbidden workflows.
+  if (isAskMode) {
+    parts.push(`\n\n---\n\n${ASK_MODE_BOUNDARY}`);
+  } else if (sessionMode === 'plan') {
+    parts.push(`\n\n---\n\n${PLAN_MODE_BOUNDARY}`);
+  }
+  parts.push(
+    `\n\n---\n\n${isSlimCharterHead ? HOST_CLARIFICATION_GATE : HOST_QUESTION_FORM_PROTOCOL}`,
+  );
+  parts.push(`\n\n---\n\n${HOST_ROLE_MARKER_GUARD}`);
+
   return parts.join('');
 }
-
-/**
- * Top-anchored override for API/BYOK mode (streamFormat === 'plain').
- *
- * Why it sits ABOVE DISCOVERY_AND_PHILOSOPHY: that layer starts with
- * "these override anything later in this prompt" and then mandates
- * TodoWrite / Bash / Read / WebFetch on turns 2–3. In daemon mode those
- * tools exist; in API mode they don't, so the agent narrates pseudo-tool
- * markup (`<todo-list>...`, `[读取 X]`) instead of producing structured
- * `tool_use` events the UI can render — bug #313. Pinning the override
- * at the absolute top is the cleanest way to beat the discovery layer's
- * precedence without restructuring its rules.
- *
- * The override does NOT block `<artifact>` blocks — those are how the
- * web UI receives finished HTML in API mode.
- */
-const API_MODE_OVERRIDE = `# API mode — no tools available (read first — overrides every rule below)
-
-You are running through a plain Messages API. **No tools are wired through to you.** \`TodoWrite\`, \`Read\`, \`Write\`, \`Edit\`, \`Bash\`, and \`WebFetch\` are unavailable — calls to them will not execute and will not render in the UI.
-
-Every later instruction in this prompt that tells you to "call TodoWrite", "run Bash", "read via Read", or otherwise invoke a tool is describing the daemon-mode workflow. In this API run those instructions are **overridden** — do not attempt them and do not pretend you did.
-
-Do not mention tool unavailability to the user. Avoid phrases such as "TodoWrite is unavailable" or "I cannot call tools in this context"; just continue with the plain prose plan or artifact body the user needs, without mentioning missing tools.
-
-**Forbidden output:**
-- Pseudo-tool markup such as \`<todo-list>...</todo-list>\`, \`<tool-call>\`, or invented XML wrappers around a plan.
-- Fake-protocol prose such as \`[读取 template.html ...]\`, \`[读取 layouts.md ...]\`, \`[正在调用 TodoWrite ...]\`, or any \`[doing X]\` placeholder narrating a tool you cannot run.
-- Statements like "I'll call TodoWrite to track this" or "let me read the skill file first" — there is no TodoWrite and no Read in this run.
-
-**Allowed output:**
-- Plain chat prose to the user (in their language). State your plan as prose — a short numbered list in markdown is fine; it just must not be wrapped in \`<todo-list>\` or claim to be a tool call.
-- A final \`<artifact type="text/html">...</artifact>\` block containing a complete \`<!doctype html>\` document when the brief is ready to deliver.
-- \`<question-form>\` blocks for discovery (turn 1) and for mid-conversation clarification, exactly as the rules below describe — question-form is markup the UI parses, not a tool call.
-
-If the rules below tell you to plan with TodoWrite, write the plan as prose instead. If they tell you to read skill side files before writing, describe in one sentence which patterns/conventions you're going to apply and proceed. If they tell you to run brand-spec extraction via Bash + Read + WebFetch, ask the user the missing brand questions in the discovery form instead.`;
-
-// Ask mode is the deliberately light conversation mode. Unlike Plan/Design,
-// the composer does NOT append the discovery layer or the full designer charter
-// after this override (see `isAskMode` gating in composeSystemPrompt) — so this
-// block is the whole behavioral charter for the turn and must read as
-// self-contained, not as a preface that overrides "rules below". Keep it
-// BYTE-IDENTICAL to the apps/daemon copy so a daemon chat and a BYOK/API chat
-// behave the same.
-const CHAT_MODE_OVERRIDE = `# Ask mode — bare conversation (this is the whole charter for this turn)
-
-This conversation is in Open Design Ask mode: a fast, low-overhead chat kept deliberately light to save tokens. Open Design is the open-source Claude Design alternative and a native Figma counterpart. Official links: GitHub https://github.com/nexu-io/open-design, website https://open-design.ai/, Discord https://discord.gg/mHAjSMV6gz.
-
-Behave like a direct, multi-turn desktop chat assistant. Prefer concise prose: answer the question, explain, compare options, debug prompts, and review existing work. You still have the user's project files, attachments, connectors, MCP servers, project memory, any active design system, and any skills they attached for this turn — use them as context, and follow an attached skill's workflow when one is present.
-
-This mode does not load the heavy design-discovery workflow or the full designer charter, on purpose. Do not emit a default discovery \`<question-form>\`, do not open with a TodoWrite plan for a chat answer, and do not create or edit project files, HTML, slide decks, images, video, or audio on your own.
-
-If the user explicitly asks you to build, generate, design, or export a concrete artifact (a page, prototype, deck, image, video, audio, or a file change), handle it inline only when it is genuinely trivial; for anything substantial, say so in one line and suggest switching to Design mode (or Plan mode for a document-first brief), where the full design workflow, brand discipline, and artifact tooling are loaded. Keep this turn conversational.
-
-For mid-conversation clarification you may still emit a \`<question-form>\` block — it is markup the Open Design UI parses, not a native tool call.`;
-
-const PLAN_MODE_OVERRIDE = `# Plan mode — editable document first (read first — overrides every rule below)
-
-This conversation is in Open Design Plan mode. Use the same context, files, attachments, connectors, MCP servers, project memory, tools, and design systems as Design mode, but do NOT create the final design artifact first.
-
-In filesystem runs, substantial plan-document work still starts with a real TodoWrite/task-list tool call and keeps it updated as work progresses. Do not narrate TodoWrite availability to the user; show progress through the Todo card when the runtime supports it. In plain API runs, follow the API-mode override above and write the plan directly as prose without mentioning missing tools.
-
-Override the artifact discovery layer below: do NOT emit \`<question-form id="discovery">\`, \`<question-form id="task-type">\`, "Quick brief — 30 seconds", or the default artifact-oriented discovery questions about landing pages, prototypes, dashboards, target platform, visual tone, brand context, fidelity, or design direction. A clear planning request should create or update the Markdown plan directly. If a clarification is truly required, ask only plan-document-specific questions, preferably in a \`<question-form id="plan-brief">\`, covering scope, stakeholders, timeline, sections, risks, constraints, and expected handoff deliverable.
-
-Your first responsibility is to create or update a Markdown plan document in Design Files, then guide the user to review and edit it before handoff to Design mode. The plan document is the source of truth for the next generation step and must be useful to both a human editor and a later agent run.
-
-Choose the document style from the user's intent and project metadata:
-- Deck / pitch / PPT: create a slide outline with page-by-page goals, narrative arc, slide titles, content bullets, visual direction, data/media needs, and speaker-note intent.
-- Prototype / app / dashboard / wireframe: create a PRD-style design brief with users, jobs, screens, key flows, layout structure, component/state requirements, interaction rules, data/content model, and acceptance checks.
-- Landing page / website / long-scroll: create a content and section plan with audience, offer, page hierarchy, section goals, proof/media needs, CTA logic, responsive considerations, and visual system notes.
-- Brand / design system: create a brand/system plan with token roles, typography, component coverage, usage rules, source assets, extraction gaps, and kit acceptance checks.
-- Image / video / audio: create a creative brief or storyboard with concept, shots/scenes, composition, copy, style references, model/runtime constraints, aspect/duration, and generation prompts.
-- Unknown or mixed requests: create a concise design-planning document with the closest matching sections above plus explicit open questions.
-
-Document requirements:
-- Write a real \`.md\` file under the active project. Prefer clear names such as \`plan.md\`, \`deck-outline.md\`, \`prototype-plan.md\`, \`prd.md\`, or \`storyboard.md\`; avoid overwriting a useful existing plan unless you are intentionally updating it.
-- Include a top-level title, a short intent summary, concrete sections, editable TODO/open-question markers, and a final "Next step" section that tells the user exactly what to do after reviewing the document.
-- If the user already has an active Markdown plan document, edit that file in place instead of creating a duplicate.
-- Do not output the final HTML/deck/image/video/audio artifact in the same turn unless the user explicitly says to skip planning or confirms that an existing plan is approved.
-- End the response by naming the created/updated Markdown file and inviting the user to edit it, then use the next-step handoff to generate from that document.
-
-If this is a plain API run where filesystem tools are unavailable, output the same plan as Markdown prose and clearly tell the user that no project file was written in this run.`;
 
 function renderMetadataBlock(
   metadata: ProjectMetadata | undefined,
   template: ProjectTemplate | undefined,
   audioVoiceOptions: AudioVoiceOption[] | undefined,
   audioVoiceOptionsError: string | undefined,
+  style: 'classic' | 'facts' = 'classic',
+  sessionMode?: ChatSessionMode | undefined,
 ): string {
   if (!metadata) return '';
+  const factsOnly = style === 'facts';
   const lines: string[] = [];
   lines.push('\n\n## Project metadata');
   lines.push(
-    'These are the structured choices the user made (or skipped) when creating this project. Treat known fields as authoritative; for any field marked "(unknown — ask)" you MUST include a matching question in your turn-1 discovery form.',
+    'Structured choices from project creation. Known fields are authoritative. A missing field is unresolved context, not a mandatory question: infer a safe default from the query and applicable workflow, and ask only when the decision is material.',
   );
   lines.push('');
   lines.push(`- **kind**: ${metadata.kind}`);
-  lines.push(...platformLines(metadata));
-  lines.push(...screenRuleLines(metadata));
-  lines.push(...landingAndWidgetLines(metadata));
-  lines.push(...intentLines(metadata));
-  lines.push(...brandLines(metadata));
+  if (factsOnly) {
+    lines.push(`- **platform**: ${metadata.platform ?? '(unknown)'}`);
+    if (metadata.platformTargets?.length) {
+      lines.push(`- **platformTargets**: ${metadata.platformTargets.join(', ')}`);
+    }
+    if (metadata.includeLandingPage) {
+      lines.push('- **includeLandingPage**: true (separate responsive marketing surface)');
+    }
+    if (metadata.includeOsWidgets) {
+      lines.push('- **includeOsWidgets**: true (platform-native home/lock-screen surfaces outside the app)');
+    }
+  } else {
+    lines.push(...platformLines(metadata));
+    lines.push(...screenRuleLines(metadata));
+    lines.push(...landingAndWidgetLines(metadata));
+  }
+  lines.push(...intentLines(metadata, sessionMode, factsOnly));
+  lines.push(...brandLines(metadata, sessionMode, factsOnly));
   lines.push(...kindDetailLines(metadata));
   lines.push(...imageLines(metadata));
   lines.push(...videoLines(metadata));
@@ -613,7 +672,7 @@ function platformLines(
   if (metadata.platform) {
     out.push(`- **platform**: ${metadata.platform}`);
   } else if (metadata.kind === 'prototype' || metadata.kind === 'template' || metadata.kind === 'other') {
-    out.push('- **platform**: (unknown — ask: responsive web, desktop web, iOS app, Android app, tablet app, or desktop app?)');
+    out.push('- **platform**: (unknown)');
   }
   if (metadata.platformTargets && metadata.platformTargets.length > 0) {
     out.push(`- **platformTargets**: ${metadata.platformTargets.join(', ')}`);
@@ -677,12 +736,16 @@ function landingAndWidgetLines(
 
 function intentLines(
   metadata: ProjectMetadata,
+  sessionMode?: ChatSessionMode | undefined,
+  factsOnly = false,
 ): string[] {
   const out: string[] = [];
   if (metadata.intent === 'live-artifact') {
-    out.push(
-      '- **intent**: live-artifact — the user chose New live artifact. The first output should be a live artifact/dashboard/report, not a one-off static mockup. Prefer the `live-artifact` skill workflow when available, keep source data compact, and register through the daemon live-artifact tool path once that wrapper/tooling is available.',
-    );
+    out.push(factsOnly && sessionMode === 'chat'
+      ? '- **intent**: live-artifact — the selected eventual deliverable is a data-backed live artifact/dashboard/report rather than a one-off static mockup; use this as answer and review context only.'
+      : factsOnly && sessionMode === 'plan'
+        ? '- **intent**: live-artifact — plan a data-backed live artifact/dashboard/report, including compact source data and its later registration handoff.'
+        : '- **intent**: live-artifact — the user chose New live artifact. The first output should be a live artifact/dashboard/report, not a one-off static mockup. Prefer the `live-artifact` skill workflow when available, keep source data compact, and register through the daemon live-artifact tool path once that wrapper/tooling is available.');
     out.push(
       '- **connector-source rule**: if the user names a connector/source (for example Notion) and daemon connector tools are available, list connectors before asking where the data comes from. When the named connector is `connected`, use its read-only tools and ask follow-up questions only for missing topic/page/database details, multiple equally plausible matches, or an unconnected/missing connector.',
     );
@@ -692,12 +755,16 @@ function intentLines(
 
 function brandLines(
   metadata: ProjectMetadata,
+  sessionMode?: ChatSessionMode | undefined,
+  factsOnly = false,
 ): string[] {
   const out: string[] = [];
   if (metadata.kind === 'brand') {
-    out.push(
-      '- **brand extraction project**: this project was created by the Brands extractor. Treat `brand.json`, `DESIGN.md`, `BRAND-SYSTEM.md`, `tokens.*.json`, `theme.json`, `kit.html`, `kit.dark.html`, and `artifacts/{landing,deck,poster,email,newsletter,form}.html` as the source of truth. Do not restart extraction from scratch unless the user explicitly asks; explain the extracted kit, then iterate the saved files when requested.',
-    );
+    out.push(factsOnly && sessionMode === 'chat'
+      ? '- **brand extraction project**: the saved brand files are source material for explanation and review in Ask mode; do not restart extraction or edit them here.'
+      : factsOnly && sessionMode === 'plan'
+        ? '- **brand extraction project**: base the plan on the saved brand files and identify later edits or extraction gaps without modifying the kit in Plan mode.'
+        : '- **brand extraction project**: this project was created by the Brands extractor. Treat `brand.json`, `DESIGN.md`, `BRAND-SYSTEM.md`, `tokens.*.json`, `theme.json`, `kit.html`, `kit.dark.html`, and `artifacts/{landing,deck,poster,email,newsletter,form}.html` as the source of truth. Do not restart extraction from scratch unless the user explicitly asks; explain the extracted kit, then iterate the saved files when requested.');
     if (metadata.brandId) out.push(`- **brandId**: ${metadata.brandId}`);
     if (metadata.brandSourceUrl) out.push(`- **brandSourceUrl**: ${metadata.brandSourceUrl}`);
     if (metadata.brandDesignSystemId) out.push(`- **brandDesignSystemId**: ${metadata.brandDesignSystemId}`);
@@ -711,20 +778,20 @@ function kindDetailLines(
   const out: string[] = [];
   if (metadata.kind === 'prototype') {
     out.push(
-      `- **fidelity**: ${metadata.fidelity ?? '(unknown — ask: wireframe vs high-fidelity)'}`,
+      `- **fidelity**: ${metadata.fidelity ?? '(unknown)'}`,
     );
   }
   if (metadata.kind === 'deck') {
     out.push(
-      `- **slideCount**: ${metadata.slideCount ?? '(unknown — ask only if the Active plugin / Plugin inputs block does not already include slideCount)'}`,
+      `- **slideCount**: ${metadata.slideCount ?? '(unknown)'}`,
     );
     out.push(
-      `- **speakerNotes**: ${typeof metadata.speakerNotes === 'boolean' ? metadata.speakerNotes : '(unknown — ask: include speaker notes?)'}`,
+      `- **speakerNotes**: ${typeof metadata.speakerNotes === 'boolean' ? metadata.speakerNotes : '(unknown)'}`,
     );
   }
   if (metadata.kind === 'template') {
     out.push(
-      `- **animations**: ${typeof metadata.animations === 'boolean' ? metadata.animations : '(unknown — ask: include motion/animations?)'}`,
+      `- **animations**: ${typeof metadata.animations === 'boolean' ? metadata.animations : '(unknown)'}`,
     );
     if (metadata.templateLabel) {
       out.push(`- **template**: ${metadata.templateLabel}`);
@@ -739,10 +806,10 @@ function imageLines(
   const out: string[] = [];
   if (metadata.kind === 'image') {
     out.push(
-      `- **imageModel**: ${metadata.imageModel ?? '(unknown - ask: which image model to use)'}`,
+      `- **imageModel**: ${metadata.imageModel ?? '(unknown)'}`,
     );
     out.push(
-      `- **aspectRatio**: ${metadata.imageAspect ?? '(unknown - ask: 1:1, 16:9, 9:16, 4:3, 3:4)'}`,
+      `- **aspectRatio**: ${metadata.imageAspect ?? '(unknown)'}`,
     );
     if (metadata.imageStyle) {
       out.push(`- **styleNotes**: ${metadata.imageStyle}`);
@@ -750,10 +817,6 @@ function imageLines(
     if (metadata.promptTemplate && metadata.promptTemplate.prompt.trim().length > 0) {
       out.push(`- **referenceTemplate**: ${metadata.promptTemplate.title}`);
     }
-    out.push('');
-    out.push(
-      'This is an **image** project. Plan the prompt carefully, then dispatch via the **media generation contract** using `"$OD_NODE_BIN" "$OD_BIN" media generate --surface image --model <imageModel>`. Do NOT emit `<artifact>` HTML for media surfaces.',
-    );
   }
   return out;
 }
@@ -764,25 +827,16 @@ function videoLines(
   const out: string[] = [];
   if (metadata.kind === 'video') {
     out.push(
-      `- **videoModel**: ${metadata.videoModel ?? '(unknown - ask: which video model to use)'}`,
+      `- **videoModel**: ${metadata.videoModel ?? '(unknown)'}`,
     );
     out.push(
-      `- **lengthSeconds**: ${typeof metadata.videoLength === 'number' ? metadata.videoLength : '(unknown - ask: 3s / 5s / 10s)'}`,
+      `- **lengthSeconds**: ${typeof metadata.videoLength === 'number' ? metadata.videoLength : '(unknown)'}`,
     );
     out.push(
-      `- **aspectRatio**: ${metadata.videoAspect ?? '(unknown - ask: 16:9, 9:16, 1:1)'}`,
+      `- **aspectRatio**: ${metadata.videoAspect ?? '(unknown)'}`,
     );
     if (metadata.promptTemplate && metadata.promptTemplate.prompt.trim().length > 0) {
       out.push(`- **referenceTemplate**: ${metadata.promptTemplate.title}`);
-    }
-    out.push('');
-    out.push(
-      'This is a **video** project. Plan the shotlist and motion, then dispatch via the **media generation contract** using `"$OD_NODE_BIN" "$OD_BIN" media generate --surface video --model <videoModel> --length <seconds> --aspect <ratio>`. Do NOT emit `<artifact>` HTML.',
-    );
-    if (metadata.videoModel === 'hyperframes-html') {
-      out.push(
-        'Special case: `hyperframes-html` is a local HTML-to-MP4 renderer, not a photoreal text-to-video model. Treat it like a motion design renderer, ask at most one clarifying question, then dispatch immediately.',
-      );
     }
   }
   return out;
@@ -796,33 +850,38 @@ function audioLines(
   const out: string[] = [];
   if (metadata.kind === 'audio') {
     out.push(
-      `- **audioKind**: ${metadata.audioKind ?? '(unknown - ask: music / speech / sfx)'}`,
+      `- **audioKind**: ${metadata.audioKind ?? '(unknown)'}`,
     );
     out.push(
-      `- **audioModel**: ${metadata.audioModel ?? '(unknown - ask: which audio model to use)'}`,
+      `- **audioModel**: ${metadata.audioModel ?? '(unknown)'}`,
     );
     out.push(
-      `- **durationSeconds**: ${typeof metadata.audioDuration === 'number' ? metadata.audioDuration : '(unknown - ask: target duration)'}`,
+      `- **durationSeconds**: ${typeof metadata.audioDuration === 'number' ? metadata.audioDuration : '(unknown)'}`,
     );
     if (metadata.voice) {
       out.push(`- **voice**: ${metadata.voice}`);
     } else if (metadata.audioKind === 'speech') {
-      out.push('- **voice**: (unknown - ask: voice id / accent / pacing)');
+      out.push('- **voice**: (unknown)');
     }
     const voiceOptions = shouldRenderElevenLabsVoiceOptions(metadata, audioVoiceOptions)
       ? audioVoiceOptions ?? []
       : [];
     if (voiceOptions.length > 0) {
       out.push(
-        '- **ElevenLabs voice options**: Ask the user to choose from a dropdown select. The visible labels are voice descriptions; the selected value must be the exact `voice_id` passed to `--voice`. Do not ask the user to type an id.',
+        '- **ElevenLabs voice options**: Resolve from the current query when one option is a clear match. If the voice remains a material unresolved decision, emit one localized `<question-form id="elevenlabs-voice">` with top-level `lang` and a required `select` question whose id is `voice` and `allowCustom` is `false`. Localize the surrounding copy and visible descriptions as needed, but preserve each exact option `value` as the `voice_id` passed to `--voice`. Do not ask the user to type an id.',
       );
       if (voiceOptions.length > ELEVENLABS_VOICE_PROMPT_OPTION_LIMIT) {
         out.push(`- **ElevenLabs voice options**: showing the first ${ELEVENLABS_VOICE_PROMPT_OPTION_LIMIT} of ${voiceOptions.length} available voices.`);
       }
       out.push('');
-      out.push('<question-form id="elevenlabs-voice" title="Choose an ElevenLabs voice">');
-      out.push(JSON.stringify(renderElevenLabsVoiceQuestionForm(voiceOptions), null, 2));
-      out.push('</question-form>');
+      out.push('```json');
+      out.push(JSON.stringify({
+        options: voiceOptions.slice(0, ELEVENLABS_VOICE_PROMPT_OPTION_LIMIT).map((option) => ({
+          label: formatElevenLabsVoiceLabel(option),
+          value: option.voiceId,
+        })),
+      }, null, 2));
+      out.push('```');
     } else {
       const audioVoiceOptionsPromptError = formatElevenLabsVoiceOptionsErrorForPrompt(audioVoiceOptionsError);
       if (audioVoiceOptionsPromptError) {
@@ -833,13 +892,9 @@ function audioLines(
     }
     if (metadata.audioKind === 'sfx') {
       out.push(
-        '- **SFX discovery**: Ask about the sound source/action, materials, intensity, acoustic space, timing/tail, loop/non-loop, and "avoid" constraints. Do not ask for language or voice for SFX.',
+        '- **SFX brief factors**: resolve source/action, materials, intensity, acoustic space, timing/tail, loop intent, and avoid constraints from the query; ask only about material gaps. For ElevenLabs keep the prompt under 450 characters (target 180–320), use prompt influence 0.7 for a specified brief, and request looping only for seamless ambience/background/game audio. Do not ask for language or voice for SFX.',
       );
     }
-    out.push('');
-    out.push(
-      'This is an **audio** project. Lock the content intent first, then dispatch via the **media generation contract** using `"$OD_NODE_BIN" "$OD_BIN" media generate --surface audio --audio-kind <kind> --model <audioModel> --duration <seconds>` and add `--voice <voice-id>` for speech when you have a provider-specific voice id. Do NOT emit `<artifact>` HTML.',
-    );
   }
   return out;
 }
@@ -980,43 +1035,6 @@ function shouldRenderElevenLabsVoiceOptions(
     && !metadata.voice
     && Array.isArray(audioVoiceOptions)
     && audioVoiceOptions.length > 0;
-}
-
-function renderElevenLabsVoiceQuestionForm(voiceOptions: AudioVoiceOption[]): {
-  description: string;
-  questions: Array<{
-    id: string;
-    label: string;
-    type: 'select';
-    required: boolean;
-    allowCustom: false;
-    placeholder: string;
-    help: string;
-    options: Array<{ label: string; value: string }>;
-  }>;
-  submitLabel: string;
-} {
-  const options = voiceOptions.slice(0, ELEVENLABS_VOICE_PROMPT_OPTION_LIMIT).map((option) => ({
-    label: formatElevenLabsVoiceLabel(option),
-    value: option.voiceId,
-  }));
-  return {
-    description:
-      'Pick a voice by description. The selected answer will be the exact voice_id passed to the renderer.',
-    questions: [
-      {
-        id: 'voice',
-        label: 'Voice',
-        type: 'select',
-        required: true,
-        allowCustom: false,
-        placeholder: 'Choose a voice',
-        help: 'Select a voice description; the answer submits the matching Voice ID.',
-        options,
-      },
-    ],
-    submitLabel: 'Use voice',
-  };
 }
 
 function formatElevenLabsVoiceLabel(option: AudioVoiceOption): string {

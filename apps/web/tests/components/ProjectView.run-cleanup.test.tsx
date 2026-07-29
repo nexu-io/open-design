@@ -230,6 +230,11 @@ async function waitForReadyChatPaneProps() {
     }) => Promise<{ ok: boolean; action?: string; message?: string } | void> | { ok: boolean; action?: string; message?: string } | void;
     onContinueBrandExtraction?: () => void;
     onSend?: (prompt: string, attachments: unknown[], comments: unknown[]) => Promise<void>;
+    onSubmitQuestionForm?: (
+      prompt: string,
+      attachments?: unknown[],
+      context?: unknown,
+    ) => boolean | Promise<boolean>;
     initialDraft?: string;
   };
 }
@@ -890,6 +895,9 @@ describe('ProjectView daemon cleanup', () => {
       );
 
       await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+      expect(streamViaDaemon.mock.calls[0]?.[0]).toMatchObject({
+        artifactDeliveryRequired: true,
+      });
       const seededCall = chatPaneSpy.mock.calls.find(
         (call) => call[0]?.initialDraft === 'design a landing page for a coffee shop',
       );
@@ -898,6 +906,69 @@ describe('ProjectView daemon cleanup', () => {
       window.sessionStorage.removeItem('od:auto-send-first:project-2');
     }
   });
+
+  it.each([
+    ['chat', false],
+    ['plan', false],
+    ['design', true],
+  ] as const)(
+    'keeps question-form delivery enforcement explicit in %s mode',
+    async (sessionMode, artifactDeliveryRequired) => {
+      listConversations.mockResolvedValue([{
+        id: 'conv-question-form',
+        title: 'Conversation',
+        sessionMode,
+      }]);
+      listMessages.mockResolvedValue([]);
+      fetchPreviewComments.mockResolvedValue([]);
+      loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+      fetchProjectFiles.mockResolvedValue([]);
+      fetchLiveArtifacts.mockResolvedValue([]);
+      fetchSkill.mockResolvedValue(null);
+      fetchDesignSystem.mockResolvedValue(null);
+      getTemplate.mockResolvedValue(null);
+      listActiveChatRuns.mockResolvedValue([]);
+      streamViaDaemon.mockImplementation(async () => new Promise<void>(() => {}));
+
+      render(
+        <ProjectView
+          project={{
+            id: `project-question-form-${sessionMode}`,
+            name: 'Project',
+            skillId: null,
+            designSystemId: null,
+          } as never}
+          routeFileName={null}
+          config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+          agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+          skills={[]}
+          designTemplates={[]}
+          designSystems={[]}
+          daemonLive
+          onModeChange={() => {}}
+          onAgentChange={() => {}}
+          onAgentModelChange={() => {}}
+          onRefreshAgents={() => {}}
+          onOpenSettings={() => {}}
+          onBack={() => {}}
+          onClearPendingPrompt={() => {}}
+          onTouchProject={() => {}}
+          onProjectChange={() => {}}
+          onProjectsRefresh={() => {}}
+        />,
+      );
+
+      const chatProps = await waitForReadyChatPaneProps();
+      expect(chatProps.onSubmitQuestionForm).toBeTypeOf('function');
+      void chatProps.onSubmitQuestionForm?.('Audience: product evaluators');
+
+      await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+      expect(streamViaDaemon.mock.calls[0]?.[0]).toMatchObject({
+        sessionMode,
+        artifactDeliveryRequired,
+      });
+    },
+  );
 
   it('reloads an empty brand-extraction transcript without auto-sending the fallback prompt', async () => {
     const programmaticMessages: ChatMessage[] = [

@@ -1,8 +1,9 @@
 # Typography craft rules
 
-Universal typography rules that apply on top of any `DESIGN.md`. The
-active design system decides *which* fonts; this file decides *how* they
-behave at every size.
+Typography defaults for details the active design system does not specify.
+Explicit typography decisions in the active `DESIGN.md` take precedence,
+including type scale, tracking, font roles, weights, and line height.
+Objective legibility, fit, and overflow checks still apply.
 
 > Adapted from [refero_skill](https://github.com/referodesign/refero_skill)
 > (MIT) — distilled and re-tuned for Open Design's token system.
@@ -10,6 +11,9 @@ behave at every size.
 ## Type scale
 
 Use a multiplicative scale (1.2 or 1.25). Cap at 6–8 sizes per artifact.
+The ranges below are web and UI defaults. Artifact-specific contracts override
+them: on a fixed 1920×1080 presentation canvas, use the deck scale (body text
+at least 24 px) rather than shrinking slide copy to the web ranges below.
 
 | Role | Range |
 |---|---|
@@ -31,15 +35,15 @@ Use a multiplicative scale (1.2 or 1.25). Cap at 6–8 sizes per artifact.
 
 ## Letter-spacing — the rule that makes or breaks craft
 
-This is the single most-skipped rule in AI-generated design. **No
-exceptions.**
+This is one of the most-skipped details in AI-generated design. Use the
+following defaults when the active `DESIGN.md` does not specify tracking:
 
 | Context | Letter-spacing |
 |---|---|
 | Body text (14–18 px) | `0` (default) |
 | Small text (11–13 px) | `0.01em` to `0.02em` (positive) |
 | UI labels and button text | `0.02em` |
-| **ALL CAPS** | **`0.06em` to `0.1em` (required)** |
+| **ALL CAPS** | **`0.06em` to `0.1em` (default)** |
 | Headings 32 px+ | `-0.01em` to `-0.02em` |
 | Display 48 px+ | `-0.02em` to `-0.03em` |
 
@@ -47,7 +51,7 @@ ALL CAPS without positive tracking looks cramped and amateur. Display
 text without negative tracking looks loose and weak. These two failures
 are the most reliable AI-slop tells.
 
-The `0.06em` floor is not arbitrary: it is the empirical lower bound
+The default `0.06em` floor is not arbitrary: it is the empirical lower bound
 that print and web typographers have converged on for uppercase
 tracking (cf. Bringhurst's *Elements of Typographic Style* §3.2.7,
 which recommends 5–10% of the em for caps; modern screen practice
@@ -79,7 +83,7 @@ Most well-crafted UIs use exactly 3 weights:
 Weight 700+ is rarely needed. If your design uses bold for "emphasis on
 emphasis," it likely lacks weight discipline elsewhere.
 
-## Common mistakes (lint these)
+## Common mistakes (lint these when DESIGN.md does not specify otherwise)
 
 - ALL CAPS without `letter-spacing` ≥ `0.06em`.
 - Display text (≥32 px) without negative tracking.

@@ -10,7 +10,7 @@
 //            file content is the same source the Source view shows. See
 //            issue #279.
 
-import { buildSrcdoc, type SrcdocOptions } from './srcdoc';
+import { buildSrcdoc, DECK_CHROME_HIDE_CSS, type SrcdocOptions } from './srcdoc';
 import { buildReactComponentSrcdoc } from './react-component';
 import { buildZip } from './zip';
 import { randomUUID } from '../utils/uuid';
@@ -19,6 +19,12 @@ import {
   isOpenDesignHostAvailable,
   printHostPdf,
 } from '@open-design/host';
+import {
+  DECK_ACTIVE_ATTRIBUTE,
+  DECK_ACTIVE_CLASSES,
+  DECK_SLIDE_SELECTOR,
+  DECK_STRUCTURED_SLIDE_SELECTOR,
+} from '@open-design/contracts/runtime/deck-stage-fallback';
 
 // Re-exported so app components can gate desktop-only export paths without
 // importing the host package directly.
@@ -69,8 +75,349 @@ function triggerDownload(blob: Blob, filename: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
-export function exportAsHtml(html: string, title: string): void {
-  const doc = buildSrcdoc(html);
+const EXPORT_DECK_FIT_SCRIPT = `<script data-od-export-deck-fit="1">
+(function () {
+  var SLIDE_SELECTOR = ${JSON.stringify(DECK_SLIDE_SELECTOR)};
+  var STRUCTURED_SLIDE_SELECTOR = ${JSON.stringify(DECK_STRUCTURED_SLIDE_SELECTOR)};
+  var ownedTransform = '';
+
+  function slides() {
+    var structured = document.querySelectorAll(STRUCTURED_SLIDE_SELECTOR);
+    if (structured.length) return Array.prototype.slice.call(structured);
+    return Array.prototype.slice.call(document.querySelectorAll(SLIDE_SELECTOR));
+  }
+
+  function inferredDeckRoot() {
+    var list = slides();
+    if (!list.length) return null;
+    var parent = list[0] && list[0].parentElement;
+    if (!parent || parent === document.documentElement) return null;
+    for (var i = 1; i < list.length; i++) {
+      if (list[i].parentElement !== parent) return null;
+    }
+
+    var width = dimension(parent, 'width');
+    var height = dimension(parent, 'height');
+    if (width < 320 || height < 180) return null;
+    var ratio = width / height;
+    if (ratio < 1.2 || ratio > 2.2) return null;
+    if (width <= window.innerWidth + 1 && height <= window.innerHeight + 1) return null;
+
+    var firstLeft = Number(list[0] && list[0].offsetLeft) || 0;
+    var firstTop = Number(list[0] && list[0].offsetTop) || 0;
+    for (var j = 1; j < list.length; j++) {
+      var left = Number(list[j] && list[j].offsetLeft) || 0;
+      var top = Number(list[j] && list[j].offsetTop) || 0;
+      if (Math.abs(left - firstLeft) > 1 || Math.abs(top - firstTop) > 1) return null;
+    }
+    return parent;
+  }
+
+  function deckRoot() {
+    return inferredDeckRoot() ||
+      document.querySelector('deck-stage, #deck-stage, .deck-stage, [data-od-id="deck-stage"], .stage, .deck-viewport') ||
+      document.querySelector('[data-od-id="deck-root"]') ||
+      document.querySelector('.deck') ||
+      document.querySelector('[data-od-export-fit-owned="true"]');
+  }
+
+  function dimension(element, property) {
+    var layout = property === 'width' ? element.offsetWidth : element.offsetHeight;
+    if (layout > 0) return layout;
+    var parsed = parseFloat(getComputedStyle(element)[property]);
+    return isFinite(parsed) ? parsed : 0;
+  }
+
+  function fit() {
+    var root = deckRoot();
+    if (!root) return;
+    var owned = root.getAttribute('data-od-export-fit-owned') === 'true';
+    if (owned && root.style.transform !== ownedTransform) {
+      root.removeAttribute('data-od-export-fit-owned');
+      return;
+    }
+    if (!owned) {
+      var nativeTransform = getComputedStyle(root).transform;
+      if (nativeTransform && nativeTransform !== 'none') return;
+    }
+
+    var width = dimension(root, 'width');
+    var height = dimension(root, 'height');
+    if (width <= 0 || height <= 0) return;
+    var viewportWidth = Math.max(1, window.innerWidth);
+    var viewportHeight = Math.max(1, window.innerHeight);
+    var alreadyViewportSized =
+      Math.abs(width - viewportWidth) <= 1 && Math.abs(height - viewportHeight) <= 1;
+    if (!owned && alreadyViewportSized) return;
+
+    var padding = 32;
+    var scale = Math.min(
+      Math.max(1, viewportWidth - padding) / width,
+      Math.max(1, viewportHeight - padding) / height
+    );
+    if (!isFinite(scale) || scale <= 0) return;
+    var x = (viewportWidth - width * scale) / 2;
+    var y = (viewportHeight - height * scale) / 2;
+    ownedTransform = 'translate(' + x + 'px,' + y + 'px) scale(' + scale + ')';
+
+    document.documentElement.style.width = '100%';
+    document.documentElement.style.height = '100%';
+    document.documentElement.style.overflow = 'hidden';
+    if (root !== document.body) {
+      document.body.style.width = '100%';
+      document.body.style.height = '100%';
+    }
+    document.body.style.margin = '0';
+    document.body.style.overflow = 'hidden';
+    root.style.position = 'fixed';
+    root.style.left = '0';
+    root.style.top = '0';
+    root.style.margin = '0';
+    root.style.transformOrigin = 'top left';
+    root.style.transform = ownedTransform;
+    ownedTransform = root.style.transform;
+    root.setAttribute('data-od-export-fit-owned', 'true');
+  }
+
+  function scheduleFit() { setTimeout(fit, 0); }
+  window.addEventListener('load', scheduleFit);
+  window.addEventListener('resize', fit);
+  if (document.readyState === 'complete') scheduleFit();
+})();
+</script>`;
+
+const EXPORT_DECK_NAVIGATION_SCRIPT = `<script data-od-export-deck-navigation="3">
+(function () {
+  var ACTIVE_ATTRIBUTE = ${JSON.stringify(DECK_ACTIVE_ATTRIBUTE)};
+  var ACTIVE_CLASSES = ${JSON.stringify(DECK_ACTIVE_CLASSES)};
+  var SLIDE_SELECTOR = ${JSON.stringify(DECK_SLIDE_SELECTOR)};
+  var STRUCTURED_SLIDE_SELECTOR = ${JSON.stringify(DECK_STRUCTURED_SLIDE_SELECTOR)};
+
+  function slides() {
+    var structured = document.querySelectorAll(STRUCTURED_SLIDE_SELECTOR);
+    if (structured.length) return Array.prototype.slice.call(structured);
+    return Array.prototype.slice.call(document.querySelectorAll(SLIDE_SELECTOR));
+  }
+
+  function scrollContainers() {
+    return [document.scrollingElement, document.documentElement, document.body]
+      .filter(Boolean)
+      .filter(function (el, index, all) { return all.indexOf(el) === index; });
+  }
+
+  function activeClass(list) {
+    for (var i = 0; i < ACTIVE_CLASSES.length; i++) {
+      var name = ACTIVE_CLASSES[i];
+      if (list.some(function (slide) { return slide.classList.contains(name); })) return name;
+    }
+    return '';
+  }
+
+  function activeIndex(list) {
+    var name = activeClass(list);
+    if (name) {
+      var found = list.findIndex(function (slide) { return slide.classList.contains(name); });
+      if (found >= 0) return found;
+    }
+    var byAttribute = list.findIndex(function (slide) {
+      return slide.hasAttribute(ACTIVE_ATTRIBUTE);
+    });
+    if (byAttribute >= 0) return byAttribute;
+    var byVisibility = computedVisibleIndex(list);
+    if (byVisibility >= 0) return byVisibility;
+    var left = scrollContainers().reduce(function (value, el) {
+      return Math.abs(Number(el.scrollLeft) || 0) > Math.abs(value)
+        ? Number(el.scrollLeft) || 0
+        : value;
+    }, 0);
+    return Math.max(0, Math.min(list.length - 1, Math.round(left / Math.max(1, window.innerWidth))));
+  }
+
+  function computedVisibleIndex(list) {
+    var found = -1;
+    for (var i = 0; i < list.length; i++) {
+      try {
+        var style = window.getComputedStyle(list[i]);
+        var visible = style.display !== 'none' &&
+          style.visibility !== 'hidden' &&
+          Number.parseFloat(style.opacity || '1') > 0.001;
+        if (!visible) continue;
+        if (found >= 0) return -1;
+        found = i;
+      } catch (_) {}
+    }
+    return found;
+  }
+
+  function computedDisplayDeckMode(list) {
+    var visible = computedVisibleIndex(list);
+    if (visible < 0) return '';
+    var hiddenCount = 0;
+    for (var i = 0; i < list.length; i++) {
+      try {
+        if (window.getComputedStyle(list[i]).display === 'none') hiddenCount += 1;
+      } catch (_) {}
+    }
+    if (hiddenCount < 1) return '';
+    try {
+      return window.getComputedStyle(list[visible]).display || 'block';
+    } catch (_) {
+      return 'block';
+    }
+  }
+
+  function state(list) {
+    var slideState = list.map(function (slide) {
+      return [
+        slide.className || '',
+        slide.getAttribute('style') || '',
+        slide.getAttribute('hidden') === null ? '' : 'hidden',
+        slide.getAttribute('aria-hidden') || '',
+        slide.hasAttribute(ACTIVE_ATTRIBUTE) ? ACTIVE_ATTRIBUTE : '',
+      ].join(':');
+    }).join('|');
+    var scrollState = scrollContainers().map(function (el) {
+      return Math.round(Number(el.scrollLeft) || 0) + ',' + Math.round(Number(el.scrollTop) || 0);
+    }).join('|');
+    return slideState + '//' + scrollState + '//' + String(location.hash || '');
+  }
+
+  function shouldIgnore(event) {
+    if (event.defaultPrevented || (event.button !== undefined && event.button !== 0)) return true;
+    if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return true;
+    var root = document.documentElement;
+    if (
+      root.hasAttribute('data-od-comment-mode')
+      || root.hasAttribute('data-od-inspect-mode')
+      || root.hasAttribute('data-od-edit-mode')
+    ) return true;
+    var target = event.target;
+    if (
+      target
+      && target.closest
+      && target.closest('a,button,input,textarea,select,summary,[contenteditable],[role="button"],[role="link"]')
+    ) return true;
+    var selection = window.getSelection && window.getSelection();
+    return !!(selection && !selection.isCollapsed);
+  }
+
+  function dispatchArrow(direction) {
+    var key = direction < 0 ? 'ArrowLeft' : 'ArrowRight';
+    document.dispatchEvent(new KeyboardEvent('keydown', {
+      key: key,
+      code: key,
+      bubbles: true,
+      cancelable: true,
+    }));
+  }
+
+  function setStaticVisibility(list, next) {
+    var displayMode = computedDisplayDeckMode(list);
+    var usesInlineDisplay = list.some(function (slide) { return slide.style.display === 'none'; });
+    var usesInlineVisibility = list.some(function (slide) { return slide.style.visibility === 'hidden'; });
+    var usesHidden = list.some(function (slide) { return slide.hasAttribute('hidden'); });
+    if (!displayMode && !usesInlineDisplay && !usesInlineVisibility && !usesHidden) return false;
+
+    list.forEach(function (slide, index) {
+      var active = index === next;
+      slide.toggleAttribute(ACTIVE_ATTRIBUTE, active);
+      slide.setAttribute('aria-hidden', active ? 'false' : 'true');
+      if (usesHidden) slide.toggleAttribute('hidden', !active);
+      if (displayMode) {
+        slide.style.setProperty('display', active ? displayMode : 'none', 'important');
+      } else if (usesInlineDisplay) {
+        slide.style.display = active ? '' : 'none';
+      }
+      if (usesInlineVisibility) slide.style.visibility = active ? '' : 'hidden';
+    });
+    return true;
+  }
+
+  function directFallback(list, direction) {
+    var current = activeIndex(list);
+    var next = Math.max(0, Math.min(list.length - 1, current + direction));
+    if (next === current) return;
+    var name = activeClass(list);
+    if (name) {
+      var usesVisibleClass = list.some(function (slide) {
+        return slide.classList.contains('visible');
+      });
+      list.forEach(function (slide, index) {
+        var active = index === next;
+        slide.toggleAttribute(ACTIVE_ATTRIBUTE, active);
+        slide.classList.toggle(name, active);
+        if (name !== 'visible' && usesVisibleClass) slide.classList.toggle('visible', active);
+      });
+      return;
+    }
+    if (setStaticVisibility(list, next)) return;
+    var left = next * Math.max(1, window.innerWidth);
+    scrollContainers().forEach(function (el) {
+      try { el.scrollLeft = left; } catch (_) {}
+      try { el.scrollTo({ left: left, behavior: 'smooth' }); } catch (_) {}
+    });
+  }
+
+  function directionForPoint(x, y) {
+    var horizontal = (x / Math.max(1, window.innerWidth) - 0.5) * 2;
+    var vertical = (y / Math.max(1, window.innerHeight) - 0.5) * 2;
+    if (Math.abs(horizontal) > Math.abs(vertical)) return horizontal < 0 ? -1 : 1;
+    return vertical < 0 ? -1 : 1;
+  }
+
+  // Standalone exports own blank-canvas clicks. Register in <head> on window
+  // capture so older left/right-only artifact handlers cannot double-advance
+  // or override the host's four-direction contract.
+  window.addEventListener('click', function (event) {
+    if (shouldIgnore(event)) return;
+    var list = slides();
+    if (list.length < 2) return;
+    var before = state(list);
+    var direction = directionForPoint(event.clientX, event.clientY);
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    dispatchArrow(direction);
+    setTimeout(function () {
+      list = slides();
+      if (state(list) === before) directFallback(list, direction);
+    }, 80);
+  }, { capture: true });
+})();
+</script>`;
+
+function injectIntoHead(doc: string, tag: string): string {
+  if (/<\/head>/i.test(doc)) return doc.replace(/<\/head>/i, `${tag}</head>`);
+  if (/<head[^>]*>/i.test(doc)) return doc.replace(/<head[^>]*>/i, (match) => `${match}${tag}`);
+  return tag + doc;
+}
+
+export function prepareStandaloneDeckHtml(doc: string): string {
+  const styleTag = `<style data-od-export-deck-chrome-hidden>
+${DECK_CHROME_HIDE_CSS}
+</style>`;
+  let prepared = doc.includes('data-od-export-deck-chrome-hidden')
+    ? doc
+    : injectIntoHead(doc, styleTag);
+  if (!prepared.includes('data-od-export-deck-navigation="3"')) {
+    prepared = prepared.replace(
+      /<script\s+data-od-export-deck-navigation(?:=(?:"[^"]*"|'[^']*'))?[^>]*>[\s\S]*?<\/script>/i,
+      '',
+    );
+    prepared = injectIntoHead(prepared, EXPORT_DECK_NAVIGATION_SCRIPT);
+  }
+  if (!prepared.includes('data-od-export-deck-fit="1"')) {
+    prepared = injectIntoHead(prepared, EXPORT_DECK_FIT_SCRIPT);
+  }
+  return prepared;
+}
+
+export function exportAsHtml(
+  html: string,
+  title: string,
+  options: { deck?: boolean } = {},
+): void {
+  const srcdoc = buildSrcdoc(html);
+  const doc = options.deck ? prepareStandaloneDeckHtml(srcdoc) : srcdoc;
   const blob = new Blob([doc], { type: 'text/html;charset=utf-8' });
   triggerDownload(blob, `${safeFilename(title, 'artifact')}.html`);
 }
@@ -81,6 +428,7 @@ export async function exportProjectAsHtml(opts: {
   fallbackHtml: string;
   fallbackTitle: string;
   versionId?: string;
+  deck?: boolean;
 }): Promise<void> {
   const segments = opts.filePath
     .split('/')
@@ -93,11 +441,16 @@ export async function exportProjectAsHtml(opts: {
   try {
     const resp = await fetch(url);
     if (!resp.ok) throw new Error(`html export request failed (${resp.status})`);
-    const blob = await resp.blob();
+    const blob = opts.deck
+      ? new Blob(
+        [prepareStandaloneDeckHtml(await resp.text())],
+        { type: 'text/html;charset=utf-8' },
+      )
+      : await resp.blob();
     triggerDownload(blob, `${safeFilename(opts.fallbackTitle, 'artifact')}.html`);
   } catch (err) {
     console.warn('[exportProjectAsHtml] falling back to source HTML export:', err);
-    exportAsHtml(opts.fallbackHtml, opts.fallbackTitle);
+    exportAsHtml(opts.fallbackHtml, opts.fallbackTitle, { deck: opts.deck });
   }
 }
 
@@ -1520,7 +1873,8 @@ const DECK_PRINT_CSS = `
     transition: none !important;
   }
   .slide:last-child, [data-screen-label]:last-child { page-break-after: auto; break-after: auto; }
-  .deck-counter, .deck-hint, .deck-nav,
+  .deck-counter, .deck-hint, .deck-nav, .data-deck-nav,
+  [data-deck-nav], [data-od-id="deck-nav"], [data-slide-nav],
   [aria-label="Previous slide"], [aria-label="Next slide"] {
     display: none !important;
   }
@@ -1678,7 +2032,10 @@ async function captureArtifactSlides(
   iframe.setAttribute('aria-hidden', 'true');
   iframe.setAttribute('tabindex', '-1');
   iframe.style.cssText = `position:fixed;left:-100000px;top:0;width:${width}px;height:${height}px;border:0;background:#fff;`;
-  iframe.srcdoc = buildSrcdoc(html, { deck: opts.deck });
+  iframe.srcdoc = buildSrcdoc(html, {
+    deck: opts.deck,
+    hideDeckChrome: opts.deck,
+  });
   document.body.appendChild(iframe);
 
   const slides: CapturedSlide[] = [];

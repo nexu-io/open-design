@@ -95,7 +95,7 @@ const SLIDE_MAX_PX = 8192;
 // in design-templates/html-ppt/assets/runtime.js, but avoids bare `.notes` and
 // `.overview`: those class names are generic enough to be authored content.
 export const HIDE_CHROME_SELECTOR =
-  ".progress-bar, .notes-overlay, aside.notes, .speaker-notes, .deck-nav, .deck-hint, .deck-counter";
+  ".progress-bar, .notes-overlay, aside.notes, .speaker-notes, .deck-nav, .data-deck-nav, .deck-hint, .deck-counter, [data-deck-nav], [data-od-id=\"deck-nav\"], [data-slide-nav]";
 
 // The slide-surface family, matching the print/export path in pdf-export.ts
 // (`.slide, [data-screen-label], .deck-slide, .ppt-slide`) — decks ship under

@@ -50,6 +50,9 @@ describe('DeckSlideThumbnail', () => {
     expect(sections).toHaveLength(1);
     expect(sections[0]!.textContent).toContain('Alpha');
     expect(sections[0]!.classList.contains('active')).toBe(true);
+    expect(sections[0]!.classList.contains('is-active')).toBe(false);
+    expect(sections[0]!.classList.contains('current')).toBe(false);
+    expect(sections[0]!.classList.contains('visible')).toBe(false);
     expect(sections[0]!.hasAttribute('data-od-thumb-slide')).toBe(true);
     expect(sections[0]!.hasAttribute('data-od-deck-active')).toBe(true);
 
@@ -68,6 +71,50 @@ describe('DeckSlideThumbnail', () => {
     expect(root.querySelector('.deck-shell[data-od-thumb-wrap]')).toBeTruthy();
     expect(root.querySelector('.deck-stage[data-od-thumb-wrap]')).toBeTruthy();
     expect(root.querySelector('.od-thumb-canvas')).toBeTruthy();
+  });
+
+  it('preserves authored slide display modes instead of forcing block', () => {
+    const layoutDeck = `<!doctype html><html><head><style>
+      .stage { width: 1920px; height: 1080px; }
+      .slide:not(.active) { display: none; }
+      .slide-grid { display: grid; grid-template-columns: 1fr 1fr; }
+    </style></head><body><main class="stage">
+      <section class="slide active">One</section>
+      <section class="slide slide-grid">Two</section>
+    </main></body></html>`;
+    const p = parseDeckThumbnails(layoutDeck);
+    expect(p.renderable).toBe(true);
+    const { container } = render(<DeckSlideThumbnail parsed={p} index={1} />);
+    const root = (container.querySelector('.deck-thumbnail-shadow-host') as HTMLElement).shadowRoot!;
+    const style = root.querySelector('style')?.textContent ?? '';
+    const slide = root.querySelector<HTMLElement>('[data-od-thumb-slide]')!;
+
+    expect(style).not.toMatch(/\[data-od-thumb-slide\]\{display:block!important/);
+    expect(style).not.toMatch(/\[data-od-thumb-wrap\]\{display:block!important/);
+    expect(slide.classList.contains('active')).toBe(true);
+    expect(slide.classList.contains('is-active')).toBe(false);
+    expect(slide.classList.contains('current')).toBe(false);
+    expect(slide.classList.contains('visible')).toBe(false);
+  });
+
+  it('reconstructs sanitized html/body root shims for theme selectors', () => {
+    const themedDeck = `<!doctype html><html class="dark"><head><style>
+      html.dark body[data-theme="night"] .stage { width: 1920px; height: 1080px; }
+      body[data-theme="night"] .slide { display: grid; }
+    </style></head><body data-theme="night"><main class="stage">
+      <section class="slide active">Theme</section>
+    </main></body></html>`;
+    const p = parseDeckThumbnails(themedDeck);
+    expect(p.renderable).toBe(true);
+    const { container } = render(<DeckSlideThumbnail parsed={p} index={0} />);
+    const root = (container.querySelector('.deck-thumbnail-shadow-host') as HTMLElement).shadowRoot!;
+    const htmlRoot = root.querySelector<HTMLElement>('[data-od-thumb-html]')!;
+    const bodyRoot = root.querySelector<HTMLElement>('[data-od-thumb-body]')!;
+
+    expect(htmlRoot.classList.contains('dark')).toBe(true);
+    expect(bodyRoot.dataset.theme).toBe('night');
+    expect(htmlRoot.contains(bodyRoot)).toBe(true);
+    expect(bodyRoot.querySelector('.stage > .slide')).toBeTruthy();
   });
 
   it('swaps to the requested slide without accumulating stale content', () => {

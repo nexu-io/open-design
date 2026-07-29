@@ -5,8 +5,9 @@ Run before final handoff. P0 must pass.
 ## P0 — must pass
 
 - [ ] **Every `<section class="slide">` has a theme class.** Each is exactly one of: `light`, `dark`, `hero light`, `hero dark`. No bare `class="slide"`. No bare `class="slide hero"`.
-- [ ] **No 3+ same-theme slides in a row.** Mentally list the classes from slide 1 to N — if you see `light light light` anywhere, change the middle one.
-- [ ] **For 8+ slides: at least one `hero dark` AND at least one `hero light`.** A long all-light deck is sleepy; a long all-dark deck is heavy.
+- [ ] **One dominant surface is chosen from the active brand or direction.** Consecutive same-surface slides are valid. If the user or active DESIGN.md explicitly requires another surface program, record and follow that exception instead.
+- [ ] **Every inverse slide has a named narrative purpose.** Chapter break, key reveal, proof point, or closing are valid; decoration and quota-filling are not.
+- [ ] **Never alternate surfaces by slide index or quota.** A single-surface deck is valid when the story does not justify an inversion.
 - [ ] **Display headlines use `var(--font-display)` (serif).** `.h-hero`, `.h-xl`, `.h-md` and `.quote-text` all enforce this — don't override.
 - [ ] **No raw hex outside `:root`.** Every color is `var(--bg)` / `--fg` / `--muted` / `--border` / `--accent` / `--surface`. Grep `#[0-9a-fA-F]{3,8}` outside `:root{}` should return nothing.
 - [ ] **Accent appears at most twice on any single slide.** On stat slides, the number itself is the only accent. Don't also color the eyebrow + a button + a border.
@@ -18,7 +19,7 @@ Run before final handoff. P0 must pass.
 
 ## P1 — should pass
 
-- [ ] **Cover is `hero light center`.** Inverting cover-to-dark works only when the entire deck is dark.
+- [ ] **Cover is `hero light center` or `hero dark center` on the dominant surface.** Invert it only when the cover has an explicit narrative or brand reason.
 - [ ] **Cover h1 ≤ 8 words.** A long cover headline is the writing's job, not the design's.
 - [ ] **Body lead text under 56ch.** `max-width: 56ch` enforces this — don't override.
 - [ ] **Big-stat slides have one number, not three.** If you have 3 numbers, give them 3 slides.
@@ -30,10 +31,9 @@ Run before final handoff. P0 must pass.
 ## P2 — nice to have
 
 - [ ] **Position persists across refresh** (the seed's `localStorage` save/restore handles this).
-- [ ] **Top progress bar fills as you advance** (already in seed).
-- [ ] **Counter pill is visible at all times** (already in seed).
+- [ ] **Standalone progress and counter update as you advance** (already in seed). Keep both inside the seed's `data-deck-nav` container so Open Design can hide them when host navigation is present.
 
-## Theme rhythm spot-check
+## Surface hierarchy spot-check
 
 After you finish, run:
 
@@ -41,15 +41,15 @@ After you finish, run:
 grep 'class="slide' index.html
 ```
 
-Read the class list as a single sequence. The healthy patterns look like:
+Read the class list beside the slide labels. Healthy patterns include:
 
-- `hero light` `light` `hero dark` `light` `dark` `hero light` `light` `hero dark`
-- `hero light` `light` `light` `dark` `hero light` `dark` `hero dark`
+- `hero light` `light` `light` `hero dark` `dark` `light` — the inverse pair marks one narrative act
+- `hero dark` `dark` `dark` `dark` — a valid single-surface deck with layout and scale creating rhythm
 
 Bad patterns:
 
-- `light light light light light light` — flat
-- `dark dark dark dark dark dark` — heavy
+- `light dark light dark light dark` — strict alternation with no narrative purpose
+- `light light dark light light` — an isolated inversion with no named role
 - `hero hero hero hero` — no rest
 
-If your sequence is bad, swap a few middle slides to rebalance.
+If the deck feels flat, vary layout, scale, density, imagery, or typography first. Change the background only when the switch communicates a narrative role.

@@ -75,10 +75,11 @@ npx hyperframes init "$COMP" --example blank --skip-skills --non-interactive
 #    subprocess hangs partway through frame capture. The daemon process
 #    is unsandboxed, so renders complete reliably.)
 #
-#    The dispatcher returns within ~1s with a {taskId}; drive the
-#    render to completion by looping `"$OD_NODE_BIN" "$OD_BIN" media wait <taskId>` calls.
-#    Each call long-polls up to 25s (well under your shell tool's
-#    default 30s cap) and exits 0/2/5 to signal done/running/failed.
+#    The dispatcher polls briefly, then returns either the final file or a
+#    {taskId}; drive any handed-off render to completion by looping
+#    `"$OD_NODE_BIN" "$OD_BIN" media wait <taskId>` calls.
+#    `generate` exits 0 for both outcomes. Each `wait` call long-polls up to
+#    120s and exits 0/2/5 to signal done/running/failed.
 out=$("$OD_NODE_BIN" "$OD_BIN" media generate \
   --project "$OD_PROJECT_ID" \
   --surface video \
@@ -86,19 +87,30 @@ out=$("$OD_NODE_BIN" "$OD_BIN" media generate \
   --output "<descriptive-name>.mp4" \
   --composition-dir "$COMP_REL")
 ec=$?
-task_id=$(printf '%s\n' "$out" | tail -1 | jq -r '.taskId // empty')
-since=$(printf '%s\n' "$out" | tail -1 | jq -r '.nextSince // 0')
-while [ "$ec" -eq 2 ] && [ -n "$task_id" ]; do
+[ "$ec" -ne 0 ] && { printf '%s\n' "$out" >&2; exit "$ec"; }
+last=$(printf '%s\n' "$out" | tail -1)
+task_id=$(printf '%s\n' "$last" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("taskId", ""))')
+since=$(printf '%s\n' "$last" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("nextSince", 0))')
+while [ -n "$task_id" ]; do
   out=$("$OD_NODE_BIN" "$OD_BIN" media wait "$task_id" --since "$since")
   ec=$?
-  since=$(printf '%s\n' "$out" | tail -1 | jq -r '.nextSince // '"$since")
+  last=$(printf '%s\n' "$out" | tail -1)
+  if [ "$ec" -eq 0 ]; then
+    task_id=""
+  elif [ "$ec" -eq 2 ]; then
+    since=$(printf '%s\n' "$last" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("nextSince", 0))')
+  else
+    printf '%s\n' "$out" >&2
+    exit "$ec"
+  fi
 done
 [ "$ec" -ne 0 ] && { echo "$out" >&2; exit "$ec"; }
+printf '%s\n' "$last"
 ```
 
-Each `generate` and each `wait` call lasts at most ~25s, so the agent
-shell tool's default ~30s cap never fires. Progress lines from HF
-(`Capturing frame N/M`) stream to stderr live throughout the loop.
+`generate` polls briefly and each `wait` call can long-poll for up to
+120 seconds. Use a shell-tool timeout above that bound. Progress lines
+from HF (`Capturing frame N/M`) stream to stderr live throughout the loop.
 When the render finishes, the last stdout line is
 `{"file": { "name": "<output>", "size": …, "kind": "video", … }}` —
 quote `file.name` in your reply so the user knows what was produced.
@@ -125,10 +137,11 @@ The lighter HF subcommands you CAN still run from your own shell
 - `npx hyperframes lint "$COMP"` — validate composition before dispatch
 - `npx hyperframes transcribe <audio>` — generate captions
 - `npx hyperframes tts <text>` — generate narration
+- `node design-templates/hyperframes/scripts/animation-map.mjs "$COMP"` — inspect authored tween timing
 
-Reserve the daemon dispatch for `render`/`inspect`/`preview` (anything
-Chrome-bound). After authoring the composition under `.hyperframes-cache/`,
-render it by calling `"$OD_NODE_BIN" "$OD_BIN" media generate --surface video --model hyperframes-html --composition-dir <rel>`.
+Reserve the current daemon dispatch for `render`. After authoring the
+composition under `.hyperframes-cache/`, render it by calling
+`"$OD_NODE_BIN" "$OD_BIN" media generate --surface video --model hyperframes-html --composition-dir <rel>`.
 The daemon runs the Chrome-bound HyperFrames render outside your shell
 sandbox and streams progress back to you. Do not run `npx hyperframes render`
 yourself.
@@ -137,10 +150,9 @@ yourself.
 project root; OD's file listing scans recursively and the user would see
 three unrelated files appear in the chat.
 
-For CLI options beyond `render` (lint, preview, transcribe, tts, inspect,
-benchmark) call them directly from your shell tool when the task warrants
-it (e.g., generate TTS audio into the cache before referencing it from
-the composition).
+Inside OD, call only the non-Chrome commands above directly. `preview`,
+`validate`, `inspect`, `benchmark`, and `render` may launch Chrome; keep
+them on the standalone path unless OD exposes a daemon-dispatched route.
 
 ## Approach
 
@@ -154,9 +166,14 @@ Before writing HTML, think at a high level:
 
 For small edits (fix a color, adjust timing, add one element), skip straight to the rules.
 
-### Visual Identity Gate
+### Visual Identity Gate (standalone HyperFrames only)
 
-<HARD-GATE>
+If `$OD_PROJECT_DIR` is set, this subsection does not apply: use the active
+OD design system, explicit user direction, or the OD defaults defined above.
+Do not ask the three standalone identity questions merely to render an OD
+composition.
+
+<HARD-GATE standalone-only>
 Before writing ANY composition HTML, you MUST have a visual identity defined. Do NOT write compositions with default or generic colors.
 
 Check in this order:
@@ -401,7 +418,9 @@ When no `visual-style.md` or animation direction is provided, follow [house-styl
 - **Fonts:** Just write the `font-family` you want in CSS — the compiler embeds supported fonts automatically. If a font isn't supported, the compiler warns.
 - Add `crossorigin="anonymous"` to external media
 - For dynamic text overflow, use `window.__hyperframes.fitTextFontSize(text, { maxWidth, fontFamily, fontWeight })`
-- All files live at the project root alongside `index.html`; sub-compositions use `../`
+- All composition files live beside that composition's `index.html`.
+  In standalone HyperFrames this is the project root; in OD it is the hidden
+  `$COMP` directory under `.hyperframes-cache/`, never `$OD_PROJECT_DIR` itself.
 
 ## Editing Existing Compositions
 
@@ -411,8 +430,9 @@ When no `visual-style.md` or animation direction is provided, follow [house-styl
 
 ## Output Checklist
 
-- [ ] `npx hyperframes lint` and `npx hyperframes validate` both pass
-- [ ] `npx hyperframes inspect` passes, or every reported overflow is intentionally marked
+- [ ] `npx hyperframes lint` passes
+- [ ] Standalone only: `npx hyperframes validate` passes
+- [ ] Standalone only: `npx hyperframes inspect` passes, or every reported overflow is intentionally marked
 - [ ] Contrast warnings addressed (see Quality Checks below)
 - [ ] Layout issues addressed (see Quality Checks below)
 - [ ] Animation choreography verified (see Quality Checks below)
@@ -421,7 +441,7 @@ When no `visual-style.md` or animation direction is provided, follow [house-styl
 
 ### Visual Inspect
 
-`hyperframes inspect` runs the composition in headless Chrome, seeks through the timeline, and maps visual layout issues with timestamps, selectors, bounding boxes, and fix hints. Run it after `lint` and `validate`:
+`hyperframes inspect` runs the composition in headless Chrome, seeks through the timeline, and maps visual layout issues with timestamps, selectors, bounding boxes, and fix hints. Run it after `lint` and `validate` in standalone HyperFrames. Inside OD, do not run it directly from the sandboxed agent shell:
 
 ```bash
 npx hyperframes inspect
@@ -436,7 +456,7 @@ Use `--samples 15` for dense videos and `--at 1.5,4,7.25` for specific hero fram
 
 ### Contrast
 
-`hyperframes validate` runs a WCAG contrast audit by default. It seeks to 5 timestamps, screenshots the page, samples background pixels behind every text element, and computes contrast ratios. Failures appear as warnings:
+`hyperframes validate` runs a WCAG contrast audit by default. It seeks to 5 timestamps, screenshots the page, samples background pixels behind every text element, and computes contrast ratios. Run it on the standalone path; inside OD, rely on lint plus the daemon-dispatched render unless OD exposes a validation route. Failures appear as warnings:
 
 ```
 ⚠ WCAG AA contrast warnings (3):

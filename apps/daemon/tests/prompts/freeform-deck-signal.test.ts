@@ -4,6 +4,9 @@ import { composeSystemPrompt, detectDeckIntentSignal } from '../../src/prompts/s
 
 const MAYBE_DECK_HEADING = '## If this brief is a slide deck / keynote / presentation';
 const DECK_FRAMEWORK_HEADING = '# Slide deck — fixed framework';
+const DECK_DELIVERY_HEADING = '# Deck delivery contract';
+const DECK_FIXED_CANVAS_HEADING = '## Fixed-canvas execution baseline';
+const DECK_OUTCOME_HEADING = '# Deck outcome quality rules';
 
 describe('detectDeckIntentSignal', () => {
   it('fires on English deck vocabulary', () => {
@@ -37,21 +40,25 @@ describe('detectDeckIntentSignal', () => {
   });
 });
 
-describe('composeSystemPrompt — freeform maybe-deck gating', () => {
+describe('composeSystemPrompt — freeform deck promotion', () => {
   const freeform = { metadata: { kind: 'other' as const }, executionProfile: 'filesystem' as const };
 
-  it('keeps the maybe-deck framework when the signal is true or absent (legacy)', () => {
-    for (const input of [freeform, { ...freeform, freeformDeckSignal: true }]) {
-      const out = composeSystemPrompt(input);
-      expect(out).toContain(MAYBE_DECK_HEADING);
-      expect(out).toContain(DECK_FRAMEWORK_HEADING);
-    }
+  it('promotes a positive freeform signal to the deck contract without conditional wording', () => {
+    const out = composeSystemPrompt({ ...freeform, freeformDeckSignal: true });
+    expect(out).not.toContain(MAYBE_DECK_HEADING);
+    expect(out).toContain(DECK_DELIVERY_HEADING);
+    expect(out).toContain(DECK_FIXED_CANVAS_HEADING);
+    expect(out).toContain(DECK_OUTCOME_HEADING);
   });
 
-  it('drops the maybe-deck framework when the signal is false', () => {
-    const out = composeSystemPrompt({ ...freeform, freeformDeckSignal: false });
-    expect(out).not.toContain(MAYBE_DECK_HEADING);
-    expect(out).not.toContain(DECK_FRAMEWORK_HEADING);
+  it('drops the maybe-deck directive when the signal is false or absent', () => {
+    for (const input of [freeform, { ...freeform, freeformDeckSignal: false }]) {
+      const out = composeSystemPrompt(input);
+      expect(out).not.toContain(MAYBE_DECK_HEADING);
+      expect(out).not.toContain(DECK_FRAMEWORK_HEADING);
+      expect(out).not.toContain(DECK_DELIVERY_HEADING);
+      expect(out).not.toContain(DECK_FIXED_CANVAS_HEADING);
+    }
   });
 
   it('never gates deck-kind projects on the signal', () => {
@@ -60,7 +67,29 @@ describe('composeSystemPrompt — freeform maybe-deck gating', () => {
       executionProfile: 'filesystem',
       freeformDeckSignal: false,
     });
-    expect(out).toContain(DECK_FRAMEWORK_HEADING);
+    expect(out).toContain(DECK_DELIVERY_HEADING);
+    expect(out).toContain(DECK_FIXED_CANVAS_HEADING);
+    expect(out).toContain(DECK_OUTCOME_HEADING);
     expect(out).not.toContain(MAYBE_DECK_HEADING);
+  });
+
+  it('uses the production deck prompt for deck-kind and signaled freeform runs', () => {
+    for (const input of [
+      {
+        metadata: { kind: 'deck' as const },
+        executionProfile: 'filesystem' as const,
+      },
+      {
+        ...freeform,
+        freeformDeckSignal: true,
+      },
+    ]) {
+      const out = composeSystemPrompt(input);
+      expect(out).toContain(DECK_DELIVERY_HEADING);
+      expect(out).toContain(DECK_FIXED_CANVAS_HEADING);
+      expect(out).toContain(DECK_OUTCOME_HEADING);
+      expect(out).not.toContain(DECK_FRAMEWORK_HEADING);
+      expect(out).not.toContain(MAYBE_DECK_HEADING);
+    }
   });
 });

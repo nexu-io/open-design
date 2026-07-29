@@ -1,11 +1,11 @@
 /**
- * Anti-slop linter for generated HTML artifacts.
+ * Deterministic quality linter for generated HTML artifacts.
  *
  * Runs grep-style checks against an artifact body and returns a list of
- * structured findings. P0 findings indicate the artifact is regressing
- * to AI-slop tropes (purple gradients, emoji feature icons, sans-serif
- * display, invented metrics, lorem-style filler) and are surfaced back
- * to the agent as a system message so it can self-correct on the next
+ * structured findings. P0 findings indicate a delivery-contract failure
+ * or a regression to AI-slop tropes (purple gradients, emoji feature icons,
+ * sans-serif display, invented metrics, lorem-style filler) and are surfaced
+ * back to the agent as a system message so it can self-correct on the next
  * turn. P1/P2 findings are advisories.
  *
  * The linter is deliberately greppy: cheap, deterministic, and trivial
@@ -126,6 +126,23 @@ export function lintArtifact(rawHtml: unknown): LintFinding[] {
   // would otherwise fire false positives for the section / slide checks.
   const html = rawHtml.replace(/<!--[\s\S]*?-->/g, '');
   const lower = html.toLowerCase();
+
+  // ── P0-0: responsive slide canvas ────────────────────────────────
+  // Open Design scales one fixed presentation stage. A deck that sizes
+  // each slide from vw/vh looks correct at one viewport but lets type,
+  // spacing, and the canvas respond independently in preview/export.
+  // Scope this narrowly to structured multi-slide artifacts so ordinary
+  // responsive pages keep using viewport units without noise.
+  const responsiveDeckCanvas = detectResponsiveDeckCanvas(html);
+  if (responsiveDeckCanvas) {
+    out.push({
+      severity: 'P0',
+      id: 'deck-responsive-canvas',
+      message: 'Structured deck uses viewport-relative slide/stage geometry instead of one fixed presentation canvas.',
+      fix: 'Use one 1920×1080 .deck-stage and 1920×1080 absolutely positioned .slide sections. Keep vw/vh on an outer viewport shell only; Open Design preview/export must apply the sole uniform scale to the fixed stage.',
+      snippet: clip(responsiveDeckCanvas),
+    });
+  }
 
   // ── P0-1: purple gradient backgrounds ─────────────────────────────
   for (const hex of PURPLE_HEXES) {
@@ -462,50 +479,6 @@ export function lintArtifact(rawHtml: unknown): LintFinding[] {
     });
   }
 
-  // ── P2-2: missing slide theme classes (deck specifically) ──────────
-  // Triggered only if the artifact looks deck-shaped (has .slide).
-  if (/class\s*=\s*["'][^"']*\bslide\b/.test(html)) {
-    const slideMatches = html.match(/<section\s+class\s*=\s*["'][^"']*\bslide\b[^"']*["']/gi) ?? [];
-    const themed = slideMatches.filter((s) =>
-      /\b(light|dark|hero\s+light|hero\s+dark)\b/.test(s),
-    ).length;
-    if (slideMatches.length > 0 && themed < slideMatches.length) {
-      out.push({
-        severity: 'P0',
-        id: 'slide-theme-missing',
-        message: `${slideMatches.length - themed} of ${slideMatches.length} slides lack a theme class (light / dark / hero light / hero dark).`,
-        fix: 'Every <section class="slide"> must include exactly one theme class. Audit your slide list and add light/dark/hero modifiers.',
-      });
-    }
-    // Theme rhythm: no 3+ same-theme in a row.
-    const themeSeq = slideMatches
-      .map((s) => {
-        if (/hero\s+dark/.test(s)) return 'HD';
-        if (/hero\s+light/.test(s)) return 'HL';
-        if (/\bdark\b/.test(s)) return 'D';
-        if (/\blight\b/.test(s)) return 'L';
-        return '?';
-      })
-      .filter((t) => t !== '?');
-    for (let i = 0; i < themeSeq.length - 2; i++) {
-      const a = themeSeq[i];
-      const isLight = (t: string | undefined) => t === 'L' || t === 'HL';
-      const isDark = (t: string | undefined) => t === 'D' || t === 'HD';
-      if (
-        (isLight(a) && isLight(themeSeq[i + 1]) && isLight(themeSeq[i + 2])) ||
-        (isDark(a) && isDark(themeSeq[i + 1]) && isDark(themeSeq[i + 2]))
-      ) {
-        out.push({
-          severity: 'P1',
-          id: 'slide-rhythm',
-          message: `Three same-theme slides in a row at position ${i + 1}–${i + 3} — visual fatigue.`,
-          fix: 'Swap the middle slide to the opposite theme (light → dark, or dark → light). For 8+ slides, mix in at least one hero light AND one hero dark.',
-        });
-        break;
-      }
-    }
-  }
-
   return out;
 }
 
@@ -521,7 +494,7 @@ export function renderFindingsForAgent(findings: LintFinding[]): string {
   const sorted = [...findings].sort((a, b) => severity(a) - severity(b));
   const lines = [
     '<artifact-lint>',
-    'The artifact you just produced has the following anti-slop / design-token issues.',
+    'The artifact you just produced has the following delivery / quality issues.',
     `${findings.filter((f) => f.severity === 'P0').length} P0 (must fix), ${findings.filter((f) => f.severity === 'P1').length} P1 (should fix), ${findings.filter((f) => f.severity === 'P2').length} P2 (nice to have).`,
     'Re-emit a corrected `<artifact>` in your next turn — do not write a separate explanation; the user has the previous version already.',
     '',
@@ -548,6 +521,82 @@ function clip(s: string): string {
 
 function escapeRe(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function detectResponsiveDeckCanvas(html: string): string | null {
+  const structuredSlides = html.match(
+    /<section\b(?=[^>]*(?:data-screen-label\s*=|class\s*=\s*["'][^"']*\bslide\b))[^>]*>/gi,
+  ) ?? [];
+  const isStructuredDeck =
+    structuredSlides.length >= 2 ||
+    /<deck-stage\b/i.test(html);
+  if (!isStructuredDeck) return null;
+
+  let hasFixedStage = /<deck-stage\b(?=[^>]*\bwidth\s*=\s*["']?1920(?:px)?["']?)(?=[^>]*\bheight\s*=\s*["']?1080(?:px)?["']?)[^>]*>/i.test(
+    html,
+  );
+  let responsiveSlideRule: string | null = null;
+  let responsiveStageRule: string | null = null;
+
+  for (const styleBlock of html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)) {
+    const css = (styleBlock[1] ?? '').replace(/\/\*[\s\S]*?\*\//g, '');
+    const ruleRe = /([^{}]*)\{([^{}]*)\}/g;
+    let rule;
+    while ((rule = ruleRe.exec(css)) !== null) {
+      const selector = (rule[1] ?? '').trim();
+      const body = rule[2] ?? '';
+      if (!isDeckCanvasSelector(selector)) continue;
+
+      const declarations = parseDeclarations(body);
+      const width = findLastDecl(declarations, 'width')?.value ?? '';
+      const height = findLastDecl(declarations, 'height')?.value ?? '';
+      const isFixed1920x1080 =
+        /^1920px\b/i.test(width.trim()) &&
+        /^1080px\b/i.test(height.trim());
+      if (isFixed1920x1080) hasFixedStage = true;
+
+      const viewportWidth = containsViewportUnit(width, ['vw', 'vmin', 'vmax']);
+      const viewportHeight = containsViewportUnit(height, ['vh', 'vmin', 'vmax']);
+      const targetsSlide = selectorTargetsSlide(selector);
+      if (viewportWidth || viewportHeight) {
+        if (targetsSlide && responsiveSlideRule === null) {
+          responsiveSlideRule = `${selector} { ${body.trim()} }`;
+        } else if (!targetsSlide && responsiveStageRule === null) {
+          responsiveStageRule = `${selector} { ${body.trim()} }`;
+        }
+      }
+    }
+  }
+
+  for (const tag of structuredSlides) {
+    const style = /\bstyle\s*=\s*(["'])([\s\S]*?)\1/i.exec(tag)?.[2] ?? '';
+    if (/\b(?:width|height)\s*:[^;]*(?:vw|vh|vmin|vmax)\b/i.test(style)) {
+      return tag;
+    }
+  }
+
+  return responsiveSlideRule ?? (!hasFixedStage ? responsiveStageRule : null);
+}
+
+function isDeckCanvasSelector(selector: string): boolean {
+  return selector
+    .split(',')
+    .some((part) => (
+      /(?:^|[\s>+~])\.(?:slide|deck|deck-stage|stage)(?![\w-])/i.test(part) ||
+      /(?:^|[\s>+~])deck-stage(?![\w-])/i.test(part) ||
+      /\[data-od-id\s*=\s*["']deck-stage["']\]/i.test(part)
+    ));
+}
+
+function selectorTargetsSlide(selector: string): boolean {
+  return selector
+    .split(',')
+    .some((part) => /(?:^|[\s>+~])\.slide(?![\w-])/i.test(part));
+}
+
+function containsViewportUnit(value: string, units: string[]): boolean {
+  const unitPattern = units.map(escapeRe).join('|');
+  return new RegExp(`(?:^|[^a-z])(?:${unitPattern})\\b`, 'i').test(value);
 }
 
 // Scan every `linear-gradient(...)` body for a blue→cyan two-stop

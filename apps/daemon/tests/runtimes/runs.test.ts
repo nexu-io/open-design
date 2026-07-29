@@ -52,6 +52,50 @@ describe('chat run service shutdown', () => {
     });
   });
 
+  it('marks a run unfinished when a write-like tool call has no terminal result', async () => {
+    const runs = createRuns();
+    const run = runs.create({ projectId: 'project-1', conversationId: 'conv-1' });
+
+    runs.emit(run, 'agent', {
+      type: 'tool_use',
+      id: 'patch-1',
+      name: 'apply_patch',
+      input: {},
+    });
+    runs.finish(run, 'succeeded', 0, null);
+
+    expect(run.endedWithUnfinishedWork).toBe(true);
+    expect(runs.statusBody(run)).toMatchObject({
+      status: 'succeeded',
+      endedWithUnfinishedWork: true,
+    });
+    expect(run.events.at(-1)).toMatchObject({
+      event: 'end',
+      data: { status: 'succeeded', endedWithUnfinishedWork: true },
+    });
+  });
+
+  it('does not mark a failed write-like tool result as unfinished work', () => {
+    const runs = createRuns();
+    const run = runs.create({ projectId: 'project-1', conversationId: 'conv-1' });
+
+    runs.emit(run, 'agent', {
+      type: 'tool_use',
+      id: 'write-1',
+      name: 'write_file',
+      input: { path: '/project/index.html', content: '<!doctype html>' },
+    });
+    runs.emit(run, 'agent', {
+      type: 'tool_result',
+      toolUseId: 'write-1',
+      content: 'permission denied',
+      isError: true,
+    });
+    runs.finish(run, 'failed', 1, null);
+
+    expect(run.endedWithUnfinishedWork).toBe(false);
+  });
+
 
 
   it('ignores subsequent finish attempts after the run reaches a terminal state', async () => {

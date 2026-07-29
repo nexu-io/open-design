@@ -4,11 +4,11 @@
 
 ## Pre-flight
 
-1. **Read `assets/template.html`** end-to-end — every class below is defined in its `<style>` block. The fixed counter, progress bar, hint, and the 5-rule nav script at the bottom are already wired up; do not re-implement them.
-2. **Plan the slide list AND theme rhythm before pasting any slide.** See "Theme rhythm" below — this is the single biggest determinant of whether the deck feels alive or sleepy.
+1. **Read `assets/template.html`** end-to-end — every class below is defined in its `<style>` block. The standalone counter, progress bar, hint, and the 5-rule nav script at the bottom are already wired up inside `data-deck-nav`; do not re-implement them or add a second navigation layer.
+2. **Plan the slide list AND surface hierarchy before pasting any slide.** See "Surface hierarchy" below — background changes should communicate the story, not decorate the sequence.
 3. **Read the active DESIGN.md** — map its tokens to the six `:root` variables in the seed.
 
-## Theme rhythm — the rule that prevents 6-slide sleep
+## Surface hierarchy — narrative first
 
 Every `<section class="slide">` MUST include exactly one of:
 
@@ -19,12 +19,13 @@ Every `<section class="slide">` MUST include exactly one of:
 
 **Rules:**
 
-- No 3+ same-theme slides in a row. `light light light` → boring.
-- For decks with **8+ slides**: at least one `hero dark` AND at least one `hero light`.
-- A `dark` slide every 3–4 slides creates the "breath" that makes the next light slide hit harder.
-- The cover is almost always `hero light`. The closing is often `hero dark` or `hero light`.
+- Choose one dominant surface from the active brand or direction, unless the user or active DESIGN.md explicitly requires another surface program.
+- Consecutive same-surface slides are valid when they belong to the same narrative act.
+- Use the inverse surface only for a named narrative role such as a chapter break, key reveal, proof point, or closing.
+- A single-surface deck is valid. Never alternate surfaces by slide index or quota.
+- Create rhythm through layout, scale, density, imagery, and typography before changing the background.
 
-Before emitting, run mentally: list every slide's class. If you see `light × 5 in a row`, change one to `dark`.
+Before emitting, read every slide's class beside its label. If an inverse slide has no narrative purpose, return it to the dominant surface.
 
 ## Class inventory
 
@@ -48,7 +49,7 @@ If you reach for a class not on this list, define it in the seed's `<style>` fir
 
 ## Layout 2 — Body slide (eyebrow + headline + lead)
 
-The workhorse. Use 3–6× per deck. Vary `light` / `dark` for rhythm.
+The workhorse. Use 3–6× per deck. Use the dominant surface unless this slide has a named reason to invert.
 
 ```html
 <section class="slide light" data-screen-label="04 Why now">
@@ -129,7 +130,7 @@ Workflow / process / how-it-works. Up to 4 steps; if you need more, split across
 
 ## Layout 6 — Big quote / pull quote
 
-`hero light center`. One quote, one attribution. Italic-feel via the serif display, not actual `<em>`.
+`hero light center` is shown here; bind it to the dominant surface by default. One quote, one attribution. Italic-feel via the serif display, not actual `<em>`.
 
 ```html
 <section class="slide hero light center" data-screen-label="07 Quote">
@@ -164,7 +165,7 @@ Two columns, same shape, contrasting state. Don't decorate the columns — the c
 
 ## Layout 8 — Closing / CTA
 
-`hero dark center` or `hero light center`. One sentence on the ask, one supporting line. The audience leaves remembering this.
+`hero dark center` or `hero light center`. Use the inverse only when the closing is a deliberate narrative punctuation. One sentence on the ask, one supporting line. The audience leaves remembering this.
 
 ```html
 <section class="slide hero dark center" data-screen-label="09 Ask">
@@ -181,21 +182,21 @@ Two columns, same shape, contrasting state. Don't decorate the columns — the c
 **6-slide pitch (the minimum):**
 1. `hero light center` — Cover (Layout 1)
 2. `light`            — Problem body (Layout 2)
-3. `hero dark center` — Big stat (Layout 3)
-4. `light`            — Three points (Layout 4)
-5. `hero light center`— Quote (Layout 6)
-6. `hero dark center` — Ask (Layout 8)
+3. `light`            — Evidence (Layout 4)
+4. `hero dark center` — Solution reveal (Layout 3; inverse starts a new act)
+5. `dark`             — Pipeline (Layout 5; same solution act)
+6. `hero light center`— Ask (Layout 8; return to dominant)
 
 **10-slide narrative:**
 1. `hero light center` — Cover
 2. `light`            — Problem
-3. `hero dark center` — Big stat 1
-4. `light`            — Three points
-5. `dark`             — Pipeline (Layout 5)
-6. `hero light center`— Quote
+3. `light`            — Why now
+4. `hero dark center` — Solution reveal (inverse starts a new act)
+5. `dark`             — Pipeline (same solution act)
+6. `dark`             — Product proof (same solution act)
 7. `light`            — Before / after (Layout 7)
-8. `hero dark center` — Big stat 2
+8. `light`            — Business model
 9. `light`            — Team / metrics
-10. `hero dark center`— Ask
+10. `hero dark center`— Ask (inverse closing)
 
-After laying out, mentally read the class list — `light dark light dark` should show alternation, not blocks of the same theme.
+These are illustrative roles, not a surface quota. After laying out, read the class list with the slide labels: every surface switch should mark a narrative transition or emphasis. Strict alternation without that reason is a defect.

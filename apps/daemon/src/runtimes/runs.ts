@@ -14,6 +14,21 @@ import { projectWorkspaceProvenance } from '../workspace-contract.js';
 export const TERMINAL_RUN_STATUSES = new Set(['succeeded', 'failed', 'canceled']);
 
 const RUN_STATE_SCHEMA_VERSION = 1;
+const WRITE_LIKE_TOOL_NAMES = new Set([
+  'Write',
+  'create_file',
+  'write',
+  'write_file',
+  'Edit',
+  'str_replace_edit',
+  'edit',
+  'edit_file',
+  'replace',
+  'replace_file',
+  'MultiEdit',
+  'multi_edit',
+  'apply_patch',
+]);
 
 function atomicWriteJson(filePath, value) {
   const tempPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
@@ -82,6 +97,31 @@ function extractErrorDetails(data) {
   };
 }
 
+function hasUnfinishedWriteLikeToolCall(events) {
+  if (!Array.isArray(events) || events.length === 0) return false;
+  const completed = new Set();
+  const failed = new Set();
+  for (const rec of events) {
+    if (rec?.event !== 'agent') continue;
+    const data = rec.data && typeof rec.data === 'object' ? rec.data : null;
+    if (!data || data.type !== 'tool_result') continue;
+    const id = typeof data.toolUseId === 'string' ? data.toolUseId : null;
+    if (!id) continue;
+    if (data.isError === true) failed.add(id);
+    else completed.add(id);
+  }
+  for (const rec of events) {
+    if (rec?.event !== 'agent') continue;
+    const data = rec.data && typeof rec.data === 'object' ? rec.data : null;
+    if (!data || data.type !== 'tool_use') continue;
+    const id = typeof data.id === 'string' ? data.id : null;
+    const name = typeof data.name === 'string' ? data.name : '';
+    if (!id || !WRITE_LIKE_TOOL_NAMES.has(name)) continue;
+    if (!completed.has(id) && !failed.has(id)) return true;
+  }
+  return false;
+}
+
 export function createChatRunService({
   createSseResponse,
   createSseErrorPayload,
@@ -137,6 +177,7 @@ export function createChatRunService({
         meta.sessionMode === 'chat' || meta.sessionMode === 'design' || meta.sessionMode === 'plan'
           ? meta.sessionMode
           : null,
+      artifactDeliveryRequired: meta.artifactDeliveryRequired === true,
       context:
         meta.context && typeof meta.context === 'object' && !Array.isArray(meta.context)
           ? meta.context
@@ -181,6 +222,7 @@ export function createChatRunService({
       // `endedWithUnfinishedWork` from them via the canonical predicate.
       lastTodoSnapshot: null,
       truncatedMidTurn: false,
+      forceEndedWithUnfinishedWork: false,
       endedWithUnfinishedWork: false,
       artifactCount: undefined as number | undefined,
       artifactOutcome: undefined,
@@ -346,7 +388,10 @@ export function createChatRunService({
     // if the last TodoWrite looked done. Absence of any TodoWrite snapshot keeps
     // the flag false, so a text-only answer stays "Completed".
     run.endedWithUnfinishedWork =
-      Boolean(run.truncatedMidTurn) || todoSnapshotHasUnfinishedWork(run.lastTodoSnapshot);
+      Boolean(run.truncatedMidTurn) ||
+      Boolean(run.forceEndedWithUnfinishedWork) ||
+      todoSnapshotHasUnfinishedWork(run.lastTodoSnapshot) ||
+      hasUnfinishedWriteLikeToolCall(run.events);
     // Release run-scoped resources the starter registered (e.g. the minted
     // tool-token grant + agent event-sink entries). This runs on EVERY
     // terminal path — including a startup throw that never reached the child

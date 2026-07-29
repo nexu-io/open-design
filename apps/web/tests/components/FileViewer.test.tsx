@@ -59,6 +59,7 @@ import {
   appendSavedPreviewCommentOrder,
   applyInspectOverridesToSource,
   commentPreviewCanvasSize,
+  countDeckSlidesInSource,
   desktopPreviewAutoFitZoomPercent,
   desktopPreviewDocumentContentWidth,
   deckKeyboardShortcutForEvent,
@@ -2437,6 +2438,15 @@ describe('FileViewer SVG artifacts', () => {
       '<section class="slide">two</section>',
       '</body></html>',
     ].join('');
+    const nestedStageDeck = [
+      '<!doctype html><html><body>',
+      '<div class="deck-wrap"><div class="deck-frame"><main class="deck-stage">',
+      ...Array.from({ length: 10 }, (_, index) => (
+        `<section class="slide${index === 0 ? ' is-active' : ''}" data-screen-label="${String(index + 1).padStart(2, '0')} Slide">${index + 1}</section>`
+      )),
+      '</main></div></div>',
+      '</body></html>',
+    ].join('');
 
     function trackedEvents(name: string) {
       return analyticsTrackMock.mock.calls
@@ -2468,6 +2478,72 @@ describe('FileViewer SVG artifacts', () => {
       // rather than a specific value.
       expect(typeof views[0].slide_count).toBe('number');
       expect(typeof views[0].artifact_id).toBe('string');
+    });
+
+    it('uses structured slide count before iframe slide-state settles', () => {
+      expect(countDeckSlidesInSource(nestedStageDeck)).toBe(10);
+
+      const { container } = render(
+        <FileViewer
+          projectId="project-1"
+          projectKind="prototype"
+          file={deckFile()}
+          isDeck
+          liveHtml={nestedStageDeck}
+        />,
+      );
+
+      const counterText = (
+        container.querySelector('.deck-floating-count, .deck-nav-counter')?.textContent ?? ''
+      ).replace(/\s+/g, '');
+      expect(counterText).toBe('1/10');
+      expect(container.querySelectorAll('.deck-thumbnail-button')).toHaveLength(10);
+    });
+
+    it('drops stale slide state when the same deck source shrinks', async () => {
+      const fiveSlideDeck = [
+        '<!doctype html><html><body>',
+        '<div class="deck-wrap"><div class="deck-frame"><main class="deck-stage">',
+        ...Array.from({ length: 5 }, (_, index) => (
+          `<section class="slide${index === 0 ? ' is-active' : ''}" data-screen-label="${String(index + 1).padStart(2, '0')} Slide">${index + 1}</section>`
+        )),
+        '</main></div></div>',
+        '</body></html>',
+      ].join('');
+      const file = deckFile();
+      const { container, rerender } = render(
+        <FileViewer
+          projectId="project-source-shrink"
+          projectKind="prototype"
+          file={file}
+          isDeck
+          liveHtml={nestedStageDeck}
+        />,
+      );
+
+      const counterText = () => (
+        container.querySelector('.deck-floating-count, .deck-nav-counter')?.textContent ?? ''
+      ).replace(/\s+/g, '');
+      const thumbnails = () => (
+        Array.from(container.querySelectorAll<HTMLButtonElement>('.deck-thumbnail-button'))
+      );
+      fireEvent.click(thumbnails()[9]!);
+      expect(counterText()).toBe('10/10');
+
+      rerender(
+        <FileViewer
+          projectId="project-source-shrink"
+          projectKind="prototype"
+          file={file}
+          isDeck
+          liveHtml={fiveSlideDeck}
+        />,
+      );
+
+      await waitFor(() => {
+        expect(counterText()).toBe('5/5');
+        expect(thumbnails()).toHaveLength(5);
+      });
     });
 
     it('tracks thumbnail rail toggle with expand/collapse action', () => {
@@ -2523,6 +2599,39 @@ describe('FileViewer SVG artifacts', () => {
         element: 'slide_next',
       });
       expect(typeof nexts[0].slide_index).toBe('number');
+    });
+
+    it('advances host slide state when deck iframe does not echo slide-state', () => {
+      const { container } = render(
+        <FileViewer
+          projectId="project-1"
+          projectKind="prototype"
+          file={deckFile()}
+          isDeck
+          liveHtml={twoSlideDeck}
+        />,
+      );
+      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      const previewWindow = installSandboxedPreviewWindow(frame);
+
+      act(() => {
+        window.dispatchEvent(new MessageEvent('message', {
+          source: previewWindow,
+          data: { type: 'od:slide-state', active: 0, count: 2 },
+        }));
+      });
+      const counterText = () => (
+        container.querySelector('.deck-floating-count, .deck-nav-counter')?.textContent ?? ''
+      ).replace(/\s+/g, '');
+      expect(counterText()).toBe('1/2');
+
+      fireEvent.keyDown(window, { key: 'ArrowRight' });
+
+      expect(counterText()).toBe('2/2');
+      expect(previewWindow.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'od:slide', action: 'next' }),
+        '*',
+      );
     });
 
     it('tracks opening speaker notes for edit', () => {

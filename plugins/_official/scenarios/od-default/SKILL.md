@@ -1,6 +1,6 @@
 ---
 name: od-default
-description: Hidden fallback scenario for free-form Home prompts. Ask the task type first, then continue through the matching Open Design flow.
+description: Hidden fallback scenario for free-form Home prompts. Infer the route from the prompt and ask only when a critical ambiguity remains.
 od:
   scenario: default-router
   mode: scenario
@@ -12,81 +12,48 @@ This plugin runs only when the user types a free-form Home prompt without
 choosing one of the visible category chips. It is the design-engine
 fallback, not a visible catalog entry.
 
-## Turn 1: ask the task type and lock the brief
+## Route the query first
 
-Your first response must be one short sentence plus this structured form,
-then stop. Do not write files, use tools, or start planning until the user
-answers. Localize every user-facing string to the user's chat language, but
-keep ids, types, option values, and the ordered `taskType` options stable.
-Prefill each question's `default` from the brief, including the `taskType`
-option you recommend, so the user can submit the form unchanged.
+Infer the task type from the current user query first. Use the query's nouns,
+requested output, attached references, project metadata, and locked
+conversation context instead of treating a free-form Home prompt as missing a
+route by default.
 
-```html
-<question-form id="task-type" title="Choose the task type">
-{
-  "lang": "en",
-  "description": "I'll route this through the right Open Design workflow and lock the brief in one shot. Prefilled for you — send as is, or adjust first.",
-  "questions": [
-    {
-      "id": "taskType",
-      "label": "What should I build?",
-      "type": "radio",
-      "required": true,
-      "allowCustom": false,
-      "options": [
-        "Prototype",
-        "Live artifact",
-        "Slide deck",
-        "Image",
-        "Video",
-        "HyperFrames",
-        "Audio",
-        "Other"
-      ]
-    },
-    {
-      "id": "audience",
-      "label": "Who is this for?",
-      "type": "text",
-      "placeholder": "Target user, buyer, viewer, or audience..."
-    },
-    {
-      "id": "brand",
-      "label": "Brand context",
-      "type": "radio",
-      "options": [
-        { "label": "Pick a direction for me", "value": "pick_direction" },
-        { "label": "I have a brand spec — I'll share it", "value": "brand_spec" },
-        { "label": "Match a reference site / screenshot — I'll attach it", "value": "reference_match" }
-      ]
-    },
-    {
-      "id": "scale",
-      "label": "Roughly how much?",
-      "type": "text",
-      "placeholder": "e.g. 8 slides, 1 landing + 3 sub-pages, 4 mobile screens, 30s video"
-    },
-    {
-      "id": "speakerNotes",
-      "label": "For slide decks, include speaker notes?",
-      "type": "switch",
-      "defaultValue": true
-    },
-    {
-      "id": "constraints",
-      "label": "Any important constraints?",
-      "type": "textarea",
-      "placeholder": "Audience, brand, format, length, aspect ratio, references, things to avoid..."
-    }
-  ]
-}
-</question-form>
-```
+- A request for screens, flows, an app, a dashboard, or an interactive product
+  routes to `Prototype`.
+- A request for a landing page, marketing site, brand website, or editorial page,
+  or another standalone HTML/CSS/JS experience, routes to `Live artifact`.
+- A request for slides, a pitch, a presentation, or a deck routes to `Slide deck`.
+- A request whose final deliverable is a still image, motion/video, HyperFrames
+  sequence, or audio routes to `Image`, `Video`, `HyperFrames`, or `Audio`.
+- Use `Other` only when none of those deliverables fits.
 
-## After the answer
+When one route is clear, skip `<question-form>` and continue directly through
+that workflow. Do not ask the user to confirm an inference the query already
+supports. Missing audience, brand, tone, or scale alone does not automatically
+block execution; use the core charter's defaults unless a different answer
+would materially change the result.
 
-When the user replies with `[form answers — task-type]`, bind the chosen
-task type as authoritative and continue:
+## Clarify only a material ambiguity
+
+The binding host clarification gate owns whether the workflow pauses. If two
+or more materially different routes remain plausible, ask only for the
+unresolved decisions; never revive the old fixed questionnaire.
+
+- Include `taskType` only when the route itself is ambiguous. Use
+  `<question-form id="task-type">`, `type: "radio"`, `allowCustom: false`, and
+  the canonical routing values `Prototype`, `Live artifact`, `Slide deck`,
+  `Image`, `Video`, `HyperFrames`, `Audio`, and `Other`.
+- For any other material gap, omit `taskType`, use
+  `<question-form id="discovery">`, and follow the core contract. It owns
+  query-derived questions, defaults, localization, files, controls, and turn
+  stopping.
+
+## Continue after an answer
+
+When the user replies with `[form answers — task-type]` or
+`[form answers — discovery]`, bind the submitted decisions as authoritative
+and continue:
 
 - `Prototype`: run the normal new-generation prototype flow.
 - `Live artifact`: create a live HTML/CSS/JS artifact and register it for
@@ -103,7 +70,6 @@ task type as authoritative and continue:
 - `Other`: ask only the minimum follow-up needed, then choose the closest
   Open Design workflow and continue.
 
-This single form already locks the discovery brief. Do not emit a second
-`<question-form id="discovery">`; proceed directly to the matching planning,
-generation, and critique stages. Do not tell the user to go back and choose a
-chip; the default plugin owns this fallback.
+Do not emit a second brief form for decisions the user just answered. Proceed
+directly to planning, generation, and critique. Do not tell the user to go back
+and choose a chip; the default plugin owns this fallback.

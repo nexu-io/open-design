@@ -467,6 +467,8 @@ async function listAvailableDesignSystemPackageFiles(
  * - `pullIndex`     — short manifest-derived file index. It lists
  *                     richer preview/source evidence paths without
  *                     loading those files into the push prompt.
+ * - `corePullIndex` — exact DESIGN/tokens/manifest paths used only when a
+ *                     compact filesystem prompt must pull core detail.
  */
 export type DesignSystemAssets = {
   usageMd?: string | undefined;
@@ -474,6 +476,7 @@ export type DesignSystemAssets = {
   fixtureHtml?: string | undefined;
   componentsManifest?: string | undefined;
   pullIndex?: string | undefined;
+  corePullIndex?: string | undefined;
   importMode?: 'normalized' | 'hybrid' | 'verbatim' | undefined;
   craftApplies?: string[] | undefined;
   craftExemptions?: string[] | undefined;
@@ -508,6 +511,7 @@ export async function readDesignSystemAssets(
     fixtureHtml,
     componentsManifestJson,
     pullIndex: buildDesignSystemPullIndex(manifest),
+    corePullIndex: buildDesignSystemCorePullIndex(manifest),
     importMode: manifest?.importMode,
     craftApplies: manifest?.craft?.applies,
     craftExemptions: manifest?.craft?.exemptions,
@@ -610,6 +614,7 @@ export function digestDesignSystemContext(input: {
   componentsManifest?: string | null;
   fixtureHtml?: string | null;
   pullIndex?: string | null;
+  corePullIndex?: string | null;
   importMode?: string | null;
 }): string | null {
   const hasContent = [
@@ -619,6 +624,7 @@ export function digestDesignSystemContext(input: {
     input.componentsManifest,
     input.fixtureHtml,
     input.pullIndex,
+    input.corePullIndex,
     input.importMode,
   ].some((value) => typeof value === 'string' && value.length > 0);
   if (!hasContent) return null;
@@ -632,6 +638,7 @@ export function digestDesignSystemContext(input: {
     componentsManifest: input.componentsManifest ?? null,
     fixtureHtml: input.fixtureHtml ?? null,
     pullIndex: input.pullIndex ?? null,
+    corePullIndex: input.corePullIndex ?? null,
     importMode: input.importMode ?? null,
   };
   return createHash('sha256').update(JSON.stringify(payload), 'utf8').digest('hex');
@@ -650,6 +657,7 @@ export async function resolveDesignSystemAssets(
       fixtureHtml: undefined,
       componentsManifest: undefined,
       pullIndex: undefined,
+      corePullIndex: undefined,
       importMode: undefined,
       craftApplies: undefined,
       craftExemptions: undefined,
@@ -709,6 +717,7 @@ async function resolveDesignSystemAssetsUncached(
     componentsManifestJson: undefined,
     componentsManifest: builtIn.componentsManifest ?? userInstalled.componentsManifest,
     pullIndex: builtIn.pullIndex ?? userInstalled.pullIndex,
+    corePullIndex: builtIn.corePullIndex ?? userInstalled.corePullIndex,
     importMode: builtIn.importMode ?? userInstalled.importMode,
     craftApplies: builtIn.craftApplies ?? userInstalled.craftApplies,
     craftExemptions: builtIn.craftExemptions ?? userInstalled.craftExemptions,
@@ -793,6 +802,7 @@ function withComponentsManifest(
     | 'fixtureHtml'
     | 'componentsManifest'
     | 'pullIndex'
+    | 'corePullIndex'
     | 'importMode'
     | 'craftApplies'
     | 'craftExemptions'
@@ -878,6 +888,23 @@ function buildDesignSystemPullIndex(
   return ['Additional design-system files declared by manifest.json:', ...entries].join('\n');
 }
 
+function buildDesignSystemCorePullIndex(
+  manifest: DesignSystemProjectManifest | null,
+): string | undefined {
+  if (manifest === null) return undefined;
+  const entries: string[] = [];
+  const add = (filePath: string | undefined, label: string): void => {
+    if (!filePath || !isSafeManifestPath(filePath)) return;
+    entries.push(`- ${filePath}: ${label}`);
+  };
+  add(manifest.files.design, 'full design-system guidance');
+  add(manifest.files.tokens, 'compiled token contract');
+  add(manifest.componentsManifest, 'compact component inventory');
+  return entries.length > 0
+    ? ['Core design-system files available on demand:', ...entries].join('\n')
+    : undefined;
+}
+
 async function buildDesignSystemPullFileAllowlist(
   brandRoot: string,
   manifest: DesignSystemProjectManifest,
@@ -889,6 +916,9 @@ async function buildDesignSystemPullFileAllowlist(
   };
 
   for (const page of manifest.preview?.pages ?? []) add(page.path);
+  add(manifest.files.design);
+  add(manifest.files.tokens);
+  add(manifest.componentsManifest);
   add(manifest.sourceFiles?.scanned);
   add(manifest.sourceFiles?.evidence);
   add(manifest.sourceFiles?.tokens);

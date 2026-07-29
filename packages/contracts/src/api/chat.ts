@@ -71,6 +71,11 @@ export interface ChatRequest {
   projectId?: string | null;
   conversationId?: string | null;
   sessionMode?: ChatSessionMode;
+  /**
+   * True only when the caller knows this turn must create or modify a
+   * deliverable artifact. Omitted/false keeps report-only Design turns valid.
+   */
+  artifactDeliveryRequired?: boolean;
   assistantMessageId?: string | null;
   clientRequestId?: string | null;
   skillId?: string | null;

@@ -1,9 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import {
-  composeSystemPrompt,
+  composeSystemPrompt as composePrompt,
   renderCodexImagegenOverride,
   resolveCodexImagegenModelId,
 } from '../src/prompts/system.js';
+import { renderMediaGenerationContract } from '../src/prompts/media-contract.js';
+
+// This suite predates the slim default and primarily validates the classic
+// metadata/template stack. Explicit slim/media inputs still override it.
+const composeSystemPrompt = (input: Parameters<typeof composePrompt>[0]) =>
+  composePrompt({
+    ...input,
+    promptCoreVariant: input.promptCoreVariant ?? 'classic',
+  });
 
 // These tests pin the rendering of metadata.promptTemplate inside the
 // composed system prompt. The composer is the trust boundary between the
@@ -40,30 +49,55 @@ describe('composeSystemPrompt — metadata.promptTemplate', () => {
       },
     });
 
-    const overrideIdx = out.indexOf('Automated project mode — skip discovery form');
+    const overrideIdx = out.indexOf('Initial automated Design turn — skip discovery');
     const discoveryIdx = out.indexOf('# OD core directives');
     expect(overrideIdx).toBeGreaterThanOrEqual(0);
     expect(discoveryIdx).toBeGreaterThanOrEqual(0);
     expect(overrideIdx).toBeLessThan(discoveryIdx);
-    expect(out).toMatch(/do NOT emit `<question-form id="discovery">`/);
+    expect(out).toContain('do not emit a discovery form');
+    expect(out).toContain('For this initial Design turn only');
   });
 
   it('pins Plan mode above default artifact discovery and suppresses artifact brief forms', () => {
     const out = composeSystemPrompt({
+      promptCoreVariant: 'slim',
       sessionMode: 'plan',
       metadata: { kind: 'prototype' },
     });
 
     const overrideIdx = out.indexOf('# Plan mode — editable document first');
-    const discoveryIdx = out.indexOf('# OD core directives');
+    const foundationIdx = out.indexOf('# Open Design plan foundation');
     expect(overrideIdx).toBeGreaterThanOrEqual(0);
-    expect(discoveryIdx).toBeGreaterThanOrEqual(0);
-    expect(overrideIdx).toBeLessThan(discoveryIdx);
-    expect(out).toContain('do NOT emit `<question-form id="discovery">`');
-    expect(out).toContain('`<question-form id="task-type">`');
+    expect(foundationIdx).toBeGreaterThanOrEqual(0);
+    expect(foundationIdx).toBeLessThan(overrideIdx);
+    expect(out).not.toContain('# OD core directives');
+    expect(out).not.toContain('## Artifact creation — brand → build → verify');
+    expect(out).not.toContain('**React inline JSX**');
+    expect(out).toContain('default artifact-discovery forms `discovery` or `task-type`');
     expect(out).toContain('Quick brief — 30 seconds');
-    expect(out).toContain('<question-form id="plan-brief">');
-    expect(out).toContain('plan-document-specific questions');
+    expect(out).toContain('id `plan-brief`');
+    expect(out).toContain('material planning decision');
+    expect(out).toContain('Plan mode produces only the planning deliverable');
+    expect(out).not.toContain('## Semantic output file names');
+  });
+
+  it('gates semantic filename guidance to filesystem design artifacts', () => {
+    const filesystemDesign = composeSystemPrompt({
+      metadata: { kind: 'prototype' },
+      executionProfile: 'filesystem',
+    });
+    const textArtifact = composeSystemPrompt({
+      metadata: { kind: 'prototype' },
+      executionProfile: 'text_artifact',
+    });
+    const media = composeSystemPrompt({
+      metadata: { kind: 'image', imageModel: 'gpt-image-2' },
+      executionProfile: 'filesystem',
+    });
+
+    expect(filesystemDesign).toContain('## Semantic output file names');
+    expect(textArtifact).not.toContain('## Semantic output file names');
+    expect(media).not.toContain('## Semantic output file names');
   });
 
   it('does not instruct agents to ask for a second visual-direction picker', () => {
@@ -76,7 +110,7 @@ describe('composeSystemPrompt — metadata.promptTemplate', () => {
     expect(out).toContain('Do not emit a direction question-form');
     expect(out).not.toContain('<question-form id="direction"');
     expect(out).not.toContain('Pick a visual direction');
-    expect(out).toContain('if a design system is active and no new brand/reference source was provided, use it as the visual direction without asking again');
+    expect(out).toContain('if a design system is active, use it as the visual direction without asking again');
   });
 
   it('inlines the prompt body, attribution, and reference-template label for image projects', () => {
@@ -99,14 +133,16 @@ describe('composeSystemPrompt — metadata.promptTemplate', () => {
     expect(out).toContain('license MIT');
   });
 
-  it('asks for image model and aspect ratio when they are unset (not silently defaulted)', () => {
+  it('leaves image metadata unresolved while the media contract supplies safe defaults', () => {
     const out = composeSystemPrompt({
       metadata: { kind: 'image' },
     });
 
-    // The composer no longer seeds imageModel/imageAspect — the agent must ask.
-    expect(out).toContain('**imageModel**: (unknown — ask: which image model/provider to use)');
-    expect(out).toContain('**aspectRatio**: (unknown — ask: 1:1, 16:9 for landscape, 9:16 for portrait)');
+    expect(out).toContain('**imageModel**: (unknown)');
+    expect(out).toContain('**aspectRatio**: (unknown)');
+    expect(out).toMatch(
+      /Do not ask about model or aspect when\s+these defaults resolve the gap/,
+    );
     expect(out).not.toContain('gpt-image-2 (default');
     expect(out).not.toContain('1:1 (default');
   });
@@ -310,11 +346,15 @@ describe('composeSystemPrompt — metadata.promptTemplate', () => {
     });
 
     expect(out).toContain('## Media generation contract');
-    expect(out).toContain(
-      '"$OD_NODE_BIN" "$OD_BIN" media generate --surface image --model <imageModel>',
-    );
+    expect(out).toContain('"$OD_NODE_BIN" "$OD_BIN" media generate');
+    expect(out).toContain('--surface image');
+    expect(out).toContain('### Active model');
+    expect(out).toContain('run-selected model `gpt-image-2`');
     expect(out).not.toContain('Do not require, request, or mention `OPENAI_API_KEY`');
     expect(out).not.toContain('## Codex built-in imagegen override');
+    expect(out).not.toContain('npx hyperframes init');
+    expect(out).not.toContain('`elevenlabs-sfx`');
+    expect(out).not.toContain('audio · music');
   });
 
   it('normalizes Codex agent selection before applying the imagegen override', () => {
@@ -408,7 +448,8 @@ describe('composeSystemPrompt — metadata.promptTemplate', () => {
     expect(out).toContain('The dispatcher will reject surfaces or models outside this run');
     expect(out).toContain('Allowed surfaces for this run: `image`.');
     expect(out).toContain('Allowed models for this run: `gpt-image-2`.');
-    expect(out).toContain('### Allowed model IDs (per surface)');
+    expect(out).toContain('### Active model');
+    expect(out).not.toContain('### Allowed model IDs (active surface)');
     expect(out).not.toContain('Open Design-owned media execution is **disabled for this run**');
   });
 
@@ -430,10 +471,37 @@ describe('composeSystemPrompt — metadata.promptTemplate', () => {
 
     expect(out).toContain('### Run-scoped BYOK media defaults');
     expect(out).toContain('- Image model: `aihubmix-qwen-image-2.0-pro`');
-    expect(out).toContain('- Video model: `aihubmix-doubao-seedance-2-0-260128`');
-    expect(out).toContain('- Speech model: `aihubmix-gpt-4o-mini-tts`');
-    expect(out).toContain('- Speech voice: `nova`');
-    expect(out).toContain('### Allowed model IDs (per surface)');
+    expect(out).not.toContain('- Video model: `aihubmix-doubao-seedance-2-0-260128`');
+    expect(out).not.toContain('- Speech model: `aihubmix-gpt-4o-mini-tts`');
+    expect(out).not.toContain('- Speech voice: `nova`');
+    expect(out).toContain('### Active model');
+    expect(out).toContain('run-selected model `aihubmix-qwen-image-2.0-pro`');
+    expect(out).not.toContain('run-selected model `gpt-image-2`');
+    expect(out).not.toContain('### Allowed model IDs (active surface)');
+  });
+
+  it('renders the active-surface model catalogue only when no model is selected', () => {
+    const out = composeSystemPrompt({ metadata: { kind: 'image' } });
+
+    expect(out).toContain('### Allowed model IDs (active surface)');
+    expect(out).not.toContain('### Active model');
+  });
+
+  it('keeps provider diagnostics off the normal path but available on demand', () => {
+    const normal = renderMediaGenerationContract({
+      surface: 'image',
+      model: 'gpt-image-2',
+    });
+    const diagnostic = renderMediaGenerationContract({
+      surface: 'image',
+      model: 'gpt-image-2',
+      includeProviderDiagnostics: true,
+    });
+
+    expect(normal).not.toContain('### Detecting and surfacing provider errors');
+    expect(normal).toContain('`file.providerError`');
+    expect(diagnostic).toContain('### Detecting and surfacing provider errors');
+    expect(diagnostic).toContain('`file.usedStubFallback`');
   });
 
   it('renders BYOK media defaults in the non-media dispatch hint', () => {
@@ -450,11 +518,37 @@ describe('composeSystemPrompt — metadata.promptTemplate', () => {
     expect(out).toContain('## Media generation (if asked)');
     expect(out).toContain('### Run-scoped BYOK media defaults');
     expect(out).toContain('- Image model: `senseaudio-image-1.0-260319`');
-    expect(out).toContain('IMAGE_MODEL="senseaudio-image-1.0-260319"');
-    expect(out).toContain('--model "$IMAGE_MODEL"');
     expect(out).toContain('For image generation prefer your configured model: `senseaudio-image-1.0-260319`.');
-    expect(out).not.toContain('--model flux-pro-ultra');
+    expect(out).toContain('--model <model-id>');
+    expect(out).not.toContain('while [ -n "$task_id" ]');
+    expect(out).not.toContain('python3 -c');
     expect(out).not.toContain('For the best fal image model use `--model flux-pro-ultra`');
+  });
+
+  it('keeps non-media dispatch defaults aligned with the full media contract', () => {
+    const hint = composeSystemPrompt({
+      metadata: { kind: 'prototype' },
+      mediaHintSignal: true,
+    });
+    const image = composeSystemPrompt({
+      metadata: { kind: 'image' },
+    });
+    const video = composeSystemPrompt({
+      metadata: { kind: 'video' },
+    });
+
+    for (const prompt of [hint, image]) {
+      expect(prompt).toContain('`gpt-image-2` by default');
+      expect(prompt).toMatch(
+        /`flux-pro-ultra` only\s+for an explicit best-quality request/,
+      );
+    }
+    for (const prompt of [hint, video]) {
+      expect(prompt).toContain('`doubao-seedance-2-0-260128`');
+    }
+    expect(hint).not.toContain('use `--model veo-3-fal`');
+    expect(hint).not.toContain('use `--model wan-2.1-t2v`');
+    expect(hint).not.toContain('while [ -n "$task_id" ]');
   });
 
   it('keeps unrestricted enabled media contract unchanged', () => {
@@ -474,7 +568,7 @@ describe('composeSystemPrompt — metadata.promptTemplate', () => {
     expect(out).not.toContain('Allowed models for this run');
   });
 
-  it('documents ElevenLabs speech and SFX routing in the media contract', () => {
+  it('keeps a speech contract free of SFX-only models and flags', () => {
     const out = composeSystemPrompt({
       metadata: {
         kind: 'audio',
@@ -486,17 +580,64 @@ describe('composeSystemPrompt — metadata.promptTemplate', () => {
     });
 
     expect(out).toContain('`elevenlabs-v3`');
+    expect(out).toContain('real provider voice id');
+    expect(out).toContain('--voice <provider-voice-id>');
+    expect(out).not.toContain('`elevenlabs-sfx`');
+    expect(out).not.toContain('--prompt-influence');
+    expect(out).not.toContain('[--loop]');
+    expect(out).not.toContain('### Detecting and surfacing provider errors');
+    expect(out).toContain('`file.providerError`');
+  });
+
+  it('keeps an SFX contract free of speech-only models and voice flags', () => {
+    const out = composeSystemPrompt({
+      metadata: {
+        kind: 'audio',
+        audioKind: 'sfx',
+        audioModel: 'elevenlabs-sfx',
+        audioDuration: 10,
+      },
+    });
+
     expect(out).toContain('`elevenlabs-sfx`');
-    expect(out).toContain('provider-specific ElevenLabs `voice_id`');
-    expect(out).toContain('sound description belongs in `--prompt`');
-    expect(out).toContain('Describe the audible event itself');
+    expect(out).toContain('under 450 characters');
     expect(out).toContain('--prompt-influence 0.7');
-    expect(out).toContain('--loop');
-    expect(out).toContain('Keep ElevenLabs SFX `--prompt` under 450 characters');
-    expect(out).toContain('lo-fi felt-piano cafe loop');
-    expect(out).toContain('SFX duration is capped at 30 seconds');
-    expect(out).toContain('MiniMax, FishAudio, and ElevenLabs audio renderers are production integrations');
-    expect(out).not.toContain('fishaudio, …) are still stubs');
+    expect(out).toContain('[--loop]');
+    expect(out).not.toContain('`elevenlabs-v3`');
+    expect(out).not.toContain('--voice <provider-voice-id>');
+  });
+
+  it('does not apply speech BYOK defaults when the audio subtype is omitted', () => {
+    const out = composeSystemPrompt({
+      metadata: {
+        kind: 'audio',
+      },
+      byokMediaDefaults: {
+        speechModel: 'aihubmix-gpt-4o-mini-tts',
+        speechVoice: 'nova',
+      },
+    });
+
+    expect(out).not.toContain('### Run-scoped BYOK media defaults');
+    expect(out).not.toContain('- Speech model: `aihubmix-gpt-4o-mini-tts`');
+    expect(out).not.toContain('- Speech voice: `nova`');
+    expect(out).not.toContain('### Active model');
+    expect(out).toContain('Infer the audio subtype from the requested audible result');
+    expect(out).toContain('**audio · music**');
+    expect(out).toContain('**audio · speech**');
+    expect(out).toContain('**audio · sfx**');
+  });
+
+  it('includes the full HyperFrames authoring guide only for the selected model', () => {
+    const regularVideo = composeSystemPrompt({
+      metadata: { kind: 'video', videoModel: 'seedance-2.0' },
+    });
+    const hyperframes = composeSystemPrompt({
+      metadata: { kind: 'video', videoModel: 'hyperframes-html' },
+    });
+
+    expect(regularVideo).not.toContain('npx hyperframes init');
+    expect(hyperframes).toContain('npx hyperframes init');
   });
 
   it('documents media generate handoffs as successful queued results', () => {
@@ -509,14 +650,13 @@ describe('composeSystemPrompt — metadata.promptTemplate', () => {
       },
     });
 
-    expect(out).toContain('always exits 0');
-    expect(out).toContain('as a handoff signal');
-    expect(out).toContain('`"$OD_NODE_BIN" "$OD_BIN" media generate` exits `0`');
-    expect(out).toContain('either `file` or `taskId`');
-    expect(out).toContain('`2` from `media wait` is not a failure');
+    expect(out).toContain('exits `0` with either a final');
+    expect(out).toContain('as a successful');
+    expect(out).toContain('A `taskId` is not completion');
+    expect(out).toContain('On `2`, reuse the returned');
   });
 
-  it('surfaces ElevenLabs voice options for project discovery when no voice was preselected', () => {
+  it('surfaces exact ElevenLabs voice values without hardcoding an English form', () => {
     const voiceOptions = Array.from({ length: 50 }, (_, index) => {
       const ordinal = index + 1;
       return {
@@ -545,9 +685,11 @@ describe('composeSystemPrompt — metadata.promptTemplate', () => {
     });
 
     expect(out).toContain('ElevenLabs voice options');
-    expect(out).toContain('<question-form id="elevenlabs-voice" title="Choose an ElevenLabs voice">');
-    expect(out).toContain('"type": "select"');
-    expect(out).toContain('"allowCustom": false');
+    expect(out).toContain('emit one localized `<question-form id="elevenlabs-voice">`');
+    expect(out).toContain('top-level `lang`');
+    expect(out).toContain('`allowCustom` is `false`');
+    expect(out).not.toContain('<question-form id="elevenlabs-voice" title="Choose an ElevenLabs voice">');
+    expect(out).not.toContain('"submitLabel": "Use voice"');
     expect(out).toContain('"label": "Rachel — american · female"');
     expect(out).toContain('"value": "21m00Tcm4TlvDq8ikWAM"');
     expect(out).toContain('"label": "Adam — american · male"');

@@ -372,6 +372,12 @@ describe('Design System Project manifest runtime consumption', () => {
     expect(assets.componentsManifest).toContain('components.manifest schema v1 for cache-brand');
     expect(assets.componentsManifest).toContain('Cached buttons');
     expect(assets.pullIndex).toContain('preview/colors.html: Colors; colors');
+    expect(assets.pullIndex).not.toContain('DESIGN.md: full design-system guidance');
+    expect(assets.pullIndex).not.toContain('tokens.css: compiled token contract');
+    expect(assets.pullIndex).not.toContain('components.manifest.json: compact component inventory');
+    expect(assets.corePullIndex).toContain('DESIGN.md: full design-system guidance');
+    expect(assets.corePullIndex).toContain('tokens.css: compiled token contract');
+    expect(assets.corePullIndex).toContain('components.manifest.json: compact component inventory');
     expect(assets.pullIndex).toContain('design-tokens.json: derived Design Tokens JSON');
     expect(assets.pullIndex).toContain('tailwind-v4.css: derived Tailwind v4 theme CSS');
     expect(assets.pullIndex).toContain('fonts/Inter-Medium.woff2: font: Inter 500');
@@ -438,6 +444,14 @@ describe('Design System Project manifest runtime consumption', () => {
     await expect(readDesignSystemPullFile(root, 'pull-project', 'tailwind-v4.css')).resolves.toMatchObject({
       path: 'tailwind-v4.css',
       content: expect.stringContaining('@import "tailwindcss"'),
+    });
+    await expect(readDesignSystemPullFile(root, 'pull-project', 'DESIGN.md')).resolves.toMatchObject({
+      path: 'DESIGN.md',
+      content: expect.stringContaining('# Markdown Title'),
+    });
+    await expect(readDesignSystemPullFile(root, 'pull-project', 'tokens.css')).resolves.toMatchObject({
+      path: 'tokens.css',
+      content: expect.stringContaining('--bg: #fff'),
     });
     await expect(readDesignSystemPullFile(root, 'pull-project', 'preview/spacing.html')).resolves.toBeNull();
     await expect(readDesignSystemPullFile(root, 'pull-project', '../pull-project/preview/colors.html')).resolves.toBeNull();

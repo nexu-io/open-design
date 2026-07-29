@@ -14,7 +14,7 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 import { migratePlugins } from '../src/plugins/persistence.js';
 import { registerBundledPlugins } from '../src/plugins/bundled.js';
-import { loadAtomBodies } from '../src/plugins/atom-bodies.js';
+import { filterAtomIdsForPrompt, loadAtomBodies } from '../src/plugins/atom-bodies.js';
 import { renderActiveStageBlock } from '@open-design/contracts';
 
 const SAMPLE_MANIFEST = (id: string) =>
@@ -78,6 +78,41 @@ describe('loadAtomBodies', () => {
 
   it('returns an empty array for an empty input', async () => {
     expect(await loadAtomBodies(db, [])).toEqual([]);
+  });
+});
+
+describe('filterAtomIdsForPrompt', () => {
+  const ids = [
+    'discovery-question-form',
+    'todo-write',
+    'critique-theater',
+    'live-artifact',
+    'media-image',
+    'custom-atom',
+  ];
+
+  it('omits pipeline prompt bodies in Ask, Plan, and media surfaces without changing the pipeline', () => {
+    expect(filterAtomIdsForPrompt(ids, { sessionMode: 'chat' })).toEqual([]);
+    expect(filterAtomIdsForPrompt(ids, { sessionMode: 'plan' })).toEqual([]);
+    expect(filterAtomIdsForPrompt(ids, { mediaSurface: 'image' })).toEqual([]);
+  });
+
+  it('keeps general/custom Design atoms and gates surface-specific bodies by intent', () => {
+    expect(filterAtomIdsForPrompt(ids, {})).toEqual([
+      'discovery-question-form',
+      'todo-write',
+      'custom-atom',
+    ]);
+    expect(filterAtomIdsForPrompt(ids, {
+      projectIntent: 'live-artifact',
+      critiqueEnabled: true,
+    })).toEqual([
+      'discovery-question-form',
+      'todo-write',
+      'critique-theater',
+      'live-artifact',
+      'custom-atom',
+    ]);
   });
 });
 

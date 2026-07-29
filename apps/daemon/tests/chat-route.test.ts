@@ -234,6 +234,90 @@ process.exit(0);
     );
   });
 
+  it('fails missing artifacts only when the request explicitly requires delivery', async () => {
+    await withFakeAgent(
+      'opencode',
+      `
+console.log(JSON.stringify({ type: 'step_start', sessionID: 'artifact-delivery-session' }));
+console.log(JSON.stringify({
+  type: 'text',
+  sessionID: 'artifact-delivery-session',
+  part: { text: 'Analysis complete. No project files were changed.' },
+}));
+console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+process.exit(0);
+`,
+      async () => {
+        const createProject = async (suffix: string) => {
+          const projectId = `artifact-delivery-${suffix}-${randomUUID()}`;
+          const response = await fetch(`${baseUrl}/api/projects`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: projectId,
+              name: `Artifact delivery ${suffix}`,
+              metadata: { kind: 'prototype' },
+            }),
+          });
+          expect(response.status).toBe(200);
+          return projectId;
+        };
+        const run = async (projectId: string, artifactDeliveryRequired?: boolean) => {
+          const response = await fetch(`${baseUrl}/api/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentId: 'opencode',
+              projectId,
+              sessionMode: 'design',
+              message: 'Handle this design turn.',
+              ...(artifactDeliveryRequired === undefined
+                ? {}
+                : { artifactDeliveryRequired }),
+            }),
+          });
+          expect(response.ok).toBe(true);
+          return response.text();
+        };
+
+        const reportProjectId = await createProject('report');
+        const reportBody = await run(reportProjectId);
+        expect(reportBody).toContain('"status":"succeeded"');
+        expect(reportBody).not.toContain('NO_ARTIFACT_PRODUCED');
+
+        const blankGenerationProjectId = await createProject('blank-generation');
+        const blankGenerationBody = await run(blankGenerationProjectId, true);
+        expect(blankGenerationBody).toContain('"status":"failed"');
+        expect(blankGenerationBody).toContain('NO_ARTIFACT_PRODUCED');
+
+        const existingGenerationProjectId = await createProject('existing-generation');
+        const createFileResponse = await fetch(
+          `${baseUrl}/api/projects/${existingGenerationProjectId}/files`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: 'index.html',
+              content: '<!doctype html><h1>Existing artifact</h1>',
+              artifactManifest: {
+                version: 1,
+                kind: 'html',
+                title: 'Existing artifact',
+                entry: 'index.html',
+                renderer: 'html',
+                exports: ['html'],
+              },
+            }),
+          },
+        );
+        expect(createFileResponse.status).toBe(200);
+        const existingGenerationBody = await run(existingGenerationProjectId, true);
+        expect(existingGenerationBody).toContain('"status":"failed"');
+        expect(existingGenerationBody).toContain('NO_ARTIFACT_PRODUCED');
+      },
+    );
+  });
+
   it('marks json stream runs failed when an error frame exits with code 0', async () => {
     const conversationId = `conv-${randomUUID()}`;
 
@@ -1750,7 +1834,7 @@ process.stdin.on('data', (chunk) => {
 process.stdin.on('end', () => {
   const checks = [
     prompt.includes('## Composed skill — open-design-landing-deck') ? 'has-deck-skill-header' : 'missing-deck-skill-header',
-    prompt.includes('# Slide deck — fixed framework (this is non-negotiable for deck mode)') ? 'has-deck-framework' : 'missing-deck-framework',
+    prompt.includes('# Deck delivery contract') ? 'has-deck-directive' : 'missing-deck-directive',
   ];
   console.log(JSON.stringify({ type: 'step_start' }));
   console.log(JSON.stringify({ type: 'text', part: { text: checks.join('\\n') } }));
@@ -1772,9 +1856,9 @@ process.stdin.on('end', () => {
 
         expect(response.ok).toBe(true);
         expect(body).toContain('has-deck-skill-header');
-        expect(body).toContain('has-deck-framework');
+        expect(body).toContain('has-deck-directive');
         expect(body).not.toContain('missing-deck-skill-header');
-        expect(body).not.toContain('missing-deck-framework');
+        expect(body).not.toContain('missing-deck-directive');
       },
     );
   });
@@ -1793,7 +1877,7 @@ process.stdin.on('end', () => {
     prompt.includes('# imagegen') ? 'has-base-image-skill-body' : 'missing-base-image-skill-body',
     prompt.includes('## Composed skill — open-design-landing-deck') ? 'has-composed-deck-skill-header' : 'missing-composed-deck-skill-header',
     prompt.includes('## Media generation contract (load-bearing — overrides softer wording above)') ? 'has-image-contract' : 'missing-image-contract',
-    prompt.includes('# Slide deck — fixed framework (this is non-negotiable for deck mode)') ? 'unexpected-deck-framework' : 'kept-deck-framework-out',
+    prompt.includes('# Deck delivery contract') ? 'unexpected-deck-directive' : 'kept-deck-directive-out',
   ];
   console.log(JSON.stringify({ type: 'step_start' }));
   console.log(JSON.stringify({ type: 'text', part: { text: checks.join('\\n') } }));
@@ -1818,11 +1902,11 @@ process.stdin.on('end', () => {
         expect(body).toContain('has-base-image-skill-body');
         expect(body).toContain('has-composed-deck-skill-header');
         expect(body).toContain('has-image-contract');
-        expect(body).toContain('kept-deck-framework-out');
+        expect(body).toContain('kept-deck-directive-out');
         expect(body).not.toContain('missing-base-image-skill-body');
         expect(body).not.toContain('missing-composed-deck-skill-header');
         expect(body).not.toContain('missing-image-contract');
-        expect(body).not.toContain('unexpected-deck-framework');
+        expect(body).not.toContain('unexpected-deck-directive');
       },
     );
   });
@@ -3141,7 +3225,7 @@ process.stdin.on('end', () => {
     // fired on turn 1 must persist on the conversation row — recomputing it
     // from the scanned text alone lets it flip OFF again and re-sends the
     // ~17K stable block in both directions.
-    const MAYBE_DECK_HEADING = '## If this brief is a slide deck / keynote / presentation';
+    const DECK_DELIVERY_CONTRACT_HEADING = '# Deck delivery contract';
     if (!process.env.OD_DATA_DIR) {
       throw new Error('OD_DATA_DIR is required for intent-signal latch tests');
     }
@@ -3215,7 +3299,7 @@ process.stdin.on('end', () => {
             { message: `## user\n${deckBrief}`, currentPrompt: deckBrief },
             join(captureDir, 'turn1.txt'),
           );
-          expect(turn1Prompt).toContain(MAYBE_DECK_HEADING);
+          expect(turn1Prompt).toContain(DECK_DELIVERY_CONTRACT_HEADING);
 
           // Turn 2 carries no deck vocabulary and a trimmed transcript
           // (agent-switch trim / non-transcript client): the latched
@@ -3225,7 +3309,7 @@ process.stdin.on('end', () => {
             { message: `## user\n${followUp}`, currentPrompt: followUp },
             join(captureDir, 'turn2.txt'),
           );
-          expect(turn2Prompt).toContain(MAYBE_DECK_HEADING);
+          expect(turn2Prompt).toContain(DECK_DELIVERY_CONTRACT_HEADING);
 
           // The latch is persisted on the conversation row.
           const dbFile = resolve(process.env.OD_DATA_DIR as string, 'app.sqlite');

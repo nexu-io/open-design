@@ -2,8 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   FORM_ANSWERED_GENERIC_OVERRIDE,
+  FORM_ANSWERED_SYSTEM_OVERRIDE,
   composeChatUserRequestForAgent,
   createFinalizedMessageTelemetryReporter,
+  formAnsweredSystemOverrideForCurrentPrompt,
   shouldReportRunCompletedFromMessage,
   shouldReportRunCompletionTelemetryFallbackStatus,
   telemetryPromptFromRunRequest,
@@ -196,6 +198,20 @@ describe('Langfuse message finalization gate', () => {
     expect(FORM_ANSWERED_GENERIC_OVERRIDE).not.toContain('RULE 2');
     expect(FORM_ANSWERED_GENERIC_OVERRIDE).not.toContain('RULE 3');
     expect(FORM_ANSWERED_GENERIC_OVERRIDE).not.toContain('`<artifact>`');
+  });
+
+  it('selects the form-answer override without breaking an ordinary first turn', () => {
+    expect(formAnsweredSystemOverrideForCurrentPrompt('Build a customer support dashboard')).toBe('');
+    expect(
+      formAnsweredSystemOverrideForCurrentPrompt(
+        '[form answers — discovery]\n- audience: Support agents',
+      ),
+    ).toBe(FORM_ANSWERED_SYSTEM_OVERRIDE);
+    expect(
+      formAnsweredSystemOverrideForCurrentPrompt(
+        '[form answers - preferences]\n- theme: dark',
+      ),
+    ).toBe(FORM_ANSWERED_GENERIC_OVERRIDE);
   });
 
   it('FORM_ANSWERED_SYSTEM_OVERRIDE only fires through composeChatUserRequestForAgent\'s transition gate', async () => {

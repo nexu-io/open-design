@@ -61,6 +61,7 @@ describe('streamViaDaemon', () => {
       systemPrompt: '',
       signal: new AbortController().signal,
       handlers,
+      artifactDeliveryRequired: true,
     });
 
     const [, createRunInit] = fetchMock.mock.calls[0] as unknown as [RequestInfo | URL, RequestInit];
@@ -68,6 +69,7 @@ describe('streamViaDaemon', () => {
     expect(body.message).toContain('pre-consent brief');
     expect(body.message).toContain('post-consent revision');
     expect(body.currentPrompt).toBe('post-consent revision');
+    expect(body.artifactDeliveryRequired).toBe(true);
   });
 
   it('publishes an authoritative successful run with an artifact to the app gate', async () => {

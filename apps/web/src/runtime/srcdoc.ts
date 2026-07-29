@@ -14,7 +14,14 @@
  *   { type: 'od:slide-state', active: number, count: number }
  * after every navigation so the host can render its own counter / dots.
  */
-import { injectDeckStageFallback } from '@open-design/contracts/runtime/deck-stage-fallback';
+import {
+  DECK_ACTIVE_ATTRIBUTE,
+  DECK_ACTIVE_CLASSES,
+  DECK_SLIDE_SELECTOR,
+  DECK_STRUCTURED_SLIDE_SELECTOR,
+  htmlUsesCanonicalDeckFramework,
+  injectDeckStageFallback,
+} from '@open-design/contracts/runtime/deck-stage-fallback';
 
 import {
   buildManualEditBridge,
@@ -2417,9 +2424,14 @@ export const DECK_MOTION_FREEZE_CSS = `*, *::before, *::after {
   scroll-behavior: auto !important;
 }`;
 
+// `data-od-id="deck-nav"` and `.data-deck-nav` are backward-compatible
+// markers emitted by freeform decks. Keep them alongside `data-deck-nav`:
+// localized aria-labels cannot be enumerated safely, while a generic `.nav`
+// selector would hide legitimate in-slide content.
 export const DECK_CHROME_HIDE_CSS = `.deck-counter,
 .deck-hint,
 .deck-nav,
+.data-deck-nav,
 .deck-floating-nav,
 .deck-floating-reset,
 .deck-controls,
@@ -2434,6 +2446,7 @@ export const DECK_CHROME_HIDE_CSS = `.deck-counter,
 [role="navigation"][aria-label*="Slide"],
 [role="navigation"][aria-label*="slide"],
 [data-deck-nav],
+[data-od-id="deck-nav"],
 [data-slide-nav] {
   display: none !important;
   visibility: hidden !important;
@@ -2576,12 +2589,17 @@ function injectDeckBridge(
   const hasInlineSlideMessageListener =
     /addEventListener\s*\(\s*['"]message['"]/i.test(doc) && /\bod:slide\b/.test(doc);
   const hasInlineKeydownListener = !!options.artifactHasKeydownNavigation;
-  const isFrameworkDeck = /\bid\s*=\s*["']deck-stage["']/i.test(doc);
+  const isFrameworkDeck = htmlUsesCanonicalDeckFramework(doc);
   const clickNavigation = !!options.clickNavigation && !isFrameworkDeck;
   const styleFix = isFrameworkDeck
     ? ''
     : `<style data-od-deck-fix>
-.stage, .deck-stage, .deck-shell { place-content: center !important; }
+.stage, .deck-stage, .deck-shell { flex: none !important; place-content: center !important; }
+</style>`;
+  const exclusiveVisibilityStyle = `<style data-od-deck-exclusive-visibility>
+@media screen {
+  :root [data-od-deck-host-hidden] { display: none !important; }
+}
 </style>`;
   const script = `<script data-od-deck-bridge>(function(){
   var initialSlideIndex = ${safeInitialSlideIndex};
@@ -2620,15 +2638,17 @@ function injectDeckBridge(
     }, true);
   }
   window.__odDeckBridgeOwnListenerInstall = false;
+  var OD_ACTIVE_ATTRIBUTE = ${JSON.stringify(DECK_ACTIVE_ATTRIBUTE)};
+  var OD_ACTIVE_CLASSES = ${JSON.stringify(DECK_ACTIVE_CLASSES)};
   function slides(){
     // Structured selectors first so decorative .slide markup in non-deck
     // pages (icons, badges, code samples) is not counted as deck slides;
     // fall back to all .slide only when nothing structured matched, so
     // freeform decks that nest slides under an extra wrapper still report
     // the real count instead of leaving the host counter at 1 / 0.
-    var structured = document.querySelectorAll('deck-stage > .slide, .deck > .slide, .deck-stage > .slide, .deck-shell > .slide, body > .slide');
+    var structured = document.querySelectorAll(${JSON.stringify(DECK_STRUCTURED_SLIDE_SELECTOR)});
     if (structured.length) return structured;
-    return document.querySelectorAll('.slide');
+    return document.querySelectorAll(${JSON.stringify(DECK_SLIDE_SELECTOR)});
   }
   function scrollOverflow(el){
     if (!el) return 0;
@@ -2677,15 +2697,20 @@ function injectDeckBridge(
     add(document.scrollingElement);
     add(document.documentElement);
     add(document.body);
-    return targets;
-  }
-  function maxScrollLeft(){
-    var targets = scrollTargets();
-    var value = 0;
-    for (var i=0; i<targets.length; i++) {
-      value = Math.max(value, Number(targets[i].scrollLeft || 0));
+    var list = slides();
+    for (var s=0; s<list.length; s++) {
+      var node = list[s] && list[s].parentElement;
+      while (node && node !== document.body && node !== document.documentElement) {
+        if (
+          scrollOverflow(node) > 1 &&
+          isScrollableOverflowMode(overflowMode(node))
+        ) {
+          add(node);
+        }
+        node = node.parentElement;
+      }
     }
-    return value;
+    return targets;
   }
   function hasHorizontalScroll(){
     var targets = scrollTargets();
@@ -2694,21 +2719,36 @@ function injectDeckBridge(
     }
     return false;
   }
-  function isScrollDeck(){
+  function primaryScrollTarget(){
     var targets = scrollTargets();
     for (var i=0; i<targets.length; i++) {
       var candidate = targets[i];
       if (scrollOverflow(candidate) <= 1) continue;
       var mode = overflowMode(candidate);
-      if (isScrollableOverflowMode(mode)) return true;
-      if (isRootScrollContainer(candidate) && !isClippedOverflowMode(mode) && !rootScrollerClipped()) return true;
+      if (isScrollableOverflowMode(mode)) return candidate;
+      if (isRootScrollContainer(candidate) && !isClippedOverflowMode(mode) && !rootScrollerClipped()) return candidate;
     }
-    return false;
+    return null;
+  }
+  function scrollPageWidth(target){
+    return Math.max(1, Number(target && target.clientWidth) || Number(window.innerWidth) || 1);
+  }
+  function isScrollDeck(){
+    return !!primaryScrollTarget();
   }
   function findActiveByClass(list){
     for (var i=0; i<list.length; i++) {
       var cl = list[i].classList;
-      if (cl && (cl.contains('is-active') || cl.contains('active') || cl.contains('current'))) return i;
+      if (!cl) continue;
+      for (var j=0; j<OD_ACTIVE_CLASSES.length; j++) {
+        if (cl.contains(OD_ACTIVE_CLASSES[j])) return i;
+      }
+    }
+    return -1;
+  }
+  function findActiveByAttribute(list){
+    for (var i=0; i<list.length; i++) {
+      if (list[i].hasAttribute && list[i].hasAttribute(OD_ACTIVE_ATTRIBUTE)) return i;
     }
     return -1;
   }
@@ -2723,14 +2763,17 @@ function injectDeckBridge(
   }
   function activeIndex(list){
     if (!list || !list.length) return 0;
-    if (isScrollDeck()) {
-      var w = Math.max(1, window.innerWidth);
-      return Math.max(0, Math.min(list.length - 1, Math.round(maxScrollLeft() / w)));
+    var scrollTarget = primaryScrollTarget();
+    if (scrollTarget) {
+      var w = scrollPageWidth(scrollTarget);
+      return Math.max(0, Math.min(list.length - 1, Math.round(scrollLeftOf(scrollTarget) / w)));
     }
     var byTransform = activeIndexFromTransform(list);
     if (byTransform >= 0) return byTransform;
     var byClass = findActiveByClass(list);
     if (byClass >= 0) return byClass;
+    var byAttribute = findActiveByAttribute(list);
+    if (byAttribute >= 0) return byAttribute;
     var byVis = findActiveByVisibility(list);
     if (byVis >= 0) return byVis;
     return 0;
@@ -2754,10 +2797,11 @@ function injectDeckBridge(
   }
   function pad2(n){ return (n < 10 ? '0' : '') + n; }
   function activeClassName(list){
-    var names = ['active', 'is-active', 'current'];
-    for (var n=0; n<names.length; n++) {
+    for (var n=0; n<OD_ACTIVE_CLASSES.length; n++) {
       for (var i=0; i<list.length; i++) {
-        if (list[i].classList && list[i].classList.contains(names[n])) return names[n];
+        if (list[i].classList && list[i].classList.contains(OD_ACTIVE_CLASSES[n])) {
+          return OD_ACTIVE_CLASSES[n];
+        }
       }
     }
     return 'active';
@@ -2773,6 +2817,26 @@ function injectDeckBridge(
     }
     return false;
   }
+  function computedDisplayDeckMode(list){
+    var visibleCount = 0;
+    var hiddenCount = 0;
+    var visibleDisplay = '';
+    for (var i=0; i<list.length; i++) {
+      try {
+        var cs = window.getComputedStyle(list[i]);
+        if (cs.display === 'none') {
+          hiddenCount += 1;
+          continue;
+        }
+        if (cs.visibility === 'hidden' || cs.opacity === '0') continue;
+        visibleCount += 1;
+        visibleDisplay = cs.display || 'block';
+      } catch (_) {}
+    }
+    if (visibleCount !== 1 || hiddenCount < 1) return '';
+    return visibleDisplay || 'block';
+  }
+  var odComputedDisplayMode = '';
   function canSetActive(list){
     // A bare active-class marker is not enough to prove the host can drive the
     // deck by class mutation alone. Many generated decks keep that marker in
@@ -2783,10 +2847,25 @@ function injectDeckBridge(
     // actually hidden by computed visibility rules.
     var active = findActiveByClass(list);
     if (active >= 0 && hasComputedHiddenSibling(list, active)) return true;
+    // Preserve established inline/hidden-attribute protocols. setActive()
+    // already mirrors those without inventing a display mode for the target.
     for (var i=0; i<list.length; i++) {
       if (list[i].style.display === 'none') return true;
       if (list[i].style.visibility === 'hidden') return true;
       if (list[i].hasAttribute('hidden')) return true;
+    }
+    // Some generated decks have no navigation runtime or active class at all:
+    // CSS alone shows the first page (for example
+    // ".slide { display:none } .slide:first-child { display:flex }"). When
+    // exactly one page is computed-visible and siblings are display-hidden,
+    // the bridge can safely take ownership by writing equivalent inline
+    // display values. Do not apply this to ordinary all-visible ".slide" DOM.
+    if (active < 0) {
+      var computedDisplay = computedDisplayDeckMode(list);
+      if (computedDisplay) {
+        odComputedDisplayMode = computedDisplay;
+        return true;
+      }
     }
     return false;
   }
@@ -2847,6 +2926,90 @@ function injectDeckBridge(
     if (prev) prev.toggleAttribute('disabled', i <= 0);
     if (next) next.toggleAttribute('disabled', i >= count - 1);
   }
+  function cssTimeMs(value){
+    var parts = String(value || '').split(',');
+    var max = 0;
+    for (var i=0; i<parts.length; i++) {
+      var raw = parts[i].trim();
+      var parsed = parseFloat(raw);
+      if (!Number.isFinite(parsed)) continue;
+      var ms = /ms$/i.test(raw) ? parsed : parsed * 1000;
+      if (ms > max) max = ms;
+    }
+    return max;
+  }
+  function visualSettleMs(el){
+    try {
+      var cs = window.getComputedStyle(el);
+      var transitionMs = cssTimeMs(cs.transitionDuration) + cssTimeMs(cs.transitionDelay);
+      var animationMs = cssTimeMs(cs.animationDuration) + cssTimeMs(cs.animationDelay);
+      return Math.min(5000, Math.max(transitionMs, animationMs));
+    } catch (_) {
+      return 0;
+    }
+  }
+  function isPaintedSlide(el){
+    try {
+      var cs = window.getComputedStyle(el);
+      return cs.display !== 'none' &&
+        cs.visibility !== 'hidden' &&
+        Number.parseFloat(cs.opacity || '1') > 0.001;
+    } catch (_) {
+      return false;
+    }
+  }
+  function materiallyOverlaps(a, b){
+    try {
+      var ar = a.getBoundingClientRect();
+      var br = b.getBoundingClientRect();
+      var aw = Math.max(0, ar.width);
+      var ah = Math.max(0, ar.height);
+      var bw = Math.max(0, br.width);
+      var bh = Math.max(0, br.height);
+      if (aw && ah && bw && bh) {
+        var overlapW = Math.max(0, Math.min(ar.right, br.right) - Math.max(ar.left, br.left));
+        var overlapH = Math.max(0, Math.min(ar.bottom, br.bottom) - Math.max(ar.top, br.top));
+        var smallerArea = Math.min(aw * ah, bw * bh);
+        return smallerArea > 0 && (overlapW * overlapH) / smallerArea >= 0.8;
+      }
+      if (a.parentElement !== b.parentElement) return false;
+      var ap = window.getComputedStyle(a).position;
+      var bp = window.getComputedStyle(b).position;
+      return (ap === 'absolute' || ap === 'fixed') && (bp === 'absolute' || bp === 'fixed');
+    } catch (_) {
+      return false;
+    }
+  }
+  function scheduleExclusiveVisibilityRepair(list, active){
+    if (!list || !list.length || active < 0 || active >= list.length) return;
+    if (findActiveByClass(list) !== active || isScrollDeck() || activeIndexFromTransform(list) >= 0) return;
+    var target = list[active];
+    if (!target) return;
+    target.removeAttribute('data-od-deck-host-hidden');
+    for (var i=0; i<list.length; i++) {
+      if (i === active) continue;
+      var candidate = list[i];
+      if (!candidate || candidate.hasAttribute('data-od-deck-host-hidden')) continue;
+      if (!isPaintedSlide(candidate) || !materiallyOverlaps(candidate, target)) continue;
+      if (candidate.__odDeckExclusiveTimer) clearTimeout(candidate.__odDeckExclusiveTimer);
+      var delay = Math.max(visualSettleMs(candidate), visualSettleMs(target)) + 34;
+      (function(el, wait){
+        el.__odDeckExclusiveTimer = setTimeout(function(){
+          el.__odDeckExclusiveTimer = null;
+          var now = slides();
+          var nowActive = findActiveByClass(now);
+          var nowTarget = nowActive >= 0 ? now[nowActive] : null;
+          if (!nowTarget || el === nowTarget) {
+            el.removeAttribute('data-od-deck-host-hidden');
+            return;
+          }
+          if (isPaintedSlide(el) && materiallyOverlaps(el, nowTarget)) {
+            el.setAttribute('data-od-deck-host-hidden', '');
+          }
+        }, wait);
+      })(candidate, delay);
+    }
+  }
   function setActive(i){
     var list = slides();
     if (!list.length) return false;
@@ -2870,8 +3033,11 @@ function injectDeckBridge(
       usesVisibleClass = usesVisibleClass || (list[j].classList && list[j].classList.contains('visible'));
     }
     for (var k=0; k<list.length; k++) {
+      list[k].toggleAttribute(OD_ACTIVE_ATTRIBUTE, k === target);
       if (list[k].classList) {
-        list[k].classList.remove('active', 'is-active', 'current');
+        for (var n=0; n<OD_ACTIVE_CLASSES.length; n++) {
+          if (OD_ACTIVE_CLASSES[n] !== 'visible') list[k].classList.remove(OD_ACTIVE_CLASSES[n]);
+        }
         if (k === target) list[k].classList.add(activeClass);
         if (usesVisibleClass) list[k].classList.toggle('visible', k === target);
       }
@@ -2879,7 +3045,13 @@ function injectDeckBridge(
         if (k === target) list[k].removeAttribute('hidden');
         else list[k].setAttribute('hidden', '');
       }
-      if (usesInlineDisplay && list[k].style) {
+      if (odComputedDisplayMode && list[k].style) {
+        list[k].style.setProperty(
+          'display',
+          k === target ? odComputedDisplayMode : 'none',
+          'important',
+        );
+      } else if (usesInlineDisplay && list[k].style) {
         list[k].style.display = k === target ? '' : 'none';
       }
       if (usesInlineVisibility && list[k].style) {
@@ -2893,7 +3065,9 @@ function injectDeckBridge(
   function scrollGo(i){
     var list = slides();
     var next = Math.max(0, Math.min(list.length - 1, i));
-    var left = next * window.innerWidth;
+    var target = primaryScrollTarget();
+    if (!target) return;
+    var left = next * scrollPageWidth(target);
     var targets = scrollTargets();
     for (var t=0; t<targets.length; t++) {
       try {
@@ -3104,6 +3278,7 @@ function injectDeckBridge(
       var i = activeIndex(list);
       var count = list.length;
       var progressWidth = count ? ((i + 1) / count * 100) + '%' : '0';
+      scheduleExclusiveVisibilityRepair(list, i);
       updateDeckChrome(i, count);
       window.parent.postMessage({
         type: 'od:slide-state',
@@ -3246,26 +3421,186 @@ function injectDeckBridge(
     clearTimeout(window.__odReportT);
     window.__odReportT = setTimeout(report, 120);
   }, { passive: true, capture: true });
+  var odAutoFitTarget = null;
+  var odAutoFitAppliedTransform = '';
+  var odAutoFitOriginalTransform = '';
+  var odAutoFitOriginalTransformOrigin = '';
+  var odAutoFitOriginalPosition = '';
+  var odAutoFitOriginalLeft = '';
+  var odAutoFitOriginalTop = '';
+  var odAutoFitOriginalRight = '';
+  var odAutoFitOriginalBottom = '';
+  var odAutoFitOwnsMisfitTransform = false;
+  var odAutoFitDisabled = false;
+  function isGenuineScrollTrack(list){
+    var scrollTarget = primaryScrollTarget();
+    if (!scrollTarget) return false;
+    if (!isRootScrollContainer(scrollTarget)) return true;
+    var firstLeft = Number(list[0] && list[0].offsetLeft) || 0;
+    var firstTop = Number(list[0] && list[0].offsetTop) || 0;
+    for (var i=1; i<list.length; i++) {
+      var left = Number(list[i] && list[i].offsetLeft) || 0;
+      var top = Number(list[i] && list[i].offsetTop) || 0;
+      if (Math.abs(left - firstLeft) > 1 || Math.abs(top - firstTop) > 1) return true;
+    }
+    return false;
+  }
+  function hasCanvasTransform(parent){
+    try {
+      var computed = window.getComputedStyle(parent);
+      return !!(parent.style.transform || (computed.transform && computed.transform !== 'none'));
+    } catch (_) {
+      return !!(parent && parent.style && parent.style.transform);
+    }
+  }
+  function transformedCanvasNeedsFallback(parent, width, height){
+    var viewportWidth = Number(window.innerWidth) || 0;
+    var viewportHeight = Number(window.innerHeight) || 0;
+    if (!viewportWidth || !viewportHeight) return false;
+    var rect = null;
+    try { rect = parent.getBoundingClientRect(); } catch (_) {}
+    if (
+      !rect ||
+      !Number.isFinite(rect.width) ||
+      !Number.isFinite(rect.height) ||
+      rect.width <= 0 ||
+      rect.height <= 0
+    ) {
+      return false;
+    }
+    var visibleWidth = Math.max(0, Math.min(rect.right, viewportWidth) - Math.max(rect.left, 0));
+    var visibleHeight = Math.max(0, Math.min(rect.bottom, viewportHeight) - Math.max(rect.top, 0));
+    var visibleRatio = (visibleWidth * visibleHeight) / (rect.width * rect.height);
+    if (visibleRatio < 0.85) return true;
+    var scale = Math.min(viewportWidth / width, viewportHeight / height, 1);
+    var expectedWidth = width * scale;
+    var expectedHeight = height * scale;
+    return rect.width < expectedWidth * 0.8 || rect.height < expectedHeight * 0.8;
+  }
+  function fixedCanvasTarget(){
+    if (${JSON.stringify(isFrameworkDeck)}) return null;
+    var list = slides();
+    if (!list.length) return null;
+    var parent = list[0] && list[0].parentElement;
+    if (!parent || parent === document.documentElement) return null;
+    for (var i=1; i<list.length; i++) {
+      if (list[i].parentElement !== parent) return null;
+    }
+    var width = Number(parent.offsetWidth) || 0;
+    var height = Number(parent.offsetHeight) || 0;
+    if (width < 320 || height < 180) return null;
+    var ratio = width / height;
+    // This fallback is for one fixed presentation canvas, not horizontal or
+    // vertical slide tracks whose parent spans multiple pages.
+    if (ratio < 1.2 || ratio > 2.2) return null;
+    if (width <= window.innerWidth + 1 && height <= window.innerHeight + 1) return null;
+    if (isGenuineScrollTrack(list)) return null;
+    if (hasCanvasTransform(parent) && !transformedCanvasNeedsFallback(parent, width, height)) return null;
+    return parent;
+  }
+  function fitFixedCanvas(){
+    if (odAutoFitDisabled || ${JSON.stringify(isFrameworkDeck)}) return;
+    var target = odAutoFitTarget || fixedCanvasTarget();
+    if (!target) return;
+    var width = Number(target.offsetWidth) || 0;
+    var height = Number(target.offsetHeight) || 0;
+    var viewportWidth = Number(window.innerWidth) || 0;
+    var viewportHeight = Number(window.innerHeight) || 0;
+    if (!width || !height || !viewportWidth || !viewportHeight) return;
+    if (!odAutoFitTarget) {
+      odAutoFitTarget = target;
+      odAutoFitOriginalTransform = target.style.transform || '';
+      odAutoFitOriginalTransformOrigin = target.style.transformOrigin || '';
+      odAutoFitOriginalPosition = target.style.position || '';
+      odAutoFitOriginalLeft = target.style.left || '';
+      odAutoFitOriginalTop = target.style.top || '';
+      odAutoFitOriginalRight = target.style.right || '';
+      odAutoFitOriginalBottom = target.style.bottom || '';
+      odAutoFitOwnsMisfitTransform = hasCanvasTransform(target);
+    } else if (
+      odAutoFitAppliedTransform &&
+      target.style.transform !== odAutoFitAppliedTransform
+    ) {
+      if (!odAutoFitOwnsMisfitTransform || !transformedCanvasNeedsFallback(target, width, height)) {
+        // The artifact changed its own transform after our fallback ran. Yield
+        // ownership permanently so a late native fit runtime is never clobbered.
+        odAutoFitDisabled = true;
+        target.style.transformOrigin = odAutoFitOriginalTransformOrigin;
+        target.style.position = odAutoFitOriginalPosition;
+        target.style.left = odAutoFitOriginalLeft;
+        target.style.top = odAutoFitOriginalTop;
+        target.style.right = odAutoFitOriginalRight;
+        target.style.bottom = odAutoFitOriginalBottom;
+        target.removeAttribute('data-od-deck-auto-fit');
+        odAutoFitAppliedTransform = '';
+        odAutoFitTarget = null;
+        return;
+      }
+    }
+    var scale = Math.min(viewportWidth / width, viewportHeight / height, 1);
+    if (scale >= 1) {
+      target.style.transform = odAutoFitOriginalTransform;
+      target.style.transformOrigin = odAutoFitOriginalTransformOrigin;
+      target.style.position = odAutoFitOriginalPosition;
+      target.style.left = odAutoFitOriginalLeft;
+      target.style.top = odAutoFitOriginalTop;
+      target.style.right = odAutoFitOriginalRight;
+      target.style.bottom = odAutoFitOriginalBottom;
+      target.removeAttribute('data-od-deck-auto-fit');
+      odAutoFitAppliedTransform = '';
+      return;
+    }
+    var x = (viewportWidth - width * scale) / 2;
+    var y = (viewportHeight - height * scale) / 2;
+    var transform = 'translate(' + x + 'px, ' + y + 'px) scale(' + scale + ')';
+    target.style.position = 'fixed';
+    target.style.left = '0px';
+    target.style.top = '0px';
+    target.style.right = 'auto';
+    target.style.bottom = 'auto';
+    target.style.transformOrigin = 'top left';
+    target.style.transform = transform;
+    target.setAttribute('data-od-deck-auto-fit', 'true');
+    // CSSOM normalizes transform numbers (for example 0.381770833 becomes
+    // 0.381771). Track the browser-serialized value so the next resize does
+    // not mistake our own transform for a late artifact-owned fit runtime.
+    odAutoFitAppliedTransform = target.style.transform;
+  }
   // Nudge the deck's own fit/resize listener after layout settles. Fixed-canvas
   // decks (e.g. ".canvas { width: 1920px }" + "transform: scale(...)") compute
   // their scale on first run, which fires when the iframe is still 0x0 in
   // sandboxed previews — the deck's fit() then resolves to scale(0) / scale(1)
-  // and never recovers. Re-firing 'resize' lets the deck recompute, and a
-  // ResizeObserver picks up later layout settles (zoom toggle, sidebar drag).
+  // and never recovers. Re-firing 'resize' lets the deck recompute. If a
+  // CSS-only fixed canvas has no fit runtime, apply a conservative fallback
+  // after native listeners run. A ResizeObserver picks up later layout settles
+  // (zoom toggle, sidebar drag).
   function nudgeResize(){
     try { window.dispatchEvent(new Event('resize')); }
     catch (_) {}
   }
-  // Aggressively nudge during the first second so the deck catches the
-  // iframe's first non-zero size; bail out early once the iframe reports a
-  // real width. Without this loop, fixed-canvas decks render at scale(0).
+  window.addEventListener('resize', fitFixedCanvas);
+  // Nudge through the first layout-settling window so the deck catches both
+  // its first non-zero size and the host's subsequent hidden-to-active iframe
+  // swap. Without this loop, fixed-canvas decks can retain the hidden iframe's
+  // stale scale even though the active viewport is larger.
   function chaseFirstLayout(){
     var attempts = 0;
+    var lastWidth = -1;
+    var lastHeight = -1;
     function tick(){
       attempts += 1;
-      var w = window.innerWidth;
-      nudgeResize();
-      if (w > 0 && attempts >= 2) return; // one extra nudge after first non-zero
+      var width = window.innerWidth;
+      var height = window.innerHeight;
+      if (
+        attempts <= 2 ||
+        attempts === 30 ||
+        width !== lastWidth ||
+        height !== lastHeight
+      ) {
+        lastWidth = width;
+        lastHeight = height;
+        nudgeResize();
+      }
       if (attempts < 30) setTimeout(tick, 50);
     }
     tick();
@@ -3305,7 +3640,7 @@ function injectDeckBridge(
   }
   observeSlides();
 })();</script>`;
-  return injectBeforeBodyEnd(injectBeforeHeadEnd(doc, styleFix), script);
+  return injectBeforeBodyEnd(injectBeforeHeadEnd(doc, styleFix + exclusiveVisibilityStyle), script);
 }
 
 // The tweaks bridge lets the host toolbar toggle the visibility of the artifact's

@@ -297,6 +297,8 @@ export function renderDirectionIndexBlock(): string {
     '',
     'When you must pick a visual direction yourself (no active design system, no user-provided brand source), choose the best match for the brief\'s tone from this index, then run `"$OD_NODE_BIN" "$OD_BIN" tools directions --id <id>` directly — do not probe CLI help or alternate paths first, and retry only after materially changing the fix or input. Bind the printed `:root` palette + font stacks **verbatim** into the seed, honour the posture cues, and never improvise palette values from the label alone.',
     '',
+    'If the user explicitly asks to compare directions before choosing, shortlist 3–5 ids and pull each full spec in one batched shell call before emitting the `direction-cards` form. Populate every required `cards` field from those specs. If the specs cannot be pulled, fall back to a normal `radio` question rather than emitting empty direction cards.',
+    '',
   ];
   for (const d of DESIGN_DIRECTIONS) {
     lines.push(`- \`${d.id}\` — ${d.label}`);

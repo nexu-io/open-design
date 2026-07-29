@@ -69,6 +69,25 @@ function postSlide(win: ReturnType<typeof setupDeckBridge>['win'], action: 'next
 }
 
 describe('deck bridge — nested slide markup (#1530)', () => {
+  it.each([
+    ['data-screen-label', '<section data-screen-label="01" class="active">One</section><section data-screen-label="02">Two</section>'],
+    ['deck-slide', '<section class="deck-slide active">One</section><section class="deck-slide">Two</section>'],
+    ['ppt-slide', '<section class="ppt-slide active">One</section><section class="ppt-slide">Two</section>'],
+  ])('counts and navigates standalone %s slide markup', async (kind, slides) => {
+    const selector = kind === 'data-screen-label' ? '[data-screen-label]' : `.${kind}`;
+    const { win, parentPostMessage } = setupDeckBridge(`
+      <style>
+        ${selector} { display: none; }
+        ${selector}.active { display: block; }
+      </style>
+      ${slides}
+    `);
+    postSlide(win, 'next');
+    await new Promise<void>((resolve) => win.setTimeout(resolve, 350));
+
+    expect(lastSlideState(parentPostMessage)).toMatchObject({ active: 1, count: 2 });
+  });
+
   it('counts nested .slide elements through a fallback when no structured container matches', async () => {
     // 8 slides nested two levels deep — none of `.deck > .slide`,
     // `.deck-stage > .slide`, `.deck-shell > .slide`, or `body > .slide`

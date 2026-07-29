@@ -83,6 +83,28 @@ describe('DeckThumbnailRail', () => {
     expect(rebuilt).toHaveBeenCalledTimes(3);
   });
 
+  it('reveals an iframe fallback only after it reports the requested slide', () => {
+    const { container } = render(
+      <DeckThumbnailRail {...railProps({ count: 1, labelTotal: 1 })} />,
+    );
+    const iframe = container.querySelector('iframe')!;
+
+    fireEvent.load(iframe);
+    expect(container.querySelector('.deck-thumbnail-loading')).toBeTruthy();
+
+    fireEvent(window, new MessageEvent('message', {
+      source: iframe.contentWindow,
+      data: { type: 'od:slide-state', active: 1, count: 2 },
+    }));
+    expect(container.querySelector('.deck-thumbnail-loading')).toBeTruthy();
+
+    fireEvent(window, new MessageEvent('message', {
+      source: iframe.contentWindow,
+      data: { type: 'od:slide-state', active: 0, count: 2 },
+    }));
+    expect(container.querySelector('.deck-thumbnail-loading')).toBeNull();
+  });
+
   it('reports the clicked slide index and marks the active thumbnail', () => {
     const onSelect = vi.fn();
     const { container } = render(
@@ -131,6 +153,30 @@ describe('DeckThumbnailRail', () => {
     const buttons = Array.from(container.querySelectorAll('.deck-thumbnail-button'));
     fireEvent.click(buttons[2]!);
     expect(onSelect).toHaveBeenCalledWith(2);
+  });
+
+  it('uses the analyzed deck aspect ratio instead of forcing 16:9', () => {
+    const portraitDeck = `<!doctype html><html><head><style>
+      .stage { width: 1080px; height: 1920px; }
+      .slide { position: absolute; inset: 0; }
+    </style></head><body><main class="stage">
+      <section class="slide active">Portrait</section>
+    </main></body></html>`;
+    const parsedDeck = parseDeckThumbnails(portraitDeck);
+    const { container } = render(
+      <DeckThumbnailRail
+        {...railProps({
+          count: 1,
+          labelTotal: 1,
+          parsedDeck,
+          aspectRatio: `${parsedDeck.designWidth} / ${parsedDeck.designHeight}`,
+        })}
+      />,
+    );
+
+    expect(
+      (container.querySelector('.deck-thumbnail-frame') as HTMLElement).style.aspectRatio,
+    ).toBe('1080 / 1920');
   });
 
   it('removes the loading cover after a shadow thumbnail is ready', () => {
