@@ -24,17 +24,12 @@ import {
   type DerivedDesignTokenBinding,
   type DerivedDesignTokenReport,
 } from "../packages/contracts/src/design-systems/derived-token-outputs.ts";
+import { normalizeEol } from "./lib/eol.ts";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const designSystemsRoot = path.join(repoRoot, "design-systems");
 const craftRoot = path.join(repoRoot, "craft");
 const SKIPPED_DIRECTORIES = new Set(["_schema"]);
-
-/** Normalize CRLF→LF so byte-exact generated-file comparisons are EOL-agnostic
- *  (Windows core.autocrlf=true checks generated LF files out as CRLF). See #5175. */
-function normalizeEol(text: string): string {
-  return text.replace(/\r\n/g, "\n");
-}
 
 function toRepositoryPath(filePath: string): string {
   return path.relative(repoRoot, filePath).split(path.sep).join("/");

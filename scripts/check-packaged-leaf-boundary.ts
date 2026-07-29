@@ -7,6 +7,7 @@ import {
   evaluateScopeOutputs,
   SCOPE_EFFECTS,
 } from "./scopes.ts";
+import { normalizeEol } from "./lib/eol.ts";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const checkedRoots = ["apps", "packages", "tools", "e2e"] as const;
@@ -249,7 +250,11 @@ export async function checkPackagedLeafBoundary(): Promise<boolean> {
 
   const workflow = await readFile(path.join(repoRoot, ".github/workflows/ci.yml"), "utf8");
   const errors = scopeBoundaryErrors();
-  if (!workflow.includes(requiredWorkspaceUnitBlock)) {
+  // Normalize EOL on both sides: Windows `core.autocrlf=true` checks the LF
+  // workflow file out with CRLF endings, and the multi-line template literal
+  // above carries LF. A byte-exact `includes` would otherwise never match on
+  // a Windows working tree even on a pristine main. See #6192 / #5176.
+  if (!normalizeEol(workflow).includes(normalizeEol(requiredWorkspaceUnitBlock))) {
     errors.push("ci.yml no longer contains the guarded tools-dev, packaged unit, and focused E2E command block");
   }
 
