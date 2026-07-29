@@ -286,7 +286,10 @@ export function InlineModelSwitcher({
     });
     const result = await startVelaLogin(attribution, odDeviceId);
     if (!result.ok && !result.alreadyRunning) {
-      resolveAmrAuthTracking(analytics.track, 'failed', 'spawn_failed');
+      resolveAmrAuthTracking(analytics.track, 'failed', 'spawn_failed', {
+        errorStatus: result.status,
+        errorDetail: result.error,
+      });
       amrLoginStartedAtRef.current = null;
       setAmrLoginPending(false);
       setAmrLoginError(result.error || t('settings.amrLoginErrorCompact'));

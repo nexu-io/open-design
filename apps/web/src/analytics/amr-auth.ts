@@ -69,11 +69,35 @@ export function beginAmrAuthTracking(
 // capture below — and before the single-flight gate, since registration
 // is idempotent — so the success row itself carries `user_id` instead of
 // waiting for React to commit the status and App.tsx to re-register it.
+// Bound the stderr we forward. This is CLI/daemon failure text, so it is build
+// and OS strings rather than anything the user typed, but it can still carry a
+// home directory — scrub paths and cap the length before it leaves the client.
+const AMR_ERROR_DETAIL_MAX = 300;
+
+export function amrAuthErrorDetail(detail: string | null | undefined): string | undefined {
+  const raw = typeof detail === 'string' ? detail.trim() : '';
+  if (!raw) return undefined;
+  const scrubbed = raw
+    .replace(/([A-Za-z]:[\\/]Users[\\/])[^\\/\r\n]+/g, '$1<redacted>')
+    .replace(/\/(Users|home)\/[^/\s]+/g, '/$1/<redacted>');
+  return scrubbed.length > AMR_ERROR_DETAIL_MAX
+    ? `${scrubbed.slice(0, AMR_ERROR_DETAIL_MAX)}…`
+    : scrubbed;
+}
+
 export function resolveAmrAuthTracking(
   track: Track,
   result: AmrAuthResultProps['result'],
   errorCode?: string,
-  options?: { signedInUserId?: string | null },
+  options?: {
+    signedInUserId?: string | null;
+    // The daemon's HTTP status and failure text for a refused login start.
+    // `StartVelaLoginResult.error` is an optional `string`, so the call sites
+    // hand this an explicit `undefined`; the type matches `amrAuthErrorDetail`'s
+    // own input rather than forcing every caller to strip the key first.
+    errorStatus?: number | null | undefined;
+    errorDetail?: string | null | undefined;
+  },
 ): void {
   if (options && 'signedInUserId' in options) {
     setAnalyticsUserId(options.signedInUserId ?? null);
@@ -87,6 +111,13 @@ export function resolveAmrAuthTracking(
     area: 'amr_auth',
     result,
     ...(errorCode ? { error_code: errorCode } : {}),
+    ...(typeof options?.errorStatus === 'number'
+      ? { error_status: options.errorStatus }
+      : {}),
+    ...(() => {
+      const detail = amrAuthErrorDetail(options?.errorDetail);
+      return detail ? { error_detail: detail } : {};
+    })(),
     duration_ms: Math.max(0, Date.now() - attempt.startedAt),
     ...(attempt.entryId ? { entry_id: attempt.entryId } : {}),
     ...(attempt.sourceDetail ? { source_detail: attempt.sourceDetail } : {}),

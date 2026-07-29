@@ -2187,7 +2187,10 @@ function OnboardingView({
         return;
       }
       if (!loginResult.ok && !loginResult.alreadyRunning) {
-        resolveAmrAuthTracking(analytics.track, 'failed', 'spawn_failed');
+        resolveAmrAuthTracking(analytics.track, 'failed', 'spawn_failed', {
+          errorStatus: loginResult.status,
+          errorDetail: loginResult.error,
+        });
         setAmrLoginError(loginResult.error || t('settings.amrLoginErrorCompact'));
         return;
       }

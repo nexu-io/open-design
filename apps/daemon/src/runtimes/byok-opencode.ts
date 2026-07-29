@@ -39,14 +39,45 @@ export function opencodeByokModelId(model: string | null | undefined): string | 
   return `${BYOK_OPENCODE_PROVIDER_ID}/${trimmed}`;
 }
 
-export function buildOpenCodeByokProviderConfig(
+/**
+ * Which guard rejected a BYOK OpenCode config.
+ *
+ * These six rejections used to be six bare `return null`s, and the caller
+ * turned all of them into one constant error string — so `agent_config_invalid`
+ * (703 runs / 277 users in 24h, 702 of them BYOK) could not be broken down at
+ * all, in analytics OR in Langfuse, because the recorded text was a constant.
+ */
+export type ByokOpenCodeConfigGap =
+  | 'provider_missing'
+  | 'protocol_unsupported'
+  | 'api_key_required'
+  | 'model_required'
+  | 'model_default'
+  | 'base_url_required'
+  | 'model_id_invalid';
+
+export type ByokOpenCodeConfigResolution =
+  | { ok: true; config: OpenCodeByokProviderConfig }
+  | { ok: false; gap: ByokOpenCodeConfigGap };
+
+/**
+ * The error code a rejected run is failed with. Kept as a `BYOK_*` token so
+ * `isAgentConfigInvalidText` still buckets the run as `agent_config_invalid`
+ * (the dashboards track that name) while `run_finished.error_code` now carries
+ * the specific gap.
+ */
+export function byokOpenCodeGapErrorCode(gap: ByokOpenCodeConfigGap): string {
+  return `BYOK_PROVIDER_REQUIRED.${gap.toUpperCase()}`;
+}
+
+export function resolveOpenCodeByokProviderConfig(
   provider: ByokChatProviderConfig | null | undefined,
   model: string | null | undefined,
-): OpenCodeByokProviderConfig | null {
-  if (!provider || typeof provider !== 'object') return null;
+): ByokOpenCodeConfigResolution {
+  if (!provider || typeof provider !== 'object') return { ok: false, gap: 'provider_missing' };
   const protocol = provider.protocol;
   if (!Object.prototype.hasOwnProperty.call(DEFAULT_BASE_URL_BY_PROTOCOL, protocol)) {
-    return null;
+    return { ok: false, gap: 'protocol_unsupported' };
   }
   const apiKey = typeof provider.apiKey === 'string' ? provider.apiKey.trim() : '';
   const rawModel = typeof model === 'string' ? model.trim() : '';
@@ -58,12 +89,15 @@ export function buildOpenCodeByokProviderConfig(
       : defaultBaseUrl,
   );
   const needsApiKey = requiresApiKey(provider, baseUrl);
-  if (needsApiKey && !apiKey) return null;
-  if (!rawModel || rawModel.toLowerCase() === 'default') return null;
-  if (!baseUrl) return null;
+  if (needsApiKey && !apiKey) return { ok: false, gap: 'api_key_required' };
+  // `default` is its own population: the user never picked a model rather than
+  // having cleared one, which is a different fix in the UI.
+  if (!rawModel) return { ok: false, gap: 'model_required' };
+  if (rawModel.toLowerCase() === 'default') return { ok: false, gap: 'model_default' };
+  if (!baseUrl) return { ok: false, gap: 'base_url_required' };
 
   const modelId = opencodeByokModelId(rawModel);
-  if (!modelId) return null;
+  if (!modelId) return { ok: false, gap: 'model_id_invalid' };
 
   const providerEntry = buildProviderEntry(
     protocol,
@@ -90,11 +124,29 @@ export function buildOpenCodeByokProviderConfig(
   };
 
   return {
-    providerId: BYOK_OPENCODE_PROVIDER_ID,
-    modelId,
-    env: needsApiKey ? { [BYOK_OPENCODE_API_KEY_ENV]: apiKey } : {},
-    config,
+    ok: true,
+    config: {
+      providerId: BYOK_OPENCODE_PROVIDER_ID,
+      modelId,
+      env: needsApiKey ? { [BYOK_OPENCODE_API_KEY_ENV]: apiKey } : {},
+      config,
+    },
   };
+}
+
+/**
+ * Config-or-null projection of {@link resolveOpenCodeByokProviderConfig}, kept
+ * so the existing `!== null` call sites are untouched. Deliberately a pure
+ * projection rather than a second implementation — two copies of these guards
+ * would drift, and the looser copy is exactly how an invalid config reaches the
+ * daemon in the first place.
+ */
+export function buildOpenCodeByokProviderConfig(
+  provider: ByokChatProviderConfig | null | undefined,
+  model: string | null | undefined,
+): OpenCodeByokProviderConfig | null {
+  const resolution = resolveOpenCodeByokProviderConfig(provider, model);
+  return resolution.ok ? resolution.config : null;
 }
 
 function normalizeProviderBaseUrl(

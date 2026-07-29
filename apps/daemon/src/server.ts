@@ -211,6 +211,8 @@ import { preparePromptFileForAgent } from './runtimes/prompt-file.js';
 import { TerminalControlSequenceStripper } from './runtimes/terminal-control.js';
 import {
   buildOpenCodeByokProviderConfig,
+  byokOpenCodeGapErrorCode,
+  resolveOpenCodeByokProviderConfig,
   BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE,
 } from './runtimes/byok-opencode.js';
 import {
@@ -4342,17 +4344,25 @@ export async function startServer({
       );
     if (!def.bin)
       return design.runs.fail(run, 'AGENT_UNAVAILABLE', 'agent has no binary');
-    const byokOpenCodeProvider = def.id === 'byok-opencode'
-      ? buildOpenCodeByokProviderConfig(
+    const byokOpenCodeResolution = def.id === 'byok-opencode'
+      ? resolveOpenCodeByokProviderConfig(
           byokProvider,
           typeof model === 'string' ? model : null,
         )
       : null;
-    if (def.id === 'byok-opencode' && !byokOpenCodeProvider) {
+    const byokOpenCodeProvider = byokOpenCodeResolution?.ok
+      ? byokOpenCodeResolution.config
+      : null;
+    if (byokOpenCodeResolution && !byokOpenCodeResolution.ok) {
+      // Fail with the specific gap. The daemon rejects this config from six
+      // different guards, and reporting one constant for all of them is why
+      // `agent_config_invalid` — the largest engineering failure bucket — could
+      // not be broken down. The code flows to `run_finished.error_code` via
+      // deriveRunErrorCode, so the split is queryable without a contract change.
       return design.runs.fail(
         run,
-        'BYOK_PROVIDER_REQUIRED',
-        BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE,
+        byokOpenCodeGapErrorCode(byokOpenCodeResolution.gap),
+        `${BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE} (${byokOpenCodeResolution.gap})`,
       );
     }
     // Validate the checked-in `inactivityTimeoutMs` hint immediately

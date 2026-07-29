@@ -954,6 +954,21 @@ export interface AmrAuthResultProps {
   area: 'amr_auth';
   result: 'success' | 'failed' | 'cancelled' | 'timeout';
   error_code?: string;
+  // Why the attempt failed, beyond the three fixed `error_code` tokens.
+  //
+  // `spawn_failed` alone covered every way `POST /api/integrations/vela/login`
+  // can refuse — a missing vela binary, an unregistered AMR runtime def, and
+  // the upstream's own `502: Invalid IP address: undefined` all collapsed into
+  // one token, while the HTTP status and the CLI's stderr were live variables
+  // at the call site. At 615 failures / 395 devices in 24h that is the whole
+  // population, undiagnosable.
+  //
+  // `error_status` is the daemon's HTTP status (0 when the request never got a
+  // response). `error_detail` is the daemon/CLI failure text, scrubbed of file
+  // paths and length-capped at the emission site — it is process stderr, not
+  // user content.
+  error_status?: number;
+  error_detail?: string;
   duration_ms: number;
   // Attribution carried over from the amr_entry click that started this
   // attempt; absent when login was started without a recorded entry.

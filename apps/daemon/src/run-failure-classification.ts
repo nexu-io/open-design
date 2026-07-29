@@ -192,6 +192,10 @@ function isAgentConfigInvalidText(text: string): boolean {
     /\bdefault_permissions refers to undefined profile\b/i.test(text) ||
     /\bError loading config\.toml:[\s\S]*\bduplicate key\b/i.test(text) ||
     /\bBYOK OpenCode requires a provider, API key, and model for this run\b/i.test(text) ||
+    // Matches both the bare token and the gap-qualified codes
+    // (`BYOK_PROVIDER_REQUIRED.MODEL_DEFAULT`, …). The suffix is what makes the
+    // 702/day BYOK population breakable down in analytics; the bucket name must
+    // stay put so a widened code does not read as the regression disappearing.
     /\bBYOK_PROVIDER_REQUIRED\b/i.test(text) ||
     /\bEACCES: permission denied, mkdir\b[\s\S]*\.config[\\/]+opencode\b/i.test(text);
 }
