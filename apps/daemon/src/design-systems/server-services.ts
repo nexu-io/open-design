@@ -63,6 +63,7 @@ export function createDesignSystemServerServices({
   skills,
   designSystems,
   projects,
+  bindProjectToWorkspace,
 }: {
   // Only consulted by `listAllSkills` below for its optional workspace scope
   // filter — every other service in this factory stays filesystem-only. A
@@ -119,6 +120,20 @@ export function createDesignSystemServerServices({
     resolveProjectDir: (projectsDir: string, projectId: string, metadata?: JsonRecord) => string;
     isSafeId: (id: string) => boolean;
   };
+  /**
+   * Give the `ds-*` project that backs a design system's editing workspace a
+   * `workspace_projects` home, the same as any other created project.
+   *
+   * It is a real, run-hosting project — the chat/run prompt-composition path
+   * stands it up on demand (`server.ts`) and the system prompt has a dedicated
+   * `editingOwnDraftDesignSystem` branch for chatting inside it — so an unbound
+   * one is denied its first turn by `enforceWorkspaceResourceMutation` exactly
+   * like any other orphan. This factory has no Express request, so the daemon's
+   * ambient workspace is the only thing that can answer; the injected closure
+   * keeps that resolution in `server.ts` where the provider lives. Absent in
+   * tests that do not exercise the seam.
+   */
+  bindProjectToWorkspace?: (projectId: string, createdAt: number) => void;
 }) {
   /**
    * The functional-skills catalog. `workspaceId` narrows it to the
@@ -337,6 +352,7 @@ export function createDesignSystemServerServices({
           updatedAt: now,
         });
     if (!project) return null;
+    if (!existing) bindProjectToWorkspace?.(projectId, now);
 
     const files = await designSystems.listUserDesignSystemFiles(paths.USER_DESIGN_SYSTEMS_DIR, id);
     if (!files) return null;

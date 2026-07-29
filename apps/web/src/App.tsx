@@ -2394,7 +2394,19 @@ function AppInner() {
       action: PluginShareAction,
       locale?: string,
     ): Promise<PluginShareProjectOutcome> => {
-      const outcome = await createPluginShareProject(pluginId, action, locale);
+      // Best-effort, NOT `resolvedWorkspaceContextForWrite`: that helper throws
+      // while the identity read is in flight, and refusing this create would be
+      // a new block on a path that works today. Sending the context whenever it
+      // is known is a strict improvement — this call used to send none, ever —
+      // and the daemon binds a headerless create to its own signed-in workspace
+      // (`createdProjectWorkspaceHome`), so the loading window no longer
+      // produces an orphan either way.
+      const outcome = await createPluginShareProject(
+        pluginId,
+        action,
+        locale,
+        workspaceContextStateRef.current.context,
+      );
       if (!outcome.ok) return outcome;
       try {
         window.sessionStorage.setItem(

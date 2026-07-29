@@ -320,6 +320,11 @@ import { createDesignSystemServerServices } from './design-systems/server-servic
 import { prepareDesignTokenContractRebuild } from './design-systems/token-contract-rebuild.js';
 import { registerBrandRoutes } from './brand-routes.js';
 import {
+  bindCreatedProjectToWorkspace,
+  createdProjectWorkspaceHome,
+  type GetAmbientWorkspace,
+} from './collab/created-project-workspace.js';
+import {
   applyDiffReviewDecisionToCwd,
   applyPlugin,
   buildConnectorProbe,
@@ -2387,6 +2392,18 @@ export async function startServer({
       resolveProjectDir,
       isSafeId,
     },
+    // Reads `getAmbientWorkspace` (declared below, alongside the provider it
+    // reads) only when a design-system workspace project is actually created,
+    // which is always long after this factory call returns.
+    bindProjectToWorkspace: (projectId, createdAt) => {
+      bindCreatedProjectToWorkspace(
+        (input) => ensureWorkspaceProject(db, input),
+        null,
+        projectId,
+        createdAt,
+        getAmbientWorkspace,
+      );
+    },
   });
   const {
     ensureUserDesignSystemWorkspaceProject,
@@ -2968,6 +2985,15 @@ export async function startServer({
       clearLocalSelection: () => activeWorkspace.clear(),
     }),
   );
+  /**
+   * The workspace this daemon is signed in to right now — zero-network,
+   * synchronous, and never throwing. Every project-creating surface takes this
+   * so a create with no workspace headers of its own still gets a home workspace
+   * instead of becoming an unbound orphan. See `createdProjectWorkspaceHome` in
+   * `collab/created-project-workspace.ts` for why, and for why a daemon that has
+   * resolved no workspace at all still binds nothing.
+   */
+  const getAmbientWorkspace: GetAmbientWorkspace = () => workspaceContext.lastKnown?.() ?? null;
   function persistWorkspaceProjectSyncState(
     projectId: string,
     workspaceId: string | null | undefined,
@@ -5298,6 +5324,7 @@ export async function startServer({
     projectFiles: projectFileDeps,
     conversations: conversationDeps,
     auth: authDeps,
+    getAmbientWorkspace,
   });
   app.post('/api/projects/:id/figma/import', (req, res) => {
     figmaUpload.single('file')(req, res, async (err) => {
@@ -5457,6 +5484,7 @@ export async function startServer({
     projectFiles: projectFileDeps,
     validation: validationDeps,
     fetchProjectCreationWorkspaceDirectory,
+    getAmbientWorkspace,
   });
 
   // Whether the caller may mutate (edit / publish-toggle / delete) a design
@@ -5568,6 +5596,7 @@ export async function startServer({
     generationJobs: designSystemGenerationJobs,
   });
   registerBrandRoutes(app, {
+    getAmbientWorkspace,
     brandsRoot: BRANDS_DIR,
     userDesignSystemsRoot: USER_DESIGN_SYSTEMS_DIR,
     resolveDesignSystemWorkspaceId: resolveDesignSystemWorkspaceScope,
@@ -5816,6 +5845,11 @@ export async function startServer({
         const now = Date.now(); const id = randomId(); const cid = randomId(); const sourceSlug = githubRepoNameFromPluginName(sourcePlugin.id); const stagedPath = `plugin-source/${sourceSlug}`; const prompt = renderPluginSharePrompt({ action, sourcePlugin, stagedPath }); const metadata = { kind: 'prototype' }; const projectRoot = await ensureProject(PROJECTS_DIR, id, metadata); await copyPluginFolderForProjectContext(sourcePlugin.fsPath, path.join(projectRoot, 'plugin-source', sourceSlug));
         insertProject(db, { id, name: `${PLUGIN_SHARE_ACTION_LABELS[action]}: ${sourcePlugin.title || sourcePlugin.id}`, skillId: null, designSystemId: null, pendingPrompt: prompt, metadata, createdAt: now, updatedAt: now });
         insertConversation(db, { id: cid, projectId: id, title: null, createdAt: now, updatedAt: now });
+        // The share task IS a chat project — it opens with a seeded prompt the
+        // user immediately runs. `createPluginShareProject` (apps/web) mints no
+        // workspace headers at all, so this was permanently unbound, not merely
+        // racy: the very first turn 403s on the workspace gate.
+        bindCreatedProjectToWorkspace((input) => ensureWorkspaceProject(db, input), createdProjectWorkspaceHome(req, getAmbientWorkspace), id, now);
         const registry = await loadPluginRegistryView(); const connectorProbe = buildConnectorProbe(connectorService); const resolved = resolvePluginSnapshot({ db, body: { pluginId: actionPluginId, pluginInputs: { source_plugin_id: sourcePlugin.id, source_plugin_title: sourcePlugin.title || sourcePlugin.id, source_plugin_version: sourcePlugin.version, source_plugin_path: sourcePlugin.fsPath, plugin_context_path: stagedPath }, locale: typeof body.locale === 'string' ? body.locale : undefined }, projectId: id, conversationId: cid, registry, connectorProbe });
         if (resolved && !resolved.ok) return res.status(resolved.status).json(resolved.body);
         const project = getProject(db, id); if (!project) return sendApiError(res, 500, 'INTERNAL_ERROR', 'created project could not be loaded');
@@ -5941,6 +5975,7 @@ export async function startServer({
     projectStore: projectStoreDeps,
     conversations: conversationDeps,
     fetchProjectCreationWorkspaceDirectory,
+    getAmbientWorkspace,
     workspaceResources: { getWorkspaceResource, getWorkspaceResourceByResourceId },
     plugins: {
       listInstalledPlugins,
@@ -10912,6 +10947,17 @@ export async function startServer({
       createdAt: now,
       updatedAt: now,
     });
+    // Orbit creates its project from a scheduler tick, so there is no request to
+    // read workspace headers off — the daemon's own signed-in workspace is the
+    // ONLY thing that can answer, and without it every Orbit run is an
+    // unattributed Cloud run.
+    bindCreatedProjectToWorkspace(
+      (input) => ensureWorkspaceProject(db, input),
+      null,
+      projectId,
+      now,
+      getAmbientWorkspace,
+    );
     insertConversation(db, {
       id: conversationId,
       projectId,
@@ -11124,6 +11170,15 @@ export async function startServer({
         createdAt: now,
         updatedAt: now,
       });
+      // Same as Orbit above: a routine fires from cron with no request behind
+      // it, so only the daemon's ambient workspace can own the project it makes.
+      bindCreatedProjectToWorkspace(
+        (input) => ensureWorkspaceProject(db, input),
+        null,
+        projectId,
+        now,
+        getAmbientWorkspace,
+      );
       createdProjectId = projectId;
     };
     if (routine.target.mode === 'reuse') {

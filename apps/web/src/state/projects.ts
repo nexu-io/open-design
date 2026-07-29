@@ -1368,17 +1368,32 @@ export type PluginShareProjectOutcome =
       code?: string;
     };
 
+/**
+ * Start a plugin share task, which stands up a real chat project server-side.
+ *
+ * `workspaceContext` MUST be attached, for the same reason every sibling create
+ * in this file attaches it: the project this endpoint creates gets a
+ * `workspace_projects` binding from the request's own identity, and a headerless
+ * create leaves it unbound — denied its first run by the daemon's workspace gate
+ * and carrying no workspace to bill on any run that does get through. This call
+ * was the one create in this file with no `workspaceContext` parameter at all,
+ * so it was permanently unbound rather than merely racy.
+ */
 export async function createPluginShareProject(
   pluginId: string,
   action: PluginShareAction,
   locale?: string,
+  workspaceContext?: WorkspaceCollabContext | null,
 ): Promise<PluginShareProjectOutcome> {
   try {
     const resp = await fetch(
       `/api/plugins/${encodeURIComponent(pluginId)}/share-project`,
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(workspaceContext ? workspaceProjectHeaders(workspaceContext) : {}),
+        },
         body: JSON.stringify({
           action,
           ...(locale ? { locale } : {}),

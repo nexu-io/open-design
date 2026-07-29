@@ -22,6 +22,7 @@ import {
 import {
   authorizeCreatedProjectWorkspace,
   bindCreatedProjectToWorkspace,
+  type GetAmbientWorkspace,
   sendCreatedProjectWorkspaceError,
 } from '../../collab/created-project-workspace.js';
 import type { WorkspaceDirectoryFetchResult } from '../../collab/vela-workspace-context.js';
@@ -143,6 +144,12 @@ export interface RegisterPluginRoutesDeps {
     removeProjectDir(projectsRoot: string, projectId: string): Promise<unknown>;
   };
   fetchProjectCreationWorkspaceDirectory?: () => Promise<WorkspaceDirectoryFetchResult>;
+  /**
+   * The workspace this daemon is signed in to, for a plugin-created project whose
+   * request carries no workspace identity of its own. See
+   * `createdProjectWorkspaceHome` in `collab/created-project-workspace.ts`.
+   */
+  getAmbientWorkspace?: GetAmbientWorkspace;
   conversations: {
     insertConversation(db: SqliteDbLike, conversation: unknown): unknown;
   };
@@ -335,6 +342,7 @@ export function registerPluginRoutes(app: Express, deps: RegisterPluginRoutesDep
           createWorkspace.context,
           projectId,
           now,
+          deps.getAmbientWorkspace,
         );
         return createdProject;
       })();

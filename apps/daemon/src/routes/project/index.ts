@@ -92,7 +92,9 @@ import { resolveProjectWorkspaceScopeForCaller } from '../../collab/project-work
 import {
   authorizeCreatedProjectWorkspace,
   bindCreatedProjectToWorkspace,
+  createdProjectWorkspaceHome,
   sendCreatedProjectWorkspaceError,
+  type GetAmbientWorkspace,
 } from '../../collab/created-project-workspace.js';
 import type { WorkspaceDirectoryFetchResult } from '../../collab/vela-workspace-context.js';
 import { cancelRunsOwnedBy } from './cancel-owned-runs.js';
@@ -1605,6 +1607,14 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
   // them for a mutation — see `createEnforceWorkspaceProjectMutation`'s
   // docblock above for the full rationale.
   const enforceWorkspaceProjectMutation = createEnforceWorkspaceProjectMutation(ctx.workspaceContext);
+  /**
+   * The workspace this daemon is currently signed in to, for creation paths whose
+   * request carries no workspace identity of its own. Zero-network and
+   * synchronous — see `createdProjectWorkspaceHome` in
+   * `collab/created-project-workspace.ts` for why a headerless create binds here
+   * rather than becoming an orphan.
+   */
+  const getAmbientWorkspace: GetAmbientWorkspace = () => ctx.workspaceContext?.lastKnown?.() ?? null;
   function sendMissingWorkspaceContext(res: Response) {
     return sendApiError(res, 401, 'WORKSPACE_CONTEXT_REQUIRED', 'workspace context is required');
   }
@@ -2046,12 +2056,20 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
    * Called only after `enforceWorkspaceProjectMutation` already allowed the
    * duplicate/copy, which is proof `ctx` names an active, write-capable
    * member of the workspace that owns the SOURCE project — exactly the right
-   * home for the copy too. A caller with no workspace context at all (legacy
-   * pre-workspace request) leaves the copy unbound, same as before.
+   * home for the copy too.
+   *
+   * A request with no workspace identity at all falls back to the daemon's
+   * ambient workspace rather than leaving the copy unbound. That case is not
+   * hypothetical: `App.tsx`'s duplicate and design-system-copy handlers pass
+   * `workspaceContextRef.current`, a ref that drops the context's `loading`
+   * flag, so a duplicate clicked in the first seconds after a refresh — before
+   * the vela-backed identity read lands — sends zero headers and used to
+   * produce exactly the orphan `reconcileUnboundProjectBeforeMutation` below
+   * was later written to repair.
    */
   function bindDuplicateIntoRequestWorkspace(req: any, targetProjectId: string, now: number) {
-    const ctx = workspaceProjectContextFromRequest(req);
-    if (ctx === null || ctx === 'missing') return;
+    const ctx = createdProjectWorkspaceHome(req, getAmbientWorkspace);
+    if (ctx === null) return;
     ensureWorkspaceProject(db, {
       projectId: targetProjectId,
       workspaceId: ctx.workspaceId,
@@ -2378,7 +2396,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     }
   });
 
-  app.post('/api/project-locations/scan', async (_req, res) => {
+  app.post('/api/project-locations/scan', async (req, res) => {
     try {
       const locations = (await configuredProjectLocations()).filter((loc: any) => !loc.builtIn);
       const imported = [];
@@ -2425,6 +2443,18 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
               createdAt: now,
               updatedAt: now,
             });
+            // A project this scan adopts off disk is as much a created project
+            // as one typed into the composer, and needs the same home
+            // workspace. Without this the imported project is an orphan the
+            // moment it appears: denied its first run by
+            // `enforceWorkspaceResourceMutation`, and billing-less on any run
+            // that does get through.
+            bindCreatedProjectToWorkspace(
+              (input) => ensureWorkspaceProject(db, input),
+              createdProjectWorkspaceHome(req, getAmbientWorkspace),
+              manifest.id,
+              now,
+            );
             if (project) imported.push(project);
           } catch (err: any) {
             skipped.push({ path: entry.dir, reason: String(err?.message ?? err) });
@@ -3016,6 +3046,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
             createWorkspace.context,
             id,
             now,
+            getAmbientWorkspace,
           );
           return createdProject;
         })();
