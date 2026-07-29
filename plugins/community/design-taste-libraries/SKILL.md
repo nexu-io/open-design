@@ -11,7 +11,7 @@ Use this skill as a source-backed taste router before generating or critiquing U
 ## First Pass
 
 1. Read the user brief and any attached screenshot, code, brand file, or existing artifact.
-2. From the project working directory, locate the staged catalog at `.od-skills/*design-taste-libraries-*/references/LIBRARIES.md` and open the matching file. For example, run `find .od-skills -path '.od-skills/*design-taste-libraries-*/references/LIBRARIES.md' -print -quit`; use the same plugin-specific glob when shell access is unavailable. This matches both marketplace installs such as `community-design-taste-libraries-<hash>` and local source installs such as `design-taste-libraries-<hash>`. Do not assume `references/LIBRARIES.md` exists at the project root.
+2. Use the **Routing**, **Runtime Source Index**, and **Selection Matrix** in this `SKILL.md` as the authoritative runtime catalog. `references/LIBRARIES.md` is a review and provenance appendix only; do not search `.od-skills`, glob staged copies, or depend on that side file during a run.
 3. Check whether Open Design already has a matching local plugin or design system.
 4. Select one primary library and at most two secondary libraries.
 5. State the selected libraries, the local Open Design plugin ids used, and any external-only gap.
@@ -26,6 +26,28 @@ Use this skill as a source-backed taste router before generating or critiquing U
 - Motion-led or cinematic interaction: use Open Design HyperFrames/video templates first; add GSAP rules only when animation needs timeline-level code.
 - Taste presets such as Minimalist UI, Premium, or Industrial Brutalist UI: use the existing OD design systems/examples as constraints, never as a pile-on.
 - Material 3 or SwiftUI: use `design-system-material` for Material visual grammar; use external platform rules when production native behavior matters.
+
+## Runtime Source Index
+
+Use these canonical sources only when their dimension is needed:
+
+- Visual thesis and expressive web composition: [Anthropic Frontend Design](https://github.com/anthropics/claude-code/blob/main/plugins/frontend-design/skills/frontend-design/SKILL.md).
+- Anti-slop critique and structural variety: local `community-hallmark`, upstream [Hallmark](https://github.com/Nutlope/hallmark).
+- React component composition: local `design-system-shadcn`, upstream [shadcn UI skill](https://github.com/shadcn-ui/ui/blob/main/skills/shadcn/SKILL.md).
+- Dense enterprise and dashboard grammar: local `design-system-dashboard` / `example-dashboard`, upstream [Enterprise Design Skill](https://github.com/bergside/awesome-design-skills/blob/main/skills/enterprise/SKILL.md).
+- Category-first exploration: [UI UX Pro Max](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill).
+- Timeline and scroll choreography: [GSAP Skills](https://github.com/greensock/gsap-skills), after checking local `example-hyperframes`, `example-video-hyperframes`, and `example-motion-frames`.
+- Mobile product grammar: local `example-mobile-app` / `example-mobile-onboarding`, plus [Mobile App UI Design](https://github.com/ceorkm/mobile-app-ui-design) and [Expo Native UI](https://github.com/expo/skills/blob/main/plugins/expo/skills/expo-native-ui/SKILL.md).
+- Native Apple or Material behavior: [SwiftUI Skills](https://github.com/ameyalambat128/swiftui-skills) or [Material 3 Skill](https://github.com/hamen/material-3-skill); prefer local `design-system-material` for Material visual grammar.
+- Taste presets: [Minimalist](https://github.com/Leonxlnx/taste-skill/blob/main/skills/minimalist-skill/SKILL.md), [Industrial Brutalist](https://github.com/Leonxlnx/taste-skill/blob/main/skills/brutalist-skill/SKILL.md), or [Premium Frontend UI](https://github.com/github/awesome-copilot/blob/main/skills/premium-frontend-ui/SKILL.md), never all three.
+
+## Selection Matrix
+
+- Web app: Anthropic Frontend Design + `community-hallmark` + `design-system-shadcn` when React components are needed.
+- Mobile app: Mobile App UI Design + Expo Native UI + the closest local mobile example.
+- Dashboard: Enterprise Design Skill + `design-system-dashboard` or `example-dashboard` + `community-hallmark` for critique.
+- Landing page: Anthropic Frontend Design + one premium or taste preset.
+- Motion prototype: local HyperFrames/motion examples + GSAP only for timeline-level implementation.
 
 ## Design Rules
 
