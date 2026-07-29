@@ -254,6 +254,23 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     preferredModels: ['deepseek/deepseek-v3.1', 'deepseek/deepseek-r1'],
   },
   {
+    label: 'Novita AI',
+    protocol: 'openai',
+    baseUrl: 'https://api.novita.ai/v3/openai',
+    preferredModels: [
+      'deepseek/deepseek-v4-pro',
+      'deepseek/deepseek-v3.2',
+      'qwen/qwen3.5-397b-a17b',
+      'zai-org/glm-5.2',
+      'moonshotai/kimi-k3',
+      'openai/gpt-oss-120b',
+    ],
+    apiKeyConsoleLink: {
+      host: 'novita.ai',
+      url: 'https://novita.ai/settings/key-management?utm_source=open_design&utm_medium=provider_preset&utm_campaign=novita_byok',
+    },
+  },
+  {
     label: 'NVIDIA',
     protocol: 'openai',
     baseUrl: 'https://integrate.api.nvidia.com/v1',
