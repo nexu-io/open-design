@@ -414,6 +414,42 @@ describe('DTCG Format 2025.10 codec', () => {
   it('throws when asked to serialize an invalid document', () => {
     expect(() => serializeDtcgFormat2025_10({ bad: { $value: 1 } })).toThrow(/missing.*type|type cannot be determined/i);
   });
+
+  it('rejects documents carrying a $schema that identifies a different profile', () => {
+    expectInvalid(
+      {
+        $schema: 'https://design-tokens.org/schema.json',
+        token: token('number', 1),
+      },
+      'profile-mismatch',
+    );
+    expectInvalid(
+      {
+        $schema: 'https://example.com/unrelated.schema.json',
+        token: token('number', 1),
+      },
+      'profile-mismatch',
+    );
+    const result = parseDtcgFormat2025_10({
+      $schema: DTCG_FORMAT_SCHEMA_URL,
+      token: token('number', 1),
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.diagnostics.map((d) => d.code)).toContain('non-normative-schema-property');
+      expect(result.diagnostics.map((d) => d.code)).not.toContain('profile-mismatch');
+    }
+  });
+
+  it('accepts empty fontFamily arrays per normative report while flagging schema divergence', () => {
+    const result = parseDtcgFormat2025_10({ family: token('fontFamily', []) });
+    expect(result.ok, formatDiagnostics(result)).toBe(true);
+    if (result.ok) {
+      expect(result.diagnostics.map((d) => d.code)).toContain('schema-divergence');
+      expect(result.tokens.map((t) => t.value)).toEqual([[]]);
+    }
+    expectInvalid({ bad: token('fontFamily', [1, 2]) }, 'invalid-value');
+  });
 });
 
 function token(type: string, value: unknown): Record<string, unknown> {
