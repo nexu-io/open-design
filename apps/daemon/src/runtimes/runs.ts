@@ -155,26 +155,43 @@ function readDurableRunEvents(eventsLogPath) {
   }
 }
 
+// Explicit options type so importing test files (typed under
+// `tsconfig.tests.json`) do not have to rely on TypeScript inferring the
+// `@ts-nocheck`-guarded destructured defaults. Without this surface the
+// defaulted `runsLogDir = null` infers as `null | undefined` only, and a
+// test passing an absolute `string` path widens to TS2322. Keep the
+// runtime behaviour unchanged — defaults still match the destructure
+// above — but type `runsLogDir` as `string | null` so call-sites can
+// supply either shape.
+export interface ChatRunServiceOptions {
+  createSseResponse: (res: unknown, init?: unknown) => unknown;
+  createSseErrorPayload: (code: string, message: string, init?: unknown) => unknown;
+  maxEvents?: number;
+  ttlMs?: number;
+  shutdownGraceMs?: number;
+  /** Absolute directory under which per-run event JSONL logs are written
+   * (one file per run at `<runsLogDir>/<runId>/events.jsonl`). When null,
+   * event persistence is disabled and `statusBody.eventsLogPath = null` —
+   * legacy behavior. The path is surfaced through MCP get_run so an
+   * external coding agent can tail the file in its own shell during a long
+   * OD generation, instead of polling blindly and giving up. */
+  runsLogDir?: string | null;
+  /** Optional observer invoked for every emitted event BEFORE the in-memory
+   * ring buffer is truncated. The daemon uses it to fold committed side
+   * effects (tool calls, artifact writes) into a per-run accumulator that
+   * outlives buffer truncation. */
+  onEventEmitted?: ((run: unknown, record: unknown) => void) | null;
+}
+
 export function createChatRunService({
   createSseResponse,
   createSseErrorPayload,
   maxEvents = 2_000,
   ttlMs = 30 * 60 * 1000,
   shutdownGraceMs = 3_000,
-  // Absolute directory under which per-run event JSONL logs are written
-  // (one file per run at <runsLogDir>/<runId>/events.jsonl). When null,
-  // event persistence is disabled and statusBody.eventsLogPath = null —
-  // legacy behavior. The path is surfaced through MCP get_run so an
-  // external coding agent can `tail` the file in its own shell during
-  // a long OD generation, instead of polling blindly and giving up.
   runsLogDir = null,
-  // Optional observer invoked for every emitted event BEFORE the in-memory
-  // ring buffer is truncated. The daemon uses it to fold committed side
-  // effects (tool calls, artifact writes) into a per-run accumulator that
-  // outlives buffer truncation. Kept generic here: this service does not
-  // interpret event semantics, it just hands each record to the observer.
   onEventEmitted = null,
-}) {
+}: ChatRunServiceOptions) {
   const runs = new Map();
   const runIdsByClientRequestId = new Map();
   const runIdsByPluginWorkflowId = new Map();
