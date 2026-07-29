@@ -136,7 +136,7 @@ Extract:
 
 ### Minimalist UI
 
-Source: https://www.skills.sh/leonxlnx/taste-skill/minimalist-ui
+Source: https://github.com/Leonxlnx/taste-skill/blob/main/skills/minimalist-skill/SKILL.md
 
 Use for: sparse, quiet, editorial, luxury, or high-clarity interfaces.
 
@@ -149,7 +149,7 @@ Avoid when: the product needs rich discovery, play, high energy, or operational 
 
 ### Industrial Brutalist UI
 
-Source: https://www.skills.sh/leonxlnx/taste-skill/industrial-brutalist-ui
+Source: https://github.com/Leonxlnx/taste-skill/blob/main/skills/brutalist-skill/SKILL.md
 
 Use for: bold, raw, grid-heavy, tool-like, editorial, music, creative, or fashion-adjacent work.
 
@@ -162,7 +162,7 @@ Avoid when: the product needs trust, care, calm, finance, health, or broad consu
 
 ### Premium Frontend UI
 
-Source: https://www.skills.sh/github/awesome-copilot/premium-frontend-ui
+Source: https://github.com/github/awesome-copilot/blob/main/skills/premium-frontend-ui/SKILL.md
 
 Use for: elevated product sites, polished marketing surfaces, and high-end web prototypes.
 
