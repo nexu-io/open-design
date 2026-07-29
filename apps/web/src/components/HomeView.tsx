@@ -76,7 +76,11 @@ import type {
 } from '../types';
 import { inlineMentionToken, mentionTokenPresent } from '../utils/inlineMentions';
 import { smoothScrollToTop } from '../utils/smoothScrollToTop';
-import { missingRequiredInputs, pluginInputsAreValid } from '../utils/pluginRequiredInputs';
+import {
+  missingRequiredInputs,
+  pluginInputsAreValid,
+  requiredInputsAreUserFillable,
+} from '../utils/pluginRequiredInputs';
 import { HomeHero, type ExamplePromptInfo, type HomeHeroHandle } from './HomeHero';
 import { AppWashKineticGrid } from './AppWashKineticGrid';
 import { findChip, HOME_HERO_CHIPS, type HomeHeroChip } from './home-hero/chips';
@@ -2092,15 +2096,18 @@ export function HomeView({
       element: 'send_button',
     });
     let submittedActive = active;
-    if (submittedActive && !submittedActive.inputsValid) {
-      const missing = missingRequiredInputs(
-        submittedActive.inputFields,
-        submittedActive.inputs,
-      );
+    // Pre-empt the run only when the user could actually fix it here. On the
+    // seeded-brief 「使用」 path there is no field to fill, so we let the send
+    // through and report whatever the daemon decides (below).
+    if (
+      submittedActive &&
+      !submittedActive.inputsValid &&
+      requiredInputsAreUserFillable(submittedActive)
+    ) {
       setError(
-        missing.length > 0
-          ? `Fill the required plugin ${missing.length === 1 ? 'parameter' : 'parameters'} before running: ${missing.join(', ')}.`
-          : 'Fill the required plugin parameters before running.',
+        missingRequiredInputsMessage(
+          missingRequiredInputs(submittedActive.inputFields, submittedActive.inputs),
+        ),
       );
       return;
     }
@@ -2139,7 +2146,16 @@ export function HomeView({
       if (submittedActive && (!submittedActive.result || activeInputsChangedForSubmit)) {
         const result = await resolveActivePlugin(submittedActive.record, submittedPluginInputs);
         if (!result) {
-          setError(`Failed to apply ${submittedActive.record.title}. Check the plugin parameters and try again.`);
+          // The daemon is the authority on required inputs, and it rejects a
+          // missing one with MissingInputError. Name the fields it would have
+          // named instead of the generic apply failure, so the seeded-brief path
+          // (which no longer pre-empts the send) fails legibly.
+          const missing = missingRequiredInputs(submittedActive.inputFields, submittedPluginInputs);
+          setError(
+            missing.length > 0
+              ? missingRequiredInputsMessage(missing)
+              : `Failed to apply ${submittedActive.record.title}. Check the plugin parameters and try again.`,
+          );
           return;
         }
         submittedActive = { ...submittedActive, result, inputs: submittedPluginInputs };
@@ -2354,7 +2370,10 @@ export function HomeView({
         submitDisabled={
           Boolean(pendingApplyId) ||
           Boolean(pendingAuthoringChipId) ||
-          Boolean(active && !active.inputsValid)
+          // Only let missing required inputs disable Send where the user has a
+          // surface to fill them; otherwise a seeded 「使用」 brief would sit next
+          // to a permanently dead button (see requiredInputsAreUserFillable).
+          Boolean(active && !active.inputsValid && requiredInputsAreUserFillable(active))
         }
         onPickPlugin={(record, nextPrompt) => addPluginContext(record, nextPrompt)}
         onPickExamplePlugin={useExamplePlugin}
@@ -2847,6 +2866,16 @@ function estimatePluginContextItemCount(
   const atomCount = context.atoms?.length ?? 0;
   const craftCount = context.craft?.length ?? 0;
   return assetCount + mcpCount + claudePluginCount + atomCount + craftCount;
+}
+
+// Single wording for "these required plugin fields are still empty", shared by
+// the pre-submit gate and the daemon-rejection path so both read identically.
+// Wording is unchanged from the original pre-submit gate — see the PR's copy
+// follow-up note: this string is hardcoded English and has no i18n key yet.
+function missingRequiredInputsMessage(missing: string[]): string {
+  return missing.length > 0
+    ? `Fill the required plugin ${missing.length === 1 ? 'parameter' : 'parameters'} before running: ${missing.join(', ')}.`
+    : 'Fill the required plugin parameters before running.';
 }
 
 function hydratePluginInputs(
