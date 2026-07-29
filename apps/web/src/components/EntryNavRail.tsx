@@ -112,8 +112,18 @@ interface Props {
   onInvite?: () => void;
   /** Start the cloud sign-in / team flow from the local-state callout. */
   onSignInCloud?: () => void;
-  /** Extra controls pinned to the bottom-left of the rail. */
-  footerExtra?: ReactNode;
+  /**
+   * The update-ready host (`UpdaterPopup`), which renders nothing until the
+   * updater reports a downloaded, unopened installer.
+   *
+   * It rides the RIGHT EDGE OF THE ACCOUNT ROW, on the same line as the name
+   * and plan wordmark (`.entry-nav-rail__account-row`). #5517 parked it in the rail
+   * footer when the entry topbar was removed, which put the rocket on its own
+   * line underneath the account row; product read that as wrong placement.
+   * The footer stays as the fallback home for the signed-out shell, which has
+   * no account row to ride.
+   */
+  updaterSlot?: ReactNode;
   /** Optional notice shown above the footer controls. */
   footerNotice?: ReactNode;
 }
@@ -458,7 +468,7 @@ export function EntryNavRail({
   billing,
   balanceUsd,
   onOpenSettings,
-  footerExtra,
+  updaterSlot,
   footerNotice,
 }: Props) {
   const { t } = useI18n();
@@ -484,6 +494,13 @@ export function EntryNavRail({
   const displayName = context?.displayName?.trim() || '';
   const accountName = displayName || brandLabel;
   const accountInitial = accountName.charAt(0).toUpperCase() || '·';
+
+  // The updater host has exactly one home on screen at a time. The account row
+  // is the preferred one (right edge of the name + plan wordmark line); the
+  // footer only takes it when there is no cloud identity, because the whole
+  // account row is absent then. Deriving both from one expression is what keeps
+  // "exactly one" true — two independent renders would double the rocket.
+  const footerUpdaterSlot = context ? null : updaterSlot;
 
   // Billing chip: prefer the real summary metadata; fall back to the context
   // plan-tier hint when metadata has not loaded. Money is a separate,
@@ -754,27 +771,37 @@ export function EntryNavRail({
             onMouseEnter={cancelAccountClose}
             onMouseLeave={scheduleAccountClose}
           >
-            <button
-              ref={accountTriggerRef}
-              type="button"
-              className="entry-nav-rail__account-trigger"
-              onClick={() => setAccountOpen((v) => !v)}
-              onMouseEnter={openAccountMenu}
-              aria-expanded={accountOpen}
-              data-testid="entry-nav-account"
-            >
-              <span className="entry-nav-rail__account-avatar" aria-hidden>
-                {accountInitial}
-                {messageUnreadCount > 0 ? (
-                  <span className="entry-nav-rail__account-avatar-dot" data-testid="account-avatar-unread-dot" />
-                ) : null}
-              </span>
-              <span className="entry-nav-rail__account-name">{accountName}</span>
-              {/* #5517: the plan badge replaces the chevron when a tier is
-                  known — the standalone credits chip row is gone; credits
-                  live in the account menu's billing card. */}
-              {planTier ? <PlanWordmark tier={planTier} height={17} /> : <Icon name="chevron-down" size={14} />}
-            </button>
+            {/* Identity line: avatar + name + plan wordmark, with the
+                update-ready rocket parked at its right edge. The rocket is a
+                SIBLING of the trigger, never a child — nesting a button inside
+                the account button would make every rocket click also toggle
+                the account menu. */}
+            <div className="entry-nav-rail__account-row" data-testid="entry-nav-account-row">
+              <button
+                ref={accountTriggerRef}
+                type="button"
+                className="entry-nav-rail__account-trigger"
+                onClick={() => setAccountOpen((v) => !v)}
+                onMouseEnter={openAccountMenu}
+                aria-expanded={accountOpen}
+                data-testid="entry-nav-account"
+              >
+                <span className="entry-nav-rail__account-avatar" aria-hidden>
+                  {accountInitial}
+                  {messageUnreadCount > 0 ? (
+                    <span className="entry-nav-rail__account-avatar-dot" data-testid="account-avatar-unread-dot" />
+                  ) : null}
+                </span>
+                <span className="entry-nav-rail__account-name">{accountName}</span>
+                {/* #5517: the plan badge replaces the chevron when a tier is
+                    known — the standalone credits chip row is gone; credits
+                    live in the account menu's billing card. */}
+                {planTier ? <PlanWordmark tier={planTier} height={17} /> : <Icon name="chevron-down" size={14} />}
+              </button>
+              {updaterSlot ? (
+                <div className="entry-nav-rail__account-row-slot">{updaterSlot}</div>
+              ) : null}
+            </div>
             {accountOpen ? (
               <>
                 {/* No backdrop here (unlike the team menu): hover-open relies
@@ -1237,11 +1264,16 @@ export function EntryNavRail({
         )}
       </div>
       {/* Skip the footer entirely when it has nothing to show — an empty
-          shell here read as a dead white strip under the account row. */}
-      {footerNotice || footerExtra ? (
+          shell here read as a dead white strip under the account row.
+          `footerUpdaterSlot` is only ever set in the signed-out shell: with a
+          cloud identity the updater host rides the account row instead (see
+          `updaterSlot`), so the footer must not render a second host. */}
+      {footerNotice || footerUpdaterSlot ? (
         <div className="entry-nav-rail__footer">
           {footerNotice}
-          {footerExtra ? <div className="entry-rail-actions">{footerExtra}</div> : null}
+          {footerUpdaterSlot ? (
+            <div className="entry-rail-actions">{footerUpdaterSlot}</div>
+          ) : null}
         </div>
       ) : null}
       </div>

@@ -5264,6 +5264,34 @@
   margin: auto 0 0;
   padding-top: var(--spacing-10);
 }
+/* Identity line inside the account container: the account-menu trigger plus,
+   at its right edge, the update-ready rocket. Both children are globally
+   styled contracts (`.entry-nav-rail__account-trigger` brings its own `flex: 1`,
+   `.entry-updater-menu` is the updater's positioning host), so this wrapper
+   stays a global selector next to them rather than a CSS Module that would need
+   `:global()` escapes to reach either one.
+
+   The rocket used to sit on its own line in `.entry-nav-rail__footer` under
+   this row (#5517 fallout). Riding the row instead also removes the layout
+   jump: the rail no longer grows a 52px footer strip the moment an update
+   lands. */
+.entry-nav-rail__account-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+/* The updater host renders nothing until an installer is downloaded and
+   unopened, so collapse the slot when it is empty — otherwise the row's `gap`
+   would pad its right edge for a control that is not there. */
+.entry-nav-rail__account-row-slot {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+.entry-nav-rail__account-row-slot:empty {
+  display: none;
+}
 /* Unread-messages red dot riding the account avatar's top-right corner. */
 .entry-nav-rail__account-avatar-dot {
   position: absolute;
