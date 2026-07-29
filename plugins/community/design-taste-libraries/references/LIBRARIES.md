@@ -1,8 +1,8 @@
 ---
 generated_by: Codex
 generated_at: 2026-06-24T04:25:00+08:00
-last_updated: 2026-06-24T06:18:00+08:00
-canonical_source: tools/open-design/plugins/design-taste-libraries
+last_updated: 2026-07-29T09:55:00+08:00
+canonical_source: plugins/community/design-taste-libraries
 source_context: YouTube video Ot582-E61ac and linked public design skills/libraries
 ---
 
@@ -12,7 +12,7 @@ This catalog is a routing index for Open Design agents. It keeps source links an
 
 ## Open Design Coverage Audit
 
-Checked locally on 2026-06-24 with `opendesign plugin search`.
+Checked against current `main` on 2026-07-29 using GitHub code search and current plugin manifests.
 
 | Video library / need               | Local Open Design coverage                                                                                                                                        | Status  | Action                                                                                                                |
 | ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | --------------------------------------------------------------------------------------------------------------------- |
@@ -22,7 +22,7 @@ Checked locally on 2026-06-24 with `opendesign plugin search`.
 | Mobile app mockups/onboarding      | `example-mobile-app`, `example-mobile-onboarding`, `example-gamified-app`                                                                                         | partial | Built-in prototypes exist; keep external mobile rules for production UX checks.                                       |
 | Expo / React Native                | `design-system-expo`                                                                                                                                              | partial | Built-in is visual/brand-ish; keep external Expo Native UI rules for safe area, haptics, layout, and native behavior. |
 | HyperFrames / video motion         | `example-hyperframes`, `example-video-hyperframes`, `example-motion-frames`, many `video-template-frame-*` entries                                                | covered | Do not create another HyperFrames plugin; route to built-ins.                                                         |
-| GSAP motion                        | `example-cinematic-landing-page`                                                                                                                                  | partial | Built-in example exists; keep external GSAP rules only for timeline/ScrollTrigger/React implementation discipline.    |
+| GSAP motion                        | `example-hyperframes`, `example-video-hyperframes`, `example-motion-frames`                                                                                        | partial | Built-in motion examples exist; keep external GSAP rules only for timeline/ScrollTrigger/React implementation detail. |
 | Minimalist taste                   | `design-system-minimal`, `design-system-contemporary`, `design-system-sleek`, `example-web-prototype-taste-editorial`, `example-html-ppt-taste-editorial`         | covered | Do not create a minimalist library plugin.                                                                            |
 | Industrial/brutalist taste         | `design-system-brutalism`, `design-system-neobrutalism`, `example-web-prototype-taste-brutalist`, `example-html-ppt-taste-brutalist`                              | covered | Do not create a brutalist library plugin.                                                                             |
 | Premium frontend                   | `design-system-premium`, `design-system-apple`, `design-system-luxury`, many premium examples                                                                     | covered | Do not create a premium frontend plugin.                                                                              |
@@ -231,7 +231,9 @@ Search/install these in Open Design before hand-writing equivalents:
 - `example-dashboard`
 - `example-mobile-app`
 - `example-mobile-onboarding`
-- `example-cinematic-landing-page`
+- `example-hyperframes`
+- `example-video-hyperframes`
+- `example-motion-frames`
 
 ## Selection Matrix
 
