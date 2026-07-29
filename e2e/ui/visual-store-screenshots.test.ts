@@ -36,7 +36,11 @@ test('[P2] captures default, platforms, review, editor, history, and no-provider
   await page.getByRole('button', { name: 'Close editor' }).click();
 
   await page.getByRole('button', { name: 'Version history' }).click();
-  await expect(page.getByRole('heading', { name: 'Version history' })).toBeVisible();
+  const history = page.getByRole('region', { name: 'Version history' });
+  await expect(history.getByRole('heading', { name: 'Version history' })).toBeVisible();
+  await history.locator('time').evaluateAll((nodes) => {
+    for (const node of nodes) (node as HTMLElement).style.visibility = 'hidden';
+  });
   await expect(page).toHaveScreenshot('store-screenshot-history.png', { animations: 'disabled' });
 });
 
