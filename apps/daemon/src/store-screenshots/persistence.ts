@@ -642,6 +642,16 @@ export function createStoreScreenshotPersistence(
   return {
     create,
     read,
+    readIdentity: async (projectId: string): Promise<{
+      documentId: string;
+      version: number;
+    }> => {
+      const indexed = requireDocumentIndex(projectId);
+      return {
+        documentId: indexed.documentId,
+        version: indexed.currentVersion,
+      };
+    },
     save,
     restore: async (
       projectId: string,

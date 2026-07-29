@@ -1828,7 +1828,15 @@ const figmaUpload = multer({
 
 const storeScreenshotUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 20 * 1024 * 1024, files: 1 },
+  limits: {
+    fileSize: 20 * 1024 * 1024,
+    files: 1,
+    fields: 0,
+    // Busboy emits partsLimit when the counter reaches the configured
+    // threshold. A threshold of 2 therefore permits exactly one file part
+    // and rejects the second part.
+    parts: 2,
+  },
 });
 
 const pluginShareTaskStore = createPluginShareTaskStore({

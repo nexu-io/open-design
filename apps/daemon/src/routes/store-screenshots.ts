@@ -174,9 +174,13 @@ export function registerStoreScreenshotRoutes(
         sendApiError(res, 400, 'BAD_REQUEST', 'file is required');
         return;
       }
+      const multipartFields = req.body && typeof req.body === 'object'
+        ? req.body as Record<string, unknown>
+        : {};
       const input = parseBody(
         UploadStoreScreenshotAssetRequestSchema,
         {
+          ...multipartFields,
           fileName: req.file.originalname,
           mime: req.file.mimetype,
           byteLength: req.file.buffer.byteLength,

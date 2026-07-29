@@ -37,21 +37,32 @@ export class StoreScreenshotServiceError extends Error {
   }
 }
 
+export interface StoreScreenshotDocumentIdentity {
+  projectId: string;
+  documentId: string;
+  documentVersion: number;
+}
+
 export interface StoreScreenshotGenerateOperations {
   start(
-    projectId: string,
+    identity: StoreScreenshotDocumentIdentity,
     request: GenerateStoreScreenshotPlanRequest,
   ): Promise<StoreScreenshotJob>;
 }
 
 export interface StoreScreenshotJobOperations {
   startExport(
-    projectId: string,
+    identity: StoreScreenshotDocumentIdentity,
     request: ExportStoreScreenshotRequest,
   ): Promise<StoreScreenshotJob>;
-  get(projectId: string, jobId: string): Promise<StoreScreenshotJob | null>;
+  get(
+    projectId: string,
+    documentId: string,
+    jobId: string,
+  ): Promise<StoreScreenshotJob | null>;
   resolveDownload(
     projectId: string,
+    documentId: string,
     jobId: string,
   ): Promise<{ relativePath: string } | null>;
 }
@@ -170,6 +181,18 @@ function assertControlledDownloadPath(relativePath: string): void {
   }
 }
 
+async function readDocumentIdentity(
+  persistence: ReturnType<typeof createStoreScreenshotPersistence>,
+  projectId: string,
+): Promise<StoreScreenshotDocumentIdentity> {
+  const document = await persistence.readIdentity(projectId);
+  return {
+    projectId,
+    documentId: document.documentId,
+    documentVersion: document.version,
+  };
+}
+
 export function createStoreScreenshotService(deps: CreateStoreScreenshotServiceDeps) {
   return {
     create: async (
@@ -242,36 +265,39 @@ export function createStoreScreenshotService(deps: CreateStoreScreenshotServiceD
       projectId: string,
       request: GenerateStoreScreenshotPlanRequest,
     ): Promise<StoreScreenshotJob> => {
+      const identity = await readDocumentIdentity(deps.persistence, projectId);
       if (!deps.generate) {
         throw new StoreScreenshotServiceError(
           'NOT_IMPLEMENTED',
           'Store screenshot generation is not implemented',
         );
       }
-      return deps.generate.start(projectId, request);
+      return deps.generate.start(identity, request);
     },
 
     export: async (
       projectId: string,
       request: ExportStoreScreenshotRequest,
     ): Promise<StoreScreenshotJob> => {
+      const identity = await readDocumentIdentity(deps.persistence, projectId);
       if (!deps.jobs) {
         throw new StoreScreenshotServiceError(
           'NOT_IMPLEMENTED',
           'Store screenshot export is not implemented',
         );
       }
-      return deps.jobs.startExport(projectId, request);
+      return deps.jobs.startExport(identity, request);
     },
 
     getJob: async (projectId: string, jobId: string): Promise<StoreScreenshotJob> => {
+      const identity = await readDocumentIdentity(deps.persistence, projectId);
       if (!deps.jobs) {
         throw new StoreScreenshotServiceError(
           'NOT_IMPLEMENTED',
           'Store screenshot jobs are not implemented',
         );
       }
-      const job = await deps.jobs.get(projectId, jobId);
+      const job = await deps.jobs.get(projectId, identity.documentId, jobId);
       if (!job) {
         throw new StoreScreenshotServiceError('JOB_NOT_FOUND', 'Store screenshot job not found');
       }
@@ -282,13 +308,14 @@ export function createStoreScreenshotService(deps: CreateStoreScreenshotServiceD
       projectId: string,
       jobId: string,
     ): Promise<{ body: Buffer; fileName: string }> => {
+      const identity = await readDocumentIdentity(deps.persistence, projectId);
       if (!deps.jobs) {
         throw new StoreScreenshotServiceError(
           'NOT_IMPLEMENTED',
           'Store screenshot downloads are not implemented',
         );
       }
-      const download = await deps.jobs.resolveDownload(projectId, jobId);
+      const download = await deps.jobs.resolveDownload(projectId, identity.documentId, jobId);
       if (!download) {
         throw new StoreScreenshotServiceError('JOB_NOT_FOUND', 'Store screenshot job not found');
       }

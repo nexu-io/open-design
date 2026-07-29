@@ -8,7 +8,7 @@ import type { AddressInfo } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import sharp from 'sharp';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { sendApiError } from '../src/http/api-errors.js';
 import { requireLocalDaemonRequest } from '../src/http/local-daemon-request.js';
@@ -32,6 +32,7 @@ import { createStoreScreenshotAssetStore } from '../src/store-screenshots/assets
 import { LocalProjectStorage } from '../src/storage/project-storage.js';
 
 const PROJECT_ID = 'project-1';
+const PROJECT_B_ID = 'project-2';
 
 const createBody = {
   product: {
@@ -58,48 +59,97 @@ describe('store screenshot routes', () => {
   let baseUrl: string;
   let inventory: ReturnType<typeof getRouteRegistrationInventory>;
   let downloadPath: string | undefined;
+  let projectStorage: LocalProjectStorage;
+  let assetSave: ReturnType<typeof vi.fn>;
+  let uploadAsset: ReturnType<typeof vi.fn>;
+  let generateStart: ReturnType<typeof vi.fn>;
+  let exportStart: ReturnType<typeof vi.fn>;
+  let getJob: ReturnType<typeof vi.fn>;
+  let resolveDownload: ReturnType<typeof vi.fn>;
+  let ownedJob: {
+    projectId: string;
+    documentId: string;
+    jobId: string;
+    relativePath: string;
+  } | undefined;
 
   beforeEach(async () => {
     db = new Database(':memory:');
     db.pragma('foreign_keys = ON');
     migrateStoreScreenshots(db);
     root = await mkdtemp(path.join(os.tmpdir(), 'od-store-screenshot-routes-'));
-    const projectStorage = new LocalProjectStorage(root);
+    projectStorage = new LocalProjectStorage(root);
     const persistence = createStoreScreenshotPersistence(db, projectStorage, {
       now: () => 1_700_000_000_000,
     });
     const assets = createStoreScreenshotAssetStore(db, projectStorage, {
       now: () => 1_700_000_000_000,
     });
+    assetSave = vi.spyOn(assets, 'save');
     downloadPath = undefined;
+    ownedJob = undefined;
+    generateStart = vi.fn(async () => {
+      throw new StoreScreenshotServiceError(
+        'NOT_IMPLEMENTED',
+        'Store screenshot generation is not implemented',
+      );
+    });
+    exportStart = vi.fn(async () => {
+      throw new StoreScreenshotServiceError(
+        'NOT_IMPLEMENTED',
+        'Store screenshot export is not implemented',
+      );
+    });
+    getJob = vi.fn(async (...args: unknown[]) => {
+      if (!ownedJob) {
+        throw new StoreScreenshotServiceError(
+          'NOT_IMPLEMENTED',
+          'Store screenshot jobs are not implemented',
+        );
+      }
+      const [projectId, documentId, jobId] = args;
+      if (
+        projectId !== ownedJob.projectId
+        || documentId !== ownedJob.documentId
+        || jobId !== ownedJob.jobId
+      ) return null;
+      return {
+        id: ownedJob.jobId,
+        type: 'export' as const,
+        status: 'done' as const,
+        progress: { completed: 1, total: 1 },
+      };
+    });
+    resolveDownload = vi.fn(async (...args: unknown[]) => {
+      if (downloadPath) return { relativePath: downloadPath };
+      if (!ownedJob) {
+        throw new StoreScreenshotServiceError(
+          'NOT_IMPLEMENTED',
+          'Store screenshot downloads are not implemented',
+        );
+      }
+      const [projectId, documentId, jobId] = args;
+      if (
+        projectId !== ownedJob.projectId
+        || documentId !== ownedJob.documentId
+        || jobId !== ownedJob.jobId
+      ) return null;
+      return { relativePath: ownedJob.relativePath };
+    });
     let id = 0;
     const storeScreenshots = createStoreScreenshotService({
       persistence,
       assets,
       projectStorage,
       createId: () => `document-${++id}`,
+      generate: { start: generateStart },
       jobs: {
-        startExport: async () => {
-          throw new StoreScreenshotServiceError(
-            'NOT_IMPLEMENTED',
-            'Store screenshot export is not implemented',
-          );
-        },
-        get: async () => {
-          throw new StoreScreenshotServiceError(
-            'NOT_IMPLEMENTED',
-            'Store screenshot jobs are not implemented',
-          );
-        },
-        resolveDownload: async () => {
-          if (downloadPath) return { relativePath: downloadPath };
-          throw new StoreScreenshotServiceError(
-            'NOT_IMPLEMENTED',
-            'Store screenshot downloads are not implemented',
-          );
-        },
+        startExport: exportStart,
+        get: getJob,
+        resolveDownload,
       },
     });
+    uploadAsset = vi.spyOn(storeScreenshots, 'uploadAsset');
     const app = express();
     installRouteRegistrationGuard(app);
     app.use(express.json());
@@ -108,22 +158,35 @@ describe('store screenshot routes', () => {
       http: {
         requireLocalDaemonRequest,
         sendApiError,
-        sendMulterError: (res: Response, error: unknown) => sendApiError(
-          res,
-          400,
-          'BAD_REQUEST',
-          error instanceof Error ? error.message : String(error),
-        ),
+        sendMulterError: (res: Response, error: unknown) => {
+          const legacyCode = error instanceof multer.MulterError
+            ? error.code
+            : 'UPLOAD_ERROR';
+          return sendApiError(
+            res,
+            400,
+            'BAD_REQUEST',
+            error instanceof Error ? error.message : String(error),
+            { details: { legacyCode } },
+          );
+        },
       },
       projectStore: {
         getProject: (_db: Database.Database, projectId: string) => (
-          projectId === PROJECT_ID ? { id: PROJECT_ID } : null
+          projectId === PROJECT_ID || projectId === PROJECT_B_ID
+            ? { id: projectId }
+            : null
         ),
       },
       uploads: {
         storeScreenshotUpload: multer({
           storage: multer.memoryStorage(),
-          limits: { fileSize: 20 * 1024 * 1024, files: 1 },
+          limits: {
+            fileSize: 20 * 1024 * 1024,
+            files: 1,
+            fields: 0,
+            parts: 2,
+          },
         }),
       },
       storeScreenshots,
@@ -306,6 +369,51 @@ describe('store screenshot routes', () => {
     });
   });
 
+  it('rejects multipart fields and excess parts before Service or asset storage', async () => {
+    const basePath = `/api/projects/${PROJECT_ID}/store-screenshots`;
+    expect((await json('POST', basePath, createBody)).status).toBe(201);
+    const png = await sharp({
+      create: {
+        width: 1,
+        height: 1,
+        channels: 3,
+        background: '#ffffff',
+      },
+    }).png().toBuffer();
+
+    const fieldOnly = new FormData();
+    fieldOnly.append('caption', 'must not pass');
+    const fieldResponse = await fetch(`${baseUrl}${basePath}/assets`, {
+      method: 'POST',
+      body: fieldOnly,
+    });
+    expect(fieldResponse.status).toBe(400);
+    expect(await fieldResponse.json()).toMatchObject({
+      error: {
+        code: 'BAD_REQUEST',
+        details: { legacyCode: 'LIMIT_FIELD_COUNT' },
+      },
+    });
+
+    const excessParts = new FormData();
+    excessParts.append('file', new Blob([png], { type: 'image/png' }), 'screen.png');
+    excessParts.append('caption', 'must not pass');
+    const partsResponse = await fetch(`${baseUrl}${basePath}/assets`, {
+      method: 'POST',
+      body: excessParts,
+    });
+    expect(partsResponse.status).toBe(400);
+    expect(await partsResponse.json()).toMatchObject({
+      error: {
+        code: 'BAD_REQUEST',
+        details: { legacyCode: 'LIMIT_FIELD_COUNT' },
+      },
+    });
+
+    expect(uploadAsset).not.toHaveBeenCalled();
+    expect(assetSave).not.toHaveBeenCalled();
+  });
+
   it('returns structured project, validation, document, and conflict errors', async () => {
     const missingProject = await json(
       'POST',
@@ -373,6 +481,84 @@ describe('store screenshot routes', () => {
       expect(response.status).toBe(501);
       expect(response.body.error).toMatchObject({ code: 'NOT_IMPLEMENTED' });
     }
+  });
+
+  it('does not call future dependencies when the screenshot document is missing', async () => {
+    const basePath = `/api/projects/${PROJECT_ID}/store-screenshots`;
+
+    for (const [method, pathname, body] of [
+      ['POST', `${basePath}/generate`, {}],
+      ['POST', `${basePath}/export`, { platforms: ['appStore'] }],
+      ['GET', `${basePath}/jobs/job-1`, undefined],
+      ['GET', `${basePath}/jobs/job-1/download`, undefined],
+    ] as const) {
+      const response = await json(method, pathname, body);
+      expect(response.status).toBe(404);
+      expect(response.body.error.code).toBe('DOCUMENT_NOT_FOUND');
+    }
+
+    expect(generateStart).not.toHaveBeenCalled();
+    expect(exportStart).not.toHaveBeenCalled();
+    expect(getJob).not.toHaveBeenCalled();
+    expect(resolveDownload).not.toHaveBeenCalled();
+  });
+
+  it('passes authoritative document identity and version to generate and export', async () => {
+    const basePath = `/api/projects/${PROJECT_ID}/store-screenshots`;
+    expect((await json('POST', basePath, createBody)).status).toBe(201);
+    const queuedJob = {
+      id: 'job-queued',
+      type: 'generate' as const,
+      status: 'queued' as const,
+      progress: { completed: 0, total: 1 },
+    };
+    generateStart.mockResolvedValueOnce(queuedJob);
+    exportStart.mockResolvedValueOnce({ ...queuedJob, type: 'export' as const });
+
+    expect((await json('POST', `${basePath}/generate`, {})).status).toBe(202);
+    expect((await json('POST', `${basePath}/export`, {
+      platforms: ['appStore'],
+    })).status).toBe(202);
+
+    const identity = {
+      projectId: PROJECT_ID,
+      documentId: 'document-1',
+      documentVersion: 1,
+    };
+    expect(generateStart).toHaveBeenCalledWith(identity, {});
+    expect(exportStart).toHaveBeenCalledWith(identity, {
+      platforms: ['appStore'],
+    });
+  });
+
+  it('does not expose another project job or read its download', async () => {
+    const projectABase = `/api/projects/${PROJECT_ID}/store-screenshots`;
+    const projectBBase = `/api/projects/${PROJECT_B_ID}/store-screenshots`;
+    expect((await json('POST', projectABase, createBody)).status).toBe(201);
+    expect((await json('POST', projectBBase, createBody)).status).toBe(201);
+    ownedJob = {
+      projectId: PROJECT_B_ID,
+      documentId: 'document-2',
+      jobId: 'job-b',
+      relativePath: 'store-screenshots/exports/project-b.zip',
+    };
+    const readFile = vi.spyOn(projectStorage, 'readFile');
+
+    const jobResponse = await json('GET', `${projectABase}/jobs/job-b`);
+    expect(jobResponse.status).toBe(404);
+    expect(jobResponse.body.error.code).toBe('JOB_NOT_FOUND');
+
+    const downloadResponse = await json('GET', `${projectABase}/jobs/job-b/download`);
+    expect(downloadResponse.status).toBe(404);
+    expect(downloadResponse.body.error.code).toBe('JOB_NOT_FOUND');
+
+    expect(getJob).toHaveBeenCalledWith(PROJECT_ID, 'document-1', 'job-b');
+    expect(resolveDownload).toHaveBeenCalledWith(PROJECT_ID, 'document-1', 'job-b');
+    expect(readFile).not.toHaveBeenCalledWith(
+      PROJECT_ID,
+      ownedJob.relativePath,
+    );
+    expect(readFile).not.toHaveBeenCalled();
   });
 
   it('returns platform validation issues without turning them into transport errors', async () => {
