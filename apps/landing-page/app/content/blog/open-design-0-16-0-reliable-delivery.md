@@ -57,7 +57,7 @@ i18n:
       </ul>
 
       <h2>已经补上：0.16.1</h2>
-      <p>两天之后，<a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.16.1">0.16.1</a> 带来了一处针对设计预览的集中修复：<strong>运行状态不再盖住你生成的作品。</strong>构建中、已完成、交付恢复这几种状态都留在聊天里——那里依然是你跟进进度或重试失败交付的地方——画布则完全归你。今天要下载的话，就装 0.16.1。</p>
+      <p>第二天，<a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.16.1">0.16.1</a> 带来了一处针对设计预览的集中修复：<strong>运行状态不再盖住你生成的作品。</strong>构建中、已完成、交付恢复这几种状态都留在聊天里——那里依然是你跟进进度或重试失败交付的地方——画布则完全归你。今天要下载的话，就装 0.16.1。</p>
 
       <h2>今天就能用它做什么</h2>
       <table>
@@ -134,7 +134,7 @@ i18n:
       </ul>
 
       <h2>すでに修正済み: 0.16.1</h2>
-      <p>2 日後、<a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.16.1">0.16.1</a> がデザインプレビューに絞った修正を 1 つ届けました。<strong>実行ステータスが生成物を覆わなくなりました。</strong>ビルド中、完了、配信リカバリーの各ステータスはチャットに残り — 進捗の追跡や失敗した配信の再試行はそこが引き続き定位置です — キャンバスはあなたのものになります。今日ダウンロードするなら 0.16.1 を。</p>
+      <p>翌日、<a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.16.1">0.16.1</a> がデザインプレビューに絞った修正を 1 つ届けました。<strong>実行ステータスが生成物を覆わなくなりました。</strong>ビルド中、完了、配信リカバリーの各ステータスはチャットに残り — 進捗の追跡や失敗した配信の再試行はそこが引き続き定位置です — キャンバスはあなたのものになります。今日ダウンロードするなら 0.16.1 を。</p>
 
       <h2>今日それで何ができるか</h2>
       <table>
@@ -211,7 +211,7 @@ i18n:
       </ul>
 
       <h2>이미 고쳐졌습니다: 0.16.1</h2>
-      <p>이틀 뒤 <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.16.1">0.16.1</a>이 디자인 미리보기에 집중한 수정 하나를 내놓았습니다. <strong>실행 상태가 생성된 작업물을 가리지 않습니다.</strong> 빌드 중, 완료, 전달 복구 상태는 채팅에 머물고 — 진행 상황을 따라가거나 실패한 전달을 다시 시도하는 곳은 여전히 채팅입니다 — 캔버스는 온전히 여러분의 것이 됩니다. 오늘 내려받는다면 0.16.1을 받으세요.</p>
+      <p>다음 날 <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.16.1">0.16.1</a>이 디자인 미리보기에 집중한 수정 하나를 내놓았습니다. <strong>실행 상태가 생성된 작업물을 가리지 않습니다.</strong> 빌드 중, 완료, 전달 복구 상태는 채팅에 머물고 — 진행 상황을 따라가거나 실패한 전달을 다시 시도하는 곳은 여전히 채팅입니다 — 캔버스는 온전히 여러분의 것이 됩니다. 오늘 내려받는다면 0.16.1을 받으세요.</p>
 
       <h2>오늘 무엇을 할 수 있나</h2>
       <table>
@@ -288,7 +288,7 @@ i18n:
       </ul>
 
       <h2>Schon behoben: 0.16.1</h2>
-      <p>Zwei Tage später brachte <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.16.1">0.16.1</a> eine gezielte Korrektur für die Design-Vorschau: <strong>Der Laufstatus verdeckt Ihre erzeugte Arbeit nicht mehr.</strong> Build-, Abschluss- und Delivery-Recovery-Status bleiben im Chat — dort verfolgen Sie weiterhin den Fortschritt oder starten eine fehlgeschlagene Auslieferung neu — und die Canvas gehört Ihnen. Wer heute herunterlädt, nimmt 0.16.1.</p>
+      <p>Am Tag darauf brachte <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.16.1">0.16.1</a> eine gezielte Korrektur für die Design-Vorschau: <strong>Der Laufstatus verdeckt Ihre erzeugte Arbeit nicht mehr.</strong> Build-, Abschluss- und Delivery-Recovery-Status bleiben im Chat — dort verfolgen Sie weiterhin den Fortschritt oder starten eine fehlgeschlagene Auslieferung neu — und die Canvas gehört Ihnen. Wer heute herunterlädt, nimmt 0.16.1.</p>
 
       <h2>Was Sie heute damit tun können</h2>
       <table>
@@ -365,7 +365,7 @@ i18n:
       </ul>
 
       <h2>Déjà corrigé : 0.16.1</h2>
-      <p>Deux jours plus tard, <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.16.1">0.16.1</a> a livré un correctif ciblé pour l'aperçu de design : <strong>le statut d'exécution ne recouvre plus votre travail généré.</strong> Les statuts de construction, d'achèvement et de reprise de livraison restent dans le chat — qui demeure l'endroit pour suivre l'avancement ou relancer une livraison échouée — et le canvas reste le vôtre. Si vous téléchargez aujourd'hui, prenez 0.16.1.</p>
+      <p>Le lendemain, <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.16.1">0.16.1</a> a livré un correctif ciblé pour l'aperçu de design : <strong>le statut d'exécution ne recouvre plus votre travail généré.</strong> Les statuts de construction, d'achèvement et de reprise de livraison restent dans le chat — qui demeure l'endroit pour suivre l'avancement ou relancer une livraison échouée — et le canvas reste le vôtre. Si vous téléchargez aujourd'hui, prenez 0.16.1.</p>
 
       <h2>Ce que vous pouvez en faire aujourd'hui</h2>
       <table>
@@ -442,7 +442,7 @@ i18n:
       </ul>
 
       <h2>Уже исправлено: 0.16.1</h2>
-      <p>Через два дня <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.16.1">0.16.1</a> принёс одно точечное исправление для превью дизайна: <strong>статус выполнения больше не закрывает созданную работу.</strong> Статусы сборки, завершения и восстановления доставки остаются в чате — там же вы по-прежнему следите за прогрессом и повторяете неудавшуюся доставку, — а холст остаётся вашим. Если скачиваете сегодня, берите 0.16.1.</p>
+      <p>На следующий день <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.16.1">0.16.1</a> принёс одно точечное исправление для превью дизайна: <strong>статус выполнения больше не закрывает созданную работу.</strong> Статусы сборки, завершения и восстановления доставки остаются в чате — там же вы по-прежнему следите за прогрессом и повторяете неудавшуюся доставку, — а холст остаётся вашим. Если скачиваете сегодня, берите 0.16.1.</p>
 
       <h2>Что с этим делать сегодня</h2>
       <table>
@@ -519,7 +519,7 @@ i18n:
       </ul>
 
       <h2>Ya parcheado: 0.16.1</h2>
-      <p>Dos días después, <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.16.1">0.16.1</a> trajo una corrección concreta para la vista previa de diseño: <strong>el estado de ejecución ya no tapa tu trabajo generado.</strong> Los estados de construcción, finalización y recuperación de entrega se quedan en el chat — que sigue siendo el lugar para seguir el progreso o reintentar una entrega fallida — y el lienzo vuelve a ser tuyo. Si descargas hoy, coge la 0.16.1.</p>
+      <p>Al día siguiente, <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.16.1">0.16.1</a> trajo una corrección concreta para la vista previa de diseño: <strong>el estado de ejecución ya no tapa tu trabajo generado.</strong> Los estados de construcción, finalización y recuperación de entrega se quedan en el chat — que sigue siendo el lugar para seguir el progreso o reintentar una entrega fallida — y el lienzo vuelve a ser tuyo. Si descargas hoy, coge la 0.16.1.</p>
 
       <h2>Qué hacer con ello hoy</h2>
       <table>
@@ -596,7 +596,7 @@ i18n:
       </ul>
 
       <h2>Já corrigido: 0.16.1</h2>
-      <p>Dois dias depois, o <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.16.1">0.16.1</a> trouxe uma correção focada para a prévia de design: <strong>o status de execução não cobre mais o trabalho gerado.</strong> Os status de construção, conclusão e recuperação de entrega ficam no Chat — que segue sendo o lugar de acompanhar o progresso ou tentar de novo uma entrega que falhou — e o canvas volta a ser seu. Se for baixar hoje, pegue o 0.16.1.</p>
+      <p>No dia seguinte, o <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.16.1">0.16.1</a> trouxe uma correção focada para a prévia de design: <strong>o status de execução não cobre mais o trabalho gerado.</strong> Os status de construção, conclusão e recuperação de entrega ficam no Chat — que segue sendo o lugar de acompanhar o progresso ou tentar de novo uma entrega que falhou — e o canvas volta a ser seu. Se for baixar hoje, pegue o 0.16.1.</p>
 
       <h2>O que fazer com isso hoje</h2>
       <table>
@@ -673,7 +673,7 @@ i18n:
       </ul>
 
       <h2>Già corretto: 0.16.1</h2>
-      <p>Due giorni dopo, <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.16.1">0.16.1</a> ha portato una correzione mirata per l'anteprima di design: <strong>lo stato dell'esecuzione non copre più il lavoro generato.</strong> Gli stati di build, completamento e recupero della consegna restano in Chat — che rimane il posto dove seguire l'avanzamento o ritentare una consegna fallita — e la canvas torna tua. Se scarichi oggi, prendi 0.16.1.</p>
+      <p>Il giorno dopo, <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.16.1">0.16.1</a> ha portato una correzione mirata per l'anteprima di design: <strong>lo stato dell'esecuzione non copre più il lavoro generato.</strong> Gli stati di build, completamento e recupero della consegna restano in Chat — che rimane il posto dove seguire l'avanzamento o ritentare una consegna fallita — e la canvas torna tua. Se scarichi oggi, prendi 0.16.1.</p>
 
       <h2>Cosa farci oggi</h2>
       <table>
@@ -750,7 +750,7 @@ i18n:
       </ul>
 
       <h2>Zaten yamalandı: 0.16.1</h2>
-      <p>İki gün sonra <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.16.1">0.16.1</a>, tasarım önizlemesi için odaklı bir düzeltme getirdi: <strong>çalışma durumu artık ürettiğiniz işi örtmüyor.</strong> Derleme, tamamlanma ve teslimat kurtarma durumları Sohbet'te kalıyor — ilerlemeyi izlediğiniz ya da başarısız bir teslimatı yeniden denediğiniz yer hâlâ orası — tuval ise tamamen sizin oluyor. Bugün indirecekseniz 0.16.1'i alın.</p>
+      <p>Ertesi gün <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.16.1">0.16.1</a>, tasarım önizlemesi için odaklı bir düzeltme getirdi: <strong>çalışma durumu artık ürettiğiniz işi örtmüyor.</strong> Derleme, tamamlanma ve teslimat kurtarma durumları Sohbet'te kalıyor — ilerlemeyi izlediğiniz ya da başarısız bir teslimatı yeniden denediğiniz yer hâlâ orası — tuval ise tamamen sizin oluyor. Bugün indirecekseniz 0.16.1'i alın.</p>
 
       <h2>Bugün bununla ne yapmalı</h2>
       <table>
@@ -838,7 +838,7 @@ Image generation got steadier too: **Nano Banana and custom image generation ret
 
 ## Already patched: 0.16.1
 
-Two days later, [0.16.1](https://github.com/nexu-io/open-design/releases/tag/open-design-v0.16.1) shipped one focused fix for the design preview: **run status no longer covers your generated work.** Building, completion, and delivery-recovery status stay in Chat — which is still where you follow progress or retry a failed delivery — and the canvas stays yours. If you're downloading today, take 0.16.1.
+The next day, [0.16.1](https://github.com/nexu-io/open-design/releases/tag/open-design-v0.16.1) shipped one focused fix for the design preview: **run status no longer covers your generated work.** Building, completion, and delivery-recovery status stay in Chat — which is still where you follow progress or retry a failed delivery — and the canvas stays yours. If you're downloading today, take 0.16.1.
 
 ## What to do with it today
 
