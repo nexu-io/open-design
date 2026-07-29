@@ -1,6 +1,8 @@
 import type { Dict } from '../types';
+import { storeScreenshotEnglishFallback } from '../store-screenshot-fallback';
 
 export const tr: Dict = {
+  ...storeScreenshotEnglishFallback,
   'chat.amrCard.switchTitle': 'Model çağrısı başarısız oldu — bu çalıştırma duraklatıldı',
   'chat.amrCard.switchBody': 'Open Design Cloud\'ın resmi model hizmetine geçin — API anahtarı yapılandırması gerekmez. Oturum açma, yetkilendirme ve bakiye yükleme sonrası bu çalıştırma otomatik olarak yeniden denenir.',
   'chat.amrCard.chipOfficial': 'Resmi hizmet',

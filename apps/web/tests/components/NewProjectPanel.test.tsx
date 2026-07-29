@@ -369,6 +369,40 @@ describe('NewProjectPanel design system defaults', () => {
     );
   });
 
+  it('creates a store screenshot project and preserves the selected design system', () => {
+    const onCreate = vi.fn();
+    render(
+      <NewProjectPanel
+        skills={skills}
+        designSystems={designSystems}
+        defaultDesignSystemId="clay"
+        templates={[]}
+        onDeleteTemplate={vi.fn()}
+        promptTemplates={[]}
+        onCreate={onCreate}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Store screenshots' }));
+    fireEvent.change(screen.getByTestId('new-project-name'), {
+      target: { value: 'Focus store listing' },
+    });
+    fireEvent.click(screen.getByTestId('create-project'));
+
+    expect(onCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'Focus store listing',
+        designSystemId: 'clay',
+        metadata: expect.objectContaining({
+          kind: 'image',
+          intent: 'store-screenshot',
+          platform: 'mobile-ios',
+          platformTargets: ['mobile-ios', 'mobile-android'],
+        }),
+      }),
+    );
+  });
+
   it('saves deck creation with speaker notes metadata when the toggle is enabled', () => {
     const onCreate = vi.fn();
     render(

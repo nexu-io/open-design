@@ -1,6 +1,8 @@
 import type { Dict } from '../types';
+import { storeScreenshotEnglishFallback } from '../store-screenshot-fallback';
 
 export const ko: Dict = {
+  ...storeScreenshotEnglishFallback,
   'chat.amrCard.switchTitle': '모델 호출 실패 — 이 작업이 일시중지되었습니다',
   'chat.amrCard.switchBody': 'Open Design Cloud 공식 모델 서비스로 전환하세요 — API 키 설정이 필요 없습니다. 로그인・인증・충전이 완료되면 이 작업이 자동으로 재시도됩니다.',
   'chat.amrCard.chipOfficial': '공식 호스팅',

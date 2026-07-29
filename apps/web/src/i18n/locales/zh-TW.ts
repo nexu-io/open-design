@@ -1,6 +1,8 @@
 import type { Dict } from "../types";
+import { storeScreenshotEnglishFallback } from "../store-screenshot-fallback";
 
 export const zhTW: Dict = {
+  ...storeScreenshotEnglishFallback,
   "chat.amrCard.switchTitle": "模型呼叫失敗，目前任務已暫停",
   "chat.amrCard.switchBody":
     "可切換到 Open Design Cloud 官方模型服務，無需設定 API Key。完成登入、授權與儲值後，將自動重試目前任務。",

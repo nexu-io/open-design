@@ -1,6 +1,8 @@
 import type { Dict } from '../types';
+import { storeScreenshotEnglishFallback } from '../store-screenshot-fallback';
 
 export const fa: Dict = {
+  ...storeScreenshotEnglishFallback,
   'chat.amrCard.switchTitle': 'فراخوانی مدل ناموفق بود — این اجرا متوقف شد',
   'chat.amrCard.switchBody': 'به سرویس رسمی مدل Open Design Cloud سوئیچ کنید — بدون نیاز به تنظیم کلید API. پس از ورود، اعطای دسترسی و شارژ، این اجرا به‌طور خودکار دوباره انجام می‌شود.',
   'chat.amrCard.chipOfficial': 'میزبانی رسمی',

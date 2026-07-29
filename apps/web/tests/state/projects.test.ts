@@ -112,6 +112,74 @@ describe('createProject', () => {
       }),
     );
   });
+
+  it('initializes a four-page minimal store screenshot document after project creation', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (input) => {
+      if (String(input) === '/api/projects') {
+        return new Response(JSON.stringify({
+          project: {
+            id: 'project-store-1',
+            name: 'Focus store listing',
+            skillId: null,
+            designSystemId: 'clay',
+            metadata: {
+              kind: 'image',
+              intent: 'store-screenshot',
+              platformTargets: ['mobile-ios', 'mobile-android'],
+            },
+          },
+          conversationId: 'conversation-1',
+        }), {
+          status: 201,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify({
+        document: {
+          id: 'document-1',
+          projectId: 'project-store-1',
+        },
+      }), {
+        status: 201,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await createProject({
+      name: 'Focus store listing',
+      skillId: null,
+      designSystemId: 'clay',
+      metadata: {
+        kind: 'image',
+        intent: 'store-screenshot',
+        platform: 'mobile-ios',
+        platformTargets: ['mobile-ios', 'mobile-android'],
+      },
+    });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/projects/project-store-1/store-screenshots',
+      expect.objectContaining({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    const [, init] = fetchMock.mock.calls[1]!;
+    expect(JSON.parse(String(init?.body))).toEqual({
+      product: {
+        name: 'Focus store listing',
+        summary: '',
+        audience: '',
+        features: [],
+      },
+      designSystemId: 'clay',
+      templateId: 'minimal-center',
+      pageCount: 4,
+      platforms: ['appStore', 'googlePlay'],
+    });
+  });
 });
 
 describe('listPlugins', () => {

@@ -1,6 +1,8 @@
 import type { Dict } from '../types';
+import { storeScreenshotEnglishFallback } from '../store-screenshot-fallback';
 
 export const hu: Dict = {
+  ...storeScreenshotEnglishFallback,
   'chat.amrCard.switchTitle': 'Sikertelen modellhívás — ez a futtatás szünetel',
   'chat.amrCard.switchBody': 'Válts az Open Design Cloud hivatalos modellszolgáltatására — nincs szükség API-kulcs beállítására. Bejelentkezés, engedélyezés és feltöltés után ez a futtatás automatikusan újraindul.',
   'chat.amrCard.chipOfficial': 'Hivatalos szolgáltatás',

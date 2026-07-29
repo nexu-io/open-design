@@ -24,6 +24,7 @@ import type {
   TerminalSession,
 } from '@open-design/contracts';
 import { randomUUID } from '../utils/uuid';
+import { createStoreScreenshotDocument } from '../features/store-screenshots/api';
 import type {
   ChatMessage,
   Conversation,
@@ -99,6 +100,9 @@ export async function createProject(input: {
   pluginInputs?: Record<string, unknown>;
 }): Promise<{ project: Project; conversationId: string; appliedPluginSnapshotId?: string }> {
   try {
+    if (input.metadata?.intent === 'store-screenshot' && !input.designSystemId) {
+      throw new Error('A design system is required for store screenshot projects');
+    }
     // `randomUUID` falls back to `crypto.getRandomValues` / `Math.random`
     // when `crypto.randomUUID` is unavailable. Open Design served over
     // plain HTTP on a LAN IP (Docker / unRAID self-hosting) is a
@@ -129,11 +133,26 @@ export async function createProject(input: {
       }
       throw new Error(message);
     }
-    return (await resp.json()) as {
+    const result = (await resp.json()) as {
       project: Project;
       conversationId: string;
       appliedPluginSnapshotId?: string;
     };
+    if (input.metadata?.intent === 'store-screenshot' && input.designSystemId) {
+      await createStoreScreenshotDocument(result.project.id, {
+        product: {
+          name: input.name,
+          summary: '',
+          audience: '',
+          features: [],
+        },
+        designSystemId: input.designSystemId,
+        templateId: 'minimal-center',
+        pageCount: 4,
+        platforms: ['appStore', 'googlePlay'],
+      });
+    }
+    return result;
   } catch (err) {
     throw err instanceof Error ? err : new Error('Could not create project');
   }

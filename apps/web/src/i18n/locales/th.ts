@@ -1,6 +1,8 @@
 import type { Dict } from '../types';
+import { storeScreenshotEnglishFallback } from '../store-screenshot-fallback';
 
 export const th: Dict = {
+  ...storeScreenshotEnglishFallback,
   'chat.amrCard.switchTitle': 'เรียกใช้โมเดลล้มเหลว — งานนี้ถูกหยุดชั่วคราว',
   'chat.amrCard.switchBody': 'สลับไปยังบริการโมเดล Open Design Cloud อย่างเป็นทางการของ Open Design Cloud — ไม่ต้องตั้งค่า API Key หลังจากเข้าสู่ระบบ ให้สิทธิ์ และเติมเงินแล้ว งานนี้จะถูกลองใหม่โดยอัตโนมัติ',
   'chat.amrCard.chipOfficial': 'โฮสติ้งอย่างเป็นทางการ',

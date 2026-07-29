@@ -1,0 +1,23 @@
+// Phase one intentionally falls back to English outside en and zh-CN.
+// Keeping this slice shared makes the fallback explicit without weakening Dict.
+export const storeScreenshotEnglishFallback = {
+  'newproj.tabStoreScreenshot': 'Store screenshots',
+  'newproj.titleStoreScreenshot': 'New store screenshots',
+  'storeScreenshots.workspaceTitle': 'Store screenshot set',
+  'storeScreenshots.platformAria': 'Store platforms',
+  'storeScreenshots.appStore': 'App Store',
+  'storeScreenshots.googlePlay': 'Google Play',
+  'storeScreenshots.validationChecking': 'Checking…',
+  'storeScreenshots.validationReady': 'Ready to export',
+  'storeScreenshots.validationIssues': 'Validation needs attention',
+  'storeScreenshots.validationUnavailable': 'Validation unavailable',
+  'storeScreenshots.generate': 'Generate with AI',
+  'storeScreenshots.generating': 'Generating…',
+  'storeScreenshots.export': 'Export',
+  'storeScreenshots.exporting': 'Exporting…',
+  'storeScreenshots.providerRequired': 'Connect a Provider to generate with AI. You can keep editing manually.',
+  'storeScreenshots.page': 'Page {n}',
+  'storeScreenshots.thumbnailRail': 'Page thumbnails',
+  'storeScreenshots.loadFailed': 'Could not load the store screenshots.',
+  'storeScreenshots.retry': 'Retry',
+} as const;

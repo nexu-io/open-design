@@ -1,6 +1,8 @@
 import type { Dict } from '../types';
+import { storeScreenshotEnglishFallback } from '../store-screenshot-fallback';
 
 export const id: Dict = {
+  ...storeScreenshotEnglishFallback,
   'chat.amrCard.switchTitle': 'Panggilan model gagal — proses ini dijeda',
   'chat.amrCard.switchBody': 'Beralih ke layanan model resmi Open Design Cloud — tanpa perlu mengatur API Key. Setelah masuk, otorisasi, dan isi ulang, proses ini akan dicoba ulang otomatis.',
   'chat.amrCard.chipOfficial': 'Hosting resmi',

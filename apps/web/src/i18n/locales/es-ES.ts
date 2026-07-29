@@ -1,6 +1,8 @@
 import type { Dict } from '../types';
+import { storeScreenshotEnglishFallback } from '../store-screenshot-fallback';
 
 export const esES: Dict = {
+  ...storeScreenshotEnglishFallback,
   'chat.amrCard.switchTitle': 'Falló la llamada al modelo — esta ejecución está en pausa',
   'chat.amrCard.switchBody': 'Cambia al servicio oficial de modelos de Open Design Cloud — sin configurar API Key. Tras iniciar sesión, autorizar y recargar, esta ejecución se reintentará automáticamente.',
   'chat.amrCard.chipOfficial': 'Alojamiento oficial',

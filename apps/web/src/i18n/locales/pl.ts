@@ -1,6 +1,8 @@
 import type { Dict } from '../types';
+import { storeScreenshotEnglishFallback } from '../store-screenshot-fallback';
 
 export const pl: Dict = {
+  ...storeScreenshotEnglishFallback,
   'chat.amrCard.switchTitle': 'Wywołanie modelu nieudane — to zadanie jest wstrzymane',
   'chat.amrCard.switchBody': 'Przełącz się na oficjalną usługę modeli Open Design Cloud — bez konfigurowania klucza API. Po zalogowaniu, autoryzacji i doładowaniu zadanie zostanie automatycznie ponowione.',
   'chat.amrCard.chipOfficial': 'Oficjalny hosting',

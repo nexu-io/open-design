@@ -1,6 +1,8 @@
 import type { Dict } from '../types';
+import { storeScreenshotEnglishFallback } from '../store-screenshot-fallback';
 
 export const ar: Dict = {
+  ...storeScreenshotEnglishFallback,
   'chat.amrCard.switchTitle': 'فشل استدعاء النموذج — تم إيقاف هذه المهمة مؤقتًا',
   'chat.amrCard.switchBody': 'بدِّل إلى خدمة نماذج Open Design Cloud الرسمية — لا حاجة لإعداد مفتاح API. بعد تسجيل الدخول والتفويض والشحن، ستُعاد محاولة هذه المهمة تلقائيًا.',
   'chat.amrCard.chipOfficial': 'استضافة رسمية',

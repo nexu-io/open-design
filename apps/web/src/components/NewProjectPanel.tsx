@@ -122,7 +122,14 @@ const DESIGN_PLATFORMS: Array<{
   },
 ];
 
-export type CreateTab = 'prototype' | 'live-artifact' | 'deck' | 'template' | 'media' | 'other';
+export type CreateTab =
+  | 'prototype'
+  | 'live-artifact'
+  | 'deck'
+  | 'template'
+  | 'store-screenshot'
+  | 'media'
+  | 'other';
 export type MediaSurface = 'image' | 'video' | 'audio';
 
 export interface CreateInput {
@@ -174,6 +181,7 @@ const TAB_LABEL_KEYS: Record<CreateTab, keyof Dict> = {
   'live-artifact': 'newproj.tabLiveArtifact',
   deck: 'newproj.tabDeck',
   template: 'newproj.tabTemplate',
+  'store-screenshot': 'newproj.tabStoreScreenshot',
   media: 'newproj.tabMedia',
   other: 'newproj.tabOther',
 };
@@ -198,6 +206,8 @@ function newProjectTabToApplyKind(
       // mark it `unknown` rather than guessing. The picker is also
       // typically hidden under media but the helper stays total.
       return 'unknown';
+    case 'store-screenshot':
+      return 'image';
     case 'template':
     case 'other':
       return 'unknown';
@@ -315,7 +325,7 @@ export function NewProjectPanel({
     trackNewProjectModalSurfaceView(analytics.track, {
       page_name: 'home',
       area: 'new_project_modal',
-      tab_name: createTabToTracking(tab),
+      tab_name: createTabToTracking(tab === 'store-screenshot' ? 'image' : tab),
     });
   }, [tab, analytics.track]);
   // Media tab consolidates image / video / audio. The active surface picks
@@ -387,6 +397,7 @@ export function NewProjectPanel({
     tab === 'prototype' ||
     tab === 'deck' ||
     tab === 'template' ||
+    tab === 'store-screenshot' ||
     tab === 'other';
   // Orbit briefings ship their own complete visual language baked into
   // example.html and explicitly opt out of DESIGN.md injection via
@@ -614,7 +625,9 @@ export function NewProjectPanel({
   }, [tab, mediaSurface, skillIdForTab, videoModelTouched]);
 
   const canCreate =
-    !loading && (tab !== 'template' || templateId != null);
+    !loading
+    && (tab !== 'template' || templateId != null)
+    && (tab !== 'store-screenshot' || selectedDsIds.length > 0);
 
   function updateTabScrollState() {
     const el = tabsRef.current;
@@ -759,7 +772,7 @@ export function NewProjectPanel({
         page_name: 'home',
         area: 'new_project_modal',
         element: 'create',
-        tab_name: createTabToTracking(tab),
+        tab_name: createTabToTracking(tab === 'store-screenshot' ? 'image' : tab),
       },
       { requestId },
     );
@@ -867,7 +880,9 @@ export function NewProjectPanel({
                     page_name: 'home',
                     area: 'new_project_modal',
                     element: 'tab',
-                    tab_name: createTabToTracking(entry),
+                    tab_name: createTabToTracking(
+                      entry === 'store-screenshot' ? 'image' : entry,
+                    ),
                   });
                 }
                 setTab(entry);
@@ -3093,9 +3108,11 @@ function buildMetadata(input: {
   const kind: ProjectKind =
     input.tab === 'live-artifact'
       ? 'prototype'
-      : input.tab === 'media'
-        ? input.mediaSurface
-        : input.tab;
+      : input.tab === 'store-screenshot'
+        ? 'image'
+        : input.tab === 'media'
+          ? input.mediaSurface
+          : input.tab;
   const selectedPlatforms = normalizeSelectedPlatforms(input.platformTargets);
   const concreteTargets = platformTargetsFor(selectedPlatforms);
   const canIncludeOsWidgets = platformTargetsSupportOsWidgets(concreteTargets);
@@ -3119,6 +3136,15 @@ function buildMetadata(input: {
       // the panel) — wireframe live artifacts don't make sense.
       fidelity: input.tab === 'live-artifact' ? 'high-fidelity' : input.fidelity,
       ...(input.tab === 'live-artifact' ? { intent: 'live-artifact' as const } : {}),
+      ...inspirations,
+    };
+  }
+  if (input.tab === 'store-screenshot') {
+    return {
+      kind: 'image',
+      intent: 'store-screenshot',
+      platform: 'mobile-ios',
+      platformTargets: ['mobile-ios', 'mobile-android'],
       ...inspirations,
     };
   }
@@ -3271,6 +3297,8 @@ function titleForTab(
       return t('newproj.titleDeck');
     case 'template':
       return t('newproj.titleTemplate');
+    case 'store-screenshot':
+      return t('newproj.titleStoreScreenshot');
     case 'media': {
       // Title tracks the active surface so the heading still reads "New
       // image" / "New video" / "New audio" — the shared "Media" label only
