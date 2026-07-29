@@ -62,7 +62,7 @@
         "name": "brief",
         "label": "Brief",
         "type": "text",
-        "required": true,
+        "default": "Use the user's current request, attachments, and project context.",
         "placeholder": "What should the design accomplish?"
       }
     ],
