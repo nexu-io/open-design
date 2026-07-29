@@ -444,7 +444,37 @@ export function createChatRunService({
   };
 
   const persistState = (run) => {
+    // Once a run has been swept as part of a project delete (or explicitly
+    // tombstoned), its on-disk state must never be recreated — even by a
+    // terminal telemetry callback (markAnalyticsCompleted/markLangfuseCompleted)
+    // that resolves after the sweep deleted <runDir>/state.json. atomicWriteJson
+    // mkdirs the parent dir, so without this guard any run whose project was
+    // deleted while it was still alive would leak its dir back onto disk the
+    // moment the analytics/langfuse completion resolved (#6117 regression).
+    if (run?.persistsDisabled) return;
     if (run?.statePath) atomicWriteJson(run.statePath, durableRunState(run));
+  };
+
+  /**
+   * Disable further durable state writes for a run and unlink its on-disk
+   * artifacts if present. Used by project-delete to tombstone every run owned
+   * by the deleted project before the on-disk sweep runs, so the async
+   * terminal telemetry callbacks that resolve *after* the sweep can't
+   * recreate the directory (#6117).
+   *
+   * Removes the run's per-run directory (`<runsLogDir>/<runId>/`) entirely
+   * — `state.json`, `events.jsonl`, and any siblings — so callers scanning
+   * the runs dir for stragglers don't double-process this run. Safe to call
+   * on a live or terminal run. Idempotent. Does not touch the in-memory run
+   * record beyond flipping the flag.
+   */
+  const disablePersist = (run) => {
+    if (!run) return;
+    run.persistsDisabled = true;
+    if (run.statePath) {
+      const runDir = path.dirname(run.statePath);
+      try { fs.rmSync(runDir, { recursive: true, force: true }); } catch { /* best-effort */ }
+    }
   };
 
   const setAnalyticsRecovery = (run, recovery) => {
@@ -570,6 +600,12 @@ export function createChatRunService({
     // memory + SSE clients below; we just stop persisting them to the closed
     // log. (#3408 P1 FD-leak fix; cf. #4163.)
     if (run.eventsLogClosed) return null;
+    // Tombstoned runs (#6117): the project was deleted out from under us,
+    // and the run's on-disk dir has already been removed by disablePersist.
+    // Reopening the log stream here would mkdir the directory back — the
+    // exact leak the tombstone prevents. Treat like eventsLogClosed: late
+    // events still reach memory + SSE clients, just don't hit disk.
+    if (run.persistsDisabled) return null;
     try {
       fs.mkdirSync(path.dirname(run.eventsLogPath), { recursive: true });
       run.eventsLogStream = fs.createWriteStream(run.eventsLogPath, { flags: 'a' });
@@ -1010,6 +1046,47 @@ export function createChatRunService({
     return new Promise((resolve) => run.waiters.add(resolve));
   };
 
+  /**
+   * Tombstone every run owned by a project so the on-disk state for those
+   * runs cannot be recreated by an async terminal telemetry callback that
+   * resolves *after* the project delete handler has already swept the runs
+   * dir (#6117 race condition surfaced by @mrcfps on PR #6202).
+   *
+   * For every run whose projectId matches:
+   *   - flip `run.persistsDisabled = true` so `persistState` becomes a no-op;
+   *   - unlink the run's current state.json / events.jsonl if present;
+   *   - if the run is still active, cancel it (so its waiters resolve and the
+   *     child is reaped) — terminal runs are left alone status-wise, only
+   *     tombstoned on disk.
+   *
+   * Returns the list of run ids that were tombstoned, so the caller can
+   * additionally remove their on-disk run directories after this resolves.
+   * Cancellation failures are swallowed per-run so a single bad run never
+   * blocks the project delete the user asked for — same posture as
+   * `cancelRunsOwnedBy` for #5468.
+   */
+  const purgeRunsForProject = async (projectId) => {
+    if (typeof projectId !== 'string' || !projectId) return [];
+    const owned = Array.from(runs.values()).filter((run) => run.projectId === projectId);
+    const tombstoned = [];
+    // Order matters (#6117 race): disablePersist MUST run before cancel,
+    // because cancel -> finish -> emit('end') -> persistState -> atomicWriteJson
+    // mkdirs the runDir we just removed. With persistsDisabled flipped first,
+    // the late persistState is a no-op and the directory stays gone. disablePersist
+    // also synchronously rm -rf's the run dir, so a delayed markAnalyticsCompleted /
+    // markLangfuseCompleted callback resolving after this cannot recreate it either.
+    await Promise.all(
+      owned.map(async (run) => {
+        disablePersist(run);
+        tombstoned.push(run.id);
+        if (!TERMINAL_RUN_STATUSES.has(run.status)) {
+          try { await cancel(run); } catch { /* best-effort, like cancelRunsOwnedBy */ }
+        }
+      }),
+    );
+    return tombstoned;
+  };
+
   // Drop a run from the in-memory registry without emitting any terminal
   // event. Used by callers that prepared a run optimistically (created the
   // record before some external precondition was checked) and need to undo
@@ -1072,6 +1149,7 @@ export function createChatRunService({
     wait,
     emit,
     persistState,
+    disablePersist,
     setAnalyticsRecovery,
     markAnalyticsCompleted,
     markLangfuseCompleted,
@@ -1079,6 +1157,7 @@ export function createChatRunService({
     finish,
     fail,
     drop,
+    purgeRunsForProject,
     signalChild: killChild,
     reapProcessGroup,
     signalProcessGroup,

@@ -225,4 +225,56 @@ describe('DELETE project sweeps orphaned run dirs (#6117)', () => {
     }
     expect(getProject(db, 'p1')).toBeNull();
   });
+
+  it('does not let a delayed terminal telemetry callback recreate the swept run dir (#6117 race)', async () => {
+    // Reproduces the race @mrcfps called out on PR #6202:
+    //   1. A live run is created with a real on-disk state.json path.
+    //   2. The handler cancels+tombstones it (purgeRunsForProject) and sweeps
+    //      its run dir.
+    //   3. After the sweep, a delayed terminal telemetry callback fires
+    //      `markAnalyticsCompleted(run)` — which previously called persistState
+    //      -> atomicWriteJson -> mkdir parent + write state.json, recreating
+    //      exactly the orphaned dir this PR promises to eliminate.
+    // After the fix, persistState is a no-op on tombstoned runs.
+    const runsDir = path.join(tempDir, 'runs');
+    mkdirSync(runsDir, { recursive: true });
+    const runs = createChatRunService({
+      createSseResponse: () => ({ send: vi.fn(() => true), end: vi.fn(), cleanup: vi.fn() }),
+      createSseErrorPayload: (code: string, message: string) => ({ error: { code, message } }),
+      shutdownGraceMs: 10,
+      ttlMs: 60_000,
+      runsLogDir: runsDir,
+    });
+
+    const run = runs.create({ projectId: 'p1', conversationId: null });
+    // Simulate analytics recovery so markAnalyticsCompleted has work to do.
+    runs.setAnalyticsRecovery?.(run, {
+      context: { page_name: 'test' },
+      properties: { a: 1 },
+      insertId: 'test-insert',
+    });
+    const runDir = path.join(runsDir, run.id);
+    // Service should have written state.json on create.
+    expect(existsSync(path.join(runDir, 'state.json'))).toBe(true);
+
+    const app = await mountProjectApp(db, runs, tempDir);
+    try {
+      const res = await fetch(`${app.base}/api/projects/p1`, { method: 'DELETE' });
+      expect(res.status).toBe(200);
+    } finally {
+      await app.close();
+    }
+
+    // Sweep has happened: dir is gone.
+    expect(existsSync(runDir)).toBe(false);
+
+    // Now release the delayed telemetry callback. Before the tombstone fix
+    // this would mkdir the runDir back and write a fresh state.json — the
+    // exact regression #6117 describes.
+    runs.markAnalyticsCompleted?.(run);
+    runs.markLangfuseCompleted?.(run);
+    runs.persistState?.(run);
+
+    expect(existsSync(runDir)).toBe(false);
+  });
 });

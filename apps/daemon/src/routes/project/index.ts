@@ -2271,18 +2271,22 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
 
   app.delete('/api/projects/:id', async (req, res) => {
     try {
-      // Stop any live agent run in this project before its row and directory
-      // are removed, otherwise the CLI subprocess is orphaned — it keeps
-      // billing and writes into a directory that no longer exists (#5468).
-      await cancelRunsOwnedBy(design.runs, { projectId: req.params.id });
+      // Tombstone + cancel every run owned by this project *before* the on-disk
+      // sweep, so async terminal telemetry callbacks (markAnalyticsCompleted /
+      // markLangfuseCompleted via persistState -> atomicWriteJson) cannot
+      // recreate the run dir after we delete it. atomicWriteJson mkdirs the
+      // parent dir, so without the tombstone any run whose project was deleted
+      // while it was still alive would leak its dir back onto disk the moment
+      // the analytics/langfuse completion resolved (#6117 race @mrcfps on #6202).
+      // Also cancels live runs (#5468 supersedes the bare cancelRunsOwnedBy).
+      await design.runs.purgeRunsForProject(req.params.id).catch(() => {});
       dbDeleteProject(db, req.params.id);
       await removeProjectDir(PROJECTS_DIR, req.params.id).catch(() => {});
-      // The run service keeps non-terminal runs in memory and drops them
-      // after a ~30 min TTL, but `<RUNTIME_DATA_DIR>/runs/<runId>/state.json`
-      // outlives that map. Sweep the runs dir for orphaned entries whose
-      // state.json still references this project so delete doesn't leak
-      // every prior run's directory (#6117). Best-effort — same posture as
-      // removeProjectDir above.
+      // Backstop: sweep any on-disk run dir whose state.json still references
+      // this project. purgeRunsForProject handles runs known to the in-memory
+      // map; this catches runs whose TTL has already expired out of the map
+      // (their state.json lingers on disk until now). Best-effort — same
+      // posture as removeProjectDir above.
       await removeProjectRunDirs(path.join(ctx.paths.RUNTIME_DATA_DIR, 'runs'), req.params.id).catch(() => {});
       /** @type {import('@open-design/contracts').OkResponse} */
       const body = { ok: true };
