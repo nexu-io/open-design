@@ -21,7 +21,7 @@
 - 不在源码、测试、日志、命令参数或截图中放入真实 API Key。
 - 不新增依赖、不新增 i18n key；允许修改 shared contract、daemon app-config 验证与 CLI，以保持 UI/CLI 双轨闭环。
 - 根级开发生命周期只能使用 `corepack pnpm tools-dev`。
-- 完成前必须通过 web 测试、web typecheck、web build、`pnpm guard` 和根 `pnpm typecheck`。
+- 完成前必须通过与改动边界匹配的 web/daemon 聚焦测试、contracts/web/daemon typecheck、`pnpm guard` 与 `git diff --check`。如根 `pnpm typecheck` 受已知 pnpm 路径版本问题阻塞，使用 Corepack 直接执行对应 package 的 TypeScript 检查并记录该限制。
 
 ## 文件边界
 
@@ -30,22 +30,24 @@
 - 修改 `apps/daemon/src/app-config.ts`、`apps/daemon/src/routes/media.ts`、`apps/daemon/src/cli.ts`
   - 校验 protocol、HTTP(S) Base URL 与非空 model；无效选择通过 `/api/app-config` 返回 400，且不修改原有选择。
   - `od config byok get/set` 只读写非秘密 metadata，并在 daemon 拒绝时非零退出。
-- 修改 `apps/web/src/state/config.ts`、`apps/web/src/App.tsx`
+- 修改 `apps/web/src/state/config.ts`、`apps/web/src/types.ts`、`apps/web/src/App.tsx`
   - 在 `KNOWN_PROVIDERS` 中定义 Agnes AI 的 canonical provider metadata。
   - 在 `BYOK_PROVIDER_PRESET_SPECS` 中暴露稳定的 `agnes-ai` 快捷入口。
   - 水合 provider metadata 时以 protocol + Base URL 判断同一身份，保留同一身份的浏览器本地 Key；支持自定义受支持端点。
   - 区分显式 Local CLI 切换（发送 `null`）与例行 daemon-mode 同步（省略字段）。
 - 修改 `apps/web/tests/state/config.test.ts`
   - 锁定 Agnes provider/preset、密钥保留、自定义端点水合和显式清除语义。
-- 修改 `apps/daemon/tests/server-persistence-smoke.test.ts`、`apps/daemon/tests/cli-templates.test.ts`
-  - 覆盖真实 daemon 400 路径、保留既有选择，以及 CLI 错误退出。
-- 不修改 `SettingsDialog.tsx`
-  - 该组件已经从 `BYOK_PROVIDER_PRESETS` 渲染 provider 入口并复用现有切换逻辑。
+- 修改 `apps/daemon/tests/app-config.test.ts`、`apps/daemon/tests/server-persistence-smoke.test.ts`、`apps/daemon/tests/cli-templates.test.ts`
+  - 覆盖非秘密持久化、真实 daemon 400 路径、保留既有选择，以及 CLI 输出/错误退出。
+- UI surface：`apps/web/src/components/EntryShell.tsx` 负责 onboarding provider 切换时的本地 Key 隔离；`apps/web/src/components/SettingsDialog.tsx` 继续复用 `BYOK_PROVIDER_PRESETS` 与 autosave 持久化路径。
+- UI 回归：`apps/web/tests/components/EntryShell.onboarding.test.tsx` 与 `apps/web/tests/components/SettingsDialog.execution.test.tsx` 覆盖 Agnes 预填、provider 选择和 Key 隔离。
 - daemon/CLI 变更仅限 shared non-secret `byokProvider` metadata；不得增加 API Key 参数、持久化或回显。
 
 ---
 
-### Task 1：以测试先行方式注册 Agnes AI provider 与 BYOK preset
+### Task 1：历史基线——仅注册 Agnes AI provider 与 BYOK preset（已由 Task 2 取代，不再执行）
+
+> 本节保留最初 registry-only 的 TDD 记录。它不再是可执行实施方案：最终实现必须以 **Task 2** 的 shared contract、daemon、CLI、UI 状态与真实路由验证为准。
 
 **文件：**
 
@@ -211,13 +213,62 @@ git commit -m "feat: add Agnes AI BYOK provider preset"
 
 提交不得包含 `.tmp` 截图、真实 API Key、`Co-authored-by` 或其他 co-author metadata。
 
+### Task 2：最终 shared non-secret BYOK 架构与双轨闭环
+
+**文件与责任：**
+
+- `packages/contracts/src/api/app-config.ts`：定义 `BYOK_PROVIDER_PROTOCOLS`、`ByokProviderProtocol` 和只含 `protocol`、`baseUrl`、`model` 的非秘密 `byokProvider` 合同。
+- `apps/daemon/src/app-config.ts`、`apps/daemon/src/routes/media.ts`：在写入前校验受支持 protocol、HTTP(S) Base URL 与非空 model；无效 `byokProvider` 返回 HTTP 400，且不得清除既有选择。
+- `apps/daemon/src/cli.ts`：`od config byok get` / `set <protocol> <base-url> <model>` 通过同一 `/api/app-config` API 读写非秘密 metadata；daemon 400 必须令 CLI 非零退出。
+- `apps/web/src/state/config.ts`、`apps/web/src/types.ts`、`apps/web/src/App.tsx`：水合已知和自定义受支持端点；同一 protocol + Base URL 保留浏览器本地 Key，身份变化或 CLI-first 水合保持空 Key；显式 BYOK → Local CLI 发送 `byokProvider: null`，例行 bootstrap/daemon-mode 同步省略该字段。
+- `apps/web/src/components/EntryShell.tsx`、`apps/web/src/components/SettingsDialog.tsx`：保持 onboarding/Settings 的 provider 选择、预填和 Key 隔离行为；不得向 daemon 或 CLI 传递 API Key。
+- `apps/web/tests/state/config.test.ts`、`apps/web/tests/components/EntryShell.onboarding.test.tsx`、`apps/web/tests/components/SettingsDialog.execution.test.tsx`：覆盖 UI/状态行为。
+- `apps/daemon/tests/app-config.test.ts`、`apps/daemon/tests/cli-templates.test.ts`、`apps/daemon/tests/server-persistence-smoke.test.ts`：覆盖 app-config 持久化、CLI 输出/错误和真实 HTTP 路由。
+
+**实施步骤：**
+
+- [ ] **步骤 1：共享合同与红灯。** 先添加 web state、daemon CLI 和真实 `/api/app-config` 路由回归：同身份保留本地 Key，首次 hydration 为空 Key，自定义端点可用，显式 Local CLI 写入 `null`，无效 protocol/URL/model 返回 400 且保留旧值，CLI 非零退出。
+- [ ] **步骤 2：确认红灯。** 分别运行聚焦 web state、daemon CLI 与 server persistence 测试；失败必须对应缺少 identity 保留、clear intent 或 400 校验，而不是环境错误。
+- [ ] **步骤 3：实现最小 shared contract 与 daemon 校验。** 将 protocol allowlist 放在 `packages/contracts`；daemon 只接受 `protocol`、`baseUrl`、`model`，在落盘前拒绝无效 payload。`null` 是唯一允许的清除值；未知字段（包括 `apiKey`）不得持久化。
+- [ ] **步骤 4：实现 web hydration 与同步生命周期。** 用 protocol + Base URL 判定身份；只在相同身份保留浏览器 Key。将“例行省略”与“用户明确清除”表示为 transient sync intent，避免 bootstrap 覆盖 CLI 写入或 reload 循环。
+- [ ] **步骤 5：实现 CLI 闭环。** `get` 输出机器可读的非秘密 provider object；`set` 只接受恰好三个非秘密 positional values，并将 daemon 400 转为非零退出，不回显输入之外的凭据。
+- [ ] **步骤 6：确认绿灯与真实边界。** 至少执行：
+
+```bash
+corepack pnpm --filter @open-design/contracts build
+corepack pnpm --filter @open-design/contracts typecheck
+corepack pnpm --filter @open-design/web exec vitest run -c vitest.config.ts tests/state/config.test.ts
+corepack pnpm --filter @open-design/daemon exec vitest run -c vitest.config.ts tests/app-config.test.ts tests/cli-templates.test.ts tests/server-persistence-smoke.test.ts
+corepack pnpm --filter @open-design/web typecheck
+corepack pnpm --filter @open-design/daemon exec tsc -p tsconfig.json --noEmit
+corepack pnpm --filter @open-design/daemon exec tsc -p tsconfig.tests.json --noEmit
+corepack pnpm guard
+```
+
+- [ ] **步骤 7：敏感信息、差异与提交。**
+
+```bash
+git diff --check
+git diff -- packages/contracts/src/api/app-config.ts apps/daemon/src/app-config.ts \
+  apps/daemon/src/routes/media.ts apps/daemon/src/cli.ts apps/web/src/App.tsx \
+  apps/web/src/state/config.ts apps/web/src/types.ts \
+  | rg -n 'Authorization:\s*Bearer|apiKey|sk-[A-Za-z0-9_-]{8,}'
+git add packages/contracts/src/api/app-config.ts apps/daemon/src/app-config.ts \
+  apps/daemon/src/routes/media.ts apps/daemon/src/cli.ts apps/web/src/App.tsx \
+  apps/web/src/state/config.ts apps/web/src/types.ts apps/web/tests \
+  apps/daemon/tests specs/current/agnes-ai-byok-provider-implementation-plan.md
+git commit -m "fix: harden BYOK provider synchronization"
+```
+
+最后一条 diff 命令用于人工审查敏感字段接触面；不得把真实 API Key、Authorization header 或凭据值写入源码、测试输出、报告或 commit。提交不得包含 `.tmp`、构建产物、`Co-authored-by` 或其他 co-author metadata。
+
 ## 完成判定
 
-- 新增测试经历明确的红灯和绿灯。
+- 共享 contract、daemon、CLI、web state 与 onboarding/Settings 均通过同一非秘密 `byokProvider` 合同闭环。
+- 新增测试经历明确的红灯和绿灯，且真实 daemon 路由验证了 HTTP 400 与不覆写旧值。
 - `Agnes AI` 在 provider catalogue 与 BYOK preset 中各恰好出现一次。
 - Base URL、protocol 和默认模型与设计规格完全一致。
-- web 测试、web typecheck、web build、guard、根 typecheck 全绿。
-- 桌面 IPC 状态证明窗口运行且可见。
-- UI/DOM 检查证明 Agnes 入口和预填值存在。
-- 截图和 Git 差异中没有真实 API Key。
-- 实现以单个原子提交完成。
+- 同一 identity 保留浏览器本地 Key；身份变化、CLI-first hydration 与自定义端点均不导入或持久化 Key。
+- 显式 Local CLI 切换写入 `null`，例行同步省略字段，reload 保持 Local CLI。
+- contracts/web/daemon 类型检查、聚焦测试、guard 和差异检查全绿。
+- Git 差异、日志、报告和提交中没有真实 API Key、Authorization header 或 API Key 参数。
