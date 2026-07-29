@@ -3,16 +3,16 @@ title: "Open Design 0.16.0: reliable delivery"
 date: 2026-07-22
 category: "Product"
 readingTime: 7
-summary: "Tag open-design-v0.16.0 — 92 PRs from 20 contributors in five days. Codename \"Reliable Delivery.\" Visual direction now follows whatever you are actually making, automatic updates take effect properly, long tasks keep their answer and the files that came with it, and previews stop fighting the frame. Plus a message center inside the app — and the 0.16.1 patch that cleared the last thing covering your canvas."
+summary: "open-design-v0.16.0 — 92 PRs from 20 contributors in five days. Codename \"Reliable Delivery.\" Visual direction now follows whatever you are actually making, automatic updates take effect properly, long tasks keep their answer and the files that came with it, and previews stop fighting the frame. Plus a message center inside the app — and the 0.16.1 patch that cleared the last thing covering your canvas."
 socialImage: "/blog/open-design-0-16-0-reliable-delivery-cover.webp"
 ctaKind: download-app
 i18n:
   zh:
     title: 'Open Design 0.16.0：可靠交付'
-    summary: '版本标签 open-design-v0.16.0 —— 五天内 20 位贡献者提交了 92 个 PR。代号「可靠交付（Reliable Delivery）」。视觉风格现在会跟着你手上真正在做的东西走，自动更新会真正生效，长任务能留住结果和随之产出的文件，预览也不再跟你较劲。另有应用内消息中心——以及 0.16.1 顺手清掉的最后一样挡住画布的东西。'
+    summary: 'open-design-v0.16.0 —— 五天内 20 位贡献者提交了 92 个 PR。代号「可靠交付（Reliable Delivery）」。视觉风格现在会跟着你手上真正在做的东西走，自动更新会真正生效，长任务能留住结果和随之产出的文件，预览也不再跟你较劲。另有应用内消息中心——以及 0.16.1 顺手清掉的最后一样挡住画布的东西。'
     category: '产品'
     bodyHtml: |
-      <p>版本标签 <code>open-design-v0.16.0</code>，于 2026 年 7 月 22 日发布。<strong>五天内 20 位贡献者提交了 92 个 PR。</strong>代号「可靠交付（Reliable Delivery）」。上一次发布针对的是每次运行的成本，这一次针对的是「结果做完了」和「它真正到你手上」之间发生的事：只更新了一半的版本、丢了文件的长任务、要跟你较劲的预览、少了一页的导出。</p>
+      <p><code>open-design-v0.16.0</code>，于 2026 年 7 月 22 日发布。<strong>五天内 20 位贡献者提交了 92 个 PR。</strong>代号「可靠交付（Reliable Delivery）」。上一次发布针对的是每次运行的成本，这一次针对的是「结果做完了」和「它真正到你手上」之间发生的事：只更新了一半的版本、丢了文件的长任务、要跟你较劲的预览、少了一页的导出。</p>
       <p>想看完整的更新日志？它就在 <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.16.0">GitHub 上的发布说明</a>里。本文是精简版：底层改了什么、你今天能用它做什么，以及从哪里开始。</p>
 
       <h2>视觉风格跟着你手上真正在做的东西走</h2>
@@ -86,10 +86,10 @@ i18n:
       </ul>
   ja:
     title: 'Open Design 0.16.0 — 確実に届く'
-    summary: 'タグ open-design-v0.16.0 — 5 日間で 20 人のコントリビューターから 92 の PR。コードネームは「Reliable Delivery」。ビジュアルの方向性が実際に作っているものに追従し、自動アップデートがきちんと効き、長いタスクが答えと生成物を手放さず、プレビューが枠と争わなくなりました。アプリ内のメッセージセンターと、キャンバスを覆う最後の一点を片づけた 0.16.1 も。'
+    summary: 'open-design-v0.16.0 — 5 日間で 20 人のコントリビューターから 92 の PR。コードネームは「Reliable Delivery」。ビジュアルの方向性が実際に作っているものに追従し、自動アップデートがきちんと効き、長いタスクが答えと生成物を手放さず、プレビューが枠と争わなくなりました。アプリ内のメッセージセンターと、キャンバスを覆う最後の一点を片づけた 0.16.1 も。'
     category: 'プロダクト'
     bodyHtml: |
-      <p>タグ <code>open-design-v0.16.0</code>、2026 年 7 月 22 日公開。<strong>5 日間で 20 人のコントリビューターから 92 の PR。</strong>コードネームは「Reliable Delivery」。前回のリリースは 1 回の実行にかかるコストに向き合いました。今回は、成果が仕上がってから実際にあなたの手元に届くまでの間に起きること — 中途半端に当たったアップデート、ファイルを失った長いタスク、戦わないと使えないプレビュー、1 枚落ちた書き出し — に向き合います。</p>
+      <p><code>open-design-v0.16.0</code>、2026 年 7 月 22 日公開。<strong>5 日間で 20 人のコントリビューターから 92 の PR。</strong>コードネームは「Reliable Delivery」。前回のリリースは 1 回の実行にかかるコストに向き合いました。今回は、成果が仕上がってから実際にあなたの手元に届くまでの間に起きること — 中途半端に当たったアップデート、ファイルを失った長いタスク、戦わないと使えないプレビュー、1 枚落ちた書き出し — に向き合います。</p>
       <p>変更履歴の全文は <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.16.0">GitHub のリリースノート</a>にあります。ここでは短い版を: 下で何が変わり、今日それで何ができ、どこから始めるか。</p>
 
       <h2>ビジュアルの方向性が、作っているものに追従する</h2>
@@ -163,10 +163,10 @@ i18n:
       </ul>
   ko:
     title: 'Open Design 0.16.0: 확실한 전달'
-    summary: '태그 open-design-v0.16.0 — 5일 동안 20명의 기여자가 92개의 PR을 보냈습니다. 코드명 “Reliable Delivery”. 비주얼 방향이 실제로 만드는 것에 맞춰 따라오고, 자동 업데이트가 제대로 적용되며, 긴 작업이 결과와 함께 만들어진 파일까지 지키고, 미리보기가 프레임과 다투지 않습니다. 앱 안의 메시지 센터, 그리고 캔버스를 가리던 마지막 하나를 걷어낸 0.16.1까지.'
+    summary: 'open-design-v0.16.0 — 5일 동안 20명의 기여자가 92개의 PR을 보냈습니다. 코드명 “Reliable Delivery”. 비주얼 방향이 실제로 만드는 것에 맞춰 따라오고, 자동 업데이트가 제대로 적용되며, 긴 작업이 결과와 함께 만들어진 파일까지 지키고, 미리보기가 프레임과 다투지 않습니다. 앱 안의 메시지 센터, 그리고 캔버스를 가리던 마지막 하나를 걷어낸 0.16.1까지.'
     category: '제품'
     bodyHtml: |
-      <p>태그 <code>open-design-v0.16.0</code>, 2026년 7월 22일 공개. <strong>5일 동안 20명의 기여자가 92개의 PR을 보냈습니다.</strong> 코드명 “Reliable Delivery”. 지난 릴리스가 한 번의 실행에 드는 비용을 겨눴다면, 이번 릴리스는 결과가 완성된 순간과 그것이 실제로 손에 닿는 순간 사이에 벌어지는 일을 겨눕니다. 반쯤 적용된 업데이트, 파일을 잃어버린 긴 작업, 씨름해야 하는 미리보기, 한 장이 빠진 내보내기.</p>
+      <p><code>open-design-v0.16.0</code>, 2026년 7월 22일 공개. <strong>5일 동안 20명의 기여자가 92개의 PR을 보냈습니다.</strong> 코드명 “Reliable Delivery”. 지난 릴리스가 한 번의 실행에 드는 비용을 겨눴다면, 이번 릴리스는 결과가 완성된 순간과 그것이 실제로 손에 닿는 순간 사이에 벌어지는 일을 겨눕니다. 반쯤 적용된 업데이트, 파일을 잃어버린 긴 작업, 씨름해야 하는 미리보기, 한 장이 빠진 내보내기.</p>
       <p>전체 변경 이력이 필요하다면 <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.16.0">GitHub의 릴리스 노트</a>에 있습니다. 여기서는 짧은 버전으로: 아래에서 무엇이 바뀌었고, 오늘 그것으로 무엇을 할 수 있으며, 어디서 시작하면 되는지.</p>
 
       <h2>비주얼 방향이 실제로 만드는 것을 따라옵니다</h2>
@@ -240,10 +240,10 @@ i18n:
       </ul>
   de:
     title: 'Open Design 0.16.0: verlässliche Auslieferung'
-    summary: 'Tag open-design-v0.16.0 — 92 PRs von 20 Mitwirkenden in fünf Tagen. Codename „Reliable Delivery“. Die visuelle Richtung folgt jetzt dem, was Sie tatsächlich bauen, automatische Updates greifen wirklich, lange Aufgaben behalten ihr Ergebnis samt Dateien, und Vorschauen kämpfen nicht mehr mit dem Rahmen. Dazu ein Nachrichtencenter in der App — und der 0.16.1-Patch, der das Letzte von der Canvas geräumt hat.'
+    summary: 'open-design-v0.16.0 — 92 PRs von 20 Mitwirkenden in fünf Tagen. Codename „Reliable Delivery“. Die visuelle Richtung folgt jetzt dem, was Sie tatsächlich bauen, automatische Updates greifen wirklich, lange Aufgaben behalten ihr Ergebnis samt Dateien, und Vorschauen kämpfen nicht mehr mit dem Rahmen. Dazu ein Nachrichtencenter in der App — und der 0.16.1-Patch, der das Letzte von der Canvas geräumt hat.'
     category: 'Produkt'
     bodyHtml: |
-      <p>Tag <code>open-design-v0.16.0</code>, veröffentlicht am 22. Juli 2026. <strong>92 PRs von 20 Mitwirkenden in fünf Tagen.</strong> Codename „Reliable Delivery“. Das letzte Release ging dem nach, was ein Lauf kostet. Dieses geht dem nach, was zwischen einem fertigen Ergebnis und dem Moment passiert, in dem es Sie wirklich erreicht: das halb angewandte Update, die lange Aufgabe, die ihre Dateien verlor, die Vorschau, gegen die man ankämpfen musste, der Export, dem eine Folie fehlte.</p>
+      <p><code>open-design-v0.16.0</code>, veröffentlicht am 22. Juli 2026. <strong>92 PRs von 20 Mitwirkenden in fünf Tagen.</strong> Codename „Reliable Delivery“. Das letzte Release ging dem nach, was ein Lauf kostet. Dieses geht dem nach, was zwischen einem fertigen Ergebnis und dem Moment passiert, in dem es Sie wirklich erreicht: das halb angewandte Update, die lange Aufgabe, die ihre Dateien verlor, die Vorschau, gegen die man ankämpfen musste, der Export, dem eine Folie fehlte.</p>
       <p>Das vollständige Changelog steht in den <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.16.0">Release Notes auf GitHub</a>. Hier die Kurzfassung: was sich darunter geändert hat, was Sie heute damit tun können und wo Sie anfangen.</p>
 
       <h2>Die visuelle Richtung folgt dem, was Sie tatsächlich bauen</h2>
@@ -317,10 +317,10 @@ i18n:
       </ul>
   fr:
     title: 'Open Design 0.16.0 : une livraison fiable'
-    summary: 'Tag open-design-v0.16.0 — 92 PR de 20 contributeurs en cinq jours. Nom de code « Reliable Delivery ». La direction visuelle suit désormais ce que vous fabriquez vraiment, les mises à jour automatiques prennent effet pour de bon, les longues tâches gardent leur résultat et les fichiers qui vont avec, et les aperçus cessent de se battre avec le cadre. Plus un centre de messages dans l''app — et le correctif 0.16.1 qui a dégagé la dernière chose posée sur votre canvas.'
+    summary: 'open-design-v0.16.0 — 92 PR de 20 contributeurs en cinq jours. Nom de code « Reliable Delivery ». La direction visuelle suit désormais ce que vous fabriquez vraiment, les mises à jour automatiques prennent effet pour de bon, les longues tâches gardent leur résultat et les fichiers qui vont avec, et les aperçus cessent de se battre avec le cadre. Plus un centre de messages dans l''app — et le correctif 0.16.1 qui a dégagé la dernière chose posée sur votre canvas.'
     category: 'Produit'
     bodyHtml: |
-      <p>Tag <code>open-design-v0.16.0</code>, publié le 22 juillet 2026. <strong>92 PR de 20 contributeurs en cinq jours.</strong> Nom de code « Reliable Delivery ». La version précédente s'attaquait à ce que coûte une exécution. Celle-ci s'attaque à ce qui se passe entre un résultat terminé et le moment où il vous parvient vraiment : la mise à jour à moitié appliquée, la longue tâche qui a perdu ses fichiers, l'aperçu qu'il fallait dompter, l'export auquel il manquait une diapositive.</p>
+      <p><code>open-design-v0.16.0</code>, publié le 22 juillet 2026. <strong>92 PR de 20 contributeurs en cinq jours.</strong> Nom de code « Reliable Delivery ». La version précédente s'attaquait à ce que coûte une exécution. Celle-ci s'attaque à ce qui se passe entre un résultat terminé et le moment où il vous parvient vraiment : la mise à jour à moitié appliquée, la longue tâche qui a perdu ses fichiers, l'aperçu qu'il fallait dompter, l'export auquel il manquait une diapositive.</p>
       <p>Le changelog complet vit dans les <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.16.0">notes de version sur GitHub</a>. Voici la version courte : ce qui a changé en dessous, ce que vous pouvez en faire aujourd'hui et par où commencer.</p>
 
       <h2>La direction visuelle suit ce que vous fabriquez vraiment</h2>
@@ -394,10 +394,10 @@ i18n:
       </ul>
   ru:
     title: 'Open Design 0.16.0: надёжная доставка'
-    summary: 'Тег open-design-v0.16.0 — 92 PR от 20 участников за пять дней. Кодовое имя «Reliable Delivery». Визуальное направление теперь следует за тем, что вы действительно делаете, автообновления по-настоящему вступают в силу, длинные задачи сохраняют результат вместе с файлами, а превью перестаёт бороться с рамкой. Плюс центр сообщений внутри приложения — и патч 0.16.1, убравший последнее, что закрывало холст.'
+    summary: 'open-design-v0.16.0 — 92 PR от 20 участников за пять дней. Кодовое имя «Reliable Delivery». Визуальное направление теперь следует за тем, что вы действительно делаете, автообновления по-настоящему вступают в силу, длинные задачи сохраняют результат вместе с файлами, а превью перестаёт бороться с рамкой. Плюс центр сообщений внутри приложения — и патч 0.16.1, убравший последнее, что закрывало холст.'
     category: 'Продукт'
     bodyHtml: |
-      <p>Тег <code>open-design-v0.16.0</code>, опубликован 22 июля 2026 года. <strong>92 PR от 20 участников за пять дней.</strong> Кодовое имя «Reliable Delivery». Прошлый релиз занимался тем, сколько стоит один прогон. Этот занимается тем, что происходит между готовым результатом и моментом, когда он действительно доходит до вас: наполовину применённое обновление, длинная задача, потерявшая файлы, превью, с которым приходилось бороться, экспорт, потерявший слайд.</p>
+      <p><code>open-design-v0.16.0</code>, опубликован 22 июля 2026 года. <strong>92 PR от 20 участников за пять дней.</strong> Кодовое имя «Reliable Delivery». Прошлый релиз занимался тем, сколько стоит один прогон. Этот занимается тем, что происходит между готовым результатом и моментом, когда он действительно доходит до вас: наполовину применённое обновление, длинная задача, потерявшая файлы, превью, с которым приходилось бороться, экспорт, потерявший слайд.</p>
       <p>Полный список изменений — в <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.16.0">заметках о релизе на GitHub</a>. Здесь короткая версия: что изменилось внутри, что с этим можно делать сегодня и с чего начать.</p>
 
       <h2>Визуальное направление следует за тем, что вы делаете</h2>
@@ -471,10 +471,10 @@ i18n:
       </ul>
   es:
     title: 'Open Design 0.16.0: entrega fiable'
-    summary: 'Etiqueta open-design-v0.16.0 — 92 PR de 20 personas en cinco días. Nombre en clave «Reliable Delivery». La dirección visual ahora sigue a lo que estás haciendo de verdad, las actualizaciones automáticas surten efecto, las tareas largas conservan su resultado y los archivos que lo acompañan, y las vistas previas dejan de pelearse con el marco. Además, un centro de mensajes dentro de la app y el parche 0.16.1 que despejó lo último que tapaba el lienzo.'
+    summary: 'open-design-v0.16.0 — 92 PR de 20 personas en cinco días. Nombre en clave «Reliable Delivery». La dirección visual ahora sigue a lo que estás haciendo de verdad, las actualizaciones automáticas surten efecto, las tareas largas conservan su resultado y los archivos que lo acompañan, y las vistas previas dejan de pelearse con el marco. Además, un centro de mensajes dentro de la app y el parche 0.16.1 que despejó lo último que tapaba el lienzo.'
     category: 'Producto'
     bodyHtml: |
-      <p>Etiqueta <code>open-design-v0.16.0</code>, publicada el 22 de julio de 2026. <strong>92 PR de 20 personas en cinco días.</strong> Nombre en clave «Reliable Delivery». La versión anterior fue a por lo que cuesta cada ejecución. Esta va a por lo que ocurre entre un resultado terminado y el momento en que de verdad llega a tus manos: la actualización aplicada a medias, la tarea larga que perdió sus archivos, la vista previa contra la que había que pelear, la exportación a la que le faltaba una diapositiva.</p>
+      <p><code>open-design-v0.16.0</code>, publicado el 22 de julio de 2026. <strong>92 PR de 20 personas en cinco días.</strong> Nombre en clave «Reliable Delivery». La versión anterior fue a por lo que cuesta cada ejecución. Esta va a por lo que ocurre entre un resultado terminado y el momento en que de verdad llega a tus manos: la actualización aplicada a medias, la tarea larga que perdió sus archivos, la vista previa contra la que había que pelear, la exportación a la que le faltaba una diapositiva.</p>
       <p>El changelog completo vive en las <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.16.0">notas de la versión en GitHub</a>. Esta es la versión corta: qué cambió por debajo, qué puedes hacer con ello hoy y por dónde empezar.</p>
 
       <h2>La dirección visual sigue a lo que realmente estás haciendo</h2>
@@ -548,10 +548,10 @@ i18n:
       </ul>
   pt-br:
     title: 'Open Design 0.16.0: entrega confiável'
-    summary: 'Tag open-design-v0.16.0 — 92 PRs de 20 pessoas em cinco dias. Codinome “Reliable Delivery”. A direção visual agora acompanha o que você está realmente criando, as atualizações automáticas passam a valer de fato, tarefas longas guardam o resultado e os arquivos que vieram com ele, e as prévias param de brigar com a moldura. Além de uma central de mensagens dentro do app — e o patch 0.16.1, que tirou a última coisa em cima do canvas.'
+    summary: 'open-design-v0.16.0 — 92 PRs de 20 pessoas em cinco dias. Codinome “Reliable Delivery”. A direção visual agora acompanha o que você está realmente criando, as atualizações automáticas passam a valer de fato, tarefas longas guardam o resultado e os arquivos que vieram com ele, e as prévias param de brigar com a moldura. Além de uma central de mensagens dentro do app — e o patch 0.16.1, que tirou a última coisa em cima do canvas.'
     category: 'Produto'
     bodyHtml: |
-      <p>Tag <code>open-design-v0.16.0</code>, publicada em 22 de julho de 2026. <strong>92 PRs de 20 pessoas em cinco dias.</strong> Codinome “Reliable Delivery”. A versão anterior atacou o custo de cada execução. Esta ataca o que acontece entre um resultado pronto e o momento em que ele realmente chega até você: a atualização aplicada pela metade, a tarefa longa que perdeu os arquivos, a prévia com que era preciso brigar, a exportação que deixou um slide para trás.</p>
+      <p><code>open-design-v0.16.0</code>, publicado em 22 de julho de 2026. <strong>92 PRs de 20 pessoas em cinco dias.</strong> Codinome “Reliable Delivery”. A versão anterior atacou o custo de cada execução. Esta ataca o que acontece entre um resultado pronto e o momento em que ele realmente chega até você: a atualização aplicada pela metade, a tarefa longa que perdeu os arquivos, a prévia com que era preciso brigar, a exportação que deixou um slide para trás.</p>
       <p>O changelog completo está nas <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.16.0">notas de versão no GitHub</a>. Aqui vai a versão curta: o que mudou por baixo, o que dá para fazer com isso hoje e por onde começar.</p>
 
       <h2>A direção visual acompanha o que você está realmente criando</h2>
@@ -625,10 +625,10 @@ i18n:
       </ul>
   it:
     title: 'Open Design 0.16.0: consegna affidabile'
-    summary: 'Tag open-design-v0.16.0 — 92 PR da 20 contributori in cinque giorni. Nome in codice «Reliable Delivery». La direzione visiva ora segue ciò che stai davvero costruendo, gli aggiornamenti automatici hanno davvero effetto, le attività lunghe conservano il risultato e i file che lo accompagnano, e le anteprime smettono di litigare con la cornice. In più un centro messaggi dentro l''app e la patch 0.16.1, che ha liberato l''ultima cosa rimasta sopra la canvas.'
+    summary: 'open-design-v0.16.0 — 92 PR da 20 contributori in cinque giorni. Nome in codice «Reliable Delivery». La direzione visiva ora segue ciò che stai davvero costruendo, gli aggiornamenti automatici hanno davvero effetto, le attività lunghe conservano il risultato e i file che lo accompagnano, e le anteprime smettono di litigare con la cornice. In più un centro messaggi dentro l''app e la patch 0.16.1, che ha liberato l''ultima cosa rimasta sopra la canvas.'
     category: 'Prodotto'
     bodyHtml: |
-      <p>Tag <code>open-design-v0.16.0</code>, pubblicato il 22 luglio 2026. <strong>92 PR da 20 contributori in cinque giorni.</strong> Nome in codice «Reliable Delivery». La release precedente puntava a quanto costa un'esecuzione. Questa punta a ciò che accade tra un risultato finito e il momento in cui ti raggiunge davvero: l'aggiornamento applicato a metà, l'attività lunga che ha perso i suoi file, l'anteprima con cui bisognava combattere, l'esportazione a cui mancava una slide.</p>
+      <p><code>open-design-v0.16.0</code>, pubblicato il 22 luglio 2026. <strong>92 PR da 20 contributori in cinque giorni.</strong> Nome in codice «Reliable Delivery». La release precedente puntava a quanto costa un'esecuzione. Questa punta a ciò che accade tra un risultato finito e il momento in cui ti raggiunge davvero: l'aggiornamento applicato a metà, l'attività lunga che ha perso i suoi file, l'anteprima con cui bisognava combattere, l'esportazione a cui mancava una slide.</p>
       <p>Il changelog completo vive nelle <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.16.0">note di rilascio su GitHub</a>. Qui la versione breve: cosa è cambiato sotto, cosa puoi farci oggi e da dove iniziare.</p>
 
       <h2>La direzione visiva segue ciò che stai davvero costruendo</h2>
@@ -702,10 +702,10 @@ i18n:
       </ul>
   tr:
     title: 'Open Design 0.16.0: güvenilir teslimat'
-    summary: 'Etiket open-design-v0.16.0 — beş günde 20 katkıcıdan 92 PR. Kod adı “Reliable Delivery”. Görsel yön artık gerçekten ürettiğiniz şeyi izliyor, otomatik güncellemeler gerçekten devreye giriyor, uzun görevler sonucu ve yanındaki dosyaları koruyor, önizlemeler çerçeveyle boğuşmayı bırakıyor. Ayrıca uygulama içinde bir mesaj merkezi ve tuvalin üzerindeki son şeyi kaldıran 0.16.1 yaması.'
+    summary: 'open-design-v0.16.0 — beş günde 20 katkıcıdan 92 PR. Kod adı “Reliable Delivery”. Görsel yön artık gerçekten ürettiğiniz şeyi izliyor, otomatik güncellemeler gerçekten devreye giriyor, uzun görevler sonucu ve yanındaki dosyaları koruyor, önizlemeler çerçeveyle boğuşmayı bırakıyor. Ayrıca uygulama içinde bir mesaj merkezi ve tuvalin üzerindeki son şeyi kaldıran 0.16.1 yaması.'
     category: 'Ürün'
     bodyHtml: |
-      <p>Etiket <code>open-design-v0.16.0</code>, 22 Temmuz 2026'da yayımlandı. <strong>Beş günde 20 katkıcıdan 92 PR.</strong> Kod adı “Reliable Delivery”. Önceki sürüm bir koşunun maliyetini hedeflemişti. Bu sürüm, biten bir sonuç ile onun gerçekten size ulaştığı an arasında olan biteni hedefliyor: yarım uygulanan güncelleme, dosyalarını yitiren uzun görev, boğuşmak zorunda kaldığınız önizleme, bir slaydı düşüren dışa aktarma.</p>
+      <p><code>open-design-v0.16.0</code>, 22 Temmuz 2026'da yayımlandı. <strong>Beş günde 20 katkıcıdan 92 PR.</strong> Kod adı “Reliable Delivery”. Önceki sürüm bir koşunun maliyetini hedeflemişti. Bu sürüm, biten bir sonuç ile onun gerçekten size ulaştığı an arasında olan biteni hedefliyor: yarım uygulanan güncelleme, dosyalarını yitiren uzun görev, boğuşmak zorunda kaldığınız önizleme, bir slaydı düşüren dışa aktarma.</p>
       <p>Tüm değişiklik listesi <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.16.0">GitHub'daki sürüm notlarında</a>. Burada kısa hâli var: altta ne değişti, bugün bununla ne yapabilirsiniz ve nereden başlamalı.</p>
 
       <h2>Görsel yön, gerçekten ürettiğiniz şeyi izliyor</h2>
@@ -779,7 +779,7 @@ i18n:
       </ul>
 ---
 
-Tag `open-design-v0.16.0`, published on July 22, 2026. **92 PRs from 20 contributors in five days.** Codename "Reliable Delivery." The last release went after what a run costs you. This one goes after what happens between a finished result and the moment it actually reaches you: the update that half-applied, the long task that lost its files, the preview you had to fight, the export that dropped a slide.
+`open-design-v0.16.0`, published on July 22, 2026. **92 PRs from 20 contributors in five days.** Codename "Reliable Delivery." The last release went after what a run costs you. This one goes after what happens between a finished result and the moment it actually reaches you: the update that half-applied, the long task that lost its files, the preview you had to fight, the export that dropped a slide.
 
 Want the full changelog? It lives in the [release notes on GitHub](https://github.com/nexu-io/open-design/releases/tag/open-design-v0.16.0). This is the short version: what changed underneath, what you can do with it today, and where to start.
 
