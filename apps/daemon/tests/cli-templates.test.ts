@@ -610,7 +610,7 @@ describe('od config byok CLI', () => {
       status: 400,
       body: {
         error: {
-          code: 'missing-input',
+          code: 'BAD_REQUEST',
           message: 'invalid BYOK provider selection',
         },
       },

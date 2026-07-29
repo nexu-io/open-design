@@ -111,7 +111,7 @@ it('[P0] starts on an existing data dir with legacy app config and persisted pro
     expect(response.status).toBe(400);
     expect(await response.json()).toMatchObject({
       error: {
-        code: 'missing-input',
+        code: 'BAD_REQUEST',
         message: 'invalid BYOK provider selection',
       },
     });

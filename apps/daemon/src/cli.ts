@@ -1839,7 +1839,7 @@ function exitWithStructuredError({ code, message, data }) {
 // structured envelope instead of collapsing to `HTTP <status>: `, which
 // would drop the only diagnostic the daemon actually returned to a
 // headless caller.
-async function structuredHttpFailure(resp, fallbackCode = 'daemon-not-running') {
+async function structuredHttpFailure(resp, fallbackCode = 'daemon-not-running', codeMap) {
   let raw = '';
   let parsed;
   try {
@@ -1852,7 +1852,8 @@ async function structuredHttpFailure(resp, fallbackCode = 'daemon-not-running') 
     typeof parsed?.error === 'string'
       ? { message: parsed.error }
       : parsed?.error;
-  const errCode = normalizeRecoverableErrorCode(errorObj?.code, errorObj?.message);
+  const errCode = codeMap?.[errorObj?.code]
+    ?? normalizeRecoverableErrorCode(errorObj?.code, errorObj?.message);
   if (errCode) {
     exitWithStructuredError({
       code:    errCode,
@@ -8655,7 +8656,9 @@ Common options:
       headers: { 'content-type': 'application/json' },
       body:    JSON.stringify(next),
     });
-    if (!resp.ok) return structuredHttpFailure(resp);
+    if (!resp.ok) return structuredHttpFailure(resp, 'daemon-not-running', {
+      BAD_REQUEST: 'missing-input',
+    });
     return (await resp.json())?.config ?? next;
   };
 
