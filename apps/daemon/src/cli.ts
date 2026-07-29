@@ -6285,6 +6285,8 @@ async function runRun(args) {
   od run continue <runId> [--follow]        Continue a resumable failed run.
   od run list   [--project <id>]            List recent runs.
   od run info   <runId>                     One run's status.
+  od run inspect <runId> [--json]           Failure diagnostics: why it failed,
+                                            retryable, suggested action.
   od run result-package <runId> [--json]    Inspect run outputs and workspace
                                             provenance without applying them.
 
@@ -6322,6 +6324,30 @@ Common options:
       if (!resp.ok) return structuredHttpFailure(resp, 'run-not-found');
       const data = await resp.json();
       process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      return;
+    }
+    case 'inspect': {
+      // Surface the daemon's per-run failure diagnostics (#5489): why it
+      // failed, whether it is safe to retry, and the suggested action.
+      const id = rest.find((a) => !a.startsWith('-'));
+      if (!id) {
+        console.error('Usage: od run inspect <runId> [--json]');
+        process.exit(2);
+      }
+      const resp = await fetch(`${base}/api/runs/${encodeURIComponent(id)}/diagnostics`);
+      if (!resp.ok) return structuredHttpFailure(resp, 'run-not-found');
+      const data = await resp.json();
+      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      console.log(`${data?.runId ?? id} — ${data?.status ?? '-'}`);
+      const failure = data?.failure ?? null;
+      if (!failure) {
+        console.log('failure: (none)');
+        return;
+      }
+      const stage = failure.stage ? `   (stage: ${failure.stage})` : '';
+      console.log(`failure: ${failure.category ?? '-'} / ${failure.detail ?? '-'}${stage}`);
+      console.log(`retryable: ${failure.retryable === null ? '-' : failure.retryable ? 'yes' : 'no'}`);
+      console.log(`suggested action: ${failure.userAction ?? '-'}`);
       return;
     }
     case 'result-package': {

@@ -5603,6 +5603,13 @@ export async function startServer({
       // failure type + fix. Only meaningful on a failed result.
       run.failureCategory = result === 'failed' ? failure?.failure_category ?? null : null;
       run.failureDetail = result === 'failed' ? failure?.failure_detail ?? null : null;
+      // Carry the remaining already-computed classification fields on the run so
+      // the diagnostics endpoint + `od run inspect` can surface them (#5489).
+      // Same source object as failureCategory/Detail above; only meaningful on a
+      // failed result.
+      run.failureStage = result === 'failed' ? failure?.failure_stage ?? null : null;
+      run.failureRetryable = result === 'failed' ? failure?.retryable ?? null : null;
+      run.failureUserAction = result === 'failed' ? failure?.user_action ?? null : null;
       // Stamp the classification onto the persisted assistant message too, so a
       // reload (or any daemon-side persistence without the live web error
       // handler) keeps the specific failure guidance instead of the coarse

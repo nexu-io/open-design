@@ -11,6 +11,11 @@ import {
   type ChatRunStatus,
   type ChatRunStatusResponse,
   type ProjectMetadata as ContractProjectMetadata,
+  type RunDiagnosticsResponse,
+  type RunFailureCategory,
+  type RunFailureDetail,
+  type RunFailureStage,
+  type RunFailureUserAction,
   type RunResultPackageResponse,
 } from '@open-design/contracts';
 import {
@@ -154,6 +159,13 @@ interface ChatRun {
   signal?: string | null;
   error?: string | null;
   errorCode?: string | null;
+  // Finalize-time failure classification the daemon computes for retry-policy +
+  // telemetry (#5489). Surfaced through GET /api/runs/:id/diagnostics.
+  failureCategory?: RunFailureCategory | null;
+  failureDetail?: RunFailureDetail | null;
+  failureStage?: RunFailureStage | null;
+  failureRetryable?: boolean | null;
+  failureUserAction?: RunFailureUserAction | null;
   projectMetadata?: ProjectMetadata;
   appliedPluginSnapshotId?: string | null;
   pluginId?: string | null;
@@ -1509,6 +1521,36 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     const run = design.runs.get(runId);
     if (!run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
     res.json(design.runs.statusBody(run));
+  });
+
+  // Per-run reliability diagnostics (#5489). Surfaces the full failure
+  // classification the daemon already computes at finalize-time — stage,
+  // retryable, and user_action in addition to the category/detail the status
+  // endpoint carries — so local users and external agents (`od run inspect`)
+  // can see why a run failed and whether to retry, without reading telemetry.
+  // A dedicated sub-resource so GET /api/runs/:id stays lean. `failure` is null
+  // for a run that did not fail. Availability matches GET /api/runs/:id (the
+  // live run registry); durable/timing/token slices are deferred.
+  app.get('/api/runs/:id/diagnostics', (req: ApiRequest, res: ApiResponse) => {
+    const runId = routeParamId(req);
+    if (!runId) return sendApiError(res, 400, 'BAD_REQUEST', 'run id missing');
+    const run = design.runs.get(runId);
+    if (!run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
+    const failed = run.status === 'failed';
+    const body: RunDiagnosticsResponse = {
+      runId: run.id,
+      status: run.status,
+      failure: failed
+        ? {
+            category: run.failureCategory ?? null,
+            detail: run.failureDetail ?? null,
+            stage: run.failureStage ?? null,
+            retryable: run.failureRetryable ?? null,
+            userAction: run.failureUserAction ?? null,
+          }
+        : null,
+    };
+    res.json(body);
   });
 
   app.get('/api/runs/:id/events', (req: ApiRequest, res: ApiResponse) => {

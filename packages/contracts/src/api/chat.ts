@@ -17,6 +17,8 @@ import type { TrackingRuntimeType } from '../analytics/public-params.js';
 import type {
   TrackingRunFailureCategory,
   TrackingRunFailureDetail,
+  TrackingRunFailureStage,
+  TrackingRunFailureUserAction,
 } from '../analytics/events.js';
 
 // The daemon's run-failure taxonomy, re-exported under product-facing names so
@@ -26,6 +28,13 @@ import type {
 // producer and consumer can't drift.
 export type RunFailureCategory = TrackingRunFailureCategory;
 export type RunFailureDetail = TrackingRunFailureDetail;
+// The remaining classification fields the daemon already computes at
+// finalize-time but has not exposed on the API surface until now (#5489): the
+// pipeline stage the failure landed in, whether it is safe to retry, and the
+// suggested user action. Re-exported here so `od run inspect` and the
+// diagnostics endpoint carry the same union the daemon and analytics use.
+export type RunFailureStage = TrackingRunFailureStage;
+export type RunFailureUserAction = TrackingRunFailureUserAction;
 
 export type ChatRole = 'user' | 'assistant';
 export type ChatSessionMode = 'design' | 'chat' | 'plan';
@@ -525,6 +534,39 @@ export interface ChatRunStatusResponse {
 }
 
 export type ChatRunResultPackageResponse = RunResultPackageResponse;
+
+/**
+ * Per-run reliability diagnostics (#5489). The daemon already computes the full
+ * failure classification at finalize-time for retry-policy + telemetry, but the
+ * status surface only carried `failureCategory` / `failureDetail`. This exposes
+ * the remaining classification fields to local users and external agents
+ * (`GET /api/runs/:id/diagnostics`, `od run inspect`) so they can see *why* a
+ * run failed, whether it is safe to retry, and what action to take — without
+ * reading PostHog/Langfuse. Slice 1 covers the bounded failure classification;
+ * timing-segment and token/cache breakdowns follow once their storage story is
+ * settled (they are fire-and-forget into telemetry today).
+ *
+ * `failure` is null when the run did not fail. Availability matches
+ * `GET /api/runs/:id`: the live run registry (recent runs). Durable
+ * cross-restart persistence is deferred with the timing/token slice.
+ */
+export interface RunDiagnosticsResponse {
+  runId: string;
+  status: ChatRunStatus;
+  failure: {
+    category: RunFailureCategory | null;
+    detail: RunFailureDetail | null;
+    /** Pipeline stage the failure landed in (spawn, first_token_wait,
+     *  tool_execution, finalize, …). */
+    stage: RunFailureStage | null;
+    /** True when a same-run retry is safe (transient upstream/rate-limit),
+     *  false for terminal causes (auth, hard quota, user cancellation). */
+    retryable: boolean | null;
+    /** Suggested next action (retry, login, recharge, upgrade,
+     *  switch_model, reduce_context, install_cli, fix_config, none). */
+    userAction: RunFailureUserAction | null;
+  } | null;
+}
 
 export interface ChatRunListResponse {
   runs: ChatRunStatusResponse[];
