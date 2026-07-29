@@ -28,12 +28,23 @@ afterEach(() => {
 
 describe('StoreScreenshotWorkspace', () => {
   it('keeps export disabled when Google Play is invalid even if App Store is the active tab', async () => {
-    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async (input) => {
+    let validatePlatforms: string[] | null = null;
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async (input, init) => {
       if (String(input).endsWith('/validate')) {
-        return jsonResponse({
-          valid: false,
-          issues: [{ severity: 'error', code: 'PAGE_COUNT_OUT_OF_RANGE', message: 'Google Play requires 4 to 8 visible screenshots', platform: 'googlePlay' }],
-        });
+        const body = JSON.parse(String(init?.body ?? '{}')) as { platforms?: string[] };
+        validatePlatforms = body.platforms ?? null;
+        const validatesBothPlatforms =
+          body.platforms?.length === 2 &&
+          body.platforms.includes('appStore') &&
+          body.platforms.includes('googlePlay');
+        return jsonResponse(
+          validatesBothPlatforms
+            ? {
+                valid: false,
+                issues: [{ severity: 'error', code: 'PAGE_COUNT_OUT_OF_RANGE', message: 'Google Play requires 4 to 8 visible screenshots', platform: 'googlePlay' }],
+              }
+            : { valid: true, issues: [] },
+        );
       }
       return jsonResponse(documentResponse);
     }));
@@ -43,6 +54,7 @@ describe('StoreScreenshotWorkspace', () => {
     await screen.findAllByTestId('store-screenshot-card');
     expect(screen.getByRole('tab', { name: 'App Store' })).toHaveAttribute('aria-selected', 'true');
     expect(await screen.findByText('Validation needs attention')).toBeTruthy();
+    expect(validatePlatforms).toEqual(['appStore', 'googlePlay']);
     expect(screen.getByRole('button', { name: 'Export' })).toBeDisabled();
   });
 
