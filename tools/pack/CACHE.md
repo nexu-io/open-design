@@ -109,9 +109,13 @@ Current materialization-time parameters:
   `posthogKey`/`posthogHost`, `webOutputMode`, and `namespaceBaseRoot` — is
   regenerated on the materialization path by `writePackagedConfig`.
 
-Downstream archive nodes (`win.nsis-*`, `win.portable-zip`,
-`win.launcher-payload*`) carry `namespace` and the full `packagedVersion` in
+Downstream archive nodes (`win.nsis-*`, `win.portable-zip`, and
+`win.launcher-payload`) carry `namespace` and the full `packagedVersion` in
 their keys, because their content is the already-stamped payload.
+`win.launcher-payload-base` is the exception: its key carries `namespace`, but
+version identity reaches it only indirectly through the upstream `sourceKey`;
+the final `win.launcher-payload` archive explicitly carries the
+version-bearing `manifest` and `configBody`.
 
 **Requirement.** A value may be a materialization-time parameter only when
 both hold:
@@ -122,8 +126,11 @@ both hold:
 
 Adding a materialization-time parameter without (2) is not permitted.
 
-> Known asymmetry: app version satisfies (2); namespace currently satisfies
-> only (1) — it is rewritten but not asserted.
+> Known asymmetry: app version satisfies (2). The other regenerated config
+> fields — `namespace`, `amrProfile`, `telemetryRelayUrl`,
+> `updateMetadataUrl`, `posthogKey`, `posthogHost`, `webOutputMode`,
+> `namespaceBaseRoot`, and the packaged entrypoint fields — currently satisfy
+> only (1): they are rewritten but not asserted.
 
 ## Signing boundary
 
