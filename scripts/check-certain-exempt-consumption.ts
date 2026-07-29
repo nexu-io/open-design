@@ -117,9 +117,20 @@ const DAEMON_LANE_ALLOWED_TEST_COMMAND =
 
 const CONDITIONAL_CONSUMER = "apps/daemon/tests/runtimes/trae-cli.test.ts";
 
-function workflowRunBodies(workflow: string): string[] {
+/**
+ * Extract every `run:` body from a workflow.
+ *
+ * Splits on `\r?\n`, not `\n`: on a Windows working tree the workflow is CRLF,
+ * and a `\n`-only split leaves a trailing `\r` on every line. The line matcher
+ * below is anchored with `(.*)$`, and `.` excludes `\r` — so the match does not
+ * merely lose a character, it fails outright, silently reducing this check to
+ * "no run bodies found" and misclassifying gate lanes. Same root cause as
+ * #5175; see #6192. Exported so the CRLF case can be pinned without a real
+ * Windows checkout.
+ */
+export function workflowRunBodies(workflow: string): string[] {
   const runBodies: string[] = [];
-  const lines = workflow.split("\n");
+  const lines = workflow.split(/\r?\n/);
 
   for (let index = 0; index < lines.length; index += 1) {
     const match = lines[index]?.match(/^(\s*)(?:-\s+)?run:\s*(.*)$/);
