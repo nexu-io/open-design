@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { registerBrandRoutes, type BrandRoutesDeps } from '../src/brand-routes.js';
+import { createCreatedProjectWorkspaceResolver } from '../src/collab/created-project-workspace.js';
 import {
   closeDatabase,
   getWorkspaceProjectByProjectId,
@@ -1362,6 +1363,13 @@ describe('brand routes', () => {
       skillsRoot,
       dataDir,
       db,
+      // The same production seam `server.ts` builds. Constructed with no
+      // membership-directory fetcher, which is
+      // `authorizeCreatedProjectWorkspace`'s documented local/dev
+      // compatibility configuration — so a verified header identity still
+      // binds here, while the resolver's verify-then-degrade contract is
+      // covered directly in `tests/collab/created-project-workspace.test.ts`.
+      resolveCreatedProjectHome: createCreatedProjectWorkspaceResolver({}),
       ...extraDeps,
     });
     const server = http.createServer(app);
