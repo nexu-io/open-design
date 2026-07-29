@@ -51,6 +51,7 @@ const workspaceScopeMocks = vi.hoisted(() => ({
   ambientFailure: null as 'unsupported' | 'unavailable' | null,
   projectScope: {
     loading: false,
+    initialLoadPending: false,
     scope: {
       kind: 'personal' as const,
       projectId: 'project-1',
@@ -114,16 +115,19 @@ vi.mock('../../src/collab/useProjectWorkspaceScope', () => ({
     scope: ProjectWorkspaceScopeState['scope'],
   ) => scope?.kind === 'personal' || scope?.kind === 'team',
   // Mirrors the real `runWorkspaceIdentity`: the project's resolved scope wins,
-  // and the caller's own identity stands in ONLY while the first answer is still
-  // outstanding. Every answered or failed state stays headerless so the daemon
-  // judges it on its own state.
+  // and the caller's own identity stands in ONLY for the first, still-outstanding
+  // read of this project's binding (`initialLoadPending`). Answered, failed, and
+  // revalidating-a-known-binding all stay headerless so the daemon judges them on
+  // its own state. Keyed on `initialLoadPending`, NOT on `loading` — the two are
+  // different questions during a workspace switch.
   runWorkspaceIdentity: (
     state: ProjectWorkspaceScopeState,
     caller: WorkspaceCollabContext | null,
   ) => {
     const scope = state.scope;
     if (scope?.kind === 'personal' || scope?.kind === 'team') return scope.context;
-    if (!state.loading || scope !== null || state.failure) return null;
+    if (!state.initialLoadPending) return null;
+    if (scope !== null || state.failure) return null;
     return caller;
   },
 }));
@@ -680,6 +684,7 @@ describe('ProjectView conversation run isolation', () => {
     workspaceScopeMocks.ambientFailure = null;
     workspaceScopeMocks.projectScope = {
       loading: false,
+      initialLoadPending: false,
       scope: {
         kind: 'personal',
         projectId: project.id,
@@ -789,6 +794,7 @@ describe('ProjectView conversation run isolation', () => {
     conversationAMessages = [];
     workspaceScopeMocks.projectScope = {
       loading: false,
+      initialLoadPending: false,
       scope: null,
       failure,
     };
@@ -828,6 +834,7 @@ describe('ProjectView conversation run isolation', () => {
       'an unbound project',
       {
         loading: false,
+        initialLoadPending: false,
         scope: {
           kind: 'unbound' as const,
           projectId: project.id,
@@ -840,6 +847,7 @@ describe('ProjectView conversation run isolation', () => {
       'a project pinned to a workspace the caller is not in',
       {
         loading: false,
+        initialLoadPending: false,
         scope: {
           kind: 'unavailable' as const,
           projectId: project.id,
@@ -851,7 +859,7 @@ describe('ProjectView conversation run isolation', () => {
     ],
     [
       'a workspace-directory outage',
-      { loading: false, scope: null, failure: 'unavailable' as const },
+      { loading: false, scope: null, failure: 'unavailable' as const, initialLoadPending: false },
     ],
   ])(
     'lets a signed-in user send an AMR run with %s — they are spending their own quota',
@@ -887,6 +895,7 @@ describe('ProjectView conversation run isolation', () => {
     workspaceScopeMocks.ambientFailure = null;
     workspaceScopeMocks.projectScope = {
       loading: false,
+      initialLoadPending: false,
       scope: {
         kind: 'unbound',
         projectId: project.id,
@@ -918,6 +927,7 @@ describe('ProjectView conversation run isolation', () => {
       workspaceScopeMocks.ambientFailure = identity.failure;
       workspaceScopeMocks.projectScope = {
         loading: false,
+        initialLoadPending: false,
         scope: {
           kind: 'unbound',
           projectId: project.id,
@@ -942,6 +952,7 @@ describe('ProjectView conversation run isolation', () => {
       'an unbound project',
       {
         loading: false,
+        initialLoadPending: false,
         scope: {
           kind: 'unbound' as const,
           projectId: project.id,
@@ -952,11 +963,11 @@ describe('ProjectView conversation run isolation', () => {
     ],
     [
       'an old daemon',
-      { loading: false, scope: null, failure: 'unsupported' as const },
+      { loading: false, scope: null, failure: 'unsupported' as const, initialLoadPending: false },
     ],
     [
       'a workspace-directory outage',
-      { loading: false, scope: null, failure: 'unavailable' as const },
+      { loading: false, scope: null, failure: 'unavailable' as const, initialLoadPending: false },
     ],
   ])(
     'fails closed for a SIGNED-OUT AMR caller with %s',
@@ -996,6 +1007,7 @@ describe('ProjectView conversation run isolation', () => {
     workspaceScopeMocks.ambientContext = workspaceB;
     workspaceScopeMocks.projectScope = {
       loading: false,
+      initialLoadPending: false,
       scope: {
         kind: 'team',
         projectId: project.id,
@@ -1027,6 +1039,7 @@ describe('ProjectView conversation run isolation', () => {
     workspaceScopeMocks.ambientContext = workspaceB;
     workspaceScopeMocks.projectScope = {
       loading: false,
+      initialLoadPending: false,
       scope: {
         kind: 'team',
         projectId: project.id,

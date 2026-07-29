@@ -23,6 +23,23 @@ export interface ProjectWorkspaceScopeState {
   loading: boolean;
   scope: ProjectWorkspaceScope | null;
   failure?: 'unsupported' | 'forbidden' | 'unavailable';
+  /**
+   * Whether THIS project's binding has never been answered yet.
+   *
+   * `loading` cannot express that. The trailing transition guard below re-enters
+   * `{ loading: true, scope: null }` whenever the resolved revision or caller
+   * identity stops matching, so a first load and a post-switch revalidation are
+   * byte-identical in every other field — and they are opposite facts. In the
+   * first, nothing is known about the binding. In the second, the binding IS
+   * known and merely being re-read, so the caller's current workspace is a guess
+   * that contradicts it.
+   *
+   * True from mount until the first settled answer for the current `projectId`
+   * (a scope OR a failure), then false for that project's whole lifetime —
+   * including every later revalidation window. Resets when `projectId` changes,
+   * because a different project genuinely has not been read.
+   */
+  initialLoadPending: boolean;
 }
 
 export function projectWorkspaceContext(
@@ -89,7 +106,24 @@ export function projectWorkspaceScopeReady(
  * there, exactly as before.
  *
  * So the fallback is scoped to the single window the refusal actually came from:
- * the answer has not arrived YET.
+ * THE FIRST READ OF THIS PROJECT'S BINDING, which has not answered yet.
+ *
+ * That is `initialLoadPending`, and it is why this takes the whole state rather
+ * than just `loading`. `loading` is true for two opposite situations, because the
+ * hook's transition guard re-enters `{ loading: true, scope: null }` whenever the
+ * resolved caller identity stops matching — which every workspace switch does:
+ *
+ *   - first read, nothing known  -> the caller is the only identity available
+ *   - revalidating a KNOWN binding -> the caller's current workspace is a guess
+ *     that contradicts an answer we already have
+ *
+ * Keying on `loading` served both, so a send during a workspace switch asserted
+ * the workspace the user had just moved TO for a project still bound to the one
+ * they moved FROM. Both consumers broke, and differently: `POST /api/runs` can
+ * 403 because `enforceWorkspaceResourceMutation` still finds the row under the
+ * old workspace, and `checkAmrBalanceGate` preflights the new workspace's wallet
+ * — worse than the `undefined` this helper was written to fix, because a wrong
+ * wallet looks like a real answer.
  */
 export function runWorkspaceIdentity(
   state: ProjectWorkspaceScopeState,
@@ -97,9 +131,12 @@ export function runWorkspaceIdentity(
 ): WorkspaceCollabContext | null {
   const resolved = projectWorkspaceContext(state.scope);
   if (resolved) return resolved;
-  // Anything other than "still waiting for the first answer" keeps the
-  // pre-existing headerless behavior, so the daemon judges it on its own state.
-  if (!state.loading || state.scope !== null || state.failure) return null;
+  // Only the first, still-outstanding read of THIS project's binding may borrow
+  // the caller's identity. Every other state — answered, failed, or revalidating
+  // a binding already known — keeps the pre-existing headerless behavior, so the
+  // daemon judges it on its own state.
+  if (!state.initialLoadPending) return null;
+  if (state.scope !== null || state.failure) return null;
   return caller;
 }
 
@@ -222,12 +259,19 @@ export function useProjectWorkspaceScope(projectId: string): ProjectWorkspaceSco
   callerContextRef.current = workspaceContext;
   const callerIdentity = workspaceIdentityCacheKey(workspaceContext);
   const callerSettled = callerIdentityIsSettled(workspaceContextState);
+  // Which project has already produced a settled answer. A ref, not state: it
+  // must survive the transition guard below (which deliberately discards the
+  // resolved scope) and it is always written alongside a `setState`, so it never
+  // needs to drive a render of its own. Keyed by project id so switching to a
+  // genuinely unread project reports pending again.
+  const settledProjectIdRef = useRef<string | null>(null);
   const [state, setState] = useState<ProjectWorkspaceScopeState & {
     resolvedRevision: number;
     resolvedIdentity: string | null;
   }>({
     loading: true,
     scope: null,
+    initialLoadPending: true,
     resolvedRevision: -1,
     resolvedIdentity: null,
   });
@@ -279,6 +323,7 @@ export function useProjectWorkspaceScope(projectId: string): ProjectWorkspaceSco
         setState({
           loading: true,
           scope: null,
+          initialLoadPending: settledProjectIdRef.current !== projectId,
           resolvedRevision: refreshRevision,
           resolvedIdentity: callerIdentity,
         });
@@ -297,9 +342,11 @@ export function useProjectWorkspaceScope(projectId: string): ProjectWorkspaceSco
           },
         );
         if (controller.signal.aborted || epoch !== epochRef.current) return;
+        settledProjectIdRef.current = projectId;
         setState({
           loading: false,
           scope,
+          initialLoadPending: false,
           resolvedRevision: refreshRevision,
           resolvedIdentity: callerIdentity,
         });
@@ -312,9 +359,11 @@ export function useProjectWorkspaceScope(projectId: string): ProjectWorkspaceSco
           error instanceof ProjectWorkspaceScopeFetchError
             ? error.failure
             : 'unavailable';
+        settledProjectIdRef.current = projectId;
         setState({
           loading: false,
           scope: null,
+          initialLoadPending: false,
           resolvedRevision: refreshRevision,
           resolvedIdentity: callerIdentity,
           failure,
@@ -345,11 +394,18 @@ export function useProjectWorkspaceScope(projectId: string): ProjectWorkspaceSco
     state.resolvedIdentity !== callerIdentity ||
     (state.scope !== null && state.scope.projectId !== projectId)
   ) {
-    return { loading: true, scope: null };
+    return {
+      loading: true,
+      scope: null,
+      // The whole point of this bit: this frame looks exactly like a first load
+      // but is not one whenever this project has already been answered.
+      initialLoadPending: settledProjectIdRef.current !== projectId,
+    };
   }
   return {
     loading: state.loading,
     scope: state.scope,
+    initialLoadPending: state.initialLoadPending,
     ...(state.failure ? { failure: state.failure } : {}),
   };
 }

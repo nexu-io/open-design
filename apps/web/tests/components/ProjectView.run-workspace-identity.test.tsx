@@ -32,7 +32,7 @@
 // pre-run balance gate receives the same null and silently prices the run
 // against the ACCOUNT wallet instead of the team's.
 
-import { cleanup, render, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import {
   buildWorkspacePermissions,
   buildWorkspaceSeatSummary,
@@ -42,7 +42,10 @@ import type { ComponentProps, ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ProjectView } from '../../src/components/ProjectView';
-import { resetWorkspaceContextCache } from '../../src/collab/useWorkspaceContext';
+import {
+  WORKSPACE_CONTEXT_REFRESH_EVENT,
+  resetWorkspaceContextCache,
+} from '../../src/collab/useWorkspaceContext';
 import { streamViaDaemon } from '../../src/providers/daemon';
 import { checkAmrBalanceGate } from '../../src/runtime/amr-balance-gate';
 import {
@@ -169,8 +172,20 @@ vi.mock('../../src/components/Loading', () => ({
   CenteredLoader: () => <div data-testid="loader" />,
 }));
 vi.mock('../../src/components/ChatPane', () => ({
-  ChatPane: (props: { activeConversationId?: string | null }) => (
-    <div data-testid="active-conversation">{props.activeConversationId ?? ''}</div>
+  ChatPane: (props: {
+    activeConversationId?: string | null;
+    onSend?: (prompt: string, attachments: unknown[], comments: unknown[]) => void;
+  }) => (
+    <>
+      <div data-testid="active-conversation">{props.activeConversationId ?? ''}</div>
+      <button
+        type="button"
+        data-testid="send-message"
+        onClick={() => props.onSend?.('post-switch send', [], [])}
+      >
+        send
+      </button>
+    </>
   ),
 }));
 
@@ -321,5 +336,132 @@ describe('a Home auto-send identifies its caller before the project scope resolv
       workspaceId: TEAM_WORKSPACE,
       workspaceMemberId: TEAM_MEMBER,
     });
+  });
+});
+
+// The regression `nettee` caught on the first cut of this fix, at the layer the
+// user actually hits it. `useProjectWorkspaceScope`'s trailing guard re-enters
+// `{ loading: true, scope: null }` whenever the resolved caller identity stops
+// matching, and a workspace switch does exactly that. Keying the fallback on
+// `loading` therefore made a send issued in that window assert workspace B for a
+// project bound to workspace A.
+//
+// Both consumers are asserted separately because they fail differently:
+// `POST /api/runs` can 403 (the gate still finds the row under A) while
+// `checkAmrBalanceGate` silently preflights B's wallet.
+describe('a send immediately after a workspace switch does not assert the new workspace', () => {
+  const WORKSPACE_B = 'ws-switched-to';
+  const MEMBER_B = 'member-in-b';
+
+  function contextForB(): WorkspaceCollabContext {
+    return {
+      ...CALLER_CONTEXT,
+      workspaceId: WORKSPACE_B,
+      workspaceMemberId: MEMBER_B,
+    } as WorkspaceCollabContext;
+  }
+
+  /**
+   * Resolve this project's binding to workspace A once, then hang on every later
+   * read. The hang is what parks the hook in the post-switch revalidation window
+   * instead of letting it race back to a resolved scope.
+   */
+  function stubSwitchableFetch(state: { context: WorkspaceCollabContext }) {
+    let scopeReads = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes('/api/workspace/context')) {
+          return new Response(JSON.stringify({ context: state.context }), { status: 200 });
+        }
+        if (url.includes('/workspace-scope')) {
+          scopeReads += 1;
+          if (scopeReads > 1) return new Promise<Response>(() => {});
+          return new Response(
+            JSON.stringify({
+              scope: {
+                kind: 'team',
+                projectId: PROJECT_ID,
+                workspaceId: TEAM_WORKSPACE,
+                visibility: 'personal',
+                context: CALLER_CONTEXT,
+              },
+            }),
+            { status: 200 },
+          );
+        }
+        return new Response('{}', { status: 200 });
+      }),
+    );
+  }
+
+  beforeEach(() => {
+    window.sessionStorage.clear();
+    window.localStorage.clear();
+    resetWorkspaceContextCache();
+    mockedListConversations.mockImplementation(async (projectId: string) => [
+      conversation(projectId),
+    ]);
+    mockedCreateConversation.mockImplementation(async (projectId: string) =>
+      conversation(projectId),
+    );
+    mockedListMessages.mockResolvedValue([]);
+    mockedFetchPreviewComments.mockResolvedValue([]);
+    mockedFetchBrands.mockResolvedValue([]);
+    // Deliberately NO auto-send flag: the send is driven explicitly, after the
+    // switch, which is the scenario under test.
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+    resetWorkspaceContextCache();
+  });
+
+  async function renderThenSwitch() {
+    const state = { context: CALLER_CONTEXT };
+    stubSwitchableFetch(state);
+    renderProjectView();
+    // The binding is read and settled for workspace A.
+    await waitFor(() => expect(mockedCheckAmrBalanceGate).not.toBeUndefined());
+    await waitFor(() =>
+      expect(screen.getByTestId('active-conversation').textContent).toBe(`conv-${PROJECT_ID}`),
+    );
+    // Now the user switches to workspace B.
+    state.context = contextForB();
+    resetWorkspaceContextCache();
+    await act(async () => {
+      window.dispatchEvent(new Event(WORKSPACE_CONTEXT_REFRESH_EVENT));
+      await Promise.resolve();
+    });
+    return state;
+  }
+
+  it('does not hand POST /api/runs the workspace the user switched to', async () => {
+    await renderThenSwitch();
+
+    fireEvent.click(screen.getByTestId('send-message'));
+    await waitFor(() => expect(mockedStreamViaDaemon).toHaveBeenCalled());
+
+    const asserted = mockedStreamViaDaemon.mock.calls[0]?.[0]?.workspaceContext;
+    expect(
+      asserted?.workspaceId,
+      'workspace B would 403: the gate still finds this project under workspace A',
+    ).not.toBe(WORKSPACE_B);
+  });
+
+  it('does not preflight the AMR wallet of the workspace the user switched to', async () => {
+    await renderThenSwitch();
+    mockedCheckAmrBalanceGate.mockClear();
+
+    fireEvent.click(screen.getByTestId('send-message'));
+    await waitFor(() => expect(mockedCheckAmrBalanceGate).toHaveBeenCalled());
+
+    expect(
+      mockedCheckAmrBalanceGate.mock.calls[0]?.[0]?.workspaceId,
+      'charging the wrong team is worse than charging nothing: it looks plausible',
+    ).not.toBe(WORKSPACE_B);
   });
 });

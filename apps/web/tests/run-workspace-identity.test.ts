@@ -59,11 +59,11 @@ describe('runWorkspaceIdentity — the binding is still unread', () => {
   // well known — every other project write in ProjectView already asserts it —
   // yet the run POST alone went out anonymous.
   it('asserts the caller while the scope read is in flight', () => {
-    expect(runWorkspaceIdentity({ loading: true, scope: null }, CALLER)).toEqual(CALLER);
+    expect(runWorkspaceIdentity({ loading: true, scope: null, initialLoadPending: true }, CALLER)).toEqual(CALLER);
   });
 
   it('still has nothing to assert when the caller has no identity either', () => {
-    expect(runWorkspaceIdentity({ loading: true, scope: null }, null)).toBeNull();
+    expect(runWorkspaceIdentity({ loading: true, scope: null, initialLoadPending: true }, null)).toBeNull();
   });
 });
 
@@ -73,7 +73,10 @@ describe('runWorkspaceIdentity — the binding resolved', () => {
   // caller's own (possibly different) current workspace.
   it('prefers the project\'s own resolved scope over the caller', () => {
     const scope = resolvedTeamScope();
-    expect(runWorkspaceIdentity({ loading: false, scope }, teamContext('ws-somewhere-else')))
+    expect(runWorkspaceIdentity(
+      { loading: false, scope, initialLoadPending: false },
+      teamContext('ws-somewhere-else'),
+    ))
       .toEqual(scope.context);
   });
 });
@@ -93,7 +96,9 @@ describe('runWorkspaceIdentity — the daemon answered, and the answer must stan
       workspaceId: null,
       context: null,
     };
-    expect(runWorkspaceIdentity({ loading: false, scope }, CALLER)).toBeNull();
+    expect(
+      runWorkspaceIdentity({ loading: false, scope, initialLoadPending: false }, CALLER),
+    ).toBeNull();
   });
 
   // `unavailable` is the revoked case, and it is why a blanket `?? caller` is
@@ -114,7 +119,9 @@ describe('runWorkspaceIdentity — the daemon answered, and the answer must stan
       visibility: 'team',
       context: null,
     };
-    expect(runWorkspaceIdentity({ loading: false, scope }, CALLER)).toBeNull();
+    expect(
+      runWorkspaceIdentity({ loading: false, scope, initialLoadPending: false }, CALLER),
+    ).toBeNull();
   });
 
   // Defensive: this daemon's scope route never answers 403 (it returns 404 or a
@@ -123,7 +130,10 @@ describe('runWorkspaceIdentity — the daemon answered, and the answer must stan
   // unread-binding fallback.
   it('asserts nothing when the scope read was refused outright', () => {
     expect(
-      runWorkspaceIdentity({ loading: false, scope: null, failure: 'forbidden' }, CALLER),
+      runWorkspaceIdentity(
+        { loading: false, scope: null, failure: 'forbidden', initialLoadPending: false },
+        CALLER,
+      ),
     ).toBeNull();
   });
 
@@ -135,7 +145,10 @@ describe('runWorkspaceIdentity — the daemon answered, and the answer must stan
   // workspace-directory outage' in ProjectView.run-isolation.test.tsx.
   it('asserts nothing when the scope read failed, so the send is not pre-blocked', () => {
     expect(
-      runWorkspaceIdentity({ loading: false, scope: null, failure: 'unavailable' }, CALLER),
+      runWorkspaceIdentity(
+        { loading: false, scope: null, failure: 'unavailable', initialLoadPending: false },
+        CALLER,
+      ),
     ).toBeNull();
   });
 
@@ -143,7 +156,42 @@ describe('runWorkspaceIdentity — the daemon answered, and the answer must stan
   // pre-workspace headerless behavior.
   it('asserts nothing against a daemon with no workspace-scope endpoint', () => {
     expect(
-      runWorkspaceIdentity({ loading: false, scope: null, failure: 'unsupported' }, CALLER),
+      runWorkspaceIdentity(
+        { loading: false, scope: null, failure: 'unsupported', initialLoadPending: false },
+        CALLER,
+      ),
     ).toBeNull();
+  });
+});
+
+describe('runWorkspaceIdentity — the binding was read once and is being revalidated', () => {
+  // THE REGRESSION nettee caught. `useProjectWorkspaceScope`'s trailing guard
+  // re-enters `{ loading: true, scope: null }` whenever the resolved caller
+  // identity stops matching — which every workspace switch does. Keying the
+  // fallback on `loading` alone therefore made a send issued in that window
+  // assert the workspace the user just switched TO, for a project still bound to
+  // the one they switched FROM.
+  //
+  // Both consumers break, and differently: `POST /api/runs` can 403 because
+  // `enforceWorkspaceResourceMutation` still finds the project row under the old
+  // workspace, and `checkAmrBalanceGate` preflights the new workspace's wallet.
+  // The second is worse than the `undefined` this helper was written to fix,
+  // because a wrong wallet looks like a real answer.
+  it('asserts nothing while revalidating after a workspace switch', () => {
+    expect(
+      runWorkspaceIdentity(
+        { loading: true, scope: null, initialLoadPending: false },
+        teamContext('ws-switched-to'),
+      ),
+      'the project\'s binding is already known; the caller\'s new workspace is not it',
+    ).toBeNull();
+  });
+
+  // Same shape, opposite bit: this is the first read, so the caller is all there
+  // is. Keeps the two causes of one shape visibly distinct in the spec.
+  it('still asserts the caller when that same shape is the first read', () => {
+    expect(
+      runWorkspaceIdentity({ loading: true, scope: null, initialLoadPending: true }, CALLER),
+    ).toEqual(CALLER);
   });
 });

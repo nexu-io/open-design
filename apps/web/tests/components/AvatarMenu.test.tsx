@@ -413,6 +413,7 @@ describe('AvatarMenu', () => {
       },
       projectWorkspaceScope: {
         loading: false,
+        initialLoadPending: false,
         scope: {
           kind: 'unavailable',
           projectId: 'project-a',
@@ -489,6 +490,7 @@ describe('AvatarMenu', () => {
       config: { ...baseConfig, agentId: 'amr' },
       projectWorkspaceScope: {
         loading: false,
+        initialLoadPending: false,
         scope: {
           kind: 'unbound',
           projectId: 'project-a',
@@ -584,6 +586,7 @@ describe('AvatarMenu', () => {
       },
       projectWorkspaceScope: {
         loading: false,
+        initialLoadPending: false,
         scope: {
           kind: 'team',
           projectId: 'project-a',
