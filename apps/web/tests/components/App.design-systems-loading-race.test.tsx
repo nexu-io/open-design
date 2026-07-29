@@ -315,4 +315,70 @@ describe('App design-system catalog loading race', () => {
     // One request per switch; the guard does not add a retry or another read.
     expect(readPhases.filter((readPhase) => readPhase !== 'startup')).toEqual(['a', 'b']);
   });
+
+  it('keeps an issued catalog read when only membership identity changes', async () => {
+    const pending = deferred<DesignSystemSummary[]>();
+    let activeContext = workspaceContext('ws-initial');
+    let pendingPhase = false;
+    let pendingReads = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const pathname = new URL(String(input), 'http://d.local').pathname;
+        return {
+          ok: true,
+          json: async () =>
+            pathname.endsWith('/workspace/context')
+              ? { context: activeContext }
+              : {},
+        } as Response;
+      }),
+    );
+    notifyWorkspaceContextRefresh({ context: activeContext });
+    vi.mocked(fetchDesignSystems).mockImplementation(() => {
+      if (!pendingPhase) return Promise.resolve([]);
+      pendingReads += 1;
+      return pending.promise;
+    });
+
+    render(<App />);
+    await waitFor(() => expect(fetchDesignSystems).toHaveBeenCalled());
+
+    pendingPhase = true;
+    activeContext = {
+      ...workspaceContext('ws-shared'),
+      workspaceMemberId: 'member-a',
+    };
+    await act(async () => {
+      notifyWorkspaceContextRefresh({ context: activeContext });
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(pendingReads).toBe(1));
+
+    // The daemon's Design Systems catalog is scoped by workspaceId, not by
+    // member/role/permission identity. This transition must neither invalidate
+    // the in-flight answer nor spend a redundant successor request.
+    activeContext = {
+      ...activeContext,
+      workspaceMemberId: 'member-b',
+      permissions: {
+        ...activeContext.permissions,
+        canShareProjects: false,
+      },
+    };
+    await act(async () => {
+      notifyWorkspaceContextRefresh({ context: activeContext });
+      await Promise.resolve();
+    });
+    expect(pendingReads).toBe(1);
+
+    await act(async () => {
+      pending.resolve([designSystem('system-from-shared-workspace')]);
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(screen.getByText('system-from-shared-workspace')).toBeTruthy());
+    expect(screen.getByTestId('design-systems-state').dataset.loading).toBe('false');
+    expect(pendingReads).toBe(1);
+  });
 });

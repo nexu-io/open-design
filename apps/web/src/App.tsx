@@ -1467,11 +1467,11 @@ function AppInner() {
         markSkillRegistryReady('templates');
       });
 
-      const designSystemsRead = beginWorkspaceScopedRead(workspaceContextRef.current);
+      const designSystemsWorkspaceId = workspaceContextRef.current?.workspaceId ?? null;
       void fetchDesignSystems().then((list) => {
         if (
           cancelled ||
-          !designSystemsRead.isStillCurrent(workspaceContextRef.current)
+          (workspaceContextRef.current?.workspaceId ?? null) !== designSystemsWorkspaceId
         ) return;
         setDesignSystems(list);
         setDsLoading(false);
@@ -1750,13 +1750,13 @@ function AppInner() {
   const refreshDesignSystems = useCallback(async () => {
     // `fetchDesignSystems()` takes no context — the daemon resolves the scope
     // from its OWN vela session (`resolveWorkspaceScope`), not from request
-    // headers. That makes no difference here: the identity this guard is about
-    // is the COMMIT-time one. The response still describes whichever workspace
-    // was active when the request was issued, so a slow read for the workspace
-    // the user has left would still restore its library over the current one.
-    const read = beginWorkspaceScopedRead(workspaceContextRef.current);
+    // headers. The catalog itself is keyed only by workspaceId, so the commit
+    // guard deliberately uses that SAME scope: role/member/permission changes
+    // must not discard a still-valid response without scheduling a successor.
+    // A slow read for a different workspace still cannot restore its library.
+    const issuedWorkspaceId = workspaceContextRef.current?.workspaceId ?? null;
     const list = await fetchDesignSystems();
-    if (!read.isStillCurrent(workspaceContextRef.current)) return;
+    if ((workspaceContextRef.current?.workspaceId ?? null) !== issuedWorkspaceId) return;
     setDesignSystems(list);
     // Bootstrap and this workspace-scoped refresh can overlap on launch.
     // Either response is a complete catalog for the active daemon identity,
