@@ -2,9 +2,15 @@ import type {
   CreateStoreScreenshotDocumentRequest,
   ExportStoreScreenshotRequest,
   GenerateStoreScreenshotPlanRequest,
+  StoreScreenshotJob,
   StoreScreenshotDocumentResponse,
   StoreScreenshotJobResponse,
   StoreScreenshotValidationResult,
+} from '@open-design/contracts';
+import {
+  StoreScreenshotDocumentResponseSchema,
+  StoreScreenshotJobResponseSchema,
+  StoreScreenshotValidationResultSchema,
 } from '@open-design/contracts';
 
 export type StoreScreenshotDocument = StoreScreenshotDocumentResponse['document'];
@@ -36,10 +42,27 @@ async function requestJson<T>(
   url: string,
   init: RequestInit | undefined,
   fallbackError: string,
+  schema: RuntimeSchema<T>,
 ): Promise<T> {
   const response = await fetch(url, init);
   if (!response.ok) throw await readApiError(response, fallbackError);
-  return await response.json() as T;
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    throw new Error('Invalid store screenshot API response');
+  }
+  const parsed = schema.safeParse(body);
+  if (!parsed.success) {
+    throw new Error('Invalid store screenshot API response');
+  }
+  return parsed.data;
+}
+
+interface RuntimeSchema<T> {
+  safeParse(input: unknown):
+    | { success: true; data: T }
+    | { success: false };
 }
 
 function jsonRequest(body: unknown): RequestInit {
@@ -58,6 +81,7 @@ export async function createStoreScreenshotDocument(
     storeScreenshotUrl(projectId),
     jsonRequest(input),
     'Could not create the store screenshot document',
+    StoreScreenshotDocumentResponseSchema,
   );
   return response.document;
 }
@@ -69,6 +93,7 @@ export async function fetchStoreScreenshotDocument(
     storeScreenshotUrl(projectId),
     undefined,
     'Could not load the store screenshot document',
+    StoreScreenshotDocumentResponseSchema,
   );
   return response.document;
 }
@@ -81,6 +106,7 @@ export function validateStoreScreenshotDocument(
     storeScreenshotUrl(projectId, '/validate'),
     jsonRequest({ platforms }),
     'Could not validate the store screenshots',
+    StoreScreenshotValidationResultSchema,
   );
 }
 
@@ -92,6 +118,7 @@ export async function generateStoreScreenshots(
     storeScreenshotUrl(projectId, '/generate'),
     jsonRequest(input),
     'Could not start store screenshot generation',
+    StoreScreenshotJobResponseSchema,
   );
   return response.job;
 }
@@ -104,6 +131,30 @@ export async function exportStoreScreenshots(
     storeScreenshotUrl(projectId, '/export'),
     jsonRequest(input),
     'Could not start store screenshot export',
+    StoreScreenshotJobResponseSchema,
   );
   return response.job;
+}
+
+export async function fetchStoreScreenshotJob(
+  projectId: string,
+  jobId: string,
+): Promise<StoreScreenshotJob> {
+  const response = await requestJson<StoreScreenshotJobResponse>(
+    storeScreenshotUrl(projectId, `/jobs/${encodeURIComponent(jobId)}`),
+    undefined,
+    'Could not load the store screenshot job',
+    StoreScreenshotJobResponseSchema,
+  );
+  return response.job;
+}
+
+export function storeScreenshotJobDownloadUrl(
+  projectId: string,
+  jobId: string,
+): string {
+  return storeScreenshotUrl(
+    projectId,
+    `/jobs/${encodeURIComponent(jobId)}/download`,
+  );
 }

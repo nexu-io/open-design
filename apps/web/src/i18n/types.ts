@@ -2013,6 +2013,9 @@ export interface Dict {
   'storeScreenshots.generating': string;
   'storeScreenshots.export': string;
   'storeScreenshots.exporting': string;
+  'storeScreenshots.generationReadyForPreview': string;
+  'storeScreenshots.exportReady': string;
+  'storeScreenshots.downloadZip': string;
   'storeScreenshots.providerRequired': string;
   'storeScreenshots.page': string;
   'storeScreenshots.thumbnailRail': string;

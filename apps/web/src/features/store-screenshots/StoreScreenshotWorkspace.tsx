@@ -1,13 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button } from '@open-design/components';
-import type { GenerateStoreScreenshotPlanRequest } from '@open-design/contracts';
+import type {
+  GenerateStoreScreenshotPlanRequest,
+  StoreScreenshotJob,
+} from '@open-design/contracts';
 
 import { Icon } from '../../components/Icon';
 import { useT } from '../../i18n';
 import {
   exportStoreScreenshots,
+  fetchStoreScreenshotJob,
   fetchStoreScreenshotDocument,
   generateStoreScreenshots,
+  storeScreenshotJobDownloadUrl,
   validateStoreScreenshotDocument,
   type StoreScreenshotDocument,
   type StoreScreenshotPlatform,
@@ -27,6 +32,17 @@ type ValidationState =
   | { status: 'issues' }
   | { status: 'unavailable' };
 
+const JOB_POLL_INTERVAL_MS = 1_000;
+
+function jobIsPending(job: StoreScreenshotJob | null): boolean {
+  return job?.status === 'queued' || job?.status === 'running';
+}
+
+function terminalJobError(job: StoreScreenshotJob): string | null {
+  if (job.status !== 'failed' && job.status !== 'interrupted') return null;
+  return job.error?.message ?? 'Store screenshot job failed';
+}
+
 export function StoreScreenshotWorkspace({
   projectId,
   aiGenerationEnabled = false,
@@ -39,9 +55,13 @@ export function StoreScreenshotWorkspace({
   const [loadError, setLoadError] = useState(false);
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [validation, setValidation] = useState<ValidationState>({ status: 'idle' });
-  const [generating, setGenerating] = useState(false);
-  const [exporting, setExporting] = useState(false);
+  const [generateJob, setGenerateJob] = useState<StoreScreenshotJob | null>(null);
+  const [exportJob, setExportJob] = useState<StoreScreenshotJob | null>(null);
+  const [generateSubmitting, setGenerateSubmitting] = useState(false);
+  const [exportSubmitting, setExportSubmitting] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const generating = generateSubmitting || jobIsPending(generateJob);
+  const exporting = exportSubmitting || jobIsPending(exportJob);
 
   useEffect(() => {
     let cancelled = false;
@@ -78,6 +98,43 @@ export function StoreScreenshotWorkspace({
     };
   }, [document, platform, projectId]);
 
+  useEffect(() => {
+    const pendingJobs = [
+      generateJob && jobIsPending(generateJob)
+        ? { job: generateJob, update: setGenerateJob }
+        : null,
+      exportJob && jobIsPending(exportJob)
+        ? { job: exportJob, update: setExportJob }
+        : null,
+    ].filter((entry): entry is {
+      job: StoreScreenshotJob;
+      update: typeof setGenerateJob;
+    } => entry !== null);
+    if (pendingJobs.length === 0) return;
+
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void Promise.all(pendingJobs.map(async ({ job, update }) => {
+        try {
+          const nextJob = await fetchStoreScreenshotJob(projectId, job.id);
+          if (cancelled) return;
+          update(nextJob);
+          const failure = terminalJobError(nextJob);
+          if (failure) setActionError(failure);
+        } catch (error) {
+          if (cancelled) return;
+          update(null);
+          setActionError(error instanceof Error ? error.message : String(error));
+        }
+      }));
+    }, JOB_POLL_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [exportJob, generateJob, projectId]);
+
   const validationLabel = useMemo(() => {
     switch (validation.status) {
       case 'ready':
@@ -94,29 +151,35 @@ export function StoreScreenshotWorkspace({
 
   const handleGenerate = useCallback(async () => {
     if (!aiGenerationEnabled || generating) return;
-    setGenerating(true);
+    setGenerateSubmitting(true);
     setActionError(null);
     try {
-      await generateStoreScreenshots(projectId, {
+      const job = await generateStoreScreenshots(projectId, {
         ...(byokProvider ? { byokProvider } : {}),
       });
+      setGenerateJob(job);
+      const failure = terminalJobError(job);
+      if (failure) setActionError(failure);
     } catch (error) {
       setActionError(error instanceof Error ? error.message : String(error));
     } finally {
-      setGenerating(false);
+      setGenerateSubmitting(false);
     }
   }, [aiGenerationEnabled, byokProvider, generating, projectId]);
 
   const handleExport = useCallback(async () => {
     if (exporting || validation.status !== 'ready') return;
-    setExporting(true);
+    setExportSubmitting(true);
     setActionError(null);
     try {
-      await exportStoreScreenshots(projectId, { platforms: [platform] });
+      const job = await exportStoreScreenshots(projectId, { platforms: [platform] });
+      setExportJob(job);
+      const failure = terminalJobError(job);
+      if (failure) setActionError(failure);
     } catch (error) {
       setActionError(error instanceof Error ? error.message : String(error));
     } finally {
-      setExporting(false);
+      setExportSubmitting(false);
     }
   }, [exporting, platform, projectId, validation.status]);
 
@@ -188,14 +251,36 @@ export function StoreScreenshotWorkspace({
         ))}
       </div>
 
-      {!aiGenerationEnabled ? (
-        <div className={styles.providerNotice}>
-          <Icon name="info" size={14} />
-          <span>{t('storeScreenshots.providerRequired')}</span>
-        </div>
-      ) : null}
-
-      {actionError ? <p className={styles.actionError} role="alert">{actionError}</p> : null}
+      <div className={styles.feedbackRow}>
+        {!aiGenerationEnabled ? (
+          <div className={styles.providerNotice}>
+            <Icon name="info" size={14} />
+            <span>{t('storeScreenshots.providerRequired')}</span>
+          </div>
+        ) : null}
+        {actionError ? (
+          <p className={styles.actionError} role="alert">{actionError}</p>
+        ) : null}
+        {generateJob?.status === 'done' ? (
+          <div className={styles.jobNotice} role="status">
+            <Icon name="check" size={14} />
+            <span>{t('storeScreenshots.generationReadyForPreview')}</span>
+          </div>
+        ) : null}
+        {exportJob?.status === 'done' ? (
+          <div className={styles.jobNotice} role="status">
+            <Icon name="check" size={14} />
+            <span>{t('storeScreenshots.exportReady')}</span>
+            <a
+              className={styles.downloadLink}
+              href={storeScreenshotJobDownloadUrl(projectId, exportJob.id)}
+              download="store-screenshots.zip"
+            >
+              {t('storeScreenshots.downloadZip')}
+            </a>
+          </div>
+        ) : null}
+      </div>
 
       <div className={styles.content}>
         {document ? (

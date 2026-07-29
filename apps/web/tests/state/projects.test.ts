@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { StoreScreenshotDocumentResponse } from '@open-design/contracts';
 import {
   applyPlugin,
   contributeGeneratedPluginToOpenDesign,
@@ -114,7 +115,7 @@ describe('createProject', () => {
   });
 
   it('initializes a four-page minimal store screenshot document after project creation', async () => {
-    const fetchMock = vi.fn<typeof fetch>(async (input) => {
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
       if (String(input) === '/api/projects') {
         return new Response(JSON.stringify({
           project: {
@@ -134,12 +135,7 @@ describe('createProject', () => {
           headers: { 'content-type': 'application/json' },
         });
       }
-      return new Response(JSON.stringify({
-        document: {
-          id: 'document-1',
-          projectId: 'project-store-1',
-        },
-      }), {
+      return new Response(JSON.stringify(storeScreenshotDocumentResponse('project-store-1')), {
         status: 201,
         headers: { 'content-type': 'application/json' },
       });
@@ -180,7 +176,108 @@ describe('createProject', () => {
       platforms: ['appStore', 'googlePlay'],
     });
   });
+
+  it('retries document initialization on the same project after an initialization failure', async () => {
+    let documentAttempts = 0;
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      if (String(input) === '/api/projects') {
+        return new Response(JSON.stringify({
+          project: {
+            id: 'project-store-retry',
+            name: 'Recoverable store listing',
+            skillId: null,
+            designSystemId: 'clay',
+            metadata: {
+              kind: 'image',
+              intent: 'store-screenshot',
+              platformTargets: ['mobile-ios', 'mobile-android'],
+            },
+          },
+          conversationId: 'conversation-retry',
+        }), {
+          status: 201,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (init?.method !== 'POST') {
+        return new Response(JSON.stringify({
+          error: { message: 'document not found' },
+        }), {
+          status: 404,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      documentAttempts += 1;
+      if (documentAttempts === 1) {
+        return new Response(JSON.stringify({
+          error: { message: 'temporary document failure' },
+        }), {
+          status: 503,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return new Response(
+        JSON.stringify(storeScreenshotDocumentResponse('project-store-retry')),
+        {
+          status: 201,
+          headers: { 'content-type': 'application/json' },
+        },
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const input: Parameters<typeof createProject>[0] = {
+      name: 'Recoverable store listing',
+      skillId: null,
+      designSystemId: 'clay',
+      metadata: {
+        kind: 'image',
+        intent: 'store-screenshot',
+        platform: 'mobile-ios',
+        platformTargets: ['mobile-ios', 'mobile-android'],
+      },
+    };
+
+    await expect(createProject(input)).rejects.toThrow('temporary document failure');
+    await expect(createProject(input)).resolves.toMatchObject({
+      project: { id: 'project-store-retry' },
+    });
+
+    expect(fetchMock.mock.calls.filter(([url]) => String(url) === '/api/projects')).toHaveLength(1);
+    expect(fetchMock.mock.calls.filter(([url, init]) => (
+      String(url) === '/api/projects/project-store-retry/store-screenshots'
+      && init?.method === 'POST'
+    ))).toHaveLength(2);
+  });
 });
+
+function storeScreenshotDocumentResponse(
+  projectId: string,
+): StoreScreenshotDocumentResponse {
+  return {
+    document: {
+      schemaVersion: 1,
+      id: `document-${projectId}`,
+      projectId,
+      version: 1,
+      product: {
+        name: 'Focus store listing',
+        summary: '',
+        audience: '',
+        features: [],
+      },
+      designSystemId: 'clay',
+      assets: [],
+      pages: Array.from({ length: 4 }, (_, index) => ({
+        id: `page-${index + 1}`,
+        order: index,
+        templateId: 'minimal-center',
+        headline: 'Focus store listing',
+        overrides: {},
+        lockedFields: [],
+      })),
+    },
+  };
+}
 
 describe('listPlugins', () => {
   afterEach(() => {

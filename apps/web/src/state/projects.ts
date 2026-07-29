@@ -24,7 +24,10 @@ import type {
   TerminalSession,
 } from '@open-design/contracts';
 import { randomUUID } from '../utils/uuid';
-import { createStoreScreenshotDocument } from '../features/store-screenshots/api';
+import {
+  createStoreScreenshotDocument,
+  fetchStoreScreenshotDocument,
+} from '../features/store-screenshots/api';
 import type {
   ChatMessage,
   Conversation,
@@ -84,7 +87,7 @@ export async function getProjectDetail(
   }
 }
 
-export async function createProject(input: {
+interface CreateProjectInput {
   name: string;
   projectLocationId?: string;
   skillId: string | null;
@@ -98,10 +101,69 @@ export async function createProject(input: {
   pluginId?: string;
   appliedPluginSnapshotId?: string;
   pluginInputs?: Record<string, unknown>;
-}): Promise<{ project: Project; conversationId: string; appliedPluginSnapshotId?: string }> {
+}
+
+interface CreateProjectResult {
+  project: Project;
+  conversationId: string;
+  appliedPluginSnapshotId?: string;
+}
+
+const pendingStoreScreenshotProjects = new Map<string, CreateProjectResult>();
+
+function storeScreenshotCreationKey(input: CreateProjectInput): string | null {
+  if (input.metadata?.intent !== 'store-screenshot') return null;
+  return JSON.stringify({
+    name: input.name,
+    projectLocationId: input.projectLocationId ?? null,
+    skillId: input.skillId,
+    designSystemId: input.designSystemId,
+    metadata: input.metadata,
+  });
+}
+
+async function initializeStoreScreenshotProject(
+  result: CreateProjectResult,
+  input: CreateProjectInput,
+  recovering: boolean,
+): Promise<void> {
+  if (input.metadata?.intent !== 'store-screenshot' || !input.designSystemId) return;
+  if (recovering) {
+    try {
+      await fetchStoreScreenshotDocument(result.project.id);
+      return;
+    } catch {
+      // The original initialization may have failed before persistence.
+      // Retry the create call against the same project below.
+    }
+  }
+  await createStoreScreenshotDocument(result.project.id, {
+    product: {
+      name: input.name,
+      summary: '',
+      audience: '',
+      features: [],
+    },
+    designSystemId: input.designSystemId,
+    templateId: 'minimal-center',
+    pageCount: 4,
+    platforms: ['appStore', 'googlePlay'],
+  });
+}
+
+export async function createProject(input: CreateProjectInput): Promise<CreateProjectResult> {
   try {
     if (input.metadata?.intent === 'store-screenshot' && !input.designSystemId) {
       throw new Error('A design system is required for store screenshot projects');
+    }
+    const recoveryKey = storeScreenshotCreationKey(input);
+    const pendingResult = recoveryKey
+      ? pendingStoreScreenshotProjects.get(recoveryKey)
+      : undefined;
+    if (pendingResult && recoveryKey) {
+      await initializeStoreScreenshotProject(pendingResult, input, true);
+      pendingStoreScreenshotProjects.delete(recoveryKey);
+      return pendingResult;
     }
     // `randomUUID` falls back to `crypto.getRandomValues` / `Math.random`
     // when `crypto.randomUUID` is unavailable. Open Design served over
@@ -133,24 +195,11 @@ export async function createProject(input: {
       }
       throw new Error(message);
     }
-    const result = (await resp.json()) as {
-      project: Project;
-      conversationId: string;
-      appliedPluginSnapshotId?: string;
-    };
-    if (input.metadata?.intent === 'store-screenshot' && input.designSystemId) {
-      await createStoreScreenshotDocument(result.project.id, {
-        product: {
-          name: input.name,
-          summary: '',
-          audience: '',
-          features: [],
-        },
-        designSystemId: input.designSystemId,
-        templateId: 'minimal-center',
-        pageCount: 4,
-        platforms: ['appStore', 'googlePlay'],
-      });
+    const result = (await resp.json()) as CreateProjectResult;
+    if (recoveryKey) {
+      pendingStoreScreenshotProjects.set(recoveryKey, result);
+      await initializeStoreScreenshotProject(result, input, false);
+      pendingStoreScreenshotProjects.delete(recoveryKey);
     }
     return result;
   } catch (err) {

@@ -318,6 +318,9 @@ importers:
       '@formkit/auto-animate':
         specifier: 0.9.0
         version: 0.9.0
+      '@launch-studio/store-screenshot':
+        specifier: workspace:*
+        version: link:../../packages/store-screenshot
       '@lexical/react':
         specifier: 0.36.2
         version: 0.36.2(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(yjs@13.6.31)
@@ -2068,11 +2071,6 @@ packages:
 
   '@posthog/types@1.374.2':
     resolution: {integrity: sha512-ZghQSFMi+HFJNPvPjBoyY/jWQ+q6mSQVtWQxOHMSbBidUZjsyYbxYxBFbHy2qWLNe4mEpX+Wqir2Q4I/4AVvJQ==}
-
-  '@powerformer/vela-cli-darwin-arm64@0.0.26':
-    resolution: {integrity: sha512-tSUREO2bNQZho4PVdh/53+k7mNko2ylkCF6cC3leZe1TIAoNzLK95Ulj3Jq74qPisj5lG9r538lfvqHU16nH4g==}
-    cpu: [arm64]
-    os: [darwin]
 
   '@powerformer/vela-cli-darwin-x64@0.0.26':
     resolution: {integrity: sha512-+YpPawJ05ONP5kNOw9HunyfkbndoBeEx752rHwBbjWYkMMvM547kJX55drgU2bpBewC9Kowz2nM55GfSbgCcIQ==}
@@ -7906,9 +7904,6 @@ snapshots:
 
   '@posthog/types@1.374.2': {}
 
-  '@powerformer/vela-cli-darwin-arm64@0.0.26':
-    optional: true
-
   '@powerformer/vela-cli-darwin-x64@0.0.26':
     optional: true
 
@@ -7923,7 +7918,6 @@ snapshots:
 
   '@powerformer/vela-cli@0.0.26':
     optionalDependencies:
-      '@powerformer/vela-cli-darwin-arm64': 0.0.26
       '@powerformer/vela-cli-darwin-x64': 0.0.26
       '@powerformer/vela-cli-linux-arm64': 0.0.26
       '@powerformer/vela-cli-linux-x64': 0.0.26

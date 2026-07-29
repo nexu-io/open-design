@@ -2,6 +2,11 @@
   min-width: 0;
   height: 100%;
   display: grid;
+  grid-template-areas:
+    "header"
+    "platforms"
+    "feedback"
+    "content";
   grid-template-rows: auto auto auto minmax(0, 1fr);
   background: var(--bg);
   color: var(--text);
@@ -9,6 +14,7 @@
 }
 
 .header {
+  grid-area: header;
   min-height: 56px;
   padding: 10px 16px;
   display: flex;
@@ -22,7 +28,8 @@
 .headingGroup,
 .actions,
 .validation,
-.providerNotice {
+.providerNotice,
+.jobNotice {
   display: flex;
   align-items: center;
 }
@@ -79,6 +86,7 @@
 }
 
 .platformTabs {
+  grid-area: platforms;
   display: flex;
   align-items: center;
   gap: 2px;
@@ -114,8 +122,12 @@
   font-weight: 600;
 }
 
-.providerNotice {
-  gap: 7px;
+.feedbackRow {
+  grid-area: feedback;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 14px;
   padding: 8px 16px;
   color: var(--text-muted);
   background: var(--bg-panel);
@@ -124,7 +136,39 @@
   line-height: 1.35;
 }
 
+.feedbackRow:empty {
+  padding: 0;
+  border-bottom: 0;
+}
+
+.providerNotice,
+.jobNotice {
+  min-width: 0;
+  gap: 7px;
+}
+
+.jobNotice {
+  color: var(--text);
+}
+
+.downloadLink {
+  color: var(--accent);
+  font-weight: 600;
+  text-underline-offset: 2px;
+}
+
+.downloadLink:hover {
+  text-decoration-thickness: 2px;
+}
+
+.downloadLink:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
 .content {
+  grid-area: content;
   min-height: 0;
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
@@ -155,7 +199,6 @@
 .cardCanvas {
   position: relative;
   display: block;
-  aspect-ratio: 1290 / 2796;
   min-height: 280px;
   max-height: 62vh;
   overflow: hidden;
@@ -356,7 +399,6 @@
 
 .loadingCard {
   min-height: 280px;
-  aspect-ratio: 1290 / 2796;
   border-radius: 8px;
   background: linear-gradient(90deg, var(--bg-subtle), var(--bg-muted), var(--bg-subtle));
   background-size: 200% 100%;
@@ -364,6 +406,7 @@
 }
 
 .errorState {
+  grid-area: content;
   align-self: center;
   justify-self: center;
   max-width: 320px;
@@ -382,10 +425,7 @@
 }
 
 .actionError {
-  padding: 8px 16px;
   color: var(--danger-text, #b42318);
-  background: var(--danger-bg, #fef3f2);
-  border-bottom: 1px solid var(--border);
 }
 
 @keyframes statusPulse {

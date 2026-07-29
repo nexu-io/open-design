@@ -1,40 +1,28 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { StoreScreenshotWorkspace } from '../../../src/features/store-screenshots/StoreScreenshotWorkspace';
-
-const documentResponse = {
-  document: {
-    schemaVersion: 1,
-    id: 'document-1',
-    projectId: 'project-1',
-    version: 1,
-    product: {
-      name: 'Focus',
-      summary: 'Plan the day with clarity.',
-      audience: 'Busy professionals',
-      features: ['Plan faster', 'Stay focused', 'See progress', 'Finish calmly'],
-    },
-    designSystemId: 'clay',
-    assets: [],
-    pages: Array.from({ length: 4 }, (_, index) => ({
-      id: `page-${index + 1}`,
-      order: index,
-      templateId: 'minimal-center' as const,
-      headline: `Page ${index + 1}`,
-      body: 'Plan the day with clarity.',
-      overrides: index === 0
-        ? { googlePlay: { headline: 'Google Play page 1' } }
-        : {},
-      lockedFields: [],
-    })),
-  },
-};
+import {
+  completedExportJobResponse,
+  completedGenerateJobResponse,
+  documentResponse,
+  failedJobResponse,
+  queuedJobResponse,
+} from './fixtures';
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -67,6 +55,18 @@ describe('StoreScreenshotWorkspace', () => {
     await waitFor(() => {
       expect(screen.getByText('Ready to export')).toBeTruthy();
     });
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Google Play' }));
+
+    expect(screen.getByRole('tab', { name: 'Google Play' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    const firstCard = screen.getAllByTestId('store-screenshot-card')[0]!;
+    expect(within(firstCard).getByText('Google Play page 1')).toBeTruthy();
+    expect(within(firstCard).getByTestId('store-screenshot-canvas')).toHaveStyle({
+      aspectRatio: '1080 / 1920',
+    });
   });
 
   it('disables AI generation without a provider and keeps manual editing available', async () => {
@@ -90,4 +90,200 @@ describe('StoreScreenshotWorkspace', () => {
     expect(screen.getByText('Connect a Provider to generate with AI. You can keep editing manually.')).toBeTruthy();
     expect(screen.getAllByTestId('store-screenshot-card')[0]).toBeEnabled();
   });
+
+  it('keeps generation pending through queued polls and prevents duplicate submits', async () => {
+    vi.useFakeTimers();
+    let jobPolls = 0;
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/validate')) {
+        return jsonResponse({ valid: true, issues: [] });
+      }
+      if (url.endsWith('/generate') && init?.method === 'POST') {
+        return jsonResponse(queuedJobResponse('generate'), 202);
+      }
+      if (url.endsWith('/jobs/generate-job-1')) {
+        jobPolls += 1;
+        return jsonResponse(
+          jobPolls === 1
+            ? queuedJobResponse('generate')
+            : completedGenerateJobResponse,
+        );
+      }
+      return jsonResponse(documentResponse);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<StoreScreenshotWorkspace projectId="project-1" aiGenerationEnabled />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const generate = screen.getByRole('button', { name: 'Generate with AI' });
+
+    fireEvent.click(generate);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(screen.getByRole('button', { name: 'Generating…' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Generating…' }));
+    expect(fetchMock.mock.calls.filter(([input]) => String(input).endsWith('/generate'))).toHaveLength(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000);
+    });
+    expect(screen.getByRole('button', { name: 'Generating…' })).toBeDisabled();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000);
+    });
+    expect(screen.getByText('Generation complete. Ready for preview.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Generate with AI' })).toBeEnabled();
+  });
+
+  it('prevents duplicate generation while the start request is unresolved', async () => {
+    let resolveGeneration!: (response: Response) => void;
+    const generationResponse = new Promise<Response>((resolve) => {
+      resolveGeneration = resolve;
+    });
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/validate')) {
+        return jsonResponse({ valid: true, issues: [] });
+      }
+      if (url.endsWith('/generate') && init?.method === 'POST') {
+        return generationResponse;
+      }
+      return jsonResponse(documentResponse);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const rendered = render(
+      <StoreScreenshotWorkspace projectId="project-1" aiGenerationEnabled />,
+    );
+    await screen.findAllByTestId('store-screenshot-card');
+    fireEvent.click(screen.getByRole('button', { name: 'Generate with AI' }));
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const pendingButton = screen.getByRole('button', { name: 'Generating…' });
+    expect(pendingButton).toBeDisabled();
+    fireEvent.click(pendingButton);
+    expect(fetchMock.mock.calls.filter(([input]) => (
+      String(input).endsWith('/generate')
+    ))).toHaveLength(1);
+
+    await act(async () => {
+      resolveGeneration(jsonResponse(queuedJobResponse('generate'), 202));
+      await generationResponse;
+    });
+    rendered.unmount();
+  });
+
+  it('shows a terminal job failure and clears the pending state', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/validate')) {
+        return jsonResponse({ valid: true, issues: [] });
+      }
+      if (url.endsWith('/generate') && init?.method === 'POST') {
+        return jsonResponse(queuedJobResponse('generate'), 202);
+      }
+      if (url.endsWith('/jobs/generate-job-1')) {
+        return jsonResponse(failedJobResponse('generate'));
+      }
+      return jsonResponse(documentResponse);
+    }));
+
+    render(<StoreScreenshotWorkspace projectId="project-1" aiGenerationEnabled />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Generate with AI' }));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000);
+    });
+
+    expect(screen.getByRole('alert')).toHaveTextContent('generate failed');
+    expect(screen.getByRole('button', { name: 'Generate with AI' })).toBeEnabled();
+  });
+
+  it('shows a download link when an export job completes', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/validate')) {
+        return jsonResponse({ valid: true, issues: [] });
+      }
+      if (url.endsWith('/export') && init?.method === 'POST') {
+        return jsonResponse(queuedJobResponse('export'), 202);
+      }
+      if (url.endsWith('/jobs/export-job-1')) {
+        return jsonResponse(completedExportJobResponse);
+      }
+      return jsonResponse(documentResponse);
+    }));
+
+    render(<StoreScreenshotWorkspace projectId="project-1" aiGenerationEnabled />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Export' }));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000);
+    });
+
+    expect(screen.getByRole('link', { name: 'Download ZIP' })).toHaveAttribute(
+      'href',
+      '/api/projects/project-1/store-screenshots/jobs/export-job-1/download',
+    );
+  });
+
+  it('cancels job polling when the workspace unmounts', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/validate')) {
+        return jsonResponse({ valid: true, issues: [] });
+      }
+      if (url.endsWith('/generate') && init?.method === 'POST') {
+        return jsonResponse(queuedJobResponse('generate'), 202);
+      }
+      return jsonResponse(documentResponse);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const rendered = render(
+      <StoreScreenshotWorkspace projectId="project-1" aiGenerationEnabled />,
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Generate with AI' }));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    rendered.unmount();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000);
+    });
+
+    expect(fetchMock.mock.calls.some(([input]) => (
+      String(input).endsWith('/jobs/generate-job-1')
+    ))).toBe(false);
+  });
 });
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  });
+}

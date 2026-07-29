@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react';
+import { platformSpecs } from '@launch-studio/store-screenshot';
 
 import type {
   StoreScreenshotDocument,
@@ -27,8 +28,11 @@ function visiblePageContent(
 
 function pageStyle(
   page: StoreScreenshotDocument['pages'][number],
+  platform: StoreScreenshotPlatform,
 ): CSSProperties {
+  const { width, height } = platformSpecs[platform].size;
   return {
+    aspectRatio: `${width} / ${height}`,
     background: page.colors?.background ?? '#ffffff',
     color: page.colors?.text ?? '#18181b',
     '--store-screenshot-accent': page.colors?.accent ?? '#6366f1',
@@ -63,7 +67,11 @@ export function StoreScreenshotGallery({
               aria-pressed={selected}
               onClick={() => onSelectPage(page.id)}
             >
-              <span className={styles.cardCanvas} style={pageStyle(page)}>
+              <span
+                className={styles.cardCanvas}
+                data-testid="store-screenshot-canvas"
+                style={pageStyle(page, platform)}
+              >
                 <span className={styles.cardCopy}>
                   <strong>{content.headline}</strong>
                   {content.body ? <span>{content.body}</span> : null}
@@ -100,7 +108,10 @@ export function StoreScreenshotGallery({
               aria-current={selected ? 'true' : undefined}
               onClick={() => onSelectPage(page.id)}
             >
-              <span className={styles.thumbnailPreview} style={pageStyle(page)}>
+              <span
+                className={styles.thumbnailPreview}
+                style={pageStyle(page, platform)}
+              >
                 <span>{content.headline}</span>
               </span>
               <span>{index + 1}</span>
