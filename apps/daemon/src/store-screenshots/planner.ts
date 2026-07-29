@@ -7,6 +7,7 @@ import {
   StoreScreenshotChangeSetSchema,
   type StoreScreenshotChangeSet,
   type StoreScreenshotDocument,
+  type StoreScreenshotPage,
 } from '@launch-studio/store-screenshot';
 
 import {
@@ -91,13 +92,20 @@ function unsupportedClaims(
   const claims: string[] = [];
   const claimPatterns = [
     /[$€£¥￥]\s*\d/u,
+    /(?:USD|CNY|RMB)\s*\d+(?:[.,]\d+)?/iu,
+    /\d+(?:[.,]\d+)?\s*(?:USD|CNY|RMB|美元|人民币|元|[$¥￥])/iu,
+    /[零〇一二三四五六七八九十百千万两]+(?:块)?元/u,
     /(?:售价|价格|定价|只需|月费|年费|price|cost)\s*[:：]?\s*\d+(?:[.,]\d+)?/iu,
     /(?:评分|评级|rating|rated)\s*[:：]?\s*\d+(?:[.,]\d+)?(?:\s*(?:分|\/\s*5|星|stars?))?/iu,
     /\d+(?:[.,]\d+)?\s*(?:元|美元|欧元|英镑|\/\s*5|星|stars?|%|percent|[x×倍])/iu,
     /百分之[零〇一二三四五六七八九十百千万两\d]+/u,
     /[零〇一二三四五六七八九十百千万两\d]+(?:\.\d+)?\s*倍/u,
     /\b(?:twice|double|triple)\b/iu,
-    /永久免费|终身免费|免费使用|免费版|\bfree forever\b|\bcompletely free\b/iu,
+    /免费/u,
+    /\bfor free\b|\bfree (?:forever|plan|tier|version|trial|to use|download)\b|\bcompletely free\b/iu,
+    /\b(?:try|get|use|download|start|available)\b.{0,20}\bfree\b/iu,
+    /\bfree\b(?=\s*(?:$|[!,.]))/iu,
+    /^\s*free\s*[!.]?\s*$/iu,
     /五星(?:好评|评价|评分)?|\bfive[- ]star\b/iu,
     /\bawards?\b|\baward-winning\b|获奖|奖项|大奖|最佳应用/iu,
   ];
@@ -262,6 +270,23 @@ function nextGeneratedPageId(
   return `${stem}-${suffix}`;
 }
 
+function normalizePlatformOverrides(
+  overrides: ScreenshotPlan['pages'][number]['platformOverrides'],
+): StoreScreenshotPage['overrides'] {
+  const normalized: StoreScreenshotPage['overrides'] = {};
+  for (const platform of ['appStore', 'googlePlay'] as const) {
+    const override = overrides?.[platform];
+    if (!override) continue;
+    const value = {
+      ...(override.headline !== undefined ? { headline: override.headline } : {}),
+      ...(override.body !== undefined ? { body: override.body } : {}),
+      ...(override.hidden !== undefined ? { hidden: override.hidden } : {}),
+    };
+    if (Object.keys(value).length > 0) normalized[platform] = value;
+  }
+  return normalized;
+}
+
 export function screenshotPlanToChangeSet(
   document: StoreScreenshotDocument,
   plan: ScreenshotPlan,
@@ -357,7 +382,7 @@ export function screenshotPlanToChangeSet(
           && document.assets.some(({ id }) => id === page.screenshotAssetId)
           ? { screenshotAssetId: page.screenshotAssetId }
           : {}),
-        overrides: page.platformOverrides ?? {},
+        overrides: normalizePlatformOverrides(page.platformOverrides),
         lockedFields: [],
       },
     });

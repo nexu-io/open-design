@@ -170,6 +170,11 @@ describe('store screenshot planner', () => {
     '五星好评',
     'Twice as fast',
     'Double productivity',
+    '免费',
+    'For free',
+    'Free',
+    '九十九元',
+    '9.99 USD',
   ])('rejects an unsupported claim: %s', async (headline) => {
     const planner = createStoreScreenshotPlanner({
       generateJson: async () => ({
@@ -184,6 +189,51 @@ describe('store screenshot planner', () => {
       document: document(),
       request: {},
     })).rejects.toMatchObject({ code: 'INVALID_PROVIDER_RESPONSE' });
+  });
+
+  it.each([
+    '免费',
+    '9.99 USD',
+    '九十九元',
+  ])('allows an exact price or free claim already present in the Product Profile: %s', async (headline) => {
+    const withFact = {
+      ...document(),
+      product: {
+        ...document().product,
+        summary: `官方说明：${headline}`,
+      },
+    };
+    const factualPlan = {
+      ...plan,
+      pages: plan.pages.map((page, index) => index === 0
+        ? { ...page, headline }
+        : page),
+    };
+    const planner = createStoreScreenshotPlanner({
+      generateJson: async () => factualPlan,
+    });
+
+    await expect(planner.plan({
+      document: withFact,
+      request: {},
+    })).resolves.toEqual(factualPlan);
+  });
+
+  it('does not treat free as a marketing claim when used as an ordinary verb', async () => {
+    const ordinaryUsage = {
+      ...plan,
+      pages: plan.pages.map((page, index) => index === 0
+        ? { ...page, headline: 'Free your focus' }
+        : page),
+    };
+    const planner = createStoreScreenshotPlanner({
+      generateJson: async () => ordinaryUsage,
+    });
+
+    await expect(planner.plan({
+      document: document(),
+      request: {},
+    })).resolves.toEqual(ordinaryUsage);
   });
 
   it('does not let an unrelated profile number authorize a different quantified claim', async () => {
@@ -423,5 +473,45 @@ describe('store screenshot planner', () => {
     expect(applied.pages.map(({ headline }) => headline)).toEqual(
       plan.pages.map(({ headline }) => headline),
     );
+  });
+
+  it('strips explicitly undefined platform override fields from inserted pages', () => {
+    const before = document();
+    const twoPageDocument = { ...before, pages: before.pages.slice(0, 2) };
+    const withUndefinedOverrides = ScreenshotPlanSchema.parse({
+      ...plan,
+      pages: plan.pages.map((page, index) => index === 2
+        ? {
+          ...page,
+          platformOverrides: {
+            appStore: {
+              headline: undefined,
+              body: '仅保留正文',
+              hidden: undefined,
+            },
+            googlePlay: {
+              headline: undefined,
+              body: undefined,
+              hidden: undefined,
+            },
+          },
+        }
+        : page),
+    });
+
+    const changeSet = screenshotPlanToChangeSet(twoPageDocument, withUndefinedOverrides);
+    const inserted = changeSet.operations.find((operation) => (
+      operation.op === 'insertPage' && operation.page.headline === '形成节奏'
+    ));
+    expect(inserted).toMatchObject({
+      op: 'insertPage',
+      page: {
+        overrides: { appStore: { body: '仅保留正文' } },
+      },
+    });
+    if (inserted?.op !== 'insertPage') throw new Error('expected inserted page');
+    expect(Object.hasOwn(inserted.page.overrides.appStore ?? {}, 'headline')).toBe(false);
+    expect(Object.hasOwn(inserted.page.overrides.appStore ?? {}, 'hidden')).toBe(false);
+    expect(Object.hasOwn(inserted.page.overrides, 'googlePlay')).toBe(false);
   });
 });
