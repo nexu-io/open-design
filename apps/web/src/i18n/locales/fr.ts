@@ -4288,7 +4288,9 @@ export const fr: Dict = {
   'questions.uploadFailed': 'Échec de l’envoi de {failed} fichier(s).',
   'runCost.toggle': 'Détail du coût',
   'runCost.loading': 'Lecture du journal d’exécution…',
-  'runCost.unavailable': 'Aucune donnée de coût pour cette exécution : aucun journal d’événements sur le disque, ou il ne contient aucune consommation par appel (l’exécution n’a jamais appelé le modèle, ou le flux de cet agent ne rapporte pas la consommation).',
+  'runCost.unavailable': 'Aucune donnée de coût pour ce run — pas de journal d\'événements sur le disque, ou il ne contient aucune consommation (soit le run n\'a pas atteint d\'appel au modèle, soit le flux de cet agent ne signale pas la consommation).',
+
+  'runCost.unavailableAggregate': 'Cet agent ne signale la consommation de tokens qu\'une fois par run, et non par appel au modèle : il n\'y a donc pas de courbe de contexte à décomposer. Le run n\'a rien d\'anormal — la décomposition des coûts nécessite aujourd\'hui un agent de la famille OpenCode.',
   'runCost.estimateNote': 'Estimé sur un tarif fixe — ce n’est pas un montant facturé',
   'runCost.calls': '{count} appels au modèle',
   'runCost.peakContext': 'le contexte a culminé à {tokens} jetons',
@@ -4306,6 +4308,8 @@ export const fr: Dict = {
   'runCost.step': 'étape {index}',
   'runCost.outputComposition': 'Composition de la sortie',
   'runCost.prose': 'Prose',
+
+  'runCost.thinking': 'Raisonnement',
   'runCost.intake': 'Entrée en contexte',
   'runCost.intakeHint': 'Chargé dans le contexte, puis relu à chaque étape suivante. Ce qui arrive tôt est traîné le plus loin.',
 };

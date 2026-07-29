@@ -4288,7 +4288,9 @@ export const th: Dict = {
   'questions.uploadFailed': 'อัปโหลดล้มเหลว {failed} ไฟล์',
   'runCost.toggle': 'Cost breakdown',
   'runCost.loading': 'Reading the run log…',
-  'runCost.unavailable': 'No cost data for this run — no event log on disk, or it carries no per-call usage (either the run made no model call, or this agent stream does not report usage).',
+  'runCost.unavailable': 'ไม่มีข้อมูลต้นทุนสำหรับการรันนี้ — ไม่มีบันทึกเหตุการณ์บนดิสก์ หรือไม่มีข้อมูลการใช้งานเลย (การรันยังไม่ถึงการเรียกโมเดล หรือสตรีมของเอเจนต์นี้ไม่รายงานการใช้งาน)',
+
+  'runCost.unavailableAggregate': 'เอเจนต์นี้รายงานการใช้โทเค็นครั้งเดียวต่อการรัน ไม่ใช่ต่อการเรียกโมเดล จึงไม่มีเส้นโค้งบริบทให้แยกส่วน การรันไม่ได้มีอะไรผิด — การแยกส่วนต้นทุนตอนนี้ต้องใช้เอเจนต์ตระกูล OpenCode',
   'runCost.estimateNote': 'Estimated against a fixed rate card — not a billing figure',
   'runCost.calls': '{count} model calls',
   'runCost.peakContext': 'context peaked at {tokens} tokens',
@@ -4306,6 +4308,8 @@ export const th: Dict = {
   'runCost.step': 'step {index}',
   'runCost.outputComposition': 'Output composition',
   'runCost.prose': 'Prose',
+
+  'runCost.thinking': 'การคิด',
   'runCost.intake': 'Intake',
   'runCost.intakeHint': 'Pulled into context, then re-read by every later step. What arrives early is dragged furthest.',
 };

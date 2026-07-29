@@ -60,6 +60,52 @@ describe('readRunCostReport', () => {
     expect(result.unavailableReason).toBe('no-usage-frames');
   });
 
+  it('gates a whole-run aggregate log instead of reporting a one-point curve', () => {
+    // The claude-stream shape: tool work, then one usage frame from the
+    // terminal `result`. Running the per-call arithmetic over it would report
+    // 40,000 preamble tokens and zero transcript with total confidence, so this
+    // is the ONE place that refuses — both surfaces read the refusal from here.
+    writeRun('r-agg', [
+      { event: 'agent', data: { type: 'tool_use', id: 't1', name: 'read', input: { filePath: '/a' } } },
+      { event: 'agent', data: { type: 'tool_result', toolUseId: 't1', content: 'x'.repeat(200) } },
+      {
+        event: 'agent',
+        data: {
+          type: 'usage',
+          usage: { input_tokens: 100, cache_read_input_tokens: 40_000, output_tokens: 900 },
+          costUsd: 0.42,
+          durationMs: 9000,
+        },
+        timestamp: 0,
+      },
+    ]);
+
+    const result = readRunCostReport({ runsDir, runId: 'r-agg' });
+
+    expect(result.report).toBeNull();
+    expect(result.unavailableReason).toBe('aggregate-usage-only');
+  });
+
+  it('still reports a per-call log whose usage is interleaved with tool work', () => {
+    // The same tool traffic, but with a usage frame per call: this must NOT be
+    // caught by the gate above.
+    writeRun('r-percall', [
+      { event: 'agent', data: { type: 'tool_use', id: 't1', name: 'read', input: { filePath: '/a' } } },
+      { event: 'agent', data: { type: 'tool_result', toolUseId: 't1', content: 'x'.repeat(200) } },
+      usage(1000, 10),
+      { event: 'agent', data: { type: 'tool_use', id: 't2', name: 'read', input: { filePath: '/b' } } },
+      { event: 'agent', data: { type: 'tool_result', toolUseId: 't2', content: 'y'.repeat(200) } },
+      usage(2000, 20),
+      usage(3000, 30),
+    ]);
+
+    const result = readRunCostReport({ runsDir, runId: 'r-percall' });
+
+    expect(result.unavailableReason).toBeUndefined();
+    expect(result.report!.usageScope).toBe('per-call');
+    expect(result.report!.steps).toHaveLength(3);
+  });
+
   it('skips unparseable lines rather than failing the whole report', () => {
     const dir = path.join(runsDir, 'r3');
     fs.mkdirSync(dir, { recursive: true });

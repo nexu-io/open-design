@@ -4288,7 +4288,9 @@ export const pl: Dict = {
   'questions.uploadFailed': 'Nie udało się przesłać {failed} plik(ów).',
   'runCost.toggle': 'Cost breakdown',
   'runCost.loading': 'Reading the run log…',
-  'runCost.unavailable': 'No cost data for this run — no event log on disk, or it carries no per-call usage (either the run made no model call, or this agent stream does not report usage).',
+  'runCost.unavailable': 'Brak danych o koszcie tego przebiegu — nie ma dziennika zdarzeń na dysku albo nie zawiera on żadnego zużycia (przebieg nie doszedł do wywołania modelu lub strumień tego agenta nie raportuje zużycia).',
+
+  'runCost.unavailableAggregate': 'Ten agent raportuje zużycie tokenów raz na przebieg, a nie na wywołanie modelu, więc nie ma krzywej kontekstu do rozłożenia. Z przebiegiem nie ma nic złego — rozkład kosztów wymaga dziś agenta z rodziny OpenCode.',
   'runCost.estimateNote': 'Estimated against a fixed rate card — not a billing figure',
   'runCost.calls': '{count} model calls',
   'runCost.peakContext': 'context peaked at {tokens} tokens',
@@ -4306,6 +4308,8 @@ export const pl: Dict = {
   'runCost.step': 'step {index}',
   'runCost.outputComposition': 'Output composition',
   'runCost.prose': 'Prose',
+
+  'runCost.thinking': 'Rozumowanie',
   'runCost.intake': 'Intake',
   'runCost.intakeHint': 'Pulled into context, then re-read by every later step. What arrives early is dragged furthest.',
 };

@@ -1899,9 +1899,12 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
   });
 
   // Cost decomposition for one run, derived entirely from its persisted event
-  // log — no instrumentation and no re-run. `usage.cached_read_tokens` on step
-  // i is the context size at step i, so a finished run already carries its own
-  // growth curve; this exposes the arithmetic over it.
+  // log — no instrumentation and no re-run. The cache-read figure on step i is
+  // the context size at step i, so a finished run already carries its own
+  // growth curve; this exposes the arithmetic over it. Which field carries that
+  // figure is provider-specific and resolved through the shared alias matrix,
+  // and a log whose usage is a whole-run aggregate has no curve at all — see
+  // `readRunCostReport`, which owns both decisions for every surface.
   app.get('/api/runs/:id/cost', (req: ApiRequest, res: ApiResponse) => {
     const runId = routeParamId(req);
     if (!runId) return sendApiError(res, 400, 'BAD_REQUEST', 'run id missing');

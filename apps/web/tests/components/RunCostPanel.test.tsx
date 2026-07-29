@@ -22,6 +22,9 @@ afterEach(() => {
  */
 function report(overrides: Partial<RunCostReport> = {}): RunCostReport {
   return {
+    // The daemon only ever hands the panel a per-call report; an aggregate log
+    // is gated into `report: null` before it reaches the wire.
+    usageScope: 'per-call',
     steps: [
       { index: 0, contextTokens: 12_000, cacheWriteTokens: 4_000, inputTokens: 900, outputTokens: 300, gapMs: null, incremental: true },
       { index: 1, contextTokens: 34_000, cacheWriteTokens: 0, inputTokens: 500, outputTokens: 200, gapMs: 1_200, incremental: false },
@@ -235,6 +238,48 @@ describe('RunCostPanel', () => {
     expect(screen.getByText('512 B')).toBeTruthy();
     // Prose is rendered as its own row alongside the per-tool ones.
     expect(screen.getByText(en['runCost.prose'])).toBeTruthy();
+  });
+
+  it('renders thinking alongside prose so the output shares reconcile to 100%', async () => {
+    // `totalBytes` includes `thinkingBytes`, so omitting the row leaves the
+    // visible percentages short of 100% on any reasoning-heavy run and drops
+    // the prose-vs-thinking split the API already supplied.
+    //
+    // This override is the one output fixture that ADDS UP — 6000 + 3000 + 1000
+    // = 10_000 — precisely so the rendered rows can be checked to reconcile,
+    // which the main fixture's deliberately-colliding-proof numbers cannot do.
+    stubFetch({
+      runId: 'run-1',
+      report: report({
+        output: {
+          byTool: [{ tool: 'Write', bytes: 6_000, share: 0.6 }],
+          proseBytes: 3_000,
+          thinkingBytes: 1_000,
+          totalBytes: 10_000,
+        },
+      }),
+    });
+    render(<RunCostPanel runId="run-1" />);
+
+    await screen.findByText(en['runCost.total']);
+    expect(screen.getByText(en['runCost.thinking'])).toBeTruthy();
+    expect(screen.getByText('1000 B')).toBeTruthy();
+
+    // 60% tool + 30% prose + 10% thinking, every one against `totalBytes`.
+    expect(screen.getByText('60.0%')).toBeTruthy();
+    expect(screen.getByText('30.0%')).toBeTruthy();
+    expect(screen.getByText('10.0%')).toBeTruthy();
+  });
+
+  it('names the agent stream as the cause when usage is only a run aggregate', async () => {
+    // Distinct copy matters here: the cause is the agent's stream family, not
+    // the run, so re-running changes nothing and the user should not go
+    // hunting. Folding this into the generic message would send them looking.
+    stubFetch({ runId: 'run-1', report: null, unavailableReason: 'aggregate-usage-only' });
+    render(<RunCostPanel runId="run-1" />);
+
+    expect(await screen.findByText(en['runCost.unavailableAggregate'])).toBeTruthy();
+    expect(screen.queryByText(en['runCost.unavailable'])).toBeNull();
   });
 
   it('explains itself when the run has a log but no usage frames', async () => {

@@ -4283,7 +4283,9 @@ export const fa: Dict = {
   'questions.uploadFailed': 'بارگذاری {failed} فایل ناموفق بود.',
   'runCost.toggle': 'Cost breakdown',
   'runCost.loading': 'Reading the run log…',
-  'runCost.unavailable': 'No cost data for this run — no event log on disk, or it carries no per-call usage (either the run made no model call, or this agent stream does not report usage).',
+  'runCost.unavailable': 'داده‌ای از هزینه برای این اجرا نیست — گزارش رویدادی روی دیسک وجود ندارد، یا هیچ مصرفی در آن ثبت نشده است (یا اجرا به فراخوانی مدل نرسیده، یا جریان این عامل مصرف را گزارش نمی‌کند).',
+
+  'runCost.unavailableAggregate': 'این عامل مصرف توکن را یک بار برای هر اجرا گزارش می‌کند، نه به‌ازای هر فراخوانی مدل؛ بنابراین منحنی زمینه‌ای برای تفکیک وجود ندارد. مشکلی در اجرا نیست — تفکیک هزینه در حال حاضر به عاملی از خانواده OpenCode نیاز دارد.',
   'runCost.estimateNote': 'Estimated against a fixed rate card — not a billing figure',
   'runCost.calls': '{count} model calls',
   'runCost.peakContext': 'context peaked at {tokens} tokens',
@@ -4301,6 +4303,8 @@ export const fa: Dict = {
   'runCost.step': 'step {index}',
   'runCost.outputComposition': 'Output composition',
   'runCost.prose': 'Prose',
+
+  'runCost.thinking': 'استدلال',
   'runCost.intake': 'Intake',
   'runCost.intakeHint': 'Pulled into context, then re-read by every later step. What arrives early is dragged furthest.',
 };

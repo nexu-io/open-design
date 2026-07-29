@@ -4288,7 +4288,9 @@ export const de: Dict = {
   'questions.uploadFailed': 'Hochladen von {failed} Datei(en) fehlgeschlagen.',
   'runCost.toggle': 'Kostenaufschlüsselung',
   'runCost.loading': 'Lauf-Protokoll wird gelesen…',
-  'runCost.unavailable': 'Keine Kostendaten für diesen Lauf: Kein Ereignisprotokoll auf der Festplatte, oder es enthält keine Nutzung pro Aufruf (der Lauf hat das Modell nie aufgerufen, oder der Stream dieses Agenten meldet keine Nutzung).',
+  'runCost.unavailable': 'Keine Kostendaten für diesen Run — kein Event-Log auf der Festplatte, oder es enthält überhaupt keinen Verbrauch (entweder erreichte der Run keinen Modellaufruf, oder der Stream dieses Agenten meldet keinen Verbrauch).',
+
+  'runCost.unavailableAggregate': 'Dieser Agent meldet den Token-Verbrauch einmal pro Run, nicht pro Modellaufruf — es gibt also keine Kontextkurve zum Aufschlüsseln. Am Run ist nichts falsch: Die Kostenaufschlüsselung braucht derzeit einen Agenten der OpenCode-Familie.',
   'runCost.estimateNote': 'Geschätzt anhand fester Preise — kein Abrechnungsbetrag',
   'runCost.calls': '{count} Modellaufrufe',
   'runCost.peakContext': 'Kontext erreichte {tokens} Tokens',
@@ -4306,6 +4308,8 @@ export const de: Dict = {
   'runCost.step': 'Schritt {index}',
   'runCost.outputComposition': 'Zusammensetzung der Ausgabe',
   'runCost.prose': 'Prosa',
+
+  'runCost.thinking': 'Denkprozess',
   'runCost.intake': 'Kontextaufnahme',
   'runCost.intakeHint': 'Wird in den Kontext geladen und von jedem späteren Schritt erneut gelesen. Was früh ankommt, wird am weitesten mitgeschleppt.',
 };

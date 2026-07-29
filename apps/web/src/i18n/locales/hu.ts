@@ -4288,7 +4288,9 @@ export const hu: Dict = {
   'questions.uploadFailed': '{failed} fájl feltöltése sikertelen.',
   'runCost.toggle': 'Cost breakdown',
   'runCost.loading': 'Reading the run log…',
-  'runCost.unavailable': 'No cost data for this run — no event log on disk, or it carries no per-call usage (either the run made no model call, or this agent stream does not report usage).',
+  'runCost.unavailable': 'Nincs költségadat ehhez a futáshoz — nincs eseménynapló a lemezen, vagy egyáltalán nem tartalmaz használatot (vagy a futás nem jutott el modellhívásig, vagy ennek az ügynöknek a streamje nem jelent használatot).',
+
+  'runCost.unavailableAggregate': 'Ez az ügynök futásonként egyszer jelenti a tokenhasználatot, nem modellhívásonként, így nincs kontextusgörbe, amit fel lehetne bontani. A futással nincs semmi baj — a költségbontáshoz jelenleg OpenCode-családba tartozó ügynök kell.',
   'runCost.estimateNote': 'Estimated against a fixed rate card — not a billing figure',
   'runCost.calls': '{count} model calls',
   'runCost.peakContext': 'context peaked at {tokens} tokens',
@@ -4306,6 +4308,8 @@ export const hu: Dict = {
   'runCost.step': 'step {index}',
   'runCost.outputComposition': 'Output composition',
   'runCost.prose': 'Prose',
+
+  'runCost.thinking': 'Gondolkodás',
   'runCost.intake': 'Intake',
   'runCost.intakeHint': 'Pulled into context, then re-read by every later step. What arrives early is dragged furthest.',
 };

@@ -10,6 +10,7 @@ import { runConnectorsToolCli } from './tools-connectors-cli.js';
 import { runDesignSystemsToolCli } from './tools-design-systems-cli.js';
 import { DESIGN_SYSTEMS_USAGE, isDesignSystemsHelpArg } from './cli-help/index.js';
 import { BRAND_USAGE, isBrandHelpArg } from './cli-help/index.js';
+import { runCostUnavailableMessage } from './cli-help/index.js';
 import { parseDesignSystemRenameArgs } from './design-systems/rename-args.js';
 import { runLiveArtifactsToolCli } from './tools-live-artifacts-cli.js';
 import { runByokToolCli } from './tools-byok-cli.js';
@@ -297,18 +298,10 @@ const BRAND_STRING_FLAGS = new Set([
 const BRAND_BOOLEAN_FLAGS = new Set([
   'help', 'h', 'json',
 ]);
-// Hoisted for the same reason: `runRun` reaches `printRunCostReport` through
-// the top-of-file SUBCOMMAND_MAP dispatch during module evaluation, so this map
-// declared next to that printer would still be in TDZ when a run with no
-// recoverable event log takes the unavailable branch.
-const RUN_COST_UNAVAILABLE = {
-  'no-event-log': 'no event log on disk for this run (pruned, or it predates event persistence)',
-  // Zero frames has two causes and this must not assert the wrong one: the run
-  // may never have reached a model call, OR the agent's stream family may not
-  // emit per-call usage at all. Verified on json-event-stream runs, whose logs
-  // do carry a frame per call; other families are not guaranteed to.
-  'no-usage-frames': 'the event log carries no per-call usage — either the run made no model call, or this agent stream does not report usage',
-};
+// The `od run cost` unavailable copy lives in `cli-help/run-cost-cli-help.ts`,
+// not here: this file is `@ts-nocheck`, so the `Record` over the contract's
+// reason union only acts as a real exhaustiveness guard from a checked module.
+// Importing it also settles the TDZ hazard that the map used to be hoisted for.
 // Hoisted because `runAutomation` is reachable through the top-of-file
 // SUBCOMMAND_MAP dispatch, which runs during module evaluation —
 // any `const` declared further down would still be in TDZ when
@@ -6360,7 +6353,7 @@ function fmtBytes(value) {
 function printRunCostReport(body) {
   const report = body?.report;
   if (!report) {
-    const reason = RUN_COST_UNAVAILABLE[body?.unavailableReason] ?? 'no cost data available';
+    const reason = runCostUnavailableMessage(body?.unavailableReason);
     console.log(`Run ${body?.runId ?? '?'}: ${reason}`);
     return;
   }

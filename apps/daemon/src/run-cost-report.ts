@@ -43,10 +43,17 @@ function isSafeRunId(runId: string): boolean {
  * unavailable with a reason, so a caller can explain the gap instead of
  * rendering an empty panel.
  *
- * `no-usage-frames` deliberately does NOT claim the run made no model call.
- * Per-call usage frames were verified present on `json-event-stream` runs, but
- * a stream family that never emits them would land here identically. Callers
- * must present both causes rather than picking one.
+ * `no-usage-frames` deliberately does NOT claim the run made no model call: a
+ * run that never reached the model and a stream that reports nothing land here
+ * identically. Callers must present both causes rather than picking one.
+ *
+ * `aggregate-usage-only` is the gate for a log whose usage is a whole-run
+ * summary rather than one frame per call — every runtime except the
+ * `json-event-stream` family today. The per-call arithmetic does not degrade
+ * gracefully on such a log; it reports a one-point curve, which pins the entire
+ * read cost on the preamble term and zeroes the transcript term. Refusing to
+ * report is the honest outcome, and this is the ONE place that decides it, so
+ * the web panel and `od run cost` can never disagree about it.
  */
 export function readRunCostReport(options: ReadRunCostReportOptions): RunCostResponse {
   const { runsDir, runId, rates } = options;
@@ -80,5 +87,6 @@ export function readRunCostReport(options: ReadRunCostReportOptions): RunCostRes
 
   const report = analyzeRunCost(lines, rates ? { rates } : {});
   if (report.steps.length === 0) return unavailable('no-usage-frames');
+  if (report.usageScope === 'aggregate') return unavailable('aggregate-usage-only');
   return { runId, report };
 }

@@ -4288,7 +4288,9 @@ export const it: Dict = {
   'questions.uploadFailed': 'Caricamento non riuscito per {failed} file.',
   'runCost.toggle': 'Dettaglio dei costi',
   'runCost.loading': 'Lettura del registro di esecuzione…',
-  'runCost.unavailable': 'Nessun dato di costo per questa esecuzione: nessun registro eventi su disco, o non contiene l’uso per chiamata (l’esecuzione non ha mai chiamato il modello, o lo stream di questo agente non riporta l’uso).',
+  'runCost.unavailable': 'Nessun dato di costo per questo run — nessun log eventi su disco, oppure non contiene alcun uso (o il run non è arrivato a chiamare il modello, o lo stream di questo agente non riporta l\'uso).',
+
+  'runCost.unavailableAggregate': 'Questo agente riporta l\'uso dei token una volta per run, non per chiamata al modello, quindi non c\'è alcuna curva di contesto da scomporre. Il run non ha nulla di sbagliato: la scomposizione dei costi richiede oggi un agente della famiglia OpenCode.',
   'runCost.estimateNote': 'Stimato su un listino fisso — non è un importo fatturato',
   'runCost.calls': '{count} chiamate al modello',
   'runCost.peakContext': 'il contesto ha toccato {tokens} token',
@@ -4306,6 +4308,8 @@ export const it: Dict = {
   'runCost.step': 'passo {index}',
   'runCost.outputComposition': 'Composizione dell’output',
   'runCost.prose': 'Prosa',
+
+  'runCost.thinking': 'Ragionamento',
   'runCost.intake': 'Ingresso nel contesto',
   'runCost.intakeHint': 'Entra nel contesto e viene riletto da ogni passo successivo. Ciò che arriva presto viene trascinato più a lungo.',
 };

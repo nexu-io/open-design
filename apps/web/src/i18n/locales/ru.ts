@@ -4288,7 +4288,9 @@ export const ru: Dict = {
   'questions.uploadFailed': 'Не удалось загрузить файлы: {failed}.',
   'runCost.toggle': 'Cost breakdown',
   'runCost.loading': 'Reading the run log…',
-  'runCost.unavailable': 'No cost data for this run — no event log on disk, or it carries no per-call usage (either the run made no model call, or this agent stream does not report usage).',
+  'runCost.unavailable': 'Нет данных о стоимости этого запуска — на диске нет журнала событий, либо он вообще не содержит расхода (запуск не дошёл до вызова модели, либо поток этого агента не сообщает о расходе).',
+
+  'runCost.unavailableAggregate': 'Этот агент сообщает о расходе токенов один раз за запуск, а не на каждый вызов модели, поэтому кривой контекста для разложения нет. С запуском всё в порядке — для разложения стоимости сейчас нужен агент семейства OpenCode.',
   'runCost.estimateNote': 'Estimated against a fixed rate card — not a billing figure',
   'runCost.calls': '{count} model calls',
   'runCost.peakContext': 'context peaked at {tokens} tokens',
@@ -4306,6 +4308,8 @@ export const ru: Dict = {
   'runCost.step': 'step {index}',
   'runCost.outputComposition': 'Output composition',
   'runCost.prose': 'Prose',
+
+  'runCost.thinking': 'Размышление',
   'runCost.intake': 'Intake',
   'runCost.intakeHint': 'Pulled into context, then re-read by every later step. What arrives early is dragged furthest.',
 };

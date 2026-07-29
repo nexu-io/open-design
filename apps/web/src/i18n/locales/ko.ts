@@ -4288,7 +4288,9 @@ export const ko: Dict = {
   'questions.uploadFailed': '{failed}개 파일 업로드에 실패했습니다.',
   'runCost.toggle': 'Cost breakdown',
   'runCost.loading': 'Reading the run log…',
-  'runCost.unavailable': 'No cost data for this run — no event log on disk, or it carries no per-call usage (either the run made no model call, or this agent stream does not report usage).',
+  'runCost.unavailable': '이 실행의 비용 데이터가 없습니다 — 디스크에 이벤트 로그가 없거나, 사용량이 전혀 담겨 있지 않습니다(실행이 모델 호출에 이르지 못했거나, 이 에이전트의 스트림이 사용량을 보고하지 않습니다).',
+
+  'runCost.unavailableAggregate': '이 에이전트는 토큰 사용량을 모델 호출별이 아니라 실행당 한 번만 보고하므로, 분해할 컨텍스트 곡선이 없습니다. 실행에 문제가 있는 것은 아닙니다 — 비용 분해에는 현재 OpenCode 계열 에이전트가 필요합니다.',
   'runCost.estimateNote': 'Estimated against a fixed rate card — not a billing figure',
   'runCost.calls': '{count} model calls',
   'runCost.peakContext': 'context peaked at {tokens} tokens',
@@ -4306,6 +4308,8 @@ export const ko: Dict = {
   'runCost.step': 'step {index}',
   'runCost.outputComposition': 'Output composition',
   'runCost.prose': 'Prose',
+
+  'runCost.thinking': '사고 과정',
   'runCost.intake': 'Intake',
   'runCost.intakeHint': 'Pulled into context, then re-read by every later step. What arrives early is dragged furthest.',
 };

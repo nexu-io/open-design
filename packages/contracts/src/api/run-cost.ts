@@ -16,11 +16,25 @@
  * re-running, no spend. Everything here is derived from that curve plus the
  * tool traffic around it.
  *
+ * WHAT THIS CANNOT MEASURE. The curve only exists if the log carries one usage
+ * frame PER MODEL CALL. Only the `json-event-stream` family (OpenCode) does:
+ * `claude-stream`, `copilot-stream`, `qoder-stream`, the ACP session, and the
+ * pi RPC bridge all emit usage once, from the terminal `result` frame, as a
+ * whole-run aggregate. Feeding an aggregate through the per-call arithmetic does
+ * not degrade gracefully — it silently reports a one-point curve, which pins
+ * 100% of the read cost on the preamble term and zeroes the transcript term.
+ * `usageScope` therefore reports what the log can support and callers gate on
+ * it; see `detectUsageScope`.
+ *
  * PURITY. This module is pure TypeScript by contract: no Node APIs, no
  * filesystem, no `Buffer`. Byte counts go through `TextEncoder` so the same
  * arithmetic runs in the daemon and in the browser and cannot drift between
  * them. Callers supply already-parsed JSONL lines.
  */
+import {
+  extractUsageCacheFields,
+  resolveEffectiveInputTokens,
+} from './usage-accounting.js';
 
 /** Per-million-token prices used to turn token counts into dollars. */
 export interface RunCostRates {
@@ -54,9 +68,23 @@ export const DEFAULT_RUN_COST_RATES: RunCostRates = {
 export interface RunCostStep {
   /** Zero-based position in the run's usage sequence. */
   index: number;
-  /** `cached_read_tokens` — the context size the model re-read on this call. */
+  /**
+   * The context the model re-read on this call, read through the shared
+   * provider alias matrix (`extractUsageCacheFields`) rather than off one
+   * literal field name. Anthropic reports this as `cache_read_input_tokens`
+   * and OpenAI-style runtimes as `cached_input_tokens`; a raw
+   * `cached_read_tokens` lookup silently reports ZERO for both.
+   */
   contextTokens: number;
   cacheWriteTokens: number;
+  /**
+   * Input tokens that were NOT served from cache, normalized across the two
+   * incompatible accounting conventions: additive (Anthropic — `input_tokens`
+   * is already the uncached remainder) and inclusive (OpenAI — `input_tokens`
+   * contains the cache-read subset and must have it subtracted). Pricing the
+   * raw field bills an inclusive payload's cached tokens twice, once at the
+   * uncached rate.
+   */
   inputTokens: number;
   outputTokens: number;
   /** Wall-clock milliseconds since the previous step; `null` on the first. */
@@ -129,11 +157,12 @@ export interface RunCostIntakeItem {
   /** File path for reads, command for shells, else the serialized input. */
   label: string;
   bytes: number;
-  /** Usage-step the result landed at. */
+  /** Index of the model call that PRODUCED the result. */
   stepIndex: number;
   /**
-   * `bytes x steps that re-read it`. The ordering lever: content pulled in
-   * early is dragged through every later step, so a large late read can cost
+   * `bytes x calls that re-read it` — excluding the call that produced it, and
+   * zero for a result with no later call. The ordering lever: content pulled in
+   * early is dragged through every later call, so a large late read can cost
    * less than a small early one.
    */
   dragBytes: number;
@@ -163,7 +192,19 @@ export interface RunCostCacheHealth {
   rewrittenTokens: number;
 }
 
+/**
+ * Whether the log's `usage` frames are one-per-model-call (the curve exists) or
+ * one whole-run aggregate (it does not).
+ */
+export type RunCostUsageScope = 'per-call' | 'aggregate';
+
 export interface RunCostReport {
+  /**
+   * What the underlying log can support. `aggregate` means every per-call term
+   * below is meaningless and the report must not be shown; callers gate on this
+   * rather than second-guessing the numbers.
+   */
+  usageScope: RunCostUsageScope;
   steps: RunCostStep[];
   terms: RunCostTerms;
   usd: RunCostUsd;
@@ -189,13 +230,19 @@ export interface RunCostResponse {
   /**
    * Why `report` is null, for a surface to explain rather than show nothing.
    *
-   * `no-usage-frames` means the log carried no per-call usage — NOT that the
-   * run made no model call. Per-call frames were verified present on
-   * `json-event-stream` runs; a stream family that does not emit them lands
-   * here identically, and the two are indistinguishable from the log alone.
-   * Surfaces must name both causes.
+   * `no-usage-frames` means the log carried no usage at all — NOT that the run
+   * made no model call. A run that never reached the model and a stream family
+   * that reports nothing land here identically, and the two are
+   * indistinguishable from the log alone. Surfaces must name both causes.
+   *
+   * `aggregate-usage-only` means usage WAS reported, but once for the whole run
+   * instead of once per model call, so there is no context curve to decompose.
+   * This is a property of the agent's stream family, not of the run: every
+   * runtime except the `json-event-stream` family (OpenCode) reports this way
+   * today. Reporting it as unavailable is deliberate — the per-call arithmetic
+   * applied to an aggregate produces confident, wrong numbers.
    */
-  unavailableReason?: 'no-event-log' | 'no-usage-frames';
+  unavailableReason?: 'no-event-log' | 'no-usage-frames' | 'aggregate-usage-only';
 }
 
 const encoder = new TextEncoder();
@@ -263,6 +310,55 @@ function writeMatchesDelta(write: number, delta: number): boolean {
 }
 
 /**
+ * How many model calls re-read a tool result produced by call `producingStep`.
+ *
+ * A result cannot be re-read by the call that PRODUCED it. In the persisted
+ * order the result is written before that call's usage frame — OpenCode's
+ * `tool_use` part emits the result as soon as its state reaches `completed`,
+ * and the `step_finish` carrying the call's tokens arrives after it — so
+ * `producingStep` indexes the producing call itself, and only the calls after
+ * it drag the bytes forward.
+ *
+ * The consequence at the boundaries is what makes this worth naming: a result
+ * from the FIRST call is dragged through `n - 1` calls, not `n`, and a result
+ * with no later call at all is dragged nowhere, so its drag is zero rather than
+ * one. Both ends matter because this number ranks which intake to attack first.
+ */
+function callsThatReRead(producingStep: number, totalSteps: number): number {
+  return Math.max(0, totalSteps - 1 - producingStep);
+}
+
+/**
+ * Whether a log's `usage` frames are per-model-call or one whole-run aggregate.
+ *
+ * A per-call log INTERLEAVES usage with work: the call that consumes a tool
+ * result emits its own frame afterwards. So if every `tool_use` in the run
+ * precedes the FIRST usage frame, the frames were not interleaved with the
+ * work — they are a summary written at close. That is the signature of every
+ * runtime except the `json-event-stream` family, which report usage from the
+ * terminal `result` frame.
+ *
+ * The test is positional on purpose. Sniffing for companion fields
+ * (`costUsd`, `durationMs`, `stopReason`) would be guesswork that OpenCode's
+ * own frames partly satisfy, and counting frames would break the day a
+ * terminal-frame runtime emits two.
+ *
+ * A run with no tool calls is per-call by definition: its single frame IS its
+ * single call, and the decomposition of a one-call run is trivially right. The
+ * remaining edge — a genuine one-call OpenCode run that did use tools — is
+ * classified aggregate, and that is the correct answer rather than a false
+ * positive: a one-point curve is exactly the degenerate case that pins the
+ * whole read cost on the preamble term.
+ */
+export function detectUsageScope(args: {
+  toolUseFrames: number;
+  toolUseAfterFirstUsage: boolean;
+}): RunCostUsageScope {
+  if (args.toolUseFrames === 0) return 'per-call';
+  return args.toolUseAfterFirstUsage ? 'per-call' : 'aggregate';
+}
+
+/**
  * Decompose a run's persisted event lines into cost terms, cache health,
  * output composition, and intake drag.
  *
@@ -288,6 +384,10 @@ export function analyzeRunCost(
   let duplicateCalls = 0;
   let duplicateBytes = 0;
   let lastTimestamp: number | null = null;
+  // Scope discriminator, tracked positionally as the log is read. See
+  // `detectUsageScope` for why interleaving is the signal.
+  let toolUseFrames = 0;
+  let toolUseAfterFirstUsage = false;
 
   for (const line of Array.isArray(lines) ? lines : []) {
     const data = eventPayload(line);
@@ -298,12 +398,25 @@ export function analyzeRunCost(
       const usage = isRecord(data.usage) ? data.usage : null;
       if (!usage) continue;
       const timestamp = isRecord(line) && typeof line.timestamp === 'number' ? line.timestamp : null;
+      // Read through the shared provider matrix, never off literal field names:
+      // Anthropic ships `cache_read_input_tokens` and additive `input_tokens`,
+      // OpenAI-style runtimes ship `cached_input_tokens` and inclusive
+      // `input_tokens`. `resolveEffectiveInputTokens` returns `undefined` for
+      // uncached input when the provider gave no split to derive it from; the
+      // raw input figure is the honest fallback there.
+      const fields = extractUsageCacheFields(usage);
+      const { uncachedInput } = resolveEffectiveInputTokens(
+        fields.inputTokens,
+        fields.cacheReadInputTokens,
+        fields.cacheCreationInputTokens,
+        fields.cacheTokenSource,
+      );
       steps.push({
         index: steps.length,
-        contextTokens: num(usage.cached_read_tokens),
-        cacheWriteTokens: num(usage.cached_write_tokens),
-        inputTokens: num(usage.input_tokens),
-        outputTokens: num(usage.output_tokens),
+        contextTokens: fields.cacheReadInputTokens ?? 0,
+        cacheWriteTokens: fields.cacheCreationInputTokens ?? 0,
+        inputTokens: uncachedInput ?? fields.inputTokens ?? 0,
+        outputTokens: fields.outputTokens ?? 0,
         gapMs: timestamp !== null && lastTimestamp !== null ? timestamp - lastTimestamp : null,
         incremental: false,
       });
@@ -322,6 +435,8 @@ export function analyzeRunCost(
 
     if (type === 'tool_use' && typeof data.name === 'string') {
       const tool = data.name;
+      toolUseFrames += 1;
+      if (steps.length > 0) toolUseAfterFirstUsage = true;
       outputByTool.set(tool, (outputByTool.get(tool) ?? 0) + serializedBytes(data.input));
       if (typeof data.id === 'string') {
         toolNameById.set(data.id, tool);
@@ -453,7 +568,7 @@ export function analyzeRunCost(
   const items: RunCostIntakeItem[] = intakeItems
     .map((item) => ({
       ...item,
-      dragBytes: item.bytes * Math.max(0, totalSteps - item.stepIndex),
+      dragBytes: item.bytes * callsThatReRead(item.stepIndex, totalSteps),
     }))
     .sort((a, b) => b.dragBytes - a.dragBytes);
 
@@ -468,6 +583,7 @@ export function analyzeRunCost(
     .sort((a, b) => b.bytes - a.bytes);
 
   return {
+    usageScope: detectUsageScope({ toolUseFrames, toolUseAfterFirstUsage }),
     steps,
     terms,
     usd,

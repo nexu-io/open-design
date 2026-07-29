@@ -4753,7 +4753,9 @@ export const zhTW: Dict = {
   "questions.uploadFailed": "有 {failed} 個檔案上傳失敗。",
   'runCost.toggle': 'Cost breakdown',
   'runCost.loading': 'Reading the run log…',
-  'runCost.unavailable': 'No cost data for this run — no event log on disk, or it carries no per-call usage (either the run made no model call, or this agent stream does not report usage).',
+  'runCost.unavailable': '這次執行沒有成本資料——磁碟上沒有事件日誌，或者日誌中完全沒有用量（可能執行未觸及模型呼叫，或該代理的串流不上報用量）。',
+
+  'runCost.unavailableAggregate': '這個代理按每次執行上報一次 token 用量，而不是按每次模型呼叫上報，因此沒有可拆解的上下文曲線。這次執行本身沒有問題——成本拆解目前需要 OpenCode 系列的代理。',
   'runCost.estimateNote': 'Estimated against a fixed rate card — not a billing figure',
   'runCost.calls': '{count} model calls',
   'runCost.peakContext': 'context peaked at {tokens} tokens',
@@ -4771,6 +4773,8 @@ export const zhTW: Dict = {
   'runCost.step': 'step {index}',
   'runCost.outputComposition': 'Output composition',
   'runCost.prose': 'Prose',
+
+  'runCost.thinking': '思考',
   'runCost.intake': 'Intake',
   'runCost.intakeHint': 'Pulled into context, then re-read by every later step. What arrives early is dragged furthest.',
 };

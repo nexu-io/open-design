@@ -4288,7 +4288,9 @@ export const ja: Dict = {
   'questions.uploadFailed': '{failed} 件のファイルのアップロードに失敗しました。',
   'runCost.toggle': 'Cost breakdown',
   'runCost.loading': 'Reading the run log…',
-  'runCost.unavailable': 'No cost data for this run — no event log on disk, or it carries no per-call usage (either the run made no model call, or this agent stream does not report usage).',
+  'runCost.unavailable': 'この実行のコストデータはありません — ディスクにイベントログがない、または使用量がまったく含まれていません（モデル呼び出しに至らなかったか、このエージェントのストリームが使用量を報告していません）。',
+
+  'runCost.unavailableAggregate': 'このエージェントはトークン使用量をモデル呼び出しごとではなく実行ごとに一度だけ報告するため、分解できるコンテキスト曲線がありません。実行に問題はありません — コスト分解には現在 OpenCode 系のエージェントが必要です。',
   'runCost.estimateNote': 'Estimated against a fixed rate card — not a billing figure',
   'runCost.calls': '{count} model calls',
   'runCost.peakContext': 'context peaked at {tokens} tokens',
@@ -4306,6 +4308,8 @@ export const ja: Dict = {
   'runCost.step': 'step {index}',
   'runCost.outputComposition': 'Output composition',
   'runCost.prose': 'Prose',
+
+  'runCost.thinking': '思考',
   'runCost.intake': 'Intake',
   'runCost.intakeHint': 'Pulled into context, then re-read by every later step. What arrives early is dragged furthest.',
 };

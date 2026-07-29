@@ -4288,7 +4288,9 @@ export const ptBR: Dict = {
   'questions.uploadFailed': 'Falha no envio de {failed} arquivo(s).',
   'runCost.toggle': 'Detalhamento de custo',
   'runCost.loading': 'Lendo o registro da execução…',
-  'runCost.unavailable': 'Sem dados de custo para esta execução: não há registro de eventos em disco, ou ele não contém uso por chamada (a execução não chegou a chamar o modelo, ou o stream deste agente não reporta uso).',
+  'runCost.unavailable': 'Sem dados de custo para esta execução — não há log de eventos em disco, ou ele não contém uso algum (a execução não chegou a chamar o modelo, ou o stream deste agente não informa uso).',
+
+  'runCost.unavailableAggregate': 'Este agente informa o uso de tokens uma vez por execução, e não por chamada ao modelo, então não há curva de contexto para decompor. Nada está errado com a execução — a decomposição de custos hoje precisa de um agente da família OpenCode.',
   'runCost.estimateNote': 'Estimado com uma tabela de preços fixa — não é um valor de cobrança',
   'runCost.calls': '{count} chamadas ao modelo',
   'runCost.peakContext': 'o contexto chegou a {tokens} tokens',
@@ -4306,6 +4308,8 @@ export const ptBR: Dict = {
   'runCost.step': 'passo {index}',
   'runCost.outputComposition': 'Composição da saída',
   'runCost.prose': 'Prosa',
+
+  'runCost.thinking': 'Raciocínio',
   'runCost.intake': 'Entrada de contexto',
   'runCost.intakeHint': 'Entra no contexto e é relido por cada passo seguinte. O que chega cedo é arrastado por mais tempo.',
 };

@@ -30,6 +30,11 @@ function tokens(value: number): string {
   return value.toLocaleString('en-US');
 }
 
+/** Share of the output total, so every rendered category uses one denominator. */
+function outputShare(value: number, total: number): string {
+  return total > 0 ? `${((value / total) * 100).toFixed(1)}%` : '—';
+}
+
 export function RunCostPanel({ runId }: { runId: string }) {
   const t = useT();
   const [state, setState] = useState<
@@ -60,9 +65,16 @@ export function RunCostPanel({ runId }: { runId: string }) {
     );
   }
   if (state.kind === 'error' || !state.data.report) {
+    // An aggregate-usage run is worth naming rather than folding into a generic
+    // "unavailable": the cause is the agent's stream family, not the run, so
+    // re-running it changes nothing and the user should not go looking.
+    const reason =
+      state.kind === 'ready' && state.data.unavailableReason === 'aggregate-usage-only'
+        ? t('runCost.unavailableAggregate')
+        : t('runCost.unavailable');
     return (
       <div className={styles.panel}>
-        <p className={styles.status}>{t('runCost.unavailable')}</p>
+        <p className={styles.status}>{reason}</p>
       </div>
     );
   }
@@ -143,14 +155,19 @@ export function RunCostPanel({ runId }: { runId: string }) {
               share={`${(tool.share * 100).toFixed(1)}%`}
             />
           ))}
+          {/* Prose and thinking are both categories of `totalBytes`, so both
+              must be rendered: showing prose alone leaves the visible shares
+              short of 100% on any reasoning-heavy run, and drops the
+              prose-vs-thinking split the API already supplies. */}
           <Row
             label={t('runCost.prose')}
             value={bytes(output.proseBytes)}
-            share={
-              output.totalBytes > 0
-                ? `${((output.proseBytes / output.totalBytes) * 100).toFixed(1)}%`
-                : '—'
-            }
+            share={outputShare(output.proseBytes, output.totalBytes)}
+          />
+          <Row
+            label={t('runCost.thinking')}
+            value={bytes(output.thinkingBytes)}
+            share={outputShare(output.thinkingBytes, output.totalBytes)}
           />
         </div>
       </section>

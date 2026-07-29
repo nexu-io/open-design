@@ -4288,7 +4288,9 @@ export const tr: Dict = {
   'questions.uploadFailed': '{failed} dosya yüklenemedi.',
   'runCost.toggle': 'Cost breakdown',
   'runCost.loading': 'Reading the run log…',
-  'runCost.unavailable': 'No cost data for this run — no event log on disk, or it carries no per-call usage (either the run made no model call, or this agent stream does not report usage).',
+  'runCost.unavailable': 'Bu çalıştırma için maliyet verisi yok — diskte olay günlüğü bulunmuyor ya da hiç kullanım içermiyor (çalıştırma model çağrısına ulaşmadı veya bu ajanın akışı kullanım bildirmiyor).',
+
+  'runCost.unavailableAggregate': 'Bu ajan token kullanımını her model çağrısı için değil, çalıştırma başına bir kez bildiriyor; dolayısıyla ayrıştırılacak bir bağlam eğrisi yok. Çalıştırmada bir sorun yok — maliyet ayrıştırması şu an OpenCode ailesinden bir ajan gerektiriyor.',
   'runCost.estimateNote': 'Estimated against a fixed rate card — not a billing figure',
   'runCost.calls': '{count} model calls',
   'runCost.peakContext': 'context peaked at {tokens} tokens',
@@ -4306,6 +4308,8 @@ export const tr: Dict = {
   'runCost.step': 'step {index}',
   'runCost.outputComposition': 'Output composition',
   'runCost.prose': 'Prose',
+
+  'runCost.thinking': 'Düşünme',
   'runCost.intake': 'Intake',
   'runCost.intakeHint': 'Pulled into context, then re-read by every later step. What arrives early is dragged furthest.',
 };

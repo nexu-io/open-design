@@ -4433,6 +4433,7 @@ export interface Dict {
   'runCost.toggle': string;
   'runCost.loading': string;
   'runCost.unavailable': string;
+  'runCost.unavailableAggregate': string;
   'runCost.estimateNote': string;
   'runCost.calls': string;
   'runCost.peakContext': string;
@@ -4450,6 +4451,7 @@ export interface Dict {
   'runCost.step': string;
   'runCost.outputComposition': string;
   'runCost.prose': string;
+  'runCost.thinking': string;
   'runCost.intake': string;
   'runCost.intakeHint': string;
 }

@@ -4302,7 +4302,9 @@ export const en: Dict = {
   'questions.uploadFailed': 'File upload failed for {failed} file(s).',
   'runCost.toggle': 'Cost breakdown',
   'runCost.loading': 'Reading the run log…',
-  'runCost.unavailable': 'No cost data for this run — no event log on disk, or it carries no per-call usage (either the run made no model call, or this agent stream does not report usage).',
+  'runCost.unavailable': 'No cost data for this run — no event log on disk, or it carries no usage at all (either the run made no model call, or this agent stream does not report usage).',
+
+  'runCost.unavailableAggregate': 'This agent reports token usage once per run, not per model call, so there is no context curve to break down. Nothing is wrong with the run — cost decomposition currently needs an OpenCode-family agent.',
   'runCost.estimateNote': 'Estimated against a fixed rate card — not a billing figure',
   'runCost.calls': '{count} model calls',
   'runCost.peakContext': 'context peaked at {tokens} tokens',
@@ -4320,6 +4322,8 @@ export const en: Dict = {
   'runCost.step': 'step {index}',
   'runCost.outputComposition': 'Output composition',
   'runCost.prose': 'Prose',
+
+  'runCost.thinking': 'Thinking',
   'runCost.intake': 'Intake',
   'runCost.intakeHint': 'Pulled into context, then re-read by every later step. What arrives early is dragged furthest.',
 };

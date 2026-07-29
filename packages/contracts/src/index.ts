@@ -38,6 +38,7 @@ export * from './api/registry.js';
 export * from './api/research.js';
 export * from './api/run-completeness.js';
 export * from './api/run-cost.js';
+export * from './api/usage-accounting.js';
 export * from './api/reasoningExecution.js';
 export * from './api/social-share.js';
 export * from './api/terminals.js';

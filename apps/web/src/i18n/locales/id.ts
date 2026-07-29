@@ -4288,7 +4288,9 @@ export const id: Dict = {
   'questions.uploadFailed': 'Gagal mengunggah {failed} file.',
   'runCost.toggle': 'Cost breakdown',
   'runCost.loading': 'Reading the run log…',
-  'runCost.unavailable': 'No cost data for this run — no event log on disk, or it carries no per-call usage (either the run made no model call, or this agent stream does not report usage).',
+  'runCost.unavailable': 'Tidak ada data biaya untuk run ini — tidak ada log peristiwa di disk, atau tidak memuat penggunaan sama sekali (entah run tidak sampai memanggil model, atau stream agen ini tidak melaporkan penggunaan).',
+
+  'runCost.unavailableAggregate': 'Agen ini melaporkan penggunaan token sekali per run, bukan per panggilan model, sehingga tidak ada kurva konteks yang bisa diuraikan. Tidak ada yang salah dengan run ini — penguraian biaya saat ini memerlukan agen keluarga OpenCode.',
   'runCost.estimateNote': 'Estimated against a fixed rate card — not a billing figure',
   'runCost.calls': '{count} model calls',
   'runCost.peakContext': 'context peaked at {tokens} tokens',
@@ -4306,6 +4308,8 @@ export const id: Dict = {
   'runCost.step': 'step {index}',
   'runCost.outputComposition': 'Output composition',
   'runCost.prose': 'Prose',
+
+  'runCost.thinking': 'Penalaran',
   'runCost.intake': 'Intake',
   'runCost.intakeHint': 'Pulled into context, then re-read by every later step. What arrives early is dragged furthest.',
 };
