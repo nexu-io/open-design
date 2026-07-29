@@ -6742,6 +6742,7 @@ export function ProjectView({
       byokImageModelOptionsPV,
       byokVideoModelOptionsPV,
       byokSpeechModelOptionsPV,
+      projectRunBillingContext,
       projectRunWorkspaceContext,
       projectRunHasBillableAmrPrincipal,
     ],
@@ -9147,6 +9148,7 @@ export function ProjectView({
     initialDraft,
     project.pendingPrompt,
     projectRunHasBillableAmrPrincipal,
+    projectRunBillingContext,
     handleSend,
   ]);
 

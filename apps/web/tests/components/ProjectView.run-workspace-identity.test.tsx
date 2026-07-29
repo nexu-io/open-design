@@ -42,6 +42,7 @@ import type { ComponentProps, ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ProjectView } from '../../src/components/ProjectView';
+import type { ProjectWorkspaceScopeState } from '../../src/collab/useProjectWorkspaceScope';
 import { resetWorkspaceContextCache } from '../../src/collab/useWorkspaceContext';
 import { streamViaDaemon } from '../../src/providers/daemon';
 import { checkAmrBalanceGate } from '../../src/runtime/amr-balance-gate';
@@ -83,6 +84,10 @@ const CALLER_CONTEXT: WorkspaceCollabContext = {
   permissions: buildWorkspacePermissions({ role: 'member', lifecycleState: 'active' }),
 } as WorkspaceCollabContext;
 
+const workspaceScopeMocks = vi.hoisted(() => ({
+  projectScope: { loading: true, scope: null } as ProjectWorkspaceScopeState,
+}));
+
 vi.mock('../../src/i18n', () => ({
   useI18n: () => ({ locale: 'zh-CN', setLocale: () => undefined, t: (key: string) => key }),
   useT: () => (key: string) => key,
@@ -91,6 +96,16 @@ vi.mock('../../src/i18n', () => ({
 vi.mock('../../src/router', () => ({ navigate: vi.fn() }));
 
 vi.mock('../../src/providers/anthropic', () => ({ streamMessage: vi.fn() }));
+
+vi.mock('../../src/collab/useWorkspaceContext', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/collab/useWorkspaceContext')>()),
+  useWorkspaceContext: () => ({ context: CALLER_CONTEXT, loading: false }),
+}));
+
+vi.mock('../../src/collab/useProjectWorkspaceScope', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/collab/useProjectWorkspaceScope')>()),
+  useProjectWorkspaceScope: () => workspaceScopeMocks.projectScope,
+}));
 
 vi.mock('../../src/providers/daemon', () => ({
   fetchChatRunStatus: vi.fn(),
@@ -244,8 +259,8 @@ function stubFetch() {
   );
 }
 
-function renderProjectView(overrides: Partial<ComponentProps<typeof ProjectView>> = {}) {
-  return render(
+function projectViewElement(overrides: Partial<ComponentProps<typeof ProjectView>> = {}) {
+  return (
     <ProjectView
       project={project()}
       routeFileName={null}
@@ -266,8 +281,12 @@ function renderProjectView(overrides: Partial<ComponentProps<typeof ProjectView>
       onProjectChange={vi.fn()}
       onProjectsRefresh={vi.fn()}
       {...overrides}
-    />,
+    />
   );
+}
+
+function renderProjectView(overrides: Partial<ComponentProps<typeof ProjectView>> = {}) {
+  return render(projectViewElement(overrides));
 }
 
 describe('a Home auto-send identifies its caller before the project scope resolves', () => {
@@ -285,6 +304,7 @@ describe('a Home auto-send identifies its caller before the project scope resolv
     mockedListMessages.mockResolvedValue([]);
     mockedFetchPreviewComments.mockResolvedValue([]);
     mockedFetchBrands.mockResolvedValue([]);
+    workspaceScopeMocks.projectScope = { loading: true, scope: null };
     // Home's hand-off: this flag is what makes ProjectView fire the seeded
     // prompt without a second click.
     window.sessionStorage.setItem(`od:auto-send-first:${PROJECT_ID}`, '1');
@@ -310,5 +330,85 @@ describe('a Home auto-send identifies its caller before the project scope resolv
       'a run POST with no workspace context is refused 401 WORKSPACE_CONTEXT_REQUIRED '
         + 'on a workspace-bound project',
     ).toEqual(CALLER_CONTEXT);
+  });
+});
+
+describe('a Home auto-send observes a project billing scope that settles after mount', () => {
+  beforeEach(() => {
+    window.sessionStorage.clear();
+    window.localStorage.clear();
+    resetWorkspaceContextCache();
+    mockedListConversations.mockImplementation(async (projectId: string) => [
+      conversation(projectId),
+    ]);
+    mockedCreateConversation.mockImplementation(async (projectId: string) =>
+      conversation(projectId),
+    );
+    mockedListMessages.mockResolvedValue([]);
+    mockedFetchPreviewComments.mockResolvedValue([]);
+    mockedFetchBrands.mockResolvedValue([]);
+    workspaceScopeMocks.projectScope = { loading: true, scope: null };
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+    resetWorkspaceContextCache();
+  });
+
+  it('preflights and auto-sends with the latest settled Team billing scope', async () => {
+    // Keep every prop that participates in `handleSend` or the auto-send effect
+    // referentially stable across the rerender. The project billing scope is the
+    // only dependency allowed to change in this regression.
+    const stableOverrides: Partial<ComponentProps<typeof ProjectView>> = {
+      project: project(),
+      agents: [{ id: 'amr', name: 'amr', available: true }] as unknown as AgentInfo[],
+      skills: [] as SkillSummary[],
+      designTemplates: [] as SkillSummary[],
+      designSystems: [] as DesignSystemSummary[],
+      onModeChange: vi.fn(),
+      onAgentChange: vi.fn(),
+      onAgentModelChange: vi.fn(),
+      onRefreshAgents: vi.fn(),
+      onOpenSettings: vi.fn(),
+      onBack: vi.fn(),
+      onClearPendingPrompt: vi.fn(),
+      onTouchProject: vi.fn(),
+      onProjectChange: vi.fn(),
+      onProjectsRefresh: vi.fn(),
+    };
+    const view = renderProjectView(stableOverrides);
+    await waitFor(() => expect(mockedListMessages).toHaveBeenCalled());
+    expect(mockedStreamViaDaemon).not.toHaveBeenCalled();
+
+    // Add the Home hand-off only after mount, then settle the project scope to
+    // the SAME context object already used for run identity. That keeps
+    // `projectRunWorkspaceContext` referentially stable, so only the billing
+    // context changed. Without the `handleSend` billing dependency, the effect
+    // dispatches through a callback that still holds its mount-time `null`.
+    // The effect also lists the billing context it reads directly instead of
+    // relying on that callback's identity as a transitive dependency.
+    window.sessionStorage.setItem(`od:auto-send-first:${PROJECT_ID}`, '1');
+    workspaceScopeMocks.projectScope = {
+      loading: false,
+      scope: {
+        kind: 'team',
+        projectId: PROJECT_ID,
+        workspaceId: TEAM_WORKSPACE,
+        visibility: 'personal',
+        context: CALLER_CONTEXT as WorkspaceCollabContext & { workspaceType: 'team' },
+      },
+    };
+    view.rerender(projectViewElement(stableOverrides));
+
+    await waitFor(() => {
+      expect(mockedCheckAmrBalanceGate).toHaveBeenCalledWith({
+        workspaceType: 'team',
+        workspaceId: TEAM_WORKSPACE,
+        workspaceMemberId: TEAM_MEMBER,
+      });
+    });
+    await waitFor(() => expect(mockedStreamViaDaemon).toHaveBeenCalled());
   });
 });
