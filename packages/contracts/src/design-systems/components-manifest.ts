@@ -76,14 +76,14 @@ const COMPONENT_GROUPS: ComponentGroupDefinition[] = [
     id: 'buttons',
     label: 'Buttons and calls to action',
     selectorMatchers: [/\bbutton\b/i, /\.btn(?:\b|[-_:])/i, /\[type=["']?(?:button|submit|reset)/i],
-    classMatchers: [/^btn(?:$|-)/i, /button/i, /cta/i],
+    classMatchers: [/^btn(?:$|-)/i, /^button(?:$|-)/i, /^cta(?:$|-)/i],
     elementMatchers: [/^button$/i],
   },
   {
     id: 'inputs',
     label: 'Form fields and controls',
     selectorMatchers: [/\binput\b/i, /\btextarea\b/i, /\bselect\b/i, /\.field(?:\b|[-_:])/i, /\blabel\b/i],
-    classMatchers: [/^field(?:$|-)/i, /input/i, /control/i, /form/i],
+    classMatchers: [/^field(?:$|-)/i, /^input(?:$|-)/i, /^control(?:$|-)/i, /^form(?:$|-)/i],
     elementMatchers: [/^(input|textarea|select|label|form)$/i],
   },
   {
@@ -97,7 +97,7 @@ const COMPONENT_GROUPS: ComponentGroupDefinition[] = [
     id: 'badges',
     label: 'Badges, chips, and status labels',
     selectorMatchers: [/\.badge(?:\b|[-_:])/i, /\.chip(?:\b|[-_:])/i, /\.tag(?:\b|[-_:])/i, /\.pill(?:\b|[-_:])/i],
-    classMatchers: [/^badge(?:$|-)/i, /^chip(?:$|-)/i, /^tag(?:$|-)/i, /^pill(?:$|-)/i, /status/i],
+    classMatchers: [/^badge(?:$|-)/i, /^chip(?:$|-)/i, /^tag(?:$|-)/i, /^pill(?:$|-)/i, /^status(?:$|-)/i],
     elementMatchers: [],
   },
   {
@@ -111,7 +111,7 @@ const COMPONENT_GROUPS: ComponentGroupDefinition[] = [
     id: 'keyboard',
     label: 'Keyboard hints',
     selectorMatchers: [/\bkbd\b/i, /\.kbd(?:\b|[-_:])/i],
-    classMatchers: [/^kbd(?:$|-)/i, /keyboard/i, /shortcut/i],
+    classMatchers: [/^kbd(?:$|-)/i, /^keyboard(?:$|-)/i, /^shortcut(?:$|-)/i],
     elementMatchers: [/^kbd$/i],
   },
   {
@@ -125,7 +125,7 @@ const COMPONENT_GROUPS: ComponentGroupDefinition[] = [
     id: 'typography',
     label: 'Typography scale and text utilities',
     selectorMatchers: [/\bh[1-6]\b/i, /\.lead(?:\b|[-_:])/i, /\.eyebrow(?:\b|[-_:])/i, /\.body-(?:muted|sm|small)\b/i],
-    classMatchers: [/^lead$/i, /^eyebrow$/i, /^body-(?:muted|sm|small)$/i, /caption/i],
+    classMatchers: [/^lead$/i, /^eyebrow$/i, /^body-(?:muted|sm|small)$/i, /^caption(?:$|-)/i],
     elementMatchers: [/^h[1-6]$/i, /^p$/i],
   },
   {
@@ -139,7 +139,7 @@ const COMPONENT_GROUPS: ComponentGroupDefinition[] = [
       /\bmain\b/i,
       /\bnav\b/i,
     ],
-    classMatchers: [/^container$/i, /^stack-\d+$/i, /^row-(?:between|center|start|end)$/i, /grid/i, /layout/i],
+    classMatchers: [/^container$/i, /^stack-\d+$/i, /^row-(?:between|center|start|end)$/i, /^grid(?:$|-)/i, /^layout(?:$|-)/i],
     elementMatchers: [/^(main|section|nav|header|footer)$/i],
   },
 ];
@@ -283,20 +283,24 @@ function extractCssSelectors(css: string): string[] {
 function extractSelectorTokenReferences(css: string): Map<string, string[]> {
   const referencesBySelector = new Map<string, Set<string>>();
   const commentlessCss = stripContainerAtRuleHeaders(stripCssComments(css));
-  const rulePattern = /(?:^|[{}])\s*([^@{}][^{}]*?)\s*\{([^{}]*)\}/g;
-  let match: RegExpExecArray | null;
 
-  while ((match = rulePattern.exec(commentlessCss)) !== null) {
-    const rawSelectorList = match[1]?.trim();
-    const rawBody = match[2] ?? '';
-    if (rawSelectorList == null || rawSelectorList.length === 0) continue;
-    if (rawSelectorList.includes(':root')) continue;
-    if (/^(?:from|to|\d+(?:\.\d+)?%)$/i.test(rawSelectorList)) continue;
+  // Walk the CSS character-by-character with a brace-depth scanner instead of
+  // a single `[{}]\s*([^@{}][^{}]*?)\s*\{([^{}]*)\}` regex. The regex consumed
+  // each rule's closing `}`, so the *next* rule lost its `[{}]` anchor and
+  // was skipped — silent loss of every other flat rule's token attribution
+  // (issue #6224 part 1). The regex body `[^{}]*` also couldn't match nested
+  // blocks (Tailwind v4 state output), mis-attributing tokens to declaration
+  // text as a pseudo-selector (issue #6224 part 2). The scanner flattens one
+  // level of nesting so `&:hover { ... }` declarations contribute to the
+  // parent selector instead of leaking into a fake selector.
+  for (const { selectorList, body } of iterateCssRules(commentlessCss)) {
+    if (selectorList.includes(':root')) continue;
+    if (/^(?:from|to|\d+(?:\.\d+)?%)$/i.test(selectorList)) continue;
 
-    const tokenReferences = extractTokenReferences(rawBody);
+    const tokenReferences = extractTokenReferences(body);
     if (tokenReferences.length === 0) continue;
 
-    for (const selector of splitSelectorList(rawSelectorList)) {
+    for (const selector of splitSelectorList(selectorList)) {
       const normalized = normalizeSelector(selector);
       if (normalized.length === 0 || normalized.startsWith('@')) continue;
       const selectorReferences = referencesBySelector.get(normalized) ?? new Set<string>();
@@ -312,6 +316,113 @@ function extractSelectorTokenReferences(css: string): Map<string, string[]> {
       .map(([selector, references]) => [selector, [...references].sort((a, b) => a.localeCompare(b))] as const)
       .sort(([left], [right]) => left.localeCompare(right)),
   );
+}
+
+type CssRule = { selectorList: string; body: string };
+
+function iterateCssRules(css: string): CssRule[] {
+  const rules: CssRule[] = [];
+  let index = 0;
+  const length = css.length;
+
+  while (index < length) {
+    // Find the next '{' that opens a rule body. Skip '@container' at-rule
+    // bodies (their inner rules are emitted with the at-rule header stripped,
+    // matching stripContainerAtRuleHeaders behaviour).
+    const openIndex = css.indexOf('{', index);
+    if (openIndex === -1) break;
+
+    const selectorList = css.slice(index, openIndex).trim();
+    index = openIndex + 1;
+
+    // Match the closing '}' at brace depth 0. Nested blocks (CSS nesting)
+    // are flattened — their inner declarations merge into the parent rule's
+    // body so tokens inside `&:hover { ... }` attribute to the outer
+    // selector, not to a garbage "selector" pieced together from declaration
+    // text.
+    let depth = 1;
+    let bodyStart = index;
+    let bodyEnd = -1;
+    let cursor = index;
+    while (cursor < length) {
+      const char = css[cursor];
+      if (char === '/' && css[cursor + 1] === '*') {
+        // Skip a /* ... */ comment block so braces inside comments do not
+        // perturb the depth count. (stripCssComments already removed
+        // comments outside at-rule bodies, but defensive scanning here
+        // keeps the parser honest if a caller passes pre-stripped CSS.)
+        const closeIdx = css.indexOf('*/', cursor + 2);
+        cursor = closeIdx === -1 ? length : closeIdx + 2;
+        continue;
+      }
+      if (char === '{') {
+        depth += 1;
+      } else if (char === '}') {
+        depth -= 1;
+        if (depth === 0) {
+          bodyEnd = cursor;
+          break;
+        }
+      }
+      cursor += 1;
+    }
+
+    if (bodyEnd === -1) {
+      // Unbalanced CSS — flush the remaining text as a final rule body.
+      break;
+    }
+
+    // Extract outer-body declarations, stripping nested `{ ... }` blocks
+    // (their inner declarations are folded in via a recursive flatten so
+    // tokens referenced inside `&:hover { background: var(--x) }` count
+    // toward `.parent`).
+    const body = flattenNestedBody(css.slice(bodyStart, bodyEnd));
+    if (selectorList.length > 0) {
+      rules.push({ selectorList, body });
+    }
+    index = bodyEnd + 1;
+    // Skip trailing whitespace + stray semicolons between rules — keeps the
+    // next iteration's selectorList clean.
+    while (index < length && /[\s;]/.test(css[index]!)) index += 1;
+  }
+
+  return rules;
+}
+
+function flattenNestedBody(bodySlice: string): string {
+  // For `.parent { color: var(--a); &:hover { background: var(--b); } }` we
+  // receive the inner slice `color: var(--a); &:hover { background: var(--b); } `
+  // and want to emit `color: var(--a); background: var(--b); ` so both tokens
+  // attribute to `.parent`. We strip the nested `{ ... }` wrapper but keep
+  // its inner declarations, dropping the `&:hover` selector prefix — the
+  // parent already owns the tokens.
+  let out = '';
+  let depth = 0;
+  let cursor = 0;
+  const length = bodySlice.length;
+  while (cursor < length) {
+    const char = bodySlice[cursor];
+    if (char === '/' && bodySlice[cursor + 1] === '*') {
+      const closeIdx = bodySlice.indexOf('*/', cursor + 2);
+      cursor = closeIdx === -1 ? length : closeIdx + 2;
+      continue;
+    }
+    if (char === '{') {
+      depth += 1;
+      cursor += 1;
+      continue;
+    }
+    if (char === '}') {
+      depth = Math.max(0, depth - 1);
+      cursor += 1;
+      continue;
+    }
+    if (depth === 0) {
+      out += char;
+    }
+    cursor += 1;
+  }
+  return out;
 }
 
 function splitSelectorList(selectorList: string): string[] {
