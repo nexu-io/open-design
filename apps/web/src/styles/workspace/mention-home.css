@@ -358,9 +358,9 @@
   z-index: 80;
   position: absolute;
   /* Anchor the panel's BOTTOM edge to the host, so it grows upward.
-     The host (`.entry-updater-menu`) is pinned to the bottom of the nav rail —
-     it rides the account row, which is the last thing in the rail — so a
-     top-anchored panel grew down past the window edge and the 「更新已就绪」
+     The host (`.entry-updater-menu`) sits near the bottom of the nav rail — in
+     the strip just above the account row, which is the last thing in the rail —
+     so a top-anchored panel grew down past the window edge and the 「更新已就绪」
      copy was clipped mid-sentence. `.entry-help-popover` already anchors this
      way for exactly the same reason. */
   bottom: 0;

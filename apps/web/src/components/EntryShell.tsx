@@ -1266,10 +1266,10 @@ export function EntryShell({
   //
   // The updater host has no topbar to live in any more (the rail toggle is the
   // pinned Home tab in the workspace tabs bar), so the rail owns it: it renders
-  // at the right edge of the account row, falling back to the rail footer in the
-  // signed-out shell. `EntryNavRail` decides which — the shell only supplies the
-  // host, which renders nothing until the real updater reports a downloaded,
-  // unopened installer.
+  // in a right-aligned strip just above the account row, falling back to the
+  // rail footer in the signed-out shell. `EntryNavRail` decides which — the
+  // shell only supplies the host, which renders nothing until the real updater
+  // reports a downloaded, unopened installer.
   const updaterSlot = (
     <UpdaterPopup
       allowSilentUpdates={config.allowSilentUpdates}
