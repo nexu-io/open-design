@@ -1,0 +1,70 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-taste-libraries",
+  "title": "Design Taste Libraries",
+  "version": "0.1.0",
+  "description": "General Open Design skill that routes agents through high-quality design, UI, dashboard, mobile, shadcn, and motion libraries before generating or critiquing frontend work.",
+  "license": "MIT",
+  "author": {
+    "name": "Konstantin Baltsat"
+  },
+  "tags": [
+    "local",
+    "design",
+    "frontend",
+    "taste",
+    "libraries",
+    "mobile",
+    "dashboard",
+    "shadcn",
+    "motion",
+    "source-backed"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "frontend-design",
+    "useCase": {
+      "query": {
+        "en": "Use Design Taste Libraries to choose the right source-backed design library before designing, critiquing, or rebuilding a frontend artifact. Select by surface, cite the library used, then generate or critique with visual proof gates."
+      }
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": ["./references/LIBRARIES.md"]
+    },
+    "inputs": [
+      {
+        "name": "surface",
+        "label": "Surface",
+        "type": "select",
+        "options": ["web app", "mobile app", "dashboard", "landing page", "motion prototype"],
+        "default": "web app"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the design accomplish?"
+      }
+    ],
+    "capabilities": ["prompt:inject"]
+  },
+  "plugin": {
+    "repo": "https://github.com/nexu-io/open-design/tree/main/plugins/community/design-taste-libraries"
+  }
+}
