@@ -22,6 +22,7 @@ await build({
     "./src/runtime/html-injection-points.ts",
     "./src/design-systems/components-manifest.ts",
     "./src/design-systems/derived-token-outputs.ts",
+    "./src/design-systems/dtcg-2025-10.ts",
     "./src/design-systems/token-schema.ts",
     "./src/analytics/index.ts",
   ],
