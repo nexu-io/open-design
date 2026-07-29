@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- [fix] 删除项目时清理 `<RUNTIME_DATA_DIR>/runs/<runId>/` 下归属于该项目的孤立 run 目录,而非仅取消活跃 run。Run service 在 ~30 分钟 TTL 后从内存 map 移除已终止 run,但磁盘上的 `state.json`/`events.jsonl` 超出该窗口仍然残留;此前 delete project 会泄漏该项目所有已结束 run 的目录。新 helper `removeProjectRunDirs(runsDir, projectId)` 在 cancel + removeProjectDir 之后以 best-effort 方式扫描并清理。(#6117)
+
 ## [0.9.0] - 2026-05-29
 
 🎉 **310 PRs · 88 contributors · 7 days** — Meet the **install-and-create release**. No more API-key scavenger hunts. No more asking teammates to install three different CLIs before their first prompt. **Open Design AMR** is now built into the app: sign in once, pick a model, and start building. Around that zero-config first run, 0.9.0 brings a bigger agent bench, faster model picking, a more discoverable plugin marketplace, richer review workflows, smoother Studio tools, and easier installs across Windows, macOS, and Linux. 🚀
