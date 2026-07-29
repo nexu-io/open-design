@@ -246,7 +246,7 @@ describe('DELETE project sweeps orphaned run dirs (#6117)', () => {
       runsLogDir: runsDir,
     });
 
-    const run = runs.create({ projectId: 'p1', conversationId: null });
+    const run = runs.create({ projectId: 'p1' });
     // Simulate analytics recovery so markAnalyticsCompleted has work to do.
     runs.setAnalyticsRecovery?.(run, {
       context: { page_name: 'test' },
