@@ -1,3 +1,6 @@
+import { mkdtemp, rm } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod-v3';
 
@@ -6,7 +9,11 @@ import {
   StructuredJsonError,
   type StructuredJsonTextRequest,
 } from '../src/structured-json.js';
-import { generateConfiguredJsonText } from '../src/memory-llm.js';
+import {
+  generateConfiguredJsonText,
+  generateConfiguredJsonTextWithMetadata,
+} from '../src/memory-llm.js';
+import { writeAppConfig } from '../src/app-config.js';
 
 const ExampleSchema = z.object({
   title: z.string().min(1),
@@ -91,6 +98,53 @@ describe('generateStructuredJson', () => {
     });
   });
 
+  it('uses transport-discovered secrets when constructing repair prompts and failures', async () => {
+    const secret = 'AIza-runtime-provider-value';
+    const requests: StructuredJsonTextRequest[] = [];
+
+    let caught: unknown;
+    try {
+      await generateStructuredJson({
+        system: 'Return one object.',
+        user: 'Create a title.',
+        schema: ExampleSchema,
+      }, {
+        generateText: async (request) => {
+          requests.push(request);
+          return {
+            text: `{"leaked":"${secret}","title":42}`,
+            sensitiveValues: [secret],
+          };
+        },
+      });
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(requests).toHaveLength(2);
+    expect(requests[1]?.user).not.toContain(secret);
+    expect(requests[1]?.user).toContain('[REDACTED]');
+    expect(String((caught as Error).message)).not.toContain(secret);
+    expect((caught as StructuredJsonError).rawSummary).not.toContain(secret);
+  });
+
+  it('rejects otherwise valid structured results that contain a discovered secret', async () => {
+    const secret = 'runtime-secret-in-valid-result';
+    const outputs = [
+      { text: `{"title":"${secret}"}`, sensitiveValues: [secret] },
+      { text: '{"title":"Safe"}', sensitiveValues: [secret] },
+    ];
+    const generateText = vi.fn(async () => outputs.shift() ?? null);
+
+    await expect(generateStructuredJson({
+      system: 'Return one object.',
+      user: 'Create a title.',
+      schema: ExampleSchema,
+    }, { generateText })).resolves.toEqual({ title: 'Safe' });
+    expect(generateText).toHaveBeenCalledTimes(2);
+    expect(generateText.mock.calls[1]?.[0].user).not.toContain(secret);
+  });
+
   it('returns PROVIDER_NOT_CONFIGURED when the configured provider resolver has no provider', async () => {
     await expect(generateStructuredJson({
       system: 'Return one object.',
@@ -105,6 +159,54 @@ describe('generateStructuredJson', () => {
 describe('configured structured JSON provider transport', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  it('returns env-provider and Local CLI app-config secrets as transport metadata', async () => {
+    const envSecret = 'custom-env-provider-value';
+    vi.stubEnv('OPENAI_API_KEY', envSecret);
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      choices: [{ message: { content: '{"title":"Remote"}' } }],
+    }), { status: 200 })));
+
+    await expect(generateConfiguredJsonTextWithMetadata({
+      system: 'Return JSON.',
+      user: 'Create a title.',
+    })).resolves.toEqual({
+      text: '{"title":"Remote"}',
+      sensitiveValues: [envSecret],
+    });
+
+    const dataDir = await mkdtemp(path.join(os.tmpdir(), 'od-structured-json-'));
+    const cliSecret = 'custom-cli-app-config-value';
+    const inheritedCliSecret = 'custom-inherited-cli-token';
+    const inheritedCredential = 'custom-cloud-credential-value';
+    vi.stubEnv('ANTHROPIC_AUTH_TOKEN', inheritedCliSecret);
+    vi.stubEnv('AWS_SECRET_ACCESS_KEY', inheritedCredential);
+    try {
+      await writeAppConfig(dataDir, {
+        agentCliEnv: {
+          claude: { ANTHROPIC_API_KEY: cliSecret },
+        },
+      });
+      await expect(generateConfiguredJsonTextWithMetadata({
+        system: 'Return JSON.',
+        user: 'Create a title.',
+        chatAgentId: 'claude',
+      }, {
+        dataDir,
+        localCliRunner: async () => `{"title":"${cliSecret}"}`,
+      })).resolves.toEqual({
+        text: `{"title":"${cliSecret}"}`,
+        sensitiveValues: expect.arrayContaining([
+          cliSecret,
+          inheritedCliSecret,
+          inheritedCredential,
+        ]),
+      });
+    } finally {
+      await rm(dataDir, { recursive: true, force: true });
+    }
   });
 
   it('uses the selected supported Local CLI before remote credentials', async () => {

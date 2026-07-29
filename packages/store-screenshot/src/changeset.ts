@@ -4,14 +4,21 @@ import type {
   StoreScreenshotColorField,
   StoreScreenshotDocument,
   StoreScreenshotPage,
+  StoreScreenshotTemplateId,
 } from './schema.js';
-import { StorePlatformSchema, StoreScreenshotDocumentSchema, StoreScreenshotPageSchema } from './schema.js';
+import {
+  StorePlatformSchema,
+  StoreScreenshotDocumentSchema,
+  StoreScreenshotPageSchema,
+  StoreScreenshotTemplateIdSchema,
+} from './schema.js';
 
 export type ChangeOperation =
   | { op: 'setText'; pageId: string; field: 'headline' | 'body'; value: string; platform?: StorePlatform }
   | { op: 'setColor'; pageId: string; field: StoreScreenshotColorField; value: string }
   | { op: 'setTransform'; pageId: string; x: number; y: number; scale: number }
   | { op: 'setAsset'; pageId: string; assetId: string }
+  | { op: 'setTemplate'; pageId: string; templateId: StoreScreenshotTemplateId }
   | { op: 'setVisibility'; pageId: string; visible: boolean; platform?: StorePlatform }
   | { op: 'insertPage'; afterPageId?: string; page: StoreScreenshotPage }
   | { op: 'duplicatePage'; pageId: string }
@@ -53,6 +60,11 @@ export const ChangeOperationSchema = z.discriminatedUnion('op', [
     op: z.literal('setAsset'),
     pageId: z.string().min(1),
     assetId: z.string().min(1),
+  }).strict(),
+  z.object({
+    op: z.literal('setTemplate'),
+    pageId: z.string().min(1),
+    templateId: StoreScreenshotTemplateIdSchema,
   }).strict(),
   z.object({
     op: z.literal('setVisibility'),
@@ -156,6 +168,13 @@ function applyOperation(
       return updatePage(pages, operation.pageId, (page) => isLocked(startingLocks, page.id, 'screenshot')
         ? page
         : { ...page, screenshotAssetId: operation.assetId });
+    case 'setTemplate':
+      return updatePage(pages, operation.pageId, (page) => (
+        isLocked(startingLocks, page.id, 'template')
+        || isLocked(startingLocks, page.id, 'layout')
+      )
+        ? page
+        : { ...page, templateId: operation.templateId });
     case 'setVisibility':
       return updatePage(pages, operation.pageId, (page) => {
         if (isLocked(startingLocks, page.id, 'layout')) return page;

@@ -21,6 +21,7 @@ import {
 import { createStoreScreenshotService } from '../src/store-screenshots/service.js';
 import { createStoreScreenshotPlanner } from '../src/store-screenshots/planner.js';
 import { LocalProjectStorage } from '../src/storage/project-storage.js';
+import { generateStructuredJson } from '../src/structured-json.js';
 
 function documentFixture(
   projectId = 'project-1',
@@ -150,9 +151,73 @@ describe('store screenshot export jobs', () => {
     });
     expect(
       (done.result as { preview: { affectedPageIds: string[] } }).preview.affectedPageIds,
-    ).toHaveLength(8);
+    ).toHaveLength(4);
     expect((await persistence.read('project-1')).version).toBe(1);
     expect((await persistence.read('project-1')).pages[0]?.headline).toBe('Feature 1');
+  });
+
+  it('never persists transport-discovered provider secrets in failed generate jobs', async () => {
+    const secret = 'custom-runtime-secret-value';
+    const otherwiseValidPlan = {
+      strategy: secret,
+      pages: [
+        { headline: 'Take back focus', feature: 'Focus', templateId: 'minimal-center' },
+        { headline: 'Review progress', feature: 'Review', templateId: 'editorial-split' },
+        { headline: 'Keep improving', feature: 'Improve', templateId: 'gradient-device' },
+        { headline: 'Plan today', feature: 'Plan', templateId: 'minimal-center' },
+      ],
+    };
+    const planner = createStoreScreenshotPlanner({
+      generateJson: (request) => generateStructuredJson(request, {
+        generateText: async () => ({
+          text: JSON.stringify(otherwiseValidPlan),
+          sensitiveValues: [secret],
+        }),
+      }),
+    });
+    const operations = createStoreScreenshotJobs({
+      db,
+      persistence,
+      projectStorage: storage,
+      createId: () => 'job-secret',
+      now: () => clock++,
+      schedule: (task) => scheduled.push(task),
+      planner,
+    });
+
+    await operations.start(
+      { projectId: 'project-1', documentId: 'document-1', documentVersion: 1 },
+      {},
+    );
+    await scheduled[0]!();
+
+    const raw = db.prepare(`
+      SELECT result_json AS resultJson, error_json AS errorJson
+      FROM store_screenshot_jobs WHERE id = 'job-secret'
+    `).get() as { resultJson: string | null; errorJson: string | null };
+    const response = await operations.get('project-1', 'document-1', 'job-secret');
+    expect(JSON.stringify(raw)).not.toContain(secret);
+    expect(JSON.stringify(response)).not.toContain(secret);
+    expect(response).toMatchObject({
+      status: 'failed',
+      error: { code: 'INVALID_PROVIDER_RESPONSE' },
+    });
+  });
+
+  it('rejects arbitrary persisted job result keys at the database read boundary', async () => {
+    const secret = 'database-extra-secret-value';
+    db.prepare(`
+      INSERT INTO store_screenshot_jobs
+        (id, project_id, document_id, type, status, progress_json,
+         result_json, error_json, created_at, started_at, ended_at, updated_at)
+      VALUES ('invalid-result', 'project-1', 'document-1', 'generate', 'done',
+              '{"completed":1,"total":1}', ?, NULL, 1, 1, 1, 1)
+    `).run(JSON.stringify({ apiKey: secret }));
+    const operations = jobs();
+
+    await expect(
+      operations.get('project-1', 'document-1', 'invalid-result'),
+    ).rejects.not.toThrow(secret);
   });
 
   it('persists PROVIDER_NOT_CONFIGURED when generate has no provider-backed planner', async () => {

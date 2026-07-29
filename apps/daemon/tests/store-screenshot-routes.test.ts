@@ -591,6 +591,29 @@ describe('store screenshot routes', () => {
     expect(readFile).not.toHaveBeenCalled();
   });
 
+  it('does not expose secret-shaped arbitrary job results through the API', async () => {
+    const basePath = `/api/projects/${PROJECT_ID}/store-screenshots`;
+    expect((await json('POST', basePath, createBody)).status).toBe(201);
+    const secret = 'api-response-secret-value';
+    ownedJob = {
+      projectId: PROJECT_ID,
+      documentId: 'document-1',
+      jobId: 'job-invalid',
+      relativePath: 'store-screenshots/exports/job-invalid/store-screenshots.zip',
+    };
+    getJob.mockResolvedValueOnce({
+      id: 'job-invalid',
+      type: 'generate',
+      status: 'done',
+      progress: { completed: 1, total: 1 },
+      result: { apiKey: secret },
+    } as never);
+
+    const response = await json('GET', `${basePath}/jobs/job-invalid`);
+    expect(response.status).toBe(500);
+    expect(JSON.stringify(response.body)).not.toContain(secret);
+  });
+
   it('returns platform validation issues without turning them into transport errors', async () => {
     const basePath = `/api/projects/${PROJECT_ID}/store-screenshots`;
     expect((await json('POST', basePath, {

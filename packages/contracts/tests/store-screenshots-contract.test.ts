@@ -9,6 +9,8 @@ import {
   StoreScreenshotChangeSetPreviewRequestSchema,
   StoreScreenshotChangeSetPreviewResponseSchema,
   StoreScreenshotJobSchema,
+  StoreScreenshotGenerateJobResultSchema,
+  StoreScreenshotExportJobResultSchema,
   StoreScreenshotValidationResultSchema,
 } from '../src/index.js';
 import type { ProjectMetadata } from '../src/api/projects.js';
@@ -108,5 +110,57 @@ describe('store screenshot API contracts', () => {
   it('allows store screenshot projects to retain the image project kind', () => {
     const metadata: ProjectMetadata = { kind: 'image', intent: 'store-screenshot' };
     expect(metadata.intent).toBe('store-screenshot');
+  });
+
+  it('strictly validates job results by type and status', () => {
+    const generateResult = {
+      plan: {
+        strategy: 'value',
+        pages: [{
+          headline: 'Focus',
+          feature: 'Focus',
+          templateId: 'minimal-center',
+        }],
+      },
+      preview: {
+        changeSet: { baseVersion: 1, operations: [] },
+        affectedPageIds: [],
+      },
+    };
+    expect(StoreScreenshotGenerateJobResultSchema.parse(generateResult)).toEqual(generateResult);
+    expect(() => StoreScreenshotGenerateJobResultSchema.parse({
+      ...generateResult,
+      apiKey: 'should-never-survive',
+    })).toThrow();
+    expect(() => StoreScreenshotJobSchema.parse({
+      id: 'job-queued',
+      type: 'generate',
+      status: 'queued',
+      progress: { completed: 0, total: 1 },
+      result: generateResult,
+    })).toThrow();
+    expect(StoreScreenshotJobSchema.parse({
+      id: 'job-done',
+      type: 'generate',
+      status: 'done',
+      progress: { completed: 1, total: 1 },
+      result: generateResult,
+    }).status).toBe('done');
+
+    expect(() => StoreScreenshotExportJobResultSchema.parse({
+      downloadPath: 'exports/job.zip',
+      files: [],
+      manifest: {
+        schemaVersion: 1,
+        documentId: 'doc',
+        documentVersion: 1,
+        exportedAt: '2026-07-29T00:00:00.000Z',
+        platforms: {},
+        files: [],
+        errors: [],
+        warnings: [],
+      },
+      secretToken: 'should-never-survive',
+    })).toThrow();
   });
 });

@@ -83,6 +83,7 @@ export const ScreenshotPlanSchema = z.object({
 
 export const GenerateStoreScreenshotPlanRequestSchema = z.object({
   prompt: z.string().min(1).optional(),
+  pageCount: z.number().int().min(1).max(10).optional(),
   byokProvider: z.object({
     protocol: z.enum([
       'anthropic',
@@ -144,17 +145,110 @@ export const StoreScreenshotJobProgressSchema = z.object({
   }
 });
 
+export const StoreScreenshotGenerateJobResultSchema = z.object({
+  plan: ScreenshotPlanSchema,
+  preview: StoreScreenshotChangeSetPreviewResponseSchema,
+}).strict();
+
+const StoreScreenshotExportIssueSchema = z.object({
+  severity: z.enum(['error', 'warning']),
+  code: z.string().min(1),
+  message: z.string().min(1),
+  platform: StorePlatformSchema.optional(),
+  pageId: z.string().min(1).optional(),
+}).strict();
+
+const StoreScreenshotExportManifestFileSchema = z.object({
+  order: z.number().int().positive(),
+  fileName: z.string().min(1),
+  width: z.number().int().positive(),
+  height: z.number().int().positive(),
+  sha256: z.string().regex(/^[a-f0-9]{64}$/),
+  sourcePageId: z.string().min(1),
+  templateId: StoreScreenshotTemplateIdSchema,
+}).strict();
+
+const StoreScreenshotExportPlatformManifestSchema = z.object({
+  ruleVersion: z.literal(1),
+  targetSize: z.object({
+    width: z.number().int().positive(),
+    height: z.number().int().positive(),
+  }).strict(),
+  pageCount: z.number().int().nonnegative(),
+}).strict();
+
+export const StoreScreenshotExportManifestSchema = z.object({
+  schemaVersion: z.literal(1),
+  documentId: z.string().min(1),
+  documentVersion: z.number().int().positive(),
+  exportedAt: z.string().datetime(),
+  platforms: z.object({
+    appStore: StoreScreenshotExportPlatformManifestSchema.optional(),
+    googlePlay: StoreScreenshotExportPlatformManifestSchema.optional(),
+  }).strict(),
+  files: z.array(StoreScreenshotExportManifestFileSchema),
+  errors: z.array(StoreScreenshotExportIssueSchema),
+  warnings: z.array(StoreScreenshotExportIssueSchema),
+}).strict();
+
+export const StoreScreenshotExportJobResultSchema = z.object({
+  downloadPath: z.string().min(1),
+  files: z.array(z.string().min(1)),
+  manifest: StoreScreenshotExportManifestSchema,
+}).strict();
+
+const StoreScreenshotJobErrorSchema = z.object({
+  code: z.string().min(1),
+  message: z.string().min(1),
+}).strict();
+
 export const StoreScreenshotJobSchema = z.object({
   id: z.string().min(1),
   type: StoreScreenshotJobTypeSchema,
   status: StoreScreenshotJobStatusSchema,
   progress: StoreScreenshotJobProgressSchema,
-  result: z.unknown().optional(),
-  error: z.object({
-    code: z.string().min(1),
-    message: z.string().min(1),
-  }).strict().optional(),
-}).strict();
+  result: z.union([
+    StoreScreenshotGenerateJobResultSchema,
+    StoreScreenshotExportJobResultSchema,
+  ]).optional(),
+  error: StoreScreenshotJobErrorSchema.optional(),
+}).strict().superRefine((job, context) => {
+  const terminalFailure = job.status === 'failed' || job.status === 'interrupted';
+  if (job.status === 'done') {
+    const resultSchema = job.type === 'generate'
+      ? StoreScreenshotGenerateJobResultSchema
+      : job.type === 'export'
+        ? StoreScreenshotExportJobResultSchema
+        : null;
+    if (!resultSchema || !resultSchema.safeParse(job.result).success) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['result'],
+        message: `A done ${job.type} job requires its strict result schema`,
+      });
+    }
+  } else if (job.result !== undefined) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['result'],
+      message: 'Only done jobs may carry a result',
+    });
+  }
+  if (terminalFailure && job.error === undefined) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['error'],
+      message: 'Failed and interrupted jobs require an error',
+    });
+  }
+  if (!terminalFailure && job.error !== undefined) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['error'],
+      message: 'Only failed and interrupted jobs may carry an error',
+    });
+  }
+});
 
 export const StoreScreenshotJobResponseSchema = z.object({
   job: StoreScreenshotJobSchema,
@@ -182,6 +276,8 @@ export type StoreScreenshotChangeSetPreviewResponse = z.infer<typeof StoreScreen
 export type ApplyStoreScreenshotChangeSetRequest = z.infer<typeof ApplyStoreScreenshotChangeSetRequestSchema>;
 export type StoreScreenshotValidationResult = z.infer<typeof StoreScreenshotValidationResultSchema>;
 export type StoreScreenshotJob = z.infer<typeof StoreScreenshotJobSchema>;
+export type StoreScreenshotGenerateJobResult = z.infer<typeof StoreScreenshotGenerateJobResultSchema>;
+export type StoreScreenshotExportJobResult = z.infer<typeof StoreScreenshotExportJobResultSchema>;
 export type StoreScreenshotJobResponse = z.infer<typeof StoreScreenshotJobResponseSchema>;
 export type RenderStoreScreenshotRequest = z.infer<typeof RenderStoreScreenshotRequestSchema>;
 export type ExportStoreScreenshotRequest = z.infer<typeof ExportStoreScreenshotRequestSchema>;

@@ -13,8 +13,15 @@ export interface StructuredJsonTextRequest {
   chatAgentId?: string;
 }
 
+export interface StructuredJsonTextResult {
+  text: string;
+  sensitiveValues?: readonly string[];
+}
+
 export interface StructuredJsonDeps {
-  generateText(request: StructuredJsonTextRequest): Promise<string | null>;
+  generateText(
+    request: StructuredJsonTextRequest,
+  ): Promise<string | StructuredJsonTextResult | null>;
   sensitiveValues?: readonly string[];
 }
 
@@ -62,7 +69,10 @@ function parseCandidate<T>(raw: string, schema: z.ZodType<T>): T {
   return parsed.data;
 }
 
-function redactProviderOutput(raw: string, sensitiveValues: readonly string[]): string {
+export function redactStructuredJsonSensitiveText(
+  raw: string,
+  sensitiveValues: readonly string[],
+): string {
   const preciselyRedacted = sensitiveValues
     .filter((value) => value.length > 0)
     .reduce(
@@ -79,10 +89,45 @@ function redactProviderOutput(raw: string, sensitiveValues: readonly string[]): 
 }
 
 function summarizeProviderOutput(raw: string, sensitiveValues: readonly string[]): string {
-  return redactProviderOutput(raw, sensitiveValues)
+  return redactStructuredJsonSensitiveText(raw, sensitiveValues)
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 500);
+}
+
+function normalizeTextResult(
+  result: string | StructuredJsonTextResult,
+): StructuredJsonTextResult {
+  return typeof result === 'string' ? { text: result } : result;
+}
+
+function mergedSensitiveValues(
+  configured: readonly string[],
+  discovered: readonly string[] | undefined,
+): string[] {
+  return [...new Set([...configured, ...(discovered ?? [])].filter(Boolean))];
+}
+
+function assertNoSensitiveValues(
+  value: unknown,
+  sensitiveValues: readonly string[],
+): void {
+  const exactValues = sensitiveValues.filter((candidate) => candidate.length > 0);
+  const containsSensitiveValue = (candidate: unknown): boolean => {
+    if (typeof candidate === 'string') {
+      return exactValues.some((secret) => candidate.includes(secret));
+    }
+    if (Array.isArray(candidate)) return candidate.some(containsSensitiveValue);
+    if (candidate && typeof candidate === 'object') {
+      return Object.entries(candidate).some(([key, nested]) => (
+        containsSensitiveValue(key) || containsSensitiveValue(nested)
+      ));
+    }
+    return false;
+  };
+  if (containsSensitiveValue(value)) {
+    throw new Error('Provider output contained a configured sensitive value');
+  }
 }
 
 function repairRequest(
@@ -117,33 +162,47 @@ export async function generateStructuredJson<T>(
     user: request.user,
     ...(request.chatAgentId ? { chatAgentId: request.chatAgentId } : {}),
   };
-  const first = await deps.generateText(textRequest);
-  if (first === null) {
+  const firstRaw = await deps.generateText(textRequest);
+  if (firstRaw === null) {
     throw new StructuredJsonError(
       'PROVIDER_NOT_CONFIGURED',
       'No configured provider is available for structured JSON generation',
     );
   }
+  const first = normalizeTextResult(firstRaw);
+  const firstSensitiveValues = mergedSensitiveValues(
+    deps.sensitiveValues ?? [],
+    first.sensitiveValues,
+  );
 
   try {
-    return parseCandidate(first, request.schema);
+    const parsed = parseCandidate(first.text, request.schema);
+    assertNoSensitiveValues(parsed, firstSensitiveValues);
+    return parsed;
   } catch (firstError) {
-    const repaired = await deps.generateText(repairRequest(
+    const repairedRaw = await deps.generateText(repairRequest(
       textRequest,
-      first,
+      first.text,
       firstError,
-      deps.sensitiveValues ?? [],
+      firstSensitiveValues,
     ));
-    if (repaired === null) {
+    if (repairedRaw === null) {
       throw new StructuredJsonError(
         'PROVIDER_NOT_CONFIGURED',
         'No configured provider is available for structured JSON repair',
       );
     }
+    const repaired = normalizeTextResult(repairedRaw);
+    const allSensitiveValues = mergedSensitiveValues(
+      firstSensitiveValues,
+      repaired.sensitiveValues,
+    );
     try {
-      return parseCandidate(repaired, request.schema);
+      const parsed = parseCandidate(repaired.text, request.schema);
+      assertNoSensitiveValues(parsed, allSensitiveValues);
+      return parsed;
     } catch {
-      const rawSummary = summarizeProviderOutput(repaired, deps.sensitiveValues ?? []);
+      const rawSummary = summarizeProviderOutput(repaired.text, allSensitiveValues);
       throw new StructuredJsonError(
         'INVALID_PROVIDER_RESPONSE',
         rawSummary

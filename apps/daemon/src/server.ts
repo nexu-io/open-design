@@ -656,7 +656,7 @@ import { createStoreScreenshotPersistence } from './store-screenshots/persistenc
 import { createStoreScreenshotService } from './store-screenshots/service.js';
 import { createStoreScreenshotPlanner } from './store-screenshots/planner.js';
 import { generateStructuredJson } from './structured-json.js';
-import { generateConfiguredJsonText } from './memory-llm.js';
+import { generateConfiguredJsonTextWithMetadata } from './memory-llm.js';
 import { configureConnectorCredentialStore, connectorService, FileConnectorCredentialStore } from './connectors/service.js';
 import { composioConnectorProvider } from './connectors/composio.js';
 import { configureComposioConfigStore } from './connectors/composio-config.js';
@@ -2871,7 +2871,7 @@ export async function startServer({
           ...(byokProvider?.apiKey
             ? { sensitiveValues: [byokProvider.apiKey] }
             : {}),
-          generateText: (textRequest) => generateConfiguredJsonText(textRequest, {
+          generateText: (textRequest) => generateConfiguredJsonTextWithMetadata(textRequest, {
             projectRoot: PROJECT_ROOT,
             dataDir: RUNTIME_DATA_DIR,
             ...(!byokProvider && chatAgentId ? { chatAgentId } : {}),

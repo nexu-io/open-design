@@ -1,5 +1,7 @@
 import type Database from 'better-sqlite3';
 import {
+  StoreScreenshotExportJobResultSchema,
+  StoreScreenshotGenerateJobResultSchema,
   StoreScreenshotJobSchema,
   type ExportStoreScreenshotRequest,
   type GenerateStoreScreenshotPlanRequest,
@@ -230,6 +232,10 @@ export function createStoreScreenshotJobs(
         operation.op === 'insertPage' ? operation.page.id : operation.pageId
       )))];
       const timestamp = now();
+      const result = StoreScreenshotGenerateJobResultSchema.parse({
+        plan,
+        preview: { changeSet, affectedPageIds },
+      });
       deps.db.prepare(`
         UPDATE store_screenshot_jobs
         SET status = 'done',
@@ -241,10 +247,7 @@ export function createStoreScreenshotJobs(
         WHERE id = ? AND status = 'running'
       `).run(
         JSON.stringify({ completed: 1, total: 1 }),
-        JSON.stringify({
-          plan,
-          preview: { changeSet, affectedPageIds },
-        }),
+        JSON.stringify(result),
         timestamp,
         timestamp,
         jobId,
@@ -324,6 +327,11 @@ export function createStoreScreenshotJobs(
       await deps.projectStorage.writeFile(identity.projectId, downloadPath, exported.zip);
 
       const timestamp = now();
+      const result = StoreScreenshotExportJobResultSchema.parse({
+        downloadPath,
+        files: exported.files,
+        manifest: exported.manifest,
+      });
       deps.db.prepare(`
         UPDATE store_screenshot_jobs
         SET status = 'done',
@@ -335,11 +343,7 @@ export function createStoreScreenshotJobs(
         WHERE id = ? AND status = 'running'
       `).run(
         JSON.stringify({ completed: total, total }),
-        JSON.stringify({
-          downloadPath,
-          files: exported.files,
-          manifest: exported.manifest,
-        }),
+        JSON.stringify(result),
         timestamp,
         timestamp,
         jobId,

@@ -90,6 +90,29 @@ describe('applyChangeSet', () => {
     });
   });
 
+  it('模板修改遵守 template 和 layout 锁', () => {
+    const lockedDocument: StoreScreenshotDocument = {
+      ...document,
+      pages: [
+        { ...document.pages[0]!, lockedFields: ['template'] },
+        { ...document.pages[1]!, lockedFields: ['layout'] },
+      ],
+    };
+
+    const next = applyChangeSet(lockedDocument, {
+      baseVersion: 3,
+      operations: [
+        { op: 'setTemplate', pageId: 'page-1', templateId: 'editorial-split' },
+        { op: 'setTemplate', pageId: 'page-2', templateId: 'minimal-center' },
+      ],
+    });
+
+    expect(next.pages.map(({ templateId }) => templateId)).toEqual([
+      'minimal-center',
+      'gradient-device',
+    ]);
+  });
+
   it('先按 order 规范化页面再只修改目标页', () => {
     const outOfOrderDocument: StoreScreenshotDocument = {
       ...document,

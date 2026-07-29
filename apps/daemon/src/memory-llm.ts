@@ -949,17 +949,6 @@ function extractJsonEventText(kind, raw, agentName) {
 }
 
 async function callLocalCli(provider, system, user, options) {
-  if (typeof options?.localCliRunner === 'function') {
-    return options.localCliRunner({
-      agentId: provider.agentId,
-      model: provider.model,
-      system,
-      user,
-      projectRoot: options?.projectRoot ?? null,
-      dataDir: options?.dataDir ?? null,
-    });
-  }
-
   const def = getAgentDef(provider.agentId);
   if (!def) {
     throw new Error(`Local CLI agent "${provider.agentId}" is not installed`);
@@ -972,13 +961,32 @@ async function callLocalCli(provider, system, user, options) {
   } catch {
     configuredAgentEnv = {};
   }
-  const configuredSecrets = Object.entries(configuredAgentEnv)
+  const configuredSecrets = Object.entries({
+    ...process.env,
+    ...configuredAgentEnv,
+  })
     .filter(([key, value]) => (
-      /(API_KEY|AUTH_TOKEN|RUNTIME_KEY|ACCESS_TOKEN|SECRET)$/i.test(key)
+      /(API_KEY|AUTH_TOKEN|RUNTIME_KEY|ACCESS_TOKEN|SECRET_ACCESS_KEY|SECRET|TOKEN|PASSWORD|PASSWD|CREDENTIALS?|PRIVATE_KEY)$/i.test(key)
       && typeof value === 'string'
       && value.length > 0
     ))
     .map(([, value]) => value);
+
+  if (typeof options?.localCliRunner === 'function') {
+    try {
+      const text = await options.localCliRunner({
+        agentId: provider.agentId,
+        model: provider.model,
+        system,
+        user,
+        projectRoot: options?.projectRoot ?? null,
+        dataDir: options?.dataDir ?? null,
+      });
+      return { text, sensitiveValues: configuredSecrets };
+    } catch (error) {
+      throw redactProviderError(error, provider, configuredSecrets);
+    }
+  }
 
   const launch = resolveAgentLaunch(def, configuredAgentEnv);
   if (!launch?.launchPath) {
@@ -1100,11 +1108,11 @@ async function callLocalCli(provider, system, user, options) {
         try {
           text = parseStdout(stdout);
         } catch (err) {
-          finish(err);
+          finish(redactProviderError(err, provider, configuredSecrets));
           return;
         }
         if (text) {
-          finish(null, text);
+          finish(null, { text, sensitiveValues: configuredSecrets });
           return;
         }
       }
@@ -1123,11 +1131,15 @@ async function callLocalCli(provider, system, user, options) {
   });
 }
 
-function redactProviderError(error, provider) {
+function redactProviderError(error, provider, sensitiveValues = []) {
   const raw = error?.message || String(error);
   const apiKey =
     typeof provider?.apiKey === 'string' ? provider.apiKey.trim() : '';
-  const redacted = (apiKey ? raw.split(apiKey).join('[REDACTED]') : raw)
+  const exactValues = [apiKey, ...sensitiveValues].filter(Boolean);
+  const redacted = exactValues.reduce(
+    (text, value) => text.split(value).join('[REDACTED]'),
+    raw,
+  )
     .replace(
       /((?:api[_-]?key|auth[_-]?token|access[_-]?token|authorization)\s*[:=]\s*)[^\s,;]+/gi,
       '$1[REDACTED]',
@@ -1140,7 +1152,7 @@ function redactProviderError(error, provider) {
 // Shared provider transport used by memory extraction and other daemon-owned
 // strict-JSON tasks. Provider selection deliberately reuses pickProvider so
 // Local CLI, chat BYOK, env, and media-config precedence cannot drift.
-export async function generateConfiguredJsonText(request, options = {}) {
+export async function generateConfiguredJsonTextWithMetadata(request, options = {}) {
   const projectRoot = options?.projectRoot ?? null;
   const dataDir = options?.dataDir ?? null;
   const provider = options?.provider ?? await pickProvider(
@@ -1159,19 +1171,30 @@ export async function generateConfiguredJsonText(request, options = {}) {
         localCliRunner: options?.localCliRunner,
       });
     }
+    let text;
     if (provider.kind === 'anthropic') {
-      return await callAnthropic(provider, request.system, request.user);
+      text = await callAnthropic(provider, request.system, request.user);
+    } else if (provider.kind === 'azure') {
+      text = await callAzure(provider, request.system, request.user);
+    } else if (provider.kind === 'google') {
+      text = await callGoogle(provider, request.system, request.user);
+    } else {
+      text = await callOpenAI(provider, request.system, request.user);
     }
-    if (provider.kind === 'azure') {
-      return await callAzure(provider, request.system, request.user);
-    }
-    if (provider.kind === 'google') {
-      return await callGoogle(provider, request.system, request.user);
-    }
-    return await callOpenAI(provider, request.system, request.user);
+    return {
+      text,
+      sensitiveValues: typeof provider.apiKey === 'string' && provider.apiKey
+        ? [provider.apiKey]
+        : [],
+    };
   } catch (error) {
     throw redactProviderError(error, provider);
   }
+}
+
+export async function generateConfiguredJsonText(request, options = {}) {
+  const result = await generateConfiguredJsonTextWithMetadata(request, options);
+  return result?.text ?? null;
 }
 
 // Tolerant JSON parse — the model occasionally wraps output in ```json

@@ -1,12 +1,13 @@
-import type {
-  ApplyStoreScreenshotChangeSetRequest,
-  CreateStoreScreenshotDocumentRequest,
-  ExportStoreScreenshotRequest,
-  GenerateStoreScreenshotPlanRequest,
-  StoreScreenshotChangeSetPreviewResponse,
-  StoreScreenshotJob,
-  StoreScreenshotUploadedAsset,
-  StoreScreenshotValidationResult,
+import {
+  StoreScreenshotJobSchema,
+  type ApplyStoreScreenshotChangeSetRequest,
+  type CreateStoreScreenshotDocumentRequest,
+  type ExportStoreScreenshotRequest,
+  type GenerateStoreScreenshotPlanRequest,
+  type StoreScreenshotChangeSetPreviewResponse,
+  type StoreScreenshotJob,
+  type StoreScreenshotUploadedAsset,
+  type StoreScreenshotValidationResult,
 } from '@open-design/contracts';
 import {
   applyChangeSet,
@@ -269,7 +270,7 @@ export function createStoreScreenshotService(deps: CreateStoreScreenshotServiceD
           'Store screenshot generation is not implemented',
         );
       }
-      return deps.generate.start(identity, request);
+      return StoreScreenshotJobSchema.parse(await deps.generate.start(identity, request));
     },
 
     export: async (
@@ -283,7 +284,7 @@ export function createStoreScreenshotService(deps: CreateStoreScreenshotServiceD
           'Store screenshot export is not implemented',
         );
       }
-      return deps.jobs.startExport(identity, request);
+      return StoreScreenshotJobSchema.parse(await deps.jobs.startExport(identity, request));
     },
 
     getJob: async (projectId: string, jobId: string): Promise<StoreScreenshotJob> => {
@@ -298,7 +299,7 @@ export function createStoreScreenshotService(deps: CreateStoreScreenshotServiceD
       if (!job) {
         throw new StoreScreenshotServiceError('JOB_NOT_FOUND', 'Store screenshot job not found');
       }
-      return job;
+      return StoreScreenshotJobSchema.parse(job);
     },
 
     readJobDownload: async (
