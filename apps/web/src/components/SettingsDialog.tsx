@@ -198,12 +198,6 @@ import {
   requestNotificationPermission,
   showCompletionNotification,
 } from '../utils/notifications';
-import {
-  deriveUpdaterModel,
-  readUpdaterStatus,
-  type UpdaterModel,
-} from '../lib/updater';
-
 export type SettingsSection =
   | 'execution'
   | 'instructions'

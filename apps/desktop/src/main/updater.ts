@@ -2655,6 +2655,9 @@ export function createDesktopUpdater(
     });
     const reselected = await checkForCandidate({ autoDownload: true });
     if (reselected.installResult != null) return reselected;
+    if (reselected.error != null) {
+      return setState(DESKTOP_UPDATE_STATES.ERROR, reselected.error);
+    }
     const reselectedIsPayload = reselected.artifact?.type === "payload";
     if (reselected.state === DESKTOP_UPDATE_STATES.DOWNLOADED && reselectedIsPayload !== wantsManual) {
       return null;
