@@ -3,6 +3,7 @@ import {
   createCachedWorkspaceDirectoryFetcher,
   createVelaWorkspaceContextProvider,
   mapVelaWorkspaceContext,
+  workspaceContextFromDirectoryItem,
 } from '../src/collab/vela-workspace-context.js';
 
 // A well-formed body as B's GET /api/v1/workspaces/current returns it — a team
@@ -63,6 +64,42 @@ describe('mapVelaWorkspaceContext', () => {
     const mapped = mapVelaWorkspaceContext({ ...B_TEAM_CONTEXT, workspaceType: 'personal' });
     expect(mapped?.workspaceType).toBe('personal');
     expect(mapped?.teamId).toBeUndefined();
+  });
+
+  // recvpkuLOujgAm follow-up: B names EVERY workspace, personal included
+  // (vela #964 derives "<owner>'s workspace" for an unnamed personal one, and
+  // an owner may rename it outright). Dropping that name for the personal case
+  // left the switcher's collapsed label with nothing but a hardcoded English
+  // fallback until the user opened the dropdown and the directory read landed.
+  it('carries the workspace name for a personal workspace', () => {
+    const mapped = mapVelaWorkspaceContext({
+      ...B_TEAM_CONTEXT,
+      workspaceType: 'personal',
+      workspaceName: "Ada's workspace",
+    });
+    expect(mapped?.workspaceName).toBe("Ada's workspace");
+    // `teamName` stays team-only — it is the team switcher's field.
+    expect(mapped?.teamName).toBeUndefined();
+  });
+
+  it('carries the workspace name for a team workspace alongside teamName', () => {
+    const mapped = mapVelaWorkspaceContext({ ...B_TEAM_CONTEXT, workspaceName: '1321' });
+    expect(mapped?.workspaceName).toBe('1321');
+    expect(mapped?.teamName).toBe('1321');
+  });
+
+  it('carries a personal workspace name synthesized from a directory item', () => {
+    const context = workspaceContextFromDirectoryItem({
+      workspaceId: 'ws-personal-1',
+      workspaceName: "Ada's workspace",
+      workspaceType: 'personal',
+      workspaceMemberId: 'wm-9',
+      role: 'owner',
+      memberStatus: 'active',
+      lifecycleState: 'active',
+    });
+    expect(context.workspaceName).toBe("Ada's workspace");
+    expect(context.teamName).toBeUndefined();
   });
 
   it('re-derives an inconsistent seat summary from the authoritative counts', () => {

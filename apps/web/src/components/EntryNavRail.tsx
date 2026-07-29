@@ -624,8 +624,16 @@ export function EntryNavRail({
   const currentWorkspaceItem = context
     ? workspaceItems.find((item) => item.workspaceId === context.workspaceId) ?? null
     : null;
+  // Name the CURRENT workspace from whatever real source has already answered,
+  // never from a read of our own. `context` is the startup context the shell
+  // already holds, and B populates its `workspaceName` for personal workspaces
+  // too — so a personal workspace is labelled correctly on first paint instead
+  // of sitting on the hardcoded fallback until the user opens this dropdown and
+  // the directory read lands (recvpkuLOujgAm). The directory item stays first:
+  // when it is warm it is the same value, revalidated.
   const workspaceName =
     currentWorkspaceItem?.workspaceName?.trim() ||
+    context?.workspaceName?.trim() ||
     context?.teamName?.trim() ||
     context?.teamId ||
     (context?.workspaceType === 'personal' ? 'Personal workspace' : '');

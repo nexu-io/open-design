@@ -276,6 +276,20 @@ export interface WorkspaceCollabContext {
   teamId?: string;
   /** Human-friendly team name for the workspace switcher (falls back to teamId). */
   teamName?: string;
+  /**
+   * B's display name for THIS workspace, whatever its type. Mirrors the
+   * `workspaceName` on B's CurrentWorkspaceContext, which is required there and
+   * is populated for personal workspaces too — vela derives "«owner»'s
+   * workspace" for an unnamed one, and an owner may rename it outright.
+   *
+   * Distinct from `teamName` on purpose: `teamName` is the TEAM switcher's
+   * field and stays absent for a personal workspace, so nothing may read it as
+   * an "is a team" signal. Any surface that just wants to LABEL the current
+   * workspace reads this one, and therefore gets a correct label from the
+   * context the client already fetches at startup — without waiting on the
+   * workspace-directory read that only happens when the switcher is opened.
+   */
+  workspaceName?: string;
   /** Display name for the presence overlay (optional; falls back to the id). */
   displayName?: string;
 }

@@ -281,6 +281,11 @@ export function parseWorkspaceCollabContext(input: unknown): WorkspaceCollabCont
   if (typeof raw.teamName === 'string' && raw.teamName.trim()) {
     context.teamName = raw.teamName.trim();
   }
+  // Any workspace type may carry a name here — the dev/demo lane must be able
+  // to drive a personal workspace's label the same way B does.
+  if (typeof raw.workspaceName === 'string' && raw.workspaceName.trim()) {
+    context.workspaceName = raw.workspaceName.trim();
+  }
   if (typeof raw.displayName === 'string' && raw.displayName.trim()) {
     context.displayName = raw.displayName.trim();
   }

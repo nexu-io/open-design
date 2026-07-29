@@ -144,6 +144,11 @@ export function mapVelaWorkspaceContext(input: unknown): WorkspaceCollabContext 
     context.teamId = workspaceId;
   }
   const workspaceName = str((raw as { workspaceName?: unknown }).workspaceName);
+  // B names EVERY workspace, personal included, so the name belongs on the
+  // context for both types — that is what lets a surface label the current
+  // workspace off the startup context alone. `teamName` stays team-only: it is
+  // the team switcher's field and doubles as an "is a team" signal.
+  if (workspaceName) context.workspaceName = workspaceName;
   if (workspaceName && workspaceType === 'team') context.teamName = workspaceName;
   const displayName = str((raw as { displayName?: unknown }).displayName);
   if (displayName) context.displayName = displayName;
@@ -435,6 +440,7 @@ export function workspaceContextFromDirectoryItem(
   };
   const settingsUrl = resolveWorkspaceSettingsUrl(item.workspaceId, undefined);
   if (settingsUrl) context.workspaceSettingsUrl = settingsUrl;
+  if (item.workspaceName) context.workspaceName = item.workspaceName;
   if (item.workspaceType === 'team') {
     context.teamId = item.workspaceId;
     context.teamName = item.workspaceName;
