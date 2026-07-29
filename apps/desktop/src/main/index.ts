@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
@@ -39,12 +39,31 @@ import {
 import { readProcessStamp } from "@open-design/platform";
 
 import { createDesktopRuntime, type DesktopRuntime } from "./runtime.js";
+import { setUpDesktopCrashReporter, writeDesktopGpuInfo } from "./crash-diagnostics.js";
+import { beginDesktopSession, clearReportedCrash, endDesktopSessionCleanly, markDesktopSessionRunning } from "./session-lifecycle.js";
+import {
+  attachDesktopChildProcessCrashReporter,
+  reportDesktopObservabilityEvent,
+  reportPriorDesktopUncleanExits,
+} from "./observability.js";
 import { attachDesktopProcessErrorFilter } from "./uncaught-exception.js";
-import { createDesktopUpdater, createDesktopUpdaterScheduler, type DesktopUpdaterScheduler } from "./updater.js";
+import {
+  DEFAULT_DESKTOP_UPDATE_MENU_LABELS,
+  deriveDesktopUpdateMenuItem,
+  desktopUpdateMenuItemKey,
+  type DesktopUpdateMenuLabels,
+} from "./update-menu.js";
+import {
+  createDesktopUpdater,
+  createDesktopUpdaterScheduler,
+  type DesktopUpdater,
+  type DesktopUpdaterScheduler,
+} from "./updater.js";
 import {
   exportDiagnosticsToFile,
   registerDesktopDiagnosticsIpc,
 } from "./diagnostics.js";
+import { notifyDesktopExternalShow } from "./external-show.js";
 
 // Re-export pure URL-policy helpers so the packaged workspace's
 // vitest can pin their behaviour without spinning up a full Electron
@@ -91,6 +110,7 @@ type AmrEnvironmentProfile = (typeof AMR_ENVIRONMENT_PROFILES)[number];
 type DesktopAppConfigPrefs = {
   agentModels?: Record<string, { model?: string; reasoning?: string }>;
   agentCliEnv?: Record<string, Record<string, string>>;
+  allowSilentUpdates?: boolean;
   [key: string]: unknown;
 };
 
@@ -122,6 +142,7 @@ export function applyOsLocaleSwitch(electronApp: Electron.App): string {
 
 export type DesktopMainOptions = {
   beforeShutdown?: () => Promise<void>;
+  onExternalShow?: () => void | Promise<void>;
   discoverWebUrl?: () => Promise<string | null>;
   /**
    * Round-7 (lefarcen P2 @ runtime.ts:336): packaged builds report the
@@ -351,12 +372,22 @@ async function writeAppConfigToDaemon(
   return payload.config;
 }
 
+type DesktopMenuController = {
+  dispose(): void;
+  setUpdateLabels(labels: DesktopUpdateMenuLabels): void;
+};
+
 function installDesktopMenu(
   runtime: SidecarRuntimeContext<SidecarStamp>,
-  options: Pick<DesktopMainOptions, "discoverDaemonUrl" | "discoverWebUrl"> = {},
-): () => void {
+  options: Pick<DesktopMainOptions, "discoverDaemonUrl" | "discoverWebUrl"> & {
+    onOpenUpdateDialog?: () => void;
+    updater: DesktopUpdater;
+  },
+): DesktopMenuController {
   let developMenuVisible = false;
   let lastKnownAmrProfile: AmrEnvironmentProfile = "prod";
+  let updateMenuLabels = DEFAULT_DESKTOP_UPDATE_MENU_LABELS;
+  let updateStatus = options.updater.snapshot();
   const developMenuAccelerator = process.platform === "darwin" ? "Command+Option+Shift+D" : "Control+Alt+Shift+D";
 
   const showDevelopMenuError = (message: string, error: unknown): void => {
@@ -422,7 +453,14 @@ function installDesktopMenu(
       console.error("desktop diagnostics export from menu failed", error);
     });
   };
+  let lastUpdateMenuItemKey: string | null = null;
   const rebuild = () => {
+    const updateMenuItem = deriveDesktopUpdateMenuItem({
+      labels: updateMenuLabels,
+      platform: process.platform,
+      status: updateStatus,
+    });
+    lastUpdateMenuItemKey = desktopUpdateMenuItemKey(updateMenuItem);
     const template: MenuItemConstructorOptions[] = [
       ...(process.platform === "darwin"
         ? [
@@ -430,6 +468,14 @@ function installDesktopMenu(
               label: app.name,
               submenu: [
                 { role: "about" as const },
+                ...(updateMenuItem.visible
+                  ? [{
+                      click: options.onOpenUpdateDialog,
+                      enabled: updateMenuItem.enabled,
+                      id: "check-for-updates",
+                      label: updateMenuItem.label,
+                    }]
+                  : []),
                 { type: "separator" as const },
                 { role: "services" as const },
                 { type: "separator" as const },
@@ -537,14 +583,34 @@ function installDesktopMenu(
   };
 
   rebuild();
+  const unsubscribeUpdater = options.updater.subscribe(() => {
+    updateStatus = options.updater.snapshot();
+    // Updater status ticks frequently during downloads (progress updates),
+    // but Menu.setApplicationMenu drops open menus and burns main-process
+    // work. Rebuild only when the derived update item actually changes.
+    const nextKey = desktopUpdateMenuItemKey(deriveDesktopUpdateMenuItem({
+      labels: updateMenuLabels,
+      platform: process.platform,
+      status: updateStatus,
+    }));
+    if (nextKey === lastUpdateMenuItemKey) return;
+    rebuild();
+  });
   const registered = globalShortcut.register(developMenuAccelerator, toggleDevelopMenu);
   if (!registered) {
     console.warn("[open-design desktop] develop menu shortcut unavailable", { accelerator: developMenuAccelerator });
   }
-  return () => {
-    if (registered) {
-      globalShortcut.unregister(developMenuAccelerator);
-    }
+  return {
+    dispose() {
+      unsubscribeUpdater();
+      if (registered) {
+        globalShortcut.unregister(developMenuAccelerator);
+      }
+    },
+    setUpdateLabels(labels) {
+      updateMenuLabels = labels;
+      rebuild();
+    },
   };
 }
 
@@ -708,12 +774,34 @@ export async function runDesktopMain(
   });
   const rendererLogPath = join(dirname(desktopLogPath), "renderer.log");
 
+  // Start local crash-dump collection before the main window (and its renderer)
+  // is created, directing minidumps into the desktop log tree the diagnostics
+  // export bundles, and snapshot GPU info. Together these make a "Save logs…"
+  // bundle enough to root-cause a native renderer crash (e.g. 0x80000003).
+  setUpDesktopCrashReporter(join(dirname(desktopLogPath), "crashes"));
+  void writeDesktopGpuInfo(join(dirname(desktopLogPath), "gpu-info.json"));
+  // Abnormal-exit detection: read the previous run's marker (unclean if the app
+  // died without a graceful quit — a main-process crash, OS kill, force-quit
+  // after a hang, or power loss), then stamp a fresh dirty marker for this run.
+  // The renderer-crash and startup-crash events don't cover this "runtime 闪退"
+  // class, and a dead process can't report itself, so this is the only way to
+  // observe it. Reported below once the daemon is reachable; marked clean on a
+  // graceful shutdown.
+  const sessionStatePath = join(dirname(desktopLogPath), "session-state.json");
+  const { previousUncleanSessions } = beginDesktopSession({
+    stateFilePath: sessionStatePath,
+    sessionId: randomUUID(),
+    version: app.getVersion(),
+    now: () => new Date(),
+  });
+
   let desktop: DesktopRuntime | null = null;
   let disposeMenu: () => void = () => undefined;
   let updateScheduler: DesktopUpdaterScheduler | null = null;
   let removeDiagnosticsIpc: () => void = () => undefined;
   let ipcServer: JsonIpcServerHandle | null = null;
   let shuttingDown = false;
+  let pendingUpdateDialogRequest = false;
 
   async function snapshotUpdateForStatus(): Promise<{
     update: DesktopUpdateStatusSnapshot;
@@ -767,6 +855,11 @@ export async function runDesktopMain(
     removeDiagnosticsIpc();
     await ipcServer?.close().catch(() => undefined);
     await desktop?.close().catch(() => undefined);
+    // Mark the session clean only AFTER teardown actually completed, right
+    // before app.quit(). Doing it at the start of shutdown would flag a quit as
+    // clean even if a later await hangs and the process is then force-quit or
+    // OS-killed — which is itself an abnormal exit worth reporting.
+    endDesktopSessionCleanly({ stateFilePath: sessionStatePath });
     app.quit();
   }
 
@@ -805,6 +898,7 @@ export async function runDesktopMain(
             return activeDesktop.console();
           case SIDECAR_MESSAGES.SHOW:
             activeDesktop.show();
+            notifyDesktopExternalShow(options.onExternalShow);
             return { accepted: true };
           case SIDECAR_MESSAGES.CLICK:
             return await activeDesktop.click(request.input as DesktopClickInput);
@@ -834,6 +928,19 @@ export async function runDesktopMain(
   });
   console.info("[open-design desktop] desktop IPC server listening", { ipc: runtime.ipc });
 
+  const menuController = installDesktopMenu(runtime, {
+    ...options,
+    onOpenUpdateDialog: () => {
+      if (desktop == null) {
+        pendingUpdateDialogRequest = true;
+        return;
+      }
+      desktop.openUpdateDialog({ source: "mac-app-menu" });
+    },
+    updater,
+  });
+  disposeMenu = menuController.dispose;
+
   console.info("[open-design desktop] creating desktop runtime");
   desktop = await createDesktopRuntime({
     desktopAuthSecret,
@@ -848,23 +955,70 @@ export async function runDesktopMain(
     // protection still works) and POSTs once more.
     registerDesktopAuthWithDaemon: () => registerDesktopAuthWithDaemon(runtime, desktopAuthSecret),
     rendererLogPath,
+    // Mark "reached running" only when the window is ACTUALLY revealed (web app
+    // mounted + shown), not when createDesktopRuntime returns — it starts async
+    // bootstrap via `void tick()` and returns before the first load. Until this
+    // fires, a crash is still a startup failure (covered by
+    // packaged_runtime_failed), not a runtime abnormal exit.
+    onRevealed: () => markDesktopSessionRunning({ stateFilePath: sessionStatePath }),
+    onUpdateMenuLabels: menuController.setUpdateLabels,
     requestQuit: shutdownAndExit,
     splashWindow: options.splashWindow,
     splashStartedAt: options.splashStartedAt,
     updater,
     windowTitle: options.windowTitle,
   });
+  if (pendingUpdateDialogRequest) {
+    pendingUpdateDialogRequest = false;
+    desktop.openUpdateDialog({ source: "mac-app-menu" });
+  }
   console.info("[open-design desktop] desktop runtime created");
-  options.onDesktopReady?.({ show: () => desktop?.show() });
-  disposeMenu = installDesktopMenu(runtime, options);
+  options.onDesktopReady?.({
+    show: () => {
+      void Promise.resolve(options.onExternalShow?.()).finally(() => desktop?.show());
+    },
+  });
+
+  const discoverDaemonBaseUrl = resolveDaemonBaseUrl(runtime, options);
+  // Report each abnormal exit of a prior run now that the daemon is up to relay
+  // it (best-effort; the events carry no user content). Each is dropped from the
+  // queue only once the daemon acks it, so a failed report is retried next launch.
+  if (previousUncleanSessions.length > 0) {
+    console.warn("[open-design desktop] prior session(s) ended abnormally (no clean shutdown)", {
+      count: previousUncleanSessions.length,
+    });
+    void reportPriorDesktopUncleanExits({
+      previousUncleanSessions,
+      currentVersion: app.getVersion(),
+      stateFilePath: sessionStatePath,
+      report: (event, properties) => reportDesktopObservabilityEvent(discoverDaemonBaseUrl, event, properties),
+      clearReported: clearReportedCrash,
+    });
+  }
+  // GPU / utility child-process crashes: the window keeps running but degraded
+  // (a GPU-process crash is a common cause of a window that then goes blank or
+  // vanishes), and the child can't report itself. `clean-exit` is normal teardown.
+  attachDesktopChildProcessCrashReporter(
+    app,
+    (event, properties) => reportDesktopObservabilityEvent(discoverDaemonBaseUrl, event, properties),
+  );
   removeDiagnosticsIpc = registerDesktopDiagnosticsIpc({
     discoverDaemonBaseUrl: resolveDaemonBaseUrl(runtime, options),
   });
+  const discoverUpdaterAppConfigBaseUrl = resolveDaemonBaseUrl(runtime, options);
   updateScheduler = createDesktopUpdaterScheduler(updater, {
     backoffInitialMs: updater.config.checkBackoffInitialMs,
     backoffMaxMs: updater.config.checkBackoffMaxMs,
     initialDelayMs: updater.config.checkInitialDelayMs,
     intervalMs: updater.config.checkIntervalMs,
+    startupSilentPayloadUpdate: {
+      isEnabled: async () => {
+        const baseUrl = await discoverUpdaterAppConfigBaseUrl();
+        const config = await readAppConfigFromDaemon(baseUrl);
+        return config.allowSilentUpdates === true;
+      },
+      requestQuit: shutdownAndExit,
+    },
   });
   if (updater.shouldAutoCheck()) updateScheduler.start();
 

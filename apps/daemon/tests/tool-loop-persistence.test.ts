@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { daemonAgentPayloadToPersistedAgentEvent } from '../src/runtimes/chat-run-messages.js';
 import {
   __forTestFilesystemEmptyAnswerFallbackText,
   __forTestFilesystemWriteFileNamesFromRunEvents,
-  daemonAgentPayloadToPersistedAgentEvent,
 } from '../src/server.js';
 
 // Regression for PR #3375 review: the `tool_loop` event was handled by the live
@@ -98,6 +98,53 @@ describe('daemonAgentPayloadToPersistedAgentEvent — diagnostic', () => {
         hasText: true,
       },
     });
+  });
+});
+
+describe('daemonAgentPayloadToPersistedAgentEvent — transient ACP status labels', () => {
+  // Regression for PR #5145 review: transient ACP protocol-internal status
+  // labels (waiting_for_first_output, tool_call, tool_call_update,
+  // session_update) carry no user-visible detail. The live web translator
+  // normalizes them to 'running', but the daemon must also suppress them at
+  // persistence time so history replay doesn't render empty expandable rows
+  // in the assistant process panel.
+  it.each([
+    ['waiting_for_first_output'],
+    ['tool_call'],
+    ['tool_call_update'],
+    ['session_update'],
+  ])('returns null for transient status %s', (label) => {
+    expect(
+      persist({
+        type: 'status',
+        label,
+        detail: 'should be dropped',
+      }),
+    ).toBeNull();
+  });
+
+  it('persists a visible model status with model as detail', () => {
+    const persisted = persist({
+      type: 'status',
+      label: 'model',
+      model: 'claude-sonnet-4',
+    });
+    expect(persisted).not.toBeNull();
+    expect(persisted!.kind).toBe('status');
+    expect(persisted!.label).toBe('model');
+    expect(persisted!.detail).toBe('claude-sonnet-4');
+  });
+
+  it('persists a visible streaming status with explicit detail', () => {
+    const persisted = persist({
+      type: 'status',
+      label: 'streaming',
+      detail: 'thinking…',
+    });
+    expect(persisted).not.toBeNull();
+    expect(persisted!.kind).toBe('status');
+    expect(persisted!.label).toBe('streaming');
+    expect(persisted!.detail).toBe('thinking…');
   });
 });
 

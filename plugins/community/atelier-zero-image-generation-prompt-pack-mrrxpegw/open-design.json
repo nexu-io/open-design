@@ -1,0 +1,22 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "atelier-zero-image-generation-prompt-pack-mrrxpegw",
+  "title": "Atelier Zero — Image Generation Prompt Pack",
+  "version": "0.1.0",
+  "description": "This pack is consumed by the `open-design-landing` skill. Every page-level image is rendered with `gpt-image-fal` (preferred) or `gpt-image-azure`.",
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}

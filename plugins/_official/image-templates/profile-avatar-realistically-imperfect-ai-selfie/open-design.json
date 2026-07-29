@@ -24,6 +24,7 @@
     "en": "Profile / Avatar - Realistically Imperfect AI Selfie"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "A creative prompt used with GPT Image 2 to generate a 'failed' selfie that looks like an accidental, low-quality smartphone snapshot.",
   "description_i18n": {
     "zh-CN": "与 GPT Image 2 配合使用的创意提示词，生成看起来像意外拍摄的低质量智能手机快照的「失败」自拍照。",

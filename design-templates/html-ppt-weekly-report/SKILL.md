@@ -1,16 +1,34 @@
 ---
 name: html-ppt-weekly-report
-description: Team weekly / status-update deck — corporate clarity, 8-cell KPI grid, shipped list, 8-week bar chart, next-week table. Use for 周报, business reviews, team status updates, and exec dashboards.
+en_name: "Write a Weekly Growth Review like a Head of Analytics"
+zh_name: "像分析负责人一样写每周增长复盘"
+description: |
+  Open Design's weekly growth review: stars, installs, activation — the number, the driver, and the recommended move. Built as a decision-grade data & finance deck for growth & product team.
+en_description: |
+  Open Design's weekly growth review: stars, installs, activation — the number, the driver, and the recommended move. Built as a decision-grade data & finance deck for growth & product team.
+zh_description: |
+  像分析负责人一样写每周增长复盘——一份可商业交付的数据财务 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "data-finance"
+  - "product-analytics-deck"
+  - "finance"
+  - "kpi"
+  - "metrics"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "html-ppt-weekly-report"
 triggers:
-  - "weekly report"
-  - "周报"
-  - "status update"
-  - "team report"
-  - "business review"
-  - "wbr"
+  - "product-analytics-deck"
+  - "data-finance"
+  - "Write a Weekly Growth Review like a Head of Analytics"
+  - "像分析负责人一样写每周增长复盘"
+  - "kpi"
+  - "finance"
+  - "metrics"
+  - "html deck"
+  - "html slides"
 od:
   mode: deck
-  scenario: operations
   upstream: "https://github.com/lewislulu/html-ppt-skill"
   preview:
     type: html
@@ -19,7 +37,9 @@ od:
     requires: false
   speaker_notes: true
   animations: true
-  example_prompt: "用 html-ppt-weekly-report 模板生成一份周报（7 页）。先问我四件事：本周时间范围、3-5 个核心 KPI 数字、本周已发布 / 已完成的事项、下周计划与风险。然后用模板填好 8 周柱状图和下周表格。"
+  category: "data-finance"
+  scenario: "finance"
+  example_prompt: "Create \"Write a Weekly Growth Review like a Head of Analytics\" as a decision-grade Data, KPI & finance deck in this template's own visual system. Subject: Open Design's weekly growth review: stars, installs, activation — the number, the driver, and the recommended move. Audience: growth & product team. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does every chart have a decision above it."
 ---
 # HTML PPT · Weekly Report
 
@@ -32,23 +52,23 @@ The Examples gallery wires "Use this prompt" to the example_prompt above. When y
 ## How to author the deck
 
 1. **Read the master skill first.** All authoring rules live in
-   [`skills/html-ppt/SKILL.md`](../html-ppt/SKILL.md) — content/audience checklist,
+   [`design-templates/html-ppt/SKILL.md`](../html-ppt/SKILL.md) — content/audience checklist,
    token rules, layout reuse, presenter mode, the keyboard runtime, and the
    "never put presenter-only text on the slide" rule.
 2. **Start from the matching template folder:**
-   `skills/html-ppt/templates/full-decks/weekly-report/` — copy `index.html` and
+   `design-templates/html-ppt/templates/full-decks/weekly-report/` — copy `index.html` and
    `style.css` into the project, keep the `.tpl-weekly-report` body class.
 3. **Bring the shared runtime with the template.** The upstream
    `index.html` links the shared CSS/JS via `../../../assets/...` because it
-   sits three folders deep inside `skills/html-ppt/templates/full-decks/`.
+   sits three folders deep inside `design-templates/html-ppt/templates/full-decks/`.
    Once you copy `index.html` into the project, those parent-relative URLs
    no longer resolve and `base.css`, `animations.css`, and `runtime.js`
    will 404 — meaning the deck never activates and slide navigation is
    dead. Pick one of these two recipes per project:
    - **Recipe A — copy + rewrite (preferred):** copy
-     `skills/html-ppt/assets/fonts.css`, `skills/html-ppt/assets/base.css`,
-     `skills/html-ppt/assets/animations/animations.css`, and
-     `skills/html-ppt/assets/runtime.js` into a project-local
+     `design-templates/html-ppt/assets/fonts.css`, `design-templates/html-ppt/assets/base.css`,
+     `design-templates/html-ppt/assets/animations/animations.css`, and
+     `design-templates/html-ppt/assets/runtime.js` into a project-local
      `assets/` (with `assets/animations/animations.css`), then rewrite the
      four `<link>`/`<script>` tags in `index.html` from
      `../../../assets/...` to the matching project-local paths
@@ -63,7 +83,7 @@ The Examples gallery wires "Use this prompt" to the example_prompt above. When y
    Either way, do not ship the upstream `../../../assets/...` URLs
    verbatim into a project artifact — they only work in-tree.
 4. **Pick a theme.** Default tokens look fine; if the user wants a different
-   feel, swap in any of the 36 themes from `skills/html-ppt/assets/themes/*.css`
+   feel, swap in any of the 36 themes from `design-templates/html-ppt/assets/themes/*.css`
    via `<link id="theme-link">` and let `T` cycle.
 5. **Replace demo content, not classes.** The `.tpl-weekly-report` scoped CSS only
    recognises the structural classes shipped in the template — keep them.
@@ -73,5 +93,5 @@ The Examples gallery wires "Use this prompt" to the example_prompt above. When y
 
 Visual system, layouts, themes and the runtime keyboard model come from
 the upstream MIT-licensed [`lewislulu/html-ppt-skill`](https://github.com/lewislulu/html-ppt-skill). The
-LICENSE file ships at `skills/html-ppt/LICENSE`; please keep it in place when
+LICENSE file ships at `design-templates/html-ppt/LICENSE`; please keep it in place when
 redistributing.

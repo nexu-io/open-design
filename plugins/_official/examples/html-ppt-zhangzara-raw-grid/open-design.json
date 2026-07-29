@@ -2,48 +2,19 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-html-ppt-zhangzara-raw-grid",
-  "title": "Html Ppt Zhangzara Raw Grid",
+  "title": "Present a Poster-Series Case Study like a Festival Art Director",
   "title_i18n": {
-    "zh-CN": "Html Ppt Zhangzara Raw Grid",
-    "zh-TW": "Html Ppt Zhangzara Raw Grid",
-    "ja": "Html Ppt Zhangzara Raw Grid",
-    "ko": "Html Ppt Zhangzara Raw Grid",
-    "de": "Html Ppt Zhangzara Raw Grid",
-    "fr": "Html Ppt Zhangzara Raw Grid",
-    "ru": "Html Ppt Zhangzara Raw Grid",
-    "es": "Html Ppt Zhangzara Raw Grid",
-    "pt-BR": "Html Ppt Zhangzara Raw Grid",
-    "it": "Html Ppt Zhangzara Raw Grid",
-    "vi": "Html Ppt Zhangzara Raw Grid",
-    "pl": "Html Ppt Zhangzara Raw Grid",
-    "id": "Html Ppt Zhangzara Raw Grid",
-    "nl": "Html Ppt Zhangzara Raw Grid",
-    "ar": "Html Ppt Zhangzara Raw Grid",
-    "tr": "Html Ppt Zhangzara Raw Grid",
-    "uk": "Html Ppt Zhangzara Raw Grid",
-    "en": "Html Ppt Zhangzara Raw Grid"
+    "en": "Present a Poster-Series Case Study like a Festival Art Director",
+    "zh-CN": "像音乐节艺术总监一样讲海报系列案例",
+    "zh-TW": "像音乐节艺术总监一样讲海报系列案例"
   },
   "version": "0.1.0",
-  "description": "Raw Grid — Neo-brutalist deck with thick borders, offset shadows, and a pink/sage/ink palette. Anything that should feel direct and graphic-confident: founder pitches, accelerator demos, brand decks, indie launches, creator portfolios.",
+  "publishedAt": "2026-05-12T07:18:16Z",
+  "description": "A brutalist poster-series case study for a music festival — the concept, the system, and how it scaled across formats. Built as a decision-grade design craft deck for design peers, client.",
   "description_i18n": {
-    "zh-CN": "Raw Grid——新粗野主义演示模板，采用粗边框、偏移阴影和粉/鼠尾草/墨色配色方案。适合需要直接且富有图形自信感的场景：创始人路演、加速器演示、品牌手册、独立产品发布、创作者作品集。",
-    "zh-TW": "Raw Grid——新粗野主義簡報模板，採用粗邊框、偏移陰影和粉紅/鼠尾草綠/墨色配色方案。適合需要直接且富有圖形自信感的場景：創辦人募資簡報、加速器展示、品牌手冊、獨立產品發布、創作者作品集。",
-    "ja": "Raw Grid — 太い境界線、オフセットシャドウ、ピンク/セージ/インクのパレットを備えたネオブルータリストデッキ。直接的でグラフィカルな自信を表現したいシーンに最適：創業者ピッチ、アクセラレーターデモ、ブランドデッキ、インディーローンチ、クリエイターポートフォリオ。",
-    "ko": "Raw Grid — 두꺼운 테두리, 오프셋 그림자, 핑크/세이지/잉크 팔레트를 갖춘 네오 브루탈리스트 덱. 직접적이고 그래픽적으로 자신감 있는 느낌이 필요한 곳에 적합: 창업자 피칭, 액셀러레이터 데모, 브랜드 덱, 인디 론칭, 크리에이터 포트폴리오.",
-    "de": "Raw Grid — Neo-brutalistisches Deck mit dicken Rahmen, versetzten Schatten und einer Pink/Salbei/Tinte-Palette. Für alles, was direkt und grafisch-selbstbewusst wirken soll: Gründer-Pitches, Accelerator-Demos, Brand-Decks, Indie-Launches, Creator-Portfolios.",
-    "fr": "Raw Grid — Deck néo-brutaliste avec bordures épaisses, ombres décalées et palette rose/sauge/encre. Pour tout ce qui doit être direct et graphiquement confiant : pitchs de fondateurs, démos d'accélérateurs, decks de marque, lancements indés, portfolios de créateurs.",
-    "ru": "Raw Grid — необруталистская презентация с толстыми границами, смещёнными тенями и палитрой розового/шалфея/чернил. Для всего, что должно выглядеть прямолинейно и графически уверенно: питчи основателей, демо для акселераторов, брендовые презентации, инди-запуски, портфолио криейторов.",
-    "es": "Raw Grid — Presentación neobrutalista con bordes gruesos, sombras desplazadas y paleta rosa/salvia/tinta. Para todo lo que deba sentirse directo y gráficamente confiado: pitches de fundadores, demos de aceleradoras, decks de marca, lanzamientos indie, portafolios de creadores.",
-    "pt-BR": "Raw Grid — Deck neo-brutalista com bordas grossas, sombras deslocadas e paleta rosa/sálvia/tinta. Para tudo que precisa parecer direto e graficamente confiante: pitches de fundadores, demos de aceleradoras, decks de marca, lançamentos indie, portfólios de criadores.",
-    "it": "Raw Grid — Deck neo-brutalista con bordi spessi, ombre sfalsate e palette rosa/salvia/inchiostro. Per tutto ciò che deve risultare diretto e graficamente sicuro: pitch di fondatori, demo per acceleratori, deck di brand, lanci indie, portfolio di creator.",
-    "vi": "Raw Grid — Bộ slide neo-brutalist với viền dày, đổ bóng lệch và bảng màu hồng/xanh xám/mực. Dành cho mọi thứ cần cảm giác trực tiếp và tự tin về đồ họa: bài thuyết trình nhà sáng lập, demo tăng tốc, bộ tài liệu thương hiệu, ra mắt indie, portfolio sáng tạo.",
-    "pl": "Raw Grid — Neo-brutalistyczna prezentacja z grubymi obramowaniami, przesuniętymi cieniami i paletą różu/szałwii/atramentu. Do wszystkiego, co ma być bezpośrednie i graficznie pewne siebie: pitche założycieli, dema dla akceleratorów, decki brandowe, indie launcze, portfolio twórców.",
-    "id": "Raw Grid — Deck neo-brutalis dengan border tebal, bayangan offset, dan palet pink/sage/tinta. Untuk apa pun yang harus terasa langsung dan percaya diri secara grafis: pitch founder, demo akselerator, deck brand, peluncuran indie, portofolio kreator.",
-    "nl": "Raw Grid — Neo-brutalistische deck met dikke randen, verschoven schaduwen en een roze/salie/inkt-palet. Voor alles dat direct en grafisch zelfverzekerd moet aanvoelen: founder-pitches, accelerator-demo's, brand-decks, indie-launches, creator-portfolio's.",
-    "ar": "Raw Grid — عرض تقديمي بأسلوب نيو-بروتاليست مع حدود سميكة وظلال منحرفة ولوحة ألوان وردي/ميرمية/حبر. لكل ما يجب أن يبدو مباشراً وواثقاً بصرياً: عروض المؤسسين، عروض المسرّعات، عروض العلامات التجارية، الإطلاقات المستقلة، ملفات أعمال المبدعين.",
-    "tr": "Raw Grid — Kalın kenarlıklar, kaydırılmış gölgeler ve pembe/adaçayı/mürekkep paletine sahip neo-brütalist sunum. Doğrudan ve grafik olarak kendinden emin hissettirmesi gereken her şey için: kurucu sunumları, hızlandırıcı demoları, marka sunumları, bağımsız lansmanlar, yaratıcı portföyleri.",
-    "uk": "Raw Grid — необруталістська презентація з товстими межами, зміщеними тінями та палітрою рожевого/шавлії/чорнила. Для всього, що має виглядати прямолінійно та графічно впевнено: пітчі засновників, демо для акселераторів, брендові презентації, інді-запуски, портфоліо криейторів.",
-    "en": "Raw Grid — Neo-brutalist deck with thick borders, offset shadows, and a pink/sage/ink palette. Anything that should feel direct and graphic-confident: founder pitches, accelerator demos, brand decks, indie launches, creator portfolios."
+    "en": "A brutalist poster-series case study for a music festival — the concept, the system, and how it scaled across formats. Built as a decision-grade design craft deck for design peers, client.",
+    "zh-CN": "像音乐节艺术总监一样讲海报系列案例——一份可商业交付的设计打磨 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像音乐节艺术总监一样讲海报系列案例——一份可商业交付的设计打磨 Deck，围绕真实主题、证据链与决策目标组织。"
   },
   "license": "MIT",
   "author": {
@@ -67,7 +38,15 @@
     "accelerator-demo-day",
     "html-deck",
     "html-slides",
-    "zhangzara"
+    "zhangzara",
+    "design",
+    "brand",
+    "visual-system",
+    "html-ppt-zhangzara-raw-grid",
+    "design-craft",
+    "board-upgrade-deck-rescue",
+    "decision-deck",
+    "commercial-slide-agent"
   ],
   "compat": {
     "agentSkills": [
@@ -80,7 +59,7 @@
     "kind": "scenario",
     "taskKind": "new-generation",
     "mode": "deck",
-    "scenario": "marketing",
+    "scenario": "design",
     "surface": "web",
     "preview": {
       "type": "html",
@@ -88,13 +67,18 @@
     },
     "useCase": {
       "query": {
-        "en": "Raw Grid — Neo-brutalist deck with thick borders, offset shadows, and a pink/sage/ink palette. Anything that should feel direct and graphic-confident: founder pitches, accelerator demos, brand decks, indie launches, creator portfolios.",
-        "zh-CN": "使用这个插件完成以下任务：Raw Grid — Neo-brutalist deck with thick borders, offset shadows, and a pink/sage/ink palette. Anything that should feel direct and graphic-confident: founder pitches, accelerator demos, brand decks, indie launches, creator portfolios."
+        "en": "Create \"Present a Poster-Series Case Study like a Festival Art Director\" as a decision-grade Design craft deck in this template's own visual system. Subject: A brutalist poster-series case study for a music festival — the concept, the system, and how it scaled across formats. Audience: design peers, client. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the deck feel authored by a senior designer rather than generated.",
+        "zh-CN": "像音乐节艺术总监一样讲海报系列案例。像音乐节艺术总监一样讲海报系列案例——一份可商业交付的设计打磨 Deck，围绕真实主题、证据链与决策目标组织。 主题：A brutalist poster-series case study for a music festival — the concept, the system, and how it scaled across formats. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "Html Ppt Zhangzara Raw Grid"
+          "title": "Present a Poster-Series Case Study like a Festival Art Director",
+          "title_i18n": {
+            "en": "Present a Poster-Series Case Study like a Festival Art Director",
+            "zh-CN": "像音乐节艺术总监一样讲海报系列案例",
+            "zh-TW": "像音乐节艺术总监一样讲海报系列案例"
+          }
         }
       ]
     },
@@ -122,6 +106,7 @@
     "capabilities": [
       "prompt:inject",
       "fs:write"
-    ]
+    ],
+    "category": "design-craft"
   }
 }

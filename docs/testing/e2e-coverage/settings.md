@@ -7,6 +7,8 @@
 - Automations / Orbit 页面
 - Language 页面
 - Pets 页面
+- Integrations 的 Skills 标签页
+- Settings 的 Design systems 页面
 - API protocol 迁移与切换回归
 - 国际化内容注册完整性
 
@@ -15,6 +17,7 @@
 - `e2e/ui/settings-api-protocol.test.ts`
 - `e2e/ui/settings-media-providers.test.ts`
 - `e2e/ui/settings-memory-routines.test.ts`
+- `e2e/ui/settings-design-systems.test.ts`
 - `e2e/tests/localized-content.test.ts`
 - `apps/web/tests/components/App.connectors.test.tsx`
 - `apps/web/tests/components/App.mediaProviders.test.tsx`
@@ -22,6 +25,8 @@
 - `apps/web/tests/components/SettingsDialog.test.ts`
 - `apps/web/tests/components/SettingsDialog.execution.test.tsx`
 - `apps/web/tests/components/SettingsDialog.orbit.test.tsx`
+- `apps/web/tests/components/SkillsSection.test.tsx`
+- `apps/web/tests/components/DesignSystemsSection.test.tsx`
 
 ## 已自动化
 
@@ -90,10 +95,10 @@
 | SET-060 | 已领养宠物的 `Wake / Tuck away` 状态切换会即时更新页面，并在保存时正确落到 `pet.enabled` | `SettingsDialog.execution.test.tsx` |
 | SET-061 | Community 标签页支持 `Refresh` 和 `Download community pets`，并展示同步完成状态文案 | `SettingsDialog.execution.test.tsx` |
 | SET-062 | Community 标签页的 hatch prompt 会带上当前 concept，支持复制到剪贴板并展示 `Copied!` 反馈 | `SettingsDialog.execution.test.tsx` |
-| SET-063 | Skills & Design Systems 页面默认展示 Skills 库，支持按 mode 筛选并结合搜索缩小结果 | `SettingsDialog.execution.test.tsx` |
-| SET-064 | Skills 库支持展开预览详情，并可通过 toggle 把 skill 加入 `disabledSkills` 保存 | `SettingsDialog.execution.test.tsx` |
-| SET-065 | 切换到 Design Systems 库后，支持按 category 筛选、展开详情预览，并保存 `disabledDesignSystems` | `SettingsDialog.execution.test.tsx` |
-| SET-066 | Skills & Design Systems 搜索无匹配时，会展示空结果提示 | `SettingsDialog.execution.test.tsx` |
+| SET-063 | Integrations 的 Skills 标签页展示 functional skills，支持按 type/category 筛选并结合搜索缩小结果 | `SettingsDialog.execution.test.tsx`, `SkillsSection.test.tsx` |
+| SET-064 | Integrations 的 Skills 标签页支持展开详情，并可通过 toggle 把 skill 加入 `disabledSkills` 保存 | `SettingsDialog.execution.test.tsx`, `SkillsSection.test.tsx` |
+| SET-065 | Settings 的独立 Design systems 页面支持按 category 筛选、展开详情，并保存 `disabledDesignSystems` | `SettingsDialog.execution.test.tsx`, `DesignSystemsSection.test.tsx` |
+| SET-066 | Integrations 的 Skills 标签页在筛选或搜索无匹配时展示空结果提示 | `SettingsDialog.execution.test.tsx` |
 | SET-067 | About 页面会正确展示 `Version / Channel / Runtime / Platform / Architecture` 五项只读版本信息 | `SettingsDialog.execution.test.tsx` |
 | SET-068 | About 页面在 `appVersionInfo` 缺失时，会展示版本信息不可用的降级空态 | `SettingsDialog.execution.test.tsx` |
 | SET-069 | About 页面是只读信息页；关闭按钮或遮罩关闭不会产生保存动作或脏状态 | `SettingsDialog.execution.test.tsx` |

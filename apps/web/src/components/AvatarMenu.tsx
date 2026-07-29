@@ -9,7 +9,11 @@ import { AgentIcon } from './AgentIcon';
 import { PlanBadge } from './PlanBadge';
 import { RemixIcon } from './RemixIcon';
 import { orderAgentsWithOpenDesignFirst } from './agentOrdering';
-import { SearchableModelSelect } from './modelOptions';
+import { defaultAgentModelId, effectiveAgentModelChoice } from './agentModelSelection';
+import {
+  orderModelOptionsByAvailability,
+  SearchableModelSelect,
+} from './modelOptions';
 import type { AgentInfo, AppConfig, ExecMode, ProviderModelOption } from '../types';
 import { SUGGESTED_MODELS_BY_PROTOCOL } from '../state/apiProtocols';
 import { KNOWN_PROVIDERS } from '../state/config';
@@ -37,7 +41,7 @@ interface Props {
   onAgentChange: (id: string) => void;
   onAgentModelChange: (
     id: string,
-    choice: { model?: string; reasoning?: string },
+    choice: { model?: string; reasoning?: string; serviceTier?: string },
   ) => void;
   onApiModelChange?: (model: string) => void;
   providerModelsCache?: Record<string, ProviderModelOption[]>;
@@ -171,6 +175,11 @@ export function AvatarMenu({
     () => agents.find((a) => a.id === config.agentId) ?? null,
     [agents, config.agentId],
   );
+  const currentAgentModelOptions = useMemo(() => {
+    const models = currentAgent?.models ?? [];
+    if (currentAgent?.id !== 'amr') return models;
+    return orderModelOptionsByAvailability(models);
+  }, [currentAgent]);
 
   const installedAgents = orderAgentsWithOpenDesignFirst(
     agents.filter((a) => a.available && isVisibleLocalCliAgent(a)),
@@ -246,13 +255,20 @@ export function AvatarMenu({
   // hasn't touched the picker yet so the labels don't read as empty.
   const currentChoice =
     (config.agentId && config.agentModels?.[config.agentId]) || {};
+  const normalizedCurrentChoice = effectiveAgentModelChoice(currentAgent, currentChoice) ?? currentChoice;
   const currentModelId =
-    currentChoice.model ?? currentAgent?.models?.[0]?.id ?? null;
+    normalizedCurrentChoice.model ?? defaultAgentModelId(currentAgent);
   const currentReasoningId =
     currentChoice.reasoning ?? currentAgent?.reasoningOptions?.[0]?.id ?? null;
-  const currentModelLabel = currentAgent?.models?.find(
+  const currentModelOption = currentAgent?.models?.find(
     (m) => m.id === currentModelId,
-  )?.label;
+  ) ?? null;
+  const currentServiceTierOptions = currentModelOption?.serviceTierOptions ?? [];
+  const currentServiceTierId =
+    currentServiceTierOptions.some((tier) => tier.id === currentChoice.serviceTier)
+      ? currentChoice.serviceTier!
+      : 'default';
+  const currentModelLabel = currentModelOption?.label;
 
   const apiProtocol = config.apiProtocol ?? 'openai';
   const byokProvider =
@@ -305,8 +321,8 @@ export function AvatarMenu({
 
   const byokModelOptions = mergeProviderModelOptions(
     fetchedByokModels,
-    byokProvider?.models?.length
-      ? byokProvider.models
+    byokProvider?.preferredModels.length
+      ? byokProvider.preferredModels
       : SUGGESTED_MODELS_BY_PROTOCOL[apiProtocol] ?? [],
   );
 
@@ -323,7 +339,7 @@ export function AvatarMenu({
         title={t('avatar.title')}
         aria-label={t('avatar.title')}
       >
-        {currentAgent ? (
+        {config.mode === 'daemon' && currentAgent ? (
           <AgentIcon id={currentAgent.id} size={20} />
         ) : (
           <RemixIcon name="link" size={20} />
@@ -515,9 +531,10 @@ export function AvatarMenu({
                         onChange={(value) =>
                           onAgentModelChange(currentAgent.id, {
                             model: value,
+                            serviceTier: undefined,
                           })
                         }
-                        models={currentAgent.models}
+                        models={currentAgentModelOptions}
                         additionalOptions={
                           currentModelId &&
                           !currentAgent.models.some((m) => m.id === currentModelId)
@@ -533,6 +550,44 @@ export function AvatarMenu({
                         searchInputTestId="avatar-model-search"
                         popoverTestId="avatar-model-popover"
                         minSearchableOptions={5}
+                        disabledOptionHint={
+                          currentAgent.id === 'amr'
+                            ? (option) =>
+                                option.enabled === false
+                                  ? t('settings.amrModelUpgradeHint')
+                                  : null
+                            : undefined
+                        }
+                        onDisabledOptionUpgrade={
+                          currentAgent.id === 'amr'
+                            ? () => {
+                                const attribution = recordAmrEntry(
+                                  analytics.track,
+                                  'avatar_amr_upgrade',
+                                  new Date(),
+                                  {
+                                    metricsConsent:
+                                      config.telemetry?.metrics === true,
+                                  },
+                                );
+                                const deviceId = amrHandoffDeviceId({
+                                  metricsConsent:
+                                    config.telemetry?.metrics === true,
+                                  resolvedDeviceId: getResolvedDeviceId(),
+                                  installationId: config.installationId,
+                                });
+                                window.open(
+                                  attributedAmrUrl(
+                                    amrPlansUrl,
+                                    attribution,
+                                    deviceId,
+                                  ),
+                                  '_blank',
+                                  'noopener,noreferrer',
+                                );
+                              }
+                            : undefined
+                        }
                       />
                     </label>
                   ) : null}
@@ -554,6 +609,30 @@ export function AvatarMenu({
                         {currentAgent.reasoningOptions.map((r) => (
                           <option key={r.id} value={r.id}>
                             {r.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
+                  {currentServiceTierOptions.length > 0 ? (
+                    <label className="avatar-select-row">
+                      <span className="avatar-select-label">
+                        {t('avatar.serviceTierLabel')}
+                      </span>
+                      <select
+                        className="avatar-select"
+                        value={currentServiceTierId}
+                        onChange={(e) =>
+                          onAgentModelChange(currentAgent.id, {
+                            serviceTier:
+                              e.target.value === 'default' ? undefined : e.target.value,
+                          })
+                        }
+                      >
+                        <option value="default">{t('common.default')}</option>
+                        {currentServiceTierOptions.map((tier) => (
+                          <option key={tier.id} value={tier.id}>
+                            {tier.label}
                           </option>
                         ))}
                       </select>
@@ -586,13 +665,13 @@ export function AvatarMenu({
                   className="inline-switcher__select avatar-select"
                   value={config.model ?? ''}
                   onChange={(value) => onApiModelChange?.(value)}
-                  models={byokModelOptions.map((m) => ({ id: m.id, label: m.label }))}
+                  models={byokModelOptions.map((m) => ({ ...m, label: m.label }))}
                   additionalOptions={
                     config.model && !byokModelOptions.some((m) => m.id === config.model)
                       ? [
                           {
                             value: config.model,
-                            label: byokProvider?.models?.includes(config.model)
+                            label: byokProvider?.preferredModels.includes(config.model)
                               ? config.model
                               : `${config.model} ${t('avatar.customSuffix')}`,
                           },

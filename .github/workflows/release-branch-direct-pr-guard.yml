@@ -46,6 +46,8 @@ jobs:
             exit 0
           fi
           echo "Blocking direct release PR #$PR into $BASE by $AUTHOR"
+          # Markdown code spans are intentional literal text.
+          # shellcheck disable=SC2016
           body="$(printf '%s\n' \
             '🚫 Direct PRs into release branches are not accepted.' \
             '' \

@@ -1,30 +1,30 @@
 #!/usr/bin/env node
 import fs from "node:fs";
 import path from "node:path";
-import crypto from "node:crypto";
 
 function usage() {
   console.log(`Usage:
-  node scripts/init-clone.mjs <site-name-or-slug> [--url <url>] [--mode <mode>] [--level <L1-L6>]
+  node scripts/init-clone.mjs <slug> [--url <url>] [--mode <mode>] [--level <L1-L6>] [--root <dir>] [--in-place]
 
 Creates:
-  ./website-clones/<normalized-slug>-clone/
-  ./website-clones/<normalized-slug>-clone/NOTES.md
-  ./website-clones/<normalized-slug>-clone/RECON/screenshots/
+  <root>/<slug>-clone/
+  <root>/<slug>-clone/NOTES.md
+  <root>/<slug>-clone/RECON/screenshots/
 
-Set WEB_CLONE_ROOT=/absolute/path to write projects somewhere else.
-Non-ASCII names fall back to the --url hostname, then a stable short hash.
+With --in-place, creates NOTES.md and RECON/screenshots/ in <root> itself.
 `);
 }
 
 function parseArgs(argv) {
-  const out = { slug: null, url: "", mode: "", level: "" };
+  const out = { slug: null, url: "", mode: "", level: "", root: process.cwd(), inPlace: false };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === "--help" || arg === "-h") out.help = true;
     else if (arg === "--url") out.url = argv[++i] || "";
     else if (arg === "--mode") out.mode = argv[++i] || "";
     else if (arg === "--level") out.level = argv[++i] || "";
+    else if (arg === "--root") out.root = argv[++i] || process.cwd();
+    else if (arg === "--in-place") out.inPlace = true;
     else if (!out.slug) out.slug = arg;
     else throw new Error(`Unexpected argument: ${arg}`);
   }
@@ -40,32 +40,7 @@ function cleanSlug(input) {
     .replace(/^-+|-+$/g, "");
 }
 
-function slugFromUrl(url) {
-  if (!url) return "";
-  try {
-    const parsed = new URL(url);
-    return cleanSlug(parsed.hostname.replace(/^www\./i, ""));
-  } catch {
-    return "";
-  }
-}
-
-function fallbackSlug(input, url) {
-  const direct = cleanSlug(input);
-  if (direct) return direct;
-
-  const fromUrl = slugFromUrl(url);
-  if (fromUrl) return fromUrl;
-
-  const hash = crypto.createHash("sha1").update(`${input}\n${url}`).digest("hex").slice(0, 8);
-  return `site-${hash}`;
-}
-
-function shellQuote(value) {
-  return `'${value.replace(/'/g, "'\\''")}'`;
-}
-
-function notesTemplate({ name, url, mode, level, projectPath }) {
+function notesTemplate({ name, url, mode, level }) {
   return `# ${name} · 克隆笔记
 
 ## 源信息
@@ -88,7 +63,6 @@ function notesTemplate({ name, url, mode, level, projectPath }) {
 
 ## 跑起来
 \`\`\`bash
-cd ${shellQuote(projectPath)}
 python3 -m http.server 8123
 \`\`\`
 
@@ -135,14 +109,13 @@ try {
     process.exit(args.help ? 0 : 1);
   }
 
-  const slug = fallbackSlug(args.slug, args.url);
+  const slug = cleanSlug(args.slug);
+  if (!slug) throw new Error("Slug is empty after normalization.");
   const name = slug.endsWith("-clone") ? slug : `${slug}-clone`;
-  const root = process.env.WEB_CLONE_ROOT
-    ? path.resolve(process.env.WEB_CLONE_ROOT)
-    : path.join(process.cwd(), "website-clones");
-  const project = path.join(root, name);
+  const root = path.resolve(args.root || process.cwd());
+  const project = args.inPlace ? root : path.join(root, name);
 
-  if (fs.existsSync(project)) {
+  if (!args.inPlace && fs.existsSync(project)) {
     throw new Error(`Project already exists: ${project}`);
   }
 
@@ -154,7 +127,6 @@ try {
       url: args.url,
       mode: args.mode,
       level: args.level,
-      projectPath: project,
     })
   );
   fs.writeFileSync(path.join(project, ".gitignore"), "node_modules/\n.DS_Store\n");

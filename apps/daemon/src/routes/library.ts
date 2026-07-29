@@ -45,6 +45,7 @@ import {
   writeFigmaSidecar,
 } from '../library.js';
 import { reconcileLibrary, type ReconcileLibraryResult } from '../library-sync.js';
+import { fetchExternalBrandAsset } from '../brands/safe-fetch.js';
 import { ensureProjectSubdir } from '../projects.js';
 import {
   confirmPairing,
@@ -107,7 +108,14 @@ function parseDataUrl(dataUrl: string): { bytes: Buffer; mime: string | undefine
 }
 
 async function fetchRemoteBytes(url: string): Promise<{ bytes: Buffer; mime: string | undefined }> {
-  const resp = await fetch(url, { redirect: 'follow' });
+  // Route the client-supplied URL through the same SSRF guard the brand-asset
+  // path uses (assertPublicBrandUrl): reject cloud-metadata (169.254.169.254),
+  // loopback, RFC1918/CGNAT, and link-local hosts, re-validating on every
+  // redirect hop (redirect:'manual'). Without this a caller could make the
+  // privileged daemon fetch an internal/loopback URL and read the response back
+  // via GET /api/library/assets/:id/raw — SSRF + response exfiltration. Sibling
+  // to the loopback-SSRF class in #5478.
+  const resp = await fetchExternalBrandAsset(url);
   if (!resp.ok) throw new Error(`remote fetch failed: ${resp.status}`);
   const declared = Number(resp.headers.get('content-length') ?? '0');
   if (declared && declared > MAX_REMOTE_BYTES) throw new Error('remote resource too large');
@@ -115,6 +123,38 @@ async function fetchRemoteBytes(url: string): Promise<{ bytes: Buffer; mime: str
   if (buf.length > MAX_REMOTE_BYTES) throw new Error('remote resource too large');
   const mime = resp.headers.get('content-type')?.split(';')[0]?.trim() || undefined;
   return { bytes: buf, mime };
+}
+
+/**
+ * Stream a file to the HTTP response with an `error` handler on the read stream.
+ * `.pipe()` does NOT forward the source's errors, so without this a mid-stream
+ * read failure (file deleted/truncated mid-read, EIO, an fd race) emits an
+ * unhandled `error` on the Readable, which Node escalates to an uncaughtException
+ * that takes the whole daemon down. On error we fall back to `onOpenError`
+ * (a 404) when nothing has been written yet, else tear the response down.
+ */
+export function streamAssetFileToResponse(
+  abs: string,
+  res: Response,
+  onOpenError: () => void,
+): void {
+  const stream = createReadStream(abs);
+  stream.on('error', () => {
+    if (res.headersSent) {
+      res.destroy();
+      return;
+    }
+    // The route sets success-only headers (Content-Type/-Length, Cache-Control,
+    // Content-Disposition) before streaming. Strip them before the JSON error
+    // fallback so a transient open/read failure isn't returned with stale asset
+    // metadata — in particular the `max-age=3600` directive, which would cache
+    // the 404 for an hour and mask the file once it becomes available again.
+    for (const header of ['Cache-Control', 'Content-Disposition', 'Content-Type', 'Content-Length']) {
+      res.removeHeader(header);
+    }
+    onOpenError();
+  });
+  stream.pipe(res);
 }
 
 export function registerLibraryRoutes(app: Express, ctx: RegisterLibraryRoutesDeps): void {
@@ -479,7 +519,9 @@ export function registerLibraryRoutes(app: Express, ctx: RegisterLibraryRoutesDe
       res.setHeader('Content-Type', asset.mime ?? 'application/octet-stream');
       res.setHeader('Content-Length', String(info.size));
       res.setHeader('Cache-Control', 'private, max-age=3600');
-      createReadStream(abs).pipe(res);
+      streamAssetFileToResponse(abs, res, () =>
+        sendApiError(res, 404, 'NOT_FOUND', 'asset bytes not available'),
+      );
     } catch {
       return sendApiError(res, 404, 'NOT_FOUND', 'asset bytes not available');
     }
@@ -501,7 +543,9 @@ export function registerLibraryRoutes(app: Express, ctx: RegisterLibraryRoutesDe
       res.setHeader('Content-Length', String(info.size));
       res.setHeader('Content-Disposition', `attachment; filename="${figmaDownloadName(asset)}"`);
       res.setHeader('Cache-Control', 'private, max-age=3600');
-      createReadStream(sidecar).pipe(res);
+      streamAssetFileToResponse(sidecar, res, () =>
+        sendApiError(res, 404, 'NOT_FOUND', 'no figma capture for this asset'),
+      );
     } catch {
       return sendApiError(res, 404, 'NOT_FOUND', 'no figma capture for this asset');
     }
@@ -521,7 +565,9 @@ export function registerLibraryRoutes(app: Express, ctx: RegisterLibraryRoutesDe
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       res.setHeader('Content-Length', String(info.size));
       res.setHeader('Cache-Control', 'private, max-age=3600');
-      createReadStream(sidecar).pipe(res);
+      streamAssetFileToResponse(sidecar, res, () =>
+        sendApiError(res, 404, 'NOT_FOUND', 'no element markup for this asset'),
+      );
     } catch {
       return sendApiError(res, 404, 'NOT_FOUND', 'no element markup for this asset');
     }

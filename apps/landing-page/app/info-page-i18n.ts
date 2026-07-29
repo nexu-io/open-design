@@ -344,6 +344,7 @@ export interface InfoPageCopy {
     label: string;
     heading: string;
     lead: string;
+    mobileDesktopNotice: string;
     autoCtaPrefix: string; // "Download for" → "Download for macOS"
     autoCtaFallback: string; // shown before JS detects platform
     recommended: string; // "Recommended for your system"
@@ -794,6 +795,8 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
           ],
           tocLabel: 'On this page',
           toc: [
+            { id: 'best-alternatives', label: 'Best alternatives' },
+            { id: 'free-oss', label: 'Free & open-source' },
             { id: 'what-is-lovable', label: 'What Lovable is' },
             { id: 'why-switch', label: 'Why switch' },
             { id: 'local-byok', label: 'Local-first + BYOK' },
@@ -802,6 +805,37 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
             { id: 'migrate', label: 'Migration' },
           ],
           sections: [
+            {
+              id: 'best-alternatives',
+              heading: 'Best Lovable alternatives in 2026',
+              blocks: [
+                { kind: 'p', text: 'Looking for a Lovable alternative? The best Lovable alternatives are Open Design (open-source, local-first), Bolt, v0, Cursor, Replit, and Dyad — here is how they compare and where each one fits. Open Design is the pick if you want to own your design artifacts as version-controlled files instead of state inside a hosted app-builder.' },
+                { kind: 'table', columns: ['Tool', 'License', 'Pricing', 'Best for', 'Open source'], rows: [
+                  ['Open Design', 'Apache-2.0', 'Free app · BYOK (pay your own API)', 'Design-first artifacts you own as files', 'Yes'],
+                  ['Bolt (bolt.new)', 'Proprietary', 'Free tier + paid', 'In-browser full-stack app prototyping', 'No'],
+                  ['v0 (Vercel)', 'Proprietary', 'Free tier + paid', 'React / Next.js UI generation', 'No'],
+                  ['Cursor', 'Proprietary', 'Free tier + paid', 'Agentic coding inside an IDE', 'No'],
+                  ['Replit (Agent)', 'Proprietary', 'Free tier + paid', 'Cloud IDE with build-and-deploy', 'No'],
+                  ['Dyad', 'Open source (Apache-2.0)', 'Free, local', 'Local open-source app builder', 'Yes'],
+                ] },
+                { kind: 'steps', items: [
+                  { label: 'Open Design', body: 'The open-source, local-first, design-first pick — #1 for people who want to own their design artifacts as files, not a Lovable clone. Apache-2.0, BYOK, drives the coding agent you already use. Best for design artifacts and a portable brand you keep in your own repo.' },
+                  { label: 'Bolt (bolt.new)', body: 'Hosted, proprietary app builder that runs the dev environment in the browser. Best for quickly prototyping a running full-stack app from a prompt.' },
+                  { label: 'v0 (Vercel)', body: 'Generates React / Next.js components and UI from a prompt, tuned for the Vercel stack. Best for front-end UI and component prototyping.' },
+                  { label: 'Cursor', body: 'Agentic AI coding inside a full IDE. Best for developers who want the agent embedded in their editor and codebase.' },
+                  { label: 'Replit (Agent)', body: 'Cloud IDE where the agent builds and deploys from one place. Best for going from idea to a deployed app in the browser.' },
+                  { label: 'Dyad', body: 'The other open-source, local option — a free, local app builder (Apache-2.0). Best for self-hosting a prompt-to-app builder with your own keys.' },
+                ] },
+                { kind: 'p', text: 'Where Open Design fits honestly: it is a design layer around the coding agent you already use — BYOK, Apache-2.0 — so it is the Lovable alternative for people who want design artifacts as version-controlled files rather than a hosted app-builder. If you specifically want a hosted prompt-to-app builder, Lovable, Bolt, or Replit fit better.' },
+              ],
+            },
+            {
+              id: 'free-oss',
+              heading: 'Is there a free, open-source Lovable alternative?',
+              blocks: [
+                { kind: 'p', text: 'Yes. Open Design is free and open-source — Apache-2.0, BYOK, so the app costs nothing and you pay only your own provider API spend — and is the design-first option. Dyad (Apache-2.0) is the other open-source option: a local app builder you can run for free. Both are free to run, and between them they cover the two high-intent needs behind "free open-source Lovable alternative": design-first artifact ownership (Open Design) and a self-hostable app builder (Dyad).' },
+              ],
+            },
             {
               id: 'what-is-lovable',
               heading: 'What Lovable is',
@@ -892,6 +926,9 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
           faqTitle: 'FAQ',
           faq: [
             { name: 'Is Open Design a drop-in replacement for Lovable?', text: 'No. Lovable ships deployed full-stack apps; Open Design is design-first and produces artifacts you own. They overlap on prompt-to-UI, not on hosting a backend.' },
+            { name: 'What is the best free Lovable alternative?', text: 'Open Design — it is free and open-source (Apache-2.0, BYOK, so you pay only your own API spend) and is the strongest pick for design-first work. If you specifically want a local open-source app builder instead, Dyad (Apache-2.0) is free to run.' },
+            { name: 'Is there an open-source Lovable alternative?', text: 'Yes — Open Design is an open-source, local-first alternative focused on design artifacts (Apache-2.0, agent-native), and Dyad is an open-source local app builder (Apache-2.0). Both are free to run.' },
+            { name: 'Lovable vs Bolt vs v0 — which should I use?', text: 'Lovable is aimed at non-technical makers building full apps from a prompt; Bolt (bolt.new) builds a full-stack app in the browser; v0 (Vercel) generates React/Next.js UI and components. Pick Open Design when you want to own your design artifacts as version-controlled files rather than state inside a hosted builder.' },
             { name: 'Can Open Design build a full app like Lovable?', text: 'Open Design focuses on design artifacts, prototypes, and brand systems. For production backends and one-click hosting, Lovable is the better fit.' },
             { name: 'Which agent does Open Design use?', text: 'Your choice — BYOK with Claude Code, Codex, Cursor, Gemini, OpenCode, or Qwen. API spend bills to your account and credentials are never proxied through us.' },
             { name: 'Is Open Design really open source?', text: 'Yes. It lives at github.com/nexu-io/open-design under Apache-2.0 and is self-hostable.' },
@@ -997,6 +1034,8 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
           ],
           tocLabel: 'On this page',
           toc: [
+            { id: 'best-alternatives', label: 'Best alternatives' },
+            { id: 'free-oss', label: 'Free & open-source' },
             { id: 'what-is-figma', label: 'What Figma is' },
             { id: 'why-switch', label: 'Why switch' },
             { id: 'local-byok', label: 'Local-first + BYOK' },
@@ -1005,6 +1044,36 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
             { id: 'migrate', label: 'Migration' },
           ],
           sections: [
+            {
+              id: 'best-alternatives',
+              heading: 'Best free & open-source Figma alternatives in 2026',
+              blocks: [
+                { kind: 'p', text: 'The best Figma alternatives are Penpot, Open Design, Lunacy, Pixso, and OpenPencil — with Penpot and Open Design leading on the open-source, free-to-use angle. Here is how they compare and where each fits.' },
+                { kind: 'table', columns: ['Tool', 'License', 'Pricing', 'Best for', 'Open source'], rows: [
+                  ['Penpot', 'Open source (MPL-2.0)', 'Free, self-host', 'Open-source design & prototyping canvas', 'Yes'],
+                  ['Open Design', 'Apache-2.0', 'Free app · BYOK (pay your own API)', 'Agent-native design artifacts you own as files', 'Yes'],
+                  ['Lunacy (Icons8)', 'Proprietary (free)', 'Free', 'Free Sketch-compatible desktop UI design', 'No'],
+                  ['Pixso', 'Proprietary', 'Free tier + paid', 'Figma-style collaborative UI design', 'No'],
+                  ['OpenPencil', 'Open source (MIT)', 'Free, self-host', 'Local, AI-native, reads .fig', 'Yes'],
+                  ['Figma', 'Proprietary', 'Free tier + paid', 'The incumbent collaborative design tool', 'No'],
+                ] },
+                { kind: 'steps', items: [
+                  { label: 'Penpot', body: 'The closest open-source canvas replacement for Figma (MPL-2.0). A real-time, self-hostable vector and prototyping canvas. Best for teams who want a hands-on Figma-style tool that is free and open source.' },
+                  { label: 'Open Design', body: 'The agent-native, local-first pick — for people who want design artifacts as version-controlled files driven by the coding agent they already use, not a Figma-canvas clone. Apache-2.0, BYOK. Best for owning your design output as files in your own repo.' },
+                  { label: 'Lunacy (Icons8)', body: 'A free, proprietary desktop UI design app that reads Sketch files, with built-in assets. Best for a free Sketch-compatible editor on your desktop.' },
+                  { label: 'Pixso', body: 'A proprietary, Figma-style collaborative design tool with a real-time canvas. Best for teams who want a familiar multiplayer canvas with a free tier.' },
+                  { label: 'OpenPencil', body: 'A local, AI-native open-source design tool (MIT) that can read .fig files. Best for people who want an AI-native, self-hostable editor that opens existing Figma files.' },
+                ] },
+                { kind: 'p', text: 'Where Open Design fits honestly: it is a design layer around the coding agent you already use — BYOK, Apache-2.0 — a different job from a canvas editor. It is for owning your design output as files, not pixel-pushing on a shared canvas. If you specifically want an open-source Figma-style canvas, Penpot is the closest replacement.' },
+              ],
+            },
+            {
+              id: 'free-oss',
+              heading: 'Is Figma open source? Free & open-source alternatives',
+              blocks: [
+                { kind: 'p', text: 'Figma is proprietary and closed-source. If you want an open-source alternative you can self-host, Penpot (MPL-2.0) is the closest canvas replacement and Open Design (Apache-2.0) is the agent-native, local-first option; both are free to use.' },
+              ],
+            },
             {
               id: 'what-is-figma',
               heading: 'What Figma is',
@@ -1094,6 +1163,9 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
           faqTitle: 'FAQ',
           faq: [
             { name: 'Is Open Design a drop-in replacement for Figma?', text: 'No. Figma is a hands-on collaborative canvas; Open Design is an agent-driven, local-first design layer. They overlap on producing interfaces, not on real-time canvas editing.' },
+            { name: 'What are the best free Figma alternatives?', text: 'Penpot and Open Design are free and open-source; Lunacy is a free proprietary option.' },
+            { name: 'Is Figma open source?', text: 'No, Figma is proprietary/closed-source; Penpot and Open Design are open-source alternatives.' },
+            { name: 'Is there an open-source Figma alternative?', text: 'Yes — Penpot (MPL-2.0) as a canvas replacement, Open Design (Apache-2.0) as an agent-native design layer, OpenPencil (MIT) as an AI-native .fig-reading option.' },
             { name: 'Can I still use Figma alongside Open Design?', text: 'Yes. Many teams design in Figma and use Open Design to generate and iterate from a portable brand; migration is manual today.' },
             { name: 'Which agent does Open Design use?', text: 'Your choice — BYOK with Claude Code, Codex, Cursor, Gemini, OpenCode, or Qwen. Credentials are never proxied through us.' },
             { name: 'Is Open Design really open source?', text: 'Yes. It lives at github.com/nexu-io/open-design under Apache-2.0 and is self-hostable.' },
@@ -1198,6 +1270,8 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
           ],
           tocLabel: 'On this page',
           toc: [
+            { id: 'best-alternatives', label: 'Best alternatives' },
+            { id: 'free-oss', label: 'Free & open-source' },
             { id: 'what-is-bolt', label: 'What Bolt is' },
             { id: 'why-switch', label: 'Why switch' },
             { id: 'local-byok', label: 'Local-first + BYOK' },
@@ -1206,6 +1280,37 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
             { id: 'migrate', label: 'Migration' },
           ],
           sections: [
+            {
+              id: 'best-alternatives',
+              heading: 'The best bolt.new alternatives in 2026',
+              blocks: [
+                { kind: 'p', text: 'The best bolt.new alternatives are Open Design (open-source, local-first), Lovable, v0, Cursor, Replit, and the community fork OpenBolt — here is how they compare and where each one fits. Open Design is the pick if you want to own your design artifacts as version-controlled files instead of state inside a hosted app-builder.' },
+                { kind: 'table', columns: ['Tool', 'License', 'Pricing', 'Best for', 'Open source'], rows: [
+                  ['Open Design', 'Apache-2.0', 'Free app · BYOK (pay your own API)', 'Design-first artifacts you own as files', 'Yes'],
+                  ['Lovable', 'Proprietary', 'Paid subscription + credits', 'Non-technical full-app builds from a prompt', 'No'],
+                  ['v0 (Vercel)', 'Proprietary', 'Free tier + paid', 'React / Next.js component & UI prototyping', 'No'],
+                  ['Cursor', 'Proprietary', 'Free tier + paid', 'Agentic coding inside an IDE', 'No'],
+                  ['Replit (Agent)', 'Proprietary', 'Free tier + paid', 'Cloud IDE with build-and-deploy', 'No'],
+                  ['OpenBolt / bolt.diy', 'MIT (OSS)', 'Free, self-host', 'Self-hosting the bolt.new experience', 'Yes'],
+                ] },
+                { kind: 'steps', items: [
+                  { label: 'Open Design', body: 'The open-source, local-first, design-first pick — #1 for people who want to own their design artifacts as files, not a bolt.new clone. Apache-2.0, BYOK, drives the coding agent you already use. Best for design artifacts and a portable brand you keep in your own repo.' },
+                  { label: 'Lovable', body: 'Hosted, proprietary app builder that turns a prompt into a working full app. Best for non-technical makers who want a running product without touching files.' },
+                  { label: 'v0 (Vercel)', body: 'Generates React / Next.js components and UI from a prompt, tuned for the Vercel stack. Best for front-end UI and component prototyping.' },
+                  { label: 'Cursor', body: 'Agentic AI coding inside a full IDE. Best for developers who want the agent embedded in their editor and codebase.' },
+                  { label: 'Replit (Agent)', body: 'Cloud IDE where the agent builds and deploys from one place. Best for going from idea to a deployed app in the browser.' },
+                  { label: 'OpenBolt / bolt.diy', body: 'The community open-source fork of bolt.new itself (MIT). Best for self-hosting the bolt.new experience with your own keys and models.' },
+                ] },
+                { kind: 'p', text: 'Where Open Design fits honestly: it is a design layer around the coding agent you already use — BYOK, Apache-2.0 — so it is the bolt.new alternative for people who want design artifacts as version-controlled files rather than a hosted app-builder. If you specifically want a hosted prompt-to-app builder, Lovable, Replit, or bolt.new itself fit better.' },
+              ],
+            },
+            {
+              id: 'free-oss',
+              heading: 'Is there a free, open-source bolt.new alternative?',
+              blocks: [
+                { kind: 'p', text: 'Yes. Open Design is free and open-source — Apache-2.0, BYOK, so the app costs nothing and you pay only your own provider API spend. For the bolt.new experience itself as open source, OpenBolt (bolt.diy) is the community OSS fork of bolt.new you can self-host. Between them they cover the two high-intent needs behind "free open-source bolt.new alternative": design-first artifact ownership (Open Design) and a self-hostable app builder (OpenBolt).' },
+              ],
+            },
             {
               id: 'what-is-bolt',
               heading: 'What Bolt is',
@@ -1295,6 +1400,9 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
           faqTitle: 'FAQ',
           faq: [
             { name: 'Is Open Design a drop-in replacement for Bolt?', text: 'No. Bolt ships running full-stack apps; Open Design is design-first and produces artifacts you own. They overlap on prompt-to-UI, not on running a backend.' },
+            { name: 'What is the best free bolt.new alternative?', text: 'Open Design — it is free and open-source (Apache-2.0, BYOK, so you pay only your own API spend) and is the strongest pick for design-first work. If you specifically want the bolt.new experience itself as open source, OpenBolt (bolt.diy) lets you self-host it for free.' },
+            { name: 'Is there an open-source bolt.new?', text: 'bolt.new itself is proprietary, but OpenBolt (bolt.diy) is the community open-source fork you can self-host. Open Design is a separate open-source, local-first alternative focused on design artifacts rather than a hosted app builder.' },
+            { name: 'bolt.new vs Lovable vs v0 — which should I use?', text: 'bolt.new builds a full-stack app in the browser from a prompt; Lovable is aimed at non-technical makers building full apps; v0 (Vercel) generates React/Next.js UI and components. Pick Open Design when you want to own your design artifacts as version-controlled files rather than state inside a hosted builder.' },
             { name: 'Can Open Design build a full app like Bolt?', text: 'Open Design focuses on design artifacts, prototypes, and brand systems. For an instant in-browser full-stack app, Bolt is the better fit.' },
             { name: 'Which agent does Open Design use?', text: 'Your choice — BYOK with Claude Code, Codex, Cursor, Gemini, OpenCode, or Qwen. API spend bills to your account and credentials are never proxied through us.' },
             { name: 'Is Open Design really open source?', text: 'Yes. It lives at github.com/nexu-io/open-design under Apache-2.0 and is self-hostable.' },
@@ -1920,6 +2028,222 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
           ctaTitle: 'Own your design, in three commands.',
           ctaBody:
             'Star the repo, grab the desktop build, or run the install in your terminal. No generation cap, no Google account — your DESIGN.md system stays in your repo from the first render onward.',
+          ctaActions: [
+            { label: 'Download Open Design', href: '/download/', variant: 'primary' },
+            { label: 'Star on GitHub', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
+          ],
+          hubLinkLabel: 'See all comparisons',
+        },
+      },
+      'pencil-dev': {
+        title: 'Best Pencil.dev alternative for design — Open Design',
+        description:
+          'Pencil (pencil.dev) is an a16z-backed, agent-driven design canvas that keeps .pen files in your repo — free in early access, but the app itself is closed-source and tuned for Claude. Open Design is the fully open-source (Apache-2.0), BYOK alternative: the whole app is yours, not just the file format.',
+        breadcrumb: 'Best Pencil.dev alternative',
+        label: 'Alternative · Pencil.dev',
+        heading: 'Best Pencil.dev alternative for design.',
+        lead:
+          'Pencil (pencil.dev) puts an AI design canvas inside your IDE and keeps its .pen design files in your repo under Git — genuinely close to how Open Design works. The difference: Pencil’s app is closed-source and free only while it is in early access, and it is tuned first for Claude. Open Design is fully open-source (Apache-2.0) and BYOK across every major coding agent — the whole tool is yours, not just the file format.',
+        tldrTitle: 'TL;DR',
+        tldrBody:
+          'Pencil (pencil.dev) is an a16z-backed, agent-driven design canvas that lives in your IDE and keeps .pen JSON files in your repo — a polished vector canvas, Figma paste, built-in UI kits, and free while in early access. But the app itself is closed-source (only the file format is documented), it is optimized for Claude Code, and “free” is early-access, not a business model. Open Design is the fully open-source (Apache-2.0), local-first alternative: BYOK with any major coding agent, output as files you own, and a portable DESIGN.md brand. These two are unusually close — this page is honest about where Pencil genuinely wins.',
+        toc: ['Why people search', 'Local-first + BYOK', 'Feature comparison', 'Who should pick which', 'Migration / first run', 'FAQ'],
+        whyTitle: 'Why people search for a Pencil.dev alternative',
+        whyLead: 'Pencil and Open Design overlap more than most tools on this page — both are agent-driven and keep design as files in your repo. The reasons people still look for an alternative are specific:',
+        reasons: [
+          { label: 'The app is closed-source; only the format is “open”.', body: 'Pencil markets “open design files,” and the .pen JSON format is documented — but the application itself is a closed-source, a16z-backed product with no public source, and the format docs reserve the right to introduce breaking changes. Open Design is Apache-2.0: the whole app, not just the file spec, is yours to read, fork, and self-host.' },
+          { label: '“Free” is early-access, not structural.', body: 'Pencil is free today but explicitly in early access — the founders say “Free is not a business model,” so paid plans and limits are on the way. Open Design is free because it is open source; there is no vendor that needs to meter you later, and you only ever pay your own model API spend.' },
+          { label: 'Optimized for Claude, weaker elsewhere.', body: 'Pencil connects several agents over MCP but is tuned first for Claude Code, and reviewers report a weaker experience with other models. Open Design is BYOK and provider-neutral — Claude, Codex, Cursor, Gemini, OpenCode, or Qwen, all first-class.' },
+          { label: 'UI-to-code, not a broader design surface.', body: 'Pencil is focused on turning UI into code. Open Design renders a wider range of artifacts from the same brand — UI, landing pages, decks, prototypes, and a portable DESIGN.md design system — all as files you own.' },
+        ],
+        localByokTitle: 'Local-first + BYOK, explained',
+        localByokBody: [
+          'Both Pencil and Open Design are local-first — that is genuinely common ground. Open Design runs a desktop app, a local daemon, and Markdown skill and design-system catalogs on your machine, and your brand lives in your repo as a portable DESIGN.md every skill respects. Output lands as real files in your project, not state in a vendor cloud.',
+          'The difference is ownership and neutrality. Open Design is Apache-2.0, so the whole application — not just a documented file format — is yours to fork, audit, and self-host. And you bring your own agent key: Claude Code, Codex, Cursor, Gemini, OpenCode, or Qwen, with credentials in local config and spend billed to your own provider.',
+        ],
+        featureTitle: 'Feature comparison',
+        features: [
+          { name: 'License', od: 'Apache-2.0 — the whole app is open source', cd: 'Closed-source app; only the .pen file format is documented' },
+          { name: 'Runtime', od: 'Local daemon + desktop app', cd: 'Local desktop app + IDE extension + local MCP server' },
+          { name: 'Design files', od: 'Files in your repo (Git): DESIGN.md, artifacts', cd: '.pen JSON files in your repo (Git)' },
+          { name: 'Account', od: 'None required; runs locally', cd: 'Account / sign-in (early access)' },
+          { name: 'Pricing', od: 'Free & open source; you pay your own model spend', cd: 'Free in early access; paid plans signaled ("Free is not a business model")' },
+          { name: 'Model', od: 'BYOK, provider-neutral — Claude, Codex, Cursor, Gemini, Qwen', cd: 'MCP with several agents, but optimized for Claude Code' },
+          { name: 'Primary surface', od: 'Agent-driven (prompt → artifacts) + web UI', cd: 'Figma-like vector canvas you edit directly; agent via MCP' },
+          { name: 'Output', od: 'UI, landing pages, decks, prototypes, design systems', cd: 'UI screens/components → code (framework matches your repo)' },
+          { name: 'Design system', od: 'Portable DESIGN.md every skill enforces', cd: 'Variables/Components/Libraries + built-in UI kits (Shadcn, Lunaris, Halo, Nitro)' },
+          { name: 'Figma import', od: 'Via agent (paste/screenshot → extract to DESIGN.md)', cd: 'Native copy-paste (preserves layers, auto-layout, styles)' },
+          { name: 'Collaboration', od: 'Single-user local; agent-driven', cd: 'No human multiplayer; "SWARM" = multiple AI agents' },
+          { name: 'Self-host / fork', od: 'Yes (Apache-2.0)', cd: 'No — app is closed-source' },
+          { name: 'Maturity', od: 'Stable releases', cd: 'Early access — reviewers report crashes and no autosave' },
+        ],
+        whoTitle: 'Who should pick which',
+        pickClaudeTitle: 'Pick Pencil if',
+        pickClaude: [
+          'You want a polished, Figma-like vector canvas you edit directly by hand — layers, properties, drag-and-drop, and prompt blocks placed right on the canvas.',
+          'Your workflow is Claude Code in Cursor or VS Code and you want the design surface to live inline in that exact IDE.',
+          'You lean on native Figma copy-paste and built-in UI kits (Shadcn, Lunaris, Halo, Nitro) to move fast, and closed-source plus early-access limits are fine for now.',
+        ],
+        pickOpenTitle: 'Pick Open Design if',
+        pickOpen: [
+          'You want the whole tool open source (Apache-2.0) — fork it, audit it, self-host it — not just a documented file format.',
+          'You want “free” that stays free because it is open source, with no vendor cap arriving after early access.',
+          'You want BYOK that is genuinely provider-neutral across Claude, Codex, Cursor, Gemini, OpenCode, and Qwen.',
+          'You want more than UI-to-code: landing pages, decks, prototypes, and a portable DESIGN.md design system, all as files you own.',
+        ],
+        migrateTitle: 'Migration / first run',
+        migrateLead: 'Pencil and Open Design both keep design as files in your repo, so moving over is design-first — extract your brand once and render against it:',
+        migrateSteps: [
+          'Install Open Design from the download page and bring your own agent key (Claude Code, Codex, Cursor, Gemini, OpenCode, or Qwen).',
+          'Point your agent at a Pencil export, a Figma paste, or a screenshot whose look you want to keep.',
+          'Ask the agent to extract the brand — colors, type, spacing — into a DESIGN.md file in your repo.',
+          'Pick a skill and render it against your new brand to confirm it matches.',
+        ],
+        migrateClosing:
+          'From then on, every skill renders in your brand — and the UI, code, and design system stay in your repo as files you own under version control.',
+        faqTitle: 'FAQ',
+        faq: [
+          { name: 'Is Pencil (pencil.dev) open source?', text: 'Not the app. Pencil is a closed-source, a16z-backed product; what is “open” is the .pen file format, which is documented but can change (the team reserves the right to make breaking changes). Open Design is fully open source under Apache-2.0 — the entire application, not just the file spec — and is self-hostable.' },
+          { name: 'Is Pencil.dev free?', text: 'It is free today, but explicitly in early access. The founders have said “Free is not a business model,” signaling future paid plans and limits. Open Design is free because it is open source; you bring your own agent key, so model spend bills to you with no vendor-set cap.' },
+          { name: 'What is the difference between Open Design and Pencil?', text: 'They are close — both are agent-driven and keep design as files in your repo under Git. The differences: Open Design is fully open source (Apache-2.0, not just an open format), provider-neutral BYOK (not tuned mainly for Claude), and renders a wider range of artifacts (UI, decks, prototypes, design systems). Pencil offers a more mature hands-on vector canvas and native Figma paste.' },
+          { name: 'Does Pencil work with agents other than Claude?', text: 'Yes — it connects several agents over MCP (Cursor, Windsurf, Codex, and others), but it is optimized for Claude Code and reviewers report a weaker experience with other models. Open Design treats Claude, Codex, Cursor, Gemini, OpenCode, and Qwen as first-class.' },
+          { name: 'Is Open Design affiliated with Pencil?', text: 'No. Open Design is an independent, open-source project (github.com/nexu-io/open-design, Apache-2.0). Pencil is a separate, a16z-backed product at pencil.dev; this is an unaffiliated comparison.' },
+        ],
+        ctaTitle: 'Own the whole tool, not just the file format.',
+        ctaBody:
+          'Star the repo, grab the desktop build, or run the install in your terminal. Open Design is open source end to end — your UI, code, and DESIGN.md system stay in your repo from the first render onward.',
+        rich: {
+          heroCtaLead:
+            'Open Design is the fully open-source, local-first alternative to Pencil — an agent-native design workspace you drive with the coding agent you already use, your key, your files, and a portable design system you keep in your repo.',
+          heroCtaActions: [
+            { label: 'Download Open Design', href: '/download/', variant: 'primary' },
+            { label: 'Star on GitHub', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
+          ],
+          heroImage: {
+            src: '/alternatives/pencil-dev/pencil-dev-hero.webp',
+            alt: 'Open Design vs Pencil.dev — warm-paper editorial illustration of a design canvas converging into a repo of files you own',
+          },
+          intro: [
+            'Pencil (<a href="https://www.pencil.dev/" target="_blank" rel="noopener">pencil.dev</a>) is an agent-driven design tool from a16z Speedrun that puts a Figma-like vector canvas inside your IDE and keeps its design as <b>.pen JSON files in your repo</b>, versioned with Git. A local MCP server lets your coding agent read and write those files, so a prompt becomes an editable UI you can then hand to a coding agent for production code. It launched publicly in early 2026, crossed <b>100,000 users</b>, and is genuinely good — with the catch that the app itself is <b>closed-source</b>, tuned first for Claude, and <b>free only while it is in early access</b>.',
+            'Open Design is the <b>fully open-source, local-first</b> alternative: an agent-native design workspace you point <b>your own coding agent</b> at (Claude Code, Codex, Cursor, Gemini, OpenCode, Qwen) over BYOK. These two are unusually close — both agent-driven, both keeping design as files in your repo. The differences are ownership and range: with Open Design the <b>whole app</b> is Apache-2.0 (not just a documented format), BYOK is <b>provider-neutral</b>, and the output spans UI, decks, prototypes, and a portable <b>DESIGN.md</b>. This page is honest about where Pencil genuinely wins.',
+          ],
+          tocLabel: 'On this page',
+          toc: [
+            { id: 'what-is-pencil', label: 'What Pencil is' },
+            { id: 'compare', label: 'Feature comparison' },
+            { id: 'why-switch', label: 'Why switch' },
+            { id: 'local-byok', label: 'Open source + BYOK' },
+            { id: 'decision', label: 'Which to pick' },
+            { id: 'migrate', label: 'Migration' },
+          ],
+          sections: [
+            {
+              id: 'what-is-pencil',
+              heading: 'What Pencil is',
+              blocks: [
+                { kind: 'p', text: 'Pencil (<a href="https://www.pencil.dev/" target="_blank" rel="noopener">pencil.dev</a>) is “design on canvas, land in code” — an infinite vector design canvas that lives inside your IDE and codebase, built by Tom Krcha (previously behind Around, acquired by Miro) and backed by <b>a16z Speedrun</b>. Its design files use an open, documented <b>.pen JSON format</b> that sits in your repo under Git, and a <b>local MCP server</b> lets AI agents read and write them. You prompt or draw on the canvas, then hand the design to a coding agent (Claude Code and others) to generate production components that match your stack.' },
+                { kind: 'split', imageSide: 'right', image: { src: '/alternatives/pencil-dev/pencil-dev-product.webp', alt: 'Pencil (pencil.dev) — an AI design canvas inside the IDE that keeps .pen files in your repo', caption: 'Pencil: a Figma-like vector canvas in your IDE, with .pen design files versioned in your repo (screenshot: pencil.dev).' }, text: [
+                  'As a design surface, Pencil is polished: a real vector canvas with layers, a properties inspector, drag-and-drop components, <b>prompt blocks</b> you place directly on the canvas, native <b>Figma copy-paste</b> that preserves layers and auto-layout, and built-in UI kits (<b>Shadcn, Lunaris, Halo, Nitro</b>). Manual canvas edits do not consume agent tokens.',
+                  'What to know before you commit: the Pencil <b>application is closed-source</b> (only the .pen format is documented, and it can change), it is <b>optimized for Claude Code</b> with a weaker experience on other models, it is <b>free only in early access</b> (“Free is not a business model,” per the founders), and reviewers note it is still <b>early</b> — occasional crashes and no autosave.',
+                ] },
+                { kind: 'ul', items: [
+                  'Vendor: Pencil (pencil.dev), a16z Speedrun — closed-source app, ~100,000 users, launched early 2026',
+                  'Runtime: local desktop app + IDE extension (Cursor / VS Code / Windsurf) + local MCP server',
+                  'Design files: open .pen JSON format in your repo, Git-versioned',
+                  'Model: MCP with several agents, optimized for Claude Code; you bring your own agent subscription',
+                  'Pricing: free in early access, no published caps yet — paid plans signaled',
+                ] },
+              ],
+            },
+            {
+              id: 'compare',
+              heading: 'Open Design vs Pencil, feature by feature',
+              blocks: [
+                { kind: 'table', columns: ['Feature', 'Open Design', 'Pencil (pencil.dev)'], rows: [
+                  ['License', 'Apache-2.0 — the whole app is open source', 'Closed-source app; only the .pen format is documented'],
+                  ['Runtime', 'Local daemon + desktop app', 'Local desktop app + IDE extension + local MCP server'],
+                  ['Design files', 'Files in your repo (Git): DESIGN.md, artifacts', '.pen JSON files in your repo (Git)'],
+                  ['Account', 'None required; runs locally', 'Account / sign-in (early access)'],
+                  ['Pricing', 'Free & open source; your own model spend', 'Free in early access; paid plans signaled'],
+                  ['Model', 'BYOK, provider-neutral — Claude, Codex, Cursor, Gemini, Qwen', 'MCP with several agents, optimized for Claude Code'],
+                  ['Primary surface', 'Agent-driven (prompt → artifacts) + web UI', 'Figma-like vector canvas you edit directly; agent via MCP'],
+                  ['Output', 'UI, landing pages, decks, prototypes, design systems', 'UI screens/components → code (matches your repo)'],
+                  ['Design system', 'Portable DESIGN.md every skill enforces', 'Variables/Components + built-in UI kits (Shadcn, Lunaris…)'],
+                  ['Figma import', 'Via agent (paste/screenshot → DESIGN.md)', 'Native copy-paste (preserves layers, auto-layout)'],
+                  ['Collaboration', 'Single-user local; agent-driven', 'No human multiplayer; SWARM = multiple AI agents'],
+                  ['Self-host / fork', 'Yes (Apache-2.0)', 'No — app is closed-source'],
+                  ['Maturity', 'Stable releases', 'Early access — crashes, no autosave reported'],
+                ] },
+                { kind: 'p', text: 'Read it honestly: Pencil wins on the <b>hands-on canvas</b> — a mature, Figma-like surface you edit directly, with native Figma paste and built-in UI kits, right inside your IDE. Open Design wins on <b>ownership and range</b> — the whole app is open source (not just the file format), BYOK is provider-neutral instead of Claude-first, “free” stays free because there is no vendor to monetize you, and the output spans UI, decks, prototypes, and a portable design system as files you keep.' },
+              ],
+            },
+            {
+              id: 'why-switch',
+              heading: 'Why teams look for a Pencil alternative',
+              blocks: [
+                { kind: 'p', text: 'Pencil is a strong way to design inside your IDE, and for a lot of “developers who design” it is a great fit. The reasons people still look for an alternative cluster around what happens after the early-access honeymoon — ownership, provider lock-in, and scope.' },
+                { kind: 'steps', items: [
+                  { label: 'The app is closed, only the format is open', body: 'Pencil’s .pen format is documented, but the application is closed-source and a16z-backed, and the format spec reserves the right to change. Open Design is Apache-2.0 end to end — fork it, audit it, self-host it, and own every artifact it produces.' },
+                  { label: '“Free” has an expiry date', body: 'Pencil is free while it is in early access, but the founders are explicit that “Free is not a business model.” Paid plans and limits are coming. Open Design is free because it is open source; you only ever pay your own model spend.' },
+                  { label: 'It is Claude-first', body: 'Pencil connects several agents over MCP but is tuned for Claude Code, with a weaker experience elsewhere. Open Design is provider-neutral BYOK — Claude, Codex, Cursor, Gemini, OpenCode, and Qwen are all first-class.' },
+                  { label: 'You want more than UI-to-code', body: 'Pencil is focused on UI → code. Open Design renders UI, landing pages, decks, prototypes, and a portable DESIGN.md design system from the same brand, all as files in your repo.' },
+                ] },
+              ],
+            },
+            {
+              id: 'local-byok',
+              heading: 'Open source + BYOK, explained',
+              blocks: [
+                { kind: 'split', imageSide: 'left', image: { src: '/alternatives/pencil-dev/pencil-dev-design-systems.webp', alt: 'The Open Design design-system library — brands and tokens kept as files you own', caption: 'Your design system lives as files in Open Design — portable, versioned, rendered by every skill.' }, text: [
+                  'Both tools are local-first and keep design as files in your repo — that part is common ground. Where Open Design differs is that the <b>whole application</b> is Apache-2.0, not just a documented file format, so you can fork, audit, and self-host it. Your brand lives in your repo as a <b>portable DESIGN.md</b> every skill respects.',
+                  'You also <b>bring your own agent key</b>, provider-neutral. Credentials stay in local config or environment variables — Open Design never proxies them — and the API spend <b>bills directly to you</b>, at your provider’s rates, with no vendor cap after early access.',
+                ] },
+                { kind: 'p', text: 'New to the idea? Read <a href="/blog/what-is-vibe-design/">what vibe design is</a>, browse the <a href="/plugins/">plugin and design-system library</a>, see <a href="/compare/">all Open Design comparisons</a> — including <a href="/alternatives/figma/">Figma</a> and <a href="/alternatives/stitch/">Google Stitch</a> — or <a href="/download/">download Open Design</a> to try it.' },
+              ],
+            },
+            {
+              id: 'decision',
+              heading: 'Where Pencil genuinely wins — and which to pick',
+              blocks: [
+                { kind: 'p', text: 'Credit where it is due: as a <b>design surface</b>, Pencil is excellent. It is a real, Figma-like vector canvas you edit by hand — layers, a properties inspector, drag-and-drop components, and prompt blocks placed directly on the canvas — with native Figma copy-paste that keeps layers and auto-layout, plus built-in UI kits (Shadcn, Lunaris, Halo, Nitro). And it all lives right inside your IDE, so a developer who designs never leaves Cursor or VS Code. If what you want is a polished canvas to manipulate directly, Pencil’s surface is more mature than Open Design’s agent-first flow today. The trade-off is everything structural around it: closed-source app, Claude-first tuning, and a “free” that the founders have said will not last.' },
+                { kind: 'p', text: 'A quick way to decide by what you actually want to do — the two overlap, so the honest split matters:' },
+                { kind: 'table', compact: true, columns: ['If you want to…', 'Best pick'], rows: [
+                  ['Own the whole tool as open source you can fork/self-host', 'Open Design'],
+                  ['Keep “free” free with no vendor cap after early access', 'Open Design'],
+                  ['Use provider-neutral BYOK (not Claude-first)', 'Open Design'],
+                  ['Render UI + decks + prototypes + a design system', 'Open Design'],
+                  ['Edit a mature, Figma-like vector canvas by hand', 'Pencil'],
+                  ['Paste from Figma with layers and auto-layout intact', 'Pencil'],
+                  ['Design inline inside Cursor / VS Code', 'Pencil'],
+                ] },
+              ],
+            },
+            {
+              id: 'migrate',
+              heading: 'Moving a design from Pencil into Open Design',
+              blocks: [
+                { kind: 'p', text: 'Both tools keep design as files in your repo, so there is no lossy cloud export to fight — moving over is design-first. Extract your brand once and every render after inherits it.' },
+                { kind: 'ol', items: [
+                  'Install Open Design from the download page and bring your own agent key (Claude Code, Codex, Cursor, Gemini, OpenCode, or Qwen).',
+                  'Point your agent at a Pencil export, a Figma paste, or a screenshot whose look you want to keep.',
+                  'Ask the agent to extract the brand — colors, type, spacing — into a DESIGN.md file in your repo.',
+                  'Pick a skill and render it against your new brand to confirm it matches.',
+                ] },
+                { kind: 'p', text: 'From then on, every skill renders in your brand — and the <b>UI, code, and design system stay in your repo</b> as files you own under version control.' },
+              ],
+            },
+          ],
+          faqTitle: 'FAQ',
+          faq: [
+            { name: 'Is Pencil (pencil.dev) open source?', text: 'Not the app. Pencil is a closed-source, a16z-backed product; what is “open” is the .pen file format, which is documented but can change (the team reserves the right to make breaking changes). Open Design is fully open source under Apache-2.0 — the entire application, not just the file spec — and is self-hostable.' },
+            { name: 'Is Pencil.dev free?', text: 'It is free today, but explicitly in early access. The founders have said “Free is not a business model,” signaling future paid plans and limits. Open Design is free because it is open source; you bring your own agent key, so model spend bills to you with no vendor-set cap.' },
+            { name: 'What is the difference between Open Design and Pencil?', text: 'They are close — both are agent-driven and keep design as files in your repo under Git. The differences: Open Design is fully open source (Apache-2.0, not just an open format), provider-neutral BYOK (not tuned mainly for Claude), and renders a wider range of artifacts (UI, decks, prototypes, design systems). Pencil offers a more mature hands-on vector canvas and native Figma paste.' },
+            { name: 'Does Pencil work with agents other than Claude?', text: 'Yes — it connects several agents over MCP (Cursor, Windsurf, Codex, and others), but it is optimized for Claude Code and reviewers report a weaker experience with other models. Open Design treats Claude, Codex, Cursor, Gemini, OpenCode, and Qwen as first-class.' },
+            { name: 'Is Open Design affiliated with Pencil?', text: 'No. Open Design is an independent, open-source project (github.com/nexu-io/open-design, Apache-2.0). Pencil is a separate, a16z-backed product at pencil.dev; this is an unaffiliated comparison.' },
+          ],
+          ctaTitle: 'Own the whole tool, not just the file format.',
+          ctaBody:
+            'Star the repo, grab the desktop build, or run the install in your terminal. Open Design is open source end to end — your UI, code, and DESIGN.md system stay in your repo from the first render onward.',
           ctaActions: [
             { label: 'Download Open Design', href: '/download/', variant: 'primary' },
             { label: 'Star on GitHub', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
@@ -2980,6 +3304,10 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
           faqTitle: 'FAQ',
           faq: [
             { name: 'Is Open Design really a drop-in alternative to Claude Design?', text: 'Not literally, but they overlap on prompt-to-design-artifact use cases.' },
+            { name: 'Is Claude Design free?', text: 'Claude Design is a paid hosted product. Open Design is free and open source (Apache-2.0) — you only pay for your own agent API usage (BYOK), with nothing bundled into a subscription.' },
+            { name: 'Is there a free Claude Design alternative?', text: 'Yes — Open Design is a free, open-source (Apache-2.0) alternative. Download the desktop app, bring your own agent key, and design locally with no seat or subscription fee.' },
+            { name: 'Does Claude Design have templates — and does Open Design?', text: 'Open Design ships composable SKILL.md skills and portable DESIGN.md design systems you can fork, instead of fixed built-in templates — so a template becomes a file you own and version in your repo.' },
+            { name: 'Is Claude Design open source or on GitHub?', text: 'Claude Design is a closed-source hosted product. If you want an open-source design tool you can read, fork, self-host, or download, Open Design is on GitHub at github.com/nexu-io/open-design under Apache-2.0.' },
             { name: 'Can I use Claude as my agent in Open Design?', text: 'Yes. Open Design supports Claude Code and Anthropic API BYOK flows; credentials are never proxied through us.' },
             { name: 'What happens to my Claude Design designs?', text: 'You can keep using Claude Design alongside Open Design; migration is manual today.' },
             { name: 'Does Open Design generate the same artifact types?', text: 'Yes for common types: landing pages, decks, dashboards, social posts, brand systems, and prototypes.' },
@@ -2999,14 +3327,15 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
     },
     agentGuides: EN_AGENT_GUIDES,
     download: {
-      title: 'Download Open Design — desktop app for macOS, Windows & Linux',
+      title: 'Download Open Design — Free Desktop App (macOS, Windows, Linux)',
       description:
-        'Download the latest Open Design desktop build. Install and create — sign in once, pick a model, start designing. macOS (Apple Silicon & Intel), Windows, and Linux.',
+        'Download the latest Open Design desktop app — free and open-source (Apache-2.0). Install, pick a model with your own keys, and start designing. macOS (Apple Silicon & Intel), Windows, and Linux.',
       breadcrumb: 'Download',
       label: 'Download',
       heading: 'Download Open Design.',
       lead:
         'Install and create — no API key, no setup. The desktop app ships with the official model router; sign in once and start designing.',
+      mobileDesktopNotice: 'Open Design is a desktop app. Please open this page on a computer to download.',
       autoCtaPrefix: 'Download for',
       autoCtaFallback: 'Download Open Design',
       recommended: 'Recommended',
@@ -3054,9 +3383,9 @@ type DownloadCopy = InfoPageCopy['download'];
 const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = {
   ja: {
     ...INFO_PAGE_COPY.en!.download,
-    title: 'Open Design をダウンロード — macOS / Windows / Linux デスクトップアプリ',
+    title: 'Open Design をダウンロード — 無料のオープンソース デスクトップアプリ（macOS / Windows / Linux）',
     description:
-      '最新の Open Design デスクトップ版をダウンロード。入れたらすぐ作れます——一度サインインし、モデルを選んで、デザインを開始。macOS（Apple Silicon と Intel）、Windows、Linux に対応。',
+      '最新の Open Design デスクトップアプリをダウンロード——無料でオープンソース（Apache-2.0）。インストールして、自分のキーでモデルを選び、デザインを開始。macOS（Apple Silicon と Intel）、Windows、Linux に対応。',
     breadcrumb: 'ダウンロード',
     label: 'ダウンロード',
     heading: 'Open Design をダウンロード。',
@@ -3089,9 +3418,9 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
   },
   ko: {
     ...INFO_PAGE_COPY.en!.download,
-    title: 'Open Design 다운로드 — macOS / Windows / Linux 데스크톱 앱',
+    title: 'Open Design 다운로드 — 무료 오픈소스 데스크톱 앱 (macOS, Windows, Linux)',
     description:
-      '최신 Open Design 데스크톱 빌드를 다운로드하세요. 설치하면 바로 제작——한 번 로그인하고 모델을 고른 뒤 디자인을 시작하세요. macOS(Apple Silicon 및 Intel), Windows, Linux 지원.',
+      '최신 Open Design 데스크톱 앱을 다운로드하세요 — 무료 오픈소스(Apache-2.0). 설치하고, 자신의 키로 모델을 고른 뒤 디자인을 시작하세요. macOS(Apple Silicon 및 Intel), Windows, Linux 지원.',
     breadcrumb: '다운로드',
     label: '다운로드',
     heading: 'Open Design 다운로드.',
@@ -3124,9 +3453,9 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
   },
   de: {
     ...INFO_PAGE_COPY.en!.download,
-    title: 'Open Design herunterladen — Desktop-App für macOS, Windows & Linux',
+    title: 'Open Design herunterladen — kostenlose Open-Source-Desktop-App (macOS, Windows, Linux)',
     description:
-      'Lade den neuesten Open-Design-Desktop-Build herunter. Installieren und loslegen — einmal anmelden, Modell wählen, designen. macOS (Apple Silicon & Intel), Windows und Linux.',
+      'Lade die neueste Open-Design-Desktop-App herunter — kostenlos und Open Source (Apache-2.0). Installieren, ein Modell mit deinen eigenen Schlüsseln wählen und loslegen. macOS (Apple Silicon & Intel), Windows und Linux.',
     breadcrumb: 'Download',
     label: 'Download',
     heading: 'Open Design herunterladen.',
@@ -3159,9 +3488,9 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
   },
   fr: {
     ...INFO_PAGE_COPY.en!.download,
-    title: 'Télécharger Open Design — application de bureau pour macOS, Windows et Linux',
+    title: 'Télécharger Open Design — application de bureau gratuite et open source (macOS, Windows, Linux)',
     description:
-      'Téléchargez la dernière version bureau d’Open Design. Installez et créez — connectez-vous une fois, choisissez un modèle, commencez à concevoir. macOS (Apple Silicon et Intel), Windows et Linux.',
+      'Téléchargez la dernière application de bureau Open Design — gratuite et open source (Apache-2.0). Installez, choisissez un modèle avec vos propres clés et commencez à concevoir. macOS (Apple Silicon et Intel), Windows et Linux.',
     breadcrumb: 'Télécharger',
     label: 'Télécharger',
     heading: 'Télécharger Open Design.',
@@ -3194,9 +3523,9 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
   },
   ru: {
     ...INFO_PAGE_COPY.en!.download,
-    title: 'Скачать Open Design — десктопное приложение для macOS, Windows и Linux',
+    title: 'Скачать Open Design — бесплатное десктопное приложение с открытым исходным кодом (macOS, Windows, Linux)',
     description:
-      'Скачайте последнюю десктопную сборку Open Design. Установите и создавайте — войдите один раз, выберите модель, начните проектировать. macOS (Apple Silicon и Intel), Windows и Linux.',
+      'Скачайте последнее десктопное приложение Open Design — бесплатное и с открытым исходным кодом (Apache-2.0). Установите, выберите модель со своими ключами и начните проектировать. macOS (Apple Silicon и Intel), Windows и Linux.',
     breadcrumb: 'Скачать',
     label: 'Скачать',
     heading: 'Скачать Open Design.',
@@ -3229,9 +3558,9 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
   },
   es: {
     ...INFO_PAGE_COPY.en!.download,
-    title: 'Descargar Open Design — app de escritorio para macOS, Windows y Linux',
+    title: 'Descargar Open Design — app de escritorio gratuita y de código abierto (macOS, Windows, Linux)',
     description:
-      'Descarga la última versión de escritorio de Open Design. Instala y crea: inicia sesión una vez, elige un modelo y empieza a diseñar. macOS (Apple Silicon e Intel), Windows y Linux.',
+      'Descarga la última app de escritorio de Open Design: gratis y de código abierto (Apache-2.0). Instala, elige un modelo con tus propias claves y empieza a diseñar. macOS (Apple Silicon e Intel), Windows y Linux.',
     breadcrumb: 'Descargar',
     label: 'Descargar',
     heading: 'Descargar Open Design.',
@@ -3264,9 +3593,9 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
   },
   'pt-br': {
     ...INFO_PAGE_COPY.en!.download,
-    title: 'Baixar Open Design — app de desktop para macOS, Windows e Linux',
+    title: 'Baixar Open Design — app de desktop gratuito e open source (macOS, Windows, Linux)',
     description:
-      'Baixe a versão de desktop mais recente do Open Design. Instale e crie: faça login uma vez, escolha um modelo e comece a projetar. macOS (Apple Silicon e Intel), Windows e Linux.',
+      'Baixe o app de desktop mais recente do Open Design — gratuito e open source (Apache-2.0). Instale, escolha um modelo com suas próprias chaves e comece a projetar. macOS (Apple Silicon e Intel), Windows e Linux.',
     breadcrumb: 'Baixar',
     label: 'Baixar',
     heading: 'Baixar Open Design.',
@@ -3299,9 +3628,9 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
   },
   it: {
     ...INFO_PAGE_COPY.en!.download,
-    title: 'Scarica Open Design — app desktop per macOS, Windows e Linux',
+    title: 'Scarica Open Design — app desktop gratuita e open source (macOS, Windows, Linux)',
     description:
-      'Scarica l’ultima build desktop di Open Design. Installa e crea: accedi una volta, scegli un modello e inizia a progettare. macOS (Apple Silicon e Intel), Windows e Linux.',
+      'Scarica l’ultima app desktop di Open Design — gratuita e open source (Apache-2.0). Installa, scegli un modello con le tue chiavi e inizia a progettare. macOS (Apple Silicon e Intel), Windows e Linux.',
     breadcrumb: 'Scarica',
     label: 'Scarica',
     heading: 'Scarica Open Design.',
@@ -3509,9 +3838,9 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
   },
   tr: {
     ...INFO_PAGE_COPY.en!.download,
-    title: 'Open Design’i indir — macOS, Windows ve Linux için masaüstü uygulaması',
+    title: 'Open Design’i indir — ücretsiz ve açık kaynak masaüstü uygulaması (macOS, Windows, Linux)',
     description:
-      'En son Open Design masaüstü sürümünü indirin. Kurun ve üretmeye başlayın — bir kez giriş yapın, bir model seçin, tasarlamaya başlayın. macOS (Apple Silicon ve Intel), Windows ve Linux.',
+      'En son Open Design masaüstü uygulamasını indirin — ücretsiz ve açık kaynak (Apache-2.0). Kurun, kendi anahtarlarınızla bir model seçin ve tasarlamaya başlayın. macOS (Apple Silicon ve Intel), Windows ve Linux.',
     breadcrumb: 'İndir',
     label: 'İndir',
     heading: 'Open Design’i indir.',
@@ -3833,13 +4162,14 @@ INFO_PAGE_COPY.zh = {
   agentGuides: ZH_AGENT_GUIDES,
   download: {
     ...INFO_PAGE_COPY.en!.download,
-    title: '下载 Open Design —— macOS / Windows / Linux 桌面客户端',
+    title: '下载 Open Design —— 免费开源桌面客户端（macOS / Windows / Linux）',
     description:
-      '下载最新版 Open Design 桌面客户端。装上就能创作——登录一次、选个模型、开始设计。支持 macOS（Apple Silicon 与 Intel）、Windows、Linux。',
+      '下载最新版 Open Design 桌面客户端——免费、开源（Apache-2.0）。装上、用自己的密钥选个模型，就能开始设计。支持 macOS（Apple Silicon 与 Intel）、Windows、Linux。',
     breadcrumb: '下载',
     label: '下载',
     heading: '下载 Open Design。',
     lead: '装上就能创作——不需要 API key、零配置。桌面端内置官方 model router，登录一次即可开始设计。',
+    mobileDesktopNotice: 'Open Design 是桌面客户端，请在电脑上下载。',
     autoCtaPrefix: '下载适用于',
     autoCtaFallback: '下载 Open Design',
     recommended: '推荐',

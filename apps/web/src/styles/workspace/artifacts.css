@@ -500,6 +500,41 @@
   margin: 0;
   font-size: 12px;
 }
+.settings-about-silent-updates {
+  align-items: center;
+}
+.settings-about-diagnostics > .settings-about-toggle {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+.settings-about-toggle input {
+  appearance: auto;
+  width: 14px;
+  height: 14px;
+  flex: none;
+  padding: 0;
+  border: none;
+  background: none;
+  accent-color: var(--accent);
+  margin: 2px 0 0;
+}
+.settings-about-toggle-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+.settings-about-toggle-copy .hint {
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
+}
 .diagnostics-export-row {
   display: flex;
   flex-direction: column;
@@ -2145,6 +2180,13 @@
 .model-select-searchable__option:hover {
   background: var(--bg-subtle);
 }
+.model-select-searchable__option.is-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.model-select-searchable__option.is-disabled:hover {
+  background: transparent;
+}
 .model-select-searchable__option.is-active {
   background: var(--accent-tint);
   color: var(--accent-strong);
@@ -2169,13 +2211,132 @@
 .settings-byok-select-popover .model-select-searchable__option[data-selected='true']::after {
   color: var(--selected);
 }
+.model-select-searchable__value,
+.model-select-searchable__option-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  width: 100%;
+}
+.model-select-searchable__option-content {
+  align-items: flex-start;
+  gap: 10px;
+}
+.model-select-searchable__option-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.model-select-searchable__value-label,
 .model-select-searchable__option-label {
+  display: inline-flex;
+  align-items: center;
   font-size: 12.5px;
   line-height: 1.35;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.model-select-searchable__option-label > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.model-select-searchable__value-badge,
+.model-select-searchable__option-badge {
+  --model-tag-color: var(--text-muted);
+  --model-tag-bg: color-mix(in srgb, var(--model-tag-color) 10%, var(--bg-panel));
+  --model-tag-border: color-mix(in srgb, var(--model-tag-color) 34%, transparent);
+
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 112px;
+  min-height: 17px;
+  padding: 2px 6px 2px 5px;
+  border: 1px solid var(--model-tag-border);
+  border-radius: 6px;
+  background: var(--model-tag-bg);
+  color: var(--model-tag-color);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--bg-panel) 72%, white 28%);
+  font-size: 10.5px;
+  font-weight: 680;
+  line-height: 1.05;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.model-select-searchable__value-badge::before,
+.model-select-searchable__option-badge::before {
+  content: '';
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.88;
+  flex: 0 0 auto;
 }
 .model-select-searchable__option-meta {
   font-size: 11px;
+  line-height: 1.3;
   color: var(--text-muted);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.model-select-searchable__option-badge {
+  margin-top: 1px;
+}
+.model-select-searchable__option.is-active .model-select-searchable__option-meta {
+  color: color-mix(in srgb, var(--accent-strong) 60%, var(--text-muted));
+}
+.model-select-searchable__option-affordances {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+.model-select-searchable__option-lock-inline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  vertical-align: middle;
+  transition:
+    color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    background 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.model-select-searchable__option-lock-inline:hover,
+.model-select-searchable__option-lock-inline:focus-visible {
+  color: var(--accent-strong);
+  background: var(--accent-tint);
+}
+.model-select-searchable__value-badge[data-tag='standard'],
+.model-select-searchable__option-badge[data-tag='standard'] {
+  --model-tag-color: #90887a;
+}
+.model-select-searchable__value-badge[data-tag='advanced'],
+.model-select-searchable__option-badge[data-tag='advanced'] {
+  --model-tag-color: #bf8a34;
+}
+.model-select-searchable__value-badge[data-tag='bestQuality'],
+.model-select-searchable__option-badge[data-tag='bestQuality'] {
+  --model-tag-color: #c77858;
 }
 .model-select-searchable__empty {
   padding: 12px 10px;
@@ -2197,6 +2358,9 @@
   width: 100%;
   text-align: left;
   line-height: 1.35;
+}
+.inline-switcher__select .model-select-searchable__value {
+  justify-content: space-between;
 }
 .settings-section-byok .model-select-searchable > .settings-model-select {
   height: 34px;
@@ -2453,7 +2617,7 @@
    of inventing local variants.
 
    Heights
-     text input ............ 30px   (.newproj-name)
+     text input ............ 36px   (.newproj-name)
      dropdown trigger ...... 38px   (.newproj-section .ds-picker-trigger)
      compact toggle ........ 36px   (.compact-toggle)
      popover item .......... 38px   (.ds-picker-item)
@@ -2481,14 +2645,14 @@
   position: relative;
   overflow: visible;
   padding: 0 24px;
-  margin-bottom: -1px;
+  margin-bottom: 14px;
   z-index: 2;
   flex: 0 0 auto;
 }
 .newproj-tabs {
   display: flex;
-  padding: 0;
-  gap: 2px;
+  padding: 2px 0;
+  gap: 6px;
   overflow-x: auto;
   overflow-y: hidden;
   scroll-behavior: smooth;
@@ -2509,11 +2673,11 @@
 }
 .newproj-tabs-shell::before {
   left: 0;
-  background: linear-gradient(90deg, var(--bg), transparent);
+  background: linear-gradient(90deg, var(--bg-panel), transparent);
 }
 .newproj-tabs-shell::after {
   right: 0;
-  background: linear-gradient(270deg, var(--bg), transparent);
+  background: linear-gradient(270deg, var(--bg-panel), transparent);
 }
 .newproj-tabs-shell.can-left::before,
 .newproj-tabs-shell.can-right::after {
@@ -2552,15 +2716,15 @@
 .newproj-tab {
   flex: 0 0 auto;
   min-width: max-content;
-  padding: 7px 14px;
+  padding: 7px 15px;
   background: transparent;
-  font-size: 12px;
+  font-size: 12.5px;
   color: var(--text-muted);
   font-weight: 500;
   border: 1px solid transparent;
-  border-radius: 12px 12px 0 0;
+  border-radius: var(--radius-pill);
   position: relative;
-  transition: none;
+  transition: background 140ms var(--ease-out), color 140ms var(--ease-out), border-color 140ms var(--ease-out);
 }
 .newproj-tab:focus,
 .newproj-tab:active {
@@ -2572,11 +2736,10 @@
 .newproj-tab:focus-visible {
   outline: none;
   box-shadow: inset 0 0 0 2px var(--selected);
-  border-radius: 8px 8px 0 0;
   color: var(--text);
 }
 .newproj-tab:hover:not(:disabled) {
-  background: transparent;
+  background: var(--bg-subtle);
   border-color: transparent;
   outline: none;
   color: var(--text);
@@ -2585,38 +2748,38 @@
 .newproj-tab.active:hover:not(:disabled),
 .newproj-tab.active:focus,
 .newproj-tab.active:focus-visible {
-  color: var(--text);
-  background: var(--bg-panel);
-  border-color: var(--border);
-  border-bottom-color: var(--bg-panel);
+  color: var(--bg-panel);
+  background: var(--text-strong);
+  border-color: var(--text-strong);
   z-index: 3;
 }
 .newproj-body {
-  margin: 0 24px;
-  padding: 16px 18px 12px;
-  border: 1px solid var(--border);
-  border-radius: 0 0 12px 12px;
-  background: var(--bg-panel);
-  box-shadow: var(--shadow-xs);
+  margin: 0;
+  padding: 2px 24px 16px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  /* The parent `.newproj` is `overflow: hidden`; the card needs to be the
+  gap: 13px;
+  /* The parent `.newproj` is `overflow: hidden`; the body needs to be the
      scroll container so taller form variants (image/media tabs, validation
-     messages, compact-height windows) stay reachable inside the sidebar.
-     `flex: 0 1 auto` keeps the card at its natural content height when the
-     form is short (so there's no big white void at the bottom of the
-     card), but lets `flex-shrink: 1` collapse it down to the available
-     space when content is long — at which point `overflow-y: auto` takes
-     over and the body scrolls. */
+     messages, compact-height windows) stay reachable inside the modal.
+     `flex: 0 1 auto` keeps the body at its natural content height when the
+     form is short (so there's no big white void at the bottom), but lets
+     `flex-shrink: 1` collapse it down to the available space when content
+     is long — at which point `overflow-y: auto` takes over and the body
+     scrolls. */
   flex: 0 1 auto;
   min-height: 0;
   overflow-y: auto;
 }
 .newproj-title {
   margin: 0;
-  font-size: 13px;
-  font-weight: 550;
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -2637,7 +2800,13 @@
   text-transform: uppercase;
   line-height: 1.4;
 }
-.newproj-name { width: 100%; height: 30px; padding: 0 10px; }
+.newproj-name {
+  width: 100%;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 10px;
+  font-size: 13px;
+}
 .newproj-working-dir-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -2684,6 +2853,113 @@
   background: var(--bg-subtle);
 }
 .newproj-section { display: flex; flex-direction: column; gap: 6px; }
+/* -------- "Start from" rail (blank-first scenario templates) --------
+   Horizontal card rail on the prototype/deck tabs. The Blank card is
+   always first and selected by default; template cards reroute create
+   to the matching design template. Neutral palette per the block
+   rules above — active mark is the text color, never the accent. */
+.newproj-start-row {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 104px;
+  gap: 10px;
+  overflow-x: auto;
+  padding: 2px 2px 6px;
+  scroll-snap-type: x proximity;
+  scrollbar-width: thin;
+}
+.newproj-start-card {
+  scroll-snap-align: start;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-panel);
+  cursor: pointer;
+  overflow: hidden;
+  text-align: center;
+  transition: border-color 140ms var(--ease-out), box-shadow 140ms var(--ease-out), transform 140ms var(--ease-out);
+}
+.newproj-start-card:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-xs);
+  transform: translateY(-1px);
+}
+.newproj-start-card.active {
+  border-color: var(--text-strong);
+  box-shadow: 0 0 0 1px var(--text-strong);
+}
+.newproj-start-thumb {
+  height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-subtle);
+  border-bottom: 1px solid var(--border-soft);
+  color: var(--text-muted);
+}
+.newproj-start-thumb svg { display: block; flex: none; }
+.newproj-start-card.blank .newproj-start-thumb {
+  position: relative;
+  background: var(--bg-panel);
+}
+.newproj-start-card.blank .newproj-start-thumb::before {
+  content: '';
+  position: absolute;
+  inset: 8px 10px;
+  border: 1.5px dashed var(--border-strong);
+  border-radius: 8px;
+}
+.newproj-start-card.blank.active .newproj-start-thumb {
+  color: var(--text-strong);
+}
+.newproj-start-card.blank.active .newproj-start-thumb::before {
+  border-color: var(--text-strong);
+}
+.newproj-start-glyph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 30px;
+  border-radius: 4px;
+  background: var(--bg-panel);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  font-family: var(--serif);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+/* Prototype thumbs read as a tiny browser window: a slim top chrome bar
+   above the monogram; deck thumbs stay a bare 16:9 slide frame. */
+.newproj-start-thumb.mode-prototype .newproj-start-glyph {
+  position: relative;
+  padding-top: 6px;
+}
+.newproj-start-thumb.mode-prototype .newproj-start-glyph::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 6px;
+  border-bottom: 1px solid var(--border-strong);
+  border-radius: 4px 4px 0 0;
+  background: var(--bg-subtle);
+}
+.newproj-start-name {
+  display: block;
+  padding: 7px 8px 8px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text);
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .platform-picker-hint {
   margin: 0;
   color: var(--text-muted);
@@ -2939,10 +3215,11 @@
   justify-content: center;
   gap: 8px;
   width: 100%;
-  padding: 8px 11px;
-  margin-top: 2px;
-  font-size: 13px;
-  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  margin-top: 4px;
+  font-size: 13.5px;
+  font-weight: 600;
+  border-radius: 10px;
 }
 .newproj-import {
   display: inline-flex;

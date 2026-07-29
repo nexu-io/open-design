@@ -115,6 +115,7 @@ const SECTION_ORDER: FileCategory[] = [
 ];
 
 const STYLESHEET_EXTENSIONS = new Set(['css', 'scss', 'sass', 'less']);
+const HTML_THUMBNAIL_INLINE_MAX_BYTES = 512 * 1024;
 
 function fileCategory(file: ProjectFile): FileCategory {
   const dot = file.name.lastIndexOf('.');
@@ -205,9 +206,11 @@ function prefersReducedMotion(): boolean {
 }
 
 // Footer "tip" line that types out one tip at a time (typewriter), holds, then
-// advances to the next — mirroring Claude Design's empty-state hint. Under
-// prefers-reduced-motion the full tip is shown immediately and just cycles.
-function RotatingTip() {
+// advances to the next — mirroring Claude Design's empty-state hint. It is
+// intentionally auxiliary while a run is active; the preview status bar owns
+// progress and recovery feedback. Under prefers-reduced-motion the full tip is
+// shown immediately and just cycles.
+function RotatingTip({ auxiliary = false }: { auxiliary?: boolean }) {
   const t = useT();
   const [index, setIndex] = useState(0);
   const [typed, setTyped] = useState('');
@@ -256,7 +259,7 @@ function RotatingTip() {
   }, [index]);
 
   return (
-    <div className="df-useful-info">
+    <div className={`df-useful-info${auxiliary ? ' df-useful-info-auxiliary' : ''}`}>
       <div className="df-useful-info-head">
         <Icon name="sparkles" size={12} />
         <span className="df-useful-info-label">{t('designFiles.usefulInfoLabel')}</span>
@@ -1281,7 +1284,7 @@ export function DesignFilesPanel({
           )}
           <div className="df-footer-info">
             {running ? (
-              <RotatingTip />
+              <RotatingTip auxiliary />
             ) : (
               <div className="df-drop-hint">
                 <span className="df-drop-hint-label">
@@ -1426,7 +1429,12 @@ function DfPreview({
         {rendersSketchJson ? (
           <SketchPreview projectId={projectId} file={file} />
         ) : file.kind === 'image' || file.kind === 'sketch' ? (
-          <img src={`${url}?v=${Math.round(file.mtime)}`} alt={file.name} />
+          <img
+            src={`${url}?v=${Math.round(file.mtime)}`}
+            alt={file.name}
+            loading="lazy"
+            decoding="async"
+          />
         ) : file.kind === 'html' ? (
           <HtmlPreviewThumbnail projectId={projectId} file={file} />
         ) : file.kind === 'video' ? (
@@ -1439,19 +1447,7 @@ function DfPreview({
         ) : file.kind === 'audio' ? (
           <audio src={`${url}?v=${Math.round(file.mtime)}`} controls preload="metadata" />
         ) : (
-          <div
-            style={{
-              width: '100%',
-              height: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'var(--text-faint)',
-              fontSize: 38,
-            }}
-          >
-            {categoryGlyph(fileCategory(file))}
-          </div>
+          <FilePreviewPlaceholder file={file} />
         )}
         {thumbCanOpen ? (
           <button
@@ -1493,31 +1489,57 @@ function HtmlPreviewThumbnail({
   projectId: string;
   file: ProjectFile;
 }) {
+  const t = useT();
+  const tooLargeForThumbnail = file.size > HTML_THUMBNAIL_INLINE_MAX_BYTES;
   const url = projectFileUrl(projectId, file.name);
   const [srcDoc, setSrcDoc] = useState<string | null>(null);
   useEffect(() => {
+    setSrcDoc(null);
+    if (tooLargeForThumbnail) return;
+    const controller = new AbortController();
     let cancelled = false;
-    void fetch(`${url}?v=${Math.round(file.mtime)}`)
+    void fetch(`${url}?v=${Math.round(file.mtime)}`, { signal: controller.signal })
       .then((response) => (response.ok ? response.text() : null))
       .then((html) => {
         if (cancelled || html === null) return;
-        setSrcDoc(buildSrcdoc(html, { baseHref: projectRawUrl(projectId, baseDirForFile(file.name)) }));
+        const nextSrcDoc = buildSrcdoc(html, { baseHref: projectRawUrl(projectId, baseDirForFile(file.name)) });
+        if (!cancelled) setSrcDoc(nextSrcDoc);
       })
-      .catch(() => {
+      .catch((err) => {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
         if (!cancelled) setSrcDoc(null);
       });
     return () => {
       cancelled = true;
+      controller.abort();
     };
-  }, [file.mtime, file.name, projectId, url]);
+  }, [file.mtime, file.name, projectId, tooLargeForThumbnail, url]);
+
+  if (tooLargeForThumbnail || srcDoc === null) {
+    return <FilePreviewPlaceholder file={file} title={t('designFiles.previewOpen')} />;
+  }
 
   return (
     <iframe
       title={file.name}
-      src={srcDoc ? undefined : url}
-      srcDoc={srcDoc ?? undefined}
+      srcDoc={srcDoc}
       sandbox="allow-scripts allow-downloads"
+      loading="lazy"
     />
+  );
+}
+
+function FilePreviewPlaceholder({
+  file,
+  title,
+}: {
+  file: ProjectFile;
+  title?: string;
+}) {
+  return (
+    <div className="df-preview-placeholder" title={title}>
+      {categoryGlyph(fileCategory(file))}
+    </div>
   );
 }
 

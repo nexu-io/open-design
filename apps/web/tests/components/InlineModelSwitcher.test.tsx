@@ -8,6 +8,18 @@ import { fetchProviderModels } from '../../src/providers/provider-models';
 import { providerModelsCacheKey } from '../../src/components/providerModelsCache';
 import type { AgentInfo, AppConfig, ProviderModelOption } from '../../src/types';
 
+function optionNames(container: HTMLElement): string[] {
+  return within(container).getAllByRole('option').map((option) => {
+    const labelledBy = option.getAttribute('aria-labelledby');
+    if (!labelledBy) return option.textContent?.trim() ?? '';
+    return labelledBy
+      .split(/\s+/)
+      .map((id) => document.getElementById(id)?.textContent?.trim() ?? '')
+      .filter(Boolean)
+      .join(' ');
+  });
+}
+
 vi.mock('../../src/providers/provider-models', () => ({
   fetchProviderModels: vi.fn(),
 }));
@@ -49,6 +61,18 @@ const codexAgent: AgentInfo = {
   available: true,
   version: '0.133.0-alpha.1',
   models: [{ id: 'default', label: 'Default' }],
+};
+
+const codexFastAgent: AgentInfo = {
+  ...codexAgent,
+  models: [
+    { id: 'default', label: 'Default' },
+    {
+      id: 'gpt-5.5',
+      label: 'gpt-5.5',
+      serviceTierOptions: [{ id: 'priority', label: 'Fast' }],
+    },
+  ],
 };
 
 function renderSwitcher(
@@ -178,6 +202,32 @@ describe('InlineModelSwitcher AMR row', () => {
     expect(chip.getAttribute('aria-label')).toMatch(/·/u);
   });
 
+  it('shows an explicit AMR default choice instead of the concrete catalog fallback', () => {
+    renderSwitcher(
+      {
+        agentId: 'amr',
+        agentModels: { amr: { model: 'default', reasoning: 'default' } },
+      },
+      [
+        {
+          ...amrAgent,
+          models: [
+            { id: 'kimi-k2.6', label: 'Kimi K2.6', default: true },
+            { id: 'glm-5.1', label: 'GLM 5.1' },
+          ],
+        },
+      ],
+    );
+
+    const chip = screen.getByTestId('inline-model-switcher-chip');
+    expect(chip.getAttribute('aria-label')).toContain('Open Design');
+    expect(chip.getAttribute('aria-label')).toContain('default');
+    expect(chip.getAttribute('aria-label')).not.toContain('Kimi K2.6');
+
+    fireEvent.click(chip);
+    expect(screen.getByTestId('inline-model-switcher-agent-model')).toHaveTextContent('default');
+  });
+
   it('does not show the AMR reminder dot when AMR is already selected', () => {
     renderSwitcher({}, [amrAgent, codexAgent]);
 
@@ -239,9 +289,7 @@ describe('InlineModelSwitcher AMR row', () => {
     expect(modelPicker.textContent).toContain('Default');
     fireEvent.click(modelPicker);
     const modelPopover = screen.getByTestId('inline-model-switcher-agent-model-popover');
-    expect(
-      within(modelPopover).getAllByRole('option').map((option) => option.textContent?.trim()),
-    ).toEqual(['Default', 'AMR Cloud Latest']);
+    expect(optionNames(modelPopover)).toEqual(['Default', 'AMR Cloud Latest']);
   });
 
   it('persists the live AMR fallback when the saved AMR model is stale', async () => {
@@ -270,14 +318,47 @@ describe('InlineModelSwitcher AMR row', () => {
     expect(modelPicker.textContent).toContain('Default');
     fireEvent.click(modelPicker);
     const modelPopover = screen.getByTestId('inline-model-switcher-agent-model-popover');
-    expect(
-      within(modelPopover).getAllByRole('option').map((option) => option.textContent?.trim()),
-    ).toEqual(['Default', 'AMR Cloud Latest']);
+    expect(optionNames(modelPopover)).toEqual(['Default', 'AMR Cloud Latest']);
     await waitFor(() => {
       expect(onAgentModelChange).toHaveBeenCalledWith('amr', {
         model: 'default',
         reasoning: 'default',
       });
+    });
+  });
+
+  it('routes Codex service tier changes through onAgentModelChange', () => {
+    const { onAgentModelChange } = renderSwitcher(
+      {
+        agentId: 'codex',
+        agentModels: {
+          codex: { model: 'gpt-5.5', reasoning: 'default' },
+        },
+      },
+      [amrAgent, codexFastAgent],
+    );
+
+    fireEvent.click(screen.getByTestId('inline-model-switcher-chip'));
+
+    const tierSelect = screen.getByRole('combobox', {
+      name: 'Service tier',
+    }) as HTMLSelectElement;
+    expect(tierSelect).toBe(screen.getByTestId('inline-model-switcher-service-tier'));
+    expect(
+      Array.from(tierSelect.options).map((option) => option.textContent),
+    ).toEqual(['Default', 'Fast']);
+
+    fireEvent.change(tierSelect, { target: { value: 'priority' } });
+
+    expect(onAgentModelChange).toHaveBeenCalledWith('codex', {
+      serviceTier: 'priority',
+    });
+
+    onAgentModelChange.mockClear();
+    fireEvent.change(tierSelect, { target: { value: 'default' } });
+
+    expect(onAgentModelChange).toHaveBeenCalledWith('codex', {
+      serviceTier: undefined,
     });
   });
 
@@ -510,9 +591,7 @@ describe('InlineModelSwitcher AMR row', () => {
     fireEvent.change(searchInput, { target: { value: '5.5' } });
 
     const modelPopover = screen.getByTestId('inline-model-switcher-api-model-popover');
-    expect(
-      within(modelPopover).getAllByRole('option').map((option) => option.textContent?.trim()),
-    ).toEqual(['gpt-4.1-mini', 'gpt-5.5']);
+    expect(optionNames(modelPopover)).toEqual(['gpt-4.1-mini', 'gpt-5.5']);
   });
 
   it('prefers fetched BYOK provider models over only showing the currently selected custom model', async () => {
@@ -544,9 +623,9 @@ describe('InlineModelSwitcher AMR row', () => {
     const modelPicker = screen.getByTestId('inline-model-switcher-api-model');
     fireEvent.click(modelPicker);
     const modelPopover = screen.getByTestId('inline-model-switcher-api-model-popover');
-    expect(
-      within(modelPopover).getAllByRole('option').map((option) => option.textContent?.trim()),
-    ).toEqual(expect.arrayContaining(['gpt-4.1-mini', 'gpt-4.1', 'gpt-5.5']));
+    expect(optionNames(modelPopover)).toEqual(
+      expect.arrayContaining(['gpt-4.1-mini', 'gpt-4.1', 'gpt-5.5']),
+    );
     expect(within(modelPopover).getAllByRole('option').length).toBeGreaterThan(1);
   });
 

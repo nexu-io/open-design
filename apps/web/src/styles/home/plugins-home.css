@@ -49,6 +49,42 @@
   gap: 10px;
   flex: 0 0 auto;
 }
+/* Hot / newest sort toggle — a compact two-segment pill that shares the
+   search field's height and border treatment so the facet-tools cluster
+   reads as one control strip. */
+.plugins-home__sort {
+  display: inline-flex;
+  align-items: stretch;
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--bg-panel);
+  padding: 2px;
+  gap: 2px;
+}
+.plugins-home__sort-segment {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  border-radius: var(--radius-pill);
+  padding: 3px 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 120ms var(--ease-out), color 120ms var(--ease-out);
+}
+.plugins-home__sort-segment:hover {
+  color: var(--text);
+}
+.plugins-home__sort-segment.is-active {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+.plugins-home__sort-segment:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
 .plugins-home__search {
   position: relative;
   display: inline-flex;
@@ -254,7 +290,9 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  flex: 0 1 240px;
+  /* Wide enough for the sort toggle + the 200px search field before the
+     cluster wraps under the chip strip. */
+  flex: 0 1 360px;
   margin-left: auto;
   min-width: min(100%, 200px);
 }
@@ -299,18 +337,19 @@
   cursor: pointer;
   transition: border-color 120ms var(--ease-out), background-color 120ms var(--ease-out), color 120ms var(--ease-out);
 }
-.plugins-home__pill:hover {
-  border-color: var(--border-strong);
-  color: var(--text);
+.plugins-home__pill:hover:not(.is-active) {
+  border-color: color-mix(in srgb, var(--accent) 32%, var(--border));
+  background: var(--accent-tint);
+  color: var(--accent);
 }
 .plugins-home__pill.is-active {
-  background: var(--text);
-  border-color: var(--text);
-  color: var(--bg-panel);
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
 }
 .plugins-home__pill.is-active .plugins-home__pill-count {
-  color: var(--bg-panel);
-  opacity: 0.8;
+  color: white;
+  opacity: 0.85;
 }
 .plugins-home__pill-count {
   font-size: 10.5px;
@@ -451,20 +490,42 @@
 }
 .plugins-home__card--gallery {
   cursor: pointer;
-  contain-intrinsic-size: 400px 340px;
+  contain-intrinsic-size: 400px 380px;
 }
 .plugins-home__card--gallery:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+/* Footer under the preview: title (+ dot + category tag) then description —
+   the preview is the hero on top, the metadata reads below it like the Create
+   page picker cards. */
 .plugins-home__gallery-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-panel);
+  min-width: 0;
+}
+.plugins-home__gallery-bar-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-subtle);
   min-width: 0;
+}
+/* Description line under the tile title — gives the card the same directive
+   "what is this" signal the Create page picker cards show (issue: gallery
+   tiles previously showed only title + category, no description). */
+.plugins-home__gallery-desc {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .plugins-home__gallery-dot {
   width: 9px;
@@ -499,6 +560,25 @@
   outline: 2px solid var(--accent);
   outline-offset: 2px;
   border-radius: 4px;
+}
+/* Commercial-category ("品类") chip at the trailing edge of the footer title
+   row — a calm subtle-fill pill with a hairline so it reads as a distinct tag
+   on the panel footer. The name button's flex:1 pushes it to the edge. */
+.plugins-home__gallery-category {
+  flex: 0 0 auto;
+  max-width: 46%;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .plugins-home__gallery-frame {
   position: relative;
@@ -564,24 +644,29 @@
 .plugins-home__card--gallery:hover .plugins-home__html-iframe {
   top: -404px;
 }
-/* Decks ship a fixed 16:9 stage that scales itself to its viewport. The tall
-   scroll-preview viewport above would letterbox that stage, leaving a dark
-   --stage-bg band above/below the slide. Give deck tiles a 16:9 frame and let
-   the iframe fill it natively (no transform), so the stage fits edge-to-edge
-   with no band, and skip the scroll-pan (there is nothing below to reveal). */
+/* Decks render inside a 16:9 frame. The tall scroll-preview viewport above would
+   letterbox them; instead give deck tiles a 16:9 box and render the iframe at a
+   fixed 1280×720 logical viewport scaled down to fit (--deck-preview-scale,
+   measured per-card in PluginCard). Filling the frame natively (transform:none)
+   only worked for decks that self-scale to their viewport; a fixed-pixel-canvas
+   template then overflowed the small iframe into an overlapping mess. Rendering
+   at the design width and scaling to fit — the PreviewModal approach — previews
+   every template proportionally, and skips the scroll-pan (nothing to reveal). */
 .plugins-home__card--gallery[data-od-mode="deck"] .plugins-home__gallery-frame {
-  /* Replace the fixed 300px scroll-preview frame with a 16:9 box so the deck
-     stage fills it exactly — no dark letterbox band, and no leftover white
-     strip below the slide. */
+  /* Replace the fixed 300px scroll-preview frame with a 16:9 box so the scaled
+     deck slide fills it exactly — no dark letterbox band, no leftover strip. */
   height: auto;
   aspect-ratio: 16 / 9;
+  --deck-preview-scale: 0.208;
 }
 .plugins-home__card--gallery[data-od-mode="deck"] .plugins-home__html-iframe,
 .plugins-home__card--gallery[data-od-mode="deck"]:hover .plugins-home__html-iframe {
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  transform: none;
+  top: 0;
+  left: 0;
+  width: 1280px;
+  height: 720px;
+  transform: scale(var(--deck-preview-scale));
+  transform-origin: top left;
   transition: none;
 }
 

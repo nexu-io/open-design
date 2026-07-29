@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   decideAutoOpenAfterWrite,
   selectAutoOpenProducedArtifact,
+  selectAutoOpenTurnArtifact,
 } from '../../src/components/auto-open-file';
 
 describe('decideAutoOpenAfterWrite', () => {
@@ -196,5 +197,263 @@ describe('selectAutoOpenProducedArtifact', () => {
     ]);
 
     expect(result).toBeNull();
+  });
+
+  describe('preferSiteEntry (website-clone turns)', () => {
+    it('opens the site entry even when subpages were written after it', () => {
+      // A clone run writes the entry first and keeps landing subpages and
+      // reports afterwards — the newest-mtime rule would open a subpage.
+      const result = selectAutoOpenProducedArtifact(
+        [
+          { name: 'index.html', path: 'index.html', kind: 'html', mtime: 10 },
+          { name: 'about.html', path: 'about.html', kind: 'html', mtime: 30 },
+          { name: 'CLONE_REPORT.md', path: 'CLONE_REPORT.md', kind: 'text', mtime: 40 },
+        ],
+        { preferSiteEntry: true },
+      );
+
+      expect(result).toBe('index.html');
+    });
+
+    it('prefers the shallowest index.html among nested entries', () => {
+      const result = selectAutoOpenProducedArtifact(
+        [
+          { name: 'zh/index.html', path: 'zh/index.html', kind: 'html', mtime: 30 },
+          { name: 'index.html', path: 'index.html', kind: 'html', mtime: 10 },
+        ],
+        { preferSiteEntry: true },
+      );
+
+      expect(result).toBe('index.html');
+    });
+
+    it('breaks a same-depth entry tie to the newest mtime', () => {
+      const result = selectAutoOpenProducedArtifact(
+        [
+          { name: 'en/index.html', path: 'en/index.html', kind: 'html', mtime: 10 },
+          { name: 'zh/index.html', path: 'zh/index.html', kind: 'html', mtime: 30 },
+        ],
+        { preferSiteEntry: true },
+      );
+
+      expect(result).toBe('zh/index.html');
+    });
+
+    it('falls back to the standard newest-html rule when no index.html was produced', () => {
+      const result = selectAutoOpenProducedArtifact(
+        [
+          { name: 'landing.html', path: 'landing.html', kind: 'html', mtime: 10 },
+          { name: 'pricing.html', path: 'pricing.html', kind: 'html', mtime: 30 },
+        ],
+        { preferSiteEntry: true },
+      );
+
+      expect(result).toBe('pricing.html');
+    });
+
+    it('does not change behavior when the flag is off', () => {
+      const result = selectAutoOpenProducedArtifact([
+        { name: 'index.html', path: 'index.html', kind: 'html', mtime: 10 },
+        { name: 'about.html', path: 'about.html', kind: 'html', mtime: 30 },
+      ]);
+
+      expect(result).toBe('about.html');
+    });
+  });
+});
+
+describe('selectAutoOpenTurnArtifact', () => {
+  const TURN_START = 1_000_000;
+
+  it('opens a pre-existing HTML file the turn rewrote in place (plan regeneration)', () => {
+    // Plan-mode loop: plan → generate → edit plan → regenerate. The second
+    // generation rewrites index.html, so the name diff (produced) is empty.
+    const result = selectAutoOpenTurnArtifact(
+      [],
+      [
+        { name: 'plan.md', path: 'plan.md', kind: 'text', mtime: TURN_START - 60_000 },
+        { name: 'index.html', path: 'index.html', kind: 'html', mtime: TURN_START + 5_000 },
+      ],
+      { turnStartedAt: TURN_START },
+    );
+
+    expect(result).toBe('index.html');
+  });
+
+  it('still prefers rewritten HTML over a markdown plan touched in the same turn', () => {
+    const result = selectAutoOpenTurnArtifact(
+      [],
+      [
+        { name: 'plan.md', path: 'plan.md', kind: 'text', mtime: TURN_START + 9_000 },
+        { name: 'index.html', path: 'index.html', kind: 'html', mtime: TURN_START + 5_000 },
+      ],
+      { turnStartedAt: TURN_START },
+    );
+
+    expect(result).toBe('index.html');
+  });
+
+  it('keeps preferring newly produced files and merges rewritten ones by rank', () => {
+    const result = selectAutoOpenTurnArtifact(
+      [{ name: 'report.md', path: 'report.md', kind: 'text', mtime: TURN_START + 8_000 }],
+      [
+        { name: 'report.md', path: 'report.md', kind: 'text', mtime: TURN_START + 8_000 },
+        { name: 'index.html', path: 'index.html', kind: 'html', mtime: TURN_START + 5_000 },
+      ],
+      { turnStartedAt: TURN_START },
+    );
+
+    expect(result).toBe('index.html');
+  });
+
+  it('ignores files untouched since the turn started', () => {
+    const result = selectAutoOpenTurnArtifact(
+      [],
+      [
+        { name: 'index.html', path: 'index.html', kind: 'html', mtime: TURN_START - 90_000 },
+        { name: 'notes.txt', path: 'notes.txt', kind: 'text', mtime: TURN_START + 5_000 },
+      ],
+      { turnStartedAt: TURN_START },
+    );
+
+    expect(result).toBeNull();
+  });
+
+  it('tolerates filesystem mtime precision right at the turn boundary', () => {
+    const result = selectAutoOpenTurnArtifact(
+      [],
+      [{ name: 'index.html', path: 'index.html', kind: 'html', mtime: TURN_START - 900 }],
+      { turnStartedAt: TURN_START },
+    );
+
+    expect(result).toBe('index.html');
+  });
+
+  it('excludes user sketches, dotfiles, and directories from turn attribution', () => {
+    const result = selectAutoOpenTurnArtifact(
+      [],
+      [
+        { name: 'page.sketch.json', path: 'page.sketch.json', kind: 'text', mtime: TURN_START + 5_000 },
+        { name: '.cache/index.html', path: '.cache/index.html', kind: 'html', mtime: TURN_START + 5_000 },
+        { name: 'assets', path: 'assets', type: 'dir', mtime: TURN_START + 5_000 },
+      ],
+      { turnStartedAt: TURN_START },
+    );
+
+    expect(result).toBeNull();
+  });
+
+  it('falls back to produced-only selection without a turn start stamp', () => {
+    const result = selectAutoOpenTurnArtifact(
+      [],
+      [{ name: 'index.html', path: 'index.html', kind: 'html', mtime: TURN_START + 5_000 }],
+      {},
+    );
+
+    expect(result).toBeNull();
+  });
+
+  it('honors preferSiteEntry across rewritten site files', () => {
+    const result = selectAutoOpenTurnArtifact(
+      [],
+      [
+        { name: 'about.html', path: 'about.html', kind: 'html', mtime: TURN_START + 9_000 },
+        { name: 'index.html', path: 'index.html', kind: 'html', mtime: TURN_START + 5_000 },
+      ],
+      { turnStartedAt: TURN_START, preferSiteEntry: true },
+    );
+
+    expect(result).toBe('index.html');
+  });
+
+  describe('agentTouchedFileNames (write-event protocols)', () => {
+    it('does not steal focus toward a user-autosaved plan on a text-only turn', () => {
+      // Plan mode: the user edits plan.md in the split editor (autosave on)
+      // while the agent answers a clarification in text only. plan.md's mtime
+      // lands inside the turn window from the user's own keystrokes — with
+      // the agent's touched set known and empty of plan.md, it must not win.
+      const result = selectAutoOpenTurnArtifact(
+        [],
+        [{ name: 'plan.md', path: 'plan.md', kind: 'text', mtime: TURN_START + 5_000 }],
+        { turnStartedAt: TURN_START, agentTouchedFileNames: new Set(['notes.md']) },
+      );
+
+      expect(result).toBeNull();
+    });
+
+    it('keeps the rewritten HTML the agent actually touched and drops the user edit', () => {
+      const result = selectAutoOpenTurnArtifact(
+        [],
+        [
+          { name: 'plan.md', path: 'plan.md', kind: 'text', mtime: TURN_START + 9_000 },
+          { name: 'index.html', path: 'index.html', kind: 'html', mtime: TURN_START + 5_000 },
+        ],
+        { turnStartedAt: TURN_START, agentTouchedFileNames: new Set(['index.html']) },
+      );
+
+      expect(result).toBe('index.html');
+    });
+
+    it('falls back to the pure time window when the touched set is empty (no-event protocols)', () => {
+      // codex/gemini/opencode/ACP agents emit no Write tool events, so the
+      // touched set is empty — the mtime window is the only signal and must
+      // keep attributing the in-place rewrite.
+      const result = selectAutoOpenTurnArtifact(
+        [],
+        [{ name: 'index.html', path: 'index.html', kind: 'html', mtime: TURN_START + 5_000 }],
+        { turnStartedAt: TURN_START, agentTouchedFileNames: new Set() },
+      );
+
+      expect(result).toBe('index.html');
+    });
+
+    it('does not restrict newly produced files by the touched set', () => {
+      // The produced list is a file-NAME diff — those files are new this
+      // turn and already attributed; the touched restriction only applies to
+      // pre-existing files entering via the mtime window.
+      const result = selectAutoOpenTurnArtifact(
+        [{ name: 'report.md', path: 'report.md', kind: 'text', mtime: TURN_START + 5_000 }],
+        [{ name: 'report.md', path: 'report.md', kind: 'text', mtime: TURN_START + 5_000 }],
+        { turnStartedAt: TURN_START, agentTouchedFileNames: new Set(['index.html']) },
+      );
+
+      expect(result).toBe('report.md');
+    });
+  });
+
+  describe('turnEndedAt (window upper bound)', () => {
+    const TURN_END = TURN_START + 30_000;
+
+    it('ignores a file the user edited after the turn ended', () => {
+      // Reload/reattach recovery runs long after the turn: the user's
+      // post-turn plan.md edit must not be attributed to the agent.
+      const result = selectAutoOpenTurnArtifact(
+        [],
+        [{ name: 'plan.md', path: 'plan.md', kind: 'text', mtime: TURN_END + 120_000 }],
+        { turnStartedAt: TURN_START, turnEndedAt: TURN_END },
+      );
+
+      expect(result).toBeNull();
+    });
+
+    it('keeps a write that settles just after the terminal status (grace)', () => {
+      const result = selectAutoOpenTurnArtifact(
+        [],
+        [{ name: 'index.html', path: 'index.html', kind: 'html', mtime: TURN_END + 30_000 }],
+        { turnStartedAt: TURN_START, turnEndedAt: TURN_END },
+      );
+
+      expect(result).toBe('index.html');
+    });
+
+    it('keeps the window open-ended when no end stamp is available', () => {
+      const result = selectAutoOpenTurnArtifact(
+        [],
+        [{ name: 'index.html', path: 'index.html', kind: 'html', mtime: TURN_START + 900_000 }],
+        { turnStartedAt: TURN_START },
+      );
+
+      expect(result).toBe('index.html');
+    });
   });
 });

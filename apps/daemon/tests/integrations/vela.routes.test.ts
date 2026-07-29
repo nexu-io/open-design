@@ -18,7 +18,7 @@ import https from 'node:https';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import type http from 'node:http';
+import http from 'node:http';
 import { PassThrough } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 
@@ -28,8 +28,11 @@ import { startServer } from '../../src/server.js';
 import { readAppConfig, writeAppConfig } from '../../src/app-config.js';
 import {
   clearAllVelaLiveAccounts,
+  clearVelaLiveAccountRefreshThrottle,
   parseAmrEntryAnalyticsPayload,
   parseAmrOnboardingProfileAnalyticsPayload,
+  readVelaCredentialRevision,
+  velaLiveAccountCacheKey,
 } from '../../src/integrations/vela.js';
 
 interface StartedServer {
@@ -225,6 +228,8 @@ afterEach(() => {
   delete process.env.FAKE_VELA_BILLING_LOG;
   delete process.env.FAKE_VELA_BILLING_DELAY_MS;
   delete process.env.FAKE_VELA_BILLING_UNKNOWN_COMMAND;
+  delete process.env.FAKE_VELA_MODEL_LIST_JSON;
+  delete process.env.FAKE_VELA_MODEL_PRESET_JSON;
   delete process.env.FAKE_VELA_ENV_DUMP_PATH;
   delete process.env.OD_PUBLIC_BASE_URL;
   delete process.env.VELA_RUNTIME_KEY;
@@ -232,7 +237,12 @@ afterEach(() => {
   delete process.env.OPEN_DESIGN_AMR_ANALYTICS_URL;
   delete process.env.OPEN_DESIGN_AMR_ANALYTICS_ENV;
   delete process.env.OD_AMR_WALLET_FETCH_TIMEOUT_MS;
-  rmSync(tmpHome, { recursive: true, force: true });
+  rmSync(tmpHome, {
+    recursive: true,
+    force: true,
+    maxRetries: 5,
+    retryDelay: 50,
+  });
 });
 
 describe('GET /api/integrations/vela/wallet', () => {
@@ -298,6 +308,196 @@ describe('GET /api/integrations/vela/wallet', () => {
     } finally {
       await walletApi.close();
     }
+  });
+
+  it('invalidates the AMR model catalog cache on explicit wallet refresh', async () => {
+    const walletApi = await startWalletApi((_req, res) => {
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({
+        balanceUsd: '20.0000',
+        updatedAt: '2026-07-09T07:30:00.000Z',
+      }));
+    });
+    process.env.FAKE_VELA_MODEL_LIST_JSON = JSON.stringify({
+      source: 'remote',
+      data: [
+        { id: 'public_model_deepseek_v4_flash', enabled: false },
+      ],
+    });
+    seedLogin('local', {
+      apiUrl: walletApi.url,
+      controlKey: 'ck-wallet-refresh',
+      runtimeKey: 'rt-wallet-refresh',
+      user: { id: 'wallet-user', email: 'wallet@example.com', plan: 'free' },
+    });
+    try {
+      const warmed = await waitForAmrModels('remote');
+      expect(warmed.body.models).toEqual([
+        { id: 'deepseek-v4-flash', label: 'deepseek-v4-flash', enabled: false },
+      ]);
+
+      const refresh = await getJson<{ status: string; balanceUsd: string | null }>(
+        `${baseUrl}/api/integrations/vela/wallet?refresh=1`,
+      );
+      expect(refresh.status).toBe(200);
+      expect(refresh.body.status).toBe('available');
+
+      const afterRefresh = await getJson<{
+        source: 'preset' | 'remote';
+        refreshing?: boolean;
+        models: Array<{ id: string }>;
+      }>(`${baseUrl}/api/amr/models`);
+      expect(afterRefresh.status).toBe(200);
+      expect(afterRefresh.body.source).toBe('preset');
+      expect(afterRefresh.body.refreshing).toBe(true);
+      expect(afterRefresh.body.models.map((model) => model.id)).toEqual([
+        'deepseek-v4-flash',
+        'deepseek-v3.2',
+        'gemini-2.5-flash',
+        'glm-5.1',
+      ]);
+    } finally {
+      await walletApi.close();
+    }
+  });
+
+  it('invalidates the AMR model catalog cache when a forced status refresh observes a plan change', async () => {
+    process.env.FAKE_VELA_BILLING_TIER = 'free';
+    process.env.FAKE_VELA_BILLING_BALANCE_USD = '1.00';
+    process.env.FAKE_VELA_MODEL_LIST_JSON = JSON.stringify({
+      source: 'remote',
+      data: [
+        { id: 'public_model_deepseek_v4_flash', enabled: false },
+      ],
+    });
+    seedLogin('local', {
+      controlKey: 'ck-status-refresh',
+      runtimeKey: 'rt-status-refresh',
+      user: { id: 'status-user', email: 'status@example.com', plan: 'free' },
+    });
+
+    const firstStatus = await getJson<{ account?: { plan?: string } }>(
+      `${baseUrl}/api/integrations/vela/status?refresh=1`,
+    );
+    expect(firstStatus.status).toBe(200);
+    expect(firstStatus.body.account?.plan).toBe('free');
+
+    const warmed = await waitForAmrModels('remote');
+    expect(warmed.body.models).toEqual([
+      { id: 'deepseek-v4-flash', label: 'deepseek-v4-flash', enabled: false },
+    ]);
+
+    process.env.FAKE_VELA_BILLING_TIER = 'pro';
+    const upgradedStatus = await getJson<{ account?: { plan?: string } }>(
+      `${baseUrl}/api/integrations/vela/status?refresh=1`,
+    );
+    expect(upgradedStatus.status).toBe(200);
+    expect(upgradedStatus.body.account?.plan).toBe('pro');
+
+    const afterPlanChange = await getJson<{
+      source: 'preset' | 'remote';
+      refreshing?: boolean;
+      models: Array<{ id: string }>;
+    }>(`${baseUrl}/api/amr/models`);
+    expect(afterPlanChange.status).toBe(200);
+    expect(afterPlanChange.body.source).toBe('preset');
+    expect(afterPlanChange.body.refreshing).toBe(true);
+  });
+
+  it('invalidates the AMR model catalog cache on forced status refresh without a prior account snapshot', async () => {
+    process.env.FAKE_VELA_BILLING_TIER = 'pro';
+    process.env.FAKE_VELA_BILLING_BALANCE_USD = '1.00';
+    process.env.FAKE_VELA_MODEL_LIST_JSON = JSON.stringify({
+      source: 'remote',
+      data: [
+        { id: 'public_model_deepseek_v4_flash', enabled: false },
+      ],
+    });
+    seedLogin('local', {
+      controlKey: 'ck-status-refresh-cold-account',
+      runtimeKey: 'rt-status-refresh-cold-account',
+      user: {
+        id: 'status-cold-account-user',
+        email: 'status-cold-account@example.com',
+        plan: 'pro',
+      },
+    });
+
+    const warmed = await waitForAmrModels('remote');
+    expect(warmed.body.models).toEqual([
+      { id: 'deepseek-v4-flash', label: 'deepseek-v4-flash', enabled: false },
+    ]);
+
+    clearAllVelaLiveAccounts();
+    const refreshedStatus = await getJson<{ account?: { plan?: string } }>(
+      `${baseUrl}/api/integrations/vela/status?refresh=1`,
+    );
+    expect(refreshedStatus.status).toBe(200);
+    expect(refreshedStatus.body.account?.plan).toBe('pro');
+
+    const afterRefresh = await getJson<{
+      source: 'preset' | 'remote';
+      refreshing?: boolean;
+      models: Array<{ id: string }>;
+    }>(`${baseUrl}/api/amr/models`);
+    expect(afterRefresh.status).toBe(200);
+    expect(afterRefresh.body.source).toBe('preset');
+    expect(afterRefresh.body.refreshing).toBe(true);
+  });
+
+  it('preserves model-cache invalidation when forced status refresh joins an in-flight probe', async () => {
+    clearAllVelaLiveAccounts();
+    process.env.FAKE_VELA_BILLING_TIER = 'free';
+    process.env.FAKE_VELA_BILLING_BALANCE_USD = '1.00';
+    process.env.FAKE_VELA_MODEL_LIST_JSON = JSON.stringify({
+      source: 'remote',
+      data: [
+        { id: 'public_model_deepseek_v4_flash', enabled: false },
+      ],
+    });
+    seedLogin('local', {
+      controlKey: 'ck-status-refresh-inflight',
+      runtimeKey: 'rt-status-refresh-inflight',
+      user: { id: 'status-inflight-user', email: 'status-inflight@example.com', plan: 'free' },
+    });
+
+    const firstStatus = await getJson<{ account?: { plan?: string } }>(
+      `${baseUrl}/api/integrations/vela/status?refresh=1`,
+    );
+    expect(firstStatus.status).toBe(200);
+    expect(firstStatus.body.account?.plan).toBe('free');
+
+    const warmed = await waitForAmrModels('remote');
+    expect(warmed.body.models).toEqual([
+      { id: 'deepseek-v4-flash', label: 'deepseek-v4-flash', enabled: false },
+    ]);
+
+    const accountCacheKey = velaLiveAccountCacheKey(
+      readVelaCredentialRevision(process.env, {}),
+    );
+    clearVelaLiveAccountRefreshThrottle(accountCacheKey);
+    process.env.FAKE_VELA_BILLING_TIER = 'pro';
+    process.env.FAKE_VELA_BILLING_DELAY_MS = '150';
+
+    const warmStatus = getJson<{ account?: { plan?: string } }>(
+      `${baseUrl}/api/integrations/vela/status`,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    const forcedStatus = await getJson<{ account?: { plan?: string } }>(
+      `${baseUrl}/api/integrations/vela/status?refresh=1`,
+    );
+    expect((await warmStatus).body.account?.plan).toBe('free');
+    expect(forcedStatus.status).toBe(200);
+    expect(forcedStatus.body.account?.plan).toBe('pro');
+
+    const afterPlanChange = await getJson<{
+      source: 'preset' | 'remote';
+      refreshing?: boolean;
+      models: Array<{ id: string }>;
+    }>(`${baseUrl}/api/amr/models`);
+    expect(afterPlanChange.status).toBe(200);
+    expect(afterPlanChange.body.source).toBe('preset');
+    expect(afterPlanChange.body.refreshing).toBe(true);
   });
 
   it('does not serve a cached wallet balance after the control key is rejected', async () => {
@@ -1243,6 +1443,139 @@ describe('ALL /api/integrations/vela/api-proxy/*', () => {
   });
 });
 
+describe('ALL /api/integrations/vela/message-center/*', () => {
+  it('uses the selected profile origin for anonymous messages without forwarding credentials', async () => {
+    const requests: Array<{ url: string; authorization: string | undefined }> = [];
+    const upstream = createServer((req, res) => {
+      requests.push({
+        url: req.url ?? '',
+        authorization: req.headers.authorization,
+      });
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ messages: [], nextCursor: null, unreadCount: 0 }));
+    });
+    await new Promise<void>((resolve) => upstream.listen(0, '127.0.0.1', resolve));
+    const address = upstream.address() as AddressInfo;
+    seedLogin('test', {
+      apiUrl: `http://127.0.0.1:${address.port}`,
+      controlKey: undefined,
+      runtimeKey: undefined,
+      user: undefined,
+    });
+    await setSettingsAmrEnv({ OPEN_DESIGN_AMR_PROFILE: 'test' });
+    try {
+      const response = await fetch(
+        `${baseUrl}/api/integrations/vela/message-center-public/messages?locale=en-US&limit=30`,
+        { headers: { authorization: 'Bearer browser-supplied-key' } },
+      );
+      expect(response.status).toBe(200);
+      expect(requests).toEqual([
+        {
+          url: '/api/v1/message-center/messages?locale=en-US&limit=30',
+          authorization: undefined,
+        },
+      ]);
+    } finally {
+      await setSettingsAmrEnv({ OPEN_DESIGN_AMR_PROFILE: undefined });
+      await new Promise<void>((resolve) => upstream.close(() => resolve()));
+    }
+  });
+
+  it('forwards only Message Center routes to the configured profile origin with its control key', async () => {
+    const requests: Array<{ url: string; method: string; authorization: string | undefined }> = [];
+    const upstream = createServer((req, res) => {
+      requests.push({
+        url: req.url ?? '',
+        method: req.method ?? '',
+        authorization: req.headers.authorization,
+      });
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ messages: [], nextCursor: null, unreadCount: 0 }));
+    });
+    await new Promise<void>((resolve) => upstream.listen(0, '127.0.0.1', resolve));
+    const address = upstream.address() as AddressInfo;
+    seedLogin('local', { apiUrl: `http://127.0.0.1:${address.port}` });
+    try {
+      const response = await fetch(
+        `${baseUrl}/api/integrations/vela/message-center/messages?locale=en-US&limit=30`,
+        { headers: { authorization: 'Bearer browser-supplied-key' } },
+      );
+      expect(response.status).toBe(200);
+      expect(requests).toEqual([
+        {
+          url: '/api/v1/message-center/messages?locale=en-US&limit=30',
+          method: 'GET',
+          authorization: 'Bearer ck-seeded-key',
+        },
+      ]);
+      const markRead = await fetch(
+        `${baseUrl}/api/integrations/vela/message-center/messages/release/read`,
+        { method: 'POST' },
+      );
+      expect(markRead.status).toBe(200);
+      expect(requests).toEqual([
+        {
+          url: '/api/v1/message-center/messages?locale=en-US&limit=30',
+          method: 'GET',
+          authorization: 'Bearer ck-seeded-key',
+        },
+        {
+          url: '/api/v1/message-center/messages/release/read',
+          method: 'POST',
+          authorization: 'Bearer ck-seeded-key',
+        },
+      ]);
+      const rejected = await fetch(`${baseUrl}/api/integrations/vela/message-center/wallet/balance`);
+      expect(rejected.status).toBe(404);
+      expect(await rejected.json()).toEqual({ error: 'unknown_message_center_path' });
+      expect(requests).toHaveLength(2);
+    } finally {
+      await new Promise<void>((resolve) => upstream.close(() => resolve()));
+    }
+  });
+
+  it('fails visibly when no control key is configured', async () => {
+    const response = await fetch(
+      `${baseUrl}/api/integrations/vela/message-center/messages?locale=en-US`,
+    );
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ error: 'vela_control_key_required' });
+  });
+
+  it('guards upstream response-stream errors after headers without crashing the daemon', async () => {
+    const requestSpy = vi.spyOn(http, 'request').mockImplementation(((target, options, callback) => {
+      const req = new PassThrough() as any;
+      req.on('finish', () => {
+        const upstreamRes = new PassThrough() as any;
+        upstreamRes.statusCode = 200;
+        upstreamRes.headers = { 'content-type': 'application/json' };
+        callback?.(upstreamRes);
+        upstreamRes.write('{"messages":[');
+        setImmediate(() => upstreamRes.emit('error', new Error('mid-stream reset')));
+      });
+      req.setTimeout = () => req;
+      return req;
+    }) as typeof http.request);
+
+    seedLogin('local', { apiUrl: 'http://127.0.0.1:18080' });
+
+    try {
+      const response = await fetch(
+        `${baseUrl}/api/integrations/vela/message-center/messages?locale=en-US`,
+      );
+
+      expect(response.status).toBe(200);
+      expect(await response.text()).toBe('{"messages":[');
+
+      const status = await getJson<{ loggedIn: boolean }>(`${baseUrl}/api/integrations/vela/status`);
+      expect(status.status).toBe(200);
+      expect(status.body.loggedIn).toBe(true);
+    } finally {
+      requestSpy.mockRestore();
+    }
+  });
+});
+
 describe('POST /api/integrations/vela/analytics-entry', () => {
   it('mirrors Open Design AMR entry clicks to the AMR analytics ingest shape', async () => {
     const requests: unknown[] = [];
@@ -1707,8 +2040,8 @@ describe('POST /api/integrations/vela/logout', () => {
     expect(first.body.models.map((model) => model.id)).toEqual([
       'deepseek-v4-flash',
       'deepseek-v3.2',
-      'glm-5.1',
       'gemini-2.5-flash',
+      'glm-5.1',
     ]);
 
     const warmed = await waitForAmrModels('remote');
@@ -1735,8 +2068,8 @@ describe('POST /api/integrations/vela/logout', () => {
     expect(afterLogout.body.models.map((model) => model.id)).toEqual([
       'deepseek-v4-flash',
       'deepseek-v3.2',
-      'glm-5.1',
       'gemini-2.5-flash',
+      'glm-5.1',
     ]);
   });
 
@@ -1981,12 +2314,14 @@ describe('parseAmrEntryAnalyticsPayload — entry sources added in this PR', () 
     entryOccurredAt: '2026-06-03T12:00:00.000Z',
   });
 
-  it('accepts the four new upgrade / agent-card sources so mirroring is not 400ed', () => {
+  it('accepts upgrade / agent-card sources so mirroring is not 400ed', () => {
     const cases: Array<[string, string]> = [
       ['settings_amr_upgrade', 'settings'],
       ['inline_amr_upgrade', 'chat_panel'],
       ['avatar_amr_upgrade', 'chat_panel'],
       ['avatar_amr_agent_card', 'chat_panel'],
+      ['artifact_success_upgrade', 'artifact'],
+      ['home_artifact_upgrade', 'home'],
     ];
     for (const [source, page] of cases) {
       expect(parseAmrEntryAnalyticsPayload(payloadFor(source, page))).not.toBeNull();

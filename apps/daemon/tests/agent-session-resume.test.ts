@@ -16,6 +16,7 @@ import {
   computeIncludeStable,
   hashStableInstructions,
   isAgentResumeFailure,
+  isAmrOpencodeEventStreamResumeFailure,
   isAmrResumeFailure,
   isClaudeResumeFailure,
   isCodexResumeFailure,
@@ -130,6 +131,7 @@ describe('resolveAgentResumeContext', () => {
     });
     expect(ctx.isResuming).toBe(false);
     expect(ctx.resumeSessionId).toBeNull();
+    expect(ctx.storedSessionId).toBe('sess-A');
     expect(ctx.invalidationReason).toBe('model_changed');
   });
 
@@ -465,6 +467,24 @@ describe('isAmrResumeFailure', () => {
   });
 });
 
+describe('isAmrOpencodeEventStreamResumeFailure', () => {
+  it('matches AMR opencode event-stream EOF failures', () => {
+    expect(
+      isAmrOpencodeEventStreamResumeFailure(
+        'json-rpc id 4: opencode event stream: opencode SSE ended before prompt completion',
+      ),
+    ).toBe(true);
+    expect(
+      isAmrOpencodeEventStreamResumeFailure('opencode SSE ended before prompt completion'),
+    ).toBe(true);
+  });
+
+  it('ignores unrelated AMR/opencode output', () => {
+    expect(isAmrOpencodeEventStreamResumeFailure('opencode auth failed')).toBe(false);
+    expect(isAmrOpencodeEventStreamResumeFailure('')).toBe(false);
+  });
+});
+
 describe('isAgentResumeFailure dispatch', () => {
   it('routes amr to the resume_failed structured detector on stdout', () => {
     // AMR's signal arrives on stdout (the ACP JSON-RPC channel), not stderr.
@@ -474,6 +494,16 @@ describe('isAgentResumeFailure dispatch', () => {
     expect(
       isAgentResumeFailure('amr', '{"error":{"data":{"kind":"resume_failed"}}}', ''),
     ).toBe(false);
+  });
+
+  it('routes AMR opencode event-stream EOF to the resume failure detector', () => {
+    expect(
+      isAgentResumeFailure(
+        'amr',
+        'json-rpc id 4: opencode event stream: opencode SSE ended before prompt completion',
+        '',
+      ),
+    ).toBe(true);
   });
 
   it('routes codex to the rollout-not-found detector', () => {

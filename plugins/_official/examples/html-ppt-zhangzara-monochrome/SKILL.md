@@ -1,21 +1,34 @@
 ---
 name: html-ppt-zhangzara-monochrome
+en_name: "Write a Grant Committee Brief like a Funded Principal Investigator"
+zh_name: "像拿到资助的 PI 一样写基金评审简报"
 description: |
-  Monochrome — Ivory ledger paper with all-black type; Lora serif headlines, Jost body, no color at all. Anything that should feel like a hand-typeset ledger: user research synthesis, white papers, longform reports, academic and policy briefs, advisory deliverables, bilingual EN/CN reports.
+  A grant proposal on CRISPR base-editing for sickle-cell disease — the hypothesis, the approach, the milestones, and the risk. Built as a decision-grade academic research deck for grant review committee.
+en_description: |
+  A grant proposal on CRISPR base-editing for sickle-cell disease — the hypothesis, the approach, the milestones, and the risk. Built as a decision-grade academic research deck for grant review committee.
+zh_description: |
+  像拿到资助的 PI 一样写基金评审简报——一份可商业交付的学术研究 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "academic-research"
+  - "academic-review-deck"
+  - "research"
+  - "grant"
+  - "review"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "html-ppt-zhangzara-monochrome"
 triggers:
-  - "monochrome"
-  - "zhangzara-monochrome"
-  - "restrained"
-  - "literary"
-  - "considered"
-  - "user research synthesis"
-  - "white paper"
+  - "academic-review-deck"
+  - "academic-research"
+  - "Write a Grant Committee Brief like a Funded Principal Investigator"
+  - "像拿到资助的 PI 一样写基金评审简报"
+  - "research"
+  - "grant"
+  - "review"
   - "html deck"
   - "html slides"
-  - "zhangzara"
 od:
   mode: deck
-  scenario: marketing
   upstream: "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/monochrome"
   upstream_license: MIT
   preview:
@@ -25,6 +38,9 @@ od:
     requires: false
   speaker_notes: false
   animations: false
+  category: "academic-research"
+  scenario: "research"
+  example_prompt: "Create \"Write a Grant Committee Brief like a Funded Principal Investigator\" as a decision-grade Academic research deck in this template's own visual system. Subject: A grant proposal on CRISPR base-editing for sickle-cell disease — the hypothesis, the approach, the milestones, and the risk. Audience: grant review committee. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the deck prove novelty without overclaiming."
 ---
 
 # Monochrome

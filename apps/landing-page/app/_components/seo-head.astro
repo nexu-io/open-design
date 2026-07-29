@@ -45,6 +45,23 @@ export interface SeoHeadProps {
   category?: string;
   /** Defaults to "Open Design". */
   author?: string;
+  /** Set when this page has no generated per-locale variants. */
+  localeCanonicalOnly?: boolean;
+  /**
+   * Drop the hreflang cluster because this page's locale variants are served
+   * with `noindex`. Deliberately NOT `localeCanonicalOnly`: the variants do
+   * exist here and stay reachable through the language switcher, they just
+   * must not be advertised to search engines, since hreflang may not point at
+   * noindexed URLs.
+   */
+  noindexedLocaleVariants?: boolean;
+  /**
+   * Keep this single page out of the search index. Independent of the
+   * site-wide staging flag below: staging emits `noindex, nofollow` for the
+   * whole mirror, whereas a page opting in here emits `noindex, follow` so
+   * crawlers still traverse its outbound links.
+   */
+  noindex?: boolean;
   /**
    * Optional Google Search Console verification token. When set, renders
    * `<meta name="google-site-verification" content="...">`. Only needed on
@@ -66,7 +83,12 @@ const props = Astro.props as SeoHeadProps;
 // `__OD_LANDING_NOINDEX__` is a compile-time constant injected by
 // `vite.define` in astro.config.ts — `.astro` frontmatter is transformed by
 // Vite and cannot read process.env directly.
-const noindex = __OD_LANDING_NOINDEX__;
+const stagingNoindex = __OD_LANDING_NOINDEX__;
+const noindex = stagingNoindex || props.noindex === true;
+// Staging hides the whole mirror, so nothing there is worth crawling onward.
+// A page-level opt-out is the opposite case: the page itself shouldn't rank,
+// but its outbound links should still pass equity, hence `follow`.
+const robotsContent = stagingNoindex ? 'noindex, nofollow' : 'noindex, follow';
 
 const SITE_NAME = 'Open Design';
 const TAGLINE = 'Design with the agent already on your laptop.';
@@ -74,11 +96,14 @@ const isArticle = props.kind === 'article';
 const locale = localeFromPath(props.pathname);
 const localeDef = getLocaleDefinition(locale);
 const basePath = stripLocaleFromPath(props.pathname).pathname;
-const alternateLinks = alternateLinksForPath(props.pathname).map((entry) => ({
-  ...entry,
-  href: new URL(entry.hrefPath, Astro.site).toString(),
-}));
-const xDefaultHref = new URL(alternateLinks[0]!.hrefPath, Astro.site).toString();
+const altEntries = alternateLinksForPath(props.pathname);
+const alternateLinks = props.localeCanonicalOnly || props.noindexedLocaleVariants
+  ? []
+  : altEntries.map((entry) => ({
+      ...entry,
+      href: new URL(entry.hrefPath, Astro.site).toString(),
+    }));
+const xDefaultHref = new URL(altEntries[0]!.hrefPath, Astro.site).toString();
 
 const canonical = new URL(props.pathname, Astro.site).toString();
 const image = props.image ?? new URL(ogDefaultImage, Astro.site).toString();
@@ -166,7 +191,7 @@ const blogJsonLd =
 <title>{fullTitle}</title>
 <meta name='description' content={metaDescription} />
 <meta name='theme-color' content='#efe7d2' />
-{noindex && <meta name='robots' content='noindex, nofollow' />}
+{noindex && <meta name='robots' content={robotsContent} />}
 <link rel='canonical' href={canonical} />
 {alternateLinks.map((entry) => (
   <link rel='alternate' hreflang={entry.hreflang} href={entry.href} />
@@ -187,7 +212,7 @@ const blogJsonLd =
 <meta property='og:url' content={canonical} />
 <meta property='og:image' content={image} />
 <meta property='og:locale' content={localeDef.ogLocale} />
-{LANDING_LOCALES.filter((entry) => entry.code !== locale).map((entry) => (
+{!props.localeCanonicalOnly && LANDING_LOCALES.filter((entry) => entry.code !== locale).map((entry) => (
   <meta property='og:locale:alternate' content={entry.ogLocale} />
 ))}
 

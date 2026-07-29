@@ -20,12 +20,15 @@ import { getResolvedDeviceId } from '../analytics/client';
 import { trackChatPanelClick, trackMessageQueueClick, trackRunFailedToastSurfaceView } from '../analytics/events';
 import { amrHandoffDeviceId, attributedAmrUrl, recordAmrEntry } from '../analytics/amr-attribution';
 import { useT } from '../i18n';
+import { startersForProduct, type ProductType } from '../onboarding/recommendation';
+import { starterCopyFor } from '../onboarding/starter-copy';
 import {
   FEATURED_DESIGN_TOOLBOX_ACTION_IDS,
   findDesignToolboxSkill,
   getDesignToolboxAction,
   type DesignToolboxActionId,
 } from '../runtime/design-toolbox';
+import { isRetryableAssistantTerminalFailure } from '../runtime/design-delivery';
 import type { Dict } from '../i18n/types';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { projectRawUrl } from '../providers/registry';
@@ -33,18 +36,28 @@ import { takeComposerSeedFor } from '../state/libraryHandoff';
 import { splitOnQuestionForms } from '../artifacts/question-form';
 import { stripArtifact } from '../artifacts/strip';
 import type { TodoItem } from '../runtime/todos';
-import type { AppliedPluginSnapshot, ChatSessionMode, WorkspaceContextItem } from '@open-design/contracts';
+import type {
+  AppliedPluginSnapshot,
+  ChatSessionMode,
+  RunContextSelection,
+  WorkspaceContextItem,
+} from '@open-design/contracts';
 import type { TrackingProjectKind } from '@open-design/contracts/analytics';
 import {
   DESIGN_SYSTEM_WORKSPACE_DISPLAY_DESCRIPTION,
   DESIGN_SYSTEM_WORKSPACE_DISPLAY_TITLE,
   isDesignSystemWorkspacePrompt,
 } from '../design-system-auto-prompt';
-import { isTodoWriteToolName, latestTodoWriteInputForPinnedCard } from '../runtime/todos';
+import {
+  isTodoWriteToolName,
+  latestTodoWriteInputForPinnedCard,
+  unfinishedTodosFromEvents,
+} from '../runtime/todos';
 import type { AppConfig, ChatAttachment, ChatCommentAttachment, ChatMessage, ChatMessageFeedbackChange, Conversation, DesignSystemSummary, PreviewComment, Project, ProjectFile, ProjectMetadata, SkillSummary } from '../types';
 import { agentDisplayName } from '../utils/agentLabels';
 import { commentTargetDisplayName, commentsToAttachments, simplePositionLabel } from '../comments';
-import { AssistantMessage, type QuestionFormOpenRequest } from './AssistantMessage';
+import { AssistantMessage, type QuestionFormSubmitHandler } from './AssistantMessage';
+import { TodoCard } from './ToolCard';
 import type { BrandBrowserAssistConfirm } from './OdCard';
 import {
   DESIGN_SYSTEM_NEXT_STEP_ACTIONS,
@@ -56,7 +69,11 @@ import {
   AMR_LOGIN_STATUS_EVENT,
   amrLoginStatusEventReason,
 } from './amrLoginPolling';
-import { amrRechargeUrlForProfile, resolveRunFailureUi } from '../runtime/amr-guidance';
+import {
+  amrPlansUrlForProfile,
+  amrRechargeUrlForProfile,
+  resolveRunFailureUi,
+} from '../runtime/amr-guidance';
 import {
   fetchVelaLoginStatus,
   type VelaLoginStatus,
@@ -65,12 +82,14 @@ import { RESUME_CONTINUE_PROMPT } from '../runtime/resume';
 import {
   ChatComposer,
   type ChatComposerHandle,
+  type ChatSendOutcome,
   type ChatSendMeta,
 } from './ChatComposer';
 import type { PlaceholderScenario } from './home-hero/placeholderScenarios';
 import { listDesignArtifactCandidates } from './design-files/designArtifacts';
 import type { PluginFolderAgentAction } from './design-files/pluginFolderActions';
 import { Icon, type IconName } from './Icon';
+import { UserActionCard, type UserActionCardTone } from './UserActionCard';
 import { repoConnectCopy } from './design-system-github-evidence';
 import { isRenderableSketchJson, SketchPreview } from './SketchPreview';
 import type { SettingsSection } from './SettingsDialog';
@@ -95,6 +114,7 @@ type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => 
 type StarterPrompt = {
   icon: string;
   title: string;
+  // Empty for path-scoped onboarding starters, which have no category tag.
   tag: string;
   prompt: string;
 };
@@ -469,6 +489,9 @@ interface Props {
   // Names that exist in the project folder. Tool cards and chips use this
   // set to decide whether a path can be opened as a tab.
   projectFileNames?: Set<string>;
+  // Daemon-resolved on-disk working directory of the current project —
+  // positive-proof anchor for chat file-link routing (see AssistantMessage).
+  projectResolvedDir?: string | null;
   onEnsureProject: () => Promise<string | null>;
   previewComments?: PreviewComment[];
   attachedComments?: PreviewComment[];
@@ -480,7 +503,7 @@ interface Props {
     attachments: ChatAttachment[],
     commentAttachments: ChatCommentAttachment[],
     meta?: ChatSendMeta,
-  ) => void;
+  ) => ChatSendOutcome | Promise<ChatSendOutcome>;
   onRetry?: (assistantMessage: ChatMessage) => void;
   onResumeRun?: (assistantMessage: ChatMessage) => void;
   onStop: () => void;
@@ -510,9 +533,13 @@ interface Props {
   // time before the full `tool_use` arrives. Never persisted.
   liveToolInput?: Record<string, { name: string; text: string; seq?: number }>;
   initialDraft?: string;
+  // Product path of the Home recommendation that started this project. When
+  // set (and concrete), the empty-conversation starter cards show that path's
+  // starters — one-click composer replacements — instead of the generic set.
+  onboardingStarterPath?: ProductType | null;
   composerPlaceholder?: string;
-  // Focus the right-hand Questions tab from the chat banner.
-  onOpenQuestions?: (request?: QuestionFormOpenRequest) => void;
+  onSubmitQuestionForm?: QuestionFormSubmitHandler;
+  questionFormSubmitDisabled?: boolean;
   onContinueRemainingTasks?: (assistantMessage: ChatMessage, todos: TodoItem[]) => void;
   onAssistantFeedback?: (assistantMessage: ChatMessage, change: ChatMessageFeedbackChange) => void;
   // Client-side action for a brand-browser-assist od-card: open/focus the
@@ -611,7 +638,9 @@ interface Props {
   onTogglePet?: () => void;
   onOpenPetSettings?: () => void;
   projectMetadata?: ProjectMetadata;
-  onProjectMetadataChange?: (metadata: ProjectMetadata) => void;
+  // Authoritative post-patch project from the daemon — see ChatComposer's
+  // prop of the same name for the recency invariant.
+  onProjectMetadataChange?: (updated: Project) => void;
   activeWorkspaceContext?: WorkspaceContextItem | null;
   initialWorkspaceContexts?: WorkspaceContextItem[];
   workspaceContexts?: WorkspaceContextItem[];
@@ -645,6 +674,10 @@ interface Props {
   currentDesignSystemId?: string | null;
   onActiveDesignSystemChange?: (project: Project) => void;
   onShowToast?: (message: string) => void;
+  // Optional transient UI owned by the project shell. Rendering it inside the
+  // scroll-area wrapper keeps it structurally above the variable-height
+  // composer instead of guessing a bottom offset from outside ChatPane.
+  chatLogTray?: ReactNode;
   // Project header slot. The former standalone chrome header row was removed;
   // its back button, project title (editable) and design-system picker moved
   // into the top of the chat pane. ProjectView owns the project record so it
@@ -749,6 +782,7 @@ function hasVisibleBrandAssistantEvent(event: NonNullable<ChatMessage['events']>
     case 'status':
       return !HIDDEN_BRAND_ASSISTANT_STATUS_LABELS.has(event.label);
     case 'usage':
+    case 'diagnostic':
     case 'conversation_title':
       return false;
   }
@@ -770,6 +804,7 @@ export function ChatPane({
   hasActiveDesignSystem = false,
   activeDesignSystem = null,
   projectFileNames,
+  projectResolvedDir,
   onEnsureProject,
   previewComments = [],
   attachedComments = [],
@@ -795,8 +830,10 @@ export function ChatPane({
   forceStreamingMessageIds,
   liveToolInput,
   initialDraft,
+  onboardingStarterPath = null,
   composerPlaceholder,
-  onOpenQuestions,
+  onSubmitQuestionForm,
+  questionFormSubmitDisabled = false,
   onContinueRemainingTasks,
   onAssistantFeedback,
   onBrandBrowserAssistConfirm,
@@ -864,6 +901,7 @@ export function ChatPane({
   currentDesignSystemId,
   onActiveDesignSystemChange,
   onShowToast,
+  chatLogTray,
   onBack,
   backLabel,
   projectHeader,
@@ -895,6 +933,7 @@ export function ChatPane({
   const composerRef = useRef<ChatComposerHandle | null>(null);
   const composerSlotRef = useRef<HTMLDivElement | null>(null);
   const composerLayerRef = useRef<HTMLDivElement | null>(null);
+  const pinnedTodoRef = useRef<HTMLDivElement | null>(null);
   const queuedSendStripRef = useRef<HTMLDivElement | null>(null);
   const didInitialScrollRef = useRef(false);
   const runFailedToastSurfaceKeysRef = useRef<Set<string>>(new Set());
@@ -906,8 +945,8 @@ export function ChatPane({
   // shouldn't be yanked back the moment the next chunk streams in.
   const pinnedToBottomRef = useRef(true);
   const scrolledToFormRef = useRef<Set<string>>(new Set());
-  const refreshInlineAmrLoginStatus = useCallback(async () => {
-    const next = await fetchVelaLoginStatus().catch(() => null);
+  const refreshInlineAmrLoginStatus = useCallback(async (options: { refresh?: boolean } = {}) => {
+    const next = await fetchVelaLoginStatus(options).catch(() => null);
     if (next) setInlineAmrLoginStatus(next);
     return next;
   }, []);
@@ -922,6 +961,19 @@ export function ChatPane({
     window.addEventListener(AMR_LOGIN_STATUS_EVENT, onAmrLoginStatusChange);
     return () => {
       window.removeEventListener(AMR_LOGIN_STATUS_EVENT, onAmrLoginStatusChange);
+    };
+  }, [refreshInlineAmrLoginStatus]);
+
+  useEffect(() => {
+    const refreshAfterExternalAmrReturn = () => {
+      if (document.visibilityState === 'hidden') return;
+      void refreshInlineAmrLoginStatus({ refresh: true });
+    };
+    window.addEventListener('focus', refreshAfterExternalAmrReturn);
+    document.addEventListener('visibilitychange', refreshAfterExternalAmrReturn);
+    return () => {
+      window.removeEventListener('focus', refreshAfterExternalAmrReturn);
+      document.removeEventListener('visibilitychange', refreshAfterExternalAmrReturn);
     };
   }, [refreshInlineAmrLoginStatus]);
 
@@ -944,6 +996,7 @@ export function ChatPane({
   // message). Route them through this ref so a memoized message still calls the
   // LATEST handler. See areAssistantMessagePropsEqual in AssistantMessage.tsx.
   const assistantCallbacksRef = useRef<AssistantCallbacks>({
+    onSubmitQuestionForm,
     onContinueRemainingTasks,
     onAssistantFeedback,
     onBrandBrowserAssistConfirm,
@@ -957,6 +1010,7 @@ export function ChatPane({
     onNextStepCreateDesignSystem: onCreateDesignSystemFromProject,
   });
   assistantCallbacksRef.current = {
+    onSubmitQuestionForm,
     onContinueRemainingTasks,
     onAssistantFeedback,
     onBrandBrowserAssistConfirm,
@@ -1028,6 +1082,19 @@ export function ChatPane({
     })),
     [projectMetadata, t],
   );
+  // Empty-conversation starter cards. A recommendation-started project shows
+  // its OWN product path's starters — clicking replaces the composer draft, so
+  // the pre-filled first request and the cards complement rather than compete.
+  // The general fallback path and every other project keep the generic set.
+  const starterTemplateCards = useMemo<StarterPrompt[]>(() => {
+    if (onboardingStarterPath && onboardingStarterPath !== 'general') {
+      return startersForProduct(onboardingStarterPath).map((starter) => {
+        const copy = starterCopyFor(starter.id);
+        return { icon: '✦', title: t(copy.title), tag: '', prompt: t(copy.firstPrompt) };
+      });
+    }
+    return pickStarters(projectMetadata, t);
+  }, [onboardingStarterPath, projectMetadata, t]);
   const followUpComposerScenarios = useMemo<PlaceholderScenario[]>(() => {
     if (nextStepVariant === 'design-system') {
       return DESIGN_SYSTEM_NEXT_STEP_ACTIONS.map((action) => ({
@@ -1121,7 +1188,11 @@ export function ChatPane({
   // Per-case failure UI (button + copy + whether to promote AMR). Only
   // meaningful for a failed run (retryAssistant present).
   const runFailureUi = retryAssistant
-    ? resolveRunFailureUi(failedRunErrorEvent?.code, retryAssistant.agentId)
+    ? resolveRunFailureUi(
+        failedRunErrorEvent?.code,
+        failedRunErrorEvent?.failureDetail,
+        retryAssistant.agentId,
+      )
     : null;
   const hasInlineAmrAuthorizeFailure = Boolean(
     retryAssistant && onRetry && runFailureUi?.primaryAction === 'authorize',
@@ -1201,19 +1272,17 @@ export function ChatPane({
         agentId: retryAssistant?.agentId,
       })
     : null;
-  // First non-empty line of the diagnostics — shown as the one-line peek when
-  // the error-source area is collapsed.
-  const errorSourcePeek =
-    errorDiagnosticText?.split('\n').find((line) => line.trim().length > 0)?.trim() ?? null;
-  // Status-dot tone for the unified card. Brand (accent) for AMR sign-in/top-up
-  // — the commercial recovery path; warn (amber) for the self-healing
-  // connection drop; error (red) for everything else. Purely visual.
-  const runErrorTone: 'error' | 'warn' | 'brand' =
-    runFailureUi?.primaryAction === 'authorize' || runFailureUi?.primaryAction === 'recharge'
+  // Brand (accent) for AMR sign-in/top-up, warning for a self-healing
+  // connection drop, danger for everything else. The shared action card only
+  // tints its icon; the surface itself stays neutral.
+  const runErrorTone: UserActionCardTone =
+    runFailureUi?.primaryAction === 'authorize' ||
+    runFailureUi?.primaryAction === 'recharge' ||
+    runFailureUi?.primaryAction === 'upgrade'
       ? 'brand'
       : failedRunErrorEvent?.code === 'AGENT_CONNECTION_DROPPED'
-        ? 'warn'
-        : 'error';
+        ? 'warning'
+        : 'danger';
   const [copiedErrorDiagnostic, setCopiedErrorDiagnostic] = useState(false);
   // Collapsed by default: the error source area shows one line until expanded.
   const [errorSourceOpen, setErrorSourceOpen] = useState(false);
@@ -1258,16 +1327,32 @@ export function ChatPane({
           runId: retryAssistant.runId ?? null,
         }
       : null;
-  const showByokRecoveryCta = showByokRecoveryAction && Boolean(onSwitchToLocalCli);
-  const showErrorActions =
-    showByokRecoveryCta || Boolean(retryAssistant && onRetry && runFailureUi);
+  // A `primaryAction: 'none'` failure (e.g. a hard quota where retrying is
+  // futile) contributes no button of its own — it relies on the AMR switch card
+  // below. Only claim the actions row when a real control will render, so a
+  // no-action card doesn't leave an empty flex row (and a dangling column gap).
+  const runFailureHasAction = Boolean(
+    retryAssistant &&
+      onRetry &&
+      runFailureUi &&
+      (runFailureUi.primaryAction !== 'none' ||
+        runFailureUi.secondaryRetry ||
+        canResumeFailedRun),
+  );
+  // The generic local-CLI escape hatch is only used when the failure card has
+  // no direct recovery action. AMR guidance remains visible whenever the
+  // classifier asks for it, alongside a case-specific retry when applicable.
+  const showByokRecoveryCta =
+    showByokRecoveryAction && Boolean(onSwitchToLocalCli) && !runFailureHasAction;
+  const showErrorActions = showByokRecoveryCta || runFailureHasAction;
+  const showAmrGuidance = Boolean(amrSwitchPayload);
   useEffect(() => {
     if (!displayError || !failedRunErrorEvent?.code || !retryAssistant) return;
     // The hosted-AMR nudge owns this same surface_view when it renders below
     // the error card. For all other failed-run guidance (AMR auth/balance,
     // Antigravity auth/quota, upstream outage, generic retry), the chat error
     // card itself is the visible run_failed_toast surface.
-    if (amrSwitchPayload) return;
+    if (showAmrGuidance) return;
 
     const key = [
       projectId ?? '',
@@ -1293,7 +1378,7 @@ export function ChatPane({
   }, [
     activeConversationId,
     analytics.track,
-    amrSwitchPayload,
+    showAmrGuidance,
     displayError,
     failedRunErrorEvent?.code,
     projectId,
@@ -1313,13 +1398,6 @@ export function ChatPane({
   const composerDraftStorageKey = projectId && activeConversationId
     ? `od:chat-composer:draft:${projectId}:${activeConversationId}`
     : undefined;
-  // Only the first user message gets the active-plugin chip — the
-  // plugin is project-scoped so re-stamping it on every reply would be
-  // noise. Subsequent messages still run under the same snapshot.
-  const firstUserMessageId = useMemo(
-    () => displayMessages.find((m) => m.role === 'user')?.id,
-    [displayMessages],
-  );
   const shouldBalanceFinishedTranscript =
     !loading &&
     !streaming &&
@@ -1327,8 +1405,8 @@ export function ChatPane({
     !hasActiveRunMessage &&
     displayMessages.length > 0;
   // Map each assistant message id to the user message that follows it (if any)
-  // so the chat-side Questions banner can reopen that exact answered form in
-  // the right-hand panel later.
+  // so structured form replies collapse into a readable summary on the
+  // assistant message that asked them.
   const nextUserContentByAssistantId = useMemo(() => {
     const map = new Map<string, string>();
     for (let i = 0; i < displayMessages.length - 1; i++) {
@@ -1714,7 +1792,20 @@ export function ChatPane({
       }
     };
 
+    let observedPinnedTodo: Element | null = null;
     let observedQueuedSendStrip: Element | null = null;
+    const syncPinnedTodo = () => {
+      if (!resizeObserver) return;
+      const pinnedEl = pinnedTodoRef.current;
+      if (pinnedEl && observedPinnedTodo !== pinnedEl) {
+        if (observedPinnedTodo) resizeObserver.unobserve(observedPinnedTodo);
+        resizeObserver.observe(pinnedEl);
+        observedPinnedTodo = pinnedEl;
+      } else if (!pinnedEl && observedPinnedTodo) {
+        resizeObserver.unobserve(observedPinnedTodo);
+        observedPinnedTodo = null;
+      }
+    };
     const syncQueuedSendStrip = () => {
       if (!resizeObserver) return;
       const queuedEl = queuedSendStripRef.current;
@@ -1731,12 +1822,14 @@ export function ChatPane({
     };
 
     syncObservedChildren();
+    syncPinnedTodo();
     syncQueuedSendStrip();
 
     const mutationObserver =
       typeof MutationObserver !== 'undefined'
         ? new MutationObserver(() => {
             syncObservedChildren();
+            syncPinnedTodo();
             syncQueuedSendStrip();
             followLatestIfPinned();
           })
@@ -1749,11 +1842,9 @@ export function ChatPane({
       childList: true,
       subtree: true,
     });
-    // QueuedSendStrip lives outside the chat-log subtree (it is a sibling of
-    // .chat-log-wrap inside .pane). The MutationObserver above only fires for
-    // changes inside el, so it cannot detect that surface mounting or
-    // unmounting. Watch the nearest common ancestor (.pane) with childList-only
-    // to keep its observer current.
+    // PinnedTodoSlot and QueuedSendStrip live outside the chat-log subtree.
+    // Watch their nearest common ancestor so resize observation follows those
+    // surfaces when they mount or unmount.
     const paneEl = el.parentElement?.parentElement ?? null;
     if (paneEl && mutationObserver) {
       mutationObserver.observe(paneEl, { childList: true });
@@ -1982,7 +2073,15 @@ export function ChatPane({
         anchorActiveRef.current = false;
         resetTailSpacer();
         anchorPendingRef.current = true;
-        onSend(prompt, attachments, commentAttachments, meta);
+        const outcome = onSend(prompt, attachments, commentAttachments, meta);
+        if (outcome instanceof Promise) {
+          return outcome.then((result) => {
+            if (result === 'restore-draft') anchorPendingRef.current = false;
+            return result;
+          });
+        }
+        if (outcome === 'restore-draft') anchorPendingRef.current = false;
+        return outcome;
       }}
       onStop={onStop}
       onOpenSettings={onOpenSettings}
@@ -2081,12 +2180,12 @@ export function ChatPane({
               <div className="chat-history-menu-head">
                 <span className="chat-history-menu-title">
                   {t('chat.conversationsHeading')}
-                </span>
-                <span className="chat-history-menu-count">
-                  <span data-testid="conversation-history-count">
-                  {filteredConversations.length === conversations.length
-                    ? compactCount(conversations.length)
-                    : `${compactCount(filteredConversations.length)} / ${compactCount(conversations.length)}`}
+                  <span className="chat-history-menu-count">
+                    <span data-testid="conversation-history-count">
+                    {filteredConversations.length === conversations.length
+                      ? compactCount(conversations.length)
+                      : `${compactCount(filteredConversations.length)} / ${compactCount(conversations.length)}`}
+                    </span>
                   </span>
                 </span>
                 {onNewConversation ? (
@@ -2163,7 +2262,7 @@ export function ChatPane({
       </div>
       {tab === 'chat' ? (
         <>
-          <div className="chat-log-wrap">
+          <div className={`chat-log-wrap${chatLogTray ? ' has-chat-log-tray' : ''}`}>
             <div
               className={[
                 'chat-log',
@@ -2208,7 +2307,7 @@ export function ChatPane({
                         </span>
                       </div>
                       <div className="chat-examples" role="list">
-                        {pickStarters(projectMetadata, t).map((ex, i) => (
+                        {starterTemplateCards.map((ex, i) => (
                           <button
                             key={`${ex.title}-${i}`}
                             type="button"
@@ -2231,7 +2330,9 @@ export function ChatPane({
                             <span className="chat-example-body">
                               <span className="chat-example-head">
                                 <span className="chat-example-title">{ex.title}</span>
-                                <span className="chat-example-tag">{ex.tag}</span>
+                                {ex.tag ? (
+                                  <span className="chat-example-tag">{ex.tag}</span>
+                                ) : null}
                               </span>
                               <span className="chat-example-prompt">{ex.prompt}</span>
                             </span>
@@ -2280,6 +2381,7 @@ export function ChatPane({
                 projectFiles={projectFiles}
                 projectMetadata={projectMetadata}
                 projectFileNames={projectFileNames}
+                projectResolvedDir={projectResolvedDir}
                 onRequestOpenFile={onRequestOpenFile}
                 onRequestPluginDetails={onRequestPluginDetails}
                 onRequestDesignSystemDetails={onRequestDesignSystemDetails}
@@ -2290,14 +2392,12 @@ export function ChatPane({
                 shareToOpenDesignBusyMessageId={shareToOpenDesignBusyMessageId}
                 forceStreamingMessageIds={forceStreamingMessageIds}
                 lastAssistantId={lastAssistantId}
-                firstUserMessageId={firstUserMessageId}
                 activePluginSnapshot={activePluginSnapshot}
                 activeDesignSystem={activeDesignSystem}
                 hasActiveDesignSystem={hasActiveDesignSystem}
                 errorCardOwnerId={errorCardOwnerId}
                 nextUserContentByAssistantId={nextUserContentByAssistantId}
                 assistantCallbacksRef={assistantCallbacksRef}
-                onContinueRemainingTasks={onContinueRemainingTasks}
                 onBrandBrowserAssistConfirm={onBrandBrowserAssistConfirm}
                 onArtifactShare={onArtifactShare}
                 onToolboxAction={handleToolboxAction}
@@ -2321,67 +2421,47 @@ export function ChatPane({
                 onAssistantFeedback={onAssistantFeedback}
                 forkingMessageId={forkingMessageId}
                 t={t}
-                onOpenQuestions={onOpenQuestions}
+                onSubmitQuestionForm={onSubmitQuestionForm}
+                questionFormSubmitDisabled={questionFormSubmitDisabled}
                 scrollContainerRef={logRef}
               />
               {displayError ? (
-                <div className="run-error" data-tone={runErrorTone}>
-                  {/* ① type title + ② detail */}
-                  <div className="run-error__main">
-                    <span className="run-error__icon" aria-hidden="true">
-                      <svg viewBox="0 0 16 16" fill="none">
-                        <circle cx="8" cy="8" r="6.4" stroke="currentColor" strokeWidth="1.4" />
-                        <path d="M8 4.5v4M8 11h.01" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-                      </svg>
-                    </span>
-                    <div className="run-error__copy">
-                      {runFailureUi ? (
-                        <p className="run-error__title">{t(runFailureUi.titleKey)}</p>
+                <UserActionCard
+                  dataKind="run-recovery"
+                  icon="alert-triangle"
+                  tone={runErrorTone}
+                  title={
+                    runFailureUi
+                      ? t(runFailureUi.titleKey)
+                      : t('chat.runError.title.generic')
+                  }
+                  open={errorSourceOpen}
+                  onOpenChange={setErrorSourceOpen}
+                  detailsLabel={t('brand.viewDetails')}
+                  details={
+                    <div className="run-error__details">
+                      <p className="run-error__description">{displayError}</p>
+                      {errorDiagnosticText ? (
+                        <div className="run-error__diagnostic">
+                          <div className="run-error__diagnostic-head">
+                            <span>{t('chat.runError.sourceLabel')}</span>
+                            <button
+                              type="button"
+                              className="run-error__source-copy"
+                              onClick={() => void copyErrorDiagnostic()}
+                              aria-label={copiedErrorDiagnostic ? t('chat.copyDone') : t('chat.copyErrorDiagnostic')}
+                              title={copiedErrorDiagnostic ? t('chat.copyDone') : t('chat.copyErrorDiagnostic')}
+                            >
+                              <Icon name={copiedErrorDiagnostic ? 'check' : 'copy'} size={13} />
+                            </button>
+                          </div>
+                          <pre>{errorDiagnosticText}</pre>
+                        </div>
                       ) : null}
-                      <p className="run-error__desc">{displayError}</p>
                     </div>
-                  </div>
-                  {/* ④ collapsible error source */}
-                  {errorDiagnosticText ? (
-                    <div className={`run-error__source${errorSourceOpen ? ' is-open' : ''}`}>
-                      <div className="run-error__source-head">
-                        <button
-                          type="button"
-                          className="run-error__source-bar"
-                          aria-expanded={errorSourceOpen}
-                          aria-label={
-                            errorSourceOpen
-                              ? t('chat.runError.sourceCollapseAria')
-                              : t('chat.runError.sourceExpandAria')
-                          }
-                          onClick={() => setErrorSourceOpen((open) => !open)}
-                        >
-                          <svg className="run-error__source-chevron" viewBox="0 0 12 12" fill="none">
-                            <path d="M4.5 2.5 8 6l-3.5 3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-                          </svg>
-                          <span className="run-error__source-label">{t('chat.runError.sourceLabel')}</span>
-                          {errorSourcePeek ? (
-                            <span className="run-error__source-peek">{errorSourcePeek}</span>
-                          ) : null}
-                        </button>
-                        <button
-                          type="button"
-                          className="run-error__source-copy"
-                          onClick={() => void copyErrorDiagnostic()}
-                          aria-label={copiedErrorDiagnostic ? t('chat.copyDone') : t('chat.copyErrorDiagnostic')}
-                          title={copiedErrorDiagnostic ? t('chat.copyDone') : t('chat.copyErrorDiagnostic')}
-                        >
-                          <Icon name={copiedErrorDiagnostic ? 'check' : 'copy'} size={13} />
-                        </button>
-                      </div>
-                      <div className="run-error__source-full">
-                        <pre>{errorDiagnosticText}</pre>
-                      </div>
-                    </div>
-                  ) : null}
-                  {/* ③ fix actions */}
-                  {showErrorActions || (retryAssistant && onRetry && runFailureUi) ? (
-                    <div className="run-error__actions">
+                  }
+                  footerActions={showErrorActions ? (
+                    <>
                       {showByokRecoveryCta ? (
                         <button
                           type="button"
@@ -2403,11 +2483,15 @@ export function ChatPane({
                               signInLabel={t('chat.amrError.authorizeCta')}
                               amrEntrySourceDetail="chat_error_authorize_retry"
                               initialStatus={inlineAmrLoginStatus}
+                              skipInitialRefresh
                               metricsConsent={config?.telemetry?.metrics === true}
                               installationId={config?.installationId}
                               showActivationDetails
                               hideSignedOutStatus
                               revealPendingCancelAction
+                              onSignInStarted={() => {
+                                amrAuthPrevLoggedInRef.current = false;
+                              }}
                               onStatusChange={(loginStatus) => {
                                 // Retry only on a real signed-out -> signed-in
                                 // transition (see amrAuthPrevLoggedInRef).
@@ -2490,6 +2574,39 @@ export function ChatPane({
                             >
                               {t('chat.amrError.rechargeCta')}
                             </button>
+                          ) : runFailureUi.primaryAction === 'upgrade' ? (
+                            <button
+                              type="button"
+                              className="chat-error-action"
+                              onClick={() => {
+                                const attribution = recordAmrEntry(
+                                  analytics.track,
+                                  'chat_error_upgrade',
+                                  new Date(),
+                                  {
+                                    metricsConsent:
+                                      config?.telemetry?.metrics === true,
+                                  },
+                                );
+                                const deviceId = amrHandoffDeviceId({
+                                  metricsConsent:
+                                    config?.telemetry?.metrics === true,
+                                  resolvedDeviceId: getResolvedDeviceId(),
+                                  installationId: config?.installationId,
+                                });
+                                window.open(
+                                  attributedAmrUrl(
+                                    amrPlansUrlForProfile(amrProfile),
+                                    attribution,
+                                    deviceId,
+                                  ),
+                                  '_blank',
+                                  'noopener,noreferrer',
+                                );
+                              }}
+                            >
+                              {t('chat.amrBalanceGate.plansCta')}
+                            </button>
                           ) : null}
                           {canResumeFailedRun ? (
                             // Resumable failure: continue the agent's existing
@@ -2501,7 +2618,7 @@ export function ChatPane({
                             // re-sending Retry path, which would resume + repeat.
                             <button
                               type="button"
-                              className="ghost chat-error-retry"
+                              className="chat-error-action"
                               onClick={() =>
                                 onResumeRun
                                   ? onResumeRun(retryAssistant)
@@ -2510,10 +2627,11 @@ export function ChatPane({
                             >
                               {t('chat.resumeRunCta')}
                             </button>
-                          ) : runFailureUi.primaryAction === 'retry' || runFailureUi.secondaryRetry ? (
+                          ) : runFailureUi.primaryAction === 'retry' ||
+                            runFailureUi.secondaryRetry ? (
                             <button
                               type="button"
-                              className="ghost chat-error-retry"
+                              className="chat-error-action chat-error-retry"
                               onClick={() => onRetry(retryAssistant)}
                             >
                               {t('promptTemplates.retry')}
@@ -2521,11 +2639,11 @@ export function ChatPane({
                           ) : null}
                         </>
                       ) : null}
-                    </div>
-                  ) : null}
-                </div>
+                    </>
+                  ) : undefined}
+                />
               ) : null}
-              {amrSwitchPayload ? (
+              {showAmrGuidance && amrSwitchPayload ? (
                 <AmrGuidance
                   {...amrSwitchPayload}
                   sourceDetail="chat_error_switch_retry_card"
@@ -2544,6 +2662,7 @@ export function ChatPane({
                   the viewport, then shrinks as the reply streams in below. */}
               <div className="chat-log-tail-spacer" ref={tailSpacerRef} aria-hidden />
             </div>
+            {chatLogTray}
             {/* Always mounted so the CSS transition can play in both
                 directions; the `chat-jump-btn-active` class flips the
                 slide + opacity, and `aria-hidden` + `tabIndex={-1}`
@@ -2563,6 +2682,12 @@ export function ChatPane({
               <span>{t('chat.jumpToLatest')}</span>
             </button>
           </div>
+          <PinnedTodoSlot
+            messages={displayMessages}
+            streaming={streaming}
+            onContinueRemainingTasks={onContinueRemainingTasks}
+            containerRef={pinnedTodoRef}
+          />
           <QueuedSendStrip
             containerRef={queuedSendStripRef}
             items={queuedItems}
@@ -2634,6 +2759,7 @@ export function ChatPane({
 }
 
 interface AssistantCallbacks {
+  onSubmitQuestionForm: QuestionFormSubmitHandler | undefined;
   onContinueRemainingTasks:
     | ((assistantMessage: ChatMessage, todos: TodoItem[]) => void)
     | undefined;
@@ -2656,6 +2782,11 @@ type ChatRenderItem = {
   key: string;
   message: ChatMessage;
 };
+
+type AppliedContextItem =
+  | { kind: 'plugin'; title: string; pluginId: string }
+  | { kind: 'skill'; title: string }
+  | { kind: 'design-system'; title: string; system?: DesignSystemSummary };
 
 function ChatConversationLoading({ t }: { t: TranslateFn }) {
   return (
@@ -2686,6 +2817,7 @@ function ChatRows({
   projectFiles,
   projectMetadata,
   projectFileNames,
+  projectResolvedDir,
   onRequestOpenFile,
   onRequestPluginDetails,
   onRequestDesignSystemDetails,
@@ -2696,14 +2828,12 @@ function ChatRows({
   shareToOpenDesignBusyMessageId,
   forceStreamingMessageIds,
   lastAssistantId,
-  firstUserMessageId,
   activePluginSnapshot,
   activeDesignSystem,
   hasActiveDesignSystem,
   errorCardOwnerId,
   nextUserContentByAssistantId,
   assistantCallbacksRef,
-  onContinueRemainingTasks,
   onBrandBrowserAssistConfirm,
   onArtifactShare,
   onToolboxAction,
@@ -2727,7 +2857,8 @@ function ChatRows({
   onAssistantFeedback,
   forkingMessageId,
   t,
-  onOpenQuestions,
+  onSubmitQuestionForm,
+  questionFormSubmitDisabled,
   scrollContainerRef,
 }: {
   messages: ChatMessage[];
@@ -2740,6 +2871,9 @@ function ChatRows({
   projectFiles: ProjectFile[];
   projectMetadata?: ProjectMetadata;
   projectFileNames?: Set<string>;
+  // Daemon-resolved on-disk working directory of the current project —
+  // positive-proof anchor for chat file-link routing (see AssistantMessage).
+  projectResolvedDir?: string | null;
   onRequestOpenFile?: (name: string) => void;
   onRequestPluginDetails?: (pluginId: string) => void;
   onRequestDesignSystemDetails?: (system: DesignSystemSummary) => void;
@@ -2750,14 +2884,12 @@ function ChatRows({
   shareToOpenDesignBusyMessageId?: string | null;
   forceStreamingMessageIds?: Set<string>;
   lastAssistantId: string | undefined;
-  firstUserMessageId: string | undefined;
   activePluginSnapshot?: AppliedPluginSnapshot | null;
   activeDesignSystem?: DesignSystemSummary | null;
   hasActiveDesignSystem: boolean;
   errorCardOwnerId: string | null;
   nextUserContentByAssistantId: Map<string, string>;
   assistantCallbacksRef: MutableRefObject<AssistantCallbacks>;
-  onContinueRemainingTasks?: (assistantMessage: ChatMessage, todos: TodoItem[]) => void;
   onBrandBrowserAssistConfirm?: BrandBrowserAssistConfirm;
   onArtifactShare?: (fileName: string) => void;
   onToolboxAction?: (id: DesignToolboxActionId) => void;
@@ -2784,21 +2916,81 @@ function ChatRows({
   onAssistantFeedback?: (message: ChatMessage, change: ChatMessageFeedbackChange) => void;
   forkingMessageId?: string | null;
   t: TranslateFn;
-  onOpenQuestions?: (request?: QuestionFormOpenRequest) => void;
+  onSubmitQuestionForm?: QuestionFormSubmitHandler;
+  questionFormSubmitDisabled: boolean;
   scrollContainerRef: MutableRefObject<HTMLDivElement | null>;
 }) {
-  const conversationTodoInput = useMemo(
-    () => latestTodoWriteInputForPinnedCard(messages),
-    [messages],
-  );
-  const conversationTodoAnchorMessageId = useMemo(
-    () => firstTodoWriteAssistantMessageId(messages),
-    [messages],
-  );
   const items = useMemo(
     () => buildChatRenderItems(messages),
     [messages],
   );
+  const appliedContextByMessageId = useMemo(() => {
+    const skillNames = new Map(
+      (nextStepSkills ?? []).map((skill) => [skill.id, skill.name || skill.id]),
+    );
+    const byMessageId = new Map<string, AppliedContextItem[]>();
+    let previousSignature = '';
+
+    for (const message of messages) {
+      if (message.role !== 'user') continue;
+      const pluginSnapshot = message.appliedPluginSnapshot ?? activePluginSnapshot ?? null;
+      const contextItems: AppliedContextItem[] = [];
+
+      if (pluginSnapshot) {
+        contextItems.push({
+          kind: 'plugin',
+          title: pluginSnapshot.pluginTitle ?? pluginSnapshot.pluginId,
+          pluginId: pluginSnapshot.pluginId,
+        });
+      }
+      for (const pluginId of message.runContext?.pluginIds ?? []) {
+        if (pluginSnapshot?.pluginId === pluginId) continue;
+        contextItems.push({ kind: 'plugin', title: pluginId, pluginId });
+      }
+      for (const skillId of message.runContext?.skillIds ?? []) {
+        contextItems.push({ kind: 'skill', title: skillNames.get(skillId) ?? skillId });
+      }
+      if (activeDesignSystem) {
+        contextItems.push({
+          kind: 'design-system',
+          title: activeDesignSystem.title,
+          system: activeDesignSystem,
+        });
+      }
+      for (const item of message.runContext?.workspaceItems ?? []) {
+        if (item.kind !== 'design-system') continue;
+        if (contextItems.some((candidate) => candidate.kind === 'design-system' && candidate.title === item.label)) {
+          continue;
+        }
+        contextItems.push({ kind: 'design-system', title: item.label });
+      }
+
+      const deduped = contextItems.filter((item, index, all) =>
+        all.findIndex((candidate) => candidate.kind === item.kind && candidate.title === item.title) === index,
+      );
+      const signature = deduped.map((item) => `${item.kind}:${item.title}`).join('|');
+      if (signature && signature !== previousSignature) {
+        byMessageId.set(message.id, deduped);
+      }
+      previousSignature = signature;
+    }
+    return byMessageId;
+  }, [activeDesignSystem, activePluginSnapshot, messages, nextStepSkills]);
+  const assistantRoleByMessageId = useMemo(() => {
+    const byMessageId = new Map<string, boolean>();
+    let previousAssistantIdentity: string | null = null;
+
+    for (const message of messages) {
+      if (message.role !== 'assistant') {
+        previousAssistantIdentity = null;
+        continue;
+      }
+      const identity = message.agentId ?? message.agentName ?? 'assistant';
+      byMessageId.set(message.id, identity !== previousAssistantIdentity);
+      previousAssistantIdentity = identity;
+    }
+    return byMessageId;
+  }, [messages]);
   const virtualized = items.length > CHAT_MESSAGE_VIRTUALIZE_THRESHOLD;
   const virtualWindow = useMeasuredVirtualWindow(items, {
     enabled: virtualized,
@@ -2807,10 +2999,6 @@ function ChatRows({
     overscanPx: CHAT_MESSAGE_OVERSCAN_PX,
     resetKey: activeConversationKey,
     initialTailRows: CHAT_VIRTUAL_INITIAL_TAIL_ROWS,
-    alwaysIncludeKey:
-      conversationTodoInput != null && conversationTodoAnchorMessageId
-        ? `message:${conversationTodoAnchorMessageId}`
-        : undefined,
   });
 
   const renderItem = (item: ChatRenderItem) => {
@@ -2831,16 +3019,7 @@ function ChatRows({
           onRequestPluginDetails={onRequestPluginDetails}
           onRequestDesignSystemDetails={onRequestDesignSystemDetails}
           t={t}
-          activePluginSnapshot={
-            m.id === firstUserMessageId
-              ? activePluginSnapshot ?? null
-              : null
-          }
-          activeDesignSystem={
-            m.id === firstUserMessageId
-              ? activeDesignSystem ?? null
-              : null
-          }
+          appliedContextItems={appliedContextByMessageId.get(m.id) ?? []}
         />
       );
     }
@@ -2852,14 +3031,13 @@ function ChatRows({
         // get a stable `undefined`, so adding `liveToolInput` to the memo
         // comparator re-renders just this row per `tool_input_delta`, not all N.
         liveToolInput={messageStreaming ? liveToolInput : undefined}
-        showConversationTodoCard={m.id === conversationTodoAnchorMessageId}
-        conversationTodoInput={conversationTodoInput}
         projectId={projectId}
         projectKind={projectKindForTracking}
         conversationId={activeConversationId}
         projectFiles={projectFiles}
         projectMetadata={projectMetadata}
         projectFileNames={projectFileNames}
+        projectResolvedDir={projectResolvedDir}
         onRequestOpenFile={onRequestOpenFile}
         onRequestPluginFolderAgentAction={onRequestPluginFolderAgentAction}
         activePluginActionPaths={activePluginActionPaths}
@@ -2870,20 +3048,26 @@ function ChatRows({
             : undefined
         }
         shareToOpenDesignBusy={shareToOpenDesignBusyMessageId === m.id}
+        showRole={assistantRoleByMessageId.get(m.id) ?? true}
         isLast={m.id === lastAssistantId}
         errorCardOwnerId={errorCardOwnerId}
         nextUserContent={nextUserContentByAssistantId.get(m.id)}
         suppressDirectionForms={hasActiveDesignSystem}
         hasDesignSystemContext={hasActiveDesignSystem || !!activeDesignSystem}
-        onOpenQuestions={onOpenQuestions}
+        onSubmitQuestionForm={
+          onSubmitQuestionForm
+            ? (text, attachments, context) =>
+                assistantCallbacksRef.current.onSubmitQuestionForm?.(
+                  text,
+                  attachments,
+                  context,
+                )
+            : undefined
+        }
+        questionFormSubmitDisabled={questionFormSubmitDisabled}
         onBrandBrowserAssistConfirm={
           onBrandBrowserAssistConfirm
             ? (card) => assistantCallbacksRef.current.onBrandBrowserAssistConfirm?.(card)
-            : undefined
-        }
-        onContinueRemainingTasks={
-          m.id === lastAssistantId && onContinueRemainingTasks
-            ? (todos) => assistantCallbacksRef.current.onContinueRemainingTasks?.(m, todos)
             : undefined
         }
         onForkFromMessage={
@@ -3017,6 +3201,12 @@ function buildChatRenderItems(messages: ChatMessage[]): ChatRenderItem[] {
   const items: ChatRenderItem[] = [];
   for (let i = 0; i < messages.length; i += 1) {
     const message = messages[i]!;
+    // Structured form answers are rendered as a compact summary on the
+    // preceding assistant message. Keeping the raw machine payload in a
+    // separate user bubble duplicates the same decision and exposes stable IDs.
+    if (message.role === 'user' && /^\[form answers\b/i.test(message.content.trim())) {
+      continue;
+    }
     items.push({
       kind: 'message',
       key: `message:${message.id}`,
@@ -3024,17 +3214,6 @@ function buildChatRenderItems(messages: ChatMessage[]): ChatRenderItem[] {
     });
   }
   return items;
-}
-
-function firstTodoWriteAssistantMessageId(messages: ChatMessage[]): string | null {
-  const message = messages.find(
-    (candidate) =>
-      candidate.role === 'assistant' &&
-      candidate.events?.some(
-        (event) => event.kind === 'tool_use' && isTodoWriteToolName(event.name),
-      ),
-  );
-  return message?.id ?? null;
 }
 
 function estimateChatRenderItemHeight(item: ChatRenderItem): number {
@@ -3211,6 +3390,48 @@ function includeVirtualRowByKey<T extends { key: string }>(
       top: offsets[index] ?? 0,
     },
   ].sort((a, b) => a.index - b.index);
+}
+
+function PinnedTodoSlot({
+  messages,
+  streaming,
+  onContinueRemainingTasks,
+  containerRef,
+}: {
+  messages: ChatMessage[];
+  streaming: boolean;
+  onContinueRemainingTasks?: (assistantMessage: ChatMessage, todos: TodoItem[]) => void;
+  containerRef?: MutableRefObject<HTMLDivElement | null>;
+}) {
+  const input = latestTodoWriteInputForPinnedCard(messages);
+  if (input == null) return null;
+
+  const owner = [...messages].reverse().find(
+    (message) =>
+      message.role === 'assistant' &&
+      message.events?.some(
+        (event) => event.kind === 'tool_use' && isTodoWriteToolName(event.name),
+      ),
+  );
+  const unfinishedTodos = owner ? unfinishedTodosFromEvents(owner.events) : [];
+
+  return (
+    <div
+      className="chat-pinned-todo"
+      ref={containerRef}
+    >
+      <TodoCard
+        input={input}
+        runStreaming={streaming}
+        runSucceeded={!streaming}
+        onContinue={
+          owner && unfinishedTodos.length > 0 && onContinueRemainingTasks
+            ? () => onContinueRemainingTasks(owner, unfinishedTodos)
+            : undefined
+        }
+      />
+    </div>
+  );
 }
 
 function QueuedSendStrip({
@@ -3607,7 +3828,7 @@ export function retryableAssistantMessage(
   const last = messages[messages.length - 1];
   if (!last || last.role !== 'assistant') return null;
   if (last.id !== lastAssistantId) return null;
-  return last.runStatus === 'failed' ? last : null;
+  return isRetryableAssistantTerminalFailure(last) ? last : null;
 }
 
 export function isAssistantMessageStreaming(
@@ -3760,8 +3981,7 @@ function UserMessageImpl({
   onRequestPluginDetails,
   onRequestDesignSystemDetails,
   t,
-  activePluginSnapshot,
-  activeDesignSystem,
+  appliedContextItems,
 }: {
   message: ChatMessage;
   projectId: string | null;
@@ -3770,18 +3990,16 @@ function UserMessageImpl({
   onRequestPluginDetails?: (pluginId: string) => void;
   onRequestDesignSystemDetails?: (system: DesignSystemSummary) => void;
   t: TranslateFn;
-  activePluginSnapshot?: AppliedPluginSnapshot | null;
-  activeDesignSystem?: DesignSystemSummary | null;
+  appliedContextItems: AppliedContextItem[];
 }) {
   const attachments = sortChatAttachmentsForDisplay(message.attachments ?? []);
   const commentAttachments = message.commentAttachments ?? [];
   const workspaceItems = message.runContext?.workspaceItems ?? [];
-  const messagePluginSnapshot = message.appliedPluginSnapshot ?? activePluginSnapshot ?? null;
+  const visibleWorkspaceItems = workspaceItems.filter((item) => item.kind !== 'design-system');
   const hasRunContext = Boolean(
     message.sessionMode ||
-      workspaceItems.length > 0 ||
-      messagePluginSnapshot ||
-      activeDesignSystem,
+      visibleWorkspaceItems.length > 0 ||
+      appliedContextItems.length > 0,
   );
   const [copied, setCopied] = useState(false);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout>>();
@@ -3814,24 +4032,19 @@ function UserMessageImpl({
           {message.sessionMode ? (
             <MessageSessionModeChip mode={message.sessionMode} t={t} />
           ) : null}
-          {workspaceItems.map((item) => (
+          {visibleWorkspaceItems.map((item) => (
             <ActiveWorkspaceContextChip
               key={`${item.kind}:${item.id}`}
               item={item}
               onOpen={onRequestOpenFile}
             />
           ))}
-          {messagePluginSnapshot ? (
-            <ActivePluginChip
-              snapshot={messagePluginSnapshot}
+          {appliedContextItems.length > 0 ? (
+            <AppliedContextDisclosure
+              items={appliedContextItems}
               t={t}
-              onOpenDetails={onRequestPluginDetails}
-            />
-          ) : null}
-          {activeDesignSystem ? (
-            <ActiveDesignSystemChip
-              system={activeDesignSystem}
-              onOpenDetails={onRequestDesignSystemDetails}
+              onOpenPlugin={onRequestPluginDetails}
+              onOpenDesignSystem={onRequestDesignSystemDetails}
             />
           ) : null}
         </div>
@@ -3913,58 +4126,83 @@ function UserMessageImpl({
   );
 }
 
-// Context chip rendered above a user message when the project pinned a
-// plugin at create time (PluginLoopHome on Home). Replaces the noisy
-// in-composer plugin rail so the user is not re-prompted to pick
-// something they already chose; instead the active plugin lives inside
-// the run message it kicked off.
-function ActivePluginChip({
-  snapshot,
-  t: _t,
-  onOpenDetails,
+// Plugin, skill and design-system inputs are supporting context, not separate
+// cards. Collapse them into one line and only render that line when the
+// selection changes (the caller performs the conversation-level dedupe).
+function AppliedContextDisclosure({
+  items,
+  t,
+  onOpenPlugin,
+  onOpenDesignSystem,
 }: {
-  snapshot: AppliedPluginSnapshot;
+  items: AppliedContextItem[];
   t: TranslateFn;
-  onOpenDetails?: (pluginId: string) => void;
+  onOpenPlugin?: (pluginId: string) => void;
+  onOpenDesignSystem?: (system: DesignSystemSummary) => void;
 }) {
-  const title = snapshot.pluginTitle ?? snapshot.pluginId;
-  const version = snapshot.pluginVersion;
-  const taskKind = snapshot.taskKind;
-  const content = (
-    <>
-      <span className="msg-plugin-chip__dot" aria-hidden />
-      <span className="msg-plugin-chip__label">
-        <span className="msg-plugin-chip__kind">Plugin</span>
-        <span className="msg-plugin-chip__title">{title}</span>
-        {version ? (
-          <span className="msg-plugin-chip__version">@{version}</span>
-        ) : null}
-      </span>
-      {taskKind ? (
-        <span className="msg-plugin-chip__task">{taskKind}</span>
-      ) : null}
-    </>
-  );
-  // One clean chip per message — the plugin's full resolved context still
-  // rides the run via the persisted snapshot; we no longer fan it out into
-  // per-category (design-system / asset / skill) chips here.
+  const [open, setOpen] = useState(false);
+  const names = items.map((item) => item.title).join(' · ');
+  const summary = t('brand.appliedToChat', { name: names });
   return (
-    <div className="msg-plugin-context" data-testid="msg-plugin-context">
-      {onOpenDetails ? (
-        <button
-          type="button"
-          className="msg-plugin-chip msg-plugin-chip--action"
-          data-testid="msg-plugin-chip"
-          title={title}
-          onClick={() => onOpenDetails(snapshot.pluginId)}
-        >
-          {content}
-        </button>
-      ) : (
-        <div className="msg-plugin-chip" data-testid="msg-plugin-chip">
-          {content}
+    <div className="msg-applied-context" data-testid="msg-applied-context">
+      <button
+        type="button"
+        className="msg-applied-context__toggle"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+        title={summary}
+      >
+        <span className="msg-applied-context__icon" aria-hidden>
+          <Icon name="blocks" size={11} />
+        </span>
+        <span className="msg-applied-context__summary">{summary}</span>
+        <span className={`msg-applied-context__chevron${open ? ' is-open' : ''}`} aria-hidden>
+          <Icon name="chevron-down" size={11} />
+        </span>
+      </button>
+      <div className={`accordion-collapsible${open ? ' open' : ''}`}>
+        <div className="accordion-collapsible-inner">
+          <div className="msg-applied-context__details">
+            {items.map((item, index) => {
+              const label = item.kind === 'plugin'
+                ? 'Plugin'
+                : item.kind === 'skill'
+                  ? 'Skill'
+                  : 'Design System';
+              const canOpenPlugin = item.kind === 'plugin' && !!onOpenPlugin;
+              const canOpenSystem = item.kind === 'design-system' && !!item.system && !!onOpenDesignSystem;
+              const content = (
+                <>
+                  <span className="msg-applied-context__kind">{label}</span>
+                  <span>{item.title}</span>
+                </>
+              );
+              return canOpenPlugin || canOpenSystem ? (
+                <button
+                  key={`${item.kind}:${item.title}:${index}`}
+                  type="button"
+                  className="msg-applied-context__item is-action"
+                  onClick={() => {
+                    if (item.kind === 'plugin') onOpenPlugin?.(item.pluginId);
+                    if (item.kind === 'design-system' && item.system) {
+                      onOpenDesignSystem?.(item.system);
+                    }
+                  }}
+                >
+                  {content}
+                </button>
+              ) : (
+                <span
+                  key={`${item.kind}:${item.title}:${index}`}
+                  className="msg-applied-context__item"
+                >
+                  {content}
+                </span>
+              );
+            })}
+          </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -3991,45 +4229,6 @@ function MessageSessionModeChip({
       <Icon name={icon} size={12} />
       <span>{label}</span>
     </div>
-  );
-}
-
-function ActiveDesignSystemChip({
-  system,
-  onOpenDetails,
-}: {
-  system: DesignSystemSummary;
-  onOpenDetails?: (system: DesignSystemSummary) => void;
-}) {
-  const content = (
-    <>
-      <span className="msg-plugin-chip__dot" aria-hidden />
-      <span className="msg-plugin-chip__label">
-        <span className="msg-plugin-chip__kind">Design System</span>
-        <span className="msg-plugin-chip__title">{system.title}</span>
-      </span>
-      {system.category ? (
-        <span className="msg-plugin-chip__task">{system.category}</span>
-      ) : null}
-    </>
-  );
-  if (!onOpenDetails) {
-    return (
-      <div className="msg-plugin-chip msg-plugin-chip--design-system" data-testid="msg-design-system-chip">
-        {content}
-      </div>
-    );
-  }
-  return (
-    <button
-      type="button"
-      className="msg-plugin-chip msg-plugin-chip--design-system msg-plugin-chip--action"
-      data-testid="msg-design-system-chip"
-      title={system.title}
-      onClick={() => onOpenDetails(system)}
-    >
-      {content}
-    </button>
   );
 }
 

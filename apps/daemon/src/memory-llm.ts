@@ -31,11 +31,13 @@
 //   3. BYOK chat-config snapshot for API-mode chats.
 //   4. ANTHROPIC_API_KEY env → Claude Haiku 4.5 (legacy fallback)
 //   5. OPENAI_API_KEY env    → gpt-4o-mini
-//   6. media-config OpenAI BYOK → gpt-4o-mini
+//   6. media-config text-capable BYOK → OpenAI / MiniMax /
+//      AIHubMix / SenseAudio fast defaults
 //      (the key the user already typed into Settings → Media providers;
 //       reuses an existing credential so Local-CLI users don't have to
 //       paste it twice just to get LLM-side memory extraction)
-//   7. nothing               → record a 'skipped: no-provider' attempt
+//   7. unsupported media key → record a 'skipped: unsupported-provider'
+//   8. nothing               → record a 'skipped: no-provider' attempt
 //      so the UI can surface "configure a key to enable LLM memory"
 //      instead of staying silent
 //
@@ -64,6 +66,7 @@ import { resolveProviderConfig } from './media/config.js';
 import { AIHUBMIX_APP_CODE } from './integrations/aihubmix.js';
 import { spawn } from 'node:child_process';
 import os from 'node:os';
+import { createHash } from 'node:crypto';
 import { createCommandInvocation } from '@open-design/platform';
 import {
   applyAgentLaunchEnv,
@@ -193,6 +196,36 @@ const PROVIDER_DEFAULTS = {
   },
 };
 
+// Some Settings -> Media providers credentials are usable for text
+// extraction even though their media base URL targets image/TTS endpoints.
+// Keep those fallbacks explicit so a saved image/audio-only key does not get
+// reported as "no API key", and so we never accidentally call a non-chat media
+// endpoint as the memory extractor.
+const MEDIA_MEMORY_PROVIDER_FALLBACKS = [
+  {
+    mediaProviderId: 'minimax',
+    memoryProvider: 'openai',
+    model: 'MiniMax-M2.7-highspeed',
+    baseUrl: 'https://api.minimax.io/v1',
+  },
+  {
+    mediaProviderId: 'aihubmix',
+    memoryProvider: 'aihubmix',
+    model: PROVIDER_DEFAULTS.aihubmix.model,
+    baseUrl: PROVIDER_DEFAULTS.aihubmix.baseUrl,
+  },
+  {
+    mediaProviderId: 'senseaudio',
+    memoryProvider: 'senseaudio',
+    model: PROVIDER_DEFAULTS.senseaudio.model,
+    baseUrl: PROVIDER_DEFAULTS.senseaudio.baseUrl,
+  },
+];
+
+const MEDIA_MEMORY_PROVIDER_IDS = new Set(
+  MEDIA_MEMORY_PROVIDER_FALLBACKS.map((fallback) => fallback.mediaProviderId),
+);
+
 // Map an explicit override provider to the env var the daemon should
 // consult when the override doesn't carry its own apiKey. The fallback
 // chain stays the same as before for anthropic/openai; azure uses the
@@ -295,6 +328,66 @@ function localCliProviderFor(agentId, provider, model) {
   };
 }
 
+function providerFromOpenAiMediaConfig(cred, envOverrideModel) {
+  if (!cred || typeof cred.apiKey !== 'string' || !cred.apiKey.trim()) return null;
+  return {
+    kind: 'openai',
+    apiKey: cred.apiKey.trim(),
+    model:
+      envOverrideModel || cred.model || PROVIDER_DEFAULTS.openai.model,
+    baseUrl: (cred.baseUrl && String(cred.baseUrl).trim())
+      || PROVIDER_DEFAULTS.openai.baseUrl,
+    apiVersion: '',
+    credentialSource: 'media-config',
+  };
+}
+
+async function providerFromMediaMemoryFallbacks(projectRoot, envOverrideModel) {
+  for (const fallback of MEDIA_MEMORY_PROVIDER_FALLBACKS) {
+    try {
+      const cred = await resolveProviderConfig(projectRoot, fallback.mediaProviderId);
+      if (cred && typeof cred.apiKey === 'string' && cred.apiKey.trim()) {
+        return {
+          kind: fallback.memoryProvider,
+          apiKey: cred.apiKey.trim(),
+          model: envOverrideModel || fallback.model,
+          // Deliberately use the text-chat default, not the media base URL.
+          baseUrl: fallback.baseUrl,
+          apiVersion: '',
+          credentialSource: 'media-config',
+        };
+      }
+    } catch (err) {
+      console.warn(
+        `[memory-llm] media-config lookup failed (${fallback.mediaProviderId})`,
+        err?.message ?? err,
+      );
+    }
+  }
+  return null;
+}
+
+async function hasUnsupportedMediaProviderConfig(projectRoot) {
+  try {
+    const { readMaskedConfig } = await import('./media/config.js');
+    const masked = await readMaskedConfig(projectRoot);
+    const configured = Object.entries(masked.providers)
+      .filter(([, provider]) => provider?.configured)
+      .map(([id]) => id);
+    if (configured.length === 0) return false;
+    const hasTextCapable = configured.some(
+      (id) => id === 'openai' || MEDIA_MEMORY_PROVIDER_IDS.has(id),
+    );
+    return !hasTextCapable;
+  } catch (err) {
+    console.warn(
+      '[memory-llm] failed to inspect media-config support',
+      err?.message ?? err,
+    );
+    return false;
+  }
+}
+
 // Pick a provider in this order:
 //   0. Memory config override → user-set provider/model/baseUrl/apiKey
 //   1. Current Local CLI → if the user is chatting through Claude Code,
@@ -303,8 +396,8 @@ function localCliProviderFor(agentId, provider, model) {
 //      just because the extraction happens in the background.
 //   2. Chat-protocol-constrained env var → if the chat is on Claude
 //      Code (anthropic), only ANTHROPIC_API_KEY counts; Codex/OpenAI-
-//      compatible CLIs only consult OPENAI_API_KEY (and the media-
-//      config OpenAI key as a secondary fallback). This stops the
+//      compatible CLIs only consult OPENAI_API_KEY (and text-capable
+//      media-config keys as a secondary fallback). This stops the
 //      legacy "claude user, openai gpt-4o-mini extracts in the
 //      background" surprise — if the matching key isn't configured,
 //      we'd rather skip with 'no-provider' and surface that in the
@@ -323,7 +416,8 @@ function localCliProviderFor(agentId, provider, model) {
 //      AND the caller didn't pass `chatProvider`)
 //      ANTHROPIC_API_KEY env → Claude Haiku 4.5
 //   5. (legacy fallback) OPENAI_API_KEY env → gpt-4o-mini
-//   6. (legacy fallback) media-config OpenAI BYOK → gpt-4o-mini
+//   6. (legacy fallback) media-config text-capable BYOK → OpenAI /
+//      MiniMax / AIHubMix / SenseAudio fast defaults
 //
 // The `OD_MEMORY_MODEL` env continues to override the model name across
 // (1)–(6) so power users don't lose that lever. It does NOT override the
@@ -455,16 +549,8 @@ async function pickProvider(projectRoot, dataDir, chatAgentId, chatProvider, cha
       try {
         const cred = await resolveProviderConfig(projectRoot, 'openai');
         if (cred && typeof cred.apiKey === 'string' && cred.apiKey.trim()) {
-          return {
-            kind: 'openai',
-            apiKey: cred.apiKey.trim(),
-            model:
-              envOverrideModel || cred.model || PROVIDER_DEFAULTS.openai.model,
-            baseUrl: (cred.baseUrl && String(cred.baseUrl).trim())
-              || PROVIDER_DEFAULTS.openai.baseUrl,
-            apiVersion: '',
-            credentialSource: 'media-config',
-          };
+          const provider = providerFromOpenAiMediaConfig(cred, envOverrideModel);
+          if (provider) return provider;
         }
       } catch (err) {
         console.warn(
@@ -472,6 +558,11 @@ async function pickProvider(projectRoot, dataDir, chatAgentId, chatProvider, cha
           err?.message ?? err,
         );
       }
+      const mediaProvider = await providerFromMediaMemoryFallbacks(
+        projectRoot,
+        envOverrideModel,
+      );
+      if (mediaProvider) return mediaProvider;
     }
     // The chat protocol is known but no key for it is available. Bail
     // out instead of wandering — recording 'skipped: no-provider' is
@@ -488,6 +579,14 @@ async function pickProvider(projectRoot, dataDir, chatAgentId, chatProvider, cha
   // big chat model (gpt-4o, claude-sonnet-4-5) silently turns into a
   // cheap haiku/mini call. The caller can opt into using the chat
   // model verbatim by setting `chatProvider.model`.
+  //
+  // Keyless BYOK (local vLLM / Ollama / openai-compatible servers with
+  // `requiresApiKey: false`) is also valid — the web app explicitly
+  // marks it via `requiresApiKey: false` on the snapshot. We must
+  // enter the BYOK branch in that case too because the alternative
+  // paths below all require an env / media-config key and would fall
+  // back to unrelated OpenAI credentials (the gpt-4o-mini default this
+  // hook exists to avoid), defeating the BYOK guarantee.
   if (
     chatProvider
     && chatProvider.provider
@@ -495,13 +594,14 @@ async function pickProvider(projectRoot, dataDir, chatAgentId, chatProvider, cha
   ) {
     const apiKey =
       typeof chatProvider.apiKey === 'string' ? chatProvider.apiKey.trim() : '';
-    if (apiKey) {
+    const allowKeyless = chatProvider.requiresApiKey === false;
+    if (apiKey || allowKeyless) {
       const defaults = PROVIDER_DEFAULTS[chatProvider.provider];
       const baseUrl =
         (typeof chatProvider.baseUrl === 'string' && chatProvider.baseUrl.trim())
         || defaults.baseUrl;
       // Azure with no resource URL is unrecoverable — same guard as
-      // the override path above.
+      // the override path above. (Azure is never keyless.)
       if (chatProvider.provider !== 'azure' || baseUrl) {
         const explicitModel =
           typeof chatProvider.model === 'string' && chatProvider.model.trim()
@@ -519,6 +619,10 @@ async function pickProvider(projectRoot, dataDir, chatAgentId, chatProvider, cha
                 || PROVIDER_DEFAULTS.azure.apiVersion
               : '',
           credentialSource: 'chat-byok',
+          // Preserve the keyless signal for the HTTP call layer so it
+          // omits the Authorization header instead of sending `Bearer `
+          // (empty) which the local server would reject.
+          ...(allowKeyless ? { requiresApiKey: false } : {}),
         };
       }
     }
@@ -552,23 +656,19 @@ async function pickProvider(projectRoot, dataDir, chatAgentId, chatProvider, cha
   if (projectRoot) {
     try {
       const cred = await resolveProviderConfig(projectRoot, 'openai');
-      if (cred && typeof cred.apiKey === 'string' && cred.apiKey.trim()) {
-        return {
-          kind: 'openai',
-          apiKey: cred.apiKey.trim(),
-          model:
-            envOverrideModel || cred.model || PROVIDER_DEFAULTS.openai.model,
-          baseUrl: (cred.baseUrl && String(cred.baseUrl).trim())
-            || PROVIDER_DEFAULTS.openai.baseUrl,
-          credentialSource: 'media-config',
-        };
-      }
+      const provider = providerFromOpenAiMediaConfig(cred, envOverrideModel);
+      if (provider) return provider;
     } catch (err) {
       console.warn(
         '[memory-llm] failed to read media-config for fallback',
         err?.message ?? err,
       );
     }
+    const mediaProvider = await providerFromMediaMemoryFallbacks(
+      projectRoot,
+      envOverrideModel,
+    );
+    if (mediaProvider) return mediaProvider;
   }
   return null;
 }
@@ -715,7 +815,14 @@ async function callOpenAI(provider, system, user) {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
-          authorization: `Bearer ${provider.apiKey}`,
+          // Keyless BYOK endpoints (local vLLM / Ollama / openai-compatible
+          // servers marked with `requiresApiKey: false`) accept requests
+          // without an Authorization header — sending `Bearer ` (empty)
+          // would cause some servers to reject the call. Only attach the
+          // header when we actually have a key.
+          ...(provider.apiKey
+            ? { authorization: `Bearer ${provider.apiKey}` }
+            : {}),
           // AIHubMix routes through this same OpenAI-compatible path but wants
           // the fixed APP-Code attribution header on every request.
           ...(provider.kind === 'aihubmix' && AIHUBMIX_APP_CODE
@@ -1062,6 +1169,46 @@ function toMemoryDraft(candidate) {
   };
 }
 
+// Duplicate-turn de-duplication for chat ('llm') extraction. The daemon fires
+// the extractor from a run's child-close hook, so a turn that is re-fed —
+// retried, re-posted, or re-ground during a long build — re-enters here with the
+// same (conversation, user message, rendered reply). A failed/out-of-credits
+// attempt yields an empty reply, so the whole re-fire storm shares one signature
+// and collapses to a single pass. The signature is keyed by conversation, so an
+// identical message+reply in a different conversation is still examined, and it
+// is recorded only AFTER a provider call succeeds (see collectProposedEntries) —
+// a failed or no-provider attempt must not permanently mark a turn as seen. The
+// set is bounded, and process-lifetime only: a restart is a fine reason to
+// re-examine a turn.
+const RECENT_LLM_TURN_LIMIT = 256;
+const recentLlmTurnSignatures = new Set();
+
+function llmTurnSignature(conversationKey, userMessage, assistantMessage) {
+  // JSON-encode the parts so the (conversation, message, reply) boundaries are
+  // unambiguous without a separator byte the content itself could contain.
+  return createHash('sha256')
+    .update(JSON.stringify([
+      String(conversationKey ?? ''),
+      String(userMessage ?? ''),
+      String(assistantMessage ?? ''),
+    ]))
+    .digest('hex');
+}
+
+function rememberLlmTurnSignature(signature) {
+  recentLlmTurnSignatures.add(signature);
+  if (recentLlmTurnSignatures.size > RECENT_LLM_TURN_LIMIT) {
+    // Evict the oldest (insertion order) so the working set stays bounded.
+    const oldest = recentLlmTurnSignatures.values().next().value;
+    if (oldest !== undefined) recentLlmTurnSignatures.delete(oldest);
+  }
+}
+
+// Test-only — reset the duplicate-turn de-dup set so specs start from a clean slate.
+export function __resetMemoryTurnDedupeForTests() {
+  recentLlmTurnSignatures.clear();
+}
+
 async function collectProposedEntries(dataDir, input, options) {
   const projectRoot = options?.projectRoot ?? null;
   const chatAgentId = options?.chatAgentId ?? null;
@@ -1092,6 +1239,34 @@ async function collectProposedEntries(dataDir, input, options) {
     return { status: 'skipped', attemptId: null, proposed: [], existingEntries: [] };
   }
 
+  // Duplicate-turn gate — skip BEFORE picking a provider so no LLM call is spent
+  // re-mining a turn already extracted. The daemon fires this from the run's
+  // child-close hook, which re-runs on every retry / re-fed attempt of the same
+  // turn (a long out-of-credits build re-analyzed one turn dozens of times). A
+  // failed attempt has an empty reply, so its (conversation, message, "")
+  // signature is identical across the storm and collapses to a single pass.
+  // Deliberately NOT gated on retryAttemptCount: a turn that only succeeds on a
+  // retry produces its reply on that attempt, and must still be mined. The
+  // signature is recorded only AFTER a successful provider call (below), so a
+  // failed or no-provider extraction never permanently marks the turn as seen.
+  //
+  // Gate is scoped to a REAL conversation id. Callers that don't thread one —
+  // e.g. the BYOK/API-mode `/api/memory/extract` post-turn path — get no
+  // de-dup at all, because an empty fallback key would be shared across every
+  // such caller and collapse identical (message, reply) pairs from unrelated
+  // conversations into a single skipped extraction. The chat close hook that
+  // caused the re-fire storm always passes `run.conversationId`, so its
+  // protection is preserved.
+  const conversationKey =
+    typeof options?.conversationId === 'string' ? options.conversationId : '';
+  let turnSignature = null;
+  if (extractionKind === 'llm' && conversationKey) {
+    turnSignature = llmTurnSignature(conversationKey, userMessage, input?.assistantMessage);
+    if (recentLlmTurnSignatures.has(turnSignature)) {
+      return { status: 'skipped', attemptId: null, proposed: [], existingEntries: [] };
+    }
+  }
+
   const provider = await pickProvider(
     projectRoot,
     dataDir,
@@ -1100,7 +1275,11 @@ async function collectProposedEntries(dataDir, input, options) {
     chatModel,
   );
   if (!provider) {
-    recordSkip({ userMessage, reason: 'no-provider', kind: extractionKind });
+    const reason =
+      projectRoot && await hasUnsupportedMediaProviderConfig(projectRoot)
+        ? 'unsupported-provider'
+        : 'no-provider';
+    recordSkip({ userMessage, reason, kind: extractionKind });
     return { status: 'skipped', attemptId: null, proposed: [], existingEntries: [] };
   }
 
@@ -1177,6 +1356,10 @@ async function collectProposedEntries(dataDir, input, options) {
     return { status: 'failed', attemptId, proposed: [], existingEntries };
   }
   markProposed(attemptId, proposed.length);
+  // Provider call succeeded (even an empty extraction) — now safe to remember
+  // this turn so identical re-fires skip. Recording here, not before the call,
+  // means a failed / no-provider attempt can still be retried for this turn.
+  if (turnSignature) rememberLlmTurnSignature(turnSignature);
   return { status: 'ok', attemptId, proposed, existingEntries };
 }
 

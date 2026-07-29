@@ -32,6 +32,7 @@ import {
 } from '../src/server.js';
 import { skillCwdAliasSegment } from '../src/cwd-aliases.js';
 import { getAgentDef } from '../src/agents.js';
+import { readAppConfig, writeAppConfig } from '../src/app-config.js';
 import { readMemoryConfig, writeMemoryConfig } from '../src/memory.js';
 import { upsertMessage } from '../src/db.js';
 import { renderCodexImagegenOverride } from '../src/prompts/system.js';
@@ -194,6 +195,43 @@ describe('/api/chat', () => {
     expect(response.ok).toBe(true);
     expect(body).not.toContain('res is not defined');
     expect(body).toContain('AGENT_UNAVAILABLE');
+  });
+
+  it('keeps serving when delivered-session persistence has no conversation row', async () => {
+    const conversationId = `missing-conversation-${randomUUID()}`;
+
+    await withFakeAgent(
+      'opencode',
+      `
+console.log(JSON.stringify({ type: 'step_start', sessionID: 'missing-conversation-session' }));
+console.log(JSON.stringify({
+  type: 'text',
+  sessionID: 'missing-conversation-session',
+  part: { text: '<question-form id="discovery">{"questions":[{"id":"style","label":"Style?"}]}</question-form>' },
+}));
+console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+process.exit(0);
+`,
+      async () => {
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            conversationId,
+            message: 'ask for clarification',
+          }),
+        });
+        const body = await response.text();
+
+        expect(response.ok).toBe(true);
+        expect(body).toContain('<question-form');
+        expect(body).toContain('"status":"succeeded"');
+
+        const healthResponse = await fetch(`${baseUrl}/api/health`);
+        expect(healthResponse.status).toBe(200);
+      },
+    );
   });
 
   it('marks json stream runs failed when an error frame exits with code 0', async () => {
@@ -538,7 +576,7 @@ process.stdin.on('end', () => {
         };
         const provider = parsed.provider?.['open-design-byok'];
         expect(provider).toMatchObject({
-          npm: '@ai-sdk/openai',
+          npm: '@ai-sdk/openai-compatible',
           options: {
             baseURL: 'http://127.0.0.1:8000/v1',
           },
@@ -736,6 +774,62 @@ process.stdin.on('end', () => {
     }
   });
 
+  it('does not leave a pinned assistant message queued when legacy chat fails before spawning', async () => {
+    if (!process.env.OD_DATA_DIR) {
+      throw new Error('OD_DATA_DIR is required for assistant message pin tests');
+    }
+    const projectId = `proj-${randomUUID()}`;
+    const assistantMessageId = `assistant-failed-${randomUUID()}`;
+
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: projectId, name: 'Failed assistant pin fixture' }),
+    });
+    expect(createProjectResponse.ok).toBe(true);
+
+    const conversationsResponse = await fetch(`${baseUrl}/api/projects/${projectId}/conversations`);
+    expect(conversationsResponse.ok).toBe(true);
+    const conversationsBody = await conversationsResponse.json() as {
+      conversations: Array<{ id: string }>;
+    };
+    const conversationId = conversationsBody.conversations[0]?.id;
+    expect(conversationId).toBeTruthy();
+
+    const response = await fetch(`${baseUrl}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        agentId: `missing-agent-${randomUUID()}`,
+        projectId,
+        conversationId,
+        assistantMessageId,
+        message: 'fail before spawn',
+      }),
+    });
+    const body = await response.text();
+    expect(response.ok).toBe(true);
+    expect(body).toContain('unknown agent');
+
+    const dbFile = resolve(process.env.OD_DATA_DIR, 'app.sqlite');
+    let lastStatus: string | null = null;
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const sqlite = new Database(dbFile, { readonly: true });
+      try {
+        const row = sqlite
+          .prepare(`SELECT run_status FROM messages WHERE id = ?`)
+          .get(assistantMessageId) as { run_status: string | null } | undefined;
+        lastStatus = row?.run_status ?? null;
+        if (lastStatus && lastStatus !== 'queued' && lastStatus !== 'running') break;
+      } finally {
+        sqlite.close();
+      }
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+
+    expect(lastStatus).toBe('failed');
+  });
+
   it('rewrites the OpenCode scanner overflow into a generic retry message', async () => {
     const conversationId = `conv-${randomUUID()}`;
 
@@ -917,6 +1011,115 @@ child.on('exit', (code, signal) => {
       else process.env.VELA_RUNTIME_KEY = previousRuntimeKey;
       if (previousLinkUrl == null) delete process.env.VELA_LINK_URL;
       else process.env.VELA_LINK_URL = previousLinkUrl;
+    }
+  });
+
+  it('keeps service tier overrides when /api/runs omits model but settings has one', async () => {
+    if (!process.env.OD_DATA_DIR) {
+      throw new Error('OD_DATA_DIR is required for service tier settings tests');
+    }
+    const argsPath = join(tmpdir(), `od-codex-args-${randomUUID()}.json`);
+    const previousConfig = await readAppConfig(process.env.OD_DATA_DIR);
+    try {
+      await writeAppConfig(process.env.OD_DATA_DIR, {
+        agentModels: { codex: { model: 'gpt-5.5' } },
+      });
+      await withFakeAgent(
+        'codex',
+        `
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+if (args[0] === 'debug' && args[1] === 'models') {
+  console.log(JSON.stringify([{ id: 'gpt-5.5', name: 'gpt-5.5', service_tiers: [{ id: 'priority', label: 'Fast' }] }]));
+  process.exit(0);
+}
+if (args[0] === 'login' && args[1] === 'status') {
+  console.log('Logged in');
+  process.exit(0);
+}
+fs.writeFileSync(${JSON.stringify(argsPath)}, JSON.stringify(args));
+console.log(JSON.stringify({ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'done' }] }));
+process.exit(0);
+`,
+        async () => {
+          const createResponse = await fetch(`${baseUrl}/api/runs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentId: 'codex',
+              message: 'hello',
+              serviceTier: 'priority',
+            }),
+          });
+          expect(createResponse.status).toBe(202);
+          const { runId } = await createResponse.json() as { runId: string };
+          await waitForRunStatus(baseUrl, runId);
+
+          const args = JSON.parse(readFileSync(argsPath, 'utf8')) as string[];
+          expect(args).toContain('--model');
+          expect(args).toContain('gpt-5.5');
+          expect(args).toContain('service_tier="priority"');
+        },
+      );
+    } finally {
+      rmSync(argsPath, { force: true });
+      await writeAppConfig(process.env.OD_DATA_DIR, {
+        agentModels: previousConfig.agentModels ?? null,
+      });
+    }
+  });
+
+  it('keeps service tier overrides when /api/runs omits model and settings has none', async () => {
+    if (!process.env.OD_DATA_DIR) {
+      throw new Error('OD_DATA_DIR is required for service tier settings tests');
+    }
+    const argsPath = join(tmpdir(), `od-codex-args-${randomUUID()}.json`);
+    const previousConfig = await readAppConfig(process.env.OD_DATA_DIR);
+    try {
+      await writeAppConfig(process.env.OD_DATA_DIR, { agentModels: null });
+      await withFakeAgent(
+        'codex',
+        `
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+if (args[0] === 'debug' && args[1] === 'models') {
+  console.log(JSON.stringify([{ id: 'gpt-5.5', name: 'gpt-5.5', service_tiers: [{ id: 'priority', label: 'Fast' }] }]));
+  process.exit(0);
+}
+if (args[0] === 'login' && args[1] === 'status') {
+  console.log('Logged in');
+  process.exit(0);
+}
+fs.writeFileSync(${JSON.stringify(argsPath)}, JSON.stringify(args));
+console.log(JSON.stringify({ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'done' }] }));
+process.exit(0);
+`,
+        async () => {
+          await fetch(`${baseUrl}/api/agents`);
+          const createResponse = await fetch(`${baseUrl}/api/runs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentId: 'codex',
+              message: 'hello',
+              serviceTier: 'priority',
+            }),
+          });
+          expect(createResponse.status).toBe(202);
+          const { runId } = await createResponse.json() as { runId: string };
+          await waitForRunStatus(baseUrl, runId);
+
+          const args = JSON.parse(readFileSync(argsPath, 'utf8')) as string[];
+          expect(args).toContain('--model');
+          expect(args).toContain('gpt-5.5');
+          expect(args).toContain('service_tier="priority"');
+        },
+      );
+    } finally {
+      rmSync(argsPath, { force: true });
+      await writeAppConfig(process.env.OD_DATA_DIR, {
+        agentModels: previousConfig.agentModels ?? null,
+      });
     }
   });
 
@@ -2367,6 +2570,54 @@ process.exit(0);
     );
   });
 
+  it('fails plain-stream runs when stdout artifact persistence fails', async () => {
+    await withFakeAgent(
+      'agy',
+      `
+const args = process.argv.slice(2);
+if (args[0] === '--version') {
+  console.log('1.107.0-test');
+  process.exit(0);
+}
+process.stdout.write('<artifact identifier="blocked" type="text/html" title="Blocked"><!doctype html><html><body>Name to confirm</body></html></artifact>\\n');
+process.exit(0);
+`,
+      async () => {
+        const projectId = `plain-artifact-fail-${randomUUID()}`;
+        const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: projectId, name: 'Plain artifact failure' }),
+        });
+        expect(createProjectResponse.ok).toBe(true);
+
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'antigravity',
+            projectId,
+            message: 'emit blocked artifact',
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const eventsController = new AbortController();
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+          signal: eventsController.signal,
+        });
+        const eventsBody = await readSseUntil(eventsResponse, 'event: final');
+        eventsController.abort();
+        const statusBody = await waitForRunStatus(baseUrl, runId);
+
+        expect(eventsBody).toContain('event: error');
+        expect(eventsBody).toContain('plain-stream artifact');
+        expect(statusBody.status).toBe('failed');
+      },
+    );
+  });
+
   it('fails Antigravity Gemini JSONL output with no visible assistant content', async () => {
     await withFakeAgent(
       'agy',
@@ -2883,6 +3134,122 @@ process.stdin.on('end', () => {
     }
   });
 
+  it('latches intent signals on the conversation so a signal-free later turn keeps the deck framework', async () => {
+    // Red spec for specs/current/intent-signal-cache-hotfix.md §3 case 6 (R2).
+    // History is trimmed on agent switch (scopeHistoryToAgent) and
+    // non-transcript clients never resend prior turns, so a deck signal that
+    // fired on turn 1 must persist on the conversation row — recomputing it
+    // from the scanned text alone lets it flip OFF again and re-sends the
+    // ~17K stable block in both directions.
+    const MAYBE_DECK_HEADING = '## If this brief is a slide deck / keynote / presentation';
+    if (!process.env.OD_DATA_DIR) {
+      throw new Error('OD_DATA_DIR is required for intent-signal latch tests');
+    }
+
+    const projectId = `proj-${randomUUID()}`;
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: projectId, name: 'Intent signal latch fixture' }),
+    });
+    expect(createProjectResponse.ok).toBe(true);
+
+    const createConversationResponse = await fetch(
+      `${baseUrl}/api/projects/${projectId}/conversations`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      },
+    );
+    expect(createConversationResponse.ok).toBe(true);
+    const { conversation } = await createConversationResponse.json() as {
+      conversation: { id: string };
+    };
+    const conversationId = conversation.id;
+
+    const captureDir = mkdtempSync(join(tmpdir(), 'od-intent-latch-'));
+    tempDirs.push(captureDir);
+    const previousCapturePath = process.env.OD_CAPTURE_PROMPT_PATH;
+    try {
+      await withFakeAgent(
+        'opencode',
+        `
+const fs = require('node:fs');
+let input = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => { input += chunk; });
+process.stdin.on('end', () => {
+  fs.writeFileSync(process.env.OD_CAPTURE_PROMPT_PATH, input, 'utf8');
+  console.log(JSON.stringify({ type: 'text', part: { text: 'ok' } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+});
+`,
+        async () => {
+          const runTurn = async (
+            turn: { message: string; currentPrompt: string },
+            capturePath: string,
+          ): Promise<string> => {
+            process.env.OD_CAPTURE_PROMPT_PATH = capturePath;
+            const response = await fetch(`${baseUrl}/api/runs`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                agentId: 'opencode',
+                projectId,
+                conversationId,
+                message: turn.message,
+                currentPrompt: turn.currentPrompt,
+              }),
+            });
+            expect(response.status).toBe(202);
+            const { runId } = await response.json() as { runId: string };
+            const statusBody = await waitForRunStatus(baseUrl, runId);
+            expect(statusBody.status).toBe('succeeded');
+            return readFileSync(capturePath, 'utf8');
+          };
+
+          // Turn 1 mentions a deck in the user's own words → framework present.
+          const deckBrief = '帮我做一份路演材料，先出内容大纲';
+          const turn1Prompt = await runTurn(
+            { message: `## user\n${deckBrief}`, currentPrompt: deckBrief },
+            join(captureDir, 'turn1.txt'),
+          );
+          expect(turn1Prompt).toContain(MAYBE_DECK_HEADING);
+
+          // Turn 2 carries no deck vocabulary and a trimmed transcript
+          // (agent-switch trim / non-transcript client): the latched
+          // conversation signal must keep the framework present.
+          const followUp = '把主色调调亮一点';
+          const turn2Prompt = await runTurn(
+            { message: `## user\n${followUp}`, currentPrompt: followUp },
+            join(captureDir, 'turn2.txt'),
+          );
+          expect(turn2Prompt).toContain(MAYBE_DECK_HEADING);
+
+          // The latch is persisted on the conversation row.
+          const dbFile = resolve(process.env.OD_DATA_DIR as string, 'app.sqlite');
+          const sqlite = new Database(dbFile, { readonly: true });
+          try {
+            const row = sqlite
+              .prepare(`SELECT intent_signals_json AS intentSignalsJson FROM conversations WHERE id = ?`)
+              .get(conversationId) as { intentSignalsJson: string | null } | undefined;
+            expect(row?.intentSignalsJson).toBeTruthy();
+            expect(JSON.parse(row?.intentSignalsJson ?? '{}')).toMatchObject({ deck: true });
+          } finally {
+            sqlite.close();
+          }
+        },
+      );
+    } finally {
+      if (previousCapturePath == null) {
+        delete process.env.OD_CAPTURE_PROMPT_PATH;
+      } else {
+        process.env.OD_CAPTURE_PROMPT_PATH = previousCapturePath;
+      }
+    }
+  });
+
   it('uses a project design system in sandboxed chat runs without an explicit run designSystemId', async () => {
     const projectId = `project-ds-${randomUUID()}`;
     const projectResponse = await fetch(`${baseUrl}/api/projects`, {
@@ -3333,6 +3700,7 @@ describe('chat prompt helpers', () => {
       stablePromptHash: 'hash-a',
       hit: false,
       missReason: 'new-session',
+      changedSections: null,
     });
 
     expect(describeStablePromptCache({
@@ -3343,6 +3711,7 @@ describe('chat prompt helpers', () => {
       stablePromptHash: 'hash-a',
       hit: true,
       missReason: null,
+      changedSections: null,
     });
 
     expect(describeStablePromptCache({
@@ -3353,6 +3722,55 @@ describe('chat prompt helpers', () => {
       stablePromptHash: 'hash-b',
       hit: false,
       missReason: 'stable-prompt-changed',
+      // No section map supplied: report no attribution rather than invent one.
+      changedSections: null,
+    });
+  });
+
+  it('names the drifted sections when a section map is supplied', () => {
+    expect(describeStablePromptCache({
+      isResuming: true,
+      storedStablePromptHash: 'hash-a',
+      currentStableHash: 'hash-b',
+      storedStableSections: { memory: 'm1', skill: 's1' },
+      currentStableSections: { memory: 'm2', skill: 's1' },
+    })).toEqual({
+      stablePromptHash: 'hash-b',
+      hit: false,
+      missReason: 'stable-prompt-changed',
+      changedSections: ['memory'],
+    });
+  });
+
+  it('reports unattributed drift when the prefix moved but no tracked section did', () => {
+    // The hash is the source of truth, so this is a real miss; an empty list
+    // would read as a drift with no cause instead of the coverage gap it is.
+    expect(describeStablePromptCache({
+      isResuming: true,
+      storedStablePromptHash: 'hash-a',
+      currentStableHash: 'hash-b',
+      storedStableSections: { memory: 'm1' },
+      currentStableSections: { memory: 'm1' },
+    })).toMatchObject({
+      missReason: 'stable-prompt-changed',
+      changedSections: ['unattributed'],
+    });
+  });
+
+  it('does not attribute sections for a missing stored hash', () => {
+    // A legacy/reseeded row has no baseline to diff, so every section would
+    // read as "changed" and drown the signal real drift carries.
+    expect(describeStablePromptCache({
+      isResuming: true,
+      storedStablePromptHash: null,
+      currentStableHash: 'hash-b',
+      storedStableSections: null,
+      currentStableSections: { memory: 'm1' },
+    })).toEqual({
+      stablePromptHash: 'hash-b',
+      hit: false,
+      missReason: 'missing-stored-hash',
+      changedSections: null,
     });
   });
 

@@ -18,24 +18,25 @@ export interface BuildDesktopPdfExportInputOptions {
   metadata?: Record<string, unknown> | null;
   projectId: string;
   projectsRoot: string;
+  sourceHtml?: string;
   title?: string;
 }
 
 export async function buildDesktopPdfExportInput(
   options: BuildDesktopPdfExportInputOptions,
 ): Promise<DesktopExportPdfInput> {
-  const file = await readProjectFile(
+  const html = options.sourceHtml ?? (await readProjectFile(
     options.projectsRoot,
     options.projectId,
     options.fileName,
     options.metadata ?? undefined,
-  );
+  )).buffer.toString('utf8');
   const title = displayTitle(options.title, options.fileName);
   return {
     baseHref: rawBaseHref(options.daemonUrl, options.projectId, options.fileName),
     deck: options.deck === true,
     defaultFilename: `${safeFilename(title, 'artifact')}.pdf`,
-    html: file.buffer.toString('utf8'),
+    html,
     title,
   };
 }
@@ -51,6 +52,7 @@ export interface BuildDesktopArtifactExportInputOptions {
   metadata?: Record<string, unknown> | null;
   projectId: string;
   projectsRoot: string;
+  sourceHtml?: string;
   title?: string;
   width?: number;
   height?: number;
@@ -59,18 +61,18 @@ export interface BuildDesktopArtifactExportInputOptions {
 export async function buildDesktopArtifactExportInput(
   options: BuildDesktopArtifactExportInputOptions,
 ): Promise<DesktopExportArtifactInput> {
-  const file = await readProjectFile(
+  const html = options.sourceHtml ?? (await readProjectFile(
     options.projectsRoot,
     options.projectId,
     options.fileName,
     options.metadata ?? undefined,
-  );
+  )).buffer.toString('utf8');
   const title = displayTitle(options.title, options.fileName);
   return {
     baseHref: rawBaseHref(options.daemonUrl, options.projectId, options.fileName),
     deck: options.deck === true,
     format: options.format,
-    html: file.buffer.toString('utf8'),
+    html,
     title,
     ...(options.imageFormat ? { imageFormat: options.imageFormat } : {}),
     ...(options.width ? { width: options.width } : {}),

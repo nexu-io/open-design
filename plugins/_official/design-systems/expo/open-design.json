@@ -24,6 +24,7 @@
     "en": "Expo"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "React Native platform. Dark theme, tight letter-spacing, code-centric.",
   "description_i18n": {
     "zh-CN": "React Native 平台。深色主题，紧凑字间距，代码风格。",

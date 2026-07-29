@@ -24,6 +24,7 @@
     "en": "Notion-style Team Dashboard (Live Artifact)"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "Single-screen Notion-native team dashboard mockup — KPI grid, 7-day sparkline, activity feed, and linked-database task table. Visual companion to the live-artifact skill; pair with it for refreshable / connector-backed runs, or use standalone as a still mockup.",
   "description_i18n": {
     "zh-CN": "单屏 Notion 原生团队仪表板模型——包含 KPI 网格、7 天趋势图、活动信息流和关联数据库任务表。可搭配实时制品功能实现数据刷新和连接器支持，也可作为静态模型独立使用。",

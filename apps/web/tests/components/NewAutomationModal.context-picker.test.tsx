@@ -5,6 +5,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ConnectorDetail, InstalledPluginRecord } from '@open-design/contracts';
 
 import { NewAutomationModal } from '../../src/components/NewAutomationModal';
+import type { AutomationTemplate } from '../../src/components/NewAutomationModal';
+import { I18nProvider } from '../../src/i18n';
 import type { SkillSummary } from '../../src/types';
 import { listPlugins } from '../../src/state/projects';
 import { fetchMcpServers } from '../../src/state/mcp';
@@ -77,6 +79,28 @@ afterEach(() => {
 });
 
 describe('NewAutomationModal context picker', () => {
+  const templateWithLocalizedTitle: AutomationTemplate = {
+    id: 'memory-refresh-template',
+    category: 'memory',
+    kind: 'routine',
+    icon: 'history',
+    title: 'Refresh project memory from recent work.',
+    description: 'Use recent changes to refresh your memory index.',
+    defaultName: 'Memory refresh',
+    prompt: 'Use Automation template "memory-refresh-template".',
+  };
+
+  const liveArtifactTemplate: AutomationTemplate = {
+    id: 'live-artifact-template',
+    category: 'memory',
+    kind: 'live-artifact',
+    icon: 'sparkles',
+    title: 'Refresh artifact from recent work.',
+    description: 'Use recent changes to refresh an artifact.',
+    defaultName: 'Artifact refresh',
+    prompt: 'Use Automation template "live-artifact-template".',
+  };
+
   it('picks skills, plugins, MCP servers, and connectors from @ in the prompt', async () => {
     vi.mocked(listPlugins).mockResolvedValue([plugin]);
     vi.mocked(fetchMcpServers).mockResolvedValue({ servers: [mcpServer], templates: [] });
@@ -130,5 +154,56 @@ describe('NewAutomationModal context picker', () => {
     expect(screen.getByTitle('Remove Release Plugin')).toBeTruthy();
     expect(screen.getByTitle('Remove Figma MCP')).toBeTruthy();
     expect(screen.getByTitle('Remove Linear')).toBeTruthy();
+  });
+
+  it('uses template title for picker visibility but seeds default name on selection', () => {
+    vi.mocked(listPlugins).mockResolvedValue([]);
+    vi.mocked(fetchMcpServers).mockResolvedValue({ servers: [], templates: [] });
+
+    render(
+      <NewAutomationModal
+        open
+        templates={[templateWithLocalizedTitle]}
+        projects={[]}
+        skills={[]}
+        connectors={[]}
+        onClose={() => undefined}
+        onSaved={() => undefined}
+      />,
+    );
+
+    const templateTrigger = screen.getByRole('button', { name: 'Use template' });
+    fireEvent.click(templateTrigger);
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: /^Refresh project memory from recent work\./,
+      }),
+    );
+
+    expect((screen.getByTestId('automation-modal-title') as HTMLInputElement).value).toBe('Memory refresh');
+  });
+
+  it('localizes template kind labels in the picker', () => {
+    vi.mocked(listPlugins).mockResolvedValue([]);
+    vi.mocked(fetchMcpServers).mockResolvedValue({ servers: [], templates: [] });
+
+    render(
+      <I18nProvider initial="zh-CN">
+        <NewAutomationModal
+          open
+          templates={[liveArtifactTemplate]}
+          projects={[]}
+          skills={[]}
+          connectors={[]}
+          onClose={() => undefined}
+          onSaved={() => undefined}
+        />
+      </I18nProvider>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '使用模板' }));
+
+    expect(screen.getByText('实时看板')).toBeTruthy();
+    expect(screen.queryByText('Live artifact')).toBeNull();
   });
 });

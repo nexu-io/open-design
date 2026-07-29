@@ -11,7 +11,7 @@ For briefs that ask for "editorial", "newspaper", "agency portfolio", "Swiss des
 
 ## Source
 
-Distilled from [Leonxlnx/taste-skill](https://github.com/Leonxlnx/taste-skill) — `skills/brutalist-skill/SKILL.md` §2.1 (Swiss Industrial Print). For decks that lean into the dark CRT mode, see `skills/html-ppt-taste-brutalist/`.
+Distilled from [Leonxlnx/taste-skill](https://github.com/Leonxlnx/taste-skill) — `skills/brutalist-skill/SKILL.md` §2.1 (Swiss Industrial Print). For decks that lean into the dark CRT mode, see `design-templates/html-ppt-taste-brutalist/`.
 
 ## Hard rules
 

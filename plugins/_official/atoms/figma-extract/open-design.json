@@ -4,6 +4,7 @@
   "name": "figma-extract",
   "title": "Figma extract",
   "version": "0.1.0",
+  "publishedAt": "2026-05-09T14:22:18Z",
   "description": "Pull a Figma file's node tree, design tokens, and embedded assets into the project cwd as a structured snapshot.",
   "license": "MIT",
   "author": {

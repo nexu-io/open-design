@@ -151,6 +151,11 @@ export const PluginManifestSchema = z.object({
   }).passthrough().optional(),
   license:  z.string().optional(),
   homepage: z.string().optional(),
+  // ISO 8601 timestamp of when the plugin was first published to its
+  // catalog. Shipped metadata — unlike the installed-record timestamps it
+  // does not depend on when a particular machine seeded its database, so
+  // recency ordering survives fresh installs and catalog re-stamps.
+  publishedAt: z.string().optional(),
   icon:     z.string().optional(),
   tags:     z.array(z.string()).optional(),
   compat: z.object({

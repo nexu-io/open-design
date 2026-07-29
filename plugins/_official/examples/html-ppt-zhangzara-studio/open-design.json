@@ -2,48 +2,19 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-html-ppt-zhangzara-studio",
-  "title": "Html Ppt Zhangzara Studio",
+  "title": "Build a Studio Portfolio & Rate Deck like a Creative Studio Owner",
   "title_i18n": {
-    "zh-CN": "Html Ppt Zhangzara Studio",
-    "zh-TW": "Html Ppt Zhangzara Studio",
-    "ja": "Html Ppt Zhangzara Studio",
-    "ko": "Html Ppt Zhangzara Studio",
-    "de": "Html Ppt Zhangzara Studio",
-    "fr": "Html Ppt Zhangzara Studio",
-    "ru": "Html Ppt Zhangzara Studio",
-    "es": "Html Ppt Zhangzara Studio",
-    "pt-BR": "Html Ppt Zhangzara Studio",
-    "it": "Html Ppt Zhangzara Studio",
-    "vi": "Html Ppt Zhangzara Studio",
-    "pl": "Html Ppt Zhangzara Studio",
-    "id": "Html Ppt Zhangzara Studio",
-    "nl": "Html Ppt Zhangzara Studio",
-    "ar": "Html Ppt Zhangzara Studio",
-    "tr": "Html Ppt Zhangzara Studio",
-    "uk": "Html Ppt Zhangzara Studio",
-    "en": "Html Ppt Zhangzara Studio"
+    "en": "Build a Studio Portfolio & Rate Deck like a Creative Studio Owner",
+    "zh-CN": "像创意工作室主理人一样做作品与报价稿",
+    "zh-TW": "像创意工作室主理人一样做作品与报价稿"
   },
   "version": "0.1.0",
-  "description": "Studio — Black canvas with electric-yellow type; high-voltage design studio aesthetic. Anything that should feel electric and design-led: studio credentials, creative agency pitches, brand showcases, art-direction reviews, fashion / sneaker brand work.",
+  "publishedAt": "2026-05-12T07:18:16Z",
+  "description": "A photography studio's portfolio-and-rate deck — the signature work, the process, and the packages that win the brief. Built as a decision-grade design craft deck for prospective clients.",
   "description_i18n": {
-    "zh-CN": "Studio — 黑色画布搭配荧光黄字体；高压电感设计工作室美学。适用于设计工作室作品集、创意机构提案、品牌展示、艺术指导评审、时尚/球鞋品牌等场景。",
-    "zh-TW": "Studio — 黑色畫布搭配螢光黃字體；高壓電感設計工作室美學。適用於設計工作室作品集、創意機構提案、品牌展示、藝術指導評審、時尚/球鞋品牌等場景。",
-    "ja": "Studio — 黒いキャンバスにエレクトリックイエローのタイポグラフィ。高電圧デザインスタジオの美学。スタジオ実績、クリエイティブエージェンシーのピッチ、ブランドショーケース、アートディレクションレビュー、ファッション/スニーカーブランド向け。",
-    "ko": "Studio — 블랙 캔버스에 일렉트릭 옐로우 타이포; 고전압 디자인 스튜디오 미학. 스튜디오 포트폴리오, 크리에이티브 에이전시 피칭, 브랜드 쇼케이스, 아트 디렉션 리뷰, 패션/스니커즈 브랜드 작업에 적합.",
-    "de": "Studio — Schwarze Leinwand mit elektrisch-gelber Typografie; Hochspannungs-Designstudio-Ästhetik. Für Studio-Referenzen, Kreativagentur-Pitches, Markenpräsentationen, Art-Direction-Reviews, Mode- und Sneaker-Marken.",
-    "fr": "Studio — Toile noire avec typographie jaune électrique ; esthétique de studio design haute tension. Idéal pour portfolios de studios, pitchs d'agences créatives, présentations de marques, revues de direction artistique, marques de mode et sneakers.",
-    "ru": "Studio — Черный фон с электрическим желтым шрифтом; эстетика дизайн-студии высокого напряжения. Для портфолио студий, презентаций креативных агентств, витрин брендов, арт-дирекции, модных и кроссовочных брендов.",
-    "es": "Studio — Lienzo negro con tipografía amarillo eléctrico; estética de estudio de diseño de alto voltaje. Para credenciales de estudio, presentaciones de agencias creativas, exhibiciones de marca, revisiones de dirección artística, marcas de moda y zapatillas.",
-    "pt-BR": "Studio — Tela preta com tipografia amarelo elétrico; estética de estúdio de design de alta voltagem. Para portfólios de estúdio, pitches de agências criativas, showcases de marca, revisões de direção de arte, marcas de moda e tênis.",
-    "it": "Studio — Tela nera con tipografia giallo elettrico; estetica da studio di design ad alto voltaggio. Per credenziali di studio, presentazioni di agenzie creative, vetrine di brand, revisioni di direzione artistica, brand di moda e sneaker.",
-    "vi": "Studio — Canvas đen với typography vàng điện; thẩm mỹ studio thiết kế điện áp cao. Dành cho hồ sơ studio, bài thuyết trình agency sáng tạo, giới thiệu thương hiệu, đánh giá art direction, thương hiệu thời trang và giày sneaker.",
-    "pl": "Studio — Czarne płótno z elektryczno-żółtą typografią; estetyka studia projektowego wysokiego napięcia. Do portfolio studia, prezentacji agencji kreatywnych, wystaw marki, przeglądów art direction, marek modowych i sneakersów.",
-    "id": "Studio — Canvas hitam dengan tipografi kuning listrik; estetika studio desain tegangan tinggi. Untuk portofolio studio, pitching agensi kreatif, showcase brand, tinjauan art direction, brand fashion dan sneaker.",
-    "nl": "Studio — Zwart canvas met elektrisch-gele typografie; hoogspannings designstudio-esthetiek. Voor studio-portfolio's, creatieve agency pitches, merkshowcases, art direction reviews, mode- en sneakermerken.",
-    "ar": "Studio — لوحة سوداء مع طباعة صفراء كهربائية؛ جمالية استوديو تصميم عالي الجهد. لبيانات الاعتماد الاستوديو، عروض الوكالات الإبداعية، عرض العلامات التجارية، مراجعات التوجيه الفني، علامات الأزياء والأحذية الرياضية.",
-    "tr": "Studio — Elektrik sarısı tipografi ile siyah kanvas; yüksek voltajlı tasarım stüdyosu estetiği. Stüdyo portföyleri, kreatif ajans sunumları, marka vitrinleri, sanat yönetimi incelemeleri, moda ve sneaker markaları için.",
-    "uk": "Studio — Чорне полотно з електрично-жовтою типографікою; естетика дизайн-студії високої напруги. Для портфоліо студій, презентацій креативних агенцій, вітрин брендів, арт-дирекції, модних брендів та брендів кросівок.",
-    "en": "Studio — Black canvas with electric-yellow type; high-voltage design studio aesthetic. Anything that should feel electric and design-led: studio credentials, creative agency pitches, brand showcases, art-direction reviews, fashion / sneaker brand work."
+    "en": "A photography studio's portfolio-and-rate deck — the signature work, the process, and the packages that win the brief. Built as a decision-grade design craft deck for prospective clients.",
+    "zh-CN": "像创意工作室主理人一样做作品与报价稿——一份可商业交付的设计打磨 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像创意工作室主理人一样做作品与报价稿——一份可商业交付的设计打磨 Deck，围绕真实主题、证据链与决策目标组织。"
   },
   "license": "MIT",
   "author": {
@@ -67,7 +38,18 @@
     "creative-agency-pitch",
     "html-deck",
     "html-slides",
-    "zhangzara"
+    "zhangzara",
+    "sales",
+    "renewal",
+    "customer",
+    "html-ppt-zhangzara-studio",
+    "design-craft",
+    "board-upgrade-deck-rescue",
+    "design",
+    "brand",
+    "visual-system",
+    "decision-deck",
+    "commercial-slide-agent"
   ],
   "compat": {
     "agentSkills": [
@@ -80,7 +62,7 @@
     "kind": "scenario",
     "taskKind": "new-generation",
     "mode": "deck",
-    "scenario": "marketing",
+    "scenario": "design",
     "surface": "web",
     "preview": {
       "type": "html",
@@ -88,13 +70,18 @@
     },
     "useCase": {
       "query": {
-        "en": "Studio — Black canvas with electric-yellow type; high-voltage design studio aesthetic. Anything that should feel electric and design-led: studio credentials, creative agency pitches, brand showcases, art-direction reviews, fashion / sneaker brand work.",
-        "zh-CN": "使用这个插件完成以下任务：Studio — Black canvas with electric-yellow type; high-voltage design studio aesthetic. Anything that should feel electric and design-led: studio credentials, creative agency pitches, brand showcases, art-direction reviews, fashion / sneaker brand work."
+        "en": "Create \"Build a Studio Portfolio & Rate Deck like a Creative Studio Owner\" as a decision-grade Design craft deck in this template's own visual system. Subject: A photography studio's portfolio-and-rate deck — the signature work, the process, and the packages that win the brief. Audience: prospective clients. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the deck feel authored by a senior designer rather than generated.",
+        "zh-CN": "像创意工作室主理人一样做作品与报价稿。像创意工作室主理人一样做作品与报价稿——一份可商业交付的设计打磨 Deck，围绕真实主题、证据链与决策目标组织。 主题：A photography studio's portfolio-and-rate deck — the signature work, the process, and the packages that win the brief. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "Html Ppt Zhangzara Studio"
+          "title": "Build a Studio Portfolio & Rate Deck like a Creative Studio Owner",
+          "title_i18n": {
+            "en": "Build a Studio Portfolio & Rate Deck like a Creative Studio Owner",
+            "zh-CN": "像创意工作室主理人一样做作品与报价稿",
+            "zh-TW": "像创意工作室主理人一样做作品与报价稿"
+          }
         }
       ]
     },
@@ -122,6 +109,7 @@
     "capabilities": [
       "prompt:inject",
       "fs:write"
-    ]
+    ],
+    "category": "design-craft"
   }
 }

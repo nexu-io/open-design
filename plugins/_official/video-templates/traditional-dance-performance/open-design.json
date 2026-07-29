@@ -24,6 +24,7 @@
     "en": "Traditional Dance Performance"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "A comprehensive video prompt for Seedance 2.0 to generate a graceful traditional dance based on choreography and identity reference images.",
   "description_i18n": {
     "zh-CN": "为 Seedance 2.0 提供完整的视频提示词，根据编舞和身份参考图像生成优雅的传统舞蹈。",

@@ -141,6 +141,41 @@ describe('inferPluginPreview', () => {
     expect(gallery.loopHoldMs).toBe(2500);
   });
 
+  it('uses baked previews for commercial slide templates when available', () => {
+    const record = make({
+      id: 'commercial-deck',
+      tags: ['commercial-slide-agent'],
+      preview: { type: 'html', entry: './example.html' },
+      bakedPreview: {
+        poster: '/api/plugin-previews/commercial-deck/current/poster.jpg',
+        video: '/api/plugin-previews/commercial-deck/current/preview.mp4',
+        holdMs: 2500,
+      },
+    });
+
+    const gallery = inferPluginPreview(record, { preferBaked: true });
+    expect(gallery.kind).toBe('media');
+    if (gallery.kind !== 'media') return;
+    expect(gallery.mediaType).toBe('video');
+    expect(gallery.poster).toBe('/api/plugin-previews/commercial-deck/current/poster.jpg');
+    expect(gallery.videoUrl).toBe('/api/plugin-previews/commercial-deck/current/preview.mp4');
+    expect(gallery.loopHoldMs).toBe(2500);
+  });
+
+  it('falls back to live HTML for commercial slide templates without a baked preview', () => {
+    const record = make({
+      id: 'commercial-deck',
+      tags: ['commercial-slide-agent'],
+      preview: { type: 'html', entry: './example.html' },
+    });
+
+    const gallery = inferPluginPreview(record, { preferBaked: true });
+    expect(gallery.kind).toBe('html');
+    if (gallery.kind !== 'html') return;
+    expect(gallery.src).toBe('/api/plugins/commercial-deck/preview');
+    expect(gallery.label).toBe('example.html');
+  });
+
   it('falls back to the first exampleOutputs entry when no preview block is set', () => {
     const out = inferPluginPreview(
       make({

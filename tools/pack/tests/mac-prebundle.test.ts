@@ -1,11 +1,14 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
+import { build } from "esbuild";
 import { describe, expect, it } from "vitest";
 
 import {
   MAC_DAEMON_PREBUNDLE_ESM_REQUIRE_BANNER,
+  MAC_PREBUNDLE_COPIED_RUNTIME_DEPENDENCIES,
   MAC_PREBUNDLE_ESBUILD_TARGET,
   MAC_PREBUNDLE_POLICIES,
   MAC_PREBUNDLE_RUNTIME_DEPENDENCIES,
@@ -73,18 +76,57 @@ describe("mac standalone prebundle policy", () => {
   it("documents the explicit code-level bundle boundaries", () => {
     expect(MAC_PREBUNDLE_ESBUILD_TARGET).toBe("node24");
     expect(MAC_PREBUNDLE_POLICIES.packagedMain.externals).toEqual(["electron"]);
-    expect(MAC_PREBUNDLE_POLICIES.daemonCli.externals).toEqual(["better-sqlite3", "blake3-wasm"]);
-    expect(MAC_PREBUNDLE_POLICIES.daemonSidecar.externals).toEqual(["better-sqlite3", "blake3-wasm"]);
+    expect(MAC_PREBUNDLE_POLICIES.daemonCli.externals).toEqual([
+      "better-sqlite3",
+      "blake3-wasm",
+      "fsevents",
+    ]);
+    expect(MAC_PREBUNDLE_POLICIES.daemonSidecar.externals).toEqual([
+      "better-sqlite3",
+      "blake3-wasm",
+      "fsevents",
+    ]);
     expect(MAC_PREBUNDLE_POLICIES.webSidecar.externals).toEqual([]);
     expect(MAC_DAEMON_PREBUNDLE_ESM_REQUIRE_BANNER).toContain("createRequire");
+    // Must match apps/daemon/package.json / the pnpm lockfile, or
+    // electron-builder's collector drops the module from the shipped app and
+    // the daemon dies at boot with ERR_MODULE_NOT_FOUND (issue #4638).
     expect(MAC_PREBUNDLE_RUNTIME_DEPENDENCIES).toEqual({
-      "better-sqlite3": "12.9.0",
+      "better-sqlite3": "12.10.0",
       "blake3-wasm": "2.1.5",
     });
+    expect(MAC_PREBUNDLE_COPIED_RUNTIME_DEPENDENCIES).toEqual({ "fsevents": "2.3.3" });
     expect(MAC_PREBUNDLED_DAEMON_CLI_RELATIVE_PATH).toBe("app/prebundled/daemon/daemon-cli.mjs");
     expect(MAC_PREBUNDLED_DAEMON_SIDECAR_RELATIVE_PATH).toBe("app/prebundled/daemon/daemon-sidecar.mjs");
     expect(MAC_PREBUNDLED_WEB_SIDECAR_RELATIVE_PATH).toBe("app/prebundled/web-sidecar.mjs");
   });
+
+  it.skipIf(process.platform !== "darwin")(
+    "keeps chokidar's native fsevents binding outside daemon bundles",
+    async () => {
+      const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
+      const result = await build({
+        banner: { js: MAC_DAEMON_PREBUNDLE_ESM_REQUIRE_BANNER },
+        bundle: true,
+        external: [...MAC_PREBUNDLE_POLICIES.daemonSidecar.externals],
+        format: "esm",
+        logLevel: "silent",
+        metafile: true,
+        platform: "node",
+        stdin: {
+          contents: 'import "chokidar";',
+          loader: "js",
+          resolveDir: join(workspaceRoot, "apps", "daemon"),
+        },
+        target: MAC_PREBUNDLE_ESBUILD_TARGET,
+        write: false,
+      });
+
+      expect(Object.keys(result.metafile.inputs).some((input) => input.includes("/node_modules/fsevents/"))).toBe(
+        false,
+      );
+    },
+  );
 });
 
 describe("findForbiddenMacPrebundleInputs", () => {
@@ -152,6 +194,25 @@ describe("assertMacPrebundleMetafile", () => {
       await writeFile(
         metafilePath,
         JSON.stringify({ inputs: { "/repo/node_modules/blake3-wasm/dist/node/index.js": {} } }),
+        "utf8",
+      );
+
+      await expect(
+        assertMacPrebundleMetafile({ metafilePath, policyName: "daemonSidecar" }),
+      ).rejects.toThrow(/daemon sidecar prebundle included forbidden inputs/);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("rejects a daemon metafile that bundled native runtime dependencies", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-mac-prebundle-"));
+    const metafilePath = join(root, "unsafe-native-daemon.json");
+
+    try {
+      await writeFile(
+        metafilePath,
+        JSON.stringify({ inputs: { "/repo/node_modules/fsevents/fsevents.js": {} } }),
         "utf8",
       );
 

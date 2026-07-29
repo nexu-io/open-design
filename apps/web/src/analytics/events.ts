@@ -18,6 +18,7 @@ import type {
   DesignSystemsTemplatesModalSurfaceViewProps,
   AssistantFeedbackReasonPanelSurfaceViewProps,
   QuestionsFormSurfaceViewProps,
+  PreviewRunStatusSurfaceViewProps,
   // ui_click
   HomeNavClickProps,
   HelpPopoverClickProps,
@@ -73,6 +74,10 @@ import type {
   AmrAuthResultProps,
   AmrEntryClickProps,
   RunFailedToastSurfaceViewProps,
+  HomeRecommendationClickProps,
+  HomeRecommendationSurfaceViewProps,
+  StudioOnboardingHintClickProps,
+  StudioOnboardingHintSurfaceViewProps,
   ChatPanelResourcesPopoverClickProps,
   ChatPanelMessageQueueClickProps,
   FileManagerClickProps,
@@ -86,6 +91,8 @@ import type {
   ArtifactHeaderClickProps,
   HandoffClickProps,
   PresentPopoverClickProps,
+  DeckViewerClickProps,
+  DeckViewerSurfaceViewProps,
   ShareOptionPopoverClickProps,
   FileVersionModalClickProps,
   FileVersionModalSurfaceViewProps,
@@ -118,17 +125,24 @@ import type {
   RunFinishedProps,
   FileUploadResultProps,
   ContextLinkResultProps,
+  SpeakerNotesSaveResultProps,
   ArtifactExportResultProps,
   ArtifactDeployResultProps,
+  SketchSaveResultProps,
+  SketchExportResultProps,
   FeedbackSubmitResultProps,
   SettingsViewProps,
   SettingsCliTestResultProps,
   SettingsByokModelsFetchResultProps,
   SettingsByokTestResultProps,
   SettingsConnectorAuthResultProps,
+  ByokPreflightBlockedProps,
   OnboardingClickProps,
   OnboardingRuntimeScanResultProps,
   OnboardingCompleteResultProps,
+  OnboardingPromptPrefilledProps,
+  OnboardingFirstPromptSentProps,
+  OnboardingFirstGenerationCompletedProps,
   DesignSystemSourceIngestResultProps,
   DesignSystemCreateResultProps,
   DesignSystemReviewResultProps,
@@ -136,7 +150,10 @@ import type {
   DesignSystemApplyResultProps,
   UpdateIndicatorSurfaceViewProps,
   UpdatePromptSurfaceViewProps,
+  UpdateCheckResultProps,
   UpdateInstallResultProps,
+  WhatsNewPopupSurfaceViewProps,
+  WhatsNewPopupClickProps,
 } from '@open-design/contracts/analytics';
 
 type TrackOptions = { requestId?: string; insertId?: string };
@@ -242,6 +259,13 @@ export function trackRunFailedToastSurfaceView(
   send(track, 'surface_view', props);
 }
 
+export function trackPreviewRunStatusSurfaceView(
+  track: Track,
+  props: PreviewRunStatusSurfaceViewProps,
+): void {
+  send(track, 'surface_view', props);
+}
+
 export function trackQuestionsFormSurfaceView(
   track: Track,
   props: QuestionsFormSurfaceViewProps,
@@ -252,6 +276,36 @@ export function trackQuestionsFormSurfaceView(
 export function trackRunFailedToastGoAmrClick(
   track: Track,
   props: RunFailedToastClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
+// Personalized first-run recommendation on Home (spec §7).
+export function trackHomeRecommendationSurfaceView(
+  track: Track,
+  props: HomeRecommendationSurfaceViewProps,
+): void {
+  send(track, 'surface_view', props);
+}
+
+export function trackHomeRecommendationClick(
+  track: Track,
+  props: HomeRecommendationClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
+// First-generation Studio hint (spec §8.3).
+export function trackStudioOnboardingHintSurfaceView(
+  track: Track,
+  props: StudioOnboardingHintSurfaceViewProps,
+): void {
+  send(track, 'surface_view', props);
+}
+
+export function trackStudioOnboardingHintClick(
+  track: Track,
+  props: StudioOnboardingHintClickProps,
 ): void {
   send(track, 'ui_click', props);
 }
@@ -612,6 +666,20 @@ export function trackDesignToolboxClick(
   send(track, 'ui_click', props);
 }
 
+export function trackSketchSaveResult(
+  track: Track,
+  props: SketchSaveResultProps,
+): void {
+  send(track, 'sketch_save_result', props);
+}
+
+export function trackSketchExportResult(
+  track: Track,
+  props: SketchExportResultProps,
+): void {
+  send(track, 'sketch_export_result', props);
+}
+
 export function trackComposerBarClick(
   track: Track,
   props: ComposerBarClickProps,
@@ -724,6 +792,27 @@ export function trackPresentPopoverClick(
   props: PresentPopoverClickProps,
 ): void {
   send(track, 'ui_click', props);
+}
+
+export function trackDeckViewerSurfaceView(
+  track: Track,
+  props: DeckViewerSurfaceViewProps,
+): void {
+  send(track, 'surface_view', props);
+}
+
+export function trackDeckViewerClick(
+  track: Track,
+  props: DeckViewerClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
+export function trackSpeakerNotesSaveResult(
+  track: Track,
+  props: SpeakerNotesSaveResultProps,
+): void {
+  send(track, 'speaker_notes_save_result', props);
 }
 
 export function trackShareOptionPopoverClick(
@@ -983,6 +1072,13 @@ export function trackSettingsByokModelsFetchResult(
   send(track, 'settings_byok_models_fetch_result', props);
 }
 
+export function trackByokPreflightBlocked(
+  track: Track,
+  props: ByokPreflightBlockedProps,
+): void {
+  send(track, 'byok_preflight_blocked', props);
+}
+
 export function trackSettingsConnectorAuthResult(
   track: Track,
   props: SettingsConnectorAuthResultProps,
@@ -1066,6 +1162,28 @@ export function trackOnboardingCompleteResult(
   send(track, 'onboarding_complete_result', props);
 }
 
+// First-generation funnel (spec §11.1).
+export function trackOnboardingPromptPrefilled(
+  track: Track,
+  props: OnboardingPromptPrefilledProps,
+): void {
+  send(track, 'onboarding_prompt_prefilled', props);
+}
+
+export function trackOnboardingFirstPromptSent(
+  track: Track,
+  props: OnboardingFirstPromptSentProps,
+): void {
+  send(track, 'onboarding_first_prompt_sent', props);
+}
+
+export function trackOnboardingFirstGenerationCompleted(
+  track: Track,
+  props: OnboardingFirstGenerationCompletedProps,
+): void {
+  send(track, 'onboarding_first_generation_completed', props);
+}
+
 // ---- Design-system lifecycle ---------------------------------------------
 //
 // `trackDesignSystem*Result` cover the five lifecycle moments in the
@@ -1134,4 +1252,27 @@ export function trackUpdateInstallResult(
   props: UpdateInstallResultProps,
 ): void {
   send(track, 'update_install_result', props);
+}
+
+export function trackUpdateCheckResult(
+  track: Track,
+  props: UpdateCheckResultProps,
+): void {
+  send(track, 'update_check_result', props);
+}
+
+// ---- Post-update "what's new" card ---------------------------------------
+
+export function trackWhatsNewPopupSurfaceView(
+  track: Track,
+  props: WhatsNewPopupSurfaceViewProps,
+): void {
+  send(track, 'surface_view', props);
+}
+
+export function trackWhatsNewPopupClick(
+  track: Track,
+  props: WhatsNewPopupClickProps,
+): void {
+  send(track, 'ui_click', props);
 }

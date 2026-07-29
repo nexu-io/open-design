@@ -1,9 +1,14 @@
+import { readFileSync } from 'node:fs';
 import { expect, test } from '@/playwright/suite';
 import { ensureRailOpen } from '@/playwright/rail';
-import type { Page, Request } from '@playwright/test';
+import type { Locator, Page, Request } from '@playwright/test';
 import { applyStandardMocks, fulfillAgentsRoute, STORAGE_KEY } from '@/playwright/mock-factory';
 import { T } from '@/timeouts';
-const LOCAL_CLI_LABEL = /Local CLI|本机 CLI|本地 CLI/i;
+const LOCAL_CLI_LABEL = /Local CLI|Local coding agent|本机 CLI|本地 CLI/i;
+const WEBGL_AURORA_PREVIEW_HTML = readFileSync(
+  new URL('../../plugins/_official/examples/webgl-aurora-veil/example.html', import.meta.url),
+  'utf8',
+);
 const STARTER_PLUGIN = makeStarterPlugin({
   id: 'localized-plugin',
   title: 'Localized Plugin',
@@ -35,6 +40,56 @@ const STARTER_PLUGINS = [
     title: 'Figma Importer',
     taskKind: 'figma-migration',
     description: 'Import a Figma file into a project.',
+  }),
+] as const;
+const MULTI_FACET_PLUGINS = [
+  makeStarterPlugin({
+    id: 'facet-landing-prototype',
+    title: 'Facet Landing Prototype',
+    mode: 'prototype',
+    tags: ['landing-page'],
+  }),
+  makeStarterPlugin({
+    id: 'facet-app-prototype',
+    title: 'Facet App Prototype',
+    mode: 'prototype',
+    tags: ['app-onboarding'],
+  }),
+  makeStarterPlugin({
+    id: 'image-template-notion-team-dashboard-live-artifact',
+    title: 'Facet Live Artifact',
+    mode: 'prototype',
+    tags: ['live-artifact'],
+  }),
+  makeStarterPlugin({
+    id: 'facet-deck',
+    title: 'Facet Deck',
+    mode: 'deck',
+    tags: ['pitch-deck'],
+  }),
+  makeStarterPlugin({
+    id: 'facet-image',
+    title: 'Facet Image',
+    mode: 'image',
+    tags: ['ui'],
+  }),
+  makeStarterPlugin({
+    id: 'facet-video',
+    title: 'Facet Video',
+    mode: 'video',
+    tags: ['video-template'],
+  }),
+  makeStarterPlugin({
+    id: 'facet-hyperframes',
+    title: 'Facet HyperFrames',
+    mode: 'video',
+    tags: ['hyperframes'],
+  }),
+  makeStarterPlugin({
+    id: 'facet-audio',
+    title: 'Facet Audio',
+    mode: 'audio',
+    tags: ['audio'],
   }),
 ] as const;
 const DESIGN_SYSTEMS = [
@@ -166,6 +221,120 @@ test('[P0] @critical home hero submit creates a project and lands on a usable wo
   await expect(page.getByTestId('file-workspace')).toBeVisible();
 });
 
+test('[P1] onboarding recommendation creates a project with prefilled first prompt context', async ({ page }) => {
+  const createdBodies: Array<Record<string, unknown>> = [];
+  const runBodies: Array<Record<string, unknown>> = [];
+  const projectId = `onboarding-recommendation-${Date.now()}`;
+  await page.addInitScript((key) => {
+    window.localStorage.setItem(
+      key,
+      JSON.stringify({
+        mode: 'daemon',
+        apiKey: '',
+        baseUrl: 'https://api.anthropic.com',
+        model: 'claude-sonnet-4-5',
+        agentId: 'mock',
+        skillId: null,
+        designSystemId: null,
+        onboardingCompleted: false,
+        agentModels: {},
+        privacyDecisionAt: 1,
+        telemetry: { metrics: false, content: false, artifactManifest: false },
+      }),
+    );
+  }, STORAGE_KEY);
+  await page.route('**/api/app-config', async (route) => {
+    if (route.request().method() === 'PUT') {
+      await route.fulfill({ json: { ok: true } });
+      return;
+    }
+    if (route.request().method() === 'GET') {
+      await route.fulfill({
+        json: {
+          config: {
+            onboardingCompleted: false,
+            agentId: 'mock',
+            skillId: null,
+            designSystemId: null,
+            agentModels: {},
+            privacyDecisionAt: 1,
+            telemetry: { metrics: false, content: false, artifactManifest: false },
+          },
+        },
+      });
+      return;
+    }
+    await route.continue();
+  });
+  await page.route('**/api/projects', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.continue();
+      return;
+    }
+    createdBodies.push(route.request().postDataJSON() as Record<string, unknown>);
+    await route.fulfill({
+      json: {
+        project: {
+          id: projectId,
+          name: 'Product UI Prototype',
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          pendingPrompt: createdBodies[0]?.pendingPrompt,
+          metadata: createdBodies[0]?.metadata ?? { kind: 'prototype' },
+        },
+        conversationId: `${projectId}-conversation`,
+      },
+    });
+  });
+  await page.route('**/api/runs', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.continue();
+      return;
+    }
+    runBodies.push(route.request().postDataJSON() as Record<string, unknown>);
+    await route.fulfill({
+      status: 202,
+      contentType: 'application/json',
+      body: '{"runId":"recommendation-should-not-auto-send"}',
+    });
+  });
+
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
+  await page.getByRole('button', { name: LOCAL_CLI_LABEL }).click();
+  await page.getByRole('button', { name: /^Continue$/i }).click();
+  await page.getByRole('button', { name: /Engineer$/i }).click();
+  await page.getByRole('button', { name: /Product design/i }).click();
+  await page.getByRole('button', { name: /^Continue$/i }).click();
+  await page.getByRole('button', { name: /^Continue$/i }).click();
+  await page.getByRole('button', { name: 'Go to home' }).click();
+
+  await expect(page.getByTestId('home-recommendation')).toBeVisible();
+  await page.getByTestId('home-recommendation-start').click();
+
+  await expect.poll(() => createdBodies.length).toBe(1);
+  const body = createdBodies[0] as {
+    pendingPrompt?: string;
+    metadata?: { kind?: string };
+  };
+  expect(body.pendingPrompt ?? '').toContain('product');
+  expect(typeof body.metadata?.kind).toBe('string');
+  await expect(page).toHaveURL(new RegExp(`/projects/${projectId}`));
+  await expect
+    .poll(() => page.evaluate((id) => window.sessionStorage.getItem(`open-design:first-loop-entry:${id}`), projectId))
+    .toContain('product_ui_prototype');
+  const firstLoopEntry = await page.evaluate((id) => {
+    const raw = window.sessionStorage.getItem(`open-design:first-loop-entry:${id}`);
+    return raw ? JSON.parse(raw) as { recommendationId?: string; productType?: string } : null;
+  }, projectId);
+  expect(firstLoopEntry).toMatchObject({
+    productType: 'product_ui',
+    recommendationId: 'product_ui_prototype',
+  });
+  await page.waitForTimeout(500);
+  expect(runBodies).toHaveLength(0);
+});
+
 test('[P1] entry top navigation matches the current home tab structure', async ({ page }) => {
   await gotoEntryHome(page);
   await ensureRailOpen(page);
@@ -187,7 +356,6 @@ test('[P1] entry top navigation matches the current home tab structure', async (
   await expect(page.getByTestId('home-hero-rail-prototype')).toHaveAttribute('aria-selected', 'false');
   await expect(page.getByTestId('home-hero-footer-options')).toHaveCount(0);
   await expect(page.getByTestId('home-hero-plugin-presets')).toHaveCount(0);
-  await expect(page.getByTestId('home-templates-hint')).toBeVisible();
   await expect(page.getByTestId('plugins-home-row-subcategory-prototype')).toHaveCount(0);
 });
 
@@ -203,7 +371,9 @@ test('[P1] home view exposes the redesigned hero, recent projects, and starters'
   await expect(page.getByTestId('recent-projects-view-all')).toBeVisible();
   await expect(home.getByTestId('plugins-home-section')).toBeVisible();
   await expect(home.getByTestId('plugins-home-browse-registry')).toBeVisible();
+  // The Community gallery defaults to the All slice (#5759).
   await expect(home.getByTestId('plugins-home-pill-category-all')).toHaveAttribute('aria-selected', 'true');
+  await expect(home.getByTestId('plugins-home-pill-category-deck')).toHaveAttribute('aria-selected', 'false');
   await expect(page.getByTestId('home-hero')).toBeVisible();
   await expect(page.getByTestId('home-templates-hint')).toHaveCount(0);
   await expect(page.getByTestId('entry-nav-home')).toHaveAttribute('aria-current', 'page');
@@ -284,18 +454,15 @@ test('[P1] design systems page is reachable from entry nav and supports search, 
   await page.getByTestId('design-systems-surface-all').click();
 
   // Master-detail: selecting a list row renders that system in the right
-  // preview pane, where the full-preview and "set as default" actions live.
+  // detail pane, where secondary actions live in the header overflow menu.
   await page.getByTestId('design-system-card-airbnb').click();
-  await page.getByTestId('design-system-preview-airbnb').click();
-  const preview = page.getByRole('dialog', { name: /Airbnb preview/i });
-  await expect(preview).toBeVisible();
-  await expect(preview.getByRole('tab', { name: /showcase/i })).toHaveAttribute('aria-selected', 'true');
-  await expect(preview.getByRole('tab', { name: /tokens/i })).toBeVisible();
-  await expect(preview.getByRole('button', { name: 'DESIGN.md', exact: true })).toBeVisible();
-  await page.keyboard.press('Escape');
-  await expect(preview).toHaveCount(0);
+  const detail = page.getByTestId('design-system-detail-airbnb');
+  await expect(detail).toBeVisible();
+  await expect(page.getByTestId('design-kit-view-airbnb')).toBeVisible();
+  await expect(detail).toContainText('Airbnb');
 
-  await page.getByTestId('design-system-select-airbnb').click();
+  await detail.getByTestId('design-kit-more-actions').click();
+  await page.getByRole('menuitem', { name: /Default for new chats/i }).click();
   await expect(page.getByTestId('design-system-card-airbnb')).toContainText(/default/i);
   await expect
     .poll(() => persistedConfigs.at(-1)?.designSystemId)
@@ -341,8 +508,11 @@ test('[P1] disabled design systems are filtered from entry creation surfaces', a
   const modal = page.getByTestId('new-project-modal');
   await expect(modal).toBeVisible();
   await modal.getByTestId('design-system-trigger').click();
-  await expect(modal.getByRole('option', { name: /Agentic/i })).toBeVisible();
-  await expect(modal.getByRole('option', { name: /Airbnb/i })).toHaveCount(0);
+  // The picker popover renders through a document.body portal (so short
+  // viewports cannot clip it), so its options live outside the modal subtree.
+  const modalPicker = page.locator('.ds-picker-popover');
+  await expect(modalPicker.getByRole('option', { name: /Agentic/i })).toBeVisible();
+  await expect(modalPicker.getByRole('option', { name: /Airbnb/i })).toHaveCount(0);
   await page.keyboard.press('Escape');
   await page.keyboard.press('Escape');
   await expect(modal).toHaveCount(0);
@@ -466,9 +636,7 @@ test('[P0] @critical entry execution pill opens the Local CLI and BYOK switcher 
   const pill = page.getByTestId('inline-model-switcher-chip');
   await expect(pill).toContainText(LOCAL_CLI_LABEL);
   await expect(pill).toContainText('Codex CLI');
-  await pill.click();
-
-  const popover = page.getByTestId('inline-model-switcher-popover');
+  const popover = await openInlineModelSwitcher(page);
   await expect(popover).toBeVisible();
   await expect(page.getByTestId('inline-model-switcher-mode-daemon')).toHaveAttribute(
     'aria-selected',
@@ -481,9 +649,277 @@ test('[P0] @critical entry execution pill opens the Local CLI and BYOK switcher 
   await expect(page.getByTestId('inline-model-switcher-agent-hermes')).toBeVisible();
   await expect(page.getByTestId('inline-model-switcher-agent-cursor-agent')).toBeVisible();
 
-  await page.getByTestId('inline-model-switcher-open-settings').click();
+  await openInlineModelSwitcherSettingsDialog(page);
   await expect(page.getByRole('dialog')).toBeVisible();
   await expect(page.getByRole('tab', { name: LOCAL_CLI_LABEL })).toBeVisible();
+});
+
+test('[P1] Settings About reads desktop updater status and runs a manual update check', async ({ page }) => {
+  await page.addInitScript(() => {
+    const idleStatus = {
+      arch: 'arm64',
+      capabilities: {
+        canApplyInPlace: false,
+        canDownload: true,
+        canOpenInstaller: true,
+        requiresManualInstall: false,
+      },
+      channel: 'beta',
+      currentVersion: '0.13.4',
+      enabled: true,
+      mode: 'package-launcher',
+      platform: 'darwin',
+      state: 'idle',
+      supported: true,
+    };
+    const checkedStatus = {
+      ...idleStatus,
+      lastCheckedAt: '2026-06-30T00:00:00.000Z',
+      state: 'not-available',
+    };
+    (window as unknown as { __odUpdaterCalls?: string[] }).__odUpdaterCalls = [];
+    (window as unknown as { __od__?: unknown }).__od__ = {
+      version: 2,
+      client: { type: 'desktop', platform: 'darwin', osLocale: 'en-US' },
+      browser: { clearData: async () => ({ ok: true }) },
+      capture: { page: async () => ({ ok: false, reason: 'not mocked' }) },
+      pdf: { print: async () => ({ ok: true }) },
+      pet: { setVisible: () => {} },
+      project: {
+        pickAndImport: async () => ({ ok: false, canceled: true }),
+        pickAndReplaceWorkingDir: async () => ({ ok: false, canceled: true }),
+      },
+      shell: {
+        openExternal: async () => ({ ok: true }),
+        openPath: async () => ({ ok: true }),
+      },
+      updater: {
+        status: async () => idleStatus,
+        check: async () => {
+          (window as unknown as { __odUpdaterCalls: string[] }).__odUpdaterCalls.push('check');
+          return checkedStatus;
+        },
+        download: async () => checkedStatus,
+        install: async () => checkedStatus,
+        quit: async () => ({ ok: true }),
+        setMenuLabels: async () => ({ ok: true }),
+        subscribe: () => () => {},
+        subscribeOpenDialog: () => () => {},
+      },
+    };
+  });
+  await page.route('**/api/version', async (route) => {
+    await route.fulfill({
+      json: {
+        version: {
+          version: '0.13.4',
+          channel: 'beta',
+          packaged: true,
+          platform: 'darwin',
+          arch: 'arm64',
+        },
+      },
+    });
+  });
+
+  await gotoEntryHome(page);
+  await page.getByTestId('entry-settings-menu-trigger').click();
+  await page.getByTestId('entry-settings-open-details').click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+
+  await dialog.getByRole('button', { name: /^About\b/i }).click();
+  await expect(dialog.locator('.settings-about-version-num')).toContainText('0.13.4');
+  await expect(dialog.locator('.settings-about-update-status')).toContainText('Not checked yet');
+
+  await dialog.getByRole('button', { name: 'Check for updates' }).click();
+  await expect(dialog.locator('.settings-about-update-status')).toContainText('You are already on the latest version.');
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as { __odUpdaterCalls?: string[] }).__odUpdaterCalls ?? []))
+    .toEqual(['check']);
+});
+
+test('[P1] Settings About surfaces prerelease updater check failures with retry affordance', async ({ page }) => {
+  await page.addInitScript(() => {
+    const idleStatus = {
+      arch: 'arm64',
+      capabilities: {
+        canApplyInPlace: false,
+        canDownload: true,
+        canOpenInstaller: true,
+        requiresManualInstall: false,
+      },
+      channel: 'prerelease',
+      currentVersion: '0.16.0-prerelease.1',
+      enabled: true,
+      mode: 'package-launcher',
+      platform: 'darwin',
+      state: 'idle',
+      supported: true,
+    };
+    const failedStatus = {
+      ...idleStatus,
+      error: {
+        code: 'metadata-fetch-failed',
+        message: 'prerelease metadata returned 503',
+      },
+      lastCheckedAt: '2026-07-21T12:00:00.000Z',
+      state: 'error',
+    };
+    (window as unknown as { __odUpdaterCalls?: string[] }).__odUpdaterCalls = [];
+    (window as unknown as { __od__?: unknown }).__od__ = {
+      version: 2,
+      client: { type: 'desktop', platform: 'darwin', osLocale: 'en-US' },
+      browser: { clearData: async () => ({ ok: true }) },
+      capture: { page: async () => ({ ok: false, reason: 'not mocked' }) },
+      pdf: { print: async () => ({ ok: true }) },
+      pet: { setVisible: () => {} },
+      project: {
+        pickAndImport: async () => ({ ok: false, canceled: true }),
+        pickAndReplaceWorkingDir: async () => ({ ok: false, canceled: true }),
+      },
+      shell: {
+        openExternal: async () => ({ ok: true }),
+        openPath: async () => ({ ok: true }),
+      },
+      updater: {
+        status: async () => idleStatus,
+        check: async () => {
+          (window as unknown as { __odUpdaterCalls: string[] }).__odUpdaterCalls.push('check');
+          return failedStatus;
+        },
+        download: async () => failedStatus,
+        install: async () => failedStatus,
+        quit: async () => ({ ok: true }),
+        setMenuLabels: async () => ({ ok: true }),
+        subscribe: () => () => {},
+        subscribeOpenDialog: () => () => {},
+      },
+    };
+  });
+  await page.route('**/api/version', async (route) => {
+    await route.fulfill({
+      json: {
+        version: {
+          version: '0.16.0-prerelease.1',
+          channel: 'prerelease',
+          packaged: true,
+          platform: 'darwin',
+          arch: 'arm64',
+        },
+      },
+    });
+  });
+
+  await gotoEntryHome(page);
+  await page.getByTestId('entry-settings-menu-trigger').click();
+  await page.getByTestId('entry-settings-open-details').click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+
+  await dialog.getByRole('button', { name: /^About\b/i }).click();
+  await expect(dialog.locator('.settings-about-version-num')).toContainText('0.16.0-prerelease.1');
+  await expect(dialog.locator('.settings-about-update-status')).toContainText('Not checked yet');
+
+  await dialog.getByRole('button', { name: 'Check for updates' }).click();
+  await expect(dialog.locator('.settings-about-update-status')).toContainText('Update failed');
+  await expect(dialog.getByRole('button', { name: 'Retry' })).toBeVisible();
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as { __odUpdaterCalls?: string[] }).__odUpdaterCalls ?? []))
+    .toEqual(['check']);
+});
+
+test('[P1] Settings BYOK connection failures emit a classified analytics error code', async ({ page }) => {
+  const byokConfig = {
+    mode: 'api',
+    apiKey: 'sk-openai-e2e',
+    apiProtocol: 'openai',
+    apiVersion: '',
+    baseUrl: 'https://api.openai.com/v1',
+    model: 'gpt-4o-mini',
+    apiProviderBaseUrl: 'https://api.openai.com/v1',
+    agentId: 'codex',
+    skillId: null,
+    designSystemId: null,
+    onboardingCompleted: true,
+    privacyDecisionAt: 1,
+    telemetry: { metrics: true, content: false, artifactManifest: false },
+    agentModels: { codex: { model: 'default' } },
+  };
+  await page.addInitScript(
+    ({ key, value }) => {
+      window.localStorage.setItem(key, JSON.stringify(value));
+    },
+    { key: STORAGE_KEY, value: byokConfig },
+  );
+
+  await page.route('**/api/app-config', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({ json: { config: byokConfig } });
+  });
+  await page.route('**/api/analytics/config', async (route) => {
+    const origin = new URL(route.request().url()).origin;
+    await route.fulfill({
+      json: {
+        enabled: true,
+        key: 'phc_e2e',
+        host: origin,
+        env: 'test',
+        installationId: 'e2e-byok-error-device',
+      },
+    });
+  });
+
+  const analyticsPayloads: string[] = [];
+  for (const pattern of ['**/e/**', '**/batch/**', '**/capture/**', '**/decide/**']) {
+    await page.route(pattern, async (route) => {
+      analyticsPayloads.push(route.request().postData() ?? route.request().url());
+      await route.fulfill({ json: { status: 1 } });
+    });
+  }
+
+  await page.route('**/api/test/connection', async (route) => {
+    expect(route.request().method()).toBe('POST');
+    const body = route.request().postDataJSON() as Record<string, unknown>;
+    expect(body).toMatchObject({
+      mode: 'provider',
+      protocol: 'openai',
+      baseUrl: 'https://api.openai.com/v1',
+      apiKey: 'sk-openai-e2e',
+      model: 'gpt-4o-mini',
+    });
+    await route.fulfill({
+      json: {
+        ok: false,
+        kind: 'unknown',
+        status: 402,
+        latencyMs: 12,
+        model: 'gpt-4o-mini',
+        detail: 'provider reported insufficient credits',
+      },
+    });
+  });
+
+  await gotoEntryHome(page);
+  await page.getByTestId('entry-settings-menu-trigger').click();
+  await page.getByTestId('entry-settings-open-details').click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+
+  const connectionTest = dialog.locator('.settings-byok-connection-test');
+  await expect(connectionTest).toBeVisible();
+  await connectionTest.getByRole('button', { name: /^Test$/ }).click();
+  await expect(dialog.getByRole('alert')).toContainText(/insufficient credits/i);
+
+  await expect
+    .poll(() => analyticsPayloads.join('\n'), { timeout: 15_000 })
+    .toContain('settings_byok_test_result');
+  const captured = analyticsPayloads.join('\n');
+  expect(captured).toContain('HTTP_402');
+  expect(captured).toContain('unknown');
 });
 
 test('[P2] entry help menu exposes community links and topbar routes Use everywhere', async ({ page }) => {
@@ -519,6 +955,61 @@ test('[P2] entry help menu exposes community links and topbar routes Use everywh
   await expect(menu).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(menu).toHaveCount(0);
+});
+
+test('[P1] Use everywhere guide uses daemon MCP install info and copies an agent guide', async ({ page }) => {
+  await page.addInitScript(() => {
+    const store: string[] = [];
+    Object.defineProperty(window, '__copiedTexts', {
+      value: store,
+      configurable: true,
+    });
+    Object.defineProperty(navigator, 'clipboard', {
+      value: {
+        writeText(text: string) {
+          store.push(text);
+          return Promise.resolve();
+        },
+      },
+      configurable: true,
+    });
+  });
+  await page.route('**/api/mcp/install-info', async (route) => {
+    await route.fulfill({
+      json: {
+        command: '/Applications/Open Design.app/Contents/MacOS/od',
+        args: ['mcp', '--daemon-url', 'http://127.0.0.1:7456'],
+        env: {
+          OD_DATA_DIR: '/Users/test/.open-design',
+        },
+      },
+    });
+  });
+
+  await gotoEntryHome(page);
+  await page.getByTestId('entry-use-everywhere-button').click();
+  await expect(page.getByRole('heading', { name: 'Integrations' })).toBeVisible();
+  await expect(page.getByTestId('integrations-tab-use-everywhere')).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+
+  await page.getByTestId('use-everywhere-tab-mcp').click();
+  const mcpSection = page.getByTestId('use-everywhere-section-mcp');
+  await expect(mcpSection).toContainText('/Applications/Open Design.app/Contents/MacOS/od');
+  await expect(mcpSection).toContainText('OD_DATA_DIR');
+
+  await page.getByTestId('use-everywhere-copy-guide').click();
+  await expect(page.getByTestId('use-everywhere-copy-guide')).toContainText(/Copied|已复制|已複製/i);
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as { __copiedTexts?: string[] }).__copiedTexts?.at(-1) ?? ''))
+    .toContain('/Applications/Open Design.app/Contents/MacOS/od');
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as { __copiedTexts?: string[] }).__copiedTexts?.at(-1) ?? ''))
+    .toMatch(/http:\/\/127\.0\.0\.1:\d+\/api\/mcp\/install-info/);
+
+  await page.getByTestId('use-everywhere-open-settings').click();
+  await expect(page.getByTestId('integrations-tab-mcp')).toHaveAttribute('aria-selected', 'true');
 });
 
 test('[P2] home topbar overlays close on outside click, Escape, and Settings open', async ({ page }) => {
@@ -570,10 +1061,7 @@ test('[P1] entry execution pill remains available across secondary entry pages',
       page.locator('h1').filter({ hasText: destination.heading }).first(),
     ).toBeVisible();
 
-    const pill = page.getByTestId('inline-model-switcher-chip');
-    await expect(pill).toBeVisible();
-    await pill.click();
-    await expect(page.getByTestId('inline-model-switcher-popover')).toBeVisible();
+    await openInlineModelSwitcher(page);
     await page.keyboard.press('Escape');
     await expect(page.getByTestId('inline-model-switcher-popover')).toHaveCount(0);
   }
@@ -592,8 +1080,11 @@ test('[P1] home starters can browse registry and use a starter from Home', async
   });
 
   await gotoEntryHome(page);
-  await expect(page.getByTestId('plugins-home-browse-registry')).toBeVisible();
-  await page.getByTestId('plugins-home-browse-registry').click();
+  // The browse link lives inside the first-run reveal container; reveal it
+  // first or the collapsed overlay intercepts the click.
+  const home = await revealHomeTemplates(page);
+  await expect(home.getByTestId('plugins-home-browse-registry')).toBeVisible();
+  await home.getByTestId('plugins-home-browse-registry').click();
   await expect(page).toHaveURL(/\/plugins$/);
   await expect(page.getByTestId('entry-nav-plugins')).toHaveAttribute('aria-current', 'page');
   await expect(page.locator('h1').filter({ hasText: 'Plugins' })).toBeVisible();
@@ -608,14 +1099,41 @@ test('[P1] home starters can browse registry and use a starter from Home', async
   // collapse button on hover, which would intercept the click).
   await page.getByTestId('entry-nav-home').click();
   await expect(page.getByTestId('home-hero')).toBeVisible();
-  // Community is a gallery now (no inline Use button): open the starter's
-  // detail modal and use it. This starter ships an example query, so the
+  // Details modal use is still covered separately from the gallery inline
+  // Use button. This starter ships an example query, so the
   // primary Use button loads the prompt while binding it as the
   // active driver; this case only asserts the active-plugin chip, which
   // appears on either Use variant.
   await openHomePluginDetails(page, 'localized-plugin', /Localized Plugin/i);
   await page.getByTestId('plugin-details-use-localized-plugin').click();
   await expect(page.getByTestId('home-hero-active-plugin')).toBeVisible();
+});
+
+test('[P1] home starters gallery inline Use applies the starter without opening details', async ({ page }) => {
+  await page.route('**/api/plugins', async (route) => {
+    await route.fulfill({
+      json: {
+        plugins: [STARTER_PLUGIN],
+      },
+    });
+  });
+  await page.route('**/api/plugins/localized-plugin/apply', async (route) => {
+    await route.fulfill({ json: makeApplyResult('localized-plugin') });
+  });
+
+  await gotoEntryHome(page);
+  const home = await revealHomeTemplates(page);
+  const card = home.locator('article.plugins-home__card[data-plugin-id="localized-plugin"]');
+  await expect(card).toBeVisible();
+
+  await card.hover();
+  const useButton = card.getByTestId('plugins-home-use-localized-plugin');
+  await expect(useButton).toBeVisible();
+  await useButton.click();
+
+  await expect(page.getByRole('dialog').filter({ hasText: /Localized Plugin/i })).toHaveCount(0);
+  await expect(page.getByTestId('home-hero-active-plugin')).toBeVisible();
+  await expect(page.getByTestId('home-hero-input')).toHaveText('');
 });
 
 test('[P2] home starters shows the empty catalog state when no plugins are available', async ({ page }) => {
@@ -647,19 +1165,15 @@ test('[P2] home starters search and facet filters narrow the visible gallery', a
   await gotoEntryHome(page);
 
   const home = await revealHomeTemplates(page);
-  await expect(home.getByTestId('plugins-home-pill-category-all')).toContainText('4');
-
-  await home.getByTestId('plugins-home-pill-category-deck').click({ force: true });
+  const deckCategory = home.getByTestId('plugins-home-pill-category-deck');
+  // The gallery defaults to the All slice (#5759); pick Deck explicitly
+  // before asserting the deck-only visibility set.
+  await deckCategory.click();
+  await expect(deckCategory).toHaveAttribute('aria-selected', 'true');
   await expect(home.locator('[data-plugin-id="deck-writer"]')).toBeVisible();
   await expect(home.locator('[data-plugin-id="figma-importer"]')).toHaveCount(0);
   await expect(home.locator('[data-plugin-id="localized-plugin"]')).toHaveCount(0);
   await expect(home.locator('[data-plugin-id="hyperframes-video"]')).toHaveCount(0);
-
-  await home.getByTestId('plugins-home-pill-category-all').click({ force: true });
-  await expect(home.locator('[data-plugin-id="figma-importer"]')).toBeVisible();
-  await expect(home.locator('[data-plugin-id="localized-plugin"]')).toBeVisible();
-  await expect(home.locator('[data-plugin-id="hyperframes-video"]')).toBeVisible();
-  await expect(home.locator('[data-plugin-id="deck-writer"]')).toBeVisible();
 
   const search = home.getByTestId('plugins-home-search');
   await search.fill('Deck Writer');
@@ -667,7 +1181,66 @@ test('[P2] home starters search and facet filters narrow the visible gallery', a
   await expect(home.locator('[data-plugin-id="localized-plugin"]')).toHaveCount(0);
   await expect(home.locator('[data-plugin-id="hyperframes-video"]')).toHaveCount(0);
   await home.getByTestId('plugins-home-search-clear').click({ force: true });
-  await expect(home.locator('[data-plugin-id="localized-plugin"]')).toBeVisible();
+  await expect(home.locator('[data-plugin-id="deck-writer"]')).toBeVisible();
+});
+
+test('[P1] home starters category tabs and subcategory tabs switch the gallery slice', async ({ page }) => {
+  await page.route('**/api/plugins', async (route) => {
+    await route.fulfill({
+      json: {
+        plugins: MULTI_FACET_PLUGINS,
+      },
+    });
+  });
+
+  await gotoEntryHome(page);
+  const home = await revealHomeTemplates(page);
+
+  // The gallery defaults to the All slice (#5759): the All pill is selected
+  // and every facet is visible until a category is picked.
+  await expect(home.getByTestId('plugins-home-pill-category-all')).toHaveAttribute('aria-selected', 'true');
+  await expect(home.getByTestId('plugins-home-pill-category-deck')).toHaveAttribute('aria-selected', 'false');
+  await expect(home.locator('[data-plugin-id="facet-deck"]')).toBeVisible();
+  await expect(home.locator('[data-plugin-id="facet-landing-prototype"]')).toBeVisible();
+
+  const categoryCases = [
+    ['prototype', 'facet-landing-prototype', 'facet-deck'],
+    ['live-artifact', 'image-template-notion-team-dashboard-live-artifact', 'facet-landing-prototype'],
+    ['deck', 'facet-deck', 'facet-image'],
+    ['image', 'facet-image', 'facet-video'],
+    ['video', 'facet-video', 'facet-hyperframes'],
+    ['hyperframes', 'facet-hyperframes', 'facet-video'],
+    ['audio', 'facet-audio', 'facet-image'],
+  ] as const;
+
+  for (const [category, visibleId, hiddenId] of categoryCases) {
+    const pill = home.getByTestId(`plugins-home-pill-category-${category}`);
+    await pill.scrollIntoViewIfNeeded();
+    await expect(pill).toBeVisible();
+    await pill.click();
+    await expect(pill).toHaveAttribute('aria-selected', 'true');
+    await expect(home.locator(`[data-plugin-id="${visibleId}"]`)).toBeVisible();
+    await expect(home.locator(`[data-plugin-id="${hiddenId}"]`)).toHaveCount(0);
+  }
+
+  const prototypeCategory = home.getByTestId('plugins-home-pill-category-prototype');
+  await prototypeCategory.scrollIntoViewIfNeeded();
+  await expect(prototypeCategory).toBeVisible();
+  await prototypeCategory.click();
+  await expect(home.getByTestId('plugins-home-row-subcategory-prototype')).toBeVisible();
+  await home.getByTestId('plugins-home-pill-subcategory-prototype-landing-marketing').click({ force: true });
+  await expect(home.getByTestId('plugins-home-pill-subcategory-prototype-landing-marketing')).toHaveAttribute('aria-selected', 'true');
+  await expect(home.locator('[data-plugin-id="facet-landing-prototype"]')).toBeVisible();
+  await expect(home.locator('[data-plugin-id="facet-app-prototype"]')).toHaveCount(0);
+
+  await home.getByTestId('plugins-home-pill-subcategory-prototype-app-prototypes').click({ force: true });
+  await expect(home.getByTestId('plugins-home-pill-subcategory-prototype-app-prototypes')).toHaveAttribute('aria-selected', 'true');
+  await expect(home.locator('[data-plugin-id="facet-app-prototype"]')).toBeVisible();
+  await expect(home.locator('[data-plugin-id="facet-landing-prototype"]')).toHaveCount(0);
+
+  await home.getByTestId('plugins-home-pill-subcategory-prototype-all').click({ force: true });
+  await expect(home.locator('[data-plugin-id="facet-landing-prototype"]')).toBeVisible();
+  await expect(home.locator('[data-plugin-id="facet-app-prototype"]')).toBeVisible();
 });
 
 test('[P1] home starters can jump into plugin creation through the registry browse flow', async ({ page }) => {
@@ -680,7 +1253,10 @@ test('[P1] home starters can jump into plugin creation through the registry brow
   });
 
   await gotoEntryHome(page);
-  await page.getByTestId('plugins-home-browse-registry').click();
+  // The browse link lives inside the first-run reveal container; reveal it
+  // first or the collapsed overlay intercepts the click.
+  const home = await revealHomeTemplates(page);
+  await home.getByTestId('plugins-home-browse-registry').click();
   await expect(page).toHaveURL(/\/plugins$/);
   await expect(page.locator('h1').filter({ hasText: 'Plugins' })).toBeVisible();
   await page.getByTestId('plugins-create-button').click();
@@ -703,7 +1279,6 @@ test('[P2] home starters search can enter a no-results state and recover with cl
   // plugins views (both stay mounted), so scope to the home view to keep these
   // strict-mode locators unambiguous.
   const home = await revealHomeTemplates(page);
-  await home.getByTestId('plugins-home-pill-category-all').click({ force: true });
   const search = home.getByTestId('plugins-home-search');
   await search.click({ force: true });
   await search.fill('no-such-starter');
@@ -730,7 +1305,7 @@ test('[P2] home starters details modal opens from a gallery card and closes on E
   const home = await revealHomeTemplates(page);
   const card = home.locator('[data-plugin-id="localized-plugin"]').first();
   await expect(card).toBeVisible();
-  await home.getByTestId('plugins-home-details-localized-plugin').dispatchEvent('click');
+  await card.click();
 
   const dialog = page.getByRole('dialog', { name: /Localized Plugin details/i });
   await expect(dialog).toBeVisible();
@@ -773,7 +1348,7 @@ test('[P1] home starters gallery card click opens the large preview detail modal
   await expect(card).toHaveAttribute('data-preview-kind', 'html');
   await expect(card.locator('.plugins-home__gallery-frame')).toBeVisible();
 
-  await card.dispatchEvent('click');
+  await clickCardAtActionablePoint(page, card);
   const dialog = page.getByRole('dialog', { name: /Community Gallery Plugin preview/i });
   await expect(dialog).toBeVisible();
   await expect(dialog.locator('.ds-modal-stage')).toBeVisible();
@@ -842,14 +1417,7 @@ test('[P1] home starters gallery duplicate creates a project and exposes the ret
 
   await gotoEntryHome(page);
   const home = await revealHomeTemplates(page);
-  const card = home.locator('article.plugins-home__card[data-plugin-id="duplicate-gallery-plugin"]');
-  await expect(card).toBeVisible();
-  await expect(card).toHaveAttribute('data-preview-kind', 'html');
-
-  await card
-    .getByTestId('plugins-home-duplicate-duplicate-gallery-plugin')
-    .first()
-    .dispatchEvent('click');
+  await duplicatePluginFromDetails(page, 'duplicate-gallery-plugin', /Duplicate Gallery Plugin/i, home);
 
   await expect
     .poll(() => duplicateRequests.at(-1)?.name)
@@ -889,19 +1457,15 @@ test('[P1] home starters gallery duplicate failure recovers without leaving Home
 
   await gotoEntryHome(page);
   const home = await revealHomeTemplates(page);
-  const card = home.locator('article.plugins-home__card[data-plugin-id="duplicate-failure-plugin"]');
-  await expect(card).toBeVisible();
-
-  const duplicateButton = card.getByTestId('plugins-home-duplicate-duplicate-failure-plugin').first();
-  await duplicateButton.dispatchEvent('click');
+  await duplicatePluginFromDetails(page, 'duplicate-failure-plugin', /Duplicate Failure Plugin/i, home);
 
   await expect
     .poll(() => duplicateRequests.at(-1)?.name)
     .toBe('Duplicate Failure Plugin');
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.locator('.home-hero__error')).toContainText('Could not duplicate this template.');
-  await expect(duplicateButton).not.toHaveAttribute('aria-busy', 'true');
-  await expect(duplicateButton).toBeEnabled();
+  await expect(page.locator('.home-hero__error')).toContainText('Could not remix this template.');
+  await expect(page.getByTestId('home-hero-input')).toBeVisible();
+  await expect(page.getByTestId('home-hero-submit')).toBeEnabled();
 });
 
 test('[P2] home starters html details modal exposes header actions and closes from the close button', async ({ page }) => {
@@ -928,8 +1492,10 @@ test('[P2] home starters html details modal exposes header actions and closes fr
   });
 
   await gotoEntryHome(page);
-  await page.locator('article.plugins-home__card[data-plugin-id="html-details-plugin"]').hover();
-  await page.getByTestId('plugins-home-details-html-details-plugin').click({ force: true });
+  const home = await revealHomeTemplates(page);
+  const card = home.locator('article.plugins-home__card[data-plugin-id="html-details-plugin"]');
+  await expect(card).toBeVisible();
+  await card.click();
 
   const dialog = page.getByRole('dialog', { name: /HTML Details Plugin preview/i });
   await expect(dialog).toBeVisible();
@@ -941,12 +1507,249 @@ test('[P2] home starters html details modal exposes header actions and closes fr
   // preview owns the stage. The header "Plugin info" toggle and the inline
   // "More" share menu were removed; the sidebar opens via the preview-edge
   // handle.
+  await expect(dialog.getByRole('button', { name: 'Plugin info', exact: true })).toHaveCount(0);
   await expect(dialog.locator('.ds-modal-sidebar')).toHaveCount(0);
   await dialog.locator('.ds-modal-stage-handle.is-expand').click();
   await expect(dialog.locator('.ds-modal-sidebar')).toBeVisible();
 
   await dialog.locator('.ds-modal-close').click();
   await expect(dialog).toHaveCount(0);
+});
+
+test('[P1] home starters WebGL example previews render real canvas output', async ({ page }) => {
+  const webglPlugins = [
+    makeStarterPlugin({
+      id: 'example-webgl-aurora-veil',
+      title: 'WebGL Aurora Veil',
+      description: 'Pure shader WebGL example.',
+      mode: 'prototype',
+      featured: true,
+      tags: ['webgl2', 'powered-preview'],
+      previewEntry: './example.html',
+    }),
+    makeStarterPlugin({
+      id: 'example-webgl-depth-gallery',
+      title: 'WebGL Depth Gallery',
+      description: 'Asset gallery WebGL example.',
+      mode: 'prototype',
+      featured: true,
+      tags: ['webgl2', 'gallery', 'powered-preview'],
+      previewEntry: './example.html',
+    }),
+  ];
+
+  await page.route('**/api/plugins', async (route) => {
+    await route.fulfill({ json: { plugins: webglPlugins } });
+  });
+  for (const plugin of webglPlugins) {
+    await page.route(`**/api/plugins/${plugin.id}/preview`, async (route) => {
+      await route.fulfill({
+        status: 200,
+        headers: { 'content-type': 'text/html' },
+        body: webglCanvasPreview(plugin.title),
+      });
+    });
+  }
+
+  await gotoEntryHome(page);
+  const home = await revealHomeTemplates(page);
+
+  for (const plugin of webglPlugins) {
+    const card = home.locator(`article.plugins-home__card[data-plugin-id="${plugin.id}"]`);
+    await expect(card).toBeVisible();
+    await card.getByRole('button', { name: new RegExp(`View details for ${plugin.title}`, 'i') }).click();
+
+    const dialog = page.getByRole('dialog', { name: new RegExp(`${plugin.title} preview`, 'i') });
+    await expect(dialog).toBeVisible();
+    const frame = dialog.frameLocator(`iframe[title^="${plugin.title}"]`);
+    await expect(frame.locator('canvas#scene')).toBeVisible();
+    await expect.poll(async () => frame.locator('canvas#scene').evaluate((canvas: HTMLCanvasElement) => {
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return false;
+      const { data } = ctx.getImageData(0, 0, 16, 16);
+      return Array.from(data).some((value, index) => index % 4 !== 3 && value > 0);
+    })).toBe(true);
+    await expect(frame.getByTestId('webgl-mode')).toContainText(/webgl2|2d-fallback/);
+    await expect(dialog).not.toContainText(/Couldn't load|No preview/i);
+    await dialog.locator('.ds-modal-close').click();
+    await expect(dialog).toHaveCount(0);
+  }
+});
+
+test('[P1] home starters WebGL example previews resize the real canvas backing store', async ({ page }) => {
+  await page.setViewportSize({ width: 1240, height: 720 });
+
+  const plugin = makeStarterPlugin({
+    id: 'example-webgl-aurora-veil',
+    title: 'Aurora Veil',
+    description: 'Pure shader WebGL example.',
+    mode: 'prototype',
+    featured: true,
+    tags: ['webgl2', 'powered-preview'],
+    previewEntry: './example.html',
+  });
+
+  await page.route('**/api/plugins', async (route) => {
+    await route.fulfill({ json: { plugins: [plugin] } });
+  });
+  await page.route(`**/api/plugins/${plugin.id}/preview`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { 'content-type': 'text/html' },
+      body: WEBGL_AURORA_PREVIEW_HTML,
+    });
+  });
+
+  await gotoEntryHome(page);
+  const home = await revealHomeTemplates(page);
+  const card = home.locator(`article.plugins-home__card[data-plugin-id="${plugin.id}"]`);
+  await expect(card).toBeVisible();
+  await card.getByRole('button', { name: /View details for Aurora Veil/i }).click();
+
+  const dialog = page.getByRole('dialog', { name: /Aurora Veil preview/i });
+  await expect(dialog).toBeVisible();
+  const canvas = dialog.frameLocator('iframe[title^="Aurora Veil"]').locator('canvas#gl');
+  await expect(canvas).toBeVisible();
+
+  await setPreviewFrameWidth(dialog, 640);
+  await expect.poll(async () => {
+    const metrics = await webglCanvasMetrics(canvas);
+    return metrics.cssWidth > 0 && metrics.cssWidth <= 660 && metrics.backingWidth >= metrics.cssWidth;
+  }).toBe(true);
+  const narrow = await webglCanvasMetrics(canvas);
+
+  await setPreviewFrameWidth(dialog, 980);
+  await expect.poll(async () => {
+    const metrics = await webglCanvasMetrics(canvas);
+    return metrics.cssWidth > narrow.cssWidth + 200 && metrics.backingWidth >= metrics.cssWidth;
+  }, { timeout: 10_000 }).toBe(true);
+});
+
+test('[P1] Community templates sort toggle switches to newest order and persists after reload', async ({ page }) => {
+  const hotVisual = {
+    ...makeStarterPlugin({
+      id: 'sort-hot-visual',
+      title: 'Sort Hot Visual',
+      description: 'Rich visual card that wins the hot ranking.',
+      mode: 'prototype',
+      featured: true,
+      tags: ['webgl', 'animation', 'gallery', 'prototype'],
+      previewEntry: './example.html',
+    }),
+    installedAt: 10,
+    updatedAt: 10,
+  };
+  const newestPlain = {
+    ...makeStarterPlugin({
+      id: 'sort-newest-plain',
+      title: 'Sort Newest Plain',
+      description: 'Plain recent template.',
+      mode: 'prototype',
+      tags: ['utility'],
+    }),
+    installedAt: 30,
+    updatedAt: 30,
+  };
+  const middlePlain = {
+    ...makeStarterPlugin({
+      id: 'sort-middle-plain',
+      title: 'Sort Middle Plain',
+      description: 'Middle recent template.',
+      mode: 'prototype',
+      tags: ['utility'],
+    }),
+    installedAt: 20,
+    updatedAt: 20,
+  };
+
+  await page.route('**/api/plugins', async (route) => {
+    await route.fulfill({ json: { plugins: [hotVisual, middlePlain, newestPlain] } });
+  });
+  await page.route('**/api/plugins/sort-hot-visual/preview', async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { 'content-type': 'text/html' },
+      body: '<!doctype html><html><body><h1>Sort Hot Visual Preview</h1></body></html>',
+    });
+  });
+
+  await gotoEntryHome(page);
+  let home = await revealHomeTemplates(page);
+  const cardIds = async () => home.locator('article.plugins-home__card').evaluateAll((cards) =>
+    cards.map((card) => card.getAttribute('data-plugin-id')),
+  );
+
+  await expect(home.getByTestId('plugins-home-sort-hot')).toHaveAttribute('aria-checked', 'true');
+  expect((await cardIds()).slice(0, 3)).toEqual(['sort-hot-visual', 'sort-middle-plain', 'sort-newest-plain']);
+
+  await home.getByTestId('plugins-home-sort-newest').click();
+  await expect(home.getByTestId('plugins-home-sort-newest')).toHaveAttribute('aria-checked', 'true');
+  expect((await cardIds()).slice(0, 3)).toEqual(['sort-newest-plain', 'sort-middle-plain', 'sort-hot-visual']);
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await gotoEntryHome(page);
+  home = await revealHomeTemplates(page);
+  await expect(home.getByTestId('plugins-home-sort-newest')).toHaveAttribute('aria-checked', 'true');
+  expect((await cardIds()).slice(0, 3)).toEqual(['sort-newest-plain', 'sort-middle-plain', 'sort-hot-visual']);
+});
+
+test('[P1] home starters html details sidebar handle stays clickable after info pane scroll', async ({ page }) => {
+  const htmlPlugin = makeStarterPlugin({
+    id: 'html-scroll-sidebar-plugin',
+    title: 'HTML Scroll Sidebar Plugin',
+    description: 'A richly described HTML starter with enough metadata to scroll.',
+    mode: 'prototype',
+    featured: true,
+    query: 'Use the {{topic}} template.',
+    inputs: [{ name: 'topic', type: 'string', default: 'sidebar scroll' }],
+    previewEntry: './example.html',
+    tags: ['prototype', 'webgl', 'gallery', 'animation', 'landing-page', 'dashboard'],
+    authorName: 'Open Design',
+    context: {
+      skills: [{ path: './SKILL.md' }, { path: './QA.md' }],
+      assets: ['./example.html', './textures/noise.png', './textures/depth.png'],
+    },
+    pipeline: {
+      stages: [
+        { id: 'plan', atoms: ['outline', 'requirements'] },
+        { id: 'compose', atoms: ['layout', 'motion', 'handoff'] },
+        { id: 'verify', atoms: ['responsive', 'accessibility', 'export'] },
+      ],
+    },
+  });
+
+  await page.route('**/api/plugins', async (route) => {
+    await route.fulfill({ json: { plugins: [htmlPlugin] } });
+  });
+  await page.route('**/api/plugins/html-scroll-sidebar-plugin/preview', async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { 'content-type': 'text/html' },
+      body: '<!doctype html><html><body><main style="min-height:1800px"><h1>Scrollable Preview</h1></main></body></html>',
+    });
+  });
+
+  await gotoEntryHome(page);
+  const home = await revealHomeTemplates(page);
+  await home.locator('article.plugins-home__card[data-plugin-id="html-scroll-sidebar-plugin"]').click();
+
+  const dialog = page.getByRole('dialog', { name: /HTML Scroll Sidebar Plugin preview/i });
+  await expect(dialog).toBeVisible();
+  const expandHandle = dialog.locator('.ds-modal-stage-handle.is-expand');
+  await expect(expandHandle).toBeVisible();
+  await expandHandle.click();
+
+  const sidebar = dialog.locator('.ds-modal-sidebar');
+  await expect(sidebar).toBeVisible();
+  await sidebar.locator('.plugin-info-pane').evaluate((node) => {
+    node.scrollTop = node.scrollHeight;
+  });
+  const collapseHandle = dialog.locator('.ds-modal-stage-handle.is-collapse');
+  await expect(collapseHandle).toBeVisible();
+  await expect(collapseHandle).toBeInViewport();
+  await collapseHandle.click();
+  await expect(sidebar).toHaveCount(0);
+  await expect(dialog.locator('.ds-modal-stage-handle.is-expand')).toBeVisible();
 });
 
 test('[P2] home starters html details modal shows metadata links and supports copy query', async ({ page }) => {
@@ -1004,8 +1807,10 @@ test('[P2] home starters html details modal shows metadata links and supports co
   });
 
   await gotoEntryHome(page);
-  await page.locator('article.plugins-home__card[data-plugin-id="html-metadata-plugin"]').hover();
-  await page.getByTestId('plugins-home-details-html-metadata-plugin').click({ force: true });
+  const home = await revealHomeTemplates(page);
+  const card = home.locator('article.plugins-home__card[data-plugin-id="html-metadata-plugin"]');
+  await expect(card).toBeVisible();
+  await card.click();
 
   const dialog = page.getByRole('dialog', { name: /HTML Metadata Plugin preview/i });
   await expect(dialog).toBeVisible();
@@ -1064,8 +1869,10 @@ test('[P1] home starters Use plugin from the details modal applies the plugin to
   });
 
   await gotoEntryHome(page);
-  await page.locator('article.plugins-home__card[data-plugin-id="detail-use-plugin"]').hover();
-  await page.getByTestId('plugins-home-details-detail-use-plugin').click({ force: true });
+  // Reveal first: a force-click on the details testid inside the collapsed
+  // (inert) reveal container is silently swallowed.
+  const detailHome = await revealHomeTemplates(page);
+  await detailHome.getByTestId('plugins-home-details-detail-use-plugin').click({ force: true });
 
   const dialog = page.getByRole('dialog', { name: /Detail Use Plugin preview/i });
   await expect(dialog).toBeVisible();
@@ -1100,8 +1907,8 @@ test('[P0] @critical home starters Use-plugin-only routes the plugin as the acti
   await expect(input).toHaveText('');
 
   const applyResponsePromise = page.waitForResponse('**/api/plugins/localized-plugin/apply');
-  // Community is a gallery (no inline Use button): open the starter's detail
-  // modal and use it from there. This starter ships an example query, so the
+  // Details modal use remains covered separately from the gallery inline
+  // Use button. This starter ships an example query, so the
   // primary Use button now loads the prompt — the structure-only
   // freeform path lives in the caret menu's "Use without prompt" option.
   await openHomePluginDetails(page, 'localized-plugin', /Localized Plugin/i);
@@ -1183,8 +1990,8 @@ test('[P0] @critical home starters Use with query carries the hydrated starter p
 
   const input = page.getByTestId('home-hero-input');
   const home = await revealHomeTemplates(page);
-  // Use the starter from its detail modal (gallery has no inline Use). This
-  // starter ships an example query, so the primary Use button loads the prompt:
+  // Use the starter from its detail modal; gallery inline Use is covered by a
+  // separate case. This starter ships an example query, so the primary Use button loads the prompt:
   // it routes the plugin as the active run driver AND seeds the hydrated prompt.
   // We still fill the same brief explicitly to keep the assertion robust to the
   // async apply→seed roundtrip (the value is identical either way).
@@ -1213,7 +2020,7 @@ test('[P0] @critical home starters Use with query carries the hydrated starter p
   expect(typeof projectBody.metadata?.kind).toBe('string');
 });
 
-test('[P0] @critical home plugin input edits are reapplied and carried into project creation', async ({ page }) => {
+test('[P0] @critical home plugin input edits are resolved and carried into project creation', async ({ page }) => {
   const parameterizedPlugin = makeStarterPlugin({
     id: 'parameterized-deck-plugin',
     title: 'Parameterized Deck Plugin',
@@ -1233,12 +2040,16 @@ test('[P0] @critical home plugin input edits are reapplied and carried into proj
   await page.route('**/api/plugins/parameterized-deck-plugin/apply', async (route) => {
     const body = route.request().postDataJSON() as { inputs?: Record<string, unknown> };
     applyBodies.push(body);
+    const result = makeApplyResult(
+      'parameterized-deck-plugin',
+      'Draft a {{topic}} deck with {{notes}}.',
+      body.inputs ?? {},
+    );
     await route.fulfill({
-      json: makeApplyResult(
-        'parameterized-deck-plugin',
-        'Draft a {{topic}} deck with {{notes}}.',
-        body.inputs ?? {},
-      ),
+      json: {
+        ...result,
+        inputs: parameterizedPlugin.manifest.od.inputs,
+      },
     });
   });
 
@@ -1267,7 +2078,7 @@ test('[P0] @critical home plugin input edits are reapplied and carried into proj
   expect(body.pendingPrompt).toBe('Draft a Liquid Glasses deck with narrated speaker notes.');
   expect(body.pluginInputs).toMatchObject({
     topic: 'Liquid Glasses',
-    notes: 'speaker notes',
+    notes: 'narrated speaker notes',
   });
   expect(body.appliedPluginSnapshotId).toBe('snap-parameterized-deck-plugin');
   expect(applyBodies.at(-1)?.inputs).toMatchObject(body.pluginInputs ?? {});
@@ -1698,14 +2509,28 @@ test('[P1] rail can be collapsed again on coarse-pointer / non-hover devices', a
   // Without a hover, the collapse control must still be visible and tappable,
   // and tapping it must actually fold the rail back.
   const collapse = page.getByTestId('entry-nav-collapse');
+  await collapse.focus();
   await expect(collapse).toBeVisible();
   await collapse.click();
   await expect(page.locator('.entry')).not.toHaveClass(/entry--rail-open/);
 });
 
 async function gotoEntryHome(page: Page) {
+  // The home surface re-renders (and can remount transient UI such as the
+  // templates reveal container or an open details modal) when the async
+  // projects list resolves. Arm the waiter before navigating and hold until
+  // that fetch settles so tests never interact inside the remount window.
+  const projectsSettled = page
+    .waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === '/api/projects' &&
+        response.request().method() === 'GET',
+      { timeout: 10_000 },
+    )
+    .catch(() => null);
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
+  await projectsSettled;
   const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
   if (await privacyDialog.isVisible()) {
     await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
@@ -1723,16 +2548,94 @@ async function gotoEntryHome(page: Page) {
   await expect(page.getByTestId('home-hero-input')).toBeVisible();
 }
 
-async function revealHomeTemplates(page: Page) {
-  const home = page.getByTestId('entry-view-home');
-  const hint = home.getByTestId('home-templates-hint');
-  if (await hint.count()) {
-    await hint.click({ force: true });
-    await expect(home.locator('.home-templates-reveal')).toHaveClass(/is-revealed/);
-    await expect(home.locator('.home-templates-reveal__body')).not.toHaveAttribute('inert', '');
-    await page.waitForTimeout(450);
+async function openInlineModelSwitcher(page: Page): Promise<Locator> {
+  const popover = page.getByTestId('inline-model-switcher-popover');
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    if (await popover.isVisible().catch(() => false)) {
+      return popover;
+    }
+    const pill = page.getByTestId('inline-model-switcher-chip');
+    await expect(pill).toBeVisible();
+    await expect(pill).toBeEnabled();
+    await pill.click();
+    try {
+      await expect(popover).toBeVisible({ timeout: 750 });
+      return popover;
+    } catch {
+      await pill.focus();
+      await page.keyboard.press('Enter');
+      try {
+        await expect(popover).toBeVisible({ timeout: 750 });
+        return popover;
+      } catch {
+        await page.waitForTimeout(100);
+      }
+    }
   }
+  await expect(popover).toBeVisible();
+  return popover;
+}
+
+async function openInlineModelSwitcherSettingsDialog(page: Page): Promise<void> {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const popover = await openInlineModelSwitcher(page);
+    const settingsButton = popover.getByTestId('inline-model-switcher-open-settings');
+    await expect(settingsButton).toBeVisible();
+    try {
+      await settingsButton.click({ timeout: 5_000 });
+      await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5_000 });
+      return;
+    } catch {
+      if (await page.getByRole('dialog').isVisible().catch(() => false)) {
+        return;
+      }
+      await page.keyboard.press('Escape').catch(() => undefined);
+      await page.waitForTimeout(100);
+    }
+  }
+  const popover = await openInlineModelSwitcher(page);
+  await popover.getByTestId('inline-model-switcher-open-settings').click();
+}
+
+async function revealHomeTemplates(page: Page) {
+  const home = page.locator('[data-testid="entry-view-home"][data-active="true"]');
   const section = home.getByTestId('plugins-home-section');
+  const reveal = home.locator('.home-templates-reveal');
+  const isRevealed = () =>
+    reveal.evaluate((node) => node.classList.contains('is-revealed')).catch(() => false);
+  // `HomeTemplatesReveal` keeps its revealed flag in component state, and the
+  // async projects fetch can remount it (or flip `enabled`) after we reveal,
+  // silently collapsing the gallery again. Reveal, then require the revealed
+  // state to survive a settle window before trusting it; retry on regression.
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    if (!(await reveal.count())) {
+      // Looks like pass-through mode, but the wrapper can mount late (React
+      // may still be processing the projects response and flip `enabled`
+      // right after we look). Hold one settle window and re-check; only a
+      // stable absence is really pass-through.
+      await page.waitForTimeout(600);
+      if (!(await reveal.count())) break;
+      continue;
+    }
+    const hint = home.getByTestId('home-templates-hint');
+    if (!(await isRevealed())) {
+      for (let wheel = 0; wheel < 3 && !(await isRevealed()); wheel += 1) {
+        await page.mouse.wheel(0, 900);
+        await page.waitForTimeout(120);
+      }
+      if (!(await isRevealed()) && (await hint.count())) {
+        await hint.scrollIntoViewIfNeeded();
+        await expect(hint).toBeVisible();
+        await hint.click();
+      }
+    }
+    await page.waitForTimeout(600);
+    if (await isRevealed()) break;
+  }
+  if (await reveal.count()) {
+    await expect(reveal).toHaveClass(/is-revealed/);
+    await expect(home.locator('.home-templates-reveal__body')).not.toHaveAttribute('inert', '');
+  }
   await expect(section).toBeVisible();
   await page.locator('.entry-main--scroll').evaluate((node) => {
     node.scrollTop = node.scrollHeight;
@@ -1744,19 +2647,92 @@ async function openHomePluginDetails(
   page: Page,
   pluginId: string,
   name: RegExp,
-  scopedHome = page.getByTestId('entry-view-home'),
+  scopedHome = page.locator('[data-testid="entry-view-home"][data-active="true"]'),
 ) {
-  let home = scopedHome;
-  let card = home.locator(`article.plugins-home__card[data-plugin-id="${pluginId}"]`).first();
-  if (!(await card.isVisible().catch(() => false))) {
-    home = await revealHomeTemplates(page);
-    card = home.locator(`article.plugins-home__card[data-plugin-id="${pluginId}"]`).first();
-  }
+  // Always walk the reveal path (it is idempotent when the templates are
+  // already expanded): a card inside the collapsed first-run reveal container
+  // still reports isVisible(), so gating the reveal on card visibility leaves
+  // the card without an actionable click point whenever the previous test in
+  // the worker left the home in its collapsed hero state.
+  await revealHomeTemplates(page);
+  const home = scopedHome;
+  const card = home.locator(`article.plugins-home__card[data-plugin-id="${pluginId}"]`).first();
   await expect(card).toBeVisible();
-  await card.dispatchEvent('click');
+  const detailsButton = card.getByTestId(`plugins-home-details-${pluginId}`);
+  await expect(detailsButton).toBeVisible();
   const dialog = page.getByRole('dialog').filter({ hasText: name });
+  await scrollCardIntoActionableView(card);
+  await expect
+    .poll(async () => {
+      return (await getActionablePoint(detailsButton).catch(() => null)) !== null;
+    }, { timeout: T.medium })
+    .toBe(true);
+  await detailsButton.dispatchEvent('click');
   await expect(dialog).toBeVisible();
   return dialog;
+}
+
+async function duplicatePluginFromDetails(
+  page: Page,
+  pluginId: string,
+  name: RegExp,
+  scopedHome = page.locator('[data-testid="entry-view-home"][data-active="true"]'),
+) {
+  const dialog = await openHomePluginDetails(page, pluginId, name, scopedHome);
+  await dialog.getByTestId(`plugin-details-use-${pluginId}-menu`).click();
+  await page.getByTestId(`plugin-details-duplicate-${pluginId}`).click();
+}
+
+async function clickCardAtActionablePoint(page: Page, card: Locator) {
+  await scrollCardIntoActionableView(card);
+  await expect
+    .poll(async () => {
+      return (await getActionablePoint(card)) !== null;
+    }, { timeout: 5_000 })
+    .toBe(true);
+  const point = await getActionablePoint(card);
+  if (!point) {
+    throw new Error('Plugin card did not expose an actionable click point.');
+  }
+  await page.mouse.click(point.x, point.y);
+}
+
+async function getActionablePoint(target: Locator) {
+  return target.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    const points = [
+      { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 },
+      { x: rect.left + 24, y: rect.top + 24 },
+      { x: rect.right - 24, y: rect.bottom - 24 },
+    ];
+    for (const point of points) {
+      if (
+        point.x < 0 ||
+        point.y < 0 ||
+        point.x > window.innerWidth ||
+        point.y > window.innerHeight
+      ) {
+        continue;
+      }
+      const hit = document.elementFromPoint(point.x, point.y);
+      if (hit && element.contains(hit)) {
+        return point;
+      }
+    }
+    return null;
+  });
+}
+
+async function scrollCardIntoActionableView(card: Locator) {
+  await card.evaluate((element) => {
+    const scroller = element.closest('.entry-main--scroll');
+    if (!(scroller instanceof HTMLElement)) {
+      element.scrollIntoView({ block: 'end', inline: 'center' });
+      return;
+    }
+    scroller.scrollTop = scroller.scrollHeight;
+    element.scrollIntoView({ block: 'nearest', inline: 'center' });
+  });
 }
 
 async function createProject(page: Page, name: string) {
@@ -2060,4 +3036,46 @@ function makeStarterPlugin({
       },
     },
   } as const;
+}
+
+function webglCanvasPreview(label: string): string {
+  return `<!doctype html>
+<html>
+  <body>
+    <canvas id="scene" width="64" height="64" aria-label="${label}"></canvas>
+    <p data-testid="webgl-mode"></p>
+    <script>
+      const canvas = document.getElementById('scene');
+      const gl = document.createElement('canvas').getContext('webgl2');
+      document.querySelector('[data-testid="webgl-mode"]').textContent = gl ? 'webgl2' : '2d-fallback';
+      const ctx = canvas.getContext('2d');
+      const gradient = ctx.createLinearGradient(0, 0, 64, 64);
+      gradient.addColorStop(0, '#14b8a6');
+      gradient.addColorStop(1, '#f97316');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, 64, 64);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(24, 24, 16, 16);
+    </script>
+  </body>
+</html>`;
+}
+
+async function webglCanvasMetrics(canvas: Locator) {
+  return canvas.evaluate((element: HTMLCanvasElement) => {
+    const rect = element.getBoundingClientRect();
+    return {
+      backingWidth: element.width,
+      backingHeight: element.height,
+      cssWidth: Math.round(rect.width),
+      cssHeight: Math.round(rect.height),
+    };
+  });
+}
+
+async function setPreviewFrameWidth(dialog: Locator, width: number) {
+  await dialog.locator('.ds-modal-stage-iframe-scaler').evaluate((element: HTMLElement, nextWidth) => {
+    element.style.width = `${nextWidth}px`;
+    element.style.maxWidth = 'none';
+  }, width);
 }

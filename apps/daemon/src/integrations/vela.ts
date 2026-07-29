@@ -30,6 +30,13 @@ const AMR_ENTRY_SOURCES: ReadonlySet<TrackingAmrEntrySource> = new Set([
   'handoff_amr_website',
   'chat_error_authorize_retry',
   'chat_error_recharge',
+  'chat_error_upgrade',
+  'chat_balance_gate_upgrade',
+  'home_balance_gate_upgrade',
+  'chat_low_balance_warn_recharge',
+  'home_low_balance_warn_recharge',
+  'chat_balance_gate_sign_in',
+  'home_balance_gate_sign_in',
   'chat_error_switch_retry_card',
   'generation_preview_authorize_retry',
   'generation_preview_recharge',
@@ -38,6 +45,8 @@ const AMR_ENTRY_SOURCES: ReadonlySet<TrackingAmrEntrySource> = new Set([
   'inline_amr_upgrade',
   'avatar_amr_upgrade',
   'avatar_amr_agent_card',
+  'artifact_success_upgrade',
+  'home_artifact_upgrade',
 ]);
 
 const AMR_ONBOARDING_PROFILE_SOURCES: ReadonlySet<TrackingAmrEntrySource> = new Set([
@@ -47,7 +56,7 @@ const AMR_ONBOARDING_PROFILE_SOURCES: ReadonlySet<TrackingAmrEntrySource> = new 
 
 type AmrEntrySourcePageName = Extract<
   TrackingPageName,
-  'onboarding' | 'chat_panel' | 'settings' | 'file_manager' | 'artifact'
+  'onboarding' | 'chat_panel' | 'settings' | 'file_manager' | 'artifact' | 'home'
 >;
 
 const AMR_ENTRY_SOURCE_PAGES: ReadonlySet<AmrEntrySourcePageName> = new Set([
@@ -56,6 +65,7 @@ const AMR_ENTRY_SOURCE_PAGES: ReadonlySet<AmrEntrySourcePageName> = new Set([
   'settings',
   'file_manager',
   'artifact',
+  'home',
 ]);
 
 const AMR_ENTRY_SOURCE_PAGE_BY_SOURCE: Record<
@@ -73,6 +83,13 @@ const AMR_ENTRY_SOURCE_PAGE_BY_SOURCE: Record<
   handoff_amr_website: 'artifact',
   chat_error_authorize_retry: 'chat_panel',
   chat_error_recharge: 'chat_panel',
+  chat_error_upgrade: 'chat_panel',
+  chat_balance_gate_upgrade: 'chat_panel',
+  home_balance_gate_upgrade: 'home',
+  chat_low_balance_warn_recharge: 'chat_panel',
+  home_low_balance_warn_recharge: 'home',
+  chat_balance_gate_sign_in: 'chat_panel',
+  home_balance_gate_sign_in: 'home',
   chat_error_switch_retry_card: 'chat_panel',
   generation_preview_authorize_retry: 'file_manager',
   generation_preview_recharge: 'file_manager',
@@ -81,6 +98,8 @@ const AMR_ENTRY_SOURCE_PAGE_BY_SOURCE: Record<
   inline_amr_upgrade: 'chat_panel',
   avatar_amr_upgrade: 'chat_panel',
   avatar_amr_agent_card: 'chat_panel',
+  artifact_success_upgrade: 'artifact',
+  home_artifact_upgrade: 'home',
 };
 
 const AMR_ANALYTICS_EVENTS_URL =
@@ -269,12 +288,9 @@ export interface VelaControlApiContext {
   configMtimeMs: number | null;
 }
 
-export interface VelaControlApiContext {
+export interface VelaApiContext {
   profile: string;
   apiUrl: string;
-  controlKey: string;
-  user: VelaUser | null;
-  configMtimeMs: number | null;
 }
 
 interface VelaProfileShape {
@@ -287,6 +303,12 @@ interface VelaProfileShape {
 
 interface VelaConfigFileShape {
   profiles?: Record<string, VelaProfileShape>;
+}
+
+interface VelaProfileConfigSnapshot {
+  profile: string;
+  stored: VelaProfileShape | undefined;
+  configMtimeMs: number | null;
 }
 
 export function mergeVelaEnv(
@@ -318,6 +340,20 @@ function readConfigFile(): VelaConfigFileShape | null {
   } catch {
     return null;
   }
+}
+
+function readVelaProfileConfigSnapshot(
+  env: NodeJS.ProcessEnv = process.env,
+  configuredEnv: Record<string, string> = {},
+): VelaProfileConfigSnapshot {
+  const mergedEnv = mergeVelaEnv(env, configuredEnv);
+  const profile = resolveAmrProfile(mergedEnv);
+  const file = readConfigFile();
+  return {
+    profile,
+    stored: file?.profiles?.[profile],
+    configMtimeMs: existsSync(amrConfigPath()) ? statSync(amrConfigPath()).mtimeMs : null,
+  };
 }
 
 export function readVelaLoginStatus(
@@ -525,16 +561,31 @@ export function readVelaControlApiContext(
       configMtimeMs: null,
     };
   }
-  const file = readConfigFile();
-  const stored = file?.profiles?.[profile];
+  const snapshot = readVelaProfileConfigSnapshot(env, configuredEnv);
+  const apiContext = readVelaApiContext(env, configuredEnv, snapshot);
+  const stored = snapshot.stored;
   const controlKey = stored?.controlKey?.trim() ?? '';
   if (!controlKey) return null;
   return {
-    profile,
-    apiUrl: stored?.apiUrl?.trim() || envApiUrl || 'https://amr-api.open-design.ai',
+    ...apiContext,
     controlKey,
     user: stored?.user ?? null,
-    configMtimeMs: existsSync(amrConfigPath()) ? statSync(amrConfigPath()).mtimeMs : null,
+    configMtimeMs: snapshot.configMtimeMs,
+  };
+}
+
+export function readVelaApiContext(
+  env: NodeJS.ProcessEnv = process.env,
+  configuredEnv: Record<string, string> = {},
+  snapshot: VelaProfileConfigSnapshot = readVelaProfileConfigSnapshot(env, configuredEnv),
+): VelaApiContext {
+  const mergedEnv = mergeVelaEnv(env, configuredEnv);
+  return {
+    profile: snapshot.profile,
+    apiUrl:
+      snapshot.stored?.apiUrl?.trim()
+      || mergedEnv.VELA_API_URL?.trim()
+      || 'https://amr-api.open-design.ai',
   };
 }
 

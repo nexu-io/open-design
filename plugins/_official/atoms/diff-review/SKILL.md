@@ -51,4 +51,6 @@ or the equivalent in the `code-import`-bound repo path.
 
 ## Status
 
-Reserved id, prompt-only fragment in v1.
+Implemented by the daemon runner in
+`apps/daemon/src/plugins/atoms/diff-review.ts`, with GenUI decisions persisted
+by `apps/daemon/src/plugins/atoms/diff-review-genui-bridge.ts`.

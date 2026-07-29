@@ -27,6 +27,7 @@ describe('openrouter video generation', () => {
   const realFetch = globalThis.fetch;
   const originalMediaConfigDir = process.env.OD_MEDIA_CONFIG_DIR;
   const originalDataDir = process.env.OD_DATA_DIR;
+  const originalPollInterval = process.env.OD_OPENROUTER_VIDEO_POLL_INTERVAL_MS;
 
   beforeEach(async () => {
     root = await mkdtemp(path.join(tmpdir(), 'od-openrouter-video-'));
@@ -35,6 +36,7 @@ describe('openrouter video generation', () => {
     await mkdir(projectsRoot, { recursive: true });
     delete process.env.OD_MEDIA_CONFIG_DIR;
     delete process.env.OD_DATA_DIR;
+    process.env.OD_OPENROUTER_VIDEO_POLL_INTERVAL_MS = '0';
     process.env.OD_OPENROUTER_API_KEY = 'sk-or-test-key-1234';
   });
 
@@ -50,6 +52,11 @@ describe('openrouter video generation', () => {
       delete process.env.OD_DATA_DIR;
     } else {
       process.env.OD_DATA_DIR = originalDataDir;
+    }
+    if (originalPollInterval == null) {
+      delete process.env.OD_OPENROUTER_VIDEO_POLL_INTERVAL_MS;
+    } else {
+      process.env.OD_OPENROUTER_VIDEO_POLL_INTERVAL_MS = originalPollInterval;
     }
     await rm(root, { recursive: true, force: true });
   });
@@ -488,6 +495,32 @@ describe('openrouter video generation', () => {
     // doesn't regress to a lower value (e.g. 20 min).
     await expect(generateMedia(argsWithPaths())).resolves.toBeDefined();
   });
+
+  it('propagates requestInit.dispatcher to all fetch calls (submit, poll, download)', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResp({
+        id: 'job-disp',
+        polling_url: 'https://openrouter.ai/api/v1/videos/job-disp',
+        status: 'pending',
+      }, 202))
+      .mockResolvedValueOnce(jsonResp({
+        id: 'job-disp',
+        status: 'completed',
+        unsigned_urls: ['https://example.com/dl.mp4'],
+      }))
+      .mockResolvedValueOnce(mp4Resp());
+    vi.stubGlobal('fetch', fetchMock);
+
+    const dispatcher = { fake: 'dispatcher' } as any;
+    await generateMedia({ ...argsWithPaths(), requestInit: { dispatcher } });
+
+    // 1. Submit
+    expect(fetchMock.mock.calls[0]![1].dispatcher).toBe(dispatcher);
+    // 2. Poll
+    expect(fetchMock.mock.calls[1]![1].dispatcher).toBe(dispatcher);
+    // 3. Download
+    expect(fetchMock.mock.calls[2]![1].dispatcher).toBe(dispatcher);
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -712,5 +745,25 @@ describe('openrouter image generation', () => {
     expect(result.providerNote).toContain('my-custom-gemini-img');
 
     delete process.env.OD_MEDIA_MODEL_ALIASES;
+  });
+
+  it('propagates requestInit.dispatcher to the fetch calls (submit, download)', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(
+        chatResp([{ type: 'image_url', image_url: { url: 'https://example.com/image.png' } }]),
+      )
+      .mockResolvedValueOnce(new Response(Buffer.from(PNG_B64, 'base64'), {
+        status: 200,
+        headers: { 'content-type': 'image/png' },
+      }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const dispatcher = { fake: 'dispatcher' } as any;
+    await generateMedia(imageArgs({ requestInit: { dispatcher } }));
+
+    // 1. Submit
+    expect(fetchMock.mock.calls[0]![1].dispatcher).toBe(dispatcher);
+    // 2. Download
+    expect(fetchMock.mock.calls[1]![1].dispatcher).toBe(dispatcher);
   });
 });

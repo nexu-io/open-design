@@ -114,6 +114,7 @@ export type SolutionPageKey =
   | 'figmaToCode'
   | 'screenshotToCode'
   | 'aiPrototypeGenerator'
+  | 'htmlToPpt'
   | 'prototype'
   | 'dashboard'
   | 'slides'

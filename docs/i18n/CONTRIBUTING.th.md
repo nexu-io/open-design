@@ -12,9 +12,10 @@ Guide นี้บอกชัด ๆ ว่า contribution แต่ละป�
 
 | ถ้าคุณอยาก… | สิ่งที่คุณเพิ่มจริง ๆ | อยู่ที่ไหน | ขนาดงาน |
 |---|---|---|---|
-| ทำให้ OD render artifact ชนิดใหม่ (invoice, iOS Settings screen, one-pager…) | **Skill** | [`skills/<your-skill>/`](../../skills/) | หนึ่ง folder, ประมาณ 2 files |
-| ทำให้ OD พูด visual language ของ brand ใหม่ | **Design System** | [`design-systems/<brand>/DESIGN.md`](../../design-systems/) | Markdown file เดียว |
-| ต่อ coding-agent CLI ใหม่ | **Agent adapter** | [`apps/daemon/src/agents.ts`](../../apps/daemon/src/agents.ts) | ประมาณ 10 บรรทัดใน array เดียว |
+| ทำให้ OD render artifact ชนิดใหม่ (invoice, iOS Settings screen, one-pager…) | **Design template** | [`design-templates/<your-template>/`](../../design-templates/) | folder ที่มี `SKILL.md` และ rendering assets |
+| เพิ่ม functional capability ที่ agent เรียกใช้ระหว่าง task | **Skill** | [`skills/<your-skill>/`](../../skills/) | folder ที่มี `SKILL.md` และ resources แบบ optional |
+| ทำให้ OD พูด visual language ของ brand ใหม่ | **Design System** | [`design-systems/<brand>/`](../../design-systems/) | package เดียว: `manifest.json`, `DESIGN.md` และ `tokens.css` |
+| ต่อ coding-agent CLI ใหม่ | **Agent adapter** | [`apps/daemon/src/runtimes/defs/`](../../apps/daemon/src/runtimes/defs/) | definition หนึ่งชุดและ registry entry |
 | เพิ่ม feature, แก้ bug, ยก UX pattern จาก [`open-codesign`][ocod] | code | `apps/web/src/`, `apps/daemon/` | PR ปกติ |
 | ปรับ docs, port section เป็น Français / Deutsch / 中文, แก้ typo | docs | `README.md`, `docs/i18n/README.fr.md`, `docs/i18n/README.de.md`, `docs/i18n/README.zh-CN.md`, `docs/`, `QUICKSTART.md` | หนึ่ง PR |
 
@@ -99,93 +100,101 @@ OPEN_DESIGN_IMAGE=docker.io/vanjayak/open-design:latest
 
 ---
 
-## เพิ่ม Skill ใหม่
+## เพิ่ม Design template ใหม่
 
-Skill คือ folder ใต้ [`skills/`](../../skills/) ที่มี `SKILL.md` อยู่ที่ root ตาม [`SKILL.md` convention][skill] ของ Claude Code พร้อม extension `od:` แบบ optional ของเรา. **ไม่ต้อง registration.** วาง folder เข้าไป, restart daemon, picker ก็จะแสดง skill นั้น.
+Design template คือ folder ใต้ [`design-templates/`](../../design-templates/) ที่มี `SKILL.md` อยู่ที่ root ตาม [`SKILL.md` convention][skill] ของ Claude Code พร้อม extension `od:` แบบ optional ของเรา. มันรวมรูปทรงและ rendering resources ของ artifact ที่แสดงใน Templates gallery.
 
 ### → ดู guide เต็มที่ [`docs/skills-contributing.md`](../../docs/skills-contributing.md)
 
 ไฟล์นั้นอธิบาย:
 
-- **Quick start** — clone → copy skill ที่ใกล้ที่สุด → run `pnpm tools-dev run web` → เห็นใน picker → เปิด PR.
-- **Skill คืออะไร / ไม่ใช่อะไร** — ช่วยประหยัดเวลาหนึ่งสัปดาห์ถ้า idea ของคุณกลายเป็น feature หรือ vendor integration แทน.
-- **Skill anatomy** — minimum folder layout และ `SKILL.md` frontmatter cheat sheet.
+- **Quick start** — clone → copy template ที่ใกล้ที่สุด → run `pnpm tools-dev run web` → เห็นใน picker → เปิด PR.
+- **Design template คืออะไร / ไม่ใช่อะไร** — ช่วยประหยัดเวลาหนึ่งสัปดาห์ถ้า idea ของคุณกลายเป็น feature หรือ vendor integration แทน.
+- **Design-template anatomy** — minimum folder layout และ `SKILL.md` frontmatter cheat sheet.
 - **Running locally** — command สี่ตัวที่สำคัญจริง ๆ.
 - **Merge bar** — checklist ทุกอย่างที่ reviewer จะตรวจแบบ copy-paste ได้.
 - **PR description template** — วางลง PR body แล้วกรอก.
 - **Common rejection patterns** — เหตุผลที่เคยใช้ close พร้อมตัวอย่างจริง.
 
-Protocol spec (frontmatter grammar แบบเต็ม — typed inputs, slider parameters, craft references, testing primitives) อยู่แยกใน [`docs/skills-protocol.md`](../../docs/skills-protocol.md).
+Protocol spec (frontmatter grammar แบบ active เต็ม และ field ที่ registry ใช้งานจริง) อยู่แยกใน [`docs/skills-protocol.md`](../../docs/skills-protocol.md). Field แบบพกพารุ่นเก่าอย่าง `od.inputs`, `od.parameters`, และ `od.capabilities_required` อาจยังโผล่ใน external bundles ได้ แต่ skill/template registry ไม่ได้ consume มันแล้ว.
+
+---
+
+## เพิ่ม functional Skill
+
+Functional Skill คือ capability ที่ agent เรียกใช้ระหว่าง task เพื่อทำงานกับ input ของ user. อ่านขอบเขต ownership ใน [`skills/README.md`](../../skills/README.md), folder contract ใน [`skills/AGENTS.md`](../../skills/AGENTS.md), และ grammar `SKILL.md` ที่ใช้ร่วมกันใน [`docs/skills-protocol.md`](../../docs/skills-protocol.md). Lazy scanner ของ daemon จะ scan skill roots ใน request `/api/skills` ถัดไป ดังนั้น local dev ไม่ต้อง rebuild หรือ restart daemon.
 
 ---
 
 ## เพิ่ม Design System ใหม่
 
-Design system คือไฟล์ [`DESIGN.md`](../../design-systems/README.md) ไฟล์เดียวใต้ `design-systems/<slug>/`. **ไฟล์เดียว, ไม่มี code.** วางเข้าไป, restart daemon, picker จะแสดงและ group ตาม category.
+Design system ใหม่ใน repository คือ package ใต้ [`design-systems/<slug>/`](../../design-systems/) ไม่ใช่ Markdown file เดี่ยว. Systems ที่ bundle อยู่ทั้ง 151 ชุด migrate มาใช้ package contract ด้านล่างแล้ว. Daemon ยังรับ folder ที่มีเพียง `DESIGN.md` เพื่อ compatibility กับ content เก่าหรือ user-installed แต่ไม่ใช่ authoring target สำหรับ bundled system ใหม่. Catalog จะ scan ใหม่ทุก request `/api/design-systems`; หลังแก้ไขให้ refresh Design System surface โดยไม่ต้อง restart daemon.
 
-### โครงสร้าง folder ของ design system
+### โครงสร้าง package ขั้นต่ำ
 
 ```text
 design-systems/your-brand/
-└── DESIGN.md
+├── manifest.json
+├── DESIGN.md
+└── tokens.css
 ```
+
+`manifest.json` เก็บ id ที่ stable, display name, category, description, provenance และ package paths ที่ประกาศไว้. `DESIGN.md` อธิบาย design intent ให้ agent; `tokens.css` คือ canonical compiled semantic-token stylesheet. Contract เต็มอยู่ใน [`docs/design-systems.md`](../../docs/design-systems.md) และ [`design-systems/_schema/AGENTS.md`](../../design-systems/_schema/AGENTS.md).
 
 ### รูปทรงของ `DESIGN.md`
 
 ```markdown
-# Design System Inspired by YourBrand
+# YourBrand Design System
 
-> Category: Developer Tools
-> One-line summary that shows in the picker preview.
-
-## 1. Visual Theme & Atmosphere
+## Visual Theme
 …
 
-## 2. Color
-- Primary: `#hex` / `oklch(...)`
-- …
-
-## 3. Typography
+## Color Roles
 …
 
-## 4. Spacing & Grid
-## 5. Layout & Composition
-## 6. Components
-## 7. Motion & Interaction
-## 8. Voice & Brand
-## 9. Anti-patterns
+## Typography
+…
+
+## Layout and Spacing
+## Components and States
+## Motion and Interaction
+## Accessibility
+## Anti-patterns
 ```
 
-Schema 9 section เป็น fixed — skill bodies ใช้ grep หา. H1 แรกจะกลายเป็น picker label (prefix `Design System Inspired by` จะถูก strip อัตโนมัติ), และบรรทัด `> Category: …` กำหนดว่าจะอยู่ group ไหน. Categories ที่มีอยู่ลิสต์ใน [`design-systems/README.md`](../../design-systems/README.md); ถ้า brand ของคุณไม่เข้าจริง ๆ คุณเพิ่ม category ใหม่ได้ แต่ **ลองใช้ category เดิมก่อน**.
+ไม่มี schema แบบ fixed 9 sections. Package quality guard ต้องการ H2 ที่มีเนื้อหาจริงอย่างน้อย 7 sections โดยไม่บังคับชื่อ ลำดับ หรือเลขหัวข้อ. ใช้ headings ที่เหมาะกับ system จริง.
 
 ### Bar สำหรับ merge design system ใหม่
 
-1. **มีครบทั้ง 9 sections.** Section body ว่างได้ถ้าข้อมูลหายาก (เช่น motion tokens), แต่ heading ต้องมี ไม่งั้น prompt grep จะพัง.
-2. **Hex codes ต้องจริง.** Sample จาก site หรือ product ของ brand โดยตรง ไม่ใช่จำจากความทรงจำหรือให้ AI เดา. Protocol "brand-spec extraction" 5 ขั้นใน README ใช้กับ maintainers ด้วย.
-3. **OKLch values สำหรับ accent colors** เป็น nice-to-have. ช่วยให้ palette lerp คาดเดาได้ใน light/dark.
-4. **ไม่มี marketing fluff.** Tagline ของ brand ไม่ใช่ design token. ตัดออก.
-5. **Slug ใช้ ASCII** — `linear.app` เป็น `linear-app`, `x.ai` เป็น `x-ai`. Systems ที่ import มา 69 ชุดใช้ convention นี้อยู่แล้ว; ทำตามนั้น.
+1. **มี required files ทั้งสาม.** Folder slug ต้องตรงกับ `manifest.id` และใช้ normalized ASCII (`linear.app` → `linear-app`, `x.ai` → `x-ai`).
+2. **เขียน H2 ที่มีเนื้อหาจริงอย่างน้อย 7 sections.** ห้ามเพิ่ม heading ว่างเพื่อให้ครบ count.
+3. **ให้ prose และ tokens ตรงกัน.** Color, type, spacing และ motion ใน `DESIGN.md` ต้องตรงกับ `tokens.css` และผ่าน shared token guards.
+4. **ใช้ evidence จริงและ provenance ชัดเจน.** Sample จาก source product หรือ site และบันทึกแหล่งที่มาใน manifest/package evidence.
+5. **เขียน catalog copy ที่มีประโยชน์.** `manifest.name`, `category` และ `description` คือ metadata หลักของ picker; ตัด marketing fluff.
 
-Product systems 69 ชุดที่เรา ship import จาก [`VoltAgent/awesome-design-md`][acd2] ผ่าน [`scripts/sync-design-systems.ts`](../../scripts/sync-design-systems.ts). ถ้า brand ของคุณควรอยู่ upstream, **ส่ง PR ไปที่นั่นก่อน** — เราจะดึงมาอัตโนมัติใน sync ถัดไป. Folder `design-systems/` มีไว้สำหรับ systems ที่ไม่ fit upstream รวมถึง starter ที่เราเขียนเองสองชุด.
+Product systems ที่มาจาก upstream ถูก import จาก [`VoltAgent/awesome-design-md`][acd2] ผ่าน [`scripts/sync-design-systems.ts`](../../scripts/sync-design-systems.ts). ถ้า brand ของคุณควรอยู่ upstream, **ส่ง PR ไปที่นั่นก่อน** — เราจะดึงมาอัตโนมัติใน sync ถัดไป. Folder `design-systems/` ยังเก็บ additions ที่ project เป็นเจ้าของและไม่ fit upstream ด้วย.
 
 ---
 
 ## เพิ่ม coding-agent CLI ใหม่
 
-การต่อ agent ใหม่ (เช่น CLI `foo-coder` จากเจ้าใหม่) คือ entry เดียวใน [`apps/daemon/src/agents.ts`](../../apps/daemon/src/agents.ts):
+การต่อ agent ใหม่ (เช่น CLI `foo-coder` จากเจ้าใหม่) ต้องเพิ่ม definition ใน [`apps/daemon/src/runtimes/defs/`](../../apps/daemon/src/runtimes/defs/) และลงทะเบียนใน `runtimes/registry.ts`:
 
-```javascript
-{
+```ts
+import type { RuntimeAgentDef } from '../types.js';
+
+export const fooAgentDef = {
   id: 'foo',
   name: 'Foo Coder',
   bin: 'foo',
   versionArgs: ['--version'],
+  fallbackModels: [{ id: 'default', label: 'Default', default: true }],
   buildArgs: (prompt) => ['exec', '-p', prompt],
   streamFormat: 'plain',           // or 'claude-stream-json' if it speaks that
-}
+} satisfies RuntimeAgentDef;
 ```
 
-เท่านี้ — daemon จะ detect บน `PATH`, picker จะแสดง, chat path จะใช้งานได้. ถ้า CLI emit **typed events** (เหมือน `--output-format stream-json` ของ Claude Code), ให้ wire parser ใน [`apps/daemon/src/claude-stream.ts`](../../apps/daemon/src/claude-stream.ts) และตั้ง `streamFormat: 'claude-stream-json'`.
+Import definition เข้า [`runtimes/registry.ts`](../../apps/daemon/src/runtimes/registry.ts) และเพิ่มใน `BASE_AGENT_DEFS`; shared engine จะ detect บน `PATH`, แสดงใน picker และประกอบ invocation. Reuse `streamFormat` เดิมเมื่อ wire shape ตรงกัน. Wire format ใหม่จริง ๆ ต้องมี parser ใต้ [`apps/daemon/src/runtimes/`](../../apps/daemon/src/runtimes/) หรือ [`apps/daemon/src/agent-protocol/`](../../apps/daemon/src/agent-protocol/), parser tests และ dispatch branch ที่ตรงกันใน [`server.ts`](../../apps/daemon/src/server.ts).
 
 Bar สำหรับ merge:
 
@@ -283,7 +292,7 @@ Table OVERRIDES ใน `maxTokens.ts` มีไว้สำหรับกรณ
 - **Vendor model runtime.** Bet ทั้งหมดของ OD คือ "CLI ที่คุณมีอยู่แล้วก็พอ". เราไม่ ship `pi-ai`, OpenAI keys หรือ model loaders.
 - **Rewrite frontend ออกจาก stack ปัจจุบันโดยไม่คุยก่อน.** Next.js 16 App Router + React 18 + TS คือเส้น. ไม่มี Astro, Solid, Svelte หรือ framework rewrites อื่น เว้นแต่ maintainers ต้องการ migration นั้นชัดเจน.
 - **แทน daemon ด้วย serverless function.** จุดประสงค์ทั้งหมดของ daemon คือถือ `cwd` จริงและ spawn CLI จริง. Vercel deployment ของ SPA ทำได้; daemon ยังเป็น daemon.
-- **เพิ่ม telemetry / analytics / phone-home.** OD เป็น local-first. Outbound calls มีเฉพาะ providers ที่ user configure ชัดเจน.
+- **เพิ่ม telemetry หรือการเก็บข้อมูลภายนอกนอกสัญญาความเป็นส่วนตัว.** Product analytics และ session replay ที่ปกปิดข้อมูลต้องได้รับ consent; telemetry ด้านความปลอดภัย/ความเสถียรที่ scrub แล้วจะเปิดตลอดใน build ที่ตั้งค่าไว้. Event, field หรือปลายทางใหม่ต้องรักษาขอบเขต consent, data minimization และ scrubbing ตาม [`PRIVACY.md`](../../PRIVACY.md).
 - **Bundle binary** โดยไม่มี license file และ authorship attribution ข้าง ๆ.
 
 ถ้าไม่แน่ใจว่า idea ของคุณ fit ไหม เปิด discussion ก่อนเขียน code.

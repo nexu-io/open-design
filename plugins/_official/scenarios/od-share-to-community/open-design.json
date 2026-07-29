@@ -21,6 +21,7 @@
     "uk": "Поділитися зі спільнотою"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-06-05T08:09:04Z",
   "description": "Package the work the user just finished into an Open Design plugin and route them to the existing Add-to-My-plugins / Open-Design-PR buttons. Triggered by the post-completion 'Share to Open Design' submission action.",
   "description_i18n": {
     "en": "Package the work the user just finished into an Open Design plugin and route them to the existing Add-to-My-plugins / Open-Design-PR buttons. Triggered by the post-completion 'Share to Open Design' submission action.",

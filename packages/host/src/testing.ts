@@ -76,11 +76,14 @@ function defaultHost(): OpenDesignHostBridge {
     },
     updater: {
       check: async () => updaterStatus,
+      "clear-cache": async () => updaterStatus,
       download: async () => updaterStatus,
       install: async () => updaterStatus,
       quit: async () => ({ ok: true }),
+      setMenuLabels: async () => ({ ok: true }),
       status: async () => updaterStatus,
       subscribe: () => () => undefined,
+      subscribeOpenDialog: () => () => undefined,
     },
   };
 }

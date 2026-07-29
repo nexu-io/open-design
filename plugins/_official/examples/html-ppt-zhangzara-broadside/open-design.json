@@ -2,48 +2,19 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-html-ppt-zhangzara-broadside",
-  "title": "Html Ppt Zhangzara Broadside",
+  "title": "Write a Product-Launch Announcement like a PR & Comms Director",
   "title_i18n": {
-    "zh-CN": "Html Ppt Zhangzara Broadside",
-    "zh-TW": "Html Ppt Zhangzara Broadside",
-    "ja": "Html Ppt Zhangzara Broadside",
-    "ko": "Html Ppt Zhangzara Broadside",
-    "de": "Html Ppt Zhangzara Broadside",
-    "fr": "Html Ppt Zhangzara Broadside",
-    "ru": "Html Ppt Zhangzara Broadside",
-    "es": "Html Ppt Zhangzara Broadside",
-    "pt-BR": "Html Ppt Zhangzara Broadside",
-    "it": "Html Ppt Zhangzara Broadside",
-    "vi": "Html Ppt Zhangzara Broadside",
-    "pl": "Html Ppt Zhangzara Broadside",
-    "id": "Html Ppt Zhangzara Broadside",
-    "nl": "Html Ppt Zhangzara Broadside",
-    "ar": "Html Ppt Zhangzara Broadside",
-    "tr": "Html Ppt Zhangzara Broadside",
-    "uk": "Html Ppt Zhangzara Broadside",
-    "en": "Html Ppt Zhangzara Broadside"
+    "en": "Write a Product-Launch Announcement like a PR & Comms Director",
+    "zh-CN": "像公关传播总监一样写产品发布公告",
+    "zh-TW": "像公关传播总监一样写产品发布公告"
   },
   "version": "0.1.0",
-  "description": "Broadside — Dark editorial canvas with a single fire orange accent and bilingual Latin/Chinese type stack. Anything that should land like a broadside newspaper headline: brand manifestos, magazine and cultural pitches, design talks, bilingual EN/CN decks, founder vision statements.",
+  "publishedAt": "2026-05-12T07:18:16Z",
+  "description": "Open Design's product-launch announcement and press narrative — the headline, the proof points, and the call to action. Built as a decision-grade marketing & GTM deck for press, community, prospects.",
   "description_i18n": {
-    "zh-CN": "Broadside — 深色编辑画布，配以单一火橙色强调色和拉丁文/中文双语字体栈。适用于需要如报纸大标题般震撼的内容：品牌宣言、杂志和文化提案、设计演讲、中英双语演示文稿、创始人愿景声明。",
-    "zh-TW": "Broadside — 深色編輯畫布，配以單一火橙色強調色和拉丁文/中文雙語字體堆疊。適用於需要如報紙大標題般震撼的內容：品牌宣言、雜誌和文化提案、設計演講、中英雙語簡報、創辦人願景聲明。",
-    "ja": "Broadside — ダークな編集キャンバスに、単一のファイアオレンジのアクセントとラテン文字/中国語のバイリンガルタイプスタックを組み合わせたテンプレート。新聞の見出しのようなインパクトが必要なコンテンツに最適：ブランドマニフェスト、雑誌や文化的提案、デザイン講演、英語/中国語バイリンガルデッキ、創業者のビジョンステートメント。",
-    "ko": "Broadside — 단일 파이어 오렌지 강조색과 라틴어/중국어 이중 언어 타이포그래피 스택이 있는 어두운 편집 캔버스. 신문 헤드라인처럼 강렬한 인상을 주어야 하는 콘텐츠에 적합: 브랜드 선언문, 매거진 및 문화 기획안, 디자인 강연, 영어/중국어 이중 언어 프레젠테이션, 창업자 비전 선언문.",
-    "de": "Broadside — Dunkle redaktionelle Leinwand mit einem einzelnen feuerorangenen Akzent und zweisprachigem Latin/Chinesisch-Schriftstapel. Für alles, das wie eine Zeitungsschlagzeile wirken soll: Markenmanifeste, Magazin- und Kulturpitches, Designvorträge, zweisprachige EN/CN-Decks, Gründervision-Statements.",
-    "fr": "Broadside — Toile éditoriale sombre avec un seul accent orange feu et une pile typographique bilingue latin/chinois. Pour tout ce qui doit frapper comme un titre de journal : manifestes de marque, pitchs culturels et magazine, présentations design, decks bilingues EN/CN, déclarations de vision fondateur.",
-    "ru": "Broadside — Тёмный редакционный холст с единственным огненно-оранжевым акцентом и двуязычным латинским/китайским типографским стеком. Для контента, который должен производить эффект газетного заголовка: манифесты бренда, журнальные и культурные презентации, дизайн-доклады, двуязычные EN/CN-деки, заявления о видении основателей.",
-    "es": "Broadside — Lienzo editorial oscuro con un único acento naranja fuego y pila tipográfica bilingüe latín/chino. Para cualquier contenido que deba impactar como un titular de periódico: manifiestos de marca, propuestas culturales y de revistas, charlas de diseño, decks bilingües EN/CN, declaraciones de visión fundacional.",
-    "pt-BR": "Broadside — Tela editorial escura com um único acento laranja fogo e pilha tipográfica bilíngue latim/chinês. Para qualquer conteúdo que deva causar impacto como uma manchete de jornal: manifestos de marca, pitches culturais e de revista, palestras de design, decks bilíngues EN/CN, declarações de visão de fundadores.",
-    "it": "Broadside — Tela editoriale scura con un singolo accento arancione fuoco e stack tipografico bilingue latino/cinese. Per contenuti che devono colpire come un titolo di giornale: manifesti di brand, pitch culturali e di magazine, talk di design, deck bilingui EN/CN, dichiarazioni di vision dei fondatori.",
-    "vi": "Broadside — Canvas biên tập tối với một điểm nhấn màu cam lửa duy nhất và ngăn xếp font chữ song ngữ Latin/tiếng Trung. Dành cho nội dung cần tạo ấn tượng như tiêu đề báo: tuyên ngôn thương hiệu, bài giới thiệu tạp chí và văn hóa, bài thuyết trình thiết kế, bản trình bày song ngữ EN/CN, tuyên bố tầm nhìn của người sáng lập.",
-    "pl": "Broadside — Ciemne płótno edytorskie z pojedynczym akcentem w kolorze ognistej pomarańczy i dwujęzycznym stosem typograficznym łacińsko/chińskim. Dla treści, które powinny trafiać jak nagłówek gazetowy: manifesty marek, pitche magazynowe i kulturalne, prezentacje designu, dwujęzycznedecki EN/CN, deklaracje wizji założycieli.",
-    "id": "Broadside — Kanvas editorial gelap dengan aksen oranye api tunggal dan tumpukan tipografi bilingual Latin/Mandarin. Untuk konten yang harus terlihat seperti judul koran: manifesto merek, pitch majalah dan budaya, presentasi desain, deck bilingual EN/CN, pernyataan visi founder.",
-    "nl": "Broadside — Donker redactioneel canvas met een enkel vurig oranje accent en tweetalige Latijns/Chinese typografie-stack. Voor alles dat moet landen als een krantenkopregel: merkmanifesten, magazine- en culturele pitches, designpraatjes, tweetalige EN/CN-decks, visie-statements van oprichters.",
-    "ar": "Broadside — لوحة تحريرية داكنة مع لون تمييز برتقالي ناري واحد ومجموعة خطوط ثنائية اللغة لاتينية/صينية. لأي محتوى يجب أن يؤثر مثل عنوان صحيفة: بيانات العلامة التجارية، عروض المجلات والثقافة، محاضرات التصميم، عروض ثنائية اللغة EN/CN، بيانات رؤية المؤسسين.",
-    "tr": "Broadside — Tek bir ateş turuncu vurgusu ve iki dilli Latin/Çince tipografi yığını olan koyu editoryal tuval. Gazete manşeti gibi etki yapması gereken her şey için: marka manifestoları, dergi ve kültürel sunumlar, tasarım konuşmaları, iki dilli EN/CN sunumlar, kurucu vizyon beyanları.",
-    "uk": "Broadside — Темне редакційне полотно з єдиним вогняно-помаранчевим акцентом і двомовним латинсько-китайським типографічним стеком. Для контенту, який має вражати як газетний заголовок: маніфести бренду, журнальні та культурні презентації, дизайн-доповіді, двомовні EN/CN-деки, заяви про бачення засновників.",
-    "en": "Broadside — Dark editorial canvas with a single fire orange accent and bilingual Latin/Chinese type stack. Anything that should land like a broadside newspaper headline: brand manifestos, magazine and cultural pitches, design talks, bilingual EN/CN decks, founder vision statements."
+    "en": "Open Design's product-launch announcement and press narrative — the headline, the proof points, and the call to action. Built as a decision-grade marketing & GTM deck for press, community, prospects.",
+    "zh-CN": "像公关传播总监一样写产品发布公告——一份可商业交付的市场增长 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像公关传播总监一样写产品发布公告——一份可商业交付的市场增长 Deck，围绕真实主题、证据链与决策目标组织。"
   },
   "license": "MIT",
   "author": {
@@ -67,7 +38,18 @@
     "founder-vision-deck",
     "html-deck",
     "html-slides",
-    "zhangzara"
+    "zhangzara",
+    "board",
+    "strategy",
+    "business-review",
+    "html-ppt-zhangzara-broadside",
+    "marketing-gtm",
+    "annual-marketing-plan",
+    "launch",
+    "campaign",
+    "pipeline",
+    "decision-deck",
+    "commercial-slide-agent"
   ],
   "compat": {
     "agentSkills": [
@@ -88,13 +70,18 @@
     },
     "useCase": {
       "query": {
-        "en": "Broadside — Dark editorial canvas with a single fire orange accent and bilingual Latin/Chinese type stack. Anything that should land like a broadside newspaper headline: brand manifestos, magazine and cultural pitches, design talks, bilingual EN/CN decks, founder vision statements.",
-        "zh-CN": "使用这个插件完成以下任务：Broadside — Dark editorial canvas with a single fire orange accent and bilingual Latin/Chinese type stack. Anything that should land like a broadside newspaper headline: brand manifestos, magazine and cultural pitches, design talks, bilingual EN/CN decks, founder vision statements."
+        "en": "Create \"Write a Product-Launch Announcement like a PR & Comms Director\" as a decision-grade Marketing & GTM deck in this template's own visual system. Subject: Open Design's product-launch announcement and press narrative — the headline, the proof points, and the call to action. Audience: press, community, prospects. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can the plan connect creative choices to measurable growth.",
+        "zh-CN": "像公关传播总监一样写产品发布公告。像公关传播总监一样写产品发布公告——一份可商业交付的市场增长 Deck，围绕真实主题、证据链与决策目标组织。 主题：Open Design's product-launch announcement and press narrative — the headline, the proof points, and the call to action. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "Html Ppt Zhangzara Broadside"
+          "title": "Write a Product-Launch Announcement like a PR & Comms Director",
+          "title_i18n": {
+            "en": "Write a Product-Launch Announcement like a PR & Comms Director",
+            "zh-CN": "像公关传播总监一样写产品发布公告",
+            "zh-TW": "像公关传播总监一样写产品发布公告"
+          }
         }
       ]
     },
@@ -122,6 +109,7 @@
     "capabilities": [
       "prompt:inject",
       "fs:write"
-    ]
+    ],
+    "category": "marketing-gtm"
   }
 }

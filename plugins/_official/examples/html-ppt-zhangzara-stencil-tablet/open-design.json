@@ -2,48 +2,19 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-html-ppt-zhangzara-stencil-tablet",
-  "title": "Html Ppt Zhangzara Stencil Tablet",
+  "title": "Present a Workplace-Safety Compliance Review like a Senior Regulator",
   "title_i18n": {
-    "zh-CN": "Html Ppt Zhangzara 模板平板",
-    "zh-TW": "Html Ppt Zhangzara 模版平板",
-    "ja": "Html Ppt Zhangzara ステンシルタブレット",
-    "ko": "Html Ppt Zhangzara 스텐실 태블릿",
-    "de": "Html Ppt Zhangzara Schablonen-Tablet",
-    "fr": "Html Ppt Zhangzara Pochoir Tablette",
-    "ru": "Html Ppt Zhangzara Трафарет Планшет",
-    "es": "Html Ppt Zhangzara Plantilla Tableta",
-    "pt-BR": "Html Ppt Zhangzara Estêncil Tablet",
-    "it": "Html Ppt Zhangzara Stencil Tablet",
-    "vi": "Html Ppt Zhangzara Stencil Tablet",
-    "pl": "Html Ppt Zhangzara Szablon Tablet",
-    "id": "Html Ppt Zhangzara Stensil Tablet",
-    "nl": "Html Ppt Zhangzara Stencil Tablet",
-    "ar": "Html Ppt Zhangzara استنسل تابلت",
-    "tr": "Html Ppt Zhangzara Şablon Tablet",
-    "uk": "Html Ppt Zhangzara Трафарет Планшет",
-    "en": "Html Ppt Zhangzara Stencil Tablet"
+    "en": "Present a Workplace-Safety Compliance Review like a Senior Regulator",
+    "zh-CN": "像资深监管者一样做工作场所安全合规评审",
+    "zh-TW": "像资深监管者一样做工作场所安全合规评审"
   },
   "version": "0.1.0",
-  "description": "Stencil & Tablet — Bone paper with stencil-cut headlines and a six-color earth palette: archaeology meets brand. Anything that should feel archival, tactile, and weighty-graphic: museum and cultural-institution decks, art / architecture brands, longform research, heritage and craft brands, manifestos.",
+  "publishedAt": "2026-05-12T07:18:16Z",
+  "description": "A workplace-safety compliance review for a manufacturing regulator — findings, the evidence chain, and the corrective mandate. Built as a decision-grade policy briefing deck for regulator, plant leadership.",
   "description_i18n": {
-    "zh-CN": "模板与平板——骨纸质感搭配镂空标题和六色大地色系：考古学与品牌的融合。适用于博物馆和文化机构演示、艺术/建筑品牌、长篇研究、传统工艺品牌及宣言等需要档案感、触感和视觉冲击力的内容。",
-    "zh-TW": "模版與平板——骨紙質感搭配鏤空標題和六色大地色系：考古學與品牌的融合。適用於博物館和文化機構簡報、藝術/建築品牌、長篇研究、傳統工藝品牌及宣言等需要檔案感、觸感和視覺衝擊力的內容。",
-    "ja": "ステンシル＆タブレット——ボーン紙にステンシルカットの見出しと6色のアースパレット：考古学とブランドの融合。博物館や文化施設のプレゼン、アート/建築ブランド、長文リサーチ、伝統工芸ブランド、マニフェストなど、アーカイブ的で触感的、重厚なグラフィックが必要なコンテンツに最適。",
-    "ko": "스텐실 & 태블릿 — 본 페이퍼에 스텐실 컷 헤드라인과 6색 어스 팔레트: 고고학과 브랜드의 만남. 박물관 및 문화기관 프레젠테이션, 예술/건축 브랜드, 장편 리서치, 전통 공예 브랜드, 선언문 등 아카이브적이고 촉각적이며 무게감 있는 그래픽이 필요한 콘텐츠에 적합합니다.",
-    "de": "Schablone & Tablet – Knochenpapier mit schablonengeschnittenen Überschriften und einer sechsfarbigen Erdpalette: Archäologie trifft Marke. Ideal für Museum- und Kulturinstitutionspräsentationen, Kunst-/Architekturmarken, ausführliche Forschung, Handwerks- und Heritage-Marken sowie Manifeste.",
-    "fr": "Pochoir & Tablette — Papier os avec titres découpés au pochoir et palette de six couleurs terre : l'archéologie rencontre la marque. Idéal pour les présentations muséales et culturelles, marques artistiques/architecturales, recherches longues, marques patrimoniales et artisanales, manifestes.",
-    "ru": "Трафарет и планшет — костяная бумага с трафаретными заголовками и шестицветной земляной палитрой: археология встречается с брендом. Подходит для музейных и культурных презентаций, художественных/архитектурных брендов, длинных исследований, традиционных и ремесленных брендов, манифестов.",
-    "es": "Plantilla y Tableta — Papel hueso con titulares recortados en plantilla y una paleta de seis colores tierra: la arqueología se encuentra con la marca. Ideal para presentaciones de museos e instituciones culturales, marcas artísticas/arquitectónicas, investigaciones extensas, marcas de patrimonio y artesanía, manifiestos.",
-    "pt-BR": "Estêncil & Tablet — Papel osso com títulos recortados em estêncil e paleta de seis cores terrosas: arqueologia encontra marca. Ideal para apresentações de museus e instituições culturais, marcas artísticas/arquitetônicas, pesquisas longas, marcas de patrimônio e artesanato, manifestos.",
-    "it": "Stencil e Tablet — Carta osso con titoli tagliati a stencil e palette di sei colori terra: l'archeologia incontra il brand. Ideale per presentazioni museali e istituzionali culturali, brand artistici/architettonici, ricerche lunghe, brand artigianali e del patrimonio, manifesti.",
-    "vi": "Stencil & Tablet — Giấy xương với tiêu đề cắt stencil và bảng màu đất sáu tones: khảo cổ học gặp thương hiệu. Phù hợp cho bài thuyết trình bảo tàng và văn hóa, thương hiệu nghệ thuật/kiến trúc, nghiên cứu dài, thương hiệu di sản và thủ công, tuyên ngôn.",
-    "pl": "Szablon i Tablet — Papier kościany z nagłówkami wycinanymi szablonem i paletą sześciu kolorów ziemi: archeologia spotyka markę. Idealne dla prezentacji muzealnych i instytucji kulturalnych, marek artystycznych/architektonicznych, długich badań, marek rzemieślniczych i dziedzictwa, manifestów.",
-    "id": "Stensil & Tablet — Kertas tulang dengan judul potong stensil dan palet enam warna bumi: arkeologi bertemu merek. Cocok untuk presentasi museum dan institusi budaya, merek seni/arsitektur, riset panjang, merek warisan dan kerajinan, manifesto.",
-    "nl": "Stencil & Tablet — Botpapier met stencil-gesneden koppen en een zespaletkleurenpalet: archeologie ontmoet merk. Ideaal voor museum- en culturele presentaties, kunst-/architectuurmerken, langdurig onderzoek, erfgoed- en ambachtelijke merken, manifesten.",
-    "ar": "استنسل وتابلت — ورق عظمي مع عناوين مقطوعة بالاستنسل ولوحة ألوان أرضية من ستة ألوان: علم الآثار يلتقي بالعلامة التجارية. مثالي لعروض المتاحف والمؤسسات الثقافية، العلامات التجارية الفنية/المعمارية، البحوث الطويلة، علامات التراث والحرف، البيانات.",
-    "tr": "Şablon ve Tablet — Şablon kesimli başlıklar ve altı renkli toprak paleti ile kemik kağıt: arkeoloji markayı buluşturuyor. Müze ve kültür kurumu sunumları, sanat/mimarlık markaları, uzun araştırmalar, miras ve zanaat markaları, manifestolar için ideal.",
-    "uk": "Трафарет і планшет — кістковий папір із трафаретними заголовками та шестикольоровою земляною палітрою: археологія зустрічається з брендом. Підходить для музейних і культурних презентацій, художніх/архітектурних брендів, довгих досліджень, традиційних і ремісничих брендів, маніфестів.",
-    "en": "Stencil & Tablet — Bone paper with stencil-cut headlines and a six-color earth palette: archaeology meets brand. Anything that should feel archival, tactile, and weighty-graphic: museum and cultural-institution decks, art / architecture brands, longform research, heritage and craft brands, manifestos."
+    "en": "A workplace-safety compliance review for a manufacturing regulator — findings, the evidence chain, and the corrective mandate. Built as a decision-grade policy briefing deck for regulator, plant leadership.",
+    "zh-CN": "像资深监管者一样做工作场所安全合规评审——一份可商业交付的政策简报 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像资深监管者一样做工作场所安全合规评审——一份可商业交付的政策简报 Deck，围绕真实主题、证据链与决策目标组织。"
   },
   "license": "MIT",
   "author": {
@@ -67,7 +38,18 @@
     "art-architecture-brand",
     "html-deck",
     "html-slides",
-    "zhangzara"
+    "zhangzara",
+    "design",
+    "brand",
+    "visual-system",
+    "html-ppt-zhangzara-stencil-tablet",
+    "government-policy",
+    "policy-briefing-deck",
+    "policy",
+    "regulatory",
+    "risk-review",
+    "decision-deck",
+    "commercial-slide-agent"
   ],
   "compat": {
     "agentSkills": [
@@ -80,7 +62,7 @@
     "kind": "scenario",
     "taskKind": "new-generation",
     "mode": "deck",
-    "scenario": "marketing",
+    "scenario": "policy",
     "surface": "web",
     "preview": {
       "type": "html",
@@ -88,13 +70,18 @@
     },
     "useCase": {
       "query": {
-        "en": "Stencil & Tablet — Bone paper with stencil-cut headlines and a six-color earth palette: archaeology meets brand. Anything that should feel archival, tactile, and weighty-graphic: museum and cultural-institution decks, art / architecture brands, longform research, heritage and craft brands, manifestos.",
-        "zh-CN": "使用这个插件完成以下任务：Stencil & Tablet — Bone paper with stencil-cut headlines and a six-color earth palette: archaeology meets brand. Anything that should feel archival, tactile, and weighty-graphic: museum and cultural-institution decks, art / architecture brands, longform research, heritage and craft brands, manifestos."
+        "en": "Create \"Present a Workplace-Safety Compliance Review like a Senior Regulator\" as a decision-grade Government & policy deck in this template's own visual system. Subject: A workplace-safety compliance review for a manufacturing regulator — findings, the evidence chain, and the corrective mandate. Audience: regulator, plant leadership. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the deck reduce approval risk rather than create rhetorical heat.",
+        "zh-CN": "像资深监管者一样做工作场所安全合规评审。像资深监管者一样做工作场所安全合规评审——一份可商业交付的政策简报 Deck，围绕真实主题、证据链与决策目标组织。 主题：A workplace-safety compliance review for a manufacturing regulator — findings, the evidence chain, and the corrective mandate. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "Html Ppt Zhangzara Stencil Tablet"
+          "title": "Present a Workplace-Safety Compliance Review like a Senior Regulator",
+          "title_i18n": {
+            "en": "Present a Workplace-Safety Compliance Review like a Senior Regulator",
+            "zh-CN": "像资深监管者一样做工作场所安全合规评审",
+            "zh-TW": "像资深监管者一样做工作场所安全合规评审"
+          }
         }
       ]
     },
@@ -123,6 +110,7 @@
     "capabilities": [
       "prompt:inject",
       "fs:write"
-    ]
+    ],
+    "category": "government-policy"
   }
 }

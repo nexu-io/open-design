@@ -28,7 +28,10 @@ describe('agent slug guard', () => {
   it('accepts every documented slug and rejects others', () => {
     for (const s of AGENT_SLUGS) expect(isAgentSlug(s)).toBe(true);
     expect(isAgentSlug('not-an-agent')).toBe(false);
-    expect(AGENT_SLUGS).toHaveLength(13);
+    expect(AGENT_SLUGS).toHaveLength(16);
+    expect(isAgentSlug('kiro')).toBe(true);
+    expect(isAgentSlug('reasonix')).toBe(true);
+    expect(isAgentSlug('raven')).toBe(true);
   });
 });
 
@@ -54,6 +57,19 @@ describe('CLI-driven agents', () => {
     expect(plan.addArgv).toContain('--env');
     expect(plan.addArgv).toContain('OD_DATA_DIR=/home/u/.open-design');
     expect(plan.addArgv.slice(-SPEC.args.length - 2)).toEqual(['--', SPEC.command, ...SPEC.args]);
+  });
+
+  it('reasonix uses its native mcp add/remove/get commands', () => {
+    const plan = planAgentInstall('reasonix', SPEC, ctx());
+    if (plan.kind !== 'cli') throw new Error('expected cli');
+    expect(plan.bin).toBe('reasonix');
+    expect(plan.addArgv).toEqual([
+      'mcp', 'add', 'open-design',
+      '--env', 'OD_DATA_DIR=/home/u/.open-design',
+      SPEC.command, ...SPEC.args,
+    ]);
+    expect(plan.removeArgv).toEqual(['mcp', 'remove', 'open-design']);
+    expect(plan.getArgv).toEqual(['mcp', 'get', 'open-design']);
   });
 
 });
@@ -89,6 +105,62 @@ describe('JSON-config agents', () => {
     if (plan.kind !== 'json') throw new Error('expected json');
     expect(plan.keyPath).toEqual(['mcp', 'servers']);
     expect(plan.entry).toEqual({ command: SPEC.command, args: SPEC.args });
+  });
+
+  it('kiro merges a stdio entry into the user MCP settings file', () => {
+    const plan = planAgentInstall('kiro', SPEC, ctx());
+    if (plan.kind !== 'json') throw new Error('expected json');
+    expect(plan.configPath).toBe('/home/u/.kiro/settings/mcp.json');
+    expect(plan.keyPath).toEqual(['mcpServers']);
+    expect(plan.serverKey).toBe('open-design');
+    expect(plan.entry).toEqual({
+      command: SPEC.command,
+      args: SPEC.args,
+      env: SPEC.env,
+    });
+  });
+
+  it('raven plans a stdio entry under tools.mcpServers', () => {
+    const plan = planAgentInstall('raven', SPEC, ctx());
+    if (plan.kind !== 'json') throw new Error('expected json');
+    expect(plan.configPath).toBe('/home/u/.raven/config.json');
+    expect(plan.keyPath).toEqual(['tools', 'mcpServers']);
+    expect(plan.serverKey).toBe('open-design');
+    expect(plan.entry).toEqual({
+      command: SPEC.command,
+      args: SPEC.args,
+      type: 'stdio',
+      env: SPEC.env,
+    });
+  });
+
+  it('raven keeps the env field when no environment variables are needed', () => {
+    const plan = planAgentInstall('raven', SPEC_NO_ENV, ctx());
+    if (plan.kind !== 'json') throw new Error('expected json');
+    expect(plan.entry).toEqual({
+      command: SPEC.command,
+      args: SPEC.args,
+      type: 'stdio',
+      env: {},
+    });
+  });
+
+  it('raven install and removal preserve existing config and sibling servers', () => {
+    const plan = planAgentInstall('raven', SPEC, ctx());
+    if (plan.kind !== 'json') throw new Error('expected json');
+    const existing = JSON.stringify({
+      theme: 'dark',
+      tools: { mcpServers: { existing: { command: 'existing-command' } } },
+    });
+
+    const installed = JSON.parse(applyJsonInstall(existing, plan));
+    expect(installed.theme).toBe('dark');
+    expect(installed.tools.mcpServers.existing).toEqual({ command: 'existing-command' });
+    expect(installed.tools.mcpServers['open-design']).toEqual(plan.entry);
+
+    const removed = removeJsonInstall(JSON.stringify(installed), plan);
+    expect(removed).not.toBeNull();
+    expect(JSON.parse(removed ?? '{}')).toEqual(JSON.parse(existing));
   });
 
   it('omits env entirely when the launch spec has no env', () => {

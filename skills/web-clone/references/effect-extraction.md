@@ -61,7 +61,7 @@ web-clone 第一动作永远是"去 GitHub / source-map 找真源码"。但**特
 - 需要运行时帧捕获、逐帧比对、shader/uniform 级别的抠取；
 - 想要"先 baseline 复现、再独立工程化"的完整带闸流程。
 
-委托产物（最小可复现的 baseline + 证据包）拿回来后，**再并入 `$WEB_CLONE_PROJECT/`**，
+委托产物（最小可复现的 baseline + 证据包）拿回来后，**再并入 `当前项目目录/`**，
 按 web-clone 的产物规范补 NOTES/TEARDOWN，并继续走 Step 5 验证 + Step 6 替换。
 
 没装它也不影响：上面四节的纪律本身就能照着做，web-shader-extractor 只是把第四节的捕获机器做成了现成工具。

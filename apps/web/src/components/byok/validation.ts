@@ -56,7 +56,7 @@ export interface NormalizedByokBaseUrl {
 export type ByokModelPreferenceSource =
   | 'explicit'
   | 'account'
-  | 'provider_default'
+  | 'provider_preferred'
   | 'empty';
 
 export interface ByokModelPreference {
@@ -163,24 +163,31 @@ export function validateByokDraft(
       message: 'Base URL is required.',
       action: 'focus_base_url',
     });
-  } else if (validateBaseUrl(baseUrl).error) {
-    issues.push({
-      field: 'base_url',
-      level: 'error',
-      code: 'base_url_invalid',
-      message: 'Base URL must be a valid public http:// or https:// URL.',
-      action: 'focus_base_url',
-    });
-  } else if (protocol === 'google' && baseUrl) {
-    const host = baseUrlHostname(baseUrl);
-    if (host === 'api.anthropic.com' || host === 'api.openai.com') {
+  } else {
+    // #3225 — a `forbidden` result is a syntactically-valid URL that points at
+    // an internal address. Don't block it here: the Test / model-fetch actions
+    // gate on these issues, and the daemon owns the OD_ALLOWED_INTERNAL_HOSTS
+    // decision. Only genuinely malformed / non-http URLs are a client blocker.
+    const baseUrlCheck = validateBaseUrl(baseUrl);
+    if (baseUrlCheck.error && !baseUrlCheck.forbidden) {
       issues.push({
         field: 'base_url',
         level: 'error',
         code: 'base_url_invalid',
-        message: `Base URL points to ${host}. For Google Gemini use ${GOOGLE_GEMINI_DEFAULT_BASE_URL}.`,
+        message: 'Base URL must be a valid public http:// or https:// URL.',
         action: 'focus_base_url',
       });
+    } else if (protocol === 'google' && baseUrl) {
+      const host = baseUrlHostname(baseUrl);
+      if (host === 'api.anthropic.com' || host === 'api.openai.com') {
+        issues.push({
+          field: 'base_url',
+          level: 'error',
+          code: 'base_url_invalid',
+          message: `Base URL points to ${host}. For Google Gemini use ${GOOGLE_GEMINI_DEFAULT_BASE_URL}.`,
+          action: 'focus_base_url',
+        });
+      }
     }
   }
 
@@ -217,19 +224,34 @@ export function blockingByokDraftFields(
 export function resolveByokModelPreference({
   currentModel,
   accountModels,
-  providerDefaultModel,
+  providerPreferredModels = [],
 }: {
   currentModel: string;
   accountModels: readonly ProviderModelOption[];
-  providerDefaultModel?: string;
+  providerPreferredModels?: readonly string[];
 }): ByokModelPreference {
   const explicit = currentModel.trim();
   if (explicit) return { model: explicit, source: 'explicit' };
-  const account = accountModels.find((model) => model.id.trim());
-  if (account) return { model: account.id, source: 'account' };
-  const providerDefault = providerDefaultModel?.trim() ?? '';
-  if (providerDefault) {
-    return { model: providerDefault, source: 'provider_default' };
+  const enabledAccountModels = accountModels.filter(
+    (model) => model.enabled !== false && model.id.trim(),
+  );
+  const enabledAccountModelIds = new Set(
+    enabledAccountModels.map((model) => model.id.trim()),
+  );
+  const providerPreferred = providerPreferredModels
+    .map((model) => model.trim())
+    .find((model) => model && enabledAccountModelIds.has(model));
+  if (providerPreferred) {
+    return { model: providerPreferred, source: 'provider_preferred' };
+  }
+  if (accountModels.length === 0) {
+    const fallback = providerPreferredModels.find((model) => model.trim())?.trim() ?? '';
+    if (fallback) {
+      return { model: fallback, source: 'provider_preferred' };
+    }
+  }
+  if (enabledAccountModels.length === 1) {
+    return { model: enabledAccountModels[0]!.id.trim(), source: 'account' };
   }
   return { model: '', source: 'empty' };
 }

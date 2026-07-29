@@ -24,6 +24,7 @@
     "en": "Finance Report"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "Quarterly / monthly financial report — masthead with KPIs, revenue and burn charts, P&L summary table, top-line highlights, and an outlook paragraph. Use when the brief mentions \"financial report\", \"Q3 report\", \"MRR review\", \"P&L\", or \"财报\".",
   "description_i18n": {
     "zh-CN": "季度/月度财务报告——包含关键指标的报头、收入与消耗图表、损益汇总表、重点摘要和展望段落。当需求提到'财务报告'、'Q3报告'、'MRR审查'、'P&L'或'财报'时使用。",

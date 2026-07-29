@@ -25,12 +25,19 @@ import {
   renderBrandPreviewIntoProject,
   startBrandExtraction,
 } from '../src/brands/index.js';
-import { findChrome } from '../src/brands/chrome.js';
 import { patchMeta } from '../src/brands/store.js';
 import { ensureLogoFallback } from '../src/brands/logo-fallback.js';
 import { brandFromMaterial } from '../src/brands/provisional.js';
 import { listDesignSystems } from '../src/design-systems/index.js';
-import { buildBrandSystem, deriveTokens, seedFromMaterial } from '../src/brands/engine/index.js';
+import {
+  buildBrandSystem,
+  defaultSeed,
+  defaultThemeAlgorithm,
+  deriveTokens,
+  seedFromMaterial,
+  tokensToThemeJson,
+} from '../src/brands/engine/index.js';
+import type { SeedToken } from '../src/brands/engine/types.js';
 import {
   adoptExistingImagery,
   findImageRefs,
@@ -201,7 +208,7 @@ describe('agent-driven brand extraction engine', () => {
   let projectsRoot: string;
   let userDesignSystemsRoot: string;
 
-  it('keeps the generated default theme light even when the source canvas is dark', () => {
+  it('adopts the brand canvas for the default theme when the brand is explicitly dark-first', () => {
     const darkCanvasBrand: Brand = {
       ...VALID_BRAND,
       name: 'Open Design',
@@ -215,14 +222,95 @@ describe('agent-driven brand extraction engine', () => {
 
     const system = buildBrandSystem(darkCanvasBrand);
 
+    // A brand that explicitly carries a dark background role plus a light
+    // foreground role is dark-first: the default theme keeps its canvas
+    // instead of clamping to the light Ant baseline.
+    expect(system.themes.default.colorBgContainer).toBe('#050505');
+    expect(system.themes.dark.colorBgContainer).toBe('#050505');
+    // Neutral text derives from the brand foreground over the dark canvas —
+    // it must read light, not the light-theme #1f1f1f.
+    expect(parseInt(system.themes.default.colorText.slice(1, 3), 16)).toBeGreaterThan(180);
+    expect(system.files['kit.html']).toContain('--brand-color-bg-container: #050505;');
+    expect(system.files['kit.html']).not.toContain('--brand-color-bg-container: #ffffff;');
+    expect(system.files['kit.dark.html']).toContain('--brand-color-bg-container: #050505;');
+    // The exported ConfigProvider artifact must carry the SAME effective
+    // algorithm as the tokens/CSS/kit above — otherwise a consumer applies the
+    // light algorithm to a dark canvas.
+    expect(JSON.parse(system.files['theme.json'] ?? '').algorithm).toBe('dark');
+  });
+
+  it('still falls back to the light default theme when brand neutrals are ambiguous', () => {
+    const midGrayBrand: Brand = {
+      ...VALID_BRAND,
+      name: 'Open Design',
+      colors: [
+        { role: 'background', hex: '#808080', oklch: 'oklch(60% 0 0)', name: 'Gray', usage: 'source background' },
+        { role: 'foreground', hex: '#f4f4f4', oklch: 'oklch(96% 0 0)', name: 'White', usage: 'source text' },
+        { role: 'accent', hex: '#56fe13', oklch: 'oklch(86% 0.29 142)', name: 'Signal Green', usage: 'primary actions' },
+      ],
+    };
+
+    const system = buildBrandSystem(midGrayBrand);
+
+    // A mid-gray canvas is not a confident dark-first signal; keep the light
+    // baseline exactly as before.
     expect(system.themes.default.colorBgContainer).toBe('#ffffff');
-    expect(system.themes.default.colorText).toBe('#1f1f1f');
     expect(system.themes.dark.colorBgContainer).toBe('#141414');
-    expect(system.themes.dark.colorText).toBe('#dcdcdc');
-    expect(system.files['kit.html']).toContain('--brand-color-bg-container: #ffffff;');
-    expect(system.files['kit.html']).toContain('--brand-color-text: #1f1f1f;');
-    expect(system.files['kit.html']).not.toContain('--brand-color-bg-container: #141414;');
-    expect(system.files['kit.dark.html']).toContain('--brand-color-bg-container: #141414;');
+    // ...and the exported ConfigProvider artifact stays on the light algorithm.
+    expect(JSON.parse(system.files['theme.json'] ?? '').algorithm).toBe('default');
+  });
+
+  it('drops scraped CSS source junk from font families instead of corrupting the token block', () => {
+    // Extractors sometimes scrape CSS *source text* instead of a real family —
+    // e.g. Tailwind v4's `--theme(--default-font-family` from aliyun.com. The
+    // unbalanced `(` inside the emitted `--brand-font-family` value swallows
+    // every later `:root` declaration (sizes, control heights, radii), which
+    // renders the whole component kit unstyled (issue: kit shows UA serif text
+    // with collapsed buttons while colors declared earlier still work).
+    const junkFontBrand: Brand = {
+      ...VALID_BRAND,
+      name: 'Junk Fonts',
+      typography: {
+        display: { family: '--theme(--default-font-family', fallbacks: ['system-ui'], weights: [400, 700] },
+        body: { family: '--theme(--default-font-family', fallbacks: ['system-ui'], weights: [400, 700] },
+      },
+    };
+
+    const system = buildBrandSystem(junkFontBrand);
+
+    // The junk never reaches the seed or any emitted document.
+    expect(system.seed.fontFamily).not.toContain('--theme(');
+    for (const file of ['kit.html', 'kit.dark.html', 'variables.css', 'artifacts/landing.html', 'index.html']) {
+      expect(system.files[file], file).not.toContain('--theme(');
+    }
+    // The declared custom property keeps balanced parens so the declarations
+    // after it (sizes, control heights) survive CSS parsing.
+    const famLine = /--brand-font-family:([^\n]*)/.exec(system.files['kit.html'] ?? '')?.[1] ?? '';
+    expect(famLine).not.toBe('');
+    expect((famLine.match(/\(/g) ?? []).length).toBe((famLine.match(/\)/g) ?? []).length);
+    // Renderable fallbacks survive the sanitization.
+    expect(system.seed.fontFamily).toContain('system-ui');
+  });
+
+  it('keeps theme.json algorithm consistent with the derived theme under a background-only seed override', () => {
+    // Locks the rebuildSystem seed-override path (sanitizeSeedOverrides →
+    // reassembleWithSeed → tokensToThemeJson(seed, defaultThemeAlgorithm(seed))):
+    // a background-only override on an otherwise light brand must NOT be treated
+    // as dark-first, or theme.json would export algorithm:"dark" while the seed
+    // still carries a dark colorTextBase — the ConfigProvider mismatch.
+    const bgOnlyDark: SeedToken = { ...defaultSeed, colorBgBase: '#050505' }; // colorTextBase stays #000000
+    expect(defaultThemeAlgorithm(bgOnlyDark)).toBe('default');
+    // The derived default theme clamps back to the light canvas...
+    expect(deriveTokens(bgOnlyDark, 'default').colorBgContainer).toBe('#ffffff');
+    // ...and the exported ConfigProvider algorithm matches it (no dark/light split).
+    expect(JSON.parse(tokensToThemeJson(bgOnlyDark, defaultThemeAlgorithm(bgOnlyDark))).algorithm).toBe('default');
+
+    // A full override supplying BOTH a dark canvas and a light foreground DOES
+    // opt into dark-first — consistently across the derived theme and export.
+    const fullDark: SeedToken = { ...defaultSeed, colorBgBase: '#050505', colorTextBase: '#f4f4f4' };
+    expect(defaultThemeAlgorithm(fullDark)).toBe('dark');
+    expect(deriveTokens(fullDark, 'default').colorBgContainer).toBe('#050505');
+    expect(JSON.parse(tokensToThemeJson(fullDark, defaultThemeAlgorithm(fullDark))).algorithm).toBe('dark');
   });
 
   it('keeps programmatic dark-site material on a light default seed', () => {
@@ -254,21 +342,6 @@ describe('agent-driven brand extraction engine', () => {
   afterEach(() => {
     closeDatabase();
     rmSync(tempDir, { recursive: true, force: true });
-  });
-
-  it('keeps the system Chrome fallback disabled unless explicitly opted in', () => {
-    const previousAllow = process.env.OD_BRAND_ALLOW_SYSTEM_CHROME;
-    const previousChrome = process.env.BRANDING_AGENT_CHROME;
-    delete process.env.OD_BRAND_ALLOW_SYSTEM_CHROME;
-    delete process.env.BRANDING_AGENT_CHROME;
-    try {
-      expect(findChrome()).toBeNull();
-    } finally {
-      if (previousAllow === undefined) delete process.env.OD_BRAND_ALLOW_SYSTEM_CHROME;
-      else process.env.OD_BRAND_ALLOW_SYSTEM_CHROME = previousAllow;
-      if (previousChrome === undefined) delete process.env.BRANDING_AGENT_CHROME;
-      else process.env.BRANDING_AGENT_CHROME = previousChrome;
-    }
   });
 
   it('prefers source-backed human brand tokens over script/debug color noise', () => {
@@ -1199,6 +1272,8 @@ describe('agent-driven brand extraction engine', () => {
     const prompt = getProject(db, result.projectId)?.pendingPrompt ?? '';
     expect(prompt).toContain('context/input-DESIGN.md');
     expectNoPhantomSkillCall(prompt);
+    expect(prompt).toContain('`brand.json.seed`');
+    expect(prompt).toContain('Do not edit `system/seed.json`');
   });
 
   it('renderBrandPreviewIntoProject re-renders brand.html from a partial brand.json', async () => {
@@ -1306,6 +1381,61 @@ describe('agent-driven brand extraction engine', () => {
     expect(html).toContain('system/kit.html');
     expect(existsSync(path.join(projectDir, 'system', 'kit.html'))).toBe(true);
     expect(html).toMatch(/"colorPrimary":"#/);
+  });
+
+  it('finalizeBrand preserves authored seed overrides in the registered system', async () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+    const started = await startOfflineBrandExtraction({
+      url: 'acme.com',
+      brandsRoot,
+      projectsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      logoFallback: NO_LOGO_FALLBACK,
+    });
+
+    const projectDir = path.join(projectsRoot, started.projectId);
+    writeFileSync(
+      path.join(projectDir, 'brand.json'),
+      JSON.stringify(
+        {
+          ...VALID_BRAND,
+          sourceUrl: started.sourceUrl,
+          seed: { controlHeight: 44 },
+        },
+        null,
+        2,
+      ),
+      'utf8',
+    );
+
+    await finalizeBrand({
+      id: started.id,
+      brandsRoot,
+      userDesignSystemsRoot,
+      projectsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      logoFallback: NO_LOGO_FALLBACK,
+      imageryFallback: NO_IMAGERY_FALLBACK,
+    });
+
+    const persistedBrand = JSON.parse(
+      readFileSync(path.join(projectDir, 'brand.json'), 'utf8'),
+    ) as { seed?: { controlHeight?: number } };
+    expect(persistedBrand.seed?.controlHeight).toBe(44);
+
+    const generatedSeed = JSON.parse(
+      readFileSync(path.join(projectDir, 'system', 'seed.json'), 'utf8'),
+    ) as { controlHeight?: number };
+    expect(generatedSeed.controlHeight).toBe(44);
+
+    const generatedGuide = readFileSync(
+      path.join(projectDir, 'system', 'BRAND-SYSTEM.md'),
+      'utf8',
+    );
+    expect(generatedGuide).toContain('`brand.json.seed`');
+    expect(generatedGuide).not.toContain('only authored surface');
   });
 
   it('finalizeBrand is idempotent — re-finalizing reuses the brand design system', async () => {

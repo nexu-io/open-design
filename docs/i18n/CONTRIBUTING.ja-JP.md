@@ -12,9 +12,10 @@
 
 | やりたいこと | 実際に追加するもの | 配置場所 | 規模 |
 |---|---|---|---|
-| OD に新しい種類の artifact をレンダリングさせる（請求書、iOS Settings 画面、ワンページャー…） | **Skill** | [`skills/<your-skill>/`](../../skills/) | フォルダ 1 つ、約 2 ファイル |
-| OD に新しいブランドのビジュアル言語を話させる | **Design System** | [`design-systems/<brand>/DESIGN.md`](../../design-systems/) | Markdown ファイル 1 つ |
-| 新しい coding-agent CLI を接続する | **Agent adapter** | [`apps/daemon/src/agents.ts`](../../apps/daemon/src/agents.ts) | 1 つの配列に約 10 行 |
+| OD に新しい種類の artifact をレンダリングさせる（請求書、iOS Settings 画面、ワンページャー…） | **Design template** | [`design-templates/<your-template>/`](../../design-templates/) | `SKILL.md` とレンダリング asset を含むフォルダ 1 つ |
+| タスク中にエージェントが呼び出す機能を追加する | **Skill** | [`skills/<your-skill>/`](../../skills/) | `SKILL.md` とオプションのリソースを含むフォルダ 1 つ |
+| OD に新しいブランドのビジュアル言語を話させる | **Design System** | [`design-systems/<brand>/`](../../design-systems/) | 1 つのパッケージ：`manifest.json`、`DESIGN.md`、`tokens.css` |
+| 新しい coding-agent CLI を接続する | **Agent adapter** | [`apps/daemon/src/runtimes/defs/`](../../apps/daemon/src/runtimes/defs/) | 定義 1 つと registry entry 1 つ |
 | 機能追加、バグ修正、[`open-codesign`][ocod] から UX パターンを移植 | コード | `apps/web/src/`、`apps/daemon/` | 通常の PR |
 | ドキュメント改善、Français / Deutsch / 中文 への翻訳、タイポ修正 | ドキュメント | `README.md`、`README.fr.md`、`README.de.md`、`README.zh-CN.md`、`docs/`、`QUICKSTART.md` | PR 1 つ |
 
@@ -42,14 +43,16 @@ OD 自体の開発に agent CLI は `PATH` 上に不要です — daemon は「n
 
 ---
 
-## 新しい Skill の追加
+## 新しい Design template の追加
 
-Skill は [`skills/`](../../skills/) 配下のフォルダで、ルートに `SKILL.md` を持ち、Claude Code の [`SKILL.md` 規約][skill]とオプションの `od:` 拡張に従います。**登録ステップは不要です。** フォルダを配置して daemon を再起動すれば、ピッカーに表示されます。
+Design template は [`design-templates/`](../../design-templates/) 配下のフォルダで、ルートに `SKILL.md` を持ち、Claude Code の [`SKILL.md` 規約][skill]とオプションの `od:` 拡張に従います。Templates ギャラリーに表示する artifact の形とレンダリングリソースをまとめます。
 
-### Skill フォルダ構成
+### → 詳細は [`docs/skills-contributing.md`](../../docs/skills-contributing.md) を参照
+
+### Design template フォルダ構成
 
 ```text
-skills/your-skill/
+design-templates/your-template/
 ├── SKILL.md                    # 必須
 ├── assets/template.html        # オプションだが推奨 — seed ファイル
 ├── references/                 # オプション — エージェントが読むナレッジファイル
@@ -61,11 +64,11 @@ skills/your-skill/
 
 ### `SKILL.md` frontmatter
 
-最初の 3 キーは Claude Code のベース仕様 — `name`、`description`、`triggers`。`od:` 配下はすべて OD 固有のオプションですが、**`od.mode`** が Skill の表示グループ（Prototype / Deck / Template / Design system）を決定します。
+最初の 3 キーは Claude Code のベース仕様 — `name`、`description`、`triggers`。`od:` 配下はすべて OD 固有のオプションですが、**`od.mode`** が template の表示グループ（Prototype / Deck / Template / Design system）を決定します。
 
 ```yaml
 ---
-name: your-skill
+name: your-template
 description: |
   1 段落のエレベーターピッチ。エージェントはこれをそのまま読んで、
   ユーザーの要件にマッチするか判断します。具体的に：surface、
@@ -81,109 +84,117 @@ od:
   featured: 1               # 正の整数を設定すると「ショーケース」セクションに表示
   preview:
     type: html              # html | jsx | pptx | markdown
-    entry: index.html
   design_system:
-    requires: true          # Skill がアクティブな DESIGN.md を読むか？
-    sections: [color, typography, layout, components]
-  example_prompt: "この Skill の機能をわかりやすく示すコピペ可能なプロンプト。"
+    requires: true          # template がアクティブな DESIGN.md を読むか？
+  craft:
+    requires: [typography, color, anti-ai-slop]
+  example_prompt: "この template の機能をわかりやすく示すコピペ可能なプロンプト。"
 ---
 
-# Your Skill
+# Your Template
 
 本文はエージェントが従うべきワークフローを記述する自由形式の Markdown…
 ```
 
-型付き入力、スライダーパラメータ、ケイパビリティゲーティングの完全な文法は [`docs/skills-protocol.md`](../../docs/skills-protocol.md) にあります。
+アクティブな完全文法（`od.mode`、`od.surface`、`od.craft.requires`、`od.critique.policy`、gallery hints など）は [`docs/skills-protocol.md`](../../docs/skills-protocol.md) にあります。`od.inputs`、`od.parameters`、`od.capabilities_required` のような古いポータブルフィールドは外部バンドルに残ることがありますが、skill/template registry では消費されません。
 
-### 新しい Skill のマージ基準
+### 新しい Design template のマージ基準
 
-Skill はユーザーに直接見える面であるため、厳しく審査します。新しい Skill は以下を満たす必要があります：
+Design template はユーザーに直接見える面であるため、厳しく審査します。新しい template は以下を満たす必要があります：
 
-1. **実際の `example.html` を同梱すること。** 手作りで、ディスクから直接開けて、デザイナーが実際に納品するレベルの見た目であること。Lorem ipsum や `<svg><rect/></svg>` のプレースホルダー hero は不可。自分で example を作れないなら、その Skill はまだ準備できていません。
+1. **実際の `example.html` を同梱すること。** 手作りで、ディスクから直接開けて、デザイナーが実際に納品するレベルの見た目であること。Lorem ipsum や `<svg><rect/></svg>` のプレースホルダー hero は不可。自分で example を作れないなら、その template はまだ準備できていません。
 2. **本文で anti-AI-slop チェックリストをパスすること。** 紫グラデーション、汎用 emoji アイコン、左ボーダー付き角丸カード、Inter を *display* フォントとして使用、架空の統計データは不可。完全なリストは README の **anti-AI-slop 機構**セクションを参照。
 3. **正直なプレースホルダー。** エージェントが実数値を持たない場合は `—` またはラベル付きグレーブロックを書き、「10 倍高速」とは書かない。
-4. **`references/checklist.md` を持つこと。** 少なくとも P0 ゲート（エージェントが `<artifact>` を出力する前にパスすべき項目）を含む。フォーマットは [`skills/guizang-ppt/references/checklist.md`](../../skills/guizang-ppt/) または [`skills/dating-web/references/checklist.md`](../../skills/dating-web/) を参考にしてください。
-5. **スクリーンショットを追加。** Skill が featured の場合、`docs/screenshots/skills/<skill>.png` に配置。PNG、約 1024×640 Retina、実際の `example.html` からズームアウトしたブラウザ縮尺でキャプチャ。
-6. **単一の自己完結フォルダであること。** 他の Skill が既に使用しているもの以外の CDN インポート禁止。ライセンスのないフォント禁止。約 250 KB を超える画像禁止。
+4. **`references/checklist.md` を持つこと。** 少なくとも P0 ゲート（エージェントが `<artifact>` を出力する前にパスすべき項目）を含む。フォーマットは [`design-templates/guizang-ppt/references/checklist.md`](../../design-templates/guizang-ppt/) または [`design-templates/dating-web/references/checklist.md`](../../design-templates/dating-web/) を参考にしてください。
+5. **スクリーンショットを追加。** template が featured の場合、`docs/screenshots/skills/<skill>.png` に配置。PNG、約 1024×640 Retina、実際の `example.html` からズームアウトしたブラウザ縮尺でキャプチャ。
+6. **単一の自己完結フォルダであること。** 他の template が既に使用しているもの以外の CDN インポート禁止。ライセンスのないフォント禁止。約 250 KB を超える画像禁止。
 
-既存の Skill を fork する場合（例：`dating-web` から `recruiting-web` にリミックス）、元の LICENSE と帰属表示を `references/` に保持し、PR の説明で明記してください。
+既存の Design template を fork する場合（例：`dating-web` から `recruiting-web` にリミックス）、元の LICENSE と帰属表示を `references/` に保持し、PR の説明で明記してください。
 
-### 同梱済み Skill — 模倣するものを選ぶ
+### 同梱済み Design template — 模倣するものを選ぶ
 
-- ビジュアルショーケース、単一画面プロトタイプ：[`skills/dating-web/`](../../skills/dating-web/)、[`skills/digital-eguide/`](../../skills/digital-eguide/)
-- マルチフレームモバイルフロー：[`skills/mobile-onboarding/`](../../skills/mobile-onboarding/)、[`skills/gamified-app/`](../../skills/gamified-app/)
-- ドキュメント / テンプレート（Design System 不要）：[`skills/pm-spec/`](../../skills/pm-spec/)、[`skills/weekly-update/`](../../skills/weekly-update/)
-- Deck モード：[`skills/guizang-ppt/`](../../skills/guizang-ppt/)（[op7418/guizang-ppt-skill][guizang] からそのまま同梱）および [`skills/simple-deck/`](../../skills/simple-deck/)
+- ビジュアルショーケース、単一画面プロトタイプ：[`design-templates/dating-web/`](../../design-templates/dating-web/)、[`design-templates/digital-eguide/`](../../design-templates/digital-eguide/)
+- マルチフレームモバイルフロー：[`design-templates/mobile-onboarding/`](../../design-templates/mobile-onboarding/)、[`design-templates/gamified-app/`](../../design-templates/gamified-app/)
+- ドキュメント / テンプレート（Design System 不要）：[`design-templates/pm-spec/`](../../design-templates/pm-spec/)、[`design-templates/weekly-update/`](../../design-templates/weekly-update/)
+- Deck モード：[`design-templates/guizang-ppt/`](../../design-templates/guizang-ppt/)（[op7418/guizang-ppt-skill][guizang] からそのまま同梱）および [`design-templates/simple-deck/`](../../design-templates/simple-deck/)
+
+---
+
+## Functional Skill の追加
+
+Functional Skill は、タスク中にエージェントがユーザー入力へ作用するために呼び出す機能です。責務の境界は [`skills/README.md`](../../skills/README.md)、フォルダ契約は [`skills/AGENTS.md`](../../skills/AGENTS.md)、共通の `SKILL.md` 文法は [`docs/skills-protocol.md`](../../docs/skills-protocol.md) を参照してください。daemon の lazy scanner は次の `/api/skills` リクエストで Skill root を走査するため、ローカルでは再ビルドも daemon の再起動も不要です。
 
 ---
 
 ## 新しい Design System の追加
 
-Design System は `design-systems/<slug>/` 配下の単一の [`DESIGN.md`](../../design-systems/README.md) ファイルです。**ファイル 1 つ、コード不要。** 配置して daemon を再起動すれば、ピッカーにカテゴリ別にグループ化されて表示されます。
+リポジトリに追加する新しい Design System は [`design-systems/<slug>/`](../../design-systems/) 配下の package であり、単独の Markdown ファイルではありません。現在同梱される 151 システムはすべて下記の package contract に移行済みです。Daemon は古い内容やユーザーがインストールした内容との互換性のため `DESIGN.md` のみのフォルダも引き続き受け付けますが、新しい同梱システムの authoring target ではありません。Catalog は `/api/design-systems` リクエストごとに再走査されるため、編集後は Design System surface を refresh すればよく、daemon の再起動は不要です。
 
-### Design System フォルダ構成
+### 最小 package 構成
 
 ```text
 design-systems/your-brand/
-└── DESIGN.md
+├── manifest.json
+├── DESIGN.md
+└── tokens.css
 ```
+
+`manifest.json` は安定した id、表示名、category、description、provenance、宣言済み package path を保持します。`DESIGN.md` は agent に design intent を説明し、`tokens.css` は canonical なコンパイル済み semantic-token stylesheet です。完全な contract は [`docs/design-systems.md`](../../docs/design-systems.md) と [`design-systems/_schema/AGENTS.md`](../../design-systems/_schema/AGENTS.md) を参照してください。
 
 ### `DESIGN.md` の構造
 
 ```markdown
-# Design System Inspired by YourBrand
+# YourBrand Design System
 
-> Category: Developer Tools
-> ピッカーのプレビューに表示される 1 行の要約。
-
-## 1. Visual Theme & Atmosphere
+## Visual Theme
 …
 
-## 2. Color
-- Primary: `#hex` / `oklch(...)`
-- …
-
-## 3. Typography
+## Color Roles
 …
 
-## 4. Spacing & Grid
-## 5. Layout & Composition
-## 6. Components
-## 7. Motion & Interaction
-## 8. Voice & Brand
-## 9. Anti-patterns
+## Typography
+…
+
+## Layout and Spacing
+## Components and States
+## Motion and Interaction
+## Accessibility
+## Anti-patterns
 ```
 
-9 セクションスキーマは固定です — Skill 本文の grep 対象だからです。最初の H1 がピッカーのラベルになり（`Design System Inspired by` プレフィックスは自動的に除去）、`> Category: …` 行がグループを決定します。既存のカテゴリは [`design-systems/README.md`](../../design-systems/README.md) に記載されています。ブランドが本当にどのカテゴリにも合わない場合は新しいカテゴリを導入できますが、**まず既存カテゴリに合わないか試してください**。
+固定の 9 セクション schema はありません。Package quality guard は内容のある H2 section を 7 つ以上要求しますが、名称、順序、番号は指定しません。実際の system に合う見出しを使ってください。
 
 ### 新しい Design System のマージ基準
 
-1. **全 9 セクションが存在すること。** データが見つかりにくいセクション（例：モーショントークン）は本文が空でも構いませんが、見出しは必須です。見出しがないとプロンプトの grep が壊れます。
-2. **Hex コードが実物であること。** ブランドのサイトやプロダクトから直接サンプリングし、記憶や AI の推測ではないこと。README の「ブランドアセット抽出」5 ステッププロトコルはメンテナにも適用されます。
-3. **アクセントカラーの OKLch 値**はあると良い。ライト/ダーク間で予測可能な補間が可能になります。
-4. **マーケティングの美辞麗句は不要。** ブランドのタグラインはデザイントークンではありません。削除してください。
-5. **スラッグは ASCII を使用** — `linear.app` は `linear-app`、`x.ai` は `x-ai` になります。インポート済みの 69 システムがこの規約に従っています。それに合わせてください。
+1. **必須の 3 ファイルを含めること。** Folder slug と `manifest.id` を一致させ、正規化した ASCII を使います（`linear.app` → `linear-app`、`x.ai` → `x-ai`）。
+2. **内容のある H2 section を 7 つ以上書くこと。** 数を満たすだけの空見出しは禁止です。
+3. **Prose と token を一致させること。** `DESIGN.md` に書いた color、type、spacing、motion は `tokens.css` と一致し、共有 token guard を通る必要があります。
+4. **実証できる evidence と明確な provenance を使うこと。** Source product または site から直接採取し、manifest/package evidence に出典を記録します。
+5. **有用な catalog copy を書くこと。** `manifest.name`、`category`、`description` が picker の主要 metadata です。Marketing fluff は入れません。
 
-出荷している 69 のプロダクトシステムは [`VoltAgent/awesome-design-md`][acd2] から [`scripts/sync-design-systems.ts`](../../scripts/sync-design-systems.ts) 経由でインポートされています。ブランドが上流に属する場合は、**まずそちらに PR を送ってください** — 次の sync で自動的に反映されます。`design-systems/` フォルダは上流に合わないシステムと、手作りの 2 つのスターター用です。
+上流由来のプロダクトシステムは [`VoltAgent/awesome-design-md`][acd2] から [`scripts/sync-design-systems.ts`](../../scripts/sync-design-systems.ts) 経由でインポートされています。ブランドが上流に属する場合は、**まずそちらに PR を送ってください** — 次の sync で自動的に反映されます。`design-systems/` フォルダには、上流に合わないプロジェクト所有の追加システムも含まれます。
 
 ---
 
 ## 新しい coding-agent CLI の追加
 
-新しいエージェント（例：`foo-coder` CLI）の接続は [`apps/daemon/src/agents.ts`](../../apps/daemon/src/agents.ts) にエントリを 1 つ追加するだけです：
+新しいエージェント（例：`foo-coder` CLI）には [`apps/daemon/src/runtimes/defs/`](../../apps/daemon/src/runtimes/defs/) の定義と `runtimes/registry.ts` の登録を追加します：
 
-```javascript
-{
+```ts
+import type { RuntimeAgentDef } from '../types.js';
+
+export const fooAgentDef = {
   id: 'foo',
   name: 'Foo Coder',
   bin: 'foo',
   versionArgs: ['--version'],
+  fallbackModels: [{ id: 'default', label: 'Default', default: true }],
   buildArgs: (prompt) => ['exec', '-p', prompt],
   streamFormat: 'plain',           // Claude Code と同じプロトコルなら 'claude-stream-json'
-}
+} satisfies RuntimeAgentDef;
 ```
 
-これだけです — daemon が `PATH` 上で検出し、ピッカーに表示され、チャットパスが動作します。CLI が**型付きイベント**を出力する場合（Claude Code の `--output-format stream-json` のように）、[`apps/daemon/src/claude-stream.ts`](../../apps/daemon/src/claude-stream.ts) にパーサーを追加して `streamFormat: 'claude-stream-json'` を設定してください。
+定義を [`runtimes/registry.ts`](../../apps/daemon/src/runtimes/registry.ts) に import して `BASE_AGENT_DEFS` に追加すると、共有エンジンが `PATH` 上で検出し、ピッカーに表示して invocation を組み立てます。wire shape が一致する場合は既存の `streamFormat` を再利用してください。まったく新しい wire format には、[`apps/daemon/src/runtimes/`](../../apps/daemon/src/runtimes/) または [`apps/daemon/src/agent-protocol/`](../../apps/daemon/src/agent-protocol/) 配下の parser、parser test、そして [`server.ts`](../../apps/daemon/src/server.ts) の対応する dispatch branch も必要です。
 
 マージ基準：
 
@@ -251,7 +262,7 @@ CLA は求めません。Apache-2.0 でカバーされます。あなたのコ�
 - **モデルランタイムを vendor する。** OD の根幹は「あなたの既存 CLI で十分」です。`pi-ai`、OpenAI キー、モデルローダーは同梱しません。
 - **事前の議論なくフロントエンドを現在のスタックから書き換える。** Next.js 16 App Router + React 18 + TS がラインです。メンテナが明示的にそのマイグレーションを望まない限り、Astro、Solid、Svelte、その他のフレームワークへの書き換えは不可。
 - **daemon をサーバーレス関数に置き換える。** daemon の存在意義は実際の `cwd` を所有し、実際の CLI を spawn することです。SPA の Vercel デプロイは OK。daemon は daemon のまま。
-- **テレメトリ / アナリティクス / phone-home を追加する。** OD はローカルファーストです。外向きの呼び出しはユーザーが明示的に設定したプロバイダへのもののみ。
+- **プライバシー契約の外側でテレメトリや外部向けデータ収集を追加する。** プロダクト分析とマスク済みセッションリプレイは同意制で、構成済みビルドではスクラブ済みの安全性・信頼性テレメトリが常時有効です。新しいイベント、フィールド、送信先は [`PRIVACY.md`](../../PRIVACY.md) の同意・最小化・スクラブ境界を守る必要があります。
 - **ライセンスファイルと帰属表示なしでバイナリを同梱する。**
 
 アイデアが適合するか分からない場合は、コードを書く前に discussion を作成してください。
@@ -277,7 +288,7 @@ tl;dr：良い PR を出し、丁寧にレビューし、[Discussions][discussio
 
 ## ライセンス
 
-コントリビューションすることにより、あなたのコントリビューションがこのリポジトリの [Apache-2.0 License](../../LICENSE) の下でライセンスされることに同意するものとします。ただし、[`skills/guizang-ppt/`](../../skills/guizang-ppt/) 内のファイルは元の MIT ライセンスと [op7418](https://github.com/op7418) の帰属表示を保持します。
+コントリビューションすることにより、あなたのコントリビューションがこのリポジトリの [Apache-2.0 License](../../LICENSE) の下でライセンスされることに同意するものとします。ただし、[`design-templates/guizang-ppt/`](../../design-templates/guizang-ppt/) 内のファイルは元の MIT ライセンスと [op7418](https://github.com/op7418) の帰属表示を保持します。
 
 [skill]: https://docs.anthropic.com/en/docs/claude-code/skills
 [guizang]: https://github.com/op7418/guizang-ppt-skill

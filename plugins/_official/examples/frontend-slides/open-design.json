@@ -2,16 +2,19 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-frontend-slides",
-  "title": "Frontend Slides",
+  "title": "Write an AI-Workflow 101 like a Top Technology Explainer",
   "title_i18n": {
-    "en": "Frontend Slides",
-    "zh-CN": "Frontend Slides 动效幻灯片"
+    "en": "Write an AI-Workflow 101 like a Top Technology Explainer",
+    "zh-CN": "像顶级技术解释者一样写 AI 工作流 101",
+    "zh-TW": "像顶级技术解释者一样写 AI 工作流 101"
   },
   "version": "1.0.0",
-  "description": "Animation-rich, zero-dependency HTML presentations on a fixed 1920x1080 stage that scales to any viewport. Distinctive typography, committed palettes, choreographed staggered reveals, keyboard navigation, and hash routing - no generic AI-slop aesthetics.",
+  "publishedAt": "2026-06-16T09:32:15Z",
+  "description": "Open Design as a worked AI-workflow example: how local agents read your files and design on your desktop — concretely. Built as a decision-grade AI literacy deck for teams new to AI, leadership.",
   "description_i18n": {
-    "en": "Animation-rich, zero-dependency HTML presentations on a fixed 1920x1080 stage that scales to any viewport. Distinctive typography, committed palettes, choreographed staggered reveals, keyboard navigation, and hash routing - no generic AI-slop aesthetics.",
-    "zh-CN": "动画丰富的零依赖单文件 HTML 幻灯片：固定 1920x1080 舞台等比缩放适配任意屏幕，个性化字体排印、坚定的配色系统、编排式错峰入场动画、键盘导航和 hash 路由，拒绝千篇一律的 AI 味设计。"
+    "en": "Open Design as a worked AI-workflow example: how local agents read your files and design on your desktop — concretely. Built as a decision-grade AI literacy deck for teams new to AI, leadership.",
+    "zh-CN": "像顶级技术解释者一样写 AI 工作流 101——一份可商业交付的AI 素养 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像顶级技术解释者一样写 AI 工作流 101——一份可商业交付的AI 素养 Deck，围绕真实主题、证据链与决策目标组织。"
   },
   "license": "MIT",
   "author": {
@@ -29,7 +32,19 @@
     "presentation",
     "animation",
     "web",
-    "ppt"
+    "ppt",
+    "consulting-deliverable",
+    "strategy",
+    "client",
+    "frontend-slides",
+    "consulting-delivery",
+    "ai-literacy",
+    "enterprise-ai-copilot-rollout-brief",
+    "ai",
+    "copilot",
+    "workflow",
+    "decision-deck",
+    "commercial-slide-agent"
   ],
   "compat": {
     "agentSkills": [
@@ -42,7 +57,7 @@
     "kind": "scenario",
     "taskKind": "new-generation",
     "mode": "deck",
-    "scenario": "product",
+    "scenario": "ai",
     "surface": "web",
     "preview": {
       "type": "html",
@@ -51,16 +66,17 @@
     },
     "useCase": {
       "query": {
-        "en": "Create an animation-rich {{deckType}} for {{audience}} about {{topic}} with {{slideCount}}, designed as a {{density}} deck in the {{stylePreset}} visual direction. Output one self-contained single-file HTML deck with zero dependencies (all CSS/JS inline, no build step, no external JS libraries). Hard rules, all locked: (1) Fixed 16:9 stage - author every slide on a 1920x1080 canvas inside .deck-viewport > .deck-stage and scale the whole stage uniformly to the viewport with one transform (factor = min(innerWidth/1920, innerHeight/1080), centered with letterbox); never reflow slide content per device and never use responsive breakpoints inside slides. (2) Each page is one <section class=\"slide\">; switch slides only via .active/.visible classes toggling visibility/opacity/pointer-events - never display:none. (3) Keyboard navigation (arrows, Space, PageUp/PageDown, Home/End), debounced wheel, touch swipe, and #/<index> hash routing with deep-link restore; page counter chrome fixed outside the scaled stage. (4) All colors/fonts/sizes/easing live in :root design tokens. (5) Distinctive typography from Google Fonts or Fontshare - never Inter, Roboto, Arial, or system display fonts; no purple-gradient-on-white, no generic indigo #6366f1; commit to a cohesive palette with sharp accents. (6) One signature easing; entrances via .reveal elements staggered with transition-delay when the slide gains .visible; animate only transform and opacity; include prefers-reduced-motion support. (7) No scrolling, no overflow, no overlapping panels; split content into more slides instead of shrinking type; low-density speaker-led decks get one idea per slide with 1-3 bullets, high-density reading-first decks get structured grids with max 4-6 cards. (8) Icons are inline SVG; prefer CSS-generated visuals (gradients, shapes, patterns) over remote images. Start from the example.html seed in this plugin: keep its stage CSS (full viewport-base.css contents), slide shell chrome (slide number top-left, breadcrumbs top-right, baseline rule), and the entire SlidePresentation controller script verbatim - replace only the slide content and, if a different style is requested, the :root tokens and layout skins following references/STYLE_PRESETS.md and references/animation-patterns.md. Compose slides from the layout vocabulary: title card, agenda list, section divider with giant number, bullet points, big stat, quote, two-column comparison, principle grid, CSS bar chart, closing.",
-        "zh-CN": "用 Frontend Slides 为 {{audience}} 创作一套关于 {{topic}} 的 {{deckType}}（{{slideCount}}，{{density}}，{{stylePreset}} 风格方向）：零依赖单文件 HTML，固定 1920x1080 舞台整体等比缩放适配视口（绝不按设备重排内容），每页一个 section.slide、用 .active/.visible 切换，键盘/滚轮/触摸导航 + hash 路由，:root 设计 token，个性化字体与坚定配色（拒绝 AI 味），.reveal 错峰入场动画并支持 prefers-reduced-motion。从插件内 example.html 种子出发，保留舞台系统、导航脚本和页面骨架，只替换内容；换风格时按 references/STYLE_PRESETS.md 调整 token 与版式皮肤。完整硬性规格以英文 prompt 为准。"
+        "en": "Create \"Write an AI-Workflow 101 like a Top Technology Explainer\" as a decision-grade AI literacy deck in this template's own visual system. Subject: Open Design as a worked AI-workflow example: how local agents read your files and design on your desktop — concretely. Audience: teams new to AI, leadership. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the deck make AI implementation concrete enough to fund.",
+        "zh-CN": "像顶级技术解释者一样写 AI 工作流 101。像顶级技术解释者一样写 AI 工作流 101——一份可商业交付的AI 素养 Deck，围绕真实主题、证据链与决策目标组织。 主题：Open Design as a worked AI-workflow example: how local agents read your files and design on your desktop — concretely. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "The Craft of Motion - Bold Signal deck",
+          "title": "Write an AI-Workflow 101 like a Top Technology Explainer",
           "title_i18n": {
-            "en": "The Craft of Motion - Bold Signal deck",
-            "zh-CN": "The Craft of Motion · Bold Signal 风格演示"
+            "en": "Write an AI-Workflow 101 like a Top Technology Explainer",
+            "zh-CN": "像顶级技术解释者一样写 AI 工作流 101",
+            "zh-TW": "像顶级技术解释者一样写 AI 工作流 101"
           }
         }
       ]
@@ -175,6 +191,7 @@
     "capabilities": [
       "prompt:inject",
       "fs:write"
-    ]
+    ],
+    "category": "ai-literacy"
   }
 }

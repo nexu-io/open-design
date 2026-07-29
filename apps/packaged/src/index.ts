@@ -5,7 +5,11 @@ import {
   SIDECAR_SOURCES,
   type SidecarStamp,
 } from "@open-design/sidecar-proto";
-import { parseLauncherAfterQuitArgs } from "@open-design/launcher-proto";
+import {
+  parseLauncherAfterQuitArgs,
+  parseLauncherDelegatedArgs,
+  parseLauncherHandoffResumeArgs,
+} from "@open-design/launcher-proto";
 import {
   bootstrapSidecarRuntime,
   createSidecarLaunchEnv,
@@ -17,14 +21,23 @@ import { join } from "node:path";
 import { app, dialog } from "electron";
 
 import { readPackagedConfig } from "./config.js";
+import {
+  claimPackagedDownloadAttribution,
+  discoverPackagedDownloadAttribution,
+} from "./download-attribution.js";
 import { writePackagedDesktopIdentity } from "./identity.js";
 import { PackagedPathAccessError } from "./errors.js";
-import { inspectExistingDesktopForLauncher, waitForLauncherAfterQuit } from "./launcher-after-quit.js";
+import {
+  exitPackagedLauncherForExistingDesktop,
+  inspectExistingDesktopForLauncher,
+  waitForLauncherAfterQuit,
+} from "./launcher-after-quit.js";
 import { confirmPackagedLauncherRuntime, resolvePackagedLauncherRuntime } from "./launcher-runtime.js";
 import {
   applyPackagedElectronPathOverrides,
   claimPackagedSingleInstanceLock,
   ensurePackagedNamespacePaths,
+  stabilizePackagedWorkingDirectory,
 } from "./launch.js";
 import {
   attachPackagedDesktopProcessLogging,
@@ -32,6 +45,8 @@ import {
   type PackagedDesktopLogger,
 } from "./logging.js";
 import { resolvePackagedNamespacePaths } from "./paths.js";
+import { createObsoleteInstalledOuterRetirement } from "./obsolete-installed-outer.js";
+import { launchPackagedPayloadDesktop } from "./payload-desktop-launch.js";
 import { packagedEntryUrl, registerOdProtocol } from "./protocol.js";
 import { startPackagedSidecars } from "./sidecars.js";
 import { reportStartupFailure, resolveStartupDistinctId } from "./startup-telemetry.js";
@@ -55,6 +70,7 @@ let startupTelemetryContext:
       namespace: string;
       source: string;
       installationRoot: string;
+      nativeModulePath: string | null;
     }
   | null = null;
 
@@ -100,22 +116,35 @@ async function main(): Promise<void> {
 
   const config = await readPackagedConfig();
   const afterQuit = parseLauncherAfterQuitArgs(process.argv.slice(1));
+  const handoffResume = parseLauncherHandoffResumeArgs(process.argv.slice(1));
+  const delegated = parseLauncherDelegatedArgs(process.argv.slice(1));
   const argvStamp = readProcessStamp(process.argv.slice(1), OPEN_DESIGN_SIDECAR_CONTRACT);
   const namespace = argvStamp?.namespace ?? config.namespace;
   const namespaceConfig = namespace === config.namespace ? config : { ...config, namespace };
   const initialPaths = resolvePackagedNamespacePaths(namespaceConfig, namespace, process.env);
-  await waitForLauncherAfterQuit(afterQuit, initialPaths);
+  if (!await waitForLauncherAfterQuit(afterQuit, initialPaths)) {
+    app.exit(1);
+    return;
+  }
   const existingDesktop = await inspectExistingDesktopForLauncher(namespace, {
+    incomingVersion: namespaceConfig.appVersion,
     logger: console,
     paths: initialPaths,
   });
-  if (existingDesktop.action === "exit") {
+  if (exitPackagedLauncherForExistingDesktop(existingDesktop, (code) => app.exit(code))) {
     return;
   }
-  const launcherRuntime = await resolvePackagedLauncherRuntime(namespaceConfig, initialPaths);
+  const stamp = argvStamp ?? createPackagedDesktopStamp(namespace);
+  const launcherRuntime = await resolvePackagedLauncherRuntime(namespaceConfig, initialPaths, {
+    delegated,
+    resume: handoffResume,
+  });
+  if (await launchPackagedPayloadDesktop(launcherRuntime, stamp)) {
+    app.exit(0);
+    return;
+  }
   const activeConfig = launcherRuntime.config;
   const paths = launcherRuntime.paths;
-  const stamp = argvStamp ?? createPackagedDesktopStamp(namespace);
 
   // Arm fatal-exit telemetry now that we know the channel key/version. The
   // startPackagedSidecars call below is THE failure this covers (daemon/web
@@ -129,11 +158,37 @@ async function main(): Promise<void> {
     // Pass installationRoot explicitly: OD_INSTALLATION_DIR is only set in the
     // daemon child env, not this parent process (see startup-telemetry.ts).
     installationRoot: paths.installationRoot,
+    // Absolute path where the daemon's better-sqlite3 binding ships in the
+    // packaged bundle (`Contents/Resources/app/node_modules/...` — layout
+    // verified against the shipped 0.13.0 DMG). The fatal-exit report probes
+    // this to record whether the .node actually exists on the crashing machine.
+    nativeModulePath: join(
+      app.getAppPath(),
+      "node_modules",
+      "better-sqlite3",
+      "build",
+      "Release",
+      "better_sqlite3.node",
+    ),
   };
 
   await ensurePackagedNamespacePaths(paths);
+  stabilizePackagedWorkingDirectory(paths);
+  const downloadAttribution = await discoverPackagedDownloadAttribution(paths, console).catch((error: unknown) => {
+    console.warn("[attribution] failed to discover packaged download attribution", error);
+    return null;
+  });
   packagedLogger = createPackagedDesktopLogger(paths);
   attachPackagedDesktopProcessLogging({ logger: packagedLogger, paths, stamp });
+  const retireObsoleteInstalledOuter = createObsoleteInstalledOuterRetirement({
+    currentExecutablePath: process.execPath,
+    currentPid: process.pid,
+    installedLaunchPath: launcherRuntime.installedLaunchPath,
+    logger: packagedLogger,
+    payloadDesktopProcess: launcherRuntime.payloadDesktopProcess,
+    payloadExecutablePath: launcherRuntime.desktopExecutablePath,
+    platform: process.platform,
+  });
   applyPackagedElectronPathOverrides(paths);
   applyPackagedUpdaterEnv(activeConfig.updateMetadataUrl);
   if (!claimPackagedSingleInstanceLock(app, () => {
@@ -199,6 +254,14 @@ async function main(): Promise<void> {
       setSplashStage(splash.window, stage);
     },
   });
+  if (sidecars.daemon.url) {
+    void claimPackagedDownloadAttribution({
+      attribution: downloadAttribution,
+      daemonUrl: sidecars.daemon.url,
+      installerObservationRoot: paths.installerObservationRoot,
+      logger: packagedLogger,
+    });
+  }
   // Sidecars are up; the remaining wait is the hidden main window loading and
   // mounting the web bundle (the runtime re-asserts this stage at its reveal
   // gate, which is a no-op when the label is already current).
@@ -211,9 +274,13 @@ async function main(): Promise<void> {
     splashStartedAt: splash.startedAt,
     async beforeShutdown() {
       try {
-        await sidecars.close();
+        await retireObsoleteInstalledOuter();
       } finally {
-        await identity.close();
+        try {
+          await sidecars.close();
+        } finally {
+          await identity.close();
+        }
       }
     },
     async discoverWebUrl() {
@@ -227,6 +294,9 @@ async function main(): Promise<void> {
       return sidecars.daemon.url;
     },
     windowTitle: resolvePackagedWindowTitle(activeConfig),
+    async onExternalShow() {
+      await retireObsoleteInstalledOuter();
+    },
     onDesktopReady(controls) {
       void confirmPackagedLauncherRuntime(launcherRuntime).catch((error: unknown) => {
         packagedLogger?.warn("failed to confirm packaged launcher runtime", { error });
@@ -284,6 +354,7 @@ void main().catch(async (error: unknown) => {
       appVersion: startupTelemetryContext.appVersion,
       namespace: startupTelemetryContext.namespace,
       source: startupTelemetryContext.source,
+      nativeModulePath: startupTelemetryContext.nativeModulePath,
     });
   }
   process.exit(1);

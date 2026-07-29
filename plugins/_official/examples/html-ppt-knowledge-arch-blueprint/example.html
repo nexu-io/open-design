@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Open Design · Engineering Blueprint</title>
+<title>Turn an Incident Retro into a Learning Deck like a Platform VP - Product management</title>
 <style>/* html-ppt :: shared webfonts (trimmed to faces actually in use) */
 @import url('https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap');
@@ -235,29 +235,29 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
     <div class="kb-grid-bg"></div>
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:40px;margin-bottom:44px">
       <div>
-        <div class="kb-kicker">Apache-2.0 · Runs locally · BYOK</div>
-        <h1 class="kb-h1" style="font-size:58px">Open <span class="rust">Design</span>'s<br>engineering blueprint</h1>
-        <p class="kb-sub">Open-source, local, agent-driven — idea to prototypes, websites, slides, and HTML video, all on your own machine.</p>
+        <div class="kb-kicker">Product Management · Incident Retro Deck</div>
+        <h1 class="kb-h1" style="font-size:54px">Turn an incident retro into<br>a <span class="rust">learning deck</span>, like a Platform VP</h1>
+        <p class="kb-sub">The daemon-restart data bug: what broke, why, the fix on the table, and the one decision engineering, SRE, and leadership need to co-sign this week.</p>
       </div>
-      <div class="kb-insight"><span class="kk">KEY INSIGHT</span>Don't build agents — plug them in:<br>the Claude Code / Codex on your machine is already strong enough.</div>
+      <div class="kb-insight"><span class="kk">DECISION NEEDED</span>Ship the data-root guardrail before the next namespace migration — not another point patch.</div>
     </div>
-    <div class="kb-section-label">Pipeline · End-to-end</div>
+    <div class="kb-section-label">Retro Arc · Decision → Measure</div>
     <div class="kb-pipeline">
-      <div class="kb-step"><div class="kb-step-num">STEP 01</div><div class="kb-step-title">Pick a start</div><div class="kb-step-body">Describe the goal in one sentence, or start from a template / plugin</div></div>
-      <div class="kb-step"><div class="kb-step-num">STEP 02</div><div class="kb-step-title">Visual direction</div><div class="kb-step-body">Palette, type, and spacing flow into generation automatically</div></div>
-      <div class="kb-step hero"><div class="kb-step-num">STEP 03 · CORE</div><div class="kb-step-title">Generate artifacts</div><div class="kb-step-body">The agent reads full context and produces real, runnable files with instant sandbox preview</div></div>
-      <div class="kb-step"><div class="kb-step-num">STEP 04</div><div class="kb-step-title">Ship &amp; settle</div><div class="kb-step-body">Hand off to engineering or convert to video; every choice becomes next time's context</div></div>
+      <div class="kb-step"><div class="kb-step-num">STEP 01</div><div class="kb-step-title">Decision needed</div><div class="kb-step-body">Which fix ships this sprint: patch the call sites, or remove the fallback entirely</div></div>
+      <div class="kb-step"><div class="kb-step-num">STEP 02</div><div class="kb-step-title">User pain</div><div class="kb-step-body">41 projects looked "deleted" for 12 minutes after a routine restart</div></div>
+      <div class="kb-step hero"><div class="kb-step-num">STEP 03 · CORE</div><div class="kb-step-title">Options &amp; recommendation</div><div class="kb-step-body">Compare the narrow patch against the guardrail that closes the whole class</div></div>
+      <div class="kb-step"><div class="kb-step-num">STEP 04</div><div class="kb-step-title">Measure</div><div class="kb-step-body">MTTR, recurrence count, and CI catch-rate we'll track post-ship</div></div>
     </div>
-    <div class="kb-footer"><span>Open Design · github.com/nexu-io/open-design</span><span>01 / 08</span></div>
+    <div class="kb-footer"><span>Open Design · Platform Incident Retro</span><span>01 / 08</span></div>
   </section>
 
   <!-- 2. SECTION DIVIDER -->
   <section class="slide">
     <div class="kb-grid-bg"></div>
     <div style="margin:auto 0">
-      <div class="kb-kicker">Chapter One</div>
-      <h1 class="kb-h1" style="font-size:108px">Why <span class="rust">design</span><br>must be open</h1>
-      <p class="kb-sub" style="font-size:24px;margin-top:20px">In April 2026, Claude Design proved for the first time that LLMs can truly design.<br>But it is closed-source, paid, and cloud-only — Open Design makes that capability <b>open</b>.</p>
+      <div class="kb-kicker">Chapter One · Decision Needed</div>
+      <h1 class="kb-h1" style="font-size:92px">Ship the guardrail —<br><span class="rust">before</span> the next restart</h1>
+      <p class="kb-sub" style="font-size:24px;margin-top:20px">On June 14, a routine daemon restart under a stale namespace let 41 projects' SQLite files resolve against a cwd-relative fallback instead of the daemon's actual data root.<br>The only question left this sprint is <b>which fix we ship</b> — a patch, or a guardrail.</p>
     </div>
     <div class="kb-footer"><span>Section · Chapter 1</span><span>02 / 08</span></div>
   </section>
@@ -265,54 +265,53 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
   <!-- 3. CONTENT 2-col -->
   <section class="slide">
     <div class="kb-grid-bg"></div>
-    <div class="kb-kicker">Problem · Solution</div>
-    <h1 class="kb-h1" style="font-size:48px">Closed cloud vs <span class="rust">open local</span></h1>
+    <div class="kb-kicker">User Pain · Options</div>
+    <h1 class="kb-h1" style="font-size:44px">12 minutes of "my projects vanished" × 41 teams</h1>
     <div class="kb-grid-2">
       <div class="kb-card">
-        <div class="kb-kicker" style="color:#6f6a5f">Claude Design</div>
-        <h4>Closed · Paid · Cloud-only</h4>
-        <p>Model locked to Anthropic; swapping agents, self-hosting, and BYOK are all off the table. Powerful — but it belongs to one cloud.</p>
+        <div class="kb-kicker" style="color:#6f6a5f">Option A</div>
+        <h4>Patch the call sites</h4>
+        <p>Fix the 9 known <span class="kb-mono">openDatabase(projectRoot)</span> calls to pass the resolved data root explicitly. Ships in two days — but the next engineer who adds a call site can reintroduce the same escape.</p>
       </div>
       <div class="kb-card" style="background:var(--kb-rust-soft);border-color:var(--kb-rust)">
-        <div class="kb-kicker">Open Design</div>
-        <h4>Open source · Local · Agent-driven</h4>
-        <p>Apache-2.0, running on your own machine; plug in the coding agents you already have, and BYOK any compatible endpoint.</p>
+        <div class="kb-kicker">Option B · Recommended</div>
+        <h4>Remove the fallback entirely</h4>
+        <p>Delete the cwd-relative default from <span class="kb-mono">openDatabase</span> itself, so a missing data root fails loudly at startup instead of silently writing elsewhere. One migration, closes the whole bug class.</p>
       </div>
     </div>
     <div class="kb-legend">
-      <div class="d"><span class="b"></span>Closed cloud capability</div>
-      <div class="d"><span class="b rust"></span>Open local capability · Open Design</div>
-      <div class="d">—— data flow &nbsp;&nbsp; ┈┈ memory feedback</div>
+      <div class="d"><span class="b"></span>Fast, narrow coverage · Option A</div>
+      <div class="d"><span class="b rust"></span>Slower, closes the class · Option B</div>
+      <div class="d">—— data path &nbsp;&nbsp; ┈┈ silent fallback (the bug)</div>
     </div>
-    <div class="kb-footer"><span>Content · Compare</span><span>03 / 08</span></div>
+    <div class="kb-footer"><span>Content · Options</span><span>03 / 08</span></div>
   </section>
 
   <!-- 4. CODE -->
   <section class="slide">
     <div class="kb-grid-bg"></div>
-    <div class="kb-kicker">Implementation · Design Memory</div>
-    <h1 class="kb-h1" style="font-size:48px">How design memory <span class="rust">accumulates</span></h1>
-    <p class="kb-sub">Every choice settles into design systems, preferences, and memory, so the next generation lands closer to what you want — it understands you better with use.</p>
-    <pre class="kb-codebox"><span class="cm"># skills/design-memory/SKILL.md</span>
-<span class="kw">name</span>: design-memory
-<span class="kw">trigger</span>: <span class="st">"after every generation"</span>
+    <div class="kb-kicker">Tradeoffs · The Fix</div>
+    <h1 class="kb-h1" style="font-size:44px">Why "patch the sites" loses to "kill the fallback"</h1>
+    <p class="kb-sub">A per-site patch depends on every future engineer remembering the rule. Removing the fallback makes the rule impossible to violate — the daemon simply refuses to start with an unresolved data root.</p>
+    <pre class="kb-codebox"><span class="cm"># apps/daemon/src/db.ts — before vs after</span>
+<span class="kw">function</span> openDatabase(projectRoot<span class="hl">?</span>) {
+  <span class="kw">const</span> root = projectRoot ?? <span class="st">cwd-relative default</span> <span class="cm">// silent escape</span>
+  <span class="kw">return</span> sqlite.open(root)
+}
 
-<span class="kw">on_pick</span>:    record(<span class="st">palette, type, spacing</span>)
-<span class="kw">on_edit</span>:    record(<span class="st">diff, reason=</span><span class="hl">"user-tweak"</span>)
-<span class="kw">on_ship</span>:    record(<span class="st">artifact, design_system</span>)
-
-<span class="kw">next_run</span>:
-  - <span class="st">load preferences → seed generation</span>
-  - <span class="st">apply design-system tokens</span>
-  - <span class="st">keep artifacts local in .od/, git-diffable</span></pre>
-    <div class="kb-footer"><span>Content · Code</span><span>04 / 08</span></div>
+<span class="cm"># after: fallback deleted, root is required</span>
+<span class="kw">function</span> openDatabase(root<span class="hl"> = RUNTIME_DATA_DIR</span>) {
+  <span class="kw">if</span> (!root) <span class="kw">throw</span> <span class="st">"missing data root — refuse to start"</span>
+  <span class="kw">return</span> sqlite.open(root)
+}</pre>
+    <div class="kb-footer"><span>Content · Tradeoffs</span><span>04 / 08</span></div>
   </section>
 
   <!-- 5. DIAGRAM - SVG feedback loop -->
   <section class="slide">
     <div class="kb-grid-bg"></div>
-    <div class="kb-kicker">System Diagram</div>
-    <h1 class="kb-h1" style="font-size:44px">From idea to delivery, end to end</h1>
+    <div class="kb-kicker">Recommendation · System Diagram</div>
+    <h1 class="kb-h1" style="font-size:40px">One resolved root, three enforced checks</h1>
     <svg viewBox="0 0 1200 520" style="width:100%;max-width:1200px;margin-top:20px" xmlns="http://www.w3.org/2000/svg">
       <defs>
         <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
@@ -325,21 +324,21 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
       <g font-family="Archivo, sans-serif" font-size="16" font-weight="700">
         <!-- boxes -->
         <rect x="40" y="180" width="200" height="120" rx="2" fill="#FBF8F2" stroke="#1a1a1a" stroke-width="2"/>
-        <text x="140" y="220" text-anchor="middle">Idea</text>
-        <text x="140" y="250" text-anchor="middle" font-size="12" font-weight="400" fill="#4f4b44">one sentence · template · plugin</text>
+        <text x="140" y="220" text-anchor="middle">Daemon start</text>
+        <text x="140" y="250" text-anchor="middle" font-size="12" font-weight="400" fill="#4f4b44">OD_DATA_DIR env in</text>
 
         <rect x="300" y="180" width="200" height="120" rx="2" fill="#FBF8F2" stroke="#1a1a1a" stroke-width="2"/>
-        <text x="400" y="220" text-anchor="middle">Design System</text>
-        <text x="400" y="250" text-anchor="middle" font-size="12" font-weight="400" fill="#4f4b44">palette · type · spacing</text>
+        <text x="400" y="220" text-anchor="middle">Resolve root</text>
+        <text x="400" y="250" text-anchor="middle" font-size="12" font-weight="400" fill="#4f4b44">no cwd fallback allowed</text>
 
         <rect x="560" y="160" width="220" height="160" rx="2" fill="#B5392A" stroke="#1a1a1a" stroke-width="2"/>
-        <text x="670" y="210" text-anchor="middle" fill="#fff" font-size="20">Agent generation</text>
-        <text x="670" y="240" text-anchor="middle" font-size="12" font-weight="400" fill="rgba(255,255,255,.8)">Claude Code · Codex</text>
-        <text x="670" y="262" text-anchor="middle" font-size="12" font-weight="400" fill="rgba(255,255,255,.8)">sandbox preview · live edits</text>
+        <text x="670" y="210" text-anchor="middle" fill="#fff" font-size="20">RUNTIME_DATA_DIR</text>
+        <text x="670" y="240" text-anchor="middle" font-size="12" font-weight="400" fill="rgba(255,255,255,.8)">single source of truth</text>
+        <text x="670" y="262" text-anchor="middle" font-size="12" font-weight="400" fill="rgba(255,255,255,.8)">SQLite · artifacts · plugins</text>
 
         <rect x="840" y="180" width="200" height="120" rx="2" fill="#FBF8F2" stroke="#1a1a1a" stroke-width="2"/>
-        <text x="940" y="220" text-anchor="middle">Deliver</text>
-        <text x="940" y="250" text-anchor="middle" font-size="12" font-weight="400" fill="#4f4b44">prototypes · slides · video</text>
+        <text x="940" y="220" text-anchor="middle">Every caller</text>
+        <text x="940" y="250" text-anchor="middle" font-size="12" font-weight="400" fill="#4f4b44">openDatabase, artifacts, MCP</text>
 
         <!-- forward arrows -->
         <line x1="245" y1="240" x2="295" y2="240" stroke="#1a1a1a" stroke-width="2" marker-end="url(#arrow)"/>
@@ -349,45 +348,45 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
         <!-- feedback dashed -->
         <path d="M 940 180 Q 940 80, 670 80 Q 400 80, 400 180" fill="none" stroke="#B5392A" stroke-width="2" stroke-dasharray="6 6" marker-end="url(#arrow-r)"/>
         <rect x="580" y="58" width="180" height="30" rx="2" fill="#F0EAE0" stroke="#B5392A" stroke-width="1"/>
-        <text x="670" y="78" text-anchor="middle" fill="#B5392A" font-size="12">MEMORY · preferences settle</text>
+        <text x="670" y="78" text-anchor="middle" fill="#B5392A" font-size="12">CI CHECK · blocks new fallbacks</text>
 
         <!-- bottom feedback to sources -->
         <path d="M 940 300 Q 940 420, 670 420 Q 140 420, 140 300" fill="none" stroke="#B5392A" stroke-width="2" stroke-dasharray="6 6" marker-end="url(#arrow-r)"/>
         <rect x="560" y="400" width="220" height="30" rx="2" fill="#F0EAE0" stroke="#B5392A" stroke-width="1"/>
-        <text x="670" y="420" text-anchor="middle" fill="#B5392A" font-size="12">MEMORY · every choice feeds the next run</text>
+        <text x="670" y="420" text-anchor="middle" fill="#B5392A" font-size="12">RESTART DRILL · every release, both namespaces</text>
       </g>
     </svg>
-    <div class="kb-footer"><span>Diagram · Feedback Loop</span><span>05 / 08</span></div>
+    <div class="kb-footer"><span>Diagram · Recommendation</span><span>05 / 08</span></div>
   </section>
 
   <!-- 6. STATS -->
   <section class="slide">
     <div class="kb-grid-bg"></div>
-    <div class="kb-kicker">Community Numbers</div>
-    <h1 class="kb-h1" style="font-size:44px">The open-source community, <span class="rust">in numbers</span></h1>
+    <div class="kb-kicker">Measure</div>
+    <h1 class="kb-h1" style="font-size:44px">What we track <span class="rust">after ship</span></h1>
     <div style="display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:24px;margin-top:28px;align-items:center">
-      <div style="text-align:center"><div class="kb-big-num">60K+</div><p style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:#4f4b44;margin-top:6px;letter-spacing:.14em;text-transform:uppercase">GitHub stars · Apache-2.0 open source</p></div>
-      <div class="kb-card"><h4 style="color:var(--kb-rust)">-80%</h4><p>Monthly cost reduction vs Claude Design ($500 → ~$73)</p></div>
-      <div class="kb-card"><h4 style="color:var(--kb-rust)">21</h4><p>Coding agents supported — auto-detected, zero config</p></div>
+      <div style="text-align:center"><div class="kb-big-num">0</div><p style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:#4f4b44;margin-top:6px;letter-spacing:.14em;text-transform:uppercase">Recurrences targeted across next 2 restart drills</p></div>
+      <div class="kb-card"><h4 style="color:var(--kb-rust)">-92%</h4><p>MTTR for data-path incidents once the CI guardrail lands (14m → 70s)</p></div>
+      <div class="kb-card"><h4 style="color:var(--kb-rust)">9 → 0</h4><p>Legacy fallback call sites remaining after the migration</p></div>
     </div>
     <div class="kb-grid-2" style="margin-top:18px">
-      <div class="kb-card"><h4>217+ Plugins · 129 Design Systems</h4><p>Prototypes, slides, posters, dashboards, weekly reports; design systems import from GitHub / Figma / local files.</p></div>
-      <div class="kb-card"><h4>300+ Contributors</h4><p>Built together under Apache-2.0: forking, self-hosting, and commercial use are all allowed.</p></div>
+      <div class="kb-card"><h4>3 signals we watch</h4><p>Restart-drill pass rate, CI guardrail catches on PRs, and support tickets tagged "missing project."</p></div>
+      <div class="kb-card"><h4>Sign-off owners</h4><p>Platform infra and SRE co-sign the guardrail PR; engineering leadership signs off on the quarterly restart-drill cadence.</p></div>
     </div>
-    <div class="kb-footer"><span>Content · Stats</span><span>06 / 08</span></div>
+    <div class="kb-footer"><span>Content · Measure</span><span>06 / 08</span></div>
   </section>
 
   <!-- 7. CTA -->
   <section class="slide">
     <div class="kb-grid-bg"></div>
-    <div class="kb-kicker">Next Step</div>
-    <h1 class="kb-h1" style="font-size:60px">Start your <span class="rust">Open Design</span></h1>
-    <p class="kb-sub">No sign-up, runs locally, BYOK. Plug in the coding agents already on your machine and ship your first artifact tonight.</p>
+    <div class="kb-kicker">Next Step · The Ask</div>
+    <h1 class="kb-h1" style="font-size:52px">Approve the <span class="rust">guardrail PR</span> this week</h1>
+    <p class="kb-sub">One irreversible step: merge the fallback removal plus the CI check before the next namespace migration ships.</p>
     <div class="kb-pipeline">
-      <div class="kb-step"><div class="kb-step-num">TONIGHT</div><div class="kb-step-title">Download &amp; install</div><div class="kb-step-body">macOS / Windows, <span style="overflow-wrap:break-word;word-break:keep-all">github.com/<wbr>nexu-io/<wbr>open-design</span></div></div>
-      <div class="kb-step"><div class="kb-step-num">DAY 2</div><div class="kb-step-title">Connect an agent</div><div class="kb-step-body">CLIs on your PATH are auto-detected, zero config</div></div>
-      <div class="kb-step hero"><div class="kb-step-num">DAY 3 · CORE</div><div class="kb-step-title">First artifact</div><div class="kb-step-body">From one sentence to a runnable prototype / slides / video</div></div>
-      <div class="kb-step"><div class="kb-step-num">MONTH 1</div><div class="kb-step-title">Grows to know you</div><div class="kb-step-body">Preferences and memory accumulate; output keeps getting sharper</div></div>
+      <div class="kb-step"><div class="kb-step-num">TODAY</div><div class="kb-step-title">Merge the guardrail PR</div><div class="kb-step-body">Removes the cwd-relative fallback from openDatabase</div></div>
+      <div class="kb-step"><div class="kb-step-num">THIS WEEK</div><div class="kb-step-title">Run the restart drill</div><div class="kb-step-body">Two concurrent namespaces, verify no silent fallback writes</div></div>
+      <div class="kb-step hero"><div class="kb-step-num">NEXT RELEASE · CORE</div><div class="kb-step-title">Ship the CI check</div><div class="kb-step-body">Blocks any new call site that recomputes a data root instead of receiving one</div></div>
+      <div class="kb-step"><div class="kb-step-num">ONGOING</div><div class="kb-step-title">Quarterly drill review</div><div class="kb-step-body">SRE reports pass rate to leadership every release cycle</div></div>
     </div>
     <div class="kb-footer"><span>CTA</span><span>07 / 08</span></div>
   </section>
@@ -396,9 +395,9 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
   <section class="slide">
     <div class="kb-grid-bg"></div>
     <div style="margin:auto 0;text-align:center">
-      <div class="kb-kicker">Open · Local · Agent-native</div>
-      <h1 class="kb-h1" style="font-size:120px;margin-top:24px">thank <span class="rust">·</span> you</h1>
-      <p class="kb-sub" style="margin:0 auto;font-size:22px">Putting frontier AI design capability back on every creator's desk — <b class="nowrap">github.com/nexu-io/open-design</b> · <span class="nowrap">discord.gg/mHAjSMV6gz</span></p>
+      <div class="kb-kicker">Engineering · SRE · Leadership</div>
+      <h1 class="kb-h1" style="font-size:104px;margin-top:24px">sign <span class="rust">·</span> off</h1>
+      <p class="kb-sub" style="margin:0 auto;font-size:22px">Cross-functional agreement closes this retro: Platform, SRE, and Leadership all back <b class="nowrap">the guardrail</b>, not just the patch.</p>
     </div>
     <div class="kb-footer"><span>End of deck</span><span>08 / 08</span></div>
   </section>

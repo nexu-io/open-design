@@ -8,7 +8,7 @@ durationSeconds: 130
 author: 'Artem Daniliants'
 official: false
 ---
-- Eliminates quota constraints by routing requests through configurable backends: Claude, Codex, Gemini CLI, or local LLMs
+- Eliminates quota constraints by routing requests through configurable backends: Claude, Codex, OpenCode, Google Gemini BYOK, or local LLMs
 - Includes pre-built design systems, image templates, and video templates for immediate use without prompt engineering
 - Media generation (images, video, audio) powered by user-provided API keys, avoiding single-provider lock-in
 - Self-evolving open-source agent maintained by nexu-io on GitHub

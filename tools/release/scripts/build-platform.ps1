@@ -296,11 +296,11 @@ try {
         throw "tools-pack win update fixture build failed with exit code $LASTEXITCODE"
       }
       $updateOutput | Set-Content -LiteralPath $fixtureJsonPath -Encoding utf8
-      $updateBuild = Get-Content -LiteralPath $fixtureJsonPath -Raw | ConvertFrom-Json
-      $localUpdateArtifactPath = [string]$updateBuild.installerPath
-      if ([string]::IsNullOrWhiteSpace($localUpdateArtifactPath)) {
-        throw "tools-pack win build update fixture did not report installerPath"
-      }
+    }
+    $updateBuild = Get-Content -LiteralPath $fixtureJsonPath -Raw | ConvertFrom-Json
+    $localUpdateArtifactPath = [string]$updateBuild.installerPath
+    if ([string]::IsNullOrWhiteSpace($localUpdateArtifactPath)) {
+      throw "tools-pack win build update fixture did not report installerPath"
     }
     Measure-Step "validate launcher payload update fixture" {
       $updateBuild = Get-Content -LiteralPath $fixtureJsonPath -Raw | ConvertFrom-Json

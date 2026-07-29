@@ -2,48 +2,19 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-html-ppt-zhangzara-cobalt-grid",
-  "title": "Html Ppt Zhangzara Cobalt Grid",
+  "title": "Write a Renewal & Expansion Business Case like an Account Director",
   "title_i18n": {
-    "zh-CN": "Html Ppt Zhangzara Cobalt Grid",
-    "zh-TW": "Html Ppt Zhangzara Cobalt Grid",
-    "ja": "Html Ppt Zhangzara Cobalt Grid",
-    "ko": "Html Ppt Zhangzara Cobalt Grid",
-    "de": "Html Ppt Zhangzara Cobalt Grid",
-    "fr": "Html Ppt Zhangzara Cobalt Grid",
-    "ru": "Html Ppt Zhangzara Cobalt Grid",
-    "es": "Html Ppt Zhangzara Cobalt Grid",
-    "pt-BR": "Html Ppt Zhangzara Cobalt Grid",
-    "it": "Html Ppt Zhangzara Cobalt Grid",
-    "vi": "Html Ppt Zhangzara Cobalt Grid",
-    "pl": "Html Ppt Zhangzara Cobalt Grid",
-    "id": "Html Ppt Zhangzara Cobalt Grid",
-    "nl": "Html Ppt Zhangzara Cobalt Grid",
-    "ar": "Html Ppt Zhangzara Cobalt Grid",
-    "tr": "Html Ppt Zhangzara Cobalt Grid",
-    "uk": "Html Ppt Zhangzara Cobalt Grid",
-    "en": "Html Ppt Zhangzara Cobalt Grid"
+    "en": "Write a Renewal & Expansion Business Case like an Account Director",
+    "zh-CN": "像客户总监一样写续约与扩容论证",
+    "zh-TW": "像客户总监一样写续约与扩容论证"
   },
   "version": "0.1.0",
-  "description": "Cobalt Grid — Electric cobalt italic serifs on a graph-paper canvas, anchored by stair-stepped pixel-glitch decorations and slim hairline rules. Anything that should feel like a quietly serious design / research bulletin, art publication, or curated trend report.",
+  "publishedAt": "2026-05-12T07:18:16Z",
+  "description": "Open Design renewal + seat-expansion business case for a growing customer: realized value, usage proof, and the expansion ROI. Built as a decision-grade B2B sales deck for champion, finance approver.",
   "description_i18n": {
-    "zh-CN": "Cobalt Grid — 电光钴蓝色斜体衬线字体搭配方格纸画布，配有阶梯式像素故障装饰和纤细发线规则。适合严肃设计/研究简报、艺术出版物或精选趋势报告。",
-    "zh-TW": "Cobalt Grid — 電光鈷藍色斜體襯線字體搭配方格紙畫布，配有階梯式像素故障裝飾和纖細髮線規則。適合嚴肅設計/研究簡報、藝術出版物或精選趨勢報告。",
-    "ja": "Cobalt Grid — 方眼紙キャンバスに電気コバルトのイタリック体セリフを配し、階段状のピクセルグリッチ装飾と細いヘアラインで構成。静かに真面目なデザイン/リサーチレポート、アート出版物、厳選されたトレンドレポートに最適。",
-    "ko": "Cobalt Grid — 모눈종이 캔버스 위에 전기 코발트 이탤릭 세리프를 배치하고, 계단식 픽셀 글리치 장식과 가는 헤어라인 규칙으로 구성. 차분하고 진지한 디자인/리서치 브리프, 아트 출판물, 큐레이션된 트렌드 리포트에 적합.",
-    "de": "Cobalt Grid — Elektrisches Kobaltblau in kursiven Serifen auf Karopapier-Canvas, mit treppenförmigen Pixel-Glitch-Dekorationen und feinen Haarlinien. Ideal für seriöse Design-/Research-Bulletins, Kunstpublikationen oder kuratierte Trendberichte.",
-    "fr": "Cobalt Grid — Sérifs italiques cobalt électrique sur une toile quadrillée, avec décorations pixel-glitch en escalier et fines lignes capillaires. Parfait pour bulletins design/recherche sérieux, publications artistiques ou rapports de tendances curés.",
-    "ru": "Cobalt Grid — Электрический кобальтовый курсив с засечками на миллиметровой бумаге, с пиксельными глитч-украшениями в виде ступеней и тонкими линиями. Для серьёзных дизайн-бюллетеней, арт-публикаций или трендовых отчётов.",
-    "es": "Cobalt Grid — Serifas itálicas en cobalto eléctrico sobre lienzo cuadriculado, con decoraciones pixel-glitch escalonadas y líneas capilares finas. Ideal para boletines de diseño/investigación serios, publicaciones artísticas o informes de tendencias curados.",
-    "pt-BR": "Cobalt Grid — Serifas itálicas em cobalto elétrico sobre tela quadriculada, com decorações pixel-glitch em degraus e linhas capilares finas. Perfeito para boletins sérios de design/pesquisa, publicações de arte ou relatórios de tendências curados.",
-    "it": "Cobalt Grid — Serif corsivi color cobalto elettrico su tela a quadretti, con decorazioni pixel-glitch a gradini e sottili linee capillari. Ideale per bollettini seri di design/ricerca, pubblicazioni artistiche o report di tendenze curati.",
-    "vi": "Cobalt Grid — Chữ serif nghiêng coban điện trên canvas giấy kẻ ô, với trang trí pixel-glitch bậc thang và đường kẻ tóc mảnh. Phù hợp cho bản tin thiết kế/nghiên cứu nghiêm túc, ấn phẩm nghệ thuật hoặc báo cáo xu hướng được tuyển chọn.",
-    "pl": "Cobalt Grid — Elektryczny kobaltowy kursywny szerif na papierze milimetrowym, z dekoracjami pixel-glitch w formie schodów i cienkimi liniami. Idealny do poważnych biuletynów projektowych/badawczych, publikacji artystycznych lub raportów trendów.",
-    "id": "Cobalt Grid — Serif italic kobalt elektrik di atas kanvas kertas grafik, dengan dekorasi pixel-glitch bertangga dan garis tipis hairline. Cocok untuk buletin desain/riset serius, publikasi seni, atau laporan tren yang dikurasi.",
-    "nl": "Cobalt Grid — Elektrisch kobaltblauwe cursieve schreef op ruitjespapier, met trapvormige pixel-glitch decoraties en dunne haarlijnen. Ideaal voor serieuze ontwerp-/onderzoeksbulletins, kunstpublicaties of gecureerde trendrapporten.",
-    "ar": "Cobalt Grid — خطوط سيريف مائلة بلون الكوبالت الكهربائي على لوحة ورق مربعات، مع زخارف بكسل جليتش متدرجة وخطوط شعرية رفيعة. مثالي لنشرات التصميم/البحث الجادة والمنشورات الفنية وتقارير الاتجاهات المنسقة.",
-    "tr": "Cobalt Grid — Kareli kağıt tuvali üzerinde elektrik kobalt renkli italik serifler, basamaklı piksel-glitch süslemeleri ve ince saç çizgisi kurallarıyla. Ciddi tasarım/araştırma bültenleri, sanat yayınları veya küratörlü trend raporları için ideal.",
-    "uk": "Cobalt Grid — Електричний кобальтовий курсив із засічками на міліметровому папері, зі сходоподібними піксельними глітч-прикрасами та тонкими лініями. Для серйозних дизайн-бюлетенів, арт-публікацій або трендових звітів.",
-    "en": "Cobalt Grid — Electric cobalt italic serifs on a graph-paper canvas, anchored by stair-stepped pixel-glitch decorations and slim hairline rules. Anything that should feel like a quietly serious design / research bulletin, art publication, or curated trend report."
+    "en": "Open Design renewal + seat-expansion business case for a growing customer: realized value, usage proof, and the expansion ROI. Built as a decision-grade B2B sales deck for champion, finance approver.",
+    "zh-CN": "像客户总监一样写续约与扩容论证——一份可商业交付的B2B 销售 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像客户总监一样写续约与扩容论证——一份可商业交付的B2B 销售 Deck，围绕真实主题、证据链与决策目标组织。"
   },
   "license": "MIT",
   "author": {
@@ -67,7 +38,18 @@
     "studio-annual-or-seasonal-bulletin",
     "html-deck",
     "html-slides",
-    "zhangzara"
+    "zhangzara",
+    "design",
+    "brand",
+    "visual-system",
+    "html-ppt-zhangzara-cobalt-grid",
+    "b2b-sales",
+    "b2b-saas-sales-proposal",
+    "sales",
+    "renewal",
+    "customer",
+    "decision-deck",
+    "commercial-slide-agent"
   ],
   "compat": {
     "agentSkills": [
@@ -80,7 +62,7 @@
     "kind": "scenario",
     "taskKind": "new-generation",
     "mode": "deck",
-    "scenario": "marketing",
+    "scenario": "sales",
     "surface": "web",
     "preview": {
       "type": "html",
@@ -88,13 +70,18 @@
     },
     "useCase": {
       "query": {
-        "en": "Cobalt Grid — Electric cobalt italic serifs on a graph-paper canvas, anchored by stair-stepped pixel-glitch decorations and slim hairline rules. Anything that should feel like a quietly serious design / research bulletin, art publication, or curated trend report.",
-        "zh-CN": "使用这个插件完成以下任务：Cobalt Grid — Electric cobalt italic serifs on a graph-paper canvas, anchored by stair-stepped pixel-glitch decorations and slim hairline rules. Anything that should feel like a quietly serious design / research bulletin, art publication, or curated trend report."
+        "en": "Create \"Write a Renewal & Expansion Business Case like an Account Director\" as a decision-grade B2B sales deck in this template's own visual system. Subject: Open Design renewal + seat-expansion business case for a growing customer: realized value, usage proof, and the expansion ROI. Audience: champion, finance approver. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can the champion forward this internally without rewriting it.",
+        "zh-CN": "像客户总监一样写续约与扩容论证。像客户总监一样写续约与扩容论证——一份可商业交付的B2B 销售 Deck，围绕真实主题、证据链与决策目标组织。 主题：Open Design renewal + seat-expansion business case for a growing customer: realized value, usage proof, and the expansion ROI. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "Html Ppt Zhangzara Cobalt Grid"
+          "title": "Write a Renewal & Expansion Business Case like an Account Director",
+          "title_i18n": {
+            "en": "Write a Renewal & Expansion Business Case like an Account Director",
+            "zh-CN": "像客户总监一样写续约与扩容论证",
+            "zh-TW": "像客户总监一样写续约与扩容论证"
+          }
         }
       ]
     },
@@ -122,6 +109,7 @@
     "capabilities": [
       "prompt:inject",
       "fs:write"
-    ]
+    ],
+    "category": "b2b-sales"
   }
 }

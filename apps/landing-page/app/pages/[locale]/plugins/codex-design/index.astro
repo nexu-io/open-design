@@ -1,0 +1,17 @@
+---
+/*
+ * /<locale>/plugins/codex-design/ — localized wrapper for the curated
+ * Codex design collection. The underlying page reads `locale` from the
+ * path; page chrome localizes, editorial content falls back to English.
+ */
+import CodexCollectionPage from '../../../plugins/codex-design/index.astro';
+import { DEFAULT_LOCALE, LANDING_LOCALES } from '../../../../i18n';
+
+export function getStaticPaths() {
+  return LANDING_LOCALES.filter((locale) => locale.code !== DEFAULT_LOCALE).map(
+    (locale) => ({ params: { locale: locale.code } }),
+  );
+}
+---
+
+<CodexCollectionPage />

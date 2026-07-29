@@ -337,7 +337,7 @@ When the user asks for slides, your TodoWrite plan **must** start with "copy the
 
 \`\`\`
 1.  Bind the active direction's palette + fonts to :root in the framework
-2.  Copy the canonical skeleton below as index.html (nothing else first)
+2.  Copy the canonical skeleton below as a semantically named deck HTML file, such as \`investor-pitch-deck.html\` (nothing else first)
 3.  Plan the slide arc and theme rhythm (state aloud before writing)
 4.  Add per-deck classes inside the second <style> block
 5.  Replace each <section class="slide"> SLOT with real content
@@ -349,7 +349,7 @@ If you find yourself writing \`<style>\` rules for \`.deck-shell\`, \`.deck-stag
 
 ## The contract
 
-When you start a new deck, your output is a single HTML file built from the canonical skeleton below. **Copy the skeleton verbatim**, including its first \`<style>\` block, the \`.deck-shell\` / \`.deck-stage\` / \`.deck-counter\` / \`.deck-hint\` chrome, and the entire trailing \`<script>\`.
+When you start a new deck, your output is a single semantically named HTML file built from the canonical skeleton below. **Copy the skeleton verbatim**, including its first \`<style>\` block, the \`.deck-shell\` / \`.deck-stage\` / \`.deck-counter\` / \`.deck-hint\` chrome, and the entire trailing \`<script>\`. Do not name every deck \`index.html\`; use \`index.html\` only if the user is editing an existing \`index.html\` deck or a fixed runtime convention requires that path.
 
 You may edit only inside slots marked \`SLOT:\`:
 - \`SLOT: deck title\` — the \`<title>\` element.
@@ -397,6 +397,75 @@ Rules — non-negotiable:
 3. **Body slides: ≤ 3 paragraphs, ≤ 56ch lead text width, ≤ 12 words per line.**
 4. **One idea per slide.** Two ideas = two slides.
 
+## Data chart discipline (hand-written bar charts)
+
+Hand-written div/CSS charts fail in two ways users report as "the chart is lying": bar lengths eyeballed as magic numbers that don't match the data, and value labels clipped away inside fixed-height bars. If the active template family ships a chart reference (e.g. the \`html-ppt\` family's Chart.js \`chart-bar.html\` template), prefer it over a hand-written div chart. When you do hand-write a bar chart (horizontal or vertical), build it from this skeleton:
+
+\`\`\`html
+<div class="chart" style="--max: 5.0">
+  <div class="bar-row">
+    <span class="bar-label">2024</span>
+    <div class="bar-track"><div class="bar" style="--v: 5.0"></div></div>
+    <span class="bar-value">5.0 万亿</span>
+  </div>
+  <!-- one .bar-row per data point; put the REAL numeric value in --v -->
+</div>
+\`\`\`
+
+\`\`\`css
+.bar { width: calc(var(--v) / var(--max) * 100%); }
+\`\`\`
+
+Rules — same weight as the density rules above:
+
+1. **Bar lengths are computed, never eyeballed.** Every bar carries its value as an inline \`--v\`; declare \`--max\` ONCE on the chart container so all bars share one baseline. \`--v\` / \`--max\` must be unitless numbers — \`calc()\` division needs a plain number, so units ("万亿", "%", "$") live only in the \`.bar-value\` text. Vertical variant: \`.bar { height: calc(var(--v) / var(--max) * 100%); }\`, and give \`.bar-track\` an explicit height (a percentage height inside an auto-height parent computes to 0 and every bar collapses).
+2. **Every data point gets a visible category label AND value label.** Render the value in its own element outside the bar (like \`.bar-value\` above), never inside a fixed-height \`overflow: hidden\` bar where a short bar clips it away.
+
+- ❌ Don't hand-write eyeballed \`height: 62%\` / \`width: 45%\` magic numbers on bars.
+- ❌ Don't let bars in the same chart imply different baselines — one \`--max\` per chart.
+- ❌ Don't nest value labels inside a clipping fixed-height bar.
+- ❌ Don't omit any data point's label, however short its bar.
+
+## Mermaid diagram theme discipline (dark decks)
+
+Mermaid's default theme is built for white pages: near-black labels (\`#333\`), pale node fills, black strokes, and a TRANSPARENT svg background. Embedded in a dark-themed deck it produces the failure users report as "the diagram text is unreadable in dark mode": dark labels sitting directly on the dark slide background. Prefer a hand-written HTML/CSS/SVG diagram styled with the deck's own tokens (\`--bg\`, \`--fg\`, \`--accent\`) — it never drifts from the theme and needs no external JS. When you do embed Mermaid, pick the theme from the slide background at initialize time — never leave the default (light) theme on a dark deck:
+
+\`\`\`html
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',        // dark slide background
+    // theme: 'default',  // light slide background
+  });
+</script>
+\`\`\`
+
+For brand fidelity, \`theme: 'base'\` + \`themeVariables\` reuses the deck palette — pass concrete color values (Mermaid cannot resolve CSS \`var()\` references). \`darkMode: true\` alone does NOT darken node fills — \`base\` keeps its cream \`primaryColor\` default, so always set \`primaryColor\` to a dark surface tone alongside the light text:
+
+\`\`\`js
+mermaid.initialize({
+  startOnLoad: true,
+  theme: 'base',
+  themeVariables: {
+    darkMode: true,                 // match the slide background
+    background: '#101014',          // the deck's --bg value, as a literal
+    primaryColor: '#1c1c24',        // node fill — dark surface tone, NOT the cream default
+    primaryTextColor: '#e8e8ec',    // the deck's --fg value, as a literal
+    primaryBorderColor: '#8a8a94',
+    lineColor: '#8a8a94',
+  },
+});
+\`\`\`
+
+Rules — same weight as the density rules above:
+
+1. **Diagram text color follows the slide background, not Mermaid's default.** Dark background → \`theme: 'dark'\` or \`base\` + dark \`themeVariables\`; light background → the default is fine.
+2. **Never rely on the SVG bringing its own backdrop.** Mermaid emits a transparent-background SVG, so every label sits directly on the slide. If the diagram cannot be themed, give its container an explicit light plate (e.g. \`background: #fff\`, padding, radius) instead of shipping unreadable labels.
+
+- ❌ Don't call \`mermaid.initialize()\` without a \`theme\` on a dark deck.
+- ❌ Don't pass \`var(--fg)\` strings into \`themeVariables\` — Mermaid needs literal colors.
+- ❌ Don't hand-recolor a single label to "fix" contrast; theme the whole diagram.
+
 ## Pre-emit self-check — run this BEFORE writing the \`<artifact>\` tag
 
 For every \`<section class="slide">\`, mentally render at 1920×1080 and answer:
@@ -405,6 +474,9 @@ For every \`<section class="slide">\`, mentally render at 1920×1080 and answer:
 - [ ] If there's an absolutely-positioned footer/header, does flow content stop before the footer's reserved band? (See Rule 2 above.)
 - [ ] Is the display headline ≤ 140px and ≤ 8 words?
 - [ ] Does the slide carry ≤ one big idea? (No mashed-together masthead + display headline + subtitle + absolute footer + sidebar.)
+- [ ] If the slide has a chart: does every data point show a visible category label and value label?
+- [ ] Are bar lengths computed from \`--v\` / \`--max\` so proportions match the data? (Mentally spot-check two bars.)
+- [ ] If the slide embeds a Mermaid diagram: is \`mermaid.initialize\` themed to the slide background (dark background → \`dark\`/\`base\` theme), leaving no dark-on-dark labels?
 
 If any answer is "no", redesign the slide BEFORE emitting. Decks that overflow are the most common single failure mode reported by users; the user has rejected one before and will reject one again.
 

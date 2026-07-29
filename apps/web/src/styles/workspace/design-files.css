@@ -297,7 +297,8 @@
   font-weight: 600;
   padding: 8px 20px;
   background: var(--bg-subtle);
-  border-bottom: 1px solid var(--border-soft);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
 }
 .df-section-count {
   margin-left: 8px;
@@ -753,7 +754,8 @@
   justify-content: center;
   gap: 10px;
   background: color-mix(in srgb, var(--accent) 3.5%, transparent);
-  border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border-radius: var(--radius);
 }
 .df-drop-hint {
   display: flex;
@@ -809,6 +811,19 @@
   line-height: 1.5;
   color: var(--text);
   min-height: 1.5em;
+}
+.df-useful-info-auxiliary {
+  opacity: 0.72;
+}
+.df-useful-info-auxiliary .df-useful-info-head {
+  color: var(--text-faint);
+}
+.df-useful-info-auxiliary .df-useful-info-label {
+  color: var(--text-faint);
+}
+.df-useful-info-auxiliary .df-useful-info-tip {
+  font-size: 12px;
+  color: var(--text-muted);
 }
 .df-tip-link {
   color: inherit;
@@ -958,6 +973,17 @@
   position: absolute;
   left: 12px;
   bottom: 12px;
+}
+.df-preview-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-faint);
+  font-size: 38px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--bg-panel) 88%, var(--accent)) 0%, var(--bg-panel) 100%);
 }
 .df-preview-meta {
   padding: 0 16px 16px;

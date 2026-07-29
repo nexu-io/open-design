@@ -16,7 +16,7 @@ This guide walks you through your first 20 minutes with Open Design — from a c
 
 ## What is Open Design?
 
-Open Design is an open-source, local-first design platform — an agent-native alternative to Claude Design and Figma. Instead of locking you into one model provider, it runs **on top of the coding agent you already use**: Claude Code, Codex, Cursor, Gemini, Copilot, OpenCode, and a dozen more. It is "bring your own agent" rather than just bring your own key.
+Open Design is an open-source, local-first design platform — an agent-native alternative to Claude Design and Figma. Instead of locking you into one model provider, it runs **on top of the coding agent you already use**: Claude Code, Codex, Cursor, Copilot, OpenCode, Qwen, and a dozen more. It is "bring your own agent" rather than just bring your own key.
 
 A few things that make it worth a look:
 
@@ -65,7 +65,7 @@ To use Open Design without ever opening the GUI — calling it as a skill or MCP
 
 ```bash
 curl -fsSL https://open-design.ai/install.sh | sh -s <agent>
-# <agent> = claude | codex | cursor | copilot | gemini | opencode | …
+# <agent> = claude | codex | cursor | copilot | opencode | kiro | …
 ```
 
 Then, inside the agent, just ask: `Use open-design to generate a landing page with the Linear design system`.
@@ -127,7 +127,7 @@ The result is a real, interactive prototype: click through the charts and pages,
 Yes — it is open source under the Apache-2.0 license. You can run it locally for free; you only pay for the model/API usage of whichever agent and media providers you connect.
 
 **Which coding agents does it support?**
-21+ agents, including Claude Code, Codex, Cursor, Gemini, GitHub Copilot, and OpenCode. Open Design detects the CLIs already installed on your machine.
+21+ agents, including Claude Code, Codex, Cursor, GitHub Copilot, OpenCode, and Qwen. Open Design detects the supported CLIs already installed on your machine.
 
 **Do I have to create a design system before I can design?**
 No. Unlike Claude Design, Open Design gives you working defaults and a gallery of starting points. You can bring your own design system when you want one.

@@ -26,12 +26,15 @@ import { localizePluginTitle } from './plugins-home/localization';
 import { usePluginFacets } from './plugins-home/usePluginFacets';
 import { pluginSubfacetLabel } from './plugins-home/subfacetLabel';
 import { useSavedPluginIds } from './plugins-home/savedPlugins';
+import type { PluginSortOrder } from './plugins-home/sortOrder';
 import type { PluginUseAction } from './plugins-home/useActions';
 import { Toast } from './Toast';
 import { AnimatePresence } from 'motion/react';
 
-const INITIAL_PLUGIN_RENDER_LIMIT = 60;
-const PLUGIN_RENDER_BATCH_SIZE = 60;
+const RICH_PLUGIN_RENDER_LIMIT = 60;
+const RICH_PLUGIN_RENDER_BATCH_SIZE = 60;
+const GALLERY_PLUGIN_RENDER_LIMIT = 12;
+const GALLERY_PLUGIN_RENDER_BATCH_SIZE = 12;
 
 interface Props {
   plugins: InstalledPluginRecord[];
@@ -78,7 +81,12 @@ export function PluginsHomeSection({
   const { locale, t } = useI18n();
   const { savedPluginIds, savePluginId } = useSavedPluginIds();
   const [saveToast, setSaveToast] = useState<string | null>(null);
-  const [renderLimit, setRenderLimit] = useState(INITIAL_PLUGIN_RENDER_LIMIT);
+  const initialRenderLimit =
+    cardLayout === 'gallery' ? GALLERY_PLUGIN_RENDER_LIMIT : RICH_PLUGIN_RENDER_LIMIT;
+  const renderBatchSize =
+    cardLayout === 'gallery' ? GALLERY_PLUGIN_RENDER_BATCH_SIZE : RICH_PLUGIN_RENDER_BATCH_SIZE;
+  const loadMoreRootMargin = cardLayout === 'gallery' ? '900px' : '640px';
+  const [renderLimit, setRenderLimit] = useState(initialRenderLimit);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const {
     visiblePlugins,
@@ -93,11 +101,13 @@ export function PluginsHomeSection({
     setMode,
     query,
     setQuery,
+    sortOrder,
+    setSortOrder,
     totalVisible,
   } = usePluginFacets({
     plugins,
     savedPluginIds,
-    preferDefaultFacet,
+    preferDefaultFacet: cardLayout === 'gallery' ? false : preferDefaultFacet,
     locale,
   });
   const renderedPlugins = useMemo(
@@ -105,10 +115,13 @@ export function PluginsHomeSection({
     [filtered, renderLimit],
   );
   const hasMorePlugins = renderLimit < filtered.length;
+  const handlePickCategory = (slug: string | null): void => {
+    pickCategory(slug);
+  };
 
   useEffect(() => {
-    setRenderLimit(INITIAL_PLUGIN_RENDER_LIMIT);
-  }, [filtered]);
+    setRenderLimit(initialRenderLimit);
+  }, [filtered, initialRenderLimit]);
 
   useEffect(() => {
     if (!hasMorePlugins) return;
@@ -122,14 +135,14 @@ export function PluginsHomeSection({
       (entries) => {
         if (!entries.some((entry) => entry.isIntersecting)) return;
         setRenderLimit((limit) =>
-          Math.min(filtered.length, limit + PLUGIN_RENDER_BATCH_SIZE),
+          Math.min(filtered.length, limit + renderBatchSize),
         );
       },
-      { rootMargin: '640px' },
+      { rootMargin: loadMoreRootMargin },
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, [filtered.length, hasMorePlugins]);
+  }, [filtered.length, hasMorePlugins, loadMoreRootMargin, renderBatchSize]);
 
   function handleSavePlugin(record: InstalledPluginRecord): void {
     const result = savePluginId(record.id);
@@ -183,7 +196,6 @@ export function PluginsHomeSection({
               options={catalog.category}
               selectedSlug={selection.category}
               totalVisible={totalVisible}
-              onPick={pickCategory}
               // The Saved collection lives on the rich management surface
               // (PluginsView). The minimal Community gallery has no per-card
               // save affordance, so the orthogonal Saved chip is hidden there.
@@ -193,8 +205,12 @@ export function PluginsHomeSection({
               onToggleSaved={() =>
                 setMode(mode === 'saved' ? 'all' : 'saved')
               }
+              showAll
               query={query}
               onQueryChange={setQuery}
+              sortOrder={sortOrder}
+              onSortOrderChange={setSortOrder}
+              onPick={handlePickCategory}
             />
             {selection.category ? (
               <SubcategoryRow
@@ -277,14 +293,18 @@ interface CategoryRowProps {
   savedCount: number;
   savedActive: boolean;
   onToggleSaved: () => void;
+  showAll: boolean;
   query: string;
   onQueryChange: (next: string) => void;
+  sortOrder: PluginSortOrder;
+  onSortOrderChange: (next: PluginSortOrder) => void;
 }
 
 // Single combined filter bar: an optional Saved override chip + category
-// pills on the left, search field on the right. The "All" pill doubles as a
-// clear-filters affordance, so a separate `X / Y` counter and `Clear` link
-// would just repeat what the pill strip already shows.
+// pills on the left, sort toggle + search field on the right. The "All"
+// pill doubles as a clear-filters affordance, so a separate `X / Y`
+// counter and `Clear` link would just repeat what the pill strip already
+// shows.
 function CategoryRow({
   options,
   selectedSlug,
@@ -294,8 +314,11 @@ function CategoryRow({
   savedCount,
   savedActive,
   onToggleSaved,
+  showAll,
   query,
   onQueryChange,
+  sortOrder,
+  onSortOrderChange,
 }: CategoryRowProps) {
   const t = useT();
   if (options.length === 0) return null;
@@ -328,14 +351,16 @@ function CategoryRow({
             <span className="plugins-home__chip-count">{savedCount}</span>
           </button>
         ) : null}
-        <CategoryPill
-          slug={null}
-          label={t('common.all')}
-          count={totalVisible}
-          active={selectedSlug === null}
-          onPick={onPick}
-          variant="all"
-        />
+        {showAll ? (
+          <CategoryPill
+            slug={null}
+            label={t('common.all')}
+            count={totalVisible}
+            active={selectedSlug === null}
+            onPick={onPick}
+            variant="all"
+          />
+        ) : null}
         {options.map((opt) => (
           <CategoryPill
             key={opt.slug}
@@ -348,6 +373,7 @@ function CategoryRow({
         ))}
       </div>
       <div className="plugins-home__facet-tools">
+        <SortToggle value={sortOrder} onChange={onSortOrderChange} />
         <SearchInput value={query} onChange={onQueryChange} />
       </div>
     </div>
@@ -471,6 +497,46 @@ function pluginFacetLabel(slug: string, fallback: string, t: ReturnType<typeof u
     // top-level slugs fall through to the subfacet table before giving up.
     default: return pluginSubfacetLabel(slug, fallback, t);
   }
+}
+
+interface SortToggleProps {
+  value: PluginSortOrder;
+  onChange: (next: PluginSortOrder) => void;
+}
+
+// Hot / newest ordering toggle that lives next to the search field.
+// Rendered as a compact two-segment radio group: "hot" keeps the
+// visual-appeal ranking the gallery leads with today, "newest" re-ranks
+// by record freshness. The picked order persists per browser via the
+// hook (`sortOrder.ts`).
+function SortToggle({ value, onChange }: SortToggleProps) {
+  const t = useT();
+  const segments: Array<{ order: PluginSortOrder; label: string }> = [
+    { order: 'hot', label: t('pluginsHome.sortHot') },
+    { order: 'newest', label: t('pluginsHome.sortNewest') },
+  ];
+  return (
+    <div
+      className="plugins-home__sort"
+      role="radiogroup"
+      aria-label={t('pluginsHome.sortAria')}
+      data-testid="plugins-home-sort"
+    >
+      {segments.map((segment) => (
+        <button
+          key={segment.order}
+          type="button"
+          role="radio"
+          aria-checked={value === segment.order}
+          className={`plugins-home__sort-segment${value === segment.order ? ' is-active' : ''}`}
+          onClick={() => onChange(segment.order)}
+          data-testid={`plugins-home-sort-${segment.order}`}
+        >
+          {segment.label}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 interface SearchInputProps {

@@ -585,6 +585,10 @@ const attachToken = ${JSON.stringify(attachToken)};
   }
   const token = process.env.OD_TOOL_TOKEN;
   const daemonUrl = process.env.OD_DAEMON_URL;
+  if (!token || !daemonUrl) {
+    console.log(JSON.stringify({ type: 'text', part: { text: 'media policy skipped' } }));
+    return;
+  }
   const projectId = process.env.OD_PROJECT_ID;
   const url = endpoint === 'legacy'
     ? daemonUrl + '/api/projects/' + encodeURIComponent(projectId || '') + '/media/generate'

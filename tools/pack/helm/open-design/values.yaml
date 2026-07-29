@@ -9,10 +9,9 @@
 #   Huawei: persistence.backend=sfs     secrets.backend=kms
 #   Self-hosted: persistence.backend=hostPath / nfs / longhorn
 #
-# These values are reference defaults; the chart's templates/ aren't
-# wired here yet (Phase 5 follow-up). The file pins the parameter
-# surface so a downstream PR can implement the templates without
-# revisiting the deployment shape.
+# These values are the reference defaults consumed by the chart's
+# templates. Per-cloud files override only the provider-specific
+# persistence and secret-backend choices.
 
 image:
   repository: ghcr.io/nexu-io/od

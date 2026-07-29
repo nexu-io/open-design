@@ -24,6 +24,7 @@
     "en": "Dcf Valuation"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "Discounted cash flow valuation and intrinsic value analysis for public companies. Use when the brief asks for DCF, fair value, intrinsic value, price target, undervalued or overvalued analysis, or \"what is this company worth?\"",
   "description_i18n": {
     "zh-CN": "为上市公司提供现金流折现估值和内在价值分析。适用于DCF、公允价值、内在价值、目标价、低估或高估分析等需求。",

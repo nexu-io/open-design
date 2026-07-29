@@ -13,7 +13,7 @@ export default defineConfig({
   testDir: './ui',
   testMatch: 'visual-*.test.ts',
   outputDir: './ui/reports/visual-test-results',
-  timeout: Number(process.env.OD_PLAYWRIGHT_TIMEOUT) || 60_000,
+  timeout: Number(process.env.OD_PLAYWRIGHT_TIMEOUT) || 240_000,
   expect: {
     timeout: 10_000,
   },

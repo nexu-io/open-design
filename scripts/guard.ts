@@ -3,12 +3,16 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import ts from "typescript";
 
+import { checkCertainExemptConsumption } from "./check-certain-exempt-consumption.ts";
 import { checkCrossAppImports } from "./check-cross-app-imports.ts";
+import { checkPackagedLeafBoundary } from "./check-packaged-leaf-boundary.ts";
+import { checkTsNocheckImports } from "./check-ts-nocheck-imports.ts";
 import { checkDesignSystemManifests } from "./check-design-system-manifests.ts";
 import { checkDesignSystemPackageQuality } from "./check-design-system-package-quality.ts";
 import { checkDesignSystemComponentFixtureReport } from "./check-components-fixtures.ts";
 import { checkDesignSystemFlagParity } from "./check-design-system-flag-parity.ts";
 import { checkComponentsManifestExtraction } from "./check-components-manifest-extraction.ts";
+import { checkPluginPreviewManifest } from "./check-plugin-preview-manifest.ts";
 import { validatePlaywrightSuiteTopology } from "../e2e/lib/playwright/suites.ts";
 import {
   checkDesignSystemA1RequiredTokens,
@@ -20,6 +24,12 @@ import {
 } from "./check-tokens-fixture-sync.ts";
 import { checkCraftReferences } from "./lint-craft-references.ts";
 import { collectCssHardcodedColorMatches, cssWideAndSpecialColorKeywords, realNamedColors } from "./style-policy.ts";
+import { checkScriptsLibraryArchitecture } from "./lib/guard/architecture.ts";
+import { runGuardChecks, type GuardCheck, type GuardContext } from "./lib/guard/core.ts";
+import {
+  checkDaemonCoreBoundary as checkDaemonCoreScopeBoundary,
+  checkUiP0ShadowContract,
+} from "./lib/guard/scope.ts";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const allowedE2eScripts = new Set([
@@ -27,11 +37,6 @@ const allowedE2eScripts = new Set([
   "e2e/scripts/release-smoke.ts",
   "e2e/scripts/visual-report.ts",
 ]);
-
-type GuardCheck = {
-  name: string;
-  run: () => Promise<boolean>;
-};
 
 function toRepositoryPath(filePath: string): string {
   return path.relative(repoRoot, filePath).split(path.sep).join("/");
@@ -50,6 +55,8 @@ const residualSkippedDirectories = new Set([
   ".od",
   ".od-e2e",
   ".opencode",
+  // Local agent deepwork/worktree scratch (git-ignored; not product source).
+  ".slim",
   ".task",
   ".tmp",
   ".vite",
@@ -154,6 +161,10 @@ const residualAllowedPathPrefixes = [
   "design-templates/last30days/scripts/lib/vendor/",
   // Vendored upstream html-ppt runtime assets (lewislulu/html-ppt-skill, design template).
   "design-templates/html-ppt/assets/",
+  // Vendored upstream website-clone recon/mirror/audit helpers
+  // (Jane-xiaoer/claude-skill-web-clone). Global skill assets staged into the
+  // project cwd for direct `node scripts/...` execution by the agent.
+  "skills/web-clone/scripts/",
   // Replay-based mock CLIs that impersonate the agent CLIs OD spawns
   // (opencode/claude/codex/gemini/cursor-agent + ACP family). Need to
   // be directly executable via Node so `child_process.spawn` from test
@@ -493,6 +504,28 @@ async function collectTestLayoutViolations(directory: string): Promise<string[]>
   }
 
   return violations;
+}
+
+async function checkScriptsTestFree(): Promise<boolean> {
+  const scriptsFiles = await collectRepositoryFiles(path.join(repoRoot, "scripts"), testLayoutSkippedDirectories);
+  const violations = scriptsFiles.filter(isScriptTestFile);
+
+  if (violations.length > 0) {
+    console.error(
+      "Root scripts/ is test-free: move behavior-contract coverage to e2e/tests/scripts/ (see e2e/AGENTS.md):",
+    );
+    for (const violation of violations) {
+      console.error(`- ${violation}`);
+    }
+    return false;
+  }
+
+  console.log("Scripts test-free check passed: no test files under root scripts/.");
+  return true;
+}
+
+export function isScriptTestFile(repositoryPath: string): boolean {
+  return /\.test\.[^/]+$/.test(repositoryPath);
 }
 
 async function checkTestLayout(): Promise<boolean> {
@@ -1270,13 +1303,12 @@ async function checkCiTopology(): Promise<boolean> {
       "ci_mode: ${{ steps.detect.outputs.ci_mode }}",
       "ui_p0_validation_required: ${{ steps.detect.outputs.ui_p0_validation_required }}",
       "run_ui_p0: ${{ steps.detect.outputs.run_ui_p0 }}",
-      "run_nix_validation: ${{ steps.detect.outputs.run_nix_validation }}",
       "ui_p0_matrix: ${{ steps.detect.outputs.ui_p0_matrix }}",
       "visual_matrix: ${{ steps.detect.outputs.visual_matrix }}",
       "include: ${{ fromJSON(needs.scopes.outputs.ui_p0_matrix) }}",
       "include: ${{ fromJSON(needs.scopes.outputs.visual_matrix) }}",
       "needs.scopes.outputs.run_ui_p0 == 'true'",
-      "pnpm -C e2e exec tsx scripts/playwright.ts run-ui-group smoke",
+      "pnpm -C e2e exec tsx scripts/playwright.ts run-ui-group critical-extras",
       "pnpm -C e2e exec tsx scripts/playwright.ts run-ui-group ${{ matrix.shard }}",
     ]
       .filter((needle) => !ciWorkflow.includes(needle))
@@ -1293,12 +1325,34 @@ async function checkCiTopology(): Promise<boolean> {
   return true;
 }
 
+let crossAppImportsResult: Promise<boolean> | undefined;
+
+function checkCrossAppImportsOnce(): Promise<boolean> {
+  crossAppImportsResult ??= Promise.resolve(checkCrossAppImports());
+  return crossAppImportsResult;
+}
+
+async function checkDaemonCoreBoundary(context: GuardContext): Promise<boolean> {
+  const [crossAppImportsPass, scopeBoundaryPass] = await Promise.all([
+    checkCrossAppImportsOnce(),
+    checkDaemonCoreScopeBoundary(context),
+  ]);
+  return crossAppImportsPass && scopeBoundaryPass;
+}
+
 const checks: GuardCheck[] = [
   { name: "residual JavaScript", run: checkResidualJavaScript },
+  { name: "certain-exempt surface consumption", run: checkCertainExemptConsumption },
+  { name: "packaged leaf boundary", run: checkPackagedLeafBoundary },
+  { name: "daemon core boundary", run: checkDaemonCoreBoundary },
+  { name: "UI P0 shadow contract", run: checkUiP0ShadowContract },
   { name: "package dependency specs", run: checkPackageDependencySpecs },
   { name: "product neutrality", run: checkProductNeutrality },
-  { name: "cross-app imports", run: checkCrossAppImports },
+  { name: "cross-app imports", run: checkCrossAppImportsOnce },
+  { name: "@ts-nocheck import resolution", run: checkTsNocheckImports },
   { name: "test layout", run: checkTestLayout },
+  { name: "scripts test-free", run: checkScriptsTestFree },
+  { name: "scripts library architecture", run: checkScriptsLibraryArchitecture },
   { name: "e2e layout", run: checkE2eLayout },
   { name: "web test layout", run: checkWebTestLayout },
   { name: "web import isolation", run: checkWebImportIsolation },
@@ -1306,6 +1360,7 @@ const checks: GuardCheck[] = [
   { name: "style policy", run: checkStylePolicy },
   { name: "CI topology", run: checkCiTopology },
   { name: "craft references", run: checkCraftReferences },
+  { name: "plugin preview manifest", run: checkPluginPreviewManifest },
   { name: "design system manifests", run: checkDesignSystemManifests },
   { name: "design system package quality", run: checkDesignSystemPackageQuality },
   { name: "design system component fixture report", run: checkDesignSystemComponentFixtureReport },
@@ -1319,22 +1374,14 @@ const checks: GuardCheck[] = [
   { name: "design system component manifest extraction", run: checkComponentsManifestExtraction },
 ];
 
-async function runChecks(): Promise<boolean> {
-  const results: boolean[] = [];
-  for (const check of checks) {
-    try {
-      results.push(await check.run());
-    } catch (error) {
-      console.error(`Guard check failed unexpectedly: ${check.name}`);
-      console.error(error);
-      results.push(false);
-    }
-  }
-
-  return results.every(Boolean);
-}
-
 const isMain = process.argv[1] ? import.meta.url === pathToFileURL(process.argv[1]).href : false;
-if (isMain && !(await runChecks())) {
-  process.exitCode = 1;
+if (isMain) {
+  // `--list-checks` is the machine-readable registry of guard check names; the
+  // scope rule-table invariant test resolves `certain` rules' guard fields
+  // against it so a renamed or deleted guard fails CI.
+  if (process.argv[2] === "--list-checks") {
+    for (const check of checks) console.log(check.name);
+  } else if (!(await runGuardChecks(checks, { repoRoot }))) {
+    process.exitCode = 1;
+  }
 }

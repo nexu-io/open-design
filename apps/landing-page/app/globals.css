@@ -453,59 +453,13 @@ body::before {
   .locale-trigger-caret { transition: none; }
 }
 /* ---------- Open Design Cloud header account ---------- */
-/*
- * Two mutually-exclusive states share this slot: the signed-out "Sign in"
- * link and the signed-in avatar menu. Both render in the markup; the avatar
- * `<details>` carries `hidden` until `header-enhancer.astro` confirms a live
- * cloud session, then toggles `hidden` on each. `[hidden]` on either element
- * fully removes it from layout, so only one is ever visible.
- */
+/* The avatar menu stays out of layout until a live cloud session is found. */
 .nav-account {
   display: inline-flex;
   align-items: center;
   flex-shrink: 0;
 }
-/* Sign in — an outlined pill so it sits beside the filled Download CTA
-   without competing with it as a second solid button. */
-.nav-signin {
-  display: inline-flex;
-  align-items: center;
-  padding: 7px 15px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--ink);
-  font-family: var(--sans);
-  font-size: 13px;
-  font-weight: 500;
-  text-decoration: none;
-  white-space: nowrap;
-  transition: border-color 160ms ease, color 160ms ease;
-}
-.nav-signin:hover,
-.nav-signin:focus-visible {
-  border-color: var(--ink);
-  color: var(--ink);
-}
 .nav-account [hidden] { display: none !important; }
-/* Sign-in focus scrim — dims the page (but not the header chrome at z-index
-   50/60) while the vela login popup is open, so the popup reads as a modal
-   step. Mounted/removed by the account block in `header-enhancer.astro`;
-   `.is-active` drives the fade. */
-.nav-login-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 40;
-  background: rgba(8, 10, 14, 0.55);
-  -webkit-backdrop-filter: blur(2px);
-  backdrop-filter: blur(2px);
-  opacity: 0;
-  transition: opacity 200ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-.nav-login-overlay.is-active { opacity: 1; }
-@media (prefers-reduced-motion: reduce) {
-  .nav-login-overlay { transition: none; }
-}
 /* Avatar menu — a borderless <details> whose summary is the avatar disc. */
 .nav-account-menu {
   position: relative;
@@ -1049,6 +1003,63 @@ body::before {
    grows past the viewport, scrolling inside instead. */
 .nav-dropdown-solution {
   max-height: min(70vh, 520px);
+  overflow-y: auto;
+}
+
+/* Product mega menu — category columns side by side. Each `.nav-mega-col` is
+   one top-level category (Products, Agent, and later e.g. Feature); adding a
+   column just widens the panel. Reuses the base `.nav-dropdown` card chrome
+   (paper, border, shadow, item hover fills) and only lays the columns out.
+   Product is the leftmost nav item, so the panel opens rightward with no
+   right-edge overflow risk. */
+.nav-dropdown-mega {
+  display: flex;
+  gap: 0;
+  min-width: 0;
+  max-width: min(94vw, 640px);
+}
+.nav-dropdown-mega .nav-mega-col {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  min-width: 216px;
+}
+.nav-dropdown-mega .nav-mega-col + .nav-mega-col {
+  margin-left: 6px;
+  padding-left: 6px;
+  border-left: 1px solid rgba(26, 26, 26, 0.08);
+}
+.nav-dropdown-mega .nav-mega-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+/* Column header — small-caps category label, matching the grouped-dropdown
+   label. When it is a link (Agent → /agents/ hub) it tints on hover; it
+   overrides the generic `.nav-dropdown a` block/padding/hover-fill styles. */
+.nav-dropdown-mega .nav-mega-col-head {
+  display: block;
+  padding: 4px 12px 6px;
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  text-decoration: none;
+}
+a.nav-mega-col-head:hover {
+  background: transparent;
+  color: var(--coral);
+}
+a.nav-mega-col-head.is-active {
+  background: transparent;
+  color: var(--ink);
+}
+/* A long column (Agent: 21 rows) caps its own height and scrolls so the
+   panel never runs off short viewports; shorter columns stay static. */
+.nav-dropdown-mega .nav-mega-list-scroll {
+  max-height: min(60vh, 420px);
   overflow-y: auto;
 }
 
@@ -5191,6 +5202,15 @@ footer .container {
   grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 28px;
   margin-bottom: 36px;
+  align-items: start;
+}
+/* A grid cell that stacks two short nav sections vertically so the sub-page
+   footer's eight sections fit the 7-track grid without a section orphaning
+   onto a second row (used for Community + Company in site-footer.astro). */
+.sub-footer-col-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
 }
 .sub-footer-col h5 {
   font-family: var(--mono);
@@ -5552,6 +5572,17 @@ footer .container {
   /* Let the Solution panel flow naturally inside the flattened nav panel
      instead of scrolling within a capped box. */
   .nav-dropdown-solution { max-height: none; overflow: visible; }
+  /* Product mega menu flattens to stacked full-width categories in the mobile
+     drawer: drop the flex columns, dividers, and the agent scroll cap so each
+     category reads as a labeled vertical list. */
+  .nav-dropdown-mega { display: block; max-width: none; }
+  .nav-dropdown-mega .nav-mega-col { min-width: 0; }
+  .nav-dropdown-mega .nav-mega-col + .nav-mega-col {
+    margin-left: 0;
+    padding-left: 0;
+    border-left: none;
+  }
+  .nav-dropdown-mega .nav-mega-list-scroll { max-height: none; overflow: visible; }
 }
 @media (max-width: 1080px) {
   .container { padding: 0 32px; }

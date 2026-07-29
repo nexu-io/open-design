@@ -98,6 +98,7 @@ export const SIDECAR_MESSAGES = Object.freeze({
 
 export const DESKTOP_UPDATE_ACTIONS = Object.freeze({
   CHECK: "check",
+  CLEAR_CACHE: "clear-cache",
   DOWNLOAD: "download",
   INSTALL: "install",
   STATUS: "status",
@@ -420,7 +421,7 @@ export type DesktopUpdateIncomingSnapshot = {
   version: string;
 };
 
-export type DesktopUpdateCacheLifecycleTrigger = "cold-start" | "next-version-ready";
+export type DesktopUpdateCacheLifecycleTrigger = "cold-start" | "manual" | "next-version-ready";
 
 export type DesktopUpdateReleaseLifecycleState =
   | "cleanup-deferred"
@@ -448,6 +449,30 @@ export type DesktopUpdateCacheSnapshot = {
   lifecycle?: DesktopUpdateCacheLifecycleSummary;
 };
 
+export const DESKTOP_UPDATE_REINSTALL_REASONS = Object.freeze({
+  LAUNCHER_SCHEMA: "launcher-schema",
+  OUTER_BELOW_MIN: "outer-below-min",
+  OUTER_VERSION_UNREADABLE: "outer-version-unreadable",
+} as const);
+
+export type DesktopUpdateReinstallReason =
+  (typeof DESKTOP_UPDATE_REINSTALL_REASONS)[keyof typeof DESKTOP_UPDATE_REINSTALL_REASONS];
+
+/**
+ * Present on a status snapshot when the release feed requires a full installer
+ * reinstall instead of an in-place payload update. `installedVersion` is the
+ * physically installed outer package version (not the running payload version);
+ * it is omitted when the outer bundle config could not be read. `url` is an
+ * optional operator-supplied explanation link from
+ * `control.launcher.version.url`.
+ */
+export type DesktopUpdateReinstallSnapshot = {
+  installedVersion?: string;
+  minVersion?: string;
+  reason: DesktopUpdateReinstallReason;
+  url?: string;
+};
+
 export type DesktopUpdateStatusSnapshot = {
   active?: DesktopUpdateReleaseSnapshot;
   arch: string;
@@ -470,6 +495,7 @@ export type DesktopUpdateStatusSnapshot = {
   paths?: DesktopUpdatePathSnapshot;
   platform: string;
   progress?: DesktopUpdateProgressSnapshot;
+  reinstall?: DesktopUpdateReinstallSnapshot;
   state: DesktopUpdateState;
   supported: boolean;
 };
@@ -827,7 +853,7 @@ function normalizeDesktopExportArtifactInput(input: unknown): DesktopExportArtif
   };
 }
 
-function isDesktopUpdateAction(value: unknown): value is DesktopUpdateAction {
+export function isDesktopUpdateAction(value: unknown): value is DesktopUpdateAction {
   return Object.values(DESKTOP_UPDATE_ACTIONS).includes(value as DesktopUpdateAction);
 }
 

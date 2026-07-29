@@ -90,6 +90,7 @@ export type DesignSystemStaticFileDetail = {
 
 export type DesignSystemPackageInfo = {
   manifest?: DesignSystemProjectManifest;
+  availableFiles?: string[];
   sourceEvidence?: {
     scannedFileCount?: number;
     tokenCount?: number;
@@ -404,10 +405,47 @@ export async function readDesignSystemPackageInfo(
   if (manifest === null) return null;
 
   const sourceEvidence = await readDesignSystemSourceEvidence(brandRoot, manifest);
+  const availableFiles = await listAvailableDesignSystemPackageFiles(brandRoot, manifest);
   return {
     manifest,
+    ...(availableFiles.length > 0 ? { availableFiles } : {}),
     ...(sourceEvidence ? { sourceEvidence } : {}),
   };
+}
+
+async function listAvailableDesignSystemPackageFiles(
+  brandRoot: string,
+  manifest: DesignSystemProjectManifest,
+): Promise<string[]> {
+  const candidates = new Set<string>(DESIGN_SYSTEM_STATIC_SYSTEM_FILES);
+  const add = (filePath: string | undefined): void => {
+    const cleanPath = typeof filePath === 'string' ? sanitizeRelativeFilePath(filePath) : null;
+    if (cleanPath) candidates.add(cleanPath);
+  };
+
+  add(manifest.files.design);
+  add(manifest.files.tokens);
+  add(manifest.files.components);
+  add(manifest.files.designTokens);
+  add(manifest.files.tailwind);
+  add(manifest.usage);
+  add(manifest.componentsManifest);
+  for (const page of manifest.preview?.pages ?? []) add(page.path);
+  for (const font of manifest.fonts ?? []) add(font.file);
+
+  const out: string[] = [];
+  const resolvedRoot = path.resolve(brandRoot);
+  for (const relativePath of Array.from(candidates).sort()) {
+    const filePath = path.resolve(brandRoot, relativePath);
+    if (filePath !== resolvedRoot && !filePath.startsWith(`${resolvedRoot}${path.sep}`)) continue;
+    try {
+      const stats = await stat(filePath);
+      if (stats.isFile()) out.push(relativePath);
+    } catch (err) {
+      if (!isAbsenceError(err)) throw err;
+    }
+  }
+  return out;
 }
 
 /**
@@ -1231,6 +1269,49 @@ export async function updateUserDesignSystem(
   return listed.find((s) => s.id === `user:${dirId}`) ?? null;
 }
 
+// A design-system workspace project mirrors its design system's title:
+// ensureUserDesignSystemWorkspaceProject re-stamps the project name from
+// the registry title every time the workspace is ensured, so a rename
+// applied only to the project row silently reverts on the next open.
+// Renames on these projects must instead be written through to the
+// design-system title — the sync then carries the new name back onto the
+// project and both records agree.
+export function workspaceRenameDesignSystemId(project: {
+  designSystemId?: string | null;
+  metadata?: unknown;
+}): string | null {
+  const id = typeof project?.designSystemId === 'string' ? project.designSystemId : '';
+  if (!id.startsWith('user:')) return null;
+  const metadata = project?.metadata;
+  const importedFrom =
+    metadata && typeof metadata === 'object'
+      ? (metadata as Record<string, unknown>).importedFrom
+      : undefined;
+  return importedFrom === 'design-system' ? id : null;
+}
+
+// 'not-applicable': the project is not a design-system workspace (or the
+// name is blank) — the rename does not involve a design system at all.
+// 'propagated': the bound design system's title now matches the new name.
+// 'failed': the project IS bound to a user design system but the title
+// could not be written through (e.g. the entry is missing on disk).
+// Callers must not persist the project-row rename on 'failed' — doing so
+// recreates the silent revert this write-through exists to prevent.
+export type WorkspaceRenamePropagation = 'not-applicable' | 'propagated' | 'failed';
+
+export async function propagateWorkspaceProjectRename(
+  root: string,
+  project: { designSystemId?: string | null; metadata?: unknown },
+  name: unknown,
+): Promise<WorkspaceRenamePropagation> {
+  const id = workspaceRenameDesignSystemId(project);
+  if (!id) return 'not-applicable';
+  const title = typeof name === 'string' ? name.trim() : '';
+  if (!title) return 'not-applicable';
+  const updated = await updateUserDesignSystem(root, id, { title });
+  return updated != null ? 'propagated' : 'failed';
+}
+
 export async function linkUserDesignSystemProject(
   root: string,
   id: string,
@@ -1907,6 +1988,89 @@ function classifyDesignSystemFile(
   return 'asset';
 }
 
+// Hidden fingerprint manifest recording the content the generator last wrote for
+// each derived file. `collectDesignSystemFiles` skips dot-prefixed entries, so it
+// is excluded from file listings and ZIP archives; the pull/static allowlists are
+// default-deny, so it is never served either.
+const GENERATED_MANIFEST_FILENAME = '.od-generated.json';
+
+// Manifest keys are posix-relative paths under the design-system root, matching
+// the `collectDesignSystemFiles` relative-path convention.
+function generatedManifestKey(dir: string, targetPath: string): string {
+  return path.relative(dir, targetPath).split(path.sep).join('/');
+}
+
+function hashGeneratedContent(content: string): string {
+  return createHash('sha256').update(content, 'utf8').digest('hex');
+}
+
+function serializeGeneratedManifest(manifest: Record<string, string>): string {
+  const sorted: Record<string, string> = {};
+  for (const [key, value] of Object.entries(manifest).sort(([a], [b]) => a.localeCompare(b))) {
+    sorted[key] = value;
+  }
+  return `${JSON.stringify(sorted, null, 2)}\n`;
+}
+
+// Reading the manifest is fault-tolerant: a missing, malformed, or user-authored
+// same-named file all degrade to "no manifest" (an empty record). That routes the
+// caller into the conservative legacy path (write-if-missing) instead of ever
+// trusting an untrusted file as a source of overwrite decisions.
+async function readGeneratedManifest(dir: string): Promise<Record<string, string>> {
+  const raw = await readFileOptional(path.join(dir, GENERATED_MANIFEST_FILENAME));
+  if (raw === undefined) return {};
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return {};
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+    if (typeof value === 'string') out[key] = value;
+  }
+  return out;
+}
+
+// Regeneration must never discard files a user has customized (issue #323). A
+// generated file is only overwritten when it is still byte-identical to what the
+// generator last wrote (recorded in `.od-generated.json`). Anything the user
+// edited — or any pre-existing file with no recorded fingerprint (legacy systems)
+// — is preserved. Files that are absent are written and fingerprinted. The
+// returned `nextManifest` records fingerprints for every path that will be
+// written/refreshed, preserves the prior fingerprint for kept-but-skipped paths,
+// and drops manifest keys the generator no longer produces.
+async function filterGeneratedWritesPreservingUserEdits(
+  dir: string,
+  writes: AtomicTextFileWrite[],
+  manifest: Record<string, string>,
+): Promise<{ writes: AtomicTextFileWrite[]; nextManifest: Record<string, string> }> {
+  const kept: AtomicTextFileWrite[] = [];
+  const nextManifest: Record<string, string> = {};
+  for (const write of writes) {
+    const key = generatedManifestKey(dir, write.targetPath);
+    const current = await readFileOptional(write.targetPath);
+    if (current === undefined) {
+      // Absent → safe to write.
+      kept.push(write);
+      nextManifest[key] = hashGeneratedContent(write.content);
+      continue;
+    }
+    const recorded = manifest[key];
+    if (recorded !== undefined && hashGeneratedContent(current) === recorded) {
+      // Untouched since the last generation → refresh to the new content.
+      kept.push(write);
+      nextManifest[key] = hashGeneratedContent(write.content);
+      continue;
+    }
+    // User-owned (edited, or a legacy file with no fingerprint) → preserve as-is.
+    // Retain any prior fingerprint so future updates can still compare.
+    if (recorded !== undefined) nextManifest[key] = recorded;
+  }
+  return { writes: kept, nextManifest };
+}
+
 async function writeGeneratedDesignSystemFiles(
   root: string,
   id: string,
@@ -1931,10 +2095,19 @@ async function writeGeneratedDesignSystemFiles(
     mkdir(path.join(dir, 'ui_kits', 'app', 'components'), { recursive: true }),
   ]);
 
+  const manifest = await readGeneratedManifest(dir);
+  const { writes, nextManifest } = await filterGeneratedWritesPreservingUserEdits(
+    dir,
+    generatedDesignSystemFileWrites(dir, input),
+    manifest,
+  );
   await Promise.all(
-    generatedDesignSystemFileWrites(dir, input).map((write) =>
-      writeFile(write.targetPath, write.content, 'utf8')
-    ),
+    writes.map((write) => writeFile(write.targetPath, write.content, 'utf8')),
+  );
+  await writeFile(
+    path.join(dir, GENERATED_MANIFEST_FILENAME),
+    serializeGeneratedManifest(nextManifest),
+    'utf8',
   );
 }
 
@@ -2541,6 +2714,7 @@ async function writeAcceptedUserDesignSystemRevision(
     updatedAt,
     ...(provenance ? { provenance } : {}),
   };
+  const fileChangeWrites = revisionFileChangeWrites(root, dirId, revision.fileChanges);
   const writes: AtomicTextFileWrite[] = [
     { targetPath: designPath, content: revision.proposedBody },
     {
@@ -2550,17 +2724,37 @@ async function writeAcceptedUserDesignSystemRevision(
   ];
   if (artifactMode !== 'agent-managed') {
     const sourceNotes = provenanceToNotes(provenance);
-    writes.push(...generatedDesignSystemFileWrites(base, {
-      title,
-      category,
-      surface,
-      summary: summarize(revision.proposedBody),
-      ...(provenance ? { provenance } : {}),
-      ...(sourceNotes ? { sourceNotes } : {}),
-      body: revision.proposedBody,
-    }));
+    const manifest = await readGeneratedManifest(base);
+    const filtered = await filterGeneratedWritesPreservingUserEdits(
+      base,
+      generatedDesignSystemFileWrites(base, {
+        title,
+        category,
+        surface,
+        summary: summarize(revision.proposedBody),
+        ...(provenance ? { provenance } : {}),
+        ...(sourceNotes ? { sourceNotes } : {}),
+        body: revision.proposedBody,
+      }),
+      manifest,
+    );
+    // Generated writes precede fileChanges; writeTextFilesAtomically keeps the
+    // last write per path, so an explicit fileChange wins over a same-named
+    // derived write. Drop those paths from the manifest so the hand-authored
+    // content is treated as user-owned (preserved) on the next regeneration.
+    const nextManifest = { ...filtered.nextManifest };
+    for (const change of fileChangeWrites) {
+      delete nextManifest[generatedManifestKey(base, change.targetPath)];
+    }
+    writes.push(...filtered.writes);
+    writes.push(...fileChangeWrites);
+    writes.push({
+      targetPath: path.join(base, GENERATED_MANIFEST_FILENAME),
+      content: serializeGeneratedManifest(nextManifest),
+    });
+  } else {
+    writes.push(...fileChangeWrites);
   }
-  writes.push(...revisionFileChangeWrites(root, dirId, revision.fileChanges));
   writes.push({
     targetPath: path.join(base, 'revisions', `${acceptedRevision.id}.json`),
     content: `${JSON.stringify(acceptedRevision, null, 2)}\n`,
@@ -3594,7 +3788,11 @@ function extractSwatches(raw: string): string[] {
   // bold markers (`**Name:**`) or outside them (`**Name**:`). Both variants
   // are common in hand-authored DESIGN.md files, so we allow the colon in
   // either position around the closing `**`.
-  const reA = /^[\s>*-]*\**\s*([A-Za-z][A-Za-z0-9 /&()+_-]{1,40}?)\s*[:：]?\s*\**\s*[:：]?\s*`?(#[0-9a-fA-F]{3,8})/gm;
+  // The leading class `[\s>*-]` already covers whitespace, `>`, `*` and `-`, so
+  // the old `[\s>*-]*\**\s*` prefix had three overlapping star-consumers whose
+  // ambiguous split made a long run of `*` at a line start O(n^2). A single
+  // `[\s>*-]*` matches the same prefixes without the backtracking blowup.
+  const reA = /^[\s>*-]*([A-Za-z][A-Za-z0-9 /&()+_-]{1,40}?)\s*[:：]?\s*\**\s*[:：]?\s*`?(#[0-9a-fA-F]{3,8})/gm;
   let m;
   while ((m = reA.exec(raw)) !== null) push(m[1] ?? '', m[2] ?? '');
   // Form B: "**Stripe Purple** (`#533afd`)"

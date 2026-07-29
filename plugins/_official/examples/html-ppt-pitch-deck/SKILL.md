@@ -1,17 +1,35 @@
 ---
 name: html-ppt-pitch-deck
-description: Investor-ready 10-slide HTML pitch deck — white + blue→purple gradient hero, big numbers, traction bar chart, $4.5M-style ask page. Use when the user wants a fundraising deck, seed-round pitch, or VC meeting slides.
-triggers:
-  - "pitch deck"
-  - "pitch"
+en_name: "Write a Demo Day Pitch like a Top Accelerator Partner"
+zh_name: "像顶级加速器合伙人一样写 Demo Day 路演"
+description: |
+  Open Design's demo-day pitch: hook, traction, moat, and the raise — built to make a partner sit up by page three. Built as a decision-grade fundraising pitch deck for accelerator partners, angels.
+en_description: |
+  Open Design's demo-day pitch: hook, traction, moat, and the raise — built to make a partner sit up by page three. Built as a decision-grade fundraising pitch deck for accelerator partners, angels.
+zh_description: |
+  像顶级加速器合伙人一样写 Demo Day 路演——一份可商业交付的融资路演 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "fundraising-pitch"
+  - "series-a-pitch-deck"
+  - "finance"
+  - "pitch-deck"
   - "fundraising"
-  - "seed round"
-  - "investor deck"
-  - "vc deck"
-  - "pitch slides"
+  - "investor-deck"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "html-ppt-pitch-deck"
+triggers:
+  - "series-a-pitch-deck"
+  - "fundraising-pitch"
+  - "Write a Demo Day Pitch like a Top Accelerator Partner"
+  - "像顶级加速器合伙人一样写 Demo Day 路演"
+  - "pitch-deck"
+  - "fundraising"
+  - "investor-deck"
+  - "html deck"
+  - "html slides"
 od:
   mode: deck
-  scenario: finance
   featured: 20
   upstream: "https://github.com/lewislulu/html-ppt-skill"
   preview:
@@ -21,7 +39,9 @@ od:
     requires: false
   speaker_notes: true
   animations: true
-  example_prompt: "Build a 10-slide pitch deck in HTML for my seed round. Use the html-ppt-pitch-deck full-deck template (white + blue→purple gradient, traction bars, $X.XM ask). Confirm three things first: (1) name + one-line pitch, (2) key traction numbers, (3) ask + use of funds."
+  category: "fundraising-pitch"
+  scenario: "finance"
+  example_prompt: "Create \"Write a Demo Day Pitch like a Top Accelerator Partner\" as a decision-grade Fundraising pitch deck in this template's own visual system. Subject: Open Design's demo-day pitch: hook, traction, moat, and the raise — built to make a partner sit up by page three. Audience: accelerator partners, angels. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would an investor know why this is venture-scale and urgent."
 ---
 # HTML PPT · Pitch Deck
 
@@ -34,23 +54,23 @@ The Examples gallery wires "Use this prompt" to the example_prompt above. When y
 ## How to author the deck
 
 1. **Read the master skill first.** All authoring rules live in
-   [`skills/html-ppt/SKILL.md`](../html-ppt/SKILL.md) — content/audience checklist,
+   [`design-templates/html-ppt/SKILL.md`](../html-ppt/SKILL.md) — content/audience checklist,
    token rules, layout reuse, presenter mode, the keyboard runtime, and the
    "never put presenter-only text on the slide" rule.
 2. **Start from the matching template folder:**
-   `skills/html-ppt/templates/full-decks/pitch-deck/` — copy `index.html` and
+   `design-templates/html-ppt/templates/full-decks/pitch-deck/` — copy `index.html` and
    `style.css` into the project, keep the `.tpl-pitch-deck` body class.
 3. **Bring the shared runtime with the template.** The upstream
    `index.html` links the shared CSS/JS via `../../../assets/...` because it
-   sits three folders deep inside `skills/html-ppt/templates/full-decks/`.
+   sits three folders deep inside `design-templates/html-ppt/templates/full-decks/`.
    Once you copy `index.html` into the project, those parent-relative URLs
    no longer resolve and `base.css`, `animations.css`, and `runtime.js`
    will 404 — meaning the deck never activates and slide navigation is
    dead. Pick one of these two recipes per project:
    - **Recipe A — copy + rewrite (preferred):** copy
-     `skills/html-ppt/assets/fonts.css`, `skills/html-ppt/assets/base.css`,
-     `skills/html-ppt/assets/animations/animations.css`, and
-     `skills/html-ppt/assets/runtime.js` into a project-local
+     `design-templates/html-ppt/assets/fonts.css`, `design-templates/html-ppt/assets/base.css`,
+     `design-templates/html-ppt/assets/animations/animations.css`, and
+     `design-templates/html-ppt/assets/runtime.js` into a project-local
      `assets/` (with `assets/animations/animations.css`), then rewrite the
      four `<link>`/`<script>` tags in `index.html` from
      `../../../assets/...` to the matching project-local paths
@@ -65,7 +85,7 @@ The Examples gallery wires "Use this prompt" to the example_prompt above. When y
    Either way, do not ship the upstream `../../../assets/...` URLs
    verbatim into a project artifact — they only work in-tree.
 4. **Pick a theme.** Default tokens look fine; if the user wants a different
-   feel, swap in any of the 36 themes from `skills/html-ppt/assets/themes/*.css`
+   feel, swap in any of the 36 themes from `design-templates/html-ppt/assets/themes/*.css`
    via `<link id="theme-link">` and let `T` cycle.
 5. **Replace demo content, not classes.** The `.tpl-pitch-deck` scoped CSS only
    recognises the structural classes shipped in the template — keep them.
@@ -75,5 +95,5 @@ The Examples gallery wires "Use this prompt" to the example_prompt above. When y
 
 Visual system, layouts, themes and the runtime keyboard model come from
 the upstream MIT-licensed [`lewislulu/html-ppt-skill`](https://github.com/lewislulu/html-ppt-skill). The
-LICENSE file ships at `skills/html-ppt/LICENSE`; please keep it in place when
+LICENSE file ships at `design-templates/html-ppt/LICENSE`; please keep it in place when
 redistributing.

@@ -31,7 +31,7 @@ You don't need to be comfortable with a terminal. The simplest route:
 
 ## Step 2 — Connect a model in one click
 
-The first time it opens, Open Design **automatically detects the AI tools already on your computer** — things like Claude Code, Codex, Gemini, or Qwen — and lists them. Click one and hit **Get started**.
+The first time it opens, Open Design **automatically detects the supported AI tools already on your computer** — things like Claude Code, Codex, OpenCode, or Qwen — and lists them. Click one and hit **Get started**.
 
 No coding tools installed? No problem: choose **API provider** instead and paste a key from Anthropic, OpenAI, Azure, or Google Gemini. Either way, you're ready in seconds. You can switch the model later from the same button, and the settings also let you add media providers, change the **language**, pick light/dark mode, and even adopt a little desktop **pet** that hangs out in the corner.
 

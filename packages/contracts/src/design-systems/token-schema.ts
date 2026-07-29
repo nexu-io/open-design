@@ -229,6 +229,16 @@ export const BRAND_EXTENSIONS: Readonly<Record<string, readonly string[]>> = {
     "--radius-xl", // 16px — kami hero containers
     "--elev-ring-accent", // 1px brand ring used as primary-button edge
   ],
+  "tom-modern": [
+    "--tm-accent-soft", // rgba accent tint for subtle backgrounds
+    "--tm-shadow-hard", // 8px 8px hard offset shadow (hover emphasis)
+    "--tm-shadow-soft", // 4px 4px soft offset shadow (default card)
+    "--tm-shadow-code", // 0 28px 90px deep shadow (code window)
+    "--tm-header-height", // 82px sticky header height
+    "--tm-code-bg", // #111517 code window background
+    "--tm-code-panel", // #151a1d code window header
+    "--tm-code-text", // #d8dee9 code syntax text
+  ],
 };
 
 /**

@@ -2,7 +2,7 @@
 
 `dom-to-pptx.bundle.js.gz` is the checked-in compressed **browser UMD build** of
 [`dom-to-pptx`](https://github.com/atharva9167j/dom-to-pptx) (MIT), pinned at the
-version below. `scripts/postinstall.mjs` expands it to the ignored
+version below. `scripts/postinstall.mjs` (run via `pnpm bootstrap` or automatically during `pnpm install`) expands it to the ignored
 `dom-to-pptx.bundle.js` runtime file. The bundle is the engine behind
 **editable** PowerPoint export: it walks a rendered slide's live DOM and emits
 native PowerPoint shapes/text/images (not a flat screenshot) via PptxGenJS.
@@ -18,7 +18,7 @@ The npm package declares `puppeteer` + `@puppeteer/browsers` as dependencies
 Chromium (~150 MB+). We never use that path — we inject this self-contained
 browser bundle into our **existing** Electron Chromium render window
 (`apps/desktop/src/main/deck-capture.ts`). Keeping the gzip source in git and
-materializing the runtime file during postinstall preserves the "no second
+materializing the runtime file during `pnpm bootstrap` (or `postinstall`) preserves the "no second
 rendering engine / no install-time Chromium download" property without adding a
 multi-megabyte JavaScript blob to the PR.
 

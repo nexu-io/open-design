@@ -35,6 +35,10 @@
 //                              (Gemini Flash, Flux, Recraft) and async
 //                              /videos submit + poll for video
 //                              (Seedance 2.0, Veo 3.1, Wan 2.7)
+//   * provider 'minimax'    → MiniMax: synchronous /v1/image_generation
+//                              for image-01 (T2I + I2I via subject_reference)
+//                              on api.minimax.io, plus TTS via the legacy
+//                              api.minimaxi.chat host
 //   * provider 'custom-image'→ user-supplied OpenAI-compatible
 //                              /v1/images/generations + /v1/images/edits
 //                              endpoints
@@ -72,6 +76,10 @@ import {
   resolveModelAlias,
   resolveProviderConfig,
 } from './config.js';
+import {
+  fetchImageGenerationWithResponseRetry,
+  type ImageGenerationRequestSummary,
+} from './image-generation-retry.js';
 import { codexNeedsDangerFullAccessSandbox } from '../runtimes/defs/codex.js';
 import {
   ensureProject,
@@ -89,6 +97,7 @@ import {
 } from '../integrations/aihubmix.js';
 
 const execFile = promisify(execFileCb);
+const DEFAULT_OPENROUTER_VIDEO_POLL_INTERVAL_MS = 8000;
 type ProviderConfig = { apiKey?: string; baseUrl?: string; model?: string };
 type ProgressFn = (message: string) => void;
 type ImageRef = { path: string; abs: string; mime: string; size: number; dataUrl: string };
@@ -135,6 +144,9 @@ type MediaContext = {
   /** Additional reference images for multi-image i2v / style reference flows. */
   imageRefs: ImageRef[];
   projectRoot: string;
+  onProviderRequestSettled:
+    | ((summary: ImageGenerationRequestSummary & { providerId: string }) => void)
+    | undefined;
 };
 type RenderResult = { bytes: Buffer; providerNote: string; suggestedExt?: string };
 type JsonRecord = Record<string, unknown>;
@@ -314,6 +326,7 @@ export async function generateMedia(args: {
   prompt?: string; output?: string; aspect?: string; length?: number; duration?: number; voice?: string;
   audioKind?: AudioKind; language?: string; loop?: boolean; promptInfluence?: number;
   compositionDir?: string; image?: string; images?: string[]; onProgress?: ProgressFn; requestInit?: MediaRequestInit;
+  onProviderRequestSettled?: (summary: ImageGenerationRequestSummary & { providerId: string }) => void;
 }) {
   const {
     projectRoot,
@@ -334,6 +347,7 @@ export async function generateMedia(args: {
     compositionDir,
     image,
     requestInit,
+    onProviderRequestSettled,
   } = args;
 
   if (!projectRoot) throw new Error('projectRoot required');
@@ -469,7 +483,7 @@ export async function generateMedia(args: {
   // instructions, MINIMAX/FISHAUDIO TTS map) continue to key off the
   // catalog id while the provider's request body carries the alias.
   const wireModel = await resolveModelAlias(projectRoot, model);
-  const ctx = {
+  const ctx: MediaContext = {
     surface,
     model,
     wireModel,
@@ -496,6 +510,7 @@ export async function generateMedia(args: {
     requestInit: requestInit || {},
     imageRefs,
     projectRoot,
+    onProviderRequestSettled,
   };
 
   const credentials = await resolveProviderConfig(projectRoot, def.provider);
@@ -695,6 +710,11 @@ export async function generateMedia(args: {
       suggestedExt = result.suggestedExt;
     } else if (def.provider === 'minimax' && surface === 'audio') {
       const result = await renderMinimaxTTS(ctx, credentials);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'minimax' && surface === 'image') {
+      const result = await renderMinimaxImage(ctx, credentials);
       bytes = result.bytes;
       providerNote = result.providerNote;
       suggestedExt = result.suggestedExt;
@@ -1037,7 +1057,7 @@ function codexImagegenMissingOutputError(threadDir: string, stdout: string): Err
     );
   }
   return new Error(
-    `Codex imagegen completed but did not write an ig_* image under ${threadDir}. Use an API-backed image provider or a Codex CLI build that writes generated_images output.${suffix}`,
+    `Codex imagegen completed but did not write an ig_* or call_* image under ${threadDir}. Use an API-backed image provider or a Codex CLI build that writes generated_images output.${suffix}`,
   );
 }
 
@@ -1056,9 +1076,13 @@ async function readCodexGeneratedImage(
     }
     throw err;
   }
+  const supportedImagePattern = /\.(?:png|jpe?g|webp)$/i;
   const match = entries
-    .filter((name) => /^ig_.*\.(?:png|jpe?g|webp)$/i.test(name))
-    .sort()[0];
+    .filter((name) => /^ig_/i.test(name) && supportedImagePattern.test(name))
+    .sort()[0]
+    ?? entries
+      .filter((name) => /^call_/i.test(name) && supportedImagePattern.test(name))
+      .sort()[0];
   if (!match) {
     throw codexImagegenMissingOutputError(threadDir, stdout);
   }
@@ -1223,16 +1247,28 @@ async function renderCustomOpenAIImage(ctx: MediaContext, credentials: ProviderC
   };
   let url = buildOpenAIImageUrl(baseUrl, false);
   if (ctx.imageRef?.dataUrl) {
-    body.response_format = 'b64_json';
+    // gpt-image-* does NOT accept response_format on /v1/images/edits
+    // (HTTP 400 "Unknown parameter: 'response_format'"). dall-e-2
+    // accepts it; the base b64 path is what callers expect either way,
+    // so we only set response_format for non-gpt-image models.
+    if (!wireModel.startsWith('gpt-image-')) {
+      body.response_format = 'b64_json';
+    }
     body.images = [{ image_url: ctx.imageRef.dataUrl }];
     url = buildOpenAIImageEditUrl(baseUrl);
   }
 
-  const resp = await fetch(url, withMediaRequestInit(ctx, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
-  }));
+  const resp = await fetchImageGenerationWithResponseRetry(
+    () => fetch(url, withMediaRequestInit(ctx, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+    })),
+    (summary) => ctx.onProviderRequestSettled?.({
+      providerId: 'custom-image',
+      ...summary,
+    }),
+  );
   const data = await parseOpenAICompatibleJson(resp, 'custom image');
   const bytes = await bytesFromOpenAICompatibleData(data, 'custom image', ctx.requestInit);
   return {
@@ -1803,7 +1839,8 @@ async function renderGrokImage(ctx: MediaContext, credentials: ProviderConfig): 
 }
 
 async function renderNanoBananaImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
-  if (!credentials.apiKey) {
+  const apiKey = credentials.apiKey;
+  if (!apiKey) {
     throw new Error(
       'no Nano Banana API key — configure it in Settings or set OD_NANOBANANA_API_KEY',
     );
@@ -1826,11 +1863,17 @@ async function renderNanoBananaImage(ctx: MediaContext, credentials: ProviderCon
     },
   };
 
-  const resp = await fetch(`${baseUrl}/v1beta/models/${encodeURIComponent(wireModel)}:generateContent`, withMediaRequestInit(ctx, {
-    method: 'POST',
-    headers: nanoBananaHeaders(baseUrl, credentials.apiKey),
-    body: JSON.stringify(body),
-  }));
+  const resp = await fetchImageGenerationWithResponseRetry(
+    () => fetch(`${baseUrl}/v1beta/models/${encodeURIComponent(wireModel)}:generateContent`, withMediaRequestInit(ctx, {
+      method: 'POST',
+      headers: nanoBananaHeaders(baseUrl, apiKey),
+      body: JSON.stringify(body),
+    })),
+    (summary) => ctx.onProviderRequestSettled?.({
+      providerId: 'nanobanana',
+      ...summary,
+    }),
+  );
   const text = await resp.text();
   if (!resp.ok) {
     throw new Error(`nano-banana image ${resp.status}: ${truncate(text, 240)}`);
@@ -1982,7 +2025,7 @@ async function renderOpenRouterImage(
   };
   body.image_config = imageConfig;
 
-  const resp = await fetch(`${baseUrl}/chat/completions`, {
+  const resp = await fetch(`${baseUrl}/chat/completions`, withMediaRequestInit(ctx, {
     method: 'POST',
     headers: {
       'authorization': `Bearer ${credentials.apiKey}`,
@@ -1991,7 +2034,8 @@ async function renderOpenRouterImage(
       'X-Title': 'Open Design',
     },
     body: JSON.stringify(body),
-  });
+    signal: AbortSignal.timeout(Math.max(OPENAI_IMAGE_HEADERS_TIMEOUT_MS, OPENAI_IMAGE_BODY_TIMEOUT_MS)),
+  }));
   const text = await resp.text();
   if (!resp.ok) {
     throw new Error(`openrouter image ${resp.status}: ${truncate(text, 240)}`);
@@ -2029,7 +2073,7 @@ async function renderOpenRouterImage(
     bytes = Buffer.from(b64Match[1]!, 'base64');
   } else if (dataUrl.startsWith('http')) {
     // Some models may return a plain URL instead of inline base64.
-    const imgResp = await fetch(dataUrl);
+    const imgResp = await fetch(dataUrl, withMediaRequestInit(ctx));
     if (!imgResp.ok) throw new Error(`openrouter image download ${imgResp.status}`);
     bytes = Buffer.from(await imgResp.arrayBuffer());
   } else {
@@ -2139,7 +2183,7 @@ async function renderOpenRouterVideo(
   }
 
   // ── Step 1: Submit the generation request ──────────────────────────
-  const submitResp = await fetch(`${baseUrl}/videos`, {
+  const submitResp = await fetch(`${baseUrl}/videos`, withMediaRequestInit(ctx, {
     method: 'POST',
     headers: {
       'authorization': `Bearer ${credentials.apiKey}`,
@@ -2150,7 +2194,7 @@ async function renderOpenRouterVideo(
       'X-Title': 'Open Design',
     },
     body: JSON.stringify(body),
-  });
+  }));
   const submitText = await submitResp.text();
   if (!submitResp.ok) {
     throw new Error(
@@ -2179,6 +2223,11 @@ async function renderOpenRouterVideo(
     Number.isFinite(configuredMaxMs) && configuredMaxMs >= 60_000
       ? configuredMaxMs
       : 30 * 60 * 1000; // 30 minutes default
+  const configuredPollIntervalMs = Number(process.env.OD_OPENROUTER_VIDEO_POLL_INTERVAL_MS);
+  const pollIntervalMs =
+    Number.isFinite(configuredPollIntervalMs) && configuredPollIntervalMs >= 0
+      ? configuredPollIntervalMs
+      : DEFAULT_OPENROUTER_VIDEO_POLL_INTERVAL_MS;
 
   let lastStatus = submitData?.status || 'pending';
   let videoUrls: string[] | null = null;
@@ -2191,14 +2240,16 @@ async function renderOpenRouterVideo(
   }
 
   while (Date.now() - startedAt < maxMs) {
-    await sleep(8000);
-    const pollResp = await fetch(pollingUrl, {
+    if (pollIntervalMs > 0) {
+      await sleep(pollIntervalMs);
+    }
+    const pollResp = await fetch(pollingUrl, withMediaRequestInit(ctx, {
       headers: {
         'authorization': `Bearer ${credentials.apiKey}`,
         'HTTP-Referer': 'https://opendesign.dev',
         'X-Title': 'Open Design',
       },
-    });
+    }));
     const pollText = await pollResp.text();
     if (!pollResp.ok) {
       throw new Error(
@@ -2260,7 +2311,7 @@ async function renderOpenRouterVideo(
     dlHeaders['authorization'] = `Bearer ${credentials.apiKey}`;
   }
 
-  const dlResp = await fetch(contentUrl, { headers: dlHeaders });
+  const dlResp = await fetch(contentUrl, withMediaRequestInit(ctx, { headers: dlHeaders }));
   if (!dlResp.ok) {
     throw new Error(`openrouter video download ${dlResp.status}`);
   }
@@ -2812,6 +2863,23 @@ const MINIMAX_TTS_MODEL_MAP = {
   'minimax-tts': 'speech-02-turbo',
 } as Record<string, string>;
 
+// Image generation lives on a different host than the legacy TTS endpoint
+// (api.minimax.io vs api.minimaxi.chat). Keeping the two constants
+// separate lets existing TTS users keep their api.minimaxi.chat/v1
+// default while new image users get api.minimax.io without manual
+// configuration. The image renderer resolves baseUrl from
+// OD_MINIMAX_IMAGE_BASE_URL env -> this constant; credentials.baseUrl
+// is intentionally ignored for image (see renderMinimaxImage).
+const MINIMAX_IMAGE_DEFAULT_BASE_URL = 'https://api.minimax.io';
+
+// Map our generic catalogue id onto MiniMax's actual wire model name. Mirrors
+// the TTS pattern above: the catalog id `minimax-image-01` is shorthand for
+// "their flagship image model"; we substitute the real model name on the wire
+// so MiniMax accepts the request without exposing the user to internal naming.
+const MINIMAX_IMAGE_MODEL_MAP = {
+  'minimax-image-01': 'image-01',
+} as Record<string, string>;
+
 async function renderMinimaxTTS(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
   if (!credentials.apiKey) {
     throw new Error(
@@ -2901,6 +2969,135 @@ async function renderMinimaxTTS(ctx: MediaContext, credentials: ProviderConfig):
     providerNote: `minimax/${wireModel} · ${voiceId} · ${seconds}s · ${bytes.length} bytes`,
     suggestedExt: '.mp3',
   };
+}
+
+// ---------------------------------------------------------------------------
+// Provider: MiniMax — image-01 text-to-image (synchronous, with optional
+// I2I via subject_reference).
+//
+// Docs: https://platform.minimax.io/docs/api-reference/image-generation-t2i
+// POST /v1/image_generation with a JSON body describing the prompt +
+// optional subject reference for image-to-image. Response is JSON with the
+// image base64-encoded under `data.image_base64[0]` and a `base_resp`
+// envelope that distinguishes HTTP-level from API-level failures, mirroring
+// MiniMax's TTS API.
+//
+// We always request `response_format: 'base64'` because MiniMax's default
+// URL responses expire after 24 hours — base64 persists at write time and
+// never goes stale. The wire model `image-01` is mapped from our catalog id
+// `minimax-image-01` via MINIMAX_IMAGE_MODEL_MAP.
+// ---------------------------------------------------------------------------
+
+async function renderMinimaxImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error(
+      'no MiniMax API key — configure it in Settings or set OD_MINIMAX_API_KEY',
+    );
+  }
+  // Base URL precedence:
+  //   OD_MINIMAX_IMAGE_BASE_URL env var (operator override for proxies)
+  //   -> MINIMAX_IMAGE_DEFAULT_BASE_URL (api.minimax.io)
+  //
+  // We deliberately ignore credentials.baseUrl here. The 'minimax' provider
+  // slot is shared with TTS, whose stored baseUrl is the legacy
+  // api.minimaxi.chat/v1 host. Naively appending '/v1/image_generation'
+  // would produce https://api.minimaxi.chat/v1/v1/image_generation — a
+  // 404 against the wrong host. Adding a per-surface baseUrl to the
+  // provider schema would be a cleaner long-term fix; until then, image
+  // stays pinned to its own host and operators route via the env var.
+  const baseUrl = (
+    process.env.OD_MINIMAX_IMAGE_BASE_URL?.trim() || MINIMAX_IMAGE_DEFAULT_BASE_URL
+  ).replace(/\/+$/, '');
+  // Resolve the wire model. credentials.model wins if the user pinned a
+  // specific deployment name in Settings; otherwise we look up the
+  // ctx.wireModel in MINIMAX_IMAGE_MODEL_MAP (which translates our
+  // catalog id `minimax-image-01` to MiniMax's wire name `image-01`),
+  // falling back to ctx.wireModel itself. The map is keyed off
+  // ctx.wireModel so user aliases (OD_MEDIA_MODEL_ALIASES) pass through
+  // unchanged when they aren't in the map.
+  const wireModel = (
+    credentials.model
+    || MINIMAX_IMAGE_MODEL_MAP[ctx.wireModel]
+    || ctx.wireModel
+  ).trim();
+  const aspectRatio = minimaxImageAspectFor(ctx.aspect);
+  const body: Record<string, unknown> = {
+    model: wireModel,
+    prompt: (ctx.prompt && ctx.prompt.trim()) || 'A high-quality reference image.',
+    response_format: 'base64',
+    n: 1,
+  };
+  if (aspectRatio) {
+    body.aspect_ratio = aspectRatio;
+  }
+  // I2I: when --image is supplied, pass it as subject_reference[0]. The
+  // existing resolveProjectImage() helper already returns a base64 dataUrl
+  // with a strict mime allowlist (png/jpg/jpeg/webp/gif, < 16MB).
+  if (ctx.imageRef?.dataUrl) {
+    body.subject_reference = [{
+      type: 'character',
+      image_file: ctx.imageRef.dataUrl,
+    }];
+  }
+  const resp = await fetch(`${baseUrl}/v1/image_generation`, withMediaRequestInit(ctx, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${credentials.apiKey}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  }));
+  const respText = await resp.text();
+  if (!resp.ok) {
+    throw new Error(`minimax image ${resp.status}: ${truncate(respText, 240)}`);
+  }
+  let data: any;
+  try {
+    data = JSON.parse(respText);
+  } catch {
+    throw new Error(`minimax image non-JSON: ${truncate(respText, 200)}`);
+  }
+  // MiniMax wraps every response in `base_resp`; even an HTTP 200 can
+  // be a logical failure (`status_code !== 0`).
+  if (data?.base_resp && data.base_resp.status_code !== 0) {
+    throw new Error(
+      `minimax image api error ${data.base_resp.status_code}: ${data.base_resp.status_msg || 'unknown'}`,
+    );
+  }
+  const base64 = data?.data?.image_base64?.[0];
+  if (typeof base64 !== 'string' || !base64) {
+    throw new Error('minimax image response missing data.image_base64[0]');
+  }
+  const bytes = Buffer.from(base64, 'base64');
+  if (bytes.length === 0) {
+    throw new Error('minimax image decoded zero bytes');
+  }
+  return {
+    bytes,
+    providerNote: `minimax/${wireModel} · ${aspectRatio || '1:1'} · ${bytes.length} bytes`,
+    suggestedExt: sniffImageExt(bytes),
+  };
+}
+
+function minimaxImageAspectFor(aspect?: string): string | undefined {
+  // MiniMax's full allowlist: 1:1, 16:9, 4:3, 3:2, 2:3, 3:4, 9:16, 21:9.
+  // We accept any of these so the agent (or a future picker option) can
+  // request a wider aspect without silently falling back to 1:1.
+  // Anything outside this set is omitted from the body, letting MiniMax
+  // pick its own default rather than us round-tripping an unknown value.
+  if (
+    aspect === '1:1'
+    || aspect === '16:9'
+    || aspect === '9:16'
+    || aspect === '4:3'
+    || aspect === '3:4'
+    || aspect === '3:2'
+    || aspect === '2:3'
+    || aspect === '21:9'
+  ) {
+    return aspect;
+  }
+  return undefined;
 }
 
 // ---------------------------------------------------------------------------

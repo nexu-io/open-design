@@ -1,23 +1,32 @@
 ---
 name: huashu-annual-letter
+en_name: "Write an Annual Founder's Letter like a Mission-Driven CEO"
+zh_name: "像使命驱动的 CEO 一样写年度公开信"
 description: |
-  Annual Letter · 年度信笺 — Stripe-annual-letter style single-file HTML decks
-  from the editorial-longform line of 花叔 (alchaincyf)'s huashu-design skill.
-  Cream #FBFAF8 paper, one Stripe-purple #635BFF accent, serif prose at a 65ch
-  publication measure, inline data cards inside the running text, and giant
-  tabular display-number anchor pages. Use when the user wants an annual
-  letter, shareholder letter, founder memo, 年度信, 股东信, or a longform
-  letter-style deck.
+  Open Design's annual letter to its community: the year's story, what it learned, and where it's going next. Built as a decision-grade corporate strategy deck for community, contributors, investors.
+en_description: |
+  Open Design's annual letter to its community: the year's story, what it learned, and where it's going next. Built as a decision-grade corporate strategy deck for community, contributors, investors.
+zh_description: |
+  像使命驱动的 CEO 一样写年度公开信——一份可商业交付的企业战略 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "corporate-strategy"
+  - "board-pre-read-deck"
+  - "strategy"
+  - "board"
+  - "business-review"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "huashu-annual-letter"
 triggers:
-  - "annual letter"
-  - "shareholder letter"
-  - "founder memo"
-  - "年度信"
-  - "股东信"
-  - "年度复盘"
-  - "致股东"
-  - "信笺"
-  - "editorial longform"
+  - "board-pre-read-deck"
+  - "corporate-strategy"
+  - "Write an Annual Founder's Letter like a Mission-Driven CEO"
+  - "像使命驱动的 CEO 一样写年度公开信"
+  - "board"
+  - "strategy"
+  - "business-review"
+  - "html deck"
+  - "html slides"
 od:
   mode: deck
   surface: web
@@ -26,9 +35,11 @@ od:
     entry: example.html
   design_system:
     requires: false
-  example_prompt: "Use the Annual Letter template to turn my year-in-review into a Stripe-letter style HTML deck: cream #FBFAF8 paper, one Stripe-purple #635BFF accent, serif prose at a 65ch measure, inline data cards, giant tabular display-number anchors, keyboard ←/→/Space navigation with #/N hash routing. Start from example.html, replace the content only, and keep the design system intact."
   example_prompt_i18n:
     zh-CN: "用「年度信笺」模板把我的年度复盘写成一封 Stripe 年信风格的 HTML 幻灯片：奶白 #FBFAF8 纸面、单一 Stripe 紫 #635BFF 点睛、65ch 行宽衬线散文、内联数据卡、超大 tabular 数字锚点页，键盘 ←/→/空格翻页 + #/N hash 跳页。从 example.html 出发只换内容，不要重写设计。"
+  category: "corporate-strategy"
+  scenario: "strategy"
+  example_prompt: "Create \"Write an Annual Founder's Letter like a Mission-Driven CEO\" as a decision-grade Corporate strategy deck in this template's own visual system. Subject: Open Design's annual letter to its community: the year's story, what it learned, and where it's going next. Audience: community, contributors, investors. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would a board member know what to approve and why before page five."
 ---
 
 # Annual Letter · 年度信笺

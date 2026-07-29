@@ -1,5 +1,5 @@
 import type { ExecFileOptions } from 'node:child_process';
-import type { AgentDiagnostic } from '@open-design/contracts';
+import type { AgentDiagnostic, ModelMetadata } from '@open-design/contracts';
 
 export type { AgentDiagnostic } from '@open-design/contracts';
 
@@ -8,6 +8,13 @@ export type RuntimeEnv = NodeJS.ProcessEnv | Record<string, string>;
 export type RuntimeModelOption = {
   id: string;
   label: string;
+  enabled?: boolean;
+  default?: boolean;
+  inputPriceUsdPerMillion?: number;
+  outputPriceUsdPerMillion?: number;
+  metadata?: ModelMetadata;
+  additionalSpeedTiers?: string[];
+  serviceTierOptions?: RuntimeModelOption[];
 };
 
 export type RuntimeModelSource = 'live' | 'fallback';
@@ -17,6 +24,7 @@ export type RuntimeReasoningOption = RuntimeModelOption;
 export type RuntimeBuildOptions = {
   model?: string | null;
   reasoning?: string | null;
+  serviceTier?: string | null;
 };
 
 export type RuntimeContext = {
@@ -227,6 +235,13 @@ export type RuntimeAgentDef = {
   authProbe?: {
     args: string[];
     timeoutMs?: number;
+    // Agent id whose tailored auth classifier + API-key short-circuit should
+    // be used for this probe when it differs from the runtime agent id. Local
+    // profiles (local-profiles.ts) inherit a base adapter's `authProbe` but run
+    // under the profile id; carrying the base id here keeps the base adapter's
+    // auth semantics (e.g. Claude's JSON-aware parser) instead of falling
+    // through to the generic classifier. Defaults to the def id when unset.
+    classifierAgentId?: string;
   };
   // Format for the `env` field in ACP `session/new` → `mcpServers[].env`.
   // `'array'` (default) emits `[{name, value}]` — used by Hermes, Kimi,

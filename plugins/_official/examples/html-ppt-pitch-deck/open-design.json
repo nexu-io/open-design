@@ -2,48 +2,19 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-html-ppt-pitch-deck",
-  "title": "Html Ppt Pitch Deck",
+  "title": "Write a Demo Day Pitch like a Top Accelerator Partner",
   "title_i18n": {
-    "zh-CN": "Html Ppt 融资演示",
-    "zh-TW": "Html Ppt 募資簡報",
-    "ja": "Html Ppt ピッチデック",
-    "ko": "Html Ppt 피치덱",
-    "de": "Html Ppt Pitch Deck",
-    "fr": "Html Ppt Pitch Deck",
-    "ru": "Html Ppt питч-дек",
-    "es": "Html Ppt Pitch Deck",
-    "pt-BR": "Html Ppt Pitch Deck",
-    "it": "Html Ppt Pitch Deck",
-    "vi": "Html Ppt Pitch Deck",
-    "pl": "Html Ppt Pitch Deck",
-    "id": "Html Ppt Pitch Deck",
-    "nl": "Html Ppt Pitch Deck",
-    "ar": "Html Ppt عرض تقديمي",
-    "tr": "Html Ppt Pitch Deck",
-    "uk": "Html Ppt пітч-дек",
-    "en": "Html Ppt Pitch Deck"
+    "en": "Write a Demo Day Pitch like a Top Accelerator Partner",
+    "zh-CN": "像顶级加速器合伙人一样写 Demo Day 路演",
+    "zh-TW": "像顶级加速器合伙人一样写 Demo Day 路演"
   },
   "version": "0.1.0",
-  "description": "Investor-ready 10-slide HTML pitch deck — white + blue→purple gradient hero, big numbers, traction bar chart, $4.5M-style ask page. Use when the user wants a fundraising deck, seed-round pitch, or VC meeting slides.",
+  "publishedAt": "2026-05-12T07:18:16Z",
+  "description": "Open Design's demo-day pitch: hook, traction, moat, and the raise — built to make a partner sit up by page three. Built as a decision-grade fundraising pitch deck for accelerator partners, angels.",
   "description_i18n": {
-    "zh-CN": "投资级 10 页 HTML 融资演示模板——白色 + 蓝紫渐变主视觉，大数字展示，增长柱状图，450 万美元融资需求页。适用于制作融资演示、种子轮路演或 VC 会议幻灯片。",
-    "zh-TW": "投資級 10 頁 HTML 募資簡報範本——白色 + 藍紫漸層主視覺，大數字展示，成長長條圖，450 萬美元募資需求頁。適用於製作募資簡報、種子輪路演或 VC 會議簡報。",
-    "ja": "投資家向け 10 スライド HTML ピッチデック——白 + 青紫グラデーションのヒーロー、大きな数字、トラクション棒グラフ、450万ドル調達ページ。資金調達デック、シードラウンドピッチ、VC ミーティングスライドに最適。",
-    "ko": "투자자용 10슬라이드 HTML 피치덱——화이트 + 블루-퍼플 그라디언트 히어로, 큰 숫자, 트랙션 막대 차트, 450만 달러 투자 유치 페이지. 자금 조달 덱, 시드 라운드 피치, VC 미팅 슬라이드 제작에 사용.",
-    "de": "Investoren-fertiges 10-Folien HTML Pitch Deck – weiß + blau-lila Verlauf Hero, große Zahlen, Traction-Balkendiagramm, 4,5-Mio.-$-Ask-Seite. Für Fundraising-Decks, Seed-Round-Pitches oder VC-Meeting-Folien.",
-    "fr": "Pitch deck HTML 10 diapositives prêt pour investisseurs – hero blanc + dégradé bleu-violet, grands chiffres, graphique de traction, page de demande 4,5 M$. Pour deck de levée de fonds, pitch seed round ou présentation VC.",
-    "ru": "Готовый для инвесторов HTML питч-дек на 10 слайдов – белый + сине-фиолетовый градиент, крупные цифры, график роста, страница запроса $4.5M. Для презентаций по привлечению инвестиций, посевных раундов и встреч с VC.",
-    "es": "Pitch deck HTML de 10 diapositivas listo para inversores – hero blanco + gradiente azul-morado, números grandes, gráfico de tracción, página de solicitud de $4.5M. Para decks de financiación, pitch de ronda semilla o reuniones con VC.",
-    "pt-BR": "Pitch deck HTML de 10 slides pronto para investidores – hero branco + gradiente azul-roxo, números grandes, gráfico de tração, página de pedido de $4.5M. Para decks de captação, pitch de seed round ou apresentações para VC.",
-    "it": "Pitch deck HTML da 10 slide pronto per investitori – hero bianco + gradiente blu-viola, numeri grandi, grafico di trazione, pagina richiesta $4.5M. Per deck di fundraising, pitch seed round o presentazioni VC.",
-    "vi": "Bộ pitch deck HTML 10 slide cho nhà đầu tư – hero trắng + gradient xanh-tím, số liệu lớn, biểu đồ tăng trưởng, trang kêu gọi $4.5M. Dùng cho bộ thuyết trình gọi vốn, seed round hoặc họp VC.",
-    "pl": "Gotowy dla inwestorów 10-slajdowy HTML pitch deck – biały + gradient niebieski-fioletowy, duże liczby, wykres trakcji, strona z prośbą o $4.5M. Do prezentacji fundraisingowych, pitchy seed round lub spotkań z VC.",
-    "id": "Pitch deck HTML 10 slide siap investor – hero putih + gradien biru-ungu, angka besar, grafik batang traksi, halaman permintaan $4.5M. Untuk deck penggalangan dana, pitch seed round, atau slide pertemuan VC.",
-    "nl": "Investor-ready HTML pitch deck van 10 slides – wit + blauw-paars verloop hero, grote cijfers, tractie staafdiagram, $4.5M-aanvraagpagina. Voor fundraising decks, seed-round pitches of VC-presentaties.",
-    "ar": "عرض تقديمي HTML من 10 شرائح جاهز للمستثمرين – تدرج أبيض + أزرق-بنفسجي، أرقام كبيرة، مخطط نمو، صفحة طلب 4.5 مليون دولار. للعروض التمويلية وعروض الجولة التأسيسية أو اجتماعات VC.",
-    "tr": "Yatırımcıya hazır 10 slaytlık HTML pitch deck – beyaz + mavi-mor degrade hero, büyük rakamlar, traksiyon çubuk grafik, $4.5M talep sayfası. Fon toplama sunumları, seed round pitch veya VC toplantı slaytları için.",
-    "uk": "Готовий для інвесторів HTML пітч-дек на 10 слайдів – білий + синьо-фіолетовий градієнт, великі цифри, графік зростання, сторінка запиту $4.5M. Для презентацій залучення інвестицій, посівних раундів та зустрічей з VC.",
-    "en": "Investor-ready 10-slide HTML pitch deck — white + blue→purple gradient hero, big numbers, traction bar chart, $4.5M-style ask page. Use when the user wants a fundraising deck, seed-round pitch, or VC meeting slides."
+    "en": "Open Design's demo-day pitch: hook, traction, moat, and the raise — built to make a partner sit up by page three. Built as a decision-grade fundraising pitch deck for accelerator partners, angels.",
+    "zh-CN": "像顶级加速器合伙人一样写 Demo Day 路演——一份可商业交付的融资路演 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像顶级加速器合伙人一样写 Demo Day 路演——一份可商业交付的融资路演 Deck，围绕真实主题、证据链与决策目标组织。"
   },
   "license": "MIT",
   "author": {
@@ -63,7 +34,12 @@
     "seed-round",
     "investor-deck",
     "vc-deck",
-    "pitch-slides"
+    "pitch-slides",
+    "html-ppt-pitch-deck",
+    "fundraising-pitch",
+    "series-a-pitch-deck",
+    "decision-deck",
+    "commercial-slide-agent"
   ],
   "compat": {
     "agentSkills": [
@@ -84,13 +60,18 @@
     },
     "useCase": {
       "query": {
-        "en": "Build a 10-slide pitch deck in HTML for my seed round. Use the html-ppt-pitch-deck full-deck template (white + blue→purple gradient, traction bars, $X.XM ask). Confirm three things first: (1) name + one-line pitch, (2) key traction numbers, (3) ask + use of funds.",
-        "zh-CN": "使用这个插件完成以下任务：Build a 10-slide pitch deck in HTML for my seed round. Use the html-ppt-pitch-deck full-deck template (white + blue→purple gradient, traction bars, $X.XM ask). Confirm three things first: (1) name + one-line pitch, (2) key traction numbers, (3) ask + use of funds."
+        "en": "Create \"Write a Demo Day Pitch like a Top Accelerator Partner\" as a decision-grade Fundraising pitch deck in this template's own visual system. Subject: Open Design's demo-day pitch: hook, traction, moat, and the raise — built to make a partner sit up by page three. Audience: accelerator partners, angels. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would an investor know why this is venture-scale and urgent.",
+        "zh-CN": "像顶级加速器合伙人一样写 Demo Day 路演。像顶级加速器合伙人一样写 Demo Day 路演——一份可商业交付的融资路演 Deck，围绕真实主题、证据链与决策目标组织。 主题：Open Design's demo-day pitch: hook, traction, moat, and the raise — built to make a partner sit up by page three. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "Html Ppt Pitch Deck"
+          "title": "Write a Demo Day Pitch like a Top Accelerator Partner",
+          "title_i18n": {
+            "en": "Write a Demo Day Pitch like a Top Accelerator Partner",
+            "zh-CN": "像顶级加速器合伙人一样写 Demo Day 路演",
+            "zh-TW": "像顶级加速器合伙人一样写 Demo Day 路演"
+          }
         }
       ]
     },
@@ -141,6 +122,7 @@
     "capabilities": [
       "prompt:inject",
       "fs:write"
-    ]
+    ],
+    "category": "fundraising-pitch"
   }
 }

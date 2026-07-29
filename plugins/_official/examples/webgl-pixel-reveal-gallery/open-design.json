@@ -1,0 +1,105 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-webgl-pixel-reveal-gallery",
+  "title": "Pixel Reveal Gallery",
+  "title_i18n": {
+    "zh-CN": "像素揭示画廊",
+    "zh-TW": "像素揭示畫廊",
+    "ja": "ピクセルリビール・ギャラリー",
+    "ko": "픽셀 리빌 갤러리",
+    "de": "Pixel-Reveal-Galerie",
+    "fr": "Galerie à révélation pixel",
+    "ru": "Пиксельная галерея",
+    "es": "Galería de revelado por píxeles",
+    "pt-BR": "Galeria de revelação em pixels",
+    "en": "Pixel Reveal Gallery"
+  },
+  "version": "0.1.0",
+  "publishedAt": "2026-07-08T17:29:38Z",
+  "description": "A scroll-reactive masonry gallery (Three.js + GSAP) where each image develops from a pixel/grid dissolve on viewport entry, with a split-text heading and click-to-fullscreen Flip.",
+  "description_i18n": {
+    "zh-CN": "滚动响应式瀑布流图廊（Three.js + GSAP）：每图进入视口时从像素/网格溶解显影，配分行标题动画与点击 Flip 放大。",
+    "zh-TW": "滾動響應式瀑布流圖廊（Three.js + GSAP）：每圖進入視口時從像素/網格溶解顯影，配分行標題與點擊 Flip 放大。",
+    "en": "A scroll-reactive masonry gallery (Three.js + GSAP) where each image develops from a pixel/grid dissolve on viewport entry, with a split-text heading and click-to-fullscreen Flip."
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "credits": [
+    {
+      "role": "effect",
+      "name": "J0SUKE / Codrops",
+      "license": "MIT"
+    },
+    {
+      "role": "imagery",
+      "name": "Original (AI-generated)"
+    }
+  ],
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/webgl-pixel-reveal-gallery",
+  "tags": [
+    "example",
+    "first-party",
+    "gallery",
+    "webgl",
+    "three.js",
+    "gsap",
+    "scroll",
+    "reveal",
+    "masonry",
+    "powered-preview",
+    "untitled"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "scenario": "design",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Build a scroll-reactive masonry gallery where each image develops from a pixel/grid dissolve on entry, with a split-text heading and click-to-fullscreen Flip.",
+        "zh-CN": "构建滚动响应式瀑布流图廊，每图进入时从像素网格溶解显影，配分行标题与点击 Flip 放大。"
+      }
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      }
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

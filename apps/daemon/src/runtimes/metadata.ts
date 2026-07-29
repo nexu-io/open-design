@@ -83,6 +83,10 @@ const AGENT_INSTALL_LINKS: Record<
     installUrl: 'https://www.codebuddy.cn',
     docsUrl: 'https://www.codebuddy.cn/docs/workbuddy/Overview',
   },
+  atomcode: {
+    installUrl: 'https://atomcode.atomgit.com/docs/en/quickstart.html',
+    docsUrl: 'https://atomcode.atomgit.com/docs/en/index.html',
+  },
 };
 
 function sanitizeHttpsUrl(value: string | undefined): string | undefined {

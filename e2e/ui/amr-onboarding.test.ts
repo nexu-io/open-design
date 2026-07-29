@@ -1,7 +1,12 @@
 import { expect, test } from '@/playwright/suite';
 import type { Locator, Page } from '@playwright/test';
 
-import { dismissPrivacyDialog, STORAGE_KEY, waitForLoadingToClear } from '@/playwright/amr';
+import {
+  dismissPrivacyDialog,
+  mockAmrWalletSnapshot,
+  STORAGE_KEY,
+  waitForLoadingToClear,
+} from '@/playwright/amr';
 import { fulfillAgentsRoute } from '@/playwright/mock-factory';
 import { T } from '@/timeouts';
 
@@ -1181,6 +1186,15 @@ async function wireOnboardingMocks(
     }
   });
 
+  if (options.amrAvailable) {
+    await mockAmrWalletSnapshot(page, {
+      email: 'onboarding@example.com',
+      loggedIn: () => loggedIn,
+      plan: 'free',
+      profile: 'local',
+    });
+  }
+
   await page.route('**/api/integrations/vela/login', async (route) => {
     loginCalls += 1;
     loginInFlight = true;
@@ -1261,7 +1275,7 @@ async function expectOnboardingFinished(page: Page) {
   }
   await expect(page).not.toHaveURL(/\/onboarding$/);
   await dismissPrivacyDialog(page);
-  await expect(page.getByRole('heading', { name: /What will you design today/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /What will you design with your agent today/i })).toBeVisible();
 }
 
 async function expectFinalDesignSystemStep(page: Page) {

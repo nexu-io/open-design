@@ -4,6 +4,11 @@
 # 127.0.0.1, satisfying the loopback guard on connector endpoints
 # (Composio key save, GitHub OAuth, etc.) that bridge networking breaks.
 #
+# Also mounts host-installed agent CLIs (Claude Code, opencode, …) into the
+# container so Open Design can spawn them as agent runtimes. Requires the
+# local image built from Dockerfile.local (adds glibc compat for Alpine).
+# See README.md "Linux: mounting host agent CLIs" for setup instructions.
+#
 # network_mode: host is Linux-only. macOS and Windows Docker Desktop users
 # should use the base docker-compose.yml behind a loopback-bound reverse proxy.
 #
@@ -27,6 +32,28 @@ services:
       # Lock it to loopback so the base file's 0.0.0.0 default does not expose
       # Open Design on the LAN or public IP.
       OD_BIND_HOST: 127.0.0.1
+      # Prepend host-bin mounts so the daemon finds agent CLIs before
+      # any container-local stubs.
+      PATH: /mnt/host-local-bin:/mnt/host-opencode:/usr/local/bin:/usr/bin:/bin
+      # API keys for agent CLIs. Leave blank to omit.
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    volumes:
+      - ${HOME}/.local/bin:/mnt/host-local-bin:ro
+      - ${HOME}/.opencode/bin:/mnt/host-opencode:ro
+      # Claude Code versioned binaries — mounted at the same absolute path as the host
+      # so the ~/.local/bin/claude symlink resolves correctly inside the container.
+      - ${HOME}/.local/share/claude:${HOME}/.local/share/claude:ro
+      # Claude Code credentials — read-only; never written inside the container.
+      - ${HOME}/.claude:/home/open-design/.claude:ro
+      # Full glibc for CLIs that exceed what libc6-compat (gcompat) covers.
+      # amd64 only — on arm64 replace with /lib/aarch64-linux-gnu:/lib/aarch64-linux-gnu:ro
+      - /lib/x86_64-linux-gnu:/lib/x86_64-linux-gnu:ro
+      - /lib64:/lib64:ro
+    tmpfs:
+      # uid/gid must match the base image's open-design user (1001:1001).
+      - /home/open-design:uid=1001,gid=1001
     healthcheck:
       # Use wget (available in Alpine) instead of node — faster and does not
       # compete with the daemon for CPU during startup.
@@ -34,4 +61,4 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 20s
+      start_period: 30s  # increased from 20s — glibc host mounts add startup latency

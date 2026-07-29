@@ -130,9 +130,17 @@ function parsePositiveIntegerHeader(value: string | null): number | null {
   return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
 }
 
-async function readComposioLogoBody(response: globalThis.Response): Promise<Buffer | null> {
+async function readComposioLogoBody(
+  response: globalThis.Response,
+  controller: AbortController,
+): Promise<Buffer | null> {
   const contentLength = parsePositiveIntegerHeader(response.headers.get('content-length'));
-  if (contentLength !== null && contentLength > COMPOSIO_LOGO_MAX_BYTES) return null;
+  if (contentLength !== null && contentLength > COMPOSIO_LOGO_MAX_BYTES) {
+    // Abort so the unread response body is torn down instead of leaving the
+    // upstream connection occupied until GC.
+    controller.abort();
+    return null;
+  }
 
   const reader = response.body?.getReader();
   if (!reader) {
@@ -142,13 +150,26 @@ async function readComposioLogoBody(response: globalThis.Response): Promise<Buff
 
   const chunks: Uint8Array[] = [];
   let totalBytes = 0;
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    if (!value) continue;
-    totalBytes += value.byteLength;
-    if (totalBytes > COMPOSIO_LOGO_MAX_BYTES) return null;
-    chunks.push(value);
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      totalBytes += value.byteLength;
+      if (totalBytes > COMPOSIO_LOGO_MAX_BYTES) {
+        controller.abort(); // stop pulling more bytes from the upstream logo host
+        return null;
+      }
+      chunks.push(value);
+    }
+  } finally {
+    // Release the upstream connection instead of leaving the body half-read
+    // until GC (matches readBodyCapped in plugin-asset-cache.ts).
+    try {
+      await reader.cancel();
+    } catch {
+      // reader already closed / errored — nothing to release
+    }
   }
   return Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)), totalBytes);
 }
@@ -198,8 +219,13 @@ async function fetchComposioLogo(slug: string, theme: 'light' | 'dark'): Promise
         headers: { accept: 'image/avif,image/webp,image/apng,image/png,image/jpeg' },
         signal: controller.signal,
       });
-      if (!response.ok) return null;
-      const body = await readComposioLogoBody(response);
+      if (!response.ok) {
+        // Discard the error-response body so a run of misses (e.g. 404s for
+        // unknown slugs) can't exhaust reusable upstream connections.
+        controller.abort();
+        return null;
+      }
+      const body = await readComposioLogoBody(response, controller);
       if (!body) return null;
       const contentType = normalizeImageContentType(response.headers.get('content-type'));
       if (!contentType) return null;

@@ -3,10 +3,36 @@ import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { SIDECAR_ENV } from '@open-design/sidecar-proto';
 
-import { createAgentRuntimeEnv, createAgentRuntimeToolPrompt } from '../../src/server.js';
+import {
+  createAgentRuntimeEnv,
+  createAgentRuntimeToolPrompt,
+  createDaemonDataDirConfiguredAgentEnv,
+  createOpenDesignToolEnv,
+  resolveOpenDesignNodeBin,
+} from '../../src/server.js';
 import { applyAgentLaunchEnv } from '../../src/runtimes/launch.js';
+import { spawnEnvForAgent } from '../../src/runtimes/env.js';
 
 describe('agent runtime tool environment', () => {
+  it('prefers explicit OD_NODE_BIN over the process executable', () => {
+    expect(resolveOpenDesignNodeBin({
+      env: { OD_NODE_BIN: 'C:\\Open Design\\resources\\open-design\\bin\\node.exe' },
+      execPath: 'C:\\Users\\Ada\\AppData\\Roaming\\Open Design\\en\\hash\\Open Design.exe',
+      platform: 'win32',
+      resourceRoot: null,
+    })).toBe('C:\\Open Design\\resources\\open-design\\bin\\node.exe');
+  });
+
+  it('resolves the bundled resource node before falling back to process.execPath', () => {
+    expect(resolveOpenDesignNodeBin({
+      env: {},
+      execPath: 'C:\\Users\\Ada\\AppData\\Roaming\\Open Design\\en\\hash\\Open Design.exe',
+      platform: 'win32',
+      resourceRoot: 'C:\\Users\\Ada\\AppData\\Local\\Programs\\Open Design\\resources\\open-design',
+      exists: (candidate) => candidate.endsWith('\\resources\\open-design\\bin\\node.exe'),
+    })).toBe('C:\\Users\\Ada\\AppData\\Local\\Programs\\Open Design\\resources\\open-design\\bin\\node.exe');
+  });
+
   it('injects daemon URL and run-scoped tool token into agent sessions', () => {
     const env = createAgentRuntimeEnv(
       { PATH: '/bin', OD_TOOL_TOKEN: 'stale-token' },
@@ -85,6 +111,38 @@ describe('agent runtime tool environment', () => {
     );
 
     expect(env.OD_DATA_DIR).toBe(process.env.OD_DATA_DIR);
+  });
+
+  it('keeps wrapper media commands on the daemon data dir even when configured agent env is stale', () => {
+    const base = createAgentRuntimeEnv(
+      { PATH: '/bin', OD_DATA_DIR: '/stale/process/data' },
+      'http://127.0.0.1:7456',
+      null,
+      '/opt/open-design/bin/node',
+    );
+    const configuredAgentEnv = createDaemonDataDirConfiguredAgentEnv({
+      OD_DATA_DIR: '/stale/configured/data',
+    });
+
+    const env = {
+      ...spawnEnvForAgent(
+        'amr',
+        base,
+        configuredAgentEnv,
+      ),
+      ...createOpenDesignToolEnv({
+        daemonUrl: 'http://127.0.0.1:7456',
+        projectDir: '/tmp/project',
+        projectId: 'project-1',
+      }),
+    };
+
+    expect(env.OD_DATA_DIR).toBe(process.env.OD_DATA_DIR);
+    expect(env.OPENCODE_TEST_HOME).toBe(
+      path.join(process.env.OD_DATA_DIR ?? '', 'amr', 'opencode-home'),
+    );
+    expect(env.OD_PROJECT_ID).toBe('project-1');
+    expect(env.OD_PROJECT_DIR).toBe('/tmp/project');
   });
 
   it('keeps non-sandbox NO_PROXY behavior unchanged', () => {

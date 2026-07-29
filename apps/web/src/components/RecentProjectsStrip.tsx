@@ -10,11 +10,18 @@ import type { CSSProperties } from 'react';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Dialog, DialogDescription, DialogFooter, DialogTitle } from '@open-design/components';
 import { useT } from '../i18n';
-import { fetchProjectFiles, fetchProjectFileText, projectFileUrl } from '../providers/registry';
+import { fetchProjectFiles, fetchProjectFileText } from '../providers/registry';
 import type { DesignSystemSummary, Project, ProjectDisplayStatus, ProjectFile } from '../types';
 import { Icon } from './Icon';
 import { STATUS_LABEL_KEYS } from './DesignsTab';
 import { isDesignSystemProject, isPublishedDesignSystemProject } from './design-system-project';
+import {
+  HtmlProjectCoverFrame,
+  coverFromProjectFile,
+  projectCoverUrl,
+  selectProjectFileCover,
+  type ProjectCoverOverride,
+} from './project-cover';
 
 interface Props {
   projects: Project[];
@@ -34,14 +41,10 @@ interface Props {
 
 const EMPTY_DESIGN_SYSTEMS: DesignSystemSummary[] = [];
 
-const DECK_PREVIEW_WIDTH = 1280;
-const DECK_PREVIEW_HEIGHT = 720;
 const DEFAULT_RECENT_PROJECT_LIMIT = 6;
 const WIDE_RECENT_PROJECT_LIMIT = 7;
 // 7 * 180px cards + 6 * 12px gaps, matching recent-projects.css.
 const WIDE_RECENT_PROJECT_MIN_ROW_WIDTH = 1332;
-const deckCoverCache = new Map<string, string>();
-const deckCoverInflight = new Map<string, Promise<string>>();
 
 export function RecentProjectsStrip({
   projects,
@@ -96,7 +99,7 @@ export function RecentProjectsStrip({
     [projects, resolvedLimit],
   );
   const [coverByProject, setCoverByProject] = useState<
-    Record<string, { kind: 'html' | 'image' | 'video' | 'logo'; name: string } | null>
+    Record<string, ProjectCoverOverride | null>
   >({});
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [renameTarget, setRenameTarget] = useState<{ id: string; original: string } | null>(null);
@@ -145,36 +148,7 @@ export function RecentProjectsStrip({
           }
           return [project.id, null] as const;
         }
-        const html =
-          files.find((file) => (file.path ?? file.name) === 'index.html') ??
-          files
-            .filter((file) => file.kind === 'html')
-            .sort((a, b) => b.mtime - a.mtime)[0];
-        if (html) {
-          return [
-            project.id,
-            { kind: 'html' as const, name: html.path ?? html.name },
-          ] as const;
-        }
-        const image = files
-          .filter((file) => file.kind === 'image')
-          .sort((a, b) => b.mtime - a.mtime)[0];
-        if (image) {
-          return [
-            project.id,
-            { kind: 'image' as const, name: image.path ?? image.name },
-          ] as const;
-        }
-        const video = files
-          .filter((file) => file.kind === 'video')
-          .sort((a, b) => b.mtime - a.mtime)[0];
-        if (video) {
-          return [
-            project.id,
-            { kind: 'video' as const, name: video.path ?? video.name },
-          ] as const;
-        }
-        return [project.id, null] as const;
+        return [project.id, selectProjectFileCover(files)] as const;
       }),
     ).then((entries) => {
       if (cancelled) return;
@@ -261,7 +235,12 @@ export function RecentProjectsStrip({
           const publishedDesignSystem = isPublishedDesignSystemProject(project, designSystems);
           const isActive =
             !publishedDesignSystem &&
-            (status === 'running' || status === 'queued' || status === 'awaiting_input');
+            (status === 'running' ||
+              status === 'queued' ||
+              status === 'awaiting_input' ||
+              // Incomplete is terminal but needs attention; show the status dot so
+              // it reads as "not done", not a static success pill (#1247 / #1060).
+              status === 'incomplete');
           return (
             <div
               key={project.id}
@@ -295,10 +274,13 @@ export function RecentProjectsStrip({
                       preload="metadata"
                       playsInline
                     />
-                  ) : cover.kind === 'html' && cover.src ? (
-                    <RecentProjectHtmlThumb
+                  ) : cover.kind === 'html' ? (
+                    <HtmlProjectCoverFrame
                       src={cover.src}
-                      deckCoverOnly={project.metadata?.kind === 'deck'}
+                      initial={cover.initial}
+                      iframeClassName="recent-projects__thumb-iframe"
+                      glyphClassName="recent-projects__card-glyph"
+                      diagnostic={`${project.id}:${cover.name ?? 'unknown'}`}
                     />
                   ) : (
                     <span className="recent-projects__card-glyph">{cover.initial}</span>
@@ -443,189 +425,6 @@ export function RecentProjectsStrip({
   );
 }
 
-function RecentProjectHtmlThumb({
-  src,
-  deckCoverOnly,
-}: {
-  src: string;
-  deckCoverOnly: boolean;
-}) {
-  if (!deckCoverOnly) {
-    return (
-      <iframe
-        className="recent-projects__thumb-iframe"
-        src={src}
-        title=""
-        loading="lazy"
-        sandbox="allow-scripts"
-        tabIndex={-1}
-      />
-    );
-  }
-
-  return <DeckCoverThumb src={src} />;
-}
-
-function DeckCoverThumb({ src }: { src: string }) {
-  const frameRef = useRef<HTMLDivElement | null>(null);
-  const [srcDoc, setSrcDoc] = useState<string | null>(() => deckCoverCache.get(src) ?? null);
-  const [scale, setScale] = useState(1);
-
-  useEffect(() => {
-    let cancelled = false;
-    const cached = deckCoverCache.get(src);
-    if (cached) {
-      setSrcDoc(cached);
-      return;
-    }
-    setSrcDoc(null);
-    loadDeckCover(src)
-      .then((next) => {
-        if (!cancelled) setSrcDoc(next);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setSrcDoc(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [src]);
-
-  useEffect(() => {
-    const node = frameRef.current;
-    if (!node) return;
-    const update = () => {
-      const rect = node.getBoundingClientRect();
-      if (rect.width <= 0 || rect.height <= 0) return;
-      setScale(Math.min(rect.width / DECK_PREVIEW_WIDTH, rect.height / DECK_PREVIEW_HEIGHT));
-    };
-    update();
-    if (typeof ResizeObserver === 'undefined') {
-      window.addEventListener('resize', update);
-      return () => window.removeEventListener('resize', update);
-    }
-    const observer = new ResizeObserver(update);
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, []);
-
-  return (
-    <div
-      ref={frameRef}
-      className="recent-projects__deck-frame"
-      style={{ '--recent-deck-scale': scale } as CSSProperties}
-      aria-hidden
-    >
-      {srcDoc ? (
-        <iframe
-          className="recent-projects__deck-iframe"
-          srcDoc={srcDoc}
-          title=""
-          loading="lazy"
-          sandbox=""
-          tabIndex={-1}
-        />
-      ) : (
-        <span className="recent-projects__deck-cover-loading" aria-hidden />
-      )}
-    </div>
-  );
-}
-
-async function loadDeckCover(src: string): Promise<string> {
-  const cached = deckCoverCache.get(src);
-  if (cached) return cached;
-  const existing = deckCoverInflight.get(src);
-  if (existing) return existing;
-  const run = fetch(src)
-    .then((res) => {
-      if (!res.ok) throw new Error(`Failed to load project cover: ${res.status}`);
-      return res.text();
-    })
-    .then((html) => {
-      const parsed = deckPreviewSrcDoc(html);
-      deckCoverCache.set(src, parsed);
-      deckCoverInflight.delete(src);
-      return parsed;
-    })
-    .catch((error) => {
-      deckCoverInflight.delete(src);
-      throw error;
-    });
-  deckCoverInflight.set(src, run);
-  return run;
-}
-
-function deckPreviewSrcDoc(html: string): string {
-  const withoutScripts = html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/giu, '');
-  const style = `<style id="od-recent-deck-real-preview">
-    html,
-    body {
-      margin: 0 !important;
-      width: ${DECK_PREVIEW_WIDTH}px !important;
-      height: ${DECK_PREVIEW_HEIGHT}px !important;
-      overflow: hidden !important;
-    }
-    body {
-      display: block !important;
-      scroll-snap-type: none !important;
-    }
-    .slide,
-    section[data-slide],
-    section[data-screen-label] {
-      position: absolute !important;
-      inset: 0 !important;
-      width: ${DECK_PREVIEW_WIDTH}px !important;
-      height: ${DECK_PREVIEW_HEIGHT}px !important;
-      flex: none !important;
-      scroll-snap-align: none !important;
-    }
-    .slide:not(:first-of-type),
-    section[data-slide]:not(:first-of-type),
-    section[data-screen-label]:not(:first-of-type),
-    .deck-counter,
-    .deck-controls,
-    .deck-hint,
-    .deck-page-controls,
-    .deck-pager,
-    .deck-progress,
-    .deck-nav,
-    .deck-navigation,
-    .page-controls,
-    .page-flip-controls,
-    .page-nav,
-    .page-navigation,
-    .pagination-control,
-    .pagination-controls,
-    #deck-prev,
-    #deck-next,
-    #deck-cur,
-    #deck-total,
-    [data-deck-controls],
-    [data-page-controls],
-    [data-pagination],
-    [aria-label="Previous slide"],
-    [aria-label="Next slide"],
-    [aria-label="Deck navigation"],
-    [aria-label="Page navigation"],
-    [aria-label="Pagination"],
-    nav[aria-label*="page" i],
-    nav[aria-label*="pagination" i] {
-      display: none !important;
-      visibility: hidden !important;
-      pointer-events: none !important;
-    }
-  </style>`;
-  return injectBefore(withoutScripts, '</head>', style);
-}
-
-function injectBefore(source: string, marker: string, addition: string): string {
-  const index = source.toLowerCase().lastIndexOf(marker);
-  if (index === -1) return `${addition}${source}`;
-  return `${source.slice(0, index)}${addition}${source.slice(index)}`;
-}
-
 function statusLabel(
   status: ProjectDisplayStatus,
   t: ReturnType<typeof useT>,
@@ -647,12 +446,13 @@ function relativeTime(ts: number, t: ReturnType<typeof useT>): string {
 
 function projectCover(
   project: Project,
-  override: { kind: 'html' | 'image' | 'video' | 'logo'; name: string } | null,
+  override: ProjectCoverOverride | null,
 ): {
   kind: 'image' | 'video' | 'html' | 'logo' | 'fallback';
   src?: string;
   style: CSSProperties;
   initial: string;
+  name?: string;
 } {
   let h = 0;
   for (let i = 0; i < project.id.length; i += 1) {
@@ -668,18 +468,19 @@ function projectCover(
   if (override) {
     return {
       kind: override.kind,
-      src: projectFileUrl(project.id, override.name),
+      src: projectCoverUrl(project.id, override.name, override.mtime),
       style,
       initial,
+      name: override.name,
     };
   }
   const meta = project.metadata;
   const entry = meta?.entryFile;
   if (entry) {
-    const src = projectFileUrl(project.id, entry);
+    const src = projectCoverUrl(project.id, entry, project.updatedAt);
     if (meta?.kind === 'image') return { kind: 'image', src, style, initial };
     if (meta?.kind === 'video') return { kind: 'video', src, style, initial };
-    if (/\.html?$/i.test(entry)) return { kind: 'html', src, style, initial };
+    if (/\.html?$/i.test(entry)) return { kind: 'html', src, style, initial, name: entry };
   }
   return { kind: 'fallback', style, initial };
 }
@@ -735,20 +536,20 @@ function findDesignSystemLogoFile(files: ProjectFile[]): ProjectFile | null {
 async function findDesignSystemCover(
   projectId: string,
   files: ProjectFile[],
-): Promise<{ kind: 'image' | 'logo'; name: string } | null> {
-  const knownFiles = new Set(files.map((file) => file.path ?? file.name));
+): Promise<ProjectCoverOverride | null> {
+  const knownFiles = new Map(files.map((file) => [file.path ?? file.name, file]));
   const brandCover = await designSystemCoverFromBrandJson(projectId, knownFiles);
   if (brandCover) return brandCover;
 
   const logo = findDesignSystemLogoFile(files);
   if (!logo) return null;
-  return { kind: 'logo', name: logo.path ?? logo.name };
+  return coverFromProjectFile(logo, 'logo');
 }
 
 async function designSystemCoverFromBrandJson(
   projectId: string,
-  knownFiles: ReadonlySet<string>,
-): Promise<{ kind: 'image' | 'logo'; name: string } | null> {
+  knownFiles: ReadonlyMap<string, ProjectFile>,
+): Promise<ProjectCoverOverride | null> {
   const raw = await fetchProjectFileText(projectId, 'brand.json', { cache: 'no-store' });
   if (!raw) return null;
   let brand: unknown;
@@ -769,7 +570,7 @@ async function designSystemCoverFromBrandJson(
     .map((sample) => typeof sample.file === 'string' ? sample.file : null)
     .filter((file): file is string => Boolean(file));
   const image = samplePaths.find((file) => knownFiles.has(file) && isRasterOrSvgImage(file));
-  if (image) return { kind: 'image', name: image };
+  if (image) return coverFromProjectFile(knownFiles.get(image)!, 'image');
 
   const logo = root.logo && typeof root.logo === 'object' ? root.logo as Record<string, unknown> : null;
   const alternates = Array.isArray(logo?.alternates) ? logo.alternates : [];
@@ -784,9 +585,9 @@ async function designSystemCoverFromBrandJson(
       isRasterOrSvgImage(candidate) &&
       !/(^|\/)favicon[-.]/iu.test(candidate),
   );
-  if (nonFaviconLogo) return { kind: 'logo', name: nonFaviconLogo };
+  if (nonFaviconLogo) return coverFromProjectFile(knownFiles.get(nonFaviconLogo)!, 'logo');
   if (typeof logo?.primary === 'string' && knownFiles.has(logo.primary) && isRasterOrSvgImage(logo.primary)) {
-    return { kind: 'logo', name: logo.primary };
+    return coverFromProjectFile(knownFiles.get(logo.primary)!, 'logo');
   }
   return null;
 }

@@ -447,14 +447,31 @@ export function createClaudeStreamHandler(
       // assistant message has been emitted, so the daemon's stdin-close
       // handler sees the final `stop_reason` before deciding whether to
       // close stream-json input stdin.
-      if (stopReason) {
+      //
+      // `turn_end` is the MAIN turn's boundary. Under `--verbose`, a Task
+      // sub-agent's messages stream inline carrying a non-null top-level
+      // `parent_tool_use_id`, and its internal turn ends with its own
+      // `stop_reason: 'end_turn'`. That sub-turn boundary must NOT be treated
+      // as the run's turn completion: emitting `turn_end` for it would let
+      // applyClaudeStreamJsonRunBookkeeping mark `turnCompletedCleanly` and
+      // close stdin while the main turn is still running (so a later non-zero
+      // crash with no result frame is misclassified as succeeded, #5487), and
+      // would reset the per-turn artifact-echo dedup state below mid-turn.
+      // Only a main-turn frame (`parent_tool_use_id == null`) may fire it.
+      if (stopReason && obj.parent_tool_use_id == null) {
         onEvent({ type: 'turn_end', stopReason });
         if (stopReason !== 'tool_use') {
           recentWriteContents.length = 0;
           wroteHtmlFileThisTurn = false;
         }
       }
-      if (typeof obj.error === 'string' && obj.error.trim()) {
+      // A sub-agent (parent_tool_use_id != null) in-stream error must NOT be
+      // emitted as a run-level error: it condemns a main turn that has already
+      // recovered (end_turn + is_error:false result + exit 0) to a false
+      // `failed`. Mirror the parent_tool_use_id guard the turn_end emit above
+      // already carries (#5488). Main-turn errors (connection-drop path) are
+      // unaffected since they carry a null parent_tool_use_id.
+      if (typeof obj.error === 'string' && obj.error.trim() && obj.parent_tool_use_id == null) {
         onEvent({
           type: 'error',
           message: assistantText(obj.message.content) || obj.error,
@@ -484,6 +501,13 @@ export function createClaudeStreamHandler(
     }
 
     if (obj.type === 'result') {
+      // An is_error result is an error termination, not a clean turn: the CLI
+      // is about to exit non-zero (error_during_execution, error_max_turns,
+      // resume failures) and the human-readable cause lives in errors[], not
+      // in any assistant message. Washing it into a plain usage event lets the
+      // close handler classify the run as succeeded with nothing surfaced.
+      // Mirrors the qoder-stream result contract.
+      const isError = obj.is_error === true;
       onEvent({
         type: 'usage',
         usage: obj.usage ?? null,
@@ -493,9 +517,33 @@ export function createClaudeStreamHandler(
           (typeof obj.stop_reason === 'string' && obj.stop_reason) ||
           (typeof obj.terminal_reason === 'string' && obj.terminal_reason) ||
           null,
+        ...(isError ? { isError: true } : {}),
       });
+      if (isError) {
+        onEvent({
+          type: 'error',
+          message: errorResultMessage(obj),
+          code: typeof obj.subtype === 'string' && obj.subtype ? obj.subtype : 'result_error',
+          // Marks this as the run's terminal error (the CLI is exiting), not an
+          // in-stream hiccup. Consumers with their own result-frame
+          // classification (connection test #4501) skip terminal errors.
+          terminal: true,
+        });
+      }
       return;
     }
+  }
+
+  function errorResultMessage(obj: Record<string, unknown>): string {
+    if (Array.isArray(obj.errors)) {
+      const parts = obj.errors.filter(
+        (entry): entry is string => typeof entry === 'string' && entry.length > 0,
+      );
+      if (parts.length > 0) return parts.join('\n');
+    }
+    if (typeof obj.result === 'string' && obj.result.trim()) return obj.result;
+    if (typeof obj.subtype === 'string' && obj.subtype) return `Claude run failed: ${obj.subtype}`;
+    return 'Claude run failed';
   }
 
   function assistantText(content: unknown[]): string {

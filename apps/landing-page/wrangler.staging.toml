@@ -1,0 +1,19 @@
+# Staging has an independent binding set and namespace so test traffic cannot
+# consume production download or browser-bridge attribution tokens.
+name = "open-design-landing-staging"
+pages_build_output_dir = "out"
+compatibility_date = "2026-05-26"
+
+[[kv_namespaces]]
+binding = "NEWSLETTER_SUBSCRIBERS"
+id = "3eaa600b0e1a43abbebc6a36252e1474"
+
+[[kv_namespaces]]
+binding = "ATTRIBUTION_KV"
+id = "90e2e8eb690e40c3830d70e407e592d8"
+
+[[d1_databases]]
+binding = "ATTRIBUTION_DB"
+database_name = "open-design-landing-staging-attribution"
+database_id = "056f7710-df65-4b63-a9d5-f2f8cc1fda14"
+migrations_dir = "migrations"

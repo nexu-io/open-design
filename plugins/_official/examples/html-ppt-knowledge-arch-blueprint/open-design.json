@@ -2,48 +2,19 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-html-ppt-knowledge-arch-blueprint",
-  "title": "Html Ppt Knowledge Arch Blueprint",
+  "title": "Turn an Incident Retro into a Learning Deck like a Platform VP",
   "title_i18n": {
-    "zh-CN": "Html Ppt 知识架构蓝图",
-    "zh-TW": "Html Ppt 知識架構藍圖",
-    "ja": "Html Ppt ナレッジアーキテクチャ設計図",
-    "ko": "Html Ppt 지식 아키텍처 청사진",
-    "de": "Html Ppt Wissensarchitektur-Blaupause",
-    "fr": "Plan d'architecture de connaissances Html Ppt",
-    "ru": "Чертёж архитектуры знаний Html Ppt",
-    "es": "Plano de arquitectura de conocimiento Html Ppt",
-    "pt-BR": "Planta de arquitetura de conhecimento Html Ppt",
-    "it": "Blueprint di architettura della conoscenza Html Ppt",
-    "vi": "Sơ đồ kiến trúc tri thức Html Ppt",
-    "pl": "Plan architektury wiedzy Html Ppt",
-    "id": "Cetak Biru Arsitektur Pengetahuan Html Ppt",
-    "nl": "Html Ppt kennisarchitectuur blauwdruk",
-    "ar": "مخطط معماري للمعرفة Html Ppt",
-    "tr": "Html Ppt bilgi mimarisi planı",
-    "uk": "Креслення архітектури знань Html Ppt",
-    "en": "Html Ppt Knowledge Arch Blueprint"
+    "en": "Turn an Incident Retro into a Learning Deck like a Platform VP",
+    "zh-CN": "像平台 VP 一样把事故复盘写成学习稿",
+    "zh-TW": "像平台 VP 一样把事故复盘写成学习稿"
   },
   "version": "0.1.0",
-  "description": "奶油蓝图架构 deck — 奶油纸 #F0EAE0 底色 + 单一锈红 #B5392A 高亮、48px 蓝图网格 mask、2px 黑边硬卡片、pipeline 步骤盒（其中一个抬高）、右侧锈红 insight callout、Playfair 衬线大字、SVG 虚线反馈环。零渐变零软阴影，认真且印刷友好。",
+  "publishedAt": "2026-05-12T07:18:16Z",
+  "description": "Open Design's incident retro: the daemon-restart data bug, the root cause, the fix, and the systemic follow-ups. Built as a decision-grade product management deck for engineering, SRE, leadership.",
   "description_i18n": {
-    "zh-CN": "奶油蓝图架构 deck — 奶油纸 #F0EAE0 底色 + 单一锈红 #B5392A 高亮、48px 蓝图网格 mask、2px 黑边硬卡片、pipeline 步骤盒（其中一个抬高）、右侧锈红 insight callout、Playfair 衬线大字、SVG 虚线反馈环。零渐变零软阴影，认真且印刷友好。",
-    "zh-TW": "奶油藍圖架構 deck — 奶油紙 #F0EAE0 底色 + 單一鏽紅 #B5392A 高亮、48px 藍圖網格 mask、2px 黑邊硬卡片、pipeline 步驟盒（其中一個抬高）、右側鏽紅 insight callout、Playfair 襯線大字、SVG 虛線回饋環。零漸層零軟陰影，認真且印刷友好。",
-    "ja": "クリーム色の設計図アーキテクチャデッキ — クリーム紙 #F0EAE0 ベース + 単一の錆赤 #B5392A ハイライト、48px 設計図グリッドマスク、2px 黒枠ハードカード、パイプラインステップボックス（1つを浮き上がらせる）、右側の錆赤インサイトコールアウト、Playfair セリフ大文字、SVG 破線フィードバックループ。グラデーションなし、ソフトシャドウなし、シリアスで印刷に最適。",
-    "ko": "크림 청사진 아키텍처 덱 — 크림 페이퍼 #F0EAE0 배경 + 단일 녹청색 #B5392A 하이라이트, 48px 청사진 그리드 마스크, 2px 검은 테두리 하드 카드, 파이프라인 단계 박스(하나 상승), 오른쪽 녹청색 인사이트 콜아웃, Playfair 세리프 대형 글자, SVG 점선 피드백 루프. 그라데이션 없음, 소프트 섀도우 없음, 진지하고 인쇄 친화적.",
-    "de": "Cremefarbenes Blaupausen-Architektur-Deck — Cremepapierbasis #F0EAE0 + einzelne rostrot #B5392A Hervorhebung, 48px Blaupausengitter-Maske, 2px schwarze harte Karten, Pipeline-Schrittboxen (eine erhöht), rechts rostrot Insight-Callout, Playfair-Serifenschrift groß, SVG gestrichelter Feedback-Loop. Keine Verläufe, keine weichen Schatten, ernst und druckfreundlich.",
-    "fr": "Deck d'architecture blueprint crème — base papier crème #F0EAE0 + surbrillance rouille unique #B5392A, masque de grille blueprint 48px, cartes dures bordure noire 2px, boîtes d'étapes pipeline (une élevée), callout insight rouille à droite, grande police à empattement Playfair, boucle de feedback SVG en pointillés. Zéro dégradé, zéro ombre douce, sérieux et adapté à l'impression.",
-    "ru": "Кремовая архитектурная колода-чертёж — кремовая бумажная основа #F0EAE0 + единичная ржаво-красная #B5392A подсветка, маска сетки чертежа 48px, жёсткие карточки с чёрной обводкой 2px, блоки шагов конвейера (один приподнят), ржаво-красный инсайт-врезка справа, крупный шрифт с засечками Playfair, пунктирная петля обратной связи SVG. Без градиентов, без мягких теней, серьёзно и дружелюбно к печати.",
-    "es": "Deck de arquitectura de planos crema — base de papel crema #F0EAE0 + resaltado rojo óxido único #B5392A, máscara de cuadrícula de planos 48px, tarjetas duras con borde negro 2px, cajas de pasos de pipeline (una elevada), llamada de insight rojo óxido a la derecha, fuente serif grande Playfair, bucle de retroalimentación SVG punteado. Sin degradados, sin sombras suaves, serio y apto para impresión.",
-    "pt-BR": "Deck de arquitetura blueprint creme — base papel creme #F0EAE0 + destaque vermelho ferrugem único #B5392A, máscara de grade blueprint 48px, cartões duros com borda preta 2px, caixas de etapas de pipeline (uma elevada), callout de insight vermelho ferrugem à direita, fonte serifada grande Playfair, loop de feedback SVG tracejado. Sem gradientes, sem sombras suaves, sério e amigável para impressão.",
-    "it": "Deck di architettura blueprint crema — base carta crema #F0EAE0 + evidenziazione rosso ruggine singola #B5392A, maschera griglia blueprint 48px, carte rigide con bordo nero 2px, box passaggi pipeline (uno sollevato), callout insight rosso ruggine a destra, carattere serif grande Playfair, loop di feedback SVG tratteggiato. Nessun gradiente, nessuna ombra morbida, serio e adatto alla stampa.",
-    "vi": "Bộ kiến trúc bản thiết kế kem — nền giấy kem #F0EAE0 + điểm nhấn đỏ gỉ duy nhất #B5392A, mặt nạ lưới bản thiết kế 48px, thẻ cứng viền đen 2px, hộp bước pipeline (một cái nâng cao), khung insight đỏ gỉ bên phải, chữ serif lớn Playfair, vòng phản hồi SVG nét đứt. Không gradient, không bóng mềm, nghiêm túc và thân thiện in ấn.",
-    "pl": "Kremowy zestaw architektury blueprintu — kremowa baza papieru #F0EAE0 + pojedyncze podświetlenie rdzawo-czerwone #B5392A, maska siatki blueprintu 48px, twarde karty z czarną obwódką 2px, pudełka kroków pipeline (jedno podniesione), rdza-czerwone wywołanie insight po prawej, duża czcionka szeryfowa Playfair, przerywana pętla feedbacku SVG. Zero gradientów, zero miękkich cieni, poważne i przyjazne drukowi.",
-    "id": "Deck arsitektur cetak biru krem — basis kertas krem #F0EAE0 + sorotan merah karat tunggal #B5392A, masker grid cetak biru 48px, kartu keras tepi hitam 2px, kotak langkah pipeline (satu terangkat), callout insight merah karat di kanan, font serif besar Playfair, loop umpan balik SVG putus-putus. Tanpa gradien, tanpa bayangan lembut, serius dan ramah cetak.",
-    "nl": "Crème blauwdruk architectuurdeck — crème papierbasis #F0EAE0 + enkele roestroze #B5392A markering, 48px blauwdrukrastermasker, 2px zwarte rand harde kaarten, pipeline stappenboxen (een verhoogd), rechts roestroze insight-callout, Playfair schreefloos groot lettertype, SVG gestippelde feedbackloop. Geen verlopen, geen zachte schaduwen, serieus en printvriendelijk.",
-    "ar": "مجموعة معمارية بمخطط كريمي — قاعدة ورق كريمي #F0EAE0 + تظليل صدئ أحمر واحد #B5392A، قناع شبكة مخطط 48px، بطاقات صلبة بحدود سوداء 2px، صناديق خطوات خط الأنابيب (واحد مرفوع)، إطار رؤية صدئ أحمر على اليمين، خط Playfair serif كبير، حلقة ملاحظات SVG منقطة. بدون تدرجات، بدون ظلال ناعمة، جدي وصديق للطباعة.",
-    "tr": "Krem plan mimarisi destesi — krem kağıt tabanlı #F0EAE0 + tek pas kırmızı #B5392A vurgu, 48px plan ızgara maskesi, 2px siyah kenarlı sert kartlar, pipeline adım kutuları (biri yükseltilmiş), sağda pas kırmızı içgörü çağrısı, Playfair serif büyük yazı tipi, SVG kesikli geri bildirim döngüsü. Gradyan yok, yumuşak gölge yok, ciddi ve baskı dostu.",
-    "uk": "Кремова архітектурна колода-креслення — кремова паперова основа #F0EAE0 + єдине іржаво-червоне #B5392A підсвічування, маска сітки креслення 48px, жорсткі картки з чорною обводкою 2px, блоки кроків конвеєра (один піднесений), іржаво-червона врізка інсайту праворуч, великий шрифт із засічками Playfair, пунктирна петля зворотного зв'язку SVG. Без градієнтів, без м'яких тіней, серйозно і дружньо до друку.",
-    "en": "奶油蓝图架构 deck — 奶油纸 #F0EAE0 底色 + 单一锈红 #B5392A 高亮、48px 蓝图网格 mask、2px 黑边硬卡片、pipeline 步骤盒（其中一个抬高）、右侧锈红 insight callout、Playfair 衬线大字、SVG 虚线反馈环。零渐变零软阴影，认真且印刷友好。"
+    "en": "Open Design's incident retro: the daemon-restart data bug, the root cause, the fix, and the systemic follow-ups. Built as a decision-grade product management deck for engineering, SRE, leadership.",
+    "zh-CN": "像平台 VP 一样把事故复盘写成学习稿——一份可商业交付的产品管理 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像平台 VP 一样把事故复盘写成学习稿——一份可商业交付的产品管理 Deck，围绕真实主题、证据链与决策目标组织。"
   },
   "license": "MIT",
   "author": {
@@ -62,7 +33,18 @@
     "system-design",
     "untitled",
     "data-flow",
-    "engineering-whitepaper"
+    "engineering-whitepaper",
+    "ai",
+    "copilot",
+    "workflow",
+    "html-ppt-knowledge-arch-blueprint",
+    "enterprise-ai-literacy",
+    "product-management",
+    "pm-feature-business-case-deck",
+    "product",
+    "roadmap",
+    "decision-deck",
+    "commercial-slide-agent"
   ],
   "compat": {
     "agentSkills": [
@@ -75,7 +57,7 @@
     "kind": "scenario",
     "taskKind": "new-generation",
     "mode": "deck",
-    "scenario": "engineering",
+    "scenario": "product",
     "surface": "web",
     "preview": {
       "type": "html",
@@ -83,13 +65,18 @@
     },
     "useCase": {
       "query": {
-        "en": "Use the html-ppt-knowledge-arch-blueprint template to create a system architecture introduction deck. Use a cream paper base, rust-red highlights, blueprint grid, raised pipeline blocks, and serif display type. First ask me for the system name, 5-7 core modules, and data-flow direction, then write 8-10 slides.",
-        "zh-CN": "用 html-ppt-knowledge-arch-blueprint 模板做一份系统架构介绍 PPT。奶油纸底 + 锈红高亮 + 蓝图网格 + pipeline 抬高一格 + 衬线大字。先告诉我系统名 + 5-7 个核心模块 + 数据流方向，再写 8-10 页。"
+        "en": "Create \"Turn an Incident Retro into a Learning Deck like a Platform VP\" as a decision-grade Product management deck in this template's own visual system. Subject: Open Design's incident retro: the daemon-restart data bug, the root cause, the fix, and the systemic follow-ups. Audience: engineering, SRE, leadership. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can cross-functional reviewers agree on the next irreversible step.",
+        "zh-CN": "像平台 VP 一样把事故复盘写成学习稿。像平台 VP 一样把事故复盘写成学习稿——一份可商业交付的产品管理 Deck，围绕真实主题、证据链与决策目标组织。 主题：Open Design's incident retro: the daemon-restart data bug, the root cause, the fix, and the systemic follow-ups. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "Html Ppt Knowledge Arch Blueprint"
+          "title": "Turn an Incident Retro into a Learning Deck like a Platform VP",
+          "title_i18n": {
+            "en": "Turn an Incident Retro into a Learning Deck like a Platform VP",
+            "zh-CN": "像平台 VP 一样把事故复盘写成学习稿",
+            "zh-TW": "像平台 VP 一样把事故复盘写成学习稿"
+          }
         }
       ]
     },
@@ -117,6 +104,7 @@
     "capabilities": [
       "prompt:inject",
       "fs:write"
-    ]
+    ],
+    "category": "product-management"
   }
 }

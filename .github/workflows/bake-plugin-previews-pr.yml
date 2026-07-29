@@ -11,9 +11,17 @@ name: bake-plugin-previews-pr
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+    # Everything that changes what a baked preview looks like: both plugin
+    # roots the preview manifest may reference (the guard and the bake cover
+    # plugins/community too), the renderer, and the shared bake action + this
+    # workflow itself — so a change to the bake recipe or its strictness can't
+    # merge without running the strict pre-merge validation.
     paths:
       - 'plugins/_official/**'
+      - 'plugins/community/**'
       - 'scripts/bake-plugin-previews.mjs'
+      - '.github/actions/bake-previews/**'
+      - '.github/workflows/bake-plugin-previews-pr.yml'
 
 permissions:
   contents: read
@@ -41,6 +49,11 @@ jobs:
         uses: ./.github/actions/bake-previews
         with:
           upload: 'false'
+          # Strict: a PR that breaks its own preview (blank clip, or a change
+          # whose re-bake fails and would leave the committed entry serving the
+          # OLD clip) fails here, pre-merge, instead of shipping a gallery card
+          # that no longer matches the plugin.
+          strict: 'true'
 
       - name: Compare generated manifest
         run: |

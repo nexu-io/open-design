@@ -24,6 +24,7 @@ import {
   collectProcessTreePids,
   createPackageManagerInvocation,
   createProcessStampArgs,
+  isProcessAlive,
   listProcessSnapshots,
   matchesStampedProcess,
   readLogTail,
@@ -523,6 +524,8 @@ async function latestMtimeMs(filePath: string): Promise<number> {
 }
 
 async function ensureDaemonCliBuild(config: ToolDevConfig, logHandle: FileHandle): Promise<void> {
+  await ensureContractsBuild(config, logHandle);
+
   const daemonRoot = path.join(config.workspaceRoot, "apps/daemon");
   const distCliPath = path.join(daemonRoot, "dist/cli.js");
   const distMtime = await latestMtimeMs(distCliPath);
@@ -536,6 +539,33 @@ async function ensureDaemonCliBuild(config: ToolDevConfig, logHandle: FileHandle
   const reason = distMtime > 0 ? "source is newer than apps/daemon/dist/cli.js" : "apps/daemon/dist/cli.js is missing";
   await logHandle.write(`\n[tools-dev] building @open-design/daemon because ${reason} at ${new Date().toISOString()}\n`);
   const invocation = createPackageManagerInvocation(["--filter", "@open-design/daemon", "build"], process.env);
+  await runLoggedCommand({
+    args: invocation.args,
+    command: invocation.command,
+    cwd: config.workspaceRoot,
+    env: process.env,
+    logFd: logHandle.fd,
+    windowsVerbatimArguments: invocation.windowsVerbatimArguments,
+  });
+}
+
+async function ensureContractsBuild(config: ToolDevConfig, logHandle: FileHandle): Promise<void> {
+  const contractsRoot = path.join(config.workspaceRoot, "packages/contracts");
+  const distDeclarationPath = path.join(contractsRoot, "dist/index.d.ts");
+  const distMtime = await latestMtimeMs(distDeclarationPath);
+  const sourceMtime = Math.max(
+    await latestMtimeMs(path.join(contractsRoot, "src")),
+    await latestMtimeMs(path.join(contractsRoot, "package.json")),
+    await latestMtimeMs(path.join(contractsRoot, "tsconfig.json")),
+    await latestMtimeMs(path.join(contractsRoot, "esbuild.config.mjs")),
+  );
+  if (distMtime > 0 && distMtime >= sourceMtime) return;
+
+  const reason = distMtime > 0
+    ? "source is newer than packages/contracts/dist/index.d.ts"
+    : "packages/contracts/dist/index.d.ts is missing";
+  await logHandle.write(`\n[tools-dev] building @open-design/contracts because ${reason} at ${new Date().toISOString()}\n`);
+  const invocation = createPackageManagerInvocation(["--filter", "@open-design/contracts", "build"], process.env);
   await runLoggedCommand({
     args: invocation.args,
     command: invocation.command,
@@ -669,7 +699,11 @@ async function startDaemon(
 
   const spawned = await spawnDaemonRuntime(config, options, { requireDesktopAuth });
   try {
-    const status = await waitForDaemonRuntime(runtimeLookup(config));
+    const status = await waitForDaemonRuntime(
+      runtimeLookup(config),
+      undefined,
+      () => isProcessAlive(spawned.pid),
+    );
     return {
       app: APP_KEYS.DAEMON,
       created: true,
@@ -698,7 +732,11 @@ async function startWeb(config: ToolDevConfig, options: CliOptions) {
 
   const spawned = await spawnWebRuntime(config, options);
   try {
-    const status = await waitForWebRuntime(runtimeLookup(config));
+    const status = await waitForWebRuntime(
+      runtimeLookup(config),
+      undefined,
+      () => isProcessAlive(spawned.pid),
+    );
     return {
       app: APP_KEYS.WEB,
       created: true,
@@ -723,7 +761,11 @@ async function startDesktop(config: ToolDevConfig, options: CliOptions) {
 
   const spawned = await spawnDesktopRuntime(config, options);
   try {
-    const status = await waitForDesktopRuntime(runtimeLookup(config));
+    const status = await waitForDesktopRuntime(
+      runtimeLookup(config),
+      undefined,
+      () => isProcessAlive(spawned.pid),
+    );
     return {
       app: APP_KEYS.DESKTOP,
       created: true,

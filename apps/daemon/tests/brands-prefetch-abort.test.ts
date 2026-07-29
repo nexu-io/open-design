@@ -3,13 +3,6 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('../src/brands/chrome.js', () => ({
-  chromeDumpDom: vi.fn(async () => '<html><body>unexpected chrome fallback</body></html>'),
-  chromeScreenshot: vi.fn(async () => true),
-  findChrome: vi.fn(() => '/fake/chrome'),
-}));
-
-import { chromeDumpDom, chromeScreenshot } from '../src/brands/chrome.js';
 import { prefetchBrand } from '../src/brands/prefetch.js';
 
 describe('brand prefetch abort handling', () => {
@@ -18,7 +11,7 @@ describe('brand prefetch abort handling', () => {
     vi.unstubAllGlobals();
   });
 
-  it('does not fall through to system Chrome when the main fetch is aborted', async () => {
+  it('rejects instead of continuing when the main fetch is aborted', async () => {
     const tempDir = mkdtempSync(path.join(os.tmpdir(), 'od-brand-prefetch-abort-'));
     const controller = new AbortController();
     const fetchMock = vi.fn(async () => {
@@ -32,9 +25,9 @@ describe('brand prefetch abort handling', () => {
         prefetchBrand('https://example.com', tempDir, { signal: controller.signal }),
       ).rejects.toThrow(/abort/i);
 
+      // The abort short-circuits the prefetch: one fetch attempt, then it bails
+      // rather than silently falling through to any further extraction step.
       expect(fetchMock).toHaveBeenCalledTimes(1);
-      expect(chromeDumpDom).not.toHaveBeenCalled();
-      expect(chromeScreenshot).not.toHaveBeenCalled();
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }

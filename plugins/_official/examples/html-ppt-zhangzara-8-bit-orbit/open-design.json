@@ -2,48 +2,19 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-html-ppt-zhangzara-8-bit-orbit",
-  "title": "Html Ppt Zhangzara 8 Bit Orbit",
+  "title": "Turn a Hobby into a Story Deck like a Passion-Project Storyteller",
   "title_i18n": {
-    "zh-CN": "Html Ppt Zhangzara 8 Bit Orbit",
-    "zh-TW": "Html Ppt Zhangzara 8 Bit Orbit",
-    "ja": "Html Ppt Zhangzara 8 Bit Orbit",
-    "ko": "Html Ppt Zhangzara 8 Bit Orbit",
-    "de": "Html Ppt Zhangzara 8 Bit Orbit",
-    "fr": "Html Ppt Zhangzara 8 Bit Orbit",
-    "ru": "Html Ppt Zhangzara 8 Bit Orbit",
-    "es": "Html Ppt Zhangzara 8 Bit Orbit",
-    "pt-BR": "Html Ppt Zhangzara 8 Bit Orbit",
-    "it": "Html Ppt Zhangzara 8 Bit Orbit",
-    "vi": "Html Ppt Zhangzara 8 Bit Orbit",
-    "pl": "Html Ppt Zhangzara 8 Bit Orbit",
-    "id": "Html Ppt Zhangzara 8 Bit Orbit",
-    "nl": "Html Ppt Zhangzara 8 Bit Orbit",
-    "ar": "Html Ppt Zhangzara 8 Bit Orbit",
-    "tr": "Html Ppt Zhangzara 8 Bit Orbit",
-    "uk": "Html Ppt Zhangzara 8 Bit Orbit",
-    "en": "Html Ppt Zhangzara 8 Bit Orbit"
+    "en": "Turn a Hobby into a Story Deck like a Passion-Project Storyteller",
+    "zh-CN": "像热爱驱动的讲述者一样把爱好做成故事",
+    "zh-TW": "像热爱驱动的讲述者一样把爱好做成故事"
   },
   "version": "0.1.0",
-  "description": "8-Bit Orbit — Pixel-art neon arcade aesthetic on a deep navy void. Anything that should feel like a CRT screen at 2am: cyberpunk, gaming, web3, indie dev tools, hackathon demos.",
+  "publishedAt": "2026-05-12T07:18:16Z",
+  "description": "A gamer's journey building a retro-arcade collection — the obsession, the hunt, and what the machines came to mean. Built as a decision-grade story deck for friends, hobby community.",
   "description_i18n": {
-    "zh-CN": "8-Bit Orbit — 深邃海军蓝背景上的像素艺术霓虹街机美学。适合任何需要凌晨2点CRT屏幕感觉的场景：赛博朋克、游戏、web3、独立开发工具、黑客马拉松演示。",
-    "zh-TW": "8-Bit Orbit — 深邃海軍藍背景上的像素藝術霓虹街機美學。適合任何需要凌晨2點CRT螢幕感覺的場景：賽博龐克、遊戲、web3、獨立開發工具、黑客松展示。",
-    "ja": "8-Bit Orbit — 深いネイビーブルーの背景に映えるピクセルアートのネオンアーケード美学。深夜2時のCRTモニターのような雰囲気に最適：サイバーパンク、ゲーム、web3、インディー開発ツール、ハッカソンデモ。",
-    "ko": "8-Bit Orbit — 짙은 네이비 배경 위의 픽셀 아트 네온 아케이드 미학. 새벽 2시 CRT 화면 느낌이 필요한 모든 것에 적합: 사이버펑크, 게임, web3, 인디 개발 도구, 해커톤 데모.",
-    "de": "8-Bit Orbit — Pixel-Art-Neon-Arcade-Ästhetik auf tiefem Marineblau. Für alles, das wie ein CRT-Bildschirm um 2 Uhr nachts wirken soll: Cyberpunk, Gaming, Web3, Indie-Dev-Tools, Hackathon-Demos.",
-    "fr": "8-Bit Orbit — Esthétique arcade néon en pixel art sur fond bleu marine profond. Pour tout ce qui doit évoquer un écran CRT à 2h du matin : cyberpunk, gaming, web3, outils dev indie, démos hackathon.",
-    "ru": "8-Bit Orbit — Неоновая аркадная пикселарт-эстетика на глубоком тёмно-синем фоне. Для всего, что должно выглядеть как экран ЭЛТ в 2 часа ночи: киберпанк, игры, web3, инди-инструменты разработки, демо с хакатонов.",
-    "es": "8-Bit Orbit — Estética arcade de neón en pixel art sobre un fondo azul marino profundo. Para todo lo que deba parecer una pantalla CRT a las 2 de la madrugada: cyberpunk, gaming, web3, herramientas indie dev, demos de hackathons.",
-    "pt-BR": "8-Bit Orbit — Estética arcade neon em pixel art sobre um fundo azul marinho profundo. Para tudo que precisa parecer uma tela CRT às 2h da manhã: cyberpunk, games, web3, ferramentas indie dev, demos de hackathons.",
-    "it": "8-Bit Orbit — Estetica arcade neon in pixel art su sfondo blu navy profondo. Per tutto ciò che deve sembrare uno schermo CRT alle 2 di notte: cyberpunk, gaming, web3, strumenti indie dev, demo hackathon.",
-    "vi": "8-Bit Orbit — Thẩm mỹ arcade neon pixel art trên nền xanh navy đậm. Dành cho mọi thứ cần có cảm giác màn hình CRT lúc 2 giờ sáng: cyberpunk, gaming, web3, công cụ indie dev, demo hackathon.",
-    "pl": "8-Bit Orbit — Neonowa estetyka arcade w pixel arcie na głębokim granatowym tle. Do wszystkiego, co powinno wyglądać jak ekran CRT o 2 w nocy: cyberpunk, gaming, web3, narzędzia indie dev, dema hackathonowe.",
-    "id": "8-Bit Orbit — Estetika arcade neon pixel art di atas latar biru navy gelap. Untuk semua yang perlu terasa seperti layar CRT jam 2 pagi: cyberpunk, gaming, web3, tools indie dev, demo hackathon.",
-    "nl": "8-Bit Orbit — Pixel-art neon arcade-esthetiek op een diep marineblauw. Voor alles dat moet aanvoelen als een CRT-scherm om 2 uur 's nachts: cyberpunk, gaming, web3, indie dev tools, hackathon demo's.",
-    "ar": "8-Bit Orbit — جمالية أركيد نيون بفن البكسل على خلفية زرقاء داكنة عميقة. لأي شيء يجب أن يبدو مثل شاشة CRT في الساعة 2 صباحاً: سايبربانك، ألعاب، web3، أدوات المطورين المستقلين، عروض الهاكاثون.",
-    "tr": "8-Bit Orbit — Derin lacivert zemin üzerinde pixel sanatı neon atari estetiği. Gece saat 2'de CRT ekran hissi vermesi gereken her şey için: cyberpunk, oyun, web3, indie geliştirici araçları, hackathon demoları.",
-    "uk": "8-Bit Orbit — Неонова аркадна піксель-арт естетика на глибокому темно-синьому тлі. Для всього, що має виглядати як екран ЕПТ о 2-й ночі: кіберпанк, ігри, web3, інді-інструменти розробки, демо з хакатонів.",
-    "en": "8-Bit Orbit — Pixel-art neon arcade aesthetic on a deep navy void. Anything that should feel like a CRT screen at 2am: cyberpunk, gaming, web3, indie dev tools, hackathon demos."
+    "en": "A gamer's journey building a retro-arcade collection — the obsession, the hunt, and what the machines came to mean. Built as a decision-grade story deck for friends, hobby community.",
+    "zh-CN": "像热爱驱动的讲述者一样把爱好做成故事——一份可商业交付的生活故事 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像热爱驱动的讲述者一样把爱好做成故事——一份可商业交付的生活故事 Deck，围绕真实主题、证据链与决策目标组织。"
   },
   "license": "MIT",
   "author": {
@@ -67,7 +38,19 @@
     "hackathon-demo",
     "html-deck",
     "html-slides",
-    "zhangzara"
+    "zhangzara",
+    "ai",
+    "copilot",
+    "workflow",
+    "html-ppt-zhangzara-8-bit-orbit",
+    "enterprise-ai-literacy",
+    "life",
+    "travel-photo-essay-deck",
+    "personal",
+    "story",
+    "photo-essay",
+    "decision-deck",
+    "commercial-slide-agent"
   ],
   "compat": {
     "agentSkills": [
@@ -80,7 +63,7 @@
     "kind": "scenario",
     "taskKind": "new-generation",
     "mode": "deck",
-    "scenario": "marketing",
+    "scenario": "personal",
     "surface": "web",
     "preview": {
       "type": "html",
@@ -88,13 +71,18 @@
     },
     "useCase": {
       "query": {
-        "en": "8-Bit Orbit — Pixel-art neon arcade aesthetic on a deep navy void. Anything that should feel like a CRT screen at 2am: cyberpunk, gaming, web3, indie dev tools, hackathon demos.",
-        "zh-CN": "使用这个插件完成以下任务：8-Bit Orbit — Pixel-art neon arcade aesthetic on a deep navy void. Anything that should feel like a CRT screen at 2am: cyberpunk, gaming, web3, indie dev tools, hackathon demos."
+        "en": "Create \"Turn a Hobby into a Story Deck like a Passion-Project Storyteller\" as a decision-grade Life & story deck in this template's own visual system. Subject: A gamer's journey building a retro-arcade collection — the obsession, the hunt, and what the machines came to mean. Audience: friends, hobby community. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would someone retell the story after seeing it once.",
+        "zh-CN": "像热爱驱动的讲述者一样把爱好做成故事。像热爱驱动的讲述者一样把爱好做成故事——一份可商业交付的生活故事 Deck，围绕真实主题、证据链与决策目标组织。 主题：A gamer's journey building a retro-arcade collection — the obsession, the hunt, and what the machines came to mean. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "Html Ppt Zhangzara 8 Bit Orbit"
+          "title": "Turn a Hobby into a Story Deck like a Passion-Project Storyteller",
+          "title_i18n": {
+            "en": "Turn a Hobby into a Story Deck like a Passion-Project Storyteller",
+            "zh-CN": "像热爱驱动的讲述者一样把爱好做成故事",
+            "zh-TW": "像热爱驱动的讲述者一样把爱好做成故事"
+          }
         }
       ]
     },
@@ -122,6 +110,7 @@
     "capabilities": [
       "prompt:inject",
       "fs:write"
-    ]
+    ],
+    "category": "life"
   }
 }

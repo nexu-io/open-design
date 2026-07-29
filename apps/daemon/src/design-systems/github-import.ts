@@ -3,6 +3,7 @@ import { mkdir, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 
+import { containsSymlink } from '../library-install.js';
 import {
   LocalDesignSystemImportError,
   type LocalDesignSystemImportOptions,
@@ -53,6 +54,16 @@ export async function importGitHubDesignSystemProject(
 
   try {
     await execGit(gitBin, cloneArgs, undefined, 120_000);
+    // Refuse a clone that contains symbolic links: the design-system readers and
+    // this importer follow symlinks, so a committed in-tree symlink pointing
+    // outside the clone (e.g. `README.md -> /etc/passwd`) would exfiltrate an
+    // arbitrary file into the imported design system. Mirrors installFromGithub.
+    if (await containsSymlink(cloneDir)) {
+      throw new LocalDesignSystemImportError(
+        'BAD_REQUEST',
+        'repository contains symbolic links, which are not allowed',
+      );
+    }
     const [detectedBranch, commit] = await Promise.all([
       readGitStdout(gitBin, ['-C', cloneDir, 'rev-parse', '--abbrev-ref', 'HEAD']),
       readGitStdout(gitBin, ['-C', cloneDir, 'rev-parse', 'HEAD']),

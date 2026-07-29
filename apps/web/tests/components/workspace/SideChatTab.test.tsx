@@ -78,4 +78,46 @@ describe('SideChatTab', () => {
       }),
     );
   });
+
+  it('forwards the file-link routing anchors (projectFileNames + projectResolvedDir) to ChatPane', () => {
+    // Without these, absolute managed disk links in side-chat messages
+    // cannot be classified and stay inert (#5611 review round 4).
+    const config = { mode: 'daemon' } as unknown as AppConfig;
+    const conversations = [
+      {
+        id: 'conv-1',
+        title: 'Current',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        projectId: 'project-1',
+        messageCount: 0,
+        sessionMode: 'design',
+      },
+    ] as unknown as Conversation[];
+    const projectFileNames = new Set(['index.html']);
+
+    render(
+      <SideChatTab
+        projectId="project-1"
+        conversationId="conv-1"
+        config={config}
+        agentsById={new Map()}
+        locale="en"
+        projectFiles={[]}
+        projectFileNames={projectFileNames}
+        projectResolvedDir="/data/projects/project-1"
+        conversations={conversations}
+        onSelectConversation={vi.fn()}
+        onDeleteConversation={vi.fn()}
+      />,
+    );
+
+    expect(chatPaneMock).toHaveBeenCalled();
+    expect(chatPaneMock.mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({
+        projectFileNames,
+        projectResolvedDir: '/data/projects/project-1',
+      }),
+    );
+  });
 });

@@ -58,9 +58,7 @@ vi.mock('../../src/components/EntryView', () => ({
     projects: Project[];
   }) => (
     <main>
-      {window.location.pathname === '/' ? (
-        <div data-testid="entry-home-surface" />
-      ) : null}
+      <div data-testid="entry-home-surface" />
       <button
         type="button"
         onClick={() =>

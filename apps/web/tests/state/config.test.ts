@@ -1,10 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   buildMediaProvidersForDaemonSave,
+  BYOK_PROVIDER_PRESETS,
   DEFAULT_CONFIG,
+  defaultKnownProviderModel,
   fetchMediaProvidersFromDaemon,
   isStoredMediaProviderEntryEmpty,
   isStoredMediaProviderEntryPresent,
+  KNOWN_PROVIDERS,
   loadConfig,
   mergeDaemonConfig,
   mergeDaemonMediaProviders,
@@ -18,6 +21,69 @@ import type { AppConfig } from '../../src/types';
 
 const store = new Map<string, string>();
 const originalFetch = globalThis.fetch;
+
+describe('KNOWN_PROVIDERS', () => {
+  it('includes separate SiliconFlow CN and Global presets', () => {
+    expect(
+      KNOWN_PROVIDERS.filter((provider) => provider.label.startsWith('SiliconFlow')),
+    ).toEqual([
+      expect.objectContaining({
+        label: 'SiliconFlow (CN)',
+        protocol: 'openai',
+        baseUrl: 'https://api.siliconflow.cn/v1',
+        preferredModels: expect.arrayContaining(['deepseek-ai/DeepSeek-V3.1']),
+      }),
+      expect.objectContaining({
+        label: 'SiliconFlow (Global)',
+        protocol: 'openai',
+        baseUrl: 'https://api.siliconflow.com/v1',
+        preferredModels: expect.arrayContaining(['deepseek-ai/DeepSeek-V3.1']),
+      }),
+    ]);
+  });
+
+  it('keeps BYOK presets derived from the canonical provider registry', () => {
+    const moonshot = KNOWN_PROVIDERS.find((provider) => provider.label === 'Moonshot');
+    const moonshotPreset = BYOK_PROVIDER_PRESETS.find((preset) => preset.id === 'moonshot');
+
+    expect(moonshot?.preferredModels).toEqual(expect.arrayContaining([
+      'kimi-k2.6',
+      'kimi-k2.7-code',
+    ]));
+    expect(moonshot?.retiredModels).toContain('kimi-k2-0711-preview');
+    expect(moonshotPreset).toEqual(expect.objectContaining({
+      protocol: moonshot?.protocol,
+      baseUrl: moonshot?.baseUrl,
+      preferredModels: moonshot?.preferredModels,
+    }));
+  });
+
+  it('moves both DeepSeek gateways to the V4 model ids before legacy aliases retire', () => {
+    const deepSeekProviders = KNOWN_PROVIDERS.filter((provider) =>
+      provider.label.startsWith('DeepSeek'),
+    );
+
+    expect(deepSeekProviders).toHaveLength(2);
+    for (const provider of deepSeekProviders) {
+      expect(provider.preferredModels).toEqual([
+        'deepseek-v4-flash',
+        'deepseek-v4-pro',
+      ]);
+      expect(provider.retiredModels).toEqual([
+        'deepseek-chat',
+        'deepseek-reasoner',
+      ]);
+    }
+  });
+
+  it('keeps gpt-oss:120b as the Ollama Cloud default', () => {
+    const ollamaCloud = KNOWN_PROVIDERS.find(
+      (provider) => provider.label === 'Ollama Cloud (managed)',
+    );
+
+    expect(defaultKnownProviderModel(ollamaCloud)).toBe('gpt-oss:120b');
+  });
+});
 
 vi.stubGlobal('localStorage', {
   getItem: vi.fn((key: string) => store.get(key) ?? null),
@@ -172,6 +238,24 @@ describe('syncConfigToDaemon', () => {
       updateInstallMode: 'manual',
     });
   });
+
+  it('syncs the silent update preference to daemon app config', async () => {
+    const fetchMock = vi.fn(async () => new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await syncConfigToDaemon({
+      ...DEFAULT_CONFIG,
+      allowSilentUpdates: true,
+    });
+
+    const [, init] = fetchMock.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      allowSilentUpdates: true,
+    });
+  });
 });
 
 describe('syncMediaProvidersToDaemon', () => {
@@ -305,7 +389,7 @@ describe('mergeDaemonConfig', () => {
     // Brand-new install: the daemon has no privacy state at all. The product
     // default telemetry channels (metrics + content) are on and an anonymous
     // id is assigned so events have a stable distinct id. This mirrors the
-    // first-run banner's "I get it" opt-in payload; artifactManifest stays
+    // first-run banner's "Share" payload; artifactManifest stays
     // off, matching that surface.
     const merged = mergeDaemonConfig(DEFAULT_CONFIG, {});
 
@@ -337,6 +421,18 @@ describe('mergeDaemonConfig', () => {
 
     expect(merged.telemetry?.metrics).toBe(false);
     expect(merged.installationId == null).toBe(true);
+  });
+
+  it('uses daemon silent update preference and clears stale local values when absent', () => {
+    expect(
+      mergeDaemonConfig(DEFAULT_CONFIG, { allowSilentUpdates: false }).allowSilentUpdates,
+    ).toBe(false);
+    expect(
+      mergeDaemonConfig(DEFAULT_CONFIG, { allowSilentUpdates: true }).allowSilentUpdates,
+    ).toBe(true);
+    expect(
+      mergeDaemonConfig({ ...DEFAULT_CONFIG, allowSilentUpdates: true }, {}).allowSilentUpdates,
+    ).toBeUndefined();
   });
 });
 
@@ -901,10 +997,101 @@ describe('loadConfig', () => {
 
     expect(config.mode).toBe('api');
     expect(config.baseUrl).toBe('https://api.deepseek.com');
-    expect(config.model).toBe('deepseek-chat');
+    expect(config.model).toBe('deepseek-v4-flash');
     expect(config.apiProtocol).toBe('openai');
-    expect(config.configMigrationVersion).toBe(1);
+    expect(config.configMigrationVersion).toBe(2);
   });
+
+  it('migrates retired provider defaults in active, protocol, and provider-draft configs', () => {
+    const moonshotBaseUrl = 'https://api.moonshot.cn/v1';
+    const persisted: Partial<AppConfig> = {
+      mode: 'api',
+      apiProtocol: 'openai',
+      apiKey: 'sk-moonshot',
+      baseUrl: moonshotBaseUrl,
+      model: 'kimi-k2-0711-preview',
+      apiProviderBaseUrl: moonshotBaseUrl,
+      configMigrationVersion: 1,
+      apiProtocolConfigs: {
+        openai: {
+          apiKey: 'sk-moonshot',
+          baseUrl: moonshotBaseUrl,
+          model: 'kimi-k2-0711-preview',
+          apiProviderBaseUrl: moonshotBaseUrl,
+        },
+      },
+      byokProviderConfigDrafts: {
+        [`openai:${moonshotBaseUrl}`]: {
+          apiConfig: {
+            apiKey: 'sk-moonshot',
+            baseUrl: moonshotBaseUrl,
+            model: 'kimi-k2-0711-preview',
+            apiProviderBaseUrl: moonshotBaseUrl,
+          },
+        },
+      },
+    };
+    store.set('open-design:config', JSON.stringify(persisted));
+
+    const config = loadConfig();
+
+    expect(config.model).toBe('kimi-k2.6');
+    expect(config.apiProtocolConfigs?.openai?.model).toBe('kimi-k2.6');
+    expect(
+      config.byokProviderConfigDrafts?.[`openai:${moonshotBaseUrl}`]?.apiConfig.model,
+    ).toBe('kimi-k2.6');
+    expect(config.configMigrationVersion).toBe(2);
+  });
+
+  it('migrates legacy SiliconFlow Global configs to the known OpenAI preset', () => {
+    const legacyConfig: Partial<AppConfig> = {
+      mode: 'api',
+      apiKey: 'sk-test',
+      baseUrl: 'https://api.siliconflow.com/v1',
+      model: 'deepseek-ai/DeepSeek-V3.1',
+      agentId: null,
+      skillId: null,
+      designSystemId: null,
+    };
+    store.set('open-design:config', JSON.stringify(legacyConfig));
+
+    const config = loadConfig();
+
+    expect(config.apiProtocol).toBe('openai');
+    expect(config.apiProviderBaseUrl).toBe('https://api.siliconflow.com/v1');
+    expect(config.configMigrationVersion).toBe(2);
+  });
+
+  it('keeps the parsed config when re-persisting a downgraded protocol fails', () => {
+    // A stored `bedrock` protocol is downgraded on load, which re-persists via
+    // saveConfig(). If that localStorage write throws (quota / private mode),
+    // the valid parsed config must survive rather than being reset to defaults.
+    const persisted: Partial<AppConfig> = {
+      mode: 'api',
+      apiProtocol: 'bedrock',
+      apiKey: 'sk-secret',
+      baseUrl: 'https://bedrock-runtime.us-east-1.amazonaws.com',
+      model: 'anthropic.claude-3',
+      configMigrationVersion: 1,
+      agentId: null,
+      skillId: null,
+      designSystemId: null,
+    };
+    store.set('open-design:config', JSON.stringify(persisted));
+    const setItem = vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
+      throw new DOMException('exceeded', 'QuotaExceededError');
+    });
+    try {
+      const config = loadConfig();
+      // the unsupported protocol was still downgraded ...
+      expect(config.apiProtocol).toBe(DEFAULT_CONFIG.apiProtocol);
+      // ... but the rest of the user's config was NOT discarded to defaults
+      expect(config.mode).toBe('api');
+    } finally {
+      setItem.mockRestore();
+    }
+  });
+
 
   it('backfills the fixed-origin base URL for AIHubMix when persisted empty', () => {
     // AIHubMix hides the Base URL field, so older configs persisted an empty
@@ -1085,7 +1272,7 @@ describe('loadConfig', () => {
 
     expect(config.mode).toBe('daemon');
     expect(config.apiProtocol).toBe('openai');
-    expect(config.configMigrationVersion).toBe(1);
+    expect(config.configMigrationVersion).toBe(2);
   });
 
   it('migrates legacy Ollama Cloud configs to an explicit ollama apiProtocol', () => {
@@ -1107,7 +1294,7 @@ describe('loadConfig', () => {
     expect(config.model).toBe('gpt-oss:120b');
     expect(config.apiProtocol).toBe('ollama');
     expect(config.apiProviderBaseUrl).toBe('https://ollama.com');
-    expect(config.configMigrationVersion).toBe(1);
+    expect(config.configMigrationVersion).toBe(2);
   });
 
   it('migrates legacy ollama.com configs with a custom base URL path', () => {
@@ -1229,7 +1416,7 @@ describe('loadConfig', () => {
 
   it('sets an explicit apiProtocol for new default configs', () => {
     expect(DEFAULT_CONFIG.apiProtocol).toBe('anthropic');
-    expect(DEFAULT_CONFIG.configMigrationVersion).toBe(1);
+    expect(DEFAULT_CONFIG.configMigrationVersion).toBe(2);
     expect(DEFAULT_CONFIG.accentColor).toBe('#c96442');
   });
 });
@@ -1241,12 +1428,14 @@ describe('saveConfig', () => {
       installationId: 'install-1',
       privacyDecisionAt: 1778244000000,
       telemetry: { metrics: true },
+      allowSilentUpdates: true,
     });
 
     const saved = JSON.parse(store.get('open-design:config') ?? '{}');
     expect(saved.installationId).toBeUndefined();
     expect(saved.privacyDecisionAt).toBeUndefined();
     expect(saved.telemetry).toBeUndefined();
+    expect(saved.allowSilentUpdates).toBeUndefined();
   });
 
   it('keeps CLI API key env values out of localStorage while preserving intent and non-secret env', () => {

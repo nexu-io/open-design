@@ -3,7 +3,7 @@ import type { AddressInfo } from 'node:net';
 import express from 'express';
 import type { Express } from 'express';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { getFile } from '../src/mcp.js';
+import { getFile, handleMcpToolCall } from '../src/mcp.js';
 
 const PROJECT_ID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 
@@ -129,5 +129,74 @@ describe('getFile binary rejection unchanged', () => {
     expect('isError' in r && r.isError).toBe(true);
     const text = contentTexts(r.content).join('\n');
     expect(text).toMatch(/binary content is not yet supported/);
+  });
+});
+
+describe('public MCP get_file active context defaults', () => {
+  let server: http.Server;
+  let baseUrl: string;
+
+  beforeAll(async () => {
+    const app = express();
+    app.get('/api/active', (_req, res) =>
+      res.json({
+        active: true,
+        projectId: 'active-project',
+        projectName: 'Active Project',
+        fileName: 'landing.html',
+        ageMs: 25,
+      }),
+    );
+    app.get('/api/projects/:id/raw/*splat', (req, res) => {
+      expect(req.params.id).toBe('active-project');
+      expect(req.params.splat).toEqual(['landing.html']);
+      res.set({ 'content-type': 'text/html' }).send('<!doctype html><h1>Active file</h1>');
+    });
+    const r = await startServer(app);
+    server = r.server;
+    baseUrl = r.baseUrl;
+  });
+
+  afterAll(() => new Promise((resolve) => server.close(resolve)));
+
+  it('uses the active project and active file when project and path are omitted', async () => {
+    const result = await handleMcpToolCall(baseUrl, 'get_file', {});
+    const textParts = contentTexts(result.content);
+    expect(textParts[0]).toContain('[od:active-context project="Active Project" file="landing.html"]');
+    expect(lastText(textParts)).toContain('<h1>Active file</h1>');
+  });
+});
+
+describe('public MCP get_file active context fallbacks', () => {
+  let server: http.Server;
+  let baseUrl: string;
+
+  beforeAll(async () => {
+    const app = express();
+    app.get('/api/active', (_req, res) => res.json({ active: false }));
+    app.get('/api/projects/:id/raw/*splat', (_req, res) =>
+      res.set({ 'content-type': 'text/html' }).send('<!doctype html><h1>Explicit file</h1>'),
+    );
+    const r = await startServer(app);
+    server = r.server;
+    baseUrl = r.baseUrl;
+  });
+
+  afterAll(() => new Promise((resolve) => server.close(resolve)));
+
+  it('requires a path when active context is inactive and project/path are omitted', async () => {
+    const result = await handleMcpToolCall(baseUrl, 'get_file', {});
+    expect('isError' in result && result.isError).toBe(true);
+    expect(contentTexts(result.content).join('\n')).toContain('Open Design has no active project');
+  });
+
+  it('does not stamp active context when project and path are explicit', async () => {
+    const result = await handleMcpToolCall(baseUrl, 'get_file', {
+      project: PROJECT_ID,
+      path: 'explicit.html',
+    });
+    const textParts = contentTexts(result.content);
+    expect(textParts.some((text) => text.startsWith('[od:active-context'))).toBe(false);
+    expect(lastText(textParts)).toContain('<h1>Explicit file</h1>');
   });
 });

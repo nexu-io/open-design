@@ -31,13 +31,20 @@
  */
 import type { ChatSessionMode } from '../api/chat.js';
 import type { ProjectMetadata, ProjectTemplate } from '../api/projects.js';
-import { OFFICIAL_DESIGNER_PROMPT } from './official-system.js';
+import { OFFICIAL_DESIGNER_PROMPT, renderOfficialDesignerPrompt } from './official-system.js';
 import { DISCOVERY_AND_PHILOSOPHY } from './discovery.js';
 import { DECK_FRAMEWORK_DIRECTIVE } from './deck-framework.js';
 import { MEDIA_GENERATION_CONTRACT } from './media-contract.js';
 
 export const BASE_SYSTEM_PROMPT = OFFICIAL_DESIGNER_PROMPT;
 const ELEVENLABS_VOICE_PROMPT_OPTION_LIMIT = 100;
+const SEMANTIC_OUTPUT_FILE_NAMES = `## Semantic output file names
+
+For new user-facing deliverables, choose a short semantic project-relative filename derived from the user's brief, product, screen, or artifact type. Do not call every new artifact \`index.html\`.
+
+Good examples: \`investor-pitch-deck.html\`, \`ai-community-pr-deck.html\`, \`refund-ops-dashboard.html\`, \`pricing-page.html\`, \`screens/ios-checkout.html\`, \`daily-digest.md\`, \`image-manifest.json\`.
+
+When editing an existing artifact, preserve its existing filename unless the user asks for a copy or version. Use \`index.html\` only for fixed runtime conventions or a lightweight launcher/overview: live-artifact generated previews, HyperFrames compositions, static SPA/deploy entry mapping, plugin previews/examples, \`ui_kits/app/index.html\`, or a multi-screen overview that links to semantic screen files. If an active skill or template says to copy a seed to \`index.html\`, adapt the destination to a semantic filename unless the task is one of those fixed-path exceptions.`;
 
 export interface AudioVoiceOption {
   name: string;
@@ -272,6 +279,12 @@ export function composeSystemPrompt({
   // wording later in the official base prompt.
   const parts: string[] = [];
   const activeDesignSystemBody = designSystemBody?.trim();
+  // Website Clone runs reproduce an existing site, so its palette/typography must
+  // win — an active design system being declared "authoritative" would pull the
+  // model away from faithful reproduction. Mirror the daemon (apps/daemon/src/
+  // server.ts suppresses the design-system sections for intent==='web-clone') so
+  // API/BYOK web-clone prompts drop the same guidance.
+  const isWebCloneRun = metadata?.intent === 'web-clone';
   const isMediaSurfaceEarly =
     skillMode === 'image' ||
     skillMode === 'video' ||
@@ -332,19 +345,25 @@ export function composeSystemPrompt({
   // Ask mode skips the multi-thousand-token designer charter entirely — the
   // CHAT_MODE_OVERRIDE above is its self-contained identity. Plan/Design keep it.
   if (!isAskMode) {
-    parts.push('# Identity and workflow charter (background)\n\n', BASE_SYSTEM_PROMPT);
+    // Website Clone runs swap the "don't recreate copyrighted designs" guardrail
+    // for a faithful-reproduction + pre-deploy-checklist rule, mirroring the
+    // daemon prompt so API/BYOK-backed web-clone runs behave identically.
+    parts.push(
+      '# Identity and workflow charter (background)\n\n',
+      renderOfficialDesignerPrompt({ webCloneFidelity: metadata?.intent === 'web-clone' }),
+    );
   }
 
   // Mid-conversation clarification reuses the same `<question-form>` flow as
   // turn-1 discovery (DISCOVERY_AND_PHILOSOPHY) so the host keeps ONE unified
-  // questions surface: a chat banner, the form in the right-hand Questions
-  // tab, and answers returned as the next user message. Mirrors the
+  // questions surface: the form renders inline in the originating assistant
+  // message, and answers return as the next user message. Mirrors the
   // daemon-side composer's "## Clarifying questions mid-conversation" section
   // in apps/daemon/src/prompts/system.ts — keep both in sync so a daemon chat
   // and a BYOK/API chat route follow-up choices through the same surface
   // instead of drifting back to plain markdown option lists.
   parts.push(
-    "\n\n---\n\n## Clarifying questions mid-conversation\n\nWhen you need a clarification AFTER turn 1 and the answer benefits from structured input, emit a `<question-form>` block — the same markup turn-1 discovery uses — instead of writing a bulleted list of options in markdown. The host renders it as a Questions banner the user opens in the side tab; a markdown list renders as plain text and forces the user to type a reply. Use the richest appropriate web form controls (`radio`, `checkbox`, `select`, `text`, `textarea`, `number`, `range`, `date`, `time`, `datetime-local`, `color`, `url`, `email`, `tel`, `file`, `switch`, or `direction-cards`). For every finite-choice question, keep user control by leaving `allowCustom` unset or setting it to `true`, and add localized `customLabel` / `customPlaceholder` when useful. Use free-form prose questions only when a form would add no structure. Do NOT also duplicate the form's questions as markdown text alongside it.\n\n`<question-form>` is assistant text for the Open Design UI, not a native tool call. If you need to clarify direction, emit the complete `<question-form>...</question-form>` block directly in the assistant message before any TodoWrite, file write/edit, Bash, or other native tool call. Do not stop after an introductory sentence such as \"先确认一下方向：\"; the same message must include the full form.",
+    "\n\n---\n\n## Clarifying questions mid-conversation\n\nWhen you need a clarification AFTER turn 1 and the answer benefits from structured input, emit a `<question-form>` block — the same markup turn-1 discovery uses — instead of writing a bulleted list of options in markdown. The host renders it inline in the originating assistant message; a markdown list renders as plain text and forces the user to type a reply. Use the richest appropriate web form controls (`radio`, `checkbox`, `select`, `text`, `textarea`, `number`, `range`, `date`, `time`, `datetime-local`, `color`, `url`, `email`, `tel`, `file`, `switch`, or `direction-cards`). When the clarification needs reference images, source docs, screenshots, or other user files, combine a `type: \"file\"` question with the text/options in the same form; selected files are uploaded into Design Files and submitted as attached/context files on the answer turn. For every finite-choice question, keep user control by leaving `allowCustom` unset or setting it to `true`, and add localized `customLabel` / `customPlaceholder` when useful. Use free-form prose questions only when a form would add no structure. Do NOT also duplicate the form's questions as markdown text alongside it.\n\n`<question-form>` is assistant text for the Open Design UI, not a native tool call. If you need to clarify direction, emit the complete `<question-form>...</question-form>` block directly in the assistant message before any TodoWrite, file write/edit, Bash, or other native tool call. Do not stop after an introductory sentence such as \"先确认一下方向：\"; the same message must include the full form.",
   );
 
   // Mirrors the daemon-side composer in apps/daemon/src/prompts/system.ts —
@@ -396,7 +415,7 @@ export function composeSystemPrompt({
     );
   }
 
-  if (activeDesignSystemBody && activeDesignSystemBody.length > 0) {
+  if (!isWebCloneRun && activeDesignSystemBody && activeDesignSystemBody.length > 0) {
     parts.push(
       `\n\n## Active design system${designSystemTitle ? ` — ${designSystemTitle}` : ''}\n\nTreat the following DESIGN.md as authoritative for color, typography, spacing, and component rules. Do not invent tokens outside this palette. When you copy the active skill's seed template, bind these tokens into its \`:root\` block before generating any layout.\n\n${activeDesignSystemBody}`,
     );
@@ -407,6 +426,10 @@ export function composeSystemPrompt({
     parts.push(
       `\n\n## Active skill${skillName ? ` — ${skillName}` : ''}\n\nFollow this skill's workflow exactly.${preflight}\n\n${skillBody.trim()}`,
     );
+  }
+
+  if (!isAskMode) {
+    parts.push(`\n\n${SEMANTIC_OUTPUT_FILE_NAMES}`);
   }
 
   if (pluginBlock && pluginBlock.trim().length > 0) {
@@ -465,7 +488,7 @@ export function composeSystemPrompt({
     parts.push(MEDIA_GENERATION_CONTRACT);
   }
 
-  if (!isAskMode && activeDesignSystemBody && activeDesignSystemBody.length > 0) {
+  if (!isAskMode && !isWebCloneRun && activeDesignSystemBody && activeDesignSystemBody.length > 0) {
     parts.push(ACTIVE_DESIGN_SYSTEM_VISUAL_DIRECTION_OVERRIDE);
   }
 
@@ -567,191 +590,280 @@ function renderMetadataBlock(
   );
   lines.push('');
   lines.push(`- **kind**: ${metadata.kind}`);
+  lines.push(...platformLines(metadata));
+  lines.push(...screenRuleLines(metadata));
+  lines.push(...landingAndWidgetLines(metadata));
+  lines.push(...intentLines(metadata));
+  lines.push(...brandLines(metadata));
+  lines.push(...kindDetailLines(metadata));
+  lines.push(...imageLines(metadata));
+  lines.push(...videoLines(metadata));
+  lines.push(...audioLines(metadata, audioVoiceOptions, audioVoiceOptionsError));
+  lines.push(...inspirationLines(metadata));
+  lines.push(...contextPluginLines(metadata));
+  lines.push(...promptTemplateReferenceLines(metadata));
+  lines.push(...templateReferenceLines(metadata, template));
+  return lines.join('\n');
+}
+
+function platformLines(
+  metadata: ProjectMetadata,
+): string[] {
+  const out: string[] = [];
   if (metadata.platform) {
-    lines.push(`- **platform**: ${metadata.platform}`);
+    out.push(`- **platform**: ${metadata.platform}`);
   } else if (metadata.kind === 'prototype' || metadata.kind === 'template' || metadata.kind === 'other') {
-    lines.push('- **platform**: (unknown — ask: responsive web, desktop web, iOS app, Android app, tablet app, or desktop app?)');
+    out.push('- **platform**: (unknown — ask: responsive web, desktop web, iOS app, Android app, tablet app, or desktop app?)');
   }
   if (metadata.platformTargets && metadata.platformTargets.length > 0) {
-    lines.push(`- **platformTargets**: ${metadata.platformTargets.join(', ')}`);
+    out.push(`- **platformTargets**: ${metadata.platformTargets.join(', ')}`);
   }
   if (metadata.platform === 'responsive' || metadata.platformTargets?.includes('responsive')) {
-    lines.push(
+    out.push(
       '- **responsive web contract**: `responsive` means one web product experience that adapts across modern browser/device ranges, not only legacy desktop/tablet/mobile buckets. It is not an iOS app, Android app, or native tablet app target. Show responsive behavior through real product layout changes; do not render viewport labels as user-facing product content. Cover 2025–2026 breakpoints: mobile compact 360px, mobile standard 390–430px, foldable/small tablet 600–744px, tablet portrait 768–834px, tablet landscape/large tablet 1024–1180px, laptop 1280–1366px, desktop 1440–1536px, and wide 1920px. Use fluid `clamp()` scales, container queries where useful, and explicit layout changes at semantic thresholds. Verify no horizontal scroll at 360px, 390px, 430px, 768px, 820px, 1024px, 1366px, 1440px, and 1920px unless the brief explicitly asks for a pan/board canvas.',
     );
   }
   if ((metadata.platformTargets?.length ?? 0) > 1) {
-    lines.push(
+    out.push(
       '- **cross-platform deliverable rule**: each selected target keeps the same product goal but MUST be delivered as its own product screen/file when more than one concrete target is selected. Use clear files such as `landing.html` (if enabled), `mobile-ios.html`, `mobile-android.html`, `tablet.html`, `desktop.html`, plus shared `css/` and `js/` when useful. `index.html` may be a launcher/overview that links to these files, but it must not be the only place where mobile/tablet/desktop designs live. Do not collapse cross-platform work into a single tabbed demo, selector UI, comparison board, platform map, or labelled documentation section inside one mock product page.',
     );
   }
+  return out;
+}
+
+function screenRuleLines(
+  metadata: ProjectMetadata,
+): string[] {
+  const out: string[] = [];
   if (metadata.kind === 'prototype' || metadata.kind === 'template' || metadata.kind === 'other') {
-    lines.push(
+    out.push(
       '- **screen-file-first rule**: each distinct user-facing screen or surface MUST be delivered as its own HTML file unless the user explicitly asks for a single-page scroll or single-file artifact. Do not combine landing pages, product app screens, dashboards, history, pricing, settings, mobile app, tablet app, desktop app, or OS widget surfaces into one long page. Use `index.html` as a launcher/overview that links to screen files when more than one screen exists; it may summarize the product and show screen cards, but it must not contain the full design for every screen.',
     );
-    lines.push(
+    out.push(
       '- **product-realism rule**: final artifacts must look like real end-user product UI. Do not render project metadata, screen counts, target counts, state counts, "demo only" labels, "settings" panels for choosing platforms, "full design target" badges, viewport/device selector controls, theme/style knobs, platform output maps, behavior-spec sections, or design-process cards inside the product unless the user explicitly asks for a design spec/dashboard. Any navigation/tabs inside the artifact must be real product navigation, not designer controls for switching generated mockups.',
     );
-    lines.push(
+    out.push(
       '- **visual-system rule**: when the user does not specify colors, layout, or visual direction, you must still make an intentional product-appropriate visual system. Infer a palette from the product category and audience with at least: neutral surface tokens, a primary action color, a secondary/domain accent, and status colors. Avoid plain monochrome/unstyled greyscale outputs. Use tasteful gradients, illustrations, iconography, device/product mockups, and colored state moments where they clarify the product, while still avoiding generic beige/peach/pink/brown AI washes.',
     );
-    lines.push(
+    out.push(
       '- **app-specific modules rule**: include domain-specific in-app modules/components by default (cards, panels, controls, charts, lists, quick actions, status modules, mini players, checkout/cart summaries, etc. as appropriate). These are product UI modules, not OS home-screen widgets. Give each major module a clear purpose, states, and responsive behavior instead of generic card grids.',
     );
-    lines.push(
+    out.push(
       '- **CJX-ready UX rule**: the artifact must be implementation-ready, not a static screenshot. Structure CSS tokens/components/responsive sections clearly; include real JavaScript behavior for meaningful UX such as tabs, dialogs, drawers, filters, generation/copy actions, validation, playback controls, or state transitions. If keeping a self-contained `index.html`, put the CSS/JS in clearly labelled blocks; for complex UX, generate `css/` and `js/` files when useful.',
     );
-    lines.push(
+    out.push(
       '- **interaction-fidelity rule**: when the requested screen includes user input, generation, copying, validation, login, checkout, filtering, or any action verb, build real interactive controls for that screen. Do not substitute static text rows, prefilled-only mockups, screenshot-like device frames, or decorative state cards for editable inputs and working actions.',
     );
   }
+  return out;
+}
+
+function landingAndWidgetLines(
+  metadata: ProjectMetadata,
+): string[] {
+  const out: string[] = [];
   if (metadata.includeLandingPage) {
-    lines.push(
+    out.push(
       '- **includeLandingPage**: true — create `landing.html` as a separate responsive marketing companion surface in addition to the selected product/app screens. Do not implement the landing page only as a section inside `index.html`, even for responsive-web-only projects. If there is a working product/app screen, create it as a separate file such as `app.html`, `dashboard.html`, or a domain-specific screen name. `index.html` should be a lightweight launcher/overview when multiple files exist. Include hero, value props, product screenshots/device mockups, proof/features, and an appropriate CTA such as waitlist, download, or contact sales.',
     );
   }
   if (metadata.includeOsWidgets) {
-    lines.push(
+    out.push(
       '- **includeOsWidgets**: true — add platform-native OS home-screen / lock-screen / quick-access widget surfaces where relevant. These are outside-the-app widgets (for example iOS WidgetKit, Android home screen widget, Live Activity/lock screen, tablet glance panel), not in-app cards. Include realistic widget sizes and direct quick actions for the domain.',
     );
   }
+  return out;
+}
+
+function intentLines(
+  metadata: ProjectMetadata,
+): string[] {
+  const out: string[] = [];
   if (metadata.intent === 'live-artifact') {
-    lines.push(
+    out.push(
       '- **intent**: live-artifact — the user chose New live artifact. The first output should be a live artifact/dashboard/report, not a one-off static mockup. Prefer the `live-artifact` skill workflow when available, keep source data compact, and register through the daemon live-artifact tool path once that wrapper/tooling is available.',
     );
-    lines.push(
+    out.push(
       '- **connector-source rule**: if the user names a connector/source (for example Notion) and daemon connector tools are available, list connectors before asking where the data comes from. When the named connector is `connected`, use its read-only tools and ask follow-up questions only for missing topic/page/database details, multiple equally plausible matches, or an unconnected/missing connector.',
     );
   }
+  return out;
+}
+
+function brandLines(
+  metadata: ProjectMetadata,
+): string[] {
+  const out: string[] = [];
   if (metadata.kind === 'brand') {
-    lines.push(
+    out.push(
       '- **brand extraction project**: this project was created by the Brands extractor. Treat `brand.json`, `DESIGN.md`, `BRAND-SYSTEM.md`, `tokens.*.json`, `theme.json`, `kit.html`, `kit.dark.html`, and `artifacts/{landing,deck,poster,email,newsletter,form}.html` as the source of truth. Do not restart extraction from scratch unless the user explicitly asks; explain the extracted kit, then iterate the saved files when requested.',
     );
-    if (metadata.brandId) lines.push(`- **brandId**: ${metadata.brandId}`);
-    if (metadata.brandSourceUrl) lines.push(`- **brandSourceUrl**: ${metadata.brandSourceUrl}`);
-    if (metadata.brandDesignSystemId) lines.push(`- **brandDesignSystemId**: ${metadata.brandDesignSystemId}`);
+    if (metadata.brandId) out.push(`- **brandId**: ${metadata.brandId}`);
+    if (metadata.brandSourceUrl) out.push(`- **brandSourceUrl**: ${metadata.brandSourceUrl}`);
+    if (metadata.brandDesignSystemId) out.push(`- **brandDesignSystemId**: ${metadata.brandDesignSystemId}`);
   }
+  return out;
+}
 
+function kindDetailLines(
+  metadata: ProjectMetadata,
+): string[] {
+  const out: string[] = [];
   if (metadata.kind === 'prototype') {
-    lines.push(
+    out.push(
       `- **fidelity**: ${metadata.fidelity ?? '(unknown — ask: wireframe vs high-fidelity)'}`,
     );
   }
   if (metadata.kind === 'deck') {
-    lines.push(
+    out.push(
       `- **slideCount**: ${metadata.slideCount ?? '(unknown — ask only if the Active plugin / Plugin inputs block does not already include slideCount)'}`,
     );
-    lines.push(
+    out.push(
       `- **speakerNotes**: ${typeof metadata.speakerNotes === 'boolean' ? metadata.speakerNotes : '(unknown — ask: include speaker notes?)'}`,
     );
   }
   if (metadata.kind === 'template') {
-    lines.push(
+    out.push(
       `- **animations**: ${typeof metadata.animations === 'boolean' ? metadata.animations : '(unknown — ask: include motion/animations?)'}`,
     );
     if (metadata.templateLabel) {
-      lines.push(`- **template**: ${metadata.templateLabel}`);
+      out.push(`- **template**: ${metadata.templateLabel}`);
     }
   }
+  return out;
+}
+
+function imageLines(
+  metadata: ProjectMetadata,
+): string[] {
+  const out: string[] = [];
   if (metadata.kind === 'image') {
-    lines.push(
+    out.push(
       `- **imageModel**: ${metadata.imageModel ?? '(unknown - ask: which image model to use)'}`,
     );
-    lines.push(
+    out.push(
       `- **aspectRatio**: ${metadata.imageAspect ?? '(unknown - ask: 1:1, 16:9, 9:16, 4:3, 3:4)'}`,
     );
     if (metadata.imageStyle) {
-      lines.push(`- **styleNotes**: ${metadata.imageStyle}`);
+      out.push(`- **styleNotes**: ${metadata.imageStyle}`);
     }
     if (metadata.promptTemplate && metadata.promptTemplate.prompt.trim().length > 0) {
-      lines.push(`- **referenceTemplate**: ${metadata.promptTemplate.title}`);
+      out.push(`- **referenceTemplate**: ${metadata.promptTemplate.title}`);
     }
-    lines.push('');
-    lines.push(
+    out.push('');
+    out.push(
       'This is an **image** project. Plan the prompt carefully, then dispatch via the **media generation contract** using `"$OD_NODE_BIN" "$OD_BIN" media generate --surface image --model <imageModel>`. Do NOT emit `<artifact>` HTML for media surfaces.',
     );
   }
+  return out;
+}
+
+function videoLines(
+  metadata: ProjectMetadata,
+): string[] {
+  const out: string[] = [];
   if (metadata.kind === 'video') {
-    lines.push(
+    out.push(
       `- **videoModel**: ${metadata.videoModel ?? '(unknown - ask: which video model to use)'}`,
     );
-    lines.push(
+    out.push(
       `- **lengthSeconds**: ${typeof metadata.videoLength === 'number' ? metadata.videoLength : '(unknown - ask: 3s / 5s / 10s)'}`,
     );
-    lines.push(
+    out.push(
       `- **aspectRatio**: ${metadata.videoAspect ?? '(unknown - ask: 16:9, 9:16, 1:1)'}`,
     );
     if (metadata.promptTemplate && metadata.promptTemplate.prompt.trim().length > 0) {
-      lines.push(`- **referenceTemplate**: ${metadata.promptTemplate.title}`);
+      out.push(`- **referenceTemplate**: ${metadata.promptTemplate.title}`);
     }
-    lines.push('');
-    lines.push(
+    out.push('');
+    out.push(
       'This is a **video** project. Plan the shotlist and motion, then dispatch via the **media generation contract** using `"$OD_NODE_BIN" "$OD_BIN" media generate --surface video --model <videoModel> --length <seconds> --aspect <ratio>`. Do NOT emit `<artifact>` HTML.',
     );
     if (metadata.videoModel === 'hyperframes-html') {
-      lines.push(
+      out.push(
         'Special case: `hyperframes-html` is a local HTML-to-MP4 renderer, not a photoreal text-to-video model. Treat it like a motion design renderer, ask at most one clarifying question, then dispatch immediately.',
       );
     }
   }
+  return out;
+}
+
+function audioLines(
+  metadata: ProjectMetadata,
+  audioVoiceOptions: AudioVoiceOption[] | undefined,
+  audioVoiceOptionsError: string | undefined,
+): string[] {
+  const out: string[] = [];
   if (metadata.kind === 'audio') {
-    lines.push(
+    out.push(
       `- **audioKind**: ${metadata.audioKind ?? '(unknown - ask: music / speech / sfx)'}`,
     );
-    lines.push(
+    out.push(
       `- **audioModel**: ${metadata.audioModel ?? '(unknown - ask: which audio model to use)'}`,
     );
-    lines.push(
+    out.push(
       `- **durationSeconds**: ${typeof metadata.audioDuration === 'number' ? metadata.audioDuration : '(unknown - ask: target duration)'}`,
     );
     if (metadata.voice) {
-      lines.push(`- **voice**: ${metadata.voice}`);
+      out.push(`- **voice**: ${metadata.voice}`);
     } else if (metadata.audioKind === 'speech') {
-      lines.push('- **voice**: (unknown - ask: voice id / accent / pacing)');
+      out.push('- **voice**: (unknown - ask: voice id / accent / pacing)');
     }
     const voiceOptions = shouldRenderElevenLabsVoiceOptions(metadata, audioVoiceOptions)
       ? audioVoiceOptions ?? []
       : [];
     if (voiceOptions.length > 0) {
-      lines.push(
+      out.push(
         '- **ElevenLabs voice options**: Ask the user to choose from a dropdown select. The visible labels are voice descriptions; the selected value must be the exact `voice_id` passed to `--voice`. Do not ask the user to type an id.',
       );
       if (voiceOptions.length > ELEVENLABS_VOICE_PROMPT_OPTION_LIMIT) {
-        lines.push(`- **ElevenLabs voice options**: showing the first ${ELEVENLABS_VOICE_PROMPT_OPTION_LIMIT} of ${voiceOptions.length} available voices.`);
+        out.push(`- **ElevenLabs voice options**: showing the first ${ELEVENLABS_VOICE_PROMPT_OPTION_LIMIT} of ${voiceOptions.length} available voices.`);
       }
-      lines.push('');
-      lines.push('<question-form id="elevenlabs-voice" title="Choose an ElevenLabs voice">');
-      lines.push(JSON.stringify(renderElevenLabsVoiceQuestionForm(voiceOptions), null, 2));
-      lines.push('</question-form>');
+      out.push('');
+      out.push('<question-form id="elevenlabs-voice" title="Choose an ElevenLabs voice">');
+      out.push(JSON.stringify(renderElevenLabsVoiceQuestionForm(voiceOptions), null, 2));
+      out.push('</question-form>');
     } else {
       const audioVoiceOptionsPromptError = formatElevenLabsVoiceOptionsErrorForPrompt(audioVoiceOptionsError);
       if (audioVoiceOptionsPromptError) {
-        lines.push(
+        out.push(
           `- **ElevenLabs voice options**: ${audioVoiceOptionsPromptError}`,
         );
       }
     }
     if (metadata.audioKind === 'sfx') {
-      lines.push(
+      out.push(
         '- **SFX discovery**: Ask about the sound source/action, materials, intensity, acoustic space, timing/tail, loop/non-loop, and "avoid" constraints. Do not ask for language or voice for SFX.',
       );
     }
-    lines.push('');
-    lines.push(
+    out.push('');
+    out.push(
       'This is an **audio** project. Lock the content intent first, then dispatch via the **media generation contract** using `"$OD_NODE_BIN" "$OD_BIN" media generate --surface audio --audio-kind <kind> --model <audioModel> --duration <seconds>` and add `--voice <voice-id>` for speech when you have a provider-specific voice id. Do NOT emit `<artifact>` HTML.',
     );
   }
+  return out;
+}
 
+function inspirationLines(
+  metadata: ProjectMetadata,
+): string[] {
+  const out: string[] = [];
   if (metadata.inspirationDesignSystemIds && metadata.inspirationDesignSystemIds.length > 0) {
-    lines.push(
+    out.push(
       `- **inspirationDesignSystemIds**: ${metadata.inspirationDesignSystemIds.join(', ')} — the user picked these systems as *additional* inspiration alongside the primary one. Borrow palette accents, typographic personality, or component patterns from them; don't replace the primary system's tokens.`,
     );
   }
+  return out;
+}
 
+function contextPluginLines(
+  metadata: ProjectMetadata,
+): string[] {
+  const out: string[] = [];
   if (Array.isArray(metadata.contextPlugins) && metadata.contextPlugins.length > 0) {
-    lines.push('');
-    lines.push('### @ plugin context');
-    lines.push(
+    out.push('');
+    out.push('### @ plugin context');
+    out.push(
       'The user selected these plugins as additive context via @ mentions. Treat them as requested references to combine with the brief; only the explicit active plugin block, if present, is the executable/pinned plugin snapshot.',
     );
     for (const plugin of metadata.contextPlugins) {
@@ -763,7 +875,7 @@ function renderMetadataBlock(
       const description = typeof plugin.description === 'string' && plugin.description.trim().length > 0
         ? ` — ${plugin.description.trim()}`
         : '';
-      lines.push(`- ${title}${id ? ` (\`${id}\`)` : ''}${description}`);
+      out.push(`- ${title}${id ? ` (\`${id}\`)` : ''}${description}`);
     }
   }
 
@@ -772,14 +884,21 @@ function renderMetadataBlock(
   // mood and phrasing without a separate fetch. The user may have edited
   // the body before clicking Create — those edits land here and are now
   // authoritative for the brief.
+  return out;
+}
+
+function promptTemplateReferenceLines(
+  metadata: ProjectMetadata,
+): string[] {
+  const out: string[] = [];
   if (
     (metadata.kind === 'image' || metadata.kind === 'video') &&
     metadata.promptTemplate &&
     metadata.promptTemplate.prompt.trim().length > 0
   ) {
     const tpl = metadata.promptTemplate;
-    lines.push('');
-    lines.push(`### Reference prompt template — "${tpl.title}"`);
+    out.push('');
+    out.push(`### Reference prompt template — "${tpl.title}"`);
     const meta: string[] = [];
     if (tpl.category) meta.push(`category: ${tpl.category}`);
     if (tpl.model) meta.push(`suggested model: ${tpl.model}`);
@@ -787,13 +906,13 @@ function renderMetadataBlock(
     if (tpl.tags && tpl.tags.length > 0) {
       meta.push(`tags: ${tpl.tags.join(', ')}`);
     }
-    if (meta.length > 0) lines.push(meta.join(' · '));
+    if (meta.length > 0) out.push(meta.join(' · '));
     if (tpl.summary) {
-      lines.push('');
-      lines.push(tpl.summary);
+      out.push('');
+      out.push(tpl.summary);
     }
-    lines.push('');
-    lines.push(
+    out.push('');
+    out.push(
       'The user picked this template as inspiration. Treat it as a structural and stylistic reference: borrow composition, palette cues, lighting language, lens/motion direction, and the level of detail. Adapt the wording to the user\'s actual subject and brief — do NOT generate the template subject verbatim. If a field above is unknown the user wants you to follow the template\'s defaults.',
     );
     // Escape triple-backticks so a user who pastes ``` into the editable
@@ -806,25 +925,32 @@ function renderMetadataBlock(
       safe.length > 4000
         ? `${safe.slice(0, 4000)}\n… (truncated ${safe.length - 4000} chars)`
         : safe;
-    lines.push('');
-    lines.push('```text');
-    lines.push(truncated);
-    lines.push('```');
+    out.push('');
+    out.push('```text');
+    out.push(truncated);
+    out.push('```');
     if (tpl.source) {
       const author = tpl.source.author ? ` by ${tpl.source.author}` : '';
-      lines.push('');
-      lines.push(
+      out.push('');
+      out.push(
         `Source: ${tpl.source.repo}${author} — license ${tpl.source.license}. Preserve attribution if you echo the template language directly.`,
       );
     }
   }
+  return out;
+}
 
+function templateReferenceLines(
+  metadata: ProjectMetadata,
+  template: ProjectTemplate | undefined,
+): string[] {
+  const out: string[] = [];
   if (metadata.kind === 'template' && template && template.files.length > 0) {
-    lines.push('');
-    lines.push(
+    out.push('');
+    out.push(
       `### Template reference — "${template.name}"${template.description ? ` (${template.description})` : ''}`,
     );
-    lines.push(
+    out.push(
       'These HTML snapshots are what the user wants to start FROM. Read them as a stylistic + structural reference. You may copy structure, palette, typography, and component patterns; you may adapt them to the new brief; do NOT ship them verbatim. The agent should still produce its own artifact, just one that visibly inherits this template\'s design language.',
     );
     for (const f of template.files) {
@@ -834,15 +960,14 @@ function renderMetadataBlock(
         f.content.length > 12000
           ? `${f.content.slice(0, 12000)}\n<!-- … truncated (${f.content.length - 12000} chars omitted) -->`
           : f.content;
-      lines.push('');
-      lines.push(`#### \`${f.name}\``);
-      lines.push('```html');
-      lines.push(truncated);
-      lines.push('```');
+      out.push('');
+      out.push(`#### \`${f.name}\``);
+      out.push('```html');
+      out.push(truncated);
+      out.push('```');
     }
   }
-
-  return lines.join('\n');
+  return out;
 }
 
 function shouldRenderElevenLabsVoiceOptions(

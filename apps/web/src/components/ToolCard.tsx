@@ -13,7 +13,7 @@ import { useT } from '../i18n';
 import { isTodoWriteToolName, parseTodoWriteInput } from '../runtime/todos';
 import { getToolRenderer, toRenderProps } from '../runtime/tool-renderers';
 import type { AgentEvent } from '../types';
-import { Icon } from './Icon';
+import { Icon, type IconName } from './Icon';
 
 interface Props {
   use: Extract<AgentEvent, { kind: 'tool_use' }>;
@@ -34,6 +34,49 @@ interface Props {
   onRequestOpenFile?: (name: string) => void;
 }
 
+/** Stable product-level categories for execution details. */
+export type ToolCategory =
+  | 'todo'
+  | 'write'
+  | 'edit'
+  | 'read'
+  | 'run'
+  | 'search'
+  | 'fetch'
+  | 'skill'
+  | 'ask'
+  | 'other';
+
+const TOOL_CATEGORY_ICON: Record<ToolCategory, IconName> = {
+  todo: 'kanban',
+  write: 'file-code',
+  edit: 'pencil',
+  read: 'eye',
+  run: 'terminal',
+  search: 'search',
+  fetch: 'globe',
+  skill: 'puzzle',
+  ask: 'help-circle',
+  other: 'blocks',
+};
+
+export function toolCategoryForName(name: string): ToolCategory {
+  if (isTodoWriteToolName(name)) return 'todo';
+  const normalized = name.trim().toLowerCase().replace(/[\s-]+/g, '_');
+  if (['write', 'create_file'].includes(normalized)) return 'write';
+  if (['edit', 'str_replace_edit', 'multiedit', 'notebookedit'].includes(normalized)) return 'edit';
+  if (['read', 'read_file'].includes(normalized)) return 'read';
+  if (['bash', 'shell', 'terminal', 'exec', 'exec_command', 'run_command'].includes(normalized)) return 'run';
+  if (
+    ['glob', 'grep', 'find', 'list_files'].includes(normalized) ||
+    normalized.includes('search')
+  ) return 'search';
+  if (['webfetch', 'web_fetch', 'fetch', 'fetch_url'].includes(normalized)) return 'fetch';
+  if (['skill', 'use_skill', 'run_skill'].includes(normalized) || normalized.endsWith('_skill')) return 'skill';
+  if (isAskUserQuestionName(name)) return 'ask';
+  return 'other';
+}
+
 export function ToolCard({
   use,
   result,
@@ -43,6 +86,7 @@ export function ToolCard({
   onRequestOpenFile,
 }: Props) {
   const name = use.name;
+  const category = toolCategoryForName(name);
   const isStreaming = runStreaming ?? false;
   const isSucceeded = runSucceeded ?? false;
   const custom = getToolRenderer(name);
@@ -59,21 +103,19 @@ export function ToolCard({
     }
   }
   const ctx: FileToolCtx = { projectFileNames, onRequestOpenFile };
-  if (isTodoWriteToolName(name)) return <TodoCard input={use.input} runStreaming={isStreaming} runSucceeded={isSucceeded} />;
-  if (name === 'Write' || name === 'write' || name === 'create_file')
+  if (category === 'todo') return <TodoCard input={use.input} runStreaming={isStreaming} runSucceeded={isSucceeded} />;
+  if (category === 'write')
     return <FileWriteCard input={use.input} result={result} runStreaming={isStreaming} runSucceeded={isSucceeded} ctx={ctx} />;
-  if (name === 'Edit' || name === 'str_replace_edit')
+  if (category === 'edit')
     return <FileEditCard input={use.input} result={result} runStreaming={isStreaming} runSucceeded={isSucceeded} ctx={ctx} />;
-  if (name === 'Read' || name === 'read_file')
+  if (category === 'read')
     return <FileReadCard input={use.input} result={result} runStreaming={isStreaming} runSucceeded={isSucceeded} ctx={ctx} />;
-  if (name === 'Bash') return <BashCard input={use.input} result={result} runStreaming={isStreaming} runSucceeded={isSucceeded} />;
-  if (name === 'Glob' || name === 'list_files') return <GlobCard input={use.input} result={result} runStreaming={isStreaming} runSucceeded={isSucceeded} />;
-  if (name === 'Grep') return <GrepCard input={use.input} result={result} runStreaming={isStreaming} runSucceeded={isSucceeded} />;
-  if (name === 'WebFetch' || name === 'web_fetch') return <WebFetchCard input={use.input} result={result} runStreaming={isStreaming} runSucceeded={isSucceeded} />;
-  if (name === 'WebSearch' || name === 'web_search') return <WebSearchCard input={use.input} result={result} runStreaming={isStreaming} runSucceeded={isSucceeded} />;
-  if (isAskUserQuestionName(name))
+  if (category === 'run') return <BashCard input={use.input} result={result} runStreaming={isStreaming} runSucceeded={isSucceeded} />;
+  if (category === 'search') return <SearchCard toolName={name} input={use.input} result={result} runStreaming={isStreaming} runSucceeded={isSucceeded} />;
+  if (category === 'fetch') return <WebFetchCard input={use.input} result={result} runStreaming={isStreaming} runSucceeded={isSucceeded} />;
+  if (category === 'ask')
     return <LegacyAskUserQuestionCard input={use.input} result={result} runStreaming={isStreaming} runSucceeded={isSucceeded} />;
-  return <GenericCard name={name} input={use.input} result={result} runStreaming={isStreaming} runSucceeded={isSucceeded} />;
+  return <GenericCard name={name} category={category} input={use.input} result={result} runStreaming={isStreaming} runSucceeded={isSucceeded} />;
 }
 
 // The interactive `AskUserQuestion` mechanism was retired in favor of the
@@ -160,7 +202,7 @@ function LegacyAskUserQuestionCard({
   const first = questions[0];
   // Unparseable payload → defer to the generic card rather than inventing UI.
   if (!first)
-    return <GenericCard name="AskUserQuestion" input={input} result={result} runStreaming={runStreaming} runSucceeded={runSucceeded} />;
+    return <GenericCard name="AskUserQuestion" category="ask" input={input} result={result} runStreaming={runStreaming} runSucceeded={runSucceeded} />;
   // Title + summary are model-authored text (already in the user's locale), so
   // no new i18n keys are needed for this historical-only surface.
   const title = first.header ?? truncate(first.question, 60);
@@ -177,7 +219,7 @@ function LegacyAskUserQuestionCard({
   return (
     <div className="op-card op-generic">
       <div className="op-card-head">
-        <ResultBadge result={result} runStreaming={runStreaming} runSucceeded={runSucceeded} />
+        <ResultBadge category="ask" result={result} runStreaming={runStreaming} runSucceeded={runSucceeded} />
         <span className="op-title">{title}</span>
         {summary ? <span className="op-meta">{truncate(summary, 240)}</span> : null}
       </div>
@@ -211,20 +253,26 @@ function OpenInTabButton({ filePath, ctx }: { filePath: string; ctx: FileToolCtx
   );
 }
 
-export function TodoCard({ input, runStreaming, runSucceeded, onDismiss }: { input: unknown; runStreaming: boolean; runSucceeded: boolean; onDismiss?: () => void }) {
+export function TodoCard({
+  input,
+  runStreaming,
+  runSucceeded,
+  onContinue,
+}: {
+  input: unknown;
+  runStreaming: boolean;
+  runSucceeded: boolean;
+  onContinue?: () => void;
+}) {
   const t = useT();
   const todos = parseTodoWriteInput(input);
   // Mirror the pattern other agent UIs (Cursor, Codex) use: default the
   // todo list to expanded while there is in-progress work or anything
-  // pending, collapse it to a one-line summary when everything is done.
-  // The user can flip it manually via the header button — that local
-  // override sticks for the lifetime of this card.
+  // pending, and collapse it to its progress summary when everything is done.
+  // The summary always remains a disclosure button, so completed tasks can be
+  // reviewed without making every completed turn permanently verbose.
   const hasInProgress = todos.some((todo) => todo.status === 'in_progress');
   const hasPending = todos.some((todo) => todo.status === 'pending' || todo.status === 'in_progress');
-  const defaultExpanded = todos.length > 0 && (hasInProgress || hasPending || runStreaming);
-  const [overrideExpanded, setOverrideExpanded] = useState<boolean | null>(null);
-  const expanded = overrideExpanded ?? defaultExpanded;
-  if (todos.length === 0) return <GenericCard name="TodoWrite" input={input} runStreaming={runStreaming} runSucceeded={runSucceeded} />;
   // The counter reads as "active progress / total" — a task that is
   // currently in_progress counts toward the numerator alongside completed
   // ones, matching how Cursor / Codex tally tasks. Without this the user
@@ -235,10 +283,16 @@ export function TodoCard({ input, runStreaming, runSucceeded, onDismiss }: { inp
   const done = todos.filter(
     (todo) => todo.status === 'completed' || todo.status === 'in_progress',
   ).length;
-  // All-complete state surfaces the Done dismiss button (when wired) so the
-  // pinned task list can be cleared once the whole plan is finished.
-  const allComplete = completed === todos.length;
-  const showDismiss = !!onDismiss && allComplete;
+  // All-complete state wins over an in-flight response: an agent may still be
+  // writing its final prose after marking every task complete, so the details
+  // start collapsed. The summary remains in the conversation as part of the
+  // task history and can always be expanded for review.
+  const allComplete = todos.length > 0 && completed === todos.length;
+  const defaultExpanded = !allComplete && runStreaming && (hasInProgress || hasPending);
+  const [overrideExpanded, setOverrideExpanded] = useState<boolean | null>(null);
+  const expanded = overrideExpanded ?? defaultExpanded;
+  if (todos.length === 0) return <GenericCard name="TodoWrite" category="todo" input={input} runStreaming={runStreaming} runSucceeded={runSucceeded} />;
+  const showContinue = !!onContinue && !allComplete && !runStreaming;
   return (
     <div className={`op-card op-todo${expanded ? '' : ' op-todo-collapsed'}`}>
       <div className="op-card-head op-todo-head">
@@ -249,28 +303,30 @@ export function TodoCard({ input, runStreaming, runSucceeded, onDismiss }: { inp
           onClick={() => setOverrideExpanded(!expanded)}
           title={expanded ? t('tool.todosCollapse') : t('tool.todosExpand')}
         >
-          <span className="op-icon" aria-hidden>☐</span>
+          <span className="op-todo-icon" data-tool-category="todo" aria-hidden>
+            <Icon name={TOOL_CATEGORY_ICON.todo} size={14} strokeWidth={2} />
+          </span>
           <span className="op-title">{t('tool.todos')}</span>
           <span className="op-meta">
             {done}/{todos.length}
           </span>
+          {allComplete ? <span className="op-todo-complete">{t('tool.todosDone')}</span> : null}
           {!expanded && inProgressTodo ? (
             <span className="op-todo-current">
               {inProgressTodo.activeForm || inProgressTodo.content}
             </span>
           ) : null}
           <span className="op-todo-chev" aria-hidden>
-            {expanded ? '▾' : '▸'}
+            <Icon name="chevron-down" size={14} />
           </span>
         </button>
-        {showDismiss ? (
+        {showContinue ? (
           <button
             type="button"
-            className="op-todo-done"
-            onClick={() => onDismiss?.()}
-            title={t('tool.todosDismiss')}
+            className="op-todo-continue"
+            onClick={() => onContinue?.()}
           >
-            {t('tool.todosDone')}
+            {t('assistant.continueRemaining')}
           </button>
         ) : null}
       </div>
@@ -322,8 +378,8 @@ function FileWriteCard({
   const isRunning = runStreaming && !result;
   return (
     <div className="op-card op-file">
-      <button type="button" className="op-card-head" onClick={() => setOpen((o) => !o)}>
-        <ResultBadge result={result} runStreaming={runStreaming} runSucceeded={runSucceeded} />
+      <button type="button" className="op-card-head" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        <ResultBadge category="write" result={result} runStreaming={runStreaming} runSucceeded={runSucceeded} />
         <span className={`op-title${isRunning ? ' shimmer-text' : ''}`}>{t('tool.write')}</span>
         <span className="op-meta">{baseName}{lines !== null ? ` · ${t('tool.lines', { n: lines })}` : ''}</span>
         <span className="op-expand-chev" aria-hidden>
@@ -338,7 +394,6 @@ function FileWriteCard({
           </div>
         </div>
       </div>
-      <FileErrorDetail result={result} />
     </div>
   );
 }
@@ -372,8 +427,8 @@ function FileEditCard({
   const isRunning = runStreaming && !result;
   return (
     <div className="op-card op-file">
-      <button type="button" className="op-card-head" onClick={() => setOpen((o) => !o)}>
-        <ResultBadge result={result} runStreaming={runStreaming} runSucceeded={runSucceeded} />
+      <button type="button" className="op-card-head" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        <ResultBadge category="edit" result={result} runStreaming={runStreaming} runSucceeded={runSucceeded} />
         <span className={`op-title${isRunning ? ' shimmer-text' : ''}`}>{t('tool.edit')}</span>
         <span className="op-meta">{baseName} · {editCount} {editCount === 1 ? t('tool.changeSingular') : t('tool.changePlural')}</span>
         <span className="op-expand-chev" aria-hidden>
@@ -388,7 +443,6 @@ function FileEditCard({
           </div>
         </div>
       </div>
-      <FileErrorDetail result={result} />
     </div>
   );
 }
@@ -414,8 +468,8 @@ function FileReadCard({
   const isRunning = runStreaming && !result;
   return (
     <div className="op-card op-file">
-      <button type="button" className="op-card-head" onClick={() => setOpen((o) => !o)}>
-        <ResultBadge result={result} runStreaming={runStreaming} runSucceeded={runSucceeded} />
+      <button type="button" className="op-card-head" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        <ResultBadge category="read" result={result} runStreaming={runStreaming} runSucceeded={runSucceeded} />
         <span className={`op-title${isRunning ? ' shimmer-text' : ''}`}>{t('tool.read')}</span>
         <span className="op-meta">{baseName}</span>
         <span className="op-expand-chev" aria-hidden>
@@ -424,13 +478,17 @@ function FileReadCard({
       </button>
       <div className={`accordion-collapsible${open ? ' open' : ''}`}>
         <div className="accordion-collapsible-inner">
-          <div className="op-card-detail op-card-file-detail">
-            <code className="op-path">{file}</code>
-            <OpenInTabButton filePath={file} ctx={ctx} />
+          <div className="op-card-detail op-card-file-detail op-card-read-detail">
+            <div className="op-card-file-path-row">
+              <code className="op-path">{file}</code>
+              <OpenInTabButton filePath={file} ctx={ctx} />
+            </div>
+            {result?.content && !result.isError ? (
+              <pre className="op-output">{truncate(result.content, 4000)}</pre>
+            ) : null}
           </div>
         </div>
       </div>
-      <FileErrorDetail result={result} />
     </div>
   );
 }
@@ -444,8 +502,8 @@ function BashCard({ input, result, runStreaming, runSucceeded }: { input: unknow
   const isRunning = runStreaming && !result;
   return (
     <div className="op-card op-bash">
-      <button type="button" className="op-card-head" onClick={() => setOpen((o) => !o)}>
-        <ResultBadge result={result} runStreaming={runStreaming} runSucceeded={runSucceeded} />
+      <button type="button" className="op-card-head" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        <ResultBadge category="run" result={result} runStreaming={runStreaming} runSucceeded={runSucceeded} />
         <span className={`op-title${isRunning ? ' shimmer-text' : ''}`}>{t('tool.bash')}</span>
         {desc ? <span className="op-meta op-desc">{desc}</span> : null}
         <span className="op-expand-chev" aria-hidden>
@@ -456,7 +514,7 @@ function BashCard({ input, result, runStreaming, runSucceeded }: { input: unknow
         <div className="accordion-collapsible-inner">
           <div className="op-card-detail">
             <pre className="op-command">{truncate(command, 400)}</pre>
-            {result?.content ? (
+            {result?.content && !result.isError ? (
               <pre className="op-output">{truncate(result.content, 4000)}</pre>
             ) : null}
           </div>
@@ -466,31 +524,21 @@ function BashCard({ input, result, runStreaming, runSucceeded }: { input: unknow
   );
 }
 
-function GlobCard({ input, result, runStreaming, runSucceeded }: { input: unknown; result?: Props['result']; runStreaming: boolean; runSucceeded: boolean }) {
+function SearchCard({ toolName, input, result, runStreaming, runSucceeded }: { toolName: string; input: unknown; result?: Props['result']; runStreaming: boolean; runSucceeded: boolean }) {
   const t = useT();
-  const obj = (input ?? {}) as { pattern?: string; path?: string };
+  const obj = (input ?? {}) as { query?: string; pattern?: string; glob?: string; path?: string };
+  const query = obj.query ?? obj.pattern ?? obj.glob ?? '*';
+  const isWebSearch = toolName.toLowerCase().includes('web');
   return (
-    <div className="op-card op-search">
-      <div className="op-card-head">
-        <ResultBadge result={result} runStreaming={runStreaming} runSucceeded={runSucceeded} />
-        <span className="op-title">{t('tool.glob')}</span>
-        <span className="op-meta">{obj.pattern ?? '*'}{obj.path ? ` in ${obj.path}` : ''}</span>
-      </div>
-    </div>
-  );
-}
-
-function GrepCard({ input, result, runStreaming, runSucceeded }: { input: unknown; result?: Props['result']; runStreaming: boolean; runSucceeded: boolean }) {
-  const t = useT();
-  const obj = (input ?? {}) as { pattern?: string; path?: string; glob?: string };
-  return (
-    <div className="op-card op-search">
-      <div className="op-card-head">
-        <ResultBadge result={result} runStreaming={runStreaming} runSucceeded={runSucceeded} />
-        <span className="op-title">{t('tool.grep')}</span>
-        <span className="op-meta">{obj.pattern ?? ''}{obj.path ? ` in ${obj.path}` : ''}</span>
-      </div>
-    </div>
+    <CompactResultCard
+      className={isWebSearch ? 'op-web' : 'op-search'}
+      category="search"
+      title={t('tool.search')}
+      summary={`${query}${obj.path ? ` in ${obj.path}` : ''}`}
+      result={result}
+      runStreaming={runStreaming}
+      runSucceeded={runSucceeded}
+    />
   );
 }
 
@@ -498,38 +546,86 @@ function WebFetchCard({ input, result, runStreaming, runSucceeded }: { input: un
   const t = useT();
   const obj = (input ?? {}) as { url?: string };
   return (
-    <div className="op-card op-web">
-      <div className="op-card-head">
-        <ResultBadge result={result} runStreaming={runStreaming} runSucceeded={runSucceeded} />
-        <span className="op-title">{t('tool.fetch')}</span>
-        <span className="op-meta">{obj.url ?? ''}</span>
-      </div>
-    </div>
+    <CompactResultCard
+      className="op-web"
+      category="fetch"
+      title={t('tool.fetch')}
+      summary={obj.url ?? ''}
+      result={result}
+      runStreaming={runStreaming}
+      runSucceeded={runSucceeded}
+    />
   );
 }
 
-function WebSearchCard({ input, result, runStreaming, runSucceeded }: { input: unknown; result?: Props['result']; runStreaming: boolean; runSucceeded: boolean }) {
-  const t = useT();
-  const obj = (input ?? {}) as { query?: string };
+function CompactResultCard({
+  className,
+  category,
+  title,
+  summary,
+  result,
+  runStreaming,
+  runSucceeded,
+}: {
+  className: string;
+  category: ToolCategory;
+  title: string;
+  summary: string;
+  result?: Props['result'];
+  runStreaming: boolean;
+  runSucceeded: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const hasOutput = !!result?.content.trim() && !result.isError;
+  const head = (
+    <>
+      <ResultBadge category={category} result={result} runStreaming={runStreaming} runSucceeded={runSucceeded} />
+      <span className="op-title">{title}</span>
+      {summary ? <span className="op-meta">{summary}</span> : null}
+      {hasOutput ? (
+        <span className="op-expand-chev" aria-hidden>
+          <Icon name={open ? 'chevron-down' : 'chevron-right'} size={11} />
+        </span>
+      ) : null}
+    </>
+  );
   return (
-    <div className="op-card op-web">
-      <div className="op-card-head">
-        <ResultBadge result={result} runStreaming={runStreaming} runSucceeded={runSucceeded} />
-        <span className="op-title">{t('tool.search')}</span>
-        <span className="op-meta">{obj.query ?? ''}</span>
-      </div>
+    <div className={`op-card ${className}`}>
+      {hasOutput ? (
+        <button
+          type="button"
+          className="op-card-head"
+          aria-expanded={open}
+          onClick={() => setOpen((value) => !value)}
+        >
+          {head}
+        </button>
+      ) : (
+        <div className="op-card-head op-card-head--static">{head}</div>
+      )}
+      {hasOutput ? (
+        <div className={`accordion-collapsible${open ? ' open' : ''}`}>
+          <div className="accordion-collapsible-inner">
+            <div className="op-card-detail">
+              <pre className="op-output">{truncate(result?.content ?? '', 4000)}</pre>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
 
 function GenericCard({
   name,
+  category,
   input,
   result,
   runStreaming,
   runSucceeded,
 }: {
   name: string;
+  category: ToolCategory;
   input: unknown;
   result?: Props['result'];
   runStreaming: boolean;
@@ -539,7 +635,7 @@ function GenericCard({
   return (
     <div className="op-card op-generic">
       <div className="op-card-head">
-        <ResultBadge result={result} runStreaming={runStreaming} runSucceeded={runSucceeded} />
+        <ResultBadge category={category} result={result} runStreaming={runStreaming} runSucceeded={runSucceeded} />
         <span className="op-title">{name}</span>
         {summary ? <span className="op-meta">{truncate(summary, 200)}</span> : null}
       </div>
@@ -547,17 +643,36 @@ function GenericCard({
   );
 }
 
-function ResultBadge({ result, runStreaming, runSucceeded }: { result?: Props['result']; runStreaming: boolean; runSucceeded: boolean }) {
+function ResultBadge({
+  category,
+  result,
+  runStreaming,
+  runSucceeded,
+}: {
+  category: ToolCategory;
+  result?: Props['result'];
+  runStreaming: boolean;
+  runSucceeded: boolean;
+}) {
   const t = useT();
-  if (!result && runStreaming) return <span className="op-status op-status-running" title={t('tool.running')}><Icon name="spinner" size={14} /></span>;
-  if (!result && !runSucceeded) return <span className="op-status op-status-error" title={t('tool.error')}><Icon name="close" size={14} /></span>;
-  if (result?.isError) return <span className="op-status op-status-error" title={result.content || t('tool.error')}><Icon name="close" size={14} /></span>;
-  return <span className="op-status op-status-ok" title={t('tool.done')}><Icon name="check" size={14} /></span>;
-}
-
-function FileErrorDetail({ result }: { result?: Props['result'] }) {
-  if (!result?.isError || !result.content.trim()) return null;
-  return <pre className="op-output">{truncate(result.content, 1200)}</pre>;
+  const failed = result?.isError || (!result && !runStreaming && !runSucceeded);
+  const completed = !failed && (!!result || (!runStreaming && runSucceeded));
+  const state = failed ? 'error' : completed ? 'completed' : 'running';
+  const title = failed
+    ? result?.content || t('tool.error')
+    : completed
+      ? t('tool.done')
+      : t('tool.running');
+  return (
+    <span
+      className="op-status op-status-category"
+      data-tool-category={category}
+      data-tool-state={state}
+      title={title}
+    >
+      <Icon name={TOOL_CATEGORY_ICON[category]} size={14} />
+    </span>
+  );
 }
 
 function describeInput(input: unknown): string {

@@ -71,6 +71,9 @@ interface Props {
   /** Project files for the composer's @-mention picker and produced-file chips. */
   projectFiles: ProjectFile[];
   projectFileNames?: Set<string>;
+  /** Daemon-resolved on-disk working directory of the project — positive-proof
+   *  anchor for chat file-link routing (see AssistantMessage). */
+  projectResolvedDir?: string | null;
   /** Conversation list + selection callbacks, shared with the header menu so a
    *  side chat is just another conversation the user can browse/switch. */
   conversations: Conversation[];
@@ -97,6 +100,7 @@ export function SideChatTab({
   locale,
   projectFiles,
   projectFileNames,
+  projectResolvedDir,
   conversations,
   onSelectConversation,
   onDeleteConversation,
@@ -146,6 +150,7 @@ export function SideChatTab({
           onSessionModeChange={(mode) => onSessionModeChange?.(conversationId, mode)}
           projectFiles={projectFiles}
           projectFileNames={projectFileNames}
+          projectResolvedDir={projectResolvedDir}
           onEnsureProject={async () => projectId}
           onSend={controlledChat?.onSend ?? chat.onSend}
           onRetry={controlledChat?.onRetry ?? chat.onRetry}

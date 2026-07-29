@@ -1,7 +1,9 @@
 import type { Express, Response } from 'express';
 import { PROJECT_EXPORT_MANIFEST_SCHEMA, isExportFormat } from '@open-design/contracts';
 import nodePath from 'node:path';
+import os from 'node:os';
 import { readFile, rm } from 'node:fs/promises';
+import { isBlocked as isBlockedSystemDir } from './linked-dirs.js';
 import type { RouteDeps } from './server-context.js';
 import {
   InlineAssetsLimitError,
@@ -17,6 +19,7 @@ import {
   readSlideFiles,
   type BuildDeckRenderInputOptions,
 } from './deck-export.js';
+import { readProjectFileVersion } from './project-file-versions.js';
 import { authorizeReasoningEgress, sendReasoningEgressDenial } from './reasoning-egress.js';
 import { sandboxImportedProjectRootUnavailableReason } from './sandbox-mode.js';
 import { parseOrchestratorWorkspace } from './workspace-contract.js';
@@ -30,6 +33,28 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
   const { fs, path } = ctx.node;
   const { randomId } = ctx.ids;
   const { PROJECTS_DIR, RUNTIME_DATA_DIR_CANONICAL } = ctx.paths;
+
+  // A project root (imported folder OR a working-dir rebind) must not point at a
+  // system directory or a credential store. Binding it at $HOME / ~/.ssh / etc.
+  // would let the project file API read or delete the user's private keys and
+  // credentials. `isBlockedSystemDir` covers /etc, /proc, …; credential dirs use
+  // a prefix match; the home ROOT only exact-matches so legitimate subfolders
+  // (e.g. ~/Projects) stay usable. Shared by both entry points so neither can
+  // be used to bypass the other. Returns a rejection reason, or null if allowed.
+  async function blockedProjectRootReason(normalizedPath: string): Promise<string | null> {
+    let homeReal = os.homedir();
+    try { homeReal = await fs.promises.realpath(homeReal); } catch { /* keep as-is */ }
+    const credentialDirs = ['.ssh', '.aws', '.gnupg', '.kube', '.docker'].map((d) =>
+      path.join(homeReal, d),
+    );
+    const inCredentialDir = credentialDirs.some(
+      (dir) => normalizedPath === dir || normalizedPath.startsWith(dir + path.sep),
+    );
+    if (isBlockedSystemDir(normalizedPath) || normalizedPath === homeReal || inCredentialDir) {
+      return 'cannot use a system or credential directory as a project root';
+    }
+    return null;
+  }
   const { importClaudeDesignZip, projectDir, detectEntryFile } = ctx.imports;
   const {
     consumedImportNonces,
@@ -199,6 +224,10 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
       ) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'cannot point at the data directory');
       }
+      const workingDirBlockReason = await blockedProjectRootReason(normalizedPath);
+      if (workingDirBlockReason) {
+        return sendApiError(res, 400, 'BAD_REQUEST', workingDirBlockReason);
+      }
       const sandboxReason = normalizedOrchestratorWorkspace && trustedPickerImport
         ? null
         : sandboxImportedProjectRootUnavailableReason(normalizedPath);
@@ -333,6 +362,10 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
       ) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'cannot import the data directory');
       }
+      const importBlockReason = await blockedProjectRootReason(normalizedPath);
+      if (importBlockReason) {
+        return sendApiError(res, 400, 'BAD_REQUEST', importBlockReason);
+      }
       const sandboxReason = normalizedOrchestratorWorkspace && trustedPickerImport
         ? null
         : sandboxImportedProjectRootUnavailableReason(normalizedPath);
@@ -425,6 +458,29 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
     return !rendered.ok && typeof rendered.error === 'string' && /no slide surfaces found/i.test(rendered.error);
   }
 
+  function normalizeExportVersionId(raw: unknown): string | undefined {
+    if (typeof raw !== 'string') return undefined;
+    const value = raw.trim();
+    return value.length > 0 ? value : undefined;
+  }
+
+  async function readExportVersionSource(
+    projectId: string,
+    fileName: string,
+    versionId: string | undefined,
+    metadata: unknown,
+  ): Promise<string | undefined> {
+    if (!versionId) return undefined;
+    const result = await readProjectFileVersion(
+      PROJECTS_DIR,
+      projectId,
+      fileName,
+      versionId,
+      metadata,
+    );
+    return result.content;
+  }
+
   function screenshotRenderClientError(
     rendered: { ok: boolean; error?: string; errorCode?: string },
     format: 'pptx' | 'pdf' | 'image',
@@ -468,6 +524,10 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
       if (typeof fileName !== 'string' || fileName.length === 0) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'fileName required');
       }
+      const project = getProject(db, projectId);
+      const metadata = project?.metadata ?? null;
+      const versionId = normalizeExportVersionId(body?.versionId);
+      const sourceHtml = await readExportVersionSource(projectId, fileName, versionId, metadata);
       if (format === 'image' && imageFormat != null && imageFormat !== 'png' && imageFormat !== 'jpeg') {
         return sendApiError(res, 400, 'BAD_REQUEST', 'imageFormat must be png or jpeg');
       }
@@ -483,9 +543,10 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
             daemonUrl: daemonUrlRef.current,
             fileName,
             format,
-            metadata: getProject(db, projectId)?.metadata ?? null,
+            metadata,
             projectId,
             projectsRoot: PROJECTS_DIR,
+            ...(sourceHtml !== undefined ? { sourceHtml } : {}),
             ...(typeof title === 'string' ? { title } : {}),
             ...(typeof body?.deck === 'boolean' ? { deck: body.deck } : {}),
             ...(format === 'image' && imageFormat === 'jpeg' ? { imageFormat: 'jpeg' } : {}),
@@ -552,11 +613,12 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
         // Imported-folder projects keep their workspace under metadata.baseDir;
         // thread it through so readProjectFile resolves the real file instead of
         // 404ing on <data>/projects/:id.
-        metadata: getProject(db, projectId)?.metadata ?? null,
+        metadata,
         outputDir,
         projectId,
         projectsRoot: PROJECTS_DIR,
       };
+      if (sourceHtml !== undefined) renderOptions.sourceHtml = sourceHtml;
       if (typeof title === 'string') renderOptions.title = title;
       if (typeof width === 'number') renderOptions.width = width;
       if (typeof height === 'number') renderOptions.height = height;
@@ -905,13 +967,18 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
       if (typeof fileName !== 'string' || fileName.length === 0) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'fileName required');
       }
+      const project = getProject(db, req.params.id);
+      const metadata = project?.metadata ?? null;
+      const versionId = normalizeExportVersionId(req.body?.versionId);
+      const sourceHtml = await readExportVersionSource(req.params.id, fileName, versionId, metadata);
       const input = await buildDesktopPdfExportInput({
         daemonUrl: daemonUrlRef.current,
         deck: deck === true,
         fileName,
-        metadata: getProject(db, req.params.id)?.metadata ?? null,
+        metadata,
         projectId: req.params.id,
         projectsRoot: PROJECTS_DIR,
+        ...(sourceHtml !== undefined ? { sourceHtml } : {}),
         title: typeof title === 'string' ? title : undefined,
       });
       const result = await desktopPdfExporter(input);
@@ -959,7 +1026,7 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
   // handleScreenshotExport owns validation, the 404/400/422 error mapping, and
   // scratch-dir cleanup.
   app.post('/api/projects/:id/export', async (req, res) => {
-    const { fileName, title, deck, format, imageFormat, width, height } = req.body || {};
+    const { fileName, title, deck, format, imageFormat, width, height, versionId } = req.body || {};
     if (typeof fileName !== 'string' || fileName.length === 0) {
       return sendApiError(res, 400, 'BAD_REQUEST', 'fileName required');
     }
@@ -976,6 +1043,7 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
       ...(width != null ? { width } : {}),
       ...(height != null ? { height } : {}),
       ...(typeof title === 'string' ? { title } : {}),
+      ...(typeof versionId === 'string' ? { versionId } : {}),
     });
   });
 
@@ -1025,6 +1093,7 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
       const project = getProject(db, req.params.id);
       const splatParam = (req.params as { splat?: string | string[] }).splat;
       const relPath = Array.isArray(splatParam) ? splatParam.join('/') : String(splatParam ?? '');
+      const versionId = normalizeExportVersionId(req.query.versionId);
 
       // PR #1312 round-5 (lefarcen P2): stat the owner file BEFORE
       // readProjectFile so a 100 MiB owner HTML is rejected after a
@@ -1039,53 +1108,82 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
       // as defense-in-depth: it still catches direct in-process callers
       // that skip the route and any future drift in the size reported
       // by stat vs the bytes actually returned by readFile.
-      let ownerMeta;
-      try {
-        ownerMeta = await resolveProjectFilePath(
-          PROJECTS_DIR,
-          req.params.id,
-          relPath,
-          project?.metadata,
-        );
-      } catch (err: any) {
-        const status = err && err.code === 'ENOENT' ? 404 : 400;
-        return sendApiError(
-          res,
-          status,
-          status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
-          String(err),
-        );
-      }
+      let ownerHtml: string;
+      if (versionId) {
+        try {
+          ownerHtml = await readExportVersionSource(
+            req.params.id,
+            relPath,
+            versionId,
+            project?.metadata,
+          ) ?? '';
+        } catch (err: any) {
+          const status = err && err.code === 'ENOENT' ? 404 : 400;
+          return sendApiError(
+            res,
+            status,
+            status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
+            String(err),
+          );
+        }
+        const ownerBytes = Buffer.byteLength(ownerHtml, 'utf8');
+        if (ownerBytes > MAX_INLINE_OWNER_BYTES) {
+          return sendApiError(
+            res,
+            413,
+            'PAYLOAD_TOO_LARGE',
+            `owner html ${ownerBytes} bytes exceeds MAX_INLINE_OWNER_BYTES ${MAX_INLINE_OWNER_BYTES}`,
+          );
+        }
+      } else {
+        let ownerMeta;
+        try {
+          ownerMeta = await resolveProjectFilePath(
+            PROJECTS_DIR,
+            req.params.id,
+            relPath,
+            project?.metadata,
+          );
+        } catch (err: any) {
+          const status = err && err.code === 'ENOENT' ? 404 : 400;
+          return sendApiError(
+            res,
+            status,
+            status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
+            String(err),
+          );
+        }
 
-      if (ownerMeta.size > MAX_INLINE_OWNER_BYTES) {
-        return sendApiError(
-          res,
-          413,
-          'PAYLOAD_TOO_LARGE',
-          `owner html ${ownerMeta.size} bytes exceeds MAX_INLINE_OWNER_BYTES ${MAX_INLINE_OWNER_BYTES}`,
-        );
-      }
+        if (ownerMeta.size > MAX_INLINE_OWNER_BYTES) {
+          return sendApiError(
+            res,
+            413,
+            'PAYLOAD_TOO_LARGE',
+            `owner html ${ownerMeta.size} bytes exceeds MAX_INLINE_OWNER_BYTES ${MAX_INLINE_OWNER_BYTES}`,
+          );
+        }
 
-      if (!ownerMeta.mime.startsWith('text/html')) {
-        return sendApiError(
-          res,
-          415,
-          'UNSUPPORTED_MEDIA_TYPE',
-          'export endpoint only supports HTML files',
-        );
-      }
+        if (!ownerMeta.mime.startsWith('text/html')) {
+          return sendApiError(
+            res,
+            415,
+            'UNSUPPORTED_MEDIA_TYPE',
+            'export endpoint only supports HTML files',
+          );
+        }
 
-      let file;
-      try {
-        file = await readProjectFile(PROJECTS_DIR, req.params.id, relPath, project?.metadata);
-      } catch (err: any) {
-        const status = err && err.code === 'ENOENT' ? 404 : 400;
-        return sendApiError(
-          res,
-          status,
-          status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
-          String(err),
-        );
+        try {
+          const file = await readProjectFile(PROJECTS_DIR, req.params.id, relPath, project?.metadata);
+          ownerHtml = file.buffer.toString('utf8');
+        } catch (err: any) {
+          const status = err && err.code === 'ENOENT' ? 404 : 400;
+          return sendApiError(
+            res,
+            status,
+            status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
+            String(err),
+          );
+        }
       }
 
       // PR #1312 round-4 (lefarcen P2): stat first, then read. This
@@ -1127,7 +1225,7 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
         projectId: req.params.id,
         projectsRoot: PROJECTS_DIR,
         relPath,
-        html: file.buffer.toString('utf8'),
+        html: ownerHtml,
         metadata: project?.metadata,
         readProjectFile,
         resolveProjectFilePath,

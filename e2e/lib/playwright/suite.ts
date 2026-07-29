@@ -33,6 +33,13 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
       let stopError: unknown = null;
       try {
         await toolsDev.startWeb();
+        const warmupResponse = await fetch(toolsDev.url.web('/'));
+        if (!warmupResponse.ok) {
+          throw new Error(
+            `Playwright web warmup failed with ${warmupResponse.status} ${warmupResponse.statusText}`,
+          );
+        }
+        await warmupResponse.arrayBuffer();
         await use(toolsDev);
       } catch (error) {
         useError = error;

@@ -2,16 +2,19 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-huashu-takram-soft-tech",
-  "title": "Takram Soft Tech",
+  "title": "Build a Buyer-Committee Leave-Behind like an Enterprise Sales Lead",
   "title_i18n": {
-    "en": "Takram Soft Tech",
-    "zh-CN": "东方柔光科技"
+    "en": "Build a Buyer-Committee Leave-Behind like an Enterprise Sales Lead",
+    "zh-CN": "像企业销售负责人一样写买方委员会转发稿",
+    "zh-TW": "像企业销售负责人一样写买方委员会转发稿"
   },
   "version": "1.0.0",
-  "description": "Soft Eastern-philosophy tech decks: warm rice-paper canvas (#F5F0EB), sage green #6B8F71 + one gold #D4A574 + warm grays, Noto Serif SC display headings mixed with Inter labels, rounded translucent data cards, and SVG data visualization treated as an art piece — three-series overlaid radar charts on hand-drawn dashed grids with Fig. NN plate annotations, on a fixed 1920×1080 canvas. Based on https://github.com/alchaincyf/huashu-design ppt-takram, expanded from a single showcase page into a full multi-section deck.",
+  "publishedAt": "2026-06-16T09:32:15Z",
+  "description": "Open Design procurement & security leave-behind: the one-pager-plus a buying committee can forward and approve internally. Built as a decision-grade B2B sales deck for buying committee, security, procurement.",
   "description_i18n": {
-    "en": "Soft Eastern-philosophy tech decks: warm rice-paper canvas (#F5F0EB), sage green #6B8F71 + one gold #D4A574 + warm grays, Noto Serif SC display headings mixed with Inter labels, rounded translucent data cards, and SVG data visualization treated as an art piece — three-series overlaid radar charts on hand-drawn dashed grids with Fig. NN plate annotations, on a fixed 1920×1080 canvas. Based on https://github.com/alchaincyf/huashu-design ppt-takram, expanded from a single showcase page into a full multi-section deck.",
-    "zh-CN": "东方哲学柔和科技感幻灯片：米色和纸底 #F5F0EB、鼠尾草绿 #6B8F71 + 唯一金 #D4A574 + 暖灰自然色系、Noto Serif SC 衬线大标题与 Inter 标签混排、圆角半透明数据卡片，招牌装置是「数据可视化当艺术品」——手绘感虚线同心网格上的三色叠加 SVG 雷达图与 Fig. NN 图版注记，1920×1080 固定画布、零外部 JS 依赖。基于花叔 huashu-design 的 ppt-takram 单页范本扩展为完整多章节 deck。"
+    "en": "Open Design procurement & security leave-behind: the one-pager-plus a buying committee can forward and approve internally. Built as a decision-grade B2B sales deck for buying committee, security, procurement.",
+    "zh-CN": "像企业销售负责人一样写买方委员会转发稿——一份可商业交付的B2B 销售 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像企业销售负责人一样写买方委员会转发稿——一份可商业交付的B2B 销售 Deck，围绕真实主题、证据链与决策目标组织。"
   },
   "license": "MIT",
   "author": {
@@ -32,7 +35,19 @@
     "data-viz",
     "nature",
     "radar-chart",
-    "huashu"
+    "huashu",
+    "ai",
+    "copilot",
+    "workflow",
+    "huashu-takram-soft-tech",
+    "enterprise-ai-literacy",
+    "b2b-sales",
+    "b2b-saas-sales-proposal",
+    "sales",
+    "renewal",
+    "customer",
+    "decision-deck",
+    "commercial-slide-agent"
   ],
   "compat": {
     "agentSkills": [
@@ -45,7 +60,7 @@
     "kind": "scenario",
     "taskKind": "new-generation",
     "mode": "deck",
-    "scenario": "product",
+    "scenario": "sales",
     "surface": "web",
     "preview": {
       "type": "html",
@@ -54,16 +69,17 @@
     },
     "useCase": {
       "query": {
-        "en": "Create a soft nature-toned {{deckType}} for {{audience}} about {{topic}} with {{slideCount}}, using the Takram Soft Tech system (based on huashu-design ppt-takram): a fixed 1920×1080 canvas auto-scaled to the viewport on warm rice paper #F5F0EB with two locked ≤8%-alpha radial washes (sage at 20%/50%, warm gray at 80%/30%) breathing behind every page; the palette is sage green #6B8F71/#7D9B72/#A8B5A0 as protagonist, one gold #D4A574 strictly limited to the 2nd data series / quote marks / one special delta pill, and warm grays #C8C2B8/#D4CFC6/#DDD9D2 as the 3rd series and all chrome — no purple, no blue, no neon, no pure black, no gradients beyond the two washes. Typography mixes Noto Serif SC display headings (cover 90–104px, sections 44–66px, weight 400–500, never bold bombast) with Inter labels (10–13px, weight 500, 1.5–3px tracking, uppercase) and weight-300 English subtitles; hero numerals are 240–280px weight 300. The signature device is data visualization treated as an art piece: hand-laid inline SVG plates with concentric dashed-circle grids (stroke-dasharray 2,6), delicate 0.5px axes, hollow endpoint circles, and a 3-series overlay — green polygon prominent (stroke 2, r=6 dots with halo rings), gold secondary (stroke 1.2, r=3.5), warm-gray tertiary (stroke 1 dashed, r=2.5) — with thin annotation callout lines, 14px/600 green value numerals, and a right-aligned 'Fig. NN — Title' caption on every plate; when axis values change, recompute polygon points so printed values and shape agree. Other devices: rounded 16px translucent cards rgba(255,255,255,0.6) with a 32×2px sage top tick and sage delta pills; a 64px hairline masthead (green dot + tracked uppercase deck name left, warm-gray section label right); rounded badge pills and serif insight cards. Draw layouts from the locked enumeration: cover / contents / philosophy / big-number / radar master (480px left panel + right chart plate + 3 metric cards, the upstream master) / SVG architecture diagram / 2×3 metrics grid / quote (gold SVG quote marks) / roadmap (dots graded gray→sage→green) / closing — this is an all-light style with no dark pages; rhythm comes from density alternation, and at least one radar or diagram art plate is mandatory. No emoji, no Chart.js/mermaid (all charts are hand-laid SVG), no shadows beyond drop-shadow(0 4px 20px rgba(0,0,0,0.04)). Build a single self-contained HTML file by copying example.html and replacing content only — keep its design tokens, masthead/footer chrome, washes, and navigation script (←/→/Space keys, #/N hash routing, click zones, counter pill) intact; the only external reference is the locked Google Fonts @import (Inter + Noto Serif SC). Use the user's real numbers, never lorem ipsum or invented data; Chinese copy uses 「」 quotes; replace all fictional 青屿/QINGYU demo content.",
-        "zh-CN": "用「东方柔光科技」体系为 {{audience}} 做一套关于 {{topic}} 的 {{deckType}}（页数 {{slideCount}}）：1920×1080 固定画布、米色和纸底 #F5F0EB + 两层锁定的柔和径向光晕，鼠尾草绿 #6B8F71 主导、唯一金 #D4A574 只用于第二数据系列/引号/一枚特殊 delta 胶囊、暖灰系做第三系列与全部框架，Noto Serif SC 衬线大标题 + Inter 标签混排；招牌装置是「数据可视化当艺术品」——虚线同心网格上的三色叠加 SVG 雷达图/架构图版，每张图配 Fig. NN 注记，数值改动须重算多边形坐标使图形与数字成比例。版式从封面/目录/哲学/巨数/雷达主版/架构图解/指标网格/引语/路线图/结尾枚举中取用，全亮色无暗页。从 example.html 复制出单文件、只换内容，保留 token、masthead、光晕与导航脚本；用真实数据、替换全部「青屿」演示内容。完整规格以英文版为准（follow the en query above）。"
+        "en": "Create \"Build a Buyer-Committee Leave-Behind like an Enterprise Sales Lead\" as a decision-grade B2B sales deck in this template's own visual system. Subject: Open Design procurement & security leave-behind: the one-pager-plus a buying committee can forward and approve internally. Audience: buying committee, security, procurement. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can the champion forward this internally without rewriting it.",
+        "zh-CN": "像企业销售负责人一样写买方委员会转发稿。像企业销售负责人一样写买方委员会转发稿——一份可商业交付的B2B 销售 Deck，围绕真实主题、证据链与决策目标组织。 主题：Open Design procurement & security leave-behind: the one-pager-plus a buying committee can forward and approve internally. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "Takram Soft Tech",
+          "title": "Build a Buyer-Committee Leave-Behind like an Enterprise Sales Lead",
           "title_i18n": {
-            "en": "Takram Soft Tech",
-            "zh-CN": "东方柔光科技"
+            "en": "Build a Buyer-Committee Leave-Behind like an Enterprise Sales Lead",
+            "zh-CN": "像企业销售负责人一样写买方委员会转发稿",
+            "zh-TW": "像企业销售负责人一样写买方委员会转发稿"
           }
         }
       ]
@@ -142,6 +158,7 @@
     "capabilities": [
       "prompt:inject",
       "fs:write"
-    ]
+    ],
+    "category": "b2b-sales"
   }
 }

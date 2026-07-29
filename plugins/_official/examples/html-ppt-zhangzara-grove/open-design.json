@@ -2,48 +2,19 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-html-ppt-zhangzara-grove",
-  "title": "Html Ppt Zhangzara Grove",
+  "title": "Write an Urban Green-Space Policy Brief like a City Sustainability Director",
   "title_i18n": {
-    "zh-CN": "Html Ppt Zhangzara Grove",
-    "zh-TW": "Html Ppt Zhangzara Grove",
-    "ja": "Html Ppt Zhangzara Grove",
-    "ko": "Html Ppt Zhangzara Grove",
-    "de": "Html Ppt Zhangzara Grove",
-    "fr": "Html Ppt Zhangzara Grove",
-    "ru": "Html Ppt Zhangzara Grove",
-    "es": "Html Ppt Zhangzara Grove",
-    "pt-BR": "Html Ppt Zhangzara Grove",
-    "it": "Html Ppt Zhangzara Grove",
-    "vi": "Html Ppt Zhangzara Grove",
-    "pl": "Html Ppt Zhangzara Grove",
-    "id": "Html Ppt Zhangzara Grove",
-    "nl": "Html Ppt Zhangzara Grove",
-    "ar": "Html Ppt Zhangzara Grove",
-    "tr": "Html Ppt Zhangzara Grove",
-    "uk": "Html Ppt Zhangzara Grove",
-    "en": "Html Ppt Zhangzara Grove"
+    "en": "Write an Urban Green-Space Policy Brief like a City Sustainability Director",
+    "zh-CN": "像城市可持续总监一样写城市绿地政策简报",
+    "zh-TW": "像城市可持续总监一样写城市绿地政策简报"
   },
   "version": "0.1.0",
-  "description": "Grove — Forest-green canvas with cream type, classical Playfair serifs, and a single rust accent. Anything that should feel organic, considered, and grown-up: sustainability and wellness brands, outdoor / nature products, wineries and restaurants, literary or arts decks, advisory deliverables, bilingual EN/CN reports.",
+  "publishedAt": "2026-05-12T07:18:16Z",
+  "description": "A municipal urban-tree-canopy policy proposal — the public need, the evidence, the options, and the funding decision. Built as a decision-grade policy briefing deck for city council, agency reviewers.",
   "description_i18n": {
-    "zh-CN": "Grove — 森林绿画布配米白色字体，经典 Playfair 衬线体，单色锈红点缀。适用于需要有机、考究、成熟感的内容：可持续发展和健康品牌、户外/自然产品、酒庄和餐厅、文学或艺术演示、咨询交付物、中英双语报告。",
-    "zh-TW": "Grove — 森林綠畫布配米白色字體，經典 Playfair 襯線體，單色鐵鏽紅點綴。適用於需要有機、考究、成熟感的內容：永續發展和健康品牌、戶外/自然產品、酒莊和餐廳、文學或藝術簡報、顧問交付物、中英雙語報告。",
-    "ja": "Grove — フォレストグリーンのキャンバスにクリーム色の文字、クラシックな Playfair セリフ体、ラストカラーのアクセント。サステナビリティやウェルネスブランド、アウトドア/自然製品、ワイナリーやレストラン、文学・芸術プレゼン、コンサル成果物、日英/中英バイリンガルレポートなど、オーガニックで洗練された大人の印象が必要なコンテンツに最適。",
-    "ko": "Grove — 포레스트 그린 캔버스에 크림색 타이포, 클래식한 Playfair 세리프체, 러스트 컬러 악센트. 유기적이고 세련되며 성숙한 느낌이 필요한 콘텐츠에 적합: 지속가능성 및 웰니스 브랜드, 아웃도어/자연 제품, 와이너리 및 레스토랑, 문학/예술 프레젠테이션, 컨설팅 결과물, 영중/한중 이중언어 보고서.",
-    "de": "Grove — Waldgrüne Leinwand mit cremefarbener Schrift, klassische Playfair-Serifen und einem einzelnen Rostakzent. Für alles, was organisch, durchdacht und erwachsen wirken soll: Nachhaltigkeits- und Wellness-Marken, Outdoor-/Naturprodukte, Weingüter und Restaurants, literarische oder künstlerische Präsentationen, Beratungsleistungen, zweisprachige EN/CN-Berichte.",
-    "fr": "Grove — Toile vert forêt avec typographie crème, empattements classiques Playfair et un accent rouille. Pour tout contenu organique, réfléchi et mature : marques durables et bien-être, produits outdoor/nature, domaines viticoles et restaurants, présentations littéraires ou artistiques, livrables de conseil, rapports bilingues EN/CN.",
-    "ru": "Grove — лесной зелёный фон с кремовым шрифтом, классическая засечка Playfair и ржавый акцент. Для контента, требующего органичности, продуманности и зрелости: бренды устойчивого развития и велнеса, товары для природы и туризма, винодельни и рестораны, литературные и художественные презентации, консалтинговые материалы, двуязычные отчёты EN/CN.",
-    "es": "Grove — Lienzo verde bosque con tipografía crema, serifas clásicas Playfair y un acento óxido. Para contenido orgánico, reflexivo y maduro: marcas de sostenibilidad y bienestar, productos outdoor/naturaleza, bodegas y restaurantes, presentaciones literarias o artísticas, entregables de consultoría, informes bilingües EN/CN.",
-    "pt-BR": "Grove — Tela verde-floresta com tipografia creme, serifas clássicas Playfair e um único acento ferrugem. Para conteúdo orgânico, ponderado e maduro: marcas de sustentabilidade e bem-estar, produtos outdoor/natureza, vinícolas e restaurantes, apresentações literárias ou artísticas, entregas de consultoria, relatórios bilíngues EN/CN.",
-    "it": "Grove — Tela verde foresta con caratteri crema, grazie classiche Playfair e un singolo accento ruggine. Per contenuti organici, ponderati e maturi: brand sostenibilità e wellness, prodotti outdoor/natura, cantine e ristoranti, presentazioni letterarie o artistiche, deliverable consulenziali, report bilingue EN/CN.",
-    "vi": "Grove — Canvas xanh rừng với chữ màu kem, serif cổ điển Playfair và điểm nhấn gỉ sét. Dành cho nội dung cần cảm giác hữu cơ, chỉn chu và trưởng thành: thương hiệu bền vững và sức khỏe, sản phẩm ngoài trời/thiên nhiên, nhà máy rượu và nhà hàng, bản trình bày văn học/nghệ thuật, sản phẩm tư vấn, báo cáo song ngữ EN/CN.",
-    "pl": "Grove — Leśna zieleń z kremową typografią, klasyczne antykwy Playfair i akcent w kolorze rdzy. Dla treści organicznych, przemyślanych i dojrzałych: marki zrównoważonego rozwoju i wellness, produkty outdoor/natura, winnice i restauracje, prezentacje literackie lub artystyczne, dostawy konsultingowe, raporty dwujęzyczne EN/CN.",
-    "id": "Grove — Kanvas hijau hutan dengan tipe krem, serif klasik Playfair, dan aksen karat tunggal. Untuk konten yang organik, matang, dan berkelas: brand keberlanjutan dan kesehatan, produk outdoor/alam, perkebunan anggur dan restoran, presentasi sastra atau seni, deliverable konsultansi, laporan bilingual EN/CN.",
-    "nl": "Grove — Bosgroen canvas met crèmekleurige typografie, klassieke Playfair-schreef en één roestkleurig accent. Voor organische, doordachte en volwassen content: duurzaamheids- en wellnessmerken, outdoor-/natuurproducten, wijngaarden en restaurants, literaire of artistieke presentaties, adviesleveringen, tweetalige EN/CN-rapporten.",
-    "ar": "Grove — لوحة خضراء غابية مع خط كريمي، خطوط Playfair الكلاسيكية، ولمسة صدأ واحدة. للمحتوى العضوي والمدروس والناضج: علامات الاستدامة والعافية، منتجات الطبيعة والهواء الطلق، مصانع النبيذ والمطاعم، عروض أدبية أو فنية، مخرجات استشارية، تقارير ثنائية اللغة EN/CN.",
-    "tr": "Grove — Orman yeşili tuval, krem rengi tipografi, klasik Playfair serifleri ve tek pas rengi vurgu. Organik, düşünülmüş ve olgun hissettirmesi gereken içerikler için: sürdürülebilirlik ve wellness markaları, outdoor/doğa ürünleri, şaraphaneler ve restoranlar, edebi veya sanatsal sunumlar, danışmanlık çıktıları, iki dilli EN/CN raporlar.",
-    "uk": "Grove — Лісове зелене полотно з кремовим шрифтом, класична засічка Playfair та іржавий акцент. Для контенту, що має виглядати органічно, продумано та зріло: бренди сталого розвитку та велнесу, товари для природи та активного відпочинку, виноробні та ресторани, літературні чи мистецькі презентації, консалтингові матеріали, двомовні звіти EN/CN.",
-    "en": "Grove — Forest-green canvas with cream type, classical Playfair serifs, and a single rust accent. Anything that should feel organic, considered, and grown-up: sustainability and wellness brands, outdoor / nature products, wineries and restaurants, literary or arts decks, advisory deliverables, bilingual EN/CN reports."
+    "en": "A municipal urban-tree-canopy policy proposal — the public need, the evidence, the options, and the funding decision. Built as a decision-grade policy briefing deck for city council, agency reviewers.",
+    "zh-CN": "像城市可持续总监一样写城市绿地政策简报——一份可商业交付的政策简报 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像城市可持续总监一样写城市绿地政策简报——一份可商业交付的政策简报 Deck，围绕真实主题、证据链与决策目标组织。"
   },
   "license": "MIT",
   "author": {
@@ -67,7 +38,18 @@
     "wellness-brand",
     "html-deck",
     "html-slides",
-    "zhangzara"
+    "zhangzara",
+    "design",
+    "brand",
+    "visual-system",
+    "html-ppt-zhangzara-grove",
+    "government-policy",
+    "policy-briefing-deck",
+    "policy",
+    "regulatory",
+    "risk-review",
+    "decision-deck",
+    "commercial-slide-agent"
   ],
   "compat": {
     "agentSkills": [
@@ -80,7 +62,7 @@
     "kind": "scenario",
     "taskKind": "new-generation",
     "mode": "deck",
-    "scenario": "marketing",
+    "scenario": "policy",
     "surface": "web",
     "preview": {
       "type": "html",
@@ -88,13 +70,18 @@
     },
     "useCase": {
       "query": {
-        "en": "Grove — Forest-green canvas with cream type, classical Playfair serifs, and a single rust accent. Anything that should feel organic, considered, and grown-up: sustainability and wellness brands, outdoor / nature products, wineries and restaurants, literary or arts decks, advisory deliverables, bilingual EN/CN reports.",
-        "zh-CN": "使用这个插件完成以下任务：Grove — Forest-green canvas with cream type, classical Playfair serifs, and a single rust accent. Anything that should feel organic, considered, and grown-up: sustainability and wellness brands, outdoor / nature products, wineries and restaurants, literary or arts decks, advisory deliverables, bilingual EN/CN reports."
+        "en": "Create \"Write an Urban Green-Space Policy Brief like a City Sustainability Director\" as a decision-grade Government & policy deck in this template's own visual system. Subject: A municipal urban-tree-canopy policy proposal — the public need, the evidence, the options, and the funding decision. Audience: city council, agency reviewers. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the deck reduce approval risk rather than create rhetorical heat.",
+        "zh-CN": "像城市可持续总监一样写城市绿地政策简报。像城市可持续总监一样写城市绿地政策简报——一份可商业交付的政策简报 Deck，围绕真实主题、证据链与决策目标组织。 主题：A municipal urban-tree-canopy policy proposal — the public need, the evidence, the options, and the funding decision. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "Html Ppt Zhangzara Grove"
+          "title": "Write an Urban Green-Space Policy Brief like a City Sustainability Director",
+          "title_i18n": {
+            "en": "Write an Urban Green-Space Policy Brief like a City Sustainability Director",
+            "zh-CN": "像城市可持续总监一样写城市绿地政策简报",
+            "zh-TW": "像城市可持续总监一样写城市绿地政策简报"
+          }
         }
       ]
     },
@@ -122,6 +109,7 @@
     "capabilities": [
       "prompt:inject",
       "fs:write"
-    ]
+    ],
+    "category": "government-policy"
   }
 }

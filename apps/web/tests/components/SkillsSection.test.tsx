@@ -5,6 +5,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { SkillsSection } from '../../src/components/SkillsSection';
 import { I18nProvider } from '../../src/i18n';
+import { en } from '../../src/i18n/locales/en';
+import { zhCN } from '../../src/i18n/locales/zh-CN';
 import type { AppConfig } from '../../src/types';
 import type { SkillSummary } from '@open-design/contracts';
 
@@ -222,6 +224,92 @@ describe('SkillsSection', () => {
 
     expect(within(row).queryByTestId('skills-edit-builtin-warning')).toBeNull();
     expect(await within(row).findByTestId('skills-edit-form')).toBeTruthy();
+  });
+
+  // Regression for the nettee / lefarcen follow-up on PR #4793: editing a
+  // built-in skill must read as an explicit "user override" flow in every
+  // locale, never a hardcoded-English or plain "Edit" / "Save" affordance.
+  // Lock the override wording end to end — edit tooltip → confirmation →
+  // form heading → submit — in the default English locale and one translated
+  // zh-CN path, so a regression to the old wording (or to a missing locale
+  // key) goes red.
+  describe.each([
+    { locale: 'en' as const, dict: en },
+    { locale: 'zh-CN' as const, dict: zhCN },
+  ])('built-in skill override wording ($locale)', ({ locale, dict }) => {
+    it('frames the edit affordance, confirmation, form, and submit as a user override', async () => {
+      renderSkillsSection(
+        [
+          makeSkill({
+            id: 'builtin-skill',
+            name: 'Built-in skill',
+            source: 'built-in',
+          }),
+        ],
+        { locale },
+      );
+
+      const row = await screen.findByTestId('skill-row-builtin-skill');
+
+      // The edit (pencil) tooltip reads "Create user override".
+      expect(within(row).getByTestId('skills-edit').title).toBe(
+        dict['settings.skillsOverrideCreate'],
+      );
+
+      fireEvent.click(within(row).getByTestId('skills-edit'));
+
+      // The inline confirmation shows the localized override warning and an
+      // override-framed confirm button — not the plain "Edit" label.
+      expect(
+        await within(row).findByText(dict['settings.skillsBuiltInOverrideWarning']),
+      ).toBeTruthy();
+      expect(
+        within(row).getByTestId('skills-edit-builtin-confirm').textContent,
+      ).toBe(dict['settings.skillsOverrideCreate']);
+
+      fireEvent.click(within(row).getByTestId('skills-edit-builtin-confirm'));
+
+      // The override form heading and submit both read as "user override".
+      const form = await within(row).findByTestId('skills-edit-form');
+      expect(within(form).getByRole('heading', { level: 4 }).textContent).toBe(
+        dict['settings.skillsOverrideCreate'],
+      );
+      expect(within(form).getByTestId('skills-save').textContent).toBe(
+        dict['settings.skillsOverrideSave'],
+      );
+    });
+  });
+
+  // The override wording must stay scoped to built-in skills: editing a
+  // user-authored skill keeps the plain Edit / Save affordance and never
+  // surfaces the override confirmation.
+  it('keeps the plain edit/save wording for user skills', async () => {
+    renderSkillsSection(
+      [
+        makeSkill({
+          id: 'user-skill',
+          name: 'User skill',
+          source: 'user',
+        }),
+      ],
+      { locale: 'en' },
+    );
+
+    const row = await screen.findByTestId('skill-row-user-skill');
+    expect(within(row).getByTestId('skills-edit').title).toBe(
+      en['settings.skillsEdit'],
+    );
+
+    fireEvent.click(within(row).getByTestId('skills-edit'));
+    expect(within(row).queryByTestId('skills-edit-builtin-warning')).toBeNull();
+
+    const form = await within(row).findByTestId('skills-edit-form');
+    expect(within(form).getByRole('heading', { level: 4 }).textContent).toBe(
+      en['settings.skillsEdit'],
+    );
+    expect(within(form).getByTestId('skills-save').textContent).toBe(
+      en['settings.skillsSave'],
+    );
   });
 
   it('matches localized built-in skill names and descriptions in search', async () => {

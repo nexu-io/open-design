@@ -25,6 +25,52 @@ describe('appendErrorStatusEvent', () => {
     expect(appendErrorStatusEvent(seeded, 'boom')).toBe(seeded);
   });
 
+  it('merges classification into the existing trailing error event with the same detail', () => {
+    // Reload/reattach race: the daemon-persisted error frame is read first
+    // (detail only), then the run finishes and onError arrives with the
+    // finalize-time classification. The helper must enrich in place, not no-op.
+    const seeded: ChatMessage = {
+      ...base,
+      events: [{ kind: 'status', label: 'error', detail: 'quota gone' }],
+    };
+    const next = appendErrorStatusEvent(seeded, 'quota gone', 'RATE_LIMITED', {
+      failureCategory: 'rate_limit',
+      failureDetail: 'hard_quota',
+    });
+    expect(next).not.toBe(seeded);
+    expect(next.events).toHaveLength(1);
+    expect(next.events?.[0]).toEqual({
+      kind: 'status',
+      label: 'error',
+      detail: 'quota gone',
+      code: 'RATE_LIMITED',
+      failureCategory: 'rate_limit',
+      failureDetail: 'hard_quota',
+    });
+  });
+
+  it('no-ops when the new pass adds nothing beyond the existing error event', () => {
+    const seeded: ChatMessage = {
+      ...base,
+      events: [
+        {
+          kind: 'status',
+          label: 'error',
+          detail: 'quota gone',
+          code: 'RATE_LIMITED',
+          failureCategory: 'rate_limit',
+          failureDetail: 'hard_quota',
+        },
+      ],
+    };
+    expect(
+      appendErrorStatusEvent(seeded, 'quota gone', 'RATE_LIMITED', {
+        failureCategory: 'rate_limit',
+        failureDetail: 'hard_quota',
+      }),
+    ).toBe(seeded);
+  });
+
   it('appends when the previous error status detail differs', () => {
     const seeded: ChatMessage = {
       ...base,

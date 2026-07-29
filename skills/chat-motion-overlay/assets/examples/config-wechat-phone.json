@@ -1,0 +1,18 @@
+{
+  "container": "wechat",
+  "avatarMode": "preset",
+  "deviceFrame": "iphone-dynamic-island",
+  "nicknameMode": "hidden",
+  "deliveryFormat": "mov",
+  "showTimestamp": true,
+  "participants": {
+    "闺蜜": {
+      "side": "left",
+      "preset": "female-bunny-pink"
+    },
+    "老婆": {
+      "side": "right",
+      "preset": "female-cat-orange"
+    }
+  }
+}

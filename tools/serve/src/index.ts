@@ -7,6 +7,8 @@ import { startUpdaterFixtureServer } from "./updater-fixture.js";
 type CliOptions = {
   artifactPath?: string;
   channel?: ReleaseChannel;
+  controlLauncherVersionMin?: string;
+  controlLauncherVersionUrl?: string;
   host?: string;
   json?: boolean;
   platform?: "mac" | "win";
@@ -59,6 +61,8 @@ async function start(service: string, options: CliOptions): Promise<void> {
   const server = await startUpdaterFixtureServer({
     artifactPath: options.artifactPath,
     channel: options.channel,
+    controlLauncherVersionMin: options.controlLauncherVersionMin,
+    controlLauncherVersionUrl: options.controlLauncherVersionUrl,
     host: options.host,
     platform: parsePlatform(options.platform),
     includePayload: options.includePayload,
@@ -94,6 +98,8 @@ cli
   .command("start <service>", "Start a local fixture service")
   .option("--artifact-path <path>", "Serve a local update artifact file")
   .option("--channel <channel>", "Updater channel: stable|beta|betas|prerelease|preview", { default: "stable" })
+  .option("--control-launcher-version-min <version>", "Publish control.launcher.version.min in fixture metadata")
+  .option("--control-launcher-version-url <url>", "Publish control.launcher.version.url in fixture metadata")
   .option("--host <host>", "Host to bind", { default: "127.0.0.1" })
   .option("--json", "Print JSON")
   .option("--include-payload", "Include launcher payload metadata")

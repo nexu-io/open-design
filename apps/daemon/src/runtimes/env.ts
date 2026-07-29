@@ -106,6 +106,18 @@ export function spawnEnvForAgent(
     if (!env.AMR_CLIENT_SOURCE?.trim()) {
       env.AMR_CLIENT_SOURCE = 'open_design';
     }
+    // AMR runs through Vela's private OpenCode server. The server inherits
+    // this flag, which enables OpenCode's built-in, keyless Exa websearch
+    // tool for AMR without changing the standalone Vela CLI default.
+    if (!env.OPENCODE_ENABLE_EXA?.trim()) {
+      env.OPENCODE_ENABLE_EXA = '1';
+    }
+    // Vela owns the private OpenCode config and intentionally discards a
+    // parent OPENCODE_CONFIG_CONTENT. Its explicit opt-in lets AMR mount the
+    // keyless Parallel Search MCP (web_search + web_fetch) alongside Exa.
+    if (!env.VELA_ENABLE_PARALLEL_MCP?.trim()) {
+      env.VELA_ENABLE_PARALLEL_MCP = '1';
+    }
     if (!env.OPENCODE_TEST_HOME?.trim() && env.OD_DATA_DIR?.trim()) {
       env.OPENCODE_TEST_HOME = path.join(
         env.OD_DATA_DIR.trim(),
@@ -117,13 +129,13 @@ export function spawnEnvForAgent(
       const opencodeBin = resolveAmrOpenCodeExecutable(env);
       if (opencodeBin) env.VELA_OPENCODE_BIN = opencodeBin;
     }
-    return reapplySandboxRuntimeEnv(env, sandboxRuntime);
+    return finalizeRuntimeEnv(env, sandboxRuntime);
   }
   if (agentId === 'claude') {
-    return reapplySandboxRuntimeEnv(env, sandboxRuntime);
+    return finalizeRuntimeEnv(env, sandboxRuntime);
   }
   if (agentId === 'codex') {
-    return reapplySandboxRuntimeEnv(env, sandboxRuntime);
+    return finalizeRuntimeEnv(env, sandboxRuntime);
   }
   if (agentId === 'opencode' || agentId === 'byok-opencode') {
     stripKeysCaseInsensitive(env, [
@@ -143,7 +155,7 @@ export function spawnEnvForAgent(
     if (!env.OPENCODE_DISABLE_PROJECT_CONFIG?.trim()) {
       env.OPENCODE_DISABLE_PROJECT_CONFIG = 'true';
     }
-    return reapplySandboxRuntimeEnv(env, sandboxRuntime);
+    return finalizeRuntimeEnv(env, sandboxRuntime);
   }
   if (agentId === 'mimo') {
     stripKeysCaseInsensitive(env, [
@@ -159,9 +171,9 @@ export function spawnEnvForAgent(
     if (!env.MIMOCODE_DISABLE_PROJECT_CONFIG?.trim()) {
       env.MIMOCODE_DISABLE_PROJECT_CONFIG = 'true';
     }
-    return reapplySandboxRuntimeEnv(env, sandboxRuntime);
+    return finalizeRuntimeEnv(env, sandboxRuntime);
   }
-  return reapplySandboxRuntimeEnv(env, sandboxRuntime);
+  return finalizeRuntimeEnv(env, sandboxRuntime);
 }
 
 export function openDesignAmrTraceEnv(input: {
@@ -209,6 +221,15 @@ function reapplySandboxRuntimeEnv(
   return applySandboxRuntimeEnv(env, sandboxRuntime);
 }
 
+function finalizeRuntimeEnv(
+  env: NodeJS.ProcessEnv,
+  sandboxRuntime: SandboxRuntimeConfig | null,
+): NodeJS.ProcessEnv {
+  const finalizedEnv = reapplySandboxRuntimeEnv(env, sandboxRuntime);
+  applyWindowsUserCacheEnv(finalizedEnv);
+  return finalizedEnv;
+}
+
 function stripKeysCaseInsensitive(
   env: NodeJS.ProcessEnv,
   keysToStrip: readonly string[],
@@ -217,4 +238,51 @@ function stripKeysCaseInsensitive(
   for (const key of Object.keys(env)) {
     if (keysUpper.has(key.toUpperCase())) delete env[key];
   }
+}
+
+function applyWindowsUserCacheEnv(env: NodeJS.ProcessEnv): void {
+  if (process.platform !== 'win32') return;
+
+  // GUI-launched Windows daemons can inherit enough PATH to resolve a CLI
+  // while still missing the profile/cache variables CLIs use at startup.
+  const userProfile =
+    envValue(env, 'USERPROFILE') ||
+    envValue(env, 'HOME') ||
+    os.homedir();
+  if (!userProfile) return;
+
+  setEnvIfMissing(env, 'USERPROFILE', userProfile);
+  const localAppData =
+    envValue(env, 'LOCALAPPDATA') ||
+    path.win32.join(userProfile, 'AppData', 'Local');
+  setEnvIfMissing(env, 'LOCALAPPDATA', localAppData);
+  setEnvIfMissing(
+    env,
+    'APPDATA',
+    path.win32.join(userProfile, 'AppData', 'Roaming'),
+  );
+  const tempDir = path.win32.join(localAppData, 'Temp');
+  setEnvIfMissing(env, 'TEMP', tempDir);
+  setEnvIfMissing(env, 'TMP', tempDir);
+}
+
+function envValue(env: NodeJS.ProcessEnv, key: string): string | null {
+  const existingKey = Object.keys(env).find(
+    (candidate) => candidate.toUpperCase() === key.toUpperCase(),
+  );
+  const value = existingKey ? env[existingKey] : undefined;
+  const trimmed = typeof value === 'string' ? value.trim() : '';
+  return trimmed ? (value as string) : null;
+}
+
+function setEnvIfMissing(
+  env: NodeJS.ProcessEnv,
+  key: string,
+  value: string,
+): void {
+  if (envValue(env, key)) return;
+  const existingKey = Object.keys(env).find(
+    (candidate) => candidate.toUpperCase() === key.toUpperCase(),
+  );
+  env[existingKey ?? key] = value;
 }

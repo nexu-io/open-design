@@ -24,6 +24,7 @@
     "en": "Sentry"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "Error monitoring. Dark dashboard, data-dense, pink-purple accent.",
   "description_i18n": {
     "zh-CN": "错误监控。深色仪表板，高密度数据展示，粉紫色强调。",

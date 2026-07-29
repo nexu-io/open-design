@@ -80,6 +80,7 @@ describe("release workflows", () => {
     expect(mac).toContain("build_args+=(--signed --notarize)");
     expect(mac).toContain("Build beta mac_arm64 update fixture");
     expect(mac).toContain("OD_PACKAGED_E2E_MAC_UPDATE_BUILD_JSON_PATH: ${{ steps.mac_arm64_update_fixture.outputs.update_build_json_path }}");
+    expect(mac).toContain("OD_PACKAGED_E2E_MAC_UPDATE_FIXTURE: ${{ inputs.mac_arm64_smoke_mode == 'full' && inputs.mac_arm64_update_metadata_url == '' && inputs.mac_arm64_update_target_version == '' && 'tools-serve' || '' }}");
     expect(mac).toContain("pnpm exec tsx scripts/release-smoke.ts mac specs/mac.spec.ts");
     expect(mac).toContain("bash .github/scripts/release/cache/mac.sh");
     expect(macX64).toContain("uses: actions/cache/restore@v5");
@@ -107,6 +108,10 @@ describe("release workflows", () => {
     expect(beta).toContain("win_x64_update_metadata_url:");
     expect(beta).toContain("OD_PACKAGED_E2E_MAC_UPDATE_METADATA_URL: ${{ inputs.mac_arm64_update_metadata_url }}");
     expect(beta).toContain("OD_PACKAGED_E2E_WIN_UPDATE_METADATA_URL: ${{ inputs.win_x64_update_metadata_url }}");
+    expect(beta).toContain("POSTHOG_KEY: ${{ inputs.publish && secrets.POSTHOG_KEY || '' }}");
+    expect(beta).toContain("POSTHOG_HOST: ${{ inputs.publish && vars.POSTHOG_HOST || '' }}");
+    expect(beta).toContain("POSTHOG_CLI_API_KEY: ${{ inputs.publish && secrets.POSTHOG_CLI_API_KEY || '' }}");
+    expect(beta).toContain("POSTHOG_CLI_PROJECT_ID: ${{ inputs.publish && vars.POSTHOG_CLI_PROJECT_ID || '' }}");
     expect(beta).not.toContain("publish-beta-metadata.ts");
     expect(beta).not.toContain("verify-beta-metadata.ts");
     expect(beta).not.toContain("summary-beta.ts");
@@ -266,6 +271,21 @@ describe("release workflows", () => {
     expect(prereleaseMac).toContain("pnpm exec tools-pack mac cleanup --dir \"$RUNNER_TEMP/tools-pack\" --namespace release-prerelease --json");
     expect(prereleaseMac).toContain("exec tools-pack mac build");
     expect(prereleaseMac).toContain("--cache-dir \"$RUNNER_TEMP/tools-pack-cache\"");
+    expect(countOccurrences(prereleaseMac, "--notarize")).toBe(2);
+    // Both the primary build and the cache-miss retry must carry Apple notary
+    // env, or notarization fails closed on the retry path.
+    expect(
+      countOccurrences(prereleaseMac, "APPLE_ID: ${{ secrets.APPLE_ID }}"),
+    ).toBe(2);
+    expect(
+      countOccurrences(
+        prereleaseMac,
+        "APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}",
+      ),
+    ).toBe(2);
+    expect(
+      countOccurrences(prereleaseMac, "APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}"),
+    ).toBe(2);
     expect(prereleaseMac).toContain("tools-release write-report");
     expect(prereleaseMacX64).toContain("uses: actions/cache/restore@v5");
     expect(prereleaseMacX64).toContain("uses: actions/cache/save@v5");
@@ -273,7 +293,33 @@ describe("release workflows", () => {
     expect(prereleaseMacX64).toContain("pnpm exec tools-pack mac cleanup --dir \"$RUNNER_TEMP/tools-pack\" --namespace release-prerelease-intel --json");
     expect(prereleaseMacX64).toContain("exec tools-pack mac build");
     expect(prereleaseMacX64).toContain("--cache-dir \"$RUNNER_TEMP/tools-pack-cache\"");
+    expect(countOccurrences(prereleaseMacX64, "--notarize")).toBe(2);
+    expect(
+      countOccurrences(prereleaseMacX64, "APPLE_ID: ${{ secrets.APPLE_ID }}"),
+    ).toBe(2);
+    expect(
+      countOccurrences(
+        prereleaseMacX64,
+        "APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}",
+      ),
+    ).toBe(2);
+    expect(
+      countOccurrences(prereleaseMacX64, "APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}"),
+    ).toBe(2);
     expect(prereleaseMacX64).toContain("tools-release write-report");
+    for (const [prereleaseMacJob, nextStep] of [
+      [prereleaseMac, "Smoke prerelease mac"],
+      [prereleaseMacX64, "Write mac_x64 release report"],
+    ] as const) {
+      expect(prereleaseMacJob).toContain("Verify prerelease mac");
+      expect(prereleaseMacJob).toContain('hdiutil attach "$dmg_path" -nobrowse -readonly -mountpoint "$mount_point"');
+      expect(prereleaseMacJob).toContain('codesign --verify --deep --strict "$candidate_app"');
+      expect(prereleaseMacJob).toContain('xcrun stapler validate "$candidate_app"');
+      expect(prereleaseMacJob).toContain('spctl --assess --type execute --verbose=4 "$candidate_app"');
+      expect(prereleaseMacJob.indexOf("Verify prerelease mac")).toBeLessThan(
+        prereleaseMacJob.indexOf(nextStep),
+      );
+    }
     expect(prereleaseWin).toContain("tools-pack-win-v1-prerelease-$env:RUNNER_OS-");
     expect(prereleaseWin).toContain("tools-pack win validate-payload");
     expect(prereleaseWin).toContain("release-build\\win_x64\\build.json");
@@ -327,5 +373,43 @@ describe("release workflows", () => {
     expect(stablePrepare).toContain('parseStableDryRunMode');
     expect(stablePrepare).toContain('setOutput("run_prepublish_jobs"');
     expect(stablePrepare).toContain('setOutput("publish_side_effects_enabled"');
+  });
+
+  it("passes launcher version floor repo vars through to metadata publish and verify verbatim", async () => {
+    const [beta, betaSelfHosted, preview, prerelease, stable] = await Promise.all([
+      readFile(new URL("../../../.github/workflows/release-beta.yml", import.meta.url), "utf8"),
+      readFile(new URL("../../../.github/workflows/release-beta-s.yml", import.meta.url), "utf8"),
+      readFile(new URL("../../../.github/workflows/release-preview.yml", import.meta.url), "utf8"),
+      readFile(new URL("../../../.github/workflows/release-prerelease.yml", import.meta.url), "utf8"),
+      readFile(new URL("../../../.github/workflows/release-stable.yml", import.meta.url), "utf8"),
+    ]);
+
+    const passthrough = (suffix: string): string[] => [
+      `RELEASE_LAUNCHER_VERSION_MIN_${suffix}: \${{ vars.RELEASE_LAUNCHER_VERSION_MIN_${suffix} }}`,
+      `RELEASE_LAUNCHER_VERSION_MIN_URL_${suffix}: \${{ vars.RELEASE_LAUNCHER_VERSION_MIN_URL_${suffix} }}`,
+    ];
+
+    // Each channel workflow forwards its own repo-vars pair plus the STABLE
+    // fallback pair verbatim; channel policy (pair-level stable fallback,
+    // format/https/floor validation) lives only in
+    // tools/release/src/storage/launcher-version-floor.ts, never in YAML.
+    const lanes: Array<{ minSteps: number; suffix: string; workflow: string }> = [
+      { minSteps: 2, suffix: "BETA", workflow: beta },
+      { minSteps: 1, suffix: "BETAS", workflow: betaSelfHosted },
+      { minSteps: 2, suffix: "PREVIEW", workflow: preview },
+      { minSteps: 2, suffix: "PRERELEASE", workflow: prerelease },
+    ];
+    for (const lane of lanes) {
+      for (const key of [...passthrough(lane.suffix), ...passthrough("STABLE")]) {
+        // publish-metadata always carries the pair; lanes with a
+        // verify-metadata step must carry it there too.
+        expect(countOccurrences(lane.workflow, key)).toBeGreaterThanOrEqual(lane.minSteps);
+      }
+      expect(lane.workflow).not.toContain(`vars.RELEASE_LAUNCHER_VERSION_MIN_${lane.suffix} ||`);
+    }
+    for (const key of passthrough("STABLE")) {
+      expect(countOccurrences(stable, key)).toBeGreaterThanOrEqual(2);
+    }
+    expect(stable).not.toContain("vars.RELEASE_LAUNCHER_VERSION_MIN_STABLE ||");
   });
 });

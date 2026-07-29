@@ -24,6 +24,7 @@
     "en": "Pricing Page"
   },
   "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
   "description": "A standalone pricing page — header, plan tiers, feature comparison table, and an FAQ. Use when the brief asks for \"pricing\", \"plans\", \"subscription tiers\", or a \"compare plans\" page.",
   "description_i18n": {
     "zh-CN": "独立的价格页面 — 包含页眉、套餐层级、功能对比表和常见问题。适用于需要'价格'、'套餐'、'订阅层级'或'对比套餐'页面的需求。",

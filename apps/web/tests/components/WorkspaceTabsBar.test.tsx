@@ -352,6 +352,38 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     });
   });
 
+  it('reuses the existing project tab instead of duplicating on repeated open', async () => {
+    render(<WorkspaceTabsBar route={{ kind: 'home', view: 'home' }} projects={[project]} />);
+
+    openWorkspaceTab({ ...projectRoute });
+    openWorkspaceTab({ ...projectRoute });
+    openWorkspaceTab({ ...projectRoute });
+
+    await waitFor(() => {
+      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      expect(labels).toHaveLength(2);
+      expect(labels.filter((label) => label.includes('Project Alpha'))).toHaveLength(1);
+    });
+  });
+
+  it('updates the existing project tab fields instead of appending when reopened with new context', async () => {
+    render(<WorkspaceTabsBar route={{ kind: 'home', view: 'home' }} projects={[project]} />);
+
+    openWorkspaceTab({ ...projectRoute });
+    openWorkspaceTab({
+      kind: 'project',
+      projectId: 'project-alpha',
+      conversationId: 'conv-1',
+      fileName: 'deck.html',
+    });
+
+    await waitFor(() => {
+      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      expect(labels).toHaveLength(2);
+      expect(labels.filter((label) => label.includes('Project Alpha'))).toHaveLength(1);
+    });
+  });
+
   it('keeps a singleton Home tab when restoring a Home-less workspace and navigating back to Home', async () => {
     window.localStorage.setItem(
       'open-design:workspace-tabs:v1',
@@ -435,6 +467,48 @@ describe('WorkspaceTabsBar navigation semantics', () => {
         expect.stringContaining('Project Alpha'),
         expect.stringContaining('Project Beta'),
       ]);
+    });
+  });
+
+  it('coalesces duplicate project tabs restored from saved workspace state', async () => {
+    // Regression for #2641: a workspace persisted before the dedupe fix can
+    // hold several tabs for the same projectId (distinct tab ids). On restore,
+    // normalization must collapse them to one and keep the canonical (newest
+    // here) tab, preserving the project's conversation/file context.
+    window.localStorage.setItem(
+      'open-design:workspace-tabs:v1',
+      JSON.stringify({
+        activeTabId: 'project:project-alpha-dup',
+        tabs: [
+          {
+            id: 'project:project-alpha',
+            kind: 'project',
+            projectId: 'project-alpha',
+            conversationId: null,
+            fileName: null,
+            createdAt: 1,
+            lastActiveAt: 1,
+          },
+          {
+            id: 'project:project-alpha-dup',
+            kind: 'project',
+            projectId: 'project-alpha',
+            conversationId: 'conv-1',
+            fileName: 'deck.html',
+            createdAt: 2,
+            lastActiveAt: 5,
+          },
+        ],
+      }),
+    );
+
+    render(<WorkspaceTabsBar route={{ ...projectRoute }} projects={[project]} />);
+
+    await waitFor(() => {
+      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      // Home + exactly one Project Alpha tab.
+      expect(labels).toHaveLength(2);
+      expect(labels.filter((label) => label.includes('Project Alpha'))).toHaveLength(1);
     });
   });
 

@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Pixel Reveal Gallery — Open Design</title>
+<!--
+  Faithful single-file port of J0SUKE's "Pixel Image Effect" scroll-reveal
+  gallery (Codrops). Original: https://github.com/J0SUKE/gsap-threejs-codrops
+  The multi-page Astro/Barba build is condensed to one self-contained page:
+  masonry grid + WebGL pixel-grid reveal on scroll + split-text heading +
+  click-to-fullscreen (GSAP Flip). Three.js + GSAP via CDN, images original
+  (generated, not the author's Midjourney set). Runs in powered preview.
+-->
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Manrope:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+  *,*::before,*::after{ box-sizing:border-box; }
+  :root{ --bg:#0d0d0f; --ink:#ececef; --mut:#8a8a92; --line:#242424; }
+  html,body{ margin:0; background:var(--bg); color:var(--ink);
+    font-family:'Manrope',system-ui,sans-serif; -webkit-font-smoothing:antialiased; }
+  #webgl{ position:fixed; inset:0; width:100%; height:100%; z-index:2; pointer-events:none; }
+  #app{ position:relative; z-index:1; }
+  .frame{ position:fixed; inset:0; z-index:5; pointer-events:none; padding:1.4rem 1.6rem;
+    display:flex; justify-content:space-between; align-items:flex-start;
+    font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:0.22em; text-transform:uppercase; color:var(--mut); }
+  .frame .dot{ width:7px;height:7px;border-radius:50%;background:#b8ff3c;box-shadow:0 0 12px #b8ff3c;display:inline-block;margin-right:8px;vertical-align:middle;}
+  .frame a{ color:var(--mut); pointer-events:auto; }
+  .wrap{ max-width:1180px; margin:0 auto; padding:0 1.6rem; }
+  header.intro{ padding:26vh 0 12vh; }
+  header.intro h1{ font-size:clamp(38px,7vw,104px); line-height:0.94; font-weight:800; letter-spacing:-0.03em; margin:0; }
+  header.intro h1 .l{ display:block; overflow:hidden; }
+  header.intro .meta{ margin-top:2rem; max-width:44ch; color:var(--mut); font-size:14px; line-height:1.5;
+    font-family:'IBM Plex Mono',monospace; letter-spacing:0.02em; }
+  .grid{ column-count:3; column-gap:2.2rem; padding-bottom:22vh; }
+  @media(max-width:900px){ .grid{ column-count:2; } }
+  @media(max-width:560px){ .grid{ column-count:1; } }
+  .item{ break-inside:avoid; margin:0 0 2.2rem; display:block; text-decoration:none; color:inherit; cursor:pointer; }
+  .item img{ width:100%; height:auto; display:block; opacity:0; }   /* WebGL plane draws it */
+  .item .cap{ font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:0.06em; color:var(--mut);
+    display:flex; justify-content:space-between; margin-top:0.7rem; text-transform:uppercase; }
+  /* detail overlay */
+  #detail{ position:fixed; inset:0; z-index:8; display:none; align-items:center; justify-content:center;
+    background:rgba(8,8,10,0.0); backdrop-filter:blur(0px); }
+  #detail.on{ display:flex; }
+  #detail .stage{ position:relative; }
+  #detail img{ max-width:82vw; max-height:80vh; width:auto; height:auto; display:block; }
+  #detail .info{ position:absolute; left:0; bottom:-2.4rem; font-family:'IBM Plex Mono',monospace;
+    font-size:12px; letter-spacing:0.08em; color:var(--mut); text-transform:uppercase; display:flex; gap:1.6rem; }
+  #detail .close{ position:fixed; top:1.4rem; right:1.6rem; font-family:'IBM Plex Mono',monospace; font-size:11px;
+    letter-spacing:0.22em; text-transform:uppercase; color:var(--mut); cursor:pointer; }
+</style>
+</head>
+<body>
+<canvas id="webgl"></canvas>
+<div class="frame">
+  <span><span class="dot"></span>Open Design · WebGL Preview</span>
+  <span>Effect: <a href="https://github.com/J0SUKE/gsap-threejs-codrops" target="_blank">J0SUKE / Codrops</a></span>
+</div>
+
+<div id="app"><div id="smooth-content">
+  <div class="wrap">
+    <header class="intro">
+      <h1 class="split"><span class="l">Northbound</span><span class="l">Field Records</span></h1>
+      <p class="meta">An invented archive of nine ascents, 1971–1979. Each frame resolves from a pixel grid as it enters the frame — scroll to develop, click to enlarge.</p>
+    </header>
+    <div class="grid" id="grid"></div>
+  </div>
+</div></div>
+
+<div id="detail"><div class="close">Close ✕</div><div class="stage"><img alt=""><div class="info"></div></div></div>
+
+<script>
+// ---- original gallery data (own captions; images generated, not the author's) ----
+const DATA = [
+  { url:'expedition/e1.jpg', name:'First Light Ascent', loc:'North Couloir',    date:'April 14, 1971' },
+  { url:'expedition/e2.jpg', name:'Camp Below the Col',  loc:'Base II',          date:'August 2, 1973' },
+  { url:'expedition/e3.jpg', name:'Axe and Line',        loc:'Equipment Cache',  date:'June 9, 1974' },
+  { url:'expedition/e4.jpg', name:'The Long Traverse',   loc:'Glacier Basin',    date:'July 27, 1975' },
+  { url:'expedition/e5.jpg', name:'Overcast Plateau',    loc:'High Tableland',   date:'May 30, 1977' },
+  { url:'expedition/e6.jpg', name:'Gloves and Chart',    loc:'Wind Shelter',     date:'September 6, 1979' },
+];
+const grid = document.getElementById('grid');
+DATA.forEach((d,i)=>{
+  const a=document.createElement('a'); a.className='item'; a.href='#'; a.dataset.i=i;
+  a.innerHTML=`<img src="${d.url}" alt="${d.name}" crossorigin="anonymous">
+    <div class="cap"><span>${String(i+1).padStart(2,'0')} · ${d.name}</span><span>${d.date}</span></div>`;
+  grid.appendChild(a);
+});
+</script>
+
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+import gsap from 'https://cdn.jsdelivr.net/npm/gsap@3.13.0/index.js';
+import { ScrollTrigger } from 'https://cdn.jsdelivr.net/npm/gsap@3.13.0/ScrollTrigger.js';
+import { SplitText } from 'https://cdn.jsdelivr.net/npm/gsap@3.13.0/SplitText.js';
+import { Flip } from 'https://cdn.jsdelivr.net/npm/gsap@3.13.0/Flip.js';
+gsap.registerPlugin(ScrollTrigger, SplitText, Flip);
+
+const VERT = `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*viewMatrix*modelMatrix*vec4(position,1.0); }`;
+const FRAG = `uniform sampler2D uTexture; varying vec2 vUv; uniform vec2 uResolution; uniform float uProgress;
+uniform vec3 uColor; uniform vec2 uContainerRes;
+float random(vec2 st){ return fract(sin(dot(st.xy,vec2(12.9898,78.233)))*43758.5453123); }
+vec2 squaresGrid(vec2 vUv){ float cAx=uResolution.x/uResolution.y, cAy=uResolution.y/uResolution.x;
+  vec2 r=vec2(min(cAx,1.0),min(cAy,1.0));
+  return vec2(vUv.x*r.x+(1.0-r.x)*0.5, vUv.y*r.y+(1.0-r.y)*0.5); }
+void main(){
+  float iAx=uResolution.x/uResolution.y, iAy=uResolution.y/uResolution.x;
+  float cAx=uContainerRes.x/uContainerRes.y, cAy=uContainerRes.y/uContainerRes.x;
+  vec2 ratio=vec2(min(cAx/iAx,1.0),min(cAy/iAy,1.0));
+  vec2 coverUvs=vec2(vUv.x*ratio.x+(1.0-ratio.x)*0.5, vUv.y*ratio.y+(1.0-ratio.y)*0.5);
+  vec2 squareUvs=squaresGrid(coverUvs);
+  float gridSize=floor(uContainerRes.x/20.);
+  vec2 grid=vec2(floor(squareUvs.x*gridSize)/gridSize, floor(squareUvs.y*gridSize)/gridSize);
+  vec4 gridTexture=vec4(uColor,0.);
+  vec4 texture=texture2D(uTexture,coverUvs);
+  float height=0.2;
+  float progress=(1.+height)-(uProgress*(1.+height+height));
+  float dist=1.-distance(grid.y,progress);
+  float clampedDist=smoothstep(height,0.,distance(grid.y,progress));
+  float randDist=step(1.-height*random(grid),dist);
+  dist=step(1.-height,dist);
+  float rand=random(grid);
+  float alpha=dist*(clampedDist+rand-0.5*(1.-randDist)); alpha=max(0.,alpha);
+  gridTexture.a=alpha;
+  texture.rgba*=step(progress,grid.y);
+  gl_FragColor=vec4(mix(texture,gridTexture,gridTexture.a));
+}`;
+
+// ---- Canvas (perspective cam mapping DOM px → world units) ----
+const canvas=document.getElementById('webgl');
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 100); camera.position.z=10;
+const renderer=new THREE.WebGLRenderer({ canvas, alpha:true, antialias:true });
+renderer.setPixelRatio(Math.min(2,devicePixelRatio)); renderer.setSize(innerWidth,innerHeight);
+let sizes={};
+function computeSizes(){ const fov=camera.fov*(Math.PI/180); const h=camera.position.z*Math.tan(fov/2)*2; sizes={width:h*camera.aspect, height:h}; }
+computeSizes();
+const loader=new THREE.TextureLoader();
+
+// ---- Media (ported media.ts): a plane synced to an <img>'s DOM bounds ----
+class Media {
+  constructor(el){ this.el=el; this.a=el.closest('a');
+    this.currentScroll=0; this.lastScroll=0;
+    this.geo=new THREE.PlaneGeometry(1,1);
+    this.mat=new THREE.ShaderMaterial({ vertexShader:VERT, fragmentShader:FRAG, transparent:true, uniforms:{
+      uTexture:{value:null}, uResolution:{value:new THREE.Vector2(1,1)}, uContainerRes:{value:new THREE.Vector2(1,1)},
+      uProgress:{value:0}, uColor:{value:new THREE.Color('#242424')} } });
+    this.mesh=new THREE.Mesh(this.geo,this.mat);
+    this.setBounds(); this.setDims(); this.setPos(); this.setTex();
+    scene.add(this.mesh);
+  }
+  setBounds(){ this.b=this.el.getBoundingClientRect(); this.node={w:this.b.width,h:this.b.height}; }
+  setDims(){ this.mesh.scale.x=this.node.w*sizes.width/innerWidth; this.mesh.scale.y=this.node.h*sizes.height/innerHeight; }
+  setPos(){ this.pos={ x:this.b.left*sizes.width/innerWidth, y:-this.b.top*sizes.height/innerHeight };
+    this.pos.x-=sizes.width/2; this.pos.x+=this.mesh.scale.x/2; this.pos.y-=this.mesh.scale.y/2; this.pos.y+=sizes.height/2;
+    this.mesh.position.x=this.pos.x; this.mesh.position.y=this.pos.y; }
+  setTex(){ this.mat.uniforms.uTexture.value=loader.load(this.el.src, ({image})=>{
+    this.mat.uniforms.uResolution.value.set(image.naturalWidth,image.naturalHeight);
+    this.mat.uniforms.uContainerRes.value.set(this.node.w,this.node.h);
+    this.mat.uniforms.uTexture.value.colorSpace=THREE.SRGBColorSpace; }); }
+  updateScroll(scrollY){ this.currentScroll=-scrollY*sizes.height/innerHeight;
+    const d=this.currentScroll-this.lastScroll; this.lastScroll=this.currentScroll;
+    this.pos.y-=d; this.mesh.position.y=this.pos.y; }
+  observe(){ this.st=gsap.to(this.mat.uniforms.uProgress, { value:1, duration:1.6, ease:'linear',
+    scrollTrigger:{ trigger:this.el, start:'top bottom', end:'bottom top', toggleActions:'play reset restart reset' } }); }
+  onResize(){ this.setBounds(); this.setDims(); this.setPos(); this.mat.uniforms.uContainerRes.value.set(this.node.w,this.node.h); }
+}
+
+// ---- boot after images load + fonts ----
+let medias=[];
+function boot(){
+  // Native scroll (robust across all browsers + the sandbox iframe). The fixed
+  // WebGL canvas locks its planes DIRECTLY to window.scrollY so each image stays
+  // pinned to its DOM cell — no ScrollSmoother normalizeScroll/transform hijack.
+  document.querySelectorAll('.item img').forEach(img=>medias.push(new Media(img)));
+  medias.forEach(m=>m.observe());
+  ScrollTrigger.refresh();
+  // heading split
+  const split=new SplitText('.split .l',{type:'lines',linesClass:'sl'});
+  gsap.from(split.lines,{ yPercent:120, duration:1.1, ease:'power3.out', stagger:0.12, delay:0.15 });
+  gsap.ticker.add(()=>{ const s=window.scrollY||document.documentElement.scrollTop||0;
+    medias.forEach(m=>m.updateScroll(s)); renderer.render(scene,camera); });
+  bindDetail();
+}
+function whenImagesReady(cb){
+  const imgs=[...document.querySelectorAll('.item img')]; let n=0; const total=imgs.length;
+  const done=()=>{ if(++n>=total) cb(); };
+  imgs.forEach(im=>{ if(im.complete&&im.naturalWidth) done(); else { im.addEventListener('load',done); im.addEventListener('error',done); } });
+  if(total===0) cb();
+}
+whenImagesReady(boot);
+
+function onResize(){ const w=innerWidth,h=innerHeight; if(w===onResize._w&&h===onResize._h)return; onResize._w=w; onResize._h=h;
+  camera.aspect=w/h; camera.updateProjectionMatrix();
+  renderer.setSize(w,h); computeSizes(); medias.forEach(m=>m.onResize()); ScrollTrigger.refresh(); }
+addEventListener('resize',onResize);
+gsap.ticker.add(onResize);
+
+// ---- click → fullscreen detail (in-page Flip, replaces Barba page nav) ----
+function bindDetail(){
+  const detail=document.getElementById('detail'), dImg=detail.querySelector('img'), dInfo=detail.querySelector('.info');
+  document.querySelectorAll('.item').forEach(a=>{
+    a.addEventListener('click', e=>{
+      e.preventDefault(); const i=+a.dataset.i, d=DATA[i]; const srcImg=a.querySelector('img');
+      const r=srcImg.getBoundingClientRect();
+      dImg.src=d.url; dInfo.innerHTML=`<span>${d.name}</span><span>${d.loc}</span><span>${d.date}</span>`;
+      // 1) place the detail img exactly over the grid cell (start), 2) capture it,
+      // 3) release to its centered CSS layout (final), 4) Flip start→final.
+      gsap.set(dImg,{ position:'fixed', left:r.left, top:r.top, width:r.width, height:r.height, maxWidth:'none', maxHeight:'none', margin:0, zIndex:9 });
+      detail.classList.add('on');
+      const state=Flip.getState(dImg);
+      gsap.set(dImg,{ clearProps:'all' });
+      Flip.from(state,{ duration:0.8, ease:'power3.inOut', absolute:true });
+      gsap.fromTo(detail,{ backdropFilter:'blur(0px)', backgroundColor:'rgba(8,8,10,0)' },
+        { backdropFilter:'blur(8px)', backgroundColor:'rgba(8,8,10,0.82)', duration:0.6 });
+      gsap.fromTo(dInfo,{ opacity:0, y:10 },{ opacity:1, y:0, duration:0.5, delay:0.35 });
+    });
+  });
+  const close=()=>{ gsap.to(detail,{ backdropFilter:'blur(0px)', backgroundColor:'rgba(8,8,10,0)', duration:0.45,
+    onComplete:()=>detail.classList.remove('on') }); gsap.to(dImg,{ opacity:0, duration:0.4, onComplete:()=>gsap.set(dImg,{opacity:1}) }); };
+  detail.querySelector('.close').addEventListener('click',close);
+  detail.addEventListener('click',e=>{ if(e.target===detail) close(); });
+}
+</script>
+</body>
+</html>

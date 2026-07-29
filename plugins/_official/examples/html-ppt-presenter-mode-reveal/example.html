@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Open Design · Presenter Mode Deck</title>
+<title>Run a Live AI Product Demo like a Founding DevRel Lead - AI literacy</title>
 <style>/* html-ppt :: shared webfonts (only families actually used by this deck) */
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
@@ -587,22 +587,22 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
 
   <!-- ============ 1. COVER ============ -->
   <section class="slide" data-title="Cover">
-    <p class="kicker">presenter-mode / demo</p>
-    <h1 class="h1 anim-fade-up" data-anim="fade-up"><span style="color:var(--accent)">Open Design</span><br>The open-source, local, agent-driven design platform</h1>
+    <p class="kicker">ai literacy / devrel enablement</p>
+    <h1 class="h1 anim-fade-up" data-anim="fade-up">Run a Live AI Product Demo<br><span style="color:var(--accent)">like a Founding DevRel Lead</span></h1>
     <p class="lede mt-m">Press <span class="mono">S</span> for presenter view · <span class="mono">T</span> to switch themes · <span class="mono">← →</span> to navigate</p>
     <div class="speaker">
       <div class="av"></div>
-      <div><b>Open Design</b><span>github.com/nexu-io/open-design · 30 min</span></div>
+      <div><b>Open Design DevRel</b><span>github.com/nexu-io/open-design · 30 min session</span></div>
     </div>
     <div class="deck-footer">
       <span class="mono">Apache-2.0 · Runs locally · BYOK · No sign-up</span>
       <span class="slide-number" data-current="1" data-total="6"></span>
     </div>
     <aside class="notes">
-      <p>Hi everyone, welcome to today's session. I want to introduce <strong>Open Design — an open-source, local, agent-driven design platform</strong>: from idea to prototype, web page, slides, and HTML video, the entire product-design workflow runs on your own machine.</p>
-      <p>Before we dive in, a word about this deck itself: it supports <em>presenter mode</em>. You're seeing the audience view, while my screen shows the current slide, the next slide, the full script, and a timer — which is itself an example of Open Design producing slides with a Plugin.</p>
-      <p>Four keywords to remember: <strong>Apache-2.0 open source, runs locally, BYOK, no sign-up</strong>. This is not another cloud subscription tool — it's a design workflow that runs on your own machine.</p>
-      <p>We've got about 30 minutes, split into 5 parts. Interrupt me anytime with questions. Let's go.</p>
+      <p>Hi everyone. This session is the playbook a founding DevRel lead uses to run a <strong>live AI product demo</strong> — not a recorded walkthrough, a real session where the prompt in front of the audience is theirs, and the output is a runnable file by the time we're done.</p>
+      <p>The deck itself is the proof point: it's built with presenter mode, so you're seeing the audience view while my screen carries the current slide, the next slide, the full script, and a timer — one Open Design plugin produced everything you're looking at.</p>
+      <p>Four facts to hold onto for the rest of this session: <strong>Apache-2.0 open source, runs locally, BYOK, no sign-up</strong>. That's what makes a live, unscripted demo safe to run in front of a room — no cloud dependency to go down mid-pitch.</p>
+      <p>30 minutes, five parts, questions welcome anytime. Let's go.</p>
     </aside>
   </section>
 
@@ -611,119 +611,120 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
     <p class="kicker">agenda</p>
     <h2 class="h2">Five things on the agenda</h2>
     <div class="stack mt-l">
-      <div class="agenda-row"><span class="num">01</span><span class="t">Why · What Claude Design proved — and what it locked away</span><span class="d">~5min</span></div>
-      <div class="agenda-row"><span class="num">02</span><span class="t">Workflow · From idea to deliverable in a few steps</span><span class="d">~6min</span></div>
-      <div class="agenda-row"><span class="num">03</span><span class="t">Three principles · What makes Open Design different</span><span class="d">~8min</span></div>
-      <div class="agenda-row"><span class="num">04</span><span class="t">Live demo · Presenting this very deck in presenter mode</span><span class="d">~8min</span></div>
-      <div class="agenda-row"><span class="num">05</span><span class="t">CTA + Q&amp;A</span><span class="d">~3min</span></div>
+      <div class="agenda-row"><span class="num">01</span><span class="t">Why now · Live demos are outperforming decks in AI evaluations</span><span class="d">~5min</span></div>
+      <div class="agenda-row"><span class="num">02</span><span class="t">Workflow map · From a one-line prompt to a runnable file, live</span><span class="d">~6min</span></div>
+      <div class="agenda-row"><span class="num">03</span><span class="t">Pilot &amp; risk control · The 30-minute session format, and the fallback plan</span><span class="d">~8min</span></div>
+      <div class="agenda-row"><span class="num">04</span><span class="t">Live demo · Running this very deck in presenter mode</span><span class="d">~8min</span></div>
+      <div class="agenda-row"><span class="num">05</span><span class="t">ROI + rollout plan + Q&amp;A</span><span class="d">~3min</span></div>
     </div>
     <aside class="notes">
       <p>Let's walk through today's agenda.</p>
-      <p>Part one is the <strong>Why</strong> — in April 2026, Claude Design proved that LLMs can genuinely do design, but it's closed-source, paid, and cloud-only. That's the reason Open Design exists.</p>
-      <p>Part two covers the <strong>workflow</strong>: how the whole pipeline runs locally, from a one-line idea to a deliverable artifact.</p>
-      <p>Part three is the <em>core</em> of today — Open Design's three principles: desktop-native, plug into agents instead of building one, and getting smarter the more you use it.</p>
-      <p>Part four is the live demo — though really, the demo started on slide one: this deck was produced by Open Design, and I've had presenter mode on the whole time.</p>
-      <p>Then we wrap up with the CTA and Q&amp;A.</p>
+      <p>Part one is <strong>why now</strong> — buyers have started discounting recorded demos; a live one, run on the audience's own prompt, is what actually moves a deal forward.</p>
+      <p>Part two is the <strong>workflow map</strong>: the four beats that take a one-line prompt to a real, runnable deliverable while the room watches.</p>
+      <p>Part three covers <em>pilot format and risk control</em> — how we scope a 30-minute session, and what we do when the live prompt doesn't cooperate.</p>
+      <p>Part four is the live demo — though really it started on slide one: this deck was produced by Open Design, and I've had presenter mode on the whole time.</p>
+      <p>Then ROI, the rollout plan, and Q&amp;A.</p>
       <p>OK, on to part one.</p>
     </aside>
   </section>
 
   <!-- ============ 3. PROBLEM ============ -->
   <section class="slide" data-title="Problem">
-    <p class="kicker">// part 01 · why</p>
-    <h2 class="h2">AI can do design now —<br>but the capability is <span class="accent">locked in the cloud</span>.</h2>
+    <p class="kicker">// part 01 · why now</p>
+    <h2 class="h2">Buyers stopped trusting canned demos —<br>they want <span class="accent">their own prompt, live</span>.</h2>
     <div class="grid g3 mt-l">
       <div class="card card-accent">
-        <h4>✅ What it proved</h4>
-        <p class="dim">In April 2026, Claude Design proved for the first time that LLMs can genuinely do design — not write about it, but produce real design work.</p>
+        <h4>✅ What buyers expect</h4>
+        <p class="dim">A prompt from the room, not a rehearsed script — proof the tool works on their real problem, not a curated one.</p>
       </div>
       <div class="card card-accent">
-        <h4>❌ What it locked away</h4>
-        <p class="dim">Closed-source, paid, cloud-only: the model is locked to Anthropic — no swapping agents, no self-hosting, no BYOK.</p>
+        <h4>❌ What kills a demo</h4>
+        <p class="dim">Pre-recorded video, no visible source, and no good answer when someone asks "what if I ask it X instead?"</p>
       </div>
       <div class="card card-accent">
-        <h4>💡 Open Design</h4>
-        <p class="dim">Opens that capability up — <strong>bringing frontier AI design power back to every creator's desk</strong>.</p>
+        <h4>💡 Open Design's answer</h4>
+        <p class="dim">Local, agent-native runtime — <strong>any prompt becomes a real, runnable file in the room, in minutes</strong>.</p>
       </div>
     </div>
     <aside class="notes">
-      <p>Let's start with a moment in time — <strong>April 2026, Claude Design launches</strong>.</p>
-      <p>Look at the card on the left. What did it prove? That LLMs can <em>genuinely do design</em> — not write an essay about design, but directly produce usable design work. That's a qualitative leap.</p>
-      <p>But the middle card is the problem: it's <strong>closed-source, paid, and cloud-only</strong>. The model is locked to Anthropic. Want to swap in a different agent? No. Self-host? No. Use your own API key — BYOK? Still no. The capability is powerful, but you can't get your hands on it.</p>
-      <p>Which brings us to the card on the right — <strong>Open Design's mission is to open that capability up</strong>: open source, runs locally, swap agents freely. In one sentence: bring frontier AI design power back to every creator's desk.</p>
-      <p>So how does it actually work? On to the next part.</p>
+      <p>Let's start with why this matters right now.</p>
+      <p>Look at the card on the left. Prospects have watched a dozen AI product videos this quarter alone. What actually changes a mind is watching the tool take <em>their</em> prompt, not a cherry-picked one — that's the bar now.</p>
+      <p>The middle card is the trap most demos fall into: a pre-recorded video, no source visible, and the moment someone asks "what if I typed something different" the whole thing falls apart because there's nothing live to show.</p>
+      <p>Which brings us to the right card — Open Design runs locally and reads full context live, so the agent can take any prompt from the audience and turn it into a real, editable file before the session ends. That's the demo we're about to run.</p>
+      <p>So what does that workflow actually look like, step by step? Next part.</p>
     </aside>
   </section>
 
   <!-- ============ 4. SOLUTION ============ -->
   <section class="slide" data-title="Presenter View">
-    <p class="kicker">// part 02 · workflow</p>
-    <h2 class="h2">From idea to deliverable in <span class="accent">four steps</span></h2>
+    <p class="kicker">// part 02 · workflow map</p>
+    <h2 class="h2">From a one-line prompt to a shipped file in <span class="accent">four beats</span></h2>
     <div class="grid g2 mt-l">
       <div>
-        <div class="feature-row"><span class="num blue">①</span><div><b>Pick a starting point</b><p class="dim">Describe your goal in one sentence, or start from a template or Plugin.</p></div></div>
-        <div class="feature-row"><span class="num green">②</span><div><b>Set the visual direction</b><p class="dim">Once chosen, the palette, typography, and spacing flow into every generation step.</p></div></div>
+        <div class="feature-row"><span class="num blue">①</span><div><b>Take the room's prompt</b><p class="dim">Ask the audience for a real ask — a landing page, a dashboard, a pitch deck — and type exactly what they say.</p></div></div>
+        <div class="feature-row"><span class="num green">②</span><div><b>Lock the direction</b><p class="dim">One click sets palette, typography, and spacing so every following screen stays visually consistent.</p></div></div>
       </div>
       <div>
-        <div class="feature-row"><span class="num orange">③</span><div><b>Generate the artifact</b><p class="dim">The agent reads the full context and produces real, runnable files — preview and edit instantly in the sandbox.</p></div></div>
-        <div class="feature-row"><span class="num purple">④</span><div><b>Deliver + build memory</b><p class="dim">Hand off to engineering, or turn it into video with HyperFrames; every choice becomes context for the next generation.</p></div></div>
+        <div class="feature-row"><span class="num orange">③</span><div><b>Generate on screen</b><p class="dim">The agent writes real, runnable files in the sandbox — the audience watches code compile, not a loading spinner.</p></div></div>
+        <div class="feature-row"><span class="num purple">④</span><div><b>Hand it over, on the spot</b><p class="dim">Drop the file into a repo or a Slack channel before the session ends — no "we'll follow up" needed.</p></div></div>
       </div>
     </div>
     <aside class="notes">
-      <p>Open Design's workflow is four steps. Let me walk through them in order.</p>
-      <p>Step one, <strong>pick a starting point</strong>. Describe what you want in one sentence, or pick a starting point straight from templates and Plugins — today's deck, for example, started from a presenter-mode Slides Plugin.</p>
-      <p>Step two, <strong>set the visual direction</strong>. Once the direction is locked in, the palette, fonts, and spacing automatically carry into the rest of the generation flow — no per-slide hand-tuning.</p>
-      <p>Step three, <strong>generate the artifact</strong> — the most important step. The agent reads the full context and produces <em>real, runnable files</em> — not screenshots, not preview images — that you can preview and edit instantly in the sandbox.</p>
-      <p>Step four, <strong>deliver and build memory</strong>. The files can go straight to engineering for further development, or become a marketing video via HyperFrames; meanwhile every choice you make is captured as memory, so the next generation lands closer to what you want.</p>
-      <p>So what's the philosophy behind this workflow? Next part.</p>
+      <p>This is the workflow map — four beats, and I run through all four live in every session.</p>
+      <p>Beat one, <strong>take the room's prompt</strong>. Not a warm-up example — the actual thing the audience says they need, typed verbatim.</p>
+      <p>Beat two, <strong>lock the direction</strong>. One click sets the palette, fonts, and spacing, so everything the agent generates after this stays visually consistent — no per-screen tuning live on stage.</p>
+      <p>Beat three, <strong>generate on screen</strong> — the moment that sells the room. The agent reads full context and writes real, runnable files in the sandbox, and the audience watches it happen in real time, not a spinner cutting to a finished screenshot.</p>
+      <p>Beat four, <strong>hand it over on the spot</strong>. The file goes to a repo or a Slack channel before we move to Q&amp;A — the prospect leaves with something real, not a follow-up email.</p>
+      <p>So how do we scope this as a repeatable pilot, and what's the fallback if the live prompt misbehaves? Next part.</p>
     </aside>
   </section>
 
   <!-- ============ 5. SCRIPT ============ -->
   <section class="slide" data-title="Script">
-    <p class="kicker">// part 03 · principles</p>
-    <h2 class="h2">Open Design's <span class="accent">three principles</span></h2>
+    <p class="kicker">// part 03 · pilot &amp; risk control</p>
+    <h2 class="h2">Pilot format &amp; <span class="accent">risk controls</span></h2>
     <div class="stack mt-l">
       <div class="rule-row">
         <span class="num red">01</span>
         <div>
-          <b>🖥️ <span class="accent">Desktop</span>-native</b>
-          <p class="dim">Design happens on the desktop. Local files, Figma exports, and code repos are directly readable, and <em>the agent has full terminal execution power</em>.</p>
+          <b>🎯 <span class="accent">Pilot scope</span>: one session, one live prompt</b>
+          <p class="dim">30 minutes, one audience-chosen problem, one agent, one deliverable — repeatable across prospects, not a one-off show.</p>
         </div>
       </div>
       <div class="rule-row">
         <span class="num red">02</span>
         <div>
-          <b>🤖 Don't build agents — <span class="accent">plug into them</span></b>
-          <p class="dim">The Claude Code / Codex / Cursor on your machine are already powerful. Open Design wires them into a complete design workflow.</p>
+          <b>🛡️ <span class="accent">Risk control</span>: it runs without the internet</b>
+          <p class="dim">Local-first, so a flaky venue Wi-Fi never stalls the demo; a rehearsed backup prompt is ready if the live one runs long.</p>
         </div>
       </div>
       <div class="rule-row">
         <span class="num red">03</span>
         <div>
-          <b>🧠 Gets <span class="accent">smarter</span> with every use</b>
-          <p class="dim">Every choice settles into your Design System, preferences, and memory — so the next generation lands closer to what you want.</p>
+          <b>📊 <span class="accent">Success bar</span>: they can name the file</b>
+          <p class="dim">Pass/fail signal: can the audience say what got built and where it lives — a repo link, a preview URL — by the time we close?</p>
         </div>
       </div>
     </div>
     <aside class="notes">
-      <p>Now for the heart of today's talk — Open Design's three principles.</p>
-      <p><strong>First, desktop-native</strong>. The desktop is where design actually happens: local files, Figma exports, code repositories — all directly readable. More importantly, the agent here has <em>full terminal execution power</em> — something no cloud tool can give you.</p>
-      <p><strong>Second, don't build agents — plug into them</strong>. We don't reinvent the wheel. The Claude Code, Codex, and Cursor on your machine are already strong; what Open Design does is wire them into a complete design workflow — <strong>21 coding agents</strong> supported so far, auto-detected from your PATH, zero configuration.</p>
-      <p><strong>Third, it gets smarter the more you use it</strong>. Every choice settles into your Design System, preferences, and memory, so the next generation lands closer to what you want. That's a self-evolving design system.</p>
-      <p>Put the three together: open, local, agent-native. Finally, let's see how to get started.</p>
+      <p>Now for the part that gets this funded internally — how we scope the pilot and control the risk of running it live.</p>
+      <p><strong>First, pilot scope</strong>. One session, 30 minutes, one problem the audience picks in the room — not five feature tours crammed into one slot. That's what makes it repeatable across ten prospects a month instead of a single showcase event.</p>
+      <p><strong>Second, risk control</strong>. Because Open Design runs locally, a bad venue Wi-Fi connection never stalls the live moment — the agent and sandbox are on the laptop. If the live prompt runs long, I have one rehearsed backup prompt ready that still lands inside the 30 minutes.</p>
+      <p><strong>Third, the success bar</strong> — and this is the metric that matters to a DevRel manager: can the audience, unprompted, say what file got built and where it lives? If yes, the session earned a follow-up meeting. If no, we adjust the pilot script, not the product.</p>
+      <p>Put those three together and you have a pilot you can run weekly, not once. Now, the numbers that make the case to fund it.</p>
     </aside>
   </section>
 
   <!-- ============ 6. DEMO + CLOSING ============ -->
   <section class="slide" data-title="Demo & Close">
-    <p class="kicker">// part 04-05 · demo + close</p>
-    <h2 class="h2">Bring frontier AI design power <span class="accent">back to your desk</span></h2>
+    <p class="kicker">// part 04-05 · roi + rollout</p>
+    <h2 class="h2">The numbers that get this <span class="accent">funded</span></h2>
     <div class="code-block mt-m">
 <span class="comment"># Get Open Design (macOS / Windows · Apache-2.0)</span>
 <span class="cmd">open</span> <span class="flag">https://github.com/nexu-io/open-design</span>
 
 <span class="comment"># 60K+ Stars · 300+ Contributors · 217+ Plugins · 129 Design Systems</span>
+<span class="comment"># Cost per live session: $0 in API fees when run BYOK on the presenter's own key</span>
 
 <span class="comment"># Keyboard shortcuts for this deck (presenter-mode demo)</span>
 <span class="flag">S</span>  <span class="comment">→ open presenter view</span>
@@ -731,17 +732,17 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
 <span class="flag">← →</span> <span class="comment">→ navigate slides</span>
 <span class="flag">R</span>  <span class="comment">→ reset timer</span>
     </div>
-    <p class="lede mt-m tc"><strong>Open · Local · Agent-native</strong> — Download Open Design ｜ Star on GitHub · discord.gg/mHAjSMV6gz</p>
+    <p class="lede mt-m tc"><strong>Rollout: 1 pilot session this week → 4 DevRel reps trained next sprint → weekly cadence.</strong> discord.gg/mHAjSMV6gz</p>
     <div class="deck-footer">
       <span class="mono">#thanks · Q&amp;A</span>
       <span class="slide-number" data-current="6" data-total="6"></span>
     </div>
     <aside class="notes">
-      <p>Finally, the call to action — to save you some time figuring it out yourselves.</p>
-      <p>Getting started is simple: open the GitHub repo <code>nexu-io/open-design</code> and download the macOS or Windows client. <strong>Apache-2.0 open source, no sign-up, BYOK with your own key</strong>. The community is at 60K+ stars, 300+ contributors, 217+ Plugins, and 129 Design Systems — the ecosystem is buzzing.</p>
-      <p>The keyboard shortcuts are listed here. <strong>S for presenter view, T to switch themes, arrow keys to navigate, R to reset the timer</strong>. Five themes ship by default — tokyo-night, dracula, catppuccin-mocha, nord, corporate-clean — covering dark tech talks and light business reviews alike.</p>
-      <p>And remember, this deck is itself an Open Design artifact — <em>presenter mode, the full script, theme switching: all generated HTML</em>. The demo you've been watching is the product.</p>
-      <p>That's all from me today. One line to take home: <strong>open, local, agent-native</strong>. Thank you — questions, go.</p>
+      <p>Finally, the numbers and the rollout plan — what I need approved to keep running this every week.</p>
+      <p>Open Design is Apache-2.0, no sign-up, and BYOK — which matters for ROI, because a live demo session costs nothing beyond the presenter's own API key. Community context: 60K+ stars, 300+ contributors, 217+ Plugins, 129 Design Systems — this isn't a fringe tool the prospect has never heard of.</p>
+      <p>The keyboard shortcuts here are the exact ones I use live: <strong>S for presenter view, T to switch themes, arrow keys to navigate, R to reset the timer</strong>. Five themes ship by default, so the same deck reads right in a dark technical room or a bright executive briefing.</p>
+      <p>Rollout plan: <strong>one pilot session this week, four DevRel reps trained on the format next sprint, then a weekly cadence</strong> against the pipeline. That's the ask.</p>
+      <p>Remember — this deck is itself the proof: presenter mode, live script, theme switching, all generated HTML, produced the same way the demo will be run. Thank you — questions, go.</p>
     </aside>
   </section>
 
@@ -750,7 +751,6 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
 <div style="position:fixed;bottom:12px;left:12px;font-size:11px;font-family:var(--font-mono);color:var(--text-3);opacity:.7;z-index:100;pointer-events:none">
   S presenter view · T theme · ← → navigate · F fullscreen · O overview · R reset timer
 </div>
-
 
 </body>
 </html>

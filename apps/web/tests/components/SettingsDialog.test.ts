@@ -12,6 +12,7 @@ import {
   isValidApiBaseUrl,
   mergeProviderModelOptions,
   providerModelsCacheKey,
+  resolveSettingsAutosavePayload,
   sanitizeSettingsSavePayload,
   shouldEnableSettingsSave,
   shouldShowCustomModelInput,
@@ -219,7 +220,7 @@ describe('SettingsDialog about update control', () => {
     });
   });
 
-  it('offers a quit retry after the installer has opened', () => {
+  it('shows installer handoff without claiming that quit failed', () => {
     const control = deriveAboutUpdateControl(
       deriveUpdaterModel(
         updateStatus({
@@ -247,8 +248,8 @@ describe('SettingsDialog about update control', () => {
       primaryAction: 'quit',
       primaryLabelKey: 'updater.quitButton',
       showReleaseLink: false,
-      statusKey: 'settings.updateQuitFailed',
-      statusTone: 'warning',
+      statusKey: 'updater.opening',
+      statusTone: 'neutral',
     });
   });
 
@@ -261,9 +262,33 @@ describe('SettingsDialog about update control', () => {
     expect(control).toMatchObject({
       primaryAction: 'check',
       primaryLabelKey: 'settings.updateRetry',
-      statusKey: 'settings.updateStatusFailed',
+      statusKey: 'updater.failed',
       statusTone: 'error',
     });
+  });
+
+  it('retries updater errors from the last actionable phase', () => {
+    const downloadRetry = deriveAboutUpdateControl(
+      deriveUpdaterModel(
+        updateStatus({ availableVersion: '1.2.3-beta.4', state: 'error' }),
+        { hostAvailable: true },
+      ),
+      packagedVersion,
+    );
+    const installRetry = deriveAboutUpdateControl(
+      deriveUpdaterModel(
+        updateStatus({
+          availableVersion: '1.2.3-beta.4',
+          downloadPath: '/tmp/Open Design Beta.dmg',
+          state: 'error',
+        }),
+        { hostAvailable: true },
+      ),
+      packagedVersion,
+    );
+
+    expect(downloadRetry.primaryAction).toBe('download');
+    expect(installRetry.primaryAction).toBe('install');
   });
 
   it('does not offer in-app update actions in development or web-only contexts', () => {
@@ -378,6 +403,27 @@ describe('SettingsDialog API protocol switching', () => {
     });
   });
 
+  it('keeps Atlas Cloud as an OpenAI-compatible known provider without changing the OpenAI default', () => {
+    const openai = switchApiProtocolConfig(baseConfig, 'openai');
+    const atlas = updateCurrentApiProtocolConfig(openai, {
+      baseUrl: 'https://api.atlascloud.ai/v1',
+      model: 'qwen/qwen3.5-flash',
+      apiProviderBaseUrl: 'https://api.atlascloud.ai/v1',
+    });
+
+    expect(openai).toMatchObject({
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o',
+      apiProviderBaseUrl: 'https://api.openai.com/v1',
+    });
+    expect(atlas).toMatchObject({
+      apiProtocol: 'openai',
+      baseUrl: 'https://api.atlascloud.ai/v1',
+      model: 'qwen/qwen3.5-flash',
+      apiProviderBaseUrl: 'https://api.atlascloud.ai/v1',
+    });
+  });
+
   it('auto-fills Google defaults when switching from a selected known provider', () => {
     expect(switchApiProtocolConfig(baseConfig, 'google')).toMatchObject({
       mode: 'api',
@@ -482,12 +528,15 @@ describe('SettingsDialog provider model fetch helpers', () => {
         'openai',
       ),
     ).toBe(false);
+    // #3225 — an internal-IP endpoint is now fetchable from the UI's
+    // perspective; the daemon enforces the OD_ALLOWED_INTERNAL_HOSTS allowlist
+    // and returns the authoritative allow/block decision.
     expect(
       canFetchProviderModels(
         { apiKey: 'sk-openai', baseUrl: 'http://10.0.0.5:11434/v1' },
         'openai',
       ),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       canFetchProviderModels(
         { apiKey: 'azure-key', baseUrl: 'https://example.openai.azure.com' },
@@ -527,13 +576,23 @@ describe('SettingsDialog provider model fetch helpers', () => {
     expect(
       mergeProviderModelOptions(
         [
-          { id: 'remote-a', label: 'Remote A' },
+          {
+            id: 'remote-a',
+            label: 'Remote A',
+            metadata: { cost: 'low', capability: 'standard' },
+            enabled: false,
+          },
           { id: 'gpt-4o', label: 'Remote GPT' },
         ],
         ['gpt-4o', 'o4-mini'],
       ),
     ).toEqual([
-      { id: 'remote-a', label: 'Remote A' },
+      {
+        id: 'remote-a',
+        label: 'Remote A',
+        metadata: { cost: 'low', capability: 'standard' },
+        enabled: false,
+      },
       { id: 'gpt-4o', label: 'Remote GPT' },
       { id: 'o4-mini', label: 'o4-mini' },
     ]);
@@ -671,17 +730,35 @@ describe('SettingsDialog API Base URL validation', () => {
     expect(isValidApiBaseUrl('ftp://api.example.com')).toBe(false);
     expect(isValidApiBaseUrl('http:api.example.com')).toBe(false);
     expect(isValidApiBaseUrl('https://')).toBe(false);
-    expect(isValidApiBaseUrl('http://0.0.0.0:11434/v1')).toBe(false);
-    expect(isValidApiBaseUrl('http://10.0.0.5:11434/v1')).toBe(false);
-    expect(isValidApiBaseUrl('http://100.64.0.1:11434/v1')).toBe(false);
-    expect(isValidApiBaseUrl('http://169.254.1.5:11434/v1')).toBe(false);
-    expect(isValidApiBaseUrl('http://172.16.0.5:11434/v1')).toBe(false);
-    expect(isValidApiBaseUrl('http://192.168.1.5:11434/v1')).toBe(false);
-    expect(isValidApiBaseUrl('http://224.0.0.1:11434/v1')).toBe(false);
-    expect(isValidApiBaseUrl('http://[::]:11434/v1')).toBe(false);
-    expect(isValidApiBaseUrl('http://[fd00::1]:11434/v1')).toBe(false);
-    expect(isValidApiBaseUrl('http://[fe80::1]:11434/v1')).toBe(false);
-    expect(isValidApiBaseUrl('http://[::ffff:192.168.1.5]:11434/v1')).toBe(false);
+  });
+
+  it('keeps syntactically-valid internal-IP base URLs UI-valid so the daemon allowlist can decide (#3225)', () => {
+    // The internal-IP / SSRF decision belongs to the daemon, which honors the
+    // operator's OD_ALLOWED_INTERNAL_HOSTS allowlist — a value the browser
+    // cannot see. These are well-formed URLs that merely point at internal
+    // addresses, so the client must not block them: the operator needs to run
+    // the connection test / model fetch and get the daemon's authoritative
+    // answer (allowed when listed, "Internal IPs blocked" otherwise).
+    for (const internal of [
+      'http://0.0.0.0:11434/v1',
+      'http://10.0.0.5:11434/v1',
+      'http://100.64.0.1:11434/v1',
+      'http://169.254.1.5:11434/v1',
+      'http://172.16.0.5:11434/v1',
+      'http://192.168.1.5:11434/v1',
+      'http://224.0.0.1:11434/v1',
+      'http://[::]:11434/v1',
+      'http://[fd00::1]:11434/v1',
+      'http://[fe80::1]:11434/v1',
+      'http://[::ffff:192.168.1.5]:11434/v1',
+    ]) {
+      expect(isValidApiBaseUrl(internal)).toBe(true);
+    }
+  });
+
+  it('still rejects genuinely malformed URLs client-side', () => {
+    expect(isValidApiBaseUrl('http://')).toBe(false);
+    expect(isValidApiBaseUrl('http:// /v1')).toBe(false);
   });
 });
 
@@ -1448,5 +1525,105 @@ describe('sanitizeSettingsSavePayload', () => {
     expect(sanitized.mode).toBe('daemon');
     expect(sanitized.agentId).toBe('claude-code');
     expect(sanitized.theme).toBe('system');
+  });
+});
+
+describe('resolveSettingsAutosavePayload', () => {
+  const activeDaemon: AppConfig = {
+    ...baseConfig,
+    mode: 'daemon',
+    agentId: 'claude-code',
+    apiKey: '',
+  };
+
+  it('persists a cleared API key for the active provider', () => {
+    const activeOpenAi: AppConfig = {
+      ...baseConfig,
+      apiProtocol: 'openai',
+      apiKey: 'sk-openai-test',
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o',
+      apiProviderBaseUrl: 'https://api.openai.com/v1',
+    };
+    const clearedKey: AppConfig = {
+      ...activeOpenAi,
+      apiKey: '',
+    };
+
+    expect(
+      resolveSettingsAutosavePayload(clearedKey, activeOpenAi, {
+        commitClearedActiveApiKey: true,
+      }),
+    ).toBe(clearedKey);
+  });
+
+  it.each([
+    {
+      name: 'API key',
+      draft: {
+        ...activeDaemon,
+        mode: 'api' as const,
+        apiKey: '',
+      },
+    },
+    {
+      name: 'model',
+      draft: {
+        ...activeDaemon,
+        mode: 'api' as const,
+        apiKey: 'sk-ant-draft',
+        model: '',
+      },
+    },
+    {
+      name: 'base URL',
+      draft: {
+        ...activeDaemon,
+        mode: 'api' as const,
+        apiKey: 'sk-ant-draft',
+        baseUrl: '',
+      },
+    },
+  ])('keeps an incomplete $name in a provider draft', ({ draft }) => {
+    const payload = resolveSettingsAutosavePayload(draft, activeDaemon);
+
+    expect(payload.mode).toBe('daemon');
+    expect(payload.agentId).toBe('claude-code');
+    expect(payload).toMatchObject({
+      byokPendingProviderKey: expect.any(String),
+    });
+    expect(Object.values(payload.byokProviderConfigDrafts ?? {})).toContainEqual(
+      expect.objectContaining({
+        apiConfig: expect.objectContaining({
+          apiKey: draft.apiKey,
+          baseUrl: draft.baseUrl,
+          model: draft.model,
+        }),
+      }),
+    );
+  });
+
+  it('promotes a statically complete BYOK config to active', () => {
+    const complete: AppConfig = {
+      ...activeDaemon,
+      mode: 'api',
+      apiKey: 'sk-ant-complete',
+    };
+
+    expect(resolveSettingsAutosavePayload(complete, activeDaemon)).toBe(complete);
+  });
+
+  it('promotes a complete keyless local provider config to active', () => {
+    const local: AppConfig = {
+      ...activeDaemon,
+      mode: 'api',
+      apiProtocol: 'ollama',
+      apiKey: '',
+      baseUrl: 'http://localhost:11434',
+      model: 'llama3.2',
+      apiProviderBaseUrl: 'http://localhost:11434',
+    };
+
+    expect(resolveSettingsAutosavePayload(local, activeDaemon)).toBe(local);
   });
 });

@@ -41,6 +41,13 @@ const ENTRY_PAGE_BY_SOURCE: Record<TrackingAmrEntrySource, TrackingPageName> = {
   handoff_amr_website: 'artifact',
   chat_error_authorize_retry: 'chat_panel',
   chat_error_recharge: 'chat_panel',
+  chat_error_upgrade: 'chat_panel',
+  chat_balance_gate_upgrade: 'chat_panel',
+  home_balance_gate_upgrade: 'home',
+  chat_low_balance_warn_recharge: 'chat_panel',
+  home_low_balance_warn_recharge: 'home',
+  chat_balance_gate_sign_in: 'chat_panel',
+  home_balance_gate_sign_in: 'home',
   chat_error_switch_retry_card: 'chat_panel',
   generation_preview_authorize_retry: 'file_manager',
   generation_preview_recharge: 'file_manager',
@@ -49,6 +56,8 @@ const ENTRY_PAGE_BY_SOURCE: Record<TrackingAmrEntrySource, TrackingPageName> = {
   inline_amr_upgrade: 'chat_panel',
   avatar_amr_upgrade: 'chat_panel',
   avatar_amr_agent_card: 'chat_panel',
+  artifact_success_upgrade: 'artifact',
+  home_artifact_upgrade: 'home',
 };
 
 const ONBOARDING_PROFILE_SYNC_SOURCES: readonly TrackingAmrEntrySource[] = [

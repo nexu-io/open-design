@@ -33,6 +33,7 @@ import {
   detectClientType,
   getAnonymousId,
   getSessionId,
+  isFirstSession,
 } from './identity';
 import { randomUUID } from '../utils/uuid';
 
@@ -166,6 +167,8 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
       anonymousId: getAnonymousId(),
       sessionId: getSessionId(),
       clientType: detectClientType(),
+      // Pinned once per tab session (spec §11.1 common field).
+      isFirstSession: isFirstSession(),
     }),
     [],
   );
@@ -188,6 +191,7 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
         anonymousId: identity.anonymousId,
         sessionId: identity.sessionId,
         clientType: identity.clientType,
+        isFirstSession: identity.isFirstSession,
         locale,
         appVersion: resolvedAppVersion,
       });
@@ -195,6 +199,7 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
         anonymousId: identity.anonymousId,
         sessionId: identity.sessionId,
         clientType: identity.clientType,
+        isFirstSession: identity.isFirstSession,
         locale,
         appVersion: resolvedAppVersion,
       });
@@ -252,6 +257,7 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
         anonymousId: identity.anonymousId,
         sessionId: identity.sessionId,
         clientType: identity.clientType,
+        isFirstSession: identity.isFirstSession,
         locale: locale,
         appVersion: resolvedAppVersion,
       });
@@ -310,6 +316,7 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
           anonymousId: identity.anonymousId,
           sessionId: identity.sessionId,
           clientType: identity.clientType,
+          isFirstSession: identity.isFirstSession,
           locale: locale,
           appVersion: resolvedAppVersion,
         });
@@ -350,6 +357,7 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
               anonymousId: identity.anonymousId,
               sessionId: identity.sessionId,
               clientType: identity.clientType,
+              isFirstSession: identity.isFirstSession,
               locale,
               appVersion: resolvedAppVersion,
             });
