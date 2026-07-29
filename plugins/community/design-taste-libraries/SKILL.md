@@ -11,7 +11,7 @@ Use this skill as a source-backed taste router before generating or critiquing U
 ## First Pass
 
 1. Read the user brief and any attached screenshot, code, brand file, or existing artifact.
-2. From the project working directory, locate the staged catalog at `.od-skills/design-taste-libraries-*/references/LIBRARIES.md` and open the matching file. For example, run `find .od-skills -path '*/design-taste-libraries-*/references/LIBRARIES.md' -print -quit`; use the same folder-specific glob when shell access is unavailable. Do not assume `references/LIBRARIES.md` exists at the project root.
+2. From the project working directory, locate the staged catalog at `.od-skills/*design-taste-libraries-*/references/LIBRARIES.md` and open the matching file. For example, run `find .od-skills -path '.od-skills/*design-taste-libraries-*/references/LIBRARIES.md' -print -quit`; use the same plugin-specific glob when shell access is unavailable. This matches both marketplace installs such as `community-design-taste-libraries-<hash>` and local source installs such as `design-taste-libraries-<hash>`. Do not assume `references/LIBRARIES.md` exists at the project root.
 3. Check whether Open Design already has a matching local plugin or design system.
 4. Select one primary library and at most two secondary libraries.
 5. State the selected libraries, the local Open Design plugin ids used, and any external-only gap.
