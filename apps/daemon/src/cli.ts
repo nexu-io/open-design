@@ -13,6 +13,7 @@ import { BRAND_USAGE, isBrandHelpArg } from './cli-help/index.js';
 import { parseDesignSystemRenameArgs } from './design-systems/rename-args.js';
 import { runLiveArtifactsToolCli } from './tools-live-artifacts-cli.js';
 import { splitResearchSubcommand } from './research/cli-args.js';
+import { runStoreScreenshotCli } from './store-screenshots/cli.js';
 import { resolveDaemonUrl } from './daemon-url.js';
 import { requestJsonIpc } from '@open-design/sidecar';
 import { SIDECAR_ENV, SIDECAR_MESSAGES } from '@open-design/sidecar-proto';
@@ -366,6 +367,7 @@ const SUBCOMMAND_MAP = {
   config: runConfig,
   library: runLibrary,
   figma: runFigma,
+  'store-screenshot': runStoreScreenshot,
 };
 
 const EXPORT_STRING_FLAGS = new Set([
@@ -662,6 +664,10 @@ function printRootHelp() {
       Automations tab, so an external agent (hermes, openclaw, ...) can
       schedule, trigger, or harvest results from a routine without
       opening the web UI.
+
+  od store-screenshot <create|upload|generate|validate|export|status|versions|restore> [args]
+      Create, generate, validate, export, and version store screenshots
+      through the same daemon API used by the web UI.
 
   od message-center <list|read|read-all> [args]
       Read and acknowledge message-center inbox items through the same
@@ -1016,6 +1022,21 @@ async function runResearchSearch(rawArgs) {
 
 async function runArtifacts(args) {
   const { exitCode } = await runArtifactsCli(args);
+  process.exit(exitCode);
+}
+
+async function runStoreScreenshot(args) {
+  const { exitCode } = await runStoreScreenshotCli(args, {
+    onHttpFailure: structuredHttpFailure,
+    onNetworkFailure: (error, baseUrl) => {
+      exitWithStructuredError({
+        code: 'daemon-not-running',
+        message: `failed to reach daemon at ${baseUrl}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      });
+    },
+  });
   process.exit(exitCode);
 }
 
