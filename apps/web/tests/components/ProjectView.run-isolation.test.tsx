@@ -102,17 +102,17 @@ vi.mock('../../src/collab/useWorkspaceContext', () => ({
   useWorkspaceBilling: () => null,
 }));
 
-vi.mock('../../src/collab/useProjectWorkspaceScope', () => ({
+// Only the HOOK is stubbed; every pure helper comes from the real module.
+//
+// This factory used to hand-list each export, and that cost three separate
+// debugging rounds: adding ONE export to `useProjectWorkspaceScope` made all 64
+// tests in this file fail with "not a function" at render, and the hand-written
+// copies were free to drift from the semantics under test. `importOriginal`
+// removes the whole failure mode — a new export is picked up automatically and
+// is always the real implementation.
+vi.mock('../../src/collab/useProjectWorkspaceScope', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/collab/useProjectWorkspaceScope')>()),
   useProjectWorkspaceScope: () => workspaceScopeMocks.projectScope,
-  projectWorkspaceContext: (scope: ProjectWorkspaceScopeState['scope']) =>
-    scope?.kind === 'personal' || scope?.kind === 'team'
-      ? scope.context
-      : null,
-  projectWorkspaceScopeReady: (scope: ProjectWorkspaceScopeState['scope']) =>
-    scope?.kind === 'unbound' || scope?.kind === 'personal' || scope?.kind === 'team',
-  projectWorkspaceScopeAuthorizesAmr: (
-    scope: ProjectWorkspaceScopeState['scope'],
-  ) => scope?.kind === 'personal' || scope?.kind === 'team',
 }));
 
 vi.mock('../../src/providers/daemon', () => ({

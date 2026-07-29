@@ -39,6 +39,56 @@ export function projectWorkspaceScopeReady(
   return scope?.kind === 'unbound' || scope?.kind === 'personal' || scope?.kind === 'team';
 }
 
+/**
+ * The workspace identity a run creation asserts to the daemon.
+ *
+ * INVARIANT: **a send always names the caller.** The project's own resolved scope
+ * wins when there is one — it is the authority for which workspace the run writes
+ * into and which wallet pays — and otherwise the caller's current workspace
+ * stands, unconditionally.
+ *
+ * There is deliberately no "may I name myself yet" question here any more, and
+ * that took three review rounds to arrive at. The scope arrives over the wire and
+ * a Home auto-send fires before it lands, so this used to return null in that
+ * window, `POST /api/runs` went out with no `x-od-workspace-*`, and the daemon
+ * refused it with 401 WORKSPACE_CONTEXT_REQUIRED. Every attempt to name the safe
+ * window instead — "only while loading", "only on the first read", "only when the
+ * project's binding agrees" — was really working around ONE daemon asymmetry: a
+ * resource no workspace had claimed was mutable by a headerless caller but
+ * refused to a caller that identified itself. That asymmetry is now gone
+ * (`enforceWorkspaceResourceMutation`), so the client no longer has to model it.
+ *
+ * Why unconditional is safe:
+ *
+ *   - Projects are workspace-isolated. `App.tsx` keys `ProjectView` on
+ *     `projectViewAuthorizationLifetimeKey(projectId, context)`, so a workspace
+ *     switch remounts the surface and the previous workspace's project does not
+ *     come along; the no-scope catalog lists only unbound projects. A caller
+ *     acting on a project bound to a workspace they are not in is not a state the
+ *     product produces.
+ *   - Naming a workspace is not the same as being granted it. The daemon resolves
+ *     the row inside the workspace the request names and still applies
+ *     `withLastKnownMembership`, so a stale claim is narrowed against
+ *     daemon-owned state. A project bound elsewhere still refuses.
+ *   - Billing does not follow these headers. The wallet an AMR run is charged to
+ *     is resolved server-side from the project's persisted binding
+ *     (`runtimes/project-amr-trace-env.ts` reads `getWorkspaceProjectByProjectId`),
+ *     never from the caller's assertion — so this cannot move a charge. What it
+ *     DOES fix is the client-side pre-flight: `checkAmrBalanceGate` was handed
+ *     `undefined` here and priced the run against the account wallet instead of
+ *     the team's.
+ *   - It matches every other project write in `ProjectView` — `patchProject`,
+ *     `uploadProjectFiles`, the comment mutations all assert the caller's context
+ *     unconditionally. Run creation was the lone exception, and being the
+ *     exception is what produced the bug.
+ */
+export function runWorkspaceIdentity(
+  state: ProjectWorkspaceScopeState,
+  caller: WorkspaceCollabContext | null,
+): WorkspaceCollabContext | null {
+  return projectWorkspaceContext(state.scope) ?? caller;
+}
+
 /** AMR must resolve an explicit personal/team billing principal. Unbound,
  * revoked, loading and directory-outage states all fail closed. */
 export function projectWorkspaceScopeAuthorizesAmr(

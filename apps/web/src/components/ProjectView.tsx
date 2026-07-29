@@ -236,6 +236,7 @@ import {
 import {
   projectWorkspaceContext,
   projectWorkspaceScopeAuthorizesAmr,
+  runWorkspaceIdentity,
   useProjectWorkspaceScope,
 } from '../collab/useProjectWorkspaceScope';
 import { CollabProvider, type CollabContextValue } from '../collab/collab-context';
@@ -1543,7 +1544,22 @@ export function ProjectView({
   const workspaceContextState = useWorkspaceContext();
   const { context: workspaceContext } = workspaceContextState;
   const projectWorkspaceScopeState = useProjectWorkspaceScope(project.id);
-  const projectRunWorkspaceContext = projectWorkspaceContext(
+  // The project's resolved scope when there is one, else the caller's own
+  // workspace — a send always names its caller, like every other project write
+  // here. See `runWorkspaceIdentity`.
+  const projectRunWorkspaceContext = runWorkspaceIdentity(
+    projectWorkspaceScopeState,
+    workspaceContext,
+  );
+  // The AMR pre-run balance gate keeps EXACTLY its previous derivation — the
+  // project's resolved scope, nothing borrowed. It is not the run's identity: it
+  // fails closed, so pricing against a workspace on weaker evidence blocks a send
+  // rather than being corrected by the server, which is the dead button 21f452ffe
+  // had to undo. It also has a defect of its own (an unscoped send is priced
+  // against the ACCOUNT wallet, so a team member with no personal credits can be
+  // shown a buy-credits dialog for a run their team would fund) — tracked
+  // separately, deliberately not folded in here.
+  const projectRunBillingContext = projectWorkspaceContext(
     projectWorkspaceScopeState.scope,
   );
   const projectRunRequiresWorkspaceScope =
@@ -5415,12 +5431,12 @@ export function ProjectView({
         amrGateInFlightConversationsRef.current.add(gateConversationId);
         try {
           const gate = await checkAmrBalanceGate(
-            projectRunWorkspaceContext
+            projectRunBillingContext
               ? {
-                  workspaceType: projectRunWorkspaceContext.workspaceType,
-                  workspaceId: projectRunWorkspaceContext.workspaceId,
+                  workspaceType: projectRunBillingContext.workspaceType,
+                  workspaceId: projectRunBillingContext.workspaceId,
                   workspaceMemberId:
-                    projectRunWorkspaceContext.workspaceMemberId,
+                    projectRunBillingContext.workspaceMemberId,
                 }
               : undefined,
           );
@@ -9112,7 +9128,7 @@ export function ProjectView({
       autoSendAmrGateWitnessRef.current !== undefined &&
       amrBalanceGateScopesMatch(
         autoSendAmrGateWitnessRef.current,
-        amrBalanceGateScopeForWorkspaceContext(projectRunWorkspaceContext),
+        amrBalanceGateScopeForWorkspaceContext(projectRunBillingContext),
       );
     void handleSend(seed, attachments, [], {
       ...(context ? { context } : {}),

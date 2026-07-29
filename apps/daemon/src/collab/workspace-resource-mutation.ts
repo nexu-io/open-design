@@ -491,6 +491,25 @@ export function enforceWorkspaceResourceMutation(
   }
   const ctx = withLastKnownMembership(requestCtx, getLastKnownMembership);
   const row = getWorkspaceResource(db, ctx.workspaceId, resourceId);
+  // "No row in MY workspace" is two different facts, and only one of them is a
+  // refusal. A resource NO workspace has claimed is outside the isolation regime
+  // altogether — the design's "no retroactive tagging" rule, which
+  // `routes/plugins/index.ts` already applies by skipping this gate entirely for
+  // an unbound plugin so it cannot become "permanently un-uninstallable the
+  // moment a caller happens to carry workspace headers", and which design
+  // systems' `designSystemVisibleFromWorkspace` follows too.
+  //
+  // Treating it as a refusal made the gate ASYMMETRIC: `headerlessMutationAllowed`
+  // short-circuits on "no row anywhere" before it even asks for an identity, so
+  // the same caller was allowed when it sent NO headers and refused when it
+  // identified itself. That protected nothing — dropping headers is trivial — and
+  // it is what forced the web client to tiptoe about when it may name itself,
+  // surfacing as 401 WORKSPACE_CONTEXT_REQUIRED on a first send.
+  //
+  // This only PERMITS the operation. Nothing here writes, so the resource is not
+  // adopted into the asserting caller's workspace; silently rebinding a
+  // pre-existing orphan (#6213) remains out of bounds.
+  if (!row && !getWorkspaceResourceByResourceId(db, resourceId)) return true;
   if (!workspaceResourceMutationAllowed(row, ctx, capability)) {
     const code = row && isWorkspaceResourceLocked(ctx)
       ? 'WORKSPACE_LOCKED'

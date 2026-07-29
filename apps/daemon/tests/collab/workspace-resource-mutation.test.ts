@@ -412,3 +412,85 @@ describe('enforceWorkspaceResourceMutation', () => {
     }]);
   });
 });
+
+// The gate used to be ASYMMETRIC on a resource that no workspace has claimed:
+//
+//   headerless        -> allowed (`headerlessMutationAllowed` short-circuits on
+//                        "no row anywhere" before it even asks for an identity)
+//   identity asserted -> refused, because the asserted path resolves the row
+//                        inside the caller's OWN workspace and treats a missing
+//                        row as a refusal
+//
+// That asymmetry protected nothing. Any caller who wanted the permissive answer
+// could simply drop its headers and get it, so the only thing the refusal did was
+// punish honest clients for identifying themselves — and it is what forced the web
+// client to tiptoe about WHEN it may name itself, which produced a
+// 401 WORKSPACE_CONTEXT_REQUIRED on the Home example-prompt send.
+//
+// `routes/plugins/index.ts` already ships exactly the behavior asserted below,
+// and names the rule: an unbound resource "stays outside the isolation regime
+// rather than becoming permanently un-uninstallable the moment a caller happens
+// to carry workspace headers" (the design's "no retroactive tagging" rule, which
+// design systems' `designSystemVisibleFromWorkspace` also follows). Project was
+// the one resource type that disagreed.
+//
+// This ONLY permits the operation. The gate returns a boolean and writes nothing,
+// so a previously-unbound resource is not adopted into the asserting caller's
+// workspace — #6213's objection to silently rebinding an orphan is untouched.
+describe('enforceWorkspaceResourceMutation — a resource no workspace has claimed', () => {
+  it('allows an asserted identity, exactly as it already allows a headerless caller', () => {
+    const { getWorkspaceResource, getWorkspaceResourceByResourceId } = makeLookups({});
+    const { calls, sendApiError } = spySendApiError();
+
+    const allowed = enforceWorkspaceResourceMutation(
+      'project',
+      fakeReq(workspaceHeaders({ workspaceId: 'ws-1', memberId: 'member-1' })),
+      fakeRes(),
+      sendApiError,
+      getWorkspaceResource,
+      getWorkspaceResourceByResourceId,
+      {},
+      'project-unbound',
+      'writeFiles',
+    );
+
+    expect(allowed, 'the same caller would be allowed by simply omitting its headers').toBe(true);
+    expect(calls).toEqual([]);
+  });
+
+  // The boundary that must NOT move: "no row in MY workspace" is not the same
+  // fact as "no row anywhere". A resource bound to someone else's workspace stays
+  // refused, which is what `e2e/tests/collab/headerless-mutation.test.ts` pins
+  // for the headerless path and what stops dropping/forging headers from becoming
+  // an escalation route.
+  it('still refuses an asserted identity when the resource is bound to another workspace', () => {
+    const { getWorkspaceResource, getWorkspaceResourceByResourceId } = makeLookups({
+      'project-elsewhere': {
+        workspaceId: 'ws-someone-else',
+        visibility: 'personal',
+        resourceState: 'active',
+        createdByWorkspaceMemberId: 'member-other',
+      },
+    });
+    const { calls, sendApiError } = spySendApiError();
+
+    const allowed = enforceWorkspaceResourceMutation(
+      'project',
+      fakeReq(workspaceHeaders({ workspaceId: 'ws-1', memberId: 'member-1' })),
+      fakeRes(),
+      sendApiError,
+      getWorkspaceResource,
+      getWorkspaceResourceByResourceId,
+      {},
+      'project-elsewhere',
+      'writeFiles',
+    );
+
+    expect(allowed).toBe(false);
+    expect(calls).toEqual([{
+      status: 403,
+      code: 'WORKSPACE_PROJECT_PERMISSION_DENIED',
+      message: 'workspace project mutation is not allowed',
+    }]);
+  });
+});

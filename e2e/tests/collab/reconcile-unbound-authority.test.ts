@@ -1,10 +1,12 @@
 // @vitest-environment node
 
 // `reconcileUnboundProjectBeforeMutation` (apps/daemon/src/routes/project/index.ts)
-// claims a project this daemon has never bound to ANY workspace into the current
-// mutating request's workspace, so a true orphan is not denied its first mutation
-// by `enforceWorkspaceResourceMutation`'s `!row -> false` rule (recvqbhor3pai2,
-// "复制的项目再次复制").
+// may claim a project this daemon has never bound to ANY workspace into the
+// current mutating request's workspace (recvqbhor3pai2, "复制的项目再次复制").
+// The mutation gate now treats a resource no workspace has claimed the same
+// whether the caller identifies itself or omits headers: it remains outside the
+// workspace isolation regime. The reconciliation helper still owns the separate
+// persistence decision described below.
 //
 // It resolved that workspace from `workspaceProjectContextFromRequest(req)` —
 // header PARSING with no authority check — and stamped
@@ -34,11 +36,11 @@
 // turn today's working headerless duplicate into a 401 — a new failure on a path
 // that works now. Pinned below.
 //
-// Assertions are on the PERSISTED BINDING (`GET /api/projects/:id/workspace-scope`),
-// never on the mutation's status code: whether the duplicate itself is allowed is
-// the pre-existing gate's business, and it legitimately differs for a caller that
-// cannot prove membership. The security property is that no unverifiable claim is
-// ever written.
+// Assertions primarily target the PERSISTED BINDING
+// (`GET /api/projects/:id/workspace-scope`). The forged-header duplicate also
+// pins the gate's newly explicit 200 result: allowing the operation and
+// persisting the asserted identity are separate decisions. The security property
+// is that no unverifiable claim is ever written.
 //
 // Runs with `OD_WORKSPACE_CONTEXT_SOURCE=vela` so the membership authority is
 // live, seeded only through the daemon's real vela integration against a
@@ -234,9 +236,25 @@ describe('reconciling an unbound project verifies the asserted workspace first',
             'precondition: the source project is a true orphan',
           ).toBe('unbound');
 
-          await mutate(webUrl, duplicatePath(viaDuplicate), workspaceHeaders(FOREIGN), {
-            name: 'Forged duplicate',
-          });
+          // The mutation itself is now ALLOWED, and that outcome is pinned rather
+          // than left unspecified. A resource no workspace has claimed sits
+          // outside the isolation regime ("no retroactive tagging"), so
+          // `enforceWorkspaceResourceMutation` no longer refuses a caller for
+          // identifying itself when it would have allowed the same caller with no
+          // headers at all — see `apps/daemon/tests/collab/
+          // workspace-resource-mutation.test.ts`. Nothing is escalated: dropping
+          // the headers was always the permissive path, so the forged pair buys
+          // access it already had.
+          //
+          // What must NOT change is the assertion below: the forged claim is
+          // still never PERSISTED. Permitting a copy of an orphan and adopting
+          // the orphan are different acts, and only the first one happens.
+          expect(
+            await mutate(webUrl, duplicatePath(viaDuplicate), workspaceHeaders(FOREIGN), {
+              name: 'Forged duplicate',
+            }),
+            'an unbound resource is mutable by an asserted identity, exactly as by a headerless one',
+          ).toBe(200);
 
           const duplicateScope = await readScope(webUrl, viaDuplicate);
           expect(
