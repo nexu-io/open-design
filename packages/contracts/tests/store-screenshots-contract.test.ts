@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   API_ERROR_CODES,
   CreateStoreScreenshotDocumentRequestSchema,
+  GenerateStoreScreenshotPlanRequestSchema,
   ApplyStoreScreenshotChangeSetRequestSchema,
   ScreenshotPlanSchema,
   StoreScreenshotChangeSetPreviewRequestSchema,
@@ -32,6 +33,22 @@ describe('store screenshot API contracts', () => {
       status: 'queued',
       progress: { completed: 0, total: 8 },
     }).status).toBe('queued');
+
+    expect(GenerateStoreScreenshotPlanRequestSchema.parse({
+      prompt: '突出离线优先',
+      byokProvider: {
+        protocol: 'google',
+        apiKey: 'AIza-test-key',
+        model: 'gemini-test',
+      },
+    })).toEqual({
+      prompt: '突出离线优先',
+      byokProvider: {
+        protocol: 'google',
+        apiKey: 'AIza-test-key',
+        model: 'gemini-test',
+      },
+    });
   });
 
   it('uses the domain change-set schema for previews and plans', () => {
@@ -83,6 +100,7 @@ describe('store screenshot API contracts', () => {
       'INVALID_ASSET',
       'PLATFORM_VALIDATION_FAILED',
       'PROVIDER_NOT_CONFIGURED',
+      'INVALID_PROVIDER_RESPONSE',
       'JOB_NOT_FOUND',
     ]));
   });

@@ -77,7 +77,7 @@ export interface CreateStoreScreenshotServiceDeps {
   jobs?: StoreScreenshotJobOperations;
 }
 
-function createDocument(
+export function createDocumentFromTemplate(
   projectId: string,
   request: CreateStoreScreenshotDocumentRequest,
   documentId: string,
@@ -197,7 +197,7 @@ export function createStoreScreenshotService(deps: CreateStoreScreenshotServiceD
       request: CreateStoreScreenshotDocumentRequest,
     ): Promise<StoreScreenshotDocument> => deps.persistence.create(
       projectId,
-      createDocument(projectId, request, deps.createId()),
+      createDocumentFromTemplate(projectId, request, deps.createId()),
     ),
 
     read: (projectId: string): Promise<StoreScreenshotDocument> => (

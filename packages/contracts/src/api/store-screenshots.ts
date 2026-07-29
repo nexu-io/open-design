@@ -83,6 +83,22 @@ export const ScreenshotPlanSchema = z.object({
 
 export const GenerateStoreScreenshotPlanRequestSchema = z.object({
   prompt: z.string().min(1).optional(),
+  byokProvider: z.object({
+    protocol: z.enum([
+      'anthropic',
+      'openai',
+      'azure',
+      'google',
+      'ollama',
+      'senseaudio',
+      'aihubmix',
+    ]),
+    apiKey: z.string(),
+    baseUrl: z.string().optional(),
+    apiVersion: z.string().optional(),
+    requiresApiKey: z.boolean().optional(),
+    model: z.string().optional(),
+  }).strict().optional(),
 }).strict();
 
 export const PreviewStoreScreenshotChangeSetRequestSchema = StoreScreenshotChangeSetSchema;

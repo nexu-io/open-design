@@ -972,6 +972,13 @@ async function callLocalCli(provider, system, user, options) {
   } catch {
     configuredAgentEnv = {};
   }
+  const configuredSecrets = Object.entries(configuredAgentEnv)
+    .filter(([key, value]) => (
+      /(API_KEY|AUTH_TOKEN|RUNTIME_KEY|ACCESS_TOKEN|SECRET)$/i.test(key)
+      && typeof value === 'string'
+      && value.length > 0
+    ))
+    .map(([, value]) => value);
 
   const launch = resolveAgentLaunch(def, configuredAgentEnv);
   if (!launch?.launchPath) {
@@ -990,7 +997,7 @@ async function callLocalCli(provider, system, user, options) {
   const prompt = [
     system,
     '',
-    'You are running as a background memory extractor. Do not use tools. Return strict JSON only.',
+    'You are running as a background structured-JSON task. Do not use tools. Return strict JSON only.',
     '',
     user,
   ].join('\n');
@@ -1101,7 +1108,11 @@ async function callLocalCli(provider, system, user, options) {
           return;
         }
       }
-      const detail = (stderr.trim() || stdout.trim() || 'no output').slice(0, 1000);
+      const rawDetail = (stderr.trim() || stdout.trim() || 'no output').slice(0, 1000);
+      const detail = configuredSecrets.reduce(
+        (text, secret) => text.split(secret).join('[REDACTED]'),
+        rawDetail,
+      );
       const status = signal ? `signal ${signal}` : `exit ${code}`;
       finish(new Error(`${def.name} CLI ${status}: ${detail}`));
     });
@@ -1110,6 +1121,57 @@ async function callLocalCli(provider, system, user, options) {
     });
     child.stdin.end(stdinText);
   });
+}
+
+function redactProviderError(error, provider) {
+  const raw = error?.message || String(error);
+  const apiKey =
+    typeof provider?.apiKey === 'string' ? provider.apiKey.trim() : '';
+  const redacted = (apiKey ? raw.split(apiKey).join('[REDACTED]') : raw)
+    .replace(
+      /((?:api[_-]?key|auth[_-]?token|access[_-]?token|authorization)\s*[:=]\s*)[^\s,;]+/gi,
+      '$1[REDACTED]',
+    )
+    .replace(/\bBearer\s+\S+/gi, 'Bearer [REDACTED]')
+    .replace(/\bsk-[A-Za-z0-9_-]{8,}\b/g, '[REDACTED]');
+  return new Error(redacted);
+}
+
+// Shared provider transport used by memory extraction and other daemon-owned
+// strict-JSON tasks. Provider selection deliberately reuses pickProvider so
+// Local CLI, chat BYOK, env, and media-config precedence cannot drift.
+export async function generateConfiguredJsonText(request, options = {}) {
+  const projectRoot = options?.projectRoot ?? null;
+  const dataDir = options?.dataDir ?? null;
+  const provider = options?.provider ?? await pickProvider(
+    projectRoot,
+    options?.useMemoryConfig === true ? dataDir : null,
+    request?.chatAgentId ?? options?.chatAgentId ?? null,
+    options?.chatProvider ?? null,
+    options?.chatModel ?? null,
+  );
+  if (!provider) return null;
+  try {
+    if (provider.transport === 'chat-cli') {
+      return await callLocalCli(provider, request.system, request.user, {
+        dataDir,
+        projectRoot,
+        localCliRunner: options?.localCliRunner,
+      });
+    }
+    if (provider.kind === 'anthropic') {
+      return await callAnthropic(provider, request.system, request.user);
+    }
+    if (provider.kind === 'azure') {
+      return await callAzure(provider, request.system, request.user);
+    }
+    if (provider.kind === 'google') {
+      return await callGoogle(provider, request.system, request.user);
+    }
+    return await callOpenAI(provider, request.system, request.user);
+  } catch (error) {
+    throw redactProviderError(error, provider);
+  }
 }
 
 // Tolerant JSON parse — the model occasionally wraps output in ```json
@@ -1312,24 +1374,19 @@ async function collectProposedEntries(dataDir, input, options) {
 
   let raw = '';
   try {
-    if (provider.transport === 'chat-cli') {
-      raw = await callLocalCli(provider, systemPrompt, userPayload, {
+    raw = await generateConfiguredJsonText(
+      {
+        system: systemPrompt,
+        user: userPayload,
+        chatAgentId,
+      },
+      {
+        provider,
         dataDir,
         projectRoot,
         localCliRunner: options?.localCliRunner,
-      });
-    } else if (provider.kind === 'anthropic') {
-      raw = await callAnthropic(provider, systemPrompt, userPayload);
-    } else if (provider.kind === 'azure') {
-      raw = await callAzure(provider, systemPrompt, userPayload);
-    } else if (provider.kind === 'google') {
-      raw = await callGoogle(provider, systemPrompt, userPayload);
-    } else {
-      // openai or ollama — both speak the OpenAI chat-completions
-      // wire shape, so callOpenAI handles them with just a different
-      // base URL.
-      raw = await callOpenAI(provider, systemPrompt, userPayload);
-    }
+      },
+    );
   } catch (err) {
     // err.message is already pre-formatted by describeFetchError() when
     // the call layer caught a network error. For HTTP-level failures

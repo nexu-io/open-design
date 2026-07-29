@@ -65,6 +65,7 @@ export const API_ERROR_CODES = [
   'INVALID_ASSET',
   'PLATFORM_VALIDATION_FAILED',
   'PROVIDER_NOT_CONFIGURED',
+  'INVALID_PROVIDER_RESPONSE',
   'JOB_NOT_FOUND',
   // Handoff (`POST /api/projects/:id/handoff`): the requested conversation
   // is not in the project, or has no messages to synthesize a handoff from.

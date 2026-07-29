@@ -654,6 +654,9 @@ import {
 } from './store-screenshots/jobs.js';
 import { createStoreScreenshotPersistence } from './store-screenshots/persistence.js';
 import { createStoreScreenshotService } from './store-screenshots/service.js';
+import { createStoreScreenshotPlanner } from './store-screenshots/planner.js';
+import { generateStructuredJson } from './structured-json.js';
+import { generateConfiguredJsonText } from './memory-llm.js';
 import { configureConnectorCredentialStore, connectorService, FileConnectorCredentialStore } from './connectors/service.js';
 import { composioConnectorProvider } from './connectors/composio.js';
 import { configureComposioConfigStore } from './connectors/composio-config.js';
@@ -2405,7 +2408,7 @@ export async function startServer({
   if (storeScreenshotJobReconcile.interrupted > 0) {
     console.warn(
       `[store-screenshots] interrupted ${storeScreenshotJobReconcile.interrupted} `
-        + 'export job(s) after daemon restart',
+        + 'job(s) after daemon restart',
     );
   }
   mediaTaskStore.mediaTasks.clear();
@@ -2848,17 +2851,62 @@ export async function startServer({
     db,
     storeScreenshotStorage,
   );
+  const storeScreenshotPlanner = createStoreScreenshotPlanner({
+    generateJson: async (request, context) => {
+      const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
+      const chatAgentId =
+        typeof appConfig.agentId === 'string' && appConfig.agentId.trim()
+          ? appConfig.agentId.trim()
+          : undefined;
+      const chatModel = chatAgentId
+        ? appConfig.agentModels?.[chatAgentId]?.model
+        : undefined;
+      const byokProvider = context.byokProvider;
+      return generateStructuredJson(
+        {
+          ...request,
+          ...(!byokProvider && chatAgentId ? { chatAgentId } : {}),
+        },
+        {
+          ...(byokProvider?.apiKey
+            ? { sensitiveValues: [byokProvider.apiKey] }
+            : {}),
+          generateText: (textRequest) => generateConfiguredJsonText(textRequest, {
+            projectRoot: PROJECT_ROOT,
+            dataDir: RUNTIME_DATA_DIR,
+            ...(!byokProvider && chatAgentId ? { chatAgentId } : {}),
+            chatModel,
+            ...(byokProvider
+              ? {
+                chatProvider: {
+                  provider: byokProvider.protocol,
+                  apiKey: byokProvider.apiKey,
+                  baseUrl: byokProvider.baseUrl,
+                  apiVersion: byokProvider.apiVersion,
+                  requiresApiKey: byokProvider.requiresApiKey,
+                  model: byokProvider.model,
+                },
+              }
+              : {}),
+          }),
+        },
+      );
+    },
+  });
+  const storeScreenshotJobs = createStoreScreenshotJobs({
+    db,
+    persistence: storeScreenshotPersistence,
+    projectStorage: storeScreenshotStorage,
+    createId: randomUUID,
+    planner: storeScreenshotPlanner,
+  });
   const storeScreenshots = createStoreScreenshotService({
     persistence: storeScreenshotPersistence,
     assets: createStoreScreenshotAssetStore(db, storeScreenshotStorage),
     projectStorage: storeScreenshotStorage,
     createId: randomUUID,
-    jobs: createStoreScreenshotJobs({
-      db,
-      persistence: storeScreenshotPersistence,
-      projectStorage: storeScreenshotStorage,
-      createId: randomUUID,
-    }),
+    generate: storeScreenshotJobs,
+    jobs: storeScreenshotJobs,
   });
   const conversationDeps = {
     insertConversation,

@@ -2,6 +2,7 @@ import type Database from 'better-sqlite3';
 import {
   StoreScreenshotJobSchema,
   type ExportStoreScreenshotRequest,
+  type GenerateStoreScreenshotPlanRequest,
   type StoreScreenshotJob,
 } from '@open-design/contracts';
 import type {
@@ -17,9 +18,15 @@ import {
 import type { createStoreScreenshotPersistence } from './persistence.js';
 import type {
   StoreScreenshotDocumentIdentity,
+  StoreScreenshotGenerateOperations,
   StoreScreenshotJobOperations,
 } from './service.js';
 import type { ProjectStorage } from '../storage/project-storage.js';
+import {
+  screenshotPlanToChangeSet,
+  type StoreScreenshotPlanner,
+} from './planner.js';
+import { StructuredJsonError } from '../structured-json.js';
 
 export type StoreScreenshotJobTask = () => Promise<void>;
 
@@ -30,6 +37,7 @@ export interface CreateStoreScreenshotJobsDeps {
   createId: () => string;
   now?: () => number;
   schedule?: (task: StoreScreenshotJobTask) => void;
+  planner?: StoreScreenshotPlanner;
 }
 
 type JobRow = {
@@ -125,7 +133,7 @@ export function reconcileStoreScreenshotJobsOnBoot(
 
 export function createStoreScreenshotJobs(
   deps: CreateStoreScreenshotJobsDeps,
-): StoreScreenshotJobOperations {
+): StoreScreenshotJobOperations & StoreScreenshotGenerateOperations {
   const now = deps.now ?? Date.now;
   const schedule = deps.schedule ?? ((task: StoreScreenshotJobTask): void => {
     queueMicrotask(() => {
@@ -158,7 +166,11 @@ export function createStoreScreenshotJobs(
     `).run(JSON.stringify({ completed, total }), now(), jobId);
   };
 
-  const markFailed = (jobId: string, error: unknown): void => {
+  const markFailed = (
+    jobId: string,
+    error: unknown,
+    fallbackCode = 'EXPORT_FAILED',
+  ): void => {
     const timestamp = now();
     const jobError = error instanceof StoreScreenshotExportValidationError
       ? {
@@ -170,8 +182,13 @@ export function createStoreScreenshotJobs(
           code: error.code,
           message: error.message,
         }
+      : error instanceof StructuredJsonError
+        ? {
+          code: error.code,
+          message: error.message,
+        }
       : {
-        code: 'EXPORT_FAILED',
+        code: fallbackCode,
         message: error instanceof Error ? error.message : String(error),
       };
     deps.db.prepare(`
@@ -182,6 +199,86 @@ export function createStoreScreenshotJobs(
           updated_at = ?
       WHERE id = ? AND status = 'running'
     `).run(JSON.stringify(jobError), timestamp, timestamp, jobId);
+  };
+
+  const runGenerate = async (
+    jobId: string,
+    identity: StoreScreenshotDocumentIdentity,
+    document: StoreScreenshotDocument,
+    request: GenerateStoreScreenshotPlanRequest,
+  ): Promise<void> => {
+    const startedAt = now();
+    const started = deps.db.prepare(`
+      UPDATE store_screenshot_jobs
+      SET status = 'running',
+          started_at = ?,
+          updated_at = ?
+      WHERE id = ? AND status = 'queued'
+    `).run(startedAt, startedAt, jobId);
+    if (started.changes !== 1) return;
+
+    try {
+      if (!deps.planner) {
+        throw new StructuredJsonError(
+          'PROVIDER_NOT_CONFIGURED',
+          'No configured provider is available for store screenshot planning',
+        );
+      }
+      const plan = await deps.planner.plan({ document, request });
+      const changeSet = screenshotPlanToChangeSet(document, plan);
+      const affectedPageIds = [...new Set(changeSet.operations.map((operation) => (
+        operation.op === 'insertPage' ? operation.page.id : operation.pageId
+      )))];
+      const timestamp = now();
+      deps.db.prepare(`
+        UPDATE store_screenshot_jobs
+        SET status = 'done',
+            progress_json = ?,
+            result_json = ?,
+            error_json = NULL,
+            ended_at = ?,
+            updated_at = ?
+        WHERE id = ? AND status = 'running'
+      `).run(
+        JSON.stringify({ completed: 1, total: 1 }),
+        JSON.stringify({
+          plan,
+          preview: { changeSet, affectedPageIds },
+        }),
+        timestamp,
+        timestamp,
+        jobId,
+      );
+    } catch (error) {
+      markFailed(jobId, error, 'GENERATION_FAILED');
+    }
+  };
+
+  const start = async (
+    identity: StoreScreenshotDocumentIdentity,
+    request: GenerateStoreScreenshotPlanRequest,
+  ): Promise<StoreScreenshotJob> => {
+    const document = await deps.persistence.read(identity.projectId);
+    assertIdentity(document, identity);
+    const jobId = deps.createId();
+    const timestamp = now();
+    deps.db.prepare(`
+      INSERT INTO store_screenshot_jobs
+        (id, project_id, document_id, type, status, progress_json,
+         result_json, error_json, created_at, started_at, ended_at, updated_at)
+      VALUES (?, ?, ?, 'generate', 'queued', ?, NULL, NULL, ?, NULL, NULL, ?)
+    `).run(
+      jobId,
+      identity.projectId,
+      identity.documentId,
+      JSON.stringify({ completed: 0, total: 1 }),
+      timestamp,
+      timestamp,
+    );
+    schedule(() => runGenerate(jobId, identity, document, request));
+    const job = await get(identity.projectId, identity.documentId, jobId);
+    if (!job) throw new Error('Store screenshot job was not persisted');
+    return job;
   };
 
   const runExport = async (
@@ -300,6 +397,7 @@ export function createStoreScreenshotJobs(
   };
 
   return {
+    start,
     startExport,
     get,
     resolveDownload,

@@ -137,6 +137,9 @@ importers:
       undici:
         specifier: 7.25.0
         version: 7.25.0
+      zod-v3:
+        specifier: npm:zod@3.25.76
+        version: zod@3.25.76
     devDependencies:
       '@types/better-sqlite3':
         specifier: 7.6.13

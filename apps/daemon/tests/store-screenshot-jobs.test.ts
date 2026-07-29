@@ -19,6 +19,7 @@ import {
   migrateStoreScreenshots,
 } from '../src/store-screenshots/persistence.js';
 import { createStoreScreenshotService } from '../src/store-screenshots/service.js';
+import { createStoreScreenshotPlanner } from '../src/store-screenshots/planner.js';
 import { LocalProjectStorage } from '../src/storage/project-storage.js';
 
 function documentFixture(
@@ -88,6 +89,92 @@ describe('store screenshot export jobs', () => {
       },
     });
   }
+
+  it('persists an AI plan as a previewable generate job without applying the ChangeSet', async () => {
+    const planner = createStoreScreenshotPlanner({
+      generateJson: async () => ({
+        strategy: 'Value to action',
+        pages: [
+          { headline: 'Take back focus', body: 'Block distractions', feature: 'Focus', templateId: 'minimal-center' },
+          { headline: 'See progress', body: 'Review each week', feature: 'Review', templateId: 'editorial-split' },
+          { headline: 'Build a rhythm', body: 'Keep improving', feature: 'Improve', templateId: 'gradient-device' },
+          { headline: 'Start today', body: 'Plan the next session', feature: 'Plan', templateId: 'minimal-center' },
+        ],
+      }),
+    });
+    const operations = createStoreScreenshotJobs({
+      db,
+      persistence,
+      projectStorage: storage,
+      createId: () => 'job-generate',
+      now: () => clock++,
+      schedule: (task) => {
+        scheduled.push(task);
+      },
+      planner,
+    });
+    const service = createStoreScreenshotService({
+      persistence,
+      assets: createStoreScreenshotAssetStore(db, storage),
+      projectStorage: storage,
+      createId: () => 'unused-document-id',
+      generate: operations,
+      jobs: operations,
+    });
+
+    await expect(service.generate('project-1', {
+      prompt: 'Keep the tone direct',
+    })).resolves.toMatchObject({
+      id: 'job-generate',
+      type: 'generate',
+      status: 'queued',
+      progress: { completed: 0, total: 1 },
+    });
+    await scheduled[0]!();
+
+    const done = await service.getJob('project-1', 'job-generate');
+    expect(done).toMatchObject({
+      type: 'generate',
+      status: 'done',
+      progress: { completed: 1, total: 1 },
+      result: {
+        plan: {
+          strategy: 'Value to action',
+        },
+        preview: {
+          changeSet: {
+            baseVersion: 1,
+          },
+        },
+      },
+    });
+    expect(
+      (done.result as { preview: { affectedPageIds: string[] } }).preview.affectedPageIds,
+    ).toHaveLength(8);
+    expect((await persistence.read('project-1')).version).toBe(1);
+    expect((await persistence.read('project-1')).pages[0]?.headline).toBe('Feature 1');
+  });
+
+  it('persists PROVIDER_NOT_CONFIGURED when generate has no provider-backed planner', async () => {
+    const operations = jobs();
+
+    await expect(operations.start(
+      { projectId: 'project-1', documentId: 'document-1', documentVersion: 1 },
+      {},
+    )).resolves.toMatchObject({
+      type: 'generate',
+      status: 'queued',
+    });
+    await scheduled[0]!();
+
+    expect(await operations.get('project-1', 'document-1', 'job-1')).toMatchObject({
+      status: 'failed',
+      error: {
+        code: 'PROVIDER_NOT_CONFIGURED',
+      },
+    });
+    expect((await persistence.read('project-1')).version).toBe(1);
+  });
 
   it('persists queued, running, and done states and writes the complete export under its job path', async () => {
     const operations = jobs();

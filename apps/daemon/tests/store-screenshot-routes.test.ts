@@ -95,12 +95,12 @@ describe('store screenshot routes', () => {
     assetSave = vi.spyOn(assets, 'save');
     downloadPath = undefined;
     ownedJob = undefined;
-    generateStart = vi.fn<GenerateStart>(async () => {
-      throw new StoreScreenshotServiceError(
-        'NOT_IMPLEMENTED',
-        'Store screenshot generation is not implemented',
-      );
-    });
+    generateStart = vi.fn<GenerateStart>(async () => ({
+      id: 'job-generate',
+      type: 'generate',
+      status: 'queued',
+      progress: { completed: 0, total: 1 },
+    }));
     exportStart = vi.fn<ExportStart>(async () => {
       throw new StoreScreenshotServiceError(
         'NOT_IMPLEMENTED',
@@ -474,12 +474,24 @@ describe('store screenshot routes', () => {
     expect(duplicate.body.error.code).toBe('CONFLICT');
   });
 
-  it('reports future generate, export, job, and download boundaries as not implemented', async () => {
+  it('accepts generation while unconfigured export, job, and download boundaries stay explicit', async () => {
     const basePath = `/api/projects/${PROJECT_ID}/store-screenshots`;
     expect((await json('POST', basePath, createBody)).status).toBe(201);
 
+    const generated = await json('POST', `${basePath}/generate`, {});
+    expect(generated).toEqual({
+      status: 202,
+      body: {
+        job: {
+          id: 'job-generate',
+          type: 'generate',
+          status: 'queued',
+          progress: { completed: 0, total: 1 },
+        },
+      },
+    });
+
     for (const [method, pathname, body] of [
-      ['POST', `${basePath}/generate`, {}],
       ['POST', `${basePath}/export`, { platforms: ['appStore'] }],
       ['GET', `${basePath}/jobs/job-1`, undefined],
       ['GET', `${basePath}/jobs/job-1/download`, undefined],
@@ -522,7 +534,15 @@ describe('store screenshot routes', () => {
     generateStart.mockResolvedValueOnce(queuedJob);
     exportStart.mockResolvedValueOnce({ ...queuedJob, type: 'export' as const });
 
-    expect((await json('POST', `${basePath}/generate`, {})).status).toBe(202);
+    const byokProvider = {
+      protocol: 'google' as const,
+      apiKey: 'AIza-route-scoped-key',
+      model: 'gemini-test',
+    };
+    expect((await json('POST', `${basePath}/generate`, {
+      prompt: 'Use the current provider',
+      byokProvider,
+    })).status).toBe(202);
     expect((await json('POST', `${basePath}/export`, {
       platforms: ['appStore'],
     })).status).toBe(202);
@@ -532,7 +552,10 @@ describe('store screenshot routes', () => {
       documentId: 'document-1',
       documentVersion: 1,
     };
-    expect(generateStart).toHaveBeenCalledWith(identity, {});
+    expect(generateStart).toHaveBeenCalledWith(identity, {
+      prompt: 'Use the current provider',
+      byokProvider,
+    });
     expect(exportStart).toHaveBeenCalledWith(identity, {
       platforms: ['appStore'],
     });
