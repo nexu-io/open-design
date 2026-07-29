@@ -628,6 +628,7 @@ import { registerRunRoutes } from './routes/runs.js';
 import { registerTerminalRoutes } from './routes/terminal.js';
 import { createTerminalService } from './terminals.js';
 import { registerSocialShareRoutes } from './routes/social-share.js';
+import { registerStoreScreenshotRoutes } from './routes/store-screenshots.js';
 import { registerOpenDesignPublicMetadataRoutes } from './routes/open-design-public-metadata.js';
 import { registerWhatsNewRoutes } from './routes/whats-new.js';
 import { registerMemoryRoutes } from './routes/memory.js';
@@ -645,6 +646,10 @@ import { createPluginInstallationHelpers, normalizeProjectPluginFolderPath, reso
 import { createPluginShareTaskStore } from './services/plugin-share-tasks.js';
 import { getRouteRegistrationInventory, installRouteRegistrationGuard } from './route-registration-guard.js';
 import { assertServerContextSatisfiesRoutes } from './route-context-contract.js';
+import { resolveProjectStorage } from './storage/project-storage.js';
+import { createStoreScreenshotAssetStore } from './store-screenshots/assets.js';
+import { createStoreScreenshotPersistence } from './store-screenshots/persistence.js';
+import { createStoreScreenshotService } from './store-screenshots/service.js';
 import { configureConnectorCredentialStore, connectorService, FileConnectorCredentialStore } from './connectors/service.js';
 import { composioConnectorProvider } from './connectors/composio.js';
 import { configureComposioConfigStore } from './connectors/composio-config.js';
@@ -1821,6 +1826,11 @@ const figmaUpload = multer({
   limits: { fileSize: 200 * 1024 * 1024 },  // community kits run large
 });
 
+const storeScreenshotUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 20 * 1024 * 1024, files: 1 },
+});
+
 const pluginShareTaskStore = createPluginShareTaskStore({
   randomUUID,
   execCommandViaLoginShell,
@@ -2778,7 +2788,12 @@ export async function startServer({
 
   const nodeDeps = { fs, path };
   const idDeps = { randomId, randomUUID };
-  const uploadDeps = { upload, importUpload, handleProjectUpload };
+  const uploadDeps = {
+    upload,
+    importUpload,
+    handleProjectUpload,
+    storeScreenshotUpload,
+  };
   const projectStoreDeps = {
     getProject,
     insertProject,
@@ -2806,6 +2821,16 @@ export async function startServer({
     listTabs,
     setTabs,
   };
+  const storeScreenshotStorage = resolveProjectStorage({
+    projectsRoot: PROJECTS_DIR,
+    env: process.env,
+  });
+  const storeScreenshots = createStoreScreenshotService({
+    persistence: createStoreScreenshotPersistence(db, storeScreenshotStorage),
+    assets: createStoreScreenshotAssetStore(db, storeScreenshotStorage),
+    projectStorage: storeScreenshotStorage,
+    createId: randomUUID,
+  });
   const conversationDeps = {
     insertConversation,
     getConversation,
@@ -3053,6 +3078,13 @@ export async function startServer({
     appConfig: appConfigDeps,
     agents: agentDeps,
     validation: validationDeps,
+  });
+  registerStoreScreenshotRoutes(app, {
+    db,
+    http: httpDeps,
+    projectStore: projectStoreDeps,
+    uploads: uploadDeps,
+    storeScreenshots,
   });
   registerTerminalRoutes(app, {
     db,
@@ -8890,6 +8922,7 @@ export async function startServer({
     agents: agentDeps,
     critique: critiqueDeps,
     openDesignPublicMetadata,
+    storeScreenshots,
     lifecycle: { isDaemonShuttingDown: () => daemonShuttingDown },
   });
 

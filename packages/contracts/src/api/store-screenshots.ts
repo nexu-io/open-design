@@ -53,6 +53,12 @@ export const StoreScreenshotUploadedAssetSchema = StoreScreenshotAssetSchema.ext
   relativePath: z.string().min(1),
 }).strict();
 
+export const UploadStoreScreenshotAssetRequestSchema = z.object({
+  fileName: z.string().min(1).max(255),
+  mime: z.enum(['image/png', 'image/jpeg', 'image/webp']),
+  byteLength: z.number().int().positive().max(20 * 1024 * 1024),
+}).strict();
+
 export const UploadStoreScreenshotAssetResponseSchema = z.object({
   asset: StoreScreenshotUploadedAssetSchema,
 }).strict();
@@ -151,6 +157,7 @@ export type UpdateStoreScreenshotDocumentRequest = z.infer<typeof UpdateStoreScr
 export type RestoreStoreScreenshotDocumentRequest = z.infer<typeof RestoreStoreScreenshotDocumentRequestSchema>;
 export type StoreScreenshotVersion = z.infer<typeof StoreScreenshotVersionSchema>;
 export type StoreScreenshotUploadedAsset = z.infer<typeof StoreScreenshotUploadedAssetSchema>;
+export type UploadStoreScreenshotAssetRequest = z.infer<typeof UploadStoreScreenshotAssetRequestSchema>;
 export type UploadStoreScreenshotAssetResponse = z.infer<typeof UploadStoreScreenshotAssetResponseSchema>;
 export type ScreenshotPlan = z.infer<typeof ScreenshotPlanSchema>;
 export type GenerateStoreScreenshotPlanRequest = z.infer<typeof GenerateStoreScreenshotPlanRequestSchema>;
