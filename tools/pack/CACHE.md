@@ -109,9 +109,13 @@ Current materialization-time parameters:
   `posthogKey`/`posthogHost`, `webOutputMode`, and `namespaceBaseRoot` — is
   regenerated on the materialization path by `writePackagedConfig`.
 
-Downstream archive nodes (`win.nsis-*`, `win.portable-zip`, and
-`win.launcher-payload`) carry `namespace` and the full `packagedVersion` in
-their keys, because their content is the already-stamped payload.
+The downstream `win.nsis-payload-overlay`, `win.nsis-installer`,
+`win.portable-zip`, and `win.launcher-payload` nodes carry `namespace` and the
+full `packagedVersion` in their keys, because their content includes the
+already-stamped payload. `win.nsis-payload-base` instead carries only
+`versionCore`: its content excludes `Open Design.exe`,
+`resources/app/package.json`, and `resources/open-design-config.json`, which
+are assigned to the version-bearing overlay.
 `win.launcher-payload-base` is the exception: its key carries `namespace`, but
 version identity reaches it only indirectly through the upstream `sourceKey`;
 the final `win.launcher-payload` archive explicitly carries the
