@@ -182,19 +182,35 @@ function assertControlledDownloadPath(relativePath: string): void {
   }
 }
 
-function assertControlledAssetPath(relativePath: string, contentHash: string): void {
+const CANONICAL_ASSET_FORMATS = {
+  png: { mime: 'image/png', signature: (body: Buffer) => body.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) },
+  jpg: { mime: 'image/jpeg', signature: (body: Buffer) => body.length >= 3 && body[0] === 0xff && body[1] === 0xd8 && body[2] === 0xff },
+  webp: { mime: 'image/webp', signature: (body: Buffer) => body.length >= 12 && body.subarray(0, 4).equals(Buffer.from('RIFF')) && body.subarray(8, 12).equals(Buffer.from('WEBP')) },
+} as const;
+
+type CanonicalAssetExtension = keyof typeof CANONICAL_ASSET_FORMATS;
+
+function assertControlledAssetPath(
+  relativePath: string,
+  contentHash: string,
+  storedMime: 'image/png' | 'image/jpeg' | 'image/webp',
+): typeof CANONICAL_ASSET_FORMATS[CanonicalAssetExtension] {
   const extension = relativePath.split('.').at(-1);
+  const format = extension && extension in CANONICAL_ASSET_FORMATS
+    ? CANONICAL_ASSET_FORMATS[extension as CanonicalAssetExtension]
+    : null;
   if (
     !/^[a-f0-9]{64}$/.test(contentHash)
-    || !extension
-    || !['png', 'jpg', 'webp'].includes(extension)
+    || !format
     || relativePath !== `store-screenshots/assets/${contentHash}.${extension}`
+    || format.mime !== storedMime
   ) {
     throw new StoreScreenshotServiceError(
       'UNSAFE_ASSET',
       'Store screenshot asset path is not a controlled asset path',
     );
   }
+  return format;
 }
 
 async function readDocumentIdentity(
@@ -253,7 +269,7 @@ export function createStoreScreenshotService(deps: CreateStoreScreenshotServiceD
       ) {
         throw new StoreScreenshotServiceError('ASSET_NOT_FOUND', 'Store screenshot asset not found');
       }
-      assertControlledAssetPath(asset.relativePath, asset.contentHash);
+      const format = assertControlledAssetPath(asset.relativePath, asset.contentHash, asset.mime);
       let body: Buffer;
       try {
         body = await deps.projectStorage.readFile(projectId, asset.relativePath);
@@ -263,7 +279,10 @@ export function createStoreScreenshotService(deps: CreateStoreScreenshotServiceD
       if (createHash('sha256').update(body).digest('hex') !== asset.contentHash) {
         throw new StoreScreenshotServiceError('ASSET_NOT_FOUND', 'Store screenshot asset not found');
       }
-      return { body, mime: asset.mime };
+      if (!format.signature(body)) {
+        throw new StoreScreenshotServiceError('UNSAFE_ASSET', 'Store screenshot asset bytes do not match its canonical format');
+      }
+      return { body, mime: format.mime };
     },
 
     previewChanges: async (

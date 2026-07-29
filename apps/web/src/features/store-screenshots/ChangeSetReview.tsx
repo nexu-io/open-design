@@ -3,6 +3,7 @@ import {
   applyChangeSet,
   deriveStoreScreenshotPage,
   placeDerivedStoreScreenshotAsset,
+  platformSpecs,
   type StoreScreenshotChangeSet,
   type StorePlatform,
   type StoreScreenshotPage,
@@ -172,14 +173,14 @@ function PagePreview({
   }
   const derived = deriveStoreScreenshotPage(document, page.id, platform);
   const placement = placeDerivedStoreScreenshotAsset(derived);
-  const previewWidth = 220;
-  const scale = previewWidth / derived.size.width;
+  const { width, height } = derived.size;
   return (
     <div
       className={styles.pagePreview}
       style={{
         background: derived.colors.background,
         color: derived.colors.text,
+        aspectRatio: `${width} / ${height}`,
       }}
       data-testid={`change-preview-${page.id}-${platform}`}
       data-platform={platform}
@@ -197,11 +198,11 @@ function PagePreview({
           alt={`Product screenshot ${derived.screenshotAsset!.id}`}
           data-asset-id={derived.screenshotAsset!.id}
           style={{
-            left: `${placement.left * scale}px`,
-            top: `${placement.top * scale}px`,
-            width: `${placement.width * scale}px`,
-            height: `${placement.height * scale}px`,
-            borderRadius: `${placement.radius * scale}px`,
+            left: `${placement.left / width * 100}%`,
+            top: `${placement.top / height * 100}%`,
+            width: `${placement.width / width * 100}%`,
+            height: `${placement.height / height * 100}%`,
+            borderRadius: `${placement.radius / width * 100}%`,
           }}
         />
       ) : null}
@@ -221,24 +222,32 @@ function buildDifferences(
         ...beforeDocument.pages.map(({ id }) => id),
         ...(afterDocument?.pages.map(({ id }) => id) ?? []),
       ]));
-  return ids.map((id, index) => {
+  const allPlatforms = Object.keys(platformSpecs) as StorePlatform[];
+  const differences: PageDifference[] = [];
+  for (const [index, id] of ids.entries()) {
     const before = beforeDocument.pages.find((page) => page.id === id);
     const after = afterDocument?.pages.find((page) => page.id === id);
-    const operation = changeSet.operations.find((candidate) => (
-      (candidate.op === 'insertPage' ? candidate.page.id : candidate.pageId) === id
-      && 'platform' in candidate
-      && candidate.platform !== undefined
+    const operations = changeSet.operations.filter((operation) => (
+      (operation.op === 'insertPage' ? operation.page.id : operation.pageId) === id
     ));
-    const platform = operation && 'platform' in operation && operation.platform
-      ? operation.platform
-      : 'appStore';
-    return {
-      id,
-      pageNumber: (before?.order ?? after?.order ?? index) + 1,
-      platform,
-      ...(before ? { before } : {}),
-      ...(after ? { after } : {}),
-      changed: JSON.stringify(before) !== JSON.stringify(after),
-    };
-  });
+    const platforms = new Set<StorePlatform>();
+    for (const operation of operations) {
+      if ('platform' in operation && operation.platform !== undefined) {
+        platforms.add(operation.platform);
+      } else {
+        for (const platform of allPlatforms) platforms.add(platform);
+      }
+    }
+    for (const platform of platforms) {
+      differences.push({
+        id: `${id}:${platform}`,
+        pageNumber: (before?.order ?? after?.order ?? index) + 1,
+        platform,
+        ...(before ? { before } : {}),
+        ...(after ? { after } : {}),
+        changed: JSON.stringify(before) !== JSON.stringify(after),
+      });
+    }
+  }
+  return differences;
 }

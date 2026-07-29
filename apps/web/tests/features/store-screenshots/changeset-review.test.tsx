@@ -34,8 +34,8 @@ describe('ChangeSetReview', () => {
       />,
     );
 
-    expect(screen.getByText('Page 1 before')).toBeTruthy();
-    expect(screen.getByText('Page 1 after')).toBeTruthy();
+    expect(screen.getAllByText('Page 1 before')).toHaveLength(2);
+    expect(screen.getAllByText('Page 1 after')).toHaveLength(2);
     expect(screen.getByText('Page 1')).toBeTruthy();
     expect(screen.getByText('Focus faster')).toBeTruthy();
     expect(fetchMock).not.toHaveBeenCalled();
@@ -132,6 +132,48 @@ describe('ChangeSetReview', () => {
     expect(beforeImage).toHaveAttribute('data-asset-id', 'asset-1');
     expect(afterImage).toHaveAttribute('data-asset-id', 'asset-2');
     expect(beforeImage.getAttribute('style')).not.toBe(afterImage.getAttribute('style'));
+  });
+
+  it('shows every affected platform once and keeps native platform proportions and percentage placement', () => {
+    const document = structuredClone(documentResponse.document);
+    document.assets = [{ id: 'asset-1' }, { id: 'asset-2' }];
+    document.pages[0]!.screenshotAssetId = 'asset-1';
+    const changeSet: StoreScreenshotChangeSet = {
+      baseVersion: 1,
+      operations: [
+        { op: 'setText', pageId: 'page-1', field: 'headline', value: 'App copy', platform: 'appStore' },
+        { op: 'setText', pageId: 'page-1', field: 'headline', value: 'GP copy', platform: 'googlePlay' },
+        { op: 'setTransform', pageId: 'page-1', x: 42, y: -12, scale: 1.25 },
+        { op: 'setAsset', pageId: 'page-1', assetId: 'asset-2' },
+      ],
+    };
+    render(
+      <ChangeSetReview
+        projectId="project-1"
+        document={document}
+        changeSet={changeSet}
+        affectedPageIds={['page-1']}
+        onApplied={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    const appPreviews = screen.getAllByTestId('change-preview-page-1-appStore');
+    const gpPreviews = screen.getAllByTestId('change-preview-page-1-googlePlay');
+    expect(appPreviews).toHaveLength(2);
+    expect(gpPreviews).toHaveLength(2);
+    expect(appPreviews[1]).toHaveTextContent('App copy');
+    expect(gpPreviews[1]).toHaveTextContent('GP copy');
+    expect(appPreviews[1]).toHaveStyle({ aspectRatio: '1290 / 2796' });
+    expect(gpPreviews[1]).toHaveStyle({ aspectRatio: '1080 / 1920' });
+    const [appBefore, appAfter, gpBefore, gpAfter] = screen.getAllByAltText(/Product screenshot/);
+    if (!appBefore || !appAfter || !gpBefore || !gpAfter) throw new Error('Expected four platform previews');
+    expect((appAfter as HTMLElement).style.left).toMatch(/%$/);
+    expect((appAfter as HTMLElement).style.width).toMatch(/%$/);
+    expect((gpAfter as HTMLElement).style.left).toMatch(/%$/);
+    expect((gpAfter as HTMLElement).style.width).toMatch(/%$/);
+    expect((appBefore as HTMLElement).style.left).not.toBe((appAfter as HTMLElement).style.left);
+    expect((gpBefore as HTMLElement).style.left).not.toBe((gpAfter as HTMLElement).style.left);
   });
 });
 

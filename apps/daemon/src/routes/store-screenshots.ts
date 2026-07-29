@@ -204,7 +204,7 @@ export function registerStoreScreenshotRoutes(
     });
   });
 
-  app.get(`${BASE_PATH}/assets/:assetId/raw`, async (req, res) => {
+  app.get(`${BASE_PATH}/assets/:assetId/raw`, requireLocalDaemonRequest, async (req, res) => {
     if (!requireProject(req, res)) return;
     try {
       const asset = await ctx.storeScreenshots.readAssetRaw(

@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import { createHash } from 'node:crypto';
 import express from 'express';
 import type { Response } from 'express';
 import multer from 'multer';
@@ -366,6 +367,14 @@ describe('store screenshot routes', () => {
     expect(raw.headers.get('x-content-type-options')).toBe('nosniff');
     expect(Buffer.from(await raw.arrayBuffer()).equals(png)).toBe(true);
 
+    const localOrigin = await fetch(`${baseUrl}${basePath}/assets/${uploaded.asset.id}/raw`, {
+      headers: { origin: baseUrl },
+    });
+    expect(localOrigin.status).toBe(200);
+    expect((await fetch(`${baseUrl}${basePath}/assets/${uploaded.asset.id}/raw`, {
+      headers: { origin: 'https://example.com' },
+    })).status).toBe(403);
+
     const crossProject = await fetch(`${baseUrl}${otherPath}/assets/${uploaded.asset.id}/raw`);
     expect(crossProject.status).toBe(404);
     const traversal = await fetch(`${baseUrl}${basePath}/assets/..%2Fsecret/raw`);
@@ -380,6 +389,20 @@ describe('store screenshot routes', () => {
     expect((await fetch(`${baseUrl}${basePath}/assets/${uploaded.asset.id}/raw`)).status).toBe(404);
     db.prepare(`UPDATE store_screenshot_assets SET relative_path = ? WHERE id = ?`)
       .run('../not-an-asset.png', uploaded.asset.id);
+    expect((await fetch(`${baseUrl}${basePath}/assets/${uploaded.asset.id}/raw`)).status).toBe(400);
+
+    const replacement = Buffer.from('not a png signature');
+    const replacementHash = createHash('sha256').update(replacement).digest('hex');
+    const replacementPath = `store-screenshots/assets/${replacementHash}.png`;
+    await projectStorage.writeFile(PROJECT_ID, replacementPath, replacement);
+    db.prepare(`
+      UPDATE store_screenshot_assets
+      SET relative_path = ?, content_hash = ?, mime = ?
+      WHERE id = ?
+    `).run(replacementPath, replacementHash, 'image/png', uploaded.asset.id);
+    expect((await fetch(`${baseUrl}${basePath}/assets/${uploaded.asset.id}/raw`)).status).toBe(400);
+    db.prepare(`UPDATE store_screenshot_assets SET mime = ? WHERE id = ?`)
+      .run('image/jpeg', uploaded.asset.id);
     expect((await fetch(`${baseUrl}${basePath}/assets/${uploaded.asset.id}/raw`)).status).toBe(400);
   });
 
