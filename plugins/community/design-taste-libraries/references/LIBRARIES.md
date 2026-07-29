@@ -1,7 +1,7 @@
 ---
 generated_by: Codex
 generated_at: 2026-06-24T04:25:00+08:00
-last_updated: 2026-07-29T09:55:00+08:00
+last_updated: 2026-07-29
 canonical_source: plugins/community/design-taste-libraries
 source_context: YouTube video Ot582-E61ac and linked public design skills/libraries
 ---
@@ -79,7 +79,7 @@ Extract:
 
 ### Dashboard
 
-Source: https://github.com/bergside/awesome-design-skills/tree/main/skills/dashboard
+Source: https://github.com/bergside/awesome-design-skills/blob/main/skills/enterprise/SKILL.md
 
 Use for: analytics, admin, CRM, operations, monitoring, finance, product dashboards, and any dense decision surface.
 
@@ -122,7 +122,7 @@ Avoid when: a small CSS transition or platform-native animation is enough.
 
 ### HyperFrames
 
-Source: local OpenAI curated plugin `hyperframes`
+Source: local Open Design examples `example-hyperframes`, `example-video-hyperframes`, and `example-motion-frames`
 
 Use for: video-grade web motion, interactive product films, and reusable motion components.
 
@@ -187,7 +187,7 @@ Extract:
 
 ### Expo Native UI
 
-Source: https://github.com/expo/skills/blob/main/plugins/expo/skills/building-native-ui/SKILL.md
+Source: https://github.com/expo/skills/blob/main/plugins/expo/skills/expo-native-ui/SKILL.md
 
 Use for: Expo/React Native screens and native-feeling mobile prototypes.
 
