@@ -7,9 +7,9 @@ summary: "Tag open-design-v0.11.0 — 137 PRs from 57 contributors in four days.
 i18n:
   zh:
     title: 'Open Design 0.11.0：集市'
-    summary: '标签 open-design-v0.11.0 —— 四天内 57 位贡献者提交了 137 个 PR。代号「集市」。插件画廊现在会为每一个真实产出播放一段实时片段，你已经在用的任何 coding agent 都能即插即用，而新人的第一次运行是一段有引导的欢迎之旅，而不再是一道上锁的关卡。'
+    summary: '版本标签 open-design-v0.11.0 —— 四天内 57 位贡献者提交了 137 个 PR。代号「集市」。插件画廊现在会为每一个真实产出播放一段实时片段，你已经在用的任何 coding agent 都能即插即用，而新人的第一次运行是一段有引导的欢迎之旅，而不再是一道上锁的关卡。'
     bodyHtml: |
-      <p>标签 <code>open-design-v0.11.0</code>，于 2026 年 6 月 17 日发布。<strong>四天内 57 位贡献者提交了 137 个 PR。</strong>代号「集市」。大教堂由少数被选中的人闭门建造；而集市则在开放之中由所有人同时建造 —— 而这次发布把 Open Design 变成了那座集市。走进来，逛逛摊位，看中什么就拿起什么，让它成为你自己的。</p>
+      <p>版本标签 <code>open-design-v0.11.0</code>，于 2026 年 6 月 17 日发布。<strong>四天内 57 位贡献者提交了 137 个 PR。</strong>代号「集市」。大教堂由少数被选中的人闭门建造；而集市则在开放之中由所有人同时建造 —— 而这次发布把 Open Design 变成了那座集市。走进来，逛逛摊位，看中什么就拿起什么，让它成为你自己的。</p>
       <p>想看完整版本，可以查阅 <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.11.0">GitHub 上的发布说明</a>。本文是精简版：这次发布开放了什么、你今天能用它做什么，以及从哪里开始。</p>
 
       <h2>一个终于会展示自己的画廊</h2>

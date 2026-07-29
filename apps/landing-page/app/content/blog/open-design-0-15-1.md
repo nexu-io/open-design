@@ -13,19 +13,19 @@ ctaHref: "https://releases.open-design.ai/?utm_source=blog&utm_medium=docs&utm_c
 i18n:
   zh:
     title: 'Open Design 0.15.1：看得更清，跑得更久'
-    summary: '0.15.1 打磨的是 OpenDesign Agent：图像细节更清晰、长会话更能撑住也更容易恢复、澄清式提问直接留在对话里、可用的模型运行时更多——另有 HTML、演示导出与桌面端的一批修复。'
+    summary: '0.15.1 打磨的是 OpenDesign Agent：图像细节更清晰、长会话更扛得住、也更容易恢复，需要跟你确认的问题直接留在对话里、可用的模型运行时更多——另有 HTML、演示导出与桌面端的一批修复。'
     category: '产品'
     bodyHtml: |
-      <p>Open Design 0.15.1 是一次围绕运行时的发布。我们升级了内置的 <strong>OpenDesign Agent</strong>：多模态模型能看到图像里更多的细节，长时间的工作会话更不容易散架、也更容易恢复，而日常流程——澄清式提问、模型选择、导出——则安静地退到一边。它让 <a href="/blog/what-is-vibe-design/">vibe design</a> 的循环——提出、查看、打磨——一路无摩擦地转下去。</p>
+      <p>Open Design 0.15.1 是一次围绕运行时的发布。我们升级了内置的 <strong>OpenDesign Agent</strong>：多模态模型能看到图像里更多的细节，长时间的工作会话更不容易散架、也更容易恢复，而日常流程——确认追问、模型选择、导出——则安静地退到一边。它让 <a href="/blog/what-is-vibe-design/">vibe design</a> 的循环——提出、查看、打磨——一路无摩擦地转下去。</p>
       <p><a href="https://releases.open-design.ai/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202607_0_15_1&amp;utm_content=official">下载 0.15.1</a> · <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.15.1">完整发布说明</a></p>
 
       <h2>你的 agent 把图看得更清楚了</h2>
       <p>OpenDesign Agent 现在会把图像里真正存在的细节更完整地交给多模态模型。截图分析、视觉评审、以图驱动的设计任务因此更可靠——模型依据的是你眼睛看到的那张图，而不是它的模糊版本。</p>
 
       <h2>长会话保持连贯，也能自己恢复</h2>
-      <p>长时间的工作更不容易丢失上下文。本次发布改进了会话回放、流式与上下文溢出的恢复方式，以及有用的上下文在压缩后如何存活，让一次长时间的 agent 运行能沿着正轨走完，而不是中途提前结束。真的被打断时——比如运行时瞬间关闭、恢复过程读到 EOF——agent 会清掉失效会话并沿恢复路径继续，而不是把这单活丢掉。</p>
+      <p>长时间的工作更不容易丢失上下文。本次发布改进了会话回放、流式与上下文溢出的恢复方式，以及有用的上下文在压缩后如何存活，让一次长时间的 agent 运行能沿着正轨走完，而不是中途提前结束。真的被打断时——比如运行时瞬间关闭、恢复过程读到 EOF——agent 会清掉失效会话并沿恢复路径继续，而不是直接把这次任务丢掉。</p>
 
-      <h2>澄清式提问就留在对话里</h2>
+      <h2>需要确认的问题就留在对话里</h2>
       <p>关于演示与原型方向的追问，现在用的是可以对比、刷新、展开的可视化选项，全程不用离开对话。提交后的答案——包括多选的那种——会折叠成一段可读的简报，于是这些来回本身成了记录的一部分，而不是一段岔路。</p>
 
       <h2>更多模型，更干净的记忆</h2>
@@ -93,14 +93,14 @@ i18n:
       <p>덱과 프로토타입 방향을 묻는 질문은 이제 비교하고, 새로고침하고, 펼쳐 볼 수 있는 시각적 선택지로 제시됩니다. 채팅을 떠날 필요가 없습니다. 제출한 답변은 — 다중 선택도 포함해 — 읽기 좋은 브리프로 접히고, 이 주고받음 자체가 기록의 일부가 됩니다. 더 이상 곁길이 아닙니다.</p>
 
       <h2>더 많은 모델, 더 깨끗한 메모리</h2>
-      <p>알맞은 모델과 자료를 프로젝트로 가져오세요. 0.15.1은 <strong>AtomCode</strong>를 에이전트 런타임으로 추가하고, <strong>SiliconFlow Global BYOK</strong> 프리셋(자세한 내용은 <a href="/blog/byok-design-workflow-claude-codex-qwen/">BYOK 디자인 워크플로</a> 가이드에서)과 AMR의 <strong>병렬 웹 검색</strong>을 더했습니다. 메모리도 더 깨끗하게 시작하고 통제권은 여러분에게 있습니다. 「대화에서 학습」이 기본으로 꺼지고, 기존 메모리와 업무 프로필, 직접 추가한 항목, 커넥터로 가져온 내용은 그대로 남습니다.</p>
+      <p>알맞은 모델과 자료를 프로젝트로 가져오세요. 0.15.1은 <strong>AtomCode</strong>를 에이전트 런타임으로 추가하고, <strong>SiliconFlow Global BYOK</strong> 프리셋(자세한 내용은 <a href="/blog/byok-design-workflow-claude-codex-qwen/">BYOK 디자인 워크플로</a> 가이드에서)과 AMR의 <strong>병렬 웹 검색</strong>을 더했습니다. 메모리도 더 깨끗하게 시작하고 통제권은 여러분에게 있습니다. “대화에서 학습”이 기본으로 꺼지고, 기존 메모리와 업무 프로필, 직접 추가한 항목, 커넥터로 가져온 내용은 그대로 남습니다.</p>
 
       <h2>폭넓은 수정</h2>
       <p>눈에 띄는 변화 아래에서 0.15.1은 긴 목록의 거친 부분을 정리했습니다.</p>
       <ul>
         <li><strong>HTML과 미리보기</strong> — 성공한 분석이 실패한 작업처럼 보이지 않고(텍스트 답변의 <code>ARTIFACT_NOT_FOUND</code> 해결), 플랜 모드 HTML이 자동으로 열리며, 큰 미리보기는 전체 소스와 함께 새로고침되고, 리디렉션 루프가 미리보기를 멈춰 세우지 않습니다.</li>
         <li><strong>덱과 내보내기</strong> — 여러 페이지 PPT/PDF 내보내기에 모든 슬라이드가 포함되고, 이미지와 PDF가 텍스트와 겹치지 않으며, 편집 가능한 PPTX가 CJK 서체를 유지하고, 썸네일이 사라지지 않습니다.</li>
-        <li><strong>BYOK와 모델</strong> — 권한 확인창이 지원되는 BYOK 실행을 막지 않고, 제공자의 「Not Found」 응답이 깔끔하게 종료되며, <code>od media generate</code>가 문서대로 프롬프트 파일을 받습니다.</li>
+        <li><strong>BYOK와 모델</strong> — 권한 확인창이 지원되는 BYOK 실행을 막지 않고, 제공자의 “Not Found” 응답이 깔끔하게 종료되며, <code>od media generate</code>가 문서대로 프롬프트 파일을 받습니다.</li>
         <li><strong>데스크톱 안정성</strong> — 번들 데이터베이스 바이너리가 패키징된 런타임과 일치하고, 재실행 시 호환되지 않는 이전 프로세스를 정리할 수 있으며, 동시에 진행되는 라이브러리 가져오기가 오류 대신 중복 제거로 처리됩니다.</li>
       </ul>
 
@@ -144,31 +144,31 @@ i18n:
     summary: '0.15.1 affûte l''OpenDesign Agent : plus de détails dans les images, une meilleure reprise des longues sessions, des questions de clarification qui restent dans le chat et davantage de runtimes de modèles — plus des correctifs HTML, export de deck et bureau.'
     category: 'Produit'
     bodyHtml: |
-      <p>Open Design 0.15.1 est une version centrée sur le runtime. Nous avons amélioré l''<strong>OpenDesign Agent</strong> intégré : les modèles multimodaux voient davantage des détails d''une image, les longues sessions de travail tiennent mieux et se rétablissent plus proprement, et le quotidien — questions de clarification, choix du modèle, exports — reste hors du chemin. La boucle du <a href="/blog/what-is-vibe-design/">vibe design</a> — demander, voir, affiner — continue de tourner sans friction.</p>
+      <p>Open Design 0.15.1 est une version centrée sur le runtime. Nous avons amélioré l'<strong>OpenDesign Agent</strong> intégré : les modèles multimodaux voient davantage des détails d'une image, les longues sessions de travail tiennent mieux et se rétablissent plus proprement, et le quotidien — questions de clarification, choix du modèle, exports — reste hors du chemin. La boucle du <a href="/blog/what-is-vibe-design/">vibe design</a> — demander, voir, affiner — continue de tourner sans friction.</p>
       <p><a href="https://releases.open-design.ai/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202607_0_15_1&amp;utm_content=official">Télécharger 0.15.1</a> · <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.15.1">Notes de version complètes</a></p>
 
       <h2>Votre agent voit les images plus nettement</h2>
-      <p>L''OpenDesign Agent transmet désormais aux modèles multimodaux une plus grande part de ce que contient réellement une image. L''analyse de captures d''écran, la critique visuelle et les tâches de design guidées par l''image deviennent plus fiables : le modèle travaille sur ce que vous voyez, pas sur une version floutée.</p>
+      <p>L'OpenDesign Agent transmet désormais aux modèles multimodaux une plus grande part de ce que contient réellement une image. L'analyse de captures d'écran, la critique visuelle et les tâches de design guidées par l'image deviennent plus fiables : le modèle travaille sur ce que vous voyez, pas sur une version floutée.</p>
 
       <h2>Les longues sessions gardent leur cohérence — et se rétablissent</h2>
-      <p>Un travail prolongé perd moins souvent le fil. Cette version améliore la relecture de session, la reprise après un dépassement de flux ou de contexte, et la survie du contexte utile après compactage : une longue exécution d''agent reste sur sa trajectoire au lieu de s''arrêter prématurément. Et quand quelque chose interrompt vraiment — une fermeture passagère du runtime, un EOF à la reprise — l''agent efface la session périmée et poursuit par son chemin de récupération plutôt que d''abandonner la tâche.</p>
+      <p>Un travail prolongé perd moins souvent le fil. Cette version améliore la relecture de session, la reprise après un dépassement de flux ou de contexte, et la survie du contexte utile après compactage : une longue exécution d'agent reste sur sa trajectoire au lieu de s'arrêter prématurément. Et quand quelque chose interrompt vraiment — une fermeture passagère du runtime, un EOF à la reprise — l'agent efface la session périmée et poursuit par son chemin de récupération plutôt que d'abandonner la tâche.</p>
 
       <h2>Les questions de clarification restent dans la conversation</h2>
-      <p>Les questions sur la direction d''un deck ou d''un prototype utilisent maintenant des choix visuels que vous pouvez comparer, rafraîchir et déplier sans quitter le chat. Les réponses envoyées — y compris les choix multiples — se replient en un brief lisible : ces allers-retours font partie du dossier au lieu d''être un détour.</p>
+      <p>Les questions sur la direction d'un deck ou d'un prototype utilisent maintenant des choix visuels que vous pouvez comparer, rafraîchir et déplier sans quitter le chat. Les réponses envoyées — y compris les choix multiples — se replient en un brief lisible : ces allers-retours font partie du dossier au lieu d'être un détour.</p>
 
       <h2>Plus de modèles, une mémoire plus propre</h2>
-      <p>Amenez le bon modèle et la bonne recherche dans un projet : 0.15.1 ajoute <strong>AtomCode</strong> comme runtime d''agent, un preset <strong>SiliconFlow Global BYOK</strong> — nous en disons plus dans notre guide du <a href="/blog/byok-design-workflow-claude-codex-qwen/">workflow de design BYOK</a> — et la <strong>recherche web parallèle</strong> pour AMR. La mémoire démarre aussi plus propre et reste sous votre contrôle : « Apprendre des conversations » est désormais désactivé par défaut, tandis que vos mémoires existantes, votre profil de travail, vos entrées manuelles et vos imports de connecteurs restent en place.</p>
+      <p>Amenez le bon modèle et la bonne recherche dans un projet : 0.15.1 ajoute <strong>AtomCode</strong> comme runtime d'agent, un preset <strong>SiliconFlow Global BYOK</strong> — nous en disons plus dans notre guide du <a href="/blog/byok-design-workflow-claude-codex-qwen/">workflow de design BYOK</a> — et la <strong>recherche web parallèle</strong> pour AMR. La mémoire démarre aussi plus propre et reste sous votre contrôle : « Apprendre des conversations » est désormais désactivé par défaut, tandis que vos mémoires existantes, votre profil de travail, vos entrées manuelles et vos imports de connecteurs restent en place.</p>
 
       <h2>Un large balayage de correctifs</h2>
-      <p>Sous les grands chantiers, 0.15.1 élimine une longue liste d''aspérités :</p>
+      <p>Sous les grands chantiers, 0.15.1 élimine une longue liste d'aspérités :</p>
       <ul>
-        <li><strong>HTML et aperçus</strong> — une analyse réussie ne ressemble plus à une tâche échouée (fini <code>ARTIFACT_NOT_FOUND</code> pour les réponses textuelles), le HTML du mode plan s''ouvre automatiquement, les grands aperçus se rafraîchissent avec la source complète, et les boucles de redirection ne figent plus l''aperçu.</li>
+        <li><strong>HTML et aperçus</strong> — une analyse réussie ne ressemble plus à une tâche échouée (fini <code>ARTIFACT_NOT_FOUND</code> pour les réponses textuelles), le HTML du mode plan s'ouvre automatiquement, les grands aperçus se rafraîchissent avec la source complète, et les boucles de redirection ne figent plus l'aperçu.</li>
         <li><strong>Decks et export</strong> — les exports PPT/PDF multipages contiennent toutes les diapositives, images et PDF ne chevauchent plus le texte, les PPTX éditables conservent les polices CJK, et les vignettes ne disparaissent plus.</li>
-        <li><strong>BYOK et modèles</strong> — les demandes d''autorisation ne bloquent plus les exécutions BYOK prises en charge, les réponses « Not Found » d''un fournisseur s''arrêtent proprement, et <code>od media generate</code> accepte les fichiers de prompt comme documenté.</li>
-        <li><strong>Fiabilité du bureau</strong> — le binaire de base de données livré correspond au runtime empaqueté, un redémarrage peut arrêter un ancien processus incompatible, et les imports de bibliothèque simultanés sont dédupliqués au lieu d''échouer.</li>
+        <li><strong>BYOK et modèles</strong> — les demandes d'autorisation ne bloquent plus les exécutions BYOK prises en charge, les réponses « Not Found » d'un fournisseur s'arrêtent proprement, et <code>od media generate</code> accepte les fichiers de prompt comme documenté.</li>
+        <li><strong>Fiabilité du bureau</strong> — le binaire de base de données livré correspond au runtime empaqueté, un redémarrage peut arrêter un ancien processus incompatible, et les imports de bibliothèque simultanés sont dédupliqués au lieu d'échouer.</li>
       </ul>
 
-      <h2>Mettez à jour aujourd''hui</h2>
+      <h2>Mettez à jour aujourd'hui</h2>
       <p>0.15.1 est gratuit, open source et local-first.</p>
       <p><a href="https://releases.open-design.ai/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202607_0_15_1&amp;utm_content=official">Télécharger 0.15.1</a></p>
   ru:
@@ -253,14 +253,14 @@ i18n:
       <p>Perguntas sobre a direção de uma apresentação ou de um protótipo agora usam opções visuais que você pode comparar, atualizar e expandir sem sair do chat. As respostas enviadas — inclusive as de múltipla escolha — se dobram em um briefing legível, de modo que essa troca vira parte do registro em vez de um desvio.</p>
 
       <h2>Mais modelos, memória mais limpa</h2>
-      <p>Traga o modelo e a pesquisa certos para o projeto: o 0.15.1 adiciona o <strong>AtomCode</strong> como runtime de agente, um preset <strong>SiliconFlow Global BYOK</strong> — falamos mais sobre isso no nosso guia de <a href="/blog/byok-design-workflow-claude-codex-qwen/">fluxo de design com BYOK</a> — e <strong>busca web paralela</strong> para o AMR. A memória também começa mais limpa e continua sob seu controle: «Aprender com as conversas» agora vem desligado, enquanto suas memórias existentes, perfil de trabalho, entradas manuais e importações de conectores permanecem intactos.</p>
+      <p>Traga o modelo e a pesquisa certos para o projeto: o 0.15.1 adiciona o <strong>AtomCode</strong> como runtime de agente, um preset <strong>SiliconFlow Global BYOK</strong> — falamos mais sobre isso no nosso guia de <a href="/blog/byok-design-workflow-claude-codex-qwen/">fluxo de design com BYOK</a> — e <strong>busca web paralela</strong> para o AMR. A memória também começa mais limpa e continua sob seu controle: “Aprender com as conversas” agora vem desligado, enquanto suas memórias existentes, perfil de trabalho, entradas manuais e importações de conectores permanecem intactos.</p>
 
       <h2>Uma ampla leva de correções</h2>
       <p>Abaixo do trabalho principal, o 0.15.1 resolve uma longa lista de arestas:</p>
       <ul>
         <li><strong>HTML e prévias</strong> — uma análise bem-sucedida não parece mais uma tarefa que falhou (fim do <code>ARTIFACT_NOT_FOUND</code> em respostas de texto), o HTML do modo plano abre sozinho, prévias grandes recarregam com o código-fonte completo e loops de redirecionamento deixam de travar a prévia.</li>
         <li><strong>Apresentações e exportação</strong> — exportações PPT/PDF de várias páginas incluem todos os slides, imagens e PDFs não se sobrepõem ao texto, o PPTX editável preserva fontes CJK e as miniaturas param de sumir.</li>
-        <li><strong>BYOK e modelos</strong> — avisos de permissão não bloqueiam mais execuções BYOK suportadas, respostas «Not Found» do provedor terminam de forma limpa e <code>od media generate</code> aceita arquivos de prompt como documentado.</li>
+        <li><strong>BYOK e modelos</strong> — avisos de permissão não bloqueiam mais execuções BYOK suportadas, respostas “Not Found” do provedor terminam de forma limpa e <code>od media generate</code> aceita arquivos de prompt como documentado.</li>
         <li><strong>Confiabilidade no desktop</strong> — o binário de banco de dados embarcado corresponde ao runtime empacotado, o relançamento consegue encerrar um processo antigo incompatível e importações simultâneas de biblioteca são deduplicadas em vez de gerar erro.</li>
       </ul>
 
@@ -272,25 +272,25 @@ i18n:
     summary: '0.15.1 affina l''OpenDesign Agent: più dettaglio nelle immagini, ripresa più fluida delle sessioni lunghe, domande di chiarimento dentro la chat e più runtime di modelli, oltre a correzioni su HTML, esportazione delle presentazioni e desktop.'
     category: 'Prodotto'
     bodyHtml: |
-      <p>Open Design 0.15.1 è una release incentrata sul runtime. Abbiamo migliorato l''<strong>OpenDesign Agent</strong> integrato: i modelli multimodali vedono più dettaglio di un''immagine, le lunghe sessioni di lavoro reggono meglio e si riprendono più solidamente, e la quotidianità — domande di chiarimento, scelta del modello, esportazioni — resta fuori dai piedi. Il ciclo del <a href="/blog/what-is-vibe-design/">vibe design</a> — chiedere, vedere, rifinire — continua a girare senza attrito.</p>
+      <p>Open Design 0.15.1 è una release incentrata sul runtime. Abbiamo migliorato l'<strong>OpenDesign Agent</strong> integrato: i modelli multimodali vedono più dettaglio di un'immagine, le lunghe sessioni di lavoro reggono meglio e si riprendono più solidamente, e la quotidianità — domande di chiarimento, scelta del modello, esportazioni — resta fuori dai piedi. Il ciclo del <a href="/blog/what-is-vibe-design/">vibe design</a> — chiedere, vedere, rifinire — continua a girare senza attrito.</p>
       <p><a href="https://releases.open-design.ai/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202607_0_15_1&amp;utm_content=official">Scarica 0.15.1</a> · <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.15.1">Note di rilascio complete</a></p>
 
       <h2>Il tuo agente vede le immagini più nitide</h2>
-      <p>L''OpenDesign Agent ora passa ai modelli multimodali una parte maggiore del dettaglio realmente presente in un''immagine. Analisi di screenshot, critica visiva e attività di design guidate dall''immagine diventano più affidabili: il modello lavora su ciò che vedi tu, non su una versione sfocata.</p>
+      <p>L'OpenDesign Agent ora passa ai modelli multimodali una parte maggiore del dettaglio realmente presente in un'immagine. Analisi di screenshot, critica visiva e attività di design guidate dall'immagine diventano più affidabili: il modello lavora su ciò che vedi tu, non su una versione sfocata.</p>
 
       <h2>Le sessioni lunghe restano coerenti — e si riprendono</h2>
-      <p>Il lavoro prolungato perde il filo più di rado. Questa release migliora la riproduzione della sessione, il recupero da overflow di stream e di contesto e quanto contesto utile sopravvive alla compattazione, così una lunga esecuzione dell''agente resta in rotta invece di chiudersi in anticipo. E quando qualcosa interrompe davvero — una chiusura momentanea del runtime, un EOF alla ripresa — l''agente ripulisce la sessione obsoleta e prosegue lungo il proprio percorso di recupero invece di lasciar cadere il lavoro.</p>
+      <p>Il lavoro prolungato perde il filo più di rado. Questa release migliora la riproduzione della sessione, il recupero da overflow di stream e di contesto e quanto contesto utile sopravvive alla compattazione, così una lunga esecuzione dell'agente resta in rotta invece di chiudersi in anticipo. E quando qualcosa interrompe davvero — una chiusura momentanea del runtime, un EOF alla ripresa — l'agente ripulisce la sessione obsoleta e prosegue lungo il proprio percorso di recupero invece di lasciar cadere il lavoro.</p>
 
       <h2>Le domande di chiarimento restano nella conversazione</h2>
       <p>Le domande sulla direzione di un deck o di un prototipo usano ora scelte visive che puoi confrontare, aggiornare ed espandere senza uscire dalla chat. Le risposte inviate — comprese quelle a scelta multipla — si ripiegano in un brief leggibile, così quel botta e risposta entra a far parte del resoconto invece di essere una deviazione.</p>
 
       <h2>Più modelli, memoria più pulita</h2>
-      <p>Porta nel progetto il modello e la ricerca giusti: 0.15.1 aggiunge <strong>AtomCode</strong> come runtime dell''agente, un preset <strong>SiliconFlow Global BYOK</strong> — ne parliamo più a fondo nella nostra guida al <a href="/blog/byok-design-workflow-claude-codex-qwen/">workflow di design in BYOK</a> — e la <strong>ricerca web parallela</strong> per AMR. Anche la memoria parte più pulita e resta sotto il tuo controllo: «Impara dalle chat» ora è disattivato per impostazione predefinita, mentre le memorie esistenti, il profilo di lavoro, le voci manuali e le importazioni dai connettori restano al loro posto.</p>
+      <p>Porta nel progetto il modello e la ricerca giusti: 0.15.1 aggiunge <strong>AtomCode</strong> come runtime dell'agente, un preset <strong>SiliconFlow Global BYOK</strong> — ne parliamo più a fondo nella nostra guida al <a href="/blog/byok-design-workflow-claude-codex-qwen/">workflow di design in BYOK</a> — e la <strong>ricerca web parallela</strong> per AMR. Anche la memoria parte più pulita e resta sotto il tuo controllo: «Impara dalle chat» ora è disattivato per impostazione predefinita, mentre le memorie esistenti, il profilo di lavoro, le voci manuali e le importazioni dai connettori restano al loro posto.</p>
 
       <h2>Un ampio giro di correzioni</h2>
       <p>Sotto il lavoro principale, 0.15.1 elimina una lunga lista di asperità:</p>
       <ul>
-        <li><strong>HTML e anteprime</strong> — un''analisi riuscita non sembra più un''attività fallita (via l''<code>ARTIFACT_NOT_FOUND</code> per le risposte testuali), l''HTML in modalità piano si apre da solo, le anteprime grandi si aggiornano con il sorgente completo e i loop di redirect non congelano più l''anteprima.</li>
+        <li><strong>HTML e anteprime</strong> — un'analisi riuscita non sembra più un'attività fallita (via l'<code>ARTIFACT_NOT_FOUND</code> per le risposte testuali), l'HTML in modalità piano si apre da solo, le anteprime grandi si aggiornano con il sorgente completo e i loop di redirect non congelano più l'anteprima.</li>
         <li><strong>Presentazioni ed esportazione</strong> — le esportazioni PPT/PDF multipagina includono ogni slide, immagini e PDF non si sovrappongono al testo, il PPTX modificabile mantiene i caratteri CJK e le miniature non spariscono più.</li>
         <li><strong>BYOK e modelli</strong> — le richieste di permesso non bloccano più le esecuzioni BYOK supportate, le risposte «Not Found» del provider terminano in modo pulito e <code>od media generate</code> accetta i file di prompt come documentato.</li>
         <li><strong>Affidabilità sul desktop</strong> — il binario del database incluso corrisponde al runtime del pacchetto, il riavvio può chiudere un vecchio processo incompatibile e le importazioni simultanee della libreria vengono deduplicate invece di andare in errore.</li>
@@ -304,8 +304,8 @@ i18n:
     summary: '0.15.1 OpenDesign Agent''ı keskinleştiriyor: görsellerde daha ince ayrıntı, uzun oturumlarda daha pürüzsüz toparlanma, sohbetin içinde kalan netleştirme soruları ve daha fazla model çalışma zamanı — ayrıca HTML, sunum dışa aktarma ve masaüstü düzeltmeleri.'
     category: 'Ürün'
     bodyHtml: |
-      <p>Open Design 0.15.1, çalışma zamanına odaklanan bir sürüm. Yerleşik <strong>OpenDesign Agent</strong>''ı geliştirdik: çok kipli modeller bir görselin ayrıntısını daha fazla görüyor, uzun çalışma oturumları dağılmadan sürüyor ve daha iyi toparlanıyor, günlük akış — netleştirme soruları, model seçimi, dışa aktarmalar — ise yolunuzdan çekiliyor. <a href="/blog/what-is-vibe-design/">Vibe design</a> döngüsü — iste, gör, inceltip düzelt — sürtünmesiz dönmeye devam ediyor.</p>
-      <p><a href="https://releases.open-design.ai/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202607_0_15_1&amp;utm_content=official">0.15.1''i indir</a> · <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.15.1">Tüm sürüm notları</a></p>
+      <p>Open Design 0.15.1, çalışma zamanına odaklanan bir sürüm. Yerleşik <strong>OpenDesign Agent</strong>'ı geliştirdik: çok kipli modeller bir görselin ayrıntısını daha fazla görüyor, uzun çalışma oturumları dağılmadan sürüyor ve daha iyi toparlanıyor, günlük akış — netleştirme soruları, model seçimi, dışa aktarmalar — ise yolunuzdan çekiliyor. <a href="/blog/what-is-vibe-design/">Vibe design</a> döngüsü — iste, gör, inceltip düzelt — sürtünmesiz dönmeye devam ediyor.</p>
+      <p><a href="https://releases.open-design.ai/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202607_0_15_1&amp;utm_content=official">0.15.1'i indir</a> · <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.15.1">Tüm sürüm notları</a></p>
 
       <h2>Ajanınız görselleri daha net görüyor</h2>
       <p>OpenDesign Agent artık bir görselde gerçekten var olan ayrıntının daha fazlasını çok kipli modellere aktarıyor. Ekran görüntüsü çözümlemesi, görsel kritik ve görselden yürüyen tasarım işleri daha güvenilir hale geliyor: model, bulanık bir kopyayla değil, sizin gördüğünüz şeyle çalışıyor.</p>
@@ -314,23 +314,23 @@ i18n:
       <p>Uzayan çalışmalar yerini daha seyrek kaybediyor. Bu sürüm oturum yeniden oynatmayı, akış ve bağlam taşmasından toparlanmayı ve sıkıştırmadan sonra hangi yararlı bağlamın hayatta kaldığını iyileştiriyor; böylece uzun bir ajan koşusu erkenden bitmek yerine rotasında kalıyor. Bir şey gerçekten araya girdiğinde — geçici bir çalışma zamanı kapanması, sürdürmede bir EOF — ajan bayat oturumu temizleyip kurtarma yolundan devam ediyor, işi düşürmüyor.</p>
 
       <h2>Netleştirme soruları sohbetin içinde kalıyor</h2>
-      <p>Sunum ve prototip yönüne dair sorular artık karşılaştırabileceğiniz, yenileyebileceğiniz ve genişletebileceğiniz görsel seçenekler kullanıyor; sohbetten çıkmanız gerekmiyor. Gönderilen yanıtlar — çoklu seçim olanlar dahil — okunabilir bir brief''e katlanıyor, böylece bu gidiş geliş bir sapma değil, kaydın parçası oluyor.</p>
+      <p>Sunum ve prototip yönüne dair sorular artık karşılaştırabileceğiniz, yenileyebileceğiniz ve genişletebileceğiniz görsel seçenekler kullanıyor; sohbetten çıkmanız gerekmiyor. Gönderilen yanıtlar — çoklu seçim olanlar dahil — okunabilir bir brief'e katlanıyor, böylece bu gidiş geliş bir sapma değil, kaydın parçası oluyor.</p>
 
       <h2>Daha fazla model, daha temiz bellek</h2>
-      <p>Doğru modeli ve araştırmayı projeye getirin: 0.15.1, ajan çalışma zamanı olarak <strong>AtomCode</strong>''u, bir <strong>SiliconFlow Global BYOK</strong> hazır ayarını — bu konuda daha fazlası <a href="/blog/byok-design-workflow-claude-codex-qwen/">BYOK tasarım akışı</a> rehberimizde — ve AMR için <strong>paralel web araması</strong>nı ekliyor. Bellek de daha temiz başlıyor ve denetimi sizde kalıyor: «Sohbetlerden öğren» artık varsayılan olarak kapalı, mevcut anılarınız, çalışma profiliniz, elle eklediğiniz kayıtlar ve bağlayıcı içe aktarmaları ise yerinde duruyor.</p>
+      <p>Doğru modeli ve araştırmayı projeye getirin: 0.15.1, ajan çalışma zamanı olarak <strong>AtomCode</strong>'u, bir <strong>SiliconFlow Global BYOK</strong> hazır ayarını — bu konuda daha fazlası <a href="/blog/byok-design-workflow-claude-codex-qwen/">BYOK tasarım akışı</a> rehberimizde — ve AMR için <strong>paralel web araması</strong>nı ekliyor. Bellek de daha temiz başlıyor ve denetimi sizde kalıyor: “Sohbetlerden öğren” artık varsayılan olarak kapalı, mevcut anılarınız, çalışma profiliniz, elle eklediğiniz kayıtlar ve bağlayıcı içe aktarmaları ise yerinde duruyor.</p>
 
       <h2>Geniş bir düzeltme turu</h2>
       <p>Başlıktaki işlerin altında 0.15.1 uzun bir pürüz listesini topluyor:</p>
       <ul>
         <li><strong>HTML ve önizlemeler</strong> — başarılı bir çözümleme artık başarısız bir iş gibi görünmüyor (metin yanıtlarında <code>ARTIFACT_NOT_FOUND</code> yok), plan modundaki HTML kendiliğinden açılıyor, büyük önizlemeler tam kaynakla yenileniyor ve yönlendirme döngüleri önizlemeyi dondurmuyor.</li>
-        <li><strong>Sunumlar ve dışa aktarma</strong> — çok sayfalı PPT/PDF dışa aktarmaları her slaydı içeriyor, görseller ve PDF''ler metinle üst üste binmiyor, düzenlenebilir PPTX CJK yazı tiplerini koruyor ve küçük resimler kaybolmuyor.</li>
-        <li><strong>BYOK ve modeller</strong> — izin istemleri desteklenen BYOK koşularını engellemiyor, sağlayıcının «Not Found» yanıtları temiz biçimde sonlanıyor ve <code>od media generate</code> belgelendiği gibi istem dosyalarını kabul ediyor.</li>
+        <li><strong>Sunumlar ve dışa aktarma</strong> — çok sayfalı PPT/PDF dışa aktarmaları her slaydı içeriyor, görseller ve PDF'ler metinle üst üste binmiyor, düzenlenebilir PPTX CJK yazı tiplerini koruyor ve küçük resimler kaybolmuyor.</li>
+        <li><strong>BYOK ve modeller</strong> — izin istemleri desteklenen BYOK koşularını engellemiyor, sağlayıcının “Not Found” yanıtları temiz biçimde sonlanıyor ve <code>od media generate</code> belgelendiği gibi istem dosyalarını kabul ediyor.</li>
         <li><strong>Masaüstü güvenilirliği</strong> — paketle gelen veritabanı ikilisi paketlenmiş çalışma zamanıyla eşleşiyor, yeniden başlatma eski ve uyumsuz bir süreci durdurabiliyor, eşzamanlı kitaplık içe aktarmaları hata vermek yerine yinelenenleri ayıklıyor.</li>
       </ul>
 
       <h2>Bugün güncelleyin</h2>
       <p>0.15.1 ücretsiz, açık kaynak ve yerel öncelikli.</p>
-      <p><a href="https://releases.open-design.ai/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202607_0_15_1&amp;utm_content=official">0.15.1''i indir</a></p>
+      <p><a href="https://releases.open-design.ai/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202607_0_15_1&amp;utm_content=official">0.15.1'i indir</a></p>
 ---
 
 Open Design 0.15.1 is a runtime-focused release. We upgraded the built-in **OpenDesign Agent** so multimodal models see more of an image's detail, long working sessions hold together and recover better, and the everyday flow — clarifying questions, model choice, exports — stays out of your way. It keeps the [vibe-design](/blog/what-is-vibe-design/) loop — prompt, see, refine — moving without friction.

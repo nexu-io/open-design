@@ -7,9 +7,9 @@ summary: "Tag open-design-v0.10.0 — 405 PRs from 68 contributors in nine days.
 i18n:
   zh:
     title: "Open Design 0.10.0：一体化设计工作空间"
-    summary: "标签 open-design-v0.10.0 —— 九天内 68 位贡献者提交了 405 个 PR。代号「一体化 Agentic 设计工作空间」。本次发布把从构思、精修到交付的整条流程收进同一个窗口，工作不再散落在十几个标签页之间。"
+    summary: "版本标签 open-design-v0.10.0 —— 九天内 68 位贡献者提交了 405 个 PR。代号「一体化 Agentic 设计工作空间」。本次发布把从构思、精修到交付的整条流程收进同一个窗口，工作不再散落在十几个标签页之间。"
     bodyHtml: |
-      <p>标签 <code>open-design-v0.10.0</code>，于 2026 年 6 月 11 日发布。<strong>九天内 68 位贡献者提交了 405 个 PR。</strong>代号「一体化 Agentic 设计工作空间」—— 这是一次<strong>单窗口发布</strong>。前三次发布让「开始」变得廉价，而这一次让「<em>持续</em>」也变得廉价。从最初的构思到最终的交付，工作不再散落在十几个标签页和三个应用之间。</p>
+      <p>版本标签 <code>open-design-v0.10.0</code>，于 2026 年 6 月 11 日发布。<strong>九天内 68 位贡献者提交了 405 个 PR。</strong>代号「一体化 Agentic 设计工作空间」—— 这是一次<strong>单窗口发布</strong>。前三次发布让「开始」变得廉价，而这一次让「<em>持续</em>」也变得廉价。从最初的构思到最终的交付，工作不再散落在十几个标签页和三个应用之间。</p>
       <p>想看完整版本，可以查阅 <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.10.0">GitHub 上的发布说明</a>。本文是精简版：底层改了什么、你今天能用它做什么，以及从哪里开始。</p>
 
       <h2>为什么标签页之间的反复横跳是一种税</h2>

@@ -7,10 +7,10 @@ summary: "Tag open-design-v0.15.0 — 118 PRs from 34 contributors in four days.
 i18n:
   zh:
     title: 'Open Design 0.15.0：更省成本，更快交付'
-    summary: '标签 open-design-v0.15.0 —— 四天内 34 位贡献者提交了 118 个 PR。代号「更省成本，更快交付（Cost Less. Ship Faster.）」。一个更精简的 Design System Prompt 在代表性运行中把首个 token 的等待时间缩短了 49.5%、端到端时长缩短了 21.2%、平均输入 token 减少了 25.1%。本次发布的其余部分让整条创作循环更顺滑：像工作区一样的演示文稿、从 URL 克隆网站、把对话变成动态效果，以及终于会告诉你下一步该怎么办的失败提示。'
+    summary: '版本标签 open-design-v0.15.0 —— 四天内 34 位贡献者提交了 118 个 PR。代号「更省成本，更快交付（Cost Less. Ship Faster.）」。一个更精简的 Design System Prompt 在代表性运行中把首个 token 的等待时间缩短了 49.5%、端到端时长缩短了 21.2%、平均输入 token 减少了 25.1%。本次发布的其余部分让整条创作循环更顺滑：像工作区一样的演示文稿、从 URL 克隆网站、把对话变成动态效果，以及终于会告诉你下一步该怎么办的失败提示。'
     category: '产品'
     bodyHtml: |
-      <p>标签 <code>open-design-v0.15.0</code>，于 2026 年 7 月 14 日发布。<strong>四天内 34 位贡献者提交了 118 个 PR。</strong>代号「更省成本，更快交付（Cost Less. Ship Faster.）」。前两次发布让你的工作在中断之间保持存活，也留住了心流过去容易丢失的想法。这一次针对的是你为每一次运行所付出的「税」：首个 token 之前的等待、抵达那里所花掉的 token，以及一份做完的结果与一份可交付成果之间的摩擦。</p>
+      <p>版本标签 <code>open-design-v0.15.0</code>，于 2026 年 7 月 14 日发布。<strong>四天内 34 位贡献者提交了 118 个 PR。</strong>代号「更省成本，更快交付（Cost Less. Ship Faster.）」。前两次发布让你的工作在中断之间保持存活，也留住了心流过去容易丢失的想法。这一次针对的是你为每一次运行所付出的「税」：首个 token 之前的等待、抵达那里所花掉的 token，以及一份做完的结果与一份可交付成果之间的摩擦。</p>
       <p>想看完整的更新日志？它就在 <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.15.0">GitHub 上的发布说明</a>里。本文是精简版：底层改了什么、你今天能用它做什么，以及从哪里开始。</p>
 
       <h2>更精简的提示，更快的循环</h2>

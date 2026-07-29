@@ -9,15 +9,15 @@ ctaKind: download-app
 i18n:
   zh:
     title: 'Open Design 0.16.0：可靠交付'
-    summary: '标签 open-design-v0.16.0 —— 五天内 20 位贡献者提交了 92 个 PR。代号「可靠交付」。视觉风格现在跟着你真正在做的东西走，自动更新会真正生效，长任务能留住结果和随之产出的文件，预览也不再跟你抢画框。另有应用内消息中心——以及 0.16.1 补上的最后一块遮挡画布的东西。'
+    summary: '版本标签 open-design-v0.16.0 —— 五天内 20 位贡献者提交了 92 个 PR。代号「可靠交付（Reliable Delivery）」。视觉风格现在会跟着你手上真正在做的东西走，自动更新会真正生效，长任务能留住结果和随之产出的文件，预览也不再跟你较劲。另有应用内消息中心——以及 0.16.1 顺手清掉的最后一样挡住画布的东西。'
     category: '产品'
     bodyHtml: |
-      <p>标签 <code>open-design-v0.16.0</code>，于 2026 年 7 月 22 日发布。<strong>五天内 20 位贡献者提交了 92 个 PR。</strong>代号「可靠交付」。上一次发布针对的是每次运行的成本，这一次针对的是「结果做完了」和「它真正到你手上」之间发生的事：只更新了一半的版本、丢了文件的长任务、要跟你较劲的预览、少了一页的导出。</p>
+      <p>版本标签 <code>open-design-v0.16.0</code>，于 2026 年 7 月 22 日发布。<strong>五天内 20 位贡献者提交了 92 个 PR。</strong>代号「可靠交付（Reliable Delivery）」。上一次发布针对的是每次运行的成本，这一次针对的是「结果做完了」和「它真正到你手上」之间发生的事：只更新了一半的版本、丢了文件的长任务、要跟你较劲的预览、少了一页的导出。</p>
       <p>想看完整的更新日志？它就在 <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.16.0">GitHub 上的发布说明</a>里。本文是精简版：底层改了什么、你今天能用它做什么，以及从哪里开始。</p>
 
-      <h2>视觉风格跟着你真正在做的东西走</h2>
+      <h2>视觉风格跟着你手上真正在做的东西走</h2>
       <p>过去，风格是只有演示文稿和原型才能做的决定。其余的一切——文档、海报、视频、Web Clone、线框图、移动端稿、Hyperframe——都只能听凭模型自由发挥。</p>
-      <p>在 0.16.0 里，<strong>每一种产物形态都有自己的视觉方向</strong>，预览也按这种形态真正被看到的样子来渲染。四个快捷选项就摆在你工作的地方，完整的风格库一次点击即达。你为眼前这个东西挑一个样子，而不用在脑子里把一套演示主题翻译成一张海报。</p>
+      <p>在 0.16.0 里，<strong>每一种产物形态都有自己的视觉方向</strong>，预览也按这种形态真正被看到的样子来渲染。四个快捷选项就摆在你工作的地方，完整的风格库一次点击即达。你直接为眼前这件东西挑一个样子，而不用在脑子里把一套演示主题翻译成一张海报。</p>
       <figure>
         <img src="/blog/open-design-0-16-0-reliable-delivery-style.webp" alt="草图上画着文档、海报、视频、手机屏等不同产物形态，各自变成一张比例正确的风格预览，落在一个安静的鼠尾草绿界面里，暖纸编辑插画风格" />
         <figcaption>文档、海报、视频、Web Clone、线框图、移动端稿与 Hyperframe，各自获得适配自身形态的预览——四个选项就在手边，完整风格库一次点击即达。</figcaption>
@@ -36,24 +36,24 @@ i18n:
       </figure>
 
       <h2>产品动态在应用里有了自己的位置</h2>
-      <p>0.16.0 新增：<strong>首页与项目页顶部的一个铃铛，背后是消息中心</strong>——未读计数、筛选、一键全部已读，以及直达所讲内容的链接。未读状态在匿名使用时留在本机，登录后则跟随账号；日期按你的语言环境渲染，关闭按钮永远在你以为的位置。感谢 <a href="https://github.com/nettee">@nettee</a>。</p>
+      <p>0.16.0 新增：<strong>首页与项目页顶部的一个铃铛，背后是消息中心</strong>——未读计数、筛选、一键全部已读，以及直达对应内容的链接。未读状态在匿名使用时留在本机，登录后则跟随账号；日期按你的语言环境渲染，关闭按钮永远在你以为它在的地方。感谢 <a href="https://github.com/nettee">@nettee</a>。</p>
 
       <h2>BYOK 在打断你之前就发现配置问题</h2>
       <p>自带密钥应该在配置阶段失败，而不是在任务跑了三分钟之后。<strong>没写完的修改现在会作为可恢复的草稿保留，而不是覆盖掉一份能用的配置</strong>，一次改到一半的调整因此不会拖垮你依赖的服务商。</p>
-      <p>连接测试的行为更接近真实任务，会把服务商的真实报错呈现出来，并保留每家服务商自己的模型排序——不再用一个字母序列表把你想要的模型埋掉。兼容的 MiniMax、DeepSeek 与 MiMo 地址处理得更一致，过时的 Moonshot 与 DeepSeek 默认值指向了当前可用的模型，设置页与新手引导终于展示同一份选项。Memory 也能用上你已保存的兼容 MiniMax 密钥，遇到只支持图像或音频的服务商时会直说。</p>
+      <p>连接测试的行为更接近真实任务，会把服务商的真实报错呈现出来，并保留每家服务商自己的模型排序——不再让一个按字母排序的列表把你要的模型埋掉。兼容的 MiniMax、DeepSeek 与 MiMo 地址处理得更一致，过时的 Moonshot 与 DeepSeek 默认值指向了当前可用的模型，设置页与新手引导终于展示同一份选项。Memory 也能用上你已保存的兼容 MiniMax 密钥，遇到只支持图像或音频的服务商时会直说。</p>
 
-      <h2>预览不再跟你抢画框</h2>
+      <h2>预览不再跟你较劲</h2>
       <p>摩擦很小，但天天都能感觉到。宽幅桌面页面现在<strong>会自适应窗格，直到你自己选择缩放比例</strong>，老的演示文稿会立刻响应导航按键，最新的主 HTML 文件在任务一结束就出现，而不用手动刷新。当某个素材因安全原因被拦下时，预览会指出相关的项目文件，而不暴露敏感的系统路径。</p>
-      <p>图像生成也更稳了：<strong>Nano Banana 与自定义图像生成在服务商短暂繁忙时会自动重试一次</strong>，GPT Image 的参考图编辑在更多兼容服务上可用。一次抖动变成短暂的等待，而不是一次丢失的创作。</p>
+      <p>图像生成也更稳了：<strong>Nano Banana 与自定义图像生成在服务商短暂繁忙时会自动重试一次</strong>，GPT Image 的参考图编辑在更多兼容服务上可用。一次抖动只是短暂等待，而不再白白丢掉一轮创作。</p>
 
       <h2>0.16.0 还带来了什么</h2>
       <ul>
-        <li><strong>画廊优先展示真正有人用的东西</strong>——幻灯片、图像、视频等非原型画廊会把真实使用量高的模板排在前面，空白条目和没有预览的卡片不再挤占顶部。原型保留它的编辑策展位，每个分类的完整目录也都还在。</li>
-        <li><strong>设计系统导入更忠实</strong>——仓库导入会选对流程，拆分的 token 包会保留布局值，常见的 YAML 列表与多行格式也保住了作者写下的元数据。</li>
+        <li><strong>Gallery 优先展示真正有人在用的东西</strong>——幻灯片、图像、视频等非原型 Gallery会把真实使用量高的模板排在前面，空白条目和没有预览的卡片不再挤占顶部。原型仍保留人工策展的橱窗位，每个分类的完整目录也都还在。</li>
+        <li><strong>设计系统导入还原度更高</strong>——仓库导入会选对流程，拆分的 token 包会保留布局值，常见的 YAML 列表与多行格式也保住了作者写下的元数据。</li>
         <li><strong>本地安全边界更牢</strong>——导入的项目会保护隐藏的凭证，删除插件只动这个插件自己的文件，市场与已保存站点的内容处理得更谨慎，每段对话也都稳稳挂在正确的项目上。</li>
         <li><strong>发布前先预览</strong>——Cloudflare Pages 部署现在在界面和 <code>od deploy --target … --json</code> 里都把 Preview 与 Production 作为明确的目标，预览会返回自己的 URL，而不是顶掉你的线上域名。</li>
         <li><strong>Kiro 加入 MCP 配置选择器</strong>——直接从设置里复制正确的共享服务端片段，不用再手动翻译另一个客户端的格式。</li>
-        <li><strong>值得一提的安静修复</strong>——MCP 的后续追问能收到最新一条消息，ACP 历史刷新后不再长出空行，搭载较老处理器的 Windows 设备也能通过常规更新路径重新运行 OpenCode。</li>
+        <li><strong>值得一提的零碎修复</strong>——MCP 的后续追问能收到最新一条消息，ACP 历史刷新后不再长出空行，搭载较老处理器的 Windows 设备也能通过常规更新路径重新运行 OpenCode。</li>
       </ul>
 
       <h2>已经补上：0.16.1</h2>
@@ -163,10 +163,10 @@ i18n:
       </ul>
   ko:
     title: 'Open Design 0.16.0: 확실한 전달'
-    summary: '태그 open-design-v0.16.0 — 5일 동안 20명의 기여자가 92개의 PR을 보냈습니다. 코드명 「Reliable Delivery」. 비주얼 방향이 실제로 만드는 것에 맞춰 따라오고, 자동 업데이트가 제대로 적용되며, 긴 작업이 결과와 함께 만들어진 파일까지 지키고, 미리보기가 프레임과 다투지 않습니다. 앱 안의 메시지 센터, 그리고 캔버스를 가리던 마지막 하나를 걷어낸 0.16.1까지.'
+    summary: '태그 open-design-v0.16.0 — 5일 동안 20명의 기여자가 92개의 PR을 보냈습니다. 코드명 “Reliable Delivery”. 비주얼 방향이 실제로 만드는 것에 맞춰 따라오고, 자동 업데이트가 제대로 적용되며, 긴 작업이 결과와 함께 만들어진 파일까지 지키고, 미리보기가 프레임과 다투지 않습니다. 앱 안의 메시지 센터, 그리고 캔버스를 가리던 마지막 하나를 걷어낸 0.16.1까지.'
     category: '제품'
     bodyHtml: |
-      <p>태그 <code>open-design-v0.16.0</code>, 2026년 7월 22일 공개. <strong>5일 동안 20명의 기여자가 92개의 PR을 보냈습니다.</strong> 코드명 「Reliable Delivery」. 지난 릴리스가 한 번의 실행에 드는 비용을 겨눴다면, 이번 릴리스는 결과가 완성된 순간과 그것이 실제로 손에 닿는 순간 사이에 벌어지는 일을 겨눕니다. 반쯤 적용된 업데이트, 파일을 잃어버린 긴 작업, 씨름해야 하는 미리보기, 한 장이 빠진 내보내기.</p>
+      <p>태그 <code>open-design-v0.16.0</code>, 2026년 7월 22일 공개. <strong>5일 동안 20명의 기여자가 92개의 PR을 보냈습니다.</strong> 코드명 “Reliable Delivery”. 지난 릴리스가 한 번의 실행에 드는 비용을 겨눴다면, 이번 릴리스는 결과가 완성된 순간과 그것이 실제로 손에 닿는 순간 사이에 벌어지는 일을 겨눕니다. 반쯤 적용된 업데이트, 파일을 잃어버린 긴 작업, 씨름해야 하는 미리보기, 한 장이 빠진 내보내기.</p>
       <p>전체 변경 이력이 필요하다면 <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.16.0">GitHub의 릴리스 노트</a>에 있습니다. 여기서는 짧은 버전으로: 아래에서 무엇이 바뀌었고, 오늘 그것으로 무엇을 할 수 있으며, 어디서 시작하면 되는지.</p>
 
       <h2>비주얼 방향이 실제로 만드는 것을 따라옵니다</h2>
@@ -179,7 +179,7 @@ i18n:
 
       <h2>실제로 적용되는 업데이트</h2>
       <p>절반만 적용된 업데이트는 업데이트하지 않은 것보다 나쁩니다. 앱은 새 버전을 말하는데 어떤 기능은 조용히 옛 버전으로 돌아갑니다. 0.16.0은 업그레이드가 착지하도록 만듭니다. <strong>업데이트 후 새 버전이 더 확실하게 적용되고, 불완전한 업데이트로 망가졌던 기능 — PPTX 내보내기를 포함해 — 이 다시 동작합니다.</strong></p>
-      <p>macOS에서 「업데이트 확인…」은 지금 어떤 상태인지 분명히 알려 줍니다. 최신, 다운로드 중, 재시작 준비 완료, 진행 중인 작업 대기, 수동 다운로드 필요. Windows의 업데이트 안정성도 나아졌습니다. 이 영역에서 오래 손을 움직여 준 <a href="https://github.com/PerishCode">@PerishCode</a>에게 감사드립니다.</p>
+      <p>macOS에서 “업데이트 확인…”은 지금 어떤 상태인지 분명히 알려 줍니다. 최신, 다운로드 중, 재시작 준비 완료, 진행 중인 작업 대기, 수동 다운로드 필요. Windows의 업데이트 안정성도 나아졌습니다. 이 영역에서 오래 손을 움직여 준 <a href="https://github.com/PerishCode">@PerishCode</a>에게 감사드립니다.</p>
 
       <h2>긴 작업이 결과를 — 그리고 파일을 — 지킵니다</h2>
       <p>가장 값진 작업은 긴 실행 안에 있고, 동시에 그 작업이 가장 잘 사라지던 곳이기도 했습니다. 0.16.0에서는 대화 한계에 가까워진 작업이 <strong>갑작스럽게 실패하는 대신 가장 최신의 유용한 컨텍스트로 계속되고</strong>, 실행 초반에 만들어진 파일도 <strong>결과에 붙어 남습니다</strong>. 압축과 함께 사라지지 않습니다.</p>
@@ -221,7 +221,7 @@ i18n:
         <tbody>
           <tr><td>Open Design이 처음이라면</td><td>데스크톱 앱을 내려받아 프로젝트를 시작하고, 지금 만드는 포맷에 맞는 비주얼 방향을 고르세요</td></tr>
           <tr><td>긴 작업을 돌리고 있다면</td><td>긴 실행을 한 걸음 더 밀어 보세요 — 컨텍스트 한계에 닿아도 최신의 유용한 컨텍스트로 이어지고 파일도 남습니다</td></tr>
-          <tr><td>오래된 빌드를 쓰고 있다면</td><td>「업데이트 확인…」을 실행하세요 — 상태가 명확해졌고, 업그레이드 후 PPTX 내보내기도 동작합니다</td></tr>
+          <tr><td>오래된 빌드를 쓰고 있다면</td><td>“업데이트 확인…”을 실행하세요 — 상태가 명확해졌고, 업그레이드 후 PPTX 내보내기도 동작합니다</td></tr>
           <tr><td>자기 키를 쓰고 있다면</td><td>BYOK 제공자를 다시 테스트하세요: 오류는 설정 단계에서 드러나고, 초안이 동작 중인 설정을 덮지 않습니다</td></tr>
           <tr><td>미리보기에 살고 있다면</td><td>넓은 데스크톱 페이지나 오래된 덱을 다시 열어 보세요 — 프레임이 맞고, 키가 반응합니다</td></tr>
         </tbody>
@@ -320,77 +320,77 @@ i18n:
     summary: 'Tag open-design-v0.16.0 — 92 PR de 20 contributeurs en cinq jours. Nom de code « Reliable Delivery ». La direction visuelle suit désormais ce que vous fabriquez vraiment, les mises à jour automatiques prennent effet pour de bon, les longues tâches gardent leur résultat et les fichiers qui vont avec, et les aperçus cessent de se battre avec le cadre. Plus un centre de messages dans l''app — et le correctif 0.16.1 qui a dégagé la dernière chose posée sur votre canvas.'
     category: 'Produit'
     bodyHtml: |
-      <p>Tag <code>open-design-v0.16.0</code>, publié le 22 juillet 2026. <strong>92 PR de 20 contributeurs en cinq jours.</strong> Nom de code « Reliable Delivery ». La version précédente s''attaquait à ce que coûte une exécution. Celle-ci s''attaque à ce qui se passe entre un résultat terminé et le moment où il vous parvient vraiment : la mise à jour à moitié appliquée, la longue tâche qui a perdu ses fichiers, l''aperçu qu''il fallait dompter, l''export auquel il manquait une diapositive.</p>
-      <p>Le changelog complet vit dans les <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.16.0">notes de version sur GitHub</a>. Voici la version courte : ce qui a changé en dessous, ce que vous pouvez en faire aujourd''hui et par où commencer.</p>
+      <p>Tag <code>open-design-v0.16.0</code>, publié le 22 juillet 2026. <strong>92 PR de 20 contributeurs en cinq jours.</strong> Nom de code « Reliable Delivery ». La version précédente s'attaquait à ce que coûte une exécution. Celle-ci s'attaque à ce qui se passe entre un résultat terminé et le moment où il vous parvient vraiment : la mise à jour à moitié appliquée, la longue tâche qui a perdu ses fichiers, l'aperçu qu'il fallait dompter, l'export auquel il manquait une diapositive.</p>
+      <p>Le changelog complet vit dans les <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.16.0">notes de version sur GitHub</a>. Voici la version courte : ce qui a changé en dessous, ce que vous pouvez en faire aujourd'hui et par où commencer.</p>
 
       <h2>La direction visuelle suit ce que vous fabriquez vraiment</h2>
       <p>Le style était longtemps une décision réservée aux decks et aux prototypes. Tout le reste — un document, une affiche, une vidéo, un Web Clone, un wireframe, un écran mobile, un Hyperframe — partait de ce dont le modèle avait envie.</p>
-      <p>Dans 0.16.0, <strong>chaque format a sa propre direction visuelle</strong>, avec des aperçus rendus tels que ce format est réellement vu. Quatre choix rapides s''installent là où vous travaillez, et la bibliothèque de styles complète est à un clic. Vous choisissez un look pour l''objet qui est devant vous au lieu de traduire mentalement un thème de deck en affiche.</p>
+      <p>Dans 0.16.0, <strong>chaque format a sa propre direction visuelle</strong>, avec des aperçus rendus tels que ce format est réellement vu. Quatre choix rapides s'installent là où vous travaillez, et la bibliothèque de styles complète est à un clic. Vous choisissez un look pour l'objet qui est devant vous au lieu de traduire mentalement un thème de deck en affiche.</p>
       <figure>
         <img src="/blog/open-design-0-16-0-reliable-delivery-style.webp" alt="Une esquisse de plusieurs formats de sortie — document, affiche, vidéo, écran mobile — devenant chacun son propre aperçu de style aux bonnes proportions dans une interface vert sauge apaisée, illustration éditoriale chaleureuse" />
         <figcaption>Documents, affiches, vidéos, Web Clones, wireframes, travaux mobiles et Hyperframes reçoivent chacun des aperçus adaptés à leur format — quatre choix sous la main, la bibliothèque complète à un clic.</figcaption>
       </figure>
 
       <h2>Des mises à jour qui prennent vraiment effet</h2>
-      <p>Une mise à jour à moitié appliquée est pire que pas de mise à jour du tout : l''app annonce une nouvelle version pendant qu''une fonctionnalité tourne discrètement sur l''ancienne. 0.16.0 fait atterrir la mise à niveau. <strong>Après la mise à jour, la nouvelle version prend effet plus sûrement, et les fonctionnalités cassées par une mise à jour incomplète — dont l''export PPTX — refonctionnent.</strong></p>
+      <p>Une mise à jour à moitié appliquée est pire que pas de mise à jour du tout : l'app annonce une nouvelle version pendant qu'une fonctionnalité tourne discrètement sur l'ancienne. 0.16.0 fait atterrir la mise à niveau. <strong>Après la mise à jour, la nouvelle version prend effet plus sûrement, et les fonctionnalités cassées par une mise à jour incomplète — dont l'export PPTX — refonctionnent.</strong></p>
       <p>Sur macOS, « Rechercher les mises à jour… » indique désormais dans quel état vous êtes : à jour, en téléchargement, prêt à redémarrer, en attente de la fin du travail en cours, ou nécessitant un téléchargement manuel. La fiabilité des mises à jour progresse aussi sous Windows. Merci à <a href="https://github.com/PerishCode">@PerishCode</a> pour une longue série de travaux ici.</p>
 
       <h2>Les longues tâches gardent leur réponse — et leurs fichiers</h2>
-      <p>C''est dans les longues exécutions que se trouve le travail le plus précieux, et c''est là qu''il disparaissait le plus souvent. Dans 0.16.0, une tâche qui approche d''une limite de conversation <strong>continue avec le contexte utile le plus récent au lieu d''échouer brutalement</strong>, et les fichiers générés plus tôt dans l''exécution <strong>restent attachés au résultat</strong> au lieu de s''évanouir avec le compactage.</p>
-      <p>Les chemins d''échec sont devenus plus honnêtes eux aussi : les agents auxiliaires récupérés ne transforment plus un travail réussi en échec déclaré, les tâches interrompues affichent un état exact après redémarrage, le travail annulé reste annulé, et les erreurs vraiment irrécupérables s''arrêtent avec une explication exploitable plutôt qu''avec un spinner sans fin.</p>
+      <p>C'est dans les longues exécutions que se trouve le travail le plus précieux, et c'est là qu'il disparaissait le plus souvent. Dans 0.16.0, une tâche qui approche d'une limite de conversation <strong>continue avec le contexte utile le plus récent au lieu d'échouer brutalement</strong>, et les fichiers générés plus tôt dans l'exécution <strong>restent attachés au résultat</strong> au lieu de s'évanouir avec le compactage.</p>
+      <p>Les chemins d'échec sont devenus plus honnêtes eux aussi : les agents auxiliaires récupérés ne transforment plus un travail réussi en échec déclaré, les tâches interrompues affichent un état exact après redémarrage, le travail annulé reste annulé, et les erreurs vraiment irrécupérables s'arrêtent avec une explication exploitable plutôt qu'avec un spinner sans fin.</p>
       <figure>
         <img src="/blog/open-design-0-16-0-reliable-delivery-flow.webp" alt="Un long fil ininterrompu transportant une pile de fiches de fichiers générés à travers un passage qui se rétrécit et arrivant intact dans une interface vert sauge apaisée, illustration éditoriale chaleureuse" />
-        <figcaption>Approcher la limite de contexte ne met plus fin à l''exécution — la tâche continue avec le contexte utile le plus récent, et les fichiers déjà produits arrivent avec elle.</figcaption>
+        <figcaption>Approcher la limite de contexte ne met plus fin à l'exécution — la tâche continue avec le contexte utile le plus récent, et les fichiers déjà produits arrivent avec elle.</figcaption>
       </figure>
 
-      <h2>Les nouvelles produit ont une place dans l''app</h2>
-      <p>Nouveau dans 0.16.0 : <strong>un centre de messages derrière une cloche dans les en-têtes Accueil et Projet</strong> — compteurs de non-lus, filtres, tout marquer comme lu, et des liens directs vers ce dont on parle. L''état de lecture reste sur l''appareil en usage anonyme et suit votre compte une fois connecté, les dates s''affichent dans votre langue, et le bouton de fermeture est toujours là où vous l''attendez. Merci <a href="https://github.com/nettee">@nettee</a>.</p>
+      <h2>Les nouvelles produit ont une place dans l'app</h2>
+      <p>Nouveau dans 0.16.0 : <strong>un centre de messages derrière une cloche dans les en-têtes Accueil et Projet</strong> — compteurs de non-lus, filtres, tout marquer comme lu, et des liens directs vers ce dont on parle. L'état de lecture reste sur l'appareil en usage anonyme et suit votre compte une fois connecté, les dates s'affichent dans votre langue, et le bouton de fermeture est toujours là où vous l'attendez. Merci <a href="https://github.com/nettee">@nettee</a>.</p>
 
-      <h2>BYOK attrape les problèmes de configuration avant qu''ils ne vous interrompent</h2>
-      <p>Apporter sa propre clé devrait échouer au moment de la configuration, pas trois minutes après le début d''une tâche. <strong>Les modifications inachevées restent désormais des brouillons récupérables au lieu d''écraser une configuration qui marche</strong> : un changement à moitié fait ne peut plus faire tomber un fournisseur dont vous dépendez.</p>
-      <p>Les tests de connexion se comportent davantage comme de vraies tâches, remontent l''erreur réelle du fournisseur et conservent l''ordre des modèles propre à chacun — fini la liste alphabétique qui enterre le modèle voulu. Les adresses compatibles MiniMax, DeepSeek et MiMo sont traitées plus uniformément, les valeurs par défaut obsolètes de Moonshot et DeepSeek pointent vers des modèles actuels, et les Réglages et l''onboarding montrent enfin les mêmes choix. La mémoire peut aussi utiliser une clé MiniMax compatible déjà enregistrée, et dit clairement quand un fournisseur ne gère que l''image ou l''audio.</p>
+      <h2>BYOK attrape les problèmes de configuration avant qu'ils ne vous interrompent</h2>
+      <p>Apporter sa propre clé devrait échouer au moment de la configuration, pas trois minutes après le début d'une tâche. <strong>Les modifications inachevées restent désormais des brouillons récupérables au lieu d'écraser une configuration qui marche</strong> : un changement à moitié fait ne peut plus faire tomber un fournisseur dont vous dépendez.</p>
+      <p>Les tests de connexion se comportent davantage comme de vraies tâches, remontent l'erreur réelle du fournisseur et conservent l'ordre des modèles propre à chacun — fini la liste alphabétique qui enterre le modèle voulu. Les adresses compatibles MiniMax, DeepSeek et MiMo sont traitées plus uniformément, les valeurs par défaut obsolètes de Moonshot et DeepSeek pointent vers des modèles actuels, et les Réglages et l'onboarding montrent enfin les mêmes choix. La mémoire peut aussi utiliser une clé MiniMax compatible déjà enregistrée, et dit clairement quand un fournisseur ne gère que l'image ou l'audio.</p>
 
       <h2>Les aperçus cessent de se battre avec le cadre</h2>
-      <p>Petite friction, ressentie en permanence. Les pages desktop larges <strong>tiennent maintenant dans le volet jusqu''à ce que vous choisissiez votre propre zoom</strong>, les decks plus anciens répondent immédiatement aux touches de navigation, et le dernier fichier HTML principal apparaît dès la fin de la tâche au lieu d''attendre un rafraîchissement manuel. Quand une ressource est bloquée pour raison de sécurité, l''aperçu nomme le fichier de projet concerné sans exposer un chemin système sensible.</p>
-      <p>La génération d''images a gagné en robustesse : <strong>Nano Banana et la génération d''images personnalisée réessaient une fois quand un fournisseur est brièvement occupé</strong>, et les retouches par référence de GPT Image fonctionnent sur davantage de services compatibles. Un hoquet devient une courte attente au lieu d''un tour créatif perdu.</p>
+      <p>Petite friction, ressentie en permanence. Les pages desktop larges <strong>tiennent maintenant dans le volet jusqu'à ce que vous choisissiez votre propre zoom</strong>, les decks plus anciens répondent immédiatement aux touches de navigation, et le dernier fichier HTML principal apparaît dès la fin de la tâche au lieu d'attendre un rafraîchissement manuel. Quand une ressource est bloquée pour raison de sécurité, l'aperçu nomme le fichier de projet concerné sans exposer un chemin système sensible.</p>
+      <p>La génération d'images a gagné en robustesse : <strong>Nano Banana et la génération d'images personnalisée réessaient une fois quand un fournisseur est brièvement occupé</strong>, et les retouches par référence de GPT Image fonctionnent sur davantage de services compatibles. Un hoquet devient une courte attente au lieu d'un tour créatif perdu.</p>
 
       <h2>Ce qui arrive aussi dans 0.16.0</h2>
       <ul>
-        <li><strong>Les galeries mettent en avant ce que les gens utilisent vraiment</strong> — les galeries Slides, image, vidéo et autres hors prototype font remonter les modèles réellement utilisés, tandis que les entrées vides et les cartes sans aperçu cessent d''encombrer le haut. Prototype conserve sa vitrine éditoriale, et chaque catégorie garde son catalogue complet.</li>
-        <li><strong>Les design systems s''importent plus fidèlement</strong> — les imports de dépôt choisissent le bon flux, les paquets de tokens éclatés gardent leurs valeurs de mise en page, et les formats YAML de liste et multilignes courants préservent les métadonnées écrites par leurs auteurs.</li>
-        <li><strong>Des frontières de sécurité locales renforcées</strong> — les projets importés gardent privés leurs identifiants cachés, la suppression d''un plugin reste dans les fichiers de ce plugin, les contenus de la marketplace et des sites enregistrés sont traités avec plus de soin, et chaque conversation reste rattachée au bon projet.</li>
-        <li><strong>Prévisualiser avant de publier</strong> — le déploiement Cloudflare Pages expose Preview et Production comme cibles explicites dans l''interface et dans <code>od deploy --target … --json</code>, si bien qu''un aperçu renvoie sa propre URL au lieu de remplacer votre nom d''hôte en production.</li>
-        <li><strong>Kiro rejoint le sélecteur de configuration MCP</strong> — copiez le bon extrait de serveur partagé depuis les Réglages au lieu de traduire à la main le format d''un autre client.</li>
-        <li><strong>Des correctifs discrets qui méritent d''être cités</strong> — les relances MCP reçoivent le dernier message, les historiques ACP n''accumulent plus de lignes vides après un rafraîchissement, et les machines Windows à processeur plus ancien peuvent de nouveau exécuter OpenCode via le chemin de mise à jour normal.</li>
+        <li><strong>Les galeries mettent en avant ce que les gens utilisent vraiment</strong> — les galeries Slides, image, vidéo et autres hors prototype font remonter les modèles réellement utilisés, tandis que les entrées vides et les cartes sans aperçu cessent d'encombrer le haut. Prototype conserve sa vitrine éditoriale, et chaque catégorie garde son catalogue complet.</li>
+        <li><strong>Les design systems s'importent plus fidèlement</strong> — les imports de dépôt choisissent le bon flux, les paquets de tokens éclatés gardent leurs valeurs de mise en page, et les formats YAML de liste et multilignes courants préservent les métadonnées écrites par leurs auteurs.</li>
+        <li><strong>Des frontières de sécurité locales renforcées</strong> — les projets importés gardent privés leurs identifiants cachés, la suppression d'un plugin reste dans les fichiers de ce plugin, les contenus de la marketplace et des sites enregistrés sont traités avec plus de soin, et chaque conversation reste rattachée au bon projet.</li>
+        <li><strong>Prévisualiser avant de publier</strong> — le déploiement Cloudflare Pages expose Preview et Production comme cibles explicites dans l'interface et dans <code>od deploy --target … --json</code>, si bien qu'un aperçu renvoie sa propre URL au lieu de remplacer votre nom d'hôte en production.</li>
+        <li><strong>Kiro rejoint le sélecteur de configuration MCP</strong> — copiez le bon extrait de serveur partagé depuis les Réglages au lieu de traduire à la main le format d'un autre client.</li>
+        <li><strong>Des correctifs discrets qui méritent d'être cités</strong> — les relances MCP reçoivent le dernier message, les historiques ACP n'accumulent plus de lignes vides après un rafraîchissement, et les machines Windows à processeur plus ancien peuvent de nouveau exécuter OpenCode via le chemin de mise à jour normal.</li>
       </ul>
 
       <h2>Déjà corrigé : 0.16.1</h2>
-      <p>Deux jours plus tard, <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.16.1">0.16.1</a> a livré un correctif ciblé pour l''aperçu de design : <strong>le statut d''exécution ne recouvre plus votre travail généré.</strong> Les statuts de construction, d''achèvement et de reprise de livraison restent dans le chat — qui demeure l''endroit pour suivre l''avancement ou relancer une livraison échouée — et le canvas reste le vôtre. Si vous téléchargez aujourd''hui, prenez 0.16.1.</p>
+      <p>Deux jours plus tard, <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.16.1">0.16.1</a> a livré un correctif ciblé pour l'aperçu de design : <strong>le statut d'exécution ne recouvre plus votre travail généré.</strong> Les statuts de construction, d'achèvement et de reprise de livraison restent dans le chat — qui demeure l'endroit pour suivre l'avancement ou relancer une livraison échouée — et le canvas reste le vôtre. Si vous téléchargez aujourd'hui, prenez 0.16.1.</p>
 
-      <h2>Ce que vous pouvez en faire aujourd''hui</h2>
+      <h2>Ce que vous pouvez en faire aujourd'hui</h2>
       <table>
         <thead>
           <tr><th>Si vous…</th><th>Commencez ici</th></tr>
         </thead>
         <tbody>
-          <tr><td>découvrez Open Design</td><td>Téléchargez l''app desktop, démarrez un projet et choisissez une direction visuelle faite pour le format sur lequel vous travaillez</td></tr>
+          <tr><td>découvrez Open Design</td><td>Téléchargez l'app desktop, démarrez un projet et choisissez une direction visuelle faite pour le format sur lequel vous travaillez</td></tr>
           <tr><td>lancez de longues tâches</td><td>Poussez une longue exécution plus loin — atteindre le plafond de contexte continue désormais avec le contexte utile le plus récent, fichiers intacts</td></tr>
-          <tr><td>êtes sur une build ancienne</td><td>Lancez « Rechercher les mises à jour… » — l''état est maintenant explicite, et l''export PPTX refonctionne après la mise à niveau</td></tr>
-          <tr><td>utilisez vos propres clés</td><td>Retestez vos fournisseurs BYOK : les erreurs apparaissent à la configuration, les brouillons n''écrasent plus une config qui marche</td></tr>
-          <tr><td>vivez dans l''aperçu</td><td>Rouvrez une page desktop large ou un deck ancien — le cadre s''ajuste et les touches répondent</td></tr>
+          <tr><td>êtes sur une build ancienne</td><td>Lancez « Rechercher les mises à jour… » — l'état est maintenant explicite, et l'export PPTX refonctionne après la mise à niveau</td></tr>
+          <tr><td>utilisez vos propres clés</td><td>Retestez vos fournisseurs BYOK : les erreurs apparaissent à la configuration, les brouillons n'écrasent plus une config qui marche</td></tr>
+          <tr><td>vivez dans l'aperçu</td><td>Rouvrez une page desktop large ou un deck ancien — le cadre s'ajuste et les touches répondent</td></tr>
         </tbody>
       </table>
 
       <h2>Et maintenant</h2>
-      <p>Une version en laquelle on peut avoir confiance est surtout une version qui arrête de perdre des choses. 0.16.0 dépense son budget exactement là — une mise à jour qui atterrit, une longue tâche qui garde ses fichiers, un style adapté au format, un aperçu qui s''écarte. Téléchargez l''app desktop, relancez la plus longue tâche que vous ayez, et regardez-la arriver entière.</p>
+      <p>Une version en laquelle on peut avoir confiance est surtout une version qui arrête de perdre des choses. 0.16.0 dépense son budget exactement là — une mise à jour qui atterrit, une longue tâche qui garde ses fichiers, un style adapté au format, un aperçu qui s'écarte. Téléchargez l'app desktop, relancez la plus longue tâche que vous ayez, et regardez-la arriver entière.</p>
       <p><a href="https://releases.open-design.ai/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202607_0_16_0&amp;utm_content=official">Télécharger Open Design</a>.</p>
-      <p>92 PR en cinq jours, de la part de 20 personnes qui ont chacune comblé un écart de plus entre un résultat fini et un résultat livré. La fiabilité est un travail sans gloire, et c''est le travail qui rend tout le reste crédible. On vous voit. 🚀</p>
+      <p>92 PR en cinq jours, de la part de 20 personnes qui ont chacune comblé un écart de plus entre un résultat fini et un résultat livré. La fiabilité est un travail sans gloire, et c'est le travail qui rend tout le reste crédible. On vous voit. 🚀</p>
 
       <h2>À lire ensuite</h2>
       <ul>
         <li><a href="/blog/open-design-0-15-1/">Open Design 0.15.1 — vision plus nette, flow plus long</a></li>
         <li><a href="/blog/open-design-0-15-0-cost-less-ship-faster/">Open Design 0.15.0 — coûter moins, livrer plus vite</a></li>
-        <li><a href="/blog/open-design-0-14-0-inspiration-time-machine/">Open Design 0.14.0 — la machine à remonter l''inspiration</a></li>
+        <li><a href="/blog/open-design-0-14-0-inspiration-time-machine/">Open Design 0.14.0 — la machine à remonter l'inspiration</a></li>
       </ul>
   ru:
     title: 'Open Design 0.16.0: надёжная доставка'
@@ -548,10 +548,10 @@ i18n:
       </ul>
   pt-br:
     title: 'Open Design 0.16.0: entrega confiável'
-    summary: 'Tag open-design-v0.16.0 — 92 PRs de 20 pessoas em cinco dias. Codinome «Reliable Delivery». A direção visual agora acompanha o que você está realmente criando, as atualizações automáticas passam a valer de fato, tarefas longas guardam o resultado e os arquivos que vieram com ele, e as prévias param de brigar com a moldura. Além de uma central de mensagens dentro do app — e o patch 0.16.1, que tirou a última coisa em cima do canvas.'
+    summary: 'Tag open-design-v0.16.0 — 92 PRs de 20 pessoas em cinco dias. Codinome “Reliable Delivery”. A direção visual agora acompanha o que você está realmente criando, as atualizações automáticas passam a valer de fato, tarefas longas guardam o resultado e os arquivos que vieram com ele, e as prévias param de brigar com a moldura. Além de uma central de mensagens dentro do app — e o patch 0.16.1, que tirou a última coisa em cima do canvas.'
     category: 'Produto'
     bodyHtml: |
-      <p>Tag <code>open-design-v0.16.0</code>, publicada em 22 de julho de 2026. <strong>92 PRs de 20 pessoas em cinco dias.</strong> Codinome «Reliable Delivery». A versão anterior atacou o custo de cada execução. Esta ataca o que acontece entre um resultado pronto e o momento em que ele realmente chega até você: a atualização aplicada pela metade, a tarefa longa que perdeu os arquivos, a prévia com que era preciso brigar, a exportação que deixou um slide para trás.</p>
+      <p>Tag <code>open-design-v0.16.0</code>, publicada em 22 de julho de 2026. <strong>92 PRs de 20 pessoas em cinco dias.</strong> Codinome “Reliable Delivery”. A versão anterior atacou o custo de cada execução. Esta ataca o que acontece entre um resultado pronto e o momento em que ele realmente chega até você: a atualização aplicada pela metade, a tarefa longa que perdeu os arquivos, a prévia com que era preciso brigar, a exportação que deixou um slide para trás.</p>
       <p>O changelog completo está nas <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.16.0">notas de versão no GitHub</a>. Aqui vai a versão curta: o que mudou por baixo, o que dá para fazer com isso hoje e por onde começar.</p>
 
       <h2>A direção visual acompanha o que você está realmente criando</h2>
@@ -564,7 +564,7 @@ i18n:
 
       <h2>Atualizações que realmente passam a valer</h2>
       <p>Uma atualização aplicada pela metade é pior do que nenhuma: o app anuncia uma versão nova enquanto um recurso continua silenciosamente na antiga. O 0.16.0 faz a atualização aterrissar. <strong>Depois de atualizar, a nova versão passa a valer com mais confiabilidade, e recursos quebrados por uma atualização incompleta — inclusive a exportação para PPTX — voltam a funcionar.</strong></p>
-      <p>No macOS, «Verificar atualizações…» agora diz em que estado você está: atualizado, baixando, pronto para reiniciar, aguardando o trabalho em andamento terminar ou precisando de download manual. A confiabilidade das atualizações também melhora no Windows. Obrigado a <a href="https://github.com/PerishCode">@PerishCode</a> por uma longa sequência de trabalho aqui.</p>
+      <p>No macOS, “Verificar atualizações…” agora diz em que estado você está: atualizado, baixando, pronto para reiniciar, aguardando o trabalho em andamento terminar ou precisando de download manual. A confiabilidade das atualizações também melhora no Windows. Obrigado a <a href="https://github.com/PerishCode">@PerishCode</a> por uma longa sequência de trabalho aqui.</p>
 
       <h2>Tarefas longas guardam a resposta — e os arquivos</h2>
       <p>O trabalho mais valioso mora nas execuções longas, e era ali que ele mais sumia. No 0.16.0, uma tarefa que se aproxima do limite da conversa <strong>continua com o contexto útil mais recente em vez de falhar de repente</strong>, e os arquivos gerados antes na execução <strong>continuam presos ao resultado</strong> em vez de sumirem junto com a compactação.</p>
@@ -606,7 +606,7 @@ i18n:
         <tbody>
           <tr><td>é novo no Open Design</td><td>Baixe o app de desktop, comece um projeto e escolha uma direção visual feita para o formato em que está trabalhando</td></tr>
           <tr><td>roda tarefas longas</td><td>Leve uma execução longa mais adiante — bater no teto de contexto agora segue com o contexto útil mais recente, com os arquivos intactos</td></tr>
-          <tr><td>está numa build antiga</td><td>Rode «Verificar atualizações…» — o estado agora é explícito e a exportação para PPTX funciona depois de atualizar</td></tr>
+          <tr><td>está numa build antiga</td><td>Rode “Verificar atualizações…” — o estado agora é explícito e a exportação para PPTX funciona depois de atualizar</td></tr>
           <tr><td>usa as próprias chaves</td><td>Teste de novo seus provedores BYOK: os erros aparecem na configuração e rascunhos não atropelam uma config que funciona</td></tr>
           <tr><td>vive na prévia</td><td>Reabra uma página desktop larga ou uma apresentação antiga — a moldura encaixa e as teclas respondem</td></tr>
         </tbody>
@@ -628,52 +628,52 @@ i18n:
     summary: 'Tag open-design-v0.16.0 — 92 PR da 20 contributori in cinque giorni. Nome in codice «Reliable Delivery». La direzione visiva ora segue ciò che stai davvero costruendo, gli aggiornamenti automatici hanno davvero effetto, le attività lunghe conservano il risultato e i file che lo accompagnano, e le anteprime smettono di litigare con la cornice. In più un centro messaggi dentro l''app e la patch 0.16.1, che ha liberato l''ultima cosa rimasta sopra la canvas.'
     category: 'Prodotto'
     bodyHtml: |
-      <p>Tag <code>open-design-v0.16.0</code>, pubblicato il 22 luglio 2026. <strong>92 PR da 20 contributori in cinque giorni.</strong> Nome in codice «Reliable Delivery». La release precedente puntava a quanto costa un''esecuzione. Questa punta a ciò che accade tra un risultato finito e il momento in cui ti raggiunge davvero: l''aggiornamento applicato a metà, l''attività lunga che ha perso i suoi file, l''anteprima con cui bisognava combattere, l''esportazione a cui mancava una slide.</p>
+      <p>Tag <code>open-design-v0.16.0</code>, pubblicato il 22 luglio 2026. <strong>92 PR da 20 contributori in cinque giorni.</strong> Nome in codice «Reliable Delivery». La release precedente puntava a quanto costa un'esecuzione. Questa punta a ciò che accade tra un risultato finito e il momento in cui ti raggiunge davvero: l'aggiornamento applicato a metà, l'attività lunga che ha perso i suoi file, l'anteprima con cui bisognava combattere, l'esportazione a cui mancava una slide.</p>
       <p>Il changelog completo vive nelle <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.16.0">note di rilascio su GitHub</a>. Qui la versione breve: cosa è cambiato sotto, cosa puoi farci oggi e da dove iniziare.</p>
 
       <h2>La direzione visiva segue ciò che stai davvero costruendo</h2>
       <p>Per molto tempo lo stile è stato una decisione possibile solo per deck e prototipi. Tutto il resto — un documento, un poster, un video, un Web Clone, un wireframe, una schermata mobile, un Hyperframe — partiva da qualunque cosa passasse per la testa al modello.</p>
-      <p>In 0.16.0 <strong>ogni formato ottiene la propria direzione visiva</strong>, con anteprime renderizzate nel modo in cui quel formato viene davvero visto. Quattro scelte rapide restano dove stai lavorando e l''intera libreria di stili è a un clic. Scegli un look per la cosa che hai davanti invece di tradurre mentalmente un tema da deck in un poster.</p>
+      <p>In 0.16.0 <strong>ogni formato ottiene la propria direzione visiva</strong>, con anteprime renderizzate nel modo in cui quel formato viene davvero visto. Quattro scelte rapide restano dove stai lavorando e l'intera libreria di stili è a un clic. Scegli un look per la cosa che hai davanti invece di tradurre mentalmente un tema da deck in un poster.</p>
       <figure>
-        <img src="/blog/open-design-0-16-0-reliable-delivery-style.webp" alt="Uno schizzo di diversi formati di output — documento, poster, video, schermata mobile — che diventano ciascuno la propria anteprima di stile con le proporzioni corrette dentro un''interfaccia verde salvia pacata, illustrazione editoriale calda" />
+        <img src="/blog/open-design-0-16-0-reliable-delivery-style.webp" alt="Uno schizzo di diversi formati di output — documento, poster, video, schermata mobile — che diventano ciascuno la propria anteprima di stile con le proporzioni corrette dentro un'interfaccia verde salvia pacata, illustrazione editoriale calda" />
         <figcaption>Documenti, poster, video, Web Clone, wireframe, lavori mobile e Hyperframe ricevono anteprime adatte al loro formato: quattro scelte a portata di mano, la libreria completa a un clic.</figcaption>
       </figure>
 
       <h2>Aggiornamenti che hanno davvero effetto</h2>
-      <p>Un aggiornamento applicato a metà è peggio di nessun aggiornamento: l''app dichiara una versione nuova mentre una funzione gira silenziosamente su quella vecchia. 0.16.0 fa atterrare l''upgrade. <strong>Dopo l''aggiornamento la nuova versione entra in vigore in modo più affidabile e le funzioni rotte da un aggiornamento incompleto — tra cui l''esportazione PPTX — tornano a funzionare.</strong></p>
-      <p>Su macOS, «Verifica aggiornamenti…» ora dice in quale stato ti trovi: aggiornato, in download, pronto al riavvio, in attesa che finisca il lavoro in corso oppure bisognoso di un download manuale. Anche su Windows l''affidabilità degli aggiornamenti migliora. Grazie a <a href="https://github.com/PerishCode">@PerishCode</a> per una lunga serie di interventi qui.</p>
+      <p>Un aggiornamento applicato a metà è peggio di nessun aggiornamento: l'app dichiara una versione nuova mentre una funzione gira silenziosamente su quella vecchia. 0.16.0 fa atterrare l'upgrade. <strong>Dopo l'aggiornamento la nuova versione entra in vigore in modo più affidabile e le funzioni rotte da un aggiornamento incompleto — tra cui l'esportazione PPTX — tornano a funzionare.</strong></p>
+      <p>Su macOS, «Verifica aggiornamenti…» ora dice in quale stato ti trovi: aggiornato, in download, pronto al riavvio, in attesa che finisca il lavoro in corso oppure bisognoso di un download manuale. Anche su Windows l'affidabilità degli aggiornamenti migliora. Grazie a <a href="https://github.com/PerishCode">@PerishCode</a> per una lunga serie di interventi qui.</p>
 
       <h2>Le attività lunghe conservano la risposta — e i loro file</h2>
-      <p>Il lavoro più prezioso vive nelle esecuzioni lunghe, ed è lì che spariva più spesso. In 0.16.0 un''attività che si avvicina al limite della conversazione <strong>prosegue con il contesto utile più recente invece di fallire di colpo</strong>, e i file generati nelle fasi iniziali <strong>restano attaccati al risultato</strong> invece di svanire con la compattazione.</p>
+      <p>Il lavoro più prezioso vive nelle esecuzioni lunghe, ed è lì che spariva più spesso. In 0.16.0 un'attività che si avvicina al limite della conversazione <strong>prosegue con il contesto utile più recente invece di fallire di colpo</strong>, e i file generati nelle fasi iniziali <strong>restano attaccati al risultato</strong> invece di svanire con la compattazione.</p>
       <p>Anche i percorsi di errore sono diventati più onesti: gli agenti ausiliari recuperati non trasformano più un lavoro riuscito in un fallimento dichiarato, le attività interrotte mostrano uno stato corretto dopo il riavvio, il lavoro annullato resta annullato, e gli errori davvero irrecuperabili si fermano con una spiegazione su cui puoi agire invece che con uno spinner infinito.</p>
       <figure>
-        <img src="/blog/open-design-0-16-0-reliable-delivery-flow.webp" alt="Un lungo filo ininterrotto porta una pila di schede di file generati attraverso un varco che si restringe e arriva intatto in un''interfaccia verde salvia pacata, illustrazione editoriale calda" />
-        <figcaption>Avvicinarsi al limite di contesto non chiude più l''esecuzione: l''attività prosegue con il contesto utile più recente e i file già prodotti arrivano insieme a lei.</figcaption>
+        <img src="/blog/open-design-0-16-0-reliable-delivery-flow.webp" alt="Un lungo filo ininterrotto porta una pila di schede di file generati attraverso un varco che si restringe e arriva intatto in un'interfaccia verde salvia pacata, illustrazione editoriale calda" />
+        <figcaption>Avvicinarsi al limite di contesto non chiude più l'esecuzione: l'attività prosegue con il contesto utile più recente e i file già prodotti arrivano insieme a lei.</figcaption>
       </figure>
 
-      <h2>Le novità di prodotto hanno una casa dentro l''app</h2>
-      <p>Nuovo in 0.16.0: <strong>un centro messaggi dietro una campanella nelle intestazioni di Home e progetto</strong>, con contatori dei non letti, filtri, segna tutto come letto e link diretti a ciò di cui si parla. Lo stato di lettura resta sul dispositivo nell''uso anonimo e segue il tuo account una volta effettuato l''accesso, le date usano la tua lingua e il pulsante di chiusura è sempre dove te lo aspetti. Grazie <a href="https://github.com/nettee">@nettee</a>.</p>
+      <h2>Le novità di prodotto hanno una casa dentro l'app</h2>
+      <p>Nuovo in 0.16.0: <strong>un centro messaggi dietro una campanella nelle intestazioni di Home e progetto</strong>, con contatori dei non letti, filtri, segna tutto come letto e link diretti a ciò di cui si parla. Lo stato di lettura resta sul dispositivo nell'uso anonimo e segue il tuo account una volta effettuato l'accesso, le date usano la tua lingua e il pulsante di chiusura è sempre dove te lo aspetti. Grazie <a href="https://github.com/nettee">@nettee</a>.</p>
 
       <h2>BYOK intercetta i problemi di configurazione prima che ti interrompano</h2>
-      <p>Portare la propria chiave dovrebbe fallire in fase di configurazione, non tre minuti dopo l''inizio di un''attività. <strong>Le modifiche incomplete ora restano bozze recuperabili invece di sovrascrivere una configurazione funzionante</strong>: una modifica lasciata a metà non può più far cadere un provider da cui dipendi.</p>
-      <p>I test di connessione si comportano più come attività reali, mostrano l''errore effettivo del provider e conservano l''ordine dei modelli scelto da ciascuno — niente più elenco alfabetico che seppellisce il modello che volevi. Gli indirizzi compatibili MiniMax, DeepSeek e MiMo sono gestiti in modo più coerente, i default obsoleti di Moonshot e DeepSeek puntano a modelli attuali, e Impostazioni e onboarding mostrano finalmente le stesse scelte. Anche Memory può usare una chiave MiniMax compatibile già salvata e dice chiaramente quando un provider supporta solo immagini o audio.</p>
+      <p>Portare la propria chiave dovrebbe fallire in fase di configurazione, non tre minuti dopo l'inizio di un'attività. <strong>Le modifiche incomplete ora restano bozze recuperabili invece di sovrascrivere una configurazione funzionante</strong>: una modifica lasciata a metà non può più far cadere un provider da cui dipendi.</p>
+      <p>I test di connessione si comportano più come attività reali, mostrano l'errore effettivo del provider e conservano l'ordine dei modelli scelto da ciascuno — niente più elenco alfabetico che seppellisce il modello che volevi. Gli indirizzi compatibili MiniMax, DeepSeek e MiMo sono gestiti in modo più coerente, i default obsoleti di Moonshot e DeepSeek puntano a modelli attuali, e Impostazioni e onboarding mostrano finalmente le stesse scelte. Anche Memory può usare una chiave MiniMax compatibile già salvata e dice chiaramente quando un provider supporta solo immagini o audio.</p>
 
       <h2>Le anteprime smettono di litigare con la cornice</h2>
-      <p>Attrito piccolo, ma percepito di continuo. Le pagine desktop larghe ora <strong>si adattano al riquadro finché non scegli tu lo zoom</strong>, i deck più vecchi rispondono subito ai tasti di navigazione e l''ultimo file HTML principale compare appena l''attività finisce, senza aggiornare a mano. Quando un asset viene bloccato per sicurezza, l''anteprima indica il file di progetto coinvolto senza esporre un percorso di sistema sensibile.</p>
+      <p>Attrito piccolo, ma percepito di continuo. Le pagine desktop larghe ora <strong>si adattano al riquadro finché non scegli tu lo zoom</strong>, i deck più vecchi rispondono subito ai tasti di navigazione e l'ultimo file HTML principale compare appena l'attività finisce, senza aggiornare a mano. Quando un asset viene bloccato per sicurezza, l'anteprima indica il file di progetto coinvolto senza esporre un percorso di sistema sensibile.</p>
       <p>Anche la generazione di immagini è più solida: <strong>Nano Banana e la generazione personalizzata riprovano una volta quando un provider è momentaneamente occupato</strong>, e le modifiche per riferimento di GPT Image funzionano su più servizi compatibili. Un intoppo diventa una breve attesa invece di un giro creativo perso.</p>
 
-      <h2>Cos''altro arriva in 0.16.0</h2>
+      <h2>Cos'altro arriva in 0.16.0</h2>
       <ul>
-        <li><strong>Le gallerie partono da ciò che le persone usano davvero</strong> — le gallerie di slide, immagini, video e le altre non-prototipo mettono in cima i template con uso reale, mentre le voci vuote e le schede senza anteprima smettono di affollare la testa dell''elenco. Prototype conserva la sua vetrina editoriale e ogni categoria mantiene il catalogo completo.</li>
+        <li><strong>Le gallerie partono da ciò che le persone usano davvero</strong> — le gallerie di slide, immagini, video e le altre non-prototipo mettono in cima i template con uso reale, mentre le voci vuote e le schede senza anteprima smettono di affollare la testa dell'elenco. Prototype conserva la sua vetrina editoriale e ogni categoria mantiene il catalogo completo.</li>
         <li><strong>I design system si importano in modo più fedele</strong> — le importazioni da repository scelgono il flusso giusto, i pacchetti di token suddivisi mantengono i valori di layout e i formati YAML più comuni per liste e valori multilinea preservano i metadati scritti dagli autori.</li>
-        <li><strong>Confini di sicurezza locali più solidi</strong> — i progetti importati tengono private le credenziali nascoste, la rimozione di un plugin resta all''interno dei file di quel plugin, i contenuti del marketplace e dei siti salvati sono trattati con più cautela, e ogni conversazione resta agganciata al progetto corretto.</li>
-        <li><strong>Anteprima prima di pubblicare</strong> — il deploy su Cloudflare Pages espone Preview e Production come target espliciti sia nell''interfaccia sia in <code>od deploy --target … --json</code>, così un''anteprima restituisce il proprio URL invece di sostituire il tuo hostname di produzione.</li>
+        <li><strong>Confini di sicurezza locali più solidi</strong> — i progetti importati tengono private le credenziali nascoste, la rimozione di un plugin resta all'interno dei file di quel plugin, i contenuti del marketplace e dei siti salvati sono trattati con più cautela, e ogni conversazione resta agganciata al progetto corretto.</li>
+        <li><strong>Anteprima prima di pubblicare</strong> — il deploy su Cloudflare Pages espone Preview e Production come target espliciti sia nell'interfaccia sia in <code>od deploy --target … --json</code>, così un'anteprima restituisce il proprio URL invece di sostituire il tuo hostname di produzione.</li>
         <li><strong>Kiro entra nel selettore di configurazione MCP</strong> — copia lo snippet corretto del server condiviso dalle Impostazioni invece di tradurre a mano il formato di un altro client.</li>
         <li><strong>Correzioni silenziose che vale la pena citare</strong> — i follow-up MCP ricevono il messaggio più recente, le cronologie ACP non generano più righe vuote dopo un refresh, e i dispositivi Windows con processori più vecchi possono di nuovo eseguire OpenCode tramite il normale percorso di aggiornamento.</li>
       </ul>
 
       <h2>Già corretto: 0.16.1</h2>
-      <p>Due giorni dopo, <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.16.1">0.16.1</a> ha portato una correzione mirata per l''anteprima di design: <strong>lo stato dell''esecuzione non copre più il lavoro generato.</strong> Gli stati di build, completamento e recupero della consegna restano in Chat — che rimane il posto dove seguire l''avanzamento o ritentare una consegna fallita — e la canvas torna tua. Se scarichi oggi, prendi 0.16.1.</p>
+      <p>Due giorni dopo, <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.16.1">0.16.1</a> ha portato una correzione mirata per l'anteprima di design: <strong>lo stato dell'esecuzione non copre più il lavoro generato.</strong> Gli stati di build, completamento e recupero della consegna restano in Chat — che rimane il posto dove seguire l'avanzamento o ritentare una consegna fallita — e la canvas torna tua. Se scarichi oggi, prendi 0.16.1.</p>
 
       <h2>Cosa farci oggi</h2>
       <table>
@@ -681,47 +681,47 @@ i18n:
           <tr><th>Se sei…</th><th>Parti da qui</th></tr>
         </thead>
         <tbody>
-          <tr><td>nuovo su Open Design</td><td>Scarica l''app desktop, avvia un progetto e scegli una direzione visiva pensata per il formato su cui stai lavorando</td></tr>
-          <tr><td>uno che lancia attività lunghe</td><td>Spingi più in là un''esecuzione lunga: toccare il tetto del contesto ora prosegue con il contesto utile più recente, file intatti</td></tr>
-          <tr><td>fermo a una build vecchia</td><td>Lancia «Verifica aggiornamenti…»: lo stato ora è esplicito e l''esportazione PPTX funziona dopo l''upgrade</td></tr>
+          <tr><td>nuovo su Open Design</td><td>Scarica l'app desktop, avvia un progetto e scegli una direzione visiva pensata per il formato su cui stai lavorando</td></tr>
+          <tr><td>uno che lancia attività lunghe</td><td>Spingi più in là un'esecuzione lunga: toccare il tetto del contesto ora prosegue con il contesto utile più recente, file intatti</td></tr>
+          <tr><td>fermo a una build vecchia</td><td>Lancia «Verifica aggiornamenti…»: lo stato ora è esplicito e l'esportazione PPTX funziona dopo l'upgrade</td></tr>
           <tr><td>uno che usa le proprie chiavi</td><td>Ritesta i tuoi provider BYOK: gli errori emergono in configurazione e le bozze non travolgono una config funzionante</td></tr>
-          <tr><td>uno che vive nell''anteprima</td><td>Riapri una pagina desktop larga o un deck datato: la cornice si adatta e i tasti rispondono</td></tr>
+          <tr><td>uno che vive nell'anteprima</td><td>Riapri una pagina desktop larga o un deck datato: la cornice si adatta e i tasti rispondono</td></tr>
         </tbody>
       </table>
 
       <h2>Cosa fare ora</h2>
-      <p>Una release di cui fidarsi è soprattutto una release che smette di perdere pezzi. 0.16.0 spende lì il suo budget: un aggiornamento che atterra, un''attività lunga che conserva i file, uno stile che corrisponde al formato, un''anteprima che si toglie di mezzo. Scarica l''app desktop, rilancia l''attività più lunga che hai e guardala arrivare intera.</p>
+      <p>Una release di cui fidarsi è soprattutto una release che smette di perdere pezzi. 0.16.0 spende lì il suo budget: un aggiornamento che atterra, un'attività lunga che conserva i file, uno stile che corrisponde al formato, un'anteprima che si toglie di mezzo. Scarica l'app desktop, rilancia l'attività più lunga che hai e guardala arrivare intera.</p>
       <p><a href="https://releases.open-design.ai/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202607_0_16_0&amp;utm_content=official">Scarica Open Design</a>.</p>
-      <p>92 PR in cinque giorni, da 20 persone che hanno chiuso ciascuna un altro varco tra un risultato finito e uno consegnato. L''affidabilità è un lavoro poco appariscente, ed è il lavoro che rende credibile tutto il resto. Vi vediamo. 🚀</p>
+      <p>92 PR in cinque giorni, da 20 persone che hanno chiuso ciascuna un altro varco tra un risultato finito e uno consegnato. L'affidabilità è un lavoro poco appariscente, ed è il lavoro che rende credibile tutto il resto. Vi vediamo. 🚀</p>
 
       <h2>Letture correlate</h2>
       <ul>
         <li><a href="/blog/open-design-0-15-1/">Open Design 0.15.1 — sguardo più nitido, flow più lungo</a></li>
         <li><a href="/blog/open-design-0-15-0-cost-less-ship-faster/">Open Design 0.15.0 — costa meno, consegna prima</a></li>
-        <li><a href="/blog/open-design-0-14-0-inspiration-time-machine/">Open Design 0.14.0 — la macchina del tempo dell''ispirazione</a></li>
+        <li><a href="/blog/open-design-0-14-0-inspiration-time-machine/">Open Design 0.14.0 — la macchina del tempo dell'ispirazione</a></li>
       </ul>
   tr:
     title: 'Open Design 0.16.0: güvenilir teslimat'
-    summary: 'Etiket open-design-v0.16.0 — beş günde 20 katkıcıdan 92 PR. Kod adı «Reliable Delivery». Görsel yön artık gerçekten ürettiğiniz şeyi izliyor, otomatik güncellemeler gerçekten devreye giriyor, uzun görevler sonucu ve yanındaki dosyaları koruyor, önizlemeler çerçeveyle boğuşmayı bırakıyor. Ayrıca uygulama içinde bir mesaj merkezi ve tuvalin üzerindeki son şeyi kaldıran 0.16.1 yaması.'
+    summary: 'Etiket open-design-v0.16.0 — beş günde 20 katkıcıdan 92 PR. Kod adı “Reliable Delivery”. Görsel yön artık gerçekten ürettiğiniz şeyi izliyor, otomatik güncellemeler gerçekten devreye giriyor, uzun görevler sonucu ve yanındaki dosyaları koruyor, önizlemeler çerçeveyle boğuşmayı bırakıyor. Ayrıca uygulama içinde bir mesaj merkezi ve tuvalin üzerindeki son şeyi kaldıran 0.16.1 yaması.'
     category: 'Ürün'
     bodyHtml: |
-      <p>Etiket <code>open-design-v0.16.0</code>, 22 Temmuz 2026''da yayımlandı. <strong>Beş günde 20 katkıcıdan 92 PR.</strong> Kod adı «Reliable Delivery». Önceki sürüm bir koşunun maliyetini hedeflemişti. Bu sürüm, biten bir sonuç ile onun gerçekten size ulaştığı an arasında olan biteni hedefliyor: yarım uygulanan güncelleme, dosyalarını yitiren uzun görev, boğuşmak zorunda kaldığınız önizleme, bir slaydı düşüren dışa aktarma.</p>
-      <p>Tüm değişiklik listesi <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.16.0">GitHub''daki sürüm notlarında</a>. Burada kısa hâli var: altta ne değişti, bugün bununla ne yapabilirsiniz ve nereden başlamalı.</p>
+      <p>Etiket <code>open-design-v0.16.0</code>, 22 Temmuz 2026'da yayımlandı. <strong>Beş günde 20 katkıcıdan 92 PR.</strong> Kod adı “Reliable Delivery”. Önceki sürüm bir koşunun maliyetini hedeflemişti. Bu sürüm, biten bir sonuç ile onun gerçekten size ulaştığı an arasında olan biteni hedefliyor: yarım uygulanan güncelleme, dosyalarını yitiren uzun görev, boğuşmak zorunda kaldığınız önizleme, bir slaydı düşüren dışa aktarma.</p>
+      <p>Tüm değişiklik listesi <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.16.0">GitHub'daki sürüm notlarında</a>. Burada kısa hâli var: altta ne değişti, bugün bununla ne yapabilirsiniz ve nereden başlamalı.</p>
 
       <h2>Görsel yön, gerçekten ürettiğiniz şeyi izliyor</h2>
       <p>Stil uzun süre yalnızca sunumlar ve prototipler için verilebilen bir karardı. Geri kalan her şey — bir belge, bir afiş, bir video, bir Web Clone, bir tel kafes, bir mobil ekran, bir Hyperframe — modelin canı ne isterse ondan başlıyordu.</p>
-      <p>0.16.0''da <strong>her biçim kendi görsel yönünü kazanıyor</strong> ve önizlemeler o biçimin gerçekten göründüğü şekilde işleniyor. Dört hızlı seçenek çalıştığınız yerde duruyor, tam stil kitaplığı ise bir tık ötede. Bir sunum temasını kafanızda afişe çevirmek yerine, önünüzdeki şeye uygun görünümü doğrudan seçiyorsunuz.</p>
+      <p>0.16.0'da <strong>her biçim kendi görsel yönünü kazanıyor</strong> ve önizlemeler o biçimin gerçekten göründüğü şekilde işleniyor. Dört hızlı seçenek çalıştığınız yerde duruyor, tam stil kitaplığı ise bir tık ötede. Bir sunum temasını kafanızda afişe çevirmek yerine, önünüzdeki şeye uygun görünümü doğrudan seçiyorsunuz.</p>
       <figure>
         <img src="/blog/open-design-0-16-0-reliable-delivery-style.webp" alt="Belge, afiş, video, mobil ekran gibi farklı çıktı biçimlerinin taslağı; her biri sakin adaçayı yeşili bir arayüzde doğru oranlı kendi stil önizlemesine dönüşüyor, sıcak editoryal illüstrasyon" />
-        <figcaption>Belgeler, afişler, videolar, Web Clone''lar, tel kafesler, mobil işler ve Hyperframe''ler kendi biçimine uygun önizlemeler alıyor — dört seçenek elinizin altında, kitaplığın tamamı bir tık ötede.</figcaption>
+        <figcaption>Belgeler, afişler, videolar, Web Clone'lar, tel kafesler, mobil işler ve Hyperframe'ler kendi biçimine uygun önizlemeler alıyor — dört seçenek elinizin altında, kitaplığın tamamı bir tık ötede.</figcaption>
       </figure>
 
       <h2>Gerçekten devreye giren güncellemeler</h2>
       <p>Yarım uygulanan bir güncelleme, hiç güncellememekten kötüdür: uygulama yeni sürümü bildirirken bir özellik sessizce eskisi üzerinde çalışır. 0.16.0 yükseltmeyi yere indiriyor. <strong>Güncellemeden sonra yeni sürüm daha güvenilir biçimde etkinleşiyor ve eksik güncellemenin bozduğu özellikler — PPTX dışa aktarma dahil — yeniden çalışıyor.</strong></p>
-      <p>macOS''ta «Güncellemeleri Denetle…» artık hangi durumda olduğunuzu açıkça söylüyor: güncel, indiriliyor, yeniden başlatmaya hazır, süren işin bitmesini bekliyor ya da elle indirme gerekiyor. Windows''ta da güncelleme güvenilirliği artıyor. Bu alandaki uzun soluklu çalışması için <a href="https://github.com/PerishCode">@PerishCode</a>''a teşekkürler.</p>
+      <p>macOS'ta “Güncellemeleri Denetle…” artık hangi durumda olduğunuzu açıkça söylüyor: güncel, indiriliyor, yeniden başlatmaya hazır, süren işin bitmesini bekliyor ya da elle indirme gerekiyor. Windows'ta da güncelleme güvenilirliği artıyor. Bu alandaki uzun soluklu çalışması için <a href="https://github.com/PerishCode">@PerishCode</a>'a teşekkürler.</p>
 
       <h2>Uzun görevler yanıtını — ve dosyalarını — koruyor</h2>
-      <p>En değerli iş uzun koşuların içinde yaşar; en çok da orada kaybolurdu. 0.16.0''da konuşma sınırına yaklaşan bir görev <strong>ani bir hatayla düşmek yerine en güncel yararlı bağlamla devam ediyor</strong>, koşunun erken aşamalarında üretilen dosyalar da <strong>sonuca bağlı kalıyor</strong>, sıkıştırmayla birlikte yok olmuyor.</p>
+      <p>En değerli iş uzun koşuların içinde yaşar; en çok da orada kaybolurdu. 0.16.0'da konuşma sınırına yaklaşan bir görev <strong>ani bir hatayla düşmek yerine en güncel yararlı bağlamla devam ediyor</strong>, koşunun erken aşamalarında üretilen dosyalar da <strong>sonuca bağlı kalıyor</strong>, sıkıştırmayla birlikte yok olmuyor.</p>
       <p>Hata yolları da dürüstleşti: kurtarılan yardımcı ajanlar başarılı işi bildirilen bir başarısızlığa çevirmiyor, kesintiye uğrayan görevler yeniden başlatmadan sonra doğru durumu gösteriyor, iptal edilen iş iptal kalıyor ve gerçekten kurtarılamayan hatalar sonsuz bir bekleme çemberi yerine üzerine hareket edebileceğiniz bir açıklamayla duruyor.</p>
       <figure>
         <img src="/blog/open-design-0-16-0-reliable-delivery-flow.webp" alt="Kopmayan uzun bir iplik, üretilmiş dosya kartlarından oluşan bir yığını daralan bir geçitten taşıyıp sakin adaçayı yeşili bir arayüze eksiksiz ulaştırıyor, sıcak editoryal illüstrasyon" />
@@ -729,7 +729,7 @@ i18n:
       </figure>
 
       <h2>Ürün haberleri uygulamanın içinde bir yer edindi</h2>
-      <p>0.16.0''da yeni: <strong>Ana sayfa ve proje başlıklarındaki zilin arkasında bir mesaj merkezi</strong> — okunmamış sayaçları, filtreler, tümünü okundu işaretle ve anlatılan şeye doğrudan giden bağlantılar. Okunma durumu anonim kullanımda cihazda kalıyor, oturum açtığınızda hesabınızı izliyor; tarihler dilinize göre görünüyor ve kapatma düğmesi her zaman beklediğiniz yerde. Teşekkürler <a href="https://github.com/nettee">@nettee</a>.</p>
+      <p>0.16.0'da yeni: <strong>Ana sayfa ve proje başlıklarındaki zilin arkasında bir mesaj merkezi</strong> — okunmamış sayaçları, filtreler, tümünü okundu işaretle ve anlatılan şeye doğrudan giden bağlantılar. Okunma durumu anonim kullanımda cihazda kalıyor, oturum açtığınızda hesabınızı izliyor; tarihler dilinize göre görünüyor ve kapatma düğmesi her zaman beklediğiniz yerde. Teşekkürler <a href="https://github.com/nettee">@nettee</a>.</p>
 
       <h2>BYOK, sizi kesintiye uğratmadan önce kurulum sorunlarını yakalıyor</h2>
       <p>Kendi anahtarınızı getirmek, bir görev üç dakika koştuktan sonra değil, kurulum sırasında hata vermeli. <strong>Tamamlanmamış düzenlemeler artık çalışan bir yapılandırmanın üzerine yazmak yerine kurtarılabilir taslak olarak duruyor</strong>; yarım kalmış bir değişiklik güvendiğiniz bir sağlayıcıyı deviremiyor.</p>
@@ -739,18 +739,18 @@ i18n:
       <p>Küçük bir sürtünme ama sürekli hissediliyor. Geniş masaüstü sayfaları artık <strong>siz kendi yakınlaştırmanızı seçene kadar bölmeye sığıyor</strong>, eski sunumlar gezinme tuşlarına anında yanıt veriyor ve en güncel ana HTML dosyası elle yenilemeye gerek kalmadan görev biter bitmez beliriyor. Bir varlık güvenlik nedeniyle engellendiğinde önizleme, hassas bir sistem yolunu açığa çıkarmadan ilgili proje dosyasını adlandırıyor.</p>
       <p>Görsel üretimi de sağlamlaştı: <strong>Nano Banana ve özel görsel üretimi, bir sağlayıcı kısa süreliğine meşgulse bir kez yeniden deniyor</strong>, GPT Image referans düzenlemeleri daha fazla uyumlu serviste çalışıyor. Bir kesinti, kaybedilmiş bir yaratıcı tur değil, kısa bir bekleme oluyor.</p>
 
-      <h2>0.16.0''a giren diğer şeyler</h2>
+      <h2>0.16.0'a giren diğer şeyler</h2>
       <ul>
         <li><strong>Galeriler gerçekten kullanılan şeylerle başlıyor</strong> — slayt, görsel, video ve prototip dışı diğer galeriler gerçek kullanımı olan şablonları öne çıkarıyor; boş kayıtlar ve önizlemesiz kartlar üst sıraları tıkamıyor. Prototip kendi editoryal vitrinini koruyor, her kategori de tam kataloğunu.</li>
         <li><strong>Tasarım sistemleri daha sadık içe aktarılıyor</strong> — depo içe aktarmaları doğru akışı seçiyor, bölünmüş token paketleri yerleşim değerlerini koruyor, yaygın YAML liste ve çok satırlı biçimleri yazarlarının girdiği meta verileri saklıyor.</li>
         <li><strong>Daha güçlü yerel güvenlik sınırları</strong> — içe aktarılan projeler gizli kimlik bilgilerini saklı tutuyor, bir eklentiyi kaldırmak o eklentinin dosyalarıyla sınırlı kalıyor, pazar yeri ve kayıtlı site içerikleri daha dikkatli işleniyor, her konuşma doğru projeye bağlı kalıyor.</li>
-        <li><strong>Yayınlamadan önce önizleyin</strong> — Cloudflare Pages dağıtımı, hem arayüzde hem <code>od deploy --target … --json</code> içinde Preview ve Production''ı açık hedefler olarak sunuyor; önizleme canlı alan adınızın yerine geçmek yerine kendi URL''sini döndürüyor.</li>
-        <li><strong>Kiro, MCP kurulum seçicisine katıldı</strong> — başka bir istemcinin biçimini elle çevirmek yerine doğru paylaşılan sunucu parçacığını Ayarlar''dan kopyalayın.</li>
-        <li><strong>Adı anılmayı hak eden sessiz düzeltmeler</strong> — MCP takip istekleri en son mesajı alıyor, ACP geçmişleri yenilemeden sonra boş satır üretmiyor ve eski işlemcili Windows cihazlar OpenCode''u normal güncelleme yolundan yeniden çalıştırabiliyor.</li>
+        <li><strong>Yayınlamadan önce önizleyin</strong> — Cloudflare Pages dağıtımı, hem arayüzde hem <code>od deploy --target … --json</code> içinde Preview ve Production'ı açık hedefler olarak sunuyor; önizleme canlı alan adınızın yerine geçmek yerine kendi URL'sini döndürüyor.</li>
+        <li><strong>Kiro, MCP kurulum seçicisine katıldı</strong> — başka bir istemcinin biçimini elle çevirmek yerine doğru paylaşılan sunucu parçacığını Ayarlar'dan kopyalayın.</li>
+        <li><strong>Adı anılmayı hak eden sessiz düzeltmeler</strong> — MCP takip istekleri en son mesajı alıyor, ACP geçmişleri yenilemeden sonra boş satır üretmiyor ve eski işlemcili Windows cihazlar OpenCode'u normal güncelleme yolundan yeniden çalıştırabiliyor.</li>
       </ul>
 
       <h2>Zaten yamalandı: 0.16.1</h2>
-      <p>İki gün sonra <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.16.1">0.16.1</a>, tasarım önizlemesi için odaklı bir düzeltme getirdi: <strong>çalışma durumu artık ürettiğiniz işi örtmüyor.</strong> Derleme, tamamlanma ve teslimat kurtarma durumları Sohbet''te kalıyor — ilerlemeyi izlediğiniz ya da başarısız bir teslimatı yeniden denediğiniz yer hâlâ orası — tuval ise tamamen sizin oluyor. Bugün indirecekseniz 0.16.1''i alın.</p>
+      <p>İki gün sonra <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.16.1">0.16.1</a>, tasarım önizlemesi için odaklı bir düzeltme getirdi: <strong>çalışma durumu artık ürettiğiniz işi örtmüyor.</strong> Derleme, tamamlanma ve teslimat kurtarma durumları Sohbet'te kalıyor — ilerlemeyi izlediğiniz ya da başarısız bir teslimatı yeniden denediğiniz yer hâlâ orası — tuval ise tamamen sizin oluyor. Bugün indirecekseniz 0.16.1'i alın.</p>
 
       <h2>Bugün bununla ne yapmalı</h2>
       <table>
@@ -758,9 +758,9 @@ i18n:
           <tr><th>Eğer…</th><th>Buradan başlayın</th></tr>
         </thead>
         <tbody>
-          <tr><td>Open Design''a yeniyseniz</td><td>Masaüstü uygulamasını indirin, bir proje başlatın ve çalıştığınız biçime uygun bir görsel yön seçin</td></tr>
+          <tr><td>Open Design'a yeniyseniz</td><td>Masaüstü uygulamasını indirin, bir proje başlatın ve çalıştığınız biçime uygun bir görsel yön seçin</td></tr>
           <tr><td>Uzun görevler koşuyorsanız</td><td>Uzun bir koşuyu daha ileri götürün — bağlam tavanına çarpmak artık en güncel yararlı bağlamla, dosyalar yerinde devam ediyor</td></tr>
-          <tr><td>Eski bir yapıdaysanız</td><td>«Güncellemeleri Denetle…»yi çalıştırın — durum artık açık ve yükseltmeden sonra PPTX dışa aktarma çalışıyor</td></tr>
+          <tr><td>Eski bir yapıdaysanız</td><td>“Güncellemeleri Denetle…”yi çalıştırın — durum artık açık ve yükseltmeden sonra PPTX dışa aktarma çalışıyor</td></tr>
           <tr><td>Kendi anahtarlarınızı kullanıyorsanız</td><td>BYOK sağlayıcılarınızı yeniden test edin: hatalar kurulumda ortaya çıkıyor, taslaklar çalışan yapılandırmayı ezmiyor</td></tr>
           <tr><td>Önizlemede yaşıyorsanız</td><td>Geniş bir masaüstü sayfasını ya da eski bir sunumu yeniden açın — çerçeve oturuyor, tuşlar yanıt veriyor</td></tr>
         </tbody>
@@ -768,7 +768,7 @@ i18n:
 
       <h2>Sırada ne var</h2>
       <p>Güvenebileceğiniz bir sürüm, çoğunlukla bir şeyleri kaybetmeyi bırakmış bir sürümdür. 0.16.0 bütçesini tam oraya harcıyor: yere inen bir güncelleme, dosyalarını koruyan uzun bir görev, biçimle örtüşen bir stil, yoldan çekilen bir önizleme. Masaüstü uygulamasını indirin, elinizdeki en uzun görevi yeniden çalıştırın ve eksiksiz vardığını görün.</p>
-      <p><a href="https://releases.open-design.ai/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202607_0_16_0&amp;utm_content=official">Open Design''ı indir</a>.</p>
+      <p><a href="https://releases.open-design.ai/?utm_source=blog&amp;utm_medium=docs&amp;utm_campaign=202607_0_16_0&amp;utm_content=official">Open Design'ı indir</a>.</p>
       <p>Beş günde 92 PR; biten bir sonuçla teslim edilmiş bir sonuç arasındaki boşluğu birer birer kapatan 20 kişiden. Güvenilirlik gösterişsiz bir iştir ve geri kalan her şeyi inandırıcı kılan iştir. Sizi görüyoruz. 🚀</p>
 
       <h2>İlgili okumalar</h2>

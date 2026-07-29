@@ -7,9 +7,9 @@ summary: "Tag open-design-v0.12.0 — 103 PRs from 30 contributors in six days. 
 i18n:
   zh:
     title: 'Open Design 0.12.0：你的品牌就是一套设计系统'
-    summary: '标签 open-design-v0.12.0 —— 六天内 30 位贡献者提交了 103 个 PR。代号「品牌支撑的设计系统」。把 Open Design 对准一个在线站点、丢进一个 Figma 文件，或者在浏览器里剪取一个页面，它就会把真实的品牌 —— 配色、字体、语调 —— 提炼成一套可复用的设计系统，让你在之后的每个项目里都能以它为基础进行构建。'
+    summary: '版本标签 open-design-v0.12.0 —— 六天内 30 位贡献者提交了 103 个 PR。代号「品牌支撑的设计系统」。把 Open Design 对准一个在线站点、丢进一个 Figma 文件，或者在浏览器里剪取一个页面，它就会把真实的品牌 —— 配色、字体、语调 —— 提炼成一套可复用的设计系统，让你在之后的每个项目里都能以它为基础进行构建。'
     bodyHtml: |
-      <p>标签 <code>open-design-v0.12.0</code>，于 2026 年 6 月 26 日发布。<strong>六天内 30 位贡献者提交了 103 个 PR。</strong>代号「品牌支撑的设计系统」。过去两个月里，Open Design 从一张白纸出发，<em>为</em>你做设计。而这次发布把它反转过来：<strong>你已经拥有的品牌，变成一套可复用的设计系统。</strong></p>
+      <p>版本标签 <code>open-design-v0.12.0</code>，于 2026 年 6 月 26 日发布。<strong>六天内 30 位贡献者提交了 103 个 PR。</strong>代号「品牌支撑的设计系统」。过去两个月里，Open Design 从一张白纸出发，<em>为</em>你做设计。而这次发布把它反转过来：<strong>你已经拥有的品牌，变成一套可复用的设计系统。</strong></p>
       <p>想看完整版本，可以查阅 <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.12.0">GitHub 上的发布说明</a>。本文是精简版：底层改了什么、你今天能用它做什么，以及从哪里开始。</p>
 
       <h2>你的品牌就是一套设计系统</h2>
