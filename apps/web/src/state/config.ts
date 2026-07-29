@@ -181,6 +181,12 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     preferredModels: ['gpt-4o', 'gpt-4o-mini', 'o3', 'o4-mini'],
   },
   {
+    label: 'Agnes AI',
+    protocol: 'openai',
+    baseUrl: 'https://apihub.agnes-ai.com/v1',
+    preferredModels: ['agnes-2.0-flash'],
+  },
+  {
     label: 'Atlas Cloud',
     protocol: 'openai',
     baseUrl: 'https://api.atlascloud.ai/v1',
@@ -495,6 +501,7 @@ export interface ByokProviderPresetConfig {
 const BYOK_PROVIDER_PRESET_SPECS = [
   { id: 'anthropic', title: 'Anthropic', providerLabel: 'Anthropic (Claude)' },
   { id: 'openai', title: 'OpenAI', providerLabel: 'OpenAI' },
+  { id: 'agnes-ai', title: 'Agnes AI', providerLabel: 'Agnes AI' },
   { id: 'atlascloud', title: 'Atlas Cloud', providerLabel: 'Atlas Cloud' },
   { id: 'google-ai-studio', title: 'Google Gemini', providerLabel: 'Google Gemini' },
   { id: 'ollama', title: 'Ollama Cloud', providerLabel: 'Ollama Cloud (managed)' },

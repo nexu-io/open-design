@@ -31,6 +31,28 @@ const store = new Map<string, string>();
 const originalFetch = globalThis.fetch;
 
 describe('KNOWN_PROVIDERS', () => {
+  it('registers Agnes AI as an OpenAI-compatible BYOK preset', () => {
+    const providers = KNOWN_PROVIDERS.filter((provider) => provider.label === 'Agnes AI');
+    const presets = BYOK_PROVIDER_PRESETS.filter((preset) => preset.id === 'agnes-ai');
+
+    expect(providers).toHaveLength(1);
+    expect(providers[0]).toEqual({
+      label: 'Agnes AI',
+      protocol: 'openai',
+      baseUrl: 'https://apihub.agnes-ai.com/v1',
+      preferredModels: ['agnes-2.0-flash'],
+    });
+
+    expect(presets).toHaveLength(1);
+    expect(presets[0]).toEqual({
+      id: 'agnes-ai',
+      title: 'Agnes AI',
+      protocol: 'openai',
+      baseUrl: 'https://apihub.agnes-ai.com/v1',
+      preferredModels: ['agnes-2.0-flash'],
+    });
+  });
+
   it('includes separate SiliconFlow CN and Global presets', () => {
     expect(
       KNOWN_PROVIDERS.filter((provider) => provider.label.startsWith('SiliconFlow')),

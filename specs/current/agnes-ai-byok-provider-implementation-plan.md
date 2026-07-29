@@ -37,7 +37,7 @@
 
 ---
 
-### 任务 1：以测试先行方式注册 Agnes AI provider 与 BYOK preset
+### Task 1：以测试先行方式注册 Agnes AI provider 与 BYOK preset
 
 **文件：**
 
