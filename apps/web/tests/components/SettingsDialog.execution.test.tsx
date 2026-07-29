@@ -569,8 +569,8 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     expect(dialog.classList.contains('settings-fullscreen')).toBe(false);
   });
 
-  it('renders BYOK provider preset tabs and toggles API key visibility', () => {
-    renderSettingsDialog();
+  it('renders BYOK provider preset tabs and toggles API key visibility', async () => {
+    const { onPersist } = renderSettingsDialog();
 
     expect(screen.getByRole('tablist', { name: en['settings.protocolAria'] })).toBeTruthy();
     expect(screen.getByRole('tab', { name: 'Anthropic' }).getAttribute('aria-selected')).toBe('true');
@@ -618,6 +618,31 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
         .getByRole('link', { name: 'Get key ↗' })
         .getAttribute('href'),
     ).toBe('https://platform.openai.com/api-keys');
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Agnes AI' }));
+    expect((screen.getByLabelText('Base URL') as HTMLInputElement).value).toBe(
+      'https://apihub.agnes-ai.com/v1',
+    );
+    await waitFor(() => {
+      expect(onPersist).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          byokProviderConfigDrafts: expect.objectContaining({
+            'openai:https://apihub.agnes-ai.com/v1': expect.objectContaining({
+              apiConfig: expect.objectContaining({
+                baseUrl: 'https://apihub.agnes-ai.com/v1',
+                model: 'agnes-2.0-flash',
+              }),
+            }),
+          }),
+        }),
+        expect.anything(),
+      );
+    });
+    expect(
+      screen
+        .getByRole('link', { name: 'Get key ↗' })
+        .getAttribute('href'),
+    ).toBe('https://platform.agnes-ai.com');
   });
 
   it('isolates API key draft and visibility by BYOK provider preset', () => {

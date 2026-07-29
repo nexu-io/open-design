@@ -41,6 +41,10 @@ describe('KNOWN_PROVIDERS', () => {
       protocol: 'openai',
       baseUrl: 'https://apihub.agnes-ai.com/v1',
       preferredModels: ['agnes-2.0-flash'],
+      apiKeyConsoleLink: {
+        host: 'platform.agnes-ai.com',
+        url: 'https://platform.agnes-ai.com',
+      },
     });
 
     expect(presets).toHaveLength(1);
@@ -198,6 +202,29 @@ describe('syncConfigToDaemon', () => {
         codex: { CODEX_HOME: '~/.codex-alt', CODEX_BIN: '~/bin/codex-next' },
       },
     });
+  });
+
+  it('syncs non-secret Agnes provider selection to the daemon app config', async () => {
+    const fetchMock = vi.fn(async () => new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await syncConfigToDaemon({
+      ...DEFAULT_CONFIG,
+      mode: 'api',
+      apiProtocol: 'openai',
+      apiKey: 'browser-only-key',
+      baseUrl: 'https://apihub.agnes-ai.com/v1',
+      model: 'agnes-2.0-flash',
+    });
+
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    const body = JSON.parse(String(init.body));
+    expect(body.byokProvider).toEqual({
+      protocol: 'openai',
+      baseUrl: 'https://apihub.agnes-ai.com/v1',
+      model: 'agnes-2.0-flash',
+    });
+    expect(JSON.stringify(body)).not.toContain('browser-only-key');
   });
 
   it('syncs CLI API key env values and intent to daemon app config while localStorage strips them', async () => {

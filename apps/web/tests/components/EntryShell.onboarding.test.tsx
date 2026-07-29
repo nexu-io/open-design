@@ -1676,6 +1676,35 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     expect(props.onApiModelChange).not.toHaveBeenCalledWith('upstream-first');
   });
 
+  it('clears the prior provider key when Agnes AI is selected during BYOK onboarding', async () => {
+    const props = renderOnboarding({
+      config: baseConfig({
+        apiProtocol: 'openai',
+        apiKey: 'openai-key-that-must-not-leave-the-provider',
+        baseUrl: 'https://api.openai.com/v1',
+        model: 'gpt-4o',
+        apiProviderBaseUrl: 'https://api.openai.com/v1',
+      }),
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Bring your own key/i }));
+    chooseOnboardingOption('Quick fill provider', /Agnes AI/i);
+
+    await waitFor(() => {
+      expect((screen.getByLabelText('API key') as HTMLInputElement).value).toBe('');
+      expect((screen.getByLabelText('Base URL') as HTMLInputElement).value).toBe(
+        'https://apihub.agnes-ai.com/v1',
+      );
+      expect(screen.getByRole('button', { name: 'agnes-2.0-flash' })).toBeTruthy();
+    });
+    expect((props.onConfigPersist as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0]).toMatchObject({
+      apiKey: '',
+      baseUrl: 'https://apihub.agnes-ai.com/v1',
+      model: 'agnes-2.0-flash',
+      apiProviderBaseUrl: 'https://apihub.agnes-ai.com/v1',
+    });
+  });
+
   it('persists the BYOK config before finishing onboarding', async () => {
     globalThis.fetch = vi.fn(async (input, init) => {
       const url = String(input);

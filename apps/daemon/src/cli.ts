@@ -8629,6 +8629,9 @@ async function runConfig(args) {
   od config set <key> --value-json '<json>'
                                        Set a key to a JSON value.
   od config unset <key>               Remove a top-level key.
+  od config byok get                  Print the selected non-secret BYOK provider.
+  od config byok set <protocol> <base-url> <model>
+                                       Persist provider metadata only; never an API key.
 
 Common options:
   --daemon-url <url>   Open Design daemon HTTP base.
@@ -8657,6 +8660,28 @@ Common options:
   };
 
   switch (sub) {
+    case 'byok': {
+      const action = rest[0];
+      if (action === 'get') {
+        const provider = (await fetchConfig())?.byokProvider ?? null;
+        process.stdout.write(JSON.stringify(provider, null, 2) + '\n');
+        return;
+      }
+      if (action === 'set') {
+        const positional = rest.slice(1).filter((arg) => !arg.startsWith('-'));
+        const [protocol, baseUrl, model] = positional;
+        if (!protocol || !baseUrl || !model) {
+          console.error('Usage: od config byok set <protocol> <base-url> <model>');
+          process.exit(2);
+        }
+        const written = await writeConfig({ byokProvider: { protocol, baseUrl, model } });
+        const provider = written?.byokProvider ?? null;
+        process.stdout.write(JSON.stringify(provider, null, 2) + '\n');
+        return;
+      }
+      console.error('Usage: od config byok get | od config byok set <protocol> <base-url> <model>');
+      process.exit(2);
+    }
     case 'list': {
       const cfg = await fetchConfig();
       process.stdout.write(JSON.stringify(cfg, null, 2) + '\n');

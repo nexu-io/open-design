@@ -2986,6 +2986,7 @@ function OnboardingView({
                         (item) => item.protocol === apiProtocol && item.baseUrl === baseUrl,
                       );
                       updateApiConfig({
+                        apiKey: '',
                         baseUrl: provider?.baseUrl ?? '',
                         model: defaultKnownProviderModel(provider),
                         apiProviderBaseUrl: provider?.baseUrl ?? null,

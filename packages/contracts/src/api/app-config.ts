@@ -27,7 +27,16 @@ export interface ProjectLocationPrefs {
   path: string;
 }
 
+/** Non-secret provider metadata shared by the BYOK UI and `od config byok`. */
+export interface ByokProviderPrefs {
+  protocol: string;
+  baseUrl: string;
+  model: string;
+}
+
 export interface AppConfigPrefs {
+  /** Provider selection only. API keys stay in the existing credential flow. */
+  byokProvider?: ByokProviderPrefs | null;
   onboardingCompleted?: boolean;
   agentId?: string | null;
   agentModels?: Record<string, AgentModelPrefs>;

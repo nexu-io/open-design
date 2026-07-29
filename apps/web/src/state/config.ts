@@ -185,6 +185,10 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     protocol: 'openai',
     baseUrl: 'https://apihub.agnes-ai.com/v1',
     preferredModels: ['agnes-2.0-flash'],
+    apiKeyConsoleLink: {
+      host: 'platform.agnes-ai.com',
+      url: 'https://platform.agnes-ai.com',
+    },
   },
   {
     label: 'Atlas Cloud',
@@ -1768,6 +1772,13 @@ export async function syncConfigToDaemon(
     customInstructions: config.customInstructions ?? null,
     projectLocations: config.projectLocations ?? [],
     defaultProjectLocationId: config.defaultProjectLocationId ?? 'default',
+    byokProvider: config.mode === 'api' && config.apiProtocol && config.baseUrl && config.model
+      ? {
+        protocol: config.apiProtocol,
+        baseUrl: config.baseUrl,
+        model: config.model,
+      }
+      : null,
   };
   try {
     const response = await fetch('/api/app-config', {
