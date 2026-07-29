@@ -43,7 +43,7 @@ import {
 import { connectorService } from '../../connectors/service.js';
 import type { RouteDeps } from '../../server-context.js';
 import { listSkills } from '../../skills.js';
-import { isSafeId } from '../../projects.js';
+import { isSafeId, removeProjectRunDirs } from '../../projects.js';
 import {
   BUILT_IN_PROJECT_LOCATION_ID,
   allProjectLocations,
@@ -2277,6 +2277,13 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       await cancelRunsOwnedBy(design.runs, { projectId: req.params.id });
       dbDeleteProject(db, req.params.id);
       await removeProjectDir(PROJECTS_DIR, req.params.id).catch(() => {});
+      // The run service keeps non-terminal runs in memory and drops them
+      // after a ~30 min TTL, but `<RUNTIME_DATA_DIR>/runs/<runId>/state.json`
+      // outlives that map. Sweep the runs dir for orphaned entries whose
+      // state.json still references this project so delete doesn't leak
+      // every prior run's directory (#6117). Best-effort — same posture as
+      // removeProjectDir above.
+      await removeProjectRunDirs(path.join(ctx.paths.RUNTIME_DATA_DIR, 'runs'), req.params.id).catch(() => {});
       /** @type {import('@open-design/contracts').OkResponse} */
       const body = { ok: true };
       res.json(body);

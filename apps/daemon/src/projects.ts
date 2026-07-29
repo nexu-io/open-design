@@ -1341,6 +1341,55 @@ export async function removeProjectDir(projectsRoot, projectId) {
   await rm(dir, { recursive: true, force: true });
 }
 
+/**
+ * Remove orphaned per-run directories under `runsDir` that belong to a project
+ * being deleted. The run service holds non-terminal runs in an in-memory map
+ * and drops them once they go terminal + ttl (~30 min), but the on-disk state
+ * `runsDir/<runId>/state.json` outlives that map — so a delete-project that
+ * only cancels live runs leaks every prior run's directory for that project
+ * (#6117).
+ *
+ * Walks `runsDir` one level deep, reads `<runId>/state.json` for each entry,
+ * and recursively removes the entries whose `projectId` matches. `state.json`
+ * may be missing or unreadable (legacy/in-progress run dir); such entries are
+ * skipped to avoid wiping unrelated state. Failures during the walk are
+ * swallowed per-entry so a single bad directory never blocks the project
+ * delete the user asked for — same best-effort posture as `removeProjectDir`.
+ *
+ * @param {string} runsDir Absolute path to the runtime `runs` directory.
+ * @param {string} projectId The project id whose run directories to remove.
+ * @returns {Promise<number>} Number of run directories removed. Resolves to 0
+ *   when `runsDir` does not exist (fresh install, no runs yet).
+ */
+export async function removeProjectRunDirs(runsDir, projectId) {
+  if (!isSafeId(projectId)) return 0;
+  let entries: import('node:fs').Dirent[];
+  try {
+    entries = await readdir(runsDir, { withFileTypes: true });
+  } catch (err: any) {
+    if (err?.code === 'ENOENT') return 0;
+    throw err;
+  }
+  let removed = 0;
+  await Promise.all(
+    entries
+      .filter((entry) => entry.isDirectory())
+      .map(async (entry) => {
+        const runDir = path.join(runsDir, entry.name);
+        try {
+          const stateRaw = await readFile(path.join(runDir, 'state.json'), 'utf8');
+          const state = JSON.parse(stateRaw);
+          if (state?.projectId !== projectId) return;
+          await rm(runDir, { recursive: true, force: true });
+          removed += 1;
+        } catch {
+          // state.json missing, unreadable, or malformed — leave the dir alone.
+        }
+      }),
+  );
+  return removed;
+}
+
 function resolveSafe(dir, name) {
   const safePath = validateProjectPath(name);
   const target = path.resolve(dir, safePath);
