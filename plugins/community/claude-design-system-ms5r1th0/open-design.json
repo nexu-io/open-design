@@ -1,0 +1,22 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "claude-design-system-ms5r1th0",
+  "title": "Claude Design System",
+  "version": "0.1.0",
+  "description": "A production-usable design-system package for **Claude** (Anthropic), extracted from [claude.ai](https://claude.ai/) and deepened by a live re-measurement pass (2026-07) against the site's real stylesheets (`data-color-v",
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}
