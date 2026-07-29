@@ -2,14 +2,14 @@
   "$schema": "https://open-design.ai/schemas/marketplace.v1.json",
   "specVersion": "1.0.0",
   "name": "open-design-community",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "owner": {
     "name": "Open Design Community",
     "url": "https://open-design.ai/marketplace/community"
   },
   "metadata": {
     "description": "Default community plugin registry seed. Entries here are discoverable by default but remain restricted until the user installs and trusts them.",
-    "version": "0.2.3"
+    "version": "0.2.4"
   },
   "plugins": [
     {
@@ -111,6 +111,35 @@
         "qa"
       ],
       "description": "Presentation system for agent-made PPTs: AST (audience-state-transfer) outline with per-page media decisions, a production brief for downstream renderers, and a capped 3-round presentation checkup on the rendered deck."
+    },
+    {
+      "name": "community/design-taste-libraries",
+      "title": "Design Taste Libraries",
+      "version": "0.1.0",
+      "source": "github:nexu-io/open-design@main/plugins/community/design-taste-libraries",
+      "publisher": {
+        "id": "baltsat",
+        "github": "Baltsat",
+        "url": "https://github.com/Baltsat"
+      },
+      "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/community/design-taste-libraries",
+      "license": "MIT",
+      "capabilitiesSummary": [
+        "prompt:inject"
+      ],
+      "tags": [
+        "community",
+        "design",
+        "frontend",
+        "taste",
+        "libraries",
+        "mobile",
+        "dashboard",
+        "shadcn",
+        "motion",
+        "source-backed"
+      ],
+      "description": "Source-backed design library router for frontend, mobile, dashboard, shadcn, and motion design work."
     }
   ]
 }
