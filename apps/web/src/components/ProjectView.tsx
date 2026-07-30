@@ -1701,6 +1701,22 @@ export function ProjectView({
     workspaceContextLoading: projectWorkspaceScopeState.loading,
     presenceFilePath: project?.metadata?.entryFile ?? null,
   });
+  // Tab layout is private browser state for a read-only Team viewer. Keep its
+  // identity-partitioned local cache working, but only let a positively proven
+  // project writer update the daemon's shared project row. Personal and legacy
+  // unbound projects retain their existing local-daemon persistence.
+  const projectTabsCanPersistToDaemon =
+    !project.workspaceId?.trim()
+    || projectWorkspaceScopeState.scope?.kind === 'unbound'
+    || projectRunWorkspaceContext?.workspaceType === 'personal'
+    || (
+      projectRunWorkspaceContext?.workspaceType === 'team'
+      && projectCollab.writerAuthority === 'allowed'
+    );
+  const projectTabsCanPersistToDaemonRef = useRef(
+    projectTabsCanPersistToDaemon,
+  );
+  projectTabsCanPersistToDaemonRef.current = projectTabsCanPersistToDaemon;
   // Stable references (useCallback with empty deps inside useCollab) — safe
   // for the project-events handler's dependency array without re-subscribing.
   const {
@@ -2661,7 +2677,9 @@ export function ProjectView({
     hasAppliedInitialPrimaryOpenRef.current = false;
     setOpenTabsState({ tabs: [], active: null });
     (async () => {
-      const state = await loadTabs(project.id, requestWorkspaceContext);
+      const state = await loadTabs(project.id, requestWorkspaceContext, {
+        reconcileNewerCacheToDaemon: projectTabsCanPersistToDaemonRef.current,
+      });
       if (cancelled) return;
       const routeActive = routeFileNameRef.current;
       let nextState = routeActive
@@ -2673,17 +2691,26 @@ export function ProjectView({
             active: routeActive,
           }
         : state;
-      if (routeActive) {
+      const routeChangesSavedState = Boolean(
+        routeActive
+        && (
+          state.active !== routeActive
+          || !state.tabs.includes(routeActive)
+        ),
+      );
+      if (routeActive && routeChangesSavedState) {
         nextState = cacheTabsLocally(
           project.id,
           nextState,
           requestWorkspaceContext,
         );
-        void persistTabsToDaemonNow(
-          project.id,
-          nextState,
-          requestWorkspaceContext,
-        );
+        if (projectTabsCanPersistToDaemonRef.current) {
+          void persistTabsToDaemonNow(
+            project.id,
+            nextState,
+            requestWorkspaceContext,
+          );
+        }
       }
       tabsHydratedFromSavedStateRef.current = state.hasSavedState === true;
       setOpenTabsState(nextState);
@@ -2733,6 +2760,14 @@ export function ProjectView({
         next,
         projectRunWorkspaceContext,
       );
+      if (!projectTabsCanPersistToDaemon) {
+        if (tabsDaemonSaveTimerRef.current != null) {
+          clearTimeout(tabsDaemonSaveTimerRef.current);
+          tabsDaemonSaveTimerRef.current = null;
+        }
+        pendingDaemonTabsRef.current = null;
+        return;
+      }
       pendingDaemonTabsRef.current = {
         projectId: project.id,
         state: stamped,
@@ -2754,14 +2789,30 @@ export function ProjectView({
         }
       }, TAB_PERSIST_DEBOUNCE_MS);
     },
-    [project.id, projectRunWorkspaceContext],
+    [
+      project.id,
+      projectRunWorkspaceContext,
+      projectTabsCanPersistToDaemon,
+    ],
   );
+
+  // Revocation can arrive without another tab interaction. Discard a queued
+  // write immediately instead of letting its old authority fire after the
+  // project has become read-only.
+  useEffect(() => {
+    if (projectTabsCanPersistToDaemon) return;
+    if (tabsDaemonSaveTimerRef.current != null) {
+      clearTimeout(tabsDaemonSaveTimerRef.current);
+      tabsDaemonSaveTimerRef.current = null;
+    }
+    pendingDaemonTabsRef.current = null;
+  }, [projectTabsCanPersistToDaemon]);
 
   // Flush any pending tab write when the project changes or the view unmounts,
   // so a fast project switch / close doesn't leave the daemon a debounce behind.
   useEffect(
     () => flushTabsDaemonSave,
-    [flushTabsDaemonSave, project.id, projectRunAuthorityKey],
+    [flushTabsDaemonSave, project.id],
   );
 
   const handleActiveWorkspaceContextChange = useCallback((next: WorkspaceContextItem | null) => {
@@ -3289,7 +3340,17 @@ export function ProjectView({
     projectAuthorizationKey,
     projectRunWorkspaceContext,
   ]);
-  useProjectFileEvents(project.id, daemonLive, handleProjectEvent, {
+  // A bound project must not open a headerless EventSource while its exact
+  // authority is unresolved or forbidden: that request can only fail and the
+  // EventSource reconnect loop would keep retrying a terminal response.
+  // Anonymous/local unbound projects intentionally keep their legacy stream.
+  const projectEventsEnabled =
+    daemonLive
+    && (
+      !project.workspaceId?.trim()
+      || projectRunWorkspaceContext !== null
+    );
+  useProjectFileEvents(project.id, projectEventsEnabled, handleProjectEvent, {
     onConnectedChange: setProjectEventsSseConnected,
   }, projectRunWorkspaceContext);
 

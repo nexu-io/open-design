@@ -1080,6 +1080,9 @@ async function persistTabsToDaemon(
 export async function loadTabs(
   projectId: string,
   workspaceContext?: WorkspaceCollabContext | null,
+  options: {
+    reconcileNewerCacheToDaemon?: boolean;
+  } = {},
 ): Promise<OpenTabsState> {
   const cached = readCachedTabs(projectId, workspaceContext);
   const requestKey =
@@ -1098,7 +1101,12 @@ export async function loadTabs(
       return normalizeTabsState(await resp.json());
     });
     const latest = newestTabsState(cached, saved);
-    if (cached && latest === cached && (cached.updatedAt ?? 0) > (saved?.updatedAt ?? 0)) {
+    if (
+      options.reconcileNewerCacheToDaemon !== false
+      && cached
+      && latest === cached
+      && (cached.updatedAt ?? 0) > (saved?.updatedAt ?? 0)
+    ) {
       void persistTabsToDaemon(projectId, cached, workspaceContext).catch(() => {});
     }
     return latest;

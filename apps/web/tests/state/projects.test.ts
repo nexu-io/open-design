@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   applyPlugin,
+  cacheTabsLocally,
   contributeGeneratedPluginToOpenDesign,
   createDesignSystemProjectFromProject,
   createProject,
@@ -13,17 +14,18 @@ import {
   importClaudeDesignZip,
   importFolderProject,
   installGeneratedPluginFolder,
+  listPlugins,
   listProjects,
   listWorkspaceProjectSummaries,
-  listPlugins,
+  loadTabs,
   moveWorkspaceProject,
-  workspaceProjectMoveErrorCode,
   patchProject,
   pickLocalFolderPath,
   publishGeneratedPluginToGitHub,
   resolvedWorkspaceContextForWrite,
   startGeneratedPluginShareTask,
   waitGeneratedPluginShareTask,
+  workspaceProjectMoveErrorCode,
 } from '../../src/state/projects';
 import {
   buildWorkspacePermissions,
@@ -1209,5 +1211,58 @@ describe('deleteProject tabs cache', () => {
     vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response(null, { status: 500 })));
     await expect(deleteProject('p1')).resolves.toBe(false);
     expect(store.has(tabsKey)).toBe(true);
+  });
+});
+
+describe('read-only project tabs cache', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('does not reconcile a newer member-scoped cache back to the daemon', async () => {
+    const store = new Map<string, string>();
+    vi.stubGlobal('window', {
+      localStorage: {
+        getItem: (key: string) => store.get(key) ?? null,
+        setItem: (key: string, value: string) => {
+          store.set(key, value);
+        },
+        removeItem: (key: string) => {
+          store.delete(key);
+        },
+      },
+    });
+    const context = teamWorkspaceContext({
+      workspaceId: 'workspace-read-only-tabs',
+      workspaceMemberId: 'member-read-only-tabs',
+    });
+    cacheTabsLocally(
+      'project-read-only-tabs',
+      { tabs: ['local.html'], active: 'local.html' },
+      context,
+    );
+    expect([...store.keys()][0]).toContain(
+      'workspace-read-only-tabs:team:member-read-only-tabs',
+    );
+    const fetchMock = vi.fn<typeof fetch>(async (_input, init) => {
+      if (init?.method === 'PUT') return new Response(null, { status: 204 });
+      return Response.json({
+        tabs: ['daemon.html'],
+        active: 'daemon.html',
+        updatedAt: 1,
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const loaded = await loadTabs(
+      'project-read-only-tabs',
+      context,
+      { reconcileNewerCacheToDaemon: false },
+    );
+    await Promise.resolve();
+
+    expect(loaded.active).toBe('local.html');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]?.[1]?.method).toBeUndefined();
   });
 });
