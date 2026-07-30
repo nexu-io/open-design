@@ -36,6 +36,8 @@ describe('GET /api/projects/:id/raw/* cache revalidation', () => {
     await writeFile(path.join(dir, 'styles.css'), Buffer.from('body{color:#123456}'));
     await writeFile(path.join(dir, 'logo.png'), Buffer.alloc(256, 0x7f));
     await writeFile(path.join(dir, 'clip.mp4'), Buffer.alloc(512, 0x42));
+    await mkdir(path.join(dir, 'fonts'), { recursive: true });
+    await writeFile(path.join(dir, 'fonts', 'display.woff2'), Buffer.alloc(128, 0x17));
     // A Vite dev entry whose /raw/ response is substituted with dist/index.html.
     await writeFile(
       path.join(dir, 'vite-entry.html'),
@@ -58,6 +60,14 @@ describe('GET /api/projects/:id/raw/* cache revalidation', () => {
     expect(res.headers.get('etag')).toBeTruthy();
     expect(res.headers.get('last-modified')).toBeTruthy();
     // no-cache = always revalidate, never serve stale silently (safe for mutable files).
+    expect(res.headers.get('cache-control')).toBe('no-cache');
+  });
+
+  it('serves project font files with a browser-loadable font MIME', async () => {
+    const res = await fetch(rawUrl('fonts/display.woff2'));
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('font/woff2');
+    expect(res.headers.get('etag')).toBeTruthy();
     expect(res.headers.get('cache-control')).toBe('no-cache');
   });
 

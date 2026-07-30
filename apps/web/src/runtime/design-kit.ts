@@ -29,11 +29,22 @@ export function hostnameOf(rawUrl: string): string {
   }
 }
 
+function normalizeFontFamily(family: string): string {
+  return family
+    .trim()
+    .replace(/,+$/g, '')
+    .trim()
+    .replace(/^["'“”‘’]+|["'“”‘’]+$/g, '')
+    .trim();
+}
+
 /** Build a CSS font-family stack from a kit font spec, quoting multi-word names. */
 export function fontStack(spec: { family: string; fallbacks?: string[] }): string {
-  const families = [spec.family, ...(spec.fallbacks ?? [])].filter(Boolean);
+  const families = [spec.family, ...(spec.fallbacks ?? [])]
+    .map((family) => normalizeFontFamily(family))
+    .filter(Boolean);
   if (families.length === 0) return 'ui-sans-serif, system-ui, sans-serif';
-  return families.map((f) => (/\s/.test(f) ? `'${f}'` : f)).join(', ');
+  return families.map((f) => (/\s/.test(f) ? `'${f.replace(/'/g, "\\'")}'` : f)).join(', ');
 }
 
 /** Relative-luminance check so a swatch hex caption stays legible on the chip. */
@@ -259,10 +270,25 @@ function mergeTypography(
   base: DesignKit['typography'],
   overlay: DesignKit['typography'],
 ): DesignKit['typography'] {
+  const mergeFont = (baseFont: KitFont | undefined, overlayFont: KitFont | undefined): KitFont | undefined => {
+    if (!overlayFont) return baseFont;
+    if (!baseFont) return overlayFont;
+    const baseFamily = normalizeFontFamily(baseFont.family).toLowerCase();
+    const overlayFamily = normalizeFontFamily(overlayFont.family).toLowerCase();
+    if (baseFamily !== overlayFamily) return overlayFont;
+    return {
+      ...baseFont,
+      ...overlayFont,
+      family: baseFont.family,
+      fallbacks: overlayFont.fallbacks.length > baseFont.fallbacks.length ? overlayFont.fallbacks : baseFont.fallbacks,
+      weights: overlayFont.weights.length > baseFont.weights.length ? overlayFont.weights : baseFont.weights,
+      googleFontsUrl: overlayFont.googleFontsUrl ?? baseFont.googleFontsUrl,
+    };
+  };
   return {
-    display: overlay.display ?? base.display,
-    body: overlay.body ?? base.body,
-    mono: overlay.mono ?? base.mono,
+    display: mergeFont(base.display, overlay.display),
+    body: mergeFont(base.body, overlay.body),
+    mono: mergeFont(base.mono, overlay.mono),
   };
 }
 
