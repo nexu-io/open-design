@@ -745,6 +745,12 @@ describe('run event log persistence', () => {
       conversationId: 'c1',
       assistantMessageId: 'm1',
       agentId: 'claude',
+      workspaceScope: {
+        schemaVersion: 1,
+        projectId: 'p1',
+        workspaceId: 'workspace-a',
+        source: 'persisted_project_binding',
+      },
     });
     const statePath = path.join(tmpDir, run.id, 'state.json');
 
@@ -753,6 +759,12 @@ describe('run event log persistence', () => {
       id: run.id,
       status: 'queued',
       assistantMessageId: 'm1',
+      workspaceScope: {
+        schemaVersion: 1,
+        projectId: 'p1',
+        workspaceId: 'workspace-a',
+        source: 'persisted_project_binding',
+      },
     });
 
     runs.setAnalyticsRecovery(run, {

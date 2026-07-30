@@ -104,6 +104,10 @@ import {
   runAskedUserQuestion,
 } from '../runtimes/run-artifacts.js';
 import {
+  pinRunWorkspaceScopeForProject,
+  type PinnedRunWorkspaceScope,
+} from '../runtimes/project-amr-trace-env.js';
+import {
   runArtifactCountForRun,
   runDesignSystemCreatedForRun,
   runPreviewModuleCountForRun,
@@ -149,6 +153,7 @@ interface ChatRun {
   conversationId: string | null;
   assistantMessageId: string | null;
   agentId: string | null;
+  workspaceScope?: PinnedRunWorkspaceScope | null;
   model?: string | null;
   status: ChatRunStatus;
   createdAt: number;
@@ -214,6 +219,7 @@ interface RunCreateMeta extends JsonRecord {
   message?: string;
   currentPrompt?: string;
   projectMetadata?: ProjectMetadata;
+  workspaceScope?: PinnedRunWorkspaceScope | null;
 }
 
 interface RunListFilters {
@@ -585,8 +591,11 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     res: ApiResponse,
     projectId: string,
     agentId: unknown,
-  ): Promise<boolean> {
-    if (!ctx.projectStore) return true;
+  ): Promise<
+    | { ok: true; workspaceScope: PinnedRunWorkspaceScope | null }
+    | { ok: false }
+  > {
+    if (!ctx.projectStore) return { ok: true, workspaceScope: null };
     const binding = ctx.projectStore.getWorkspaceProjectByProjectId(db, projectId);
     const requestContext = workspaceResourceContextFromRequest(req);
     if (binding) {
@@ -606,13 +615,23 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           { mode: 'write', capability: 'writeFiles' },
         )
       ) {
-        return false;
+        return { ok: false };
       }
       // Run billing scope is the persisted project binding. On the Personal
       // lane a headerless local caller remains valid; Vela/AMR receives the
       // signed-in account plus this exact binding and makes the membership/
       // balance decision.
-      if (requestContext === null) return true;
+      const workspaceScope = pinRunWorkspaceScopeForProject(db, projectId);
+      if (!workspaceScope || workspaceScope.workspaceId !== binding.workspaceId) {
+        sendApiError(
+          res,
+          409,
+          'AMR_WORKSPACE_SCOPE_CONFLICT',
+          'the project Workspace binding changed before the run could be pinned',
+        );
+        return { ok: false };
+      }
+      if (requestContext === null) return { ok: true, workspaceScope };
       if (requestContext === 'missing') {
         sendApiError(
           res,
@@ -620,7 +639,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           'WORKSPACE_CONTEXT_INCOMPLETE',
           'both workspace and member identity are required',
         );
-        return false;
+        return { ok: false };
       }
       if (requestContext.workspaceId !== binding.workspaceId) {
         sendApiError(
@@ -629,16 +648,20 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           'WORKSPACE_PROJECT_PERMISSION_DENIED',
           'run workspace does not match the persisted project workspace',
         );
-        return false;
+        return { ok: false };
       }
-      return true;
+      return { ok: true, workspaceScope };
     }
 
     // This migration guard is deliberately AMR-only. Local CLIs, BYOK
     // providers, and every other runtime retain the legacy unbound path and do
     // not even probe AMR login or Workspace authority.
-    if (agentId !== 'amr' || !ctx.amrWorkspaceScope) return true;
-    if (!await ctx.amrWorkspaceScope.isSignedIn()) return true;
+    if (agentId !== 'amr' || !ctx.amrWorkspaceScope) {
+      return { ok: true, workspaceScope: null };
+    }
+    if (!await ctx.amrWorkspaceScope.isSignedIn()) {
+      return { ok: true, workspaceScope: null };
+    }
 
     if (requestContext === null) {
       sendApiError(
@@ -647,7 +670,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         'AMR_WORKSPACE_SCOPE_REQUIRED',
         'open the project from your Personal Workspace before running AMR Cloud',
       );
-      return false;
+      return { ok: false };
     }
     if (requestContext === 'missing') {
       sendApiError(
@@ -656,14 +679,14 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         'WORKSPACE_CONTEXT_INCOMPLETE',
         'both workspace and member identity are required',
       );
-      return false;
+      return { ok: false };
     }
 
     const verified =
       await ctx.amrWorkspaceScope.verifyWorkspaceRequestAuthority(req);
     if (!verified.ok) {
       sendApiError(res, verified.status, verified.code, verified.message);
-      return false;
+      return { ok: false };
     }
     if (
       verified.context.workspaceId !== requestContext.workspaceId
@@ -675,7 +698,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         'WORKSPACE_ACCESS_DENIED',
         'the verified Workspace identity does not match the run request',
       );
-      return false;
+      return { ok: false };
     }
     if (verified.context.workspaceType !== 'personal') {
       sendApiError(
@@ -684,7 +707,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         'AMR_PERSONAL_WORKSPACE_REQUIRED',
         'historical projects can only be adopted into a Personal Workspace',
       );
-      return false;
+      return { ok: false };
     }
     const ensureWorkspaceProject = ctx.projectStore.ensureWorkspaceProject;
     if (!ensureWorkspaceProject) {
@@ -694,13 +717,13 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         'AMR_WORKSPACE_SCOPE_REQUIRED',
         'the project must be migrated into a Personal Workspace before running AMR Cloud',
       );
-      return false;
+      return { ok: false };
     }
 
     const project = toProjectRecord(getProject(db, projectId));
     if (!project) {
       sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
-      return false;
+      return { ok: false };
     }
     const { getWorkspaceProjectByProjectId } = ctx.projectStore;
     const bindPersonal = db.transaction(() => {
@@ -729,9 +752,19 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         'AMR_WORKSPACE_SCOPE_CONFLICT',
         'the project was bound to another Workspace before AMR could start',
       );
-      return false;
+      return { ok: false };
     }
-    return true;
+    const workspaceScope = pinRunWorkspaceScopeForProject(db, projectId);
+    if (!workspaceScope || workspaceScope.workspaceId !== verified.context.workspaceId) {
+      sendApiError(
+        res,
+        409,
+        'AMR_WORKSPACE_SCOPE_CONFLICT',
+        'the project Workspace binding changed before the run could be pinned',
+      );
+      return { ok: false };
+    }
+    return { ok: true, workspaceScope };
   }
 
   async function authorizeRunProject(
@@ -918,12 +951,11 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE,
       );
     }
-    if (
-      typeof meta.projectId === 'string' &&
-      meta.projectId &&
-      !await prepareRunWorkspaceScope(req, res, meta.projectId, meta.agentId)
-    ) {
-      return;
+    if (typeof meta.projectId === 'string' && meta.projectId) {
+      const preparedWorkspaceScope =
+        await prepareRunWorkspaceScope(req, res, meta.projectId, meta.agentId);
+      if (!preparedWorkspaceScope.ok) return;
+      meta.workspaceScope = preparedWorkspaceScope.workspaceScope;
     }
     const toolBundleSupport = validateRunToolBundleForAgent(
       toolBundle.bundle,
@@ -1957,12 +1989,11 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE,
       );
     }
-    if (
-      typeof meta.projectId === 'string' &&
-      meta.projectId &&
-      !await prepareRunWorkspaceScope(req, res, meta.projectId, meta.agentId)
-    ) {
-      return;
+    if (typeof meta.projectId === 'string' && meta.projectId) {
+      const preparedWorkspaceScope =
+        await prepareRunWorkspaceScope(req, res, meta.projectId, meta.agentId);
+      if (!preparedWorkspaceScope.ok) return;
+      meta.workspaceScope = preparedWorkspaceScope.workspaceScope;
     }
     const run = design.runs.create(meta);
     try {

@@ -720,7 +720,8 @@ import {
 import { resolveWorkspaceScope } from './collab/workspace-scope.js';
 import {
   AmrWorkspaceScopeRequiredError,
-  openDesignAmrTraceEnvForProject,
+  openDesignAmrTraceEnvForRun,
+  pinRunWorkspaceScopeForProject,
 } from './runtimes/project-amr-trace-env.js';
 import {
   createCachedWorkspaceDirectoryFetcher,
@@ -7751,6 +7752,17 @@ export async function startServer({
     if (typeof clientRequestId === 'string' && clientRequestId)
       run.clientRequestId = clientRequestId;
     if (typeof agentId === 'string' && agentId) run.agentId = agentId;
+    // Freeze the billing address once, before the first asynchronous setup
+    // step. HTTP-created runs already carry the scope captured by the request
+    // authorization transaction. Internal runs pin here. Retries reuse the
+    // existing property and therefore never consult a later project rebind.
+    if (!Object.prototype.hasOwnProperty.call(run, 'workspaceScope')) {
+      run.workspaceScope =
+        typeof projectId === 'string' && projectId
+          ? pinRunWorkspaceScopeForProject(db, projectId)
+          : null;
+      design.runs.persistState(run);
+    }
     // Stash the original user prompt + per-turn config so the
     // langfuse-bridge report path can include them without reaching back
     // into chatBody across the createChatRunService boundary. Each field
@@ -10079,18 +10091,20 @@ export async function startServer({
         ...(mmdRouteLaunchEnv || {}),
         ...odMediaEnv,
         ...(byokOpenCodeProvider ? byokOpenCodeProvider.env : {}),
-        ...await openDesignAmrTraceEnvForProject(db, {
+        ...await openDesignAmrTraceEnvForRun({
           agentId: def.id,
           runId: run.id,
           conversationId: run.conversationId,
           runAttempt: run.retryAttemptCount ?? 0,
           // Vela's workspace-credit isolation reads this env together with the
-          // signed-in account identity. SQLite pins the project's exact
-          // Workspace; Vela/AMR remains the authority for membership, balance,
-          // and billing eligibility. Team and Personal bindings are both sent
-          // explicitly. An unbound project is refused before process spawn.
-          // Project visibility and ambient/current selection never participate.
+          // signed-in account identity. The run pins the project's exact
+          // Workspace before its first asynchronous setup step; Vela/AMR
+          // remains the authority for membership, balance, and billing
+          // eligibility. Team and Personal bindings are both sent explicitly.
+          // An unbound project is refused before process spawn. Later project
+          // rebinds and ambient/current selection never participate.
           projectId,
+          workspaceScope: run.workspaceScope,
         }, {
           // Report persisted-binding vs truly-unbound selection to the daemon
           // log and telemetry. Ids and the branch name only —

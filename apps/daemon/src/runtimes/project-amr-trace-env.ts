@@ -3,6 +3,13 @@ import { openDesignAmrTraceEnv } from './env.js';
 
 type SqliteDb = Parameters<typeof getWorkspaceProjectByProjectId>[0];
 
+export type PinnedRunWorkspaceScope = Readonly<{
+  schemaVersion: 1;
+  projectId: string;
+  workspaceId: string;
+  source: 'persisted_project_binding';
+}>;
+
 /**
  * The spawn wallet is an address, not a local authorization decision.
  *
@@ -37,24 +44,50 @@ export class AmrWorkspaceScopeRequiredError extends Error {
 }
 
 /**
- * Build the AMR trace environment solely from the project's persisted binding.
+ * Freeze the billing address before a run is created.
  *
- * The request shell's active/current Workspace and the local membership
- * directory are intentionally absent. Project A stays pinned to A for initial
- * spawn and every retry, even if the UI later switches to B or the directory is
- * unavailable. The backend receives the signed-in account credentials plus
- * `OPEN_DESIGN_WORKSPACE_ID=A` and makes the final authorization/billing
- * decision. An unbound project is refused instead of silently falling through
- * to the signed-in account wallet.
+ * This is the only function in the run path that reads the mutable project
+ * binding. Its result is stored on the run and reused for every attempt.
  */
-export async function openDesignAmrTraceEnvForProject(
+export function pinRunWorkspaceScopeForProject(
   db: SqliteDb,
+  projectId: string,
+): PinnedRunWorkspaceScope | null {
+  const normalizedProjectId = projectId.trim();
+  if (!normalizedProjectId) return null;
+  const binding = getWorkspaceProjectByProjectId(db, normalizedProjectId);
+  const workspaceId =
+    typeof binding?.workspaceId === 'string' && binding.workspaceId.trim()
+      ? binding.workspaceId.trim()
+      : null;
+  if (!workspaceId) return null;
+  return Object.freeze({
+    schemaVersion: 1,
+    projectId: normalizedProjectId,
+    workspaceId,
+    source: 'persisted_project_binding',
+  });
+}
+
+/**
+ * Build the AMR trace environment solely from the run's frozen binding.
+ *
+ * The request shell's active/current Workspace, the local membership
+ * directory, and the project's current binding are intentionally absent.
+ * Project A stays pinned to A for initial spawn and every retry even if the UI
+ * switches to B, authority lookup is unavailable, or the project is later
+ * rebound. Vela/AMR receives the signed-in account credentials plus
+ * `OPEN_DESIGN_WORKSPACE_ID=A` and remains the final authorization/billing
+ * authority. Missing proof is refused instead of falling through to Personal.
+ */
+export async function openDesignAmrTraceEnvForRun(
   input: {
     agentId: string;
     runId: string;
     conversationId?: string | null;
     runAttempt: number;
     projectId?: string | null;
+    workspaceScope?: PinnedRunWorkspaceScope | null;
   },
   deps: {
     onWorkspaceScopeOutcome?: (outcome: ProjectWorkspaceScopeOutcome) => void;
@@ -72,11 +105,12 @@ export async function openDesignAmrTraceEnvForProject(
 
   const projectId = input.projectId?.trim();
   if (!projectId) throw new AmrWorkspaceScopeRequiredError(null);
-
-  const binding = getWorkspaceProjectByProjectId(db, projectId);
   const workspaceId =
-    typeof binding?.workspaceId === 'string' && binding.workspaceId.trim()
-      ? binding.workspaceId.trim()
+    input.workspaceScope?.projectId === projectId
+    && input.workspaceScope.source === 'persisted_project_binding'
+    && input.workspaceScope.schemaVersion === 1
+    && input.workspaceScope.workspaceId.trim()
+      ? input.workspaceScope.workspaceId.trim()
       : null;
   deps.onWorkspaceScopeOutcome?.({
     kind: workspaceId ? 'resolved_persisted_binding' : 'refused_unbound',

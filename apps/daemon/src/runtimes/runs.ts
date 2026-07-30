@@ -59,6 +59,7 @@ function durableRunState(run) {
       ? { designSystemSelectionSource: run.designSystemSelectionSource }
       : {}),
     ...(typeof run.clientType === 'string' ? { clientType: run.clientType } : {}),
+    ...(run.workspaceScope !== undefined ? { workspaceScope: run.workspaceScope } : {}),
     ...(run.analyticsTelemetry ? { analyticsTelemetry: run.analyticsTelemetry } : {}),
     ...(run.promptTelemetry ? { promptTelemetry: run.promptTelemetry } : {}),
     ...(run.promptCache ? { promptCache: run.promptCache } : {}),
@@ -191,6 +192,9 @@ export function createChatRunService({
       // can't lazily re-open a stream nothing will ever close (FD leak).
       eventsLogClosed: false,
     };
+    if (Object.prototype.hasOwnProperty.call(meta, 'workspaceScope')) {
+      run.workspaceScope = meta.workspaceScope ?? null;
+    }
     runs.set(run.id, run);
     if (run.statePath) atomicWriteJson(run.statePath, durableRunState(run));
     return run;

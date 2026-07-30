@@ -75,6 +75,7 @@ function createRunsServiceStub() {
         conversationId: typeof meta.conversationId === 'string' ? meta.conversationId : null,
         assistantMessageId: typeof meta.assistantMessageId === 'string' ? meta.assistantMessageId : null,
         agentId: typeof meta.agentId === 'string' ? meta.agentId : null,
+        workspaceScope: meta.workspaceScope,
         status: 'queued',
         createdAt: Date.now(),
         updatedAt: Date.now(),
@@ -286,6 +287,37 @@ describe('POST /api/runs — workspace mutation gate', () => {
     const payload = (await resp.json()) as { runId: string };
     expect(typeof payload.runId).toBe('string');
   });
+
+  it.each(['/api/runs', '/api/chat'])(
+    'persists the exact project binding on the run before spawning through %s',
+    async (route) => {
+      const baseUrl = await startServer();
+      const createResponse = await fetch(`${baseUrl}${route}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId: PERSONAL_PROJECT,
+          agentId: 'amr',
+          message: 'pin billing scope',
+        }),
+      });
+      expect(createResponse.status).toBe(202);
+      const { runId } = (await createResponse.json()) as { runId: string };
+
+      const statusResponse = await fetch(`${baseUrl}/api/runs/${runId}`, {
+        headers: workspaceHeaders(OWNER_MEMBER_ID, 'owner'),
+      });
+      expect(statusResponse.status).toBe(200);
+      await expect(statusResponse.json()).resolves.toMatchObject({
+        workspaceScope: {
+          schemaVersion: 1,
+          projectId: PERSONAL_PROJECT,
+          workspaceId: WORKSPACE_ID,
+          source: 'persisted_project_binding',
+        },
+      });
+    },
+  );
 
   it.each(['/api/runs', '/api/chat'])(
     'allows the shared-project owner to create a run through %s',
