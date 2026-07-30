@@ -98,6 +98,7 @@ const workspaceScopeMocks = vi.hoisted(() => ({
   projectScope: { loading: true, scope: null } as ProjectWorkspaceScopeState,
   ambientContext: null as WorkspaceCollabContext | null,
 }));
+const chatPaneSpy = vi.hoisted(() => vi.fn());
 const resourceContextObservations = vi.hoisted(
   () => [] as Array<WorkspaceCollabContext | null>,
 );
@@ -229,24 +230,28 @@ vi.mock('../../src/components/ChatPane', () => ({
   ChatPane: (props: {
     activeConversationId?: string | null;
     sendDisabled?: boolean;
+    queuedItems?: Array<{ prompt: string }>;
     onSend?: (
       prompt: string,
       attachments: [],
       commentAttachments: [],
     ) => unknown;
-  }) => (
-    <div>
-      <div data-testid="active-conversation">{props.activeConversationId ?? ''}</div>
-      <button
-        type="button"
-        data-testid="normal-send"
-        disabled={props.sendDisabled}
-        onClick={() => props.onSend?.('normal prompt', [], [])}
-      >
-        send
-      </button>
-    </div>
-  ),
+  }) => {
+    chatPaneSpy(props);
+    return (
+      <div>
+        <div data-testid="active-conversation">{props.activeConversationId ?? ''}</div>
+        <button
+          type="button"
+          data-testid="normal-send"
+          disabled={props.sendDisabled}
+          onClick={() => props.onSend?.('normal prompt', [], [])}
+        >
+          send
+        </button>
+      </div>
+    );
+  },
 }));
 
 const mockedStreamViaDaemon = vi.mocked(streamViaDaemon);
@@ -375,6 +380,7 @@ describe('a Home auto-send identifies its caller before the project scope resolv
     mockedListMessages.mockResolvedValue([]);
     mockedFetchPreviewComments.mockResolvedValue([]);
     mockedFetchBrands.mockResolvedValue([]);
+    mockedCheckAmrBalanceGate.mockResolvedValue({ kind: 'allow' });
     workspaceScopeMocks.projectScope = { loading: true, scope: null };
     workspaceScopeMocks.ambientContext = CALLER_CONTEXT;
     // Home's hand-off: this flag is what makes ProjectView fire the seeded
@@ -463,6 +469,59 @@ describe('a Home auto-send identifies its caller before the project scope resolv
 
     await waitFor(() => expect(mockedStreamViaDaemon).toHaveBeenCalled());
     expect(mockedCheckAmrBalanceGate).not.toHaveBeenCalled();
+  });
+
+  it('consumes the Home handoff after an unavailable AMR gate durably queues it and starts it once after recovery', async () => {
+    workspaceScopeMocks.projectScope = {
+      loading: false,
+      scope: {
+        kind: 'team',
+        projectId: PROJECT_ID,
+        workspaceId: TEAM_WORKSPACE,
+        visibility: 'personal',
+        context: CALLER_CONTEXT as WorkspaceCollabContext & { workspaceType: 'team' },
+      },
+    };
+    mockedCheckAmrBalanceGate.mockResolvedValue({ kind: 'unavailable' });
+
+    const stableOverrides: Partial<ComponentProps<typeof ProjectView>> = {
+      project: project(),
+      agents: [{ id: 'amr', name: 'amr', available: true }] as unknown as AgentInfo[],
+      skills: [] as SkillSummary[],
+      designTemplates: [] as SkillSummary[],
+      designSystems: [] as DesignSystemSummary[],
+      onModeChange: vi.fn(),
+      onAgentChange: vi.fn(),
+      onAgentModelChange: vi.fn(),
+      onRefreshAgents: vi.fn(),
+      onOpenSettings: vi.fn(),
+      onBack: vi.fn(),
+      onClearPendingPrompt: vi.fn(),
+      onTouchProject: vi.fn(),
+      onProjectChange: vi.fn(),
+      onProjectsRefresh: vi.fn(),
+    };
+    const view = renderProjectView(stableOverrides);
+
+    await waitFor(() => {
+      const latest = chatPaneSpy.mock.calls.at(-1)?.[0];
+      expect(latest?.queuedItems).toHaveLength(1);
+    });
+    expect(mockedStreamViaDaemon).not.toHaveBeenCalled();
+    expect(window.sessionStorage.getItem(`od:auto-send-first:${PROJECT_ID}`)).toBeNull();
+
+    view.rerender(projectViewElement({
+      ...stableOverrides,
+      config: { ...config, agentId: 'codex' },
+      agents: [{ id: 'codex', name: 'Codex', available: true }] as unknown as AgentInfo[],
+    }));
+
+    await waitFor(() => expect(mockedStreamViaDaemon).toHaveBeenCalledTimes(1));
+    await waitFor(() => {
+      const latest = chatPaneSpy.mock.calls.at(-1)?.[0];
+      expect(latest?.queuedItems).toHaveLength(0);
+    });
+    expect(mockedStreamViaDaemon).toHaveBeenCalledTimes(1);
   });
 
   it('keeps an explicitly Personal project on the Personal preflight', async () => {
@@ -577,6 +636,7 @@ describe('a Home auto-send observes a project billing scope that settles after m
     mockedListMessages.mockResolvedValue([]);
     mockedFetchPreviewComments.mockResolvedValue([]);
     mockedFetchBrands.mockResolvedValue([]);
+    mockedCheckAmrBalanceGate.mockResolvedValue({ kind: 'allow' });
     workspaceScopeMocks.projectScope = { loading: true, scope: null };
     workspaceScopeMocks.ambientContext = CALLER_CONTEXT;
   });

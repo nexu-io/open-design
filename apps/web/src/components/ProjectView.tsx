@@ -337,6 +337,11 @@ type ProjectChatSendMeta = ChatSendMeta & {
    *  the home submit (with any soft warning answered there); skip re-gating
    *  so the user is never double-prompted for one task. */
   amrGatePrechecked?: boolean;
+  /** The Home handoff owns a separately persisted prompt. Once that payload is
+   *  durably queued, report it as accepted so the handoff is consumed instead
+   *  of replaying a second copy when the queue later drains. This flag is
+   *  transport-only and is stripped before queue persistence. */
+  acceptQueuedHomeHandoff?: boolean;
 };
 
 export function mergeSavedPreviewComment(current: PreviewComment[], saved: PreviewComment): PreviewComment[] {
@@ -5712,7 +5717,7 @@ export function ProjectView({
           commentAttachments,
           meta: { ...(meta ?? {}), sessionMode: runSessionMode },
         });
-        return false;
+        return meta?.acceptQueuedHomeHandoff === true;
       }
       // Open Design Cloud pre-run balance gate: a definitively insufficient
       // wallet blocks the run BEFORE any message is persisted or a daemon run
@@ -5733,7 +5738,7 @@ export function ProjectView({
             commentAttachments,
             meta: { ...(meta ?? {}), sessionMode: runSessionMode },
           });
-          return false;
+          return meta?.acceptQueuedHomeHandoff === true;
         }
         amrGateInFlightConversationsRef.current.add(gateConversationId);
         try {
@@ -5779,7 +5784,7 @@ export function ProjectView({
           // (and re-popping a dialog) on every unrelated state change; any
           // later send that passes the gate lifts it, and a manual "run now"
           // on a queued item bypasses it deliberately.
-          const queueGateSend = () => {
+          const queueGateSend = (): boolean => {
             if (!retryTarget && !meta?.queueDrain) {
               queueChatSendForCurrentConversation({
                 conversationId: gateConversationId,
@@ -5788,11 +5793,17 @@ export function ProjectView({
                 commentAttachments,
                 meta: { ...(meta ?? {}), sessionMode: runSessionMode },
               });
+              return true;
             }
+            return false;
           };
-          const parkBlockedSend = () => {
-            queueGateSend();
+          const parkBlockedSend = (): boolean => {
+            const queued = queueGateSend();
             amrGatePausedQueueConversationsRef.current.add(gateConversationId);
+            return queued;
+          };
+          const acceptedQueuedHomeHandoff = (queued: boolean): boolean => {
+            return queued && meta?.acceptQueuedHomeHandoff === true;
           };
           // The await may have raced a conversation switch; re-run the entry
           // guard before touching any state so this stale closure can't write
@@ -5800,8 +5811,7 @@ export function ProjectView({
           // composer has already cleared, so keep the full payload queued for
           // the original conversation instead of dropping it.
           if (messagesConversationIdRef.current !== activeConversationId) {
-            queueGateSend();
-            return false;
+            return acceptedQueuedHomeHandoff(queueGateSend());
           }
           if (gate.kind === 'hard') {
             setAmrBalanceGateBlock({
@@ -5809,12 +5819,10 @@ export function ProjectView({
               snapshot: gate.snapshot,
               conversationId: gateConversationId,
             });
-            parkBlockedSend();
-            return false;
+            return acceptedQueuedHomeHandoff(parkBlockedSend());
           }
           if (gate.kind === 'unavailable') {
-            parkBlockedSend();
-            return false;
+            return acceptedQueuedHomeHandoff(parkBlockedSend());
           }
           if (gate.kind === 'soft') {
             // Low balance: pause THIS send while the reminder dialog waits
@@ -5822,8 +5830,7 @@ export function ProjectView({
             // a continuation, not a re-submit.
             const plan = await resolveAmrPlan(gate.snapshot);
             if (messagesConversationIdRef.current !== activeConversationId) {
-              queueGateSend();
-              return false;
+              return acceptedQueuedHomeHandoff(queueGateSend());
             }
             if (isPaidAmrPlan(plan)) {
               const decision = await new Promise<AmrLowBalanceDecision>((resolve) => {
@@ -5833,8 +5840,7 @@ export function ProjectView({
               // Same conversation-switch guard for the dialog-open window; the
               // payload is parked (not sent) so nothing is lost either way.
               if (decision !== 'proceed' || messagesConversationIdRef.current !== activeConversationId) {
-                parkBlockedSend();
-                return false;
+                return acceptedQueuedHomeHandoff(parkBlockedSend());
               }
             }
           }
@@ -9539,12 +9545,13 @@ export function ProjectView({
     autoSendInFlightRef.current = true;
     void handleSend(seed, attachments, [], {
         ...(context ? { context } : {}),
+        acceptQueuedHomeHandoff: true,
         // Only reuse Home's decision for the exact persisted project scope.
         // A workspace/member mismatch falls through to handleSend's normal gate.
         ...(autoSendGateStillMatches ? { amrGatePrechecked: true } : {}),
       })
-      .then((started) => {
-        if (!started) {
+      .then((accepted) => {
+        if (!accepted) {
           // The handoff was not accepted (for example a transient project
           // scope/conversation transition or a recoverable preflight block).
           // Keep every session value intact; a later dependency change can
@@ -10518,9 +10525,15 @@ function isQueuedChatSend(value: unknown): value is QueuedChatSend {
   );
 }
 
-function stripQueueOnlyFromMeta(meta: ChatSendMeta | undefined): ProjectChatSendMeta | undefined {
+function stripQueueOnlyFromMeta(
+  meta: ProjectChatSendMeta | ChatSendMeta | undefined,
+): ProjectChatSendMeta | undefined {
   if (!meta) return undefined;
-  const { queueOnly: _queueOnly, ...rest } = meta;
+  const {
+    queueOnly: _queueOnly,
+    acceptQueuedHomeHandoff: _acceptQueuedHomeHandoff,
+    ...rest
+  } = meta as ProjectChatSendMeta;
   return Object.keys(rest).length > 0 ? rest : undefined;
 }
 
