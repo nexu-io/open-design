@@ -3212,7 +3212,12 @@ function FileVersionManagerModal({
     if (contentCacheRef.current.has(versionId)) return Promise.resolve();
     const pending = inFlightRef.current.get(versionId);
     if (pending) return pending;
-    const request = fetchProjectFileVersion(projectId, file.name, versionId)
+    const request = fetchProjectFileVersion(
+      projectId,
+      file.name,
+      versionId,
+      workspaceContext,
+    )
       .then((result) => {
         if (result) contentCacheRef.current.set(versionId, result.content);
       })
@@ -3222,7 +3227,7 @@ function FileVersionManagerModal({
       });
     inFlightRef.current.set(versionId, request);
     return request;
-  }, [file.name, projectId]);
+  }, [file.name, projectId, workspaceContext]);
 
   const loadVersions = useCallback(async (preferredId?: string | null) => {
     setLoading(true);
@@ -15349,6 +15354,7 @@ function SketchViewer({
   file: ProjectFile;
 }) {
   const t = useT();
+  const { workspaceContext } = useProjectCollabContext();
   return (
     <div className="viewer image-viewer sketch-viewer">
       <div className="viewer-toolbar">
@@ -15360,7 +15366,12 @@ function SketchViewer({
         <FileActions projectId={projectId} file={file} />
       </div>
       <div className="viewer-body image-body">
-        <SketchPreview projectId={projectId} file={file} className="viewer-sketch-preview" />
+        <SketchPreview
+          projectId={projectId}
+          file={file}
+          className="viewer-sketch-preview"
+          workspaceContext={workspaceContext}
+        />
       </div>
     </div>
   );

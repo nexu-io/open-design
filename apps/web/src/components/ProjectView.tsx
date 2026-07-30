@@ -7020,7 +7020,10 @@ export function ProjectView({
           userMsg.id,
           project.id,
           projectFiles,
-          { omitNativeImageAttachments: usesAnthropicProxy(config) },
+          {
+            omitNativeImageAttachments: usesAnthropicProxy(config),
+            workspaceContext: projectRunWorkspaceContext,
+          },
         );
         // Session-dimension hints on the BYOK-OpenCode path too, so
         // run_created / run_finished carry the same session-global and

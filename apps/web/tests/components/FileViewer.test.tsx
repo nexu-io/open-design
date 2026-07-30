@@ -4122,13 +4122,15 @@ describe('FileViewer SVG artifacts', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     try {
-      render(
+      const workspaceContext = teamWorkspaceContext();
+      renderWithProjectWorkspace(
         <FileViewer
           projectId="project-1"
           projectKind="prototype"
           file={file}
           liveHtml="<html><body><h1>Current</h1></body></html>"
         />,
+        workspaceContext,
       );
 
       fireEvent.click(screen.getByRole('button', { name: 'Versions' }));
@@ -4154,6 +4156,13 @@ describe('FileViewer SVG artifacts', () => {
         expect(capturedBlob).toBeTruthy();
       });
       expect(fetchMock.mock.calls.some(([input]) => String(input) === '/api/projects/project-1/files/index.html/versions/v1')).toBe(true);
+      const versionRead = fetchMock.mock.calls.find(
+        ([input]) => String(input) === '/api/projects/project-1/files/index.html/versions/v1',
+      );
+      expect(new Headers(versionRead?.[1]?.headers).get('x-od-workspace-id'))
+        .toBe(workspaceContext.workspaceId);
+      expect(new Headers(versionRead?.[1]?.headers).get('x-od-workspace-member-id'))
+        .toBe(workspaceContext.workspaceMemberId);
       expect(fetchMock.mock.calls.some(([input]) => String(input) === '/api/projects/project-1/export/index.html?inline=1')).toBe(false);
       expect(await capturedBlob!.text()).toContain('Prior version export');
     } finally {

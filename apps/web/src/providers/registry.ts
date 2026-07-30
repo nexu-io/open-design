@@ -2281,11 +2281,15 @@ export async function fetchProjectFileVersion(
   projectId: string,
   name: string,
   versionId: string,
+  workspaceContext?: WorkspaceCollabContext | null,
 ): Promise<ProjectFileVersionResponse | null> {
   try {
     const resp = await fetch(
       `${projectFileVersionsUrl(projectId, name)}/${encodeURIComponent(versionId)}`,
-      { cache: 'no-store' },
+      {
+        cache: 'no-store',
+        ...(workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : {}),
+      },
     );
     if (!resp.ok) return null;
     return (await resp.json()) as ProjectFileVersionResponse;

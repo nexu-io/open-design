@@ -23,6 +23,8 @@ import {
   fetchLiveArtifactRefreshes,
   fetchLiveArtifacts,
   fetchProjectFileText,
+  fetchProjectFileVersion,
+  fetchProjectFiles,
   fetchProjectDeployments,
   fetchSkill,
   fetchSkillFiles,
@@ -109,6 +111,7 @@ describe('persisted project Workspace transport scope', () => {
     const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
       const url = String(input);
       if (url.includes('/raw/')) return new Response('hello');
+      if (url.endsWith('/files')) return Response.json({ files: [] });
       if (url.endsWith('/terminals')) {
         return Response.json({ terminal: { id: 'terminal-1' } });
       }
@@ -138,6 +141,7 @@ describe('persisted project Workspace transport scope', () => {
     await fetchProjectFileText('project-1', 'index.html', {
       workspaceContext: workspaceA,
     });
+    await fetchProjectFiles('project-1', { workspaceContext: workspaceA });
     await createTerminal('project-1', undefined, workspaceA);
     await sendTerminalStdin('project-1', 'terminal-1', 'pwd\n', workspaceA);
     await listConversations('project-scope-test', {
@@ -153,10 +157,33 @@ describe('persisted project Workspace transport scope', () => {
     await fetchChatRunStatus('run-1', workspaceA);
     await listActiveChatRuns('project-1', 'conversation-1', workspaceA);
 
-    expect(fetchMock).toHaveBeenCalledTimes(8);
+    expect(fetchMock).toHaveBeenCalledTimes(9);
     for (const [, init] of fetchMock.mock.calls) {
       expect(requestScope(init)).toEqual(['workspace-a', 'member-a']);
     }
+  });
+
+  it('sends exact headers when reading a historical project file version', async () => {
+    const workspaceA = teamContext('workspace-a', 'member-a');
+    const fetchMock = vi.fn<typeof fetch>(async () =>
+      Response.json({
+        version: { id: 'version-1' },
+        content: '<h1>Historical</h1>',
+      }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await fetchProjectFileVersion('project-1', 'index.html', 'version-1', workspaceA);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/projects/project-1/files/index.html/versions/version-1',
+      expect.objectContaining({
+        cache: 'no-store',
+        headers: expect.objectContaining({
+          'x-od-workspace-id': 'workspace-a',
+          'x-od-workspace-member-id': 'member-a',
+        }),
+      }),
+    );
   });
 
   it('partitions same project id conversation and tabs reads by full identity', async () => {

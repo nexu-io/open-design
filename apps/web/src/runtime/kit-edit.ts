@@ -7,8 +7,14 @@ import {
 
 export type KitTextModule = 'identity' | 'voice' | 'imagery-layout' | 'design-md';
 
-async function readBrand(projectId: string): Promise<Brand | null> {
-  const raw = await fetchProjectFileText(projectId, 'brand.json', { cache: 'no-store' });
+async function readBrand(
+  projectId: string,
+  workspaceContext?: WorkspaceCollabContext | null,
+): Promise<Brand | null> {
+  const raw = await fetchProjectFileText(projectId, 'brand.json', {
+    cache: 'no-store',
+    workspaceContext,
+  });
   if (!raw) return null;
   try {
     return JSON.parse(raw) as Brand;
@@ -37,7 +43,7 @@ export async function patchBrand(
   mutate: (brand: Brand) => void,
   workspaceContext?: WorkspaceCollabContext | null,
 ): Promise<boolean> {
-  const brand = await readBrand(projectId);
+  const brand = await readBrand(projectId, workspaceContext);
   if (!brand) return false;
   mutate(brand);
   return writeBrand(projectId, brand, workspaceContext);
@@ -95,7 +101,7 @@ export async function updateBrandColor(
 ): Promise<boolean> {
   const nextHex = normalizeHex(hex);
   if (!nextHex) return false;
-  const brand = await readBrand(projectId);
+  const brand = await readBrand(projectId, workspaceContext);
   const color = brand?.colors?.[index];
   if (!brand || !color) return false;
   color.hex = nextHex;
@@ -161,8 +167,14 @@ export async function deleteBrandImage(
   return ok;
 }
 
-export async function readDesignMd(projectId: string): Promise<string> {
-  return (await fetchProjectFileText(projectId, 'DESIGN.md', { cache: 'no-store' })) ?? '';
+export async function readDesignMd(
+  projectId: string,
+  workspaceContext?: WorkspaceCollabContext | null,
+): Promise<string> {
+  return (await fetchProjectFileText(projectId, 'DESIGN.md', {
+    cache: 'no-store',
+    workspaceContext,
+  })) ?? '';
 }
 
 export async function writeDesignMd(

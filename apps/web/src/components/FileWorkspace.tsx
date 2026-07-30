@@ -68,7 +68,10 @@ import { buildSrcdoc } from '../runtime/srcdoc';
 import { removeSpeakerNotesFromHtml } from '../runtime/speaker-notes';
 import { useDesignKit, hostnameOf, type KitColor } from '../runtime/design-kit';
 import { useKitModuleUpload } from '../runtime/kit-upload';
-import { appendResourceQuery } from '../collab/workspace-identity';
+import {
+  appendResourceQuery,
+  workspaceIdentityCacheKey,
+} from '../collab/workspace-identity';
 import {
   DesignKitView,
   type DesignKitActionFeedbackTone,
@@ -4102,6 +4105,10 @@ function DesignSystemProjectPanel({
   const t = useT();
   const analytics = useAnalytics();
   const { workspaceContext } = useProjectCollabContext();
+  // Match the exact fields sent by workspaceProjectHeaders. Billing-only
+  // refreshes must not blank and reload the kit, while a role, membership, or
+  // permission change must discard every prior identity's source snapshot.
+  const workspaceIdentity = workspaceIdentityCacheKey(workspaceContext);
   const [reviewDecisions, setReviewDecisions] = useState<Record<string, DesignSystemReviewDecision>>({});
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   const [feedbackSection, setFeedbackSection] = useState<string | null>(null);
@@ -4142,6 +4149,12 @@ function DesignSystemProjectPanel({
   const initialDesignMdRef = useRef<string | null>(null);
   const initialBrandJsonRef = useRef<string | null>(null);
   const initialBrandJsonLoadedRef = useRef(false);
+  useEffect(() => {
+    setDesignMdBody('');
+    initialDesignMdRef.current = null;
+    initialBrandJsonRef.current = null;
+    initialBrandJsonLoadedRef.current = false;
+  }, [projectId, workspaceIdentity]);
   function emitDesignSystemProjectEditClick(
     element: DesignSystemEditClickProps['element'],
     module: DesignSystemEditClickProps['module'],
@@ -4173,7 +4186,7 @@ function DesignSystemProjectPanel({
   useEffect(() => {
     let cancelled = false;
     void Promise.all([
-      readDesignMd(projectId),
+      readDesignMd(projectId, workspaceContext),
       fetchProjectFileText(projectId, 'brand.json', {
         cache: 'no-store',
         workspaceContext,
@@ -4190,7 +4203,7 @@ function DesignSystemProjectPanel({
     return () => {
       cancelled = true;
     };
-  }, [projectId, kitReloadKey]);
+  }, [projectId, kitReloadKey, workspaceIdentity]);
   const kitHost = system.provenance?.sourceUrls?.[0]
     ? hostnameOf(system.provenance.sourceUrls[0])
     : undefined;

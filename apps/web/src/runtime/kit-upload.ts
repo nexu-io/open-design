@@ -54,7 +54,14 @@ export function useKitModuleUpload(opts: {
         const storedPath = uploaded.name || path;
         const storedBase = storedPath.split('/').pop() || safe;
 
-        const raw = await fetchProjectFileText(projectId, 'brand.json', { cache: 'no-store' });
+        const raw = await fetchProjectFileText(projectId, 'brand.json', {
+          cache: 'no-store',
+          workspaceContext,
+        });
+        if (raw === null) {
+          onError?.(module, 'brand-read-failed');
+          return;
+        }
         const brand = brandFromRaw(raw, title);
         if (module === 'logo') {
           const prev = brand.logo.primary;
@@ -83,7 +90,10 @@ export function useKitModuleUpload(opts: {
           return;
         }
         if (module === 'font') {
-          const manifestRaw = await fetchProjectFileText(projectId, 'fonts/manifest.json', { cache: 'no-store' });
+          const manifestRaw = await fetchProjectFileText(projectId, 'fonts/manifest.json', {
+            cache: 'no-store',
+            workspaceContext,
+          });
           const manifest = parseFontManifest(manifestRaw);
           const family = fontFamilyFromFilename(storedBase);
           manifest.files = manifest.files.filter((entry) => entry.file !== storedBase);

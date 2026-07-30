@@ -319,7 +319,9 @@ async function resolveDesignSystemWorkspaceProject(
   if (!system.projectId) return null;
   const fallbackProject = await getProject(system.projectId, workspaceContext);
   if (!fallbackProject) return null;
-  const files = await fetchProjectFiles(system.projectId);
+  const files = workspaceContext
+    ? await fetchProjectFiles(system.projectId, { workspaceContext })
+    : await fetchProjectFiles(system.projectId);
   return {
     projectId: system.projectId,
     files,
@@ -2142,16 +2144,19 @@ export function DesignSystemDetailView({
   }
 
   const refreshWorkspaceProjectFiles = useCallback(async (projectId: string) => {
-    const next = await fetchProjectFiles(projectId);
+    const next = workspaceContext
+      ? await fetchProjectFiles(projectId, { workspaceContext })
+      : await fetchProjectFiles(projectId);
     setWorkspaceProjectFiles(next);
     return next;
-  }, []);
+  }, [workspaceContext]);
 
   const syncDesignSystemBodyFromWorkspace = useCallback(async (projectId: string) => {
     if (!system || !editable) return false;
     const nextBody = await fetchProjectFileText(projectId, 'DESIGN.md', {
       cache: 'no-store',
       cacheBustKey: Date.now(),
+      ...(workspaceContext ? { workspaceContext } : {}),
     });
     if (!nextBody || nextBody === body) return false;
     const updated = await updateDesignSystemDraft(
@@ -2164,7 +2169,7 @@ export function DesignSystemDetailView({
     setBody(updated.body);
     await onSystemsRefresh?.();
     return true;
-  }, [body, editable, onSystemsRefresh, system]);
+  }, [body, editable, onSystemsRefresh, system, workspaceContext]);
 
   // Asset counterpart of syncDesignSystemBodyFromWorkspace (spec 04 §9.3,
   // recvqb1t4FrckM): the text sync above PATCHes DESIGN.md content through

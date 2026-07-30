@@ -7,6 +7,11 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  buildWorkspacePermissions,
+  buildWorkspaceSeatSummary,
+  type WorkspaceCollabContext,
+} from '@open-design/contracts';
 
 import {
   DESIGN_FILES_TAB,
@@ -24,6 +29,10 @@ import {
   fetchProjectFolders,
 } from '../../src/providers/registry';
 import type { ChatMessage, ProjectFile, ProjectFolder } from '../../src/types';
+import {
+  CollabProvider,
+  type CollabContextValue,
+} from '../../src/collab/collab-context';
 
 vi.mock('../../src/providers/registry', async () => {
   const actual = await vi.importActual<typeof import('../../src/providers/registry')>(
@@ -256,6 +265,48 @@ function workspaceFile(name: string): ProjectFile {
     mtime: 1700000000,
     kind: name.endsWith('.html') ? 'html' : 'text',
     mime: name.endsWith('.html') ? 'text/html' : 'text/plain',
+  };
+}
+
+function teamContext(
+  workspaceId: string,
+  workspaceMemberId: string,
+): WorkspaceCollabContext {
+  return {
+    workspaceId,
+    workspaceType: 'team',
+    workspaceMemberId,
+    role: 'owner',
+    memberStatus: 'active',
+    lifecycleState: 'active',
+    billingState: 'active',
+    planId: 'team_plus',
+    providerMode: 'platform_credits',
+    teamId: `team-${workspaceId}`,
+    seatSummary: buildWorkspaceSeatSummary({ seatLimit: 3, usedSeats: 1 }),
+    permissions: buildWorkspacePermissions({ role: 'owner', lifecycleState: 'active' }),
+  };
+}
+
+function collabValue(workspaceContext: WorkspaceCollabContext): CollabContextValue {
+  return {
+    workspaceContext,
+    workspaceContextLoading: false,
+    enabled: false,
+    member: null,
+    present: [],
+    publishedVersion: null,
+    syncState: null,
+    viewerOnly: false,
+    writerAuthority: 'allowed',
+    isOwner: true,
+    ownerDisplayName: null,
+    ownerRole: null,
+    downloadPending: false,
+    reportChange: () => {},
+    requestPublish: () => {},
+    refreshPresence: () => {},
+    checkStatusNow: () => {},
   };
 }
 
@@ -1875,6 +1926,61 @@ describe('FileWorkspace launcher tab creation', () => {
         tabs: ['cover.html'],
         active: '__design_system__',
       });
+    });
+  });
+
+  it('reloads design-system source files under the complete pinned Workspace identity', async () => {
+    const workspaceA = teamContext('workspace-a', 'member-a');
+    const workspaceB = teamContext('workspace-b', 'member-b');
+    const props = {
+      projectId: 'project-1',
+      projectKind: 'prototype' as const,
+      files: [workspaceFile('DESIGN.md'), workspaceFile('brand.json')],
+      liveArtifacts: [],
+      onRefreshFiles: vi.fn(),
+      isDeck: false,
+      tabsState: { tabs: [], active: '__design_system__' },
+      onTabsStateChange: vi.fn(),
+      designSystemProject: {
+        id: 'neutral-modern',
+        title: 'Neutral Modern',
+        category: 'Starter',
+        source: 'bundled',
+        updatedAt: 1,
+      } as never,
+    };
+
+    const { rerender } = render(
+      <CollabProvider value={collabValue(workspaceA)}>
+        <FileWorkspace {...props} />
+      </CollabProvider>,
+    );
+    await waitFor(() => {
+      expect(mockedFetchProjectFileText).toHaveBeenCalledWith(
+        'project-1',
+        'DESIGN.md',
+        { cache: 'no-store', workspaceContext: workspaceA },
+      );
+    });
+
+    mockedFetchProjectFileText.mockClear();
+    rerender(
+      <CollabProvider value={collabValue(workspaceB)}>
+        <FileWorkspace {...props} />
+      </CollabProvider>,
+    );
+
+    await waitFor(() => {
+      expect(mockedFetchProjectFileText).toHaveBeenCalledWith(
+        'project-1',
+        'DESIGN.md',
+        { cache: 'no-store', workspaceContext: workspaceB },
+      );
+      expect(mockedFetchProjectFileText).toHaveBeenCalledWith(
+        'project-1',
+        'brand.json',
+        { cache: 'no-store', workspaceContext: workspaceB },
+      );
     });
   });
 

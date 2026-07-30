@@ -433,7 +433,13 @@ function ChatArtifactPreview({
     `v=${Math.round(file.mtime)}`,
   );
   if (isRenderableSketchJson(file)) {
-    return <SketchPreview projectId={projectId} file={file} />;
+    return (
+      <SketchPreview
+        projectId={projectId}
+        file={file}
+        workspaceContext={workspaceContext}
+      />
+    );
   }
   if (file.kind === 'image' || file.kind === 'sketch') {
     return <img src={url} alt="" loading="lazy" />;
