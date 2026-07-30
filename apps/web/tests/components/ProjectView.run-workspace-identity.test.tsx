@@ -817,6 +817,17 @@ describe('a Home auto-send observes a project billing scope that settles after m
 
   it('flushes project A tabs with A authority after rendering project B', async () => {
     window.sessionStorage.removeItem(`od:auto-send-first:${PROJECT_ID}`);
+    projectCollabMocks.writerAuthority = 'allowed';
+    workspaceScopeMocks.projectScope = {
+      loading: false,
+      scope: {
+        kind: 'team',
+        projectId: PROJECT_ID,
+        workspaceId: TEAM_WORKSPACE,
+        visibility: 'team',
+        context: CALLER_CONTEXT as WorkspaceCollabContext & { workspaceType: 'team' },
+      },
+    };
     const projectA: Project = {
       ...project(),
       pendingPrompt: '',
@@ -914,6 +925,46 @@ describe('a Home auto-send observes a project billing scope that settles after m
     });
     expect(mockedPersistTabsToDaemonNow).not.toHaveBeenCalled();
   });
+
+  it.each(['pending', 'denied'] as const)(
+    'does not treat a missing local workspaceId as unbound when Team writer authority is %s',
+    async (writerAuthority) => {
+      window.sessionStorage.removeItem(`od:auto-send-first:${PROJECT_ID}`);
+      projectCollabMocks.writerAuthority = writerAuthority;
+      projectCollabMocks.viewerOnly = writerAuthority === 'denied';
+      workspaceScopeMocks.projectScope = {
+        loading: false,
+        scope: {
+          kind: 'team',
+          projectId: PROJECT_ID,
+          workspaceId: TEAM_WORKSPACE,
+          visibility: 'team',
+          context: CALLER_CONTEXT as WorkspaceCollabContext & { workspaceType: 'team' },
+        },
+      };
+
+      const view = renderProjectView({
+        project: {
+          ...project(),
+          pendingPrompt: '',
+          workspaceId: undefined,
+        },
+      });
+      await waitFor(() => expect(mockedLoadTabs).toHaveBeenCalledTimes(1));
+      expect(mockedLoadTabs).toHaveBeenCalledWith(
+        PROJECT_ID,
+        CALLER_CONTEXT,
+        { reconcileNewerCacheToDaemon: false },
+      );
+      vi.useFakeTimers();
+      fireEvent.click(view.getByTestId('queue-alt-tab-write'));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(400);
+      });
+
+      expect(mockedPersistTabsToDaemonNow).not.toHaveBeenCalled();
+    },
+  );
 
   it('coalesces confirmed-writer tab changes into one daemon PUT', async () => {
     window.sessionStorage.removeItem(`od:auto-send-first:${PROJECT_ID}`);
@@ -1139,6 +1190,48 @@ describe('a Home auto-send observes a project billing scope that settles after m
     };
     view.rerender(projectViewElement({ project: stableProject }));
     expect(mockedUseProjectFileEvents.mock.calls.at(-1)?.[1]).toBe(false);
+  });
+
+  it('does not treat a missing local workspaceId as settled unbound SSE authority', async () => {
+    window.sessionStorage.removeItem(`od:auto-send-first:${PROJECT_ID}`);
+    workspaceScopeMocks.ambientContext = null;
+    workspaceScopeMocks.projectScope = { loading: true, scope: null };
+
+    renderProjectView({
+      project: {
+        ...project(),
+        pendingPrompt: '',
+        workspaceId: undefined,
+      },
+    });
+
+    await waitFor(() => expect(mockedUseProjectFileEvents).toHaveBeenCalled());
+    expect(mockedUseProjectFileEvents.mock.calls.at(-1)?.[1]).toBe(false);
+  });
+
+  it('enables SSE for a settled Personal project scope', async () => {
+    window.sessionStorage.removeItem(`od:auto-send-first:${PROJECT_ID}`);
+    workspaceScopeMocks.ambientContext = PERSONAL_CONTEXT;
+    workspaceScopeMocks.projectScope = {
+      loading: false,
+      scope: {
+        kind: 'personal',
+        projectId: PROJECT_ID,
+        workspaceId: PERSONAL_CONTEXT.workspaceId,
+        visibility: 'personal',
+        context: PERSONAL_CONTEXT as WorkspaceCollabContext & { workspaceType: 'personal' },
+      },
+    };
+
+    renderProjectView({
+      project: {
+        ...project(),
+        pendingPrompt: '',
+        workspaceId: undefined,
+      },
+    });
+    await waitFor(() => expect(mockedUseProjectFileEvents).toHaveBeenCalled());
+    expect(mockedUseProjectFileEvents.mock.calls.at(-1)?.[1]).toBe(true);
   });
 
   it('keeps anonymous unbound project SSE enabled', async () => {

@@ -239,6 +239,7 @@ import {
 import {
   projectWorkspaceContext,
   projectWorkspaceScopeAuthorizesAmr,
+  projectWorkspaceScopeReady,
   runWorkspaceIdentity,
   useProjectWorkspaceScope,
 } from '../collab/useProjectWorkspaceScope';
@@ -1704,13 +1705,14 @@ export function ProjectView({
   // Tab layout is private browser state for a read-only Team viewer. Keep its
   // identity-partitioned local cache working, but only let a positively proven
   // project writer update the daemon's shared project row. Personal and legacy
-  // unbound projects retain their existing local-daemon persistence.
+  // unbound projects retain their existing local-daemon persistence once the
+  // daemon has settled that scope. The local project row is not an unbound
+  // authority witness: it can lag a daemon-side Team binding.
   const projectTabsCanPersistToDaemon =
-    !project.workspaceId?.trim()
-    || projectWorkspaceScopeState.scope?.kind === 'unbound'
-    || projectRunWorkspaceContext?.workspaceType === 'personal'
+    projectWorkspaceScopeState.scope?.kind === 'unbound'
+    || projectWorkspaceScopeState.scope?.kind === 'personal'
     || (
-      projectRunWorkspaceContext?.workspaceType === 'team'
+      projectWorkspaceScopeState.scope?.kind === 'team'
       && projectCollab.writerAuthority === 'allowed'
     );
   const projectTabsCanPersistToDaemonRef = useRef(
@@ -3343,13 +3345,12 @@ export function ProjectView({
   // A bound project must not open a headerless EventSource while its exact
   // authority is unresolved or forbidden: that request can only fail and the
   // EventSource reconnect loop would keep retrying a terminal response.
-  // Anonymous/local unbound projects intentionally keep their legacy stream.
+  // Anonymous/local unbound projects intentionally keep their legacy stream
+  // after the daemon settles them as unbound. A missing local workspaceId is
+  // not sufficient: that project row can lag a hidden daemon-side Team mirror.
   const projectEventsEnabled =
     daemonLive
-    && (
-      !project.workspaceId?.trim()
-      || projectRunWorkspaceContext !== null
-    );
+    && projectWorkspaceScopeReady(projectWorkspaceScopeState.scope);
   useProjectFileEvents(project.id, projectEventsEnabled, handleProjectEvent, {
     onConnectedChange: setProjectEventsSseConnected,
   }, projectRunWorkspaceContext);
