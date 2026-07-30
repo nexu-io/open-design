@@ -48,10 +48,158 @@ export interface RegisterCollabPresenceRoutesDeps {
     | null
   >;
   /**
+   * Bounded successful authority lease for the idempotent GET surface.
+   * Heartbeat and leave deliberately keep using `verifyWorkspaceRequest`.
+   */
+  verifyWorkspaceReadRequest?: RegisterCollabPresenceRoutesDeps['verifyWorkspaceRequest'];
+  /** Test/operations seam for the short-lived cloud list cache. */
+  presenceListCacheFreshMs?: number;
+  /** Virtual clock seam for deterministic TTL coverage. */
+  presenceListCacheNow?: () => number;
+  /**
    * The configured cloud route authoritatively rejects projects outside the
    * requested workspace, so a separate remote team-project lookup is redundant.
    */
   cloudAuthorizesProjectPresence?: (projectId: string) => boolean;
+}
+
+export interface CollabPresenceRoutesControl {
+  /**
+   * Drop cached list results for one project after a hub presence-changed
+   * signal. `workspaceId` keeps invalidation scoped when it is known.
+   */
+  invalidatePresence(projectId: string, workspaceId?: string): void;
+}
+
+const DEFAULT_PRESENCE_LIST_CACHE_FRESH_MS = 1_000;
+const MAX_PRESENCE_LIST_CACHE_ENTRIES = 256;
+
+interface PresenceListCacheEntry {
+  projectId: string;
+  workspaceId: string;
+  value: CollabPresenceMember[] | null;
+  settledAt: number;
+  inflight: Promise<CollabPresenceMember[]> | null;
+}
+
+function presenceListCacheKey(
+  projectId: string,
+  context: WorkspaceCollabContext | null,
+): string {
+  return JSON.stringify([
+    projectId,
+    context?.workspaceId?.trim() ?? '',
+    context?.workspaceMemberId?.trim() ?? '',
+    context?.workspaceType ?? '',
+    context?.role ?? '',
+    context?.memberStatus ?? '',
+    context?.lifecycleState ?? '',
+  ]);
+}
+
+function createPresenceListCache(options: {
+  freshMs: number;
+  now: () => number;
+}) {
+  const entries = new Map<string, PresenceListCacheEntry>();
+  const store = (key: string, entry: PresenceListCacheEntry) => {
+    entries.delete(key);
+    entries.set(key, entry);
+    while (entries.size > MAX_PRESENCE_LIST_CACHE_ENTRIES) {
+      const oldestKey = entries.keys().next().value;
+      if (oldestKey === undefined) break;
+      entries.delete(oldestKey);
+    }
+  };
+
+  const refresh = (
+    key: string,
+    entry: PresenceListCacheEntry,
+    fetcher: () => Promise<CollabPresenceMember[]>,
+  ): Promise<CollabPresenceMember[]> => {
+    const request = Promise.resolve().then(fetcher);
+    entry.inflight = request;
+    request.then(
+      (value) => {
+        if (entries.get(key) !== entry) return;
+        entry.value = value;
+        entry.settledAt = options.now();
+        entry.inflight = null;
+      },
+      () => {
+        if (entries.get(key) !== entry) return;
+        // A failed cold read is not authority or presence evidence. A failed
+        // background refresh also drops its old value after the one caller
+        // that already received it, so an outage cannot display somebody as
+        // online indefinitely.
+        entries.delete(key);
+      },
+    );
+    return request;
+  };
+
+  return {
+    read(
+      projectId: string,
+      context: WorkspaceCollabContext | null,
+      fetcher: () => Promise<CollabPresenceMember[]>,
+    ): Promise<CollabPresenceMember[]> {
+      const key = presenceListCacheKey(projectId, context);
+      let entry = entries.get(key);
+      if (!entry) {
+        entry = {
+          projectId,
+          workspaceId: context?.workspaceId?.trim() ?? '',
+          value: null,
+          settledAt: 0,
+          inflight: null,
+        };
+        store(key, entry);
+        return refresh(key, entry, fetcher);
+      }
+      // Bounded LRU: a daemon that opens many historical projects must not
+      // retain every short-lived roster forever.
+      store(key, entry);
+      if (entry.value !== null) {
+        const value = entry.value;
+        if (
+          !entry.inflight
+          && options.now() - entry.settledAt >= options.freshMs
+        ) {
+          // Polls never wait on a fresh Vela process once this exact viewer has
+          // a value. Refresh in the background and keep concurrent callers on
+          // the same process.
+          void refresh(key, entry, fetcher).catch(() => undefined);
+        }
+        return Promise.resolve(value);
+      }
+      return entry.inflight ?? refresh(key, entry, fetcher);
+    },
+
+    publish(
+      projectId: string,
+      context: WorkspaceCollabContext | null,
+      value: CollabPresenceMember[],
+    ): void {
+      const key = presenceListCacheKey(projectId, context);
+      store(key, {
+        projectId,
+        workspaceId: context?.workspaceId?.trim() ?? '',
+        value,
+        settledAt: options.now(),
+        inflight: null,
+      });
+    },
+
+    invalidate(projectId: string, workspaceId?: string): void {
+      const exactWorkspaceId = workspaceId?.trim();
+      for (const [key, entry] of entries) {
+        if (entry.projectId !== projectId) continue;
+        if (exactWorkspaceId && entry.workspaceId !== exactWorkspaceId) continue;
+        entries.delete(key);
+      }
+    },
+  };
 }
 
 /**
@@ -207,9 +355,19 @@ function sendWorkspaceVerificationFailure(
  * shared project; clients poll the present set (live cursors were cut, content
  * is polled — the spec). The set is process-local in {@link CollabRuntime}.
  */
-export function registerCollabPresenceRoutes(app: Express, deps: RegisterCollabPresenceRoutesDeps): void {
+export function registerCollabPresenceRoutes(
+  app: Express,
+  deps: RegisterCollabPresenceRoutesDeps,
+): CollabPresenceRoutesControl {
   const { presence } = deps.collab;
   const cloud = deps.cloud ?? null;
+  const presenceLists = createPresenceListCache({
+    freshMs: Math.max(
+      0,
+      deps.presenceListCacheFreshMs ?? DEFAULT_PRESENCE_LIST_CACHE_FRESH_MS,
+    ),
+    now: deps.presenceListCacheNow ?? Date.now,
+  });
 
   async function projectIsShared(
     projectId: string,
@@ -235,13 +393,18 @@ export function registerCollabPresenceRoutes(app: Express, deps: RegisterCollabP
   async function verifiedContext(
     req: Request,
     projectId: string,
+    mode: 'read' | 'write',
   ): Promise<PresenceWorkspaceVerification> {
-    if (!deps.verifyWorkspaceRequest) {
+    const verify =
+      mode === 'read'
+        ? deps.verifyWorkspaceReadRequest ?? deps.verifyWorkspaceRequest
+        : deps.verifyWorkspaceRequest;
+    if (!verify) {
       return { ok: true, context: null };
     }
     try {
       return normalizeWorkspaceVerification(
-        await deps.verifyWorkspaceRequest(req, projectId),
+        await verify(req, projectId),
       );
     } catch {
       return {
@@ -255,7 +418,7 @@ export function registerCollabPresenceRoutes(app: Express, deps: RegisterCollabP
   }
 
   app.get('/api/projects/:id/presence', async (req, res) => {
-    const verification = await verifiedContext(req, req.params.id);
+    const verification = await verifiedContext(req, req.params.id, 'read');
     if (cloud && !verification.ok) {
       return sendWorkspaceVerificationFailure(res, verification);
     }
@@ -269,7 +432,11 @@ export function registerCollabPresenceRoutes(app: Express, deps: RegisterCollabP
     if (cloud) {
       try {
         return res.json({
-          present: await cloud.listPresence(req.params.id, context),
+          present: await presenceLists.read(
+            req.params.id,
+            context,
+            () => cloud.listPresence(req.params.id, context),
+          ),
         });
       } catch (error) {
         return cloudError(res, error);
@@ -281,7 +448,7 @@ export function registerCollabPresenceRoutes(app: Express, deps: RegisterCollabP
   app.post('/api/projects/:id/presence/heartbeat', async (req, res) => {
     const heartbeat = readHeartbeat(req.body);
     if (!heartbeat) return res.status(400).json({ error: 'memberId required' });
-    const verification = await verifiedContext(req, req.params.id);
+    const verification = await verifiedContext(req, req.params.id, 'write');
     if (cloud && !verification.ok) {
       return sendWorkspaceVerificationFailure(res, verification);
     }
@@ -305,12 +472,14 @@ export function registerCollabPresenceRoutes(app: Express, deps: RegisterCollabP
     }
     if (cloud) {
       try {
+        const present = await cloud.heartbeatPresence(
+          req.params.id,
+          heartbeat,
+          context,
+        );
+        presenceLists.publish(req.params.id, context, present);
         return res.json({
-          present: await cloud.heartbeatPresence(
-            req.params.id,
-            heartbeat,
-            context,
-          ),
+          present,
         });
       } catch (error) {
         return cloudError(res, error);
@@ -323,7 +492,7 @@ export function registerCollabPresenceRoutes(app: Express, deps: RegisterCollabP
   app.post('/api/projects/:id/presence/leave', async (req, res) => {
     const leave = readLeave(req.body);
     if (!leave) return res.status(400).json({ error: 'memberId required' });
-    const verification = await verifiedContext(req, req.params.id);
+    const verification = await verifiedContext(req, req.params.id, 'write');
     if (cloud && !verification.ok) {
       return sendWorkspaceVerificationFailure(res, verification);
     }
@@ -337,9 +506,15 @@ export function registerCollabPresenceRoutes(app: Express, deps: RegisterCollabP
     }
     if (cloud) {
       try {
+        const present = await cloud.leavePresence(
+          req.params.id,
+          leave,
+          context,
+        );
+        presenceLists.publish(req.params.id, context, present);
         return res.json({
           ok: true,
-          present: await cloud.leavePresence(req.params.id, leave, context),
+          present,
         });
       } catch (error) {
         return cloudError(res, error);
@@ -348,4 +523,9 @@ export function registerCollabPresenceRoutes(app: Express, deps: RegisterCollabP
     presence.leave(req.params.id, leave.memberId);
     res.json({ ok: true, present: presence.present(req.params.id) });
   });
+
+  return {
+    invalidatePresence: (projectId, workspaceId) =>
+      presenceLists.invalidate(projectId, workspaceId),
+  };
 }

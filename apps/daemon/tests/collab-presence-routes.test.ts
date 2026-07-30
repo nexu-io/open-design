@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import express from 'express';
 import http from 'node:http';
+import {
+  buildWorkspacePermissions,
+  buildWorkspaceSeatSummary,
+  type WorkspaceCollabContext,
+} from '@open-design/contracts';
 import { createCollabRuntime } from '../src/collab/runtime.js';
 import type {
   CollabPresenceCloudClient,
@@ -10,6 +15,8 @@ import {
   createCollabPresenceCloudClient,
   registerCollabPresenceRoutes,
 } from '../src/routes/collab-presence.js';
+import { verifyWorkspaceRequestContext } from '../src/collab/request-workspace-context.js';
+import { createCachedWorkspaceDirectoryFetcher } from '../src/collab/vela-workspace-context.js';
 
 let server: http.Server | null = null;
 
@@ -27,11 +34,14 @@ async function startPresenceServer(
     isProjectShared?: (projectId: string) => Promise<boolean>;
     cloudAuthorizesProjectPresence?: (projectId: string) => boolean;
     verifyWorkspaceRequest?: RegisterCollabPresenceRoutesDeps['verifyWorkspaceRequest'];
+    verifyWorkspaceReadRequest?: RegisterCollabPresenceRoutesDeps['verifyWorkspaceReadRequest'];
+    presenceListCacheFreshMs?: number;
+    presenceListCacheNow?: () => number;
   } = {},
 ) {
   const app = express();
   app.use(express.json());
-  registerCollabPresenceRoutes(app, {
+  const routes = registerCollabPresenceRoutes(app, {
     collab: createCollabRuntime(),
     ...(cloud ? { cloud } : {}),
     ...(options.isProjectShared ? { isProjectShared: options.isProjectShared } : {}),
@@ -41,6 +51,15 @@ async function startPresenceServer(
     ...(options.verifyWorkspaceRequest
       ? { verifyWorkspaceRequest: options.verifyWorkspaceRequest }
       : {}),
+    ...(options.verifyWorkspaceReadRequest
+      ? { verifyWorkspaceReadRequest: options.verifyWorkspaceReadRequest }
+      : {}),
+    ...(options.presenceListCacheFreshMs !== undefined
+      ? { presenceListCacheFreshMs: options.presenceListCacheFreshMs }
+      : {}),
+    ...(options.presenceListCacheNow
+      ? { presenceListCacheNow: options.presenceListCacheNow }
+      : {}),
   });
   server = http.createServer(app);
   await new Promise<void>((resolve) => server!.listen(0, resolve));
@@ -48,10 +67,22 @@ async function startPresenceServer(
   if (!address || typeof address === 'string') throw new Error('server did not bind to a TCP port');
   const base = `http://127.0.0.1:${address.port}`;
   return {
-    async json(route: string, options: { method?: string; body?: unknown } = {}) {
+    routes,
+    async json(
+      route: string,
+      options: {
+        method?: string;
+        body?: unknown;
+        headers?: Record<string, string>;
+      } = {},
+    ) {
       const init: RequestInit = { method: options.method ?? 'GET' };
+      if (options.headers) init.headers = options.headers;
       if (options.body !== undefined) {
-        init.headers = { 'content-type': 'application/json' };
+        init.headers = {
+          ...options.headers,
+          'content-type': 'application/json',
+        };
         init.body = JSON.stringify(options.body);
       }
       const response = await fetch(`${base}${route}`, init);
@@ -62,6 +93,30 @@ async function startPresenceServer(
 
 function presentIds(body: Record<string, any>): string[] {
   return (body.present as { memberId: string }[]).map((member) => member.memberId).sort();
+}
+
+function teamContext(
+  workspaceId = 'w1',
+  workspaceMemberId = 'm1',
+): WorkspaceCollabContext {
+  return {
+    workspaceId,
+    workspaceName: `Workspace ${workspaceId}`,
+    workspaceType: 'team',
+    teamId: workspaceId,
+    workspaceMemberId,
+    role: 'member',
+    memberStatus: 'active',
+    lifecycleState: 'active',
+    billingState: 'active',
+    planId: null,
+    providerMode: 'platform_credits',
+    seatSummary: buildWorkspaceSeatSummary({ seatLimit: 5, usedSeats: 1 }),
+    permissions: buildWorkspacePermissions({
+      role: 'member',
+      lifecycleState: 'active',
+    }),
+  };
 }
 
 describe('collab presence routes', () => {
@@ -152,7 +207,6 @@ describe('collab presence routes', () => {
           activity: { label: '正在评论 Typography' },
         },
       },
-      { op: 'list', projectId: 'p1' },
       { op: 'leave', projectId: 'p1', input: { memberId: 'm1', clientId: 'client-1' } },
     ]);
   });
@@ -219,6 +273,344 @@ describe('collab presence routes', () => {
     expect(heartbeat.status).toBe(200);
     expect(calls).toEqual(['list:p1', 'heartbeat:p1']);
     expect(isProjectShared).not.toHaveBeenCalled();
+  });
+
+  it('uses the read authority lease and coalesces sequential cloud presence reads', async () => {
+    const context = teamContext();
+    let now = 1_000;
+    const fetchDirectory = vi.fn(async () => ({
+      ok: true as const,
+      items: [{
+        workspaceId: context.workspaceId,
+        workspaceName: context.workspaceName ?? context.workspaceId,
+        workspaceType: context.workspaceType,
+        workspaceMemberId: context.workspaceMemberId,
+        role: context.role,
+        memberStatus: context.memberStatus,
+        lifecycleState: context.lifecycleState,
+      }],
+    }));
+    const cachedDirectory = createCachedWorkspaceDirectoryFetcher({
+      fetchDirectory,
+      identityKey: () => 'presence-reader',
+      ttlMs: 5_000,
+      now: () => now,
+    });
+    const verifyWorkspaceRequest = vi.fn(async () => {
+      throw new Error('GET must not use fresh mutation authority');
+    });
+    const verifyWorkspaceReadRequest = vi.fn((req: unknown) =>
+      verifyWorkspaceRequestContext({
+        req,
+        fetchWorkspaceDirectory: cachedDirectory,
+      }));
+    const listPresence = vi.fn(async () => [{ memberId: 'm1' }]);
+    const api = await startPresenceServer(
+      {
+        heartbeatPresence: vi.fn(async () => []),
+        listPresence,
+        leavePresence: vi.fn(async () => []),
+      },
+      {
+        verifyWorkspaceRequest,
+        verifyWorkspaceReadRequest,
+        cloudAuthorizesProjectPresence: () => true,
+      },
+    );
+
+    const headers = {
+      'x-od-workspace-id': context.workspaceId,
+      'x-od-workspace-member-id': context.workspaceMemberId,
+    };
+    await expect(api.json('/api/projects/p1/presence', { headers })).resolves.toMatchObject({
+      status: 200,
+      body: { present: [{ memberId: 'm1' }] },
+    });
+    now += 4_999;
+    await expect(api.json('/api/projects/p1/presence', { headers })).resolves.toMatchObject({
+      status: 200,
+      body: { present: [{ memberId: 'm1' }] },
+    });
+
+    expect(verifyWorkspaceReadRequest).toHaveBeenCalledTimes(2);
+    expect(fetchDirectory).toHaveBeenCalledTimes(1);
+    expect(verifyWorkspaceRequest).not.toHaveBeenCalled();
+    expect(listPresence).toHaveBeenCalledTimes(1);
+  });
+
+  it('single-flights concurrent presence reads for one exact viewer scope', async () => {
+    let resolveList:
+      | ((present: Array<{ memberId: string }>) => void)
+      | undefined;
+    const listPresence = vi.fn(
+      () =>
+        new Promise<Array<{ memberId: string }>>((resolve) => {
+          resolveList = resolve;
+        }),
+    );
+    const context = teamContext();
+    const api = await startPresenceServer(
+      {
+        heartbeatPresence: vi.fn(async () => []),
+        listPresence,
+        leavePresence: vi.fn(async () => []),
+      },
+      {
+        verifyWorkspaceReadRequest: async () => ({ ok: true, context }),
+        cloudAuthorizesProjectPresence: () => true,
+      },
+    );
+
+    const first = api.json('/api/projects/p1/presence');
+    const second = api.json('/api/projects/p1/presence');
+    await vi.waitFor(() => expect(listPresence).toHaveBeenCalledTimes(1));
+    resolveList?.([{ memberId: 'm1' }]);
+
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      { status: 200, body: { present: [{ memberId: 'm1' }] } },
+      { status: 200, body: { present: [{ memberId: 'm1' }] } },
+    ]);
+  });
+
+  it('isolates cached presence by workspace, project, and viewer member', async () => {
+    const listPresence = vi.fn(async (_projectId, context) => [
+      { memberId: context?.workspaceMemberId ?? 'missing' },
+    ]);
+    const api = await startPresenceServer(
+      {
+        heartbeatPresence: vi.fn(async () => []),
+        listPresence,
+        leavePresence: vi.fn(async () => []),
+      },
+      {
+        verifyWorkspaceReadRequest: async (req) => {
+          const workspaceId = String(req.headers['x-test-workspace']);
+          const workspaceMemberId = String(req.headers['x-test-member']);
+          return {
+            ok: true,
+            context: teamContext(workspaceId, workspaceMemberId),
+          };
+        },
+        cloudAuthorizesProjectPresence: () => true,
+      },
+    );
+    const scopedGet = (projectId: string, workspaceId: string, memberId: string) =>
+      api.json(`/api/projects/${projectId}/presence`, {
+        headers: {
+          'x-test-workspace': workspaceId,
+          'x-test-member': memberId,
+        },
+      });
+
+    await scopedGet('p1', 'w1', 'm1');
+    await scopedGet('p1', 'w1', 'm2');
+    await scopedGet('p1', 'w2', 'm1');
+    await scopedGet('p2', 'w1', 'm1');
+    await scopedGet('p1', 'w1', 'm1');
+
+    expect(listPresence).toHaveBeenCalledTimes(4);
+  });
+
+  it('uses a virtual clock for TTL refresh and explicit hub invalidation', async () => {
+    let now = 1_000;
+    const listPresence = vi
+      .fn()
+      .mockResolvedValueOnce([{ memberId: 'first' }])
+      .mockResolvedValueOnce([{ memberId: 'refreshed' }])
+      .mockResolvedValueOnce([{ memberId: 'invalidated' }]);
+    const context = teamContext();
+    const api = await startPresenceServer(
+      {
+        heartbeatPresence: vi.fn(async () => []),
+        listPresence,
+        leavePresence: vi.fn(async () => []),
+      },
+      {
+        verifyWorkspaceReadRequest: async () => ({ ok: true, context }),
+        cloudAuthorizesProjectPresence: () => true,
+        presenceListCacheFreshMs: 1_000,
+        presenceListCacheNow: () => now,
+      },
+    );
+
+    expect((await api.json('/api/projects/p1/presence')).body.present).toEqual([
+      { memberId: 'first' },
+    ]);
+    now += 999;
+    expect((await api.json('/api/projects/p1/presence')).body.present).toEqual([
+      { memberId: 'first' },
+    ]);
+    expect(listPresence).toHaveBeenCalledTimes(1);
+
+    now += 1;
+    expect((await api.json('/api/projects/p1/presence')).body.present).toEqual([
+      { memberId: 'first' },
+    ]);
+    await vi.waitFor(() => expect(listPresence).toHaveBeenCalledTimes(2));
+    expect((await api.json('/api/projects/p1/presence')).body.present).toEqual([
+      { memberId: 'refreshed' },
+    ]);
+
+    api.routes.invalidatePresence('p1', 'w1');
+    expect((await api.json('/api/projects/p1/presence')).body.present).toEqual([
+      { memberId: 'invalidated' },
+    ]);
+    expect(listPresence).toHaveBeenCalledTimes(3);
+  });
+
+  it('does not cache failed cloud presence reads', async () => {
+    const listPresence = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('temporary outage'))
+      .mockResolvedValueOnce([{ memberId: 'm1' }]);
+    const context = teamContext();
+    const api = await startPresenceServer(
+      {
+        heartbeatPresence: vi.fn(async () => []),
+        listPresence,
+        leavePresence: vi.fn(async () => []),
+      },
+      {
+        verifyWorkspaceReadRequest: async () => ({ ok: true, context }),
+        cloudAuthorizesProjectPresence: () => true,
+      },
+    );
+
+    expect((await api.json('/api/projects/p1/presence')).status).toBe(502);
+    expect((await api.json('/api/projects/p1/presence')).status).toBe(200);
+    expect(listPresence).toHaveBeenCalledTimes(2);
+  });
+
+  it('drops stale presence after a failed background refresh', async () => {
+    let now = 1_000;
+    const listPresence = vi
+      .fn()
+      .mockResolvedValueOnce([{ memberId: 'stale' }])
+      .mockRejectedValueOnce(new Error('temporary outage'))
+      .mockResolvedValueOnce([{ memberId: 'recovered' }]);
+    const context = teamContext();
+    const api = await startPresenceServer(
+      {
+        heartbeatPresence: vi.fn(async () => []),
+        listPresence,
+        leavePresence: vi.fn(async () => []),
+      },
+      {
+        verifyWorkspaceReadRequest: async () => ({ ok: true, context }),
+        cloudAuthorizesProjectPresence: () => true,
+        presenceListCacheFreshMs: 1_000,
+        presenceListCacheNow: () => now,
+      },
+    );
+
+    expect((await api.json('/api/projects/p1/presence')).body.present).toEqual([
+      { memberId: 'stale' },
+    ]);
+    now += 1_000;
+    expect((await api.json('/api/projects/p1/presence')).body.present).toEqual([
+      { memberId: 'stale' },
+    ]);
+    await vi.waitFor(() => expect(listPresence).toHaveBeenCalledTimes(2));
+    expect((await api.json('/api/projects/p1/presence')).body.present).toEqual([
+      { memberId: 'recovered' },
+    ]);
+    expect(listPresence).toHaveBeenCalledTimes(3);
+  });
+
+  it('denies reads after the authority lease expires without serving cached presence', async () => {
+    const context = teamContext();
+    let now = 1_000;
+    let directoryItems = [{
+      workspaceId: context.workspaceId,
+      workspaceName: context.workspaceName ?? context.workspaceId,
+      workspaceType: context.workspaceType,
+      workspaceMemberId: context.workspaceMemberId,
+      role: context.role,
+      memberStatus: context.memberStatus,
+      lifecycleState: context.lifecycleState,
+    }];
+    const fetchDirectory = vi.fn(async () => ({
+      ok: true as const,
+      items: directoryItems,
+    }));
+    const cachedDirectory = createCachedWorkspaceDirectoryFetcher({
+      fetchDirectory,
+      identityKey: () => 'revoked-presence-reader',
+      ttlMs: 5_000,
+      now: () => now,
+    });
+    const listPresence = vi.fn(async () => [{ memberId: 'm1' }]);
+    const verifyWorkspaceReadRequest = vi.fn((req: unknown) =>
+      verifyWorkspaceRequestContext({
+        req,
+        fetchWorkspaceDirectory: cachedDirectory,
+      }));
+    const api = await startPresenceServer(
+      {
+        heartbeatPresence: vi.fn(async () => []),
+        listPresence,
+        leavePresence: vi.fn(async () => []),
+      },
+      {
+        verifyWorkspaceReadRequest,
+        cloudAuthorizesProjectPresence: () => true,
+      },
+    );
+    const headers = {
+      'x-od-workspace-id': context.workspaceId,
+      'x-od-workspace-member-id': context.workspaceMemberId,
+    };
+
+    expect((await api.json('/api/projects/p1/presence', { headers })).status).toBe(200);
+    directoryItems = [];
+    now += 4_999;
+    expect((await api.json('/api/projects/p1/presence', { headers })).status).toBe(200);
+    now += 1;
+    expect((await api.json('/api/projects/p1/presence', { headers })).status).toBe(403);
+    expect(fetchDirectory).toHaveBeenCalledTimes(2);
+    expect(listPresence).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps heartbeat and leave on fresh authority and publishes their latest result', async () => {
+    const context = teamContext();
+    const verifyWorkspaceRequest = vi.fn(async () => ({
+      ok: true as const,
+      context,
+    }));
+    const verifyWorkspaceReadRequest = vi.fn(async () => ({
+      ok: true as const,
+      context,
+    }));
+    const heartbeatPresence = vi.fn(async () => [{ memberId: 'm1' }]);
+    const leavePresence = vi.fn(async () => []);
+    const listPresence = vi.fn(async () => {
+      throw new Error('mutation result should prime the read cache');
+    });
+    const api = await startPresenceServer(
+      { heartbeatPresence, listPresence, leavePresence },
+      {
+        verifyWorkspaceRequest,
+        verifyWorkspaceReadRequest,
+        cloudAuthorizesProjectPresence: () => true,
+      },
+    );
+
+    expect((await api.json('/api/projects/p1/presence/heartbeat', {
+      method: 'POST',
+      body: { memberId: 'm1' },
+    })).status).toBe(200);
+    expect((await api.json('/api/projects/p1/presence')).body.present).toEqual([
+      { memberId: 'm1' },
+    ]);
+    expect((await api.json('/api/projects/p1/presence/leave', {
+      method: 'POST',
+      body: { memberId: 'm1' },
+    })).status).toBe(200);
+    expect((await api.json('/api/projects/p1/presence')).body.present).toEqual([]);
+
+    expect(verifyWorkspaceRequest).toHaveBeenCalledTimes(2);
+    expect(verifyWorkspaceReadRequest).toHaveBeenCalledTimes(2);
+    expect(listPresence).not.toHaveBeenCalled();
   });
 
   it('returns a retryable 503 without relay side effects when Workspace authority is unavailable', async () => {

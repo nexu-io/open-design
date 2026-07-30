@@ -153,8 +153,13 @@ describe('collab presence with the vela-cli collab transport on', () => {
     await setupVelaStub();
     const api = await startIsolatedServer();
 
-    // The cloud answer wins over anything the in-process tracker holds, which is
-    // how a second daemon's viewer becomes visible here.
+    // Exercise the read relay before the heartbeat primes its short-lived
+    // roster cache. The cloud answer wins over anything the in-process tracker
+    // holds, which is how a second daemon's viewer becomes visible here.
+    const list = await api.get(`/api/projects/${SHARED_PROJECT}/presence`);
+    expect(list.status).toBe(200);
+    expect(presentIds(list.body)).toEqual(['cloud-member']);
+
     const beat = await api.post(`/api/projects/${SHARED_PROJECT}/presence/heartbeat`, {
       memberId: 'local-member',
       name: 'Ada',
@@ -162,10 +167,6 @@ describe('collab presence with the vela-cli collab transport on', () => {
     });
     expect(beat.status).toBe(200);
     expect(presentIds(beat.body)).toEqual(['cloud-member']);
-
-    const list = await api.get(`/api/projects/${SHARED_PROJECT}/presence`);
-    expect(list.status).toBe(200);
-    expect(presentIds(list.body)).toEqual(['cloud-member']);
 
     const left = await api.post(`/api/projects/${SHARED_PROJECT}/presence/leave`, {
       memberId: 'local-member',

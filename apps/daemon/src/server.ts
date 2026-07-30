@@ -3164,6 +3164,10 @@ export async function startServer({
    */
   const projectIsUnmaterializedSharedPlaceholder = (projectId: string): boolean =>
     isUnmaterializedSharedPlaceholder(getProject(db, projectId));
+  let invalidatePresenceReadCache = (
+    _projectId: string,
+    _workspaceId?: string,
+  ): void => {};
   const collab = createCollabRuntime({
     workspaceContext,
     canPublishProjectContent: (projectId) =>
@@ -3187,6 +3191,7 @@ export async function startServer({
     // `presence-changed` onto the project's existing events SSE so the open
     // project view re-fetches presence instead of waiting for its poll tick.
     onPresenceChange: ({ projectId }) => {
+      invalidatePresenceReadCache(projectId);
       emitProjectEvent(projectId, { type: 'presence-changed', projectId, at: Date.now() });
     },
   });
@@ -3657,29 +3662,40 @@ export async function startServer({
   const authoritativePresenceWorkspaces = new Set<string>();
   const presenceScopeFor = (projectId: string): string | undefined =>
     findTeamWorkspaceIdForProject(db, projectId)?.trim() || undefined;
-  registerCollabPresenceRoutes(app, {
+  const verifyPresenceWorkspaceRequest = async (
+    req: any,
+    projectId: string,
+    options: { fresh?: boolean } = {},
+  ) => {
+    const verified = await verifyExplicitWorkspaceRequestContext(
+      { req },
+      options,
+    );
+    if (!verified.ok) return verified;
+    const binding = getWorkspaceProjectByProjectId(db, projectId);
+    if (
+      binding?.workspaceId
+      && binding.workspaceId !== verified.context.workspaceId
+    ) {
+      return {
+        ok: false as const,
+        status: 403 as const,
+        code: 'WORKSPACE_ACCESS_DENIED' as const,
+        message: 'the requested workspace does not own this project',
+      };
+    }
+    return verified;
+  };
+  const presenceRoutes = registerCollabPresenceRoutes(app, {
     collab,
     // Null when this run has no vela-cli collab transport, which is what keeps
     // the process-local presence fallback reachable. See
     // `createCollabPresenceCloudClient` for the invariant.
     cloud: createCollabPresenceCloudClient(velaCliCollabClient, presenceScopeFor),
-    verifyWorkspaceRequest: async (req, projectId) => {
-      const verified = await verifyExplicitWorkspaceRequestContext({ req });
-      if (!verified.ok) return verified;
-      const binding = getWorkspaceProjectByProjectId(db, projectId);
-      if (
-        binding?.workspaceId
-        && binding.workspaceId !== verified.context.workspaceId
-      ) {
-        return {
-          ok: false as const,
-          status: 403 as const,
-          code: 'WORKSPACE_ACCESS_DENIED' as const,
-          message: 'the requested workspace does not own this project',
-        };
-      }
-      return verified;
-    },
+    verifyWorkspaceRequest: (req, projectId) =>
+      verifyPresenceWorkspaceRequest(req, projectId),
+    verifyWorkspaceReadRequest: (req, projectId) =>
+      verifyPresenceWorkspaceRequest(req, projectId, { fresh: false }),
     isProjectShared: async (projectId, context) => {
       const projectContext =
         context ?? await resolveBoundProjectWorkspaceContext(projectId);
@@ -3698,6 +3714,7 @@ export async function startServer({
       );
     },
   });
+  invalidatePresenceReadCache = presenceRoutes.invalidatePresence;
   // Author-side publish TRIGGER (C spec §D1): watch the projects THIS daemon's
   // member owns + has shared, and coalesce every file edit into a debounced
   // publish. The read-only gate (team-shared AND owner === me) means a member's
@@ -4600,6 +4617,7 @@ export async function startServer({
         case 'presence-changed': {
           if (event.projectId) {
             const projectId = event.projectId;
+            invalidatePresenceReadCache(projectId, eventWorkspaceId);
             void resolveBoundProjectWorkspaceContext(projectId)
               .then((context) => {
                 if (context?.workspaceId !== eventWorkspaceId) return;
