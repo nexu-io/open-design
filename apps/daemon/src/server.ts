@@ -3735,11 +3735,15 @@ export async function startServer({
   collabPublishWatcher.start();
   const sharedProjectPullProfiling =
     sharedProjectPullProfileEnabled(process.env);
-  const verifiedWorkspaceContextForRequest = async (
+  const verifyProjectWorkspaceContextForRequest = async (
     req: any,
     projectId?: string,
+    options: { fresh?: boolean } = {},
   ) => {
-    const verified = await verifyExplicitWorkspaceRequestContext({ req });
+    const verified = await verifyExplicitWorkspaceRequestContext(
+      { req },
+      options,
+    );
     if (!verified.ok) return verified;
     if (projectId) {
       const binding = getWorkspaceProjectByProjectId(db, projectId);
@@ -3757,6 +3761,18 @@ export async function startServer({
     }
     return verified;
   };
+  const verifiedWorkspaceContextForRequest = (
+    req: any,
+    projectId?: string,
+  ) => verifyProjectWorkspaceContextForRequest(req, projectId);
+  const verifiedWorkspaceReadContextForRequest = (
+    req: any,
+    projectId?: string,
+  ) => verifyProjectWorkspaceContextForRequest(
+    req,
+    projectId,
+    { fresh: false },
+  );
   const resolveProjectCommentWorkspaceContext = async (
     req: any,
     projectId: string,
@@ -3813,6 +3829,7 @@ export async function startServer({
   const collabSyncRoutes = registerCollabSyncRoutes(app, {
     collab,
     verifyWorkspaceRequest: verifiedWorkspaceContextForRequest,
+    verifyWorkspaceReadRequest: verifiedWorkspaceReadContextForRequest,
     verifyWorkspaceScope: verifiedTeamMirrorScope,
     readContentTransferState: (projectId, scope) =>
       projectContentTransferStates.read({ projectId, ...scope }),

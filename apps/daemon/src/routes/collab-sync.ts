@@ -140,6 +140,19 @@ export interface RegisterCollabSyncRoutesDeps {
     | null
   >;
   /**
+   * Bounded successful authority lease for the read-only status surface.
+   * Mutations and content materialization must continue to use
+   * `verifyWorkspaceRequest`.
+   */
+  verifyWorkspaceReadRequest?: (
+    req: Request,
+    projectId?: string,
+  ) => Promise<
+    | VerifiedWorkspaceRequestContextResult
+    | WorkspaceCollabContext
+    | null
+  >;
+  /**
    * Revalidate one already-captured Team pull scope against the authoritative
    * membership directory. This must address `scope.workspaceId` +
    * `scope.viewerMemberId` directly; it must not compare against the daemon's
@@ -682,16 +695,17 @@ export function registerCollabSyncRoutes(
     }
   };
 
-  async function verifiedWorkspaceContextForRequest(
+  async function verifyWorkspaceContextForRequest(
     req: Request,
     projectId?: string,
+    verifier = deps.verifyWorkspaceRequest,
   ): Promise<RouteWorkspaceVerification> {
-    if (!deps.verifyWorkspaceRequest) {
+    if (!verifier) {
       return { ok: true, context: null };
     }
     try {
       return normalizeWorkspaceVerification(
-        await deps.verifyWorkspaceRequest(req, projectId),
+        await verifier(req, projectId),
       );
     } catch {
       return {
@@ -704,6 +718,28 @@ export function registerCollabSyncRoutes(
     }
   }
 
+  function verifiedWorkspaceContextForRequest(
+    req: Request,
+    projectId?: string,
+  ): Promise<RouteWorkspaceVerification> {
+    return verifyWorkspaceContextForRequest(
+      req,
+      projectId,
+      deps.verifyWorkspaceRequest,
+    );
+  }
+
+  function verifiedWorkspaceReadContextForRequest(
+    req: Request,
+    projectId?: string,
+  ): Promise<RouteWorkspaceVerification> {
+    return verifyWorkspaceContextForRequest(
+      req,
+      projectId,
+      deps.verifyWorkspaceReadRequest ?? deps.verifyWorkspaceRequest,
+    );
+  }
+
   async function statusIdentityForRequest(projectId: string, req: {
     get(name: string): string | undefined;
     headers: { authorization?: string | string[] | undefined };
@@ -713,7 +749,7 @@ export function registerCollabSyncRoutes(
     principal: ResourceHubPrincipal | null;
     workspaceId: string | null;
   }> {
-    const verification = await verifiedWorkspaceContextForRequest(
+    const verification = await verifiedWorkspaceReadContextForRequest(
       req as Request,
       projectId,
     );
@@ -1034,19 +1070,20 @@ export function registerCollabSyncRoutes(
     projectId: string,
     req: Parameters<typeof pullAccessForRequest>[1],
     viewer: {
-      principal: ResourceHubPrincipal | null;
-      workspaceId: string | null;
       ownerMemberId: string | null;
       callerIsOwner: boolean;
     },
   ): void {
     if (!viewer.ownerMemberId) return;
     void (async () => {
+      // Status may have been authorized by the bounded read lease. Pulling and
+      // materializing bytes is a mutation, so deliberately omit the captured
+      // status identity and force `pullAccessForRequest` through fresh
+      // `verifyWorkspaceRequest` authority.
       const { principal: resourcePrincipal, scope } = await pullAccessForRequest(
         projectId,
         req,
         viewer.ownerMemberId,
-        { principal: viewer.principal, workspaceId: viewer.workspaceId },
       );
       if (!scope) return;
       try {
@@ -2103,8 +2140,6 @@ export function registerCollabSyncRoutes(
     );
     if (awaitingFirstMaterialization) {
       materializePlaceholderOnOpen(projectId, req, {
-        principal,
-        workspaceId: resolvedWorkspaceId ?? null,
         ownerMemberId,
         callerIsOwner,
       });

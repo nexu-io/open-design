@@ -32,6 +32,8 @@ import {
 } from '../src/collab/proactive-content-pull.js';
 import { createProjectContentTransferStateStore } from '../src/collab/project-content-transfer-state.js';
 import { resolveAuthorizedActiveTeamWorkspaceSnapshot } from '../src/collab/active-workspace-selection.js';
+import { verifyWorkspaceRequestContext } from '../src/collab/request-workspace-context.js';
+import { createCachedWorkspaceDirectoryFetcher } from '../src/collab/vela-workspace-context.js';
 import {
   promoteAuthorizedTeamProjectStage,
   type PromoteAuthorizedTeamProjectStageInput,
@@ -1046,6 +1048,183 @@ describe('collab sync routes', () => {
   it('reports local_only sync state before any share', async () => {
     const api = await startSyncServer();
     expect((await api.json('/api/projects/p1/collab/status')).body.syncState).toBe('local_only');
+  });
+
+  it('leases consecutive status reads while publish, share, and pull stay fresh', async () => {
+    const context = teamContext('ws-1', 'wm-1');
+    const directory = {
+      ok: true as const,
+      items: [{
+        workspaceId: context.workspaceId,
+        workspaceName: 'Team',
+        workspaceType: 'team' as const,
+        workspaceMemberId: context.workspaceMemberId,
+        role: context.role,
+        memberStatus: context.memberStatus,
+        lifecycleState: context.lifecycleState,
+      }],
+    };
+    const fetchReadDirectory = vi.fn(async () => directory);
+    const cachedReadDirectory = createCachedWorkspaceDirectoryFetcher({
+      fetchDirectory: fetchReadDirectory,
+      identityKey: () => 'account-a:config-a',
+      ttlMs: 5_000,
+    });
+    const verifyWorkspaceReadRequest = vi.fn((req: express.Request) =>
+      verifyWorkspaceRequestContext({
+        req,
+        fetchWorkspaceDirectory: cachedReadDirectory,
+      }));
+    const verifyWorkspaceRequest = vi.fn(async () => ({
+      ok: true as const,
+      context,
+    }));
+    const api = await startSyncServer(
+      { current: async () => context },
+      {
+        verifyWorkspaceReadRequest,
+        verifyWorkspaceRequest,
+        resolveSharedProjectOwner: async () => null,
+      },
+    );
+
+    expect((await api.json('/api/projects/p1/collab/status')).status).toBe(200);
+    expect((await api.json('/api/projects/p1/collab/status')).status).toBe(200);
+    expect(verifyWorkspaceReadRequest).toHaveBeenCalledTimes(2);
+    expect(fetchReadDirectory).toHaveBeenCalledTimes(1);
+    expect(verifyWorkspaceRequest).not.toHaveBeenCalled();
+
+    expect((await api.json('/api/projects/p1/collab/sync-intent', {
+      method: 'POST',
+      body: {
+        event: 'project_team_share_requested',
+        projectId: 'p1',
+      },
+    })).status).toBe(200);
+    expect((await api.json('/api/projects/p1/collab/publish', {
+      method: 'POST',
+    })).status).toBe(200);
+    // This narrow fixture has no mirror store, so pull reaches its expected
+    // post-authorization 502 after proving it used fresh authority.
+    expect((await api.json('/api/projects/p1/collab/pull', {
+      method: 'POST',
+    })).status).toBe(502);
+    expect(verifyWorkspaceRequest).toHaveBeenCalledTimes(3);
+    expect(fetchReadDirectory).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not cache a failed status authority read', async () => {
+    const context = teamContext('ws-1', 'wm-1');
+    const fetchReadDirectory = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false as const, items: [] })
+      .mockResolvedValueOnce({
+        ok: true as const,
+        items: [{
+          workspaceId: context.workspaceId,
+          workspaceName: 'Team',
+          workspaceType: 'team' as const,
+          workspaceMemberId: context.workspaceMemberId,
+          role: context.role,
+          memberStatus: context.memberStatus,
+          lifecycleState: context.lifecycleState,
+        }],
+      });
+    const cachedReadDirectory = createCachedWorkspaceDirectoryFetcher({
+      fetchDirectory: fetchReadDirectory,
+      identityKey: () => 'account-a:config-a',
+      ttlMs: 5_000,
+    });
+    const api = await startSyncServer(
+      { current: async () => context },
+      {
+        verifyWorkspaceReadRequest: (req) =>
+          verifyWorkspaceRequestContext({
+            req,
+            fetchWorkspaceDirectory: cachedReadDirectory,
+          }),
+        verifyWorkspaceRequest: vi.fn(async () => ({
+          ok: true as const,
+          context,
+        })),
+        resolveSharedProjectOwner: async () => null,
+      },
+    );
+
+    expect((await api.json('/api/projects/p1/collab/status')).status).toBe(503);
+    expect((await api.json('/api/projects/p1/collab/status')).status).toBe(200);
+    expect(fetchReadDirectory).toHaveBeenCalledTimes(2);
+  });
+
+  it('rechecks fresh authority before a status-triggered placeholder pull', async () => {
+    const context = teamContext('ws-1', 'wm-1');
+    const projectStore = fakeProjectStore();
+    const markSharedProjectPlaceholder = vi.fn(
+      (projectId: string, placeholder: boolean) => {
+        const record = projectStore.projects.get(projectId);
+        if (!record) return;
+        const metadata = {
+          ...((record.metadata as Record<string, unknown> | undefined) ?? {}),
+        };
+        if (placeholder) {
+          metadata[SHARED_PROJECT_PLACEHOLDER_METADATA_KEY] = Date.now();
+        } else {
+          delete metadata[SHARED_PROJECT_PLACEHOLDER_METADATA_KEY];
+        }
+        projectStore.projects.set(projectId, {
+          ...record,
+          metadata: metadata as never,
+        });
+      },
+    );
+    const pullDir = await mkdtemp(path.join(tmpdir(), 'od-status-fresh-pull-'));
+    tempDirs.push(pullDir);
+    let resolveFresh:
+      | ((value: { ok: true; context: WorkspaceCollabContext }) => void)
+      | undefined;
+    const verifyWorkspaceRequest = vi.fn(
+      () =>
+        new Promise<{ ok: true; context: WorkspaceCollabContext }>((resolve) => {
+          resolveFresh = resolve;
+        }),
+    );
+    const pull = vi.fn(async () => ({ version: 1 }));
+    const api = await startSyncServer(
+      { current: async () => context },
+      {
+        projectStore,
+        markSharedProjectPlaceholder,
+        resolvePullDir: () => pullDir,
+        verifyWorkspaceReadRequest: vi.fn(async () => ({
+          ok: true as const,
+          context,
+        })),
+        verifyWorkspaceRequest,
+        resolveSharedProjectOwner: async () => context.workspaceMemberId,
+        resolveSharedProject: async (projectId, scope) => ({
+          projectId,
+          ownerMemberId: scope?.ownerMemberId ?? context.workspaceMemberId,
+          sharedAt: new Date(1).toISOString(),
+          name: 'Freshly Authorized Project',
+        }),
+      },
+      {
+        adapter: {
+          publish: async () => ({ version: 1 }),
+          syncLatest: async () => ({ version: 1 }),
+          pull,
+        },
+      },
+    );
+
+    const status = await api.json('/api/projects/fresh-pull/collab/status');
+    expect(status.status).toBe(200);
+    expect(status.body.awaitingFirstMaterialization).toBe(true);
+    await vi.waitFor(() => expect(verifyWorkspaceRequest).toHaveBeenCalledOnce());
+    expect(pull).not.toHaveBeenCalled();
+
+    resolveFresh?.({ ok: true, context });
+    await vi.waitFor(() => expect(pull).toHaveBeenCalledOnce());
   });
 
   it('registers a local placeholder when a member opens a not-yet-pulled shared project', async () => {
