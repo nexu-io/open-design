@@ -132,7 +132,14 @@ function renderWithProjectWorkspace(
   ui: ReactElement,
   workspaceContext: WorkspaceCollabContext | null,
 ) {
-  const value: CollabContextValue = {
+  const value = projectWorkspaceCollabValue(workspaceContext);
+  return render(<CollabProvider value={value}>{ui}</CollabProvider>);
+}
+
+function projectWorkspaceCollabValue(
+  workspaceContext: WorkspaceCollabContext | null,
+): CollabContextValue {
+  return {
     workspaceContext,
     workspaceContextLoading: false,
     enabled: false,
@@ -151,7 +158,6 @@ function renderWithProjectWorkspace(
     refreshPresence: () => {},
     checkStatusNow: () => {},
   };
-  return render(<CollabProvider value={value}>{ui}</CollabProvider>);
 }
 
 const TEST_SNAPSHOT_DATA_URL = 'data:image/png;base64,c25hcHNob3Q=';
@@ -2336,6 +2342,62 @@ describe('FileViewer SVG artifacts', () => {
     expect(container.querySelector('.viewer-viewport-switcher')).toBeTruthy();
     expect(screen.queryByTestId('palette-tweaks-toggle')).toBeNull();
     expect(screen.getByTestId('artifact-preview-frame')).toBeTruthy();
+  });
+
+  it('rebuilds deck thumbnail resource URLs when the project workspace changes', async () => {
+    const file = baseFile({
+      name: 'deck.html',
+      path: 'deck.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'deck',
+        title: 'Deck',
+        entry: 'deck.html',
+        renderer: 'deck-html',
+        exports: ['html'],
+      },
+    });
+    const workspaceA = teamWorkspaceContext();
+    const workspaceB: WorkspaceCollabContext = {
+      ...workspaceA,
+      workspaceId: 'ws-2',
+      teamId: 'team-2',
+      workspaceMemberId: 'wm-2',
+    };
+    const viewer = (
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={file}
+        isDeck
+        liveHtml={'<html><body><section class="slide">one</section></body></html>'}
+      />
+    );
+    const { container, rerender } = render(
+      <CollabProvider value={projectWorkspaceCollabValue(workspaceA)}>
+        {viewer}
+      </CollabProvider>,
+    );
+
+    const thumbnail = container.querySelector('.deck-thumbnail-frame iframe') as HTMLIFrameElement | null;
+    expect(thumbnail).toBeTruthy();
+    expect(thumbnail!.srcdoc).toContain('workspaceId=ws-1');
+    expect(thumbnail!.srcdoc).toContain('workspaceMemberId=wm-1');
+
+    rerender(
+      <CollabProvider value={projectWorkspaceCollabValue(workspaceB)}>
+        {viewer}
+      </CollabProvider>,
+    );
+
+    await waitFor(() => {
+      const updated = container.querySelector('.deck-thumbnail-frame iframe') as HTMLIFrameElement | null;
+      expect(updated?.srcdoc).toContain('workspaceId=ws-2');
+      expect(updated?.srcdoc).toContain('workspaceMemberId=wm-2');
+      expect(updated?.srcdoc).not.toContain('workspaceId=ws-1');
+    });
   });
 
   it('shows speaker notes panel with existing real notes', () => {

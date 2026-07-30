@@ -8971,7 +8971,7 @@ function HtmlViewer({
       previewFocusGuard: true,
       freezeMotion: true,
     }),
-    [deckVisualSource, projectId, file.name],
+    [deckVisualSource, projectId, file.name, workspaceContext],
   );
   // Parse the deck once per source into per-slide shadow-root render data. When
   // renderable, DeckThumbnailRail mounts a single cloned slide per thumbnail
@@ -8986,7 +8986,7 @@ function HtmlViewer({
       projectRawUrl(projectId, baseDirFor(file.name), workspaceContext),
     );
     return parsed.renderable ? parsed : null;
-  }, [effectiveDeck, deckVisualSource, projectId, file.name]);
+  }, [effectiveDeck, deckVisualSource, projectId, file.name, workspaceContext]);
   // Stable thunk so HtmlViewer's frequent re-renders (slide state, streaming
   // edits) never invalidate the memoized rail; the ref always calls the
   // freshest goToSlide closure.
