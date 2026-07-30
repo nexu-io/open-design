@@ -37,7 +37,7 @@ describe('handleHubWorkspaceContextChanged', () => {
   it('triggers an immediate workspace-invalidation poll cycle', async () => {
     const pollWorkspaceInvalidation = vi.fn(async () => undefined);
 
-    handleHubWorkspaceContextChanged(pollWorkspaceInvalidation);
+    handleHubWorkspaceContextChanged('workspace-1', pollWorkspaceInvalidation);
 
     expect(pollWorkspaceInvalidation).toHaveBeenCalledTimes(1);
   });
@@ -47,7 +47,9 @@ describe('handleHubWorkspaceContextChanged', () => {
     const unhandled = vi.fn();
     process.once('unhandledRejection', unhandled);
 
-    expect(() => handleHubWorkspaceContextChanged(pollWorkspaceInvalidation)).not.toThrow();
+    expect(() =>
+      handleHubWorkspaceContextChanged('workspace-1', pollWorkspaceInvalidation)
+    ).not.toThrow();
     // Let the fire-and-forget `.catch()` settle before asserting nothing leaked.
     await new Promise((resolve) => setTimeout(resolve, 10));
 

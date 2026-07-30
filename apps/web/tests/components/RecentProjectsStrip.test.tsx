@@ -8,6 +8,34 @@ import { RecentProjectsStrip } from '../../src/components/RecentProjectsStrip';
 import { fetchProjectFiles, fetchProjectFileText } from '../../src/providers/registry';
 import type { Project } from '../../src/types';
 
+const recentWorkspaceState = vi.hoisted(() => ({
+  context: {
+    workspaceId: 'ws-1',
+    workspaceType: 'team',
+    workspaceMemberId: 'wm-1',
+    role: 'member',
+    memberStatus: 'active',
+    lifecycleState: 'active',
+    billingState: 'active',
+    providerMode: 'platform_credits',
+    planId: null,
+    seatSummary: { seatLimit: 5, usedSeats: 2, availableSeats: 3 },
+    permissions: {},
+    teamId: 'team-1',
+  },
+}));
+
+vi.mock('../../src/collab/useWorkspaceContext', () => ({
+  notifyTeamProjectsChanged: vi.fn(),
+  useWorkspaceBilling: () => null,
+  useWorkspaceContext: () => ({
+    context: recentWorkspaceState.context,
+    loading: false,
+    failure: null,
+    refresh: vi.fn(),
+  }),
+}));
+
 vi.mock('../../src/providers/registry', () => ({
   fetchProjectFileText: vi.fn(async (projectId: string, name: string) => {
     if (projectId === 'project-ds' && name === 'brand.json') {
@@ -47,8 +75,16 @@ vi.mock('../../src/providers/registry', () => ({
     }
     return [];
   }),
-  projectFileUrl: (projectId: string, fileName: string) =>
-    `/api/projects/${projectId}/files/${fileName}`,
+  projectFileUrl: (
+    projectId: string,
+    fileName: string,
+    workspaceContext?: { workspaceId: string; workspaceMemberId: string } | null,
+  ) => {
+    const base = `/api/projects/${projectId}/files/${fileName}`;
+    return workspaceContext
+      ? `${base}?workspaceId=${workspaceContext.workspaceId}&workspaceMemberId=${workspaceContext.workspaceMemberId}`
+      : base;
+  },
 }));
 
 afterEach(() => {
@@ -199,6 +235,15 @@ describe('RecentProjectsStrip', () => {
     );
 
     await waitFor(() => expect(fetchProjectFiles).toHaveBeenCalledTimes(2));
+    expect(fetchProjectFiles).toHaveBeenCalledWith(
+      'project-ready',
+      expect.objectContaining({
+        workspaceContext: expect.objectContaining({
+          workspaceId: 'ws-1',
+          workspaceMemberId: 'wm-1',
+        }),
+      }),
+    );
     expect(container.querySelector('.recent-projects__card-thumb-html')).toBeNull();
     expect(MockWorkspaceEventSource.instances).toHaveLength(1);
 
@@ -211,6 +256,9 @@ describe('RecentProjectsStrip', () => {
     });
 
     await waitFor(() => expect(container.querySelector('.recent-projects__card-thumb-html')).not.toBeNull());
+    expect(
+      (container.querySelector('iframe') as HTMLIFrameElement | null)?.getAttribute('src'),
+    ).toContain('workspaceId=ws-1');
     expect(vi.mocked(fetchProjectFiles).mock.calls.filter(([id]) => id === 'project-ready')).toHaveLength(2);
     expect(vi.mocked(fetchProjectFiles).mock.calls.filter(([id]) => id === 'project-other')).toHaveLength(1);
   });
@@ -793,11 +841,13 @@ describe('RecentProjectsStrip', () => {
     await waitFor(() => {
       expect(designSystemCard?.querySelector('.recent-projects__card-thumb-image img')).toBeTruthy();
       expect(designSystemCard?.querySelector('img')?.getAttribute('src')).toBe(
-        '/api/projects/project-ds/files/imagery/cover-0.png?v=3',
+        '/api/projects/project-ds/files/imagery/cover-0.png?workspaceId=ws-1&workspaceMemberId=wm-1&v=3',
       );
       const htmlFrame = container.querySelector<HTMLIFrameElement>('.recent-projects__card-thumb-html iframe');
       expect(htmlFrame).toBeTruthy();
-      expect(htmlFrame?.getAttribute('src')).toBe('/api/projects/project-html/files/index.html?v=200');
+      expect(htmlFrame?.getAttribute('src')).toBe(
+        '/api/projects/project-html/files/index.html?workspaceId=ws-1&workspaceMemberId=wm-1&v=200',
+      );
       expect(container.querySelector('.recent-projects__card-thumb-html .recent-projects__card-glyph')).toBeNull();
     });
   });
@@ -826,7 +876,7 @@ describe('RecentProjectsStrip', () => {
     await waitFor(() => {
       expect(designSystemCard?.querySelector('.recent-projects__card-thumb-logo img')).toBeTruthy();
       expect(designSystemCard?.querySelector('img')?.getAttribute('src')).toBe(
-        '/api/projects/project-ds-fallback/files/logos/wordmark.svg?v=3',
+        '/api/projects/project-ds-fallback/files/logos/wordmark.svg?workspaceId=ws-1&workspaceMemberId=wm-1&v=3',
       );
     });
   });
@@ -865,18 +915,31 @@ describe('RecentProjectsStrip', () => {
       expect(deckCard?.querySelector('.recent-projects__deck-iframe')?.getAttribute('srcdoc'))
         .toContain('slide');
       expect(htmlCard?.querySelector('iframe')?.getAttribute('src')).toBe(
-        '/api/projects/project-html/files/index.html?v=200',
+        '/api/projects/project-html/files/index.html?workspaceId=ws-1&workspaceMemberId=wm-1&v=200',
       );
       expect(deckCard?.querySelector('.recent-projects__card-glyph')).toBeNull();
       expect(htmlCard?.querySelector('.recent-projects__card-glyph')).toBeNull();
     });
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/projects/project-deck/files/index.html?v=400',
-      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      '/api/projects/project-deck/files/index.html?workspaceId=ws-1&workspaceMemberId=wm-1&v=400',
+      expect.objectContaining({
+        signal: expect.any(AbortSignal),
+        headers: expect.objectContaining({
+          'x-od-workspace-id': 'ws-1',
+          'x-od-workspace-member-id': 'wm-1',
+        }),
+      }),
     );
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/projects/project-html/files/index.html?v=200',
-      expect.objectContaining({ cache: 'no-store', method: 'HEAD' }),
+      '/api/projects/project-html/files/index.html?workspaceId=ws-1&workspaceMemberId=wm-1&v=200',
+      expect.objectContaining({
+        cache: 'no-store',
+        method: 'HEAD',
+        headers: expect.objectContaining({
+          'x-od-workspace-id': 'ws-1',
+          'x-od-workspace-member-id': 'wm-1',
+        }),
+      }),
     );
   });
 

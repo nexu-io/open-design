@@ -24,7 +24,10 @@ import {
   notifyWorkspaceContextRefresh,
   useWorkspaceContext,
 } from '../src/collab/useWorkspaceContext';
-import { workspaceContextFixture } from './helpers/workspace-context';
+import {
+  workspaceContextFixture,
+  workspaceDirectoryFixture,
+} from './helpers/workspace-context';
 
 const CONTEXTS = {
   a: workspaceContextFixture({ workspaceId: 'ws-a', workspaceMemberId: 'mem-a' }),
@@ -51,6 +54,11 @@ beforeEach(() => {
     'fetch',
     vi.fn((input: RequestInfo | URL): Promise<Response> => {
       const url = String(input);
+      if (url.includes('/api/workspace/directory')) {
+        return Promise.resolve(
+          jsonResponse(workspaceDirectoryFixture([CONTEXTS[activeWorkspace]])),
+        );
+      }
       if (!url.includes('/api/workspace/context')) {
         return Promise.reject(new Error(`Unexpected fetch: ${url}`));
       }

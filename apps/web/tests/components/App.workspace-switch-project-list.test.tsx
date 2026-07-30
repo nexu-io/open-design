@@ -28,6 +28,7 @@
 // (a local switch must correct itself locally).
 
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { buildWorkspacePermissions } from '@open-design/contracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from '../../src/App';
@@ -54,6 +55,7 @@ import {
   resetWorkspaceContextCache,
 } from '../../src/collab/useWorkspaceContext';
 import { resetCoalescedGet } from '../../src/lib/coalesced-get';
+import { workspaceDirectoryFixture } from '../helpers/workspace-context';
 
 vi.mock('../../src/components/EntryView', () => ({
   EntryView: ({ projects }: { projects: Project[] }) => (
@@ -169,23 +171,33 @@ function project(id: string, name: string): Project {
 const WORKSPACE_A_PROJECT = project('project-in-a', 'Workspace A project');
 const WORKSPACE_B_PROJECT = project('project-in-b', 'Workspace B project');
 
-function workspaceContextPayload(workspaceId: string) {
+function workspaceContext(workspaceId: string) {
   return {
-    context: {
-      workspaceId,
-      workspaceType: 'team',
-      workspaceMemberId: `member-${workspaceId}`,
-      role: 'member',
-      memberStatus: 'active',
-      lifecycleState: 'active',
-      billingState: 'active',
-      planId: null,
-      providerMode: 'platform_credits',
-      seatSummary: { seatLimit: 5, usedSeats: 1, availableSeats: 4 },
-      permissions: { canCreateProjects: true, canWriteSyncedFiles: true },
-      displayName: workspaceId,
+    workspaceId,
+    workspaceType: 'team' as const,
+    workspaceMemberId: `member-${workspaceId}`,
+    role: 'member' as const,
+    memberStatus: 'active' as const,
+    lifecycleState: 'active' as const,
+    billingState: 'active' as const,
+    planId: null,
+    providerMode: 'platform_credits' as const,
+    seatSummary: {
+      seatLimit: 5,
+      usedSeats: 1,
+      availableSeats: 4,
+      isSeatFull: false,
     },
+    permissions: buildWorkspacePermissions({
+      role: 'member',
+      lifecycleState: 'active',
+    }),
+    displayName: workspaceId,
   };
+}
+
+function workspaceContextPayload(workspaceId: string) {
+  return { context: workspaceContext(workspaceId) };
 }
 
 function deferred<T>() {
@@ -234,9 +246,14 @@ describe('App project list across a workspace switch', () => {
         return {
           ok: true,
           json: async () =>
-            pathname.endsWith('/workspace/context')
-              ? workspaceContextPayload(activeWorkspaceId)
-              : {},
+            pathname.endsWith('/workspace/directory')
+              ? workspaceDirectoryFixture([
+                  workspaceContext('ws-a'),
+                  workspaceContext('ws-b'),
+                ])
+              : pathname.endsWith('/workspace/context')
+                ? workspaceContextPayload(activeWorkspaceId)
+                : {},
         } as Response;
       }),
     );
@@ -257,7 +274,7 @@ describe('App project list across a workspace switch', () => {
     // The switch itself: B's context resolves, B's project list has NOT.
     activeWorkspaceId = 'ws-b';
     await act(async () => {
-      notifyWorkspaceContextRefresh();
+      notifyWorkspaceContextRefresh({ context: workspaceContext('ws-b') });
       await Promise.resolve();
     });
     await waitFor(() =>

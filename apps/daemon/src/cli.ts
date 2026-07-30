@@ -189,7 +189,9 @@ const DAEMON_STRING_FLAGS = new Set([
 const DAEMON_BOOLEAN_FLAGS = new Set([
   'help', 'h', 'json', 'headless', 'serve-web', 'no-open',
 ]);
-const LIBRARY_STRING_FLAGS = new Set(['daemon-url', 'query', 'tag']);
+const LIBRARY_STRING_FLAGS = new Set([
+  'daemon-url', 'query', 'tag', 'workspace', 'workspace-member',
+]);
 const LIBRARY_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 // `od library …` (OD Library asset registry). Hoisted so the dispatcher can
 // parse flags without hitting a temporal-dead-zone on these sets.
@@ -203,7 +205,10 @@ const CONFIG_STRING_FLAGS = new Set(['daemon-url', 'value', 'value-json']);
 const CONFIG_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 const AMR_STRING_FLAGS = new Set(['daemon-url']);
 const AMR_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'refresh']);
-const COLLAB_STRING_FLAGS = new Set(['daemon-url', 'project', 'member', 'name', 'role', 'design-system']);
+const COLLAB_STRING_FLAGS = new Set([
+  'daemon-url', 'project', 'member', 'name', 'role', 'design-system',
+  'workspace', 'workspace-member',
+]);
 const COLLAB_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 const MESSAGE_CENTER_STRING_FLAGS = new Set([
   'daemon-url',
@@ -220,6 +225,11 @@ const PROJECT_STRING_FLAGS = new Set([
   'agent', 'model', 'service-tier', 'snapshot-id', 'inputs', 'grant-caps', 'editor',
   'title', 'label', 'against', 'seed-from', 'fork-after', 'mode',
   'source',
+]);
+const PROJECT_RESOURCE_STRING_FLAGS = new Set([
+  ...PROJECT_STRING_FLAGS,
+  'workspace',
+  'workspace-member',
 ]);
 const PROJECT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'follow']);
 const WORKSPACE_STRING_FLAGS = new Set([
@@ -813,20 +823,44 @@ Options:
 // Subcommand: od collab …  (team-edition collaboration)
 // ---------------------------------------------------------------------------
 
+function workspaceHeadersFromExplicitFlags(flags, required = false) {
+  const workspaceId =
+    typeof flags?.workspace === 'string' ? flags.workspace.trim() : '';
+  const workspaceMemberId =
+    typeof flags?.['workspace-member'] === 'string'
+      ? flags['workspace-member'].trim()
+      : typeof flags?.member === 'string'
+        ? flags.member.trim()
+        : '';
+  if (workspaceId && workspaceMemberId) {
+    return {
+      'x-od-workspace-id': workspaceId,
+      'x-od-workspace-member-id': workspaceMemberId,
+    };
+  }
+  if (required || workspaceId || workspaceMemberId) {
+    exitWithStructuredError({
+      code: 'workspace-context-required',
+      message: 'pass --workspace <id> and --workspace-member <id>',
+    });
+  }
+  return null;
+}
+
 function printCollabHelp() {
   console.log(`Usage:
-  od collab status <projectId> [--json]
-  od collab presence <projectId> [--json]
-  od collab heartbeat <projectId> --member <id> [--name <name>] [--role owner|admin|member] [--json]
-  od collab leave <projectId> --member <id> [--json]
-  od collab changed <projectId> [--json]
-  od collab publish <projectId> [--json]
-  od collab share <projectId> [--json]
-  od collab pull <projectId> [--json]
-  od collab share-resource <design-systems|plugins|skills> <id> [--json]
-  od collab team-resources <design-systems|plugins|skills> [--json]
-  od collab share-design-system <designSystemId> [--json]
-  od collab team-design-systems [--json]
+  od collab status <projectId> --workspace <id> --workspace-member <id> [--json]
+  od collab presence <projectId> --workspace <id> --workspace-member <id> [--json]
+  od collab heartbeat <projectId> --workspace <id> --workspace-member <id> --member <id> [--name <name>] [--role owner|admin|member] [--json]
+  od collab leave <projectId> --workspace <id> --workspace-member <id> --member <id> [--json]
+  od collab changed <projectId> --workspace <id> --workspace-member <id> [--json]
+  od collab publish <projectId> --workspace <id> --workspace-member <id> [--json]
+  od collab share <projectId> --workspace <id> --workspace-member <id> [--json]
+  od collab pull <projectId> --workspace <id> --workspace-member <id> [--json]
+  od collab share-resource <design-systems|plugins|skills> <id> --workspace <id> --workspace-member <id> [--json]
+  od collab team-resources <design-systems|plugins|skills> --workspace <id> --workspace-member <id> [--json]
+  od collab share-design-system <designSystemId> --workspace <id> --workspace-member <id> [--json]
+  od collab team-design-systems --workspace <id> --workspace-member <id> [--json]
 
 Team-edition collaboration: presence overlay + sync trigger. The
 client is authoritative about whether it is in a shared context, so it drives
@@ -842,6 +876,8 @@ forms are kept as aliases).
 Options:
   --project <id>          Project id (alternative to the positional argument).
   --design-system <id>    Design system id for share-design-system.
+  --workspace <id>        Explicit workspace id for request authorization.
+  --workspace-member <id> Explicit workspace member id for request authorization.
   --member <id>           Member id for the presence heartbeat / leave.
   --name <name>           Display name attached to a heartbeat.
   --role <role>           owner | admin | member.
@@ -849,13 +885,13 @@ Options:
   --daemon-url <url>      Override daemon URL.
 
 Examples:
-  od collab presence p1 --json
-  od collab heartbeat p1 --member m-42 --name "Ma Shu" --role member
-  od collab publish p1
-  od collab share-resource plugins my-plugin --json
-  od collab team-resources skills --json
-  od collab share-design-system user:palette-x --json
-  od collab status p1 --json`);
+  od collab presence p1 --workspace team-1 --workspace-member m-42 --json
+  od collab heartbeat p1 --workspace team-1 --workspace-member m-42 --member m-42 --name "Ma Shu" --role member
+  od collab publish p1 --workspace team-1 --workspace-member m-42
+  od collab share-resource plugins my-plugin --workspace team-1 --workspace-member m-42 --json
+  od collab team-resources skills --workspace team-1 --workspace-member m-42 --json
+  od collab share-design-system user:palette-x --workspace team-1 --workspace-member m-42 --json
+  od collab status p1 --workspace team-1 --workspace-member m-42 --json`);
 }
 
 async function runCollab(args) {
@@ -884,6 +920,7 @@ async function runCollab(args) {
     sub === 'team-design-systems'
   ) {
     const base = await cliDaemonBaseUrl(flags);
+    const workspaceHeaders = workspaceHeadersFromExplicitFlags(flags, true);
     const emit = (payload, plain) =>
       flags.json ? process.stdout.write(JSON.stringify(payload, null, 2) + '\n') : plain();
     const wsRequest = async (method, path, body) => {
@@ -891,9 +928,11 @@ async function runCollab(args) {
       try {
         resp = await fetch(`${base}${path}`, {
           method,
-          ...(body !== undefined
-            ? { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }
-            : {}),
+          headers: {
+            ...workspaceHeaders,
+            ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
+          },
+          ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
         });
       } catch (err) {
         surfaceFetchError(err, base);
@@ -955,15 +994,18 @@ async function runCollab(args) {
   }
   const base = await cliDaemonBaseUrl(flags);
   const encoded = encodeURIComponent(projectId);
+  const workspaceHeaders = workspaceHeadersFromExplicitFlags(flags, true);
 
   const request = async (method, path, body) => {
     let resp;
     try {
       resp = await fetch(`${base}/api/projects/${encoded}${path}`, {
         method,
-        ...(body !== undefined
-          ? { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }
-          : {}),
+        headers: {
+          ...workspaceHeaders,
+          ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
+        },
+        ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
       });
     } catch (err) {
       surfaceFetchError(err, base);
@@ -2254,9 +2296,15 @@ Exit codes:
   if (!flags['no-daemon']) {
     const base = (await libraryDaemonUrl(flags)).replace(/\/$/, '');
     try {
+      const designSystemWorkspaceHeaders =
+        workspaceHeadersFromExplicitFlags(flags);
       const [skillsResp, dsResp, atomsResp] = await Promise.all([
         fetch(`${base}/api/skills`).catch(() => null),
-        fetch(`${base}/api/design-systems`).catch(() => null),
+        fetch(`${base}/api/design-systems`, {
+          ...(designSystemWorkspaceHeaders
+            ? { headers: designSystemWorkspaceHeaders }
+            : {}),
+        }).catch(() => null),
         fetch(`${base}/api/atoms`).catch(() => null),
       ]);
       const skills = (skillsResp?.ok ? (await skillsResp.json())?.skills : []) ?? [];
@@ -6273,8 +6321,8 @@ async function postJsonToDaemon(base, route, body, headers = {}) {
   return data;
 }
 
-async function postImportFolderToDaemon(base, body, baseDir) {
-  const headers = {};
+async function postImportFolderToDaemon(base, body, baseDir, workspaceHeaders = {}) {
+  const headers = { ...workspaceHeaders };
   const importToken = await mintCliImportToken(baseDir);
   if (importToken != null) {
     headers['x-od-desktop-import-token'] = importToken;
@@ -6311,6 +6359,9 @@ async function runProject(args) {
 
 Common options:
   --daemon-url <url>   Open Design daemon HTTP base.
+  --workspace <id>     Exact Workspace for bound project requests.
+  --workspace-member <id>
+                       Exact caller membership for bound project requests.
   --json               Emit raw JSON.`);
     process.exit(args.length === 0 ? 2 : 0);
   }
@@ -6326,11 +6377,18 @@ Common options:
     if (exitCode !== 0) process.exit(exitCode);
     return;
   }
-  const flags = parseFlags(rest, { string: PROJECT_STRING_FLAGS, boolean: PROJECT_BOOLEAN_FLAGS });
+  const flags = parseFlags(rest, {
+    string: PROJECT_RESOURCE_STRING_FLAGS,
+    boolean: PROJECT_BOOLEAN_FLAGS,
+  });
   const base = (await projectDaemonUrl(flags)).replace(/\/$/, '');
+  const workspaceHeaders =
+    workspaceHeadersFromExplicitFlags(flags) ?? {};
   switch (sub) {
     case 'list': {
-      const resp = await fetch(`${base}/api/projects`);
+      const resp = await fetch(`${base}/api/projects`, {
+        headers: workspaceHeaders,
+      });
       if (!resp.ok) return structuredHttpFailure(resp);
       const data = await resp.json();
       if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
@@ -6343,12 +6401,14 @@ Common options:
       return;
     }
     case 'info': {
-      const id = rest.find((a) => !a.startsWith('-'));
+      const id = positionalArgs(rest, PROJECT_RESOURCE_STRING_FLAGS)[0];
       if (!id) {
         console.error('Usage: od project info <id>');
         process.exit(2);
       }
-      const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}`);
+      const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}`, {
+        headers: workspaceHeaders,
+      });
       if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
       const data = await resp.json();
       process.stdout.write(JSON.stringify(data, null, 2) + '\n');
@@ -6386,7 +6446,7 @@ Common options:
       }
       const resp = await fetch(`${base}/api/projects`, {
         method:  'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', ...workspaceHeaders },
         body:    JSON.stringify(body),
       });
       const data = await resp.json().catch(() => ({}));
@@ -6406,7 +6466,7 @@ Common options:
       return;
     }
     case 'create-design-system': {
-      const sourceProjectId = positionalArgs(rest, PROJECT_STRING_FLAGS)[0];
+      const sourceProjectId = positionalArgs(rest, PROJECT_RESOURCE_STRING_FLAGS)[0];
       if (!sourceProjectId) {
         console.error('Usage: od project create-design-system <id> [--name "<title>"] [--prompt-file <path|->] [--json]');
         process.exit(2);
@@ -6419,6 +6479,7 @@ Common options:
         base,
         `/api/projects/${encodeURIComponent(sourceProjectId)}/design-system-copy`,
         body,
+        workspaceHeaders,
       );
       if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
       console.log(
@@ -6428,7 +6489,7 @@ Common options:
       return;
     }
     case 'duplicate': {
-      const sourceProjectId = positionalArgs(rest, PROJECT_STRING_FLAGS)[0];
+      const sourceProjectId = positionalArgs(rest, PROJECT_RESOURCE_STRING_FLAGS)[0];
       if (!sourceProjectId) {
         console.error('Usage: od project duplicate <id> [--name "<title>"] [--json]');
         process.exit(2);
@@ -6439,6 +6500,7 @@ Common options:
         base,
         `/api/projects/${encodeURIComponent(sourceProjectId)}/duplicate`,
         body,
+        workspaceHeaders,
       );
       if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
       console.log(
@@ -6448,7 +6510,7 @@ Common options:
       return;
     }
     case 'import': {
-      const [baseDir] = positionalArgs(rest, PROJECT_STRING_FLAGS);
+      const [baseDir] = positionalArgs(rest, PROJECT_RESOURCE_STRING_FLAGS);
       const importBaseDir = typeof baseDir === 'string' ? baseDir.trim() : '';
       if (!importBaseDir) {
         console.error('Usage: od project import <baseDir> [--name "<title>"]');
@@ -6460,7 +6522,7 @@ Common options:
       if (typeof flags['design-system'] === 'string' && flags['design-system'].length > 0) {
         body.designSystemId = flags['design-system'];
       }
-      const headers = { 'content-type': 'application/json' };
+      const headers = { 'content-type': 'application/json', ...workspaceHeaders };
       const importToken = await mintCliImportToken(importBaseDir);
       if (importToken != null) {
         headers['x-od-desktop-import-token'] = importToken;
@@ -6477,7 +6539,7 @@ Common options:
       return;
     }
     case 'import-folder': {
-      const parts = collectCliPositionals(rest, PROJECT_STRING_FLAGS);
+      const parts = collectCliPositionals(rest, PROJECT_RESOURCE_STRING_FLAGS);
       const folderArg = flags.path ?? flags.dir ?? parts[0];
       if (!folderArg) {
         console.error('Usage: od project import-folder <path> [--skill <id>] [--design-system <id>]');
@@ -6492,18 +6554,26 @@ Common options:
         skillId:        flags.skill ?? null,
         designSystemId: flags['design-system'] ?? null,
       };
-      const data = await postImportFolderToDaemon(base, body, folderPath);
+      const data = await postImportFolderToDaemon(
+        base,
+        body,
+        folderPath,
+        workspaceHeaders,
+      );
       if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
       console.log(`[project] imported ${data.project?.id ?? '-'} from ${folderPath} (conversation ${data.conversationId ?? '-'})`);
       return;
     }
     case 'delete': {
-      const id = rest.find((a) => !a.startsWith('-'));
+      const id = positionalArgs(rest, PROJECT_RESOURCE_STRING_FLAGS)[0];
       if (!id) {
         console.error('Usage: od project delete <id>');
         process.exit(2);
       }
-      const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers: workspaceHeaders,
+      });
       if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
       console.log(`[project] deleted ${id}`);
       return;
@@ -6521,7 +6591,7 @@ Common options:
       return;
     }
     case 'open-in': {
-      const id = rest.find((a) => !a.startsWith('-'));
+      const id = positionalArgs(rest, PROJECT_RESOURCE_STRING_FLAGS)[0];
       if (!id) {
         console.error('Usage: od project open-in <id> --editor <slug>');
         process.exit(2);
@@ -6533,7 +6603,7 @@ Common options:
       }
       const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}/open-in`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', ...workspaceHeaders },
         body: JSON.stringify({ editorId: editor }),
       });
       const data = await resp.json().catch(() => ({}));
@@ -6555,13 +6625,13 @@ Common options:
 async function runWorkspace(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
-  od workspace invite --email <addr> [--role admin|member] [--json]
-  od workspace projects team [--json]
-  od workspace projects list --workspace <id> [--view recent|drafts|team|all] [--json]
-  od workspace projects move <projectId> --workspace <id> --visibility personal|team [--json]
-  od workspace projects batch-delete --workspace <id> --project <id> [--project <id> ...] [--json]
-  od workspace projects batch-move --workspace <id> --visibility personal|team --project <id> [--project <id> ...] [--json]
-  od workspace members list [--json]
+  od workspace invite --workspace <id> --member <id> --email <addr> [--role admin|member] [--json]
+  od workspace projects team --workspace <id> --member <id> [--json]
+  od workspace projects list --workspace <id> --member <id> [--view recent|drafts|team|all] [--json]
+  od workspace projects move <projectId> --workspace <id> --member <id> --visibility personal|team [--json]
+  od workspace projects batch-delete --workspace <id> --member <id> --project <id> [--project <id> ...] [--json]
+  od workspace projects batch-move --workspace <id> --member <id> --visibility personal|team --project <id> [--project <id> ...] [--json]
+  od workspace members list --workspace <id> --member <id> [--json]
   od workspace billing [--workspace-type personal|team] [--workspace <id>] [--json]
 
 Common options:
@@ -6584,9 +6654,17 @@ Common options:
   const base = (await projectDaemonUrl(flags)).replace(/\/$/, '');
 
   async function workspaceContextRequest(path, init) {
+    const needsExplicitWorkspace =
+      path === '/api/workspace/invite'
+      || path === '/api/workspace/members'
+      || path === '/api/workspace/projects/team';
+    const workspaceHeaders = needsExplicitWorkspace
+      ? workspaceHeadersFromExplicitFlags(flags, true)
+      : {};
     const resp = await fetch(`${base}${path}`, {
       ...init,
       headers: {
+        ...workspaceHeaders,
         ...(init?.headers ?? {}),
       },
     });
@@ -7279,6 +7357,9 @@ async function runFiles(args) {
 
 Common options:
   --daemon-url <url>   Open Design daemon HTTP base.
+  --workspace <id>     Exact Workspace for bound project requests.
+  --workspace-member <id>
+                       Exact caller membership for bound project requests.
   --prompt-file <path|->  Read a version prompt from file/stdin where supported.
   --source <ai|manual|restore>
                        Version provenance where supported.
@@ -7287,16 +7368,23 @@ Common options:
   }
   const sub = args[0];
   const rest = args.slice(1);
-  const flags = parseFlags(rest, { string: PROJECT_STRING_FLAGS, boolean: PROJECT_BOOLEAN_FLAGS });
+  const flags = parseFlags(rest, {
+    string: PROJECT_RESOURCE_STRING_FLAGS,
+    boolean: PROJECT_BOOLEAN_FLAGS,
+  });
   const base = (await projectDaemonUrl(flags)).replace(/\/$/, '');
+  const workspaceHeaders =
+    workspaceHeadersFromExplicitFlags(flags) ?? {};
   switch (sub) {
     case 'list': {
-      const id = rest.find((a) => !a.startsWith('-'));
+      const id = positionalArgs(rest, PROJECT_RESOURCE_STRING_FLAGS)[0];
       if (!id) {
         console.error('Usage: od files list <projectId>');
         process.exit(2);
       }
-      const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}/files`);
+      const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}/files`, {
+        headers: workspaceHeaders,
+      });
       if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
       const data = await resp.json();
       if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
@@ -7305,21 +7393,23 @@ Common options:
       return;
     }
     case 'read': {
-      const positional = rest.filter((a) => !a.startsWith('-'));
+      const positional = positionalArgs(rest, PROJECT_RESOURCE_STRING_FLAGS);
       const [id, rel] = positional;
       if (!id || !rel) {
         console.error('Usage: od files read <projectId> <relpath>');
         process.exit(2);
       }
-      const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}/files/${rel.split('/').map(encodeURIComponent).join('/')}`);
+      const resp = await fetch(
+        `${base}/api/projects/${encodeURIComponent(id)}/files/${rel.split('/').map(encodeURIComponent).join('/')}`,
+        { headers: workspaceHeaders },
+      );
       if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
       const buf = Buffer.from(await resp.arrayBuffer());
       process.stdout.write(buf);
       return;
     }
     case 'upload': {
-      const positional = rest.filter((a) => !a.startsWith('-')
-        && a !== flags.as);
+      const positional = positionalArgs(rest, PROJECT_RESOURCE_STRING_FLAGS);
       const [id, localPath] = positional;
       if (!id || !localPath) {
         console.error('Usage: od files upload <projectId> <localpath> [--as <relpath>]');
@@ -7331,7 +7421,7 @@ Common options:
         : basename(localPath);
       const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}/files`, {
         method:  'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', ...workspaceHeaders },
         body:    JSON.stringify({
           name: desiredName,
           content: buf.toString('base64'),
@@ -7346,7 +7436,7 @@ Common options:
       return;
     }
     case 'write': {
-      const positional = rest.filter((a) => !a.startsWith('-'));
+      const positional = positionalArgs(rest, PROJECT_RESOURCE_STRING_FLAGS);
       const [id, rel] = positional;
       if (!id || !rel) {
         console.error('Usage: od files write <projectId> <relpath> [< stdin]');
@@ -7364,7 +7454,7 @@ Common options:
       const body = Buffer.concat(chunks);
       const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}/files`, {
         method:  'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', ...workspaceHeaders },
         body:    JSON.stringify({
           name: rel,
           content: body.toString('utf8'),
@@ -7379,37 +7469,40 @@ Common options:
       return;
     }
     case 'delete': {
-      const positional = rest.filter((a) => !a.startsWith('-'));
+      const positional = positionalArgs(rest, PROJECT_RESOURCE_STRING_FLAGS);
       const [id, name] = positional;
       if (!id || !name) {
         console.error('Usage: od files delete <projectId> <name>');
         process.exit(2);
       }
-      const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}/files/${encodeURIComponent(name)}`, { method: 'DELETE' });
+      const resp = await fetch(
+        `${base}/api/projects/${encodeURIComponent(id)}/files/${encodeURIComponent(name)}`,
+        { method: 'DELETE', headers: workspaceHeaders },
+      );
       if (!resp.ok) return structuredHttpFailure(resp);
       console.log(`[files] deleted ${name}`);
       return;
     }
     case 'diff': {
-      const positional = positionalArgs(rest, PROJECT_STRING_FLAGS);
+      const positional = positionalArgs(rest, PROJECT_RESOURCE_STRING_FLAGS);
       const [id, relA, relB] = positional;
       const against = typeof flags.against === 'string' ? flags.against : null;
       if (!id || !relA || (!relB && !against) || (relB && against)) {
         console.error('Usage: od files diff <projectId> <relpathA> [<relpathB> | --against -]');
         process.exit(2);
       }
-      const left = await fetchProjectFileText(base, id, relA);
+      const left = await fetchProjectFileText(base, id, relA, workspaceHeaders);
       const rightLabel = against ?? relB;
       const right = against === '-'
         ? await readStdinUtf8()
-        : await fetchProjectFileText(base, id, rightLabel);
+        : await fetchProjectFileText(base, id, rightLabel, workspaceHeaders);
       const diff = createUnifiedDiff(`a/${relA}`, `b/${rightLabel}`, left, right);
       if (flags.json) return process.stdout.write(JSON.stringify({ diff }, null, 2) + '\n');
       process.stdout.write(diff);
       return;
     }
     case 'versions': {
-      const positional = positionalArgs(rest, PROJECT_STRING_FLAGS);
+      const positional = positionalArgs(rest, PROJECT_RESOURCE_STRING_FLAGS);
       const [id, rel] = positional;
       if (!id || !rel) {
         console.error('Usage: od files versions <projectId> <relpath>');
@@ -7417,6 +7510,7 @@ Common options:
       }
       const resp = await fetch(
         `${base}/api/projects/${encodeURIComponent(id)}/files/${encodeProjectRelpath(rel)}/versions`,
+        { headers: workspaceHeaders },
       );
       if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
       const data = await resp.json();
@@ -7435,7 +7529,7 @@ Common options:
       return;
     }
     case 'version-read': {
-      const positional = positionalArgs(rest, PROJECT_STRING_FLAGS);
+      const positional = positionalArgs(rest, PROJECT_RESOURCE_STRING_FLAGS);
       const [id, rel, versionId] = positional;
       if (!id || !rel || !versionId) {
         console.error('Usage: od files version-read <projectId> <relpath> <versionId>');
@@ -7443,6 +7537,7 @@ Common options:
       }
       const resp = await fetch(
         `${base}/api/projects/${encodeURIComponent(id)}/files/${encodeProjectRelpath(rel)}/versions/${encodeURIComponent(versionId)}`,
+        { headers: workspaceHeaders },
       );
       if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
       const data = await resp.json();
@@ -7451,7 +7546,7 @@ Common options:
       return;
     }
     case 'version-create': {
-      const positional = positionalArgs(rest, PROJECT_STRING_FLAGS);
+      const positional = positionalArgs(rest, PROJECT_RESOURCE_STRING_FLAGS);
       const [id, rel] = positional;
       if (!id || !rel) {
         console.error('Usage: od files version-create <projectId> <relpath> [--prompt <text> | --prompt-file <path|->] [--label <text>] [--source <ai|manual|restore>]');
@@ -7467,7 +7562,7 @@ Common options:
         `${base}/api/projects/${encodeURIComponent(id)}/files/${encodeProjectRelpath(rel)}/versions`,
         {
           method: 'POST',
-          headers: { 'content-type': 'application/json' },
+          headers: { 'content-type': 'application/json', ...workspaceHeaders },
           body: JSON.stringify(body),
         },
       );
@@ -7478,7 +7573,7 @@ Common options:
       return;
     }
     case 'version-restore': {
-      const positional = positionalArgs(rest, PROJECT_STRING_FLAGS);
+      const positional = positionalArgs(rest, PROJECT_RESOURCE_STRING_FLAGS);
       const [id, rel, versionId] = positional;
       if (!id || !rel || !versionId) {
         console.error('Usage: od files version-restore <projectId> <relpath> <versionId> [--prompt <text> | --prompt-file <path|->]');
@@ -7491,7 +7586,7 @@ Common options:
         `${base}/api/projects/${encodeURIComponent(id)}/files/${encodeProjectRelpath(rel)}/versions/${encodeURIComponent(versionId)}/restore`,
         {
           method: 'POST',
-          headers: { 'content-type': 'application/json' },
+          headers: { 'content-type': 'application/json', ...workspaceHeaders },
           body: JSON.stringify(body),
         },
       );
@@ -7512,9 +7607,10 @@ function encodeProjectRelpath(rel) {
   return String(rel).split('/').map(encodeURIComponent).join('/');
 }
 
-async function fetchProjectFileText(base, id, rel) {
+async function fetchProjectFileText(base, id, rel, headers = {}) {
   const resp = await fetch(
     `${base}/api/projects/${encodeURIComponent(id)}/files/${encodeProjectRelpath(rel)}`,
+    { headers },
   );
   if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
   const buf = Buffer.from(await resp.arrayBuffer());
@@ -8546,9 +8642,16 @@ async function runLibraryList(name, args) {
   const flags = parseFlags(rest, { string: LIBRARY_STRING_FLAGS, boolean: LIBRARY_BOOLEAN_FLAGS });
   const base = (await libraryDaemonUrl(flags)).replace(/\/$/, '');
   const apiPath = name === 'design-systems' ? '/api/design-systems' : `/api/${name}`;
+  const designSystemWorkspaceHeaders = name === 'design-systems'
+    ? workspaceHeadersFromExplicitFlags(flags) ?? {}
+    : undefined;
   switch (sub) {
     case 'list': {
-      const resp = await fetch(`${base}${apiPath}`);
+      const resp = await fetch(`${base}${apiPath}`, {
+        ...(designSystemWorkspaceHeaders
+          ? { headers: designSystemWorkspaceHeaders }
+          : {}),
+      });
       if (!resp.ok) return structuredHttpFailure(resp);
       const data = await resp.json();
       if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
@@ -8560,12 +8663,16 @@ async function runLibraryList(name, args) {
       return;
     }
     case 'show': {
-      const id = rest.find((a) => !a.startsWith('-'));
+      const id = positionalArgs(rest, LIBRARY_STRING_FLAGS)[0];
       if (!id) {
         console.error(`Usage: od ${name} show <id>`);
         process.exit(2);
       }
-      const resp = await fetch(`${base}${apiPath}/${encodeURIComponent(id)}`);
+      const resp = await fetch(`${base}${apiPath}/${encodeURIComponent(id)}`, {
+        ...(designSystemWorkspaceHeaders
+          ? { headers: designSystemWorkspaceHeaders }
+          : {}),
+      });
       if (!resp.ok) return structuredHttpFailure(resp);
       const data = await resp.json();
       process.stdout.write(JSON.stringify(data, null, 2) + '\n');
@@ -8697,6 +8804,7 @@ generated SKILLS.md usage guide).
   }
   const stringFlags = new Set([...LIBRARY_STRING_FLAGS, 'out']);
   const flags = parseFlags(args, { string: stringFlags, boolean: LIBRARY_BOOLEAN_FLAGS });
+  const workspaceHeaders = workspaceHeadersFromExplicitFlags(flags) ?? {};
   const id = positionalArgs(args, stringFlags)[0];
   if (!id) {
     console.error('Usage: od design-systems download <id> [--out <path>]');
@@ -8705,7 +8813,9 @@ generated SKILLS.md usage guide).
   const base = (await libraryDaemonUrl(flags)).replace(/\/$/, '');
   let resp;
   try {
-    resp = await fetch(`${base}/api/design-systems/${encodeURIComponent(id)}/archive`);
+    resp = await fetch(`${base}/api/design-systems/${encodeURIComponent(id)}/archive`, {
+      headers: workspaceHeaders,
+    });
   } catch (err) {
     surfaceFetchError(err, base);
     process.exit(3);
@@ -8820,9 +8930,10 @@ function designSystemImportRequestBody(flags, baseBody) {
 
 async function postDesignSystemImport(flags, endpoint, body) {
   const base = (await libraryDaemonUrl(flags)).replace(/\/$/, '');
+  const workspaceHeaders = workspaceHeadersFromExplicitFlags(flags) ?? {};
   const resp = await fetch(`${base}${endpoint}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...workspaceHeaders },
     body: JSON.stringify(body),
   });
   if (!resp.ok) return structuredHttpFailure(resp);
@@ -8863,9 +8974,10 @@ Starts a review-gated TOKEN_SCHEMA token contract rebuild for an editable import
     process.exit(2);
   }
   const base = (await libraryDaemonUrl(flags)).replace(/\/$/, '');
+  const workspaceHeaders = workspaceHeadersFromExplicitFlags(flags) ?? {};
   const resp = await fetch(`${base}/api/design-systems/${encodeURIComponent(id)}/token-contract/rebuild-jobs`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...workspaceHeaders },
     body: JSON.stringify({ force: flags.force === true }),
   });
   if (!resp.ok) return structuredHttpFailure(resp);
@@ -8936,9 +9048,10 @@ Renames an editable (user-created) design system. Built-in systems are read-only
     boolean: LIBRARY_BOOLEAN_FLAGS,
   });
   const base = (await libraryDaemonUrl(flags)).replace(/\/$/, '');
+  const workspaceHeaders = workspaceHeadersFromExplicitFlags(flags) ?? {};
   const resp = await fetch(`${base}/api/design-systems/${encodeURIComponent(parsed.id)}`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...workspaceHeaders },
     body: JSON.stringify({ title: parsed.title }),
   });
   if (!resp.ok) return structuredHttpFailure(resp);
@@ -9137,9 +9250,14 @@ or the daemon cannot be reached.`);
 
   // Library inventory
   try {
+    const designSystemWorkspaceHeaders = null;
     const [skillsResp, dsResp, atomsResp] = await Promise.all([
       fetch(`${base}/api/skills`),
-      fetch(`${base}/api/design-systems`),
+      fetch(`${base}/api/design-systems`, {
+        ...(designSystemWorkspaceHeaders
+          ? { headers: designSystemWorkspaceHeaders }
+          : {}),
+      }),
       fetch(`${base}/api/atoms`),
     ]);
     if (skillsResp.ok) {

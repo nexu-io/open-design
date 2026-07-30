@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Dialog, DialogDescription, DialogFooter, DialogTitle } from "@open-design/components";
+import type { WorkspaceCollabContext } from "@open-design/contracts";
 import { projectKindFromMetadataToTracking } from "@open-design/contracts/analytics";
 import { useAnalytics } from "../analytics/provider";
 import {
@@ -10,6 +11,7 @@ import {
   trackProjectsMorePopoverClick,
 } from "../analytics/events";
 import { useT } from "../i18n";
+import { useWorkspaceContext } from "../collab/useWorkspaceContext";
 import { deleteLiveArtifact, fetchLiveArtifacts, fetchProjectFiles, liveArtifactPreviewUrl } from "../providers/registry";
 import type {
 	DesignSystemSummary,
@@ -107,6 +109,7 @@ export function DesignsTab({
 	const confirmTitleId = useId();
 	const t = useT();
 	const analytics = useAnalytics();
+	const { context: workspaceContext } = useWorkspaceContext();
 	// P0 page_view page_name=projects — fire once when the tab mounts so
 	// `/projects` landings register even before the user clicks anything.
 	// ref-keyed to survive re-renders that flip parent state without
@@ -172,7 +175,10 @@ export function DesignsTab({
 				async (projectId) =>
 					[
 						projectId,
-						await fetchLiveArtifacts(projectId, { signal: controller.signal }),
+						await fetchLiveArtifacts(projectId, {
+							signal: controller.signal,
+							workspaceContext,
+						}),
 					] as const,
 			),
 		).then((entries) => {
@@ -181,7 +187,7 @@ export function DesignsTab({
 		});
 
 		return () => controller.abort();
-	}, [isActive, projects]);
+	}, [isActive, projects, workspaceContext]);
 
 	useEffect(() => {
 		if (!isActive) return;
@@ -202,6 +208,7 @@ export function DesignsTab({
 				try {
 					files = await fetchProjectFiles(project.id, {
 						signal: controller.signal,
+						workspaceContext,
 					});
 				} catch {
 					return [project.id, null] as const;
@@ -221,7 +228,7 @@ export function DesignsTab({
 			setCoverByProject(Object.fromEntries(entries));
 		});
 		return () => controller.abort();
-	}, [isActive, projects]);
+	}, [isActive, projects, workspaceContext]);
 
 	useEffect(() => {
 		if (!menuOpenId) return;
@@ -471,7 +478,7 @@ export function DesignsTab({
 			message: `${t("common.delete")} "${artifact.title}"?`,
 			confirmLabel: t("designs.menuDelete"),
 			onConfirm: async () => {
-				const ok = await deleteLiveArtifact(projectId, artifact.id);
+				const ok = await deleteLiveArtifact(projectId, artifact.id, workspaceContext);
 				if (!ok) return;
 				setLiveArtifactsByProject((current) => ({
 					...current,
@@ -743,7 +750,12 @@ export function DesignsTab({
 									>
 										<iframe
 											className="thumb-iframe"
-											src={liveArtifactPreviewUrl(p.id, artifact.id)}
+											src={liveArtifactPreviewUrl(
+												p.id,
+												artifact.id,
+												"rendered",
+												workspaceContext,
+											)}
 											title=""
 											loading="lazy"
 											sandbox="allow-scripts"
@@ -778,7 +790,11 @@ export function DesignsTab({
 
 						const liveCount = liveArtifactsByProject[p.id]?.length ?? 0;
 						const status = p.status?.value ?? "not_started";
-						const cover = projectCover(p, coverByProject[p.id] ?? null);
+						const cover = projectCover(
+							p,
+							coverByProject[p.id] ?? null,
+							workspaceContext,
+						);
 						const isSelected = selected.has(p.id);
 						const designSystemProject = isDesignSystemProject(p);
 						const publishedDesignSystem = isPublishedDesignSystemProject(p, designSystems);
@@ -1220,6 +1236,7 @@ function isOrbitProject(project: Project): boolean {
 function projectCover(
 	project: Project,
 	override: ProjectCoverOverride | null,
+	workspaceContext?: WorkspaceCollabContext | null,
 ): {
 	kind: "image" | "video" | "html" | "logo" | "brand" | "fallback";
 	src?: string;
@@ -1257,7 +1274,12 @@ function projectCover(
 	if (override) {
 		return {
 			kind: override.kind,
-			src: projectCoverUrl(project.id, override.name, override.mtime),
+			src: projectCoverUrl(
+				project.id,
+				override.name,
+				override.mtime,
+				workspaceContext,
+			),
 			style,
 			initial,
 			name: override.name,
@@ -1265,7 +1287,12 @@ function projectCover(
 	}
 	const entry = meta?.entryFile;
 	if (entry) {
-		const src = projectCoverUrl(project.id, entry, project.updatedAt);
+		const src = projectCoverUrl(
+			project.id,
+			entry,
+			project.updatedAt,
+			workspaceContext,
+		);
 		if (meta?.kind === "image") return { kind: "image", src, style, initial };
 		if (meta?.kind === "video") return { kind: "video", src, style, initial };
 		if (/\.html?$/i.test(entry)) return { kind: "html", src, style, initial, name: entry };

@@ -30,11 +30,16 @@ export interface WorkspaceInvalidationPollerDeps {
    *  drives `workspace-context-changed`. Returns null off-team / signed out. */
   getWorkspaceContext: () => Promise<WorkspaceCollabContext | null>;
   /** Team-shared project discovery (resource hub). Only called on a team context. */
-  listTeamProjects: () => Promise<TeamProject[]>;
+  listTeamProjects: (context: WorkspaceCollabContext) => Promise<TeamProject[]>;
   /** Team member directory. Only called on a team context. */
-  listMembers: () => Promise<CollabCloudMemberDirectoryEntry[]>;
+  listMembers: (
+    context: WorkspaceCollabContext,
+  ) => Promise<CollabCloudMemberDirectoryEntry[]>;
   /** Emit a thin workspace invalidation to the connected web sinks. */
-  emit: (payload: WorkspaceInvalidationSsePayload) => void;
+  emit: (
+    payload: WorkspaceInvalidationSsePayload,
+    context: WorkspaceCollabContext | null,
+  ) => void;
   /** Poll cadence; defaults to 15s (matches the web team-projects/members poll). */
   pollIntervalMs?: number;
   /** Ask the daemon recovery coordinator to inspect locally missing team
@@ -144,8 +149,9 @@ export function createWorkspaceInvalidationPoller(
     previous: string | undefined,
     next: string,
     payload: WorkspaceInvalidationSsePayload,
+    context: WorkspaceCollabContext | null,
   ): string => {
-    if (previous !== undefined && previous !== next) deps.emit(payload);
+    if (previous !== undefined && previous !== next) deps.emit(payload, context);
     return next;
   };
 
@@ -184,7 +190,7 @@ export function createWorkspaceInvalidationPoller(
     contextSig = emitIfChanged(contextSig, contextSignature(context), {
       type: 'workspace-context-changed',
       at: observedAt,
-    });
+    }, context);
 
     if (!isTeamContext(context)) {
       recoveryWorkspaceId = null;
@@ -194,20 +200,20 @@ export function createWorkspaceInvalidationPoller(
       teamProjectsSig = emitIfChanged(teamProjectsSig, teamProjectsSignature([]), {
         type: 'team-projects-changed',
         at: observedAt,
-      });
+      }, context);
       membersSig = emitIfChanged(membersSig, membersSignature([]), {
         type: 'members-changed',
         at: observedAt,
-      });
+      }, context);
       return;
     }
 
     const [projects, members] = await Promise.all([
-      deps.listTeamProjects().catch((error) => {
+      deps.listTeamProjects(context).catch((error) => {
         deps.onError?.(error);
         return null;
       }),
-      deps.listMembers().catch((error) => {
+      deps.listMembers(context).catch((error) => {
         deps.onError?.(error);
         return null;
       }),
@@ -218,14 +224,14 @@ export function createWorkspaceInvalidationPoller(
       teamProjectsSig = emitIfChanged(teamProjectsSig, teamProjectsSignature(projects), {
         type: 'team-projects-changed',
         at: observedAt,
-      });
+      }, context);
       requestMissingProjectRecovery(context, projects, observedAt);
     }
     if (members) {
       membersSig = emitIfChanged(membersSig, membersSignature(members), {
         type: 'members-changed',
         at: observedAt,
-      });
+      }, context);
     }
   }
 

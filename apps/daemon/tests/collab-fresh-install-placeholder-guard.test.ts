@@ -7,7 +7,6 @@ import {
 } from '../src/collab/shared-project-placeholder.js';
 import { createShouldPublish } from '../src/collab/should-publish.js';
 import type { ResourceHubPrincipal } from '../src/collab/resource-principal.js';
-import type { WorkspaceContextProvider } from '../src/collab/workspace-context.js';
 
 // Red spec for 飞书 recvqzaDvUU6B3 — "uninstall wiped local files; after
 // reinstall every shared project got emptied for the whole team".
@@ -32,17 +31,12 @@ import type { WorkspaceContextProvider } from '../src/collab/workspace-context.j
 // (origin/feat/workspace-team @ 09697edf3) with the watcher subscribing to
 // `reinstalled-shared-project` and firing its initial publish.
 
-function providerReturning(
-  context: Record<string, unknown> | null,
-): WorkspaceContextProvider {
-  return { current: () => Promise.resolve(context as never) };
-}
-
-const ACTIVE_OWNER_CONTEXT = {
+const ACTIVE_OWNER_PRINCIPAL: ResourceHubPrincipal = {
+  teamId: 't1',
+  memberId: 'owner-1',
+  role: 'owner',
+  lifecycleState: 'active',
   workspaceType: 'team',
-  workspaceId: 't1',
-  workspaceMemberId: 'owner-1',
-  memberStatus: 'active',
 };
 
 /** The exact local record shape `ensureSharedProjectPlaceholder` +
@@ -70,7 +64,7 @@ describe('fresh-install shared-project placeholder must never publish (recvqzaDv
       // The hub's catalog still lists the project and names this daemon's
       // member as its owner — that is what made the pre-guard code publish.
       resolveSharedProjectOwner: async () => 'owner-1',
-      workspaceContext: providerReturning(ACTIVE_OWNER_CONTEXT),
+      resolveProjectPrincipal: async () => ACTIVE_OWNER_PRINCIPAL,
       rememberTeamShare: vi.fn(),
       hasUnmaterializedPlaceholder: (projectId) =>
         isUnmaterializedSharedPlaceholder(store.get(projectId) ?? null),
@@ -104,7 +98,7 @@ describe('fresh-install shared-project placeholder must never publish (recvqzaDv
       listProjectIds: () => [...store.keys()],
       shouldPublish: createShouldPublish({
         resolveSharedProjectOwner: async () => 'owner-1',
-        workspaceContext: providerReturning(ACTIVE_OWNER_CONTEXT),
+        resolveProjectPrincipal: async () => ACTIVE_OWNER_PRINCIPAL,
         rememberTeamShare: vi.fn(),
         hasUnmaterializedPlaceholder: (projectId) =>
           isUnmaterializedSharedPlaceholder(store.get(projectId) ?? null),
@@ -122,7 +116,10 @@ describe('fresh-install shared-project placeholder must never publish (recvqzaDv
 
     await watcher.reconcile();
     expect(notifyChanged).toHaveBeenCalledTimes(1);
-    expect(notifyChanged).toHaveBeenCalledWith('reinstalled-shared-project');
+    expect(notifyChanged).toHaveBeenCalledWith(
+      'reinstalled-shared-project',
+      ACTIVE_OWNER_PRINCIPAL,
+    );
   });
 
   it('blocks a scheduler-driven publish for a placeholder at the runtime choke point, without touching explicit shares', async () => {
@@ -142,7 +139,15 @@ describe('fresh-install shared-project placeholder must never publish (recvqzaDv
     };
     const runtime = createCollabRuntime({
       adapter: { publish },
-      workspaceContext: providerReturning(ACTIVE_OWNER_CONTEXT),
+      workspaceContext: {
+        current: () =>
+          Promise.resolve({
+            workspaceType: 'team',
+            workspaceId: 't1',
+            workspaceMemberId: 'owner-1',
+            memberStatus: 'active',
+          } as never),
+      },
       canPublishProjectContent: (projectId) =>
         !isUnmaterializedSharedPlaceholder(store.get(projectId) ?? null),
     });

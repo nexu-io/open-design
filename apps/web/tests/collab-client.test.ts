@@ -1,10 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CollabClient, type CollabSnapshot } from '../src/collab/collab-client.js';
+import { workspaceContextFixture } from './helpers/workspace-context';
+
+const TEAM_CONTEXT = workspaceContextFixture({
+  workspaceId: 'workspace-team',
+  workspaceMemberId: 'member-viewer',
+});
 
 interface RecordedCall {
   url: string;
   method: string;
   body: unknown;
+  headers: Headers;
 }
 
 interface FakeFetchOptions {
@@ -25,13 +32,18 @@ function makeFetch(options: FakeFetchOptions = {}) {
     const url = String(input);
     const method = init?.method ?? 'GET';
     const body = init?.body ? JSON.parse(String(init.body)) : undefined;
-    calls.push({ url, method, body });
+    calls.push({ url, method, body, headers: new Headers(init?.headers) });
     const pathname = new URL(url, 'http://daemon.local').pathname;
     if (options.failPath && pathname.endsWith(options.failPath)) {
       return { ok: false, status: 500, json: async () => ({}) } as unknown as Response;
     }
     let payload: unknown = { ok: true };
-    if (pathname.endsWith('/presence/heartbeat')) payload = { present: state.present };
+    if (
+      pathname.endsWith('/presence')
+      || pathname.endsWith('/presence/heartbeat')
+    ) {
+      payload = { present: state.present };
+    }
     else if (pathname.endsWith('/collab/status')) {
       payload = { publishedVersion: state.publishedVersion, syncState: state.syncState };
     }
@@ -49,6 +61,30 @@ afterEach(() => {
 });
 
 describe('CollabClient', () => {
+  it('binds status and pull to the captured workspace identity', async () => {
+    const { fetchImpl, calls } = makeFetch();
+    const client = new CollabClient({
+      projectId: 'p1',
+      member: null,
+      fetch: fetchImpl,
+      workspaceContext: TEAM_CONTEXT,
+    });
+
+    await client.pollStatus();
+    await client.pull();
+
+    const status = calls.find((call) => call.url.endsWith('/collab/status'));
+    const pull = calls.find((call) => call.url.endsWith('/collab/pull'));
+    for (const call of [status, pull]) {
+      expect(call?.headers.get('x-od-workspace-id')).toBe(
+        TEAM_CONTEXT.workspaceId,
+      );
+      expect(call?.headers.get('x-od-workspace-member-id')).toBe(
+        TEAM_CONTEXT.workspaceMemberId,
+      );
+    }
+  });
+
   it('applies content-transfer SSE state in timestamp order', () => {
     const { fetchImpl } = makeFetch();
     const client = new CollabClient({
@@ -275,6 +311,31 @@ describe('CollabClient', () => {
     client.stop();
   });
 
+  it('refreshes presence with a read instead of emitting another heartbeat', async () => {
+    const { fetchImpl, calls, state } = makeFetch({
+      present: [{ memberId: 'm2', name: 'Teammate' }],
+    });
+    const client = new CollabClient({
+      projectId: 'p1',
+      member: { memberId: 'm1' },
+      fetch: fetchImpl,
+      workspaceContext: TEAM_CONTEXT,
+    });
+
+    await client.refreshPresence();
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({
+      url: '/api/projects/p1/presence',
+      method: 'GET',
+    });
+    expect(calls[0]!.headers.get('x-od-workspace-id')).toBe(
+      TEAM_CONTEXT.workspaceId,
+    );
+    expect(client.getSnapshot().present).toEqual(state.present);
+    expect(calls.some((call) => call.url.endsWith('/presence/heartbeat'))).toBe(false);
+  });
+
   it('reports author changes and requests a publish through the sync routes', async () => {
     const { fetchImpl, calls } = makeFetch();
     const client = new CollabClient({ projectId: 'p9', member: { memberId: 'm1' }, fetch: fetchImpl });
@@ -432,6 +493,37 @@ describe('CollabClient', () => {
       await vi.advanceTimersByTimeAsync(10_000);
 
       expect(calls.slice(afterClear).some((c) => c.url.endsWith('/presence/heartbeat'))).toBe(false);
+
+      client.stop();
+    });
+
+    it('does not re-heartbeat same-member metadata updates but announces a new identity', async () => {
+      const { fetchImpl, calls } = makeFetch({ syncState: 'synced' });
+      const client = new CollabClient({
+        projectId: 'p1',
+        member: { memberId: 'm1', filePath: 'index.html' },
+        fetch: fetchImpl,
+      });
+
+      client.start();
+      await vi.advanceTimersByTimeAsync(0);
+      const afterInitial = calls.filter(
+        (call) => call.url.endsWith('/presence/heartbeat'),
+      ).length;
+
+      client.setMember({ memberId: 'm1', filePath: 'preview.html' });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(
+        calls.filter((call) => call.url.endsWith('/presence/heartbeat')),
+      ).toHaveLength(afterInitial);
+
+      client.setMember({ memberId: 'm2', filePath: 'preview.html' });
+      await vi.advanceTimersByTimeAsync(0);
+      const heartbeats = calls.filter(
+        (call) => call.url.endsWith('/presence/heartbeat'),
+      );
+      expect(heartbeats).toHaveLength(afterInitial + 1);
+      expect(heartbeats.at(-1)?.body).toMatchObject({ memberId: 'm2' });
 
       client.stop();
     });

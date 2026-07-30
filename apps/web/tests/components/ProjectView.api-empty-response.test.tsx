@@ -907,7 +907,7 @@ describe('ProjectView API empty response handling', () => {
 
 async function sendTestPrompt() {
   await waitFor(() => {
-    expect(mockedListMessages).toHaveBeenCalledWith(project.id, 'conv-project-1');
+    expect(mockedListMessages).toHaveBeenCalledWith(project.id, 'conv-project-1', null);
   });
   await new Promise((resolve) => setTimeout(resolve, 0));
   await waitFor(() => expect(screen.getByRole('button', { name: 'send' })).toBeTruthy());

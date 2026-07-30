@@ -19,6 +19,11 @@ import {
   isOpenDesignHostAvailable,
   printHostPdf,
 } from '@open-design/host';
+import type { WorkspaceCollabContext } from '@open-design/contracts';
+import {
+  workspaceProjectHeaders,
+  workspaceResourceUrl,
+} from '../collab/workspace-identity';
 
 // Re-exported so app components can gate desktop-only export paths without
 // importing the host package directly.
@@ -1118,10 +1123,16 @@ function blobToDataUrl(blob: Blob): Promise<string> {
 export async function downloadDesignSystemArchive(opts: {
   designSystemId: string;
   fallbackTitle: string;
+  workspaceContext?: WorkspaceCollabContext | null;
 }): Promise<boolean> {
-  const url = `/api/design-systems/${encodeURIComponent(opts.designSystemId)}/archive`;
+  const url = workspaceResourceUrl(
+    `/api/design-systems/${encodeURIComponent(opts.designSystemId)}/archive`,
+    opts.workspaceContext,
+  );
   try {
-    const resp = await fetch(url);
+    const resp = opts.workspaceContext
+      ? await fetch(url, { headers: workspaceProjectHeaders(opts.workspaceContext) })
+      : await fetch(url);
     if (!resp.ok) throw new Error(`archive request failed (${resp.status})`);
     const blob = await resp.blob();
     triggerDownload(blob, archiveFilenameFrom(resp, opts.fallbackTitle, ''));

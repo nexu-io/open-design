@@ -331,11 +331,11 @@ describe('reconcileWorkspaceProjectsWithRemote, verified through the real worksp
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ name: 'Illicit rename' }),
       });
-      expect(patch.status).toBe(401);
+      expect(patch.status).toBe(400);
       const deletion = await fetch(`${routeServer.url}/api/projects/${projectId}`, {
         method: 'DELETE',
       });
-      expect(deletion.status).toBe(401);
+      expect(deletion.status).toBe(400);
       expect(getProject(db, projectId)).toMatchObject({ name: 'Pulled team project' });
     } finally {
       await close(routeServer.server);

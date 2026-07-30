@@ -144,6 +144,10 @@ import {
 } from '../collab/useWorkspaceContext';
 import { useWorkspaceInvalidation } from '../collab/workspace-events';
 import {
+  beginWorkspaceScopedRead,
+  workspaceProjectHeaders,
+} from '../collab/workspace-identity';
+import {
   buildAllProjectsList,
   buildDraftsList,
   createSharedProjectPredicate,
@@ -775,7 +779,7 @@ export function EntryShell({
         currentWorkspaceMemberId,
       );
     },
-  });
+  }, { workspaceContext });
   useEffect(() => {
     if (!readyScopeKey) return;
     for (const [projectId, eventScope] of pendingContentReadyProjectIdsRef.current) {
@@ -846,9 +850,15 @@ export function EntryShell({
     // on the card (spinner overlay) and swallow re-clicks meanwhile —
     // otherwise the first click reads as dead for the entire download.
     if (pullingProjectId) return false;
+    const pullRead = beginWorkspaceScopedRead(workspaceContextRef.current);
+    if (!pullRead.context) return false;
     setPullingProjectId(id);
     try {
-      const response = await fetch(`/api/projects/${encodeURIComponent(id)}/collab/pull`, { method: 'POST' });
+      const response = await fetch(`/api/projects/${encodeURIComponent(id)}/collab/pull`, {
+        method: 'POST',
+        headers: workspaceProjectHeaders(pullRead.context),
+      });
+      if (!pullRead.isStillCurrent(workspaceContextRef.current)) return false;
       if (!response.ok) return false;
       await Promise.resolve(onProjectsRefresh?.());
     } catch {

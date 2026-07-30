@@ -10,6 +10,7 @@ import {
   ensureWorkspaceResource,
   getWorkspaceResource,
   getWorkspaceResourceByResourceId,
+  listTeamWorkspaceResourceWorkspaceIds,
   listWorkspaceResources,
   openDatabase,
   updateWorkspaceResource,
@@ -130,6 +131,28 @@ describe('workspace_resources persistence', () => {
     ensureWorkspaceResource(db, 'plugin', 'ws-2', 'plugin-c', { updatedAt: 3_000 });
     const rows = listWorkspaceResources(db, 'plugin', 'ws-1');
     expect(rows.map((r) => r.resourceId)).toEqual(['plugin-b', 'plugin-a']);
+  });
+
+  it('lists each persisted live Team resource Workspace once for background reconciliation', () => {
+    const db = seed();
+    ensureWorkspaceResource(db, 'plugin', 'ws-b', 'plugin-a', {
+      visibility: 'team',
+      resourceState: 'active',
+    });
+    ensureWorkspaceResource(db, 'skill', 'ws-a', 'skill-a', {
+      visibility: 'team',
+      resourceState: 'active',
+    });
+    ensureWorkspaceResource(db, 'design_system', 'ws-a', 'system-a', {
+      visibility: 'team',
+      resourceState: 'deleted',
+    });
+    ensureWorkspaceResource(db, 'plugin', 'ws-personal', 'plugin-personal', {
+      visibility: 'personal',
+      resourceState: 'active',
+    });
+
+    expect(listTeamWorkspaceResourceWorkspaceIds(db)).toEqual(['ws-a', 'ws-b']);
   });
 
   it('deletes a binding scoped to the workspace it names', () => {

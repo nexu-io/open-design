@@ -49,6 +49,7 @@ import { resetWorkspaceDirectoryCache } from '../../src/components/EntryNavRail'
 import { resetCoalescedGet } from '../../src/lib/coalesced-get';
 import { I18nProvider } from '../../src/i18n';
 import type { AgentInfo, AppConfig } from '../../src/types';
+import { workspaceDirectoryFixture } from '../helpers/workspace-context';
 
 const originalFetch = globalThis.fetch;
 const originalResizeObserver = globalThis.ResizeObserver;
@@ -232,6 +233,11 @@ async function mountHomeShell(initial: WorkspaceCollabContext): Promise<Harness>
 
   globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
+    if (url.endsWith('/api/workspace/directory')) {
+      const otherContext =
+        currentContext.workspaceId === PAID_TEAM.workspaceId ? FREE_TEAM : PAID_TEAM;
+      return jsonResponse(workspaceDirectoryFixture([currentContext, otherContext]));
+    }
     if (url.endsWith('/api/workspace/context')) {
       contextReads += 1;
       return jsonResponse({ context: currentContext });
@@ -306,7 +312,7 @@ async function mountHomeShell(initial: WorkspaceCollabContext): Promise<Harness>
     card: billingCard,
     switchTo: async (next) => {
       currentContext = next;
-      act(() => notifyWorkspaceContextRefresh());
+      act(() => notifyWorkspaceContextRefresh({ context: next }));
       await waitFor(() => expect(billingReads).toContain(next.workspaceId));
     },
   };

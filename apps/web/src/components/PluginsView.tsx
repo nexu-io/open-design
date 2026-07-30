@@ -53,6 +53,7 @@ import {
   resolvedWorkspaceContextForWrite,
   setPluginMarketplaceTrust,
   uninstallPlugin,
+  workspaceProjectHeaders,
   type PluginInstallOutcome,
   type PluginShareAction,
   type PluginShareProjectOutcome,
@@ -319,7 +320,10 @@ export function PluginsView({
     }
     setPendingApplyId(record.id);
     setNotice(null);
-    const result = await applyPlugin(record.id, { locale });
+    const result = await applyPlugin(record.id, {
+      locale,
+      workspaceContext: pluginsContextRef.current,
+    });
     setPendingApplyId(null);
     if (!result) {
       setNotice({
@@ -515,6 +519,7 @@ export function PluginsView({
         {!loading && activeTab === 'installed' ? (
           <PluginsHomeSection
             plugins={userPlugins}
+            workspaceContext={pluginsWorkspaceContext}
             loading={false}
             activePluginId={activePlugin?.record.id ?? null}
             pendingApplyId={pendingApplyId}
@@ -686,8 +691,9 @@ export function PluginsView({
 
       <AnimatePresence>
         {detailsRecord ? (
-          <PluginDetailsModal
-            record={detailsRecord}
+        <PluginDetailsModal
+          record={detailsRecord}
+          workspaceContext={pluginsWorkspaceContext}
             onClose={() => setDetailsRecord(null)}
             onUse={(record, action) => void handleUsePlugin(record, action)}
             onDuplicate={(record) => void handleDuplicatePlugin(record)}
@@ -1055,7 +1061,7 @@ export function ExtensionsMarketplace({
 
   async function handleCreateImportUrl() {
     const url = createUrl.trim();
-    if (!url || createBusy) return;
+    if (!url || createBusy || workspaceContextLoading) return;
     if (createKind === 'skill') {
       setCreateBusy('import');
       try {
@@ -1095,7 +1101,7 @@ export function ExtensionsMarketplace({
   }
 
   async function handleCreateUploadFolder() {
-    if (createFolderFiles.length === 0 || createBusy) return;
+    if (createFolderFiles.length === 0 || createBusy || workspaceContextLoading) return;
     setCreateBusy('upload');
     try {
       if (createKind === 'plugin') {
@@ -1197,13 +1203,24 @@ export function ExtensionsMarketplace({
 
   const refreshSharedResources = useCallback(async () => {
     const read = beginWorkspaceScopedRead(emContextRef.current);
+    if (!read.context || !workspaceContextHasTeamIdentity(read.context)) {
+      setSharedPluginIds(new Set());
+      setSharedSkillIds(new Set());
+      setSharedPluginMeta(new Map());
+      setSharedSkillMeta(new Map());
+      return;
+    }
+    const context = read.context;
     const loadShared = async (
       basePath: string,
       setter: Dispatch<SetStateAction<ReadonlySet<string>>>,
       metaSetter: Dispatch<SetStateAction<ReadonlyMap<string, SharedResourceCardMeta>>>,
     ) => {
       try {
-        const res = await fetch(`/api/workspace/${basePath}/team`, { cache: 'no-store' });
+        const res = await fetch(`/api/workspace/${basePath}/team`, {
+          cache: 'no-store',
+          headers: workspaceProjectHeaders(context),
+        });
         if (!res.ok) return;
         const body = (await res.json()) as { ids?: unknown; resources?: unknown };
         if (!read.isStillCurrent(emContextRef.current)) return;
@@ -1278,6 +1295,11 @@ export function ExtensionsMarketplace({
 
   async function shareResource(kind: MarketMode, id: string, title: string) {
     if (sharingId || unsharingId) return;
+    const context = emContextRef.current;
+    if (!context || !workspaceContextHasTeamIdentity(context)) {
+      setToast({ message: t('pluginsView.shareUnavailable', { title }), tone: 'error' });
+      return;
+    }
     // Same POST route promotes a not-yet-shared resource AND pushes an update
     // for one that is already shared (`share()` has no "already shared"
     // guard — see team-resource-share.ts). Only the toast copy distinguishes
@@ -1290,6 +1312,7 @@ export function ExtensionsMarketplace({
     try {
       const res = await fetch(`/api/workspace/${basePath}/${encodeURIComponent(id)}/share`, {
         method: 'POST',
+        headers: workspaceProjectHeaders(context),
       });
       const body = (await res.json().catch(() => ({}))) as { shared?: boolean };
       if (res.ok && body.shared) {
@@ -1316,12 +1339,18 @@ export function ExtensionsMarketplace({
 
   async function unshareResource(kind: MarketMode, id: string, title: string) {
     if (sharingId || unsharingId) return;
+    const context = emContextRef.current;
+    if (!context || !workspaceContextHasTeamIdentity(context)) {
+      setToast({ message: t('pluginsView.unshareUnavailable', { title }), tone: 'error' });
+      return;
+    }
     setUnsharingId(id);
     setMenuId(null);
     const basePath = kind === 'plugins' ? 'plugins' : 'skills';
     try {
       const res = await fetch(`/api/workspace/${basePath}/${encodeURIComponent(id)}/share`, {
         method: 'DELETE',
+        headers: workspaceProjectHeaders(context),
       });
       const body = (await res.json().catch(() => ({}))) as { unshared?: boolean };
       if (res.ok && body.unshared) {
@@ -1341,12 +1370,12 @@ export function ExtensionsMarketplace({
   // card builder marked uninstallable (never a bundled plugin or a built-in
   // skill), and only after the inline confirmation has been armed.
   async function uninstallResource(kind: MarketMode, id: string, title: string) {
-    if (uninstallingId) return;
+    if (uninstallingId || workspaceContextLoading) return;
     setUninstallingId(id);
     try {
       const ok =
         kind === 'plugins'
-          ? await uninstallPlugin(id)
+          ? await uninstallPlugin(id, workspaceContext)
           : 'ok' in (await uninstallSkill(id, workspaceContext));
       if (!ok) {
         setToast({ message: t('pluginsView.uninstallFailed', { title }), tone: 'error' });
@@ -1365,10 +1394,13 @@ export function ExtensionsMarketplace({
   }
 
   async function installAvailable(plugin: AvailableMarketplacePlugin, title: string) {
-    if (installingKeys.has(plugin.key)) return;
+    if (installingKeys.has(plugin.key) || workspaceContextLoading) return;
     setInstallingKeys((prev) => new Set(prev).add(plugin.key));
     try {
-      const outcome = await installPluginSource(plugin.installSource ?? plugin.entry.name);
+      const outcome = await installPluginSource(
+        plugin.installSource ?? plugin.entry.name,
+        workspaceContext,
+      );
       if (outcome.ok) {
         await refresh();
         // The open detail modal holds the pre-install catalog entry, so leaving
@@ -1841,7 +1873,7 @@ export function ExtensionsMarketplace({
                       <button
                         type="button"
                         className="plugin-marketplace__row-action"
-                        disabled={busy}
+                        disabled={busy || workspaceContextLoading}
                         data-testid={`plugins-card-install-${card.id}`}
                         onClick={(event) => {
                           event.stopPropagation();
@@ -1942,7 +1974,7 @@ export function ExtensionsMarketplace({
                               <button
                                 type="button"
                                 role="menuitem"
-                                disabled={uninstalling}
+                                disabled={uninstalling || workspaceContextLoading}
                                 onClick={() => {
                                   if (confirmUninstallId !== card.id) {
                                     setConfirmUninstallId(card.id);
@@ -1977,6 +2009,7 @@ export function ExtensionsMarketplace({
         {cardDetail?.kind === 'plugin' ? (
           <PluginDetailsModal
             record={cardDetail.record}
+            workspaceContext={workspaceContext}
             onClose={() => setCardDetail(null)}
             onUse={(record, action) => {
               setCardDetail(null);
@@ -1992,7 +2025,10 @@ export function ExtensionsMarketplace({
         {cardDetail?.kind === 'available' ? (
           <AvailablePluginDetailsModal
             plugin={cardDetail.plugin}
-            pending={installingKeys.has(cardDetail.plugin.key)}
+            pending={
+              workspaceContextLoading
+              || installingKeys.has(cardDetail.plugin.key)
+            }
             onClose={() => {
               if (!installingKeys.has(cardDetail.plugin.key)) setCardDetail(null);
             }}
@@ -2095,7 +2131,11 @@ export function ExtensionsMarketplace({
                     <button
                       type="button"
                       data-testid="plugin-create-import-url"
-                      disabled={createBusy !== null || createUrl.trim().length === 0}
+                      disabled={
+                        workspaceContextLoading
+                        || createBusy !== null
+                        || createUrl.trim().length === 0
+                      }
                       onClick={() => void handleCreateImportUrl()}
                     >
                       {createBusy === 'import' ? t('pluginsView.importing') : t('pluginsView.importAndUpload')}
@@ -2142,7 +2182,11 @@ export function ExtensionsMarketplace({
                     <button
                       type="button"
                       data-testid="plugin-create-upload-folder"
-                      disabled={createBusy !== null || createFolderFiles.length === 0}
+                      disabled={
+                        workspaceContextLoading
+                        || createBusy !== null
+                        || createFolderFiles.length === 0
+                      }
                       onClick={() => void handleCreateUploadFolder()}
                     >
                       {createBusy === 'upload'
@@ -3774,12 +3818,22 @@ function TeamPanel({
 
   const refreshTeamPanelShared = useCallback(async (cancelled: () => boolean = () => false) => {
     const read = beginWorkspaceScopedRead(contextRef.current);
+    if (!read.context || !workspaceContextHasTeamIdentity(read.context)) {
+      setSkills([]);
+      setSharedPluginIds(new Set());
+      setSharedSkillIds(new Set());
+      return;
+    }
+    const context = read.context;
     const loadShared = async (
       basePath: string,
       setter: (ids: ReadonlySet<string>) => void,
     ) => {
       try {
-        const res = await fetch(`/api/workspace/${basePath}/team`, { cache: 'no-store' });
+        const res = await fetch(`/api/workspace/${basePath}/team`, {
+          cache: 'no-store',
+          headers: workspaceProjectHeaders(context),
+        });
         if (!res.ok) return;
         const body = (await res.json()) as { ids?: unknown };
         if (
@@ -3833,11 +3887,17 @@ function TeamPanel({
     id: string,
   ) {
     if (sharingId) return;
+    const context = contextRef.current;
+    if (!context || !workspaceContextHasTeamIdentity(context)) {
+      setFailed(true);
+      return;
+    }
     setSharingId(id);
     setFailed(false);
     try {
       const res = await fetch(`/api/workspace/${basePath}/${encodeURIComponent(id)}/share`, {
         method: 'POST',
+        headers: workspaceProjectHeaders(context),
       });
       const body = (await res.json().catch(() => ({}))) as { shared?: boolean };
       if (res.ok && body.shared) {

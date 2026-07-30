@@ -211,38 +211,51 @@ beforeEach(() => {
   process.env.VELA_PROFILE = 'prod';
 });
 
-afterEach(() => {
-  if (originalHome === undefined) delete process.env.HOME;
-  else process.env.HOME = originalHome;
-  delete process.env.OPEN_DESIGN_AMR_PROFILE;
-  delete process.env.VELA_PROFILE;
-  delete process.env.FAKE_VELA_LOGIN_DELAY_MS;
-  delete process.env.FAKE_VELA_LOGIN_FAIL;
-  delete process.env.FAKE_VELA_LOGIN_FAIL_WITHOUT_API_URL;
-  delete process.env.FAKE_VELA_LOGIN_FAIL_WITHOUT_API_URL_DELAY_MS;
-  delete process.env.OD_AMR_LOGIN_ACTIVATION_GRACE_MS;
-  delete process.env.FAKE_VELA_LOGIN_USER_EMAIL;
-  delete process.env.FAKE_VELA_LOGIN_USER_PLAN;
-  delete process.env.FAKE_VELA_BILLING_TIER;
-  delete process.env.FAKE_VELA_BILLING_BALANCE_USD;
-  delete process.env.FAKE_VELA_BILLING_LOG;
-  delete process.env.FAKE_VELA_BILLING_DELAY_MS;
-  delete process.env.FAKE_VELA_BILLING_UNKNOWN_COMMAND;
-  delete process.env.FAKE_VELA_MODEL_LIST_JSON;
-  delete process.env.FAKE_VELA_MODEL_PRESET_JSON;
-  delete process.env.FAKE_VELA_ENV_DUMP_PATH;
-  delete process.env.OD_PUBLIC_BASE_URL;
-  delete process.env.VELA_RUNTIME_KEY;
-  delete process.env.VELA_LINK_URL;
-  delete process.env.OPEN_DESIGN_AMR_ANALYTICS_URL;
-  delete process.env.OPEN_DESIGN_AMR_ANALYTICS_ENV;
-  delete process.env.OD_AMR_WALLET_FETCH_TIMEOUT_MS;
-  rmSync(tmpHome, {
-    recursive: true,
-    force: true,
-    maxRetries: 5,
-    retryDelay: 50,
-  });
+afterEach(async () => {
+  try {
+    // `/login` acknowledges after the child reaches its activation boundary,
+    // not necessarily after the child exits. Do not let that process retain
+    // this test's HOME/env or trip the next test's in-flight guard.
+    const status = await getJson<{ loginInFlight: boolean }>(
+      `${baseUrl}/api/integrations/vela/status`,
+    );
+    if (status.body.loginInFlight) {
+      await postJson(`${baseUrl}/api/integrations/vela/login/cancel`);
+      await waitForVelaLoginIdle();
+    }
+  } finally {
+    if (originalHome === undefined) delete process.env.HOME;
+    else process.env.HOME = originalHome;
+    delete process.env.OPEN_DESIGN_AMR_PROFILE;
+    delete process.env.VELA_PROFILE;
+    delete process.env.FAKE_VELA_LOGIN_DELAY_MS;
+    delete process.env.FAKE_VELA_LOGIN_FAIL;
+    delete process.env.FAKE_VELA_LOGIN_FAIL_WITHOUT_API_URL;
+    delete process.env.FAKE_VELA_LOGIN_FAIL_WITHOUT_API_URL_DELAY_MS;
+    delete process.env.OD_AMR_LOGIN_ACTIVATION_GRACE_MS;
+    delete process.env.FAKE_VELA_LOGIN_USER_EMAIL;
+    delete process.env.FAKE_VELA_LOGIN_USER_PLAN;
+    delete process.env.FAKE_VELA_BILLING_TIER;
+    delete process.env.FAKE_VELA_BILLING_BALANCE_USD;
+    delete process.env.FAKE_VELA_BILLING_LOG;
+    delete process.env.FAKE_VELA_BILLING_DELAY_MS;
+    delete process.env.FAKE_VELA_BILLING_UNKNOWN_COMMAND;
+    delete process.env.FAKE_VELA_MODEL_LIST_JSON;
+    delete process.env.FAKE_VELA_MODEL_PRESET_JSON;
+    delete process.env.FAKE_VELA_ENV_DUMP_PATH;
+    delete process.env.OD_PUBLIC_BASE_URL;
+    delete process.env.VELA_RUNTIME_KEY;
+    delete process.env.VELA_LINK_URL;
+    delete process.env.OPEN_DESIGN_AMR_ANALYTICS_URL;
+    delete process.env.OPEN_DESIGN_AMR_ANALYTICS_ENV;
+    delete process.env.OD_AMR_WALLET_FETCH_TIMEOUT_MS;
+    rmSync(tmpHome, {
+      recursive: true,
+      force: true,
+      maxRetries: 5,
+      retryDelay: 50,
+    });
+  }
 });
 
 describe('GET /api/integrations/vela/wallet', () => {

@@ -37,6 +37,16 @@ const FREE_TEAM_CONTEXT = {
   billingState: 'free',
   planId: null,
   teamId: 'ws-team',
+  permissions: {
+    canManageMembers: false,
+    canManageBilling: false,
+    canInviteMembers: false,
+    canManageAutoRecharge: false,
+    canShareProjects: true,
+    canWriteSyncedFiles: true,
+    canViewWorkspaceSettings: false,
+    canManageSharedResources: true,
+  },
 };
 
 const PERSONAL_CONTEXT = {
@@ -48,6 +58,16 @@ const PERSONAL_CONTEXT = {
   lifecycleState: 'active',
   billingState: 'free',
   planId: null,
+  permissions: {
+    canManageMembers: false,
+    canManageBilling: false,
+    canInviteMembers: false,
+    canManageAutoRecharge: false,
+    canShareProjects: false,
+    canWriteSyncedFiles: true,
+    canViewWorkspaceSettings: false,
+    canManageSharedResources: false,
+  },
 };
 
 let workspaceContext: unknown = FREE_TEAM_CONTEXT;
@@ -231,14 +251,23 @@ describe('ExtensionsMarketplace 团队 scope visibility', () => {
       skills: deferred<Response>(),
     };
     const counts = { plugins: 0, skills: 0 };
+    const requestScopes: Array<{ kind: 'plugins' | 'skills'; workspaceId: string | null }> = [];
     workspaceContext = { ...FREE_TEAM_CONTEXT, workspaceId: 'ws-a', teamId: 'ws-a' };
-    globalThis.fetch = vi.fn((input: RequestInfo | URL) => {
+    globalThis.fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input.toString();
       if (url.endsWith('/workspace/plugins/team')) {
+        requestScopes.push({
+          kind: 'plugins',
+          workspaceId: new Headers(init?.headers).get('x-od-workspace-id'),
+        });
         counts.plugins += 1;
         return counts.plugins === 1 ? sharedA.plugins.promise : sharedB.plugins.promise;
       }
       if (url.endsWith('/workspace/skills/team')) {
+        requestScopes.push({
+          kind: 'skills',
+          workspaceId: new Headers(init?.headers).get('x-od-workspace-id'),
+        });
         counts.skills += 1;
         return counts.skills === 1 ? sharedA.skills.promise : sharedB.skills.promise;
       }
@@ -261,6 +290,12 @@ describe('ExtensionsMarketplace 团队 scope visibility', () => {
       </I18nProvider>,
     );
     await waitFor(() => expect(counts).toEqual({ plugins: 2, skills: 2 }));
+    expect(requestScopes).toEqual([
+      { kind: 'plugins', workspaceId: 'ws-a' },
+      { kind: 'skills', workspaceId: 'ws-a' },
+      { kind: 'plugins', workspaceId: 'ws-b' },
+      { kind: 'skills', workspaceId: 'ws-b' },
+    ]);
 
     await act(async () => {
       sharedB.plugins.resolve(jsonResponse({

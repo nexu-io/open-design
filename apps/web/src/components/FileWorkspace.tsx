@@ -68,6 +68,7 @@ import { buildSrcdoc } from '../runtime/srcdoc';
 import { removeSpeakerNotesFromHtml } from '../runtime/speaker-notes';
 import { useDesignKit, hostnameOf, type KitColor } from '../runtime/design-kit';
 import { useKitModuleUpload } from '../runtime/kit-upload';
+import { appendResourceQuery } from '../collab/workspace-identity';
 import {
   DesignKitView,
   type DesignKitActionFeedbackTone,
@@ -103,13 +104,14 @@ import {
   type ChatSessionMode,
   type InstalledPluginRecord,
   type LocalizedText,
+  type WorkspaceCollabContext,
   type WorkspaceContextItem,
 } from '@open-design/contracts';
 import {
   notifyTeamProjectsChanged,
   TEAM_PROJECTS_CHANGED_EVENT,
-  useWorkspaceContext,
 } from '../collab/useWorkspaceContext';
+import { useProjectCollabContext } from '../collab/collab-context';
 import { createTerminal, killTerminal, listPlugins, moveWorkspaceProject } from '../state/projects';
 import { MoveToTeamConfirmDialog, moveConfirmSkipped } from './MoveToTeamConfirmDialog';
 import { DesignFilesPanel, type DesignFilesNavState } from './DesignFilesPanel';
@@ -1310,7 +1312,7 @@ export function FileWorkspace({
   fileSyncBadge = null,
 }: Props) {
   const { locale, t } = useI18n();
-  const { context: workspaceContext } = useWorkspaceContext();
+  const { workspaceContext } = useProjectCollabContext();
   const analytics = useAnalytics();
   // P1 page_view page_name=file_manager — once per project the user lands
   // inside the workspace. Re-fire when the projectId changes so a
@@ -1496,9 +1498,9 @@ export function FileWorkspace({
   useEffect(() => {
     let cancelled = false;
     const load = () => {
-      void listPlugins().then((records) => {
+      void listPlugins({ workspaceContext }).then((records) => {
         if (cancelled) return;
-        setCommunityPluginPresets(communityPluginPagePresets(records));
+        setCommunityPluginPresets(communityPluginPagePresets(records, workspaceContext));
       });
     };
     load();
@@ -1507,7 +1509,7 @@ export function FileWorkspace({
       cancelled = true;
       window.removeEventListener('open-design:plugins-changed', load);
     };
-  }, []);
+  }, [workspaceContext]);
 
   const loadSketchFile = useCallback((file: ProjectFile): Promise<boolean> => {
     const sourceKey = sketchFileSourceKey(projectId, file);
@@ -1522,7 +1524,9 @@ export function FileWorkspace({
     const inFlight = { promise: null as Promise<boolean> | null };
     const promise = (async () => {
       try {
-        const text = await fetchProjectFileText(projectId, file.name);
+        const text = workspaceContext
+          ? await fetchProjectFileText(projectId, file.name, { workspaceContext })
+          : await fetchProjectFileText(projectId, file.name);
         const doc = parseSketchWorkspaceDocument(text);
         if (activeProjectIdRef.current !== projectId) return false;
         setSketches((curr) => {
@@ -1551,7 +1555,7 @@ export function FileWorkspace({
     inFlight.promise = promise;
     sketchPreloadInFlightRef.current.set(sourceKey, promise);
     return promise;
-  }, [projectId]);
+  }, [projectId, workspaceContext]);
 
   const liveArtifactEntries = useMemo(
     () => liveArtifacts.map(liveArtifactSummaryToWorkspaceEntry),
@@ -1559,22 +1563,22 @@ export function FileWorkspace({
   );
 
   const refreshProjectFolders = useCallback(async (): Promise<ProjectFolder[]> => {
-    const next = await fetchProjectFolders(projectId);
+    const next = await fetchProjectFolders(projectId, workspaceContext);
     setProjectFolders(next);
     return next;
-  }, [projectId]);
+  }, [projectId, workspaceContext]);
 
   useEffect(() => {
     let cancelled = false;
     // The synchronous clear happens during render (see projectFoldersProjectIdRef
     // above); here we only fetch the new project's folders.
-    void fetchProjectFolders(projectId).then((next) => {
+    void fetchProjectFolders(projectId, workspaceContext).then((next) => {
       if (!cancelled) setProjectFolders(next);
     });
     return () => {
       cancelled = true;
     };
-  }, [projectId]);
+  }, [projectId, workspaceContext]);
 
   // True when the Design Files tab has nothing to attach: no files, no live
   // artifacts, no folders. Mirrors DesignFilesPanel's own empty-state gate so
@@ -2077,7 +2081,10 @@ export function FileWorkspace({
     if (isTerminalTabId(name)) {
       const originalId = terminalIdFromTabId(name);
       const liveId = terminalLiveSessionsRef.current.get(originalId) ?? originalId;
-      void killTerminal(projectId, liveId, { keepalive: true });
+      void killTerminal(projectId, liveId, {
+        keepalive: true,
+        workspaceContext,
+      });
       terminalLiveSessionsRef.current.delete(originalId);
     }
     const sketchEntry = sketches[name];
@@ -2508,7 +2515,13 @@ export function FileWorkspace({
     const target = nextHtmlPagePath(visibleFiles, pagePresetFileBaseName(preset, t, locale));
     setPageCreating(true);
     try {
-      const content = await contentForPagePreset(target, preset, t, locale);
+      const content = await contentForPagePreset(
+        target,
+        preset,
+        t,
+        locale,
+        workspaceContext,
+      );
       const file = await writeProjectTextFile(projectId, target, content, {
         versionSource: 'manual',
         versionPrompt: pagePresetVersionPrompt(preset, t, locale),
@@ -3255,7 +3268,7 @@ export function FileWorkspace({
 
   useEffect(() => {
     let cancelled = false;
-    const refreshShareAccess = () => void projectIsSharedWithWorkspace(projectId).then((shared) => {
+    const refreshShareAccess = () => void projectIsSharedWithWorkspace(projectId, workspaceContext).then((shared) => {
       if (!cancelled) setProjectShareAccess(shared ? 'workspace' : 'private');
     });
     refreshShareAccess();
@@ -3264,7 +3277,7 @@ export function FileWorkspace({
       cancelled = true;
       window.removeEventListener(TEAM_PROJECTS_CHANGED_EVENT, refreshShareAccess);
     };
-  }, [projectId, projectShareMenuOpen]);
+  }, [projectId, projectShareMenuOpen, workspaceContext]);
 
   useEffect(() => {
     if (!projectShareMenuOpen) setProjectShareAccessMenuOpen(false);
@@ -3299,7 +3312,7 @@ export function FileWorkspace({
     // Surface a toast when the daemon can't start one (e.g. node-pty not
     // compiled) instead of silently no-opping the launcher action.
     createTerminal: async () => {
-      const term = await createTerminal(projectId);
+      const term = await createTerminal(projectId, undefined, workspaceContext);
       if (!term) {
         setLauncherToast({ message: t('workspace.terminalStartFailed'), tone: 'error' });
         return null;
@@ -3892,6 +3905,7 @@ export function FileWorkspace({
             key={activeTab}
             projectId={projectId}
             terminalId={terminalIdFromTabId(activeTab)}
+            workspaceContext={workspaceContext}
             onClose={() => closeTab(activeTab)}
             onSessionIdChange={handleTerminalSessionChange}
           />
@@ -3992,7 +4006,13 @@ export function FileWorkspace({
               const dir = uploadDir || undefined;
               let lastRelPath: string | null = null;
               for (const asset of assets) {
-                const res = await applyLibraryAsset(asset.id, projectId, dir, { includeElement: true });
+                const res = await applyLibraryAsset(
+                  asset.id,
+                  projectId,
+                  dir,
+                  { includeElement: true },
+                  workspaceContext,
+                );
                 if (res?.relPath) lastRelPath = res.relPath;
                 if (res?.elementRelPath) lastRelPath = res.elementRelPath;
               }
@@ -4081,7 +4101,7 @@ function DesignSystemProjectPanel({
 }) {
   const t = useT();
   const analytics = useAnalytics();
-  const { context: workspaceContext } = useWorkspaceContext();
+  const { workspaceContext } = useProjectCollabContext();
   const [reviewDecisions, setReviewDecisions] = useState<Record<string, DesignSystemReviewDecision>>({});
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   const [feedbackSection, setFeedbackSection] = useState<string | null>(null);
@@ -4140,7 +4160,7 @@ function DesignSystemProjectPanel({
 
   const refreshKitDependencies = useCallback(async (options?: { finalizeBrand?: boolean }) => {
     if (options?.finalizeBrand && brandId) {
-      const outcome = await finalizeBrandProject(brandId, projectId);
+      const outcome = await finalizeBrandProject(brandId, projectId, workspaceContext);
       if (!outcome.ok) throw new Error(outcome.error);
     }
     setKitReloadKey((k) => k + 1);
@@ -4148,13 +4168,16 @@ function DesignSystemProjectPanel({
       Promise.resolve(onRefreshFiles()),
       Promise.resolve(onDesignSystemsRefresh?.()),
     ]);
-  }, [brandId, onDesignSystemsRefresh, onRefreshFiles, projectId]);
+  }, [brandId, onDesignSystemsRefresh, onRefreshFiles, projectId, workspaceContext]);
 
   useEffect(() => {
     let cancelled = false;
     void Promise.all([
       readDesignMd(projectId),
-      fetchProjectFileText(projectId, 'brand.json', { cache: 'no-store' }),
+      fetchProjectFileText(projectId, 'brand.json', {
+        cache: 'no-store',
+        workspaceContext,
+      }),
     ]).then(([designMd, brandJson]) => {
       if (cancelled) return;
       setDesignMdBody(designMd);
@@ -4197,9 +4220,14 @@ function DesignSystemProjectPanel({
     editable,
     host: kitHost,
     reloadKey: kitReloadKey,
+    workspaceContext,
   });
   async function persistDesignMd(nextBody: string) {
-    const updated = await updateDesignSystemDraft(system.id, { body: nextBody });
+    const updated = await updateDesignSystemDraft(
+      system.id,
+      { body: nextBody },
+      workspaceContext,
+    );
     if (!updated) throw new Error(t('ds.actionFailed'));
     const file = await writeProjectTextFile(projectId, 'DESIGN.md', nextBody, undefined, workspaceContext);
     if (!file) throw new Error(t('ds.actionFailed'));
@@ -4232,7 +4260,11 @@ function DesignSystemProjectPanel({
       if (brandId) {
         await refreshKitDependencies({ finalizeBrand: true });
       } else {
-        const job = await startDesignSystemTokenContractRebuildJob(system.id, { force: true });
+        const job = await startDesignSystemTokenContractRebuildJob(
+          system.id,
+          { force: true },
+          workspaceContext,
+        );
         if (!job) throw new Error(t('ds.actionFailed'));
         await refreshKitDependencies();
       }
@@ -4252,7 +4284,11 @@ function DesignSystemProjectPanel({
       await refreshKitDependencies({ finalizeBrand: true });
       const ok =
         await downloadProjectArchive({ projectId, fallbackTitle: system.title }) ||
-        await downloadDesignSystemArchive({ designSystemId: system.id, fallbackTitle: system.title });
+        await downloadDesignSystemArchive({
+          designSystemId: system.id,
+          fallbackTitle: system.title,
+          workspaceContext,
+        });
       if (!ok) throw new Error(t('ds.actionFailed'));
       notifyKit('success', t('ds.actionDone'));
     } catch {
@@ -4289,7 +4325,7 @@ function DesignSystemProjectPanel({
         setKitActionBusy(null);
         return;
       }
-      await deleteDesignSystemDraft(system.id);
+      await deleteDesignSystemDraft(system.id, workspaceContext);
       await onDesignSystemsRefresh?.();
     } catch {
       notifyKit('error', t('ds.actionFailed'));
@@ -4378,6 +4414,7 @@ function DesignSystemProjectPanel({
     let cancelled = false;
     void fetchProjectFileText(projectId, manifestFileName, {
       cache: 'no-store',
+      workspaceContext,
       cacheBustKey: manifestCacheBustKey,
     }).then((text) => {
       if (cancelled) return;
@@ -4467,7 +4504,11 @@ function DesignSystemProjectPanel({
     notifyKitLoading(publishActionLabel);
     try {
       const nextStatus = nextPublished ? 'published' : 'draft';
-      const updated = await updateDesignSystemDraft(system.id, { status: nextStatus });
+      const updated = await updateDesignSystemDraft(
+        system.id,
+        { status: nextStatus },
+        workspaceContext,
+      );
       if (!updated) throw new Error(t('ds.actionFailed'));
       setStatus(updated.status ?? nextStatus);
       await onDesignSystemsRefresh?.();
@@ -6134,7 +6175,10 @@ function slugifyPageFileBaseName(value: string, fallback = 'community-page'): st
     || fallback;
 }
 
-function communityPluginPagePresets(records: InstalledPluginRecord[]): ProjectPagePreset[] {
+function communityPluginPagePresets(
+  records: InstalledPluginRecord[],
+  workspaceContext?: WorkspaceCollabContext | null,
+): ProjectPagePreset[] {
   return records
     .map((record): ProjectPagePreset | null => {
       const category = projectPageKindForCommunityPlugin(record);
@@ -6146,8 +6190,8 @@ function communityPluginPagePresets(records: InstalledPluginRecord[]): ProjectPa
         fileBaseName: slugifyPageFileBaseName(record.title || record.manifest?.title || record.id),
         source: 'community',
         plugin: record,
-        pluginPreview: inferPluginPreview(record, { preferBaked: true }),
-        pluginHtmlPreview: inferPluginPreview(record),
+        pluginPreview: inferPluginPreview(record, { preferBaked: true, workspaceContext }),
+        pluginHtmlPreview: inferPluginPreview(record, { workspaceContext }),
         featured: curatedPluginPriority(record) !== null,
       };
     })
@@ -6202,13 +6246,18 @@ async function contentForPagePreset(
   preset: ProjectPagePreset,
   t: TranslateFn,
   locale?: string,
+  workspaceContext?: WorkspaceCollabContext | null,
 ): Promise<string> {
   let html: string | null = null;
   if (preset.plugin && preset.pluginHtmlPreview?.kind === 'html') {
     const preview = preset.pluginHtmlPreview;
     const result = preview.source === 'preview'
-      ? await fetchPluginPreviewHtml(preset.plugin.id)
-      : await fetchPluginExampleHtml(preset.plugin.id, preview.exampleStem ?? '');
+      ? await fetchPluginPreviewHtml(preset.plugin.id, workspaceContext)
+      : await fetchPluginExampleHtml(
+          preset.plugin.id,
+          preview.exampleStem ?? '',
+          workspaceContext,
+        );
     if ('html' in result && typeof result.html === 'string' && result.html.trim().length > 0) {
       html = result.html;
     }
@@ -6823,7 +6872,8 @@ function DesignSystemInlinePreview({
   projectId: string;
   file: ProjectFile;
 }) {
-  const url = projectFileUrl(projectId, file.name);
+  const { workspaceContext } = useProjectCollabContext();
+  const url = projectFileUrl(projectId, file.name, workspaceContext);
   const [srcDoc, setSrcDoc] = useState<string | null>(null);
   const [srcDocReady, setSrcDocReady] = useState(false);
 
@@ -6835,23 +6885,33 @@ function DesignSystemInlinePreview({
     void fetchProjectFileText(projectId, file.name, {
       cache: 'no-store',
       cacheBustKey: Math.round(file.mtime),
+      workspaceContext,
     }).then(async (html) => {
       if (cancelled) return;
       if (!html) {
         setSrcDocReady(true);
         return;
       }
-      const inlinedHtml = await inlineDesignSystemPreviewRelativeAssets(html, projectId, file.name);
+      const inlinedHtml = await inlineDesignSystemPreviewRelativeAssets(
+        html,
+        projectId,
+        file.name,
+        workspaceContext,
+      );
       if (cancelled) return;
       setSrcDoc(buildSrcdoc(inlinedHtml, {
-        baseHref: projectRawUrl(projectId, baseDirForDesignSystemPreviewFile(file.name)),
+        baseHref: projectRawUrl(
+          projectId,
+          baseDirForDesignSystemPreviewFile(file.name),
+          workspaceContext,
+        ),
       }));
       setSrcDocReady(true);
     });
     return () => {
       cancelled = true;
     };
-  }, [file.kind, file.mtime, file.name, projectId]);
+  }, [file.kind, file.mtime, file.name, projectId, workspaceContext]);
 
   if (file.kind === 'html') {
     return (
@@ -6863,13 +6923,14 @@ function DesignSystemInlinePreview({
       />
     );
   }
-  return <img src={`${url}?v=${Math.round(file.mtime)}`} alt={file.name} />;
+  return <img src={appendResourceQuery(url, `v=${Math.round(file.mtime)}`)} alt={file.name} />;
 }
 
 async function inlineDesignSystemPreviewRelativeAssets(
   html: string,
   projectId: string,
   ownerFileName: string,
+  workspaceContext?: WorkspaceCollabContext | null,
 ): Promise<string> {
   const replacements: Array<Promise<{ from: string; to: string } | null>> = [];
   const links = html.match(/<link\b[^>]*>/gi) ?? [];
@@ -6879,9 +6940,17 @@ async function inlineDesignSystemPreviewRelativeAssets(
     if (!rel || !/\bstylesheet\b/i.test(rel) || !href) continue;
     const stylesheetPath = resolveDesignSystemPreviewRelativePath(ownerFileName, href);
     if (!stylesheetPath) continue;
-    replacements.push(fetchProjectFileText(projectId, stylesheetPath, { cache: 'no-store' }).then((css) => {
+    replacements.push(fetchProjectFileText(projectId, stylesheetPath, {
+      cache: 'no-store',
+      workspaceContext,
+    }).then((css) => {
       if (css == null) return null;
-      const safeCss = rewriteDesignSystemPreviewCssUrls(css, projectId, stylesheetPath)
+      const safeCss = rewriteDesignSystemPreviewCssUrls(
+        css,
+        projectId,
+        stylesheetPath,
+        workspaceContext,
+      )
         .replace(/<\/style/gi, '<\\/style');
       return {
         from: tag,
@@ -6898,7 +6967,12 @@ async function inlineDesignSystemPreviewRelativeAssets(
   for (const tag of scripts) {
     const src = readDesignSystemPreviewHtmlAttr(tag, 'src');
     if (!src) continue;
-    replacements.push(fetchDesignSystemPreviewRelativeText(projectId, ownerFileName, src).then((js) => {
+    replacements.push(fetchDesignSystemPreviewRelativeText(
+      projectId,
+      ownerFileName,
+      src,
+      workspaceContext,
+    ).then((js) => {
       if (js == null) return null;
       const open = tag.match(/^<script\b[^>]*>/i)?.[0] ?? '<script>';
       const attrs = open
@@ -6923,18 +6997,29 @@ async function inlineDesignSystemPreviewRelativeAssets(
     (next, replacement) => next.replace(replacement.from, () => replacement.to),
     html,
   );
-  const withInlineCssAssets = rewriteDesignSystemPreviewInlineCssAssetUrls(withInlineAssets, projectId, ownerFileName);
-  return rewriteDesignSystemPreviewHtmlAssetUrls(withInlineCssAssets, projectId, ownerFileName);
+  const withInlineCssAssets = rewriteDesignSystemPreviewInlineCssAssetUrls(
+    withInlineAssets,
+    projectId,
+    ownerFileName,
+    workspaceContext,
+  );
+  return rewriteDesignSystemPreviewHtmlAssetUrls(
+    withInlineCssAssets,
+    projectId,
+    ownerFileName,
+    workspaceContext,
+  );
 }
 
 async function fetchDesignSystemPreviewRelativeText(
   projectId: string,
   ownerFileName: string,
   assetRef: string,
+  workspaceContext?: WorkspaceCollabContext | null,
 ): Promise<string | null> {
   const filePath = resolveDesignSystemPreviewRelativePath(ownerFileName, assetRef);
   if (!filePath) return null;
-  return fetchProjectFileText(projectId, filePath, { cache: 'no-store' });
+  return fetchProjectFileText(projectId, filePath, { cache: 'no-store', workspaceContext });
 }
 
 type DesignSystemPreviewAssetPath = {
@@ -6973,23 +7058,53 @@ function isDesignSystemPreviewAppRootRef(ref: string): boolean {
     || pathOnly.startsWith('/frames/');
 }
 
-function rewriteDesignSystemPreviewCssUrls(css: string, projectId: string, stylesheetFileName: string): string {
+function designSystemPreviewAssetUrl(
+  projectId: string,
+  assetPath: DesignSystemPreviewAssetPath,
+  workspaceContext?: WorkspaceCollabContext | null,
+): string {
+  const baseUrl = projectRawUrl(projectId, assetPath.filePath, workspaceContext);
+  const hashIndex = assetPath.suffix.indexOf('#');
+  const query = (hashIndex >= 0 ? assetPath.suffix.slice(0, hashIndex) : assetPath.suffix)
+    .replace(/^\?/, '');
+  const hash = hashIndex >= 0 ? assetPath.suffix.slice(hashIndex) : '';
+  return `${query ? appendResourceQuery(baseUrl, query) : baseUrl}${hash}`;
+}
+
+function rewriteDesignSystemPreviewCssUrls(
+  css: string,
+  projectId: string,
+  stylesheetFileName: string,
+  workspaceContext?: WorkspaceCollabContext | null,
+): string {
   return css.replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/gi, (match, _quote: string, rawRef: string) => {
     const ref = rawRef.trim();
     const assetPath = resolveDesignSystemPreviewAssetPath(stylesheetFileName, ref);
     if (!assetPath) return match;
-    return `url("${escapeDesignSystemPreviewCssUrl(projectRawUrl(projectId, assetPath.filePath) + assetPath.suffix)}")`;
+    return `url("${escapeDesignSystemPreviewCssUrl(
+      designSystemPreviewAssetUrl(projectId, assetPath, workspaceContext),
+    )}")`;
   });
 }
 
-function rewriteDesignSystemPreviewHtmlAssetUrls(html: string, projectId: string, ownerFileName: string): string {
+function rewriteDesignSystemPreviewHtmlAssetUrls(
+  html: string,
+  projectId: string,
+  ownerFileName: string,
+  workspaceContext?: WorkspaceCollabContext | null,
+): string {
   const directAssetTags = new RegExp(
     '(<(?:img|source|video|audio|track|embed|object|image|use)\\b[^>]*?\\s' +
       '(?:src|poster|data|href|xlink:href)\\s*=\\s*)([\'"])([\\s\\S]*?)\\2',
     'gi',
   );
   const withDirectAssets = html.replace(directAssetTags, (match, prefix: string, quote: string, rawRef: string) => {
-    const rewritten = rewriteDesignSystemPreviewHtmlAssetRef(rawRef, projectId, ownerFileName);
+    const rewritten = rewriteDesignSystemPreviewHtmlAssetRef(
+      rawRef,
+      projectId,
+      ownerFileName,
+      workspaceContext,
+    );
     if (rewritten === rawRef) return match;
     return `${prefix}${quote}${escapeDesignSystemPreviewAttr(rewritten)}${quote}`;
   });
@@ -6998,19 +7113,29 @@ function rewriteDesignSystemPreviewHtmlAssetUrls(html: string, projectId: string
     'gi',
   );
   return withDirectAssets.replace(srcsetAssetTags, (match, prefix: string, quote: string, rawSrcset: string) => {
-    const rewritten = rewriteDesignSystemPreviewSrcset(rawSrcset, projectId, ownerFileName);
+    const rewritten = rewriteDesignSystemPreviewSrcset(
+      rawSrcset,
+      projectId,
+      ownerFileName,
+      workspaceContext,
+    );
     if (rewritten === rawSrcset) return match;
     return `${prefix}${quote}${escapeDesignSystemPreviewAttr(rewritten)}${quote}`;
   });
 }
 
-function rewriteDesignSystemPreviewInlineCssAssetUrls(html: string, projectId: string, ownerFileName: string): string {
+function rewriteDesignSystemPreviewInlineCssAssetUrls(
+  html: string,
+  projectId: string,
+  ownerFileName: string,
+  workspaceContext?: WorkspaceCollabContext | null,
+): string {
   const withStyleBlocks = html.replace(/<style\b([^>]*)>([\s\S]*?)<\/style>/gi, (
     match,
     attrs: string,
     css: string,
   ) => {
-    const rewritten = rewriteDesignSystemPreviewCssUrls(css, projectId, ownerFileName);
+    const rewritten = rewriteDesignSystemPreviewCssUrls(css, projectId, ownerFileName, workspaceContext);
     if (rewritten === css) return match;
     return `<style${attrs}>${rewritten}</style>`;
   });
@@ -7020,25 +7145,40 @@ function rewriteDesignSystemPreviewInlineCssAssetUrls(html: string, projectId: s
     quote: string,
     css: string,
   ) => {
-    const rewritten = rewriteDesignSystemPreviewCssUrls(css, projectId, ownerFileName);
+    const rewritten = rewriteDesignSystemPreviewCssUrls(css, projectId, ownerFileName, workspaceContext);
     if (rewritten === css) return match;
     return `${prefix}${quote}${escapeDesignSystemPreviewAttr(rewritten)}${quote}`;
   });
 }
 
-function rewriteDesignSystemPreviewHtmlAssetRef(ref: string, projectId: string, ownerFileName: string): string {
+function rewriteDesignSystemPreviewHtmlAssetRef(
+  ref: string,
+  projectId: string,
+  ownerFileName: string,
+  workspaceContext?: WorkspaceCollabContext | null,
+): string {
   const assetPath = resolveDesignSystemPreviewAssetPath(ownerFileName, ref.trim());
-  return assetPath ? projectRawUrl(projectId, assetPath.filePath) + assetPath.suffix : ref;
+  return assetPath ? designSystemPreviewAssetUrl(projectId, assetPath, workspaceContext) : ref;
 }
 
-function rewriteDesignSystemPreviewSrcset(srcset: string, projectId: string, ownerFileName: string): string {
+function rewriteDesignSystemPreviewSrcset(
+  srcset: string,
+  projectId: string,
+  ownerFileName: string,
+  workspaceContext?: WorkspaceCollabContext | null,
+): string {
   if (/\bdata:/i.test(srcset)) return srcset;
   return srcset
     .split(',')
     .map((candidate) => {
       const match = candidate.trim().match(/^(\S+)(\s+.+)?$/);
       if (!match) return candidate;
-      const rewritten = rewriteDesignSystemPreviewHtmlAssetRef(match[1] ?? '', projectId, ownerFileName);
+      const rewritten = rewriteDesignSystemPreviewHtmlAssetRef(
+        match[1] ?? '',
+        projectId,
+        ownerFileName,
+        workspaceContext,
+      );
       return `${rewritten}${match[2] ?? ''}`;
     })
     .join(', ');

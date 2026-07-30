@@ -335,19 +335,17 @@ describe('bootstrap route regressions', () => {
     expect(velaProxyUnknownPath.status).toBe(404);
     expect(await velaProxyUnknownPath.json()).toEqual({ error: 'unknown_amr_api_proxy_path' });
 
-    expect(genuiRunList.status).toBe(200);
-    expect(await genuiRunList.json()).toEqual({ runId: 'missing-run', surfaces: [] });
+    expect(genuiRunList.status).toBe(404);
+    expect(await genuiRunList.json()).toEqual({ error: 'run not found' });
 
     expect(genuiRunSurfaceMissing.status).toBe(404);
-    expect(await genuiRunSurfaceMissing.json()).toEqual({ error: 'surface not found' });
+    expect(await genuiRunSurfaceMissing.json()).toEqual({ error: 'run not found' });
 
-    expect(devloopIterations.status).toBe(200);
-    expect(await devloopIterations.json()).toEqual({ runId: 'missing-run', iterations: [] });
+    expect(devloopIterations.status).toBe(404);
+    expect(await devloopIterations.json()).toEqual({ error: 'run not found' });
 
-    expect(replayMissingSnapshot.status).toBe(400);
-    expect(await replayMissingSnapshot.json()).toEqual({
-      error: 'snapshotId is required (runs are in-memory; pass the snapshotId returned by /api/plugins/:id/apply)',
-    });
+    expect(replayMissingSnapshot.status).toBe(404);
+    expect(await replayMissingSnapshot.json()).toEqual({ error: 'run not found' });
   });
 
   it('keeps extracted design-system and template example responses stable', async () => {
@@ -457,6 +455,13 @@ describe('bootstrap route regressions', () => {
       paths,
       projectFiles: {} as never,
       projectStore: {} as never,
+      verifyWorkspaceRequestAuthority: async () => {
+        throw new Error('unbound fixture must not verify Workspace authority');
+      },
+      workspaceResources: {
+        getWorkspaceResource: () => undefined,
+        getWorkspaceResourceByResourceId: () => undefined,
+      },
       designSystems: {
         buildUserDesignSystemArchive: async () => null,
         canMutateUserDesignSystem: async () => true,

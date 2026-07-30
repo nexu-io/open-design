@@ -1,4 +1,8 @@
-import type { WorkspaceCollabContext } from '@open-design/contracts';
+import type {
+  WorkspaceCollabContext,
+  WorkspaceDirectoryItem,
+  WorkspaceDirectoryResponse,
+} from '@open-design/contracts';
 
 /**
  * A complete `WorkspaceCollabContext` whose workspace + member identity the
@@ -37,5 +41,41 @@ export function workspaceContextFixture(
       canManageSharedResources: false,
     },
     ...overrides,
+  };
+}
+
+export function workspaceDirectoryItemFixture(
+  context: Pick<
+    WorkspaceCollabContext,
+    | 'workspaceId'
+    | 'workspaceType'
+    | 'workspaceMemberId'
+    | 'role'
+    | 'memberStatus'
+    | 'lifecycleState'
+  > & Partial<Pick<WorkspaceCollabContext, 'workspaceName' | 'teamName'>>,
+): WorkspaceDirectoryItem {
+  return {
+    workspaceId: context.workspaceId,
+    workspaceName:
+      context.workspaceName?.trim()
+      || context.teamName?.trim()
+      || context.workspaceId,
+    workspaceType: context.workspaceType,
+    workspaceMemberId: context.workspaceMemberId,
+    role: context.role,
+    memberStatus: context.memberStatus,
+    lifecycleState: context.lifecycleState,
+  };
+}
+
+export function workspaceDirectoryFixture(
+  contexts: Array<Parameters<typeof workspaceDirectoryItemFixture>[0]>,
+): WorkspaceDirectoryResponse {
+  return {
+    items: contexts.map(workspaceDirectoryItemFixture),
+    // The web selection is tab-local and must not consume a daemon-global
+    // current Workspace. Tests deliberately keep this compatibility echo null.
+    activeWorkspaceId: null,
   };
 }

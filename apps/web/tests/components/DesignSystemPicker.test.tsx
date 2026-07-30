@@ -97,7 +97,7 @@ describe('DesignSystemPicker', () => {
     expect(screen.getByTestId('project-ds-picker-option-noir-check')).toBeTruthy();
 
     await waitFor(() => {
-      expect(fetchDesignSystemMock).toHaveBeenCalledWith('noir');
+      expect(fetchDesignSystemMock).toHaveBeenCalledWith('noir', null);
     });
     expect(await screen.findByTestId('project-ds-picker-preview-kit-view')).toBeTruthy();
     expect(screen.getByText('High-contrast editorial system.')).toBeTruthy();
@@ -112,7 +112,7 @@ describe('DesignSystemPicker', () => {
 
     fireEvent.mouseEnter(screen.getByTestId('project-ds-picker-option-clay'));
     await waitFor(() => {
-      expect(fetchDesignSystemMock).toHaveBeenCalledWith('clay');
+      expect(fetchDesignSystemMock).toHaveBeenCalledWith('clay', null);
     });
     expect(screen.getByText('Friendly tactile product UI.')).toBeTruthy();
 

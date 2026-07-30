@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type Database from 'better-sqlite3';
+import { teamResourceWorkspaceRoot } from '../collab/team-resource-materialization.js';
 
 type JsonRecord = Record<string, unknown>;
 type SkillEntry = { id: string } & JsonRecord;
@@ -50,6 +51,7 @@ type DesignSystemListOptions = {
   source?: string;
   isEditable?: boolean;
   defaultStatus?: string;
+  workspaceId?: string | null;
 };
 
 export type DesignSystemAssetSyncOutcome =
@@ -133,14 +135,17 @@ export function createDesignSystemServerServices({
    * keeps that resolution in `server.ts` where the provider lives. Absent in
    * tests that do not exercise the seam.
    */
-  bindProjectToWorkspace?: (projectId: string, createdAt: number) => void;
+  bindProjectToWorkspace?: (
+    projectId: string,
+    createdAt: number,
+    designSystem: DesignSystemSummary,
+  ) => void;
 }) {
   /**
    * The functional-skills catalog. `workspaceId` narrows it to the
    * user-imported skills that workspace may see (mirrors
-   * `listAllDesignSystems` below) — only `GET /api/skills` passes it. Callers
-   * that resolve a skill BY ID (system-prompt composition, install/import
-   * lookups, `/api/skills/:id/example`) must keep omitting it.
+   * `listAllDesignSystems` below). Request and project-bound consumers pass
+   * their exact persisted scope; only true legacy/internal callers omit it.
    *
    * Checking `options.workspaceId === undefined` (not just falsy) matters:
    * `GET /api/skills` always passes the key, with `null` whenever the request
@@ -156,25 +161,50 @@ export function createDesignSystemServerServices({
     if (!db || options.workspaceId === undefined) {
       return skills.listSkills(roots.SKILL_ROOTS);
     }
-    return skills.listSkills(roots.SKILL_ROOTS, { db, workspaceId: options.workspaceId });
+    const personalAndBuiltIn = await skills.listSkills(roots.SKILL_ROOTS, {
+      db,
+      workspaceId: options.workspaceId,
+    });
+    const workspaceId = options.workspaceId?.trim();
+    if (!workspaceId || !roots.SKILL_ROOTS[0]) return personalAndBuiltIn;
+    const team = await skills.listSkills([
+      teamResourceWorkspaceRoot(roots.SKILL_ROOTS[0], workspaceId),
+    ]);
+    const teamIds = new Set(team.map((entry) => entry.id));
+    return [
+      ...team.map((entry) => ({ ...entry, teamSynced: true })),
+      ...personalAndBuiltIn.filter((entry) => !teamIds.has(entry.id)),
+    ];
   }
 
   async function listAllDesignTemplates() {
     return skills.listSkills(roots.DESIGN_TEMPLATE_ROOTS);
   }
 
-  async function listAllSkillLikeEntries() {
-    return skills.listSkills(roots.ALL_SKILL_LIKE_ROOTS);
+  async function listAllSkillLikeEntries(
+    options: { workspaceId?: string | null } = {},
+  ) {
+    if (options.workspaceId === undefined) {
+      return skills.listSkills(roots.ALL_SKILL_LIKE_ROOTS);
+    }
+    const [functional, templates] = await Promise.all([
+      listAllSkills(options),
+      listAllDesignTemplates(),
+    ]);
+    const functionalIds = new Set(functional.map((entry) => entry.id));
+    return [
+      ...functional,
+      ...templates.filter((entry) => !functionalIds.has(entry.id)),
+    ];
   }
 
   /**
    * The design-system catalog.
    *
    * `workspaceId` narrows the USER half to the systems that workspace may see
-   * (#145); the built-in half is shipped with the app and stays global. Callers
-   * that resolve a system BY ID — project validation, install/import lookups —
-   * must keep omitting it, or a project would stop finding its own design
-   * system whenever the user is working from another workspace.
+   * (#145); the built-in half is shipped with the app and stays global. Project
+   * validation and request-bound lookups pass the project's exact persisted
+   * Workspace, so shell navigation cannot retarget same-id resolution.
    *
    * Forwarding the key whenever it is DEFINED (not just truthy) matters:
    * `GET /api/design-systems` always passes `workspaceId`, with `null`
@@ -203,6 +233,28 @@ export function createDesignSystemServerServices({
     } catch {
       // User directory may not exist yet or be unreadable.
     }
+    const workspaceId = options.workspaceId?.trim();
+    if (workspaceId) {
+      try {
+        const team = await designSystems.listDesignSystems(
+          teamResourceWorkspaceRoot(paths.USER_DESIGN_SYSTEMS_DIR, workspaceId),
+          {
+            idPrefix: 'user:',
+            source: 'user',
+            isEditable: false,
+            defaultStatus: 'published',
+            workspaceId,
+          },
+        );
+        const teamIds = new Set(team.map((system) => system.id));
+        installed = [
+          ...team.map((system) => ({ ...system, teamSynced: true })),
+          ...installed.filter((system) => !teamIds.has(system.id)),
+        ];
+      } catch {
+        // A workspace with no pulled Team systems has no scoped directory.
+      }
+    }
     const seen = new Set(builtIn.map((s) => s.id));
     return [
       ...installed
@@ -213,7 +265,19 @@ export function createDesignSystemServerServices({
     ];
   }
 
-  async function readAvailableDesignSystem(id: string) {
+  async function readAvailableDesignSystem(
+    id: string,
+    options: { workspaceId?: string | null } = {},
+  ) {
+    const workspaceId = options.workspaceId?.trim();
+    if (workspaceId && typeof id === 'string' && id.startsWith('user:')) {
+      const scoped = await designSystems.readDesignSystem(
+        teamResourceWorkspaceRoot(paths.USER_DESIGN_SYSTEMS_DIR, workspaceId),
+        id,
+        { idPrefix: 'user:' },
+      );
+      if (scoped != null) return scoped;
+    }
     if (typeof id === 'string' && id.startsWith('user:')) {
       return designSystems.readDesignSystem(paths.USER_DESIGN_SYSTEMS_DIR, id, { idPrefix: 'user:' });
     }
@@ -223,7 +287,19 @@ export function createDesignSystemServerServices({
     );
   }
 
-  async function readAvailableDesignSystemPackageInfo(id: string) {
+  async function readAvailableDesignSystemPackageInfo(
+    id: string,
+    options: { workspaceId?: string | null } = {},
+  ) {
+    const workspaceId = options.workspaceId?.trim();
+    if (workspaceId && typeof id === 'string' && id.startsWith('user:')) {
+      const scoped = await designSystems.readDesignSystemPackageInfo(
+        teamResourceWorkspaceRoot(paths.USER_DESIGN_SYSTEMS_DIR, workspaceId),
+        id,
+        { idPrefix: 'user:' },
+      );
+      if (scoped != null) return scoped;
+    }
     if (typeof id === 'string' && id.startsWith('user:')) {
       return designSystems.readDesignSystemPackageInfo(paths.USER_DESIGN_SYSTEMS_DIR, id, { idPrefix: 'user:' });
     }
@@ -233,7 +309,21 @@ export function createDesignSystemServerServices({
     );
   }
 
-  async function readAvailableDesignSystemStaticFile(id: string, filePath: string) {
+  async function readAvailableDesignSystemStaticFile(
+    id: string,
+    filePath: string,
+    options: { workspaceId?: string | null } = {},
+  ) {
+    const workspaceId = options.workspaceId?.trim();
+    if (workspaceId && typeof id === 'string' && id.startsWith('user:')) {
+      const scoped = await designSystems.readDesignSystemStaticFile(
+        teamResourceWorkspaceRoot(paths.USER_DESIGN_SYSTEMS_DIR, workspaceId),
+        id,
+        filePath,
+        { idPrefix: 'user:' },
+      );
+      if (scoped != null) return scoped;
+    }
     if (typeof id === 'string' && id.startsWith('user:')) {
       return designSystems.readDesignSystemStaticFile(paths.USER_DESIGN_SYSTEMS_DIR, id, filePath, { idPrefix: 'user:' });
     }
@@ -247,7 +337,10 @@ export function createDesignSystemServerServices({
     return summary?.status !== 'draft';
   }
 
-  async function validateProjectDesignSystemId(id: unknown) {
+  async function validateProjectDesignSystemId(
+    id: unknown,
+    options: { workspaceId?: string | null } = {},
+  ) {
     if (id === undefined || id === null || id === '') return { ok: true, id: null };
     if (typeof id !== 'string') {
       return {
@@ -256,7 +349,7 @@ export function createDesignSystemServerServices({
         message: 'designSystemId must be a string or null',
       };
     }
-    const systems = await listAllDesignSystems();
+    const systems = await listAllDesignSystems(options);
     const summary = systems.find((system) => system.id === id);
     if (!summary) {
       return {
@@ -275,7 +368,10 @@ export function createDesignSystemServerServices({
     return { ok: true, id };
   }
 
-  async function validateProjectSkillId(id: unknown) {
+  async function validateProjectSkillId(
+    id: unknown,
+    options: { workspaceId?: string | null } = {},
+  ) {
     if (id === undefined || id === null || id === '') {
       return { ok: true, id: null };
     }
@@ -286,7 +382,7 @@ export function createDesignSystemServerServices({
         message: 'skillId must be a string or null',
       };
     }
-    const allSkills = await listAllSkillLikeEntries();
+    const allSkills = await listAllSkillLikeEntries(options);
     const resolved = skills.findSkillById(allSkills, id);
     if (!resolved) {
       return {
@@ -352,7 +448,7 @@ export function createDesignSystemServerServices({
           updatedAt: now,
         });
     if (!project) return null;
-    if (!existing) bindProjectToWorkspace?.(projectId, now);
+    if (!existing) bindProjectToWorkspace?.(projectId, now, summary);
 
     const files = await designSystems.listUserDesignSystemFiles(paths.USER_DESIGN_SYSTEMS_DIR, id);
     if (!files) return null;

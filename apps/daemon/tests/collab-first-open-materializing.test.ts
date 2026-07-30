@@ -7,6 +7,7 @@ import {
   type WorkspaceCollabContext,
 } from '@open-design/contracts';
 import { createCollabRuntime } from '../src/collab/runtime.js';
+import type { WorkspaceContextProvider } from '../src/collab/workspace-context.js';
 import {
   SHARED_PROJECT_PLACEHOLDER_METADATA_KEY,
   isUnmaterializedSharedPlaceholder,
@@ -57,7 +58,7 @@ afterEach(async () => {
   }
 });
 
-function memberContextProvider(workspaceMemberId: string) {
+function memberContextProvider(workspaceMemberId: string): WorkspaceContextProvider {
   const context: WorkspaceCollabContext = {
     workspaceId: 'ws-1',
     workspaceType: 'team',
@@ -110,13 +111,26 @@ async function startFirstOpenDaemon(options: {
   ) => { id: string };
 }) {
   const { rows, store, markSharedProjectPlaceholder } = freshInstallProjectStore();
+  const workspaceContext = memberContextProvider('viewer-member');
+  const context = await workspaceContext.current({});
+  if (!context) throw new Error('test workspace context missing');
   const runtime = createCollabRuntime({
-    workspaceContext: memberContextProvider('viewer-member'),
+    workspaceContext,
   });
   const app = express();
   app.use(express.json());
   registerCollabSyncRoutes(app, {
     collab: runtime,
+    verifyWorkspaceRequest: async (req) =>
+      req.header('x-od-workspace-id') === context.workspaceId
+      && req.header('x-od-workspace-member-id') === context.workspaceMemberId
+        ? context
+        : null,
+    verifyWorkspaceScope: async (scope) =>
+      context.workspaceType === 'team'
+      && scope.workspaceId === context.workspaceId
+      && scope.resourceTeamId === context.teamId
+      && scope.viewerMemberId === context.workspaceMemberId,
     // The hub catalog lists the project and names SOMEONE ELSE as its owner —
     // the member case QA reported.
     resolveSharedProjectOwner: async () => 'owner-1',
@@ -130,14 +144,21 @@ async function startFirstOpenDaemon(options: {
   await new Promise<void>((resolve) => server!.listen(0, resolve));
   const address = server.address();
   if (!address || typeof address === 'string') throw new Error('no port');
-  return { base: `http://127.0.0.1:${address.port}`, rows };
+  return {
+    base: `http://127.0.0.1:${address.port}`,
+    rows,
+    headers: {
+      'x-od-workspace-id': context.workspaceId,
+      'x-od-workspace-member-id': context.workspaceMemberId,
+    },
+  };
 }
 
 describe('first open of an unmaterialized shared project (QA P0: no loading state, nothing downloads)', () => {
   it('tells the client on the FIRST status response that local files are not the project content yet', async () => {
-    const { base, rows } = await startFirstOpenDaemon({});
+    const { base, rows, headers } = await startFirstOpenDaemon({});
 
-    const res = await fetch(`${base}/api/projects/shared-from-owner/collab/status`);
+    const res = await fetch(`${base}/api/projects/shared-from-owner/collab/status`, { headers });
     const body = (await res.json()) as Record<string, unknown>;
 
     expect(res.status).toBe(200);
@@ -158,9 +179,9 @@ describe('first open of an unmaterialized shared project (QA P0: no loading stat
 
   it('starts the content pull on that same first open instead of waiting for a later poll', async () => {
     const beginContentTransfer = vi.fn(() => ({ id: 'transfer-1' }));
-    const { base } = await startFirstOpenDaemon({ beginContentTransfer });
+    const { base, headers } = await startFirstOpenDaemon({ beginContentTransfer });
 
-    const res = await fetch(`${base}/api/projects/shared-from-owner/collab/status`);
+    const res = await fetch(`${base}/api/projects/shared-from-owner/collab/status`, { headers });
     expect(res.status).toBe(200);
     await res.json();
 
@@ -184,13 +205,13 @@ describe('first open of an unmaterialized shared project (QA P0: no loading stat
   });
 
   it('stops reporting the awaiting state once the placeholder is materialized', async () => {
-    const { base, rows } = await startFirstOpenDaemon({});
+    const { base, rows, headers } = await startFirstOpenDaemon({});
 
-    await fetch(`${base}/api/projects/shared-from-owner/collab/status`);
+    await fetch(`${base}/api/projects/shared-from-owner/collab/status`, { headers });
     // What a landed pull does: replace the row and drop the stamp.
     rows.set('shared-from-owner', { name: 'Real project', metadata: {} });
 
-    const res = await fetch(`${base}/api/projects/shared-from-owner/collab/status`);
+    const res = await fetch(`${base}/api/projects/shared-from-owner/collab/status`, { headers });
     const body = (await res.json()) as Record<string, unknown>;
     expect(res.status).toBe(200);
     expect(body.awaitingFirstMaterialization).toBe(false);

@@ -1,4 +1,4 @@
-import type { Express } from 'express';
+import type { Express, Request, Response } from 'express';
 import { mkdir, mkdtemp, readdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -13,6 +13,9 @@ import {
 import type {
   ProjectContentTransferToken,
 } from '../collab/project-content-transfer-state.js';
+import type {
+  VerifiedWorkspaceRequestContextResult,
+} from '../collab/request-workspace-context.js';
 import type { CollabRuntime } from '../collab/runtime.js';
 import {
   contextToResourceHubPrincipal,
@@ -113,13 +116,36 @@ export interface RegisterCollabSyncRoutesDeps {
     | 'requestTeamShare'
     | 'requestTeamUnshare'
     | 'pullLatest'
-    | 'workspaceContext'
   >;
-  resolveSharedProjectOwner?: (projectId: string) => Promise<string | null>;
+  resolveSharedProjectOwner?: (
+    projectId: string,
+    scope?: { workspaceId: string; workspaceMemberId: string },
+  ) => Promise<string | null>;
   resolveSharedProject?: (
     projectId: string,
     scope?: TeamMirrorPullScope | null,
   ) => Promise<TeamProject | null>;
+  /**
+   * Authorize the request's explicit Workspace selector against the signed-in
+   * account's authoritative membership directory, then return the directory-
+   * derived context. Client-supplied role/permission headers are never
+   * authority. Null is a fail-closed denial.
+   */
+  verifyWorkspaceRequest?: (
+    req: Request,
+    projectId?: string,
+  ) => Promise<
+    | VerifiedWorkspaceRequestContextResult
+    | WorkspaceCollabContext
+    | null
+  >;
+  /**
+   * Revalidate one already-captured Team pull scope against the authoritative
+   * membership directory. This must address `scope.workspaceId` +
+   * `scope.viewerMemberId` directly; it must not compare against the daemon's
+   * mutable active Workspace.
+   */
+  verifyWorkspaceScope?: (scope: TeamMirrorPullScope) => Promise<boolean>;
   /** Set/clear the non-destructive "team mirror revoked" flag on a local
    *  project so read routes stop serving a project that has left the team. */
   markTeamProjectRevoked?: (projectId: string, revoked: boolean) => void;
@@ -147,6 +173,7 @@ export interface RegisterCollabSyncRoutesDeps {
   invalidateTeamProjectCatalog?: () => void;
   resolveOwnerDisplayName?: (
     memberId: string,
+    context: WorkspaceCollabContext,
   ) => Promise<{ displayName: string; role: 'owner' | 'admin' | 'member' } | null>;
   projectStore?: PulledProjectStore;
   resolveProjectDir?: (projectId: string) => string | Promise<string>;
@@ -194,7 +221,7 @@ export interface RegisterCollabSyncRoutesDeps {
   readManifest?: (projectDir: string) => Promise<PulledProjectManifest | null>;
   authorizedTeamProjectPull?: {
     journalDir: string;
-    getActiveWorkspaceSnapshot: () => {
+    getActiveWorkspaceSnapshot?: () => {
       workspaceId: string | null;
       generation: number;
     };
@@ -408,19 +435,6 @@ async function resolvePulledProjectName(
     ?? PULLED_PROJECT_PLACEHOLDER_NAME;
 }
 
-function headerValue(req: { get(name: string): string | undefined }, name: string): string | null {
-  const value = req.get(name);
-  return typeof value === 'string' && value.trim() ? value.trim() : null;
-}
-
-function headerBool(req: { get(name: string): string | undefined }, name: string, fallback: boolean): boolean {
-  const value = headerValue(req, name);
-  if (value === null) return fallback;
-  if (value === 'false') return false;
-  if (value === 'true') return true;
-  return fallback;
-}
-
 const STATUS_ENRICHMENT_CACHE_LIMIT = 256;
 
 function readLruEntry<K, V>(cache: Map<K, V>, key: K): V | undefined {
@@ -439,26 +453,6 @@ function writeLruEntry<K, V>(cache: Map<K, V>, key: K, value: V): void {
     if (oldest.done) return;
     cache.delete(oldest.value);
   }
-}
-
-function headerPrincipalForRequest(req: { get(name: string): string | undefined }): ResourceHubPrincipal | null {
-  const teamId = headerValue(req, 'x-od-workspace-id');
-  const memberId = headerValue(req, 'x-od-workspace-member-id');
-  if (!teamId || !memberId) return null;
-  const role = headerValue(req, 'x-od-workspace-role') ?? 'member';
-  const lifecycleState = headerValue(req, 'x-od-workspace-lifecycle-state') ?? 'active';
-  return {
-    teamId,
-    memberId,
-    role: role === 'owner' || role === 'admin' ? role : 'member',
-    lifecycleState:
-      lifecycleState === 'billing_past_due' ||
-      lifecycleState === 'locked' ||
-      lifecycleState === 'deleting' ||
-      lifecycleState === 'deleted'
-        ? lifecycleState
-        : 'active',
-  };
 }
 
 function normalizePublicFilePath(raw: string): string | null {
@@ -586,13 +580,53 @@ function publicSnapshotFileUrl(baseUrl: string, slug: string, filePath: string):
 async function resolveSharedProjectForPublicFile(
   resolveSharedProject: RegisterCollabSyncRoutesDeps['resolveSharedProject'],
   projectId: string,
+  context: WorkspaceCollabContext,
+  principal: ResourceHubPrincipal,
 ): Promise<{ ok: true; project: TeamProject | null } | { ok: false }> {
   try {
-    return { ok: true, project: await resolveSharedProject?.(projectId) ?? null };
+    return {
+      ok: true,
+      project: await resolveSharedProject?.(projectId, {
+        workspaceId: context.workspaceId,
+        resourceTeamId: principal.teamId,
+        viewerMemberId: principal.memberId,
+        // This is an ownership lookup, not a pull authorization witness. The
+        // catalog result below supplies the authoritative owner.
+        ownerMemberId: '',
+      }) ?? null,
+    };
   } catch (error) {
     console.warn('[od] failed to resolve public file project ownership:', error);
     return { ok: false };
   }
+}
+
+type RouteWorkspaceVerification =
+  | { ok: true; context: WorkspaceCollabContext | null }
+  | Exclude<VerifiedWorkspaceRequestContextResult, { ok: true }>;
+
+function normalizeWorkspaceVerification(
+  value:
+    | VerifiedWorkspaceRequestContextResult
+    | WorkspaceCollabContext
+    | null,
+): RouteWorkspaceVerification {
+  if (value && 'ok' in value) return value;
+  if (value) return { ok: true, context: value };
+  // Legacy injected test adapters used null as a route-specific denial.
+  // Production supplies the structured verifier result above.
+  return { ok: true, context: null };
+}
+
+function sendWorkspaceVerificationFailure(
+  res: Response,
+  verification: Exclude<RouteWorkspaceVerification, { ok: true }>,
+) {
+  return res.status(verification.status).json({
+    error: verification.code,
+    message: verification.message,
+    ...(verification.retryable ? { retryable: true } : {}),
+  });
 }
 
 export function registerCollabSyncRoutes(
@@ -608,7 +642,6 @@ export function registerCollabSyncRoutes(
     requestTeamShare,
     requestTeamUnshare,
     pullLatest,
-    workspaceContext,
   } = deps.collab;
   const {
     projectStore,
@@ -649,54 +682,48 @@ export function registerCollabSyncRoutes(
     }
   };
 
-  async function principalForRequest(req: {
-    get(name: string): string | undefined;
-    headers: { authorization?: string | string[] | undefined };
-  }) {
-    const authorization = Array.isArray(req.headers.authorization)
-      ? req.headers.authorization[0]
-      : req.headers.authorization;
-    return headerPrincipalForRequest(req) ?? contextToResourceHubPrincipal(await workspaceContext.current({ authorization }));
+  async function verifiedWorkspaceContextForRequest(
+    req: Request,
+    projectId?: string,
+  ): Promise<RouteWorkspaceVerification> {
+    if (!deps.verifyWorkspaceRequest) {
+      return { ok: true, context: null };
+    }
+    try {
+      return normalizeWorkspaceVerification(
+        await deps.verifyWorkspaceRequest(req, projectId),
+      );
+    } catch {
+      return {
+        ok: false,
+        status: 503,
+        code: 'WORKSPACE_AUTHORITY_UNAVAILABLE',
+        message: 'workspace membership authority is temporarily unavailable',
+        retryable: true,
+      };
+    }
   }
 
-  async function statusIdentityForRequest(req: {
+  async function statusIdentityForRequest(projectId: string, req: {
     get(name: string): string | undefined;
     headers: { authorization?: string | string[] | undefined };
   }): Promise<{
+    verification: RouteWorkspaceVerification;
+    context: WorkspaceCollabContext | null;
     principal: ResourceHubPrincipal | null;
     workspaceId: string | null;
   }> {
-    const headerPrincipal = headerPrincipalForRequest(req);
-    if (headerPrincipal) {
-      return {
-        principal: headerPrincipal,
-        workspaceId: headerValue(req, 'x-od-workspace-id'),
-      };
-    }
-    const authorization = Array.isArray(req.headers.authorization)
-      ? req.headers.authorization[0]
-      : req.headers.authorization;
-    const context = await workspaceContext.current({ authorization });
+    const verification = await verifiedWorkspaceContextForRequest(
+      req as Request,
+      projectId,
+    );
+    const context = verification.ok ? verification.context : null;
     return {
+      verification,
+      context,
       principal: contextToResourceHubPrincipal(context),
       workspaceId: context?.workspaceId?.trim() || null,
     };
-  }
-
-  /**
-   * Principal for the public single-file publish routes only. Same header
-   * short-circuit as `principalForRequest` (tests and the CLI assert identity
-   * through headers), but the context fallback accepts ANY workspace — see
-   * `publicFilePrincipal` for why a personal workspace is a valid publisher.
-   */
-  async function publicFilePrincipalForRequest(req: {
-    get(name: string): string | undefined;
-    headers: { authorization?: string | string[] | undefined };
-  }) {
-    const authorization = Array.isArray(req.headers.authorization)
-      ? req.headers.authorization[0]
-      : req.headers.authorization;
-    return headerPrincipalForRequest(req) ?? publicFilePrincipal(await workspaceContext.current({ authorization }));
   }
 
   async function pullAccessForRequest(
@@ -710,48 +737,53 @@ export function registerCollabSyncRoutes(
       principal: ResourceHubPrincipal | null;
       workspaceId: string | null;
     },
-  ): Promise<{ principal: ResourceHubPrincipal | null; scope: TeamMirrorPullScope | null }> {
-    const headerPrincipal = capturedIdentity ? null : headerPrincipalForRequest(req);
-    const authorization = Array.isArray(req.headers.authorization)
-      ? req.headers.authorization[0]
-      : req.headers.authorization;
-    const context = capturedIdentity
-      ? null
-      : await workspaceContext.current({ authorization });
+  ): Promise<{
+    verification: RouteWorkspaceVerification;
+    principal: ResourceHubPrincipal | null;
+    scope: TeamMirrorPullScope | null;
+  }> {
+    const verification = capturedIdentity
+      ? { ok: true as const, context: null }
+      : await verifiedWorkspaceContextForRequest(req as Request, projectId);
+    const context = verification.ok ? verification.context : null;
     const viewerPrincipal =
       capturedIdentity?.principal ??
-      headerPrincipal ??
       contextToResourceHubPrincipal(context);
+    const workspaceId = capturedIdentity
+      ? capturedIdentity.workspaceId
+      : context?.workspaceId;
+    const viewerMemberId = viewerPrincipal?.memberId ?? null;
     let ownerMemberId = knownOwnerMemberId ?? null;
     if (knownOwnerMemberId === undefined) {
       try {
-        ownerMemberId = (await resolveSharedProjectOwner?.(projectId)) ?? null;
+        ownerMemberId =
+          workspaceId && viewerMemberId
+            ? (await resolveSharedProjectOwner?.(projectId, {
+                workspaceId,
+                workspaceMemberId: viewerMemberId,
+              }))
+                ?? projectOwnerMemberId(projectId, viewerPrincipal)
+                ?? null
+            : null;
       } catch {
         ownerMemberId = null;
       }
     }
-    const workspaceId = capturedIdentity
-      ? capturedIdentity.workspaceId
-      : headerPrincipal
-        ? req.get('x-od-workspace-id') ?? headerPrincipal.teamId
-        : context?.workspaceId;
-    const contextMatchesViewer =
-      context?.workspaceType === 'team' &&
-      context.memberStatus === 'active' &&
-      context.lifecycleState === 'active' &&
-      context.workspaceId === workspaceId &&
-      context.workspaceMemberId === viewerPrincipal?.memberId;
     const resourceTeamId = capturedIdentity
       ? viewerPrincipal?.teamId
-      : contextMatchesViewer
-        ? context.teamId ?? context.workspaceId
-        : viewerPrincipal?.teamId;
+      : context?.workspaceType === 'team'
+        && context.memberStatus === 'active'
+        && context.lifecycleState === 'active'
+        && context.workspaceId === workspaceId
+        && context.workspaceMemberId === viewerPrincipal?.memberId
+          ? context.teamId ?? context.workspaceId
+          : null;
     const scope =
       ownerMemberId &&
       viewerPrincipal &&
       workspaceId &&
       resourceTeamId &&
-      (capturedIdentity != null || headerPrincipal != null || context?.workspaceType === 'team')
+      (capturedIdentity != null || context?.workspaceType === 'team')
         ? {
             workspaceId,
             resourceTeamId,
@@ -767,37 +799,87 @@ export function registerCollabSyncRoutes(
           role: ownerMemberId === viewerPrincipal.memberId ? viewerPrincipal.role : 'member' as const,
         }
       : viewerPrincipal;
-    return { principal, scope };
+    return { verification, principal, scope };
   }
 
-  async function canShareProjectsForRequest(req: {
-    get(name: string): string | undefined;
-    headers: { authorization?: string | string[] | undefined };
-  }) {
-    const headerPrincipal = headerPrincipalForRequest(req);
-    if (headerPrincipal) {
-      const legacyWriteEnabled = headerBool(req, 'x-od-workspace-write-enabled', true);
-      const canWriteSyncedFiles = headerBool(req, 'x-od-workspace-can-write-synced-files', legacyWriteEnabled);
-      return headerBool(req, 'x-od-workspace-can-share-projects', canWriteSyncedFiles);
+  async function canShareProjectsForRequest(
+    req: Request,
+    verifiedContext?: WorkspaceCollabContext | null,
+  ): Promise<boolean> {
+    const verification =
+      verifiedContext === undefined
+        ? await verifiedWorkspaceContextForRequest(req)
+        : { ok: true as const, context: verifiedContext };
+    const context = verification.ok ? verification.context : null;
+    return context?.permissions.canShareProjects === true;
+  }
+
+  async function verifiedPublishPrincipalForRequest(
+    req: Request,
+    projectId: string,
+  ): Promise<
+    | { ok: true; principal: ResourceHubPrincipal }
+    | {
+        ok: false;
+        status: 400 | 403 | 503;
+        error: string;
+        message?: string;
+        retryable?: true;
+      }
+  > {
+    const verification = await verifiedWorkspaceContextForRequest(req, projectId);
+    if (!verification.ok) {
+      return {
+        ok: false,
+        status: verification.status,
+        error: verification.code,
+        message: verification.message,
+        ...(verification.retryable ? { retryable: true } : {}),
+      };
     }
-    const authorization = Array.isArray(req.headers.authorization)
-      ? req.headers.authorization[0]
-      : req.headers.authorization;
-    return (await workspaceContext.current({ authorization }))?.permissions.canShareProjects ?? false;
+    const context = verification.context;
+    const principal = contextToResourceHubPrincipal(context);
+    if (
+      !context
+      || !principal
+      || context.memberStatus !== 'active'
+      || context.lifecycleState !== 'active'
+      || !context.permissions.canWriteSyncedFiles
+    ) {
+      return {
+        ok: false,
+        status: 403,
+        error: 'WORKSPACE_PROJECT_PUBLISH_DENIED',
+      };
+    }
+    let ownerMemberId: string | null;
+    try {
+      ownerMemberId =
+        await resolveSharedProjectOwner?.(projectId, {
+          workspaceId: context.workspaceId,
+          workspaceMemberId: context.workspaceMemberId,
+        })
+        ?? projectOwnerMemberId(projectId, principal);
+    } catch {
+      return {
+        ok: false,
+        status: 503,
+        error: 'WORKSPACE_PROJECT_OWNERSHIP_UNAVAILABLE',
+      };
+    }
+    if (ownerMemberId !== principal.memberId) {
+      return {
+        ok: false,
+        status: 403,
+        error: 'WORKSPACE_PROJECT_PUBLISH_DENIED',
+      };
+    }
+    return { ok: true, principal };
   }
 
-  async function capturedScopeIsStillActive(scope: TeamMirrorPullScope): Promise<boolean> {
+  async function capturedScopeIsStillAuthorized(scope: TeamMirrorPullScope): Promise<boolean> {
     try {
-      const context = await workspaceContext.current({});
-      return Boolean(
-        context &&
-        context.workspaceType === 'team' &&
-        context.memberStatus === 'active' &&
-        context.lifecycleState === 'active' &&
-        context.workspaceId === scope.workspaceId &&
-        (context.teamId ?? context.workspaceId) === scope.resourceTeamId &&
-        context.workspaceMemberId === scope.viewerMemberId
-      );
+      return await deps.verifyWorkspaceScope?.(scope) ?? false;
     } catch {
       return false;
     }
@@ -1000,15 +1082,33 @@ export function registerCollabSyncRoutes(
     })().catch(() => undefined);
   }
 
-  app.post('/api/projects/:id/collab/changed', (req, res) => {
-    scheduler.notifyChanged(req.params.id, 'change');
-    res.json({ ok: true });
+  app.post('/api/projects/:id/collab/changed', async (req, res) => {
+    const projectId = req.params.id;
+    const authorization = await verifiedPublishPrincipalForRequest(req, projectId);
+    if (!authorization.ok) {
+      return res.status(authorization.status).json({
+        error: authorization.error,
+        ...(authorization.message ? { message: authorization.message } : {}),
+        ...(authorization.retryable ? { retryable: true } : {}),
+      });
+    }
+    scheduler.notifyChanged(projectId, 'change', authorization.principal);
+    return res.json({ ok: true });
   });
 
-  app.post('/api/projects/:id/collab/publish', (req, res) => {
-    scheduler.notifyChanged(req.params.id, 'run');
-    scheduler.runBoundary(req.params.id);
-    res.json({ ok: true });
+  app.post('/api/projects/:id/collab/publish', async (req, res) => {
+    const projectId = req.params.id;
+    const authorization = await verifiedPublishPrincipalForRequest(req, projectId);
+    if (!authorization.ok) {
+      return res.status(authorization.status).json({
+        error: authorization.error,
+        ...(authorization.message ? { message: authorization.message } : {}),
+        ...(authorization.retryable ? { retryable: true } : {}),
+      });
+    }
+    scheduler.notifyChanged(projectId, 'run', authorization.principal);
+    scheduler.runBoundary(projectId, authorization.principal);
+    return res.json({ ok: true });
   });
 
   app.post(/^\/api\/projects\/([^/]+)\/files\/(.+)\/publish-public$/u, async (req, res) => {
@@ -1018,14 +1118,24 @@ export function registerCollabSyncRoutes(
     if (!projectId || !filePath) {
       return res.status(400).json({ error: 'invalid_file_path' });
     }
-    const principal = await publicFilePrincipalForRequest(req);
-    if (!principal) {
+    const verification = await verifiedWorkspaceContextForRequest(req, projectId);
+    if (!verification.ok) {
+      return sendWorkspaceVerificationFailure(res, verification);
+    }
+    const verifiedContext = verification.context;
+    const principal = publicFilePrincipal(verifiedContext);
+    if (!verifiedContext || !principal) {
       return res.status(409).json(workspaceIdentityRequiredBody());
     }
-    if (!await canShareProjectsForRequest(req)) {
+    if (!await canShareProjectsForRequest(req, verifiedContext)) {
       return res.status(403).json({ error: 'WORKSPACE_PROJECT_SHARE_DENIED' });
     }
-    const sharedProjectResult = await resolveSharedProjectForPublicFile(resolveSharedProject, projectId);
+    const sharedProjectResult = await resolveSharedProjectForPublicFile(
+      resolveSharedProject,
+      projectId,
+      verifiedContext,
+      principal,
+    );
     if (!sharedProjectResult.ok) {
       return res.status(503).json({ error: 'WORKSPACE_PROJECT_OWNERSHIP_UNAVAILABLE' });
     }
@@ -1112,14 +1222,24 @@ export function registerCollabSyncRoutes(
     if (!projectId || !filePath || !slug) {
       return res.status(400).json({ error: 'invalid_public_file' });
     }
-    const principal = await publicFilePrincipalForRequest(req);
-    if (!principal) {
+    const verification = await verifiedWorkspaceContextForRequest(req, projectId);
+    if (!verification.ok) {
+      return sendWorkspaceVerificationFailure(res, verification);
+    }
+    const verifiedContext = verification.context;
+    const principal = publicFilePrincipal(verifiedContext);
+    if (!verifiedContext || !principal) {
       return res.status(409).json(workspaceIdentityRequiredBody());
     }
-    if (!await canShareProjectsForRequest(req)) {
+    if (!await canShareProjectsForRequest(req, verifiedContext)) {
       return res.status(403).json({ error: 'WORKSPACE_PROJECT_SHARE_DENIED' });
     }
-    const sharedProjectResult = await resolveSharedProjectForPublicFile(resolveSharedProject, projectId);
+    const sharedProjectResult = await resolveSharedProjectForPublicFile(
+      resolveSharedProject,
+      projectId,
+      verifiedContext,
+      principal,
+    );
     if (!sharedProjectResult.ok) {
       return res.status(503).json({ error: 'WORKSPACE_PROJECT_OWNERSHIP_UNAVAILABLE' });
     }
@@ -1150,14 +1270,24 @@ export function registerCollabSyncRoutes(
     if (!projectId || !filePath) {
       return res.status(400).json({ error: 'invalid_file_path' });
     }
-    const principal = await publicFilePrincipalForRequest(req);
-    if (!principal) {
+    const verification = await verifiedWorkspaceContextForRequest(req, projectId);
+    if (!verification.ok) {
+      return sendWorkspaceVerificationFailure(res, verification);
+    }
+    const verifiedContext = verification.context;
+    const principal = publicFilePrincipal(verifiedContext);
+    if (!verifiedContext || !principal) {
       return res.status(409).json(workspaceIdentityRequiredBody());
     }
-    if (!await canShareProjectsForRequest(req)) {
+    if (!await canShareProjectsForRequest(req, verifiedContext)) {
       return res.status(403).json({ error: 'WORKSPACE_PROJECT_SHARE_DENIED' });
     }
-    const sharedProjectResult = await resolveSharedProjectForPublicFile(resolveSharedProject, projectId);
+    const sharedProjectResult = await resolveSharedProjectForPublicFile(
+      resolveSharedProject,
+      projectId,
+      verifiedContext,
+      principal,
+    );
     if (!sharedProjectResult.ok) {
       return res.status(503).json({ error: 'WORKSPACE_PROJECT_OWNERSHIP_UNAVAILABLE' });
     }
@@ -1176,18 +1306,25 @@ export function registerCollabSyncRoutes(
       return res.status(400).json({ error: 'invalid sync intent event' });
     }
     const projectId = req.params.id;
-    const principal = await principalForRequest(req);
-    const context = await workspaceContext.current({ authorization: req.headers.authorization });
+    const verification = await verifiedWorkspaceContextForRequest(req, projectId);
+    if (!verification.ok) {
+      return sendWorkspaceVerificationFailure(res, verification);
+    }
+    const context = verification.context;
+    const principal = contextToResourceHubPrincipal(context);
 
     if (event === 'project_team_share_requested') {
-      if (!(await canShareProjectsForRequest(req))) {
+      if (!principal || !(await canShareProjectsForRequest(req, context))) {
         return res.status(403).json({ error: 'WORKSPACE_PROJECT_SHARE_DENIED' });
       }
-      const sharerMemberId = principal?.memberId ?? context?.workspaceMemberId;
-      const existingSharedProject = await resolveSharedProject?.(projectId) ?? null;
+      const sharerMemberId = principal.memberId;
+      const existingOwnerMemberId = await resolveSharedProjectOwner?.(projectId, {
+        workspaceId: context!.workspaceId,
+        workspaceMemberId: context!.workspaceMemberId,
+      }) ?? null;
       if (
-        existingSharedProject?.ownerMemberId &&
-        existingSharedProject.ownerMemberId !== sharerMemberId
+        existingOwnerMemberId &&
+        existingOwnerMemberId !== sharerMemberId
       ) {
         return res.json({
           ok: true,
@@ -1220,12 +1357,16 @@ export function registerCollabSyncRoutes(
     }
 
     if (event === 'project_team_unshare_requested') {
-      if (!(await canShareProjectsForRequest(req))) {
+      if (!principal || !(await canShareProjectsForRequest(req, context))) {
         return res.status(403).json({ error: 'WORKSPACE_PROJECT_SHARE_DENIED' });
       }
-      const callerMemberId = principal?.memberId ?? context?.workspaceMemberId;
-      const sharedProject = await resolveSharedProject?.(projectId) ?? null;
-      const ownerMemberId = sharedProject?.ownerMemberId ?? projectOwnerMemberId(projectId, principal);
+      const callerMemberId = principal.memberId;
+      const remoteOwnerMemberId = await resolveSharedProjectOwner?.(projectId, {
+        workspaceId: context!.workspaceId,
+        workspaceMemberId: context!.workspaceMemberId,
+      }) ?? null;
+      const ownerMemberId =
+        remoteOwnerMemberId ?? projectOwnerMemberId(projectId, principal);
       if (ownerMemberId && ownerMemberId !== callerMemberId) {
         return res.status(403).json({ error: 'WORKSPACE_PROJECT_UNSHARE_DENIED' });
       }
@@ -1351,9 +1492,9 @@ export function registerCollabSyncRoutes(
       authorizedStageInvocation &&
       expectedVersion != null
     ) {
-      const activeSnapshot = authorizedPull.getActiveWorkspaceSnapshot();
       if (
-        activeSnapshot.workspaceId !== scope.workspaceId ||
+        !deps.verifyWorkspaceScope ||
+        !(await deps.verifyWorkspaceScope(scope)) ||
         !authorizedStageInvocation.isStillExpected()
       ) {
         return complete({ status: 'register_failed' });
@@ -1405,11 +1546,9 @@ export function registerCollabSyncRoutes(
             scope,
             staged.stageDir,
           );
-          const postStageSnapshot =
-            authorizedPull.getActiveWorkspaceSnapshot();
           if (
-            postStageSnapshot.workspaceId !== scope.workspaceId ||
-            postStageSnapshot.generation !== activeSnapshot.generation ||
+            !deps.verifyWorkspaceScope ||
+            !(await deps.verifyWorkspaceScope(scope)) ||
             !authorizedStageInvocation.isStillExpected()
           ) {
             throw new Error(
@@ -1427,10 +1566,8 @@ export function registerCollabSyncRoutes(
             stageDir: staged.stageDir,
             expectedStageIdentity: staged.identity,
             journalDir: authorizedPull.journalDir,
-            expectedWorkspaceId: scope.workspaceId,
-            activeWorkspaceGeneration: activeSnapshot.generation,
-            getActiveWorkspaceSnapshot:
-              authorizedPull.getActiveWorkspaceSnapshot,
+            isScopeStillAuthorized:
+              authorizedStageInvocation.isStillExpected,
             isExpectedVersion:
               authorizedStageInvocation.isStillExpected,
             validateReceipt: () =>
@@ -1472,33 +1609,15 @@ export function registerCollabSyncRoutes(
           if (promotionStarted) {
             reportAuthorizedPullTiming('promotion-done', 'failed');
           }
-          const observedSnapshot =
-            authorizedPull.getActiveWorkspaceSnapshot();
-          const workspaceAvailable = observedSnapshot.workspaceId !== null;
-          const workspaceMatches =
-            observedSnapshot.workspaceId === scope.workspaceId;
-          const generationMatches =
-            observedSnapshot.generation === activeSnapshot.generation;
           const versionStillExpected =
             authorizedStageInvocation.isStillExpected();
-          const reason = !workspaceAvailable
-            ? 'workspace-unavailable'
-            : !workspaceMatches
-              ? 'workspace-changed'
-              : !generationMatches
-                ? 'workspace-generation-changed'
-                : !versionStillExpected
-                  ? 'version-superseded'
-                  : 'promotion-failed';
+          const reason = !versionStillExpected
+            ? 'version-superseded'
+            : 'promotion-failed';
           console.warn('[od] failed to promote authorized team project', {
             projectId,
             version: expectedVersion,
             reason,
-            snapshot: {
-              workspaceAvailable,
-              workspaceMatches,
-              generationMatches,
-            },
             ...errorLogFields(error),
           });
           return complete({ status: 'register_failed' });
@@ -1555,7 +1674,7 @@ export function registerCollabSyncRoutes(
               () => ({ ok: false as const }),
             )
         : null;
-      if (scope && !(await capturedScopeIsStillActive(scope))) {
+      if (scope && !(await capturedScopeIsStillAuthorized(scope))) {
         return complete({ status: 'register_failed' });
       }
       // Revocation gate: a project may only be pulled while it is still shared
@@ -1572,7 +1691,7 @@ export function registerCollabSyncRoutes(
           if (scope) return complete({ status: 'register_failed' });
           stillShared = true;
         }
-        if (scope && !(await capturedScopeIsStillActive(scope))) {
+        if (scope && !(await capturedScopeIsStillAuthorized(scope))) {
           return complete({ status: 'register_failed' });
         }
         if (!stillShared) {
@@ -1655,7 +1774,7 @@ export function registerCollabSyncRoutes(
         // Keep this check adjacent to the synchronous SQLite transaction.
         // Nothing below may await before materializeTeamMirror revalidates the
         // binding and commits it.
-        if (!(await capturedScopeIsStillActive(scope))) {
+        if (!(await capturedScopeIsStillAuthorized(scope))) {
           return complete({ status: 'register_failed' });
         }
         reportPullTiming({
@@ -1889,7 +2008,14 @@ export function registerCollabSyncRoutes(
 
   app.post('/api/projects/:id/collab/pull', async (req, res) => {
     const projectId = req.params.id;
-    const { principal, scope } = await pullAccessForRequest(projectId, req);
+    const { verification, principal, scope } =
+      await pullAccessForRequest(projectId, req);
+    if (!verification.ok) {
+      return sendWorkspaceVerificationFailure(res, verification);
+    }
+    if (!principal || !scope) {
+      return res.status(403).json({ error: 'WORKSPACE_PROJECT_PULL_DENIED' });
+    }
     const outcome = await pullSharedProjectCoalesced(projectId, principal, scope);
     if (outcome.status === 'revoked') {
       return res.status(403).json({ error: 'WORKSPACE_PROJECT_PULL_DENIED' });
@@ -1903,9 +2029,17 @@ export function registerCollabSyncRoutes(
   app.get('/api/projects/:id/collab/status', async (req, res) => {
     const projectId = req.params.id;
     const {
+      verification,
+      context,
       principal,
       workspaceId: resolvedWorkspaceId,
-    } = await statusIdentityForRequest(req);
+    } = await statusIdentityForRequest(projectId, req);
+    if (!verification.ok) {
+      return sendWorkspaceVerificationFailure(res, verification);
+    }
+    if (!context || !resolvedWorkspaceId) {
+      return res.status(403).json({ error: 'WORKSPACE_PROJECT_STATUS_DENIED' });
+    }
     let syncState = projectSyncState(projectId, principal);
     let ownerMemberId = projectOwnerMemberId(projectId, principal);
     let ownerDisplayName: string | undefined;
@@ -1920,7 +2054,13 @@ export function registerCollabSyncRoutes(
     // /collab/status confirms ownership, so a slow status made the flash long.
     if (ownerMemberId == null && resolveSharedProjectOwner) {
       try {
-        const hubOwner = await resolveSharedProjectOwner(projectId);
+        const hubOwner =
+          resolvedWorkspaceId && principal?.memberId
+            ? await resolveSharedProjectOwner(projectId, {
+                workspaceId: resolvedWorkspaceId,
+                workspaceMemberId: principal.memberId,
+              })
+            : null;
         if (hubOwner != null) {
           if (syncState === 'local_only') syncState = 'synced';
           ownerMemberId = hubOwner;
@@ -1994,13 +2134,14 @@ export function registerCollabSyncRoutes(
     if (
       ownerMemberId &&
       resolvedWorkspaceId &&
+      context &&
       principal &&
       !callerIsOwner &&
       resolveOwnerDisplayName &&
       (!cachedOwnerName || Date.now() - cachedOwnerName.resolvedAt >= OWNER_ENRICHMENT_TTL_MS) &&
       !ownerEnrichmentInFlight.has(enrichmentKey)
     ) {
-      const refreshOwner = resolveOwnerDisplayName(ownerMemberId)
+      const refreshOwner = resolveOwnerDisplayName(ownerMemberId, context)
         .then((entry) => {
           writeLruEntry(ownerEnrichmentCache, enrichmentKey, {
             entry,

@@ -30,6 +30,16 @@ const FREE_TEAM_CONTEXT = {
   billingState: 'free',
   planId: null,
   teamId: 'ws-team',
+  permissions: {
+    canManageMembers: false,
+    canManageBilling: false,
+    canInviteMembers: false,
+    canManageAutoRecharge: false,
+    canShareProjects: true,
+    canWriteSyncedFiles: true,
+    canViewWorkspaceSettings: false,
+    canManageSharedResources: true,
+  },
 };
 
 const PERSONAL_CONTEXT = {
@@ -41,6 +51,16 @@ const PERSONAL_CONTEXT = {
   lifecycleState: 'active',
   billingState: 'free',
   planId: null,
+  permissions: {
+    canManageMembers: false,
+    canManageBilling: false,
+    canInviteMembers: false,
+    canManageAutoRecharge: false,
+    canShareProjects: false,
+    canWriteSyncedFiles: true,
+    canViewWorkspaceSettings: false,
+    canManageSharedResources: false,
+  },
 };
 
 let workspaceContext: unknown = FREE_TEAM_CONTEXT;

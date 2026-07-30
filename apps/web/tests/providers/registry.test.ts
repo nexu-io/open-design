@@ -13,13 +13,16 @@ import {
   DEFAULT_DEPLOY_PROVIDER_ID,
   deletePreviewComment,
   deployProjectFile,
+  createDesignSystemDraft,
   fetchAgentsStream,
   fetchCloudflarePagesZones,
   fetchDeployConfig,
+  fetchDesignSystemsResult,
   fetchAppVersionInfo,
   fetchConnectorDetail,
   fetchConnectorDiscovery,
   fetchPluginExampleHtml,
+  fetchPluginAssetText,
   fetchPluginPreviewHtml,
   fetchProjectDesignSystemPackageAudit,
   fetchProjectFiles,
@@ -67,6 +70,62 @@ function agentStreamResponse(text: string): Response {
     },
   );
 }
+
+describe('design-system Workspace scope', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('attaches the captured Workspace/member identity to catalog reads', async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ designSystems: [] }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const context = personalWorkspaceContext();
+
+    await expect(fetchDesignSystemsResult(context)).resolves.toEqual({
+      ok: true,
+      designSystems: [],
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/design-systems', {
+      headers: expect.objectContaining({
+        'x-od-workspace-id': context.workspaceId,
+        'x-od-workspace-member-id': context.workspaceMemberId,
+      }),
+    });
+  });
+
+  it('attaches the same identity to design-system creation', async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({
+        designSystem: {
+          id: 'user:brand-a',
+          title: 'Brand A',
+          category: 'Custom',
+          summary: '',
+          swatches: [],
+          surface: 'web',
+          body: '# Brand A',
+          source: 'user',
+          status: 'draft',
+          isEditable: true,
+        },
+      }), { status: 201 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const context = personalWorkspaceContext();
+
+    await createDesignSystemDraft({ title: 'Brand A' }, context);
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/design-systems', expect.objectContaining({
+      method: 'POST',
+      headers: expect.objectContaining({
+        'x-od-workspace-id': context.workspaceId,
+        'x-od-workspace-member-id': context.workspaceMemberId,
+      }),
+    }));
+  });
+});
 
 describe('fetchAgentsStream', () => {
   afterEach(() => {
@@ -658,6 +717,34 @@ describe('fetchPluginExampleHtml', () => {
     await expect(
       fetchPluginExampleHtml('example-live-artifact', 'index'),
     ).resolves.toEqual({ error: 'HTTP 500' });
+  });
+});
+
+describe('Workspace-scoped resource reads', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('sends the exact Workspace/member headers on skill, plugin and asset fetches', async () => {
+    const context = personalWorkspaceContext();
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        new Response('<html>ok</html>', { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await fetchSkillExample('skill-a', 'html', context);
+    await fetchPluginPreviewHtml('plugin-a', context);
+    await fetchPluginExampleHtml('plugin-a', 'example-a', context);
+    await fetchPluginAssetText('plugin-a', './DESIGN.md', context);
+
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    for (const [, init] of fetchMock.mock.calls) {
+      const headers = new Headers(init?.headers);
+      expect(headers.get('x-od-workspace-id')).toBe(context.workspaceId);
+      expect(headers.get('x-od-workspace-member-id')).toBe(context.workspaceMemberId);
+    }
   });
 });
 

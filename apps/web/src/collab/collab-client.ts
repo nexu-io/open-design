@@ -10,11 +10,16 @@ import type {
   CollabPresenceMember,
   ProjectContentTransferState,
   ProjectSyncState,
+  WorkspaceCollabContext,
 } from '@open-design/contracts';
 
 // Presence identity is the shared contract DTO; re-export so collab consumers
 // keep importing it from the client module.
 import { coalescedGet, evictCoalescedGet } from '../lib/coalesced-get';
+import {
+  workspaceIdentityCacheKey,
+  workspaceProjectHeaders,
+} from './workspace-identity';
 export type { CollabPresenceMember };
 
 export interface CollabSnapshot {
@@ -47,12 +52,14 @@ export interface CollabSnapshot {
 export interface CollabClientOptions {
   projectId: string;
   /**
-   * The presence identity. Nullable because status polling (below) does not
-   * need one — a caller can start the client before the identity resolves and
-   * supply it later via {@link CollabClient.setMember}. Presence (heartbeat +
-   * leave) stays a no-op the whole time `member` is null.
+   * The presence identity. Nullable because status polling does not need the
+   * richer presence DTO once the workspace authority above is known. A caller
+   * can supply it later via {@link CollabClient.setMember}; heartbeat + leave
+   * stay a no-op while `member` is null.
    */
   member: CollabPresenceMember | null;
+  /** Workspace authority captured when this client session was created. */
+  workspaceContext?: WorkspaceCollabContext;
   /** Injectable for tests; defaults to the global fetch. */
   fetch?: typeof fetch;
   /** Daemon API base; default '' (same origin). */
@@ -71,6 +78,7 @@ export class CollabClient {
   // Mutable — see setMember(). Status polling below never reads this; only
   // heartbeat/leave/leaveBeacon do, and all three no-op while it is null.
   private member: CollabPresenceMember | null;
+  private readonly workspaceContext: WorkspaceCollabContext | undefined;
   private readonly fetchImpl: typeof fetch;
   private readonly baseUrl: string;
   private readonly heartbeatMs: number;
@@ -106,6 +114,7 @@ export class CollabClient {
   constructor(options: CollabClientOptions) {
     this.projectId = options.projectId;
     this.member = options.member;
+    this.workspaceContext = options.workspaceContext;
     this.fetchImpl = options.fetch ?? globalThis.fetch.bind(globalThis);
     this.baseUrl = options.baseUrl ?? '';
     this.heartbeatMs = Math.max(1_000, options.heartbeatMs ?? DEFAULT_HEARTBEAT_MS);
@@ -125,11 +134,20 @@ export class CollabClient {
    * in-flight status poll) down and rebuilding it. Fires an immediate
    * heartbeat when a real member arrives while running, so presence
    * announces itself right away instead of waiting out the next interval
-   * tick — the same immediacy `start()` gives a member known up front.
+   * tick — the same immediacy `start()` gives a member known up front. Updating
+   * metadata for the same member only changes the next scheduled payload; it
+   * must not create an extra heartbeat loop on ordinary React rerenders.
    */
   setMember(member: CollabPresenceMember | null): void {
+    const previousMemberId = this.member?.memberId ?? null;
     this.member = member;
-    if (this.running && member) void this.heartbeat();
+    if (
+      this.running
+      && member
+      && member.memberId !== previousMemberId
+    ) {
+      void this.heartbeat();
+    }
   }
 
   start(): void {
@@ -197,6 +215,10 @@ export class CollabClient {
   }
 
   async heartbeat(): Promise<void> {
+    // A status request issued by a client that React has since cleaned up may
+    // still resolve and reach the "newly shared" heartbeat below. Stopped
+    // clients no longer own a presence loop and must never write to it.
+    if (!this.running) return;
     // No identity yet (status polling can be running well before `member`
     // resolves — see setMember) — presence has nothing to announce.
     if (!this.member) return;
@@ -207,6 +229,26 @@ export class CollabClient {
     try {
       const body = await this.post('/presence/heartbeat', this.member);
       if (Array.isArray(body?.present)) this.update({ present: body.present as CollabPresenceMember[] });
+    } catch (error) {
+      this.onError?.(error);
+    }
+  }
+
+  /**
+   * Re-read the presence roster without mutating the caller's heartbeat.
+   *
+   * Hub `presence-changed` events are emitted in response to presence writes.
+   * Answering one with another heartbeat creates a write → event → write
+   * feedback loop, so push-channel consumers must use this read-only path.
+   */
+  async refreshPresence(): Promise<void> {
+    try {
+      const body = await this.get('/presence');
+      if (Array.isArray(body?.present)) {
+        this.update({
+          present: body.present as CollabPresenceMember[],
+        });
+      }
     } catch (error) {
       this.onError?.(error);
     }
@@ -316,17 +358,28 @@ export class CollabClient {
     if (!this.member) return;
     const url = this.url('/presence/leave');
     const body = JSON.stringify({ memberId: this.member.memberId });
-    try {
-      if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
-        const blob = new Blob([body], { type: 'application/json' });
-        if (navigator.sendBeacon(url, blob)) return;
+    // sendBeacon cannot attach workspace headers. Retain it only for legacy
+    // unscoped clients; real workspace sessions use keepalive fetch so the
+    // daemon can authenticate the same captured identity as every other
+    // collab route.
+    if (!this.workspaceContext) {
+      try {
+        if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
+          const blob = new Blob([body], { type: 'application/json' });
+          if (navigator.sendBeacon(url, blob)) return;
+        }
+      } catch {
+        // fall through to the keepalive fetch
       }
-    } catch {
-      // fall through to the keepalive fetch
     }
     void this.fetchImpl(url, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        ...(this.workspaceContext
+          ? workspaceProjectHeaders(this.workspaceContext)
+          : {}),
+        'content-type': 'application/json',
+      },
       body,
       keepalive: true,
     }).catch(() => {});
@@ -342,15 +395,29 @@ export class CollabClient {
   }
 
   private async get(path: string): Promise<Record<string, unknown> | null> {
-    const response = await this.fetchImpl(this.url(path));
+    const response = await this.fetchImpl(this.url(path), {
+      ...(this.workspaceContext
+        ? { headers: workspaceProjectHeaders(this.workspaceContext) }
+        : {}),
+    });
     if (!response.ok) throw new Error(`collab GET ${path} failed: ${response.status}`);
     return (await response.json()) as Record<string, unknown>;
   }
 
   private async post(path: string, body?: unknown): Promise<Record<string, unknown> | null> {
-    const init: RequestInit = { method: 'POST' };
+    const init: RequestInit = {
+      method: 'POST',
+      ...(this.workspaceContext
+        ? { headers: workspaceProjectHeaders(this.workspaceContext) }
+        : {}),
+    };
     if (body !== undefined) {
-      init.headers = { 'content-type': 'application/json' };
+      init.headers = {
+        ...(this.workspaceContext
+          ? workspaceProjectHeaders(this.workspaceContext)
+          : {}),
+        'content-type': 'application/json',
+      };
       init.body = JSON.stringify(body);
     }
     const response = await this.fetchImpl(this.url(path), init);
@@ -373,13 +440,21 @@ export class CollabClient {
  */
 export function fetchProjectCollabStatus(
   projectId: string,
-  options?: { baseUrl?: string; fetchImpl?: typeof fetch },
+  options?: {
+    baseUrl?: string;
+    fetchImpl?: typeof fetch;
+    workspaceContext?: WorkspaceCollabContext;
+  },
 ): Promise<Record<string, unknown> | null> {
   const baseUrl = options?.baseUrl ?? '';
   const fetchImpl = options?.fetchImpl ?? globalThis.fetch.bind(globalThis);
-  return coalescedGet(`collab-status:${baseUrl}|${projectId}`, async () => {
+  const identity = workspaceIdentityCacheKey(options?.workspaceContext);
+  return coalescedGet(`collab-status:${baseUrl}|${identity}|${projectId}`, async () => {
     const response = await fetchImpl(
       `${baseUrl}/api/projects/${encodeURIComponent(projectId)}/collab/status`,
+      options?.workspaceContext
+        ? { headers: workspaceProjectHeaders(options.workspaceContext) }
+        : undefined,
     );
     if (!response.ok) {
       throw new Error(`collab GET /collab/status failed: ${response.status}`);
@@ -389,8 +464,14 @@ export function fetchProjectCollabStatus(
 }
 
 /** Thin invalidation for the shared status read (authoritative SSE change). */
-export function evictProjectCollabStatusRead(projectId: string, baseUrl = ''): void {
-  evictCoalescedGet(`collab-status:${baseUrl}|${projectId}`);
+export function evictProjectCollabStatusRead(
+  projectId: string,
+  baseUrl = '',
+  workspaceContext?: WorkspaceCollabContext,
+): void {
+  evictCoalescedGet(
+    `collab-status:${baseUrl}|${workspaceIdentityCacheKey(workspaceContext)}|${projectId}`,
+  );
 }
 
 function isCollabMemberRole(value: unknown): value is CollabMemberRole {

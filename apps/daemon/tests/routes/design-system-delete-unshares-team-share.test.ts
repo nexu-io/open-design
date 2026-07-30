@@ -30,7 +30,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { registerDesignSystemRoutes } from '../../src/routes/design-systems.js';
 import type { DesignSystemSummary } from '../../src/design-systems/index.js';
 import { closeDatabase, openDatabase } from '../../src/db.js';
-import { createTeamResourceShareService, unshareIfCurrentlyShared } from '../../src/collab/team-resource-share.js';
+import {
+  createTeamResourceShareService,
+  unshareIfCurrentlyShared,
+  type TeamResourceRequestScope,
+} from '../../src/collab/team-resource-share.js';
 import type { ResourceHubPrincipal } from '../../src/collab/resource-principal.js';
 
 let server: http.Server | null = null;
@@ -122,17 +126,20 @@ function registerRoutes(
     hub: ReturnType<typeof fakeHub>;
     canMutate?: (root: string, id: string, req: any) => Promise<boolean>;
     principal?: ResourceHubPrincipal;
+    unshareTeamDesignSystemIfShared?: (id: string, req: any) => Promise<boolean>;
   },
 ) {
   tempDir = mkdtempSync(path.join(os.tmpdir(), 'od-ds-delete-unshare-'));
   const db = openDatabase(tempDir, { dataDir: tempDir });
   const deleteUserDesignSystem = vi.fn(async () => true);
+  const scope: TeamResourceRequestScope = {
+    principal: opts.principal ?? OWNER_PRINCIPAL,
+    canShare: true,
+  };
   const designSystemsTeamShare = createTeamResourceShareService({
     kind: 'design_system',
     idPrefix: 'ds',
     resolveDir: () => '/tmp/ds',
-    getPrincipal: () => opts.principal ?? OWNER_PRINCIPAL,
-    getCanShare: () => true,
     run: opts.hub.run,
     env: { OD_WORKSPACE_CONTEXT_SOURCE: 'vela' },
   });
@@ -144,6 +151,13 @@ function registerRoutes(
     } as never,
     projectFiles: {} as never,
     projectStore: {} as never,
+    verifyWorkspaceRequestAuthority: async () => {
+      throw new Error('unbound fixture must not verify Workspace authority');
+    },
+    workspaceResources: {
+      getWorkspaceResource: () => undefined,
+      getWorkspaceResourceByResourceId: () => undefined,
+    },
     designSystems: {
       buildUserDesignSystemArchive: async () => null,
       canMutateUserDesignSystem: opts.canMutate ?? (async () => true),
@@ -162,7 +176,9 @@ function registerRoutes(
       renderDesignSystemPreview: () => '<!doctype html>',
       renderDesignSystemShowcase: () => '<!doctype html>',
       syncUserDesignSystemAssetsFromWorkspace: async () => ({ ok: false, reason: 'not-found' }),
-      unshareTeamDesignSystemIfShared: (id) => unshareIfCurrentlyShared(designSystemsTeamShare, id),
+      unshareTeamDesignSystemIfShared:
+        opts.unshareTeamDesignSystemIfShared ??
+        ((id) => unshareIfCurrentlyShared(designSystemsTeamShare, id, scope)),
       updateUserDesignSystem: async () => null,
       updateUserDesignSystemRevisionStatus: async () => null,
     },
@@ -173,7 +189,7 @@ function registerRoutes(
       start: () => ({}) as never,
     },
   });
-  return { deleteUserDesignSystem, designSystemsTeamShare };
+  return { deleteUserDesignSystem, designSystemsTeamShare, scope };
 }
 
 describe('DELETE /api/design-systems/:id unshares from the team hub first', () => {
@@ -195,11 +211,11 @@ describe('DELETE /api/design-systems/:id unshares from the team hub first', () =
 
     const app = express();
     app.use(express.json());
-    const { deleteUserDesignSystem, designSystemsTeamShare } = registerRoutes(app, { hub });
+    const { deleteUserDesignSystem, designSystemsTeamShare, scope } = registerRoutes(app, { hub });
     const baseUrl = await listen(app);
 
     // Sanity: the hub really does report it shared before the delete.
-    await expect(designSystemsTeamShare.sharedResources()).resolves.toEqual([
+    await expect(designSystemsTeamShare.sharedResources(scope)).resolves.toEqual([
       expect.objectContaining({ id: 'user:my-brand' }),
     ]);
 
@@ -210,7 +226,7 @@ describe('DELETE /api/design-systems/:id unshares from the team hub first', () =
     expect(hub.resources.has(hubResourceId)).toBe(false);
     expect(hub.removeCalls).toHaveLength(1);
     expect(hub.removeCalls[0]).toEqual(['remove', hubResourceId, '--json']);
-    await expect(designSystemsTeamShare.sharedResources()).resolves.toEqual([]);
+    await expect(designSystemsTeamShare.sharedResources(scope)).resolves.toEqual([]);
 
     // AND the local delete actually proceeded (unshare-then-delete).
     expect(deleteUserDesignSystem).toHaveBeenCalledOnce();
@@ -231,6 +247,27 @@ describe('DELETE /api/design-systems/:id unshares from the team hub first', () =
     // `service.unshare()` regardless of current share state (which would
     // itself unconditionally issue a hub `remove` even for an unknown id,
     // per `TeamResourceShareService.unshare`'s own implementation).
+    expect(hub.removeCalls).toHaveLength(0);
+    expect(deleteUserDesignSystem).toHaveBeenCalledOnce();
+  });
+
+  it('continues local deletion when authoritative Personal scope has no Team share to retract', async () => {
+    const hub = fakeHub();
+    const unsharePersonal = vi.fn(async () => false);
+    const app = express();
+    app.use(express.json());
+    const { deleteUserDesignSystem } = registerRoutes(app, {
+      hub,
+      unshareTeamDesignSystemIfShared: unsharePersonal,
+    });
+    const baseUrl = await listen(app);
+
+    const res = await fetch(`${baseUrl}/api/design-systems/user:my-brand`, {
+      method: 'DELETE',
+    });
+
+    expect(res.status).toBe(204);
+    expect(unsharePersonal).toHaveBeenCalledOnce();
     expect(hub.removeCalls).toHaveLength(0);
     expect(deleteUserDesignSystem).toHaveBeenCalledOnce();
   });

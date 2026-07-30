@@ -4,6 +4,10 @@ import type { DesignSystemSummary } from './design-systems/index.js';
 import type { RoutineRoutesService } from './routes/routine.js';
 import type { OpenDesignPublicMetadataService } from './services/open-design-public-metadata.js';
 import type { ResourceHubPrincipal } from './collab/resource-principal.js';
+import type {
+  AuthorizeProjectRequest,
+  AuthorizeProjectToolRequest,
+} from './collab/project-request-authority.js';
 
 export interface HttpDeps {
   createSseResponse: (...args: any[]) => any;
@@ -50,10 +54,10 @@ export interface ResourceDeps {
   listAllDesignSystems: (options?: {
     workspaceId?: string | null;
   }) => Promise<Array<DesignSystemSummary & { source?: string }>>;
-  // The workspace a catalog read should be scoped to (#145). Resolves the
-  // explicit local pin first and the workspace context otherwise; null when
-  // signed out / single-player.
-  resolveWorkspaceScope?: () => Promise<string | null>;
+  // The workspace a catalog read should be scoped to (#145). Data-plane reads
+  // resolve it from this exact request's explicit Workspace/member identity,
+  // never from a daemon-global active/current Workspace.
+  resolveWorkspaceScope?: (req: any) => Promise<string | null>;
   // Whether the caller may mutate (edit / publish-toggle / delete) design
   // system `id` — the same verdict the PATCH/DELETE routes enforce (see
   // `registerDesignSystemRoutes`'s identically-named dep). Optional so a
@@ -76,7 +80,9 @@ export interface ResourceDeps {
   // resolvers (chat run system prompt, orbit template resolver,
   // /api/skills/:id/example, /api/skills/:id/assets/*) keep working when
   // a stored project.skillId points at either root.
-  listAllSkillLikeEntries: () => Promise<Array<SkillInfo & { source?: string }>>;
+  listAllSkillLikeEntries: (options?: {
+    workspaceId?: string | null;
+  }) => Promise<Array<SkillInfo & { source?: string }>>;
   mimeFor: (filePath: string) => string;
 }
 
@@ -85,8 +91,15 @@ export interface RoutineDeps {
 }
 
 export interface ProjectPreviewScopeDeps {
-  mint: (projectId: string) => string;
+  mint: (
+    projectId: string,
+    workspace?: { workspaceId: string; workspaceMemberId: string } | null,
+  ) => string;
   validate: (projectId: string, scope: string) => boolean;
+  resolve: (
+    projectId: string,
+    scope: string,
+  ) => { workspaceId: string; workspaceMemberId: string } | null | undefined;
 }
 
 export interface TelemetryDeps {
@@ -130,6 +143,8 @@ export interface ServerContext {
   uploads: any;
   node: any;
   projectStore: any;
+  authorizeProjectRequest: AuthorizeProjectRequest;
+  authorizeProjectToolRequest: AuthorizeProjectToolRequest;
   projectFiles: any;
   conversations: any;
   templates: any;

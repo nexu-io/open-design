@@ -23,24 +23,33 @@ import type {
 export interface WorkspaceContextRequest {
   /** The caller's bearer token (a real provider verifies this against B). */
   authorization?: string | undefined;
+  /**
+   * The workspace this caller explicitly selected. Client-facing routes must
+   * always provide it; it must never be inferred from daemon-global active
+   * state because one daemon can serve multiple browser tabs concurrently.
+   */
+  workspaceId?: string | undefined;
 }
 
 export interface WorkspaceContextProvider {
   current(req: WorkspaceContextRequest): Promise<WorkspaceCollabContext | null>;
+  /**
+   * Resolve one request-selected Workspace without reading or mutating any
+   * daemon-global selection. Client-facing routes use this API exclusively.
+   */
+  resolveExact?(
+    req: WorkspaceContextRequest & { workspaceId: string },
+  ): Promise<WorkspaceCollabContext | null>;
   /**
    * Dev/demo seam: override the returned context. Absent on a real B-backed
    * provider (whose context is derived per-request from the token).
    */
   set?(context: WorkspaceCollabContext | null): void;
   /**
-   * Synchronous read of the most recently resolved context — NO network I/O,
-   * ever. Populated as a side effect of the ordinary `.current()` traffic this
-   * provider already serves: the web client's `GET /api/workspace/context`
-   * poll (every 15s) plus every other in-daemon `.current()` caller. Absent on
-   * a bare provider; `withLastKnownWorkspaceContext` below adds it. A caller
-   * that needs a same-request cross-check against real membership state — a
-   * mutation gate that must not spend a fresh vela round-trip on every write —
-   * reads this instead of awaiting `.current()`.
+   * Legacy synchronous observation of the most recently resolved context.
+   * It performs no network I/O and is populated by `current`, `resolveExact`,
+   * or the dev-only `set` seam. Request authorization must not use it because
+   * it is neither keyed by Workspace nor guaranteed fresh.
    */
   lastKnown?(): WorkspaceCollabContext | null;
   /**
@@ -55,20 +64,12 @@ export interface WorkspaceContextProvider {
 }
 
 /**
- * Wrap a provider so every `.current()` result is also remembered for a later
- * synchronous `.lastKnown()` read, with no extra network I/O of its own. This
- * is the ONLY sanctioned way to get a same-request read of "what does the
- * daemon actually believe about this workspace right now" — see
- * `collab/workspace-resource-mutation.ts`'s membership cross-check, which
- * refuses to trust a client's `x-od-workspace-member-status` header once the
- * daemon's own last-verified state says the caller has been removed.
+ * Preserve the legacy observation API while client-facing routes migrate to
+ * exact request authority. The wrapper performs no extra network I/O.
  *
- * `lastKnown()` reflects whichever workspace the wrapped provider most
- * recently resolved — normally the account's one active workspace, since a
- * single daemon process serves a single signed-in user. It is deliberately
- * NOT scoped per-workspace-id: a caller must compare `lastKnown().workspaceId`
- * against the workspace it cares about and treat a mismatch as "no opinion",
- * exactly like a cache miss.
+ * `lastKnown()` reflects whichever Workspace the provider most recently
+ * resolved. It is deliberately not scoped per Workspace and therefore is not
+ * authority for reads, writes, billing, or background subscriptions.
  *
  * Authorization generations have a narrower meaning than raw availability.
  * Vela maps both a transient timeout and a real signed-out response to `null`,
@@ -112,9 +113,19 @@ export function withLastKnownWorkspaceContext(
       observe(context, false);
       return context;
     },
+    ...(provider.resolveExact
+      ? {
+          async resolveExact(
+            req: WorkspaceContextRequest & { workspaceId: string },
+          ): Promise<WorkspaceCollabContext | null> {
+            const context = await provider.resolveExact!(req);
+            observe(context, false);
+            return context;
+          },
+        }
+      : {}),
     // Dev/demo provider only (see `set?` above): a direct override is also a
-    // same-process source of truth, so it should update the cache immediately
-    // rather than waiting for the next `.current()` poll tick to catch up.
+    // same-process source of truth, so update the observation immediately.
     ...(provider.set
       ? {
           set: (context: WorkspaceCollabContext | null) => {
@@ -296,6 +307,8 @@ export function createDevWorkspaceContextProvider(
   let context: WorkspaceCollabContext | null = seed ?? readEnvContext();
   return {
     current: () => Promise.resolve(context),
+    resolveExact: ({ workspaceId }) =>
+      Promise.resolve(context?.workspaceId === workspaceId ? context : null),
     set: (next) => {
       context = next;
     },

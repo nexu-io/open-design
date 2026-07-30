@@ -100,7 +100,7 @@ function jsonResponse(body: unknown): Response {
   });
 }
 
-let shareCalls: string[];
+let shareCalls: Array<{ url: string; init?: RequestInit }>;
 
 function mockFetch(options: {
   plugins?: unknown[];
@@ -146,7 +146,7 @@ function mockFetch(options: {
       });
     }
     if (url.includes('/share') && init?.method === 'POST') {
-      shareCalls.push(url);
+      shareCalls.push({ url, init });
       return jsonResponse({ shared: true, version: shareCalls.length });
     }
     return jsonResponse({});
@@ -199,7 +199,11 @@ describe('ExtensionsMarketplace — repeat share reads as "sync" once already te
 
     fireEvent.click(syncButton);
     await waitFor(() => expect(shareCalls).toHaveLength(1));
-    expect(shareCalls[0]).toContain('/api/workspace/plugins/my-plugin/share');
+    expect(shareCalls[0]?.url).toContain('/api/workspace/plugins/my-plugin/share');
+    expect(new Headers(shareCalls[0]?.init?.headers).get('x-od-workspace-id')).toBe('ws-team');
+    expect(new Headers(shareCalls[0]?.init?.headers).get('x-od-workspace-member-id')).toBe(
+      'mem-owner',
+    );
   });
 
   it('plugin: a plugin shared by someone else never surfaces a share/sync action in Personal', async () => {
@@ -231,6 +235,10 @@ describe('ExtensionsMarketplace — repeat share reads as "sync" once already te
 
     fireEvent.click(syncButton);
     await waitFor(() => expect(shareCalls).toHaveLength(1));
-    expect(shareCalls[0]).toContain('/api/workspace/skills/my-skill/share');
+    expect(shareCalls[0]?.url).toContain('/api/workspace/skills/my-skill/share');
+    expect(new Headers(shareCalls[0]?.init?.headers).get('x-od-workspace-id')).toBe('ws-team');
+    expect(new Headers(shareCalls[0]?.init?.headers).get('x-od-workspace-member-id')).toBe(
+      'mem-owner',
+    );
   });
 });

@@ -316,7 +316,7 @@ describe('ProjectView shared-project title refresh on project-metadata-changed',
     dispatchProjectEvent({ type: 'project-metadata-changed', projectId: project.id });
 
     await waitFor(() => {
-      expect(mockedGetProject).toHaveBeenCalledWith(project.id);
+      expect(mockedGetProject).toHaveBeenCalledWith(project.id, null);
     });
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(onProjectChangeMock).not.toHaveBeenCalled();
@@ -343,7 +343,7 @@ describe('ProjectView shared-project title refresh on project-metadata-changed',
     dispatchProjectEvent({ type: 'project-metadata-changed', projectId: project.id });
 
     await waitFor(() => {
-      expect(mockedGetProject).toHaveBeenCalledWith(project.id);
+      expect(mockedGetProject).toHaveBeenCalledWith(project.id, null);
     });
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(onProjectChangeMock).not.toHaveBeenCalled();

@@ -2,7 +2,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import express from 'express';
 import http from 'node:http';
 import { createCollabRuntime } from '../src/collab/runtime.js';
-import type { CollabPresenceCloudClient } from '../src/routes/collab-presence.js';
+import type {
+  CollabPresenceCloudClient,
+  RegisterCollabPresenceRoutesDeps,
+} from '../src/routes/collab-presence.js';
 import {
   createCollabPresenceCloudClient,
   registerCollabPresenceRoutes,
@@ -23,6 +26,7 @@ async function startPresenceServer(
   options: {
     isProjectShared?: (projectId: string) => Promise<boolean>;
     cloudAuthorizesProjectPresence?: (projectId: string) => boolean;
+    verifyWorkspaceRequest?: RegisterCollabPresenceRoutesDeps['verifyWorkspaceRequest'];
   } = {},
 ) {
   const app = express();
@@ -33,6 +37,9 @@ async function startPresenceServer(
     ...(options.isProjectShared ? { isProjectShared: options.isProjectShared } : {}),
     ...(options.cloudAuthorizesProjectPresence
       ? { cloudAuthorizesProjectPresence: options.cloudAuthorizesProjectPresence }
+      : {}),
+    ...(options.verifyWorkspaceRequest
+      ? { verifyWorkspaceRequest: options.verifyWorkspaceRequest }
       : {}),
   });
   server = http.createServer(app);
@@ -212,6 +219,50 @@ describe('collab presence routes', () => {
     expect(heartbeat.status).toBe(200);
     expect(calls).toEqual(['list:p1', 'heartbeat:p1']);
     expect(isProjectShared).not.toHaveBeenCalled();
+  });
+
+  it('returns a retryable 503 without relay side effects when Workspace authority is unavailable', async () => {
+    const heartbeatPresence = vi.fn(async () => []);
+    const listPresence = vi.fn(async () => []);
+    const leavePresence = vi.fn(async () => []);
+    const isProjectShared = vi.fn(async () => true);
+    const api = await startPresenceServer(
+      { heartbeatPresence, listPresence, leavePresence },
+      {
+        isProjectShared,
+        verifyWorkspaceRequest: async () => ({
+          ok: false,
+          status: 503,
+          code: 'WORKSPACE_AUTHORITY_UNAVAILABLE',
+          message: 'workspace membership authority is temporarily unavailable',
+          retryable: true,
+        }),
+      },
+    );
+
+    const responses = [
+      await api.json('/api/projects/p1/presence'),
+      await api.json('/api/projects/p1/presence/heartbeat', {
+        method: 'POST',
+        body: { memberId: 'm1' },
+      }),
+      await api.json('/api/projects/p1/presence/leave', {
+        method: 'POST',
+        body: { memberId: 'm1' },
+      }),
+    ];
+
+    for (const response of responses) {
+      expect(response.status).toBe(503);
+      expect(response.body).toMatchObject({
+        error: 'WORKSPACE_AUTHORITY_UNAVAILABLE',
+        retryable: true,
+      });
+    }
+    expect(isProjectShared).not.toHaveBeenCalled();
+    expect(heartbeatPresence).not.toHaveBeenCalled();
+    expect(listPresence).not.toHaveBeenCalled();
+    expect(leavePresence).not.toHaveBeenCalled();
   });
 });
 

@@ -244,7 +244,7 @@ export function SkillsSection({ cfg, setCfg, onSkillsRefresh, onSkillsChanged }:
       if (bodyById[id] !== undefined) return bodyById[id];
       setBodyLoadingId(id);
       try {
-        const detail = await fetchSkill(id);
+        const detail = await fetchSkill(id, workspaceContext);
         const body = detail?.body ?? '';
         setBodyById((cur) => ({ ...cur, [id]: body }));
         return body;
@@ -260,7 +260,7 @@ export function SkillsSection({ cfg, setCfg, onSkillsRefresh, onSkillsChanged }:
       if (filesById[id]) return filesById[id]!;
       setFilesLoadingId(id);
       try {
-        const files = await fetchSkillFiles(id);
+        const files = await fetchSkillFiles(id, workspaceContext);
         setFilesById((cur) => ({ ...cur, [id]: files }));
         return files;
       } finally {

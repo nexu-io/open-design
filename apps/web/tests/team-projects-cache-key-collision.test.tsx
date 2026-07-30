@@ -28,21 +28,41 @@ import {
   useTeamProjects,
 } from '../src/collab/useWorkspaceContext';
 import { resetCoalescedGet } from '../src/lib/coalesced-get';
+import {
+  workspaceContextFixture,
+  workspaceDirectoryFixture,
+} from './helpers/workspace-context';
 
 const TEAM_PROJECT = {
   projectId: 'p-shared',
   ownerMemberId: 'member-owner',
   name: 'Shared deck',
 };
+const TEAM_CONTEXT = workspaceContextFixture({
+  workspaceId: 'workspace-team',
+  workspaceMemberId: 'member-viewer',
+});
 
 function stubFetch(): void {
   const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
+    if (url.includes('/api/workspace/directory')) {
+      return new Response(JSON.stringify(workspaceDirectoryFixture([TEAM_CONTEXT])), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
     // Force `projectIsSharedWithWorkspace` past its per-project status probe so
     // it falls through to the shared team-directory read, exactly as it does on
     // a project page whose collab status is unavailable.
     if (url.includes('/collab/status')) {
       return new Response('not found', { status: 404 });
+    }
+    if (url.includes('/api/workspace/context')) {
+      return new Response(JSON.stringify({ context: TEAM_CONTEXT }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
     }
     if (url.includes('/api/workspace/projects/team')) {
       return new Response(JSON.stringify({ projects: [TEAM_PROJECT] }), {
@@ -73,7 +93,7 @@ describe('team-projects coalescing key is shape-safe across call sites', () => {
 
   it('useTeamProjects() still yields an ARRAY when a project page primed the shared cache first', async () => {
     // 1. Project page: caches the team directory under the shared key.
-    await projectIsSharedWithWorkspace('p-shared');
+    await projectIsSharedWithWorkspace('p-shared', TEAM_CONTEXT);
 
     // 2. User switches to Community/home inside the share window; this mount
     //    joins the entry the project page just settled.
@@ -95,7 +115,7 @@ describe('team-projects coalescing key is shape-safe across call sites', () => {
       expect(result.current.loading).toBe(false);
     });
 
-    await expect(projectIsSharedWithWorkspace('p-shared')).resolves.toBe(true);
+    await expect(projectIsSharedWithWorkspace('p-shared', TEAM_CONTEXT)).resolves.toBe(true);
   });
 });
 

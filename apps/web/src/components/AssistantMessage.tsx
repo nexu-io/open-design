@@ -12,7 +12,8 @@ import {
 } from "../runtime/in-project-link";
 import { navigate } from "../router";
 import { deleteProjectFile, projectFileUrl, uploadProjectFiles } from "../providers/registry";
-import { useWorkspaceContext } from "../collab/useWorkspaceContext";
+import { useProjectCollabContext } from "../collab/collab-context";
+import { workspaceProjectHeaders } from "../collab/workspace-identity";
 import { useAnalytics } from "../analytics/provider";
 import {
   trackAssistantFeedbackButtonClick,
@@ -209,6 +210,7 @@ function SkillPluginCandidateCard({
   onRequestOpenFile?: (name: string) => void;
 }) {
   const t = useT();
+  const { workspaceContext } = useProjectCollabContext();
   const [busy, setBusy] = useState<null | "draft" | "contribute">(null);
   const [notice, setNotice] = useState<ActionNotice | null>(null);
   const disabled = !projectId || busy !== null;
@@ -221,7 +223,10 @@ function SkillPluginCandidateCard({
   async function post(path: string, body: Record<string, unknown> = {}) {
     const resp = await fetch(path, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(workspaceContext ? workspaceProjectHeaders(workspaceContext) : {}),
+      },
       body: JSON.stringify(body),
     });
     const data = await resp.json().catch(() => null);
@@ -2158,6 +2163,7 @@ function ProducedFiles({
   onRequestOpenFile?: (name: string) => void;
 }) {
   const t = useT();
+  const { workspaceContext } = useProjectCollabContext();
   return (
     <div className="produced-files">
       <div className="produced-files-label">{t("assistant.producedFiles")}</div>
@@ -2183,7 +2189,7 @@ function ProducedFiles({
               ) : null}
               <a
                 className="ghost-link"
-                href={projectFileUrl(projectId, f.name)}
+                href={projectFileUrl(projectId, f.name, workspaceContext)}
                 download={f.name}
               >
                 {t("assistant.downloadFile")}
@@ -2642,7 +2648,7 @@ function FormBlock({
 }) {
   const t = useT();
   const analytics = useAnalytics();
-  const { context: workspaceContext } = useWorkspaceContext();
+  const { workspaceContext } = useProjectCollabContext();
   const formKey =
     projectId && conversationId
       ? `${projectId}:${conversationId}:${assistantMessageId}:${form.id}`
@@ -2812,11 +2818,13 @@ function FormBlock({
     if (pending.length === 0) return true;
     if (!projectId) return false;
     const deleted = await Promise.all(
-      pending.map((attachment) => deleteProjectFile(projectId, attachment.path)),
+      pending.map((attachment) =>
+        deleteProjectFile(projectId, attachment.path, workspaceContext),
+      ),
     );
     pendingUploadCleanupRef.current = pending.filter((_, index) => !deleted[index]);
     return pendingUploadCleanupRef.current.length === 0;
-  }, [projectId]);
+  }, [projectId, workspaceContext]);
 
   const handleSubmit = useCallback(
     async (

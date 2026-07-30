@@ -56,7 +56,19 @@ afterEach(async () => {
 
 async function startServer(deps: {
   workspaceContext: WorkspaceContextProvider;
-  listTeamProjects: () => Promise<TeamProject[]>;
+  listTeamProjects: (context: WorkspaceCollabContext) => Promise<TeamProject[]>;
+  fetchWorkspaceDirectory?: () => Promise<{
+    ok: boolean;
+    items: Array<{
+      workspaceId: string;
+      workspaceName: string;
+      workspaceType: 'personal' | 'team';
+      workspaceMemberId: string;
+      role: 'owner' | 'admin' | 'member';
+      memberStatus: 'active' | 'removed';
+      lifecycleState: 'active' | 'billing_past_due' | 'locked' | 'deleting' | 'deleted';
+    }>;
+  }>;
 }) {
   const app = express();
   app.use(express.json());
@@ -67,9 +79,10 @@ async function startServer(deps: {
   if (!address || typeof address === 'string') {
     throw new Error('server did not bind to a TCP port');
   }
-  return async () => {
+  return async (headers?: Record<string, string>) => {
     const response = await fetch(
       `http://127.0.0.1:${address.port}/api/workspace/projects/team`,
+      headers ? { headers } : undefined,
     );
     return {
       status: response.status,
@@ -79,15 +92,54 @@ async function startServer(deps: {
 }
 
 describe('GET /api/workspace/projects/team', () => {
+  it('uses the request workspace rather than the daemon ambient workspace', async () => {
+    const seen: unknown[] = [];
+    const listTeamProjects = async (scope: WorkspaceCollabContext) => {
+      seen.push(scope);
+      return PROJECTS;
+    };
+    const get = await startServer({
+      workspaceContext: teamContextProvider(),
+      listTeamProjects,
+      fetchWorkspaceDirectory: async () => ({
+        ok: true,
+        items: [
+          {
+            workspaceId: 'team-a',
+            workspaceName: 'Team A',
+            workspaceType: 'team',
+            workspaceMemberId: 'member-a',
+            role: 'member',
+            memberStatus: 'active',
+            lifecycleState: 'active',
+          },
+        ],
+      }),
+    });
+
+    const response = await get({
+      'x-od-workspace-id': 'team-a',
+      'x-od-workspace-member-id': 'member-a',
+      'x-od-workspace-type': 'team',
+    });
+
+    expect(response.status).toBe(200);
+    expect(seen).toEqual([
+      expect.objectContaining({
+        workspaceId: 'team-a',
+        workspaceMemberId: 'member-a',
+      }),
+    ]);
+  });
+
   it('lists projects through the injected Vela team-project catalog', async () => {
     const workspaceContext = teamContextProvider();
     const calls: string[] = [];
     const listTeamProjects = createTeamProjectsLister({
-      workspaceContext,
       env: { OD_WORKSPACE_CONTEXT_SOURCE: 'vela' },
       teamProjectCatalog: {
-        list: async () => {
-          calls.push('list');
+        list: async (workspaceId) => {
+          calls.push(workspaceId ?? '');
           return PROJECTS;
         },
         get: async () => null,
@@ -95,18 +147,38 @@ describe('GET /api/workspace/projects/team', () => {
         remove: async () => {},
       },
     });
-    const get = await startServer({ workspaceContext, listTeamProjects });
+    const get = await startServer({
+      workspaceContext,
+      listTeamProjects: (context) => listTeamProjects(context.workspaceId),
+      fetchWorkspaceDirectory: async () => ({
+        ok: true,
+        items: [
+          {
+            workspaceId: 'ws-1',
+            workspaceName: 'Workspace 1',
+            workspaceType: 'team',
+            workspaceMemberId: 'wm-1',
+            role: 'member',
+            memberStatus: 'active',
+            lifecycleState: 'active',
+          },
+        ],
+      }),
+    });
 
-    const response = await get();
+    const response = await get({
+      'x-od-workspace-id': 'ws-1',
+      'x-od-workspace-member-id': 'wm-1',
+      'x-od-workspace-type': 'team',
+    });
     expect(response.status).toBe(200);
-    expect(calls).toEqual(['list']);
+    expect(calls).toEqual(['ws-1']);
     expect(response.body).toEqual({ projects: PROJECTS });
   });
 
   it('returns an empty list off-team without invoking Vela', async () => {
     const workspaceContext = personalContextProvider();
     const listTeamProjects = createTeamProjectsLister({
-      workspaceContext,
       env: { OD_WORKSPACE_CONTEXT_SOURCE: 'vela' },
       teamProjectCatalog: {
         list: async () => {
@@ -117,10 +189,31 @@ describe('GET /api/workspace/projects/team', () => {
         remove: async () => {},
       },
     });
-    const get = await startServer({ workspaceContext, listTeamProjects });
+    const get = await startServer({
+      workspaceContext,
+      listTeamProjects: (context) => listTeamProjects(context.workspaceId),
+      fetchWorkspaceDirectory: async () => ({
+        ok: true,
+        items: [
+          {
+            workspaceId: 'personal-1',
+            workspaceName: 'Personal',
+            workspaceType: 'personal',
+            workspaceMemberId: 'wm-personal',
+            role: 'owner',
+            memberStatus: 'active',
+            lifecycleState: 'active',
+          },
+        ],
+      }),
+    });
 
-    const response = await get();
-    expect(response.status).toBe(200);
-    expect(response.body).toEqual({ projects: [] });
+    const response = await get({
+      'x-od-workspace-id': 'personal-1',
+      'x-od-workspace-member-id': 'wm-personal',
+      'x-od-workspace-type': 'personal',
+    });
+    expect(response.status).toBe(403);
+    expect(response.body).toMatchObject({ error: 'WORKSPACE_ACCESS_DENIED' });
   });
 });

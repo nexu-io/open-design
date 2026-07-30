@@ -17,20 +17,17 @@
 // dangerous field: `workspaceResourceAccess` derives `selfCreated` from it, which
 // is what grants a non-privileged member mutation rights over the row.
 //
-// Same three-way shape #6201 established for created projects, via the same
-// `createCreatedProjectWorkspaceResolver`:
+// The resolver now has two outcomes and no daemon-global fallback:
 //
 //   1. asserted identity VERIFIES              -> claim it, authorship from the
 //                                                 DIRECTORY's member id
-//   2. asserted identity does NOT verify       -> never write that claim; use the
-//      (foreign, inactive, or unconfirmable      daemon's ambient workspace, whose
-//      because the authority is unreadable)      member id is its own verified
-//                                                 session, else write nothing
-//   3. nothing asserted                        -> write nothing (see below)
+//   2. asserted identity does NOT verify       -> never write that claim; the
+//      (foreign, inactive, or unconfirmable      project stays unbound
+//      because the authority is unreadable)
+//   3. nothing asserted                        -> write nothing
 //
-// Case 3 deliberately does NOT claim into the ambient workspace, unlike
-// `createdProjectWorkspaceHome`'s third branch. This helper runs immediately
-// before `enforceWorkspaceResourceMutation`, whose HEADERLESS branch reads
+// Case 3 deliberately remains unbound. This helper runs immediately before
+// `enforceWorkspaceResourceMutation`, whose HEADERLESS branch reads
 // `getWorkspaceResourceByResourceId` and answers 401 WORKSPACE_CONTEXT_REQUIRED
 // as soon as ANY row exists. Claiming on a headerless request would therefore
 // turn today's working headerless duplicate into a 401 — a new failure on a path
@@ -85,20 +82,14 @@ const FOREIGN = {
   workspaceMemberId: 'mem-rec-foreign',
 };
 
-/**
- * `/api/v1/workspaces` is the membership directory. `/api/v1/workspaces/current`
- * decides whether the daemon ends up with an AMBIENT workspace at all:
- *   - 401 -> "signed out at the vela layer", provider returns null, ambient absent.
- *   - 403 `missing_principal` -> provider picks a default from the directory,
- *     so ambient is present.
- */
+/** `/api/v1/workspaces` is the only authority used by these data-plane tests. */
 function startDirectoryMock(options: {
   directoryStatus?: number;
   currentStatus: 401 | 403;
 }): Promise<{
   url: string;
   close: () => Promise<void>;
-  /** Flip `/current` so a test can move the daemon from "no ambient" to "ambient". */
+  /** Retained to model an older backend response; data-plane routes ignore it. */
   setCurrentStatus: (status: 401 | 403) => void;
 }> {
   let currentStatus = options.currentStatus;
@@ -150,7 +141,7 @@ function workspaceHeaders(input: {
   };
 }
 
-/** An unbound project: created headerless while the daemon has no ambient workspace. */
+/** An unbound project: a headerless legacy create carries no durable scope. */
 async function createUnboundProject(webUrl: string, name: string): Promise<string> {
   const created = await requestJson<CreatedProject>(webUrl, '/api/projects', {
     body: {
@@ -166,10 +157,15 @@ async function createUnboundProject(webUrl: string, name: string): Promise<strin
   return created.project.id;
 }
 
-async function readScope(webUrl: string, projectId: string): Promise<ProjectWorkspaceScope> {
+async function readScope(
+  webUrl: string,
+  projectId: string,
+  headers?: Record<string, string>,
+): Promise<ProjectWorkspaceScope> {
   const body = await requestJson<{ scope: ProjectWorkspaceScope }>(
     webUrl,
     `/api/projects/${encodeURIComponent(projectId)}/workspace-scope`,
+    headers ? { headers } : {},
   );
   return body.scope;
 }
@@ -200,22 +196,20 @@ type DirectoryMock = Awaited<ReturnType<typeof startDirectoryMock>>;
 
 let readableAuthority: DirectoryMock;
 let unreadableAuthority: DirectoryMock;
-/** Directory readable, and `/current` flippable so a test can move the daemon
- *  from "no ambient" to "ambient" between two phases. */
-let ambientAuthority: DirectoryMock;
+/** Directory readable; `/current` is deliberately irrelevant to data-plane scope. */
+let selectionAuthority: DirectoryMock;
 
 beforeAll(async () => {
   readableAuthority = await startDirectoryMock({ currentStatus: 401 });
   unreadableAuthority = await startDirectoryMock({ currentStatus: 401, directoryStatus: 500 });
-  // Starts WITHOUT ambient so a true orphan can be created, then flips.
-  ambientAuthority = await startDirectoryMock({ currentStatus: 401 });
+  selectionAuthority = await startDirectoryMock({ currentStatus: 403 });
 });
 
 afterAll(async () => {
   await Promise.all([
     readableAuthority.close(),
     unreadableAuthority.close(),
-    ambientAuthority.close(),
+    selectionAuthority.close(),
   ]);
 });
 
@@ -236,25 +230,16 @@ describe('reconciling an unbound project verifies the asserted workspace first',
             'precondition: the source project is a true orphan',
           ).toBe('unbound');
 
-          // The mutation itself is now ALLOWED, and that outcome is pinned rather
-          // than left unspecified. A resource no workspace has claimed sits
-          // outside the isolation regime ("no retroactive tagging"), so
-          // `enforceWorkspaceResourceMutation` no longer refuses a caller for
-          // identifying itself when it would have allowed the same caller with no
-          // headers at all — see `apps/daemon/tests/collab/
-          // workspace-resource-mutation.test.ts`. Nothing is escalated: dropping
-          // the headers was always the permissive path, so the forged pair buys
-          // access it already had.
-          //
-          // What must NOT change is the assertion below: the forged claim is
-          // still never PERSISTED. Permitting a copy of an orphan and adopting
-          // the orphan are different acts, and only the first one happens.
+          // Once a caller asserts Workspace identity, project creation and
+          // duplication verify that exact pair before touching the orphan. A
+          // forged pair therefore fails closed; only a truly headerless local
+          // caller keeps the legacy unbound behavior.
           expect(
             await mutate(webUrl, duplicatePath(viaDuplicate), workspaceHeaders(FOREIGN), {
               name: 'Forged duplicate',
             }),
-            'an unbound resource is mutable by an asserted identity, exactly as by a headerless one',
-          ).toBe(200);
+            'a forged asserted identity must fail before copying or claiming the orphan',
+          ).toBe(403);
 
           const duplicateScope = await readScope(webUrl, viaDuplicate);
           expect(
@@ -270,9 +255,11 @@ describe('reconciling an unbound project verifies the asserted workspace first',
           const viaCopy = await createUnboundProject(webUrl, 'Reconcile via ds copy');
           expect((await readScope(webUrl, viaCopy)).kind).toBe('unbound');
 
-          await mutate(webUrl, designSystemCopyPath(viaCopy), workspaceHeaders(FOREIGN), {
-            name: 'Forged copy',
-          });
+          expect(
+            await mutate(webUrl, designSystemCopyPath(viaCopy), workspaceHeaders(FOREIGN), {
+              name: 'Forged copy',
+            }),
+          ).toBe(403);
 
           const copyScope = await readScope(webUrl, viaCopy);
           expect(
@@ -294,7 +281,11 @@ describe('reconciling an unbound project verifies the asserted workspace first',
           );
           expect(status, 'a verified caller must not be refused').toBe(200);
 
-          const legitimateScope = await readScope(webUrl, legitimate);
+          const legitimateScope = await readScope(
+            webUrl,
+            legitimate,
+            workspaceHeaders(MEMBER),
+          );
           expect(legitimateScope.kind).toBe('personal');
           expect(legitimateScope.workspaceId).toBe(MEMBER.workspaceId);
 
@@ -345,53 +336,33 @@ describe('reconciling an unbound project verifies the asserted workspace first',
   );
 
   test(
-    'a populated but DIFFERENT ambient workspace is not written onto an existing orphan',
+    'a validated navigation switch is not written onto an existing orphan',
     { timeout: 300_000 },
     async () => {
-      const suite = await createSmokeSuite('collab-reconcile-ambient-mismatch');
+      const suite = await createSmokeSuite('collab-reconcile-selection-isolation');
 
-      // The state-integrity case. Unlike the fixtures above, this daemon HAS an
-      // ambient workspace (`/current` answers 403 missing_principal, so the
-      // provider bootstraps a default from the directory).
-      //
-      // A pre-existing orphan is not a new project. Binding a NEW project to the
-      // ambient workspace takes nothing from anyone — that is #6201 and it is
-      // right. Binding an EXISTING orphan there, because someone asserted an
-      // identity that could not be verified, may take it from the workspace it
-      // actually belongs to. Worse, it is sticky: this helper's own
-      // `getWorkspaceProjectByProjectId` guard means the rightful verified
-      // workspace can never reconcile it afterwards. Creation and reconciliation
-      // are not the same risk.
-      //
-      // So a degraded (ambient) authority may only be persisted when it names
-      // the very pair that was asserted — outage continuity for a legitimate
-      // caller whose client is on the same workspace the daemon resolved — and
-      // otherwise nothing is written at all.
+      // A left-rail switch validates a tab-local selection. It must not become
+      // daemon-global project authority, even when a later request asserts a
+      // different, unverifiable pair.
       await suite.with.toolsDev(
         async ({ webUrl }) => {
-          // PHASE 1 — no ambient yet, so a headerless create leaves a true orphan
-          // (#6201's create-side binding has nothing to bind to).
-          ambientAuthority.setCurrentStatus(401);
-          const orphan = await createUnboundProject(webUrl, 'Ambient mismatch orphan');
+          const orphan = await createUnboundProject(webUrl, 'Selection-isolated orphan');
           expect(
             (await readScope(webUrl, orphan)).kind,
             'precondition: this must be a true orphan',
           ).toBe('unbound');
 
-          // PHASE 2 — the daemon now resolves an ambient workspace. Reading
-          // `/api/workspace/context` drives `.current()`, which is what populates
-          // the `lastKnown()` cache the resolver degrades to, so this is
-          // deterministic rather than waiting on a poll tick.
-          ambientAuthority.setCurrentStatus(403);
-          const ambientContext = await waitForAmbientWorkspace(webUrl);
-          expect(
-            ambientContext,
-            'precondition: the daemon must now have an ambient workspace to degrade to',
-          ).toBe(MEMBER.workspaceId);
+          const switched = await fetch(new URL('/api/workspace/active', webUrl), {
+            method: 'PUT',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              workspaceId: MEMBER.workspaceId,
+              workspaceMemberId: MEMBER.workspaceMemberId,
+            }),
+          });
+          expect(switched.status).toBe(200);
 
-          // Asserts a pair the directory does NOT list. Verification fails, so the
-          // resolver degrades to ambient — which is a REAL workspace here, and a
-          // different one from what was asserted.
+          // The next request asserts a pair the directory does not list.
           await mutate(webUrl, duplicatePath(orphan), workspaceHeaders(FOREIGN), {
             name: 'Duplicate asserting an unverifiable pair',
           });
@@ -403,7 +374,7 @@ describe('reconciling an unbound project verifies the asserted workspace first',
           ).not.toBe(FOREIGN.workspaceId);
           expect(
             after.workspaceId,
-            'nor may the ambient workspace be written onto a pre-existing orphan it was never asserted for',
+            'nor may the tab selection be written onto a pre-existing orphan',
           ).not.toBe(MEMBER.workspaceId);
           expect(
             after.kind,
@@ -414,7 +385,7 @@ describe('reconciling an unbound project verifies the asserted workspace first',
           env: {
             AMR_HOME: await emptyAmrHome(suite.scratchDir),
             OD_WORKSPACE_CONTEXT_SOURCE: 'vela',
-            VELA_API_URL: ambientAuthority.url,
+            VELA_API_URL: selectionAuthority.url,
             VELA_CONTROL_KEY: 'e2e-reconcile-control-key',
           },
         },
@@ -457,24 +428,6 @@ describe('reconciling an unbound project verifies the asserted workspace first',
   );
 
 });
-
-/**
- * Drive `.current()` until the daemon reports an ambient workspace, and return
- * its id. `GET /api/workspace/context` calls the provider directly, so this both
- * observes and populates the `lastKnown()` cache.
- */
-async function waitForAmbientWorkspace(webUrl: string): Promise<string | null> {
-  for (let attempt = 0; attempt < 40; attempt += 1) {
-    const body = await requestJson<{ context: { workspaceId?: string } | null }>(
-      webUrl,
-      '/api/workspace/context',
-    );
-    const workspaceId = body.context?.workspaceId;
-    if (typeof workspaceId === 'string' && workspaceId) return workspaceId;
-    await new Promise((resolve) => setTimeout(resolve, 250));
-  }
-  return null;
-}
 
 /**
  * A vela config home guaranteed to hold no session, so the daemon's

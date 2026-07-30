@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import type { WorkspaceCollabContext } from '@open-design/contracts';
 import { projectFileUrl } from '../providers/registry';
 import type { ProjectFile } from '../types';
 import {
@@ -44,8 +45,13 @@ export function selectProjectFileCover(files: ProjectFile[]): ProjectCoverOverri
   return null;
 }
 
-export function projectCoverUrl(projectId: string, name: string, version?: number): string {
-  const url = projectFileUrl(projectId, name);
+export function projectCoverUrl(
+  projectId: string,
+  name: string,
+  version?: number,
+  workspaceContext?: WorkspaceCollabContext | null,
+): string {
+  const url = projectFileUrl(projectId, name, workspaceContext);
   if (!Number.isFinite(version) || version === undefined || version <= 0) return url;
   const separator = url.includes('?') ? '&' : '?';
   return `${url}${separator}v=${encodeURIComponent(String(Math.trunc(version)))}`;

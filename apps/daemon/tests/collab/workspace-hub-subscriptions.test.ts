@@ -3,7 +3,7 @@ import type { HubEventsSubscriber } from '../../src/collab/hub-events-subscriber
 import { createWorkspaceHubSubscriptionManager } from '../../src/collab/workspace-hub-subscriptions.js';
 
 describe('WorkspaceHubSubscriptionManager', () => {
-  it('dedupes ambient and billing reasons into one upstream per workspace', () => {
+  it('dedupes explicit billing interests into one upstream per workspace', () => {
     const started: string[] = [];
     const stopped: string[] = [];
     const manager = createWorkspaceHubSubscriptionManager({
@@ -17,14 +17,9 @@ describe('WorkspaceHubSubscriptionManager', () => {
       },
     });
 
-    manager.setAmbientWorkspace('workspace-a');
     manager.setBillingInterests(['workspace-a', 'workspace-b', 'workspace-b']);
     expect(started).toEqual(['workspace-a', 'workspace-b']);
     expect(manager.activeWorkspaceIds()).toEqual(['workspace-a', 'workspace-b']);
-
-    manager.setAmbientWorkspace('workspace-b');
-    expect(started).toEqual(['workspace-a', 'workspace-b']);
-    expect(stopped).toEqual([]);
 
     manager.setBillingInterests(['workspace-b']);
     expect(stopped).toEqual(['workspace-a']);
@@ -50,7 +45,7 @@ describe('WorkspaceHubSubscriptionManager', () => {
     manager.dispose();
   });
 
-  it('caps live upstream SSE connections and always prioritizes the ambient workspace', () => {
+  it('caps live upstream SSE connections without consulting ambient selection', () => {
     const started: string[] = [];
     const stopped: string[] = [];
     const manager = createWorkspaceHubSubscriptionManager({
@@ -67,10 +62,8 @@ describe('WorkspaceHubSubscriptionManager', () => {
 
     manager.setBillingInterests(['workspace-a', 'workspace-b', 'workspace-c']);
     expect(manager.activeWorkspaceIds()).toEqual(['workspace-a', 'workspace-b']);
-    manager.setAmbientWorkspace('workspace-c');
-    expect(manager.activeWorkspaceIds()).toEqual(['workspace-a', 'workspace-c']);
-    expect(started).toEqual(['workspace-a', 'workspace-b', 'workspace-c']);
-    expect(stopped).toEqual(['workspace-b']);
+    expect(started).toEqual(['workspace-a', 'workspace-b']);
+    expect(stopped).toEqual([]);
     manager.dispose();
   });
 });

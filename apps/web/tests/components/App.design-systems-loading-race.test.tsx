@@ -316,8 +316,9 @@ describe('App design-system catalog loading race', () => {
     expect(readPhases.filter((readPhase) => readPhase !== 'startup')).toEqual(['a', 'b']);
   });
 
-  it('keeps an issued catalog read when only membership identity changes', async () => {
-    const pending = deferred<DesignSystemSummary[]>();
+  it('reissues and isolates catalog reads when membership identity changes', async () => {
+    const memberARead = deferred<DesignSystemSummary[]>();
+    const memberBRead = deferred<DesignSystemSummary[]>();
     let activeContext = workspaceContext('ws-initial');
     let pendingPhase = false;
     let pendingReads = 0;
@@ -335,10 +336,12 @@ describe('App design-system catalog loading race', () => {
       }),
     );
     notifyWorkspaceContextRefresh({ context: activeContext });
-    vi.mocked(fetchDesignSystems).mockImplementation(() => {
+    vi.mocked(fetchDesignSystems).mockImplementation((context) => {
       if (!pendingPhase) return Promise.resolve([]);
       pendingReads += 1;
-      return pending.promise;
+      return context?.workspaceMemberId === 'member-a'
+        ? memberARead.promise
+        : memberBRead.promise;
     });
 
     render(<App />);
@@ -355,9 +358,9 @@ describe('App design-system catalog loading race', () => {
     });
     await waitFor(() => expect(pendingReads).toBe(1));
 
-    // The daemon's Design Systems catalog is scoped by workspaceId, not by
-    // member/role/permission identity. This transition must neither invalidate
-    // the in-flight answer nor spend a redundant successor request.
+    // The daemon verifies both Workspace and membership identity. A transition
+    // to another membership in the same Workspace must issue a new request and
+    // prevent the old membership's response from committing.
     activeContext = {
       ...activeContext,
       workspaceMemberId: 'member-b',
@@ -370,15 +373,21 @@ describe('App design-system catalog loading race', () => {
       notifyWorkspaceContextRefresh({ context: activeContext });
       await Promise.resolve();
     });
-    expect(pendingReads).toBe(1);
+    await waitFor(() => expect(pendingReads).toBe(2));
 
     await act(async () => {
-      pending.resolve([designSystem('system-from-shared-workspace')]);
+      memberARead.resolve([designSystem('system-from-member-a')]);
+      await Promise.resolve();
+    });
+    expect(screen.queryByText('system-from-member-a')).toBeNull();
+
+    await act(async () => {
+      memberBRead.resolve([designSystem('system-from-member-b')]);
       await Promise.resolve();
     });
 
-    await waitFor(() => expect(screen.getByText('system-from-shared-workspace')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('system-from-member-b')).toBeTruthy());
     expect(screen.getByTestId('design-systems-state').dataset.loading).toBe('false');
-    expect(pendingReads).toBe(1);
+    expect(pendingReads).toBe(2);
   });
 });

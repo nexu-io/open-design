@@ -47,9 +47,14 @@ export interface PromoteAuthorizedTeamProjectStageInput<T> {
   stageDir: string;
   expectedStageIdentity: AuthorizedTeamProjectStageIdentity;
   journalDir: string;
-  expectedWorkspaceId: string;
-  activeWorkspaceGeneration: number;
-  getActiveWorkspaceSnapshot: () => ActiveWorkspaceSnapshot;
+  /** Exact-scope authorization captured by the caller. When present it
+   * replaces the legacy mutable-active-Workspace guard below. */
+  isScopeStillAuthorized?: () => boolean;
+  /** Legacy compatibility seam for older callers/tests. New data-plane
+   * callers must use `isScopeStillAuthorized`. */
+  expectedWorkspaceId?: string;
+  activeWorkspaceGeneration?: number;
+  getActiveWorkspaceSnapshot?: () => ActiveWorkspaceSnapshot;
   isExpectedVersion: () => boolean;
   validateReceipt: () => void;
   commit: () => T;
@@ -286,13 +291,30 @@ export async function promoteAuthorizedTeamProjectStage<T>(
     'team mirror stage',
   );
 
-  const snapshot = input.getActiveWorkspaceSnapshot();
-  if (
-    snapshot.workspaceId !== input.expectedWorkspaceId ||
-    snapshot.generation !== input.activeWorkspaceGeneration
-  ) {
+  const scopeStillAuthorized = (): boolean => {
+    if (input.isScopeStillAuthorized) {
+      return input.isScopeStillAuthorized();
+    }
+    if (
+      !input.getActiveWorkspaceSnapshot ||
+      input.expectedWorkspaceId == null ||
+      input.activeWorkspaceGeneration == null
+    ) {
+      return false;
+    }
+    const snapshot = input.getActiveWorkspaceSnapshot();
+    return (
+      snapshot.workspaceId === input.expectedWorkspaceId &&
+      snapshot.generation === input.activeWorkspaceGeneration
+    );
+  };
+  if (!scopeStillAuthorized()) {
     await removeOwnedDirectory(stageDir, input.expectedStageIdentity);
-    throw new Error('active workspace changed while the team mirror was staged');
+    throw new Error(
+      input.isScopeStillAuthorized
+        ? 'team mirror workspace scope changed while the project was staged'
+        : 'active workspace changed while the team mirror was staged',
+    );
   }
   if (!input.isExpectedVersion()) {
     await removeOwnedDirectory(stageDir, input.expectedStageIdentity);
@@ -389,10 +411,8 @@ export async function promoteAuthorizedTeamProjectStage<T>(
 
     // No await may be introduced between these final local guards and the
     // synchronous SQLite transaction.
-    const finalSnapshot = input.getActiveWorkspaceSnapshot();
     if (
-      finalSnapshot.workspaceId !== input.expectedWorkspaceId ||
-      finalSnapshot.generation !== input.activeWorkspaceGeneration ||
+      !scopeStillAuthorized() ||
       !input.isExpectedVersion()
     ) {
       throw new Error('team mirror promotion became stale');

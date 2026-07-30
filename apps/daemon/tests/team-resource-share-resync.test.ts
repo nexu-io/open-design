@@ -20,7 +20,10 @@ import { afterEach, describe, expect, it } from 'vitest';
 import express from 'express';
 import http from 'node:http';
 import { registerTeamResourceShareRoutes } from '../src/routes/team-resource-share.js';
-import { createTeamResourceShareService } from '../src/collab/team-resource-share.js';
+import {
+  createTeamResourceShareService,
+  type TeamResourceRequestScope,
+} from '../src/collab/team-resource-share.js';
 import type { ResourceHubPrincipal } from '../src/collab/resource-principal.js';
 
 let server: http.Server | null = null;
@@ -48,6 +51,7 @@ const OWNER: ResourceHubPrincipal = {
   lifecycleState: 'active',
   workspaceType: 'team',
 };
+const SCOPE: TeamResourceRequestScope = { principal: OWNER, canShare: true };
 
 /**
  * In-memory stand-in for the vela CLI's hub-side resource store — the exact
@@ -103,15 +107,17 @@ describe('team resource re-share (the "Sync to team" backend path)', () => {
       idPrefix: 'ds',
       resolveDir: () => currentDir,
       describeResource: () => ({ localId: 'user:ds-1', title: 'Ds 1' }),
-      getPrincipal: () => OWNER,
-      getCanShare: () => true,
       run: hub.run,
       env: { OD_WORKSPACE_CONTEXT_SOURCE: 'vela' },
     });
 
     const app = express();
     app.use(express.json());
-    registerTeamResourceShareRoutes(app, { basePath: 'design-systems', share });
+    registerTeamResourceShareRoutes(app, {
+      basePath: 'design-systems',
+      share,
+      resolveScope: async () => ({ ok: true, scope: SCOPE }),
+    });
     const base = await listen(app);
 
     // First share.
@@ -160,18 +166,17 @@ describe('team resource re-share (the "Sync to team" backend path)', () => {
       idPrefix: 'skill',
       resolveDir: () => '/tmp/skill-1',
       describeResource: () => ({ localId: 'my-skill' }),
-      getPrincipal: () => OWNER,
-      getCanShare: () => {
-        shareChecks += 1;
-        return true;
-      },
       run: hub.run,
       env: { OD_WORKSPACE_CONTEXT_SOURCE: 'vela' },
     });
+    const resolveScope = async () => {
+        shareChecks += 1;
+        return { ok: true as const, scope: SCOPE };
+    };
 
     const app = express();
     app.use(express.json());
-    registerTeamResourceShareRoutes(app, { basePath: 'skills', share });
+    registerTeamResourceShareRoutes(app, { basePath: 'skills', share, resolveScope });
     const base = await listen(app);
 
     for (let i = 0; i < 3; i += 1) {

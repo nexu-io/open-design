@@ -7,12 +7,19 @@
 // evidence/electron-project-waterfall-20260727. Both copies now live here,
 // on top of the single-flight status read every other consumer shares.
 
+import type { WorkspaceCollabContext } from '@open-design/contracts';
+
 import { fetchProjectCollabStatus } from './collab-client';
 import { fetchTeamProjectsCatalog } from './team-projects-catalog';
 
-export async function projectIsSharedWithWorkspace(projectId: string): Promise<boolean> {
+export async function projectIsSharedWithWorkspace(
+  projectId: string,
+  workspaceContext: WorkspaceCollabContext | null,
+): Promise<boolean> {
   try {
-    const body = await fetchProjectCollabStatus(projectId);
+    const body = await fetchProjectCollabStatus(projectId, {
+      ...(workspaceContext ? { workspaceContext } : {}),
+    });
     if (body) {
       if (typeof body.ownerMemberId === 'string' && body.ownerMemberId.trim()) return true;
       if (typeof body.syncState === 'string' && body.syncState !== 'local_only') return true;
@@ -20,8 +27,9 @@ export async function projectIsSharedWithWorkspace(projectId: string): Promise<b
   } catch {
     // Fall through to the team-project directory below.
   }
+  if (!workspaceContext) return false;
   try {
-    const projects = await fetchTeamProjectsCatalog();
+    const projects = await fetchTeamProjectsCatalog({ context: workspaceContext });
     return projects.some((project) => project.projectId === projectId);
   } catch {
     return false;

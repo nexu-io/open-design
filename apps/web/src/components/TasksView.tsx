@@ -31,6 +31,11 @@ import {
 import { describeRoutineSchedule } from './routineScheduleLabels';
 import { useWorkspaceContext } from '../collab/useWorkspaceContext';
 import { listProjects } from '../state/projects';
+import {
+  workspaceIdentityCacheKey,
+  workspaceProjectHeaders,
+} from '../collab/workspace-identity';
+import type { WorkspaceCollabContext } from '@open-design/contracts';
 
 type ProjectSummary = { id: string; name: string };
 type TemplateFilter =
@@ -396,6 +401,15 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
   // see `workspaceProjectListViewForRoute` in App.tsx for the same per-surface
   // view choice made project-browsing routes).
   const { context: tasksWorkspaceContext } = useWorkspaceContext();
+  const tasksWorkspaceIdentity = workspaceIdentityCacheKey(tasksWorkspaceContext);
+  const routineHeaders = useMemo(
+    () => tasksWorkspaceContext
+      ? workspaceProjectHeaders(tasksWorkspaceContext)
+      : undefined,
+    // The identity contains every authority field placed on the wire.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tasksWorkspaceIdentity],
+  );
   // P2 page_view page_name=automations. Ref-keyed so re-renders don't
   // double-fire while the user is on the page.
   const pageViewFiredRef = useState<{ fired: boolean }>(() => ({ fired: false }))[0];
@@ -468,7 +482,7 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
           return null;
         });
       const [rRes, projectList, tJson, proposalJson] = await Promise.all([
-        fetch('/api/routines'),
+        fetch('/api/routines', routineHeaders ? { headers: routineHeaders } : undefined),
         listProjects({ workspaceContext: tasksWorkspaceContext, workspaceView: 'all' }),
         templateRequest,
         proposalRequest,
@@ -494,7 +508,10 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
     // workspace switch, not just mount — same as PluginsView/RoutinesSection —
     // so the project picker reflects the newly active workspace's projects.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tasksWorkspaceContext?.workspaceId]);
+    // `tasksWorkspaceIdentity` partitions this callback on every authority
+    // field. The captured context belongs to that exact identity.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routineHeaders, tasksWorkspaceIdentity]);
 
   useEffect(() => {
     void refresh();
@@ -548,7 +565,10 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
     setBusyId(id);
     setError(null);
     try {
-      const res = await fetch(`/api/routines/${id}/run`, { method: 'POST' });
+      const res = await fetch(`/api/routines/${id}/run`, {
+        method: 'POST',
+        ...(routineHeaders ? { headers: routineHeaders } : {}),
+      });
       if (!res.ok && res.status !== 202) {
         const j = await res.json().catch(() => ({}));
         throw new Error(j.error || `run failed: ${res.status}`);
@@ -579,6 +599,7 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
     try {
       const res = await fetch(`/api/routines/${routineId}/runs/${runId}/crystallize`, {
         method: 'POST',
+        ...(routineHeaders ? { headers: routineHeaders } : {}),
       });
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
@@ -611,7 +632,10 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
     try {
       const res = await fetch(`/api/routines/${routine.id}`, {
         method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
+        headers: {
+          'content-type': 'application/json',
+          ...(routineHeaders ?? {}),
+        },
         body: JSON.stringify({ enabled: !routine.enabled }),
       });
       if (!res.ok) {
@@ -631,7 +655,10 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
       return;
     setBusyId(id);
     try {
-      const res = await fetch(`/api/routines/${id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/routines/${id}`, {
+        method: 'DELETE',
+        ...(routineHeaders ? { headers: routineHeaders } : {}),
+      });
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
         throw new Error(j.error || `delete failed: ${res.status}`);
@@ -833,6 +860,7 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
                     <AutomationRunHistory
                       routineId={r.id}
                       refreshKey={historyTick}
+                      workspaceContext={tasksWorkspaceContext}
                       crystallizingRunId={crystallizingRunId}
                       onCrystallizeRun={crystallizeRun}
                       onFireClick={fireClick}
@@ -1041,6 +1069,7 @@ function Metric({ label, value }: { label: string; value: number }) {
 function AutomationRunHistory({
   routineId,
   refreshKey,
+  workspaceContext,
   crystallizingRunId,
   onCrystallizeRun,
   onFireClick,
@@ -1048,19 +1077,23 @@ function AutomationRunHistory({
 }: {
   routineId: string;
   refreshKey: number;
+  workspaceContext: WorkspaceCollabContext | null;
   crystallizingRunId: string | null;
   onCrystallizeRun: (routineId: string, runId: string) => void;
   onFireClick: (element: AutomationsClickProps['element']) => void;
   t: TranslateFn;
 }) {
   const [runs, setRuns] = useState<RoutineRun[] | null>(null);
+  const workspaceIdentity = workspaceIdentityCacheKey(workspaceContext);
 
   useEffect(() => {
     let cancelled = false;
     setRuns(null);
     void (async () => {
       try {
-        const res = await fetch(`/api/routines/${routineId}/runs?limit=10`);
+        const res = await fetch(`/api/routines/${routineId}/runs?limit=10`, workspaceContext
+          ? { headers: workspaceProjectHeaders(workspaceContext) }
+          : undefined);
         if (!res.ok) throw new Error(`runs: ${res.status}`);
         const json = await res.json();
         if (!cancelled) setRuns(json.runs ?? []);
@@ -1071,7 +1104,10 @@ function AutomationRunHistory({
     return () => {
       cancelled = true;
     };
-  }, [refreshKey, routineId]);
+    // The captured context is exact for this identity; object churn with the
+    // same authority must not restart the history request.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshKey, routineId, workspaceIdentity]);
 
   if (runs === null) {
     return <div className="automation-history automation-history--empty">{t('automations.runHistoryLoading')}</div>;

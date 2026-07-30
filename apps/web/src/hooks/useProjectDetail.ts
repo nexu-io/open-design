@@ -6,7 +6,11 @@
 // emit `null` otherwise so callers can degrade their UI gracefully.
 
 import { useCallback, useEffect, useState } from 'react';
-import type { Project, ProjectDetailResponse } from '@open-design/contracts';
+import type {
+  Project,
+  ProjectDetailResponse,
+  WorkspaceCollabContext,
+} from '@open-design/contracts';
 
 export interface ProjectDetailState {
   project: Project | null;
@@ -16,18 +20,50 @@ export interface ProjectDetailState {
   refresh: () => Promise<void>;
 }
 
-export function useProjectDetail(projectId: string): ProjectDetailState {
+export function useProjectDetail(
+  projectId: string,
+  workspaceContext: WorkspaceCollabContext | null = null,
+  persistedProjectWorkspaceId?: string | null,
+): ProjectDetailState {
   const [project, setProject] = useState<Project | null>(null);
   const [resolvedDir, setResolvedDir] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const boundWorkspaceId =
+    typeof persistedProjectWorkspaceId === 'string'
+      ? persistedProjectWorkspaceId.trim()
+      : '';
+  const authorizedWorkspaceContext =
+    boundWorkspaceId && workspaceContext?.workspaceId === boundWorkspaceId
+      ? workspaceContext
+      : null;
+  const authorityWorkspaceId = authorizedWorkspaceContext?.workspaceId.trim() ?? '';
+  const authorityMemberId =
+    authorizedWorkspaceContext?.workspaceMemberId.trim() ?? '';
+  const authorityKey =
+    authorityWorkspaceId && authorityMemberId
+      ? `${authorityWorkspaceId}:${authorityMemberId}`
+      : 'none';
 
   const fetchOnce = useCallback(
     async (signal?: AbortSignal) => {
       setLoading(true);
       setError(null);
+      if (boundWorkspaceId && authorityKey === 'none') {
+        setError(new Error(`GET /api/projects/${projectId} requires exact workspace authority`));
+        setLoading(false);
+        return;
+      }
       try {
         const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}`, {
+          ...(authorityKey !== 'none'
+            ? {
+                headers: {
+                  'x-od-workspace-id': authorityWorkspaceId,
+                  'x-od-workspace-member-id': authorityMemberId,
+                },
+              }
+            : {}),
           signal,
         });
         if (!resp.ok) {
@@ -50,7 +86,13 @@ export function useProjectDetail(projectId: string): ProjectDetailState {
         if (!signal?.aborted) setLoading(false);
       }
     },
-    [projectId],
+    [
+      authorityKey,
+      authorityMemberId,
+      authorityWorkspaceId,
+      boundWorkspaceId,
+      projectId,
+    ],
   );
 
   useEffect(() => {

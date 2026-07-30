@@ -14,6 +14,7 @@ import type {
   BrandSummary,
   BrandVoice,
   DesignSystemPackageInfo,
+  WorkspaceCollabContext,
 } from '@open-design/contracts';
 import { designSystemStaticUrl, fetchProjectFileText, projectRawUrl } from '../providers/registry';
 import { parseDesignMd, type ParsedDesignMd } from './design-md-parse';
@@ -348,6 +349,7 @@ interface BrandKitOptions {
   host?: string;
   showcaseHtml?: string | null;
   reloadKey?: number | string;
+  workspaceContext?: WorkspaceCollabContext | null;
   /** The system/ artifacts only exist once a brand is finalized; gate the kit
    *  iframe + asset tiles so an in-flight brand does not point at 404s. */
   ready?: boolean;
@@ -360,7 +362,9 @@ export function brandToKit(brand: Brand, opts: BrandKitOptions): DesignKit {
   const ready = opts.ready !== false;
   const showSystem = ready && Boolean(projectId);
   const asset = (rel: string): string | null =>
-    projectId ? withCacheBust(projectRawUrl(projectId, rel), opts.reloadKey) : null;
+    projectId
+      ? withCacheBust(projectRawUrl(projectId, rel, opts.workspaceContext), opts.reloadKey)
+      : null;
   const host = opts.host || hostnameOf(brand.sourceUrl || '');
   const imagery: KitImagery | undefined = brand.imagery
     ? {
@@ -410,10 +414,22 @@ export function brandToKit(brand: Brand, opts: BrandKitOptions): DesignKit {
     layout: hasLayout(brand.layout) ? brand.layout : undefined,
     system: showSystem
       ? {
-          kitUrl: withCacheBust(projectRawUrl(projectId!, 'system/kit.html'), opts.reloadKey),
-          kitDarkUrl: withCacheBust(projectRawUrl(projectId!, 'system/kit.dark.html'), opts.reloadKey),
-          tokensUrl: withCacheBust(projectRawUrl(projectId!, 'system/tokens.default.json'), opts.reloadKey),
-          indexUrl: withCacheBust(projectRawUrl(projectId!, 'system/index.html'), opts.reloadKey),
+          kitUrl: withCacheBust(
+            projectRawUrl(projectId!, 'system/kit.html', opts.workspaceContext),
+            opts.reloadKey,
+          ),
+          kitDarkUrl: withCacheBust(
+            projectRawUrl(projectId!, 'system/kit.dark.html', opts.workspaceContext),
+            opts.reloadKey,
+          ),
+          tokensUrl: withCacheBust(
+            projectRawUrl(projectId!, 'system/tokens.default.json', opts.workspaceContext),
+            opts.reloadKey,
+          ),
+          indexUrl: withCacheBust(
+            projectRawUrl(projectId!, 'system/index.html', opts.workspaceContext),
+            opts.reloadKey,
+          ),
         }
       : undefined,
     assets: showSystem
@@ -462,6 +478,7 @@ interface ParsedKitOptions {
   packageInfo?: DesignSystemPackageInfo;
   showcaseHtml?: string | null;
   reloadKey?: number | string;
+  workspaceContext?: WorkspaceCollabContext | null;
 }
 
 function packageFontsToTypography(
@@ -518,7 +535,11 @@ export function parsedToKit(parsed: ParsedDesignMd, opts: ParsedKitOptions): Des
     samples: [],
   };
   const staticUrl = !opts.editable && opts.designSystemId && opts.packageInfo?.manifest
-    ? (rel: string): string => designSystemStaticUrl(opts.designSystemId!, rel)
+    ? (rel: string): string => designSystemStaticUrl(
+        opts.designSystemId!,
+        rel,
+        opts.workspaceContext,
+      )
     : null;
   const manifestFiles = opts.packageInfo?.manifest?.files;
   const kitPath = staticUrl
@@ -586,6 +607,7 @@ export interface DesignKitSource {
   host?: string;
   /** Bump to force a brand.json re-read after an upload writes a module. */
   reloadKey?: number;
+  workspaceContext?: WorkspaceCollabContext | null;
 }
 
 function tryParseBrand(raw: string | null): Brand | null {
@@ -619,6 +641,7 @@ export function useDesignKit(source: DesignKitSource): { kit: DesignKit | null; 
     editable,
     host,
     reloadKey,
+    workspaceContext,
   } = source;
   const [kit, setKit] = useState<DesignKit | null>(null);
   const [loading, setLoading] = useState(false);
@@ -636,6 +659,7 @@ export function useDesignKit(source: DesignKitSource): { kit: DesignKit | null; 
         packageInfo,
         showcaseHtml,
         reloadKey,
+        workspaceContext,
       });
 
     if (!projectId) {
@@ -651,10 +675,18 @@ export function useDesignKit(source: DesignKitSource): { kit: DesignKit | null; 
       // Fetch brand.json (richest) and DESIGN.md (fallback) together so the kit
       // resolves in a single async hop — brand.json wins when it is a valid kit.
       const [rawBrand, rawDesignMd] = await Promise.all([
-        fetchProjectFileText(projectId, 'brand.json', { cache: 'no-store', cacheBustKey: reloadKey }),
+        fetchProjectFileText(projectId, 'brand.json', {
+          cache: 'no-store',
+          cacheBustKey: reloadKey,
+          workspaceContext,
+        }),
         body != null
           ? Promise.resolve(body)
-          : fetchProjectFileText(projectId, 'DESIGN.md', { cache: 'no-store', cacheBustKey: reloadKey }),
+          : fetchProjectFileText(projectId, 'DESIGN.md', {
+              cache: 'no-store',
+              cacheBustKey: reloadKey,
+              workspaceContext,
+            }),
       ]);
       if (cancelled) return;
       const brand = tryParseBrand(rawBrand);
@@ -666,6 +698,7 @@ export function useDesignKit(source: DesignKitSource): { kit: DesignKit | null; 
           host,
           showcaseHtml,
           reloadKey,
+          workspaceContext,
         });
         setKit(mergeBrandKitWithDesignMd(brandKit, rawDesignMd ?? '', {
           designSystemId,
@@ -676,6 +709,7 @@ export function useDesignKit(source: DesignKitSource): { kit: DesignKit | null; 
           swatches,
           packageInfo,
           showcaseHtml,
+          workspaceContext,
         }));
       } else {
         setKit(fromDesignMd(rawDesignMd ?? ''));
@@ -697,6 +731,7 @@ export function useDesignKit(source: DesignKitSource): { kit: DesignKit | null; 
     editable,
     host,
     reloadKey,
+    workspaceContext,
   ]);
 
   return { kit, loading };

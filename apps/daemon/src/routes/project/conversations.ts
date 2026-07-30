@@ -4,6 +4,7 @@ import { readAnalyticsContext } from '../../analytics.js';
 import { backfillBrandExtractionTranscriptForProject } from '../../brands/index.js';
 import type { RouteDeps } from '../../server-context.js';
 import type { BoundWorkspaceResourceMutationGate } from '../../collab/workspace-resource-mutation.js';
+import type { AuthorizeProjectRequest } from '../../collab/project-request-authority.js';
 import { registerProjectCommentRoutes } from './comments.js';
 import { cancelRunsOwnedBy } from './cancel-owned-runs.js';
 
@@ -17,6 +18,7 @@ export interface RegisterProjectConversationRoutesDeps extends RouteDeps<'db' | 
    * `RegisterProjectCommentRoutesDeps` in `./comments.js`.
    */
   enforceWorkspaceProjectMutation?: BoundWorkspaceResourceMutationGate;
+  authorizeProjectRequest?: AuthorizeProjectRequest;
   /**
    * Passed alongside `enforceWorkspaceProjectMutation` above — the gate calls
    * this to write the 401/403 response body when it denies a mutation. Kept
@@ -52,20 +54,32 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
   const { BRANDS_DIR, PROJECTS_DIR } = ctx.paths;
   const { readAppConfig } = ctx.appConfig;
   const { getAgentDef } = ctx.agents;
+  // Production registration always injects the shared project authority gate.
+  // The fallback preserves narrow unit fixtures whose in-memory projects have
+  // no Workspace binding and do not construct the full server authority graph.
+  const authorizeProjectRequest: AuthorizeProjectRequest =
+    ctx.authorizeProjectRequest ?? (async () => true);
 
   // ---- Conversations --------------------------------------------------------
 
-  app.get('/api/projects/:id/conversations', (req, res) => {
+  app.get('/api/projects/:id/conversations', async (req, res) => {
     if (!getProject(db, req.params.id)) {
       return res.status(404).json({ error: 'project not found' });
     }
+    if (!await authorizeProjectRequest(req, res, req.params.id, { mode: 'read' })) return;
     res.json({ conversations: listConversations(db, req.params.id) });
   });
 
-  app.post('/api/projects/:id/conversations', (req, res) => {
+  app.post('/api/projects/:id/conversations', async (req, res) => {
     if (!getProject(db, req.params.id)) {
       return res.status(404).json({ error: 'project not found' });
     }
+    if (!await authorizeProjectRequest(
+      req,
+      res,
+      req.params.id,
+      { mode: 'write', capability: 'writeFiles' },
+    )) return;
     const { title, seedFromConversationId, forkAfterMessageId } = req.body || {};
     const now = Date.now();
     const hasExplicitSessionMode = Boolean(
@@ -152,7 +166,13 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
     res.json({ conversation: conv });
   });
 
-  app.patch('/api/projects/:id/conversations/:cid', (req, res) => {
+  app.patch('/api/projects/:id/conversations/:cid', async (req, res) => {
+    if (!await authorizeProjectRequest(
+      req,
+      res,
+      req.params.id,
+      { mode: 'write', capability: 'writeFiles' },
+    )) return;
     const conv = getConversation(db, req.params.cid);
     if (!conv || conv.projectId !== req.params.id) {
       return res.status(404).json({ error: 'not found' });
@@ -169,6 +189,12 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
   });
 
   app.delete('/api/projects/:id/conversations/:cid', async (req, res) => {
+    if (!await authorizeProjectRequest(
+      req,
+      res,
+      req.params.id,
+      { mode: 'write', capability: 'writeFiles' },
+    )) return;
     const conv = getConversation(db, req.params.cid);
     if (!conv || conv.projectId !== req.params.id) {
       return res.status(404).json({ error: 'not found' });
@@ -183,6 +209,7 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
   // ---- Messages -------------------------------------------------------------
 
   app.get('/api/projects/:id/conversations/:cid/messages', async (req, res) => {
+    if (!await authorizeProjectRequest(req, res, req.params.id, { mode: 'read' })) return;
     const conv = getConversation(db, req.params.cid);
     if (!conv || conv.projectId !== req.params.id) {
       return res.status(404).json({ error: 'conversation not found' });
@@ -211,7 +238,13 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
     res.json({ messages: listMessages(db, req.params.cid) });
   });
 
-  app.put('/api/projects/:id/conversations/:cid/messages/:mid', (req, res) => {
+  app.put('/api/projects/:id/conversations/:cid/messages/:mid', async (req, res) => {
+    if (!await authorizeProjectRequest(
+      req,
+      res,
+      req.params.id,
+      { mode: 'write', capability: 'writeFiles' },
+    )) return;
     const conv = getConversation(db, req.params.cid);
     if (!conv || conv.projectId !== req.params.id) {
       return res.status(404).json({ error: 'conversation not found' });

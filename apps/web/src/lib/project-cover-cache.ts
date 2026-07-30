@@ -4,11 +4,11 @@
 // deck document fetch). Returning to a home surface used to re-run that scan
 // for every card in the grid even though nothing changed
 // (evidence/electron-project-waterfall-20260727). This cache remembers the
-// last successful decision per (workspace, project, version) so a remount
+// last successful decision per (workspace identity, project, version) so a remount
 // renders covers immediately and only re-probes what actually changed.
 //
 // Scope and staleness rules (handoff §4.2):
-// - The key carries the workspace id, project id and the project's
+// - The key carries the complete workspace authority identity, project id and the project's
 //   `updatedAt` version; a content update that bumps the project version
 //   misses the cache naturally, and covers never leak across workspaces.
 // - The stored value carries the preview file identity (name + mtime) inside
@@ -30,11 +30,11 @@ interface ProjectCoverSnapshot {
 const snapshots = new Map<string, ProjectCoverSnapshot>();
 
 export function projectCoverSnapshotKey(
-  workspaceId: string | null | undefined,
+  workspaceIdentity: string | null | undefined,
   projectId: string,
   version: number,
 ): string {
-  return `${workspaceId ?? 'local'}|${projectId}|${version}`;
+  return `${workspaceIdentity ?? 'local'}|${projectId}|${version}`;
 }
 
 /** `undefined` means "no snapshot"; a snapshot may hold a `null` cover. */

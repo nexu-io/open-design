@@ -124,7 +124,10 @@ export function createDesignSystemGenerationJobStore(options: StoreOptions) {
   const delayMs = options.delayMs ?? 280;
   const idFactory = options.idFactory ?? randomUUID;
 
-  function start(input: UserDesignSystemInput): DesignSystemGenerationJob {
+  function start(
+    input: UserDesignSystemInput,
+    createDesignSystemForJob: StoreOptions['createDesignSystem'] = createDesignSystem,
+  ): DesignSystemGenerationJob {
     const now = new Date().toISOString();
     const job: MutableJob = {
       id: idFactory(),
@@ -137,7 +140,7 @@ export function createDesignSystemGenerationJobStore(options: StoreOptions) {
       message: 'Queued',
     };
     jobs.set(job.id, job);
-    void run(job, input);
+    void run(job, input, createDesignSystemForJob);
     return snapshot(job);
   }
 
@@ -182,7 +185,11 @@ export function createDesignSystemGenerationJobStore(options: StoreOptions) {
     return job ? snapshot(job) : null;
   }
 
-  async function run(job: MutableJob, input: UserDesignSystemInput): Promise<void> {
+  async function run(
+    job: MutableJob,
+    input: UserDesignSystemInput,
+    createDesignSystemForJob: NonNullable<StoreOptions['createDesignSystem']>,
+  ): Promise<void> {
     try {
       markJob(job, 'running', 'Starting generation');
       let created: DesignSystemSummary | null = null;
@@ -194,7 +201,7 @@ export function createDesignSystemGenerationJobStore(options: StoreOptions) {
         setStepMessage(job, 'explore-resources', sourceSummary(input, sourceContext));
       });
       await runStep(job, 'create-draft', async () => {
-        created = await createDesignSystem(options.root, enrichedInput);
+        created = await createDesignSystemForJob(options.root, enrichedInput);
         job.designSystemId = created.id;
         setStepMessage(job, 'create-draft', `Created ${created.title}`);
       });

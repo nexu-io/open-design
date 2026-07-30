@@ -1,8 +1,11 @@
-import type { Express } from 'express';
+import type { Express, Response } from 'express';
 import type Database from 'better-sqlite3';
 import path from 'node:path';
 import fs from 'node:fs';
-import type { DesignSystemTokenContractRebuildJobResponse } from '@open-design/contracts';
+import type {
+  DesignSystemTokenContractRebuildJobResponse,
+  WorkspaceCollabContext,
+} from '@open-design/contracts';
 import { TeamResourceCopyForbiddenError } from '@open-design/contracts';
 import {
   enforceTeamResourceCopyAllowed,
@@ -25,9 +28,9 @@ import {
   getWorkspaceResourceByResourceId,
 } from '../db.js';
 import {
-  enforceWorkspaceResourceMutation,
-  headerValue,
-  workspaceResourceContext,
+  enforceVerifiedWorkspaceResourceMutation,
+  resolveOptionalWorkspaceRequestAuthority,
+  type VerifyWorkspaceRequestAuthority,
 } from '../collab/workspace-resource-mutation.js';
 import { listCodexPets, readCodexPetSpritesheet } from '../codex-pets.js';
 import { syncCommunityPets } from '../community-pets-sync.js';
@@ -55,6 +58,7 @@ export interface RegisterAtomRoutesDeps {
 }
 
 export interface RegisterStaticResourceRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'resources'> {
+  verifyWorkspaceRequestAuthority?: VerifyWorkspaceRequestAuthority;
   tokenContractRebuild?: {
     maybeStartForImportedDesignSystem?: (
       designSystemId: string,
@@ -122,37 +126,115 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
     sendApiError(res, 403, 'FORBIDDEN', 'local origin required');
     return false;
   };
+  const sendWorkspaceScopeError = (res: Response, error: unknown): boolean => {
+    if (
+      !error
+      || typeof error !== 'object'
+      || !('status' in error)
+      || (error.status !== 400 && error.status !== 403 && error.status !== 503)
+      || !('code' in error)
+      || typeof error.code !== 'string'
+    ) {
+      return false;
+    }
+    res.status(error.status).json({
+      error: error.code,
+      message: error instanceof Error ? error.message : String(error.code),
+      ...('retryable' in error && error.retryable === true ? { retryable: true } : {}),
+    });
+    return true;
+  };
   // Stamp a freshly imported/installed skill with the caller's workspace, the
   // same moment plugin install does (`installOrUpgradePlugin` in server.ts).
   // A caller with no workspace headers (`od skill import`, a not-logged-in
   // web session) leaves the skill unbound — visible everywhere, same as
   // every skill imported before this shipped ("no retroactive tagging").
-  const bindImportedSkillToWorkspace = (req: any, skillId: string): void => {
-    const workspaceIdForImport = headerValue(req, 'x-od-workspace-id');
-    if (!workspaceIdForImport) return;
-    const ctx = workspaceResourceContext(req, workspaceIdForImport);
-    if (!ctx || ctx.memberStatus !== 'active') return;
-    ensureWorkspaceResource(db, 'skill', ctx.workspaceId, skillId, {
+  const bindImportedSkillToWorkspace = (
+    authority: WorkspaceCollabContext | null,
+    skillId: string,
+  ): void => {
+    if (!authority) return;
+    ensureWorkspaceResource(db, 'skill', authority.workspaceId, skillId, {
       visibility: 'personal',
       resourceState: 'active',
-      createdByWorkspaceMemberId: ctx.workspaceMemberId,
-      updatedByWorkspaceMemberId: ctx.workspaceMemberId,
+      createdByWorkspaceMemberId: authority.workspaceMemberId,
+      updatedByWorkspaceMemberId: authority.workspaceMemberId,
     });
+  };
+  const requestWithNavigationScope = (req: any): any | 'conflict' => {
+    const workspaceId = typeof req.query?.workspaceId === 'string'
+      ? req.query.workspaceId.trim()
+      : '';
+    const workspaceMemberId = typeof req.query?.workspaceMemberId === 'string'
+      ? req.query.workspaceMemberId.trim()
+      : '';
+    if (!workspaceId && !workspaceMemberId) return req;
+    const headerWorkspaceId = req.get('x-od-workspace-id')?.trim() ?? '';
+    const headerWorkspaceMemberId =
+      req.get('x-od-workspace-member-id')?.trim() ?? '';
+    if (
+      (headerWorkspaceId || headerWorkspaceMemberId)
+      && (
+        headerWorkspaceId !== workspaceId
+        || headerWorkspaceMemberId !== workspaceMemberId
+      )
+    ) {
+      return 'conflict';
+    }
+    return {
+      get(name: string) {
+        const normalized = name.toLowerCase();
+        if (normalized === 'x-od-workspace-id') return workspaceId || undefined;
+        if (normalized === 'x-od-workspace-member-id') {
+          return workspaceMemberId || undefined;
+        }
+        return req.get(name);
+      },
+    };
+  };
+  const resolveWorkspaceAuthority = async (
+    req: any,
+    res: Response,
+    options: { allowNavigationQuery?: boolean } = {},
+  ): Promise<WorkspaceCollabContext | null | undefined> => {
+    const scopedRequest = options.allowNavigationQuery
+      ? requestWithNavigationScope(req)
+      : req;
+    if (scopedRequest === 'conflict') {
+      sendApiError(
+        res,
+        400,
+        'WORKSPACE_CONTEXT_CONFLICT',
+        'workspace header and navigation scope must match',
+      );
+      return undefined;
+    }
+    const authority = await resolveOptionalWorkspaceRequestAuthority(
+      scopedRequest,
+      ctx.verifyWorkspaceRequestAuthority,
+    );
+    if (!authority.ok) {
+      sendApiError(res, authority.status, authority.code, authority.message, {
+        ...(authority.retryable ? { retryable: true } : {}),
+      });
+      return undefined;
+    }
+    return authority.context;
   };
   // Gate a mutation route for a skill bound into `workspace_resources`. Only
   // applies when the skill actually carries a binding row (installed/imported
   // through the workspace-aware routes above after this shipped) — an unbound
   // legacy skill stays outside the isolation regime, mirroring the plugin
   // uninstall route's same conditional gate.
-  const enforceSkillWorkspaceMutation = (
+  const enforceSkillWorkspaceMutation = async (
     req: any,
     res: any,
     skillId: string,
     capability: 'delete' | 'writeFiles',
-  ): boolean => {
+  ): Promise<boolean> => {
     const binding = getWorkspaceResourceByResourceId(db, 'skill', skillId);
     if (!binding) return true;
-    return enforceWorkspaceResourceMutation(
+    return enforceVerifiedWorkspaceResourceMutation(
       'skill',
       req,
       res,
@@ -162,6 +244,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
       db,
       skillId,
       capability,
+      ctx.verifyWorkspaceRequestAuthority,
     );
   };
   const importedDesignSystemResponse = async <T extends { id: string }>(designSystem: T) => {
@@ -235,7 +318,9 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
       // Workspace-scoped (see `skillVisibleFromWorkspace` in skills.ts): a
       // skill imported into a different workspace than the caller's is
       // hidden, same one-way rule `GET /api/plugins` already applies.
-      const workspaceId = headerValue(req, 'x-od-workspace-id');
+      const authority = await resolveWorkspaceAuthority(req, res);
+      if (authority === undefined) return;
+      const workspaceId = authority?.workspaceId ?? null;
       const skills = await listAllSkills({ workspaceId });
       // Strip full body + on-disk dir from the listing — frontend fetches the
       // body via /api/skills/:id when needed (keeps the listing payload small).
@@ -252,7 +337,10 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
 
   app.get('/api/skills/:id', async (req, res) => {
     try {
-      const skills = await listAllSkills();
+      const authority = await resolveWorkspaceAuthority(req, res);
+      if (authority === undefined) return;
+      const workspaceId = authority?.workspaceId ?? null;
+      const skills = await listAllSkills({ workspaceId });
       const skill = findSkillById(skills, req.params.id);
       if (!skill) return res.status(404).json({ error: 'skill not found' });
       const { dir: _dir, ...serializable } = skill;
@@ -297,9 +385,11 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
   // automatically because listSkills walks USER_SKILLS_DIR first.
   app.post('/api/skills/import', async (req, res) => {
     try {
+      const authority = await resolveWorkspaceAuthority(req, res);
+      if (authority === undefined) return;
       const result = await importUserSkill(USER_SKILLS_DIR, req.body || {});
-      bindImportedSkillToWorkspace(req, result.id);
-      const skills = await listAllSkills();
+      bindImportedSkillToWorkspace(authority, result.id);
+      const skills = await listAllSkills({ workspaceId: authority?.workspaceId ?? null });
       const skill = findSkillById(skills, result.id);
       if (!skill) {
         return sendApiError(
@@ -332,7 +422,9 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
   // the bundled assets/references/scripts/examples). See PR #955 review.
   app.put('/api/skills/:id', async (req, res) => {
     try {
-      const skills = await listAllSkills();
+      const authority = await resolveWorkspaceAuthority(req, res);
+      if (authority === undefined) return;
+      const skills = await listAllSkills({ workspaceId: authority?.workspaceId ?? null });
       const skill = findSkillById(skills, req.params.id);
       if (!skill) {
         return sendApiError(res, 404, 'NOT_FOUND', 'skill not found');
@@ -343,13 +435,13 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
       if (teamResources) {
         await enforceTeamResourceCopyAllowed(teamResources, { kind: 'skill', resourceId: skill.id });
       }
-      if (!enforceSkillWorkspaceMutation(req, res, skill.id, 'writeFiles')) return;
+      if (!await enforceSkillWorkspaceMutation(req, res, skill.id, 'writeFiles')) return;
       const result = await updateUserSkill(USER_SKILLS_DIR, {
         ...(req.body || {}),
         id: skill.id,
         sourceDir: skill.dir,
       });
-      const next = await listAllSkills();
+      const next = await listAllSkills({ workspaceId: authority?.workspaceId ?? null });
       const updated = findSkillById(next, result.id);
       if (!updated) {
         return sendApiError(
@@ -383,7 +475,10 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
   // file tree (capped server-side to keep payload bounded).
   app.get('/api/skills/:id/files', async (req, res) => {
     try {
-      const skills = await listAllSkills();
+      const authority = await resolveWorkspaceAuthority(req, res);
+      if (authority === undefined) return;
+      const workspaceId = authority?.workspaceId ?? null;
+      const skills = await listAllSkills({ workspaceId });
       const skill = findSkillById(skills, req.params.id);
       if (!skill) {
         return sendApiError(res, 404, 'NOT_FOUND', 'skill not found');
@@ -477,7 +572,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
       // one workspace also filled a brand-new one. Every other caller of
       // `listAllDesignSystems` resolves a system by id and stays unscoped.
       const systems = await listAllDesignSystems({
-        workspaceId: (await resolveWorkspaceScope?.()) ?? null,
+        workspaceId: (await resolveWorkspaceScope?.(req)) ?? null,
       });
       // recvqb6mfyqXLD: decorate every teamSynced entry with the same
       // mutate verdict the PATCH/DELETE routes enforce, so any surface that
@@ -500,6 +595,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
         : systems.map(({ body, ...rest }) => rest);
       res.json({ designSystems });
     } catch (err: any) {
+      if (sendWorkspaceScopeError(res, err)) return;
       res.status(500).json({ error: String(err) });
     }
   });
@@ -563,7 +659,15 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
       // HTML rewrites assets to /api/skills/<id>/... and we want those URLs
       // to keep resolving regardless of which root owns the backing folder
       // after the skills/design-templates split.
-      const skills = await listAllSkillLikeEntries();
+      const authority = await resolveWorkspaceAuthority(req, res, {
+        allowNavigationQuery: true,
+      });
+      if (authority === undefined) return;
+      const workspaceId = authority?.workspaceId ?? null;
+      const skills = await listAllSkillLikeEntries({ workspaceId });
+      const workspaceQuery = authority
+        ? `?workspaceId=${encodeURIComponent(authority.workspaceId)}&workspaceMemberId=${encodeURIComponent(authority.workspaceMemberId)}`
+        : '';
 
       // 1. Derived `<parent>:<child>` id — resolve straight to the matching
       // file under <parentDir>/examples/. Done before findSkillById so the
@@ -584,7 +688,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
           const html = await fs.promises.readFile(candidate, 'utf8');
           return res
             .type('text/html')
-            .send(rewriteSkillAssetUrls(html, parent.id));
+            .send(rewriteSkillAssetUrls(html, parent.id, workspaceQuery));
         }
         return res
           .status(404)
@@ -602,7 +706,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
         const html = await fs.promises.readFile(baked, 'utf8');
         return res
           .type('text/html')
-          .send(rewriteSkillAssetUrls(html, skill.id));
+          .send(rewriteSkillAssetUrls(html, skill.id, workspaceQuery));
       }
 
       const tpl = path.join(skill.dir, 'assets', 'template.html');
@@ -614,7 +718,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
           const assembled = assembleExample(tplHtml, slidesHtml, skill.name);
           return res
             .type('text/html')
-            .send(rewriteSkillAssetUrls(assembled, skill.id));
+            .send(rewriteSkillAssetUrls(assembled, skill.id, workspaceQuery));
         } catch {
           // Fall through to raw template on read failure.
         }
@@ -623,14 +727,14 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
         const html = await fs.promises.readFile(tpl, 'utf8');
         return res
           .type('text/html')
-          .send(rewriteSkillAssetUrls(html, skill.id));
+          .send(rewriteSkillAssetUrls(html, skill.id, workspaceQuery));
       }
       const idx = path.join(skill.dir, 'assets', 'index.html');
       if (fs.existsSync(idx)) {
         const html = await fs.promises.readFile(idx, 'utf8');
         return res
           .type('text/html')
-          .send(rewriteSkillAssetUrls(html, skill.id));
+          .send(rewriteSkillAssetUrls(html, skill.id, workspaceQuery));
       }
 
       // Friendly fallback for skills that aggregate examples in a sibling
@@ -658,7 +762,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
             const html = await fs.promises.readFile(direct, 'utf8');
             return res
               .type('text/html')
-              .send(rewriteSkillAssetUrls(html, skill.id));
+              .send(rewriteSkillAssetUrls(html, skill.id, workspaceQuery));
           } catch {
             continue;
           }
@@ -687,7 +791,12 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
     try {
       // Same rationale as /example above — assets need to resolve whether
       // the owning skill folder lives under skills/ or design-templates/.
-      const skills = await listAllSkillLikeEntries();
+      const authority = await resolveWorkspaceAuthority(req, res, {
+        allowNavigationQuery: true,
+      });
+      if (authority === undefined) return;
+      const workspaceId = authority?.workspaceId ?? null;
+      const skills = await listAllSkillLikeEntries({ workspaceId });
       const skill = findSkillById(skills, req.params.id);
       if (!skill) {
         return res.status(404).type('text/plain').send('skill not found');
@@ -717,6 +826,8 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
   app.post('/api/skills/install', async (req, res) => {
     if (!requireLocalOrigin(req, res)) return;
     try {
+      const authority = await resolveWorkspaceAuthority(req, res);
+      if (authority === undefined) return;
       const body = req.body && typeof req.body === 'object' ? req.body : {};
       const isLegacyTarget =
         (body.source === 'github' && typeof body.url === 'string') ||
@@ -744,13 +855,13 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
       if (typeof result.dir !== 'string' || !result.dir) {
         return res.status(500).json({ error: 'skill install did not return an installation directory' });
       }
-      const skills = await listAllSkills();
+      const skills = await listAllSkills({ workspaceId: authority?.workspaceId ?? null });
       const installedDir = fs.realpathSync.native(result.dir);
       const skill = skills.find((candidate) => fs.realpathSync.native(candidate.dir) === installedDir);
       if (!skill) {
         return res.status(500).json({ error: `installed skill was not found in catalog: ${result.dir}` });
       }
-      bindImportedSkillToWorkspace(req, skill.id);
+      bindImportedSkillToWorkspace(authority, skill.id);
       res.json({
         skill: {
           ...skill,
@@ -773,7 +884,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
   app.delete('/api/skills/:id', async (req, res) => {
     if (!requireLocalOrigin(req, res)) return;
     try {
-      if (!enforceSkillWorkspaceMutation(req, res, req.params.id, 'delete')) return;
+      if (!await enforceSkillWorkspaceMutation(req, res, req.params.id, 'delete')) return;
       const result = await uninstallById(req.params.id, USER_SKILLS_DIR, SKILLS_DIR, 'skill');
       if (!result.ok) return res.status(result.status || 400).json({ error: result.error });
       // Clean up the binding row too — `workspace_resources` has no
@@ -1029,14 +1140,18 @@ export function assembleExample(templateHtml: string, slidesHtml: string, title:
     .replace(/<title>.*?<\/title>/, `<title>${title} | Open Design Example</title>`);
 }
 
-export function rewriteSkillAssetUrls(html: string, skillId: string) {
+export function rewriteSkillAssetUrls(
+  html: string,
+  skillId: string,
+  workspaceQuery = '',
+) {
   if (typeof html !== 'string' || html.length === 0) return html;
   return html.replace(
     /(\s(?:src|href)\s*=\s*)(['"])((?:\.\.\/([^/'"#?]+)\/)?(?:\.\/)?assets\/([^'"#?]+))(\2)/gi,
     (_match, attr, openQuote, _fullPath, siblingSkillId, relPath, closeQuote) => {
       const resolvedSkillId = siblingSkillId || skillId;
       const prefix = `/api/skills/${encodeURIComponent(resolvedSkillId)}/assets/`;
-      return `${attr}${openQuote}${prefix}${relPath}${closeQuote}`;
+      return `${attr}${openQuote}${prefix}${relPath}${workspaceQuery}${closeQuote}`;
     },
   );
 }

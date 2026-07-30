@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { rm } from 'node:fs/promises';
 import path from 'node:path';
-import type { Express, Response } from 'express';
+import type { Express, Request, Response } from 'express';
 import {
   defaultScenarioPluginIdForProjectMetadata,
   type ChatSessionMode,
@@ -16,6 +16,7 @@ import {
   type ProjectFileVersionSource,
   type ProjectFileVersionWarning,
   type ProjectSyncState,
+  type WorkspaceCollabContext,
 } from '@open-design/contracts';
 import { readMeta as readBrandMeta } from '../../brands/store.js';
 import { createProjectArtifactFile } from '../../artifacts/create.js';
@@ -62,6 +63,7 @@ import {
 import { auditDesignSystemPackage } from '../../tools-connectors-cli.js';
 import { parseOrchestratorWorkspace } from '../../workspace-contract.js';
 import { registerProjectConversationRoutes } from './conversations.js';
+import type { ProjectCommentWorkspaceContextResolution } from './comments.js';
 import {
   projectResourceIdFor,
   velaProjectSyncStateToProject,
@@ -75,48 +77,44 @@ import {
   type WorkspaceTypeRegistry,
 } from '../../collab/team-share-scope.js';
 import {
-  enforceWorkspaceResourceMutation,
+  enforceVerifiedWorkspaceResourceMutation,
   headerValue,
   isWorkspaceResourceLocked as isWorkspaceLocked,
-  requestCanMutateWorkspaceResource,
+  requestCanMutateVerifiedWorkspaceResource,
   workspaceResourceAccess,
   workspaceResourceContext as workspaceProjectContext,
   workspaceResourceContextFromRequest as workspaceProjectContextFromRequest,
-  type GetLastKnownWorkspaceMembership,
+  workspaceResourceContextFromVerified,
+  type VerifyWorkspaceRequestAuthority,
   type WorkspaceResourceAccessInput,
   type WorkspaceResourceContext,
   type WorkspaceResourceMutationCapability,
 } from '../../collab/workspace-resource-mutation.js';
-import type { WorkspaceContextProvider } from '../../collab/workspace-context.js';
-import { ambientWorkspaceResourceContext } from '../../collab/workspace-resource-mutation.js';
-import { resolveProjectWorkspaceScopeForCaller } from '../../collab/project-workspace-scope.js';
+import { resolveProjectWorkspaceScope } from '../../collab/project-workspace-scope.js';
+import {
+  createAuthorizeProjectRequest,
+  type AuthorizeProjectRequest,
+} from '../../collab/project-request-authority.js';
 import {
   authorizeCreatedProjectWorkspace,
   bindCreatedProjectToWorkspace,
   createCreatedProjectWorkspaceResolver,
+  CreatedProjectWorkspaceResolutionError,
   sendCreatedProjectWorkspaceError,
-  type GetAmbientWorkspace,
 } from '../../collab/created-project-workspace.js';
 import type { WorkspaceDirectoryFetchResult } from '../../collab/vela-workspace-context.js';
 import { cancelRunsOwnedBy } from './cancel-owned-runs.js';
 
 export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'projectStore' | 'projectFiles' | 'conversations' | 'templates' | 'status' | 'events' | 'ids' | 'telemetry' | 'appConfig' | 'agents' | 'validation' | 'collabSync'> {
   teamProjectCatalog?: VelaTeamProjectCatalogClient;
-  /**
-   * The daemon's own workspace-context provider (see
-   * `collab/workspace-context.ts`). Only `lastKnown()` is used here, and only
-   * for a synchronous, no-network-I/O cross-check: `enforceWorkspaceProjectMutation`
-   * refuses to trust a client's `x-od-workspace-member-status: active` header
-   * once this same-workspace cache says the caller has actually been removed
-   * (recvqbbQ4yljNC / recvqbeDjAsejl). Absent in tests that don't exercise
-   * this seam — the gate then falls back to trusting the header alone, exactly
-   * like before this cross-check existed.
-   */
-  workspaceContext?: Pick<WorkspaceContextProvider, 'lastKnown'>;
+  /** Authoritative verifier for every Workspace-bound project mutation. */
+  verifyWorkspaceRequestAuthority?: VerifyWorkspaceRequestAuthority;
+  /** Shared fresh exact authority gate for all project data-plane routes. */
+  authorizeProjectRequest?: AuthorizeProjectRequest;
   /**
    * Authoritative signed-in membership directory. Project detail uses it to
-   * resolve the project's persisted workspace independently from the daemon's
-   * ambient active workspace.
+   * resolve the project's persisted workspace independently from any
+   * daemon-global active/current state.
    */
   fetchWorkspaceDirectory?: () => Promise<WorkspaceDirectoryFetchResult>;
   /**
@@ -135,11 +133,39 @@ export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | '
    * All optional and no-op off-team / when the collab cloud is unconfigured.
    */
   resolveAuthorMemberId?: (authorization: string | undefined) => Promise<string | undefined>;
-  resolveProjectOwnerMemberId?: (projectId: string) => Promise<string | null>;
-  isSharedProject?: (projectId: string) => Promise<boolean>;
-  onCommentCreated?: (comment: PreviewComment) => void;
-  onCommentUpdated?: (comment: PreviewComment) => void;
-  onCommentDeleted?: (comment: PreviewComment) => void;
+  resolveWorkspaceContext?: (
+    req: Request,
+    projectId: string,
+  ) => Promise<ProjectCommentWorkspaceContextResolution>;
+  resolveProjectOwnerMemberId?: (
+    projectId: string,
+    context?: WorkspaceCollabContext | null,
+  ) => Promise<string | null>;
+  isSharedProject?: (
+    projectId: string,
+    context?: WorkspaceCollabContext | null,
+  ) => Promise<boolean>;
+  shouldSyncProjectComments?: (
+    authorization: string | undefined,
+    projectId: string,
+    context?: WorkspaceCollabContext | null,
+  ) => Promise<boolean>;
+  onCommentCreated?: (
+    comment: PreviewComment,
+    context: WorkspaceCollabContext | null,
+  ) => void;
+  onCommentUpdated?: (
+    comment: PreviewComment,
+    context: WorkspaceCollabContext | null,
+  ) => void;
+  onCommentDeleted?: (
+    comment: PreviewComment,
+    context: WorkspaceCollabContext | null,
+  ) => void;
+  onCommentsRead?: (
+    projectId: string,
+    context: WorkspaceCollabContext | null,
+  ) => void;
   /**
    * What the daemon has learned about each workspace's type, used to refuse a
    * team share aimed at a personal workspace even when the caller's headers say
@@ -192,7 +218,26 @@ function projectAccess(
   // collab/workspace-resource-mutation.ts so a fix there lands for plugin and
   // skill too. Only the fields below (canMoveToTeam/canMoveToPersonal/
   // canOpen/canExport/canSendTo) are project-specific UX affordances.
-  const { frozen, canMutate, canShareLocal, disabledReason } = workspaceResourceAccess(wp, ctx);
+  const {
+    frozen,
+    selfCreated,
+    canMutate: privilegedOrCreatorCanMutate,
+    canShareLocal,
+    disabledReason: baseDisabledReason,
+  } = workspaceResourceAccess(wp, ctx);
+  // Team-shared projects are single-writer resources: Workspace governance
+  // may manage the Team, but only the member recorded as this project's
+  // creator may mutate or unshare it. Keep the read model aligned with the
+  // authoritative route gate; otherwise owner/admin callers are advertised
+  // actions that direct project routes reject, while the workspace move route
+  // (which consumes these flags) can still unshare someone else's project.
+  // Personal/unshared projects retain the existing privileged-or-creator rule.
+  const canMutate =
+    privilegedOrCreatorCanMutate
+    && (wp.visibility !== 'team' || selfCreated);
+  const disabledReason =
+    baseDisabledReason
+    ?? (!canMutate ? 'permission_denied' : undefined);
   return {
     canOpen: !frozen && ctx.memberStatus === 'active',
     canRename: canMutate,
@@ -214,90 +259,43 @@ function projectAccess(
 }
 
 /**
- * Build the project-flavored `enforceWorkspaceProjectMutation` gate, bound to
- * ONE resource type ('project') and — when a workspace-context provider is
- * available — cross-checked against the daemon's own last-known-good
- * workspace context.
- *
- * Why the cross-check: `workspaceProjectContext()` builds its
- * `memberStatus`/`role`/`canWriteSyncedFiles` entirely from the CALLER'S OWN
- * request headers (`x-od-workspace-*`), which the web/desktop client attaches
- * from its OWN last poll of `/api/workspace/context`. A member removed from
- * the workspace keeps sending stale `active` headers until that poll catches
- * up (or the client restarts) — so without this cross-check, a removed
- * member's write requests sail through on their own say-so
- * (recvqbbQ4yljNC / recvqbeDjAsejl).
- *
- * `workspaceContext.lastKnown()` (`collab/workspace-context.ts`) is a
- * synchronous, no-network-I/O read of whatever the daemon's ordinary
- * `.current()` traffic already resolved — that same client poll, plus every
- * other in-daemon `.current()` caller. This function purposefully does NOT
- * await `.current()` itself: a fresh vela round-trip on every project write
- * would be its own cost and its own new failure mode. The time lag between a
- * real removal and the next cached refresh is accepted (see
- * `collab/workspace-resource-mutation.ts`'s `withLastKnownMembership` for the
- * exact narrow-only-on-positive-evidence semantics this relies on).
- *
- * Each of this file's three route-registration functions (project, file,
- * upload) calls this once with its own `ctx.workspaceContext` — never wired
- * up in most unit tests, in which case the gate falls back to trusting the
- * header alone, exactly like before this cross-check existed.
- *
- * Exported so `server.ts` can build a SECOND instance (same shape, same
- * cross-check) for `registerRunRoutes` — POST /api/runs and POST /api/chat
- * had ZERO `enforceWorkspace*` coverage until that fix, unlike every other
- * project-mutation route this file itself registers. Run creation borrows
- * this instance rather than a bespoke copy so its semantics can never drift
- * from rename/delete/duplicate/writeFiles/comments.
+ * Build the project-flavored authoritative mutation gate. Every bound project
+ * requires an exact Workspace/member pair and a fresh directory-backed
+ * verifier result; request role/permission claims and daemon-global
+ * active/current/last-known state are never authority. The exported factory is
+ * shared with run/chat routes so all project mutations fail closed identically.
  */
-/** The `withLastKnownMembership` cross-check seam, adapted from a workspace
- *  context provider. Shared by the rejecting gate and the non-rejecting
- *  write-authority check below so the two can never disagree about whose
- *  membership opinion wins. */
-function lastKnownWorkspaceMembership(
-  workspaceContext: Pick<WorkspaceContextProvider, 'lastKnown'> | undefined,
-): GetLastKnownWorkspaceMembership | undefined {
-  if (!workspaceContext) return undefined;
-  return () => {
-    const known = workspaceContext.lastKnown?.() ?? null;
-    return known ? { workspaceId: known.workspaceId, memberStatus: known.memberStatus } : null;
-  };
-}
-
 /**
  * The non-rejecting counterpart of `createEnforceWorkspaceProjectMutation`,
  * for a read route that would otherwise write as a side effect. See
- * `requestCanMutateWorkspaceResource` for why a READ must answer this question
+ * `requestCanMutateVerifiedWorkspaceResource` for why a READ must answer this question
  * without ever answering it with a 401/403.
  */
 export function createWorkspaceProjectWriteAuthorityCheck(
-  workspaceContext: Pick<WorkspaceContextProvider, 'lastKnown'> | undefined,
+  verifyWorkspaceRequestAuthority?: VerifyWorkspaceRequestAuthority,
 ) {
-  const getLastKnownWorkspaceMembership = lastKnownWorkspaceMembership(workspaceContext);
-  return function requestCanWriteWorkspaceProject(
+  return async function requestCanWriteWorkspaceProject(
     req: any,
     getWorkspaceProject: (db: unknown, workspaceId: string, projectId: string) => WorkspaceProjectAccessInput | null | undefined,
+    getWorkspaceProjectByProjectId: (db: unknown, projectId: string) => WorkspaceProjectAccessInput | null | undefined,
     db: unknown,
     projectId: string,
-  ): boolean {
-    return requestCanMutateWorkspaceResource(
+  ): Promise<boolean> {
+    return requestCanMutateVerifiedWorkspaceResource(
       req,
       getWorkspaceProject,
+      getWorkspaceProjectByProjectId,
       db,
       projectId,
-      getLastKnownWorkspaceMembership,
+      verifyWorkspaceRequestAuthority,
     );
   };
 }
 
 export function createEnforceWorkspaceProjectMutation(
-  workspaceContext: Pick<WorkspaceContextProvider, 'lastKnown'> | undefined,
+  verifyWorkspaceRequestAuthority?: VerifyWorkspaceRequestAuthority,
 ) {
-  const getLastKnownWorkspaceMembership = lastKnownWorkspaceMembership(workspaceContext);
-  /** The daemon's own signed-in identity, for a request that asserts none —
-   *  see `headerlessMutationAllowed` in collab/workspace-resource-mutation.ts. */
-  const getAmbientWorkspace: GetAmbientWorkspace = () => workspaceContext?.lastKnown?.() ?? null;
-  return function enforceWorkspaceProjectMutation(
+  return async function enforceWorkspaceProjectMutation(
     req: any,
     res: Response,
     sendApiError: (res: Response, status: number, code: string, message: string) => unknown,
@@ -306,8 +304,8 @@ export function createEnforceWorkspaceProjectMutation(
     db: unknown,
     projectId: string,
     capability: WorkspaceProjectMutationCapability,
-  ): boolean {
-    return enforceWorkspaceResourceMutation(
+  ): Promise<boolean> {
+    return enforceVerifiedWorkspaceResourceMutation(
       'project',
       req,
       res,
@@ -317,8 +315,7 @@ export function createEnforceWorkspaceProjectMutation(
       db,
       projectId,
       capability,
-      getLastKnownWorkspaceMembership,
-      getAmbientWorkspace,
+      verifyWorkspaceRequestAuthority,
     );
   };
 }
@@ -1608,59 +1605,67 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
   const { randomId } = ctx.ids;
   const { validateProjectDesignSystemId, validateProjectSkillId } = ctx.validation;
   const { collabSync, teamProjectCatalog, workspaceTypes } = ctx;
-  // recvqbbQ4yljNC / recvqbeDjAsejl: cross-check the client's workspace
-  // headers against the daemon's own last-known-good context before trusting
-  // them for a mutation — see `createEnforceWorkspaceProjectMutation`'s
-  // docblock above for the full rationale.
-  const enforceWorkspaceProjectMutation = createEnforceWorkspaceProjectMutation(ctx.workspaceContext);
-  /**
-   * The workspace this daemon is currently signed in to, for creation paths whose
-   * request carries no workspace identity of its own. Zero-network and
-   * synchronous — see `createdProjectWorkspaceHome` in
-   * `collab/created-project-workspace.ts` for why a headerless create binds here
-   * rather than becoming an orphan.
-   */
-  const getAmbientWorkspace: GetAmbientWorkspace = () => ctx.workspaceContext?.lastKnown?.() ?? null;
-  /**
-   * The workspace identity a mutation on this request ACTUALLY acts under.
-   *
-   * INVARIANT: this is the same resolution `enforceWorkspaceProjectMutation` used
-   * to allow the request — the caller's asserted identity when it has one, the
-   * daemon's own signed-in identity when it does not. Any SIDE EFFECT a mutation
-   * performs must read the context from here rather than re-deriving it from
-   * headers, or the effect silently disagrees with the gate that permitted it.
-   *
-   * That disagreement was a real cross-client data-consistency bug: `DELETE
-   * /api/projects/:id` re-derived `workspaceProjectContextFromRequest(req)`, which
-   * is null for a headerless caller, so once headerless mutation was allowed the
-   * hub unpublish and catalog removal were skipped while the local delete still
-   * ran — teammates kept seeing a project whose owner had already destroyed it.
-   */
-  function effectiveWorkspaceProjectContext(req: any): WorkspaceProjectContext | null {
-    const asserted = workspaceProjectContextFromRequest(req);
-    if (asserted === 'missing') return null;
-    if (asserted !== null) return asserted;
-    return ambientWorkspaceResourceContext(getAmbientWorkspace);
+  const enforceWorkspaceProjectMutation = createEnforceWorkspaceProjectMutation(
+    ctx.verifyWorkspaceRequestAuthority,
+  );
+  const authorizeProjectRequest =
+    ctx.authorizeProjectRequest ??
+    createAuthorizeProjectRequest({
+      db,
+      getWorkspaceProject,
+      getWorkspaceProjectByProjectId,
+      ...(ctx.verifyWorkspaceRequestAuthority
+        ? { verifyWorkspaceRequestAuthority: ctx.verifyWorkspaceRequestAuthority }
+        : {}),
+      sendApiError,
+    });
+  async function verifiedWorkspaceProjectContext(
+    req: any,
+  ): Promise<WorkspaceProjectContext | null> {
+    if (!ctx.verifyWorkspaceRequestAuthority) return null;
+    const verified = await ctx.verifyWorkspaceRequestAuthority(req);
+    return verified.ok ? workspaceResourceContextFromVerified(verified.context) : null;
   }
   /**
    * Where a created project belongs when the request has no authorization gate
    * of its own — the duplicate / design-system-copy pair and the
-   * project-location scan importer. Verifies an asserted identity through the
-   * SAME directory lookup `POST /api/projects` gates on, then degrades to the
-   * ambient workspace rather than refusing. See
-   * `createdProjectWorkspaceHome`.
+   * project-location scan importer. An asserted pair is verified through the
+   * same directory lookup as `POST /api/projects`; a headerless legacy/local
+   * request remains unbound and a failed assertion writes nothing.
    */
   const resolveCreatedProjectHome = createCreatedProjectWorkspaceResolver({
-    getAmbientWorkspace,
     ...(ctx.fetchProjectCreationWorkspaceDirectory
       ? { fetchWorkspaceDirectory: ctx.fetchProjectCreationWorkspaceDirectory }
-      : {}),
-    ...(lastKnownWorkspaceMembership(ctx.workspaceContext)
-      ? { getLastKnownMembership: lastKnownWorkspaceMembership(ctx.workspaceContext)! }
       : {}),
   });
   function sendMissingWorkspaceContext(res: Response) {
     return sendApiError(res, 401, 'WORKSPACE_CONTEXT_REQUIRED', 'workspace context is required');
+  }
+  async function authoritativeWorkspaceProjectContext(
+    req: any,
+    res: Response,
+    expectedWorkspaceId: string,
+  ): Promise<WorkspaceProjectContext | null> {
+    if (!ctx.verifyWorkspaceRequestAuthority) {
+      const legacy = workspaceProjectContext(req, expectedWorkspaceId);
+      if (!legacy) sendMissingWorkspaceContext(res);
+      return legacy;
+    }
+    const verified = await ctx.verifyWorkspaceRequestAuthority(req);
+    if (!verified.ok) {
+      sendApiError(res, verified.status, verified.code, verified.message);
+      return null;
+    }
+    if (verified.context.workspaceId !== expectedWorkspaceId) {
+      sendApiError(
+        res,
+        403,
+        'WORKSPACE_ACCESS_DENIED',
+        'the requested workspace does not match the route workspace',
+      );
+      return null;
+    }
+    return workspaceResourceContextFromVerified(verified.context);
   }
   /**
    * Refuse — loudly — to record a team share in a workspace that cannot host
@@ -2102,17 +2107,14 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
    * member of the workspace that owns the SOURCE project — exactly the right
    * home for the copy too.
    *
-   * A request with no workspace identity at all falls back to the daemon's
-   * ambient workspace rather than leaving the copy unbound. That case is not
-   * hypothetical: `App.tsx`'s duplicate and design-system-copy handlers pass
-   * `workspaceContextRef.current`, a ref that drops the context's `loading`
-   * flag, so a duplicate clicked in the first seconds after a refresh — before
-   * the vela-backed identity read lands — sends zero headers and used to
-   * produce exactly the orphan `reconcileUnboundProjectBeforeMutation` below
-   * was later written to repair.
+   * A request with no identity remains a true legacy/unbound copy. Modern web
+   * callers lock and send the source project's persisted exact scope.
    */
-  async function bindDuplicateIntoRequestWorkspace(req: any, targetProjectId: string, now: number) {
-    const ctx = await resolveCreatedProjectHome(req);
+  function bindDuplicateIntoRequestWorkspace(
+    ctx: WorkspaceResourceContext | null,
+    targetProjectId: string,
+    now: number,
+  ) {
     if (ctx === null) return;
     ensureWorkspaceProject(db, {
       projectId: targetProjectId,
@@ -2133,7 +2135,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
    * CURRENT mutating request's workspace, right before
    * `enforceWorkspaceProjectMutation` evaluates it.
    *
-   * `enforceWorkspaceResourceMutation`'s authenticated branch denies any
+   * the verified Workspace mutation gate denies any
    * mutation the moment the two-key lookup comes back empty
    * (`workspaceResourceMutationAllowed`'s `if (!row) return false;`) — right
    * for a project genuinely bound to a DIFFERENT workspace than the one the
@@ -2170,55 +2172,40 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
    * meant a plain curl could claim someone else's orphaned project into a
    * workspace it has no membership in and install itself as the author.
    *
-   * So the workspace and the authorship both come from
-   * `resolveCreatedProjectHome` — the same verify-then-degrade resolver every
-   * created-project path uses (`collab/created-project-workspace.ts`):
+   * So the workspace and authorship both come from
+   * `resolveCreatedProjectHome`, the same exact verifier every created-project
+   * path uses:
    *
    *   - the asserted identity VERIFIES against the membership directory -> claim
    *     it, attributed to the DIRECTORY's member id rather than the header's;
-   *   - it does NOT verify — foreign, inactive, permissions disagree, last-known
-   *     says removed, or the authority is unreadable so it cannot be confirmed —
-   *     -> write NOTHING, unless the degraded (ambient) authority happens to name
-   *     the very pair that was asserted;
-   *   - neither is available -> write nothing, and let the pre-existing gate
+   *   - it does NOT verify — foreign, inactive, removed, or authority unreadable
+   *     -> write NOTHING;
+   *   - no pair was asserted -> write nothing, and let the pre-existing gate
    *     below answer. A caller that cannot prove membership over a project
    *     nothing has ever claimed is exactly who that gate is for; inventing a
    *     binding to keep it happy is what this fix removes.
    *
-   * CREATION AND RECONCILIATION ARE NOT THE SAME RISK, which is why the degraded
-   * branch is narrower here than in `createdProjectWorkspaceHome`. Putting a
-   * BRAND-NEW project in the ambient workspace takes nothing from anyone. Putting
-   * a PRE-EXISTING orphan there — because someone asserted an identity that could
-   * not be verified — may take it from the workspace it actually belongs to, and
-   * the `getWorkspaceProjectByProjectId` guard above makes that write STICKY: the
-   * rightful verified workspace can never reconcile it afterwards. A forged
-   * request, or a legitimate one during an authority outage after the active
-   * workspace changed, would permanently mis-file the project.
-   *
-   * So the ambient authority is accepted only when it matches the asserted pair
-   * exactly. That is outage continuity for the ordinary legitimate caller — whose
-   * client took its headers from this same daemon, so the two agree — while a
-   * mismatch writes nothing. Not in tension with 「所有 project 都应该能找到
-   * workspace」: the display-side fallback (#6185) already renders an unbound
-   * project inside the caller's current workspace, so nothing reads as "unknown".
-   * The binding row is a separate, durable fact and stays conservative.
+   * Failing closed is essential because this binding is sticky: assigning an
+   * orphan from a forged or unverifiable request could prevent its rightful
+   * Workspace from reconciling it later.
    *
    * The `null`/`'missing'` early return is unchanged and load-bearing, and is
    * why this does not simply use `createdProjectWorkspaceHome`'s own third
-   * branch. `enforceWorkspaceResourceMutation` runs immediately after this and
+   * branch. The verified Workspace mutation gate runs immediately after this and
    * its HEADERLESS branch answers 401 WORKSPACE_CONTEXT_REQUIRED as soon as ANY
    * row exists for the resource. Claiming on a request that asserts nothing
    * would therefore convert a working headerless mutation into a 401.
    */
-  async function reconcileUnboundProjectBeforeMutation(req: any, projectId: string) {
+  function reconcileUnboundProjectBeforeMutation(
+    req: any,
+    projectId: string,
+    home: WorkspaceResourceContext | null,
+  ) {
     const asserted = workspaceProjectContextFromRequest(req);
     if (asserted === null || asserted === 'missing') return;
     if (getWorkspaceProjectByProjectId(db, projectId)) return;
-    const home = await resolveCreatedProjectHome(req);
     if (!home) return;
-    // Verified assertions resolve to the pair that was asserted (the directory
-    // lookup is keyed on it), so this admits them and rejects only a degraded
-    // ambient authority that names something else.
+    // Verified assertions resolve to the exact pair used as the directory key.
     if (
       home.workspaceId !== asserted.workspaceId
       || home.workspaceMemberId !== asserted.workspaceMemberId
@@ -2500,6 +2487,10 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
 
   app.post('/api/project-locations/scan', async (req, res) => {
     try {
+      // Resolve once before scanning or inserting anything. An explicitly
+      // scoped request whose membership is removed/unavailable must not leave
+      // partially imported unbound projects behind.
+      const createHome = await resolveCreatedProjectHome(req);
       const locations = (await configuredProjectLocations()).filter((loc: any) => !loc.builtIn);
       const imported = [];
       const existing: string[] = [];
@@ -2549,11 +2540,11 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
             // as one typed into the composer, and needs the same home
             // workspace. Without this the imported project is an orphan the
             // moment it appears: denied its first run by
-            // `enforceWorkspaceResourceMutation`, and billing-less on any run
+            // the verified Workspace mutation gate, and billing-less on any run
             // that does get through.
             bindCreatedProjectToWorkspace(
               (input) => ensureWorkspaceProject(db, input),
-              await resolveCreatedProjectHome(req),
+              createHome,
               manifest.id,
               now,
             );
@@ -2567,6 +2558,15 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       const body = { scanned, imported, existing, skipped };
       res.json(body);
     } catch (err: any) {
+      if (err instanceof CreatedProjectWorkspaceResolutionError) {
+        return sendApiError(
+          res,
+          err.status,
+          err.code,
+          err.message,
+          err.retryable ? { retryable: true } : {},
+        );
+      }
       sendApiError(res, 400, 'BAD_REQUEST', String(err));
     }
   });
@@ -2769,8 +2769,8 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
 
   app.post('/api/workspaces/:workspaceId/projects/:projectId/move', async (req, res) => {
     try {
-      const ctx = workspaceProjectContext(req, req.params.workspaceId);
-      if (!ctx) return sendMissingWorkspaceContext(res);
+      const ctx = await authoritativeWorkspaceProjectContext(req, res, req.params.workspaceId);
+      if (!ctx) return;
       const project = getProject(db, req.params.projectId);
       const locations = await configuredProjectLocations();
       if (!project || !projectVisibleForLocations(project, locations)) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
@@ -2817,8 +2817,8 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
 
   app.post('/api/workspaces/:workspaceId/projects/batch-move', async (req, res) => {
     try {
-      const ctx = workspaceProjectContext(req, req.params.workspaceId);
-      if (!ctx) return sendMissingWorkspaceContext(res);
+      const ctx = await authoritativeWorkspaceProjectContext(req, res, req.params.workspaceId);
+      if (!ctx) return;
       const visibility = req.body?.visibility;
       const projectIds = parseProjectIds(req.body?.projectIds);
       if (!validVisibility(visibility) || !projectIds) {
@@ -2869,8 +2869,8 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
 
   app.post('/api/workspaces/:workspaceId/projects/batch-delete', async (req, res) => {
     try {
-      const ctx = workspaceProjectContext(req, req.params.workspaceId);
-      if (!ctx) return sendMissingWorkspaceContext(res);
+      const ctx = await authoritativeWorkspaceProjectContext(req, res, req.params.workspaceId);
+      if (!ctx) return;
       const projectIds = parseProjectIds(req.body?.projectIds);
       if (!projectIds) return sendApiError(res, 400, 'BAD_REQUEST', 'projectIds are required');
       const locations = await configuredProjectLocations();
@@ -3021,7 +3021,13 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       if (skipDiscoveryBrief !== undefined && typeof skipDiscoveryBrief !== 'boolean') {
         return sendApiError(res, 400, 'BAD_REQUEST', 'skipDiscoveryBrief must be a boolean');
       }
-      const designSystemValidation = await validateProjectDesignSystemId(designSystemId);
+      const creationWorkspaceScope = {
+        workspaceId: createWorkspace.context?.workspaceId ?? null,
+      };
+      const designSystemValidation = await validateProjectDesignSystemId(
+        designSystemId,
+        creationWorkspaceScope,
+      );
       if (!designSystemValidation.ok) {
         return sendApiError(
           res,
@@ -3031,7 +3037,10 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         );
       }
       const normalizedDesignSystemId = designSystemValidation.id;
-      const skillValidation = await validateProjectSkillId(skillId);
+      const skillValidation = await validateProjectSkillId(
+        skillId,
+        creationWorkspaceScope,
+      );
       if (!skillValidation.ok) {
         return sendApiError(res, 400, skillValidation.code, skillValidation.message);
       }
@@ -3148,7 +3157,6 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
             createWorkspace.context,
             id,
             now,
-            getAmbientWorkspace,
           );
           return createdProject;
         })();
@@ -3259,6 +3267,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       if (!sourceProject || !projectVisibleForLocations(sourceProject, locations)) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
       }
+      const createHome = await resolveCreatedProjectHome(req);
       // recvqbhor3pai2: a project this daemon has never bound anywhere (e.g.
       // a copy left unbound by an earlier headerless duplicate — see
       // `bindDuplicateIntoRequestWorkspace`'s doc comment) must not be
@@ -3266,8 +3275,8 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       // finally comes in for it. Claim it into the caller's own workspace
       // first, exactly like this same route already does for the COPY it is
       // about to create.
-      await reconcileUnboundProjectBeforeMutation(req, sourceProject.id);
-      if (!enforceWorkspaceProjectMutation(
+      reconcileUnboundProjectBeforeMutation(req, sourceProject.id, createHome);
+      if (!await enforceWorkspaceProjectMutation(
         req,
         res,
         sendApiError,
@@ -3331,7 +3340,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
           updatedAt: now,
         });
         insertedProject = true;
-        await bindDuplicateIntoRequestWorkspace(req, targetProjectId, now);
+        bindDuplicateIntoRequestWorkspace(createHome, targetProjectId, now);
         const conversationId = randomId();
         insertConversation(db, {
           id: conversationId,
@@ -3361,6 +3370,15 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         throw err;
       }
     } catch (err: any) {
+      if (err instanceof CreatedProjectWorkspaceResolutionError) {
+        return sendApiError(
+          res,
+          err.status,
+          err.code,
+          err.message,
+          err.retryable ? { retryable: true } : {},
+        );
+      }
       sendApiError(res, 400, 'BAD_REQUEST', String(err));
     }
   });
@@ -3372,11 +3390,12 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       if (!sourceProject || !projectVisibleForLocations(sourceProject, locations)) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
       }
+      const createHome = await resolveCreatedProjectHome(req);
       // recvqbhor3pai2 — same reasoning as the sibling /duplicate route just
       // above: a never-bound source project must not be permanently
       // un-copyable once a real, authenticated request finally names it.
-      await reconcileUnboundProjectBeforeMutation(req, sourceProject.id);
-      if (!enforceWorkspaceProjectMutation(
+      reconcileUnboundProjectBeforeMutation(req, sourceProject.id, createHome);
+      if (!await enforceWorkspaceProjectMutation(
         req,
         res,
         sendApiError,
@@ -3473,7 +3492,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
           updatedAt: now,
         });
         insertedProject = true;
-        await bindDuplicateIntoRequestWorkspace(req, targetProjectId, now);
+        bindDuplicateIntoRequestWorkspace(createHome, targetProjectId, now);
         const conversationId = randomId();
         insertConversation(db, {
           id: conversationId,
@@ -3519,6 +3538,15 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         throw err;
       }
     } catch (err: any) {
+      if (err instanceof CreatedProjectWorkspaceResolutionError) {
+        return sendApiError(
+          res,
+          err.status,
+          err.code,
+          err.message,
+          err.retryable ? { retryable: true } : {},
+        );
+      }
       sendApiError(res, 400, 'BAD_REQUEST', String(err));
     }
   });
@@ -3528,6 +3556,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     const locations = await configuredProjectLocations();
     if (!project || !projectVisibleForLocations(project, locations))
       return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
+    if (!await authorizeProjectRequest(req, res, project.id, { mode: 'read' })) return;
     // When a caller is about to *reference* this project (add it as read-only
     // context for another run), materialize its managed folder first so the
     // reference resolves to a real directory. See ensureReferencedProjectDir.
@@ -3565,23 +3594,21 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     if (!project || !projectVisibleForLocations(project, locations)) {
       return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
     }
+    if (!await authorizeProjectRequest(req, res, project.id, { mode: 'read' })) return;
     const binding = getWorkspaceProjectByProjectId(db, project.id);
     const directory = ctx.fetchWorkspaceDirectory
       ? await ctx.fetchWorkspaceDirectory().catch(
           (): WorkspaceDirectoryFetchResult => ({ ok: false, items: [] }),
         )
       : { ok: false, items: [] };
-    // A project with no binding of its own resolves to the workspace THIS
-    // caller is acting in, read the same sanctioned way every neighbouring
-    // handler reads it. A bound project ignores the caller entirely — see
-    // `resolveProjectWorkspaceScopeForCaller`.
-    const callerCtx = workspaceProjectContextFromRequest(req);
-    const scope = resolveProjectWorkspaceScopeForCaller({
+    // Persisted binding is the resource identity. The authorization gate above
+    // freshly verifies the exact caller pair for a bound project; a genuinely
+    // unbound legacy project remains unbound even when a caller supplies an
+    // unrelated Workspace identity.
+    const scope = resolveProjectWorkspaceScope({
       projectId: project.id,
       binding,
       directory,
-      callerWorkspaceId:
-        callerCtx === null || callerCtx === 'missing' ? null : callerCtx.workspaceId,
     });
     /** @type {import('@open-design/contracts').ProjectWorkspaceScopeResponse} */
     const body = { scope };
@@ -3595,7 +3622,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       if (!patchProject) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
       }
-      if (!enforceWorkspaceProjectMutation(
+      if (!await enforceWorkspaceProjectMutation(
         req,
         res,
         sendApiError,
@@ -3726,7 +3753,12 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         return sendApiError(res, 400, 'BAD_REQUEST', 'customInstructions exceeds 5 000 character limit');
       }
       if (Object.prototype.hasOwnProperty.call(patch, 'designSystemId')) {
-        const designSystemValidation = await validateProjectDesignSystemId(patch.designSystemId);
+        const projectWorkspaceId =
+          getWorkspaceProjectByProjectId(db, req.params.id)?.workspaceId ?? null;
+        const designSystemValidation = await validateProjectDesignSystemId(
+          patch.designSystemId,
+          { workspaceId: projectWorkspaceId },
+        );
         if (!designSystemValidation.ok) {
           return sendApiError(
             res,
@@ -3738,7 +3770,12 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         patch.designSystemId = designSystemValidation.id;
       }
       if (Object.prototype.hasOwnProperty.call(patch, 'skillId')) {
-        const skillValidation = await validateProjectSkillId(patch.skillId);
+        const projectWorkspaceId =
+          getWorkspaceProjectByProjectId(db, req.params.id)?.workspaceId ?? null;
+        const skillValidation = await validateProjectSkillId(
+          patch.skillId,
+          { workspaceId: projectWorkspaceId },
+        );
         if (!skillValidation.ok) {
           return sendApiError(res, 400, skillValidation.code, skillValidation.message);
         }
@@ -3792,7 +3829,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       if (!project) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
       }
-      if (!enforceWorkspaceProjectMutation(
+      if (!await enforceWorkspaceProjectMutation(
         req,
         res,
         sendApiError,
@@ -3818,10 +3855,10 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         // Same context the gate above allowed this delete under — NOT a fresh
         // header read, which is null for a headerless caller and would skip the
         // hub work while still deleting locally.
-        const teamCtx = effectiveWorkspaceProjectContext(req);
+        const teamCtx = await verifiedWorkspaceProjectContext(req);
         if (!teamCtx) {
           // Unreachable while the gate is intact: it admits a team-bound row only
-          // for an asserted identity or a matching ambient one. Refuse rather than
+          // for an explicit authoritative identity. Refuse rather than
           // fall through, so a future gate change cannot quietly reintroduce a
           // local-only delete of a still-shared project.
           return sendApiError(
@@ -3854,10 +3891,16 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
   // Subscribers come and go as users open/close project tabs; the underlying
   // chokidar watcher is refcounted in project-watchers.ts so we never hold
   // descriptors for projects no UI is looking at.
-  app.get('/api/projects/:id/events', (req, res) => {
+  app.get('/api/projects/:id/events', async (req, res) => {
     if (!getProject(db, req.params.id)) {
       return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
     }
+    if (!await authorizeProjectRequest(
+      req,
+      res,
+      req.params.id,
+      { mode: 'read', allowNavigationQuery: true },
+    )) return;
     let sub: any;
     try {
       const sse = createSseResponse(res);
@@ -3894,29 +3937,40 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
   });
 
   // Comments have no workspace binding of their own — thread down the SAME
-  // `enforceWorkspaceProjectMutation` instance (built above with the
-  // last-known-membership cross-check already wired) so a comment's mutation
+  // authoritative `enforceWorkspaceProjectMutation` instance so a comment's
   // gate matches its parent project's exactly, instead of comments quietly
-  // shipping a second, weaker copy (spec 04 §10 fix #4/#6).
+  // shipping a second, weaker copy.
   registerProjectConversationRoutes(app, {
     ...ctx,
     enforceWorkspaceProjectMutation,
+    authorizeProjectRequest,
     sendApiError,
   });
 
   // ---- Tabs -----------------------------------------------------------------
 
-  app.get('/api/projects/:id/tabs', (req, res) => {
+  app.get('/api/projects/:id/tabs', async (req, res) => {
     if (!getProject(db, req.params.id)) {
       return res.status(404).json({ error: 'project not found' });
     }
+    if (!await authorizeProjectRequest(req, res, req.params.id, { mode: 'read' })) return;
     res.json(listTabs(db, req.params.id));
   });
 
-  app.put('/api/projects/:id/tabs', (req, res) => {
+  app.put('/api/projects/:id/tabs', async (req, res) => {
     if (!getProject(db, req.params.id)) {
       return res.status(404).json({ error: 'project not found' });
     }
+    if (!await enforceWorkspaceProjectMutation(
+      req,
+      res,
+      sendApiError,
+      getWorkspaceProject,
+      getWorkspaceProjectByProjectId,
+      db,
+      req.params.id,
+      'writeFiles',
+    )) return;
     const { tabs = [], active = null, browserTabs = [] } = req.body || {};
     if (!Array.isArray(tabs) || !tabs.every((t) => typeof t === 'string')) {
       return res.status(400).json({ error: 'tabs must be string[]' });
@@ -4090,9 +4144,8 @@ export function registerProjectArtifactRoutes(app: Express, ctx: RegisterProject
 }
 
 export interface RegisterProjectFileRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'uploads' | 'node' | 'projectStore' | 'projectFiles' | 'documents' | 'artifacts' | 'projectPreviewScopes'> {
-  /** See `RegisterProjectRoutesDeps.workspaceContext` above — same seam,
-   *  used by this file's own `enforceWorkspaceProjectMutation` calls. */
-  workspaceContext?: Pick<WorkspaceContextProvider, 'lastKnown'>;
+  verifyWorkspaceRequestAuthority?: VerifyWorkspaceRequestAuthority;
+  authorizeProjectRequest?: AuthorizeProjectRequest;
 }
 
 export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFileRoutesDeps) {
@@ -4103,9 +4156,24 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
   const { PROJECTS_DIR, DESIGN_SYSTEMS_DIR, USER_DESIGN_SYSTEMS_DIR } = ctx.paths;
   const { upload } = ctx.uploads;
   const { fs } = ctx.node;
-  const enforceWorkspaceProjectMutation = createEnforceWorkspaceProjectMutation(ctx.workspaceContext);
-  const requestCanWriteWorkspaceProject = createWorkspaceProjectWriteAuthorityCheck(ctx.workspaceContext);
   const { getProject, getWorkspaceProject, getWorkspaceProjectByProjectId } = ctx.projectStore;
+  const enforceWorkspaceProjectMutation = createEnforceWorkspaceProjectMutation(
+    ctx.verifyWorkspaceRequestAuthority,
+  );
+  const authorizeProjectRequest =
+    ctx.authorizeProjectRequest ??
+    createAuthorizeProjectRequest({
+      db,
+      getWorkspaceProject,
+      getWorkspaceProjectByProjectId,
+      ...(ctx.verifyWorkspaceRequestAuthority
+        ? { verifyWorkspaceRequestAuthority: ctx.verifyWorkspaceRequestAuthority }
+        : {}),
+      sendApiError,
+    });
+  const requestCanWriteWorkspaceProject = createWorkspaceProjectWriteAuthorityCheck(
+    ctx.verifyWorkspaceRequestAuthority,
+  );
   const { listFiles, listProjectFolders, createProjectFolder, deleteProjectFolder, searchProjectFiles, readProjectFile, resolveProjectDir, resolveProjectFilePath, parseByteRange, renameProjectFile, deleteProjectFile, writeProjectFile, sanitizeName, sanitizePath, ensureProject } = ctx.projectFiles;
   const { buildDocumentPreview } = ctx.documents;
   const { validateArtifactManifestInput } = ctx.artifacts;
@@ -4591,6 +4659,10 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     try {
       const since = Number(req.query?.since);
       const project = getProject(db, req.params.id);
+      if (!project) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
+      if (!await authorizeProjectRequest(req, res, project.id, { mode: 'read' })) return;
       if (project?.metadata?.teamMirrorRevokedAt) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
       }
@@ -4608,6 +4680,11 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
 
   app.get('/api/projects/:id/search', async (req, res) => {
     try {
+      const searchProject = getProject(db, req.params.id);
+      if (!searchProject) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
+      if (!await authorizeProjectRequest(req, res, searchProject.id, { mode: 'read' })) return;
       const query = String(req.query.q ?? '');
       if (!query) {
         sendApiError(res, 400, 'BAD_REQUEST', 'q query parameter is required');
@@ -4615,7 +4692,6 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       }
       const pattern = req.query.pattern ? String(req.query.pattern) : null;
       const max = Math.min(Number(req.query.max) || 200, 1000);
-      const searchProject = getProject(db, req.params.id);
       const matches = await searchProjectFiles(PROJECTS_DIR, req.params.id, query, {
         pattern,
         max,
@@ -4638,6 +4714,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
         return;
       }
+      if (!await authorizeProjectRequest(req, res, project.id, { mode: 'read' })) return;
       const allowedProps = new Set([
         'color',
         'backgroundColor',
@@ -4694,6 +4771,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       if (!project) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       }
+      if (!await authorizeProjectRequest(req, res, project.id, { mode: 'read' })) return;
       const folders = await listProjectFolders(PROJECTS_DIR, req.params.id, {
         metadata: project.metadata,
       });
@@ -4715,7 +4793,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       if (!project) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       }
-      if (!enforceWorkspaceProjectMutation(
+      if (!await enforceWorkspaceProjectMutation(
         req,
         res,
         sendApiError,
@@ -4749,7 +4827,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       if (!project) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       }
-      if (!enforceWorkspaceProjectMutation(
+      if (!await enforceWorkspaceProjectMutation(
         req,
         res,
         sendApiError,
@@ -4780,6 +4858,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
         return;
       }
+      if (!await authorizeProjectRequest(req, res, project.id, { mode: 'read' })) return;
       const projectRoot = resolveProjectDir(PROJECTS_DIR, project.id, project.metadata);
       const audit = await auditDesignSystemPackage(projectRoot);
       res.setHeader('Cache-Control', 'no-store');
@@ -4796,6 +4875,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
         return;
       }
+      if (!await authorizeProjectRequest(req, res, project.id, { mode: 'read' })) return;
       const requestedPath = previewFilePathForProject(project, req.query.file);
       const meta = await resolveProjectFilePath(
         PROJECTS_DIR,
@@ -4803,7 +4883,16 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         requestedPath,
         project.metadata,
       );
-      const scope = projectPreviewScopes.mint(project.id);
+      const requestContext = workspaceProjectContextFromRequest(req);
+      const scope = projectPreviewScopes.mint(
+        project.id,
+        requestContext === null || requestContext === 'missing'
+          ? null
+          : {
+              workspaceId: requestContext.workspaceId,
+              workspaceMemberId: requestContext.workspaceMemberId,
+            },
+      );
       /** @type {import('@open-design/contracts').ProjectPreviewUrlResponse} */
       const body = {
         url: `/api/projects/${encodeURIComponent(project.id)}/preview/${scope}/${encodeProjectPathForUrl(meta.name)}`,
@@ -4838,6 +4927,15 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         Math.min(Number.isFinite(requestedLimit) ? Math.floor(requestedLimit) : 96 * 1024, 512 * 1024),
       );
       const project = getProject(db, projectId);
+      if (!project) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
+      if (!await authorizeProjectRequest(
+        req,
+        res,
+        projectId,
+        { mode: 'read', allowNavigationQuery: true },
+      )) return;
       const meta = await resolveProjectFilePath(
         PROJECTS_DIR,
         projectId,
@@ -4892,10 +4990,27 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
         return;
       }
-      if (!projectPreviewScopes.validate(project.id, scope)) {
+      const previewWorkspace = projectPreviewScopes.resolve(project.id, scope);
+      if (previewWorkspace === undefined) {
         sendApiError(res, 404, 'PREVIEW_SCOPE_NOT_FOUND', 'preview scope not found');
         return;
       }
+      const authorityRequest = previewWorkspace
+        ? {
+            query: {
+              ...req.query,
+              workspaceId: previewWorkspace.workspaceId,
+              workspaceMemberId: previewWorkspace.workspaceMemberId,
+            },
+            get: req.get.bind(req),
+          }
+        : req;
+      if (!await authorizeProjectRequest(
+        authorityRequest,
+        res,
+        projectId,
+        { mode: 'read', allowNavigationQuery: true },
+      )) return;
       if (req.headers.origin === 'null') {
         res.header('Access-Control-Allow-Origin', '*');
       }
@@ -4946,6 +5061,15 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       const relPath = String(params[1] ?? '');
       if (rejectInternalVersionPath(res, relPath)) return;
       const project = getProject(db, projectId);
+      if (!project) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
+      if (!await authorizeProjectRequest(
+        req,
+        res,
+        projectId,
+        { mode: 'read', allowNavigationQuery: true },
+      )) return;
       if (project?.metadata?.teamMirrorRevokedAt) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
       }
@@ -5016,6 +5140,15 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       const relPath = String(params[1] ?? '');
       if (rejectInternalVersionPath(res, relPath)) return;
       const project = getProject(db, projectId);
+      if (!project) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
+      if (!await authorizeProjectRequest(
+        req,
+        res,
+        projectId,
+        { mode: 'read', allowNavigationQuery: true },
+      )) return;
       const meta = await resolveProjectFilePath(
         PROJECTS_DIR,
         projectId,
@@ -5064,7 +5197,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       if (!project) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       }
-      if (!enforceWorkspaceProjectMutation(
+      if (!await enforceWorkspaceProjectMutation(
         req,
         res,
         sendApiError,
@@ -5093,6 +5226,15 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
   app.get('/api/projects/:id/files/:name/preview', async (req, res) => {
     try {
       const project = getProject(db, req.params.id);
+      if (!project) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
+      if (!await authorizeProjectRequest(
+        req,
+        res,
+        project.id,
+        { mode: 'read', allowNavigationQuery: true },
+      )) return;
       const file = await readProjectFile(
         PROJECTS_DIR,
         req.params.id,
@@ -5127,6 +5269,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       if (!project) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       }
+      if (!await authorizeProjectRequest(req, res, project.id, { mode: 'read' })) return;
       if (!/\.html?$/i.test(fileName)) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'versions are only available for HTML files');
       }
@@ -5154,7 +5297,13 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       // project the member is told they cannot modify. The read itself is
       // never refused: browsing history stays open (飞书 recvq56vFjQKfT).
       if (workingFileContent !== null && versions.length === 0
-        && requestCanWriteWorkspaceProject(req, getWorkspaceProject, db, project.id)) {
+        && await requestCanWriteWorkspaceProject(
+          req,
+          getWorkspaceProject,
+          getWorkspaceProjectByProjectId,
+          db,
+          project.id,
+        )) {
         const initial = await ensureCurrentProjectFileVersion(
           PROJECTS_DIR,
           project.id,
@@ -5196,7 +5345,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       if (!project) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       }
-      if (!enforceWorkspaceProjectMutation(
+      if (!await enforceWorkspaceProjectMutation(
         req,
         res,
         sendApiError,
@@ -5270,7 +5419,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       if (!project) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       }
-      if (!enforceWorkspaceProjectMutation(
+      if (!await enforceWorkspaceProjectMutation(
         req,
         res,
         sendApiError,
@@ -5347,6 +5496,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       if (!project) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       }
+      if (!await authorizeProjectRequest(req, res, project.id, { mode: 'read' })) return;
       const body = await readProjectFileVersion(
         PROJECTS_DIR,
         project.id,
@@ -5376,6 +5526,15 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       const fileSplat = String(params[1] ?? '');
       if (rejectInternalVersionPath(res, fileSplat)) return;
       const project = getProject(db, projectId);
+      if (!project) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
+      if (!await authorizeProjectRequest(
+        req,
+        res,
+        project.id,
+        { mode: 'read', allowNavigationQuery: true },
+      )) return;
       if (project?.metadata?.teamMirrorRevokedAt) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
       }
@@ -5418,7 +5577,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
           cleanupRejectedUpload();
           return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
         }
-        if (!enforceWorkspaceProjectMutation(
+        if (!await enforceWorkspaceProjectMutation(
           req,
           res,
           sendApiError,
@@ -5643,7 +5802,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       if (!project) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       }
-      if (!enforceWorkspaceProjectMutation(
+      if (!await enforceWorkspaceProjectMutation(
         req,
         res,
         sendApiError,
@@ -5689,7 +5848,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       if (!delProject) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       }
-      if (!enforceWorkspaceProjectMutation(
+      if (!await enforceWorkspaceProjectMutation(
         req,
         res,
         sendApiError,
@@ -5718,9 +5877,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
 }
 
 export interface RegisterProjectUploadRoutesDeps extends RouteDeps<'db' | 'http' | 'uploads' | 'node' | 'paths' | 'projectStore' | 'projectFiles'> {
-  /** See `RegisterProjectRoutesDeps.workspaceContext` above — same seam,
-   *  used by this file's own `enforceWorkspaceProjectMutation` call. */
-  workspaceContext?: Pick<WorkspaceContextProvider, 'lastKnown'>;
+  verifyWorkspaceRequestAuthority?: VerifyWorkspaceRequestAuthority;
 }
 
 export function registerProjectUploadRoutes(app: Express, ctx: RegisterProjectUploadRoutesDeps) {
@@ -5731,7 +5888,9 @@ export function registerProjectUploadRoutes(app: Express, ctx: RegisterProjectUp
   const { getProject, getWorkspaceProject, getWorkspaceProjectByProjectId } = ctx.projectStore;
   const { readProjectFile } = ctx.projectFiles;
   const { fs } = ctx.node;
-  const enforceWorkspaceProjectMutation = createEnforceWorkspaceProjectMutation(ctx.workspaceContext);
+  const enforceWorkspaceProjectMutation = createEnforceWorkspaceProjectMutation(
+    ctx.verifyWorkspaceRequestAuthority,
+  );
 
   app.post(
     '/api/projects/:id/upload',
@@ -5744,7 +5903,7 @@ export function registerProjectUploadRoutes(app: Express, ctx: RegisterProjectUp
             if (f?.path) fs.promises.unlink(f.path).catch(() => {});
           }
         };
-        if (!enforceWorkspaceProjectMutation(
+        if (!await enforceWorkspaceProjectMutation(
           req,
           res,
           sendApiError,

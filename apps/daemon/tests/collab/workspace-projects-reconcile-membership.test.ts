@@ -178,12 +178,17 @@ describe('reconciler remote membership vs the display-filtered catalog (recvqzjn
     return () =>
       reconcilerRemoteTeamProjects({
         listCatalogMembership: async () =>
-          (await membershipCatalog.list()).map((record) => ({
+          (await membershipCatalog.list({
+            memberId: READER_MEMBER_ID,
+            teamId: TEAM_WORKSPACE_ID,
+            role: 'member',
+            lifecycleState: 'active',
+          })).map((record) => ({
             projectId: record.projectId,
             ownerMemberId: record.ownerMemberId,
           })),
         listDisplayTeamProjects: async () =>
-          (await displayCatalog.list()).map((project) => ({
+          (await displayCatalog.list(TEAM_WORKSPACE_ID)).map((project) => ({
             projectId: project.projectId,
             ownerMemberId: project.ownerMemberId,
           })),

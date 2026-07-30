@@ -1,11 +1,17 @@
-import type { Express, Response } from 'express';
-import type { CollabPresenceMember } from '@open-design/contracts';
+import type { Express, Request, Response } from 'express';
+import type {
+  CollabPresenceMember,
+  WorkspaceCollabContext,
+} from '@open-design/contracts';
 import type { CollabRuntime } from '../collab/runtime.js';
 import type { PresenceMember } from '../collab/presence-tracker.js';
 import type {
   VelaCliPresenceHeartbeatInput,
   VelaCliPresenceLeaveInput,
 } from '../collab/vela-cli-collab-client.js';
+import type {
+  VerifiedWorkspaceRequestContextResult,
+} from '../collab/request-workspace-context.js';
 
 type PresenceActivity = Exclude<PresenceMember['activity'], undefined>;
 
@@ -13,18 +19,34 @@ export interface CollabPresenceCloudClient {
   heartbeatPresence(
     projectId: string,
     input: VelaCliPresenceHeartbeatInput,
+    context?: WorkspaceCollabContext | null,
   ): Promise<CollabPresenceMember[]>;
-  listPresence(projectId: string): Promise<CollabPresenceMember[]>;
+  listPresence(
+    projectId: string,
+    context?: WorkspaceCollabContext | null,
+  ): Promise<CollabPresenceMember[]>;
   leavePresence(
     projectId: string,
     input: VelaCliPresenceLeaveInput,
+    context?: WorkspaceCollabContext | null,
   ): Promise<CollabPresenceMember[]>;
 }
 
 export interface RegisterCollabPresenceRoutesDeps {
   collab: Pick<CollabRuntime, 'presence'>;
   cloud?: CollabPresenceCloudClient | null;
-  isProjectShared?: (projectId: string) => Promise<boolean>;
+  isProjectShared?: (
+    projectId: string,
+    context?: WorkspaceCollabContext | null,
+  ) => Promise<boolean>;
+  verifyWorkspaceRequest?: (
+    req: Request,
+    projectId: string,
+  ) => Promise<
+    | VerifiedWorkspaceRequestContextResult
+    | WorkspaceCollabContext
+    | null
+  >;
   /**
    * The configured cloud route authoritatively rejects projects outside the
    * requested workspace, so a separate remote team-project lookup is redundant.
@@ -40,16 +62,16 @@ export interface CollabPresenceCloudTransport {
   heartbeatPresence(
     projectId: string,
     input: VelaCliPresenceHeartbeatInput,
-    workspaceId?: string,
+    workspaceId: string,
   ): Promise<CollabPresenceMember[]>;
   listPresence(
     projectId: string,
-    workspaceId?: string,
+    workspaceId: string,
   ): Promise<CollabPresenceMember[]>;
   leavePresence(
     projectId: string,
     input: VelaCliPresenceLeaveInput,
-    workspaceId?: string,
+    workspaceId: string,
   ): Promise<CollabPresenceMember[]>;
 }
 
@@ -76,13 +98,35 @@ export function createCollabPresenceCloudClient(
   workspaceScopeFor: (projectId: string) => string | undefined,
 ): CollabPresenceCloudClient | null {
   if (!transport) return null;
+  const exactWorkspaceId = (
+    projectId: string,
+    context?: WorkspaceCollabContext | null,
+  ): string => {
+    const workspaceId =
+      context?.workspaceId?.trim() || workspaceScopeFor(projectId)?.trim() || '';
+    if (!workspaceId) {
+      throw new Error('explicit workspace scope is required');
+    }
+    return workspaceId;
+  };
   return {
-    heartbeatPresence: (projectId, input) =>
-      transport.heartbeatPresence(projectId, input, workspaceScopeFor(projectId)),
-    listPresence: (projectId) =>
-      transport.listPresence(projectId, workspaceScopeFor(projectId)),
-    leavePresence: (projectId, input) =>
-      transport.leavePresence(projectId, input, workspaceScopeFor(projectId)),
+    heartbeatPresence: (projectId, input, context) =>
+      transport.heartbeatPresence(
+        projectId,
+        input,
+        exactWorkspaceId(projectId, context),
+      ),
+    listPresence: (projectId, context) =>
+      transport.listPresence(
+        projectId,
+        exactWorkspaceId(projectId, context),
+      ),
+    leavePresence: (projectId, input, context) =>
+      transport.leavePresence(
+        projectId,
+        input,
+        exactWorkspaceId(projectId, context),
+      ),
   };
 }
 
@@ -130,6 +174,34 @@ function cloudError(res: Response, error: unknown) {
   return res.status(502).json({ error: 'collab_presence_unavailable', message });
 }
 
+type PresenceWorkspaceVerification =
+  | { ok: true; context: WorkspaceCollabContext | null }
+  | Exclude<VerifiedWorkspaceRequestContextResult, { ok: true }>;
+
+function normalizeWorkspaceVerification(
+  value:
+    | VerifiedWorkspaceRequestContextResult
+    | WorkspaceCollabContext
+    | null,
+): PresenceWorkspaceVerification {
+  if (value && 'ok' in value) return value;
+  if (value) return { ok: true, context: value };
+  // Legacy injected test adapters used null as a route-specific denial.
+  // Production supplies the structured verifier result above.
+  return { ok: true, context: null };
+}
+
+function sendWorkspaceVerificationFailure(
+  res: Response,
+  verification: Exclude<PresenceWorkspaceVerification, { ok: true }>,
+) {
+  return res.status(verification.status).json({
+    error: verification.code,
+    message: verification.message,
+    ...(verification.retryable ? { retryable: true } : {}),
+  });
+}
+
 /**
  * Team collaboration presence (presence) capability. Members heartbeat while viewing a
  * shared project; clients poll the present set (live cursors were cut, content
@@ -139,10 +211,13 @@ export function registerCollabPresenceRoutes(app: Express, deps: RegisterCollabP
   const { presence } = deps.collab;
   const cloud = deps.cloud ?? null;
 
-  async function projectIsShared(projectId: string): Promise<boolean> {
+  async function projectIsShared(
+    projectId: string,
+    context: WorkspaceCollabContext | null,
+  ): Promise<boolean> {
     if (!deps.isProjectShared) return true;
     try {
-      return await deps.isProjectShared(projectId);
+      return await deps.isProjectShared(projectId, context);
     } catch (error) {
       return false;
     }
@@ -157,16 +232,45 @@ export function registerCollabPresenceRoutes(app: Express, deps: RegisterCollabP
     }
   }
 
+  async function verifiedContext(
+    req: Request,
+    projectId: string,
+  ): Promise<PresenceWorkspaceVerification> {
+    if (!deps.verifyWorkspaceRequest) {
+      return { ok: true, context: null };
+    }
+    try {
+      return normalizeWorkspaceVerification(
+        await deps.verifyWorkspaceRequest(req, projectId),
+      );
+    } catch {
+      return {
+        ok: false,
+        status: 503,
+        code: 'WORKSPACE_AUTHORITY_UNAVAILABLE',
+        message: 'workspace membership authority is temporarily unavailable',
+        retryable: true,
+      };
+    }
+  }
+
   app.get('/api/projects/:id/presence', async (req, res) => {
+    const verification = await verifiedContext(req, req.params.id);
+    if (cloud && !verification.ok) {
+      return sendWorkspaceVerificationFailure(res, verification);
+    }
+    const context = verification.ok ? verification.context : null;
     if (
       !cloudAuthorizesProject(req.params.id) &&
-      !(await projectIsShared(req.params.id))
+      !(await projectIsShared(req.params.id, context))
     ) {
       return res.json({ present: [] });
     }
     if (cloud) {
       try {
-        return res.json({ present: await cloud.listPresence(req.params.id) });
+        return res.json({
+          present: await cloud.listPresence(req.params.id, context),
+        });
       } catch (error) {
         return cloudError(res, error);
       }
@@ -177,16 +281,36 @@ export function registerCollabPresenceRoutes(app: Express, deps: RegisterCollabP
   app.post('/api/projects/:id/presence/heartbeat', async (req, res) => {
     const heartbeat = readHeartbeat(req.body);
     if (!heartbeat) return res.status(400).json({ error: 'memberId required' });
+    const verification = await verifiedContext(req, req.params.id);
+    if (cloud && !verification.ok) {
+      return sendWorkspaceVerificationFailure(res, verification);
+    }
+    const context = verification.ok ? verification.context : null;
+    if (
+      cloud
+      && deps.verifyWorkspaceRequest
+      && (
+        !verification.ok
+        || !context
+        || heartbeat.member.memberId !== context.workspaceMemberId
+      )
+    ) {
+      return res.status(403).json({ error: 'WORKSPACE_PROJECT_PRESENCE_DENIED' });
+    }
     if (
       !cloudAuthorizesProject(req.params.id) &&
-      !(await projectIsShared(req.params.id))
+      !(await projectIsShared(req.params.id, context))
     ) {
       return res.json({ present: [] });
     }
     if (cloud) {
       try {
         return res.json({
-          present: await cloud.heartbeatPresence(req.params.id, heartbeat),
+          present: await cloud.heartbeatPresence(
+            req.params.id,
+            heartbeat,
+            context,
+          ),
         });
       } catch (error) {
         return cloudError(res, error);
@@ -199,11 +323,23 @@ export function registerCollabPresenceRoutes(app: Express, deps: RegisterCollabP
   app.post('/api/projects/:id/presence/leave', async (req, res) => {
     const leave = readLeave(req.body);
     if (!leave) return res.status(400).json({ error: 'memberId required' });
+    const verification = await verifiedContext(req, req.params.id);
+    if (cloud && !verification.ok) {
+      return sendWorkspaceVerificationFailure(res, verification);
+    }
+    const context = verification.ok ? verification.context : null;
+    if (
+      cloud
+      && deps.verifyWorkspaceRequest
+      && (!verification.ok || !context || leave.memberId !== context.workspaceMemberId)
+    ) {
+      return res.status(403).json({ error: 'WORKSPACE_PROJECT_PRESENCE_DENIED' });
+    }
     if (cloud) {
       try {
         return res.json({
           ok: true,
-          present: await cloud.leavePresence(req.params.id, leave),
+          present: await cloud.leavePresence(req.params.id, leave, context),
         });
       } catch (error) {
         return cloudError(res, error);

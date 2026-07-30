@@ -212,7 +212,7 @@ describe('ProjectView conversation delete', () => {
       await chatPaneProps.onDeleteConversation!('conv-1');
     });
 
-    expect(deleteConversation).toHaveBeenCalledWith('project-1', 'conv-1');
+    expect(deleteConversation).toHaveBeenCalledWith('project-1', 'conv-1', null);
     expect(onProjectsRefresh).toHaveBeenCalledTimes(1);
   });
 
@@ -245,7 +245,7 @@ describe('ProjectView conversation delete', () => {
       await chatPaneProps.onDeleteConversation!('conv-1');
     });
 
-    expect(deleteConversation).toHaveBeenCalledWith('project-1', 'conv-1');
+    expect(deleteConversation).toHaveBeenCalledWith('project-1', 'conv-1', null);
     expect(onProjectsRefresh).not.toHaveBeenCalled();
   });
 
@@ -305,7 +305,13 @@ describe('ProjectView conversation delete', () => {
       await chatPaneProps.onDeleteConversation!('conv-1');
     });
 
-    await waitFor(() => expect(createConversation).toHaveBeenCalledWith('project-1'));
+    await waitFor(() =>
+      expect(createConversation).toHaveBeenCalledWith(
+        'project-1',
+        undefined,
+        { workspaceContext: null },
+      ),
+    );
     await waitFor(() => expect(chatPaneProps.activeConversationId).toBe('conv-fresh'));
     expect(chatPaneProps.conversations?.map((conversation) => conversation.id)).toEqual(['conv-fresh']);
   });

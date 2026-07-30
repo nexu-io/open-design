@@ -221,6 +221,24 @@ function devWorkspaceContext(): WorkspaceCollabContext {
   };
 }
 
+function devWorkspaceHeaders(): Record<string, string> {
+  const context = devWorkspaceContext();
+  return {
+    'x-od-workspace-id': context.workspaceId,
+    'x-od-workspace-type': context.workspaceType,
+    'x-od-workspace-member-id': context.workspaceMemberId,
+    'x-od-workspace-role': context.role,
+    'x-od-workspace-member-status': context.memberStatus,
+    'x-od-workspace-lifecycle-state': context.lifecycleState,
+    'x-od-workspace-can-share-projects': String(
+      context.permissions.canShareProjects,
+    ),
+    'x-od-workspace-can-write-synced-files': String(
+      context.permissions.canWriteSyncedFiles,
+    ),
+  };
+}
+
 /**
  * A stand-in `vela` on the daemon's normal resolution path (`VELA_BIN`), so the
  * team-project catalog and the collab presence relay exercise the real
@@ -324,13 +342,20 @@ async function startIsolatedServer(): Promise<{
   });
   return {
     async get(route: string) {
-      return read(await fetch(`${base}${route}`));
+      return read(
+        await fetch(`${base}${route}`, {
+          headers: devWorkspaceHeaders(),
+        }),
+      );
     },
     async post(route: string, body: unknown) {
       return read(
         await fetch(`${base}${route}`, {
           method: 'POST',
-          headers: { 'content-type': 'application/json' },
+          headers: {
+            'content-type': 'application/json',
+            ...devWorkspaceHeaders(),
+          },
           body: JSON.stringify(body),
         }),
       );

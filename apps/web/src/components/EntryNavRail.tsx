@@ -824,20 +824,24 @@ export function EntryNavRail({
 
   async function switchWorkspace(workspaceId: string) {
     if (workspaceId === context?.workspaceId || workspaceSwitchingId) return;
+    const selected = visibleWorkspaceItems.find((item) => item.workspaceId === workspaceId);
+    if (!selected) return;
     setWorkspaceSwitchingId(workspaceId);
     try {
       const response = await fetch('/api/workspace/active', {
         method: 'PUT',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ workspaceId }),
+        body: JSON.stringify({
+          workspaceId,
+          workspaceMemberId: selected.workspaceMemberId,
+        }),
       });
       if (!response.ok) return;
       const body = (await response.json()) as WorkspaceActiveResponse;
       setTeamOpen(false);
-      // Seed the shell from the switch response rather than making every
-      // consumer re-read it: the daemon builds this `context` from the same
-      // `workspaceContext.current()` call `GET /api/workspace/context` serves,
-      // and only answers 200 once it agrees the active workspace really moved.
+      // Seed this tab from the authoritatively verified switch response. The
+      // selected identity is kept in sessionStorage by the context provider, so
+      // another tab remains on its own Workspace.
       notifyWorkspaceContextRefresh(
         body?.context ? { context: body.context } : null,
       );
@@ -1443,6 +1447,7 @@ export function EntryNavRail({
       <InviteDialog
         open={inviteOpen}
         onClose={() => setInviteOpen(false)}
+        workspaceContext={context}
         canAssignRoles={canInviteMembers}
         availableSeats={context?.seatSummary?.availableSeats}
         onUpgrade={

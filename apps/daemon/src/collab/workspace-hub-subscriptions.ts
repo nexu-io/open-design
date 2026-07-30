@@ -9,12 +9,11 @@ export interface WorkspaceHubSubscriptionManagerOptions {
 /**
  * Owns the process-wide set of Vela workspace event streams.
  *
- * Ambient workspace activity and explicit billing interests are two reasons
- * for the same workspace stream, not two independent subscribers. Replacing
- * either reason set reconciles to one subscriber per workspace.
+ * Every live stream is backed by an explicit, leased billing interest. A
+ * daemon-global UI selection is deliberately not a subscription authority:
+ * one tab switching to B must not stop another tab's A stream.
  */
 export class WorkspaceHubSubscriptionManager {
-  private ambientWorkspaceId: string | null = null;
   private billingWorkspaceIds = new Set<string>();
   private readonly subscribers = new Map<string, HubEventsSubscriber>();
   private disposed = false;
@@ -22,14 +21,6 @@ export class WorkspaceHubSubscriptionManager {
 
   constructor(private readonly options: WorkspaceHubSubscriptionManagerOptions) {
     this.maxSubscribers = Math.max(1, options.maxSubscribers ?? 8);
-  }
-
-  setAmbientWorkspace(workspaceIdInput: string | null | undefined): void {
-    this.assertUsable();
-    const workspaceId = workspaceIdInput?.trim() ?? '';
-    if ((this.ambientWorkspaceId ?? '') === workspaceId) return;
-    this.ambientWorkspaceId = workspaceId || null;
-    this.reconcile();
   }
 
   setBillingInterests(workspaceIds: Iterable<string>): void {
@@ -54,14 +45,10 @@ export class WorkspaceHubSubscriptionManager {
     for (const subscriber of this.subscribers.values()) subscriber.stop();
     this.subscribers.clear();
     this.billingWorkspaceIds.clear();
-    this.ambientWorkspaceId = null;
   }
 
   private reconcile(): void {
-    const ordered = [
-      ...(this.ambientWorkspaceId ? [this.ambientWorkspaceId] : []),
-      ...this.billingWorkspaceIds,
-    ];
+    const ordered = [...this.billingWorkspaceIds];
     const desired = new Set<string>();
     for (const workspaceId of ordered) {
       if (desired.size >= this.maxSubscribers) break;

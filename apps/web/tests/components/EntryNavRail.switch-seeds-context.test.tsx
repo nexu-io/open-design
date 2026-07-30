@@ -1,10 +1,9 @@
 // @vitest-environment jsdom
 //
 // `PUT /api/workspace/active` already returns the new `WorkspaceCollabContext`
-// (`WorkspaceActiveResponse.context`), produced by the very same
-// `workspaceContext.current()` call that `GET /api/workspace/context` serves —
-// and the route only returns 200 after asserting `context.workspaceId` equals
-// the requested workspace. The client parsed that body and threw it away, then
+// (`WorkspaceActiveResponse.context`), and the route only returns 200 after
+// verifying the exact Workspace/member pair. The client parsed that body and
+// threw it away, then
 // called `notifyWorkspaceContextRefresh()` so every mounted consumer went and
 // GET the same data again.
 //
@@ -113,6 +112,9 @@ describe('workspace switch — seeding the context from the PUT response', () =>
   it('adopts the switch response instead of re-reading the context', async () => {
     let activeWorkspaceId = 'ws-a';
     const paths: string[] = [];
+    const contextScopes: Array<{ workspaceId: string | null; workspaceMemberId: string | null }> = [];
+    const switchBodies: unknown[] = [];
+    const storageWrites = vi.spyOn(Storage.prototype, 'setItem');
 
     globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = new URL(String(input), 'http://d.local');
@@ -123,12 +125,25 @@ describe('workspace switch — seeding the context from the PUT response', () =>
         });
       }
       if (url.pathname === '/api/workspace/context') {
+        const headers = new Headers(init?.headers);
+        const requestedWorkspaceId = headers.get('x-od-workspace-id');
+        const requestedWorkspaceMemberId = headers.get('x-od-workspace-member-id');
+        contextScopes.push({
+          workspaceId: requestedWorkspaceId,
+          workspaceMemberId: requestedWorkspaceMemberId,
+        });
+        if (!requestedWorkspaceId || !requestedWorkspaceMemberId) {
+          return new Response(JSON.stringify({ error: 'missing_scope' }), { status: 400 });
+        }
         return new Response(
-          JSON.stringify({ context: contextFor(activeWorkspaceId, `wm-${activeWorkspaceId}`) }),
+          JSON.stringify({
+            context: contextFor(requestedWorkspaceId, requestedWorkspaceMemberId),
+          }),
           { status: 200 },
         );
       }
       if (url.pathname === '/api/workspace/active') {
+        switchBodies.push(JSON.parse(String(init?.body ?? '{}')));
         activeWorkspaceId = 'ws-b';
         return new Response(
           JSON.stringify({
@@ -145,6 +160,7 @@ describe('workspace switch — seeding the context from the PUT response', () =>
     await waitFor(() =>
       expect(screen.getByTestId('observed-workspace').textContent).toBe('ws-a'),
     );
+    expect(contextScopes).toEqual([{ workspaceId: 'ws-a', workspaceMemberId: 'wm-a' }]);
 
     fireEvent.click(screen.getByTestId('workspace-switcher'));
     await waitFor(() => expect(screen.getByText('Workspace B')).toBeTruthy());
@@ -164,6 +180,10 @@ describe('workspace switch — seeding the context from the PUT response', () =>
     );
 
     expect(paths.filter((entry) => entry === 'PUT /api/workspace/active')).toHaveLength(1);
+    expect(switchBodies).toEqual([{ workspaceId: 'ws-b', workspaceMemberId: 'wm-b' }]);
+    expect(
+      storageWrites.mock.calls.some(([key]) => key === 'od.workspaceContext.refreshAt'),
+    ).toBe(false);
 
     // …and it must not have spent a second round-trip asking for what the PUT
     // just returned.
@@ -171,5 +191,55 @@ describe('workspace switch — seeding the context from the PUT response', () =>
       (entry) => entry === 'GET /api/workspace/context',
     ).length;
     expect(contextGetsAfterSwitch).toBe(contextGetsBeforeSwitch);
+
+    // A refresh stays on this tab's session selection and explicitly scopes
+    // the context request to B. Another tab has its own sessionStorage and did
+    // not receive a localStorage switch broadcast above.
+    act(() => {
+      window.dispatchEvent(new Event('focus'));
+    });
+    await waitFor(() => expect(contextScopes).toHaveLength(2));
+    expect(contextScopes[1]).toEqual({
+      workspaceId: 'ws-b',
+      workspaceMemberId: 'wm-b',
+    });
+  });
+
+  it('clears a cached Team selection when the authoritative directory becomes signed-out empty', async () => {
+    let signedOut = false;
+    let contextReads = 0;
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input), 'http://d.local');
+      if (url.pathname === '/api/workspace/directory') {
+        return new Response(JSON.stringify({
+          items: signedOut ? [] : [DIRECTORY[0]],
+          activeWorkspaceId: null,
+        }), { status: 200 });
+      }
+      if (url.pathname === '/api/workspace/context') {
+        contextReads += 1;
+        return new Response(JSON.stringify({ context: contextFor('ws-a', 'wm-a') }), {
+          status: 200,
+        });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    }) as typeof fetch;
+
+    render(<Harness />);
+    await waitFor(() =>
+      expect(screen.getByTestId('observed-workspace').textContent).toBe('ws-a'),
+    );
+    expect(contextReads).toBe(1);
+
+    signedOut = true;
+    act(() => {
+      window.dispatchEvent(new Event('od:workspace-context-refresh'));
+    });
+
+    await waitFor(() =>
+      expect(screen.getByTestId('observed-workspace').textContent).toBe('none'),
+    );
+    expect(contextReads).toBe(1);
+    expect(window.sessionStorage.getItem('od.workspaceSelection.v1')).toBeNull();
   });
 });

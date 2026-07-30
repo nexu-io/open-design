@@ -2,19 +2,37 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CollabDemoView } from '../src/collab/CollabDemoView';
+import { resetWorkspaceContextCache } from '../src/collab/useWorkspaceContext';
+import {
+  workspaceContextFixture,
+  workspaceDirectoryFixture,
+} from './helpers/workspace-context';
+
+const TEAM_CONTEXT = workspaceContextFixture({
+  workspaceId: 'workspace-team',
+  workspaceMemberId: 'member-demo',
+});
 
 // Route the demo view's live polling through a stub so the presence + sync loop
 // is exercised without a daemon. Mirrors the real route shapes.
 function installFetchStub(present: Array<{ memberId: string; name?: string }>, publishedVersion: number | null) {
-  const calls: Array<{ url: string; method: string; body: unknown }> = [];
+  const calls: Array<{ url: string; method: string; body: unknown; headers: Headers }> = [];
   const state = { present, publishedVersion };
   const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     const method = init?.method ?? 'GET';
-    calls.push({ url, method, body: init?.body ? JSON.parse(String(init.body)) : undefined });
+    calls.push({
+      url,
+      method,
+      body: init?.body ? JSON.parse(String(init.body)) : undefined,
+      headers: new Headers(init?.headers),
+    });
     const pathname = new URL(url, 'http://daemon.local').pathname;
     let payload: unknown = { ok: true };
-    if (pathname.endsWith('/presence/heartbeat')) payload = { present: state.present };
+    if (pathname.endsWith('/workspace/directory')) {
+      payload = workspaceDirectoryFixture([TEAM_CONTEXT]);
+    } else if (pathname.endsWith('/workspace/context')) payload = { context: TEAM_CONTEXT };
+    else if (pathname.endsWith('/presence/heartbeat')) payload = { present: state.present };
     else if (pathname.endsWith('/collab/status')) payload = { publishedVersion: state.publishedVersion, syncState: 'synced' };
     return { ok: true, status: 200, json: async () => payload } as unknown as Response;
   }) as typeof fetch;
@@ -24,6 +42,7 @@ function installFetchStub(present: Array<{ memberId: string; name?: string }>, p
 
 beforeEach(() => {
   vi.useFakeTimers();
+  resetWorkspaceContextCache();
   // A stable member id keeps the self-exclusion assertion deterministic.
   vi.stubGlobal('crypto', { randomUUID: () => 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee' });
 });
@@ -69,10 +88,18 @@ describe('CollabDemoView', () => {
     await act(async () => {
       fireEvent.click(screen.getByText('Report change'));
       fireEvent.click(screen.getByText('Publish'));
+      fireEvent.click(screen.getByText('Share to team'));
       await vi.advanceTimersByTimeAsync(0);
     });
     expect(calls.some((c) => c.method === 'POST' && c.url.endsWith('/collab/changed'))).toBe(true);
     expect(calls.some((c) => c.method === 'POST' && c.url.endsWith('/collab/publish'))).toBe(true);
+    const syncIntent = calls.find((c) => c.url.endsWith('/collab/sync-intent'));
+    expect(syncIntent?.headers.get('x-od-workspace-id')).toBe(
+      TEAM_CONTEXT.workspaceId,
+    );
+    expect(syncIntent?.headers.get('x-od-workspace-member-id')).toBe(
+      TEAM_CONTEXT.workspaceMemberId,
+    );
   });
 
   it('surfaces a pull prompt when the published head advances past the pulled version', async () => {

@@ -20,23 +20,27 @@ import {
   resetWorkspaceContextCache,
   useWorkspaceContext,
 } from '../src/collab/useWorkspaceContext';
+import {
+  workspaceContextFixture,
+  workspaceDirectoryFixture,
+} from './helpers/workspace-context';
 
-const SIGNED_IN = { workspaceId: 'ws-1', teamName: 'Acme', workspaceType: 'team' };
+const SIGNED_IN = workspaceContextFixture({
+  workspaceId: 'ws-1',
+  workspaceMemberId: 'member-1',
+  teamName: 'Acme',
+});
 
 /** A fetch whose every call resolves only when the test says so. */
 function deferredContextFetch() {
-  const pending: Array<(context: unknown) => void> = [];
+  const pending: Array<{
+    url: string;
+    resolve: (response: Response) => void;
+  }> = [];
   const fetchMock = vi.fn(
-    () =>
+    (input: RequestInfo | URL) =>
       new Promise<Response>((resolve) => {
-        pending.push((context) =>
-          resolve(
-            new Response(JSON.stringify({ context }), {
-              status: 200,
-              headers: { 'content-type': 'application/json' },
-            }),
-          ),
-        );
+        pending.push({ url: String(input), resolve });
       }),
   );
   vi.stubGlobal('fetch', fetchMock);
@@ -44,10 +48,31 @@ function deferredContextFetch() {
     fetchMock,
     /** Settle every read issued so far with `context`. */
     async settleAll(context: unknown) {
-      const waiting = pending.splice(0, pending.length);
-      await act(async () => {
-        for (const resolve of waiting) resolve(context);
-      });
+      for (let pass = 0; pass < 4; pass += 1) {
+        const waiting = pending.splice(0, pending.length);
+        if (waiting.length === 0) {
+          await Promise.resolve();
+          if (pending.length === 0) break;
+          continue;
+        }
+        await act(async () => {
+          for (const request of waiting) {
+            const body =
+              request.url === '/api/workspace/directory'
+                ? workspaceDirectoryFixture(
+                    context ? [context as typeof SIGNED_IN] : [],
+                  )
+                : { context };
+            request.resolve(
+              new Response(JSON.stringify(body), {
+                status: 200,
+                headers: { 'content-type': 'application/json' },
+              }),
+            );
+          }
+          await Promise.resolve();
+        });
+      }
     },
   };
 }

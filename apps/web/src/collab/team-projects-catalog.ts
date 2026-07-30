@@ -23,15 +23,17 @@
 // mis-shaped payload degrades to an empty catalog instead of poisoning every
 // consumer downstream.
 
-import type { TeamProject, WorkspaceTeamProjectsResponse } from '@open-design/contracts';
+import type {
+  TeamProject,
+  WorkspaceCollabContext,
+  WorkspaceTeamProjectsResponse,
+} from '@open-design/contracts';
 
 import { coalescedGet, forceCoalescedGet } from '../lib/coalesced-get';
-
-/**
- * Module-private on purpose — see the header. Exporting it would re-open the
- * door to a second producer with a different payload shape.
- */
-const TEAM_PROJECTS_CACHE_KEY = 'workspace-team-projects';
+import {
+  workspaceIdentityCacheKey,
+  workspaceProjectHeaders,
+} from './workspace-identity';
 
 /**
  * Narrow an untrusted catalog payload to the row array every consumer expects.
@@ -58,17 +60,31 @@ export function asTeamProjectRows(value: unknown): TeamProject[] {
  * workspace change, where the cached answer describes the previous identity.
  */
 export async function fetchTeamProjectsCatalog(
-  options: { force?: boolean } = {},
+  options: {
+    context: WorkspaceCollabContext;
+    force?: boolean;
+    /** Explicit user refreshes own their request generation and must remain
+     * independent so a newer response can supersede an older in-flight one. */
+    coalesce?: boolean;
+  },
 ): Promise<TeamProject[]> {
+  const cacheKey = `workspace-team-projects:${workspaceIdentityCacheKey(options.context)}`;
   const run = async (): Promise<TeamProject[]> => {
-    const response = await fetch('/api/workspace/projects/team');
+    const response = await fetch('/api/workspace/projects/team', {
+      headers: workspaceProjectHeaders(options.context),
+    });
     if (!response.ok) throw new Error(`team-projects ${response.status}`);
     const body = (await response.json()) as WorkspaceTeamProjectsResponse;
     return asTeamProjectRows(body);
   };
-  const projects = options.force
-    ? await forceCoalescedGet(TEAM_PROJECTS_CACHE_KEY, run)
-    : await coalescedGet(TEAM_PROJECTS_CACHE_KEY, run);
+  let projects: TeamProject[];
+  if (options.coalesce === false) {
+    projects = await run();
+  } else if (options.force) {
+    projects = await forceCoalescedGet(cacheKey, run);
+  } else {
+    projects = await coalescedGet(cacheKey, run);
+  }
   // Belt and braces: a cache entry seeded before this module owned the key
   // (or by a future caller that reaches the coalescer some other way) must
   // still leave every consumer holding an array.

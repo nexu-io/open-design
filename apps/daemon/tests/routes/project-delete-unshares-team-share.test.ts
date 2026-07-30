@@ -37,6 +37,7 @@ import {
 import { removeProjectDir } from '../../src/projects.js';
 import { registerProjectRoutes } from '../../src/routes/project/index.js';
 import { createCollabRuntime } from '../../src/collab/runtime.js';
+import { workspaceContextFromDirectoryItem } from '../../src/collab/vela-workspace-context.js';
 import type { ResourcePublishAdapter, ResourcePublishInput } from '../../src/collab/publish-scheduler.js';
 import type { ResourceHubPrincipal } from '../../src/collab/resource-principal.js';
 
@@ -110,22 +111,8 @@ function fakeHub() {
   return { adapter, teamProjectCatalog, published, catalog, publishCalls, unpublishCalls, catalogRemoveCalls, key };
 }
 
-/** The daemon's own signed-in identity, as `workspaceContext.lastKnown()` reports it. */
-function ambientOwner() {
-  return {
-    workspaceId: WORKSPACE_ID,
-    workspaceType: 'personal' as const,
-    workspaceMemberId: OWNER_MEMBER_ID,
-    role: 'owner' as const,
-    memberStatus: 'active' as const,
-    lifecycleState: 'active' as const,
-    permissions: { canShareProjects: true, canWriteSyncedFiles: true },
-  };
-}
-
 async function startServer(
   hub: ReturnType<typeof fakeHub>,
-  options: { ambient?: ReturnType<typeof ambientOwner> | null } = {},
 ) {
   tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-project-delete-unshare-'));
   projectsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-project-delete-unshare-dir-'));
@@ -161,9 +148,38 @@ async function startServer(
     appConfig: {},
     agents: {},
     validation: {},
-    ...(options.ambient === undefined
-      ? {}
-      : { workspaceContext: { lastKnown: () => options.ambient } }),
+    verifyWorkspaceRequestAuthority: async (req: any) => {
+      const workspaceId = req.get('x-od-workspace-id');
+      const memberId = req.get('x-od-workspace-member-id');
+      if (!workspaceId || !memberId) {
+        return {
+          ok: false,
+          status: 400,
+          code: 'WORKSPACE_CONTEXT_REQUIRED',
+          message: 'an explicit workspace context is required',
+        };
+      }
+      if (workspaceId !== WORKSPACE_ID || memberId !== OWNER_MEMBER_ID) {
+        return {
+          ok: false,
+          status: 403,
+          code: 'WORKSPACE_ACCESS_DENIED',
+          message: 'workspace access denied',
+        };
+      }
+      return {
+        ok: true,
+        context: workspaceContextFromDirectoryItem({
+          workspaceId,
+          workspaceName: workspaceId,
+          workspaceType: 'team',
+          workspaceMemberId: memberId,
+          role: 'owner',
+          memberStatus: 'active',
+          lifecycleState: 'active',
+        }),
+      };
+    },
     collabSync: {
       requestTeamShare: (projectId: string, share?: string | ResourceHubPrincipal) =>
         collab.requestTeamShare(projectId, share),
@@ -391,9 +407,9 @@ describe('member-side convergence after an owner unshare (spec 04 §11, known ga
   // occurrence: a local delete that lands while the hub call is skipped leaves
   // exactly the inconsistency this guards, so the hub state is asserted to be
   // clean at the same moment the project is gone locally.
-  it('unshares from the hub for a HEADERLESS caller whose ambient identity owns the row', async () => {
+  it('unshares from the hub for an explicitly-scoped authoritative owner', async () => {
     const hub = fakeHub();
-    const { baseUrl, db } = await startServer(hub, { ambient: ambientOwner() });
+    const { baseUrl, db } = await startServer(hub);
     const now = Date.now();
     const projectId = 'p-team-shared-headerless';
     insertProject(db, { id: projectId, name: 'Team shared headerless', createdAt: now, updatedAt: now });
@@ -415,14 +431,16 @@ describe('member-side convergence after an owner unshare (spec 04 §11, known ga
     hub.published.set(hub.key(projectId, principal), { version: 1 });
     hub.catalog.set(hub.key(projectId, principal), { projectId });
 
-    // No `ownerHeaders()` — this is the bare DELETE `od project delete` sends.
-    const res = await fetch(`${baseUrl}/api/projects/${projectId}`, { method: 'DELETE' });
+    const res = await fetch(`${baseUrl}/api/projects/${projectId}`, {
+      method: 'DELETE',
+      headers: ownerHeaders(),
+    });
     expect(res.status).toBe(200);
 
     // The hub learned about it...
     expect(
       hub.unpublishCalls.length,
-      'a headerless delete must still unpublish the shared resource',
+      'an authorized delete must unpublish the shared resource',
     ).toBeGreaterThan(0);
     expect(hub.published.has(hub.key(projectId, principal))).toBe(false);
     expect(
@@ -431,7 +449,7 @@ describe('member-side convergence after an owner unshare (spec 04 §11, known ga
     ).toContain(projectId);
     expect(hub.catalog.has(hub.key(projectId, principal))).toBe(false);
 
-    // ...and the unshare was attributed to the ambient identity, not to nothing.
+    // ...and the unshare was attributed to the verified explicit identity.
     expect(hub.unpublishCalls[0]?.principal?.teamId).toBe(WORKSPACE_ID);
     expect(hub.unpublishCalls[0]?.principal?.memberId).toBe(OWNER_MEMBER_ID);
 
@@ -445,7 +463,7 @@ describe('member-side convergence after an owner unshare (spec 04 §11, known ga
   // deletable by a caller nothing can vouch for.
   it('refuses a headerless delete of a team-bound project when the daemon has no identity', async () => {
     const hub = fakeHub();
-    const { baseUrl, db } = await startServer(hub, { ambient: null });
+    const { baseUrl, db } = await startServer(hub);
     const now = Date.now();
     const projectId = 'p-team-shared-no-identity';
     insertProject(db, { id: projectId, name: 'Team shared no identity', createdAt: now, updatedAt: now });
@@ -459,7 +477,7 @@ describe('member-side convergence after an owner unshare (spec 04 §11, known ga
     });
 
     const res = await fetch(`${baseUrl}/api/projects/${projectId}`, { method: 'DELETE' });
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(400);
     expect(hub.unpublishCalls.length).toBe(0);
     expect(getProject(db, projectId), 'nothing may be destroyed locally either').toBeTruthy();
   });

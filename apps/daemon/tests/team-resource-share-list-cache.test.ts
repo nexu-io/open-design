@@ -3,9 +3,33 @@ import express from 'express';
 import http from 'node:http';
 import { registerTeamResourceShareRoutes } from '../src/routes/team-resource-share.js';
 import { createSwrCache } from '../src/collab/swr-cache.js';
-import type { TeamResourceShareRecord, TeamResourceShareService } from '../src/collab/team-resource-share.js';
+import type {
+  TeamResourceRequestScope,
+  TeamResourceShareRecord,
+  TeamResourceShareService,
+} from '../src/collab/team-resource-share.js';
 
 let server: http.Server | null = null;
+const SCOPE: TeamResourceRequestScope = {
+  principal: {
+    memberId: 'wm-1',
+    teamId: 'ws-1',
+    role: 'owner',
+    lifecycleState: 'active',
+    workspaceType: 'team',
+  },
+  canShare: true,
+};
+const SCOPE_B: TeamResourceRequestScope = {
+  principal: {
+    memberId: 'wm-2',
+    teamId: 'ws-2',
+    role: 'member',
+    lifecycleState: 'active',
+    workspaceType: 'team',
+  },
+  canShare: true,
+};
 
 afterEach(async () => {
   if (server) {
@@ -37,29 +61,39 @@ function fakeShare(records: TeamResourceShareRecord[]): {
 
 interface TestServer {
   base: string;
-  get(route: string): Promise<{ status: number; body: Record<string, unknown> }>;
-  post(route: string): Promise<{ status: number; body: Record<string, unknown> }>;
-  del(route: string): Promise<{ status: number; body: Record<string, unknown> }>;
+  get(route: string, headers?: Record<string, string>): Promise<{ status: number; body: Record<string, unknown> }>;
+  post(route: string, headers?: Record<string, string>): Promise<{ status: number; body: Record<string, unknown> }>;
+  del(route: string, headers?: Record<string, string>): Promise<{ status: number; body: Record<string, unknown> }>;
 }
 
-async function startServer(deps: Parameters<typeof registerTeamResourceShareRoutes>[1]): Promise<TestServer> {
+type RouteDeps = Parameters<typeof registerTeamResourceShareRoutes>[1];
+
+async function startServer(
+  deps: Omit<RouteDeps, 'resolveScope'> & Partial<Pick<RouteDeps, 'resolveScope'>>,
+): Promise<TestServer> {
   const app = express();
   app.use(express.json());
-  registerTeamResourceShareRoutes(app, deps);
+  registerTeamResourceShareRoutes(app, {
+    resolveScope: async () => ({ ok: true, scope: SCOPE }),
+    ...deps,
+  });
   server = http.createServer(app);
   await new Promise<void>((resolve) => server!.listen(0, resolve));
   const address = server.address();
   if (!address || typeof address === 'string') throw new Error('server did not bind to a TCP port');
   const base = `http://127.0.0.1:${address.port}`;
-  const call = async (method: string, route: string) => {
-    const response = await fetch(`${base}${route}`, { method });
+  const call = async (method: string, route: string, headers?: Record<string, string>) => {
+    const response = await fetch(`${base}${route}`, {
+      method,
+      ...(headers ? { headers } : {}),
+    });
     return { status: response.status, body: (await response.json()) as Record<string, unknown> };
   };
   return {
     base,
-    get: (route) => call('GET', route),
-    post: (route) => call('POST', route),
-    del: (route) => call('DELETE', route),
+    get: (route, headers) => call('GET', route, headers),
+    post: (route, headers) => call('POST', route, headers),
+    del: (route, headers) => call('DELETE', route, headers),
   };
 }
 
@@ -67,6 +101,70 @@ const record = (id: string): TeamResourceShareRecord =>
   ({ id, localId: id, version: 1 }) as unknown as TeamResourceShareRecord;
 
 describe('team resource share /team listing', () => {
+  it('forwards each request-resolved scope through list, share, and unshare', async () => {
+    const seen: Array<{ operation: string; workspaceId: string }> = [];
+    const service = {
+      async sharedResources(scope: TeamResourceRequestScope) {
+        seen.push({ operation: 'list', workspaceId: scope.principal.teamId });
+        return [];
+      },
+      async share(_id: string, scope: TeamResourceRequestScope) {
+        seen.push({ operation: 'share', workspaceId: scope.principal.teamId });
+        return { version: 1 };
+      },
+      async unshare(_id: string, scope: TeamResourceRequestScope) {
+        seen.push({ operation: 'unshare', workspaceId: scope.principal.teamId });
+        return true;
+      },
+    } as unknown as TeamResourceShareService;
+    const req = await startServer({
+      basePath: 'skills',
+      share: service,
+      resolveScope: async (request) => ({
+        ok: true,
+        scope: request.get('x-test-workspace') === 'ws-2' ? SCOPE_B : SCOPE,
+      }),
+    });
+
+    await req.get('/api/workspace/skills/team');
+    await req.post('/api/workspace/skills/a/share', { 'x-test-workspace': 'ws-2' });
+    await req.del('/api/workspace/skills/a/share');
+
+    expect(seen).toEqual([
+      { operation: 'list', workspaceId: 'ws-1' },
+      { operation: 'share', workspaceId: 'ws-2' },
+      { operation: 'unshare', workspaceId: 'ws-1' },
+    ]);
+  });
+
+  it.each([
+    [400, 'WORKSPACE_CONTEXT_REQUIRED'],
+    [403, 'WORKSPACE_ACCESS_DENIED'],
+    [503, 'WORKSPACE_AUTHORITY_UNAVAILABLE'],
+  ] as const)('returns explicit authority failure %s (%s)', async (status, code) => {
+    const { service, calls } = fakeShare([]);
+    const req = await startServer({
+      basePath: 'plugins',
+      share: service,
+      resolveScope: async () => ({
+        ok: false,
+        status,
+        code,
+        message: 'scope rejected',
+        ...(status === 503 ? { retryable: true as const } : {}),
+      }),
+    });
+
+    const response = await req.get('/api/workspace/plugins/team');
+    expect(response.status).toBe(status);
+    expect(response.body).toMatchObject({
+      error: code,
+      message: 'scope rejected',
+      ...(status === 503 ? { retryable: true } : {}),
+    });
+    expect(calls()).toBe(0);
+  });
+
   it('serves the cached listTeam provider instead of hitting the hub', async () => {
     const { service, calls } = fakeShare([record('a'), record('b')]);
     let listTeamCalls = 0;
@@ -138,7 +236,7 @@ describe('team resource share success invalidates the cached /team listing', () 
       const { service, sharedResourcesCalls } = mutableShare([record('a')]);
       const listTeam = createSwrCache(
         async () => {
-          const resources = await service.sharedResources();
+          const resources = await service.sharedResources(SCOPE);
           return { ids: resources.map((r) => r.id), resources };
         },
         () => 'ws-1',
@@ -165,7 +263,7 @@ describe('team resource share success invalidates the cached /team listing', () 
       const { service, sharedResourcesCalls } = mutableShare([record('a'), record('b')]);
       const listTeam = createSwrCache(
         async () => {
-          const resources = await service.sharedResources();
+          const resources = await service.sharedResources(SCOPE);
           return { ids: resources.map((r) => r.id), resources };
         },
         () => 'ws-1',
@@ -194,7 +292,7 @@ describe('team resource share success invalidates the cached /team listing', () 
     (service as unknown as { share: TeamResourceShareService['share'] }).share = async () => null;
     const listTeam = createSwrCache(
       async () => {
-        const resources = await service.sharedResources();
+        const resources = await service.sharedResources(SCOPE);
         return { ids: resources.map((r) => r.id), resources };
       },
       () => 'ws-1',
@@ -217,7 +315,7 @@ describe('team resource share success invalidates the cached /team listing', () 
     (service as unknown as { unshare: TeamResourceShareService['unshare'] }).unshare = async () => false;
     const listTeam = createSwrCache(
       async () => {
-        const resources = await service.sharedResources();
+        const resources = await service.sharedResources(SCOPE);
         return { ids: resources.map((r) => r.id), resources };
       },
       () => 'ws-1',
@@ -289,7 +387,7 @@ describe('team resource share success invalidates the cached /team listing', () 
     function cachedTeamResourceListLikeServerTs() {
       const listing = createSwrCache(
         async () => {
-          const resources = await service.sharedResources();
+          const resources = await service.sharedResources(SCOPE);
           return { ids: resources.map((r) => r.id), resources };
         },
         () => 'ws-1',

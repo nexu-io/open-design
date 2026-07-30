@@ -1,6 +1,7 @@
-import type { Express } from 'express';
+import type { Express, Request, Response } from 'express';
 import {
   TeamResourceShareForbiddenError,
+  type TeamResourceRequestScope,
   type TeamResourceShareRecord,
   type TeamResourceShareService,
 } from '../collab/team-resource-share.js';
@@ -10,12 +11,27 @@ export interface TeamResourceShareListing {
   resources: TeamResourceShareRecord[];
 }
 
+export type TeamResourceScopeResolution =
+  | { ok: true; scope: TeamResourceRequestScope }
+  | {
+      ok: false;
+      status: 400 | 403 | 503;
+      code: string;
+      message: string;
+      retryable?: true;
+    };
+
 export interface RegisterTeamResourceShareRoutesDeps {
   /** URL segment for this resource kind: `design-systems` | `plugins` | `skills`. */
   basePath: string;
   share: TeamResourceShareService;
+  /** Resolve the request's explicit Workspace against authoritative membership. */
+  resolveScope: (req: Request) => Promise<TeamResourceScopeResolution>;
   /** Optional materialization hook for shared team resources. */
-  syncSharedResource?: (resource: TeamResourceShareRecord) => Promise<void>;
+  syncSharedResource?: (
+    resource: TeamResourceShareRecord,
+    scope: TeamResourceRequestScope,
+  ) => Promise<void>;
   /**
    * Optional stale-while-revalidate provider for the `/team` list. Each GET
    * otherwise hits the resource hub (and re-materializes every shared resource)
@@ -31,16 +47,19 @@ export interface RegisterTeamResourceShareRoutesDeps {
    * its cadence). Best-effort and optional: a `listTeam` with no `invalidate`
    * just falls back to the old behavior of catching up on the next refresh.
    */
-  listTeam?: (() => Promise<TeamResourceShareListing>) & { invalidate?: () => void };
+  listTeam?: ((scope: TeamResourceRequestScope) => Promise<TeamResourceShareListing>) & {
+    invalidate?: (scope: TeamResourceRequestScope) => void;
+  };
 }
 
 /**
  * Team resource sharing routes for one resource kind. A member promotes a
  * personal resource into the team scope; the share service packs its directory
- * and pushes it to the resource hub so teammates can pull it. When there is no
- * team identity (or the hub is not configured), share returns `shared: false`
- * so the client keeps a local-only view instead of erroring. Mounted once per
- * kind (design systems, plugins, skills).
+ * and pushes it to the resource hub so teammates can pull it. Every route first
+ * verifies the request's explicit Workspace/member selector against the
+ * authoritative directory. A verified request still returns `shared: false`
+ * when the hub transport is not configured. Mounted once per kind (design
+ * systems, plugins, skills).
  */
 export function registerTeamResourceShareRoutes(
   app: Express,
@@ -52,23 +71,49 @@ export function registerTeamResourceShareRoutes(
   // The mutation itself already succeeded by the time this runs — a cache seam
   // failing here must not turn a successful share/unshare into a reported
   // failure, so this is best-effort and swallows its own errors.
-  function invalidateListTeam(): void {
+  function invalidateListTeam(scope: TeamResourceRequestScope): void {
     try {
-      deps.listTeam?.invalidate?.();
+      deps.listTeam?.invalidate?.(scope);
     } catch {
       // ignore
     }
   }
 
+  async function resolveScope(
+    req: Request,
+    res: Response,
+  ): Promise<TeamResourceRequestScope | null> {
+    let resolution: TeamResourceScopeResolution;
+    try {
+      resolution = await deps.resolveScope(req);
+    } catch {
+      res.status(503).json({
+        error: 'WORKSPACE_AUTHORITY_UNAVAILABLE',
+        message: 'workspace membership authority is temporarily unavailable',
+        retryable: true,
+      });
+      return null;
+    }
+    if (resolution.ok) return resolution.scope;
+    res.status(resolution.status).json({
+      error: resolution.code,
+      message: resolution.message,
+      ...(resolution.retryable ? { retryable: true } : {}),
+    });
+    return null;
+  }
+
   // Ids shared to the team — drives the "team" collection for this kind.
-  app.get(`${root}/team`, async (_req, res) => {
+  app.get(`${root}/team`, async (req, res) => {
+    const scope = await resolveScope(req, res);
+    if (!scope) return;
     if (deps.listTeam) {
-      res.json(await deps.listTeam());
+      res.json(await deps.listTeam(scope));
       return;
     }
-    const resources = await share.sharedResources();
+    const resources = await share.sharedResources(scope);
     if (deps.syncSharedResource) {
-      await Promise.all(resources.map((resource) => deps.syncSharedResource?.(resource)));
+      await Promise.all(resources.map((resource) => deps.syncSharedResource?.(resource, scope)));
     }
     res.json({ ids: resources.map((resource) => resource.id), resources });
   });
@@ -77,15 +122,17 @@ export function registerTeamResourceShareRoutes(
   app.post(`${root}/:id/share`, async (req, res) => {
     const id = typeof req.params.id === 'string' ? decodeURIComponent(req.params.id) : '';
     if (!id) return res.status(400).json({ error: 'invalid resource id' });
+    const scope = await resolveScope(req, res);
+    if (!scope) return;
     try {
-      const result = await share.share(id);
+      const result = await share.share(id, scope);
       if (!result) return res.json({ shared: false });
       // The cached `/team` listing is now stale by construction — drop it so
       // the client's immediate refetch (it fires one right after this
       // response) reads the new state instead of waiting out the cache's
       // freshMs, or worse, the client's slower background poll once SSE
       // lowers its cadence.
-      invalidateListTeam();
+      invalidateListTeam(scope);
       res.json({ shared: true, version: result.version });
     } catch (error) {
       if (error instanceof TeamResourceShareForbiddenError) {
@@ -100,9 +147,11 @@ export function registerTeamResourceShareRoutes(
   app.delete(`${root}/:id/share`, async (req, res) => {
     const id = typeof req.params.id === 'string' ? decodeURIComponent(req.params.id) : '';
     if (!id) return res.status(400).json({ error: 'invalid resource id' });
+    const scope = await resolveScope(req, res);
+    if (!scope) return;
     try {
-      const unshared = await share.unshare(id);
-      if (unshared) invalidateListTeam();
+      const unshared = await share.unshare(id, scope);
+      if (unshared) invalidateListTeam(scope);
       res.json({ unshared });
     } catch (error) {
       if (error instanceof TeamResourceShareForbiddenError) {

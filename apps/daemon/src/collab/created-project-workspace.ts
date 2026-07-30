@@ -1,13 +1,8 @@
 import type { ApiErrorResponse } from '@open-design/contracts';
 import type { Response } from 'express';
 import {
-  ambientWorkspaceResourceContext,
   isWorkspaceResourceLocked,
-  withLastKnownMembership,
   workspaceResourceContextFromRequest,
-  type AmbientWorkspaceSnapshot,
-  type GetAmbientWorkspace,
-  type GetLastKnownWorkspaceMembership,
   type WorkspaceResourceContext,
 } from './workspace-resource-mutation.js';
 import {
@@ -15,13 +10,6 @@ import {
   type WorkspaceDirectoryFetchResult,
 } from './vela-workspace-context.js';
 import { sendApiError } from '../http/api-errors.js';
-
-// The ambient-identity types live in `workspace-resource-mutation.ts` (the lower
-// module every resource type already depends on) so the mutation gate and the
-// creation paths cannot drift into two different notions of "the daemon's own
-// workspace". Re-exported here because the creation-path callers import them
-// from this module.
-export type { AmbientWorkspaceSnapshot, GetAmbientWorkspace };
 
 export type CreatedProjectWorkspaceResolution =
   | { ok: true; context: WorkspaceResourceContext | null }
@@ -169,93 +157,37 @@ export async function authorizeCreatedProjectWorkspace(
 }
 
 /**
- * The daemon's ambient workspace as a binding subject, or null when it is not
- * one this daemon may hand a project to.
- *
- * Refused for the same three reasons a header identity is: a removed member, a
- * member who cannot write synced files, and a locked/deleted workspace. Refusal
- * means "leave the project unbound", never "fail the create".
- *
- * `workspaceTypeAsserted` is null on purpose. That field records what the CALLER
- * claimed, and an ambient identity is the daemon's own knowledge — nobody claimed
- * anything, so `team-share-scope.ts` must not read a claim that was never made.
- *
- * `appUserId` is empty for the same reason: it mirrors a request header
- * (`x-od-app-user-id`) this path has none of. Nothing in the binding written
- * below consumes it.
+ * Error thrown by resolver-style creation paths. It preserves the same typed
+ * 400/403/503 result as direct HTTP creation gates so callers can reject before
+ * touching the filesystem or database.
  */
-function ambientWorkspaceHome(
-  getAmbientWorkspace?: GetAmbientWorkspace,
-): WorkspaceResourceContext | null {
-  const context = ambientWorkspaceResourceContext(getAmbientWorkspace);
-  if (!context) return null;
-  if (
-    context.memberStatus !== 'active'
-    || !context.canWriteSyncedFiles
-    || isWorkspaceResourceLocked(context)
-  ) {
-    return null;
+export class CreatedProjectWorkspaceResolutionError extends Error {
+  readonly status: CreatedProjectWorkspaceError['status'];
+  readonly code: CreatedProjectWorkspaceError['code'];
+  readonly retryable?: true;
+
+  constructor(error: CreatedProjectWorkspaceError) {
+    super(error.message);
+    this.name = 'CreatedProjectWorkspaceResolutionError';
+    this.status = error.status;
+    this.code = error.code;
+    if (error.retryable) this.retryable = true;
   }
-  return context;
 }
 
 /**
- * Resolve the workspace a created project belongs to, for a creation path that
- * has NO authorization gate of its own and must never grow one.
- *
- * VERIFY, THEN DEGRADE — NEVER REJECT, NEVER TRUST. Three outcomes, in order:
- *
- *   1. The request asserts an identity AND it verifies — bind to it.
- *   2. The request asserts an identity that does NOT verify — unknown
- *      workspace, member not active, permissions disagree, the daemon's own
- *      last-known state says that member was removed, or the membership
- *      authority is unreadable so the claim cannot be confirmed at all — bind
- *      to the daemon's ambient workspace instead, or leave the project unbound.
- *      The unverifiable claim is never written.
- *   3. The request asserts nothing — bind to the ambient workspace, or leave
- *      the project unbound when the daemon has none either.
- *
- * Creation therefore still never returns 4xx (these paths ship today and answer
- * 200 today, so a header problem must not become a refusal), while an
- * unverifiable claim degrades to something the daemon can actually vouch for
- * rather than being persisted as fact. `x-od-workspace-*` headers are an
- * unauthenticated hint — any local caller (`od` CLI, plain curl, a compromised
- * page) can assert an arbitrary pair — so writing them unchecked would hand out
- * a binding into a workspace the caller has no membership in, with a fabricated
- * `createdByWorkspaceMemberId`.
- *
- * Verification is NOT re-implemented here. It is exactly
- * {@link authorizeCreatedProjectWorkspace} — the same directory lookup
- * `POST /api/projects` gates on, which also returns the DIRECTORY's
- * authoritative context rather than the caller's claimed one — plus
- * `withLastKnownMembership`, the same cross-check the mutation gates apply.
- * Only the failure behavior differs: they refuse, this degrades. Two notions of
- * "verified" in one file is how this drifts back apart.
- *
- * An absent `fetchWorkspaceDirectory` remains the documented local/dev
- * compatibility path, identical to `authorizeCreatedProjectWorkspace`'s own
- * contract — not a second, weaker definition of verified. A directory that is
- * present but unreadable is "cannot confirm", and degrades.
+ * Resolve an exact creation scope. Headerless legacy requests remain unbound.
+ * Once either identity field is asserted, any incomplete, removed, denied, or
+ * unavailable authority fails closed; it never degrades to ambient/current or
+ * silently creates an unbound project.
  */
 export async function createdProjectWorkspaceHome(
   req: unknown,
-  getAmbientWorkspace?: GetAmbientWorkspace,
   fetchWorkspaceDirectory?: () => Promise<WorkspaceDirectoryFetchResult>,
-  getLastKnownMembership?: GetLastKnownWorkspaceMembership,
 ): Promise<WorkspaceResourceContext | null> {
-  const ambient = () => ambientWorkspaceHome(getAmbientWorkspace);
-  const authorized = await authorizeCreatedProjectWorkspace(
-    req,
-    fetchWorkspaceDirectory,
-  ).catch((): CreatedProjectWorkspaceResolution => ({ ok: true, context: null }));
-  // Asserted but unverifiable (400 incomplete / 403 denied / 503 authority
-  // unavailable). Degrade instead of refusing — and never write the claim.
-  if (!authorized.ok) return ambient();
-  // Nothing asserted at all.
-  if (authorized.context === null) return ambient();
-  const verified = withLastKnownMembership(authorized.context, getLastKnownMembership);
-  if (verified.memberStatus !== 'active') return ambient();
-  return verified;
+  const authorized = await authorizeCreatedProjectWorkspace(req, fetchWorkspaceDirectory);
+  if (!authorized.ok) throw new CreatedProjectWorkspaceResolutionError(authorized);
+  return authorized.context;
 }
 
 /**
@@ -267,16 +199,12 @@ export type CreatedProjectWorkspaceResolver = (
 ) => Promise<WorkspaceResourceContext | null>;
 
 export function createCreatedProjectWorkspaceResolver(deps: {
-  getAmbientWorkspace?: GetAmbientWorkspace;
   fetchWorkspaceDirectory?: () => Promise<WorkspaceDirectoryFetchResult>;
-  getLastKnownMembership?: GetLastKnownWorkspaceMembership;
 }): CreatedProjectWorkspaceResolver {
   return (req) =>
     createdProjectWorkspaceHome(
       req,
-      deps.getAmbientWorkspace,
       deps.fetchWorkspaceDirectory,
-      deps.getLastKnownMembership,
     );
 }
 
@@ -292,14 +220,8 @@ export function createCreatedProjectWorkspaceResolver(deps: {
  * `enforceWorkspaceResourceMutation` the moment the caller carries any workspace
  * header, because the two-key lookup comes back empty.
  *
- * `context` is the caller's own workspace when the request named one. When it did
- * not, the binding falls back to the daemon's ambient workspace instead of
- * leaving an orphan — a headerless create is a caller that COULDN'T say which
- * workspace it meant (`od project create` and the MCP `create_project` tool mint
- * no headers; a web create fired before the seconds-long identity read lands
- * sends none; Orbit and scheduled routines have no request at all), not a caller
- * asserting there is no workspace. The one case with genuinely no answer — no
- * request identity and no resolved session — still binds nothing, on purpose.
+ * `context` is the caller's exact verified Workspace when the request named
+ * one. A headerless legacy request supplies null and remains unbound.
  */
 export function bindCreatedProjectToWorkspace(
   ensureWorkspaceProject: (input: {
@@ -318,17 +240,15 @@ export function bindCreatedProjectToWorkspace(
   context: WorkspaceResourceContext | null,
   projectId: string,
   now: number,
-  getAmbientWorkspace?: GetAmbientWorkspace,
 ): void {
-  const home = context ?? ambientWorkspaceHome(getAmbientWorkspace);
-  if (!home) return;
+  if (!context) return;
   ensureWorkspaceProject({
     projectId,
-    workspaceId: home.workspaceId,
+    workspaceId: context.workspaceId,
     visibility: 'personal',
     resourceState: 'active',
-    createdByWorkspaceMemberId: home.workspaceMemberId,
-    updatedByWorkspaceMemberId: home.workspaceMemberId,
+    createdByWorkspaceMemberId: context.workspaceMemberId,
+    updatedByWorkspaceMemberId: context.workspaceMemberId,
     syncState: 'local_only',
     resourceHubResourceId: null,
     cloudTombstonedAt: null,

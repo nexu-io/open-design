@@ -12,6 +12,7 @@ import {
   designSystemLogoHost,
   isUserSystem,
 } from './design-system-metadata';
+import { useWorkspaceContext } from '../collab/useWorkspaceContext';
 
 interface DesignSystemKitPreviewProps {
   system: DesignSystemSummary;
@@ -93,6 +94,7 @@ function RegistryDesignSystemKitPreview({
   dataTestId: string;
 }) {
   const t = useT();
+  const { context: workspaceContext } = useWorkspaceContext();
   const [detail, setDetail] = useState<DesignSystemDetail | null>(null);
   const [detailResolved, setDetailResolved] = useState(false);
 
@@ -100,7 +102,7 @@ function RegistryDesignSystemKitPreview({
     let cancelled = false;
     setDetail(null);
     setDetailResolved(false);
-    void fetchDesignSystem(system.id)
+    void fetchDesignSystem(system.id, workspaceContext)
       .then((next) => {
         if (cancelled) return;
         setDetail(next);
@@ -112,7 +114,7 @@ function RegistryDesignSystemKitPreview({
     return () => {
       cancelled = true;
     };
-  }, [system.id]);
+  }, [system.id, workspaceContext]);
 
   const projectId = detail?.projectId ?? system.projectId;
   const host = designSystemLogoHost(system) || undefined;
@@ -126,6 +128,7 @@ function RegistryDesignSystemKitPreview({
     showcaseHtml: null,
     editable: isUserSystem(system),
     host,
+    workspaceContext,
   });
 
   const pending = !detailResolved || loading || !kit;

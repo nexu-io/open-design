@@ -7,12 +7,18 @@ import type {
   WorkspaceBillingSummary,
   WorkspaceCollabContext,
   WorkspaceContextResponse,
+  WorkspaceDirectoryItem,
+  WorkspaceDirectoryResponse,
   WorkspaceInvalidationSsePayload,
 } from '@open-design/contracts';
 import { coalescedGet, forceCoalescedGet } from '../lib/coalesced-get';
 import { isTeamPlanTier } from './team-plan';
 import { fetchTeamProjectsCatalog } from './team-projects-catalog';
 import { useWorkspaceInvalidation } from './workspace-events';
+import {
+  beginWorkspaceScopedRead,
+  workspaceIdentityCacheKey,
+} from './workspace-identity';
 import {
   createWorkspaceBillingInterestOwnerId,
   ensureWorkspaceBillingInterestDeclared,
@@ -31,6 +37,13 @@ import {
 export interface WorkspaceContextState {
   context: WorkspaceCollabContext | null;
   loading: boolean;
+  /**
+   * A deliberate identity change was announced, but its replacement context has
+   * not resolved yet. Consumers of workspace-owned data must hide the previous
+   * identity's snapshot during this window even though `context` intentionally
+   * stays available to avoid flashing the whole shell signed out.
+   */
+  identityChangePending?: boolean;
   /**
    * `unsupported` is an old daemon with no workspace endpoint and retains the
    * legal pre-workspace/headerless behavior. `unavailable` means a modern
@@ -98,29 +111,7 @@ export function workspaceIdentityCanBillAmr(state: WorkspaceContextState): boole
  * Returns `'none'` for a caller with no resolved workspace identity, which is a
  * distinct cache partition from any real one, not a wildcard that matches them.
  */
-export function workspaceIdentityCacheKey(
-  context: WorkspaceCollabContext | null | undefined,
-): string {
-  if (!context) return 'none';
-  return [
-    context.workspaceId,
-    context.workspaceType,
-    context.workspaceMemberId,
-    context.role,
-    context.memberStatus,
-    context.lifecycleState,
-    // Optional-chained deliberately. `permissions` is REQUIRED on the contract,
-    // so an absent one means a partial/malformed context — and this function is
-    // now called on async continuations (see `beginWorkspaceScopedRead`), where
-    // throwing does not surface as a handled error but as an unhandled rejection
-    // from whatever late promise happened to be settling. Computing an identity
-    // must be total: a partial context is simply its own cache partition, never
-    // an exception. `String(undefined)` is `'undefined'`, which is stable and
-    // distinct from both `'true'` and `'false'`.
-    String(context.permissions?.canShareProjects),
-    String(context.permissions?.canWriteSyncedFiles),
-  ].join(':');
-}
+export { workspaceIdentityCacheKey } from './workspace-identity';
 
 /**
  * One workspace-scoped read: the identity it was issued for, plus the check that
@@ -153,23 +144,8 @@ export function workspaceIdentityCacheKey(
  * `useWorkspaceContext` already applies to its own read; identity is the right
  * discriminator for reads that are scoped BY identity.
  */
-export interface WorkspaceScopedRead {
-  /** The context to send with the request — see rule 1 above. */
-  readonly context: WorkspaceCollabContext | null;
-  /** Whether `current` is still the identity this read was issued for. */
-  isStillCurrent(current: WorkspaceCollabContext | null | undefined): boolean;
-}
-
-export function beginWorkspaceScopedRead(
-  context: WorkspaceCollabContext | null | undefined,
-): WorkspaceScopedRead {
-  const issuedFor = context ?? null;
-  const identity = workspaceIdentityCacheKey(issuedFor);
-  return {
-    context: issuedFor,
-    isStillCurrent: (current) => workspaceIdentityCacheKey(current ?? null) === identity,
-  };
-}
+export { beginWorkspaceScopedRead } from './workspace-identity';
+export type { WorkspaceScopedRead } from './workspace-identity';
 
 /**
  * `GET /api/workspace/context` is the read that ESTABLISHES the caller's
@@ -219,6 +195,84 @@ function workspaceContextCoalesceKey(): string {
 // last-known signed-in state instantly while the background read revalidates.
 let cachedWorkspaceContext: WorkspaceContextState['context'] = null;
 let workspaceContextRevision = 0;
+let workspaceContextIdentityChangePending = false;
+const WORKSPACE_SELECTION_SESSION_KEY = 'od.workspaceSelection.v1';
+
+interface WorkspaceSelection {
+  workspaceId: string;
+  workspaceMemberId: string;
+}
+
+function readWorkspaceSelection(): WorkspaceSelection | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = JSON.parse(window.sessionStorage.getItem(WORKSPACE_SELECTION_SESSION_KEY) ?? 'null') as {
+      workspaceId?: unknown;
+      workspaceMemberId?: unknown;
+    } | null;
+    const workspaceId =
+      typeof raw?.workspaceId === 'string' ? raw.workspaceId.trim() : '';
+    const workspaceMemberId =
+      typeof raw?.workspaceMemberId === 'string' ? raw.workspaceMemberId.trim() : '';
+    return workspaceId && workspaceMemberId
+      ? { workspaceId, workspaceMemberId }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeWorkspaceSelection(selection: WorkspaceSelection | null): void {
+  if (typeof window === 'undefined') return;
+  try {
+    if (selection) {
+      window.sessionStorage.setItem(WORKSPACE_SELECTION_SESSION_KEY, JSON.stringify(selection));
+    } else {
+      window.sessionStorage.removeItem(WORKSPACE_SELECTION_SESSION_KEY);
+    }
+  } catch {
+    // A tab with unavailable sessionStorage still remains isolated in memory.
+  }
+}
+
+function selectableWorkspaceItems(items: WorkspaceDirectoryItem[]): WorkspaceDirectoryItem[] {
+  return items.filter(
+    (item) => item.memberStatus === 'active' && item.lifecycleState !== 'deleted',
+  );
+}
+
+function chooseWorkspaceForTab(items: WorkspaceDirectoryItem[]): WorkspaceDirectoryItem | null {
+  const visible = selectableWorkspaceItems(items);
+  const selected = readWorkspaceSelection();
+  const exact = selected
+    ? visible.find(
+        (item) =>
+          item.workspaceId === selected.workspaceId
+          && item.workspaceMemberId === selected.workspaceMemberId,
+      )
+    : undefined;
+  const chosen =
+    exact
+    ?? visible.find((item) => item.workspaceType === 'personal')
+    ?? visible[0]
+    ?? null;
+  writeWorkspaceSelection(
+    chosen
+      ? {
+          workspaceId: chosen.workspaceId,
+          workspaceMemberId: chosen.workspaceMemberId,
+        }
+      : null,
+  );
+  return chosen;
+}
+
+function explicitWorkspaceHeaders(selection: WorkspaceSelection): Record<string, string> {
+  return {
+    'x-od-workspace-id': selection.workspaceId,
+    'x-od-workspace-member-id': selection.workspaceMemberId,
+  };
+}
 
 /** Test seam: clear the module-level context cache between tests. */
 export function resetWorkspaceContextCache(): void {
@@ -227,6 +281,8 @@ export function resetWorkspaceContextCache(): void {
   workspaceContextRequestToken = 'initial';
   localIdentityChangeSeq = 0;
   seededWorkspaceContext = null;
+  workspaceContextIdentityChangePending = false;
+  writeWorkspaceSelection(null);
 }
 
 /**
@@ -238,30 +294,46 @@ export function lastResolvedWorkspaceContext(): WorkspaceContextState['context']
   return cachedWorkspaceContext;
 }
 
-// Last team-shared catalog this shell successfully read. `null` means "never
-// loaded", which is NOT the same as "nothing is shared" — consumers that relax
-// a fail-closed gate on this must treat null as "unknown" and keep failing
-// closed.
-let cachedTeamProjects: TeamProject[] | null = null;
+// Last team-shared catalogs this shell successfully read, partitioned by the
+// Workspace + member identity that authorized each response. A missing entry
+// means "never loaded", which is NOT the same as "nothing is shared" —
+// consumers that relax a fail-closed gate on this must treat it as "unknown".
+const cachedTeamProjects = new Map<string, TeamProject[]>();
+
+function teamProjectsIdentity(
+  context: WorkspaceCollabContext | null | undefined,
+): string | null {
+  const workspaceId = context?.workspaceId?.trim();
+  const workspaceMemberId = context?.workspaceMemberId?.trim();
+  return workspaceId && workspaceMemberId
+    ? JSON.stringify([workspaceId, workspaceMemberId])
+    : null;
+}
 
 /** Test seam: clear the module-level team-project cache between tests. */
 export function resetTeamProjectsCache(): void {
-  cachedTeamProjects = null;
+  cachedTeamProjects.clear();
 }
 
 /**
- * The team-shared catalog the shell last resolved, or null if it never has.
- * Same source the 全部项目 grid reads, exposed for consumers that need to know
- * whether a project is shared before `/collab/status` answers.
+ * The team-shared catalog the shell last resolved for `context`, or null if that
+ * identity never loaded one or an identity change is still pending. Same source
+ * the 全部项目 grid reads, exposed for consumers that need to know whether a
+ * project is shared before `/collab/status` answers.
  */
-export function lastResolvedTeamProjects(): TeamProject[] | null {
-  return cachedTeamProjects;
+export function lastResolvedTeamProjects(
+  context: WorkspaceCollabContext | null | undefined = cachedWorkspaceContext,
+): TeamProject[] | null {
+  if (workspaceContextIdentityChangePending) return null;
+  const identity = teamProjectsIdentity(context);
+  return identity ? cachedTeamProjects.get(identity) ?? null : null;
 }
 
 export function useWorkspaceContext(): WorkspaceContextState {
   const [state, setState] = useState<WorkspaceContextState>(() => ({
     context: cachedWorkspaceContext,
     loading: cachedWorkspaceContext === null,
+    identityChangePending: workspaceContextIdentityChangePending,
   }));
   const mountedRef = useRef(true);
   // A forced workspace switch can overtake an older ambient read. Keep request
@@ -305,13 +377,42 @@ export function useWorkspaceContext(): WorkspaceContextState {
   const loadContext = useCallback(async (options: { markLoading?: boolean } = {}) => {
     const requestEpoch = ++requestEpochRef.current;
     if (options.markLoading && mountedRef.current) {
-      setState((prev) =>
-        prev.context === null && !prev.loading ? { ...prev, loading: true } : prev,
-      );
+      setState((prev) => ({
+        ...prev,
+        // Keep a resolved context visible to shell-only consumers while marking
+        // its workspace-owned data unsafe through identityChangePending.
+        loading: prev.context === null ? true : prev.loading,
+        identityChangePending: true,
+      }));
     }
     try {
       const fetchContext = async () => {
-        const res = await fetch('/api/workspace/context', { cache: 'no-store' });
+        const fetchDirectory = async () => {
+          const response = await fetch('/api/workspace/directory', { cache: 'no-store' });
+          if (!response.ok) {
+            const error = new Error(`workspace-directory ${response.status}`) as Error & {
+              status?: number;
+            };
+            error.status = response.status;
+            throw error;
+          }
+          return (await response.json()) as WorkspaceDirectoryResponse;
+        };
+        const directoryKey = `workspace-directory-selection:${workspaceContextRequestToken}`;
+        const directory = options.markLoading
+          ? await forceCoalescedGet(directoryKey, fetchDirectory)
+          : await coalescedGet(directoryKey, fetchDirectory);
+        const selected = chooseWorkspaceForTab(directory.items ?? []);
+        if (!selected) {
+          return { context: null } satisfies WorkspaceContextResponse;
+        }
+        const res = await fetch('/api/workspace/context', {
+          cache: 'no-store',
+          headers: explicitWorkspaceHeaders({
+            workspaceId: selected.workspaceId,
+            workspaceMemberId: selected.workspaceMemberId,
+          }),
+        });
         if (!res.ok) {
           const error = new Error(`workspace-context ${res.status}`) as Error & {
             status?: number;
@@ -339,7 +440,12 @@ export function useWorkspaceContext(): WorkspaceContextState {
         workspaceContextRevision += 1;
       }
       cachedWorkspaceContext = nextContext;
-      setState({ context: cachedWorkspaceContext, loading: false });
+      workspaceContextIdentityChangePending = false;
+      setState({
+        context: cachedWorkspaceContext,
+        loading: false,
+        identityChangePending: false,
+      });
     } catch (error) {
       if (!mountedRef.current || requestEpochRef.current !== requestEpoch) return;
       // Transient failure (offline, momentary daemon/hub hiccup): keep the
@@ -349,6 +455,7 @@ export function useWorkspaceContext(): WorkspaceContextState {
       setState({
         context: cachedWorkspaceContext,
         loading: false,
+        identityChangePending: workspaceContextIdentityChangePending,
         failure:
           (error as { status?: unknown })?.status === 404
             ? 'unsupported'
@@ -367,7 +474,10 @@ export function useWorkspaceContext(): WorkspaceContextState {
   // on failure rather than clearing), so the SSE re-fetch just calls it.
   const { connected: sseConnected } = useWorkspaceInvalidation(
     { 'workspace-context-changed': () => void loadContext() },
-    { onActive: () => void loadContext() },
+    {
+      workspaceContext: state.context,
+      onActive: () => void loadContext(),
+    },
   );
 
   useEffect(() => {
@@ -399,7 +509,14 @@ export function useWorkspaceContext(): WorkspaceContextState {
       const seeded = seededContextForCurrentGeneration();
       if (seeded) {
         requestEpochRef.current += 1;
-        if (mountedRef.current) setState({ context: seeded, loading: false });
+        workspaceContextIdentityChangePending = false;
+        if (mountedRef.current) {
+          setState({
+            context: seeded,
+            loading: false,
+            identityChangePending: false,
+          });
+        }
         return;
       }
       void loadContext({ markLoading: true });
@@ -445,12 +562,10 @@ const WORKSPACE_CONTEXT_REFRESH_STORAGE_KEY = 'od.workspaceContext.refreshAt';
  * A context the ACTING surface already holds, published alongside the identity-
  * change broadcast so consumers adopt it instead of re-reading it.
  *
- * `PUT /api/workspace/active` returns the post-switch context from the very same
- * `workspaceContext.current()` call `GET /api/workspace/context` serves, and only
- * after asserting its `workspaceId` matches the workspace that was requested. So
- * the switch response IS the next context; making every mounted consumer go and
- * fetch it again spends a round-trip to learn what request #1 already said, and
- * makes the UI wait for request #2 to show it.
+ * The compatibility switch route returns the post-switch context after verifying
+ * the exact Workspace/member pair against the directory. The switch response IS
+ * the next context; making every mounted consumer fetch it again would spend a
+ * round-trip to learn what request #1 already said.
  *
  * Stamped with the identity generation it belongs to. Every mounted consumer
  * handles one broadcast in the same synchronous pass and each must adopt, so this
@@ -494,6 +609,11 @@ export function notifyWorkspaceContextRefresh(
   // change into one request per mounted consumer.
   advanceWorkspaceContextRequestToken();
   if (seed?.context) {
+    writeWorkspaceSelection({
+      workspaceId: seed.context.workspaceId,
+      workspaceMemberId: seed.context.workspaceMemberId,
+    });
+    workspaceContextIdentityChangePending = false;
     seededWorkspaceContext = { token: workspaceContextRequestToken, context: seed.context };
     // Redefine the module cache now, so a consumer that mounts after this
     // dispatch seeds from the new identity rather than the one just left.
@@ -504,13 +624,18 @@ export function notifyWorkspaceContextRefresh(
     }
     cachedWorkspaceContext = seed.context;
   } else {
+    workspaceContextIdentityChangePending = true;
     seededWorkspaceContext = null;
   }
   window.dispatchEvent(new Event(WORKSPACE_CONTEXT_REFRESH_EVENT));
-  try {
-    window.localStorage.setItem(WORKSPACE_CONTEXT_REFRESH_STORAGE_KEY, stamp);
-  } catch {
-    // The in-window event is enough when localStorage is unavailable.
+  // A seeded refresh is a workspace selection and is deliberately tab-local.
+  // Sign-in/sign-out has no seed and remains account-wide across tabs.
+  if (!seed?.context) {
+    try {
+      window.localStorage.setItem(WORKSPACE_CONTEXT_REFRESH_STORAGE_KEY, stamp);
+    } catch {
+      // The in-window event is enough when localStorage is unavailable.
+    }
   }
 }
 
@@ -906,7 +1031,10 @@ export function useWorkspaceBillingResponse(
         void loadBilling(false, true, billingInvalidationToken(event));
       }
     },
-  }, { onActive: () => void loadBilling(false, true) });
+  }, {
+    workspaceContext: context,
+    onActive: () => void loadBilling(false, true),
+  });
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -1189,7 +1317,27 @@ export function notifyTeamProjectsChanged(): void {
 }
 
 export function useTeamProjects(): TeamProjectsState {
-  const [projects, setProjects] = useState<TeamProject[]>([]);
+  const {
+    context: workspaceContext,
+    loading: workspaceContextLoading,
+    identityChangePending,
+  } = useWorkspaceContext();
+  const workspaceContextRef = useRef(workspaceContext);
+  workspaceContextRef.current = workspaceContext;
+  const catalogIdentity = workspaceIdentityCacheKey(workspaceContext);
+  const teamCatalogIdentity = teamProjectsIdentity(workspaceContext);
+  const [catalog, setCatalog] = useState<{
+    identity: string | null;
+    projects: TeamProject[];
+  }>(() => {
+    const cached = teamCatalogIdentity
+      ? cachedTeamProjects.get(teamCatalogIdentity) ?? null
+      : null;
+    return {
+      identity: cached ? teamCatalogIdentity : null,
+      projects: cached ?? [],
+    };
+  });
   const [loading, setLoading] = useState(true);
   const [nonce, setNonce] = useState(0);
   const mountedRef = useRef(true);
@@ -1209,30 +1357,50 @@ export function useTeamProjects(): TeamProjectsState {
   // collapses the case where every mounted `useTeamProjects()` instance reacts
   // to that same change in one synchronous burst into a single fetch.
   const loadFull = useCallback(async (force = false) => {
+    const read = beginWorkspaceScopedRead(workspaceContextRef.current);
+    if (!read.context) {
+      if (mountedRef.current) {
+        setCatalog({ identity: null, projects: [] });
+        setLoading(false);
+      }
+      return;
+    }
     try {
       // `fetchTeamProjectsCatalog` owns the endpoint, the coalescing key, and
       // the array guarantee — see team-projects-catalog.ts for why those three
       // must not be split across call sites again.
-      const projects = await fetchTeamProjectsCatalog({ force });
-      cachedTeamProjects = projects;
+      const projects = await fetchTeamProjectsCatalog({
+        context: read.context,
+        force,
+      });
+      if (!read.isStillCurrent(workspaceContextRef.current)) return;
+      const identity = teamProjectsIdentity(read.context);
+      if (identity) cachedTeamProjects.set(identity, projects);
       if (mountedRef.current) {
-        setProjects(projects);
+        setCatalog({ identity, projects });
         setLoading(false);
       }
     } catch {
       // Personal / offline / daemon without the hub: no team-shared projects.
+      // A request issued for the workspace the user just left must not clear a
+      // newer workspace's successful catalog when it rejects late.
+      if (!read.isStillCurrent(workspaceContextRef.current)) return;
       if (mountedRef.current) {
-        setProjects([]);
+        setCatalog({
+          identity: teamProjectsIdentity(read.context),
+          projects: [],
+        });
         setLoading(false);
       }
     }
-  }, []);
+  }, [catalogIdentity]);
 
   // Initial load + manual reload (nonce bump).
   useEffect(() => {
+    if (workspaceContextLoading) return;
     setLoading(true);
     void loadFull();
-  }, [nonce, loadFull]);
+  }, [nonce, loadFull, workspaceContextLoading]);
 
   // Collab realtime hop-2: subscribe to the workspace SSE and re-fetch on a
   // pushed `team-projects-changed` (a teammate shared/unshared a project). The
@@ -1240,7 +1408,10 @@ export function useTeamProjects(): TeamProjectsState {
   // on an actual change. `connected` drives poll-as-floor below.
   const { connected: sseConnected } = useWorkspaceInvalidation(
     { 'team-projects-changed': () => void loadFull() },
-    { onActive: () => void loadFull() },
+    {
+      workspaceContext,
+      onActive: () => void loadFull(),
+    },
   );
 
   // Lightweight polling so teammates see each other's shares without refreshing.
@@ -1293,5 +1464,13 @@ export function useTeamProjects(): TeamProjectsState {
   }, [loadFull]);
 
   const reload = useCallback(() => setNonce((n) => n + 1), []);
-  return { projects, loading, reload };
+  const catalogMatchesIdentity = catalog.identity === teamCatalogIdentity;
+  const projects =
+    !identityChangePending && catalogMatchesIdentity ? catalog.projects : [];
+  return {
+    projects,
+    loading:
+      loading || Boolean(identityChangePending) || !catalogMatchesIdentity,
+    reload,
+  };
 }

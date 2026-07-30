@@ -41,7 +41,6 @@ import { projectRawUrl, uploadProjectFiles, openFolderDialog, fetchRecentLinkedD
 import {
   duplicatePluginAsProject,
   patchProject,
-  resolvedWorkspaceContextForWrite,
 } from "../state/projects";
 import { navigate } from '../router';
 import { fetchMcpServers } from "../state/mcp";
@@ -58,6 +57,7 @@ import type {
   PluginSourceKind,
   ResearchOptions,
   RunContextSelection,
+  WorkspaceCollabContext,
   WorkspaceContextItem,
 } from '@open-design/contracts';
 import { buildVisualAnnotationAttachment, commentTargetDisplayName } from '../comments';
@@ -97,7 +97,7 @@ import {
   type InlineMentionEntity,
 } from '../utils/inlineMentions';
 import { workspaceContextLinkedDir, workspaceContextLinkedDirs } from './workspace-context';
-import { useWorkspaceContext } from '../collab/useWorkspaceContext';
+import { useProjectCollabContext } from '../collab/collab-context';
 import {
   LexicalComposerInput,
   type LexicalComposerInputHandle,
@@ -489,8 +489,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
   ) {
     const { locale, t } = useI18n();
     const analytics = useAnalytics();
-    const workspaceContextState = useWorkspaceContext();
-    const { context: workspaceContext } = workspaceContextState;
+    const { workspaceContext } = useProjectCollabContext();
     const activeFileContext =
       projectMetadata?.importedFrom === 'folder' && activeProjectFileName
         ? activeProjectFileName
@@ -667,7 +666,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       try {
         const result = await duplicatePluginAsProject(record.id, {
           name: localizePluginTitle(locale, record),
-        }, resolvedWorkspaceContextForWrite(workspaceContextState));
+        }, workspaceContext);
         setDetailsRecord(null);
         navigate({
           kind: 'project',
@@ -1922,7 +1921,13 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         const elementBlocks: string[] = [];
         let failed = 0;
         for (const asset of assets) {
-          const res = await applyLibraryAsset(asset.id, id);
+          const res = await applyLibraryAsset(
+            asset.id,
+            id,
+            undefined,
+            undefined,
+            workspaceContext,
+          );
           if (!res?.relPath) {
             failed += 1;
             continue;
@@ -2819,6 +2824,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               onMouseLeave={scheduleComposerPanelClose}
             >
               <DesignToolboxPanel
+                workspaceContext={workspaceContext}
                 actions={DESIGN_TOOLBOX_ACTIONS}
                 skills={skills}
                 plugins={pluginsForComposer}
@@ -2878,6 +2884,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               onMouseLeave={scheduleComposerPanelClose}
             >
               <StandalonePluginsPane
+                workspaceContext={workspaceContext}
                 plugins={pluginsForComposer}
                 onPick={(record) => {
                   trackComposerBar({
@@ -3105,6 +3112,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               }}
             />
             <ComposerPlusMenu
+              workspaceContext={workspaceContext}
               triggerTestId="chat-plus-trigger"
               placementPreference="up"
               openRequest={plusMenuOpenRequest}
@@ -3316,6 +3324,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         {detailsRecord ? (
           <PluginDetailsModal
             record={detailsRecord}
+            workspaceContext={workspaceContext}
             onClose={() => setDetailsRecord(null)}
             onUse={async (record) => {
               inlineBackedPluginRef.current = null;
@@ -3343,6 +3352,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
           <FigmaImportModal
             onClose={() => setFigmaModalOpen(false)}
             resolveProjectId={async () => projectId}
+            workspaceContext={workspaceContext}
             onImported={(result) => {
               // Prefill the composer with the reshape prompt; the user reviews
               // and sends to build the page from the decoded snapshot.
@@ -3365,6 +3375,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         {projectReferenceOpen ? (
           <ProjectReferenceModal
             currentProjectId={projectId}
+            workspaceContext={workspaceContext}
             onClose={() => {
               // Only the dismiss paths (X / backdrop / Escape / Cancel) land
               // here — a confirmed pick closes via handleReferenceProjects,
@@ -3726,12 +3737,15 @@ function StagedRunContexts({
   onSkillDetails?: (id: string) => void;
   t: TranslateFn;
 }) {
+  const { workspaceContext } = useProjectCollabContext();
   // Attachment thumbnails preview in a portal modal; keep that state here so the
   // file chips can live in the same wrap row as the design-system picker and
   // other run-context chips (so files flow to the picker's right, wrapping to a
   // new line only when the row fills) instead of forcing a separate row below.
   const [preview, setPreview] = useState<ChatAttachment | null>(null);
-  const previewUrl = preview && projectId ? projectRawUrl(projectId, preview.path) : null;
+  const previewUrl = preview && projectId
+    ? projectRawUrl(projectId, preview.path, workspaceContext)
+    : null;
   useEffect(() => {
     if (!preview) return;
     function onKey(e: KeyboardEvent) {
@@ -3888,7 +3902,9 @@ function StagedRunContexts({
       ))}
       {attachments.map((a, index) => {
         const canPreview = a.kind === 'image' && Boolean(projectId);
-        const imageUrl = canPreview ? projectRawUrl(projectId!, a.path) : null;
+        const imageUrl = canPreview
+          ? projectRawUrl(projectId!, a.path, workspaceContext)
+          : null;
         return (
           <div
             key={a.path}
@@ -4015,10 +4031,12 @@ function StandalonePluginsPane({
   plugins,
   onPick,
   onAdd,
+  workspaceContext,
 }: {
   plugins: InstalledPluginRecord[];
   onPick: (record: InstalledPluginRecord) => void;
   onAdd?: () => void;
+  workspaceContext: WorkspaceCollabContext | null;
 }) {
   const { locale, t } = useI18n();
   const [query, setQuery] = useState('');
@@ -4083,7 +4101,11 @@ function StandalonePluginsPane({
         ) : null}
       </div>
       {hoveredPlugin ? (
-        <ComposerPluginPreview record={hoveredPlugin} locale={locale} />
+        <ComposerPluginPreview
+          record={hoveredPlugin}
+          locale={locale}
+          workspaceContext={workspaceContext}
+        />
       ) : null}
     </div>
   );
@@ -4342,6 +4364,7 @@ function DesignToolboxPanel({
   onPickSkill,
   onPickResource,
   onOpened,
+  workspaceContext,
 }: {
   actions: DesignToolboxAction[];
   skills: SkillSummary[];
@@ -4359,6 +4382,7 @@ function DesignToolboxPanel({
   onPickSkill: (skill: SkillSummary) => void;
   onPickResource: (resource: DesignToolboxResource) => void;
   onOpened?: () => void;
+  workspaceContext: WorkspaceCollabContext | null;
 }) {
   const { locale, t } = useI18n();
   const [query, setQuery] = useState('');
@@ -4535,7 +4559,11 @@ function DesignToolboxPanel({
                   // sandboxed example iframe + meta); every other kind keeps
                   // the compact text detail since it has no preview asset.
                   resource.kind === 'plugin' ? (
-                    <ComposerPluginPreview record={resource.plugin} locale={locale} />
+                    <ComposerPluginPreview
+                      record={resource.plugin}
+                      locale={locale}
+                      workspaceContext={workspaceContext}
+                    />
                   ) : (
                     <>
                       <div className="plus-menu__detail-title">{resource.title}</div>

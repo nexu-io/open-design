@@ -17,6 +17,7 @@ import { MediaSurface } from './plugins-home/cards/MediaSurface';
 import { PluginDetailsModal } from './PluginDetailsModal';
 import type { PluginUseAction } from './plugins-home/useActions';
 import { useInView } from './plugins-home/useInView';
+import { useWorkspaceContext } from '../collab/useWorkspaceContext';
 
 /** Each tab carries the same icon the home composer's creation-type radial
  *  uses for that artifact kind (see home-hero/chips.ts), so the two surfaces
@@ -48,6 +49,7 @@ interface CommunityViewProps {
 
 export function CommunityView({ onRemixTemplate, onUsePrompt, onUsePlugin }: CommunityViewProps) {
   const { locale, t } = useI18n();
+  const { context: workspaceContext } = useWorkspaceContext();
   const [plugins, setPlugins] = useState<InstalledPluginRecord[]>([]);
   // The gallery card opens the FULL plugin details modal (Use split action +
   // Share + close) — the same surface the plugin library uses — while the
@@ -99,8 +101,8 @@ export function CommunityView({ onRemixTemplate, onUsePrompt, onUsePlugin }: Com
     return () => { cancelled = true; };
   }, []);
   const templates = useMemo(
-    () => buildCommunityTemplates(plugins, locale, t),
-    [plugins, locale, t],
+    () => buildCommunityTemplates(plugins, locale, t, workspaceContext),
+    [plugins, locale, t, workspaceContext],
   );
   const typeOptions = TEMPLATE_TYPE_ORDER.filter((type) =>
     templates.some((template) => template.type === type),
@@ -261,6 +263,7 @@ export function CommunityView({ onRemixTemplate, onUsePrompt, onUsePlugin }: Com
       {detailsRecord ? (
         <PluginDetailsModal
           record={detailsRecord}
+          workspaceContext={workspaceContext}
           onClose={() => setDetailsRecord(null)}
           onUse={handleDetailsUse}
           onDuplicate={handleDetailsRemix}

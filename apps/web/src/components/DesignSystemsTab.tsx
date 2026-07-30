@@ -16,7 +16,15 @@ import type {
 } from '@open-design/contracts/analytics';
 import { useI18n } from '../i18n';
 import { useWorkspaceContext } from '../collab/useWorkspaceContext';
-import { workspaceContextHasTeamIdentity } from '@open-design/contracts';
+import {
+  beginWorkspaceScopedRead,
+  workspaceIdentityCacheKey,
+  workspaceProjectHeaders,
+} from '../collab/workspace-identity';
+import {
+  workspaceContextHasTeamIdentity,
+  type WorkspaceCollabContext,
+} from '@open-design/contracts';
 import type { Locale } from '../i18n/types';
 import {
   localizeDesignSystemCategory,
@@ -176,6 +184,9 @@ export function DesignSystemsTab({
   // team-only): signed-out / personal-workspace users get no team tab, and a
   // sign-out while on it falls back to 你的体系 (#5517 signed-out form).
   const { context: workspaceContext } = useWorkspaceContext();
+  const workspaceContextRef = useRef(workspaceContext);
+  workspaceContextRef.current = workspaceContext;
+  const workspaceIdentity = workspaceIdentityCacheKey(workspaceContext);
   // Gate on TEAM IDENTITY — the same predicate the daemon uses to accept a hub
   // share (workspaceContextHasTeamIdentity; see team-resource-share.ts) — NOT on
   // the billing plan. A team on a free/unpaid tier (trial, lapsed, or billing not
@@ -359,17 +370,28 @@ export function DesignSystemsTab({
   // the hub unconfigured) this returns an empty list, so the team collection is
   // simply empty and the share action is available but a no-op.
   const refreshTeamShared = useCallback(async (options: { refreshSystems?: boolean } = {}) => {
+    const read = beginWorkspaceScopedRead(workspaceContextRef.current);
+    if (!read.context || !workspaceContextHasTeamIdentity(read.context)) {
+      setTeamSharedIds(new Set());
+      setTeamSharedMeta(new Map());
+      return;
+    }
+    const context = read.context;
     try {
       // Key the coalescing window by workspace (#145): the response is the
       // ACTIVE workspace's shared set, so a constant key let a switch that
       // landed inside the in-flight/TTL window serve the previous workspace's
       // ids to the new one.
-      const cacheKey = `workspace-design-systems-team:${workspaceContext?.workspaceId ?? 'none'}`;
+      const cacheKey = `workspace-design-systems-team:${workspaceIdentityCacheKey(context)}`;
       const body = await coalescedGet(cacheKey, async () => {
-        const res = await fetch('/api/workspace/design-systems/team', { cache: 'no-store' });
+        const res = await fetch('/api/workspace/design-systems/team', {
+          cache: 'no-store',
+          headers: workspaceProjectHeaders(context),
+        });
         if (!res.ok) throw new Error(`design-systems-team ${res.status}`);
         return (await res.json()) as { ids?: unknown; resources?: unknown };
       });
+      if (!read.isStillCurrent(workspaceContextRef.current)) return;
       if (Array.isArray(body.ids)) {
         const next = new Set(body.ids.filter((id): id is string => typeof id === 'string'));
         setTeamSharedIds((prev) => setsEqual(prev, next) ? prev : next);
@@ -390,7 +412,7 @@ export function DesignSystemsTab({
     } catch {
       // Non-fatal: leave the team collection empty on a transient failure.
     }
-  }, [onSystemsRefresh, workspaceContext?.workspaceId]);
+  }, [onSystemsRefresh, workspaceIdentity]);
 
   useEffect(() => {
     void refreshTeamShared();
@@ -420,6 +442,11 @@ export function DesignSystemsTab({
   // rendering distinguishes the two cases (see the `syncToTeam` label above).
   async function handleShareToTeam(system: DesignSystemSummary) {
     if (sharingId) return;
+    const context = workspaceContextRef.current;
+    if (!context || !workspaceContextHasTeamIdentity(context)) {
+      notifyAction('error', t('dsManager.shareToTeamFailed'));
+      return;
+    }
     const wasAlreadyShared = teamSharedIds.has(system.id);
     const loadingLabel = wasAlreadyShared ? t('dsManager.syncToTeam') : t('dsManager.shareToTeam');
     const failedLabel = wasAlreadyShared ? t('dsManager.syncToTeamFailed') : t('dsManager.shareToTeamFailed');
@@ -428,6 +455,7 @@ export function DesignSystemsTab({
     try {
       const res = await fetch(`/api/workspace/design-systems/${encodeURIComponent(system.id)}/share`, {
         method: 'POST',
+        headers: workspaceProjectHeaders(context),
       });
       const body = (await res.json().catch(() => ({}))) as { shared?: boolean };
       if (res.ok && body.shared) {
@@ -453,11 +481,17 @@ export function DesignSystemsTab({
   // button shows).
   async function handleUnshareFromTeam(system: DesignSystemSummary) {
     if (unsharingId) return;
+    const context = workspaceContextRef.current;
+    if (!context || !workspaceContextHasTeamIdentity(context)) {
+      notifyAction('error', t('dsManager.unshareFromTeamFailed'));
+      return;
+    }
     setUnsharingId(system.id);
     notifyActionLoading(t('dsManager.unshareFromTeam'));
     try {
       const res = await fetch(`/api/workspace/design-systems/${encodeURIComponent(system.id)}/share`, {
         method: 'DELETE',
+        headers: workspaceProjectHeaders(context),
       });
       const body = (await res.json().catch(() => ({}))) as { unshared?: boolean };
       if (res.ok && body.unshared) {
@@ -489,7 +523,7 @@ export function DesignSystemsTab({
     try {
       const updated = await updateDesignSystemDraft(system.id, {
         status: willPublish ? 'published' : 'draft',
-      });
+      }, workspaceContext);
       succeeded = Boolean(updated);
       if (!succeeded) errorCode = 'DS_STATUS_UPDATE_RETURNED_NULL';
       if (succeeded) {
@@ -551,7 +585,7 @@ export function DesignSystemsTab({
     let succeeded = false;
     let errorCode: string | undefined;
     try {
-      const deleted = await deleteDesignSystemDraft(system.id);
+      const deleted = await deleteDesignSystemDraft(system.id, workspaceContext);
       succeeded = Boolean(deleted);
       if (!succeeded) errorCode = 'DS_DELETE_RETURNED_FALSE';
       if (succeeded && selectedId === system.id) {
@@ -1051,7 +1085,10 @@ function SystemRowPaletteLogo({ system }: { system: DesignSystemSummary }) {
 // only knows the *design-system* id, which differs from the brand id the brands
 // route expects. Returns `undefined` while the fetch is in flight, `null` when
 // the project has no logo, or the raw URL string.
-function useProjectLogoSrc(projectId: string | undefined): string | null | undefined {
+function useProjectLogoSrc(
+  projectId: string | undefined,
+  workspaceContext: WorkspaceCollabContext | null,
+): string | null | undefined {
   const [src, setSrc] = useState<string | null | undefined>(projectId ? undefined : null);
   useEffect(() => {
     if (!projectId) {
@@ -1060,7 +1097,10 @@ function useProjectLogoSrc(projectId: string | undefined): string | null | undef
     }
     let cancelled = false;
     setSrc(undefined);
-    void fetchProjectFileText(projectId, 'brand.json', { cache: 'no-store' }).then((raw) => {
+    void fetchProjectFileText(projectId, 'brand.json', {
+      cache: 'no-store',
+      workspaceContext,
+    }).then((raw) => {
       if (cancelled) return;
       let primary: string | null = null;
       if (raw) {
@@ -1072,12 +1112,12 @@ function useProjectLogoSrc(projectId: string | undefined): string | null | undef
           // Not a valid brand.json (e.g. a non-brand "Create"d system) — no logo.
         }
       }
-      setSrc(primary ? projectRawUrl(projectId, primary) : null);
+      setSrc(primary ? projectRawUrl(projectId, primary, workspaceContext) : null);
     });
     return () => {
       cancelled = true;
     };
-  }, [projectId]);
+  }, [projectId, workspaceContext]);
   return src;
 }
 
@@ -1088,7 +1128,11 @@ function useProjectLogoSrc(projectId: string | undefined): string | null | undef
 // logo is still loading, so the thumbnail never flashes a broken image first.
 function SystemRowLogo({ system }: { system: DesignSystemSummary }) {
   const host = designSystemLogoHost(system);
-  const projectLogo = useProjectLogoSrc(isUserSystem(system) ? system.projectId : undefined);
+  const { context: workspaceContext } = useWorkspaceContext();
+  const projectLogo = useProjectLogoSrc(
+    isUserSystem(system) ? system.projectId : undefined,
+    workspaceContext,
+  );
 
   // Candidate srcs in priority order, skipping empties; `onError` advances to
   // the next, and exhausting them collapses to the palette stripe.
@@ -1206,6 +1250,7 @@ function DesignSystemDetail({
   unsharing,
 }: DetailProps) {
   const analytics = useAnalytics();
+  const { context: workspaceContext } = useWorkspaceContext();
   const isUser = isUserSystem(system);
   const status = system.status ?? 'draft';
   const published = status === 'published';
@@ -1257,7 +1302,7 @@ function DesignSystemDetail({
     } else {
       setReloadKey((k) => k + 1);
     }
-    void fetchDesignSystem(system.id).then((d) => {
+    void fetchDesignSystem(system.id, workspaceContext).then((d) => {
       if (cancelled) return;
       if (d) setDetail(d);
       setDetailResolved(true);
@@ -1267,7 +1312,7 @@ function DesignSystemDetail({
     return () => {
       cancelled = true;
     };
-  }, [system]);
+  }, [system, workspaceContext]);
 
   const host = designSystemLogoHost(system) || undefined;
   const projectId = detail?.projectId ?? system.projectId;
@@ -1303,6 +1348,7 @@ function DesignSystemDetail({
     editable: isUser,
     host,
     reloadKey,
+    workspaceContext,
   });
 
   async function handleDownload() {
@@ -1316,6 +1362,7 @@ function DesignSystemDetail({
         await downloadDesignSystemArchive({
           designSystemId: system.id,
           fallbackTitle: system.title,
+          workspaceContext,
         }) || (projectId
           ? await downloadProjectArchive({ projectId, fallbackTitle: system.title })
           : false);

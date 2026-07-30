@@ -4,7 +4,11 @@ import { access, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { InstalledPluginRecord, Project } from '@open-design/contracts';
+import type {
+  InstalledPluginRecord,
+  Project,
+  WorkspaceCollabContext,
+} from '@open-design/contracts';
 import { sendApiError } from '../src/http/api-errors.js';
 import {
   closeDatabase,
@@ -54,6 +58,43 @@ async function makePreviewPlugin(root: string, id = 'duplicate-fixture'): Promis
 
 async function expectMissing(pathname: string): Promise<void> {
   await expect(access(pathname)).rejects.toMatchObject({ code: 'ENOENT' });
+}
+
+async function verifyWorkspaceRequestAuthority(req: express.Request) {
+  const workspaceId = req.get('x-od-workspace-id')?.trim() ?? '';
+  const workspaceMemberId =
+    req.get('x-od-workspace-member-id')?.trim() ?? '';
+  return {
+    ok: true as const,
+    context: {
+      workspaceId,
+      workspaceName: workspaceId,
+      workspaceType: 'team',
+      workspaceMemberId,
+      role: 'member',
+      memberStatus: 'active',
+      lifecycleState: 'active',
+      billingState: 'active',
+      planId: null,
+      providerMode: 'platform_credits',
+      seatSummary: {
+        seatLimit: 5,
+        usedSeats: 1,
+        availableSeats: 4,
+        isSeatFull: false,
+      },
+      permissions: {
+        canManageMembers: false,
+        canManageBilling: false,
+        canInviteMembers: false,
+        canManageAutoRecharge: false,
+        canShareProjects: true,
+        canWriteSyncedFiles: true,
+        canViewWorkspaceSettings: true,
+        canManageSharedResources: false,
+      },
+    } as WorkspaceCollabContext,
+  };
 }
 
 describe('plugin project duplication', () => {
@@ -115,6 +156,7 @@ describe('plugin project duplication', () => {
         getInstalledPlugin: vi.fn(() => plugin),
         listInstalledPlugins: vi.fn(() => []),
       },
+      verifyWorkspaceRequestAuthority,
       fetchProjectCreationWorkspaceDirectory: async () => ({ ok: false, items: [] }),
       helpers: {
         requireLocalDaemonRequest: ((_req, _res, next) => next()) as express.RequestHandler,
@@ -227,10 +269,12 @@ describe('plugin project duplication', () => {
         getInstalledPlugin: vi.fn(() => plugin),
         listInstalledPlugins: vi.fn(() => []),
       },
+      verifyWorkspaceRequestAuthority,
       helpers: {
         requireLocalDaemonRequest: ((_req, _res, next) => next()) as express.RequestHandler,
         assembleExample: (templateHtml: string) => templateHtml,
         applyBakedPreviews: (records: unknown[]) => records,
+        sendApiError,
       },
     } as unknown as Parameters<typeof registerPluginRoutes>[1]);
     const server = await listen(app);
@@ -343,10 +387,12 @@ describe('plugin project duplication', () => {
         getInstalledPlugin: vi.fn(() => plugin),
         listInstalledPlugins: vi.fn(() => []),
       },
+      verifyWorkspaceRequestAuthority,
       helpers: {
         requireLocalDaemonRequest: ((_req, _res, next) => next()) as express.RequestHandler,
         assembleExample: (templateHtml: string) => templateHtml,
         applyBakedPreviews: (records: unknown[]) => records,
+        sendApiError,
       },
     } as unknown as Parameters<typeof registerPluginRoutes>[1]);
     const server = await listen(app);
@@ -417,10 +463,12 @@ describe('plugin project duplication', () => {
         getInstalledPlugin: vi.fn(() => plugin),
         listInstalledPlugins: vi.fn(() => []),
       },
+      verifyWorkspaceRequestAuthority,
       helpers: {
         requireLocalDaemonRequest: ((_req, _res, next) => next()) as express.RequestHandler,
         assembleExample: (templateHtml: string) => templateHtml,
         applyBakedPreviews: (records: unknown[]) => records,
+        sendApiError,
       },
     } as unknown as Parameters<typeof registerPluginRoutes>[1]);
     const server = await listen(app);

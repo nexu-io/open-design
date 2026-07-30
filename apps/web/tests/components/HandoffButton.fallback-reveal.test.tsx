@@ -51,7 +51,7 @@ describe('HandoffButton zero-editors fallback', () => {
     const fallback = (await screen.findByText('Finder')).closest('button') as HTMLButtonElement;
     fireEvent.click(fallback);
 
-    await waitFor(() => expect(openProjectInEditor).toHaveBeenCalledWith('p1', 'finder'));
+    await waitFor(() => expect(openProjectInEditor).toHaveBeenCalledWith('p1', 'finder', null));
   });
 
   it('surfaces a daemon spawn failure inline so the fallback is not a silent no-op', async () => {

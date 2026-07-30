@@ -613,10 +613,10 @@ export function HomeView({
   const detailsTemplate = useMemo(() => {
     if (!detailsRecord) return null;
     return (
-      buildCommunityTemplates(plugins, locale, t)
+      buildCommunityTemplates(plugins, locale, t, workspaceContext)
         .find((template) => template.id === detailsRecord.id) ?? null
     );
-  }, [detailsRecord, plugins, locale, t]);
+  }, [detailsRecord, plugins, locale, t, workspaceContext]);
   // Same synchronous single-flight gate the Community remix path uses: the
   // lightweight preview's Remix kicks off one project create; clicks landing
   // before React re-renders must all see the lock immediately, so a plain
@@ -1169,7 +1169,30 @@ export function HomeView({
     applyRequestId?: number,
   ): Promise<ApplyResult | null> {
     setPendingApplyId(record.id);
-    const result = await applyPlugin(record.id, { locale, inputs });
+    let writeWorkspaceContext;
+    try {
+      if (workspaceContextState.identityChangePending) {
+        throw new Error('workspace identity change pending');
+      }
+      writeWorkspaceContext = resolvedWorkspaceContextForWrite(workspaceContextState);
+    } catch {
+      if (
+        applyRequestId === undefined
+        || activePluginApplyRequestRef.current === applyRequestId
+      ) {
+        setPendingApplyId(null);
+        setPendingChipId(null);
+      }
+      setError(
+        'Workspace context is unavailable. Try again when workspace sync finishes.',
+      );
+      return null;
+    }
+    const result = await applyPlugin(record.id, {
+      locale,
+      inputs,
+      workspaceContext: writeWorkspaceContext,
+    });
     if (applyRequestId === undefined || activePluginApplyRequestRef.current === applyRequestId) {
       setPendingApplyId(null);
       setPendingChipId(null);
@@ -2305,6 +2328,7 @@ export function HomeView({
     >
       {isActive ? <AppWashKineticGrid clipBottomTo=".home-hero" /> : null}
       <HomeHero
+        workspaceContext={workspaceContext}
         ref={inputRef}
         active={isActive}
         firstRunGuide={projectsLoading ? undefined : projects.length === 0}
@@ -2494,6 +2518,7 @@ export function HomeView({
         ) : detailsRecord ? (
           <PluginDetailsModal
             record={detailsRecord}
+            workspaceContext={workspaceContext}
             onClose={() => {
               // Covers the close button, Esc and the backdrop — every
               // variant funnels dismissal through this single onClose.
@@ -2544,6 +2569,7 @@ export function HomeView({
         {figmaModalOpen ? (
           <FigmaImportModal
             onClose={() => setFigmaModalOpen(false)}
+            workspaceContext={workspaceContext}
             resolveProjectId={async () => {
               // The homepage has no project yet; create a bare one to decode
               // the Figma file into, then navigate into it.

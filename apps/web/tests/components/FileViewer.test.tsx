@@ -2,7 +2,7 @@
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState, type ReactElement } from 'react';
 import { act, cleanup, createEvent, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { installMockOpenDesignHost } from '@open-design/host/testing';
@@ -84,7 +84,10 @@ import { emptyManualEditStyles } from '../../src/edit-mode/types';
 import { __resetPreviewIsolationCache } from '../../src/runtime/powered-preview';
 import { readExpandedIndexCss } from '../helpers/read-expanded-css';
 import { resetWorkspaceContextCache } from '../../src/collab/useWorkspaceContext';
-import { CollabProvider, type CollabContextValue } from '../../src/collab/collab-context';
+import {
+  CollabProvider,
+  type CollabContextValue,
+} from '../../src/collab/collab-context';
 import {
   buildWorkspacePermissions,
   buildWorkspaceSeatSummary,
@@ -123,6 +126,31 @@ function stubFetchWithWorkspaceContext(context: WorkspaceCollabContext | null): 
       return new Response(JSON.stringify({ deployments: [] }), { status: 200 });
     }),
   );
+}
+
+function renderWithProjectWorkspace(
+  ui: ReactElement,
+  workspaceContext: WorkspaceCollabContext | null,
+) {
+  const value: CollabContextValue = {
+    workspaceContext,
+    workspaceContextLoading: false,
+    enabled: false,
+    member: null,
+    present: [],
+    publishedVersion: null,
+    syncState: null,
+    viewerOnly: false,
+    isOwner: false,
+    ownerDisplayName: null,
+    ownerRole: null,
+    downloadPending: false,
+    reportChange: () => {},
+    requestPublish: () => {},
+    refreshPresence: () => {},
+    checkStatusNow: () => {},
+  };
+  return render(<CollabProvider value={value}>{ui}</CollabProvider>);
 }
 
 const TEST_SNAPSHOT_DATA_URL = 'data:image/png;base64,c25hcHNob3Q=';
@@ -3414,12 +3442,14 @@ describe('FileViewer SVG artifacts', () => {
         exports: ['html'],
       },
     });
-    stubFetchWithWorkspaceContext(teamWorkspaceContext());
+    const context = teamWorkspaceContext();
+    stubFetchWithWorkspaceContext(context);
 
-    render(
+    renderWithProjectWorkspace(
       <FileViewer projectId="project-1" projectKind="prototype" file={file}
         liveHtml="<html><body><h1>Hello</h1></body></html>"
       />,
+      context,
     );
 
     fireEvent.click(screen.getByRole('button', { name: /share/i }));
@@ -3492,16 +3522,18 @@ describe('FileViewer SVG artifacts', () => {
   }
 
   it('offers the public publish entry to a personal workspace', async () => {
-    stubFetchWithWorkspaceContext({
+    const context: WorkspaceCollabContext = {
       ...teamWorkspaceContext(),
       workspaceType: 'personal',
       teamId: undefined,
-    });
+    };
+    stubFetchWithWorkspaceContext(context);
 
-    render(
+    renderWithProjectWorkspace(
       <FileViewer projectId="project-1" projectKind="prototype" file={publicPublishFile()}
         liveHtml="<html><body><h1>Hello</h1></body></html>"
       />,
+      context,
     );
 
     fireEvent.click(screen.getByRole('button', { name: /share/i }));
@@ -3544,10 +3576,11 @@ describe('FileViewer SVG artifacts', () => {
       }),
     );
 
-    render(
+    renderWithProjectWorkspace(
       <FileViewer projectId="project-1" projectKind="prototype" file={publicPublishFile()}
         liveHtml="<html><body><h1>Hello</h1></body></html>"
       />,
+      context,
     );
 
     fireEvent.click(screen.getByRole('button', { name: /share/i }));
@@ -3570,16 +3603,18 @@ describe('FileViewer SVG artifacts', () => {
   // silently failed. The public single-file publish card right above it is
   // unaffected (that one IS meant to work for a personal workspace).
   it('hides the team-only workspace-share card for a personal workspace', async () => {
-    stubFetchWithWorkspaceContext({
+    const context: WorkspaceCollabContext = {
       ...teamWorkspaceContext(),
       workspaceType: 'personal',
       teamId: undefined,
-    });
+    };
+    stubFetchWithWorkspaceContext(context);
 
-    render(
+    renderWithProjectWorkspace(
       <FileViewer projectId="project-1" projectKind="prototype" file={publicPublishFile()}
         liveHtml="<html><body><h1>Hello</h1></body></html>"
       />,
+      context,
     );
 
     fireEvent.click(screen.getByRole('button', { name: /share/i }));
@@ -3594,17 +3629,19 @@ describe('FileViewer SVG artifacts', () => {
   // workspace that can already publish must show ONLY the publish card, with
   // no team-CTA card and no create-team link underneath it.
   it('does not show a create-team CTA for a personal workspace that can already publish', async () => {
-    stubFetchWithWorkspaceContext({
+    const context: WorkspaceCollabContext = {
       ...teamWorkspaceContext(),
       workspaceType: 'personal',
       teamId: undefined,
       workspaceSettingsUrl: 'https://web.example.com/console/settings?workspaceId=ws-1',
-    });
+    };
+    stubFetchWithWorkspaceContext(context);
 
-    render(
+    renderWithProjectWorkspace(
       <FileViewer projectId="project-1" projectKind="prototype" file={publicPublishFile()}
         liveHtml="<html><body><h1>Hello</h1></body></html>"
       />,
+      context,
     );
 
     fireEvent.click(screen.getByRole('button', { name: /share/i }));
@@ -3619,12 +3656,14 @@ describe('FileViewer SVG artifacts', () => {
   // there — "separates deploy sharing actions from download actions" above
   // already pins this, this test names the invariant directly.
   it('offers the workspace-share card to a team workspace', async () => {
-    stubFetchWithWorkspaceContext(teamWorkspaceContext());
+    const context = teamWorkspaceContext();
+    stubFetchWithWorkspaceContext(context);
 
-    render(
+    renderWithProjectWorkspace(
       <FileViewer projectId="project-1" projectKind="prototype" file={publicPublishFile()}
         liveHtml="<html><body><h1>Hello</h1></body></html>"
       />,
+      context,
     );
 
     fireEvent.click(screen.getByRole('button', { name: /share/i }));
@@ -5987,6 +6026,8 @@ describe('FileViewer tweaks toolbar', () => {
 
   it('keeps the Comment CTA for a new element annotation in a viewer-only team project', async () => {
     const collab: CollabContextValue = {
+      workspaceContext: teamWorkspaceContext(),
+      workspaceContextLoading: false,
       enabled: true,
       member: { memberId: 'wm-1', name: 'Member', role: 'member' },
       present: [],

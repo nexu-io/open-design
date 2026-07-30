@@ -22,9 +22,18 @@ vi.mock('../src/collab/workspace-events', () => ({
   useWorkspaceInvalidation: vi.fn(() => ({ connected: false })),
 }));
 
-import { useTeamMembers } from '../src/collab/useTeamMembers';
-import { notifyWorkspaceContextRefresh } from '../src/collab/useWorkspaceContext';
-import { workspaceContextFixture } from './helpers/workspace-context';
+import {
+  currentUserDirectoryEntry,
+  useTeamMembers,
+} from '../src/collab/useTeamMembers';
+import {
+  notifyWorkspaceContextRefresh,
+  useWorkspaceContext,
+} from '../src/collab/useWorkspaceContext';
+import {
+  workspaceContextFixture,
+  workspaceDirectoryFixture,
+} from './helpers/workspace-context';
 
 const CONTEXTS = {
   a: workspaceContextFixture({ workspaceId: 'ws-a', workspaceMemberId: 'mem-a' }),
@@ -45,6 +54,8 @@ function jsonResponse(body: unknown): Response {
 
 type PendingMembersRead = {
   workspace: 'a' | 'b';
+  workspaceId: string | null;
+  workspaceMemberId: string | null;
   resolve: (response: Response) => void;
 };
 
@@ -61,23 +72,31 @@ beforeEach(() => {
   slowMembersWorkspaces = new Set();
   vi.stubGlobal(
     'fetch',
-    vi.fn((input: RequestInfo | URL): Promise<Response> => {
+    vi.fn((input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
       const url = String(input);
+      if (url.includes('/api/workspace/directory')) {
+        return Promise.resolve(
+          jsonResponse(workspaceDirectoryFixture([CONTEXTS[activeWorkspace]])),
+        );
+      }
       if (url.includes('/api/workspace/context')) {
         return Promise.resolve(jsonResponse({ context: CONTEXTS[activeWorkspace] }));
       }
       if (url.includes('/api/workspace/members')) {
+        const headers = new Headers(init?.headers);
+        const workspaceId = headers.get('x-od-workspace-id');
+        const workspaceMemberId = headers.get('x-od-workspace-member-id');
         const workspace = activeWorkspace;
         const answer = jsonResponse({ members: ROSTERS[workspace] });
         if (!slowMembersWorkspaces.has(workspace)) {
-          membersReads.push({ workspace, resolve: () => {} });
+          membersReads.push({ workspace, workspaceId, workspaceMemberId, resolve: () => {} });
           return Promise.resolve(answer);
         }
         let resolve!: (response: Response) => void;
         const promise = new Promise<Response>((next) => {
           resolve = next;
         });
-        membersReads.push({ workspace, resolve });
+        membersReads.push({ workspace, workspaceId, workspaceMemberId, resolve });
         return promise;
       }
       return Promise.reject(new Error(`Unexpected fetch: ${url}`));
@@ -98,6 +117,8 @@ describe('useTeamMembers caches the roster per workspace identity', () => {
       expect(membersReads).toHaveLength(1);
     });
     expect(membersReads[0]?.workspace).toBe('a');
+    expect(membersReads[0]?.workspaceId).toBe(CONTEXTS.a.workspaceId);
+    expect(membersReads[0]?.workspaceMemberId).toBe(CONTEXTS.a.workspaceMemberId);
 
     // The user switches workspace: the daemon's active workspace is now B, and
     // the context read that follows the switch says so. A's roster read is
@@ -113,6 +134,8 @@ describe('useTeamMembers caches the roster per workspace identity', () => {
     await waitFor(() => {
       expect(hook.result.current.members).toEqual(ROSTERS.b);
     });
+    expect(membersReads[1]?.workspaceId).toBe(CONTEXTS.b.workspaceId);
+    expect(membersReads[1]?.workspaceMemberId).toBe(CONTEXTS.b.workspaceMemberId);
     expect(hook.result.current.resolve('mem-b-peer')?.displayName).toBe(
       'Workspace B teammate',
     );
@@ -126,5 +149,75 @@ describe('useTeamMembers caches the roster per workspace identity', () => {
     expect(hook.result.current.resolve('mem-a-peer')).toBeNull();
 
     hook.unmount();
+  });
+
+  it('masks workspace A roster and roles while workspace B context is pending', async () => {
+    let holdWorkspaceContext = false;
+    let resolveWorkspaceContext!: (response: Response) => void;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+        const url = String(input);
+        if (url.includes('/api/workspace/directory')) {
+          return Promise.resolve(
+            jsonResponse(workspaceDirectoryFixture([CONTEXTS[activeWorkspace]])),
+          );
+        }
+        if (url.includes('/api/workspace/context')) {
+          if (!holdWorkspaceContext) {
+            return Promise.resolve(
+              jsonResponse({ context: CONTEXTS[activeWorkspace] }),
+            );
+          }
+          return new Promise<Response>((resolve) => {
+            resolveWorkspaceContext = resolve;
+          });
+        }
+        if (url.includes('/api/workspace/members')) {
+          const headers = new Headers(init?.headers);
+          const workspaceId = headers.get('x-od-workspace-id');
+          const workspace =
+            workspaceId === CONTEXTS.b.workspaceId ? 'b' : 'a';
+          return Promise.resolve(jsonResponse({ members: ROSTERS[workspace] }));
+        }
+        return Promise.reject(new Error(`Unexpected fetch: ${url}`));
+      }),
+    );
+
+    const hook = renderHook(() => {
+      const { context, identityChangePending } = useWorkspaceContext();
+      return useTeamMembers(
+        currentUserDirectoryEntry(identityChangePending ? null : context),
+      );
+    });
+    await waitFor(() => {
+      expect(hook.result.current.members).toEqual(ROSTERS.a);
+    });
+    expect(hook.result.current.resolve('mem-a-peer')?.role).toBe('owner');
+    expect(hook.result.current.resolve(CONTEXTS.a.workspaceMemberId)?.role).toBe(
+      CONTEXTS.a.role,
+    );
+
+    activeWorkspace = 'b';
+    holdWorkspaceContext = true;
+    act(() => {
+      notifyWorkspaceContextRefresh();
+    });
+    await waitFor(() => {
+      expect(resolveWorkspaceContext).toBeTypeOf('function');
+    });
+
+    expect(hook.result.current.members).toEqual([]);
+    expect(hook.result.current.resolve('mem-a-peer')).toBeNull();
+    expect(hook.result.current.resolve(CONTEXTS.a.workspaceMemberId)).toBeNull();
+
+    await act(async () => {
+      holdWorkspaceContext = false;
+      resolveWorkspaceContext(jsonResponse({ context: CONTEXTS.b }));
+    });
+    await waitFor(() => {
+      expect(hook.result.current.members).toEqual(ROSTERS.b);
+    });
+    expect(hook.result.current.resolve('mem-b-peer')?.role).toBe('owner');
   });
 });

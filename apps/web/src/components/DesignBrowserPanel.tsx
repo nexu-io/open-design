@@ -69,7 +69,7 @@ import { Icon } from './Icon';
 import { BoardComposerPopover } from './BoardComposerPopover';
 import { PreviewDrawOverlay } from './PreviewDrawOverlay';
 import { RemixIcon } from './RemixIcon';
-import { useWorkspaceContext } from '../collab/useWorkspaceContext';
+import { useProjectCollabContext } from '../collab/collab-context';
 
 type BrowserHistoryEntry = {
   iconUrl?: string;
@@ -919,7 +919,7 @@ export function DesignBrowserPanel({
   browserTabId,
 }: DesignBrowserPanelProps) {
   const t = useT();
-  const { context: workspaceContext } = useWorkspaceContext();
+  const { workspaceContext } = useProjectCollabContext();
   const desktopHostAvailable = isOpenDesignHostAvailable();
   const initialState = initialBrowserState(initialUrl, initialTitle);
   // `loadUrl` is the navigation target bound to the <webview>/<iframe> `src`.
@@ -2395,7 +2395,7 @@ export function DesignBrowserPanel({
       onDeleteComment={onRemovePreviewComment}
       images={browserImagePreviews}
       existingImages={(activeSavedComment?.attachments ?? []).map((attachment) => ({
-        url: projectRawUrl(projectId, attachment.path),
+        url: projectRawUrl(projectId, attachment.path, workspaceContext),
         name: attachment.name,
       }))}
       onAttachImages={addBrowserImages}

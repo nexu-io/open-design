@@ -88,7 +88,11 @@ describe('first open of an unmaterialized shared project (QA P0)', () => {
     // fresh closure per render would loop.
     const fetchImpl = daemonWith(firstOpenStatus(), MEMBER_CONTEXT);
     const { result } = renderHook(() =>
-      useProjectCollab('p1', { fetch: fetchImpl, statusPollMs: 30_000 }),
+      useProjectCollab('p1', {
+        fetch: fetchImpl,
+        statusPollMs: 30_000,
+        workspaceContext: MEMBER_CONTEXT,
+      }),
     );
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
@@ -110,7 +114,11 @@ describe('first open of an unmaterialized shared project (QA P0)', () => {
     // A placeholder means "local files are not the content" for every viewer.
     const fetchImpl = daemonWith(firstOpenStatus(), OWNER_CONTEXT);
     const { result } = renderHook(() =>
-      useProjectCollab('p1', { fetch: fetchImpl, statusPollMs: 30_000 }),
+      useProjectCollab('p1', {
+        fetch: fetchImpl,
+        statusPollMs: 30_000,
+        workspaceContext: OWNER_CONTEXT,
+      }),
     );
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
@@ -130,7 +138,11 @@ describe('first open of an unmaterialized shared project (QA P0)', () => {
       MEMBER_CONTEXT,
     );
     const { result } = renderHook(() =>
-      useProjectCollab('p1', { fetch: fetchImpl, statusPollMs: 30_000 }),
+      useProjectCollab('p1', {
+        fetch: fetchImpl,
+        statusPollMs: 30_000,
+        workspaceContext: MEMBER_CONTEXT,
+      }),
     );
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);

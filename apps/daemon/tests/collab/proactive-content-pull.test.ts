@@ -126,6 +126,30 @@ describe('proactive content pull (hub project-content-changed consumer)', () => 
     expect(deps.pullCalls).toEqual(['proj-1']);
   });
 
+  it('resolves identity from the event Workspace instead of mutable global selection', async () => {
+    const globallySelectedWorkspaceId = 'ws-other';
+    const getWorkspaceIdentity = vi.fn(async (workspaceId: string) =>
+      workspaceId === 'ws-1'
+        ? {
+            workspaceId,
+            resourceTeamId: 'team-1',
+            workspaceMemberId: 'wm-member',
+          }
+        : null,
+    );
+    const deps = makeDeps({ getWorkspaceIdentity });
+    const pull = createProactiveContentPull(deps);
+
+    await pull.handleContentChanged({
+      ...baseEvent,
+      workspaceId: 'ws-1',
+    });
+
+    expect(globallySelectedWorkspaceId).toBe('ws-other');
+    expect(getWorkspaceIdentity).toHaveBeenCalledWith('ws-1');
+    expect(deps.pullCalls).toEqual(['proj-1']);
+  });
+
   it('issues the pull target a fresh witness bound to the guarded event version', async () => {
     const receivedTargets: ProactiveContentPullTarget[] = [];
     const deps = makeDeps({

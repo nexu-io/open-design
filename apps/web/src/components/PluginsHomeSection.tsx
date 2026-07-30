@@ -16,7 +16,10 @@
 
 import { Button, Input } from '@open-design/components';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { InstalledPluginRecord } from '@open-design/contracts';
+import type {
+  InstalledPluginRecord,
+  WorkspaceCollabContext,
+} from '@open-design/contracts';
 import { useI18n, useT } from '../i18n';
 import type { PluginShareAction } from '../state/projects';
 import { Icon } from './Icon';
@@ -58,6 +61,7 @@ interface Props {
   // 'gallery' renders each card as a minimal live example.html preview
   // tile (Community); 'rich' keeps the hover-overlay metadata card.
   cardLayout?: 'rich' | 'gallery';
+  workspaceContext?: WorkspaceCollabContext | null;
 }
 
 export function PluginsHomeSection({
@@ -77,6 +81,7 @@ export function PluginsHomeSection({
   subtitle,
   emptyMessage,
   cardLayout = 'rich',
+  workspaceContext = null,
 }: Props) {
   const { locale, t } = useI18n();
   const { savedPluginIds, savePluginId } = useSavedPluginIds();
@@ -256,6 +261,7 @@ export function PluginsHomeSection({
                   onSave={handleSavePlugin}
                   onShareAction={onPluginShareAction}
                   layout={cardLayout}
+                  workspaceContext={workspaceContext}
                 />
               ))}
               {hasMorePlugins ? (

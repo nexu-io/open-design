@@ -7,7 +7,9 @@ import { InlineModelSwitcher } from '../../src/components/InlineModelSwitcher';
 import { AMR_LOGIN_TIMEOUT_MS } from '../../src/components/amrLoginPolling';
 import { fetchProviderModels } from '../../src/providers/provider-models';
 import { providerModelsCacheKey } from '../../src/components/providerModelsCache';
+import { resetWorkspaceContextCache } from '../../src/collab/useWorkspaceContext';
 import type { AgentInfo, AppConfig, ProviderModelOption } from '../../src/types';
+import { workspaceDirectoryFixture } from '../helpers/workspace-context';
 
 function optionNames(container: HTMLElement): string[] {
   return within(container).getAllByRole('option').map((option) => {
@@ -157,6 +159,13 @@ function workspaceContextResponse(context: WorkspaceCollabContext | null) {
   });
 }
 
+function workspaceDirectoryResponse(context: WorkspaceCollabContext) {
+  return new Response(JSON.stringify(workspaceDirectoryFixture([context])), {
+    status: 200,
+    headers: { 'content-type': 'application/json' },
+  });
+}
+
 function expectVelaLoginWithAttribution(
   fetchMock: ReturnType<typeof vi.fn>,
   sourceDetail: string,
@@ -199,6 +208,7 @@ describe('InlineModelSwitcher AMR row', () => {
     } catch {
       // jsdom normally exposes localStorage; keep cleanup tolerant.
     }
+    resetWorkspaceContextCache();
   });
 
   it('shows the AMR reminder dot once when another CLI is selected', async () => {
@@ -470,6 +480,7 @@ describe('InlineModelSwitcher AMR row', () => {
   });
 
   it('uses only the explicit team workspace balance, never the account fallback', async () => {
+    const workspaceContext = teamMemberWorkspaceContext();
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = input.toString();
       if (url === '/api/integrations/vela/status') {
@@ -487,8 +498,11 @@ describe('InlineModelSwitcher AMR row', () => {
           { status: 200, headers: { 'content-type': 'application/json' } },
         );
       }
+      if (url === '/api/workspace/directory') {
+        return workspaceDirectoryResponse(workspaceContext);
+      }
       if (url === '/api/workspace/context') {
-        return workspaceContextResponse(teamMemberWorkspaceContext());
+        return workspaceContextResponse(workspaceContext);
       }
       if (url === '/api/workspace/billing?scope=workspace&workspaceId=ws-team') {
         return new Response(
@@ -584,6 +598,7 @@ describe('InlineModelSwitcher AMR row', () => {
 
   it('routes inline upgrades through the signed-in AMR profile', async () => {
     const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+    const workspaceContext = personalWorkspaceContext();
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = input.toString();
       if (url === '/api/integrations/vela/status') {
@@ -601,8 +616,11 @@ describe('InlineModelSwitcher AMR row', () => {
       // Personal workspace: `canManageBilling` is always true there, so this
       // is the control case proving the permission gate below does not
       // suppress the upgrade entry for non-team identities.
+      if (url === '/api/workspace/directory') {
+        return workspaceDirectoryResponse(workspaceContext);
+      }
       if (url === '/api/workspace/context') {
-        return workspaceContextResponse(personalWorkspaceContext());
+        return workspaceContextResponse(workspaceContext);
       }
       throw new Error(`Unexpected fetch: ${url}`);
     });
@@ -636,6 +654,7 @@ describe('InlineModelSwitcher AMR row', () => {
   // stay hidden for them even with a fully signed-in, upgrade-eligible AMR
   // account.
   it('hides the inline upgrade action for a team member without billing permission', async () => {
+    const workspaceContext = teamMemberWorkspaceContext();
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = input.toString();
       if (url === '/api/integrations/vela/status') {
@@ -650,8 +669,11 @@ describe('InlineModelSwitcher AMR row', () => {
           { status: 200, headers: { 'content-type': 'application/json' } },
         );
       }
+      if (url === '/api/workspace/directory') {
+        return workspaceDirectoryResponse(workspaceContext);
+      }
       if (url === '/api/workspace/context') {
-        return workspaceContextResponse(teamMemberWorkspaceContext());
+        return workspaceContextResponse(workspaceContext);
       }
       if (url === '/api/workspace/billing?scope=workspace&workspaceId=ws-team') {
         return new Response(

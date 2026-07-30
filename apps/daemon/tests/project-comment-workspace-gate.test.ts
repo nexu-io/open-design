@@ -21,6 +21,11 @@ import { afterEach, describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import {
+  buildWorkspacePermissions,
+  buildWorkspaceSeatSummary,
+  type WorkspaceCollabContext,
+} from '@open-design/contracts';
 
 import {
   closeDatabase,
@@ -45,6 +50,7 @@ import { registerProjectCommentRoutes } from '../src/routes/project/comments.js'
 
 let server: http.Server | null = null;
 let tempDir: string | null = null;
+let database: ReturnType<typeof openDatabase> | null = null;
 
 afterEach(async () => {
   if (server) {
@@ -53,6 +59,7 @@ afterEach(async () => {
     await new Promise<void>((resolve) => toClose.close(() => resolve()));
   }
   closeDatabase();
+  database = null;
   if (tempDir) fs.rmSync(tempDir, { recursive: true, force: true });
   tempDir = null;
 });
@@ -92,9 +99,12 @@ const COMMENT_TARGET = {
   position: { x: 0, y: 0, width: 0, height: 0 },
 };
 
-async function startServer() {
+async function startServer(
+  routeOverrides: Record<string, unknown> = {},
+) {
   tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-comment-ws-gate-'));
   const db = openDatabase(tempDir);
+  database = db;
   const now = Date.now();
   for (const [id, conv] of [
     [TEAM_PROJECT, 'conv-team'],
@@ -147,7 +157,7 @@ async function startServer() {
       reorderPreviewComment,
     } as any,
     sendApiError,
-    enforceWorkspaceProjectMutation: (req, res, sendError, getWp, getWpByProjectId, dbArg, projectId, capability) =>
+    enforceWorkspaceProjectMutation: async (req, res, sendError, getWp, getWpByProjectId, dbArg, projectId, capability) =>
       enforceWorkspaceResourceMutation(
         'project',
         req,
@@ -160,6 +170,7 @@ async function startServer() {
         capability,
       ),
     resolveAuthorMemberId: async () => undefined,
+    ...routeOverrides,
   });
   const created = http.createServer(app);
   server = created;
@@ -170,6 +181,167 @@ async function startServer() {
 }
 
 describe('project comments — workspace mutation gate', () => {
+  it('uses the verified project A scope after ambient identity moved to B', async () => {
+    const projectContext: WorkspaceCollabContext = {
+      workspaceId: WORKSPACE_ID,
+      workspaceType: 'team',
+      workspaceMemberId: OTHER_MEMBER_ID,
+      role: 'member',
+      memberStatus: 'active',
+      lifecycleState: 'active',
+      billingState: 'active',
+      planId: null,
+      providerMode: 'platform_credits',
+      seatSummary: buildWorkspaceSeatSummary({ seatLimit: 5, usedSeats: 2 }),
+      permissions: buildWorkspacePermissions({
+        role: 'member',
+        lifecycleState: 'active',
+      }),
+      teamId: WORKSPACE_ID,
+    };
+    const pushedScopes: Array<{ workspaceId: string; workspaceMemberId: string }> = [];
+    const baseUrl = await startServer({
+      // Models the stale daemon-global answer after another tab moved to B.
+      resolveAuthorMemberId: async () => 'member-b',
+      resolveWorkspaceContext: async () => ({ ok: true, context: projectContext }),
+      shouldSyncProjectComments: async () => true,
+      onCommentCreated: (
+        _comment: unknown,
+        scope: WorkspaceCollabContext | null,
+      ) => {
+        if (scope) {
+          pushedScopes.push({
+            workspaceId: scope.workspaceId,
+            workspaceMemberId: scope.workspaceMemberId,
+          });
+        }
+      },
+    });
+    const response = await fetch(
+      `${baseUrl}/api/projects/${TEAM_MIRROR_PROJECT}/conversations/conv-team-mirror/comments`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...workspaceHeaders(OTHER_MEMBER_ID, 'member'),
+        },
+        body: JSON.stringify({ target: COMMENT_TARGET, note: 'scoped to A' }),
+      },
+    );
+
+    expect(response.status).toBe(200);
+    const { comment } = (await response.json()) as {
+      comment: { authorMemberId?: string };
+    };
+    expect(comment.authorMemberId).toBe(OTHER_MEMBER_ID);
+    expect(pushedScopes).toEqual([
+      {
+        workspaceId: WORKSPACE_ID,
+        workspaceMemberId: OTHER_MEMBER_ID,
+      },
+    ]);
+  });
+
+  it('fails closed before saving or relaying when project scope authority is unavailable', async () => {
+    let relayed = 0;
+    const baseUrl = await startServer({
+      resolveWorkspaceContext: async () => ({
+        ok: false,
+        status: 503,
+        code: 'WORKSPACE_AUTHORITY_UNAVAILABLE',
+        message: 'workspace membership authority is temporarily unavailable',
+        retryable: true,
+      }),
+      onCommentCreated: () => {
+        relayed += 1;
+      },
+    });
+    const response = await fetch(
+      `${baseUrl}/api/projects/${TEAM_PROJECT}/conversations/conv-team/comments`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...workspaceHeaders(OWNER_MEMBER_ID, 'owner'),
+        },
+        body: JSON.stringify({ target: COMMENT_TARGET, note: 'must not persist' }),
+      },
+    );
+
+    expect(response.status).toBe(503);
+    expect(relayed).toBe(0);
+    expect(database).not.toBeNull();
+    expect(listPreviewComments(database!, TEAM_PROJECT, 'conv-team')).toEqual([]);
+  });
+
+  it('fails closed before derived anchor or reorder writes when scope authority is unavailable', async () => {
+    const baseUrl = await startServer({
+      resolveWorkspaceContext: async () => ({
+        ok: false,
+        status: 503,
+        code: 'WORKSPACE_AUTHORITY_UNAVAILABLE',
+        message: 'workspace membership authority is temporarily unavailable',
+        retryable: true,
+      }),
+    });
+    expect(database).not.toBeNull();
+    const seeded = upsertPreviewComment(
+      database!,
+      TEAM_PROJECT,
+      'conv-team',
+      {
+        id: 'comment-derived-write',
+        target: COMMENT_TARGET,
+        note: 'keep the original derived state',
+      },
+    );
+    expect(seeded).not.toBeNull();
+    if (!seeded) throw new Error('expected the comment fixture to be created');
+    const before = getPreviewComment(
+      database!,
+      TEAM_PROJECT,
+      'conv-team',
+      seeded.id,
+    );
+
+    const anchor = await fetch(
+      `${baseUrl}/api/projects/${TEAM_PROJECT}/conversations/conv-team/comments/${seeded.id}/anchor`,
+      {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...workspaceHeaders(OWNER_MEMBER_ID, 'owner'),
+        },
+        body: JSON.stringify({
+          selector: '[data-od-id="different"]',
+          position: { x: 99, y: 99, width: 10, height: 10 },
+        }),
+      },
+    );
+    const reorder = await fetch(
+      `${baseUrl}/api/projects/${TEAM_PROJECT}/conversations/conv-team/comments/${seeded.id}/reorder`,
+      {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...workspaceHeaders(OWNER_MEMBER_ID, 'owner'),
+        },
+        body: JSON.stringify({ sortKey: 999 }),
+      },
+    );
+
+    expect(anchor.status).toBe(503);
+    expect(reorder.status).toBe(503);
+    expect(
+      getPreviewComment(
+        database!,
+        TEAM_PROJECT,
+        'conv-team',
+        seeded.id,
+      ),
+    ).toEqual(before);
+  });
+
   it('rejects a headerless POST (new comment) against a team-bound project', async () => {
     const baseUrl = await startServer();
     const resp = await fetch(`${baseUrl}/api/projects/${TEAM_PROJECT}/conversations/conv-team/comments`, {

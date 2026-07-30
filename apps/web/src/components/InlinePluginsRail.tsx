@@ -11,7 +11,16 @@ import type {
   ApplyResult,
   InstalledPluginRecord,
 } from '@open-design/contracts';
-import { applyPlugin, listPlugins } from '../state/projects';
+import {
+  applyPlugin,
+  listPlugins,
+  resolvedWorkspaceContextForWrite,
+} from '../state/projects';
+import { useProjectCollabContext } from '../collab/collab-context';
+import {
+  useWorkspaceContext,
+  workspaceIdentityCacheKey,
+} from '../collab/useWorkspaceContext';
 import { useI18n } from '../i18n';
 import { localizePluginDescription, localizePluginTitle } from './plugins-home/localization';
 
@@ -46,13 +55,27 @@ interface Props {
 
 export function InlinePluginsRail(props: Props) {
   const { locale } = useI18n();
+  const shellWorkspace = useWorkspaceContext();
+  const projectCollab = useProjectCollabContext();
+  const workspaceContext = props.projectId
+    ? projectCollab.workspaceContext
+    : shellWorkspace.context;
+  const workspaceContextUnavailable = props.projectId
+    ? projectCollab.workspaceContextLoading
+    : shellWorkspace.loading
+      || shellWorkspace.identityChangePending === true
+      || shellWorkspace.failure === 'unavailable';
+  const workspaceIdentity = workspaceContextUnavailable
+    ? 'workspace-unavailable'
+    : workspaceIdentityCacheKey(workspaceContext);
   const [plugins, setPlugins] = useState<InstalledPluginRecord[]>([]);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (workspaceContextUnavailable) return;
     let cancelled = false;
-    void listPlugins().then((rows) => {
+    void listPlugins({ workspaceContext }).then((rows) => {
       if (cancelled) return;
       setPlugins(filterPlugins(rows, props.filter));
     });
@@ -64,14 +87,34 @@ export function InlinePluginsRail(props: Props) {
     props.filter?.mode,
     props.filter?.kinds?.join(','),
     props.filter?.pluginIds?.join(','),
+    workspaceIdentity,
+    workspaceContextUnavailable,
   ]);
 
   const onClick = async (record: InstalledPluginRecord) => {
+    if (workspaceContextUnavailable) {
+      setError(
+        'Workspace context is unavailable. Try again when workspace sync finishes.',
+      );
+      return;
+    }
+    let writeWorkspaceContext;
+    try {
+      writeWorkspaceContext = props.projectId
+        ? projectCollab.workspaceContext
+        : resolvedWorkspaceContextForWrite(shellWorkspace);
+    } catch {
+      setError(
+        'Workspace context is unavailable. Try again when workspace sync finishes.',
+      );
+      return;
+    }
     setPendingId(record.id);
     setError(null);
     const result = await applyPlugin(record.id, {
       ...(props.projectId ? { projectId: props.projectId } : {}),
       locale,
+      workspaceContext: writeWorkspaceContext,
     });
     setPendingId(null);
     if (!result) {
@@ -104,7 +147,7 @@ export function InlinePluginsRail(props: Props) {
             role="listitem"
             className="inline-plugins-rail__card"
             onClick={() => onClick(p)}
-            disabled={pendingId !== null}
+            disabled={pendingId !== null || workspaceContextUnavailable}
             aria-busy={pendingId === p.id ? 'true' : undefined}
             data-plugin-id={p.id}
             title={description || title}

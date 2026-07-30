@@ -35,10 +35,10 @@ export interface UpsertVelaTeamProjectInput {
 }
 
 export interface VelaTeamProjectCatalogClient {
-  list(principal?: ResourceHubPrincipal | null): Promise<VelaTeamProjectRecord[]>;
+  list(principal: ResourceHubPrincipal): Promise<VelaTeamProjectRecord[]>;
   upsert(
     input: UpsertVelaTeamProjectInput,
-    principal?: ResourceHubPrincipal | null,
+    principal: ResourceHubPrincipal,
   ): Promise<VelaTeamProjectRecord | null>;
 }
 

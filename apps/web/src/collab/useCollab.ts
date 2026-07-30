@@ -1,15 +1,24 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { ProjectContentTransferState } from '@open-design/contracts';
+import type {
+  ProjectContentTransferState,
+  WorkspaceCollabContext,
+} from '@open-design/contracts';
 import {
   CollabClient,
   type CollabClientOptions,
   type CollabPresenceMember,
   type CollabSnapshot,
 } from './collab-client';
+import { workspaceIdentityCacheKey } from './workspace-identity';
 
 export interface UseCollabOptions {
   projectId: string | null | undefined;
   member: CollabPresenceMember | null | undefined;
+  /**
+   * Workspace authority for every collab request. `null` means unresolved and
+   * blocks the client; omitted is retained only for isolated legacy consumers.
+   */
+  workspaceContext?: WorkspaceCollabContext | null;
   /**
    * Presence gate: heartbeat + leave. Requires both this AND a resolved
    * `member` — sending presence with no identity is meaningless and could
@@ -17,14 +26,10 @@ export interface UseCollabOptions {
    */
   enabled?: boolean;
   /**
-   * Status-poll gate: GET /collab/status only reads project-keyed sync state,
-   * and the daemon resolves the caller's own identity server-side from
-   * request headers/cookies rather than from this payload — so, unlike
-   * presence, it does not need `member` to have resolved. Defaults to
-   * `enabled` (so callers that don't pass this — CollabDemoView, most tests —
-   * see no behavior change). `useProjectCollab` passes a wider gate here
-   * ("workspace-context read still in flight OR enabled") so the poll can
-   * start in parallel with `/api/workspace/context` instead of waiting for it.
+   * Status-poll gate. It may run before the separate presence `member` object
+   * resolves, but a real workspace caller must already provide
+   * `workspaceContext` because `/collab/status` is an identity-scoped
+   * data-plane read. Defaults to `enabled`.
    */
   statusEnabled?: boolean;
   baseUrl?: string;
@@ -72,11 +77,13 @@ const EMPTY: CollabSnapshot = {
 
 interface ProjectScopedSnapshot {
   sourceProjectId: string | null;
+  sourceWorkspaceIdentity: string;
   snapshot: CollabSnapshot;
 }
 
 const EMPTY_SCOPED_SNAPSHOT: ProjectScopedSnapshot = {
   sourceProjectId: null,
+  sourceWorkspaceIdentity: 'none',
   snapshot: EMPTY,
 };
 
@@ -89,7 +96,13 @@ const EMPTY_SCOPED_SNAPSHOT: ProjectScopedSnapshot = {
 export function useCollab(options: UseCollabOptions): UseCollabResult {
   const { projectId, member, enabled = true } = options;
   const statusEnabled = options.statusEnabled ?? enabled;
-  const active = Boolean(statusEnabled && projectId);
+  const workspaceIdentity =
+    options.workspaceContext === undefined
+      ? 'legacy'
+      : workspaceIdentityCacheKey(options.workspaceContext);
+  const active = Boolean(
+    statusEnabled && projectId && options.workspaceContext !== null,
+  );
   const [scopedSnapshot, setScopedSnapshot] =
     useState<ProjectScopedSnapshot>(EMPTY_SCOPED_SNAPSHOT);
   // Effects clean up only after render commits. When projectId changes, the
@@ -97,7 +110,9 @@ export function useCollab(options: UseCollabOptions): UseCollabResult {
   // synchronously mask it so no consumer can seed a new-project cursor or
   // start a pull from old-project published/sync state.
   const snapshot =
-    active && scopedSnapshot.sourceProjectId === (projectId ?? null)
+    active
+      && scopedSnapshot.sourceProjectId === (projectId ?? null)
+      && scopedSnapshot.sourceWorkspaceIdentity === workspaceIdentity
       ? scopedSnapshot.snapshot
       : EMPTY;
   const clientRef = useRef<CollabClient | null>(null);
@@ -133,12 +148,19 @@ export function useCollab(options: UseCollabOptions): UseCollabResult {
     const clientOptions: CollabClientOptions = {
       projectId,
       member: null,
+      ...(options.workspaceContext
+        ? { workspaceContext: options.workspaceContext }
+        : {}),
       onUpdate: (nextSnapshot) => {
         // stop() cannot cancel a status request already in flight. Ignore that
         // old client's late response instead of letting it overwrite the new
         // project's scoped snapshot.
         if (!disposed) {
-          setScopedSnapshot({ sourceProjectId: projectId, snapshot: nextSnapshot });
+          setScopedSnapshot({
+            sourceProjectId: projectId,
+            sourceWorkspaceIdentity: workspaceIdentity,
+            snapshot: nextSnapshot,
+          });
         }
       },
     };
@@ -165,7 +187,14 @@ export function useCollab(options: UseCollabOptions): UseCollabResult {
     // fetch is intentionally not a restart trigger (a fresh reference every
     // render must not tear down a running client).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, projectId, options.baseUrl, options.heartbeatMs, options.statusPollMs]);
+  }, [
+    active,
+    projectId,
+    workspaceIdentity,
+    options.baseUrl,
+    options.heartbeatMs,
+    options.statusPollMs,
+  ]);
 
   // Presence identity: resolves independently of (and typically later than)
   // status-poll eligibility above — `member` needs the workspace-context
@@ -184,7 +213,16 @@ export function useCollab(options: UseCollabOptions): UseCollabResult {
     // memberKey stands in for `member`; fetch is intentionally excluded, same
     // as the client-lifecycle effect above.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, projectId, enabled, memberKey, options.baseUrl, options.heartbeatMs, options.statusPollMs]);
+  }, [
+    active,
+    projectId,
+    workspaceIdentity,
+    enabled,
+    memberKey,
+    options.baseUrl,
+    options.heartbeatMs,
+    options.statusPollMs,
+  ]);
 
   const reportChange = useCallback(() => {
     void clientRef.current?.reportChange();
@@ -202,7 +240,7 @@ export function useCollab(options: UseCollabOptions): UseCollabResult {
   // 5s status tick, so joins, leaves, renames, and fresh publishes surface
   // near-instantly while the poll loops stay as the fallback cadence.
   const refreshPresence = useCallback(() => {
-    void clientRef.current?.heartbeat();
+    void clientRef.current?.refreshPresence();
   }, []);
   const checkStatusNow = useCallback(() => {
     void clientRef.current?.pollStatus();

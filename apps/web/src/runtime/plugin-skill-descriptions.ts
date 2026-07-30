@@ -182,6 +182,7 @@ async function fetchSkillMarkdown(
   pluginId: string,
   assetPath: string,
   parentSignal: AbortSignal,
+  workspaceContext?: WorkspaceCollabContext | null,
 ): Promise<string | null> {
   const controller = new AbortController();
   const abort = () => controller.abort(parentSignal.reason);
@@ -191,6 +192,9 @@ async function fetchSkillMarkdown(
   try {
     const response = await fetch(pluginAssetUrl(pluginId, assetPath), {
       signal: controller.signal,
+      ...(workspaceContext
+        ? { headers: workspaceProjectHeaders(workspaceContext) }
+        : {}),
     });
     if (!response.ok) return null;
     return await readBoundedResponseText(response, controller.signal);
@@ -206,6 +210,7 @@ export async function loadPluginSkillDescriptions(
   pluginId: string,
   sources: readonly PluginSkillDescriptionSource[],
   signal: AbortSignal,
+  workspaceContext?: WorkspaceCollabContext | null,
 ): Promise<Record<string, string>> {
   const eligible = sources
     .filter((source) => source.assetPath && isMarkdownAssetPath(source.assetPath))
@@ -219,7 +224,12 @@ export async function loadPluginSkillDescriptions(
       cursor += 1;
       const source = eligible[index];
       if (!source?.assetPath) return;
-      const markdown = await fetchSkillMarkdown(pluginId, source.assetPath, signal);
+      const markdown = await fetchSkillMarkdown(
+        pluginId,
+        source.assetPath,
+        signal,
+        workspaceContext,
+      );
       if (!markdown) continue;
       const description = descriptionFromMarkdown(markdown);
       if (description) entries[index] = [source.key, description];
@@ -231,3 +241,5 @@ export async function loadPluginSkillDescriptions(
     entries.filter((entry): entry is readonly [string, string] => entry !== null),
   );
 }
+import type { WorkspaceCollabContext } from '@open-design/contracts';
+import { workspaceProjectHeaders } from '../collab/workspace-identity';

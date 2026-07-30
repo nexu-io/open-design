@@ -17,17 +17,13 @@ import {
   type PublishedResourceVersion,
   type ResourcePublishAdapter,
 } from './publish-scheduler.js';
-import {
-  contextToResourceHubPrincipal,
-  type ResourceHubPrincipal,
-} from './resource-principal.js';
+import type { ResourceHubPrincipal } from './resource-principal.js';
 import { createStubResourcePublishAdapter } from './stub-resource-adapter.js';
 import {
   createDevTeamResourceStateProvider,
   type TeamResourceStateProvider,
 } from './team-resource-state.js';
 import {
-  contextHasTeamIdentity,
   createVelaCliResourceAdapter,
   shouldUseVelaCliResourceTransport,
 } from './vela-cli-resource-adapter.js';
@@ -60,8 +56,15 @@ interface TeamProjectCatalogSink {
  * either side needing to know about the other.
  */
 export interface CollabRuntimeScheduler {
-  notifyChanged(projectId: string, reason?: string): void;
-  runBoundary(projectId: string): void;
+  notifyChanged(
+    projectId: string,
+    reason?: string,
+    principal?: ResourceHubPrincipal | null,
+  ): void;
+  runBoundary(
+    projectId: string,
+    principal?: ResourceHubPrincipal | null,
+  ): void;
 }
 
 export interface CollabRuntime {
@@ -150,7 +153,6 @@ export interface CreateCollabRuntimeOptions {
 function selectResourcePublishAdapter(
   resolveProjectDir: ((projectId: string) => string | Promise<string>) | undefined,
   resolvePullDir: ((projectId: string) => string | Promise<string>) | undefined,
-  workspaceContext: WorkspaceContextProvider,
   describeProject: ((projectId: string) => Record<string, unknown> | null | Promise<Record<string, unknown> | null>) | undefined,
 ): ResourcePublishAdapter | null {
   if (!resolveProjectDir) return null;
@@ -159,7 +161,10 @@ function selectResourcePublishAdapter(
       resolveProjectDir,
       ...(resolvePullDir ? { resolvePullDir } : {}),
       ...(describeProject ? { describeProject } : {}),
-      hasTeamIdentity: async () => contextHasTeamIdentity(await workspaceContext.current({})),
+      // Every data-plane caller must provide a principal that was captured from
+      // an explicit, authoritative Workspace scope. There is no ambient
+      // Workspace fallback at the transport boundary.
+      hasTeamIdentity: (principal) => principal != null,
     });
   }
   return null;
@@ -199,7 +204,7 @@ export function createCollabRuntime(options: CreateCollabRuntimeOptions = {}): C
       const principal = principalsForProject(projectId)[0];
       if (principal) return principal;
     }
-    return contextToResourceHubPrincipal(await workspaceContext.current({}));
+    return null;
   };
 
   const baseAdapter =
@@ -207,7 +212,6 @@ export function createCollabRuntime(options: CreateCollabRuntimeOptions = {}): C
     selectResourcePublishAdapter(
       options.resolveProjectDir,
       options.resolvePullDir,
-      workspaceContext,
       options.describeProject,
     ) ??
     createStubResourcePublishAdapter();
@@ -273,8 +277,11 @@ export function createCollabRuntime(options: CreateCollabRuntimeOptions = {}): C
    * touches projects that already have a share principal; an unshared
    * project's `syncState` stays `'local_only'` regardless of local edits.
    */
-  function markLocalChangePending(projectId: string) {
-    const principals = principalsForProject(projectId);
+  function markLocalChangePending(
+    projectId: string,
+    principal?: ResourceHubPrincipal | null,
+  ) {
+    const principals = principal ? [principal] : principalsForProject(projectId);
     if (principals.length === 0) return;
     for (const principal of principals) {
       const key = scopedProjectKey(projectId, principal);
@@ -585,13 +592,18 @@ export function createCollabRuntime(options: CreateCollabRuntimeOptions = {}): C
   // confirming it (see the function's doc comment). The real scheduler still
   // owns debouncing/coalescing/flush — this only adds the state update.
   const schedulerFacade: CollabRuntimeScheduler = {
-    notifyChanged(projectId, reason) {
-      markLocalChangePending(projectId);
-      scheduler.notifyChanged(projectId, reason);
+    notifyChanged(projectId, reason, principal) {
+      markLocalChangePending(projectId, principal);
+      scheduler.notifyChanged(
+        principal ? scopedProjectKey(projectId, principal) : projectId,
+        reason,
+      );
     },
-    runBoundary(projectId) {
-      markLocalChangePending(projectId);
-      scheduler.runBoundary(projectId);
+    runBoundary(projectId, principal) {
+      markLocalChangePending(projectId, principal);
+      scheduler.runBoundary(
+        principal ? scopedProjectKey(projectId, principal) : projectId,
+      );
     },
   };
   const presenceOptions: CollabPresenceTrackerOptions = {};

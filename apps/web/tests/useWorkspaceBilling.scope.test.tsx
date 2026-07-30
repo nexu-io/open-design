@@ -19,6 +19,7 @@ import {
   workspaceBillingSnapshotForContext,
   workspaceBillingSummaryForContext,
 } from '../src/collab/useWorkspaceContext';
+import { workspaceDirectoryFixture } from './helpers/workspace-context';
 
 function teamContext(workspaceId: string): WorkspaceCollabContext {
   return {
@@ -29,6 +30,15 @@ function teamContext(workspaceId: string): WorkspaceCollabContext {
     memberStatus: 'active',
     lifecycleState: 'active',
   } as WorkspaceCollabContext;
+}
+
+function workspaceDirectoryResponse(
+  context: WorkspaceCollabContext,
+): Response {
+  return new Response(JSON.stringify(workspaceDirectoryFixture([context])), {
+    status: 200,
+    headers: { 'content-type': 'application/json' },
+  });
 }
 
 function billingResponse(workspaceId: string, balanceUsd: string) {
@@ -258,6 +268,9 @@ describe('useWorkspaceBilling explicit scope', () => {
         const url = String(input);
         const interestResponse = billingInterestResponse(input, init);
         if (interestResponse) return interestResponse;
+        if (url === '/api/workspace/directory') {
+          return workspaceDirectoryResponse(teamContext('workspace-a'));
+        }
         if (url === '/api/workspace/context') {
           return new Response(JSON.stringify({ context: teamContext('workspace-a') }), {
             status: 200,
@@ -405,6 +418,9 @@ describe('useWorkspaceBilling explicit scope', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
+        if (url === '/api/workspace/directory') {
+          return workspaceDirectoryResponse(teamContext('workspace-a'));
+        }
         if (url === '/api/workspace/context') {
           return new Response(JSON.stringify({ context: teamContext('workspace-a') }), {
             status: 200,
@@ -485,6 +501,9 @@ describe('useWorkspaceBilling explicit scope', () => {
         const url = String(input);
         const interestResponse = billingInterestResponse(input, init);
         if (interestResponse) return interestResponse;
+        if (url === '/api/workspace/directory') {
+          return workspaceDirectoryResponse(teamContext('workspace-b'));
+        }
         if (url === '/api/workspace/context') {
           return new Response(
             JSON.stringify({ context: teamContext('workspace-b') }),
@@ -604,6 +623,9 @@ describe('useWorkspaceBilling explicit scope', () => {
             headers: { 'content-type': 'application/json' },
           });
         }
+        if (url === '/api/workspace/directory') {
+          return workspaceDirectoryResponse(context);
+        }
         if (url === '/api/workspace/context') {
           return new Response(JSON.stringify({ context }), {
             status: 200,
@@ -720,6 +742,9 @@ describe('useWorkspaceBilling explicit scope', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
+        if (url === '/api/workspace/directory') {
+          return workspaceDirectoryResponse(currentContext);
+        }
         if (url === '/api/workspace/context') {
           return new Response(JSON.stringify({ context: currentContext }), {
             status: 200,
@@ -802,6 +827,9 @@ describe('useWorkspaceBilling explicit scope', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
+        if (url === '/api/workspace/directory') {
+          return workspaceDirectoryResponse(teamContext('workspace-a'));
+        }
         if (url === '/api/workspace/context') {
           return new Response(JSON.stringify({ context: teamContext('workspace-a') }), {
             status: 200,
@@ -845,6 +873,9 @@ describe('useWorkspaceBilling explicit scope', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
+        if (url === '/api/workspace/directory') {
+          return workspaceDirectoryResponse(teamContext('workspace-a'));
+        }
         if (url === '/api/workspace/context') {
           return new Response(JSON.stringify({ context: teamContext('workspace-a') }), {
             status: 200,
@@ -919,6 +950,9 @@ describe('useWorkspaceBilling explicit scope', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
+        if (url === '/api/workspace/directory') {
+          return workspaceDirectoryResponse(teamContext('workspace-a'));
+        }
         if (url === '/api/workspace/context') {
           return new Response(JSON.stringify({ context: teamContext('workspace-a') }), {
             status: 200,
@@ -969,6 +1003,9 @@ describe('useWorkspaceBilling explicit scope', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
+        if (url === '/api/workspace/directory') {
+          return workspaceDirectoryResponse(teamContext('workspace-a'));
+        }
         if (url === '/api/workspace/context') {
           return new Response(JSON.stringify({ context: teamContext('workspace-a') }), {
             status: 200,
@@ -1025,6 +1062,9 @@ describe('useWorkspaceBilling explicit scope', () => {
         const url = String(input);
         const interestResponse = billingInterestResponse(input, init);
         if (interestResponse) return interestResponse;
+        if (url === '/api/workspace/directory') {
+          return workspaceDirectoryResponse(currentContext);
+        }
         if (url === '/api/workspace/context') {
           return new Response(JSON.stringify({ context: currentContext }), {
             status: 200,
@@ -1104,6 +1144,9 @@ describe('useWorkspaceBilling explicit scope', () => {
         const url = String(input);
         const interestResponse = billingInterestResponse(input, init);
         if (interestResponse) return interestResponse;
+        if (url === '/api/workspace/directory') {
+          return workspaceDirectoryResponse(teamContext('workspace-a'));
+        }
         if (url === '/api/workspace/context') {
           return new Response(JSON.stringify({ context: teamContext('workspace-a') }), {
             status: 200,
@@ -1149,6 +1192,9 @@ describe('useWorkspaceBilling explicit scope', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
+        if (url === '/api/workspace/directory') {
+          return workspaceDirectoryResponse(teamContext('workspace-a'));
+        }
         if (url === '/api/workspace/context') {
           return new Response(JSON.stringify({ context: teamContext('workspace-a') }), {
             status: 200,
@@ -1193,6 +1239,9 @@ describe('useWorkspaceBilling explicit scope', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
+        if (url === '/api/workspace/directory') {
+          return workspaceDirectoryResponse(teamContext('workspace-a'));
+        }
         if (url === '/api/workspace/context') {
           return new Response(JSON.stringify({ context: teamContext('workspace-a') }), {
             status: 200,
@@ -1250,6 +1299,9 @@ describe('useWorkspaceBilling explicit scope', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
+        if (url === '/api/workspace/directory') {
+          return workspaceDirectoryResponse(teamContext('workspace-b'));
+        }
         if (url === '/api/workspace/context') {
           return new Response(JSON.stringify({ context: teamContext('workspace-b') }), {
             status: 200,
@@ -1316,6 +1368,9 @@ describe('useWorkspaceBilling explicit scope', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
+        if (url === '/api/workspace/directory') {
+          return workspaceDirectoryResponse(teamContext('workspace-b'));
+        }
         if (url === '/api/workspace/context') {
           return new Response(JSON.stringify({ context: teamContext('workspace-b') }), {
             status: 200,
@@ -1385,6 +1440,9 @@ describe('useWorkspaceBilling explicit scope', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
+        if (url === '/api/workspace/directory') {
+          return workspaceDirectoryResponse(teamContext('workspace-b'));
+        }
         if (url === '/api/workspace/context') {
           contextCalls += 1;
           if (contextCalls === 1) return workspaceAContextResponse;
@@ -1459,6 +1517,9 @@ describe('useWorkspaceBilling explicit scope', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
+        if (url === '/api/workspace/directory') {
+          return workspaceDirectoryResponse(teamContext('workspace-a'));
+        }
         if (url === '/api/workspace/context') {
           return new Response(JSON.stringify({ context: teamContext('workspace-a') }), {
             status: 200,
@@ -1492,6 +1553,9 @@ describe('useWorkspaceBilling explicit scope', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
+        if (url === '/api/workspace/directory') {
+          return workspaceDirectoryResponse(teamContext('workspace-b'));
+        }
         if (url === '/api/workspace/context') {
           return new Response(JSON.stringify({ context: teamContext('workspace-b') }), {
             status: 200,
@@ -1558,6 +1622,9 @@ describe('useWorkspaceBilling explicit scope', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
+        if (url === '/api/workspace/directory') {
+          return workspaceDirectoryResponse(teamContext('workspace-b'));
+        }
         if (url === '/api/workspace/context') {
           return new Response(JSON.stringify({ context: teamContext('workspace-b') }), {
             status: 200,
@@ -1618,6 +1685,13 @@ describe('useWorkspaceBilling explicit scope', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
+        if (url === '/api/workspace/directory') {
+          return workspaceDirectoryResponse({
+            ...teamContext('personal-a'),
+            workspaceType: 'personal',
+            workspaceMemberId: 'member-personal',
+          });
+        }
         if (url === '/api/workspace/context') {
           return new Response(
             JSON.stringify({

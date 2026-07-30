@@ -73,7 +73,11 @@ describe('useProjectCollab member auto-pull retry', () => {
     }) as typeof fetch;
 
     const { result } = renderHook(() =>
-      useProjectCollab('p1', { fetch: fetchImpl, statusPollMs: 30_000 }),
+      useProjectCollab('p1', {
+        fetch: fetchImpl,
+        statusPollMs: 30_000,
+        workspaceContext: MEMBER_CONTEXT,
+      }),
     );
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
@@ -100,7 +104,11 @@ describe('useProjectCollab member auto-pull retry', () => {
     }) as typeof fetch;
 
     const { result } = renderHook(() =>
-      useProjectCollab('p1', { fetch: fetchImpl, statusPollMs: 30_000 }),
+      useProjectCollab('p1', {
+        fetch: fetchImpl,
+        statusPollMs: 30_000,
+        workspaceContext: MEMBER_CONTEXT,
+      }),
     );
 
     await act(async () => {
@@ -152,7 +160,11 @@ describe('useProjectCollab member auto-pull retry', () => {
     }) as typeof fetch;
 
     const { result } = renderHook(() =>
-      useProjectCollab('p1', { fetch: fetchImpl, statusPollMs: 30_000 }),
+      useProjectCollab('p1', {
+        fetch: fetchImpl,
+        statusPollMs: 30_000,
+        workspaceContext: MEMBER_CONTEXT,
+      }),
     );
 
     await act(async () => {
@@ -189,7 +201,11 @@ describe('useProjectCollab member auto-pull retry', () => {
     }) as typeof fetch;
 
     const { result } = renderHook(() =>
-      useProjectCollab('p1', { fetch: fetchImpl, statusPollMs: 1_000 }),
+      useProjectCollab('p1', {
+        fetch: fetchImpl,
+        statusPollMs: 1_000,
+        workspaceContext: MEMBER_CONTEXT,
+      }),
     );
 
     await act(async () => {
@@ -227,7 +243,11 @@ describe('useProjectCollab member auto-pull retry', () => {
     }) as typeof fetch;
 
     const { result } = renderHook(() =>
-      useProjectCollab('p1', { fetch: fetchImpl, statusPollMs: 1_000 }),
+      useProjectCollab('p1', {
+        fetch: fetchImpl,
+        statusPollMs: 1_000,
+        workspaceContext: MEMBER_CONTEXT,
+      }),
     );
 
     await act(async () => {
@@ -274,7 +294,11 @@ describe('useProjectCollab member auto-pull retry', () => {
     }) as typeof fetch;
 
     const { result } = renderHook(() =>
-      useProjectCollab('p1', { fetch: fetchImpl, statusPollMs: 1_000 }),
+      useProjectCollab('p1', {
+        fetch: fetchImpl,
+        statusPollMs: 1_000,
+        workspaceContext: MEMBER_CONTEXT,
+      }),
     );
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
@@ -333,7 +357,11 @@ describe('useProjectCollab member auto-pull retry', () => {
 
     const { result, rerender } = renderHook(
       ({ projectId }) =>
-        useProjectCollab(projectId, { fetch: fetchImpl, statusPollMs: 1_000 }),
+        useProjectCollab(projectId, {
+          fetch: fetchImpl,
+          statusPollMs: 1_000,
+          workspaceContext: MEMBER_CONTEXT,
+        }),
       { initialProps: { projectId: 'p1' } },
     );
     await act(async () => {
@@ -414,7 +442,11 @@ describe('useProjectCollab member auto-pull retry', () => {
 
     const { result, rerender } = renderHook(
       ({ projectId }) =>
-        useProjectCollab(projectId, { fetch: fetchImpl, statusPollMs: 1_000 }),
+        useProjectCollab(projectId, {
+          fetch: fetchImpl,
+          statusPollMs: 1_000,
+          workspaceContext: MEMBER_CONTEXT,
+        }),
       { initialProps: { projectId: 'p1' } },
     );
     await act(async () => {

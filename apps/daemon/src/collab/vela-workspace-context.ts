@@ -34,8 +34,8 @@ import {
 const WORKSPACE_CURRENT_PATH = '/api/v1/workspaces/current';
 const DEFAULT_TIMEOUT_MS = 8_000;
 const DEFAULT_DIRECTORY_CACHE_TTL_MS = 5_000;
-// After a FAILED default-workspace bootstrap (empty directory, PUT rejected),
-// don't re-list on every poller tick — B is asked again after this window.
+// After a failed legacy default-workspace bootstrap, avoid repeating the
+// directory read on every compatibility request.
 const BOOTSTRAP_FAILURE_COOLDOWN_MS = 60_000;
 
 const WORKSPACE_TYPES = new Set<WorkspaceType>(['personal', 'team']);
@@ -63,7 +63,10 @@ interface VelaWorkspaceContextOptions {
   fetch?: typeof fetch;
   /** Injectable for tests; defaults to reading ~/.amr/config.json + env. */
   readSession?: typeof readVelaControlApiContext;
-  /** OD-local active workspace selection. Vela Web does not own this. */
+  /**
+   * Legacy default for no-argument `current()` and fresh-account bootstrap.
+   * Exact request resolution never reads it.
+   */
   getActiveWorkspaceId?: () => string | null | undefined;
   /**
    * Persist a LOCAL default selection (fresh account with no selection
@@ -340,12 +343,17 @@ export function createVelaWorkspaceContextProvider(
     return workspaceContextFromDirectoryItem(fallback);
   }
 
-  return {
-    async current(_req: WorkspaceContextRequest): Promise<WorkspaceCollabContext | null> {
+  async function resolveCurrent(
+    req: WorkspaceContextRequest,
+  ): Promise<WorkspaceCollabContext | null> {
       const session = readSession();
       if (!session || !session.controlKey || !session.apiUrl) return null;
       try {
-        const localSelection = options.getActiveWorkspaceId?.()?.trim() || undefined;
+        const explicitSelection = req.workspaceId?.trim() || undefined;
+        // The no-argument fallback is legacy compatibility only. Client-facing
+        // routes use resolveExact and cannot borrow this daemon-local pin.
+        const localSelection =
+          explicitSelection ?? (options.getActiveWorkspaceId?.()?.trim() || undefined);
         // B's current is enrichment, not authority (explicit-workspace
         // handoff): the daemon serves the LOCALLY pinned workspace. B's
         // answer is adopted only when it matches — a switch made on another
@@ -387,7 +395,47 @@ export function createVelaWorkspaceContextProvider(
         // single-player. A transient B outage must not break the local editor.
         return null;
       }
-    },
+  }
+
+  async function resolveExact(
+    req: WorkspaceContextRequest & { workspaceId: string },
+  ): Promise<WorkspaceCollabContext | null> {
+    const session = readSession();
+    const workspaceId = req.workspaceId.trim();
+    if (!session || !session.controlKey || !session.apiUrl || !workspaceId) return null;
+    try {
+      const response = await fetchCurrent(session, workspaceId);
+      if (response.ok) {
+        const mapped = mapVelaWorkspaceContext(await response.json());
+        if (mapped?.workspaceId === workspaceId) {
+          return withDisplayName(mapped, session);
+        }
+      } else if (response.status === 401) {
+        return null;
+      }
+      const directory = await fetchVelaWorkspaceDirectory({
+        fetch: fetchImpl,
+        readSession: () => session,
+        timeoutMs,
+      });
+      if (!directory.ok) return null;
+      const item = directory.items.find(
+        (entry) =>
+          entry.workspaceId === workspaceId
+          && entry.memberStatus === 'active'
+          && entry.lifecycleState !== 'deleted',
+      );
+      return item
+        ? withDisplayName(workspaceContextFromDirectoryItem(item), session)
+        : null;
+    } catch {
+      return null;
+    }
+  }
+
+  return {
+    current: resolveCurrent,
+    resolveExact,
   };
 }
 
@@ -541,7 +589,10 @@ export async function fetchVelaWorkspaceDirectory(
   const readSession = options.readSession ?? readVelaControlApiContext;
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const session = readSession();
-  if (!session || !session.controlKey || !session.apiUrl) return { ok: false, items: [] };
+  // No local Vela session is an authoritative signed-out identity, not an
+  // authority outage. Returning a successful empty directory lets clients
+  // clear a previously cached Team selection instead of preserving it forever.
+  if (!session || !session.controlKey || !session.apiUrl) return { ok: true, items: [] };
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {

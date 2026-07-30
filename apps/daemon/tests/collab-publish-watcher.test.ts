@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createCollabPublishWatcher } from '../src/collab/collab-publish-watcher.js';
+import type { ResourceHubPrincipal } from '../src/collab/resource-principal.js';
 
 describe('collab publish watcher', () => {
   it('publishes current content once when it first watches an owned+shared project', async () => {
@@ -62,5 +63,34 @@ describe('collab publish watcher', () => {
 
     expect(notifyChanged).toHaveBeenCalledTimes(1);
     expect(notifyChanged).toHaveBeenCalledWith('p1');
+  });
+
+  it('keeps the verified workspace principal captured by the watch', async () => {
+    const principal: ResourceHubPrincipal = {
+      teamId: 'workspace-a',
+      memberId: 'member-a',
+      role: 'owner',
+      lifecycleState: 'active',
+      workspaceType: 'team',
+    };
+    const notifyChanged = vi.fn();
+    const handler: { onChange: (() => void) | null } = { onChange: null };
+    const watcher = createCollabPublishWatcher({
+      notifyChanged,
+      listProjectIds: () => ['p1'],
+      shouldPublish: async () => principal,
+      subscribeFiles: (_projectId, onChange) => {
+        handler.onChange = onChange;
+        return { unsubscribe: () => {} };
+      },
+    });
+
+    await watcher.reconcile();
+    expect(notifyChanged).toHaveBeenLastCalledWith('p1', principal);
+
+    notifyChanged.mockClear();
+    handler.onChange?.();
+    expect(notifyChanged).toHaveBeenCalledOnce();
+    expect(notifyChanged).toHaveBeenCalledWith('p1', principal);
   });
 });

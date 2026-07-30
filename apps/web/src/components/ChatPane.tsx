@@ -33,6 +33,8 @@ import type { Dict } from '../i18n/types';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { useLiquidGlass } from '../hooks/useLiquidGlass';
 import { projectRawUrl } from '../providers/registry';
+import { appendResourceQuery } from '../collab/workspace-identity';
+import { useProjectCollabContext } from '../collab/collab-context';
 import { takeComposerSeedFor } from '../state/libraryHandoff';
 import { splitOnQuestionForms } from '../artifacts/question-form';
 import { stripArtifact } from '../artifacts/strip';
@@ -421,11 +423,15 @@ function ChatArtifactPreview({
   projectId: string | null;
   file: ProjectFile;
 }) {
+  const { workspaceContext } = useProjectCollabContext();
   if (!projectId) {
     return <ChatArtifactFallback kind={file.kind} />;
   }
 
-  const url = `${projectRawUrl(projectId, file.name)}?v=${Math.round(file.mtime)}`;
+  const url = appendResourceQuery(
+    projectRawUrl(projectId, file.name, workspaceContext),
+    `v=${Math.round(file.mtime)}`,
+  );
   if (isRenderableSketchJson(file)) {
     return <SketchPreview projectId={projectId} file={file} />;
   }
@@ -944,6 +950,7 @@ export function ChatPane({
   designSystemPicker,
   config,
 }: Props) {
+  const { workspaceContext } = useProjectCollabContext();
   const t = useT();
   const analytics = useAnalytics();
   const displayMessages = useMemo(
@@ -4400,6 +4407,7 @@ function UserMessageImpl({
   appliedContextItems: AppliedContextItem[];
   highlighted?: boolean;
 }) {
+  const { workspaceContext } = useProjectCollabContext();
   const attachments = sortChatAttachmentsForDisplay(message.attachments ?? []);
   const commentAttachments = message.commentAttachments ?? [];
   const workspaceItems = message.runContext?.workspaceItems ?? [];
@@ -4483,7 +4491,10 @@ function UserMessageImpl({
                   {index + 1}
                 </span>
                 {a.kind === 'image' && projectId ? (
-                  <img src={projectRawUrl(projectId, a.path)} alt={a.name} />
+                  <img
+                    src={projectRawUrl(projectId, a.path, workspaceContext)}
+                    alt={a.name}
+                  />
                 ) : (
                   <Icon name="file" size={14} />
                 )}

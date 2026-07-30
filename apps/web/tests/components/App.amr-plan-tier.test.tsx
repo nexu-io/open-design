@@ -28,6 +28,12 @@ import {
 } from '../../src/providers/registry';
 import { fetchAmrModels, fetchVelaLoginStatus } from '../../src/providers/daemon';
 import { listProjects, listTemplates } from '../../src/state/projects';
+import {
+  resetWorkspaceBillingCache,
+  resetWorkspaceContextCache,
+} from '../../src/collab/useWorkspaceContext';
+import { resetCoalescedGet } from '../../src/lib/coalesced-get';
+import { workspaceDirectoryFixture } from '../helpers/workspace-context';
 
 const homeRouteMock = { kind: 'home' as const, view: 'home' as const };
 vi.mock('../../src/router', () => ({
@@ -169,6 +175,9 @@ function jsonResponse(body: unknown): Response {
 
 describe('App AMR plan-tier gate', () => {
   beforeEach(() => {
+    resetCoalescedGet();
+    resetWorkspaceContextCache();
+    resetWorkspaceBillingCache();
     capturedPlanCalls.length = 0;
     mockedDaemonIsLive.mockResolvedValue(true);
     mockedFetchAgentsStream.mockResolvedValue([]);
@@ -188,6 +197,9 @@ describe('App AMR plan-tier gate', () => {
     cleanup();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
+    resetCoalescedGet();
+    resetWorkspaceContextCache();
+    resetWorkspaceBillingCache();
   });
 
   it('does not gate a Team Plus member behind the free-tier upsell just because vela account.plan reads free', async () => {
@@ -202,17 +214,43 @@ describe('App AMR plan-tier gate', () => {
       account: { plan: 'free' },
     });
 
+    const workspaceContext = {
+      workspaceId: 'ws-team',
+      workspaceType: 'team' as const,
+      workspaceMemberId: 'member-team',
+      role: 'member' as const,
+      memberStatus: 'active' as const,
+      lifecycleState: 'active' as const,
+    };
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input.toString();
+      if (url.endsWith('/api/workspace/directory')) {
+        return jsonResponse(workspaceDirectoryFixture([workspaceContext]));
+      }
       if (url.includes('/api/workspace/billing?')) {
         return jsonResponse({
           summary: {
-            membershipTier: 'team_plus',
+            workspaceId: null,
+            membershipTier: 'free',
+            balanceUsd: '0',
+            workspaceBalance: null,
+          },
+          workspaceBalance: {
+            workspaceId: 'ws-team',
+            workspaceMemberId: 'member-team',
             balanceUsd: '12.34',
-            workspaceBalance: {
-              workspaceId: 'ws-team',
-              balanceUsd: '12.34',
-            },
+            billingScopeVersion: 2,
+            expiresAt: null,
+            updatedAt: null,
+          },
+          workspaceSnapshot: {
+            schemaVersion: 1,
+            workspaceId: 'ws-team',
+            workspaceMemberId: 'member-team',
+            billingScopeVersion: 2,
+            billing: { billingState: 'active', planId: 'team_plus' },
+            wallet: { balanceUsd: '12.34', expiresAt: null, updatedAt: null },
+            revisions: { billing: 'billing-1', wallet: 'wallet-1' },
           },
         });
       }
@@ -220,12 +258,7 @@ describe('App AMR plan-tier gate', () => {
         // A non-owner member: B omits planId here (the documented gap
         // resolvePlanTier's precedence chain exists to route around).
         return jsonResponse({
-          context: {
-            workspaceId: 'ws-team',
-            workspaceType: 'team',
-            workspaceMemberId: 'member-team',
-            role: 'member',
-          },
+          context: workspaceContext,
         });
       }
       return jsonResponse({});

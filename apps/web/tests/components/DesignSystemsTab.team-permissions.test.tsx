@@ -47,6 +47,16 @@ const TEAM_CONTEXT = {
   billingState: 'free',
   planId: null,
   teamId: 'ws-team',
+  permissions: {
+    canManageMembers: false,
+    canManageBilling: false,
+    canInviteMembers: false,
+    canManageAutoRecharge: false,
+    canShareProjects: true,
+    canWriteSyncedFiles: true,
+    canViewWorkspaceSettings: false,
+    canManageSharedResources: true,
+  },
 };
 
 vi.mock('../../src/collab/useWorkspaceContext', () => ({

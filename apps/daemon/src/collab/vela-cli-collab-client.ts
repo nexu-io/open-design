@@ -16,7 +16,6 @@ export type RunVelaCollab = (
 
 export interface VelaCliCollabClientOptions {
   run?: RunVelaCollab;
-  getWorkspaceId?: () => string | null | undefined;
 }
 
 type MemberWire = {
@@ -54,9 +53,11 @@ type PresenceActivity = Exclude<CollabPresenceMember['activity'], undefined>;
 export function createVelaCliCollabClient(options: VelaCliCollabClientOptions = {}) {
   const run = options.run ?? defaultRunVelaCollab;
 
-  async function runJson<T>(args: string[], workspaceId?: string): Promise<T> {
-    const requestedWorkspaceId =
-      workspaceId?.trim() || options.getWorkspaceId?.()?.trim() || undefined;
+  async function runJson<T>(args: string[], workspaceId: string): Promise<T> {
+    const requestedWorkspaceId = workspaceId.trim();
+    if (!requestedWorkspaceId) {
+      throw new Error('explicit workspace scope is required');
+    }
     const stdout = await run(args, requestedWorkspaceId);
     const trimmed = stdout.trim();
     if (!trimmed) return {} as T;
@@ -132,7 +133,7 @@ export function createVelaCliCollabClient(options: VelaCliCollabClientOptions = 
     async heartbeatPresence(
       projectId: string,
       input: VelaCliPresenceHeartbeatInput,
-      workspaceId?: string,
+      workspaceId: string,
     ): Promise<CollabPresenceMember[]> {
       const args = [
         'presence',
@@ -151,7 +152,7 @@ export function createVelaCliCollabClient(options: VelaCliCollabClientOptions = 
       return Array.isArray(payload.viewers) ? payload.viewers.map(toPresenceMember) : [];
     },
 
-    async listPresence(projectId: string, workspaceId?: string): Promise<CollabPresenceMember[]> {
+    async listPresence(projectId: string, workspaceId: string): Promise<CollabPresenceMember[]> {
       const payload = await runJson<{ viewers?: PresenceWire[] }>([
         'presence',
         'list',
@@ -163,7 +164,7 @@ export function createVelaCliCollabClient(options: VelaCliCollabClientOptions = 
     async leavePresence(
       projectId: string,
       input: VelaCliPresenceLeaveInput,
-      workspaceId?: string,
+      workspaceId: string,
     ): Promise<CollabPresenceMember[]> {
       const payload = await runJson<{ viewers?: PresenceWire[] }>([
         'presence',

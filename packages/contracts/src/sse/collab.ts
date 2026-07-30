@@ -103,7 +103,10 @@ export interface WorkspaceContextChangedSsePayload {
 /** Subscription / seat billing changed. */
 export interface WorkspaceBillingChangedSsePayload {
   type: 'billing-changed';
-  /** Present on newer Vela versions; absent on legacy broad invalidations. */
+  /**
+   * Present on newer Vela versions. Older payloads omit it, but still travel
+   * only on the exact Workspace-scoped SSE connection that authorized them.
+   */
   workspaceId?: string;
   /** Opaque revision shared with the additive v2 alias when both are emitted. */
   revision?: string;
@@ -131,9 +134,11 @@ export interface WorkspaceWalletBalanceChangedSsePayload {
 
 /**
  * Workspace-scoped invalidation events carried on `/api/workspace/events`.
- * Workspace scope is singular per daemon (one signed-in identity). Broad
- * invalidations carry no id; project-content readiness names the one card
- * whose local files just became readable.
+ * The EventSource URL carries an exact Workspace/member pair and the daemon
+ * freshly verifies it before joining that Workspace's sink partition. Events
+ * that omit an id are broad only inside that authorized Workspace channel;
+ * project-content readiness additionally names the one card whose local files
+ * just became readable.
  */
 export type WorkspaceInvalidationSsePayload =
   | TeamProjectsChangedSsePayload

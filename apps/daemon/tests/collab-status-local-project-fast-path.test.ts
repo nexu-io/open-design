@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import express from 'express';
+import express, { type Request } from 'express';
 import http from 'node:http';
 import {
   buildWorkspacePermissions,
@@ -38,6 +38,53 @@ function memberContextProvider(workspaceMemberId: string): WorkspaceContextProvi
   return { current: async () => context };
 }
 
+function teamContext(
+  workspaceId: string,
+  workspaceMemberId: string,
+  teamId = 'team-1',
+): WorkspaceCollabContext {
+  return {
+    workspaceId,
+    workspaceType: 'team',
+    teamId,
+    workspaceMemberId,
+    role: 'member',
+    memberStatus: 'active',
+    lifecycleState: 'active',
+    billingState: 'active',
+    planId: null,
+    providerMode: 'platform_credits',
+    seatSummary: buildWorkspaceSeatSummary({ seatLimit: 5, usedSeats: 1 }),
+    permissions: buildWorkspacePermissions({ role: 'member', lifecycleState: 'active' }),
+  };
+}
+
+function workspaceHeaders(context: WorkspaceCollabContext): Record<string, string> {
+  return {
+    'x-od-workspace-id': context.workspaceId,
+    'x-od-workspace-member-id': context.workspaceMemberId,
+  };
+}
+
+function verifiedScopeDeps(context: WorkspaceCollabContext) {
+  return {
+    verifyWorkspaceRequest: async (req: Request) =>
+      req.header('x-od-workspace-id') === context.workspaceId
+      && req.header('x-od-workspace-member-id') === context.workspaceMemberId
+        ? context
+        : null,
+    verifyWorkspaceScope: async (scope: {
+      workspaceId: string;
+      resourceTeamId: string;
+      viewerMemberId: string;
+    }) =>
+      context.workspaceType === 'team'
+      && scope.workspaceId === context.workspaceId
+      && scope.resourceTeamId === context.teamId
+      && scope.viewerMemberId === context.workspaceMemberId,
+  };
+}
+
 /**
  * A local-only, unowned project must NOT trigger the resource-hub published-head
  * lookup. That call is an uncached ~2s round-trip; running it on every status
@@ -46,6 +93,7 @@ function memberContextProvider(workspaceMemberId: string): WorkspaceContextProvi
  */
 describe('collab/status local-only fast path', () => {
   it('skips publishedHead when the project is local-only and unowned', async () => {
+    const context = teamContext('ws-1', 'viewer-member');
     const runtime = createCollabRuntime() as CollabRuntime & {
       publishedHead: CollabRuntime['publishedHead'];
     };
@@ -61,6 +109,7 @@ describe('collab/status local-only fast path', () => {
     app.use(express.json());
     registerCollabSyncRoutes(app, {
       collab: runtime,
+      ...verifiedScopeDeps(context),
       resolveSharedProjectOwner: async () => {
         ownerLookups += 1;
         return null; // not shared to the team
@@ -72,7 +121,9 @@ describe('collab/status local-only fast path', () => {
     if (!address || typeof address === 'string') throw new Error('no port');
     const base = `http://127.0.0.1:${address.port}`;
 
-    const res = await fetch(`${base}/api/projects/my-local-project/collab/status`);
+    const res = await fetch(`${base}/api/projects/my-local-project/collab/status`, {
+      headers: workspaceHeaders(context),
+    });
     const body = (await res.json()) as Record<string, unknown>;
 
     expect(res.status).toBe(200);
@@ -85,6 +136,7 @@ describe('collab/status local-only fast path', () => {
   });
 
   it('consults publishedHead for a NON-owner member of a shared project', async () => {
+    const context = teamContext('ws-1', 'viewer-member');
     const runtime = createCollabRuntime({
       workspaceContext: memberContextProvider('viewer-member'),
     }) as CollabRuntime & { publishedHead: CollabRuntime['publishedHead'] };
@@ -100,6 +152,7 @@ describe('collab/status local-only fast path', () => {
     app.use(express.json());
     registerCollabSyncRoutes(app, {
       collab: runtime,
+      ...verifiedScopeDeps(context),
       resolveSharedProjectOwner: async () => 'member-owner', // someone else owns it
       resolveOwnerDisplayName: async () => {
         nameLookups += 1;
@@ -112,7 +165,9 @@ describe('collab/status local-only fast path', () => {
     if (!address || typeof address === 'string') throw new Error('no port');
     const base = `http://127.0.0.1:${address.port}`;
 
-    const res = await fetch(`${base}/api/projects/shared-project/collab/status`);
+    const res = await fetch(`${base}/api/projects/shared-project/collab/status`, {
+      headers: workspaceHeaders(context),
+    });
     const body = (await res.json()) as Record<string, unknown>;
 
     expect(res.status).toBe(200);
@@ -126,6 +181,7 @@ describe('collab/status local-only fast path', () => {
     expect(nameLookups).toBe(1);
     const enrichedRes = await fetch(
       `${base}/api/projects/shared-project/collab/status`,
+      { headers: workspaceHeaders(context) },
     );
     const enrichedBody = (await enrichedRes.json()) as Record<string, unknown>;
     expect(enrichedRes.status).toBe(200);
@@ -137,6 +193,7 @@ describe('collab/status local-only fast path', () => {
   });
 
   it('returns local shared identity before remote owner-name and head enrichment settle', async () => {
+    const context = teamContext('ws-1', 'viewer-member');
     const runtime = createCollabRuntime({
       workspaceContext: memberContextProvider('viewer-member'),
     }) as CollabRuntime & { publishedHead: CollabRuntime['publishedHead'] };
@@ -184,6 +241,7 @@ describe('collab/status local-only fast path', () => {
     app.use(express.json());
     registerCollabSyncRoutes(app, {
       collab: runtime,
+      ...verifiedScopeDeps(context),
       resolveOwnerDisplayName: async () => {
         nameLookups += 1;
         markRemoteLookupStarted();
@@ -198,6 +256,7 @@ describe('collab/status local-only fast path', () => {
 
     const responsePromise = fetch(
       `${base}/api/projects/shared-local-project/collab/status`,
+      { headers: workspaceHeaders(context) },
     );
     await remoteLookupsStarted;
     const firstResult = await Promise.race([
@@ -227,6 +286,7 @@ describe('collab/status local-only fast path', () => {
     await new Promise<void>((resolve) => setImmediate(resolve));
     const enrichedRes = await fetch(
       `${base}/api/projects/shared-local-project/collab/status`,
+      { headers: workspaceHeaders(context) },
     );
     const enrichedBody = (await enrichedRes.json()) as Record<string, unknown>;
     expect(enrichedRes.status).toBe(200);
@@ -234,41 +294,15 @@ describe('collab/status local-only fast path', () => {
     expect(enrichedBody.publishedVersion).toBe(7);
   });
 
-  it('keeps no-header enrichment isolated by workspace when resource identity is shared', async () => {
-    let contextReads = 0;
-    const workspaceSequence = [
-      'workspace-a',
-      'workspace-b',
-      'workspace-b',
-      'workspace-a',
+  it('keeps explicit workspace enrichment isolated when resource identity is shared', async () => {
+    const contexts = [
+      teamContext('workspace-a', 'viewer-member', 'shared-resource-team'),
+      teamContext('workspace-b', 'viewer-member', 'shared-resource-team'),
     ];
-    const switchingContext: WorkspaceContextProvider = {
-      current: async () => {
-        const workspaceId =
-          workspaceSequence[contextReads] ?? workspaceSequence.at(-1)!;
-        contextReads += 1;
-        return {
-          workspaceId,
-          workspaceType: 'team',
-          teamId: 'shared-resource-team',
-          workspaceMemberId: 'viewer-member',
-          role: 'member',
-          memberStatus: 'active',
-          lifecycleState: 'active',
-          billingState: 'active',
-          planId: null,
-          providerMode: 'platform_credits',
-          seatSummary: buildWorkspaceSeatSummary({ seatLimit: 5, usedSeats: 1 }),
-          permissions: buildWorkspacePermissions({
-            role: 'member',
-            lifecycleState: 'active',
-          }),
-        };
-      },
+    let verificationReads = 0;
+    const runtime = createCollabRuntime() as CollabRuntime & {
+      publishedHead: CollabRuntime['publishedHead'];
     };
-    const runtime = createCollabRuntime({
-      workspaceContext: switchingContext,
-    }) as CollabRuntime & { publishedHead: CollabRuntime['publishedHead'] };
     runtime.rememberTeamShare(
       'switching-project',
       {
@@ -289,6 +323,21 @@ describe('collab/status local-only fast path', () => {
     app.use(express.json());
     registerCollabSyncRoutes(app, {
       collab: runtime,
+      verifyWorkspaceRequest: async (req) => {
+        verificationReads += 1;
+        return contexts.find(
+          (context) =>
+            req.header('x-od-workspace-id') === context.workspaceId
+            && req.header('x-od-workspace-member-id') === context.workspaceMemberId,
+        ) ?? null;
+      },
+      verifyWorkspaceScope: async (scope) =>
+        contexts.some(
+          (context) =>
+            scope.workspaceId === context.workspaceId
+            && scope.resourceTeamId === context.teamId
+            && scope.viewerMemberId === context.workspaceMemberId,
+        ),
       resolveOwnerDisplayName: async () => ({
         displayName: 'Owner',
         role: 'member',
@@ -306,6 +355,7 @@ describe('collab/status local-only fast path', () => {
 
     const firstA = await fetch(
       `${base}/api/projects/switching-project/collab/status`,
+      { headers: workspaceHeaders(contexts[0]!) },
     );
     const firstABody = (await firstA.json()) as Record<string, unknown>;
     await new Promise<void>((resolve) => setImmediate(resolve));
@@ -316,10 +366,12 @@ describe('collab/status local-only fast path', () => {
     expect(firstABody.ownerDisplayName).toBeUndefined();
     expect(firstABody.publishedVersion).toBeNull();
 
-    // No workspace header is sent, and A/B deliberately share the same
-    // resource team, viewer, owner and project. B must still miss A's cache.
+    // A/B deliberately share the same resource team, viewer, owner and
+    // project. The explicit Workspace selector must still keep their caches
+    // isolated.
     const firstB = await fetch(
       `${base}/api/projects/switching-project/collab/status`,
+      { headers: workspaceHeaders(contexts[1]!) },
     );
     const firstBBody = (await firstB.json()) as Record<string, unknown>;
     expect(firstBBody.ownerDisplayName).toBeUndefined();
@@ -329,6 +381,7 @@ describe('collab/status local-only fast path', () => {
 
     const enrichedB = await fetch(
       `${base}/api/projects/switching-project/collab/status`,
+      { headers: workspaceHeaders(contexts[1]!) },
     );
     const enrichedBBody = (await enrichedB.json()) as Record<string, unknown>;
     expect(enrichedBBody.ownerDisplayName).toBe('Owner');
@@ -337,35 +390,37 @@ describe('collab/status local-only fast path', () => {
 
     const revisitedA = await fetch(
       `${base}/api/projects/switching-project/collab/status`,
+      { headers: workspaceHeaders(contexts[0]!) },
     );
     const revisitedABody = (await revisitedA.json()) as Record<string, unknown>;
     expect(revisitedABody.ownerDisplayName).toBe('Owner');
     expect(revisitedABody.publishedVersion).toBe(9);
     expect(revisitedABody.materializedVersion).toBe(11);
     expect(materializedScopes).toEqual(['workspace-b', 'workspace-a']);
-    // One workspace read per status request; background enrichment reuses the
-    // captured identity instead of synchronously reading an ambient active one.
-    expect(contextReads).toBe(4);
+    // One authoritative verification per status request; background enrichment
+    // reuses the captured identity instead of reading an ambient active one.
+    expect(verificationReads).toBe(4);
   });
 
   it('does not enrich an owner name from a personal workspace without a team principal', async () => {
-    const personalContext: WorkspaceContextProvider = {
-      current: async () => ({
-        workspaceId: 'personal-workspace',
-        workspaceType: 'personal',
-        workspaceMemberId: 'personal-member',
+    const context: WorkspaceCollabContext = {
+      workspaceId: 'personal-workspace',
+      workspaceType: 'personal',
+      workspaceMemberId: 'personal-member',
+      role: 'owner',
+      memberStatus: 'active',
+      lifecycleState: 'active',
+      billingState: 'active',
+      planId: null,
+      providerMode: 'platform_credits',
+      seatSummary: buildWorkspaceSeatSummary({ seatLimit: 1, usedSeats: 1 }),
+      permissions: buildWorkspacePermissions({
         role: 'owner',
-        memberStatus: 'active',
         lifecycleState: 'active',
-        billingState: 'active',
-        planId: null,
-        providerMode: 'platform_credits',
-        seatSummary: buildWorkspaceSeatSummary({ seatLimit: 1, usedSeats: 1 }),
-        permissions: buildWorkspacePermissions({
-          role: 'owner',
-          lifecycleState: 'active',
-        }),
       }),
+    };
+    const personalContext: WorkspaceContextProvider = {
+      current: async () => context,
     };
     const runtime = createCollabRuntime({
       workspaceContext: personalContext,
@@ -387,6 +442,7 @@ describe('collab/status local-only fast path', () => {
     app.use(express.json());
     registerCollabSyncRoutes(app, {
       collab: runtime,
+      ...verifiedScopeDeps(context),
       resolveOwnerDisplayName: async () => {
         ownerNameLookups += 1;
         return { displayName: 'Owner', role: 'member' };
@@ -400,6 +456,7 @@ describe('collab/status local-only fast path', () => {
 
     const res = await fetch(
       `${base}/api/projects/personal-context-project/collab/status`,
+      { headers: workspaceHeaders(context) },
     );
     const body = (await res.json()) as Record<string, unknown>;
     await new Promise<void>((resolve) => setImmediate(resolve));
@@ -427,6 +484,16 @@ describe('collab/status local-only fast path', () => {
     app.use(express.json());
     registerCollabSyncRoutes(app, {
       collab: runtime,
+      verifyWorkspaceRequest: async (req) => {
+        const workspaceId = req.header('x-od-workspace-id');
+        const memberId = req.header('x-od-workspace-member-id');
+        return workspaceId && memberId
+          ? teamContext(workspaceId, memberId, workspaceId)
+          : null;
+      },
+      verifyWorkspaceScope: async (scope) =>
+        scope.workspaceId === scope.resourceTeamId
+        && scope.viewerMemberId.startsWith('viewer-'),
       resolveSharedProjectOwner: async () => 'member-owner',
       resolveOwnerDisplayName: async () => ({
         displayName: 'Owner',
@@ -487,6 +554,7 @@ describe('collab/status local-only fast path', () => {
   });
 
   it('skips publishedHead when the caller IS the owner of a shared project', async () => {
+    const context = teamContext('ws-1', 'member-owner');
     const runtime = createCollabRuntime({
       workspaceContext: memberContextProvider('member-owner'),
     }) as CollabRuntime & { publishedHead: CollabRuntime['publishedHead'] };
@@ -502,6 +570,7 @@ describe('collab/status local-only fast path', () => {
     app.use(express.json());
     registerCollabSyncRoutes(app, {
       collab: runtime,
+      ...verifiedScopeDeps(context),
       resolveSharedProjectOwner: async () => 'member-owner', // caller owns it
       resolveOwnerDisplayName: async () => {
         nameLookups += 1;
@@ -514,7 +583,9 @@ describe('collab/status local-only fast path', () => {
     if (!address || typeof address === 'string') throw new Error('no port');
     const base = `http://127.0.0.1:${address.port}`;
 
-    const res = await fetch(`${base}/api/projects/my-shared-project/collab/status`);
+    const res = await fetch(`${base}/api/projects/my-shared-project/collab/status`, {
+      headers: workspaceHeaders(context),
+    });
     const body = (await res.json()) as Record<string, unknown>;
 
     expect(res.status).toBe(200);

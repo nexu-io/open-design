@@ -181,15 +181,10 @@ export function openDesignAmrTraceEnv(input: {
   runId: string;
   conversationId?: string | null;
   runAttempt: number;
-  // The team workspace this run's project belongs to. Only ever the
-  // project's own pinned TEAM workspace (see collab/workspace-scope.ts and
-  // db.ts#findTeamWorkspaceIdForProject) — never an account-level "current
-  // selection" or a personal workspace id. Per the vela workspace-credit
-  // isolation design (spec: workspace-scoped wallet and credit isolation),
-  // personal projects deliberately send no workspace id at all so vela's own
-  // `sponsor_workspace_id IS NULL` fallback attributes the spend to the
-  // caller's personal wallet — Open Design must not invent or forward a
-  // personal workspace id here.
+  // The exact persisted Workspace binding for this run's project, whether
+  // Team or Personal. Never derive it from an account-level current/active
+  // selection. Omission means the historical project is genuinely unbound;
+  // Vela/AMR owns the resulting wallet and membership decision.
   workspaceId?: string | null;
 }): NodeJS.ProcessEnv {
   if (input.agentId !== 'amr') return {};

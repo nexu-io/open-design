@@ -69,10 +69,9 @@ function contextFor(workspaceId: string): WorkspaceCollabContext {
 }
 
 /**
- * A switch harness with an in-memory active-workspace pin, so the route is
- * exercised through the same store it mutates rather than a stub that cannot
- * disagree with itself. There is deliberately no backend-selection seam: the
- * pin is the only thing a switch moves.
+ * A switch harness with a legacy active-workspace pin. The compatibility route
+ * must leave it untouched; only the response and exact-scope warm announcement
+ * describe the tab-local selection.
  */
 async function startSwitchServer(options: {
   /** What the follow-up context read answers. Default: agrees with the pin. */
@@ -128,7 +127,10 @@ async function startSwitchServer(options: {
       const response = await fetch(`${base}/api/workspace/active`, {
         method: 'PUT',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ workspaceId }),
+        body: JSON.stringify({
+          workspaceId,
+          workspaceMemberId: `wm-${workspaceId}`,
+        }),
       });
       return { status: response.status, body: (await response.json()) as Record<string, unknown> };
     },
@@ -142,7 +144,7 @@ describe('PUT /api/workspace/active announces a confirmed switch for cache warmi
     const result = await api.switchTo(TEAM);
 
     expect(result.status).toBe(200);
-    expect(api.pinnedWorkspace()).toBe(TEAM);
+    expect(api.pinnedWorkspace()).toBe(PERSONAL);
     // The announcement is what lets the daemon refill the `catalog` and
     // `members` digest faces during the idle beat after the switch, instead of
     // making the first project load or agent run in the new workspace pay for
@@ -174,7 +176,7 @@ describe('PUT /api/workspace/active announces a confirmed switch for cache warmi
     const result = await api.switchTo(TEAM);
 
     expect(result.status).toBe(200);
-    expect(api.pinnedWorkspace()).toBe(TEAM);
+    expect(api.pinnedWorkspace()).toBe(PERSONAL);
     expect(result.body.activeWorkspaceId).toBe(TEAM);
     // Synthesized from the directory entry the route already validated, so the
     // response still describes the workspace the user picked.
@@ -190,7 +192,7 @@ describe('PUT /api/workspace/active announces a confirmed switch for cache warmi
     const result = await api.switchTo(TEAM);
 
     expect(result.status).toBe(200);
-    expect(api.pinnedWorkspace()).toBe(TEAM);
+    expect(api.pinnedWorkspace()).toBe(PERSONAL);
     expect((result.body.context as { workspaceId?: string }).workspaceId).toBe(TEAM);
     expect(api.onWorkspaceSwitched).toHaveBeenCalledWith(TEAM);
   });
@@ -205,17 +207,17 @@ describe('PUT /api/workspace/active announces a confirmed switch for cache warmi
   });
 });
 
-// `workspaceContext.current()` is not a passive read, and that is the whole
-// hazard here. The REAL vela provider's `resolvePinnedWorkspace` does its own
-// FRESH directory lookup and, when that confirms the pinned workspace is gone,
-// clears the pin and re-pins a recovery workspace (so a removed member is not
-// locked out of everything). The route's own directory read can meanwhile be a
-// 5-second cached success that still lists the workspace.
+// The compatibility route authorizes the tab-local choice from its directory
+// read and may ask `resolveExact()` for richer context. `resolveExact()` is
+// deliberately read-only: unlike the legacy `current()` path, it cannot clear
+// or re-pin daemon-global selection state. The route's directory read can be a
+// 5-second cached success while the exact enrichment performs a fresh read and
+// returns null; that disagreement must not resurrect active/current authority.
 //
 // These cases wire the production provider against the production cached
-// directory fetcher, sharing ONE pin store exactly as `server.ts` does, so the
-// two reads genuinely disagree instead of a stub pretending they do.
-describe('PUT /api/workspace/active when the context read re-pins the workspace', () => {
+// directory fetcher so the two reads genuinely disagree instead of a stub
+// pretending they do.
+describe('PUT /api/workspace/active keeps exact enrichment tab-local', () => {
   const B_PERSONAL_CONTEXT = {
     userId: 'auth-user-1',
     appUserId: 'app-user-1',
@@ -241,7 +243,7 @@ describe('PUT /api/workspace/active when the context read re-pins the workspace'
     let directoryCalls = 0;
     const onWorkspaceSwitched = vi.fn<(workspaceId: string) => void>();
 
-    // Shared pin store — the route writes it, the provider may re-write it.
+    // Legacy pin store: neither the route nor resolveExact may write it.
     const activeWorkspace: NonNullable<RegisterCollabContextRoutesDeps['activeWorkspace']> = {
       get: () => pinned,
       set: async (workspaceId: string) => {
@@ -256,7 +258,8 @@ describe('PUT /api/workspace/active when the context read re-pins the workspace'
       ({ ok: status >= 200 && status < 300, status, json: async () => body }) as unknown as Response;
 
     // Call 1 (the route's read, which gets cached) still lists TEAM.
-    // Call 2+ (the provider's fresh read) no longer does — membership is gone.
+    // Call 2+ (resolveExact's fresh read) no longer does — enrichment returns
+    // null without mutating the legacy pin.
     const fetchImpl = (async (url: URL | string, init?: RequestInit) => {
       const u = String(url);
       const method = init?.method ?? 'GET';
@@ -272,8 +275,8 @@ describe('PUT /api/workspace/active when the context read re-pins the workspace'
         );
       }
       if (u.includes('/workspaces/current') && method === 'GET') {
-        // TEAM is gone, so B refuses the explicitly scoped read. That is what
-        // sends the provider down `resolvePinnedWorkspace`.
+        // TEAM is gone, so B refuses the explicitly scoped read. resolveExact
+        // then performs the fresh directory lookup above and returns null.
         const requested = (init?.headers as Record<string, string> | undefined)?.[
           'x-vela-workspace-id'
         ];
@@ -328,7 +331,10 @@ describe('PUT /api/workspace/active when the context read re-pins the workspace'
         const response = await fetch(`${base}/api/workspace/active`, {
           method: 'PUT',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ workspaceId }),
+          body: JSON.stringify({
+            workspaceId,
+            workspaceMemberId: `wm-${workspaceId}`,
+          }),
         });
         return {
           status: response.status,
@@ -338,29 +344,27 @@ describe('PUT /api/workspace/active when the context read re-pins the workspace'
     };
   }
 
-  it('never claims a workspace the pin no longer holds', async () => {
+  it('uses cached directory authorization without mutating the legacy pin', async () => {
     const api = await startRealProviderServer();
 
     const result = await api.switchTo(TEAM);
 
-    // The provider confirmed TEAM is gone and recovered to PERSONAL. Answering
-    // 200 for TEAM here would make the UI show the switch succeeding and then
-    // snap back on the next context poll — the response must not outrank the pin.
+    // The compatibility route describes this tab's exact selection. The old
+    // daemon pin remains unrelated and unchanged.
     expect(api.pinnedWorkspace()).toBe(PERSONAL);
-    expect(result.status).toBe(404);
-    expect(result.body.error).toBe('workspace_no_longer_available');
-    expect(JSON.stringify(result.body)).not.toContain(TEAM);
-    // Nothing moved to TEAM, so warming its caches would be wrong.
-    expect(api.onWorkspaceSwitched).not.toHaveBeenCalled();
+    expect(result.status).toBe(200);
+    expect(result.body.activeWorkspaceId).toBe(TEAM);
+    expect((result.body.context as { workspaceId?: string }).workspaceId).toBe(TEAM);
+    expect(api.onWorkspaceSwitched).toHaveBeenCalledOnce();
+    expect(api.onWorkspaceSwitched).toHaveBeenCalledWith(TEAM);
   });
 
-  it("leaves the provider's recovery pin in place rather than reverting it", async () => {
+  it('does not restore active/current authority through exact enrichment', async () => {
     const api = await startRealProviderServer();
 
     await api.switchTo(TEAM);
 
-    // Restoring the pre-switch pin would undo the recovery that exists to stop a
-    // removed member being signed out of every workspace.
+    // The pin is merely legacy compatibility state and remains untouched.
     expect(api.pinnedWorkspace()).toBe(PERSONAL);
   });
 });

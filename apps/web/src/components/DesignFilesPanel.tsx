@@ -6,6 +6,8 @@ import { LIBRARY_UI_VISIBLE } from '../features/libraryUi';
 import type { Dict } from '../i18n/types';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { projectFileUrl, projectRawUrl } from '../providers/registry';
+import { appendResourceQuery } from '../collab/workspace-identity';
+import { useProjectCollabContext } from '../collab/collab-context';
 import { buildSrcdoc } from '../runtime/srcdoc';
 import type { LiveArtifactWorkspaceEntry, ProjectFile, ProjectFileKind, ProjectFolder } from '../types';
 import {
@@ -331,6 +333,7 @@ export function DesignFilesPanel({
   navState,
   onNavStateChange,
 }: Props) {
+  const { workspaceContext } = useProjectCollabContext();
   const t = useT();
   const analytics = useAnalytics();
   const [draggingFiles, setDraggingFiles] = useState(false);
@@ -977,7 +980,10 @@ export function DesignFilesPanel({
           aria-label={openLabel}
         >
           <img
-            src={`${projectRawUrl(projectId, f.name)}?v=${Math.round(f.mtime)}`}
+            src={appendResourceQuery(
+              projectRawUrl(projectId, f.name, workspaceContext),
+              `v=${Math.round(f.mtime)}`,
+            )}
             alt=""
             loading="lazy"
           />
@@ -1622,7 +1628,7 @@ export function DesignFilesPanel({
               : t('designFiles.copyLocalPath')}
           </button>
           <a
-            href={projectFileUrl(projectId, menuPos.name)}
+            href={projectFileUrl(projectId, menuPos.name, workspaceContext)}
             download={menuPos.name}
             style={{ textDecoration: 'none' }}
           >
@@ -1674,8 +1680,9 @@ function HtmlCardThumbnail({
   projectId: string;
   file: ProjectFile;
 }) {
+  const { workspaceContext } = useProjectCollabContext();
   const tooLargeForThumbnail = file.size > HTML_THUMBNAIL_INLINE_MAX_BYTES;
-  const url = projectFileUrl(projectId, file.name);
+  const url = projectFileUrl(projectId, file.name, workspaceContext);
   const [srcDoc, setSrcDoc] = useState<string | null>(null);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [scale, setScale] = useState<number | null>(null);
@@ -1685,11 +1692,19 @@ function HtmlCardThumbnail({
     if (tooLargeForThumbnail) return;
     const controller = new AbortController();
     let cancelled = false;
-    void fetch(`${url}?v=${Math.round(file.mtime)}`, { signal: controller.signal })
+    void fetch(appendResourceQuery(url, `v=${Math.round(file.mtime)}`), {
+      signal: controller.signal,
+    })
       .then((response) => (response.ok ? response.text() : null))
       .then((html) => {
         if (cancelled || html === null) return;
-        const nextSrcDoc = buildSrcdoc(html, { baseHref: projectRawUrl(projectId, baseDirForFile(file.name)) });
+        const nextSrcDoc = buildSrcdoc(html, {
+          baseHref: projectRawUrl(
+            projectId,
+            baseDirForFile(file.name),
+            workspaceContext,
+          ),
+        });
         if (!cancelled) setSrcDoc(nextSrcDoc);
       })
       .catch((err) => {
@@ -1700,7 +1715,14 @@ function HtmlCardThumbnail({
       cancelled = true;
       controller.abort();
     };
-  }, [file.mtime, file.name, projectId, tooLargeForThumbnail, url]);
+  }, [
+    file.mtime,
+    file.name,
+    projectId,
+    tooLargeForThumbnail,
+    url,
+    workspaceContext,
+  ]);
 
   // Track the host width so the fixed-layout iframe scales with the card.
   // Environments without ResizeObserver (jsdom) fall back to an unscaled

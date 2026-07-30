@@ -298,6 +298,28 @@ describe('project move to personal on an unbound (never-locally-shared) project'
     app.use(express.json());
     registerCollabContextRoutes(app, {
       workspaceContext: { current: async () => null },
+      fetchWorkspaceDirectory: async () => ({
+        ok: true,
+        items: [
+          {
+            workspaceId: TEAM_WORKSPACE_ID,
+            workspaceMemberId: OWNER_MEMBER_ID,
+            workspaceType: 'team',
+            workspaceName: 'Heritage Team',
+            role: 'owner',
+            memberStatus: 'active',
+            lifecycleState: 'active',
+            resourceTeamId: TEAM_WORKSPACE_ID,
+            permissions: {
+              canManageBilling: true,
+              canManageMembers: true,
+              canInviteMembers: true,
+              canShareProjects: true,
+              canWriteSyncedFiles: true,
+            },
+          },
+        ],
+      }),
       listTeamProjects: async () => [
         {
           projectId: result.projectId,
@@ -309,7 +331,9 @@ describe('project move to personal on an unbound (never-locally-shared) project'
     });
     const routeServer = await listen(app);
     try {
-      const resp = await fetch(`${routeServer.url}/api/workspace/projects/team`);
+      const resp = await fetch(`${routeServer.url}/api/workspace/projects/team`, {
+        headers: ownerTeamHeaders(),
+      });
       expect(resp.status).toBe(200);
       const body = (await resp.json()) as { projects: Array<{ projectId: string }> };
       expect(body.projects.some((project) => project.projectId === result.projectId)).toBe(true);

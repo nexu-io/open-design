@@ -12,13 +12,18 @@
 // Kept OUT of runtime.ts (which #5383 is also editing) so the surfaces do not
 // collide; server.ts wires it to the runtime's scheduler + the project watchers.
 
+import type { ResourceHubPrincipal } from './resource-principal.js';
+
 export interface PublishWatchSubscription {
   unsubscribe: () => Promise<void> | void;
 }
 
 export interface CollabPublishWatcherDeps {
   /** Coalesce every file edit into a debounced publish (the scheduler owns the window). */
-  notifyChanged: (projectId: string) => void;
+  notifyChanged: (
+    projectId: string,
+    principal?: ResourceHubPrincipal,
+  ) => void;
   /** Local project ids to consider watching. */
   listProjectIds: () => string[];
   /**
@@ -26,7 +31,9 @@ export interface CollabPublishWatcherDeps {
    * AND this daemon's member is its owner (the single writer). Async because it
    * consults the team hub + the workspace context.
    */
-  shouldPublish: (projectId: string) => Promise<boolean>;
+  shouldPublish: (
+    projectId: string,
+  ) => Promise<boolean | ResourceHubPrincipal>;
   /** Subscribe to file-change events for a project's content dir. */
   subscribeFiles: (projectId: string, onChange: () => void) => PublishWatchSubscription;
   /** Reconcile cadence (ms): how often to (re)discover owned+shared projects. */
@@ -45,7 +52,13 @@ const DEFAULT_RECONCILE_MS = 10_000;
 
 export function createCollabPublishWatcher(deps: CollabPublishWatcherDeps): CollabPublishWatcher {
   const reconcileMs = deps.reconcileMs ?? DEFAULT_RECONCILE_MS;
-  const subs = new Map<string, PublishWatchSubscription>();
+  const subs = new Map<
+    string,
+    {
+      subscription: PublishWatchSubscription;
+      principal?: ResourceHubPrincipal;
+    }
+  >();
   let timer: ReturnType<typeof setInterval> | null = null;
   let reconciling = false;
 
@@ -55,29 +68,35 @@ export function createCollabPublishWatcher(deps: CollabPublishWatcherDeps): Coll
     try {
       const ids = new Set(deps.listProjectIds());
       // Drop watchers for projects that no longer exist locally.
-      for (const [projectId, sub] of subs) {
+      for (const [projectId, watched] of subs) {
         if (!ids.has(projectId)) {
-          void Promise.resolve(sub.unsubscribe()).catch(() => {});
+          void Promise.resolve(watched.subscription.unsubscribe()).catch(() => {});
           subs.delete(projectId);
         }
       }
       // Add watchers for owned + team-shared projects not yet watched.
       for (const projectId of ids) {
         if (subs.has(projectId)) continue;
-        let owned = false;
+        let publishScope: boolean | ResourceHubPrincipal = false;
         try {
-          owned = await deps.shouldPublish(projectId);
+          publishScope = await deps.shouldPublish(projectId);
         } catch (error) {
           deps.onError?.(error);
           continue;
         }
-        if (!owned) continue;
+        if (!publishScope) continue;
+        const principal =
+          typeof publishScope === 'object' ? publishScope : undefined;
         const sub = deps.subscribeFiles(projectId, () => {
           // Every edit → a debounced publish; the scheduler collapses bursts so a
           // half-written intermediate state never reaches members.
-          deps.notifyChanged(projectId);
+          if (principal) deps.notifyChanged(projectId, principal);
+          else deps.notifyChanged(projectId);
         });
-        subs.set(projectId, sub);
+        subs.set(projectId, {
+          subscription: sub,
+          ...(principal ? { principal } : {}),
+        });
         // Publish the CURRENT content once on first watch. The file watcher uses
         // `ignoreInitial`, so files already on disk when watching begins (e.g.
         // documents uploaded to a project before it was shared, or before the
@@ -87,7 +106,8 @@ export function createCollabPublishWatcher(deps: CollabPublishWatcherDeps): Coll
         // (team-shared AND owned by me) above, so this only republishes a
         // single-writer's own project and is loop-safe. Fires once per project
         // per watch session (reconcile only subscribes not-yet-watched ids).
-        deps.notifyChanged(projectId);
+        if (principal) deps.notifyChanged(projectId, principal);
+        else deps.notifyChanged(projectId);
       }
     } finally {
       reconciling = false;
@@ -107,7 +127,9 @@ export function createCollabPublishWatcher(deps: CollabPublishWatcherDeps): Coll
         clearInterval(timer);
         timer = null;
       }
-      for (const sub of subs.values()) void Promise.resolve(sub.unsubscribe()).catch(() => {});
+      for (const watched of subs.values()) {
+        void Promise.resolve(watched.subscription.unsubscribe()).catch(() => {});
+      }
       subs.clear();
     },
   };

@@ -5,6 +5,7 @@ import os from 'node:os';
 import { readFile, rm } from 'node:fs/promises';
 import { isBlocked as isBlockedSystemDir } from './linked-dirs.js';
 import type { RouteDeps } from './server-context.js';
+import type { AuthorizeProjectRequest } from './collab/project-request-authority.js';
 import {
   InlineAssetsLimitError,
   MAX_INLINE_OWNER_BYTES,
@@ -26,19 +27,14 @@ import { parseOrchestratorWorkspace } from './workspace-contract.js';
 import {
   authorizeCreatedProjectWorkspace,
   bindCreatedProjectToWorkspace,
-  type GetAmbientWorkspace,
   sendCreatedProjectWorkspaceError,
 } from './collab/created-project-workspace.js';
 import type { WorkspaceDirectoryFetchResult } from './collab/vela-workspace-context.js';
+import type { BoundWorkspaceResourceMutationGate } from './collab/workspace-resource-mutation.js';
 
 export interface RegisterImportRoutesDeps extends RouteDeps<'db' | 'http' | 'uploads' | 'node' | 'ids' | 'paths' | 'imports' | 'auth' | 'projectStore' | 'conversations' | 'projectFiles' | 'validation'> {
   fetchProjectCreationWorkspaceDirectory?: () => Promise<WorkspaceDirectoryFetchResult>;
-  /**
-   * The workspace this daemon is signed in to, for an import whose request
-   * carries no workspace identity of its own. See `createdProjectWorkspaceHome`
-   * in `collab/created-project-workspace.ts`.
-   */
-  getAmbientWorkspace?: GetAmbientWorkspace;
+  enforceWorkspaceProjectMutation?: BoundWorkspaceResourceMutationGate;
 }
 
 export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps) {
@@ -78,10 +74,20 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
     pruneExpiredImportNonces,
     verifyDesktopImportToken,
   } = ctx.auth;
-  const { getProject, insertProject, updateProject, ensureWorkspaceProject } = ctx.projectStore;
+  const {
+    getProject,
+    getWorkspaceProject,
+    getWorkspaceProjectByProjectId,
+    insertProject,
+    updateProject,
+    ensureWorkspaceProject,
+  } = ctx.projectStore;
   const { insertConversation } = ctx.conversations;
   const { setTabs } = ctx.projectFiles;
-  const { validateProjectDesignSystemId } = ctx.validation;
+  const {
+    validateProjectDesignSystemId,
+    validateProjectSkillId,
+  } = ctx.validation;
   app.post(
     '/api/import/claude-design',
     importUpload.single('file'),
@@ -145,7 +151,6 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
             createWorkspace.context,
             id,
             now,
-            ctx.getAmbientWorkspace,
           );
           return createdProject;
         })();
@@ -179,6 +184,21 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
       const existing = getProject(db, projectId);
       if (!existing) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
+      if (
+        ctx.enforceWorkspaceProjectMutation
+        && !(await ctx.enforceWorkspaceProjectMutation(
+          req,
+          res,
+          sendApiError,
+          getWorkspaceProject,
+          getWorkspaceProjectByProjectId,
+          db,
+          projectId,
+          'writeFiles',
+        ))
+      ) {
+        return;
       }
       const { baseDir, orchestratorWorkspace } = req.body || {};
       if (typeof baseDir !== 'string' || !baseDir.trim()) {
@@ -425,7 +445,10 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
           ? name.trim()
           : path.basename(normalizedPath);
       const entryFile = await detectEntryFile(normalizedPath);
-      const designSystemValidation = await validateProjectDesignSystemId(designSystemId);
+      const designSystemValidation = await validateProjectDesignSystemId(
+        designSystemId,
+        { workspaceId: createWorkspace.context?.workspaceId ?? null },
+      );
       if (!designSystemValidation.ok) {
         return sendApiError(
           res,
@@ -434,12 +457,24 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
           designSystemValidation.message,
         );
       }
+      const skillValidation = await validateProjectSkillId(
+        skillId,
+        { workspaceId: createWorkspace.context?.workspaceId ?? null },
+      );
+      if (!skillValidation.ok) {
+        return sendApiError(
+          res,
+          400,
+          skillValidation.code,
+          skillValidation.message,
+        );
+      }
       const cid = randomId();
       const project = db.transaction(() => {
         const createdProject = insertProject(db, {
           id,
           name: projectName,
-          skillId: skillId ?? null,
+          skillId: skillValidation.id,
           designSystemId: designSystemValidation.id,
           pendingPrompt: null,
           metadata: {
@@ -471,7 +506,6 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
           createWorkspace.context,
           id,
           now,
-          ctx.getAmbientWorkspace,
         );
         return createdProject;
       })();
@@ -485,7 +519,9 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
 
 }
 
-export interface RegisterProjectExportRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'node' | 'ids' | 'projectStore' | 'exports' | 'projectFiles' | 'validation'> {}
+export interface RegisterProjectExportRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'node' | 'ids' | 'projectStore' | 'exports' | 'projectFiles' | 'validation'> {
+  authorizeProjectRequest: AuthorizeProjectRequest;
+}
 
 export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectExportRoutesDeps) {
   const { db } = ctx;
@@ -507,6 +543,20 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
     daemonUrlRef,
     sanitizeArchiveFilename,
   } = ctx.exports;
+  async function authorizeExportRead(
+    req: any,
+    res: any,
+    options: { allowNavigationQuery?: boolean } = {},
+  ): Promise<boolean> {
+    return ctx.authorizeProjectRequest(
+      req,
+      res,
+      req.params.id,
+      options.allowNavigationQuery
+        ? { mode: 'read', allowNavigationQuery: true }
+        : { mode: 'read' },
+    );
+  }
 
   function isNoSlideDeckRenderError(rendered: { ok: boolean; error?: string }): boolean {
     return !rendered.ok && typeof rendered.error === 'string' && /no slide surfaces found/i.test(rendered.error);
@@ -912,6 +962,7 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
   app.get('/api/projects/:id/archive', async (req, res) => {
     try {
       const root = typeof req.query?.root === 'string' ? req.query.root : '';
+      if (!await authorizeExportRead(req, res, { allowNavigationQuery: true })) return;
       const project = getProject(db, req.params.id);
       const { buffer, baseName } = await buildProjectArchive(
         PROJECTS_DIR,
@@ -954,6 +1005,7 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
         sendApiError(res, 400, 'BAD_REQUEST', 'files must be a non-empty array');
         return;
       }
+      if (!await authorizeExportRead(req, res)) return;
       const project = getProject(db, req.params.id);
       const { buffer } = await buildBatchArchive(
         PROJECTS_DIR,
@@ -992,6 +1044,7 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
       if (!project) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       }
+      if (!await ctx.authorizeProjectRequest(req, res, project.id, { mode: 'read' })) return;
       const files = await listFiles(PROJECTS_DIR, req.params.id, {
         metadata: project.metadata,
       });
@@ -1022,6 +1075,10 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
         return sendApiError(res, 400, 'BAD_REQUEST', 'fileName required');
       }
       const project = getProject(db, req.params.id);
+      if (!project) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
+      if (!await ctx.authorizeProjectRequest(req, res, project.id, { mode: 'read' })) return;
       const metadata = project?.metadata ?? null;
       const versionId = normalizeExportVersionId(req.body?.versionId);
       const sourceHtml = await readExportVersionSource(req.params.id, fileName, versionId, metadata);
@@ -1052,6 +1109,7 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
   // PNG and assemble a one-image-per-slide .pptx. Replaces the old "send a prompt
   // to the agent and hope it runs python-pptx" path with a deterministic export.
   app.post('/api/projects/:id/export/pptx', async (req, res) => {
+    if (!await authorizeExportRead(req, res)) return;
     await handleScreenshotExport(res, 'pptx', req.params.id, req.body);
   });
 
@@ -1059,6 +1117,7 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
   // The print-ready vector PDF stays on POST /export/pdf; this is the "exactly
   // what you see" counterpart that shares the slide renderer with PPTX.
   app.post('/api/projects/:id/export/pdf-image', async (req, res) => {
+    if (!await authorizeExportRead(req, res)) return;
     await handleScreenshotExport(res, 'pdf', req.params.id, req.body);
   });
 
@@ -1067,6 +1126,7 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
   // the whole document at natural size. Viewport-independent — unlike the
   // host-compositor snapshot, the size never depends on the preview pane.
   app.post('/api/projects/:id/export/image', async (req, res) => {
+    if (!await authorizeExportRead(req, res)) return;
     await handleScreenshotExport(res, 'image', req.params.id, req.body);
   });
 
@@ -1087,6 +1147,7 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
     if (!isExportFormat(format)) {
       return sendApiError(res, 400, 'BAD_REQUEST', 'invalid export format');
     }
+    if (!await authorizeExportRead(req, res)) return;
     await handleScreenshotExport(res, format, req.params.id, {
       fileName,
       // pptx is deck-only (handleScreenshotExport forces it); pdf/image honor the
@@ -1144,6 +1205,7 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
         );
       }
 
+      if (!await authorizeExportRead(req, res, { allowNavigationQuery: true })) return;
       const project = getProject(db, req.params.id);
       const splatParam = (req.params as { splat?: string | string[] }).splat;
       const relPath = Array.isArray(splatParam) ? splatParam.join('/') : String(splatParam ?? '');
@@ -1532,7 +1594,9 @@ function roleForExportManifestFile(
   return 'other';
 }
 
-export interface RegisterFinalizeRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'projectStore' | 'validation' | 'finalize'> {}
+export interface RegisterFinalizeRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'projectStore' | 'validation' | 'finalize'> {
+  authorizeProjectRequest: AuthorizeProjectRequest;
+}
 
 export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutesDeps) {
   const { db } = ctx;
@@ -1618,6 +1682,12 @@ export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutes
       if (!project) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       }
+      if (!await ctx.authorizeProjectRequest(
+        req,
+        res,
+        project.id,
+        { mode: 'write', capability: 'writeFiles' },
+      )) return;
 
       const finalizeAbort = new AbortController();
       const abortFromRequest = (): void => {

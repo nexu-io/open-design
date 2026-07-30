@@ -1,4 +1,4 @@
-import type { Express } from 'express';
+import type { Express, Response } from 'express';
 import type {
   CollabCloudMemberDirectoryEntry,
   CollabCloudMembersResponse,
@@ -15,11 +15,13 @@ import type {
   WorkspaceWalletBalance,
   WorkspaceDirectoryItem,
   WorkspaceDirectoryResponse,
+  WorkspaceCollabContext,
   WorkspaceContextResponse,
   WorkspaceActiveResponse,
   WorkspaceInviteCreateResponse,
   WorkspaceInviteCreateResult,
   WorkspaceInviteRole,
+  WorkspaceInvalidationSsePayload,
   WorkspaceTeamProjectsResponse,
 } from '@open-design/contracts';
 import {
@@ -54,6 +56,42 @@ import {
   type WorkspaceBillingRuntimeCoordinator,
   type WorkspaceBillingRuntimeResult,
 } from '../collab/workspace-billing-runtime.js';
+import {
+  verifyWorkspaceRequestContext,
+  type VerifiedWorkspaceRequestContextResult,
+} from '../collab/request-workspace-context.js';
+import { requestWithWorkspaceNavigationScope } from '../collab/workspace-resource-mutation.js';
+
+export type WorkspaceEventSink = (payload: WorkspaceInvalidationSsePayload) => void;
+export type WorkspaceEventSinksByWorkspace =
+  Map<string, Set<WorkspaceEventSink>>;
+
+/**
+ * Deliver one thin invalidation only to clients whose EventSource connection
+ * was freshly verified for the affected Workspace. Member identity is still
+ * verified at subscription time; delivery is workspace-wide because roster,
+ * catalog, context, and team billing changes legitimately invalidate every
+ * active member's view of that Workspace.
+ */
+export function emitWorkspaceEventToScope(
+  sinksByWorkspace: WorkspaceEventSinksByWorkspace,
+  workspaceIdInput: string,
+  payload: WorkspaceInvalidationSsePayload,
+): boolean {
+  const workspaceId = workspaceIdInput.trim();
+  if (!workspaceId) return false;
+  const sinks = sinksByWorkspace.get(workspaceId);
+  if (!sinks || sinks.size === 0) return false;
+  for (const sink of Array.from(sinks)) {
+    try {
+      sink(payload);
+    } catch {
+      sinks.delete(sink);
+    }
+  }
+  if (sinks.size === 0) sinksByWorkspace.delete(workspaceId);
+  return true;
+}
 
 export interface RegisterCollabContextRoutesDeps {
   workspaceContext: WorkspaceContextProvider;
@@ -82,17 +120,20 @@ export interface RegisterCollabContextRoutesDeps {
   /** Injectable for tests; defaults to the resource-hub team-project lister
    *  built from the same workspace context + env-configured hub client the share
    *  path uses. */
-  listTeamProjects?: () => Promise<TeamProject[]>;
+  listTeamProjects?: (context: WorkspaceCollabContext) => Promise<TeamProject[]>;
   /**
    * The team's collab-cloud member directory (memberId → {displayName, role}),
    * so the web client can resolve comment authors + the shared-project owner to
    * a name + role. Empty off-team / when the collab cloud is unconfigured. STUB:
    * B's roster is the real source; the collab-cloud directory stands in for it.
    */
-  listMembers?: () => Promise<CollabCloudMemberDirectoryEntry[]>;
+  listMembers?: (
+    context: WorkspaceCollabContext,
+  ) => Promise<CollabCloudMemberDirectoryEntry[]>;
   /**
-   * OD-local active workspace selection. Vela Web lists/creates workspaces but
-   * does not choose which workspace this local OD daemon is operating in.
+   * Legacy local selection store retained for compatibility wiring. Data-plane
+   * routes do not read or mutate it; each tab carries its exact Workspace and
+   * member identity on the request.
    */
   activeWorkspace?: {
     get(): string | null;
@@ -100,15 +141,12 @@ export interface RegisterCollabContextRoutesDeps {
     clear(): Promise<void>;
   };
   /**
-   * Announce that the active workspace just changed to `workspaceId`, after the
-   * switch is confirmed by a matching context read (never for a rejected or
-   * rolled-back switch).
+   * Announce that one tab selected `workspaceId`, after a fresh membership
+   * directory read confirms the exact Workspace/member pair.
    *
-   * Every workspace-scoped cache in the daemon is keyed on the active workspace,
-   * so a switch leaves all of them cold and the first consumer pays the refill
-   * on its own request path. This seam lets the owner of those caches warm them
-   * while the user is still looking at the freshly switched view. It is
-   * deliberately fire-and-forget: the switch response must not wait on warming.
+   * Caches are keyed by explicit scope, so this only warms the selected scope;
+   * it never changes or checks daemon-global active/current state. It is
+   * deliberately fire-and-forget: the response must not wait on warming.
    */
   onWorkspaceSwitched?: (workspaceId: string) => void;
   /** Injectable for tests; defaults to the Vela workspace directory API. */
@@ -128,7 +166,7 @@ export interface RegisterCollabContextRoutesDeps {
   createSseResponse?: (res: unknown, opts?: unknown) => {
     send: (event: string, data: unknown, id?: string | number | null) => boolean;
   };
-  workspaceEventSinks?: Set<(payload: unknown) => void>;
+  workspaceEventSinks?: WorkspaceEventSinksByWorkspace;
 }
 
 const ASSIGNABLE_ROLES = new Set<WorkspaceInviteRole>(['admin', 'member']);
@@ -166,7 +204,7 @@ function parseInviteCreateItems(
 
 /**
  * Workspace-context route : the daemon's single B-integration seam. The
- * web client fetches the current caller's workspace context here to decide
+ * web client fetches an explicitly selected workspace context here to decide
  * whether collab runs and who the present member is (resolveCollabSession). In
  * production the provider proxies B; the dev provider is settable via PUT so a
  * demo/tools-dev run can exercise the full path before B is reachable.
@@ -197,8 +235,10 @@ export function registerCollabContextRoutes(app: Express, deps: RegisterCollabCo
     deps.startCheckout ??
     ((input: { workspaceId?: string; planId?: WorkspaceTeamBillingPlanId; seats?: number }) =>
       fetchBillingCheckoutUrl(input));
+  const rawTeamProjectsLister = createTeamProjectsLister({});
   const listTeamProjects =
-    deps.listTeamProjects ?? createTeamProjectsLister({ workspaceContext });
+    deps.listTeamProjects ??
+    ((context: WorkspaceCollabContext) => rawTeamProjectsLister(context.workspaceId));
   const listMembers = deps.listMembers ?? (async () => []);
   const listWorkspaceDirectory =
     deps.listWorkspaceDirectory ?? (() => listVelaWorkspaceDirectory());
@@ -208,6 +248,18 @@ export function registerCollabContextRoutes(app: Express, deps: RegisterCollabCo
       ok: true,
       items: await listWorkspaceDirectory(),
     }));
+  const sendWorkspaceVerificationFailure = (
+    res: Response,
+    verified: Exclude<
+      VerifiedWorkspaceRequestContextResult,
+      { ok: true }
+    >,
+  ) =>
+    res.status(verified.status).json({
+      error: verified.code,
+      message: verified.message,
+      ...(verified.retryable ? { retryable: true } : {}),
+    });
 
   // Desktop invite hand-off ("桌面唤起和本地恢复"): the desktop app parses the
   // opendesign:// invite deeplink and POSTs the nonce here. The daemon consumes
@@ -234,12 +286,14 @@ export function registerCollabContextRoutes(app: Express, deps: RegisterCollabCo
     const items = parseInviteCreateItems(req.body);
     if (items.length === 0) return res.status(400).json({ error: 'missing_invites' });
 
-    const authorization = req.header('authorization') ?? undefined;
-    const context = await workspaceContext.current({ authorization });
-    const workspaceId = context?.workspaceId?.trim() ?? '';
-    if (!context || !workspaceId) {
-      return res.status(409).json({ error: 'no_workspace' });
-    }
+    const verified = await verifyWorkspaceRequestContext({
+      req,
+      fetchWorkspaceDirectory,
+      requireTeam: true,
+    });
+    if (!verified.ok) return sendWorkspaceVerificationFailure(res, verified);
+    const context = verified.context;
+    const workspaceId = context.workspaceId;
     if (!context.permissions.canInviteMembers) {
       return res.status(403).json({ error: 'forbidden' });
     }
@@ -264,12 +318,33 @@ export function registerCollabContextRoutes(app: Express, deps: RegisterCollabCo
 
   app.get('/api/workspace/context', async (req, res) => {
     const authorization = req.header('authorization') ?? undefined;
-    const context = await workspaceContext.current({ authorization });
+    const verified = await verifyWorkspaceRequestContext({
+      req,
+      fetchWorkspaceDirectory,
+    });
+    if (!verified.ok) return sendWorkspaceVerificationFailure(res, verified);
+    const enriched = await workspaceContext.resolveExact?.({
+      authorization,
+      workspaceId: verified.context.workspaceId,
+    }).catch(() => null);
+    const context =
+      enriched
+      && enriched.workspaceId === verified.context.workspaceId
+      && enriched.workspaceMemberId === verified.context.workspaceMemberId
+        ? enriched
+        : verified.context;
     const body: WorkspaceContextResponse = { context };
     res.json(body);
   });
 
-  // Collab realtime hop-2: workspace-scoped invalidation SSE. Carries thin
+  // Collab realtime hop-2: workspace-scoped invalidation SSE. Browser-owned
+  // EventSource cannot send custom headers, so it carries the exact
+  // Workspace/member pair in the navigation query. The pair is promoted to
+  // the normal request-header shape, freshly directory-verified, then used
+  // only to select the sink partition; authority-bearing role/lifecycle bits
+  // always come from the verified directory context.
+  //
+  // Carries thin
   // `WorkspaceInvalidationSsePayload` signals (`team-projects-changed`,
   // `members-changed`, `workspace-context-changed`, `billing-changed`); the web
   // re-fetches the affected resource on receipt. Modeled on the project events
@@ -278,21 +353,46 @@ export function registerCollabContextRoutes(app: Express, deps: RegisterCollabCo
   // client's reconnect snapshot re-fetch, not a server-side replay.
   const { createSseResponse, workspaceEventSinks } = deps;
   if (createSseResponse && workspaceEventSinks) {
-    app.get('/api/workspace/events', (_req, res) => {
+    app.get('/api/workspace/events', async (req, res) => {
+      const scopedRequest = requestWithWorkspaceNavigationScope(req);
+      if (scopedRequest === 'conflict') {
+        res.status(400).json({
+          error: 'WORKSPACE_CONTEXT_CONFLICT',
+          message: 'workspace header and navigation scope must match',
+        });
+        return;
+      }
+      const verified = await verifyWorkspaceRequestContext({
+        req: scopedRequest,
+        fetchWorkspaceDirectory,
+      });
+      if (!verified.ok) {
+        sendWorkspaceVerificationFailure(res, verified);
+        return;
+      }
+      const workspaceId = verified.context.workspaceId;
       const sse = createSseResponse(res);
-      const sink = (payload: unknown) => {
+      const sink: WorkspaceEventSink = (payload) => {
         const type =
           payload && typeof payload === 'object' && 'type' in payload
             ? String((payload as { type: unknown }).type)
             : 'message';
         sse.send(type, payload);
       };
-      workspaceEventSinks.add(sink);
+      let workspaceSinks = workspaceEventSinks.get(workspaceId);
+      if (!workspaceSinks) {
+        workspaceSinks = new Set();
+        workspaceEventSinks.set(workspaceId, workspaceSinks);
+      }
+      workspaceSinks.add(sink);
       // Handshake so the client treats the stream as live and resets its
       // reconnect backoff immediately (mirrors the project stream's `ready`).
       sse.send('ready', { at: Date.now() });
       const cleanup = () => {
-        workspaceEventSinks.delete(sink);
+        workspaceSinks?.delete(sink);
+        if (workspaceSinks?.size === 0) {
+          workspaceEventSinks.delete(workspaceId);
+        }
       };
       res.on('close', cleanup);
       res.on('finish', cleanup);
@@ -300,30 +400,47 @@ export function registerCollabContextRoutes(app: Express, deps: RegisterCollabCo
   }
 
   app.get('/api/workspace/directory', async (req, res) => {
-    const authorization = req.header('authorization') ?? undefined;
-    const [items, context] = await Promise.all([
-      listWorkspaceDirectory().catch(() => []),
-      workspaceContext.current({ authorization }).catch(() => null),
-    ]);
-    const activeWorkspaceId =
-      deps.activeWorkspace?.get() ??
-      context?.workspaceId ??
-      items.find((item) => item.workspaceType === 'team')?.workspaceId ??
-      items[0]?.workspaceId ??
-      null;
+    const directory = await fetchWorkspaceDirectory().catch(
+      (): WorkspaceDirectoryFetchResult => ({ ok: false, items: [] }),
+    );
+    if (!directory.ok) {
+      return res.status(503).json({
+        error: 'WORKSPACE_AUTHORITY_UNAVAILABLE',
+        message: 'workspace membership authority is temporarily unavailable',
+        retryable: true,
+      });
+    }
+    const items = directory.items;
+    const claimed = await verifyWorkspaceRequestContext({
+      req,
+      fetchWorkspaceDirectory: async () => directory,
+    });
+    const activeWorkspaceId = claimed.ok ? claimed.context.workspaceId : null;
     const body: WorkspaceDirectoryResponse = { items, activeWorkspaceId };
     res.json(body);
   });
 
   app.put('/api/workspace/active', async (req, res) => {
-    if (!deps.activeWorkspace) {
-      return res.status(404).json({ error: 'workspace selection is not available' });
-    }
-    const raw = req.body as { workspaceId?: unknown } | null;
+    const raw = req.body as { workspaceId?: unknown; workspaceMemberId?: unknown } | null;
     const workspaceId = typeof raw?.workspaceId === 'string' ? raw.workspaceId.trim() : '';
+    const workspaceMemberId =
+      typeof raw?.workspaceMemberId === 'string' ? raw.workspaceMemberId.trim() : '';
     if (!workspaceId) return res.status(400).json({ error: 'missing_workspace_id' });
+    if (!workspaceMemberId) {
+      return res.status(400).json({ error: 'missing_workspace_member_id' });
+    }
 
-    const directory = await listWorkspaceDirectory().catch(() => []);
+    const directoryResult = await fetchWorkspaceDirectory().catch(
+      (): WorkspaceDirectoryFetchResult => ({ ok: false, items: [] }),
+    );
+    if (!directoryResult.ok) {
+      return res.status(503).json({
+        error: 'WORKSPACE_AUTHORITY_UNAVAILABLE',
+        message: 'workspace membership authority is temporarily unavailable',
+        retryable: true,
+      });
+    }
+    const directory = directoryResult.items;
     // A directory row only authorizes a switch while it is a LIVE membership.
     // Matching on the id alone would let a listed-but-removed membership (or a
     // deleted workspace) through, and this entry is also what gets synthesized
@@ -333,6 +450,7 @@ export function registerCollabContextRoutes(app: Express, deps: RegisterCollabCo
     const selected = directory.find(
       (item) =>
         item.workspaceId === workspaceId &&
+        item.workspaceMemberId === workspaceMemberId &&
         item.memberStatus === 'active' &&
         item.lifecycleState !== 'deleted',
     );
@@ -340,60 +458,35 @@ export function registerCollabContextRoutes(app: Express, deps: RegisterCollabCo
       return res.status(404).json({ error: 'workspace_not_visible' });
     }
 
-    // Choosing a workspace is a LOCAL decision, and this daemon's pin is the
-    // only thing that decides which workspace it operates in. The membership
-    // directory above is the authorization: it answered, and it lists the
-    // caller as holding this workspace. Nothing about that fact lives on the
-    // backend, so there is nothing here that can be "rejected" — the switch
-    // cannot fail once the directory confirms it.
+    // Choosing a workspace is tab-local. The membership directory above is the
+    // authorization; neither this compatibility endpoint nor any data-plane
+    // route writes a daemon-global active Workspace.
     //
     // This used to PUT B's account-level active workspace first and fail the
     // user's click (502) when that write did not take. That row is keyed by app
     // user, so it can only ever name ONE workspace for an account whose clients
     // are in different ones: every switch yanked the other clients' server-side
-    // scope, and the client that did not write it last was answered for someone
-    // else's workspace. Workspace now travels per request on
-    // `x-vela-workspace-id` instead (see `fetchCurrent`), which is what makes
-    // N clients of one account independent.
+    // scope. Workspace now travels per request, which is what makes N tabs and
+    // clients of one account independent.
     const authorization = req.header('authorization') ?? undefined;
-    await deps.activeWorkspace.set(workspaceId);
-    const context = await workspaceContext.current({ authorization }).catch(() => null);
-
-    // `current()` is NOT a passive read. The vela provider's
-    // `resolvePinnedWorkspace` does its own FRESH directory lookup, and when
-    // that confirms the pinned workspace is gone (membership removed, workspace
-    // deleted) it clears the pin and re-pins a recovery workspace so a removed
-    // member is not left signed out of everything. The directory read above can
-    // meanwhile have been served from its 5s cache and still list the workspace.
-    //
-    // So the pin — re-read here, after `current()` has had its chance to move
-    // it — is the only thing that can say which workspace this daemon actually
-    // ended up on. Trusting the pre-call snapshot instead would let this route
-    // answer 200 naming a workspace the pin no longer holds: the UI would show
-    // the switch succeeding and then snap back on the next context poll.
-    const pinnedAfterRead = deps.activeWorkspace.get();
-    if (pinnedAfterRead !== workspaceId) {
-      // The provider confirmed the requested workspace is not available to this
-      // member and recovered elsewhere. Report that the requested switch did not
-      // happen, and leave its recovery pin alone — undoing it would restore the
-      // very "signed out of every workspace" state it exists to prevent. The web
-      // picks the recovery workspace up from its next context read.
+    const context = typeof workspaceContext.resolveExact === 'function'
+      ? await workspaceContext.resolveExact!({
+          authorization,
+          workspaceId,
+        }).catch(() => null)
+      : null;
+    if (
+      context
+      && (
+        context.workspaceId !== workspaceId
+        || context.workspaceMemberId !== workspaceMemberId
+      )
+    ) {
       return res.status(404).json({ error: 'workspace_no_longer_available' });
     }
-
-    // The pin held. A context read that failed, or that still describes the old
-    // workspace, is an unconfirmed READ — never evidence that the switch was
-    // wrong. Answer from the directory entry already validated above rather than
-    // reverting a choice the user made and the directory allowed. The billing
-    // plane is thinner on that synthesis (no plan id, no seat counts), which the
-    // web closes out on its next context poll.
-    const resolved =
-      context && context.workspaceId === workspaceId
-        ? context
-        : workspaceContextFromDirectoryItem(selected);
-    // Warm the now-cold workspace-scoped caches before responding to the
-    // browser, but never await them — a slow upstream must not delay the
-    // switch, and a failed warm just leaves the old cold-read behavior.
+    const resolved = context ?? workspaceContextFromDirectoryItem(selected);
+    // Warm this exact workspace's cold caches before responding, but never
+    // await them — a slow upstream must not delay the tab-local selection.
     deps.onWorkspaceSwitched?.(workspaceId);
     const body: WorkspaceActiveResponse = { activeWorkspaceId: workspaceId, context: resolved };
     res.json(body);
@@ -404,10 +497,22 @@ export function registerCollabContextRoutes(app: Express, deps: RegisterCollabCo
   // member whose own /api/projects list is empty still sees the owner's shared
   // projects to pull + open. Empty off-team / hub-unconfigured; a transient hub
   // error also degrades to [] so a hub outage never blanks the view with a 500.
-  app.get('/api/workspace/projects/team', async (_req, res) => {
+  app.get('/api/workspace/projects/team', async (req, res) => {
+    const verified = await verifyWorkspaceRequestContext({
+      req,
+      fetchWorkspaceDirectory,
+      requireTeam: true,
+    });
+    if (!verified.ok) {
+      return res.status(verified.status).json({
+        error: verified.code,
+        message: verified.message,
+        ...(verified.retryable ? { retryable: true } : {}),
+      });
+    }
     let projects: TeamProject[] = [];
     try {
-      projects = await listTeamProjects();
+      projects = await listTeamProjects(verified.context);
     } catch {
       projects = [];
     }
@@ -419,10 +524,16 @@ export function registerCollabContextRoutes(app: Express, deps: RegisterCollabCo
   // "琼羽 · Owner") and the shared-project owner name from this. Read from the
   // collab-cloud directory; empty off-team / hub-unconfigured, and a directory
   // outage degrades to [] rather than a 500. STUB: stands in for B's roster.
-  app.get('/api/workspace/members', async (_req, res) => {
+  app.get('/api/workspace/members', async (req, res) => {
+    const verified = await verifyWorkspaceRequestContext({
+      req,
+      fetchWorkspaceDirectory,
+      requireTeam: true,
+    });
+    if (!verified.ok) return sendWorkspaceVerificationFailure(res, verified);
     let members: CollabCloudMemberDirectoryEntry[] = [];
     try {
-      members = await listMembers();
+      members = await listMembers(verified.context);
     } catch {
       members = [];
     }
@@ -662,21 +773,27 @@ export function registerCollabContextRoutes(app: Express, deps: RegisterCollabCo
   });
 
   app.get('/api/workspace/billing/catalog', async (req, res) => {
-    const authorization = req.header('authorization') ?? undefined;
-    const context = await workspaceContext.current({ authorization });
-    const workspaceId = context?.workspaceId?.trim() ?? '';
-    const catalog = workspaceId ? await fetchBillingCatalog(workspaceId) : null;
+    const verified = await verifyWorkspaceRequestContext({
+      req,
+      fetchWorkspaceDirectory,
+      requireTeam: true,
+    });
+    if (!verified.ok) return sendWorkspaceVerificationFailure(res, verified);
+    const catalog = await fetchBillingCatalog(verified.context.workspaceId);
     const body: WorkspaceBillingCatalogResponse = { catalog };
-    res.json(body);
+    return res.json(body);
   });
 
   // Compatibility checkout route. The current product UI opens Vela Web for
   // upgrade/payment, but keeping this endpoint avoids breaking existing tests
   // and lets A's CLI checkout path be exercised directly when needed.
   app.post('/api/workspace/billing/checkout', async (req, res) => {
-    const authorization = req.header('authorization') ?? undefined;
-    const context = await workspaceContext.current({ authorization });
-    const workspaceId = context?.workspaceId?.trim() ?? '';
+    const verified = await verifyWorkspaceRequestContext({
+      req,
+      fetchWorkspaceDirectory,
+      requireTeam: true,
+    });
+    if (!verified.ok) return sendWorkspaceVerificationFailure(res, verified);
     const body = (req.body ?? {}) as { planId?: unknown; seats?: unknown };
     const planId = parseTeamBillingPlanId(body.planId);
     const seats = typeof body.seats === 'number' && body.seats > 0 ? Math.floor(body.seats) : undefined;
@@ -684,7 +801,7 @@ export function registerCollabContextRoutes(app: Express, deps: RegisterCollabCo
       workspaceId?: string;
       planId?: WorkspaceTeamBillingPlanId;
       seats?: number;
-    } = { workspaceId };
+    } = { workspaceId: verified.context.workspaceId };
     if (planId) checkoutInput.planId = planId;
     if (seats !== undefined) checkoutInput.seats = seats;
     const checkoutUrl = await startCheckout(checkoutInput);

@@ -16,6 +16,7 @@ interface CapturedRequest {
   method: string;
   url: string;
   body: string;
+  headers: http.IncomingHttpHeaders;
 }
 
 interface StubServer {
@@ -41,7 +42,12 @@ async function startCollabStubServer(): Promise<StubServer> {
       raw += chunk;
     });
     req.on('end', () => {
-      requests.push({ method: req.method ?? '', url: req.url ?? '', body: raw });
+      requests.push({
+        method: req.method ?? '',
+        url: req.url ?? '',
+        body: raw,
+        headers: req.headers,
+      });
       res.setHeader('content-type', 'application/json');
       const { method, url } = { method: req.method ?? '', url: req.url ?? '' };
       if (method === 'GET' && url === '/api/projects/p1/presence') {
@@ -109,19 +115,28 @@ async function runCli(args: string[]): Promise<{ stdout: string; stderr: string;
 describe('od collab CLI', () => {
   it('lists the present member set as JSON', async () => {
     stub = await startCollabStubServer();
-    const result = await runCli(['collab', 'presence', 'p1', '--json', '--daemon-url', stub.baseUrl]);
+    const result = await runCli([
+      'collab', 'presence', 'p1',
+      '--workspace', 'team-1', '--workspace-member', 'm-42',
+      '--json', '--daemon-url', stub.baseUrl,
+    ]);
     expect(result.code).toBe(0);
     expect(JSON.parse(result.stdout)).toEqual({
       present: [{ memberId: 'm-42', name: 'Ma Shu', role: 'member' }],
     });
     expect(stub.requests).toHaveLength(1);
     expect(stub.requests[0]).toMatchObject({ method: 'GET', url: '/api/projects/p1/presence' });
+    expect(stub.requests[0]?.headers).toMatchObject({
+      'x-od-workspace-id': 'team-1',
+      'x-od-workspace-member-id': 'm-42',
+    });
   });
 
   it('sends a heartbeat with the member identity in the body', async () => {
     stub = await startCollabStubServer();
     const result = await runCli([
       'collab', 'heartbeat', 'p1',
+      '--workspace', 'team-1', '--workspace-member', 'm-42',
       '--member', 'm-42', '--name', 'Ma Shu', '--role', 'member',
       '--daemon-url', stub.baseUrl,
     ]);
@@ -133,11 +148,19 @@ describe('od collab CLI', () => {
 
   it('requests a publish and prints the published version', async () => {
     stub = await startCollabStubServer();
-    const publish = await runCli(['collab', 'publish', 'p1', '--json', '--daemon-url', stub.baseUrl]);
+    const publish = await runCli([
+      'collab', 'publish', 'p1',
+      '--workspace', 'team-1', '--workspace-member', 'm-42',
+      '--json', '--daemon-url', stub.baseUrl,
+    ]);
     expect(publish.code).toBe(0);
     expect(JSON.parse(publish.stdout)).toEqual({ ok: true });
 
-    const status = await runCli(['collab', 'status', 'p1', '--daemon-url', stub.baseUrl]);
+    const status = await runCli([
+      'collab', 'status', 'p1',
+      '--workspace', 'team-1', '--workspace-member', 'm-42',
+      '--daemon-url', stub.baseUrl,
+    ]);
     expect(status.code).toBe(0);
     expect(status.stdout).toContain('publishedVersion\t7');
     expect(status.stdout).toContain('materializedVersion\t6');
@@ -145,11 +168,49 @@ describe('od collab CLI', () => {
       'POST /api/projects/p1/collab/publish',
       'GET /api/projects/p1/collab/status',
     ]);
+    for (const request of stub.requests) {
+      expect(request?.headers).toMatchObject({
+        'x-od-workspace-id': 'team-1',
+        'x-od-workspace-member-id': 'm-42',
+      });
+    }
+  });
+
+  it('pulls through the explicitly scoped project route', async () => {
+    stub = await startCollabStubServer();
+
+    const result = await runCli([
+      'collab',
+      'pull',
+      'p1',
+      '--workspace',
+      'team-1',
+      '--workspace-member',
+      'm-42',
+      '--json',
+      '--daemon-url',
+      stub.baseUrl,
+    ]);
+
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual({ ok: true, version: 3 });
+    expect(stub.requests.map((request) =>
+      `${request.method} ${request.url}`)).toEqual([
+      'POST /api/projects/p1/collab/pull',
+    ]);
+    expect(stub.requests[0]?.headers).toMatchObject({
+      'x-od-workspace-id': 'team-1',
+      'x-od-workspace-member-id': 'm-42',
+    });
   });
 
   it('sends the visibility-to-sync team-share intent and reports the sync state', async () => {
     stub = await startCollabStubServer();
-    const share = await runCli(['collab', 'share', 'p1', '--json', '--daemon-url', stub.baseUrl]);
+    const share = await runCli([
+      'collab', 'share', 'p1',
+      '--workspace', 'team-1', '--workspace-member', 'm-42',
+      '--json', '--daemon-url', stub.baseUrl,
+    ]);
     expect(share.code).toBe(0);
     expect(JSON.parse(share.stdout)).toEqual({ ok: true, syncState: 'pending_upload' });
     expect(stub.requests).toHaveLength(1);
@@ -162,16 +223,34 @@ describe('od collab CLI', () => {
 
   it('surfaces the sync state in status output', async () => {
     stub = await startCollabStubServer();
-    const status = await runCli(['collab', 'status', 'p1', '--daemon-url', stub.baseUrl]);
+    const status = await runCli([
+      'collab', 'status', 'p1',
+      '--workspace', 'team-1', '--workspace-member', 'm-42',
+      '--daemon-url', stub.baseUrl,
+    ]);
     expect(status.code).toBe(0);
     expect(status.stdout).toContain('synced');
   });
 
   it('rejects a heartbeat with no --member', async () => {
     stub = await startCollabStubServer();
-    const result = await runCli(['collab', 'heartbeat', 'p1', '--daemon-url', stub.baseUrl]);
+    const result = await runCli([
+      'collab', 'heartbeat', 'p1',
+      '--workspace', 'team-1', '--workspace-member', 'm-42',
+      '--daemon-url', stub.baseUrl,
+    ]);
     expect(result.code).toBe(2);
     expect(result.stderr).toContain('--member');
+    expect(stub.requests).toHaveLength(0);
+  });
+
+  it('rejects project collaboration without explicit workspace identity', async () => {
+    stub = await startCollabStubServer();
+    const result = await runCli([
+      'collab', 'status', 'p1', '--daemon-url', stub.baseUrl,
+    ]);
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain('--workspace <id> and --workspace-member <id>');
     expect(stub.requests).toHaveLength(0);
   });
 });

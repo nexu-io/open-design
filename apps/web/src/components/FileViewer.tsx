@@ -18,7 +18,12 @@ import {
   type ProjectFileVersion,
   type SocialShareRequest,
   type SocialShareResponse,
+  type WorkspaceCollabContext,
 } from '@open-design/contracts';
+import {
+  appendResourceQuery,
+  workspaceProjectHeaders,
+} from '../collab/workspace-identity';
 import {
   anonymizeArtifactId,
   artifactKindToTracking,
@@ -63,7 +68,6 @@ import { useDismissOnOutsideInteraction } from '../hooks/useDismissOnOutsideInte
 import {
   notifyTeamProjectsChanged,
   TEAM_PROJECTS_CHANGED_EVENT,
-  useWorkspaceContext,
 } from '../collab/useWorkspaceContext';
 import {
   canPublishPublicFile,
@@ -832,9 +836,19 @@ async function highlightMarkdownCodeBlocks(html: string): Promise<string> {
   return changed ? root.innerHTML : html;
 }
 
-function rewriteMarkdownImageSources(html: string, projectId: string, markdownPath: string): string {
+function rewriteMarkdownImageSources(
+  html: string,
+  projectId: string,
+  markdownPath: string,
+  workspaceContext?: WorkspaceCollabContext | null,
+): string {
   return html.replace(/<img\b([^>]*?)\bsrc="([^"]*)"([^>]*)>/g, (match, before: string, src: string, after: string) => {
-    const resolved = markdownImageSourceUrl(projectId, markdownPath, decodeHtmlAttribute(src));
+    const resolved = markdownImageSourceUrl(
+      projectId,
+      markdownPath,
+      decodeHtmlAttribute(src),
+      workspaceContext,
+    );
     if (!resolved) return match;
     const attrs = `${before}${after}`;
     const loadingAttr = /\sloading=/.test(attrs) ? '' : ' loading="lazy"';
@@ -842,14 +856,21 @@ function rewriteMarkdownImageSources(html: string, projectId: string, markdownPa
   });
 }
 
-export function markdownImageSourceUrl(projectId: string, markdownPath: string, src: string): string | null {
+export function markdownImageSourceUrl(
+  projectId: string,
+  markdownPath: string,
+  src: string,
+  workspaceContext?: WorkspaceCollabContext | null,
+): string | null {
   const trimmed = src.trim();
   if (!trimmed) return null;
   if (ABSOLUTE_MARKDOWN_IMAGE_SOURCE_RE.test(trimmed)) return trimmed;
   const relativePath = trimmed.startsWith('/')
     ? normalizeMarkdownProjectPath(trimmed.slice(1))
     : normalizeMarkdownProjectPath(`${markdownDirectory(markdownPath)}/${trimmed}`);
-  return relativePath ? projectFileUrl(projectId, relativePath) : null;
+  return relativePath
+    ? projectFileUrl(projectId, relativePath, workspaceContext)
+    : null;
 }
 
 function markdownDirectory(path: string): string {
@@ -1670,6 +1691,7 @@ export function LiveArtifactViewer({
   onRefreshArtifacts?: () => Promise<void> | void;
 }) {
   const t = useT();
+  const { workspaceContext } = useProjectCollabContext();
   const tabs = useMemo(() => liveArtifactViewerTabs(t), [t]);
   const [mode, setMode] = useState<LiveArtifactViewerTab>('preview');
   const [detail, setDetail] = useState<LiveArtifact | null>(null);
@@ -1763,10 +1785,14 @@ export function LiveArtifactViewer({
           ? `Live artifact created: ${liveArtifactEvent.title}`
           : `Live artifact updated: ${liveArtifactEvent.title}`,
       );
-      void fetchLiveArtifact(projectId, liveArtifact.artifactId).then((next) => {
+      void fetchLiveArtifact(projectId, liveArtifact.artifactId, workspaceContext).then((next) => {
         if (next) setDetail(next);
       });
-      void fetchLiveArtifactRefreshes(projectId, liveArtifact.artifactId).then(setRefreshHistory);
+      void fetchLiveArtifactRefreshes(
+        projectId,
+        liveArtifact.artifactId,
+        workspaceContext,
+      ).then(setRefreshHistory);
       setReloadKey((n) => n + 1);
       continue;
     }
@@ -1788,10 +1814,14 @@ export function LiveArtifactViewer({
           error: liveArtifactEvent.error ?? undefined,
         }),
       );
-      void fetchLiveArtifact(projectId, liveArtifact.artifactId).then((next) => {
+      void fetchLiveArtifact(projectId, liveArtifact.artifactId, workspaceContext).then((next) => {
         if (next) setDetail(next);
       });
-      void fetchLiveArtifactRefreshes(projectId, liveArtifact.artifactId).then(setRefreshHistory);
+      void fetchLiveArtifactRefreshes(
+        projectId,
+        liveArtifact.artifactId,
+        workspaceContext,
+      ).then(setRefreshHistory);
       continue;
     }
 
@@ -1808,34 +1838,45 @@ export function LiveArtifactViewer({
     } else {
       setRefreshError(t('liveArtifact.refresh.noSourceTitle'));
     }
-    void fetchLiveArtifact(projectId, liveArtifact.artifactId).then((next) => {
+    void fetchLiveArtifact(projectId, liveArtifact.artifactId, workspaceContext).then((next) => {
       if (next) setDetail(next);
     });
-    void fetchLiveArtifactRefreshes(projectId, liveArtifact.artifactId).then(setRefreshHistory);
+    void fetchLiveArtifactRefreshes(
+      projectId,
+      liveArtifact.artifactId,
+      workspaceContext,
+    ).then(setRefreshHistory);
     setReloadKey((n) => n + 1);
     }
-  }, [liveArtifactEvents, liveArtifact.artifactId, projectId, t]);
+  }, [liveArtifactEvents, liveArtifact.artifactId, projectId, t, workspaceContext]);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setDetail(null);
-    void fetchLiveArtifact(projectId, liveArtifact.artifactId).then((next) => {
+    void fetchLiveArtifact(projectId, liveArtifact.artifactId, workspaceContext).then((next) => {
       if (cancelled) return;
       setDetail(next);
       setLoading(false);
     });
-    void fetchLiveArtifactRefreshes(projectId, liveArtifact.artifactId).then((next) => {
+    void fetchLiveArtifactRefreshes(
+      projectId,
+      liveArtifact.artifactId,
+      workspaceContext,
+    ).then((next) => {
       if (!cancelled) setRefreshHistory(next);
     });
     return () => {
       cancelled = true;
     };
-  }, [projectId, liveArtifact.artifactId, liveArtifact.updatedAt]);
+  }, [projectId, liveArtifact.artifactId, liveArtifact.updatedAt, workspaceContext]);
 
   const previewUrl = useMemo(
-    () => `${liveArtifactPreviewUrl(projectId, liveArtifact.artifactId)}&v=${reloadKey}`,
-    [projectId, liveArtifact.artifactId, reloadKey],
+    () => appendResourceQuery(
+      liveArtifactPreviewUrl(projectId, liveArtifact.artifactId, 'rendered', workspaceContext),
+      `v=${reloadKey}`,
+    ),
+    [projectId, liveArtifact.artifactId, reloadKey, workspaceContext],
   );
   const previewScale = zoom / 100;
 
@@ -1862,9 +1903,17 @@ export function LiveArtifactViewer({
     setRefreshSuccess(null);
     setRefreshEvents((prev) => appendRefreshEvent(prev, { phase: 'started' }));
     try {
-      const result = await refreshLiveArtifact(projectId, liveArtifact.artifactId);
+      const result = await refreshLiveArtifact(
+        projectId,
+        liveArtifact.artifactId,
+        workspaceContext,
+      );
       setDetail(result.artifact);
-      void fetchLiveArtifactRefreshes(projectId, liveArtifact.artifactId).then(setRefreshHistory);
+      void fetchLiveArtifactRefreshes(
+        projectId,
+        liveArtifact.artifactId,
+        workspaceContext,
+      ).then(setRefreshHistory);
       setReloadKey((n) => n + 1);
       setRefreshEvents((prev) =>
         appendRefreshEvent(prev, {
@@ -1907,7 +1956,11 @@ export function LiveArtifactViewer({
   const presentNewTab = () => {
     setPresentMenuOpen(false);
     if (typeof window === 'undefined') return;
-    window.open(liveArtifactPreviewUrl(projectId, liveArtifact.artifactId), '_blank', 'noopener,noreferrer');
+    window.open(
+      liveArtifactPreviewUrl(projectId, liveArtifact.artifactId, 'rendered', workspaceContext),
+      '_blank',
+      'noopener,noreferrer',
+    );
   };
   useEffect(() => {
     if (!inTabPresent) return;
@@ -2060,7 +2113,12 @@ export function LiveArtifactViewer({
             <span className="viewer-divider" aria-hidden />
             <a
               className="ghost-link"
-              href={liveArtifactPreviewUrl(projectId, liveArtifact.artifactId)}
+              href={liveArtifactPreviewUrl(
+                projectId,
+                liveArtifact.artifactId,
+                'rendered',
+                workspaceContext,
+              )}
               target="_blank"
               rel="noreferrer noopener"
               tabIndex={mode === 'preview' ? 0 : -1}
@@ -2225,6 +2283,7 @@ function LiveArtifactCodePanel({
   reloadKey: number;
 }) {
   const t = useT();
+  const { workspaceContext } = useProjectCollabContext();
   const [variant, setVariant] = useState<LiveArtifactCodeVariant>('template');
   const [code, setCode] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -2235,7 +2294,7 @@ function LiveArtifactCodePanel({
     setLoading(true);
     setFailed(false);
     setCode(null);
-    void fetchLiveArtifactCode(projectId, artifactId, variant).then((next) => {
+    void fetchLiveArtifactCode(projectId, artifactId, variant, workspaceContext).then((next) => {
       if (cancelled) return;
       setCode(next);
       setFailed(next == null);
@@ -2244,7 +2303,7 @@ function LiveArtifactCodePanel({
     return () => {
       cancelled = true;
     };
-  }, [artifactId, projectId, reloadKey, variant]);
+  }, [artifactId, projectId, reloadKey, variant, workspaceContext]);
 
   return (
     <div className="live-artifact-code-panel">
@@ -2840,18 +2899,19 @@ function FileActions({
   file: ProjectFile;
 }) {
   const t = useT();
+  const { workspaceContext } = useProjectCollabContext();
   return (
     <div className="viewer-toolbar-actions">
       <a
         className="ghost-link"
-        href={projectFileUrl(projectId, file.name)}
+        href={projectFileUrl(projectId, file.name, workspaceContext)}
         download={file.name}
       >
         {t('fileViewer.download')}
       </a>
       <a
         className="ghost-link"
-        href={projectFileUrl(projectId, file.name)}
+        href={projectFileUrl(projectId, file.name, workspaceContext)}
         target="_blank"
         rel="noreferrer noopener"
       >
@@ -2911,16 +2971,22 @@ export function fileVersionPreviewOptions(
   projectId: string,
   fileName: string,
   source: string | null | undefined,
+  workspaceContext?: WorkspaceCollabContext | null,
 ) {
   return {
     deck: sourceLooksLikeDeckPreview(source),
-    baseHref: projectRawUrl(projectId, baseDirFor(fileName)),
+    baseHref: projectRawUrl(projectId, baseDirFor(fileName), workspaceContext),
   };
 }
 
-function fileVersionPreviewSrcDoc(projectId: string, fileName: string, source: string) {
+function fileVersionPreviewSrcDoc(
+  projectId: string,
+  fileName: string,
+  source: string,
+  workspaceContext?: WorkspaceCollabContext | null,
+) {
   return buildSrcdoc(source, {
-    ...fileVersionPreviewOptions(projectId, fileName, source),
+    ...fileVersionPreviewOptions(projectId, fileName, source, workspaceContext),
     previewFocusGuard: true,
   });
 }
@@ -3004,7 +3070,7 @@ function FileVersionManagerModal({
 }) {
   const { locale, t } = useI18n();
   const analytics = useAnalytics();
-  const { context: workspaceContext } = useWorkspaceContext();
+  const { workspaceContext } = useProjectCollabContext();
   const tRef = useRef(t);
   const [versions, setVersions] = useState<ProjectFileVersion[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -4097,6 +4163,7 @@ export function CommentSidePanel({
   t: TranslateFn;
   composer?: ReactNode;
 }) {
+  const { workspaceContext } = useProjectCollabContext();
   const [newCommentDraft, setNewCommentDraft] = useState('');
   const [dragState, setDragState] = useState<CommentSideDragState | null>(null);
   // Collab-cloud member directory: turns a comment's authorMemberId into a
@@ -4359,7 +4426,11 @@ export function CommentSidePanel({
               {projectId && comment.attachments && comment.attachments.length > 0 ? (
                 <div className="comment-side-attachments">
                   {comment.attachments.map((attachment) => {
-                    const url = projectRawUrl(projectId, attachment.path);
+                    const url = projectRawUrl(
+                      projectId,
+                      attachment.path,
+                      workspaceContext,
+                    );
                     return (
                       <a
                         key={attachment.path}
@@ -5964,7 +6035,7 @@ function ReactComponentViewer({
   viewerOnly?: boolean;
 }) {
   const t = useT();
-  const { context: workspaceContext } = useWorkspaceContext();
+  const { workspaceContext } = useProjectCollabContext();
   const [mode, setMode] = useState<'preview' | 'source'>('preview');
   const [source, setSource] = useState<string | null>(null);
   const [srcDoc, setSrcDoc] = useState('');
@@ -5999,13 +6070,13 @@ function ReactComponentViewer({
   useEffect(() => {
     setSource(null);
     let cancelled = false;
-    void fetchProjectFileText(projectId, file.name).then((text) => {
+    void fetchProjectFileText(projectId, file.name, { workspaceContext }).then((text) => {
       if (!cancelled) setSource(text ?? '');
     });
     return () => {
       cancelled = true;
     };
-  }, [projectId, file.name, file.mtime, reloadKey]);
+  }, [projectId, file.name, file.mtime, reloadKey, workspaceContext]);
 
   // Detect whether this .jsx/.tsx is a module loaded by a sibling HTML entry.
   // Runs before any srcdoc is built so a module never flashes the raw
@@ -6015,14 +6086,16 @@ function ReactComponentViewer({
     let cancelled = false;
     void (async () => {
       try {
-        const files = await fetchProjectFiles(projectId);
+        const files = await fetchProjectFiles(projectId, { workspaceContext });
         const htmlNames = files
           .filter((entry) => /\.html?$/i.test(entry.name))
           .map((entry) => entry.name);
         const htmlSources = new Map<string, string>();
         await Promise.all(
           htmlNames.map(async (name) => {
-            const text = await fetchProjectFileText(projectId, name).catch(() => null);
+            const text = await fetchProjectFileText(projectId, name, {
+              workspaceContext,
+            }).catch(() => null);
             if (text != null) htmlSources.set(name, text);
           }),
         );
@@ -6035,7 +6108,7 @@ function ReactComponentViewer({
     return () => {
       cancelled = true;
     };
-  }, [projectId, file.name, file.mtime, reloadKey]);
+  }, [projectId, file.name, file.mtime, reloadKey, workspaceContext]);
 
   useEffect(() => {
     if (!shareMenuOpen) return;
@@ -6066,7 +6139,7 @@ function ReactComponentViewer({
 
   useEffect(() => {
     let cancelled = false;
-    const refreshShareAccess = () => void projectIsSharedWithWorkspace(projectId).then((shared) => {
+    const refreshShareAccess = () => void projectIsSharedWithWorkspace(projectId, workspaceContext).then((shared) => {
       if (!cancelled) setShareAccess(shared ? 'workspace' : 'private');
     });
     refreshShareAccess();
@@ -6075,7 +6148,7 @@ function ReactComponentViewer({
       cancelled = true;
       window.removeEventListener(TEAM_PROJECTS_CHANGED_EVENT, refreshShareAccess);
     };
-  }, [projectId, shareMenuOpen]);
+  }, [projectId, shareMenuOpen, workspaceContext]);
 
   // Collapse the nested workspace-access listbox whenever the share popover
   // itself closes, so it never re-opens mid-flight.
@@ -6657,6 +6730,7 @@ function DocumentPreviewViewer({
   file: ProjectFile;
 }) {
   const t = useT();
+  const { workspaceContext } = useProjectCollabContext();
   const [preview, setPreview] = useState<ProjectFilePreview | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -6664,7 +6738,7 @@ function DocumentPreviewViewer({
     let cancelled = false;
     setLoading(true);
     setPreview(null);
-    void fetchProjectFilePreview(projectId, file.name).then((next) => {
+    void fetchProjectFilePreview(projectId, file.name, workspaceContext).then((next) => {
       if (!cancelled) {
         setPreview(next);
         setLoading(false);
@@ -6673,7 +6747,7 @@ function DocumentPreviewViewer({
     return () => {
       cancelled = true;
     };
-  }, [projectId, file.name, file.mtime]);
+  }, [projectId, file.name, file.mtime, workspaceContext]);
 
   return (
     <div className="viewer document-viewer">
@@ -6774,9 +6848,10 @@ function HtmlViewer({
 }) {
   const { locale, t } = useI18n();
   const {
-    context: workspaceContext,
-    loading: workspaceContextLoading,
-  } = useWorkspaceContext();
+    workspaceContext,
+    workspaceContextLoading,
+  } = useProjectCollabContext();
+  const workspaceContextIdentityChangePending = false;
   const sourceAuthorizationScopeKey = workspaceContextLoading
     ? null
     : workspaceContext
@@ -7187,7 +7262,7 @@ function HtmlViewer({
 
   useEffect(() => {
     let cancelled = false;
-    const refreshShareAccess = () => void projectIsSharedWithWorkspace(projectId).then((shared) => {
+    const refreshShareAccess = () => void projectIsSharedWithWorkspace(projectId, workspaceContext).then((shared) => {
       if (!cancelled) setShareAccess(shared ? 'workspace' : 'private');
     });
     refreshShareAccess();
@@ -7196,7 +7271,7 @@ function HtmlViewer({
       cancelled = true;
       window.removeEventListener(TEAM_PROJECTS_CHANGED_EVENT, refreshShareAccess);
     };
-  }, [projectId, deployMenuOpen]);
+  }, [projectId, deployMenuOpen, workspaceContext]);
 
   // Collapse the nested workspace-access listbox whenever the unified share
   // popover itself closes, so it never re-opens mid-flight.
@@ -7994,7 +8069,7 @@ function HtmlViewer({
   ) {
     const requestSeq = ++deployProviderLoadSeqRef.current;
     setDeployProviderId(providerId);
-    const deployments = await fetchProjectDeployments(projectId);
+    const deployments = await fetchProjectDeployments(projectId, workspaceContext);
     const nextDeploymentsByProvider = deploymentMapForCurrentFile(deployments);
     const exactDeployment = nextDeploymentsByProvider[providerId] ?? null;
     const fallbackDeployment = options?.fallbackToExisting
@@ -8163,12 +8238,14 @@ function HtmlViewer({
       ? fetchProjectFileTextPreview(projectId, file.name, {
           limit: HTML_ROUTING_TEXT_PREVIEW_LIMIT,
           cacheBustKey,
+          workspaceContext,
         }).then(async (preview) => {
           const previewText = preview?.text ?? null;
           if (previewTextNeedsFullSourceForSafeInline(previewText)) {
             const fullText = await fetchProjectFileText(projectId, file.name, {
               cache: 'no-store',
               cacheBustKey,
+              workspaceContext,
             });
             if (fullText !== null) {
               return {
@@ -8187,6 +8264,7 @@ function HtmlViewer({
       : fetchProjectFileText(projectId, file.name, {
           cache: 'no-store',
           cacheBustKey,
+          workspaceContext,
         }).then((text) => ({
         text,
         poweredPreviewRequired: false,
@@ -8279,7 +8357,7 @@ function HtmlViewer({
     setDeployError(null);
     setCopiedDeployLink(null);
     setDeployPhase('idle');
-    void fetchProjectDeployments(projectId).then((items) => {
+    void fetchProjectDeployments(projectId, workspaceContext).then((items) => {
       if (cancelled) return;
       const nextDeploymentsByProvider = deploymentMapForCurrentFile(items);
       const current = nextDeploymentsByProvider[deployProviderId] ?? null;
@@ -8290,7 +8368,7 @@ function HtmlViewer({
     return () => {
       cancelled = true;
     };
-  }, [projectId, file.name, deployProviderId]);
+  }, [projectId, file.name, deployProviderId, workspaceContext]);
 
   const routingHtmlSource = source ?? routingSource ?? lastGoodSourceForRoutingRef.current;
   const passiveLargeHtmlPreview = shouldDeferPassivePreviewSource && source === null;
@@ -8503,13 +8581,13 @@ function HtmlViewer({
   useEffect(() => {
     let cancelled = false;
     setProjectFilePathSet(null);
-    void fetchProjectFiles(projectId).then((files) => {
+    void fetchProjectFiles(projectId, { workspaceContext }).then((files) => {
       if (!cancelled) setProjectFilePathSet(new Set(files.map((entry) => entry.name)));
     });
     return () => {
       cancelled = true;
     };
-  }, [projectId, file.mtime, filesRefreshKey, reloadKey]);
+  }, [projectId, file.mtime, filesRefreshKey, reloadKey, workspaceContext]);
   const projectRootAssetRefs = useMemo(
     () => source != null && htmlHasRootRelativeProjectAssetRefs(source, projectFilePathSet),
     [source, projectFilePathSet],
@@ -8530,7 +8608,15 @@ function HtmlViewer({
       for (const assetPath of assetPaths) {
         if (cancelled) return;
         try {
-          const resp = await fetch(`${projectRawUrl(projectId, assetPath)}?previewAssetCheck=${encodeURIComponent(cacheBust)}`);
+          const resp = await fetch(
+            appendResourceQuery(
+              projectRawUrl(projectId, assetPath, workspaceContext),
+              `previewAssetCheck=${encodeURIComponent(cacheBust)}`,
+            ),
+            workspaceContext
+              ? { headers: workspaceProjectHeaders(workspaceContext) }
+              : undefined,
+          );
           if (cancelled) return;
           if (resp.ok || resp.status === 404) continue;
           const body = await readPreviewAssetResponseBody(resp);
@@ -8560,6 +8646,7 @@ function HtmlViewer({
     projectId,
     reloadKey,
     routingHtmlSource,
+    workspaceContext,
   ]);
   // A real WebGL/Worker/WASM/SharedArrayBuffer artifact needs the "powered
   // preview" path — a cross-origin-isolated iframe with allow-same-origin —
@@ -8594,8 +8681,11 @@ function HtmlViewer({
   };
   const useUrlLoadPreview = shouldUrlLoadHtmlPreview(urlLoadDecision) && !manualEditRequiresSrcDoc;
   const basePreviewSrcUrl = useMemo(
-    () => `${projectRawUrl(projectId, file.name)}?v=${Math.round(file.mtime)}&r=${reloadKey}&${PREVIEW_BRIDGE_QUERY}`,
-    [projectId, file.name, file.mtime, reloadKey],
+    () => appendResourceQuery(
+      projectRawUrl(projectId, file.name, workspaceContext),
+      `v=${Math.round(file.mtime)}&r=${reloadKey}&${PREVIEW_BRIDGE_QUERY}`,
+    ),
+    [projectId, file.name, file.mtime, reloadKey, workspaceContext],
   );
   const [previewSrcUrl, setPreviewSrcUrl] = useState(basePreviewSrcUrl);
   // Hold the iframe URL still (it carries file.mtime) while the user is mid
@@ -8772,7 +8862,13 @@ function HtmlViewer({
     if (projectRootAssetRefs && projectFilePathSet === null) return;
     if (!hasRelativeAssetRefs(source) && !projectRootAssetRefs) return;
     let cancelled = false;
-    void inlineRelativeAssets(source, projectId, file.name, projectFilePathSet).then((next) => {
+    void inlineRelativeAssets(
+      source,
+      projectId,
+      file.name,
+      projectFilePathSet,
+      workspaceContext,
+    ).then((next) => {
       if (!cancelled) setInlinedSource(next);
     });
     return () => {
@@ -8787,12 +8883,13 @@ function HtmlViewer({
     useUrlLoadPreview,
     projectRootAssetRefs,
     projectFilePathSet,
+    workspaceContext,
   ]);
 
   const srcDoc = useMemo(
     () => (previewSource ? buildSrcdoc(previewSource, {
       deck: effectiveDeck,
-      baseHref: projectRawUrl(projectId, baseDirFor(file.name)),
+      baseHref: projectRawUrl(projectId, baseDirFor(file.name), workspaceContext),
       initialSlideIndex: htmlPreviewSlideState.get(previewStateKey)?.active ?? 0,
       hideDeckChrome: effectiveDeck,
       selectionBridge: true,
@@ -8812,7 +8909,15 @@ function HtmlViewer({
       // even when the fetched HTML bytes are identical (issue #4650).
       reloadKey,
     }) : ''),
-    [previewSource, effectiveDeck, projectId, file.name, previewStateKey, reloadKey],
+    [
+      previewSource,
+      effectiveDeck,
+      projectId,
+      file.name,
+      previewStateKey,
+      reloadKey,
+      workspaceContext,
+    ],
   );
   // Only materialized while the in-tab presentation overlay is up — building
   // it eagerly would re-run buildSrcdoc on every source edit for a document
@@ -8820,13 +8925,21 @@ function HtmlViewer({
   const presentationSrcDoc = useMemo(
     () => (deckVisualSource && inTabPresent ? buildSrcdoc(deckVisualSource, {
       deck: effectiveDeck,
-      baseHref: projectRawUrl(projectId, baseDirFor(file.name)),
+      baseHref: projectRawUrl(projectId, baseDirFor(file.name), workspaceContext),
       initialSlideIndex: htmlPreviewSlideState.get(previewStateKey)?.active ?? 0,
       hideDeckChrome: effectiveDeck,
       deckClickNavigation: effectiveDeck,
       previewFocusGuard: true,
     }) : ''),
-    [deckVisualSource, inTabPresent, effectiveDeck, projectId, file.name, previewStateKey],
+    [
+      deckVisualSource,
+      inTabPresent,
+      effectiveDeck,
+      projectId,
+      file.name,
+      previewStateKey,
+      workspaceContext,
+    ],
   );
   // Per-slide thumbnail documents are built lazily by DeckThumbnailRail, one
   // slide at a time and only for thumbnails near the rail viewport. This
@@ -8837,7 +8950,7 @@ function HtmlViewer({
   const buildDeckThumbnailSrcDoc = useCallback(
     (index: number) => buildSrcdoc(deckVisualSource ?? '', {
       deck: true,
-      baseHref: projectRawUrl(projectId, baseDirFor(file.name)),
+      baseHref: projectRawUrl(projectId, baseDirFor(file.name), workspaceContext),
       initialSlideIndex: index,
       hideDeckChrome: true,
       previewFocusGuard: true,
@@ -8853,7 +8966,10 @@ function HtmlViewer({
   // fallback via `parsedDeck = null`.
   const parsedDeckThumbnails = useMemo(() => {
     if (!effectiveDeck || !deckVisualSource) return null;
-    const parsed = parseDeckThumbnails(deckVisualSource, projectRawUrl(projectId, baseDirFor(file.name)));
+    const parsed = parseDeckThumbnails(
+      deckVisualSource,
+      projectRawUrl(projectId, baseDirFor(file.name), workspaceContext),
+    );
     return parsed.renderable ? parsed : null;
   }, [effectiveDeck, deckVisualSource, projectId, file.name]);
   // Stable thunk so HtmlViewer's frequent re-renders (slide state, streaming
@@ -10183,6 +10299,7 @@ function HtmlViewer({
     const persisted = await fetchProjectFileText(projectId, file.name, {
       cache: 'no-store',
       cacheBustKey: Date.now(),
+      workspaceContext,
     });
     if (persisted == null || persisted === expectedSource) return true;
     setSource(persisted);
@@ -10431,7 +10548,7 @@ function HtmlViewer({
     const count = Math.max(deckSlideCount, speakerNotes.length, 1);
     const presenterPreviewHtmlBySlide = Array.from({ length: count }, (_, index) => buildSrcdoc(deckVisualSource, {
       deck: true,
-      baseHref: projectRawUrl(projectId, baseDirFor(file.name)),
+      baseHref: projectRawUrl(projectId, baseDirFor(file.name), workspaceContext),
       initialSlideIndex: index,
       hideDeckChrome: true,
       previewFocusGuard: true,
@@ -10849,7 +10966,7 @@ function HtmlViewer({
     if (!source) return;
     openSandboxedPreviewInNewTab(source, exportTitle, {
       deck: effectiveDeck,
-      baseHref: projectRawUrl(projectId, baseDirFor(file.name)),
+      baseHref: projectRawUrl(projectId, baseDirFor(file.name), workspaceContext),
       initialSlideIndex: htmlPreviewSlideState.get(previewStateKey)?.active ?? 0,
       hideDeckChrome: effectiveDeck,
       deckClickNavigation: effectiveDeck,
@@ -11112,6 +11229,7 @@ function HtmlViewer({
         deployProviderId,
         cloudflarePagesSelection,
         deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? deployTarget : undefined,
+        workspaceContext,
       );
       setDeploymentsByProvider((current) => ({
         ...current,
@@ -11160,7 +11278,7 @@ function HtmlViewer({
     setDeployError(null);
     setDeployPhase('preparing-link');
     try {
-      const next = await checkDeploymentLink(projectId, current.id);
+      const next = await checkDeploymentLink(projectId, current.id, workspaceContext);
       setDeploymentsByProvider((items) => ({
         ...items,
         [next.providerId]: next,
@@ -12576,8 +12694,10 @@ function HtmlViewer({
   // on a personal workspace and on an unshared project, i.e. exactly the cases
   // where a comment lost its avatar and name.
   const commentAuthorSelf = useMemo(
-    () => currentUserDirectoryEntry(workspaceContext),
-    [workspaceContext],
+    () => currentUserDirectoryEntry(
+      workspaceContextIdentityChangePending ? null : workspaceContext,
+    ),
+    [workspaceContext, workspaceContextIdentityChangePending],
   );
   const commentComposerPortalMetrics = (() => {
     if (!commentComposerHost || !commentPreviewCanvasNode) return null;
@@ -12618,7 +12738,7 @@ function HtmlViewer({
       images={boardImagePreviews}
       existingImages={
         activeComposerAttachments.map((attachment) => ({
-          url: projectRawUrl(projectId, attachment.path),
+          url: projectRawUrl(projectId, attachment.path, workspaceContext),
           name: attachment.name,
         }))
       }
@@ -15052,8 +15172,10 @@ async function inlineRelativeAssets(
   projectId: string,
   fileName: string,
   projectFilePaths: ReadonlySet<string> | null = null,
+  workspaceContext?: WorkspaceCollabContext | null,
 ): Promise<string> {
-  const toRawUrl = (projectPath: string) => projectRawUrl(projectId, projectPath);
+  const toRawUrl = (projectPath: string) =>
+    projectRawUrl(projectId, projectPath, workspaceContext);
   // Root-relative project asset refs (confirmed against the real file list)
   // become owner-relative first, so the stylesheet/script inlining below and
   // the srcDoc <base href> rebasing treat them like any other relative ref.
@@ -15068,7 +15190,7 @@ async function inlineRelativeAssets(
     const href = readHtmlAttr(tag, 'href');
     if (!rel || !/\bstylesheet\b/i.test(rel) || !href) continue;
     replacements.push(
-      fetchProjectRelativeText(projectId, fileName, href).then((asset) =>
+      fetchProjectRelativeText(projectId, fileName, href, workspaceContext).then((asset) =>
         asset == null
           ? null
           : {
@@ -15087,7 +15209,7 @@ async function inlineRelativeAssets(
     const src = readHtmlAttr(tag, 'src');
     if (!src) continue;
     replacements.push(
-      fetchProjectRelativeText(projectId, fileName, src).then((asset) => {
+      fetchProjectRelativeText(projectId, fileName, src, workspaceContext).then((asset) => {
         if (asset == null) return null;
         const js = projectFilePaths
           ? rewriteInlinedScriptAssetRefs(asset.text, asset.filePath, projectFilePaths, toRawUrl)
@@ -15115,11 +15237,17 @@ async function fetchProjectRelativeText(
   projectId: string,
   ownerFileName: string,
   assetRef: string,
+  workspaceContext?: WorkspaceCollabContext | null,
 ): Promise<{ filePath: string; text: string } | null> {
   const filePath = resolveProjectRelativePath(ownerFileName, assetRef);
   if (!filePath) return null;
   try {
-    const resp = await fetch(projectRawUrl(projectId, filePath));
+    const resp = await fetch(
+      projectRawUrl(projectId, filePath, workspaceContext),
+      workspaceContext
+        ? { headers: workspaceProjectHeaders(workspaceContext) }
+        : undefined,
+    );
     if (!resp.ok) return null;
     return { filePath, text: await resp.text() };
   } catch {
@@ -15163,7 +15291,11 @@ function ImageViewer({
   file: ProjectFile;
 }) {
   const t = useT();
-  const url = `${projectFileUrl(projectId, file.name)}?v=${Math.round(file.mtime)}`;
+  const { workspaceContext } = useProjectCollabContext();
+  const url = appendResourceQuery(
+    projectFileUrl(projectId, file.name, workspaceContext),
+    `v=${Math.round(file.mtime)}`,
+  );
   return (
     <div className="viewer image-viewer">
       <div className="viewer-toolbar">
@@ -15177,14 +15309,14 @@ function ImageViewer({
         <div className="viewer-toolbar-actions">
           <a
             className="ghost-link"
-            href={projectFileUrl(projectId, file.name)}
+            href={projectFileUrl(projectId, file.name, workspaceContext)}
             download={file.name}
           >
             {t('fileViewer.download')}
           </a>
           <a
             className="ghost-link"
-            href={projectFileUrl(projectId, file.name)}
+            href={projectFileUrl(projectId, file.name, workspaceContext)}
             target="_blank"
             rel="noreferrer noopener"
           >
@@ -15232,7 +15364,11 @@ function VideoViewer({
   file: ProjectFile;
 }) {
   const t = useT();
-  const url = `${projectFileUrl(projectId, file.name)}?v=${Math.round(file.mtime)}`;
+  const { workspaceContext } = useProjectCollabContext();
+  const url = appendResourceQuery(
+    projectFileUrl(projectId, file.name, workspaceContext),
+    `v=${Math.round(file.mtime)}`,
+  );
   return (
     <div className="viewer video-viewer">
       <div className="viewer-toolbar">
@@ -15258,7 +15394,11 @@ function AudioViewer({
   file: ProjectFile;
 }) {
   const t = useT();
-  const url = `${projectFileUrl(projectId, file.name)}?v=${Math.round(file.mtime)}`;
+  const { workspaceContext } = useProjectCollabContext();
+  const url = appendResourceQuery(
+    projectFileUrl(projectId, file.name, workspaceContext),
+    `v=${Math.round(file.mtime)}`,
+  );
   return (
     <div className="viewer audio-viewer">
       <div className="viewer-toolbar">
@@ -15296,12 +15436,16 @@ export function SvgViewer({
   initialSource,
 }: SvgViewerProps) {
   const t = useT();
+  const { workspaceContext } = useProjectCollabContext();
   const [mode, setMode] = useState<SvgViewerMode>(initialMode);
   const [source, setSource] = useState<string | null>(initialSource ?? null);
   const [loadingSource, setLoadingSource] = useState(false);
   const [sourceError, setSourceError] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
-  const url = `${projectFileUrl(projectId, file.name)}?v=${Math.round(file.mtime)}&r=${reloadKey}`;
+  const url = appendResourceQuery(
+    projectFileUrl(projectId, file.name, workspaceContext),
+    `v=${Math.round(file.mtime)}&r=${reloadKey}`,
+  );
 
   useEffect(() => {
     if (mode !== 'source') return;
@@ -15312,6 +15456,7 @@ export function SvgViewer({
     void fetchProjectFileText(projectId, file.name, {
       cache: 'no-store',
       cacheBustKey: `${Math.round(file.mtime)}-${reloadKey}`,
+      workspaceContext,
     }).then((next) => {
       if (cancelled) return;
       if (next === null) {
@@ -15325,7 +15470,15 @@ export function SvgViewer({
     return () => {
       cancelled = true;
     };
-  }, [projectId, file.name, file.mtime, initialSource, mode, reloadKey]);
+  }, [
+    projectId,
+    file.name,
+    file.mtime,
+    initialSource,
+    mode,
+    reloadKey,
+    workspaceContext,
+  ]);
 
   return (
     <div className="viewer svg-viewer">
@@ -15366,14 +15519,14 @@ export function SvgViewer({
           </button>
           <a
             className="ghost-link"
-            href={projectFileUrl(projectId, file.name)}
+            href={projectFileUrl(projectId, file.name, workspaceContext)}
             download={file.name}
           >
             {t('fileViewer.download')}
           </a>
           <a
             className="ghost-link"
-            href={projectFileUrl(projectId, file.name)}
+            href={projectFileUrl(projectId, file.name, workspaceContext)}
             target="_blank"
             rel="noreferrer noopener"
           >
@@ -15412,19 +15565,20 @@ function TextViewer({
   file: ProjectFile;
 }) {
   const t = useT();
+  const { workspaceContext } = useProjectCollabContext();
   const [text, setText] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [copied, setCopied] = useState(false);
   useEffect(() => {
     setText(null);
     let cancelled = false;
-    void fetchProjectFileText(projectId, file.name).then((t) => {
+    void fetchProjectFileText(projectId, file.name, { workspaceContext }).then((t) => {
       if (!cancelled) setText(t ?? '');
     });
     return () => {
       cancelled = true;
     };
-  }, [projectId, file.name, file.mtime, reloadKey]);
+  }, [projectId, file.name, file.mtime, reloadKey, workspaceContext]);
 
   async function copy() {
     if (text == null) return;
@@ -15638,7 +15792,7 @@ function MarkdownViewer({
   viewerOnly?: boolean;
 }) {
   const { t, locale } = useI18n();
-  const { context: workspaceContext } = useWorkspaceContext();
+  const { workspaceContext } = useProjectCollabContext();
   const [text, setText] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
@@ -15697,7 +15851,7 @@ function MarkdownViewer({
       copyBlockTimerRef.current = null;
     }
     let cancelled = false;
-    void fetchProjectFileText(projectId, file.name).then((next) => {
+    void fetchProjectFileText(projectId, file.name, { workspaceContext }).then((next) => {
       if (cancelled) return;
       if (
         loadedFileKeyRef.current === markdownFileKey &&

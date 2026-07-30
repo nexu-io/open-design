@@ -12,6 +12,7 @@
 
 import { cleanup, render, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { ComponentProps } from 'react';
 import {
   buildWorkspacePermissions,
   buildWorkspaceSeatSummary,
@@ -19,6 +20,10 @@ import {
 } from '@open-design/contracts';
 
 import { FileViewer } from '../../src/components/FileViewer';
+import {
+  CollabProvider,
+  type CollabContextValue,
+} from '../../src/collab/collab-context';
 import type { ProjectFile } from '../../src/types';
 
 function teamWorkspaceContext(): WorkspaceCollabContext {
@@ -58,8 +63,37 @@ function htmlFile(): ProjectFile {
   };
 }
 
+function renderProjectFileViewer(
+  context: WorkspaceCollabContext,
+  props: ComponentProps<typeof FileViewer>,
+) {
+  const collab: CollabContextValue = {
+    workspaceContext: context,
+    workspaceContextLoading: false,
+    enabled: true,
+    member: null,
+    present: [],
+    publishedVersion: null,
+    syncState: null,
+    viewerOnly: props.viewerOnly === true,
+    isOwner: props.viewerOnly !== true,
+    ownerDisplayName: null,
+    ownerRole: null,
+    downloadPending: false,
+    reportChange: () => {},
+    requestPublish: () => {},
+    refreshPresence: () => {},
+    checkStatusNow: () => {},
+  };
+  return render(
+    <CollabProvider value={collab}>
+      <FileViewer {...props} />
+    </CollabProvider>,
+  );
+}
+
 function stubFetch(context: WorkspaceCollabContext) {
-  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input.toString();
     if (url.includes('/api/workspace/context')) {
       return new Response(JSON.stringify({ context }), { status: 200 });
@@ -87,15 +121,13 @@ afterEach(() => {
 describe('readonly viewers skip the publish-public probe (Batch A §4.4)', () => {
   it('issues no publish-public read for a viewer-only shared project', async () => {
     const fetchMock = stubFetch(teamWorkspaceContext());
-    render(
-      <FileViewer
-        projectId="project-ro"
-        projectKind="prototype"
-        file={htmlFile()}
-        liveHtml="<html><body><h1>Hello</h1></body></html>"
-        viewerOnly
-      />,
-    );
+    renderProjectFileViewer(teamWorkspaceContext(), {
+      projectId: 'project-ro',
+      projectKind: 'prototype',
+      file: htmlFile(),
+      liveHtml: '<html><body><h1>Hello</h1></body></html>',
+      viewerOnly: true,
+    });
     // Let the mount-time effects (workspace context, deployments) settle.
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     await new Promise((resolve) => setTimeout(resolve, 20));
@@ -106,18 +138,23 @@ describe('readonly viewers skip the publish-public probe (Batch A §4.4)', () =>
 
   it('still hydrates the published state for a writable viewer', async () => {
     const fetchMock = stubFetch(teamWorkspaceContext());
-    render(
-      <FileViewer
-        projectId="project-rw"
-        projectKind="prototype"
-        file={htmlFile()}
-        liveHtml="<html><body><h1>Hello</h1></body></html>"
-      />,
-    );
+    renderProjectFileViewer(teamWorkspaceContext(), {
+      projectId: 'project-rw',
+      projectKind: 'prototype',
+      file: htmlFile(),
+      liveHtml: '<html><body><h1>Hello</h1></body></html>',
+    });
     await waitFor(() =>
       expect(
         requestedUrls(fetchMock).some((url) => url.includes('publish-public')),
       ).toBe(true),
     );
+    const publicationCall = fetchMock.mock.calls.find(([input]) =>
+      String(input).includes('publish-public'),
+    );
+    expect(publicationCall).toBeTruthy();
+    const headers = new Headers(publicationCall?.[1]?.headers);
+    expect(headers.get('x-od-workspace-id')).toBe('ws-1');
+    expect(headers.get('x-od-workspace-member-id')).toBe('wm-1');
   });
 });

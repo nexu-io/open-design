@@ -1,8 +1,10 @@
 import type {
+  WorkspaceCollabContext,
   WorkspaceInvalidationEventName,
   WorkspaceInvalidationSsePayload,
 } from '@open-design/contracts';
 import { useEventStream, type UseEventStreamResult } from '../hooks/useEventStream';
+import { workspaceResourceUrl } from './workspace-identity';
 
 // Collab realtime hop-2 — the workspace-scoped invalidation SSE
 // (`GET /api/workspace/events`). One shared connection for the whole nav shell:
@@ -11,7 +13,14 @@ import { useEventStream, type UseEventStreamResult } from '../hooks/useEventStre
 // surface" rule), so the shell does not spend four of the browser's ~6-per-host
 // connections on realtime.
 
-export const WORKSPACE_EVENTS_URL = '/api/workspace/events';
+const WORKSPACE_EVENTS_PATH = '/api/workspace/events';
+
+export function workspaceEventsUrl(
+  workspaceContext: WorkspaceCollabContext | null | undefined,
+): string | null {
+  if (!workspaceContext) return null;
+  return workspaceResourceUrl(WORKSPACE_EVENTS_PATH, workspaceContext);
+}
 
 /** Thin-event handlers keyed by SSE event name; the payload carries no body, so
  *  each handler is a plain re-fetch trigger. */
@@ -22,6 +31,8 @@ export type WorkspaceInvalidationHandlers = {
 };
 
 export interface UseWorkspaceInvalidationOptions {
+  /** Exact selected/project-persisted identity encoded into EventSource URL. */
+  workspaceContext: WorkspaceCollabContext | null;
   /** Re-fetch the subscribed resource's snapshot on (re)connect + tab-visible. */
   onActive?: () => void;
   /** When false the hook stays poll-only. Defaults to true. */
@@ -35,11 +46,12 @@ export interface UseWorkspaceInvalidationOptions {
  */
 export function useWorkspaceInvalidation(
   handlers: WorkspaceInvalidationHandlers,
-  options: UseWorkspaceInvalidationOptions = {},
+  options: UseWorkspaceInvalidationOptions,
 ): UseEventStreamResult {
-  return useEventStream(WORKSPACE_EVENTS_URL, {
+  const url = workspaceEventsUrl(options.workspaceContext);
+  return useEventStream(url ?? WORKSPACE_EVENTS_PATH, {
     events: handlers as Record<string, (data: unknown) => void>,
     ...(options.onActive ? { onActive: options.onActive } : {}),
-    ...(options.enabled !== undefined ? { enabled: options.enabled } : {}),
+    enabled: Boolean(url) && (options.enabled ?? true),
   });
 }

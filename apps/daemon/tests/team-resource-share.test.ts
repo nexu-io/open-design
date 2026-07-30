@@ -4,7 +4,14 @@ import {
   createTeamResourceShareService,
   parseSharedResourceIds,
   parseSharedResourceRecords,
+  teamResourceRequestScopeFromContext,
+  teamResourceRequestScopeForWorkspaceId,
+  type TeamResourceRequestScope,
 } from '../src/collab/team-resource-share.js';
+import type {
+  WorkspaceCollabContext,
+  WorkspaceDirectoryItem,
+} from '@open-design/contracts';
 import type { ResourceHubPrincipal } from '../src/collab/resource-principal.js';
 
 const unreachableRun = async (): Promise<string> => {
@@ -16,33 +23,92 @@ const principal: ResourceHubPrincipal = {
   role: 'member',
   lifecycleState: 'active',
 };
+const scope: TeamResourceRequestScope = { principal, canShare: true };
+const readOnlyScope: TeamResourceRequestScope = { principal, canShare: false };
 
 describe('team resource share permission gate', () => {
+  it('does not manufacture a Team resource scope for an authoritative Personal workspace', () => {
+    const personalContext = {
+      workspaceId: 'personal-1',
+      workspaceType: 'personal',
+      workspaceMemberId: 'wm-personal',
+      memberStatus: 'active',
+      permissions: {
+        canManageSharedResources: false,
+        canShareProjects: false,
+      },
+    } as WorkspaceCollabContext;
+
+    expect(teamResourceRequestScopeFromContext(personalContext)).toBeNull();
+  });
+
+  it('resolves a background operation from the exact event Workspace membership', () => {
+    const directory: WorkspaceDirectoryItem[] = [
+      {
+        workspaceId: 'team-a',
+        workspaceName: 'A',
+        workspaceType: 'team',
+        workspaceMemberId: 'wm-a',
+        role: 'owner',
+        memberStatus: 'active',
+        lifecycleState: 'active',
+      },
+      {
+        workspaceId: 'team-b',
+        workspaceName: 'B',
+        workspaceType: 'team',
+        workspaceMemberId: 'wm-b',
+        role: 'member',
+        memberStatus: 'removed',
+        lifecycleState: 'active',
+      },
+    ];
+
+    expect(teamResourceRequestScopeForWorkspaceId(directory, 'team-a')).toMatchObject({
+      principal: { teamId: 'team-a', memberId: 'wm-a' },
+    });
+    expect(teamResourceRequestScopeForWorkspaceId(directory, 'team-b')).toBeNull();
+  });
+
+  it('uses the request-scoped principal even when the daemon ambient workspace has changed', async () => {
+    const requestPrincipal: ResourceHubPrincipal = {
+      memberId: 'wm-a',
+      teamId: 'team-a',
+      role: 'owner',
+      lifecycleState: 'active',
+      workspaceType: 'team',
+    };
+    const calls: Array<{ args: string[]; workspaceId: string | undefined }> = [];
+    const service = createTeamResourceShareService({
+      kind: 'skill',
+      idPrefix: 'skill',
+      resolveDir: () => '/tmp/skill',
+      run: async (args, workspaceId) => {
+        calls.push({ args, workspaceId });
+        return JSON.stringify({ version: 1 });
+      },
+      env: { OD_WORKSPACE_CONTEXT_SOURCE: 'vela' },
+    });
+
+    await service.share('skill-a', { principal: requestPrincipal, canShare: true });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.workspaceId).toBe('team-a');
+    expect(calls[0]?.args[2]).toBe('skill-team-a-skill-a');
+  });
+
   it('refuses a team member who cannot manage shared resources (403 marker)', async () => {
     const service = createTeamResourceShareService({
       kind: 'design_system',
       idPrefix: 'ds',
       resolveDir: () => '/tmp/ds',
-      getPrincipal: () => principal,
-      getCanShare: () => false,
       run: unreachableRun,
       env: { OD_WORKSPACE_CONTEXT_SOURCE: 'vela' },
     });
-    await expect(service.share('ds-1')).rejects.toBeInstanceOf(TeamResourceShareForbiddenError);
-    expect(service.isShared('ds-1')).toBe(false);
-  });
-
-  it('stays a silent no-op when there is no team identity, without a permission error', async () => {
-    const service = createTeamResourceShareService({
-      kind: 'design_system',
-      idPrefix: 'ds',
-      resolveDir: () => '/tmp/ds',
-      getPrincipal: () => null,
-      getCanShare: () => false,
-      run: unreachableRun,
-      env: { OD_WORKSPACE_CONTEXT_SOURCE: 'vela' },
-    });
-    expect(await service.share('ds-1')).toBeNull();
+    await expect(service.share('ds-1', readOnlyScope)).rejects.toBeInstanceOf(
+      TeamResourceShareForbiddenError,
+    );
+    expect(service.isShared('ds-1', readOnlyScope)).toBe(false);
   });
 
   it('keeps a non-Vela dev workspace on the unconfigured no-op path', async () => {
@@ -50,16 +116,14 @@ describe('team resource share permission gate', () => {
       kind: 'design_system',
       idPrefix: 'ds',
       resolveDir: () => '/tmp/ds',
-      getPrincipal: () => principal,
-      getCanShare: () => true,
       run: unreachableRun,
       env: {},
     });
 
     expect(service.configured).toBe(false);
-    expect(await service.share('ds-1')).toBeNull();
-    expect(await service.unshare('ds-1')).toBe(false);
-    expect(await service.sharedIds()).toEqual([]);
+    expect(await service.share('ds-1', scope)).toBeNull();
+    expect(await service.unshare('ds-1', scope)).toBe(false);
+    expect(await service.sharedIds(scope)).toEqual([]);
   });
 
   it('removes a team resource through the Vela CLI', async () => {
@@ -74,21 +138,48 @@ describe('team resource share permission gate', () => {
       kind: 'skill',
       idPrefix: 'skill',
       resolveDir: () => '/tmp/skill',
-      getPrincipal: () => principal,
-      getCanShare: () => true,
       run,
       env: { OD_WORKSPACE_CONTEXT_SOURCE: 'vela' },
     });
 
-    expect(await service.share('mock-team-expert-kit')).toEqual({ version: 1 });
-    expect(service.isShared('mock-team-expert-kit')).toBe(true);
-    await expect(service.unshare('mock-team-expert-kit')).resolves.toBe(true);
-    expect(service.isShared('mock-team-expert-kit')).toBe(false);
+    expect(await service.share('mock-team-expert-kit', scope)).toEqual({ version: 1 });
+    expect(service.isShared('mock-team-expert-kit', scope)).toBe(true);
+    await expect(service.unshare('mock-team-expert-kit', scope)).resolves.toBe(true);
+    expect(service.isShared('mock-team-expert-kit', scope)).toBe(false);
     expect(calls.at(-1)).toEqual([
       'remove',
       'skill-t-1-mock-team-expert-kit',
       '--json',
     ]);
+  });
+
+  it('keeps fallback shared state isolated when two Workspace requests interleave', async () => {
+    const workspaceA: TeamResourceRequestScope = {
+      principal: { ...principal, memberId: 'wm-a', teamId: 'team-a' },
+      canShare: true,
+    };
+    const workspaceB: TeamResourceRequestScope = {
+      principal: { ...principal, memberId: 'wm-b', teamId: 'team-b' },
+      canShare: true,
+    };
+    const service = createTeamResourceShareService({
+      kind: 'skill',
+      idPrefix: 'skill',
+      resolveDir: () => '/tmp/skill',
+      run: async (args) => {
+        if (args[0] === 'push') return JSON.stringify({ version: 1 });
+        throw new Error('hub listing temporarily unavailable');
+      },
+      env: { OD_WORKSPACE_CONTEXT_SOURCE: 'vela' },
+    });
+
+    await service.share('skill-a', workspaceA);
+    await service.share('skill-b', workspaceB);
+
+    expect(service.isShared('skill-a', workspaceA)).toBe(true);
+    expect(service.isShared('skill-b', workspaceB)).toBe(true);
+    await expect(service.sharedIds(workspaceA)).resolves.toEqual(['skill-a']);
+    await expect(service.sharedIds(workspaceB)).resolves.toEqual(['skill-b']);
   });
 
   it('lists resources already shared through another daemon via Vela CLI', async () => {
@@ -112,14 +203,12 @@ describe('team resource share permission gate', () => {
       kind: 'skill',
       idPrefix: 'skill',
       resolveDir: () => '/tmp/skill',
-      getPrincipal: () => principal,
-      getCanShare: () => false,
       run,
       env: { OD_WORKSPACE_CONTEXT_SOURCE: 'vela' },
     });
 
-    expect(await service.sharedIds()).toEqual(['mock-team-expert-kit']);
-    await expect(service.sharedResources()).resolves.toEqual([
+    expect(await service.sharedIds(readOnlyScope)).toEqual(['mock-team-expert-kit']);
+    await expect(service.sharedResources(readOnlyScope)).resolves.toEqual([
       {
         id: 'mock-team-expert-kit',
         title: 'Mock kit',
@@ -128,7 +217,7 @@ describe('team resource share permission gate', () => {
         canUnshare: true,
       },
     ]);
-    expect(service.isShared('mock-team-expert-kit')).toBe(true);
+    expect(service.isShared('mock-team-expert-kit', readOnlyScope)).toBe(true);
   });
 
   it('preserves the workspace-scoped hub id for teammate materialization', async () => {
@@ -136,8 +225,6 @@ describe('team resource share permission gate', () => {
       kind: 'skill',
       idPrefix: 'skill',
       resolveDir: () => '/tmp/skill',
-      getPrincipal: () => principal,
-      getCanShare: () => false,
       run: async () => JSON.stringify({
         resources: [
           {
@@ -152,7 +239,7 @@ describe('team resource share permission gate', () => {
       env: { OD_WORKSPACE_CONTEXT_SOURCE: 'vela' },
     });
 
-    const [resource] = await service.sharedResources();
+    const [resource] = await service.sharedResources(readOnlyScope);
     expect(resource).toEqual({
       id: 'shared-kit',
       ownerMemberId: 'wm-owner',
@@ -184,20 +271,18 @@ describe('team resource share permission gate', () => {
       kind: 'skill',
       idPrefix: 'skill',
       resolveDir: () => '/tmp/skill',
-      getPrincipal: () => principal,
-      getCanShare: () => true,
       run,
       env: { OD_WORKSPACE_CONTEXT_SOURCE: 'vela' },
     });
 
-    expect(await service.share('mock-team-expert-kit')).toEqual({ version: 1 });
-    expect(await service.sharedIds()).toEqual(['mock-team-expert-kit']);
-    expect(service.isShared('mock-team-expert-kit')).toBe(true);
+    expect(await service.share('mock-team-expert-kit', scope)).toEqual({ version: 1 });
+    expect(await service.sharedIds(scope)).toEqual(['mock-team-expert-kit']);
+    expect(service.isShared('mock-team-expert-kit', scope)).toBe(true);
 
     remoteHasSkill = false;
 
-    expect(await service.sharedIds()).toEqual([]);
-    expect(service.isShared('mock-team-expert-kit')).toBe(false);
+    expect(await service.sharedIds(scope)).toEqual([]);
+    expect(service.isShared('mock-team-expert-kit', scope)).toBe(false);
   });
 
   it('marks resources unshareable for non-owner non-uploader members', async () => {
@@ -215,16 +300,16 @@ describe('team resource share permission gate', () => {
       kind: 'plugin',
       idPrefix: 'plugin',
       resolveDir: () => '/tmp/plugin',
-      getPrincipal: () => principal,
-      getCanShare: () => true,
       run,
       env: { OD_WORKSPACE_CONTEXT_SOURCE: 'vela' },
     });
 
-    await expect(service.sharedResources()).resolves.toEqual([
+    await expect(service.sharedResources(scope)).resolves.toEqual([
       { id: 'shared-kit', ownerMemberId: 'wm-owner', canUnshare: false },
     ]);
-    await expect(service.unshare('shared-kit')).rejects.toBeInstanceOf(TeamResourceShareForbiddenError);
+    await expect(service.unshare('shared-kit', scope)).rejects.toBeInstanceOf(
+      TeamResourceShareForbiddenError,
+    );
   });
 
   it('parses shared resource ids by kind and prefix', () => {

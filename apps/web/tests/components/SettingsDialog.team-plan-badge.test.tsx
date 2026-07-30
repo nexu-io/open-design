@@ -22,6 +22,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SettingsDialog } from '../../src/components/SettingsDialog';
 import { I18nProvider } from '../../src/i18n';
 import type { AgentInfo, AppConfig } from '../../src/types';
+import { workspaceDirectoryFixture } from '../helpers/workspace-context';
 
 vi.mock('../../src/providers/registry', async () => {
   const actual = await vi.importActual<typeof import('../../src/providers/registry')>(
@@ -128,6 +129,12 @@ async function renderCliTab(options: {
 }) {
   globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
     const url = input.toString();
+    if (url.startsWith('/api/workspace/directory')) {
+      return new Response(
+        JSON.stringify(workspaceDirectoryFixture([options.context])),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    }
     if (url.startsWith('/api/workspace/context')) {
       return new Response(JSON.stringify({ context: options.context }), {
         status: 200,

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  createScopedVelaTeamProjectCatalogClientCache,
   createVelaCliTeamProjectCatalog,
   createVelaCliTeamProjectCatalogClient,
   shouldUseVelaCliTeamProjectCatalog,
@@ -12,7 +13,6 @@ describe('Vela CLI team-project catalog adapter', () => {
       workspaceId: string | undefined;
     }> = [];
     const catalog = createVelaCliTeamProjectCatalog({
-      getWorkspaceId: () => 'team-active',
       run: async (args, workspaceId) => {
         calls.push({ args, workspaceId });
         return JSON.stringify({
@@ -140,7 +140,6 @@ describe('Vela CLI team-project catalog adapter', () => {
   it('uses an explicitly captured workspace for an authoritative list', async () => {
     const catalog = createVelaCliTeamProjectCatalog({
       supportsTeamProjects: () => true,
-      getWorkspaceId: () => 'team-current',
       run: async (args, workspaceId) => {
         expect(args).toEqual(['list']);
         expect(workspaceId).toBe('team-captured');
@@ -151,10 +150,126 @@ describe('Vela CLI team-project catalog adapter', () => {
     await expect(catalog.list('team-captured')).resolves.toEqual([]);
   });
 
+  it('keeps the rich membership list on its explicit principal when active workspace switches during capability detection', async () => {
+    let activeWorkspaceId = 'team-a';
+    const calls: Array<{ args: string[]; workspaceId: string | undefined }> = [];
+    const client = createVelaCliTeamProjectCatalogClient({
+      supportsTeamProjects: async () => {
+        activeWorkspaceId = 'team-b';
+        return true;
+      },
+      run: async (args, workspaceId) => {
+        calls.push({ args, workspaceId });
+        return JSON.stringify({ projects: [] });
+      },
+    });
+
+    await expect(client.list({
+      memberId: 'member-a',
+      teamId: 'team-a',
+      role: 'member',
+      lifecycleState: 'active',
+    })).resolves.toEqual([]);
+
+    expect(activeWorkspaceId).toBe('team-b');
+    expect(calls).toEqual([{ args: ['list'], workspaceId: 'team-a' }]);
+  });
+
+  it('partitions cached client reads by the complete captured principal', async () => {
+    const calls: string[] = [];
+    const cached = createScopedVelaTeamProjectCatalogClientCache({
+      list: async (principal) => {
+        calls.push(principal.teamId);
+        return [];
+      },
+      upsert: async () => null,
+    });
+    const principalA = {
+      memberId: 'member-a',
+      teamId: 'team-a',
+      role: 'member' as const,
+      lifecycleState: 'active' as const,
+    };
+    const principalB = {
+      memberId: 'member-b',
+      teamId: 'team-b',
+      role: 'member' as const,
+      lifecycleState: 'active' as const,
+    };
+
+    await cached.list(principalA);
+    await cached.list(principalB);
+    await cached.list(principalA);
+
+    expect(calls).toEqual(['team-a', 'team-b']);
+  });
+
+  it('drops rich catalog rows that do not match the explicit workspace', async () => {
+    const client = createVelaCliTeamProjectCatalogClient({
+      supportsTeamProjects: () => true,
+      run: async () => JSON.stringify({
+        projects: [
+          {
+            id: 'row-b',
+            workspaceId: 'team-b',
+            projectId: 'project-b',
+            resourceId: 'resource-b',
+            ownerMemberId: 'member-b',
+            syncState: 'synced',
+            createdAt: '2026-07-01T00:00:00.000Z',
+            updatedAt: '2026-07-01T00:00:00.000Z',
+          },
+        ],
+      }),
+    });
+
+    await expect(client.list({
+      memberId: 'member-a',
+      teamId: 'team-a',
+      role: 'member',
+      lifecycleState: 'active',
+    })).resolves.toEqual([]);
+  });
+
+  it('keeps catalog upsert and remove on their explicit principal across capability awaits', async () => {
+    let activeWorkspaceId = 'team-a';
+    const calls: Array<{ args: string[]; workspaceId: string | undefined }> = [];
+    const catalog = createVelaCliTeamProjectCatalog({
+      supportsTeamProjects: async () => {
+        activeWorkspaceId = 'team-b';
+        return true;
+      },
+      run: async (args, workspaceId) => {
+        calls.push({ args, workspaceId });
+        return '';
+      },
+    });
+    const principal = {
+      memberId: 'member-a',
+      teamId: 'team-a',
+      role: 'member' as const,
+      lifecycleState: 'active' as const,
+    };
+
+    await catalog.upsert({ projectId: 'project-a' }, principal);
+    activeWorkspaceId = 'team-a';
+    await catalog.remove('project-a', principal);
+
+    expect(calls).toEqual([
+      {
+        args: ['upsert', 'project-a', '--resource-id', 'project-project-a'],
+        workspaceId: 'team-a',
+      },
+      {
+        args: ['remove', 'project-a'],
+        workspaceId: 'team-a',
+      },
+    ]);
+  });
+
   it('maps list output into team-project DTOs', async () => {
     const catalog = createVelaCliTeamProjectCatalog({
       supportsTeamProjects: () => true,
-      getWorkspaceId: () => 'team-selected',
       run: async (args, workspaceId) => {
         expect(args).toEqual(['list']);
         expect(workspaceId).toBe('team-selected');
@@ -180,7 +295,7 @@ describe('Vela CLI team-project catalog adapter', () => {
       },
     });
 
-    await expect(catalog.list()).resolves.toEqual([
+    await expect(catalog.list('team-selected')).resolves.toEqual([
       {
         projectId: 'p1',
         ownerMemberId: 'wm-owner',
@@ -225,7 +340,7 @@ describe('Vela CLI team-project catalog adapter', () => {
       }),
     });
 
-    await expect(catalog.list()).resolves.toEqual([
+    await expect(catalog.list('team-selected')).resolves.toEqual([
       {
         projectId: 'synced',
         ownerMemberId: 'wm-owner',
@@ -245,6 +360,12 @@ describe('Vela CLI team-project catalog adapter', () => {
         return '{}';
       },
     });
+    const principal = {
+      memberId: 'member-owner',
+      teamId: 'team-1',
+      role: 'owner' as const,
+      lifecycleState: 'active' as const,
+    };
 
     await catalog.upsert({
       projectId: 'p1',
@@ -256,8 +377,8 @@ describe('Vela CLI team-project catalog adapter', () => {
         designSystemId: 'ds-emerald',
         metadata: { kind: 'deck' },
       },
-    });
-    await catalog.remove('p1');
+    }, principal);
+    await catalog.remove('p1', principal);
 
     expect(calls).toEqual([
       [
@@ -320,7 +441,7 @@ describe('Vela CLI team-project catalog adapter', () => {
     };
 
     const catalog = createVelaCliTeamProjectCatalog(options);
-    await expect(catalog.list()).resolves.toEqual([
+    await expect(catalog.list('team-1')).resolves.toEqual([
       {
         projectId: 'p-fallback',
         ownerMemberId: 'member-owner',
@@ -332,13 +453,19 @@ describe('Vela CLI team-project catalog adapter', () => {
         metadata: { kind: 'deck' },
       },
     ]);
-    await catalog.upsert({ projectId: 'p-fallback' });
-    await catalog.remove('p-fallback');
+    const principal = {
+      memberId: 'member-owner',
+      teamId: 'team-1',
+      role: 'member' as const,
+      lifecycleState: 'active' as const,
+    };
+    await catalog.upsert({ projectId: 'p-fallback' }, principal);
+    await catalog.remove('p-fallback', principal);
     expect(teamCalls).toEqual([['--help']]);
     expect(resourceCalls).toEqual([['shared', '--json']]);
 
     const client = createVelaCliTeamProjectCatalogClient(options);
-    await expect(client.list()).resolves.toEqual([
+    await expect(client.list(principal)).resolves.toEqual([
       expect.objectContaining({
         workspaceId: 'team-1',
         projectId: 'p-fallback',
@@ -351,7 +478,7 @@ describe('Vela CLI team-project catalog adapter', () => {
     await expect(client.upsert({
       projectId: 'p-fallback',
       resourceId: scopedId,
-    })).resolves.toBeNull();
+    }, principal)).resolves.toBeNull();
     expect(teamCalls).toEqual([['--help'], ['--help']]);
     expect(resourceCalls).toEqual([
       ['shared', '--json'],

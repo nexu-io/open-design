@@ -1,19 +1,9 @@
 // @vitest-environment jsdom
 //
-// Perf follow-up to the 29e8b4c85 fail-closed fix: `/collab/status` is a
-// plain project-keyed read (the daemon resolves the caller's own identity
-// server-side from request headers/cookies, not from anything the front end
-// sends), so it does not need to wait for `/api/workspace/context` to resolve
-// `member` first. Before this, `useCollab`'s single `active` gate required
-// `member` — which only exists once `resolveCollabSession` has a context —
-// so the two real network round-trips ran serialized (~5s on a cold real hub)
-// instead of in parallel (~2.5s). These tests pin: (1) the status poll now
-// starts in the same tick the workspace-context read is still pending,
-// without ever announcing presence before an identity resolves, and (2) once
-// the context read resolves to a CONFIRMED permission-denied reason (member
-// removed, workspace frozen) — an identity/permission gate, not a
-// "haven't read the response yet" problem — the poll stops, so decoupling did
-// not open a lasting leak.
+// Collab data-plane routes fail closed without a workspace identity. Status
+// polling must therefore wait for `/api/workspace/context`, then put that
+// exact identity on every request. A confirmed removed/frozen identity never
+// starts a collab client at all.
 
 import { act, cleanup, renderHook } from '@testing-library/react';
 import {
@@ -51,8 +41,92 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe('useProjectCollab: status poll runs in parallel with /api/workspace/context', () => {
-  it('starts /collab/status while the workspace-context read is still pending', async () => {
+describe('useProjectCollab: status waits for explicit workspace authority', () => {
+  it('keeps project A status, presence, and pull on A when ambient context is B', async () => {
+    const projectContext = teamContext({
+      workspaceId: 'workspace-a',
+      workspaceMemberId: 'member-a',
+      teamId: 'workspace-a',
+    });
+    const ambientContext = teamContext({
+      workspaceId: 'workspace-b',
+      workspaceMemberId: 'member-b',
+      teamId: 'workspace-b',
+    });
+    let contextReads = 0;
+    const scopedCalls: Array<{
+      pathname: string;
+      workspaceId: string | null;
+      workspaceMemberId: string | null;
+    }> = [];
+    const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const pathname = new URL(String(input), 'http://d.local').pathname;
+      if (pathname.endsWith('/workspace/context')) {
+        contextReads += 1;
+        return new Response(JSON.stringify({ context: ambientContext }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      const headers = new Headers(init?.headers);
+      scopedCalls.push({
+        pathname,
+        workspaceId: headers.get('x-od-workspace-id'),
+        workspaceMemberId: headers.get('x-od-workspace-member-id'),
+      });
+      if (pathname.endsWith('/collab/status')) {
+        return new Response(JSON.stringify({
+          publishedVersion: 2,
+          materializedVersion: 1,
+          syncState: 'synced',
+          ownerMemberId: 'member-owner',
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (pathname.endsWith('/presence/heartbeat')) {
+        return new Response(JSON.stringify({ present: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify({ ok: true, version: 2 }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }) as typeof fetch;
+
+    renderHook(() =>
+      useProjectCollab('project-a', {
+        fetch: fetchImpl,
+        workspaceContext: projectContext,
+      }),
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(contextReads).toBe(0);
+    const projectCalls = scopedCalls.filter(({ pathname }) =>
+      pathname.endsWith('/collab/status')
+      || pathname.endsWith('/presence/heartbeat')
+      || pathname.endsWith('/collab/pull'),
+    );
+    expect(projectCalls.map(({ pathname }) => pathname)).toEqual(
+      expect.arrayContaining([
+        '/api/projects/project-a/collab/status',
+        '/api/projects/project-a/presence/heartbeat',
+        '/api/projects/project-a/collab/pull',
+      ]),
+    );
+    expect(
+      projectCalls.every(
+        ({ workspaceId, workspaceMemberId }) =>
+          workspaceId === 'workspace-a' && workspaceMemberId === 'member-a',
+      ),
+    ).toBe(true);
+  });
+
+  it('does not start /collab/status while the workspace-context read is pending', async () => {
     const calls: string[] = [];
     const fetchImpl = (async (input: RequestInfo | URL) => {
       const pathname = new URL(String(input), 'http://d.local').pathname;
@@ -74,24 +148,20 @@ describe('useProjectCollab: status poll runs in parallel with /api/workspace/con
       await vi.advanceTimersByTimeAsync(0);
     });
 
-    // The status read fired even though /api/workspace/context never answered.
-    expect(calls.some((p) => p.endsWith('/collab/status'))).toBe(true);
+    expect(calls.some((p) => p.endsWith('/collab/status'))).toBe(false);
     // Presence never announces itself without a resolved identity — the
     // context read (which member depends on) is still hanging.
     expect(calls.some((p) => p.endsWith('/presence/heartbeat'))).toBe(false);
   });
 
-  it('keeps polling status on its normal cadence while member resolves, then starts presence', async () => {
-    let contextCalls = 0;
-    const fetchImpl = (async (input: RequestInfo | URL) => {
+  it('starts scoped status and presence once workspace context resolves', async () => {
+    const scopedCalls: Array<{ pathname: string; workspaceId: string | null }> = [];
+    const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const pathname = new URL(String(input), 'http://d.local').pathname;
-      if (pathname.endsWith('/workspace/context')) {
-        contextCalls += 1;
-        // Resolves on the SECOND call to model a real async round-trip that
-        // outlives the first render/effect flush.
-        if (contextCalls < 2) return new Promise<Response>(() => {});
-        return { ok: true, status: 200, json: async () => ({ context: teamContext() }) } as unknown as Response;
-      }
+      scopedCalls.push({
+        pathname,
+        workspaceId: new Headers(init?.headers).get('x-od-workspace-id'),
+      });
       if (pathname.endsWith('/collab/status')) {
         return { ok: true, status: 200, json: async () => ({ publishedVersion: 1, syncState: 'synced' }) } as unknown as Response;
       }
@@ -101,20 +171,50 @@ describe('useProjectCollab: status poll runs in parallel with /api/workspace/con
       return { ok: true, status: 200, json: async () => ({ ok: true }) } as unknown as Response;
     }) as typeof fetch;
 
-    const { result } = renderHook(() => useProjectCollab('p1', { fetch: fetchImpl }));
+    const { result, rerender } = renderHook(
+      ({ workspaceContext, workspaceContextLoading }) =>
+        useProjectCollab('p1', {
+          fetch: fetchImpl,
+          workspaceContext,
+          workspaceContextLoading,
+        }),
+      {
+        initialProps: {
+          workspaceContext: null as WorkspaceCollabContext | null,
+          workspaceContextLoading: true,
+        },
+      },
+    );
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
     });
-    // Context is still hanging on this first flush; status already answered.
-    expect(result.current.syncState).toBe('synced');
+    expect(result.current.syncState).toBeNull();
     expect(result.current.enabled).toBe(false);
     expect(result.current.present).toEqual([]);
+
+    await act(async () => {
+      rerender({
+        workspaceContext: teamContext(),
+        workspaceContextLoading: false,
+      });
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(result.current.syncState).toBe('synced');
+    expect(
+      scopedCalls
+        .filter(({ pathname }) =>
+          pathname.endsWith('/collab/status')
+          || pathname.endsWith('/presence/heartbeat'),
+        )
+        .every(({ workspaceId }) => workspaceId === 'ws-1'),
+    ).toBe(true);
   });
 });
 
-describe('useProjectCollab: confirmed permission-denied reasons still stop the status poll', () => {
-  it('stops polling once the context confirms the member was removed', async () => {
+describe('useProjectCollab: permission-denied identities never start collab', () => {
+  it('never polls when context confirms the member was removed', async () => {
     const calls: string[] = [];
     const removed = teamContext({ memberStatus: 'removed' });
     const fetchImpl = (async (input: RequestInfo | URL) => {
@@ -136,9 +236,7 @@ describe('useProjectCollab: confirmed permission-denied reasons still stop the s
       await vi.advanceTimersByTimeAsync(0);
     });
 
-    // It DID start (the decoupling worked)…
-    expect(calls.some((p) => p.endsWith('/collab/status'))).toBe(true);
-    // …but a removed member never gets a presence identity.
+    expect(calls.some((p) => p.endsWith('/collab/status'))).toBe(false);
     expect(calls.some((p) => p.endsWith('/presence/heartbeat'))).toBe(false);
     expect(result.current.enabled).toBe(false);
 
@@ -154,7 +252,7 @@ describe('useProjectCollab: confirmed permission-denied reasons still stop the s
     expect(pollsAfterWaiting).toBe(pollsAtSettle);
   });
 
-  it('stops polling once the context confirms the workspace lifecycle is frozen (locked)', async () => {
+  it('never polls when context confirms the workspace lifecycle is frozen (locked)', async () => {
     const calls: string[] = [];
     const locked = teamContext({ lifecycleState: 'locked' });
     const fetchImpl = (async (input: RequestInfo | URL) => {
@@ -176,7 +274,7 @@ describe('useProjectCollab: confirmed permission-denied reasons still stop the s
       await vi.advanceTimersByTimeAsync(0);
     });
 
-    expect(calls.some((p) => p.endsWith('/collab/status'))).toBe(true);
+    expect(calls.some((p) => p.endsWith('/collab/status'))).toBe(false);
     expect(calls.some((p) => p.endsWith('/presence/heartbeat'))).toBe(false);
     expect(result.current.enabled).toBe(false);
 

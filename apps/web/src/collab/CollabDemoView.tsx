@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CollabMemberRole } from '@open-design/contracts';
 import { navigate } from '../router';
 import { useCollab } from './useCollab';
+import { useWorkspaceContext } from './useWorkspaceContext';
+import { workspaceProjectHeaders } from './workspace-identity';
 import { PresenceBar } from './PresenceBar';
 import { CommentDriftDemo } from './CommentDriftDemo';
 import styles from './CollabDemoView.module.css';
@@ -54,6 +56,7 @@ export function CollabDemoView({ projectId }: { projectId: string | null }) {
   if (!memberIdRef.current) memberIdRef.current = demoMemberId();
 
   const activeProjectId = projectId?.trim() || null;
+  const { context: workspaceContext } = useWorkspaceContext();
   const member = useMemo(
     () => ({ memberId: memberIdRef.current, name: name.trim() || 'Demo member', role }),
     [name, role],
@@ -62,14 +65,19 @@ export function CollabDemoView({ projectId }: { projectId: string | null }) {
   const { present, publishedVersion, syncState, reportChange, requestPublish } = useCollab({
     projectId: activeProjectId,
     member,
+    workspaceContext,
     enabled: Boolean(activeProjectId),
   });
 
   const shareToTeam = async () => {
-    if (!activeProjectId) return;
+    if (!activeProjectId || !workspaceContext) return;
+    const requestContext = workspaceContext;
     await fetch(`/api/projects/${encodeURIComponent(activeProjectId)}/collab/sync-intent`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json',
+        ...workspaceProjectHeaders(requestContext),
+      },
       body: JSON.stringify({ event: 'project_team_share_requested', projectId: activeProjectId }),
     });
   };

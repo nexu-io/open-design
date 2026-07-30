@@ -14,11 +14,13 @@ import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties
 import { createPortal } from 'react-dom';
 import {
   normalizeWorkspaceInviteCreateErrorCode,
+  type WorkspaceCollabContext,
   type WorkspaceInviteRole,
 } from '@open-design/contracts';
 import { Button } from '@open-design/components';
 import { Icon } from './Icon';
 import { useI18n } from '../i18n';
+import { workspaceProjectHeaders } from '../collab/workspace-identity';
 
 const ROLE_OPTIONS = ['admin', 'member'] as const;
 
@@ -38,6 +40,8 @@ export interface InviteRow {
 interface Props {
   open: boolean;
   onClose: () => void;
+  /** Identity the host already resolved for this invite mutation. */
+  workspaceContext: WorkspaceCollabContext | null;
   /** Shows "你的团队有 1人" for single-seat plans (vs the team default). */
   freePlan?: boolean;
   /**
@@ -73,6 +77,7 @@ function toCanonicalRole(role: string): WorkspaceInviteRole {
 export function InviteDialog({
   open,
   onClose,
+  workspaceContext,
   freePlan = false,
   availableSeats,
   onUpgrade,
@@ -201,12 +206,20 @@ export function InviteDialog({
   async function handleConfirm() {
     const valid = rows.filter((r) => isEmail(r.email));
     if (valid.length === 0 || submitting || success || seatsExhausted) return;
+    if (!workspaceContext) {
+      setError(t('workspaceInvite.submitFailed'));
+      return;
+    }
+    const requestContext = workspaceContext;
     setSubmitting(true);
     setError(null);
     try {
       const res = await fetch('/api/workspace/invite', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: {
+          'content-type': 'application/json',
+          ...workspaceProjectHeaders(requestContext),
+        },
         body: JSON.stringify({
           invites: valid.map((r) => ({ email: r.email.trim(), role: toCanonicalRole(r.role) })),
         }),

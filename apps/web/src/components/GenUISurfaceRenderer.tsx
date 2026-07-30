@@ -10,7 +10,11 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useT } from '../i18n';
-import type { GenUISurfaceSpec } from '@open-design/contracts';
+import type {
+  GenUISurfaceSpec,
+  WorkspaceCollabContext,
+} from '@open-design/contracts';
+import { workspaceResourceUrl } from '../collab/workspace-identity';
 
 export interface PendingSurface {
   // The surface descriptor as declared in `od.genui.surfaces[]`.
@@ -37,6 +41,7 @@ export interface PendingSurface {
 
 interface Props {
   pending: PendingSurface;
+  workspaceContext?: WorkspaceCollabContext | null;
   onAnswered: (value: unknown) => Promise<void> | void;
   onSkip?: () => void;
 }
@@ -194,10 +199,13 @@ export function GenUISurfaceRenderer(props: Props) {
         </div>
       );
     }
-    const src = `/api/plugins/${encodeURIComponent(pluginId)}/asset/${sanitizedPath
-      .split('/')
-      .map(encodeURIComponent)
-      .join('/')}`;
+    const src = workspaceResourceUrl(
+      `/api/plugins/${encodeURIComponent(pluginId)}/asset/${sanitizedPath
+        .split('/')
+        .map(encodeURIComponent)
+        .join('/')}`,
+      props.workspaceContext,
+    );
     return (
       <SandboxedComponentSurface
         runId={props.pending.runId}

@@ -78,7 +78,9 @@ export interface VelaCliResourceAdapterOptions {
    * session never publishes. The CLI itself resolves the concrete member/team
    * from the vela session; this only gates whether we invoke it at all.
    */
-  hasTeamIdentity: () => boolean | Promise<boolean>;
+  hasTeamIdentity: (
+    principal?: ResourceHubPrincipal | null,
+  ) => boolean | Promise<boolean>;
   /** Injectable child-process runner; defaults to spawning the vela binary. */
   run?: RunVelaResource;
 }
@@ -105,8 +107,12 @@ export function createVelaCliResourceAdapter(
   const kind = options.kind ?? PROJECT_KIND;
   const run = options.run ?? defaultRunVelaResource;
 
-  async function gated<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
-    return (await options.hasTeamIdentity()) ? fn() : fallback;
+  async function gated<T>(
+    principal: ResourceHubPrincipal | null | undefined,
+    fn: () => Promise<T>,
+    fallback: T,
+  ): Promise<T> {
+    return (await options.hasTeamIdentity(principal)) ? fn() : fallback;
   }
 
   function resourceIdsFor(projectId: string, principal?: ResourceHubPrincipal | null): string[] {
@@ -118,7 +124,7 @@ export function createVelaCliResourceAdapter(
 
   return {
     publish({ projectId, principal }) {
-      return gated(async () => {
+      return gated(principal, async () => {
         const dir = await options.resolveProjectDir(projectId);
         const args = ['push', kind, resourceIdFor(projectId, principal), dir, '--ref', PUBLISHED_REF, '--json'];
         for (const name of MEMBER_MIRROR_EXCLUDED_ENTRIES) {
@@ -140,7 +146,7 @@ export function createVelaCliResourceAdapter(
     },
 
     syncLatest({ projectId, principal }) {
-      return gated(async () => {
+      return gated(principal, async () => {
         // `head` reports the published version without downloading — a null
         // version means nothing is published yet.
         for (const resourceId of resourceIdsFor(projectId, principal)) {
@@ -156,7 +162,7 @@ export function createVelaCliResourceAdapter(
     },
 
     async pull({ projectId, principal }) {
-      return gated(async () => {
+      return gated(principal, async () => {
         const dir = await resolvePullDir(projectId);
         let lastError: unknown;
         const resourceIds = resourceIdsFor(projectId, principal);
@@ -186,7 +192,7 @@ export function createVelaCliResourceAdapter(
     },
 
     async unpublish({ projectId, principal }) {
-      await gated(async () => {
+      await gated(principal, async () => {
         try {
           await run(
             ['remove', resourceIdFor(projectId, principal), '--json'],
@@ -330,11 +336,9 @@ export function shouldUseVelaCliResourceTransport(env: NodeJS.ProcessEnv = proce
  * team's resource hub through a vela session that is still locally valid.
  *
  * `hasTeamIdentity` is re-evaluated fresh on every publish/pull/syncLatest/
- * unpublish attempt (see `selectResourcePublishAdapter` in `runtime.ts`,
- * which calls `workspaceContext.current({})` per invocation rather than
- * caching it), so this closes the gap live — the very next sync attempt after
- * a removal is confirmed by B refuses, without needing to tear down the
- * already-attached file watcher.
+ * unpublish attempt. The runtime supplies the immutable principal captured by
+ * the request or project watch; it never re-targets through daemon-global
+ * active Workspace state.
  */
 export function contextHasTeamIdentity(context: WorkspaceCollabContext | null): boolean {
   return workspaceContextHasTeamIdentity(context) && context?.memberStatus === 'active';

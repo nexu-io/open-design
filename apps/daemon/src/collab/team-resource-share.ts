@@ -4,12 +4,20 @@
 // its kind, so teammates can pull it into their own workspace. Open Design owns
 // the permission gate and scheduling, not backend credentials or byte transfer.
 
-import type { ResourceHubPrincipal } from './resource-principal.js';
+import type {
+  WorkspaceCollabContext,
+  WorkspaceDirectoryItem,
+} from '@open-design/contracts';
+import {
+  contextToResourceHubPrincipal,
+  type ResourceHubPrincipal,
+} from './resource-principal.js';
 import {
   createVelaCliResourceAdapter,
   shouldUseVelaCliResourceTransport,
 } from './vela-cli-resource-adapter.js';
 import type { ResourcePublishAdapter } from './publish-scheduler.js';
+import { workspaceContextFromDirectoryItem } from './vela-workspace-context.js';
 
 /** Thrown when a team member without share rights attempts to share a resource. */
 export class TeamResourceShareForbiddenError extends Error {
@@ -30,17 +38,63 @@ export interface TeamResourceShareRecord {
   version?: number;
 }
 
+/**
+ * Request-verified authority for one Team resource operation.
+ *
+ * The route resolves this from the request's explicit Workspace headers and
+ * the authoritative membership directory. Services must never reconstruct it
+ * from the daemon's mutable active Workspace.
+ */
+export interface TeamResourceRequestScope {
+  principal: ResourceHubPrincipal;
+  canShare: boolean;
+}
+
+export function teamResourceRequestScopeFromContext(
+  context: WorkspaceCollabContext,
+): TeamResourceRequestScope | null {
+  const principal = contextToResourceHubPrincipal(context);
+  if (!principal || context.memberStatus !== 'active') return null;
+  return {
+    principal,
+    canShare: Boolean(
+      context.permissions.canManageSharedResources ||
+      context.permissions.canShareProjects,
+    ),
+  };
+}
+
+export function teamResourceRequestScopeForWorkspaceId(
+  items: WorkspaceDirectoryItem[],
+  workspaceId: string,
+): TeamResourceRequestScope | null {
+  const requestedWorkspaceId = workspaceId.trim();
+  if (!requestedWorkspaceId) return null;
+  const membership = items.find(
+    (item) =>
+      item.workspaceId === requestedWorkspaceId &&
+      item.workspaceType === 'team' &&
+      item.memberStatus === 'active' &&
+      item.lifecycleState !== 'deleted',
+  );
+  return membership
+    ? teamResourceRequestScopeFromContext(
+        workspaceContextFromDirectoryItem(membership),
+      )
+    : null;
+}
+
 export interface TeamResourceShareService {
   /** Share a resource to the team. Returns the published version, or null off-team. */
-  share(resourceId: string): Promise<{ version: number } | null>;
+  share(resourceId: string, scope: TeamResourceRequestScope): Promise<{ version: number } | null>;
   /** Remove a resource from the team index. Returns false off-team/unconfigured. */
-  unshare(resourceId: string): Promise<boolean>;
+  unshare(resourceId: string, scope: TeamResourceRequestScope): Promise<boolean>;
   /** Ids of resources shared to the team. */
-  sharedIds(): Promise<string[]>;
+  sharedIds(scope: TeamResourceRequestScope): Promise<string[]>;
   /** Resources shared to the team, including best-effort display metadata. */
-  sharedResources(): Promise<TeamResourceShareRecord[]>;
+  sharedResources(scope: TeamResourceRequestScope): Promise<TeamResourceShareRecord[]>;
   /** True once a resource has been shared to the team. */
-  isShared(resourceId: string): boolean;
+  isShared(resourceId: string, scope: TeamResourceRequestScope): boolean;
   /** Whether the login-backed Vela transport is wired. */
   readonly configured: boolean;
 }
@@ -54,15 +108,6 @@ export interface CreateTeamResourceShareOptions {
    *  async: the skill resolver awaits the skill index, and the publish adapter
    *  awaits this before packing. */
   resolveDir: (resourceId: string) => string | Promise<string>;
-  /** Resolve the current principal (null = no team identity → share no-ops). */
-  getPrincipal: () => ResourceHubPrincipal | null | Promise<ResourceHubPrincipal | null>;
-  /**
-   * Whether the current member may manage shared resources (`canManageShared
-   * Resources`). When it resolves false but the member IS on a team, the share is
-   * refused (a non-owner/admin cannot share). Omitted → no permission gate (the
-   * caller is trusted to have pre-checked).
-   */
-  getCanShare?: () => boolean | Promise<boolean>;
   /** Optional resource-index metadata shown in teammate team lists. */
   describeResource?: (resourceId: string) => Record<string, unknown> | null | Promise<Record<string, unknown> | null>;
   /** Injectable Vela resource runner for tests. */
@@ -97,63 +142,59 @@ export function createTeamResourceShareService(
   // Ids shared this session. The published resources are the durable record on
   // the hub; this is the fast local view the team collection reads until a hub
   // listing query lands.
-  const shared = new Set<string>();
-  let sharedWorkspaceId: string | null = null;
-  const activateWorkspace = (workspaceId: string) => {
-    if (sharedWorkspaceId === workspaceId) return;
-    sharedWorkspaceId = workspaceId;
-    shared.clear();
+  const sharedByWorkspace = new Map<string, Set<string>>();
+  const sharedFor = (workspaceId: string): Set<string> => {
+    let shared = sharedByWorkspace.get(workspaceId);
+    if (!shared) {
+      shared = new Set<string>();
+      sharedByWorkspace.set(workspaceId, shared);
+    }
+    return shared;
   };
 
   const adapter: ResourcePublishAdapter = createVelaCliResourceAdapter({
     resolveProjectDir: options.resolveDir,
     resourceIdFor,
     kind: options.kind,
-    hasTeamIdentity: async () => (await options.getPrincipal()) != null,
+    // Every operation below already requires a request-verified Team scope.
+    // Re-reading the daemon's ambient Workspace here would reintroduce the
+    // cross-tab switch race this service boundary exists to prevent.
+    hasTeamIdentity: () => true,
     ...(options.describeResource ? { describeProject: options.describeResource } : {}),
     ...(options.run ? { run: options.run } : {}),
   });
 
   return {
-    async share(resourceId) {
+    async share(resourceId, scope) {
       // Permission gate: only a member who can manage shared resources may
-      // promote one to the team. No team identity stays a silent no-op
-      // (shared:false); a team member who lacks the permission is refused so the
-      // gate cannot be bypassed by calling the route directly.
-      if (options.getCanShare && !(await options.getCanShare())) {
-        if (await options.getPrincipal()) throw new TeamResourceShareForbiddenError();
-        return null;
-      }
-      const principal = await options.getPrincipal();
-      if (!principal) return null;
-      activateWorkspace(principal.teamId);
+      // promote one to the team. The route supplied this bit from the
+      // authoritative directory, never from caller-controlled headers.
+      if (!scope.canShare) throw new TeamResourceShareForbiddenError();
+      const { principal } = scope;
       const result = await adapter.publish({
         projectId: resourceId,
         principal,
         reason: 'share',
       });
-      if (result) shared.add(resourceId);
+      if (result) sharedFor(principal.teamId).add(resourceId);
       return result;
     },
-    async unshare(resourceId) {
-      const principal = await options.getPrincipal();
-      if (!principal) return false;
-      activateWorkspace(principal.teamId);
-      const sharedResource = (await this.sharedResources()).find((resource) => resource.id === resourceId);
+    async unshare(resourceId, scope) {
+      const { principal } = scope;
+      const sharedResource = (await this.sharedResources(scope)).find((resource) => resource.id === resourceId);
       if (sharedResource && !sharedResource.canUnshare) {
         throw new TeamResourceShareForbiddenError();
       }
       await adapter.unpublish?.({ projectId: resourceId, principal });
-      shared.delete(resourceId);
+      sharedFor(principal.teamId).delete(resourceId);
       return true;
     },
-    async sharedIds() {
-      return (await this.sharedResources()).map((resource) => resource.id);
+    async sharedIds(scope) {
+      return (await this.sharedResources(scope)).map((resource) => resource.id);
     },
-    async sharedResources() {
-      const principal = await options.getPrincipal();
-      if (!principal) return [];
-      activateWorkspace(principal.teamId);
+    async sharedResources(scope) {
+      const { principal } = scope;
+      const shared = sharedFor(principal.teamId);
       try {
         const out = await (options.run ?? defaultRun)(
           ['shared', '--json'],
@@ -183,7 +224,7 @@ export function createTeamResourceShareService(
         return [...shared].sort().map((id) => ({ id, canUnshare: true }));
       }
     },
-    isShared: (resourceId) => shared.has(resourceId),
+    isShared: (resourceId, scope) => sharedFor(scope.principal.teamId).has(resourceId),
     configured: true,
   };
 }
@@ -216,10 +257,11 @@ async function defaultRun(args: string[], workspaceId?: string): Promise<string>
 export async function unshareIfCurrentlyShared(
   service: Pick<TeamResourceShareService, 'sharedResources' | 'unshare'>,
   resourceId: string,
+  scope: TeamResourceRequestScope,
 ): Promise<boolean> {
-  const resources = await service.sharedResources();
+  const resources = await service.sharedResources(scope);
   if (!resources.some((resource) => resource.id === resourceId)) return false;
-  await service.unshare(resourceId);
+  await service.unshare(resourceId, scope);
   return true;
 }
 

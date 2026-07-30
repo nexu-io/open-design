@@ -40,6 +40,7 @@
 //     and runs proactively instead of waiting for the next list request.
 
 import type { WorkspaceInvalidationSsePayload } from '@open-design/contracts';
+import type { ResourceHubPrincipal } from './resource-principal.js';
 
 /** This daemon's one local `workspace_projects` row for a project, as far as
  *  reconciliation cares. */
@@ -227,6 +228,16 @@ export function planWorkspaceProjectReconciliation(input: {
   return actions;
 }
 
+export interface WorkspaceProjectsReconcileIdentity {
+  workspaceId: string;
+  workspaceMemberId: string;
+  /** Optional transport identity captured by the authority resolver. The
+   *  pure planner does not inspect it, but the remote catalog reader must
+   *  receive the same captured principal instead of reconstructing one
+   *  after an await from mutable ambient Workspace state. */
+  principal?: ResourceHubPrincipal | null;
+}
+
 export interface WorkspaceProjectsReconcilerDeps {
   /** The signed-in team workspace + member this daemon is currently acting
    *  as, or null off-team / signed out / removed. Must gate on active
@@ -234,12 +245,14 @@ export interface WorkspaceProjectsReconcilerDeps {
    *  `should-publish.ts`'s `createShouldPublish` uses — a context that can
    *  still ADDRESS a resource hub partition is not proof this member is still
    *  IN the team (see that file's doc comment). */
-  getWorkspaceIdentity: () => Promise<{ workspaceId: string; workspaceMemberId: string } | null>;
+  getWorkspaceIdentity: () => Promise<WorkspaceProjectsReconcileIdentity | null>;
   /** `listTeamProjects()` narrowed to what the planner needs — reuse the
    *  daemon's existing `teamProjectsForDisplay` (server.ts), the exact same
    *  read every other realtime consumer already shares, so this module never
    *  opens a second transport to Vela. */
-  listRemoteTeamProjects: () => Promise<readonly RemoteTeamProjectRef[]>;
+  listRemoteTeamProjects: (
+    identity: WorkspaceProjectsReconcileIdentity,
+  ) => Promise<readonly RemoteTeamProjectRef[]>;
   /**
    * True when this daemon has a local `projects` row for the id — i.e. the
    * project's content has been materialized here (created locally, or pulled
@@ -303,7 +316,7 @@ export async function reconcileWorkspaceProjectsWithRemote(
 
   let remoteProjects: readonly RemoteTeamProjectRef[];
   try {
-    remoteProjects = await deps.listRemoteTeamProjects();
+    remoteProjects = await deps.listRemoteTeamProjects(identity);
   } catch (error) {
     deps.onError?.(error);
     return NO_OP_RESULT;

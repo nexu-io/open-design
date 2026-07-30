@@ -6,14 +6,43 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { DesignsTab } from '../../src/components/DesignsTab';
 import { fetchLiveArtifacts, fetchProjectFiles } from '../../src/providers/registry';
 
+const designsWorkspaceState = vi.hoisted(() => ({
+  context: {
+    workspaceId: 'workspace-designs',
+    workspaceType: 'team',
+    workspaceMemberId: 'member-designs',
+    role: 'member',
+    memberStatus: 'active',
+    lifecycleState: 'active',
+    permissions: {},
+  },
+}));
+
 vi.mock('../../src/providers/registry', () => ({
   deleteLiveArtifact: vi.fn(),
   fetchLiveArtifacts: vi.fn(async () => []),
   fetchProjectFiles: vi.fn(async () => []),
   liveArtifactPreviewUrl: (projectId: string, artifactId: string) =>
     `/api/projects/${projectId}/live-artifacts/${artifactId}/preview`,
-  projectFileUrl: (projectId: string, fileName: string) =>
-    `/api/projects/${projectId}/files/${fileName}`,
+  projectFileUrl: (
+    projectId: string,
+    fileName: string,
+    workspaceContext?: { workspaceId: string; workspaceMemberId: string } | null,
+  ) => {
+    const base = `/api/projects/${projectId}/files/${fileName}`;
+    return workspaceContext
+      ? `${base}?workspaceId=${workspaceContext.workspaceId}&workspaceMemberId=${workspaceContext.workspaceMemberId}`
+      : base;
+  },
+}));
+
+vi.mock('../../src/collab/useWorkspaceContext', () => ({
+  useWorkspaceContext: () => ({
+    context: designsWorkspaceState.context,
+    loading: false,
+    failure: null,
+    refresh: vi.fn(),
+  }),
 }));
 
 describe('DesignsTab empty state', () => {
@@ -87,6 +116,35 @@ describe('DesignsTab empty state', () => {
 
     // Verify CTA Button is NOT present
     expect(screen.queryByRole('button', { name: 'New project' })).toBeNull();
+  });
+
+  it('scopes browser-owned project cover URLs to the exact Workspace identity', () => {
+    const { container } = render(
+      <DesignsTab
+        projects={[
+          {
+            id: 'project-cover',
+            name: 'Cover project',
+            skillId: null,
+            designSystemId: null,
+            createdAt: 1,
+            updatedAt: 2,
+            status: { value: 'not_started' },
+            metadata: { kind: 'image', entryFile: 'cover.png' },
+          },
+        ]}
+        skills={[]}
+        designSystems={[]}
+        onOpen={vi.fn()}
+        onOpenLiveArtifact={vi.fn()}
+        onDelete={vi.fn()}
+        onRename={vi.fn()}
+      />,
+    );
+
+    const src = container.querySelector('.design-card-thumb img')?.getAttribute('src');
+    expect(src).toContain('workspaceId=workspace-designs');
+    expect(src).toContain('workspaceMemberId=member-designs');
   });
 
   it('renders No projects match your search when projects exist but query filters them out', () => {
@@ -165,6 +223,15 @@ describe('DesignsTab empty state', () => {
       expect(fetchLiveArtifacts).toHaveBeenCalledTimes(1);
       expect(fetchProjectFiles).toHaveBeenCalledTimes(1);
     });
+    expect(fetchProjectFiles).toHaveBeenCalledWith(
+      'project-reopen',
+      expect.objectContaining({
+        workspaceContext: expect.objectContaining({
+          workspaceId: 'workspace-designs',
+          workspaceMemberId: 'member-designs',
+        }),
+      }),
+    );
     expect(liveSignal).toBeDefined();
     expect(filesSignal).toBeDefined();
 

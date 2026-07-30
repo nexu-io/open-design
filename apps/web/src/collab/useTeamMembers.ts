@@ -5,8 +5,13 @@ import type {
   CollabCloudMembersResponse,
   WorkspaceCollabContext,
 } from '@open-design/contracts';
-import { useWorkspaceContext, workspaceIdentityCacheKey } from './useWorkspaceContext';
+import { useWorkspaceContext } from './useWorkspaceContext';
 import { useWorkspaceInvalidation } from './workspace-events';
+import {
+  beginWorkspaceScopedRead,
+  workspaceIdentityCacheKey,
+  workspaceProjectHeaders,
+} from './workspace-identity';
 
 // Poll cadence for the collab-cloud member directory. ~15s is light enough to
 // keep a comment author's name / role fresh (a member registers on join) without
@@ -80,25 +85,30 @@ export function currentUserDirectoryEntry(
 export function useTeamMembers(
   currentUser?: CollabCloudMemberDirectoryEntry | null,
 ): TeamMembersState {
-  const [members, setMembers] = useState<CollabCloudMemberDirectoryEntry[]>([]);
+  const [roster, setRoster] = useState<{
+    identity: string;
+    members: CollabCloudMemberDirectoryEntry[];
+  }>({ identity: 'none', members: [] });
   const mountedRef = useRef(true);
   // A workspace switch makes an in-flight roster read describe an identity the
   // user has left. Ordering is local to this hook instance so the late answer
   // cannot redefine the roster the newer read already resolved.
   const requestEpochRef = useRef(0);
 
-  // `GET /api/workspace/members` answers for whichever workspace the DAEMON is
-  // currently active in and reads nothing off the request, so the roster is a
-  // per-workspace answer with no per-workspace URL. The identity therefore has to
-  // live in the cache key, and it has to be reactive: when it changes, the key
-  // changes and this hook re-reads the new workspace's roster immediately instead
-  // of waiting out the 15-60s poll.
+  // The identity lives both on the request and in its cache key. When it
+  // changes, the hook immediately re-reads that workspace's roster instead of
+  // waiting out the 15-60s poll or relying on daemon-global active state.
   //
   // This is not the duplicate GET `currentUserDirectoryEntry` warns about —
   // `useWorkspaceContext` shares one coalesced request and one module-level cache
   // across every mounted consumer, and both call sites of this hook already mount
   // it themselves.
-  const { context: workspaceContext } = useWorkspaceContext();
+  const {
+    context: workspaceContext,
+    identityChangePending,
+  } = useWorkspaceContext();
+  const workspaceContextRef = useRef(workspaceContext);
+  workspaceContextRef.current = workspaceContext;
   const membersCacheKey = `workspace-members:${workspaceIdentityCacheKey(workspaceContext)}`;
 
   useEffect(() => {
@@ -110,13 +120,30 @@ export function useTeamMembers(
   }, []);
 
   const load = useCallback(async () => {
+    const read = beginWorkspaceScopedRead(workspaceContextRef.current);
     const requestEpoch = ++requestEpochRef.current;
     const settle = (next: CollabCloudMemberDirectoryEntry[]) => {
-      if (mountedRef.current && requestEpochRef.current === requestEpoch) setMembers(next);
+      if (
+        mountedRef.current &&
+        requestEpochRef.current === requestEpoch &&
+        read.isStillCurrent(workspaceContextRef.current)
+      ) {
+        setRoster({
+          identity: workspaceIdentityCacheKey(read.context),
+          members: next,
+        });
+      }
     };
+    const requestContext = read.context;
+    if (!requestContext) {
+      settle([]);
+      return;
+    }
     try {
       const members = await coalescedGet(membersCacheKey, async () => {
-        const res = await fetch('/api/workspace/members');
+        const res = await fetch('/api/workspace/members', {
+          headers: workspaceProjectHeaders(requestContext),
+        });
         if (!res.ok) throw new Error(`members ${res.status}`);
         const body = (await res.json()) as CollabCloudMembersResponse;
         return body.members ?? [];
@@ -134,7 +161,10 @@ export function useTeamMembers(
   // change. `connected` drives poll-as-floor below.
   const { connected: sseConnected } = useWorkspaceInvalidation(
     { 'members-changed': () => void load() },
-    { onActive: () => void load() },
+    {
+      workspaceContext,
+      onActive: () => void load(),
+    },
   );
 
   useEffect(() => {
@@ -150,6 +180,10 @@ export function useTeamMembers(
     return () => clearInterval(interval);
   }, [load, sseConnected]);
 
+  const members =
+    !identityChangePending && roster.identity === workspaceIdentityCacheKey(workspaceContext)
+      ? roster.members
+      : [];
   const byId = useMemo(() => {
     const map = new Map<string, CollabCloudMemberDirectoryEntry>();
     for (const entry of members) map.set(entry.memberId, entry);
@@ -170,7 +204,11 @@ export function useTeamMembers(
             role: currentUserRole,
           }
         : null,
-    [currentUserMemberId, currentUserDisplayName, currentUserRole],
+    [
+      currentUserMemberId,
+      currentUserDisplayName,
+      currentUserRole,
+    ],
   );
 
   const resolve = useCallback(

@@ -71,7 +71,7 @@ describe('HandoffButton loading feedback (#100)', () => {
 
     // The click is acknowledged immediately with an in-flight spinner.
     await waitFor(() => expect(trigger.querySelector('.icon-spin')).not.toBeNull());
-    expect(openProjectInEditor).toHaveBeenCalledWith('p1', 'vscode');
+    expect(openProjectInEditor).toHaveBeenCalledWith('p1', 'vscode', null);
 
     // Once the launch settles, the spinner is gone.
     gate.resolve();

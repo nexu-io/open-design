@@ -13,7 +13,15 @@ import type {
   InstalledPluginRecord,
   PluginConnectorRef,
 } from '@open-design/contracts';
-import { applyPlugin } from '../state/projects';
+import {
+  applyPlugin,
+  resolvedWorkspaceContextForWrite,
+} from '../state/projects';
+import type { WorkspaceContextState } from '../collab/useWorkspaceContext';
+import {
+  workspaceProjectHeaders,
+  workspaceResourceUrl,
+} from '../collab/workspace-identity';
 import { goBack, navigate } from '../router';
 import {
   createPluginUseHandoff,
@@ -35,7 +43,13 @@ import {
 
 interface Props {
   pluginId: string;
+  workspaceContextState?: WorkspaceContextState;
 }
+
+const LEGACY_WORKSPACE_CONTEXT_STATE: WorkspaceContextState = {
+  context: null,
+  loading: false,
+};
 
 interface KnowledgeSkill {
   key: string;
@@ -163,6 +177,15 @@ function DetailSection({
 }
 
 export function PluginDetailView(props: Props) {
+  const workspaceContextState =
+    props.workspaceContextState ?? LEGACY_WORKSPACE_CONTEXT_STATE;
+  const pluginWorkspaceContextReady =
+    !workspaceContextState.loading
+    && !workspaceContextState.identityChangePending
+    && workspaceContextState.failure !== 'unavailable';
+  const pluginWorkspaceContext = pluginWorkspaceContextReady
+    ? workspaceContextState.context
+    : null;
   const { locale, t } = useI18n();
   const analytics = useAnalytics();
   const [plugin, setPlugin] = useState<InstalledPluginRecord | null>(null);
@@ -184,8 +207,13 @@ export function PluginDetailView(props: Props) {
   };
 
   useEffect(() => {
+    if (!pluginWorkspaceContextReady) return;
     let cancelled = false;
-    void fetch(`/api/plugins/${encodeURIComponent(props.pluginId)}`)
+    void fetch(`/api/plugins/${encodeURIComponent(props.pluginId)}`, {
+      ...(pluginWorkspaceContext
+        ? { headers: workspaceProjectHeaders(pluginWorkspaceContext) }
+        : {}),
+    })
       .then((response) => {
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         return response.json();
@@ -201,22 +229,23 @@ export function PluginDetailView(props: Props) {
     return () => {
       cancelled = true;
     };
-  }, [props.pluginId]);
+  }, [props.pluginId, pluginWorkspaceContext, pluginWorkspaceContextReady]);
 
   useEffect(() => {
-    if (!plugin || plugin.id !== props.pluginId) return;
+    if (!pluginWorkspaceContextReady || !plugin || plugin.id !== props.pluginId) return;
     const controller = new AbortController();
     void loadPluginSkillDescriptions(
       plugin.id,
       knowledgeSkillsFor(plugin),
       controller.signal,
+      pluginWorkspaceContext,
     ).then((descriptions) => {
       if (!controller.signal.aborted) {
         setSkillDescriptionState({ pluginId: plugin.id, descriptions });
       }
     });
     return () => controller.abort();
-  }, [plugin, props.pluginId]);
+  }, [plugin, props.pluginId, pluginWorkspaceContext, pluginWorkspaceContextReady]);
 
   if (error) {
     return (
@@ -269,7 +298,10 @@ export function PluginDetailView(props: Props) {
     });
     setApplying(true);
     setError(null);
-    const result = await applyPlugin(plugin.id, { locale });
+    const result = await applyPlugin(plugin.id, {
+      locale,
+      workspaceContext: resolvedWorkspaceContextForWrite(workspaceContextState),
+    });
     setApplying(false);
     if (!result) {
       setError({ kind: 'apply', message: '' });
@@ -382,7 +414,10 @@ export function PluginDetailView(props: Props) {
           >
             <iframe
               title={`${localizedTitle} preview`}
-              src={`/api/plugins/${encodeURIComponent(plugin.id)}/preview`}
+              src={workspaceResourceUrl(
+                `/api/plugins/${encodeURIComponent(plugin.id)}/preview`,
+                pluginWorkspaceContext,
+              )}
               sandbox="allow-scripts"
               className="plugin-detail__preview-frame"
               data-testid="plugin-detail-preview-iframe"
@@ -419,7 +454,10 @@ export function PluginDetailView(props: Props) {
                 >
                   <h3>
                     <a
-                      href={`/api/plugins/${encodeURIComponent(plugin.id)}/example/${encodeURIComponent(stem)}`}
+                      href={workspaceResourceUrl(
+                        `/api/plugins/${encodeURIComponent(plugin.id)}/example/${encodeURIComponent(stem)}`,
+                        pluginWorkspaceContext,
+                      )}
                       target="_blank"
                       rel="noreferrer"
                       data-testid={`plugin-detail-example-${stem}`}

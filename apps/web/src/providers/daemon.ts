@@ -341,6 +341,7 @@ export interface DaemonReattachOptions {
   runId: string;
   projectId?: string | null;
   conversationId?: string | null;
+  workspaceContext?: WorkspaceCollabContext | null;
   signal: AbortSignal;
   cancelSignal?: AbortSignal;
   handlers: DaemonStreamHandlers;
@@ -763,6 +764,7 @@ export async function streamViaDaemon({
       onRunEventId,
       projectId,
       conversationId,
+      workspaceContext,
       publishRunFinishedEvent: true,
     });
   } catch (err) {
@@ -782,9 +784,16 @@ export async function reattachDaemonRun(options: DaemonReattachOptions): Promise
   });
 }
 
-export async function fetchChatRunStatus(runId: string): Promise<ChatRunStatusResponse | null> {
+export async function fetchChatRunStatus(
+  runId: string,
+  workspaceContext?: WorkspaceCollabContext | null,
+): Promise<ChatRunStatusResponse | null> {
   try {
-    const resp = await fetch(`/api/runs/${encodeURIComponent(runId)}`);
+    const resp = await fetch(`/api/runs/${encodeURIComponent(runId)}`, {
+      ...(workspaceContext
+        ? { headers: workspaceProjectHeaders(workspaceContext) }
+        : {}),
+    });
     if (!resp.ok) return null;
     return (await resp.json()) as ChatRunStatusResponse;
   } catch {
@@ -1012,19 +1021,20 @@ export async function velaLogout(): Promise<{ ok: boolean }> {
 // the PUT /messages/:id round-trip).
 export async function reportChatRunFeedback(req: {
   runId: string;
-  projectId: string;
-  conversationId: string;
-  assistantMessageId: string;
   rating: 'positive' | 'negative';
   reasonCodes: string[];
   hasCustomReason: boolean;
   customReason: string;
-}): Promise<void> {
+}, workspaceContext?: WorkspaceCollabContext | null): Promise<void> {
   try {
-    await fetch(`/api/runs/${encodeURIComponent(req.runId)}/feedback`, {
+    const { runId, ...feedback } = req;
+    await fetch(`/api/runs/${encodeURIComponent(runId)}/feedback`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(req),
+      headers: {
+        'Content-Type': 'application/json',
+        ...(workspaceContext ? workspaceProjectHeaders(workspaceContext) : {}),
+      },
+      body: JSON.stringify(feedback),
     });
   } catch {
     // Best-effort.
@@ -1034,10 +1044,15 @@ export async function reportChatRunFeedback(req: {
 export async function listActiveChatRuns(
   projectId: string,
   conversationId: string,
+  workspaceContext?: WorkspaceCollabContext | null,
 ): Promise<ChatRunStatusResponse[]> {
   try {
     const qs = new URLSearchParams({ projectId, conversationId, status: 'active' });
-    const resp = await fetch(`/api/runs?${qs.toString()}`);
+    const resp = await fetch(`/api/runs?${qs.toString()}`, {
+      ...(workspaceContext
+        ? { headers: workspaceProjectHeaders(workspaceContext) }
+        : {}),
+    });
     if (!resp.ok) return [];
     const body = (await resp.json()) as ChatRunListResponse;
     return body.runs ?? [];
@@ -1046,9 +1061,15 @@ export async function listActiveChatRuns(
   }
 }
 
-export async function listProjectRuns(): Promise<ChatRunStatusResponse[]> {
+export async function listProjectRuns(
+  workspaceContext?: WorkspaceCollabContext | null,
+): Promise<ChatRunStatusResponse[]> {
   try {
-    const resp = await fetch('/api/runs');
+    const resp = await fetch('/api/runs', {
+      ...(workspaceContext
+        ? { headers: workspaceProjectHeaders(workspaceContext) }
+        : {}),
+    });
     if (!resp.ok) return [];
     const body = (await resp.json()) as ChatRunListResponse;
     return body.runs ?? [];
@@ -1068,6 +1089,7 @@ async function consumeDaemonRun({
   onRunEventId,
   projectId,
   conversationId,
+  workspaceContext,
   publishRunFinishedEvent,
 }: DaemonReattachOptions & { agentId?: string }): Promise<void> {
   let acc = '';
@@ -1106,7 +1128,12 @@ async function consumeDaemonRun({
   const cancelRun = () => {
     if (canceled) return;
     canceled = true;
-    void fetch(`/api/runs/${encodeURIComponent(runId)}/cancel`, { method: 'POST' }).catch(() => {});
+    void fetch(`/api/runs/${encodeURIComponent(runId)}/cancel`, {
+      method: 'POST',
+      ...(workspaceContext
+        ? { headers: workspaceProjectHeaders(workspaceContext) }
+        : {}),
+    }).catch(() => {});
   };
 
   cancelSignal?.addEventListener('abort', cancelRun, { once: true });
@@ -1123,6 +1150,9 @@ async function consumeDaemonRun({
         resp = await fetch(`/api/runs/${encodeURIComponent(runId)}/events${qs}`, {
           method: 'GET',
           signal,
+          ...(workspaceContext
+            ? { headers: workspaceProjectHeaders(workspaceContext) }
+            : {}),
         });
       } catch (err) {
         if ((err as Error).name === 'AbortError') throw err;
@@ -1256,7 +1286,7 @@ async function consumeDaemonRun({
       }
       let shouldResetReconnects = sawStreamProgress;
       if (pendingStructuredError && endStatus === null) {
-        const status = await fetchChatRunStatus(runId).catch(() => null);
+        const status = await fetchChatRunStatus(runId, workspaceContext).catch(() => null);
         if (status && isChatRunStatus(status.status) && status.status !== 'queued' && status.status !== 'running') {
           endStatus = status.status;
           exitCode = status.exitCode ?? null;
@@ -1289,7 +1319,7 @@ async function consumeDaemonRun({
     }
 
     if (endStatus === null) {
-      const status = await fetchChatRunStatus(runId);
+      const status = await fetchChatRunStatus(runId, workspaceContext);
       if (status && isChatRunStatus(status.status) && status.status !== 'queued' && status.status !== 'running') {
         endStatus = status.status;
         exitCode = status.exitCode ?? null;

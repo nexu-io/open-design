@@ -52,9 +52,8 @@ export interface BrandRoutesDeps {
    *  the existing design-system apply flow. */
   userDesignSystemsRoot: string;
   /** The workspace an extracted brand's design system should be claimed by
-   *  (#145), so a brand extracted in one workspace does not fill the next
-   *  one's library. Resolves to null when signed out / single-player. */
-  resolveDesignSystemWorkspaceId?: () => Promise<string | null>;
+   *  (#145), resolved from the exact request's explicit identity. */
+  resolveDesignSystemWorkspaceId?: (req: Request) => Promise<string | null>;
   /** `<dataDir>/projects` — backing brand-extraction projects. */
   projectsRoot: string;
   /**
@@ -110,6 +109,24 @@ type ProgrammaticExtractionAbortResult = 'none' | 'settled' | 'timeout';
 export function registerBrandRoutes(app: Application, deps: BrandRoutesDeps): void {
   const { brandsRoot, userDesignSystemsRoot, projectsRoot, skillsRoot, dataDir, db, randomId } = deps;
   const activeProgrammaticBrandExtractions = new Map<string, ActiveProgrammaticBrandExtraction>();
+  const sendWorkspaceScopeError = (res: Response, error: unknown): boolean => {
+    if (
+      !error
+      || typeof error !== 'object'
+      || !('status' in error)
+      || (error.status !== 400 && error.status !== 403 && error.status !== 503)
+      || !('code' in error)
+      || typeof error.code !== 'string'
+    ) {
+      return false;
+    }
+    res.status(error.status).json({
+      error: error.code,
+      message: error instanceof Error ? error.message : String(error.code),
+      ...('retryable' in error && error.retryable === true ? { retryable: true } : {}),
+    });
+    return true;
+  };
 
   /**
    * Bind a freshly started brand-extraction project into the SAME workspace
@@ -134,18 +151,15 @@ export function registerBrandRoutes(app: Application, deps: BrandRoutesDeps): vo
    * spec 04 §9.3's asset sync depends on — because their own first chat turn
    * 403s before the agent ever runs.
    *
-   * Scoped to an ACTIVE member only, matching `POST /api/projects`. A request
-   * with no workspace headers falls back to the workspace this daemon is signed
-   * in to; only a daemon that has resolved no workspace at all leaves the
-   * project unbound, which is the honest answer for a signed-out/single-player
-   * install — unbound-and-headerless is the case
-   * `enforceWorkspaceResourceMutation` already passes straight through (see its
-   * `requestCtx === null` branch).
+   * Scoped to an ACTIVE member only, matching `POST /api/projects`. A
+   * headerless legacy request remains unbound. An asserted but invalid or
+   * unavailable identity fails before extraction creates any local state.
    */
-  async function bindBrandProjectIntoRequestWorkspace(req: Request, projectId: string, now: number): Promise<void> {
-    const ctx = deps.resolveCreatedProjectHome
-      ? await deps.resolveCreatedProjectHome(req)
-      : null;
+  function bindBrandProjectIntoRequestWorkspace(
+    ctx: Awaited<ReturnType<CreatedProjectWorkspaceResolver>>,
+    projectId: string,
+    now: number,
+  ): void {
     if (!ctx || ctx.memberStatus !== 'active') return;
     ensureWorkspaceProject(db, {
       projectId,
@@ -291,6 +305,11 @@ export function registerBrandRoutes(app: Application, deps: BrandRoutesDeps): vo
       return;
     }
     try {
+      // Resolve before startBrandExtraction reserves a brand/project. An
+      // explicitly scoped request must never degrade to an unbound artifact.
+      const createHome = deps.resolveCreatedProjectHome
+        ? await deps.resolveCreatedProjectHome(req)
+        : null;
       const programmaticAbortController = new AbortController();
       const backgroundExtractionRef: { current: Promise<unknown> | null } = { current: null };
       const startOptions: Parameters<typeof startBrandExtraction>[0] = {
@@ -303,7 +322,7 @@ export function registerBrandRoutes(app: Application, deps: BrandRoutesDeps): vo
         // returning, then harvests + synthesizes + finalizes the design system
         // in the background.
         userDesignSystemsRoot,
-        designSystemWorkspaceId: (await deps.resolveDesignSystemWorkspaceId?.()) ?? null,
+        designSystemWorkspaceId: (await deps.resolveDesignSystemWorkspaceId?.(req)) ?? null,
         dataDir,
         programmaticAbortSignal: programmaticAbortController.signal,
         onBackgroundExtraction: (settled) => {
@@ -321,11 +340,12 @@ export function registerBrandRoutes(app: Application, deps: BrandRoutesDeps): vo
       const transcriptAgent = await deps.resolveTranscriptAgent?.().catch(() => null);
       if (transcriptAgent) startOptions.transcriptAgent = transcriptAgent;
       const result = await startBrandExtraction(startOptions);
-      await bindBrandProjectIntoRequestWorkspace(req, result.projectId, Date.now());
+      bindBrandProjectIntoRequestWorkspace(createHome, result.projectId, Date.now());
       const backgroundExtraction = backgroundExtractionRef.current;
       trackProgrammaticBrandExtraction(result.id, programmaticAbortController, backgroundExtraction);
       res.json(result);
     } catch (err) {
+      if (sendWorkspaceScopeError(res, err)) return;
       const message = err instanceof Error ? err.message : String(err);
       // A bad URL is the only expected throw; everything else is a 500.
       const status = /valid http/i.test(message) ? 400 : 500;
@@ -478,7 +498,7 @@ export function registerBrandRoutes(app: Application, deps: BrandRoutesDeps): vo
         id,
         brandsRoot,
         userDesignSystemsRoot,
-        designSystemWorkspaceId: (await deps.resolveDesignSystemWorkspaceId?.()) ?? null,
+        designSystemWorkspaceId: (await deps.resolveDesignSystemWorkspaceId?.(req)) ?? null,
         projectsRoot,
         skillsRoot,
         dataDir,
@@ -490,6 +510,7 @@ export function registerBrandRoutes(app: Application, deps: BrandRoutesDeps): vo
       const result = await finalizeBrand(finalizeOptions);
       res.json(result);
     } catch (err) {
+      if (sendWorkspaceScopeError(res, err)) return;
       const message = err instanceof Error ? err.message : String(err);
       const status = /not found/i.test(message) ? 404 : 422;
       res.status(status).json({ error: message });

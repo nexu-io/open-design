@@ -1575,7 +1575,9 @@ describe('ProjectView daemon cleanup', () => {
       />,
     );
 
-    await waitFor(() => expect(fetchProjectDesignSystemPackageAudit).toHaveBeenCalledWith('project-ds'));
+    await waitFor(() =>
+      expect(fetchProjectDesignSystemPackageAudit).toHaveBeenCalledWith('project-ds', null),
+    );
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalled());
     expect(window.sessionStorage.getItem('od:design-system-audit-auto-repair:project-ds')).toBe('1');
     await waitFor(() => {
@@ -1665,7 +1667,9 @@ describe('ProjectView daemon cleanup', () => {
     const chatProps = await waitForReadyChatPaneProps();
     await chatProps.onSend!('Update the design system', [], []);
 
-    await waitFor(() => expect(fetchProjectDesignSystemPackageAudit).toHaveBeenCalledWith('project-ds-manual'));
+    await waitFor(() =>
+      expect(fetchProjectDesignSystemPackageAudit).toHaveBeenCalledWith('project-ds-manual', null),
+    );
     await waitFor(() => {
       expect(saveMessage.mock.calls.some((call) =>
         call[2]?.role === 'assistant'
@@ -1746,7 +1750,9 @@ describe('ProjectView daemon cleanup', () => {
       />,
     );
 
-    await waitFor(() => expect(fetchProjectDesignSystemPackageAudit).toHaveBeenCalledWith('project-ds-pass'));
+    await waitFor(() =>
+      expect(fetchProjectDesignSystemPackageAudit).toHaveBeenCalledWith('project-ds-pass', null),
+    );
     expect(streamViaDaemon).toHaveBeenCalledTimes(1);
     expect(window.sessionStorage.getItem('od:design-system-audit-auto-repair:project-ds-pass')).toBeNull();
   });
@@ -2194,7 +2200,9 @@ describe('ProjectView daemon cleanup', () => {
       />,
     );
 
-    await waitFor(() => expect(fetchProjectFiles).toHaveBeenCalledWith('project-1'));
+    await waitFor(() =>
+      expect(fetchProjectFiles).toHaveBeenCalledWith('project-1', { workspaceContext: null }),
+    );
     expect(fetchChatRunStatus).not.toHaveBeenCalled();
     expect(reattachDaemonRun).not.toHaveBeenCalled();
     expect(saveMessage).not.toHaveBeenCalledWith(
@@ -2271,7 +2279,9 @@ describe('ProjectView daemon cleanup', () => {
       />,
     );
 
-    await waitFor(() => expect(fetchChatRunStatus).toHaveBeenCalledWith('run-legacy-replay'));
+    await waitFor(() =>
+      expect(fetchChatRunStatus).toHaveBeenCalledWith('run-legacy-replay', null),
+    );
     await waitFor(() => {
       expect(saveMessage).toHaveBeenCalledWith(
         'project-1',
@@ -3935,7 +3945,7 @@ describe('ProjectView daemon cleanup', () => {
           call[2]?.runStatus === 'canceled' &&
           call[2]?.resumable === true &&
           call[2]?.events === preservedEvents &&
-          call[3] === undefined,
+          call[3]?.workspaceContext === null,
       );
       expect(canceledSave).toBeTruthy();
     });

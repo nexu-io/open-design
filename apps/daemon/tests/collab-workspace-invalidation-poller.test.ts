@@ -46,6 +46,8 @@ interface Harness {
   contextCalls: number;
   teamListCalls: number;
   memberListCalls: number;
+  listedWorkspaceIds: string[];
+  emittedWorkspaceIds: Array<string | null>;
   errors: unknown[];
   poller: ReturnType<typeof createWorkspaceInvalidationPoller>;
 }
@@ -72,6 +74,8 @@ function harness(initial: {
     contextCalls: 0,
     teamListCalls: 0,
     memberListCalls: 0,
+    listedWorkspaceIds: [],
+    emittedWorkspaceIds: [],
     errors: [],
     poller: null as unknown as ReturnType<typeof createWorkspaceInvalidationPoller>,
   };
@@ -80,8 +84,9 @@ function harness(initial: {
       h.contextCalls += 1;
       return h.context;
     },
-    listTeamProjects: async () => {
+    listTeamProjects: async (context) => {
       h.teamListCalls += 1;
+      h.listedWorkspaceIds.push(context.workspaceId);
       if (h.projects === null) throw new Error('team-projects read failed');
       return h.projects;
     },
@@ -90,7 +95,10 @@ function harness(initial: {
       if (h.members === null) throw new Error('members read failed');
       return h.members;
     },
-    emit: (payload) => h.emitted.push(payload),
+    emit: (payload, context) => {
+      h.emitted.push(payload);
+      h.emittedWorkspaceIds.push(context?.workspaceId ?? null);
+    },
     onError: (error) => h.errors.push(error),
     ...(initial.pollIntervalMs != null
       ? { pollIntervalMs: initial.pollIntervalMs }
@@ -124,6 +132,43 @@ describe('workspace invalidation poller', () => {
     h.projects = [project('p1'), project('p2')];
     await h.poller.pollOnce();
     expect(h.types()).toEqual(['team-projects-changed']);
+  });
+
+  it('carries one captured context through catalog read and emission when ambient selection changes', async () => {
+    const contextA = teamContext({ workspaceId: 'team-a', teamId: 'team-a' });
+    const contextB = teamContext({ workspaceId: 'team-b', teamId: 'team-b' });
+    const h = harness({ context: contextA, projects: [project('a')] });
+    await h.poller.pollOnce();
+
+    h.context = contextA;
+    h.projects = [project('a'), project('a2')];
+    let catalogReads = 0;
+    let memberReads = 0;
+    const poller = createWorkspaceInvalidationPoller({
+      getWorkspaceContext: async () => contextA,
+      listTeamProjects: async (captured) => {
+        h.context = contextB;
+        expect(captured.workspaceId).toBe('team-a');
+        catalogReads += 1;
+        return catalogReads === 1
+          ? [project('a')]
+          : [project('a'), project('a2')];
+      },
+      listMembers: async (captured) => {
+        expect(captured.workspaceId).toBe('team-a');
+        memberReads += 1;
+        return memberReads === 1 ? [] : [member('member-a')];
+      },
+      emit: (payload, captured) => {
+        h.emitted.push(payload);
+        h.emittedWorkspaceIds.push(captured?.workspaceId ?? null);
+      },
+    });
+    await poller.pollOnce();
+    await poller.pollOnce();
+
+    expect(h.context?.workspaceId).toBe('team-b');
+    expect(h.emittedWorkspaceIds.slice(-2)).toEqual(['team-a', 'team-a']);
   });
 
   it('does not emit when the team list is reordered but unchanged', async () => {

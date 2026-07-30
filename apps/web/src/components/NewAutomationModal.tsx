@@ -23,6 +23,8 @@ import { useI18n, useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { localizePluginDescription, localizePluginTitle } from './plugins-home/localization';
 import { describeRoutineSchedule, describeRoutineScheduleParts } from './routineScheduleLabels';
+import { useWorkspaceContext } from '../collab/useWorkspaceContext';
+import { workspaceProjectHeaders } from '../collab/workspace-identity';
 
 type ProjectSummary = { id: string; name: string };
 type ScheduleKind = RoutineSchedule['kind'];
@@ -247,6 +249,7 @@ export function NewAutomationModal({
 }: Props) {
   const t = useT();
   const { locale } = useI18n();
+  const { context: workspaceContext } = useWorkspaceContext();
   const editingId = initial?.routine?.id ?? null;
   const [form, setForm] = useState<FormState>(emptyForm);
   const [submitting, setSubmitting] = useState(false);
@@ -467,6 +470,14 @@ export function NewAutomationModal({
           ...(selectedPluginIds.length > 0 ? { pluginIds: selectedPluginIds } : {}),
           ...(selectedMcpIds.length > 0 ? { mcpServerIds: selectedMcpIds } : {}),
           ...(selectedConnectorIds.length > 0 ? { connectorIds: selectedConnectorIds } : {}),
+          ...(target.mode === 'create_each_run' && workspaceContext
+            ? {
+                workspaceScope: {
+                  workspaceId: workspaceContext.workspaceId,
+                  workspaceMemberId: workspaceContext.workspaceMemberId,
+                },
+              }
+            : {}),
         },
         enabled: true,
       };
@@ -484,7 +495,10 @@ export function NewAutomationModal({
         : body;
       const res = await fetch(url, {
         method: isEdit ? 'PATCH' : 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: {
+          'content-type': 'application/json',
+          ...(workspaceContext ? workspaceProjectHeaders(workspaceContext) : {}),
+        },
         body: JSON.stringify(payload),
       });
       if (!res.ok) {

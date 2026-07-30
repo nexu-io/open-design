@@ -231,6 +231,41 @@ describe('reconcileWorkspaceProjectsWithRemote (orchestrator, fake deps)', () =>
     expect(onError).toHaveBeenCalledTimes(1);
   });
 
+  it('passes the once-captured workspace identity through the remote read when the ambient workspace switches', async () => {
+    let ambientWorkspaceId = 'team-a';
+    const capturedIdentity = {
+      workspaceId: ambientWorkspaceId,
+      workspaceMemberId: 'member-a',
+    };
+    const listRemoteTeamProjects = vi.fn(async (identity: typeof capturedIdentity) => {
+      // Model the user switching to B while A's catalog request is in flight.
+      ambientWorkspaceId = 'team-b';
+      return identity.workspaceId === 'team-a'
+        ? [{ projectId: 'project-a', ownerMemberId: 'member-a' }]
+        : [{ projectId: 'project-b', ownerMemberId: 'member-b' }];
+    });
+    const applyBind = vi.fn();
+
+    await reconcileWorkspaceProjectsWithRemote(
+      baseDeps({
+        getWorkspaceIdentity: async () => capturedIdentity,
+        listRemoteTeamProjects,
+        applyBind,
+      }),
+    );
+
+    expect(ambientWorkspaceId).toBe('team-b');
+    expect(listRemoteTeamProjects).toHaveBeenCalledWith(capturedIdentity);
+    expect(applyBind).toHaveBeenCalledWith(
+      'project-a',
+      expect.objectContaining({ workspaceId: 'team-a' }),
+    );
+    expect(applyBind).not.toHaveBeenCalledWith(
+      'project-b',
+      expect.anything(),
+    );
+  });
+
   it('looks up getLocalBinding only for remote projects not already covered by listLocalTeamRows', async () => {
     const getLocalBinding = vi.fn(() => null);
     await reconcileWorkspaceProjectsWithRemote(

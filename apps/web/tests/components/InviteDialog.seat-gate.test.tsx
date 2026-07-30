@@ -3,6 +3,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 import { InviteDialog } from '../../src/components/InviteDialog';
+import { workspaceContextFixture } from '../helpers/workspace-context';
+
+const TEAM_CONTEXT = workspaceContextFixture({
+  workspaceId: 'workspace-team',
+  workspaceMemberId: 'member-inviter',
+});
 
 afterEach(() => {
   cleanup();
@@ -21,7 +27,7 @@ async function submitWithError(error: string) {
   );
   vi.stubGlobal('fetch', fetchSpy);
 
-  render(<InviteDialog open onClose={() => {}} />);
+  render(<InviteDialog open onClose={() => {}} workspaceContext={TEAM_CONTEXT} />);
   typeAnInvite();
   fireEvent.click(screen.getByRole('button', { name: /确认并邀请|invite/i }));
   await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalled());
@@ -35,7 +41,13 @@ describe('InviteDialog — seat gate (#115)', () => {
     const onUpgrade = vi.fn();
 
     render(
-      <InviteDialog open onClose={() => {}} availableSeats={0} onUpgrade={onUpgrade} />,
+      <InviteDialog
+        open
+        onClose={() => {}}
+        workspaceContext={TEAM_CONTEXT}
+        availableSeats={0}
+        onUpgrade={onUpgrade}
+      />,
     );
     typeAnInvite();
 
@@ -56,13 +68,26 @@ describe('InviteDialog — seat gate (#115)', () => {
     );
     vi.stubGlobal('fetch', fetchSpy);
 
-    render(<InviteDialog open onClose={() => {}} availableSeats={3} />);
+    render(
+      <InviteDialog
+        open
+        onClose={() => {}}
+        workspaceContext={TEAM_CONTEXT}
+        availableSeats={3}
+      />,
+    );
     typeAnInvite();
     fireEvent.click(screen.getByRole('button', { name: /确认并邀请|invite/i }));
 
     await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalled());
     const firstCall = fetchSpy.mock.calls[0] as unknown[] | undefined;
     expect(String(firstCall?.[0])).toContain('/api/workspace/invite');
+    const init = firstCall?.[1] as RequestInit | undefined;
+    const headers = new Headers(init?.headers);
+    expect(headers.get('x-od-workspace-id')).toBe(TEAM_CONTEXT.workspaceId);
+    expect(headers.get('x-od-workspace-member-id')).toBe(
+      TEAM_CONTEXT.workspaceMemberId,
+    );
   });
 
   it('stays permissive while the seat count is still unknown', () => {
@@ -72,7 +97,7 @@ describe('InviteDialog — seat gate (#115)', () => {
     vi.stubGlobal('fetch', fetchSpy);
 
     // A context that has not loaded yet must not look like "no seats".
-    render(<InviteDialog open onClose={() => {}} />);
+    render(<InviteDialog open onClose={() => {}} workspaceContext={TEAM_CONTEXT} />);
     typeAnInvite();
     const confirm = screen.getByRole('button', { name: /确认并邀请|invite/i });
     expect((confirm as HTMLButtonElement).disabled).toBe(false);

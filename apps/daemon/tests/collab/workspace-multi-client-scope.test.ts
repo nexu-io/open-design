@@ -147,6 +147,7 @@ function createClient(fetchImpl: typeof fetch, pinned: string) {
   return {
     pin: () => pin,
     context: () => provider.current({}),
+    exact: (workspaceId: string) => provider.resolveExact!({ workspaceId }),
     /**
      * What `PUT /api/workspace/active` does now: move the LOCAL pin. There is
      * no backend selection call left to make.
@@ -222,6 +223,41 @@ describe('one account, two clients, against a B that only knows an account-level
 });
 
 describe('one account, two clients, against a B that honours a per-request workspace', () => {
+  it('resolves A and B concurrently without reading or mutating the daemon pin', async () => {
+    const vela = createOneAccountVela({ selection: PERSONAL, honoursWorkspaceHeader: true });
+    const client = createClient(vela.fetchImpl, 'unrelated-daemon-pin');
+
+    const [a, b] = await Promise.all([
+      client.exact(TEAM),
+      client.exact(PERSONAL),
+    ]);
+
+    expect(a?.workspaceId).toBe(TEAM);
+    expect(a?.planId).toBe('team-pro');
+    expect(b?.workspaceId).toBe(PERSONAL);
+    expect(b?.planId).toBe('personal-pro');
+    expect(client.pin()).toBe('unrelated-daemon-pin');
+    expect(vela.putCount()).toBe(0);
+  });
+
+  it('rejects a mismatched upstream current answer and falls back only to the exact directory item', async () => {
+    const vela = createOneAccountVela({ selection: PERSONAL, honoursWorkspaceHeader: false });
+    const client = createClient(vela.fetchImpl, 'unrelated-daemon-pin');
+
+    const resolved = await client.exact(TEAM);
+
+    expect(resolved).toMatchObject({
+      workspaceId: TEAM,
+      workspaceMemberId: 'wm-1',
+      role: 'member',
+    });
+    // The Personal response must not leak into Team. Directory synthesis has no
+    // Personal plan enrichment and does not touch the unrelated daemon pin.
+    expect(resolved?.planId).toBeNull();
+    expect(client.pin()).toBe('unrelated-daemon-pin');
+    expect(vela.directoryReads()).toBe(1);
+  });
+
   it('serves BOTH clients their own workspace, fully enriched', async () => {
     const vela = createOneAccountVela({ selection: PERSONAL, honoursWorkspaceHeader: true });
     const clientA = createClient(vela.fetchImpl, TEAM);

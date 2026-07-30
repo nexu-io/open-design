@@ -8,6 +8,8 @@ import {
   deleteProject,
   duplicatePluginAsProject,
   duplicateProject,
+  getProject,
+  getProjectDetail,
   importClaudeDesignZip,
   importFolderProject,
   installGeneratedPluginFolder,
@@ -20,6 +22,8 @@ import {
   pickLocalFolderPath,
   publishGeneratedPluginToGitHub,
   resolvedWorkspaceContextForWrite,
+  startGeneratedPluginShareTask,
+  waitGeneratedPluginShareTask,
 } from '../../src/state/projects';
 import {
   buildWorkspacePermissions,
@@ -55,6 +59,62 @@ function teamWorkspaceContext(
     ...overrides,
   };
 }
+
+describe('project detail reads', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('sends exact Workspace authority for getProject and getProjectDetail', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () => Response.json({
+      project: {
+        id: 'project-bound',
+        name: 'Bound project',
+        skillId: null,
+        designSystemId: null,
+        createdAt: 1,
+        updatedAt: 1,
+        workspaceId: 'workspace-detail',
+      },
+      resolvedDir: '/tmp/project-bound',
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    const context = teamWorkspaceContext({
+      workspaceId: 'workspace-detail',
+      workspaceMemberId: 'member-detail',
+    });
+
+    await getProject('project-bound', context);
+    await getProjectDetail('project-bound', { ensureDir: true }, context);
+
+    for (const call of fetchMock.mock.calls) {
+      const headers = new Headers(call[1]?.headers);
+      expect(headers.get('x-od-workspace-id')).toBe('workspace-detail');
+      expect(headers.get('x-od-workspace-member-id')).toBe('member-detail');
+    }
+  });
+
+  it('preserves headerless reads for an unbound legacy project', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () => Response.json({
+      project: {
+        id: 'legacy-project',
+        name: 'Legacy',
+        skillId: null,
+        designSystemId: null,
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await getProject('legacy-project');
+    await getProjectDetail('legacy-project');
+
+    for (const call of fetchMock.mock.calls) {
+      expect(new Headers(call[1]?.headers).has('x-od-workspace-id')).toBe(false);
+    }
+  });
+});
 
 describe('applyPlugin', () => {
   afterEach(() => {
@@ -103,6 +163,41 @@ describe('applyPlugin', () => {
       grantCaps: [],
       locale: 'zh-CN',
     });
+  });
+
+  it('scopes same-id plugin apply requests to the exact A/B workspace', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () =>
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const workspaceA = teamWorkspaceContext({
+      workspaceId: 'ws-a',
+      workspaceMemberId: 'wm-a',
+    });
+    const workspaceB = teamWorkspaceContext({
+      workspaceId: 'ws-b',
+      workspaceMemberId: 'wm-b',
+    });
+
+    await Promise.all([
+      applyPlugin('shared-plugin-id', { workspaceContext: workspaceA }),
+      applyPlugin('shared-plugin-id', { workspaceContext: workspaceB }),
+    ]);
+
+    const scopes = fetchMock.mock.calls.map(([, init]) => {
+      const headers = new Headers(init?.headers);
+      return [
+        headers.get('x-od-workspace-id'),
+        headers.get('x-od-workspace-member-id'),
+      ];
+    });
+    expect(scopes).toEqual([
+      ['ws-a', 'wm-a'],
+      ['ws-b', 'wm-b'],
+    ]);
   });
 });
 
@@ -574,13 +669,25 @@ describe('installGeneratedPluginFolder', () => {
     ));
     vi.stubGlobal('fetch', fetchMock);
 
-    const outcome = await installGeneratedPluginFolder('project-1', 'generated-plugin');
+    const context = teamWorkspaceContext({
+      workspaceId: 'workspace-install',
+      workspaceMemberId: 'member-install',
+    });
+    const outcome = await installGeneratedPluginFolder(
+      'project-1',
+      'generated-plugin',
+      context,
+    );
 
     expect(outcome.ok).toBe(true);
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/projects/project-1/plugins/install-folder',
       expect.objectContaining({
         method: 'POST',
+        headers: expect.objectContaining({
+          'x-od-workspace-id': 'workspace-install',
+          'x-od-workspace-member-id': 'member-install',
+        }),
         body: JSON.stringify({ path: 'generated-plugin' }),
       }),
     );
@@ -688,8 +795,20 @@ describe('generated plugin share actions', () => {
     ));
     vi.stubGlobal('fetch', fetchMock);
 
-    const publish = await publishGeneratedPluginToGitHub('project-1', 'generated-plugin');
-    const contribute = await contributeGeneratedPluginToOpenDesign('project-1', 'generated-plugin');
+    const context = teamWorkspaceContext({
+      workspaceId: 'workspace-share',
+      workspaceMemberId: 'member-share',
+    });
+    const publish = await publishGeneratedPluginToGitHub(
+      'project-1',
+      'generated-plugin',
+      context,
+    );
+    const contribute = await contributeGeneratedPluginToOpenDesign(
+      'project-1',
+      'generated-plugin',
+      context,
+    );
 
     expect(publish).toMatchObject({ ok: true, message: 'Ready' });
     expect(contribute).toMatchObject({ ok: true, message: 'Ready' });
@@ -698,6 +817,10 @@ describe('generated plugin share actions', () => {
       '/api/projects/project-1/plugins/publish-github',
       expect.objectContaining({
         method: 'POST',
+        headers: expect.objectContaining({
+          'x-od-workspace-id': 'workspace-share',
+          'x-od-workspace-member-id': 'member-share',
+        }),
         body: JSON.stringify({ path: 'generated-plugin' }),
       }),
     );
@@ -706,9 +829,66 @@ describe('generated plugin share actions', () => {
       '/api/projects/project-1/plugins/contribute-open-design',
       expect.objectContaining({
         method: 'POST',
+        headers: expect.objectContaining({
+          'x-od-workspace-id': 'workspace-share',
+          'x-od-workspace-member-id': 'member-share',
+        }),
         body: JSON.stringify({ path: 'generated-plugin' }),
       }),
     );
+  });
+});
+
+describe('generated plugin share tasks', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('keeps the initiating Workspace identity on both start and long-poll requests', async () => {
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(
+        JSON.stringify({
+          taskId: 'task-1',
+          action: 'publish-github',
+          path: 'generated-plugin',
+          status: 'running',
+          startedAt: 10,
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ))
+      .mockResolvedValueOnce(new Response(
+        JSON.stringify({
+          taskId: 'task-1',
+          action: 'publish-github',
+          path: 'generated-plugin',
+          status: 'done',
+          startedAt: 10,
+          endedAt: 20,
+          progress: [],
+          nextSince: 1,
+          result: { message: 'Published' },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ));
+    vi.stubGlobal('fetch', fetchMock);
+    const capturedContext = teamWorkspaceContext({
+      workspaceId: 'workspace-start',
+      workspaceMemberId: 'member-start',
+    });
+
+    const task = await startGeneratedPluginShareTask(
+      'project-1',
+      'generated-plugin',
+      'publish-github',
+      capturedContext,
+    );
+    await waitGeneratedPluginShareTask(task.taskId, 0, 25_000, capturedContext);
+
+    for (const call of fetchMock.mock.calls) {
+      const headers = new Headers(call[1]?.headers);
+      expect(headers.get('x-od-workspace-id')).toBe('workspace-start');
+      expect(headers.get('x-od-workspace-member-id')).toBe('member-start');
+    }
   });
 });
 

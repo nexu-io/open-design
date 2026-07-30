@@ -200,7 +200,7 @@ describe('server.ts wiring (source boundary)', () => {
     );
   });
 
-  it('wires poller invalidations through reconciliation and stable catalog observations through bounded full recovery', () => {
+  it('wires exact-scope recovery pollers through reconciliation and bounded full recovery', () => {
     const anchor = 'createWorkspaceInvalidationPoller({';
     const start = source.indexOf(anchor);
     expect(start, 'expected to find createWorkspaceInvalidationPoller(...) in server.ts').toBeGreaterThan(-1);
@@ -219,15 +219,26 @@ describe('server.ts wiring (source boundary)', () => {
     expect(depth, 'expected createWorkspaceInvalidationPoller({...}) braces to balance').toBe(0);
     const configBody = source.slice(start, i + 1);
     expect(configBody).toContain(
-      'handlePolledWorkspaceInvalidation(payload, emitWorkspaceEvent, reconcileWorkspaceProjectsFromRemote);',
+      'activeTeamWorkspaceIdentity(context)?.workspaceId ?? workspaceId,',
     );
     expect(configBody).toContain(
-      'onTeamProjectsObserved: ({ workspaceId }) =>\n' +
-        '      proactiveContentPull.advanceRecoveryFloor(workspaceId),',
+      'listTeamProjects: (context) => teamProjectsForDisplay(context),',
     );
-    expect(configBody).not.toContain('activeWorkspace.get()');
-    const emitStart = configBody.indexOf('emit: (payload) => {');
-    const emitEnd = configBody.indexOf('\n    },', emitStart);
+    expect(configBody).not.toContain('polledWorkspaceIdForReconcile');
+    expect(configBody).toContain(
+      'onTeamProjectsObserved: ({ workspaceId: observedWorkspaceId }) =>\n' +
+        '          proactiveContentPull.advanceRecoveryFloor(observedWorkspaceId),',
+    );
+    expect(configBody).not.toContain('activeWorkspace');
+    expect(configBody).toContain(
+      'resolveAuthoritativeTeamWorkspaceContext(workspaceId)',
+    );
+    expect(configBody).not.toContain('collab.workspaceContext.current({})');
+    const emitStart = configBody.indexOf('emit: (payload, context) => {');
+    const emitEnd = configBody.indexOf(
+      'onTeamProjectsObserved:',
+      emitStart,
+    );
     expect(emitStart).toBeGreaterThan(-1);
     expect(emitEnd).toBeGreaterThan(emitStart);
     expect(configBody.slice(emitStart, emitEnd)).not.toContain(
@@ -270,21 +281,146 @@ describe('server.ts wiring (source boundary)', () => {
     expect(source).toContain(
       '}, target.authorizationWitness, expectedVersion, target.authorizedStageInvocation)',
     );
-    expect(source).toContain(
+    expect(source).not.toContain(
       'getActiveWorkspaceSnapshot: authorizedActiveWorkspaceSnapshot',
+    );
+    expect(source).toContain(
+      'authorizedTeamProjectPull: {\n' +
+        '      journalDir: teamMirrorPromotionJournalDir,\n' +
+        '    },',
     );
   });
 
-  it('authorizes no-pin reconnect catch-up from verified workspace identity', () => {
+  it('authorizes reconnect catch-up from the expected Workspace directory identity', () => {
     const anchor = 'listSharedProjects: async (workspaceId) => {';
     const start = source.indexOf(anchor);
     const end = source.indexOf('hasMaterializedProject:', start);
     const body = source.slice(start, end);
     expect(body).not.toContain('activeWorkspace.get()');
-    expect(body).toContain('collab.workspaceContext.current({})');
-    expect(body).toContain('const before = authorizedActiveWorkspaceSnapshot()');
-    expect(body).toContain('const after = authorizedActiveWorkspaceSnapshot()');
-    expect(body).toContain('after.generation !== before.generation');
+    expect(body).not.toContain('collab.workspaceContext.current({})');
+    expect(body).not.toContain('lastKnown');
+    expect(body).toContain(
+      'resolveAuthoritativeTeamWorkspaceContext(workspaceId)',
+    );
+    expect(
+      body.split('resolveAuthoritativeTeamWorkspaceContext(workspaceId)')
+        .length - 1,
+    ).toBe(2);
+  });
+
+  it('does not drop subscribed Workspace A hub data when Workspace B is ambient', () => {
+    const start = source.indexOf(
+      'const startWorkspaceHubSubscriber = (subscribedWorkspaceId: string) =>',
+    );
+    const end = source.indexOf(
+      'workspaceHubSubscriptions = createWorkspaceHubSubscriptionManager({',
+      start,
+    );
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const body = source.slice(start, end);
+
+    expect(body).not.toContain(
+      'subscribedWorkspaceId === activeWorkspace.get()?.trim()',
+    );
+    expect(body).not.toContain('if (!isAmbientWorkspace');
+    expect(body).toContain(
+      'event.workspaceId ?? subscribedWorkspaceId',
+    );
+    expect(body).toContain(
+      'workspaceId: eventWorkspaceId',
+    );
+  });
+
+  it('runs reconnect and source-gap recovery for the exact subscribed Workspace', () => {
+    const start = source.indexOf(
+      'const startWorkspaceHubSubscriber = (subscribedWorkspaceId: string) =>',
+    );
+    const end = source.indexOf(
+      'workspaceHubSubscriptions = createWorkspaceHubSubscriptionManager({',
+      start,
+    );
+    const body = source.slice(start, end);
+    const reconnectStart = body.indexOf('onReconnect: () => {');
+    const sourceGapStart = body.indexOf('onSourceGap:', reconnectStart);
+    const errorStart = body.indexOf('onError:', sourceGapStart);
+    expect(reconnectStart).toBeGreaterThan(-1);
+    expect(sourceGapStart).toBeGreaterThan(reconnectStart);
+    expect(errorStart).toBeGreaterThan(sourceGapStart);
+
+    const reconnectBody = body.slice(reconnectStart, sourceGapStart);
+    const sourceGapBody = body.slice(sourceGapStart, errorStart);
+    expect(reconnectBody).not.toContain('activeWorkspace.get()');
+    expect(sourceGapBody).not.toContain('activeWorkspace.get()');
+    expect(reconnectBody).toContain(
+      'reconcileWorkspaceProjectsFromRemote(subscribedWorkspaceId)',
+    );
+    expect(reconnectBody).toContain(
+      'reconcileTeamResourcesFromRemote(undefined, subscribedWorkspaceId)',
+    );
+    expect(sourceGapBody).toContain(
+      'workspaceId ?? subscribedWorkspaceId',
+    );
+  });
+
+  it('polls remembered, subscribed, and persisted Team resource Workspaces instead of only ambient', () => {
+    const idsStart = source.indexOf(
+      'const teamResourceBackgroundWorkspaceIds = (): string[] => {',
+    );
+    const timerStart = source.indexOf(
+      'const teamResourcesPollTimer = setInterval(() => {',
+      idsStart,
+    );
+    expect(idsStart).toBeGreaterThan(-1);
+    expect(timerStart).toBeGreaterThan(idsStart);
+    const idsBody = source.slice(idsStart, timerStart);
+    expect(idsBody).toContain('rememberedTeamResourceScopes.keys()');
+    expect(idsBody).toContain(
+      'workspaceHubSubscriptions?.activeWorkspaceIds()',
+    );
+    expect(idsBody).toContain('listTeamWorkspaceProjectShares(db)');
+    expect(idsBody).toContain(
+      'listTeamWorkspaceResourceWorkspaceIds(db)',
+    );
+
+    const start = source.indexOf('const teamResourcesPollTimer = setInterval(() => {');
+    const end = source.indexOf('teamResourcesPollTimer.unref?.();', start);
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const body = source.slice(start, end);
+
+    expect(body).not.toContain('activeWorkspace.get()');
+    expect(body).toContain('teamResourceBackgroundWorkspaceIds()');
+    expect(body).toContain(
+      'reconcileTeamResourcesFromRemote(undefined, workspaceId)',
+    );
+  });
+
+  it('has no ambient active-workspace invalidation poller or hub subscription', () => {
+    expect(source).not.toContain(
+      'const workspaceInvalidationPoller = createWorkspaceInvalidationPoller({',
+    );
+    expect(source).not.toContain(
+      'workspaceHubSubscriptions.setAmbientWorkspace(',
+    );
+    expect(source).not.toContain('activeWorkspace.subscribe(');
+    expect(source).toContain(
+      'const workspaceInvalidationPollerFor = (workspaceIdInput: string) => {',
+    );
+  });
+
+  it('never lets display cache readers infer scope from workspaceContext current or lastKnown', () => {
+    const projectsStart = source.indexOf('const teamProjectsForDisplay = async (');
+    const projectsEnd = source.indexOf('const teamProjectsForRequest = async (', projectsStart);
+    const projectsBody = source.slice(projectsStart, projectsEnd);
+    expect(projectsBody).not.toContain('workspaceContext.current');
+    expect(projectsBody).not.toContain('lastKnown');
+
+    const membersStart = source.indexOf('const teamMembersForDisplay = async (');
+    const membersEnd = source.indexOf('let workspaceHubSubscriptions:', membersStart);
+    const membersBody = source.slice(membersStart, membersEnd);
+    expect(membersBody).not.toContain('workspaceContext.current');
+    expect(membersBody).not.toContain('lastKnown');
   });
 
   it('recognizes an authorized remote mirror from exact version and a real live directory, not a local project manifest', () => {

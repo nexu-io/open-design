@@ -32,11 +32,10 @@
 // entry stays open per recvq56vFjQKfT), it just gets the truthful empty
 // history instead of a fabricated entry, and leaves nothing behind on disk.
 //
-// Deliberately fail-open: a caller with NO workspace headers (legacy client,
-// `od` CLI, signed out) keeps today's bootstrap behavior. Suppression requires
-// an authenticated "this member cannot write here", never mere absence of
-// identity — otherwise every headerless caller would silently lose history
-// bootstrap.
+// A persisted Workspace binding also means a headerless caller is not allowed
+// to enter this data plane. It must prove the exact Workspace/member pair;
+// absence of identity must neither expose history nor fabricate a local
+// baseline version.
 
 import type http from 'node:http';
 import { randomUUID } from 'node:crypto';
@@ -66,7 +65,10 @@ describe('version history on a readonly shared mirror', () => {
 
   afterAll(async () => {
     for (const id of projectsToClean.splice(0)) {
-      await fetch(`${baseUrl}/api/projects/${id}`, { method: 'DELETE' }).catch(() => {});
+      await fetch(`${baseUrl}/api/projects/${id}`, {
+        method: 'DELETE',
+        headers: memberHeaders(OWNER_MEMBER_ID, 'member'),
+      }).catch(() => {});
     }
     await new Promise<void>((resolve) => server.close(() => resolve()));
   });
@@ -163,12 +165,18 @@ describe('version history on a readonly shared mirror', () => {
     expect(await versionRootExists(projectId)).toBe(true);
   });
 
-  it('still bootstraps a baseline version for a headerless caller', async () => {
+  it('rejects a headerless caller for a Workspace-bound project without writing', async () => {
     const projectId = await seedTeamProject();
+    expect(await versionRootExists(projectId)).toBe(false);
 
-    const body = await getVersions(projectId);
+    const response = await fetch(
+      `${baseUrl}/api/projects/${projectId}/files/index.html/versions`,
+    );
 
-    expect(body.versions.length).toBe(1);
-    expect(await versionRootExists(projectId)).toBe(true);
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: 'WORKSPACE_CONTEXT_REQUIRED' },
+    });
+    expect(await versionRootExists(projectId)).toBe(false);
   });
 });

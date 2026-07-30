@@ -29,6 +29,13 @@ function registerRoutes(app: express.Express, staticHtml: string | null) {
     } as never,
     projectFiles: {} as never,
     projectStore: {} as never,
+    verifyWorkspaceRequestAuthority: async () => {
+      throw new Error('unbound fixture must not verify Workspace authority');
+    },
+    workspaceResources: {
+      getWorkspaceResource: () => undefined,
+      getWorkspaceResourceByResourceId: () => undefined,
+    },
     designSystems: {
       buildUserDesignSystemArchive: async () => null,
       canMutateUserDesignSystem: async () => true,

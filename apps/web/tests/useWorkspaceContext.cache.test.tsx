@@ -2,18 +2,33 @@
 import { cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { useWorkspaceContext } from '../src/collab/useWorkspaceContext';
+import {
+  resetWorkspaceContextCache,
+  useWorkspaceContext,
+} from '../src/collab/useWorkspaceContext';
+import {
+  workspaceContextFixture,
+  workspaceDirectoryFixture,
+} from './helpers/workspace-context';
 
 // A resolved workspace context. Shape is intentionally partial — the hook
 // round-trips `body.context` verbatim, so the test only cares that the same
 // value comes back.
-const SIGNED_IN = { workspaceId: 'ws-1', teamName: 'Acme', workspaceType: 'team' };
+const SIGNED_IN = workspaceContextFixture({
+  workspaceId: 'ws-1',
+  workspaceMemberId: 'member-1',
+  teamName: 'Acme',
+});
 
-function stubContextFetch(context: unknown): void {
+function stubContextFetch(context: typeof SIGNED_IN): void {
   vi.stubGlobal(
     'fetch',
-    vi.fn(async () =>
-      new Response(JSON.stringify({ context }), {
+    vi.fn(async (input: RequestInfo | URL) =>
+      new Response(JSON.stringify(
+        String(input) === '/api/workspace/directory'
+          ? workspaceDirectoryFixture([context])
+          : { context },
+      ), {
         status: 200,
         headers: { 'content-type': 'application/json' },
       }),
@@ -25,6 +40,7 @@ describe('useWorkspaceContext module cache', () => {
   afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
+    resetWorkspaceContextCache();
   });
 
   it('seeds a remount from the last resolved context so returning home never flashes signed-out', async () => {

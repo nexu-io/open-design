@@ -37,6 +37,21 @@ const ADMIN_CONTEXT = {
   role: 'admin',
 };
 
+const TEAM_DIRECTORY_ITEM = {
+  workspaceId: 'wm-1',
+  workspaceName: 'Workspace 1',
+  workspaceType: 'team' as const,
+  workspaceMemberId: 'wm-1',
+  role: 'member' as const,
+  memberStatus: 'active' as const,
+  lifecycleState: 'active' as const,
+};
+
+const TEAM_HEADERS = {
+  'x-od-workspace-id': 'wm-1',
+  'x-od-workspace-member-id': 'wm-1',
+};
+
 /** What `parseWorkspaceCollabContext` returns: the minimal input enriched with the
  *  fields it derives — workspaceId fallback, provider/billing defaults, and the
  *  permissions + seat summary derived through B's shared helpers. */
@@ -102,25 +117,47 @@ describe('parseWorkspaceCollabContext', () => {
 });
 
 describe('collab context routes', () => {
-  it('returns null context before any is set', async () => {
+  it('requires an explicit workspace/member pair before any context is set', async () => {
     const api = await startContextServer();
-    expect((await api.req('/api/workspace/context')).body).toEqual({ context: null });
+    const response = await api.req('/api/workspace/context');
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe('WORKSPACE_CONTEXT_REQUIRED');
   });
 
-  it('round-trips a context set via the dev PUT', async () => {
-    const api = await startContextServer();
+  it('round-trips a context set via the dev PUT for an explicit directory membership', async () => {
+    const api = await startContextServer({
+      fetchWorkspaceDirectory: async () => ({
+        ok: true,
+        items: [TEAM_DIRECTORY_ITEM],
+      }),
+    });
     const put = await api.req('/api/workspace/context', { method: 'PUT', body: TEAM_CONTEXT });
     expect(put.status).toBe(200);
     expect(put.body).toEqual({ context: TEAM_CONTEXT_PARSED });
-    expect((await api.req('/api/workspace/context')).body).toEqual({ context: TEAM_CONTEXT_PARSED });
+    expect((await api.req('/api/workspace/context', {
+      headers: TEAM_HEADERS,
+    })).body).toEqual({ context: TEAM_CONTEXT_PARSED });
   });
 
-  it('clears the context on an empty PUT body', async () => {
-    const api = await startContextServer();
+  it('clears dev enrichment but retains directory-authorized exact context', async () => {
+    const api = await startContextServer({
+      fetchWorkspaceDirectory: async () => ({
+        ok: true,
+        items: [TEAM_DIRECTORY_ITEM],
+      }),
+    });
     await api.req('/api/workspace/context', { method: 'PUT', body: TEAM_CONTEXT });
     const cleared = await api.req('/api/workspace/context', { method: 'PUT', body: {} });
     expect(cleared.body).toEqual({ context: null });
-    expect((await api.req('/api/workspace/context')).body).toEqual({ context: null });
+    const exact = await api.req('/api/workspace/context', {
+      headers: TEAM_HEADERS,
+    });
+    expect(exact.status).toBe(200);
+    expect(exact.body.context).toMatchObject({
+      workspaceId: 'wm-1',
+      workspaceMemberId: 'wm-1',
+      role: 'member',
+    });
   });
 
   it('rejects an invalid context body', async () => {
@@ -128,9 +165,120 @@ describe('collab context routes', () => {
     const res = await api.req('/api/workspace/context', { method: 'PUT', body: { workspaceType: 'team' } });
     expect(res.status).toBe(400);
   });
+
+  it('requires an explicit workspace/member pair instead of borrowing daemon current state', async () => {
+    const api = await startContextServer({
+      fetchWorkspaceDirectory: async () => ({
+        ok: true,
+        items: [
+          {
+            workspaceId: 'ws-a',
+            workspaceName: 'Workspace A',
+            workspaceType: 'team',
+            workspaceMemberId: 'wm-a',
+            role: 'member',
+            memberStatus: 'active',
+            lifecycleState: 'active',
+          },
+          {
+            workspaceId: 'ws-b',
+            workspaceName: 'Workspace B',
+            workspaceType: 'team',
+            workspaceMemberId: 'wm-b',
+            role: 'owner',
+            memberStatus: 'active',
+            lifecycleState: 'active',
+          },
+        ],
+      }),
+    });
+    await api.req('/api/workspace/context', {
+      method: 'PUT',
+      body: {
+        ...TEAM_CONTEXT,
+        workspaceId: 'ws-b',
+        workspaceMemberId: 'wm-b',
+        role: 'owner',
+      },
+    });
+
+    const missing = await api.req('/api/workspace/context');
+    expect(missing.status).toBe(400);
+    expect(missing.body.error).toBe('WORKSPACE_CONTEXT_REQUIRED');
+
+    const explicitA = await api.req('/api/workspace/context', {
+      headers: {
+        'x-od-workspace-id': 'ws-a',
+        'x-od-workspace-member-id': 'wm-a',
+      },
+    });
+    expect(explicitA.status).toBe(200);
+    expect(explicitA.body.context).toMatchObject({
+      workspaceId: 'ws-a',
+      workspaceMemberId: 'wm-a',
+      role: 'member',
+    });
+  });
+
+  it('fails retryably when the membership authority cannot verify an explicit context', async () => {
+    const api = await startContextServer({
+      fetchWorkspaceDirectory: async () => ({ ok: false, items: [] }),
+    });
+    const response = await api.req('/api/workspace/context', {
+      headers: {
+        'x-od-workspace-id': 'ws-a',
+        'x-od-workspace-member-id': 'wm-a',
+      },
+    });
+    expect(response.status).toBe(503);
+    expect(response.body).toMatchObject({
+      error: 'WORKSPACE_AUTHORITY_UNAVAILABLE',
+      retryable: true,
+    });
+  });
+
+  it('keeps workspace selection request-local and does not mutate the daemon active pin', async () => {
+    const setActive = vi.fn(async () => {});
+    const api = await startContextServer({
+      activeWorkspace: {
+        get: () => 'ws-a',
+        set: setActive,
+        clear: async () => {},
+      },
+      fetchWorkspaceDirectory: async () => ({
+        ok: true,
+        items: [{
+          workspaceId: 'ws-b',
+          workspaceName: 'Workspace B',
+          workspaceType: 'team',
+          workspaceMemberId: 'wm-b',
+          role: 'owner',
+          memberStatus: 'active',
+          lifecycleState: 'active',
+        }],
+      }),
+    });
+
+    const response = await api.req('/api/workspace/active', {
+      method: 'PUT',
+      body: { workspaceId: 'ws-b', workspaceMemberId: 'wm-b' },
+    });
+    expect(response.status).toBe(200);
+    expect(response.body.context).toMatchObject({
+      workspaceId: 'ws-b',
+      workspaceMemberId: 'wm-b',
+    });
+    expect(setActive).not.toHaveBeenCalled();
+  });
 });
 
 describe('workspace billing routes', () => {
+  const teamHeaders = (workspaceId = 'wm-1', workspaceMemberId = 'member-1') => ({
+    'x-od-workspace-id': workspaceId,
+    'x-od-workspace-member-id': workspaceMemberId,
+    // This claim is deliberately not authority. The directory row below is.
+    'x-od-workspace-role': 'owner',
+  });
   const teamDirectory = (workspaceId = 'wm-1') => [{
     workspaceId,
     workspaceName: 'Workspace',
@@ -707,9 +855,61 @@ describe('workspace billing routes', () => {
     });
   });
 
-  it('returns the real team billing catalog for the current workspace', async () => {
+  it('rejects billing catalog and checkout without an explicit verified workspace', async () => {
+    const fetchBillingCatalog = vi.fn(async () => null);
+    const startCheckout = vi.fn(async () => null);
+    const api = await startContextServer({
+      listWorkspaceDirectory: async () => teamDirectory(),
+      fetchBillingCatalog,
+      startCheckout,
+    });
+    await api.req('/api/workspace/context', { method: 'PUT', body: TEAM_CONTEXT });
+
+    const catalog = await api.req('/api/workspace/billing/catalog');
+    const checkout = await api.req('/api/workspace/billing/checkout', {
+      method: 'POST',
+      body: { planId: 'team_pro', seats: 3 },
+    });
+
+    expect(catalog.status).toBe(400);
+    expect(catalog.body.error).toBe('WORKSPACE_CONTEXT_REQUIRED');
+    expect(checkout.status).toBe(400);
+    expect(checkout.body.error).toBe('WORKSPACE_CONTEXT_REQUIRED');
+    expect(fetchBillingCatalog).not.toHaveBeenCalled();
+    expect(startCheckout).not.toHaveBeenCalled();
+  });
+
+  it('rejects billing catalog and checkout when the claimed membership is not in the directory', async () => {
+    const fetchBillingCatalog = vi.fn(async () => null);
+    const startCheckout = vi.fn(async () => null);
+    const api = await startContextServer({
+      listWorkspaceDirectory: async () => teamDirectory('wm-1'),
+      fetchBillingCatalog,
+      startCheckout,
+    });
+    const spoofedHeaders = teamHeaders('wm-2', 'attacker-member');
+
+    const catalog = await api.req('/api/workspace/billing/catalog', {
+      headers: spoofedHeaders,
+    });
+    const checkout = await api.req('/api/workspace/billing/checkout', {
+      method: 'POST',
+      headers: spoofedHeaders,
+      body: { planId: 'team_pro', seats: 3 },
+    });
+
+    expect(catalog.status).toBe(403);
+    expect(catalog.body.error).toBe('WORKSPACE_ACCESS_DENIED');
+    expect(checkout.status).toBe(403);
+    expect(checkout.body.error).toBe('WORKSPACE_ACCESS_DENIED');
+    expect(fetchBillingCatalog).not.toHaveBeenCalled();
+    expect(startCheckout).not.toHaveBeenCalled();
+  });
+
+  it('returns the real team billing catalog for the directory-verified workspace', async () => {
     const calls: string[] = [];
     const api = await startContextServer({
+      listWorkspaceDirectory: async () => teamDirectory(),
       fetchBillingCatalog: async (workspaceId) => {
         calls.push(workspaceId);
         return {
@@ -729,7 +929,9 @@ describe('workspace billing routes', () => {
     });
     await api.req('/api/workspace/context', { method: 'PUT', body: TEAM_CONTEXT });
 
-    const res = await api.req('/api/workspace/billing/catalog');
+    const res = await api.req('/api/workspace/billing/catalog', {
+      headers: teamHeaders(),
+    });
 
     expect(res.status).toBe(200);
     expect(calls).toEqual(['wm-1']);
@@ -750,9 +952,10 @@ describe('workspace billing routes', () => {
     });
   });
 
-  it('starts checkout with workspace-derived id and selected team plan', async () => {
+  it('starts checkout with directory-derived id and ignores spoofed body and role authority', async () => {
     const calls: Array<{ workspaceId?: string; planId?: string; seats?: number }> = [];
     const api = await startContextServer({
+      listWorkspaceDirectory: async () => teamDirectory(),
       startCheckout: async (input) => {
         calls.push(input);
         return 'https://checkout.stripe.test/cs_team';
@@ -762,6 +965,7 @@ describe('workspace billing routes', () => {
 
     const res = await api.req('/api/workspace/billing/checkout', {
       method: 'POST',
+      headers: teamHeaders(),
       body: { workspaceId: 'spoofed', planId: 'team_pro', seats: 3 },
     });
 
@@ -769,21 +973,86 @@ describe('workspace billing routes', () => {
     expect(res.body).toEqual({ checkoutUrl: 'https://checkout.stripe.test/cs_team' });
     expect(calls).toEqual([{ workspaceId: 'wm-1', planId: 'team_pro', seats: 3 }]);
   });
+
+  it('keeps checkout pinned to the verified workspace while active workspace switches', async () => {
+    let releaseCheckout!: () => void;
+    const checkoutStarted = new Promise<void>((resolve) => {
+      releaseCheckout = resolve;
+    });
+    let observeCheckout!: (input: { workspaceId?: string }) => void;
+    const observedCheckout = new Promise<{ workspaceId?: string }>((resolve) => {
+      observeCheckout = resolve;
+    });
+    const api = await startContextServer({
+      listWorkspaceDirectory: async () => [
+        ...teamDirectory('wm-1'),
+        {
+          ...teamDirectory('wm-2')[0]!,
+          workspaceMemberId: 'member-2',
+        },
+      ],
+      startCheckout: async (input) => {
+        observeCheckout(input);
+        await checkoutStarted;
+        return 'https://checkout.stripe.test/cs_team';
+      },
+    });
+    await api.req('/api/workspace/context', { method: 'PUT', body: TEAM_CONTEXT });
+
+    const checkoutPromise = api.req('/api/workspace/billing/checkout', {
+      method: 'POST',
+      headers: teamHeaders('wm-1', 'member-1'),
+      body: { planId: 'team_plus' },
+    });
+    const captured = await observedCheckout;
+    await api.req('/api/workspace/context', {
+      method: 'PUT',
+      body: {
+        ...TEAM_CONTEXT,
+        workspaceId: 'wm-2',
+        workspaceMemberId: 'member-2',
+      },
+    });
+    releaseCheckout();
+    const response = await checkoutPromise;
+
+    expect(response.status).toBe(200);
+    expect(captured.workspaceId).toBe('wm-1');
+    expect(response.body.checkoutUrl).toBe('https://checkout.stripe.test/cs_team');
+  });
 });
 
 describe('POST /api/workspace/invite', () => {
-  it('creates each invite against the current workspaceId and reports per-row results', async () => {
+  const headers = {
+    'x-od-workspace-id': 'wm-1',
+    'x-od-workspace-member-id': 'wm-1',
+    'x-od-workspace-role': 'owner',
+  };
+  const directory = (role: 'admin' | 'member' = 'admin') => ({
+    ok: true,
+    items: [{
+      workspaceId: 'wm-1',
+      workspaceName: 'Team One',
+      workspaceType: 'team' as const,
+      workspaceMemberId: 'wm-1',
+      role,
+      memberStatus: 'active' as const,
+      lifecycleState: 'active' as const,
+    }],
+  });
+
+  it('creates each invite against the verified workspaceId and reports per-row results', async () => {
     const calls: Array<{ email: string; role: string; workspaceId: string }> = [];
     const api = await startContextServer({
+      fetchWorkspaceDirectory: async () => directory('admin'),
       createInvite: async (input) => {
         calls.push(input);
         return { ok: true, inviteId: `inv-${input.email}` };
       },
     });
-    // Derive workspaceId from the set context (parsed → workspaceId 'wm-1').
-    await api.req('/api/workspace/context', { method: 'PUT', body: ADMIN_CONTEXT });
     const res = await api.req('/api/workspace/invite', {
       method: 'POST',
+      headers,
       body: { invites: [{ email: 'a@x.com', role: 'admin' }, { email: 'b@x.com', role: 'member' }] },
     });
     expect(res.status).toBe(200);
@@ -806,7 +1075,7 @@ describe('POST /api/workspace/invite', () => {
     expect(res.body).toEqual({ error: 'missing_invites' });
   });
 
-  it('409s with no_workspace when there is no current context', async () => {
+  it('400s when no explicit workspace identity is provided', async () => {
     const api = await startContextServer({
       createInvite: async () => ({ ok: true, inviteId: 'inv-x' }),
     });
@@ -814,22 +1083,23 @@ describe('POST /api/workspace/invite', () => {
       method: 'POST',
       body: { invites: [{ email: 'a@x.com', role: 'member' }] },
     });
-    expect(res.status).toBe(409);
-    expect(res.body).toEqual({ error: 'no_workspace' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('WORKSPACE_CONTEXT_REQUIRED');
   });
 
-  it('403s when the current team member cannot invite teammates', async () => {
+  it('403s when the verified team member cannot invite teammates', async () => {
     let called = false;
     const api = await startContextServer({
+      fetchWorkspaceDirectory: async () => directory('member'),
       createInvite: async () => {
         called = true;
         return { ok: true, inviteId: 'inv-x' };
       },
     });
-    await api.req('/api/workspace/context', { method: 'PUT', body: TEAM_CONTEXT });
 
     const res = await api.req('/api/workspace/invite', {
       method: 'POST',
+      headers,
       body: { invites: [{ email: 'a@x.com', role: 'member' }] },
     });
 
@@ -840,11 +1110,12 @@ describe('POST /api/workspace/invite', () => {
 
   it('short-circuits to 401 no_session', async () => {
     const api = await startContextServer({
+      fetchWorkspaceDirectory: async () => directory('admin'),
       createInvite: async () => ({ ok: false, status: 401, error: 'no_session' }),
     });
-    await api.req('/api/workspace/context', { method: 'PUT', body: ADMIN_CONTEXT });
     const res = await api.req('/api/workspace/invite', {
       method: 'POST',
+      headers,
       body: { invites: [{ email: 'a@x.com', role: 'member' }] },
     });
     expect(res.status).toBe(401);
@@ -853,14 +1124,58 @@ describe('POST /api/workspace/invite', () => {
 
   it("degrades a failed B create (e.g. 404) to an ok:false result, HTTP 200", async () => {
     const api = await startContextServer({
+      fetchWorkspaceDirectory: async () => directory('admin'),
       createInvite: async () => ({ ok: false, status: 404, error: 'create_404' }),
     });
-    await api.req('/api/workspace/context', { method: 'PUT', body: ADMIN_CONTEXT });
     const res = await api.req('/api/workspace/invite', {
       method: 'POST',
+      headers,
       body: { invites: [{ email: 'a@x.com', role: 'member' }] },
     });
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ results: [{ email: 'a@x.com', ok: false, error: 'create_404' }] });
+  });
+});
+
+describe('GET /api/workspace/members', () => {
+  it('passes the directory-verified Workspace context to the member service', async () => {
+    const contexts: unknown[] = [];
+    const api = await startContextServer({
+      fetchWorkspaceDirectory: async () => ({
+        ok: true,
+        items: [{
+          workspaceId: 'team-a',
+          workspaceName: 'Team A',
+          workspaceType: 'team',
+          workspaceMemberId: 'member-a',
+          role: 'member',
+          memberStatus: 'active',
+          lifecycleState: 'active',
+        }],
+      }),
+      listMembers: async (context) => {
+        contexts.push(context);
+        return [{ memberId: 'member-a', displayName: 'A', role: 'member' }];
+      },
+    });
+
+    const response = await api.req('/api/workspace/members', {
+      headers: {
+        'x-od-workspace-id': 'team-a',
+        'x-od-workspace-member-id': 'member-a',
+        'x-od-workspace-role': 'owner',
+      },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.members).toEqual([
+      { memberId: 'member-a', displayName: 'A', role: 'member' },
+    ]);
+    expect(contexts).toHaveLength(1);
+    expect(contexts[0]).toMatchObject({
+      workspaceId: 'team-a',
+      workspaceMemberId: 'member-a',
+      role: 'member',
+    });
   });
 });

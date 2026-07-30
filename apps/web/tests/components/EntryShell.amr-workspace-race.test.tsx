@@ -19,6 +19,7 @@ import { I18nProvider } from '../../src/i18n';
 import { checkAmrBalanceGate } from '../../src/runtime/amr-balance-gate';
 import type { AgentInfo, AppConfig } from '../../src/types';
 import { setHomeHeroPrompt } from '../helpers/home-hero-lexical';
+import { workspaceDirectoryFixture } from '../helpers/workspace-context';
 
 vi.mock('../../src/runtime/amr-balance-gate', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../src/runtime/amr-balance-gate')>();
@@ -117,10 +118,14 @@ describe('EntryShell AMR workspace precheck race', () => {
 
   it('keeps a locally signed-in account in syncing state while Cloud is unavailable', async () => {
     window.history.replaceState(null, '', '/');
+    const workspace = teamContext('workspace-a', 'member-a');
     const contextFailure = deferred<Response>();
     let contextReads = 0;
     globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
+      if (url.endsWith('/api/workspace/directory')) {
+        return jsonResponse(workspaceDirectoryFixture([workspace]));
+      }
       if (url.endsWith('/api/workspace/context')) {
         contextReads += 1;
         return contextFailure.promise;
@@ -191,6 +196,9 @@ describe('EntryShell AMR workspace precheck race', () => {
     let contextReads = 0;
     globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
+      if (url.endsWith('/api/workspace/directory')) {
+        return jsonResponse(workspaceDirectoryFixture([workspaceA, workspaceB]));
+      }
       if (url.endsWith('/api/workspace/context')) {
         contextReads += 1;
         return jsonResponse({ context: currentContext });
@@ -273,8 +281,7 @@ describe('EntryShell AMR workspace precheck race', () => {
     });
 
     currentContext = workspaceB;
-    act(() => notifyWorkspaceContextRefresh());
-    await waitFor(() => expect(contextReads).toBeGreaterThan(1));
+    act(() => notifyWorkspaceContextRefresh({ context: workspaceB }));
     await act(async () => {
       gateA.resolve({ kind: 'allow' });
       await gateA.promise;

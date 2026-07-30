@@ -16,6 +16,7 @@ import type { DesignSystemDetail, DesignSystemSummary } from '../types';
 import { DesignSpecView } from './DesignSpecView';
 import { DesignSystemKitPreview } from './DesignSystemKitPreview';
 import { PreviewModal } from './PreviewModal';
+import { useWorkspaceContext } from '../collab/useWorkspaceContext';
 
 interface Props {
   system: DesignSystemSummary;
@@ -33,6 +34,7 @@ function isDesignSystemDetail(system: DesignSystemSummary): system is DesignSyst
 export function DesignSystemPreviewModal({ system, onClose, initialViewId = 'kit' }: Props) {
   const t = useT();
   const analytics = useAnalytics();
+  const { context: workspaceContext } = useWorkspaceContext();
   const surfaceViewFiredRef = useRef<string | null>(null);
   useEffect(() => {
     if (surfaceViewFiredRef.current === system.id) return;
@@ -56,14 +58,14 @@ export function DesignSystemPreviewModal({ system, onClose, initialViewId = 'kit
   useEffect(() => {
     let cancelled = false;
     setDetail(isDesignSystemDetail(system) ? system : undefined);
-    void fetchDesignSystem(system.id).then((next) => {
+    void fetchDesignSystem(system.id, workspaceContext).then((next) => {
       if (cancelled) return;
       if (next) setDetail(next);
     });
     return () => {
       cancelled = true;
     };
-  }, [system]);
+  }, [system, workspaceContext]);
 
   const initialViewIdRef = useRef<string | null>(null);
   const handleView = useCallback(
@@ -84,14 +86,14 @@ export function DesignSystemPreviewModal({ system, onClose, initialViewId = 'kit
       }
       if (viewId === 'showcase' && showcaseHtml === undefined) {
         setShowcaseHtml(null);
-        void fetchDesignSystemShowcase(system.id).then((html) => setShowcaseHtml(html));
+        void fetchDesignSystemShowcase(system.id, workspaceContext).then((html) => setShowcaseHtml(html));
       }
       if (viewId === 'tokens' && tokensHtml === undefined) {
         setTokensHtml(null);
-        void fetchDesignSystemPreview(system.id).then((html) => setTokensHtml(html));
+        void fetchDesignSystemPreview(system.id, workspaceContext).then((html) => setTokensHtml(html));
       }
     },
-    [analytics.track, system.id, system.source, showcaseHtml, tokensHtml],
+    [analytics.track, system.id, system.source, showcaseHtml, tokensHtml, workspaceContext],
   );
 
   const handleSidebarToggle = useCallback(
@@ -102,9 +104,11 @@ export function DesignSystemPreviewModal({ system, onClose, initialViewId = 'kit
         return;
       }
       setSpecBody(null);
-      void fetchDesignSystem(system.id).then((detail) => setSpecBody(detail?.body ?? null));
+      void fetchDesignSystem(system.id, workspaceContext).then((detail) =>
+        setSpecBody(detail?.body ?? null),
+      );
     },
-    [detailBody, system.id, specBody],
+    [detailBody, system.id, specBody, workspaceContext],
   );
 
   useEffect(() => {

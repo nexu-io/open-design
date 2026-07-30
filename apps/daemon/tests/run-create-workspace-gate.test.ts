@@ -1,24 +1,12 @@
-// Independent, high-priority gap found during the workspace-team data-isolation
-// sprint, out of scope for spec 04 §10/§11: `POST /api/runs` (and its sibling
-// `POST /api/chat`, same file) — the actual "send a message" / "create a run"
-// path — had ZERO `enforceWorkspace*` coverage. Every OTHER project write
-// (rename/delete/duplicate/writeFiles, and comments per §10 fix #4/#6) is
-// gated by `enforceWorkspaceResourceMutation('project', …)`; run creation was
-// not, so a caller who merely knew a projectId could spawn an agent run
-// against a TEAM-bound project without any workspace identity header at all.
-//
-// This file wires `registerRunRoutes`'s new
-// `enforceWorkspaceProjectMutation`/`projectStore` deps to the REAL
-// `enforceWorkspaceResourceMutation('project', …)` gate (the same one
-// `routes/project/index.ts` builds for its own project routes, and the same
-// one `routes/project/comments.ts` borrows — see
-// `project-comment-workspace-gate.test.ts`), against a real project bound
-// into `workspace_projects` — not a stub — so this exercises the actual
-// production wiring at the HTTP layer.
+// Run creation is a billing-address boundary, not a local project-file
+// mutation gate. The persisted `workspace_projects` row supplies the exact
+// Team or Personal Workspace id to Vela/AMR. Headerless local callers are
+// valid; an explicitly supplied pair is checked only for a Workspace mismatch.
+// Membership, balance, and subscription eligibility remain backend decisions.
 
 import http from 'node:http';
 import express from 'express';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -31,8 +19,9 @@ import {
   insertProject,
   openDatabase,
 } from '../src/db.js';
-import { enforceWorkspaceResourceMutation } from '../src/collab/workspace-resource-mutation.js';
+import { createAuthorizeProjectRequest } from '../src/collab/project-request-authority.js';
 import { createEnforceWorkspaceProjectMutation } from '../src/routes/project/index.js';
+import { workspaceContextFromDirectoryItem } from '../src/collab/vela-workspace-context.js';
 import { registerRunRoutes } from '../src/routes/runs.js';
 import { connectorService } from '../src/connectors/service.js';
 
@@ -51,6 +40,7 @@ afterEach(async () => {
 });
 
 const TEAM_PROJECT = 'p-team-run';
+const PERSONAL_PROJECT = 'p-personal-run';
 const UNBOUND_PROJECT = 'p-unbound-run';
 const WORKSPACE_ID = 'ws-run-gate';
 const OWNER_MEMBER_ID = 'member-owner-run';
@@ -67,11 +57,9 @@ function workspaceHeaders(memberId: string, role: 'owner' | 'admin' | 'member') 
   };
 }
 
-// A minimal in-memory ChatRunService stub. POST /api/runs only exercises
-// create/start/wait on this file's happy path (see the handler in
-// ../src/routes/runs.ts) — get/list/statusBody/stream/cancel/isTerminal are
-// required by the interface but never reached by this test, so they are
-// filled in with harmless no-ops rather than faithfully reproduced.
+// A minimal in-memory ChatRunService stub. It deliberately does not spawn a
+// process, but it does preserve enough run state to exercise the complete
+// create -> status/events -> cancel HTTP lifecycle.
 function createRunsServiceStub() {
   const runs = new Map<string, any>();
   let seq = 0;
@@ -97,27 +85,34 @@ function createRunsServiceStub() {
       return run;
     },
     get: (id: string) => runs.get(id) ?? null,
-    list: () => [],
+    list: (filters: { projectId?: unknown } = {}) =>
+      Array.from(runs.values()).filter(
+        (run) =>
+          typeof filters.projectId !== 'string'
+          || run.projectId === filters.projectId,
+      ),
     statusBody: (run: any) => ({ ...run }),
-    stream: () => {},
+    stream: (run: any, req: any, res: any) => {
+      res.status(req.method === 'GET' ? 200 : 202).json({ runId: run.id });
+    },
     // Intentionally does NOT invoke `starter` — this test only asserts on the
     // HTTP response to POST /api/runs, not on real agent-process spawning.
     start: (run: any) => run,
     wait: async () => ({ status: 'succeeded' }),
-    cancel: async () => ({ status: 'canceled' }),
+    cancel: async (run: any) => {
+      run.status = 'canceled';
+      run.updatedAt = Date.now();
+      return { ...run };
+    },
     isTerminal: (status: string) => status === 'succeeded' || status === 'failed' || status === 'canceled',
   };
 }
 
 async function startServer(opts?: {
   /**
-   * Override the gate wired into `registerRunRoutes`. Defaults to the bare
-   * `enforceWorkspaceResourceMutation` call (no last-known-membership
-   * cross-check, matching most of this file's tests). The cross-check
-   * tests below pass `createEnforceWorkspaceProjectMutation(workspaceContext)`
-   * instead — the SAME factory `apps/daemon/src/server.ts` calls for the
-   * real `/api/runs` wiring — with a stub `workspaceContext.lastKnown()` so
-   * this exercises the real production wiring, not a re-derived copy of it.
+   * Legacy mutation-gate seam retained by RegisterRunRoutes for compatibility.
+   * Run creation deliberately ignores its membership verdict: only the
+   * persisted binding and an optional explicit Workspace mismatch matter.
    */
   enforceWorkspaceProjectMutation?: (
     req: any,
@@ -128,12 +123,14 @@ async function startServer(opts?: {
     dbArg: any,
     projectId: string,
     capability: any,
-  ) => boolean;
+  ) => Promise<boolean>;
+  isAmrSignedIn?: () => boolean | Promise<boolean>;
+  verifyWorkspaceRequestAuthority?: (req: any) => Promise<any>;
 }) {
   tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-run-ws-gate-'));
   const db = openDatabase(tempDir);
   const now = Date.now();
-  for (const id of [TEAM_PROJECT, UNBOUND_PROJECT]) {
+  for (const id of [TEAM_PROJECT, PERSONAL_PROJECT, UNBOUND_PROJECT]) {
     insertProject(db, { id, name: id, createdAt: now, updatedAt: now });
   }
   ensureWorkspaceProject(db, {
@@ -142,9 +139,42 @@ async function startServer(opts?: {
     visibility: 'team',
     createdByWorkspaceMemberId: OWNER_MEMBER_ID,
   });
+  ensureWorkspaceProject(db, {
+    projectId: PERSONAL_PROJECT,
+    workspaceId: WORKSPACE_ID,
+    visibility: 'personal',
+    createdByWorkspaceMemberId: OWNER_MEMBER_ID,
+  });
   // UNBOUND_PROJECT deliberately gets no `workspace_projects` row — the
   // "legacy / never claimed" control case the gate must leave alone
   // (personal / solo usage with no workspace at all).
+
+  const verifyWorkspaceRequestAuthority =
+    opts?.verifyWorkspaceRequestAuthority ??
+    (async (req: any) => {
+      const workspaceId = req.get('x-od-workspace-id');
+      const memberId = req.get('x-od-workspace-member-id');
+      if (!workspaceId || !memberId) {
+        return {
+          ok: false,
+          status: 400,
+          code: 'WORKSPACE_CONTEXT_REQUIRED',
+          message: 'an explicit workspace context is required',
+        };
+      }
+      return {
+        ok: true,
+        context: workspaceContextFromDirectoryItem({
+          workspaceId,
+          workspaceName: workspaceId,
+          workspaceType: 'team',
+          workspaceMemberId: memberId,
+          role: memberId === OWNER_MEMBER_ID ? 'owner' : 'member',
+          memberStatus: 'active',
+          lifecycleState: 'active',
+        }),
+      };
+    });
 
   const app = express();
   app.use(express.json());
@@ -185,19 +215,56 @@ async function startServer(opts?: {
     },
     enforceWorkspaceProjectMutation:
       opts?.enforceWorkspaceProjectMutation ??
-      ((req, res, sendError, getWp, getWpByProjectId, dbArg, projectId, capability) =>
-        enforceWorkspaceResourceMutation(
-          'project',
-          req,
-          res,
-          sendError,
-          getWp,
-          getWpByProjectId,
-          dbArg,
+      createEnforceWorkspaceProjectMutation(async (req: any) => {
+        const workspaceId = req.get('x-od-workspace-id');
+        const memberId = req.get('x-od-workspace-member-id');
+        if (!workspaceId || !memberId) {
+          return {
+            ok: false,
+            status: 400,
+            code: 'WORKSPACE_CONTEXT_REQUIRED',
+            message: 'an explicit workspace context is required',
+          };
+        }
+        return {
+          ok: true,
+          context: workspaceContextFromDirectoryItem({
+            workspaceId,
+            workspaceName: workspaceId,
+            workspaceType: 'team',
+            workspaceMemberId: memberId,
+            role: memberId === OWNER_MEMBER_ID ? 'owner' : 'member',
+            memberStatus: 'active',
+            lifecycleState: 'active',
+          }),
+        };
+      }),
+    amrWorkspaceScope: {
+      isSignedIn: opts?.isAmrSignedIn ?? (() => false),
+      verifyWorkspaceRequestAuthority,
+    },
+    authorizeProjectRequest: createAuthorizeProjectRequest({
+      db,
+      getWorkspaceProject: (dbArg: unknown, workspaceId: string, projectId: string) =>
+        getWorkspaceProject(
+          dbArg as ReturnType<typeof openDatabase>,
+          workspaceId,
           projectId,
-          capability,
-        )),
-    projectStore: { getWorkspaceProject, getWorkspaceProjectByProjectId },
+        ),
+      getWorkspaceProjectByProjectId: (dbArg: unknown, projectId: string) =>
+        getWorkspaceProjectByProjectId(
+          dbArg as ReturnType<typeof openDatabase>,
+          projectId,
+        ),
+      verifyWorkspaceRequestAuthority,
+      sendApiError,
+    }),
+    projectStore: {
+      getWorkspaceProject,
+      getWorkspaceProjectByProjectId,
+      ensureWorkspaceProject: (dbArg: any, input: any) =>
+        ensureWorkspaceProject(dbArg, input),
+    },
   } as any);
   const created = http.createServer(app);
   server = created;
@@ -208,29 +275,98 @@ async function startServer(opts?: {
 }
 
 describe('POST /api/runs — workspace mutation gate', () => {
-  it('rejects a headerless run creation against a team-bound project', async () => {
+  it('allows a headerless local run against a personal bound project so billing uses the persisted binding', async () => {
     const baseUrl = await startServer();
     const resp = await fetch(`${baseUrl}/api/runs`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projectId: TEAM_PROJECT, agentId: 'claude', message: 'hi' }),
-    });
-    expect(resp.status).toBe(401);
-    const payload = (await resp.json()) as { error: { code: string } };
-    expect(payload.error.code).toBe('WORKSPACE_CONTEXT_REQUIRED');
-  });
-
-  it('allows run creation with a properly-authenticated team member', async () => {
-    const baseUrl = await startServer();
-    const resp = await fetch(`${baseUrl}/api/runs`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...workspaceHeaders(OWNER_MEMBER_ID, 'owner') },
-      body: JSON.stringify({ projectId: TEAM_PROJECT, agentId: 'claude', message: 'hi' }),
+      body: JSON.stringify({ projectId: PERSONAL_PROJECT, agentId: 'claude', message: 'hi' }),
     });
     expect(resp.status).toBe(202);
     const payload = (await resp.json()) as { runId: string };
     expect(typeof payload.runId).toBe('string');
   });
+
+  it.each(['/api/runs', '/api/chat'])(
+    'allows the shared-project owner to create a run through %s',
+    async (route) => {
+      const baseUrl = await startServer();
+      const resp = await fetch(`${baseUrl}${route}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...workspaceHeaders(OWNER_MEMBER_ID, 'owner'),
+        },
+        body: JSON.stringify({
+          projectId: TEAM_PROJECT,
+          agentId: 'claude',
+          message: 'hi',
+        }),
+      });
+      expect(resp.status).toBe(202);
+      const payload = (await resp.json()) as { runId: string };
+      expect(typeof payload.runId).toBe('string');
+    },
+  );
+
+  it.each(['/api/runs', '/api/chat'])(
+    'requires an explicit owner identity for a shared Team project through %s',
+    async (route) => {
+      const baseUrl = await startServer();
+      const resp = await fetch(`${baseUrl}${route}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId: TEAM_PROJECT,
+          agentId: 'claude',
+          message: 'headerless shared-project mutation',
+        }),
+      });
+
+      expect(resp.status).toBe(400);
+      await expect(resp.json()).resolves.toMatchObject({
+        error: { code: 'WORKSPACE_CONTEXT_REQUIRED' },
+      });
+    },
+  );
+
+  it.each(['/api/runs', '/api/chat'])(
+    'rejects a Team workspace owner who is not the shared-project owner through %s',
+    async (route) => {
+      const workspaceOwnerId = 'member-workspace-owner';
+      const baseUrl = await startServer({
+        verifyWorkspaceRequestAuthority: async () => ({
+          ok: true,
+          context: workspaceContextFromDirectoryItem({
+            workspaceId: WORKSPACE_ID,
+            workspaceName: 'Team',
+            workspaceType: 'team',
+            workspaceMemberId: workspaceOwnerId,
+            role: 'owner',
+            memberStatus: 'active',
+            lifecycleState: 'active',
+          }),
+        }),
+      });
+      const resp = await fetch(`${baseUrl}${route}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...workspaceHeaders(workspaceOwnerId, 'owner'),
+        },
+        body: JSON.stringify({
+          projectId: TEAM_PROJECT,
+          agentId: 'claude',
+          message: 'must not mutate another member shared project',
+        }),
+      });
+
+      expect(resp.status).toBe(403);
+      await expect(resp.json()).resolves.toMatchObject({
+        error: { code: 'WORKSPACE_PROJECT_PERMISSION_DENIED' },
+      });
+    },
+  );
 
   it('still allows a headerless run creation against a never-claimed (legacy) project', async () => {
     const baseUrl = await startServer();
@@ -257,54 +393,211 @@ describe('POST /api/runs — workspace mutation gate', () => {
   });
 });
 
-// A member removed from the team keeps sending STALE-BUT-REAL "active"
-// workspace headers until their own client's next `/api/workspace/context`
-// poll catches up (or the tab is refreshed) — those headers are not forged,
-// they were simply true a moment ago. A gate that only compares the
-// request's claimed workspaceId/memberStatus against the resource's binding
-// row would keep accepting those requests indefinitely (as long as the tab
-// stays open). The production gate closes that window itself: `server.ts`
-// builds `enforceWorkspaceProjectMutation` via
-// `createEnforceWorkspaceProjectMutation(collab.workspaceContext)`, which
-// wires `getLastKnownMembership` to `workspaceContext.lastKnown()` — the
-// daemon's OWN independently-refreshed membership cache (kept warm by
-// `collab/workspace-invalidation-poller.ts`'s background poll and by every
-// other in-daemon `.current()` caller), not anything the client asserts.
-// `enforceWorkspaceResourceMutation` narrows a stale "active" claim to
-// "removed" whenever this cache disagrees for the SAME workspace (see
-// `withLastKnownMembership` in `collab/workspace-resource-mutation.ts`,
-// already unit-tested in `tests/collab/workspace-resource-mutation.test.ts`).
-//
-// This block proves `registerRunRoutes` is wired to the SAME factory
-// `server.ts` uses for the real `/api/runs` — not a weaker one — so a run
-// creation against a team-bound project is cut off within one poll cycle of
-// a real removal, instead of "never, as long as the tab stays open".
-describe('POST /api/runs — cross-checks stale client headers against the daemon\'s own last-known membership', () => {
-  it('rejects a run when headers still claim active membership but the daemon already knows the caller was removed', async () => {
-    const workspaceContextStub = {
-      lastKnown: () => ({ workspaceId: WORKSPACE_ID, memberStatus: 'removed' as const }),
-    };
-    const baseUrl = await startServer({
-      enforceWorkspaceProjectMutation: createEnforceWorkspaceProjectMutation(workspaceContextStub as any) as any,
-    });
-    // Headers below are the exact shape a not-yet-refreshed client tab would
-    // still be sending a moment after being removed: workspaceId/memberId
-    // match, role is 'owner', no `x-od-workspace-member-status` override —
-    // i.e. nothing in the request itself looks malicious or stale.
-    const resp = await fetch(`${baseUrl}/api/runs`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...workspaceHeaders(OWNER_MEMBER_ID, 'owner') },
-      body: JSON.stringify({ projectId: TEAM_PROJECT, agentId: 'claude', message: 'hi' }),
-    });
-    expect(resp.status).toBe(403);
-    const payload = (await resp.json()) as { error: { code: string } };
-    expect(payload.error.code).toBe('WORKSPACE_PROJECT_PERMISSION_DENIED');
+describe('Workspace-bound run lifecycle authority', () => {
+  it('keeps headerless local CLI/MCP lifecycle operations working for representative non-AMR runtimes', async () => {
+    const baseUrl = await startServer();
+    const bodies = [
+      { projectId: TEAM_PROJECT, agentId: 'claude', message: 'claude run' },
+      { projectId: TEAM_PROJECT, agentId: 'codex', message: 'codex run' },
+      { projectId: TEAM_PROJECT, agentId: 'opencode', message: 'opencode run' },
+      {
+        projectId: TEAM_PROJECT,
+        agentId: 'byok-opencode',
+        model: 'test-model',
+        message: 'byok run',
+        byokProvider: {
+          protocol: 'openai',
+          apiKey: 'test-key',
+          baseUrl: 'https://example.test/v1',
+        },
+      },
+    ];
+
+    for (const body of bodies) {
+      const createResponse = await fetch(`${baseUrl}/api/runs`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...workspaceHeaders(OWNER_MEMBER_ID, 'owner'),
+        },
+        body: JSON.stringify(body),
+      });
+      expect(createResponse.status).toBe(202);
+      const { runId } = (await createResponse.json()) as { runId: string };
+
+      const statusResponse = await fetch(`${baseUrl}/api/runs/${runId}`);
+      expect(statusResponse.status).toBe(200);
+      await expect(statusResponse.json()).resolves.toMatchObject({
+        id: runId,
+        agentId: body.agentId,
+        projectId: TEAM_PROJECT,
+      });
+
+      const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`);
+      expect(eventsResponse.status).toBe(200);
+      await expect(eventsResponse.json()).resolves.toMatchObject({ runId });
+
+      const cancelResponse = await fetch(`${baseUrl}/api/runs/${runId}/cancel`, {
+        method: 'POST',
+      });
+      expect(cancelResponse.status).toBe(200);
+      await expect(cancelResponse.json()).resolves.toMatchObject({
+        ok: true,
+        run: { id: runId, status: 'canceled' },
+      });
+    }
   });
 
-  it('still allows the same headers when the daemon cache has no opinion yet (never polled this workspace)', async () => {
-    const workspaceContextStub = { lastKnown: () => null };
+  it('does not bypass exact Workspace authority for AMR run status, events, or cancel', async () => {
+    const baseUrl = await startServer();
+    const createResponse = await fetch(`${baseUrl}/api/runs`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...workspaceHeaders(OWNER_MEMBER_ID, 'owner'),
+      },
+      body: JSON.stringify({
+        projectId: TEAM_PROJECT,
+        agentId: 'amr',
+        message: 'cloud run',
+      }),
+    });
+    expect(createResponse.status).toBe(202);
+    const { runId } = (await createResponse.json()) as { runId: string };
+
+    for (const [path, method] of [
+      [`/api/runs/${runId}`, 'GET'],
+      [`/api/runs/${runId}/events`, 'GET'],
+      [`/api/runs/${runId}/cancel`, 'POST'],
+    ] as const) {
+      const response = await fetch(`${baseUrl}${path}`, { method });
+      expect(response.status).toBe(400);
+      await expect(response.json()).resolves.toMatchObject({
+        error: { code: 'WORKSPACE_CONTEXT_REQUIRED' },
+      });
+    }
+
+    const exactHeaders = workspaceHeaders(OWNER_MEMBER_ID, 'owner');
+    expect(
+      (await fetch(`${baseUrl}/api/runs/${runId}`, {
+        headers: exactHeaders,
+      })).status,
+    ).toBe(200);
+    expect(
+      (await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+        headers: exactHeaders,
+      })).status,
+    ).toBe(200);
+    expect(
+      (await fetch(`${baseUrl}/api/runs/${runId}/cancel`, {
+        method: 'POST',
+        headers: exactHeaders,
+      })).status,
+    ).toBe(200);
+  });
+
+  it('still validates an explicitly asserted Workspace identity for a non-AMR run', async () => {
+    const baseUrl = await startServer();
+    const createResponse = await fetch(`${baseUrl}/api/runs`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...workspaceHeaders(OWNER_MEMBER_ID, 'owner'),
+      },
+      body: JSON.stringify({
+        projectId: TEAM_PROJECT,
+        agentId: 'claude',
+        message: 'local run',
+      }),
+    });
+    const { runId } = (await createResponse.json()) as { runId: string };
+
+    const response = await fetch(`${baseUrl}/api/runs/${runId}`, {
+      headers: { 'x-od-workspace-id': WORKSPACE_ID },
+    });
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: 'WORKSPACE_CONTEXT_REQUIRED' },
+    });
+  });
+
+  it('fails closed when a historical run record has no reliable agentId', async () => {
+    const baseUrl = await startServer();
+    const createResponse = await fetch(`${baseUrl}/api/runs`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...workspaceHeaders(OWNER_MEMBER_ID, 'owner'),
+      },
+      body: JSON.stringify({
+        projectId: TEAM_PROJECT,
+        message: 'historical run without runtime identity',
+      }),
+    });
+    expect(createResponse.status).toBe(202);
+    const { runId } = (await createResponse.json()) as { runId: string };
+
+    const response = await fetch(`${baseUrl}/api/runs/${runId}`);
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: 'WORKSPACE_CONTEXT_REQUIRED' },
+    });
+  });
+
+  it.each([
+    ['AMR is inserted first', ['amr', 'claude']],
+    ['non-AMR is inserted first', ['claude', 'amr']],
+  ])(
+    'lists only non-AMR runs for a headerless caller when %s, independent of representative order',
+    async (_label, agentIds) => {
+      const baseUrl = await startServer();
+      for (const agentId of agentIds) {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...workspaceHeaders(OWNER_MEMBER_ID, 'owner'),
+          },
+          body: JSON.stringify({
+            projectId: TEAM_PROJECT,
+            agentId,
+            message: `${agentId} run`,
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+      }
+
+      const headerlessResponse = await fetch(
+        `${baseUrl}/api/runs?projectId=${TEAM_PROJECT}`,
+      );
+      expect(headerlessResponse.status).toBe(200);
+      const headerlessBody = (await headerlessResponse.json()) as {
+        runs: Array<{ agentId: string }>;
+      };
+      expect(headerlessBody.runs.map((run) => run.agentId)).toEqual(['claude']);
+
+      const exactResponse = await fetch(
+        `${baseUrl}/api/runs?projectId=${TEAM_PROJECT}`,
+        { headers: workspaceHeaders(OWNER_MEMBER_ID, 'owner') },
+      );
+      expect(exactResponse.status).toBe(200);
+      const exactBody = (await exactResponse.json()) as {
+        runs: Array<{ agentId: string }>;
+      };
+      expect(exactBody.runs.map((run) => run.agentId)).toEqual(agentIds);
+    },
+  );
+});
+
+describe('POST /api/runs — delegates membership and balance eligibility to Vela/AMR', () => {
+  it('does not let an ambient directory verdict override the persisted project billing binding', async () => {
     const baseUrl = await startServer({
-      enforceWorkspaceProjectMutation: createEnforceWorkspaceProjectMutation(workspaceContextStub as any) as any,
+      enforceWorkspaceProjectMutation: createEnforceWorkspaceProjectMutation(async () => ({
+        ok: false,
+        status: 403,
+        code: 'WORKSPACE_ACCESS_DENIED',
+        message: 'the requested workspace is not available to this member',
+      })),
     });
     const resp = await fetch(`${baseUrl}/api/runs`, {
       method: 'POST',
@@ -314,5 +607,256 @@ describe('POST /api/runs — cross-checks stale client headers against the daemo
     expect(resp.status).toBe(202);
     const payload = (await resp.json()) as { runId: string };
     expect(typeof payload.runId).toBe('string');
+  });
+
+  it('allows the same headers when the authoritative directory confirms ownership', async () => {
+    const baseUrl = await startServer({
+      enforceWorkspaceProjectMutation: createEnforceWorkspaceProjectMutation(async () => ({
+        ok: true,
+        context: workspaceContextFromDirectoryItem({
+          workspaceId: WORKSPACE_ID,
+          workspaceName: WORKSPACE_ID,
+          workspaceType: 'team',
+          workspaceMemberId: OWNER_MEMBER_ID,
+          role: 'owner',
+          memberStatus: 'active',
+          lifecycleState: 'active',
+        }),
+      })),
+    });
+    const resp = await fetch(`${baseUrl}/api/runs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...workspaceHeaders(OWNER_MEMBER_ID, 'owner') },
+      body: JSON.stringify({ projectId: TEAM_PROJECT, agentId: 'claude', message: 'hi' }),
+    });
+    expect(resp.status).toBe(202);
+    const payload = (await resp.json()) as { runId: string };
+    expect(typeof payload.runId).toBe('string');
+  });
+});
+
+describe('POST /api/runs — one-time Personal adoption for signed-in AMR', () => {
+  it.each(['/api/runs', '/api/chat'])(
+    'transactionally binds an unbound historical project to the exact verified Personal Workspace through %s',
+    async (route) => {
+    const verifyWorkspaceRequestAuthority = vi.fn(async () => ({
+      ok: true,
+      context: workspaceContextFromDirectoryItem({
+        workspaceId: WORKSPACE_ID,
+        workspaceName: 'Personal',
+        workspaceType: 'personal',
+        workspaceMemberId: OWNER_MEMBER_ID,
+        role: 'owner',
+        memberStatus: 'active',
+        lifecycleState: 'active',
+      }),
+    }));
+    const baseUrl = await startServer({
+      isAmrSignedIn: () => true,
+      verifyWorkspaceRequestAuthority,
+    });
+
+    const response = await fetch(`${baseUrl}${route}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...workspaceHeaders(OWNER_MEMBER_ID, 'owner'),
+        'x-od-workspace-type': 'personal',
+      },
+      body: JSON.stringify({
+        projectId: UNBOUND_PROJECT,
+        agentId: 'amr',
+        message: 'migrate and run',
+      }),
+    });
+
+      expect(response.status).toBe(202);
+      expect(verifyWorkspaceRequestAuthority).toHaveBeenCalledTimes(1);
+      expect(
+        getWorkspaceProjectByProjectId(openDatabase(tempDir!), UNBOUND_PROJECT),
+      ).toMatchObject({
+        workspaceId: WORKSPACE_ID,
+        visibility: 'personal',
+        createdByWorkspaceMemberId: null,
+      });
+    },
+  );
+
+  it.each(['/api/runs', '/api/chat'])(
+    'refuses a signed-in AMR run through %s when an unbound project has no explicit Personal identity',
+    async (route) => {
+    const verifyWorkspaceRequestAuthority = vi.fn();
+    const baseUrl = await startServer({
+      isAmrSignedIn: () => true,
+      verifyWorkspaceRequestAuthority,
+    });
+
+    const response = await fetch(`${baseUrl}${route}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        projectId: UNBOUND_PROJECT,
+        agentId: 'amr',
+        message: 'must not use account wallet',
+      }),
+    });
+
+      expect(response.status).toBe(409);
+      await expect(response.json()).resolves.toMatchObject({
+        error: { code: 'AMR_WORKSPACE_SCOPE_REQUIRED' },
+      });
+      expect(verifyWorkspaceRequestAuthority).not.toHaveBeenCalled();
+      expect(
+        getWorkspaceProjectByProjectId(openDatabase(tempDir!), UNBOUND_PROJECT),
+      ).toBeUndefined();
+    },
+  );
+
+  it('never adopts an unbound historical project into a Team Workspace', async () => {
+    const verifyWorkspaceRequestAuthority = vi.fn(async () => ({
+      ok: true,
+      context: workspaceContextFromDirectoryItem({
+        workspaceId: WORKSPACE_ID,
+        workspaceName: 'Team',
+        workspaceType: 'team',
+        workspaceMemberId: OWNER_MEMBER_ID,
+        role: 'owner',
+        memberStatus: 'active',
+        lifecycleState: 'active',
+      }),
+    }));
+    const baseUrl = await startServer({
+      isAmrSignedIn: () => true,
+      verifyWorkspaceRequestAuthority,
+    });
+
+    const response = await fetch(`${baseUrl}/api/runs`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...workspaceHeaders(OWNER_MEMBER_ID, 'owner'),
+        'x-od-workspace-type': 'team',
+      },
+      body: JSON.stringify({
+        projectId: UNBOUND_PROJECT,
+        agentId: 'amr',
+        message: 'must stay personal',
+      }),
+    });
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: 'AMR_PERSONAL_WORKSPACE_REQUIRED' },
+    });
+    expect(
+      getWorkspaceProjectByProjectId(openDatabase(tempDir!), UNBOUND_PROJECT),
+    ).toBeUndefined();
+  });
+
+  it('fails closed without binding when the exact Personal authority is unavailable', async () => {
+    const verifyWorkspaceRequestAuthority = vi.fn(async () => ({
+      ok: false,
+      status: 503,
+      code: 'WORKSPACE_AUTHORITY_UNAVAILABLE',
+      message: 'workspace membership authority is temporarily unavailable',
+      retryable: true,
+    }));
+    const baseUrl = await startServer({
+      isAmrSignedIn: () => true,
+      verifyWorkspaceRequestAuthority,
+    });
+
+    const response = await fetch(`${baseUrl}/api/runs`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...workspaceHeaders(OWNER_MEMBER_ID, 'owner'),
+        'x-od-workspace-type': 'personal',
+      },
+      body: JSON.stringify({
+        projectId: UNBOUND_PROJECT,
+        agentId: 'amr',
+        message: 'do not guess',
+      }),
+    });
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: 'WORKSPACE_AUTHORITY_UNAVAILABLE' },
+    });
+    expect(verifyWorkspaceRequestAuthority).toHaveBeenCalledTimes(1);
+    expect(
+      getWorkspaceProjectByProjectId(openDatabase(tempDir!), UNBOUND_PROJECT),
+    ).toBeUndefined();
+  });
+
+  it.each(['/api/runs', '/api/chat'])(
+    'does not fetch authority, bind, or refuse unbound non-AMR and BYOK runs through %s',
+    async (route) => {
+      const isAmrSignedIn = vi.fn(() => true);
+      const verifyWorkspaceRequestAuthority = vi.fn();
+      const baseUrl = await startServer({
+        isAmrSignedIn,
+        verifyWorkspaceRequestAuthority,
+      });
+
+      for (const body of [
+        { projectId: UNBOUND_PROJECT, agentId: 'claude', message: 'local cli' },
+        { projectId: UNBOUND_PROJECT, agentId: 'codex', message: 'local cli' },
+        { projectId: UNBOUND_PROJECT, agentId: 'opencode', message: 'local cli' },
+        {
+          projectId: UNBOUND_PROJECT,
+          agentId: 'byok-opencode',
+          model: 'test-model',
+          message: 'byok',
+          byokProvider: {
+            protocol: 'openai',
+            apiKey: 'test-key',
+            baseUrl: 'https://example.test/v1',
+          },
+        },
+      ]) {
+        const response = await fetch(`${baseUrl}${route}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        expect(response.status).toBe(202);
+      }
+
+      expect(isAmrSignedIn).not.toHaveBeenCalled();
+      expect(verifyWorkspaceRequestAuthority).not.toHaveBeenCalled();
+      expect(
+        getWorkspaceProjectByProjectId(openDatabase(tempDir!), UNBOUND_PROJECT),
+      ).toBeUndefined();
+    },
+  );
+
+  it('does not fetch authority, bind, or synchronously refuse an unlogged AMR run', async () => {
+    const verifyWorkspaceRequestAuthority = vi.fn();
+    const baseUrl = await startServer({
+      isAmrSignedIn: () => false,
+      verifyWorkspaceRequestAuthority,
+    });
+
+    const response = await fetch(`${baseUrl}/api/runs`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...workspaceHeaders(OWNER_MEMBER_ID, 'owner'),
+        'x-od-workspace-type': 'personal',
+      },
+      body: JSON.stringify({
+        projectId: UNBOUND_PROJECT,
+        agentId: 'amr',
+        message: 'auth guard remains the owner',
+      }),
+    });
+
+    expect(response.status).toBe(202);
+    expect(verifyWorkspaceRequestAuthority).not.toHaveBeenCalled();
+    expect(
+      getWorkspaceProjectByProjectId(openDatabase(tempDir!), UNBOUND_PROJECT),
+    ).toBeUndefined();
   });
 });

@@ -8,39 +8,49 @@ import type {
 import { resolveCollabSession } from './collab-session';
 import {
   lastResolvedTeamProjects as cachedTeamProjects,
-  lastResolvedWorkspaceContext as cachedWorkspaceContext,
 } from './useWorkspaceContext';
 import { useCollab } from './useCollab';
+import { workspaceIdentityCacheKey } from './workspace-identity';
 
-// Project ids the current viewer created in THIS browser session, tracked at
-// module scope like `lastResolvedWorkspaceContext` / `lastResolvedTeamProjects`
-// above. `createProject()` (`state/projects.ts`) calls `markProjectCreatedByViewer`
-// the instant its create request resolves — before the team catalog or this
-// project's own `/collab/status` have had any chance to answer. A project the
-// viewer just created cannot possibly be shared yet (sharing is a separate,
-// later, explicit action; ownership never transfers), so the very first mount
-// of `useProjectCollab` for that id can skip the project-level fail-closed
-// window below entirely instead of waiting out `knownUnshared`.
+// Workspace-scoped project ids the current viewer created in THIS browser
+// session, tracked at module scope like `lastResolvedWorkspaceContext` /
+// `lastResolvedTeamProjects` above. `createProject()` (`state/projects.ts`)
+// calls `markProjectCreatedByViewer` with the exact context used for the create
+// request — before the team catalog or this project's own `/collab/status`
+// have had any chance to answer. The marker only relaxes that initial UNKNOWN
+// window; an explicit daemon status always remains authoritative.
 //
 // This is the residual case #99's `knownOwnedByViewer` fix did not cover
 // (recvpZzWYQrhZQ): #99 relaxes the window once the project is already IN the
 // team catalog as owned-by-viewer, but a brand-new project is never in that
 // catalog (it was only just created, not shared), so `knownUnshared` stayed
 // false — and therefore fail-closed — until the catalog happened to load.
-const projectIdsCreatedByViewerThisSession = new Set<string>();
+const projectScopesCreatedByViewerThisSession = new Set<string>();
+
+function projectCreationScopeKey(
+  projectId: string,
+  workspaceContext: WorkspaceCollabContext | null,
+): string {
+  return JSON.stringify([workspaceIdentityCacheKey(workspaceContext), projectId]);
+}
 
 /**
- * Mark `projectId` as created by the current viewer in this browser session.
- * Call this the moment a create request resolves. Idempotent; safe to call
- * more than once for the same id.
+ * Mark `projectId` as created under the exact Workspace authority used by its
+ * create request. Call this the moment that request resolves. Idempotent; safe
+ * to call more than once for the same identity and id.
  */
-export function markProjectCreatedByViewer(projectId: string): void {
-  projectIdsCreatedByViewerThisSession.add(projectId);
+export function markProjectCreatedByViewer(
+  projectId: string,
+  workspaceContext: WorkspaceCollabContext | null,
+): void {
+  projectScopesCreatedByViewerThisSession.add(
+    projectCreationScopeKey(projectId, workspaceContext),
+  );
 }
 
 /** Test seam: clear the module-level creation cache between tests. */
 export function resetProjectsCreatedByViewerCache(): void {
-  projectIdsCreatedByViewerThisSession.clear();
+  projectScopesCreatedByViewerThisSession.clear();
 }
 
 /**
@@ -78,6 +88,16 @@ function localFilesAreNotTheContentYet(signals: {
 }
 
 export interface UseProjectCollabOptions {
+  /**
+   * Project-bound Workspace authority. Production project views pass the
+   * persisted project's resolved context here so ambient navigation cannot
+   * retarget status, presence, or pull requests.
+   *
+   * Omitted or explicit `null` means the project scope is unresolved/refused
+   * and keeps collab dormant. There is intentionally no shell-context fallback.
+   */
+  workspaceContext?: WorkspaceCollabContext | null;
+  workspaceContextLoading?: boolean;
   /** Injectable for tests. */
   fetch?: typeof fetch;
   baseUrl?: string;
@@ -93,53 +113,38 @@ interface WorkspaceContextState {
 }
 
 function useWorkspaceContextState(options: UseProjectCollabOptions = {}): WorkspaceContextState {
-  const baseUrl = options.baseUrl ?? '';
-  const fetchImpl = options.fetch;
-  // Opening a project used to start this read cold every time, and `viewerOnly`
-  // fails closed while it is in flight — so a member's OWN private project
-  // opened as a read-only shell: personal avatar in place of the collab roster,
-  // disabled 历史版本 / 分享, no composer (acceptance #54, #59). The nav shell has
-  // already resolved this exact context and parks it at module scope; seeding
-  // from that cache means the window only exists on the very first read of a
-  // session, while the request below still revalidates.
-  //
-  // Only the production path seeds. A test that injects `fetch`/`baseUrl` is
-  // pointing at its own daemon, so it must not inherit another suite's context.
-  const canSeedFromShell = !fetchImpl && !options.baseUrl;
+  const hasExplicitWorkspaceContext =
+    Object.prototype.hasOwnProperty.call(options, 'workspaceContext');
   const [state, setState] = useState<WorkspaceContextState>(() => {
-    const seed = canSeedFromShell ? cachedWorkspaceContext() : null;
-    return { context: seed, loading: seed === null };
+    return hasExplicitWorkspaceContext
+      ? {
+          context: options.workspaceContext ?? null,
+          loading: options.workspaceContextLoading ?? false,
+        }
+      : { context: null, loading: true };
   });
 
   useEffect(() => {
-    let cancelled = false;
-    const run = fetchImpl ?? globalThis.fetch.bind(globalThis);
-    void (async () => {
-      try {
-        const response = await run(`${baseUrl}/api/workspace/context`);
-        if (!response.ok) {
-          if (!cancelled) setState({ context: null, loading: false });
-          return;
-        }
-        const body = (await response.json()) as { context?: WorkspaceCollabContext | null };
-        if (!cancelled) setState({ context: body?.context ?? null, loading: false });
-      } catch {
-        if (!cancelled) setState({ context: null, loading: false });
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [baseUrl, fetchImpl]);
+    setState(
+      hasExplicitWorkspaceContext
+        ? {
+            context: options.workspaceContext ?? null,
+            loading: options.workspaceContextLoading ?? false,
+          }
+        : { context: null, loading: true },
+    );
+  }, [
+    hasExplicitWorkspaceContext,
+    options.workspaceContext,
+    options.workspaceContextLoading,
+  ]);
 
   return state;
 }
 
 /**
- * Fetch the current workspace context (B-integration seam, GET /api/workspace/
- * context). Null until it loads, or when there is no team-workspace context
- * (personal / signed out / hub unavailable). The daemon serves a dev context
- * until B is wired; production proxies B.
+ * Return the exact project Workspace supplied by the caller. There is no
+ * ambient self-fetch fallback: a project must never borrow shell navigation.
  */
 export function useWorkspaceContext(options: UseProjectCollabOptions = {}): WorkspaceCollabContext | null {
   return useWorkspaceContextState(options).context;
@@ -226,33 +231,23 @@ export function useProjectCollab(
   const collab = useCollab({
     projectId: projectId ?? null,
     member,
+    workspaceContext: context,
     enabled: decision.enabled,
-    // Let the status poll (`/collab/status`) start in parallel with
-    // `/api/workspace/context` instead of waiting for it — the poll doesn't
-    // need `member`/`context` (the daemon resolves the caller's own identity
-    // server-side; see useCollab's `statusEnabled` doc). While the context
-    // read is still in flight we don't yet know whether collab applies at
-    // all, so poll optimistically, same as the surrounding fail-closed UI
-    // already assumes "maybe yes" during this exact window (see
-    // `relationshipUnknown` below). Once the read resolves, fall back to the
-    // real decision: a CONFIRMED permission-denied reason (no-workspace-
-    // context / member-removed / lifecycle-xxx — see collab-session.ts) is an
-    // identity/permission gate, not a "haven't read the response yet"
-    // problem, so it must stop the poll same as before this change.
-    statusEnabled: Boolean(projectId) && (workspaceContextLoading || decision.enabled),
+    // Collab routes fail closed without an explicit workspace identity. Wait
+    // for context, then bind every status/presence/pull request to that exact
+    // identity; switching workspace recreates the client and tombstones the
+    // old response stream.
+    statusEnabled: Boolean(projectId) && decision.enabled,
     ...(options.fetch ? { fetch: options.fetch } : {}),
     ...(options.baseUrl !== undefined ? { baseUrl: options.baseUrl } : {}),
     ...(options.heartbeatMs !== undefined ? { heartbeatMs: options.heartbeatMs } : {}),
     ...(options.statusPollMs !== undefined ? { statusPollMs: options.statusPollMs } : {}),
   });
+  const workspaceIdentity = workspaceIdentityCacheKey(context);
   // Gate 1 (workspace-level): a non-writable workspace (locked/frozen billing or
   // a removed member) freezes everyone — consume B's `canWriteSyncedFiles` bit
   // rather than re-deriving from lifecycle so the two lanes cannot drift.
   const workspaceReadOnly = context != null && !context.permissions.canWriteSyncedFiles;
-  // Context loading is not the same as confirmed off-team. Fail closed during
-  // the initial workspace-context request so an already-pulled shared project
-  // never flashes writable controls before B confirms the current member.
-  const workspaceContextReadOnly = Boolean(projectId) && workspaceContextLoading;
   // Gate 2 (project-level): a project shared to the team (syncState past
   // `local_only`) is read-only for everyone except the member who shared it — the
   // single writer keeps editing their own project. This fails closed: it stays
@@ -266,6 +261,15 @@ export function useProjectCollab(
   const shared = collab.syncState !== 'local_only' && collab.syncState !== null;
   const collabEnabled = decision.enabled && (statusUnknown || shared);
   const isOwner = collab.ownerMemberId != null && collab.ownerMemberId === context?.workspaceMemberId;
+  // Context loading is not the same as confirmed off-team. Fail closed during
+  // the initial workspace-context request so an already-pulled shared project
+  // never flashes writable controls before B confirms the current member.
+  // Once the same exact request identity has also received a fresh collab
+  // status naming it as owner, however, the single-writer proof is complete:
+  // a concurrent project-scope revalidation must not demote that owner to a
+  // viewer until the redundant read settles.
+  const workspaceContextReadOnly =
+    Boolean(projectId) && workspaceContextLoading && !isOwner;
   // A project the hub catalog does not list cannot be shared, so the unknown
   // window does not have to fail closed for it. That window is why a member's
   // OWN fresh private draft flashed the "这是共享项目" read-only banner before
@@ -274,7 +278,7 @@ export function useProjectCollab(
   // `null` means the catalog was never read, which is NOT "nothing is shared" —
   // that case keeps failing closed. This only relaxes the UNKNOWN window; once
   // a status arrives, `shared && !isOwner` decides as before.
-  const knownCatalog = options.fetch || options.baseUrl ? null : cachedTeamProjects();
+  const knownCatalog = options.fetch || options.baseUrl ? null : cachedTeamProjects(context);
   const knownUnshared =
     knownCatalog !== null
     && Boolean(projectId)
@@ -296,13 +300,16 @@ export function useProjectCollab(
     && knownCatalog.some(
       (entry) => entry.projectId === projectId && entry.ownerMemberId === context.workspaceMemberId,
     );
-  // A project this browser tab created moments ago cannot possibly be shared
-  // yet — see `projectIdsCreatedByViewerThisSession` above. This covers the
-  // window `knownUnshared` cannot: right after creation the project is not
-  // (and cannot yet be) in the team catalog at all, so `knownCatalog` loading
-  // or not loading is irrelevant here.
+  // A project this browser tab created moments ago was not shared at create
+  // time. This covers the UNKNOWN window `knownUnshared` cannot: right after
+  // creation the project is not in the team catalog yet. Scope the signal to
+  // the exact Workspace identity used by the create request so switching to a
+  // different Workspace with the same project id cannot inherit it.
   const createdByViewerThisSession =
-    Boolean(projectId) && projectIdsCreatedByViewerThisSession.has(projectId as string);
+    Boolean(projectId)
+    && projectScopesCreatedByViewerThisSession.has(
+      projectCreationScopeKey(projectId as string, context),
+    );
   // Once `/collab/status` has EXPLICITLY confirmed this project belongs to
   // someone else (shared && !isOwner), remember it for as long as this
   // component stays mounted on this projectId. The owner unsharing later
@@ -313,24 +320,32 @@ export function useProjectCollab(
   // who had just lost read access entirely. A project once confirmed to be
   // someone else's must never look like the viewer's own personal project
   // again, no matter what a later poll reports.
+  const relationshipScopeKey = projectId
+    ? `${workspaceIdentity}:${projectId}`
+    : null;
   const confirmedOwnedBySomeoneElseRef = useRef<string | null>(null);
-  if (confirmedOwnedBySomeoneElseRef.current !== null && confirmedOwnedBySomeoneElseRef.current !== projectId) {
+  if (
+    confirmedOwnedBySomeoneElseRef.current !== null
+    && confirmedOwnedBySomeoneElseRef.current !== relationshipScopeKey
+  ) {
     confirmedOwnedBySomeoneElseRef.current = null;
   }
   if (shared && !isOwner && projectId) {
-    confirmedOwnedBySomeoneElseRef.current = projectId;
+    confirmedOwnedBySomeoneElseRef.current = relationshipScopeKey;
   }
-  const lostAccessAfterUnshare = confirmedOwnedBySomeoneElseRef.current === projectId && !isOwner;
-  // The project-level (single-writer) gate. It defaults to "unknown" rather than
-  // "read-only": a viewer the catalog already knows to be the owner, or who
-  // created this project in the current session, is never frozen by it, which
-  // removes the on-open flash. Everyone else still fails closed through the
-  // unknown window, whenever a confirmed status names a different owner, and
-  // permanently once this viewer has ever seen this project belong to someone
-  // else.
-  const sharedReadOnly = knownOwnedByViewer || createdByViewerThisSession
-    ? false
-    : (statusUnknown && !knownUnshared) || (shared && !isOwner) || lostAccessAfterUnshare;
+  const lostAccessAfterUnshare =
+    confirmedOwnedBySomeoneElseRef.current === relationshipScopeKey && !isOwner;
+  // The project-level (single-writer) gate. Catalog ownership and the
+  // same-session creation marker are provisional evidence used only while
+  // status is UNKNOWN, removing the on-open flash. Once daemon status resolves,
+  // its shared/owner facts win even if either provisional signal is stale.
+  const unknownStatusReadOnly =
+    statusUnknown
+    && !knownUnshared
+    && !knownOwnedByViewer
+    && !createdByViewerThisSession;
+  const sharedReadOnly =
+    unknownStatusReadOnly || (shared && !isOwner) || lostAccessAfterUnshare;
   const viewerOnly = workspaceContextReadOnly || workspaceReadOnly || sharedReadOnly;
 
   // Member content auto-sync (the last link): when a read-only member sees the
@@ -349,8 +364,8 @@ export function useProjectCollab(
   // The cursor seeds from the daemon's durable materializedVersion. A missing
   // cursor fails closed to 0 and pulls; an exact match proves this daemon
   // already has the published head, including across tab remounts/restarts.
-  const pullCursorRef = useRef<{ projectId: string | null; version: number }>({
-    projectId: null,
+  const pullCursorRef = useRef<{ scopeKey: string | null; version: number }>({
+    scopeKey: null,
     version: 0,
   });
   const pullInFlightRef = useRef(false);
@@ -358,10 +373,10 @@ export function useProjectCollab(
   // a head that advanced while a pull was in flight (the plain publishedVersion
   // dep would otherwise not re-fire once it settles on the newer number).
   const [pullTick, setPullTick] = useState(0);
-  const projectKey = projectId ?? null;
-  if (pullCursorRef.current.projectId !== projectKey) {
+  const projectKey = projectId ? `${workspaceIdentity}:${projectId}` : null;
+  if (pullCursorRef.current.scopeKey !== projectKey) {
     pullCursorRef.current = {
-      projectId: projectKey,
+      scopeKey: projectKey,
       version: collab.materializedVersion ?? 0,
     };
   } else if (
@@ -387,7 +402,7 @@ export function useProjectCollab(
         pullInFlightRef.current = false;
       }
     };
-  }, [projectId]);
+  }, [projectId, workspaceIdentity]);
   const { publishedVersion } = collab;
   const pull = collab.pull;
   const checkStatusNow = collab.checkStatusNow;

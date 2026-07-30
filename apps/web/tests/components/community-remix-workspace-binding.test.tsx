@@ -55,6 +55,7 @@ import {
 import { listProjects, listTemplates } from '../../src/state/projects';
 import type { Route } from '../../src/router';
 import type { AgentInfo, AppConfig } from '../../src/types';
+import { workspaceDirectoryFixture } from '../helpers/workspace-context';
 
 const TEMPLATE_ID = 'example-fundraising-deck';
 const TEMPLATE_PROMPT = 'Remix this seed round deck for my studio.';
@@ -234,7 +235,10 @@ interface DaemonSpy {
   patchInit: RequestInit | undefined;
   patchStatus: number | null;
   seededPendingPrompt: string | null;
+  directoryReads: number;
   contextReads: number;
+  contextWorkspaceId: string | null;
+  contextWorkspaceMemberId: string | null;
 }
 
 /**
@@ -249,14 +253,23 @@ function installDaemonStub(options: { refusePatch?: boolean } = {}): DaemonSpy {
     patchInit: undefined,
     patchStatus: null,
     seededPendingPrompt: null,
+    directoryReads: 0,
     contextReads: 0,
+    contextWorkspaceId: null,
+    contextWorkspaceMemberId: null,
   };
   globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     const pathname = new URL(url, 'http://daemon.local').pathname;
 
+    if (pathname === '/api/workspace/directory') {
+      spy.directoryReads += 1;
+      return jsonResponse(workspaceDirectoryFixture([teamContext()]));
+    }
     if (pathname === '/api/workspace/context') {
       spy.contextReads += 1;
+      spy.contextWorkspaceId = headerOf(init, 'x-od-workspace-id');
+      spy.contextWorkspaceMemberId = headerOf(init, 'x-od-workspace-member-id');
       return jsonResponse({ context: teamContext() });
     }
     if (pathname === '/api/workspace/billing') {
@@ -396,6 +409,9 @@ describe('Community Remix workspace binding', () => {
     const daemon = installDaemonStub();
     renderEntryShellCommunity();
     await waitFor(() => expect(daemon.contextReads).toBeGreaterThan(0));
+    expect(daemon.directoryReads).toBeGreaterThan(0);
+    expect(daemon.contextWorkspaceId).toBe(TEAM_WORKSPACE_ID);
+    expect(daemon.contextWorkspaceMemberId).toBe(TEAM_MEMBER_ID);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Remix template' }));
 
@@ -427,6 +443,9 @@ describe('Community Remix workspace binding', () => {
     const onCreateProject = vi.fn(async () => true);
     renderEntryShellCommunity({ onOpenProject, onCreateProject });
     await waitFor(() => expect(daemon.contextReads).toBeGreaterThan(0));
+    expect(daemon.directoryReads).toBeGreaterThan(0);
+    expect(daemon.contextWorkspaceId).toBe(TEAM_WORKSPACE_ID);
+    expect(daemon.contextWorkspaceMemberId).toBe(TEAM_MEMBER_ID);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Remix template' }));
 
@@ -442,6 +461,9 @@ describe('Community Remix workspace binding', () => {
     const daemon = installDaemonStub();
     render(<App />);
     await waitFor(() => expect(daemon.contextReads).toBeGreaterThan(0));
+    expect(daemon.directoryReads).toBeGreaterThan(0);
+    expect(daemon.contextWorkspaceId).toBe(TEAM_WORKSPACE_ID);
+    expect(daemon.contextWorkspaceMemberId).toBe(TEAM_MEMBER_ID);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Remix template' }));
 

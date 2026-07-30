@@ -13,6 +13,7 @@
 // canSendTo) that only make sense for a project; this module owns the part
 // that generalizes cleanly: reading the caller's workspace identity off
 // headers, and deciding whether a caller may mutate a bound resource row.
+import type { WorkspaceCollabContext } from '@open-design/contracts';
 import type { Response } from 'express';
 
 export type WorkspaceResourceContext = {
@@ -42,14 +43,107 @@ export type WorkspaceResourceMutationCapability =
   | 'writeFiles'
   | 'comment';
 
+export type WorkspaceRequestAuthorityResult =
+  | { ok: true; context: WorkspaceCollabContext }
+  | {
+      ok: false;
+      status: 400 | 403 | 503;
+      code: string;
+      message: string;
+      retryable?: true;
+    };
+
+export type VerifyWorkspaceRequestAuthority = (
+  req: unknown,
+) => Promise<WorkspaceRequestAuthorityResult>;
+
 /**
- * The one fact a mutation gate needs from the daemon's own verified workspace
- * state, distilled to the two fields worth cross-checking against a client's
- * unauthenticated headers. Kept minimal on purpose: this module must not
- * import the full `WorkspaceContextProvider` (that would pull the async B
- * integration into a resource-agnostic gate that plugin/skill also depend on)
- * — a caller injects a plain closure that reads it from wherever the daemon
- * already caches it (`collab/workspace-context.ts`'s `lastKnown()`).
+ * Browser navigation transports such as EventSource and iframe/src URLs
+ * cannot attach custom headers. For those read-only routes only, accept the
+ * same exact Workspace/member pair from query parameters and present it to the
+ * normal verifier as request headers. A mixed header/query request must agree
+ * exactly; callers cannot use query scope to override an existing identity.
+ */
+export function requestWithWorkspaceNavigationScope(
+  req: any,
+): any | 'conflict' {
+  const workspaceId = typeof req.query?.workspaceId === 'string'
+    ? req.query.workspaceId.trim()
+    : '';
+  const workspaceMemberId = typeof req.query?.workspaceMemberId === 'string'
+    ? req.query.workspaceMemberId.trim()
+    : '';
+  if (!workspaceId && !workspaceMemberId) return req;
+  const headerWorkspaceId = req.get('x-od-workspace-id')?.trim() ?? '';
+  const headerWorkspaceMemberId =
+    req.get('x-od-workspace-member-id')?.trim() ?? '';
+  if (
+    (headerWorkspaceId || headerWorkspaceMemberId)
+    && (
+      headerWorkspaceId !== workspaceId
+      || headerWorkspaceMemberId !== workspaceMemberId
+    )
+  ) {
+    return 'conflict';
+  }
+  return {
+    get(name: string) {
+      const normalized = name.toLowerCase();
+      if (normalized === 'x-od-workspace-id') return workspaceId || undefined;
+      if (normalized === 'x-od-workspace-member-id') {
+        return workspaceMemberId || undefined;
+      }
+      return req.get(name);
+    },
+  };
+}
+
+export type OptionalWorkspaceRequestAuthorityResult =
+  | { ok: true; context: WorkspaceCollabContext | null }
+  | Exclude<WorkspaceRequestAuthorityResult, { ok: true }>;
+
+/**
+ * Resolve the three request-scope states shared by resource reads and writes:
+ *
+ * - no Workspace/member headers: the legacy Personal/global lane;
+ * - a partial identity: a structured 400;
+ * - a complete identity: fresh directory-backed authority.
+ *
+ * The caller-provided verifier is intentionally invoked for every complete
+ * request. Resource mutations must not reuse a previously settled membership
+ * success after the member has been removed.
+ */
+export async function resolveOptionalWorkspaceRequestAuthority(
+  req: any,
+  verifyWorkspaceRequestAuthority: VerifyWorkspaceRequestAuthority | undefined,
+): Promise<OptionalWorkspaceRequestAuthorityResult> {
+  const claimed = workspaceResourceContextFromRequest(req);
+  if (claimed === null) return { ok: true, context: null };
+  if (claimed === 'missing') {
+    return {
+      ok: false,
+      status: 400,
+      code: 'WORKSPACE_CONTEXT_INCOMPLETE',
+      message: 'both workspace and member identity are required',
+    };
+  }
+  if (!verifyWorkspaceRequestAuthority) {
+    return {
+      ok: false,
+      status: 400,
+      code: 'WORKSPACE_CONTEXT_REQUIRED',
+      message: 'an explicit workspace context is required',
+    };
+  }
+  return verifyWorkspaceRequestAuthority(req);
+}
+
+/**
+ * Compatibility snapshot used only by the deprecated synchronous gate below.
+ * No production route calls that gate; its remaining direct tests document
+ * legacy behavior while current client data-plane routes use
+ * `enforceVerifiedWorkspaceResourceMutation`, which performs a fresh exact
+ * Workspace/member authority check and never consults this snapshot.
  */
 export type WorkspaceMembershipSnapshot = {
   workspaceId: string;
@@ -59,18 +153,9 @@ export type WorkspaceMembershipSnapshot = {
 export type GetLastKnownWorkspaceMembership = () => WorkspaceMembershipSnapshot | null;
 
 /**
- * The daemon's OWN signed-in workspace identity, narrowed to the fields a
- * resource decision needs. Structurally a subset of `WorkspaceCollabContext`, so
- * a caller passes `() => workspaceContext.lastKnown?.() ?? null` directly.
- *
- * Deliberately a plain closure rather than the provider type, same rule as
- * `GetLastKnownWorkspaceMembership` above: this module must stay free of the
- * async B integration that every resource type depends on.
- *
- * Populated with NO network I/O and no UI involvement — `lastKnown()` caches
- * whatever the provider last resolved from the vela session on disk, so a
- * daemon-only process that has never served a browser still has it (verified
- * end to end with `od daemon start --headless`).
+ * Ambient identity shape retained only by the deprecated synchronous gate.
+ * It is absent from authoritative request gates and must never choose a
+ * client's Workspace.
  */
 export type AmbientWorkspaceSnapshot = {
   workspaceId: string;
@@ -113,23 +198,10 @@ export function ambientWorkspaceResourceContext(
 }
 
 /**
- * Cross-check the client-asserted `memberStatus` against the daemon's own
- * last-known-good workspace context.
+ * Deprecated compatibility cross-check for the synchronous gate below.
  *
- * Client headers are an unauthenticated hint the web/desktop app attaches
- * from its OWN last poll of `/api/workspace/context` — a member removed from
- * the workspace keeps sending stale `active` headers until that poll catches
- * up (or the app restarts). The daemon's own last-known context — refreshed
- * by that very poll, and by every other in-daemon `.current()` caller — is
- * real vela-verified state for THIS SAME workspace. When it explicitly
- * disagrees (same workspaceId, `memberStatus: 'removed'`), it wins over
- * whatever the header claims.
- *
- * When the daemon has no opinion for this workspace — never polled yet, or
- * its last poll resolved a DIFFERENT workspace — the header stands. This
- * must only ever narrow an `active` claim to `removed`; it must never turn
- * "we don't have cached info yet" into a denial, or every route gated by this
- * check would fail-closed on daemon startup / a workspace switch.
+ * Current routes instead perform a fresh exact directory check. This helper
+ * remains for direct legacy tests and must not be wired into new routes.
  */
 export function withLastKnownMembership(
   ctx: WorkspaceResourceContext,
@@ -199,6 +271,23 @@ export function workspaceResourceContextFromRequest(req: any): WorkspaceResource
   return workspaceResourceContext(req, workspaceId) ?? 'missing';
 }
 
+export function workspaceResourceContextFromVerified(
+  context: WorkspaceCollabContext,
+): WorkspaceResourceContext {
+  return {
+    workspaceId: context.workspaceId,
+    workspaceType: context.workspaceType,
+    workspaceTypeAsserted: context.workspaceType,
+    appUserId: '',
+    workspaceMemberId: context.workspaceMemberId,
+    role: context.role,
+    memberStatus: context.memberStatus,
+    lifecycleState: context.lifecycleState,
+    canShareProjects: context.permissions.canShareProjects,
+    canWriteSyncedFiles: context.permissions.canWriteSyncedFiles,
+  };
+}
+
 export function isWorkspaceResourceLocked(ctx: WorkspaceResourceContext): boolean {
   return ctx.lifecycleState === 'locked' || ctx.lifecycleState === 'deleted';
 }
@@ -257,6 +346,7 @@ export function workspaceResourceAccess(
 }
 
 function workspaceResourceMutationAllowed(
+  resourceType: string,
   row: WorkspaceResourceAccessInput | null | undefined,
   ctx: WorkspaceResourceContext,
   capability: WorkspaceResourceMutationCapability,
@@ -285,17 +375,21 @@ function workspaceResourceMutationAllowed(
         row.visibility === 'team')
     );
   }
-  // Every other mutation capability collapses to the same `canMutate` bit —
-  // project's original per-capability branch (`canRename`/`canDelete`/
-  // `canDuplicate`/`canRestoreVersion`) all read the identical computed
-  // value. `capability` stays a parameter so the next capability that needs
-  // to diverge (as `comment` above did) has a seam to hang that on without
-  // another signature change at every call site.
+  // A shared Team project is a single-writer resource. Workspace governance
+  // (`owner` / `admin`) may manage the Team, but it does not transfer the
+  // project owner's authorship: every project-content mutation must come from
+  // the member recorded on the shared project row. Comments deliberately keep
+  // the broader rule above. Personal/unshared projects and non-project
+  // resources retain the ordinary privileged-or-creator mutation policy.
+  if (resourceType === 'project' && row.visibility === 'team') {
+    return access.canMutate && access.selfCreated;
+  }
+  // Every other mutation capability collapses to the same `canMutate` bit.
   return access.canMutate;
 }
 
 /**
- * Gate a mutation route for any resource bound into `workspace_resources`.
+ * Deprecated synchronous mutation gate retained for direct legacy tests.
  *
  * `resourceType` ('project' | 'plugin' | 'skill' | 'design_system') feeds
  * both the lookup callbacks' semantics and the permission-denied error code
@@ -308,12 +402,8 @@ function workspaceResourceMutationAllowed(
  * `workspace_resources` filtered to `resource_type = 'plugin'`) so this
  * module never has to know which table backs which resource type.
  *
- * `getLastKnownMembership` is the optional cross-check seam (see
- * `withLastKnownMembership` above): when provided, the client's asserted
- * `memberStatus` header is overridden to `'removed'` whenever the daemon's own
- * last-known-good workspace context says so for this same workspace. Omitted
- * by a caller with no such cache wired up — the gate then behaves exactly as
- * before, trusting the header alone.
+ * No production route calls this function. New code must use
+ * `enforceVerifiedWorkspaceResourceMutation`.
  */
 /**
  * The shape `createEnforceWorkspaceProjectMutation` (routes/project/index.ts)
@@ -334,12 +424,11 @@ export type BoundWorkspaceResourceMutationGate = (
   db: unknown,
   resourceId: string,
   capability: WorkspaceResourceMutationCapability,
-) => boolean;
+) => Promise<boolean>;
 
 /**
- * Whether `req` proves write authority over `resourceId` — the same decision
- * `enforceWorkspaceResourceMutation` makes, without turning the answer into an
- * HTTP error.
+ * Deprecated synchronous counterpart retained for legacy tests. Production
+ * routes use `requestCanMutateVerifiedWorkspaceResource`.
  *
  * For a READ route that writes as a side effect. The version-history GET
  * bootstraps a baseline version whenever a file has no manifest yet
@@ -378,6 +467,185 @@ export function requestCanMutateWorkspaceResource(
   const row = getWorkspaceResource(db, ctx.workspaceId, resourceId);
   if (!row) return true;
   return workspaceResourceAccess(row, ctx).canMutate;
+}
+
+/**
+ * Authoritative counterpart used by Workspace-bound project data-plane
+ * routes. A persisted binding makes explicit Workspace/member identity
+ * mandatory; every authority-bearing field comes from the signed-in
+ * membership directory, never from request headers or daemon-global
+ * active/last-known state. Truly unbound legacy local resources keep their
+ * existing local-only behavior.
+ */
+export async function requestCanMutateVerifiedWorkspaceResource(
+  req: any,
+  getWorkspaceResource: (
+    db: unknown,
+    workspaceId: string,
+    resourceId: string,
+  ) => WorkspaceResourceAccessInput | null | undefined,
+  getWorkspaceResourceByResourceId: (
+    db: unknown,
+    resourceId: string,
+  ) => WorkspaceResourceAccessInput | null | undefined,
+  db: unknown,
+  resourceId: string,
+  verifyWorkspaceRequestAuthority: VerifyWorkspaceRequestAuthority | undefined,
+): Promise<boolean> {
+  if (!getWorkspaceResourceByResourceId(db, resourceId)) return true;
+  if (!verifyWorkspaceRequestAuthority) return false;
+  const verified = await verifyWorkspaceRequestAuthority(req);
+  if (!verified.ok) return false;
+  const context = workspaceResourceContextFromVerified(verified.context);
+  const row = getWorkspaceResource(db, context.workspaceId, resourceId);
+  return workspaceResourceMutationAllowed(
+    'project',
+    row,
+    context,
+    'writeFiles',
+  );
+}
+
+export async function enforceVerifiedWorkspaceResourceMutation(
+  resourceType: string,
+  req: any,
+  res: Response,
+  sendApiError: (res: Response, status: number, code: string, message: string) => unknown,
+  getWorkspaceResource: (
+    db: unknown,
+    workspaceId: string,
+    resourceId: string,
+  ) => WorkspaceResourceAccessInput | null | undefined,
+  getWorkspaceResourceByResourceId: (
+    db: unknown,
+    resourceId: string,
+  ) => WorkspaceResourceAccessInput | null | undefined,
+  db: unknown,
+  resourceId: string,
+  capability: WorkspaceResourceMutationCapability,
+  verifyWorkspaceRequestAuthority: VerifyWorkspaceRequestAuthority | undefined,
+): Promise<boolean> {
+  // No persisted Workspace binding means this is a genuine legacy/local
+  // resource. Preserve that path without inventing a Workspace from ambient
+  // navigation state.
+  if (!getWorkspaceResourceByResourceId(db, resourceId)) return true;
+  if (!verifyWorkspaceRequestAuthority) {
+    sendApiError(res, 400, 'WORKSPACE_CONTEXT_REQUIRED', 'an explicit workspace context is required');
+    return false;
+  }
+
+  const verified = await verifyWorkspaceRequestAuthority(req);
+  if (!verified.ok) {
+    sendApiError(res, verified.status, verified.code, verified.message);
+    return false;
+  }
+
+  const context = workspaceResourceContextFromVerified(verified.context);
+  const row = getWorkspaceResource(db, context.workspaceId, resourceId);
+  if (!workspaceResourceMutationAllowed(
+    resourceType,
+    row,
+    context,
+    capability,
+  )) {
+    const code = row && isWorkspaceResourceLocked(context)
+      ? 'WORKSPACE_LOCKED'
+      : `WORKSPACE_${resourceType.toUpperCase()}_PERMISSION_DENIED`;
+    sendApiError(res, 403, code, `workspace ${resourceType} mutation is not allowed`);
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Fresh exact authority gate for the data plane of a Workspace-bound resource.
+ *
+ * Reads deliberately do not require creator/admin mutation standing: every
+ * active member may read a resource that is bound to the exact Workspace in
+ * the request. Locked/frozen Team resources intentionally remain readable but
+ * read-only; removed members, authority outages, cross-Workspace identities,
+ * and deleted resources fail closed. Truly unbound legacy local resources
+ * remain compatible.
+ */
+export async function enforceVerifiedWorkspaceResourceRead(
+  resourceType: string,
+  req: any,
+  res: Response,
+  sendApiError: (
+    res: Response,
+    status: number,
+    code: string,
+    message: string,
+    details?: Record<string, unknown>,
+  ) => unknown,
+  getWorkspaceResource: (
+    db: unknown,
+    workspaceId: string,
+    resourceId: string,
+  ) => WorkspaceResourceAccessInput | null | undefined,
+  getWorkspaceResourceByResourceId: (
+    db: unknown,
+    resourceId: string,
+  ) => WorkspaceResourceAccessInput | null | undefined,
+  db: unknown,
+  resourceId: string,
+  verifyWorkspaceRequestAuthority: VerifyWorkspaceRequestAuthority | undefined,
+  options: { allowNavigationQuery?: boolean } = {},
+): Promise<boolean> {
+  if (!getWorkspaceResourceByResourceId(db, resourceId)) return true;
+  const scopedRequest = options.allowNavigationQuery
+    ? requestWithWorkspaceNavigationScope(req)
+    : req;
+  if (scopedRequest === 'conflict') {
+    sendApiError(
+      res,
+      400,
+      'WORKSPACE_CONTEXT_CONFLICT',
+      'workspace header and navigation scope must match',
+    );
+    return false;
+  }
+  if (!verifyWorkspaceRequestAuthority) {
+    sendApiError(
+      res,
+      400,
+      'WORKSPACE_CONTEXT_REQUIRED',
+      'an explicit workspace context is required',
+    );
+    return false;
+  }
+  const verified = await verifyWorkspaceRequestAuthority(scopedRequest);
+  if (!verified.ok) {
+    sendApiError(
+      res,
+      verified.status,
+      verified.code,
+      verified.message,
+      verified.retryable ? { retryable: true } : {},
+    );
+    return false;
+  }
+  const context = workspaceResourceContextFromVerified(verified.context);
+  const row = getWorkspaceResource(db, context.workspaceId, resourceId);
+  if (!row || context.memberStatus !== 'active') {
+    sendApiError(
+      res,
+      403,
+      `WORKSPACE_${resourceType.toUpperCase()}_PERMISSION_DENIED`,
+      `workspace ${resourceType} read is not allowed`,
+    );
+    return false;
+  }
+  if (context.lifecycleState === 'deleted' || row.resourceState === 'deleted') {
+    sendApiError(
+      res,
+      403,
+      `WORKSPACE_${resourceType.toUpperCase()}_PERMISSION_DENIED`,
+      `workspace ${resourceType} read is not allowed`,
+    );
+    return false;
+  }
+  return true;
 }
 
 /**
@@ -448,7 +716,12 @@ function headerlessMutationAllowed(
     sendApiError(res, 401, 'WORKSPACE_CONTEXT_REQUIRED', 'workspace context is required');
     return false;
   }
-  if (!workspaceResourceMutationAllowed(ownRow, ambient, capability)) {
+  if (!workspaceResourceMutationAllowed(
+    resourceType,
+    ownRow,
+    ambient,
+    capability,
+  )) {
     const code = isWorkspaceResourceLocked(ambient)
       ? 'WORKSPACE_LOCKED'
       : `WORKSPACE_${resourceType.toUpperCase()}_PERMISSION_DENIED`;
@@ -510,7 +783,12 @@ export function enforceWorkspaceResourceMutation(
   // adopted into the asserting caller's workspace; silently rebinding a
   // pre-existing orphan (#6213) remains out of bounds.
   if (!row && !getWorkspaceResourceByResourceId(db, resourceId)) return true;
-  if (!workspaceResourceMutationAllowed(row, ctx, capability)) {
+  if (!workspaceResourceMutationAllowed(
+    resourceType,
+    row,
+    ctx,
+    capability,
+  )) {
     const code = row && isWorkspaceResourceLocked(ctx)
       ? 'WORKSPACE_LOCKED'
       : `WORKSPACE_${resourceType.toUpperCase()}_PERMISSION_DENIED`;

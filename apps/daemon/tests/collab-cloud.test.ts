@@ -309,6 +309,7 @@ describe('createCollabCloudService', () => {
       client,
       workspaceContext: fixedContextProvider(teamContext()),
       listProjectIds: () => ['p1'],
+      resolveProjectWorkspaceContext: async () => teamContext(),
       resolveLocalConversationId: () => 'conv-local',
       mergeComment: ({ comment }) => {
         mergeCalls += 1;
@@ -354,6 +355,7 @@ describe('createCollabCloudService', () => {
       client: wrapped,
       workspaceContext: fixedContextProvider(personal),
       listProjectIds: () => ['p1'],
+      resolveProjectWorkspaceContext: async () => personal,
       resolveLocalConversationId: () => 'conv-local',
       mergeComment: () => false,
     });
@@ -369,7 +371,9 @@ describe('createCollabCloudService', () => {
     const service = createCollabCloudService({
       client,
       workspaceContext: fixedContextProvider(teamContext({ displayName: '琼羽', role: 'owner' })),
-      listProjectIds: () => [],
+      listProjectIds: () => ['p1'],
+      resolveProjectWorkspaceContext: async () =>
+        teamContext({ displayName: '琼羽', role: 'owner' }),
       resolveLocalConversationId: () => null,
       mergeComment: () => false,
     });
@@ -392,6 +396,7 @@ describe('createCollabCloudService', () => {
       client,
       workspaceContext: fixedContextProvider(teamContext()),
       listProjectIds: () => ['p1'],
+      resolveProjectWorkspaceContext: async () => teamContext(),
       resolveLocalConversationId: () => null, // member pulled the project, no chat yet
       mergeComment: () => { mergeCalls += 1; return true; },
     });
@@ -425,7 +430,7 @@ describe('createCollabCloudService', () => {
       createdAt: 1,
       updatedAt: 1,
       authorMemberId: 'm-self',
-    } as any);
+    } as any, teamContext());
     const pulled = await client.pullComments('team-1', 'p1', 0);
     const tomb = pulled.comments.find((c) => c.id === 'c1');
     expect(tomb?.deleted).toBe(true);
@@ -439,13 +444,172 @@ describe('createCollabCloudService', () => {
       client,
       workspaceContext: fixedContextProvider(null),
       listProjectIds: () => ['p1'],
+      resolveProjectWorkspaceContext: async () => null,
       resolveLocalConversationId: () => 'conv-local',
       mergeComment: () => { mergeCalls += 1; return true; },
     });
     await service.pollOnce();
     expect(registered).toHaveLength(0);
     expect(mergeCalls).toBe(0);
-    expect(await service.listMembers()).toEqual([]);
+    expect(
+      await service.listMembers(teamContext({ workspaceType: 'personal' })),
+    ).toEqual([]);
+    service.dispose();
+  });
+
+  it('lists members from the explicit request workspace instead of ambient context', async () => {
+    const { client } = fakeClient();
+    const teamIds: string[] = [];
+    const scopedClient = {
+      ...client,
+      listMembers: async (teamId: string) => {
+        teamIds.push(teamId);
+        return [];
+      },
+    } as unknown as CollabCloudClient;
+    const service = createCollabCloudService({
+      client: scopedClient,
+      workspaceContext: fixedContextProvider(
+        teamContext({ workspaceId: 'team-b', teamId: 'team-b' }),
+      ),
+      listProjectIds: () => [],
+      resolveLocalConversationId: () => null,
+      mergeComment: () => false,
+    });
+
+    await service.listMembers(
+      teamContext({ workspaceId: 'team-a', teamId: 'team-a' }),
+    );
+
+    expect(teamIds).toEqual(['team-a']);
+    service.dispose();
+  });
+
+  it('keeps project comment operations on their explicit scope after ambient moves to B', async () => {
+    const { client } = fakeClient();
+    const calls: Array<{
+      operation: string;
+      teamId: string;
+      memberId?: string;
+    }> = [];
+    const scopedClient = {
+      ...client,
+      pushComment: async (
+        teamId: string,
+        _projectId: string,
+        comment: CollabCloudComment,
+      ) => {
+        calls.push({ operation: comment.deleted ? 'delete' : 'push', teamId, memberId: comment.memberId });
+        return { seq: calls.length };
+      },
+      pullComments: async (teamId: string) => {
+        calls.push({ operation: 'pull', teamId });
+        return { comments: [], latestSeq: 0, etag: null, notModified: true };
+      },
+      listMembers: async (teamId: string) => {
+        calls.push({ operation: 'resolve-member', teamId });
+        return [{ memberId: 'owner-a', displayName: 'Owner A', role: 'owner' as const }];
+      },
+    } as unknown as CollabCloudClient;
+    const service = createCollabCloudService({
+      client: scopedClient,
+      workspaceContext: fixedContextProvider(
+        teamContext({
+          workspaceId: 'workspace-b',
+          workspaceMemberId: 'member-b',
+          teamId: 'workspace-b',
+        }),
+      ),
+      listProjectIds: () => [],
+      resolveLocalConversationId: () => 'conv-local',
+      mergeComment: () => false,
+    });
+    const projectContext = teamContext({
+      workspaceId: 'workspace-a',
+      workspaceMemberId: 'member-a',
+      teamId: 'workspace-a',
+    });
+    const comment = {
+      id: 'c-scoped',
+      projectId: 'p1',
+      conversationId: 'conv-local',
+      filePath: 'index.html',
+      elementId: 'hero',
+      selector: 's',
+      label: 'l',
+      text: 't',
+      position: { x: 0, y: 0, width: 0, height: 0 },
+      htmlHint: '',
+      note: 'n',
+      status: 'open',
+      createdAt: 1,
+      updatedAt: 1,
+    } as any;
+
+    await service.pushComment(comment, projectContext);
+    await service.pushCommentDeletion(comment, projectContext);
+    await service.pullProject('p1', projectContext);
+    await expect(
+      service.resolveMember('owner-a', projectContext),
+    ).resolves.toMatchObject({ displayName: 'Owner A' });
+
+    expect(calls).toEqual([
+      { operation: 'push', teamId: 'workspace-a', memberId: 'member-a' },
+      { operation: 'delete', teamId: 'workspace-a', memberId: 'member-a' },
+      { operation: 'pull', teamId: 'workspace-a' },
+      { operation: 'resolve-member', teamId: 'workspace-a' },
+    ]);
+    service.dispose();
+  });
+
+  it('partitions pull cursors by workspace and member for the same project id', async () => {
+    const sinceCalls: Array<{
+      teamId: string;
+      sinceSeq: number;
+      etag: string | null | undefined;
+    }> = [];
+    const client = {
+      pullComments: async (
+        teamId: string,
+        _projectId: string,
+        sinceSeq: number,
+        etag?: string | null,
+      ) => {
+        sinceCalls.push({ teamId, sinceSeq, etag });
+        return {
+          comments: [],
+          latestSeq: 7,
+          etag: `etag-${teamId}`,
+          notModified: false,
+        };
+      },
+    } as unknown as CollabCloudClient;
+    const service = createCollabCloudService({
+      client,
+      listProjectIds: () => [],
+      resolveLocalConversationId: () => 'conv-local',
+      mergeComment: () => false,
+    });
+    const workspaceA = teamContext({
+      workspaceId: 'workspace-a',
+      workspaceMemberId: 'member-a',
+      teamId: 'workspace-a',
+    });
+    const workspaceB = teamContext({
+      workspaceId: 'workspace-b',
+      workspaceMemberId: 'member-b',
+      teamId: 'workspace-b',
+    });
+
+    await service.pullProject('same-project', workspaceA);
+    await service.pullProject('same-project', workspaceB);
+    await service.pullProject('same-project', workspaceA);
+
+    expect(sinceCalls).toEqual([
+      { teamId: 'workspace-a', sinceSeq: 0, etag: undefined },
+      { teamId: 'workspace-b', sinceSeq: 0, etag: undefined },
+      { teamId: 'workspace-a', sinceSeq: 7, etag: 'etag-workspace-a' },
+    ]);
     service.dispose();
   });
 
@@ -469,10 +633,10 @@ describe('createCollabCloudService', () => {
       resolveLocalConversationId: () => 'conv-local',
       mergeComment: ({ comment }) => { merged.push(comment.id); return true; },
     });
-    await expect(service.pullProject('p1')).resolves.toBe(true);
+    await expect(service.pullProject('p1', teamContext())).resolves.toBe(true);
     expect(merged).toEqual(['c1']);
     // An up-to-date follow-up pull (nothing new) still counts as redeemed.
-    await expect(service.pullProject('p1')).resolves.toBe(true);
+    await expect(service.pullProject('p1', teamContext())).resolves.toBe(true);
     service.dispose();
   });
 
@@ -486,7 +650,7 @@ describe('createCollabCloudService', () => {
       resolveLocalConversationId: () => null,
       mergeComment: () => true,
     });
-    await expect(service.pullProject('p1')).resolves.toBe(false);
+    await expect(service.pullProject('p1', teamContext())).resolves.toBe(false);
     service.dispose();
   });
 
@@ -504,7 +668,7 @@ describe('createCollabCloudService', () => {
       mergeComment: () => true,
       onError: (error) => errors.push(error),
     });
-    await expect(service.pullProject('p1')).resolves.toBe(false);
+    await expect(service.pullProject('p1', teamContext())).resolves.toBe(false);
     expect(errors).toHaveLength(1);
     service.dispose();
   });
@@ -518,7 +682,12 @@ describe('createCollabCloudService', () => {
       resolveLocalConversationId: () => 'conv-local',
       mergeComment: () => true,
     });
-    await expect(service.pullProject('p1')).resolves.toBe(false);
+    await expect(
+      service.pullProject(
+        'p1',
+        teamContext({ workspaceType: 'personal', workspaceId: 'personal' }),
+      ),
+    ).resolves.toBe(false);
     service.dispose();
   });
 });
@@ -592,7 +761,6 @@ describe('VelaCliCollabClient', () => {
     const calls: string[][] = [];
     const workspaces: Array<string | undefined> = [];
     const client = createVelaCliCollabClient({
-      getWorkspaceId: () => 'team-1',
       run: async (args, workspaceId) => {
         calls.push(args);
         workspaces.push(workspaceId);
@@ -637,7 +805,7 @@ describe('VelaCliCollabClient', () => {
       clientId: 'client-1',
       filePath: 'Typography',
       activity: { label: '正在评论 Typography' },
-    })).resolves.toEqual([
+    }, 'team-1')).resolves.toEqual([
       {
         memberId: 'm-self',
         name: '麻薯',

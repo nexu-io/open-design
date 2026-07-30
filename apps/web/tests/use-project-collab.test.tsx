@@ -62,7 +62,9 @@ afterEach(() => {
 describe('useProjectCollab', () => {
   it('activates presence + sync for a team member', async () => {
     const fetchImpl = installFetch(TEAM_CONTEXT, [{ memberId: 'wm-1' }, { memberId: 'other' }]);
-    const { result } = renderHook(() => useProjectCollab('p1', { fetch: fetchImpl }));
+    const { result } = renderHook(() =>
+      useProjectCollab('p1', { fetch: fetchImpl, workspaceContext: TEAM_CONTEXT }),
+    );
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0); // context fetch
@@ -78,12 +80,15 @@ describe('useProjectCollab', () => {
 
   it('activates presence for a personal workspace that can later invite seats', async () => {
     const calls: string[] = [];
-    const base = installFetch({ ...TEAM_CONTEXT, workspaceType: 'personal' }, []);
+    const personalContext = { ...TEAM_CONTEXT, workspaceType: 'personal' as const };
+    const base = installFetch(personalContext, []);
     const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
       calls.push(new URL(String(input), 'http://d.local').pathname);
       return base(input, init);
     }) as typeof fetch;
-    const { result } = renderHook(() => useProjectCollab('p1', { fetch: fetchImpl }));
+    const { result } = renderHook(() =>
+      useProjectCollab('p1', { fetch: fetchImpl, workspaceContext: personalContext }),
+    );
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(50);
@@ -96,7 +101,9 @@ describe('useProjectCollab', () => {
 
   it('stays dormant when there is no workspace context', async () => {
     const fetchImpl = installFetch(null, []);
-    const { result } = renderHook(() => useProjectCollab('p1', { fetch: fetchImpl }));
+    const { result } = renderHook(() =>
+      useProjectCollab('p1', { fetch: fetchImpl, workspaceContext: null }),
+    );
     await act(async () => {
       await vi.advanceTimersByTimeAsync(50);
     });
@@ -114,7 +121,13 @@ describe('useProjectCollab', () => {
       return { ok: true, status: 200, json: async () => ({ ok: true }) } as unknown as Response;
     }) as typeof fetch;
 
-    const { result } = renderHook(() => useProjectCollab('p1', { fetch: fetchImpl }));
+    const { result } = renderHook(() =>
+      useProjectCollab('p1', {
+        fetch: fetchImpl,
+        workspaceContext: null,
+        workspaceContextLoading: true,
+      }),
+    );
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
@@ -135,7 +148,9 @@ describe('useProjectCollab', () => {
     // ownership is confirmed. Pre-fix this returned viewerOnly=false for admins.
     const admin = makeContext({ role: 'admin', workspaceMemberId: 'wm-admin' });
     const fetchImpl = installFetch(admin, [{ memberId: 'wm-admin' }]);
-    const { result } = renderHook(() => useProjectCollab('p1', { fetch: fetchImpl }));
+    const { result } = renderHook(() =>
+      useProjectCollab('p1', { fetch: fetchImpl, workspaceContext: admin }),
+    );
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
@@ -160,7 +175,9 @@ describe('useProjectCollab', () => {
       return { ok: true, status: 200, json: async () => payload } as unknown as Response;
     }) as typeof fetch;
 
-    const { result } = renderHook(() => useProjectCollab('p1', { fetch: fetchImpl }));
+    const { result } = renderHook(() =>
+      useProjectCollab('p1', { fetch: fetchImpl, workspaceContext: admin }),
+    );
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
@@ -189,13 +206,55 @@ describe('useProjectCollab', () => {
       }
       return { ok: true, status: 200, json: async () => payload } as unknown as Response;
     }) as typeof fetch;
-    const { result } = renderHook(() => useProjectCollab('p1', { fetch: fetchImpl }));
+    const { result } = renderHook(() =>
+      useProjectCollab('p1', { fetch: fetchImpl, workspaceContext: owner }),
+    );
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
       await vi.advanceTimersByTimeAsync(0);
     });
 
+    expect(result.current.viewerOnly).toBe(false);
+  });
+
+  it('keeps a status-confirmed owner writable while project scope is revalidating after restart', async () => {
+    // A daemon/web restart can leave the project-scope read in its revalidation
+    // window even though the caller identity is already pinned from the
+    // persisted project binding and /collab/status has freshly confirmed the
+    // same member as the shared-project owner. Loading alone must not override
+    // that two-sided ownership proof; otherwise the real single writer gets the
+    // member-only banner and loses Chat/file editing until another remount.
+    const owner = makeContext({ role: 'member', workspaceMemberId: 'wm-owner' });
+    const fetchImpl = (async (input: RequestInfo | URL) => {
+      const pathname = new URL(String(input), 'http://d.local').pathname;
+      let payload: unknown = { ok: true };
+      if (pathname.endsWith('/presence/heartbeat')) {
+        payload = { present: [{ memberId: 'wm-owner' }] };
+      } else if (pathname.endsWith('/collab/status')) {
+        payload = {
+          publishedVersion: 2,
+          syncState: 'synced',
+          ownerMemberId: 'wm-owner',
+        };
+      }
+      return { ok: true, status: 200, json: async () => payload } as unknown as Response;
+    }) as typeof fetch;
+
+    const { result } = renderHook(() =>
+      useProjectCollab('p-restarted', {
+        fetch: fetchImpl,
+        workspaceContext: owner,
+        workspaceContextLoading: true,
+      }),
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(result.current.isOwner).toBe(true);
     expect(result.current.viewerOnly).toBe(false);
   });
 
@@ -225,7 +284,9 @@ describe('useProjectCollab', () => {
       }
       return { ok: true, status: 200, json: async () => payload } as unknown as Response;
     }) as typeof fetch;
-    const { result } = renderHook(() => useProjectCollab('p1', { fetch: fetchImpl }));
+    const { result } = renderHook(() =>
+      useProjectCollab('p1', { fetch: fetchImpl, workspaceContext: member }),
+    );
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
@@ -248,7 +309,9 @@ describe('useProjectCollab', () => {
     // ownership gate.
     const owner = makeContext({ role: 'owner', lifecycleState: 'locked', workspaceMemberId: 'wm-owner' });
     const fetchImpl = installFetch(owner, [{ memberId: 'wm-owner' }]);
-    const { result } = renderHook(() => useProjectCollab('p1', { fetch: fetchImpl }));
+    const { result } = renderHook(() =>
+      useProjectCollab('p1', { fetch: fetchImpl, workspaceContext: owner }),
+    );
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
@@ -272,7 +335,9 @@ describe('useProjectCollab', () => {
       }
       return { ok: true, status: 200, json: async () => payload } as unknown as Response;
     }) as typeof fetch;
-    const { result } = renderHook(() => useProjectCollab('p1', { fetch: fetchImpl }));
+    const { result } = renderHook(() =>
+      useProjectCollab('p1', { fetch: fetchImpl, workspaceContext: owner }),
+    );
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);

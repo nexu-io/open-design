@@ -17,7 +17,7 @@
 // so `route.kind` stays 'home' and no route change fires. Skills never did.
 
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
-import type { SkillSummary } from '@open-design/contracts';
+import type { SkillSummary, WorkspaceCollabContext } from '@open-design/contracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from '../../src/App';
@@ -44,6 +44,7 @@ import {
   resetWorkspaceContextCache,
 } from '../../src/collab/useWorkspaceContext';
 import { resetCoalescedGet } from '../../src/lib/coalesced-get';
+import { workspaceDirectoryFixture } from '../helpers/workspace-context';
 
 vi.mock('../../src/components/EntryView', () => ({
   EntryView: ({
@@ -149,32 +150,37 @@ const baseConfig: AppConfig = {
   agentCliEnv: {},
 };
 
-function workspaceContextPayload(workspaceId: string, workspaceMemberId?: string) {
+function workspaceContext(
+  workspaceId: string,
+  workspaceMemberId = `member-${workspaceId}`,
+): WorkspaceCollabContext {
   return {
-    context: {
-      workspaceId,
-      workspaceType: 'team',
-      workspaceMemberId: workspaceMemberId ?? `member-${workspaceId}`,
-      role: 'member',
-      memberStatus: 'active',
-      lifecycleState: 'active',
-      billingState: 'active',
-      planId: null,
-      providerMode: 'platform_credits',
-      seatSummary: { seatLimit: 5, usedSeats: 1, availableSeats: 4, isSeatFull: false },
-      permissions: {
-        canManageMembers: false,
-        canManageBilling: false,
-        canInviteMembers: false,
-        canManageAutoRecharge: false,
-        canShareProjects: true,
-        canWriteSyncedFiles: true,
-        canViewWorkspaceSettings: false,
-        canManageSharedResources: false,
-      },
-      displayName: workspaceId,
+    workspaceId,
+    workspaceType: 'team',
+    workspaceMemberId,
+    role: 'member',
+    memberStatus: 'active',
+    lifecycleState: 'active',
+    billingState: 'active',
+    planId: null,
+    providerMode: 'platform_credits',
+    seatSummary: { seatLimit: 5, usedSeats: 1, availableSeats: 4, isSeatFull: false },
+    permissions: {
+      canManageMembers: false,
+      canManageBilling: false,
+      canInviteMembers: false,
+      canManageAutoRecharge: false,
+      canShareProjects: true,
+      canWriteSyncedFiles: true,
+      canViewWorkspaceSettings: false,
+      canManageSharedResources: false,
     },
+    displayName: workspaceId,
   };
+}
+
+function workspaceContextPayload(workspaceId: string, workspaceMemberId?: string) {
+  return { context: workspaceContext(workspaceId, workspaceMemberId) };
 }
 
 /** Workspace ids `fetchSkills` was called for, in order. `undefined` marks a
@@ -245,9 +251,14 @@ describe('App skills list — workspace scope', () => {
         return {
           ok: true,
           json: async () =>
-            pathname.endsWith('/workspace/context')
-              ? workspaceContextPayload(activeWorkspaceId)
-              : {},
+            pathname.endsWith('/workspace/directory')
+              ? workspaceDirectoryFixture([
+                  workspaceContext('ws-a'),
+                  workspaceContext('ws-b'),
+                ])
+              : pathname.endsWith('/workspace/context')
+                ? workspaceContextPayload(activeWorkspaceId)
+                : {},
         } as Response;
       }),
     );
@@ -268,7 +279,7 @@ describe('App skills list — workspace scope', () => {
     // fires. Only a workspace-keyed refresh can correct the list.
     activeWorkspaceId = 'ws-b';
     await act(async () => {
-      notifyWorkspaceContextRefresh();
+      notifyWorkspaceContextRefresh({ context: workspaceContext('ws-b') });
       await Promise.resolve();
     });
 
@@ -290,9 +301,14 @@ describe('App skills list — workspace scope', () => {
         return {
           ok: true,
           json: async () =>
-            pathname.endsWith('/workspace/context')
-              ? workspaceContextPayload(activeWorkspaceId)
-              : {},
+            pathname.endsWith('/workspace/directory')
+              ? workspaceDirectoryFixture([
+                  workspaceContext('ws-a'),
+                  workspaceContext('ws-b'),
+                ])
+              : pathname.endsWith('/workspace/context')
+                ? workspaceContextPayload(activeWorkspaceId)
+                : {},
         } as Response;
       }),
     );
@@ -309,7 +325,7 @@ describe('App skills list — workspace scope', () => {
     // Switch while ws-a's read is still in flight.
     activeWorkspaceId = 'ws-b';
     await act(async () => {
-      notifyWorkspaceContextRefresh();
+      notifyWorkspaceContextRefresh({ context: workspaceContext('ws-b') });
       await Promise.resolve();
     });
     await waitFor(() => expect(skillsReadScopes()).toContain('ws-b'));
@@ -345,9 +361,13 @@ describe('App skills list — workspace scope', () => {
         return {
           ok: true,
           json: async () =>
-            pathname.endsWith('/workspace/context')
-              ? workspaceContextPayload('ws-shared-team', memberId)
-              : {},
+            pathname.endsWith('/workspace/directory')
+              ? workspaceDirectoryFixture([
+                  workspaceContext('ws-shared-team', memberId),
+                ])
+              : pathname.endsWith('/workspace/context')
+                ? workspaceContextPayload('ws-shared-team', memberId)
+                : {},
         } as Response;
       }),
     );
@@ -365,7 +385,9 @@ describe('App skills list — workspace scope', () => {
 
     memberId = 'member-b';
     await act(async () => {
-      notifyWorkspaceContextRefresh();
+      notifyWorkspaceContextRefresh({
+        context: workspaceContext('ws-shared-team', memberId),
+      });
       await Promise.resolve();
     });
     await waitFor(() =>
@@ -407,9 +429,13 @@ describe('App skills list — workspace scope', () => {
         return {
           ok: true,
           json: async () =>
-            pathname.endsWith('/workspace/context')
-              ? workspaceContextPayload('ws-shared-team', memberId)
-              : {},
+            pathname.endsWith('/workspace/directory')
+              ? workspaceDirectoryFixture([
+                  workspaceContext('ws-shared-team', memberId),
+                ])
+              : pathname.endsWith('/workspace/context')
+                ? workspaceContextPayload('ws-shared-team', memberId)
+                : {},
         } as Response;
       }),
     );
@@ -432,7 +458,9 @@ describe('App skills list — workspace scope', () => {
     // Same workspace, different account. A's read is still in flight.
     memberId = 'member-b';
     await act(async () => {
-      notifyWorkspaceContextRefresh();
+      notifyWorkspaceContextRefresh({
+        context: workspaceContext('ws-shared-team', memberId),
+      });
       await Promise.resolve();
     });
 

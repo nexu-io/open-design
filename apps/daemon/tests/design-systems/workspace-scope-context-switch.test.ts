@@ -1,39 +1,7 @@
-// P0: `resolveDesignSystemWorkspaceScope` (server.ts) used to memoize the
-// resolved workspace id for 10s, independent of pin/session state — on top of
-// (not instead of) the `designSystemVisibleFromWorkspace` filter that
-// `design-systems/workspace-scope.test.ts` already covers.
-//
-// Reported bug: a user creates a design system in workspace-1, then creates a
-// brand-new workspace-2 on Vela Web and comes back to OD. Workspace-2 still
-// showed workspace-1's design system. Root cause: workspace CREATION lives
-// entirely on Vela Web, not this daemon (`routes/collab-context.ts`: "Vela Web
-// lists/creates workspaces but does not choose which workspace this local OD
-// daemon is operating in"), so a switch that originates there never calls
-// `PUT /api/workspace/active` — the only route that writes the local pin file.
-// The daemon only learns the new workspace through the next
-// `collab.workspaceContext.current()` read, and that read used to land in a
-// 10s cache local to `resolveDesignSystemWorkspaceScope`, independent of the
-// pin. GET /api/design-systems kept resolving the OLD workspace's scope for up
-// to 10s after the switch, and (more seriously, since it does not self-heal)
-// `POST /api/design-systems` created in that window was PERMANENTLY stamped
-// with the stale workspace, because `createWorkspaceOwnedDesignSystem` shares
-// this exact resolver.
-//
-// Live repro against a real daemon (dev workspace-context provider,
-// `PUT /api/workspace/context` simulating the Vela-Web-driven switch with no
-// local pin write — see `createDevWorkspaceContextProvider`'s `set` seam):
-// pre-fix, GET /api/design-systems kept leaking workspace-1's system into
-// workspace-2 for ~10.1s after the switch, and a POST issued ~560ms after the
-// switch was mis-attributed to workspace-1. Post-fix, both were correct at
-// the harness's own request latency (~1.5s of fetch/import overhead, not
-// caching) — i.e. no cache-shaped delay at all.
-//
-// The fix removes `resolveDesignSystemWorkspaceScope`'s own TTL cache
-// entirely rather than shortening it: every other `collab.workspaceContext
-// .current()` caller in server.ts (mutation gates, brand routes,
-// resource-hub principal checks) already awaits it uncached per call, and
-// none of this resolver's callers are hot/polled paths (design-system
-// list/create and brand create/finalize are user-triggered, not polled).
+// Design-system catalog/create are data-plane operations. They must resolve
+// their Workspace from the request identity, not from the daemon's mutable
+// active/current Workspace. Otherwise two tabs can cross: an A request that
+// lands after a B switch is listed/stamped as B.
 
 import type http from 'node:http';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -77,7 +45,18 @@ async function setContext(baseUrl: string, context: unknown): Promise<void> {
   expect(resp.ok).toBe(true);
 }
 
-describe('GET/POST /api/design-systems — a context switch with no local pin has zero caching delay', () => {
+function workspaceHeaders(context: typeof CONTEXT_WS1 | typeof CONTEXT_WS2): Record<string, string> {
+  return {
+    'x-od-workspace-id': context.workspaceId,
+    'x-od-workspace-member-id': context.workspaceMemberId,
+    'x-od-workspace-type': context.workspaceType,
+    'x-od-workspace-role': context.role,
+    'x-od-workspace-member-status': context.memberStatus,
+    'x-od-workspace-lifecycle-state': context.lifecycleState,
+  };
+}
+
+describe('GET/POST /api/design-systems — explicit request scope is isolated from daemon current Workspace', () => {
   let server: http.Server;
   let baseUrl: string;
   let shutdown: (() => Promise<void> | void) | undefined;
@@ -94,63 +73,86 @@ describe('GET/POST /api/design-systems — a context switch with no local pin ha
     await new Promise<void>((resolve) => server.close(() => resolve()));
   });
 
-  it('does not leak workspace-1 into workspace-2 immediately after the switch, and attributes an immediate create correctly', async () => {
-    await setContext(baseUrl, CONTEXT_WS1);
+  it('keeps the completely headerless signed-out/local lane unbound', async () => {
+    const title = `local unbound ${Date.now()}`;
+    const createdResponse = await fetch(`${baseUrl}/api/design-systems`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ title }),
+    });
+    expect(createdResponse.status).toBe(201);
+    const created = (await createdResponse.json()) as {
+      id: string;
+      workspaceId?: string;
+    };
+    expect(created.workspaceId).toBeUndefined();
+
+    const listedResponse = await fetch(`${baseUrl}/api/design-systems`);
+    expect(listedResponse.status).toBe(200);
+    const listed = (await listedResponse.json()) as {
+      designSystems: Array<{ id: string }>;
+    };
+    expect(listed.designSystems.some((item) => item.id === created.id)).toBe(true);
+  });
+
+  it('rejects a half-specified Workspace identity instead of treating it as local', async () => {
+    const response = await fetch(`${baseUrl}/api/design-systems`, {
+      headers: { 'x-od-workspace-id': 'ws-switch-one' },
+    });
+    expect(response.status).toBe(400);
+  });
+
+  it('keeps an A request on A after a legacy context write without creating ambient authority', async () => {
+    await setContext(baseUrl, CONTEXT_WS2);
 
     const createResp1 = await fetch(`${baseUrl}/api/design-systems`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json',
+        ...workspaceHeaders(CONTEXT_WS1),
+      },
       body: JSON.stringify({ title: `ws1 system ${Date.now()}` }),
     });
     expect(createResp1.status).toBe(201);
     const createdInWs1 = (await createResp1.json()) as { id: string; workspaceId?: string };
     expect(createdInWs1.workspaceId).toBe('ws-switch-one');
 
-    // Switch to workspace-2 the way a "created a new workspace on Vela Web"
-    // return trip actually surfaces: `.current()` already answers ws-2 on the
-    // very next read, but `PUT /api/workspace/active` is never called.
-    await setContext(baseUrl, CONTEXT_WS2);
-
-    // The daemon's own notion of "current" was never the broken half — confirm
-    // it already reports ws-2 before checking the design-systems scope.
+    // The compatibility write no longer creates daemon-global data-plane
+    // authority. Each tab's following request must remain self-contained.
     const ctxResp = await fetch(`${baseUrl}/api/workspace/context`);
     const ctxBody = (await ctxResp.json()) as { context: { workspaceId: string } | null };
-    expect(ctxBody.context?.workspaceId).toBe('ws-switch-two');
+    expect(ctxBody.context?.workspaceId).toBeUndefined();
 
-    // The actual reported bug: GET /api/design-systems immediately after the
-    // switch must not still resolve workspace-1's scope.
-    const listResp = await fetch(`${baseUrl}/api/design-systems`);
+    const listResp = await fetch(`${baseUrl}/api/design-systems`, {
+      headers: workspaceHeaders(CONTEXT_WS1),
+    });
     const listBody = (await listResp.json()) as {
       designSystems: Array<{ id: string; workspaceId?: string }>;
     };
-    expect(listBody.designSystems.some((d) => d.id === createdInWs1.id)).toBe(false);
+    expect(listBody.designSystems.some((d) => d.id === createdInWs1.id)).toBe(true);
 
-    // The permanent-misattribution half: a system created immediately after
-    // the switch must be stamped ws-2, not silently inherit the stale ws-1 —
-    // `createWorkspaceOwnedDesignSystem` shares this same resolver, so this is
-    // the one case that used to never self-heal even after the 10s cache
-    // window passed.
     const createResp2 = await fetch(`${baseUrl}/api/design-systems`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json',
+        ...workspaceHeaders(CONTEXT_WS2),
+      },
       body: JSON.stringify({ title: `ws2 system ${Date.now()}` }),
     });
     expect(createResp2.status).toBe(201);
     const createdInWs2 = (await createResp2.json()) as { id: string; workspaceId?: string };
     expect(createdInWs2.workspaceId).toBe('ws-switch-two');
 
-    // Symmetric sanity check: workspace-1's own view must still show its own
-    // system and must not have picked up workspace-2's — the fix removes a
-    // stale-cache leak, it must not turn into a different leak the other way.
-    await setContext(baseUrl, CONTEXT_WS1);
-    const listWs1Resp = await fetch(`${baseUrl}/api/design-systems`);
+    const listWs1Resp = await fetch(`${baseUrl}/api/design-systems`, {
+      headers: workspaceHeaders(CONTEXT_WS1),
+    });
     const listWs1Body = (await listWs1Resp.json()) as { designSystems: Array<{ id: string }> };
     expect(listWs1Body.designSystems.some((d) => d.id === createdInWs1.id)).toBe(true);
     expect(listWs1Body.designSystems.some((d) => d.id === createdInWs2.id)).toBe(false);
   });
 });
 
-describe('resolveDesignSystemWorkspaceScope — spec 04 §10: a leftover pin must not outrank "no confirmed session"', () => {
+describe('resolveDesignSystemWorkspaceScope — stale local pins are never data-plane authority', () => {
   // This function's session-liveness gate (`collab.workspaceContext.lastKnown()`)
   // is untouched by the TTL-cache fix above — this suite exists to prove
   // removing that cache did not also disturb the gate. A fresh server
@@ -192,32 +194,21 @@ describe('resolveDesignSystemWorkspaceScope — spec 04 §10: a leftover pin mus
     await new Promise<void>((resolve) => server.close(() => resolve()));
   });
 
-  it('ignores the pin before any workspace context has ever been confirmed', async () => {
-    // No `PUT /api/workspace/context` has ever been sent to THIS server
-    // instance — `lastKnown()` is null, matching "never signed in" and
-    // "signed out, pin left behind" identically. The pinned-claim system must
-    // stay hidden: §10 already established that "no scope" hides a claimed
-    // system rather than trusting everything, and that must hold even though
-    // a pin file happens to sit on disk.
-    const resp = await fetch(`${baseUrl}/api/design-systems`);
+  it('ignores a stale pin when an explicit request names another Workspace', async () => {
+    const resp = await fetch(`${baseUrl}/api/design-systems`, {
+      headers: workspaceHeaders(CONTEXT_WS2),
+    });
     const body = (await resp.json()) as { designSystems: Array<{ id: string }> };
     expect(body.designSystems.some((d) => d.id === 'user:pinned-claim')).toBe(false);
   });
 
-  it('honors the pin once a session is confirmed (the pin-priority branch itself still works)', async () => {
-    // Confirm a session under a DIFFERENT workspace id — the pin still wins
-    // over whatever id "current" reports, so this is a sanity check that
-    // removing the TTL cache did not also disturb the pin-wins-when-present
-    // branch itself.
-    await setContext(baseUrl, {
-      workspaceMemberId: 'member-other',
-      workspaceId: 'ws-not-the-pin',
-      workspaceType: 'team',
-      role: 'owner',
-      memberStatus: 'active',
-      lifecycleState: 'active',
+  it('shows the claim only when the explicit request names the pinned Workspace', async () => {
+    const resp = await fetch(`${baseUrl}/api/design-systems`, {
+      headers: workspaceHeaders({
+        ...CONTEXT_WS1,
+        workspaceId: 'ws-stale-pin',
+      }),
     });
-    const resp = await fetch(`${baseUrl}/api/design-systems`);
     const body = (await resp.json()) as { designSystems: Array<{ id: string }> };
     expect(body.designSystems.some((d) => d.id === 'user:pinned-claim')).toBe(true);
   });

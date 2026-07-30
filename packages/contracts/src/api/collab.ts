@@ -318,15 +318,25 @@ export interface WorkspaceDirectoryItem {
 /** GET /api/workspace/directory. OD's local workspace switcher data source. */
 export interface WorkspaceDirectoryResponse {
   items: WorkspaceDirectoryItem[];
+  /**
+   * @deprecated Compatibility echo of the request-side selection claim.
+   * It is not a daemon-global active Workspace and must not scope resources.
+   */
   activeWorkspaceId: string | null;
 }
 
-/** PUT /api/workspace/active. Selects OD's local active workspace. */
+/**
+ * PUT /api/workspace/active.
+ * Verifies and resolves this tab's exact Workspace/member selection; it does
+ * not mutate a daemon-global selection used to scope resources.
+ */
 export interface WorkspaceActiveRequest {
   workspaceId: string;
+  workspaceMemberId: string;
 }
 
 export interface WorkspaceActiveResponse {
+  /** Compatibility echo of the verified tab-selected Workspace id. */
   activeWorkspaceId: string;
   context: WorkspaceCollabContext;
 }

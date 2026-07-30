@@ -143,7 +143,7 @@ describe('POST /api/plugins/:id/uninstall — workspace ownership gate', () => {
 
     const resp = await fetch(`${baseUrl}/api/plugins/${pluginId}/uninstall`, { method: 'POST' });
 
-    expect(resp.status).toBe(401);
+    expect(resp.status).toBe(400);
     expect(existsSync(folder)).toBe(true);
   });
 });

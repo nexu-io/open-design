@@ -92,7 +92,14 @@ function bindSkillToWorkspace(skillId: string, workspaceId: string, createdByWor
 async function fetchSkillIds(workspaceId?: string): Promise<string[]> {
   const resp = await fetch(
     `${baseUrl}/api/skills`,
-    workspaceId ? { headers: { 'x-od-workspace-id': workspaceId } } : undefined,
+    workspaceId
+      ? {
+          headers: {
+            'x-od-workspace-id': workspaceId,
+            'x-od-workspace-member-id': 'member-owner',
+          },
+        }
+      : undefined,
   );
   const body = (await resp.json()) as { skills: Array<{ id: string }> };
   return body.skills.map((s) => s.id);
@@ -211,7 +218,7 @@ describe('DELETE /api/skills/:id — workspace ownership gate', () => {
 
     const resp = await fetch(`${baseUrl}/api/skills/${skillId}`, { method: 'DELETE' });
 
-    expect(resp.status).toBe(401);
+    expect(resp.status).toBe(400);
     expect(existsSync(folder)).toBe(true);
   });
 
@@ -227,7 +234,7 @@ describe('DELETE /api/skills/:id — workspace ownership gate', () => {
 
     const resp = await fetch(`${baseUrl}/api/skills/${skillId}`, { method: 'DELETE' });
 
-    expect(resp.status).toBe(401);
+    expect(resp.status).toBe(400);
     expect(existsSync(folder)).toBe(true);
   });
 });
@@ -252,7 +259,7 @@ describe('GET /api/skills — teamSynced projection', () => {
     updateWorkspaceResource(db, 'skill', 'ws-teamsynced-1', skillId, { visibility: 'team' });
 
     const resp = await fetch(`${baseUrl}/api/skills`, {
-      headers: { 'x-od-workspace-id': 'ws-teamsynced-1' },
+      headers: workspaceHeaders('member-owner', 'member', 'ws-teamsynced-1'),
     });
     const body = (await resp.json()) as { skills: Array<{ id: string; teamSynced?: boolean }> };
     const skill = body.skills.find((s) => s.id === skillId);
@@ -266,7 +273,7 @@ describe('GET /api/skills — teamSynced projection', () => {
     bindSkillToWorkspace(skillId, 'ws-teamsynced-2', 'member-owner');
 
     const resp = await fetch(`${baseUrl}/api/skills`, {
-      headers: { 'x-od-workspace-id': 'ws-teamsynced-2' },
+      headers: workspaceHeaders('member-owner', 'member', 'ws-teamsynced-2'),
     });
     const body = (await resp.json()) as { skills: Array<{ id: string; teamSynced?: boolean }> };
     const skill = body.skills.find((s) => s.id === skillId);
@@ -280,7 +287,7 @@ describe('GET /api/skills — teamSynced projection', () => {
     await seedSkillFolder(skillId);
 
     const resp = await fetch(`${baseUrl}/api/skills`, {
-      headers: { 'x-od-workspace-id': 'ws-teamsynced-legacy' },
+      headers: workspaceHeaders('member-owner', 'member', 'ws-teamsynced-legacy'),
     });
     const body = (await resp.json()) as { skills: Array<{ id: string; teamSynced?: boolean }> };
     const skill = body.skills.find((s) => s.id === skillId);

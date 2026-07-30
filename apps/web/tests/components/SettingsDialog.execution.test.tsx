@@ -113,6 +113,7 @@ import { providerModelsCacheKey } from '../../src/components/providerModelsCache
 import { I18nProvider } from '../../src/i18n';
 import { LOCALES } from '../../src/i18n/types';
 import { MAX_MAX_TOKENS, MIN_MAX_TOKENS } from '../../src/state/maxTokens';
+import { workspaceDirectoryFixture } from '../helpers/workspace-context';
 import type {
   AgentInfo,
   AppConfig,
@@ -225,6 +226,18 @@ function workspaceContextResponse(context: WorkspaceCollabContext | null) {
     status: 200,
     headers: { 'content-type': 'application/json' },
   });
+}
+
+function workspaceDirectoryResponse(
+  context: WorkspaceCollabContext | null,
+): Response {
+  return new Response(
+    JSON.stringify(workspaceDirectoryFixture(context ? [context] : [])),
+    {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    },
+  );
 }
 
 type OnRefreshAgents = (
@@ -1772,6 +1785,9 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
   it('auto-tests BYOK after required fields become locally valid', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = input.toString();
+      if (url === '/api/workspace/directory') {
+        return workspaceDirectoryResponse(null);
+      }
       if (url === '/api/workspace/context') {
         return new Response(JSON.stringify({ context: null }), {
           status: 200,
@@ -2387,6 +2403,9 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     let attempt = 0;
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = input.toString();
+      if (url === '/api/workspace/directory') {
+        return workspaceDirectoryResponse(null);
+      }
       if (url === '/api/workspace/context') {
         return new Response(JSON.stringify({ context: null }), {
           status: 200,
@@ -3268,10 +3287,14 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
   // true (the user is their own owner), so the upgrade entry stays visible
   // for a signed-in, upgrade-eligible AMR account with no team involved.
   it('shows the AMR upgrade action for a personal identity with an upgradeable plan', async () => {
+    const context = personalWorkspaceContext();
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = input.toString();
+      if (url === '/api/workspace/directory') {
+        return workspaceDirectoryResponse(context);
+      }
       if (url === '/api/workspace/context') {
-        return workspaceContextResponse(personalWorkspaceContext());
+        return workspaceContextResponse(context);
       }
       if (url === '/api/memory') {
         return new Response(
@@ -3313,10 +3336,14 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
   // upgrade-eligible account, matching the fix for
   // "团队的成员没有升级权限，是不是可以在客户端隐藏升级入口".
   it('hides the AMR upgrade action for a team member without billing permission', async () => {
+    const context = teamMemberWorkspaceContext();
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = input.toString();
+      if (url === '/api/workspace/directory') {
+        return workspaceDirectoryResponse(context);
+      }
       if (url === '/api/workspace/context') {
-        return workspaceContextResponse(teamMemberWorkspaceContext());
+        return workspaceContextResponse(context);
       }
       if (url === '/api/memory') {
         return new Response(
@@ -3829,21 +3856,17 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
   // on this exact card. The explicit workspace balance from
   // `useWorkspaceBillingResponse` must win once it has loaded.
   it('prefers the workspace billing balance over the account-scoped wallet snapshot', async () => {
+    const context = teamMemberWorkspaceContext({
+      workspaceId: 'ws-team',
+      workspaceMemberId: 'member-team',
+    });
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = input.toString();
+      if (url === '/api/workspace/directory') {
+        return workspaceDirectoryResponse(context);
+      }
       if (url === '/api/workspace/context') {
-        return new Response(
-          JSON.stringify({
-            context: {
-              workspaceId: 'ws-team',
-              workspaceType: 'team',
-              workspaceMemberId: 'member-team',
-              role: 'member',
-              permissions: { canViewWorkspaceSettings: false },
-            },
-          }),
-          { status: 200, headers: { 'content-type': 'application/json' } },
-        );
+        return workspaceContextResponse(context);
       }
       if (url.startsWith('/api/workspace/billing?')) {
         return new Response(
@@ -5333,7 +5356,7 @@ describe('IntegrationsView skills tab', () => {
 
     fireEvent.click(screen.getByText('blog-post'));
     await waitFor(() => {
-      expect(fetchSkillMock).toHaveBeenCalledWith('blog-post');
+      expect(fetchSkillMock).toHaveBeenCalledWith('blog-post', null);
       expect(screen.getByText('skill body for blog-post')).toBeTruthy();
     });
 
@@ -5390,7 +5413,7 @@ describe('SettingsDialog design systems section', () => {
 
     fireEvent.click(screen.getByText('Signal Green'));
     await waitFor(() => {
-      expect(fetchDesignSystemMock).toHaveBeenCalledWith('signal-green');
+      expect(fetchDesignSystemMock).toHaveBeenCalledWith('signal-green', null);
       expect(screen.getByText('design system body for signal-green')).toBeTruthy();
     });
 

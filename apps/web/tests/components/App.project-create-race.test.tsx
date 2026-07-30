@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { buildWorkspacePermissions } from '@open-design/contracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from '../../src/App';
@@ -39,6 +40,8 @@ import {
   resetTeamProjectsCache,
   resetWorkspaceContextCache,
 } from '../../src/collab/useWorkspaceContext';
+import { resetCoalescedGet } from '../../src/lib/coalesced-get';
+import { workspaceDirectoryFixture } from '../helpers/workspace-context';
 
 vi.mock('../../src/components/EntryView', () => ({
   EntryView: ({
@@ -420,24 +423,34 @@ function workspaceContextPayload(
   workspaceId: string,
   workspaceMemberId: string,
 ) {
+  return { context: workspaceContext(workspaceId, workspaceMemberId) };
+}
+
+function workspaceContext(
+  workspaceId: string,
+  workspaceMemberId: string,
+) {
   return {
-    context: {
-      workspaceId,
-      workspaceType: 'team',
-      workspaceMemberId,
-      role: 'member',
-      memberStatus: 'active',
-      lifecycleState: 'active',
-      billingState: 'active',
-      planId: null,
-      providerMode: 'platform_credits',
-      seatSummary: { seatLimit: 5, usedSeats: 1, availableSeats: 4 },
-      permissions: {
-        canCreateProjects: true,
-        canWriteSyncedFiles: true,
-      },
-      displayName: workspaceId,
+    workspaceId,
+    workspaceType: 'team' as const,
+    workspaceMemberId,
+    role: 'member' as const,
+    memberStatus: 'active' as const,
+    lifecycleState: 'active' as const,
+    billingState: 'active' as const,
+    planId: null,
+    providerMode: 'platform_credits' as const,
+    seatSummary: {
+      seatLimit: 5,
+      usedSeats: 1,
+      availableSeats: 4,
+      isSeatFull: false,
     },
+    permissions: buildWorkspacePermissions({
+      role: 'member',
+      lifecycleState: 'active',
+    }),
+    displayName: workspaceId,
   };
 }
 
@@ -452,9 +465,11 @@ function stubWorkspaceContext(
       return {
         ok: true,
         json: async () =>
-          pathname.endsWith('/workspace/context')
-            ? workspaceContextPayload(workspaceId, workspaceMemberId)
-            : {},
+          pathname.endsWith('/workspace/directory')
+            ? workspaceDirectoryFixture([workspaceContext(workspaceId, workspaceMemberId)])
+            : pathname.endsWith('/workspace/context')
+              ? workspaceContextPayload(workspaceId, workspaceMemberId)
+              : {},
       } as Response;
     }),
   );
@@ -462,6 +477,7 @@ function stubWorkspaceContext(
 
 describe('App project creation routing', () => {
   beforeEach(() => {
+    resetCoalescedGet();
     resetWorkspaceContextCache();
     resetTeamProjectsCache();
     window.history.replaceState(null, '', '/');
@@ -500,6 +516,7 @@ describe('App project creation routing', () => {
     vi.clearAllMocks();
     resetWorkspaceContextCache();
     resetTeamProjectsCache();
+    resetCoalescedGet();
   });
 
   it('auto-picks the first available agent in registry order after streamed probes settle', async () => {
@@ -1056,8 +1073,16 @@ describe('App project creation routing', () => {
     // working dir flips. Asserting the call order locks the ordering in.
     mockedListProjects.mockResolvedValue([]);
     mockedReplaceProjectWorkingDir.mockResolvedValue(undefined as never);
+    stubWorkspaceContext('ws-create', 'wm-create');
+    const createContext = workspaceContextPayload('ws-create', 'wm-create').context;
 
     render(<App />);
+    await waitFor(() => {
+      expect(
+        vi.mocked(fetch).mock.calls.some(([input]) =>
+          String(input).includes('/api/workspace/context')),
+      ).toBe(true);
+    });
 
     fireEvent.click(
       await screen.findByRole('button', { name: 'Create project with working dir' }),
@@ -1072,10 +1097,12 @@ describe('App project creation routing', () => {
       'project-new',
       '/Users/me/external',
       'wd-token',
+      createContext,
     );
     // Both target the same project id, and the working-dir handoff is ordered
     // strictly before the upload so the files land in the final tree.
     expect(mockedUploadProjectFiles.mock.calls[0]?.[0]).toBe('project-new');
+    expect(mockedUploadProjectFiles.mock.calls[0]?.[3]).toEqual(createContext);
     const replaceOrder = mockedReplaceProjectWorkingDir.mock.invocationCallOrder[0]!;
     const uploadOrder = mockedUploadProjectFiles.mock.invocationCallOrder[0]!;
     expect(replaceOrder).toBeLessThan(uploadOrder);
@@ -1197,7 +1224,10 @@ describe('App project creation routing', () => {
       expect(screen.getByTestId('project-title').textContent).toBe('Catalog authority');
       expect(screen.getByTestId('project-workspace-id').textContent).toBe('ws-1');
     });
-    expect(mockedGetProject).toHaveBeenCalledWith('project-shared');
+    expect(mockedGetProject).toHaveBeenCalledWith(
+      'project-shared',
+      workspaceContext('ws-1', 'wm-1'),
+    );
   });
 
   it('keeps the original local-open behavior for an own unbound legacy project', async () => {
@@ -1233,12 +1263,17 @@ describe('App project creation routing', () => {
         return {
           ok: true,
           json: async () =>
-            pathname.endsWith('/workspace/context')
-              ? workspaceContextPayload(
-                  activeWorkspaceId,
-                  `member-${activeWorkspaceId}`,
-                )
-              : {},
+            pathname.endsWith('/workspace/directory')
+              ? workspaceDirectoryFixture([
+                  workspaceContext('ws-a', 'member-ws-a'),
+                  workspaceContext('ws-b', 'member-ws-b'),
+                ])
+              : pathname.endsWith('/workspace/context')
+                ? workspaceContextPayload(
+                    activeWorkspaceId,
+                    `member-${activeWorkspaceId}`,
+                  )
+                : {},
         } as Response;
       }),
     );
@@ -1251,7 +1286,9 @@ describe('App project creation routing', () => {
     });
 
     activeWorkspaceId = 'ws-b';
-    notifyWorkspaceContextRefresh();
+    notifyWorkspaceContextRefresh({
+      context: workspaceContext('ws-b', 'member-ws-b'),
+    });
     await waitFor(() => {
       expect(mockedListProjects.mock.calls.some(
         ([options]) => options?.workspaceContext?.workspaceId === 'ws-b',
@@ -1276,9 +1313,13 @@ describe('App project creation routing', () => {
       return {
         ok: true,
         json: async () =>
-          pathname.endsWith('/workspace/context')
-            ? workspaceContextPayload('ws-a', activeWorkspaceMemberId)
-            : {},
+          pathname.endsWith('/workspace/directory')
+            ? workspaceDirectoryFixture([
+                workspaceContext('ws-a', activeWorkspaceMemberId),
+              ])
+            : pathname.endsWith('/workspace/context')
+              ? workspaceContextPayload('ws-a', activeWorkspaceMemberId)
+              : {},
       } as Response;
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -1291,11 +1332,10 @@ describe('App project creation routing', () => {
     });
 
     activeWorkspaceMemberId = 'replacement-member';
-    notifyWorkspaceContextRefresh();
-    await waitFor(() => {
-      expect(fetchMock.mock.calls.filter(([input]) =>
-        new URL(String(input), 'http://d.local').pathname.endsWith('/workspace/context'),
-      ).length).toBeGreaterThanOrEqual(2);
+    act(() => {
+      notifyWorkspaceContextRefresh({
+        context: workspaceContext('ws-a', activeWorkspaceMemberId),
+      });
     });
 
     fireEvent.click(screen.getByRole('button', { name: 'Open workspace A project' }));
@@ -1357,7 +1397,10 @@ describe('App project creation routing', () => {
     ));
 
     await waitFor(() => {
-      expect(mockedGetProject).toHaveBeenCalledWith('project-bound-a');
+      expect(mockedGetProject).toHaveBeenCalledWith(
+        'project-bound-a',
+        workspaceContext('ws-b', 'member-ws-b'),
+      );
     });
     expect(window.location.pathname).toBe('/');
     expect(screen.queryByTestId('project-view')).toBeNull();
@@ -1386,6 +1429,15 @@ describe('App project creation routing', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const pathname = new URL(String(input), 'http://d.local').pathname;
+        if (pathname.endsWith('/workspace/directory')) {
+          return {
+            ok: true,
+            json: async () => workspaceDirectoryFixture([
+              workspaceContext('ws-a', 'member-ws-a'),
+              workspaceContext('ws-b', 'member-ws-b'),
+            ]),
+          } as Response;
+        }
         if (pathname.endsWith('/workspace/context')) {
           return {
             ok: true,
@@ -1411,7 +1463,9 @@ describe('App project creation routing', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Open workspace A project' }));
     activeWorkspaceId = 'ws-b';
-    notifyWorkspaceContextRefresh();
+    notifyWorkspaceContextRefresh({
+      context: workspaceContext('ws-b', 'member-ws-b'),
+    });
     await screen.findByTestId('entry-project-project-same');
 
     delayedAProject.resolve({
@@ -1437,7 +1491,6 @@ describe('App project creation routing', () => {
 
   it('rejects a delayed same-id open after workspace A to B to A returns to the same key', async () => {
     let activeWorkspaceId = 'ws-a';
-    let workspaceContextReads = 0;
     const delayedAProject = deferred<Project | null>();
     mockedGetProject.mockReturnValueOnce(delayedAProject.promise);
     mockedListProjects.mockResolvedValue([]);
@@ -1445,7 +1498,15 @@ describe('App project creation routing', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const pathname = new URL(String(input), 'http://d.local').pathname;
-        if (pathname.endsWith('/workspace/context')) workspaceContextReads += 1;
+        if (pathname.endsWith('/workspace/directory')) {
+          return {
+            ok: true,
+            json: async () => workspaceDirectoryFixture([
+              workspaceContext('ws-a', 'member-ws-a'),
+              workspaceContext('ws-b', 'member-ws-b'),
+            ]),
+          } as Response;
+        }
         return {
           ok: true,
           json: async () =>
@@ -1468,23 +1529,20 @@ describe('App project creation routing', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Open workspace A project' }));
 
     activeWorkspaceId = 'ws-b';
-    notifyWorkspaceContextRefresh();
+    notifyWorkspaceContextRefresh({
+      context: workspaceContext('ws-b', 'member-ws-b'),
+    });
     await waitFor(() => {
       expect(mockedListProjects.mock.calls.some(
         ([options]) => options?.workspaceContext?.workspaceId === 'ws-b',
       )).toBe(true);
     });
 
-    // `notifyWorkspaceContextRefresh()` deliberately coalesces one broadcast
-    // burst for 250ms. Model two real user switches, not duplicate listeners
-    // reacting to the same switch.
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 260));
-    });
     activeWorkspaceId = 'ws-a';
-    notifyWorkspaceContextRefresh();
-    await waitFor(() => {
-      expect(workspaceContextReads).toBeGreaterThanOrEqual(3);
+    act(() => {
+      notifyWorkspaceContextRefresh({
+        context: workspaceContext('ws-a', 'member-ws-a'),
+      });
     });
     await act(async () => {
       await Promise.resolve();
@@ -1529,6 +1587,14 @@ describe('App project creation routing', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const pathname = new URL(String(input), 'http://d.local').pathname;
+        if (pathname.endsWith('/workspace/directory')) {
+          return {
+            ok: true,
+            json: async () => workspaceDirectoryFixture([
+              workspaceContext('ws-1', 'wm-1'),
+            ]),
+          } as Response;
+        }
         if (pathname.endsWith('/workspace/context')) {
           return {
             ok: true,
@@ -1603,6 +1669,14 @@ describe('App project creation routing', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const pathname = new URL(String(input), 'http://d.local').pathname;
+        if (pathname.endsWith('/workspace/directory')) {
+          return {
+            ok: true,
+            json: async () => workspaceDirectoryFixture([
+              workspaceContext('ws-1', 'wm-1'),
+            ]),
+          } as Response;
+        }
         if (pathname.endsWith('/workspace/context')) {
           return {
             ok: true,
@@ -1678,6 +1752,14 @@ describe('App project creation routing', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const pathname = new URL(String(input), 'http://d.local').pathname;
+        if (pathname.endsWith('/workspace/directory')) {
+          return {
+            ok: true,
+            json: async () => workspaceDirectoryFixture([
+              workspaceContext('ws-1', 'wm-1'),
+            ]),
+          } as Response;
+        }
         if (pathname.endsWith('/workspace/context')) {
           return {
             ok: true,

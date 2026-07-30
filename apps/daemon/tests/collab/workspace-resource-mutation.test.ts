@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  enforceVerifiedWorkspaceResourceMutation,
   enforceWorkspaceResourceMutation,
   type WorkspaceResourceAccessInput,
 } from '../../src/collab/workspace-resource-mutation.js';
+import { workspaceContextFromDirectoryItem } from '../../src/collab/vela-workspace-context.js';
 
 // Cheapest layer that can see the symptom: exercise the shared gate directly
 // against fake req/res/db seams, without spinning up an Express server or a
@@ -492,5 +494,208 @@ describe('enforceWorkspaceResourceMutation — a resource no workspace has claim
       code: 'WORKSPACE_PROJECT_PERMISSION_DENIED',
       message: 'workspace project mutation is not allowed',
     }]);
+  });
+});
+
+describe('authoritative Workspace-bound mutation regression', () => {
+  it('rejects a forged owner role when the authoritative member is ordinary', async () => {
+    const { getWorkspaceResource, getWorkspaceResourceByResourceId } = makeLookups({
+      'project-a': {
+        workspaceId: 'workspace-a',
+        visibility: 'team',
+        resourceState: 'active',
+        createdByWorkspaceMemberId: 'member-owner',
+      },
+    });
+    const { calls, sendApiError } = spySendApiError();
+    const allowed = await enforceVerifiedWorkspaceResourceMutation(
+      'project',
+      fakeReq(workspaceHeaders({
+        workspaceId: 'workspace-a',
+        memberId: 'member-attacker',
+        role: 'owner',
+      })),
+      fakeRes(),
+      sendApiError,
+      getWorkspaceResource,
+      getWorkspaceResourceByResourceId,
+      {},
+      'project-a',
+      'writeFiles',
+      async () => ({
+        ok: true,
+        context: workspaceContextFromDirectoryItem({
+          workspaceId: 'workspace-a',
+          workspaceName: 'Workspace A',
+          workspaceType: 'team',
+          workspaceMemberId: 'member-attacker',
+          role: 'member',
+          memberStatus: 'active',
+          lifecycleState: 'active',
+        }),
+      }),
+    );
+
+    expect(allowed).toBe(false);
+    expect(calls.at(-1)?.code).toBe('WORKSPACE_PROJECT_PERMISSION_DENIED');
+  });
+
+  it('does not let ambient Workspace A authorize a headerless bound mutation', async () => {
+    const { getWorkspaceResource, getWorkspaceResourceByResourceId } = makeLookups({
+      'project-a': {
+        workspaceId: 'workspace-a',
+        visibility: 'personal',
+        resourceState: 'active',
+        createdByWorkspaceMemberId: 'member-a',
+      },
+    });
+    const { calls, sendApiError } = spySendApiError();
+    const allowed = await enforceVerifiedWorkspaceResourceMutation(
+      'project',
+      fakeReq(),
+      fakeRes(),
+      sendApiError,
+      getWorkspaceResource,
+      getWorkspaceResourceByResourceId,
+      {},
+      'project-a',
+      'writeFiles',
+      async () => ({
+        ok: false,
+        status: 400,
+        code: 'WORKSPACE_CONTEXT_REQUIRED',
+        message: 'an explicit workspace context is required',
+      }),
+    );
+
+    expect(allowed).toBe(false);
+    expect(calls.at(-1)?.code).toBe('WORKSPACE_CONTEXT_REQUIRED');
+  });
+
+  it('fails closed before side effects when membership authority is unavailable', async () => {
+    const { getWorkspaceResource, getWorkspaceResourceByResourceId } = makeLookups({
+      'project-a': {
+        workspaceId: 'workspace-a',
+        visibility: 'personal',
+        resourceState: 'active',
+        createdByWorkspaceMemberId: 'member-a',
+      },
+    });
+    const { calls, sendApiError } = spySendApiError();
+    let sideEffects = 0;
+    const allowed = await enforceVerifiedWorkspaceResourceMutation(
+      'project',
+      fakeReq(workspaceHeaders({ workspaceId: 'workspace-a', memberId: 'member-a' })),
+      fakeRes(),
+      sendApiError,
+      getWorkspaceResource,
+      getWorkspaceResourceByResourceId,
+      {},
+      'project-a',
+      'writeFiles',
+      async () => ({
+        ok: false,
+        status: 503,
+        code: 'WORKSPACE_AUTHORITY_UNAVAILABLE',
+        message: 'workspace membership authority is temporarily unavailable',
+        retryable: true,
+      }),
+    );
+    if (allowed) sideEffects += 1;
+
+    expect(allowed).toBe(false);
+    expect(sideEffects).toBe(0);
+    expect(calls.at(-1)).toMatchObject({
+      status: 503,
+      code: 'WORKSPACE_AUTHORITY_UNAVAILABLE',
+    });
+  });
+
+  it('re-verifies every mutation after a prior success and blocks removal or outage with zero new side effects', async () => {
+    const { getWorkspaceResource, getWorkspaceResourceByResourceId } = makeLookups({
+      'plugin-a': {
+        workspaceId: 'workspace-a',
+        visibility: 'personal',
+        resourceState: 'active',
+        createdByWorkspaceMemberId: 'member-a',
+      },
+    });
+    const { sendApiError } = spySendApiError();
+    const authorityResults = [
+      {
+        ok: true as const,
+        context: workspaceContextFromDirectoryItem({
+          workspaceId: 'workspace-a',
+          workspaceName: 'Workspace A',
+          workspaceType: 'team',
+          workspaceMemberId: 'member-a',
+          role: 'member',
+          memberStatus: 'active',
+          lifecycleState: 'active',
+        }),
+      },
+      {
+        ok: false as const,
+        status: 403 as const,
+        code: 'WORKSPACE_ACCESS_DENIED',
+        message: 'the member was removed',
+      },
+      {
+        ok: false as const,
+        status: 503 as const,
+        code: 'WORKSPACE_AUTHORITY_UNAVAILABLE',
+        message: 'workspace authority is unavailable',
+        retryable: true as const,
+      },
+    ];
+    let authorityReads = 0;
+    let sideEffects = 0;
+    const mutate = async () => {
+      const allowed = await enforceVerifiedWorkspaceResourceMutation(
+        'plugin',
+        fakeReq(workspaceHeaders({
+          workspaceId: 'workspace-a',
+          memberId: 'member-a',
+        })),
+        fakeRes(),
+        sendApiError,
+        getWorkspaceResource,
+        getWorkspaceResourceByResourceId,
+        {},
+        'plugin-a',
+        'writeFiles',
+        async () => authorityResults[authorityReads++]!,
+      );
+      if (allowed) sideEffects += 1;
+      return allowed;
+    };
+
+    await expect(mutate()).resolves.toBe(true);
+    expect(sideEffects).toBe(1);
+    await expect(mutate()).resolves.toBe(false);
+    expect(sideEffects).toBe(1);
+    await expect(mutate()).resolves.toBe(false);
+    expect(sideEffects).toBe(1);
+    expect(authorityReads).toBe(3);
+  });
+
+  it('keeps a truly unbound legacy local resource mutable', async () => {
+    const { getWorkspaceResource, getWorkspaceResourceByResourceId } = makeLookups({});
+    const { calls, sendApiError } = spySendApiError();
+    const allowed = await enforceVerifiedWorkspaceResourceMutation(
+      'project',
+      fakeReq(),
+      fakeRes(),
+      sendApiError,
+      getWorkspaceResource,
+      getWorkspaceResourceByResourceId,
+      {},
+      'legacy-local',
+      'writeFiles',
+      undefined,
+    );
+
+    expect(allowed).toBe(true);
+    expect(calls).toEqual([]);
   });
 });

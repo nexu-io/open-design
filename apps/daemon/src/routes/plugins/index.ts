@@ -5,6 +5,7 @@ import type {
   PluginDuplicateProjectResponse,
   Project,
   ProjectMetadata,
+  WorkspaceCollabContext,
 } from '@open-design/contracts';
 import { TeamResourceCopyForbiddenError } from '@open-design/contracts';
 import {
@@ -16,17 +17,18 @@ import {
   type TeamResourceStateProvider,
 } from '../../collab/team-resource-state.js';
 import {
-  enforceWorkspaceResourceMutation,
-  headerValue,
+  enforceVerifiedWorkspaceResourceMutation,
+  resolveOptionalWorkspaceRequestAuthority,
+  type VerifyWorkspaceRequestAuthority,
 } from '../../collab/workspace-resource-mutation.js';
 import {
   authorizeCreatedProjectWorkspace,
   bindCreatedProjectToWorkspace,
-  type GetAmbientWorkspace,
   sendCreatedProjectWorkspaceError,
 } from '../../collab/created-project-workspace.js';
 import type { WorkspaceDirectoryFetchResult } from '../../collab/vela-workspace-context.js';
 import type { PluginShareAction } from '../../services/plugin-share-tasks.js';
+import type { AuthorizeProjectRequest } from '../../collab/project-request-authority.js';
 
 export interface RegisterPluginEventRoutesDeps {
   http: { requireLocalDaemonRequest: RequestHandler };
@@ -86,6 +88,7 @@ interface PluginApplyResult {
 }
 
 interface PluginShareTaskLike {
+  projectId: string;
   status: 'queued' | 'running' | 'done' | 'failed';
   progress: string[];
   waiters: Set<() => void>;
@@ -111,7 +114,12 @@ interface PluginRouteHelpers {
   assembleExample(templateHtml: string, slidesHtml: string, title: string): string;
   sendMulterError(res: Response, err: unknown): unknown;
   decodeMultipartFilename(name: string): string;
-  installOrUpgradePlugin(req: Request, res: Response, mode: 'install' | 'upgrade'): Promise<unknown>;
+  installOrUpgradePlugin(
+    req: Request,
+    res: Response,
+    mode: 'install' | 'upgrade',
+    authority: WorkspaceCollabContext | null,
+  ): Promise<unknown>;
   loadPluginRegistryView(): Promise<unknown>;
   buildConnectorProbe(service: unknown): unknown;
   handleShareProject(req: Request, res: Response): Promise<unknown>;
@@ -131,6 +139,7 @@ interface PluginRouteHelpers {
 
 export interface RegisterPluginRoutesDeps {
   db: SqliteDbLike;
+  authorizeProjectRequest: AuthorizeProjectRequest;
   /** Team-resource copy red-line (D3). When present, a frozen team plugin cannot
    *  be duplicated into a personal project. Omit to skip the guard (no-op). */
   teamResources?: TeamResourceStateProvider;
@@ -144,12 +153,7 @@ export interface RegisterPluginRoutesDeps {
     removeProjectDir(projectsRoot: string, projectId: string): Promise<unknown>;
   };
   fetchProjectCreationWorkspaceDirectory?: () => Promise<WorkspaceDirectoryFetchResult>;
-  /**
-   * The workspace this daemon is signed in to, for a plugin-created project whose
-   * request carries no workspace identity of its own. See
-   * `createdProjectWorkspaceHome` in `collab/created-project-workspace.ts`.
-   */
-  getAmbientWorkspace?: GetAmbientWorkspace;
+  verifyWorkspaceRequestAuthority?: VerifyWorkspaceRequestAuthority;
   conversations: {
     insertConversation(db: SqliteDbLike, conversation: unknown): unknown;
   };
@@ -176,8 +180,16 @@ export interface RegisterPluginRoutesDeps {
     ) => WorkspaceResourceBindingRow | null | undefined;
   };
   plugins: {
-    listInstalledPlugins: (db: SqliteDbLike, workspaceId?: string | null) => InstalledPluginLike[];
+    listInstalledPlugins: (
+      db: SqliteDbLike,
+      workspaceId?: string | null,
+    ) => InstalledPluginLike[] | Promise<InstalledPluginLike[]>;
     getInstalledPlugin: (db: SqliteDbLike, id: string) => InstalledPluginLike | null;
+    getWorkspacePlugin?: (
+      db: SqliteDbLike,
+      id: string,
+      workspaceId: string | null,
+    ) => InstalledPluginLike | null | Promise<InstalledPluginLike | null>;
     installPlugin: (db: SqliteDbLike, args: unknown) => AsyncIterable<unknown>;
     isSafePluginId: (id: string) => boolean;
     uninstallPlugin: (db: SqliteDbLike, id: string, roots: string[]) => Promise<{ ok: boolean; removedFolder?: boolean; warning?: string }>;
@@ -230,11 +242,43 @@ export function registerPluginEventRoutes(app: Express, deps: RegisterPluginEven
 
 export function registerPluginRoutes(app: Express, deps: RegisterPluginRoutesDeps): void {
   const { db, paths, ids, projectStore, conversations, plugins, helpers, teamResources, workspaceResources } = deps;
-  app.get('/api/plugins', async (req, res) => { try { const workspaceId = headerValue(req, 'x-od-workspace-id'); res.json({ plugins: helpers.applyBakedPreviews(plugins.listInstalledPlugins(db, workspaceId), helpers.PLUGIN_PREVIEWS_DIR) }); } catch (err) { res.status(500).json({ error: String(err) }); } });
-  app.get('/api/plugins/:id', async (req, res) => { try { const plugin = plugins.getInstalledPlugin(db, req.params.id); if (!plugin) return res.status(404).json({ error: 'plugin not found' }); res.json(plugin); } catch (err) { res.status(500).json({ error: String(err) }); } });
+  const resolveWorkspaceAuthority = async (
+    req: Request,
+    res: Response,
+  ): Promise<WorkspaceCollabContext | null | undefined> => {
+    const authority = await resolveOptionalWorkspaceRequestAuthority(
+      req,
+      deps.verifyWorkspaceRequestAuthority,
+    );
+    if (!authority.ok) {
+      helpers.sendApiError(
+        res,
+        authority.status,
+        authority.code,
+        authority.message,
+      );
+      return undefined;
+    }
+    return authority.context;
+  };
+  const resolveRequestPlugin = async (
+    id: string,
+    authority: WorkspaceCollabContext | null,
+  ) => {
+    const workspaceId = authority?.workspaceId ?? null;
+    return plugins.getWorkspacePlugin
+      ? plugins.getWorkspacePlugin(db, id, workspaceId)
+      : plugins.getInstalledPlugin(db, id);
+  };
+  app.get('/api/plugins', async (req, res) => { try { const authority = await resolveWorkspaceAuthority(req, res); if (authority === undefined) return; const visible = await plugins.listInstalledPlugins(db, authority?.workspaceId ?? null); res.json({ plugins: helpers.applyBakedPreviews(visible, helpers.PLUGIN_PREVIEWS_DIR) }); } catch (err) { res.status(500).json({ error: String(err) }); } });
+  app.get('/api/plugins/:id', async (req, res) => { try { const authority = await resolveWorkspaceAuthority(req, res); if (authority === undefined) return; const plugin = await resolveRequestPlugin(req.params.id, authority); if (!plugin) return res.status(404).json({ error: 'plugin not found' }); res.json(plugin); } catch (err) { res.status(500).json({ error: String(err) }); } });
   app.post('/api/plugins/upload-zip', (req, res) => helpers.pluginUpload.single('file')(req, res, async (err: unknown) => { if (err) return helpers.sendMulterError(res, err); try { const file = req.file; if (!file?.buffer) return res.status(400).json({ error: 'file is required' }); const result = await helpers.pluginInstallation.stageUploadedPluginZip(file.buffer, `upload:zip:${helpers.decodeMultipartFilename(file.originalname || 'plugin.zip')}`); res.status((result as { ok?: boolean }).ok ? 200 : 400).json(result); } catch (uploadErr: unknown) { res.status(400).json({ ok: false, warnings: [], message: uploadErr instanceof Error ? uploadErr.message : String(uploadErr), log: [] }); } }));
   app.post('/api/plugins/upload-folder', (req, res) => helpers.pluginUpload.array('files', 500)(req, res, async (err: unknown) => { if (err) return helpers.sendMulterError(res, err); try { const files = Array.isArray(req.files) ? req.files as Array<{ buffer: Buffer; originalname: string }> : []; if (files.length === 0) return res.status(400).json({ error: 'files are required' }); const result = await helpers.pluginInstallation.stageUploadedPluginFolder(files, req.body?.paths); res.status((result as { ok?: boolean } | null)?.ok ? 200 : 400).json(result); } catch (uploadErr: unknown) { res.status(400).json({ ok: false, warnings: [], message: uploadErr instanceof Error ? uploadErr.message : String(uploadErr), log: [] }); } }));
-  app.post('/api/plugins/install', async (req, res) => helpers.installOrUpgradePlugin(req, res, 'install'));
+  app.post('/api/plugins/install', async (req, res) => {
+    const authority = await resolveWorkspaceAuthority(req, res);
+    if (authority === undefined) return;
+    return helpers.installOrUpgradePlugin(req, res, 'install', authority);
+  });
   // This route used to carry NO permission check at all: any caller (any
   // workspace, any role) could uninstall any plugin. Now gated the same way
   // project mutations are, via the shared
@@ -251,8 +295,17 @@ export function registerPluginRoutes(app: Express, deps: RegisterPluginRoutesDep
   app.post('/api/plugins/:id/uninstall', async (req, res) => {
     try {
       if (!plugins.isSafePluginId(req.params.id)) return res.status(400).json({ error: 'invalid plugin id' });
+      const authority = await resolveWorkspaceAuthority(req, res);
+      if (authority === undefined) return;
+      const requestedPlugin = await resolveRequestPlugin(req.params.id, authority);
+      if (
+        typeof requestedPlugin?.source === 'string' &&
+        requestedPlugin.source.startsWith('team:plugin:')
+      ) {
+        return res.status(403).json({ error: 'WORKSPACE_RESOURCE_MANAGE_DENIED' });
+      }
       const binding = workspaceResources?.getWorkspaceResourceByResourceId(db, 'plugin', req.params.id);
-      if (binding && workspaceResources && !enforceWorkspaceResourceMutation(
+      if (binding && workspaceResources && !await enforceVerifiedWorkspaceResourceMutation(
         'plugin',
         req,
         res,
@@ -262,18 +315,38 @@ export function registerPluginRoutes(app: Express, deps: RegisterPluginRoutesDep
         db,
         req.params.id,
         'delete',
+        deps.verifyWorkspaceRequestAuthority,
       )) return;
       const result = await plugins.uninstallPlugin(db, req.params.id, paths.PLUGIN_REGISTRY_ROOTS); if (!result.ok && !result.removedFolder) return res.status(404).json({ error: 'plugin not found', warning: result.warning }); res.json(result);
     } catch (err) { res.status(500).json({ error: String(err) }); }
   });
-  app.post('/api/plugins/:id/upgrade', async (req, res) => helpers.installOrUpgradePlugin(req, res, 'upgrade'));
-  app.post('/api/plugins/:id/apply', async (req, res) => { try { const plugin = plugins.getInstalledPlugin(db, req.params.id); if (!plugin) return res.status(404).json({ error: 'plugin not found' }); const body = req.body && typeof req.body === 'object' ? req.body as Record<string, unknown> : {}; const inputs = body.inputs && typeof body.inputs === 'object' ? body.inputs : {}; const grantCaps = Array.isArray(body.grantCaps) ? body.grantCaps.filter((c: unknown): c is string => typeof c === 'string') : []; const locale = typeof body.locale === 'string' ? body.locale : undefined; const registry = await helpers.loadPluginRegistryView(); const connectorProbe = helpers.buildConnectorProbe(helpers.connectorService); const computed = plugins.applyPlugin({ plugin, inputs, registry, locale, connectorProbe }); if (grantCaps.length > 0) { const merged = new Set([...computed.result.capabilitiesGranted, ...grantCaps]); computed.result.capabilitiesGranted = Array.from(merged); computed.result.appliedPlugin.capabilitiesGranted = Array.from(merged); } res.json({ ok: true, ...computed.result, warnings: computed.warnings, manifestSourceDigest: computed.manifestSourceDigest }); } catch (err: unknown) { if (err instanceof plugins.MissingInputError) return res.status(422).json({ error: 'missing_inputs', fields: err.fields }); res.status(500).json({ error: String(err) }); } });
+  app.post('/api/plugins/:id/upgrade', async (req, res) => {
+    const authority = await resolveWorkspaceAuthority(req, res);
+    if (authority === undefined) return;
+    const binding = workspaceResources?.getWorkspaceResourceByResourceId(db, 'plugin', req.params.id);
+    if (binding && workspaceResources && !await enforceVerifiedWorkspaceResourceMutation(
+      'plugin',
+      req,
+      res,
+      helpers.sendApiError,
+      (dbArg, workspaceId, resourceId) => workspaceResources.getWorkspaceResource(dbArg as SqliteDbLike, 'plugin', workspaceId, resourceId),
+      (dbArg, resourceId) => workspaceResources.getWorkspaceResourceByResourceId(dbArg as SqliteDbLike, 'plugin', resourceId),
+      db,
+      req.params.id,
+      'writeFiles',
+      deps.verifyWorkspaceRequestAuthority,
+    )) return;
+    return helpers.installOrUpgradePlugin(req, res, 'upgrade', authority);
+  });
+  app.post('/api/plugins/:id/apply', async (req, res) => { try { const authority = await resolveWorkspaceAuthority(req, res); if (authority === undefined) return; const plugin = await resolveRequestPlugin(req.params.id, authority); if (!plugin) return res.status(404).json({ error: 'plugin not found' }); const body = req.body && typeof req.body === 'object' ? req.body as Record<string, unknown> : {}; const inputs = body.inputs && typeof body.inputs === 'object' ? body.inputs : {}; const grantCaps = Array.isArray(body.grantCaps) ? body.grantCaps.filter((c: unknown): c is string => typeof c === 'string') : []; const locale = typeof body.locale === 'string' ? body.locale : undefined; const registry = await helpers.loadPluginRegistryView(); const connectorProbe = helpers.buildConnectorProbe(helpers.connectorService); const computed = plugins.applyPlugin({ plugin, inputs, registry, locale, connectorProbe }); if (grantCaps.length > 0) { const merged = new Set([...computed.result.capabilitiesGranted, ...grantCaps]); computed.result.capabilitiesGranted = Array.from(merged); computed.result.appliedPlugin.capabilitiesGranted = Array.from(merged); } res.json({ ok: true, ...computed.result, warnings: computed.warnings, manifestSourceDigest: computed.manifestSourceDigest }); } catch (err: unknown) { if (err instanceof plugins.MissingInputError) return res.status(422).json({ error: 'missing_inputs', fields: err.fields }); res.status(500).json({ error: String(err) }); } });
   app.post('/api/plugins/:id/duplicate-project', helpers.requireLocalDaemonRequest, async (req, res) => {
     let cleanupProjectId: string | null = null;
     let insertedProject = false;
     try {
       const pluginId = Array.isArray(req.params.id) ? req.params.id[0] ?? '' : req.params.id ?? '';
-      const plugin = plugins.getInstalledPlugin(db, pluginId);
+      const authority = await resolveWorkspaceAuthority(req, res);
+      if (authority === undefined) return;
+      const plugin = await resolveRequestPlugin(pluginId, authority);
       if (!plugin) return res.status(404).json({ error: { code: 'plugin-not-found', message: 'plugin not found' } });
       if (typeof plugin.id !== 'string' || typeof plugin.fsPath !== 'string') {
         return res.status(422).json({ error: { code: 'plugin-not-duplicable', message: 'plugin record is missing a filesystem source' } });
@@ -342,7 +415,6 @@ export function registerPluginRoutes(app: Express, deps: RegisterPluginRoutesDep
           createWorkspace.context,
           projectId,
           now,
-          deps.getAmbientWorkspace,
         );
         return createdProject;
       })();
@@ -388,31 +460,107 @@ export function registerPluginRoutes(app: Express, deps: RegisterPluginRoutesDep
     }
   });
   app.post('/api/plugins/:id/share-project', async (req, res) => helpers.handleShareProject(req, res));
-  app.post('/api/plugins/:id/doctor', async (req, res) => { try { const plugin = plugins.getInstalledPlugin(db, req.params.id); if (!plugin) return res.status(404).json({ error: 'plugin not found' }); const registry = await helpers.loadPluginRegistryView(); const connectorProbe = helpers.buildConnectorProbe(helpers.connectorService); res.json(plugins.doctorPlugin(plugin, registry, { connectorProbe })); } catch (err) { res.status(500).json({ error: String(err) }); } });
+  app.post('/api/plugins/:id/doctor', async (req, res) => { try { const authority = await resolveWorkspaceAuthority(req, res); if (authority === undefined) return; const plugin = await resolveRequestPlugin(req.params.id, authority); if (!plugin) return res.status(404).json({ error: 'plugin not found' }); const registry = await helpers.loadPluginRegistryView(); const connectorProbe = helpers.buildConnectorProbe(helpers.connectorService); res.json(plugins.doctorPlugin(plugin, registry, { connectorProbe })); } catch (err) { res.status(500).json({ error: String(err) }); } });
   app.post('/api/plugins/:id/trust', async (req, res) => helpers.handlePluginTrust(req, res));
   app.get('/api/plugins/stats', async (_req, res) => helpers.handlePluginStats(res));
   app.get('/api/applied-plugins/:snapshotId', (req, res) => { try { const snap = plugins.getSnapshot(db, req.params.snapshotId); if (!snap) return res.status(404).json({ error: 'snapshot not found' }); res.json(snap); } catch (err) { res.status(500).json({ error: String(err) }); } });
   app.get('/api/applied-plugins/:snapshotId/canon', (req, res) => { try { const snap = plugins.getSnapshot(db, req.params.snapshotId); if (!snap) return res.status(404).json({ error: 'snapshot not found' }); const block = plugins.pluginPromptBlock(snap); const accepts = String(req.headers.accept ?? '').toLowerCase(); if (accepts.includes('text/plain')) { res.setHeader('Content-Type', 'text/plain; charset=utf-8'); res.send(block); return; } res.json({ snapshotId: snap.snapshotId, pluginId: snap.pluginId, block }); } catch (err) { res.status(500).json({ error: String(err) }); } });
   app.get('/api/applied-plugins', (_req, res) => { try { const rows = db.prepare(`SELECT id FROM applied_plugin_snapshots ORDER BY applied_at DESC LIMIT 500`).all() as SqliteRowId[]; res.json({ snapshots: rows.map((r) => plugins.getSnapshot(db, r.id)).filter((x): x is AppliedPluginSnapshotLike => x !== null) }); } catch (err) { res.status(500).json({ error: String(err) }); } });
-  app.get('/api/projects/:projectId/applied-plugins', (req, res) => { try { const rows = db.prepare(`SELECT id FROM applied_plugin_snapshots WHERE project_id = ? ORDER BY applied_at DESC`).all(req.params.projectId) as SqliteRowId[]; res.json({ snapshots: rows.map((r) => plugins.getSnapshot(db, r.id)).filter((x): x is AppliedPluginSnapshotLike => x !== null) }); } catch (err) { res.status(500).json({ error: String(err) }); } });
+  app.get('/api/projects/:projectId/applied-plugins', async (req, res) => {
+    try {
+      if (!await deps.authorizeProjectRequest(
+        req,
+        res,
+        req.params.projectId,
+        { mode: 'read' },
+      )) return;
+      const rows = db.prepare(
+        `SELECT id FROM applied_plugin_snapshots WHERE project_id = ? ORDER BY applied_at DESC`,
+      ).all(req.params.projectId) as SqliteRowId[];
+      res.json({
+        snapshots: rows
+          .map((row) => plugins.getSnapshot(db, row.id))
+          .filter((snapshot): snapshot is AppliedPluginSnapshotLike => snapshot !== null),
+      });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
   app.post('/api/applied-plugins/export', helpers.requireLocalDaemonRequest, async (req, res) => helpers.handleAppliedPluginExport(req, res));
   app.post('/api/applied-plugins/prune', async (req, res) => { try { const body = req.body && typeof req.body === 'object' ? req.body : {}; const before = typeof body.before === 'number' ? body.before : undefined; const result = plugins.pruneExpiredSnapshots(db, before ? { before } : {}); if (result.removed > 0) { try { const { recordPluginEvent } = await import('../../plugins/events.js'); recordPluginEvent({ kind: 'plugin.snapshot-pruned', pluginId: '', details: { removed: result.removed, ...(before ? { before } : {}) } }); } catch {} } res.json({ ok: true, removed: result.removed, ids: result.ids }); } catch (err) { res.status(500).json({ error: String(err) }); } });
 }
 
 export function registerProjectPluginRoutes(app: Express, deps: RegisterPluginRoutesDeps): void {
   const { db, paths, plugins, helpers } = deps;
-  app.post('/api/projects/:id/plugins/install-folder', async (req, res) => helpers.handleProjectInstallFolder(req, res));
-  app.post('/api/projects/:id/plugins/publish-github', async (req, res) => helpers.handleProjectPluginCli(req, res, 'publish-github'));
-  app.get('/api/projects/:id/plugin-candidates', (req, res) => { try { const project = helpers.getProject(db, req.params.id); if (!project) return helpers.sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found'); const includeDismissed = req.query.includeDismissed === 'true'; res.json({ candidates: plugins.listSkillPluginCandidates(db, req.params.id, includeDismissed) }); } catch (err: unknown) { res.status(400).json({ error: err instanceof Error ? err.message : String(err) }); } });
-  app.post('/api/projects/:id/plugin-candidates/:candidateId/dismiss', (req, res) => { if (!helpers.isLocalSameOrigin(req, helpers.resolvedPortRef.current)) return res.status(403).json({ error: 'cross-origin request rejected' }); const candidate = plugins.dismissSkillPluginCandidate(db, req.params.id, req.params.candidateId); if (!candidate) return helpers.sendApiError(res, 404, 'NOT_FOUND', 'plugin candidate not found'); if (candidate.assistantMessageId) db.prepare(`DELETE FROM messages WHERE id = ?`).run(candidate.assistantMessageId); res.json({ ok: true, candidate }); });
-  app.post('/api/projects/:id/plugin-candidates/:candidateId/draft', async (req, res) => helpers.handleCandidateDraft(req, res));
-  app.post('/api/projects/:id/plugin-candidates/:candidateId/share-tasks', async (req, res) => helpers.handleCandidateShareTask(req, res));
-  app.post('/api/projects/:id/plugins/contribute-open-design', async (req, res) => helpers.handleProjectPluginCli(req, res, 'contribute-open-design'));
-  app.post('/api/projects/:id/plugins/share-tasks', async (req, res) => helpers.handleProjectShareTask(req, res));
-  app.post('/api/plugins/share-tasks/:id/wait', (req, res) => {
+  const authorizeWrite = (req: Request, res: Response, projectId: string) =>
+    deps.authorizeProjectRequest(
+      req,
+      res,
+      projectId,
+      { mode: 'write', capability: 'writeFiles' },
+    );
+  app.post('/api/projects/:id/plugins/install-folder', async (req, res) => {
+    if (!await authorizeWrite(req, res, req.params.id)) return;
+    return helpers.handleProjectInstallFolder(req, res);
+  });
+  app.post('/api/projects/:id/plugins/publish-github', async (req, res) => {
+    if (!await authorizeWrite(req, res, req.params.id)) return;
+    return helpers.handleProjectPluginCli(req, res, 'publish-github');
+  });
+  app.get('/api/projects/:id/plugin-candidates', async (req, res) => {
+    try {
+      const project = helpers.getProject(db, req.params.id);
+      if (!project) {
+        return helpers.sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
+      if (!await deps.authorizeProjectRequest(req, res, req.params.id, { mode: 'read' })) return;
+      const includeDismissed = req.query.includeDismissed === 'true';
+      res.json({
+        candidates: plugins.listSkillPluginCandidates(db, req.params.id, includeDismissed),
+      });
+    } catch (err: unknown) {
+      res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+  app.post('/api/projects/:id/plugin-candidates/:candidateId/dismiss', async (req, res) => {
+    if (!helpers.isLocalSameOrigin(req, helpers.resolvedPortRef.current)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    if (!await authorizeWrite(req, res, req.params.id)) return;
+    const candidate = plugins.dismissSkillPluginCandidate(
+      db,
+      req.params.id,
+      req.params.candidateId,
+    );
+    if (!candidate) {
+      return helpers.sendApiError(res, 404, 'NOT_FOUND', 'plugin candidate not found');
+    }
+    if (candidate.assistantMessageId) {
+      db.prepare(`DELETE FROM messages WHERE id = ?`).run(candidate.assistantMessageId);
+    }
+    res.json({ ok: true, candidate });
+  });
+  app.post('/api/projects/:id/plugin-candidates/:candidateId/draft', async (req, res) => {
+    if (!await authorizeWrite(req, res, req.params.id)) return;
+    return helpers.handleCandidateDraft(req, res);
+  });
+  app.post('/api/projects/:id/plugin-candidates/:candidateId/share-tasks', async (req, res) => {
+    if (!await authorizeWrite(req, res, req.params.id)) return;
+    return helpers.handleCandidateShareTask(req, res);
+  });
+  app.post('/api/projects/:id/plugins/contribute-open-design', async (req, res) => {
+    if (!await authorizeWrite(req, res, req.params.id)) return;
+    return helpers.handleProjectPluginCli(req, res, 'contribute-open-design');
+  });
+  app.post('/api/projects/:id/plugins/share-tasks', async (req, res) => {
+    if (!await authorizeWrite(req, res, req.params.id)) return;
+    return helpers.handleProjectShareTask(req, res);
+  });
+  app.post('/api/plugins/share-tasks/:id/wait', async (req, res) => {
     if (!helpers.isLocalSameOrigin(req, helpers.resolvedPortRef.current)) return res.status(403).json({ error: 'cross-origin request rejected' });
     const task = helpers.pluginShareTaskStore.get(req.params.id);
     if (!task) return res.status(404).json({ error: 'task not found' });
+    if (!await deps.authorizeProjectRequest(req, res, task.projectId, { mode: 'read' })) return;
     const since = Number.isFinite(req.body?.since) ? Number(req.body.since) : 0;
     const requestedTimeout = Number.isFinite(req.body?.timeoutMs) ? Number(req.body.timeoutMs) : 25_000;
     const timeoutMs = Math.min(Math.max(requestedTimeout, 0), 25_000);

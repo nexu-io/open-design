@@ -87,7 +87,7 @@ describe('DesignSystemPreviewModal layering', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Showcase' }));
 
     await waitFor(() => {
-      expect(fetchDesignSystemShowcaseMock).toHaveBeenCalledWith('claymorphism');
+      expect(fetchDesignSystemShowcaseMock).toHaveBeenCalledWith('claymorphism', null);
     });
     expect(screen.getByRole('tab', { name: 'Showcase' }).getAttribute('aria-selected')).toBe('true');
     expect(screen.getByRole('button', { name: 'Share' })).toBeTruthy();

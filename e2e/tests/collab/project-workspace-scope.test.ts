@@ -1,30 +1,23 @@
 // @vitest-environment node
 
-// Every project must resolve to a workspace. When the project itself carries no
-// `workspace_projects` binding, the workspace it resolves to is the CALLER'S
-// CURRENT one — there is nothing else it could sensibly be.
+// A project's workspace scope is durable project authority, not navigation
+// state. `GET /api/projects/:id/workspace-scope` therefore reads only the
+// persisted binding plus the membership directory. A genuinely unbound legacy
+// project stays unbound even when the caller's left rail currently selects a
+// Team or Personal workspace; borrowing that selection would make a tab switch
+// silently retarget later runs, writes, and billing.
 //
-// The concrete bug: `unbound` makes `projectWorkspaceScopeAuthorizesAmr` false,
-// which disables the chat composer's SEND BUTTON for an AMR run on that project,
-// permanently, with nothing the user can do to clear it.
-//
-// `GET /api/projects/:id/workspace-scope` used to read only the persisted
-// binding and the membership directory; it never looked at the request's
-// `x-od-workspace-*` identity at all, so an unbound project answered `unbound`
-// for every caller forever.
-//
-// Two cases are deliberately NOT the current workspace and are pinned here:
+// Two boundaries are pinned here:
 //
 //   * `unavailable` — a project pinned to workspace X, read by a caller whose
-//     current workspace is Y, must keep answering X/`unavailable`. The scope
+//     selected workspace is Y, must keep answering X/`unavailable`. The scope
 //     carries `workspaceMemberId`, which is the billing subject; resolving it
 //     to Y would bill Y's wallet for X's project. All three of its return sites
 //     keep today's exact behavior, and the two that differ in cause — the
 //     directory was never read, versus it was read and does not list this
 //     membership — are both pinned below. Neither gains a fallback.
-//   * a caller with NO workspace identity (signed out, plain curl) has no
-//     current workspace to fall back to, so an unbound project stays `unbound`.
-//     Inventing a workspace is worse than answering "none".
+//   * an unbound project never gains a workspace from request headers, whether
+//     those headers name a live membership, a removed membership, or nothing.
 //
 // The membership directory is seeded through the daemon's real vela integration
 // (`VELA_CONTROL_KEY` + `VELA_API_URL` -> `GET /api/v1/workspaces`) against a
@@ -79,12 +72,14 @@ const FOREIGN_MEMBER_ID = 'mem-scope-foreign';
 
 let directoryServer: Server;
 let directoryUrl: string;
+let directoryItems: Array<Record<string, unknown>>;
 
 beforeAll(async () => {
+  directoryItems = [PERSONAL, TEAM];
   directoryServer = createServer((req, res) => {
     if (req.url?.startsWith('/api/v1/workspaces') && req.method === 'GET') {
       res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ items: [PERSONAL, TEAM] }));
+      res.end(JSON.stringify({ items: directoryItems }));
       return;
     }
     res.writeHead(404, { 'content-type': 'application/json' });
@@ -151,16 +146,31 @@ async function readScope(
   return body.scope;
 }
 
-describe('project workspace scope resolves an unbound project against the caller', () => {
+async function readScopeStatus(
+  webUrl: string,
+  projectId: string,
+  headers?: Record<string, string>,
+): Promise<number> {
+  const response = await fetch(
+    `${webUrl}/api/projects/${encodeURIComponent(projectId)}/workspace-scope`,
+    headers ? { headers } : {},
+  );
+  return response.status;
+}
+
+describe('project workspace scope is independent from the caller selection', () => {
   test(
-    'an unbound project resolves to the caller current workspace, and pinned/anonymous cases do not',
+    'an unbound project stays unbound while a pinned project keeps its own workspace',
     { timeout: 240_000 },
     async () => {
       const suite = await createSmokeSuite('collab-project-workspace-scope');
 
       await suite.with.toolsDev(
         async ({ webUrl }) => {
-          // --- The bug: unbound project, caller acting in their TEAM workspace.
+          directoryItems = [PERSONAL, TEAM];
+
+          // --- The bug: an unbound project must not borrow the caller's TEAM
+          // selection.
           const unboundForTeam = await createProject(webUrl, 'Scope unbound for team');
           expect(
             (await readScope(webUrl, unboundForTeam)).kind,
@@ -172,27 +182,38 @@ describe('project workspace scope resolves an unbound project against the caller
             unboundForTeam,
             workspaceHeaders(TEAM),
           );
-          expect(teamScope.kind).toBe('team');
-          expect(teamScope.workspaceId).toBe(TEAM.workspaceId);
-          expect(teamScope.visibility).toBe('personal');
-          expect(teamScope.context?.workspaceMemberId).toBe(TEAM.workspaceMemberId);
-          expect(teamScope.context?.workspaceType).toBe('team');
+          expect(teamScope.kind).toBe('unbound');
+          expect(teamScope.workspaceId).toBeNull();
+          expect(teamScope.context).toBeNull();
 
-          // --- Same shape for a personal current workspace.
+          // --- Same invariant for a Personal selection.
           const unboundForPersonal = await createProject(webUrl, 'Scope unbound for personal');
           const personalScope = await readScope(
             webUrl,
             unboundForPersonal,
             workspaceHeaders(PERSONAL),
           );
-          expect(personalScope.kind).toBe('personal');
-          expect(personalScope.workspaceId).toBe(PERSONAL.workspaceId);
-          expect(personalScope.context?.workspaceMemberId).toBe(PERSONAL.workspaceMemberId);
+          expect(personalScope.kind).toBe('unbound');
+          expect(personalScope.workspaceId).toBeNull();
+          expect(personalScope.context).toBeNull();
 
-          // --- BOUNDARY 1: a project pinned to a workspace the caller is not a
-          // member of stays `unavailable` on that workspace. It must never
-          // borrow the caller's workspace or member id — that member id is the
-          // billing subject.
+          // --- BOUNDARY 1: bind while the member is authoritative, then remove
+          // that membership. The project stays pinned to its own workspace.
+          // The HTTP data plane fails closed before exposing that binding to an
+          // unrelated Team caller; it must never borrow TEAM or TEAM's member id.
+          directoryItems = [
+            PERSONAL,
+            TEAM,
+            {
+              workspaceId: FOREIGN_WORKSPACE_ID,
+              workspaceName: 'Scope foreign',
+              workspaceType: 'team',
+              workspaceMemberId: FOREIGN_MEMBER_ID,
+              role: 'owner',
+              memberStatus: 'active',
+              lifecycleState: 'active',
+            },
+          ];
           const pinnedElsewhere = await createProject(
             webUrl,
             'Scope pinned elsewhere',
@@ -202,13 +223,11 @@ describe('project workspace scope resolves an unbound project against the caller
               workspaceType: 'team',
             }),
           );
-          const pinnedScope = await readScope(webUrl, pinnedElsewhere, workspaceHeaders(TEAM));
-          expect(pinnedScope.kind).toBe('unavailable');
-          expect(pinnedScope.workspaceId).toBe(FOREIGN_WORKSPACE_ID);
-          // The directory WAS readable here and does not list this membership:
-          // the genuine cross-workspace case, and the one the billing rule
-          // protects. Unchanged by this fix.
-          expect(pinnedScope.context).toBeNull();
+          directoryItems = [PERSONAL, TEAM];
+          expect(
+            await readScopeStatus(webUrl, pinnedElsewhere, workspaceHeaders(TEAM)),
+            'an unrelated live Workspace must not read the persisted foreign binding',
+          ).toBe(403);
 
           // --- BOUNDARY 2: unbound + no caller identity has no workspace to
           // fall back to.
@@ -218,10 +237,8 @@ describe('project workspace scope resolves an unbound project against the caller
           expect(anonymousScope.workspaceId).toBeNull();
           expect(anonymousScope.context).toBeNull();
 
-          // --- BOUNDARY 3: a caller whose claimed current workspace is not an
-          // active membership cannot conjure one. The fallback resolves through
-          // the membership directory, so the resulting member id is always B's,
-          // never the request header's.
+          // --- BOUNDARY 3: a caller whose claimed selection is not an active
+          // membership cannot conjure a binding.
           const unboundUnconfirmed = await createProject(webUrl, 'Scope unbound unconfirmed');
           const unconfirmedScope = await readScope(
             webUrl,

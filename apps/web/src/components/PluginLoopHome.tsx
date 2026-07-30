@@ -131,7 +131,10 @@ export function PluginLoopHome({ onSubmit }: Props) {
   ) {
     setPendingApplyId(record.id);
     setError(null);
-    const result = await applyPlugin(record.id, { locale });
+    const result = await applyPlugin(record.id, {
+      locale,
+      workspaceContext: resolvedWorkspaceContextForWrite(workspaceContextState),
+    });
     setPendingApplyId(null);
     if (!result) {
       setError(`Failed to apply ${record.title}. Make sure the daemon is reachable.`);
@@ -387,6 +390,7 @@ export function PluginLoopHome({ onSubmit }: Props) {
       {detailsRecord ? (
         <PluginDetailsModal
           record={detailsRecord}
+          workspaceContext={workspaceContextState.context}
           onClose={closeDetails}
           onUse={(record, action) => void usePlugin(record, action)}
           onDuplicate={(record) => void duplicatePlugin(record)}

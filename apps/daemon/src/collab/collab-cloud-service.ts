@@ -12,6 +12,7 @@ import type {
   CollabCloudComment,
   CollabCloudMemberDirectoryEntry,
   PreviewComment,
+  WorkspaceCollabContext,
 } from '@open-design/contracts';
 import type { CollabCloudClient } from '../integrations/collab-cloud.js';
 import type { WorkspaceContextProvider } from './workspace-context.js';
@@ -20,10 +21,18 @@ import type { WorkspaceContextProvider } from './workspace-context.js';
  *  SQLite and the poller is unit-testable with fakes. */
 export interface CollabCloudServiceDeps {
   client: CollabCloudClient;
-  /** The one workspace context — team identity gate + memberId/teamId/role source. */
-  workspaceContext: WorkspaceContextProvider;
+  /**
+   * Legacy construction seam retained for compatibility with isolated callers.
+   * Project operations never read it: ambient active-workspace state is not
+   * data-plane authority.
+   */
+  workspaceContext?: WorkspaceContextProvider;
   /** Local project ids to poll for inbound comments. */
   listProjectIds: () => string[];
+  /** Resolve the exact persisted + directory-verified scope for one project. */
+  resolveProjectWorkspaceContext?: (
+    projectId: string,
+  ) => Promise<WorkspaceCollabContext | null>;
   /**
    * Resolve a LOCAL conversation id to re-home synced comments onto (conversation
    * ids do not cross daemons, and preview_comments has a conversation FK). Null
@@ -90,7 +99,7 @@ export function previewCommentToCloud(
 
 export interface CollabCloudService {
   /** PUT the current member's directory entry (best-effort; no-op off-team). */
-  registerSelf(): Promise<void>;
+  registerSelf(context?: WorkspaceCollabContext): Promise<void>;
   /**
    * Push a created OR edited comment to the cloud (best-effort; no-op off-team).
    * The relay upserts by id and receivers apply the newest by `updatedAt`, so the
@@ -105,17 +114,28 @@ export interface CollabCloudService {
    * push resolves first (in practice almost always the create) wins and a
    * later resolution is a no-op.
    */
-  pushComment(comment: PreviewComment): Promise<{ seq: number } | null>;
+  pushComment(
+    comment: PreviewComment,
+    context: WorkspaceCollabContext,
+  ): Promise<{ seq: number } | null>;
   /**
    * Push a delete as a tombstone (best-effort; no-op off-team). Receivers remove
    * the comment by id. Stamps a fresh `updatedAt` so the tombstone is not treated
    * as a stale edit if it races an in-flight update.
    */
-  pushCommentDeletion(comment: PreviewComment): Promise<void>;
-  /** The team's member directory (empty off-team / on error). */
-  listMembers(): Promise<CollabCloudMemberDirectoryEntry[]>;
+  pushCommentDeletion(
+    comment: PreviewComment,
+    context: WorkspaceCollabContext,
+  ): Promise<void>;
+  /** The explicitly scoped team's member directory (empty off-team / on error). */
+  listMembers(
+    context: WorkspaceCollabContext,
+  ): Promise<CollabCloudMemberDirectoryEntry[]>;
   /** Resolve one member id to its directory entry, or null. */
-  resolveMember(memberId: string): Promise<CollabCloudMemberDirectoryEntry | null>;
+  resolveMember(
+    memberId: string,
+    context: WorkspaceCollabContext,
+  ): Promise<CollabCloudMemberDirectoryEntry | null>;
   /** Run one poll cycle (register + pull + merge across all local projects). */
   pollOnce(): Promise<void>;
   /**
@@ -133,7 +153,10 @@ export interface CollabCloudService {
    * dirty mark as UNREDEEMED and restore it, otherwise a transient miss
    * silently loses the one signal a single comment ever gets.
    */
-  pullProject(projectId: string): Promise<boolean>;
+  pullProject(
+    projectId: string,
+    context: WorkspaceCollabContext,
+  ): Promise<boolean>;
   /** Start the background poller. */
   start(): void;
   /** Stop the poller. */
@@ -153,30 +176,34 @@ export function createCollabCloudService(deps: CollabCloudServiceDeps): CollabCl
   // process on every 5s tick (see pollOnce).
   let lastRegisteredKey: string | null = null;
 
-  async function teamIdentity(): Promise<{
+  function explicitTeamIdentity(context: WorkspaceCollabContext): {
     teamId: string;
     memberId: string;
     role: 'owner' | 'admin' | 'member';
     displayName: string;
-  } | null> {
-    const context = await deps.workspaceContext.current({});
-    // B's resources/collab plane is team-only: a personal-workspace principal
-    // is rejected with 403 `missing_principal` BY DESIGN (resources/auth.ts on
-    // B refuses non-team contexts). Only a team context — which carries
-    // `teamId` — yields a collab identity; a personal workspace keeps the
-    // whole collab-cloud surface dormant instead of hammering B with doomed
-    // CLI calls on every poll tick.
-    if (!context?.teamId) return null;
+  } | null {
+    if (
+      context.workspaceType !== 'team'
+      || context.memberStatus !== 'active'
+      || context.lifecycleState === 'deleted'
+    ) {
+      return null;
+    }
+    const teamId = context.teamId?.trim() || context.workspaceId.trim();
+    const memberId = context.workspaceMemberId.trim();
+    if (!teamId || !memberId) return null;
     return {
-      teamId: context.teamId,
-      memberId: context.workspaceMemberId,
+      teamId,
+      memberId,
       role: context.role,
-      displayName: context.displayName?.trim() || context.workspaceMemberId,
+      displayName: context.displayName?.trim() || memberId,
     };
   }
 
-  async function registerSelf(): Promise<void> {
-    const identity = await teamIdentity();
+  async function registerSelf(
+    context?: WorkspaceCollabContext,
+  ): Promise<void> {
+    const identity = context ? explicitTeamIdentity(context) : null;
     if (!identity) return;
     await deps.client.registerMember(identity.teamId, identity.memberId, {
       displayName: identity.displayName,
@@ -184,16 +211,22 @@ export function createCollabCloudService(deps: CollabCloudServiceDeps): CollabCl
     });
   }
 
-  async function pushComment(comment: PreviewComment): Promise<{ seq: number } | null> {
-    const identity = await teamIdentity();
+  async function pushComment(
+    comment: PreviewComment,
+    context: WorkspaceCollabContext,
+  ): Promise<{ seq: number } | null> {
+    const identity = explicitTeamIdentity(context);
     if (!identity) return null;
     const cloud = previewCommentToCloud(comment, identity.memberId);
     const result = await deps.client.pushComment(identity.teamId, comment.projectId, cloud);
     return result ?? null;
   }
 
-  async function pushCommentDeletion(comment: PreviewComment): Promise<void> {
-    const identity = await teamIdentity();
+  async function pushCommentDeletion(
+    comment: PreviewComment,
+    context: WorkspaceCollabContext,
+  ): Promise<void> {
+    const identity = explicitTeamIdentity(context);
     if (!identity) return;
     const cloud = previewCommentToCloud(comment, identity.memberId);
     cloud.deleted = true;
@@ -203,21 +236,32 @@ export function createCollabCloudService(deps: CollabCloudServiceDeps): CollabCl
     await deps.client.pushComment(identity.teamId, comment.projectId, cloud);
   }
 
-  async function listMembers(): Promise<CollabCloudMemberDirectoryEntry[]> {
-    const identity = await teamIdentity();
-    if (!identity) return [];
+  async function listMembersForTeamId(
+    teamId: string,
+  ): Promise<CollabCloudMemberDirectoryEntry[]> {
+    if (!teamId) return [];
     try {
-      return await deps.client.listMembers(identity.teamId);
+      return await deps.client.listMembers(teamId);
     } catch (error) {
       deps.onError?.(error);
       return [];
     }
   }
 
+  async function listMembers(
+    context: WorkspaceCollabContext,
+  ): Promise<CollabCloudMemberDirectoryEntry[]> {
+    const identity = explicitTeamIdentity(context);
+    return identity ? listMembersForTeamId(identity.teamId) : [];
+  }
+
   async function resolveMember(
     memberId: string,
+    context: WorkspaceCollabContext,
   ): Promise<CollabCloudMemberDirectoryEntry | null> {
-    const members = await listMembers();
+    const identity = explicitTeamIdentity(context);
+    if (!identity) return null;
+    const members = await listMembersForTeamId(identity.teamId);
     return members.find((m) => m.memberId === memberId) ?? null;
   }
 
@@ -225,35 +269,44 @@ export function createCollabCloudService(deps: CollabCloudServiceDeps): CollabCl
    *  `false` when there was no local conversation to merge into. */
   async function pollProject(
     teamId: string,
+    scopeKey: string,
     projectId: string,
   ): Promise<boolean> {
     const conversationId = deps.resolveLocalConversationId(projectId);
     // No local conversation to attach to yet (e.g. a member who pulled the
     // project but has not opened a chat) — nothing to merge into.
     if (!conversationId) return false;
-    const sinceSeq = cursors.get(projectId) ?? 0;
+    const cursorKey = `${scopeKey}:${projectId}`;
+    const sinceSeq = cursors.get(cursorKey) ?? 0;
     const result = await deps.client.pullComments(
       teamId,
       projectId,
       sinceSeq,
-      etags.get(projectId),
+      etags.get(cursorKey),
     );
-    etags.set(projectId, result.etag);
+    etags.set(cursorKey, result.etag);
     if (result.notModified) return true;
     let inserted = 0;
     for (const comment of result.comments) {
       if (deps.mergeComment({ projectId, conversationId, comment })) inserted += 1;
     }
-    cursors.set(projectId, result.latestSeq);
+    cursors.set(cursorKey, result.latestSeq);
     if (inserted > 0) deps.onMerged?.({ projectId, inserted });
     return true;
   }
 
-  async function pullProject(projectId: string): Promise<boolean> {
-    const identity = await teamIdentity();
+  async function pullProject(
+    projectId: string,
+    context: WorkspaceCollabContext,
+  ): Promise<boolean> {
+    const identity = explicitTeamIdentity(context);
     if (!identity) return false;
     try {
-      return await pollProject(identity.teamId, projectId);
+      return await pollProject(
+        identity.teamId,
+        `${context.workspaceId}:${identity.memberId}`,
+        projectId,
+      );
     } catch (error) {
       deps.onError?.(error);
       return false;
@@ -261,30 +314,30 @@ export function createCollabCloudService(deps: CollabCloudServiceDeps): CollabCl
   }
 
   async function pollOnce(): Promise<void> {
-    const identity = await teamIdentity();
-    if (!identity) return;
-    // Refresh our own directory entry only when the identity actually changes
-    // (first time it resolves, or a rename/role change via PUT
-    // /api/workspace/context after startup) rather than every 5s cycle — a
-    // per-cycle re-register spawned a `vela member register` process on every
-    // tick and scaled badly. Best-effort — a directory hiccup must not block
-    // comment pull, and a failure leaves `lastRegisteredKey` unset so the next
-    // cycle retries.
-    const identityKey = `${identity.teamId}:${identity.memberId}:${identity.role}:${identity.displayName}`;
-    if (identityKey !== lastRegisteredKey) {
-      try {
-        await deps.client.registerMember(identity.teamId, identity.memberId, {
-          displayName: identity.displayName,
-          role: identity.role,
-        });
-        lastRegisteredKey = identityKey;
-      } catch (error) {
-        deps.onError?.(error);
-      }
-    }
     for (const projectId of deps.listProjectIds()) {
       try {
-        await pollProject(identity.teamId, projectId);
+        const context =
+          await deps.resolveProjectWorkspaceContext?.(projectId) ?? null;
+        const identity = context ? explicitTeamIdentity(context) : null;
+        if (!context || !identity) continue;
+        // Refresh the exact project's member directory entry only when its
+        // immutable workspace/member identity changes. Never borrow the
+        // daemon's ambient active workspace.
+        const identityKey =
+          `${context.workspaceId}:${identity.teamId}:${identity.memberId}:`
+          + `${identity.role}:${identity.displayName}`;
+        if (identityKey !== lastRegisteredKey) {
+          await deps.client.registerMember(identity.teamId, identity.memberId, {
+            displayName: identity.displayName,
+            role: identity.role,
+          });
+          lastRegisteredKey = identityKey;
+        }
+        await pollProject(
+          identity.teamId,
+          `${context.workspaceId}:${identity.memberId}`,
+          projectId,
+        );
       } catch (error) {
         deps.onError?.(error);
       }

@@ -226,7 +226,7 @@ describe('same-run retry runtime', () => {
       privacyDecisionAt: Date.now(),
     });
 
-    const run = await createAndWaitForRun(started.url, 'amr', 3_000);
+    const run = await createAndWaitForRun(started.url, 'amr');
     expect(run.status).toBe('succeeded');
 
     const events = await readRunEvents(run.eventsLogPath);
@@ -259,7 +259,7 @@ describe('same-run retry runtime', () => {
       privacyDecisionAt: Date.now(),
     });
 
-    const run = await createAndWaitForRun(started.url, 'amr', 3_000, {
+    const run = await createAndWaitForRun(started.url, 'amr', {
       titleGeneration: { enabled: true },
     });
     expect(run.status).toBe('succeeded');
@@ -281,7 +281,7 @@ describe('same-run retry runtime', () => {
       privacyDecisionAt: Date.now(),
     });
 
-    const run = await createAndWaitForRun(started.url, 'amr', 3_000, {
+    const run = await createAndWaitForRun(started.url, 'amr', {
       titleGeneration: { enabled: true },
     });
     expect(run.status).toBe('succeeded');
@@ -318,7 +318,7 @@ describe('same-run retry runtime', () => {
       privacyDecisionAt: Date.now(),
     });
 
-    const run = await createAndWaitForRun(started.url, 'amr', 3_000);
+    const run = await createAndWaitForRun(started.url, 'amr');
     expect(run.status).toBe('failed');
     expect(run.error).toContain('without emitting a first output');
 
@@ -751,7 +751,6 @@ async function putConfig(url: string, patch: Record<string, unknown>): Promise<v
 async function createAndWaitForRun(
   url: string,
   agentId = 'claude',
-  timeoutMs = 10_000,
   runOverrides: Record<string, unknown> = {},
 ): Promise<RunStatus> {
   const projectId = `retry_runtime_${randomUUID()}`;
@@ -767,6 +766,27 @@ async function createAndWaitForRun(
   });
   expect(projectResponse.status).toBe(200);
   const projectBody = await projectResponse.json() as { conversationId: string };
+  let runWorkspaceHeaders: Record<string, string> | undefined;
+  if (agentId === 'amr') {
+    // AMR Cloud never runs against the generic account wallet. Model these
+    // retry fixtures after the real historical-project migration: the first
+    // Personal Workspace list read adopts the otherwise-headerless project,
+    // and every attempt then receives that persisted exact Workspace id.
+    const personalWorkspaceId = `retry_personal_${projectId}`;
+    runWorkspaceHeaders = {
+      'x-od-workspace-id': personalWorkspaceId,
+      'x-od-workspace-type': 'personal',
+      'x-od-workspace-member-id': 'retry-runtime-personal-owner',
+      'x-od-workspace-role': 'owner',
+    };
+    const adoptionResponse = await fetch(
+      `${url}/api/workspaces/${encodeURIComponent(personalWorkspaceId)}/projects?view=all`,
+      {
+        headers: runWorkspaceHeaders,
+      },
+    );
+    expect(adoptionResponse.status).toBe(200);
+  }
   const assistantMessageId = `assistant_retry_${randomUUID()}`;
   const runResponse = await fetch(`${url}/api/runs`, {
     method: 'POST',
@@ -775,6 +795,7 @@ async function createAndWaitForRun(
       'x-od-analytics-device-id': 'retry-runtime-test',
       'x-od-analytics-session-id': 'retry-runtime-session',
       'x-od-analytics-client-type': 'web',
+      ...runWorkspaceHeaders,
     },
     body: JSON.stringify({
       projectId,
@@ -789,21 +810,49 @@ async function createAndWaitForRun(
   });
   expect(runResponse.status).toBe(202);
   const body = await runResponse.json() as { runId: string };
-  return await waitForRun(url, body.runId, timeoutMs);
+  return await waitForRun(url, body.runId, runWorkspaceHeaders);
 }
 
-async function waitForRun(url: string, runId: string, timeoutMs = 10_000): Promise<RunStatus> {
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < timeoutMs) {
-    const response = await fetch(`${url}/api/runs/${encodeURIComponent(runId)}`);
-    expect(response.status).toBe(200);
-    const run = await response.json() as RunStatus;
-    if (run.status === 'failed' || run.status === 'succeeded' || run.status === 'canceled') {
-      return run;
+async function waitForRun(
+  url: string,
+  runId: string,
+  headers?: Record<string, string>,
+): Promise<RunStatus> {
+  // The SSE response ends exactly when the run becomes terminal. Waiting for
+  // that business signal avoids coupling the spec to subprocess cold-start
+  // time; the former 3s polling budget passed only after another test had
+  // pre-warmed the runtime and failed when this heartbeat case ran first.
+  const eventsResponse = await fetch(
+    `${url}/api/runs/${encodeURIComponent(runId)}/events`,
+    headers ? { headers } : {},
+  );
+  expect(eventsResponse.status).toBe(200);
+  await eventsResponse.text();
+
+  const response = await fetch(
+    `${url}/api/runs/${encodeURIComponent(runId)}`,
+    headers ? { headers } : {},
+  );
+  expect(response.status).toBe(200);
+  const run = await response.json() as RunStatus;
+  expect(['failed', 'succeeded', 'canceled']).toContain(run.status);
+  await waitForPersistedRunEnd(run.eventsLogPath);
+  return run;
+}
+
+async function waitForPersistedRunEnd(file: string): Promise<void> {
+  for (;;) {
+    try {
+      const events = await readRunEvents(file);
+      if (events.some((event) => event.event === 'end')) return;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
     }
-    await delay(100);
+    // The SSE terminal signal and JSONL append are separate consumers of the
+    // same run transition. Poll the observable persisted result rather than
+    // assuming the file write completed in the same event-loop turn.
+    await new Promise<void>((resolve) => setTimeout(resolve, 10));
   }
-  throw new Error(`run ${runId} did not finish`);
 }
 
 async function readRunEvents(file: string): Promise<RunEvent[]> {
@@ -827,8 +876,4 @@ async function readClaudeAttemptArgs(file: string): Promise<string[][]> {
 function sessionIdArg(args: string[]): string | null {
   const index = args.indexOf('--session-id');
   return index >= 0 ? args[index + 1] ?? null : null;
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }

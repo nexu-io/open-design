@@ -2,7 +2,11 @@ import { afterEach, describe, expect, it } from 'vitest';
 import express from 'express';
 import http from 'node:http';
 import type { Response } from 'express';
-import { registerCollabContextRoutes } from '../src/routes/collab-context.js';
+import {
+  emitWorkspaceEventToScope,
+  registerCollabContextRoutes,
+  type WorkspaceEventSinksByWorkspace,
+} from '../src/routes/collab-context.js';
 import { createDevWorkspaceContextProvider } from '../src/collab/workspace-context.js';
 
 // A minimal `createSseResponse` matching the daemon contract the route relies on
@@ -30,11 +34,23 @@ afterEach(async () => {
   }
 });
 
-async function startServer(workspaceEventSinks: Set<(payload: unknown) => void>) {
+async function startServer(workspaceEventSinks: WorkspaceEventSinksByWorkspace) {
   const app = express();
   app.use(express.json());
   registerCollabContextRoutes(app, {
     workspaceContext: createDevWorkspaceContextProvider(),
+    fetchWorkspaceDirectory: async () => ({
+      ok: true,
+      items: [{
+        workspaceId: 'workspace-a',
+        workspaceName: 'Workspace A',
+        workspaceType: 'team',
+        workspaceMemberId: 'member-a',
+        role: 'member',
+        memberStatus: 'active',
+        lifecycleState: 'active',
+      }],
+    }),
     createSseResponse: (res) => makeSseResponse(res as Response),
     workspaceEventSinks,
   });
@@ -66,11 +82,15 @@ async function readUntil(
 
 describe('GET /api/workspace/events', () => {
   it('registers a sink, streams a pushed thin event, and drops the sink on disconnect', async () => {
-    const sinks = new Set<(payload: unknown) => void>();
+    const sinks: WorkspaceEventSinksByWorkspace = new Map();
     const base = await startServer(sinks);
     const controller = new AbortController();
 
-    const resp = await fetch(`${base}/api/workspace/events`, { signal: controller.signal });
+    const resp = await fetch(
+      `${base}/api/workspace/events`
+      + '?workspaceId=workspace-a&workspaceMemberId=member-a',
+      { signal: controller.signal },
+    );
     expect(resp.status).toBe(200);
     expect(resp.headers.get('content-type')).toContain('text/event-stream');
     const reader = resp.body!.getReader();
@@ -81,7 +101,11 @@ describe('GET /api/workspace/events', () => {
 
     // Emitting into the sinks streams the thin event with its `type` as the SSE
     // event name (the client re-fetches on receipt; no body is required).
-    for (const sink of sinks) sink({ type: 'team-projects-changed', at: 123 });
+    emitWorkspaceEventToScope(
+      sinks,
+      'workspace-a',
+      { type: 'team-projects-changed', at: 123 },
+    );
     const framed = await readUntil(reader, (text) => text.includes('event: team-projects-changed'));
     expect(framed).toContain('"type":"team-projects-changed"');
 

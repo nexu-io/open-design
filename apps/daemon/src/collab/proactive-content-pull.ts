@@ -8,8 +8,9 @@
 //
 // Guard boundary (all fail CLOSED — an uncertain answer skips the pull):
 //   - An existing local binding must be a team binding. A newly-shared project
-//     with no local binding may bootstrap from the event only when the event
-//     carries the same workspace as this daemon's active team identity. This
+//     with no local binding may bootstrap only from an explicitly scoped hub
+//     event. That exact Workspace is resolved through authoritative membership
+//     rather than the daemon's mutable global active Workspace. This
 //     closes the first-publication gap: the catalog can expose the card before
 //     the member has ever opened/materialized it, and waiting for an open tab
 //     leaves its files/details absent for tens of seconds.
@@ -19,9 +20,9 @@
 //     pulling over it could clobber unpublished edits. The owner's daemon
 //     receives its own publish echo over the SSE channel, so this guard is
 //     load-bearing, not defensive.
-//   - Event workspace, local binding workspace, and the active identity's
-//     workspace must all agree; a mismatch means the event belongs to a scope
-//     this daemon must not address with its current principal.
+//   - Event workspace, local binding workspace, and the exact resolved
+//     identity must all agree; a mismatch means the event belongs to a scope
+//     this daemon must not address with that principal.
 //
 // Dedup model: a per-project cursor records the version the last successful
 // pull materialized, so repeated/out-of-order events for an already-landed
@@ -216,15 +217,18 @@ export interface ProactiveContentPullDeps {
   getLocalBinding: (
     projectId: string,
   ) => { workspaceId: string; visibility: 'personal' | 'team' } | null;
-  /** The active TEAM workspace identity (active membership only), or null
-   *  when signed out / personal-only. */
-  getWorkspaceIdentity: () => Promise<{
+  /** The authoritative TEAM identity for this exact Workspace (active
+   * membership only), or null when signed out / personal-only / unavailable. */
+  getWorkspaceIdentity: (workspaceId: string) => Promise<{
     workspaceId: string;
     resourceTeamId: string;
     workspaceMemberId: string;
   } | null>;
-  /** Server-authoritative owner lookup (the team hub catalog). */
-  resolveSharedProjectOwner: (projectId: string) => Promise<string | null>;
+  /** Server-authoritative owner lookup in the same exact Workspace scope. */
+  resolveSharedProjectOwner: (
+    projectId: string,
+    workspaceId: string,
+  ) => Promise<string | null>;
   /** The shared pull flow (revocation gate → pull → register → signals) —
    *  `CollabSyncRoutesHandle.pullSharedProject` in production wiring. */
   pullSharedProject: (
@@ -676,11 +680,13 @@ export function createProactiveContentPull(
         return Promise.reject(error);
       }
     };
-    const identityRead = startRead(() => deps.getWorkspaceIdentity());
+    const identityRead = startRead(() =>
+      deps.getWorkspaceIdentity(targetWorkspaceId));
     const hintedOwner = ownerHint?.trim();
     const ownerRead = hintedOwner
       ? Promise.resolve(hintedOwner)
-      : startRead(() => deps.resolveSharedProjectOwner(projectId));
+      : startRead(() =>
+        deps.resolveSharedProjectOwner(projectId, targetWorkspaceId));
     const [identityResult, ownerResult] = await Promise.allSettled([
       identityRead,
       ownerRead,
@@ -1486,7 +1492,22 @@ export function createProactiveContentPull(
         retryWorkspaceId: null,
       };
     }
-    const identity = await deps.getWorkspaceIdentity().catch((error) => {
+    if (!expectedWorkspaceId) {
+      deps.onCatchUp?.({
+        phase: 'skipped',
+        mode,
+        lane,
+        reason: 'no-active-team',
+      });
+      return {
+        retryLane: false,
+        retryProjectIds: [],
+        retryWorkspaceId: null,
+      };
+    }
+    const identity = await deps.getWorkspaceIdentity(
+      expectedWorkspaceId,
+    ).catch((error) => {
       deps.onError?.(error);
       return null;
     });
@@ -2092,7 +2113,9 @@ export function createProactiveContentPull(
           runForeground,
         );
         if (outcome.retryProjectIds.length > 0) {
-          const currentIdentity = await deps.getWorkspaceIdentity().catch(
+          const currentIdentity = await deps.getWorkspaceIdentity(
+            outcome.retryWorkspaceId ?? '',
+          ).catch(
             (error) => {
               deps.onError?.(error);
               return null;

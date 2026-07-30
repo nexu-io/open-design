@@ -1,48 +1,39 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createShouldPublish } from '../src/collab/should-publish.js';
 import type { ResourceHubPrincipal } from '../src/collab/resource-principal.js';
-import type { WorkspaceContextProvider } from '../src/collab/workspace-context.js';
 
-function providerReturning(
-  context: Record<string, unknown> | null,
-): WorkspaceContextProvider {
-  return { current: () => Promise.resolve(context as never) };
-}
-
-const ACTIVE_OWNER_CONTEXT = {
+const ACTIVE_OWNER_PRINCIPAL: ResourceHubPrincipal = {
+  teamId: 't1',
+  memberId: 'owner-1',
+  role: 'owner',
+  lifecycleState: 'active',
   workspaceType: 'team',
-  workspaceId: 't1',
-  workspaceMemberId: 'owner-1',
-  memberStatus: 'active',
 };
 
 describe('createShouldPublish', () => {
   it('watches an owned, team-shared project when the owner is an active member', async () => {
     const rememberTeamShare = vi.fn();
+    const resolveProjectPrincipal = vi.fn(async () => ACTIVE_OWNER_PRINCIPAL);
     const shouldPublish = createShouldPublish({
       resolveSharedProjectOwner: async () => 'owner-1',
-      workspaceContext: providerReturning(ACTIVE_OWNER_CONTEXT),
+      resolveProjectPrincipal,
       rememberTeamShare,
       hasUnmaterializedPlaceholder: () => false,
     });
 
-    expect(await shouldPublish('p1')).toBe(true);
+    expect(await shouldPublish('p1')).toEqual(ACTIVE_OWNER_PRINCIPAL);
+    expect(resolveProjectPrincipal).toHaveBeenCalledWith('p1');
     expect(rememberTeamShare).toHaveBeenCalledTimes(1);
     const [projectId, principal] = rememberTeamShare.mock.calls[0] as [string, ResourceHubPrincipal];
     expect(projectId).toBe('p1');
     expect(principal.memberId).toBe('owner-1');
   });
 
-  it('refuses to watch once the owner has been removed from the team, even though identity fields still resolve', async () => {
-    // Mirrors what B actually returns for a removed member: workspaceType /
-    // workspaceId / workspaceMemberId all keep resolving to the SAME team and
-    // the SAME member id — only memberStatus flips to 'removed'. Without the
-    // explicit check this predicate would still find the owner match and
-    // return true.
+  it('refuses to watch once exact project scope no longer resolves an active member', async () => {
     const rememberTeamShare = vi.fn();
     const shouldPublish = createShouldPublish({
       resolveSharedProjectOwner: async () => 'owner-1',
-      workspaceContext: providerReturning({ ...ACTIVE_OWNER_CONTEXT, memberStatus: 'removed' }),
+      resolveProjectPrincipal: async () => null,
       rememberTeamShare,
       hasUnmaterializedPlaceholder: () => false,
     });
@@ -54,7 +45,7 @@ describe('createShouldPublish', () => {
   it('refuses when the project has no shared-project owner at all', async () => {
     const shouldPublish = createShouldPublish({
       resolveSharedProjectOwner: async () => null,
-      workspaceContext: providerReturning(ACTIVE_OWNER_CONTEXT),
+      resolveProjectPrincipal: async () => ACTIVE_OWNER_PRINCIPAL,
       rememberTeamShare: vi.fn(),
       hasUnmaterializedPlaceholder: () => false,
     });
@@ -66,7 +57,7 @@ describe('createShouldPublish', () => {
     const rememberTeamShare = vi.fn();
     const shouldPublish = createShouldPublish({
       resolveSharedProjectOwner: async () => 'someone-else',
-      workspaceContext: providerReturning(ACTIVE_OWNER_CONTEXT),
+      resolveProjectPrincipal: async () => ACTIVE_OWNER_PRINCIPAL,
       rememberTeamShare,
       hasUnmaterializedPlaceholder: () => false,
     });
@@ -75,10 +66,10 @@ describe('createShouldPublish', () => {
     expect(rememberTeamShare).not.toHaveBeenCalled();
   });
 
-  it('refuses when the workspace context cannot be resolved at all (signed out)', async () => {
+  it('refuses when the project principal cannot be resolved at all (signed out)', async () => {
     const shouldPublish = createShouldPublish({
       resolveSharedProjectOwner: async () => 'owner-1',
-      workspaceContext: providerReturning(null),
+      resolveProjectPrincipal: async () => null,
       rememberTeamShare: vi.fn(),
       hasUnmaterializedPlaceholder: () => false,
     });
@@ -91,7 +82,7 @@ describe('createShouldPublish', () => {
     const resolveSharedProjectOwner = vi.fn(async () => 'owner-1');
     const shouldPublish = createShouldPublish({
       resolveSharedProjectOwner,
-      workspaceContext: providerReturning(ACTIVE_OWNER_CONTEXT),
+      resolveProjectPrincipal: async () => ACTIVE_OWNER_PRINCIPAL,
       rememberTeamShare,
       hasUnmaterializedPlaceholder: (projectId) => projectId === 'placeholder-1',
     });

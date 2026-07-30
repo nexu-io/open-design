@@ -10,8 +10,10 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AssistantMessage } from '../../src/components/AssistantMessage';
+import { CollabProvider } from '../../src/collab/collab-context';
 import * as registry from '../../src/providers/registry';
 import type { ChatMessage, ProjectFile } from '../../src/types';
+import { workspaceContextFixture } from '../helpers/workspace-context';
 
 beforeAll(() => {
   const store = new Map<string, string>();
@@ -60,6 +62,32 @@ function producedFile(name: string): ProjectFile {
     kind: 'html',
     mime: 'text/html',
   } as ProjectFile;
+}
+
+const PROJECT_A_CONTEXT = workspaceContextFixture({
+  workspaceId: 'workspace-a',
+  workspaceMemberId: 'member-a',
+});
+
+function projectCollabValue(workspaceContext = PROJECT_A_CONTEXT) {
+  return {
+    workspaceContext,
+    workspaceContextLoading: false,
+    enabled: false,
+    member: null,
+    present: [],
+    publishedVersion: null,
+    syncState: null,
+    viewerOnly: false,
+    isOwner: false,
+    ownerDisplayName: null,
+    ownerRole: null,
+    downloadPending: false,
+    reportChange: vi.fn(),
+    requestPublish: vi.fn(),
+    refreshPresence: vi.fn(),
+    checkStatusNow: vi.fn(),
+  };
 }
 
 describe('AssistantMessage feedback gate', () => {
@@ -776,7 +804,11 @@ describe('AssistantMessage question forms', () => {
 
     await waitFor(() => {
       expect(onSubmitQuestionForm).toHaveBeenCalledTimes(1);
-      expect(deleteProjectFileMock).toHaveBeenCalledWith('proj-1', 'uploads/mood.png');
+      expect(deleteProjectFileMock).toHaveBeenCalledWith(
+        'proj-1',
+        'uploads/mood.png',
+        null,
+      );
     });
     expect(send.disabled).toBe(false);
 
@@ -840,17 +872,19 @@ describe('AssistantMessage question forms', () => {
     ].join('\n');
     const onSubmitQuestionForm = vi.fn();
     const { container } = render(
-      <AssistantMessage
-        message={baseMessage({
-          content: form,
-          events: [{ kind: 'text', text: form } as ChatMessage['events'][number]],
-        })}
-        streaming={false}
-        projectId="proj-1"
-        conversationId="conv-1"
-        isLast
-        onSubmitQuestionForm={onSubmitQuestionForm}
-      />,
+      <CollabProvider value={projectCollabValue()}>
+        <AssistantMessage
+          message={baseMessage({
+            content: form,
+            events: [{ kind: 'text', text: form } as ChatMessage['events'][number]],
+          })}
+          streaming={false}
+          projectId="proj-1"
+          conversationId="conv-1"
+          isLast
+          onSubmitQuestionForm={onSubmitQuestionForm}
+        />
+      </CollabProvider>,
     );
     const input = container.querySelector('input[type="file"]');
     if (!(input instanceof HTMLInputElement)) throw new Error('expected file input');
@@ -862,7 +896,18 @@ describe('AssistantMessage question forms', () => {
     fireEvent.click(send);
 
     await waitFor(() => {
-      expect(deleteProjectFileMock).toHaveBeenCalledWith('proj-1', 'uploads/mood.png');
+      expect(uploadProjectFilesMock).toHaveBeenNthCalledWith(
+        1,
+        'proj-1',
+        [mood, brief],
+        undefined,
+        PROJECT_A_CONTEXT,
+      );
+      expect(deleteProjectFileMock).toHaveBeenCalledWith(
+        'proj-1',
+        'uploads/mood.png',
+        PROJECT_A_CONTEXT,
+      );
     });
     expect(onSubmitQuestionForm).not.toHaveBeenCalled();
 
@@ -1223,25 +1268,27 @@ describe('AssistantMessage recovered produced files', () => {
   it('shows linked project files from the assistant summary as files this turn', () => {
     const content = '已创建计划文档：[browser-war-deck-outline.md](browser-war-deck-outline.md)。';
     render(
-      <AssistantMessage
-        message={baseMessage({
-          content,
-          events: [{ kind: 'text', text: content } as ChatMessage['events'][number]],
-          producedFiles: [],
-        })}
-        streaming={false}
-        projectId="proj-1"
-        projectFiles={[
-          {
-            name: 'browser-war-deck-outline.md',
-            path: 'browser-war-deck-outline.md',
-            size: 4096,
-            mtime: 1700000005,
-            kind: 'text',
-            mime: 'text/markdown',
-          } as ProjectFile,
-        ]}
-      />,
+      <CollabProvider value={projectCollabValue()}>
+        <AssistantMessage
+          message={baseMessage({
+            content,
+            events: [{ kind: 'text', text: content } as ChatMessage['events'][number]],
+            producedFiles: [],
+          })}
+          streaming={false}
+          projectId="proj-1"
+          projectFiles={[
+            {
+              name: 'browser-war-deck-outline.md',
+              path: 'browser-war-deck-outline.md',
+              size: 4096,
+              mtime: 1700000005,
+              kind: 'text',
+              mime: 'text/markdown',
+            } as ProjectFile,
+          ]}
+        />
+      </CollabProvider>,
     );
 
     // #5517 shape: recovered files land in the flat produced-files block (name
@@ -1250,7 +1297,10 @@ describe('AssistantMessage recovered produced files', () => {
     const produced = document.querySelector('.produced-files');
     expect(produced).toBeTruthy();
     expect(produced?.textContent).toContain('browser-war-deck-outline.md');
-    expect(produced?.querySelector('a[download]')).toBeTruthy();
+    const download = produced?.querySelector('a[download]');
+    expect(download).toBeTruthy();
+    expect(download?.getAttribute('href')).toContain('workspaceId=workspace-a');
+    expect(download?.getAttribute('href')).toContain('workspaceMemberId=member-a');
     expect(screen.queryByTestId('file-ops-summary')).toBeNull();
   });
 

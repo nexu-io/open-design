@@ -23,7 +23,6 @@ import type {
   ChatSessionMode,
   RunContextSelection,
   TeamProject,
-  WorkspaceTeamProjectsResponse,
   WorkspaceCollabContext,
   WorkspaceProjectSummary,
 } from '@open-design/contracts';
@@ -87,6 +86,8 @@ import {
 } from './providers/daemon';
 import { AMR_LOGIN_STATUS_EVENT } from './components/amrLoginPolling';
 import { CollabDemoView } from './collab/CollabDemoView';
+import { fetchTeamProjectsCatalog } from './collab/team-projects-catalog';
+import { workspaceProjectHeaders } from './collab/workspace-identity';
 import {
   beginWorkspaceScopedRead,
   useWorkspaceBilling,
@@ -492,26 +493,37 @@ type TeamProjectCatalogLookup =
   | { ok: true; project: TeamProject | null }
   | { ok: false };
 
-async function fetchTeamProjectCatalogEntry(projectId: string): Promise<TeamProjectCatalogLookup> {
+async function fetchTeamProjectCatalogEntry(
+  projectId: string,
+  workspaceContext: WorkspaceCollabContext | null,
+  coalesce = true,
+): Promise<TeamProjectCatalogLookup> {
+  if (!workspaceContext) return { ok: true, project: null };
   try {
-    const response = await fetch('/api/workspace/projects/team');
-    if (!response.ok) return { ok: false };
-    const body = (await response.json()) as WorkspaceTeamProjectsResponse;
+    const projects = await fetchTeamProjectsCatalog({
+      context: workspaceContext,
+      coalesce,
+    });
     return {
       ok: true,
-      project: (body.projects ?? []).find((project) => project.projectId === projectId) ?? null,
+      project: projects.find((project) => project.projectId === projectId) ?? null,
     };
   } catch {
     return { ok: false };
   }
 }
 
-async function pullTeamSharedProjectIfAvailable(projectId: string): Promise<TeamSharedProjectPullOutcome> {
-  const lookup = await fetchTeamProjectCatalogEntry(projectId);
+async function pullTeamSharedProjectIfAvailable(
+  projectId: string,
+  workspaceContext: WorkspaceCollabContext | null,
+): Promise<TeamSharedProjectPullOutcome> {
+  if (!workspaceContext) return { isTeamShared: false, pulled: false };
+  const lookup = await fetchTeamProjectCatalogEntry(projectId, workspaceContext);
   if (!lookup.ok || !lookup.project) return { isTeamShared: false, pulled: false };
   try {
     const pullResponse = await fetch(`/api/projects/${encodeURIComponent(projectId)}/collab/pull`, {
       method: 'POST',
+      headers: workspaceProjectHeaders(workspaceContext),
     });
     return { isTeamShared: true, pulled: pullResponse.ok };
   } catch {
@@ -1483,11 +1495,14 @@ function AppInner() {
         markSkillRegistryReady('templates');
       });
 
-      const designSystemsWorkspaceId = workspaceContextRef.current?.workspaceId ?? null;
-      void fetchDesignSystems().then((list) => {
+      const designSystemsWorkspaceIdentity = workspaceIdentityCacheKey(
+        workspaceContextRef.current,
+      );
+      void fetchDesignSystems(workspaceContextRef.current).then((list) => {
         if (
           cancelled ||
-          (workspaceContextRef.current?.workspaceId ?? null) !== designSystemsWorkspaceId
+          workspaceIdentityCacheKey(workspaceContextRef.current)
+            !== designSystemsWorkspaceIdentity
         ) return;
         setDesignSystems(list);
         setDsLoading(false);
@@ -1764,15 +1779,14 @@ function AppInner() {
   ]);
 
   const refreshDesignSystems = useCallback(async () => {
-    // `fetchDesignSystems()` takes no context — the daemon resolves the scope
-    // from its OWN vela session (`resolveWorkspaceScope`), not from request
-    // headers. The catalog itself is keyed only by workspaceId, so the commit
-    // guard deliberately uses that SAME scope: role/member/permission changes
-    // must not discard a still-valid response without scheduling a successor.
-    // A slow read for a different workspace still cannot restore its library.
-    const issuedWorkspaceId = workspaceContextRef.current?.workspaceId ?? null;
-    const list = await fetchDesignSystems();
-    if ((workspaceContextRef.current?.workspaceId ?? null) !== issuedWorkspaceId) return;
+    // Carry the captured Workspace/member identity on the request. The daemon
+    // verifies that exact membership instead of consulting mutable ambient
+    // Workspace state, and the same identity key prevents an A response from
+    // committing after the UI has moved to B.
+    const issuedContext = workspaceContextRef.current;
+    const issuedIdentity = workspaceIdentityCacheKey(issuedContext);
+    const list = await fetchDesignSystems(issuedContext);
+    if (workspaceIdentityCacheKey(workspaceContextRef.current) !== issuedIdentity) return;
     setDesignSystems(list);
     // Bootstrap and this workspace-scoped refresh can overlap on launch.
     // Either response is a complete catalog for the active daemon identity,
@@ -1781,14 +1795,12 @@ function AppInner() {
     setDsLoading(false);
   }, []);
 
-  // The design-system catalog is workspace-scoped on the daemon (#145), so it
-  // is stale the moment the active workspace changes. Only the boot pass and a
-  // route change into home refetched it, and switching workspaces does neither
-  // — the switcher lives ON the home view, so `route.kind` stays 'home' — which
-  // left the previous workspace's library on screen until a reload.
+  // The design-system catalog is verified against the exact Workspace/member
+  // identity. Re-read whenever either half changes; a role replacement can
+  // reuse the Workspace id while changing the authoritative membership.
   useEffect(() => {
     void refreshDesignSystems();
-  }, [workspaceContext?.workspaceId, refreshDesignSystems]);
+  }, [currentWorkspaceIdentity, refreshDesignSystems]);
 
   const refreshSkills = useCallback(async () => {
     // Always scoped. `GET /api/skills` is fail-closed on a missing
@@ -2144,9 +2156,10 @@ function AppInner() {
       const fidelity = fidelityToTracking(metadata?.fidelity ?? null);
       const creationSource: 'blank' | 'template' | 'zip' | 'folder' =
         kind === 'template' ? 'template' : 'blank';
+      let createWorkspaceContext: WorkspaceCollabContext | null = null;
       let result;
       try {
-        const createWorkspaceContext = resolvedWorkspaceContextForWrite(
+        createWorkspaceContext = resolvedWorkspaceContextForWrite(
           workspaceContextStateRef.current,
         );
         if (
@@ -2231,6 +2244,7 @@ function AppInner() {
             result.project.id,
             userWorkingDir,
             input.userWorkingDirToken,
+            createWorkspaceContext,
           );
         } catch (err) {
           // The desktop working-dir token is short-lived (~60s TTL); if the
@@ -2261,7 +2275,7 @@ function AppInner() {
           result.project.id,
           pendingFiles,
           undefined,
-          workspaceContextRef.current,
+          createWorkspaceContext,
         );
         firstMessageAttachments = uploadResult.uploaded;
         const partial = uploadResult.failed.length > 0;
@@ -2573,7 +2587,8 @@ function AppInner() {
   // through the normal daemon API.
   const handleImportFolderResponse = useCallback(async (result: OpenDesignHostProjectImportSuccess) => {
     rememberLocalProject(result.projectId);
-    const project = await getProject(result.projectId);
+    const importedProjectContext = workspaceContextRef.current;
+    const project = await getProject(result.projectId, importedProjectContext);
     if (project != null) {
       setProjects((curr) => [project, ...curr.filter((p) => p.id !== project.id)]);
     } else {
@@ -2638,7 +2653,7 @@ function AppInner() {
       projectAuthorizationGenerationRef.current === authorizationGeneration
       && projectNameAuthorityRequestGenerationRef.current.get(key) === requestGeneration
       && projectViewAuthorizationLifetimeKey(projectId, workspaceContextRef.current) === key;
-    const lookup = await fetchTeamProjectCatalogEntry(projectId);
+    const lookup = await fetchTeamProjectCatalogEntry(projectId, context, false);
     if (!authorityRequestIsCurrent()) {
       // Workspace/member changed while the catalog request was in flight.
       // A newer same-key request also supersedes this response, so an older
@@ -2774,7 +2789,7 @@ function AppInner() {
       return true;
     }
     try {
-      const project = await getProject(id);
+      const project = await getProject(id, openingContext);
       if (!openingScopeIsCurrent()) return false;
       if (project && canUseLocalProject(project)) {
         const openedProject = catalogName ? { ...project, name: catalogName } : project;
@@ -2788,10 +2803,10 @@ function AppInner() {
         navigate({ kind: 'project', projectId: id, fileName: routeFileName });
         return true;
       }
-      const { pulled } = await pullTeamSharedProjectIfAvailable(id);
+      const { pulled } = await pullTeamSharedProjectIfAvailable(id, openingContext);
       if (!openingScopeIsCurrent()) return false;
       if (pulled) {
-        const pulledProject = await getProject(id);
+        const pulledProject = await getProject(id, openingContext);
         if (!openingScopeIsCurrent()) return false;
         if (pulledProject && canUseLocalProject(pulledProject)) {
           const openedProject = catalogName
@@ -3098,14 +3113,19 @@ function AppInner() {
     if (projects.some((p) => p.id === route.projectId)) return;
     let cancelled = false;
     const projectId = route.projectId;
+    const deepLinkContext = workspaceContextRef.current;
+    const deepLinkIdentity = workspaceIdentityCacheKey(deepLinkContext);
+    const identityChanged = () =>
+      workspaceIdentityCacheKey(workspaceContextRef.current) !== deepLinkIdentity;
     (async () => {
       const resolution = await resolveDeepLinkedTeamSharedProject(projectId, {
-        getProject,
-        pullTeamSharedProjectIfAvailable,
+        getProject: (id) => getProject(id, deepLinkContext),
+        pullTeamSharedProjectIfAvailable: (id) =>
+          pullTeamSharedProjectIfAvailable(id, deepLinkContext),
         delay,
-        isCancelled: () => cancelled,
+        isCancelled: () => cancelled || identityChanged(),
       });
-      if (cancelled) return;
+      if (cancelled || identityChanged()) return;
       if (resolution.kind === 'found') {
         const fetched = resolution.project;
         setProjects((curr) => {
@@ -3124,7 +3144,7 @@ function AppInner() {
       if (resolution.kind === 'still-materializing') return;
       const request = beginProjectListRequest();
       const list = await listCurrentWorkspaceProjects({ workspaceView: 'all' }).catch(() => []);
-      if (cancelled) return;
+      if (cancelled || identityChanged()) return;
       const applied = reconcileFetchedProjects(list, request);
       if (!applied) return;
       const fetchedProject = locallyDeletedProjectIdsRef.current.has(projectId)
@@ -3368,6 +3388,11 @@ function AppInner() {
       welcome={presentation === 'modal' ? settingsWelcome : false}
       initialSection={settingsInitialSection}
       initialHighlight={settingsHighlight}
+      persistedProjectWorkspaceId={
+        route.kind === 'project'
+          ? projects.find((project) => project.id === route.projectId)?.workspaceId ?? null
+          : null
+      }
       composioConfigLoading={composioConfigLoading}
       onPersist={handleConfigPersist}
       onDraftChange={handleSettingsDraftChange}
@@ -3408,7 +3433,12 @@ function AppInner() {
   } else if (route.kind === 'marketplace') {
     appMain = <MarketplaceView />;
   } else if (route.kind === 'marketplace-detail') {
-    appMain = <PluginDetailView pluginId={route.pluginId} />;
+    appMain = (
+      <PluginDetailView
+        pluginId={route.pluginId}
+        workspaceContextState={workspaceContextState}
+      />
+    );
   } else if (route.kind === 'collab-demo') {
     appMain = <CollabDemoView projectId={route.projectId} />;
   } else if (route.kind === 'community') {

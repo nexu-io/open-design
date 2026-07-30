@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createCachedWorkspaceDirectoryFetcher,
   createVelaWorkspaceContextProvider,
+  fetchVelaWorkspaceDirectory,
   mapVelaWorkspaceContext,
   workspaceContextFromDirectoryItem,
 } from '../src/collab/vela-workspace-context.js';
@@ -133,6 +134,12 @@ describe('mapVelaWorkspaceContext', () => {
 });
 
 describe('createCachedWorkspaceDirectoryFetcher', () => {
+  it('treats a missing local session as authoritative signed-out, not an outage', async () => {
+    await expect(
+      fetchVelaWorkspaceDirectory({ readSession: () => null }),
+    ).resolves.toEqual({ ok: true, items: [] });
+  });
+
   it('coalesces concurrent readers and briefly reuses one authoritative success', async () => {
     let now = 1_000;
     let resolveRead:

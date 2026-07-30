@@ -60,8 +60,7 @@ export interface UseBrandExtract {
       /**
        * The caller's active workspace, so the daemon can bind the freshly
        * created backing project into it (see `bindBrandProjectIntoRequestWorkspace`
-       * in `apps/daemon/src/brand-routes.ts`). Omitted → the daemon leaves the
-       * project unbound, exactly as for a signed-out / single-player caller.
+       * in `apps/daemon/src/brand-routes.ts`). Omitted is explicitly unscoped.
        * Without this, a team member's brand/design-system extraction project
        * has no `workspace_projects` row at all, and POST /api/runs + POST
        * /api/chat's workspace-identity gate then 403s the very first agent

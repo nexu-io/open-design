@@ -4,6 +4,27 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AmrBalanceDialog } from '../../src/components/AmrBalanceDialog';
 import { resetWorkspaceContextCache } from '../../src/collab/useWorkspaceContext';
+import {
+  workspaceContextFixture,
+  workspaceDirectoryFixture,
+} from '../helpers/workspace-context';
+
+function directoryResponse(
+  workspaceId: string,
+  workspaceMemberId: string,
+  workspaceType: 'personal' | 'team',
+): Response {
+  return new Response(JSON.stringify(workspaceDirectoryFixture([
+    workspaceContextFixture({
+      workspaceId,
+      workspaceMemberId,
+      workspaceType,
+    }),
+  ])), {
+    status: 200,
+    headers: { 'content-type': 'application/json' },
+  });
+}
 
 afterEach(() => {
   cleanup();
@@ -44,11 +65,15 @@ describe('AmrBalanceDialog', () => {
     const open = vi.spyOn(window, 'open').mockImplementation(() => null);
     vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
       const url = String(input);
+      if (url.includes('/api/workspace/directory')) {
+        return Promise.resolve(directoryResponse('ws-1', 'wm-1', 'team'));
+      }
       if (url.includes('/api/workspace/context')) {
         return Promise.resolve(new Response(JSON.stringify({
           context: {
             workspaceId: 'ws-1',
             workspaceType: 'team',
+            workspaceMemberId: 'wm-1',
             planId: null,
             billingState: 'free',
             permissions: { canManageBilling: true },
@@ -98,11 +123,15 @@ describe('AmrBalanceDialog', () => {
     const open = vi.spyOn(window, 'open').mockImplementation(() => null);
     vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
       const url = String(input);
+      if (url.includes('/api/workspace/directory')) {
+        return Promise.resolve(directoryResponse('ws-1', 'wm-1', 'team'));
+      }
       if (url.includes('/api/workspace/context')) {
         return Promise.resolve(new Response(JSON.stringify({
           context: {
             workspaceId: 'ws-1',
             workspaceType: 'team',
+            workspaceMemberId: 'wm-1',
             planId: 'team_pro',
             billingState: 'active',
             permissions: { canManageBilling: true },
@@ -154,11 +183,15 @@ describe('AmrBalanceDialog', () => {
     const open = vi.spyOn(window, 'open').mockImplementation(() => null);
     vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
       const url = String(input);
+      if (url.includes('/api/workspace/directory')) {
+        return Promise.resolve(directoryResponse('ws-p', 'wm-p', 'personal'));
+      }
       if (url.includes('/api/workspace/context')) {
         return Promise.resolve(new Response(JSON.stringify({
           context: {
             workspaceId: 'ws-p',
             workspaceType: 'personal',
+            workspaceMemberId: 'wm-p',
             planId: null,
             billingState: 'free',
             permissions: { canManageBilling: true },
@@ -205,11 +238,15 @@ describe('AmrBalanceDialog', () => {
     async (role) => {
       vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
         const url = String(input);
+        if (url.includes('/api/workspace/directory')) {
+          return Promise.resolve(directoryResponse('ws-1', 'wm-1', 'team'));
+        }
         if (url.includes('/api/workspace/context')) {
           return Promise.resolve(new Response(JSON.stringify({
             context: {
               workspaceId: 'ws-1',
               workspaceType: 'team',
+              workspaceMemberId: 'wm-1',
               role,
               planId: 'team_pro',
               billingState: 'active',

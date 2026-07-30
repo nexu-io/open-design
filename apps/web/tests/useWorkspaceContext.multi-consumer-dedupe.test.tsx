@@ -24,6 +24,15 @@ import {
   useTeamProjects,
   useWorkspaceContext,
 } from '../src/collab/useWorkspaceContext';
+import {
+  workspaceContextFixture,
+  workspaceDirectoryFixture,
+} from './helpers/workspace-context';
+
+const TEAM_CONTEXT = workspaceContextFixture({
+  workspaceId: 'workspace-team',
+  workspaceMemberId: 'member-viewer',
+});
 
 describe('workspace refresh broadcasts collapse a multi-consumer burst', () => {
   beforeEach(() => {
@@ -44,6 +53,12 @@ describe('workspace refresh broadcasts collapse a multi-consumer burst', () => {
     const contextCalls: string[] = [];
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
+      if (url.includes('/api/workspace/directory')) {
+        return new Response(JSON.stringify(workspaceDirectoryFixture([TEAM_CONTEXT])), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
       if (url.includes('/api/workspace/context')) {
         contextCalls.push(url);
         return new Response(JSON.stringify({ context: null }), {
@@ -84,9 +99,21 @@ describe('workspace refresh broadcasts collapse a multi-consumer burst', () => {
     const teamProjectCalls: string[] = [];
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
+      if (url.includes('/api/workspace/directory')) {
+        return new Response(JSON.stringify(workspaceDirectoryFixture([TEAM_CONTEXT])), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
       if (url.includes('/api/workspace/projects/team')) {
         teamProjectCalls.push(url);
         return new Response(JSON.stringify({ projects: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.includes('/api/workspace/context')) {
+        return new Response(JSON.stringify({ context: TEAM_CONTEXT }), {
           status: 200,
           headers: { 'content-type': 'application/json' },
         });

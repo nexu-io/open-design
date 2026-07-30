@@ -1,4 +1,5 @@
 import { createContext, useContext, type ReactNode } from 'react';
+import type { WorkspaceCollabContext } from '@open-design/contracts';
 import type { AnchorWriteBack } from '../comments';
 import type { ProjectCollab } from './useProjectCollab';
 
@@ -7,12 +8,17 @@ import type { ProjectCollab } from './useProjectCollab';
 // through the big intermediate components, and without a second collab client.
 
 export interface CollabContextValue extends ProjectCollab {
+  /** Exact persisted scope of the project being rendered. Never shell navigation state. */
+  workspaceContext: WorkspaceCollabContext | null;
+  workspaceContextLoading: boolean;
   /** Persist a drifted-to-`lost` comment's last-good position (needs the active
    * conversation id, which only ProjectView has). Absent when unavailable. */
   onLostAnchors?: (writeBacks: AnchorWriteBack[]) => void;
 }
 
 const DISABLED: CollabContextValue = {
+  workspaceContext: null,
+  workspaceContextLoading: false,
   enabled: false,
   member: null,
   present: [],

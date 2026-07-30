@@ -14,6 +14,7 @@ import { BrandLogo, BrandPreviewCard, hostnameOf } from './BrandPreviewCard';
 import { BrandReferencePicker } from './BrandReferencePicker';
 import { NewBrandModal } from './NewBrandModal';
 import styles from './BrandsTab.module.css';
+import { useWorkspaceContext } from '../collab/useWorkspaceContext';
 
 export interface BrandsTabProps {
   /**
@@ -30,6 +31,7 @@ export interface BrandsTabProps {
 
 export function BrandsTab({ onApplyDesignSystem, onOpenProject, onDesignSystemsRefresh }: BrandsTabProps = {}) {
   const t = useT();
+  const { context: workspaceContext } = useWorkspaceContext();
   const route = useRoute();
   // A `/brands/:id` deep-link (from the rail, a chat link, or a shared URL)
   // preselects which brand the inline preview renders. Undefined on `/brands`.
@@ -147,10 +149,10 @@ export function BrandsTab({ onApplyDesignSystem, onOpenProject, onDesignSystemsR
   // the same post-create flow as the modal (auto-send + navigate into project).
   const handlePickReference = useCallback(
     async (brand: BrandReference) => {
-      const result = await runExtract(brand.domain);
+      const result = await runExtract(brand.domain, { workspaceContext });
       if (result) handleCreated(result.id, result.projectId, result.conversationId);
     },
-    [runExtract, handleCreated],
+    [runExtract, handleCreated, workspaceContext],
   );
 
   const isEmpty = brands !== null && (brands ?? []).length === 0;

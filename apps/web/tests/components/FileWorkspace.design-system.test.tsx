@@ -937,7 +937,7 @@ describe('FileWorkspace design-system project surface', () => {
 
     expect(registryMocks.updateDesignSystemDraft).toHaveBeenCalledWith('user:acme', {
       status: 'published',
-    });
+    }, null);
     expect(onRefresh).toHaveBeenCalledOnce();
   });
 
