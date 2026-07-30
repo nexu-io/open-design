@@ -338,6 +338,157 @@ describe('collab presence routes', () => {
     expect(listPresence).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps the non-authoritative shared-project fallback inside the hot roster cache', async () => {
+    const context = teamContext();
+    const isProjectShared = vi.fn(async () => true);
+    const listPresence = vi.fn(async () => [{ memberId: 'm1' }]);
+    const api = await startPresenceServer(
+      {
+        heartbeatPresence: vi.fn(async () => []),
+        listPresence,
+        leavePresence: vi.fn(async () => []),
+      },
+      {
+        verifyWorkspaceReadRequest: async () => ({ ok: true, context }),
+        isProjectShared,
+        cloudAuthorizesProjectPresence: () => false,
+      },
+    );
+
+    const responses = [];
+    for (let index = 0; index < 20; index += 1) {
+      responses.push(await api.json('/api/projects/p1/presence'));
+    }
+    expect(responses).toHaveLength(20);
+    expect(responses.every((response) => response.status === 200)).toBe(true);
+    expect(responses.every((response) =>
+      presentIds(response.body).join(',') === 'm1')).toBe(true);
+    expect(isProjectShared).toHaveBeenCalledTimes(1);
+    expect(listPresence).toHaveBeenCalledTimes(1);
+
+    await expect(api.json('/api/projects/p1/presence')).resolves.toMatchObject({
+      status: 200,
+      body: { present: [{ memberId: 'm1' }] },
+    });
+    expect(isProjectShared).toHaveBeenCalledTimes(1);
+    expect(listPresence).toHaveBeenCalledTimes(1);
+  });
+
+  it('rechecks the shared-project fallback only after explicit invalidation', async () => {
+    const context = teamContext();
+    let shared = true;
+    const isProjectShared = vi.fn(async () => shared);
+    const listPresence = vi.fn(async () => [{ memberId: 'm1' }]);
+    const api = await startPresenceServer(
+      {
+        heartbeatPresence: vi.fn(async () => []),
+        listPresence,
+        leavePresence: vi.fn(async () => []),
+      },
+      {
+        verifyWorkspaceReadRequest: async () => ({ ok: true, context }),
+        isProjectShared,
+        cloudAuthorizesProjectPresence: () => false,
+      },
+    );
+
+    expect((await api.json('/api/projects/p1/presence')).body.present).toEqual([
+      { memberId: 'm1' },
+    ]);
+    shared = false;
+    expect((await api.json('/api/projects/p1/presence')).body.present).toEqual([
+      { memberId: 'm1' },
+    ]);
+
+    api.routes.invalidatePresence('p1', context.workspaceId);
+    expect((await api.json('/api/projects/p1/presence')).body.present).toEqual([]);
+    expect(isProjectShared).toHaveBeenCalledTimes(2);
+    expect(listPresence).toHaveBeenCalledTimes(1);
+  });
+
+  it('rechecks the shared-project fallback on TTL refresh without an invalidation event', async () => {
+    const context = teamContext();
+    let now = 1_000;
+    let shared = true;
+    const isProjectShared = vi.fn(async () => shared);
+    const listPresence = vi.fn(async () => [{ memberId: 'm1' }]);
+    const api = await startPresenceServer(
+      {
+        heartbeatPresence: vi.fn(async () => []),
+        listPresence,
+        leavePresence: vi.fn(async () => []),
+      },
+      {
+        verifyWorkspaceReadRequest: async () => ({ ok: true, context }),
+        isProjectShared,
+        cloudAuthorizesProjectPresence: () => false,
+        presenceListCacheFreshMs: 1_000,
+        presenceListCacheNow: () => now,
+      },
+    );
+
+    expect((await api.json('/api/projects/p1/presence')).body.present).toEqual([
+      { memberId: 'm1' },
+    ]);
+    shared = false;
+    now += 999;
+    expect((await api.json('/api/projects/p1/presence')).body.present).toEqual([
+      { memberId: 'm1' },
+    ]);
+    expect(isProjectShared).toHaveBeenCalledTimes(1);
+
+    now += 1;
+    // SWR: the boundary read stays non-blocking on the last roster while one
+    // background refresh rechecks both share authority and cloud presence.
+    expect((await api.json('/api/projects/p1/presence')).body.present).toEqual([
+      { memberId: 'm1' },
+    ]);
+    await vi.waitFor(() => expect(isProjectShared).toHaveBeenCalledTimes(2));
+    expect((await api.json('/api/projects/p1/presence')).body.present).toEqual([]);
+    expect(listPresence).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears a cached roster when heartbeat or leave observes an unshared project', async () => {
+    const context = teamContext();
+    let shared = true;
+    const isProjectShared = vi.fn(async () => shared);
+    const api = await startPresenceServer(
+      {
+        heartbeatPresence: vi.fn(async () => [{ memberId: 'm1' }]),
+        listPresence: vi.fn(async () => [{ memberId: 'm1' }]),
+        leavePresence: vi.fn(async () => []),
+      },
+      {
+        verifyWorkspaceRequest: async () => ({ ok: true, context }),
+        verifyWorkspaceReadRequest: async () => ({ ok: true, context }),
+        isProjectShared,
+        cloudAuthorizesProjectPresence: () => false,
+      },
+    );
+
+    expect((await api.json('/api/projects/p1/presence')).body.present).toEqual([
+      { memberId: 'm1' },
+    ]);
+    shared = false;
+    expect((await api.json('/api/projects/p1/presence/heartbeat', {
+      method: 'POST',
+      body: { memberId: context.workspaceMemberId },
+    })).body.present).toEqual([]);
+    expect((await api.json('/api/projects/p1/presence')).body.present).toEqual([]);
+
+    shared = true;
+    api.routes.invalidatePresence('p1', context.workspaceId);
+    expect((await api.json('/api/projects/p1/presence')).body.present).toEqual([
+      { memberId: 'm1' },
+    ]);
+    shared = false;
+    expect((await api.json('/api/projects/p1/presence/leave', {
+      method: 'POST',
+      body: { memberId: context.workspaceMemberId },
+    })).body.present).toEqual([]);
+    expect((await api.json('/api/projects/p1/presence')).body.present).toEqual([]);
+  });
+
   it('single-flights concurrent presence reads for one exact viewer scope', async () => {
     let resolveList:
       | ((present: Array<{ memberId: string }>) => void)
@@ -349,6 +500,7 @@ describe('collab presence routes', () => {
         }),
     );
     const context = teamContext();
+    const isProjectShared = vi.fn(async () => true);
     const api = await startPresenceServer(
       {
         heartbeatPresence: vi.fn(async () => []),
@@ -357,7 +509,8 @@ describe('collab presence routes', () => {
       },
       {
         verifyWorkspaceReadRequest: async () => ({ ok: true, context }),
-        cloudAuthorizesProjectPresence: () => true,
+        isProjectShared,
+        cloudAuthorizesProjectPresence: () => false,
       },
     );
 
@@ -370,6 +523,7 @@ describe('collab presence routes', () => {
       { status: 200, body: { present: [{ memberId: 'm1' }] } },
       { status: 200, body: { present: [{ memberId: 'm1' }] } },
     ]);
+    expect(isProjectShared).toHaveBeenCalledTimes(1);
   });
 
   it('isolates cached presence by workspace, project, and viewer member', async () => {
@@ -409,6 +563,45 @@ describe('collab presence routes', () => {
     await scopedGet('p1', 'w1', 'm1');
 
     expect(listPresence).toHaveBeenCalledTimes(4);
+  });
+
+  it('partitions cached presence by every permission bit in the verified identity', async () => {
+    const baseContext = teamContext();
+    const restrictedContext: WorkspaceCollabContext = {
+      ...baseContext,
+      permissions: {
+        ...baseContext.permissions,
+        canShareProjects: false,
+        canWriteSyncedFiles: false,
+      },
+    };
+    const listPresence = vi.fn(async (_projectId, context) => [
+      { memberId: context?.permissions.canShareProjects ? 'writer' : 'reader' },
+    ]);
+    const api = await startPresenceServer(
+      {
+        heartbeatPresence: vi.fn(async () => []),
+        listPresence,
+        leavePresence: vi.fn(async () => []),
+      },
+      {
+        verifyWorkspaceReadRequest: async (req) => ({
+          ok: true,
+          context: req.headers['x-test-permission'] === 'restricted'
+            ? restrictedContext
+            : baseContext,
+        }),
+        cloudAuthorizesProjectPresence: () => true,
+      },
+    );
+
+    expect((await api.json('/api/projects/p1/presence')).body.present).toEqual([
+      { memberId: 'writer' },
+    ]);
+    expect((await api.json('/api/projects/p1/presence', {
+      headers: { 'x-test-permission': 'restricted' },
+    })).body.present).toEqual([{ memberId: 'reader' }]);
+    expect(listPresence).toHaveBeenCalledTimes(2);
   });
 
   it('uses a virtual clock for TTL refresh and explicit hub invalidation', async () => {

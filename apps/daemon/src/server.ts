@@ -6142,8 +6142,19 @@ export async function startServer({
     // C-lane sync seam for D's project-visibility routes: a personal→team move
     // calls requestTeamShare on success to publish the project for the team.
     collabSync: {
-      requestTeamShare: (projectId, ownerMemberId) => collab.requestTeamShare(projectId, ownerMemberId),
-      requestTeamUnshare: (projectId, ownerMemberId) => collab.requestTeamUnshare(projectId, ownerMemberId),
+      requestTeamShare: async (projectId, ownerMemberId) => {
+        const result = await collab.requestTeamShare(projectId, ownerMemberId);
+        // The GET cache also contains the fallback "project is shared"
+        // verdict when this Workspace has no authoritative presence stream.
+        // A successful visibility mutation changes that verdict immediately.
+        invalidatePresenceReadCache(projectId);
+        return result;
+      },
+      requestTeamUnshare: async (projectId, ownerMemberId) => {
+        const result = await collab.requestTeamUnshare(projectId, ownerMemberId);
+        invalidatePresenceReadCache(projectId);
+        return result;
+      },
       refreshTeamProjectMetadata: (projectId) => collab.refreshTeamProjectMetadata(projectId),
       invalidateTeamProjectCatalog: () => teamProjectsDisplayCache.invalidate(),
     },

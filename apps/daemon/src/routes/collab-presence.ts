@@ -86,6 +86,7 @@ function presenceListCacheKey(
   projectId: string,
   context: WorkspaceCollabContext | null,
 ): string {
+  const permissions = context?.permissions;
   return JSON.stringify([
     projectId,
     context?.workspaceId?.trim() ?? '',
@@ -94,6 +95,14 @@ function presenceListCacheKey(
     context?.role ?? '',
     context?.memberStatus ?? '',
     context?.lifecycleState ?? '',
+    permissions?.canManageMembers ?? false,
+    permissions?.canManageBilling ?? false,
+    permissions?.canInviteMembers ?? false,
+    permissions?.canManageAutoRecharge ?? false,
+    permissions?.canShareProjects ?? false,
+    permissions?.canWriteSyncedFiles ?? false,
+    permissions?.canViewWorkspaceSettings ?? false,
+    permissions?.canManageSharedResources ?? false,
   ]);
 }
 
@@ -423,24 +432,37 @@ export function registerCollabPresenceRoutes(
       return sendWorkspaceVerificationFailure(res, verification);
     }
     const context = verification.ok ? verification.context : null;
-    if (
-      !cloudAuthorizesProject(req.params.id) &&
-      !(await projectIsShared(req.params.id, context))
-    ) {
-      return res.json({ present: [] });
-    }
     if (cloud) {
       try {
         return res.json({
           present: await presenceLists.read(
             req.params.id,
             context,
-            () => cloud.listPresence(req.params.id, context),
+            async () => {
+              // When the upstream hub subscription cannot authoritatively
+              // vouch for this Workspace, resolving the project owner is part
+              // of the SAME expensive Vela read as the roster. Keeping this
+              // check outside `presenceLists` made every hot GET spawn a
+              // second CLI/catalog read even while the roster itself was
+              // cached. Explicit share/unshare and hub invalidation drop this
+              // entry, while the exact authority verification above still
+              // runs before every read and fails closed on membership loss.
+              if (
+                !cloudAuthorizesProject(req.params.id)
+                && !(await projectIsShared(req.params.id, context))
+              ) {
+                return [];
+              }
+              return cloud.listPresence(req.params.id, context);
+            },
           ),
         });
       } catch (error) {
         return cloudError(res, error);
       }
+    }
+    if (!(await projectIsShared(req.params.id, context))) {
+      return res.json({ present: [] });
     }
     res.json({ present: presence.present(req.params.id) });
   });
@@ -468,6 +490,7 @@ export function registerCollabPresenceRoutes(
       !cloudAuthorizesProject(req.params.id) &&
       !(await projectIsShared(req.params.id, context))
     ) {
+      if (cloud) presenceLists.publish(req.params.id, context, []);
       return res.json({ present: [] });
     }
     if (cloud) {
