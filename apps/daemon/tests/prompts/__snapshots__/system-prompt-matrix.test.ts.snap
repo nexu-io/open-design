@@ -289,21 +289,6 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
     ],
     "totalChars": 86628,
   },
-  "skip-discovery-brief": {
-    "sections": [
-      "injection-resistance",
-      "skip-discovery-override",
-      "discovery-and-philosophy",
-      "direction-library",
-      "identity-charter",
-      "project-metadata",
-      "media-dispatch-hint",
-      "filesystem-handoff-override",
-      "clarifying-questions",
-      "role-marker-guard",
-    ],
-    "totalChars": 63544,
-  },
   "slim-design-full-stack": {
     "sections": [
       "injection-resistance",
@@ -340,6 +325,17 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "role-marker-guard",
     ],
     "totalChars": 22982,
+  },
+  "slim-skip-discovery-brief": {
+    "sections": [
+      "injection-resistance",
+      "skip-discovery-override",
+      "slim-core-charter",
+      "project-metadata",
+      "media-dispatch-hint",
+      "role-marker-guard",
+    ],
+    "totalChars": 22358,
   },
 }
 `;

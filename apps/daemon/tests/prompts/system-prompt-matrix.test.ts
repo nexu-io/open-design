@@ -233,8 +233,12 @@ const SCENARIOS: ReadonlyArray<[name: string, input: ComposeInput]> = [
     },
   ],
   [
-    'skip-discovery-brief',
-    { metadata: { kind: 'prototype', skipDiscoveryBrief: true }, executionProfile: 'filesystem' },
+    'slim-skip-discovery-brief',
+    {
+      metadata: { kind: 'prototype', skipDiscoveryBrief: true },
+      executionProfile: 'filesystem',
+      promptCoreVariant: 'slim',
+    },
   ],
   [
     'codex-imagegen',

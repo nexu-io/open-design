@@ -870,6 +870,7 @@ export function composeSystemPrompt({
         ...(streamFormat === 'plain' ? [API_MODE_OVERRIDE, '\n\n---\n\n'] : []),
         renderSlimCoreCharter(
           executionProfile ?? executionProfileFromStreamFormat(streamFormat),
+          { includeTurnOneDiscoveryPolicy: metadata?.skipDiscoveryBrief !== true },
         ),
         '\n\n---\n\n',
       ]

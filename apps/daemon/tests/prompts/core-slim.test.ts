@@ -255,6 +255,21 @@ describe('slim core — moved-out content stays out (ownership)', () => {
   });
 });
 
+describe('renderSlimCoreCharter — skipDiscoveryBrief gating', () => {
+  it('omits only the turn-1 discovery policy when skipDiscoveryBrief disables the first-form flow', () => {
+    const charter = renderSlimCoreCharter('filesystem', {
+      includeTurnOneDiscoveryPolicy: false,
+    });
+
+    expect(charter).not.toContain('### Turn 1: one line, one form, then stop');
+    expect(charter).not.toContain('### When to skip or inherit the form');
+    // The form-authoring contract stays: skipDiscoveryBrief still allows one
+    // concise follow-up if a required detail is impossible to infer safely.
+    expect(charter).toContain('### Writing the form — shape & tailoring');
+    expect(charter).toContain('### Form contract (any form, any turn)');
+  });
+});
+
 describe('composeSystemPrompt — promptCoreVariant switch', () => {
   const base = {
     metadata: { kind: 'prototype' as const },
