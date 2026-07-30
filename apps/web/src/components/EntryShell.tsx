@@ -145,6 +145,7 @@ import {
 import { useWorkspaceInvalidation } from '../collab/workspace-events';
 import {
   beginWorkspaceScopedRead,
+  workspaceIdentityCacheKey,
   workspaceProjectHeaders,
 } from '../collab/workspace-identity';
 import {
@@ -694,8 +695,8 @@ export function EntryShell({
   );
   const readyWorkspaceId = workspaceContext?.workspaceId ?? null;
   const readyWorkspaceMemberId = workspaceContext?.workspaceMemberId ?? null;
-  const readyScopeKey = readyWorkspaceId && readyWorkspaceMemberId
-    ? `${readyWorkspaceId}:${readyWorkspaceMemberId}`
+  const readyScopeKey = workspaceContext
+    ? workspaceIdentityCacheKey(workspaceContext)
     : null;
   const contentReadyScopeKeyRef = useRef<string | null>(null);
   if (contentReadyScopeKeyRef.current !== readyScopeKey) {
@@ -724,7 +725,8 @@ export function EntryShell({
     if (contentReadyProjectIdsRef.current.has(projectId)) {
       return Promise.resolve(true);
     }
-    const scopeKey = `${workspaceId}:${workspaceMemberId}`;
+    const scopeKey = readyScopeKey;
+    if (!scopeKey) return Promise.resolve(false);
     const key = `${scopeKey}:${projectId}`;
     const existing = contentReadyHydrationRef.current.get(key);
     if (existing) return existing;
@@ -754,6 +756,7 @@ export function EntryShell({
     return hydration;
   }, [
     onTeamProjectContentReady,
+    readyScopeKey,
     workspaceContext?.workspaceMemberId,
     workspaceContext?.workspaceId,
     workspaceContext?.workspaceType,
@@ -1443,6 +1446,7 @@ export function EntryShell({
             // shared cards), opened through the pull-first handler so a shared
             // project the member has not pulled yet still opens.
             projects={allProjectsList}
+            workspaceContext={workspaceContext}
             onOpenProject={handleOpenAllProjects}
             onClose={() => setProjectSearchOpen(false)}
           />

@@ -1509,6 +1509,7 @@ function DesignSystemDetail({
       {kit ? (
         <DesignKitView
           kit={kit}
+          workspaceContext={workspaceContext}
           badgeSlot={badgeSlot}
           actionsSlot={actionsSlot}
           showCover={false}

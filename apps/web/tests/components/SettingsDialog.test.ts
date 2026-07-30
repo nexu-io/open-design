@@ -8,6 +8,7 @@ import {
   deriveComposioCredentialState,
   configForManualOrbitRun,
   isOrbitRunDisabled,
+  orbitLiveArtifactHref,
   isProviderModelDiscoveryUnsupported,
   isValidApiBaseUrl,
   mergeProviderModelOptions,
@@ -25,6 +26,7 @@ import {
 import { deriveUpdaterModel } from '../../src/lib/updater';
 import type { OpenDesignHostUpdaterStatusSnapshot } from '@open-design/host';
 import type { AppConfig, AppVersionInfo, ConnectionTestResponse } from '../../src/types';
+import type { WorkspaceCollabContext } from '@open-design/contracts';
 
 const originalFetch = globalThis.fetch;
 
@@ -74,6 +76,33 @@ afterEach(() => {
   globalThis.fetch = originalFetch;
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+});
+
+describe('SettingsDialog Orbit artifact scope', () => {
+  const context = {
+    workspaceId: 'workspace-team',
+    workspaceType: 'team',
+    workspaceMemberId: 'member-1',
+    role: 'member',
+    memberStatus: 'active',
+    lifecycleState: 'active',
+    permissions: {
+      canShareProjects: false,
+      canWriteSyncedFiles: false,
+    },
+  } as WorkspaceCollabContext;
+
+  it('adds navigation scope for a bound Workspace artifact', () => {
+    expect(orbitLiveArtifactHref('project-1', 'artifact-1', context)).toBe(
+      '/api/live-artifacts/artifact-1/preview?projectId=project-1&workspaceId=workspace-team&workspaceMemberId=member-1',
+    );
+  });
+
+  it('preserves the unscoped local artifact URL for legacy projects', () => {
+    expect(orbitLiveArtifactHref('project-1', 'artifact-1', null)).toBe(
+      '/api/live-artifacts/artifact-1/preview?projectId=project-1',
+    );
+  });
 });
 
 describe('SettingsDialog about update control', () => {

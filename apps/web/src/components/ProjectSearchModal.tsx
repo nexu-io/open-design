@@ -20,14 +20,21 @@ import { Icon } from './Icon';
 import { useT } from '../i18n';
 import { relativeTimeLong } from '../utils/chatTime';
 import { projectCover, projectCategory, ProjectTag } from './RecentProjectsStrip';
+import type { WorkspaceCollabContext } from '@open-design/contracts';
 
 interface Props {
   projects: Project[];
+  workspaceContext?: WorkspaceCollabContext | null;
   onOpenProject: (id: string) => Promise<boolean> | Promise<void> | boolean | void;
   onClose: () => void;
 }
 
-export function ProjectSearchModal({ projects, onOpenProject, onClose }: Props) {
+export function ProjectSearchModal({
+  projects,
+  workspaceContext = null,
+  onOpenProject,
+  onClose,
+}: Props) {
   const t = useT();
   const [query, setQuery] = useState('');
   // Keyboard-driven selection: the palette is opened by ⌘K and typed into, so
@@ -127,7 +134,7 @@ export function ProjectSearchModal({ projects, onOpenProject, onClose }: Props) 
             <div className="project-search-empty">{t('quickSwitcher.noMatches')}</div>
           ) : (
             filtered.map((project, index) => {
-              const cover = projectCover(project, null);
+              const cover = projectCover(project, null, workspaceContext);
               const showImage =
                 (cover.kind === 'image' || cover.kind === 'logo') && Boolean(cover.src);
               const active = index === activeIndex;

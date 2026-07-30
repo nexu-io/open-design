@@ -27,6 +27,7 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { Button, Textarea } from '@open-design/components';
+import type { WorkspaceCollabContext } from '@open-design/contracts';
 import type { DesignSystemEditClickProps } from '@open-design/contracts/analytics';
 import { useT } from '../i18n';
 import { openExternalUrl, projectRawUrl } from '../providers/registry';
@@ -145,6 +146,7 @@ interface BrandFontManifestFile {
 export function useBrandFonts(
   projectId: string | undefined,
   fonts: { googleFontsUrl?: string }[],
+  workspaceContext: WorkspaceCollabContext | null = null,
 ): void {
   const googleUrls = useMemo(() => {
     const urls = fonts
@@ -172,7 +174,11 @@ export function useBrandFonts(
     let styleEl: HTMLStyleElement | null = null;
     void (async () => {
       try {
-        const resp = await fetch(projectRawUrl(projectId, 'fonts/manifest.json'), {
+        const resp = await fetch(projectRawUrl(
+          projectId,
+          'fonts/manifest.json',
+          workspaceContext,
+        ), {
           cache: 'no-store',
         });
         if (!resp.ok) return;
@@ -181,7 +187,7 @@ export function useBrandFonts(
         if (cancelled || files.length === 0) return;
         const css = files
           .map((f) => {
-            const url = projectRawUrl(projectId, `fonts/${f.file}`);
+            const url = projectRawUrl(projectId, `fonts/${f.file}`, workspaceContext);
             return [
               '@font-face {',
               `  font-family: '${f.family.replace(/'/g, '')}';`,
@@ -205,7 +211,7 @@ export function useBrandFonts(
       cancelled = true;
       if (styleEl) styleEl.remove();
     };
-  }, [projectId]);
+  }, [projectId, workspaceContext]);
 }
 
 interface BrandTokenSubset {
@@ -241,6 +247,7 @@ export type DesignKitActionFeedbackTone = 'success' | 'error' | 'loading';
 
 export interface DesignKitViewProps {
   kit: DesignKit;
+  workspaceContext?: WorkspaceCollabContext | null;
   variant?: 'panel' | 'compact';
   /** Rendered next to the title (status badges). */
   badgeSlot?: ReactNode;
@@ -292,6 +299,7 @@ export interface DesignKitViewProps {
 
 function DesignKitViewInner({
   kit,
+  workspaceContext = null,
   variant = 'panel',
   badgeSlot,
   actionsSlot,
@@ -358,7 +366,7 @@ function DesignKitViewInner({
   const stickyHeaderRef = useRef<HTMLElement | null>(null);
   const logoSectionRef = useRef<HTMLElement | null>(null);
 
-  useBrandFonts(kit.projectId, kit.fonts);
+  useBrandFonts(kit.projectId, kit.fonts, workspaceContext);
 
   const logoCandidates = useMemo(
     () =>

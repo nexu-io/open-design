@@ -22,6 +22,7 @@ import {
 } from '@open-design/contracts';
 import {
   appendResourceQuery,
+  workspaceIdentityCacheKey,
   workspaceProjectHeaders,
 } from '../collab/workspace-identity';
 import {
@@ -6787,6 +6788,16 @@ function DocumentPreviewViewer({
   );
 }
 
+export function fileViewerSourceAuthorizationScopeKey(
+  workspaceContextLoading: boolean,
+  workspaceContext: WorkspaceCollabContext | null,
+): string | null {
+  if (workspaceContextLoading) return null;
+  return workspaceContext
+    ? `workspace:${workspaceIdentityCacheKey(workspaceContext)}`
+    : 'local';
+}
+
 function HtmlViewer({
   projectId,
   projectKind,
@@ -6857,11 +6868,10 @@ function HtmlViewer({
     workspaceContextLoading,
   } = useProjectCollabContext();
   const workspaceContextIdentityChangePending = false;
-  const sourceAuthorizationScopeKey = workspaceContextLoading
-    ? null
-    : workspaceContext
-      ? `workspace:${workspaceContext.workspaceId}:member:${workspaceContext.workspaceMemberId}`
-      : 'local';
+  const sourceAuthorizationScopeKey = fileViewerSourceAuthorizationScopeKey(
+    workspaceContextLoading,
+    workspaceContext,
+  );
   const analytics = useAnalytics();
   // Team collaboration: resolve comment anchors through the drift ladder when
   // the viewer is a team member of a shared project. Off (exact-match, single
@@ -16134,8 +16144,13 @@ function MarkdownViewer({
   const baseHtml = useMemo(() => {
     if (text === null) return null;
     const renderPartial = MarkdownRenderer.renderPartial ?? renderMarkdownToSafeHtml;
-    return rewriteMarkdownImageSources(decorateMarkdownCodeBlocks(renderPartial(text)), projectId, file.name);
-  }, [file.name, projectId, text]);
+    return rewriteMarkdownImageSources(
+      decorateMarkdownCodeBlocks(renderPartial(text)),
+      projectId,
+      file.name,
+      workspaceContext,
+    );
+  }, [file.name, projectId, text, workspaceContext]);
   const html = highlightedHtml?.source === baseHtml && highlightedHtml.themeRevision === highlightThemeRevision
     ? highlightedHtml.html
     : baseHtml;

@@ -1993,7 +1993,7 @@ export function ProjectView({
     designMdRefreshKey,
     projectRunWorkspaceContext,
   );
-  const finalize = useFinalizeProject(project.id);
+  const finalize = useFinalizeProject(project.id, projectRunWorkspaceContext);
   const terminalLauncher = useTerminalLaunch();
   const [projectActionsToast, setProjectActionsToast] = useState<{
     message: string;

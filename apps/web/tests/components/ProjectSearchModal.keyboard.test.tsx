@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ProjectSearchModal } from '../../src/components/ProjectSearchModal';
 import { I18nProvider } from '../../src/i18n';
 import type { Project } from '../../src/types';
+import type { WorkspaceCollabContext } from '@open-design/contracts';
 
 afterEach(() => cleanup());
 
@@ -31,10 +32,33 @@ const PROJECTS = [
   project('middle', 'Middle deck', 2_000),
 ];
 
-function renderPalette(onOpenProject = vi.fn(), onClose = vi.fn()) {
+const WORKSPACE_CONTEXT = {
+  workspaceId: 'workspace-team',
+  workspaceType: 'team',
+  workspaceMemberId: 'member-1',
+  role: 'member',
+  memberStatus: 'active',
+  lifecycleState: 'active',
+  permissions: {
+    canShareProjects: false,
+    canWriteSyncedFiles: false,
+  },
+} as WorkspaceCollabContext;
+
+function renderPalette(
+  onOpenProject = vi.fn(),
+  onClose = vi.fn(),
+  projects = PROJECTS,
+  workspaceContext: WorkspaceCollabContext | null = null,
+) {
   render(
     <I18nProvider>
-      <ProjectSearchModal projects={PROJECTS} onOpenProject={onOpenProject} onClose={onClose} />
+      <ProjectSearchModal
+        projects={projects}
+        workspaceContext={workspaceContext}
+        onOpenProject={onOpenProject}
+        onClose={onClose}
+      />
     </I18nProvider>,
   );
   return { onOpenProject, onClose };
@@ -112,5 +136,21 @@ describe('ProjectSearchModal keyboard navigation', () => {
     fireEvent.keyDown(input, { key: 'Enter' });
 
     expect(activeName()).toBeUndefined();
+  });
+
+  it('scopes Team project cover URLs for browser-owned image loads', () => {
+    const teamProject = {
+      ...project('team-project', 'Team project', 4_000),
+      metadata: {
+        entryFile: 'cover.png',
+        kind: 'image',
+      },
+    } as Project;
+    renderPalette(vi.fn(), vi.fn(), [teamProject], WORKSPACE_CONTEXT);
+
+    const image = screen.getByTestId('project-search-item-team-project').querySelector('img');
+    expect(image?.getAttribute('src')).toBe(
+      '/api/projects/team-project/raw/cover.png?workspaceId=workspace-team&workspaceMemberId=member-1&v=4000',
+    );
   });
 });

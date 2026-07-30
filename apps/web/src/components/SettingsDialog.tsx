@@ -122,6 +122,7 @@ import { fetchProviderModels } from '../providers/provider-models';
 import {
   fetchConnectors,
   fetchDesignTemplates,
+  liveArtifactPreviewUrl,
   openExternalUrl,
 } from '../providers/registry';
 import { MEDIA_PROVIDERS } from '../media/models';
@@ -6627,6 +6628,14 @@ interface OrbitRunStartResponse {
   agentRunId: string;
 }
 
+export function orbitLiveArtifactHref(
+  projectId: string,
+  artifactId: string,
+  workspaceContext: WorkspaceCollabContext | null,
+): string {
+  return liveArtifactPreviewUrl(projectId, artifactId, 'rendered', workspaceContext);
+}
+
 export async function persistConfigAndRunOrbit(
   config: AppConfig,
   options?: {
@@ -6932,7 +6941,11 @@ function OrbitSection({
   const lastRunAbs = lastRun ? new Date(lastRun.completedAt).toLocaleString() : null;
   const lastRunRel = formatRelative(lastRun?.completedAt, t);
   const liveArtifactHref = lastRun?.artifactId && lastRun?.artifactProjectId
-    ? `/api/live-artifacts/${encodeURIComponent(lastRun.artifactId)}/preview?projectId=${encodeURIComponent(lastRun.artifactProjectId)}`
+    ? orbitLiveArtifactHref(
+        lastRun.artifactProjectId,
+        lastRun.artifactId,
+        workspaceContext,
+      )
     : null;
   const isBusy = running || Boolean(status?.running);
 

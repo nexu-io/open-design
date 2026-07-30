@@ -147,6 +147,7 @@ function RegistryDesignSystemKitPreview({
       ) : (
         <DesignKitView
           kit={kit}
+          workspaceContext={workspaceContext}
           variant={variant}
           showCover={showCover}
           dataTestId={`${dataTestId}-view`}

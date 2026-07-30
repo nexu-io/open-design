@@ -5007,6 +5007,7 @@ function DesignSystemProjectPanel({
       {kit ? (
         <DesignKitView
           kit={kit}
+          workspaceContext={workspaceContext}
           actionsSlot={actionsSlot}
           headerMenuActions={headerMenuActions}
           topSlot={topSlot}
