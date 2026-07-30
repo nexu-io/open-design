@@ -104,4 +104,136 @@ describe('components manifest extraction (#6224 regression suite)', () => {
     // `/^form(?:$|-)/i` rejects it.
     expect(inputsClasses).not.toContain('platform-form');
   });
+
+  it('keeps traversing supported at-rule bodies for token attribution (#6250 reviewer #1)', () => {
+    // PerishCode CHANGES_REQUESTED on PR #6250:
+    //   "keep traversing supported at-rule bodies for token attribution"
+    //
+    // The current scanner replaces `@media ... {` with `{` (via
+    // stripContainerAtRuleHeaders) and then treats everything inside the
+    // at-rule as one giant body of the *empty* selector that opened the
+    // at-rule. Rules inside `@media`/`@supports`/`@container`/`@layer`
+    // therefore lose their selector + token attribution — every selector
+    // inside `@media (min-width: 600px) { .inside-media { color: var(--bg) } }`
+    // is silently dropped, and the inner rule's token references are lost entirely.
+    //
+    // The fix: the scanner must descend into supported at-rule bodies and
+    // emit the inner rules with their real selectors preserved.
+    //
+    // We use `.btn-*` selectors so the inner rules land in the buttons group,
+    // where we can assert both the selector survival and token attribution.
+    const manifest = extractComponentsManifest({
+      brandId: 'at-rule',
+      tokensCss: ':root { --bg: #fff; --fg: #000; }',
+      fixtureHtml: `
+        <style>
+          .btn-outside { color: var(--fg); }
+          @media (min-width: 600px) {
+            .btn-inside-media { background: var(--bg); }
+            .btn-inside-media-two { border-color: var(--fg); }
+          }
+          @supports (display: grid) {
+            .btn-inside-supports { color: var(--fg); }
+          }
+          @layer framework {
+            .btn-inside-layer { background: var(--bg); }
+          }
+        </style>
+        <button class="btn-outside btn-inside-media btn-inside-media-two btn-inside-supports btn-inside-layer">x</button>
+      `,
+    });
+
+    expect(manifest.selectors).toEqual(
+      expect.arrayContaining([
+        '.btn-outside',
+        '.btn-inside-media',
+        '.btn-inside-media-two',
+        '.btn-inside-supports',
+        '.btn-inside-layer',
+      ]),
+    );
+    // Inner rules keep their token attribution, not lost to the at-rule wrapper.
+    const buttonsGroup = manifest.groups.find((g) => g.id === 'buttons');
+    expect(buttonsGroup?.selectors).toEqual(
+      expect.arrayContaining([
+        '.btn-outside',
+        '.btn-inside-media',
+        '.btn-inside-media-two',
+        '.btn-inside-supports',
+        '.btn-inside-layer',
+      ]),
+    );
+    // .btn-inside-media carries --bg, .btn-inside-media-two carries --fg.
+    expect(buttonsGroup?.tokenReferences).toEqual(
+      expect.arrayContaining(['--bg', '--fg']),
+    );
+  });
+
+  it('preserves nested-rule token references so the parent group receives outer and nested tokens (#6250 reviewer #2)', () => {
+    // PerishCode CHANGES_REQUESTED on PR #6250:
+    //   "preserve nested-rule token references so the parent group receives
+    //    both outer and nested tokens"
+    //
+    // When a rule has BOTH outer declarations AND a nested block, the
+    // resulting parent-group entry must include both the outer-body tokens
+    // AND the nested-block tokens (no silent loss of nested-only tokens).
+    // The minimal failing case: `.btn-parent { color: var(--outer); &:focus { background: var(--inner); } }`.
+    // We use `.btn-parent` so the selector lands in the buttons group, where
+    // we can assert both tokens end up on the same group entry.
+    const manifest = extractComponentsManifest({
+      brandId: 'nested-both',
+      tokensCss: ':root { --outer: red; --inner: blue; }',
+      fixtureHtml: `
+        <style>
+          .btn-parent {
+            color: var(--outer);
+            &:focus {
+              background: var(--inner);
+            }
+          }
+        </style>
+        <button class="btn-parent">x</button>
+      `,
+    });
+
+    expect(manifest.selectors).toEqual(['.btn-parent']);
+    const buttonsGroup = manifest.groups.find((g) => g.id === 'buttons');
+    expect(buttonsGroup?.selectors).toContain('.btn-parent');
+    expect(buttonsGroup?.tokenReferences).toEqual(
+      expect.arrayContaining(['--inner', '--outer']),
+    );
+
+    // Deeper nesting: an `.btn-ancestor` rule wraps two levels of CSS nesting.
+    // All three tokens (--a / --b / --c) must end up on the buttons group,
+    // proving nested-rule token references are preserved at every depth —
+    // not just the first nesting level.
+    const deep = extractComponentsManifest({
+      brandId: 'nested-deep',
+      tokensCss: ':root { --a: red; --b: green; --c: blue; }',
+      fixtureHtml: `
+        <style>
+          .btn-ancestor {
+            color: var(--a);
+            & .descendant {
+              color: var(--b);
+              & .granddesc {
+                background: var(--c);
+              }
+            }
+          }
+        </style>
+        <button class="btn-ancestor">
+          <span class="descendant">
+            <span class="granddesc">x</span>
+          </span>
+        </button>
+      `,
+    });
+    expect(deep.selectors).toContain('.btn-ancestor');
+    const deepButtons = deep.groups.find((g) => g.id === 'buttons');
+    expect(deepButtons?.selectors).toContain('.btn-ancestor');
+    expect(deepButtons?.tokenReferences).toEqual(
+      expect.arrayContaining(['--a', '--b', '--c']),
+    );
+  });
 });

@@ -260,16 +260,29 @@ function extractStyleBlocks(html: string): string[] {
 function extractCssSelectors(css: string): string[] {
   const selectors = new Set<string>();
   const commentlessCss = stripContainerAtRuleHeaders(stripCssComments(css));
-  const selectorPattern = /(?:^|[{}])\s*([^@{}][^{}]*?)\s*\{/g;
-  let match: RegExpExecArray | null;
 
-  while ((match = selectorPattern.exec(commentlessCss)) !== null) {
-    const rawSelectorList = match[1]?.trim();
-    if (rawSelectorList == null || rawSelectorList.length === 0) continue;
-    if (rawSelectorList.includes(':root')) continue;
-    if (/^(?:from|to|\d+(?:\.\d+)?%)$/i.test(rawSelectorList)) continue;
+  // The legacy `(?:^|[{}])\s*([^@{}][^{}]*?)\s*\{` regex anchored each
+  // rule at the *previous* rule's closing `}`, so half the flat rules in
+  // a sheet were silently dropped (#6224 part 1). It also mis-handled
+  // supported at-rule bodies: after `stripContainerAtRuleHeaders` turns
+  // `@media ... {` into `{`, the regex sees `{ \n .inside { ... }` and
+  // the bare `[^@{}]` exclusion rejects the inner selector — silent loss
+  // of every selector immediately inside an at-rule (#6250 reviewer #1).
+  //
+  // Reuse the brace-depth scanner that already powers
+  // `extractSelectorTokenReferences` — it walks the CSS character-by-character
+  // and recursively descends into supported at-rule bodies so inner
+  // selectors surface with their real selectors preserved.
+  for (const { selectorList } of iterateCssRules(commentlessCss)) {
+    if (selectorList.length === 0) continue;
+    if (selectorList.includes(':root')) continue;
+    if (/^(?:from|to|\d+(?:\.\d+)?%)$/i.test(selectorList)) continue;
+    // Skip supported at-rule headers — they survived the strip pass because
+    // the body wasn't processed by stripContainerAtRuleHeaders (e.g. nested
+    // recursion landed on `@media`). At-rules never contribute a *selector*.
+    if (selectorList.startsWith('@')) continue;
 
-    for (const selector of splitSelectorList(rawSelectorList)) {
+    for (const selector of splitSelectorList(selectorList)) {
       const normalized = normalizeSelector(selector);
       if (normalized.length > 0 && !normalized.startsWith('@')) {
         selectors.add(normalized);
@@ -375,9 +388,29 @@ function iterateCssRules(css: string): CssRule[] {
     // Extract outer-body declarations, stripping nested `{ ... }` blocks
     // (their inner declarations are folded in via a recursive flatten so
     // tokens referenced inside `&:hover { background: var(--x) }` count
-    // toward `.parent`).
-    const body = flattenNestedBody(css.slice(bodyStart, bodyEnd));
-    if (selectorList.length > 0) {
+    // toward `.parent`). flattenNestedBody recursively folds nested-block
+    // inner declarations — including declarations nested *two or more*
+    // levels deep — so `& .child { & .grand { background: var(--c) } }`
+    // contributes --c to the outermost ancestor (PR #6250 reviewer #2).
+    const bodySlice = css.slice(bodyStart, bodyEnd);
+    const body = flattenNestedBody(bodySlice);
+
+    if (selectorList.length === 0) {
+      // Empty selector — the at-rule header (`@media`/`@supports`/
+      // `@container`/`@layer`) was stripped to '{' by
+      // stripContainerAtRuleHeaders before this scanner ran. The outermost
+      // `{` after stripping opens an empty selector; we must NOT push it as
+      // a rule (that would swallow the whole at-rule body as one giant
+      // "rule" and lose every inner selector). Instead recurse into the
+      // body slice so inner rules are emitted with their real selectors
+      // and real bodies (PR #6250 reviewer #1).
+      rules.push(...iterateCssRules(bodySlice));
+    } else if (!selectorList.startsWith('@') || isSupportedAtRuleHeader(selectorList)) {
+      // Ordinary selector, or a supported at-rule header that survived the
+      // strip pass (e.g. recursive call landed on `@media` whose header was
+      // not stripped because the parent body wasn't processed by
+      // stripContainerAtRuleHeaders). Push it as-is; the body still has
+      // nested-block declarations flattened into it.
       rules.push({ selectorList, body });
     }
     index = bodyEnd + 1;
@@ -389,6 +422,16 @@ function iterateCssRules(css: string): CssRule[] {
   return rules;
 }
 
+// Supported at-rule headers whose bodies contain ordinary CSS rules whose
+// selectors + bodies must be enumerated (PR #6250 reviewer #1). Other
+// at-rules (@keyframes, @font-face, @page, @import, @namespace, @charset)
+// have bodies that are NOT ordinary rule trees — we treat them as opaque
+// declaration blocks and do not descend into them via the conditional
+// recursion in iterateCssRules.
+function isSupportedAtRuleHeader(selectorList: string): boolean {
+  return /^@(?:media|supports|container|layer)\b/i.test(selectorList);
+}
+
 function flattenNestedBody(bodySlice: string): string {
   // For `.parent { color: var(--a); &:hover { background: var(--b); } }` we
   // receive the inner slice `color: var(--a); &:hover { background: var(--b); } `
@@ -396,8 +439,16 @@ function flattenNestedBody(bodySlice: string): string {
   // attribute to `.parent`. We strip the nested `{ ... }` wrapper but keep
   // its inner declarations, dropping the `&:hover` selector prefix — the
   // parent already owns the tokens.
+  //
+  // The flatten is *recursive*: declarations nested two or more levels
+  // deep (`& .child { & .grand { background: var(--c) } }`) still fold
+  // into the outermost ancestor, so the inner-inner `var(--c)` is counted
+  // for `.parent` rather than dropped (PR #6250 reviewer #2). We walk the
+  // body slice, dropping only the `{` / `}` brace characters themselves
+  // and the nested-rule *selector prefix* between `{` and the next `{`/`;`
+  // — but keeping every declaration body so all `var(--token)` references
+  // at every depth survive on the outermost rule.
   let out = '';
-  let depth = 0;
   let cursor = 0;
   const length = bodySlice.length;
   while (cursor < length) {
@@ -407,19 +458,17 @@ function flattenNestedBody(bodySlice: string): string {
       cursor = closeIdx === -1 ? length : closeIdx + 2;
       continue;
     }
-    if (char === '{') {
-      depth += 1;
+    if (char === '{' || char === '}') {
+      // Drop the brace; keep scanning. We deliberately do NOT skip the
+      // nested-rule selector prefix between '{' and the next declaration
+      // — that prefix (e.g. `&:hover`) is just text with no `var(--token)`
+      // references, and if it did contain a var() we'd want to surface it
+      // on the outer selector anyway (rare in practice). Stripping only
+      // the braces gives us full-depth folding with O(n) cost.
       cursor += 1;
       continue;
     }
-    if (char === '}') {
-      depth = Math.max(0, depth - 1);
-      cursor += 1;
-      continue;
-    }
-    if (depth === 0) {
-      out += char;
-    }
+    out += char;
     cursor += 1;
   }
   return out;

@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Fix components manifest extractor losing every other flat CSS rule because the legacy `(?:^|[{}])\s*([^@{}][^{}]*?)\s*\{([^{}]*)\}` regex consumed each rule's closing `}` as the next rule's `[{}]` anchor. Replaced with a brace-depth scanner that also flattens one level of CSS nesting so tokens referenced inside `&:hover { ... }` attribute to the parent selector instead of leaking into a synthesised pseudo-selector. (#6224)
 - Anchor `classMatchers` to `^name(?:$|-)` so prefix-sharing classnames like `.navbar-button-thing`, `.mystatus`, `.platform-form` no longer cross-group via substring leakage. (#6224)
+- Fix components manifest extractor dropping selectors inside supported at-rule bodies (`@media` / `@supports` / `@container` / `@layer`). `stripContainerAtRuleHeaders` rewrites the at-rule header to `{`, and the brace-depth scanner now recurses into the resulting body slice so inner rules surface with their real selectors and token attribution preserved. `extractCssSelectors` reuses the same scanner so `manifest.selectors` matches `manifest.groups[].selectors` instead of falling back to a regex that lost every selector immediately inside an at-rule. (#6250)
+- Fix components manifest extractor losing token references declared inside nested-rule blocks two or more levels deep. `flattenNestedBody` now strips only the `{` / `}` brace characters and keeps every declaration body, so `var(--token)` references inside `& .child { & .grand { background: var(--c) } }` attribute to the outermost ancestor instead of being dropped. (#6250)
 
 ## [0.9.0] - 2026-05-29
 
