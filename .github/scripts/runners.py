@@ -26,7 +26,11 @@ def normalize_mode(raw_mode):
     return "default"
 
 
-def resolve_contract(mode):
+def is_enabled(raw_value):
+    return (raw_value or "").strip().lower() in {"1", "true", "yes", "on", "hosted"}
+
+
+def resolve_contract(mode, control_fallback=False):
     if mode == "economic":
         control = GITHUB_HOSTED
         workload = GITHUB_HOSTED
@@ -49,6 +53,10 @@ def resolve_contract(mode):
         # memory ceilings and is not covered by the medium right-size evidence.
         ui_p0_workload = NEXU_MEDIUM
         ui_p0_heavy_workload = NEXU_XLARGE
+    # Escape hatch: route control-profile jobs to GitHub-hosted runners when the
+    # self-hosted pool is unavailable, without changing runner mode.
+    if control_fallback:
+        control = GITHUB_HOSTED
 
     return {
         "runs_on": {
@@ -65,12 +73,16 @@ def resolve_contract(mode):
         "decision": {
             "schema_version": 1,
             "mode": mode,
+            "control_fallback": control_fallback,
         },
     }
 
 
 def main():
-    contract = resolve_contract(normalize_mode(os.environ.get("OD_CI_RUNNER_MODE")))
+    contract = resolve_contract(
+        normalize_mode(os.environ.get("OD_CI_RUNNER_MODE")),
+        is_enabled(os.environ.get("OD_CI_CONTROL_FALLBACK")),
+    )
     output_path = os.environ.get("GITHUB_OUTPUT")
     lines = [
         f"{key}={value if isinstance(value, str) else compact_json(value)}"

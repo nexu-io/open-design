@@ -57,6 +57,7 @@ jobs:
               && github.event.pull_request.head.repo.full_name != github.repository
               && 'economic'
               || vars.OD_CI_RUNNER_MODE }}
+          OD_CI_CONTROL_FALLBACK: ${{ vars.OD_CI_CONTROL_FALLBACK }}
         run: python3 .github/scripts/runners.py
 
   scopes:
