@@ -65,6 +65,11 @@ export type RuntimeContext = {
   // also persists) and the daemon seeds it with the full transcript.
   resumeSessionId?: string | null;
   newSessionId?: string;
+  // Per-run plugin isolation for agent subprocesses. External Plugin entry
+  // points use this for Local Codex so the child cannot recursively load the
+  // same Codex Plugin and route itself into another Open Design workflow.
+  // Operator-wide overrides remain owned by each runtime definition.
+  disablePlugins?: boolean;
 };
 
 // Marker on a RuntimeAgentDef declaring that the adapter's CLI maintains

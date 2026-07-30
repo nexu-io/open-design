@@ -35,6 +35,7 @@ import {
 } from './prompts/stable-sections.js';
 import { emittedRenderableQuestionForm } from './question-form-detect.js';
 import { resolveProjectRoot } from './project-root.js';
+import { OPEN_DESIGN_PLUGIN_ID } from './mcp-observability.js';
 import {
   resolveDaemonCliPath,
   resolveDaemonPluginPreviewsDir,
@@ -6174,6 +6175,10 @@ export async function startServer({
           promptFilePath: promptFile?.path,
           resumeSessionId: agentResumeCtx.resumeSessionId,
           newSessionId: agentResumeCtx.newSessionId,
+          disablePlugins:
+            def.id === 'codex'
+            && run.externalPluginAnalytics?.externalPluginId
+              === OPEN_DESIGN_PLUGIN_ID,
         },
       );
     } catch (err) {
