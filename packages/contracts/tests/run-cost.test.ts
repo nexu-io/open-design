@@ -480,17 +480,24 @@ describe('analyzeRunCost — usage scope', () => {
     expect(report.usageScope).toBe('aggregate');
   });
 
-  it('stays aggregate no matter how many terminal frames a runtime emits', () => {
-    // The discriminator is positional, not a frame count: a runtime that emits
-    // two terminal frames must not read as per-call.
+  it('keeps a real two-call run whose first call emitted all its tools', () => {
+    // REGRESSION, from a persisted run (0bb4f727). An earlier positional
+    // discriminator asked whether any tool_use appeared AFTER the first usage
+    // frame, and gated this shape away — but it is a legitimate two-call
+    // OpenCode run carrying a real 1,792 -> 28,864 context curve. Both of its
+    // tools simply came out of call 0, which says nothing about scope.
     const report = analyzeRunCost([
-      toolUse('t1', 'read', { filePath: '/a' }),
-      toolResult('t1', 'x'.repeat(200)),
-      rawUsageEvent({ input_tokens: 100, cache_read_input_tokens: 40_000 }),
-      rawUsageEvent({ input_tokens: 10, cache_read_input_tokens: 40_000 }),
+      toolUse('t1', 'engram_mem_context', {}),
+      toolResult('t1', 'x'.repeat(10_939)),
+      toolUse('t2', 'read', { filePath: '/cv.md' }),
+      toolResult('t2', 'y'.repeat(14_966)),
+      usageEvent({ input_tokens: 27_138, output_tokens: 93, cached_read_tokens: 1_792 }),
+      textDelta('Se creó el archivo.'),
+      usageEvent({ input_tokens: 9_338, output_tokens: 298, cached_read_tokens: 28_864 }),
     ]);
 
-    expect(report.usageScope).toBe('aggregate');
+    expect(report.usageScope).toBe('per-call');
+    expect(report.steps.map((s) => s.contextTokens)).toEqual([1_792, 28_864]);
   });
 
   it('reads interleaved frames as per-call', () => {

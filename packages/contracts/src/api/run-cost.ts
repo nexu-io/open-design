@@ -331,31 +331,37 @@ function callsThatReRead(producingStep: number, totalSteps: number): number {
 /**
  * Whether a log's `usage` frames are per-model-call or one whole-run aggregate.
  *
- * A per-call log INTERLEAVES usage with work: the call that consumes a tool
- * result emits its own frame afterwards. So if every `tool_use` in the run
- * precedes the FIRST usage frame, the frames were not interleaved with the
- * work — they are a summary written at close. That is the signature of every
- * runtime except the `json-event-stream` family, which report usage from the
- * terminal `result` frame.
+ * An aggregate is emitted from the terminal `result` frame, which happens once,
+ * so an aggregate log carries EXACTLY ONE usage frame. Two or more frames means
+ * a curve exists, however short.
  *
- * The test is positional on purpose. Sniffing for companion fields
- * (`costUsd`, `durationMs`, `stopReason`) would be guesswork that OpenCode's
- * own frames partly satisfy, and counting frames would break the day a
- * terminal-frame runtime emits two.
+ * The discriminator for a single frame is arithmetic: a run that emitted a
+ * `tool_use` made at least two model calls — one to emit it, one to consume its
+ * result — so a single frame cannot be per-call and must be a close-of-run
+ * summary. That is the shape of `claude-stream`, `copilot-stream`,
+ * `qoder-stream`, the ACP session and the pi bridge. A run with no tool calls is
+ * per-call by definition: its one frame IS its one call.
  *
- * A run with no tool calls is per-call by definition: its single frame IS its
- * single call, and the decomposition of a one-call run is trivially right. The
- * remaining edge — a genuine one-call OpenCode run that did use tools — is
- * classified aggregate, and that is the correct answer rather than a false
- * positive: a one-point curve is exactly the degenerate case that pins the
- * whole read cost on the preamble term.
+ * WHY NOT A POSITIONAL TEST. This first checked whether any `tool_use` appeared
+ * AFTER the first usage frame, reasoning that a per-call log interleaves usage
+ * with work. Real persisted runs falsified it: a legitimate two-call OpenCode
+ * run whose first call emitted both of its tools has every `tool_use` before the
+ * first frame, and was gated away despite carrying a real 1,792 → 28,864 curve.
+ * The positional test was guarding a hypothetical (a terminal-frame runtime
+ * emitting two frames) at the cost of real runs, and even in that hypothetical
+ * the damage is a two-point curve rather than the one-point collapse this gate
+ * exists to prevent.
+ *
+ * The remaining conservative edge is a one-call run that used tools and never
+ * consumed the result — a cancellation. It reads as aggregate, which errs
+ * toward refusing to report rather than reporting a one-point curve.
  */
 export function detectUsageScope(args: {
+  usageFrames: number;
   toolUseFrames: number;
-  toolUseAfterFirstUsage: boolean;
 }): RunCostUsageScope {
-  if (args.toolUseFrames === 0) return 'per-call';
-  return args.toolUseAfterFirstUsage ? 'per-call' : 'aggregate';
+  if (args.usageFrames >= 2) return 'per-call';
+  return args.toolUseFrames > 0 ? 'aggregate' : 'per-call';
 }
 
 /**
@@ -384,10 +390,8 @@ export function analyzeRunCost(
   let duplicateCalls = 0;
   let duplicateBytes = 0;
   let lastTimestamp: number | null = null;
-  // Scope discriminator, tracked positionally as the log is read. See
-  // `detectUsageScope` for why interleaving is the signal.
+  // Scope discriminator inputs. See `detectUsageScope`.
   let toolUseFrames = 0;
-  let toolUseAfterFirstUsage = false;
 
   for (const line of Array.isArray(lines) ? lines : []) {
     const data = eventPayload(line);
@@ -436,7 +440,6 @@ export function analyzeRunCost(
     if (type === 'tool_use' && typeof data.name === 'string') {
       const tool = data.name;
       toolUseFrames += 1;
-      if (steps.length > 0) toolUseAfterFirstUsage = true;
       outputByTool.set(tool, (outputByTool.get(tool) ?? 0) + serializedBytes(data.input));
       if (typeof data.id === 'string') {
         toolNameById.set(data.id, tool);
@@ -583,7 +586,7 @@ export function analyzeRunCost(
     .sort((a, b) => b.bytes - a.bytes);
 
   return {
-    usageScope: detectUsageScope({ toolUseFrames, toolUseAfterFirstUsage }),
+    usageScope: detectUsageScope({ usageFrames: steps.length, toolUseFrames }),
     steps,
     terms,
     usd,
