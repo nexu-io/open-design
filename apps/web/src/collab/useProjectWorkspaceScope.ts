@@ -12,6 +12,7 @@ import {
   sharedCancellableGet,
 } from '../lib/shared-cancellable-get';
 import { useWorkspaceInvalidation } from './workspace-events';
+import { workspaceIdentityCacheKey } from './workspace-identity';
 
 const PROJECT_SCOPE_RETRY_MS = 5_000;
 
@@ -183,6 +184,7 @@ async function fetchProjectWorkspaceScope(
   options?: {
     fresh?: boolean;
     workspaceAuthority?: ProjectWorkspaceAuthority | null;
+    workspaceIdentityKey?: string;
   },
 ): Promise<ProjectWorkspaceScope> {
   // Every mounted consumer of one project's scope shares a single request
@@ -197,8 +199,11 @@ async function fetchProjectWorkspaceScope(
   // a bound daemon row rejects them without disclosing its Workspace context.
   const get = options?.fresh ? forceSharedCancellableGet : sharedCancellableGet;
   const workspaceAuthority = options?.workspaceAuthority ?? null;
+  const workspaceIdentityKey =
+    options?.workspaceIdentityKey
+    ?? projectWorkspaceAuthorityKey(workspaceAuthority);
   return get(
-    `project-workspace-scope:${projectId}:${projectWorkspaceAuthorityKey(workspaceAuthority)}`,
+    `project-workspace-scope:${projectId}:${workspaceIdentityKey}`,
     async (sharedSignal): Promise<ProjectWorkspaceScope> => {
       const response = await fetch(
         `/api/projects/${encodeURIComponent(projectId)}/workspace-scope`,
@@ -260,6 +265,7 @@ export async function resolveProjectWorkspaceContext(
       boundWorkspaceId && workspaceContext?.workspaceId === boundWorkspaceId
         ? projectWorkspaceAuthority(workspaceContext)
         : null,
+    workspaceIdentityKey: workspaceIdentityCacheKey(workspaceContext),
   });
   return projectWorkspaceContext(scope);
 }
@@ -286,11 +292,13 @@ export function useProjectWorkspaceScope(
   const [state, setState] = useState<ProjectWorkspaceScopeState & {
     resolvedRevision: number;
     resolvedAuthorityKey: string | null;
+    resolvedCallerIdentityKey: string;
   }>({
     loading: true,
     scope: null,
     resolvedRevision: -1,
     resolvedAuthorityKey: null,
+    resolvedCallerIdentityKey: 'none',
   });
   const boundWorkspaceId =
     typeof persistedProjectWorkspaceId === 'string'
@@ -315,6 +323,7 @@ export function useProjectWorkspaceScope(
         : null
       : null;
   const requestAuthorityKey = projectWorkspaceAuthorityKey(requestWorkspaceAuthority);
+  const callerIdentityKey = workspaceIdentityCacheKey(callerWorkspaceContext);
 
   const scheduleDeferredRevalidation = useCallback(() => {
     // The daemon shares a short successful directory cache between the scope
@@ -389,6 +398,7 @@ export function useProjectWorkspaceScope(
           scope: null,
           resolvedRevision: refreshRevision,
           resolvedAuthorityKey: requestAuthorityKey,
+          resolvedCallerIdentityKey: callerIdentityKey,
           failure: 'forbidden',
         });
         return;
@@ -398,6 +408,7 @@ export function useProjectWorkspaceScope(
           const canRefreshInBackground =
             refreshRequest.preserveResolvedScope
             && current.resolvedAuthorityKey === requestAuthorityKey
+            && current.resolvedCallerIdentityKey === callerIdentityKey
             && current.scope !== null
             && current.scope.projectId === projectId
             && (
@@ -414,6 +425,7 @@ export function useProjectWorkspaceScope(
                 scope: null,
                 resolvedRevision: refreshRevision,
                 resolvedAuthorityKey: requestAuthorityKey,
+                resolvedCallerIdentityKey: callerIdentityKey,
               };
         });
         firstAttempt = false;
@@ -428,6 +440,7 @@ export function useProjectWorkspaceScope(
             // deferred TTL re-read) and must not be served from the burst cache.
             fresh: refreshRevision > 0,
             workspaceAuthority: requestWorkspaceAuthority,
+            workspaceIdentityKey: callerIdentityKey,
           },
         );
         if (controller.signal.aborted || epoch !== epochRef.current) return;
@@ -436,6 +449,7 @@ export function useProjectWorkspaceScope(
             const canKeepResolvedScope =
               refreshRequest.preserveResolvedScope
               && current.resolvedAuthorityKey === requestAuthorityKey
+              && current.resolvedCallerIdentityKey === callerIdentityKey
               && current.scope !== null
               && current.scope.kind !== 'unavailable'
               && current.scope.projectId === projectId
@@ -455,6 +469,7 @@ export function useProjectWorkspaceScope(
                   scope,
                   resolvedRevision: refreshRevision,
                   resolvedAuthorityKey: requestAuthorityKey,
+                  resolvedCallerIdentityKey: callerIdentityKey,
                 };
           });
           retryTimer = setTimeout(() => void load(), PROJECT_SCOPE_RETRY_MS);
@@ -464,6 +479,7 @@ export function useProjectWorkspaceScope(
             scope,
             resolvedRevision: refreshRevision,
             resolvedAuthorityKey: requestAuthorityKey,
+            resolvedCallerIdentityKey: callerIdentityKey,
           });
         }
       } catch (error) {
@@ -477,6 +493,7 @@ export function useProjectWorkspaceScope(
             failure === 'unavailable'
             && refreshRequest.preserveResolvedScope
             && current.resolvedAuthorityKey === requestAuthorityKey
+            && current.resolvedCallerIdentityKey === callerIdentityKey
             && current.scope !== null
             && current.scope.kind !== 'unavailable'
             && current.scope.projectId === projectId
@@ -496,6 +513,7 @@ export function useProjectWorkspaceScope(
                 scope: null,
                 resolvedRevision: refreshRevision,
                 resolvedAuthorityKey: requestAuthorityKey,
+                resolvedCallerIdentityKey: callerIdentityKey,
                 failure,
               };
         });
@@ -517,6 +535,7 @@ export function useProjectWorkspaceScope(
     projectId,
     refreshRequest,
     requestAuthorityKey,
+    callerIdentityKey,
   ]);
 
   // React preserves hook state across a ProjectView A→B prop change until the
@@ -527,6 +546,7 @@ export function useProjectWorkspaceScope(
   // ambient context refresh can change the identity without bumping the revision.
   if (
     state.resolvedAuthorityKey !== requestAuthorityKey
+    || state.resolvedCallerIdentityKey !== callerIdentityKey
     || (
       !refreshRequest.preserveResolvedScope
       && state.resolvedRevision !== refreshRequest.revision

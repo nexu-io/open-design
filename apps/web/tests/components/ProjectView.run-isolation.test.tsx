@@ -4,7 +4,12 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ProjectView, mergeSavedPreviewComment } from '../../src/components/ProjectView';
+import {
+  ProjectView,
+  listConversationsWithRetry,
+  mergeSavedPreviewComment,
+} from '../../src/components/ProjectView';
+import { ProjectConversationsHttpError } from '../../src/state/projects';
 import type { SettingsSection } from '../../src/components/SettingsDialog';
 import type { ProjectWorkspaceScopeState } from '../../src/collab/useProjectWorkspaceScope';
 import type { WorkspaceCollabContext } from '@open-design/contracts';
@@ -97,6 +102,7 @@ const projectCollabMocks = vi.hoisted(() => ({
   syncState: 'local_only' as 'local_only' | 'synced' | null,
   viewerOnly: false,
   isOwner: false,
+  writerAuthority: 'allowed' as 'allowed' | 'denied' | 'pending',
 }));
 
 vi.mock('../../src/analytics/provider', () => ({
@@ -165,6 +171,7 @@ vi.mock('../../src/collab/useProjectCollab', async (importOriginal) => ({
     syncState: projectCollabMocks.syncState,
     viewerOnly: projectCollabMocks.viewerOnly,
     isOwner: projectCollabMocks.isOwner,
+    writerAuthority: projectCollabMocks.writerAuthority,
     downloadPending: false,
     reportChange: vi.fn(),
     requestPublish: vi.fn(),
@@ -215,7 +222,8 @@ vi.mock('../../src/router', () => ({
   navigate: vi.fn(),
 }));
 
-vi.mock('../../src/state/projects', () => ({
+vi.mock('../../src/state/projects', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/state/projects')>()),
   createConversation: (...args: unknown[]) => createConversation(...args),
   deleteConversation: vi.fn(),
   getTemplate: (...args: unknown[]) => getTemplate(...args),
@@ -715,6 +723,54 @@ describe('mergeSavedPreviewComment', () => {
   });
 });
 
+describe('listConversationsWithRetry', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    listConversations.mockReset();
+  });
+
+  it('fails permanent authorization errors immediately', async () => {
+    listConversations.mockRejectedValueOnce(
+      new ProjectConversationsHttpError(403),
+    );
+
+    await expect(listConversationsWithRetry('project-1')).rejects.toMatchObject({
+      status: 403,
+    });
+    expect(listConversations).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries a transient materialization 404 on the bounded schedule', async () => {
+    vi.useFakeTimers();
+    const teamContext = teamWorkspaceContext('workspace-team', 'member-team');
+    listConversations
+      .mockRejectedValueOnce(new ProjectConversationsHttpError(404))
+      .mockResolvedValueOnce(conversations);
+
+    const result = listConversationsWithRetry('project-1', teamContext);
+    await Promise.resolve();
+    expect(listConversations).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(119);
+    expect(listConversations).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+
+    await expect(result).resolves.toEqual(conversations);
+    expect(listConversations).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not retry a missing Personal project', async () => {
+    listConversations.mockRejectedValueOnce(
+      new ProjectConversationsHttpError(404),
+    );
+
+    await expect(listConversationsWithRetry('project-1')).rejects.toMatchObject({
+      status: 404,
+    });
+    expect(listConversations).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('ProjectView conversation run isolation', () => {
   let resolveConversationBMessages: ((messages: ChatMessage[]) => void) | null = null;
   let conversationAMessages: ChatMessage[] = [runningAssistant];
@@ -738,6 +794,7 @@ describe('ProjectView conversation run isolation', () => {
     projectCollabMocks.syncState = 'local_only';
     projectCollabMocks.viewerOnly = false;
     projectCollabMocks.isOwner = false;
+    projectCollabMocks.writerAuthority = 'allowed';
     resolveConversationBMessages = null;
     conversationAMessages = [runningAssistant];
     listConversations.mockResolvedValue(conversations);
@@ -1501,13 +1558,26 @@ describe('ProjectView conversation run isolation', () => {
   });
 
   it('does not create a conversation for a read-only member of a shared project', async () => {
+    const teamContext = teamWorkspaceContext('workspace-team', 'member-team');
+    workspaceScopeMocks.ambientContext = teamContext;
+    workspaceScopeMocks.projectScope = {
+      loading: false,
+      scope: {
+        kind: 'team',
+        projectId: project.id,
+        workspaceId: teamContext.workspaceId,
+        visibility: 'team',
+        context: teamContext,
+      },
+    };
     listConversations.mockResolvedValue([]);
     projectCollabMocks.enabled = true;
     projectCollabMocks.syncState = 'synced';
     projectCollabMocks.viewerOnly = true;
     projectCollabMocks.isOwner = false;
+    projectCollabMocks.writerAuthority = 'denied';
 
-    renderProjectView();
+    renderProjectView(config, { ...project, workspaceId: teamContext.workspaceId });
 
     await waitFor(() => expect(listConversations).toHaveBeenCalledTimes(1));
     await act(async () => {
@@ -1515,6 +1585,93 @@ describe('ProjectView conversation run isolation', () => {
     });
 
     expect(createConversation).not.toHaveBeenCalled();
+  });
+
+  it('seeds an empty explicitly Personal project without Team ownership status', async () => {
+    listConversations.mockResolvedValue([]);
+    projectCollabMocks.writerAuthority = 'pending';
+
+    renderProjectView();
+
+    await waitFor(() => expect(createConversation).toHaveBeenCalledTimes(1));
+    expect(createConversation).toHaveBeenCalledWith(
+      project.id,
+      undefined,
+      expect.objectContaining({
+        workspaceContext: workspaceScopeMocks.personalContext(),
+      }),
+    );
+  });
+
+  it('seeds an empty Team project after positive writer authority settles', async () => {
+    const teamContext = teamWorkspaceContext('workspace-team', 'owner-member');
+    workspaceScopeMocks.ambientContext = teamContext;
+    workspaceScopeMocks.projectScope = {
+      loading: false,
+      scope: {
+        kind: 'team',
+        projectId: project.id,
+        workspaceId: teamContext.workspaceId,
+        visibility: 'team',
+        context: teamContext,
+      },
+    };
+    listConversations.mockResolvedValue([]);
+    projectCollabMocks.enabled = true;
+    projectCollabMocks.syncState = 'synced';
+    projectCollabMocks.viewerOnly = false;
+    projectCollabMocks.isOwner = true;
+    projectCollabMocks.writerAuthority = 'allowed';
+
+    renderProjectView(config, { ...project, workspaceId: teamContext.workspaceId });
+
+    await waitFor(() => expect(createConversation).toHaveBeenCalledTimes(1));
+    expect(createConversation).toHaveBeenCalledWith(
+      project.id,
+      undefined,
+      expect.objectContaining({ workspaceContext: teamContext }),
+    );
+  });
+
+  it('does not seed during unknown ownership even when provisional viewerOnly is false', async () => {
+    const teamContext = teamWorkspaceContext('workspace-team', 'member-team');
+    workspaceScopeMocks.ambientContext = teamContext;
+    workspaceScopeMocks.projectScope = {
+      loading: false,
+      scope: {
+        kind: 'team',
+        projectId: project.id,
+        workspaceId: teamContext.workspaceId,
+        visibility: 'team',
+        context: teamContext,
+      },
+    };
+    listConversations.mockResolvedValue([]);
+    projectCollabMocks.enabled = true;
+    projectCollabMocks.syncState = null;
+    projectCollabMocks.viewerOnly = false;
+    projectCollabMocks.isOwner = false;
+    projectCollabMocks.writerAuthority = 'pending';
+
+    const teamProject = { ...project, workspaceId: teamContext.workspaceId };
+    const view = renderProjectView(config, teamProject);
+
+    await waitFor(() => expect(listConversations).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(createConversation).not.toHaveBeenCalled();
+
+    projectCollabMocks.syncState = 'synced';
+    projectCollabMocks.viewerOnly = true;
+    projectCollabMocks.writerAuthority = 'denied';
+    view.rerender(projectViewElement(config, teamProject));
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(createConversation).not.toHaveBeenCalled();
+    expect(screen.queryByText('Could not create a conversation for this project.')).toBeNull();
   });
 
   it('blocks duplicate new conversations while creation is in flight', async () => {
@@ -3113,7 +3270,24 @@ function renderProjectView(
     onOpenAmrSettings?: () => void;
   } = {},
 ) {
-  return render(
+  return render(projectViewElement(renderConfig, renderProject, renderAgents, handlers));
+}
+
+function projectViewElement(
+  renderConfig = config,
+  renderProject: Project = project,
+  renderAgents: AgentInfo[] = [
+    { id: 'agent-1', name: 'OpenCode', bin: 'opencode', available: true, models: [] },
+    { id: 'byok-opencode', name: 'BYOK OpenCode', bin: 'opencode', available: true, models: [] },
+  ],
+  handlers: {
+    onModeChange?: (mode: 'daemon' | 'api') => void;
+    onAgentChange?: (agentId: string) => void;
+    onOpenSettings?: (section?: SettingsSection) => void;
+    onOpenAmrSettings?: () => void;
+  } = {},
+) {
+  return (
     <ProjectView
       project={renderProject}
       routeFileName={null}
@@ -3134,6 +3308,6 @@ function renderProjectView(
       onTouchProject={() => {}}
       onProjectChange={() => {}}
       onProjectsRefresh={() => {}}
-    />,
+    />
   );
 }

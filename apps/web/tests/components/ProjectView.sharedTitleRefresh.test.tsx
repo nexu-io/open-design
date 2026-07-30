@@ -188,6 +188,7 @@ function sharedMemberCollab(overrides?: Partial<ProjectCollab>): ProjectCollab {
     publishedVersion: 3,
     syncState: 'synced',
     viewerOnly: true,
+    writerAuthority: 'denied',
     isOwner: false,
     ownerDisplayName: 'Owner',
     ownerRole: 'owner',

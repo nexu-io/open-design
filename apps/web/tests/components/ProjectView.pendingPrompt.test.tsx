@@ -84,6 +84,19 @@ vi.mock('../../src/providers/project-events', () => ({
   useProjectFileEvents: vi.fn(),
 }));
 
+vi.mock('../../src/collab/useProjectWorkspaceScope', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/collab/useProjectWorkspaceScope')>()),
+  useProjectWorkspaceScope: (projectId: string) => ({
+    loading: false,
+    scope: {
+      kind: 'unbound',
+      projectId,
+      workspaceId: null,
+      context: null,
+    },
+  }),
+}));
+
 vi.mock('../../src/runtime/brands', async () => {
   const actual = await vi.importActual<typeof import('../../src/runtime/brands')>(
     '../../src/runtime/brands',

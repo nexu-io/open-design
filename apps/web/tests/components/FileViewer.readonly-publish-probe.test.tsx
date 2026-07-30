@@ -76,6 +76,7 @@ function renderProjectFileViewer(
     publishedVersion: null,
     syncState: null,
     viewerOnly: props.viewerOnly === true,
+    writerAuthority: props.viewerOnly === true ? 'denied' : 'allowed',
     isOwner: props.viewerOnly !== true,
     ownerDisplayName: null,
     ownerRole: null,

@@ -154,6 +154,9 @@ describe('useProjectCollab workspace-context seeding', () => {
     }));
     await waitFor(() => {
       expect(project.result.current.viewerOnly).toBe(false);
+      // Absence from a possibly stale catalog is enough to avoid a read-only
+      // flash, but not positive writer proof for server mutations.
+      expect(project.result.current.writerAuthority).toBe('pending');
     });
   });
 
@@ -169,6 +172,7 @@ describe('useProjectCollab workspace-context seeding', () => {
       workspaceContext: TEAM_CONTEXT,
     }));
     expect(project.result.current.viewerOnly).toBe(true);
+    expect(project.result.current.writerAuthority).toBe('pending');
   });
 
   // Issue #99 (rec:recvpZwaJNpVai): opening a project the viewer THEMSELVES
@@ -187,6 +191,7 @@ describe('useProjectCollab workspace-context seeding', () => {
       workspaceContext: TEAM_CONTEXT,
     }));
     expect(project.result.current.viewerOnly).toBe(false);
+    expect(project.result.current.writerAuthority).toBe('allowed');
   });
 
   it('still fails closed on the first read of a session, before any context is known', async () => {

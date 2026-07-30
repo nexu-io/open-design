@@ -173,6 +173,7 @@ import {
   loadTabs,
   patchConversation,
   patchProject,
+  ProjectConversationsHttpError,
   saveMessage,
   startGeneratedPluginShareTask,
   cacheTabsLocally,
@@ -348,7 +349,7 @@ function wait(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
-async function listConversationsWithRetry(
+export async function listConversationsWithRetry(
   projectId: string,
   workspaceContext?: WorkspaceCollabContext | null,
 ): Promise<Conversation[]> {
@@ -361,6 +362,17 @@ async function listConversationsWithRetry(
       });
     } catch (err) {
       lastError = err;
+      // A shared project may be visible in the catalog just before its local
+      // conversation materialization completes. Only that transient 404 earns
+      // the bounded retry window; auth/permission/request failures are settled
+      // and retrying them merely leaves the entire project in a loading state.
+      if (
+        !(err instanceof ProjectConversationsHttpError)
+        || err.status !== 404
+        || workspaceContext?.workspaceType !== 'team'
+      ) {
+        throw err;
+      }
       const delay = CONVERSATION_LOAD_RETRY_DELAYS_MS[attempt];
       if (delay === undefined) break;
       await wait(delay);
@@ -1559,7 +1571,7 @@ export function ProjectView({
   // The project's resolved scope when there is one. While that first read is
   // pending, the persisted project binding may witness the matching caller;
   // answered unavailable states deliberately do not borrow it.
-  const projectRunWorkspaceContext = runWorkspaceIdentity(
+  const resolvedProjectRunWorkspaceContext = runWorkspaceIdentity(
     projectWorkspaceScopeState,
     workspaceContext,
     project.workspaceId,
@@ -1569,7 +1581,27 @@ export function ProjectView({
   // authority carried by resource requests, not that object's allocation:
   // replacing an equivalent object must not blank conversations, messages,
   // tabs, or files while the same project remains open.
-  const projectRunAuthorityKey = workspaceIdentityCacheKey(projectRunWorkspaceContext);
+  const projectRunAuthorityKey = workspaceIdentityCacheKey(
+    resolvedProjectRunWorkspaceContext,
+  );
+  const canonicalProjectRunWorkspaceContextRef = useRef<{
+    authorityKey: string;
+    context: WorkspaceCollabContext | null;
+  }>({
+    authorityKey: projectRunAuthorityKey,
+    context: resolvedProjectRunWorkspaceContext,
+  });
+  if (
+    canonicalProjectRunWorkspaceContextRef.current.authorityKey
+    !== projectRunAuthorityKey
+  ) {
+    canonicalProjectRunWorkspaceContextRef.current = {
+      authorityKey: projectRunAuthorityKey,
+      context: resolvedProjectRunWorkspaceContext,
+    };
+  }
+  const projectRunWorkspaceContext =
+    canonicalProjectRunWorkspaceContextRef.current.context;
   const projectRunWorkspaceContextRef = useRef(projectRunWorkspaceContext);
   projectRunWorkspaceContextRef.current = projectRunWorkspaceContext;
   // The AMR pre-run balance gate uses the project's resolved scope, or the one
@@ -1664,8 +1696,6 @@ export function ProjectView({
     workspaceContextLoading: projectWorkspaceScopeState.loading,
     presenceFilePath: project?.metadata?.entryFile ?? null,
   });
-  const projectViewerOnlyRef = useRef(projectCollab.viewerOnly);
-  projectViewerOnlyRef.current = projectCollab.viewerOnly;
   // Stable references (useCallback with empty deps inside useCollab) — safe
   // for the project-events handler's dependency array without re-subscribing.
   const {
@@ -2311,12 +2341,19 @@ export function ProjectView({
     };
   }, [project.id, projectRunAuthorityKey]);
 
+  const emptyConversationWriterAuthorized =
+    projectWorkspaceScopeState.scope?.kind === 'personal'
+    || projectWorkspaceScopeState.scope?.kind === 'unbound'
+    || (
+      projectWorkspaceScopeState.scope?.kind === 'team'
+      && projectCollab.writerAuthority === 'allowed'
+    );
   useEffect(() => {
     if (
       !pendingEmptyConversationSeed
       || pendingEmptyConversationSeed.projectId !== project.id
       || pendingEmptyConversationSeed.authorityKey !== projectRunAuthorityKey
-      || projectViewerOnlyRef.current
+      || !emptyConversationWriterAuthorized
     ) {
       return;
     }
@@ -2350,8 +2387,8 @@ export function ProjectView({
     };
   }, [
     pendingEmptyConversationSeed,
+    emptyConversationWriterAuthorized,
     project.id,
-    projectCollab.viewerOnly,
     projectRunAuthorityKey,
   ]);
 
@@ -2660,7 +2697,11 @@ export function ProjectView({
   // We keep React state and the local cache IMMEDIATE (so the UI and a reload
   // are never stale) and coalesce only the daemon PUT.
   const tabsDaemonSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingDaemonTabsRef = useRef<OpenTabsState | null>(null);
+  const pendingDaemonTabsRef = useRef<{
+    projectId: string;
+    state: OpenTabsState;
+    workspaceContext: WorkspaceCollabContext | null;
+  } | null>(null);
   const flushTabsDaemonSave = useCallback(() => {
     if (tabsDaemonSaveTimerRef.current != null) {
       clearTimeout(tabsDaemonSaveTimerRef.current);
@@ -2670,12 +2711,12 @@ export function ProjectView({
     pendingDaemonTabsRef.current = null;
     if (pending) {
       void persistTabsToDaemonNow(
-        project.id,
-        pending,
-        projectRunWorkspaceContextRef.current,
+        pending.projectId,
+        pending.state,
+        pending.workspaceContext,
       );
     }
-  }, [project.id, projectRunAuthorityKey]);
+  }, []);
 
   const persistTabsState = useCallback(
     (next: OpenTabsState) => {
@@ -2685,9 +2726,13 @@ export function ProjectView({
       const stamped = cacheTabsLocally(
         project.id,
         next,
-        projectRunWorkspaceContextRef.current,
+        projectRunWorkspaceContext,
       );
-      pendingDaemonTabsRef.current = stamped;
+      pendingDaemonTabsRef.current = {
+        projectId: project.id,
+        state: stamped,
+        workspaceContext: projectRunWorkspaceContext,
+      };
       if (tabsDaemonSaveTimerRef.current != null) {
         clearTimeout(tabsDaemonSaveTimerRef.current);
       }
@@ -2697,19 +2742,22 @@ export function ProjectView({
         pendingDaemonTabsRef.current = null;
         if (pending) {
           void persistTabsToDaemonNow(
-            project.id,
-            pending,
-            projectRunWorkspaceContextRef.current,
+            pending.projectId,
+            pending.state,
+            pending.workspaceContext,
           );
         }
       }, TAB_PERSIST_DEBOUNCE_MS);
     },
-    [project.id, projectRunAuthorityKey],
+    [project.id, projectRunWorkspaceContext],
   );
 
   // Flush any pending tab write when the project changes or the view unmounts,
   // so a fast project switch / close doesn't leave the daemon a debounce behind.
-  useEffect(() => flushTabsDaemonSave, [flushTabsDaemonSave]);
+  useEffect(
+    () => flushTabsDaemonSave,
+    [flushTabsDaemonSave, project.id, projectRunAuthorityKey],
+  );
 
   const handleActiveWorkspaceContextChange = useCallback((next: WorkspaceContextItem | null) => {
     setActiveWorkspaceContext((current) =>

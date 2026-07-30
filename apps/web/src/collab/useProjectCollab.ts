@@ -171,6 +171,12 @@ export interface ProjectCollab {
    */
   viewerOnly: boolean;
   /**
+   * Positive project-writer authority for mutations that must not be inferred
+   * from `!viewerOnly`. `pending` covers the status window where the UI may
+   * provisionally remain editable but ownership has not been proven yet.
+   */
+  writerAuthority: 'allowed' | 'denied' | 'pending';
+  /**
    * Whether the viewer is this project's OWNER — the member who shared it (its
    * single writer). True only when the polled `ownerMemberId` explicitly matches
    * the current member; it fails closed during the status-load window and for
@@ -352,6 +358,19 @@ export function useProjectCollab(
   const sharedReadOnly =
     unknownStatusReadOnly || (shared && !isOwner) || lostAccessAfterUnshare;
   const viewerOnly = workspaceContextReadOnly || workspaceReadOnly || sharedReadOnly;
+  const writerAuthority: ProjectCollab['writerAuthority'] =
+    workspaceReadOnly || lostAccessAfterUnshare
+      ? 'denied'
+      : workspaceContextReadOnly
+        ? 'pending'
+        : isOwner
+          || knownOwnedByViewer
+          || createdByViewerThisSession
+          || collab.syncState === 'local_only'
+          ? 'allowed'
+          : shared
+            ? 'denied'
+            : 'pending';
 
   // Member content auto-sync (the last link): when a read-only member sees the
   // resource-hub head (`publishedVersion`) advance past what we last pulled,
@@ -480,6 +499,7 @@ export function useProjectCollab(
     publishedVersion: collab.publishedVersion,
     syncState: collab.syncState,
     viewerOnly,
+    writerAuthority,
     isOwner,
     ownerDisplayName: collab.ownerDisplayName,
     ownerRole: collab.ownerRole,

@@ -25,6 +25,7 @@ const DISABLED: CollabContextValue = {
   publishedVersion: null,
   syncState: null,
   viewerOnly: false,
+  writerAuthority: 'pending',
   isOwner: false,
   ownerDisplayName: null,
   ownerRole: null,

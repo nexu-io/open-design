@@ -624,6 +624,13 @@ export async function deleteProject(
 
 // ---------- conversations ----------
 
+export class ProjectConversationsHttpError extends Error {
+  constructor(readonly status: number) {
+    super(`conversations ${status}`);
+    this.name = 'ProjectConversationsHttpError';
+  }
+}
+
 export async function listConversations(
   projectId: string,
   options?: {
@@ -645,7 +652,7 @@ export async function listConversations(
             ? { headers: workspaceProjectHeaders(workspaceContext) }
             : undefined,
         );
-        if (!resp.ok) throw new Error(`conversations ${resp.status}`);
+        if (!resp.ok) throw new ProjectConversationsHttpError(resp.status);
         return (await resp.json()) as { conversations: Conversation[] };
       },
     );

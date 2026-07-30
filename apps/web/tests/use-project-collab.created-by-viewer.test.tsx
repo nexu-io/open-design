@@ -163,6 +163,7 @@ describe('useProjectCollab: project created by the viewer this session', () => {
     }));
 
     expect(project.result.current.viewerOnly).toBe(true);
+    expect(project.result.current.writerAuthority).toBe('pending');
   });
 
   it('does not fail closed for a project the viewer created this session, even before the team catalog loads', async () => {
@@ -177,6 +178,7 @@ describe('useProjectCollab: project created by the viewer this session', () => {
 
     await waitFor(() => {
       expect(project.result.current.viewerOnly).toBe(false);
+      expect(project.result.current.writerAuthority).toBe('allowed');
     });
   });
 

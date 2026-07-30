@@ -341,6 +341,7 @@ describe("DesignFilesPanel selection", () => {
           publishedVersion: null,
           syncState: null,
           viewerOnly: false,
+          writerAuthority: 'allowed',
           isOwner: true,
           ownerDisplayName: null,
           ownerRole: null,

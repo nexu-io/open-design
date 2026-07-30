@@ -230,6 +230,79 @@ describe('useProjectWorkspaceScope', () => {
     hook.unmount();
   });
 
+  it('revalidates and hides a stale scope when the same member authority changes', async () => {
+    const first = teamScope('project-role', 'workspace-role', 'member-role');
+    const second = deferred<Response>();
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(first), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }))
+      .mockReturnValueOnce(second.promise);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const initialCaller = first.scope.context as WorkspaceCollabContext;
+    const hook = renderHook(
+      ({ caller }) => useProjectWorkspaceScope(
+        'project-role',
+        caller,
+        caller.workspaceId,
+      ),
+      { initialProps: { caller: initialCaller } },
+    );
+
+    await waitFor(() => {
+      expect(hook.result.current.scope?.context).toMatchObject({
+        role: 'member',
+        permissions: { canWriteSyncedFiles: true },
+      });
+    });
+
+    const promotedCaller: WorkspaceCollabContext = {
+      ...initialCaller,
+      role: 'admin',
+      permissions: {
+        ...initialCaller.permissions,
+        canShareProjects: false,
+        canWriteSyncedFiles: false,
+      },
+    };
+    hook.rerender({ caller: promotedCaller });
+
+    expect(
+      hook.result.current,
+      'same member id with changed role/permissions must not expose the old scope',
+    ).toEqual({ loading: true, scope: null });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+
+    const promotedScope = teamScope(
+      'project-role',
+      'workspace-role',
+      'member-role',
+    );
+    if (promotedScope.scope.context) {
+      promotedScope.scope.context = {
+        ...promotedScope.scope.context,
+        role: 'admin',
+        permissions: promotedCaller.permissions,
+      };
+    }
+    second.resolve(new Response(JSON.stringify(promotedScope), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }));
+
+    await waitFor(() => {
+      expect(hook.result.current.scope?.context).toMatchObject({
+        role: 'admin',
+        permissions: {
+          canShareProjects: false,
+          canWriteSyncedFiles: false,
+        },
+      });
+    });
+  });
+
   it('distinguishes old-daemon, revoked and directory-outage failures', async () => {
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);

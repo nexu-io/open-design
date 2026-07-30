@@ -135,6 +135,7 @@ describe('useProjectCollab', () => {
 
     expect(result.current.enabled).toBe(false);
     expect(result.current.viewerOnly).toBe(true);
+    expect(result.current.writerAuthority).toBe('pending');
     // Permission controls still fail closed, but an unresolved context is not
     // proof that the daemon's local mirror is behind. Keep local files visible.
     expect(result.current.downloadPending).toBe(false);
@@ -216,6 +217,7 @@ describe('useProjectCollab', () => {
     });
 
     expect(result.current.viewerOnly).toBe(false);
+    expect(result.current.writerAuthority).toBe('allowed');
   });
 
   it('keeps a status-confirmed owner writable while project scope is revalidating after restart', async () => {
