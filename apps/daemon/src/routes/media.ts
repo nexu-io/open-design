@@ -794,9 +794,6 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
     if (!isLocalSameOrigin(req, getResolvedPort())) {
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
-    const taskId = req.params.id;
-    const task = getLiveMediaTask(taskId);
-    if (!task) return res.status(404).json({ error: 'task not found' });
     const authorizationHeader = req.get('authorization');
     // Once a caller chooses the tool-token lane, invalid, expired, or
     // under-scoped credentials must not downgrade to project authorization.
@@ -809,6 +806,20 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
         )
       : null;
     if (typeof authorizationHeader === 'string' && !toolGrant) return;
+    if (
+      toolGrant
+      && !await ctx.authorizeProjectToolRequest(
+        res,
+        toolGrant.projectId,
+        { mode: 'read' },
+      )
+    ) return;
+
+    // Token callers must prove fresh project authority before task lookup so
+    // a revoked member or an authority outage cannot probe task existence.
+    const taskId = req.params.id;
+    const task = getLiveMediaTask(taskId);
+    if (!task) return res.status(404).json({ error: 'task not found' });
     if (toolGrant) {
       if (requestProjectOverride(task.projectId, toolGrant.projectId)) {
         return sendApiError(

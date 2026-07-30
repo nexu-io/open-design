@@ -1,5 +1,5 @@
-import type http from 'node:http';
-import { afterEach, describe, expect, it } from 'vitest';
+import http from 'node:http';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import {
   closeDatabase,
@@ -13,12 +13,18 @@ import { toolTokenRegistry } from '../../src/tool-tokens.js';
 
 describe('media task route recovery', () => {
   let server: http.Server | null = null;
+  let authorityServer: http.Server | null = null;
 
   afterEach(async () => {
     if (server) {
       await new Promise<void>((resolve) => server?.close(() => resolve()));
       server = null;
     }
+    if (authorityServer) {
+      await new Promise<void>((resolve) => authorityServer?.close(() => resolve()));
+      authorityServer = null;
+    }
+    vi.unstubAllEnvs();
     toolTokenRegistry.clear();
     closeDatabase();
   });
@@ -192,6 +198,97 @@ describe('media task route recovery', () => {
         error: { code: expectedCode },
       });
     }
+  });
+
+  it('checks fresh tool authority before revealing whether a media task exists', async () => {
+    const dataDir = process.env.OD_DATA_DIR;
+    const db = openDatabase(process.cwd(), dataDir === undefined ? {} : { dataDir });
+    const projectId = `project_${randomUUID()}`;
+    const workspaceId = `workspace_${randomUUID()}`;
+    const now = Date.now();
+
+    insertProject(db, {
+      id: projectId,
+      name: 'Fresh-authority Team media project',
+      createdAt: now,
+      updatedAt: now,
+    });
+    ensureWorkspaceProject(db, {
+      projectId,
+      workspaceId,
+      visibility: 'team',
+      createdByWorkspaceMemberId: 'member-creator',
+    });
+    const token = toolTokenRegistry.mint({
+      projectId,
+      runId: `run_${randomUUID()}`,
+      allowedEndpoints: ['/api/media/tasks/:id/wait'],
+      allowedOperations: ['media:generate'],
+    }).token;
+    let authorityMode: 'active' | 'outage' | 'removed' = 'removed';
+    authorityServer = http.createServer((_req, res) => {
+      res.setHeader('content-type', 'application/json');
+      if (authorityMode === 'outage') {
+        res.statusCode = 503;
+        res.end(JSON.stringify({ error: 'authority unavailable' }));
+        return;
+      }
+      res.end(JSON.stringify({
+        items: [{
+          workspaceId,
+          workspaceName: 'Fresh authority workspace',
+          workspaceType: 'team',
+          workspaceMemberId: 'member-creator',
+          role: 'owner',
+          memberStatus: authorityMode === 'removed' ? 'removed' : 'active',
+          lifecycleState: 'active',
+        }],
+      }));
+    });
+    await new Promise<void>((resolve) => {
+      authorityServer?.listen(0, '127.0.0.1', resolve);
+    });
+    const authorityAddress = authorityServer.address();
+    if (!authorityAddress || typeof authorityAddress === 'string') {
+      throw new Error('authority server did not bind to a TCP port');
+    }
+    vi.stubEnv('OD_WORKSPACE_CONTEXT_SOURCE', 'vela');
+    vi.stubEnv('VELA_CONTROL_KEY', 'test-control-key');
+    vi.stubEnv('VELA_API_URL', `http://127.0.0.1:${authorityAddress.port}`);
+
+    const started = await startServer({ port: 0, returnServer: true }) as {
+      url: string;
+      server: http.Server;
+    };
+    server = started.server;
+    const waitForMissingTask = () => fetch(
+      `${started.url}/api/media/tasks/missing-task/wait`,
+      {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${token}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ since: 0, timeoutMs: 0 }),
+      },
+    );
+
+    const removed = await waitForMissingTask();
+    expect(removed.status).toBe(403);
+    await expect(removed.json()).resolves.toMatchObject({
+      error: { code: 'WORKSPACE_PROJECT_PERMISSION_DENIED' },
+    });
+
+    authorityMode = 'outage';
+    const unavailable = await waitForMissingTask();
+    expect(unavailable.status).toBe(503);
+    await expect(unavailable.json()).resolves.toMatchObject({
+      error: { code: 'WORKSPACE_AUTHORITY_UNAVAILABLE' },
+    });
+
+    authorityMode = 'active';
+    const authorized = await waitForMissingTask();
+    expect(authorized.status).toBe(404);
   });
 
   it('recovers a pre-restart running task so wait returns interrupted instead of 404', async () => {
