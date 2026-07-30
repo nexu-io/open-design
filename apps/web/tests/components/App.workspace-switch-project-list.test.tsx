@@ -88,7 +88,19 @@ vi.mock('../../src/components/ProjectView', async () => {
       projectViewLifecycle.renders(props);
       useEffect(() => {
         projectViewLifecycle.mounts();
-        return () => projectViewLifecycle.unmounts();
+        return () => {
+          projectViewLifecycle.unmounts();
+          const context = props.workspaceContextOverride;
+          void fetch(`/api/projects/${props.project.id}/collab/presence/leave`, {
+            method: 'POST',
+            headers: context
+              ? {
+                  'x-od-workspace-id': context.workspaceId,
+                  'x-od-workspace-member-id': context.workspaceMemberId,
+                }
+              : undefined,
+          });
+        };
       }, []);
       useEffect(() => {
         const context = props.workspaceContextOverride;
@@ -119,11 +131,6 @@ vi.mock('../../src/components/ProjectView', async () => {
     },
   };
 });
-
-vi.mock('../../src/components/WorkspaceTabsBar', () => ({
-  WorkspaceTabsBar: () => null,
-  openWorkspaceTab: () => {},
-}));
 
 vi.mock('../../src/components/pet/PetOverlay', () => ({
   PetOverlay: () => null,
@@ -259,6 +266,7 @@ describe('App project list across a workspace switch', () => {
     resetWorkspaceContextCache();
     resetTeamProjectsCache();
     resetCoalescedGet();
+    window.localStorage.clear();
     window.history.replaceState(null, '', '/');
     vi.mocked(daemonIsLive).mockResolvedValue(true);
     vi.mocked(fetchAgentsStream).mockResolvedValue([]);
@@ -359,6 +367,7 @@ describe('App project list across a workspace switch', () => {
     };
     let activeWorkspaceId = 'ws-a';
     const projectResourceRequests: Array<{ url: string; headers: Headers }> = [];
+    const presenceLeaveRequests: string[] = [];
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -370,6 +379,9 @@ describe('App project list across a workspace switch', () => {
             headers: new Headers(init?.headers),
           });
         }
+        if (pathname.endsWith('/collab/presence/leave')) {
+          presenceLeaveRequests.push(pathname);
+        }
         return new Response(JSON.stringify(
           pathname.endsWith('/workspace/directory')
             ? workspaceDirectoryFixture([
@@ -378,6 +390,13 @@ describe('App project list across a workspace switch', () => {
               ])
             : pathname.endsWith('/workspace/context')
               ? workspaceContextPayload(activeWorkspaceId)
+              : pathname.endsWith('/integrations/vela/status')
+                ? {
+                    loggedIn: true,
+                    profile: 'default',
+                    user: { id: 'user-1', email: 'owner@example.com' },
+                    configPath: '/test/config.json',
+                  }
               : {},
         ), {
           status: 200,
@@ -419,6 +438,7 @@ describe('App project list across a workspace switch', () => {
     expect(screen.getByTestId('project-view')).toBeTruthy();
     expect(projectViewLifecycle.mounts).toHaveBeenCalledTimes(1);
     expect(projectViewLifecycle.unmounts).not.toHaveBeenCalled();
+    expect(presenceLeaveRequests).toEqual([]);
     expect(window.location.pathname).toBe(`/projects/${boundProjectA.id}`);
     expect(projectViewLifecycle.renders.mock.lastCall?.[0]).toMatchObject({
       project: { id: boundProjectA.id, workspaceId: 'ws-a' },
@@ -443,6 +463,7 @@ describe('App project list across a workspace switch', () => {
     expect(screen.getByTestId('project-view')).toBeTruthy();
     expect(projectViewLifecycle.mounts).toHaveBeenCalledTimes(1);
     expect(projectViewLifecycle.unmounts).not.toHaveBeenCalled();
+    expect(presenceLeaveRequests).toEqual([]);
     expect(window.location.pathname).toBe(`/projects/${boundProjectA.id}`);
     expect(projectResourceRequests.every(
       (request) =>
@@ -644,6 +665,13 @@ describe('App project list across a workspace switch', () => {
               ])
             : pathname.endsWith('/workspace/context')
               ? workspaceContextPayload('ws-a')
+              : pathname.endsWith('/integrations/vela/status')
+                ? {
+                    loggedIn: true,
+                    profile: 'default',
+                    user: { id: 'user-1', email: 'owner@example.com' },
+                    configPath: '/test/config.json',
+                  }
               : {},
         ), {
           status: 200,

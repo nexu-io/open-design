@@ -3156,6 +3156,25 @@ function AppInner() {
     ? projectRouteWorkspaceContext.context
     : null;
   projectRouteWorkspaceContextRef.current = activeProjectWorkspaceContext;
+  // Project tabs belong to the project's persisted Workspace authority, not
+  // the shell's ambient selection. On a cold deep link the ambient context can
+  // settle (or switch A -> B) after the exact project scope has already loaded;
+  // handing that B key to WorkspaceTabsBar makes its legitimate scope-change
+  // cleanup navigate to B's saved Home tab, unmounting the healthy A project
+  // and emitting a misleading presence/leave. Keep tab reconciliation
+  // deferred until the project row + exact membership witness exist, then pin
+  // it to that Workspace. Truly unbound local projects retain the ambient
+  // account/workspace tab behavior.
+  const workspaceTabsIdentityScopeKey =
+    route.kind === 'project'
+      ? activeProject === null
+        ? null
+        : activeProject.workspaceId
+          ? activeProjectWorkspaceContext && identityScopeKey !== null
+            ? `${nextTabScopeAccountId}::${activeProjectWorkspaceContext.workspaceId}`
+            : null
+          : identityScopeKey
+      : identityScopeKey;
   const activeAuthoritativeProjectName =
     route.kind === 'project'
       ? authoritativeProjectNames[
@@ -3937,7 +3956,7 @@ function AppInner() {
           route={route}
           projects={projects}
           onboardingCompleted={config.onboardingCompleted === true}
-          identityScopeKey={identityScopeKey}
+          identityScopeKey={workspaceTabsIdentityScopeKey}
         />
         <div className="workspace-shell__body">
           {appMain}
