@@ -25,6 +25,11 @@ import {
   useProjectCollab,
 } from '../src/collab/useProjectCollab';
 import {
+  createProject,
+  duplicatePluginAsProject,
+  duplicateProject,
+} from '../src/state/projects';
+import {
   lastResolvedTeamProjects,
   resetTeamProjectsCache,
   resetWorkspaceContextCache,
@@ -93,6 +98,42 @@ function installFullyHangingFetch() {
   globalThis.fetch = vi.fn(async () => new Promise<Response>(() => {})) as typeof fetch;
 }
 
+function installProjectCreationFetch() {
+  globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+    const pathname = new URL(String(input), 'http://d.local').pathname;
+    if (pathname === '/api/projects') {
+      return Response.json({
+        project: { id: 'p-home-create' },
+        conversationId: 'conv-home-create',
+      });
+    }
+    if (pathname.endsWith('/duplicate')) {
+      return Response.json({
+        project: { id: 'p-duplicate' },
+        conversationId: 'conv-duplicate',
+        copiedFiles: [],
+      });
+    }
+    if (pathname.endsWith('/duplicate-project')) {
+      return Response.json({
+        ok: true,
+        projectId: 'p-plugin-duplicate',
+        conversationId: 'conv-plugin-duplicate',
+        relPath: 'index.html',
+        project: { id: 'p-plugin-duplicate' },
+        sourcePluginId: 'plugin-a',
+        sourceEntry: 'index.html',
+        copiedFiles: 1,
+        skippedFiles: 0,
+        warnings: [],
+      });
+    }
+    return new Promise<Response>(() => {
+      /* collab status and presence remain unresolved */
+    });
+  }) as typeof fetch;
+}
+
 const originalFetch = globalThis.fetch;
 
 beforeEach(() => {
@@ -137,6 +178,57 @@ describe('useProjectCollab: project created by the viewer this session', () => {
     await waitFor(() => {
       expect(project.result.current.viewerOnly).toBe(false);
     });
+  });
+
+  it('keeps a Home-created project writable while its exact project scope is still loading', async () => {
+    installProjectCreationFetch();
+    await createProject({
+      name: 'Home project',
+      skillId: null,
+      designSystemId: null,
+      workspaceContext: DEFAULT_TEAM_CONTEXT,
+    });
+
+    const project = renderHook(() => useProjectCollab('p-home-create', {
+      workspaceContext: DEFAULT_TEAM_CONTEXT,
+      workspaceContextLoading: true,
+    }));
+
+    expect(project.result.current.viewerOnly).toBe(false);
+  });
+
+  it('keeps a duplicated project writable while its exact project scope is still loading', async () => {
+    installProjectCreationFetch();
+    await duplicateProject('p-source', {}, DEFAULT_TEAM_CONTEXT);
+
+    const project = renderHook(() => useProjectCollab('p-duplicate', {
+      workspaceContext: DEFAULT_TEAM_CONTEXT,
+      workspaceContextLoading: true,
+    }));
+
+    expect(project.result.current.viewerOnly).toBe(false);
+  });
+
+  it('keeps a template Remix writable while its exact project scope is still loading', async () => {
+    installProjectCreationFetch();
+    await duplicatePluginAsProject('plugin-a', {}, DEFAULT_TEAM_CONTEXT);
+
+    const project = renderHook(() => useProjectCollab('p-plugin-duplicate', {
+      workspaceContext: DEFAULT_TEAM_CONTEXT,
+      workspaceContextLoading: true,
+    }));
+
+    expect(project.result.current.viewerOnly).toBe(false);
+  });
+
+  it('keeps an unmarked project fail-closed while exact project scope is loading', async () => {
+    installFullyHangingFetch();
+    const project = renderHook(() => useProjectCollab('p-not-created-here', {
+      workspaceContext: DEFAULT_TEAM_CONTEXT,
+      workspaceContextLoading: true,
+    }));
+
+    expect(project.result.current.viewerOnly).toBe(true);
   });
 
   it('scopes the signal to the exact project id — an unrelated project still fails closed', async () => {

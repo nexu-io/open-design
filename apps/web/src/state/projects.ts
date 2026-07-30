@@ -418,7 +418,9 @@ export async function duplicateProject(
       }
       throw new Error(message);
     }
-    return (await resp.json()) as DuplicateProjectResponse;
+    const created = (await resp.json()) as DuplicateProjectResponse;
+    markProjectCreatedByViewer(created.project.id, workspaceContext ?? null);
+    return created;
   } catch (err) {
     throw err instanceof Error ? err : new Error('Could not duplicate project');
   }
@@ -1252,6 +1254,7 @@ export async function duplicatePluginAsProject(
   if (!json?.ok || !json.projectId) {
     throw new Error('Could not duplicate this template.');
   }
+  markProjectCreatedByViewer(json.projectId, workspaceContext ?? null);
   return json;
 }
 

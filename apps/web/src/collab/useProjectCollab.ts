@@ -261,6 +261,15 @@ export function useProjectCollab(
   const shared = collab.syncState !== 'local_only' && collab.syncState !== null;
   const collabEnabled = decision.enabled && (statusUnknown || shared);
   const isOwner = collab.ownerMemberId != null && collab.ownerMemberId === context?.workspaceMemberId;
+  // A project this browser tab created moments ago was not shared at create
+  // time. Scope the signal to the exact Workspace identity used by the create
+  // request so switching to a different Workspace with the same project id
+  // cannot inherit it.
+  const createdByViewerThisSession =
+    Boolean(projectId)
+    && projectScopesCreatedByViewerThisSession.has(
+      projectCreationScopeKey(projectId as string, context),
+    );
   // Context loading is not the same as confirmed off-team. Fail closed during
   // the initial workspace-context request so an already-pulled shared project
   // never flashes writable controls before B confirms the current member.
@@ -269,7 +278,10 @@ export function useProjectCollab(
   // a concurrent project-scope revalidation must not demote that owner to a
   // viewer until the redundant read settles.
   const workspaceContextReadOnly =
-    Boolean(projectId) && workspaceContextLoading && !isOwner;
+    Boolean(projectId)
+    && workspaceContextLoading
+    && !isOwner
+    && !createdByViewerThisSession;
   // A project the hub catalog does not list cannot be shared, so the unknown
   // window does not have to fail closed for it. That window is why a member's
   // OWN fresh private draft flashed the "这是共享项目" read-only banner before
@@ -300,16 +312,9 @@ export function useProjectCollab(
     && knownCatalog.some(
       (entry) => entry.projectId === projectId && entry.ownerMemberId === context.workspaceMemberId,
     );
-  // A project this browser tab created moments ago was not shared at create
-  // time. This covers the UNKNOWN window `knownUnshared` cannot: right after
-  // creation the project is not in the team catalog yet. Scope the signal to
-  // the exact Workspace identity used by the create request so switching to a
-  // different Workspace with the same project id cannot inherit it.
-  const createdByViewerThisSession =
-    Boolean(projectId)
-    && projectScopesCreatedByViewerThisSession.has(
-      projectCreationScopeKey(projectId as string, context),
-    );
+  // The same-session creation signal also covers the UNKNOWN status window
+  // `knownUnshared` cannot: right after creation the project is not in the team
+  // catalog yet.
   // Once `/collab/status` has EXPLICITLY confirmed this project belongs to
   // someone else (shared && !isOwner), remember it for as long as this
   // component stays mounted on this projectId. The owner unsharing later
