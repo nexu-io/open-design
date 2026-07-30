@@ -374,6 +374,59 @@ describe('classifyRunFailure', () => {
     });
   });
 
+  it('does not let an unrelated fragment corroborate the fallback back into a hard quota', () => {
+    // `collectFailureText` joins up to 24 unrelated messages with '\n'. If the
+    // corroboration rule is applied to that joined string, any *other* fragment
+    // mentioning a plan or a payment vouches for the bare `quota` sitting in the
+    // empty-output fallback — and the run is suppressed from retrying again.
+    // Corroboration has to hold within a single collected fragment.
+    for (const unrelated of [
+      'Switched to the fallback plan for this workspace.',
+      'Your payment details were updated 3 days ago.',
+      'Restored session from the previous billing period snapshot.',
+    ]) {
+      expect(
+        classify('AGENT_EXECUTION_FAILED', EMPTY_OUTPUT_FALLBACK, [
+          errorEvent('AGENT_EXECUTION_FAILED', EMPTY_OUTPUT_FALLBACK),
+          errorEvent('AGENT_EXECUTION_FAILED', unrelated),
+        ]),
+        unrelated,
+      ).toMatchObject({
+        failure_category: 'empty_output',
+        failure_detail: 'empty_output',
+      });
+    }
+
+    // Same boundary for the exhaustion collocations: `\s+` matches the '\n' the
+    // fragments are joined with, so a message ending in `quota` must not pair up
+    // with the next message starting in `exceeded`.
+    expect(
+      classify('AGENT_EXECUTION_FAILED', EMPTY_OUTPUT_FALLBACK, [
+        errorEvent('AGENT_EXECUTION_FAILED', 'Reported usage against the quota'),
+        errorEvent('AGENT_EXECUTION_FAILED', 'exceeded the configured step budget'),
+      ]),
+    ).toMatchObject({
+      failure_category: 'empty_output',
+      failure_detail: 'empty_output',
+    });
+
+    // …while a fragment that corroborates *itself* still classifies, even when
+    // it arrives alongside the fallback.
+    expect(
+      classify('AGENT_EXECUTION_FAILED', EMPTY_OUTPUT_FALLBACK, [
+        errorEvent('AGENT_EXECUTION_FAILED', EMPTY_OUTPUT_FALLBACK),
+        errorEvent(
+          'AGENT_EXECUTION_FAILED',
+          'You exceeded your current quota, please check your plan and billing details.',
+        ),
+      ]),
+    ).toMatchObject({
+      failure_category: 'rate_limit',
+      failure_detail: 'hard_quota',
+      retryable: false,
+    });
+  });
+
   it('still treats a real quota exhaustion as a hard quota', () => {
     // The word `quota` alone must not be the trigger, but a corroborated quota
     // message still has to classify — otherwise this fix trades one silent

@@ -151,7 +151,7 @@ function inferFailureStageFromEvents(
   return fallback;
 }
 
-function collectFailureText(input: RunFailureClassificationInput): string {
+function collectFailureParts(input: RunFailureClassificationInput): string[] {
   const parts: string[] = [];
   const statusError = readString(input.status.error);
   if (statusError) parts.push(statusError);
@@ -166,7 +166,11 @@ function collectFailureText(input: RunFailureClassificationInput): string {
       parts.push(...eventStderrText(rec.data));
     }
   }
-  return parts.join('\n');
+  return parts;
+}
+
+function collectFailureText(input: RunFailureClassificationInput): string {
+  return collectFailureParts(input).join('\n');
 }
 
 // A bare `quota` alternative used to live in the alternation below, which made
@@ -183,7 +187,14 @@ function collectFailureText(input: RunFailureClassificationInput): string {
 // integrations/vela-errors.ts requires one of wallet/balance/credit/billing/funds
 // alongside `quota`. Phrases that are unambiguous on their own (session limit,
 // insufficient quota, exceeded your current quota…) keep matching directly.
-function isHardQuotaText(text: string): boolean {
+//
+// Evaluated per collected fragment, never over the joined text. `collectFailureText`
+// concatenates up to 24 unrelated messages with '\n', so whole-text corroboration
+// would let *any* fragment mentioning a plan or payment vouch for a bare `quota`
+// sitting in a different one — which is precisely how the empty-output fallback
+// would find its way back to `hard_quota`. Fragment scope also keeps the `\s+`
+// in the adjacency patterns below from bridging two messages across the join.
+function isHardQuotaFragment(text: string): boolean {
   if (/\b(session limit|usage limit|limit reached|billing (?:hard )?limit|insufficient[ _-]?(?:quota|credit|credits|funds)|exceeded your current quota|out of credits|no payment method|requires more credits|can only afford)\b|DAILY_LIMIT_EXCEEDED|用户额度不足|额度不足|预扣费额度失败/i
     .test(text)) {
     return true;
@@ -201,6 +212,10 @@ function isHardQuotaText(text: string): boolean {
   }
   return /\bquota\b/i.test(text) &&
     /\b(wallet|balance|credits?|billing|funds?|payment|plan)\b/i.test(text);
+}
+
+function isHardQuotaText(parts: string[]): boolean {
+  return parts.some(isHardQuotaFragment);
 }
 
 // A transient, retryable rate limit (distinct from a hard quota). vela/upstream
@@ -696,7 +711,11 @@ function classifyRunFailureBase(
   }
 
   const errorCode = normalizeCode(input.errorCode ?? input.status.errorCode);
-  const text = collectFailureText({ ...input, events });
+  // `events` is the attempt-scoped view (#6598), so the fragments are collected
+  // from it rather than from `input.events` — the quota matcher below runs per
+  // fragment and must see the same attempt the rest of this call classifies.
+  const parts = collectFailureParts({ ...input, events });
+  const text = parts.join('\n');
   const retryableHint = latestRetryable(events);
   const amrFailure = classifyAmrAccountFailure(text);
   const byokOpenCodeProviderNotFound = isByokOpenCodeProviderNotFoundText(
@@ -870,8 +889,8 @@ function classifyRunFailureBase(
     );
   }
 
-  if (errorCode === 'RATE_LIMITED' || serviceFailure === 'RATE_LIMITED' || isHardQuotaText(text) || isRateLimitText(text)) {
-    const hardQuota = isHardQuotaText(text);
+  const hardQuota = isHardQuotaText(parts);
+  if (errorCode === 'RATE_LIMITED' || serviceFailure === 'RATE_LIMITED' || hardQuota || isRateLimitText(text)) {
     const workspaceCredits = isWorkspaceCreditsText(text);
     const retryable = hardQuota ? false : (retryableHint ?? true);
     return classification(
