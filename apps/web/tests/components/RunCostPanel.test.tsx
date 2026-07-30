@@ -25,6 +25,9 @@ function report(overrides: Partial<RunCostReport> = {}): RunCostReport {
     // The daemon only ever hands the panel a per-call report; an aggregate log
     // is gated into `report: null` before it reaches the wire.
     usageScope: 'per-call',
+    // Matches the fixture's own frames: cache reads (12k/34k) exceed inputs
+    // (900/500), which is impossible under inclusive accounting.
+    usageConvention: 'additive',
     steps: [
       { index: 0, contextTokens: 12_000, cacheWriteTokens: 4_000, inputTokens: 900, outputTokens: 300, gapMs: null, incremental: true },
       { index: 1, contextTokens: 34_000, cacheWriteTokens: 0, inputTokens: 500, outputTokens: 200, gapMs: 1_200, incremental: false },

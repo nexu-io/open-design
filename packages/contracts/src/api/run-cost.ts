@@ -32,8 +32,11 @@
  * them. Callers supply already-parsed JSONL lines.
  */
 import {
+  detectUsageAccountingConvention,
   extractUsageCacheFields,
-  resolveEffectiveInputTokens,
+  uncachedInputForConvention,
+  type UsageAccountingConvention,
+  type UsageCacheFields,
 } from './usage-accounting.js';
 
 /** Per-million-token prices used to turn token counts into dollars. */
@@ -205,6 +208,13 @@ export interface RunCostReport {
    * rather than second-guessing the numbers.
    */
   usageScope: RunCostUsageScope;
+  /**
+   * Which `input_tokens` convention the run's provider was read under. Surfaced
+   * because it changes the uncached-input term materially and is otherwise
+   * invisible: diagnosing a suspicious figure meant reconstructing this by hand
+   * from the raw frames.
+   */
+  usageConvention: UsageAccountingConvention;
   steps: RunCostStep[];
   terms: RunCostTerms;
   usd: RunCostUsd;
@@ -392,6 +402,9 @@ export function analyzeRunCost(
   let lastTimestamp: number | null = null;
   // Scope discriminator inputs. See `detectUsageScope`.
   let toolUseFrames = 0;
+  // Raw cache fields per usage frame, parallel to `steps`. Held so the
+  // additive-vs-inclusive convention can be settled across the whole run.
+  const usageFields: UsageCacheFields[] = [];
 
   for (const line of Array.isArray(lines) ? lines : []) {
     const data = eventPayload(line);
@@ -403,23 +416,19 @@ export function analyzeRunCost(
       if (!usage) continue;
       const timestamp = isRecord(line) && typeof line.timestamp === 'number' ? line.timestamp : null;
       // Read through the shared provider matrix, never off literal field names:
-      // Anthropic ships `cache_read_input_tokens` and additive `input_tokens`,
-      // OpenAI-style runtimes ship `cached_input_tokens` and inclusive
-      // `input_tokens`. `resolveEffectiveInputTokens` returns `undefined` for
-      // uncached input when the provider gave no split to derive it from; the
-      // raw input figure is the honest fallback there.
+      // Anthropic ships `cache_read_input_tokens`, OpenAI-style runtimes ship
+      // `cached_input_tokens`, and a raw lookup reports zero for both.
+      //
+      // `inputTokens` is filled in AFTER the loop: whether `input_tokens` is
+      // additive or inclusive is a property of the provider, so it takes every
+      // frame of the run to decide and cannot be settled one frame at a time.
       const fields = extractUsageCacheFields(usage);
-      const { uncachedInput } = resolveEffectiveInputTokens(
-        fields.inputTokens,
-        fields.cacheReadInputTokens,
-        fields.cacheCreationInputTokens,
-        fields.cacheTokenSource,
-      );
+      usageFields.push(fields);
       steps.push({
         index: steps.length,
         contextTokens: fields.cacheReadInputTokens ?? 0,
         cacheWriteTokens: fields.cacheCreationInputTokens ?? 0,
-        inputTokens: uncachedInput ?? fields.inputTokens ?? 0,
+        inputTokens: 0,
         outputTokens: fields.outputTokens ?? 0,
         gapMs: timestamp !== null && lastTimestamp !== null ? timestamp - lastTimestamp : null,
         incremental: false,
@@ -467,6 +476,18 @@ export function analyzeRunCost(
         seenInputs.add(key);
       }
     }
+  }
+
+  // --- Uncached input, once the whole run has been seen --------------------
+  // Deciding this per frame gives one run two answers: a first call with a
+  // barely-warm cache looks inclusive even when the provider is additive. See
+  // `detectUsageAccountingConvention`.
+  const usageConvention = detectUsageAccountingConvention(usageFields);
+  for (let i = 0; i < steps.length; i += 1) {
+    const step = steps[i];
+    const fields = usageFields[i];
+    if (!step || !fields) continue;
+    step.inputTokens = uncachedInputForConvention(fields, usageConvention);
   }
 
   // --- Cache health and anomalies -----------------------------------------
@@ -587,6 +608,7 @@ export function analyzeRunCost(
 
   return {
     usageScope: detectUsageScope({ usageFrames: steps.length, toolUseFrames }),
+    usageConvention,
     steps,
     terms,
     usd,

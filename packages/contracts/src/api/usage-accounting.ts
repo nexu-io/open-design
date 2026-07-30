@@ -146,6 +146,58 @@ export function extractUsageCacheFields(
   };
 }
 
+/** Which convention a provider reports `input_tokens` under. */
+export type UsageAccountingConvention = 'additive' | 'inclusive';
+
+/**
+ * Resolve the convention for a WHOLE RUN from all of its usage frames.
+ *
+ * WHY NOT PER FRAME. The convention is a property of the provider, not of an
+ * individual call, so deciding it per frame can hand one run two different
+ * answers. That is not hypothetical: on a real OpenCode run the first call
+ * reported `input_tokens: 84,212` against `cached_read_tokens: 3,072` — a large
+ * fresh prompt against a barely-warm cache — which reads as inclusive and had
+ * 3,072 genuinely-paid tokens subtracted from it, while calls 2 and 3
+ * (`564` input against `104,448` cached) were correctly read as additive.
+ *
+ * The run-level inference is sound because the discriminator is an impossibility
+ * proof, not a guess: under inclusive accounting the cache-read figure is a
+ * SUBSET of `input_tokens`, so `read > input` cannot occur. One frame exhibiting
+ * it proves the provider is additive, and every other frame of that run —
+ * including a first call whose cache had not warmed up yet — inherits it.
+ */
+export function detectUsageAccountingConvention(
+  frames: readonly UsageCacheFields[],
+): UsageAccountingConvention {
+  for (const fields of frames) {
+    // Anthropic is additive by field shape, whatever the magnitudes say.
+    if (fields.cacheTokenSource === 'anthropic') return 'additive';
+    if (
+      fields.inputTokens !== undefined &&
+      fields.cacheReadInputTokens !== undefined &&
+      fields.cacheReadInputTokens > fields.inputTokens
+    ) {
+      return 'additive';
+    }
+  }
+  return 'inclusive';
+}
+
+/**
+ * Input tokens NOT served from cache for one frame, under a run-level
+ * convention. Additive payloads already report the uncached remainder; inclusive
+ * ones carry the cached subset inside `input_tokens` and must have it removed.
+ */
+export function uncachedInputForConvention(
+  fields: UsageCacheFields,
+  convention: UsageAccountingConvention,
+): number {
+  const input = fields.inputTokens ?? 0;
+  if (convention === 'additive') return input;
+  const read = fields.cacheReadInputTokens;
+  return read === undefined ? input : Math.max(0, input - read);
+}
+
 export interface EffectiveInputTokens {
   // The cache-inclusive prompt size, the denominator a cache-hit ratio divides
   // into. `undefined` when there is no input figure to anchor on.

@@ -419,6 +419,55 @@ describe('analyzeRunCost — provider accounting', () => {
     expect(step.inputTokens).toBe(60);
   });
 
+  it('settles the convention across the run, not per frame', () => {
+    // REGRESSION, from a live OpenCode run (2b339c63). Deciding per frame gave
+    // this ONE run two answers: call 1 pairs a large fresh prompt (84,212)
+    // against a barely-warm cache (3,072), which reads as inclusive, so 3,072
+    // genuinely-paid tokens were subtracted from it — while calls 2 and 3 were
+    // correctly read as additive.
+    //
+    // Calls 2 and 3 prove the provider is additive (a cache-read subset cannot
+    // exceed the input it is a subset of), so call 1 must inherit that.
+    const report = analyzeRunCost([
+      rawUsageEvent({ input_tokens: 84_212, output_tokens: 70, cached_read_tokens: 3_072 }),
+      rawUsageEvent({ input_tokens: 17_265, output_tokens: 199, cached_read_tokens: 87_232 }),
+      rawUsageEvent({ input_tokens: 564, output_tokens: 68, cached_read_tokens: 104_448 }),
+    ]);
+
+    expect(report.usageConvention).toBe('additive');
+    // Not one token subtracted from any of the three.
+    expect(report.steps.map((s) => s.inputTokens)).toEqual([84_212, 17_265, 564]);
+    expect(report.terms.uncachedInputTokens).toBe(102_041);
+  });
+
+  it('cross-checks the additive reading against the run own context curve', () => {
+    // Independent confirmation that additive is the right reading here: under it,
+    // call 1's effective context is 84,212 + 3,072 = 87,284, and call 2 re-reads
+    // 87,232 from cache. Those agree within 52 tokens. Under the inclusive
+    // reading call 1 holds only 84,212 and 3,020 tokens appear from nowhere.
+    const report = analyzeRunCost([
+      rawUsageEvent({ input_tokens: 84_212, cached_read_tokens: 3_072 }),
+      rawUsageEvent({ input_tokens: 17_265, cached_read_tokens: 87_232 }),
+    ]);
+
+    const first = report.steps[0]!;
+    const effectiveContext = first.inputTokens + first.contextTokens;
+    expect(Math.abs(effectiveContext - report.steps[1]!.contextTokens)).toBeLessThan(100);
+  });
+
+  it('keeps a single inclusive frame inclusive when nothing disproves it', () => {
+    // No frame violates `read <= input`, so the inclusive reading stands and the
+    // cached subset is still removed. This is the case the run-level rule must
+    // NOT break.
+    const report = analyzeRunCost([
+      rawUsageEvent({ input_tokens: 400, cached_read_tokens: 120 }),
+      rawUsageEvent({ input_tokens: 900, cached_read_tokens: 300 }),
+    ]);
+
+    expect(report.usageConvention).toBe('inclusive');
+    expect(report.steps.map((s) => s.inputTokens)).toEqual([280, 600]);
+  });
+
   it('keeps the already-normalized OpenCode shape working unchanged', () => {
     const report = analyzeRunCost([
       rawUsageEvent({
@@ -498,6 +547,11 @@ describe('analyzeRunCost — usage scope', () => {
 
     expect(report.usageScope).toBe('per-call');
     expect(report.steps.map((s) => s.contextTokens)).toEqual([1_792, 28_864]);
+    // Call 2 (9,338 input against 28,864 cached) proves the provider additive,
+    // so call 1 keeps all 27,138 of its input rather than losing 1,792 to an
+    // inclusive reading it never earned.
+    expect(report.usageConvention).toBe('additive');
+    expect(report.terms.uncachedInputTokens).toBe(36_476);
   });
 
   it('reads interleaved frames as per-call', () => {
