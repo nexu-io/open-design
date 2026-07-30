@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createCachedWorkspaceDirectoryFetcher,
+  createFreshWorkspaceDirectoryFetcher,
   createVelaWorkspaceContextProvider,
   fetchVelaWorkspaceDirectory,
   mapVelaWorkspaceContext,
@@ -220,6 +221,55 @@ describe('createCachedWorkspaceDirectoryFetcher', () => {
 
     reads[1]!.resolve({ ok: true, items: [] });
     await expect(accountB).resolves.toEqual({ ok: true, items: [] });
+  });
+});
+
+describe('createFreshWorkspaceDirectoryFetcher', () => {
+  it('isolates in-flight mutation authority reads by session and never caches a settled result', async () => {
+    let identity = 'account-a';
+    const reads: Array<{
+      identity: string;
+      resolve: (result: { ok: true; items: [] }) => void;
+    }> = [];
+    const fetchDirectory = vi.fn(
+      () =>
+        new Promise<{ ok: true; items: [] }>((resolve) => {
+          reads.push({ identity, resolve });
+        }),
+    );
+    const read = createFreshWorkspaceDirectoryFetcher({
+      fetchDirectory,
+      identityKey: () => identity,
+    });
+
+    const accountA = read();
+    const concurrentAccountA = read();
+    expect(concurrentAccountA).toBe(accountA);
+    expect(fetchDirectory).toHaveBeenCalledTimes(1);
+
+    identity = 'account-b';
+    const accountB = read();
+    expect(fetchDirectory).toHaveBeenCalledTimes(2);
+    expect(reads.map((entry) => entry.identity)).toEqual(['account-a', 'account-b']);
+
+    reads[0]!.resolve({ ok: true, items: [] });
+    await expect(accountA).resolves.toEqual({ ok: true, items: [] });
+    await expect(concurrentAccountA).resolves.toEqual({ ok: true, items: [] });
+    let accountBResolved = false;
+    void accountB.then(() => {
+      accountBResolved = true;
+    });
+    await Promise.resolve();
+    expect(accountBResolved).toBe(false);
+
+    reads[1]!.resolve({ ok: true, items: [] });
+    await expect(accountB).resolves.toEqual({ ok: true, items: [] });
+
+    const freshAccountB = read();
+    expect(fetchDirectory).toHaveBeenCalledTimes(3);
+    expect(reads[2]!.identity).toBe('account-b');
+    reads[2]!.resolve({ ok: true, items: [] });
+    await expect(freshAccountB).resolves.toEqual({ ok: true, items: [] });
   });
 });
 

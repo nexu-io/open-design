@@ -582,6 +582,33 @@ export function createCachedWorkspaceDirectoryFetcher(options: {
   };
 }
 
+/**
+ * Mutation authorization must not reuse a settled directory result, but
+ * concurrent checks from the same Vela session may share one authority read.
+ * Partitioning the in-flight request by session identity prevents an account
+ * switch from authorizing account B with account A's membership directory.
+ */
+export function createFreshWorkspaceDirectoryFetcher(options: {
+  fetchDirectory?: () => Promise<WorkspaceDirectoryFetchResult>;
+  identityKey?: () => string;
+} = {}): () => Promise<WorkspaceDirectoryFetchResult> {
+  const fetchDirectory =
+    options.fetchDirectory ?? (() => fetchVelaWorkspaceDirectory());
+  const identityKey = options.identityKey ?? velaWorkspaceDirectoryIdentity;
+  const inFlight = new Map<string, Promise<WorkspaceDirectoryFetchResult>>();
+
+  return () => {
+    const identity = identityKey();
+    const pending = inFlight.get(identity);
+    if (pending) return pending;
+    const request = fetchDirectory().finally(() => {
+      if (inFlight.get(identity) === request) inFlight.delete(identity);
+    });
+    inFlight.set(identity, request);
+    return request;
+  };
+}
+
 export async function fetchVelaWorkspaceDirectory(
   options: VelaWorkspaceContextOptions = {},
 ): Promise<WorkspaceDirectoryFetchResult> {

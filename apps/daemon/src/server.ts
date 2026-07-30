@@ -724,6 +724,7 @@ import {
 } from './runtimes/project-amr-trace-env.js';
 import {
   createCachedWorkspaceDirectoryFetcher,
+  createFreshWorkspaceDirectoryFetcher,
   createWorkspaceContextProviderFromEnv,
   fetchVelaWorkspaceDirectory,
   workspaceContextFromDirectoryItem,
@@ -2860,20 +2861,14 @@ export async function startServer({
       return result;
     },
   });
-  let mutationWorkspaceDirectoryInFlight:
-    | ReturnType<typeof fetchVelaWorkspaceDirectory>
-    | null = null;
-  const fetchFreshMutationWorkspaceDirectory = () => {
-    mutationWorkspaceDirectoryInFlight ??= fetchVelaWorkspaceDirectory()
-      .then((result) => {
+  const fetchFreshMutationWorkspaceDirectory =
+    createFreshWorkspaceDirectoryFetcher({
+      fetchDirectory: async () => {
+        const result = await fetchVelaWorkspaceDirectory();
         if (result.ok) workspaceTypes.learn(result.items);
         return result;
-      })
-      .finally(() => {
-        mutationWorkspaceDirectoryInFlight = null;
-      });
-    return mutationWorkspaceDirectoryInFlight;
-  };
+      },
+    });
   const verifyExplicitWorkspaceRequestContext = async (input: {
     req: any;
     requireTeam?: boolean;
