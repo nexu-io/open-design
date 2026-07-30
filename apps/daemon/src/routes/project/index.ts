@@ -169,6 +169,7 @@ export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | '
   onCommentsRead?: (
     projectId: string,
     context: WorkspaceCollabContext | null,
+    resolveFreshWorkspaceContext: () => Promise<ProjectCommentWorkspaceContextResolution>,
   ) => void;
   /**
    * What the daemon has learned about each workspace's type, used to refuse a

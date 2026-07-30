@@ -6177,24 +6177,45 @@ export async function startServer({
     },
     ...(collabCloud
       ? {
-          onCommentsRead: (projectId, context) => {
+          onCommentsRead: (
+            projectId,
+            leasedContext,
+            resolveFreshWorkspaceContext,
+          ) => {
             // Consume the hub push channel's dirty mark: first read after
             // opening a project pulls THAT project's missed comments — a
             // targeted pull, because the poll loop only covers projects with
             // a live events subscriber and this read can arrive before (or
             // without) one.
             if (dirtyCommentProjects.delete(projectId)) {
-              // Same unredeemed-mark rule as the hub `comment-changed`
-              // handler: a pull that no-oped (identity/conversation not
-              // ready yet) or failed must put the mark back, so the next
-              // read retries the targeted pull.
-              if (!context) {
+              // The list response may use a short successful authority lease,
+              // but the cloud pull mutates local state and therefore must
+              // independently prove the same exact member and Workspace with
+              // fresh authority. Any denial, outage, identity drift, no-op, or
+              // failure restores the dirty mark for a later authorized read.
+              if (!leasedContext) {
                 dirtyCommentProjects.add(projectId);
                 return;
               }
-              void collabCloud.pullProject(projectId, context).then((pulled) => {
-                if (!pulled) dirtyCommentProjects.add(projectId);
-              }).catch(() => dirtyCommentProjects.add(projectId));
+              void resolveFreshWorkspaceContext()
+                .then((freshResolution) => {
+                  if (!freshResolution.ok || !freshResolution.context) {
+                    return false;
+                  }
+                  const freshContext = freshResolution.context;
+                  if (
+                    freshContext.workspaceId !== leasedContext.workspaceId
+                    || freshContext.workspaceMemberId
+                      !== leasedContext.workspaceMemberId
+                  ) {
+                    return false;
+                  }
+                  return collabCloud.pullProject(projectId, freshContext);
+                })
+                .then((pulled) => {
+                  if (!pulled) dirtyCommentProjects.add(projectId);
+                })
+                .catch(() => dirtyCommentProjects.add(projectId));
             }
           },
           // Both hooks also reconcile pin_seq (recvq5BVsolIxi): a genuinely

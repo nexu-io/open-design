@@ -134,6 +134,7 @@ export interface RegisterProjectCommentRoutesDeps extends RouteDeps<'db' | 'proj
   onCommentsRead?: (
     projectId: string,
     context: WorkspaceCollabContext | null,
+    resolveFreshWorkspaceContext: () => Promise<ProjectCommentWorkspaceContextResolution>,
   ) => void;
 }
 
@@ -326,7 +327,11 @@ export function registerProjectCommentRoutes(app: Express, ctx: RegisterProjectC
     if (!workspaceResolution.ok) {
       return sendWorkspaceResolutionError(res, workspaceResolution);
     }
-    ctx.onCommentsRead?.(req.params.id, workspaceResolution.context);
+    ctx.onCommentsRead?.(
+      req.params.id,
+      workspaceResolution.context,
+      () => resolveRequestWorkspaceContext(req, req.params.id),
+    );
     res.json({
       comments: listPreviewComments(db, req.params.id, req.params.cid),
     });

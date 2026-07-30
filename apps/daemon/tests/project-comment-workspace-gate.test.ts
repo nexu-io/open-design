@@ -276,6 +276,124 @@ describe('project comments — workspace mutation gate', () => {
     expect(fetchReadDirectory).toHaveBeenCalledTimes(2);
   });
 
+  it.each([
+    ['revocation', 'revoked'],
+    ['authority outage', 'outage'],
+  ] as const)(
+    'keeps the warm GET lease but does not redeem a dirty pull during %s',
+    async (_label, deniedMode) => {
+      let readClock = 0;
+      let freshMode: 'active' | 'revoked' | 'outage' = 'active';
+      const activeDirectory = [{
+        workspaceId: WORKSPACE_ID,
+        workspaceName: 'Team',
+        workspaceType: 'team' as const,
+        workspaceMemberId: OTHER_MEMBER_ID,
+        role: 'member' as const,
+        memberStatus: 'active' as const,
+        lifecycleState: 'active' as const,
+      }];
+      const cachedReadDirectory = createCachedWorkspaceDirectoryFetcher({
+        fetchDirectory: async () => ({
+          ok: true as const,
+          items: activeDirectory,
+        }),
+        identityKey: () => 'member-comment-dirty-read',
+        ttlMs: 5_000,
+        now: () => readClock,
+      });
+      const pullProject = vi.fn(
+        async (
+          _projectId: string,
+          _context: WorkspaceCollabContext,
+        ) => true,
+      );
+      let dirty = false;
+      let redemption = Promise.resolve();
+      const baseUrl = await startServer({
+        resolveReadWorkspaceContext: (req: unknown) =>
+          verifyWorkspaceRequestContext({
+            req,
+            fetchWorkspaceDirectory: cachedReadDirectory,
+          }),
+        resolveWorkspaceContext: (req: unknown) =>
+          verifyWorkspaceRequestContext({
+            req,
+            fetchWorkspaceDirectory: async () => {
+              if (freshMode === 'outage') {
+                return { ok: false as const, items: [] };
+              }
+              return {
+                ok: true as const,
+                items: freshMode === 'active' ? activeDirectory : [],
+              };
+            },
+          }),
+        onCommentsRead: (
+          projectId: string,
+          leasedContext: WorkspaceCollabContext | null,
+          resolveFreshContext: () => Promise<
+            | { ok: true; context: WorkspaceCollabContext | null }
+            | { ok: false }
+          >,
+        ) => {
+          if (!dirty) return;
+          dirty = false;
+          redemption = (async () => {
+            const fresh = await resolveFreshContext();
+            if (
+              !fresh.ok
+              || !fresh.context
+              || !leasedContext
+              || fresh.context.workspaceId !== leasedContext.workspaceId
+              || fresh.context.workspaceMemberId
+                !== leasedContext.workspaceMemberId
+            ) {
+              dirty = true;
+              return;
+            }
+            if (!await pullProject(projectId, fresh.context)) dirty = true;
+          })();
+        },
+      });
+      const commentsUrl =
+        `${baseUrl}/api/projects/${TEAM_MIRROR_PROJECT}/conversations/conv-team-mirror/comments`;
+      const headers = workspaceHeaders(OTHER_MEMBER_ID, 'member');
+
+      // Warm the successful read lease while authority is active.
+      expect((await fetch(commentsUrl, { headers })).status).toBe(200);
+
+      // The list read still succeeds from that bounded lease, but the dirty
+      // cloud pull/local merge must independently prove fresh authority.
+      freshMode = deniedMode;
+      dirty = true;
+      expect((await fetch(commentsUrl, { headers })).status).toBe(200);
+      await redemption;
+      expect(pullProject).not.toHaveBeenCalled();
+      expect(dirty).toBe(true);
+
+      // The unredeemed mark survives the denial/outage and is consumed exactly
+      // once after fresh authority recovers. The read lease never expired.
+      freshMode = 'active';
+      expect((await fetch(commentsUrl, { headers })).status).toBe(200);
+      await redemption;
+      expect(pullProject).toHaveBeenCalledTimes(1);
+      expect(pullProject).toHaveBeenCalledWith(
+        TEAM_MIRROR_PROJECT,
+        expect.objectContaining({
+          workspaceId: WORKSPACE_ID,
+          workspaceMemberId: OTHER_MEMBER_ID,
+        }),
+      );
+      expect(dirty).toBe(false);
+
+      readClock = 1;
+      expect((await fetch(commentsUrl, { headers })).status).toBe(200);
+      await redemption;
+      expect(pullProject).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it('uses the verified project A scope after ambient identity moved to B', async () => {
     const projectContext = activeTeamContext();
     const pushedScopes: Array<{ workspaceId: string; workspaceMemberId: string }> = [];
