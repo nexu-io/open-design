@@ -11,7 +11,8 @@
 // `workspace_projects` row itself was never re-examined, so a row this
 // daemon had already bound could silently disagree with reality forever
 // (the concrete, repeatedly-reported case: an owner unshares a project and a
-// member's local "team" binding never converges back to personal). This
+// member's stale local "team" mirror remains directly readable after its
+// authoritative catalog membership disappears). This
 // module closes that gap: `handleHubTeamProjectsChanged` and
 // `handlePolledWorkspaceInvalidation` below hook BOTH existing triggers to
 // also run `reconcileWorkspaceProjectsWithRemote`, a real read-modify-write
@@ -48,6 +49,7 @@ export interface LocalTeamProjectBinding {
   projectId: string;
   workspaceId: string;
   visibility: 'personal' | 'team';
+  resourceState?: string | null;
   createdByWorkspaceMemberId: string | null;
   resourceHubResourceId: string | null;
 }
@@ -94,12 +96,14 @@ export interface ReconcilerRemoteTeamProjectSources {
  * "move to team space" action that could only ever 403 (recvqzjnshIlOe).
  *
  * A genuine unshare/delete removes the hub row itself, so it disappears from
- * the raw catalog too — using membership here does not delay the legitimate
- * demote convergence this module exists for.
+ * the raw catalog too — using membership here does not delay legitimate
+ * revocation of a teammate's stale mirror or demotion of the original
+ * creator's own project.
  *
- * The display read stays as the fallback for transports without a raw
- * catalog client; it is also the safe direction to fail toward, because a
- * FAILED read (rejection) already aborts the pass upstream.
+ * The display read remains available to callers that only need a best-effort
+ * view. Production reconciliation requires `listCatalogMembership`; when
+ * that authoritative transport is unavailable, its caller rejects the read
+ * so absence never triggers a destructive action.
  */
 export async function reconcilerRemoteTeamProjects(
   sources: ReconcilerRemoteTeamProjectSources,
@@ -127,9 +131,19 @@ export interface WorkspaceProjectDemotePatch {
   syncState: 'local_only';
 }
 
+export interface WorkspaceProjectRevokePatch {
+  visibility: 'team';
+  resourceState: 'deleted';
+  createdByWorkspaceMemberId: null;
+  resourceHubResourceId: string | null;
+  cloudTombstonedAt: null;
+  syncState: 'synced';
+}
+
 export type WorkspaceProjectReconcileAction =
   | { kind: 'bind'; projectId: string; patch: WorkspaceProjectBindPatch }
-  | { kind: 'demote'; projectId: string; workspaceId: string; patch: WorkspaceProjectDemotePatch };
+  | { kind: 'demote'; projectId: string; workspaceId: string; patch: WorkspaceProjectDemotePatch }
+  | { kind: 'revoke'; projectId: string; workspaceId: string; patch: WorkspaceProjectRevokePatch };
 
 /**
  * Pure planner: given what the remote catalog reports and what this daemon's
@@ -193,24 +207,33 @@ export function planWorkspaceProjectReconciliation(input: {
     });
   }
 
-  // Direction 2: a local row still claims `visibility: 'team'` in the active
-  // workspace, but remote no longer lists it at all (unshared / deleted /
-  // this member's access revoked). Collapse it back to a personal draft,
-  // attributed to the CURRENT reconciling member — after the collapse this
-  // really is just a local copy that happens to live on this member's
-  // machine, the same as any other project they created. This attribution is
-  // deliberate, not incidental: `workspaceProjectRowBelongsToCurrentWorkspace`
-  // (routes/project/index.ts) treats a `visibility: 'personal'` row with a
-  // NULL creator inside a team workspace as pre-workspace-isolation legacy
-  // junk and suppresses it from every view — exactly the shape a former
-  // read-only team mirror's row already has
-  // (`reconcileLocalRowWithRemoteTeamAccess`'s canEdit:false branch never
-  // sets a creator). Leaving it null here would make the demoted project
-  // vanish from `GET /api/workspaces/:workspaceId/projects` entirely instead
-  // of correctly reappearing as an ordinary personal draft.
+  // Direction 2: a local Team row remote no longer lists. The owner daemon's
+  // original project may safely become that owner's Personal draft, but a
+  // teammate's pulled mirror is not the reader's content. Promoting those
+  // stale bytes to Personal both leaks an unshared resource and fabricates
+  // authorship. Keep a foreign mirror bound to its exact Team identity and
+  // mark it deleted instead; the project bytes stay quarantined on disk and
+  // only a later authoritative re-share + materialization may reactivate it.
   for (const [projectId, local] of localBindings) {
     if (local.workspaceId !== workspaceId || local.visibility !== 'team') continue;
     if (remoteIds.has(projectId)) continue;
+    if (local.resourceState === 'deleted') continue;
+    if (local.createdByWorkspaceMemberId !== workspaceMemberId) {
+      actions.push({
+        kind: 'revoke',
+        projectId,
+        workspaceId,
+        patch: {
+          visibility: 'team',
+          resourceState: 'deleted',
+          createdByWorkspaceMemberId: null,
+          resourceHubResourceId: local.resourceHubResourceId,
+          cloudTombstonedAt: null,
+          syncState: 'synced',
+        },
+      });
+      continue;
+    }
     actions.push({
       kind: 'demote',
       projectId,
@@ -286,15 +309,25 @@ export interface WorkspaceProjectsReconcilerDeps {
    */
   applyBind: (projectId: string, patch: WorkspaceProjectBindPatch) => void;
   applyDemote: (workspaceId: string, projectId: string, patch: WorkspaceProjectDemotePatch) => void;
+  /**
+   * Quarantine a foreign pulled mirror after a successful authoritative
+   * catalog read confirms it is absent. This must not delete project bytes.
+   */
+  applyRevoke: (workspaceId: string, projectId: string, patch: WorkspaceProjectRevokePatch) => void;
   onError?: (error: unknown) => void;
 }
 
 export interface WorkspaceProjectsReconcileResult {
   bound: number;
   demoted: number;
+  revoked: number;
 }
 
-const NO_OP_RESULT: WorkspaceProjectsReconcileResult = { bound: 0, demoted: 0 };
+const NO_OP_RESULT: WorkspaceProjectsReconcileResult = {
+  bound: 0,
+  demoted: 0,
+  revoked: 0,
+};
 
 /**
  * Run one reconciliation pass: read the remote team-project list, diff it
@@ -354,7 +387,11 @@ export async function reconcileWorkspaceProjectsWithRemote(
   for (const action of actions) {
     try {
       if (action.kind === 'bind') deps.applyBind(action.projectId, action.patch);
-      else deps.applyDemote(action.workspaceId, action.projectId, action.patch);
+      else if (action.kind === 'demote') {
+        deps.applyDemote(action.workspaceId, action.projectId, action.patch);
+      } else {
+        deps.applyRevoke(action.workspaceId, action.projectId, action.patch);
+      }
     } catch (error) {
       deps.onError?.(error);
     }
@@ -363,6 +400,7 @@ export async function reconcileWorkspaceProjectsWithRemote(
   return {
     bound: actions.filter((action) => action.kind === 'bind').length,
     demoted: actions.filter((action) => action.kind === 'demote').length,
+    revoked: actions.filter((action) => action.kind === 'revoke').length,
   };
 }
 

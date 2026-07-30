@@ -31,6 +31,9 @@ describe('team mirror read revocation', () => {
       body: JSON.stringify({ id, name: id, skillId: null, designSystemId: null, ...(metadata ? { metadata } : {}) }),
     });
     expect(res.status).toBe(200);
+    return await res.json() as {
+      conversationId?: string;
+    };
   }
 
   async function addIndexHtml(id: string) {
@@ -51,17 +54,63 @@ describe('team mirror read revocation', () => {
     await addIndexHtml(normalId);
     // A revoked mirror still has its bytes on disk (addIndexHtml writes them);
     // only the read routes must refuse.
-    await createProject(revokedId, { teamMirrorRevokedAt: suffix });
+    const revokedProject = await createProject(revokedId, {
+      teamMirrorRevokedAt: suffix,
+    });
     await addIndexHtml(revokedId);
+
+    // The quarantine marker is durable. Restart so the production O(1)
+    // revoked-project index hydrates from SQLite exactly as a member daemon
+    // does after observing an unshare in an earlier process.
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    const restarted = (await startServer({
+      port: 0,
+      returnServer: true,
+    })) as {
+      url: string;
+      server: http.Server;
+    };
+    baseUrl = restarted.url;
+    server = restarted.server;
 
     // Control: the member's own (unflagged) project reads normally.
     expect((await fetch(`${baseUrl}/api/projects/${normalId}/raw/index.html`)).status).toBe(200);
     expect((await fetch(`${baseUrl}/api/projects/${normalId}/files`)).status).toBe(200);
     expect((await fetch(`${baseUrl}/api/projects/${normalId}/files/index.html`)).status).toBe(200);
 
-    // Revoked team mirror: every read route refuses.
+    // Revoked team mirror: content, metadata, conversation, status, tabs,
+    // preview, live-artifact, and SSE entry points all refuse.
     expect((await fetch(`${baseUrl}/api/projects/${revokedId}/raw/index.html`)).status).toBe(404);
     expect((await fetch(`${baseUrl}/api/projects/${revokedId}/files`)).status).toBe(404);
     expect((await fetch(`${baseUrl}/api/projects/${revokedId}/files/index.html`)).status).toBe(404);
+    const conversationId = revokedProject.conversationId;
+    expect(conversationId).toBeTruthy();
+    const deniedReadUrls = [
+      `/api/projects/${revokedId}`,
+      `/api/projects/${revokedId}/workspace-scope`,
+      `/api/projects/${revokedId}/tabs`,
+      `/api/projects/${revokedId}/events`,
+      `/api/projects/${revokedId}/preview-url`,
+      `/api/projects/${revokedId}/conversations`,
+      `/api/projects/${revokedId}/conversations/${conversationId}/messages`,
+      `/api/projects/${revokedId}/collab/status`,
+      `/api/live-artifacts?projectId=${revokedId}`,
+      `/api/live-artifacts/missing/preview?projectId=${revokedId}`,
+    ];
+    for (const url of deniedReadUrls) {
+      expect(
+        (await fetch(`${baseUrl}${url}`)).status,
+        `expected ${url} to deny the revoked mirror`,
+      ).toBe(404);
+    }
+    // Comment reads use their own context resolver rather than the generic
+    // project gate, but must fail closed as well.
+    expect(
+      (
+        await fetch(
+          `${baseUrl}/api/projects/${revokedId}/conversations/${conversationId}/comments`,
+        )
+      ).status,
+    ).toBe(403);
   });
 });

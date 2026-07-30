@@ -58,6 +58,12 @@ export function createAuthorizeProjectRequest(deps: {
   verifyWorkspaceReadAuthority?: VerifyWorkspaceRequestAuthority;
   /** Fresh fail-closed authority used for every project mutation. */
   verifyWorkspaceRequestAuthority?: VerifyWorkspaceRequestAuthority;
+  /**
+   * Durable local quarantine witness for a pulled mirror whose authoritative
+   * Team catalog row disappeared. Kept outside the generic workspace binding
+   * shape because it lives on project metadata for restart-safe recovery.
+   */
+  isProjectRevoked?: (db: unknown, projectId: string) => boolean;
   sendApiError: (
     res: Response,
     status: number,
@@ -72,11 +78,25 @@ export function createAuthorizeProjectRequest(deps: {
     getWorkspaceProjectByProjectId,
     verifyWorkspaceReadAuthority,
     verifyWorkspaceRequestAuthority,
+    isProjectRevoked,
     sendApiError,
   } = deps;
-  return (req, res, projectId, options) => {
+  return async (req, res, projectId, options) => {
+    if (isProjectRevoked?.(db, projectId)) {
+      sendApiError(
+        res,
+        options.mode === 'read' ? 404 : 403,
+        options.mode === 'read'
+          ? 'PROJECT_NOT_FOUND'
+          : 'WORKSPACE_PROJECT_PERMISSION_DENIED',
+        options.mode === 'read'
+          ? 'project not found'
+          : 'workspace project mutation is not allowed',
+      );
+      return false;
+    }
     if (options.mode === 'write') {
-      return enforceVerifiedWorkspaceResourceMutation(
+      return await enforceVerifiedWorkspaceResourceMutation(
         'project',
         req,
         res,
@@ -89,7 +109,7 @@ export function createAuthorizeProjectRequest(deps: {
         verifyWorkspaceRequestAuthority,
       );
     }
-    return enforceVerifiedWorkspaceResourceRead(
+    return await enforceVerifiedWorkspaceResourceRead(
       'project',
       req,
       res,

@@ -113,10 +113,10 @@ describe('planWorkspaceProjectReconciliation (pure)', () => {
     ]);
   });
 
-  // The concrete, repeatedly-reported scenario: an owner unshares (or deletes)
-  // a project; a member's local "team" binding must collapse back to
-  // personal instead of showing an already-unshared project forever.
-  it('demotes a local team row the remote catalog no longer lists (member row after owner unshares)', () => {
+  // A pulled teammate mirror is not this member's personal project. Once the
+  // authoritative catalog confirms the share is gone, quarantine the mirror
+  // in place instead of misattributing its stale bytes to the reader.
+  it('revokes a local teammate mirror the remote catalog no longer lists', () => {
     const local: LocalTeamProjectBinding = {
       projectId: 'p1',
       workspaceId: WORKSPACE_ID,
@@ -132,17 +132,43 @@ describe('planWorkspaceProjectReconciliation (pure)', () => {
     });
     expect(actions).toEqual([
       {
-        kind: 'demote',
+        kind: 'revoke',
         projectId: 'p1',
         workspaceId: WORKSPACE_ID,
         patch: {
-          visibility: 'personal',
-          createdByWorkspaceMemberId: READER_MEMBER_ID,
-          resourceHubResourceId: null,
+          visibility: 'team',
+          resourceState: 'deleted',
+          createdByWorkspaceMemberId: null,
+          resourceHubResourceId: 'resource-abc',
           cloudTombstonedAt: null,
-          syncState: 'local_only',
+          syncState: 'synced',
         },
       },
+    ]);
+  });
+
+  it('still demotes the current member own project when another client unshares it', () => {
+    const local: LocalTeamProjectBinding = {
+      projectId: 'p1',
+      workspaceId: WORKSPACE_ID,
+      visibility: 'team',
+      createdByWorkspaceMemberId: OWNER_MEMBER_ID,
+      resourceHubResourceId: 'resource-abc',
+    };
+    const actions = planWorkspaceProjectReconciliation({
+      workspaceId: WORKSPACE_ID,
+      workspaceMemberId: OWNER_MEMBER_ID,
+      remoteProjects: [],
+      localBindings: new Map([['p1', local]]),
+    });
+    expect(actions).toEqual([
+      expect.objectContaining({
+        kind: 'demote',
+        patch: expect.objectContaining({
+          visibility: 'personal',
+          createdByWorkspaceMemberId: OWNER_MEMBER_ID,
+        }),
+      }),
     ]);
   });
 
@@ -193,6 +219,7 @@ describe('reconcileWorkspaceProjectsWithRemote (orchestrator, fake deps)', () =>
       getLocalBinding: () => null,
       applyBind: vi.fn(),
       applyDemote: vi.fn(),
+      applyRevoke: vi.fn(),
       onError: vi.fn(),
       ...overrides,
     };
@@ -205,7 +232,7 @@ describe('reconcileWorkspaceProjectsWithRemote (orchestrator, fake deps)', () =>
     const result = await reconcileWorkspaceProjectsWithRemote(
       baseDeps({ getWorkspaceIdentity: async () => null, listRemoteTeamProjects, applyBind, applyDemote }),
     );
-    expect(result).toEqual({ bound: 0, demoted: 0 });
+    expect(result).toEqual({ bound: 0, demoted: 0, revoked: 0 });
     expect(listRemoteTeamProjects).not.toHaveBeenCalled();
     expect(applyBind).not.toHaveBeenCalled();
     expect(applyDemote).not.toHaveBeenCalled();
@@ -226,7 +253,7 @@ describe('reconcileWorkspaceProjectsWithRemote (orchestrator, fake deps)', () =>
         onError,
       }),
     );
-    expect(result).toEqual({ bound: 0, demoted: 0 });
+    expect(result).toEqual({ bound: 0, demoted: 0, revoked: 0 });
     expect(applyDemote).not.toHaveBeenCalled();
     expect(onError).toHaveBeenCalledTimes(1);
   });
@@ -284,9 +311,9 @@ describe('reconcileWorkspaceProjectsWithRemote (orchestrator, fake deps)', () =>
     expect(getLocalBinding).toHaveBeenCalledWith('p2');
   });
 
-  it('applies bind and demote actions through the injected writers and reports counts', async () => {
+  it('applies bind and revoke actions through the injected writers and reports counts', async () => {
     const applyBind = vi.fn();
-    const applyDemote = vi.fn();
+    const applyRevoke = vi.fn();
     const result = await reconcileWorkspaceProjectsWithRemote(
       baseDeps({
         listLocalTeamRows: () => [
@@ -294,12 +321,16 @@ describe('reconcileWorkspaceProjectsWithRemote (orchestrator, fake deps)', () =>
         ],
         listRemoteTeamProjects: async () => [{ projectId: 'new', ownerMemberId: READER_MEMBER_ID }],
         applyBind,
-        applyDemote,
+        applyRevoke,
       }),
     );
-    expect(result).toEqual({ bound: 1, demoted: 1 });
+    expect(result).toEqual({ bound: 1, demoted: 0, revoked: 1 });
     expect(applyBind).toHaveBeenCalledWith('new', expect.objectContaining({ visibility: 'team' }));
-    expect(applyDemote).toHaveBeenCalledWith(WORKSPACE_ID, 'gone', expect.objectContaining({ visibility: 'personal' }));
+    expect(applyRevoke).toHaveBeenCalledWith(
+      WORKSPACE_ID,
+      'gone',
+      expect.objectContaining({ visibility: 'team', resourceState: 'deleted' }),
+    );
   });
 
   // recvqmnuxxKHaI: `workspace_projects.project_id` is a FOREIGN KEY into
@@ -322,18 +353,18 @@ describe('reconcileWorkspaceProjectsWithRemote (orchestrator, fake deps)', () =>
         onError,
       }),
     );
-    expect(result).toEqual({ bound: 1, demoted: 0 });
+    expect(result).toEqual({ bound: 1, demoted: 0, revoked: 0 });
     expect(applyBind).toHaveBeenCalledTimes(1);
     expect(applyBind).toHaveBeenCalledWith('materialized', expect.objectContaining({ visibility: 'team' }));
     expect(onError).not.toHaveBeenCalled();
   });
 
-  it('still corrects (and can demote) a project whose binding exists even when hasLocalProject is consulted for others only', async () => {
+  it('still revokes a foreign mirror whose binding exists even when hasLocalProject is consulted for others only', async () => {
     // A bound row always implies a projects row (the FK guarantees it), so
     // the materialization gate must never suppress the demote direction: a
     // team row remote no longer lists still collapses back to personal.
     const hasLocalProject = vi.fn(() => false);
-    const applyDemote = vi.fn();
+    const applyRevoke = vi.fn();
     const result = await reconcileWorkspaceProjectsWithRemote(
       baseDeps({
         listLocalTeamRows: () => [
@@ -341,16 +372,20 @@ describe('reconcileWorkspaceProjectsWithRemote (orchestrator, fake deps)', () =>
         ],
         listRemoteTeamProjects: async () => [],
         hasLocalProject,
-        applyDemote,
+        applyRevoke,
       }),
     );
-    expect(result).toEqual({ bound: 0, demoted: 1 });
-    expect(applyDemote).toHaveBeenCalledWith(WORKSPACE_ID, 'gone-remote', expect.objectContaining({ visibility: 'personal' }));
+    expect(result).toEqual({ bound: 0, demoted: 0, revoked: 1 });
+    expect(applyRevoke).toHaveBeenCalledWith(
+      WORKSPACE_ID,
+      'gone-remote',
+      expect.objectContaining({ visibility: 'team', resourceState: 'deleted' }),
+    );
   });
 
   it('reports one writer failure through onError without aborting the rest of the pass', async () => {
     const onError = vi.fn();
-    const applyDemote = vi.fn();
+    const applyRevoke = vi.fn();
     const result = await reconcileWorkspaceProjectsWithRemote(
       baseDeps({
         listLocalTeamRows: () => [
@@ -358,15 +393,15 @@ describe('reconcileWorkspaceProjectsWithRemote (orchestrator, fake deps)', () =>
           { projectId: 'b', workspaceId: WORKSPACE_ID, visibility: 'team', createdByWorkspaceMemberId: null, resourceHubResourceId: null },
         ],
         listRemoteTeamProjects: async () => [],
-        applyDemote: vi.fn((workspaceId: string, projectId: string) => {
+        applyRevoke: vi.fn((workspaceId: string, projectId: string) => {
           if (projectId === 'a') throw new Error('sqlite busy');
-          applyDemote(projectId);
+          applyRevoke(projectId);
         }),
         onError,
       }),
     );
-    expect(result).toEqual({ bound: 0, demoted: 2 });
+    expect(result).toEqual({ bound: 0, demoted: 0, revoked: 2 });
     expect(onError).toHaveBeenCalledTimes(1);
-    expect(applyDemote).toHaveBeenCalledWith('b');
+    expect(applyRevoke).toHaveBeenCalledWith('b');
   });
 });

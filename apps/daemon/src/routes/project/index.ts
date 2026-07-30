@@ -1619,6 +1619,8 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       db,
       getWorkspaceProject,
       getWorkspaceProjectByProjectId,
+      isProjectRevoked: (_db, projectId) =>
+        Boolean(getProject(db, projectId)?.metadata?.teamMirrorRevokedAt),
       ...(ctx.verifyWorkspaceRequestAuthority
         ? { verifyWorkspaceRequestAuthority: ctx.verifyWorkspaceRequestAuthority }
         : {}),
@@ -2264,6 +2266,10 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
   }
 
   function workspaceProjectRowBelongsToCurrentWorkspace(row: any, ctx: WorkspaceProjectContext): boolean {
+    // A revoked pulled mirror stays bound to its exact Team identity as a
+    // non-destructive tombstone. It must not appear in any project list while
+    // its stale local bytes are quarantined.
+    if (row.resourceState === 'deleted') return false;
     if (ctx.workspaceType !== 'team') return true;
     // Legacy rows created before workspace isolation may have been projected into
     // a team workspace as personal projects with no owner. They actually belong
@@ -4211,6 +4217,8 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       db,
       getWorkspaceProject,
       getWorkspaceProjectByProjectId,
+      isProjectRevoked: (_db, projectId) =>
+        Boolean(getProject(db, projectId)?.metadata?.teamMirrorRevokedAt),
       ...(ctx.verifyWorkspaceRequestAuthority
         ? { verifyWorkspaceRequestAuthority: ctx.verifyWorkspaceRequestAuthority }
         : {}),

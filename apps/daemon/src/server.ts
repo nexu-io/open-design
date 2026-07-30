@@ -3485,6 +3485,40 @@ export async function startServer({
         workspaceMemberId: context.workspaceMemberId,
       },
     );
+  /**
+   * Non-destructive quarantine marker for a pulled Team mirror. The binding
+   * state is the central data-plane gate; the project metadata marker also
+   * protects legacy/raw read surfaces and records why the bytes remain on
+   * disk. Only a later authorized materialization clears it.
+   */
+  const revokedTeamProjectMirrors = new Set(
+    listProjects(db)
+      .filter((project: any) => project?.metadata?.teamMirrorRevokedAt)
+      .map((project: any) => project.id as string),
+  );
+  const setTeamProjectMirrorRevoked = (
+    projectId: string,
+    revoked: boolean,
+  ): void => {
+    const project = getProject(db, projectId);
+    if (!project) return;
+    const metadata: Record<string, unknown> = {
+      ...((project.metadata as Record<string, unknown> | null) ?? {}),
+    };
+    if (revoked) {
+      revokedTeamProjectMirrors.add(projectId);
+      if (metadata.teamMirrorRevokedAt) return;
+      metadata.teamMirrorRevokedAt = Date.now();
+    } else {
+      revokedTeamProjectMirrors.delete(projectId);
+      if (!metadata.teamMirrorRevokedAt) return;
+      delete metadata.teamMirrorRevokedAt;
+    }
+    updateProject(db, projectId, {
+      metadata,
+      updatedAt: SYNC_KEEPS_UPDATED_AT,
+    });
+  };
   // Collab realtime reconciliation: react to a `team-projects-changed` signal
   // (hub push OR the 15s poller's own diff, wired below) by actually
   // re-checking this daemon's `workspace_projects` rows against the remote
@@ -3533,33 +3567,33 @@ export async function startServer({
       // not the SWR-wrapped display caches): reconciliation only runs on
       // team-projects-changed signals, and a ≤TTL-stale list here is exactly
       // the shape that misreads a just-shared row as absent.
-      listRemoteTeamProjects: async (identity) =>
-        reconcilerRemoteTeamProjects({
-          listCatalogMembership: velaCliWorkspaceTeamProjectCatalog
-            ? async () =>
-              (await withoutLocallyUnsharedProjects(
-                await velaCliWorkspaceTeamProjectCatalog.list(identity.principal),
-                {
-                  workspaceId: identity.workspaceId,
-                  workspaceMemberId: identity.workspaceMemberId,
-                },
-              )).map((record) => ({
-                projectId: record.projectId,
-                ownerMemberId: record.ownerMemberId,
-              }))
-            : null,
-          listDisplayTeamProjects: async () =>
+      listRemoteTeamProjects: async (identity) => {
+        // An absent row is destructive evidence only when the complete,
+        // unfiltered catalog was read successfully. The display list hides
+        // failed/pending publishes, so falling back to it could mistake a
+        // partial view for a real unshare and revoke a valid mirror. Throwing
+        // here makes the reconciler fail closed and leave every local binding
+        // untouched until the authoritative transport is available again.
+        if (!velaCliWorkspaceTeamProjectCatalog) {
+          throw new Error('complete team project catalog unavailable');
+        }
+        return reconcilerRemoteTeamProjects({
+          listCatalogMembership: async () =>
             (await withoutLocallyUnsharedProjects(
-              await teamProjectsLister(identity.workspaceId),
+              await velaCliWorkspaceTeamProjectCatalog.list(identity.principal),
               {
                 workspaceId: identity.workspaceId,
                 workspaceMemberId: identity.workspaceMemberId,
               },
-            )).map((project) => ({
-              projectId: project.projectId,
-              ownerMemberId: project.ownerMemberId,
+            )).map((record) => ({
+              projectId: record.projectId,
+              ownerMemberId: record.ownerMemberId,
             })),
-        }),
+          listDisplayTeamProjects: async () => {
+            throw new Error('display team project catalog is not authoritative');
+          },
+        });
+      },
       // Materialization gate for the bind direction — see the dep's doc
       // comment in workspace-projects-reconciler.ts. `getProject` is the same
       // `projects`-table read `workspace_projects`' FOREIGN KEY points at.
@@ -3571,6 +3605,7 @@ export async function startServer({
             projectId: row.id,
             workspaceId: row.workspaceId,
             visibility: row.workspaceVisibility,
+            resourceState: row.resourceState ?? null,
             createdByWorkspaceMemberId: row.createdByWorkspaceMemberId ?? null,
             resourceHubResourceId: row.resourceHubResourceId ?? null,
           })),
@@ -3581,6 +3616,7 @@ export async function startServer({
           projectId,
           workspaceId: row.workspaceId,
           visibility: row.visibility,
+          resourceState: row.resourceState ?? null,
           createdByWorkspaceMemberId: row.createdByWorkspaceMemberId ?? null,
           resourceHubResourceId: row.resourceHubResourceId ?? null,
         };
@@ -3602,6 +3638,18 @@ export async function startServer({
         ...patch,
         updatedAt: SYNC_KEEPS_UPDATED_AT,
       }),
+      applyRevoke: (workspaceId, projectId, patch) => {
+        // Write the binding denial before the metadata marker. A crash between
+        // the two operations therefore fails closed, never open. The
+        // transaction keeps the auditable marker and authority state aligned.
+        db.transaction(() => {
+          updateWorkspaceProject(db, workspaceId, projectId, {
+            ...patch,
+            updatedAt: SYNC_KEEPS_UPDATED_AT,
+          });
+          setTeamProjectMirrorRevoked(projectId, true);
+        })();
+      },
       onError: (error) => console.warn('[od] workspace-projects reconciliation error:', error),
     });
   };
@@ -3800,8 +3848,24 @@ export async function startServer({
     ) => ReturnType<typeof verifyProjectWorkspaceContextForRequest>,
   ) => {
     const binding = getWorkspaceProjectByProjectId(db, projectId);
+    if (getProject(db, projectId)?.metadata?.teamMirrorRevokedAt) {
+      return {
+        ok: false as const,
+        status: 403 as const,
+        code: 'WORKSPACE_PROJECT_PERMISSION_DENIED',
+        message: 'workspace project read is not allowed',
+      };
+    }
     if (!binding?.workspaceId) {
       return { ok: true as const, context: null };
+    }
+    if (binding.resourceState === 'deleted') {
+      return {
+        ok: false as const,
+        status: 403 as const,
+        code: 'WORKSPACE_PROJECT_PERMISSION_DENIED',
+        message: 'workspace project read is not allowed',
+      };
     }
     const verified = await verify(req, projectId);
     if (!verified.ok) return verified;
@@ -3943,25 +4007,13 @@ export async function startServer({
     resolveSharedProject,
     resolveSharedProjectOwner,
     resolveSharedProjectOwnerForStatus,
+    isTeamProjectRevoked: (projectId) =>
+      revokedTeamProjectMirrors.has(projectId),
     // Non-destructive revocation flag for a pulled team mirror: the pull gate
     // sets it when a project has left the team (files stay on disk but stop
     // being served) and clears it on a successful re-pull. Read routes refuse to
     // serve a project once this is set.
-    markTeamProjectRevoked: (projectId: string, revoked: boolean) => {
-      const project = getProject(db, projectId);
-      if (!project) return;
-      const metadata: Record<string, unknown> = { ...((project.metadata as Record<string, unknown> | null) ?? {}) };
-      if (revoked) {
-        if (metadata.teamMirrorRevokedAt) return;
-        metadata.teamMirrorRevokedAt = Date.now();
-      } else {
-        if (!metadata.teamMirrorRevokedAt) return;
-        delete metadata.teamMirrorRevokedAt;
-      }
-      // A revocation flag the pull gate raises/lowers on this daemon's behalf;
-      // the project's own content is untouched — see SYNC_KEEPS_UPDATED_AT.
-      updateProject(db, projectId, { metadata, updatedAt: SYNC_KEEPS_UPDATED_AT });
-    },
+    markTeamProjectRevoked: setTeamProjectMirrorRevoked,
     // Set/clear the unmaterialized shared-project placeholder stamp (the
     // recvqzaDvUU6B3 fresh-install wipe guard) — same non-destructive
     // metadata-flag pattern as markTeamProjectRevoked above.
@@ -5775,6 +5827,8 @@ export async function startServer({
     db,
     getWorkspaceProject,
     getWorkspaceProjectByProjectId,
+    isProjectRevoked: (_db, projectId) =>
+      revokedTeamProjectMirrors.has(projectId),
     verifyWorkspaceReadAuthority,
     verifyWorkspaceRequestAuthority,
     sendApiError,
@@ -5831,6 +5885,8 @@ export async function startServer({
       db,
       getWorkspaceProject,
       getWorkspaceProjectByProjectId,
+      isProjectRevoked: (_db, id) =>
+        revokedTeamProjectMirrors.has(id),
       verifyWorkspaceRequestAuthority: async () => ({
         ok: true,
         context: authority,

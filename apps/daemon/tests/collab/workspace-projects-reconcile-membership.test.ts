@@ -41,6 +41,7 @@ import {
   getWorkspaceProject,
   openDatabase,
   rebindWorkspaceProject,
+  updateProject,
   updateWorkspaceProject,
 } from '../../src/db.js';
 import {
@@ -212,6 +213,7 @@ describe('reconciler remote membership vs the display-filtered catalog (recvqzjn
             projectId: row.id,
             workspaceId: row.workspaceId,
             visibility: row.workspaceVisibility,
+            resourceState: row.resourceState ?? null,
             createdByWorkspaceMemberId: row.createdByWorkspaceMemberId ?? null,
             resourceHubResourceId: row.resourceHubResourceId ?? null,
           })),
@@ -222,6 +224,7 @@ describe('reconciler remote membership vs the display-filtered catalog (recvqzjn
           projectId,
           workspaceId: row.workspaceId,
           visibility: row.visibility,
+          resourceState: row.resourceState ?? null,
           createdByWorkspaceMemberId: row.createdByWorkspaceMemberId ?? null,
           resourceHubResourceId: row.resourceHubResourceId ?? null,
         };
@@ -232,6 +235,16 @@ describe('reconciler remote membership vs the display-filtered catalog (recvqzjn
       },
       applyDemote: (workspaceId, projectId, patch) =>
         updateWorkspaceProject(db, workspaceId, projectId, patch),
+      applyRevoke: (workspaceId, projectId, patch) => {
+        updateWorkspaceProject(db, workspaceId, projectId, patch);
+        const project = getProject(db, projectId);
+        updateProject(db, projectId, {
+          metadata: {
+            ...((project?.metadata as Record<string, unknown> | null) ?? {}),
+            teamMirrorRevokedAt: Date.now(),
+          },
+        });
+      },
     });
   }
 
@@ -349,7 +362,7 @@ describe('reconciler remote membership vs the display-filtered catalog (recvqzjn
       ]),
     );
 
-    expect(result.demoted).toBe(0);
+    expect(result).toMatchObject({ demoted: 0, revoked: 0 });
     const row = getWorkspaceProjectByProjectId(db, projectId);
     expect(row).toMatchObject({
       visibility: 'team',
@@ -393,18 +406,67 @@ describe('reconciler remote membership vs the display-filtered catalog (recvqzjn
     expect(await draftsProjectIds()).not.toContain(projectId);
   });
 
-  it('still demotes a mirror whose hub row is genuinely gone (the 361c88cb0 convergence this must not regress)', async () => {
+  it('quarantines a mirror whose hub row is genuinely gone without turning it into the viewer personal draft', async () => {
     const projectId = 'genuinely-unshared';
     seedProject(projectId, 'Genuinely unshared');
     seedForeignTeamMirror(projectId);
 
     const result = await reconcileAsReader(remoteMembershipReader([]));
 
-    expect(result.demoted).toBe(1);
+    expect(result).toMatchObject({ demoted: 0, revoked: 1 });
     expect(getWorkspaceProjectByProjectId(db, projectId)).toMatchObject({
-      visibility: 'personal',
-      createdByWorkspaceMemberId: READER_MEMBER_ID,
-      syncState: 'local_only',
+      visibility: 'team',
+      resourceState: 'deleted',
+      createdByWorkspaceMemberId: null,
+      syncState: 'synced',
     });
+    expect(getProject(db, projectId)?.metadata).toMatchObject({
+      teamMirrorRevokedAt: expect.any(Number),
+    });
+    expect(await draftsProjectIds()).not.toContain(projectId);
+  });
+
+  it('does not revoke on a partially parseable catalog response', async () => {
+    const projectId = 'must-survive-partial-catalog';
+    seedProject(projectId, 'Must survive partial catalog');
+    seedForeignTeamMirror(projectId);
+    const client = createVelaCliTeamProjectCatalogClient({
+      supportsTeamProjects: () => true,
+      run: async () => JSON.stringify({
+        projects: [
+          hubWireRow({
+            projectId: 'some-other-project',
+            ownerMemberId: OWNER_MEMBER_ID,
+            syncState: 'synced',
+          }),
+          {
+            id: 'malformed-row',
+            workspaceId: TEAM_WORKSPACE_ID,
+            projectId,
+          },
+        ],
+      }),
+    });
+
+    const result = await reconcileAsReader(async () =>
+      (await client.list({
+        memberId: READER_MEMBER_ID,
+        teamId: TEAM_WORKSPACE_ID,
+        role: 'member',
+        lifecycleState: 'active',
+      })).map((record) => ({
+        projectId: record.projectId,
+        ownerMemberId: record.ownerMemberId,
+      })),
+    );
+
+    expect(result).toEqual({ bound: 0, demoted: 0, revoked: 0 });
+    expect(getWorkspaceProjectByProjectId(db, projectId)).toMatchObject({
+      visibility: 'team',
+      resourceState: 'active',
+    });
+    expect(getProject(db, projectId)?.metadata ?? {}).not.toHaveProperty(
+      'teamMirrorRevokedAt',
+    );
   });
 });

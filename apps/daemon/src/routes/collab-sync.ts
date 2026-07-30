@@ -172,6 +172,8 @@ export interface RegisterCollabSyncRoutesDeps {
   /** Set/clear the non-destructive "team mirror revoked" flag on a local
    *  project so read routes stop serving a project that has left the team. */
   markTeamProjectRevoked?: (projectId: string, revoked: boolean) => void;
+  /** Read the same durable quarantine marker for status/direct-read denial. */
+  isTeamProjectRevoked?: (projectId: string) => boolean;
   /**
    * Set/clear the `sharedProjectPlaceholderAt` stamp on a local project's
    * metadata (see collab/shared-project-placeholder.ts). Set when
@@ -674,6 +676,7 @@ export function registerCollabSyncRoutes(
     resolveSharedProjectOwnerForStatus,
     resolveSharedProject,
     markTeamProjectRevoked,
+    isTeamProjectRevoked,
     markSharedProjectPlaceholder,
     retireUnmaterializedSharedPlaceholder,
     invalidateTeamProjectCatalog,
@@ -2076,6 +2079,9 @@ export function registerCollabSyncRoutes(
 
   app.get('/api/projects/:id/collab/status', async (req, res) => {
     const projectId = req.params.id;
+    if (isTeamProjectRevoked?.(projectId)) {
+      return res.status(404).json({ error: 'PROJECT_NOT_FOUND' });
+    }
     const {
       verification,
       context,

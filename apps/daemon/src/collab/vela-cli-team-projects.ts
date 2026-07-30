@@ -205,19 +205,27 @@ export function createVelaCliTeamProjectCatalogClient(
           runResource,
           workspaceId,
         );
-        return resources
-          .map(toFallbackVelaTeamProjectRecord)
-          .filter((record) => record.workspaceId === workspaceId);
+        const records = resources.map(toFallbackVelaTeamProjectRecord);
+        if (records.some((record) => record.workspaceId !== workspaceId)) {
+          throw new Error('incomplete team project catalog: workspace mismatch');
+        }
+        return records;
       }
       const payload = await runJson<TeamProjectsListWire>(['list'], workspaceId);
-      return Array.isArray(payload.projects)
-        ? payload.projects
-            .map((project) => toVelaTeamProjectRecord(project))
-            .filter(
-              (project): project is VelaTeamProjectRecord =>
-                project != null && project.workspaceId === workspaceId,
-            )
-        : [];
+      if (!Array.isArray(payload.projects)) {
+        throw new Error('incomplete team project catalog: projects are missing');
+      }
+      const records = payload.projects.map((project) =>
+        toVelaTeamProjectRecord(project),
+      );
+      if (records.some((project) => project == null)) {
+        throw new Error('incomplete team project catalog: invalid project row');
+      }
+      const completeRecords = records as VelaTeamProjectRecord[];
+      if (completeRecords.some((project) => project.workspaceId !== workspaceId)) {
+        throw new Error('incomplete team project catalog: workspace mismatch');
+      }
+      return completeRecords;
     },
 
     async upsert(
@@ -465,10 +473,23 @@ async function listSharedProjectResources(
 ): Promise<SharedResourceWire[]> {
   const stdout = await runResource(['shared', '--json'], workspaceId);
   const trimmed = stdout.trim();
-  if (!trimmed) return [];
+  if (!trimmed) {
+    throw new Error('incomplete shared project catalog: empty response');
+  }
   const payload = JSON.parse(trimmed) as SharedResourcesListWire;
-  if (!Array.isArray(payload.resources)) return [];
-  return payload.resources.filter(isSharedProjectResource);
+  if (!Array.isArray(payload.resources)) {
+    throw new Error('incomplete shared project catalog: resources are missing');
+  }
+  const projectRows = payload.resources.filter(
+    (value) =>
+      Boolean(value)
+      && typeof value === 'object'
+      && (value as Record<string, unknown>).kind === 'project',
+  );
+  if (projectRows.some((value) => !isSharedProjectResource(value))) {
+    throw new Error('incomplete shared project catalog: invalid project row');
+  }
+  return projectRows as SharedResourceWire[];
 }
 
 function requireWorkspaceId(workspaceId: string): string {

@@ -127,6 +127,7 @@ async function startServer(opts?: {
   ) => Promise<boolean>;
   isAmrSignedIn?: () => boolean | Promise<boolean>;
   verifyWorkspaceRequestAuthority?: (req: any) => Promise<any>;
+  teamProjectResourceState?: 'active' | 'deleted';
 }) {
   tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-run-ws-gate-'));
   const db = openDatabase(tempDir);
@@ -138,6 +139,7 @@ async function startServer(opts?: {
     projectId: TEAM_PROJECT,
     workspaceId: WORKSPACE_ID,
     visibility: 'team',
+    resourceState: opts?.teamProjectResourceState ?? 'active',
     createdByWorkspaceMemberId: OWNER_MEMBER_ID,
   });
   ensureWorkspaceProject(db, {
@@ -358,6 +360,32 @@ describe('POST /api/runs — workspace mutation gate', () => {
       expect(resp.status).toBe(400);
       await expect(resp.json()).resolves.toMatchObject({
         error: { code: 'WORKSPACE_CONTEXT_REQUIRED' },
+      });
+    },
+  );
+
+  it.each(['/api/runs', '/api/chat'])(
+    'rejects a stale direct run against a revoked Team mirror through %s',
+    async (route) => {
+      const baseUrl = await startServer({
+        teamProjectResourceState: 'deleted',
+      });
+      const resp = await fetch(`${baseUrl}${route}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...workspaceHeaders(OWNER_MEMBER_ID, 'owner'),
+        },
+        body: JSON.stringify({
+          projectId: TEAM_PROJECT,
+          agentId: 'claude',
+          message: 'must not run stale mirror bytes',
+        }),
+      });
+
+      expect(resp.status).toBe(403);
+      await expect(resp.json()).resolves.toMatchObject({
+        error: { code: 'WORKSPACE_PROJECT_PERMISSION_DENIED' },
       });
     },
   );

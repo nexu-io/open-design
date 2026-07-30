@@ -212,12 +212,19 @@ export function materializePulledTeamMirror(
           cloudTombstonedAt: number | null;
         }
       | undefined;
+    const existing = getProject(db, input.id);
+    const isRevokedMirror =
+      existingBinding?.resourceState === 'deleted'
+      && Boolean(existing?.metadata?.teamMirrorRevokedAt);
     const compatibleBinding =
       !existingBinding ||
       (
         existingBinding.workspaceId === scope.workspaceId &&
         existingBinding.visibility === 'team' &&
-        existingBinding.resourceState === 'active' &&
+        (
+          existingBinding.resourceState === 'active'
+          || isRevokedMirror
+        ) &&
         existingBinding.cloudTombstonedAt === null &&
         existingBinding.createdByWorkspaceMemberId === expectedCreator &&
         (
@@ -229,7 +236,6 @@ export function materializePulledTeamMirror(
       throw new Error(`team mirror binding conflict for ${input.id}`);
     }
 
-    const existing = getProject(db, input.id);
     let localRecordChanged = false;
     if (!existing) {
       insertProject(db, {
@@ -248,6 +254,19 @@ export function materializePulledTeamMirror(
         skillId: input.skillId,
         designSystemId: input.designSystemId,
         metadata: input.metadata,
+        updatedAt: input.updatedAt,
+      });
+      localRecordChanged = true;
+    } else if (existing.metadata?.teamMirrorRevokedAt) {
+      const metadata = {
+        ...((existing.metadata as Record<string, unknown> | null) ?? {}),
+      };
+      delete metadata.teamMirrorRevokedAt;
+      updateProject(db, input.id, {
+        metadata,
+        // Materialization is synchronization, not local activity. Preserve
+        // the owner's content timestamp rather than stamping this daemon's
+        // re-share observation time.
         updatedAt: input.updatedAt,
       });
       localRecordChanged = true;

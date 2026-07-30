@@ -204,7 +204,7 @@ describe('Vela CLI team-project catalog adapter', () => {
     expect(calls).toEqual(['team-a', 'team-b']);
   });
 
-  it('drops rich catalog rows that do not match the explicit workspace', async () => {
+  it('rejects a rich catalog with rows outside the explicit workspace as incomplete', async () => {
     const client = createVelaCliTeamProjectCatalogClient({
       supportsTeamProjects: () => true,
       run: async () => JSON.stringify({
@@ -228,7 +228,39 @@ describe('Vela CLI team-project catalog adapter', () => {
       teamId: 'team-a',
       role: 'member',
       lifecycleState: 'active',
-    })).resolves.toEqual([]);
+    })).rejects.toThrow(/incomplete team project catalog/);
+  });
+
+  it('rejects a partially parseable rich catalog instead of treating dropped rows as confirmed absence', async () => {
+    const client = createVelaCliTeamProjectCatalogClient({
+      supportsTeamProjects: () => true,
+      run: async () => JSON.stringify({
+        projects: [
+          {
+            id: 'row-valid',
+            workspaceId: 'team-a',
+            projectId: 'project-valid',
+            resourceId: 'resource-valid',
+            ownerMemberId: 'member-a',
+            syncState: 'synced',
+            createdAt: '2026-07-01T00:00:00.000Z',
+            updatedAt: '2026-07-01T00:00:00.000Z',
+          },
+          {
+            id: 'row-malformed',
+            workspaceId: 'team-a',
+            projectId: 'project-malformed',
+          },
+        ],
+      }),
+    });
+
+    await expect(client.list({
+      memberId: 'member-a',
+      teamId: 'team-a',
+      role: 'member',
+      lifecycleState: 'active',
+    })).rejects.toThrow(/incomplete team project catalog/);
   });
 
   it('keeps catalog upsert and remove on their explicit principal across capability awaits', async () => {

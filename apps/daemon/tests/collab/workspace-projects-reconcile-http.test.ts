@@ -30,6 +30,7 @@ import {
   listWorkspaceProjects,
   openDatabase,
   rebindWorkspaceProject,
+  updateProject,
   updateWorkspaceProject,
 } from '../../src/db.js';
 import {
@@ -38,6 +39,8 @@ import {
   type RemoteTeamProjectRef,
 } from '../../src/collab/workspace-projects-reconciler.js';
 import { materializePulledTeamMirror } from '../../src/collab/team-mirror-materializer.js';
+import { createAuthorizeProjectRequest } from '../../src/collab/project-request-authority.js';
+import { workspaceContextFromDirectoryItem } from '../../src/collab/vela-workspace-context.js';
 
 const TEAM_WORKSPACE_ID = 'ws-team-1';
 const OWNER_MEMBER_ID = 'member-owner';
@@ -101,13 +104,43 @@ describe('reconcileWorkspaceProjectsWithRemote, verified through the real worksp
     } = {},
   ) {
     const noop = vi.fn();
+    const sendApiError = (
+      res: any,
+      status: number,
+      code: string,
+      message: string,
+    ) => res.status(status).json({ error: { code, message } });
+    const verifiedContext = workspaceContextFromDirectoryItem({
+      workspaceId: TEAM_WORKSPACE_ID,
+      workspaceName: 'Team',
+      workspaceType: 'team',
+      workspaceMemberId: READER_MEMBER_ID,
+      role: 'member',
+      memberStatus: 'active',
+      lifecycleState: 'active',
+    });
+    const authorizeProjectRequest = createAuthorizeProjectRequest({
+      db,
+      getWorkspaceProject: (_db, workspaceId, projectId) =>
+        getWorkspaceProject(db, workspaceId, projectId),
+      getWorkspaceProjectByProjectId: (_db, projectId) =>
+        getWorkspaceProjectByProjectId(db, projectId),
+      verifyWorkspaceReadAuthority: async () => ({
+        ok: true,
+        context: verifiedContext,
+      }),
+      verifyWorkspaceRequestAuthority: async () => ({
+        ok: true,
+        context: verifiedContext,
+      }),
+      sendApiError,
+    });
     return {
       db,
       design: {},
       http: {
         createSseResponse: noop,
-        sendApiError: (res: any, status: number, code: string, message: string) =>
-          res.status(status).json({ error: { code, message } }),
+        sendApiError,
       },
       paths: {
         DESIGN_SYSTEMS_DIR: '',
@@ -184,6 +217,7 @@ describe('reconcileWorkspaceProjectsWithRemote, verified through the real worksp
       },
       collabSync: { requestTeamShare: noop, requestTeamUnshare: noop, invalidateTeamProjectCatalog: noop },
       teamProjectCatalog,
+      authorizeProjectRequest,
     } as unknown as Parameters<typeof registerProjectRoutes>[1];
   }
 
@@ -417,6 +451,7 @@ describe('reconcileWorkspaceProjectsWithRemote, verified through the real worksp
             projectId: row.id,
             workspaceId: row.workspaceId,
             visibility: row.workspaceVisibility,
+            resourceState: row.resourceState ?? null,
             createdByWorkspaceMemberId: row.createdByWorkspaceMemberId ?? null,
             resourceHubResourceId: row.resourceHubResourceId ?? null,
           })),
@@ -427,6 +462,7 @@ describe('reconcileWorkspaceProjectsWithRemote, verified through the real worksp
           projectId,
           workspaceId: row.workspaceId,
           visibility: row.visibility,
+          resourceState: row.resourceState ?? null,
           createdByWorkspaceMemberId: row.createdByWorkspaceMemberId ?? null,
           resourceHubResourceId: row.resourceHubResourceId ?? null,
         };
@@ -439,11 +475,21 @@ describe('reconcileWorkspaceProjectsWithRemote, verified through the real worksp
         ensureWorkspaceProject(db, { projectId, ...patch });
       },
       applyDemote: (workspaceId, projectId, patch) => updateWorkspaceProject(db, workspaceId, projectId, patch),
+      applyRevoke: (workspaceId, projectId, patch) => {
+        updateWorkspaceProject(db, workspaceId, projectId, patch);
+        const project = getProject(db, projectId);
+        updateProject(db, projectId, {
+          metadata: {
+            ...((project?.metadata as Record<string, unknown> | null) ?? {}),
+            teamMirrorRevokedAt: Date.now(),
+          },
+        });
+      },
       ...(options.onError ? { onError: options.onError } : {}),
     });
   }
 
-  it('collapses a member-bound team row back to personal once the owner has unshared it remotely (the recurring "收敛" bug)', async () => {
+  it('quarantines a member mirror once the owner unshares it and denies stale direct reads', async () => {
     const projectId = 'shared-then-unshared';
     seedProject(projectId, 'Shared then unshared');
     // Simulates the state right after this member pulled a project the owner
@@ -460,26 +506,37 @@ describe('reconcileWorkspaceProjectsWithRemote, verified through the real worksp
     });
     expect(getWorkspaceProjectByProjectId(db, projectId)).toMatchObject({ visibility: 'team' });
 
-    // The owner has since unshared (or deleted) the project: the hub's team
-    // catalog no longer reports it at all.
-    const result = await reconcileAsReader([]);
-    expect(result).toEqual({ bound: 0, demoted: 1 });
-
-    // 1. Direct table assertion: the local binding itself has converged.
-    const row = getWorkspaceProjectByProjectId(db, projectId);
-    expect(row).toMatchObject({
-      visibility: 'personal',
-      resourceHubResourceId: null,
-      syncState: 'local_only',
-    });
-
-    // 2. Real HTTP assertion: the endpoint every client actually calls
-    // (`GET /api/workspaces/:workspaceId/projects`) now agrees — the project
-    // no longer shows up under the team view, and shows as personal overall.
     const app = express();
     app.use(express.json());
     registerProjectRoutes(app, buildProjectRoutesDeps({ list: async () => [] }));
     const routeServer = await listen(app);
+    const detailUrl = `${routeServer.url}/api/projects/${projectId}`;
+    const filesUrl = `${routeServer.url}/api/projects/${projectId}/files`;
+    const rawUrl = `${routeServer.url}/api/projects/${projectId}/raw/index.html`;
+    expect((await fetch(detailUrl, { headers: readerTeamHeaders() })).status).toBe(200);
+
+    // The owner has since unshared (or deleted) the project: the hub's team
+    // catalog no longer reports it at all.
+    const result = await reconcileAsReader([]);
+    expect(result).toEqual({ bound: 0, demoted: 0, revoked: 1 });
+
+    // The binding remains Team-scoped but is quarantined. Stale bytes remain
+    // on disk for safe re-share recovery and are no longer readable.
+    const row = getWorkspaceProjectByProjectId(db, projectId);
+    expect(row).toMatchObject({
+      visibility: 'team',
+      resourceState: 'deleted',
+      createdByWorkspaceMemberId: null,
+      resourceHubResourceId: `project-${projectId}`,
+      syncState: 'synced',
+    });
+    expect(getProject(db, projectId)?.metadata).toMatchObject({
+      teamMirrorRevokedAt: expect.any(Number),
+    });
+    expect((await fetch(detailUrl, { headers: readerTeamHeaders() })).status).toBe(403);
+    expect((await fetch(filesUrl, { headers: readerTeamHeaders() })).status).toBe(404);
+    expect((await fetch(rawUrl, { headers: readerTeamHeaders() })).status).toBe(404);
+
     try {
       const teamResp = await fetch(
         `${routeServer.url}/api/workspaces/${TEAM_WORKSPACE_ID}/projects?view=team`,
@@ -495,8 +552,79 @@ describe('reconcileWorkspaceProjectsWithRemote, verified through the real worksp
       );
       const allBody = (await allResp.json()) as { projects: Array<{ id: string; visibility: string }> };
       const found = allBody.projects.find((p) => p.id === projectId);
-      expect(found, 'expected the demoted project to still be listed, now as personal').toBeTruthy();
-      expect(found?.visibility).toBe('personal');
+      expect(found, 'revoked mirror must not become a personal draft').toBeUndefined();
+    } finally {
+      await close(routeServer.server);
+    }
+  });
+
+  it('reactivates a quarantined mirror only after an authoritative re-share is materialized', async () => {
+    const projectId = 'shared-unshared-reshared';
+    materializePulledTeamMirror(db, pulledProjectInput(projectId), {
+      workspaceId: TEAM_WORKSPACE_ID,
+      resourceTeamId: TEAM_WORKSPACE_ID,
+      viewerMemberId: READER_MEMBER_ID,
+      ownerMemberId: OWNER_MEMBER_ID,
+    });
+
+    expect(await reconcileAsReader([])).toEqual({
+      bound: 0,
+      demoted: 0,
+      revoked: 1,
+    });
+    expect(getWorkspaceProjectByProjectId(db, projectId)).toMatchObject({
+      visibility: 'team',
+      resourceState: 'deleted',
+    });
+
+    // The catalog row reappearing is only a discovery signal. It must not
+    // unlock stale local bytes before the fresh hub version is pulled.
+    expect(await reconcileAsReader([
+      { projectId, ownerMemberId: OWNER_MEMBER_ID },
+    ])).toEqual({
+      bound: 0,
+      demoted: 0,
+      revoked: 0,
+    });
+    expect(getWorkspaceProjectByProjectId(db, projectId)).toMatchObject({
+      resourceState: 'deleted',
+    });
+
+    materializePulledTeamMirror(
+      db,
+      {
+        ...pulledProjectInput(projectId),
+        name: 'Re-shared project',
+        updatedAt: 30,
+      },
+      {
+        workspaceId: TEAM_WORKSPACE_ID,
+        resourceTeamId: TEAM_WORKSPACE_ID,
+        viewerMemberId: READER_MEMBER_ID,
+        ownerMemberId: OWNER_MEMBER_ID,
+      },
+    );
+    expect(getWorkspaceProjectByProjectId(db, projectId)).toMatchObject({
+      visibility: 'team',
+      resourceState: 'active',
+      createdByWorkspaceMemberId: null,
+    });
+    expect(getProject(db, projectId)?.metadata ?? {}).not.toHaveProperty(
+      'teamMirrorRevokedAt',
+    );
+
+    const app = express();
+    app.use(express.json());
+    registerProjectRoutes(app, buildProjectRoutesDeps({ list: async () => [] }));
+    const routeServer = await listen(app);
+    try {
+      expect(
+        (
+          await fetch(`${routeServer.url}/api/projects/${projectId}`, {
+            headers: readerTeamHeaders(),
+          })
+        ).status,
+      ).toBe(200);
     } finally {
       await close(routeServer.server);
     }
@@ -508,7 +636,7 @@ describe('reconcileWorkspaceProjectsWithRemote, verified through the real worksp
     expect(getWorkspaceProjectByProjectId(db, projectId)).toBeUndefined();
 
     const result = await reconcileAsReader([{ projectId, ownerMemberId: OWNER_MEMBER_ID }]);
-    expect(result).toEqual({ bound: 1, demoted: 0 });
+    expect(result).toEqual({ bound: 1, demoted: 0, revoked: 0 });
 
     const row = getWorkspaceProjectByProjectId(db, projectId);
     expect(row).toMatchObject({ workspaceId: TEAM_WORKSPACE_ID, visibility: 'team', createdByWorkspaceMemberId: null });
@@ -547,7 +675,7 @@ describe('reconcileWorkspaceProjectsWithRemote, verified through the real worksp
     // A materialized project the same pass must still bind…
     const materializedId = 'materialized-but-unbound';
     seedProject(materializedId, 'Materialized but unbound');
-    // …and a stale local team row the same pass must still demote.
+    // …and a stale foreign team mirror the same pass must still revoke.
     const unsharedId = 'unshared-during-outage';
     seedProject(unsharedId, 'Unshared during outage');
     ensureWorkspaceProject(db, {
@@ -579,12 +707,15 @@ describe('reconcileWorkspaceProjectsWithRemote, verified through the real worksp
     expect(onError).not.toHaveBeenCalled();
     expect(getWorkspaceProjectByProjectId(db, neverMaterializedId)).toBeUndefined();
     // The skip is not counted as work done, and the rest of the pass ran.
-    expect(result).toEqual({ bound: 1, demoted: 1 });
+    expect(result).toEqual({ bound: 1, demoted: 0, revoked: 1 });
     expect(getWorkspaceProjectByProjectId(db, materializedId)).toMatchObject({
       workspaceId: TEAM_WORKSPACE_ID,
       visibility: 'team',
     });
-    expect(getWorkspaceProjectByProjectId(db, unsharedId)).toMatchObject({ visibility: 'personal' });
+    expect(getWorkspaceProjectByProjectId(db, unsharedId)).toMatchObject({
+      visibility: 'team',
+      resourceState: 'deleted',
+    });
   });
 
   it('does not demote on a failed remote read, leaving the row (and the HTTP-visible list) untouched', async () => {
@@ -614,14 +745,16 @@ describe('reconcileWorkspaceProjectsWithRemote, verified through the real worksp
             projectId: row.id,
             workspaceId: row.workspaceId,
             visibility: row.workspaceVisibility,
+            resourceState: row.resourceState ?? null,
             createdByWorkspaceMemberId: row.createdByWorkspaceMemberId ?? null,
             resourceHubResourceId: row.resourceHubResourceId ?? null,
           })),
       getLocalBinding: () => null,
       applyBind: (projectId, patch) => rebindWorkspaceProject(db, projectId, patch),
       applyDemote: (workspaceId, projectId, patch) => updateWorkspaceProject(db, workspaceId, projectId, patch),
+      applyRevoke: (workspaceId, projectId, patch) => updateWorkspaceProject(db, workspaceId, projectId, patch),
     });
-    expect(result).toEqual({ bound: 0, demoted: 0 });
+    expect(result).toEqual({ bound: 0, demoted: 0, revoked: 0 });
     expect(getWorkspaceProjectByProjectId(db, projectId)).toMatchObject({ visibility: 'team' });
   });
 });
