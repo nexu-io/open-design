@@ -9368,9 +9368,17 @@ export function ProjectView({
   // mid-flight never double-fires; the sessionStorage flag is cleared
   // immediately after the first dispatch.
   const autoSentRef = useRef(false);
+  const autoSendInFlightRef = useRef(false);
   useEffect(() => {
     if (autoSentRef.current) return;
+    if (autoSendInFlightRef.current) return;
     if (!activeConversationId) return;
+    // `messagesInitialized` is React state, while the conversation ownership
+    // guard used by handleSend is a ref. Require both to agree before consuming
+    // the one-shot handoff: during a project/context transition there can be a
+    // render where the state is ready but the ref has already been invalidated
+    // for a fresh scoped reload.
+    if (messagesConversationIdRef.current !== activeConversationId) return;
     if (!projectRunHasBillableAmrPrincipal) return;
     // Wait for the initial listMessages DB read to land. Without this gate
     // the auto-send fires before the in-flight DB response, which then
@@ -9408,24 +9416,42 @@ export function ProjectView({
     if (!seed && attachments.length === 0) {
       return;
     }
-    autoSentRef.current = true;
-    if (isDesignSystemWorkspaceMetadata(project.metadata)) {
-      markDesignSystemAuditAutoRepairEligible(project.id);
-    }
-    clearAutoSendSession(project.id);
-    autoSendAttachmentsRef.current = [];
     const autoSendGateStillMatches =
       autoSendAmrGateWitnessRef.current !== undefined &&
       amrBalanceGateScopesMatch(
         autoSendAmrGateWitnessRef.current,
         amrBalanceGateScopeForWorkspaceContext(projectRunPreflightContext),
       );
+    autoSendInFlightRef.current = true;
     void handleSend(seed, attachments, [], {
-      ...(context ? { context } : {}),
-      // Only reuse Home's decision for the exact persisted project scope.
-      // A workspace/member mismatch falls through to handleSend's normal gate.
-      ...(autoSendGateStillMatches ? { amrGatePrechecked: true } : {}),
-    });
+        ...(context ? { context } : {}),
+        // Only reuse Home's decision for the exact persisted project scope.
+        // A workspace/member mismatch falls through to handleSend's normal gate.
+        ...(autoSendGateStillMatches ? { amrGatePrechecked: true } : {}),
+      })
+      .then((started) => {
+        if (!started) {
+          // The handoff was not accepted (for example a transient project
+          // scope/conversation transition or a recoverable preflight block).
+          // Keep every session value intact; a later dependency change can
+          // retry the exact same prompt and attachments.
+          autoSendInFlightRef.current = false;
+          return;
+        }
+        autoSentRef.current = true;
+        if (isDesignSystemWorkspaceMetadata(project.metadata)) {
+          markDesignSystemAuditAutoRepairEligible(project.id);
+        }
+        clearAutoSendSession(project.id);
+        autoSendAttachmentsRef.current = [];
+        autoSendInFlightRef.current = false;
+      })
+      .catch(() => {
+        // `handleSend` normally reports a rejected preflight as `false`, but
+        // transport/provider setup may still throw. Preserve the handoff for a
+        // later retry instead of silently consuming the user's first prompt.
+        autoSendInFlightRef.current = false;
+      });
   }, [
     activeConversationId,
     messagesInitialized,
