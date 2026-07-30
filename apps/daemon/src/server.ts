@@ -3848,7 +3848,7 @@ export async function startServer({
     ) => ReturnType<typeof verifyProjectWorkspaceContextForRequest>,
   ) => {
     const binding = getWorkspaceProjectByProjectId(db, projectId);
-    if (getProject(db, projectId)?.metadata?.teamMirrorRevokedAt) {
+    if (revokedTeamProjectMirrors.has(projectId)) {
       return {
         ok: false as const,
         status: 403 as const,
@@ -6187,6 +6187,8 @@ export async function startServer({
     // workspaceContext) — see the mutation-gate cross-check note above.
     verifyWorkspaceRequestAuthority,
     authorizeProjectRequest,
+    isProjectRevoked: (projectId) =>
+      revokedTeamProjectMirrors.has(projectId),
     fetchWorkspaceDirectory,
     fetchProjectCreationWorkspaceDirectory,
     events: projectEventDeps,
@@ -6612,6 +6614,8 @@ export async function startServer({
     node: nodeDeps,
     projectStore: projectStoreDeps,
     authorizeProjectRequest,
+    isProjectRevoked: (projectId) =>
+      revokedTeamProjectMirrors.has(projectId),
     projectFiles: projectFileDeps,
     documents: { buildDocumentPreview },
     artifacts: artifactDeps,

@@ -1,6 +1,7 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type http from 'node:http';
 
+import { openDatabase } from '../src/db.js';
 import { startServer } from '../src/server.js';
 
 // #2 (team collab): once a project is moved out of the team, a former member's
@@ -50,7 +51,7 @@ describe('team mirror read revocation', () => {
     const normalId = `mirror-normal-${suffix}`;
     const revokedId = `mirror-revoked-${suffix}`;
 
-    await createProject(normalId);
+    const normalProject = await createProject(normalId);
     await addIndexHtml(normalId);
     // A revoked mirror still has its bytes on disk (addIndexHtml writes them);
     // only the read routes must refuse.
@@ -103,14 +104,48 @@ describe('team mirror read revocation', () => {
         `expected ${url} to deny the revoked mirror`,
       ).toBe(404);
     }
-    // Comment reads use their own context resolver rather than the generic
-    // project gate, but must fail closed as well.
-    expect(
-      (
-        await fetch(
-          `${baseUrl}/api/projects/${revokedId}/conversations/${conversationId}/comments`,
-        )
-      ).status,
-    ).toBe(403);
+    // Hot-path quarantine checks must use the startup-hydrated in-memory
+    // index. Detail/files already need one project row for their response;
+    // revocation must not add a second lookup. Comments need no project row
+    // at all. Check both normal and revoked projects so the optimization
+    // cannot accidentally become a revoked-only shortcut.
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!dataDir) throw new Error('OD_DATA_DIR is required for this test');
+    const db = openDatabase(process.cwd(), { dataDir });
+    const prepareSpy = vi.spyOn(db, 'prepare');
+    const projectMetadataReads = () =>
+      prepareSpy.mock.calls.filter(
+        ([sql]) =>
+          typeof sql === 'string'
+          && /\bFROM projects WHERE id = \?/.test(sql),
+      ).length;
+    const expectProjectReads = async (
+      url: string,
+      expectedStatus: number,
+      expectedReads: number,
+    ) => {
+      prepareSpy.mockClear();
+      expect((await fetch(`${baseUrl}${url}`)).status).toBe(expectedStatus);
+      expect(projectMetadataReads(), `unexpected project-row reads for ${url}`)
+        .toBe(expectedReads);
+    };
+    try {
+      await expectProjectReads(`/api/projects/${normalId}`, 200, 1);
+      await expectProjectReads(`/api/projects/${revokedId}`, 404, 1);
+      await expectProjectReads(`/api/projects/${normalId}/files`, 200, 1);
+      await expectProjectReads(`/api/projects/${revokedId}/files`, 404, 1);
+      await expectProjectReads(
+        `/api/projects/${normalId}/conversations/${normalProject.conversationId}/comments`,
+        200,
+        0,
+      );
+      await expectProjectReads(
+        `/api/projects/${revokedId}/conversations/${conversationId}/comments`,
+        403,
+        0,
+      );
+    } finally {
+      prepareSpy.mockRestore();
+    }
   });
 });

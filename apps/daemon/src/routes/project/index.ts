@@ -111,6 +111,8 @@ export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | '
   verifyWorkspaceRequestAuthority?: VerifyWorkspaceRequestAuthority;
   /** Shared fresh exact authority gate for all project data-plane routes. */
   authorizeProjectRequest?: AuthorizeProjectRequest;
+  /** Startup-hydrated O(1) quarantine lookup for stale Team mirrors. */
+  isProjectRevoked?: (projectId: string) => boolean;
   /**
    * Authoritative signed-in membership directory. Project detail uses it to
    * resolve the project's persisted workspace independently from any
@@ -1620,7 +1622,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       getWorkspaceProject,
       getWorkspaceProjectByProjectId,
       isProjectRevoked: (_db, projectId) =>
-        Boolean(getProject(db, projectId)?.metadata?.teamMirrorRevokedAt),
+        ctx.isProjectRevoked?.(projectId) ?? false,
       ...(ctx.verifyWorkspaceRequestAuthority
         ? { verifyWorkspaceRequestAuthority: ctx.verifyWorkspaceRequestAuthority }
         : {}),
@@ -4197,6 +4199,8 @@ export function registerProjectArtifactRoutes(app: Express, ctx: RegisterProject
 export interface RegisterProjectFileRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'uploads' | 'node' | 'projectStore' | 'projectFiles' | 'documents' | 'artifacts' | 'projectPreviewScopes'> {
   verifyWorkspaceRequestAuthority?: VerifyWorkspaceRequestAuthority;
   authorizeProjectRequest?: AuthorizeProjectRequest;
+  /** Startup-hydrated O(1) quarantine lookup for stale Team mirrors. */
+  isProjectRevoked?: (projectId: string) => boolean;
 }
 
 export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFileRoutesDeps) {
@@ -4218,7 +4222,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       getWorkspaceProject,
       getWorkspaceProjectByProjectId,
       isProjectRevoked: (_db, projectId) =>
-        Boolean(getProject(db, projectId)?.metadata?.teamMirrorRevokedAt),
+        ctx.isProjectRevoked?.(projectId) ?? false,
       ...(ctx.verifyWorkspaceRequestAuthority
         ? { verifyWorkspaceRequestAuthority: ctx.verifyWorkspaceRequestAuthority }
         : {}),
