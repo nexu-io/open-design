@@ -220,7 +220,13 @@ export function shouldRouteToFirstRunOnboarding(
   pathname: string,
 ): boolean {
   if (config.onboardingCompleted === true) return false;
-  if (pathname.startsWith('/collab-demo') || pathname.startsWith('/community')) return false;
+  if (
+    pathname.startsWith('/projects/')
+    || pathname.startsWith('/collab-demo')
+    || pathname.startsWith('/community')
+  ) {
+    return false;
+  }
   return true;
 }
 
