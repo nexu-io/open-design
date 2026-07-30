@@ -52,6 +52,16 @@ export interface RegisterProjectCommentRoutesDeps extends RouteDeps<'db' | 'proj
     projectId: string,
   ) => Promise<ProjectCommentWorkspaceContextResolution>;
   /**
+   * Bounded successful authority lease for pure comment-list reads. Production
+   * uses the same cached verifier as other project GET routes. Comment
+   * mutations continue to use `resolveWorkspaceContext` above, which is fresh
+   * and fail-closed on every write.
+   */
+  resolveReadWorkspaceContext?: (
+    req: Request,
+    projectId: string,
+  ) => Promise<ProjectCommentWorkspaceContextResolution>;
+  /**
    * Resolve the CURRENT caller's workspaceMemberId from the request identity
    * (workspace context). Server-authoritative — used both to stamp the author on
    * a new/edited comment and to gate status/delete on the caller's identity.
@@ -191,6 +201,26 @@ export function registerProjectCommentRoutes(app: Express, ctx: RegisterProjectC
     }
   }
 
+  async function resolveReadRequestWorkspaceContext(
+    req: Request,
+    projectId: string,
+  ): Promise<ProjectCommentWorkspaceContextResolution> {
+    if (!ctx.resolveReadWorkspaceContext) {
+      return resolveRequestWorkspaceContext(req, projectId);
+    }
+    try {
+      return await ctx.resolveReadWorkspaceContext(req, projectId);
+    } catch {
+      return {
+        ok: false,
+        status: 503,
+        code: 'WORKSPACE_AUTHORITY_UNAVAILABLE',
+        message: 'workspace membership authority is temporarily unavailable',
+        retryable: true,
+      };
+    }
+  }
+
   function sendWorkspaceResolutionError(
     res: any,
     resolution: Extract<ProjectCommentWorkspaceContextResolution, { ok: false }>,
@@ -289,7 +319,7 @@ export function registerProjectCommentRoutes(app: Express, ctx: RegisterProjectC
     if (!conv || conv.projectId !== req.params.id) {
       return res.status(404).json({ error: 'conversation not found' });
     }
-    const workspaceResolution = await resolveRequestWorkspaceContext(
+    const workspaceResolution = await resolveReadRequestWorkspaceContext(
       req,
       req.params.id,
     );

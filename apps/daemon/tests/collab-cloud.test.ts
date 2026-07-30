@@ -11,8 +11,12 @@ import {
 import {
   closeDatabase,
   deleteSyncedPreviewComment,
+  ensureProjectCommentAnchorConversation,
+  getLatestConversationIdForProject,
   insertConversation,
   insertProject,
+  listConversations,
+  listMessages,
   listPreviewComments,
   mergeSyncedPreviewComment,
   openDatabase,
@@ -297,6 +301,60 @@ function fakeClient() {
 }
 
 describe('createCollabCloudService', () => {
+  it('re-homes remote comments onto a stable empty local anchor', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-collab-cloud-anchor-'));
+    const db = openDatabase(tempDir);
+    insertProject(db, {
+      id: 'p1',
+      name: 'Pulled Team mirror',
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    expect(getLatestConversationIdForProject(db, 'p1')).toBeNull();
+
+    const firstAnchor = ensureProjectCommentAnchorConversation(db, 'p1', 2);
+    expect(firstAnchor?.created).toBe(true);
+    expect(ensureProjectCommentAnchorConversation(db, 'p1', 3)).toEqual({
+      conversationId: firstAnchor?.conversationId,
+      created: false,
+    });
+
+    const { client, seed } = fakeClient();
+    seed(cloudComment('remote-comment', {
+      conversationId: 'owner-private-conversation',
+      note: 'shared comment only',
+    }));
+    const service = createCollabCloudService({
+      client,
+      workspaceContext: fixedContextProvider(teamContext({ role: 'member' })),
+      listProjectIds: () => [],
+      resolveLocalConversationId: (projectId) =>
+        getLatestConversationIdForProject(db, projectId),
+      mergeComment: ({ projectId, conversationId, comment }) =>
+        mergeSyncedPreviewComment(db, projectId, conversationId, comment),
+    });
+
+    await expect(
+      service.pullProject('p1', teamContext({ role: 'member' })),
+    ).resolves.toBe(true);
+
+    const conversations = listConversations(db, 'p1');
+    expect(conversations.map((conversation) => conversation.id)).toEqual([
+      firstAnchor?.conversationId,
+    ]);
+    expect(listMessages(db, firstAnchor!.conversationId)).toEqual([]);
+    expect(
+      listPreviewComments(db, 'p1', firstAnchor!.conversationId),
+    ).toEqual([
+      expect.objectContaining({
+        id: 'remote-comment',
+        conversationId: firstAnchor?.conversationId,
+        note: 'shared comment only',
+      }),
+    ]);
+    service.dispose();
+  });
+
   it('polls, merges new comments once, and advances the cursor (no re-merge)', async () => {
     const { client, seed } = fakeClient();
     seed(cloudComment('c1'));

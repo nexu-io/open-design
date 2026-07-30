@@ -17,7 +17,7 @@
 
 import http from 'node:http';
 import express from 'express';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -46,6 +46,8 @@ import {
   upsertPreviewComment,
 } from '../src/db.js';
 import { enforceWorkspaceResourceMutation } from '../src/collab/workspace-resource-mutation.js';
+import { verifyWorkspaceRequestContext } from '../src/collab/request-workspace-context.js';
+import { createCachedWorkspaceDirectoryFetcher } from '../src/collab/vela-workspace-context.js';
 import { registerProjectCommentRoutes } from '../src/routes/project/comments.js';
 
 let server: http.Server | null = null;
@@ -86,6 +88,29 @@ function workspaceHeaders(
     'x-od-workspace-member-id': memberId,
     'x-od-workspace-role': role,
     'x-od-workspace-can-write-synced-files': String(canWriteSyncedFiles),
+  };
+}
+
+function activeTeamContext(
+  memberId = OTHER_MEMBER_ID,
+  role: 'owner' | 'admin' | 'member' = 'member',
+): WorkspaceCollabContext {
+  return {
+    workspaceId: WORKSPACE_ID,
+    workspaceType: 'team',
+    workspaceMemberId: memberId,
+    role,
+    memberStatus: 'active',
+    lifecycleState: 'active',
+    billingState: 'active',
+    planId: null,
+    providerMode: 'platform_credits',
+    seatSummary: buildWorkspaceSeatSummary({ seatLimit: 5, usedSeats: 2 }),
+    permissions: buildWorkspacePermissions({
+      role,
+      lifecycleState: 'active',
+    }),
+    teamId: WORKSPACE_ID,
   };
 }
 
@@ -181,24 +206,78 @@ async function startServer(
 }
 
 describe('project comments — workspace mutation gate', () => {
-  it('uses the verified project A scope after ambient identity moved to B', async () => {
-    const projectContext: WorkspaceCollabContext = {
+  it('leases directory authority only for GET while mutations stay fresh and revocation fails closed', async () => {
+    let clock = 0;
+    let directoryItems = [{
       workspaceId: WORKSPACE_ID,
-      workspaceType: 'team',
+      workspaceName: 'Team',
+      workspaceType: 'team' as const,
       workspaceMemberId: OTHER_MEMBER_ID,
-      role: 'member',
-      memberStatus: 'active',
-      lifecycleState: 'active',
-      billingState: 'active',
-      planId: null,
-      providerMode: 'platform_credits',
-      seatSummary: buildWorkspaceSeatSummary({ seatLimit: 5, usedSeats: 2 }),
-      permissions: buildWorkspacePermissions({
-        role: 'member',
-        lifecycleState: 'active',
-      }),
-      teamId: WORKSPACE_ID,
-    };
+      role: 'member' as const,
+      memberStatus: 'active' as const,
+      lifecycleState: 'active' as const,
+    }];
+    const fetchReadDirectory = vi.fn(async () => ({
+      ok: true as const,
+      items: directoryItems,
+    }));
+    const cachedReadDirectory = createCachedWorkspaceDirectoryFetcher({
+      fetchDirectory: fetchReadDirectory,
+      identityKey: () => 'member-comment-read',
+      ttlMs: 5_000,
+      now: () => clock,
+    });
+    const fetchFreshMutationDirectory = vi.fn(async () => ({
+      ok: true as const,
+      items: directoryItems,
+    }));
+    const baseUrl = await startServer({
+      resolveReadWorkspaceContext: (req: unknown) =>
+        verifyWorkspaceRequestContext({
+          req,
+          fetchWorkspaceDirectory: cachedReadDirectory,
+        }),
+      resolveWorkspaceContext: (req: unknown) =>
+        verifyWorkspaceRequestContext({
+          req,
+          fetchWorkspaceDirectory: fetchFreshMutationDirectory,
+        }),
+    });
+    const commentsUrl =
+      `${baseUrl}/api/projects/${TEAM_MIRROR_PROJECT}/conversations/conv-team-mirror/comments`;
+    const headers = workspaceHeaders(OTHER_MEMBER_ID, 'member');
+
+    expect((await fetch(commentsUrl, { headers })).status).toBe(200);
+    expect((await fetch(commentsUrl, { headers })).status).toBe(200);
+    expect(fetchReadDirectory).toHaveBeenCalledTimes(1);
+    expect(fetchFreshMutationDirectory).not.toHaveBeenCalled();
+
+    const create = await fetch(commentsUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...headers },
+      body: JSON.stringify({ target: COMMENT_TARGET, note: 'fresh mutation' }),
+    });
+    expect(create.status).toBe(200);
+    expect(fetchFreshMutationDirectory).toHaveBeenCalledTimes(1);
+    expect(fetchReadDirectory).toHaveBeenCalledTimes(1);
+
+    directoryItems = [];
+    clock = 5_001;
+    expect((await fetch(commentsUrl, { headers })).status).toBe(403);
+    expect(fetchReadDirectory).toHaveBeenCalledTimes(2);
+
+    const deniedMutation = await fetch(commentsUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...headers },
+      body: JSON.stringify({ target: COMMENT_TARGET, note: 'must stay denied' }),
+    });
+    expect(deniedMutation.status).toBe(403);
+    expect(fetchFreshMutationDirectory).toHaveBeenCalledTimes(2);
+    expect(fetchReadDirectory).toHaveBeenCalledTimes(2);
+  });
+
+  it('uses the verified project A scope after ambient identity moved to B', async () => {
+    const projectContext = activeTeamContext();
     const pushedScopes: Array<{ workspaceId: string; workspaceMemberId: string }> = [];
     const baseUrl = await startServer({
       // Models the stale daemon-global answer after another tab moved to B.

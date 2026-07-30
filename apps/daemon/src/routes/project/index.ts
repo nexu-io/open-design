@@ -137,6 +137,10 @@ export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | '
     req: Request,
     projectId: string,
   ) => Promise<ProjectCommentWorkspaceContextResolution>;
+  resolveReadWorkspaceContext?: (
+    req: Request,
+    projectId: string,
+  ) => Promise<ProjectCommentWorkspaceContextResolution>;
   resolveProjectOwnerMemberId?: (
     projectId: string,
     context?: WorkspaceCollabContext | null,

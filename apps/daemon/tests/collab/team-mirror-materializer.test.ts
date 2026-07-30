@@ -6,6 +6,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   closeDatabase,
   getProject,
+  listConversations,
+  listMessages,
   listWorkspaceProjects,
   openDatabase,
 } from '../../src/db.js';
@@ -164,6 +166,28 @@ describe('authorized team mirror SQLite materialization', () => {
     expect(getProject(db, input.id)?.name).toBe('Pulled project');
     expect(getTeamProjectMaterialization(db, scope.workspaceId, input.id))
       .toEqual(receipt());
+  });
+
+  it('creates one stable local-only comment anchor without copying owner chat', async () => {
+    const db = await database();
+
+    materializePulledTeamMirror(db, input, scope, receipt());
+    const first = listConversations(db, input.id);
+
+    expect(first).toHaveLength(1);
+    expect(first[0]?.messageCount).toBe(0);
+    expect(listMessages(db, first[0]!.id)).toEqual([]);
+
+    materializePulledTeamMirror(db, input, scope, {
+      ...receipt(),
+      version: 8,
+      versionId: 'version-8',
+    });
+    const second = listConversations(db, input.id);
+
+    expect(second.map((conversation) => conversation.id))
+      .toEqual(first.map((conversation) => conversation.id));
+    expect(listMessages(db, second[0]!.id)).toEqual([]);
   });
 
   it('rolls back metadata and binding when the exact receipt cursor cannot commit', async () => {

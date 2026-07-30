@@ -3784,26 +3784,38 @@ export async function startServer({
     projectId,
     { fresh: false },
   );
-  const resolveProjectCommentWorkspaceContext = async (
+  const resolveProjectCommentWorkspaceContextWith = async (
     req: any,
     projectId: string,
+    verify: (
+      req: any,
+      projectId?: string,
+    ) => ReturnType<typeof verifyProjectWorkspaceContextForRequest>,
   ) => {
     const binding = getWorkspaceProjectByProjectId(db, projectId);
     if (!binding?.workspaceId) {
       return { ok: true as const, context: null };
     }
-    const verified = await verifyExplicitWorkspaceRequestContext({ req });
+    const verified = await verify(req, projectId);
     if (!verified.ok) return verified;
-    if (verified.context.workspaceId !== binding.workspaceId) {
-      return {
-        ok: false as const,
-        status: 403 as const,
-        code: 'WORKSPACE_ACCESS_DENIED' as const,
-        message: 'the requested workspace does not own this project',
-      };
-    }
     return { ok: true as const, context: verified.context };
   };
+  const resolveProjectCommentWorkspaceContext = (
+    req: any,
+    projectId: string,
+  ) => resolveProjectCommentWorkspaceContextWith(
+    req,
+    projectId,
+    verifiedWorkspaceContextForRequest,
+  );
+  const resolveProjectCommentReadWorkspaceContext = (
+    req: any,
+    projectId: string,
+  ) => resolveProjectCommentWorkspaceContextWith(
+    req,
+    projectId,
+    verifiedWorkspaceReadContextForRequest,
+  );
   const verifiedTeamMirrorScope = async (
     scope: TeamMirrorPullScope,
   ): Promise<boolean> => {
@@ -6137,6 +6149,7 @@ export async function startServer({
     // comment author / project owner, and push the comment lifecycle (create/edit,
     // status change, tombstone) to the cross-daemon relay.
     resolveWorkspaceContext: resolveProjectCommentWorkspaceContext,
+    resolveReadWorkspaceContext: resolveProjectCommentReadWorkspaceContext,
     resolveProjectOwnerMemberId: async (projectId, context) => {
       if (!context || context.workspaceType !== 'team') return null;
       return resolveSharedProjectOwner(projectId, {

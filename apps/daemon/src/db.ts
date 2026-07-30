@@ -3035,6 +3035,39 @@ export function getLatestConversationIdForProject(
 }
 
 /**
+ * Ensure a pulled Team mirror has one LOCAL conversation row that preview
+ * comments can use as their foreign-key anchor.
+ *
+ * Conversation ids and chat transcripts are daemon-local; Team project
+ * materialization deliberately does not copy the owner's private conversations
+ * or messages. A member mirror can therefore have zero conversations even
+ * after every shared file is present. Preview comments still need a local
+ * conversation FK, so the materializer creates one empty thread exactly once.
+ * If this daemon already has any conversation for the project, that existing
+ * local thread remains the anchor.
+ */
+export function ensureProjectCommentAnchorConversation(
+  db: SqliteDb,
+  projectId: string,
+  now = Date.now(),
+): { conversationId: string; created: boolean } | null {
+  const existing = getLatestConversationIdForProject(db, projectId);
+  if (existing) return { conversationId: existing, created: false };
+  if (!getProject(db, projectId)) return null;
+
+  const conversationId = `comment-anchor-${randomUUID()}`;
+  insertConversation(db, {
+    id: conversationId,
+    projectId,
+    title: null,
+    sessionMode: 'design',
+    createdAt: now,
+    updatedAt: now,
+  });
+  return { conversationId, created: true };
+}
+
+/**
  * Delete a synced comment by its global id (the author daemon's own id). Used to
  * apply an inbound tombstone. Scoped by project so a stray id can't reach across
  * projects. Returns true when a row was removed.
