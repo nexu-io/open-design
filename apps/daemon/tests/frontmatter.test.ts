@@ -84,6 +84,22 @@ describe('parseFrontmatter block sequences and arrays', () => {
     expect(data('tags:\n  - a\n  - b').tags).toEqual(['a', 'b']);
   });
 
+  // Quoted sequence items that contain `:` must stay scalars. The skills
+  // catalogue uses phrases like `"1:1 figma"`; treating them as mappings
+  // produced objects that crashed the home composer skill preview.
+  it('keeps quoted sequence items with colons as strings', () => {
+    expect(
+      data('triggers:\n  - "figma to code"\n  - "1:1 figma"\n  - \'1:1 notes\'').triggers,
+    ).toEqual(['figma to code', '1:1 figma', '1:1 notes']);
+  });
+
+  it('still parses unquoted key: value sequence items as objects', () => {
+    expect(data('items:\n  - k: v\n  - name: foo').items).toEqual([
+      { k: 'v' },
+      { name: 'foo' },
+    ]);
+  });
+
   it('does not split inline-array elements on commas inside quotes', () => {
     expect(data('a: ["a,b", "c"]').a).toEqual(['a,b', 'c']);
     expect(data("a: ['x, y', z]").a).toEqual(['x, y', 'z']);

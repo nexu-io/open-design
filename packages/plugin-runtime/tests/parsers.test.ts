@@ -177,6 +177,18 @@ describe('parseFrontmatter', () => {
     expect(data['tags']).toEqual(['a', 'b']);
   });
 
+  it('keeps quoted sequence items with colons as strings', () => {
+    const { data } = parseFrontmatter(
+      '---\ntriggers:\n  - "figma to code"\n  - "1:1 figma"\n  - \'1:1 notes\'\n---\n',
+    );
+    expect(data['triggers']).toEqual(['figma to code', '1:1 figma', '1:1 notes']);
+  });
+
+  it('still parses unquoted key: value sequence items as objects', () => {
+    const { data } = parseFrontmatter('---\nitems:\n  - k: v\n  - name: foo\n---\n');
+    expect(data['items']).toEqual([{ k: 'v' }, { name: 'foo' }]);
+  });
+
   it('does not split inline-array elements on commas inside quotes', () => {
     const { data } = parseFrontmatter('---\na: ["a,b", "c"]\nb: [\'x, y\', z]\n---\n');
     expect(data['a']).toEqual(['a,b', 'c']);

@@ -119,7 +119,9 @@ function parseYamlSubset(src: string): FrontmatterObject {
           continue;
         }
       }
-      if (value.includes(':')) {
+      // Quoted scalars keep their colons (e.g. `- "1:1 figma"`). Only unquoted
+      // `key: value` items are single-line mapping entries in a sequence.
+      if (value.includes(':') && !isQuotedScalar(value)) {
         const obj: FrontmatterObject = {};
         const colonIdx = value.indexOf(':');
         const key = value.slice(0, colonIdx).trim();
@@ -232,15 +234,22 @@ function splitInlineArrayItems(inner: string): string[] {
   return items;
 }
 
+/** True when `raw` is a fully quoted YAML scalar (`"..."` / `'...'`). */
+function isQuotedScalar(raw: string): boolean {
+  const v = raw.trim();
+  // Require at least two characters so a lone quote isn't treated as empty.
+  return (
+    v.length >= 2 &&
+    ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'")))
+  );
+}
+
 function coerce(raw: string | undefined): FrontmatterValue {
   if (raw === undefined) return '';
   const v = raw.trim();
   // Require at least two characters so a lone quote (`"`), whose first and
   // last char are the same, isn't mistaken for an empty quoted string.
-  if (
-    v.length >= 2 &&
-    ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'")))
-  ) {
+  if (isQuotedScalar(v)) {
     return v.slice(1, -1);
   }
   if (v === 'true') return true;

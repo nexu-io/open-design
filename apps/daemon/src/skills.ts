@@ -228,7 +228,7 @@ export async function listSkills(
           ...(displayName ? { displayName } : {}),
           description,
           ...(descriptionI18n ? { descriptionI18n } : {}),
-          triggers: Array.isArray(data.triggers) ? data.triggers : [],
+          triggers: normalizeTriggers(data.triggers),
           mode,
           surface,
           source,
@@ -274,7 +274,7 @@ export async function listSkills(
             name: humanizeExampleName(example.key),
             description,
             ...(descriptionI18n ? { descriptionI18n } : {}),
-            triggers: Array.isArray(data.triggers) ? data.triggers : [],
+            triggers: normalizeTriggers(data.triggers),
             mode,
             surface,
             source,
@@ -520,6 +520,12 @@ function normalizeBoolHint(value: unknown): boolean | null {
     if (v === "false" || v === "no" || v === "0") return false;
   }
   return null;
+}
+
+/** Skill triggers are free-text phrases; drop non-strings from bad YAML parses. */
+function normalizeTriggers(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string" && item.length > 0);
 }
 
 function localizedMapFromFields(

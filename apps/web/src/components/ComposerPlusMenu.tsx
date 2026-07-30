@@ -993,7 +993,11 @@ function ComposerSkillPreview({
 }) {
   const title = localizeSkillName(locale, skill);
   const description = localizeSkillDescription(locale, skill) || skill.description;
-  const triggers = skill.triggers?.filter(Boolean) ?? [];
+  // Triggers must be strings — a bad YAML parse of quoted phrases like
+  // `"1:1 figma"` used to yield objects, which React cannot render as children.
+  const triggers = (skill.triggers ?? []).filter(
+    (trigger): trigger is string => typeof trigger === 'string' && Boolean(trigger),
+  );
   return (
     <div className="plus-menu__preview plus-menu__skill-preview" aria-live="polite">
       <div className="plus-menu__preview-meta">
