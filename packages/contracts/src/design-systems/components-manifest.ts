@@ -357,6 +357,10 @@ function iterateCssRules(css: string): CssRule[] {
     let bodyStart = index;
     let bodyEnd = -1;
     let cursor = index;
+    // Track the open CSS quote (single or double) so braces inside a
+    // quoted value such as `content: "}"` are not mistaken for the rule
+    // terminator (PR #6250 reviewer #3). null = outside any quoted string.
+    let inQuote: '"' | "'" | null = null;
     while (cursor < length) {
       const char = css[cursor];
       if (char === '/' && css[cursor + 1] === '*') {
@@ -366,6 +370,32 @@ function iterateCssRules(css: string): CssRule[] {
         // keeps the parser honest if a caller passes pre-stripped CSS.)
         const closeIdx = css.indexOf('*/', cursor + 2);
         cursor = closeIdx === -1 ? length : closeIdx + 2;
+        continue;
+      }
+      // Treat braces inside quoted CSS values as data, not rule delimiters
+      // (PR #6250 reviewer #3). Track single / double quote state and
+      // ignore `{` / `}` that appear between a pair of quotes. Handle
+      // escaped quotes \" and \' so a `}` preceded by \" doesn't escape
+      // the quoted context.
+      if (inQuote === '"' || inQuote === "'") {
+        if (char === '\\') {
+          // Skip the escaped character (could be \" or \' or any escape).
+          cursor += 2;
+          continue;
+        }
+        if (char === inQuote) {
+          inQuote = null;
+          cursor += 1;
+          continue;
+        }
+        // Inside a quoted string: braces are just text, skip without
+        // affecting depth.
+        cursor += 1;
+        continue;
+      }
+      if (char === '"' || char === "'") {
+        inQuote = char;
+        cursor += 1;
         continue;
       }
       if (char === '{') {
@@ -448,14 +478,51 @@ function flattenNestedBody(bodySlice: string): string {
   // and the nested-rule *selector prefix* between `{` and the next `{`/`;`
   // — but keeping every declaration body so all `var(--token)` references
   // at every depth survive on the outermost rule.
+  //
+  // Quote/escape state (PR #6250 reviewer #3): braces inside a quoted
+  // CSS value (`content: "}"`) are data, not rule delimiters. We preserve
+  // the quoted text character-by-character into the output so downstream
+  // token-reference scanning still sees the full declaration, but we do
+  // NOT treat the quoted `{` / `}` as braces to strip. Escapes `\"` and
+  // `\'` skip the next character so they don't terminate the quoted
+  // context prematurely.
   let out = '';
   let cursor = 0;
   const length = bodySlice.length;
+  let inQuote: '"' | "'" | null = null;
   while (cursor < length) {
     const char = bodySlice[cursor];
-    if (char === '/' && bodySlice[cursor + 1] === '*') {
+    // Comment handling: only active outside quoted strings. Comments inside
+    // quoted strings are part of the data and should be preserved verbatim.
+    if (inQuote === null && char === '/' && bodySlice[cursor + 1] === '*') {
       const closeIdx = bodySlice.indexOf('*/', cursor + 2);
       cursor = closeIdx === -1 ? length : closeIdx + 2;
+      continue;
+    }
+    if (inQuote !== null) {
+      // Inside a quoted value. Preserve the character verbatim — quoted
+      // text is data, and downstream token-reference scanning needs the
+      // full original value (e.g. `content: "}"` stays intact). Handle
+      // backslash escapes so a quoted `}"` doesn't exit the quote early.
+      if (char === '\\') {
+        out += bodySlice.slice(cursor, cursor + 2);
+        cursor += 2;
+        continue;
+      }
+      out += char;
+      if (char === inQuote) {
+        inQuote = null;
+      }
+      cursor += 1;
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      inQuote = char;
+      // Preserve the opening quote in `out` so the flattened body still
+      // carries the full quoted value (the closing quote is preserved by
+      // the inQuote !== null branch above).
+      out += char;
+      cursor += 1;
       continue;
     }
     if (char === '{' || char === '}') {

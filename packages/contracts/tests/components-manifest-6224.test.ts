@@ -236,4 +236,71 @@ describe('components manifest extraction (#6224 regression suite)', () => {
       expect.arrayContaining(['--a', '--b', '--c']),
     );
   });
+
+  it('treats braces inside quoted CSS values as data, not rule delimiters (#6250 reviewer #3)', () => {
+    // PerishCode CHANGES_REQUESTED on PR #6250:
+    //   "Treat braces inside quoted CSS values as data, not rule delimiters.
+    //    This depth loop currently has no string/escape state, so valid CSS
+    //    such as `.btn-a { content: "}"; color: var(--a); } .btn-b { color:
+    //    var(--b); }` mis-parses."
+    //
+    // The scanner used to count every `{` / `}` it saw, including braces
+    // inside a quoted string like `content: "}"`. That closed the wrapping
+    // rule early, swallowed the second rule into the first one's body,
+    // and dropped every selector + token reference after the quoted brace.
+    //
+    // The fix: track single / double quote state in iterateCssRules and
+    // flattenNestedBody and ignore braces while inside a quoted value.
+    // Handle `\"` and `\'` escapes so a quoted `}"` still terminates the
+    // quoted context cleanly.
+    const manifest = extractComponentsManifest({
+      brandId: 'quoted-braces',
+      tokensCss: ':root { --a: red; --b: blue; --c: green; }',
+      fixtureHtml: `
+        <style>
+          .btn-a { content: "}"; color: var(--a); }
+          .btn-b { content: '{'; background: var(--b); }
+          .btn-c { content: '\\'\\';'; border-color: var(--c); }
+        </style>
+        <button class="btn-a btn-b btn-c">x</button>
+      `,
+    });
+
+    expect(manifest.selectors).toEqual(
+      expect.arrayContaining(['.btn-a', '.btn-b', '.btn-c']),
+    );
+    const buttonsGroup = manifest.groups.find((g) => g.id === 'buttons');
+    expect(buttonsGroup?.selectors).toEqual(
+      expect.arrayContaining(['.btn-a', '.btn-b', '.btn-c']),
+    );
+    // All three tokens survive — the quoted braces do not truncate the
+    // rule body and lose later declarations.
+    expect(buttonsGroup?.tokenReferences).toEqual(
+      expect.arrayContaining(['--a', '--b', '--c']),
+    );
+
+    // Severity check: a quoted `}` followed by a *second flat rule* must
+    // not collapse the second rule into the first. Pre-fix behaviour:
+    // `.btn-a { content: "}"; color: var(--a); } .btn-b { color: var(--b); }`
+    // closed `.btn-a` at the quoted `}`, swallowed `.btn-b` as text, and
+    // the manifest lost `.btn-b` + its --b reference entirely.
+    const pair = extractComponentsManifest({
+      brandId: 'quoted-pair',
+      tokensCss: ':root { --a: red; --b: blue; }',
+      fixtureHtml: `
+        <style>
+          .btn-a { content: "}"; color: var(--a); }
+          .btn-b { color: var(--b); }
+        </style>
+        <button class="btn-a btn-b">x</button>
+      `,
+    });
+    expect(pair.selectors).toEqual(
+      expect.arrayContaining(['.btn-a', '.btn-b']),
+    );
+    const pairButtons = pair.groups.find((g) => g.id === 'buttons');
+    expect(pairButtons?.tokenReferences).toEqual(
+      expect.arrayContaining(['--a', '--b']),
+    );
+  });
 });
