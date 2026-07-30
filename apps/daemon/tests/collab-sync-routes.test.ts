@@ -31,6 +31,7 @@ import {
   type ProactivePullAuthorizationWitness,
 } from '../src/collab/proactive-content-pull.js';
 import { createProjectContentTransferStateStore } from '../src/collab/project-content-transfer-state.js';
+import { createSwrCache } from '../src/collab/swr-cache.js';
 import { resolveAuthorizedActiveTeamWorkspaceSnapshot } from '../src/collab/active-workspace-selection.js';
 import { verifyWorkspaceRequestContext } from '../src/collab/request-workspace-context.js';
 import { createCachedWorkspaceDirectoryFetcher } from '../src/collab/vela-workspace-context.js';
@@ -1111,6 +1112,94 @@ describe('collab sync routes', () => {
     })).status).toBe(502);
     expect(verifyWorkspaceRequest).toHaveBeenCalledTimes(3);
     expect(fetchReadDirectory).toHaveBeenCalledTimes(1);
+  });
+
+  it('reuses the scoped catalog across consecutive status owner reads and refreshes after invalidation', async () => {
+    const context = teamContext('ws-status-cache', 'wm-status-viewer');
+    const listCatalog = vi.fn(async () => [{
+      projectId: 'shared-status-project',
+      ownerMemberId: 'wm-status-owner',
+    }]);
+    const cache = createSwrCache(
+      listCatalog,
+      () => JSON.stringify([
+        context.workspaceId,
+        context.workspaceMemberId,
+      ]),
+      3_000,
+    );
+    const resolveSharedProjectOwnerForStatus = vi.fn(async (
+      projectId: string,
+      scope?: { workspaceId: string; workspaceMemberId: string },
+    ) => {
+      if (
+        scope?.workspaceId !== context.workspaceId
+        || scope.workspaceMemberId !== context.workspaceMemberId
+      ) {
+        return null;
+      }
+      return (await cache())
+        .find((entry) => entry.projectId === projectId)
+        ?.ownerMemberId ?? null;
+    });
+    const api = await startSyncServer(
+      { current: async () => context },
+      { resolveSharedProjectOwnerForStatus },
+    );
+
+    expect((await api.json(
+      '/api/projects/shared-status-project/collab/status',
+    )).status).toBe(200);
+    expect((await api.json(
+      '/api/projects/shared-status-project/collab/status',
+    )).status).toBe(200);
+    expect(resolveSharedProjectOwnerForStatus).toHaveBeenCalledTimes(2);
+    expect(listCatalog).toHaveBeenCalledTimes(1);
+
+    cache.invalidate();
+    expect((await api.json(
+      '/api/projects/shared-status-project/collab/status',
+    )).status).toBe(200);
+    expect(listCatalog).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejects a revoked member before consulting a cached status owner catalog', async () => {
+    const context = teamContext('ws-revoked-status', 'wm-revoked-status');
+    let revoked = false;
+    const resolveSharedProjectOwnerForStatus = vi.fn(
+      async () => 'wm-status-owner',
+    );
+    const verifyWorkspaceReadRequest = vi.fn(async () =>
+      revoked
+        ? {
+            ok: false as const,
+            status: 403 as const,
+            code: 'WORKSPACE_ACCESS_DENIED' as const,
+            message: 'workspace membership is inactive',
+          }
+        : {
+            ok: true as const,
+            context,
+          });
+    const api = await startSyncServer(
+      { current: async () => context },
+      {
+        verifyWorkspaceReadRequest,
+        resolveSharedProjectOwnerForStatus,
+      },
+    );
+
+    expect((await api.json(
+      '/api/projects/revoked-status-project/collab/status',
+    )).status).toBe(200);
+    expect(resolveSharedProjectOwnerForStatus).toHaveBeenCalledTimes(1);
+
+    revoked = true;
+    expect((await api.json(
+      '/api/projects/revoked-status-project/collab/status',
+    )).status).toBe(403);
+    expect(verifyWorkspaceReadRequest).toHaveBeenCalledTimes(2);
+    expect(resolveSharedProjectOwnerForStatus).toHaveBeenCalledTimes(1);
   });
 
   it('does not cache a failed status authority read', async () => {

@@ -3630,18 +3630,29 @@ export async function startServer({
       },
     ))[0] ?? null;
   };
-  // Owner lookup is a display concern (the "shared project" banner, comment
-  // author names, the publish trigger) and the owner changes only when a project
-  // is (re)shared, so it reads through the stale-while-revalidate cache — a
-  // project-view no longer waits ~1s on a fresh catalog round-trip just to learn
-  // it is owned by the current member. Revocation stays on the uncached
-  // resolveSharedProject (pull gate) so an unshare is still seen immediately.
+  // Security-sensitive ownership decisions stay fresh. Pull, publish,
+  // presence, and mutation paths all use this exact lookup so an unshare or
+  // member revocation is observed immediately.
   const resolveSharedProjectOwner = async (
     projectId: string,
     explicitScope: { workspaceId: string; workspaceMemberId: string },
   ): Promise<string | null> => {
     const list = await withoutLocallyUnsharedProjects(
       await teamProjectsLister(explicitScope.workspaceId),
+      explicitScope,
+    );
+    return list.find((entry) => entry.projectId === projectId)?.ownerMemberId ?? null;
+  };
+  // GET /collab/status is a display read whose request authority has already
+  // been verified. Reuse the explicit workspace+member catalog cache here so
+  // repeated project-open polls do not each wait on another Vela list process.
+  // No security-sensitive caller receives this resolver.
+  const resolveSharedProjectOwnerForStatus = async (
+    projectId: string,
+    explicitScope: { workspaceId: string; workspaceMemberId: string },
+  ): Promise<string | null> => {
+    const list = await withoutLocallyUnsharedProjects(
+      await teamProjectsDisplayCache(explicitScope),
       explicitScope,
     );
     return list.find((entry) => entry.projectId === projectId)?.ownerMemberId ?? null;
@@ -3912,6 +3923,7 @@ export async function startServer({
       observeLegacyTeamProjectPull(projectId, scope, version),
     resolveSharedProject,
     resolveSharedProjectOwner,
+    resolveSharedProjectOwnerForStatus,
     // Non-destructive revocation flag for a pulled team mirror: the pull gate
     // sets it when a project has left the team (files stay on disk but stop
     // being served) and clears it on a successful re-pull. Read routes refuse to

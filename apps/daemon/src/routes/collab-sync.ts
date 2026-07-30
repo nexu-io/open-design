@@ -121,6 +121,16 @@ export interface RegisterCollabSyncRoutesDeps {
     projectId: string,
     scope?: { workspaceId: string; workspaceMemberId: string },
   ) => Promise<string | null>;
+  /**
+   * Read-only owner lookup for GET /collab/status. This may use a short-lived
+   * explicit-scope display cache because request authority is verified first.
+   * Pull, publish, presence, and mutation paths deliberately keep using the
+   * fresh `resolveSharedProjectOwner` dependency above.
+   */
+  resolveSharedProjectOwnerForStatus?: (
+    projectId: string,
+    scope?: { workspaceId: string; workspaceMemberId: string },
+  ) => Promise<string | null>;
   resolveSharedProject?: (
     projectId: string,
     scope?: TeamMirrorPullScope | null,
@@ -661,6 +671,7 @@ export function registerCollabSyncRoutes(
     resolveProjectDir,
     resolvePullDir,
     resolveSharedProjectOwner,
+    resolveSharedProjectOwnerForStatus,
     resolveSharedProject,
     markTeamProjectRevoked,
     markSharedProjectPlaceholder,
@@ -2089,11 +2100,13 @@ export function registerCollabSyncRoutes(
     // call was the reason a member's OWN project flashed the "shared read-only"
     // notice for seconds after opening: the front end fails closed until
     // /collab/status confirms ownership, so a slow status made the flash long.
-    if (ownerMemberId == null && resolveSharedProjectOwner) {
+    const statusOwnerResolver =
+      resolveSharedProjectOwnerForStatus ?? resolveSharedProjectOwner;
+    if (ownerMemberId == null && statusOwnerResolver) {
       try {
         const hubOwner =
           resolvedWorkspaceId && principal?.memberId
-            ? await resolveSharedProjectOwner(projectId, {
+            ? await statusOwnerResolver(projectId, {
                 workspaceId: resolvedWorkspaceId,
                 workspaceMemberId: principal.memberId,
               })

@@ -423,6 +423,45 @@ describe('server.ts wiring (source boundary)', () => {
     expect(membersBody).not.toContain('lastKnown');
   });
 
+  it('serves repeated collab status owner reads from the explicit display cache while revocation stays fresh', () => {
+    const freshOwnerStart = source.indexOf(
+      'const resolveSharedProjectOwner = async (',
+    );
+    const statusOwnerStart = source.indexOf(
+      'const resolveSharedProjectOwnerForStatus = async (',
+      freshOwnerStart,
+    );
+    const presenceStart = source.indexOf(
+      'const authoritativePresenceWorkspaces',
+      statusOwnerStart,
+    );
+    expect(freshOwnerStart).toBeGreaterThan(-1);
+    expect(statusOwnerStart).toBeGreaterThan(freshOwnerStart);
+    expect(presenceStart).toBeGreaterThan(statusOwnerStart);
+    const freshOwnerBody = source.slice(freshOwnerStart, statusOwnerStart);
+    const statusOwnerBody = source.slice(statusOwnerStart, presenceStart);
+
+    expect(statusOwnerBody).toContain(
+      'await teamProjectsDisplayCache(explicitScope)',
+    );
+    expect(statusOwnerBody).not.toContain(
+      'await teamProjectsLister(explicitScope.workspaceId)',
+    );
+    expect(freshOwnerBody).toContain(
+      'await teamProjectsLister(explicitScope.workspaceId)',
+    );
+    expect(freshOwnerBody).not.toContain('teamProjectsDisplayCache');
+
+    const pullStart = source.indexOf('const resolveSharedProject = async (');
+    expect(pullStart).toBeGreaterThan(-1);
+    expect(pullStart).toBeLessThan(freshOwnerStart);
+    const pullBody = source.slice(pullStart, freshOwnerStart);
+    expect(pullBody).toContain(
+      'await teamProjectsLister(scope.workspaceId)',
+    );
+    expect(pullBody).not.toContain('teamProjectsDisplayCache');
+  });
+
   it('recognizes an authorized remote mirror from exact version and a real live directory, not a local project manifest', () => {
     const helperStart = source.indexOf(
       'const proactiveTeamProjectMaterializedVersion = (',
