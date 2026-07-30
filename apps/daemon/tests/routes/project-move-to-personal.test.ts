@@ -36,6 +36,7 @@ import { registerCollabContextRoutes } from '../../src/routes/collab-context.js'
 import { startBrandExtraction } from '../../src/brands/index.js';
 import {
   closeDatabase,
+  deleteWorkspaceProject,
   ensureWorkspaceProject,
   getProject,
   getWorkspaceProject,
@@ -88,6 +89,16 @@ function ownerTeamHeaders(extra: Record<string, string> = {}) {
     'x-od-workspace-can-write-synced-files': 'true',
     ...extra,
   };
+}
+
+function teamHeaders(input: {
+  memberId: string;
+  role: 'owner' | 'admin' | 'member';
+}) {
+  return ownerTeamHeaders({
+    'x-od-workspace-member-id': input.memberId,
+    'x-od-workspace-role': input.role,
+  });
 }
 
 async function listen(app: express.Express): Promise<{ server: http.Server; url: string }> {
@@ -160,7 +171,8 @@ describe('project move to personal on an unbound (never-locally-shared) project'
           rollback: vi.fn(async () => {}),
           commit: vi.fn(async () => {}),
         })),
-        deleteWorkspaceProject: noop,
+        deleteWorkspaceProject: (_db: unknown, workspaceId: string, projectId: string) =>
+          deleteWorkspaceProject(db, workspaceId, projectId),
         countWorkspaceProjectRefs: vi.fn(() => 1),
         ensureWorkspaceProject: (_db: unknown, input: any) => ensureWorkspaceProject(db, input),
         getWorkspaceProject: (_db: unknown, workspaceId: string, projectId: string) =>
@@ -342,33 +354,99 @@ describe('project move to personal on an unbound (never-locally-shared) project'
     }
   });
 
-  it('moves a real design-system-extraction project back to personal once the team hub confirms it is shared (recvqfNnRETNtM)', async () => {
-    const result = await startBrandExtraction({
-      designMd: DESIGN_MD_INPUT,
-      brandsRoot,
-      projectsRoot,
-      skillsRoot: SKILLS_ROOT,
-      db,
-      logoFallback: NO_LOGO_FALLBACK,
-      imageryFallback: NO_IMAGERY_FALLBACK,
-      seedFallback: NO_SEED_FALLBACK,
-    });
-    // Precondition, from real code: still unbound.
-    expect(getWorkspaceProjectByProjectId(db, result.projectId)).toBeUndefined();
+  it.each(['owner', 'admin'] as const)(
+    'lets a Workspace %s use the one-request catalog witness to recover a real unbound extraction project (recvqfNnRETNtM)',
+    async (role) => {
+      const result = await startBrandExtraction({
+        designMd: DESIGN_MD_INPUT,
+        brandsRoot,
+        projectsRoot,
+        skillsRoot: SKILLS_ROOT,
+        db,
+        logoFallback: NO_LOGO_FALLBACK,
+        imageryFallback: NO_IMAGERY_FALLBACK,
+        seedFallback: NO_SEED_FALLBACK,
+      });
+      // Precondition, from real code: still unbound.
+      expect(getWorkspaceProjectByProjectId(db, result.projectId)).toBeUndefined();
 
-    const resourceId = `project-${result.projectId}`;
+      const resourceId = `project-${result.projectId}`;
+      const teamProjectCatalog = {
+        list: vi.fn(async () => [
+          {
+            id: `catalog-${result.projectId}`,
+            workspaceId: TEAM_WORKSPACE_ID,
+            projectId: result.projectId,
+            resourceId,
+            // The hub never learned an owner for this project either — nothing
+            // in the brand-extraction pipeline ever registers one. The fix must
+            // NOT require this to equal the caller's own member id.
+            ownerMemberId: 'some-other-member-id',
+            displayName: 'Heritage Design System',
+            syncState: 'synced',
+            lastSyncedVersionId: 'v1',
+            createdAt: new Date(10).toISOString(),
+            updatedAt: new Date(20).toISOString(),
+            access: { canView: true, canComment: true, canEdit: true, frozen: false },
+          },
+        ]),
+        upsert: vi.fn(),
+      };
+
+      const app = express();
+      app.use(express.json());
+      registerProjectRoutes(app, buildDeps({ teamProjectCatalog }));
+      const routeServer = await listen(app);
+      try {
+        const resp = await fetch(
+          `${routeServer.url}/api/workspaces/${TEAM_WORKSPACE_ID}/projects/${result.projectId}/move`,
+          {
+            method: 'POST',
+            headers: teamHeaders({ memberId: OWNER_MEMBER_ID, role }),
+            body: JSON.stringify({ visibility: 'personal' }),
+          },
+        );
+        const body = await resp.json() as any;
+        expect(resp.status, `expected 200, got ${resp.status}: ${JSON.stringify(body)}`).toBe(200);
+        expect(body.project).toMatchObject({
+          id: result.projectId,
+          visibility: 'personal',
+          syncState: 'local_only',
+          resourceHubResourceId: null,
+        });
+
+        const row = getWorkspaceProjectByProjectId(db, result.projectId);
+        expect(row).toMatchObject({ workspaceId: TEAM_WORKSPACE_ID, visibility: 'personal' });
+      } finally {
+        await close(routeServer.server);
+      }
+    },
+  );
+
+  it('removes a privileged orphan recovery binding after unshare fails so owner/admin can retry', async () => {
+    const projectId = `retryable-orphan-${Date.now()}`;
+    insertProject(db, {
+      id: projectId,
+      name: 'Retryable privileged orphan',
+      skillId: null,
+      designSystemId: null,
+      pendingPrompt: null,
+      metadata: null,
+      customInstructions: null,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+    expect(getWorkspaceProjectByProjectId(db, projectId)).toBeUndefined();
+
     const teamProjectCatalog = {
       list: vi.fn(async () => [
         {
-          id: `catalog-${result.projectId}`,
+          id: `catalog-${projectId}`,
           workspaceId: TEAM_WORKSPACE_ID,
-          projectId: result.projectId,
-          resourceId,
-          // The hub never learned an owner for this project either — nothing
-          // in the brand-extraction pipeline ever registers one. The fix must
-          // NOT require this to equal the caller's own member id.
-          ownerMemberId: 'some-other-member-id',
-          displayName: 'Heritage Design System',
+          projectId,
+          resourceId: `project-${projectId}`,
+          ownerMemberId: 'historical-project-creator',
+          displayName: 'Retryable privileged orphan',
           syncState: 'synced',
           lastSyncedVersionId: 'v1',
           createdAt: new Date(10).toISOString(),
@@ -378,31 +456,41 @@ describe('project move to personal on an unbound (never-locally-shared) project'
       ]),
       upsert: vi.fn(),
     };
-
+    const requestTeamUnshare = vi.fn()
+      .mockRejectedValueOnce(new Error('temporary resource hub failure'))
+      .mockResolvedValueOnce(undefined);
     const app = express();
     app.use(express.json());
-    registerProjectRoutes(app, buildDeps({ teamProjectCatalog }));
+    registerProjectRoutes(app, buildDeps({
+      teamProjectCatalog,
+      collabSync: {
+        requestTeamShare: vi.fn(),
+        requestTeamUnshare,
+        invalidateTeamProjectCatalog: vi.fn(),
+      },
+    }));
     const routeServer = await listen(app);
     try {
-      const resp = await fetch(
-        `${routeServer.url}/api/workspaces/${TEAM_WORKSPACE_ID}/projects/${result.projectId}/move`,
+      const move = () => fetch(
+        `${routeServer.url}/api/workspaces/${TEAM_WORKSPACE_ID}/projects/${projectId}/move`,
         {
           method: 'POST',
-          headers: ownerTeamHeaders(),
+          headers: teamHeaders({ memberId: OWNER_MEMBER_ID, role: 'admin' }),
           body: JSON.stringify({ visibility: 'personal' }),
         },
       );
-      const body = await resp.json() as any;
-      expect(resp.status, `expected 200, got ${resp.status}: ${JSON.stringify(body)}`).toBe(200);
-      expect(body.project).toMatchObject({
-        id: result.projectId,
-        visibility: 'personal',
-        syncState: 'local_only',
-        resourceHubResourceId: null,
-      });
 
-      const row = getWorkspaceProjectByProjectId(db, result.projectId);
-      expect(row).toMatchObject({ workspaceId: TEAM_WORKSPACE_ID, visibility: 'personal' });
+      const failed = await move();
+      expect(failed.status).toBe(400);
+      expect(getWorkspaceProjectByProjectId(db, projectId)).toBeUndefined();
+
+      const retried = await move();
+      expect(retried.status).toBe(200);
+      expect(requestTeamUnshare).toHaveBeenCalledTimes(2);
+      expect(getWorkspaceProjectByProjectId(db, projectId)).toMatchObject({
+        workspaceId: TEAM_WORKSPACE_ID,
+        visibility: 'personal',
+      });
     } finally {
       await close(routeServer.server);
     }
@@ -503,6 +591,135 @@ describe('project move to personal on an unbound (never-locally-shared) project'
       const body = await resp.json() as any;
       expect(resp.status, `expected 200, got ${resp.status}: ${JSON.stringify(body)}`).toBe(200);
       expect(body.project).toMatchObject({ id: projectId, visibility: 'personal' });
+    } finally {
+      await close(routeServer.server);
+    }
+  });
+
+  it('does not let a non-creator member consume the catalog recovery witness', async () => {
+    const projectId = `orphan-non-creator-${Date.now()}`;
+    insertProject(db, {
+      id: projectId,
+      name: 'Orphan owned by another member',
+      skillId: null,
+      designSystemId: null,
+      pendingPrompt: null,
+      metadata: null,
+      customInstructions: null,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+    const teamProjectCatalog = {
+      list: vi.fn(async () => [
+        {
+          id: `catalog-${projectId}`,
+          workspaceId: TEAM_WORKSPACE_ID,
+          projectId,
+          resourceId: `project-${projectId}`,
+          ownerMemberId: 'actual-project-creator',
+          displayName: 'Orphan owned by another member',
+          syncState: 'synced',
+          lastSyncedVersionId: 'v1',
+          createdAt: new Date(10).toISOString(),
+          updatedAt: new Date(20).toISOString(),
+          access: { canView: true, canComment: true, canEdit: false, frozen: false },
+        },
+      ]),
+      upsert: vi.fn(),
+    };
+    const requestTeamUnshare = vi.fn();
+    const app = express();
+    app.use(express.json());
+    registerProjectRoutes(app, buildDeps({
+      teamProjectCatalog,
+      collabSync: {
+        requestTeamShare: vi.fn(),
+        requestTeamUnshare,
+        invalidateTeamProjectCatalog: vi.fn(),
+      },
+    }));
+    const routeServer = await listen(app);
+    try {
+      const response = await fetch(
+        `${routeServer.url}/api/workspaces/${TEAM_WORKSPACE_ID}/projects/${projectId}/move`,
+        {
+          method: 'POST',
+          headers: teamHeaders({ memberId: 'another-member', role: 'member' }),
+          body: JSON.stringify({ visibility: 'personal' }),
+        },
+      );
+
+      expect(response.status).toBe(403);
+      expect(requestTeamUnshare).not.toHaveBeenCalled();
+      // A rejected reader must not consume the orphan state by leaving a
+      // sticky binding that prevents a later owner/admin recovery request.
+      expect(getWorkspaceProjectByProjectId(db, projectId)).toBeUndefined();
+    } finally {
+      await close(routeServer.server);
+    }
+  });
+
+  it('keeps an ordinary bound Team project creator-only for move-to-personal', async () => {
+    const projectId = `bound-team-project-${Date.now()}`;
+    insertProject(db, {
+      id: projectId,
+      name: 'Ordinary shared project',
+      skillId: null,
+      designSystemId: null,
+      pendingPrompt: null,
+      metadata: null,
+      customInstructions: null,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+    ensureWorkspaceProject(db, {
+      projectId,
+      workspaceId: TEAM_WORKSPACE_ID,
+      visibility: 'team',
+      resourceState: 'active',
+      createdByWorkspaceMemberId: 'project-creator',
+      updatedByWorkspaceMemberId: 'project-creator',
+      resourceHubResourceId: `project-${projectId}`,
+      cloudTombstonedAt: null,
+      syncState: 'synced',
+    });
+    const teamProjectCatalog = { list: vi.fn(async () => []), upsert: vi.fn() };
+    const requestTeamUnshare = vi.fn(async () => undefined);
+    const app = express();
+    app.use(express.json());
+    registerProjectRoutes(app, buildDeps({
+      teamProjectCatalog,
+      collabSync: {
+        requestTeamShare: vi.fn(),
+        requestTeamUnshare,
+        invalidateTeamProjectCatalog: vi.fn(),
+      },
+    }));
+    const routeServer = await listen(app);
+    try {
+      for (const role of ['owner', 'admin'] as const) {
+        const denied = await fetch(
+          `${routeServer.url}/api/workspaces/${TEAM_WORKSPACE_ID}/projects/${projectId}/move`,
+          {
+            method: 'POST',
+            headers: teamHeaders({ memberId: `${role}-non-creator`, role }),
+            body: JSON.stringify({ visibility: 'personal' }),
+          },
+        );
+        expect(denied.status).toBe(403);
+      }
+
+      const creator = await fetch(
+        `${routeServer.url}/api/workspaces/${TEAM_WORKSPACE_ID}/projects/${projectId}/move`,
+        {
+          method: 'POST',
+          headers: teamHeaders({ memberId: 'project-creator', role: 'member' }),
+          body: JSON.stringify({ visibility: 'personal' }),
+        },
+      );
+      expect(creator.status).toBe(200);
+      expect(requestTeamUnshare).toHaveBeenCalledTimes(1);
+      expect(teamProjectCatalog.list).not.toHaveBeenCalled();
     } finally {
       await close(routeServer.server);
     }

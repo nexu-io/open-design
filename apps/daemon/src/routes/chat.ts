@@ -1557,17 +1557,21 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         'projectId is required and must be a safe identifier',
       );
     }
-    // SenseAudio and AIHubMix are explicit BYOK provider routes. Their tool
-    // loop uses the caller's own provider key and writes only into this local
-    // daemon's project folder; it neither spends an AMR Workspace wallet nor
-    // mutates the Team Resource Hub. Requiring the cloud Workspace authority
-    // here made a bound local project unusable whenever AMR was signed out or
-    // its membership directory was temporarily unavailable.
+    // The provider completion may immediately request a media tool that writes
+    // into this project. Authorize the whole loop before URL resolution,
+    // upstream egress, credential seeding, or tool execution so a read-only
+    // Team member cannot spend a BYOK key or mutate the creator's files.
     //
-    // Keep cloud authority on the routes that actually cross that boundary
-    // (project/resource mutations, feedback, and critique above). A safe local
-    // project id is still mandatory, and the ordinary filesystem/project-root
-    // guards in the BYOK tool executors remain the write boundary.
+    // The shared gate preserves the signed-out/local compatibility contract:
+    // a project with no persisted Workspace binding is accepted without
+    // consulting cloud authority. Only a bound project must prove the exact
+    // creator-capable Workspace identity.
+    if (!await ctx.authorizeProjectRequest(
+      req,
+      res,
+      projectId,
+      { mode: 'write', capability: 'writeFiles' },
+    )) return;
 
     const effectiveBaseUrl = baseUrl || opts.defaultBaseUrl;
     const validated = await validateExternalApiBaseUrl(effectiveBaseUrl);

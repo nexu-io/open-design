@@ -90,19 +90,19 @@ async function startChatServer(options: {
 describe('chat-owned project route authority', () => {
   it.each([
     {
-      label: 'SenseAudio while Workspace authority is unavailable',
+      label: 'SenseAudio',
       path: '/api/proxy/senseaudio/stream',
     },
     {
-      label: 'AIHubMix while the signed-in AMR identity is unavailable',
+      label: 'AIHubMix',
       path: '/api/proxy/aihubmix/stream',
     },
-  ])('keeps the local BYOK tool loop available for $label', async ({
+  ])('denies the $label BYOK tool loop before provider work for a non-creator', async ({
     path,
   }) => {
     const authorizeProjectRequest = vi.fn(
       async (_req, res: express.Response) => {
-        res.status(503).json({ error: 'WORKSPACE_AUTHORITY_UNAVAILABLE' });
+        res.status(403).json({ error: 'WORKSPACE_PROJECT_PERMISSION_DENIED' });
         return false;
       },
     );
@@ -117,42 +117,61 @@ describe('chat-owned project route authority', () => {
         apiKey: 'test-key',
         model: 'test-model',
         projectId: 'project-a',
-        // Once the BYOK route has deliberately bypassed cloud Workspace
-        // authority, ordinary provider URL validation is the next boundary.
+        // Authority must run before even provider URL validation: resolving a
+        // valid URL may touch DNS, and a later valid request would spend the
+        // caller's key and write the generated file.
+        baseUrl: 'not-a-url',
+        messages: [],
+      }),
+    });
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toMatchObject({
+      error: 'WORKSPACE_PROJECT_PERMISSION_DENIED',
+    });
+    expect(authorizeProjectRequest).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      'project-a',
+      { mode: 'write', capability: 'writeFiles' },
+    );
+  });
+
+  it.each([
+    {
+      label: 'SenseAudio',
+      path: '/api/proxy/senseaudio/stream',
+    },
+    {
+      label: 'AIHubMix',
+      path: '/api/proxy/aihubmix/stream',
+    },
+  ])('keeps the $label BYOK tool loop available when the unified gate accepts the creator or an unbound local project', async ({
+    path,
+  }) => {
+    const authorizeProjectRequest = vi.fn(async () => true);
+    const api = await startChatServer({ authorizeProjectRequest });
+
+    const response = await fetch(`${api.baseUrl}${path}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        apiKey: 'test-key',
+        model: 'test-model',
+        projectId: 'legacy-project',
         baseUrl: 'not-a-url',
         messages: [],
       }),
     });
 
     expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toMatchObject({
-      error: 'BAD_REQUEST',
-    });
-    expect(authorizeProjectRequest).not.toHaveBeenCalled();
-  });
-
-  it('keeps an unbound legacy BYOK project request compatible', async () => {
-    const authorizeProjectRequest = vi.fn(async () => true);
-    const api = await startChatServer({ authorizeProjectRequest });
-
-    const response = await fetch(
-      `${api.baseUrl}/api/proxy/senseaudio/stream`,
-      {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          apiKey: 'test-key',
-          model: 'test-model',
-          projectId: 'legacy-project',
-          baseUrl: 'not-a-url',
-          messages: [],
-        }),
-      },
-    );
-
-    expect(response.status).toBe(400);
     await expect(response.json()).resolves.toMatchObject({ error: 'BAD_REQUEST' });
-    expect(authorizeProjectRequest).not.toHaveBeenCalled();
+    expect(authorizeProjectRequest).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      'legacy-project',
+      { mode: 'write', capability: 'writeFiles' },
+    );
   });
 
   it('authorizes artifact navigation through the unified project read gate', async () => {

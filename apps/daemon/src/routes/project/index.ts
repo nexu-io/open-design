@@ -1985,36 +1985,49 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
    * hub already knows this project is team-visible, whether or not this
    * exact daemon's local sqlite has caught up.
    *
-   * Deliberately NOT gated on "is this caller the hub's registered owner of
-   * this specific project", unlike `reconcileLocalRowWithRemoteTeamAccess`
-   * above: that check exists to decide whether a READER discovering a
-   * teammate's shared project may adopt local edit rights over it (the list
-   * endpoint's question). Here the question is narrower — is this project
-   * really 'team' at all — and the answer to "may THIS caller move it back to
-   * personal" is left entirely to the existing `canMoveToPersonal` /
-   * `canMutate` gate below, which already grants a privileged workspace
-   * owner/admin authority over any team-visibility project regardless of who
-   * locally created it. Gating the reconciliation itself on owner-attribution
-   * would leave a genuine workspace owner stuck exactly like before whenever
-   * the hub's `ownerMemberId` for an orphaned project does not name them
-   * specifically (the brand-extraction project is never registered with an
-   * owner at all, since nothing ever calls the hub on its behalf).
+   * Reconciliation is itself authority-sensitive. A catalog reader who is
+   * neither the recorded project creator nor a Workspace owner/admin must not
+   * turn the orphan into a sticky Team binding: doing so would consume the
+   * only evidence that lets a later privileged caller repair the historical
+   * row. Creator identity keeps the ordinary creator-only path; owner/admin
+   * receives a request-local recovery witness returned to the move route
+   * below. The transient row is deleted if the remote unshare fails, and the
+   * witness itself is never retained as authority, so it cannot broaden later
+   * mutations on an ordinary already-bound Team project.
    *
    * Deliberately best-effort: a catalog outage must not turn an unshare
    * attempt into a 500. Falling through to the pre-existing personal default
    * is exactly the answer this function would give anyway if the hub had no
    * record for the project.
    */
-  async function reconcileUnboundProjectBeforeMove(projectId: string, ctx: WorkspaceProjectContext): Promise<void> {
-    if (!teamProjectCatalog) return;
+  type UnboundProjectMoveReconciliation =
+    | 'none'
+    | 'creator'
+    | 'privileged'
+    | 'denied';
+
+  async function reconcileUnboundProjectBeforeMove(
+    projectId: string,
+    ctx: WorkspaceProjectContext,
+  ): Promise<UnboundProjectMoveReconciliation> {
+    if (!teamProjectCatalog) return 'none';
     let remoteProjects: VelaTeamProjectRecord[];
     try {
       remoteProjects = await teamProjectCatalog.list(workspaceProjectPrincipal(ctx));
     } catch {
-      return;
+      return 'none';
     }
     const remote = remoteProjects.find((item) => item.projectId === projectId && item.access.canView);
-    if (!remote) return;
+    if (!remote) return 'none';
+    const creator = remote.ownerMemberId === ctx.workspaceMemberId;
+    const privilegedRecovery =
+      (ctx.role === 'owner' || ctx.role === 'admin')
+      && ctx.memberStatus === 'active'
+      && ctx.lifecycleState === 'active'
+      && ctx.canShareProjects
+      && ctx.canWriteSyncedFiles
+      && !remote.access.frozen;
+    if (!creator && !privilegedRecovery) return 'denied';
     ensureWorkspaceProject(db, {
       projectId,
       workspaceId: ctx.workspaceId,
@@ -2026,6 +2039,11 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       cloudTombstonedAt: null,
       syncState: 'synced',
     });
+    // The normal creator check handles creator-owned rows. Only a privileged
+    // non-creator needs the ephemeral override, and a frozen catalog entry
+    // must remain immutable even during recovery.
+    if (creator) return 'creator';
+    return 'privileged';
   }
   async function listRemoteTeamProjectSummaries(localRows: any[], ctx: WorkspaceProjectContext) {
     if (!teamProjectCatalog) return [];
@@ -2788,21 +2806,43 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       // `reconcileUnboundProjectBeforeMove`'s doc comment. Scoped to the
       // 'personal' direction only: 'team' already matches the fresh default
       // and must keep behaving exactly as before.
+      let orphanRecovery: UnboundProjectMoveReconciliation = 'none';
       if (visibility === 'personal' && ctx.workspaceType === 'team' && !getWorkspaceProjectByProjectId(db, project.id)) {
-        await reconcileUnboundProjectBeforeMove(project.id, ctx);
+        orphanRecovery = await reconcileUnboundProjectBeforeMove(project.id, ctx);
+        if (orphanRecovery === 'denied') {
+          return sendApiError(res, 403, 'PROJECT_DELETE_FORBIDDEN', 'project move forbidden');
+        }
       }
       const wp = ensureWorkspaceProjection(project, ctx, 'personal');
       const row = listWorkspaceProjects(db, ctx.workspaceId).find((item: any) => item.id === project.id);
       if (!row || !wp) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
       const summary = normalizeWorkspaceProjectRow(row, ctx);
-      if (!workspaceMoveAllowed(summary, visibility)) {
+      const privilegedOrphanRecoveryAllowed =
+        orphanRecovery === 'privileged'
+        && visibility === 'personal'
+        && ctx.memberStatus === 'active'
+        && ctx.lifecycleState === 'active'
+        && ctx.canShareProjects
+        && ctx.canWriteSyncedFiles;
+      if (
+        !workspaceMoveAllowed(summary, visibility)
+        && !privilegedOrphanRecoveryAllowed
+      ) {
         return sendApiError(res, 403, 'PROJECT_DELETE_FORBIDDEN', 'project move forbidden');
       }
       updateWorkspaceProject(db, ctx.workspaceId, project.id, workspaceProjectMovePatch(project.id, summary, ctx, visibility));
       try {
         await requestTeamVisibility([project.id], ctx, visibility);
       } catch (error) {
-        restoreWorkspaceProjectRow(row);
+        if (orphanRecovery === 'privileged') {
+          // This request created the row solely as an ephemeral recovery
+          // witness. Keeping it after an unshare failure would turn the
+          // historical orphan into an ordinary creator-owned Team binding
+          // and permanently block the same owner/admin from retrying.
+          deleteWorkspaceProject(db, ctx.workspaceId, project.id);
+        } else {
+          restoreWorkspaceProjectRow(row);
+        }
         throw error;
       }
       const updatedRow = listWorkspaceProjects(db, ctx.workspaceId).find((item: any) => item.id === project.id);
