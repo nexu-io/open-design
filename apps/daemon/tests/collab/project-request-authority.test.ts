@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createAuthorizeProjectRequest } from '../../src/collab/project-request-authority.js';
+import { verifyWorkspaceRequestContext } from '../../src/collab/request-workspace-context.js';
+import { createCachedWorkspaceDirectoryFetcher } from '../../src/collab/vela-workspace-context.js';
 
 function response() {
   return {} as any;
@@ -55,6 +57,77 @@ function context(overrides: Record<string, unknown> = {}) {
 }
 
 describe('createAuthorizeProjectRequest', () => {
+  it('uses the bounded read verifier without weakening fresh mutation authority', async () => {
+    const row = {
+      workspaceId: 'workspace-a',
+      visibility: 'personal',
+      resourceState: 'active',
+      createdByWorkspaceMemberId: 'member-a',
+    };
+    const directoryResult = {
+      ok: true as const,
+      items: [{
+        workspaceId: 'workspace-a',
+        workspaceName: 'A',
+        workspaceType: 'team' as const,
+        workspaceMemberId: 'member-a',
+        role: 'member' as const,
+        memberStatus: 'active' as const,
+        lifecycleState: 'active' as const,
+      }],
+    };
+    const fetchReadDirectory = vi.fn(async () => directoryResult);
+    const cachedReadDirectory = createCachedWorkspaceDirectoryFetcher({
+      fetchDirectory: fetchReadDirectory,
+      identityKey: () => 'account-a:config-a',
+      ttlMs: 5_000,
+    });
+    const fetchFreshMutationDirectory = vi.fn(async () => directoryResult);
+    const readVerifier = vi.fn((req: unknown) =>
+      verifyWorkspaceRequestContext({
+        req,
+        fetchWorkspaceDirectory: cachedReadDirectory,
+      }));
+    const mutationVerifier = vi.fn((req: unknown) =>
+      verifyWorkspaceRequestContext({
+        req,
+        fetchWorkspaceDirectory: fetchFreshMutationDirectory,
+      }));
+    const authorize = createAuthorizeProjectRequest({
+      db: {},
+      getWorkspaceProject: () => row,
+      getWorkspaceProjectByProjectId: () => row,
+      verifyWorkspaceReadAuthority: readVerifier,
+      verifyWorkspaceRequestAuthority: mutationVerifier,
+      sendApiError: vi.fn(),
+    });
+    const req = request({
+      workspaceId: 'workspace-a',
+      memberId: 'member-a',
+    });
+
+    for (let index = 0; index < 6; index += 1) {
+      await expect(authorize(req, response(), 'project-a', { mode: 'read' }))
+        .resolves.toBe(true);
+    }
+    expect(readVerifier).toHaveBeenCalledTimes(6);
+    expect(fetchReadDirectory).toHaveBeenCalledTimes(1);
+    expect(mutationVerifier).not.toHaveBeenCalled();
+
+    for (let index = 0; index < 2; index += 1) {
+      await expect(authorize(
+        req,
+        response(),
+        'project-a',
+        { mode: 'write', capability: 'writeFiles' },
+      )).resolves.toBe(true);
+    }
+    expect(readVerifier).toHaveBeenCalledTimes(6);
+    expect(fetchReadDirectory).toHaveBeenCalledTimes(1);
+    expect(mutationVerifier).toHaveBeenCalledTimes(2);
+    expect(fetchFreshMutationDirectory).toHaveBeenCalledTimes(2);
+  });
+
   it('preserves unbound legacy reads and writes without consulting authority', async () => {
     const verify = vi.fn();
     const sendApiError = vi.fn();

@@ -50,6 +50,13 @@ export function createAuthorizeProjectRequest(deps: {
     db: unknown,
     projectId: string,
   ) => WorkspaceResourceAccessInput | null | undefined;
+  /**
+   * Bounded successful authority lease for idempotent project reads. When
+   * omitted, reads retain the mutation verifier for compatibility with narrow
+   * fixtures and callers that do not provide separate cache policy.
+   */
+  verifyWorkspaceReadAuthority?: VerifyWorkspaceRequestAuthority;
+  /** Fresh fail-closed authority used for every project mutation. */
   verifyWorkspaceRequestAuthority?: VerifyWorkspaceRequestAuthority;
   sendApiError: (
     res: Response,
@@ -63,6 +70,7 @@ export function createAuthorizeProjectRequest(deps: {
     db,
     getWorkspaceProject,
     getWorkspaceProjectByProjectId,
+    verifyWorkspaceReadAuthority,
     verifyWorkspaceRequestAuthority,
     sendApiError,
   } = deps;
@@ -90,7 +98,7 @@ export function createAuthorizeProjectRequest(deps: {
       getWorkspaceProjectByProjectId,
       db,
       projectId,
-      verifyWorkspaceRequestAuthority,
+      verifyWorkspaceReadAuthority ?? verifyWorkspaceRequestAuthority,
       options.allowNavigationQuery ? { allowNavigationQuery: true } : {},
     );
   };

@@ -2877,11 +2877,14 @@ export async function startServer({
   const verifyExplicitWorkspaceRequestContext = async (input: {
     req: any;
     requireTeam?: boolean;
-  }) => {
+  }, options: { fresh?: boolean } = {}) => {
     if (process.env.OD_WORKSPACE_CONTEXT_SOURCE?.trim() === 'vela') {
       return verifyWorkspaceRequestContext({
         ...input,
-        fetchWorkspaceDirectory: fetchFreshMutationWorkspaceDirectory,
+        fetchWorkspaceDirectory:
+          options.fresh === false
+            ? fetchWorkspaceDirectory
+            : fetchFreshMutationWorkspaceDirectory,
       });
     }
     // Local/dev has no signed membership directory. Its explicit request
@@ -2929,6 +2932,8 @@ export async function startServer({
       }),
     };
   };
+  const verifyWorkspaceReadAuthority = (req: unknown) =>
+    verifyExplicitWorkspaceRequestContext({ req }, { fresh: false });
   const verifyWorkspaceRequestAuthority = (req: unknown) =>
     verifyExplicitWorkspaceRequestContext({ req });
   const enforceAuthoritativeProjectMutation = createEnforceWorkspaceProjectMutation(
@@ -5721,6 +5726,7 @@ export async function startServer({
     db,
     getWorkspaceProject,
     getWorkspaceProjectByProjectId,
+    verifyWorkspaceReadAuthority,
     verifyWorkspaceRequestAuthority,
     sendApiError,
   });
