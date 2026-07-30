@@ -33,7 +33,12 @@ import {
 
 const WORKSPACE_CURRENT_PATH = '/api/v1/workspaces/current';
 const DEFAULT_TIMEOUT_MS = 8_000;
-const DEFAULT_DIRECTORY_CACHE_TTL_MS = 5_000;
+// Read authorization is display-only and is polled every 5s by an open shared
+// project. Keep the successful lease comfortably wider than that cadence so a
+// poll cannot expire the lease at the exact instant it is meant to reuse it.
+// Mutations never consume this lease: `fresh()` below always performs (or joins)
+// an unsettled authoritative read.
+const DEFAULT_DIRECTORY_CACHE_TTL_MS = 15_000;
 // After a failed legacy default-workspace bootstrap, avoid repeating the
 // directory read on every compatibility request.
 const BOOTSTRAP_FAILURE_COOLDOWN_MS = 60_000;
@@ -540,16 +545,24 @@ export function velaWorkspaceDirectoryIdentity(
 }
 
 /**
- * One daemon-owned directory read identity shared by project scope reads and
- * final run authorization. Successful reads are briefly cached and concurrent
- * callers coalesce onto one request; failures are never cached.
+ * One daemon-owned authority broker shared by idempotent reads and mutations.
+ *
+ * Successful authority reads seed a bounded display-read lease. Mutations
+ * ignore that settled lease and always perform a fresh directory read, while
+ * still sharing an already-unsettled request from the same Vela session. This
+ * keeps the 5s status poll off the control plane without weakening mutation
+ * freshness, and prevents a status/heartbeat boundary from launching duplicate
+ * directory requests.
  */
-export function createCachedWorkspaceDirectoryFetcher(options: {
+export function createWorkspaceDirectoryAuthorityBroker(options: {
   fetchDirectory?: () => Promise<WorkspaceDirectoryFetchResult>;
   identityKey?: () => string;
   ttlMs?: number;
   now?: () => number;
-} = {}): () => Promise<WorkspaceDirectoryFetchResult> {
+} = {}): {
+  read: () => Promise<WorkspaceDirectoryFetchResult>;
+  fresh: () => Promise<WorkspaceDirectoryFetchResult>;
+} {
   const fetchDirectory =
     options.fetchDirectory ?? (() => fetchVelaWorkspaceDirectory());
   const identityKey = options.identityKey ?? velaWorkspaceDirectoryIdentity;
@@ -561,10 +574,9 @@ export function createCachedWorkspaceDirectoryFetcher(options: {
   >();
   const inFlight = new Map<string, Promise<WorkspaceDirectoryFetchResult>>();
 
-  return async () => {
-    const identity = identityKey();
-    const cachedEntry = cached.get(identity);
-    if (cachedEntry && now() < cachedEntry.expiresAt) return cachedEntry.result;
+  const start = (
+    identity: string,
+  ): Promise<WorkspaceDirectoryFetchResult> => {
     const pending = inFlight.get(identity);
     if (pending) return pending;
     const request = fetchDirectory()
@@ -580,6 +592,31 @@ export function createCachedWorkspaceDirectoryFetcher(options: {
     inFlight.set(identity, request);
     return request;
   };
+
+  return {
+    read: () => {
+      const identity = identityKey();
+      const cachedEntry = cached.get(identity);
+      if (cachedEntry && now() < cachedEntry.expiresAt) {
+        return Promise.resolve(cachedEntry.result);
+      }
+      return start(identity);
+    },
+    fresh: () => start(identityKey()),
+  };
+}
+
+/**
+ * Compatibility wrapper for callers that only need the bounded read lease.
+ * Production daemon wiring uses one shared broker for reads and mutations.
+ */
+export function createCachedWorkspaceDirectoryFetcher(options: {
+  fetchDirectory?: () => Promise<WorkspaceDirectoryFetchResult>;
+  identityKey?: () => string;
+  ttlMs?: number;
+  now?: () => number;
+} = {}): () => Promise<WorkspaceDirectoryFetchResult> {
+  return createWorkspaceDirectoryAuthorityBroker(options).read;
 }
 
 /**
@@ -592,21 +629,7 @@ export function createFreshWorkspaceDirectoryFetcher(options: {
   fetchDirectory?: () => Promise<WorkspaceDirectoryFetchResult>;
   identityKey?: () => string;
 } = {}): () => Promise<WorkspaceDirectoryFetchResult> {
-  const fetchDirectory =
-    options.fetchDirectory ?? (() => fetchVelaWorkspaceDirectory());
-  const identityKey = options.identityKey ?? velaWorkspaceDirectoryIdentity;
-  const inFlight = new Map<string, Promise<WorkspaceDirectoryFetchResult>>();
-
-  return () => {
-    const identity = identityKey();
-    const pending = inFlight.get(identity);
-    if (pending) return pending;
-    const request = fetchDirectory().finally(() => {
-      if (inFlight.get(identity) === request) inFlight.delete(identity);
-    });
-    inFlight.set(identity, request);
-    return request;
-  };
+  return createWorkspaceDirectoryAuthorityBroker(options).fresh;
 }
 
 export async function fetchVelaWorkspaceDirectory(

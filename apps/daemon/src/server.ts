@@ -724,8 +724,7 @@ import {
   pinRunWorkspaceScopeForProject,
 } from './runtimes/project-amr-trace-env.js';
 import {
-  createCachedWorkspaceDirectoryFetcher,
-  createFreshWorkspaceDirectoryFetcher,
+  createWorkspaceDirectoryAuthorityBroker,
   createWorkspaceContextProviderFromEnv,
   fetchVelaWorkspaceDirectory,
   workspaceContextFromDirectoryItem,
@@ -2855,21 +2854,16 @@ export async function startServer({
   // recorded in — and a project-scoped collab call may only be pinned to — a
   // workspace that can actually host a team plane. See collab/team-share-scope.ts.
   const workspaceTypes = createWorkspaceTypeRegistry();
-  const fetchWorkspaceDirectory = createCachedWorkspaceDirectoryFetcher({
+  const workspaceDirectoryAuthority = createWorkspaceDirectoryAuthorityBroker({
     fetchDirectory: async () => {
       const result = await fetchVelaWorkspaceDirectory();
       if (result.ok) workspaceTypes.learn(result.items);
       return result;
     },
   });
+  const fetchWorkspaceDirectory = workspaceDirectoryAuthority.read;
   const fetchFreshMutationWorkspaceDirectory =
-    createFreshWorkspaceDirectoryFetcher({
-      fetchDirectory: async () => {
-        const result = await fetchVelaWorkspaceDirectory();
-        if (result.ok) workspaceTypes.learn(result.items);
-        return result;
-      },
-    });
+    workspaceDirectoryAuthority.fresh;
   const verifyExplicitWorkspaceRequestContext = async (input: {
     req: any;
     requireTeam?: boolean;

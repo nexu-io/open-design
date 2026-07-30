@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createCachedWorkspaceDirectoryFetcher,
   createFreshWorkspaceDirectoryFetcher,
+  createWorkspaceDirectoryAuthorityBroker,
   createVelaWorkspaceContextProvider,
   fetchVelaWorkspaceDirectory,
   mapVelaWorkspaceContext,
@@ -270,6 +271,86 @@ describe('createFreshWorkspaceDirectoryFetcher', () => {
     expect(reads[2]!.identity).toBe('account-b');
     reads[2]!.resolve({ ok: true, items: [] });
     await expect(freshAccountB).resolves.toEqual({ ok: true, items: [] });
+  });
+});
+
+describe('createWorkspaceDirectoryAuthorityBroker', () => {
+  it('bounds 30s of status polls while every heartbeat mutation stays fresh', async () => {
+    let now = 0;
+    let activeReads = 0;
+    let maxActiveReads = 0;
+    const fetchDirectory = vi.fn(async () => {
+      activeReads += 1;
+      maxActiveReads = Math.max(maxActiveReads, activeReads);
+      await Promise.resolve();
+      activeReads -= 1;
+      return { ok: true as const, items: [] };
+    });
+    const authority = createWorkspaceDirectoryAuthorityBroker({
+      fetchDirectory,
+      identityKey: () => 'account-a:config-a',
+      now: () => now,
+    });
+
+    // Model the production order pessimistically: status first every 5s, then
+    // heartbeat at each 10s boundary. A fresh heartbeat seeds the next read
+    // lease, but never consumes a settled lease itself.
+    for (now = 0; now <= 30_000; now += 5_000) {
+      await authority.read();
+      if (now % 10_000 === 0) await authority.fresh();
+    }
+
+    expect(fetchDirectory).toHaveBeenCalledTimes(5);
+    expect(maxActiveReads).toBe(1);
+  });
+
+  it('coalesces unsettled read and mutation checks without reusing settled authority', async () => {
+    let resolveRead:
+      | ((result: { ok: true; items: [] }) => void)
+      | undefined;
+    const fetchDirectory = vi.fn(
+      () =>
+        new Promise<{ ok: true; items: [] }>((resolve) => {
+          resolveRead = resolve;
+        }),
+    );
+    const authority = createWorkspaceDirectoryAuthorityBroker({
+      fetchDirectory,
+      identityKey: () => 'account-a:config-a',
+    });
+
+    const read = authority.read();
+    const concurrentMutation = authority.fresh();
+    expect(fetchDirectory).toHaveBeenCalledTimes(1);
+    resolveRead?.({ ok: true, items: [] });
+    await Promise.all([read, concurrentMutation]);
+
+    const nextMutation = authority.fresh();
+    expect(fetchDirectory).toHaveBeenCalledTimes(2);
+    resolveRead?.({ ok: true, items: [] });
+    await nextMutation;
+  });
+
+  it('publishes a fresh revocation result into the subsequent read lease', async () => {
+    const active = {
+      ok: true as const,
+      items: [{ ...B_TEAM_CONTEXT }],
+    };
+    const revoked = { ok: true as const, items: [] };
+    const fetchDirectory = vi
+      .fn()
+      .mockResolvedValueOnce(active)
+      .mockResolvedValueOnce(revoked);
+    const authority = createWorkspaceDirectoryAuthorityBroker({
+      fetchDirectory,
+      identityKey: () => 'account-a:config-a',
+    });
+
+    await expect(authority.read()).resolves.toEqual(active);
+    await expect(authority.read()).resolves.toEqual(active);
+    await expect(authority.fresh()).resolves.toEqual(revoked);
+    await expect(authority.read()).resolves.toEqual(revoked);
+    expect(fetchDirectory).toHaveBeenCalledTimes(2);
   });
 });
 
