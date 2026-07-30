@@ -275,6 +275,40 @@ describe('createFreshWorkspaceDirectoryFetcher', () => {
 });
 
 describe('createWorkspaceDirectoryAuthorityBroker', () => {
+  it('single-flights shell and project bootstrap reads per account generation without caching failures', async () => {
+    let identity = 'account-a:config-a';
+    const fetchDirectory = vi.fn(async () => ({
+      ok: true as const,
+      items: [],
+    }));
+    const authority = createWorkspaceDirectoryAuthorityBroker({
+      fetchDirectory,
+      identityKey: () => identity,
+    });
+
+    const [shellDirectory, projectBootstrap] = await Promise.all([
+      authority.read(),
+      authority.read(),
+    ]);
+    expect(shellDirectory).toEqual(projectBootstrap);
+    expect(fetchDirectory).toHaveBeenCalledTimes(1);
+    await authority.read();
+    expect(fetchDirectory).toHaveBeenCalledTimes(1);
+
+    identity = 'account-b:config-b';
+    await authority.read();
+    expect(fetchDirectory).toHaveBeenCalledTimes(2);
+
+    const failedFetch = vi.fn(async () => ({ ok: false as const, items: [] }));
+    const failedAuthority = createWorkspaceDirectoryAuthorityBroker({
+      fetchDirectory: failedFetch,
+      identityKey: () => 'account-failing',
+    });
+    await failedAuthority.read();
+    await failedAuthority.read();
+    expect(failedFetch).toHaveBeenCalledTimes(2);
+  });
+
   it('bounds 30s of status polls while every heartbeat mutation stays fresh', async () => {
     let now = 0;
     let activeReads = 0;

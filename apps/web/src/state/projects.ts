@@ -25,6 +25,7 @@ import type {
   PluginShareAction,
   ProjectPluginFolderInstallRequest,
   ProjectVisibility,
+  ProjectWorkspaceScopeResponse,
   TerminalSession,
   WorkspaceCollabContext,
   WorkspaceProjectSummary,
@@ -245,6 +246,75 @@ export async function getProject(
   } catch {
     return null;
   }
+}
+
+export type ProjectRouteBootstrapResult =
+  | { kind: 'found'; project: Project }
+  | { kind: 'not-found' }
+  | { kind: 'forbidden' }
+  | { kind: 'unavailable' };
+
+/**
+ * Bootstrap a fresh project deep link without borrowing the shell's ambient
+ * Workspace. The scope endpoint returns only an exact, account-generation
+ * leased directory-verified local binding; the actual project row is then read
+ * through the normal data-plane gate with that exact Workspace/member context.
+ */
+export async function bootstrapProjectRoute(
+  projectId: string,
+  options: { accountGeneration: number },
+): Promise<ProjectRouteBootstrapResult> {
+  const key = `project-route-bootstrap:${options.accountGeneration}:${projectId}`;
+  const result = await coalescedGet(key, async (): Promise<ProjectRouteBootstrapResult> => {
+    try {
+      const scopeResponse = await fetch(
+        `/api/projects/${encodeURIComponent(projectId)}/workspace-scope`,
+        { cache: 'no-store' },
+      );
+      if (!scopeResponse.ok) {
+        if (scopeResponse.status === 404) return { kind: 'not-found' };
+        if (scopeResponse.status === 403) return { kind: 'forbidden' };
+        return { kind: 'unavailable' };
+      }
+      const body = (await scopeResponse.json()) as ProjectWorkspaceScopeResponse;
+      if (!body.scope || body.scope.projectId !== projectId) {
+        return { kind: 'unavailable' };
+      }
+      const context = body.scope.context;
+      const projectResponse = await fetch(
+        `/api/projects/${encodeURIComponent(projectId)}`,
+        {
+          cache: 'no-store',
+          ...(context ? { headers: workspaceProjectHeaders(context) } : {}),
+        },
+      );
+      if (!projectResponse.ok) {
+        if (projectResponse.status === 404) return { kind: 'not-found' };
+        if (projectResponse.status === 403) return { kind: 'forbidden' };
+        return { kind: 'unavailable' };
+      }
+      const projectBody = (await projectResponse.json()) as { project?: Project };
+      if (!projectBody.project || projectBody.project.id !== projectId) {
+        return { kind: 'unavailable' };
+      }
+      if (
+        context
+        && projectBody.project.workspaceId !== context.workspaceId
+      ) {
+        // The binding changed between the scope witness and the detail read.
+        // Do not mount the row under stale authority.
+        return { kind: 'forbidden' };
+      }
+      if (!context && projectBody.project.workspaceId) {
+        return { kind: 'forbidden' };
+      }
+      return { kind: 'found', project: projectBody.project };
+    } catch {
+      return { kind: 'unavailable' };
+    }
+  });
+  if (result.kind === 'unavailable') evictCoalescedGet(key);
+  return result;
 }
 
 export async function getProjectDetail(

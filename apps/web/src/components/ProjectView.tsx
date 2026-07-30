@@ -459,6 +459,13 @@ function ensureConversationPresent(
 
 interface Props {
   project: Project;
+  /**
+   * Exact project-bound Workspace authority resolved by the route gate.
+   * Production deep links pass this instead of borrowing the shell's mutable
+   * current/default Workspace. Tests and legacy embedded callers may omit it
+   * and retain the existing provider behavior.
+   */
+  workspaceContextOverride?: WorkspaceCollabContext | null;
   /** Workspace/member authorization lifetime for async title reads. */
   projectAuthorizationKey?: string;
   /**
@@ -1520,6 +1527,7 @@ export function reconcileProjectDetail(
 
 export function ProjectView({
   project,
+  workspaceContextOverride,
   projectAuthorizationKey = project.id,
   authoritativeProjectName,
   resolveAuthoritativeProjectName,
@@ -1567,7 +1575,14 @@ export function ProjectView({
     };
   }, [projectAuthorizationKey]);
   const analytics = useAnalytics();
-  const workspaceContextState = useWorkspaceContext();
+  const ambientWorkspaceContextState = useWorkspaceContext();
+  const workspaceContextState = workspaceContextOverride !== undefined
+    ? {
+        context: workspaceContextOverride,
+        loading: false,
+        identityChangePending: false,
+      }
+    : ambientWorkspaceContextState;
   const { context: workspaceContext } = workspaceContextState;
   const projectWorkspaceScopeState = useProjectWorkspaceScope(
     project.id,

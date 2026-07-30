@@ -10,7 +10,20 @@ import {
 interface ProjectWorkspaceBinding {
   workspaceId?: unknown;
   visibility?: unknown;
+  resourceState?: unknown;
 }
+
+export type ProjectWorkspaceScopeBootstrapResult =
+  | {
+      ok: true;
+      scope: ProjectWorkspaceScope;
+    }
+  | {
+      ok: false;
+      status: 403 | 503;
+      code: 'WORKSPACE_PROJECT_PERMISSION_DENIED' | 'WORKSPACE_DIRECTORY_UNAVAILABLE';
+      message: string;
+    };
 
 /**
  * Resolve a project's persisted workspace binding against the signed-in
@@ -54,7 +67,7 @@ export function resolveProjectWorkspaceScope(input: {
     (candidate) =>
       candidate.workspaceId === workspaceId &&
       candidate.memberStatus === 'active' &&
-      candidate.lifecycleState === 'active',
+      candidate.lifecycleState !== 'deleted',
   );
   if (!item) return unavailable();
 
@@ -82,4 +95,51 @@ export function resolveProjectWorkspaceScope(input: {
     visibility,
     context: { ...context, workspaceType: 'personal' },
   };
+}
+
+/**
+ * Resolve the one headerless bootstrap read used by a fresh project deep link.
+ *
+ * This does not authorize project content. It discloses a persisted binding
+ * only after a fresh signed-in directory proves the caller is an active member
+ * of that exact Workspace. The web must then attach the returned context to
+ * every project data-plane request, which still passes the normal route gate.
+ */
+export function resolveProjectWorkspaceScopeBootstrap(input: {
+  projectId: string;
+  binding: ProjectWorkspaceBinding | null | undefined;
+  directory: WorkspaceDirectoryFetchResult;
+}): ProjectWorkspaceScopeBootstrapResult {
+  if (!input.binding?.workspaceId) {
+    return {
+      ok: true,
+      scope: resolveProjectWorkspaceScope(input),
+    };
+  }
+  if (input.binding.resourceState === 'deleted') {
+    return {
+      ok: false,
+      status: 403,
+      code: 'WORKSPACE_PROJECT_PERMISSION_DENIED',
+      message: 'workspace project read is not allowed',
+    };
+  }
+  if (!input.directory.ok) {
+    return {
+      ok: false,
+      status: 503,
+      code: 'WORKSPACE_DIRECTORY_UNAVAILABLE',
+      message: 'workspace membership directory is unavailable',
+    };
+  }
+  const scope = resolveProjectWorkspaceScope(input);
+  if (scope.kind === 'unavailable' || scope.context === null) {
+    return {
+      ok: false,
+      status: 403,
+      code: 'WORKSPACE_PROJECT_PERMISSION_DENIED',
+      message: 'workspace project read is not allowed',
+    };
+  }
+  return { ok: true, scope };
 }

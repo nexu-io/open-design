@@ -11,6 +11,10 @@ import type {
   WorkspaceDirectoryResponse,
   WorkspaceInvalidationSsePayload,
 } from '@open-design/contracts';
+import {
+  buildWorkspacePermissions,
+  buildWorkspaceSeatSummary,
+} from '@open-design/contracts';
 import { coalescedGet, forceCoalescedGet } from '../lib/coalesced-get';
 import { isTeamPlanTier } from './team-plan';
 import { fetchTeamProjectsCatalog } from './team-projects-catalog';
@@ -187,6 +191,110 @@ function workspaceContextCoalesceKey(): string {
   return `workspace-context:${workspaceContextRequestToken}`;
 }
 
+async function fetchWorkspaceDirectory(): Promise<WorkspaceDirectoryResponse> {
+  const response = await fetch('/api/workspace/directory', { cache: 'no-store' });
+  if (!response.ok) {
+    const error = new Error(`workspace-directory ${response.status}`) as Error & {
+      status?: number;
+    };
+    error.status = response.status;
+    throw error;
+  }
+  return (await response.json()) as WorkspaceDirectoryResponse;
+}
+
+/**
+ * Read the signed-in account's Workspace directory for the current identity
+ * generation.
+ *
+ * The shell context bootstrap and a fresh project deep link both need this
+ * same answer. Keeping the read behind one generation-keyed single flight lets
+ * a project derive its persisted Workspace/member authority as soon as the
+ * directory lands, without waiting for the slower ambient
+ * `/api/workspace/context` projection and without issuing a second directory
+ * request.
+ */
+export function readWorkspaceDirectoryForCurrentGeneration(
+  options: { fresh?: boolean } = {},
+): Promise<WorkspaceDirectoryResponse> {
+  const key = `workspace-directory-selection:${workspaceContextRequestToken}`;
+  return options.fresh
+    ? forceCoalescedGet(key, fetchWorkspaceDirectory)
+    : coalescedGet(key, fetchWorkspaceDirectory);
+}
+
+function billingStateFromLifecycle(
+  lifecycleState: WorkspaceDirectoryItem['lifecycleState'],
+): WorkspaceCollabContext['billingState'] {
+  switch (lifecycleState) {
+    case 'active':
+      return 'active';
+    case 'billing_past_due':
+      return 'past_due';
+    case 'locked':
+      return 'locked';
+    default:
+      return 'inactive';
+  }
+}
+
+/**
+ * Build the exact request identity carried by a Workspace directory item.
+ *
+ * Directory items deliberately omit billing detail, but they contain every
+ * authority field used by project resource headers. The permission projection
+ * is the shared contract projection used by the daemon, so its identity key is
+ * identical to the context that `/workspace-scope` later returns.
+ */
+export function workspaceContextFromDirectoryItem(
+  item: WorkspaceDirectoryItem,
+): WorkspaceCollabContext {
+  const context: WorkspaceCollabContext = {
+    workspaceId: item.workspaceId,
+    workspaceType: item.workspaceType,
+    workspaceMemberId: item.workspaceMemberId,
+    role: item.role,
+    memberStatus: item.memberStatus,
+    lifecycleState: item.lifecycleState,
+    billingState: billingStateFromLifecycle(item.lifecycleState),
+    planId: null,
+    providerMode: 'platform_credits',
+    seatSummary: buildWorkspaceSeatSummary({ seatLimit: 0, usedSeats: 0 }),
+    permissions: buildWorkspacePermissions({
+      role: item.role,
+      lifecycleState: item.lifecycleState,
+      memberStatus: item.memberStatus,
+    }),
+    workspaceName: item.workspaceName,
+  };
+  if (item.workspaceType === 'team') {
+    context.teamId = item.workspaceId;
+    context.teamName = item.workspaceName;
+  }
+  return context;
+}
+
+/**
+ * Resolve one persisted project Workspace from the account directory. This
+ * never reads or mutates the shell's current/default Workspace.
+ */
+export async function resolveBoundProjectWorkspaceContext(
+  workspaceId: string,
+  options: { fresh?: boolean } = {},
+): Promise<WorkspaceCollabContext | null> {
+  const requestedWorkspaceId = workspaceId.trim();
+  if (!requestedWorkspaceId) return null;
+  const directory = await readWorkspaceDirectoryForCurrentGeneration(options);
+  const item = (directory.items ?? []).find(
+    (candidate) =>
+      candidate.workspaceId === requestedWorkspaceId
+      && candidate.workspaceMemberId.trim().length > 0
+      && candidate.memberStatus === 'active'
+      && candidate.lifecycleState !== 'deleted',
+  );
+  return item ? workspaceContextFromDirectoryItem(item) : null;
+}
+
 // Last successfully-resolved workspace context, kept at module scope so it
 // survives a component unmount/remount. Returning to the home view remounts the
 // nav shell, and starting each remount from `null` flashed the signed-out state
@@ -282,6 +390,8 @@ export function resetWorkspaceContextCache(): void {
   localIdentityChangeSeq = 0;
   seededWorkspaceContext = null;
   workspaceContextIdentityChangePending = false;
+  workspaceAccountGeneration = 0;
+  workspaceAccountGenerationStamp = 'initial';
   writeWorkspaceSelection(null);
 }
 
@@ -387,21 +497,9 @@ export function useWorkspaceContext(): WorkspaceContextState {
     }
     try {
       const fetchContext = async () => {
-        const fetchDirectory = async () => {
-          const response = await fetch('/api/workspace/directory', { cache: 'no-store' });
-          if (!response.ok) {
-            const error = new Error(`workspace-directory ${response.status}`) as Error & {
-              status?: number;
-            };
-            error.status = response.status;
-            throw error;
-          }
-          return (await response.json()) as WorkspaceDirectoryResponse;
-        };
-        const directoryKey = `workspace-directory-selection:${workspaceContextRequestToken}`;
         const directory = options.markLoading
-          ? await forceCoalescedGet(directoryKey, fetchDirectory)
-          : await coalescedGet(directoryKey, fetchDirectory);
+          ? await readWorkspaceDirectoryForCurrentGeneration({ fresh: true })
+          : await readWorkspaceDirectoryForCurrentGeneration();
         const selected = chooseWorkspaceForTab(directory.items ?? []);
         if (!selected) {
           return { context: null } satisfies WorkspaceContextResponse;
@@ -525,13 +623,14 @@ export function useWorkspaceContext(): WorkspaceContextState {
       if (document.visibilityState === 'visible') refresh();
     };
     const onStorage = (event: StorageEvent) => {
-      if (event.key !== WORKSPACE_CONTEXT_REFRESH_STORAGE_KEY) return;
+      if (event.key !== WORKSPACE_ACCOUNT_BOUNDARY_STORAGE_KEY) return;
       // The acting tab advanced its own token inside `notifyWorkspaceContextRefresh`;
       // a passive tab learns of the change only here. Advancing to the stamp the
       // acting tab WROTE keeps this idempotent across the many mounted consumers
       // that all hear the same storage event — they converge on one key, so one
       // change still costs one request.
       advanceWorkspaceContextRequestToken(event.newValue);
+      advanceWorkspaceAccountGeneration(event.newValue ?? 'storage');
       refreshAfterIdentityChange();
     };
     window.addEventListener('focus', refresh);
@@ -556,7 +655,10 @@ const WORKSPACE_CONTEXT_POLL_MS = 30_000;
 // behind the pushed `workspace-context-changed` events.
 const WORKSPACE_CONTEXT_SSE_FLOOR_MS = 120_000;
 export const WORKSPACE_CONTEXT_REFRESH_EVENT = 'od:workspace-context-refresh';
-const WORKSPACE_CONTEXT_REFRESH_STORAGE_KEY = 'od.workspaceContext.refreshAt';
+// Keep the deployed storage string for old/new bundle interoperability. The
+// semantic name is deliberately narrower: only unseeded sign-in/sign-out
+// writes it; a seeded ambient Workspace selection never does.
+const WORKSPACE_ACCOUNT_BOUNDARY_STORAGE_KEY = 'od.workspaceContext.refreshAt';
 
 /**
  * A context the ACTING surface already holds, published alongside the identity-
@@ -578,6 +680,24 @@ let seededWorkspaceContext: {
   token: string;
   context: WorkspaceCollabContext;
 } | null = null;
+let workspaceAccountGeneration = 0;
+let workspaceAccountGenerationStamp = 'initial';
+
+function advanceWorkspaceAccountGeneration(stamp: string): void {
+  if (workspaceAccountGenerationStamp === stamp) return;
+  workspaceAccountGenerationStamp = stamp;
+  workspaceAccountGeneration += 1;
+}
+
+/**
+ * Monotonic account boundary independent from ambient Workspace selection.
+ * Fresh project binding witnesses survive A -> B navigation, but must be
+ * discarded across sign-in/sign-out when another account may own the same
+ * local project id.
+ */
+export function currentWorkspaceAccountGeneration(): number {
+  return workspaceAccountGeneration;
+}
 
 /** The seed published for the CURRENT identity generation, if any. */
 function seededContextForCurrentGeneration(): WorkspaceCollabContext | null {
@@ -585,6 +705,16 @@ function seededContextForCurrentGeneration(): WorkspaceCollabContext | null {
   return seededWorkspaceContext.token === workspaceContextRequestToken
     ? seededWorkspaceContext.context
     : null;
+}
+
+/**
+ * Whether the current explicit refresh carries a server-verified Workspace
+ * switch result. A seeded refresh changes only the shell's ambient selection;
+ * it is not an account boundary and must not invalidate an already-open
+ * project's independently verified Workspace authority.
+ */
+export function workspaceContextRefreshHasVerifiedSelection(): boolean {
+  return seededContextForCurrentGeneration() !== null;
 }
 
 /**
@@ -602,7 +732,7 @@ export function notifyWorkspaceContextRefresh(
   seed?: { context: WorkspaceCollabContext } | null,
 ): void {
   if (typeof window === 'undefined') return;
-  const stamp = String(Date.now());
+  const stamp = `${Date.now()}:${localIdentityChangeSeq + 1}`;
   // Advance BEFORE dispatching: this call is the one place that knows a genuine
   // identity change just happened, and every handler the dispatch below runs must
   // read the new generation's key. Doing it per handler instead would turn one
@@ -624,6 +754,7 @@ export function notifyWorkspaceContextRefresh(
     }
     cachedWorkspaceContext = seed.context;
   } else {
+    advanceWorkspaceAccountGeneration(stamp);
     workspaceContextIdentityChangePending = true;
     seededWorkspaceContext = null;
   }
@@ -632,7 +763,7 @@ export function notifyWorkspaceContextRefresh(
   // Sign-in/sign-out has no seed and remains account-wide across tabs.
   if (!seed?.context) {
     try {
-      window.localStorage.setItem(WORKSPACE_CONTEXT_REFRESH_STORAGE_KEY, stamp);
+      window.localStorage.setItem(WORKSPACE_ACCOUNT_BOUNDARY_STORAGE_KEY, stamp);
     } catch {
       // The in-window event is enough when localStorage is unavailable.
     }

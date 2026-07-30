@@ -27,7 +27,7 @@
 // backend round-trip, and no dependency on a workspace-invalidation SSE event
 // (a local switch must correct itself locally).
 
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { buildWorkspacePermissions } from '@open-design/contracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -57,6 +57,12 @@ import {
 import { resetCoalescedGet } from '../../src/lib/coalesced-get';
 import { workspaceDirectoryFixture } from '../helpers/workspace-context';
 
+const projectViewLifecycle = vi.hoisted(() => ({
+  mounts: vi.fn(),
+  unmounts: vi.fn(),
+  renders: vi.fn(),
+}));
+
 vi.mock('../../src/components/EntryView', () => ({
   EntryView: ({ projects }: { projects: Project[] }) => (
     <main>
@@ -70,9 +76,49 @@ vi.mock('../../src/components/EntryView', () => ({
   ),
 }));
 
-vi.mock('../../src/components/ProjectView', () => ({
-  ProjectView: () => <main data-testid="project-view" />,
-}));
+vi.mock('../../src/components/ProjectView', async () => {
+  const { useEffect } = await vi.importActual<typeof import('react')>('react');
+  return {
+    ProjectView: (props: {
+      project: Project;
+      workspaceContextOverride?: ReturnType<typeof workspaceContext> | null;
+      onBack: () => void;
+      onProjectsRefresh: () => Promise<void> | void;
+    }) => {
+      projectViewLifecycle.renders(props);
+      useEffect(() => {
+        projectViewLifecycle.mounts();
+        return () => projectViewLifecycle.unmounts();
+      }, []);
+      useEffect(() => {
+        const context = props.workspaceContextOverride;
+        void fetch(`/api/projects/${props.project.id}/mock-project-resource`, {
+          headers: context
+            ? {
+                'x-od-workspace-id': context.workspaceId,
+                'x-od-workspace-member-id': context.workspaceMemberId,
+              }
+            : undefined,
+        });
+      }, [
+        props.project.id,
+        props.workspaceContextOverride?.workspaceId,
+        props.workspaceContextOverride?.workspaceMemberId,
+      ]);
+      return (
+        <main data-testid="project-view">
+          <button data-testid="project-back" onClick={props.onBack}>Back</button>
+          <button
+            data-testid="project-refresh"
+            onClick={() => void Promise.resolve(props.onProjectsRefresh()).catch(() => {})}
+          >
+            Refresh
+          </button>
+        </main>
+      );
+    },
+  };
+});
 
 vi.mock('../../src/components/WorkspaceTabsBar', () => ({
   WorkspaceTabsBar: () => null,
@@ -226,6 +272,9 @@ describe('App project list across a workspace switch', () => {
     vi.mocked(fetchComposioConfigFromDaemon).mockResolvedValue(null);
     vi.mocked(mergeDaemonConfig).mockImplementation((local) => local);
     vi.mocked(loadConfig).mockReturnValue({ ...baseConfig });
+    projectViewLifecycle.mounts.mockClear();
+    projectViewLifecycle.unmounts.mockClear();
+    projectViewLifecycle.renders.mockClear();
   });
 
   afterEach(() => {
@@ -297,5 +346,364 @@ describe('App project list across a workspace switch', () => {
       expect(screen.getByTestId(`entry-project-${WORKSPACE_B_PROJECT.id}`)).toBeTruthy(),
     );
     expect(screen.queryByTestId(`entry-project-${WORKSPACE_A_PROJECT.id}`)).toBeNull();
+  });
+
+  it('keeps an open A project mounted and scoped to A while the ambient shell switches to B', async () => {
+    const boundProjectA: Project = {
+      ...WORKSPACE_A_PROJECT,
+      workspaceId: 'ws-a',
+    };
+    const boundProjectB: Project = {
+      ...WORKSPACE_B_PROJECT,
+      workspaceId: 'ws-b',
+    };
+    let activeWorkspaceId = 'ws-a';
+    const projectResourceRequests: Array<{ url: string; headers: Headers }> = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        const pathname = new URL(url, 'http://d.local').pathname;
+        if (pathname.endsWith('/mock-project-resource')) {
+          projectResourceRequests.push({
+            url: pathname,
+            headers: new Headers(init?.headers),
+          });
+        }
+        return new Response(JSON.stringify(
+          pathname.endsWith('/workspace/directory')
+            ? workspaceDirectoryFixture([
+                workspaceContext('ws-a'),
+                workspaceContext('ws-b'),
+              ])
+            : pathname.endsWith('/workspace/context')
+              ? workspaceContextPayload(activeWorkspaceId)
+              : {},
+        ), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }),
+    );
+
+    const workspaceB = deferred<Project[]>();
+    vi.mocked(listProjects).mockImplementation(async (options) => {
+      const workspaceId = options?.workspaceContext?.workspaceId ?? null;
+      if (workspaceId === 'ws-b') return workspaceB.promise;
+      return [boundProjectA];
+    });
+    window.history.replaceState(null, '', `/projects/${boundProjectA.id}`);
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('project-view')).toBeTruthy();
+      expect(projectViewLifecycle.mounts).toHaveBeenCalledTimes(1);
+      expect(projectResourceRequests).toHaveLength(1);
+    });
+    expect(projectResourceRequests[0]?.headers.get('x-od-workspace-id')).toBe('ws-a');
+
+    activeWorkspaceId = 'ws-b';
+    await act(async () => {
+      notifyWorkspaceContextRefresh({ context: workspaceContext('ws-b') });
+      await Promise.resolve();
+    });
+    await waitFor(() =>
+      expect(
+        vi.mocked(listProjects).mock.calls.some(
+          ([options]) => options?.workspaceContext?.workspaceId === 'ws-b',
+        ),
+      ).toBe(true),
+    );
+
+    expect(screen.getByTestId('project-view')).toBeTruthy();
+    expect(projectViewLifecycle.mounts).toHaveBeenCalledTimes(1);
+    expect(projectViewLifecycle.unmounts).not.toHaveBeenCalled();
+    expect(window.location.pathname).toBe(`/projects/${boundProjectA.id}`);
+    expect(projectViewLifecycle.renders.mock.lastCall?.[0]).toMatchObject({
+      project: { id: boundProjectA.id, workspaceId: 'ws-a' },
+      workspaceContextOverride: {
+        workspaceId: 'ws-a',
+        workspaceMemberId: 'member-ws-a',
+      },
+    });
+
+    await act(async () => {
+      workspaceB.resolve([boundProjectB]);
+      await workspaceB.promise;
+    });
+    await waitFor(() =>
+      expect(
+        vi.mocked(listProjects).mock.calls.some(
+          ([options]) => options?.workspaceContext?.workspaceId === 'ws-b',
+        ),
+      ).toBe(true),
+    );
+
+    expect(screen.getByTestId('project-view')).toBeTruthy();
+    expect(projectViewLifecycle.mounts).toHaveBeenCalledTimes(1);
+    expect(projectViewLifecycle.unmounts).not.toHaveBeenCalled();
+    expect(window.location.pathname).toBe(`/projects/${boundProjectA.id}`);
+    expect(projectResourceRequests.every(
+      (request) =>
+        request.headers.get('x-od-workspace-id') === 'ws-a'
+        && request.headers.get('x-od-workspace-member-id') === 'member-ws-a',
+    )).toBe(true);
+  });
+
+  it('drops an open project after its own authoritative workspace list no longer contains it', async () => {
+    const boundProjectA: Project = {
+      ...WORKSPACE_A_PROJECT,
+      workspaceId: 'ws-a',
+    };
+    const projectResourceRequests: Array<{ url: string; headers: Headers }> = [];
+    let removeProjectFromAuthoritativeList = false;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const pathname = new URL(String(input), 'http://d.local').pathname;
+        if (pathname.endsWith('/mock-project-resource')) {
+          projectResourceRequests.push({
+            url: pathname,
+            headers: new Headers(init?.headers),
+          });
+        }
+        if (pathname === `/api/projects/${boundProjectA.id}/workspace-scope`) {
+          return new Response(JSON.stringify({ error: 'project_not_found' }), {
+            status: 403,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        return new Response(JSON.stringify(
+          pathname.endsWith('/workspace/directory')
+            ? workspaceDirectoryFixture([workspaceContext('ws-a')])
+            : pathname.endsWith('/workspace/context')
+              ? workspaceContextPayload('ws-a')
+              : {},
+        ), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }),
+    );
+    vi.mocked(listProjects).mockImplementation(async () =>
+      removeProjectFromAuthoritativeList ? [] : [boundProjectA],
+    );
+    window.history.replaceState(null, '', `/projects/${boundProjectA.id}`);
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('project-view')).toBeTruthy();
+      expect(projectViewLifecycle.mounts).toHaveBeenCalledTimes(1);
+      expect(projectResourceRequests).toHaveLength(1);
+    });
+    expect(projectResourceRequests[0]?.headers.get('x-od-workspace-id')).toBe('ws-a');
+
+    removeProjectFromAuthoritativeList = true;
+    fireEvent.click(screen.getByTestId('project-refresh'));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('project-view')).toBeNull();
+      expect(projectViewLifecycle.unmounts).toHaveBeenCalledTimes(1);
+      expect(screen.getByRole('alert')).toBeTruthy();
+    });
+    expect(window.location.pathname).toBe(`/projects/${boundProjectA.id}`);
+    expect(projectResourceRequests).toHaveLength(1);
+  });
+
+  it('retains a bootstrapped project when a newer authoritative refresh fails', async () => {
+    const boundProjectA: Project = {
+      ...WORKSPACE_A_PROJECT,
+      workspaceId: 'ws-a',
+    };
+    let projectListReads = 0;
+    let scopeReads = 0;
+    const projectResourceRequests: Array<{ url: string; headers: Headers }> = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const pathname = new URL(String(input), 'http://d.local').pathname;
+        if (pathname === `/api/projects/${boundProjectA.id}/workspace-scope`) {
+          scopeReads += 1;
+          return new Response(JSON.stringify({
+            scope: {
+              kind: 'team',
+              projectId: boundProjectA.id,
+              workspaceId: 'ws-a',
+              visibility: 'team',
+              context: workspaceContext('ws-a'),
+            },
+          }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        if (pathname === `/api/projects/${boundProjectA.id}`) {
+          return new Response(JSON.stringify({ project: boundProjectA }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        if (pathname.endsWith('/mock-project-resource')) {
+          projectResourceRequests.push({
+            url: pathname,
+            headers: new Headers(init?.headers),
+          });
+        }
+        return new Response(JSON.stringify(
+          pathname.endsWith('/workspace/directory')
+            ? workspaceDirectoryFixture([workspaceContext('ws-a')])
+            : pathname.endsWith('/workspace/context')
+              ? workspaceContextPayload('ws-a')
+              : {},
+        ), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }),
+    );
+    vi.mocked(listProjects).mockImplementation(async () => {
+      projectListReads += 1;
+      if (projectListReads === 1) return [];
+      throw new Error('authoritative list unavailable');
+    });
+    window.history.replaceState(null, '', `/projects/${boundProjectA.id}`);
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('project-view')).toBeTruthy();
+      expect(scopeReads).toBe(1);
+      expect(projectViewLifecycle.mounts).toHaveBeenCalledTimes(1);
+      expect(projectResourceRequests).toHaveLength(1);
+    });
+
+    fireEvent.click(screen.getByTestId('project-refresh'));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(screen.getByTestId('project-view')).toBeTruthy();
+    expect(scopeReads).toBe(1);
+    expect(projectViewLifecycle.mounts).toHaveBeenCalledTimes(1);
+    expect(projectViewLifecycle.unmounts).not.toHaveBeenCalled();
+    expect(projectResourceRequests).toHaveLength(1);
+  });
+
+  it('bootstraps a fresh A deep link under ambient B without any headerless project-data read', async () => {
+    const boundProjectA: Project = {
+      ...WORKSPACE_A_PROJECT,
+      workspaceId: 'ws-a',
+    };
+    const boundProjectB: Project = {
+      ...WORKSPACE_B_PROJECT,
+      workspaceId: 'ws-b',
+    };
+    const projectDataRequests: Array<{ url: string; headers: Headers }> = [];
+    const rejectedHeaderlessReads: string[] = [];
+    const scopeResponse = deferred<Response>();
+    let scopeReads = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        const pathname = new URL(url, 'http://d.local').pathname;
+        const headers = new Headers(init?.headers);
+        if (pathname === `/api/projects/${boundProjectA.id}/workspace-scope`) {
+          scopeReads += 1;
+          return scopeResponse.promise;
+        }
+        if (
+          pathname === `/api/projects/${boundProjectA.id}`
+          || pathname.endsWith('/mock-project-resource')
+        ) {
+          projectDataRequests.push({ url: pathname, headers });
+          if (
+            headers.get('x-od-workspace-id') !== 'ws-a'
+            || headers.get('x-od-workspace-member-id') !== 'member-ws-a'
+          ) {
+            rejectedHeaderlessReads.push(pathname);
+            return new Response('{}', { status: 400 });
+          }
+          return new Response(JSON.stringify(
+            pathname === `/api/projects/${boundProjectA.id}`
+              ? { project: boundProjectA }
+              : {},
+          ), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        return new Response(JSON.stringify(
+          pathname.endsWith('/workspace/directory')
+            ? workspaceDirectoryFixture([
+                workspaceContext('ws-a'),
+                workspaceContext('ws-b'),
+              ])
+            : pathname.endsWith('/workspace/context')
+              ? workspaceContextPayload('ws-a')
+              : {},
+        ), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }),
+    );
+    vi.mocked(listProjects).mockResolvedValue([boundProjectB]);
+    window.history.replaceState(null, '', `/projects/${boundProjectA.id}`);
+
+    render(<App />);
+
+    await waitFor(() => expect(scopeReads).toBe(1));
+    await act(async () => {
+      notifyWorkspaceContextRefresh({ context: workspaceContext('ws-b') });
+      await Promise.resolve();
+    });
+    await act(async () => {
+      scopeResponse.resolve(new Response(JSON.stringify({
+        scope: {
+          kind: 'team',
+          projectId: boundProjectA.id,
+          workspaceId: 'ws-a',
+          visibility: 'team',
+          context: workspaceContext('ws-a'),
+        },
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }));
+      await scopeResponse.promise;
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('project-view')).toBeTruthy();
+      expect(projectViewLifecycle.mounts).toHaveBeenCalledTimes(1);
+    });
+    expect(window.location.pathname).toBe(`/projects/${boundProjectA.id}`);
+    expect(scopeReads).toBe(1);
+    expect(rejectedHeaderlessReads).toEqual([]);
+    expect(
+      projectDataRequests.filter(
+        (request) => request.url === `/api/projects/${boundProjectA.id}`,
+      ),
+    ).toHaveLength(1);
+    expect(projectDataRequests.every(
+      (request) =>
+        request.headers.get('x-od-workspace-id') === 'ws-a'
+        && request.headers.get('x-od-workspace-member-id') === 'member-ws-a',
+    )).toBe(true);
+    expect(projectViewLifecycle.renders.mock.lastCall?.[0]).toMatchObject({
+      project: { id: boundProjectA.id, workspaceId: 'ws-a' },
+      workspaceContextOverride: {
+        workspaceId: 'ws-a',
+        workspaceMemberId: 'member-ws-a',
+      },
+    });
+
+    fireEvent.click(screen.getByTestId('project-back'));
+    await waitFor(() => expect(screen.getByTestId('entry-home-surface')).toBeTruthy());
+    expect(screen.queryByTestId(`entry-project-${boundProjectA.id}`)).toBeNull();
+    expect(screen.getByTestId(`entry-project-${boundProjectB.id}`)).toBeTruthy();
   });
 });

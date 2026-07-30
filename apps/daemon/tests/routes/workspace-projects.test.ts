@@ -8,6 +8,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { startServer } from '../../src/server.js';
 import { registerProjectRoutes } from '../../src/routes/project/index.js';
 import { projectResourceIdFor } from '../../src/integrations/vela-team-projects.js';
+import type { WorkspaceDirectoryFetchResult } from '../../src/collab/vela-workspace-context.js';
 
 describe('workspace project routes', () => {
   let server: http.Server;
@@ -2104,7 +2105,8 @@ function workspaceProjectRouteDeps({
     projectStore: {
       insertProject: noop,
       validateLinkedDirs: () => ({ dirs: [] }),
-      getProject: () => project,
+      getProject: (_db: unknown, requestedProjectId: string) =>
+        requestedProjectId === projectId ? project : null,
       updateProject: noop,
       dbDeleteProject,
       removeProjectDir,
@@ -2182,3 +2184,265 @@ async function close(server: http.Server): Promise<void> {
     server.close((err) => (err ? reject(err) : resolve()));
   });
 }
+
+describe('GET /api/projects/:id/workspace-scope route bootstrap', () => {
+  const projectId = 'route-bootstrap-project-a';
+  const workspaceId = 'route-bootstrap-workspace-a';
+  const memberId = 'route-bootstrap-member-a';
+  const activeMembership = {
+    workspaceId,
+    workspaceName: 'Workspace A',
+    workspaceType: 'team' as const,
+    workspaceMemberId: memberId,
+    role: 'member' as const,
+    memberStatus: 'active' as const,
+    lifecycleState: 'active' as const,
+  };
+
+  async function startBootstrapRoute(options: {
+    directory?: () => Promise<WorkspaceDirectoryFetchResult>;
+    resourceState?: string;
+    unbound?: boolean;
+  } = {}) {
+    const deps = workspaceProjectRouteDeps({
+      workspaceId,
+      projectId,
+      dbDeleteProject: vi.fn(),
+      removeProjectDir: vi.fn(),
+      workspaceRowOverrides: {
+        workspaceVisibility: 'team',
+        ...(options.resourceState ? { resourceState: options.resourceState } : {}),
+      },
+    }) as any;
+    if (options.unbound) {
+      deps.projectStore.getWorkspaceProject = () => null;
+      deps.projectStore.getWorkspaceProjectByProjectId = () => null;
+    }
+    deps.fetchWorkspaceDirectory =
+      options.directory
+      ?? (async () => ({ ok: true, items: [activeMembership] }));
+    deps.authorizeProjectRequest = vi.fn(async (
+      req: express.Request,
+      res: express.Response,
+    ) => {
+      if (options.unbound) return true;
+      const claimedWorkspaceId = req.get('x-od-workspace-id');
+      const claimedMemberId = req.get('x-od-workspace-member-id');
+      if (!claimedWorkspaceId || !claimedMemberId) {
+        res.status(400).json({
+          error: { code: 'WORKSPACE_CONTEXT_INCOMPLETE' },
+        });
+        return false;
+      }
+      if (claimedWorkspaceId !== workspaceId || claimedMemberId !== memberId) {
+        res.status(403).json({
+          error: { code: 'WORKSPACE_PROJECT_PERMISSION_DENIED' },
+        });
+        return false;
+      }
+      return true;
+    });
+    deps.http.sendApiError = (
+      res: express.Response,
+      status: number,
+      code: string,
+      message: string,
+      details?: Record<string, unknown>,
+    ) => res.status(status).json({ error: { code, message, ...details } });
+    const app = express();
+    app.use(express.json());
+    registerProjectRoutes(app, deps);
+    return listen(app);
+  }
+
+  it('returns exact A scope headerlessly while keeping project content behind explicit A headers', async () => {
+    const routeServer = await startBootstrapRoute();
+    try {
+      const scope = await fetch(
+        `${routeServer.url}/api/projects/${projectId}/workspace-scope`,
+      );
+      expect(scope.status).toBe(200);
+      await expect(scope.json()).resolves.toMatchObject({
+        scope: {
+          kind: 'team',
+          projectId,
+          workspaceId,
+          context: {
+            workspaceId,
+            workspaceMemberId: memberId,
+          },
+        },
+      });
+
+      const headerlessDetail = await fetch(
+        `${routeServer.url}/api/projects/${projectId}`,
+      );
+      expect(headerlessDetail.status).toBe(400);
+      const headerlessFiles = await fetch(
+        `${routeServer.url}/api/projects/${projectId}/files`,
+      );
+      expect(headerlessFiles.status).not.toBe(200);
+
+      const scopedDetail = await fetch(
+        `${routeServer.url}/api/projects/${projectId}`,
+        {
+          headers: {
+            'x-od-workspace-id': workspaceId,
+            'x-od-workspace-member-id': memberId,
+          },
+        },
+      );
+      expect(scopedDetail.status).toBe(200);
+    } finally {
+      await close(routeServer.server);
+    }
+  });
+
+  it('keeps partial and wrong explicit claims on the ordinary fail-closed gate', async () => {
+    const routeServer = await startBootstrapRoute();
+    try {
+      const partial = await fetch(
+        `${routeServer.url}/api/projects/${projectId}/workspace-scope`,
+        { headers: { 'x-od-workspace-id': workspaceId } },
+      );
+      expect(partial.status).toBe(400);
+      const wrong = await fetch(
+        `${routeServer.url}/api/projects/${projectId}/workspace-scope`,
+        {
+          headers: {
+            'x-od-workspace-id': workspaceId,
+            'x-od-workspace-member-id': 'wrong-member',
+          },
+        },
+      );
+      expect(wrong.status).toBe(403);
+    } finally {
+      await close(routeServer.server);
+    }
+  });
+
+  it('does not disclose scope for nonmembers, removed/deleted memberships, or deleted resources', async () => {
+    const deniedCases = [
+      {
+        directory: async () => ({
+          ok: true,
+          items: [{ ...activeMembership, workspaceId: 'workspace-b' }],
+        }),
+      },
+      {
+        directory: async () => ({
+          ok: true,
+          items: [{ ...activeMembership, memberStatus: 'removed' as const }],
+        }),
+      },
+      {
+        directory: async () => ({
+          ok: true,
+          items: [{ ...activeMembership, lifecycleState: 'deleted' as const }],
+        }),
+      },
+      {
+        resourceState: 'deleted',
+      },
+    ];
+    for (const denied of deniedCases) {
+      const routeServer = await startBootstrapRoute(denied);
+      try {
+        const response = await fetch(
+          `${routeServer.url}/api/projects/${projectId}/workspace-scope`,
+        );
+        expect(response.status).toBe(403);
+        const text = await response.text();
+        expect(text).not.toContain(workspaceId);
+        expect(text).not.toContain(memberId);
+      } finally {
+        await close(routeServer.server);
+      }
+    }
+  });
+
+  it('returns retryable 503 on directory outage and 404 for a missing project', async () => {
+    const routeServer = await startBootstrapRoute({
+      directory: async () => {
+        throw new Error('directory down');
+      },
+    });
+    try {
+      const outage = await fetch(
+        `${routeServer.url}/api/projects/${projectId}/workspace-scope`,
+      );
+      expect(outage.status).toBe(503);
+      await expect(outage.json()).resolves.toMatchObject({
+        error: {
+          code: 'WORKSPACE_DIRECTORY_UNAVAILABLE',
+          retryable: true,
+        },
+      });
+      const missing = await fetch(
+        `${routeServer.url}/api/projects/missing-project/workspace-scope`,
+      );
+      expect(missing.status).toBe(404);
+    } finally {
+      await close(routeServer.server);
+    }
+  });
+
+  it('keeps locked/frozen project reads available but read-only', async () => {
+    const routeServer = await startBootstrapRoute({
+      resourceState: 'frozen',
+      directory: async () => ({
+        ok: true,
+        items: [{ ...activeMembership, lifecycleState: 'locked' as const }],
+      }),
+    });
+    try {
+      const response = await fetch(
+        `${routeServer.url}/api/projects/${projectId}/workspace-scope`,
+      );
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toMatchObject({
+        scope: {
+          kind: 'team',
+          workspaceId,
+          context: {
+            lifecycleState: 'locked',
+            permissions: {
+              canShareProjects: false,
+              canWriteSyncedFiles: false,
+            },
+          },
+        },
+      });
+    } finally {
+      await close(routeServer.server);
+    }
+  });
+
+  it('preserves signed-out headerless scope and detail for an unbound local project', async () => {
+    const routeServer = await startBootstrapRoute({
+      unbound: true,
+      directory: async () => {
+        throw new Error('signed out');
+      },
+    });
+    try {
+      const scope = await fetch(
+        `${routeServer.url}/api/projects/${projectId}/workspace-scope`,
+      );
+      expect(scope.status).toBe(200);
+      await expect(scope.json()).resolves.toEqual({
+        scope: {
+          kind: 'unbound',
+          projectId,
+          workspaceId: null,
+          context: null,
+        },
+      });
+      expect(
+        (await fetch(`${routeServer.url}/api/projects/${projectId}`)).status,
+      ).toBe(200);
+    } finally {
+      await close(routeServer.server);
+    }
+  });
+});

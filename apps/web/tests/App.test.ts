@@ -7,6 +7,7 @@ import {
   mergeAgentModelChoice,
   persistComposioConfigChange,
   projectViewAuthorizationLifetimeKey,
+  projectRouteSurfaceState,
   resolveDeepLinkedTeamSharedProject,
   resolveSettingsCloseConfig,
   shouldSyncMediaProvidersOnSave,
@@ -16,6 +17,48 @@ import type {
   WorkspaceCollabContext,
   WorkspaceProjectSummary,
 } from '@open-design/contracts';
+
+describe('projectRouteSurfaceState', () => {
+  it('only shows an unbounded loader while the initial project list is loading', () => {
+    expect(projectRouteSurfaceState({
+      projectsLoading: true,
+      hasActiveProject: false,
+      daemonLive: false,
+    })).toBe('loading-projects');
+  });
+
+  it('makes an absent project terminal when the daemon is unavailable', () => {
+    expect(projectRouteSurfaceState({
+      projectsLoading: false,
+      hasActiveProject: false,
+      daemonLive: false,
+    })).toBe('daemon-unavailable');
+  });
+
+  it('exposes bounded deep-link failures instead of leaving the route loading forever', () => {
+    expect(projectRouteSurfaceState({
+      projectsLoading: false,
+      hasActiveProject: false,
+      daemonLive: true,
+      resolutionFailure: 'missing',
+    })).toBe('missing');
+    expect(projectRouteSurfaceState({
+      projectsLoading: false,
+      hasActiveProject: false,
+      daemonLive: true,
+      resolutionFailure: 'materialization-failed',
+    })).toBe('materialization-failed');
+  });
+
+  it('renders a loaded project regardless of stale failure metadata', () => {
+    expect(projectRouteSurfaceState({
+      projectsLoading: false,
+      hasActiveProject: true,
+      daemonLive: true,
+      resolutionFailure: 'missing',
+    })).toBe('ready');
+  });
+});
 
 const baseConfig: AppConfig = {
   mode: 'api',

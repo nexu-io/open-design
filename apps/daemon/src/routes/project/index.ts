@@ -90,7 +90,10 @@ import {
   type WorkspaceResourceContext,
   type WorkspaceResourceMutationCapability,
 } from '../../collab/workspace-resource-mutation.js';
-import { resolveProjectWorkspaceScope } from '../../collab/project-workspace-scope.js';
+import {
+  resolveProjectWorkspaceScope,
+  resolveProjectWorkspaceScopeBootstrap,
+} from '../../collab/project-workspace-scope.js';
 import {
   createAuthorizeProjectRequest,
   type AuthorizeProjectRequest,
@@ -3647,8 +3650,39 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     if (!project || !projectVisibleForLocations(project, locations)) {
       return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
     }
-    if (!await authorizeProjectRequest(req, res, project.id, { mode: 'read' })) return;
     const binding = getWorkspaceProjectByProjectId(db, project.id);
+    const hasWorkspaceClaim =
+      headerValue(req, 'x-od-workspace-id') !== null
+      || headerValue(req, 'x-od-workspace-member-id') !== null;
+    if (binding && !hasWorkspaceClaim) {
+      // This is the same session-generation keyed authority broker used by the
+      // shell directory and ordinary read gate. A cold shell + bootstrap joins
+      // one upstream read; its short successful lease is exact-account scoped,
+      // while failures are not cached. Never consult current/default Workspace.
+      const directory = ctx.fetchWorkspaceDirectory
+        ? await ctx.fetchWorkspaceDirectory().catch(
+            (): WorkspaceDirectoryFetchResult => ({ ok: false, items: [] }),
+          )
+        : { ok: false, items: [] };
+      const bootstrap = resolveProjectWorkspaceScopeBootstrap({
+        projectId: project.id,
+        binding,
+        directory,
+      });
+      if (!bootstrap.ok) {
+        return sendApiError(
+          res,
+          bootstrap.status,
+          bootstrap.code,
+          bootstrap.message,
+          bootstrap.status === 503 ? { retryable: true } : {},
+        );
+      }
+      /** @type {import('@open-design/contracts').ProjectWorkspaceScopeResponse} */
+      const body = { scope: bootstrap.scope };
+      return res.json(body);
+    }
+    if (!await authorizeProjectRequest(req, res, project.id, { mode: 'read' })) return;
     const directory = ctx.fetchWorkspaceDirectory
       ? await ctx.fetchWorkspaceDirectory().catch(
           (): WorkspaceDirectoryFetchResult => ({ ok: false, items: [] }),
