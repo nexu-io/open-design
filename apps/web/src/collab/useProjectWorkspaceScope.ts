@@ -517,9 +517,11 @@ export function useProjectWorkspaceScope(
                 failure,
               };
         });
-        // An old daemon has no endpoint to recover on a timer. Identity-change
-        // and page lifecycle invalidations still revalidate after an upgrade.
-        if (failure !== 'unsupported') {
+        // Only a transient directory/backend outage earns polling. Forbidden
+        // is an authoritative access decision; unsupported is an authoritative
+        // daemon capability decision. Both still revalidate on explicit
+        // identity, page-lifecycle, or workspace invalidation events.
+        if (failure === 'unavailable') {
           retryTimer = setTimeout(() => void load(), PROJECT_SCOPE_RETRY_MS);
         }
       }

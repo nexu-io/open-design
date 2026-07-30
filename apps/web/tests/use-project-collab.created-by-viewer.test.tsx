@@ -22,6 +22,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   markProjectCreatedByViewer,
   resetProjectsCreatedByViewerCache,
+  resolveProjectWriterAuthority,
   useProjectCollab,
 } from '../src/collab/useProjectCollab';
 import {
@@ -98,6 +99,23 @@ function installFullyHangingFetch() {
   globalThis.fetch = vi.fn(async () => new Promise<Response>(() => {})) as typeof fetch;
 }
 
+function installOtherOwnerStatusFetch() {
+  globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+    const pathname = new URL(String(input), 'http://d.local').pathname;
+    if (pathname.endsWith('/presence/heartbeat')) {
+      return Response.json({ present: [{ memberId: DEFAULT_TEAM_CONTEXT.workspaceMemberId }] });
+    }
+    if (pathname.endsWith('/collab/status')) {
+      return Response.json({
+        publishedVersion: 1,
+        syncState: 'synced',
+        ownerMemberId: 'wm-other-owner',
+      });
+    }
+    return Response.json({ ok: true });
+  }) as typeof fetch;
+}
+
 function installProjectCreationFetch() {
   globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
     const pathname = new URL(String(input), 'http://d.local').pathname;
@@ -152,6 +170,19 @@ afterEach(() => {
 });
 
 describe('useProjectCollab: project created by the viewer this session', () => {
+  it('lets explicit shared non-owner status override provisional ownership evidence', () => {
+    expect(resolveProjectWriterAuthority({
+      workspaceReadOnly: false,
+      workspaceContextReadOnly: false,
+      lostAccessAfterUnshare: false,
+      shared: true,
+      isOwner: false,
+      knownOwnedByViewer: true,
+      createdByViewerThisSession: true,
+      syncState: 'synced',
+    })).toBe('denied');
+  });
+
   it('still fails closed for an unmarked project while the team catalog has not loaded yet', async () => {
     // Sanity check the scenario: the catalog genuinely never warmed.
     await warmContextOnly();
@@ -180,6 +211,20 @@ describe('useProjectCollab: project created by the viewer this session', () => {
       expect(project.result.current.viewerOnly).toBe(false);
       expect(project.result.current.writerAuthority).toBe('allowed');
     });
+  });
+
+  it('lets explicit other-owner status revoke a stale same-session writer marker', async () => {
+    markProjectCreatedByViewer('p-reassigned', DEFAULT_TEAM_CONTEXT);
+    installOtherOwnerStatusFetch();
+
+    const project = renderHook(() => useProjectCollab('p-reassigned', {
+      workspaceContext: DEFAULT_TEAM_CONTEXT,
+    }));
+
+    await waitFor(() => expect(project.result.current.syncState).toBe('synced'));
+    expect(project.result.current.isOwner).toBe(false);
+    expect(project.result.current.viewerOnly).toBe(true);
+    expect(project.result.current.writerAuthority).toBe('denied');
   });
 
   it('keeps a Home-created project writable while its exact project scope is still loading', async () => {

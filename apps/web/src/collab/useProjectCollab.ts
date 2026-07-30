@@ -214,6 +214,35 @@ export interface ProjectCollab {
   applyContentTransferState?: (state: ProjectContentTransferState) => void;
 }
 
+export function resolveProjectWriterAuthority(options: {
+  workspaceReadOnly: boolean;
+  workspaceContextReadOnly: boolean;
+  lostAccessAfterUnshare: boolean;
+  shared: boolean;
+  isOwner: boolean;
+  knownOwnedByViewer: boolean;
+  createdByViewerThisSession: boolean;
+  syncState: ProjectCollab['syncState'];
+}): ProjectCollab['writerAuthority'] {
+  if (options.workspaceReadOnly || options.lostAccessAfterUnshare) return 'denied';
+  if (options.workspaceContextReadOnly) return 'pending';
+  // A settled daemon status outranks every provisional browser-side witness.
+  // Catalog ownership and same-session creation exist only to bridge the
+  // UNKNOWN window; once status names another writer they must not keep write
+  // authority alive.
+  if (options.shared) {
+    return options.isOwner ? 'allowed' : 'denied';
+  }
+  if (options.syncState === 'local_only') return 'allowed';
+  if (
+    options.syncState === null
+    && (options.knownOwnedByViewer || options.createdByViewerThisSession)
+  ) {
+    return 'allowed';
+  }
+  return 'pending';
+}
+
 /**
  * Real-product collab integration for a project : resolves the workspace
  * context → decides whether collab runs (team member of a live workspace) → runs
@@ -358,19 +387,16 @@ export function useProjectCollab(
   const sharedReadOnly =
     unknownStatusReadOnly || (shared && !isOwner) || lostAccessAfterUnshare;
   const viewerOnly = workspaceContextReadOnly || workspaceReadOnly || sharedReadOnly;
-  const writerAuthority: ProjectCollab['writerAuthority'] =
-    workspaceReadOnly || lostAccessAfterUnshare
-      ? 'denied'
-      : workspaceContextReadOnly
-        ? 'pending'
-        : isOwner
-          || knownOwnedByViewer
-          || createdByViewerThisSession
-          || collab.syncState === 'local_only'
-          ? 'allowed'
-          : shared
-            ? 'denied'
-            : 'pending';
+  const writerAuthority = resolveProjectWriterAuthority({
+    workspaceReadOnly,
+    workspaceContextReadOnly,
+    lostAccessAfterUnshare,
+    shared,
+    isOwner,
+    knownOwnedByViewer,
+    createdByViewerThisSession,
+    syncState: collab.syncState,
+  });
 
   // Member content auto-sync (the last link): when a read-only member sees the
   // resource-hub head (`publishedVersion`) advance past what we last pulled,

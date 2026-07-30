@@ -135,6 +135,7 @@ function teamScope(
 describe('useProjectWorkspaceScope', () => {
   afterEach(() => {
     cleanup();
+    vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
     OpeningEventSource.instances = [];
@@ -347,6 +348,26 @@ describe('useProjectWorkspaceScope', () => {
       });
     });
     outage.unmount();
+  });
+
+  it('does not poll a settled forbidden scope on the retry timer', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn(async () => new Response('{}', { status: 403 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const revoked = renderHook(() =>
+      useProjectWorkspaceScope('project-revoked-timer'),
+    );
+    await act(async () => {
+      for (let turn = 0; turn < 10; turn += 1) await Promise.resolve();
+    });
+    expect(revoked.result.current.failure).toBe('forbidden');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(20_000);
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('authorizes AMR only for explicit personal or team scopes', () => {

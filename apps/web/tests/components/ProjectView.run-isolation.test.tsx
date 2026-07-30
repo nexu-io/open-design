@@ -1674,6 +1674,49 @@ describe('ProjectView conversation run isolation', () => {
     expect(screen.queryByText('Could not create a conversation for this project.')).toBeNull();
   });
 
+  it('does not seed after explicit other-owner status revokes provisional writer authority', async () => {
+    const teamContext = teamWorkspaceContext('workspace-team', 'member-team');
+    workspaceScopeMocks.ambientContext = teamContext;
+    workspaceScopeMocks.projectScope = {
+      loading: false,
+      scope: {
+        kind: 'team',
+        projectId: project.id,
+        workspaceId: teamContext.workspaceId,
+        visibility: 'team',
+        context: teamContext,
+      },
+    };
+    let resolveConversations!: (value: Conversation[]) => void;
+    listConversations.mockImplementationOnce(
+      () => new Promise<Conversation[]>((resolve) => {
+        resolveConversations = resolve;
+      }),
+    );
+    projectCollabMocks.enabled = true;
+    projectCollabMocks.syncState = null;
+    projectCollabMocks.viewerOnly = false;
+    projectCollabMocks.isOwner = false;
+    projectCollabMocks.writerAuthority = 'allowed';
+    const teamProject = { ...project, workspaceId: teamContext.workspaceId };
+    const view = renderProjectView(config, teamProject);
+
+    await waitFor(() => expect(listConversations).toHaveBeenCalledTimes(1));
+    projectCollabMocks.syncState = 'synced';
+    projectCollabMocks.viewerOnly = true;
+    projectCollabMocks.writerAuthority = 'denied';
+    view.rerender(projectViewElement(config, teamProject));
+
+    await act(async () => {
+      resolveConversations([]);
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(createConversation).not.toHaveBeenCalled();
+  });
+
   it('blocks duplicate new conversations while creation is in flight', async () => {
     let resolveCreate!: (conversation: Conversation) => void;
     createConversation.mockImplementationOnce(
