@@ -32,7 +32,7 @@
 // pre-run balance gate receives the same null and silently prices the run
 // against the ACCOUNT wallet instead of the team's.
 
-import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import {
   buildWorkspacePermissions,
   buildWorkspaceSeatSummary,
@@ -50,6 +50,7 @@ import {
   createConversation,
   listConversations,
   listMessages,
+  loadTabs,
 } from '../../src/state/projects';
 import { fetchPreviewComments } from '../../src/providers/registry';
 import { fetchBrands } from '../../src/runtime/brands';
@@ -224,6 +225,7 @@ const mockedCheckAmrBalanceGate = vi.mocked(checkAmrBalanceGate);
 const mockedListConversations = vi.mocked(listConversations);
 const mockedCreateConversation = vi.mocked(createConversation);
 const mockedListMessages = vi.mocked(listMessages);
+const mockedLoadTabs = vi.mocked(loadTabs);
 const mockedFetchPreviewComments = vi.mocked(fetchPreviewComments);
 const mockedFetchBrands = vi.mocked(fetchBrands);
 
@@ -246,6 +248,14 @@ const conversation = (projectId: string): Conversation => ({
   createdAt: 1,
   updatedAt: 1,
 });
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((next) => {
+    resolve = next;
+  });
+  return { promise, resolve };
+}
 
 /**
  * The project Home just created from the example card: bound to the team
@@ -599,5 +609,64 @@ describe('a Home auto-send observes a project billing scope that settles after m
       });
     });
     await waitFor(() => expect(mockedStreamViaDaemon).toHaveBeenCalled());
+  });
+
+  it('keeps established project data while the same workspace authority object settles', async () => {
+    window.sessionStorage.removeItem(`od:auto-send-first:${PROJECT_ID}`);
+    mockedListMessages.mockResolvedValue([{
+      id: 'existing-message',
+      role: 'assistant',
+      content: 'existing transcript',
+      createdAt: 1,
+    } as never]);
+
+    const view = renderProjectView({
+      project: {
+        ...project(),
+        pendingPrompt: '',
+      },
+    });
+    await waitFor(() => expect(mockedListMessages).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mockedLoadTabs).toHaveBeenCalledTimes(1));
+
+    const conversationsPending = deferred<Conversation[]>();
+    const messagesPending = deferred<never[]>();
+    mockedListConversations.mockImplementationOnce(() => conversationsPending.promise);
+    mockedListMessages.mockImplementationOnce(() => messagesPending.promise);
+
+    workspaceScopeMocks.projectScope = {
+      loading: false,
+      scope: {
+        kind: 'team',
+        projectId: PROJECT_ID,
+        workspaceId: TEAM_WORKSPACE,
+        visibility: 'personal',
+        context: {
+          ...CALLER_CONTEXT,
+          permissions: { ...CALLER_CONTEXT.permissions },
+        } as WorkspaceCollabContext & { workspaceType: 'team' },
+      },
+    };
+    await act(async () => {
+      view.rerender(projectViewElement({
+        project: {
+          ...project(),
+          pendingPrompt: '',
+        },
+      }));
+    });
+
+    expect(
+      mockedListConversations,
+      'same project/workspace/member revalidation must not restart the conversation load',
+    ).toHaveBeenCalledTimes(1);
+    expect(
+      mockedListMessages,
+      'same project/workspace/member revalidation must not blank and reload the transcript',
+    ).toHaveBeenCalledTimes(1);
+    expect(
+      mockedLoadTabs,
+      'same project/workspace/member revalidation must not clear and rehydrate open tabs',
+    ).toHaveBeenCalledTimes(1);
   });
 });

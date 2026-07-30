@@ -279,13 +279,18 @@ export function useProjectWorkspaceScope(
     context: WorkspaceCollabContext | null;
   }>({ projectId, context: null });
   const deferredRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [refreshRevision, setRefreshRevision] = useState(0);
+  const [refreshRequest, setRefreshRequest] = useState({
+    revision: 0,
+    preserveResolvedScope: false,
+  });
   const [state, setState] = useState<ProjectWorkspaceScopeState & {
     resolvedRevision: number;
+    resolvedAuthorityKey: string | null;
   }>({
     loading: true,
     scope: null,
     resolvedRevision: -1,
+    resolvedAuthorityKey: null,
   });
   const boundWorkspaceId =
     typeof persistedProjectWorkspaceId === 'string'
@@ -311,8 +316,7 @@ export function useProjectWorkspaceScope(
       : null;
   const requestAuthorityKey = projectWorkspaceAuthorityKey(requestWorkspaceAuthority);
 
-  const revalidate = useCallback(() => {
-    setRefreshRevision((revision) => revision + 1);
+  const scheduleDeferredRevalidation = useCallback(() => {
     // The daemon shares a short successful directory cache between the scope
     // endpoint and final spawn. Re-read once after that TTL too, so a same-login
     // member removal/rejoin cannot be hidden by the immediately cached answer.
@@ -321,36 +325,62 @@ export function useProjectWorkspaceScope(
     }
     deferredRefreshTimerRef.current = setTimeout(() => {
       deferredRefreshTimerRef.current = null;
-      setRefreshRevision((revision) => revision + 1);
+      setRefreshRequest((current) => ({
+        revision: current.revision + 1,
+        preserveResolvedScope: true,
+      }));
     }, PROJECT_SCOPE_RETRY_MS);
   }, []);
 
+  const revalidateInBackground = useCallback(() => {
+    setRefreshRequest((current) => ({
+      revision: current.revision + 1,
+      preserveResolvedScope: true,
+    }));
+    scheduleDeferredRevalidation();
+  }, [scheduleDeferredRevalidation]);
+
+  const revalidateAfterIdentityChange = useCallback(() => {
+    setRefreshRequest((current) => ({
+      revision: current.revision + 1,
+      preserveResolvedScope: false,
+    }));
+    scheduleDeferredRevalidation();
+  }, [scheduleDeferredRevalidation]);
+
   useWorkspaceInvalidation(
-    { 'workspace-context-changed': revalidate },
+    { 'workspace-context-changed': revalidateInBackground },
     {
       workspaceContext: projectWorkspaceContext(state.scope),
-      onActive: revalidate,
+      onActive: revalidateInBackground,
     },
   );
 
   useEffect(() => {
-    window.addEventListener(WORKSPACE_CONTEXT_REFRESH_EVENT, revalidate);
-    window.addEventListener('pageshow', revalidate);
+    window.addEventListener(
+      WORKSPACE_CONTEXT_REFRESH_EVENT,
+      revalidateAfterIdentityChange,
+    );
+    window.addEventListener('pageshow', revalidateInBackground);
     return () => {
-      window.removeEventListener(WORKSPACE_CONTEXT_REFRESH_EVENT, revalidate);
-      window.removeEventListener('pageshow', revalidate);
+      window.removeEventListener(
+        WORKSPACE_CONTEXT_REFRESH_EVENT,
+        revalidateAfterIdentityChange,
+      );
+      window.removeEventListener('pageshow', revalidateInBackground);
       if (deferredRefreshTimerRef.current) {
         clearTimeout(deferredRefreshTimerRef.current);
         deferredRefreshTimerRef.current = null;
       }
     };
-  }, [revalidate]);
+  }, [revalidateAfterIdentityChange, revalidateInBackground]);
 
   useEffect(() => {
     const epoch = ++epochRef.current;
     const controller = new AbortController();
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
     let firstAttempt = true;
+    const refreshRevision = refreshRequest.revision;
 
     const load = async () => {
       if (boundWorkspaceId && !requestWorkspaceAuthority) {
@@ -358,15 +388,33 @@ export function useProjectWorkspaceScope(
           loading: false,
           scope: null,
           resolvedRevision: refreshRevision,
+          resolvedAuthorityKey: requestAuthorityKey,
           failure: 'forbidden',
         });
         return;
       }
       if (firstAttempt) {
-        setState({
-          loading: true,
-          scope: null,
-          resolvedRevision: refreshRevision,
+        setState((current) => {
+          const canRefreshInBackground =
+            refreshRequest.preserveResolvedScope
+            && current.resolvedAuthorityKey === requestAuthorityKey
+            && current.scope !== null
+            && current.scope.projectId === projectId
+            && (
+              !boundWorkspaceId
+              || current.scope.workspaceId === boundWorkspaceId
+            );
+          return canRefreshInBackground
+            ? {
+                ...current,
+                loading: false,
+              }
+            : {
+                loading: true,
+                scope: null,
+                resolvedRevision: refreshRevision,
+                resolvedAuthorityKey: requestAuthorityKey,
+              };
         });
         firstAttempt = false;
       }
@@ -383,13 +431,40 @@ export function useProjectWorkspaceScope(
           },
         );
         if (controller.signal.aborted || epoch !== epochRef.current) return;
-        setState({
-          loading: false,
-          scope,
-          resolvedRevision: refreshRevision,
-        });
         if (scope.kind === 'unavailable') {
+          setState((current) => {
+            const canKeepResolvedScope =
+              refreshRequest.preserveResolvedScope
+              && current.resolvedAuthorityKey === requestAuthorityKey
+              && current.scope !== null
+              && current.scope.kind !== 'unavailable'
+              && current.scope.projectId === projectId
+              && (
+                !boundWorkspaceId
+                || current.scope.workspaceId === boundWorkspaceId
+              );
+            return canKeepResolvedScope
+              ? {
+                  ...current,
+                  loading: false,
+                  resolvedRevision: refreshRevision,
+                  failure: 'unavailable',
+                }
+              : {
+                  loading: false,
+                  scope,
+                  resolvedRevision: refreshRevision,
+                  resolvedAuthorityKey: requestAuthorityKey,
+                };
+          });
           retryTimer = setTimeout(() => void load(), PROJECT_SCOPE_RETRY_MS);
+        } else {
+          setState({
+            loading: false,
+            scope,
+            resolvedRevision: refreshRevision,
+            resolvedAuthorityKey: requestAuthorityKey,
+          });
         }
       } catch (error) {
         if (controller.signal.aborted || epoch !== epochRef.current) return;
@@ -397,11 +472,32 @@ export function useProjectWorkspaceScope(
           error instanceof ProjectWorkspaceScopeFetchError
             ? error.failure
             : 'unavailable';
-        setState({
-          loading: false,
-          scope: null,
-          resolvedRevision: refreshRevision,
-          failure,
+        setState((current) => {
+          const canKeepResolvedScope =
+            failure === 'unavailable'
+            && refreshRequest.preserveResolvedScope
+            && current.resolvedAuthorityKey === requestAuthorityKey
+            && current.scope !== null
+            && current.scope.kind !== 'unavailable'
+            && current.scope.projectId === projectId
+            && (
+              !boundWorkspaceId
+              || current.scope.workspaceId === boundWorkspaceId
+            );
+          return canKeepResolvedScope
+            ? {
+                ...current,
+                loading: false,
+                resolvedRevision: refreshRevision,
+                failure,
+              }
+            : {
+                loading: false,
+                scope: null,
+                resolvedRevision: refreshRevision,
+                resolvedAuthorityKey: requestAuthorityKey,
+                failure,
+              };
         });
         // An old daemon has no endpoint to recover on a timer. Identity-change
         // and page lifecycle invalidations still revalidate after an upgrade.
@@ -419,7 +515,7 @@ export function useProjectWorkspaceScope(
   }, [
     boundWorkspaceId,
     projectId,
-    refreshRevision,
+    refreshRequest,
     requestAuthorityKey,
   ]);
 
@@ -430,8 +526,12 @@ export function useProjectWorkspaceScope(
   // workspace the user just left names the wallet they just left with it, and an
   // ambient context refresh can change the identity without bumping the revision.
   if (
-    state.resolvedRevision !== refreshRevision ||
-    (
+    state.resolvedAuthorityKey !== requestAuthorityKey
+    || (
+      !refreshRequest.preserveResolvedScope
+      && state.resolvedRevision !== refreshRequest.revision
+    )
+    || (
       state.scope !== null
       && (
         state.scope.projectId !== projectId

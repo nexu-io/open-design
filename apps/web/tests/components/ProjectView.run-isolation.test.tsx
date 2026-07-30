@@ -92,6 +92,12 @@ const workspaceScopeMocks = vi.hoisted(() => {
     } as ProjectWorkspaceScopeState,
   };
 });
+const projectCollabMocks = vi.hoisted(() => ({
+  enabled: false,
+  syncState: 'local_only' as 'local_only' | 'synced' | null,
+  viewerOnly: false,
+  isOwner: false,
+}));
 
 vi.mock('../../src/analytics/provider', () => ({
   useAnalytics: () => ({
@@ -152,13 +158,13 @@ vi.mock('../../src/collab/useProjectWorkspaceScope', async (importOriginal) => (
 vi.mock('../../src/collab/useProjectCollab', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/collab/useProjectCollab')>()),
   useProjectCollab: () => ({
-    enabled: false,
+    enabled: projectCollabMocks.enabled,
     member: null,
     present: [],
     publishedVersion: null,
-    syncState: 'local_only',
-    viewerOnly: false,
-    isOwner: false,
+    syncState: projectCollabMocks.syncState,
+    viewerOnly: projectCollabMocks.viewerOnly,
+    isOwner: projectCollabMocks.isOwner,
     downloadPending: false,
     reportChange: vi.fn(),
     requestPublish: vi.fn(),
@@ -728,6 +734,10 @@ describe('ProjectView conversation run isolation', () => {
         context: workspaceScopeMocks.personalContext(),
       },
     };
+    projectCollabMocks.enabled = false;
+    projectCollabMocks.syncState = 'local_only';
+    projectCollabMocks.viewerOnly = false;
+    projectCollabMocks.isOwner = false;
     resolveConversationBMessages = null;
     conversationAMessages = [runningAssistant];
     listConversations.mockResolvedValue(conversations);
@@ -1488,6 +1498,23 @@ describe('ProjectView conversation run isolation', () => {
     fireEvent.click(screen.getByTestId('new-conversation'));
 
     expect(createConversation).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not create a conversation for a read-only member of a shared project', async () => {
+    listConversations.mockResolvedValue([]);
+    projectCollabMocks.enabled = true;
+    projectCollabMocks.syncState = 'synced';
+    projectCollabMocks.viewerOnly = true;
+    projectCollabMocks.isOwner = false;
+
+    renderProjectView();
+
+    await waitFor(() => expect(listConversations).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(createConversation).not.toHaveBeenCalled();
   });
 
   it('blocks duplicate new conversations while creation is in flight', async () => {

@@ -230,6 +230,7 @@ import { localizePluginTitle } from './plugins-home/localization';
 import { DesignSystemPicker } from './DesignSystemPicker';
 import { PresenceBar } from '../collab/PresenceBar';
 import { useProjectCollab } from '../collab/useProjectCollab';
+import { workspaceIdentityCacheKey } from '../collab/workspace-identity';
 import {
   useWorkspaceContext,
   workspaceIdentityCanBillAmr,
@@ -1563,6 +1564,14 @@ export function ProjectView({
     workspaceContext,
     project.workspaceId,
   );
+  // Scope revalidation returns a freshly decoded context object even when the
+  // data-plane authority did not change. Project hydration is keyed to the
+  // authority carried by resource requests, not that object's allocation:
+  // replacing an equivalent object must not blank conversations, messages,
+  // tabs, or files while the same project remains open.
+  const projectRunAuthorityKey = workspaceIdentityCacheKey(projectRunWorkspaceContext);
+  const projectRunWorkspaceContextRef = useRef(projectRunWorkspaceContext);
+  projectRunWorkspaceContextRef.current = projectRunWorkspaceContext;
   // The AMR pre-run balance gate uses the project's resolved scope, or the one
   // narrow adoption witness returned above: an exact active Personal caller
   // for an explicitly unbound historical project. When no safe witness exists,
@@ -1655,6 +1664,8 @@ export function ProjectView({
     workspaceContextLoading: projectWorkspaceScopeState.loading,
     presenceFilePath: project?.metadata?.entryFile ?? null,
   });
+  const projectViewerOnlyRef = useRef(projectCollab.viewerOnly);
+  projectViewerOnlyRef.current = projectCollab.viewerOnly;
   // Stable references (useCallback with empty deps inside useCollab) — safe
   // for the project-events handler's dependency array without re-subscribing.
   const {
@@ -1774,6 +1785,8 @@ export function ProjectView({
   const [activeConversationId, setActiveConversationId] = useState<string | null>(
     null,
   );
+  const [pendingEmptyConversationSeed, setPendingEmptyConversationSeed] =
+    useState<{ projectId: string; authorityKey: string } | null>(null);
   const activeConversation = useMemo(
     () => conversations.find((conversation) => conversation.id === activeConversationId) ?? null,
     [conversations, activeConversationId],
@@ -2236,6 +2249,8 @@ export function ProjectView({
   // dropped), create one on the fly.
   useEffect(() => {
     let cancelled = false;
+    const requestWorkspaceContext = projectRunWorkspaceContextRef.current;
+    setPendingEmptyConversationSeed(null);
     setConversations([]);
     setActiveConversationId(null);
     setMessagesConversationId(null);
@@ -2255,21 +2270,21 @@ export function ProjectView({
       try {
         const list = await listConversationsWithRetry(
           project.id,
-          projectRunWorkspaceContext,
+          requestWorkspaceContext,
         );
         if (cancelled) return;
         if (list.length === 0) {
-          const fresh = await createConversation(project.id, undefined, {
-            workspaceContext: projectRunWorkspaceContext,
+          // Conversation reads can settle before collaboration ownership. Keep
+          // the empty result and let the effect below seed only after the
+          // fail-closed viewer gate proves this caller may mutate. This avoids
+          // both a member's POST -> 403 loop and reloading the whole transcript
+          // when status later confirms an owner.
+          setPendingEmptyConversationSeed({
+            projectId: project.id,
+            authorityKey: projectRunAuthorityKey,
           });
-          if (cancelled) return;
-          if (fresh) {
-            setConversations([fresh]);
-            setActiveConversationId(fresh.id);
-          } else {
-            throw new Error('Could not create a conversation for this project.');
-          }
         } else {
+          setPendingEmptyConversationSeed(null);
           setConversations(list);
           // Issue #1505: when the URL deep-links to a specific
           // conversation, prefer that one. Falls through to list[0]
@@ -2284,6 +2299,7 @@ export function ProjectView({
       } catch (err) {
         if (cancelled) return;
         const message = err instanceof Error ? err.message : 'Could not load conversations for this project.';
+        setPendingEmptyConversationSeed(null);
         setConversations([]);
         setActiveConversationId(null);
         setConversationLoadError(message);
@@ -2293,7 +2309,51 @@ export function ProjectView({
     return () => {
       cancelled = true;
     };
-  }, [project.id, projectRunWorkspaceContext]);
+  }, [project.id, projectRunAuthorityKey]);
+
+  useEffect(() => {
+    if (
+      !pendingEmptyConversationSeed
+      || pendingEmptyConversationSeed.projectId !== project.id
+      || pendingEmptyConversationSeed.authorityKey !== projectRunAuthorityKey
+      || projectViewerOnlyRef.current
+    ) {
+      return;
+    }
+    let cancelled = false;
+    const requestWorkspaceContext = projectRunWorkspaceContextRef.current;
+    (async () => {
+      try {
+        const fresh = await createConversation(project.id, undefined, {
+          workspaceContext: requestWorkspaceContext,
+        });
+        if (cancelled) return;
+        if (!fresh) {
+          throw new Error('Could not create a conversation for this project.');
+        }
+        setPendingEmptyConversationSeed(null);
+        setConversations([fresh]);
+        setActiveConversationId(fresh.id);
+      } catch (err) {
+        if (cancelled) return;
+        const message =
+          err instanceof Error
+            ? err.message
+            : 'Could not create a conversation for this project.';
+        setPendingEmptyConversationSeed(null);
+        setConversationLoadError(message);
+        setError(message);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    pendingEmptyConversationSeed,
+    project.id,
+    projectCollab.viewerOnly,
+    projectRunAuthorityKey,
+  ]);
 
   // Issue #1505: when the URL changes the routed conversation id while
   // we are already inside the project (e.g. the user clicks "Open
@@ -2349,6 +2409,7 @@ export function ProjectView({
     // conversation's DB read to settle before checking messages.length.
     setMessagesInitialized(false);
     let cancelled = false;
+    const requestWorkspaceContext = projectRunWorkspaceContextRef.current;
     setMessages([]);
     setPreviewComments([]);
     setAttachedComments([]);
@@ -2368,12 +2429,12 @@ export function ProjectView({
           listMessages(
             project.id,
             activeConversationId,
-            projectRunWorkspaceContext,
+            requestWorkspaceContext,
           ),
           fetchPreviewComments(
             project.id,
             activeConversationId,
-            projectRunWorkspaceContext,
+            requestWorkspaceContext,
           ),
         ]);
         if (cancelled) return;
@@ -2408,7 +2469,7 @@ export function ProjectView({
     project.id,
     activeConversationId,
     messageLoadRetryNonce,
-    projectRunWorkspaceContext,
+    projectRunAuthorityKey,
   ]);
 
   useEffect(() => {
@@ -2552,12 +2613,13 @@ export function ProjectView({
   // local state coherent.
   useEffect(() => {
     let cancelled = false;
+    const requestWorkspaceContext = projectRunWorkspaceContextRef.current;
     tabsLoadedRef.current = false;
     tabsHydratedFromSavedStateRef.current = false;
     hasAppliedInitialPrimaryOpenRef.current = false;
     setOpenTabsState({ tabs: [], active: null });
     (async () => {
-      const state = await loadTabs(project.id, projectRunWorkspaceContext);
+      const state = await loadTabs(project.id, requestWorkspaceContext);
       if (cancelled) return;
       const routeActive = routeFileNameRef.current;
       let nextState = routeActive
@@ -2573,12 +2635,12 @@ export function ProjectView({
         nextState = cacheTabsLocally(
           project.id,
           nextState,
-          projectRunWorkspaceContext,
+          requestWorkspaceContext,
         );
         void persistTabsToDaemonNow(
           project.id,
           nextState,
-          projectRunWorkspaceContext,
+          requestWorkspaceContext,
         );
       }
       tabsHydratedFromSavedStateRef.current = state.hasSavedState === true;
@@ -2589,7 +2651,7 @@ export function ProjectView({
     return () => {
       cancelled = true;
     };
-  }, [project.id, projectRunWorkspaceContext]);
+  }, [project.id, projectRunAuthorityKey]);
 
   // Debounce the canonical (daemon + SQLite) tab-state write. The embedded
   // browser fans out url/title/favicon updates in bursts on a single page load
@@ -2610,10 +2672,10 @@ export function ProjectView({
       void persistTabsToDaemonNow(
         project.id,
         pending,
-        projectRunWorkspaceContext,
+        projectRunWorkspaceContextRef.current,
       );
     }
-  }, [project.id, projectRunWorkspaceContext]);
+  }, [project.id, projectRunAuthorityKey]);
 
   const persistTabsState = useCallback(
     (next: OpenTabsState) => {
@@ -2623,7 +2685,7 @@ export function ProjectView({
       const stamped = cacheTabsLocally(
         project.id,
         next,
-        projectRunWorkspaceContext,
+        projectRunWorkspaceContextRef.current,
       );
       pendingDaemonTabsRef.current = stamped;
       if (tabsDaemonSaveTimerRef.current != null) {
@@ -2637,12 +2699,12 @@ export function ProjectView({
           void persistTabsToDaemonNow(
             project.id,
             pending,
-            projectRunWorkspaceContext,
+            projectRunWorkspaceContextRef.current,
           );
         }
       }, TAB_PERSIST_DEBOUNCE_MS);
     },
-    [project.id, projectRunWorkspaceContext],
+    [project.id, projectRunAuthorityKey],
   );
 
   // Flush any pending tab write when the project changes or the view unmounts,
@@ -2674,12 +2736,12 @@ export function ProjectView({
 
   const refreshProjectFiles = useCallback(async (): Promise<ProjectFile[]> => {
     const next = await fetchProjectFiles(project.id, {
-      workspaceContext: projectRunWorkspaceContext,
+      workspaceContext: projectRunWorkspaceContextRef.current,
     });
     projectFilesRef.current = next;
     setProjectFiles(next);
     return next;
-  }, [project.id, projectRunWorkspaceContext]);
+  }, [project.id, projectRunAuthorityKey]);
 
   useEffect(() => {
     projectFilesRef.current = projectFiles;
@@ -2700,7 +2762,11 @@ export function ProjectView({
       if (cached && cached.mtime === mtime) return cached.text;
       try {
         const response = await fetch(
-          projectRawUrl(project.id, name, projectRunWorkspaceContext),
+          projectRawUrl(
+            project.id,
+            name,
+            projectRunWorkspaceContextRef.current,
+          ),
         );
         const text = response.ok ? await response.text() : null;
         htmlContentCacheRef.current.set(name, { mtime, text });
@@ -2710,16 +2776,16 @@ export function ProjectView({
         return null;
       }
     },
-    [project.id, projectRunWorkspaceContext],
+    [project.id, projectRunAuthorityKey],
   );
 
   const refreshLiveArtifacts = useCallback(async (): Promise<LiveArtifactSummary[]> => {
     const next = await fetchLiveArtifacts(project.id, {
-      workspaceContext: projectRunWorkspaceContext,
+      workspaceContext: projectRunWorkspaceContextRef.current,
     });
     setLiveArtifacts(next);
     return next;
-  }, [project.id, projectRunWorkspaceContext]);
+  }, [project.id, projectRunAuthorityKey]);
 
   const refreshWorkspaceItems = useCallback(async (): Promise<ProjectFile[]> => {
     const [nextFiles] = await Promise.all([refreshProjectFiles(), refreshLiveArtifacts()]);
