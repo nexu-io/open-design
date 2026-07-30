@@ -6,7 +6,10 @@ import { LIBRARY_UI_VISIBLE } from '../features/libraryUi';
 import type { Dict } from '../i18n/types';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { projectFileUrl, projectRawUrl } from '../providers/registry';
-import { appendResourceQuery } from '../collab/workspace-identity';
+import {
+  appendResourceQuery,
+  workspaceProjectHeaders,
+} from '../collab/workspace-identity';
 import { useProjectCollabContext } from '../collab/collab-context';
 import { buildSrcdoc } from '../runtime/srcdoc';
 import type { LiveArtifactWorkspaceEntry, ProjectFile, ProjectFileKind, ProjectFolder } from '../types';
@@ -1048,7 +1051,12 @@ export function DesignFilesPanel({
     try {
       const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/archive/batch`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(workspaceContext
+            ? workspaceProjectHeaders(workspaceContext)
+            : {}),
+        },
         body: JSON.stringify({ files: fileList }),
       });
       if (!resp.ok) {

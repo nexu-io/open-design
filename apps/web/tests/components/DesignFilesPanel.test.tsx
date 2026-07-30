@@ -10,6 +10,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ComponentProps } from "react";
 
+import { CollabProvider } from "../../src/collab/collab-context";
 import {
   DesignFilesPanel,
   type DesignFilesNavState,
@@ -20,6 +21,7 @@ import type {
   ProjectFolder,
 } from "../../src/types";
 import { VISUAL_STABILITY_STORAGE_KEY } from "../../src/utils/visualStability";
+import { workspaceContextFixture } from "../helpers/workspace-context";
 
 function folder(path: string): ProjectFolder {
   return {
@@ -302,6 +304,95 @@ describe("DesignFilesPanel selection", () => {
     );
     expect(onDeleteFiles).toHaveBeenCalledTimes(1);
     expect(onDeleteFiles).toHaveBeenCalledWith(["file-1.html", "file-2.png"]);
+  });
+
+  it("sends the project-pinned Workspace identity on batch archive download", async () => {
+    const workspaceContext = workspaceContextFixture({
+      workspaceId: "workspace-a",
+      workspaceMemberId: "member-a",
+    });
+    const fetchMock = vi.fn<typeof fetch>(async () =>
+      new Response("zip", {
+        status: 200,
+        headers: {
+          "content-type": "application/zip",
+          "content-disposition": 'attachment; filename="project.zip"',
+        },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      value: vi.fn(() => "blob:test"),
+    });
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      value: vi.fn(),
+    });
+    const files = [file({ name: "page.html", kind: "html" })];
+    const { container } = render(
+      <CollabProvider
+        value={{
+          workspaceContext,
+          workspaceContextLoading: false,
+          enabled: true,
+          member: null,
+          present: [],
+          publishedVersion: null,
+          syncState: null,
+          viewerOnly: false,
+          isOwner: true,
+          ownerDisplayName: null,
+          ownerRole: null,
+          downloadPending: false,
+          reportChange: vi.fn(),
+          requestPublish: vi.fn(),
+          refreshPresence: vi.fn(),
+          checkStatusNow: vi.fn(),
+        }}
+      >
+        <DesignFilesPanel
+          projectId="test-project"
+          files={files}
+          liveArtifacts={[]}
+          onRefreshFiles={vi.fn()}
+          onOpenFile={vi.fn()}
+          onOpenLiveArtifact={vi.fn()}
+          onRenameFile={vi.fn()}
+          onDeleteFile={vi.fn()}
+          onDeleteFiles={vi.fn()}
+          onUpload={vi.fn()}
+          onUploadFiles={vi.fn()}
+          onPaste={vi.fn()}
+          onNewSketch={vi.fn()}
+        />
+      </CollabProvider>,
+    );
+
+    fireEvent.click(
+      screen
+        .getByTestId("design-file-row-page.html")
+        .querySelector(".df-card-check")!,
+    );
+    fireEvent.click(
+      container.querySelector('[data-testid="design-files-batch-bar"] button')!,
+    );
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(([input]) =>
+          String(input).endsWith("/archive/batch"),
+        ),
+      ).toBe(true);
+    });
+    const archiveCall = fetchMock.mock.calls.find(([input]) =>
+      String(input).endsWith("/archive/batch"),
+    );
+    expect(archiveCall).toBeTruthy();
+    const [, init] = archiveCall!;
+    const headers = new Headers(init?.headers);
+    expect(headers.get("x-od-workspace-id")).toBe("workspace-a");
+    expect(headers.get("x-od-workspace-member-id")).toBe("member-a");
   });
 
   it("does not open files from card controls", () => {

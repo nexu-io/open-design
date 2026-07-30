@@ -61,6 +61,8 @@ const RESUME_CONTINUE_PROMPT =
 // initialization") and crash every `od media …` invocation.
 const MEDIA_GENERATE_STRING_FLAGS = new Set([
   'project',
+  'workspace',
+  'workspace-member',
   'surface',
   'model',
   'prompt',
@@ -158,6 +160,8 @@ const UI_STRING_FLAGS = new Set([
   'daemon-url',
   'run',
   'project',
+  'workspace',
+  'workspace-member',
   'value',
   'value-json',
   'plugin',
@@ -197,6 +201,7 @@ const LIBRARY_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 // parse flags without hitting a temporal-dead-zone on these sets.
 const LIBRARY_ASSET_STRING_FLAGS = new Set([
   'daemon-url', 'kind', 'tag', 'source', 'date', 'query', 'project', 'label', 'out', 'dir',
+  'workspace', 'workspace-member',
 ]);
 const LIBRARY_ASSET_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 const DIAGNOSTICS_STRING_FLAGS = new Set(['daemon-url', 'output']);
@@ -253,6 +258,7 @@ const TEMPLATES_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 const DEPLOY_STRING_FLAGS = new Set([
   'daemon-url', 'file', 'provider', 'target',
   'cf-zone-id', 'cf-zone-name', 'cf-domain-prefix',
+  'workspace', 'workspace-member',
 ]);
 const DEPLOY_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 // `od automation …` mirrors the Automations tab. Same surface, same
@@ -394,6 +400,7 @@ const SUBCOMMAND_MAP = {
 
 const EXPORT_STRING_FLAGS = new Set([
   'daemon-url', 'project', 'format', 'out', 'output', 'image-format', 'title', 'file',
+  'workspace', 'workspace-member',
 ]);
 const EXPORT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'deck', 'page', 'no-deck']);
 // EXPORT_FORMATS / EXPORT_IMAGE_FORMATS are the shared contract DTO (single
@@ -418,6 +425,8 @@ Options:
   --deck                   Treat the artifact as a multi-slide deck
   --page, --no-deck        Treat the artifact as a normal scrollable page
   --title <title>          Title used for metadata / default filename
+  --workspace <id>        Explicit Workspace id for a bound project
+  --workspace-member <id> Explicit Workspace member id for a bound project
   --json                   Print a machine-readable result envelope
   --daemon-url <url>       Override daemon URL
 
@@ -460,6 +469,7 @@ async function runExport(args) {
     process.exit(2);
   }
   const base = await cliDaemonBaseUrl(flags);
+  const workspaceHeaders = workspaceHeadersFromExplicitFlags(flags) ?? {};
   // All three formats rasterize through the desktop screenshot renderer so the
   // CLI matches the UI exactly. In particular `pdf` uses `/export/pdf-image`
   // (one raster page per deck slide / per viewport for a page) — NOT the generic
@@ -489,7 +499,7 @@ async function runExport(args) {
   try {
     resp = await fetch(`${base}/api/projects/${encodeURIComponent(projectId)}/${exportPath}`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', ...workspaceHeaders },
       body: JSON.stringify(requestBody),
     });
   } catch (err) {
@@ -1373,6 +1383,9 @@ async function runMediaGenerate(rawArgs) {
   const daemonUrl = await cliDaemonUrl(flags);
   const projectId = flags.project || process.env.OD_PROJECT_ID;
   const token = process.env.OD_TOOL_TOKEN;
+  const workspaceHeaders = token
+    ? {}
+    : workspaceHeadersFromExplicitFlags(flags) ?? {};
   if (!projectId && !token) {
     console.error(
       'project id required. Pass --project <id> or set OD_PROJECT_ID. The daemon injects this when it spawns the code agent.',
@@ -1423,6 +1436,7 @@ async function runMediaGenerate(rawArgs) {
       headers: {
         'content-type': 'application/json',
         ...(token ? { authorization: `Bearer ${token}` } : {}),
+        ...workspaceHeaders,
       },
       body: JSON.stringify(body),
     });
@@ -1444,20 +1458,23 @@ async function runMediaGenerate(rawArgs) {
   console.error(`task ${taskId} queued (${accepted.status || 'queued'})`);
   await pollUntilDoneOrBudget(daemonUrl, taskId, 0, {
     stillRunningExitCode: 0,
+    requestHeaders: token
+      ? { authorization: `Bearer ${token}` }
+      : workspaceHeaders,
   });
 }
 
 async function runMediaWait(rawArgs) {
-  const taskId = rawArgs.find((a) => a && !a.startsWith('--'));
-  if (!taskId) {
-    console.error('usage: od media wait <taskId> [--since <n>] [--daemon-url <url>]');
-    process.exit(2);
-  }
-  const flagsOnly = rawArgs.filter((a) => a !== taskId);
+  const stringFlags = new Set([
+    'since',
+    'daemon-url',
+    'workspace',
+    'workspace-member',
+  ]);
   let flags;
   try {
-    flags = parseFlags(flagsOnly, {
-      string: new Set(['since', 'daemon-url']),
+    flags = parseFlags(rawArgs, {
+      string: stringFlags,
       boolean: new Set(['help', 'h']),
     });
   } catch (err) {
@@ -1465,11 +1482,24 @@ async function runMediaWait(rawArgs) {
     printMediaHelp();
     process.exit(2);
   }
+  const taskId = positionalArgs(rawArgs, stringFlags)[0];
+  if (!taskId) {
+    console.error(
+      'usage: od media wait <taskId> [--since <n>] [--workspace <id> --workspace-member <id>] [--daemon-url <url>]',
+    );
+    process.exit(2);
+  }
   const daemonUrl = await cliDaemonUrl(flags);
   const since = Number.isFinite(Number(flags.since))
     ? Number(flags.since)
     : 0;
-  await pollUntilDoneOrBudget(daemonUrl, taskId, since, { totalBudgetMs: 120_000 });
+  const token = process.env.OD_TOOL_TOKEN;
+  await pollUntilDoneOrBudget(daemonUrl, taskId, since, {
+    totalBudgetMs: 120_000,
+    requestHeaders: token
+      ? { authorization: `Bearer ${token}` }
+      : workspaceHeadersFromExplicitFlags(flags) ?? {},
+  });
 }
 
 async function pollUntilDoneOrBudget(daemonUrl, taskId, sinceStart, options = {}) {
@@ -1479,6 +1509,10 @@ async function pollUntilDoneOrBudget(daemonUrl, taskId, sinceStart, options = {}
     typeof options.stillRunningExitCode === 'number'
       ? options.stillRunningExitCode
       : 2;
+  const requestHeaders =
+    options.requestHeaders && typeof options.requestHeaders === 'object'
+      ? options.requestHeaders
+      : {};
   const startedAt = Date.now();
   const url = `${daemonUrl.replace(/\/$/, '')}/api/media/tasks/${encodeURIComponent(taskId)}/wait`;
 
@@ -1492,7 +1526,7 @@ async function pollUntilDoneOrBudget(daemonUrl, taskId, sinceStart, options = {}
     try {
       resp = await fetch(url, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', ...requestHeaders },
         body: JSON.stringify({ since, timeoutMs: callTimeout }),
       });
     } catch (err) {
@@ -1707,6 +1741,8 @@ Required:
   --surface  image | video | audio
   --model    Model id from /api/media/models (e.g. gpt-image-2, seedance-2, suno-v5).
   --project  Project id. Auto-resolved from OD_PROJECT_ID when invoked by the daemon.
+  --workspace <id>         Explicit Workspace id for a bound project.
+  --workspace-member <id>  Explicit Workspace member id for a bound project.
 
 Common options:
   --prompt "<text>"         Generation prompt. ElevenLabs SFX prompts must stay under 450 characters.
@@ -1736,6 +1772,8 @@ Output: a single line of JSON: {"file": { name, size, kind, mime, ... }}
   a successful queued handoff, not a failure. Poll with \`media wait\`:
   exit 0 = done ({"file": ...} on stdout), exit 2 = still running (re-run
   the wait command stderr prints, carrying forward nextSince), 5 = failed.
+  Standalone wait calls accept the same Workspace pair. Tool-token calls retain
+  their injected authorization proof automatically through every poll.
 
 Worked generate→wait loop (POSIX bash — do NOT translate to PowerShell;
 parse JSON with python3, not jq):
@@ -5285,6 +5323,13 @@ async function uiDaemonUrl(flags) {
   return cliDaemonUrl(flags);
 }
 
+function uiRequestHeaders(flags, json = false) {
+  return {
+    ...(json ? { 'content-type': 'application/json' } : {}),
+    ...(workspaceHeadersFromExplicitFlags(flags) ?? {}),
+  };
+}
+
 async function runUiList(rest) {
   const flags = parseFlags(rest, { string: UI_STRING_FLAGS, boolean: UI_BOOLEAN_FLAGS });
   const base = (await uiDaemonUrl(flags)).replace(/\/$/, '');
@@ -5295,7 +5340,7 @@ async function runUiList(rest) {
     console.error('Usage: od ui list --run <runId> | --project <projectId>');
     process.exit(2);
   }
-  const resp = await fetch(url);
+  const resp = await fetch(url, { headers: uiRequestHeaders(flags) });
   if (!resp.ok) {
     console.error(`GET ${url} failed: ${resp.status} ${await resp.text()}`);
     process.exit(1);
@@ -5321,6 +5366,8 @@ async function runUiShow(rest) {
     && a !== flags['daemon-url']
     && a !== flags.run
     && a !== flags.project
+    && a !== flags.workspace
+    && a !== flags['workspace-member']
     && a !== flags.value
     && a !== flags['value-json']
     && a !== flags.plugin
@@ -5334,7 +5381,7 @@ async function runUiShow(rest) {
     process.exit(2);
   }
   const url = `${(await uiDaemonUrl(flags)).replace(/\/$/, '')}/api/runs/${encodeURIComponent(runId)}/genui/${encodeURIComponent(surfaceId)}`;
-  const resp = await fetch(url);
+  const resp = await fetch(url, { headers: uiRequestHeaders(flags) });
   if (!resp.ok) {
     console.error(`GET ${url} failed: ${resp.status} ${await resp.text()}`);
     process.exit(1);
@@ -5357,6 +5404,8 @@ async function runUiRespond(rest) {
     && a !== flags['daemon-url']
     && a !== flags.run
     && a !== flags.project
+    && a !== flags.workspace
+    && a !== flags['workspace-member']
     && a !== flags.value
     && a !== flags['value-json']
     && a !== flags.plugin
@@ -5386,7 +5435,7 @@ async function runUiRespond(rest) {
   const url = `${(await uiDaemonUrl(flags)).replace(/\/$/, '')}/api/runs/${encodeURIComponent(runId)}/genui/${encodeURIComponent(surfaceId)}/respond`;
   const resp = await fetch(url, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: uiRequestHeaders(flags, true),
     body: JSON.stringify({ value, respondedBy: 'user' }),
   });
   const data = await resp.json().catch(() => ({}));
@@ -5407,6 +5456,8 @@ async function runUiRevoke(rest) {
     && a !== flags['daemon-url']
     && a !== flags.run
     && a !== flags.project
+    && a !== flags.workspace
+    && a !== flags['workspace-member']
     && a !== flags.value
     && a !== flags['value-json']
     && a !== flags.plugin
@@ -5420,7 +5471,10 @@ async function runUiRevoke(rest) {
     process.exit(2);
   }
   const url = `${(await uiDaemonUrl(flags)).replace(/\/$/, '')}/api/projects/${encodeURIComponent(projectId)}/genui/${encodeURIComponent(surfaceId)}/revoke`;
-  const resp = await fetch(url, { method: 'POST' });
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: uiRequestHeaders(flags),
+  });
   const data = await resp.json().catch(() => ({}));
   if (!resp.ok) {
     console.error(`POST ${url} failed: ${resp.status} ${JSON.stringify(data)}`);
@@ -5439,6 +5493,8 @@ async function runUiPrefill(rest) {
     && a !== flags['daemon-url']
     && a !== flags.run
     && a !== flags.project
+    && a !== flags.workspace
+    && a !== flags['workspace-member']
     && a !== flags.value
     && a !== flags['value-json']
     && a !== flags.plugin
@@ -5464,7 +5520,7 @@ async function runUiPrefill(rest) {
   const url = `${(await uiDaemonUrl(flags)).replace(/\/$/, '')}/api/projects/${encodeURIComponent(projectId)}/genui/prefill`;
   const resp = await fetch(url, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: uiRequestHeaders(flags, true),
     body: JSON.stringify({
       snapshotId,
       surfaceId,
@@ -5499,6 +5555,9 @@ function printUiHelp() {
 
 Common options:
   --daemon-url <url>   Open Design daemon HTTP base (default OD_DAEMON_URL, OD_SIDECAR_IPC_PATH discovery, or http://127.0.0.1:7456).
+  --workspace <id>     Explicit Workspace id for a bound project or run.
+  --workspace-member <id>
+                       Explicit Workspace member id for a bound project or run.
   --json               Emit raw JSON (suitable for scripts) instead of human-readable output.`);
 }
 
@@ -8409,6 +8468,8 @@ Options:
   --date <YYYY-MM-DD>       Filter by archive date.
   --project <id>            Target project for apply.
   --dir <subdir>            Subdirectory inside the project for apply (default: library).
+  --workspace <id>          Explicit Workspace id for a bound target project.
+  --workspace-member <id>   Explicit Workspace member id for a bound target project.
   --out <file>              Write the figma export to a file (default: stdout).`);
 }
 
@@ -8549,9 +8610,10 @@ async function runLibrary(args) {
         }
         const body = { projectId: flags.project };
         if (flags.dir) body.dir = flags.dir;
+        const workspaceHeaders = workspaceHeadersFromExplicitFlags(flags) ?? {};
         const resp = await fetch(`${base}/api/library/assets/${encodeURIComponent(id)}/apply`, {
           method: 'POST',
-          headers: { 'content-type': 'application/json' },
+          headers: { 'content-type': 'application/json', ...workspaceHeaders },
           body: JSON.stringify(body),
         });
         if (!resp.ok) return structuredHttpFailure(resp);
@@ -11046,6 +11108,8 @@ Options:
   --cf-zone-id <id>                         Cloudflare Pages: zone id.
   --cf-zone-name <name>                     Cloudflare Pages: zone name.
   --cf-domain-prefix <prefix>               Cloudflare Pages: domain prefix.
+  --workspace <id>                          Explicit Workspace id for a bound project.
+  --workspace-member <id>                   Explicit Workspace member id for a bound project.
   --json                                    Emit raw JSON response.
   --daemon-url <url>                        Open Design daemon HTTP base.`);
     return;
@@ -11090,11 +11154,12 @@ Options:
   }
 
   const base = await cliDaemonBaseUrl(flags);
+  const workspaceHeaders = workspaceHeadersFromExplicitFlags(flags) ?? {};
   let resp;
   try {
     resp = await fetch(`${base}/api/projects/${encodeURIComponent(projectId)}/deploy`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', ...workspaceHeaders },
       body: JSON.stringify(body),
     });
   } catch (err) {

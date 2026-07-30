@@ -20,7 +20,10 @@ import {
   type AIHubMixCatalogType,
 } from '../integrations/aihubmix.js';
 import { isSandboxModeEnabled } from '../sandbox-mode.js';
-import type { ToolTokenGrant } from '../tool-tokens.js';
+import {
+  MEDIA_TASK_WAIT_TOOL_ENDPOINT,
+  type ToolTokenGrant,
+} from '../tool-tokens.js';
 import {
   authorizePersistedAutomationWorkspaceScope,
   normalizePersistedAutomationWorkspaceScope,
@@ -794,7 +797,35 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
     const taskId = req.params.id;
     const task = getLiveMediaTask(taskId);
     if (!task) return res.status(404).json({ error: 'task not found' });
-    if (!await ctx.authorizeProjectRequest(req, res, task.projectId, { mode: 'read' })) return;
+    const authorizationHeader = req.get('authorization');
+    // Once a caller chooses the tool-token lane, invalid, expired, or
+    // under-scoped credentials must not downgrade to project authorization.
+    const toolGrant = typeof authorizationHeader === 'string'
+      ? authorizeToolRequest(
+          req,
+          res,
+          'media:generate',
+          { endpoint: MEDIA_TASK_WAIT_TOOL_ENDPOINT },
+        )
+      : null;
+    if (typeof authorizationHeader === 'string' && !toolGrant) return;
+    if (toolGrant) {
+      if (requestProjectOverride(task.projectId, toolGrant.projectId)) {
+        return sendApiError(
+          res,
+          403,
+          'FORBIDDEN',
+          'media task belongs to a different project',
+        );
+      }
+    } else if (!await ctx.authorizeProjectRequest(
+      req,
+      res,
+      task.projectId,
+      { mode: 'read' },
+    )) {
+      return;
+    }
 
     const since = Number.isFinite(req.body?.since) ? Number(req.body.since) : 0;
     const requestedTimeout = Number.isFinite(req.body?.timeoutMs)

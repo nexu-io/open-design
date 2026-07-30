@@ -4283,7 +4283,11 @@ function DesignSystemProjectPanel({
     try {
       await refreshKitDependencies({ finalizeBrand: true });
       const ok =
-        await downloadProjectArchive({ projectId, fallbackTitle: system.title }) ||
+        await downloadProjectArchive({
+          projectId,
+          fallbackTitle: system.title,
+          workspaceContext,
+        }) ||
         await downloadDesignSystemArchive({
           designSystemId: system.id,
           fallbackTitle: system.title,

@@ -1364,7 +1364,11 @@ function DesignSystemDetail({
           fallbackTitle: system.title,
           workspaceContext,
         }) || (projectId
-          ? await downloadProjectArchive({ projectId, fallbackTitle: system.title })
+          ? await downloadProjectArchive({
+              projectId,
+              fallbackTitle: system.title,
+              workspaceContext,
+            })
           : false);
       setDownloadFailed(!ok);
       onActionFeedback(ok ? 'success' : 'error', ok ? t('ds.actionDone') : t('dsManager.downloadFailed'));
