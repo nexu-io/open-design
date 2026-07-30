@@ -100,6 +100,16 @@ describe('parseFrontmatter block sequences and arrays', () => {
     ]);
   });
 
+  // Quoted keys must still form mappings (`- "name": "foo"`). A whole-value
+  // isQuotedScalar gate would mis-classify this as a scalar because the item
+  // both starts and ends with a quote.
+  it('parses quoted-key sequence mappings', () => {
+    expect(data('items:\n  - "name": "foo"\n  - \'id\': 1').items).toEqual([
+      { name: 'foo' },
+      { id: 1 },
+    ]);
+  });
+
   it('does not split inline-array elements on commas inside quotes', () => {
     expect(data('a: ["a,b", "c"]').a).toEqual(['a,b', 'c']);
     expect(data("a: ['x, y', z]").a).toEqual(['x, y', 'z']);

@@ -79,12 +79,13 @@ function parseYamlSubset(src: string): FrontmatterObject {
           continue;
         }
       }
-      // Quoted scalars keep their colons (e.g. `- "1:1 figma"`). Only unquoted
-      // `key: value` items are single-line mapping entries in a sequence.
-      if (value.includes(':') && !isQuotedScalar(value)) {
+      // Single-line sequence mappings use a colon outside quotes (e.g. `- k: v`,
+      // `- "name": "foo"`). Colons inside quoted scalars (e.g. `- "1:1 figma"`)
+      // must not open a mapping — skills catalogue triggers rely on that.
+      const colonIdx = findSequenceMappingColon(value);
+      if (colonIdx !== -1) {
         const obj: FrontmatterObject = {};
-        const colonIdx = value.indexOf(':');
-        const key = value.slice(0, colonIdx).trim();
+        const key = unquoteScalar(value.slice(0, colonIdx).trim());
         const valRaw = value.slice(colonIdx + 1).trim();
         if (valRaw) obj[key] = coerce(valRaw);
         if (!Array.isArray(container)) throw new Error('frontmatter array container expected');
@@ -203,6 +204,37 @@ function isQuotedScalar(raw: string): boolean {
     v.length >= 2 &&
     ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'")))
   );
+}
+
+/** Strip surrounding quotes from a scalar; leave other text unchanged. */
+function unquoteScalar(raw: string): string {
+  const v = raw.trim();
+  return isQuotedScalar(v) ? v.slice(1, -1) : v;
+}
+
+/**
+ * Index of a single-line mapping separator in a sequence item, or -1.
+ * Only colons outside quotes count, and the colon must be followed by
+ * whitespace or end-of-string (this parser's dash-prefixed mapping subset).
+ */
+function findSequenceMappingColon(raw: string): number {
+  let quote: '"' | "'" | null = null;
+  for (let i = 0; i < raw.length; i++) {
+    const ch = raw[i] ?? '';
+    if (quote) {
+      if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      continue;
+    }
+    if (ch === ':') {
+      const next = raw[i + 1];
+      if (next === undefined || /\s/.test(next)) return i;
+    }
+  }
+  return -1;
 }
 
 function coerce(raw: string | undefined): FrontmatterValue {

@@ -189,6 +189,13 @@ describe('parseFrontmatter', () => {
     expect(data['items']).toEqual([{ k: 'v' }, { name: 'foo' }]);
   });
 
+  it('parses quoted-key sequence mappings', () => {
+    const { data } = parseFrontmatter(
+      '---\nitems:\n  - "name": "foo"\n  - \'id\': 1\n---\n',
+    );
+    expect(data['items']).toEqual([{ name: 'foo' }, { id: 1 }]);
+  });
+
   it('does not split inline-array elements on commas inside quotes', () => {
     const { data } = parseFrontmatter('---\na: ["a,b", "c"]\nb: [\'x, y\', z]\n---\n');
     expect(data['a']).toEqual(['a,b', 'c']);
