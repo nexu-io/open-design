@@ -203,7 +203,9 @@ const mockedPlaySound = vi.mocked(playSound);
 const config: AppConfig = {
   mode: 'api',
   apiProtocol: 'openai',
-  apiKey: 'sk-test',
+  apiKey: '',
+  byokProfileId: 'byok-test-profile',
+  byokCredentialConfigured: true,
   baseUrl: 'https://api.deepseek.com',
   model: 'deepseek-chat',
   agentId: null,
@@ -748,7 +750,7 @@ describe('ProjectView API empty response handling', () => {
     await waitFor(() => expect(capturedOptions.current).not.toBeNull());
     expect(capturedOptions.current).toEqual(expect.objectContaining({
       agentId: 'byok-opencode',
-      byokProvider: expect.objectContaining({ protocol: 'openai', apiKey: 'sk-test' }),
+      byokProfileId: 'byok-test-profile',
       byokMediaDefaults: {
         imageModel: 'gpt-image-2',
         speechModel: 'gpt-4o-mini-tts',

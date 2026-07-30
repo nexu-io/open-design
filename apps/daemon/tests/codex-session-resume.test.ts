@@ -84,7 +84,7 @@ describe('codex native session resume', () => {
     started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
     await putConfig(started.url, {
       agentId: 'codex',
-      agentCliEnv: { codex: { CODEX_BIN: bin } },
+      agentCliEnv: { codex: { CODEX_BIN: bin, CODEX_HOME: binDir } },
       telemetry: { metrics: true, content: false, artifactManifest: false },
       privacyDecisionAt: Date.now(),
     });
@@ -131,7 +131,7 @@ describe('codex native session resume', () => {
     started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
     await putConfig(started.url, {
       agentId: 'codex',
-      agentCliEnv: { codex: { CODEX_BIN: bin } },
+      agentCliEnv: { codex: { CODEX_BIN: bin, CODEX_HOME: binDir } },
       telemetry: { metrics: true, content: false, artifactManifest: false },
       privacyDecisionAt: Date.now(),
     });
@@ -179,7 +179,7 @@ describe('codex native session resume', () => {
     started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
     await putConfig(started.url, {
       agentId: 'codex',
-      agentCliEnv: { codex: { CODEX_BIN: bin } },
+      agentCliEnv: { codex: { CODEX_BIN: bin, CODEX_HOME: binDir } },
       telemetry: { metrics: true, content: false, artifactManifest: false },
       privacyDecisionAt: Date.now(),
     });
@@ -208,7 +208,10 @@ describe('codex native session resume', () => {
     started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
     await putConfig(started.url, {
       agentId: 'codex',
-      agentCliEnv: { codex: { CODEX_BIN: bin }, claude: { CLAUDE_BIN: claudeBin } },
+      agentCliEnv: {
+        codex: { CODEX_BIN: bin, CODEX_HOME: binDir },
+        claude: { CLAUDE_BIN: claudeBin },
+      },
       telemetry: { metrics: true, content: false, artifactManifest: false },
       privacyDecisionAt: Date.now(),
     });
@@ -256,7 +259,7 @@ describe('codex native session resume', () => {
     started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
     await putConfig(started.url, {
       agentId: 'codex',
-      agentCliEnv: { codex: { CODEX_BIN: bin } },
+      agentCliEnv: { codex: { CODEX_BIN: bin, CODEX_HOME: binDir } },
       telemetry: { metrics: true, content: false, artifactManifest: false },
       privacyDecisionAt: Date.now(),
     });

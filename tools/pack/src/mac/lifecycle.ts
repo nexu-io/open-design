@@ -9,9 +9,11 @@ import {
   SIDECAR_MESSAGES,
   SIDECAR_MODES,
   SIDECAR_SOURCES,
+  isDesktopUpdateAction,
   type DesktopEvalResult,
   type DesktopScreenshotResult,
   type DesktopStatusSnapshot,
+  type DesktopUpdateAction,
   type DesktopUpdateResult,
   type SidecarStamp,
 } from "@open-design/sidecar-proto";
@@ -691,10 +693,10 @@ export async function readPackedMacLogs(config: ToolPackConfig) {
   };
 }
 
-function resolveUpdateAction(value: string | undefined): "status" | "check" | "download" | "install" | null {
+function resolveUpdateAction(value: string | undefined): DesktopUpdateAction | null {
   if (value == null) return null;
-  if (value === "status" || value === "check" || value === "download" || value === "install") return value;
-  throw new Error("--update-action must be status, check, download, or install");
+  if (isDesktopUpdateAction(value)) return value;
+  throw new Error("--update-action must be status, check, clear-cache, download, or install");
 }
 
 export async function inspectPackedMacApp(config: ToolPackConfig, options: { expr?: string; path?: string; updateAction?: string }): Promise<MacInspectResult> {

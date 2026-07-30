@@ -73,6 +73,28 @@ describe('BYOK draft validation', () => {
     expect(blockingByokDraftFields(missingModel)).toEqual(['model']);
   });
 
+  it('accepts an empty browser key when a daemon secure profile is configured', () => {
+    const validation = validateByokDraft(
+      'openai',
+      {
+        apiKey: '',
+        baseUrl: 'https://openrouter.ai/api/v1',
+        model: 'openrouter/free',
+      },
+      {
+        requiresApiKey: true,
+        credentialConfigured: true,
+      },
+    );
+
+    expect(validation.ok).toBe(true);
+    expect(validation.issues).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'api_key_required' }),
+      ]),
+    );
+  });
+
   it('detects obvious API keys pasted into the wrong first-party tab', () => {
     const anthropic = validateByokDraft('anthropic', {
       apiKey: 'sk-openai-key',

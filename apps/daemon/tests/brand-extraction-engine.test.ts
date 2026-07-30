@@ -260,6 +260,38 @@ describe('agent-driven brand extraction engine', () => {
     expect(JSON.parse(system.files['theme.json'] ?? '').algorithm).toBe('default');
   });
 
+  it('drops scraped CSS source junk from font families instead of corrupting the token block', () => {
+    // Extractors sometimes scrape CSS *source text* instead of a real family —
+    // e.g. Tailwind v4's `--theme(--default-font-family` from aliyun.com. The
+    // unbalanced `(` inside the emitted `--brand-font-family` value swallows
+    // every later `:root` declaration (sizes, control heights, radii), which
+    // renders the whole component kit unstyled (issue: kit shows UA serif text
+    // with collapsed buttons while colors declared earlier still work).
+    const junkFontBrand: Brand = {
+      ...VALID_BRAND,
+      name: 'Junk Fonts',
+      typography: {
+        display: { family: '--theme(--default-font-family', fallbacks: ['system-ui'], weights: [400, 700] },
+        body: { family: '--theme(--default-font-family', fallbacks: ['system-ui'], weights: [400, 700] },
+      },
+    };
+
+    const system = buildBrandSystem(junkFontBrand);
+
+    // The junk never reaches the seed or any emitted document.
+    expect(system.seed.fontFamily).not.toContain('--theme(');
+    for (const file of ['kit.html', 'kit.dark.html', 'variables.css', 'artifacts/landing.html', 'index.html']) {
+      expect(system.files[file], file).not.toContain('--theme(');
+    }
+    // The declared custom property keeps balanced parens so the declarations
+    // after it (sizes, control heights) survive CSS parsing.
+    const famLine = /--brand-font-family:([^\n]*)/.exec(system.files['kit.html'] ?? '')?.[1] ?? '';
+    expect(famLine).not.toBe('');
+    expect((famLine.match(/\(/g) ?? []).length).toBe((famLine.match(/\)/g) ?? []).length);
+    // Renderable fallbacks survive the sanitization.
+    expect(system.seed.fontFamily).toContain('system-ui');
+  });
+
   it('keeps theme.json algorithm consistent with the derived theme under a background-only seed override', () => {
     // Locks the rebuildSystem seed-override path (sanitizeSeedOverrides →
     // reassembleWithSeed → tokensToThemeJson(seed, defaultThemeAlgorithm(seed))):

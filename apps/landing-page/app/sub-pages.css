@@ -1750,22 +1750,116 @@ body.sub-page {
 /* /plugins/ hub shares the 1180px centered safe area used by /solutions/
    and /agents/, so the three hubs read as one family. */
 .sub-main:has(> .plugins-tile-grid) > .plugins-tile-grid,
+.sub-main:has(> .plugins-tile-grid) > .plugins-feature,
 .sub-main:has(> .plugins-tile-grid) > .plugins-explore,
 .sub-main:has(> .plugins-tile-grid) > .plugin-contribute {
   max-width: 1180px;
   margin-inline: auto;
 }
-/* Centered hero on the hub — eyebrow, title, lead, stats + CTAs stack.
+
+/* Codex design collection — grid of tpl-cards. Global (not scoped) so it
+   is shared by the collection page and each skill detail page's
+   "more skills" row, and so it reliably applies to the global tpl-card
+   children. */
+.codex-skill-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 18px;
+}
+@media (max-width: 1080px) {
+  .codex-skill-grid { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 760px) {
+  .codex-skill-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 480px) {
+  .codex-skill-grid { grid-template-columns: 1fr; }
+}
+
+/* Featured curated collection banner (Codex design) on the hub —
+   editorial tpl-card DNA: 1.5px ink border + hard offset hover shadow. */
+.plugins-feature {
+  /* The hero's art plate is a tall positioned pseudo-element that would
+     otherwise paint over this banner (static elements lose to positioned
+     siblings). Lift it into the same layer as the hero copy. */
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr);
+  gap: clamp(20px, 3vw, 44px);
+  align-items: center;
+  margin-bottom: clamp(28px, 4vw, 48px);
+  padding: 16px;
+  border: 1.5px solid var(--ink);
+  background: var(--bone);
+  text-decoration: none;
+  color: inherit;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+.plugins-feature:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0 var(--ink);
+}
+.plugins-feature-cover {
+  width: 100%;
+  height: 100%;
+  max-height: 248px;
+  object-fit: cover;
+  border: 1.5px solid var(--ink);
+  background: var(--paper-warm);
+}
+.plugins-feature-body {
+  padding: 4px 16px 4px 4px;
+}
+.plugins-feature-eyebrow {
+  display: block;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--coral);
+  margin-bottom: 12px;
+}
+.plugins-feature-title {
+  font-size: clamp(1.3rem, 2.4vw, 1.8rem);
+  line-height: 1.18;
+  margin: 0 0 0.5em;
+  text-wrap: balance;
+}
+.plugins-feature-blurb {
+  font-size: 0.98rem;
+  line-height: 1.55;
+  color: var(--ink-soft);
+  margin: 0 0 1.1em;
+  max-width: 54ch;
+}
+.plugins-feature-cta {
+  font-weight: 600;
+  color: var(--ink);
+}
+.plugins-feature:hover .plugins-feature-cta { color: var(--coral); }
+@media (max-width: 760px) {
+  .plugins-feature {
+    grid-template-columns: 1fr;
+  }
+  .plugins-feature-cover {
+    max-height: 200px;
+  }
+}
+/* Centered library hero — eyebrow, title, lead, stats + CTAs stack. Used by the
+   /plugins hub and by curated collection pages via `.plugins-hero-art`.
    A soft brand-tinted wash sits behind the hero and dissolves into the
    page (echoing the /stories hero's faded-image treatment). */
-.sub-main:has(> .plugins-tile-grid) > .catalog-head {
+.sub-main:has(> .plugins-tile-grid) > .catalog-head,
+.catalog-head.plugins-hero-art {
   position: relative;
   max-width: 820px;
   margin-inline: auto;
   text-align: center;
   padding-top: 28px;
 }
-.sub-main:has(> .plugins-tile-grid) > .catalog-head::before {
+.sub-main:has(> .plugins-tile-grid) > .catalog-head::before,
+.catalog-head.plugins-hero-art::before {
   content: '';
   position: absolute;
   left: 50%;
@@ -1788,11 +1882,13 @@ body.sub-page {
   background-position: 50% 16%;
   background-repeat: no-repeat;
 }
-.sub-main:has(> .plugins-tile-grid) > .catalog-head > * {
+.sub-main:has(> .plugins-tile-grid) > .catalog-head > *,
+.catalog-head.plugins-hero-art > * {
   position: relative;
   z-index: 1;
 }
-.sub-main:has(> .plugins-tile-grid) > .catalog-head .lead {
+.sub-main:has(> .plugins-tile-grid) > .catalog-head .lead,
+.catalog-head.plugins-hero-art .lead {
   max-width: 640px;
   margin-inline: auto;
 }
@@ -1986,6 +2082,9 @@ body.sub-page {
 }
 
 .plugins-tile-grid {
+  /* Same reason as .plugins-feature — stay above the hero art plate. */
+  position: relative;
+  z-index: 1;
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 16px;
@@ -4095,3 +4194,26 @@ dialog.tpl-share-popover .detail-share-dialog-text {
   font-size: 12.5px;
   line-height: 1.75;
 }
+
+/* Codex design collection — category filter chips. Global (not Astro-scoped)
+   because scoped styles are unreliable for these map-generated buttons in this
+   app; the same thing bit .codex-skill-grid and .dbjobs. */
+.codex-filter { display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 26px; }
+.codex-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 15px;
+  border: 1.5px solid var(--ink);
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease;
+}
+.codex-chip:hover { background: var(--bone); }
+.codex-chip.is-on { background: var(--ink); color: #fff; }
+.codex-chip-n { font-size: 10px; opacity: 0.6; font-variant-numeric: tabular-nums; }
+.tpl-card[hidden] { display: none; }

@@ -28,6 +28,12 @@ function unreadBadgeLabel(count: number): string {
   return count > 9 ? '9+' : String(count);
 }
 
+function formatPublishedDate(value: string, locale: Locale): string | null {
+  const publishedAt = new Date(value);
+  if (Number.isNaN(publishedAt.getTime())) return null;
+  return new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(publishedAt);
+}
+
 interface Props {
   onOpenNotificationSettings?: () => void;
 }
@@ -247,10 +253,10 @@ function MessageItem({
   onError: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const formatted = new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(new Date(message.publishedAt));
+  const formatted = formatPublishedDate(message.publishedAt, locale);
   const ctaUrl = safeExternalUrl(message.ctaUrl);
   return <article className={`${styles.item}${message.readAt ? '' : ` ${styles.itemUnread}`}${expanded ? ` ${styles.itemExpanded}` : ''}`}>
-    <button type="button" className={styles.itemSummary} aria-expanded={expanded} onClick={() => { setExpanded((value) => !value); void onRead(message.id).catch(onError); }}><span className={styles.itemMeta}><span>{message.typeName}</span><time dateTime={message.publishedAt}>{formatted}</time></span><strong>{message.title}</strong><span className={styles.bodyPreview}>{message.body}</span></button>
+    <button type="button" className={styles.itemSummary} aria-expanded={expanded} onClick={() => { setExpanded((value) => !value); void onRead(message.id).catch(onError); }}><span className={styles.itemMeta}><span>{message.typeName}</span>{formatted ? <time dateTime={message.publishedAt}>{formatted}</time> : null}</span><strong>{message.title}</strong><span className={styles.bodyPreview}>{message.body}</span></button>
     {expanded && message.ctaLabel && ctaUrl ? <div className={styles.itemActions}><button type="button" className={styles.primaryAction} onClick={() => window.open(ctaUrl, '_blank', 'noopener,noreferrer')}>{message.ctaLabel}</button></div> : null}
   </article>;
 }

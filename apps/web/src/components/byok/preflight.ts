@@ -6,7 +6,14 @@ import { blockingByokDraftIssues, validateByokDraft } from './validation';
 
 type ByokPreflightConfig = Pick<
   AppConfig,
-  'apiCredentialSource' | 'apiKey' | 'apiProtocol' | 'apiProviderBaseUrl' | 'baseUrl' | 'model'
+  | 'apiCredentialSource'
+  | 'apiKey'
+  | 'apiProtocol'
+  | 'apiProviderBaseUrl'
+  | 'baseUrl'
+  | 'model'
+  | 'byokProfileId'
+  | 'byokCredentialConfigured'
 >;
 
 export function byokPreflightBlockReason(
@@ -35,6 +42,11 @@ export function byokPreflightBlockReason(
         config.baseUrl,
       ) && !deploymentOpenAi,
       requiresBaseUrl: !deploymentOpenAi,
+      credentialConfigured: Boolean(
+        !deploymentOpenAi
+        && config.byokProfileId
+        && config.byokCredentialConfigured,
+      ),
     },
   );
   const missingReasons = new Set<TrackingByokPreflightBlockReason>();

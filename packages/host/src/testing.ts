@@ -76,6 +76,7 @@ function defaultHost(): OpenDesignHostBridge {
     },
     updater: {
       check: async () => updaterStatus,
+      "clear-cache": async () => updaterStatus,
       download: async () => updaterStatus,
       install: async () => updaterStatus,
       quit: async () => ({ ok: true }),

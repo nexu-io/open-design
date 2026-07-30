@@ -87,6 +87,12 @@ type ResolvedPayloadConfig = {
 
 export type ResolvePackagedLauncherRuntimeOptions = {
   currentExecutablePath?: string;
+  /**
+   * Pointer from `--od-launcher-delegated-*` argv: the spawning parent
+   * pre-armed attempt.json for this pointer, so a matching attempt marks the
+   * launch in progress rather than a previous failure.
+   */
+  delegated?: LauncherVersionPointer | null;
   resume?: LauncherHandoffResumeRequest | null;
 };
 
@@ -472,7 +478,12 @@ export async function resolvePackagedLauncherRuntime(
     sameExecutablePath(currentExecutablePath, handoff.payloadExecutablePath)
     ? handoff.target
     : null;
-  const selection = selectLauncherRuntimeTarget({ attempted, resume: requestedResume, runtime: descriptor });
+  const selection = selectLauncherRuntimeTarget({
+    attempted,
+    delegated: options.delegated ?? null,
+    resume: requestedResume,
+    runtime: descriptor,
+  });
   const persistedInstall = await readLauncherInstallDescriptor(launcherPaths, channel, config.namespace).catch(() => null);
   const currentPackageLaunchPath = stableAppLaunchPathFromExecutable(process.execPath);
 
@@ -552,7 +563,15 @@ async function writeJsonFile(path: string, payload: unknown): Promise<void> {
   await writeFile(path, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
 }
 
-export async function recordPackagedLauncherRuntimeFailedAttempt(
+/**
+ * Arm attempt.json for a normal active delegation BEFORE the payload spawns.
+ * A payload that dies before reaching its own launcher bookkeeping then still
+ * leaves rollback evidence, so the next cold start rolls back to
+ * lastSuccessful instead of retrying the broken payload forever. Rollback
+ * (last-successful) delegations are deliberately excluded: the attempt on
+ * disk IS the rollback evidence and must not be overwritten.
+ */
+export async function armPackagedLauncherRuntimeAttempt(
   runtime: PackagedLauncherRuntime,
 ): Promise<void> {
   if (runtime.source !== "payload") return;
@@ -567,12 +586,20 @@ export async function recordPackagedLauncherRuntimeFailedAttempt(
   } satisfies LauncherAttemptDescriptor);
 }
 
+export async function recordPackagedLauncherRuntimeFailedAttempt(
+  runtime: PackagedLauncherRuntime,
+): Promise<void> {
+  await armPackagedLauncherRuntimeAttempt(runtime);
+}
+
 export async function confirmPackagedLauncherRuntime(runtime: PackagedLauncherRuntime): Promise<void> {
   if (runtime.source !== "payload") return;
   if (!runtime.payloadDesktopProcess) return;
   if (runtime.desktopExecutablePath == null) return;
   if (!runtime.selection.selected || (
-    runtime.selection.reason !== "active" && runtime.selection.reason !== "active-resume"
+    runtime.selection.reason !== "active" &&
+    runtime.selection.reason !== "active-delegated" &&
+    runtime.selection.reason !== "active-resume"
   )) return;
   const confirmedAt = new Date().toISOString();
   const next: LauncherRuntimeDescriptor = {

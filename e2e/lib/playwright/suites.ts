@@ -1,5 +1,6 @@
 export type UiPlaywrightGroup = {
   files: readonly string[];
+  fullyParallel?: boolean;
   grep: string;
   workers?: number;
 };
@@ -21,6 +22,7 @@ export const uiP0Groups = {
     files: ["ui/app.test.ts"],
   },
   "workspace-restoration": {
+    fullyParallel: true,
     grep: String.raw`\[P0\]`,
     files: ["ui/app-restoration.test.ts", "ui/critical-smoke.test.ts"],
   },

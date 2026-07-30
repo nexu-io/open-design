@@ -77,7 +77,10 @@ type PackagedLauncherRuntimeModule = {
   resolvePackagedLauncherRuntime: (
     config: PackagedConfigLike,
     paths: PackagedPaths,
-    options?: { currentExecutablePath?: string },
+    options?: {
+      currentExecutablePath?: string;
+      delegated?: { generation: number; version: string };
+    },
   ) => Promise<PackagedLauncherRuntime>;
 };
 
@@ -420,6 +423,7 @@ describe("packaged launcher payload update loop", () => {
 
       const promoted = await resolvePackagedLauncherRuntime(config, paths, {
         currentExecutablePath: testCase.expectedPayloadExecutablePath(paths.installationRoot, config.namespace),
+        delegated: { generation: 1, version: testCase.promotedVersion },
       });
       expect(promoted.source).toBe("payload");
       expect(promoted.targetVersion).toBe(testCase.promotedVersion);

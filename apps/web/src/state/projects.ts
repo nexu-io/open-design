@@ -369,6 +369,10 @@ export async function deleteProject(id: string): Promise<boolean> {
     const resp = await fetch(`/api/projects/${encodeURIComponent(id)}`, {
       method: 'DELETE',
     });
+    // Drop the project's local tab-state cache once it is gone server-side, so
+    // the `open-design:project-tabs:*` keys don't accumulate in localStorage
+    // for the lifetime of the browser profile as projects are deleted.
+    if (resp.ok) removeCachedTabs(id);
     return resp.ok;
   } catch {
     return false;
@@ -666,6 +670,15 @@ function readCachedTabs(projectId: string): OpenTabsState | null {
     return normalizeTabsState(JSON.parse(window.localStorage.getItem(tabsCacheKey(projectId)) ?? 'null'));
   } catch {
     return null;
+  }
+}
+
+function removeCachedTabs(projectId: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.removeItem(tabsCacheKey(projectId));
+  } catch {
+    // Ignore private-mode/quota errors; the cache entry is best-effort.
   }
 }
 

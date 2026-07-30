@@ -37,6 +37,10 @@ import { readAppConfig, writeAppConfig } from '../src/app-config.js';
 import { readMemoryConfig, writeMemoryConfig } from '../src/memory.js';
 import { upsertMessage } from '../src/db.js';
 import { renderCodexImagegenOverride } from '../src/prompts/system.js';
+import {
+  ByokCredentialService,
+  type ByokSecretBackend,
+} from '../src/byok/credential-service.js';
 
 const FAKE_VELA_FIXTURE = resolve(process.cwd(), 'tests', 'fixtures', 'fake-vela.mjs');
 
@@ -213,7 +217,42 @@ describe('/api/chat', () => {
         extraction: null,
       });
     }
-    const started = await startServer({ port: 0, returnServer: true }) as {
+    const byokDataDir = mkdtempSync(join(tmpdir(), 'od-chat-route-byok-'));
+    tempDirs.push(byokDataDir);
+    const byokSecrets = new Map<string, string>();
+    const byokBackend: ByokSecretBackend = {
+      kind: 'test-memory',
+      async available() { return true; },
+      async set(profileId, secret) { byokSecrets.set(profileId, secret); },
+      async get(profileId) { return byokSecrets.get(profileId) ?? null; },
+      async delete(profileId) { return byokSecrets.delete(profileId); },
+    };
+    const byokCredentialService = new ByokCredentialService({
+      dataDir: byokDataDir,
+      backend: byokBackend,
+    });
+    await byokCredentialService.upsert({
+      id: 'byok-chat-route-keyful',
+      label: 'Chat route keyful fixture',
+      protocol: 'senseaudio',
+      apiKey: 'sk-test-byok',
+      baseUrl: 'https://api.senseaudio.cn',
+      model: 'deepseek-v4-flash',
+      requiresApiKey: true,
+    });
+    await byokCredentialService.upsert({
+      id: 'byok-chat-route-keyless',
+      label: 'Chat route keyless fixture',
+      protocol: 'openai',
+      baseUrl: 'http://127.0.0.1:8000/v1',
+      model: 'model',
+      requiresApiKey: false,
+    });
+    const started = await startServer({
+      port: 0,
+      returnServer: true,
+      byokCredentialService,
+    }) as {
       url: string;
       server: http.Server;
     };
@@ -296,7 +335,6 @@ process.exit(0);
           }),
         });
         const body = await response.text();
-
         expect(response.ok).toBe(true);
         expect(body).toContain('<question-form');
         expect(body).toContain('"status":"succeeded"');
@@ -528,15 +566,10 @@ process.stdin.on('end', () => {
             projectId,
             message: 'hello',
             model: 'deepseek-v4-flash',
-            byokProvider: {
-              protocol: 'senseaudio',
-              apiKey: 'sk-test-byok',
-              baseUrl: 'https://api.senseaudio.cn',
-            },
+            byokProfileId: 'byok-chat-route-keyful',
           }),
         });
         const body = await response.text();
-
         expect(response.ok).toBe(true);
         expect(body).toContain('byok-opencode-ok');
 
@@ -545,6 +578,8 @@ process.stdin.on('end', () => {
           'run',
           '--format',
           'json',
+          '--dir',
+          expect.stringContaining(projectId),
           '-m',
           'open-design-byok/deepseek-v4-flash',
         ]);
@@ -643,10 +678,7 @@ process.stdin.on('end', async () => {
                     projectId,
                     message: 'hello',
                     model: 'gpt-deployment',
-                    byokProvider: {
-                      protocol: 'openai',
-                      credentialSource: 'deployment',
-                    },
+                    byokCredentialSource: 'deployment',
                   }),
                 });
                 const body = await response.text();
@@ -734,10 +766,7 @@ process.exit(0);
                     projectId,
                     message: 'hello',
                     model: 'gpt-deployment',
-                    byokProvider: {
-                      protocol: 'openai',
-                      credentialSource: 'deployment',
-                    },
+                    byokCredentialSource: 'deployment',
                   }),
                 });
                 const body = await response.text();
@@ -799,12 +828,7 @@ process.stdin.on('end', () => {
             projectId,
             message: 'hello',
             model: 'model',
-            byokProvider: {
-              protocol: 'openai',
-              apiKey: '',
-              baseUrl: 'http://127.0.0.1:8000/v1',
-              requiresApiKey: false,
-            },
+            byokProfileId: 'byok-chat-route-keyless',
           }),
         });
         const body = await response.text();
@@ -817,6 +841,8 @@ process.stdin.on('end', () => {
           'run',
           '--format',
           'json',
+          '--dir',
+          expect.stringContaining(projectId),
           '-m',
           'open-design-byok/model',
         ]);
@@ -841,7 +867,7 @@ process.stdin.on('end', () => {
     );
   });
 
-  it('does not pass forged BYOK provider config to other local runtimes', async () => {
+  it('rejects forged BYOK provider config for other local runtimes', async () => {
     if (!process.env.OD_DATA_DIR) {
       throw new Error('OD_DATA_DIR is required for BYOK OpenCode config tests');
     }
@@ -891,11 +917,10 @@ process.stdin.on('end', () => {
         });
         const body = await response.text();
 
-        expect(response.ok).toBe(true);
-        expect(body).toContain('opencode-ok');
-        expect(await fsp.readFile(keyFile, 'utf8')).toBe('');
-        expect(await fsp.readFile(envFile, 'utf8')).not.toContain('open-design-byok');
-        expect(await fsp.readFile(envFile, 'utf8')).not.toContain('sk-test-byok');
+        expect(response.status).toBe(400);
+        expect(body).toContain('Raw BYOK credentials are not accepted');
+        expect(existsSync(keyFile)).toBe(false);
+        expect(existsSync(envFile)).toBe(false);
       },
     );
   });
@@ -3912,6 +3937,13 @@ describe('chat prompt helpers', () => {
       projectDesignSystemId: 'project-ds',
       appDefaultDesignSystemId: 'default-ds',
     })).toEqual({ id: 'project-ds', source: 'project' });
+
+    expect(resolveEffectiveDesignSystemSelection({
+      requestDesignSystemId: null,
+      projectDesignSystemId: 'project-ds',
+      disabledDesignSystemIds: ['project-ds'],
+      allowAppDefault: false,
+    })).toEqual({ id: null, source: 'none' });
 
     expect(resolveEffectiveDesignSystemSelection({
       appDefaultDesignSystemId: 'default-ds',

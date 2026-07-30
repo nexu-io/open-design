@@ -336,6 +336,13 @@ export function UpdateDialog() {
     if (status?.error != null && restartSafetyFromUpdaterStatus(status) == null) {
       return state === 'error' ? t('updater.dialogCheckFailed') : t('settings.updateActionFailed');
     }
+    // A forced installer reinstall reads differently from a routine update:
+    // the same copy covers both the not-yet-downloaded and ready states.
+    if ((ready || available) && model.reinstall != null) {
+      return model.availableVersion == null
+        ? t('updater.reinstallReadyGeneric')
+        : t('updater.reinstallReadyVersion', { version: model.availableVersion });
+    }
     if (ready) {
       if (model.availableVersion != null) {
         return t('updater.dialogReadyVersion', { version: model.availableVersion });
@@ -366,6 +373,7 @@ export function UpdateDialog() {
   })();
 
   const showSafety = restartSafety != null;
+  const reinstallUrl = model.reinstall?.url ?? null;
   const title = showSafety ? t('updater.activeRunsTitle') : t('settings.updateCheck');
   const primaryLabel = (() => {
     if (ready) return model.updateKind === 'payload' ? t('updater.installRestart') : t('updater.openInstaller');
@@ -417,13 +425,24 @@ export function UpdateDialog() {
         ) : null}
         {!showSafety && (available || ready) ? (
           <div className={styles.metaRow}>
-            <button
-              className={styles.releaseLink}
-              onClick={openReleaseNotes}
-              type="button"
-            >
-              {t('updater.viewVersionFeatures')} <Icon name="external-link" size={13} />
-            </button>
+            {reinstallUrl != null ? (
+              <button
+                className={styles.releaseLink}
+                data-testid="update-dialog-reinstall-learn-more"
+                onClick={() => void openExternalUrl(reinstallUrl)}
+                type="button"
+              >
+                {t('updater.reinstallLearnMore')} <Icon name="external-link" size={13} />
+              </button>
+            ) : (
+              <button
+                className={styles.releaseLink}
+                onClick={openReleaseNotes}
+                type="button"
+              >
+                {t('updater.viewVersionFeatures')} <Icon name="external-link" size={13} />
+              </button>
+            )}
           </div>
         ) : null}
         <div className={`${styles.actions} ${model.upToDate ? styles.actionsCentered : ''}`}>

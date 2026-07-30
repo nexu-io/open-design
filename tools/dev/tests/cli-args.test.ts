@@ -29,6 +29,12 @@ describe("tools-dev CLI argument rewriting", () => {
       "--web-port",
       "17573",
     ]);
+    assert.deepEqual(rewriteCliArgsForDefaultStart(["--parent-pid", "42", "--json"]), [
+      "start",
+      "--parent-pid",
+      "42",
+      "--json",
+    ]);
     assert.deepEqual(rewriteCliArgsForDefaultStart(["--namespace", "demo", "daemon"]), [
       "--namespace",
       "demo",

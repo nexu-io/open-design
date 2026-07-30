@@ -77,15 +77,19 @@ import { AMR_LOGIN_STATUS_EVENT } from './components/amrLoginPolling';
 import { navigate, useRoute } from './router';
 import {
   fetchDaemonConfig,
+  fetchByokCredentialProfilesFromDaemon,
   DEFAULT_PET,
   fetchDeploymentProviderConfigFromDaemon,
   fetchMediaProvidersFromDaemon,
   hasAnyConfiguredProvider,
   fetchComposioConfigFromDaemon,
   loadConfig,
+  migrateLegacyByokCredentialsToDaemon,
   mergeDaemonConfig,
+  mergeByokCredentialProfiles,
   mergeDaemonMediaProviders,
   saveConfig,
+  persistByokCredentialProfileToDaemon,
   shouldSyncLocalMediaProvidersToDaemon,
   syncComposioConfigToDaemon,
   syncConfigToDaemon,
@@ -451,6 +455,8 @@ function AppInner() {
   // effect while the project actually stayed in the managed root.
   const [workingDirError, setWorkingDirError] = useState<string | null>(null);
   const [projectOpenError, setProjectOpenError] = useState<string | null>(null);
+  const [legacyByokMigrationError, setLegacyByokMigrationError] =
+    useState<string | null>(null);
   const [settingsWelcome, setSettingsWelcome] = useState(false);
   const [settingsInitialSection, setSettingsInitialSection] = useState<SettingsSection>('execution');
   const [settingsHighlight, setSettingsHighlight] = useState<SettingsHighlight>(null);
@@ -1012,6 +1018,21 @@ function AppInner() {
         setAppVersionInfo(info);
       });
 
+      const legacyByokMigration =
+        await migrateLegacyByokCredentialsToDaemon(
+          latestPersistedConfigRef.current,
+        );
+      if (cancelled) return;
+      setLegacyByokMigrationError(
+        legacyByokMigration.status === 'failed'
+          ? legacyByokMigration.error.message
+          : null,
+      );
+      const migrationBaseConfig = legacyByokMigration.config;
+      if (legacyByokMigration.status === 'migrated') {
+        latestPersistedConfigRef.current = migrationBaseConfig;
+      }
+
       // Daemon-persisted config + composio config + media provider config land
       // together so the welcome-modal decision and daemon-backed settings
       // apply in one merge, avoiding a flash where local-only state is shown
@@ -1021,11 +1042,15 @@ function AppInner() {
         fetchComposioConfigFromDaemon(),
         fetchMediaProvidersFromDaemon(),
         fetchDeploymentProviderConfigFromDaemon(),
+        migrationBaseConfig.byokProfileId
+          ? fetchByokCredentialProfilesFromDaemon()
+          : Promise.resolve(null),
       ]).then(([
         daemonConfig,
         daemonComposioConfig,
         daemonMediaProvidersResult,
         daemonDeploymentProviderConfig,
+        byokCredentialProfiles,
       ]) => {
         if (cancelled) return;
         setDeploymentProviderConfig(daemonDeploymentProviderConfig);
@@ -1040,34 +1065,35 @@ function AppInner() {
             ? t('settings.mediaProviderLoadError')
             : null,
         );
-        // Compute the next config outside the setConfig updater so we can
-        // both (a) call navigate() after setConfig returns — calling it
-        // inside the updater would trigger a Router setState during React's
-        // render phase — and (b) read next.onboardingCompleted synchronously,
-        // since React batches setConfig and the updater doesn't run until
-        // the next render. latestPersistedConfigRef is kept in sync with
-        // the rendered config and is safe to read here.
+        // Settings remain interactive while daemon hydration is in flight.
+        // Rebase the daemon response on the latest persisted state so a
+        // completed user write cannot be overwritten by the boot snapshot.
         const baseConfig = latestPersistedConfigRef.current;
         const migratedLocalMediaProviders = shouldSyncLocalMediaProvidersToDaemon(
           baseConfig.mediaProviders,
           daemonMediaProvidersLoaded,
         );
-        const next = mergeDaemonMediaProviders(
-          clearStaleAmrModelChoiceOnProfileChange(
-            baseConfig,
-            mergeDaemonConfig(baseConfig, daemonConfig),
+        const next = mergeByokCredentialProfiles(
+          mergeDaemonMediaProviders(
+            clearStaleAmrModelChoiceOnProfileChange(
+              baseConfig,
+              mergeDaemonConfig(baseConfig, daemonConfig),
+            ),
+            daemonMediaProvidersLoaded,
           ),
-          daemonMediaProvidersLoaded,
+          byokCredentialProfiles,
         );
         const hasLocalComposioKey = Boolean(next.composio?.apiKey?.trim());
         if (!hasLocalComposioKey && daemonComposioConfig) {
           next.composio = daemonComposioConfig;
         }
-        saveConfig(next);
+        if (legacyByokMigration.status !== 'failed') {
+          saveConfig(next);
+        }
         if (
-          daemonMediaProvidersResult.status === 'ok' &&
-          migratedLocalMediaProviders &&
-          hasAnyConfiguredProvider(next.mediaProviders)
+          daemonMediaProvidersResult.status === 'ok'
+          && migratedLocalMediaProviders
+          && hasAnyConfiguredProvider(next.mediaProviders)
         ) {
           void syncMediaProvidersToDaemon(next.mediaProviders, {
             daemonProviders: daemonMediaProvidersLoaded,
@@ -1361,14 +1387,15 @@ function AppInner() {
    */
   const handleConfigPersistComposioKey = useCallback(
     async (composio: AppConfig['composio']) => {
-      const next = await persistComposioConfigChange(config, composio);
-      setConfig((curr) => {
-        const merged: AppConfig = { ...curr, composio: next.composio };
-        saveConfig(merged);
-        return merged;
-      });
+      const next = await persistComposioConfigChange(
+        latestPersistedConfigRef.current,
+        composio,
+      );
+      latestPersistedConfigRef.current = next;
+      saveConfig(next);
+      setConfig(next);
     },
-    [config],
+    [],
   );
 
   const handleModeChange = useCallback(
@@ -2553,6 +2580,7 @@ function AppInner() {
         onApiProtocolChange={handleApiProtocolChange}
         onApiModelChange={handleApiModelChange}
         onConfigPersist={handleConfigPersist}
+        onPersistByokCredential={persistByokCredentialProfileToDaemon}
         daemonAppConfigReady={daemonAppConfigReady}
         onSilentUpdatePreferenceChange={handleSilentUpdatePreferenceChange}
         onSkillsRefresh={refreshSkills}
@@ -2681,6 +2709,7 @@ function AppInner() {
           onSilentUpdatePreferenceChange={handleSilentUpdatePreferenceChange}
           onDraftChange={handleSettingsDraftChange}
           onPersistComposioKey={handleConfigPersistComposioKey}
+          onPersistByokCredential={persistByokCredentialProfileToDaemon}
           onClose={() => {
             // Closing the dialog is the canonical "I'm done" gesture
             // now that there is no global Save button. We mark
@@ -2728,6 +2757,21 @@ function AppInner() {
           role="alert"
           tone="error"
           onDismiss={() => setProjectOpenError(null)}
+        />
+      ) : null}
+      {legacyByokMigrationError ? (
+        <Toast
+          message={t('settings.autosaveError')}
+          details={legacyByokMigrationError}
+          actionLabel={t('settings.title')}
+          onAction={() => {
+            setLegacyByokMigrationError(null);
+            openSettings('execution');
+          }}
+          role="alert"
+          tone="error"
+          ttlMs={0}
+          onDismiss={() => setLegacyByokMigrationError(null)}
         />
       ) : null}
       {/* First-run privacy consent banner. It waits for daemon config

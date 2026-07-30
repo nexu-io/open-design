@@ -1,3 +1,9 @@
+import type {
+  TrackingAmrOpenCodeErrorPhase,
+  TrackingAmrOpenCodeLastEventType,
+  TrackingAmrOpenCodeLastToolKind,
+  TrackingAmrOpenCodeLastToolStatus,
+} from '@open-design/contracts/analytics';
 import { redactSecrets } from './redact.js';
 
 export interface RunEventForDiagnostics {
@@ -50,11 +56,21 @@ export interface RunDiagnosticsAnalytics {
   approval_requested: boolean;
   artifact_write_seen: boolean;
   live_artifact_seen: boolean;
+  amr_opencode_error_phase?: TrackingAmrOpenCodeErrorPhase;
+  amr_opencode_last_event_type?: TrackingAmrOpenCodeLastEventType;
+  amr_opencode_last_tool_status?: TrackingAmrOpenCodeLastToolStatus;
+  amr_opencode_last_tool_kind?: TrackingAmrOpenCodeLastToolKind;
   // True when this run transparently re-seeded after an upstream session resume
   // failed (expired/pruned): the dead handle was cleared and the turn was re-run
   // with a fresh session + full transcript, with no user-facing error. Lets us
   // monitor how often the resume optimization falls back (should be rare).
   resume_auto_reseeded: boolean;
+}
+
+export interface RunToolProgress {
+  toolCallSeen: boolean;
+  toolResultSent: boolean;
+  hasOutstandingTool: boolean;
 }
 
 export interface StreamTailSummary {
@@ -68,6 +84,130 @@ export type StdoutTailSummary = StreamTailSummary;
 
 const STDERR_TAIL_MAX_LINES = 20;
 const STDERR_TAIL_MAX_BYTES = 4 * 1024;
+
+function recordValue(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function amrOpenCodeErrorPhase(value: unknown): TrackingAmrOpenCodeErrorPhase | undefined {
+  if (typeof value !== 'string' || !value.trim()) return undefined;
+  switch (value.trim()) {
+    case 'timeout':
+    case 'event_stream_start':
+    case 'event_stream':
+    case 'prompt_async':
+      return value.trim() as TrackingAmrOpenCodeErrorPhase;
+    default:
+      return 'other';
+  }
+}
+
+function amrOpenCodeLastEventType(value: unknown): TrackingAmrOpenCodeLastEventType | undefined {
+  if (typeof value !== 'string' || !value.trim()) return undefined;
+  switch (value.trim()) {
+    case 'tool_call':
+    case 'tool_call_update':
+    case 'agent_message_chunk':
+    case 'agent_thought_chunk':
+    case 'done':
+      return value.trim() as TrackingAmrOpenCodeLastEventType;
+    default:
+      return 'other';
+  }
+}
+
+function amrOpenCodeLastToolStatus(value: unknown): TrackingAmrOpenCodeLastToolStatus | undefined {
+  if (typeof value !== 'string' || !value.trim()) return undefined;
+  const status = value.trim().toLowerCase().replace(/[\s-]+/g, '_');
+  if (status === 'pending') return 'pending';
+  if (status === 'running' || status === 'in_progress') return 'in_progress';
+  if (status === 'completed' || status === 'complete' || status === 'success' || status === 'succeeded') {
+    return 'completed';
+  }
+  if (
+    status === 'failed' ||
+    status === 'failure' ||
+    status === 'error' ||
+    status === 'cancelled' ||
+    status === 'canceled'
+  ) {
+    return 'failed';
+  }
+  return 'other';
+}
+
+function amrOpenCodeLastToolKind(value: unknown): TrackingAmrOpenCodeLastToolKind | undefined {
+  if (typeof value !== 'string' || !value.trim()) return undefined;
+  const kind = value.trim().toLowerCase().replace(/[\s-]+/g, '_');
+  if (/^(?:read|view|cat)$/.test(kind)) return 'read';
+  if (/^(?:write|create|save)$/.test(kind)) return 'write';
+  if (/^(?:edit|patch|replace)$/.test(kind)) return 'edit';
+  if (/^(?:grep|glob|search|find)$/.test(kind)) return 'search';
+  if (/^(?:bash|shell|exec|execute|command)$/.test(kind)) return 'execute';
+  if (/^(?:fetch|webfetch|web_fetch|websearch|web_search|browser)$/.test(kind)) return 'fetch';
+  return 'other';
+}
+
+function amrOpenCodeDiagnosticsFromError(data: unknown): Partial<RunDiagnosticsAnalytics> | null {
+  const error = recordValue(recordValue(data)?.error);
+  const details = recordValue(error?.details);
+  if (
+    details?.kind !== 'opencode_prompt_error' ||
+    (details.runtime !== undefined && details.runtime !== 'opencode')
+  ) {
+    return null;
+  }
+  const errorPhase = amrOpenCodeErrorPhase(details.phase);
+  const lastEventType = amrOpenCodeLastEventType(details.lastEventType);
+  const lastToolStatus = amrOpenCodeLastToolStatus(details.lastToolStatus);
+  const lastToolKind = amrOpenCodeLastToolKind(details.lastToolKind);
+  return {
+    ...(errorPhase ? { amr_opencode_error_phase: errorPhase } : {}),
+    ...(lastEventType ? { amr_opencode_last_event_type: lastEventType } : {}),
+    ...(lastToolStatus ? { amr_opencode_last_tool_status: lastToolStatus } : {}),
+    ...(lastToolKind ? { amr_opencode_last_tool_kind: lastToolKind } : {}),
+  };
+}
+
+export function summarizeRunToolProgress(
+  events: RunEventForDiagnostics[] = [],
+): RunToolProgress {
+  // Pair normal events by id. Some degraded provider streams omit ids on both
+  // sides, so pair those by count rather than treating every result as global.
+  const outstandingToolUseIds = new Set<string>();
+  let idlessToolUses = 0;
+  let idlessToolResults = 0;
+  let toolCallSeen = false;
+
+  for (const event of events) {
+    const data = event.data && typeof event.data === 'object'
+      ? event.data as Record<string, unknown>
+      : {};
+    if (data.type === 'tool_use') {
+      toolCallSeen = true;
+      if (typeof data.id === 'string') outstandingToolUseIds.add(data.id);
+      else idlessToolUses += 1;
+    }
+    if (data.type === 'tool_result') {
+      if (typeof data.toolUseId === 'string') {
+        outstandingToolUseIds.delete(data.toolUseId);
+      } else {
+        idlessToolResults += 1;
+      }
+    }
+  }
+
+  const hasOutstandingTool =
+    outstandingToolUseIds.size > 0 ||
+    idlessToolResults < idlessToolUses;
+  return {
+    toolCallSeen,
+    toolResultSent: toolCallSeen && !hasOutstandingTool,
+    hasOutstandingTool,
+  };
+}
 
 function readStderrChunk(data: unknown): string | null {
   if (typeof data === 'string') return data;
@@ -165,30 +305,16 @@ export function summarizeRunDiagnosticsForAnalytics(args: {
   liveArtifactSeen?: boolean;
 }): RunDiagnosticsAnalytics {
   const events = args.events ?? [];
+  const toolProgress = summarizeRunToolProgress(events);
   let stderr = '';
   let stdout = '';
   let userVisibleOutputSeen = false;
-  let toolCallSeen = false;
-  // `tool_result_sent` = EVERY committed tool_use received a matching tool_result.
-  // Paired by id (`tool_use.id` <-> `tool_result.toolUseId`, the same pairing
-  // summarizeRunTimingAnalytics uses), because a plain "any tool_result after a
-  // tool_use" flag reports delivered for a parallel turn like tool_use(A),
-  // tool_use(B), tool_result(A) where B is still outstanding.
-  //
-  // Degraded provider events carry NO id, symmetrically on both sides — see
-  // `agent-protocol/pi-rpc/events.ts` and `copilot-stream.ts`, which both emit
-  // `toolCallId ?? null` for tool_use.id AND tool_result.toolUseId. Those are
-  // paired by count instead; skipping them would let an unpaired id-less tool
-  // call fall through to "delivered" and mask exactly the stall we're attributing.
-  const outstandingToolUseIds = new Set<string>();
-  let idlessToolUses = 0;
-  let idlessToolResults = 0;
-  let sawAnyToolUse = false;
   let approvalRequested = false;
   let artifactWriteSeen = args.artifactWriteSeen === true;
   let liveArtifactSeen = args.liveArtifactSeen === true;
   let recordedCloseReason: RunCloseReason | null = null;
   let resumeAutoReseeded = false;
+  let amrOpenCodeDiagnostics: Partial<RunDiagnosticsAnalytics> = {};
   for (const event of events) {
     if (event.event === 'stderr') {
       const chunk = readStderrChunk(event.data);
@@ -208,16 +334,6 @@ export function summarizeRunDiagnosticsForAnalytics(args: {
       const delta = typeof data.delta === 'string' ? data.delta : '';
       if (delta.length > 0) userVisibleOutputSeen = true;
     }
-    if (data.type === 'tool_use') {
-      toolCallSeen = true;
-      sawAnyToolUse = true;
-      if (typeof data.id === 'string') outstandingToolUseIds.add(data.id);
-      else idlessToolUses += 1;
-    }
-    if (data.type === 'tool_result') {
-      if (typeof data.toolUseId === 'string') outstandingToolUseIds.delete(data.toolUseId);
-      else idlessToolResults += 1;
-    }
     if (data.type === 'diagnostic' && data.name === 'acp_approval_request') {
       approvalRequested = true;
     }
@@ -233,6 +349,10 @@ export function summarizeRunDiagnosticsForAnalytics(args: {
       (data.nativeSessionRecovery as Record<string, unknown>).state === 'auto_reseeded'
     ) {
       resumeAutoReseeded = true;
+    }
+    if (event.event === 'error') {
+      const structured = amrOpenCodeDiagnosticsFromError(event.data);
+      if (structured) amrOpenCodeDiagnostics = structured;
     }
     if (data.type === 'artifact') artifactWriteSeen = true;
     if (data.type === 'live_artifact' || event.event === 'live_artifact') {
@@ -290,14 +410,12 @@ export function summarizeRunDiagnosticsForAnalytics(args: {
     rpc_close_reason: rpcCloseReason,
     first_token_seen: args.firstTokenSeen === true,
     user_visible_output_seen: userVisibleOutputSeen,
-    tool_call_seen: toolCallSeen,
-    tool_result_sent:
-      sawAnyToolUse &&
-      outstandingToolUseIds.size === 0 &&
-      idlessToolResults >= idlessToolUses,
+    tool_call_seen: toolProgress.toolCallSeen,
+    tool_result_sent: toolProgress.toolResultSent,
     approval_requested: approvalRequested,
     artifact_write_seen: artifactWriteSeen,
     live_artifact_seen: liveArtifactSeen,
     resume_auto_reseeded: resumeAutoReseeded,
+    ...amrOpenCodeDiagnostics,
   };
 }

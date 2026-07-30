@@ -538,7 +538,7 @@ jobs:
         run: |
           set -euo pipefail
           prefix="${{ steps.mac_arm64_tools_pack_cache_key.outputs.prefix }}"
-          keep=3
+          keep=1
           cache_ids="$(gh cache list --key "$prefix" --sort created_at --order desc --limit 100 --json id,key,createdAt --jq ".[$keep:] | .[].id")"
           count=0
           while IFS= read -r cache_id; do
@@ -805,7 +805,7 @@ jobs:
         run: |
           set -euo pipefail
           prefix="${{ steps.mac_x64_tools_pack_cache_key.outputs.prefix }}"
-          keep=3
+          keep=1
           cache_ids="$(gh cache list --key "$prefix" --sort created_at --order desc --limit 100 --json id,key,createdAt --jq ".[$keep:] | .[].id")"
           count=0
           while IFS= read -r cache_id; do
@@ -1051,7 +1051,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $prefix = "${{ steps.win_tools_pack_cache_key.outputs.prefix }}"
-          $keep = 3
+          $keep = 1
           $caches = @(gh cache list --key $prefix --sort created_at --order desc --limit 100 --json id,key,createdAt | ConvertFrom-Json)
           $stale = @($caches | Select-Object -Skip $keep)
           foreach ($cache in $stale) {
@@ -1287,6 +1287,10 @@ jobs:
           MAC_X64_RESULT: ${{ needs.build_mac_intel.result }}
           RELEASE_ASSET_SUFFIX: ""
           RELEASE_CHANNEL: prerelease
+          RELEASE_LAUNCHER_VERSION_MIN_PRERELEASE: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_PRERELEASE }}
+          RELEASE_LAUNCHER_VERSION_MIN_STABLE: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_STABLE }}
+          RELEASE_LAUNCHER_VERSION_MIN_URL_PRERELEASE: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_URL_PRERELEASE }}
+          RELEASE_LAUNCHER_VERSION_MIN_URL_STABLE: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_URL_STABLE }}
           RELEASE_MANIFEST_DIR: ${{ runner.temp }}/release-platform-manifests
           RELEASE_METADATA_DIR: ${{ runner.temp }}/release-metadata
           RELEASE_NOTE_MANIFEST_PATH: ${{ runner.temp }}/release-metadata/release-note-publication.json
@@ -1320,6 +1324,10 @@ jobs:
           MAC_ARM64_RESULT: ${{ needs.build_mac.result }}
           MAC_X64_RESULT: ${{ needs.build_mac_intel.result }}
           RELEASE_CHANNEL: prerelease
+          RELEASE_LAUNCHER_VERSION_MIN_PRERELEASE: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_PRERELEASE }}
+          RELEASE_LAUNCHER_VERSION_MIN_STABLE: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_STABLE }}
+          RELEASE_LAUNCHER_VERSION_MIN_URL_PRERELEASE: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_URL_PRERELEASE }}
+          RELEASE_LAUNCHER_VERSION_MIN_URL_STABLE: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_URL_STABLE }}
           RELEASE_METADATA_URL: ${{ steps.outputs.outputs.version_metadata_url }}
           RELEASE_NOTE_MANIFEST_PATH: ${{ runner.temp }}/release-metadata/release-note-publication.json
           RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}

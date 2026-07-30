@@ -16,7 +16,7 @@ test.beforeAll(async () => {
   codexEnv = runtimes.codex.env;
 });
 
-test('[P1] preview delivery status keeps persisted delivery-failure recovery in Chat', async ({ page }) => {
+test('[P1] preview canvas omits run status while Chat keeps delivery recovery', async ({ page }) => {
   test.setTimeout(T.xlong);
   const projectId = `preview-run-status-${Date.now()}`;
   const now = Date.now();
@@ -78,23 +78,17 @@ test('[P1] preview delivery status keeps persisted delivery-failure recovery in 
   expect(failedResponse.ok(), await failedResponse.text()).toBeTruthy();
 
   await gotoProject(page, projectId);
-  const status = page.getByTestId('preview-run-status');
-  await expect(status).toContainText('Delivery needs attention');
-  await expect(status.locator('xpath=ancestor::*[contains(@class, "ws-preview-run-status-slot")]')).toHaveCount(1);
-  await expect(status.locator('xpath=ancestor::*[@data-testid="design-files-empty"]')).toHaveCount(0);
-  await expect(status).not.toContainText('Elapsed');
+  await expect(page.getByTestId('preview-run-status')).toHaveCount(0);
   await expect(page.getByTestId('preview-run-status-retry')).toHaveCount(0);
-  await expect(status).toContainText('Retry in Chat');
   await expect(page.getByTestId('preview-run-status-view-details')).toHaveCount(0);
   const chatRetry = page.locator('.chat-error-retry');
   await expect(chatRetry).toBeVisible();
 
-  // The persisted preview hint stays passive after navigation; the Chat
-  // failure card remains the sole retry entry point.
+  // The preview stays unobstructed after navigation; the Chat failure card
+  // remains the sole retry entry point.
   await gotoEntryHome(page);
   await gotoProject(page, projectId);
-  await expect(page.getByTestId('preview-run-status')).toContainText('Delivery needs attention');
-  await expect(page.getByTestId('preview-run-status')).not.toContainText('Elapsed');
+  await expect(page.getByTestId('preview-run-status')).toHaveCount(0);
   await expect(page.locator('.chat-error-retry')).toBeVisible();
 
   await page.locator('.chat-error-retry').click();
@@ -118,8 +112,5 @@ test('[P1] preview delivery status keeps persisted delivery-failure recovery in 
     }, { timeout: T.long })
     .toContain('fake-agent-runtime-codex.html');
 
-  await expect(page.getByTestId('preview-run-status')).toContainText('Design ready');
-  await expect(
-    page.getByTestId('preview-run-status').locator('xpath=ancestor::*[contains(@class, "ws-preview-run-status-slot")]'),
-  ).toHaveCount(1);
+  await expect(page.getByTestId('preview-run-status')).toHaveCount(0);
 });

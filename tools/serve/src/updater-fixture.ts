@@ -18,6 +18,7 @@ export type UpdaterFixtureOptions = {
   artifactPath?: string;
   channel?: UpdaterFixtureChannel;
   controlLauncherVersionMin?: string;
+  controlLauncherVersionUrl?: string;
   host?: string;
   includePayload?: boolean;
   launcherSchema?: number;
@@ -268,8 +269,17 @@ export async function startUpdaterFixtureServer(options: UpdaterFixtureOptions =
         generatedAt: new Date().toISOString(),
         ...channelMetadata(channel, version),
         ...(options.launcherSchema != null ? { launcher: { schema: options.launcherSchema } } : {}),
-        ...(options.controlLauncherVersionMin != null
-          ? { control: { launcher: { version: { min: options.controlLauncherVersionMin } } } }
+        ...(options.controlLauncherVersionMin != null || options.controlLauncherVersionUrl != null
+          ? {
+              control: {
+                launcher: {
+                  version: {
+                    ...(options.controlLauncherVersionMin != null ? { min: options.controlLauncherVersionMin } : {}),
+                    ...(options.controlLauncherVersionUrl != null ? { url: options.controlLauncherVersionUrl } : {}),
+                  },
+                },
+              },
+            }
           : {}),
         platforms: {
           [platformKey]: {

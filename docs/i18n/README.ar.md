@@ -2,8 +2,6 @@
 
 <h1 align="center">Open Design: البديل مفتوح المصدر لـ Claude Design</h1>
 
-> 🔥 **‏Open Design 0.13.0 — _Stay in Flow_ وصل.** جلسات التصميم الطويلة كانت تنهار مع كل مقاطعة — التشغيل يفقد موضعه، ومنتقي النماذج يجعلك تخمّن، والتصدير يحتاج إلى التفافة إضافية. الإصدار 0.13.0 يُبقي الجلسة حيّة: استأنف تشغيلات Codex / OpenCode / Pi / Open Design Cloud عبر الجولات، واختر النموذج المناسب أسرع، وسلّم ملفات PPTX / PDF مدعومة بلقطات الشاشة دون مغادرة التطبيق. [تنزيل 0.13.0](https://github.com/nexu-io/open-design/releases) · [ملاحظات الإصدار](https://github.com/nexu-io/open-design/releases/tag/open-design-v0.13.0)
->
 > ⚡ **‏Open Design Cloud — خدمة النماذج الرسمية.** شحنة واحدة لاستخدام GPT وClaude وGemini وDeepSeek داخل Open Design: أكثر من 20 نموذجًا رائدًا، بدون أي إعداد، وفوترة حسب الاستخدام الفعلي للرموز. [جرّب Open Design Cloud](https://open-design.ai/cloud/)
 >
 > 🏅 **برنامج Open Design Fellow مفتوح الآن.** إن كنت تؤمن أنت أيضًا بأن التصميم يجب أن يكون مفتوحًا — كُن Open Design Fellow، وشارك في تشكيل المنتج جنبًا إلى جنب مع الفريق الأساسي، وساعد المزيد من الناس على المشاركة في تحديد مستقبل التصميم. التفاصيل ← [`MAINTAINERS.md`](../../MAINTAINERS.md) و[Discord](https://discord.gg/mHAjSMV6gz).
@@ -118,10 +116,10 @@
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | ✅ مدعوم | `od mcp install claude` |
 | [Codex CLI](https://github.com/openai/codex) | ✅ مدعوم | `od mcp install codex` |
 | [DeepSeek Reasonix](https://github.com/esengine/DeepSeek-Reasonix) | ✅ مدعوم | `od mcp install reasonix` |
+| [Raven](https://github.com/EverMind-AI/Raven) | ✅ مدعوم | `od mcp install raven` |
 | [Cursor](https://www.cursor.com/cli) | ✅ مدعوم | `od mcp install cursor` |
 | [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ مدعوم | `od mcp install copilot` |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ مدعوم | `od mcp install copilot` |
-| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | ✅ مدعوم | `od mcp install gemini` |
 | [OpenCode](https://opencode.ai/) | ✅ مدعوم | `od mcp install opencode` |
 | [OpenClaw](https://github.com/openclaw/openclaw) | ✅ مدعوم | `od mcp install openclaw` |
 | [Antigravity](https://antigravity.google) | ✅ مدعوم | `od mcp install antigravity` |
@@ -306,8 +304,8 @@
 ```bash
 # One-line install into the agent you're using:
 od mcp install <agent>
-# <agent> = claude | codex | cursor | copilot | openclaw | antigravity | gemini
-#         | pi | vibe | hermes | cline | kimi | trae | opencode
+# <agent> = claude | codex | reasonix | raven | cursor | copilot | openclaw | antigravity
+#         | pi | vibe | hermes | cline | kimi | kiro | trae | opencode
 ```
 
 ثم، داخل الوكيل:

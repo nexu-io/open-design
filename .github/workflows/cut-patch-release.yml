@@ -100,10 +100,12 @@ jobs:
           # (e.g. version=0.15.1 gates open-design-v0.15.0, not the latest 0.14.0).
           vmajor=${V%%.*}; vrest=${V#*.}; vminor=${vrest%%.*}
           MINOR_BASE="${vmajor}.${vminor}.0"
-          echo "version=$V"                          >> "$GITHUB_OUTPUT"
-          echo "branch=release/v$V"                  >> "$GITHUB_OUTPUT"
-          echo "minor_base=$MINOR_BASE"              >> "$GITHUB_OUTPUT"
-          echo "minor_tag=open-design-v$MINOR_BASE"  >> "$GITHUB_OUTPUT"
+          {
+            echo "version=$V"
+            echo "branch=release/v$V"
+            echo "minor_base=$MINOR_BASE"
+            echo "minor_tag=open-design-v$MINOR_BASE"
+          } >> "$GITHUB_OUTPUT"
           echo "Cutting patch v$V (branch release/v$V); gating on stable v$MINOR_BASE"
 
       # Guard: the minor this patch sits on (the Tuesday cut) must already be a

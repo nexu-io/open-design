@@ -283,6 +283,7 @@ const DESIGN_BROWSER_PARTITION = "persist:open-design-design-browser";
 const UPDATER_IPC_CHANNELS = [
   "od:update:status",
   "od:update:check",
+  "od:update:clear-cache",
   "od:update:download",
   "od:update:install",
   "od:update:quit",
@@ -2368,6 +2369,12 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   ipcMain.handle("od:update:check", async (event, updaterOptions: unknown) => {
     requireMainWindowSender(event);
     const status = await (options.updater?.checkForUpdates(checkOptionsFromHost(updaterOptions)) ?? unavailableUpdaterStatus());
+    sendUpdaterStatus(status);
+    return status;
+  });
+  ipcMain.handle("od:update:clear-cache", async (event) => {
+    requireMainWindowSender(event);
+    const status = await (options.updater?.clearCache() ?? unavailableUpdaterStatus());
     sendUpdaterStatus(status);
     return status;
   });

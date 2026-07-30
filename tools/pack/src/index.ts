@@ -73,7 +73,7 @@ function addSharedOptions(command: CacCommand) {
     .option("--path <path>", "desktop inspect screenshot path")
     .option("--status-poll-count <count>", "inspect: poll desktop/daemon/web STATUS this many times")
     .option("--status-poll-interval-ms <ms>", "inspect: delay between STATUS poll samples")
-    .option("--update-action <action>", "desktop update action: status|check|download|install");
+    .option("--update-action <action>", "desktop update action: status|check|clear-cache|download|install");
 }
 
 // Per-platform `--to` help text mirroring resolveToolPackBuildOutput in

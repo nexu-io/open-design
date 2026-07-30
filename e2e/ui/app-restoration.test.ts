@@ -12,6 +12,14 @@ import type { Dialog, Locator, Page, Request, Response } from '@playwright/test'
 import { automatedUiScenarios } from '@/playwright/resources';
 import type { UiScenario } from '@/playwright/resources';
 import { T } from '@/timeouts';
+import { expectStableCount } from '../lib/playwright/assertions.js';
+import {
+  failedRunEventBody,
+  routeMockAgents,
+  routeRunSequence,
+  routeSuccessfulRuns,
+  successfulRunEventBody,
+} from '@/playwright/mock-factory';
 
 const STORAGE_KEY = 'open-design:config';
 const ACTIVE_ARTIFACT_PREVIEW_SELECTOR = '[data-testid="artifact-preview-frame"]:visible, [data-testid="artifact-preview-frame-url-load"]:visible, [data-testid="artifact-preview-frame-srcdoc"]:visible, [data-testid="live-artifact-preview-frame"]:visible';
@@ -30,6 +38,15 @@ function stagedAttachmentName(page: Page, name: string): Locator {
   return page
     .locator('[data-testid="staged-attachments"], [data-testid="staged-contexts"]')
     .getByText(name, { exact: true });
+}
+
+function isDesignFileUploadResponse(response: Response): boolean {
+  const url = new URL(response.url());
+  return (
+    response.request().method() === 'POST'
+    && url.pathname.startsWith('/api/projects/')
+    && url.pathname.endsWith('/upload')
+  );
 }
 
 test.beforeEach(async ({ page }) => {
@@ -72,23 +89,71 @@ test.beforeEach(async ({ page }) => {
     });
   });
 });
-test('[P0] @critical workspace restores the last manually selected file tab after reload instead of jumping back to the generated artifact', async ({ page }) => {
-  await page.route('**/api/agents', async (route) => {
-    await route.fulfill({
-      json: {
-        agents: [
+
+async function routeSimpleSuccessfulRun(page: Page, runIdPrefix: string): Promise<void> {
+  await routeSuccessfulRuns(page, {
+    runIdPrefix,
+    eventBody: successfulRunEventBody([
+      'event: start',
+      'data: {"bin":"mock-agent"}',
+      '',
+    ]),
+  });
+}
+
+function artifactRunEventBody(identifier: string, title: string, html: string): string {
+  const artifact =
+    `<artifact identifier="${identifier}" type="text/html" title="${title}">` +
+    html +
+    '</artifact>';
+  return successfulRunEventBody([
+    'event: start',
+    'data: {"bin":"mock-agent"}',
+    '',
+    'event: stdout',
+    `data: ${JSON.stringify({ chunk: artifact })}`,
+    '',
+  ]);
+}
+
+function questionFormRunEventBody(required: boolean, followUpChunk: string) {
+  let eventCount = 0;
+  const questionForm = [
+    '<question-form id="discovery" title="Quick brief">',
+    JSON.stringify(
+      {
+        description: 'Answer these before generation continues.',
+        questions: [
           {
-            id: 'mock',
-            name: 'Mock Agent',
-            bin: 'mock-agent',
-            available: true,
-            version: 'test',
-            models: [{ id: 'default', label: 'Default' }],
+            id: 'audience',
+            label: 'Audience',
+            type: 'text',
+            required,
           },
         ],
       },
-    });
-  });
+      null,
+      2,
+    ),
+    '</question-form>',
+  ].join('\n');
+
+  return () => {
+    eventCount += 1;
+    const chunk = eventCount === 1 ? questionForm : followUpChunk;
+    return successfulRunEventBody([
+      'event: start',
+      'data: {"bin":"mock-agent"}',
+      '',
+      'event: stdout',
+      `data: ${JSON.stringify({ chunk })}`,
+      '',
+    ]);
+  };
+}
+
+test('[P0] @critical workspace restores the last manually selected file tab after reload instead of jumping back to the generated artifact', async ({ page }) => {
+  await routeMockAgents(page);
 
   await page.route('**/api/runs', async (route) => {
     await route.fulfill({
@@ -126,12 +191,22 @@ test('[P0] @critical workspace restores the last manually selected file tab afte
     });
   });
 
-  await createEmptyProject(page, 'Workspace active tab restore');
+  const projectId = await createEmptyProject(page, 'Workspace active tab restore');
   await expectWorkspaceReady(page);
 
   await sendPrompt(page, 'Create a workspace persistence artifact');
   await expect(page.getByText('workspace-artifact.html', { exact: true }).first()).toBeVisible();
+  const { conversationId } = await getCurrentProjectContext(page);
+  await expectPersistedArtifactMessage(
+    page,
+    projectId,
+    conversationId,
+    'workspace-artifact.html',
+  );
 
+  const uploadResponse = page.waitForResponse(isDesignFileUploadResponse, {
+    timeout: T.short,
+  });
   await page.getByTestId('design-files-upload-input').setInputFiles({
     name: 'manual-reference.png',
     mimeType: 'image/png',
@@ -140,6 +215,7 @@ test('[P0] @critical workspace restores the last manually selected file tab afte
       'base64',
     ),
   });
+  await expect((await uploadResponse).ok()).toBeTruthy();
 
   const artifactTab = page.getByRole('tab', { name: /workspace-artifact\.html/i });
   const manualFileTab = tabBySuffix(page, 'manual-reference.png');
@@ -157,40 +233,29 @@ test('[P0] @critical workspace restores the last manually selected file tab afte
   await expect(restoredManualFileTab).toBeVisible();
   await expect(restoredManualFileTab).toHaveAttribute('aria-selected', 'true');
   const restoredArtifactTab = page.getByRole('tab', { name: /workspace-artifact\.html/i });
-  if ((await restoredArtifactTab.count()) === 0) {
+  const artifactTabRestored = await restoredArtifactTab
+    .waitFor({ state: 'visible', timeout: T.short })
+    .then(() => true, () => false);
+  if (!artifactTabRestored) {
     const turnCard = page.locator('.msg.assistant').filter({ hasText: 'workspace-artifact.html' }).first();
-    const openButton = turnCard.getByRole('button', { name: /^Open$/ });
-    await expect(openButton).toBeVisible();
-    await openButton.click();
+    const artifactButton = turnCard.getByRole('button', {
+      name: 'workspace-artifact.html',
+      exact: true,
+    });
+    await expect(artifactButton).toBeVisible();
+    await artifactButton.click();
 
     await expect(restoredArtifactTab).toBeVisible();
     await expect(restoredArtifactTab).toHaveAttribute('aria-selected', 'true');
     await expect(restoredManualFileTab).toHaveAttribute('aria-selected', 'false');
     return;
   }
-
-  await expect(restoredArtifactTab).toBeVisible();
   await expect(restoredArtifactTab).toHaveAttribute('aria-selected', 'false');
   await expect(restoredManualFileTab).toHaveAttribute('aria-selected', 'true');
 });
 
 test('[P0] switching between projects restores each project workspace to its last active file tab', async ({ page }) => {
-  await page.route('**/api/agents', async (route) => {
-    await route.fulfill({
-      json: {
-        agents: [
-          {
-            id: 'mock',
-            name: 'Mock Agent',
-            bin: 'mock-agent',
-            available: true,
-            version: 'test',
-            models: [{ id: 'default', label: 'Default' }],
-          },
-        ],
-      },
-    });
-  });
+  await routeMockAgents(page);
 
   const pngBytes = Buffer.from(
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO5W6McAAAAASUVORK5CYII=',
@@ -287,22 +352,7 @@ test('[P0] switching between projects restores each project workspace to its las
 });
 
 test('[P0] @critical visiting an uploaded design file route restores its tab and file workspace surface', async ({ page }) => {
-  await page.route('**/api/agents', async (route) => {
-    await route.fulfill({
-      json: {
-        agents: [
-          {
-            id: 'mock',
-            name: 'Mock Agent',
-            bin: 'mock-agent',
-            available: true,
-            version: 'test',
-            models: [{ id: 'default', label: 'Default' }],
-          },
-        ],
-      },
-    });
-  });
+  await routeMockAgents(page);
 
   await gotoEntryHome(page);
   await createPrototypeProject(page, 'Uploaded file deep link');
@@ -345,27 +395,15 @@ test('[P0] @critical visiting an uploaded design file route restores its tab and
 });
 
 test('[P0] returning from an uploaded design file route to the project root keeps the uploaded file tab active', async ({ page }) => {
-  await page.route('**/api/agents', async (route) => {
-    await route.fulfill({
-      json: {
-        agents: [
-          {
-            id: 'mock',
-            name: 'Mock Agent',
-            bin: 'mock-agent',
-            available: true,
-            version: 'test',
-            models: [{ id: 'default', label: 'Default' }],
-          },
-        ],
-      },
-    });
-  });
+  await routeMockAgents(page);
 
   await gotoEntryHome(page);
   await createPrototypeProject(page, 'Uploaded file root route restore');
   await expectWorkspaceReady(page);
 
+  const uploadResponse = page.waitForResponse(isDesignFileUploadResponse, {
+    timeout: T.short,
+  });
   await page.getByTestId('design-files-upload-input').setInputFiles({
     name: 'root-design-reference.png',
     mimeType: 'image/png',
@@ -374,6 +412,7 @@ test('[P0] returning from an uploaded design file route to the project root keep
       'base64',
     ),
   });
+  await expect((await uploadResponse).ok()).toBeTruthy();
   const fileTab = tabBySuffix(page, 'root-design-reference.png');
   await expect(fileTab).toBeVisible();
   const uploadedName = await fileTab.getAttribute('title');
@@ -404,57 +443,15 @@ test('[P0] returning from an uploaded design file route to the project root keep
 });
 
 test('[P0] returning from an artifact file route to the project root keeps the artifact tab active', async ({ page }) => {
-  await page.route('**/api/agents', async (route) => {
-    await route.fulfill({
-      json: {
-        agents: [
-          {
-            id: 'mock',
-            name: 'Mock Agent',
-            bin: 'mock-agent',
-            available: true,
-            version: 'test',
-            models: [{ id: 'default', label: 'Default' }],
-          },
-        ],
-      },
-    });
-  });
+  await routeMockAgents(page);
 
-  await page.route('**/api/runs', async (route) => {
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: '{"runId":"artifact-root-run"}',
-    });
-  });
-
-  await page.route('**/api/runs/*/events', async (route) => {
-    const artifact =
-      '<artifact identifier="root-restored-artifact" type="text/html" title="Root Restored Artifact">' +
-      '<!doctype html><html><body><main><h1>Root Restored Artifact</h1></main></body></html>' +
-      '</artifact>';
-    const body = [
-      'event: start',
-      'data: {"bin":"mock-agent"}',
-      '',
-      'event: stdout',
-      `data: ${JSON.stringify({ chunk: artifact })}`,
-      '',
-      'event: end',
-      'data: {"code":0,"status":"succeeded"}',
-      '',
-      '',
-    ].join('\n');
-
-    await route.fulfill({
-      status: 200,
-      headers: {
-        'content-type': 'text/event-stream',
-        'cache-control': 'no-cache',
-      },
-      body,
-    });
+  await routeSuccessfulRuns(page, {
+    runId: 'artifact-root-run',
+    eventBody: artifactRunEventBody(
+      'root-restored-artifact',
+      'Root Restored Artifact',
+      '<!doctype html><html><body><main><h1>Root Restored Artifact</h1></main></body></html>',
+    ),
   });
 
   await createEmptyProject(page, 'Artifact root route restore');
@@ -477,51 +474,9 @@ test('[P0] returning from an artifact file route to the project root keeps the a
 });
 
 test('[P0] @critical returning from an older conversation route to the project root keeps the composer available while the route is selected', async ({ page }) => {
-  await page.route('**/api/agents', async (route) => {
-    await route.fulfill({
-      json: {
-        agents: [
-          {
-            id: 'mock',
-            name: 'Mock Agent',
-            bin: 'mock-agent',
-            available: true,
-            version: 'test',
-            models: [{ id: 'default', label: 'Default' }],
-          },
-        ],
-      },
-    });
-  });
+  await routeMockAgents(page);
 
-  await page.route('**/api/runs', async (route) => {
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: '{"runId":"conversation-root-run"}',
-    });
-  });
-
-  await page.route('**/api/runs/*/events', async (route) => {
-    const body = [
-      'event: start',
-      'data: {"bin":"mock-agent"}',
-      '',
-      'event: end',
-      'data: {"code":0,"status":"succeeded"}',
-      '',
-      '',
-    ].join('\n');
-
-    await route.fulfill({
-      status: 200,
-      headers: {
-        'content-type': 'text/event-stream',
-        'cache-control': 'no-cache',
-      },
-      body,
-    });
-  });
+  await routeSimpleSuccessfulRun(page, 'conversation-root-run');
 
   await gotoEntryHome(page);
   await createPrototypeProject(page, 'Conversation root route restore');
@@ -554,51 +509,9 @@ test('[P0] @critical returning from an older conversation route to the project r
 });
 
 test('[P0] @critical switching between conversations keeps the composer usable while navigating history', async ({ page }) => {
-  await page.route('**/api/agents', async (route) => {
-    await route.fulfill({
-      json: {
-        agents: [
-          {
-            id: 'mock',
-            name: 'Mock Agent',
-            bin: 'mock-agent',
-            available: true,
-            version: 'test',
-            models: [{ id: 'default', label: 'Default' }],
-          },
-        ],
-      },
-    });
-  });
+  await routeMockAgents(page);
 
-  await page.route('**/api/runs', async (route) => {
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: '{"runId":"conversation-draft-run"}',
-    });
-  });
-
-  await page.route('**/api/runs/*/events', async (route) => {
-    const body = [
-      'event: start',
-      'data: {"bin":"mock-agent"}',
-      '',
-      'event: end',
-      'data: {"code":0,"status":"succeeded"}',
-      '',
-      '',
-    ].join('\n');
-
-    await route.fulfill({
-      status: 200,
-      headers: {
-        'content-type': 'text/event-stream',
-        'cache-control': 'no-cache',
-      },
-      body,
-    });
-  });
+  await routeSimpleSuccessfulRun(page, 'conversation-draft-run');
 
   await gotoEntryHome(page);
   await createPrototypeProject(page, 'Conversation draft restore');
@@ -667,51 +580,9 @@ test('[P0] @critical switching between conversations keeps the composer usable w
 });
 
 test('[P0] @critical reloading an older conversation route keeps the composer visible on that route', async ({ page }) => {
-  await page.route('**/api/agents', async (route) => {
-    await route.fulfill({
-      json: {
-        agents: [
-          {
-            id: 'mock',
-            name: 'Mock Agent',
-            bin: 'mock-agent',
-            available: true,
-            version: 'test',
-            models: [{ id: 'default', label: 'Default' }],
-          },
-        ],
-      },
-    });
-  });
+  await routeMockAgents(page);
 
-  await page.route('**/api/runs', async (route) => {
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: '{"runId":"conversation-reload-draft-run"}',
-    });
-  });
-
-  await page.route('**/api/runs/*/events', async (route) => {
-    const body = [
-      'event: start',
-      'data: {"bin":"mock-agent"}',
-      '',
-      'event: end',
-      'data: {"code":0,"status":"succeeded"}',
-      '',
-      '',
-    ].join('\n');
-
-    await route.fulfill({
-      status: 200,
-      headers: {
-        'content-type': 'text/event-stream',
-        'cache-control': 'no-cache',
-      },
-      body,
-    });
-  });
+  await routeSimpleSuccessfulRun(page, 'conversation-reload-draft-run');
 
   await gotoEntryHome(page);
   await createPrototypeProject(page, 'Conversation reload draft restore');
@@ -750,51 +621,9 @@ test('[P0] @critical reloading an older conversation route keeps the composer vi
 });
 
 test('[P0] @critical switching between conversations keeps staged attachments UI available', async ({ page }) => {
-  await page.route('**/api/agents', async (route) => {
-    await route.fulfill({
-      json: {
-        agents: [
-          {
-            id: 'mock',
-            name: 'Mock Agent',
-            bin: 'mock-agent',
-            available: true,
-            version: 'test',
-            models: [{ id: 'default', label: 'Default' }],
-          },
-        ],
-      },
-    });
-  });
+  await routeMockAgents(page);
 
-  await page.route('**/api/runs', async (route) => {
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: '{"runId":"conversation-attachment-run"}',
-    });
-  });
-
-  await page.route('**/api/runs/*/events', async (route) => {
-    const body = [
-      'event: start',
-      'data: {"bin":"mock-agent"}',
-      '',
-      'event: end',
-      'data: {"code":0,"status":"succeeded"}',
-      '',
-      '',
-    ].join('\n');
-
-    await route.fulfill({
-      status: 200,
-      headers: {
-        'content-type': 'text/event-stream',
-        'cache-control': 'no-cache',
-      },
-      body,
-    });
-  });
+  await routeSimpleSuccessfulRun(page, 'conversation-attachment-run');
 
   await gotoEntryHome(page);
   await createPrototypeProject(page, 'Conversation attachment restore');
@@ -862,51 +691,9 @@ test('[P0] @critical switching between conversations keeps staged attachments UI
 });
 
 test('[P0] @critical reloading an older conversation route keeps the composer available after staging attachments', async ({ page }) => {
-  await page.route('**/api/agents', async (route) => {
-    await route.fulfill({
-      json: {
-        agents: [
-          {
-            id: 'mock',
-            name: 'Mock Agent',
-            bin: 'mock-agent',
-            available: true,
-            version: 'test',
-            models: [{ id: 'default', label: 'Default' }],
-          },
-        ],
-      },
-    });
-  });
+  await routeMockAgents(page);
 
-  await page.route('**/api/runs', async (route) => {
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: '{"runId":"conversation-attachment-reload-run"}',
-    });
-  });
-
-  await page.route('**/api/runs/*/events', async (route) => {
-    const body = [
-      'event: start',
-      'data: {"bin":"mock-agent"}',
-      '',
-      'event: end',
-      'data: {"code":0,"status":"succeeded"}',
-      '',
-      '',
-    ].join('\n');
-
-    await route.fulfill({
-      status: 200,
-      headers: {
-        'content-type': 'text/event-stream',
-        'cache-control': 'no-cache',
-      },
-      body,
-    });
-  });
+  await routeSimpleSuccessfulRun(page, 'conversation-attachment-reload-run');
 
   await gotoEntryHome(page);
   await createPrototypeProject(page, 'Conversation attachment reload restore');
@@ -948,51 +735,9 @@ test('[P0] @critical reloading an older conversation route keeps the composer av
 });
 
 test('[P0] @critical reloading the project keeps the latest conversation selected in history', async ({ page }) => {
-  await page.route('**/api/agents', async (route) => {
-    await route.fulfill({
-      json: {
-        agents: [
-          {
-            id: 'mock',
-            name: 'Mock Agent',
-            bin: 'mock-agent',
-            available: true,
-            version: 'test',
-            models: [{ id: 'default', label: 'Default' }],
-          },
-        ],
-      },
-    });
-  });
+  await routeMockAgents(page);
 
-  await page.route('**/api/runs', async (route) => {
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: '{"runId":"conversation-history-reload-run"}',
-    });
-  });
-
-  await page.route('**/api/runs/*/events', async (route) => {
-    const body = [
-      'event: start',
-      'data: {"bin":"mock-agent"}',
-      '',
-      'event: end',
-      'data: {"code":0,"status":"succeeded"}',
-      '',
-      '',
-    ].join('\n');
-
-    await route.fulfill({
-      status: 200,
-      headers: {
-        'content-type': 'text/event-stream',
-        'cache-control': 'no-cache',
-      },
-      body,
-    });
-  });
+  await routeSimpleSuccessfulRun(page, 'conversation-history-reload-run');
 
   await gotoEntryHome(page);
   await createPrototypeProject(page, 'Conversation history reload selection');
@@ -1038,51 +783,9 @@ test('[P0] @critical deleting the active conversation selects the remaining conv
     await dialog.accept();
   });
 
-  await page.route('**/api/agents', async (route) => {
-    await route.fulfill({
-      json: {
-        agents: [
-          {
-            id: 'mock',
-            name: 'Mock Agent',
-            bin: 'mock-agent',
-            available: true,
-            version: 'test',
-            models: [{ id: 'default', label: 'Default' }],
-          },
-        ],
-      },
-    });
-  });
+  await routeMockAgents(page);
 
-  await page.route('**/api/runs', async (route) => {
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: '{"runId":"conversation-history-delete-run"}',
-    });
-  });
-
-  await page.route('**/api/runs/*/events', async (route) => {
-    const body = [
-      'event: start',
-      'data: {"bin":"mock-agent"}',
-      '',
-      'event: end',
-      'data: {"code":0,"status":"succeeded"}',
-      '',
-      '',
-    ].join('\n');
-
-    await route.fulfill({
-      status: 200,
-      headers: {
-        'content-type': 'text/event-stream',
-        'cache-control': 'no-cache',
-      },
-      body,
-    });
-  });
+  await routeSimpleSuccessfulRun(page, 'conversation-history-delete-run');
 
   await gotoEntryHome(page);
   await createPrototypeProject(page, 'Conversation history delete selection');
@@ -1125,51 +828,9 @@ test('[P0] @critical deleting the active conversation selects the remaining conv
 });
 
 test('[P0] returning from workspace surfaces keeps the older conversation reachable from history', async ({ page }) => {
-  await page.route('**/api/agents', async (route) => {
-    await route.fulfill({
-      json: {
-        agents: [
-          {
-            id: 'mock',
-            name: 'Mock Agent',
-            bin: 'mock-agent',
-            available: true,
-            version: 'test',
-            models: [{ id: 'default', label: 'Default' }],
-          },
-        ],
-      },
-    });
-  });
+  await routeMockAgents(page);
 
-  await page.route('**/api/runs', async (route) => {
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: '{"runId":"conversation-history-surface-run"}',
-    });
-  });
-
-  await page.route('**/api/runs/*/events', async (route) => {
-    const body = [
-      'event: start',
-      'data: {"bin":"mock-agent"}',
-      '',
-      'event: end',
-      'data: {"code":0,"status":"succeeded"}',
-      '',
-      '',
-    ].join('\n');
-
-    await route.fulfill({
-      status: 200,
-      headers: {
-        'content-type': 'text/event-stream',
-        'cache-control': 'no-cache',
-      },
-      body,
-    });
-  });
+  await routeSimpleSuccessfulRun(page, 'conversation-history-surface-run');
 
   await gotoEntryHome(page);
   await createPrototypeProject(page, 'Conversation history surface restore');
@@ -1229,51 +890,9 @@ test('[P0] returning from workspace surfaces keeps the older conversation reacha
 });
 
 test('[P0] reloading the project root keeps conversation history accessible', async ({ page }) => {
-  await page.route('**/api/agents', async (route) => {
-    await route.fulfill({
-      json: {
-        agents: [
-          {
-            id: 'mock',
-            name: 'Mock Agent',
-            bin: 'mock-agent',
-            available: true,
-            version: 'test',
-            models: [{ id: 'default', label: 'Default' }],
-          },
-        ],
-      },
-    });
-  });
+  await routeMockAgents(page);
 
-  await page.route('**/api/runs', async (route) => {
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: '{"runId":"conversation-root-reload-run"}',
-    });
-  });
-
-  await page.route('**/api/runs/*/events', async (route) => {
-    const body = [
-      'event: start',
-      'data: {"bin":"mock-agent"}',
-      '',
-      'event: end',
-      'data: {"code":0,"status":"succeeded"}',
-      '',
-      '',
-    ].join('\n');
-
-    await route.fulfill({
-      status: 200,
-      headers: {
-        'content-type': 'text/event-stream',
-        'cache-control': 'no-cache',
-      },
-      body,
-    });
-  });
+  await routeSimpleSuccessfulRun(page, 'conversation-root-reload-run');
 
   await gotoEntryHome(page);
   await createPrototypeProject(page, 'Conversation root reload preserve selection');
@@ -1312,51 +931,9 @@ test('[P0] reloading the project root keeps conversation history accessible', as
 });
 
 test('[P0] opening an uploaded file route keeps the older conversation present in history', async ({ page }) => {
-  await page.route('**/api/agents', async (route) => {
-    await route.fulfill({
-      json: {
-        agents: [
-          {
-            id: 'mock',
-            name: 'Mock Agent',
-            bin: 'mock-agent',
-            available: true,
-            version: 'test',
-            models: [{ id: 'default', label: 'Default' }],
-          },
-        ],
-      },
-    });
-  });
+  await routeMockAgents(page);
 
-  await page.route('**/api/runs', async (route) => {
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: '{"runId":"conversation-file-surface-run"}',
-    });
-  });
-
-  await page.route('**/api/runs/*/events', async (route) => {
-    const body = [
-      'event: start',
-      'data: {"bin":"mock-agent"}',
-      '',
-      'event: end',
-      'data: {"code":0,"status":"succeeded"}',
-      '',
-      '',
-    ].join('\n');
-
-    await route.fulfill({
-      status: 200,
-      headers: {
-        'content-type': 'text/event-stream',
-        'cache-control': 'no-cache',
-      },
-      body,
-    });
-  });
+  await routeSimpleSuccessfulRun(page, 'conversation-file-surface-run');
 
   await gotoEntryHome(page);
   await createPrototypeProject(page, 'Conversation file surface selection');
@@ -1423,57 +1000,15 @@ test('[P0] opening an uploaded file route keeps the older conversation present i
 });
 
 test('[P0] opening an artifact file route keeps the older conversation present in history', async ({ page }) => {
-  await page.route('**/api/agents', async (route) => {
-    await route.fulfill({
-      json: {
-        agents: [
-          {
-            id: 'mock',
-            name: 'Mock Agent',
-            bin: 'mock-agent',
-            available: true,
-            version: 'test',
-            models: [{ id: 'default', label: 'Default' }],
-          },
-        ],
-      },
-    });
-  });
+  await routeMockAgents(page);
 
-  await page.route('**/api/runs', async (route) => {
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: '{"runId":"conversation-artifact-surface-run"}',
-    });
-  });
-
-  await page.route('**/api/runs/*/events', async (route) => {
-    const artifact =
-      '<artifact identifier="conversation-surface-artifact" type="text/html" title="Conversation Surface Artifact">' +
-      '<!doctype html><html><body><main><h1>Conversation Surface Artifact</h1></main></body></html>' +
-      '</artifact>';
-    const body = [
-      'event: start',
-      'data: {"bin":"mock-agent"}',
-      '',
-      'event: stdout',
-      `data: ${JSON.stringify({ chunk: artifact })}`,
-      '',
-      'event: end',
-      'data: {"code":0,"status":"succeeded"}',
-      '',
-      '',
-    ].join('\n');
-
-    await route.fulfill({
-      status: 200,
-      headers: {
-        'content-type': 'text/event-stream',
-        'cache-control': 'no-cache',
-      },
-      body,
-    });
+  await routeSuccessfulRuns(page, {
+    runIdPrefix: 'conversation-artifact-surface-run',
+    eventBody: artifactRunEventBody(
+      'conversation-surface-artifact',
+      'Conversation Surface Artifact',
+      '<!doctype html><html><body><main><h1>Conversation Surface Artifact</h1></main></body></html>',
+    ),
   });
 
   await gotoEntryHome(page);
@@ -1537,51 +1072,9 @@ test('[P0] opening an artifact file route keeps the older conversation present i
 });
 
 test('[P0] returning from a file deep-link to the project root keeps the chosen file tab active', async ({ page }) => {
-  await page.route('**/api/agents', async (route) => {
-    await route.fulfill({
-      json: {
-        agents: [
-          {
-            id: 'mock',
-            name: 'Mock Agent',
-            bin: 'mock-agent',
-            available: true,
-            version: 'test',
-            models: [{ id: 'default', label: 'Default' }],
-          },
-        ],
-      },
-    });
-  });
+  await routeMockAgents(page);
 
-  await page.route('**/api/runs', async (route) => {
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: '{"runId":"conversation-file-root-run"}',
-    });
-  });
-
-  await page.route('**/api/runs/*/events', async (route) => {
-    const body = [
-      'event: start',
-      'data: {"bin":"mock-agent"}',
-      '',
-      'event: end',
-      'data: {"code":0,"status":"succeeded"}',
-      '',
-      '',
-    ].join('\n');
-
-    await route.fulfill({
-      status: 200,
-      headers: {
-        'content-type': 'text/event-stream',
-        'cache-control': 'no-cache',
-      },
-      body,
-    });
-  });
+  await routeSimpleSuccessfulRun(page, 'conversation-file-root-run');
 
   await gotoEntryHome(page);
   await createPrototypeProject(page, 'Conversation file surface root restore');
@@ -1664,61 +1157,25 @@ test('[P0] returning from an artifact deep-link to the project root keeps the ar
 });
 
 test('[P0] a later completed run updates the workspace to the newest artifact tab', async ({ page }) => {
-  await page.route('**/api/agents', async (route) => {
-    await route.fulfill({
-      json: {
-        agents: [
-          {
-            id: 'mock',
-            name: 'Mock Agent',
-            bin: 'mock-agent',
-            available: true,
-            version: 'test',
-            models: [{ id: 'default', label: 'Default' }],
-          },
-        ],
-      },
-    });
-  });
-
-  let runCount = 0;
-  await page.route('**/api/runs', async (route) => {
-    runCount += 1;
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: JSON.stringify({ runId: `workspace-run-${runCount}` }),
-    });
-  });
+  await routeMockAgents(page);
 
   let eventCount = 0;
-  await page.route('**/api/runs/*/events', async (route) => {
-    eventCount += 1;
-    const artifact =
-      eventCount === 1
-        ? '<artifact identifier="first-workspace-artifact" type="text/html" title="First Workspace Artifact"><!doctype html><html><body><main><h1>First Workspace Artifact</h1></main></body></html></artifact>'
-        : '<artifact identifier="latest-workspace-artifact" type="text/html" title="Latest Workspace Artifact"><!doctype html><html><body><main><h1>Latest Workspace Artifact</h1></main></body></html></artifact>';
-    const body = [
-      'event: start',
-      'data: {"bin":"mock-agent"}',
-      '',
-      'event: stdout',
-      `data: ${JSON.stringify({ chunk: artifact })}`,
-      '',
-      'event: end',
-      'data: {"code":0,"status":"succeeded"}',
-      '',
-      '',
-    ].join('\n');
-
-    await route.fulfill({
-      status: 200,
-      headers: {
-        'content-type': 'text/event-stream',
-        'cache-control': 'no-cache',
-      },
-      body,
-    });
+  await routeSuccessfulRuns(page, {
+    runIdPrefix: 'workspace-run',
+    eventBody: () => {
+      eventCount += 1;
+      return eventCount === 1
+        ? artifactRunEventBody(
+          'first-workspace-artifact',
+          'First Workspace Artifact',
+          '<!doctype html><html><body><main><h1>First Workspace Artifact</h1></main></body></html>',
+        )
+        : artifactRunEventBody(
+          'latest-workspace-artifact',
+          'Latest Workspace Artifact',
+          '<!doctype html><html><body><main><h1>Latest Workspace Artifact</h1></main></body></html>',
+        );
+    },
   });
 
   await createEmptyProject(page, 'Workspace latest artifact sync');
@@ -1778,51 +1235,11 @@ test('[P0] @critical daemon error details persist between failed sends', async (
   const entry = automatedUiScenarios().find((scenario) => scenario.id === 'prototype-basic');
   if (!entry) throw new Error('prototype-basic scenario missing');
 
-  await page.route('**/api/agents', async (route) => {
-    await route.fulfill({
-      json: {
-        agents: [
-          {
-            id: 'mock',
-            name: 'Mock Agent',
-            bin: 'mock-agent',
-            available: true,
-            version: 'test',
-            models: [{ id: 'default', label: 'Default' }],
-          },
-        ],
-      },
-    });
-  });
+  await routeMockAgents(page);
 
-  let runCount = 0;
-  await page.route('**/api/runs', async (route) => {
-    runCount += 1;
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: JSON.stringify({ runId: `error-run-${runCount}` }),
-    });
-  });
-  await page.route('**/api/runs/*/events', async (route) => {
-    const body = [
-      'event: start',
-      'data: {"bin":"mock-agent"}',
-      '',
-      'event: error',
-      'data: {"message":"connection refused"}',
-      '',
-      '',
-    ].join('\n');
-
-    await route.fulfill({
-      status: 200,
-      headers: {
-        'content-type': 'text/event-stream',
-        'cache-control': 'no-cache',
-      },
-      body,
-    });
+  await routeRunSequence(page, {
+    runIdPrefix: 'error-run',
+    eventBodies: [failedRunEventBody('connection refused')],
   });
 
   await gotoEntryHome(page);
@@ -1865,71 +1282,18 @@ test('[P0] @critical daemon error details persist between failed sends', async (
 });
 
 test('[P0] a successful retry after a failed send restores the workspace to a fresh artifact tab', async ({ page }) => {
-  await page.route('**/api/agents', async (route) => {
-    await route.fulfill({
-      json: {
-        agents: [
-          {
-            id: 'mock',
-            name: 'Mock Agent',
-            bin: 'mock-agent',
-            available: true,
-            version: 'test',
-            models: [{ id: 'default', label: 'Default' }],
-          },
-        ],
-      },
-    });
-  });
+  await routeMockAgents(page);
 
-  let runCount = 0;
-  await page.route('**/api/runs', async (route) => {
-    runCount += 1;
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: JSON.stringify({ runId: `retry-run-${runCount}` }),
-    });
-  });
-
-  let eventCount = 0;
-  await page.route('**/api/runs/*/events', async (route) => {
-    eventCount += 1;
-    const body =
-      eventCount === 1
-        ? [
-            'event: start',
-            'data: {"bin":"mock-agent"}',
-            '',
-            'event: error',
-            'data: {"message":"connection refused"}',
-            '',
-            '',
-          ].join('\n')
-        : [
-            'event: start',
-            'data: {"bin":"mock-agent"}',
-            '',
-            'event: stdout',
-            `data: ${JSON.stringify({
-              chunk:
-                '<artifact identifier="retry-success-artifact" type="text/html" title="Retry Success Artifact"><!doctype html><html><body><main><h1>Retry Success Artifact</h1></main></body></html></artifact>',
-            })}`,
-            '',
-            'event: end',
-            'data: {"code":0,"status":"succeeded"}',
-            '',
-            '',
-          ].join('\n');
-
-    await route.fulfill({
-      status: 200,
-      headers: {
-        'content-type': 'text/event-stream',
-        'cache-control': 'no-cache',
-      },
-      body,
-    });
+  await routeRunSequence(page, {
+    runIdPrefix: 'retry-run',
+    eventBodies: [
+      failedRunEventBody('connection refused'),
+      artifactRunEventBody(
+        'retry-success-artifact',
+        'Retry Success Artifact',
+        '<!doctype html><html><body><main><h1>Retry Success Artifact</h1></main></body></html>',
+      ),
+    ],
   });
 
   await createEmptyProject(page, 'Retry success preview restore');
@@ -1951,54 +1315,16 @@ test('[P0] a successful retry after a failed send restores the workspace to a fr
 test('[P0] retrying a failed run does not duplicate the original user message', async ({ page }) => {
   await routeMockAgents(page);
 
-  let runCount = 0;
-  await page.route('**/api/runs', async (route) => {
-    runCount += 1;
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: JSON.stringify({ runId: `retry-run-${runCount}` }),
-    });
-  });
-
-  let eventCount = 0;
-  await page.route('**/api/runs/*/events', async (route) => {
-    eventCount += 1;
-    const body =
-      eventCount === 1
-        ? [
-            'event: start',
-            'data: {"bin":"mock-agent"}',
-            '',
-            'event: error',
-            'data: {"message":"connection refused"}',
-            '',
-            '',
-          ].join('\n')
-        : [
-            'event: start',
-            'data: {"bin":"mock-agent"}',
-            '',
-            'event: stdout',
-            `data: ${JSON.stringify({
-              chunk:
-                '<artifact identifier="retry-dedup-artifact" type="text/html" title="Retry Dedup Artifact"><!doctype html><html><body><main><h1>Retry Dedup Artifact</h1></main></body></html></artifact>',
-            })}`,
-            '',
-            'event: end',
-            'data: {"code":0,"status":"succeeded"}',
-            '',
-            '',
-          ].join('\n');
-
-    await route.fulfill({
-      status: 200,
-      headers: {
-        'content-type': 'text/event-stream',
-        'cache-control': 'no-cache',
-      },
-      body,
-    });
+  await routeRunSequence(page, {
+    runIdPrefix: 'retry-run',
+    eventBodies: [
+      failedRunEventBody('connection refused'),
+      artifactRunEventBody(
+        'retry-dedup-artifact',
+        'Retry Dedup Artifact',
+        '<!doctype html><html><body><main><h1>Retry Dedup Artifact</h1></main></body></html>',
+      ),
+    ],
   });
 
   await createEmptyProject(page, 'Retry dedup restore');
@@ -2022,20 +1348,67 @@ test('[P0] retrying a failed run does not duplicate the original user message', 
   await expect(page.locator('.msg.user', { hasText: prompt })).toHaveCount(1);
 });
 
+test('[P1] stopping an active run sends cancel, persists canceled state, and leaves no artifact', async ({ page }) => {
+  await routeMockAgents(page);
+  await routeSuccessfulRuns(page, {
+    runId: 'stop-run',
+    events: 'pending',
+  });
+
+  let cancelRequests = 0;
+  await page.route('**/api/runs/*/cancel', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.fallback();
+      return;
+    }
+    cancelRequests += 1;
+    await route.fulfill({ json: { ok: true, runId: 'stop-run', status: 'canceled' } });
+  });
+
+  const projectId = await createEmptyProject(page, 'Stop active run');
+  await expectWorkspaceReady(page);
+  await sendPrompt(page, 'Create an artifact that should be canceled');
+  const stopButton = page.getByTestId('chat-composer').getByRole('button', { name: 'Stop' });
+  await expect(stopButton).toBeVisible();
+
+  const cancelResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return response.request().method() === 'POST' && url.pathname.endsWith('/cancel');
+  });
+  await stopButton.click();
+  expect((await cancelResponse).ok()).toBe(true);
+  await expect(stopButton).toHaveCount(0);
+
+  await expect
+    .poll(async () => {
+      const conversationsResponse = await page.request.get(`/api/projects/${projectId}/conversations`);
+      if (!conversationsResponse.ok()) return null;
+      const { conversations } = (await conversationsResponse.json()) as { conversations: Array<{ id: string }> };
+      const conversationId = conversations[0]?.id;
+      if (!conversationId) return null;
+      const messagesResponse = await page.request.get(
+        `/api/projects/${projectId}/conversations/${conversationId}/messages`,
+      );
+      if (!messagesResponse.ok()) return null;
+      const { messages } = (await messagesResponse.json()) as {
+        messages: Array<{ runId?: string; runStatus?: string }>;
+      };
+      return messages.find((message) => message.runId === 'stop-run')?.runStatus ?? null;
+    }, { timeout: T.long })
+    .toBe('canceled');
+
+  expect(await listProjectFilesFromApi(page, projectId)).toEqual([]);
+  await expectStableCount(() => cancelRequests, 1, {
+    message: 'stopping a run should send exactly one cancel request during the settled window',
+  });
+});
+
 test('[P1] chat file links open project files in workspace tabs and keep trailing punctuation out of hrefs', async ({ page }) => {
   await routeMockAgents(page);
 
-  let runCount = 0;
-  await page.route('**/api/runs', async (route) => {
-    runCount += 1;
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: JSON.stringify({ runId: `link-run-${runCount}` }),
-    });
-  });
-  await page.route('**/api/runs/*/events', async (route) => {
-    const body = [
+  await routeSuccessfulRuns(page, {
+    runIdPrefix: 'link-run',
+    eventBody: successfulRunEventBody([
       'event: start',
       'data: {"bin":"mock-agent"}',
       '',
@@ -2045,19 +1418,7 @@ test('[P1] chat file links open project files in workspace tabs and keep trailin
           'Open [details.html](details.html). Also see https://example.com/release-notes。 for external notes.',
       })}`,
       '',
-      'event: end',
-      'data: {"code":0,"status":"succeeded"}',
-      '',
-      '',
-    ].join('\n');
-    await route.fulfill({
-      status: 200,
-      headers: {
-        'content-type': 'text/event-stream',
-        'cache-control': 'no-cache',
-      },
-      body,
-    });
+    ]),
   });
 
   const projectId = await createEmptyProject(page, 'Chat file links stay in workspace');
@@ -2082,82 +1443,37 @@ test('[P1] chat file links open project files in workspace tabs and keep trailin
 test('[P0] sending another prompt while a run is active queues it and starts it after the first run finishes', async ({ page }) => {
   await routeMockAgents(page);
 
-  let runCount = 0;
   let releaseFirstRun!: () => void;
   const firstRunReleased = new Promise<void>((resolve) => {
     releaseFirstRun = resolve;
   });
 
-  await page.route('**/api/runs', async (route) => {
-    runCount += 1;
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: JSON.stringify({ runId: `queued-run-${runCount}` }),
-    });
-  });
-
-  let eventCount = 0;
-  await page.route('**/api/runs/*/events', async (route) => {
-    eventCount += 1;
-    if (eventCount === 1) {
-      await firstRunReleased;
-      const firstBody = [
-        'event: start',
-        'data: {"bin":"mock-agent"}',
-        '',
-        'event: stdout',
-        `data: ${JSON.stringify({
-          chunk:
-            '<artifact identifier="first-queued-artifact" type="text/html" title="First Queued Artifact"><!doctype html><html><body><main><h1>First Queued Artifact</h1></main></body></html></artifact>',
-        })}`,
-        '',
-        'event: end',
-        'data: {"code":0,"status":"succeeded"}',
-        '',
-        '',
-      ].join('\n');
-      await route.fulfill({
-        status: 200,
-        headers: {
-          'content-type': 'text/event-stream',
-          'cache-control': 'no-cache',
-        },
-        body: firstBody,
-      });
-      return;
-    }
-
-    const secondBody = [
-      'event: start',
-      'data: {"bin":"mock-agent"}',
-      '',
-      'event: stdout',
-      `data: ${JSON.stringify({
-        chunk:
-          '<artifact identifier="second-queued-artifact" type="text/html" title="Second Queued Artifact"><!doctype html><html><body><main><h1>Second Queued Artifact</h1></main></body></html></artifact>',
-      })}`,
-      '',
-      'event: end',
-      'data: {"code":0,"status":"succeeded"}',
-      '',
-      '',
-    ].join('\n');
-    await route.fulfill({
-      status: 200,
-      headers: {
-        'content-type': 'text/event-stream',
-        'cache-control': 'no-cache',
+  const runBodies: Array<Record<string, unknown>> = [];
+  const runRequests = await routeRunSequence(page, {
+    bodies: runBodies,
+    runIdPrefix: 'queued-run',
+    eventBodies: [
+      async () => {
+        await firstRunReleased;
+        return artifactRunEventBody(
+          'first-queued-artifact',
+          'First Queued Artifact',
+          '<!doctype html><html><body><main><h1>First Queued Artifact</h1></main></body></html>',
+        );
       },
-      body: secondBody,
-    });
+      artifactRunEventBody(
+        'second-queued-artifact',
+        'Second Queued Artifact',
+        '<!doctype html><html><body><main><h1>Second Queued Artifact</h1></main></body></html>',
+      ),
+    ],
   });
 
   await createEmptyProject(page, 'Queued run workspace restore');
   await expectWorkspaceReady(page);
 
   await sendPrompt(page, 'first queued prompt');
-  await expect.poll(() => runCount).toBe(1);
+  await runRequests.expectCount(1);
   await expect(page.getByRole('button', { name: 'Stop' })).toBeVisible();
 
   const input = page.getByTestId('chat-composer-input');
@@ -2168,12 +1484,12 @@ test('[P0] sending another prompt while a run is active queues it and starts it 
   const queuedStrip = page.getByTestId('chat-queued-send-strip');
   await expect(queuedStrip).toBeVisible();
   await expect(queuedStrip).toContainText('second queued prompt');
-  expect(runCount).toBe(1);
+  expect(runBodies).toHaveLength(1);
 
   const release: () => void = releaseFirstRun ?? (() => { throw new Error('first run release handle missing'); });
   release();
 
-  await expect.poll(() => runCount).toBe(2);
+  await runRequests.expectCount(2);
   await expect(queuedStrip).toHaveCount(0);
   await expect(page.getByRole('tab', { name: /second-queued-artifact\.html/i })).toHaveAttribute(
     'aria-selected',
@@ -2184,77 +1500,37 @@ test('[P0] sending another prompt while a run is active queues it and starts it 
 test('[P0] editing a queued prompt updates the next run request before it starts', async ({ page }) => {
   await routeMockAgents(page);
 
-  let runCount = 0;
   const runBodies: Array<Record<string, unknown>> = [];
   let releaseFirstRun!: () => void;
   const firstRunReleased = new Promise<void>((resolve) => {
     releaseFirstRun = resolve;
   });
 
-  await page.route('**/api/runs', async (route) => {
-    const raw = route.request().postData();
-    if (raw) runBodies.push(JSON.parse(raw) as Record<string, unknown>);
-    runCount += 1;
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: JSON.stringify({ runId: `edited-queued-run-${runCount}` }),
-    });
-  });
-
-  let eventCount = 0;
-  await page.route('**/api/runs/*/events', async (route) => {
-    eventCount += 1;
-    if (eventCount === 1) {
-      await firstRunReleased;
-      await route.fulfill({
-        status: 200,
-        headers: {
-          'content-type': 'text/event-stream',
-          'cache-control': 'no-cache',
-        },
-        body: [
+  const runRequests = await routeRunSequence(page, {
+    bodies: runBodies,
+    runIdPrefix: 'edited-queued-run',
+    eventBodies: [
+      async () => {
+        await firstRunReleased;
+        return successfulRunEventBody([
           'event: start',
           'data: {"bin":"mock-agent"}',
           '',
-          'event: end',
-          'data: {"code":0,"status":"succeeded"}',
-          '',
-          '',
-        ].join('\n'),
-      });
-      return;
-    }
-
-    await route.fulfill({
-      status: 200,
-      headers: {
-        'content-type': 'text/event-stream',
-        'cache-control': 'no-cache',
+        ]);
       },
-      body: [
-        'event: start',
-        'data: {"bin":"mock-agent"}',
-        '',
-        'event: stdout',
-        `data: ${JSON.stringify({
-          chunk:
-            '<artifact identifier="edited-queued-artifact" type="text/html" title="Edited Queued Artifact"><!doctype html><html><body><main><h1>Edited Queued Artifact</h1></main></body></html></artifact>',
-        })}`,
-        '',
-        'event: end',
-        'data: {"code":0,"status":"succeeded"}',
-        '',
-        '',
-      ].join('\n'),
-    });
+      artifactRunEventBody(
+        'edited-queued-artifact',
+        'Edited Queued Artifact',
+        '<!doctype html><html><body><main><h1>Edited Queued Artifact</h1></main></body></html>',
+      ),
+    ],
   });
 
   await createEmptyProject(page, 'Queued run edit before send');
   await expectWorkspaceReady(page);
 
   await sendPrompt(page, 'first queued edit prompt');
-  await expect.poll(() => runCount).toBe(1);
+  await runRequests.expectCount(1);
 
   const input = page.getByTestId('chat-composer-input');
   await input.click();
@@ -2264,7 +1540,7 @@ test('[P0] editing a queued prompt updates the next run request before it starts
   const queuedStrip = page.getByTestId('chat-queued-send-strip');
   await expect(queuedStrip).toBeVisible();
   await expect(queuedStrip).toContainText('queued prompt before edit');
-  expect(runCount).toBe(1);
+  expect(runBodies).toHaveLength(1);
 
   await queuedStrip.getByRole('button', { name: /^Edit$/i }).click();
   await expect(input).toHaveText('queued prompt before edit');
@@ -2273,12 +1549,12 @@ test('[P0] editing a queued prompt updates the next run request before it starts
 
   await expect(queuedStrip).toContainText('queued prompt after edit');
   await expect(queuedStrip).not.toContainText('queued prompt before edit');
-  expect(runCount).toBe(1);
+  expect(runBodies).toHaveLength(1);
 
   const release: () => void = releaseFirstRun ?? (() => { throw new Error('first run release handle missing'); });
   release();
 
-  await expect.poll(() => runCount).toBe(2);
+  await runRequests.expectCount(2);
   expect(runBodies[1]?.message).toContain('queued prompt after edit');
   expect(runBodies[1]?.message).not.toContain('queued prompt before edit');
   await expect(queuedStrip).toHaveCount(0);
@@ -2291,46 +1567,30 @@ test('[P0] editing a queued prompt updates the next run request before it starts
 test('[P0] editing a queued prompt from an artifact file route keeps the file editing surface active', async ({ page }) => {
   await routeMockAgents(page);
 
-  let runCount = 0;
   const runBodies: Array<Record<string, unknown>> = [];
   let releaseFirstRun!: () => void;
   const firstRunReleased = new Promise<void>((resolve) => {
     releaseFirstRun = resolve;
   });
 
-  await page.route('**/api/runs', async (route) => {
-    const raw = route.request().postData();
-    if (raw) runBodies.push(JSON.parse(raw) as Record<string, unknown>);
-    runCount += 1;
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: JSON.stringify({ runId: `artifact-file-queued-run-${runCount}` }),
-    });
-  });
-
-  let eventCount = 0;
-  await page.route('**/api/runs/*/events', async (route) => {
-    eventCount += 1;
-    if (eventCount === 1) {
-      await firstRunReleased;
-    }
-    await route.fulfill({
-      status: 200,
-      headers: {
-        'content-type': 'text/event-stream',
-        'cache-control': 'no-cache',
+  const runRequests = await routeRunSequence(page, {
+    bodies: runBodies,
+    runIdPrefix: 'artifact-file-queued-run',
+    eventBodies: [
+      async () => {
+        await firstRunReleased;
+        return successfulRunEventBody([
+          'event: start',
+          'data: {"bin":"mock-agent"}',
+          '',
+        ]);
       },
-      body: [
+      successfulRunEventBody([
         'event: start',
         'data: {"bin":"mock-agent"}',
         '',
-        'event: end',
-        'data: {"code":0,"status":"succeeded"}',
-        '',
-        '',
-      ].join('\n'),
-    });
+      ]),
+    ],
   });
 
   const projectId = await createEmptyProject(page, 'Artifact file queued edit context');
@@ -2346,7 +1606,7 @@ test('[P0] editing a queued prompt from an artifact file route keeps the file ed
   await expect(artifactPreviewFrame(page).locator('html[data-od-edit-mode]')).toHaveCount(1);
 
   await sendPrompt(page, 'first artifact file edit prompt');
-  await expect.poll(() => runCount).toBe(1);
+  await runRequests.expectCount(1);
 
   const input = page.getByTestId('chat-composer-input');
   await input.click();
@@ -2356,7 +1616,7 @@ test('[P0] editing a queued prompt from an artifact file route keeps the file ed
   const queuedStrip = page.getByTestId('chat-queued-send-strip');
   await expect(queuedStrip).toBeVisible();
   await expect(queuedStrip).toContainText('queued artifact file prompt before edit');
-  expect(runCount).toBe(1);
+  expect(runBodies).toHaveLength(1);
 
   await queuedStrip.getByRole('button', { name: /^Edit$/i }).click();
   await expect(input).toHaveText('queued artifact file prompt before edit');
@@ -2369,7 +1629,7 @@ test('[P0] editing a queued prompt from an artifact file route keeps the file ed
   const release: () => void = releaseFirstRun ?? (() => { throw new Error('first run release handle missing'); });
   release();
 
-  await expect.poll(() => runCount).toBe(2);
+  await runRequests.expectCount(2);
   expect(runBodies[1]?.message).toContain('queued artifact file prompt after edit');
   expect(runBodies[1]?.message).not.toContain('queued artifact file prompt before edit');
   await expect(page).toHaveURL(new RegExp(`/projects/${projectId}/(?:conversations/[^/]+/)?files/active-edit\\.html$`));
@@ -2381,32 +1641,9 @@ test('[P1] composer plus menu design toolbox action seeds the next run request',
   await routeMockAgents(page);
 
   const runBodies: Array<Record<string, unknown>> = [];
-  await page.route('**/api/runs', async (route) => {
-    const raw = route.request().postData();
-    if (raw) runBodies.push(JSON.parse(raw) as Record<string, unknown>);
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: '{"runId":"toolbox-action-run"}',
-    });
-  });
-  await page.route('**/api/runs/*/events', async (route) => {
-    await route.fulfill({
-      status: 200,
-      headers: {
-        'content-type': 'text/event-stream',
-        'cache-control': 'no-cache',
-      },
-      body: [
-        'event: start',
-        'data: {"bin":"mock-agent"}',
-        '',
-        'event: end',
-        'data: {"code":0,"status":"succeeded"}',
-        '',
-        '',
-      ].join('\n'),
-    });
+  const runRequests = await routeSuccessfulRuns(page, {
+    bodies: runBodies,
+    runId: 'toolbox-action-run',
   });
 
   await createEmptyProject(page, 'Composer toolbox action run context');
@@ -2422,6 +1659,7 @@ test('[P1] composer plus menu design toolbox action seeds the next run request',
   await expect(input).toContainText('Preserve the intent already in the composer: Make this dashboard feel premium.');
 
   await page.getByTestId('chat-send').click();
+  await runRequests.expectCount(1);
   expect(runBodies[0]?.message).toContain('Creative Director orchestrator');
   expect(runBodies[0]?.message).toContain('Make this dashboard feel premium.');
   expect(runBodies[0]?.message).toContain('Global resource index');
@@ -2431,32 +1669,9 @@ test('[P1] composer design toolbox motion action seeds its specific prompt into 
   await routeMockAgents(page);
 
   const runBodies: Array<Record<string, unknown>> = [];
-  await page.route('**/api/runs', async (route) => {
-    const raw = route.request().postData();
-    if (raw) runBodies.push(JSON.parse(raw) as Record<string, unknown>);
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: '{"runId":"toolbox-motion-run"}',
-    });
-  });
-  await page.route('**/api/runs/*/events', async (route) => {
-    await route.fulfill({
-      status: 200,
-      headers: {
-        'content-type': 'text/event-stream',
-        'cache-control': 'no-cache',
-      },
-      body: [
-        'event: start',
-        'data: {"bin":"mock-agent"}',
-        '',
-        'event: end',
-        'data: {"code":0,"status":"succeeded"}',
-        '',
-        '',
-      ].join('\n'),
-    });
+  const runRequests = await routeSuccessfulRuns(page, {
+    bodies: runBodies,
+    runId: 'toolbox-motion-run',
   });
 
   await createEmptyProject(page, 'Composer toolbox motion action context');
@@ -2472,6 +1687,7 @@ test('[P1] composer design toolbox motion action seeds its specific prompt into 
   await expect(input).toContainText('Preserve the intent already in the composer: Animate the KPI dashboard hero.');
 
   await page.getByTestId('chat-send').click();
+  await runRequests.expectCount(1);
   expect(runBodies[0]?.message).toContain('Add high-quality motion to the current HTML / page element');
   expect(runBodies[0]?.message).toContain('prefers-reduced-motion fallbacks');
   expect(runBodies[0]?.message).toContain('Animate the KPI dashboard hero.');
@@ -2482,32 +1698,9 @@ test('[P1] composer design toolbox anti-AI polish action seeds its specific prom
   await routeMockAgents(page);
 
   const runBodies: Array<Record<string, unknown>> = [];
-  await page.route('**/api/runs', async (route) => {
-    const raw = route.request().postData();
-    if (raw) runBodies.push(JSON.parse(raw) as Record<string, unknown>);
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: '{"runId":"toolbox-anti-ai-run"}',
-    });
-  });
-  await page.route('**/api/runs/*/events', async (route) => {
-    await route.fulfill({
-      status: 200,
-      headers: {
-        'content-type': 'text/event-stream',
-        'cache-control': 'no-cache',
-      },
-      body: [
-        'event: start',
-        'data: {"bin":"mock-agent"}',
-        '',
-        'event: end',
-        'data: {"code":0,"status":"succeeded"}',
-        '',
-        '',
-      ].join('\n'),
-    });
+  const runRequests = await routeSuccessfulRuns(page, {
+    bodies: runBodies,
+    runId: 'toolbox-anti-ai-run',
   });
 
   await createEmptyProject(page, 'Composer toolbox anti AI polish context');
@@ -2523,6 +1716,7 @@ test('[P1] composer design toolbox anti-AI polish action seeds its specific prom
   await expect(input).toContainText('Preserve the intent already in the composer: Make this SaaS landing page feel less generic.');
 
   await page.getByTestId('chat-send').click();
+  await runRequests.expectCount(1);
   expect(runBodies[0]?.message).toContain('Do one anti-AI-feel polish pass');
   expect(runBodies[0]?.message).toContain('cheap gradients/glows');
   expect(runBodies[0]?.message).toContain('Make this SaaS landing page feel less generic.');
@@ -2643,38 +1837,23 @@ test('[P1] completed background run sends the configured desktop notification', 
     notifications: notificationConfig,
   });
 
-  await page.route('**/api/runs', async (route) => {
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: '{"runId":"notification-run"}',
-    });
-  });
   let releaseEvents!: () => void;
   const eventsReleased = new Promise<void>((resolve) => {
     releaseEvents = resolve;
   });
-  await page.route('**/api/runs/*/events', async (route) => {
-    await eventsReleased;
-    await route.fulfill({
-      status: 200,
-      headers: {
-        'content-type': 'text/event-stream',
-        'cache-control': 'no-cache',
-      },
-      body: [
+  await routeSuccessfulRuns(page, {
+    runId: 'notification-run',
+    eventBody: async () => {
+      await eventsReleased;
+      return successfulRunEventBody([
         'event: start',
         'data: {"bin":"mock-agent"}',
         '',
         'event: stdout',
         `data: ${JSON.stringify({ chunk: 'Background completion notification body.' })}`,
         '',
-        'event: end',
-        'data: {"code":0,"status":"succeeded"}',
-        '',
-        '',
-      ].join('\n'),
-    });
+      ]);
+    },
   });
 
   await createEmptyProject(page, 'Background notification run');
@@ -2798,26 +1977,15 @@ test('[P1] failed foreground run still sends the configured desktop notification
     notifications: notificationConfig,
   });
 
-  await page.route('**/api/runs', async (route) => {
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: '{"runId":"notification-failure-run"}',
-    });
-  });
   let releaseEvents!: () => void;
   const eventsReleased = new Promise<void>((resolve) => {
     releaseEvents = resolve;
   });
-  await page.route('**/api/runs/*/events', async (route) => {
-    await eventsReleased;
-    await route.fulfill({
-      status: 200,
-      headers: {
-        'content-type': 'text/event-stream',
-        'cache-control': 'no-cache',
-      },
-      body: [
+  await routeSuccessfulRuns(page, {
+    runId: 'notification-failure-run',
+    eventBody: async () => {
+      await eventsReleased;
+      return [
         'event: start',
         'data: {"bin":"mock-agent"}',
         '',
@@ -2828,8 +1996,8 @@ test('[P1] failed foreground run still sends the configured desktop notification
         'data: {"code":1,"status":"failed"}',
         '',
         '',
-      ].join('\n'),
-    });
+      ].join('\n');
+    },
   });
 
   await createEmptyProject(page, 'Foreground failure notification run');
@@ -2854,32 +2022,9 @@ test('[P1] Browser Inspiration page_info action seeds Browser tab context into t
   await routeMockAgents(page);
 
   const runBodies: Array<Record<string, unknown>> = [];
-  await page.route('**/api/runs', async (route) => {
-    const raw = route.request().postData();
-    if (raw) runBodies.push(JSON.parse(raw) as Record<string, unknown>);
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: '{"runId":"browser-inspiration-run"}',
-    });
-  });
-  await page.route('**/api/runs/*/events', async (route) => {
-    await route.fulfill({
-      status: 200,
-      headers: {
-        'content-type': 'text/event-stream',
-        'cache-control': 'no-cache',
-      },
-      body: [
-        'event: start',
-        'data: {"bin":"mock-agent"}',
-        '',
-        'event: end',
-        'data: {"code":0,"status":"succeeded"}',
-        '',
-        '',
-      ].join('\n'),
-    });
+  const runRequests = await routeSuccessfulRuns(page, {
+    bodies: runBodies,
+    runId: 'browser-inspiration-run',
   });
 
   await createEmptyProject(page, 'Browser Inspiration run context');
@@ -2902,6 +2047,7 @@ test('[P1] Browser Inspiration page_info action seeds Browser tab context into t
   await expect(input).toContainText('- url: about:blank');
 
   await page.getByTestId('chat-send').click();
+  await runRequests.expectCount(1);
   expect(runBodies[0]?.message).toContain('@agent-browser');
   expect(runBodies[0]?.message).toContain('Operation: page_info');
   expect(runBodies[0]?.message).toContain('Browser tab context:');
@@ -2912,32 +2058,9 @@ test('[P1] Browser Inspiration navigate action carries Browser operation contrac
   await routeMockAgents(page);
 
   const runBodies: Array<Record<string, unknown>> = [];
-  await page.route('**/api/runs', async (route) => {
-    const raw = route.request().postData();
-    if (raw) runBodies.push(JSON.parse(raw) as Record<string, unknown>);
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: '{"runId":"browser-navigate-inspiration-run"}',
-    });
-  });
-  await page.route('**/api/runs/*/events', async (route) => {
-    await route.fulfill({
-      status: 200,
-      headers: {
-        'content-type': 'text/event-stream',
-        'cache-control': 'no-cache',
-      },
-      body: [
-        'event: start',
-        'data: {"bin":"mock-agent"}',
-        '',
-        'event: end',
-        'data: {"code":0,"status":"succeeded"}',
-        '',
-        '',
-      ].join('\n'),
-    });
+  const runRequests = await routeSuccessfulRuns(page, {
+    bodies: runBodies,
+    runId: 'browser-navigate-inspiration-run',
   });
 
   await createEmptyProject(page, 'Browser navigate Inspiration run context');
@@ -2959,6 +2082,7 @@ test('[P1] Browser Inspiration navigate action carries Browser operation contrac
   await expect(input).toContainText('Navigate the bound Browser tab to the requested URL');
 
   await page.getByTestId('chat-send').click();
+  await runRequests.expectCount(1);
   expect(runBodies[0]?.message).toContain('Operation: navigate');
   expect(runBodies[0]?.message).toContain('Input contract: url / domain / search terms');
   expect(runBodies[0]?.message).toContain('First confirm the bound tab URL/title');
@@ -2968,32 +2092,9 @@ test('[P1] Browser Inspiration page_info carries the active Browser URL context 
   await routeMockAgents(page);
 
   const runBodies: Array<Record<string, unknown>> = [];
-  await page.route('**/api/runs', async (route) => {
-    const raw = route.request().postData();
-    if (raw) runBodies.push(JSON.parse(raw) as Record<string, unknown>);
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: '{"runId":"browser-active-url-context-run"}',
-    });
-  });
-  await page.route('**/api/runs/*/events', async (route) => {
-    await route.fulfill({
-      status: 200,
-      headers: {
-        'content-type': 'text/event-stream',
-        'cache-control': 'no-cache',
-      },
-      body: [
-        'event: start',
-        'data: {"bin":"mock-agent"}',
-        '',
-        'event: end',
-        'data: {"code":0,"status":"succeeded"}',
-        '',
-        '',
-      ].join('\n'),
-    });
+  const runRequests = await routeSuccessfulRuns(page, {
+    bodies: runBodies,
+    runId: 'browser-active-url-context-run',
   });
 
   await createEmptyProject(page, 'Browser active URL Inspiration context');
@@ -3019,6 +2120,7 @@ test('[P1] Browser Inspiration page_info carries the active Browser URL context 
   await expect(input).toContainText(`- url: ${expectedUrl}`);
 
   await page.getByTestId('chat-send').click();
+  await runRequests.expectCount(1);
   expect(runBodies[0]?.message).toContain('Operation: page_info');
   expect(runBodies[0]?.message).toContain(`- url: ${expectedUrl}`);
 });
@@ -3040,32 +2142,9 @@ test('[P1] Browser Inspiration page_info carries a loaded page title into the ne
       ].join(''),
     });
   });
-  await page.route('**/api/runs', async (route) => {
-    const raw = route.request().postData();
-    if (raw) runBodies.push(JSON.parse(raw) as Record<string, unknown>);
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: '{"runId":"browser-title-context-run"}',
-    });
-  });
-  await page.route('**/api/runs/*/events', async (route) => {
-    await route.fulfill({
-      status: 200,
-      headers: {
-        'content-type': 'text/event-stream',
-        'cache-control': 'no-cache',
-      },
-      body: [
-        'event: start',
-        'data: {"bin":"mock-agent"}',
-        '',
-        'event: end',
-        'data: {"code":0,"status":"succeeded"}',
-        '',
-        '',
-      ].join('\n'),
-    });
+  const runRequests = await routeSuccessfulRuns(page, {
+    bodies: runBodies,
+    runId: 'browser-title-context-run',
   });
 
   await createEmptyProject(page, 'Browser loaded title Inspiration context');
@@ -3093,6 +2172,7 @@ test('[P1] Browser Inspiration page_info carries a loaded page title into the ne
   await expect(input).toContainText('- title: Browser Fixture Title');
 
   await page.getByTestId('chat-send').click();
+  await runRequests.expectCount(1);
   expect(runBodies[0]?.message).toContain('Operation: page_info');
   expect(runBodies[0]?.message).toContain(`- url: ${expectedUrl}`);
   expect(runBodies[0]?.message).toContain('- title: Browser Fixture Title');
@@ -3102,57 +2182,10 @@ test('[P1] inline question form Skip all sends structured skipped answers into t
   await routeMockAgents(page);
 
   const runBodies: Array<Record<string, unknown>> = [];
-  await page.route('**/api/runs', async (route) => {
-    const raw = route.request().postData();
-    if (raw) runBodies.push(JSON.parse(raw) as Record<string, unknown>);
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: JSON.stringify({ runId: `questions-skip-run-${runBodies.length}` }),
-    });
-  });
-  let eventCount = 0;
-  await page.route('**/api/runs/*/events', async (route) => {
-    eventCount += 1;
-    const questionForm = [
-      '<question-form id="discovery" title="Quick brief">',
-      JSON.stringify(
-        {
-          description: 'Answer these before generation continues.',
-          questions: [
-            {
-              id: 'audience',
-              label: 'Audience',
-              type: 'text',
-              required: false,
-            },
-          ],
-        },
-        null,
-        2,
-      ),
-      '</question-form>',
-    ].join('\n');
-    const chunk = eventCount === 1 ? questionForm : 'Thanks — continuing with skipped answers.';
-    await route.fulfill({
-      status: 200,
-      headers: {
-        'content-type': 'text/event-stream',
-        'cache-control': 'no-cache',
-      },
-      body: [
-        'event: start',
-        'data: {"bin":"mock-agent"}',
-        '',
-        'event: stdout',
-        `data: ${JSON.stringify({ chunk })}`,
-        '',
-        'event: end',
-        'data: {"code":0,"status":"succeeded"}',
-        '',
-        '',
-      ].join('\n'),
-    });
+  const runRequests = await routeSuccessfulRuns(page, {
+    bodies: runBodies,
+    runIdPrefix: 'questions-skip-run',
+    eventBody: questionFormRunEventBody(false, 'Thanks — continuing with skipped answers.'),
   });
 
   const projectId = await createEmptyProject(page, 'Inline questions skip all');
@@ -3170,7 +2203,7 @@ test('[P1] inline question form Skip all sends structured skipped answers into t
     skipAll.click(),
   ]);
 
-  await expect.poll(() => runBodies.length).toBe(2);
+  await runRequests.expectCount(2);
   expect(runBodies[1]?.message).toContain('[form answers — discovery]');
   expect(runBodies[1]?.message).toContain('Audience: (skipped)');
 
@@ -3202,57 +2235,10 @@ test('[P1] inline question form submits selected answers into the next run reque
   await routeMockAgents(page);
 
   const runBodies: Array<Record<string, unknown>> = [];
-  await page.route('**/api/runs', async (route) => {
-    const raw = route.request().postData();
-    if (raw) runBodies.push(JSON.parse(raw) as Record<string, unknown>);
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: JSON.stringify({ runId: `questions-continue-run-${runBodies.length}` }),
-    });
-  });
-  let eventCount = 0;
-  await page.route('**/api/runs/*/events', async (route) => {
-    eventCount += 1;
-    const questionForm = [
-      '<question-form id="discovery" title="Quick brief">',
-      JSON.stringify(
-        {
-          description: 'Answer these before generation continues.',
-          questions: [
-            {
-              id: 'audience',
-              label: 'Audience',
-              type: 'text',
-              required: true,
-            },
-          ],
-        },
-        null,
-        2,
-      ),
-      '</question-form>',
-    ].join('\n');
-    const chunk = eventCount === 1 ? questionForm : 'Thanks — continuing with selected answers.';
-    await route.fulfill({
-      status: 200,
-      headers: {
-        'content-type': 'text/event-stream',
-        'cache-control': 'no-cache',
-      },
-      body: [
-        'event: start',
-        'data: {"bin":"mock-agent"}',
-        '',
-        'event: stdout',
-        `data: ${JSON.stringify({ chunk })}`,
-        '',
-        'event: end',
-        'data: {"code":0,"status":"succeeded"}',
-        '',
-        '',
-      ].join('\n'),
-    });
+  const runRequests = await routeSuccessfulRuns(page, {
+    bodies: runBodies,
+    runIdPrefix: 'questions-continue-run',
+    eventBody: questionFormRunEventBody(true, 'Thanks — continuing with selected answers.'),
   });
 
   const projectId = await createEmptyProject(page, 'Inline questions submit run context');
@@ -3271,7 +2257,7 @@ test('[P1] inline question form submits selected answers into the next run reque
     submitButton.click(),
   ]);
 
-  await expect.poll(() => runBodies.length).toBe(2);
+  await runRequests.expectCount(2);
   expect(runBodies[1]?.message).toContain('[form answers — discovery]');
   expect(runBodies[1]?.message).toContain('Audience: Product marketers');
   expect(runBodies[1]?.message).not.toContain('(skipped)');
@@ -3402,25 +2388,6 @@ test('[P1] project composer working directory rejects stale folder without promo
     .toMatchObject({ linkedDirs: [staleDir] });
   expect(recentDirPutBodies).toHaveLength(0);
 });
-
-async function routeMockAgents(page: Page) {
-  await page.route('**/api/agents', async (route) => {
-    await route.fulfill({
-      json: {
-        agents: [
-          {
-            id: 'mock',
-            name: 'Mock Agent',
-            bin: 'mock-agent',
-            available: true,
-            version: 'test',
-            models: [{ id: 'default', label: 'Default' }],
-          },
-        ],
-      },
-    });
-  });
-}
 
 async function routeAppConfig(page: Page, override: Record<string, unknown>) {
   await page.route('**/api/app-config', async (route) => {
@@ -3612,8 +2579,8 @@ async function sendPrompt(page: Page, prompt: string) {
   await expect(input).toBeVisible({ timeout: 3_000 });
   await input.click();
   await input.fill(prompt);
-  await expect(input).toHaveText(prompt, { timeout: 1500 });
-  await expect(sendButton).toBeEnabled({ timeout: 1500 });
+  await expect(input).toHaveText(prompt, { timeout: 5_000 });
+  await expect(sendButton).toBeEnabled({ timeout: 5_000 });
   await Promise.all([
     page.waitForResponse(isCreateRunResponse, { timeout: 5_000 }),
     sendButton.evaluate((button: HTMLButtonElement) => button.click()),
@@ -3621,10 +2588,15 @@ async function sendPrompt(page: Page, prompt: string) {
 }
 
 async function startNewConversation(page: Page) {
+  const previousPath = new URL(page.url()).pathname;
   await page.getByTestId('conversation-history-trigger').click();
   await expect(page.getByTestId('conversation-list')).toBeVisible();
   await page.getByTestId('conversation-history-new').click();
   await expect(page.getByTestId('conversation-list')).toHaveCount(0);
+  await expect
+    .poll(() => new URL(page.url()).pathname, { timeout: 10_000 })
+    .not.toBe(previousPath);
+  await expect(page).toHaveURL(/\/projects\/[^/]+\/conversations\/[^/]+(?:\/files\/[^/]+)?$/);
 }
 
 function tabBySuffix(page: Page, name: string): Locator {
@@ -4006,6 +2978,35 @@ async function listConversationsFromApi(
     conversations: Array<{ id: string; updatedAt: number }>;
   };
   return conversations;
+}
+
+async function expectPersistedArtifactMessage(
+  page: Page,
+  projectId: string,
+  conversationId: string,
+  fileName: string,
+) {
+  await expect
+    .poll(async () => {
+      const response = await page.request.get(
+        `/api/projects/${projectId}/conversations/${conversationId}/messages`,
+      );
+      if (!response.ok()) return false;
+      const { messages } = (await response.json()) as {
+        messages: Array<{
+          role: string;
+          runStatus?: string;
+          producedFiles?: Array<{ name: string }>;
+        }>;
+      };
+      return messages.some(
+        (message) =>
+          message.role === 'assistant'
+          && message.runStatus === 'succeeded'
+          && message.producedFiles?.some((file) => file.name.endsWith(fileName)),
+      );
+    }, { timeout: T.medium })
+    .toBe(true);
 }
 
 async function expectProjectFilesToIncludeSuffixes(

@@ -209,6 +209,23 @@ export function varRef(tokenKey: string, fallback?: string): string {
   return fallback ? `var(${cssVar(tokenKey)}, ${fallback})` : `var(${cssVar(tokenKey)})`;
 }
 
+/**
+ * True when a scraped font family name is safe to embed in a CSS font stack.
+ *
+ * Extractors sometimes capture CSS *source text* instead of a real family —
+ * e.g. Tailwind v4's `--theme(--default-font-family` — and one unbalanced
+ * parenthesis inside the emitted `--brand-font-family` value swallows every
+ * later `:root` declaration, unstyling the whole kit. A real family name
+ * (including CJK names) never needs CSS syntax characters, so reject any
+ * candidate that carries them or reads as a custom property reference.
+ */
+export function isRenderableFontFamily(raw: string): boolean {
+  const fam = raw.trim().replace(/^["']|["']$/g, "").trim();
+  if (!fam) return false;
+  if (fam.startsWith("--")) return false;
+  return !/[(){}[\];:,"'\\/<>=@!]/.test(fam);
+}
+
 const PX_TOKEN = /^(fontSize|size|borderRadius|lineWidth|controlHeight)/;
 const UNITLESS_TOKEN = /^(lineHeight|fontWeight)/;
 

@@ -314,6 +314,34 @@ describe('MessageCenter', () => {
     expect(messageRequests).toBeGreaterThanOrEqual(2);
   });
 
+  it('renders cached messages when a published date is invalid', async () => {
+    const cachedMessages = [
+      {
+        ...defaultMessages[0]!,
+        id: 'invalid-date',
+        title: 'Cached update',
+        body: 'Cached body remains visible.',
+        publishedAt: 'not-a-date',
+        readAt: null,
+        ctaLabel: null,
+        ctaUrl: null,
+      },
+    ] satisfies MessageCenterMessage[];
+    localStorage.setItem('open-design.message-center.anonymous-started-at.v1', '2026-07-16T00:00:00.000Z');
+    localStorage.setItem('open-design.message-center.anonymous-messages.v1', JSON.stringify(cachedMessages));
+    localStorage.setItem('open-design.message-center.anonymous-read-ids.v1', JSON.stringify([]));
+    mockFetch({
+      onMessages: async () => new Response(null, { status: 500 }),
+    });
+
+    renderMessageCenter();
+    const dialog = await openCenter(1);
+
+    expect(within(dialog).getByText('Cached update')).toBeTruthy();
+    expect(within(dialog).getByText('Cached body remains visible.')).toBeTruthy();
+    expect(dialog.querySelector('time')).toBeNull();
+  });
+
   it('hydrates cached anonymous state through the ref-backed source of truth', async () => {
     const cachedMessages = [
       { ...defaultMessages[0]!, id: 'release', title: 'Release update', readAt: null, ctaLabel: null, ctaUrl: null },

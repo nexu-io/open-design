@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, Dispatch, SetStateAction } from 'react';
 import { Button, VisuallyHidden } from '@open-design/components';
-import type { AmrWalletSnapshot } from '@open-design/contracts';
+import type {
+  AmrWalletSnapshot,
+  ByokCredentialProfile,
+  UpsertByokCredentialProfileRequest,
+} from '@open-design/contracts';
 import { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
 import {
   agentIdToTracking,
@@ -72,6 +76,7 @@ import {
   BYOK_PROVIDER_PRESETS,
   DEFAULT_NOTIFICATIONS,
   DEFAULT_ORBIT,
+  applySavedByokCredentialProfile,
   defaultKnownProviderModel,
   isStoredMediaProviderEntryEmpty,
   isStoredMediaProviderEntryPresent,
@@ -129,7 +134,11 @@ import type {
   ProviderModelsResponse,
   SkillSummary,
 } from '../types';
-import { testAgent, testApiProvider } from '../providers/connection-test';
+import {
+  testAgent,
+  testApiProvider,
+  testSavedByokProfile,
+} from '../providers/connection-test';
 import { fetchProviderModels } from '../providers/provider-models';
 import {
   fetchConnectors,
@@ -145,6 +154,7 @@ import type { MediaProvider } from '../media/models';
 import { Toast } from './Toast';
 import {
   checkForUpdaterUpdate,
+  clearUpdaterCache,
   deriveUpdaterModel,
   downloadUpdaterUpdate,
   openUpdaterInstaller,
@@ -427,6 +437,14 @@ interface Props {
    * "Save key" button rather than the autosave channel.
    */
   onPersistComposioKey: (composio: AppConfig['composio']) => Promise<void> | void;
+  /**
+   * Explicitly moves the current BYOK key draft into the daemon's OS-backed
+   * credential store. The returned profile is non-secret and becomes the only
+   * credential reference retained by the UI.
+   */
+  onPersistByokCredential?: (
+    input: UpsertByokCredentialProfileRequest,
+  ) => Promise<ByokCredentialProfile>;
   /**
    * True while the daemon-backed Composio config is still hydrating on
    * first paint after a dev-server / app restart. The Connectors section
@@ -1379,7 +1397,11 @@ export function shouldEnableSettingsSave(
   if (cfg.apiProtocol === 'openai' && cfg.apiCredentialSource === 'deployment') {
     return Boolean(cfg.model.trim());
   }
-  return Boolean(cfg.apiKey.trim() && cfg.model.trim() && isBaseUrlValid);
+  return Boolean(
+    (cfg.apiKey.trim() || (cfg.byokProfileId && cfg.byokCredentialConfigured))
+    && cfg.model.trim()
+    && isBaseUrlValid,
+  );
 }
 
 /**
@@ -1415,6 +1437,9 @@ export function sanitizeSettingsSavePayload(
     mode: initial.mode,
     apiKey: initial.apiKey,
     apiCredentialSource: initial.apiCredentialSource,
+    byokProfileId: initial.byokProfileId,
+    byokCredentialConfigured: initial.byokCredentialConfigured,
+    byokCredentialTail: initial.byokCredentialTail,
     apiProtocol: initial.apiProtocol,
     apiVersion: initial.apiVersion,
     apiProtocolConfigs: initial.apiProtocolConfigs,
@@ -1447,7 +1472,7 @@ export function switchApiProtocolConfig(
     },
     protocol,
   );
-  return applyApiProtocolConfig(
+  const switched = applyApiProtocolConfig(
     {
       ...config,
       mode: 'api',
@@ -1456,6 +1481,14 @@ export function switchApiProtocolConfig(
     protocol,
     nextApiConfig,
   );
+  return currentProtocol === protocol
+    ? switched
+    : {
+        ...switched,
+        byokProfileId: undefined,
+        byokCredentialConfigured: false,
+        byokCredentialTail: undefined,
+      };
 }
 
 export function byokProviderSelectionPatch(
@@ -1504,6 +1537,7 @@ export function SettingsDialog({
   onPersist,
   onSilentUpdatePreferenceChange,
   onPersistComposioKey,
+  onPersistByokCredential,
   composioConfigLoading = false,
   onClose,
   onRefreshAgents,
@@ -1853,6 +1887,7 @@ export function SettingsDialog({
   const providerTestRevisionRef = useRef(0);
   const providerModelsRevisionRef = useRef(0);
   const providerTestFirstResetRef = useRef(true);
+  const providerTestSkipNextResetRef = useRef(false);
   const providerModelsFirstResetRef = useRef(true);
   const providerModelsSkipNextResetRef = useRef(false);
   const deferAfterKeyCleanRef = useRef(false);
@@ -1877,6 +1912,9 @@ export function SettingsDialog({
   const [aboutUpdateActionBusy, setAboutUpdateActionBusy] = useState(false);
   const [aboutUpdateQuitFailed, setAboutUpdateQuitFailed] = useState(false);
   const [aboutToast, setAboutToast] = useState<string | null>(null);
+  // Two-stage inline confirm for the destructive manual cache clear.
+  const [clearUpdaterCacheStage, setClearUpdaterCacheStage] = useState<'idle' | 'confirm'>('idle');
+  const [clearUpdaterCacheBusy, setClearUpdaterCacheBusy] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -1986,6 +2024,28 @@ export function SettingsDialog({
     void openExternalUrl(OPEN_DESIGN_RELEASES_URL);
   }, []);
 
+  // Manual updater/launcher cache clear — the disaster-recovery action for
+  // stuck update state. The desktop owns the capability; this handler only
+  // reports the outcome and refreshes the About updater model.
+  const handleClearUpdaterCache = useCallback(() => {
+    if (clearUpdaterCacheBusy) return;
+    setClearUpdaterCacheBusy(true);
+    void (async () => {
+      try {
+        const result = await clearUpdaterCache();
+        if (result.ok) {
+          setAboutUpdaterModel(result.model);
+          setAboutToast(t('settings.clearUpdaterCacheSuccess'));
+        } else {
+          setAboutToast(t('settings.clearUpdaterCacheFailed'));
+        }
+      } finally {
+        setClearUpdaterCacheBusy(false);
+        setClearUpdaterCacheStage('idle');
+      }
+    })();
+  }, [clearUpdaterCacheBusy, t]);
+
   // Precise inverse of App.handleCompleteOnboarding: flip
   // onboardingCompleted back to false, mirror it to localStorage and the
   // daemon through the same config-persist path, then route the user into
@@ -2093,6 +2153,10 @@ export function SettingsDialog({
       providerTestFirstResetRef.current = false;
       return;
     }
+    if (providerTestSkipNextResetRef.current) {
+      providerTestSkipNextResetRef.current = false;
+      return;
+    }
     providerTestRevisionRef.current += 1;
     providerAutoTestKeyRef.current = null;
     setByokPreconditionNotice(null);
@@ -2184,19 +2248,33 @@ export function SettingsDialog({
     };
     const providerUsesCustomStorage = provider.custom || provider.deployment;
     const nextProviderBaseUrlForCurrent = providerUsesCustomStorage ? null : provider.baseUrl;
-    const providerChangedBeforeSwitch = providerUsesCustomStorage
-      ? (cfg.apiProviderBaseUrl ?? null) !== null
-      : (cfg.apiProtocol ?? 'anthropic') !== provider.protocol ||
-        (cfg.apiProviderBaseUrl ?? null) !== nextProviderBaseUrlForCurrent;
+    const providerChangedBeforeSwitch = provider.deployment
+      ? !currentIsDeploymentCredentialMode
+      : provider.custom
+        ? (cfg.apiProviderBaseUrl ?? null) !== null || currentIsDeploymentCredentialMode
+        : (cfg.apiProtocol ?? 'anthropic') !== provider.protocol ||
+          (cfg.apiProviderBaseUrl ?? null) !== nextProviderBaseUrlForCurrent;
     focusByokRequiredFieldAfterProtocolSwitchRef.current = !providerUsesCustomStorage;
     providerModelsSkipNextResetRef.current = providerChangedBeforeSwitch;
     setCfg((current) => {
       const currentProtocol = current.apiProtocol ?? 'anthropic';
+      const currentIsDeploymentCredentialMode =
+        currentProtocol === 'openai' && current.apiCredentialSource === 'deployment';
       const nextProviderBaseUrl = providerUsesCustomStorage ? null : provider.baseUrl;
-      const providerChanged = providerUsesCustomStorage
-        ? (current.apiProviderBaseUrl ?? null) !== null
-        : currentProtocol !== provider.protocol ||
-          (current.apiProviderBaseUrl ?? null) !== nextProviderBaseUrl;
+      const providerChanged = provider.deployment
+        ? !currentIsDeploymentCredentialMode
+        : provider.custom
+          ? (current.apiProviderBaseUrl ?? null) !== null || currentIsDeploymentCredentialMode
+          : currentProtocol !== provider.protocol ||
+            (current.apiProviderBaseUrl ?? null) !== nextProviderBaseUrl;
+      const finalizeProviderSwitch = (next: AppConfig): AppConfig => providerChanged
+        ? {
+            ...next,
+            byokProfileId: undefined,
+            byokCredentialConfigured: false,
+            byokCredentialTail: undefined,
+          }
+        : next;
       const switched = switchApiProtocolConfig(current, provider.protocol);
       const fallbackApiConfig = currentApiProtocolConfig(switched);
       const customDraftKey = provider.custom
@@ -2227,7 +2305,7 @@ export function SettingsDialog({
       };
       if (savedDraft) {
         applyDraftUiState(savedDraft);
-        return applyApiProtocolConfig(
+        return finalizeProviderSwitch(applyApiProtocolConfig(
           persistByokProviderConfigDraft(
             {
               ...switched,
@@ -2238,11 +2316,11 @@ export function SettingsDialog({
           ),
           provider.protocol,
           savedDraft.apiConfig,
-        );
+        ));
       }
       if (persistedDraft) {
         applyDraftUiState(undefined);
-        return applyApiProtocolConfig(
+        return finalizeProviderSwitch(applyApiProtocolConfig(
           persistByokProviderConfigDraft(
             {
               ...switched,
@@ -2253,7 +2331,7 @@ export function SettingsDialog({
           ),
           provider.protocol,
           persistedDraft.apiConfig,
-        );
+        ));
       }
       const switchedWithCurrentDraft = persistByokProviderConfigDraft(
         switched,
@@ -2262,20 +2340,40 @@ export function SettingsDialog({
       );
       if (providerUsesCustomStorage) {
         applyDraftUiState(undefined);
-        return updateCurrentApiProtocolConfig(
+        return finalizeProviderSwitch(updateCurrentApiProtocolConfig(
           switchedWithCurrentDraft,
           byokProviderSelectionPatch(provider, providerChanged),
-        );
+        ));
       }
       applyDraftUiState(undefined);
-      return updateCurrentApiProtocolConfig(
+      return finalizeProviderSwitch(updateCurrentApiProtocolConfig(
         switchedWithCurrentDraft,
         byokProviderSelectionPatch(provider, providerChanged),
-      );
+      ));
     });
   };
   const updateApiConfig = (patch: Partial<ApiProtocolConfig>) =>
-    setCfg((c) => updateCurrentApiProtocolConfig(c, patch));
+    setCfg((c) => {
+      const next = updateCurrentApiProtocolConfig(c, patch);
+      const invalidatesProfile = (
+        (patch.apiKey !== undefined && Boolean(patch.apiKey.trim()))
+        || (patch.baseUrl !== undefined && patch.baseUrl !== c.baseUrl)
+        || (patch.model !== undefined && patch.model !== c.model)
+        || (patch.apiVersion !== undefined && patch.apiVersion !== c.apiVersion)
+      );
+      return invalidatesProfile
+        ? {
+            ...next,
+            // Keep the id so a confirmed replacement updates the existing
+            // secure-store entry instead of leaking orphaned keychain items.
+            // The configured marker is cleared so runs remain blocked until
+            // the edited draft is tested and saved again.
+            byokProfileId: c.byokProfileId,
+            byokCredentialConfigured: false,
+            byokCredentialTail: undefined,
+          }
+        : next;
+    });
   const updateMaxTokensInput = (raw: string) => {
     setMaxTokensInput(raw);
     const trimmed = raw.trim();
@@ -2569,30 +2667,73 @@ export function SettingsDialog({
       }
     };
     try {
-      const result = await testApiProvider(
-        isDeploymentCredentialMode
-          ? {
+      const testingDeploymentProvider = isDeploymentCredentialMode;
+      const testingSavedProfile = Boolean(
+        !testingDeploymentProvider
+        && cfg.byokProfileId
+        && cfg.byokCredentialConfigured
+        && !cfg.apiKey.trim(),
+      );
+      const result = testingDeploymentProvider
+        ? await testApiProvider(
+            {
               protocol: 'openai',
               credentialSource: 'deployment',
               model: cfg.model,
-            }
-          : {
-              protocol: apiProtocol,
-              credentialSource: 'user',
-              baseUrl: cfg.baseUrl,
-              apiKey: cleanByokApiKey(cfg.apiKey),
-              model: cfg.model,
-              apiVersion:
-                apiProtocol === 'azure'
-                  ? cfg.apiVersion?.trim() || undefined
-                  : undefined,
             },
-        controller.signal,
-      );
+            controller.signal,
+          )
+        : testingSavedProfile && cfg.byokProfileId
+          ? await testSavedByokProfile(cfg.byokProfileId, controller.signal)
+          : await testApiProvider(
+              {
+                protocol: apiProtocol,
+                credentialSource: 'user',
+                baseUrl: cfg.baseUrl,
+                apiKey: cleanByokApiKey(cfg.apiKey),
+                model: cfg.model,
+                apiVersion:
+                  apiProtocol === 'azure'
+                    ? cfg.apiVersion?.trim() || undefined
+                    : undefined,
+              },
+              controller.signal,
+            );
       if (controller.signal.aborted) return;
       if (providerTestRevisionRef.current !== revision) {
         clearIfStale();
         return;
+      }
+      if (
+        result.ok
+        && apiProtocol !== 'bedrock'
+        && !testingSavedProfile
+        && !testingDeploymentProvider
+      ) {
+        if (!onPersistByokCredential) {
+          throw new Error('Secure BYOK credential storage is unavailable');
+        }
+        const profile = await onPersistByokCredential({
+          ...(cfg.byokProfileId ? { id: cfg.byokProfileId } : {}),
+          label: selectedProvider?.label ?? API_PROTOCOL_LABELS[apiProtocol],
+          protocol: apiProtocol,
+          baseUrl: cfg.baseUrl.trim(),
+          model: cfg.model.trim(),
+          ...(apiProtocol === 'azure' && cfg.apiVersion?.trim()
+            ? { apiVersion: cfg.apiVersion.trim() }
+            : {}),
+          requiresApiKey: byokRequiresApiKey,
+          ...(cfg.apiKey.trim()
+            ? { apiKey: cleanByokApiKey(cfg.apiKey) }
+            : {}),
+        });
+        if (controller.signal.aborted) return;
+        if (providerTestRevisionRef.current !== revision) {
+          clearIfStale();
+          return;
+        }
+        providerTestSkipNextResetRef.current = true;
+        setCfg((current) => applySavedByokCredentialProfile(current, profile));
       }
       setProviderTestState({ status: 'done', result });
       if (!result.ok && result.kind === 'not_found_model') {
@@ -3385,6 +3526,13 @@ export function SettingsDialog({
     if (provider.deployment) {
       return isDeploymentCredentialMode && Boolean(cfg.model.trim());
     }
+    if (
+      selectedByokProvider?.id === provider.id
+      && cfg.byokProfileId
+      && cfg.byokCredentialConfigured
+    ) {
+      return true;
+    }
     if (provider.custom) {
       return canRunProviderConnectionTest(currentApiProtocolConfig(cfg), {
         requiresApiKey: byokRequiresApiKey,
@@ -3432,6 +3580,11 @@ export function SettingsDialog({
       {
         requiresApiKey: byokRequiresApiKey,
         requiresBaseUrl: !isDeploymentCredentialMode,
+        credentialConfigured: Boolean(
+          !isDeploymentCredentialMode
+          && cfg.byokProfileId
+          && cfg.byokCredentialConfigured,
+        ),
         keyValidationBaseUrl: byokKeyValidationBaseUrl,
       },
     ),
@@ -3440,7 +3593,10 @@ export function SettingsDialog({
       byokKeyValidationBaseUrl,
       byokRequiresApiKey,
       cfg.apiKey,
+      cfg.apiCredentialSource,
       cfg.baseUrl,
+      cfg.byokCredentialConfigured,
+      cfg.byokProfileId,
       cfg.model,
       isDeploymentCredentialMode,
     ],
@@ -3453,9 +3609,12 @@ export function SettingsDialog({
     () => byokPreflightBlockReason(cfg),
     [
       cfg.apiKey,
+      cfg.apiCredentialSource,
       cfg.apiProtocol,
       cfg.apiProviderBaseUrl,
       cfg.baseUrl,
+      cfg.byokCredentialConfigured,
+      cfg.byokProfileId,
       cfg.model,
     ],
   );
@@ -3473,6 +3632,11 @@ export function SettingsDialog({
       {
         requiresApiKey: byokRequiresApiKey,
         requiresBaseUrl: !isDeploymentCredentialMode,
+        credentialConfigured: Boolean(
+          !isDeploymentCredentialMode
+          && cfg.byokProfileId
+          && cfg.byokCredentialConfigured,
+        ),
         requireModel: false,
         keyValidationBaseUrl: byokKeyValidationBaseUrl,
       },
@@ -3482,7 +3646,10 @@ export function SettingsDialog({
       byokKeyValidationBaseUrl,
       byokRequiresApiKey,
       cfg.apiKey,
+      cfg.apiCredentialSource,
       cfg.baseUrl,
+      cfg.byokCredentialConfigured,
+      cfg.byokProfileId,
       cfg.model,
       isDeploymentCredentialMode,
     ],
@@ -3817,7 +3984,8 @@ export function SettingsDialog({
     focusByokRequiredFieldAfterProtocolSwitchRef.current = false;
     focusByokRequiredField(
       missingByokConnectionFields(cfg, {
-        requiresApiKey: byokRequiresApiKey,
+        requiresApiKey: byokRequiresApiKey
+          && !(cfg.byokProfileId && cfg.byokCredentialConfigured),
       })[0],
     );
   }, [apiModelCustomActive, cfg, apiProtocol, byokRequiresApiKey]);
@@ -6075,6 +6243,41 @@ export function SettingsDialog({
                   </span>
                 </label>
               </div>
+              {aboutUpdaterModel.environment === 'desktop'
+                && aboutUpdaterModel.supported
+                && appVersionInfo?.packaged !== false ? (
+                <div className="settings-about-diagnostics">
+                  <div className="settings-about-diagnostics-text">
+                    <h4>{t('settings.clearUpdaterCacheTitle')}</h4>
+                    <p className="hint">{t('settings.clearUpdaterCacheHint')}</p>
+                  </div>
+                  {clearUpdaterCacheStage === 'confirm' ? (
+                    <>
+                      <Button
+                        disabled={clearUpdaterCacheBusy}
+                        onClick={() => setClearUpdaterCacheStage('idle')}
+                      >
+                        {t('common.cancel')}
+                      </Button>
+                      <Button
+                        data-testid="settings-clear-updater-cache-confirm"
+                        disabled={clearUpdaterCacheBusy || aboutUpdaterModel.busy}
+                        onClick={handleClearUpdaterCache}
+                      >
+                        {t('settings.clearUpdaterCacheConfirmButton')}
+                      </Button>
+                    </>
+                  ) : (
+                    <Button
+                      data-testid="settings-clear-updater-cache"
+                      disabled={clearUpdaterCacheBusy || aboutUpdaterModel.busy}
+                      onClick={() => setClearUpdaterCacheStage('confirm')}
+                    >
+                      {t('settings.clearUpdaterCacheButton')}
+                    </Button>
+                  )}
+                </div>
+              ) : null}
               <div className="settings-about-diagnostics">
                 <div className="settings-about-diagnostics-text">
                   <h4>{t('diagnostics.exportTitle')}</h4>

@@ -7,10 +7,12 @@ import {
   SIDECAR_MESSAGES,
   SIDECAR_MODES,
   SIDECAR_SOURCES,
+  isDesktopUpdateAction,
   type DaemonStatusSnapshot,
   type DesktopEvalResult,
   type DesktopScreenshotResult,
   type DesktopStatusSnapshot,
+  type DesktopUpdateAction,
   type DesktopUpdateResult,
   type SidecarStamp,
   type WebStatusSnapshot,
@@ -180,7 +182,7 @@ export async function installPackedWinApp(config: ToolPackConfig): Promise<WinIn
   } else {
     await measureLifecycleStep(lifecycleTimings, "pre-install remove install dir", async () => removeTree(registeredPaths.installDir));
   }
-  await measureLifecycleStep(lifecycleTimings, "ensure install parent", async () => mkdir(dirname(paths.installDir), { recursive: true }));
+  await measureLifecycleStep(lifecycleTimings, "ensure install directory", async () => mkdir(paths.installDir, { recursive: true }));
   await measureLifecycleStep(lifecycleTimings, "nsis install", async () => runTimed(paths.installTimingPath, "install", async () => {
     await invokeNsis(paths, paths.setupPath, installArgs(config, paths), "install");
   }));
@@ -475,10 +477,10 @@ export async function resetPackedWinNamespaces(config: ToolPackConfig): Promise<
   return { namespaces, results };
 }
 
-function resolveUpdateAction(value: string | undefined): "status" | "check" | "download" | "install" | null {
+function resolveUpdateAction(value: string | undefined): DesktopUpdateAction | null {
   if (value == null) return null;
-  if (value === "status" || value === "check" || value === "download" || value === "install") return value;
-  throw new Error("--update-action must be status, check, download, or install");
+  if (isDesktopUpdateAction(value)) return value;
+  throw new Error("--update-action must be status, check, clear-cache, download, or install");
 }
 
 async function requestDesktopEval(

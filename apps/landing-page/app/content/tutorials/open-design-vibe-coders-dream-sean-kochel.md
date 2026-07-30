@@ -16,7 +16,7 @@ This guide is a vibe-coder's playbook for Open Design: bring the agent you alrea
 
 ## What is Open Design?
 
-Open Design is an open-source, local-first design platform that runs **on top of the coding agent you already use**. It detects the CLIs already on your machine — Claude Code, Codex, Cursor, Gemini, Copilot, OpenCode, and a couple of dozen more — and lets that agent drive generation. As Sean puts it: there's a CLI layer where you configure your agent, a system prompt that drives the quality, and then the parts that make it valuable — skill support and a deep library of design systems. The outputs are real HTML files, so whatever you make drops straight into your actual project.
+Open Design is an open-source, local-first design platform that runs **on top of the coding agent you already use**. It detects the CLIs already on your machine — Claude Code, Codex, Cursor, Copilot, OpenCode, Qwen, and a couple of dozen more — and lets that agent drive generation. As Sean puts it: there's a CLI layer where you configure your agent, a system prompt that drives the quality, and then the parts that make it valuable — skill support and a deep library of design systems. The outputs are real HTML files, so whatever you make drops straight into your actual project.
 
 Why vibe coders care:
 
@@ -98,7 +98,7 @@ Even a vague prompt plus reference images gets you a usable starting point. With
 ## FAQ
 
 **Do I have to use a specific model?**
-No. Open Design drives whatever agent you've configured — Claude Code, Codex, Cursor, Gemini, OpenCode, and more — or your own API key. No provider lock-in.
+No. Open Design drives whatever supported agent you've configured — Claude Code, Codex, Cursor, OpenCode, Qwen, and more — or a configured BYOK provider. No provider lock-in.
 
 **How is this different from Claude Design?**
 Same familiar feel, but free, open-source, local-first, model-agnostic, and far more customizable — you can add your own skills and processes. Plus image and video generation a single-provider tool doesn't give you.

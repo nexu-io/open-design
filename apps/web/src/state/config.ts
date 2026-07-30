@@ -1,4 +1,9 @@
-import type { AppConfigPrefs } from '@open-design/contracts';
+import type {
+  AppConfigPrefs,
+  ByokCredentialProfile,
+  ByokCredentialProfilesResponse,
+  UpsertByokCredentialProfileRequest,
+} from '@open-design/contracts';
 import { MEDIA_PROVIDERS } from '../media/models';
 import { isOpenAICompatible } from '../providers/openai-compatible';
 import type {
@@ -622,6 +627,18 @@ function inferApiProtocol(model: string, baseUrl: string): ApiProtocol {
   }
 }
 
+function hasLegacyByokSecret(config: AppConfig): boolean {
+  return Boolean(
+    config.apiKey?.trim()
+    || Object.values(config.apiProtocolConfigs ?? {}).some(
+      (entry) => Boolean(entry?.apiKey?.trim()),
+    )
+    || Object.values(config.byokProviderConfigDrafts ?? {}).some(
+      (draft) => Boolean(draft?.apiConfig.apiKey?.trim()),
+    ),
+  );
+}
+
 function migrateRetiredKnownProviderModel(
   protocol: ApiProtocol,
   config: Pick<
@@ -680,8 +697,42 @@ export function loadConfig(): AppConfig {
       notifications: normalizeNotifications(parsed.notifications),
       orbit: normalizeOrbit(parsed.orbit),
     };
+    // Browser storage is allowed to remember which non-secret profile the
+    // user selected, but never to assert that the credential still exists.
+    // Startup hydration re-enables it only after the daemon confirms the
+    // secure-store entry.
+    if (merged.byokProfileId) {
+      merged.byokCredentialConfigured = false;
+      merged.byokCredentialTail = undefined;
+    }
 
     let migratedConfig = false;
+    // Older builds stored BYOK credentials in browser storage. Keep those
+    // values intact until migrateLegacyByokCredentialsToDaemon has confirmed
+    // every secure-profile write; deleting them synchronously here would lose
+    // the user's only credential when the daemon or OS store is unavailable.
+    const hadLegacyByokSecret = hasLegacyByokSecret(merged);
+    if (hadLegacyByokSecret) {
+      // Keep the browser record untouched until the async secure-store
+      // migration succeeds, but do not hydrate plaintext credentials into the
+      // long-lived application state.
+      merged.apiKey = '';
+      merged.apiProtocolConfigs = Object.fromEntries(
+        Object.entries(merged.apiProtocolConfigs ?? {}).map(([protocol, entry]) => [
+          protocol,
+          entry ? { ...entry, apiKey: '' } : entry,
+        ]),
+      ) as AppConfig['apiProtocolConfigs'];
+      merged.byokProviderConfigDrafts = Object.fromEntries(
+        Object.entries(merged.byokProviderConfigDrafts ?? {}).map(([key, draft]) => [
+          key,
+          {
+            ...draft,
+            apiConfig: { ...draft.apiConfig, apiKey: '' },
+          },
+        ]),
+      );
+    }
     const parsedMigrationVersion =
       typeof parsed.configMigrationVersion === 'number'
         ? parsed.configMigrationVersion
@@ -756,7 +807,10 @@ export function loadConfig(): AppConfig {
       merged.baseUrl = resolveFixedOriginBaseUrl(merged.apiProtocol, merged.baseUrl);
     }
 
-    if (migratedConfig || downgradedUnsupportedChatProtocol) {
+    if (
+      !hadLegacyByokSecret
+      && (migratedConfig || downgradedUnsupportedChatProtocol)
+    ) {
       // Best-effort re-persist of the migrated / downgraded config. A localStorage
       // write failure here (quota exceeded, private-mode storage disabled) must not
       // fall through to the outer catch and discard the valid config we just
@@ -782,6 +836,327 @@ export function loadConfig(): AppConfig {
 interface PublicComposioConfigResponse {
   configured?: boolean;
   apiKeyTail?: string;
+}
+
+export async function fetchByokCredentialProfilesFromDaemon(): Promise<
+  ByokCredentialProfilesResponse | null
+> {
+  try {
+    const response = await fetch('/api/byok/profiles');
+    if (!response.ok) return null;
+    return await response.json() as ByokCredentialProfilesResponse;
+  } catch {
+    return null;
+  }
+}
+
+export async function persistByokCredentialProfileToDaemon(
+  input: UpsertByokCredentialProfileRequest,
+): Promise<ByokCredentialProfile> {
+  const response = await fetch('/api/byok/profiles', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to save BYOK credential (${response.status})`);
+  }
+  const payload = await response.json() as { profile?: ByokCredentialProfile };
+  if (!payload.profile?.id || !payload.profile.configured) {
+    throw new Error('Daemon did not confirm the BYOK credential profile');
+  }
+  return payload.profile;
+}
+
+export type LegacyByokCredentialMigrationResult =
+  | { status: 'not-needed'; config: AppConfig }
+  | { status: 'migrated'; config: AppConfig }
+  | { status: 'failed'; config: AppConfig; error: Error };
+
+interface LegacyByokCredentialCandidate {
+  input: UpsertByokCredentialProfileRequest & { id: string };
+  signature: string;
+}
+
+const BYOK_PROTOCOLS = new Set<ApiProtocol>([
+  'anthropic',
+  'openai',
+  'azure',
+  'google',
+  'ollama',
+  'senseaudio',
+  'aihubmix',
+]);
+
+function legacyByokProfileId(source: string): string {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < source.length; index += 1) {
+    hash ^= source.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return `byok-legacy-${(hash >>> 0).toString(36)}`;
+}
+
+function legacyByokCandidate(
+  source: string,
+  protocol: ApiProtocol | undefined,
+  apiConfig: Pick<ApiProtocolConfig, 'apiKey' | 'apiVersion' | 'baseUrl' | 'model'>,
+): LegacyByokCredentialCandidate | null {
+  const apiKey = apiConfig.apiKey?.trim();
+  if (!apiKey || !protocol || !BYOK_PROTOCOLS.has(protocol)) return null;
+  const knownProvider = KNOWN_PROVIDERS.find(
+    (candidate) =>
+      candidate.protocol === protocol
+      && candidate.baseUrl === apiConfig.baseUrl,
+  );
+  const signature = [
+    protocol,
+    apiConfig.baseUrl,
+    apiConfig.model,
+    apiConfig.apiVersion ?? '',
+    apiKey,
+  ].join('\u0000');
+  return {
+    signature,
+    input: {
+      id: legacyByokProfileId(source),
+      label: knownProvider?.label ?? `Imported ${protocol} profile`,
+      protocol: protocol as UpsertByokCredentialProfileRequest['protocol'],
+      baseUrl: apiConfig.baseUrl,
+      model: apiConfig.model,
+      apiKey,
+      ...(apiConfig.apiVersion
+        ? { apiVersion: apiConfig.apiVersion }
+        : {}),
+    },
+  };
+}
+
+function legacyByokCredentialCandidates(
+  config: AppConfig,
+): LegacyByokCredentialCandidate[] {
+  const activeProtocol = isBedrockRuntimeBaseUrl(config.baseUrl)
+    ? 'bedrock'
+    : config.apiProtocol ?? inferApiProtocol(config.model, config.baseUrl);
+  const candidates: Array<LegacyByokCredentialCandidate | null> = [
+    legacyByokCandidate('active', activeProtocol, config),
+    ...Object.entries(config.apiProtocolConfigs ?? {}).map(
+      ([protocol, apiConfig]) =>
+        apiConfig
+          ? legacyByokCandidate(
+              `protocol:${protocol}`,
+              protocol as ApiProtocol,
+              apiConfig,
+            )
+          : null,
+    ),
+    ...Object.entries(config.byokProviderConfigDrafts ?? {}).map(
+      ([draftKey, draft]) => {
+        const separator = draftKey.indexOf(':');
+        const protocol = (
+          separator > 0 ? draftKey.slice(0, separator) : activeProtocol
+        ) as ApiProtocol;
+        return legacyByokCandidate(
+          `draft:${draftKey}`,
+          protocol,
+          draft.apiConfig,
+        );
+      },
+    ),
+  ];
+  const unique = new Map<string, LegacyByokCredentialCandidate>();
+  for (const candidate of candidates) {
+    if (candidate && !unique.has(candidate.signature)) {
+      unique.set(candidate.signature, candidate);
+    }
+  }
+  return [...unique.values()];
+}
+
+function hasUnsupportedLegacyByokSecret(config: AppConfig): boolean {
+  const activeProtocol = isBedrockRuntimeBaseUrl(config.baseUrl)
+    ? 'bedrock'
+    : config.apiProtocol ?? inferApiProtocol(config.model, config.baseUrl);
+  if (
+    config.apiKey?.trim()
+    && !BYOK_PROTOCOLS.has(activeProtocol)
+  ) {
+    return true;
+  }
+  if (
+    Object.entries(config.apiProtocolConfigs ?? {}).some(
+      ([protocol, entry]) =>
+        Boolean(entry?.apiKey?.trim())
+        && !BYOK_PROTOCOLS.has(protocol as ApiProtocol),
+    )
+  ) {
+    return true;
+  }
+  return Object.entries(config.byokProviderConfigDrafts ?? {}).some(
+    ([draftKey, draft]) => {
+      if (!draft.apiConfig.apiKey?.trim()) return false;
+      const separator = draftKey.indexOf(':');
+      const protocol = (
+        separator > 0 ? draftKey.slice(0, separator) : activeProtocol
+      ) as ApiProtocol;
+      return !BYOK_PROTOCOLS.has(protocol);
+    },
+  );
+}
+
+function legacyByokMigrationSource(config: AppConfig): AppConfig {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return config;
+    const parsed = JSON.parse(raw) as Partial<AppConfig>;
+    return {
+      ...config,
+      ...parsed,
+      apiProtocol: parsed.apiProtocol ?? config.apiProtocol,
+      apiProtocolConfigs: {
+        ...(config.apiProtocolConfigs ?? {}),
+        ...(parsed.apiProtocolConfigs ?? {}),
+      },
+      byokProviderConfigDrafts: {
+        ...(config.byokProviderConfigDrafts ?? {}),
+        ...(parsed.byokProviderConfigDrafts ?? {}),
+      },
+    };
+  } catch {
+    return config;
+  }
+}
+
+export function applySavedByokCredentialProfile(
+  config: AppConfig,
+  selectedProfile: ByokCredentialProfile,
+): AppConfig {
+  return {
+    ...config,
+    apiKey: '',
+    byokProfileId: selectedProfile.id,
+    byokCredentialConfigured: selectedProfile.configured,
+    byokCredentialTail: selectedProfile.keyTail,
+    apiProtocolConfigs: Object.fromEntries(
+      Object.entries(config.apiProtocolConfigs ?? {}).map(([protocol, entry]) => [
+        protocol,
+        entry ? { ...entry, apiKey: '' } : entry,
+      ]),
+    ) as AppConfig['apiProtocolConfigs'],
+    byokProviderConfigDrafts: Object.fromEntries(
+      Object.entries(config.byokProviderConfigDrafts ?? {}).map(
+        ([key, draft]) => [
+          key,
+          {
+            ...draft,
+            apiConfig: { ...draft.apiConfig, apiKey: '' },
+          },
+        ],
+      ),
+    ),
+  };
+}
+
+export async function migrateLegacyByokCredentialsToDaemon(
+  config: AppConfig,
+  persistProfile: (
+    input: UpsertByokCredentialProfileRequest,
+  ) => Promise<ByokCredentialProfile> =
+    persistByokCredentialProfileToDaemon,
+): Promise<LegacyByokCredentialMigrationResult> {
+  const migrationSource = legacyByokMigrationSource(config);
+  const hasLegacySecret = hasLegacyByokSecret(migrationSource);
+  if (!hasLegacySecret) return { status: 'not-needed', config };
+
+  if (hasUnsupportedLegacyByokSecret(migrationSource)) {
+    return {
+      status: 'failed',
+      config,
+      error: new Error(
+        'The saved BYOK credential uses an unsupported legacy provider. Re-enter it in Settings.',
+      ),
+    };
+  }
+  const candidates = legacyByokCredentialCandidates(migrationSource);
+  if (candidates.length === 0) {
+    return {
+      status: 'failed',
+      config,
+      error: new Error(
+        'The saved BYOK credential uses an unsupported legacy provider. Re-enter it in Settings.',
+      ),
+    };
+  }
+
+  try {
+    const profiles: ByokCredentialProfile[] = [];
+    for (const candidate of candidates) {
+      profiles.push(await persistProfile(candidate.input));
+    }
+    const selectedProfile = profiles[0];
+    if (!selectedProfile?.configured) {
+      throw new Error('Secure credential migration did not produce a usable profile.');
+    }
+    const migrated = applySavedByokCredentialProfile(config, selectedProfile);
+    saveConfig(migrated);
+    return { status: 'migrated', config: migrated };
+  } catch (error) {
+    return {
+      status: 'failed',
+      config,
+      error: error instanceof Error ? error : new Error(String(error)),
+    };
+  }
+}
+
+/**
+ * Reconciles a locally selected non-secret profile reference with the daemon.
+ * No automatic "first profile" selection is made: changing execution
+ * credentials must remain an explicit user choice.
+ */
+export function mergeByokCredentialProfiles(
+  config: AppConfig,
+  response: ByokCredentialProfilesResponse | null,
+): AppConfig {
+  if (!config.byokProfileId || !response) return config;
+  const profile = response.profiles.find((candidate) => candidate.id === config.byokProfileId);
+  if (!response.available || !profile?.configured) {
+    return {
+      ...config,
+      byokProfileId: undefined,
+      byokCredentialConfigured: false,
+      byokCredentialTail: undefined,
+    };
+  }
+  const protocol = profile.protocol as ApiProtocol;
+  const knownProvider = KNOWN_PROVIDERS.find(
+    (candidate) =>
+      candidate.protocol === protocol
+      && candidate.baseUrl === profile.baseUrl,
+  );
+  const previousProtocolConfig = config.apiProtocolConfigs?.[protocol];
+  return {
+    ...config,
+    apiKey: '',
+    apiProtocol: protocol,
+    apiProviderBaseUrl: knownProvider?.baseUrl ?? null,
+    apiProtocolConfigs: {
+      ...(config.apiProtocolConfigs ?? {}),
+      [protocol]: {
+        ...(previousProtocolConfig ?? {}),
+        apiKey: '',
+        apiProviderBaseUrl: knownProvider?.baseUrl ?? null,
+        apiVersion: profile.apiVersion ?? '',
+        baseUrl: profile.baseUrl,
+        model: profile.model,
+      },
+    },
+    apiVersion: profile.apiVersion ?? '',
+    baseUrl: profile.baseUrl,
+    byokCredentialConfigured: true,
+    byokCredentialTail: profile.keyTail,
+    model: profile.model,
+  };
 }
 
 interface PublicMediaProviderConfigEntry {
@@ -1005,10 +1380,90 @@ function sanitizeAgentCliEnv(agentCliEnv: AppConfig['agentCliEnv']): AppConfig['
   return sanitized;
 }
 
+function preserveLegacyByokSecrets(
+  config: AppConfig,
+  stored: AppConfig,
+): AppConfig {
+  const apiProtocolConfigs = {
+    ...(config.apiProtocolConfigs ?? {}),
+  };
+  for (const [protocol, storedEntry] of Object.entries(stored.apiProtocolConfigs ?? {})) {
+    if (!storedEntry?.apiKey?.trim()) continue;
+    apiProtocolConfigs[protocol as ApiProtocol] = {
+      ...storedEntry,
+      ...(apiProtocolConfigs[protocol as ApiProtocol] ?? {}),
+      apiKey: storedEntry.apiKey,
+    };
+  }
+
+  const byokProviderConfigDrafts = {
+    ...(config.byokProviderConfigDrafts ?? {}),
+  };
+  for (const [key, storedDraft] of Object.entries(stored.byokProviderConfigDrafts ?? {})) {
+    if (!storedDraft.apiConfig.apiKey?.trim()) continue;
+    const currentDraft = byokProviderConfigDrafts[key];
+    byokProviderConfigDrafts[key] = {
+      ...storedDraft,
+      ...currentDraft,
+      apiConfig: {
+        ...storedDraft.apiConfig,
+        ...(currentDraft?.apiConfig ?? {}),
+        apiKey: storedDraft.apiConfig.apiKey,
+      },
+    };
+  }
+
+  return {
+    ...config,
+    ...(stored.apiKey?.trim() ? { apiKey: stored.apiKey } : {}),
+    apiProtocolConfigs,
+    byokProviderConfigDrafts,
+  };
+}
+
 export function saveConfig(config: AppConfig): void {
-  const sanitized: AppConfig = { ...config, agentCliEnv: sanitizeAgentCliEnv(config.agentCliEnv) };
+  let storedConfig: AppConfig | null = null;
+  try {
+    storedConfig = JSON.parse(
+      localStorage.getItem(STORAGE_KEY) ?? '{}',
+    ) as AppConfig;
+  } catch {
+    // A malformed old record cannot be preserved as a usable credential.
+  }
+  const apiProtocolConfigs = config.apiProtocolConfigs
+    ? Object.fromEntries(Object.entries(config.apiProtocolConfigs).map(([protocol, entry]) => [
+        protocol,
+        entry ? { ...entry, apiKey: '' } : entry,
+      ])) as AppConfig['apiProtocolConfigs']
+    : config.apiProtocolConfigs;
+  const byokProviderConfigDrafts = config.byokProviderConfigDrafts
+    ? Object.fromEntries(Object.entries(config.byokProviderConfigDrafts).map(([key, draft]) => [
+        key,
+        {
+          ...draft,
+          apiConfig: { ...draft.apiConfig, apiKey: '' },
+        },
+      ]))
+    : config.byokProviderConfigDrafts;
+  let sanitized: AppConfig = {
+    ...config,
+    apiKey: '',
+    apiProtocolConfigs,
+    byokProviderConfigDrafts,
+    agentCliEnv: sanitizeAgentCliEnv(config.agentCliEnv),
+  };
   for (const key of DAEMON_OWNED_KEYS) {
     delete (sanitized as unknown as Record<string, unknown>)[key];
+  }
+  if (
+    storedConfig
+    && hasLegacyByokSecret(storedConfig)
+    && !(config.byokProfileId && config.byokCredentialConfigured)
+  ) {
+    // A legacy plaintext key may be the user's only credential. Keep only
+    // those secret projections until secure migration succeeds, while still
+    // allowing unrelated settings (mode, model, theme, etc.) to persist.
+    sanitized = preserveLegacyByokSecrets(sanitized, storedConfig);
   }
   localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitized));
 }

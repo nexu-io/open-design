@@ -22,7 +22,7 @@
  * independent of how tokens are later computed.
  */
 
-import type { SeedToken } from "./types.js";
+import { isRenderableFontFamily, type SeedToken } from "./types.js";
 import type { Brand, BrandColor } from "../schema.js";
 import type { PrefetchResult } from "../prefetch.js";
 
@@ -205,7 +205,7 @@ function fontStack(primaryFamily: string | undefined, fallbacks: string[]): stri
   const seen = new Set<string>();
   const push = (raw: string) => {
     const fam = raw.trim();
-    if (!fam) return;
+    if (!fam || !isRenderableFontFamily(fam)) return;
     const key = fam.toLowerCase().replace(/^["']|["']$/g, "");
     if (seen.has(key)) return;
     seen.add(key);

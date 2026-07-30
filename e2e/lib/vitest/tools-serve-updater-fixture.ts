@@ -21,8 +21,11 @@ export type ToolsServeUpdaterFixture = {
 export async function startToolsServeUpdaterFixture(options: {
   artifactPath?: string;
   channel: ReleaseChannel;
+  controlLauncherVersionMin?: string;
+  controlLauncherVersionUrl?: string;
   payloadPath?: string;
   platform: 'mac' | 'win';
+  port?: number;
   version: string;
   workspaceRoot: string;
 }): Promise<ToolsServeUpdaterFixture> {
@@ -41,7 +44,14 @@ export async function startToolsServeUpdaterFixture(options: {
     options.platform,
   ];
   if (options.artifactPath != null) pnpmArgs.push('--artifact-path', options.artifactPath);
+  if (options.controlLauncherVersionMin != null) {
+    pnpmArgs.push('--control-launcher-version-min', options.controlLauncherVersionMin);
+  }
+  if (options.controlLauncherVersionUrl != null) {
+    pnpmArgs.push('--control-launcher-version-url', options.controlLauncherVersionUrl);
+  }
   if (options.payloadPath != null) pnpmArgs.push('--include-payload', '--payload-path', options.payloadPath);
+  if (options.port != null) pnpmArgs.push('--port', String(options.port));
   const command = process.platform === 'win32' ? (process.env.ComSpec ?? 'cmd.exe') : 'pnpm';
   const args = process.platform === 'win32' ? ['/d', '/s', '/c', 'pnpm.cmd', ...pnpmArgs] : pnpmArgs;
   const child = spawn(command, args, {

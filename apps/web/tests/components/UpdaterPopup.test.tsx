@@ -134,6 +134,55 @@ describe('UpdaterPopup', () => {
     expect(screen.queryByRole('button', { name: 'Collapse' })).toBeNull();
   });
 
+  it('uses reinstall copy and the learn-more link for forced installer reinstalls', async () => {
+    restoreHost = installMockOpenDesignHost({
+      host: {
+        updater: {
+          status: vi.fn(async () => downloadedStatus({
+            reinstall: {
+              installedVersion: '1.0.0-beta.9',
+              minVersion: '1.2.0-beta.1',
+              reason: 'outer-below-min',
+              url: 'https://example.com/reinstall-help',
+            },
+          })),
+        },
+      },
+    });
+
+    render(<UpdaterPopup />);
+
+    fireEvent.click(await screen.findByTestId('entry-nav-updater'));
+
+    await screen.findByRole('dialog', { name: 'Update ready' });
+    expect(
+      screen.getByText('Open Design 1.2.3-beta.4 requires a full reinstall. Open Design will close and open the installer.'),
+    ).toBeTruthy();
+    expect(screen.getByTestId('updater-reinstall-learn-more')).toBeTruthy();
+  });
+
+  it('omits the learn-more link when the reinstall requirement carries no url', async () => {
+    restoreHost = installMockOpenDesignHost({
+      host: {
+        updater: {
+          status: vi.fn(async () => downloadedStatus({
+            reinstall: { minVersion: '1.2.0-beta.1', reason: 'outer-version-unreadable' },
+          })),
+        },
+      },
+    });
+
+    render(<UpdaterPopup />);
+
+    fireEvent.click(await screen.findByTestId('entry-nav-updater'));
+
+    await screen.findByRole('dialog', { name: 'Update ready' });
+    expect(
+      screen.getByText('Open Design 1.2.3-beta.4 requires a full reinstall. Open Design will close and open the installer.'),
+    ).toBeTruthy();
+    expect(screen.queryByTestId('updater-reinstall-learn-more')).toBeNull();
+  });
+
   it('uses localized ready prompt copy from the app i18n provider', async () => {
     restoreHost = installMockOpenDesignHost({
       host: {

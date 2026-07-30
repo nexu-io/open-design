@@ -469,6 +469,8 @@ vi.mock('../../src/components/ChatPane', () => ({
 const config: AppConfig = {
   mode: 'daemon',
   apiKey: '',
+  byokProfileId: 'byok-test-profile',
+  byokCredentialConfigured: true,
   baseUrl: '',
   model: '',
   agentId: 'agent-1',
@@ -1830,7 +1832,10 @@ describe('ProjectView conversation run isolation', () => {
       ...config,
       mode: 'api',
       apiProtocol: 'openai',
-      apiKey: 'test-key',
+      apiKey: '',
+      byokProfileId: 'byok-test-profile',
+      byokCredentialConfigured: true,
+      baseUrl: 'https://api.openai.com/v1',
       model: 'api-model',
     });
 
@@ -1842,7 +1847,7 @@ describe('ProjectView conversation run isolation', () => {
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
     expect(streamViaDaemon).toHaveBeenCalledWith(expect.objectContaining({
       agentId: 'byok-opencode',
-      byokProvider: expect.objectContaining({ protocol: 'openai', apiKey: 'test-key' }),
+      byokProfileId: 'byok-test-profile',
       model: 'api-model',
     }));
     await waitFor(() => expect(playSound).toHaveBeenCalledWith('success-sound'));
@@ -1870,10 +1875,7 @@ describe('ProjectView conversation run isolation', () => {
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
     expect(streamViaDaemon).toHaveBeenCalledWith(expect.objectContaining({
       agentId: 'byok-opencode',
-      byokProvider: {
-        protocol: 'openai',
-        credentialSource: 'deployment',
-      },
+      byokCredentialSource: 'deployment',
       model: 'gpt-5.5',
     }));
   });
@@ -1916,6 +1918,8 @@ describe('ProjectView conversation run isolation', () => {
           agentId,
           apiProtocol: 'openai',
           apiKey,
+          byokProfileId: undefined,
+          byokCredentialConfigured: false,
           baseUrl: 'https://api.openai.com/v1',
           model,
         },
@@ -1970,14 +1974,7 @@ describe('ProjectView conversation run isolation', () => {
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
     expect(streamViaDaemon).toHaveBeenCalledWith(expect.objectContaining({
       agentId: 'byok-opencode',
-      byokProvider: {
-        protocol: 'ollama',
-        apiKey: '',
-        baseUrl: 'http://localhost:11434',
-        requiresApiKey: false,
-        apiVersion: '',
-        model: 'llama3.2',
-      },
+      byokProfileId: 'byok-test-profile',
       model: 'llama3.2',
     }));
   });
@@ -2004,14 +2001,7 @@ describe('ProjectView conversation run isolation', () => {
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
     expect(streamViaDaemon).toHaveBeenCalledWith(expect.objectContaining({
       agentId: 'byok-opencode',
-      byokProvider: {
-        protocol: 'openai',
-        apiKey: '',
-        baseUrl: 'http://127.0.0.1:8000/v1',
-        requiresApiKey: false,
-        apiVersion: '',
-        model: 'model',
-      },
+      byokProfileId: 'byok-test-profile',
       model: 'model',
     }));
   });

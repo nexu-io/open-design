@@ -983,6 +983,11 @@ export interface Dict {
   'updater.ready': string;
   'updater.readyGeneric': string;
   'updater.readyVersion': string;
+  // Forced installer reinstall (feed control.launcher.version.min gate).
+  // Copy priority: operator jump link (reinstall.url) > these defaults.
+  'updater.reinstallLearnMore': string;
+  'updater.reinstallReadyGeneric': string;
+  'updater.reinstallReadyVersion': string;
   'updater.restartAnyway': string;
   'updater.upToDate': string;
   'updater.viewVersionFeatures': string;
@@ -3579,8 +3584,32 @@ export interface Dict {
   'manualEdit.minHeight': string;
   'manualEdit.deleteElement': string;
   'manualEdit.deleteElementConfirm': string;
+  'manualEdit.duplicateElement': string;
+  'manualEdit.pasteElement': string;
+  'manualEdit.pasteImage': string;
+  'manualEdit.moveElement': string;
+  'manualEdit.resizeElement': string;
+  'manualEdit.replaceImage': string;
+  'manualEdit.cropImage': string;
+  'manualEdit.applyCrop': string;
+  'manualEdit.cropFailed': string;
+  'manualEdit.bold': string;
+  'manualEdit.italic': string;
+  'manualEdit.underline': string;
+  'manualEdit.strikethrough': string;
+  'manualEdit.alignLeft': string;
+  'manualEdit.alignCenter': string;
+  'manualEdit.alignRight': string;
+  'manualEdit.spacing': string;
+  'manualEdit.letterSpacing': string;
+  'manualEdit.lineHeight': string;
+  'manualEdit.commonColors': string;
+  'manualEdit.hue': string;
+  'manualEdit.opacity': string;
   'manualEdit.uploadImage': string;
   'manualEdit.uploadingImage': string;
+  'manualEdit.processingImage': string;
+  'manualEdit.imageAdded': string;
   'manualEdit.uploadImageFailed': string;
   'manualEdit.focusSlides': string;
   'manualEdit.showPanels': string;
@@ -3614,6 +3643,9 @@ export interface Dict {
   'fileViewer.presentInTab': string;
   'fileViewer.presentFullscreen': string;
   'fileViewer.presentNewTab': string;
+  'fileViewer.presentFromBeginning': string;
+  'fileViewer.presentFromCurrentSlide': string;
+  'fileViewer.presenterMode': string;
   'fileViewer.exitPresentation': string;
   'fileViewer.shareLabel': string;
   'fileViewer.shareMenuShareLink': string;
@@ -4276,6 +4308,13 @@ export interface Dict {
   'settings.resetOnboarding': string;
   'settings.resetOnboardingDesc': string;
   'settings.resetOnboardingButton': string;
+  // Manual updater/launcher cache clear (disaster recovery, About pane).
+  'settings.clearUpdaterCacheTitle': string;
+  'settings.clearUpdaterCacheHint': string;
+  'settings.clearUpdaterCacheButton': string;
+  'settings.clearUpdaterCacheConfirmButton': string;
+  'settings.clearUpdaterCacheSuccess': string;
+  'settings.clearUpdaterCacheFailed': string;
   'onboarding.brandTitle': string;
   'onboarding.brandSubtitle': string;
   'onboarding.brandSkip': string;

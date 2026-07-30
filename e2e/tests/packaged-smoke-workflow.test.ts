@@ -945,6 +945,21 @@ process.stdin.on("end", () => {
     }
   });
 
+  it("[P2] closes packaged-leaf coverage without duplicating the broad E2E lane", async () => {
+    const workflow = await readFile(ciWorkflowPath, "utf8");
+    const workspaceUnit = sectionBetween(workflow, "  workspace_unit_tests:", "  windows_tools_pack_payload_tests:");
+
+    expect(workspaceUnit).toContain(`if [ "\${{ needs.scopes.outputs.tools_pack_tests_required }}" = "true" ]; then
+            pnpm --filter @open-design/desktop build
+            pnpm --filter @open-design/desktop test
+            pnpm --filter @open-design/packaged test
+            pnpm --filter @open-design/tools-pack test
+            if [ "\${{ needs.scopes.outputs.run_e2e_vitest }}" != "true" ]; then
+              pnpm --filter @open-design/e2e test tests/packaged-launcher-update-loop.test.ts
+            fi
+          fi`);
+  });
+
   it("[P2] skips the critical fallback for pure packaged-leaf changes and stays fail-closed elsewhere", async () => {
     const hot = { inputs: { ci_mode: "hot" } };
 
@@ -959,10 +974,37 @@ process.stdin.on("end", () => {
       await expect(runScopesPrint("workflow_dispatch", hot, [file])).resolves.toMatchObject({
         run_playwright_critical: false,
         run_ui_p0: false,
+        tools_dev_tests_required: true,
+        tools_pack_tests_required: true,
         ui_critical_validation_required: false,
         workspace_validation_required: true,
       });
     }
+
+    const mergeGroup = {
+      merge_group: {
+        base_sha: "1111111111111111111111111111111111111111",
+        head_sha: "2222222222222222222222222222222222222222",
+      },
+    };
+    await expect(runScopesPrint("merge_group", mergeGroup, ["apps/desktop/src/main.ts"])).resolves.toMatchObject({
+      run_e2e_vitest: false,
+      run_playwright_critical: false,
+      run_playwright_visual: false,
+      run_ui_p0: false,
+      run_web_workspace_tests: false,
+      run_windows_tools_pack_payload_tests: true,
+      tools_dev_tests_required: true,
+      tools_pack_tests_required: true,
+      workspace_validation_required: true,
+    });
+
+    await expect(runScopesPrint("merge_group", mergeGroup, ["apps/desktop/package.json"])).resolves.toMatchObject({
+      run_e2e_vitest: true,
+      run_playwright_visual: true,
+      run_ui_p0: true,
+      run_web_workspace_tests: true,
+    });
 
     // Fail-closed: anything that can reach the Playwright runtime — tools-dev,
     // transitive packages (including the undeclared metatool edge), scripts,
@@ -1119,6 +1161,7 @@ process.stdin.on("end", () => {
       files: ["ui/app.test.ts"],
     });
     expect(uiP0Groups["workspace-restoration"]).toEqual({
+      fullyParallel: true,
       grep: String.raw`\[P0\]`,
       files: ["ui/app-restoration.test.ts", "ui/critical-smoke.test.ts"],
     });
@@ -1130,6 +1173,20 @@ process.stdin.on("end", () => {
     expect(workflow).not.toContain("needs.runners.outputs.contabo_control");
     expect(workflow).not.toContain("needs.runners.outputs.hosted_or_blacksmith");
     expect(workflow).not.toContain("needs.runners.outputs.blacksmith_default");
+  });
+
+  it("[P1] pins ShellCheck for actionlint across runner profiles", async () => {
+    const workflow = await readFile(ciWorkflowPath, "utf8");
+    const staticGate = sectionBetween(workflow, "  static_gate:", "  preflight:");
+
+    expect(staticGate).toContain("SHELLCHECK_VERSION: 0.11.0");
+    expect(staticGate).toContain("shellcheck_arch=x86_64");
+    expect(staticGate).toContain("shellcheck_arch=aarch64");
+    expect(staticGate).toContain(
+      'koalaman/shellcheck/releases/download/v${SHELLCHECK_VERSION}/shellcheck-v${SHELLCHECK_VERSION}.linux.${shellcheck_arch}.tar.gz',
+    );
+    expect(staticGate).toContain("sudo install -m 0755 shellcheck /usr/local/bin/shellcheck");
+    expect(staticGate).toContain("run: actionlint -color");
   });
 
   it("[P2] keeps visual ownership and generic full UI sharding explicit", async () => {
@@ -2554,6 +2611,16 @@ process.stdin.on("end", () => {
     expect(winBuildScript).not.toContain("fnm");
     expect(winBuildScript).not.toContain("corepack");
     expect(winBuildScript).not.toContain("pnpm install");
+  });
+
+  it("resolves the generated Windows update fixture outside the measured build child scope", async () => {
+    const winBuildScript = await readFile(releaseBetaWindowsBuildScriptPath, "utf8");
+
+    expect(winBuildScript).toMatch(
+      /Measure-Step "tools-pack win build update fixture" \{[\s\S]*?\r?\n    \}\r?\n    \$updateBuild = Get-Content -LiteralPath \$fixtureJsonPath -Raw \| ConvertFrom-Json\r?\n    \$localUpdateArtifactPath = \[string\]\$updateBuild\.installerPath/,
+    );
+    expect(winBuildScript).toContain('$env:OD_PACKAGED_E2E_WIN_UPDATE_FIXTURE = "tools-serve"');
+    expect(winBuildScript).toContain("$env:OD_PACKAGED_E2E_WIN_UPDATE_ARTIFACT_PATH = $localUpdateArtifactPath");
   });
 });
 

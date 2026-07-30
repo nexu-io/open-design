@@ -8,6 +8,8 @@ export const LAUNCHER_AFTER_QUIT_FLAG = "--od-launcher-after-quit" as const;
 export const LAUNCHER_AFTER_QUIT_TARGET_PID_ARG = "--od-launcher-target-pid" as const;
 export const LAUNCHER_AFTER_QUIT_TIMEOUT_MS_ARG = "--od-launcher-timeout-ms" as const;
 export const LAUNCHER_HANDOFF_RESUME_ARG = "--od-launcher-resume-handoff" as const;
+export const LAUNCHER_DELEGATED_GENERATION_ARG = "--od-launcher-delegated-generation" as const;
+export const LAUNCHER_DELEGATED_VERSION_ARG = "--od-launcher-delegated-version" as const;
 
 export const LAUNCHER_CHANNELS = Object.freeze({
   BETA: RELEASE_CHANNELS.BETA,
@@ -132,6 +134,7 @@ export type LauncherCleanupDescriptor = {
 
 export type LauncherTargetSelection =
   | { pointer: LauncherVersionPointer; reason: "active"; selected: true }
+  | { pointer: LauncherVersionPointer; reason: "active-delegated"; selected: true }
   | { pointer: LauncherVersionPointer; reason: "active-resume"; selected: true }
   | { pointer: LauncherVersionPointer; reason: "last-successful"; selected: true }
   | { reason: "no-runtime-target"; selected: false };
@@ -277,6 +280,40 @@ export function parseLauncherAfterQuitArgs(args: readonly string[]): LauncherAft
       valueAfterArg(args, LAUNCHER_AFTER_QUIT_TIMEOUT_MS_ARG),
       "launcher after-quit timeout",
     ),
+  };
+}
+
+function normalizeLauncherGeneration(value: unknown): number {
+  const generation = typeof value === "string" && value.length > 0 ? Number(value) : value;
+  if (typeof generation !== "number" || !Number.isSafeInteger(generation) || generation < 0) {
+    throw new LauncherProtocolError(`launcher generation must be a non-negative safe integer: ${String(value)}`);
+  }
+  return generation;
+}
+
+/**
+ * Delegated-launch marker: a parent that pre-armed attempt.json for the
+ * pointer it is about to spawn (packaged outer delegation, updater payload
+ * relaunch) passes the pointer along so the spawned payload can tell its own
+ * in-progress attempt apart from a previous failed launch. Without the
+ * pre-arm, a payload that dies before reaching its own bookkeeping leaves no
+ * rollback evidence and the next cold start retries the same broken payload
+ * forever.
+ */
+export function buildLauncherDelegatedArgs(pointer: LauncherVersionPointer): string[] {
+  return [
+    LAUNCHER_DELEGATED_GENERATION_ARG,
+    normalizeLauncherGeneration(pointer.generation).toString(),
+    LAUNCHER_DELEGATED_VERSION_ARG,
+    normalizeLauncherVersion(pointer.version),
+  ];
+}
+
+export function parseLauncherDelegatedArgs(args: readonly string[]): LauncherVersionPointer | null {
+  if (!args.includes(LAUNCHER_DELEGATED_GENERATION_ARG)) return null;
+  return {
+    generation: normalizeLauncherGeneration(valueAfterArg(args, LAUNCHER_DELEGATED_GENERATION_ARG)),
+    version: normalizeLauncherVersion(valueAfterArg(args, LAUNCHER_DELEGATED_VERSION_ARG)),
   };
 }
 
@@ -609,11 +646,13 @@ export function validateLauncherCleanupDescriptor(
 
 export function selectLauncherRuntimeTarget(input: {
   attempted?: LauncherAttemptDescriptor | null;
+  delegated?: LauncherVersionPointer | null;
   resume?: LauncherVersionPointer | null;
   runtime: LauncherRuntimeDescriptor;
 }): LauncherTargetSelection {
   const active = normalizePointer(input.runtime.active);
   const lastSuccessful = normalizePointer(input.runtime.lastSuccessful);
+  const delegated = input.delegated == null ? null : normalizePointer(input.delegated);
   const resume = input.resume == null ? null : normalizePointer(input.resume);
   const attempted = input.attempted == null
     ? null
@@ -639,6 +678,17 @@ export function selectLauncherRuntimeTarget(input: {
       resume.generation === active.generation
     ) {
       return { pointer: active, reason: "active-resume", selected: true };
+    }
+    // A delegated pointer matching active marks THIS launch's pre-armed
+    // attempt (the parent wrote it just before spawning us) — the launch in
+    // progress, not a previous failure. Only an exact active match qualifies;
+    // a stale pointer from an older generation must not defeat the rollback.
+    if (
+      delegated != null &&
+      delegated.version === active.version &&
+      delegated.generation === active.generation
+    ) {
+      return { pointer: active, reason: "active-delegated", selected: true };
     }
     if (lastSuccessful == null) return { pointer: active, reason: "active", selected: true };
     return { pointer: lastSuccessful, reason: "last-successful", selected: true };

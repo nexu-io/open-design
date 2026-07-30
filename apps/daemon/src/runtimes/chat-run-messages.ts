@@ -211,7 +211,15 @@ export function daemonAgentPayloadToPersistedAgentEvent(data: unknown): Persiste
     };
   }
   if (type === 'tool_use' && typeof data.id === 'string' && typeof data.name === 'string') {
-    return { kind: 'tool_use', id: data.id, name: data.name, input: normalizePersistedToolInput(data.input) };
+    return {
+      kind: 'tool_use',
+      id: data.id,
+      name: data.name,
+      input: normalizePersistedToolInput(data.input),
+      ...(typeof data.startedAt === 'number' && Number.isFinite(data.startedAt)
+        ? { startedAt: data.startedAt }
+        : {}),
+    };
   }
   if (type === 'tool_input_delta') return null;
   if (type === 'tool_result' && typeof data.toolUseId === 'string') {

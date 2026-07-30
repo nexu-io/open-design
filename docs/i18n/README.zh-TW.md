@@ -1,7 +1,5 @@
 <h1 align="center">Open Design：開源的 Claude Design 替代方案</h1>
 
-> 🔥 **Open Design 0.13.0 —— _Stay in Flow_ 正式發布。** 過去，長時間的設計工作階段總在每一次中斷時斷裂——執行遺失了進度，模型選擇器讓你只能用猜的，匯出還得多繞一道彎。0.13.0 讓工作階段持續存活：跨回合恢復 Codex / OpenCode / Pi / Open Design Cloud 的執行，更快選中合適的模型，並在不離開應用程式的情況下交付有截圖佐證的 PPTX / PDF。[下載 0.13.0](https://github.com/nexu-io/open-design/releases) · [發行說明](https://github.com/nexu-io/open-design/releases/tag/open-design-v0.13.0)
->
 > ⚡ **Open Design Cloud——官方模型服務。** 一次儲值，即可在 Open Design 中直接使用 GPT、Claude、Gemini 與 DeepSeek：20+ 旗艦模型、零設定、依實際 token 用量計費。[立即體驗](https://open-design.ai/cloud/?utm_source=github&utm_medium=referral&utm_content=readme_try_cloud)
 >
 > 🏅 **Open Design Fellow 計畫現已開放。** 如果你也相信設計應該是開放的——歡迎成為 Open Design Fellow，與核心團隊一同形塑這項產品，並協助更多人參與定義設計的未來。詳情請見 → [`MAINTAINERS.md`](../../MAINTAINERS.md) 與 [Discord](https://discord.gg/mHAjSMV6gz)。
@@ -116,10 +114,10 @@ Open Design 是這樣誕生的：當 Anthropic 隨 Claude Design 推出的那套
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | ✅ 已支援 | `od mcp install claude` |
 | [Codex CLI](https://github.com/openai/codex) | ✅ 已支援 | `od mcp install codex` |
 | [DeepSeek Reasonix](https://github.com/esengine/DeepSeek-Reasonix) | ✅ 已支援 | `od mcp install reasonix` |
+| [Raven](https://github.com/EverMind-AI/Raven) | ✅ 已支援 | `od mcp install raven` |
 | [Cursor](https://www.cursor.com/cli) | ✅ 已支援 | `od mcp install cursor` |
 | [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ 已支援 | `od mcp install copilot` |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ 已支援 | `od mcp install copilot` |
-| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | ✅ 已支援 | `od mcp install gemini` |
 | [OpenCode](https://opencode.ai/) | ✅ 已支援 | `od mcp install opencode` |
 | [OpenClaw](https://github.com/openclaw/openclaw) | ✅ 已支援 | `od mcp install openclaw` |
 | [Antigravity](https://antigravity.google) | ✅ 已支援 | `od mcp install antigravity` |
@@ -304,8 +302,8 @@ Open Design（OD）就是那個開源的替代方案。同樣的迴圈、同樣�
 ```bash
 # One-line install into the agent you're using:
 od mcp install <agent>
-# <agent> = claude | codex | cursor | copilot | openclaw | antigravity | gemini
-#         | pi | vibe | hermes | cline | kimi | trae | opencode
+# <agent> = claude | codex | reasonix | raven | cursor | copilot | openclaw | antigravity
+#         | pi | vibe | hermes | cline | kimi | kiro | trae | opencode
 
 # Hosted equivalent for curl-based setup:
 curl -fsSL https://open-design.ai/install.sh | sh -s <agent>

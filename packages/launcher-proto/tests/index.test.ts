@@ -6,9 +6,11 @@ import {
   LAUNCHER_SCHEMA_VERSION,
   LauncherProtocolError,
   buildLauncherAfterQuitArgs,
+  buildLauncherDelegatedArgs,
   buildLauncherHandoffResumeArgs,
   compareLauncherVersions,
   parseLauncherAfterQuitArgs,
+  parseLauncherDelegatedArgs,
   parseLauncherHandoffResumeArgs,
   resolveLauncherPaths,
   resolveLauncherVersionPaths,
@@ -155,6 +157,68 @@ describe("launcher runtime descriptors", () => {
       reason: "active-resume",
       selected: true,
     });
+  });
+
+  it("treats a delegated pre-armed attempt as the launch in progress, not a failed launch", () => {
+    // The delegating parent (outer or updater relaunch) arms attempt.json
+    // BEFORE spawning the payload so a payload that dies before reaching its
+    // own bookkeeping still leaves rollback evidence. The spawned payload
+    // carries the delegated pointer and must not mistake that fresh attempt
+    // for a previous failed launch.
+    const attempted = {
+      channel: "beta",
+      generation: 2,
+      namespace: "release-beta",
+      schemaVersion: LAUNCHER_SCHEMA_VERSION,
+      version: "0.8.1-beta.2",
+    } as const;
+
+    expect(
+      selectLauncherRuntimeTarget({
+        attempted,
+        delegated: { generation: 2, version: "0.8.1-beta.2" },
+        runtime,
+      }),
+    ).toEqual({
+      pointer: { generation: 2, version: "0.8.1-beta.2" },
+      reason: "active-delegated",
+      selected: true,
+    });
+
+    // A stale delegated pointer from an older generation must not defeat the
+    // rollback: only an exact active match is the launch in progress.
+    expect(
+      selectLauncherRuntimeTarget({
+        attempted,
+        delegated: { generation: 1, version: "0.8.1-beta.1" },
+        runtime,
+      }),
+    ).toEqual({
+      pointer: { generation: 1, version: "0.8.1-beta.1" },
+      reason: "last-successful",
+      selected: true,
+    });
+
+    // Without a matching attempt the delegated pointer is irrelevant.
+    expect(
+      selectLauncherRuntimeTarget({
+        delegated: { generation: 2, version: "0.8.1-beta.2" },
+        runtime,
+      }),
+    ).toEqual({
+      pointer: { generation: 2, version: "0.8.1-beta.2" },
+      reason: "active",
+      selected: true,
+    });
+  });
+
+  it("round-trips launcher delegated argv", () => {
+    const args = buildLauncherDelegatedArgs({ generation: 2, version: "0.8.1-beta.2" });
+    expect(parseLauncherDelegatedArgs(["node", "app", ...args])).toEqual({
+      generation: 2,
+      version: "0.8.1-beta.2",
+    });
+    expect(parseLauncherDelegatedArgs(["node", "app"])).toBeNull();
   });
 
   it("falls back cleanly when no active runtime target exists", () => {

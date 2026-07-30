@@ -589,7 +589,7 @@
   top: calc(100% + 6px);
   right: 0;
   z-index: var(--viewer-action-menu-z);
-  min-width: 168px;
+  min-width: 204px;
   padding: 4px;
   background: var(--bg-panel);
   border: 1px solid var(--border);

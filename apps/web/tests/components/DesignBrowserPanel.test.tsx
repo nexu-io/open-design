@@ -19,11 +19,13 @@ import {
   isHistoryEntry,
   isHistoryUrl,
   labelFromUrl,
+  loadBrowserViewport,
   loadHistory,
   normalizeBrowserAddress,
   pageBriefMarkdown,
   referenceIconUrl,
   sameUrl,
+  saveBrowserViewport,
   saveHistory,
 } from '../../src/components/DesignBrowserPanel';
 import {
@@ -435,6 +437,33 @@ describe('loadHistory / saveHistory round-trip', () => {
     }));
     saveHistory(projectId, many);
     expect(loadHistory(projectId)).toHaveLength(80);
+  });
+});
+
+describe('loadBrowserViewport / saveBrowserViewport round-trip', () => {
+  const projectId = 'proj-viewport';
+
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  afterEach(() => {
+    window.localStorage.clear();
+  });
+
+  it('returns desktop when no browser viewport is stored', () => {
+    expect(loadBrowserViewport(projectId)).toBe('desktop');
+  });
+
+  it('round-trips the selected browser viewport', () => {
+    saveBrowserViewport(projectId, 'mobile');
+    expect(window.localStorage.getItem(`od:design-browser:${projectId}:viewport:v1`)).toBe('mobile');
+    expect(loadBrowserViewport(projectId)).toBe('mobile');
+  });
+
+  it('ignores malformed stored browser viewport values', () => {
+    window.localStorage.setItem(`od:design-browser:${projectId}:viewport:v1`, 'watch');
+    expect(loadBrowserViewport(projectId)).toBe('desktop');
   });
 });
 

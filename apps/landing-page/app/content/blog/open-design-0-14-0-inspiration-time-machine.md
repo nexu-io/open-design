@@ -3,14 +3,14 @@ title: "Open Design 0.14.0: the inspiration time machine"
 date: 2026-07-08
 category: "Product"
 readingTime: 7
-summary: "Tag open-design-v0.14.0 — 125 PRs from 36 contributors in five days. Codename \"Inspiration Time Machine.\" Too many good ideas still vanished into the flow: a promising sketch, a useful source, a better earlier version, or the exact moment a draft started to go wrong. 0.14.0 keeps more of the work alive — sketch first in plan mode, trace the inputs feeding the composer, step back through HTML version history, and recover the thread instead of losing the spark."
+summary: "open-design-v0.14.0 — 125 PRs from 36 contributors in five days. Codename \"Inspiration Time Machine.\" Too many good ideas still vanished into the flow: a promising sketch, a useful source, a better earlier version, or the exact moment a draft started to go wrong. 0.14.0 keeps more of the work alive — sketch first in plan mode, trace the inputs feeding the composer, step back through HTML version history, and recover the thread instead of losing the spark."
 i18n:
   zh:
     title: 'Open Design 0.14.0：灵感时光机'
-    summary: '标签 open-design-v0.14.0 —— 五天内 36 位贡献者提交了 125 个 PR。代号「灵感时光机」。太多好点子依然消失在心流之中：一张有潜力的草图、一个有用的来源、一个更好的早期版本，或者一份草稿开始走偏的那个确切瞬间。0.14.0 让更多工作留存下来——先在 plan mode 里画草图、追溯喂给 composer 的输入、在 HTML 版本历史里回退，并找回那条线索，而不是弄丢那点火花。'
+    summary: 'open-design-v0.14.0 —— 五天内 36 位贡献者提交了 125 个 PR。代号「灵感时光机」。太多好点子依然消失在心流之中：一张有潜力的草图、一个有用的来源、一个更好的早期版本，或者一份草稿开始走偏的那个确切瞬间。0.14.0 让更多工作留存下来——先在 plan mode 里画草图、追溯喂给 composer 的输入、在 HTML 版本历史里回退，并找回那条线索，而不是弄丢那点火花。'
     category: '产品'
     bodyHtml: |
-      <p>标签 <code>open-design-v0.14.0</code>，于 2026 年 7 月 8 日发布。<strong>五天内 36 位贡献者提交了 125 个 PR。</strong>代号「灵感时光机」。上一次发布教会了 Open Design 在中断之间保持心流。这一次讲的是心流依然可能弄丢的那些点子：一张从未落地的粗略草图、喂出一个好结果的那个来源、一份更好的早期草稿、一次运行开始跑偏的那个瞬间。0.14.0 让更多工作留存下来，好让你回过头去，重新拾起那点火花。</p>
+      <p><code>open-design-v0.14.0</code>，于 2026 年 7 月 8 日发布。<strong>五天内 36 位贡献者提交了 125 个 PR。</strong>代号「灵感时光机」。上一次发布教会了 Open Design 在中断之间保持心流。这一次讲的是心流依然可能弄丢的那些点子：一张从未落地的粗略草图、喂出一个好结果的那个来源、一份更好的早期草稿、一次运行开始跑偏的那个瞬间。0.14.0 让更多工作留存下来，好让你回过头去，重新拾起那点火花。</p>
       <p>想看完整的更新日志？它就在 <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.14.0">GitHub 上的发布说明</a>里。本文是精简版：底层改了什么、你今天能用它做什么，以及从哪里开始。</p>
 
       <h2>先画草图，再正式动工</h2>
@@ -75,10 +75,10 @@ i18n:
       </ul>
   ja:
     title: 'Open Design 0.14.0：インスピレーションのタイムマシン'
-    summary: 'タグ open-design-v0.14.0 — 5日間で36人のコントリビューターから125件のPR。コードネームは「インスピレーションのタイムマシン（Inspiration Time Machine）」。あまりに多くの良いアイデアが、いまだにフローの中へ消えていきました：見込みのあるスケッチ、役に立つソース、より良い以前のバージョン、あるいは下書きが逸れ始めたまさにその瞬間。0.14.0 は、より多くの作業を生かしておきます——まず plan mode でスケッチし、composer に流れ込む入力をたどり、HTML のバージョン履歴をさかのぼって、ひらめきを失う代わりにその糸を取り戻せるように。'
+    summary: 'open-design-v0.14.0 — 5日間で36人のコントリビューターから125件のPR。コードネームは「インスピレーションのタイムマシン（Inspiration Time Machine）」。あまりに多くの良いアイデアが、いまだにフローの中へ消えていきました：見込みのあるスケッチ、役に立つソース、より良い以前のバージョン、あるいは下書きが逸れ始めたまさにその瞬間。0.14.0 は、より多くの作業を生かしておきます——まず plan mode でスケッチし、composer に流れ込む入力をたどり、HTML のバージョン履歴をさかのぼって、ひらめきを失う代わりにその糸を取り戻せるように。'
     category: 'プロダクト'
     bodyHtml: |
-      <p>タグ <code>open-design-v0.14.0</code>、2026年7月8日にリリース。<strong>5日間で36人のコントリビューターから125件のPR。</strong>コードネームは「インスピレーションのタイムマシン（Inspiration Time Machine）」。前回のリリースは、Open Design に中断をまたいでフローにとどまることを教えました。今回は、フローがいまだに失いかねないアイデアについての話です：どこにも着地しなかった粗いスケッチ、良い結果を生んだソース、より良い以前の下書き、実行が逸れ始めた瞬間。0.14.0 はより多くの作業を生かしておくので、あなたは戻って、そのひらめきをもう一度拾い上げられます。</p>
+      <p><code>open-design-v0.14.0</code>、2026年7月8日にリリース。<strong>5日間で36人のコントリビューターから125件のPR。</strong>コードネームは「インスピレーションのタイムマシン（Inspiration Time Machine）」。前回のリリースは、Open Design に中断をまたいでフローにとどまることを教えました。今回は、フローがいまだに失いかねないアイデアについての話です：どこにも着地しなかった粗いスケッチ、良い結果を生んだソース、より良い以前の下書き、実行が逸れ始めた瞬間。0.14.0 はより多くの作業を生かしておくので、あなたは戻って、そのひらめきをもう一度拾い上げられます。</p>
       <p>詳細な変更履歴が読みたい方は、<a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.14.0">GitHub のリリースノート</a>にあります。本記事は短縮版です：内部で何が変わったか、今日それで何ができるか、そしてどこから始めればよいか。</p>
 
       <h2>本格的に作り始める前に、まずスケッチ</h2>
@@ -143,10 +143,10 @@ i18n:
       </ul>
   ko:
     title: 'Open Design 0.14.0: 영감의 타임머신'
-    summary: '태그 open-design-v0.14.0 — 5일 동안 36명의 기여자가 만든 125개의 PR. 코드명 "영감의 타임머신(Inspiration Time Machine)". 너무 많은 좋은 아이디어가 여전히 흐름 속으로 사라졌습니다: 가능성 있는 스케치, 유용한 출처, 더 나은 이전 버전, 혹은 초안이 어긋나기 시작한 바로 그 순간. 0.14.0은 더 많은 작업을 살려 둡니다 — 먼저 plan mode에서 스케치하고, composer로 흘러드는 입력을 추적하고, HTML 버전 기록을 되짚어, 불꽃을 잃는 대신 그 실마리를 되찾을 수 있게요.'
+    summary: 'open-design-v0.14.0 — 5일 동안 36명의 기여자가 만든 125개의 PR. 코드명 "영감의 타임머신(Inspiration Time Machine)". 너무 많은 좋은 아이디어가 여전히 흐름 속으로 사라졌습니다: 가능성 있는 스케치, 유용한 출처, 더 나은 이전 버전, 혹은 초안이 어긋나기 시작한 바로 그 순간. 0.14.0은 더 많은 작업을 살려 둡니다 — 먼저 plan mode에서 스케치하고, composer로 흘러드는 입력을 추적하고, HTML 버전 기록을 되짚어, 불꽃을 잃는 대신 그 실마리를 되찾을 수 있게요.'
     category: '제품'
     bodyHtml: |
-      <p>태그 <code>open-design-v0.14.0</code>, 2026년 7월 8일 출시. <strong>5일 동안 36명의 기여자가 만든 125개의 PR.</strong> 코드명 "영감의 타임머신(Inspiration Time Machine)". 지난 릴리스는 Open Design에게 방해 구간을 가로질러 흐름 속에 머무는 법을 가르쳤습니다. 이번 릴리스는 흐름이 여전히 잃어버릴 수 있는 아이디어에 관한 것입니다: 어디에도 안착하지 못한 거친 스케치, 좋은 결과를 만들어 낸 출처, 더 나은 이전 초안, 실행이 어긋나기 시작한 순간. 0.14.0은 더 많은 작업을 살려 두어, 당신이 되돌아가 그 불꽃을 다시 집어 들 수 있게 합니다.</p>
+      <p><code>open-design-v0.14.0</code>, 2026년 7월 8일 출시. <strong>5일 동안 36명의 기여자가 만든 125개의 PR.</strong> 코드명 "영감의 타임머신(Inspiration Time Machine)". 지난 릴리스는 Open Design에게 방해 구간을 가로질러 흐름 속에 머무는 법을 가르쳤습니다. 이번 릴리스는 흐름이 여전히 잃어버릴 수 있는 아이디어에 관한 것입니다: 어디에도 안착하지 못한 거친 스케치, 좋은 결과를 만들어 낸 출처, 더 나은 이전 초안, 실행이 어긋나기 시작한 순간. 0.14.0은 더 많은 작업을 살려 두어, 당신이 되돌아가 그 불꽃을 다시 집어 들 수 있게 합니다.</p>
       <p>전체 변경 로그가 궁금하다면 <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.14.0">GitHub의 릴리스 노트</a>에 담겨 있습니다. 이 글은 짧은 버전입니다: 내부에서 무엇이 바뀌었는지, 오늘 그것으로 무엇을 할 수 있는지, 그리고 어디서 시작하면 되는지.</p>
 
       <h2>본격적으로 만들기 전에, 먼저 스케치</h2>
@@ -211,10 +211,10 @@ i18n:
       </ul>
   de:
     title: 'Open Design 0.14.0: die Zeitmaschine für Inspiration'
-    summary: 'Tag open-design-v0.14.0 — 125 PRs von 36 Mitwirkenden in fünf Tagen. Codename „Inspiration Time Machine" (Zeitmaschine für Inspiration). Zu viele gute Ideen verschwanden immer noch im Flow: eine vielversprechende Skizze, eine nützliche Quelle, eine bessere frühere Version oder genau der Moment, in dem ein Entwurf abzudriften begann. 0.14.0 hält mehr von der Arbeit am Leben — erst im Plan mode skizzieren, den Eingaben nachgehen, die den Composer speisen, durch die HTML-Versionshistorie zurückgehen und den Faden wiederfinden, statt den Funken zu verlieren.'
+    summary: 'open-design-v0.14.0 — 125 PRs von 36 Mitwirkenden in fünf Tagen. Codename „Inspiration Time Machine" (Zeitmaschine für Inspiration). Zu viele gute Ideen verschwanden immer noch im Flow: eine vielversprechende Skizze, eine nützliche Quelle, eine bessere frühere Version oder genau der Moment, in dem ein Entwurf abzudriften begann. 0.14.0 hält mehr von der Arbeit am Leben — erst im Plan mode skizzieren, den Eingaben nachgehen, die den Composer speisen, durch die HTML-Versionshistorie zurückgehen und den Faden wiederfinden, statt den Funken zu verlieren.'
     category: 'Produkt'
     bodyHtml: |
-      <p>Tag <code>open-design-v0.14.0</code>, veröffentlicht am 8. Juli 2026. <strong>125 PRs von 36 Mitwirkenden in fünf Tagen.</strong> Codename „Inspiration Time Machine" (Zeitmaschine für Inspiration). Das letzte Release brachte Open Design bei, über Unterbrechungen hinweg im Flow zu bleiben. In diesem geht es um die Ideen, die der Flow trotzdem noch verlieren kann: eine grobe Skizze, die nirgends landete, die Quelle, die ein gutes Ergebnis speiste, ein besserer früherer Entwurf, der Moment, in dem ein Lauf abzudriften begann. 0.14.0 hält mehr von der Arbeit am Leben, damit du zurückgehen und den Funken erneut aufgreifen kannst.</p>
+      <p><code>open-design-v0.14.0</code>, veröffentlicht am 8. Juli 2026. <strong>125 PRs von 36 Mitwirkenden in fünf Tagen.</strong> Codename „Inspiration Time Machine" (Zeitmaschine für Inspiration). Das letzte Release brachte Open Design bei, über Unterbrechungen hinweg im Flow zu bleiben. In diesem geht es um die Ideen, die der Flow trotzdem noch verlieren kann: eine grobe Skizze, die nirgends landete, die Quelle, die ein gutes Ergebnis speiste, ein besserer früherer Entwurf, der Moment, in dem ein Lauf abzudriften begann. 0.14.0 hält mehr von der Arbeit am Leben, damit du zurückgehen und den Funken erneut aufgreifen kannst.</p>
       <p>Willst du das vollständige Änderungsprotokoll? Es findet sich in den <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.14.0">Release Notes auf GitHub</a>. Dieser Beitrag ist die Kurzfassung: was sich unter der Haube geändert hat, was du heute damit machen kannst und wo du anfängst.</p>
 
       <h2>Erst skizzieren, vor dem echten Bauen</h2>
@@ -279,10 +279,10 @@ i18n:
       </ul>
   fr:
     title: 'Open Design 0.14.0 : la machine à remonter l''inspiration'
-    summary: 'Tag open-design-v0.14.0 — 125 PR de 36 contributeurs en cinq jours. Nom de code « Inspiration Time Machine » (la machine à remonter l''inspiration). Trop de bonnes idées se perdaient encore dans le flow : une esquisse prometteuse, une source utile, une meilleure version antérieure, ou l''instant précis où un brouillon a commencé à déraper. La 0.14.0 garde vivante une plus grande part du travail — esquissez d''abord en plan mode, remontez les entrées qui alimentent le composer, revenez en arrière dans l''historique des versions HTML, et retrouvez le fil au lieu de perdre l''étincelle.'
+    summary: 'open-design-v0.14.0 — 125 PR de 36 contributeurs en cinq jours. Nom de code « Inspiration Time Machine » (la machine à remonter l''inspiration). Trop de bonnes idées se perdaient encore dans le flow : une esquisse prometteuse, une source utile, une meilleure version antérieure, ou l''instant précis où un brouillon a commencé à déraper. La 0.14.0 garde vivante une plus grande part du travail — esquissez d''abord en plan mode, remontez les entrées qui alimentent le composer, revenez en arrière dans l''historique des versions HTML, et retrouvez le fil au lieu de perdre l''étincelle.'
     category: 'Produit'
     bodyHtml: |
-      <p>Tag <code>open-design-v0.14.0</code>, publié le 8 juillet 2026. <strong>125 PR de 36 contributeurs en cinq jours.</strong> Nom de code « Inspiration Time Machine » (la machine à remonter l'inspiration). La dernière version a appris à Open Design à rester dans le flow à travers les interruptions. Celle-ci parle des idées que le flow peut encore perdre : une esquisse grossière qui n'a jamais atterri nulle part, la source qui a nourri un bon résultat, un meilleur brouillon antérieur, l'instant où une exécution a commencé à dériver. La 0.14.0 garde vivante une plus grande part du travail pour que vous puissiez revenir en arrière et ressaisir l'étincelle.</p>
+      <p><code>open-design-v0.14.0</code>, publié le 8 juillet 2026. <strong>125 PR de 36 contributeurs en cinq jours.</strong> Nom de code « Inspiration Time Machine » (la machine à remonter l'inspiration). La dernière version a appris à Open Design à rester dans le flow à travers les interruptions. Celle-ci parle des idées que le flow peut encore perdre : une esquisse grossière qui n'a jamais atterri nulle part, la source qui a nourri un bon résultat, un meilleur brouillon antérieur, l'instant où une exécution a commencé à dériver. La 0.14.0 garde vivante une plus grande part du travail pour que vous puissiez revenir en arrière et ressaisir l'étincelle.</p>
       <p>Vous voulez le changelog complet ? Il se trouve dans les <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.14.0">notes de version sur GitHub</a>. Cet article est la version courte : ce qui a changé sous le capot, ce que vous pouvez en faire dès aujourd'hui, et par où commencer.</p>
 
       <h2>Esquisser d'abord, avant la vraie construction</h2>
@@ -347,10 +347,10 @@ i18n:
       </ul>
   ru:
     title: 'Open Design 0.14.0: машина времени для вдохновения'
-    summary: 'Тег open-design-v0.14.0 — 125 PR от 36 контрибьюторов за пять дней. Кодовое название «Inspiration Time Machine» (машина времени для вдохновения). Слишком много хороших идей всё ещё исчезало в потоке: многообещающий набросок, полезный источник, лучшая ранняя версия или тот самый момент, когда черновик начал уходить не туда. 0.14.0 сохраняет живой большую часть работы — сначала набросайте в plan mode, проследите за входными данными, питающими composer, отступите назад по истории версий HTML и восстановите нить вместо того, чтобы потерять искру.'
+    summary: 'open-design-v0.14.0 — 125 PR от 36 контрибьюторов за пять дней. Кодовое название «Inspiration Time Machine» (машина времени для вдохновения). Слишком много хороших идей всё ещё исчезало в потоке: многообещающий набросок, полезный источник, лучшая ранняя версия или тот самый момент, когда черновик начал уходить не туда. 0.14.0 сохраняет живой большую часть работы — сначала набросайте в plan mode, проследите за входными данными, питающими composer, отступите назад по истории версий HTML и восстановите нить вместо того, чтобы потерять искру.'
     category: 'Продукт'
     bodyHtml: |
-      <p>Тег <code>open-design-v0.14.0</code>, выпущен 8 июля 2026 года. <strong>125 PR от 36 контрибьюторов за пять дней.</strong> Кодовое название «Inspiration Time Machine» (машина времени для вдохновения). Прошлый релиз научил Open Design оставаться в потоке сквозь прерывания. Этот — об идеях, которые поток всё ещё может потерять: грубый набросок, который так никуда и не приземлился, источник, что питал хороший результат, лучший ранний черновик, момент, когда запуск начал уходить не туда. 0.14.0 сохраняет живой большую часть работы, чтобы вы могли вернуться и снова подхватить искру.</p>
+      <p><code>open-design-v0.14.0</code>, выпущен 8 июля 2026 года. <strong>125 PR от 36 контрибьюторов за пять дней.</strong> Кодовое название «Inspiration Time Machine» (машина времени для вдохновения). Прошлый релиз научил Open Design оставаться в потоке сквозь прерывания. Этот — об идеях, которые поток всё ещё может потерять: грубый набросок, который так никуда и не приземлился, источник, что питал хороший результат, лучший ранний черновик, момент, когда запуск начал уходить не туда. 0.14.0 сохраняет живой большую часть работы, чтобы вы могли вернуться и снова подхватить искру.</p>
       <p>Нужен полный список изменений? Он есть в <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.14.0">примечаниях к релизу на GitHub</a>. Этот пост — краткая версия: что изменилось под капотом, что вы можете сделать с этим уже сегодня и с чего начать.</p>
 
       <h2>Сначала набросок, до настоящей сборки</h2>
@@ -415,10 +415,10 @@ i18n:
       </ul>
   es:
     title: 'Open Design 0.14.0: la máquina del tiempo de la inspiración'
-    summary: 'Tag open-design-v0.14.0: 125 PRs de 36 colaboradores en cinco días. Nombre en clave «Inspiration Time Machine» (la máquina del tiempo de la inspiración). Demasiadas buenas ideas seguían desvaneciéndose en el flow: un boceto prometedor, una fuente útil, una versión anterior mejor, o el instante exacto en que un borrador empezó a torcerse. La 0.14.0 mantiene viva una mayor parte del trabajo: primero bocetas en plan mode, rastreas las entradas que alimentan el composer, retrocedes por el historial de versiones HTML, y recuperas el hilo en lugar de perder la chispa.'
+    summary: 'open-design-v0.14.0: 125 PRs de 36 colaboradores en cinco días. Nombre en clave «Inspiration Time Machine» (la máquina del tiempo de la inspiración). Demasiadas buenas ideas seguían desvaneciéndose en el flow: un boceto prometedor, una fuente útil, una versión anterior mejor, o el instante exacto en que un borrador empezó a torcerse. La 0.14.0 mantiene viva una mayor parte del trabajo: primero bocetas en plan mode, rastreas las entradas que alimentan el composer, retrocedes por el historial de versiones HTML, y recuperas el hilo en lugar de perder la chispa.'
     category: 'Producto'
     bodyHtml: |
-      <p>Tag <code>open-design-v0.14.0</code>, publicado el 8 de julio de 2026. <strong>125 PRs de 36 colaboradores en cinco días.</strong> Nombre en clave «Inspiration Time Machine» (la máquina del tiempo de la inspiración). La última versión le enseñó a Open Design a mantenerse en el flow a través de las interrupciones. Esta trata sobre las ideas que el flow todavía puede perder: un boceto tosco que nunca aterrizó en ningún lado, la fuente que alimentó un buen resultado, un borrador anterior mejor, el momento en que una ejecución empezó a desviarse. La 0.14.0 mantiene viva una mayor parte del trabajo para que puedas volver atrás y recoger la chispa de nuevo.</p>
+      <p><code>open-design-v0.14.0</code>, publicado el 8 de julio de 2026. <strong>125 PRs de 36 colaboradores en cinco días.</strong> Nombre en clave «Inspiration Time Machine» (la máquina del tiempo de la inspiración). La última versión le enseñó a Open Design a mantenerse en el flow a través de las interrupciones. Esta trata sobre las ideas que el flow todavía puede perder: un boceto tosco que nunca aterrizó en ningún lado, la fuente que alimentó un buen resultado, un borrador anterior mejor, el momento en que una ejecución empezó a desviarse. La 0.14.0 mantiene viva una mayor parte del trabajo para que puedas volver atrás y recoger la chispa de nuevo.</p>
       <p>¿Quieres el registro de cambios completo? Está en las <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.14.0">notas de la versión en GitHub</a>. Esta publicación es la versión corta: qué cambió por dentro, qué puedes hacer con ello hoy, y por dónde empezar.</p>
 
       <h2>Boceta primero, antes de la construcción de verdad</h2>
@@ -483,10 +483,10 @@ i18n:
       </ul>
   pt-br:
     title: 'Open Design 0.14.0: a máquina do tempo da inspiração'
-    summary: 'Tag open-design-v0.14.0 — 125 PRs de 36 contribuidores em cinco dias. Codinome "Inspiration Time Machine" (a máquina do tempo da inspiração). Boas ideias demais ainda se perdiam no flow: um esboço promissor, uma fonte útil, uma versão anterior melhor, ou o exato momento em que um rascunho começou a se desviar. A 0.14.0 mantém viva uma parte maior do trabalho — primeiro você esboça no plan mode, rastreia as entradas que alimentam o composer, volta pelo histórico de versões HTML, e recupera o fio em vez de perder a faísca.'
+    summary: 'open-design-v0.14.0 — 125 PRs de 36 contribuidores em cinco dias. Codinome "Inspiration Time Machine" (a máquina do tempo da inspiração). Boas ideias demais ainda se perdiam no flow: um esboço promissor, uma fonte útil, uma versão anterior melhor, ou o exato momento em que um rascunho começou a se desviar. A 0.14.0 mantém viva uma parte maior do trabalho — primeiro você esboça no plan mode, rastreia as entradas que alimentam o composer, volta pelo histórico de versões HTML, e recupera o fio em vez de perder a faísca.'
     category: 'Produto'
     bodyHtml: |
-      <p>Tag <code>open-design-v0.14.0</code>, lançada em 8 de julho de 2026. <strong>125 PRs de 36 contribuidores em cinco dias.</strong> Codinome "Inspiration Time Machine" (a máquina do tempo da inspiração). A última versão ensinou o Open Design a continuar no flow através das interrupções. Esta é sobre as ideias que o flow ainda pode perder: um esboço tosco que nunca chegou a lugar nenhum, a fonte que alimentou um bom resultado, um rascunho anterior melhor, o momento em que uma execução começou a se desviar. A 0.14.0 mantém viva uma parte maior do trabalho para que você possa voltar e pegar a faísca de novo.</p>
+      <p><code>open-design-v0.14.0</code>, lançada em 8 de julho de 2026. <strong>125 PRs de 36 contribuidores em cinco dias.</strong> Codinome "Inspiration Time Machine" (a máquina do tempo da inspiração). A última versão ensinou o Open Design a continuar no flow através das interrupções. Esta é sobre as ideias que o flow ainda pode perder: um esboço tosco que nunca chegou a lugar nenhum, a fonte que alimentou um bom resultado, um rascunho anterior melhor, o momento em que uma execução começou a se desviar. A 0.14.0 mantém viva uma parte maior do trabalho para que você possa voltar e pegar a faísca de novo.</p>
       <p>Quer o changelog completo? Ele está nas <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.14.0">notas de versão no GitHub</a>. Este post é a versão curta: o que mudou por baixo dos panos, o que você pode fazer com isso hoje e por onde começar.</p>
 
       <h2>Esboce primeiro, antes da construção de verdade</h2>
@@ -551,10 +551,10 @@ i18n:
       </ul>
   it:
     title: 'Open Design 0.14.0: la macchina del tempo dell''ispirazione'
-    summary: 'Tag open-design-v0.14.0 — 125 PR da 36 contributori in cinque giorni. Nome in codice "Inspiration Time Machine" (la macchina del tempo dell''ispirazione). Troppe buone idee svanivano ancora nel flow: uno schizzo promettente, una fonte utile, una versione precedente migliore, o l''istante esatto in cui una bozza ha cominciato a sbandare. La 0.14.0 mantiene viva una parte maggiore del lavoro — prima schizzi in plan mode, ripercorri gli input che alimentano il composer, torni indietro nella cronologia delle versioni HTML, e recuperi il filo invece di perdere la scintilla.'
+    summary: 'open-design-v0.14.0 — 125 PR da 36 contributori in cinque giorni. Nome in codice "Inspiration Time Machine" (la macchina del tempo dell''ispirazione). Troppe buone idee svanivano ancora nel flow: uno schizzo promettente, una fonte utile, una versione precedente migliore, o l''istante esatto in cui una bozza ha cominciato a sbandare. La 0.14.0 mantiene viva una parte maggiore del lavoro — prima schizzi in plan mode, ripercorri gli input che alimentano il composer, torni indietro nella cronologia delle versioni HTML, e recuperi il filo invece di perdere la scintilla.'
     category: 'Prodotto'
     bodyHtml: |
-      <p>Tag <code>open-design-v0.14.0</code>, rilasciato l'8 luglio 2026. <strong>125 PR da 36 contributori in cinque giorni.</strong> Nome in codice "Inspiration Time Machine" (la macchina del tempo dell'ispirazione). L'ultima release ha insegnato a Open Design a restare nel flow attraverso le interruzioni. Questa parla delle idee che il flow può ancora perdere: uno schizzo grezzo che non è mai atterrato da nessuna parte, la fonte che ha alimentato un buon risultato, una bozza precedente migliore, il momento in cui un'esecuzione ha cominciato a sbandare. La 0.14.0 mantiene viva una parte maggiore del lavoro così puoi tornare indietro e raccogliere di nuovo la scintilla.</p>
+      <p><code>open-design-v0.14.0</code>, rilasciato l'8 luglio 2026. <strong>125 PR da 36 contributori in cinque giorni.</strong> Nome in codice "Inspiration Time Machine" (la macchina del tempo dell'ispirazione). L'ultima release ha insegnato a Open Design a restare nel flow attraverso le interruzioni. Questa parla delle idee che il flow può ancora perdere: uno schizzo grezzo che non è mai atterrato da nessuna parte, la fonte che ha alimentato un buon risultato, una bozza precedente migliore, il momento in cui un'esecuzione ha cominciato a sbandare. La 0.14.0 mantiene viva una parte maggiore del lavoro così puoi tornare indietro e raccogliere di nuovo la scintilla.</p>
       <p>Vuoi il changelog completo? Lo trovi nelle <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.14.0">note di rilascio su GitHub</a>. Questo post è la versione breve: cosa è cambiato sotto il cofano, cosa puoi farci oggi e da dove iniziare.</p>
 
       <h2>Prima schizza, prima della vera costruzione</h2>
@@ -619,10 +619,10 @@ i18n:
       </ul>
   tr:
     title: 'Open Design 0.14.0: ilham zaman makinesi'
-    summary: 'Etiket open-design-v0.14.0 — beş günde 36 katkıda bulunandan 125 PR. Kod adı "Inspiration Time Machine" (ilham zaman makinesi). Hâlâ çok fazla iyi fikir akışın içinde kayboluyordu: umut vaat eden bir eskiz, işe yarar bir kaynak, daha iyi bir önceki sürüm ya da bir taslağın sapmaya başladığı tam o an. 0.14.0 işin daha büyük bir kısmını canlı tutuyor — önce plan mode''da eskiz yapın, composer''ı besleyen girdileri izleyin, HTML sürüm geçmişinde geri gidin ve kıvılcımı kaybetmek yerine ipin ucunu yeniden yakalayın.'
+    summary: 'open-design-v0.14.0 — beş günde 36 katkıda bulunandan 125 PR. Kod adı "Inspiration Time Machine" (ilham zaman makinesi). Hâlâ çok fazla iyi fikir akışın içinde kayboluyordu: umut vaat eden bir eskiz, işe yarar bir kaynak, daha iyi bir önceki sürüm ya da bir taslağın sapmaya başladığı tam o an. 0.14.0 işin daha büyük bir kısmını canlı tutuyor — önce plan mode''da eskiz yapın, composer''ı besleyen girdileri izleyin, HTML sürüm geçmişinde geri gidin ve kıvılcımı kaybetmek yerine ipin ucunu yeniden yakalayın.'
     category: 'Ürün'
     bodyHtml: |
-      <p>Etiket <code>open-design-v0.14.0</code>, 8 Temmuz 2026'da yayınlandı. <strong>Beş günde 36 katkıda bulunandan 125 PR.</strong> Kod adı "Inspiration Time Machine" (ilham zaman makinesi). Son sürüm Open Design'a kesintiler boyunca akışta kalmayı öğretti. Bu sürüm ise akışın hâlâ kaybedebileceği fikirlerle ilgili: hiçbir yere konmamış kaba bir eskiz, iyi bir sonucu besleyen kaynak, daha iyi bir önceki taslak, bir çalıştırmanın sapmaya başladığı an. 0.14.0 işin daha büyük bir kısmını canlı tutuyor, böylece geri dönüp kıvılcımı yeniden alabilirsiniz.</p>
+      <p><code>open-design-v0.14.0</code>, 8 Temmuz 2026'da yayınlandı. <strong>Beş günde 36 katkıda bulunandan 125 PR.</strong> Kod adı "Inspiration Time Machine" (ilham zaman makinesi). Son sürüm Open Design'a kesintiler boyunca akışta kalmayı öğretti. Bu sürüm ise akışın hâlâ kaybedebileceği fikirlerle ilgili: hiçbir yere konmamış kaba bir eskiz, iyi bir sonucu besleyen kaynak, daha iyi bir önceki taslak, bir çalıştırmanın sapmaya başladığı an. 0.14.0 işin daha büyük bir kısmını canlı tutuyor, böylece geri dönüp kıvılcımı yeniden alabilirsiniz.</p>
       <p>Tam değişiklik günlüğünü mü istiyorsunuz? <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.14.0">GitHub'daki sürüm notlarında</a> bulunuyor. Bu yazı kısa versiyon: kaputun altında ne değişti, bununla bugün ne yapabilirsiniz ve nereden başlamalısınız.</p>
 
       <h2>Gerçek yapıdan önce, önce eskiz</h2>
@@ -687,7 +687,7 @@ i18n:
       </ul>
 ---
 
-Tag `open-design-v0.14.0`, published on July 8, 2026. **125 PRs from 36 contributors in five days.** Codename "Inspiration Time Machine." The last release taught Open Design to stay in flow across interruptions. This one is about the ideas that flow can still lose: a rough sketch that never landed anywhere, the source that fed a good result, a better earlier draft, the moment a run started to drift. 0.14.0 keeps more of the work alive so you can go back and pick the spark up again.
+`open-design-v0.14.0`, published on July 8, 2026. **125 PRs from 36 contributors in five days.** Codename "Inspiration Time Machine." The last release taught Open Design to stay in flow across interruptions. This one is about the ideas that flow can still lose: a rough sketch that never landed anywhere, the source that fed a good result, a better earlier draft, the moment a run started to drift. 0.14.0 keeps more of the work alive so you can go back and pick the spark up again.
 
 Want the full changelog? It lives in the [release notes on GitHub](https://github.com/nexu-io/open-design/releases/tag/open-design-v0.14.0). This is the short version: what changed underneath, what you can do with it today, and where to start.
 

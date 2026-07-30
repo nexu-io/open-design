@@ -12,6 +12,13 @@
 import type { AgentEvent, ChatCommentAttachment, ChatMessage } from '../types';
 import type { AmrEntryAttribution } from '../analytics/amr-attribution';
 import type {
+  AmrAuthErrorKind,
+  AmrAuthNetworkPath,
+  AmrAuthStage,
+  AmrAuthStageResult,
+  AmrAuthStageSource,
+} from '@open-design/contracts/analytics';
+import type {
   ChatAnalyticsHints,
   ChatRunCreateResponse,
   ChatRunListResponse,
@@ -24,7 +31,6 @@ import type {
   DaemonAgentPayload,
   AmrModelsResponse,
   AmrWalletSnapshot,
-  ByokChatProviderConfig,
   MediaExecutionPolicy,
   ResearchOptions,
   RunContextSelection,
@@ -305,7 +311,10 @@ export interface DaemonStreamOptions {
   model?: string | null;
   reasoning?: string | null;
   serviceTier?: string | null;
-  byokProvider?: ByokChatProviderConfig;
+  /** Non-secret reference resolved by the daemon from the OS credential store. */
+  byokProfileId?: string;
+  /** Selects the daemon-managed deployment provider without exposing its secret. */
+  byokCredentialSource?: 'deployment';
   byokMediaDefaults?: ChatRequest['byokMediaDefaults'];
   research?: ResearchOptions;
   context?: RunContextSelection;
@@ -645,7 +654,8 @@ export async function streamViaDaemon({
   model,
   reasoning,
   serviceTier,
-  byokProvider,
+  byokProfileId,
+  byokCredentialSource,
   byokMediaDefaults,
   research,
   context,
@@ -684,7 +694,8 @@ export async function streamViaDaemon({
     model: model ?? null,
     reasoning: reasoning ?? null,
     serviceTier: serviceTier ?? null,
-    ...(byokProvider ? { byokProvider } : {}),
+    ...(byokProfileId ? { byokProfileId } : {}),
+    ...(byokCredentialSource ? { byokCredentialSource } : {}),
     ...(byokMediaDefaults ? { byokMediaDefaults } : {}),
     locale,
     ...(appliedPluginSnapshotId ? { appliedPluginSnapshotId } : {}),
@@ -876,6 +887,20 @@ export interface VelaLoginStatus {
   activationUrl?: string;
   userCode?: string;
   browserOpenFailed?: boolean;
+  authAttemptId?: string;
+  authStages?: VelaLoginAuthStage[];
+  authRoute?: AmrAuthNetworkPath;
+  fallbackUsed?: boolean;
+}
+
+export interface VelaLoginAuthStage {
+  sequence: number;
+  stage: AmrAuthStage;
+  result: AmrAuthStageResult;
+  source: AmrAuthStageSource;
+  occurredAt: string;
+  route: AmrAuthNetworkPath;
+  errorKind?: AmrAuthErrorKind;
 }
 
 // AMR (vela) login surfaces three thin endpoints on the daemon:
@@ -922,39 +947,89 @@ export interface StartVelaLoginResult {
   pid?: number;
   alreadyRunning?: boolean;
   error?: string;
+  authAttemptId?: string;
+  authStages?: VelaLoginAuthStage[];
+  authRoute?: AmrAuthNetworkPath;
+  fallbackUsed?: boolean;
 }
 
 export async function startVelaLogin(
   attribution?: AmrEntryAttribution | null,
   odDeviceId?: string | null,
+  authAttemptId?: string,
 ): Promise<StartVelaLoginResult> {
   try {
     const loginAttribution =
       attribution && odDeviceId ? { ...attribution, odDeviceId } : attribution;
+    const canonicalAuthAttemptId = authAttemptId
+      && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(authAttemptId)
+      ? authAttemptId
+      : null;
+    const authRequestId = authAttemptId
+      && /^pending-amr-auth-[a-z0-9]+-[a-z0-9]+$/.test(authAttemptId)
+      ? authAttemptId
+      : null;
+    const payload = {
+      ...(loginAttribution ? { attribution: loginAttribution } : {}),
+      ...(canonicalAuthAttemptId ? { authAttemptId: canonicalAuthAttemptId } : {}),
+      ...(authRequestId ? { authRequestId } : {}),
+    };
     const resp = await fetch('/api/integrations/vela/login', {
       method: 'POST',
-      headers: loginAttribution ? { 'Content-Type': 'application/json' } : undefined,
-      body: loginAttribution ? JSON.stringify({ attribution: loginAttribution }) : undefined,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
     });
+    const body = (await resp.json().catch(() => null)) as Omit<
+      StartVelaLoginResult,
+      'ok' | 'status' | 'alreadyRunning'
+    > | null;
     if (resp.ok) {
-      const body = (await resp.json()) as { pid?: number };
-      return { ok: true, status: resp.status, pid: body.pid };
+      return { ok: true, status: resp.status, ...(body ?? {}) };
     }
-    const body = (await resp.json().catch(() => null)) as { error?: string } | null;
     return {
       ok: false,
       status: resp.status,
       alreadyRunning: resp.status === 409,
       error: body?.error ?? '',
+      ...(body?.authAttemptId ? { authAttemptId: body.authAttemptId } : {}),
+      ...(body?.authStages ? { authStages: body.authStages } : {}),
+      ...(body?.authRoute ? { authRoute: body.authRoute } : {}),
+      ...(body?.fallbackUsed !== undefined
+        ? { fallbackUsed: body.fallbackUsed }
+        : {}),
     };
   } catch (err) {
     return { ok: false, status: 0, error: err instanceof Error ? err.message : String(err) };
   }
 }
 
-export async function cancelVelaLogin(): Promise<{ ok: boolean; canceled?: boolean }> {
+export async function cancelVelaLogin(
+  authAttemptId?: string,
+): Promise<{ ok: boolean; canceled?: boolean }> {
+  const hasTarget = authAttemptId !== undefined;
+  const canonicalAuthAttemptId = authAttemptId
+    && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(authAttemptId)
+    ? authAttemptId
+    : null;
+  const authRequestId = authAttemptId
+    && /^pending-amr-auth-[a-z0-9]+-[a-z0-9]+$/.test(authAttemptId)
+    ? authAttemptId
+    : null;
+  if (hasTarget && !canonicalAuthAttemptId && !authRequestId) {
+    return { ok: false };
+  }
   try {
-    const resp = await fetch('/api/integrations/vela/login/cancel', { method: 'POST' });
+    const resp = await fetch('/api/integrations/vela/login/cancel', {
+      method: 'POST',
+      ...(hasTarget
+        ? {
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(canonicalAuthAttemptId
+              ? { authAttemptId: canonicalAuthAttemptId }
+              : { authRequestId }),
+          }
+        : {}),
+    });
     if (!resp.ok) return { ok: false };
     const body = (await resp.json().catch(() => null)) as { canceled?: boolean } | null;
     return { ok: true, canceled: body?.canceled };

@@ -614,16 +614,20 @@ describe('QuestionFormView', () => {
     );
   });
 
-  it('does not offer Skip all when a form contains required questions', () => {
+  it('offers Skip all when a single-question form contains required questions', () => {
     const onSubmit = vi.fn();
     render(<QuestionFormView form={richForm} interactive onSubmit={onSubmit} />);
 
     expect((screen.getByRole('button', { name: 'Send answers' }) as HTMLButtonElement).disabled).toBe(
       true,
     );
-    expect(screen.queryByRole('button', { name: 'Skip all' })).toBeNull();
-    expect(screen.queryByText('Pick what fits. Skip optional fields you don\'t care about — the agent will use sensible defaults.')).toBeNull();
-    expect(onSubmit).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Skip all' }));
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.stringContaining('- Primary surface: (skipped)'),
+      {},
+      'skip',
+    );
   });
 
   it('keeps Skip all for a form containing only optional questions', () => {
@@ -690,7 +694,7 @@ describe('QuestionFormView', () => {
     );
   });
 
-  it('only auto-continues when no required answer is missing', () => {
+  it('auto-continues unanswered required questions as skipped', () => {
     vi.useFakeTimers();
     try {
       const optionalSubmit = vi.fn();
@@ -726,9 +730,13 @@ describe('QuestionFormView', () => {
           onSubmit={requiredSubmit}
         />,
       );
-      expect(screen.queryByLabelText(/Auto-continues when the timer ends 10:00/)).toBeNull();
+      expect(screen.getByLabelText(/Auto-continues when the timer ends 10:00/)).toBeTruthy();
       act(() => vi.advanceTimersByTime(10 * 60 * 1000));
-      expect(requiredSubmit).not.toHaveBeenCalled();
+      expect(requiredSubmit).toHaveBeenCalledWith(
+        expect.stringContaining('- Primary surface: (skipped)'),
+        { platform: '' },
+        'auto',
+      );
     } finally {
       vi.useRealTimers();
     }
@@ -748,7 +756,7 @@ describe('QuestionFormView', () => {
     );
 
     expect(screen.getByText('1 / 3').closest('.question-form-head')).toBeTruthy();
-    expect(screen.queryByLabelText(/Auto-continues when the timer ends 10:00/)).toBeNull();
+    expect(screen.getByLabelText(/Auto-continues when the timer ends 10:00/)).toBeTruthy();
     expect(screen.getByText('Who will see this deck?')).toBeTruthy();
     expect(screen.queryByText('How detailed should it be?')).toBeNull();
     const nextStep = screen.getByRole('button', { name: 'Next step' }) as HTMLButtonElement;
@@ -796,7 +804,7 @@ describe('QuestionFormView', () => {
     );
   });
 
-  it('offers Skip only on optional steps', () => {
+  it('offers Skip on every step and completes after skipping a required answer', () => {
     const onSubmit = vi.fn();
     const onInteraction = vi.fn();
     render(
@@ -808,39 +816,34 @@ describe('QuestionFormView', () => {
       />,
     );
 
-    expect(screen.queryByRole('button', { name: 'Skip' })).toBeNull();
-    fireEvent.change(screen.getByRole('textbox'), {
-      target: { value: 'Leadership and product team' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Next step' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Skip' }));
     expect(onInteraction).toHaveBeenCalledWith({
-      element: 'step_next',
+      element: 'step_skip',
       questionId: 'audience',
       stepIndex: 1,
       stepCount: 3,
     });
 
     expect(screen.getByText('2 / 3')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Skip' })).toBeNull();
-
+    expect(screen.getByRole('button', { name: 'Skip' })).toBeTruthy();
     fireEvent.click(screen.getByLabelText('Concise · 8 slides'));
     fireEvent.click(screen.getByRole('button', { name: 'Next step' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Skip' }));
-    expect(onInteraction).toHaveBeenCalledWith({
-      element: 'step_skip',
-      questionId: 'constraints',
-      stepIndex: 3,
-      stepCount: 3,
-    });
+
+    expect(screen.getByText('3 / 3')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Skip' })).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Send answers' }) as HTMLButtonElement).disabled).toBe(
+      false,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Send answers' }));
 
     expect(onSubmit).toHaveBeenCalledWith(
-      expect.stringContaining('- Anything else to preserve?: (skipped)'),
+      expect.stringContaining('- Who will see this deck?: (skipped)'),
       {
-        audience: 'Leadership and product team',
+        audience: '',
         length: '8',
         constraints: '',
       },
-      'skip',
+      'submit',
     );
   });
 

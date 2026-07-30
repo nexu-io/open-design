@@ -103,7 +103,6 @@ function createLauncherRuntimeSyncScript(
   if (config.portable) {
     return `
 Function SyncLauncherRuntime
-  StrCpy $LauncherRuntimeSyncFailed "0"
 FunctionEnd
 `;
   }
@@ -116,7 +115,6 @@ FunctionEnd
 
   return `
 Function SyncLauncherRuntime
-  StrCpy $LauncherRuntimeSyncFailed "0"
   Push $0
   InitPluginsDir
   File "/oname=$PLUGINSDIR\\${helperFileName}" "${escapeNsisString(helperScriptPath)}"
@@ -125,13 +123,11 @@ Function SyncLauncherRuntime
   Push "launcher runtime sync exit=$0"
   Call LogInstallerEvent
   \${If} $0 != "0"
-    StrCpy $LauncherRuntimeSyncFailed "1"
     DetailPrint "launcher runtime sync failed with exit code $0"
-    Goto done
+    Abort
   \${EndIf}
   Push "event=launcher_runtime_after_write path=${escapedRuntimePath}"
   Call LogInstallerEvent
-done:
   Pop $0
 FunctionEnd
 `;
@@ -337,185 +333,80 @@ async function resolveMakensisCommand(config: ToolPackConfig): Promise<string> {
   throw new Error("makensis is required to build the Windows installer; install NSIS or populate the electron-builder NSIS cache");
 }
 
-export function createRunningInstancesScript(): string {
+function createRunningInstancesScript(): string {
   return `param(
   [ValidateSet("detect", "close")]
   [string]$Action,
   [string]$Install,
-  [string]$ExecutableName,
-  [string]$LauncherBackup
+  [string]$Registered
 )
 
 $ErrorActionPreference = "Stop"
 
-$roots = @($Install) |
+$roots = @($Install, $Registered) |
   Where-Object { $_ } |
   ForEach-Object {
     $root = $_.TrimEnd([char]92).ToLowerInvariant()
     [pscustomobject]@{ Exact = $root; Prefix = ($root + [char]92) }
-  }
+  } |
+  Select-Object -Unique Exact, Prefix
 
-function Get-MatchingProcesses {
-  return @(Get-CimInstance Win32_Process | Where-Object {
-    $matched = $false
-    $exe = $_.ExecutablePath
-    if ($null -ne $exe) {
-      $exe = $exe.ToLowerInvariant()
+$matches = Get-CimInstance Win32_Process | Where-Object {
+  $matched = $false
+  $exe = $_.ExecutablePath
+  if ($null -ne $exe) {
+    $exe = $exe.ToLowerInvariant()
+    foreach ($root in $roots) {
+      if ($root.Exact -and (($exe -eq $root.Exact) -or $exe.StartsWith($root.Prefix))) {
+        $matched = $true
+        break
+      }
+    }
+  } else {
+    $cmd = $_.CommandLine
+    if ($null -ne $cmd) {
+      $cmdLc = $cmd.ToLowerInvariant()
       foreach ($root in $roots) {
-        if ($root.Exact -and (($exe -eq $root.Exact) -or $exe.StartsWith($root.Prefix))) {
+        if ($root.Prefix -and $cmdLc.Contains($root.Prefix)) {
           $matched = $true
           break
         }
       }
-    } else {
-      $cmd = $_.CommandLine
-      if ($null -ne $cmd) {
-        $cmdLc = $cmd.ToLowerInvariant()
-        foreach ($root in $roots) {
-          if ($root.Prefix -and $cmdLc.Contains($root.Prefix)) {
-            $matched = $true
-            break
-          }
-        }
-      }
     }
-    $matched
-  })
+  }
+  $matched
 }
 
-function Get-LauncherPaths {
-  if (-not $Install) {
-    return @()
-  }
-  return @(Join-Path $Install $ExecutableName)
-}
-
-function Quarantine-Launchers {
-  $quarantined = @()
-  foreach ($launcherPath in @(Get-LauncherPaths)) {
-    if (-not (Test-Path -LiteralPath $launcherPath -PathType Leaf)) {
-      throw "expected launcher is missing: $launcherPath"
-    }
-    if (-not $LauncherBackup) {
-      throw "launcher backup path is required"
-    }
-    if (Test-Path -LiteralPath $LauncherBackup) {
-      throw "launcher backup already exists: $LauncherBackup"
-    }
-    $launcher = Get-Item -LiteralPath $launcherPath -ErrorAction Stop
-    if ([long]$launcher.Length -le 0) {
-      throw "expected launcher is empty: $launcherPath"
-    }
-    Move-Item -LiteralPath $launcherPath -Destination $LauncherBackup -ErrorAction Stop
-    $backup = Get-Item -LiteralPath $LauncherBackup -ErrorAction Stop
-    $quarantined += [pscustomobject]@{ Original = $launcherPath; Quarantine = $LauncherBackup }
-    if ((Test-Path -LiteralPath $launcherPath) -or [long]$backup.Length -le 0) {
-      throw "launcher quarantine verification failed: $launcherPath"
-    }
-  }
-  return $quarantined
-}
-
-function Restore-Launchers {
-  param([object[]]$Quarantined)
-  foreach ($item in $Quarantined) {
-    if (Test-Path -LiteralPath $item.Quarantine -PathType Leaf) {
-      if (Test-Path -LiteralPath $item.Original) {
-        throw "launcher restore conflict: original already exists and quarantine preserved: $($item.Original)"
-      }
-      Move-Item -LiteralPath $item.Quarantine -Destination $item.Original -ErrorAction Stop
-      if ((Test-Path -LiteralPath $item.Quarantine) -or
-          -not (Test-Path -LiteralPath $item.Original -PathType Leaf)) {
-        throw "launcher restore verification failed: $($item.Original)"
-      }
-    }
-  }
-}
-
-function Get-LiveProcess {
-  param([object]$Identity)
-  $current = Get-CimInstance Win32_Process -Filter ("ProcessId = {0}" -f $Identity.ProcessId) -ErrorAction SilentlyContinue
-  if ($null -eq $current -or $current.CreationDate -ne $Identity.CreationDate) {
-    return $null
-  }
-  try {
-    return [System.Diagnostics.Process]::GetProcessById([int]$Identity.ProcessId)
-  } catch {
-    return $null
-  }
-}
-
-function Close-MatchingProcesses {
-  param([object[]]$Processes)
-  $identities = @($Processes |
-    Sort-Object ProcessId -Unique |
-    ForEach-Object {
-      [pscustomobject]@{ ProcessId = [int]$_.ProcessId; CreationDate = $_.CreationDate }
-    })
-  foreach ($identity in $identities) {
-    $process = Get-LiveProcess $identity
-    if ($null -ne $process) {
-      try { [void]$process.CloseMainWindow() } catch {}
-    }
-  }
-  if ($identities.Count -gt 0) {
-    Start-Sleep -Milliseconds 1500
-  }
-  foreach ($identity in $identities) {
-    $process = Get-LiveProcess $identity
-    if ($null -ne $process) {
-      try {
-        if (-not $process.HasExited) {
-          Stop-Process -Id $identity.ProcessId -Force -ErrorAction SilentlyContinue
-        }
-      } catch {}
-    }
-  }
-  foreach ($identity in $identities) {
-    $process = Get-LiveProcess $identity
-    if ($null -ne $process) {
-      try {
-        if (-not $process.HasExited) {
-          [void]$process.WaitForExit(5000)
-        }
-      } catch {}
-    }
-  }
-}
-
-$matches = @(Get-MatchingProcesses)
+$ids = @($matches | ForEach-Object { $_.ProcessId })
 if ($Action -eq "close") {
-  $quarantined = @()
-  try {
-    # Remove the stable spawn target before terminating any process. External
-    # clients may otherwise recreate an MCP child between Stop-Process and the
-    # installer's verification pass.
-    $quarantined = @(Quarantine-Launchers)
-    $pending = $matches
-    if ($pending.Count -eq 0) {
-      $pending = @(Get-MatchingProcesses)
-    }
-    for ($attempt = 0; $attempt -lt 3 -and $pending.Count -gt 0; $attempt++) {
-      Close-MatchingProcesses $pending
-      $pending = @(Get-MatchingProcesses)
-    }
-    if ($pending.Count -gt 0) {
-      Restore-Launchers $quarantined
-      $matches = $pending
-    } else {
-      $matches = @()
-    }
-  } catch {
-    Restore-Launchers $quarantined
-    throw
+  foreach ($id in $ids) {
+    try { [void][System.Diagnostics.Process]::GetProcessById($id).CloseMainWindow() } catch {}
+  }
+  Start-Sleep -Milliseconds 1500
+  foreach ($id in $ids) {
+    try {
+      $p = [System.Diagnostics.Process]::GetProcessById($id)
+      if (-not $p.HasExited) {
+        Stop-Process -Id $id -Force -ErrorAction SilentlyContinue
+      }
+    } catch {}
+  }
+  foreach ($id in $ids) {
+    try {
+      $p = [System.Diagnostics.Process]::GetProcessById($id)
+      if (-not $p.HasExited) {
+        [void]$p.WaitForExit(5000)
+      }
+    } catch {}
   }
 }
 
-if ($matches.Count -gt 0) {
+if ($ids) {
   $matches | ForEach-Object { [string]$_.ProcessId + [char]32 + $_.Name }
 }
 `;
 }
+
 async function writeInstallerScript(config: ToolPackConfig, paths: WinPaths, packagedVersion: string): Promise<void> {
   const identity = resolveWinInstallIdentity(config);
   const launcher = resolveToolPackLauncherLayout(config);
@@ -569,7 +460,6 @@ RequestExecutionLevel user
 
 !include "MUI2.nsh"
 !include "LogicLib.nsh"
-!include "FileFunc.nsh"
 !include "nsDialogs.nsh"
 !include "WinMessages.nsh"
 
@@ -585,11 +475,11 @@ ShowUninstDetails hide
 !define MUI_ABORTWARNING
 !define MUI_ICON "\${APP_ICON}"
 !define MUI_UNICON "\${APP_ICON}"
+Page custom RunningInstancesPage RunningInstancesPageLeave
 !insertmacro MUI_PAGE_WELCOME
 !define MUI_PAGE_CUSTOMFUNCTION_LEAVE DirectoryPageLeave
 !insertmacro MUI_PAGE_DIRECTORY
 !undef MUI_PAGE_CUSTOMFUNCTION_LEAVE
-Page custom RunningInstancesPage
 !insertmacro MUI_PAGE_INSTFILES
 !define MUI_FINISHPAGE_RUN "$INSTDIR\\${exeName}"
 !define MUI_FINISHPAGE_RUN_TEXT "$(LaunchApp)"
@@ -614,11 +504,9 @@ ${createNsisLangString("RunningInstancesSubtitle", "Close it before continuing i
 ${createNsisLangString("RunningInstancesMessage", `${productName} must be closed before installation can continue.`, { LANG_SIMPCHINESE: `继续安装前需要关闭 ${productName}。` })}
 ${createNsisLangString("CloseAndContinue", "Close and continue", { LANG_SIMPCHINESE: "关闭并继续" })}
 ${createNsisLangString("RunningInstancesCloseFailed", `${productName} could not be closed. Close it manually, then try again.`, { LANG_SIMPCHINESE: `无法关闭 ${productName}。请手动关闭后重试。` })}
+${createNsisLangString("RunningInstancesSilentAbort", `${productName} is still running. Close it before running the installer silently.`, { LANG_SIMPCHINESE: `${productName} 仍在运行。请先关闭它，再运行静默安装。` })}
 ${createNsisLangString("ExistingInstallMessage", `${productName} is already installed in the selected folder. Choose OK to overwrite it, or Cancel to stop installation.`, { LANG_SIMPCHINESE: `所选文件夹中已经安装了 ${productName}。选择确定覆盖，或取消安装。` })}
 ${createNsisLangString("ExistingInstallSilentOverwrite", "Existing installation found; silent install will overwrite it.", { LANG_SIMPCHINESE: "发现已有安装；静默安装将覆盖它。" })}
-${createNsisLangString("UnsafeInstallDirectory", "The selected folder contains files but is not a recognized Open Design installation. Choose an empty folder or the existing installation folder.", { LANG_SIMPCHINESE: "所选文件夹包含文件，但不是可识别的 Open Design 安装。请选择空文件夹或现有安装文件夹。" })}
-${createNsisLangString("InstallDirectoryRemoveFailed", "The existing Open Design installation could not be replaced safely. No new files were installed.", { LANG_SIMPCHINESE: "无法安全替换现有 Open Design 安装。未安装任何新文件。" })}
-${createNsisLangString("InstallFinalizeFailed", "Open Design files were installed, but setup could not finish system registration. Retry the installer; any replacement backup was preserved.", { LANG_SIMPCHINESE: "Open Design 文件已安装，但安装程序无法完成系统注册。请重试安装程序；任何替换备份均已保留。" })}
 
 Var RemoveDesktopShortcutCheckbox
 Var RemoveCacheDataCheckbox
@@ -627,22 +515,8 @@ Var RemoveDesktopShortcutState
 Var RemoveCacheDataState
 Var RemoveLocalDataState
 Var RunningInstancesOutput
+Var ExistingInstallLocation
 Var RunningInstancesInstallRoot
-Var RunningInstancesCloseFailed
-Var ExistingInstallTarget
-Var RegisteredInstallLocation
-Var InstallDirHasEntries
-Var InstallTransactionRoot
-Var InstallLauncherBackup
-Var InstallDirBackup
-Var InstallReplacementDir
-Var EmptyInstallDirBackup
-Var EmptyInstallDirQuarantined
-Var EmptyInstallDirRestoreFailed
-Var FreshInstallTargetWasEmpty
-Var EmptyInstallDirHasEntries
-Var InstallTargetAttributeState
-Var LauncherRuntimeSyncFailed
 Var LE
 Var LT
 Var LX
@@ -687,12 +561,12 @@ write:
 FunctionEnd
 
 ${createLauncherRuntimeSyncScript(
-    config,
-    launcher.paths.runtimePath,
-    launcher.paths.attemptsPath,
-    launcher.paths.cleanupPath,
-    launcherRuntimeSyncScriptPath,
-  )}
+  config,
+  launcher.paths.runtimePath,
+  launcher.paths.attemptsPath,
+  launcher.paths.cleanupPath,
+  launcherRuntimeSyncScriptPath,
+)}
 
 Function un.LogInstallerEvent
   Exch $0
@@ -735,7 +609,7 @@ Function DetectRunningInstances
   File "/oname=$PLUGINSDIR\\running-instances.ps1" "\${RUNNING_INSTANCES_PS1}"
 
   ; Try pwsh.exe first (PowerShell 7)
-  nsExec::ExecToStack 'pwsh.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\\running-instances.ps1" detect "$RunningInstancesInstallRoot" "${exeName}" "$InstallLauncherBackup"'
+  nsExec::ExecToStack 'pwsh.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\\running-instances.ps1" detect "$RunningInstancesInstallRoot" "$ExistingInstallLocation"'
   Pop $0
   Pop $1
 
@@ -749,7 +623,7 @@ Function DetectRunningInstances
   Push "pwsh.exe failed exit=$0, trying powershell.exe"
   Call LogInstallerEvent
 
-  nsExec::ExecToStack 'powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\\running-instances.ps1" detect "$RunningInstancesInstallRoot" "${exeName}" "$InstallLauncherBackup"'
+  nsExec::ExecToStack 'powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\\running-instances.ps1" detect "$RunningInstancesInstallRoot" "$ExistingInstallLocation"'
   Pop $0
   Pop $1
 
@@ -771,7 +645,6 @@ done:
 FunctionEnd
 
 Function CloseRunningInstances
-  StrCpy $RunningInstancesCloseFailed "0"
   Push $0
   Push $1
   Push $2
@@ -779,7 +652,7 @@ Function CloseRunningInstances
   File "/oname=$PLUGINSDIR\\running-instances.ps1" "\${RUNNING_INSTANCES_PS1}"
 
   ; Try pwsh.exe first (PowerShell 7)
-  nsExec::ExecToStack 'pwsh.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\\running-instances.ps1" close "$RunningInstancesInstallRoot" "${exeName}" "$InstallLauncherBackup"'
+  nsExec::ExecToStack 'pwsh.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\\running-instances.ps1" close "$RunningInstancesInstallRoot" "$ExistingInstallLocation"'
   Pop $0
   Pop $1
 
@@ -794,7 +667,7 @@ Function CloseRunningInstances
   Push "pwsh.exe failed exit=$0, trying powershell.exe"
   Call LogInstallerEvent
 
-  nsExec::ExecToStack 'powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\\running-instances.ps1" close "$RunningInstancesInstallRoot" "${exeName}" "$InstallLauncherBackup"'
+  nsExec::ExecToStack 'powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\\running-instances.ps1" close "$RunningInstancesInstallRoot" "$ExistingInstallLocation"'
   Pop $0
   Pop $1
 
@@ -806,7 +679,6 @@ Function CloseRunningInstances
   \${EndIf}
 
   ; Both failed
-  StrCpy $RunningInstancesCloseFailed "1"
   Push "running instances close failed: both pwsh.exe and powershell.exe failed, last exit=$0 output=$1"
   Call LogInstallerEvent
 
@@ -818,32 +690,53 @@ FunctionEnd
 
 Function .onInit
   SetShellVarContext current
-  StrCpy $RegisteredInstallLocation ""
-  ReadRegStr $RegisteredInstallLocation HKCU "${registryKey}" "InstallLocation"
-  IfFileExists "$RegisteredInstallLocation\\${exeName}" registered_install_valid registered_install_invalid
-registered_install_valid:
-  GetFullPathName $RegisteredInstallLocation "$RegisteredInstallLocation"
-  Goto inspect_selected_install
-registered_install_invalid:
-  \${If} $RegisteredInstallLocation != ""
-    Push "ignoring registered install location without expected exe: $RegisteredInstallLocation"
+  ReadRegStr $ExistingInstallLocation HKCU "${registryKey}" "InstallLocation"
+  StrCpy $RunningInstancesInstallRoot ""
+  \${If} $ExistingInstallLocation != ""
+    IfFileExists "$ExistingInstallLocation\\${exeName}" valid_existing_location invalid_existing_location
+invalid_existing_location:
+    Push "ignoring registered install location without expected exe: $ExistingInstallLocation"
     Call LogInstallerEvent
+    StrCpy $ExistingInstallLocation ""
+valid_existing_location:
   \${EndIf}
-  StrCpy $RegisteredInstallLocation ""
-inspect_selected_install:
+
+  IfSilent silent_check no_existing_install
+silent_check:
+  IfFileExists "$INSTDIR\\${exeName}" 0 silent_detect_running_instances
+  StrCpy $RunningInstancesInstallRoot "$INSTDIR"
+silent_detect_running_instances:
+  Call DetectRunningInstances
+  \${If} $RunningInstancesOutput != ""
+    Push "running instances detected before silent install: $RunningInstancesOutput"
+    Call LogInstallerEvent
+    Call CloseRunningInstances
+    Call DetectRunningInstances
+    \${If} $RunningInstancesOutput != ""
+      Push "install aborted: running instances still detected before silent install: $RunningInstancesOutput"
+      Call LogInstallerEvent
+      Abort "$(RunningInstancesSilentAbort)"
+    \${EndIf}
+  \${EndIf}
+
   IfFileExists "$INSTDIR\\${exeName}" existing_install no_existing_install
 existing_install:
   IfSilent 0 no_existing_install
     Push "existing installation found; silent install will overwrite it"
     Call LogInstallerEvent
     Goto no_existing_install
+
+cancel_install:
+  Push "install cancelled before file changes"
+  Call LogInstallerEvent
+  Abort
+
 no_existing_install:
 FunctionEnd
 
 Function RunningInstancesPage
   IfSilent done
-  IfFileExists "$INSTDIR\\${exeName}" 0 done
-  StrCpy $RunningInstancesInstallRoot "$INSTDIR"
+  StrCpy $RunningInstancesInstallRoot ""
   Call DetectRunningInstances
   \${If} $RunningInstancesOutput == ""
     Abort
@@ -870,44 +763,35 @@ Function RunningInstancesPage
 done:
 FunctionEnd
 
-
-Function GuardRegisteredInstallInstances
-  StrCmp $RegisteredInstallLocation "" done
-  StrCmp $RegisteredInstallLocation "$INSTDIR" done
-  StrCpy $RunningInstancesInstallRoot "$RegisteredInstallLocation"
+Function RunningInstancesPageLeave
+  StrCpy $RunningInstancesInstallRoot ""
+  Call CloseRunningInstances
   Call DetectRunningInstances
   \${If} $RunningInstancesOutput != ""
-    Push "install aborted: registered installation still running at $RegisteredInstallLocation: $RunningInstancesOutput"
+    Push "running instances still detected after close: $RunningInstancesOutput"
     Call LogInstallerEvent
-    Call CleanupInstallTransaction
-    Abort "$(RunningInstancesCloseFailed)"
+    MessageBox MB_OK|MB_ICONEXCLAMATION "$(RunningInstancesCloseFailed)"
+    Abort
   \${EndIf}
-done:
 FunctionEnd
 
 Function GuardRunningInstancesBeforeInstall
-  Call GuardRegisteredInstallInstances
-  \${If} $ExistingInstallTarget != "1"
+  StrCpy $RunningInstancesInstallRoot ""
+  IfFileExists "$INSTDIR\\${exeName}" 0 detect_running_instances
+  StrCpy $RunningInstancesInstallRoot "$INSTDIR"
+detect_running_instances:
+  Call DetectRunningInstances
+  \${If} $RunningInstancesOutput == ""
     Return
   \${EndIf}
-  StrCpy $RunningInstancesInstallRoot "$INSTDIR"
-  Call DetectRunningInstances
-  \${If} $RunningInstancesOutput != ""
-    Push "running instances detected at install section: $RunningInstancesOutput"
-    Call LogInstallerEvent
-  \${EndIf}
+
+  Push "running instances detected at install section: $RunningInstancesOutput"
+  Call LogInstallerEvent
   Call CloseRunningInstances
-  \${If} $RunningInstancesCloseFailed == "1"
-    Call RestoreQuarantinedLauncher
-    Call CleanupAfterLauncherRestore
-    Abort "$(RunningInstancesCloseFailed)"
-  \${EndIf}
   Call DetectRunningInstances
   \${If} $RunningInstancesOutput != ""
     Push "install aborted: running instances still detected before file changes: $RunningInstancesOutput"
     Call LogInstallerEvent
-    Call RestoreQuarantinedLauncher
-    Call CleanupAfterLauncherRestore
     Abort "$(RunningInstancesCloseFailed)"
   \${EndIf}
 FunctionEnd
@@ -932,414 +816,15 @@ Function CreateDesktopShortcut
   !insertmacro LOG_PATH_STATE "desktop_shortcut_after_create" "$DESKTOP\\${shortcutName}"
 FunctionEnd
 
-Function InspectInstallDir
-  StrCpy $InstallDirHasEntries "0"
+Function RemoveInstallDir
+  !insertmacro LOG_PATH_STATE "install_dir_before_remove" "$INSTDIR"
   Push $0
-  Push $1
-  ClearErrors
-  FindFirst $0 $1 "$INSTDIR\\*"
-  IfErrors done
-scan:
-  StrCmp $1 "." next
-  StrCmp $1 ".." next
-  StrCpy $InstallDirHasEntries "1"
-  Goto close
-next:
-  ClearErrors
-  FindNext $0 $1
-  IfErrors close scan
-close:
-  FindClose $0
-done:
-  Pop $1
+  nsExec::ExecToLog 'cmd.exe /d /s /c if exist "$INSTDIR" rmdir /s /q "\\\\?\\$INSTDIR"'
   Pop $0
-FunctionEnd
-
-Function PrepareInstallTransaction
-  Push $0
-  \${GetParent} "$INSTDIR" $0
-  ClearErrors
-  CreateDirectory "$0"
-  IfErrors failed
-  ClearErrors
-  GetTempFileName $InstallTransactionRoot "$0"
-  IfErrors failed
-  Delete "$InstallTransactionRoot"
-  IfErrors failed
-  CreateDirectory "$InstallTransactionRoot"
-  IfErrors failed
-  IfFileExists "$InstallTransactionRoot" transaction_ready failed
-transaction_ready:
-  StrCpy $EmptyInstallDirBackup "$InstallTransactionRoot\\empty-target"
-  StrCpy $InstallLauncherBackup "$InstallTransactionRoot\\launcher"
-  StrCpy $InstallDirBackup "$InstallTransactionRoot\\previous"
-  StrCpy $InstallReplacementDir "$InstallTransactionRoot\\replacement"
-  Goto done
-failed:
-  IfFileExists "$InstallTransactionRoot" remove_transaction clear_transaction
-remove_transaction:
-  RMDir /r "$InstallTransactionRoot"
-clear_transaction:
-  StrCpy $InstallTransactionRoot ""
-  StrCpy $InstallLauncherBackup ""
-  StrCpy $InstallDirBackup ""
-  StrCpy $InstallReplacementDir ""
-  StrCpy $EmptyInstallDirBackup ""
+  Push "install dir remove exit=$0"
+  Call LogInstallerEvent
   Pop $0
-  Abort "$(InstallDirectoryRemoveFailed)"
-done:
-  Pop $0
-FunctionEnd
-
-Function ValidateInstallDirectory
-  Push $0
-  Push $1
-  GetFullPathName $0 "$INSTDIR"
-  \${GetRoot} "$0" $1
-  StrCpy $1 "$1\\"
-  StrCmp $0 $1 unsafe valid
-unsafe:
-  Pop $1
-  Pop $0
-  Abort "$(UnsafeInstallDirectory)"
-valid:
-  StrCpy $INSTDIR $0
-  Pop $1
-  Pop $0
-FunctionEnd
-
-Function RestoreLauncherBackup
-  IfFileExists "$InstallLauncherBackup" restore done
-restore:
-  CreateDirectory "$INSTDIR"
-  ClearErrors
-  Rename "$InstallLauncherBackup" "$INSTDIR\\${exeName}"
-  IfErrors restore_failed
-  IfFileExists "$INSTDIR\\${exeName}" verify_backup restore_failed
-verify_backup:
-  IfFileExists "$InstallLauncherBackup" restore_failed restored
-restored:
-  !insertmacro LOG_PATH_STATE "installed_exe_after_restore" "$INSTDIR\\${exeName}"
-  Goto done
-restore_failed:
-  Push "launcher restore failed; backup preserved at $InstallLauncherBackup"
-  Call LogInstallerEvent
-done:
-FunctionEnd
-
-Function RestoreQuarantinedLauncher
-  IfFileExists "$INSTDIR\\${exeName}" done
-  Call RestoreLauncherBackup
-done:
-FunctionEnd
-
-Function CleanupAfterLauncherRestore
-  IfFileExists "$INSTDIR\\${exeName}" launcher_present preserve_transaction
-launcher_present:
-  IfFileExists "$InstallLauncherBackup" preserve_transaction cleanup_transaction
-cleanup_transaction:
-  Call CleanupInstallTransaction
-  Return
-preserve_transaction:
-  Push "launcher restore incomplete; transaction preserved at $InstallTransactionRoot"
-  Call LogInstallerEvent
-FunctionEnd
-
-Function QuarantineInstallDir
-  IfFileExists "$InstallLauncherBackup" launcher_backup_ready launcher_backup_missing
-launcher_backup_missing:
-  Call RestoreQuarantinedLauncher
-  Call CleanupAfterLauncherRestore
-  Abort "$(InstallDirectoryRemoveFailed)"
-launcher_backup_ready:
-  !insertmacro LOG_PATH_STATE "install_dir_before_quarantine" "$INSTDIR"
-  ClearErrors
-  Rename "$INSTDIR" "$InstallDirBackup"
-  IfErrors directory_not_moved
-  IfFileExists "$INSTDIR" rollback_moved directory_moved
-directory_moved:
-  IfFileExists "$InstallDirBackup" attach_launcher rollback_moved
-attach_launcher:
-  ClearErrors
-  Rename "$InstallLauncherBackup" "$InstallDirBackup\\${exeName}"
-  IfErrors rollback_moved
-  IfFileExists "$InstallDirBackup\\${exeName}" verify_launcher_backup rollback_moved
-verify_launcher_backup:
-  IfFileExists "$InstallLauncherBackup" rollback_moved done
-rollback_moved:
-  IfFileExists "$INSTDIR" rollback_failed rollback_directory
-rollback_directory:
-  ClearErrors
-  Rename "$InstallDirBackup" "$INSTDIR"
-  IfErrors rollback_failed
-  Call RestoreQuarantinedLauncher
-  Call CleanupAfterLauncherRestore
-  IfFileExists "$INSTDIR\\${exeName}" rollback_abort rollback_failed
-rollback_abort:
-  Abort "$(InstallDirectoryRemoveFailed)"
-directory_not_moved:
-  Call RestoreQuarantinedLauncher
-  Call CleanupAfterLauncherRestore
-  Abort "$(InstallDirectoryRemoveFailed)"
-rollback_failed:
-  Push "install directory quarantine rollback failed; backups preserved at $InstallDirBackup and $InstallLauncherBackup"
-  Call LogInstallerEvent
-  Abort "$(InstallDirectoryRemoveFailed)"
-done:
-  !insertmacro LOG_PATH_STATE "install_dir_after_quarantine" "$InstallDirBackup"
-FunctionEnd
-
-Function RestoreInstallDirBackup
-  IfFileExists "$InstallDirBackup" backup_present rollback_failed
-backup_present:
-  IfFileExists "$INSTDIR" target_recreated restore_old
-target_recreated:
-  Push "install directory rollback blocked because target reappeared; previous install preserved at $InstallDirBackup"
-  Call LogInstallerEvent
-  Goto done
-restore_old:
-  ClearErrors
-  Rename "$InstallDirBackup" "$INSTDIR"
-  IfErrors rollback_failed
-  IfFileExists "$INSTDIR\\${exeName}" verify_backup rollback_failed
-verify_backup:
-  IfFileExists "$InstallDirBackup" rollback_failed restored
-restored:
-  !insertmacro LOG_PATH_STATE "install_dir_after_restore" "$INSTDIR"
-  Call CleanupInstallTransaction
-  Goto done
-rollback_failed:
-  Push "install directory rollback failed; previous install preserved at $InstallDirBackup"
-  Call LogInstallerEvent
-done:
-FunctionEnd
-
-Function RecordFreshInstallTargetState
-  StrCpy $FreshInstallTargetWasEmpty "0"
-  \${If} $ExistingInstallTarget == "1"
-    Return
-  \${EndIf}
-  IfFileExists "$INSTDIR" inspect_existing done
-inspect_existing:
-  \${GetFileAttributes} "$INSTDIR" "DIRECTORY" $InstallTargetAttributeState
-  StrCmp $InstallTargetAttributeState "1" inspect_reparse reject_target
-inspect_reparse:
-  \${GetFileAttributes} "$INSTDIR" "REPARSE_POINT" $InstallTargetAttributeState
-  StrCmp $InstallTargetAttributeState "1" reject_target inspect_empty
-inspect_empty:
-  Call InspectInstallDir
-  StrCmp $InstallDirHasEntries "1" reject_target record_empty
-record_empty:
-  StrCpy $FreshInstallTargetWasEmpty "1"
-  Return
-reject_target:
-  Push "fresh install target is not an empty regular directory: $INSTDIR"
-  Call LogInstallerEvent
-  Abort "$(UnsafeInstallDirectory)"
-done:
-FunctionEnd
-
-Function InspectEmptyInstallDirBackup
-  StrCpy $EmptyInstallDirHasEntries "0"
-  Push $0
-  Push $1
-  ClearErrors
-  FindFirst $0 $1 "$EmptyInstallDirBackup\\*"
-  IfErrors done
-scan:
-  StrCmp $1 "." next
-  StrCmp $1 ".." next
-  StrCpy $EmptyInstallDirHasEntries "1"
-  Goto close
-next:
-  ClearErrors
-  FindNext $0 $1
-  IfErrors close scan
-close:
-  FindClose $0
-done:
-  Pop $1
-  Pop $0
-FunctionEnd
-
-Function QuarantineEmptyFreshInstallDir
-  StrCpy $EmptyInstallDirQuarantined "0"
-  \${If} $ExistingInstallTarget == "1"
-    Return
-  \${EndIf}
-  \${If} $FreshInstallTargetWasEmpty != "1"
-    IfFileExists "$INSTDIR" target_changed done
-  \${EndIf}
-  IfFileExists "$INSTDIR" inspect_target target_changed
-inspect_target:
-  \${GetFileAttributes} "$INSTDIR" "DIRECTORY" $InstallTargetAttributeState
-  StrCmp $InstallTargetAttributeState "1" inspect_reparse target_changed
-inspect_reparse:
-  \${GetFileAttributes} "$INSTDIR" "REPARSE_POINT" $InstallTargetAttributeState
-  StrCmp $InstallTargetAttributeState "1" target_changed inspect_empty
-inspect_empty:
-  Call InspectInstallDir
-  StrCmp $InstallDirHasEntries "1" target_changed quarantine_empty
-quarantine_empty:
-  ClearErrors
-  Rename "$INSTDIR" "$EmptyInstallDirBackup"
-  IfErrors quarantine_failed
-  StrCpy $EmptyInstallDirQuarantined "1"
-  IfFileExists "$INSTDIR" quarantine_failed verify_backup
-verify_backup:
-  IfFileExists "$EmptyInstallDirBackup" inspect_backup_attributes quarantine_failed
-inspect_backup_attributes:
-  \${GetFileAttributes} "$EmptyInstallDirBackup" "DIRECTORY" $InstallTargetAttributeState
-  StrCmp $InstallTargetAttributeState "1" inspect_backup_reparse backup_changed
-inspect_backup_reparse:
-  \${GetFileAttributes} "$EmptyInstallDirBackup" "REPARSE_POINT" $InstallTargetAttributeState
-  StrCmp $InstallTargetAttributeState "1" backup_changed inspect_backup
-inspect_backup:
-  Call InspectEmptyInstallDirBackup
-  StrCmp $EmptyInstallDirHasEntries "1" backup_changed quarantined
-backup_changed:
-  Push "fresh install target changed while it was quarantined: $INSTDIR"
-  Call LogInstallerEvent
-  Call RestoreEmptyFreshInstallDir
-  \${If} $EmptyInstallDirRestoreFailed != "1"
-    Call CleanupInstallTransaction
-  \${EndIf}
-  Abort "$(UnsafeInstallDirectory)"
-quarantined:
-  !insertmacro LOG_PATH_STATE "empty_install_dir_after_quarantine" "$EmptyInstallDirBackup"
-  Return
-target_changed:
-  Push "fresh install target changed before staging: $INSTDIR"
-  Call LogInstallerEvent
-  Call CleanupInstallTransaction
-  Abort "$(UnsafeInstallDirectory)"
-quarantine_failed:
-  IfFileExists "$EmptyInstallDirBackup" preserve_transaction cleanup_transaction
-cleanup_transaction:
-  Call CleanupInstallTransaction
-  Push "empty fresh install target quarantine failed; target left unchanged: $INSTDIR"
-  Call LogInstallerEvent
-  Goto abort_install
-preserve_transaction:
-  Push "empty fresh install target quarantine failed; transaction preserved at $InstallTransactionRoot"
-  Call LogInstallerEvent
-abort_install:
-  Abort "$(InstallDirectoryRemoveFailed)"
-done:
-FunctionEnd
-
-Function RestoreEmptyFreshInstallDir
-  StrCpy $EmptyInstallDirRestoreFailed "0"
-  \${If} $ExistingInstallTarget == "1"
-    Return
-  \${EndIf}
-  \${If} $EmptyInstallDirQuarantined != "1"
-    Return
-  \${EndIf}
-  IfFileExists "$EmptyInstallDirBackup" restore restore_failed
-restore:
-  IfFileExists "$INSTDIR" restore_failed rename_backup
-rename_backup:
-  ClearErrors
-  Rename "$EmptyInstallDirBackup" "$INSTDIR"
-  IfErrors restore_failed
-  IfFileExists "$INSTDIR" verify_backup restore_failed
-verify_backup:
-  IfFileExists "$EmptyInstallDirBackup" restore_failed restored
-restored:
-  !insertmacro LOG_PATH_STATE "empty_install_dir_after_restore" "$INSTDIR"
-  Return
-restore_failed:
-  StrCpy $EmptyInstallDirRestoreFailed "1"
-  Push "empty fresh install target restore failed; transaction preserved at $InstallTransactionRoot"
-  Call LogInstallerEvent
-FunctionEnd
-
-Function RollbackFailedInstall
-  \${If} $ExistingInstallTarget == "1"
-    Call RestoreInstallDirBackup
-  \${Else}
-    Call RestoreEmptyFreshInstallDir
-    \${If} $EmptyInstallDirRestoreFailed != "1"
-      Push "failed fresh install staging removed; target restored unchanged: $INSTDIR"
-      Call LogInstallerEvent
-      Call CleanupInstallTransaction
-    \${EndIf}
-  \${EndIf}
-FunctionEnd
-
-Function CommitInstallDir
-  !insertmacro LOG_PATH_STATE "replacement_dir_before_commit" "$InstallReplacementDir"
-  IfFileExists "$InstallReplacementDir\\${exeName}" replacement_ready commit_safe_rollback
-replacement_ready:
-  IfFileExists "$INSTDIR" target_conflict target_absent
-target_absent:
-  ClearErrors
-  Rename "$InstallReplacementDir" "$INSTDIR"
-  IfErrors commit_failed commit_published
-commit_failed:
-  IfFileExists "$INSTDIR" target_conflict commit_safe_rollback
-commit_safe_rollback:
-  Push "replacement commit failed before stable launcher publish: $InstallReplacementDir"
-  Call LogInstallerEvent
-  Call RollbackFailedInstall
-  Abort "$(InstallDirectoryRemoveFailed)"
-target_conflict:
-  Push "replacement commit blocked by a recreated target; transaction preserved at $InstallTransactionRoot"
-  Call LogInstallerEvent
-  Call RollbackFailedInstall
-  Abort "$(UnsafeInstallDirectory)"
-commit_published:
-  IfFileExists "$INSTDIR\\${exeName}" committed publish_verification_failed
-committed:
-  !insertmacro LOG_PATH_STATE "install_dir_after_commit" "$INSTDIR"
-  Return
-publish_verification_failed:
-  Push "replacement publish verification failed; transaction preserved at $InstallTransactionRoot"
-  Call LogInstallerEvent
-  Abort "$(InstallFinalizeFailed)"
-FunctionEnd
-
-Function CleanupCommittedInstallTransaction
-  \${If} $ExistingInstallTarget == "1"
-    Call CleanupInstallTransaction
-    Return
-  \${EndIf}
-  \${If} $EmptyInstallDirQuarantined != "1"
-    Call CleanupInstallTransaction
-    Return
-  \${EndIf}
-  IfFileExists "$EmptyInstallDirBackup" inspect_backup_attributes cleanup_transaction
-inspect_backup_attributes:
-  \${GetFileAttributes} "$EmptyInstallDirBackup" "DIRECTORY" $InstallTargetAttributeState
-  StrCmp $InstallTargetAttributeState "1" inspect_backup_reparse preserve_transaction
-inspect_backup_reparse:
-  \${GetFileAttributes} "$EmptyInstallDirBackup" "REPARSE_POINT" $InstallTargetAttributeState
-  StrCmp $InstallTargetAttributeState "1" preserve_transaction inspect_backup
-inspect_backup:
-  Call InspectEmptyInstallDirBackup
-  \${If} $EmptyInstallDirHasEntries == "1"
-    Goto preserve_transaction
-  \${EndIf}
-  ClearErrors
-  RMDir "$EmptyInstallDirBackup"
-  IfErrors preserve_transaction
-cleanup_transaction:
-  Call CleanupInstallTransaction
-  Return
-preserve_transaction:
-  Push "committed install cleanup preserved a changed empty target at $EmptyInstallDirBackup"
-  Call LogInstallerEvent
-FunctionEnd
-
-Function CleanupInstallTransaction
-  IfFileExists "$InstallTransactionRoot" cleanup done
-cleanup:
-  nsExec::ExecToLog 'cmd.exe /d /s /c if exist "$InstallTransactionRoot" rmdir /s /q "\\\\?\\$InstallTransactionRoot"'
-  Pop $0
-  Push "install transaction cleanup exit=$0 path=$InstallTransactionRoot"
-  Call LogInstallerEvent
-done:
+  !insertmacro LOG_PATH_STATE "install_dir_after_remove" "$INSTDIR"
 FunctionEnd
 
 Function un.UninstallOptionsPage
@@ -1438,95 +923,48 @@ Section "Install"
   SetShellVarContext current
   Push "install section start"
   Call LogInstallerEvent
-  Call ValidateInstallDirectory
+  Call GuardRunningInstancesBeforeInstall
+  !insertmacro LOG_PATH_STATE "install_dir_before_install" "$INSTDIR"
+  !insertmacro LOG_PATH_STATE "installed_exe_before_install" "$INSTDIR\\${exeName}"
 
-  StrCpy $ExistingInstallTarget "0"
-  IfFileExists "$INSTDIR\\${exeName}" existing_install_target inspect_install_target
-existing_install_target:
-  StrCpy $ExistingInstallTarget "1"
-  Goto stage_payload
-inspect_install_target:
-  Call InspectInstallDir
-  StrCmp $InstallDirHasEntries "1" unsafe_install_target stage_payload
-unsafe_install_target:
-  Push "install aborted: non-empty target is not a recognized installation: $INSTDIR"
-  Call LogInstallerEvent
-  Abort "$(UnsafeInstallDirectory)"
+  IfFileExists "$INSTDIR\\${exeName}" 0 prepare_install_dir
+  Call RemoveInstallDir
 
-stage_payload:
+prepare_install_dir:
   InitPluginsDir
   SetOutPath "$PLUGINSDIR"
   File "/oname=$PLUGINSDIR\\payload-base.7z" "\${PAYLOAD_BASE_7Z}"
   File "/oname=$PLUGINSDIR\\payload-overlay.7z" "\${PAYLOAD_OVERLAY_7Z}"
   File "/oname=$PLUGINSDIR\\7z.exe" "\${SEVEN_Z_EXE}"
   File "/oname=$PLUGINSDIR\\7z.dll" "\${SEVEN_Z_DLL}"
-  \${If} $ExistingInstallTarget == "1"
-    IfFileExists "$INSTDIR\\${exeName}" validated_install_target unsafe_install_target
-  \${Else}
-    Call InspectInstallDir
-    StrCmp $InstallDirHasEntries "1" unsafe_install_target validated_install_target
-  \${EndIf}
-validated_install_target:
-  StrCpy $EmptyInstallDirBackup ""
-  StrCpy $EmptyInstallDirQuarantined "0"
-  StrCpy $EmptyInstallDirRestoreFailed "0"
-  StrCpy $FreshInstallTargetWasEmpty "0"
-  StrCpy $EmptyInstallDirHasEntries "0"
-  StrCpy $InstallTargetAttributeState ""
-  Call RecordFreshInstallTargetState
-  Call PrepareInstallTransaction
 
-  Call GuardRunningInstancesBeforeInstall
-  Call QuarantineEmptyFreshInstallDir
-  !insertmacro LOG_PATH_STATE "install_dir_before_install" "$INSTDIR"
-  !insertmacro LOG_PATH_STATE "installed_exe_before_install" "$INSTDIR\\${exeName}"
-  \${If} $ExistingInstallTarget == "1"
-    Call QuarantineInstallDir
-  \${EndIf}
-
-  CreateDirectory "$InstallReplacementDir"
+  CreateDirectory "$INSTDIR"
   Push "payload base extraction start"
   Call LogInstallerEvent
-  nsExec::ExecToLog '"$PLUGINSDIR\\7z.exe" x -y "$PLUGINSDIR\\payload-base.7z" "-o$InstallReplacementDir"'
+  nsExec::ExecToLog '"$PLUGINSDIR\\7z.exe" x -y "$PLUGINSDIR\\payload-base.7z" "-o$INSTDIR"'
   Pop $0
   Push "payload base extraction exit=$0"
   Call LogInstallerEvent
   \${If} $0 != "0"
     DetailPrint "base payload extraction failed with exit code $0"
-    Call RollbackFailedInstall
     Abort
   \${EndIf}
 
   Push "payload overlay extraction start"
   Call LogInstallerEvent
-  nsExec::ExecToLog '"$PLUGINSDIR\\7z.exe" x -y "$PLUGINSDIR\\payload-overlay.7z" "-o$InstallReplacementDir"'
+  nsExec::ExecToLog '"$PLUGINSDIR\\7z.exe" x -y "$PLUGINSDIR\\payload-overlay.7z" "-o$INSTDIR"'
   Pop $0
   Push "payload overlay extraction exit=$0"
   Call LogInstallerEvent
   \${If} $0 != "0"
     DetailPrint "overlay payload extraction failed with exit code $0"
-    Call RollbackFailedInstall
     Abort
   \${EndIf}
-  IfFileExists "$InstallReplacementDir\\${exeName}" staged_launcher_ready staged_launcher_missing
-staged_launcher_missing:
-  Call RollbackFailedInstall
-  Abort "$(InstallDirectoryRemoveFailed)"
-staged_launcher_ready:
 
-  !insertmacro LOG_PATH_STATE "replacement_dir_after_extract" "$InstallReplacementDir"
-  !insertmacro LOG_PATH_STATE "replacement_exe_after_extract" "$InstallReplacementDir\\${exeName}"
-  ClearErrors
-  WriteUninstaller "$InstallReplacementDir\\${uninstallerName}"
-  IfErrors uninstaller_failed uninstaller_written
-uninstaller_failed:
-  Call RollbackFailedInstall
-  Abort "$(InstallDirectoryRemoveFailed)"
-uninstaller_written:
-  !insertmacro LOG_PATH_STATE "replacement_uninstaller_after_write" "$InstallReplacementDir\\${uninstallerName}"
-  Call CommitInstallDir
   !insertmacro LOG_PATH_STATE "install_dir_after_extract" "$INSTDIR"
   !insertmacro LOG_PATH_STATE "installed_exe_after_extract" "$INSTDIR\\${exeName}"
+  WriteUninstaller "$INSTDIR\\${uninstallerName}"
+  !insertmacro LOG_PATH_STATE "uninstaller_after_write" "$INSTDIR\\${uninstallerName}"
   SetOutPath "$INSTDIR"
   IfSilent 0 skip_silent_desktop_shortcut
   !insertmacro LOG_PATH_STATE "desktop_shortcut_before_create" "$DESKTOP\\${shortcutName}"
@@ -1536,7 +974,6 @@ skip_silent_desktop_shortcut:
   !insertmacro LOG_PATH_STATE "start_menu_shortcut_before_create" "$SMPROGRAMS\\${shortcutName}"
   CreateShortCut "$SMPROGRAMS\\${shortcutName}" "$INSTDIR\\${exeName}" "" "$INSTDIR\\${exeName}" 0
   !insertmacro LOG_PATH_STATE "start_menu_shortcut_after_create" "$SMPROGRAMS\\${shortcutName}"
-  ClearErrors
   WriteRegStr HKCU "${registryKey}" "DisplayName" "${productName}"
   WriteRegStr HKCU "${registryKey}" "DisplayVersion" "\${APP_VERSION}"
   WriteRegStr HKCU "${registryKey}" "InstallLocation" "$INSTDIR"
@@ -1544,27 +981,9 @@ skip_silent_desktop_shortcut:
   WriteRegStr HKCU "${registryKey}" "QuietUninstallString" '"$INSTDIR\\${uninstallerName}" /currentuser /S'
   WriteRegStr HKCU "${registryKey}" "DisplayIcon" "$INSTDIR\\${exeName},0"
   WriteRegStr HKCU "${appPathsKey}" "" "$INSTDIR\\${exeName}"
-  IfErrors registry_failed registry_written
-registry_failed:
-  Push "install finalization failed during registry write; transaction preserved at $InstallTransactionRoot"
-  Call LogInstallerEvent
-  \${If} $ExistingInstallTarget != "1"
-    Call CleanupCommittedInstallTransaction
-  \${EndIf}
-  Abort "$(InstallFinalizeFailed)"
-registry_written:
   Push "event=registry_after_write key=${registryKey} appPathsKey=${appPathsKey}"
   Call LogInstallerEvent
   Call SyncLauncherRuntime
-  \${If} $LauncherRuntimeSyncFailed == "1"
-    Push "install finalization failed during launcher runtime sync; transaction preserved at $InstallTransactionRoot"
-    Call LogInstallerEvent
-    \${If} $ExistingInstallTarget != "1"
-      Call CleanupCommittedInstallTransaction
-    \${EndIf}
-    Abort "$(InstallFinalizeFailed)"
-  \${EndIf}
-  Call CleanupCommittedInstallTransaction
   Push "install section done"
   Call LogInstallerEvent
 SectionEnd

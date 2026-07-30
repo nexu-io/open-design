@@ -108,6 +108,7 @@ export type OpenDesignHostBrowserClearDataOptions = {
 
 export const OPEN_DESIGN_HOST_UPDATER_ACTIONS = Object.freeze({
   CHECK: "check",
+  CLEAR_CACHE: "clear-cache",
   DOWNLOAD: "download",
   INSTALL: "install",
   QUIT: "quit",
@@ -217,7 +218,7 @@ export type OpenDesignHostUpdaterIncomingSnapshot = {
   version: string;
 };
 
-export type OpenDesignHostUpdaterCacheLifecycleTrigger = "cold-start" | "next-version-ready";
+export type OpenDesignHostUpdaterCacheLifecycleTrigger = "cold-start" | "manual" | "next-version-ready";
 
 export type OpenDesignHostUpdaterReleaseLifecycleState =
   | "cleanup-deferred"
@@ -245,6 +246,24 @@ export type OpenDesignHostUpdaterCacheSnapshot = {
   lifecycle?: OpenDesignHostUpdaterCacheLifecycleSummary;
 };
 
+export type OpenDesignHostUpdaterReinstallReason =
+  | "launcher-schema"
+  | "outer-below-min"
+  | "outer-version-unreadable";
+
+/**
+ * Present when the release feed requires a full installer reinstall instead of
+ * an in-place payload update. `installedVersion` is the physically installed
+ * outer package version; `url` is an optional operator-supplied explanation
+ * link.
+ */
+export type OpenDesignHostUpdaterReinstallSnapshot = {
+  installedVersion?: string;
+  minVersion?: string;
+  reason: OpenDesignHostUpdaterReinstallReason;
+  url?: string;
+};
+
 export type OpenDesignHostUpdaterStatusSnapshot = {
   active?: OpenDesignHostUpdaterReleaseSnapshot;
   arch: string;
@@ -267,6 +286,7 @@ export type OpenDesignHostUpdaterStatusSnapshot = {
   paths?: OpenDesignHostUpdaterPathSnapshot;
   platform: string;
   progress?: OpenDesignHostUpdaterProgressSnapshot;
+  reinstall?: OpenDesignHostUpdaterReinstallSnapshot;
   state: OpenDesignHostUpdaterState;
   supported: boolean;
 };
@@ -319,6 +339,7 @@ export type OpenDesignHostBridge = {
   };
   updater: {
     check(options?: OpenDesignHostUpdaterActionOptions): Promise<OpenDesignHostUpdaterStatusSnapshot>;
+    "clear-cache"(options?: OpenDesignHostUpdaterActionOptions): Promise<OpenDesignHostUpdaterStatusSnapshot>;
     download(options?: OpenDesignHostUpdaterActionOptions): Promise<OpenDesignHostUpdaterStatusSnapshot>;
     install(options?: OpenDesignHostUpdaterActionOptions): Promise<OpenDesignHostUpdaterStatusSnapshot>;
     quit(options?: OpenDesignHostUpdaterActionOptions): Promise<OpenDesignHostActionResult>;
