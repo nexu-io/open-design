@@ -188,6 +188,17 @@ function isHardQuotaText(text: string): boolean {
     .test(text)) {
     return true;
   }
+  // `quota` next to an exhaustion word is unambiguous on its own — no wallet or
+  // balance needed. `quota exhausted` is a real upstream payload in this repo
+  // (tests/byok-tools.test.ts: `status_msg: 'quota exhausted'`); requiring
+  // corroboration for it would turn a terminal failure into a retry candidate
+  // (and under RATE_LIMITED, a retryable `rate_limit_429`), which is the exact
+  // inverse of the misclassification this function is being fixed for.
+  if (/\bquota\s+(?:exceeded|exhausted|depleted|reached|used\s+up)\b/i.test(text)
+    || /\b(?:exceeded|exhausted|out\s+of|ran\s+out\s+of|no\s+remaining)\s+(?:\w+\s+){0,3}quota\b/i
+      .test(text)) {
+    return true;
+  }
   return /\bquota\b/i.test(text) &&
     /\b(wallet|balance|credits?|billing|funds?|payment|plan)\b/i.test(text);
 }

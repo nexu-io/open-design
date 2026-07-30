@@ -388,6 +388,29 @@ describe('classifyRunFailure', () => {
         retryable: false,
       });
     }
+    // Explicit exhaustion collocations must survive the corroboration rule.
+    // `quota exhausted` is a real upstream payload in this repo
+    // (tests/byok-tools.test.ts: `status_msg: 'quota exhausted'`), and dropping
+    // it would turn a terminal quota failure into a retry candidate — the exact
+    // inverse of the bug this PR fixes.
+    for (const text of [
+      'quota exhausted',
+      'quota exceeded',
+      'Quota depleted for this account.',
+      'You have exceeded your monthly quota.',
+      'HTTP 429: out of quota',
+    ]) {
+      expect(classify('AGENT_EXECUTION_FAILED', text), text).toMatchObject({
+        failure_detail: 'hard_quota',
+        retryable: false,
+      });
+      // With RATE_LIMITED the stakes are higher: without the phrase match this
+      // becomes a retryable rate_limit_429 and the suppression contract breaks.
+      expect(classify('RATE_LIMITED', text), `RATE_LIMITED ${text}`).toMatchObject({
+        failure_detail: 'hard_quota',
+        retryable: false,
+      });
+    }
     // The Chinese vela pre-charge text has its own, more specific detail and
     // must keep it — it is routed before the quota branch.
     expect(classify('AGENT_EXECUTION_FAILED', '用户额度不足')).toMatchObject({
