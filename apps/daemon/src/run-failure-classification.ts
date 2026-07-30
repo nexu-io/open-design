@@ -169,9 +169,27 @@ function collectFailureText(input: RunFailureClassificationInput): string {
   return parts.join('\n');
 }
 
+// A bare `quota` alternative used to live in the alternation below, which made
+// this matcher fire on our *own* generic empty-output fallback (server.ts:
+// "...then try re-authenticating the agent, checking quota, or switching
+// models."). The quota branch is evaluated before `isEmptyOutputText`, so every
+// output-less run — for any reason — was reported as an exhausted quota, and
+// run-retry-policy suppresses retries outright on `hard_quota`. That is the
+// misclassification behind #6143: third-party API runs failed permanently while
+// the provider still had quota.
+//
+// So `quota` on its own is not a signal; it needs a corroborating word. This
+// mirrors the detector that already got it right —
+// integrations/vela-errors.ts requires one of wallet/balance/credit/billing/funds
+// alongside `quota`. Phrases that are unambiguous on their own (session limit,
+// insufficient quota, exceeded your current quota…) keep matching directly.
 function isHardQuotaText(text: string): boolean {
-  return /\b(session limit|usage limit|limit reached|quota|billing (?:hard )?limit|insufficient[ _-]?(?:quota|credit|credits|funds)|exceeded your current quota|out of credits|no payment method|requires more credits|can only afford)\b|DAILY_LIMIT_EXCEEDED|用户额度不足|额度不足|预扣费额度失败/i
-    .test(text);
+  if (/\b(session limit|usage limit|limit reached|billing (?:hard )?limit|insufficient[ _-]?(?:quota|credit|credits|funds)|exceeded your current quota|out of credits|no payment method|requires more credits|can only afford)\b|DAILY_LIMIT_EXCEEDED|用户额度不足|额度不足|预扣费额度失败/i
+    .test(text)) {
+    return true;
+  }
+  return /\bquota\b/i.test(text) &&
+    /\b(wallet|balance|credits?|billing|funds?|payment|plan)\b/i.test(text);
 }
 
 // A transient, retryable rate limit (distinct from a hard quota). vela/upstream

@@ -353,6 +353,49 @@ describe('classifyRunFailure', () => {
     });
   });
 
+  // Refs #6143. The daemon's own generic empty-output fallback (server.ts) ends
+  // with "...then try re-authenticating the agent, checking quota, or switching
+  // models." `isHardQuotaText` used to carry a bare `quota` alternative, so the
+  // daemon read its own message back and concluded the user was out of quota.
+  //
+  // That is not cosmetic: run-retry-policy suppresses retries outright on
+  // `hard_quota`, which is why the reporter saw every third-party-API run fail
+  // permanently while the provider itself had quota left.
+  const EMPTY_OUTPUT_FALLBACK =
+    'Agent completed without producing any output. The model or provider may ' +
+    'have returned an empty response. Check the agent logs for upstream ' +
+    'errors, then try re-authenticating the agent, checking quota, or ' +
+    'switching models.';
+
+  it('does not read its own empty-output fallback as a hard quota', () => {
+    expect(classify('AGENT_EXECUTION_FAILED', EMPTY_OUTPUT_FALLBACK)).toMatchObject({
+      failure_category: 'empty_output',
+      failure_detail: 'empty_output',
+    });
+  });
+
+  it('still treats a real quota exhaustion as a hard quota', () => {
+    // The word `quota` alone must not be the trigger, but a corroborated quota
+    // message still has to classify — otherwise this fix trades one silent
+    // misclassification for another.
+    for (const text of [
+      'You exceeded your current quota, please check your plan and billing details.',
+      'Insufficient quota for the current billing period.',
+    ]) {
+      expect(classify('AGENT_EXECUTION_FAILED', text), text).toMatchObject({
+        failure_category: 'rate_limit',
+        failure_detail: 'hard_quota',
+        retryable: false,
+      });
+    }
+    // The Chinese vela pre-charge text has its own, more specific detail and
+    // must keep it — it is routed before the quota branch.
+    expect(classify('AGENT_EXECUTION_FAILED', '用户额度不足')).toMatchObject({
+      failure_detail: 'amr_insufficient_balance',
+      retryable: false,
+    });
+  });
+
   it('maps upstream failures to retry guidance', () => {
     expect(classify('UPSTREAM_UNAVAILABLE', 'HTTP 503 upstream unavailable')).toMatchObject({
       failure_category: 'upstream_unavailable',
