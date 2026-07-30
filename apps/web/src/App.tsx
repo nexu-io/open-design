@@ -318,7 +318,7 @@ const UNRESOLVED_PROJECT_LIST_SCOPE = 'local';
 
 function projectListScopeKey(context: WorkspaceCollabContext | null): string {
   return context
-    ? `${context.workspaceId}:${context.workspaceMemberId}`
+    ? `workspace:${workspaceIdentityCacheKey(context)}`
     : UNRESOLVED_PROJECT_LIST_SCOPE;
 }
 

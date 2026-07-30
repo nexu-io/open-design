@@ -134,7 +134,7 @@ describe('projectViewAuthorizationLifetimeKey', () => {
     teamId: 'team-a',
   } as WorkspaceCollabContext;
 
-  it('changes when the workspace or member authorization scope changes', () => {
+  it('changes when any Workspace authorization field changes', () => {
     const initial = projectViewAuthorizationLifetimeKey(projectId, baseContext);
 
     expect(projectViewAuthorizationLifetimeKey(projectId, {
@@ -144,6 +144,22 @@ describe('projectViewAuthorizationLifetimeKey', () => {
     expect(projectViewAuthorizationLifetimeKey(projectId, {
       ...baseContext,
       workspaceMemberId: 'member-b',
+    })).not.toBe(initial);
+    expect(projectViewAuthorizationLifetimeKey(projectId, {
+      ...baseContext,
+      role: 'admin',
+    })).not.toBe(initial);
+    expect(projectViewAuthorizationLifetimeKey(projectId, {
+      ...baseContext,
+      lifecycleState: 'locked',
+    })).not.toBe(initial);
+    expect(projectViewAuthorizationLifetimeKey(projectId, {
+      ...baseContext,
+      permissions: {
+        ...baseContext.permissions,
+        canShareProjects: true,
+        canWriteSyncedFiles: false,
+      },
     })).not.toBe(initial);
     expect(projectViewAuthorizationLifetimeKey(projectId, null)).not.toBe(initial);
   });

@@ -183,8 +183,8 @@ export async function listProjects(options?: {
   // unreachable once a context exists (the workspace branch above returns
   // first), so it can never serve one workspace's rows to another. The
   // workspace-scoped read's own key is built in
-  // `listWorkspaceProjectSummaries` below and carries workspace + member +
-  // role + status + lifecycle + view.
+  // `listWorkspaceProjectSummaries` below and carries the full wire identity
+  // plus the requested view.
   try {
     return await coalescedGet('local-projects', async () => {
       const resp = await fetch('/api/projects');
@@ -209,11 +209,7 @@ export async function listWorkspaceProjectSummaries(options: {
   const workspaceView = options.workspaceView ?? 'drafts';
   const key = [
     'workspace-projects',
-    context.workspaceId,
-    context.workspaceMemberId,
-    context.role,
-    context.memberStatus,
-    context.lifecycleState,
+    workspaceIdentityCacheKey(context),
     workspaceView,
   ].join(':');
   try {

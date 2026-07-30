@@ -328,6 +328,47 @@ describe('listProjects', () => {
     release();
     await Promise.all([first, second]);
   });
+
+  it('does not coalesce the same member across a permission transition', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const fetchMock = vi.fn<typeof fetch>(async () => {
+      await gate;
+      return Response.json({ projects: [] });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const before = teamWorkspaceContext({
+      workspaceId: 'ws-permission-transition',
+      workspaceMemberId: 'wm-same',
+      permissions: {
+        ...teamWorkspaceContext().permissions,
+        canShareProjects: false,
+        canWriteSyncedFiles: false,
+      },
+    });
+    const after = {
+      ...before,
+      permissions: {
+        ...before.permissions,
+        canShareProjects: true,
+      },
+    };
+    const first = listWorkspaceProjectSummaries({
+      context: before,
+      workspaceView: 'team',
+    });
+    const second = listWorkspaceProjectSummaries({
+      context: after,
+      workspaceView: 'team',
+    });
+
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    release();
+    await Promise.all([first, second]);
+  });
 });
 
 describe('createProject', () => {
