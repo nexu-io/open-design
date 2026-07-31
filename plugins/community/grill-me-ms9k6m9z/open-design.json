@@ -1,0 +1,22 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "grill-me-ms9k6m9z",
+  "title": "Grill Me",
+  "version": "0.1.0",
+  "description": "--- name: grill-me description: Use when the user explicitly asks to be challenged, grilled, stress-tested, pressure-tested, or wants a blunt critique of a plan, idea, strategy, product, artifact, argument, decision, or ",
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}
