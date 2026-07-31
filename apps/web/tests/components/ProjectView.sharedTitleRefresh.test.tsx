@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
+import type { WorkspaceCollabContext } from '@open-design/contracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ProjectView, reconcileProjectDetail } from '../../src/components/ProjectView';
@@ -229,11 +230,14 @@ function projectViewElement(
       projectId: string,
       expectedAuthorizationKey: string,
     ) => Promise<ProjectNameAuthorityResolution>;
+    workspaceContextOverride?: WorkspaceCollabContext | null;
+    onProjectChange?: (next: Project) => void;
   } = {},
 ) {
   return (
     <ProjectView
       project={projectOverride}
+      workspaceContextOverride={options.workspaceContextOverride}
       projectAuthorizationKey="ws-1:wm-1:project-1"
       authoritativeProjectName={options.authoritativeProjectName}
       resolveAuthoritativeProjectName={options.resolveAuthoritativeProjectName}
@@ -252,7 +256,7 @@ function projectViewElement(
       onBack={vi.fn()}
       onClearPendingPrompt={vi.fn()}
       onTouchProject={vi.fn()}
-      onProjectChange={onProjectChangeMock}
+      onProjectChange={options.onProjectChange ?? onProjectChangeMock}
       onProjectsRefresh={vi.fn()}
     />
   );
@@ -344,6 +348,77 @@ describe('ProjectView shared-project title refresh on project-metadata-changed',
       expect(onProjectChangeMock).toHaveBeenCalledWith(
         expect.objectContaining({ id: 'project-1', name: 'Q3 Marketing Site' }),
       );
+    });
+  });
+
+  it.each([
+    ['member', sharedMemberCollab()],
+    ['owner', sharedMemberCollab({
+      viewerOnly: false,
+      writerAuthority: 'allowed',
+      isOwner: true,
+      isEffectiveOwner: true,
+      isSharedNonOwner: false,
+      ownerDisplayName: null,
+      ownerRole: null,
+    })],
+  ])('pins %s title hydration to the opened Workspace after ambient Workspace changes', async (
+    role,
+    collab,
+  ) => {
+    mockedUseProjectCollab.mockReturnValue(collab);
+    const workspaceA = {
+      workspaceId: 'ws-1',
+      workspaceType: 'team',
+      workspaceMemberId: 'wm-1',
+      role: role as WorkspaceCollabContext['role'],
+      memberStatus: 'active',
+      lifecycleState: 'active',
+      billingState: 'active',
+      planId: null,
+      providerMode: 'platform_credits',
+      seatSummary: {
+        seatLimit: 3,
+        usedSeats: 2,
+        availableSeats: 1,
+        isSeatFull: false,
+      },
+      permissions: {},
+    } as WorkspaceCollabContext;
+    const placeholder = { ...project, workspaceId: workspaceA.workspaceId };
+    const pulled = {
+      ...placeholder,
+      name: 'Recipient sees the real title',
+      updatedAt: 456,
+    };
+    mockedGetProject.mockImplementation(async (_projectId, workspaceContext) => (
+      workspaceContext?.workspaceId === workspaceA.workspaceId
+        ? pulled
+        : placeholder
+    ));
+
+    function RecipientShell() {
+      const [activeProject, setActiveProject] = useState(placeholder);
+      return (
+        <>
+          <span data-testid="recipient-sidebar-title">{activeProject.name}</span>
+          <span data-testid="recipient-tab-title">{activeProject.name}</span>
+          {projectViewElement(activeProject, {
+            workspaceContextOverride: workspaceA,
+            onProjectChange: setActiveProject,
+          })}
+        </>
+      );
+    }
+
+    render(<RecipientShell />);
+    dispatchProjectEvent({ type: 'project-metadata-changed', projectId: project.id });
+
+    await waitFor(() => {
+      expect(mockedGetProject).toHaveBeenCalledWith(project.id, workspaceA);
+      expect(screen.getByTestId('recipient-sidebar-title').textContent).toBe(pulled.name);
+      expect(screen.getByTestId('recipient-tab-title').textContent).toBe(pulled.name);
+      expect(screen.getByTestId('file-workspace').getAttribute('data-project-name')).toBe(pulled.name);
     });
   });
 
