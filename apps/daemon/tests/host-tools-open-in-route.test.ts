@@ -14,7 +14,7 @@ import path from 'node:path';
 import { tmpdir } from 'node:os';
 import express from 'express';
 import type { Response } from 'express';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { registerHostToolsRoutes } from '../src/routes/host-tools.js';
 import type { RegisterHostToolsRoutesDeps } from '../src/routes/host-tools.js';
@@ -79,11 +79,11 @@ afterAll(async () => {
   await new Promise<void>((resolve) => server.close(() => resolve()));
 });
 
-function postOpenIn(projectId: string) {
+function postOpenIn(projectId: string, editorId = 'cursor') {
   return fetch(`${baseUrl}/api/projects/${projectId}/open-in`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ editorId: 'cursor' }),
+    body: JSON.stringify({ editorId }),
   });
 }
 
@@ -108,4 +108,37 @@ describe('POST /api/projects/:id/open-in launch reporting (#3871)', () => {
     expect(resp.status).toBe(200);
     expect(await resp.json()).toEqual({ ok: true, editorId: 'cursor', path: PROJECT_DIR });
   });
+});
+
+// The darwin gate on the Kiro entry has to be enforced on the *launch* path,
+// not just filtered out of `GET /api/editors`. A client can POST any
+// `editorId` — it does not have to be one the list offered — so if the route
+// stopped consulting applicableForPlatform, a non-macOS POST for `kiro` would
+// fall through to the probe. That is the exact "editor tile launches the
+// terminal agent" hazard the bundle-only entry exists to prevent (#6313), so
+// the refusal is pinned here at the HTTP boundary.
+//
+// The 400/BAD_REQUEST pair matters: with the gate removed the request is still
+// refused, but as 409 EDITOR_NOT_AVAILABLE from the probe. Asserting the code
+// (not just a non-2xx status) keeps the two failure modes distinguishable.
+describe('POST /api/projects/:id/open-in platform gate — kiro is darwin-only (#6313)', () => {
+  const ORIGINAL_PLATFORM = process.platform;
+
+  afterEach(() => {
+    Object.defineProperty(process, 'platform', { value: ORIGINAL_PLATFORM, configurable: true });
+  });
+
+  it.each(['linux', 'win32'] as const)(
+    'refuses editorId=kiro with 400 BAD_REQUEST on %s',
+    async (platform) => {
+      Object.defineProperty(process, 'platform', { value: platform, configurable: true });
+
+      const resp = await postOpenIn('p1', 'kiro');
+
+      expect(resp.status).toBe(400);
+      const body = (await resp.json()) as { error: { code: string; message: string } };
+      expect(body.error.code).toBe('BAD_REQUEST');
+      expect(body.error.message).toBe(`Kiro is not available on ${platform}`);
+    },
+  );
 });

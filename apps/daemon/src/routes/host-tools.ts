@@ -42,16 +42,9 @@ export interface CatalogueEntry {
   // macOS-only fallback: when the CLI shim is missing, look for an app
   // bundle by name and launch it via `open -a "<name>"`. Lets us list
   // Xcode / Qoder / Antigravity / Warp / IntelliJ without forcing users
-  // to also install their CLI shim. `preferMacOpenBundle` flips it from
-  // fallback to first choice.
+  // to also install their CLI shim.
   macOpenBundle?: string | readonly string[];
   macOpenArgs?: (bundleName: string, resolvedDir: string) => string[];
-  // On darwin, try `macOpenBundle` before the `$PATH` shim. For tools whose
-  // bare shim is not a deterministic entry point, the app bundle is: it goes
-  // through LaunchServices and lands on exactly one app. `command` stays as
-  // the fallback so the entry still reports available when the bundle is
-  // missing, and win32/linux resolution order is untouched.
-  preferMacOpenBundle?: boolean;
   platforms?: RealPlatform[];
   excludedPlatforms?: RealPlatform[];
 }
@@ -65,18 +58,17 @@ export const CATALOGUE: ReadonlyArray<CatalogueEntry> = [
   { id: 'cursor', label: 'Cursor', icon: 'sparkles', command: 'cursor', macOpenBundle: 'Cursor' },
   { id: 'vscode', label: 'VS Code', icon: 'file-code', command: 'code', macOpenBundle: 'Visual Studio Code' },
   { id: 'windsurf', label: 'Windsurf', icon: 'sparkles', command: 'windsurf', macOpenBundle: 'Windsurf' },
-  // darwin-only: bare `kiro` is not a deterministic IDE entry point. Once the
-  // opt-in command router is installed (v1.26.0+) `kiro` routes to whatever
-  // the user set as their default, so `kiro set-default cli` would make this
-  // tile open the terminal agent — see "Kiro Command Router" in
+  // darwin-only: bare `kiro` is not a deterministic IDE entry point. The
+  // opt-in command router (v1.26.0+) makes `kiro` follow whatever the user set
+  // as their default, so `kiro set-default cli` would point this editor tile at
+  // the terminal agent — see "Kiro Command Router" in
   // https://kiro.dev/docs/cli/reference/cli-commands/. `kiro ide <dir>` is not
-  // the fix: with the router absent, `kiro` is a Code-OSS-style launcher that
-  // treats `ide` as a path and opens a spurious `ide` entry. darwin is
-  // deterministic because it resolves /Applications/Kiro.app first, which
-  // reaches the IDE through LaunchServices in every router state; `command`
-  // stays as the fallback when that bundle is missing. win32/linux stay
+  // an alternative: with the router absent, `kiro` treats `ide` as a path and
+  // opens a spurious `ide` entry. So this entry deliberately carries no
+  // `command` shim — availability requires Kiro.app, which reaches the IDE
+  // through LaunchServices in every router state. win32/linux stay
   // unadvertised until they have a verified deterministic launch path. (#6313)
-  { id: 'kiro', label: 'Kiro', icon: 'sparkles', command: 'kiro', macOpenBundle: 'Kiro', preferMacOpenBundle: true, platforms: ['darwin'] },
+  { id: 'kiro', label: 'Kiro', icon: 'sparkles', macOpenBundle: 'Kiro', platforms: ['darwin'] },
   { id: 'zed', label: 'Zed', icon: 'edit', command: 'zed', macOpenBundle: 'Zed' },
   { id: 'qoder', label: 'Qoder', icon: 'sparkles', command: 'qoder', macOpenBundle: ['Qoder', 'QoderWork'] },
   { id: 'antigravity', label: 'Antigravity', icon: 'orbit', command: 'antigravity', macOpenBundle: ['Antigravity', 'Google Antigravity'] },
@@ -180,47 +172,35 @@ async function probeMacBundle(name: string | readonly string[]): Promise<{ name:
   return null;
 }
 
-interface ResolvedEntry {
+async function resolveEntry(entry: CatalogueEntry): Promise<{
   available: boolean;
   resolvedPath?: string;
   launch?: { command: string; argsForDir: (resolvedDir: string) => string[] };
-}
-
-async function resolveViaPathShim(entry: CatalogueEntry): Promise<ResolvedEntry | null> {
-  if (!entry.command) return null;
-  const resolved = await probeCommandOnPath(entry.command);
-  if (!resolved) return null;
-  return {
-    available: true,
-    resolvedPath: resolved,
-    launch: { command: resolved, argsForDir: entry.commandArgs ?? ((resolvedDir) => [resolvedDir]) },
-  };
-}
-
-async function resolveViaMacBundle(entry: CatalogueEntry): Promise<ResolvedEntry | null> {
-  if (!entry.macOpenBundle || process.platform !== 'darwin') return null;
-  const bundle = await probeMacBundle(entry.macOpenBundle);
-  if (!bundle) return null;
-  return {
-    available: true,
-    resolvedPath: bundle.path,
-    launch: {
-      command: await resolveMacOpenCommand(),
-      argsForDir: entry.macOpenArgs
-        ? ((resolvedDir) => entry.macOpenArgs?.(bundle.name, resolvedDir) ?? ['-a', bundle.name, resolvedDir])
-        : ((resolvedDir) => ['-a', bundle.name, resolvedDir]),
-    },
-  };
-}
-
-async function resolveEntry(entry: CatalogueEntry): Promise<ResolvedEntry> {
-  const order =
-    entry.preferMacOpenBundle === true && process.platform === 'darwin'
-      ? [resolveViaMacBundle, resolveViaPathShim]
-      : [resolveViaPathShim, resolveViaMacBundle];
-  for (const resolve of order) {
-    const resolved = await resolve(entry);
-    if (resolved) return resolved;
+}> {
+  if (entry.command) {
+    const resolved = await probeCommandOnPath(entry.command);
+    if (resolved) {
+      return {
+        available: true,
+        resolvedPath: resolved,
+        launch: { command: resolved, argsForDir: entry.commandArgs ?? ((resolvedDir) => [resolvedDir]) },
+      };
+    }
+  }
+  if (entry.macOpenBundle && process.platform === 'darwin') {
+    const bundle = await probeMacBundle(entry.macOpenBundle);
+    if (bundle) {
+      return {
+        available: true,
+        resolvedPath: bundle.path,
+        launch: {
+          command: await resolveMacOpenCommand(),
+          argsForDir: entry.macOpenArgs
+            ? ((resolvedDir) => entry.macOpenArgs?.(bundle.name, resolvedDir) ?? ['-a', bundle.name, resolvedDir])
+            : ((resolvedDir) => ['-a', bundle.name, resolvedDir]),
+        },
+      };
+    }
   }
   return { available: false };
 }

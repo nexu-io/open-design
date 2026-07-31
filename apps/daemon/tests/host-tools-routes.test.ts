@@ -48,13 +48,13 @@ describe('host tools open-in launch plans', () => {
   });
 });
 
-// Resolution-order coverage for the launch *arguments*, not just platform
-// applicability. `kiro` carries preferMacOpenBundle so darwin resolves
-// /Applications/Kiro.app ahead of the `$PATH` shim — bare `kiro` routes to the
-// user's default once the Kiro command router is installed, and `kiro ide
-// <dir>` is not a usable substitute (it adds a spurious `ide` entry when the
-// router is absent). These cases pin both halves so neither can regress.
-describe('host tools resolution order — preferMacOpenBundle', () => {
+// Resolution coverage for the launch *arguments*, not just platform
+// applicability. `kiro` is bundle-only: it declares no `command`, so the tile
+// can only ever reach Kiro.app and never the `kiro` shim, which routes to the
+// user's default once the Kiro command router is installed. These cases pin
+// both halves of that — the bundle launch, and the refusal to fall back to a
+// shim that may be the terminal agent. (#6313)
+describe('host tools resolution — kiro resolves through the IDE bundle only', () => {
   const DIR = '/tmp/open-design-project';
   const ORIGINAL_PLATFORM = process.platform;
 
@@ -83,17 +83,17 @@ describe('host tools resolution order — preferMacOpenBundle', () => {
     expect(plan.args).not.toContain('ide');
   });
 
-  it('darwin: kiro still falls back to the $PATH shim when the app bundle is missing', async () => {
+  it('darwin: kiro is unavailable when Kiro.app is missing, even with the $PATH shim installed', async () => {
     stubPlatform('darwin', ['/fake/bin/kiro', '/usr/bin/open']);
 
     const plan = await resolveHostToolLaunchPlan('kiro', DIR);
 
-    expect(plan.available).toBe(true);
-    expect(plan.command).toBe('/fake/bin/kiro');
-    expect(plan.args).toEqual([DIR]);
+    expect(plan.available).toBe(false);
+    expect(plan.command).toBeUndefined();
+    expect(plan.args).toBeUndefined();
   });
 
-  it('darwin: an unflagged entry still prefers the $PATH shim over its app bundle', async () => {
+  it('darwin: an entry that declares a shim still prefers it over its app bundle', async () => {
     stubPlatform('darwin', ['/fake/bin/cursor', '/Applications/Cursor.app', '/usr/bin/open']);
 
     const plan = await resolveHostToolLaunchPlan('cursor', DIR);
@@ -102,11 +102,6 @@ describe('host tools resolution order — preferMacOpenBundle', () => {
     expect(plan.resolvedPath).toBe('/fake/bin/cursor');
     expect(plan.command).toBe('/fake/bin/cursor');
     expect(plan.args).toEqual([DIR]);
-  });
-
-  it('only kiro opts into bundle-first resolution', () => {
-    const flagged = CATALOGUE.filter((e: CatalogueEntry) => e.preferMacOpenBundle === true);
-    expect(flagged.map((e: CatalogueEntry) => e.id)).toEqual(['kiro']);
   });
 });
 
