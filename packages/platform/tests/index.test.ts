@@ -18,6 +18,7 @@ import {
   removePathBestEffort,
   resolveSystemProxyEnv,
   wellKnownUserToolchainBins,
+  waitForHttpOk,
   type ProcessStampContract,
 } from "../src/index.js";
 
@@ -72,6 +73,27 @@ const stamp: FakeStamp = {
   namespace: "stamp-boundary-a",
   source: "tool",
 };
+
+describe("waitForHttpOk", () => {
+  it("aborts a fetch that does not settle before the deadline", async () => {
+    const originalFetch = globalThis.fetch;
+    let aborted = false;
+    globalThis.fetch = ((_url, init) => new Promise((_resolve, reject) => {
+      init?.signal?.addEventListener("abort", () => {
+        aborted = true;
+        reject(new DOMException("The operation was aborted.", "AbortError"));
+      }, { once: true });
+    })) as typeof fetch;
+
+    try {
+      await expect(waitForHttpOk("http://example.test", { timeoutMs: 20 }))
+        .rejects.toThrow("timed out waiting for http://example.test");
+      expect(aborted).toBe(true);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
 
 describe("generic process stamp primitives", () => {
   it("serializes descriptor-defined stamp flags", () => {

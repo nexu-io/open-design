@@ -835,13 +835,21 @@ export async function waitForHttpOk(url: string, { timeoutMs = 20000 }: HttpWait
   const startedAt = Date.now();
   let lastError: Error | null = null;
   while (Date.now() - startedAt < timeoutMs) {
+    const remainingMs = timeoutMs - (Date.now() - startedAt);
+    const controller = new AbortController();
+    const abortTimer = globalThis.setTimeout(() => controller.abort(), remainingMs);
     try {
-      const response = await fetch(url, { cache: "no-store" });
+      const response = await fetch(url, { cache: "no-store", signal: controller.signal });
       if (response.ok) return true;
       lastError = new Error(`HTTP ${response.status} from ${url}`);
     } catch (error) {
-      lastError = new Error(errorMessage(error));
+      lastError = controller.signal.aborted
+        ? new Error(`request timed out after ${timeoutMs}ms`)
+        : new Error(errorMessage(error));
+    } finally {
+      globalThis.clearTimeout(abortTimer);
     }
+    if (Date.now() - startedAt >= timeoutMs) break;
     await sleep(150);
   }
   throw new Error(`timed out waiting for ${url}${lastError ? ` (${lastError.message})` : ""}`);
