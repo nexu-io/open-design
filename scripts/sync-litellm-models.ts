@@ -20,6 +20,7 @@ import { fileURLToPath } from 'node:url';
 
 const SOURCE_URL =
   'https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json';
+const FETCH_TIMEOUT_MS = 30_000;
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const OUT_PATH = path.resolve(
@@ -46,7 +47,7 @@ async function writeJsonAtomic(filePath: string, contents: string): Promise<void
 
 async function main() {
   console.log(`fetching ${SOURCE_URL}`);
-  const res = await fetch(SOURCE_URL);
+  const res = await fetch(SOURCE_URL, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
   if (!res.ok) throw new Error(`fetch ${res.status}: ${res.statusText}`);
   const raw = (await res.json()) as Record<string, unknown>;
 
