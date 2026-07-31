@@ -37,13 +37,22 @@ import { openNewProjectModal } from '@/playwright/rail';
 import { openSettingsDialog } from '../lib/playwright/amr.js';
 
 // WeChat ships the longest localized category string ("Social & Messaging") —
-// the exact label the issue screenshot called out. Using the real preset keeps
-// the test honest: if a future manifest changes the category, this test will
-// fail loudly and force the truncation contract to be reverified.
+// the exact label the issue screenshot called out. We deliberately pad both
+// the title and the category well beyond the 200–700px row widths the
+// truncation contract guards (mrcfps 2026-07-29 review on head 142389a
+// flagged that the un-padded `Social & Messaging` and `WeChat` fit at
+// scrollWidth === clientWidth in the focused Chromium run, so the
+// `scrollWidth > clientWidth` precondition never fired and the regression
+// file was deterministically red). Both fields keep their original prefix so
+// existing `^WeChat\b` matchers and `toContainText('Social & Messaging')`
+// assertions stay honest: if a future manifest shortens the category, this
+// test will fail loudly and force the truncation contract to be reverified.
 const WECHAT_PRESET = {
   id: 'wechat',
-  title: 'WeChat',
-  category: 'Social & Messaging',
+  title:
+    'WeChat Super-App Messaging Patterns Collection Bundle — Long Localized Display Name',
+  category:
+    'Social & Messaging WeChat super-app messaging patterns collection suite',
   summary: 'WeChat super-app messaging patterns.',
   swatches: ['#07c160', '#1f1f1f'],
 };
@@ -416,158 +425,194 @@ test('[P2] Settings library card truncates a long user-system name without clipp
 // long name), so if the flex child calculation is wrong, the count badge
 // could be clipped at the row's right edge after the title child
 // consumes the available width.
+//
+// mrcfps 2026-07-29 review on head 142389a flagged two further deterministic
+// failures on this case: (1) the mocked `/api/design-systems` payload had
+// only `Social & Messaging` and `Product` categories, so `DesignSystemsSection`
+// never rendered a `Custom` group heading for `getByRole('heading', /Custom/i)`
+// to find — the separate `ownedDesignSystems` objects do not add a categorized
+// registry item; (2) once a heading was found, `.locator('.library-group-title')`
+// searched beneath the `<h4>` that already owns that class and so could not
+// match the element itself. We fix both by seeding a user-source design system
+// whose `category` is a deliberately long `Custom ...` string (so the group
+// heading is rendered AND its name overflows the row) and selecting the
+// heading directly through the stable `library-group-title-${category}` test
+// id that `DesignSystemsSection.tsx` already exposes, with no descendant
+// lookup.
+const LONG_CUSTOM_CATEGORY =
+  'Custom Premium Enterprise Brand Systems Bundle — Long Localized Category Name';
+
 test('[P2] Settings dialog long library-group-name does not clip the count badge (#2688)', async ({
- page,
+  page,
 }) => {
- await page.route('**/api/app-config', async (route) => {
- await route.fulfill({
- json: {
- config: {
- onboardingCompleted: true,
- agentId: 'mock',
- skillId: null,
- designSystemId: null,
- agentModels: {},
- agentCliEnv: {},
- privacyDecisionAt: 1,
- telemetry: { metrics: false, content: false, artifactManifest: false },
- // Seed an owned design system so the "Custom" library group renders
- // with an actual count > 0 (otherwise the count badge shows "0" or
- // is hidden by the renderer's 0-count guard).
- ownedDesignSystems: [
- {
- id: 'custom-ds',
- title: 'Custom',
- isEditable: true,
- source: 'user',
- },
- ],
- },
- },
- });
- });
+  await page.route('**/api/app-config', async (route) => {
+    await route.fulfill({
+      json: {
+        config: {
+          onboardingCompleted: true,
+          agentId: 'mock',
+          skillId: null,
+          designSystemId: null,
+          agentModels: {},
+          agentCliEnv: {},
+          privacyDecisionAt: 1,
+          telemetry: { metrics: false, content: false, artifactManifest: false },
+          // Seed an owned design system so the user-source registry entry
+          // below has a matching owned-design-system record (the daemon
+          // validator pairs `ownedDesignSystems` with `designSystems`
+          // entries that carry `source: 'user'`).
+          ownedDesignSystems: [
+            {
+              id: 'custom-ds',
+              title: 'Custom',
+              isEditable: true,
+              source: 'user',
+            },
+          ],
+        },
+      },
+    });
+  });
 
- await page.route('**/api/design-systems', async (route) => {
- await route.fulfill({
- json: {
- designSystems: [
- ...DESIGN_SYSTEMS.map((s) => ({
- ...s,
- source: 'preset',
- isEditable: false,
- surface: 'web',
- hidden: false,
- })),
- {
- ...LONG_EDITABLE_PRESET,
- source: 'user',
- isEditable: true,
- surface: 'web',
- hidden: false,
- },
- ],
- ownedDesignSystems: [
- {
- id: 'custom-ds',
- title: 'Custom',
- isEditable: true,
- source: 'user',
- },
- ],
- },
- });
- });
+  await page.route('**/api/design-systems', async (route) => {
+    await route.fulfill({
+      json: {
+        designSystems: [
+          ...DESIGN_SYSTEMS.map((s) => ({
+            ...s,
+            source: 'preset',
+            isEditable: false,
+            surface: 'web',
+            hidden: false,
+          })),
+          {
+            ...LONG_EDITABLE_PRESET,
+            source: 'user',
+            isEditable: true,
+            surface: 'web',
+            hidden: false,
+          },
+          // The Custom group heading is rendered by `DesignSystemsSection`
+          // only when at least one entry in `designSystems` carries
+          // `category: 'Custom ...'` (mrcfps round-5 review: separate
+          // `ownedDesignSystems` objects do not add a categorized registry
+          // item). Use a deliberately long category so the rendered
+          // `.library-group-name` text overflows the row width and forces
+          // the truncation contract to fire — short `Custom` would fit at
+          // scrollWidth === clientWidth and the precondition would never
+          // exercise ellipsis.
+          {
+            id: 'custom-category-ds',
+            title: 'Custom Category Design System',
+            category: LONG_CUSTOM_CATEGORY,
+            summary: 'Long-name regression for the .library-group-name truncation contract.',
+            swatches: ['#9333ea'],
+            source: 'user',
+            isEditable: true,
+            surface: 'web',
+            hidden: false,
+          },
+        ],
+        ownedDesignSystems: [
+          {
+            id: 'custom-ds',
+            title: 'Custom',
+            isEditable: true,
+            source: 'user',
+          },
+        ],
+      },
+    });
+  });
 
- await page.goto('/');
- const settings = await openSettingsDialog(page);
- await settings
- .getByRole('button', { name: /Design systems|设计系统|設計系統/i })
- .click();
- await expect(
- settings.getByRole('heading', { name: /Design systems|设计系统|設計系統/i }),
- ).toBeVisible();
+  await page.goto('/');
+  const settings = await openSettingsDialog(page);
+  await settings
+    .getByRole('button', { name: /Design systems|设计系统|設計系統/i })
+    .click();
+  await expect(
+    settings.getByRole('heading', { name: /Design systems|设计系统|設計系統/i }),
+  ).toBeVisible();
 
- // Locate the "Custom" group heading inside the Settings dialog's
- // library section. The heading carries `.library-group-title` with
- // two children: `.library-group-name` (shrinkable, ellipsizing) and
- // `.library-group-count` (non-shrinking badge).
- const customGroupHeading = settings
- .getByRole('heading', { name: /Custom/i })
- .first();
- await expect(customGroupHeading).toBeVisible();
+  // mrcfps round-5 review: select the heading directly through its stable
+  // `library-group-title-${category}` test id (already exposed by
+  // `DesignSystemsSection.tsx`) instead of `getByRole('heading', /Custom/i)`
+  // + descendant `.locator('.library-group-title')` — the `<h4>` already
+  // owns the class so the descendant lookup cannot match it.
+  const groupTitle = settings.getByTestId(
+    `library-group-title-${LONG_CUSTOM_CATEGORY}`,
+  );
+  await expect(groupTitle).toBeVisible();
 
- const groupTitle = customGroupHeading.locator('.library-group-title');
- await expect(groupTitle).toBeVisible();
+  const nameSpan = groupTitle.locator('.library-group-name');
+  const countSpan = groupTitle.locator('.library-group-count');
 
- const nameSpan = groupTitle.locator('.library-group-name');
- const countSpan = groupTitle.locator('.library-group-count');
+  await expect(nameSpan).toBeVisible();
+  await expect(countSpan).toBeVisible();
 
- await expect(nameSpan).toBeVisible();
- await expect(countSpan).toBeVisible();
+  // Verify the count badge has non-zero dimensions — this proves it is
+  // rendered and not clipped out by the parent's overflow: hidden.
+  const countRect = await countSpan.evaluate((el: Element) => {
+    const r = el.getBoundingClientRect();
+    return { w: Math.round(r.width), h: Math.round(r.height) };
+  });
+  expect(countRect.w, 'count badge has zero width — likely clipped').toBeGreaterThan(0);
+  expect(countRect.h, 'count badge has zero height').toBeGreaterThan(0);
 
- // Verify the count badge has non-zero dimensions — this proves it is
- // rendered and not clipped out by the parent's overflow: hidden.
- const countRect = await countSpan.evaluate((el: Element) => {
- const r = el.getBoundingClientRect();
- return { w: Math.round(r.width), h: Math.round(r.height) };
- });
- expect(countRect.w, 'count badge has zero width — likely clipped').toBeGreaterThan(0);
- expect(countRect.h, 'count badge has zero height').toBeGreaterThan(0);
+  // Verify the name span AND the count are both inside the title row.
+  const layoutInfo = await groupTitle.evaluate((el: Element) => {
+    const t = el.getBoundingClientRect();
+    const nameEl = el.querySelector('.library-group-name');
+    const countEl = el.querySelector('.library-group-count');
+    if (!nameEl || !countEl) {
+      throw new Error('missing name or count span');
+    }
+    const n = nameEl.getBoundingClientRect();
+    const c = countEl.getBoundingClientRect();
+    return {
+      titleRight: Math.round(t.right),
+      nameRight: Math.round(n.right),
+      countLeft: Math.round(c.left),
+      countRight: Math.round(c.right),
+      countWidth: Math.round(c.width),
+    };
+  });
 
- // Verify the name span AND the count are both inside the title row.
- const layoutInfo = await groupTitle.evaluate((el: Element) => {
- const t = el.getBoundingClientRect();
- const nameEl = el.querySelector('.library-group-name');
- const countEl = el.querySelector('.library-group-count');
- if (!nameEl || !countEl) {
- throw new Error('missing name or count span');
- }
- const n = nameEl.getBoundingClientRect();
- const c = countEl.getBoundingClientRect();
- return {
- titleRight: Math.round(t.right),
- nameRight: Math.round(n.right),
- countLeft: Math.round(c.left),
- countRight: Math.round(c.right),
- countWidth: Math.round(c.width),
- };
- });
+  // Both children must be inside the title row — the name should not push
+  // the count past the row's right edge.
+  expect(
+    layoutInfo.nameRight,
+    `name span right (${layoutInfo.nameRight}) exceeds title row right (${layoutInfo.titleRight}) — name is clipping beyond the row.`,
+  ).toBeLessThanOrEqual(layoutInfo.titleRight);
+  expect(
+    layoutInfo.countLeft,
+    `count badge left (${layoutInfo.countLeft}) exceeds title row right (${layoutInfo.titleRight}) — count badge is clipped beyond the row.`,
+  ).toBeLessThanOrEqual(layoutInfo.titleRight);
+  expect(
+    layoutInfo.countRight,
+    `count badge right (${layoutInfo.countRight}) exceeds title row right (${layoutInfo.titleRight}) — count badge is clipped beyond the row.`,
+  ).toBeLessThanOrEqual(layoutInfo.titleRight);
 
- // Both children must be inside the title row — the name should not push
- // the count past the row's right edge.
- expect(
- layoutInfo.nameRight,
- `name span right (${layoutInfo.nameRight}) exceeds title row right (${layoutInfo.titleRight}) — name is clipping beyond the row.`,
- ).toBeLessThanOrEqual(layoutInfo.titleRight);
- expect(
- layoutInfo.countLeft,
- `count badge left (${layoutInfo.countLeft}) exceeds title row right (${layoutInfo.titleRight}) — count badge is clipped beyond the row.`,
- ).toBeLessThanOrEqual(layoutInfo.titleRight);
- expect(
- layoutInfo.countRight,
- `count badge right (${layoutInfo.countRight}) exceeds title row right (${layoutInfo.titleRight}) — count badge is clipped beyond the row.`,
- ).toBeLessThanOrEqual(layoutInfo.titleRight);
+  // The name and count must not overlap: name's right edge must be at or
+  // before count's left edge (allowing 1px subpixel).
+  expect(
+    layoutInfo.nameRight,
+    `name overlaps count: name right (${layoutInfo.nameRight}) exceeds count left (${layoutInfo.countLeft}).`,
+  ).toBeLessThanOrEqual(layoutInfo.countLeft + 1);
 
- // The name and count must not overlap: name's right edge must be at or
- // before count's left edge (allowing 1px subpixel).
- expect(
- layoutInfo.nameRight,
- `name overlaps count: name right (${layoutInfo.nameRight}) exceeds count left (${layoutInfo.countLeft}).`,
- ).toBeLessThanOrEqual(layoutInfo.countLeft + 1);
-
- // The name span actually truncated horizontally: its scrollWidth must
- // be greater than its clientWidth (proving text was ellipsized rather
- // than fitting naturally).
- const nameGeometry = await nameSpan.evaluate((el: Element) => {
- const r = el.getBoundingClientRect();
- return {
- scrollWidth: el.scrollWidth,
- clientWidth: el.clientWidth,
- width: Math.round(r.width),
- };
- });
- expect(
- nameGeometry.scrollWidth - nameGeometry.clientWidth,
- `name span has no horizontal truncation: scrollWidth (${nameGeometry.scrollWidth}) <= clientWidth (${nameGeometry.clientWidth}). Long category name may not be long enough.`,
- ).toBeGreaterThan(0);
+  // The name span actually truncated horizontally: its scrollWidth must
+  // be greater than its clientWidth (proving text was ellipsized rather
+  // than fitting naturally).
+  const nameGeometry = await nameSpan.evaluate((el: Element) => {
+    const r = el.getBoundingClientRect();
+    return {
+      scrollWidth: el.scrollWidth,
+      clientWidth: el.clientWidth,
+      width: Math.round(r.width),
+    };
+  });
+  expect(
+    nameGeometry.scrollWidth - nameGeometry.clientWidth,
+    `name span has no horizontal truncation: scrollWidth (${nameGeometry.scrollWidth}) <= clientWidth (${nameGeometry.clientWidth}). Long category name may not be long enough.`,
+  ).toBeGreaterThan(0);
 });
