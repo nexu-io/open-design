@@ -7137,8 +7137,6 @@ function HtmlViewer({
   };
   const [mode, setMode] = useState<'preview' | 'source'>('preview');
   const sourceSnapshotRefreshKey = htmlSourceSnapshotRefreshKey(file, filesRefreshKey);
-  const sourceSnapshotIdentity =
-    `${sourceAuthorizationScopeKey ?? 'pending'}\0${projectId}\0${file.name}\0${sourceSnapshotRefreshKey}`;
   const [initialSourceSnapshot] = useState(() => (
     liveHtml === undefined && sourceAuthorizationScopeKey
       ? getHtmlSourceSnapshot(
@@ -7818,7 +7816,6 @@ function HtmlViewer({
       ? `${sourceAuthorizationScopeKey ?? 'pending'}\0${projectId}\0${file.name}\0${liveHtml === undefined ? 'raw' : 'live'}`
       : null,
   );
-  const revalidatedSourceSnapshotRef = useRef<string | null>(null);
   const templateNameId = useId();
   const templateDescriptionId = useId();
   const imageExportTitleId = useId();
@@ -8201,9 +8198,6 @@ function HtmlViewer({
           sourceSnapshotRefreshKey,
         )
       : null;
-    const shouldRevalidateCachedSnapshot =
-      cachedSnapshot !== null &&
-      revalidatedSourceSnapshotRef.current !== sourceSnapshotIdentity;
     if (fileChanged) {
       const cachedSource = cachedSnapshot?.source ?? null;
       setSource(cachedSource);
@@ -8222,9 +8216,18 @@ function HtmlViewer({
       // switches but before the effect has run.
     }
     let cancelled = false;
+    // A snapshot with the exact authorization and content-version identity is
+    // authoritative until the file event path invalidates it or the file
+    // metadata / Workspace identity changes. Re-reading the same bytes on
+    // every ordinary viewer remount made Design Files ↔ preview round-trips
+    // perform one uncached raw request apiece.
+    if (cachedSnapshot !== null) {
+      return () => {
+        cancelled = true;
+      };
+    }
     if (
       shouldDeferPassivePreviewSource &&
-      !shouldRevalidateCachedSnapshot &&
       sourceRef.current !== null &&
       !previewTextNeedsFullSourceForSafeInline(sourceRef.current)
     ) {
@@ -8243,13 +8246,7 @@ function HtmlViewer({
     // check, and the preview only refreshes when Comment closes and the
     // url-load iframe takes over with its own ?v=mtime cache-bust.
     const cacheBustKey = `${file.mtime}-${reloadKey}-${filesRefreshKey}`;
-    // A snapshot hit is only a first-paint seed. Revisit mounts always perform
-    // one full no-store read even for passive large-HTML mode, so an owner-side
-    // remote update replaces the cached document when SSE or metadata did not
-    // change locally. Subsequent mode-only effect reruns may use the bounded
-    // routing preview again.
-    revalidatedSourceSnapshotRef.current = sourceSnapshotIdentity;
-    const loadText = shouldDeferPassivePreviewSource && !shouldRevalidateCachedSnapshot
+    const loadText = shouldDeferPassivePreviewSource
       ? fetchProjectFileTextPreview(projectId, file.name, {
           limit: HTML_ROUTING_TEXT_PREVIEW_LIMIT,
           cacheBustKey,
@@ -8361,7 +8358,6 @@ function HtmlViewer({
     reloadKey,
     filesRefreshKey,
     sourceSnapshotRefreshKey,
-    sourceSnapshotIdentity,
     sourceAuthorizationScopeKey,
     shouldDeferPassivePreviewSource,
   ]);

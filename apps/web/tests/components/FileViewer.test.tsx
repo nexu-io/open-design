@@ -934,6 +934,101 @@ describe('FileViewer SVG artifacts', () => {
     expect(screen.getByTestId('artifact-preview-frame')).toBe(firstFrame);
   });
 
+  it('reuses a cached HTML source across ordinary viewer remounts until the file version changes', async () => {
+    const file = baseFile({
+      name: 'page.html',
+      path: 'page.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'page.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    const sourceReads: string[] = [];
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string'
+        ? input
+        : input instanceof Request
+          ? input.url
+          : String(input);
+      if (
+        url.includes('/api/projects/project-1/raw/page.html?')
+        && url.includes('cacheBust=')
+      ) {
+        sourceReads.push(url);
+        return new Response('<html><body>cached</body></html>', {
+          status: 200,
+          headers: { 'Content-Type': 'text/html' },
+        });
+      }
+      return new Response(JSON.stringify({ deployments: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    function Shell({ version }: { version: number }) {
+      const [visible, setVisible] = useState(true);
+      return (
+        <IframeKeepAliveProvider>
+          <button type="button" onClick={() => setVisible((next) => !next)}>
+            {visible ? 'Show files' : 'Show preview'}
+          </button>
+          {visible ? (
+            <FileViewer
+              projectId="project-1"
+              projectKind="prototype"
+              file={{ ...file, mtime: version }}
+            />
+          ) : (
+            <div data-testid="files-view" />
+          )}
+        </IframeKeepAliveProvider>
+      );
+    }
+
+    const view = renderWithProjectWorkspace(
+      <Shell version={file.mtime} />,
+      teamWorkspaceContext(),
+    );
+    await waitFor(() => expect(sourceReads).toHaveLength(1));
+
+    for (let round = 0; round < 10; round += 1) {
+      fireEvent.click(screen.getByRole('button', { name: 'Show files' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Show preview' }));
+    }
+    await waitFor(() => {
+      expect(screen.getByTestId('artifact-preview-frame')).toBeTruthy();
+    });
+    expect(sourceReads).toHaveLength(1);
+
+    view.rerender(
+      <CollabProvider value={projectWorkspaceCollabValue(teamWorkspaceContext())}>
+        <Shell version={file.mtime + 1} />
+      </CollabProvider>,
+    );
+    await waitFor(() => expect(sourceReads).toHaveLength(2));
+
+    const nextWorkspaceContext = {
+      ...teamWorkspaceContext(),
+      workspaceId: 'ws-2',
+      workspaceMemberId: 'wm-2',
+      teamId: 'team-2',
+    };
+    view.rerender(
+      <CollabProvider value={projectWorkspaceCollabValue(nextWorkspaceContext)}>
+        <Shell version={file.mtime + 1} />
+      </CollabProvider>,
+    );
+    await waitFor(() => expect(sourceReads).toHaveLength(3));
+  });
+
   it('promotes large HTML files to the srcDoc path when the routing preview shows sandbox-unsafe scripts', async () => {
     const file = baseFile({
       name: 'index.html',

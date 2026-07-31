@@ -2848,6 +2848,20 @@ export function FileWorkspace({
     }
     return null;
   }, [activeTab, visibleFiles, sketches]);
+  const activeViewerFile =
+    activeFile && !(activeFile.kind === 'sketch' && isSketchName(activeFile.name))
+      ? activeFile
+      : null;
+  const retainedViewerFileRef = useRef<{ projectId: string; fileName: string } | null>(null);
+  if (activeViewerFile) {
+    retainedViewerFileRef.current = { projectId, fileName: activeViewerFile.name };
+  }
+  const retainedViewerFile =
+    activeTab === DESIGN_FILES_TAB && retainedViewerFileRef.current?.projectId === projectId
+    ? visibleFiles.find((file) => file.name === retainedViewerFileRef.current?.fileName) ?? null
+    : null;
+  const viewerFile = activeViewerFile ?? retainedViewerFile;
+  const viewerFileActive = activeViewerFile !== null;
 
   const activeLiveArtifact = useMemo<LiveArtifactWorkspaceEntry | null>(() => {
     if (
@@ -2863,28 +2877,28 @@ export function FileWorkspace({
   // toggles) would hand FileViewer fresh object/function identities and drag
   // the whole viewer subtree — live iframes included — through a re-render.
   const activeFilePreviewComments = useMemo(
-    () => previewComments.filter((comment) => comment.filePath === activeFile?.name),
-    [previewComments, activeFile?.name],
+    () => previewComments.filter((comment) => comment.filePath === viewerFile?.name),
+    [previewComments, viewerFile?.name],
   );
   const activeFileShareRequest = useMemo(
-    () => (shareRequest && shareRequest.name === activeFile?.name
+    () => (shareRequest && shareRequest.name === viewerFile?.name
       ? { nonce: shareRequest.nonce }
       : null),
-    [shareRequest, activeFile?.name],
+    [shareRequest, viewerFile?.name],
   );
   const activeFileDownloadRequest = useMemo(
-    () => (downloadRequest && downloadRequest.name === activeFile?.name
+    () => (downloadRequest && downloadRequest.name === viewerFile?.name
       ? { nonce: downloadRequest.nonce }
       : null),
-    [downloadRequest, activeFile?.name],
+    [downloadRequest, viewerFile?.name],
   );
   const activeFileSlideNavRequest = useMemo(
     () => deliverableSlideNavForActiveFile(
       slideNavRequest,
-      activeFile?.name,
+      viewerFile?.name,
       slideNavDeliverableNonce,
     ),
-    [slideNavRequest, activeFile?.name, slideNavDeliverableNonce],
+    [slideNavRequest, viewerFile?.name, slideNavDeliverableNonce],
   );
   const stableOpenFileReplacing = useStableHandler(openFileReplacing);
 
@@ -3588,6 +3602,7 @@ export function FileWorkspace({
             id={APP_CHROME_FILE_ACTIONS_ID}
             className="ws-tabs-file-actions"
             data-app-chrome-file-actions="true"
+            hidden={!viewerFileActive}
           />
           {headerActions ? (
             <div className="ws-tabs-project-actions">{headerActions}</div>
@@ -3920,39 +3935,7 @@ export function FileWorkspace({
             onRefreshArtifacts={onRefreshFiles}
           />
         ) : activeFile ? (
-          <FileViewer
-            projectId={projectId}
-            projectKind={projectKind}
-            file={activeFile}
-            filesRefreshKey={filesRefreshKey}
-            isDeck={isDeck}
-            streaming={streaming}
-            commentQueueOnSend={commentQueueOnSend}
-            commentSendDisabled={commentSendDisabled}
-            previewComments={activeFilePreviewComments}
-            onSavePreviewComment={onSavePreviewComment}
-            onRemovePreviewComment={onRemovePreviewComment}
-            onReorderPreviewComment={onReorderPreviewComment}
-            onSendBoardCommentAttachments={onSendBoardCommentAttachments}
-            onBrandExtractionStopRequest={
-              activeFile.name === 'brand.html' ? onBrandExtractionStopRequest : undefined
-            }
-            onFileSaved={onRefreshFiles}
-            onOpenFileReplacing={stableOpenFileReplacing}
-            commentPortalId={commentPortalId}
-            onCommentModeChange={onCommentModeChange}
-            shareRequest={viewerOnly ? null : activeFileShareRequest}
-            downloadRequest={viewerOnly ? null : activeFileDownloadRequest}
-            viewerOnly={viewerOnly}
-            slideNavRequest={activeFileSlideNavRequest}
-            projectName={projectName}
-            projectDir={resolvedDir}
-            agents={handoffAgents}
-            artifactId={handoffArtifactId}
-            artifactKind={handoffArtifactKind}
-            metricsConsent={metricsConsent}
-            installationId={installationId}
-          />
+          null
         ) : (
           <div className="viewer-empty">
             {t('workspace.openFromDesignFiles')}{' '}
@@ -3969,6 +3952,48 @@ export function FileWorkspace({
             .
           </div>
         )}
+        {viewerFile ? (
+          <div
+            data-testid="retained-file-viewer"
+            aria-hidden={viewerFileActive ? undefined : true}
+            style={{ display: viewerFileActive ? 'contents' : 'none' }}
+          >
+            <FileViewer
+              key={`${projectId}:${viewerFile.name}`}
+              projectId={projectId}
+              projectKind={projectKind}
+              file={viewerFile}
+              filesRefreshKey={filesRefreshKey}
+              isDeck={isDeck}
+              streaming={streaming}
+              commentQueueOnSend={commentQueueOnSend}
+              commentSendDisabled={commentSendDisabled}
+              previewComments={activeFilePreviewComments}
+              onSavePreviewComment={onSavePreviewComment}
+              onRemovePreviewComment={onRemovePreviewComment}
+              onReorderPreviewComment={onReorderPreviewComment}
+              onSendBoardCommentAttachments={onSendBoardCommentAttachments}
+              onBrandExtractionStopRequest={
+                viewerFile.name === 'brand.html' ? onBrandExtractionStopRequest : undefined
+              }
+              onFileSaved={onRefreshFiles}
+              onOpenFileReplacing={stableOpenFileReplacing}
+              commentPortalId={commentPortalId}
+              onCommentModeChange={onCommentModeChange}
+              shareRequest={viewerOnly ? null : activeFileShareRequest}
+              downloadRequest={viewerOnly ? null : activeFileDownloadRequest}
+              viewerOnly={viewerOnly}
+              slideNavRequest={activeFileSlideNavRequest}
+              projectName={projectName}
+              projectDir={resolvedDir}
+              agents={handoffAgents}
+              artifactId={handoffArtifactId}
+              artifactKind={handoffArtifactKind}
+              metricsConsent={metricsConsent}
+              installationId={installationId}
+            />
+          </div>
+        ) : null}
       </div>
       <PageCreatorDialog
         open={pageCreatorOpen}
