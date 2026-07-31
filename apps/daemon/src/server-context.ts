@@ -8,6 +8,8 @@ export interface HttpDeps {
   createSseResponse: (...args: any[]) => any;
   getPublicBaseUrl?: (...args: any[]) => string;
   getPublicUrl?: (...args: any[]) => string;
+  /** Origin-relative path for URLs consumed by the browser through the web sidecar. */
+  getBrowserPath?: (path: string) => string;
   isLocalSameOrigin: (...args: any[]) => boolean;
   requireLocalDaemonRequest: (...args: any[]) => any;
   resolvedPortRef: { current: number };

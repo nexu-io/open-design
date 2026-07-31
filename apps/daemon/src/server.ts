@@ -2685,6 +2685,7 @@ export async function startServer({
     createSseResponse,
     getPublicBaseUrl: deploymentPaths.publicOrigin,
     getPublicUrl: deploymentPaths.publicUrl,
+    getBrowserPath: deploymentPaths.paths.withBasePath,
     requireLocalDaemonRequest,
     isLocalSameOrigin,
     resolvedPortRef,

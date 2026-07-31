@@ -2489,7 +2489,7 @@ export function registerProjectArtifactRoutes(app: Express, ctx: RegisterProject
       const findings = lintArtifact(html);
       res.json({
         path: file,
-        url: ctx.http.getPublicUrl?.(req, `/artifacts/${path.basename(dir)}/index.html`)
+        url: ctx.http.getBrowserPath?.(`/artifacts/${path.basename(dir)}/index.html`)
           ?? `/artifacts/${path.basename(dir)}/index.html`,
         lint: findings,
       });
@@ -3193,7 +3193,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       /** @type {import('@open-design/contracts').ProjectPreviewUrlResponse} */
       const previewPath = `/api/projects/${encodeURIComponent(project.id)}/preview/${scope}/${encodeProjectPathForUrl(meta.name)}`;
       const body = {
-        url: ctx.http.getPublicUrl?.(req, previewPath) ?? previewPath,
+        url: ctx.http.getBrowserPath?.(previewPath) ?? previewPath,
         file: meta.name,
         csp: projectPreviewCsp,
         iframeSandbox: projectPreviewIframeSandbox,

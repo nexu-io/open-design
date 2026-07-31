@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { createPathConfig } from '@open-design/path-config';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -47,6 +48,23 @@ describe('resolveDaemonProxyTarget', () => {
     expect(target?.href).toBe('http://127.0.0.1:7456/api/projects?limit=10');
     expect(resolveDaemonProxyTarget('http://127.0.0.1:7456', '/api/projects', '/open-design')).toBeNull();
     expect(resolveDaemonProxyTarget('http://127.0.0.1:7456', '/open-design/settings', '/open-design')).toBeNull();
+  });
+
+  it('keeps browser-generated URLs on the incoming origin across the sidecar boundary', () => {
+    const incomingOrigin = 'https://web.example.test';
+    const daemonOrigin = 'http://127.0.0.1:7456';
+    const browserPath = createPathConfig('/open-design').withBasePath(
+      '/api/projects/demo/files/byok-image.png',
+    );
+    const daemonTarget = resolveDaemonProxyTarget(daemonOrigin, browserPath, '/open-design');
+    const resolvedBrowserUrl = new URL(browserPath, incomingOrigin);
+
+    expect(daemonTarget?.origin).toBe(daemonOrigin);
+    expect(resolvedBrowserUrl.href).toBe(
+      'https://web.example.test/open-design/api/projects/demo/files/byok-image.png',
+    );
+    expect(resolvedBrowserUrl.origin).toBe(incomingOrigin);
+    expect(resolvedBrowserUrl.origin).not.toBe(daemonOrigin);
   });
 
   it('normalizes the sidecar base path from its environment', () => {

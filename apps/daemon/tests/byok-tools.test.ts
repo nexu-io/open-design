@@ -122,6 +122,38 @@ describe('executeGenerateImage', () => {
     expect(onDisk.equals(pngBytes)).toBe(true);
   });
 
+  it('uses an origin-relative base-path URL for browser-visible media', async () => {
+    const pngBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+    const fetchMock = vi.fn(async (input: unknown) => {
+      if (String(input).endsWith('/v1/image/sync')) {
+        return new Response(
+          JSON.stringify({ url: 'https://cdn.example.test/generated/cat.png' }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      return new Response(pngBytes, {
+        status: 200,
+        headers: { 'content-type': 'image/png' },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await executeGenerateImage(
+      { prompt: 'a tabby cat' },
+      {
+        ...baseCtx(),
+        browserUrl: (browserPath) => `/open-design${browserPath}`,
+      },
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.url).toMatch(
+      new RegExp(`^/open-design/api/projects/${PROJECT_ID}/files/byok-[a-z0-9-]+\\.png$`),
+    );
+    expect(new URL(result.url!, 'https://web.example.test').origin).toBe('https://web.example.test');
+    expect(result.url).not.toContain('127.0.0.1');
+  });
+
   it('honours args.model when the LLM picks a SenseAudio image model', async () => {
     const pngBytes = Buffer.from([0x89, 0x50]);
     const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {

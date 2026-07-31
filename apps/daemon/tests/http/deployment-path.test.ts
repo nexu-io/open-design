@@ -30,6 +30,20 @@ describe('deployment path config', () => {
     );
   });
 
+  it('keeps browser paths origin-relative when the request host is an internal target', () => {
+    const config = resolveDeploymentPathConfig({
+      OD_WEB_BASE_PATH: '/open-design',
+      OD_PORT: '7456',
+    });
+    const browserPath = config.paths.withBasePath('/api/projects/demo/files/byok-image.png');
+
+    expect(browserPath).toBe('/open-design/api/projects/demo/files/byok-image.png');
+    expect(new URL(browserPath, 'https://web.example.test').origin).toBe('https://web.example.test');
+    expect(new URL(browserPath, 'https://web.example.test').pathname).toBe(
+      '/open-design/api/projects/demo/files/byok-image.png',
+    );
+  });
+
   it('rejects a mismatched public URL path', () => {
     expect(() => resolveDeploymentPathConfig({
       OD_PUBLIC_BASE_URL: 'https://app.example.test/other',
