@@ -1,5 +1,5 @@
 import { createHash, type Hash } from "node:crypto";
-import { lstat, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, readdir, rename, unlink, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { z } from "zod";
 
@@ -32,6 +32,16 @@ const toolBuildMetadataPolicySchema = z.object({
 
 function resolveMetadataPath(toolRoot: string): string {
   return join(toolRoot, "dist", "metadata.json");
+}
+
+async function writeFileAtomic(path: string, content: string): Promise<void> {
+  const tempPath = `${path}.${process.pid}.tmp`;
+  try {
+    await writeFile(tempPath, content, "utf8");
+    await rename(tempPath, path);
+  } finally {
+    await unlink(tempPath).catch(() => undefined);
+  }
 }
 
 export async function readToolMeta(toolRoot: string): Promise<ToolBuildMetadataPolicy> {
@@ -100,10 +110,9 @@ export async function writeToolBuildMetadata(
   const hash = await computeToolSourceHash(policy, toolRoot);
   const metadataPath = resolveMetadataPath(toolRoot);
   await mkdir(resolve(toolRoot, "dist"), { recursive: true });
-  await writeFile(
+  await writeFileAtomic(
     metadataPath,
     `${JSON.stringify({ build: { hash } }, null, 2)}\n`,
-    "utf8",
   );
   return { hash, metadataPath };
 }
