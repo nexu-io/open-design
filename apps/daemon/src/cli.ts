@@ -147,6 +147,11 @@ const PLUGIN_STRING_FLAGS = new Set([
   'host',
   'name',
 ]);
+const PLUGIN_PROJECT_RESOURCE_STRING_FLAGS = new Set([
+  ...PLUGIN_STRING_FLAGS,
+  'workspace',
+  'workspace-member',
+]);
 const PLUGIN_BOOLEAN_FLAGS = new Set([
   'help',
   'h',
@@ -304,6 +309,11 @@ const SHARE_BOOLEAN_FLAGS = new Set([
 // further down would still be in TDZ when the handler reads it.
 const FIGMA_STRING_FLAGS = new Set([
   'daemon-url', 'project', 'file', 'figma-url', 'notes', 'prompt', 'prompt-file',
+]);
+const FIGMA_PROJECT_RESOURCE_STRING_FLAGS = new Set([
+  ...FIGMA_STRING_FLAGS,
+  'workspace',
+  'workspace-member',
 ]);
 const FIGMA_BOOLEAN_FLAGS = new Set([
   'help', 'h', 'json', 'build',
@@ -2910,14 +2920,24 @@ async function runPluginSnapshots(args) {
   const sub = args[0];
   if (!sub || sub === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
-  od plugin snapshots list  [--project <id>]               List applied plugin snapshots.
+  od plugin snapshots list  [--project <id>] [--workspace <id> --workspace-member <id>]
+                                                               List applied plugin snapshots.
   od plugin snapshots show  <snapshotId> [--json]          Print one snapshot's full contents.
   od plugin snapshots diff  <id-a> <id-b> [--json]         Compare two snapshots field-by-field.
   od plugin snapshots prune [--before <unix-ms>]           Delete expired (or older-than-cutoff) snapshots.`);
     process.exit(args.length === 0 ? 2 : 0);
   }
-  const flags = parseFlags(args.slice(1), { string: PLUGIN_STRING_FLAGS, boolean: PLUGIN_BOOLEAN_FLAGS });
+  const snapshotStringFlags =
+    sub === 'list' ? PLUGIN_PROJECT_RESOURCE_STRING_FLAGS : PLUGIN_STRING_FLAGS;
+  const flags = parseFlags(args.slice(1), {
+    string: snapshotStringFlags,
+    boolean: PLUGIN_BOOLEAN_FLAGS,
+  });
   const base = (await pluginDaemonUrl(flags)).replace(/\/$/, '');
+  const workspaceHeaders =
+    sub === 'list'
+      ? workspaceHeadersFromExplicitFlags(flags) ?? {}
+      : {};
   if (sub === 'show') {
     const positional = args.slice(1).filter((a) => !a.startsWith('-'));
     const id = positional[0];
@@ -2992,7 +3012,7 @@ async function runPluginSnapshots(args) {
     const url = flags.project
       ? `${base}/api/projects/${encodeURIComponent(flags.project)}/applied-plugins`
       : `${base}/api/applied-plugins`;
-    const resp = await fetch(url);
+    const resp = await fetch(url, { headers: workspaceHeaders });
     if (!resp.ok) {
       console.error(`GET ${url} failed: ${resp.status} ${await resp.text()}`);
       process.exit(1);
@@ -3029,19 +3049,11 @@ async function runPluginSnapshots(args) {
 // wrapper around `od plugin apply` + `POST /api/runs` so a code agent
 // can drive the apply→start→follow loop without two hops.
 async function runPluginRun(rest) {
-  const flags = parseFlags(rest, { string: PLUGIN_STRING_FLAGS, boolean: PLUGIN_BOOLEAN_FLAGS });
-  const id = rest.find((a) => !a.startsWith('-')
-    && a !== flags['daemon-url']
-    && a !== flags.source
-    && a !== flags.inputs
-    && a !== flags.project
-    && a !== flags.conversation
-    && a !== flags.message
-    && a !== flags.agent
-    && a !== flags.model
-    && a !== flags['snapshot-id']
-    && a !== flags.capabilities
-    && a !== flags['grant-caps']);
+  const flags = parseFlags(rest, {
+    string: PLUGIN_PROJECT_RESOURCE_STRING_FLAGS,
+    boolean: PLUGIN_BOOLEAN_FLAGS,
+  });
+  const id = positionalArgs(rest, PLUGIN_PROJECT_RESOURCE_STRING_FLAGS)[0];
   if (!id) {
     console.error('Usage: od plugin run <id> --project <projectId> [--inputs <json>] [--agent <id>] [--message "<text>"] [--grant-caps a,b] [--follow]');
     process.exit(2);
@@ -3055,10 +3067,11 @@ async function runPluginRun(rest) {
     ? flags['grant-caps'].split(',').map((c) => c.trim()).filter(Boolean)
     : [];
   const base = (await pluginDaemonUrl(flags)).replace(/\/$/, '');
+  const workspaceHeaders = workspaceHeadersFromExplicitFlags(flags) ?? {};
   // 1. Apply (returns ApplyResult + manifestSourceDigest).
   const applyResp = await fetch(`${base}/api/plugins/${encodeURIComponent(id)}/apply`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...workspaceHeaders },
     body: JSON.stringify({ inputs, grantCaps, projectId: flags.project }),
   });
   const applyData = await applyResp.json().catch(() => ({}));
@@ -3070,7 +3083,7 @@ async function runPluginRun(rest) {
   //    snapshot to the run object.
   const runResp = await fetch(`${base}/api/runs`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...workspaceHeaders },
     body: JSON.stringify({
       projectId:        flags.project,
       pluginId:         id,
@@ -3096,12 +3109,12 @@ async function runPluginRun(rest) {
   }
   if (flags.json) {
     process.stdout.write(JSON.stringify({ apply: applyData, run: runData }, null, 2) + '\n');
-    if (flags.follow) await streamRunEvents(base, runData.runId);
+    if (flags.follow) await streamRunEvents(base, runData.runId, workspaceHeaders);
     return;
   }
   console.log(`[run] started run ${runData.runId} (snapshot ${runData.appliedPluginSnapshotId ?? applyData?.appliedPlugin?.snapshotId ?? 'n/a'})`);
   if (flags.follow) {
-    await streamRunEvents(base, runData.runId);
+    await streamRunEvents(base, runData.runId, workspaceHeaders);
   }
 }
 
@@ -4361,15 +4374,25 @@ function coerceCliValue(raw) {
 async function runPluginCandidates(rest) {
   const sub = rest[0];
   const args = rest.slice(1);
+  const candidateStringFlags = new Set([
+    'daemon-url',
+    'project',
+    'action',
+    'workspace',
+    'workspace-member',
+  ]);
   const flags = parseFlags(args, {
-    string: new Set(['daemon-url', 'project', 'action']),
+    string: candidateStringFlags,
     boolean: new Set(['help', 'h', 'json', 'include-dismissed']),
   });
-  if (!sub || flags.help || flags.h) {
+  if (!sub || sub === 'help' || flags.help || flags.h) {
     console.log(`Usage:
   od plugin candidates list --project <projectId> [--json] [--include-dismissed]
+       --workspace <id> --workspace-member <id>
   od plugin candidates draft <candidateId> --project <projectId> [--json]
+       --workspace <id> --workspace-member <id>
   od plugin candidates dismiss <candidateId> --project <projectId> [--json]
+       --workspace <id> --workspace-member <id>
 
 Lists and formalizes persisted skill-to-plugin candidates.`);
     process.exit(!sub ? 2 : 0);
@@ -4380,9 +4403,13 @@ Lists and formalizes persisted skill-to-plugin candidates.`);
     process.exit(2);
   }
   const base = (await pluginDaemonUrl(flags)).replace(/\/$/, '');
+  const workspaceHeaders = workspaceHeadersFromExplicitFlags(flags) ?? {};
   if (sub === 'list') {
     const qs = flags['include-dismissed'] ? '?includeDismissed=true' : '';
-    const resp = await fetch(`${base}/api/projects/${encodeURIComponent(projectId)}/plugin-candidates${qs}`);
+    const resp = await fetch(
+      `${base}/api/projects/${encodeURIComponent(projectId)}/plugin-candidates${qs}`,
+      { headers: workspaceHeaders },
+    );
     const data = await resp.json().catch(() => null);
     if (!resp.ok) {
       console.error(`GET plugin candidates failed: ${resp.status} ${JSON.stringify(data)}`);
@@ -4399,7 +4426,7 @@ Lists and formalizes persisted skill-to-plugin candidates.`);
     }
     return;
   }
-  const candidateId = args.find((a) => !a.startsWith('-') && a !== flags.project && a !== flags.action);
+  const candidateId = positionalArgs(args, candidateStringFlags)[0];
   if (!candidateId) {
     console.error(`candidate id is required for ${sub}`);
     process.exit(2);
@@ -4407,7 +4434,7 @@ Lists and formalizes persisted skill-to-plugin candidates.`);
   if (sub === 'draft') {
     const resp = await fetch(`${base}/api/projects/${encodeURIComponent(projectId)}/plugin-candidates/${encodeURIComponent(candidateId)}/draft`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...workspaceHeaders },
       body: '{}',
     });
     const data = await resp.json().catch(() => null);
@@ -4424,7 +4451,7 @@ Lists and formalizes persisted skill-to-plugin candidates.`);
   if (sub === 'dismiss') {
     const resp = await fetch(`${base}/api/projects/${encodeURIComponent(projectId)}/plugin-candidates/${encodeURIComponent(candidateId)}/dismiss`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...workspaceHeaders },
       body: '{}',
     });
     const data = await resp.json().catch(() => null);
@@ -5590,13 +5617,17 @@ function printPluginHelp() {
   od plugin diff <a> <b> [--json]         Compare two installed plugins by id.
   od plugin replay <runId> --snapshot-id <id>
                                           Re-emit the immutable snapshot a run launched against.
+  od plugin run <id> --project <id> [--workspace <id> --workspace-member <id>]
+                                          Apply a plugin and start a project run.
+  od plugin snapshots list --project <id> [--workspace <id> --workspace-member <id>]
+                                          List snapshots applied to a project.
   od plugin trust <id> --capabilities a,b
                                           Stage a capability grant (full mutation lands Phase 3).
   od plugin validate <folder> [--json]    Lint a plugin folder before installing
                                           (manifest parse + atom + ref checks).
   od plugin pack <folder> [--out <path>]  Build a .tgz archive of a plugin
                                           folder for distribution.
-  od plugin candidates list --project <id>
+  od plugin candidates list --project <id> [--workspace <id> --workspace-member <id>]
                                           List persisted skill-to-plugin candidates.
   od plugin publish-repo <folder>         Create/update the author's public
                                           GitHub repo for a plugin folder.
@@ -5738,6 +5769,9 @@ Flags:
   --build              After import, start a run that builds the webpage.
   --prompt / --prompt-file   Override the build prompt (file or - for stdin).
   --daemon-url <url>   Open Design daemon HTTP base.
+  --workspace <id>     Explicit Workspace id for the bound project.
+  --workspace-member <id>
+                       Explicit Workspace member id for the bound project.
   --json               Emit raw JSON.`);
 }
 
@@ -5754,8 +5788,12 @@ async function runFigma(args) {
   }
   const idx = args.indexOf(sub);
   const rest = [...args.slice(0, idx), ...args.slice(idx + 1)];
-  const flags = parseFlags(rest, { string: FIGMA_STRING_FLAGS, boolean: FIGMA_BOOLEAN_FLAGS });
+  const flags = parseFlags(rest, {
+    string: FIGMA_PROJECT_RESOURCE_STRING_FLAGS,
+    boolean: FIGMA_BOOLEAN_FLAGS,
+  });
   const base = (await cliDaemonUrl(flags)).replace(/\/$/, '');
+  const workspaceHeaders = workspaceHeadersFromExplicitFlags(flags) ?? {};
 
   if (!flags.project) {
     console.error('--project <id> is required');
@@ -5778,7 +5816,7 @@ async function runFigma(args) {
     };
     const runResp = await fetch(`${base}/api/runs`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', ...workspaceHeaders },
       body: JSON.stringify(runBody),
     });
     const runData = await runResp.json().catch(() => ({}));
@@ -5804,6 +5842,7 @@ async function runFigma(args) {
   if (flags.notes) form.append('notes', String(flags.notes));
   const resp = await fetch(`${base}/api/projects/${encodeURIComponent(flags.project)}/figma/import`, {
     method: 'POST',
+    headers: workspaceHeaders,
     body: form,
   });
   if (!resp.ok) return structuredHttpFailure(resp);
@@ -5825,7 +5864,7 @@ async function runFigma(args) {
     const message = override || data.suggestedPrompt;
     const runResp = await fetch(`${base}/api/runs`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', ...workspaceHeaders },
       body: JSON.stringify({ projectId: flags.project, message }),
     });
     const runData = await runResp.json().catch(() => ({}));
@@ -8002,17 +8041,30 @@ async function runConversation(args) {
   od conversation info <conversationId>      Print one conversation.
 
 Common options:
-  --daemon-url <url>   Open Design daemon HTTP base.
-  --json               Emit raw JSON.`);
+  --daemon-url <url>         Open Design daemon HTTP base.
+  --workspace <id>           Explicit Workspace id for a bound project.
+  --workspace-member <id>    Explicit Workspace member id for a bound project.
+  --json                     Emit raw JSON.`);
     process.exit(args.length === 0 ? 2 : 0);
   }
   const sub = args[0];
   const rest = args.slice(1);
-  const flags = parseFlags(rest, { string: PROJECT_STRING_FLAGS, boolean: PROJECT_BOOLEAN_FLAGS });
+  const conversationStringFlags =
+    sub === 'new' || sub === 'list'
+      ? PROJECT_RESOURCE_STRING_FLAGS
+      : PROJECT_STRING_FLAGS;
+  const flags = parseFlags(rest, {
+    string: conversationStringFlags,
+    boolean: PROJECT_BOOLEAN_FLAGS,
+  });
   const base = (await projectDaemonUrl(flags)).replace(/\/$/, '');
+  const workspaceHeaders =
+    sub === 'new' || sub === 'list'
+      ? workspaceHeadersFromExplicitFlags(flags) ?? {}
+      : {};
   switch (sub) {
     case 'new': {
-      const [id] = positionalArgs(rest, PROJECT_STRING_FLAGS);
+      const [id] = positionalArgs(rest, conversationStringFlags);
       if (!id) {
         console.error('Usage: od conversation new <projectId> [--title "<title>"] [--seed-from <cid>] [--fork-after <mid>]');
         process.exit(2);
@@ -8033,7 +8085,7 @@ Common options:
       }
       const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}/conversations`, {
         method:  'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', ...workspaceHeaders },
         body:    JSON.stringify(body),
       });
       if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
@@ -8044,12 +8096,14 @@ Common options:
       return;
     }
     case 'list': {
-      const id = rest.find((a) => !a.startsWith('-'));
+      const id = positionalArgs(rest, conversationStringFlags)[0];
       if (!id) {
         console.error('Usage: od conversation list <projectId>');
         process.exit(2);
       }
-      const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}/conversations`);
+      const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}/conversations`, {
+        headers: workspaceHeaders,
+      });
       if (!resp.ok) return structuredHttpFailure(resp);
       const data = await resp.json();
       process.stdout.write(JSON.stringify(data, null, 2) + '\n');
@@ -8095,21 +8149,27 @@ async function runChat(args) {
                                            message.
 
 Common options:
-  --daemon-url <url>   Open Design daemon HTTP base.
-  --json               Emit raw JSON.`);
+  --daemon-url <url>         Open Design daemon HTTP base.
+  --workspace <id>           Explicit Workspace id for the bound project.
+  --workspace-member <id>    Explicit Workspace member id for the bound project.
+  --json                     Emit raw JSON.`);
     process.exit(args.length === 0 ? 2 : 0);
   }
   const sub = args[0];
   const rest = args.slice(1);
-  const flags = parseFlags(rest, { string: PROJECT_STRING_FLAGS, boolean: PROJECT_BOOLEAN_FLAGS });
+  const flags = parseFlags(rest, {
+    string: PROJECT_RESOURCE_STRING_FLAGS,
+    boolean: PROJECT_BOOLEAN_FLAGS,
+  });
   const base = (await projectDaemonUrl(flags)).replace(/\/$/, '');
+  const workspaceHeaders = workspaceHeadersFromExplicitFlags(flags) ?? {};
   switch (sub) {
     case 'new': {
       // Accept --project for parity with the rest of the project-scoped CLI,
       // or a bare positional id for convenience.
       const id = typeof flags.project === 'string' && flags.project
         ? flags.project
-        : positionalArgs(rest, PROJECT_STRING_FLAGS)[0];
+        : positionalArgs(rest, PROJECT_RESOURCE_STRING_FLAGS)[0];
       if (!id) {
         console.error('Usage: od chat new --project <id> [--seed-from <cid>] [--fork-after <mid>] [--title "<title>"]');
         process.exit(2);
@@ -8130,7 +8190,7 @@ Common options:
       }
       const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}/conversations`, {
         method:  'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', ...workspaceHeaders },
         body:    JSON.stringify(body),
       });
       if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
