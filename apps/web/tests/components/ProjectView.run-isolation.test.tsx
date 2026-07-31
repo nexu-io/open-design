@@ -1585,6 +1585,8 @@ describe('ProjectView conversation run isolation', () => {
     });
 
     expect(createConversation).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('chat-pane-loading')).toBeNull();
+    expect(screen.getByTestId('active-conversation').textContent).toBe('');
   });
 
   it('seeds an empty explicitly Personal project without Team ownership status', async () => {

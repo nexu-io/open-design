@@ -2386,6 +2386,10 @@ export function ProjectView({
       projectWorkspaceScopeState.scope?.kind === 'team'
       && projectCollab.writerAuthority === 'allowed'
     );
+  const emptyConversationReadOnlySettled =
+    pendingEmptyConversationSeed?.projectId === project.id
+    && pendingEmptyConversationSeed.authorityKey === projectRunAuthorityKey
+    && projectCollab.writerAuthority === 'denied';
   useEffect(() => {
     if (
       !pendingEmptyConversationSeed
@@ -9772,7 +9776,7 @@ export function ProjectView({
               className="comment-left-host"
               aria-label="Comments"
             />
-          ) : activeConversationId || conversationLoadError ? (
+          ) : activeConversationId || conversationLoadError || emptyConversationReadOnlySettled ? (
             <ChatPane
               // The conversation id is part of the key so switching conversations
               // resets internal scroll/draft state inside ChatPane and ChatComposer.
