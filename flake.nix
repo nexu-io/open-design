@@ -198,10 +198,13 @@
                 })
               ];
             };
-            webBasePath = evaluated.config.services.open-design.webFrontend.package.passthru.webBasePath;
+            webPackage = evaluated.config.services.open-design.webFrontend.package;
+            webBasePath = webPackage.passthru.webBasePath;
           in
             assert webBasePath == "/open-design";
             pkgs.runCommand "open-design-nixos-module-base-path" {} ''
+              test -f ${webPackage}/.open-design-build.json
+              grep -F '"basePath": "/open-design"' ${webPackage}/.open-design-build.json
               touch $out
             '';
       };
