@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useState, type ReactNode } from 'react';
 import type { WorkspaceCollabContext } from '@open-design/contracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -24,6 +24,7 @@ import {
   listConversations,
   listMessages,
   loadTabs,
+  ProjectConversationsHttpError,
 } from '../../src/state/projects';
 import { fetchPreviewComments } from '../../src/providers/registry';
 
@@ -75,6 +76,36 @@ vi.mock('../../src/collab/useProjectCollab', async () => {
     useProjectCollab: vi.fn(),
   };
 });
+
+vi.mock('../../src/collab/useProjectWorkspaceScope', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/collab/useProjectWorkspaceScope')>()),
+  useProjectWorkspaceScope: (
+    projectId: string,
+    workspaceContext: WorkspaceCollabContext | null,
+    persistedWorkspaceId: string | null | undefined,
+  ) => (
+    workspaceContext && persistedWorkspaceId === workspaceContext.workspaceId
+      ? {
+          loading: false,
+          scope: {
+            kind: workspaceContext.workspaceType,
+            projectId,
+            workspaceId: workspaceContext.workspaceId,
+            visibility: workspaceContext.workspaceType,
+            context: workspaceContext,
+          },
+        }
+      : {
+          loading: false,
+          scope: {
+            kind: 'unbound',
+            projectId,
+            workspaceId: null,
+            context: null,
+          },
+        }
+  ),
+}));
 
 vi.mock('../../src/providers/registry', async () => {
   const actual = await vi.importActual<typeof import('../../src/providers/registry')>(
@@ -231,6 +262,7 @@ function projectViewElement(
       expectedAuthorizationKey: string,
     ) => Promise<ProjectNameAuthorityResolution>;
     workspaceContextOverride?: WorkspaceCollabContext | null;
+    projectAuthorizationKey?: string;
     onProjectChange?: (next: Project) => void;
   } = {},
 ) {
@@ -238,7 +270,7 @@ function projectViewElement(
     <ProjectView
       project={projectOverride}
       workspaceContextOverride={options.workspaceContextOverride}
-      projectAuthorizationKey="ws-1:wm-1:project-1"
+      projectAuthorizationKey={options.projectAuthorizationKey ?? 'ws-1:wm-1:project-1'}
       authoritativeProjectName={options.authoritativeProjectName}
       resolveAuthoritativeProjectName={options.resolveAuthoritativeProjectName}
       routeFileName={null}
@@ -270,6 +302,8 @@ function renderProjectView(
       projectId: string,
       expectedAuthorizationKey: string,
     ) => Promise<ProjectNameAuthorityResolution>;
+    workspaceContextOverride?: WorkspaceCollabContext | null;
+    projectAuthorizationKey?: string;
   } = {},
 ) {
   return render(projectViewElement(projectOverride, options));
@@ -281,6 +315,45 @@ function dispatchProjectEvent(evt: ProjectEvent) {
     | undefined;
   expect(handleProjectEvent).toBeTypeOf('function');
   handleProjectEvent!(evt);
+}
+
+function teamWorkspaceContext(
+  workspaceId = 'ws-1',
+  workspaceMemberId = 'wm-1',
+): WorkspaceCollabContext {
+  return {
+    workspaceId,
+    workspaceType: 'team',
+    workspaceMemberId,
+    role: 'member',
+    memberStatus: 'active',
+    lifecycleState: 'active',
+    billingState: 'active',
+    planId: null,
+    providerMode: 'platform_credits',
+    seatSummary: {
+      seatLimit: 3,
+      usedSeats: 2,
+      availableSeats: 1,
+      isSeatFull: false,
+    },
+    permissions: {
+      canManageMembers: false,
+      canManageBilling: false,
+      canInviteMembers: false,
+      canManageAutoRecharge: false,
+      canShareProjects: true,
+      canWriteSyncedFiles: false,
+      canViewWorkspaceSettings: true,
+      canManageSharedResources: false,
+    },
+  };
+}
+
+async function exhaustConversationMaterializationRetries() {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(11_520);
+  });
 }
 
 describe('ProjectView shared-project title refresh on project-metadata-changed', () => {
@@ -303,6 +376,7 @@ describe('ProjectView shared-project title refresh on project-metadata-changed',
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
+    vi.useRealTimers();
   });
 
   it('lets a shared non-owner reopen chat without a collab rerender collapsing it again', async () => {
@@ -597,5 +671,118 @@ describe('ProjectView shared-project title refresh on project-metadata-changed',
       name: 'Stale project',
       updatedAt: 999,
     })).toBe(nextProject);
+  });
+
+  it('recovers an exhausted first-share conversation 404 when materialization signals completion', async () => {
+    vi.useFakeTimers();
+    const workspace = teamWorkspaceContext();
+    const sharedProject = { ...project, workspaceId: workspace.workspaceId };
+    mockedListConversations.mockRejectedValue(
+      new ProjectConversationsHttpError(404),
+    );
+
+    renderProjectView(sharedProject, {
+      workspaceContextOverride: workspace,
+    });
+    await exhaustConversationMaterializationRetries();
+    const callsAfterExhaustion = mockedListConversations.mock.calls.length;
+
+    mockedListConversations.mockResolvedValue([conversation]);
+    dispatchProjectEvent({
+      type: 'project-metadata-changed',
+      projectId: sharedProject.id,
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(mockedListConversations).toHaveBeenCalledTimes(callsAfterExhaustion + 1);
+    expect(mockedListMessages).toHaveBeenCalledWith(
+      sharedProject.id,
+      conversation.id,
+      workspace,
+    );
+  });
+
+  it('recovers an exhausted first-share conversation 404 when downloadPending settles', async () => {
+    vi.useFakeTimers();
+    const workspace = teamWorkspaceContext();
+    const sharedProject = { ...project, workspaceId: workspace.workspaceId };
+    mockedUseProjectCollab.mockReturnValue(sharedMemberCollab({
+      downloadPending: true,
+    }));
+    mockedListConversations.mockRejectedValue(
+      new ProjectConversationsHttpError(404),
+    );
+
+    const view = renderProjectView(sharedProject, {
+      workspaceContextOverride: workspace,
+    });
+    await exhaustConversationMaterializationRetries();
+    const callsAfterExhaustion = mockedListConversations.mock.calls.length;
+
+    mockedListConversations.mockResolvedValue([conversation]);
+    mockedUseProjectCollab.mockReturnValue(sharedMemberCollab({
+      downloadPending: false,
+    }));
+    view.rerender(projectViewElement(sharedProject, {
+      workspaceContextOverride: workspace,
+    }));
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(mockedListConversations).toHaveBeenCalledTimes(callsAfterExhaustion + 1);
+    expect(mockedListMessages).toHaveBeenCalledWith(
+      sharedProject.id,
+      conversation.id,
+      workspace,
+    );
+  });
+
+  it('does not commit a materialization recovery after its Workspace authority becomes stale', async () => {
+    vi.useFakeTimers();
+    const workspaceA = teamWorkspaceContext('ws-a', 'wm-a');
+    const workspaceB = teamWorkspaceContext('ws-b', 'wm-b');
+    const sharedProjectA = { ...project, workspaceId: workspaceA.workspaceId };
+    const sharedProjectB = { ...project, workspaceId: workspaceB.workspaceId };
+    mockedListConversations.mockRejectedValue(
+      new ProjectConversationsHttpError(404),
+    );
+
+    const view = renderProjectView(sharedProjectA, {
+      workspaceContextOverride: workspaceA,
+      projectAuthorizationKey: 'ws-a:wm-a:project-1',
+    });
+    await exhaustConversationMaterializationRetries();
+    const staleHandler = mockedUseProjectFileEvents.mock.calls.at(-1)?.[2] as
+      | ((evt: ProjectEvent) => void)
+      | undefined;
+
+    let resolveWorkspaceARecovery: ((value: Conversation[]) => void) | undefined;
+    mockedListConversations
+      .mockImplementationOnce(() => new Promise<Conversation[]>((resolve) => {
+        resolveWorkspaceARecovery = resolve;
+      }))
+      .mockRejectedValue(new ProjectConversationsHttpError(404));
+    staleHandler?.({
+      type: 'project-metadata-changed',
+      projectId: sharedProjectA.id,
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(resolveWorkspaceARecovery).toBeTypeOf('function');
+
+    view.rerender(projectViewElement(sharedProjectB, {
+      workspaceContextOverride: workspaceB,
+      projectAuthorizationKey: 'ws-b:wm-b:project-1',
+    }));
+    await act(async () => {
+      resolveWorkspaceARecovery?.([conversation]);
+      await Promise.resolve();
+    });
+
+    expect(mockedListMessages).not.toHaveBeenCalled();
   });
 });

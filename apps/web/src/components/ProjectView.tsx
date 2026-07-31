@@ -594,6 +594,12 @@ const DESIGN_SYSTEM_AUDIT_AUTO_REPAIR_ATTEMPTS = 2;
 const CONVERSATION_LOAD_RETRY_DELAYS_MS = [
   120, 300, 600, 1000, 1500, 2000, 2500, 3500,
 ] as const;
+type ConversationMaterializationRecovery = {
+  projectId: string;
+  authorityKey: string;
+  workspaceContext: WorkspaceCollabContext;
+  errorMessage: string;
+};
 // Trailing-debounce window for the canonical (daemon + SQLite) tab-state write.
 // Embedded-browser navigation bursts settle well within this; the local cache
 // is written immediately so nothing is lost if the daemon write is coalesced.
@@ -1906,6 +1912,9 @@ export function ProjectView({
   const [messagesConversationId, setMessagesConversationId] = useState<string | null>(null);
   const [failedMessagesConversationId, setFailedMessagesConversationId] = useState<string | null>(null);
   const [conversationLoadError, setConversationLoadError] = useState<string | null>(null);
+  const conversationMaterializationRecoveryRef =
+    useRef<ConversationMaterializationRecovery | null>(null);
+  const conversationMaterializationRecoveryInFlightRef = useRef<string | null>(null);
   const [messageLoadRetryNonce, setMessageLoadRetryNonce] = useState(0);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [forkingMessageId, setForkingMessageId] = useState<string | null>(null);
@@ -2244,6 +2253,8 @@ export function ProjectView({
   useEffect(() => {
     projectIdRef.current = project.id;
   }, [project.id]);
+  const projectRunAuthorityKeyRef = useRef(projectRunAuthorityKey);
+  projectRunAuthorityKeyRef.current = projectRunAuthorityKey;
   // Live mirror of the full project prop, for async handlers whose useCallback
   // deps only track `project.id` (e.g. the project-events handler below):
   // comparing a re-fetched record against a stale closure copy would
@@ -2332,6 +2343,7 @@ export function ProjectView({
   useEffect(() => {
     let cancelled = false;
     const requestWorkspaceContext = projectRunWorkspaceContextRef.current;
+    conversationMaterializationRecoveryRef.current = null;
     setPendingEmptyConversationSeed(null);
     setConversations([]);
     setActiveConversationId(null);
@@ -2381,6 +2393,18 @@ export function ProjectView({
       } catch (err) {
         if (cancelled) return;
         const message = err instanceof Error ? err.message : 'Could not load conversations for this project.';
+        const materializationRecovery =
+          err instanceof ProjectConversationsHttpError
+          && err.status === 404
+          && requestWorkspaceContext?.workspaceType === 'team'
+            ? {
+                projectId: project.id,
+                authorityKey: projectRunAuthorityKey,
+                workspaceContext: requestWorkspaceContext,
+                errorMessage: message,
+              }
+            : null;
+        conversationMaterializationRecoveryRef.current = materializationRecovery;
         setPendingEmptyConversationSeed(null);
         setConversations([]);
         setActiveConversationId(null);
@@ -2392,6 +2416,100 @@ export function ProjectView({
       cancelled = true;
     };
   }, [project.id, projectRunAuthorityKey]);
+
+  const recoverMaterializedConversations = useCallback(async (
+    signalProjectId: string,
+    signalAuthorityKey: string,
+  ) => {
+    const recovery = conversationMaterializationRecoveryRef.current;
+    if (!recovery) return;
+    if (recovery.projectId !== signalProjectId) return;
+    if (recovery.authorityKey !== signalAuthorityKey) return;
+    if (projectIdRef.current !== recovery.projectId) return;
+    if (projectRunAuthorityKeyRef.current !== recovery.authorityKey) return;
+    const recoveryKey = `${recovery.authorityKey}:${recovery.projectId}`;
+    if (conversationMaterializationRecoveryInFlightRef.current === recoveryKey) return;
+    conversationMaterializationRecoveryInFlightRef.current = recoveryKey;
+    try {
+      // Materialization completion is already our retry signal, so perform one
+      // exact-scoped read here instead of extending the fixed initial retry
+      // schedule. A still-early 404 leaves recovery armed for the next signal.
+      const list = await listConversations(recovery.projectId, {
+        throwOnError: true,
+        workspaceContext: recovery.workspaceContext,
+      });
+      if (conversationMaterializationRecoveryRef.current !== recovery) return;
+      if (projectIdRef.current !== recovery.projectId) return;
+      if (projectRunAuthorityKeyRef.current !== recovery.authorityKey) return;
+
+      conversationMaterializationRecoveryRef.current = null;
+      setConversationLoadError(null);
+      setError((current) => (
+        current === recovery.errorMessage ? null : current
+      ));
+      if (list.length === 0) {
+        setConversations([]);
+        setActiveConversationId(null);
+        setPendingEmptyConversationSeed({
+          projectId: recovery.projectId,
+          authorityKey: recovery.authorityKey,
+        });
+        return;
+      }
+
+      setPendingEmptyConversationSeed(null);
+      setConversations(list);
+      const routedMatch = routeConversationId
+        ? list.find((candidate) => candidate.id === routeConversationId) ?? null
+        : null;
+      setActiveConversationId(routedMatch ? routedMatch.id : list[0]!.id);
+    } catch (err) {
+      if (
+        err instanceof ProjectConversationsHttpError
+        && err.status === 404
+      ) {
+        return;
+      }
+      // A completion signal exposed a settled non-404 failure. Stop treating
+      // it as a materialization race; a later project/authority load owns any
+      // further retry and error presentation.
+      if (conversationMaterializationRecoveryRef.current === recovery) {
+        conversationMaterializationRecoveryRef.current = null;
+      }
+    } finally {
+      if (conversationMaterializationRecoveryInFlightRef.current === recoveryKey) {
+        conversationMaterializationRecoveryInFlightRef.current = null;
+      }
+    }
+  }, [routeConversationId]);
+
+  const previousConversationRecoveryDownloadRef = useRef<{
+    projectId: string;
+    authorityKey: string;
+    pending: boolean;
+  } | null>(null);
+  useEffect(() => {
+    const previous = previousConversationRecoveryDownloadRef.current;
+    const sameAuthority = previous?.projectId === project.id
+      && previous.authorityKey === projectRunAuthorityKey;
+    previousConversationRecoveryDownloadRef.current = {
+      projectId: project.id,
+      authorityKey: projectRunAuthorityKey,
+      pending: projectCollab.downloadPending,
+    };
+    if (
+      sameAuthority
+      && previous.pending
+      && !projectCollab.downloadPending
+    ) {
+      void recoverMaterializedConversations(project.id, projectRunAuthorityKey);
+    }
+  }, [
+    project.id,
+    projectRunAuthorityKey,
+    projectCollab.downloadPending,
+    recoverMaterializedConversations,
+  ]);
 
   const emptyConversationWriterAuthorized =
     projectWorkspaceScopeState.scope?.kind === 'personal'
@@ -3254,6 +3372,7 @@ export function ProjectView({
       iframeKeepAlivePool.evictProject(project.id);
       invalidateHtmlSourceSnapshotProject(project.id);
       coalescedFileChangedRefresh();
+      void recoverMaterializedConversations(project.id, projectRunAuthorityKey);
       return;
     }
     if (evt.type === 'comment-changed') {
@@ -3278,6 +3397,7 @@ export function ProjectView({
       if (evt.projectId === project.id) {
         invalidateHtmlSourceSnapshotProject(project.id);
         collabCheckStatusNow();
+        void recoverMaterializedConversations(project.id, projectRunAuthorityKey);
         // The daemon also pushes this signal when a pull just swapped the
         // shared-project placeholder record for the real name
         // (registerPulledProject → notifyProjectMetadataChanged). App.tsx's
@@ -3389,9 +3509,11 @@ export function ProjectView({
     onProjectChange,
     onProjectsRefresh,
     refreshLiveArtifacts,
+    recoverMaterializedConversations,
     resolveAuthoritativeProjectName,
     project.id,
     projectAuthorizationKey,
+    projectRunAuthorityKey,
     projectRunWorkspaceContext,
   ]);
   // A bound project must not open a headerless EventSource while its exact
