@@ -1,0 +1,19 @@
+{
+  "candidateId": "f46dd951-341e-43d2-b8b6-809ae151e514",
+  "projectId": "ec022c55-475a-4cdd-aaf2-afb7a09d5255",
+  "runId": "7e12e936-1c24-46b2-95af-847ea8e67852",
+  "conversationId": "1f06b5f4-2f35-4c2a-b3fa-7ee8e36bb293",
+  "provenance": {
+    "summary": "Detected from skills/grill-me/SKILL.md after a successful run.",
+    "detectedAt": 1785539588348
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "skills/grill-me/SKILL.md",
+      "label": "skills/grill-me/SKILL.md",
+      "size": 3208,
+      "copied": true
+    }
+  ]
+}
