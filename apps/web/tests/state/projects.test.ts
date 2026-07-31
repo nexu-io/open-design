@@ -8,6 +8,7 @@ import {
   importClaudeDesignZip,
   importFolderProject,
   installGeneratedPluginFolder,
+  isBlockedOriginError,
   listProjects,
   listPlugins,
   pickLocalFolderPath,
@@ -79,6 +80,48 @@ describe('listProjects', () => {
     vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response(null, { status: 503 })));
 
     await expect(listProjects({ throwOnError: true })).rejects.toThrow('projects 503');
+  });
+
+  it('flags the powered-preview origin guard so startup can surface it (#6263)', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response(
+      JSON.stringify({ error: 'Powered preview origin cannot access this API route' }),
+      { status: 403, headers: { 'content-type': 'application/json' } },
+    )));
+
+    const err = await listProjects({ throwOnError: true }).catch((e: unknown) => e);
+
+    expect(isBlockedOriginError(err)).toBe(true);
+  });
+
+  // Control arm: `Server initializing` is also a 403, but the daemon is merely
+  // still coming up and the next attempt succeeds. Keying on the status alone
+  // would turn a self-healing startup race into a permanent error screen.
+  it('does not flag transient 403s such as the daemon still initializing', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response(
+      JSON.stringify({ error: 'Server initializing' }),
+      { status: 403, headers: { 'content-type': 'application/json' } },
+    )));
+
+    const err = await listProjects({ throwOnError: true }).catch((e: unknown) => e);
+
+    expect(isBlockedOriginError(err)).toBe(false);
+  });
+
+  it('does not flag a 403 that carries no daemon error envelope', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response(null, { status: 403 })));
+
+    const err = await listProjects({ throwOnError: true }).catch((e: unknown) => e);
+
+    expect(isBlockedOriginError(err)).toBe(false);
+  });
+
+  it('leaves the blocked origin fail-soft for callers that did not opt into errors', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response(
+      JSON.stringify({ error: 'Powered preview origin cannot access this API route' }),
+      { status: 403, headers: { 'content-type': 'application/json' } },
+    )));
+
+    await expect(listProjects()).resolves.toEqual([]);
   });
 });
 

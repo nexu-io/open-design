@@ -1595,6 +1595,7 @@ export const id: Dict = {
   'designs.filterAria': 'Filter proyek',
   'designs.searchPlaceholder': 'Cari...',
   'designs.emptyNoProjects': 'Belum ada proyek.',
+  'designs.blockedOrigin': 'Proyek tidak dapat dimuat: daemon memblokir alamat ini. Buka {url} sebagai gantinya.',
   'designs.emptyNoMatch': 'Tidak ada proyek yang cocok dengan pencarianmu.',
   'designs.deleteTitle': 'Hapus proyek',
   'designs.deleteConfirm': 'Hapus "{name}"?',

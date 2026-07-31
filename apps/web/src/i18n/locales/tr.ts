@@ -1595,6 +1595,7 @@ export const tr: Dict = {
   'designs.filterAria': 'Projeleri filtrele',
   'designs.searchPlaceholder': 'Ara…',
   'designs.emptyNoProjects': 'Henüz proje yok.',
+  'designs.blockedOrigin': 'Projeler yüklenemedi: daemon bu adresi engelledi. Bunun yerine {url} adresini açın.',
   'designs.emptyNoMatch': 'Hiçbir proje aramanızla örtüşmedi.',
   'designs.deleteTitle': 'Projeyi sil',
   'designs.deleteConfirm': '"{name}"’i sil?',

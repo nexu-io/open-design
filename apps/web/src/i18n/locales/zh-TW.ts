@@ -1713,6 +1713,7 @@ export const zhTW: Dict = {
   "designs.filterAria": "篩選專案",
   "designs.searchPlaceholder": "搜尋…",
   "designs.emptyNoProjects": "還沒有專案。",
+  "designs.blockedOrigin": "無法載入專案：daemon 已封鎖此位址。請改為開啟 {url}。",
   "designs.emptyNoMatch": "沒有符合的專案。",
   "designs.deleteTitle": "刪除專案",
   "designs.deleteConfirm": "確定刪除「{name}」？",

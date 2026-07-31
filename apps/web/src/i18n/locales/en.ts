@@ -1595,6 +1595,7 @@ export const en: Dict = {
   'designs.filterAria': 'Filter projects',
   'designs.searchPlaceholder': 'Search…',
   'designs.emptyNoProjects': 'No projects yet.',
+  'designs.blockedOrigin': 'Projects could not load: the daemon blocked this address. Open {url} instead.',
   'designs.emptyNoMatch': 'No projects match your search.',
   'designs.deleteTitle': 'Delete project',
   'designs.deleteConfirm': 'Delete "{name}"?',

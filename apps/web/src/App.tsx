@@ -111,6 +111,7 @@ import {
   getProject,
   importClaudeDesignZip,
   importFolderProject,
+  isBlockedOriginError,
   listProjects,
   listTemplates,
   deleteTemplate,
@@ -519,6 +520,11 @@ function AppInner() {
   const [skillsLoading, setSkillsLoading] = useState(true);
   const [dsLoading, setDsLoading] = useState(true);
   const [projectsLoading, setProjectsLoading] = useState(true);
+  // Set only when the daemon's powered-preview origin guard rejected the
+  // project list. Holds the loopback address the user should switch to, so
+  // the projects tab can say why it is empty instead of claiming there are
+  // no projects.
+  const [blockedOriginUrl, setBlockedOriginUrl] = useState<string | null>(null);
   const [promptTemplatesLoading, setPromptTemplatesLoading] = useState(true);
   // Goes true once the daemon-persisted config (agentId/designSystemId/etc.)
   // has merged into local state. Auto-selection effects below wait on this
@@ -985,11 +991,25 @@ function AppInner() {
       });
 
       const request = beginProjectListRequest();
-      void listProjects().then((list) => {
-        if (cancelled) return;
-        reconcileFetchedProjects(list, request);
-        setProjectsLoading(false);
-      });
+      // Startup asks for the strict variant only to inspect the failure, then
+      // reproduces the fail-soft behaviour itself: a daemon that is still
+      // coming up or briefly unreachable must keep leaving the UI rendered.
+      // The one exception is the powered-preview origin guard, which will
+      // keep rejecting until the user changes the address — reconciling []
+      // there would render a persistent misconfiguration as an empty
+      // workspace.
+      void listProjects({ throwOnError: true })
+        .then((list) => {
+          if (cancelled) return;
+          reconcileFetchedProjects(list, request);
+          setProjectsLoading(false);
+        })
+        .catch((err: unknown) => {
+          if (cancelled) return;
+          if (isBlockedOriginError(err)) setBlockedOriginUrl(loopbackWorkaroundUrl());
+          else reconcileFetchedProjects([], request);
+          setProjectsLoading(false);
+        });
 
       void listTemplates().then((list) => {
         if (cancelled) return;
@@ -2572,6 +2592,7 @@ function AppInner() {
         skillsLoading={skillsLoading}
         designSystemsLoading={dsLoading}
         projectsLoading={projectsLoading}
+        blockedOriginUrl={blockedOriginUrl}
         promptTemplatesLoading={promptTemplatesLoading}
         onCreateProject={handleCreateProject}
         onCreatePluginShareProject={handleCreatePluginShareProject}
@@ -2792,6 +2813,13 @@ function AppInner() {
       </AnimatePresence>
     </>
   );
+}
+
+// The address that reaches the daemon directly. Keeps the current port so
+// the guidance stays correct for non-default `--port` runs.
+function loopbackWorkaroundUrl(): string {
+  const { protocol, port } = window.location;
+  return `${protocol}//127.0.0.1${port ? `:${port}` : ''}`;
 }
 
 function generateInstallationIdSafe(): string {

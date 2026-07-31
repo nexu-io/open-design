@@ -1704,6 +1704,7 @@ export const zhCN: Dict = {
   "designs.filterAria": "筛选项目",
   "designs.searchPlaceholder": "搜索…",
   "designs.emptyNoProjects": "还没有项目。",
+  "designs.blockedOrigin": "无法加载项目：daemon 阻止了此地址。请改为打开 {url}。",
   "designs.emptyNoMatch": "没有匹配的项目。",
   "designs.deleteTitle": "删除项目",
   "designs.deleteConfirm": "确定删除「{name}」？",

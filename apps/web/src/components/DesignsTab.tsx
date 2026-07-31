@@ -87,6 +87,10 @@ interface Props {
 	onRename?: (id: string, name: string) => void;
 	onNewProject?: () => void;
 	onRefresh?: () => Promise<void> | void;
+	/** Loopback address to recommend when the daemon's origin guard blocked the
+	 *  project list. Non-null means the list is empty because of the address,
+	 *  not because there are no projects. */
+	blockedOriginUrl?: string | null;
 	isActive?: boolean;
 }
 
@@ -101,6 +105,7 @@ export function DesignsTab({
 	onRename,
 	onNewProject,
 	onRefresh,
+	blockedOriginUrl = null,
 	isActive = true,
 }: Props) {
 	const renameTitleId = useId();
@@ -670,7 +675,17 @@ export function DesignsTab({
 			</div>
 			{filtered.length === 0 ? (
 				<div className="tab-empty">
-					{projects.length === 0 ? (
+					{projects.length === 0 && blockedOriginUrl ? (
+						// The list is empty because the daemon refused the request,
+						// not because the workspace is. Saying "No projects yet"
+						// here sends the user looking for lost work instead of at
+						// the address bar, so name the cause and the fix.
+						<div className="designs-empty-state" role="alert">
+							<h2 className="designs-empty-title">
+								{t("designs.blockedOrigin", { url: blockedOriginUrl })}
+							</h2>
+						</div>
+					) : projects.length === 0 ? (
 						<div className="designs-empty-state">
 							<h2 className="designs-empty-title">
 								{t("designs.emptyNoProjects")}

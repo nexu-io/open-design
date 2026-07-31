@@ -2131,6 +2131,7 @@ export interface Dict {
   'designs.filterAria': string;
   'designs.searchPlaceholder': string;
   'designs.emptyNoProjects': string;
+  'designs.blockedOrigin': string;
   'designs.emptyNoMatch': string;
   'designs.deleteTitle': string;
   'designs.deleteConfirm': string;
