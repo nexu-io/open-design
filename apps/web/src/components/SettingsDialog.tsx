@@ -75,6 +75,7 @@ import {
 } from './modelOptions';
 import {
   BYOK_PROVIDER_PRESETS,
+  classifyByokCredentialProfileFailure,
   DEFAULT_NOTIFICATIONS,
   DEFAULT_ORBIT,
   applySavedByokCredentialProfile,
@@ -2670,13 +2671,14 @@ export function SettingsDialog({
       });
       const byokProviderId = byokProtocolToTracking(apiProtocol);
       if (byokProviderId) {
+        const failure = classifyByokCredentialProfileFailure(err);
         trackSettingsByokTestResult(analytics.track, {
           page_name: 'settings',
           area: 'execution_model',
           provider_id: byokProviderId,
           result: 'failed',
-          error_code: err instanceof Error ? err.name : 'UNKNOWN',
-          error_kind: err instanceof Error ? err.name : 'UNKNOWN',
+          error_code: failure.errorCode,
+          error_kind: failure.errorKind,
           field_missing: 'none',
           config_key_changed: configKeyChanged,
           success_after_action: false,
@@ -3370,11 +3372,15 @@ export function SettingsDialog({
     [apiProtocol],
   );
   const selectedProviderIndex =
-    cfg.apiProviderBaseUrl == null
-      ? -1
-      : protocolProviders.findIndex(
-          (p) => p.baseUrl === cfg.apiProviderBaseUrl && p.baseUrl === cfg.baseUrl,
-        );
+    protocolProviders.findIndex((p) => {
+      if (cfg.apiProviderBaseUrl == null) {
+        return apiProtocol === 'azure' && p.baseUrl === '' && Boolean(cfg.baseUrl?.trim());
+      }
+      return (
+        p.baseUrl === cfg.apiProviderBaseUrl &&
+        (p.baseUrl === cfg.baseUrl || (apiProtocol === 'azure' && p.baseUrl === ''))
+      );
+    });
   const selectedProvider = selectedProviderIndex >= 0 ? protocolProviders[selectedProviderIndex] : undefined;
   const apiKeyConsoleLink =
     selectedProvider?.apiKeyConsoleLink ?? defaultApiKeyConsoleLink;
@@ -3412,7 +3418,12 @@ export function SettingsDialog({
           ? undefined
           : cfg.apiProtocolConfigs?.[provider.protocol]
       );
-    if (!entry || entry.baseUrl !== provider.baseUrl) return false;
+    if (!entry) return false;
+    if (provider.baseUrl) {
+      if (entry.baseUrl !== provider.baseUrl) return false;
+    } else if (provider.protocol !== 'azure' && entry.baseUrl !== provider.baseUrl) {
+      return false;
+    }
     const knownProvider = KNOWN_PROVIDERS.find((item) => item.baseUrl === provider.baseUrl);
     return canRunProviderConnectionTest(entry, {
       requiresApiKey: byokProviderRequiresApiKey(
@@ -5491,7 +5502,12 @@ export function SettingsDialog({
                     azureHint: t('settings.azureBaseUrlHint'),
                   }}
                   onBlur={commitProviderModelsInputs}
-                  onChange={(value) => updateApiConfig({ baseUrl: value, apiProviderBaseUrl: null })}
+                  onChange={(value) =>
+                    updateApiConfig({
+                      baseUrl: value,
+                      apiProviderBaseUrl: apiProtocol === 'azure' ? '' : null,
+                    })
+                  }
                   onCustomize={() => {
                     updateApiConfig({ apiProviderBaseUrl: null });
                     window.setTimeout(() => baseUrlInputRef.current?.focus(), 0);
@@ -5533,7 +5549,7 @@ export function SettingsDialog({
                     ? t('settings.azureCustomDeploymentName')
                     : t('settings.modelCustomLabel'),
                   customModelPlaceholder: apiProtocol === 'azure'
-                    ? 'e.g. gpt-4o-production'
+                    ? t('settings.azureDeploymentModel')
                     : t('settings.modelCustomPlaceholder'),
                   fetchModelsUnsupported: t('settings.fetchModelsUnsupported'),
                   model: apiProtocol === 'azure'
@@ -5570,6 +5586,7 @@ export function SettingsDialog({
                     : null
                 }
                 providerModelsFailureMessage={providerModelsFailureMessage}
+                forceTextInput={apiProtocol === 'azure'}
                 showAzureModelFetchHint={apiProtocol === 'azure'}
                 showFetchModelsUnsupportedHint={
                   apiProtocol !== 'azure' &&

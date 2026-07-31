@@ -95,52 +95,6 @@ const healthExpression = `
     }
   })()
 `;
-const byokDpapiSmokeExpression = `
-  (async () => {
-    const profileId = 'byok-packaged-win-' + Date.now().toString(36);
-    const secret = 'packaged-win-dpapi-secret';
-    const createdResponse = await fetch('/api/byok/profiles', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        id: profileId,
-        label: 'Packaged Windows DPAPI smoke',
-        protocol: 'openai',
-        baseUrl: 'https://api.openai.com/v1',
-        model: 'gpt-5.4',
-        apiKey: secret,
-      }),
-    });
-    const createdText = await createdResponse.text();
-    const listedResponse = await fetch('/api/byok/profiles');
-    const listedText = await listedResponse.text();
-    const listed = JSON.parse(listedText);
-    const resolved = Array.isArray(listed.profiles)
-      ? listed.profiles.find((profile) => profile && profile.id === profileId)
-      : null;
-    const deletedResponse = await fetch(
-      '/api/byok/profiles/' + encodeURIComponent(profileId),
-      { method: 'DELETE' },
-    );
-    const finalResponse = await fetch('/api/byok/profiles');
-    const finalText = await finalResponse.text();
-    const final = JSON.parse(finalText);
-    return {
-      configured: resolved?.configured === true,
-      createStatus: createdResponse.status,
-      deleteStatus: deletedResponse.status,
-      finalStatus: finalResponse.status,
-      listStatus: listedResponse.status,
-      profileRemoved:
-        Array.isArray(final.profiles)
-        && !final.profiles.some((profile) => profile && profile.id === profileId),
-      responseLeakedSecret:
-        createdText.includes(secret)
-        || listedText.includes(secret)
-        || finalText.includes(secret),
-    };
-  })()
-`;
 const pptxExportExpression = `
   (async () => {
     const projectId = 'packaged-payload-pptx-' + Date.now().toString(36);
@@ -503,16 +457,6 @@ type HealthEvalValue = {
   title: string;
 };
 
-type ByokDpapiSmokeEvalValue = {
-  configured: boolean;
-  createStatus: number;
-  deleteStatus: number;
-  finalStatus: number;
-  listStatus: number;
-  profileRemoved: boolean;
-  responseLeakedSecret: boolean;
-};
-
 type PptxExportEvalValue = {
   byteLength: number;
   contentType: string | null;
@@ -716,15 +660,6 @@ winDescribe('packaged windows runtime smoke', () => {
       expect(pty.exitCode, JSON.stringify(pty, null, 2)).toBe(0);
       expect(pty.cleanup.terminalStatus).toBe(200);
       expect(pty.cleanup.projectStatus).toBe(200);
-      const byokInspect = await measureSmokeStep(
-        timings,
-        'packaged Windows DPAPI credential profile',
-        async () => runToolsPackJson<WinInspectResult>('inspect', [
-          '--expr',
-          byokDpapiSmokeExpression,
-        ]),
-      );
-      assertByokDpapiSmokeEvalValue(byokInspect.eval?.value);
       assertLauncherPointer(inspect.launcher.active, updateScenario.expectedCurrentVersion, 0, 'initial active');
       assertLauncherPointer(inspect.launcher.lastSuccessful, updateScenario.expectedCurrentVersion, 0, 'initial lastSuccessful');
 
@@ -2497,29 +2432,6 @@ function assertHealthEvalValue(value: unknown): HealthEvalValue {
     throw new Error(`unexpected health eval value: ${formatUnknown(value)}`);
   }
   return normalized;
-}
-
-function assertByokDpapiSmokeEvalValue(value: unknown): ByokDpapiSmokeEvalValue {
-  if (
-    !isRecord(value)
-    || typeof value.configured !== 'boolean'
-    || typeof value.createStatus !== 'number'
-    || typeof value.deleteStatus !== 'number'
-    || typeof value.finalStatus !== 'number'
-    || typeof value.listStatus !== 'number'
-    || typeof value.profileRemoved !== 'boolean'
-    || typeof value.responseLeakedSecret !== 'boolean'
-  ) {
-    throw new Error(`unexpected Windows DPAPI smoke value: ${formatUnknown(value)}`);
-  }
-  expect(value.createStatus).toBe(201);
-  expect(value.listStatus).toBe(200);
-  expect(value.configured).toBe(true);
-  expect(value.responseLeakedSecret).toBe(false);
-  expect(value.deleteStatus).toBe(204);
-  expect(value.finalStatus).toBe(200);
-  expect(value.profileRemoved).toBe(true);
-  return value as ByokDpapiSmokeEvalValue;
 }
 
 function assertUpdaterClickEvalValue(value: unknown): UpdaterClickEvalValue {

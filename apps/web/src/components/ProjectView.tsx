@@ -6516,8 +6516,8 @@ export function ProjectView({
   const commentQueueOnSend = currentConversationBusy && !currentConversationQueueDisabled;
 
   const handleContinueRemainingTasks = useCallback(
-    (_assistantMessage: ChatMessage, todos: TodoItem[]) => {
-      if (currentConversationActionDisabled || todos.length === 0) return;
+    async (_assistantMessage: ChatMessage, todos: TodoItem[]) => {
+      if (currentConversationActionDisabled || todos.length === 0) return false;
       const remainingList = todos
         .map((todo, i) => {
           const label =
@@ -6531,7 +6531,7 @@ export function ProjectView({
         `${remainingList}\n\n` +
         'Before making changes, inspect the current project files as needed. ' +
         'Update TodoWrite as you complete each remaining task.';
-      void handleSend(prompt, [], []);
+      return handleSend(prompt, [], []);
     },
     [currentConversationActionDisabled, handleSend],
   );
