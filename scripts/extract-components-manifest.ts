@@ -1,4 +1,4 @@
-import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rename, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -26,6 +26,16 @@ type ManifestCollection = {
   manifests: ComponentsManifest[];
 };
 
+async function writeFileAtomic(filePath: string, content: string): Promise<void> {
+  const tempPath = `${filePath}.${process.pid}.tmp`;
+  try {
+    await writeFile(tempPath, content, 'utf8');
+    await rename(tempPath, filePath);
+  } finally {
+    await unlink(tempPath).catch(() => undefined);
+  }
+}
+
 async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
   if (options.help) {
@@ -47,7 +57,7 @@ async function main(): Promise<void> {
 
   const resolvedOutPath = path.resolve(repoRoot, options.outPath);
   await mkdir(path.dirname(resolvedOutPath), { recursive: true });
-  await writeFile(resolvedOutPath, `${output}\n`, 'utf8');
+  await writeFileAtomic(resolvedOutPath, `${output}\n`);
   console.log(
     `Wrote ${manifests.length} component manifest${manifests.length === 1 ? '' : 's'} to ${toRepositoryPath(resolvedOutPath)}.`,
   );
