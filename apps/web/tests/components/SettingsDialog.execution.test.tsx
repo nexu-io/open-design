@@ -112,6 +112,7 @@ import { reconcileAmrProfileEnv } from '../../src/components/SettingsDialog';
 import { providerModelsCacheKey } from '../../src/components/providerModelsCache';
 import { I18nProvider } from '../../src/i18n';
 import { LOCALES } from '../../src/i18n/types';
+import { ByokCredentialProfileHttpError } from '../../src/state/config';
 import { MAX_MAX_TOKENS, MIN_MAX_TOKENS } from '../../src/state/maxTokens';
 import type {
   AgentInfo,
@@ -2376,6 +2377,60 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
       }),
       undefined,
     );
+  });
+
+  it('reports secure profile persistence failures with stable BYOK telemetry', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/memory') {
+        return new Response(
+          JSON.stringify({ enabled: true, memories: [], extraction: null }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      expect(url).toBe('/api/test/connection');
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          kind: 'ok',
+          latencyMs: 20,
+          model: 'claude-sonnet-4-5',
+          sample: 'pong',
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { onPersistByokCredential } = renderSettingsDialog({
+      apiKey: 'sk-ant-test-provider',
+    });
+    onPersistByokCredential.mockRejectedValueOnce(
+      new ByokCredentialProfileHttpError(
+        400,
+        'Invalid secure profile',
+        'VALIDATION_FAILED',
+      ),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Test' }));
+
+    await waitFor(() => {
+      expect(analyticsTrackMock).toHaveBeenCalledWith(
+        'settings_byok_test_result',
+        expect.objectContaining({
+          page_name: 'settings',
+          area: 'execution_model',
+          provider_id: 'anthropic',
+          result: 'failed',
+          error_code: 'VALIDATION_FAILED',
+          error_kind: 'unknown',
+          field_missing: 'none',
+          success_after_action: false,
+        }),
+        undefined,
+      );
+    });
   });
 
   it('renders invalid Base URL test failures on the Base URL field', async () => {

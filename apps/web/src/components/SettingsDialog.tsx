@@ -74,6 +74,7 @@ import {
 } from './modelOptions';
 import {
   BYOK_PROVIDER_PRESETS,
+  classifyByokCredentialProfileFailure,
   DEFAULT_NOTIFICATIONS,
   DEFAULT_ORBIT,
   applySavedByokCredentialProfile,
@@ -2669,13 +2670,14 @@ export function SettingsDialog({
       });
       const byokProviderId = byokProtocolToTracking(apiProtocol);
       if (byokProviderId) {
+        const failure = classifyByokCredentialProfileFailure(err);
         trackSettingsByokTestResult(analytics.track, {
           page_name: 'settings',
           area: 'execution_model',
           provider_id: byokProviderId,
           result: 'failed',
-          error_code: err instanceof Error ? err.name : 'UNKNOWN',
-          error_kind: err instanceof Error ? err.name : 'UNKNOWN',
+          error_code: failure.errorCode,
+          error_kind: failure.errorKind,
           field_missing: 'none',
           config_key_changed: configKeyChanged,
           success_after_action: false,

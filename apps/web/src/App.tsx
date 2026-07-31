@@ -82,6 +82,7 @@ import {
   fetchMediaProvidersFromDaemon,
   hasAnyConfiguredProvider,
   fetchComposioConfigFromDaemon,
+  legacyByokMigrationErrorPresentation,
   loadConfig,
   migrateLegacyByokCredentialsToDaemon,
   mergeDaemonConfig,
@@ -454,7 +455,7 @@ function AppInner() {
   const [workingDirError, setWorkingDirError] = useState<string | null>(null);
   const [projectOpenError, setProjectOpenError] = useState<string | null>(null);
   const [legacyByokMigrationError, setLegacyByokMigrationError] =
-    useState<string | null>(null);
+    useState<Error | null>(null);
   const [settingsWelcome, setSettingsWelcome] = useState(false);
   const [settingsInitialSection, setSettingsInitialSection] = useState<SettingsSection>('execution');
   const [settingsHighlight, setSettingsHighlight] = useState<SettingsHighlight>(null);
@@ -1013,7 +1014,7 @@ function AppInner() {
       if (cancelled) return;
       setLegacyByokMigrationError(
         legacyByokMigration.status === 'failed'
-          ? legacyByokMigration.error.message
+          ? legacyByokMigration.error
           : null,
       );
       const migrationBaseConfig = legacyByokMigration.config;
@@ -2629,6 +2630,12 @@ function AppInner() {
       />
     );
   }
+  const legacyByokMigrationErrorView = legacyByokMigrationError
+    ? legacyByokMigrationErrorPresentation(
+        legacyByokMigrationError,
+        t('settings.autosaveError'),
+      )
+    : null;
   return (
     <>
       <div
@@ -2739,10 +2746,10 @@ function AppInner() {
           onDismiss={() => setProjectOpenError(null)}
         />
       ) : null}
-      {legacyByokMigrationError ? (
+      {legacyByokMigrationErrorView ? (
         <Toast
-          message={t('settings.autosaveError')}
-          details={legacyByokMigrationError}
+          message={legacyByokMigrationErrorView.message}
+          details={legacyByokMigrationErrorView.details}
           actionLabel={t('settings.title')}
           onAction={() => {
             setLegacyByokMigrationError(null);
