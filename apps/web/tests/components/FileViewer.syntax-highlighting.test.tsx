@@ -105,10 +105,11 @@ describe('FileViewer source syntax highlighting', () => {
   });
 
   it('preserves CRLF line endings while highlighting', async () => {
-    const source = 'const first = true;\r\nconst second = true;';
+    const source = 'const first = true;\r\nconst second = true;\r\nconst third = true;';
     highlightCodeTokensMock.mockResolvedValue([
       [{ content: 'const first = true;', color: '#79c0ff' }],
       [{ content: 'const second = true;', color: '#79c0ff' }],
+      [{ content: 'const third = true;', color: '#79c0ff' }],
     ]);
     vi.stubGlobal('fetch', vi.fn(async () => new Response(source, { status: 200 })));
 
@@ -129,7 +130,7 @@ describe('FileViewer source syntax highlighting', () => {
       expect(container.querySelector('.code-viewer .lines span[style*="color"]')).not.toBeNull();
     });
     expect(container.querySelector('.code-viewer .lines')?.textContent).toBe(source);
-    expect(container.querySelector('.code-viewer .gutter')?.textContent).toBe('1\n2');
+    expect(container.querySelector('.code-viewer .gutter')?.textContent).toBe('1\n2\n3');
   });
 
   it('leaves large source files as plain text', async () => {

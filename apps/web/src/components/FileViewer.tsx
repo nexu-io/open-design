@@ -969,7 +969,7 @@ function HighlightedCode({
       .then(({ highlightCodeTokens }) => highlightCodeTokens(text, language))
       .then((lines) => {
         if (cancelled) return;
-        if (lines.length === 0 || highlightedCodeText(lines) !== text.replace(/\r\n/g, '\n')) {
+        if (lines.length === 0 || highlightedCodeText(lines) !== text.replaceAll('\r\n', '\n')) {
           setHighlighted(null);
           return;
         }
