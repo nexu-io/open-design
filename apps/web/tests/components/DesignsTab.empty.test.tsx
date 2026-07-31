@@ -147,6 +147,52 @@ describe('DesignsTab empty state', () => {
     expect(src).toContain('workspaceMemberId=member-designs');
   });
 
+  // #6263: on Linux/Docker the daemon binds 127.0.0.1 and a browser visit to
+  // `localhost` is rejected by the powered-preview origin guard. The list came
+  // back empty because the request was refused, so the empty state must not
+  // claim there are no projects.
+  it('names the blocked address instead of claiming there are no projects', () => {
+    const onNewProject = vi.fn();
+    render(
+      <DesignsTab
+        projects={[]}
+        skills={[]}
+        designSystems={[]}
+        onOpen={vi.fn()}
+        onOpenLiveArtifact={vi.fn()}
+        onDelete={vi.fn()}
+        onRename={vi.fn()}
+        onNewProject={onNewProject}
+        blockedOriginUrl="http://127.0.0.1:7456"
+      />,
+    );
+
+    expect(screen.queryByText('No projects yet.')).toBeNull();
+    const alert = screen.getByRole('alert');
+    expect(alert.textContent).toContain('http://127.0.0.1:7456');
+    // The CTA would create a project through the same blocked API.
+    expect(screen.queryByRole('button', { name: 'New project' })).toBeNull();
+  });
+
+  it('keeps the ordinary empty state when nothing is blocked', () => {
+    render(
+      <DesignsTab
+        projects={[]}
+        skills={[]}
+        designSystems={[]}
+        onOpen={vi.fn()}
+        onOpenLiveArtifact={vi.fn()}
+        onDelete={vi.fn()}
+        onRename={vi.fn()}
+        onNewProject={vi.fn()}
+        blockedOriginUrl={null}
+      />,
+    );
+
+    expect(screen.getByText('No projects yet.')).toBeTruthy();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
   it('renders No projects match your search when projects exist but query filters them out', () => {
     render(
       <DesignsTab

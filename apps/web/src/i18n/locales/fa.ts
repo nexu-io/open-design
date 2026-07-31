@@ -1894,6 +1894,7 @@ export const fa: Dict = {
   'designs.filterAria': 'فیلتر پروژه‌ها',
   'designs.searchPlaceholder': 'جستجو…',
   'designs.emptyNoProjects': 'هنوز هیچ پروژه‌ای وجود ندارد.',
+  'designs.blockedOrigin': 'پروژه‌ها بارگذاری نشدند: دیمن این نشانی را مسدود کرد. به‌جای آن {url} را باز کنید.',
   'designs.emptyNoMatch': 'هیچ پروژه‌ای با جستجوی شما مطابقت ندارد.',
   'designs.deleteTitle': 'حذف پروژه',
   'designs.deleteConfirm': 'آیا «{name}» حذف شود؟',

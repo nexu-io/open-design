@@ -1894,6 +1894,7 @@ export const ko: Dict = {
   'designs.filterAria': '프로젝트 필터링',
   'designs.searchPlaceholder': '검색…',
   'designs.emptyNoProjects': '아직 프로젝트가 없습니다.',
+  'designs.blockedOrigin': '프로젝트를 불러오지 못했습니다: 데몬이 이 주소를 차단했습니다. 대신 {url}을 여세요.',
   'designs.emptyNoMatch': '검색어와 일치하는 프로젝트가 없습니다.',
   'designs.deleteTitle': '프로젝트 삭제',
   'designs.deleteConfirm': '"{name}" 프로젝트를 삭제하시겠습니까?',

@@ -1894,6 +1894,7 @@ export const ja: Dict = {
   'designs.filterAria': 'プロジェクトをフィルター',
   'designs.searchPlaceholder': '検索…',
   'designs.emptyNoProjects': 'プロジェクトがまだありません。',
+  'designs.blockedOrigin': 'プロジェクトを読み込めませんでした: デーモンがこのアドレスをブロックしました。代わりに {url} を開いてください。',
   'designs.emptyNoMatch': '検索に一致するプロジェクトがありません。',
   'designs.deleteTitle': 'プロジェクトを削除',
   'designs.deleteConfirm': '"{name}" を削除しますか？',

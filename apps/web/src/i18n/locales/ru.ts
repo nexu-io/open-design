@@ -1894,6 +1894,7 @@ export const ru: Dict = {
   'designs.filterAria': 'Фильтр проектов',
   'designs.searchPlaceholder': 'Поиск…',
   'designs.emptyNoProjects': 'Проектов пока нет.',
+  'designs.blockedOrigin': 'Не удалось загрузить проекты: демон заблокировал этот адрес. Откройте вместо этого {url}.',
   'designs.emptyNoMatch': 'Нет проектов, соответствующих вашему поиску.',
   'designs.deleteTitle': 'Удалить проект',
   'designs.deleteConfirm': 'Удалить «{name}»?',

@@ -1894,6 +1894,7 @@ export const hu: Dict = {
   'designs.filterAria': 'Projektek szűrése',
   'designs.searchPlaceholder': 'Keresés…',
   'designs.emptyNoProjects': 'Még nincs projekt.',
+  'designs.blockedOrigin': 'A projekteket nem sikerült betölteni: a daemon blokkolta ezt a címet. Nyisd meg helyette ezt: {url}.',
   'designs.emptyNoMatch': 'Egy projekt sem felel meg a keresésnek.',
   'designs.deleteTitle': 'Projekt törlése',
   'designs.deleteConfirm': 'Törlöd a(z) „{name}" projektet?',

@@ -423,6 +423,10 @@ interface Props {
   skillsLoading?: boolean;
   designSystemsLoading?: boolean;
   projectsLoading?: boolean;
+  /** Loopback address to recommend when the daemon's origin guard blocked the
+   *  project list. Non-null means the list is empty because of the address,
+   *  not because there are no projects. */
+  blockedOriginUrl?: string | null;
   // Execution / model-switching context. Threaded down from `App` so the
   // top-bar `InlineModelSwitcher` can render the active mode/agent/model
   // and persist changes through the same callbacks the project view uses.
@@ -560,6 +564,7 @@ export function EntryShell({
   skillsLoading = false,
   designSystemsLoading = false,
   projectsLoading = false,
+  blockedOriginUrl = null,
   config,
   providerModelsCache: sharedProviderModelsCache,
   onProviderModelsCacheChange,
@@ -1642,6 +1647,7 @@ export function EntryShell({
                     onDuplicate={onDuplicateProject}
                     onRename={onRenameProject}
                     onRefresh={onProjectsRefresh}
+                    blockedOriginUrl={blockedOriginUrl}
                     isActive={view === 'projects'}
                     onNewProject={() => {
                       openNewProject();

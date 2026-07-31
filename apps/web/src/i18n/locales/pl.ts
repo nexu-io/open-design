@@ -1894,6 +1894,7 @@ export const pl: Dict = {
   'designs.filterAria': 'Filtruj projekty',
   'designs.searchPlaceholder': 'Szukaj…',
   'designs.emptyNoProjects': 'Brak projektów.',
+  'designs.blockedOrigin': 'Nie można załadować projektów: demon zablokował ten adres. Otwórz zamiast tego {url}.',
   'designs.emptyNoMatch': 'Brak projektów pasujących do wyszukiwania.',
   'designs.deleteTitle': 'Usuń projekt',
   'designs.deleteConfirm': 'Usunąć „{name}”?',

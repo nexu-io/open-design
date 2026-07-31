@@ -1894,6 +1894,7 @@ export const ptBR: Dict = {
   'designs.filterAria': 'Filtrar projetos',
   'designs.searchPlaceholder': 'Buscar…',
   'designs.emptyNoProjects': 'Ainda não há projetos.',
+  'designs.blockedOrigin': 'Não foi possível carregar os projetos: o daemon bloqueou este endereço. Abra {url} em vez disso.',
   'designs.emptyNoMatch': 'Nenhum projeto corresponde à sua busca.',
   'designs.deleteTitle': 'Excluir projeto',
   'designs.deleteConfirm': 'Excluir "{name}"?',

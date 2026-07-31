@@ -1894,6 +1894,7 @@ export const ar: Dict = {
   'designs.filterAria': 'تصفية المشاريع',
   'designs.searchPlaceholder': 'بحث...',
   'designs.emptyNoProjects': 'لا توجد مشاريع بعد.',
+  'designs.blockedOrigin': 'تعذّر تحميل المشاريع: حظر الـ daemon هذا العنوان. افتح {url} بدلاً منه.',
   'designs.emptyNoMatch': 'لا توجد مشاريع تطابق بحثك.',
   'designs.deleteTitle': 'حذف المشروع',
   'designs.deleteConfirm': 'هل تريد حذف "{name}"؟',

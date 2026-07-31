@@ -1894,6 +1894,7 @@ export const th: Dict = {
   'designs.filterAria': 'ตัวกรอง',
   'designs.searchPlaceholder': 'ค้นหา…',
   'designs.emptyNoProjects': 'ยังไม่มีโปรเจกต์',
+  'designs.blockedOrigin': 'โหลดโปรเจกต์ไม่ได้: daemon บล็อกที่อยู่นี้ เปิด {url} แทน',
   'designs.emptyNoMatch': 'ไม่พบโปรเจกต์',
   'designs.deleteTitle': 'ลบโปรเจกต์',
   'designs.deleteConfirm': 'ลบ "{name}"?',

@@ -1894,6 +1894,7 @@ export const uk: Dict = {
   'designs.filterAria': 'Фільтрувати проекти',
   'designs.searchPlaceholder': 'Пошук…',
   'designs.emptyNoProjects': 'Проектів ще немає.',
+  'designs.blockedOrigin': 'Не вдалося завантажити проєкти: демон заблокував цю адресу. Відкрийте натомість {url}.',
   'designs.emptyNoMatch': 'Проектів, що відповідають пошуку, не знайдено.',
   'designs.deleteTitle': 'Видалити проект',
   'designs.deleteConfirm': 'Видалити "{name}"?',

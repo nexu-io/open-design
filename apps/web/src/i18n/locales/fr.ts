@@ -1894,6 +1894,7 @@ export const fr: Dict = {
   'designs.filterAria': 'Filtrer les projets',
   'designs.searchPlaceholder': 'Rechercher…',
   'designs.emptyNoProjects': 'Aucun projet pour l\'instant.',
+  'designs.blockedOrigin': 'Impossible de charger les projets : le daemon a bloqué cette adresse. Ouvrez plutôt {url}.',
   'designs.emptyNoMatch': 'Aucun projet ne correspond à votre recherche.',
   'designs.deleteTitle': 'Supprimer le projet',
   'designs.deleteConfirm': 'Supprimer « {name} » ?',

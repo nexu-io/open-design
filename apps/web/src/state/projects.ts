@@ -203,6 +203,47 @@ function omitWorkspaceContext<T extends { workspaceContext?: WorkspaceCollabCont
   return rest;
 }
 
+// The daemon rejects every non-preview API route when the page was loaded
+// from the powered-preview host — the Linux/Docker case where the daemon
+// binds 127.0.0.1 and the user opens `localhost`. Unlike the transport
+// failures this module deliberately swallows, it never heals on its own:
+// the address has to change. Callers discriminate on it via
+// `isBlockedOriginError` so they can keep failing soft for everything else.
+const BLOCKED_ORIGIN_DAEMON_ERROR = 'Powered preview origin cannot access this API route';
+
+export class ProjectsRequestError extends Error {
+  readonly status: number;
+  readonly daemonError: string | null;
+
+  constructor(status: number, daemonError: string | null) {
+    super(`projects ${status}`);
+    this.name = 'ProjectsRequestError';
+    this.status = status;
+    this.daemonError = daemonError;
+  }
+}
+
+export function isBlockedOriginError(err: unknown): boolean {
+  return (
+    err instanceof ProjectsRequestError &&
+    err.status === 403 &&
+    err.daemonError === BLOCKED_ORIGIN_DAEMON_ERROR
+  );
+}
+
+// Every daemon guard answers with a structured `{ error }` envelope, so the
+// permanent origin rejection is distinguishable from transient 403s such as
+// `Server initializing`. A body that is absent or unparseable is simply not
+// one of those guards.
+async function readDaemonError(resp: Response): Promise<string | null> {
+  try {
+    const json = (await resp.json()) as { error?: unknown };
+    return typeof json.error === 'string' ? json.error : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function listProjects(options?: {
   throwOnError?: boolean;
   workspaceContext?: WorkspaceCollabContext | null;
@@ -248,7 +289,7 @@ export async function listProjects(options?: {
       const resp = await fetch('/api/projects');
       // Throw inside the coalesced run so a failed read is not cached — the next
       // caller/poll retries immediately (see coalesced-get.ts).
-      if (!resp.ok) throw new Error(`projects ${resp.status}`);
+      if (!resp.ok) throw new ProjectsRequestError(resp.status, await readDaemonError(resp));
       const json = (await resp.json()) as { projects: Project[] };
       return json.projects ?? [];
     });

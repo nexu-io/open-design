@@ -111,6 +111,10 @@ interface Props {
   skillsLoading?: boolean;
   designSystemsLoading?: boolean;
   projectsLoading?: boolean;
+  /** Loopback address to recommend when the daemon's origin guard blocked the
+   *  project list. Non-null means the list is empty because of the address,
+   *  not because there are no projects. */
+  blockedOriginUrl?: string | null;
   promptTemplatesLoading?: boolean;
   onCreateProject: (input: EntryCreateProjectInput) => Promise<boolean> | boolean | void;
   onCreatePluginShareProject: (
@@ -273,6 +277,7 @@ export function EntryView({
   skillsLoading = false,
   designSystemsLoading = false,
   projectsLoading = false,
+  blockedOriginUrl = null,
   promptTemplatesLoading: _promptTemplatesLoading = false,
   onCreateProject,
   onCreatePluginShareProject,
@@ -377,6 +382,7 @@ export function EntryView({
       skillsLoading={skillsLoading}
       designSystemsLoading={designSystemsLoading}
       projectsLoading={projectsLoading}
+      blockedOriginUrl={blockedOriginUrl}
       config={config}
       providerModelsCache={providerModelsCache}
       onProviderModelsCacheChange={onProviderModelsCacheChange}
