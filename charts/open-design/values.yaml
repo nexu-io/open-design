@@ -8,6 +8,9 @@ image:
   repository: ghcr.io/nexu-io/od
   pullPolicy: IfNotPresent
   tag: "latest"
+  # Browser-visible path baked into this image at build time through
+  # OD_WEB_BASE_PATH. Must match config.webBasePath.
+  webBasePath: ""
 
 config:
 # The runtime environment for the Node.js process. 

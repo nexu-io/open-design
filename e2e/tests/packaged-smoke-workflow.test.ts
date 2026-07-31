@@ -384,6 +384,17 @@ describe("packaged smoke workflow", () => {
     expect(reportWorkflow).not.toContain("merge_group");
   });
 
+  it("[P2] boots the Helm-rendered non-root image in the Docker smoke lane", async () => {
+    const workflow = await readFile(dockerImageWorkflowPath, "utf8");
+
+    expect(workflow).toContain('"charts/open-design/**"');
+    expect(workflow).toContain('echo "web_base_path=/open-design" >> "$GITHUB_OUTPUT"');
+    expect(workflow).toContain('load: ${{ steps.mode.outputs.publish != \'true\' }}');
+    expect(workflow).toContain('OD_WEB_BASE_PATH=${{ steps.mode.outputs.web_base_path }}');
+    expect(workflow).toContain('OD_HELM_SMOKE_IMAGE="$smoke_image"');
+    expect(workflow).toContain('charts/open-design/tests/base-path-image-runtime.test.ts');
+  });
+
   it("[P2] surfaces a merge-queue needs-validation ejection as a PR comment handoff", async () => {
     const [ciWorkflow, commentWorkflow] = await Promise.all([
       readFile(ciWorkflowPath, "utf8"),

@@ -52,7 +52,14 @@ async function renderIngress(webBasePath: string, ingressPath: string): Promise<
     '--set-string',
     `ingress.hosts[0].paths[0].path=${ingressPath}`,
   ];
-  if (webBasePath !== '') args.push('--set-string', `config.webBasePath=${webBasePath}`);
+  if (webBasePath !== '') {
+    args.push(
+      '--set-string',
+      `config.webBasePath=${webBasePath}`,
+      '--set-string',
+      `image.webBasePath=${webBasePath}`,
+    );
+  }
   return execFileAsync('helm', args, { encoding: 'utf8' });
 }
 

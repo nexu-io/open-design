@@ -3,13 +3,18 @@ export type AppPath = `/${string}`;
 
 export interface PathConfig {
   readonly basePath: BasePath;
+  /** Prefix a canonical app-internal path, even when it starts with the configured prefix. */
   withBasePath(path: string): string;
+  /** Preserve a path already under the configured prefix; otherwise prefix it. */
+  ensureBasePath(path: string): string;
   stripBasePath(pathname: string): AppPath | null;
   hasBasePath(pathname: string): boolean;
   api(path?: string): string;
   asset(path: string): string;
   publicPath(path: string): string;
 }
+
+const RESERVED_BROWSER_NAMESPACES = new Set(["_next", "api", "artifacts", "frames"]);
 
 function decodePathSegment(segment: string): string {
   try {
@@ -26,12 +31,21 @@ function validateBasePathSegments(path: string): void {
   if (path.includes("://") || path.startsWith("//")) throw new Error("base path must be a path, not a URL");
   if (path.includes("//")) throw new Error("base path must not contain duplicate slashes");
 
+  const decodedSegments: string[] = [];
   for (const segment of path.slice(1).split("/")) {
     const decoded = decodePathSegment(segment);
+    decodedSegments.push(decoded);
     if (decoded === "." || decoded === "..") throw new Error("base path must not contain dot segments");
     if (decoded.includes("/") || decoded.includes("\\") || decoded.includes("\0")) {
       throw new Error("base path must not contain encoded separators or NUL");
     }
+  }
+
+  const firstSegment = decodedSegments[0]?.toLowerCase() ?? "";
+  if (RESERVED_BROWSER_NAMESPACES.has(firstSegment)) {
+    throw new Error(
+      "base path must not start with a reserved browser namespace: /api, /_next, /artifacts, or /frames",
+    );
   }
 }
 
@@ -83,6 +97,12 @@ function createPathConfigInternal(basePath: BasePath): PathConfig {
 
   const withBasePath = (path: string): string => {
     const { pathname, suffix } = requireInternalPath(path);
+    if (basePath === "") return `${pathname}${suffix}`;
+    return `${basePath}${pathname}${suffix}`;
+  };
+
+  const ensureBasePath = (path: string): string => {
+    const { pathname, suffix } = requireInternalPath(path);
     if (basePath === "" || isPathAtBoundary(pathname, basePath)) return `${pathname}${suffix}`;
     return `${basePath}${pathname}${suffix}`;
   };
@@ -111,6 +131,7 @@ function createPathConfigInternal(basePath: BasePath): PathConfig {
     api,
     asset,
     basePath,
+    ensureBasePath,
     hasBasePath,
     publicPath: asset,
     stripBasePath,
@@ -135,8 +156,9 @@ function rewriteKnownInternalBrowserUrl(raw: string, publicPath: (path: string) 
  * untouched so user content keeps its original meaning.
  */
 export function rewriteKnownInternalBrowserPaths(html: string, basePath?: string): string {
-  const publicPath = createPathConfig(basePath).publicPath;
-  if (!html || publicPath('/') === '/') return html;
+  const paths = createPathConfig(basePath);
+  const publicPath = paths.ensureBasePath;
+  if (!html || paths.basePath === '') return html;
 
   const protectedScripts: string[] = [];
   let rewritten = html.replace(

@@ -15,7 +15,7 @@ import { Fragment, useEffect, useRef, useState, type MouseEvent, type ReactNode 
 import { useT } from '../i18n';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { Icon } from '../components/Icon';
-import { publicPath } from './web-path';
+import { ensureWebBasePath } from './web-path';
 
 export type MarkdownLinkClickHandler = (
   href: string,
@@ -511,7 +511,7 @@ function isSafeMarkdownImageSrc(src: string): boolean {
 }
 
 function publicMarkdownPath(value: string): string {
-  return value.startsWith('/') && !value.startsWith('//') ? publicPath(value) : value;
+  return value.startsWith('/') && !value.startsWith('//') ? ensureWebBasePath(value) : value;
 }
 
 const INLINE_CODE_HEX_COLOR_RE = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;

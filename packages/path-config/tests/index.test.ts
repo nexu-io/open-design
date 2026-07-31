@@ -9,6 +9,7 @@ describe("normalizeBasePath", () => {
     ["open-design", "/open-design"],
     ["/open-design/", "/open-design"],
     ["/team/design", "/team/design"],
+    ["/settings", "/settings"],
   ])("normalizes %j", (input, expected) => {
     expect(normalizeBasePath(input)).toBe(expected);
   });
@@ -19,6 +20,20 @@ describe("normalizeBasePath", () => {
       expect(() => normalizeBasePath(input)).toThrow();
     },
   );
+
+  it.each([
+    "/api",
+    "/api/v2",
+    "/API",
+    "/_next",
+    "/_next/static",
+    "/artifacts",
+    "/artifacts/shared",
+    "/frames",
+    "/frames/shared",
+  ])("rejects reserved browser namespace %j", (input) => {
+    expect(() => normalizeBasePath(input)).toThrow(/reserved browser namespace/);
+  });
 });
 
 describe("createPathConfig", () => {
@@ -27,7 +42,9 @@ describe("createPathConfig", () => {
 
     expect(paths.withBasePath("/")).toBe("/open-design/");
     expect(paths.withBasePath("/api/projects?x=1")).toBe("/open-design/api/projects?x=1");
-    expect(paths.withBasePath("/open-design/api/projects")).toBe("/open-design/api/projects");
+    expect(paths.withBasePath("/open-design/api/projects")).toBe("/open-design/open-design/api/projects");
+    expect(paths.ensureBasePath("/open-design/api/projects")).toBe("/open-design/api/projects");
+    expect(paths.ensureBasePath("/api/projects?x=1")).toBe("/open-design/api/projects?x=1");
     expect(paths.stripBasePath("/open-design")).toBe("/");
     expect(paths.stripBasePath("/open-design/projects/1")).toBe("/projects/1");
     expect(paths.stripBasePath("/open-designx/projects/1")).toBeNull();
@@ -48,9 +65,17 @@ describe("createPathConfig", () => {
     const paths = createPathConfig();
 
     expect(paths.withBasePath("/api/projects")).toBe("/api/projects");
+    expect(paths.ensureBasePath("/api/projects")).toBe("/api/projects");
     expect(paths.api("/projects")).toBe("/api/projects");
     expect(paths.stripBasePath("/anything")).toBe("/anything");
     expect(paths.hasBasePath("/anything")).toBe(true);
+  });
+
+  it("prefixes an internal UI path that collides with the configured prefix", () => {
+    const paths = createPathConfig("/settings");
+
+    expect(paths.withBasePath("/settings")).toBe("/settings/settings");
+    expect(paths.ensureBasePath("/settings")).toBe("/settings");
   });
 });
 

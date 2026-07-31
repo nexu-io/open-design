@@ -1,4 +1,4 @@
-import { apiFetch, apiPath, withWebBasePath } from '@/runtime/web-path';
+import { apiFetch, apiPath, ensureWebBasePath } from '@/runtime/web-path';
 import type {
   ConnectorAuthConfigPrepareResponse,
   ConnectorDetail,
@@ -313,7 +313,7 @@ export function codexPetSpritesheetUrl(pet: CodexPetSummary): string {
   // The daemon stamps an absolute path-prefix in `spritesheetUrl`; if
   // that prefix is empty (default), it is already a same-origin path
   // we can hand to <img src> or apiFetch() as-is.
-  return withWebBasePath(pet.spritesheetUrl);
+  return ensureWebBasePath(pet.spritesheetUrl);
 }
 
 // Body for POST /api/skills/import. Mirrors the contracts type but is

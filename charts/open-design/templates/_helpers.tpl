@@ -52,14 +52,32 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
-Normalize and validate the one fixed browser-visible Web prefix. Keep this
-restricted to URL-safe path segments because the value is also rendered into
-the auth-proxy nginx configuration.
+Normalize and validate one browser-visible Web prefix. Keep this restricted to
+URL-safe path segments because the runtime value is also rendered into the
+auth-proxy nginx configuration.
 */}}
-{{- define "open-design.webBasePath" -}}
-{{- $path := .Values.config.webBasePath | default "" | trimSuffix "/" -}}
+{{- define "open-design.normalizeWebBasePath" -}}
+{{- $label := .label -}}
+{{- $path := .value | default "" | trimSuffix "/" -}}
+{{- if and $path (regexMatch "(?i)^/(api|_next|artifacts|frames)(/|$)" $path) -}}
+{{- fail (printf "%s must not start with the reserved browser namespaces /api, /_next, /artifacts, or /frames" $label) -}}
+{{- end -}}
 {{- if and $path (not (regexMatch "^/[A-Za-z0-9][A-Za-z0-9._~-]*(/[A-Za-z0-9][A-Za-z0-9._~-]*)*$" $path)) -}}
-{{- fail "config.webBasePath must be empty or a slash-prefixed path made of URL-safe segments, for example /open-design" -}}
+{{- fail (printf "%s must be empty or a slash-prefixed path made of URL-safe segments, for example /open-design" $label) -}}
 {{- end -}}
 {{- $path -}}
+{{- end }}
+
+{{/*
+Resolve the runtime prefix and require an explicit declaration that the
+selected image was built with the same OD_WEB_BASE_PATH value. The daemon's
+embedded build manifest remains the final runtime check.
+*/}}
+{{- define "open-design.webBasePath" -}}
+{{- $runtimePath := include "open-design.normalizeWebBasePath" (dict "label" "config.webBasePath" "value" .Values.config.webBasePath) -}}
+{{- $imagePath := include "open-design.normalizeWebBasePath" (dict "label" "image.webBasePath" "value" .Values.image.webBasePath) -}}
+{{- if ne $runtimePath $imagePath -}}
+{{- fail "image.webBasePath must match config.webBasePath; build and select an image with the same OD_WEB_BASE_PATH value" -}}
+{{- end -}}
+{{- $runtimePath -}}
 {{- end }}

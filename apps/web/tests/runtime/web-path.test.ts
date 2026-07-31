@@ -4,6 +4,7 @@ import {
   apiFetch,
   apiPath,
   assetPath,
+  ensureWebBasePath,
   webPathConfig,
   withWebBasePath,
 } from '../../src/runtime/web-path';
@@ -24,6 +25,7 @@ describe('web path helpers', () => {
     // behavior is pinned by the pure package tests and the Next build/e2e
     // matrix, because Vite cannot re-evaluate NEXT_PUBLIC_* substitutions.
     expect(withWebBasePath('/api/projects')).toBe('/api/projects');
+    expect(ensureWebBasePath('/api/projects')).toBe('/api/projects');
   });
 
   it('preserves native fetch arity when request init is omitted', async () => {

@@ -6,6 +6,10 @@ export function withWebBasePath(path: string): string {
   return webPathConfig.withBasePath(path);
 }
 
+export function ensureWebBasePath(path: string): string {
+  return webPathConfig.ensureBasePath(path);
+}
+
 export function apiPath(path = ''): string {
   return webPathConfig.api(path);
 }
@@ -27,17 +31,17 @@ function prefixRequestInput(input: RequestInfo | URL): RequestInfo | URL {
     // External and relative content URLs are not application routes. Only
     // root-relative paths can be safely prefixed without changing their
     // origin or document-relative semantics.
-    return input.startsWith('/') && !input.startsWith('//') ? withWebBasePath(input) : input;
+    return input.startsWith('/') && !input.startsWith('//') ? ensureWebBasePath(input) : input;
   }
   if (input instanceof URL) {
     if (typeof window === 'undefined' || input.origin !== window.location.origin) return input;
-    return new URL(withWebBasePath(`${input.pathname}${input.search}${input.hash}`), input.origin);
+    return new URL(ensureWebBasePath(`${input.pathname}${input.search}${input.hash}`), input.origin);
   }
 
   const url = new URL(input.url);
   if (typeof window === 'undefined' || url.origin !== window.location.origin) return input;
   return new Request(
-    new URL(withWebBasePath(`${url.pathname}${url.search}${url.hash}`), url.origin),
+    new URL(ensureWebBasePath(`${url.pathname}${url.search}${url.hash}`), url.origin),
     input,
   );
 }
@@ -49,5 +53,5 @@ export function apiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<
 }
 
 export function apiEventSource(path: string, eventSourceInitDict?: EventSourceInit): EventSource {
-  return new EventSource(withWebBasePath(path), eventSourceInitDict);
+  return new EventSource(ensureWebBasePath(path), eventSourceInitDict);
 }
