@@ -12,6 +12,9 @@
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { createMcpExpressApp } from '@modelcontextprotocol/sdk/server/express.js';
+import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import {
   CallToolRequestSchema,
   ListResourcesRequestSchema,
@@ -74,6 +77,12 @@ export const MCP_SERVER_INSTRUCTIONS = [
 
 type JsonObject = Record<string, unknown>;
 interface RunMcpOptions { daemonUrl: string | URL }
+export interface RunMcpHttpOptions extends RunMcpOptions {
+  host?: string;
+  port?: number;
+  maxSessions?: number;
+  sessionIdleTimeoutMs?: number;
+}
 interface CatalogItem { id: string; name?: string; title?: string; description?: string; summary?: string }
 interface SkillsPayload { skills?: CatalogItem[] }
 interface PluginsPayload { plugins?: CatalogItem[] }
@@ -1543,19 +1552,21 @@ function mcpDeliveryFacts(
   };
 }
 
-export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
+interface CreateOpenDesignMcpServerOptions extends RunMcpOptions {
+  trackRequest?: <T>(fn: () => T | Promise<T>) => Promise<T>;
+}
+
+export function createOpenDesignMcpServer({
+  daemonUrl,
+  trackRequest,
+}: CreateOpenDesignMcpServerOptions): Server {
   const baseUrl = String(daemonUrl).replace(/\/$/, '');
   const briefStore = createLocalMcpBriefStore();
   let observabilityPromise: Promise<McpObservabilitySession> | null = null;
-  let closeTransportForIdle: (() => void) | null = null;
-  const idleExit = _createMcpIdleExitController({
-    idleMs: MCP_STDIO_IDLE_EXIT_MS,
-    onIdle: () => closeTransportForIdle?.(),
-  });
   const withMcpActivity =
     <Args extends unknown[], Result>(handler: (...args: Args) => Result | Promise<Result>) =>
       (...args: Args) =>
-        idleExit.trackRequest(() => handler(...args));
+        trackRequest ? trackRequest(() => handler(...args)) : handler(...args);
 
   const server = new Server(
     { name: SERVER_NAME, version: SERVER_VERSION },
@@ -1791,6 +1802,20 @@ export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
     );
   }));
 
+  return server;
+}
+
+export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
+  let closeTransportForIdle: (() => void) | null = null;
+  const idleExit = _createMcpIdleExitController({
+    idleMs: MCP_STDIO_IDLE_EXIT_MS,
+    onIdle: () => closeTransportForIdle?.(),
+  });
+  const server = createOpenDesignMcpServer({
+    daemonUrl,
+    trackRequest: (fn) => idleExit.trackRequest(fn),
+  });
+
   const transport = new StdioServerTransport();
   try {
     closeTransportForIdle = () => {
@@ -1831,6 +1856,147 @@ export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
     idleExit.dispose();
     closeTransportForIdle = null;
   }
+}
+
+interface HttpMcpSession {
+  server: Server;
+  transport: StreamableHTTPServerTransport;
+  lastSeenAt: number;
+}
+
+export async function runMcpHttp({
+  daemonUrl,
+  host = '127.0.0.1',
+  port = 7457,
+  maxSessions = 64,
+  sessionIdleTimeoutMs = 30 * 60 * 1000,
+}: RunMcpHttpOptions): Promise<void> {
+  if (!['127.0.0.1', '::1', 'localhost'].includes(host)) {
+    throw new Error(
+      `refusing non-loopback MCP HTTP bind (${host}); use a loopback host`,
+    );
+  }
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error('--port must be an integer between 1 and 65535');
+  }
+  if (!Number.isInteger(maxSessions) || maxSessions < 1) {
+    throw new Error('--max-sessions must be a positive integer');
+  }
+  if (!Number.isFinite(sessionIdleTimeoutMs) || sessionIdleTimeoutMs < 1_000) {
+    throw new Error('--session-idle-timeout must be at least 1 second');
+  }
+
+  const app = createMcpExpressApp({ host });
+  const sessions = new Map<string, HttpMcpSession>();
+
+  const closeSession = async (sessionId: string) => {
+    const session = sessions.get(sessionId);
+    if (!session) return;
+    sessions.delete(sessionId);
+    await session.transport.close().catch(() => {});
+    await session.server.close().catch(() => {});
+  };
+
+  const createSession = async (): Promise<HttpMcpSession> => {
+    if (sessions.size >= maxSessions) {
+      throw new Error(`maximum MCP session count reached (${maxSessions})`);
+    }
+    const server = createOpenDesignMcpServer({ daemonUrl });
+    let initializedSessionId: string | undefined;
+    const transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: () => randomUUID(),
+      onsessioninitialized: (sessionId) => {
+        initializedSessionId = sessionId;
+        sessions.set(sessionId, { server, transport, lastSeenAt: Date.now() });
+      },
+    });
+    transport.onclose = () => {
+      if (initializedSessionId) sessions.delete(initializedSessionId);
+    };
+    // SDK 1.29's Node HTTP wrapper declares optional callback accessors in a
+    // way that conflicts with exactOptionalPropertyTypes, although it
+    // implements the same Transport contract at runtime.
+    await server.connect(transport as unknown as Transport);
+    return { server, transport, lastSeenAt: Date.now() };
+  };
+
+  app.all('/mcp', async (req, res) => {
+    const sessionId = req.headers['mcp-session-id'];
+    const normalizedSessionId =
+      typeof sessionId === 'string' && sessionId.length > 0
+        ? sessionId
+        : undefined;
+    let session = normalizedSessionId
+      ? sessions.get(normalizedSessionId)
+      : undefined;
+
+    if (normalizedSessionId && !session) {
+      res.status(404).json({
+        jsonrpc: '2.0',
+        error: { code: -32001, message: 'MCP session not found' },
+        id: null,
+      });
+      return;
+    }
+    if (!normalizedSessionId && req.method !== 'POST') {
+      res.status(400).json({
+        jsonrpc: '2.0',
+        error: { code: -32000, message: 'MCP session ID required' },
+        id: null,
+      });
+      return;
+    }
+
+    try {
+      session ??= await createSession();
+      session.lastSeenAt = Date.now();
+      await session.transport.handleRequest(req, res, req.body);
+      if (req.method === 'DELETE' && normalizedSessionId) {
+        sessions.delete(normalizedSessionId);
+        await session.transport.close().catch(() => {});
+        await session.server.close().catch(() => {});
+      }
+    } catch (error) {
+      if (!res.headersSent) {
+        res.status(503).json({
+          jsonrpc: '2.0',
+          error: {
+            code: -32000,
+            message: error instanceof Error ? error.message : String(error),
+          },
+          id: null,
+        });
+      }
+    }
+  });
+
+  const cleanupTimer = setInterval(() => {
+    const cutoff = Date.now() - sessionIdleTimeoutMs;
+    for (const [sessionId, session] of sessions) {
+      if (session.lastSeenAt < cutoff) void closeSession(sessionId);
+    }
+  }, Math.min(sessionIdleTimeoutMs, 60_000));
+  cleanupTimer.unref();
+
+  const listener = await new Promise<import('node:http').Server>((resolve, reject) => {
+    const candidate = app.listen(port, host, () => resolve(candidate));
+    candidate.once('error', reject);
+  });
+  process.stderr.write(`Open Design MCP listening on http://${host}:${port}/mcp\n`);
+
+  await new Promise<void>((resolve) => {
+    let closing = false;
+    const shutdown = () => {
+      if (closing) return;
+      closing = true;
+      clearInterval(cleanupTimer);
+      void Promise.all([...sessions.keys()].map(closeSession)).finally(() => {
+        listener.close(() => resolve());
+      });
+    };
+    process.once('SIGINT', shutdown);
+    process.once('SIGTERM', shutdown);
+  });
 }
 
 function ok(payload: unknown): McpToolCallResult {
