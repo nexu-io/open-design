@@ -342,7 +342,52 @@ function iterateCssRules(css: string): CssRule[] {
     // Find the next '{' that opens a rule body. Skip '@container' at-rule
     // bodies (their inner rules are emitted with the at-rule header stripped,
     // matching stripContainerAtRuleHeaders behaviour).
-    const openIndex = css.indexOf('{', index);
+    //
+    // Quote-aware scan (PR #6250 reviewer #4): a `{` that appears inside a
+    // quoted selector context — e.g. `.btn-a[data-icon="{"]` — must NOT be
+    // treated as the rule opener. We walk from `index` tracking single /
+    // double quote state and backslash escapes, ignoring `{` / `}` that
+    // appear inside a quoted string, so the first un-quoted `{` we find is
+    // the real rule-body opener. Without this, valid CSS such as
+    // `.btn-a[data-icon="{"] { color: var(--a); }` mistreats the brace
+    // inside the attribute value as the opener and `manifest.selectors`
+    // silently drops both rules.
+    let openIndex = -1;
+    let quoteScan = index;
+    let inQuote: '"' | "'" | null = null;
+    while (quoteScan < length) {
+      const ch = css[quoteScan];
+      if (ch === '/' && css[quoteScan + 1] === '*') {
+        // Skip a /* ... */ comment block so braces inside comments do not
+        // perturb the quote scan.
+        const closeIdx = css.indexOf('*/', quoteScan + 2);
+        quoteScan = closeIdx === -1 ? length : closeIdx + 2;
+        continue;
+      }
+      if (inQuote !== null) {
+        if (ch === '\\') {
+          quoteScan += 2;
+          continue;
+        }
+        if (ch === inQuote) {
+          inQuote = null;
+          quoteScan += 1;
+          continue;
+        }
+        quoteScan += 1;
+        continue;
+      }
+      if (ch === '"' || ch === "'") {
+        inQuote = ch;
+        quoteScan += 1;
+        continue;
+      }
+      if (ch === '{') {
+        openIndex = quoteScan;
+        break;
+      }
+      quoteScan += 1;
+    }
     if (openIndex === -1) break;
 
     const selectorList = css.slice(index, openIndex).trim();
@@ -360,7 +405,7 @@ function iterateCssRules(css: string): CssRule[] {
     // Track the open CSS quote (single or double) so braces inside a
     // quoted value such as `content: "}"` are not mistaken for the rule
     // terminator (PR #6250 reviewer #3). null = outside any quoted string.
-    let inQuote: '"' | "'" | null = null;
+    let bodyInQuote: '"' | "'" | null = null;
     while (cursor < length) {
       const char = css[cursor];
       if (char === '/' && css[cursor + 1] === '*') {
@@ -377,14 +422,14 @@ function iterateCssRules(css: string): CssRule[] {
       // ignore `{` / `}` that appear between a pair of quotes. Handle
       // escaped quotes \" and \' so a `}` preceded by \" doesn't escape
       // the quoted context.
-      if (inQuote === '"' || inQuote === "'") {
+      if (bodyInQuote === '"' || bodyInQuote === "'") {
         if (char === '\\') {
           // Skip the escaped character (could be \" or \' or any escape).
           cursor += 2;
           continue;
         }
-        if (char === inQuote) {
-          inQuote = null;
+        if (char === bodyInQuote) {
+          bodyInQuote = null;
           cursor += 1;
           continue;
         }
@@ -394,7 +439,7 @@ function iterateCssRules(css: string): CssRule[] {
         continue;
       }
       if (char === '"' || char === "'") {
-        inQuote = char;
+        bodyInQuote = char;
         cursor += 1;
         continue;
       }
