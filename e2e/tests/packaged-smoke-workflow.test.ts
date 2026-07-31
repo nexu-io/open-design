@@ -255,12 +255,20 @@ if (process.argv.includes("--jq")) {
   }
 }
 
-async function runRunners(mode?: string): Promise<Record<string, string>> {
+async function runRunners(
+  mode?: string,
+  options: { controlFallback?: boolean } = {},
+): Promise<Record<string, string>> {
   const env = { ...process.env };
   if (mode === undefined) {
     delete env.OD_CI_RUNNER_MODE;
   } else {
     env.OD_CI_RUNNER_MODE = mode;
+  }
+  if (options.controlFallback) {
+    env.OD_CI_CONTROL_FALLBACK = "1";
+  } else {
+    delete env.OD_CI_CONTROL_FALLBACK;
   }
   delete env.GITHUB_OUTPUT;
 
@@ -289,8 +297,14 @@ function runnerOutput(profiles: Record<string, string>, key: string): string {
   return value;
 }
 
-function runnerDecision(profiles: Record<string, string>): { schema_version: number; mode: string } {
-  return JSON.parse(runnerOutput(profiles, "decision")) as { schema_version: number; mode: string };
+function runnerDecision(
+  profiles: Record<string, string>,
+): { schema_version: number; mode: string; control_fallback: boolean } {
+  return JSON.parse(runnerOutput(profiles, "decision")) as {
+    schema_version: number;
+    mode: string;
+    control_fallback: boolean;
+  };
 }
 
 function runnerRunsOn(profiles: Record<string, string>): Record<string, string[]> {
@@ -1374,7 +1388,7 @@ process.stdin.on("end", () => {
   it("[P2] resolves CI runner profiles by mode", async () => {
     const defaultProfiles = await runRunners();
     const defaultRunsOn = runnerRunsOn(defaultProfiles);
-    expect(runnerDecision(defaultProfiles)).toEqual({ schema_version: 1, mode: "default" });
+    expect(runnerDecision(defaultProfiles)).toEqual({ schema_version: 1, mode: "default", control_fallback: false });
     expect(Object.keys(defaultRunsOn).sort()).toEqual([
       "control",
       "general_medium",
@@ -1401,7 +1415,7 @@ process.stdin.on("end", () => {
 
     const performanceProfiles = await runRunners("performance");
     const performanceRunsOn = runnerRunsOn(performanceProfiles);
-    expect(runnerDecision(performanceProfiles)).toEqual({ schema_version: 1, mode: "performance" });
+    expect(runnerDecision(performanceProfiles)).toEqual({ schema_version: 1, mode: "performance", control_fallback: false });
     expect(performanceRunsOn.control).toEqual(["nexu-runners-small"]);
     expect(performanceRunsOn.general_medium).toEqual(["nexu-runners-medium"]);
     expect(performanceRunsOn.workspace_unit).toEqual(["nexu-runners-medium"]);
@@ -1414,7 +1428,7 @@ process.stdin.on("end", () => {
 
     const blacksmithProfiles = await runRunners("blacksmith");
     const blacksmithRunsOn = runnerRunsOn(blacksmithProfiles);
-    expect(runnerDecision(blacksmithProfiles)).toEqual({ schema_version: 1, mode: "blacksmith" });
+    expect(runnerDecision(blacksmithProfiles)).toEqual({ schema_version: 1, mode: "blacksmith", control_fallback: false });
     expect(blacksmithRunsOn.control).toEqual(["blacksmith-4vcpu-ubuntu-2404"]);
     expect(blacksmithRunsOn.general_medium).toEqual(["blacksmith-4vcpu-ubuntu-2404"]);
     expect(blacksmithRunsOn.workspace_unit).toEqual(["blacksmith-4vcpu-ubuntu-2404"]);
@@ -1427,7 +1441,7 @@ process.stdin.on("end", () => {
 
     const economicProfiles = await runRunners("economic");
     const economicRunsOn = runnerRunsOn(economicProfiles);
-    expect(runnerDecision(economicProfiles)).toEqual({ schema_version: 1, mode: "economic" });
+    expect(runnerDecision(economicProfiles)).toEqual({ schema_version: 1, mode: "economic", control_fallback: false });
     expect(economicRunsOn.control).toEqual(["ubuntu-24.04"]);
     expect(economicRunsOn.general_medium).toEqual(["ubuntu-24.04"]);
     expect(economicRunsOn.workspace_unit).toEqual(["ubuntu-24.04"]);
@@ -1440,7 +1454,7 @@ process.stdin.on("end", () => {
 
     for (const invalidMode of ["Economic", " economic "]) {
       const fallbackProfiles = await runRunners(invalidMode);
-      expect(runnerDecision(fallbackProfiles)).toEqual({ schema_version: 1, mode: "default" });
+      expect(runnerDecision(fallbackProfiles)).toEqual({ schema_version: 1, mode: "default", control_fallback: false });
       expect(runnerRunsOn(fallbackProfiles).control).toEqual(["nexu-runners-small"]);
     }
   });
@@ -1451,6 +1465,31 @@ process.stdin.on("end", () => {
     });
     expect(stderr).toBe("");
     expect(stdout).toContain("rerun_infra_cancel self-check OK");
+  });
+
+  it("[P2] control fallback routes only the control profile to GitHub-hosted", async () => {
+    const fallbackProfiles = await runRunners(undefined, { controlFallback: true });
+    const fallbackRunsOn = runnerRunsOn(fallbackProfiles);
+    expect(runnerDecision(fallbackProfiles)).toEqual({
+      schema_version: 1,
+      mode: "default",
+      control_fallback: true,
+    });
+    expect(fallbackRunsOn.control).toEqual(["ubuntu-24.04"]);
+    expect(fallbackRunsOn.general_medium).toEqual(["nexu-runners-medium"]);
+    expect(fallbackRunsOn.workspace_unit).toEqual(["nexu-runners-medium"]);
+    expect(fallbackRunsOn.windows_tools).toEqual(["windows-latest"]);
+    expect(fallbackRunsOn.js_hot).toEqual(["nexu-runners-medium"]);
+    expect(fallbackRunsOn.ui_hot).toEqual(["nexu-runners-large"]);
+    expect(fallbackRunsOn.visual_hot).toEqual(["nexu-runners-large"]);
+
+    // A non-default mode still only flips control; the other tiers stay mode-driven.
+    const blacksmithFallbackRunsOn = runnerRunsOn(
+      await runRunners("blacksmith", { controlFallback: true }),
+    );
+    expect(blacksmithFallbackRunsOn.control).toEqual(["ubuntu-24.04"]);
+    expect(blacksmithFallbackRunsOn.general_medium).toEqual(["blacksmith-4vcpu-ubuntu-2404"]);
+    expect(blacksmithFallbackRunsOn.js_hot).toEqual(["blacksmith-4vcpu-ubuntu-2404"]);
   });
 
   it("[P2] routes CI follow-ons through generic handoff workflows", async () => {
