@@ -610,6 +610,21 @@ export function reconcileConversationRecoveryGlobalError(
     ? nextConversationError
     : current;
 }
+export function createConversationMaterializationGenerationController() {
+  let current = 0;
+  return {
+    begin(): number {
+      current += 1;
+      return current;
+    },
+    invalidate(generation: number): void {
+      if (current === generation) current += 1;
+    },
+    isCurrent(generation: number): boolean {
+      return current === generation;
+    },
+  };
+}
 // Trailing-debounce window for the canonical (daemon + SQLite) tab-state write.
 // Embedded-browser navigation bursts settle well within this; the local cache
 // is written immediately so nothing is lost if the daemon write is coalesced.
@@ -1924,7 +1939,13 @@ export function ProjectView({
   const [conversationLoadError, setConversationLoadError] = useState<string | null>(null);
   const conversationMaterializationRecoveryRef =
     useRef<ConversationMaterializationRecovery | null>(null);
-  const conversationMaterializationGenerationRef = useRef(0);
+  const conversationMaterializationGenerationControllerRef =
+    useRef<ReturnType<typeof createConversationMaterializationGenerationController> | null>(null);
+  const conversationMaterializationGenerationController =
+    conversationMaterializationGenerationControllerRef.current
+    ?? createConversationMaterializationGenerationController();
+  conversationMaterializationGenerationControllerRef.current =
+    conversationMaterializationGenerationController;
   const conversationMaterializationRecoveryInFlightRef =
     useRef<ConversationMaterializationRecovery | null>(null);
   const [messageLoadRetryNonce, setMessageLoadRetryNonce] = useState(0);
@@ -2354,7 +2375,7 @@ export function ProjectView({
   // dropped), create one on the fly.
   useEffect(() => {
     let cancelled = false;
-    const generation = ++conversationMaterializationGenerationRef.current;
+    const generation = conversationMaterializationGenerationController.begin();
     const requestWorkspaceContext = projectRunWorkspaceContextRef.current;
     conversationMaterializationRecoveryRef.current = null;
     setPendingEmptyConversationSeed(null);
@@ -2428,9 +2449,7 @@ export function ProjectView({
     })();
     return () => {
       cancelled = true;
-      if (conversationMaterializationGenerationRef.current === generation) {
-        conversationMaterializationGenerationRef.current += 1;
-      }
+      conversationMaterializationGenerationController.invalidate(generation);
       if (
         conversationMaterializationRecoveryRef.current?.generation
         === generation
@@ -2438,7 +2457,11 @@ export function ProjectView({
         conversationMaterializationRecoveryRef.current = null;
       }
     };
-  }, [project.id, projectRunAuthorityKey]);
+  }, [
+    conversationMaterializationGenerationController,
+    project.id,
+    projectRunAuthorityKey,
+  ]);
 
   const recoverMaterializedConversations = useCallback(async (
     signalProjectId: string,
@@ -2448,7 +2471,7 @@ export function ProjectView({
     if (!recovery) return;
     if (recovery.projectId !== signalProjectId) return;
     if (recovery.authorityKey !== signalAuthorityKey) return;
-    if (conversationMaterializationGenerationRef.current !== recovery.generation) return;
+    if (!conversationMaterializationGenerationController.isCurrent(recovery.generation)) return;
     if (projectIdRef.current !== recovery.projectId) return;
     if (projectRunAuthorityKeyRef.current !== recovery.authorityKey) return;
     if (conversationMaterializationRecoveryInFlightRef.current === recovery) return;
@@ -2462,7 +2485,7 @@ export function ProjectView({
         workspaceContext: recovery.workspaceContext,
       });
       if (conversationMaterializationRecoveryRef.current !== recovery) return;
-      if (conversationMaterializationGenerationRef.current !== recovery.generation) return;
+      if (!conversationMaterializationGenerationController.isCurrent(recovery.generation)) return;
       if (projectIdRef.current !== recovery.projectId) return;
       if (projectRunAuthorityKeyRef.current !== recovery.authorityKey) return;
 
@@ -2489,7 +2512,7 @@ export function ProjectView({
       setActiveConversationId(routedMatch ? routedMatch.id : list[0]!.id);
     } catch (err) {
       if (conversationMaterializationRecoveryRef.current !== recovery) return;
-      if (conversationMaterializationGenerationRef.current !== recovery.generation) return;
+      if (!conversationMaterializationGenerationController.isCurrent(recovery.generation)) return;
       if (projectIdRef.current !== recovery.projectId) return;
       if (projectRunAuthorityKeyRef.current !== recovery.authorityKey) return;
       if (
@@ -2499,8 +2522,8 @@ export function ProjectView({
         return;
       }
       // A completion signal exposed a settled non-404 failure. Stop treating
-      // it as a materialization race; a later project/authority load owns any
-      // further retry and error presentation.
+      // it as a materialization race and surface that exact response now; a
+      // later project/authority load owns only any further retry.
       conversationMaterializationRecoveryRef.current = null;
       const message = err instanceof Error
         ? err.message
@@ -2516,7 +2539,10 @@ export function ProjectView({
         conversationMaterializationRecoveryInFlightRef.current = null;
       }
     }
-  }, [routeConversationId]);
+  }, [
+    conversationMaterializationGenerationController,
+    routeConversationId,
+  ]);
 
   const previousConversationRecoveryDownloadRef = useRef<{
     projectId: string;

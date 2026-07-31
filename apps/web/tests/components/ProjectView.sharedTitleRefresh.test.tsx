@@ -6,6 +6,7 @@ import type { WorkspaceCollabContext } from '@open-design/contracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  createConversationMaterializationGenerationController,
   ProjectView,
   reconcileConversationRecoveryGlobalError,
   reconcileProjectDetail,
@@ -830,6 +831,19 @@ describe('ProjectView shared-project title refresh on project-metadata-changed',
     });
 
     expect(mockedListMessages).not.toHaveBeenCalled();
+  });
+
+  it('invalidates a captured recovery generation during lifecycle cleanup', () => {
+    const controller = createConversationMaterializationGenerationController();
+    const unmountedGeneration = controller.begin();
+    expect(controller.isCurrent(unmountedGeneration)).toBe(true);
+
+    controller.invalidate(unmountedGeneration);
+
+    expect(controller.isCurrent(unmountedGeneration)).toBe(false);
+    const remountedGeneration = controller.begin();
+    expect(remountedGeneration).toBeGreaterThan(unmountedGeneration);
+    expect(controller.isCurrent(remountedGeneration)).toBe(true);
   });
 
   it('does not let an old A request swallow the only completion signal after A to B to A', async () => {
