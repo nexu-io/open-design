@@ -344,6 +344,8 @@ describe("DesignFilesPanel selection", () => {
           viewerOnly: false,
           writerAuthority: 'allowed',
           isOwner: true,
+          isEffectiveOwner: true,
+          isSharedNonOwner: false,
           ownerDisplayName: null,
           ownerRole: null,
           downloadPending: false,

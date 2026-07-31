@@ -301,6 +301,8 @@ function collabValue(workspaceContext: WorkspaceCollabContext): CollabContextVal
     viewerOnly: false,
     writerAuthority: 'allowed',
     isOwner: true,
+    isEffectiveOwner: true,
+    isSharedNonOwner: false,
     ownerDisplayName: null,
     ownerRole: null,
     downloadPending: false,

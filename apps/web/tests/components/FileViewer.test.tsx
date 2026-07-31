@@ -150,6 +150,8 @@ function projectWorkspaceCollabValue(
     viewerOnly: false,
     writerAuthority: 'allowed',
     isOwner: false,
+    isEffectiveOwner: false,
+    isSharedNonOwner: false,
     ownerDisplayName: null,
     ownerRole: null,
     downloadPending: false,

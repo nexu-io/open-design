@@ -78,6 +78,8 @@ function renderProjectFileViewer(
     viewerOnly: props.viewerOnly === true,
     writerAuthority: props.viewerOnly === true ? 'denied' : 'allowed',
     isOwner: props.viewerOnly !== true,
+    isEffectiveOwner: props.viewerOnly !== true,
+    isSharedNonOwner: props.viewerOnly === true,
     ownerDisplayName: null,
     ownerRole: null,
     downloadPending: false,

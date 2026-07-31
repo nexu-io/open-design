@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -122,8 +122,26 @@ vi.mock('../../src/components/AvatarMenu', () => ({
 
 vi.mock('../../src/components/FileWorkspace', () => ({
   DESIGN_SYSTEM_TAB: '__design_system__',
-  FileWorkspace: ({ projectName }: { projectName: string }) => (
-    <div data-project-name={projectName} data-testid="file-workspace" />
+  FileWorkspace: ({
+    projectName,
+    focusMode = false,
+    onFocusModeChange,
+  }: {
+    projectName: string;
+    focusMode?: boolean;
+    onFocusModeChange?: (focused: boolean) => void;
+  }) => (
+    <div data-project-name={projectName} data-testid="file-workspace">
+      {focusMode ? (
+        <button
+          type="button"
+          data-testid="workspace-focus-toggle"
+          onClick={() => onFocusModeChange?.(false)}
+        >
+          show chat
+        </button>
+      ) : null}
+    </div>
   ),
 }));
 
@@ -203,7 +221,7 @@ function sharedMemberCollab(overrides?: Partial<ProjectCollab>): ProjectCollab {
   };
 }
 
-function renderProjectView(
+function projectViewElement(
   projectOverride: Project = project,
   options: {
     authoritativeProjectName?: string;
@@ -213,7 +231,7 @@ function renderProjectView(
     ) => Promise<ProjectNameAuthorityResolution>;
   } = {},
 ) {
-  return render(
+  return (
     <ProjectView
       project={projectOverride}
       projectAuthorizationKey="ws-1:wm-1:project-1"
@@ -236,8 +254,21 @@ function renderProjectView(
       onTouchProject={vi.fn()}
       onProjectChange={onProjectChangeMock}
       onProjectsRefresh={vi.fn()}
-    />,
+    />
   );
+}
+
+function renderProjectView(
+  projectOverride: Project = project,
+  options: {
+    authoritativeProjectName?: string;
+    resolveAuthoritativeProjectName?: (
+      projectId: string,
+      expectedAuthorizationKey: string,
+    ) => Promise<ProjectNameAuthorityResolution>;
+  } = {},
+) {
+  return render(projectViewElement(projectOverride, options));
 }
 
 function dispatchProjectEvent(evt: ProjectEvent) {
@@ -268,6 +299,25 @@ describe('ProjectView shared-project title refresh on project-metadata-changed',
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
+  });
+
+  it('lets a shared non-owner reopen chat without a collab rerender collapsing it again', async () => {
+    const view = renderProjectView();
+
+    await waitFor(() => {
+      expect(document.querySelector('.split')).toHaveClass('split-focus');
+    });
+    fireEvent.click(screen.getByTestId('workspace-focus-toggle'));
+    expect(document.querySelector('.split')).not.toHaveClass('split-focus');
+
+    mockedUseProjectCollab.mockReturnValue(sharedMemberCollab({
+      publishedVersion: 4,
+      present: [{ memberId: 'member-2', name: 'Teammate' }],
+    }));
+    view.rerender(projectViewElement());
+
+    expect(document.querySelector('.split')).not.toHaveClass('split-focus');
+    expect(screen.queryByTestId('workspace-focus-toggle')).toBeNull();
   });
 
   // recvqhwv6RPU1j: a member's first open of a team-shared project registers a

@@ -377,8 +377,12 @@ export function useProjectCollab(
     );
   // Status-confirmed ownership OR catalog/session shortcuts (issue #99 path).
   const isEffectiveOwner = isOwner || knownOwnedByViewer || createdByViewerThisSession;
-  // Once `/collab/status` has EXPLICITLY confirmed this project belongs to
-  // someone else (shared && !isOwner), remember it for as long as this
+  const statusNamedDifferentOwner =
+    collab.ownerMemberId != null
+    && context?.workspaceMemberId != null
+    && collab.ownerMemberId !== context.workspaceMemberId;
+  // Once the catalog or `/collab/status` has EXPLICITLY named another member
+  // as this project's owner, remember it for as long as this
   // component stays mounted on this projectId. The owner unsharing later
   // makes `/collab/status` regress to the exact same shape as a project that
   // was NEVER shared (syncState: 'local_only', ownerMemberId: null) —
@@ -397,11 +401,19 @@ export function useProjectCollab(
   ) {
     confirmedOwnedBySomeoneElseRef.current = null;
   }
-  if (shared && !isOwner && projectId) {
+  if (
+    projectId
+    && (
+      knownOwnedBySomeoneElse
+      || (shared && statusNamedDifferentOwner)
+    )
+  ) {
     confirmedOwnedBySomeoneElseRef.current = relationshipScopeKey;
   }
   const lostAccessAfterUnshare =
-    confirmedOwnedBySomeoneElseRef.current === relationshipScopeKey && !isOwner;
+    confirmedOwnedBySomeoneElseRef.current === relationshipScopeKey
+    && collab.syncState === 'local_only'
+    && !isOwner;
   // The project-level (single-writer) gate. Catalog ownership and the
   // same-session creation marker are provisional evidence used only while
   // status is UNKNOWN, removing the on-open flash. Once daemon status resolves,
@@ -427,10 +439,6 @@ export function useProjectCollab(
   // Positive non-owner evidence only — sticky UX (default-collapsed chat) must
   // not latch on `shared && !isOwner` while ownerMemberId is still missing from
   // an otherwise-shared status payload for the real owner.
-  const statusNamedDifferentOwner =
-    collab.ownerMemberId != null
-    && context?.workspaceMemberId != null
-    && collab.ownerMemberId !== context.workspaceMemberId;
   const isSharedNonOwner =
     !isEffectiveOwner
     && (knownOwnedBySomeoneElse

@@ -84,6 +84,8 @@ function renderWithWorkspace(ui: React.ReactElement, workspaceContext: Workspace
     viewerOnly: false,
     writerAuthority: 'allowed',
     isOwner: true,
+    isEffectiveOwner: true,
+    isSharedNonOwner: false,
     ownerDisplayName: null,
     ownerRole: 'owner',
     downloadPending: false,

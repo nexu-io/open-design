@@ -236,6 +236,34 @@ describe('useProjectCollab workspace-context seeding', () => {
     expect(project.result.current.isSharedNonOwner).toBe(false);
   });
 
+  it('does not infer shared non-owner from a cold catalog and status without ownerMemberId', async () => {
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const pathname = new URL(String(input), 'http://d.local').pathname;
+      if (pathname.endsWith('/collab/status')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ publishedVersion: 2, syncState: 'synced' }),
+        } as unknown as Response;
+      }
+      return { ok: true, status: 200, json: async () => ({}) } as unknown as Response;
+    }) as typeof fetch;
+
+    const project = renderHook(() => useProjectCollab('p-owner-unknown', {
+      workspaceContext: TEAM_CONTEXT,
+    }));
+    await waitFor(() => {
+      expect(project.result.current.syncState).toBe('synced');
+    });
+
+    // Missing owner identity must remain fail-closed for mutations, but it is
+    // not positive evidence that this viewer is someone else's project member.
+    expect(project.result.current.viewerOnly).toBe(true);
+    expect(project.result.current.writerAuthority).toBe('denied');
+    expect(project.result.current.isEffectiveOwner).toBe(false);
+    expect(project.result.current.isSharedNonOwner).toBe(false);
+  });
+
   it('marks a catalog-named teammate project as shared non-owner before status names them', async () => {
     await warmCaches([
       {
