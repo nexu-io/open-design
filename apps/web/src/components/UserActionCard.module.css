@@ -1,4 +1,8 @@
 .card {
+  /* ChatPane width is independent of the viewport — stack head actions off
+     the card's own inline size via @container, not @media (max-width). */
+  container-type: inline-size;
+  container-name: user-action-card;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -52,7 +56,10 @@
   font-weight: 600;
   line-height: 1.4;
   color: var(--text-strong);
-  overflow-wrap: anywhere;
+  /* Prefer soft breaks over `anywhere` so a squeezed title does not stack
+     every CJK character on its own line (vertical "模型调用失败…" flash). */
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 .actions {
@@ -62,6 +69,14 @@
   justify-content: flex-end;
   gap: 7px;
   min-width: 0;
+  /* Cap so a long localized CTA cannot steal the entire title track. */
+  max-width: min(100%, 16rem);
+}
+
+.actions > * {
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
 }
 
 .footer {
@@ -158,6 +173,20 @@
   }
 }
 
+/* Prefer the card's own width: a desktop split with a ~320px ChatPane never
+   matches viewport max-width:560px, so head CTAs must reflow via @container. */
+@container user-action-card (max-width: 420px) {
+  .head {
+    grid-template-columns: 24px minmax(0, 1fr);
+  }
+
+  .actions {
+    grid-column: 2 / -1;
+    justify-content: flex-start;
+    max-width: 100%;
+  }
+}
+
 @media (max-width: 560px) {
   .head {
     grid-template-columns: 24px minmax(0, 1fr);
@@ -166,6 +195,7 @@
   .actions {
     grid-column: 2;
     justify-content: flex-start;
+    max-width: 100%;
   }
 
   .footerActions {
