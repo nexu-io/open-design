@@ -3956,7 +3956,24 @@ export function FileWorkspace({
           <div
             data-testid="retained-file-viewer"
             aria-hidden={viewerFileActive ? undefined : true}
-            style={{ display: viewerFileActive ? 'contents' : 'none' }}
+            style={{
+              display: 'flex',
+              flex: viewerFileActive ? '1 1 auto' : undefined,
+              flexDirection: 'column',
+              minHeight: 0,
+              ...(viewerFileActive
+                ? {}
+                : {
+                    position: 'absolute',
+                    left: '-100000px',
+                    top: 0,
+                    width: 1,
+                    height: 1,
+                    overflow: 'hidden',
+                    visibility: 'hidden',
+                    pointerEvents: 'none',
+                  }),
+            }}
           >
             <FileViewer
               key={`${projectId}:${viewerFile.name}`}

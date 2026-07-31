@@ -1370,14 +1370,24 @@ describe('FileWorkspace launcher tab creation', () => {
       expect(mockedFetchProjectFileText).toHaveBeenCalledTimes(1);
     });
     const firstFrame = screen.getByTestId('artifact-preview-frame');
+    const retainedViewer = screen.getByTestId('retained-file-viewer');
+    expect(retainedViewer.style.display).toBe('flex');
 
     for (let round = 0; round < 10; round += 1) {
       fireEvent.click(screen.getByTestId('design-files-tab'));
-      expect(screen.getByTestId('retained-file-viewer').getAttribute('aria-hidden')).toBe('true');
+      expect(screen.getByTestId('retained-file-viewer')).toBe(retainedViewer);
+      expect(retainedViewer.getAttribute('aria-hidden')).toBe('true');
+      expect(retainedViewer.hasAttribute('hidden')).toBe(false);
+      expect(retainedViewer.style.display).toBe('flex');
+      expect(retainedViewer.style.position).toBe('absolute');
+      expect(retainedViewer.style.visibility).toBe('hidden');
       expect(container.querySelector('.iframe-keep-alive-pool iframe')).toBeNull();
 
       fireEvent.click(screen.getByRole('tab', { name: /artifact\.html/i }));
       expect(screen.getByTestId('artifact-preview-frame')).toBe(firstFrame);
+      expect(screen.getByTestId('retained-file-viewer')).toBe(retainedViewer);
+      expect(retainedViewer.style.display).toBe('flex');
+      expect(retainedViewer.style.visibility).toBe('');
     }
 
     expect(mockedFetchProjectFileText).toHaveBeenCalledTimes(1);
