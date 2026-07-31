@@ -19,6 +19,10 @@ import {
   shouldInstallInternalPackageForMacPrebundle,
   shouldUseMacStandalonePrebundle,
 } from "../mac-prebundle.js";
+import {
+  prepareNodePtyRuntime,
+  resolveNodePtyRuntimeArch,
+} from "../node-pty-runtime.js";
 import { copyBundledResourceTrees } from "../resources.js";
 import { copyOptionalVelaCliBinary } from "../vela-cli.js";
 import { electronBuilderVersionForAppVersion } from "../versions.js";
@@ -401,6 +405,11 @@ export async function writeAssembledApp(
   await assertMacRuntimeDependenciesResolvable({
     manifestPath: paths.assembledPackageJsonPath,
     runtimeRoot: paths.assembledAppRoot,
+  });
+  await prepareNodePtyRuntime({
+    appRoot: paths.assembledAppRoot,
+    arch: resolveNodePtyRuntimeArch(process.arch),
+    platform: "darwin",
   });
   await runMacElectronRebuild(config, paths.assembledAppRoot);
 }

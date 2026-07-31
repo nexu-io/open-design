@@ -1,7 +1,5 @@
 ---
 name: worker-visualizer
-en_name: "Web Worker Real-Time Visualizer"
-zh_name: "Web Worker 实时可视化"
 description: |
   A real-time data/particle/simulation visualizer whose heavy compute runs in
   a Web Worker (off the main thread), optionally sharing memory with the UI via
@@ -24,7 +22,6 @@ triggers:
   - "多线程"
   - "粒子"
 od:
-  category: design-craft
   mode: prototype
   platform: web
   scenario: design

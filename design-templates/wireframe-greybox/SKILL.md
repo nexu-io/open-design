@@ -1,7 +1,5 @@
 ---
 name: wireframe-greybox
-en_name: "Greybox Wireframe Kit"
-zh_name: "灰盒线框套件"
 description: |
   A crisp greybox / blueprint lo-fi wireframe — neutral grey blocks on a
   pale page, image placeholders drawn as a rectangle with a diagonal X,
@@ -20,7 +18,6 @@ triggers:
   - "线框图"
   - "灰盒"
 od:
-  category: design-craft
   mode: prototype
   platform: desktop
   scenario: design

@@ -67,7 +67,7 @@ describe('Langfuse message finalization gate', () => {
     );
   });
 
-  it('promotes discovery form answers above the transcript with a build-now instruction', () => {
+  it('promotes discovery form answers without suppressing new material clarification', () => {
     const currentPrompt = [
       '[form answers \u2014 discovery]',
       '- output: Dashboard / tool UI',
@@ -81,7 +81,12 @@ describe('Langfuse message finalization gate', () => {
     expect(prompt).toContain('## Latest user turn - form answers submitted');
     expect(prompt).toContain(currentPrompt);
     expect(prompt).toContain('The user has answered the discovery form.');
-    expect(prompt).toContain('For Branch B answers, build now instead of asking another brief.');
+    expect(prompt).toContain(
+      'Do not re-emit the answered form or repeat fields it already answered.',
+    );
+    expect(prompt).toContain(
+      'Only if a new, materially blocking requirement remains unresolved',
+    );
     expect(prompt.indexOf('## Full conversation transcript')).toBeGreaterThan(
       prompt.indexOf(currentPrompt),
     );
@@ -94,9 +99,33 @@ describe('Langfuse message finalization gate', () => {
     );
 
     expect(prompt).toContain('The user has answered the task-type form.');
-    expect(prompt).toContain('build now instead of asking another brief');
+    expect(prompt).toContain('continue with RULE 2 / RULE 3 or the matching active workflow');
     expect(prompt).not.toContain('Treat these form answers as the active user turn');
   });
+
+  it.each([
+    {
+      header: '[form answers: task-type]',
+      expectedFormId: 'task-type',
+      expectedTransition: 'continue with RULE 2 / RULE 3',
+    },
+    {
+      header: '[form answers]',
+      expectedFormId: 'form',
+      expectedTransition: 'Treat these form answers as the active user turn',
+    },
+  ])(
+    'accepts the supported $header form-answer header',
+    ({ header, expectedFormId, expectedTransition }) => {
+      const prompt = composeChatUserRequestForAgent(
+        '## user\ninitial brief',
+        `${header}\n- taskType: Slide deck`,
+      );
+
+      expect(prompt).toContain(`The user has answered the ${expectedFormId} form.`);
+      expect(prompt).toContain(expectedTransition);
+    },
+  );
 
   it('unknown form ids get the generic transition without forcing the build', () => {
     const prompt = composeChatUserRequestForAgent(
@@ -106,15 +135,15 @@ describe('Langfuse message finalization gate', () => {
 
     expect(prompt).toContain('The user has answered the preferences form.');
     expect(prompt).toContain('Treat these form answers as the active user turn');
-    expect(prompt).not.toContain('build now instead of asking another brief');
+    expect(prompt).not.toContain('continue with RULE 2 / RULE 3');
   });
 
   // `agy -c` carries its own conversation memory, so packing the
   // rendered web transcript (the `## user` / `## assistant` blocks)
   // into the user request duplicates context the upstream CLI already
   // has — AND the embedded copy includes the literal `<question-form>`
-  // markup the agent emitted on turn 1, which the model then re-emits
-  // on turn 2, looking like the discovery form loop never breaks.
+  // markup the agent emitted earlier, which the model can then re-emit
+  // after it is answered, looking like the discovery form loop never breaks.
   // With `skipTranscript: true`, only the latest user turn ships and
   // the misleading "## Full conversation transcript" header is dropped.
   it('drops the transcript and transcript header when skipTranscript is true', () => {
@@ -164,40 +193,43 @@ describe('Langfuse message finalization gate', () => {
   it('FORM_ANSWERED_SYSTEM_OVERRIDE pins the anti-patterns weak plain agents need spelled out', async () => {
     const { FORM_ANSWERED_SYSTEM_OVERRIDE } = await import('../src/server.js');
 
-    // Headline must call out that this is a follow-up turn, not turn 1.
-    expect(FORM_ANSWERED_SYSTEM_OVERRIDE).toContain('## OVERRIDE — form already answered');
-    expect(FORM_ANSWERED_SYSTEM_OVERRIDE).toContain('turn 2 or later');
-    // The turn-1 form directive stays in the prompt so turn 1 can still
-    // emit a valid form; OVERRIDE just demotes it to documentation for
-    // follow-up turns. The reference is qualified per charter variant
-    // (classic RULE 1 / slim "Turn 1: one line, one form") because the
-    // slim charter has no RULE headings — asserting them unconditionally
-    // reads as prompt injection to strong models.
-    expect(FORM_ANSWERED_SYSTEM_OVERRIDE).toContain('as read-only documentation');
-    expect(FORM_ANSWERED_SYSTEM_OVERRIDE).toContain('RULE 1 in the classic charter');
-    expect(FORM_ANSWERED_SYSTEM_OVERRIDE).toContain('slim charter');
+    expect(FORM_ANSWERED_SYSTEM_OVERRIDE).toContain(
+      '## OVERRIDE — submitted form answers are authoritative',
+    );
+    expect(FORM_ANSWERED_SYSTEM_OVERRIDE).not.toContain('turn 2 or later');
+    expect(FORM_ANSWERED_SYSTEM_OVERRIDE).toContain(
+      'RULE 1 does not require another form merely because its\nexample appears',
+    );
 
     // Forbidden anti-patterns observed in real captures:
-    expect(FORM_ANSWERED_SYSTEM_OVERRIDE).toContain('`<question-form>` tag of any id');
+    expect(FORM_ANSWERED_SYSTEM_OVERRIDE).toContain(
+      'Re-emitting the answered `discovery` or `task-type` form',
+    );
     expect(FORM_ANSWERED_SYSTEM_OVERRIDE).toContain('```json fenced block');
-    expect(FORM_ANSWERED_SYSTEM_OVERRIDE).toContain('Form-asking prose');
+    expect(FORM_ANSWERED_SYSTEM_OVERRIDE).toContain('Form-asking prose that repeats');
     expect(FORM_ANSWERED_SYSTEM_OVERRIDE).toContain('"subagents stopped"');
 
-    // Required path: route to the brief-to-build flow (classic RULE 2 /
-    // RULE 3), with the deliverable shape deferred to the prompt's handoff
-    // contract — filesystem runs write real files, so `<artifact>` may only
-    // be demanded conditionally.
+    // Required path: use the submitted answers and keep moving, while
+    // preserving on-demand clarification for a genuinely new blocker.
     expect(FORM_ANSWERED_SYSTEM_OVERRIDE).toContain('RULE 2');
     expect(FORM_ANSWERED_SYSTEM_OVERRIDE).toContain('RULE 3');
-    expect(FORM_ANSWERED_SYSTEM_OVERRIDE).toContain('`<artifact>` block only when');
+    expect(FORM_ANSWERED_SYSTEM_OVERRIDE).toContain(
+      'Only if a new, materially blocking requirement remains unresolved',
+    );
+    expect(FORM_ANSWERED_SYSTEM_OVERRIDE).not.toContain(
+      'A `<question-form>` tag of any id',
+    );
   });
 
   it('FORM_ANSWERED_GENERIC_OVERRIDE is used for non-discovery/task-type form ids', () => {
     // Non-build-transition forms should get a smaller override that only
     // suppresses re-asking — not the RULE 2 / RULE 3 / artifact directive.
-    expect(FORM_ANSWERED_GENERIC_OVERRIDE).toContain('## OVERRIDE — form already answered');
-    expect(FORM_ANSWERED_GENERIC_OVERRIDE).toContain('turn 2 or later');
+    expect(FORM_ANSWERED_GENERIC_OVERRIDE).toContain(
+      '## OVERRIDE — submitted form answers are authoritative',
+    );
+    expect(FORM_ANSWERED_GENERIC_OVERRIDE).not.toContain('turn 2 or later');
     expect(FORM_ANSWERED_GENERIC_OVERRIDE).toContain('Do not ask the same form again');
+    expect(FORM_ANSWERED_GENERIC_OVERRIDE).toContain('new, materially');
     // Must NOT contain the artifact-build directive that only applies to
     // discovery / task-type — sending it for an unrelated form id would give
     // the model contradictory instructions.
@@ -216,8 +248,8 @@ describe('Langfuse message finalization gate', () => {
     const currentPrompt = '继续做点修改';
 
     const prompt = composeChatUserRequestForAgent(transcript, currentPrompt);
-    expect(prompt).not.toContain('OVERRIDE — form already answered');
-    expect(prompt).not.toContain('as read-only documentation');
+    expect(prompt).not.toContain('OVERRIDE — submitted form answers are authoritative');
+    expect(prompt).not.toContain('RULE 1 does not require another form');
   });
 
   it('also drops the transcript on a non-form turn when skipTranscript is true', () => {

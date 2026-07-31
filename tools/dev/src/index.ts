@@ -37,6 +37,7 @@ import {
   ALL_APPS,
   DEFAULT_START_APPS,
   DEFAULT_STOP_APPS,
+  parseParentPidOption,
   parsePortOption,
   resolveRunApps,
   resolveStartApps,
@@ -673,6 +674,12 @@ async function startDaemon(
   }
   const daemonTrustedWebOriginPort = existing?.trustedWebOriginPort ?? null;
   if (existing?.url != null && statusMatchesForcedPort(existing.url, daemonPort)) {
+    if (options.parentPid != null) {
+      throw new Error(
+        `${APP_KEYS.DAEMON} is already running in namespace ${config.namespace} at ${existing.url}; ` +
+        `owner-bound starts require a clean namespace, so stop it or choose another namespace`,
+      );
+    }
     if (shouldRefreshWebOrigin && daemonTrustedWebOriginPort !== webPort) {
       if (existingWeb?.url != null) {
         await stopApp(config, APP_KEYS.WEB);
@@ -723,6 +730,12 @@ async function startWeb(config: ToolDevConfig, options: CliOptions) {
   const webPort = parsePortOption(options.webPort, "--web-port");
   const existing = await inspectWebRuntime(runtimeLookup(config));
   if (existing?.url != null && statusMatchesForcedPort(existing.url, webPort)) {
+    if (options.parentPid != null) {
+      throw new Error(
+        `${APP_KEYS.WEB} is already running in namespace ${config.namespace} at ${existing.url}; ` +
+        `owner-bound starts require a clean namespace, so stop it or choose another namespace`,
+      );
+    }
     return { app: APP_KEYS.WEB, created: false, logPath: config.apps.web.latestLogPath, status: existing };
   }
   if (existing?.url != null) {
@@ -755,6 +768,12 @@ async function startWeb(config: ToolDevConfig, options: CliOptions) {
 async function startDesktop(config: ToolDevConfig, options: CliOptions) {
   const existing = await inspectDesktopRuntime(runtimeLookup(config));
   if (existing != null) {
+    if (options.parentPid != null) {
+      throw new Error(
+        `${APP_KEYS.DESKTOP} is already running in namespace ${config.namespace}; ` +
+        `owner-bound starts require a clean namespace, so stop it or choose another namespace`,
+      );
+    }
     return { app: APP_KEYS.DESKTOP, created: false, logPath: config.apps.desktop.latestLogPath, status: existing };
   }
   await assertNoStaleActiveProcess(config, APP_KEYS.DESKTOP);
@@ -1134,19 +1153,29 @@ function addPortOptions(command: ReturnType<typeof cli.command>) {
     .option("--prod", "use production build (requires pnpm --filter @open-design/web build first)");
 }
 
-addPortOptions(addSharedOptions(cli.command("start [app]", "Start daemon, web, desktop, or all when app is omitted"))).action(
-  async (appName: string | undefined, options: CliOptions) => {
-    assertSupportedNodeRuntimeForStart();
-    const config = resolveToolDevConfig(options);
-    const targets = resolveStartApps(appName);
-    await resolveSharedPortsFromRunningState(targets, options, {
-      daemonUrl: async () => (await inspectDaemonRuntime(runtimeLookup(config)))?.url,
-      webUrl: async () => (await inspectWebRuntime(runtimeLookup(config)))?.url,
-    });
-    const result = await runSequential(targets, (target) => startApp(config, target, options, { targets }));
-    printStartResult(result, options);
-  },
-);
+addPortOptions(addSharedOptions(cli.command("start [app]", "Start daemon, web, desktop, or all when app is omitted")))
+  .option("--parent-pid <pid>", "stop started apps when this owner process exits")
+  .action(
+    async (appName: string | undefined, options: CliOptions) => {
+      assertSupportedNodeRuntimeForStart();
+      const parentPid = parseParentPidOption(options.parentPid);
+      if (parentPid != null && !isProcessAlive(parentPid)) {
+        throw new Error(`--parent-pid process is not alive: ${parentPid}`);
+      }
+      const startOptions = parentPid == null ? options : { ...options, parentPid };
+      const config = resolveToolDevConfig(startOptions);
+      const targets = resolveStartApps(appName);
+      await resolveSharedPortsFromRunningState(targets, startOptions, {
+        daemonUrl: async () => (await inspectDaemonRuntime(runtimeLookup(config)))?.url,
+        webUrl: async () => (await inspectWebRuntime(runtimeLookup(config)))?.url,
+      });
+      const result = await runSequential(
+        targets,
+        (target) => startApp(config, target, startOptions, { targets }),
+      );
+      printStartResult(result, startOptions);
+    },
+  );
 
 addPortOptions(addSharedOptions(cli.command("run [app]", "Start apps and keep this command alive until interrupted"))).action(
   async (appName: string | undefined, options: CliOptions) => {

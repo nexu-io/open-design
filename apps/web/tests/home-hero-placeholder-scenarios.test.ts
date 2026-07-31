@@ -139,7 +139,7 @@ describe('advanceTypewriter', () => {
     expect(delayMs).toBe(TIMING.holdMs);
   });
 
-  it('cycles type → hold → pause → next index with wraparound', () => {
+  it('cycles type → hold → delete → pause → next index with wraparound', () => {
     const length = 5;
     const count = 2;
     // From a fully typed last scenario, the next typing state must wrap to 0.
@@ -148,53 +148,6 @@ describe('advanceTypewriter', () => {
     expect(next.index).toBe(0);
     expect(next.phase).toBe('typing');
     expect(next.charCount).toBe(0);
-  });
-
-  it('clears the line in one step instead of backspacing it', () => {
-    const length = 12;
-    const { state, delayMs } = advanceTypewriter(
-      { index: 0, charCount: length, phase: 'holding' },
-      length,
-      3,
-      TIMING,
-      false,
-    );
-    // One step from a full line to a blank one — never an intermediate
-    // charCount, which is what a delete pass would produce.
-    expect(state).toEqual({ index: 0, charCount: 0, phase: 'pausing' });
-    expect(delayMs).toBe(TIMING.pauseMs);
-  });
-
-  it('never decreases charCount within a scenario', () => {
-    const length = 8;
-    let state: TypewriterState = initialTypewriterState();
-    let previous = state;
-    for (let i = 0; i < 200; i += 1) {
-      ({ state } = advanceTypewriter(state, length, 2, TIMING, false));
-      // A drop is only legal when the line is cleared outright (to zero).
-      if (state.charCount < previous.charCount) expect(state.charCount).toBe(0);
-      previous = state;
-    }
-  });
-
-  it('waits out a lead-in before typing the first character', () => {
-    // The carousel re-activates as soon as the composer goes empty, so the
-    // first step after a fresh activation must buy the user a beat rather
-    // than painting ghost text under their caret.
-    const { state, delayMs } = advanceTypewriter(
-      initialTypewriterState(),
-      10,
-      3,
-      TIMING,
-      false,
-    );
-    expect(state).toEqual({ index: 0, charCount: 0, phase: 'typing' });
-    expect(delayMs).toBe(TIMING.leadInMs);
-    expect(TIMING.leadInMs).toBeGreaterThan(TIMING.typeMs);
-  });
-
-  it('holds a finished line long enough to read it', () => {
-    expect(TIMING.holdMs).toBeGreaterThanOrEqual(5000);
   });
 
   it('reduced motion advances whole lines and keeps full charCount', () => {
@@ -211,6 +164,6 @@ describe('advanceTypewriter', () => {
   });
 
   it('starts empty on the first scenario', () => {
-    expect(initialTypewriterState()).toEqual({ index: 0, charCount: 0, phase: 'waiting' });
+    expect(initialTypewriterState()).toEqual({ index: 0, charCount: 0, phase: 'typing' });
   });
 });

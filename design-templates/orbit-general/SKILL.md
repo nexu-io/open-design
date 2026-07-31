@@ -1,7 +1,5 @@
 ---
 name: orbit-general
-en_name: "Cross-Tool Morning Briefing Dashboard"
-zh_name: "跨工具晨间简报看板"
 description: |
   Open Orbit briefing skill — selected by the Orbit pipeline when the
   user has two or more connectors connected. Pulls the past 24 hours of
@@ -22,7 +20,6 @@ triggers:
   - "早安简报"
   - "跨工具汇总"
 od:
-  category: product-management
   mode: prototype
   platform: desktop
   scenario: orbit

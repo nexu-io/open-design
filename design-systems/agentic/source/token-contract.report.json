@@ -24,7 +24,7 @@
     {
       "name": "--bg",
       "layer": "A1-identity",
-      "value": "#ffffff",
+      "value": "#0b1020",
       "confidence": "high",
       "reason": "Bundled tokens.css declares --bg; no upstream recrawl was performed for this backfill.",
       "sources": [
@@ -35,7 +35,7 @@
     {
       "name": "--surface",
       "layer": "A1-identity",
-      "value": "#f6f6f1",
+      "value": "#131b2f",
       "confidence": "high",
       "reason": "Bundled tokens.css declares --surface; no upstream recrawl was performed for this backfill.",
       "sources": [
@@ -46,7 +46,7 @@
     {
       "name": "--surface-warm",
       "layer": "B-slot",
-      "value": "#fff4ec",
+      "value": "#182343",
       "confidence": "high",
       "reason": "Bundled tokens.css declares --surface-warm; no upstream recrawl was performed for this backfill.",
       "sources": [
@@ -57,7 +57,7 @@
     {
       "name": "--fg",
       "layer": "A1-identity",
-      "value": "#111827",
+      "value": "#f8fafc",
       "confidence": "high",
       "reason": "Bundled tokens.css declares --fg; no upstream recrawl was performed for this backfill.",
       "sources": [
@@ -68,7 +68,7 @@
     {
       "name": "--fg-2",
       "layer": "B-slot",
-      "value": "#374151",
+      "value": "#cbd5e1",
       "confidence": "high",
       "reason": "Bundled tokens.css declares --fg-2; no upstream recrawl was performed for this backfill.",
       "sources": [
@@ -79,7 +79,7 @@
     {
       "name": "--muted",
       "layer": "A1-identity",
-      "value": "#6b7280",
+      "value": "#8ea0b8",
       "confidence": "high",
       "reason": "Bundled tokens.css declares --muted; no upstream recrawl was performed for this backfill.",
       "sources": [
@@ -90,7 +90,7 @@
     {
       "name": "--meta",
       "layer": "B-slot",
-      "value": "#ff5701",
+      "value": "#60a5fa",
       "confidence": "high",
       "reason": "Bundled tokens.css declares --meta; no upstream recrawl was performed for this backfill.",
       "sources": [
@@ -101,7 +101,7 @@
     {
       "name": "--border",
       "layer": "A1-identity",
-      "value": "#d1d5db",
+      "value": "#293653",
       "confidence": "high",
       "reason": "Bundled tokens.css declares --border; no upstream recrawl was performed for this backfill.",
       "sources": [
@@ -112,7 +112,7 @@
     {
       "name": "--border-soft",
       "layer": "B-slot",
-      "value": "#e5e7eb",
+      "value": "#1e2a43",
       "confidence": "high",
       "reason": "Bundled tokens.css declares --border-soft; no upstream recrawl was performed for this backfill.",
       "sources": [
@@ -123,7 +123,7 @@
     {
       "name": "--accent",
       "layer": "A1-identity",
-      "value": "#ff5701",
+      "value": "#60a5fa",
       "confidence": "high",
       "reason": "Bundled tokens.css declares --accent; no upstream recrawl was performed for this backfill.",
       "sources": [
@@ -134,7 +134,7 @@
     {
       "name": "--accent-on",
       "layer": "A2",
-      "value": "#ffffff",
+      "value": "#06111f",
       "confidence": "high",
       "reason": "Bundled tokens.css declares --accent-on; no upstream recrawl was performed for this backfill.",
       "sources": [
@@ -167,7 +167,7 @@
     {
       "name": "--success",
       "layer": "A2",
-      "value": "#16a34a",
+      "value": "#22c55e",
       "confidence": "high",
       "reason": "Bundled tokens.css declares --success; no upstream recrawl was performed for this backfill.",
       "sources": [
@@ -178,7 +178,7 @@
     {
       "name": "--warn",
       "layer": "A2",
-      "value": "#d97706",
+      "value": "#fbbf24",
       "confidence": "high",
       "reason": "Bundled tokens.css declares --warn; no upstream recrawl was performed for this backfill.",
       "sources": [
@@ -189,7 +189,7 @@
     {
       "name": "--danger",
       "layer": "A2",
-      "value": "#dc2626",
+      "value": "#fb7185",
       "confidence": "high",
       "reason": "Bundled tokens.css declares --danger; no upstream recrawl was performed for this backfill.",
       "sources": [
@@ -200,7 +200,7 @@
     {
       "name": "--font-display",
       "layer": "A1-identity",
-      "value": "Playfair Display, Georgia, serif",
+      "value": "Inter, system-ui, sans-serif",
       "confidence": "high",
       "reason": "Bundled tokens.css declares --font-display; no upstream recrawl was performed for this backfill.",
       "sources": [
@@ -211,7 +211,7 @@
     {
       "name": "--font-body",
       "layer": "A1-identity",
-      "value": "Playfair Display, Georgia, serif",
+      "value": "Inter, system-ui, sans-serif",
       "confidence": "high",
       "reason": "Bundled tokens.css declares --font-body; no upstream recrawl was performed for this backfill.",
       "sources": [
@@ -552,7 +552,7 @@
     {
       "name": "--focus-ring",
       "layer": "A2",
-      "value": "0 0 0 4px rgba(255, 87, 1, 0.28)",
+      "value": "0 0 0 4px rgba(96, 165, 250, 0.28)",
       "confidence": "high",
       "reason": "Bundled tokens.css declares --focus-ring; no upstream recrawl was performed for this backfill.",
       "sources": [

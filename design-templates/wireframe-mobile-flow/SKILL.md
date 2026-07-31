@@ -1,7 +1,5 @@
 ---
 name: wireframe-mobile-flow
-en_name: "Mobile App Flow Wireframe"
-zh_name: "移动端流程线框图"
 description: |
   A lo-fi multi-screen MOBILE flow wireframe — three or four phone frames
   laid out in a row on a board, showing a connected user flow (Onboarding →
@@ -21,7 +19,6 @@ triggers:
   - "移动端线框"
   - "App 流程图"
 od:
-  category: design-craft
   mode: prototype
   platform: auto
   scenario: design

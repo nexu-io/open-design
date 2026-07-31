@@ -1,10 +1,6 @@
 ---
 name: web-prototype-taste-soft
-en_name: "Soft Premium Web Prototype"
-zh_name: "柔和高级感网页原型"
 description: Apple-tier soft web prototype. Silver/cream canvas, double-bezel cards, button-in-button CTAs, generous squircle radii, spring motion, ambient mesh. Distilled from Leonxlnx/taste-skill `soft-skill` + sections 4–8 of `taste-skill`.
-od:
-  category: design-craft
 ---
 
 # Web Prototype — Soft Premium

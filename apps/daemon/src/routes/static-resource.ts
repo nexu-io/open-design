@@ -219,55 +219,6 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
     }
   });
 
-  // Real visual preview for template cards (inspiration picker, galleries):
-  // serve the template's own seed HTML — the canonical `assets/template.html`
-  // every deck/prototype template ships, with conventional fallbacks. Clients
-  // embed this in a sandboxed iframe (no allow-same-origin), so the document
-  // renders isolated. Rewrite local assets through the existing skill asset
-  // route, which spans both skill and design-template registries.
-  app.get('/api/design-templates/:id/preview', async (req, res) => {
-    try {
-      const templates = await listAllDesignTemplates();
-      const template = findSkillById(templates, req.params.id);
-      if (!template) return res.status(404).type('text/plain').send('not found');
-      const fsp = await import('node:fs/promises');
-      const root = path.resolve(template.dir) + path.sep;
-      // `example.html` is the catalogue's canonical rendered example (the
-      // vast majority of templates ship one); the template seed and the
-      // remaining conventional locations are fallbacks.
-      const candidates = [
-        'example.html',
-        'assets/template.html',
-        'template.html',
-        'references/template.html',
-        'templates/deck.html',
-        'assets/preview.html',
-        'preview.html',
-        'assets/index.html',
-        'examples/index.html',
-      ];
-      for (const rel of candidates) {
-        const full = path.resolve(template.dir, rel);
-        if (!full.startsWith(root)) continue;
-        try {
-          const stat = await fsp.lstat(full);
-          if (stat.isSymbolicLink() || !stat.isFile()) continue;
-          if (stat.size > 5 * 1024 * 1024) continue;
-          const html = await fsp.readFile(full, 'utf8');
-          res.setHeader('Cache-Control', 'private, max-age=300');
-          return res
-            .type('text/html')
-            .send(rewriteSkillAssetUrls(html, template.id));
-        } catch {
-          continue;
-        }
-      }
-      res.status(404).type('text/plain').send('preview not found');
-    } catch (err: any) {
-      res.status(500).type('text/plain').send(String(err));
-    }
-  });
-
   // POST /api/skills/import — write a new SKILL.md under USER_SKILLS_DIR
   // from a UI-supplied body. The next /api/skills request surfaces it
   // automatically because listSkills walks USER_SKILLS_DIR first.

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildProjectRawFileUrl } from '@open-design/contracts';
 
-import { _resetWebBaseUrlCache, handleMcpToolCall } from '../src/mcp.js';
+import { handleMcpToolCall } from '../src/mcp.js';
 
 const originalFetch = globalThis.fetch;
 
@@ -19,7 +19,6 @@ describe('public MCP discovery + generation tools', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     globalThis.fetch = originalFetch;
-    _resetWebBaseUrlCache();
   });
 
   it('list_skills proxies GET /api/skills', async () => {
@@ -31,6 +30,98 @@ describe('public MCP discovery + generation tools', () => {
 
     const result = await handleMcpToolCall('http://127.0.0.1:17456', 'list_skills', {});
     expect(JSON.parse(firstText(result))).toEqual({ skills: [{ id: 'deck', name: 'Deck' }] });
+  });
+
+  it('list_byok_profiles returns daemon-owned non-secret profile metadata', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      expect(url).toBe('http://127.0.0.1:17456/api/byok/profiles');
+      return new Response(JSON.stringify({
+        available: true,
+        backend: 'macos-keychain',
+        profiles: [{
+          id: 'byok-openrouter-1',
+          label: 'OpenRouter',
+          protocol: 'openai',
+          baseUrl: 'https://openrouter.ai/api/v1',
+          model: 'openai/gpt-5.4-mini',
+          requiresApiKey: true,
+          configured: true,
+          keyTail: '1234',
+          apiKey: 'must-never-cross-mcp',
+        }],
+      }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await handleMcpToolCall(
+      'http://127.0.0.1:17456',
+      'list_byok_profiles',
+      {},
+    );
+    const payload = JSON.parse(firstText(result));
+    expect(payload.profiles[0]).toMatchObject({
+      id: 'byok-openrouter-1',
+      configured: true,
+      keyTail: '1234',
+    });
+    expect(JSON.stringify(payload)).not.toContain('apiKey');
+    expect(JSON.stringify(payload)).not.toContain('must-never-cross-mcp');
+  });
+
+  it('start_run selects secure Local BYOK through a profile reference', async () => {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.endsWith('/api/projects')) {
+        return new Response(JSON.stringify({
+          projects: [{ id: 'project-1', name: 'Demo' }],
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ runId: 'run-byok' }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await handleMcpToolCall(
+      'http://127.0.0.1:17456',
+      'start_run',
+      {
+        project: '11111111-1111-4111-8111-111111111111',
+        prompt: 'Create a launch page',
+        byokProfile: 'byok-openrouter-1',
+      },
+    );
+
+    const runsCall = fetchMock.mock.calls.find(
+      ([url, init]) =>
+        String(url).endsWith('/api/runs')
+        && (init as RequestInit)?.method === 'POST',
+    );
+    expect(JSON.parse(String(runsCall?.[1]?.body))).toMatchObject({
+      projectId: '11111111-1111-4111-8111-111111111111',
+      agentId: 'byok-opencode',
+      byokProfileId: 'byok-openrouter-1',
+    });
+    expect(JSON.parse(firstText(result))).toMatchObject({ runId: 'run-byok' });
+  });
+
+  it('start_run rejects raw credential fields at any nesting depth', async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ runId: 'must-not-run' }), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await handleMcpToolCall(
+      'http://127.0.0.1:17456',
+      'start_run',
+      {
+        prompt: 'Create a launch page',
+        byokProfile: 'byok-openrouter-1',
+        inputs: { provider: { api_key: 'must-never-cross-mcp' } },
+      },
+    );
+
+    expect(result).toMatchObject({ isError: true });
+    expect(firstText(result)).toContain('raw API keys are not accepted');
+    expect(JSON.stringify(result)).not.toContain('must-never-cross-mcp');
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('start_run resolves a project name and POSTs /api/runs with the prompt + plugin + inputs', async () => {
@@ -52,11 +143,13 @@ describe('public MCP discovery + generation tools', () => {
       agent: 'claude',
       model: 'claude-opus-4-7',
       serviceTier: 'priority',
+      requestId: 'brief-42-cloud',
     });
 
     const postBody = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body));
     expect(postBody).toEqual({
       projectId: 'project-1',
+      clientRequestId: 'brief-42-cloud',
       message: 'A 5-slide seed pitch deck',
       currentPrompt: 'A 5-slide seed pitch deck',
       pluginId: 'pitch-deck',
@@ -65,7 +158,10 @@ describe('public MCP discovery + generation tools', () => {
       model: 'claude-opus-4-7',
       serviceTier: 'priority',
     });
-    expect(JSON.parse(firstText(result))).toMatchObject({ runId: 'run-42' });
+    expect(JSON.parse(firstText(result))).toMatchObject({
+      runId: 'run-42',
+      requestId: 'brief-42-cloud',
+    });
   });
 
   it('start_run uses the active project when project is omitted', async () => {
@@ -201,6 +297,38 @@ describe('public MCP discovery + generation tools', () => {
     expect(parsed.previewUrl).toBeUndefined();
   });
 
+  it('get_run returns a recharge link and same-request resume instructions', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.endsWith('/api/mcp/install-info')) {
+        return new Response(JSON.stringify({ webBaseUrl: null }), { status: 200 });
+      }
+      return new Response(JSON.stringify({
+        id: 'run-wallet',
+        status: 'failed',
+        projectId: 'project-1',
+        clientRequestId: 'brief-42-cloud',
+        agentId: 'amr',
+        errorCode: 'AMR_INSUFFICIENT_BALANCE',
+        failureAction: 'recharge',
+      }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await handleMcpToolCall(
+      'http://127.0.0.1:17456',
+      'get_run',
+      { runId: 'run-wallet' },
+    );
+    const parsed = JSON.parse(firstText(result));
+    expect(parsed).toMatchObject({
+      status: 'failed',
+      failureAction: 'recharge',
+      rechargeUrl: 'https://open-design.ai/amr/wallet?source=open_design',
+    });
+    expect(parsed.hint).toContain('same requestId');
+    expect(parsed.hint).toContain('resume:true');
+  });
+
   // When a run is mid-flight, the outer agent has no in-band signal
   // that OD is making progress — which led real Codex clients to cancel
   // after a few polls and substitute their own output. Surfacing
@@ -241,6 +369,53 @@ describe('public MCP discovery + generation tools', () => {
     const parsed = JSON.parse(firstText(result));
     expect(parsed.studioUrl).toBe(
       'http://127.0.0.1:65321/projects/project-1/conversations/conv-9/files/index.html',
+    );
+  });
+
+  it('get_run uses the newly registered web port on the next delivery lookup', async () => {
+    let webBaseUrl = 'http://127.0.0.1:65321';
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.endsWith('/api/mcp/install-info')) {
+        return new Response(JSON.stringify({ webBaseUrl }), { status: 200 });
+      }
+      if (url.endsWith('/api/runs/run-42')) {
+        return new Response(JSON.stringify({
+          id: 'run-42',
+          status: 'succeeded',
+          projectId: 'project-1',
+          conversationId: 'conv-9',
+        }), { status: 200 });
+      }
+      if (url.endsWith('/api/projects/project-1')) {
+        return new Response(JSON.stringify({
+          project: {
+            id: 'project-1',
+            metadata: { entryFile: 'index.html' },
+          },
+        }), { status: 200 });
+      }
+      if (url.endsWith('/api/runs/run-42/events')) {
+        return new Response('', { status: 200 });
+      }
+      throw new Error(`unexpected url ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const first = await handleMcpToolCall(
+      'http://127.0.0.1:17456',
+      'get_run',
+      { runId: 'run-42' },
+    );
+    expect(JSON.parse(firstText(first)).studioUrl).toContain('127.0.0.1:65321');
+
+    webBaseUrl = 'http://127.0.0.1:53421';
+    const afterRebind = await handleMcpToolCall(
+      'http://127.0.0.1:17456',
+      'get_run',
+      { runId: 'run-42' },
+    );
+    expect(JSON.parse(firstText(afterRebind)).studioUrl).toContain(
+      '127.0.0.1:53421',
     );
   });
 

@@ -7,7 +7,7 @@
   },
   "fixture": {
     "title": "Agentic - reference components",
-    "description": "Reference fixture for design-systems/agentic: agent workflow interface with bright neutral surfaces, orange automation signals, and editorial typography.",
+    "description": "Reference fixture for design-systems/agentic: agent workflow interface with dark command surfaces, blue automation signals, and traceable task cards.",
     "styleBlockCount": 1,
     "selectorCount": 48,
     "classCount": 26,

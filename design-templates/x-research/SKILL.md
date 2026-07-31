@@ -1,7 +1,5 @@
 ---
 name: x-research
-en_name: "X/Twitter Sentiment Research"
-zh_name: "X/推特舆情研究"
 description: |
   X/Twitter public sentiment research for recent market, company, product, or
   community discourse. Use when the brief asks what people are saying on X,
@@ -19,7 +17,6 @@ triggers:
   - "推特情绪"
   - "X 上怎么说"
 od:
-  category: marketing-gtm
   mode: prototype
   preview:
     type: markdown

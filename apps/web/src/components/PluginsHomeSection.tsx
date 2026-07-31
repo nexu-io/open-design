@@ -16,7 +16,6 @@
 
 import { Button, Input } from '@open-design/components';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { ReactNode } from 'react';
 import type { InstalledPluginRecord } from '@open-design/contracts';
 import { useI18n, useT } from '../i18n';
 import type { PluginShareAction } from '../state/projects';
@@ -27,12 +26,10 @@ import { localizePluginTitle } from './plugins-home/localization';
 import { usePluginFacets } from './plugins-home/usePluginFacets';
 import { pluginSubfacetLabel } from './plugins-home/subfacetLabel';
 import { useSavedPluginIds } from './plugins-home/savedPlugins';
-import { DEFAULT_PLUGIN_SORT_ORDER, type PluginSortOrder } from './plugins-home/sortOrder';
-import { useScrollEdges } from './plugins-home/useScrollEdges';
+import type { PluginSortOrder } from './plugins-home/sortOrder';
 import type { PluginUseAction } from './plugins-home/useActions';
 import { Toast } from './Toast';
-import { AnimatePresence, motion } from 'motion/react';
-import { popoverIn } from '../motion';
+import { AnimatePresence } from 'motion/react';
 
 const RICH_PLUGIN_RENDER_LIMIT = 60;
 const RICH_PLUGIN_RENDER_BATCH_SIZE = 60;
@@ -330,9 +327,10 @@ function CategoryRow({
       className="plugins-home__facet-row plugins-home__facet-row--inline"
       data-testid="plugins-home-row-category"
     >
-      <FacetPills
-        ariaLabel={t('pluginsHome.categoryFilterAria')}
-        contentKey={`${options.length}:${showSaved}:${showAll}`}
+      <div
+        className="plugins-home__facet-pills"
+        role="tablist"
+        aria-label={t('pluginsHome.categoryFilterAria')}
       >
         {showSaved ? (
           <button
@@ -373,38 +371,11 @@ function CategoryRow({
             onPick={onPick}
           />
         ))}
-      </FacetPills>
-      <div className="plugins-home__facet-tools">
-        <SortMenu value={sortOrder} onChange={onSortOrderChange} />
-        <SearchField value={query} onChange={onQueryChange} />
       </div>
-    </div>
-  );
-}
-
-interface FacetPillsProps {
-  ariaLabel: string;
-  // Changes whenever the rendered pill set does, so the overflow fades
-  // re-measure after a category swap replaces the strip's contents.
-  contentKey: string;
-  children: ReactNode;
-}
-
-// Single-line pill strip. Chips scroll horizontally instead of wrapping,
-// so the filter bar keeps one fixed row no matter how many scenes a
-// category exposes — the deck lane alone carries fourteen.
-function FacetPills({ ariaLabel, contentKey, children }: FacetPillsProps) {
-  const { ref, edges } = useScrollEdges<HTMLDivElement>(contentKey);
-  return (
-    <div
-      ref={ref}
-      className="plugins-home__facet-pills"
-      role="tablist"
-      aria-label={ariaLabel}
-      data-overflow-start={edges.start ? 'true' : 'false'}
-      data-overflow-end={edges.end ? 'true' : 'false'}
-    >
-      {children}
+      <div className="plugins-home__facet-tools">
+        <SortToggle value={sortOrder} onChange={onSortOrderChange} />
+        <SearchInput value={query} onChange={onQueryChange} />
+      </div>
     </div>
   );
 }
@@ -424,9 +395,10 @@ function SubcategoryRow({ parent, options, selectedSlug, onPick }: SubcategoryRo
       className="plugins-home__facet-row plugins-home__facet-row--inline plugins-home__facet-row--sub"
       data-testid={`plugins-home-row-subcategory-${parent.slug}`}
     >
-      <FacetPills
-        ariaLabel={t('pluginsHome.subcategoryFilterAria', { label: parent.label })}
-        contentKey={`${parent.slug}:${options.length}`}
+      <div
+        className="plugins-home__facet-pills"
+        role="tablist"
+        aria-label={t('pluginsHome.subcategoryFilterAria', { label: parent.label })}
       >
         <CategoryPill
           slug={null}
@@ -448,7 +420,7 @@ function SubcategoryRow({ parent, options, selectedSlug, onPick }: SubcategoryRo
             testId={`plugins-home-pill-subcategory-${parent.slug}-${opt.slug}`}
           />
         ))}
-      </FacetPills>
+      </div>
     </div>
   );
 }
@@ -527,194 +499,78 @@ function pluginFacetLabel(slug: string, fallback: string, t: ReturnType<typeof u
   }
 }
 
-interface SortMenuProps {
+interface SortToggleProps {
   value: PluginSortOrder;
   onChange: (next: PluginSortOrder) => void;
 }
 
-// Hot / newest ordering, collapsed behind a filter icon. Both orders used
-// to sit exposed as a two-segment pill, but paired with the search field
-// they ate the width the category strip needs to stay on one line — and
-// sort is a set-once preference (it persists per browser via
-// `sortOrder.ts`), not something worth permanent chrome. The trigger
-// carries a dot whenever the pick is off the default so the collapsed
-// state still says an order is in force.
-function SortMenu({ value, onChange }: SortMenuProps) {
+// Hot / newest ordering toggle that lives next to the search field.
+// Rendered as a compact two-segment radio group: "hot" keeps the
+// visual-appeal ranking the gallery leads with today, "newest" re-ranks
+// by record freshness. The picked order persists per browser via the
+// hook (`sortOrder.ts`).
+function SortToggle({ value, onChange }: SortToggleProps) {
   const t = useT();
-  const [open, setOpen] = useState(false);
-  const wrapRef = useRef<HTMLDivElement | null>(null);
   const segments: Array<{ order: PluginSortOrder; label: string }> = [
     { order: 'hot', label: t('pluginsHome.sortHot') },
     { order: 'newest', label: t('pluginsHome.sortNewest') },
   ];
-
-  useEffect(() => {
-    if (!open) return;
-    function onDown(e: MouseEvent) {
-      if (!wrapRef.current) return;
-      if (wrapRef.current.contains(e.target as Node)) return;
-      setOpen(false);
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpen(false);
-    }
-    document.addEventListener('mousedown', onDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDown);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
-
   return (
-    <div className="plugins-home__sort" ref={wrapRef} data-testid="plugins-home-sort">
-      <button
-        type="button"
-        className="plugins-home__icon-btn"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-label={t('pluginsHome.sortAria')}
-        title={t('pluginsHome.sortAria')}
-        data-active={value !== DEFAULT_PLUGIN_SORT_ORDER ? 'true' : 'false'}
-        onClick={() => setOpen((v) => !v)}
-        data-testid="plugins-home-sort-trigger"
-      >
-        <Icon name="filter" size={14} />
-      </button>
-      <AnimatePresence>
-        {open ? (
-          <motion.div
-            className="plugins-home__sort-menu"
-            role="menu"
-            aria-label={t('pluginsHome.sortAria')}
-            variants={popoverIn}
-            initial="hidden"
-            animate="visible"
-            exit="exit"
-            data-testid="plugins-home-sort-menu"
-          >
-            {segments.map((segment) => (
-              <button
-                key={segment.order}
-                type="button"
-                role="menuitemradio"
-                aria-checked={value === segment.order}
-                className={`plugins-home__sort-item${value === segment.order ? ' is-active' : ''}`}
-                onClick={() => {
-                  onChange(segment.order);
-                  setOpen(false);
-                }}
-                data-testid={`plugins-home-sort-${segment.order}`}
-              >
-                <span>{segment.label}</span>
-                {value === segment.order ? (
-                  <Icon name="check" size={12} aria-hidden />
-                ) : null}
-              </button>
-            ))}
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
+    <div
+      className="plugins-home__sort"
+      role="radiogroup"
+      aria-label={t('pluginsHome.sortAria')}
+      data-testid="plugins-home-sort"
+    >
+      {segments.map((segment) => (
+        <button
+          key={segment.order}
+          type="button"
+          role="radio"
+          aria-checked={value === segment.order}
+          className={`plugins-home__sort-segment${value === segment.order ? ' is-active' : ''}`}
+          onClick={() => onChange(segment.order)}
+          data-testid={`plugins-home-sort-${segment.order}`}
+        >
+          {segment.label}
+        </button>
+      ))}
     </div>
   );
 }
 
-interface SearchFieldProps {
+interface SearchInputProps {
   value: string;
   onChange: (next: string) => void;
 }
 
-// Search collapsed behind its own icon. Search composes with the category
-// selection via AND inside the hook, so a query narrows whatever category
-// the user has already picked rather than discarding the category
-// context. Collapsed, the field is a single icon button; the 200px input
-// only claims width once someone actually reaches for it, which is what
-// lets the category strip own the rest of the row.
-//
-// Both states stay mounted and swap a class, so the width transition
-// plays in each direction — a React unmount would skip the exit entirely.
-function SearchField({ value, onChange }: SearchFieldProps) {
+// Compact search field that lives in the section head. Search composes
+// with the category selection via AND inside the hook, so a query
+// narrows whatever category the user has already picked rather than
+// discarding the category context. We keep the UI a single text input
+// with an optional clear button so it sits inside the existing head
+// row without a heavyweight toolbar.
+function SearchInput({ value, onChange }: SearchInputProps) {
   const t = useT();
-  const [expanded, setExpanded] = useState(value.length > 0);
-  const inputRef = useRef<HTMLInputElement | null>(null);
-
-  // A query set from outside (restored state, or a category swap that keeps
-  // the query) must force the field open: an active filter with no visible
-  // control reads as an empty gallery with no explanation.
-  useEffect(() => {
-    if (value) setExpanded(true);
-  }, [value]);
-
-  function openSearch(): void {
-    setExpanded(true);
-    // Focus on the next frame so the caret lands in a field that is already
-    // growing rather than one still at zero width.
-    requestAnimationFrame(() => inputRef.current?.focus());
-  }
-
-  // Collapse on blur only while empty. A live query keeps the field open so
-  // the user can see what is narrowing the grid, and can edit it back out.
-  function handleBlur(): void {
-    if (!value) setExpanded(false);
-  }
-
   return (
-    <div
-      className={`plugins-home__search${expanded ? ' is-expanded' : ''}`}
-      data-testid="plugins-home-search-field"
-    >
-      <button
-        type="button"
-        className="plugins-home__icon-btn plugins-home__search-toggle"
-        aria-label={t('pluginsHome.searchAria')}
-        title={t('pluginsHome.searchAria')}
-        aria-expanded={expanded}
-        data-active={value ? 'true' : 'false'}
-        // Expanded, the icon is the field's own adornment — clicking it
-        // should put the caret back in the input, not tear the field down
-        // with the user's query still in it.
-        onClick={expanded ? () => inputRef.current?.focus() : openSearch}
-        data-testid="plugins-home-search-toggle"
-      >
-        <Icon name="search" size={14} />
-      </button>
+    <div className="plugins-home__search">
+      <Icon name="search" size={12} className="plugins-home__search-icon" />
       <Input
-        ref={inputRef}
         type="search"
         className="plugins-home__search-input"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        onBlur={handleBlur}
-        onKeyDown={(e) => {
-          if (e.key !== 'Escape') return;
-          // Escape clears then closes in one press; blur alone would only
-          // close a field the user had already emptied by hand.
-          onChange('');
-          setExpanded(false);
-          inputRef.current?.blur();
-        }}
         placeholder={t('pluginsHome.searchPlaceholder')}
         aria-label={t('pluginsHome.searchAria')}
         data-testid="plugins-home-search"
         spellCheck={false}
         autoComplete="off"
-        // Keep the collapsed input out of the tab order and off the
-        // accessibility tree; the toggle above is the control at that size.
-        tabIndex={expanded ? undefined : -1}
-        aria-hidden={expanded ? undefined : true}
       />
-      {expanded && value ? (
+      {value ? (
         <Button
           variant="subtle"
           className="plugins-home__search-clear"
-          // Clearing must not take focus off the input: the default
-          // mousedown blur would fire first, collapse the still-empty
-          // field, and unmount this button before its click ever landed.
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => {
-            onChange('');
-            inputRef.current?.focus();
-          }}
+          onClick={() => onChange('')}
           aria-label={t('pluginsHome.clearSearch')}
           data-testid="plugins-home-search-clear"
         >

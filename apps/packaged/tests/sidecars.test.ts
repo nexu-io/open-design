@@ -27,6 +27,7 @@ import { APP_KEYS, OPEN_DESIGN_SIDECAR_CONTRACT } from '@open-design/sidecar-pro
 import {
   buildPackagedDaemonSpawnEnv,
   createPackagedSidecarSpawnOptions,
+  registerPackagedWebUrl,
   resolveDaemonStatusTimeoutMs,
   resolvePackagedChildBaseEnv,
   resolvePackagedElectronNodeCommand,
@@ -96,7 +97,54 @@ describe('resolveDaemonStatusTimeoutMs', () => {
   });
 });
 
+describe('packaged web URL registration', () => {
+  it('registers the current dynamic web URL with the daemon sidecar and supports a later port', async () => {
+    const namespace = `web-url-${process.pid}-${Date.now()}`;
+    const daemonIpc = resolveAppIpcPath({
+      app: APP_KEYS.DAEMON,
+      contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+      namespace,
+    });
+    const received: unknown[] = [];
+    const server = await createJsonIpcServer({
+      socketPath: daemonIpc,
+      handler: async (message) => {
+        received.push(message);
+        return { accepted: true };
+      },
+    });
+
+    try {
+      await registerPackagedWebUrl(daemonIpc, 'http://127.0.0.1:64248');
+      await registerPackagedWebUrl(daemonIpc, 'http://127.0.0.1:53421');
+      expect(received).toEqual([
+        {
+          input: { url: 'http://127.0.0.1:64248' },
+          type: 'register-web-url',
+        },
+        {
+          input: { url: 'http://127.0.0.1:53421' },
+          type: 'register-web-url',
+        },
+      ]);
+    } finally {
+      await server.close();
+    }
+  });
+});
+
 describe('packaged child Vite+ environment forwarding', () => {
+  it('forwards CODEX_HOME so isolated and managed Codex installs never fall back to another user config', () => {
+    const env = resolvePackagedChildBaseEnv({
+      CODEX_HOME: '/tmp/isolated-codex-home',
+      HOME: '/Users/tester',
+      RANDOM_INTERNAL_FLAG: 'drop-me',
+    });
+
+    expect(env.CODEX_HOME).toBe('/tmp/isolated-codex-home');
+    expect(env.RANDOM_INTERNAL_FLAG).toBeUndefined();
+  });
+
   it('keeps VP_HOME in the packaged child base env without forwarding unrelated variables', () => {
     const env = resolvePackagedChildBaseEnv({
       HOME: '/Users/tester',
@@ -424,6 +472,35 @@ describe('buildPackagedDaemonSpawnEnv', () => {
     expect('OD_REQUIRE_DESKTOP_AUTH' in env).toBe(false);
     expect(env.OD_DATA_DIR).toBe('/tmp/od-pkg/data');
     expect(env.OD_APP_VERSION).toBeUndefined();
+  });
+
+  it('forwards the signed packaged launcher used to bootstrap MCP headlessly', () => {
+    const env = buildPackagedDaemonSpawnEnv(fakePaths(), {
+      appVersion: '1.2.3',
+      daemonCliEntry: '/Applications/Open Design.app/Contents/Resources/app/prebundled/daemon/daemon-cli.mjs',
+      legacyDataDir: null,
+      mcpBootstrapArgs: [
+        '-g',
+        '-j',
+        '/Applications/Open Design.app',
+        '--args',
+        '--headless',
+      ],
+      mcpBootstrapCommand:
+        '/usr/bin/open',
+      requireDesktopAuth: false,
+    });
+
+    expect(env.OD_MCP_BOOTSTRAP_COMMAND).toBe(
+      '/usr/bin/open',
+    );
+    expect(JSON.parse(env.OD_MCP_BOOTSTRAP_ARGS ?? 'null')).toEqual([
+      '-g',
+      '-j',
+      '/Applications/Open Design.app',
+      '--args',
+      '--headless',
+    ]);
   });
 
   it('forwards OD_LEGACY_DATA_DIR only when set, irrespective of requireDesktopAuth', () => {

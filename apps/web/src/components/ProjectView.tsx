@@ -53,7 +53,6 @@ import { requestAmrArtifactUpgrade } from '../runtime/amr-artifact-upgrade';
 import {
   type AmrWalletSnapshot,
   type ByokMediaDefaults,
-  type ByokChatProviderConfig,
   type ByokChatProtocol,
   type ResearchOptions,
 } from '@open-design/contracts';
@@ -220,7 +219,6 @@ import { EntrySettingsMenu } from './EntrySettingsMenu';
 import { MessageCenter } from './MessageCenter';
 import { HandoffButton } from './HandoffButton';
 import { Icon } from './Icon';
-import { ProjectHeaderMenu } from './ProjectHeaderMenu';
 import { localizePluginTitle } from './plugins-home/localization';
 import { DesignSystemPicker } from './DesignSystemPicker';
 import { PluginDetailsModal } from './PluginDetailsModal';
@@ -240,7 +238,6 @@ import {
 import { buildRepoImportPrompt, designSystemNeedsRepoConnect } from './design-system-github-evidence';
 import { isDesignSystemProject, resolveProjectDesignSystemId } from './design-system-project';
 import { collectReferencedJsxNames } from '../runtime/jsx-module-refs';
-import { KNOWN_PROVIDERS } from '../state/config';
 import { DESIGN_SYSTEM_TAB, FileWorkspace, type BrowserOpenRequest } from './FileWorkspace';
 import {
   type PluginFolderAgentAction,
@@ -273,7 +270,6 @@ import { effectiveMaxTokens } from '../state/maxTokens';
 import { effectiveAgentModelChoice } from './agentModelSelection';
 import { mediaExecutionPolicyForProjectMetadata } from '../media/execution-policy';
 import { mediaModelProviderId } from '../media/models';
-import { byokProviderRequiresApiKey } from '../utils/byokProvider';
 import {
   useByokImageModelOptions,
   useByokVideoModelOptions,
@@ -283,7 +279,6 @@ import {
   buildFinalizeCredentialsMissingToast,
   buildFinalizeRequest,
 } from '../lib/resolve-finalize-request';
-import { subscribeInspirationBrowse } from '../runtime/inspiration-browse-intent';
 
 type BrandBrowserSnapshot =
   | { status: 'ready'; html: string; css: string; baseUrl: string }
@@ -314,15 +309,6 @@ type ProjectChatSendMeta = ChatSendMeta & {
    *  the home submit (with any soft warning answered there); skip re-gating
    *  so the user is never double-prompted for one task. */
   amrGatePrechecked?: boolean;
-  /** Per-send design-system override. The inline inspiration picker applies
-   *  its pick to the project (async React state), so the same send must carry
-   *  the id explicitly or this first run would still see the stale project
-   *  value. */
-  designSystemId?: string | null;
-  /** Additional inspiration systems beyond the applied primary (inspiration
-   *  picker multi-select) — forwarded to the daemon as the run's
-   *  `inspirationDesignSystemIds` prompt metadata. */
-  inspirationDesignSystemIds?: string[];
 };
 
 export function mergeSavedPreviewComment(current: PreviewComment[], saved: PreviewComment): PreviewComment[] {
@@ -1250,41 +1236,13 @@ function byokMediaDefaultsForRun(input: {
   };
 }
 
-function byokOpenCodeProviderFromConfig(
+function byokOpenCodeProfileIdFromConfig(
   config: AppConfig,
-): ByokChatProviderConfig | undefined {
+): string | undefined {
   if (!isOpenCodeByokChatProtocol(config.apiProtocol)) return undefined;
-  const selectedProvider = selectedKnownProviderForConfig(config);
-  const model = config.model.trim();
-  if (
-    (byokProviderRequiresApiKey(config.apiProtocol, selectedProvider, config.baseUrl) && !config.apiKey.trim()) ||
-    !model ||
-    model.toLowerCase() === 'default' ||
-    (config.apiProtocol === 'azure' && !config.baseUrl.trim())
-  ) {
-    return undefined;
-  }
-  return {
-    protocol: config.apiProtocol,
-    apiKey: config.apiKey.trim(),
-    baseUrl: config.baseUrl,
-    model: config.model,
-    ...(selectedProvider?.requiresApiKey === false ? { requiresApiKey: false } : {}),
-    apiVersion:
-      config.apiProtocol === 'azure'
-        ? config.apiVersion ?? ''
-        : '',
-  };
-}
-
-function selectedKnownProviderForConfig(config: AppConfig) {
-  if (!config.apiProtocol) return undefined;
-  return KNOWN_PROVIDERS.find(
-    (provider) =>
-      provider.protocol === config.apiProtocol &&
-      provider.baseUrl === config.baseUrl &&
-      (config.apiProviderBaseUrl == null || provider.baseUrl === config.apiProviderBaseUrl),
-  );
+  if (byokPreflightBlockReason(config) !== null) return undefined;
+  if (!config.byokCredentialConfigured) return undefined;
+  return config.byokProfileId?.trim() || undefined;
 }
 
 function isOpenCodeByokChatProtocol(
@@ -1415,7 +1373,15 @@ export function ProjectView({
   const detailedProject = projectDetail.project?.id === project.id ? projectDetail.project : null;
   const currentProject =
     detailedProject && detailedProject.updatedAt >= project.updatedAt ? detailedProject : project;
-  const projectDesignSystemId = resolveProjectDesignSystemId(currentProject);
+  const resolvedProjectDesignSystemId = resolveProjectDesignSystemId(currentProject);
+  // A project can outlive a Design System being disabled in Settings. Keep the
+  // persisted project value intact for recovery, but do not inject a disabled
+  // system into a new runtime turn.
+  const projectDesignSystemId = resolvedProjectDesignSystemId;
+  const runtimeDesignSystemId =
+    projectDesignSystemId && (config.disabledDesignSystems ?? []).includes(projectDesignSystemId)
+      ? null
+      : projectDesignSystemId;
   const projectIsDesignSystemProject = isDesignSystemProject(currentProject);
   // Website-clone turns reproduce a whole multi-page site; auto-open should
   // land on the site entry (index.html), not the last-written subpage. See
@@ -1753,21 +1719,6 @@ export function ProjectView({
   // tab still focuses it.
   const [openRequest, setOpenRequest] = useState<{ name: string; nonce: number } | null>(null);
   const [browserOpenRequest, setBrowserOpenRequest] = useState<BrowserOpenRequest | null>(null);
-  // The inspiration picker's reference-site shortcuts (Dribbble, Mobbin, …)
-  // open through the workspace's built-in Browser: one tab per site, reused
-  // on repeat clicks, so the user can copy an image there and paste it back
-  // into the picker.
-  useEffect(
-    () =>
-      subscribeInspirationBrowse(({ siteId, url }) => {
-        setBrowserOpenRequest({
-          tabId: `inspiration-${siteId}`,
-          url,
-          nonce: Date.now(),
-        });
-      }),
-    [],
-  );
   // Like `openRequest`, but additionally asks the preview workspace to open the
   // file's Share/Export menu. Drives the "Share" next-step action: it reuses the
   // existing export/deploy surface rather than introducing a new share backend.
@@ -4854,11 +4805,11 @@ export function ProjectView({
           chatAttachmentsFromPreviewCommentImages(attachment.imageAttachments),
         ),
       );
-      const byokOpenCodeProvider = byokOpenCodeProviderFromConfig(config);
+      const byokProfileId = byokOpenCodeProfileIdFromConfig(config);
       const requiresByokPreflight =
         (config.mode === 'api' && config.apiProtocol !== 'bedrock') ||
         (config.mode === 'daemon' && config.agentId === 'byok-opencode');
-      if (requiresByokPreflight && !byokOpenCodeProvider) {
+      if (requiresByokPreflight && !byokProfileId) {
         trackByokPreflightBlocked(analytics.track, {
           source: 'run',
           reason: byokPreflightBlockReason(config) ?? 'config_invalid',
@@ -5937,10 +5888,7 @@ export function ProjectView({
           skillId: project.skillId ?? null,
           skillIds: Array.isArray(meta?.skillIds) ? meta.skillIds : [],
           context: runContext,
-          designSystemId: meta?.designSystemId ?? projectDesignSystemId ?? null,
-          inspirationDesignSystemIds: Array.isArray(meta?.inspirationDesignSystemIds)
-            ? meta.inspirationDesignSystemIds
-            : [],
+          designSystemId: runtimeDesignSystemId ?? null,
           attachments: runAttachments.map((a) => a.path),
           commentAttachments: runCommentAttachments,
           sessionMode: runSessionMode,
@@ -5951,8 +5899,8 @@ export function ProjectView({
           model: daemonByokOpenCode ? config.model : choice?.model ?? null,
           reasoning: daemonByokOpenCode ? null : choice?.reasoning ?? null,
           serviceTier: daemonByokOpenCode ? null : choice?.serviceTier ?? null,
-          ...(daemonByokOpenCode && byokOpenCodeProvider
-            ? { byokProvider: byokOpenCodeProvider }
+          ...(daemonByokOpenCode && byokProfileId
+            ? { byokProfileId }
             : {}),
           ...(daemonByokOpenCode
             ? {
@@ -6033,24 +5981,9 @@ export function ProjectView({
         // BYOK users even though the UI saves model + index + entries
         // for that mode.
         const userText = (userMsg.content ?? '').trim();
-        // Snapshot the live BYOK chat config so the daemon can run
-        // "Same as chat" memory extraction against the same vendor /
-        // key / baseUrl / apiVersion the user is chatting with. The
-        // daemon never persists BYOK creds itself, so this per-call
-        // signal is the only way `pickProvider()` can avoid falling
-        // through to env / media-config (which is wrong for BYOK)
-        // when no explicit memory model override is set. The picker
-        // re-syncs an *explicit* override when chat config drifts;
-        // this snapshot covers the implicit "Same as chat" default.
-        const byokChatProvider = byokOpenCodeProvider
-          ? {
-              provider: byokOpenCodeProvider.protocol,
-              apiKey: byokOpenCodeProvider.apiKey,
-              baseUrl: byokOpenCodeProvider.baseUrl,
-              apiVersion: byokOpenCodeProvider.apiVersion,
-              model: byokOpenCodeProvider.model,
-            }
-          : undefined;
+        // Pass only the non-secret profile reference so "Same as chat"
+        // memory extraction resolves the same daemon-owned credential as the
+        // run. Raw provider keys never cross this browser call boundary.
         if (userText.length > 0) {
           try {
             await fetch('/api/memory/extract', {
@@ -6060,7 +5993,7 @@ export function ProjectView({
                 userMessage: userText,
                 projectId: project.id,
                 conversationId: runConversationId,
-                chatProvider: byokChatProvider,
+                byokProfileId,
               }),
             });
           } catch {
@@ -6101,10 +6034,7 @@ export function ProjectView({
           skillId: project.skillId ?? null,
           skillIds: Array.isArray(meta?.skillIds) ? meta.skillIds : [],
           context: runContext,
-          designSystemId: meta?.designSystemId ?? projectDesignSystemId ?? null,
-          inspirationDesignSystemIds: Array.isArray(meta?.inspirationDesignSystemIds)
-            ? meta.inspirationDesignSystemIds
-            : [],
+          designSystemId: runtimeDesignSystemId ?? null,
           attachments: runAttachments.map((a) => a.path),
           commentAttachments: runCommentAttachments,
           sessionMode: runSessionMode,
@@ -6115,7 +6045,7 @@ export function ProjectView({
           model: config.model,
           reasoning: null,
           serviceTier: null,
-          ...(byokOpenCodeProvider ? { byokProvider: byokOpenCodeProvider } : {}),
+          ...(byokProfileId ? { byokProfileId } : {}),
           byokMediaDefaults: byokMediaDefaultsForRun({
             imageModelOverride: byokImageModelOverride,
             videoModelOverride: byokVideoModelOverride,
@@ -6188,6 +6118,7 @@ export function ProjectView({
       onTouchProject,
       project.id,
       projectDesignSystemId,
+      runtimeDesignSystemId,
       project.name,
       projectFiles,
       refreshProjectFiles,
@@ -8641,27 +8572,9 @@ export function ProjectView({
               questionFormSubmitDisabled={currentConversationActionDisabled}
               onSubmitQuestionForm={(text, attachments = [], context) => {
                 if (currentConversationActionDisabled) return false;
-                const { applyDesignSystemId, inspirationDesignSystemIds, ...runContext } =
-                  context ?? {};
-                // The inspiration picker's design-system pick goes through the
-                // real project apply flow (same as the header picker) so it
-                // persists for later turns; the send below carries the id
-                // explicitly because the project state update is async.
-                if (applyDesignSystemId) {
-                  handleChangeDesignSystemId(applyDesignSystemId);
-                }
-                const hasRunContext = Object.keys(runContext).length > 0;
                 return handleSend(text, attachments, [], {
                   entryFrom: 'question_answer',
-                  ...(applyDesignSystemId ? { designSystemId: applyDesignSystemId } : {}),
-                  ...(Array.isArray(inspirationDesignSystemIds) &&
-                  inspirationDesignSystemIds.length > 0
-                    ? { inspirationDesignSystemIds }
-                    : {}),
-                  ...(Array.isArray(runContext.skillIds) && runContext.skillIds.length > 0
-                    ? { skillIds: runContext.skillIds }
-                    : {}),
-                  ...(hasRunContext ? { context: runContext } : {}),
+                  ...(context ? { context } : {}),
                 });
               }}
               onContinueRemainingTasks={handleContinueRemainingTasks}
@@ -8781,28 +8694,6 @@ export function ProjectView({
                   {projectTypeLabel ? (
                     <span className="meta" data-testid="project-meta">{projectTypeLabel}</span>
                   ) : null}
-                  <ProjectHeaderMenu
-                    projectName={project.name}
-                    onRename={handleProjectRename}
-                    onDuplicate={
-                      // The duplicate endpoint rejects design-system-like
-                      // projects (400 PROJECT_ALREADY_DESIGN_SYSTEM), so hide
-                      // the entry instead of offering an action that always
-                      // errors. `projectIsDesignSystemProject` mirrors the
-                      // daemon's `isDesignSystemLikeProject` guard exactly.
-                      onDuplicateProject && !projectIsDesignSystemProject
-                        ? handleDuplicateProject
-                        : undefined
-                    }
-                    duplicateBusy={projectDuplicateStarting}
-                    onDelete={
-                      onDeleteProject
-                        ? () => {
-                            void onDeleteProject(project.id);
-                          }
-                        : undefined
-                    }
-                  />
                 </span>
               )}
               designSystemPicker={(

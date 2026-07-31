@@ -112,7 +112,7 @@ export function buildPlaceholderScenarios({
 
 // ---- Typewriter state machine (pure, so it is unit-testable) --------------
 
-export type TypewriterPhase = 'waiting' | 'typing' | 'holding' | 'pausing';
+export type TypewriterPhase = 'typing' | 'holding' | 'deleting' | 'pausing';
 
 export interface TypewriterState {
   // Index into the scenario list.
@@ -123,29 +123,25 @@ export interface TypewriterState {
 }
 
 export interface TypewriterTiming {
-  // Lead-in before the first character of a fresh activation. The carousel
-  // re-activates the moment the composer goes back to empty, so typing
-  // straight away means a user who deletes their last character gets ghost
-  // text under their caret instantly — this beat lets them keep thinking.
-  leadInMs: number;
   // Per-character delay while typing.
   typeMs: number;
-  // Dwell once a line is fully typed, long enough to actually read it.
+  // Per-character delay while deleting (faster than typing reads as decisive).
+  deleteMs: number;
+  // Dwell once a line is fully typed.
   holdMs: number;
-  // Blank gap between two lines. There is no delete pass: a line is cleared
-  // outright and the next one starts over from nothing.
+  // Gap after a line is fully deleted, before the next line starts.
   pauseMs: number;
 }
 
 export const DEFAULT_TYPEWRITER_TIMING: TypewriterTiming = {
-  leadInMs: 900,
-  typeMs: 68,
-  holdMs: 5000,
-  pauseMs: 420,
+  typeMs: 42,
+  deleteMs: 22,
+  holdMs: 1900,
+  pauseMs: 320,
 };
 
 export function initialTypewriterState(): TypewriterState {
-  return { index: 0, charCount: 0, phase: 'waiting' };
+  return { index: 0, charCount: 0, phase: 'typing' };
 }
 
 // Advance the machine one step and report how long to wait before applying it.
@@ -169,21 +165,18 @@ export function advanceTypewriter(
     };
   }
   switch (state.phase) {
-    case 'waiting':
-      return { state: { ...state, phase: 'typing' }, delayMs: timing.leadInMs };
     case 'typing':
       if (state.charCount < length) {
         return { state: { ...state, charCount: state.charCount + 1 }, delayMs: timing.typeMs };
       }
       return { state: { ...state, phase: 'holding' }, delayMs: timing.holdMs };
     case 'holding':
-      // Clear the line outright rather than backspacing it. The overlay sits
-      // under a live caret, so an erase pass reads as the user's own text
-      // vanishing; blanking and starting the next line from zero does not.
-      // The index stays put through the blank beat so the scenario reported
-      // to the parent (what Send submits on an empty composer) always matches
-      // the line the user just saw.
-      return { state: { ...state, charCount: 0, phase: 'pausing' }, delayMs: timing.pauseMs };
+      return { state: { ...state, phase: 'deleting' }, delayMs: timing.deleteMs };
+    case 'deleting':
+      if (state.charCount > 0) {
+        return { state: { ...state, charCount: state.charCount - 1 }, delayMs: timing.deleteMs };
+      }
+      return { state: { ...state, phase: 'pausing' }, delayMs: timing.pauseMs };
     case 'pausing':
     default:
       return {

@@ -1,7 +1,5 @@
 ---
 name: mobile-app
-en_name: "iPhone-Framed App Screen Mockup"
-zh_name: "iPhone 样机 App 界面稿"
 description: |
   A mobile-app screen rendered inside a pixel-accurate iPhone 15 Pro frame
   on the page. Built by copying the seed `assets/template.html` and pasting
@@ -17,7 +15,6 @@ triggers:
   - "移动端"
   - "手机 app"
 od:
-  category: design-craft
   mode: prototype
   platform: mobile
   scenario: design

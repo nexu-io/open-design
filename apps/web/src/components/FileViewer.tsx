@@ -41,6 +41,11 @@ import { recordFirstLoopStep } from '../onboarding/first-loop';
 import { MarkdownRenderer, artifactRendererRegistry } from '../artifacts/renderer-registry';
 import { renderMarkdownToSafeHtml } from '../artifacts/markdown';
 import {
+  artifactExportOriginProps,
+  matchingArtifactVersionId,
+  type ArtifactExportOriginProps,
+} from '../artifacts/version-origin';
+import {
   buildScrollAnchors,
   extractMarkdownBlockLines,
   mapScrollPosition,
@@ -2726,6 +2731,7 @@ type HtmlVersionExportContext = {
   content: string;
   title: string;
   versionId?: string;
+  version?: ProjectFileVersion;
 };
 
 type ExportToastState = {
@@ -3208,6 +3214,7 @@ function FileVersionManagerModal({
     const context: HtmlVersionExportContext = {
       content,
       title: version.current ? file.name.replace(/\.html?$/i, '') || file.name : fileVersionExportTitle(file.name, version),
+      version,
       ...(version.current ? {} : { versionId: version.id }),
     };
     setVersionExportToast(null);
@@ -5997,6 +6004,38 @@ function HtmlViewer({
   // Latest per-slide capture progress for the programmatic exporters, read by
   // the loading-toast ticker in fireShareExport to render elapsed time + ETA.
   const exportProgressRef = useRef<{ done: number; total: number } | null>(null);
+  const unknownExportOrigin = (
+    status: ArtifactExportOriginProps['artifact_origin_status'] = 'missing_version',
+  ): ArtifactExportOriginProps => ({
+    entry_surface: 'open_design_ui',
+    artifact_origin_status: status,
+    origin_entry_surface: 'unknown',
+  });
+  const resolveArtifactExportOrigin = async (
+    context?: HtmlVersionExportContext | null,
+  ): Promise<ArtifactExportOriginProps> => {
+    const content = context?.content ?? sourceRef.current;
+    if (content == null) return unknownExportOrigin();
+    let version = context?.version ?? null;
+    if (!version) {
+      const result = await fetchProjectFileVersions(projectId, file.name);
+      version = result?.versions.find((candidate) => candidate.current) ?? null;
+    }
+    return artifactExportOriginProps(content, version);
+  };
+  const resolveManualEditParentVersionId = async (
+    content: string,
+  ): Promise<string | undefined> => {
+    try {
+      const result = await fetchProjectFileVersions(projectId, file.name);
+      const currentVersion = result?.versions?.find((candidate) => candidate.current) ?? null;
+      return matchingArtifactVersionId(content, currentVersion);
+    } catch {
+      // Provenance is fail-closed: inability to prove the parent must not
+      // block a user edit, but it also must not inherit an origin.
+      return undefined;
+    }
+  };
   // Shared helper for the share menu: emit studio_click share_option on
   // entry and artifact_export_result on resolution. Sync exports report
   // success immediately after the call returns; async exports get .then
@@ -6014,6 +6053,7 @@ function HtmlViewer({
       | 'share_link'
       | 'share_page',
     fn: () => Promise<unknown> | unknown,
+    context?: HtmlVersionExportContext | null,
   ) => {
     const requestId = analytics.newRequestId();
     const artifactId = anonymizeArtifactId({ projectId, fileName: file.name });
@@ -6033,7 +6073,10 @@ function HtmlViewer({
       { requestId },
     );
     const started = performance.now();
-    const finish = (result: 'success' | 'failed' | 'cancelled', errorCode?: string) => {
+    const originPromise = resolveArtifactExportOrigin(context)
+      .catch(() => unknownExportOrigin());
+    const finish = async (result: 'success' | 'failed' | 'cancelled', errorCode?: string) => {
+      const originProps = await originPromise;
       trackArtifactExportResult(
         analytics.track,
         {
@@ -6045,6 +6088,7 @@ function HtmlViewer({
           project_kind: projectKind,
           export_format: trackingFormat,
           result,
+          ...originProps,
           ...(errorCode ? { error_code: errorCode } : {}),
           export_duration_ms: Math.round(performance.now() - started),
         },
@@ -6106,30 +6150,30 @@ function HtmlViewer({
           (result) => {
             stopTicker();
             if (result === 'cancelled') {
-              finish('cancelled');
+              void finish('cancelled');
               if (toastFormats.has(format)) setExportToast(null);
               return;
             }
-            finish('success');
+            void finish('success');
             if (toastFormats.has(format)) setExportToast({ message: t('fileViewer.exportDone'), tone: 'success' });
           },
           (err) => {
-            finish('failed', exportErrorCode(err));
+            void finish('failed', exportErrorCode(err));
             failToast(err);
           },
         );
       } else {
         stopTicker();
         if (out === 'cancelled') {
-          finish('cancelled');
+          void finish('cancelled');
           if (toastFormats.has(format)) setExportToast(null);
           return;
         }
-        finish('success');
+        void finish('success');
         if (toastFormats.has(format)) setExportToast({ message: t('fileViewer.exportDone'), tone: 'success' });
       }
     } catch (err) {
-      finish('failed', exportErrorCode(err));
+      void finish('failed', exportErrorCode(err));
       failToast(err);
     }
   };
@@ -6802,6 +6846,7 @@ function HtmlViewer({
   // export is a separate modal flow, so it owns its own request id / start.
   const imageExportRequestIdRef = useRef<string | null>(null);
   const imageExportStartedRef = useRef(0);
+  const imageExportOriginPromiseRef = useRef<Promise<ArtifactExportOriginProps> | null>(null);
   // Guards against double-emitting the image export result: each modal
   // session (reset in openImageExportModal) resolves to exactly one
   // success / failed / cancelled, no matter which exit path runs.
@@ -6810,6 +6855,7 @@ function HtmlViewer({
   // export result only after the template is actually saved (not on open).
   const templateExportRequestIdRef = useRef<string | null>(null);
   const templateExportStartedRef = useRef(0);
+  const templateExportOriginPromiseRef = useRef<Promise<ArtifactExportOriginProps> | null>(null);
   // Same one-terminal-result guard as image export: a template session
   // (reset in openSaveAsTemplateModal) emits exactly one success/failed/
   // cancelled, whether it ends in a save or a modal dismiss.
@@ -9257,10 +9303,12 @@ function HtmlViewer({
         baseSource,
         'The file changed outside manual edit mode. Refreshing before applying manual edits.',
       ))) return false;
+      const parentVersionId = await resolveManualEditParentVersionId(baseSource);
       const saved = await writeProjectTextFileDetailed(projectId, file.name, result.source, {
         artifactManifest: file.artifactManifest,
         versionSource: 'manual',
         versionLabel: label,
+        ...(parentVersionId ? { parentVersionId } : {}),
       });
       if (!saved.ok) {
         const status = 'status' in saved ? saved.status : undefined;
@@ -9343,11 +9391,9 @@ function HtmlViewer({
         setManualEditDraftDirty(true);
       }
       if (patch.kind === 'set-style') {
-        // May set an explanatory error (styles differed / target vanished);
-        // the stale-error clear already ran at the top of this function, so
-        // nothing may clear again after this point or the message is lost.
         reconcileManualEditStyleSave(patch.id, patch.styles, result.source);
       }
+      setManualEditError(null);
       await onFileSaved?.();
       return true;
     } finally {
@@ -9590,10 +9636,12 @@ function HtmlViewer({
         latest.afterSource,
         'The file changed outside manual edit mode. History was cleared to avoid overwriting newer content.',
       ))) return;
+      const parentVersionId = await resolveManualEditParentVersionId(latest.afterSource);
       const saved = await writeProjectTextFileDetailed(projectId, file.name, latest.beforeSource, {
         artifactManifest: file.artifactManifest,
         versionSource: 'manual',
         versionLabel: `Undo ${latest.label}`,
+        ...(parentVersionId ? { parentVersionId } : {}),
       });
       if (!saved.ok) {
         setManualEditError(describeManualEditSaveFailure('Could not save the undo result', saved));
@@ -9631,10 +9679,12 @@ function HtmlViewer({
         latest.beforeSource,
         'The file changed outside manual edit mode. History was cleared to avoid overwriting newer content.',
       ))) return;
+      const parentVersionId = await resolveManualEditParentVersionId(latest.beforeSource);
       const saved = await writeProjectTextFileDetailed(projectId, file.name, latest.afterSource, {
         artifactManifest: file.artifactManifest,
         versionSource: 'manual',
         versionLabel: `Redo ${latest.label}`,
+        ...(parentVersionId ? { parentVersionId } : {}),
       });
       if (!saved.ok) {
         setManualEditError(describeManualEditSaveFailure('Could not save the redo result', saved));
@@ -10508,6 +10558,8 @@ function HtmlViewer({
     const requestId = analytics.newRequestId();
     templateExportRequestIdRef.current = requestId;
     templateExportStartedRef.current = performance.now();
+    templateExportOriginPromiseRef.current = resolveArtifactExportOrigin()
+      .catch(() => unknownExportOrigin());
     templateExportResolvedRef.current = false;
     trackShareOptionPopoverClick(
       analytics.track,
@@ -10540,22 +10592,27 @@ function HtmlViewer({
     templateExportResolvedRef.current = true;
     const requestId = templateExportRequestIdRef.current ?? analytics.newRequestId();
     const started = templateExportStartedRef.current || performance.now();
-    trackArtifactExportResult(
-      analytics.track,
-      {
-        page_name: 'artifact',
-        area: 'share_option_popover',
-        artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
-        artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
-        export_format: 'template',
-        result,
-        ...(errorCode ? { error_code: errorCode } : {}),
-        export_duration_ms: Math.round(performance.now() - started),
-        project_id: projectId,
-        project_kind: projectKind,
-      },
-      { requestId },
-    );
+    const originPromise = templateExportOriginPromiseRef.current
+      ?? resolveArtifactExportOrigin().catch(() => unknownExportOrigin());
+    void originPromise.then((originProps) => {
+      trackArtifactExportResult(
+        analytics.track,
+        {
+          page_name: 'artifact',
+          area: 'share_option_popover',
+          artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
+          artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
+          export_format: 'template',
+          result,
+          ...originProps,
+          ...(errorCode ? { error_code: errorCode } : {}),
+          export_duration_ms: Math.round(performance.now() - started),
+          project_id: projectId,
+          project_kind: projectKind,
+        },
+        { requestId },
+      );
+    });
     // Onboarding first-loop 交付 step (spec §8.3): only a SUCCESSFUL template
     // export closes the loop. Project-scoped no-op unless started from Home.
     if (result === 'success') recordFirstLoopStep(analytics.track, 'delivered', projectId);
@@ -11332,7 +11389,7 @@ function HtmlViewer({
   }
 
   function triggerPdfExport(context?: HtmlVersionExportContext) {
-    fireShareExport('pdf', () => exportHtmlPdf(context));
+    fireShareExport('pdf', () => exportHtmlPdf(context), context);
   }
 
   function triggerZipExport(context?: HtmlVersionExportContext) {
@@ -11342,7 +11399,7 @@ function HtmlViewer({
       fallbackHtml: context?.content ?? source ?? '',
       fallbackTitle: context?.title ?? exportTitle,
       ...(context?.versionId ? { versionId: context.versionId } : {}),
-    }));
+    }), context);
   }
 
   function triggerHtmlExport(context?: HtmlVersionExportContext) {
@@ -11352,7 +11409,7 @@ function HtmlViewer({
       fallbackHtml: context?.content ?? source ?? '',
       fallbackTitle: context?.title ?? exportTitle,
       ...(context?.versionId ? { versionId: context.versionId } : {}),
-    }));
+    }), context);
   }
 
   useEffect(() => {
@@ -11605,6 +11662,8 @@ function HtmlViewer({
     const requestId = analytics.newRequestId();
     imageExportRequestIdRef.current = requestId;
     imageExportStartedRef.current = performance.now();
+    imageExportOriginPromiseRef.current = resolveArtifactExportOrigin(context)
+      .catch(() => unknownExportOrigin());
     imageExportResolvedRef.current = false;
     trackShareOptionPopoverClick(
       analytics.track,
@@ -11641,22 +11700,27 @@ function HtmlViewer({
     imageExportResolvedRef.current = true;
     const requestId = imageExportRequestIdRef.current ?? analytics.newRequestId();
     const started = imageExportStartedRef.current || performance.now();
-    trackArtifactExportResult(
-      analytics.track,
-      {
-        page_name: 'artifact',
-        area: 'share_option_popover',
-        artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
-        artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
-        export_format: 'image',
-        result,
-        ...(errorCode ? { error_code: errorCode } : {}),
-        export_duration_ms: Math.round(performance.now() - started),
-        project_id: projectId,
-        project_kind: projectKind,
-      },
-      { requestId },
-    );
+    const originPromise = imageExportOriginPromiseRef.current
+      ?? resolveArtifactExportOrigin().catch(() => unknownExportOrigin());
+    void originPromise.then((originProps) => {
+      trackArtifactExportResult(
+        analytics.track,
+        {
+          page_name: 'artifact',
+          area: 'share_option_popover',
+          artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
+          artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
+          export_format: 'image',
+          result,
+          ...originProps,
+          ...(errorCode ? { error_code: errorCode } : {}),
+          export_duration_ms: Math.round(performance.now() - started),
+          project_id: projectId,
+          project_kind: projectKind,
+        },
+        { requestId },
+      );
+    });
     // Onboarding first-loop 交付 step (spec §8.3): only a SUCCESSFUL image
     // export closes the loop. Project-scoped no-op unless started from Home.
     if (result === 'success') recordFirstLoopStep(analytics.track, 'delivered', projectId);

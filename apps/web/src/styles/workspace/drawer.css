@@ -608,8 +608,7 @@
   position: absolute;
   top: calc(100% + 6px);
   right: 0;
-  /* Wide enough for "Duplicate project" on one line (icon + label). */
-  min-width: 176px;
+  min-width: 144px;
   background: var(--bg-panel);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
@@ -631,7 +630,6 @@
   font-size: 12.5px;
   text-align: left;
   cursor: pointer;
-  white-space: nowrap;
 }
 .design-card-menu button:hover { background: var(--bg-subtle); }
 .design-card-menu button.danger { color: var(--red); }

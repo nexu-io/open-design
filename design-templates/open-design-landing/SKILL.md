@@ -1,7 +1,5 @@
 ---
 name: open-design-landing
-en_name: "Editorial Magazine Landing Site"
-zh_name: "杂志风编辑落地页"
 description: >
   Produce a world-class single-page editorial landing site in the
   Atelier Zero visual language (Monocle / Apartamento / Études editorial
@@ -21,7 +19,7 @@ triggers:
   - atelier zero
   - open design landing
 od:
-  category: marketing-gtm
+  category: brand-page
   surface: web
   scenario: marketing
   audience: founders, design studios, OSS maintainers

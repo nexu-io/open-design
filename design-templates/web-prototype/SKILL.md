@@ -1,7 +1,5 @@
 ---
 name: web-prototype
-en_name: "Desktop Web Prototype"
-zh_name: "桌面网页原型"
 description: |
   General-purpose desktop web prototype. Single self-contained HTML file built
   by copying the seed `assets/template.html` and pasting section layouts from
@@ -15,7 +13,6 @@ triggers:
   - "marketing page"
   - "homepage"
 od:
-  category: design-craft
   mode: prototype
   platform: desktop
   scenario: design

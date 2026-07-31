@@ -461,6 +461,31 @@ const GOLDEN_CASES: readonly GoldenCase[] = [
     }),
   },
   {
+    name: "merge_group daemon core keeps behavior coverage without unrelated consumers",
+    context: { eventName: "merge_group" },
+    files: [
+      "apps/daemon/src/server.ts",
+      "apps/daemon/src/routes/chat.ts",
+      "apps/daemon/tests/routes/chat.test.ts",
+    ],
+    expected: expectedPlan({
+      ciMode: "full",
+      scopes: [
+        "daemon_tests_required",
+        "ui_critical_validation_required",
+        "ui_p0_validation_required",
+        "workspace_validation_required",
+      ],
+      runs: ["run_e2e_vitest", "run_ui_p0"],
+    }),
+  },
+  {
+    name: "merge_group excluded daemon surfaces stay full",
+    context: { eventName: "merge_group" },
+    files: ["apps/daemon/src/sidecar/server.ts", "apps/daemon/src/runtimes/defs/claude.ts"],
+    expected: FULL_PLAN,
+  },
+  {
     name: "merge_group packaged configuration outside the certain core stays full",
     context: { eventName: "merge_group" },
     files: ["apps/desktop/package.json", "tools/pack/bin/tools-pack.mjs"],
@@ -580,6 +605,47 @@ test("packaged-leaf core matches only its certain rule with the guarded effects"
       .map(([effect]) => effect),
     ["tools_dev_tests_required", "tools_pack_tests_required", "workspace_validation_required"],
   );
+});
+
+test("daemon core matches only its certain rule while excluded daemon surfaces stay medium", async () => {
+  const { evaluateScopeOutputs, matchesRuleMatch, scopeRules } = await import("../../../scripts/scopes.ts");
+  const files = [
+    "apps/daemon/src/server.ts",
+    "apps/daemon/src/policy.md",
+    "apps/daemon/tests/server.test.ts",
+  ];
+  for (const file of files) {
+    const matched = scopeRules.filter((rule) => matchesRuleMatch(file, rule.match)).map((rule) => rule.id);
+    assert.deepEqual(matched, ["certain-daemon-core"], file);
+  }
+
+  const evaluation = evaluateScopeOutputs(files, "certain", {
+    deriveWorkspaceValidationFromTestScopes: true,
+  });
+  assert.deepEqual(evaluation.decisions.map((decision) => decision.escalated), [false, false, false]);
+  assert.deepEqual(
+    Object.entries(evaluation.outputs)
+      .filter(([, enabled]) => enabled)
+      .map(([effect]) => effect),
+    [
+      "daemon_tests_required",
+      "ui_critical_validation_required",
+      "ui_p0_validation_required",
+      "workspace_validation_required",
+    ],
+  );
+
+  for (const file of [
+    "apps/daemon/src/sidecar/server.ts",
+    "apps/daemon/src/runtimes/defs/claude.ts",
+    "apps/daemon/tests/runtimes/agent-args.test.ts",
+  ]) {
+    const outside = evaluateScopeOutputs([file], "certain", {
+      deriveWorkspaceValidationFromTestScopes: true,
+    });
+    assert.equal(outside.decisions[0]?.escalated, true, file);
+    assert.equal(outside.decisions[0]?.matchedRules.includes("certain-daemon-core"), false, file);
+  }
 });
 
 test("packaged-leaf consumption collector resolves imports, packages, and static paths", async () => {
@@ -811,10 +877,11 @@ test("runtime-definition shadow fails closed for mixed, unknown, empty, and unre
 });
 
 test("UI P0 shadow guard pins full applied coverage and closed fallbacks", async () => {
-  const { uiP0ShadowContractErrors } = await import(
-    "../../../scripts/check-ui-p0-shadow.ts"
+  const { daemonCoreScopeContractErrors, uiP0ShadowContractErrors } = await import(
+    "../../../scripts/lib/guard/scope.ts"
   );
   assert.deepEqual(uiP0ShadowContractErrors(), []);
+  assert.deepEqual(daemonCoreScopeContractErrors(), []);
 });
 
 test("plan command evaluates offline at the pr threshold", () => {

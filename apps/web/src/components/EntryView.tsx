@@ -6,7 +6,12 @@ import {
   type ReactNode,
   type SetStateAction,
 } from 'react';
-import type { ChatSessionMode, ConnectorDetail } from '@open-design/contracts';
+import type {
+  ByokCredentialProfile,
+  ChatSessionMode,
+  ConnectorDetail,
+  UpsertByokCredentialProfileRequest,
+} from '@open-design/contracts';
 import type { OpenDesignHostProjectImportSuccess } from '@open-design/host';
 import {
   DEFAULT_AUDIO_MODEL,
@@ -96,6 +101,9 @@ interface Props {
   onApiProtocolChange: (protocol: ApiProtocol) => void;
   onApiModelChange: (model: string) => void;
   onConfigPersist: (cfg: AppConfig) => Promise<void> | void;
+  onPersistByokCredential?: (
+    input: UpsertByokCredentialProfileRequest,
+  ) => Promise<ByokCredentialProfile>;
   /** True only when GET /api/app-config returned a real config object. */
   daemonAppConfigReady?: boolean;
   /** Non-optimistic daemon write for the silent-update preference. */
@@ -259,6 +267,7 @@ export function EntryView({
   onApiProtocolChange,
   onApiModelChange,
   onConfigPersist,
+  onPersistByokCredential,
   daemonAppConfigReady = false,
   onSilentUpdatePreferenceChange,
   onSkillsRefresh,
@@ -383,6 +392,7 @@ export function EntryView({
       onApiProtocolChange={onApiProtocolChange}
       onApiModelChange={onApiModelChange}
       onConfigPersist={onConfigPersist}
+      {...(onPersistByokCredential ? { onPersistByokCredential } : {})}
       daemonAppConfigReady={daemonAppConfigReady}
       onSilentUpdatePreferenceChange={onSilentUpdatePreferenceChange}
       onSkillsRefresh={onSkillsRefresh}

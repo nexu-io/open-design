@@ -234,6 +234,18 @@ async function waitForReadyChatPaneProps() {
   };
 }
 
+async function advanceTestClock(ms: number): Promise<void> {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(ms);
+  });
+}
+
+async function settleTestClock(): Promise<void> {
+  for (let step = 0; step < 3; step += 1) {
+    await advanceTestClock(0);
+  }
+}
+
 describe('terminal replay artifact recovery', () => {
   it('only reuses existing artifacts created at or after the current run started', () => {
     const runCreatedAt = 1_000;
@@ -2357,6 +2369,7 @@ describe('ProjectView daemon cleanup', () => {
   });
 
   it('keeps reattaching after two generic disconnects while daemon status stays running, but backs off before the next retry', async () => {
+    vi.useFakeTimers();
     const runCreatedAt = Date.now();
     const genericDisconnect = await createGenericDisconnectError();
 
@@ -2419,16 +2432,15 @@ describe('ProjectView daemon cleanup', () => {
       />,
     );
 
-    await waitFor(() => expect(reattachDaemonRun.mock.calls.length).toBeGreaterThanOrEqual(2), {
-      timeout: 2_000,
-    });
-    expect(reattachDaemonRun.mock.calls.length).toBe(2);
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    expect(reattachDaemonRun.mock.calls.length).toBe(2);
-    await waitFor(() => expect(reattachDaemonRun.mock.calls.length).toBeGreaterThanOrEqual(3), {
-      timeout: 4_500,
-    });
-  }, 12_000);
+    await settleTestClock();
+    expect(reattachDaemonRun).toHaveBeenCalledTimes(2);
+
+    await advanceTestClock(2_999);
+    expect(reattachDaemonRun).toHaveBeenCalledTimes(2);
+    await advanceTestClock(1);
+    await settleTestClock();
+    expect(reattachDaemonRun.mock.calls.length).toBeGreaterThanOrEqual(3);
+  });
 
   it.each([
     {
@@ -2609,19 +2621,19 @@ describe('ProjectView daemon cleanup', () => {
     );
 
     const sendProps = await waitForReadyChatPaneProps();
+    vi.useFakeTimers();
     await sendProps!.onSend!('flaky stream', [], []);
 
-    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(reattachDaemonRun.mock.calls.length).toBeGreaterThanOrEqual(1), {
-      timeout: 2_000,
-    });
-    expect(reattachDaemonRun.mock.calls.length).toBe(1);
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    expect(reattachDaemonRun.mock.calls.length).toBe(1);
-    await waitFor(() => expect(reattachDaemonRun.mock.calls.length).toBeGreaterThanOrEqual(2), {
-      timeout: 4_500,
-    });
-  }, 12_000);
+    await settleTestClock();
+    expect(streamViaDaemon).toHaveBeenCalledTimes(1);
+    expect(reattachDaemonRun).toHaveBeenCalledTimes(1);
+
+    await advanceTestClock(2_999);
+    expect(reattachDaemonRun).toHaveBeenCalledTimes(1);
+    await advanceTestClock(1);
+    await settleTestClock();
+    expect(reattachDaemonRun.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
 
   it('keeps a partial live generic disconnect recoverable after the first failure', async () => {
     const runCreatedAt = Date.now();
@@ -2793,6 +2805,7 @@ describe('ProjectView daemon cleanup', () => {
   });
 
   it('keeps generic-disconnect cap retryable when the follow-up status probe returns null, but backs off before retrying', async () => {
+    vi.useFakeTimers();
     const runCreatedAt = Date.now();
     const genericDisconnect = await createGenericDisconnectError();
 
@@ -2873,16 +2886,15 @@ describe('ProjectView daemon cleanup', () => {
       />,
     );
 
-    await waitFor(() => expect(reattachDaemonRun.mock.calls.length).toBeGreaterThanOrEqual(2), {
-      timeout: 2_000,
-    });
-    expect(reattachDaemonRun.mock.calls.length).toBe(2);
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    expect(reattachDaemonRun.mock.calls.length).toBe(2);
-    await waitFor(() => expect(reattachDaemonRun.mock.calls.length).toBeGreaterThanOrEqual(3), {
-      timeout: 4_500,
-    });
-  }, 12_000);
+    await settleTestClock();
+    expect(reattachDaemonRun).toHaveBeenCalledTimes(2);
+
+    await advanceTestClock(2_999);
+    expect(reattachDaemonRun).toHaveBeenCalledTimes(2);
+    await advanceTestClock(1);
+    await settleTestClock();
+    expect(reattachDaemonRun.mock.calls.length).toBeGreaterThanOrEqual(3);
+  });
 
   it('finalizes a reattach generic disconnect as succeeded when the next status poll turns terminal', async () => {
     const runCreatedAt = Date.now();

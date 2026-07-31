@@ -49,147 +49,63 @@
   gap: 10px;
   flex: 0 0 auto;
 }
-/* Shared trigger for the two collapsed facet tools (sort menu, search).
-   Sized to match the pill height so the tools cluster and the chip strip
-   sit on one baseline. */
-.plugins-home__icon-btn {
-  appearance: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border: 1px solid var(--border);
-  border-radius: 50%;
-  background: var(--bg-panel);
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: border-color 120ms var(--ease-out), background-color 120ms var(--ease-out),
-    color 120ms var(--ease-out);
-}
-.plugins-home__icon-btn:hover {
-  border-color: var(--border-strong);
-  color: var(--text);
-}
-.plugins-home__icon-btn[aria-expanded='true'] {
-  background: var(--bg-subtle);
-  color: var(--text);
-}
-.plugins-home__icon-btn:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-/* Collapsed, the trigger is the only thing saying a filter is in force —
-   so a non-default pick gets a dot in the corner. */
-.plugins-home__icon-btn[data-active='true'] {
-  position: relative;
-  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
-  color: var(--accent);
-}
-.plugins-home__icon-btn[data-active='true']::after {
-  content: '';
-  position: absolute;
-  top: 1px;
-  right: 1px;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--accent);
-  border: 1.5px solid var(--bg);
-}
-
-/* Hot / newest ordering, collapsed behind the filter trigger. */
+/* Hot / newest sort toggle — a compact two-segment pill that shares the
+   search field's height and border treatment so the facet-tools cluster
+   reads as one control strip. */
 .plugins-home__sort {
-  position: relative;
   display: inline-flex;
+  align-items: stretch;
   flex: 0 0 auto;
-}
-.plugins-home__sort-menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  z-index: 20;
-  display: flex;
-  flex-direction: column;
-  min-width: 150px;
-  padding: 4px;
-  gap: 2px;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-pill);
   background: var(--bg-panel);
-  box-shadow: var(--shadow-md, 0 8px 24px rgb(0 0 0 / 12%));
+  padding: 2px;
+  gap: 2px;
 }
-.plugins-home__sort-item {
+.plugins-home__sort-segment {
   appearance: none;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  width: 100%;
-  padding: 6px 8px;
   border: 0;
-  border-radius: var(--radius-sm, 6px);
   background: transparent;
+  border-radius: var(--radius-pill);
+  padding: 3px 10px;
   font-size: 12px;
   color: var(--text-muted);
-  text-align: left;
   cursor: pointer;
   white-space: nowrap;
   transition: background-color 120ms var(--ease-out), color 120ms var(--ease-out);
 }
-.plugins-home__sort-item:hover {
+.plugins-home__sort-segment:hover {
+  color: var(--text);
+}
+.plugins-home__sort-segment.is-active {
   background: var(--bg-subtle);
   color: var(--text);
 }
-.plugins-home__sort-item.is-active {
-  color: var(--text);
-}
-.plugins-home__sort-item:focus-visible {
+.plugins-home__sort-segment:focus-visible {
   outline: 2px solid var(--accent);
-  outline-offset: -1px;
+  outline-offset: 1px;
 }
-
-/* Search collapses to its own icon and grows into a field on demand, so
-   the category strip keeps the row's remaining width. Both states stay
-   mounted and swap `.is-expanded` — the width has to animate in both
-   directions, which an unmount would skip. */
 .plugins-home__search {
   position: relative;
   display: inline-flex;
   align-items: center;
-  flex: 0 0 auto;
-  width: 28px;
-  max-width: 100%;
-  border: 1px solid transparent;
-  border-radius: var(--radius-pill);
-  background: transparent;
-  transition: width 200ms var(--ease-out), border-color 200ms var(--ease-out),
-    background-color 200ms var(--ease-out), box-shadow 120ms var(--ease-out);
-}
-.plugins-home__search.is-expanded {
   width: 200px;
-  border-color: var(--border);
+  max-width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
   background: var(--bg-panel);
+  transition: border-color 120ms var(--ease-out), background-color 120ms var(--ease-out),
+    box-shadow 120ms var(--ease-out);
 }
 .plugins-home__search:focus-within {
   border-color: var(--border-strong);
   box-shadow: 0 0 0 3px var(--accent-tint);
 }
-/* The toggle doubles as the field's left adornment once expanded, so it
-   sheds its own pill chrome and stops competing with the container. */
-.plugins-home__search.is-expanded .plugins-home__search-toggle {
+.plugins-home__search-icon {
   position: absolute;
-  left: 0;
-  width: 26px;
-  height: 26px;
-  border-color: transparent;
-  background: transparent;
+  left: 10px;
   color: var(--text-faint);
-}
-.plugins-home__search.is-expanded .plugins-home__search-toggle::after {
-  display: none;
+  pointer-events: none;
 }
 /* The bare <input> below picks up the global `input { ... }` rule
    from index.css (border, radius-sm, padding, and a rectangular
@@ -209,16 +125,6 @@
   box-shadow: none;
   border-radius: var(--radius-pill);
   font-family: inherit;
-  /* Collapsed the field is 28px of icon button; the input must take no
-     width and swallow no clicks, or it would cover the toggle. */
-  transition: opacity 140ms var(--ease-out);
-}
-.plugins-home__search:not(.is-expanded) .plugins-home__search-input,
-.plugins-home__search:not(.is-expanded) .plugins-home__search-input:focus {
-  width: 0;
-  padding: 0;
-  opacity: 0;
-  pointer-events: none;
 }
 .plugins-home__search-input::placeholder {
   color: var(--text-faint);
@@ -264,10 +170,13 @@
   .plugins-home__head-tools {
     justify-content: flex-end;
   }
-  /* The expanded field would otherwise crowd the chip strip down to a
-     couple of visible pills on a phone. */
-  .plugins-home__search.is-expanded {
-    width: 148px;
+  .plugins-home__facet-tools {
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .plugins-home__search {
+    flex: 1;
+    min-width: 0;
   }
 }
 .plugins-home__empty {
@@ -368,62 +277,33 @@
 .plugins-home__facet-row--inline {
   display: flex;
   align-items: center;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 8px 12px;
   padding: 4px 0;
 }
-/* Right-aligned cluster paired with the chip strip on the same row. Both
-   tools are collapsed to icons, so the cluster is a fixed ~64px and never
-   wraps under the strip — the chips take the width instead, and scroll. */
+/* Right-aligned cluster paired with the chip strip on the same row.
+   Hosts the search input, the filtered-count, and a clear-filters
+   link when at least one facet is active. It can wrap under the
+   chip strip on constrained viewports instead of forcing a local
+   horizontal scrollbar. */
 .plugins-home__facet-tools {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex: 0 0 auto;
+  /* Wide enough for the sort toggle + the 200px search field before the
+     cluster wraps under the chip strip. */
+  flex: 0 1 360px;
   margin-left: auto;
+  min-width: min(100%, 200px);
 }
 .plugins-home__facet-row--sub {
   padding-top: 0;
   opacity: 0.92;
 }
-/* One line, always. Categories used to wrap into as many rows as the
-   taxonomy needed — the deck lane alone pushed the grid a full row down
-   the page — so the strip now scrolls horizontally at a fixed height. */
 .plugins-home__facet-row--inline .plugins-home__facet-pills {
-  flex: 1 1 auto;
-  min-width: 0;
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  overflow-y: hidden;
-  /* A visible scrollbar under the chips would double the strip's height,
-     defeating the point; the edge fades below carry the affordance. */
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-  /* Room for the pill hover border and focus ring, which the scroll
-     container would otherwise clip. */
-  padding: 2px 0;
-  scroll-padding-inline: 16px;
-}
-.plugins-home__facet-row--inline .plugins-home__facet-pills::-webkit-scrollbar {
-  display: none;
-}
-/* Fade only the side that is actually clipping. A fade painted
-   unconditionally would dim the last chip of a row that already fits,
-   which reads as a disabled pill. */
-.plugins-home__facet-pills[data-overflow-start='true'] {
-  mask-image: linear-gradient(to right, transparent 0, #000 28px);
-}
-.plugins-home__facet-pills[data-overflow-end='true'] {
-  mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent 100%);
-}
-.plugins-home__facet-pills[data-overflow-start='true'][data-overflow-end='true'] {
-  mask-image: linear-gradient(
-    to right,
-    transparent 0,
-    #000 28px,
-    #000 calc(100% - 28px),
-    transparent 100%
-  );
+  flex: 1 1 360px;
+  flex-wrap: wrap;
+  overflow: visible;
 }
 .plugins-home__facet-row--inline .plugins-home__pill,
 .plugins-home__facet-row--inline .plugins-home__chip {

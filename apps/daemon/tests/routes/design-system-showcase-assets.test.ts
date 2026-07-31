@@ -51,7 +51,6 @@ function registerRoutes(app: express.Express, staticHtml: string | null) {
       readDesignSystemWorkspaceTextFile: async () => null,
       readUserDesignSystemFile: async () => null,
       renderDesignSystemPreview: () => '<!doctype html><title>preview</title>',
-      renderDesignSystemCard: () => '<!doctype html><title>card</title>',
       renderDesignSystemShowcase: (id: string, body: string) =>
         `<!doctype html><title>${id} synthetic</title><main>${body}</main>`,
       updateUserDesignSystem: async () => null,

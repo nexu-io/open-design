@@ -1,7 +1,5 @@
 ---
 name: webgl-experience
-en_name: "WebGL Interactive Experience"
-zh_name: "WebGL 交互体验"
 description: |
   A full-screen, real-time WebGL/WebGL2 experience — animated shaders, 3D
   scenes, generative visuals, particle fields — rendered live on the GPU with
@@ -23,7 +21,6 @@ triggers:
   - "着色器"
   - "webgl 效果"
 od:
-  category: design-craft
   mode: prototype
   platform: web
   scenario: design

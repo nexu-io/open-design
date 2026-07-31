@@ -59,7 +59,6 @@ const SECTION_INPUTS = {
     'designSystemFixtureHtml',
     'designSystemPullIndex',
     'designSystemImportMode',
-    'inspirationDesignSystems',
   ],
   skill: ['skillBody', 'skillName', 'skillMode', 'skillModes'],
   craft: ['craftBody', 'craftSections'],

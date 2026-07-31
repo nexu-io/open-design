@@ -1,7 +1,5 @@
 ---
 name: waitlist-page
-en_name: "Waitlist Landing Page"
-zh_name: "等待名单落地页"
 description: |
   Minimal pre-launch landing with email capture, brand logo, and optional decorative layer.
   Reads DESIGN.md for colors, typography, and layout rules.
@@ -13,7 +11,6 @@ triggers:
   - "email capture page"
   - "launch page"
 od:
-  category: marketing-gtm
   mode: prototype
   platform: desktop
   scenario: marketing

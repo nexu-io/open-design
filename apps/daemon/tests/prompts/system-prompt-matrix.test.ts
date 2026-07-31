@@ -24,11 +24,16 @@ import { composeSystemPrompt, type ComposeInput } from '../../src/prompts/system
  */
 
 const DS_TITLE = 'Snapshot Brand';
+const ROLE_MARKER_GUARD_SENTINEL = '__ROLE_MARKER_GUARD__';
+const ROLE_MARKER_GUARD_HEADINGS = [
+  '## CRITICAL: Never fabricate conversation turns',
+  '## Critical Constraint: Never Fabricate Conversation Turns',
+] as const;
 
 // Ordered as the composer pushes them; detection is by substring so order in
 // this table is documentation, not an assertion.
 const SECTION_MARKERS = [
-  ['injection-resistance', '## Security: prompt injection resistance'],
+  ['injection-resistance', '## Security:'],
   ['api-mode-override', '# API mode — no tools available'],
   ['plan-mode-override', '# Plan mode — editable document first'],
   ['ask-mode-override', '# Ask mode — bare conversation'],
@@ -36,10 +41,10 @@ const SECTION_MARKERS = [
   ['skip-discovery-override', '# Automated project mode — skip discovery form'],
   ['ui-locale-override', '# UI locale override'],
   ['discovery-and-philosophy', '# OD core directives (read first'],
-  ['direction-library', '## Direction library — bind into'],
+  ['direction-library', '## Direction library — infer and bind by default'],
   ['shared-device-frames', '## Multi-device / multi-screen — shared frames'],
   ['identity-charter', '# Identity and workflow charter (background)'],
-  ['slim-core-charter', '# Open Design charter'],
+  ['slim-core-charter', '# Open Design Charter'],
   ['slim-platform-contracts', '## Platform delivery contracts'],
   ['personal-memory', '## Personal memory (auto-extracted from past chats)'],
   ['memory-intent-gateway', '## Intent gateway — turn short asks into a brief'],
@@ -67,9 +72,8 @@ const SECTION_MARKERS = [
   ['critique-panel', '## Panelist role definitions'],
   ['active-ds-visual-direction-override', '## Active design system visual direction'],
   ['filesystem-handoff-override', '## Filesystem handoff'],
-  ['clarifying-questions', '## Clarifying questions mid-conversation'],
-  ['inspiration-step', '## Inspiration step — ground ungrounded tasks'],
-  ['role-marker-guard', '## CRITICAL: Never fabricate conversation turns'],
+  ['clarifying-questions', '## Structured clarification on any turn'],
+  ['role-marker-guard', ROLE_MARKER_GUARD_SENTINEL],
 ] as const satisfies ReadonlyArray<readonly [string, string]>;
 
 type SectionName = (typeof SECTION_MARKERS)[number][0];
@@ -83,7 +87,24 @@ function escapeRegExp(value: string): string {
 // substring match would report sections that were never spliced in. A real
 // section heading always opens its own line.
 function markerMatches(composed: string, marker: string): boolean {
-  return new RegExp(`^${escapeRegExp(marker)}`, 'm').test(composed);
+  const candidates =
+    marker === ROLE_MARKER_GUARD_SENTINEL ? ROLE_MARKER_GUARD_HEADINGS : [marker];
+  return candidates.some((candidate) =>
+    new RegExp(`^${escapeRegExp(candidate)}`, 'm').test(composed),
+  );
+}
+
+function lastMarkerIndex(composed: string, marker: string): number {
+  const candidates =
+    marker === ROLE_MARKER_GUARD_SENTINEL ? ROLE_MARKER_GUARD_HEADINGS : [marker];
+  return Math.max(
+    ...candidates.map((candidate) => {
+      const matches = [
+        ...composed.matchAll(new RegExp(`^${escapeRegExp(candidate)}`, 'gm')),
+      ];
+      return matches.length > 0 ? matches[matches.length - 1]!.index : -1;
+    }),
+  );
 }
 
 // Note one genuine containment: the maybe-deck variant embeds the full deck
@@ -301,24 +322,17 @@ describe('composeSystemPrompt — position invariants', () => {
       const expectedHead = isSlim
         ? input.sessionMode === 'chat'
           ? '# Ask mode — bare conversation'
-          : '# Open Design charter'
+          : '# Open Design Charter'
         : '## Security: prompt injection resistance';
       expect(
         composed.startsWith(expectedHead),
         `${name}: prompt must open with ${expectedHead}`,
       ).toBe(true);
-      expect(composed, `${name}: security section missing`).toContain(
-        '## Security: prompt injection resistance',
-      );
-      const guardIndex = composed.indexOf('## CRITICAL: Never fabricate conversation turns');
+      expect(composed, `${name}: security section missing`).toMatch(/^## Security:/m);
+      const guardIndex = lastMarkerIndex(composed, ROLE_MARKER_GUARD_SENTINEL);
       expect(guardIndex, `${name}: role-marker guard missing`).toBeGreaterThan(-1);
       const lastHeadingIndex = Math.max(
-        ...SECTION_MARKERS.map(([, marker]) => {
-          const matches = [
-            ...composed.matchAll(new RegExp(`^${escapeRegExp(marker)}`, 'gm')),
-          ];
-          return matches.length > 0 ? matches[matches.length - 1]!.index : -1;
-        }),
+        ...SECTION_MARKERS.map(([, marker]) => lastMarkerIndex(composed, marker)),
       );
       expect(guardIndex, `${name}: role-marker guard must be the final section`).toBe(
         lastHeadingIndex,

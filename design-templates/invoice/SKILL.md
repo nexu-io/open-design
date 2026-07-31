@@ -1,7 +1,5 @@
 ---
 name: invoice
-en_name: "Invoice & Billing Document"
-zh_name: "发票账单"
 description: |
   A printable invoice page — sender + recipient block, line items table,
   tax breakdown, totals, and payment instructions. Use when the brief
@@ -13,7 +11,6 @@ triggers:
   - "发票"
   - "账单"
 od:
-  category: data-finance
   mode: prototype
   platform: desktop
   scenario: finance

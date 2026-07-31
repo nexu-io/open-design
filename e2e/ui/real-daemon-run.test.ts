@@ -7,6 +7,7 @@ import {
   createFakeAgentRuntimes,
   FAKE_AGENT_RUNTIME_IDS,
 } from '@/playwright/fake-agents';
+import { trackRunRequests } from '@/playwright/mock-factory';
 import type { FakeAgentId } from '@/playwright/fake-agents';
 import { T } from '@/timeouts';
 
@@ -76,7 +77,6 @@ test.afterEach(async ({ page }) => {
 });
 
 test('[P0] real daemon run streams, persists, and previews an artifact', async ({ page }) => {
-  await page.goto('/');
   await createProject(page, 'Real daemon run smoke');
   await expectWorkspaceReady(page);
 
@@ -106,7 +106,6 @@ test('[P0] real daemon run streams, persists, and previews an artifact', async (
 });
 
 test('[P0] real daemon run persists an artifact streamed across multiple chunks', async ({ page }) => {
-  await page.goto('/');
   await createProject(page, 'Chunked daemon run smoke');
   await expectWorkspaceReady(page);
 
@@ -121,7 +120,6 @@ test('[P0] real daemon run persists an artifact streamed across multiple chunks'
 });
 
 test('[P1] plain stdout daemon runtime persists artifact tags into project files and preview', async ({ page }) => {
-  await page.goto('/');
   await createProject(page, 'Plain stream artifact smoke', 'qwen');
   await expectWorkspaceReady(page);
 
@@ -135,7 +133,6 @@ test('[P1] plain stdout daemon runtime persists artifact tags into project files
 });
 
 test('[P0] real daemon run surfaces process/parser errors in chat', async ({ page }) => {
-  await page.goto('/');
   await createProject(page, 'Daemon error smoke');
   await expectWorkspaceReady(page);
 
@@ -146,7 +143,6 @@ test('[P0] real daemon run surfaces process/parser errors in chat', async ({ pag
 });
 
 test('[P0] real daemon run classifies a Claude mid-stream socket drop as a retryable connection error', async ({ page }) => {
-  await page.goto('/');
   await createProject(page, 'Daemon socket-drop smoke', 'claude');
   await expectWorkspaceReady(page);
 
@@ -162,7 +158,6 @@ test('[P0] real daemon run classifies a Claude mid-stream socket drop as a retry
 });
 
 test('[P0] real daemon run supports a follow-up turn in the same project', async ({ page }) => {
-  await page.goto('/');
   await createProject(page, 'Daemon follow-up smoke');
   await expectWorkspaceReady(page);
 
@@ -182,7 +177,6 @@ test('[P0] real daemon run supports a follow-up turn in the same project', async
 });
 
 test('[P1] real daemon run treats an in-place artifact edit as produced work', async ({ page }) => {
-  await page.goto('/');
   await createProject(page, 'Daemon artifact edit smoke', 'claude');
   await expectWorkspaceReady(page);
 
@@ -222,6 +216,7 @@ test('[P1] real daemon run treats an in-place artifact edit as produced work', a
   await expect(editedHeading).toBeVisible();
   await editedHeading.click();
   await expect(editedHeading).toHaveAttribute('data-od-edit-selected', 'true');
+  await page.getByTestId('manual-edit-open-inspector').click();
   const fontSizeInput = page
     .locator('.manual-edit-modal .cc-section')
     .filter({ hasText: 'TYPOGRAPHY' })
@@ -241,7 +236,6 @@ test('[P1] real daemon run treats an in-place artifact edit as produced work', a
 });
 
 test('[P1] Plan mode daemon run creates, opens, and restores an editable markdown plan', async ({ page }) => {
-  await page.goto('/');
   await createProject(page, 'Plan mode markdown smoke');
   await expectWorkspaceReady(page);
 
@@ -275,7 +269,6 @@ test('[P1] Plan mode daemon run creates, opens, and restores an editable markdow
 // generated HTML instead of staying on the markdown plan.
 test('[P1] Plan mode generation turn auto-opens the generated HTML file', async ({ page }) => {
   test.setTimeout(120_000);
-  await page.goto('/');
   await createProject(page, 'Plan mode html auto-open smoke', 'claude');
   await expectWorkspaceReady(page);
 
@@ -311,7 +304,6 @@ test('[P1] Plan mode generation turn auto-opens the generated HTML file', async 
 // auto-open path cannot mask the turn-end selection.
 test('[P1] Plan mode regeneration re-opens the existing generated HTML file', async ({ page }) => {
   test.setTimeout(120_000);
-  await page.goto('/');
   await createProject(page, 'Plan mode html regen smoke');
   await expectWorkspaceReady(page);
 
@@ -345,7 +337,6 @@ test('[P1] Plan mode regeneration re-opens the existing generated HTML file', as
 });
 
 test('[P0] real daemon run restores a delayed artifact turn after reload', async ({ page }) => {
-  await page.goto('/');
   await createProject(page, 'Delayed daemon reload smoke');
   await expectWorkspaceReady(page);
 
@@ -373,7 +364,6 @@ test('[P0] real daemon run restores a delayed artifact turn after reload', async
 test('[P1] real daemon run reconnects after reload while the run is still active', async ({ page }) => {
   test.setTimeout(90_000);
 
-  await page.goto('/');
   await createProject(page, 'Running daemon reload smoke');
   await expectWorkspaceReady(page);
 
@@ -407,7 +397,6 @@ test('[P1] real daemon run reconnects after reload while the run is still active
 test('[P1] artifact persistence survives page reload during an active real daemon run', async ({ page }) => {
   test.setTimeout(120_000);
 
-  await page.goto('/');
   await createProject(page, 'Running daemon reload smoke');
   await expectWorkspaceReady(page);
 
@@ -476,7 +465,6 @@ test('[P1] artifact persistence survives page reload during an active real daemo
 });
 
 test('[P1] real daemon run survives reload before the create response reaches the browser', async ({ page }) => {
-  await page.goto('/');
   await createProject(page, 'Delayed daemon create-response reload smoke');
   await expectWorkspaceReady(page);
 
@@ -497,7 +485,6 @@ test('[P1] real daemon run survives reload before the create response reaches th
 });
 
 test('[P0] empty daemon output fails cleanly, persists after reload, and does not leave ghost files', async ({ page }) => {
-  await page.goto('/');
   await createProject(page, 'Empty daemon failure smoke');
   await expectWorkspaceReady(page);
 
@@ -522,7 +509,6 @@ test('[P0] empty daemon output fails cleanly, persists after reload, and does no
 });
 
 test('[P1] plain stdout daemon runtime surfaces stderr-only failures without ghost files', async ({ page }) => {
-  await page.goto('/');
   await createProject(page, 'Plain stderr failure smoke', 'qwen');
   await expectWorkspaceReady(page);
 
@@ -545,7 +531,6 @@ test('[P1] plain stdout daemon runtime surfaces stderr-only failures without gho
 });
 
 test('[P0] separate projects keep daemon artifacts isolated across recent-project navigation', async ({ page }) => {
-  await page.goto('/');
   await createProject(page, 'Real daemon isolation alpha');
   await expectWorkspaceReady(page);
   await sendPrompt(page, 'Create a deterministic smoke artifact');
@@ -602,10 +587,7 @@ test('[P1] BYOK OpenCode run is blocked before spawn when provider config is mis
   // Settings section for the user to complete the config. So "fails clearly
   // before spawn" now means no create-run request is issued and the preflight
   // surfaces the fix, not a daemon-side failed run.
-  let createRunRequestSent = false;
-  page.on('request', (request) => {
-    if (isCreateRunRequest(request)) createRunRequestSent = true;
-  });
+  const runRequests = trackRunRequests(page);
 
   const { projectId } = await currentProjectContext(page);
   const input = page.getByTestId('chat-composer-input');
@@ -620,8 +602,11 @@ test('[P1] BYOK OpenCode run is blocked before spawn when provider config is mis
   ).toBeVisible({ timeout: 15_000 });
 
   // No run was created and no artifact was produced — the block is pre-spawn.
-  await page.waitForTimeout(1_000);
-  expect(createRunRequestSent).toBe(false);
+  await runRequests.expectNone({
+    timeout: 1_000,
+    message: 'missing BYOK provider should block before POST /api/runs',
+  });
+  runRequests.dispose?.();
   expect(await listProjectFiles(page, projectId)).toEqual([]);
 
   await page.reload({ waitUntil: 'domcontentloaded' });
@@ -719,18 +704,17 @@ test('[P0] real daemon run supports fake non-Codex runtime protocols', async ({ 
 async function createProject(page: Page, name: string, agentId: FakeAgentId = 'codex') {
   await configureFakeAgent(page, agentId);
   await installBrowserAgentConfig(page, agentId);
-  await gotoEntryHome(page);
-  await setBrowserAgentConfig(page, agentId);
-  await page.reload({ waitUntil: 'domcontentloaded' });
+  const projectId = `real-daemon-${agentId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  await createProjectViaApi(page, projectId, name);
+  try {
+    await page.goto(`/projects/${projectId}`, { waitUntil: 'domcontentloaded' });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!/ERR_ABORTED|frame was detached/i.test(message)) throw error;
+  }
   await waitForLoadingToClear(page);
-  await setBrowserAgentConfig(page, agentId);
-  await configureFakeAgent(page, agentId);
   await expectBrowserAgentConfig(page, agentId);
   await dismissPrivacyDialog(page);
-  await openNewProjectModalFromProjects(page);
-  await page.getByTestId('new-project-tab-prototype').click();
-  await page.getByTestId('new-project-name').fill(name);
-  await page.getByTestId('create-project').click();
 }
 
 async function createByokOpenCodeProject(page: Page, name: string) {

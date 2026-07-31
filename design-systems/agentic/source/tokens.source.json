@@ -11,67 +11,67 @@
   "tokens": [
     {
       "name": "--bg",
-      "value": "#ffffff",
+      "value": "#0b1020",
       "layer": "A1-identity",
       "source": "tokens.css:7"
     },
     {
       "name": "--surface",
-      "value": "#f6f6f1",
+      "value": "#131b2f",
       "layer": "A1-identity",
       "source": "tokens.css:8"
     },
     {
       "name": "--surface-warm",
-      "value": "#fff4ec",
+      "value": "#182343",
       "layer": "B-slot",
       "source": "tokens.css:9"
     },
     {
       "name": "--fg",
-      "value": "#111827",
+      "value": "#f8fafc",
       "layer": "A1-identity",
       "source": "tokens.css:10"
     },
     {
       "name": "--fg-2",
-      "value": "#374151",
+      "value": "#cbd5e1",
       "layer": "B-slot",
       "source": "tokens.css:11"
     },
     {
       "name": "--muted",
-      "value": "#6b7280",
+      "value": "#8ea0b8",
       "layer": "A1-identity",
       "source": "tokens.css:12"
     },
     {
       "name": "--meta",
-      "value": "#ff5701",
+      "value": "#60a5fa",
       "layer": "B-slot",
       "source": "tokens.css:13"
     },
     {
       "name": "--border",
-      "value": "#d1d5db",
+      "value": "#293653",
       "layer": "A1-identity",
       "source": "tokens.css:14"
     },
     {
       "name": "--border-soft",
-      "value": "#e5e7eb",
+      "value": "#1e2a43",
       "layer": "B-slot",
       "source": "tokens.css:15"
     },
     {
       "name": "--accent",
-      "value": "#ff5701",
+      "value": "#60a5fa",
       "layer": "A1-identity",
       "source": "tokens.css:16"
     },
     {
       "name": "--accent-on",
-      "value": "#ffffff",
+      "value": "#06111f",
       "layer": "A2",
       "source": "tokens.css:17"
     },
@@ -89,31 +89,31 @@
     },
     {
       "name": "--success",
-      "value": "#16a34a",
+      "value": "#22c55e",
       "layer": "A2",
       "source": "tokens.css:20"
     },
     {
       "name": "--warn",
-      "value": "#d97706",
+      "value": "#fbbf24",
       "layer": "A2",
       "source": "tokens.css:21"
     },
     {
       "name": "--danger",
-      "value": "#dc2626",
+      "value": "#fb7185",
       "layer": "A2",
       "source": "tokens.css:22"
     },
     {
       "name": "--font-display",
-      "value": "Playfair Display, Georgia, serif",
+      "value": "Inter, system-ui, sans-serif",
       "layer": "A1-identity",
       "source": "tokens.css:23"
     },
     {
       "name": "--font-body",
-      "value": "Playfair Display, Georgia, serif",
+      "value": "Inter, system-ui, sans-serif",
       "layer": "A1-identity",
       "source": "tokens.css:24"
     },
@@ -299,7 +299,7 @@
     },
     {
       "name": "--focus-ring",
-      "value": "0 0 0 4px rgba(255, 87, 1, 0.28)",
+      "value": "0 0 0 4px rgba(96, 165, 250, 0.28)",
       "layer": "A2",
       "source": "tokens.css:55"
     },

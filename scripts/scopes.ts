@@ -166,9 +166,36 @@ const CERTAIN_PACKAGED_LEAF_SURFACE: RuleMatch = {
   prefixes: CERTAIN_PACKAGED_LEAF_PREFIXES,
 };
 
+export const CERTAIN_DAEMON_CORE_PREFIXES = [
+  "apps/daemon/src/",
+  "apps/daemon/tests/",
+] as const;
+
+export const CERTAIN_DAEMON_CORE_EXCLUDED_PREFIXES = [
+  "apps/daemon/src/sidecar/",
+  ...DAEMON_RUNTIME_DEFINITION_PREFIXES,
+] as const;
+
+export const CERTAIN_DAEMON_CORE_EXCLUDED_EXACT = DAEMON_RUNTIME_DEFINITION_EXACT;
+
+const CERTAIN_DAEMON_CORE_EXCLUDED_SURFACE: RuleMatch = {
+  prefixes: CERTAIN_DAEMON_CORE_EXCLUDED_PREFIXES,
+  exact: CERTAIN_DAEMON_CORE_EXCLUDED_EXACT,
+};
+
+const CERTAIN_DAEMON_CORE_SURFACE: RuleMatch = {
+  prefixes: CERTAIN_DAEMON_CORE_PREFIXES,
+  excludeWhen: CERTAIN_DAEMON_CORE_EXCLUDED_SURFACE,
+};
+
 const CERTAIN_SURFACE: RuleMatch = {
-  prefixes: [...CERTAIN_EXEMPT_PREFIXES, ...CERTAIN_PACKAGED_LEAF_PREFIXES],
+  prefixes: [
+    ...CERTAIN_EXEMPT_PREFIXES,
+    ...CERTAIN_PACKAGED_LEAF_PREFIXES,
+    ...CERTAIN_DAEMON_CORE_PREFIXES,
+  ],
   exact: CERTAIN_EXEMPT_EXACT,
+  excludeWhen: CERTAIN_DAEMON_CORE_EXCLUDED_SURFACE,
 };
 
 // Medium-tier exempt residue. The global markdown regex stays medium on
@@ -196,9 +223,15 @@ const MEDIUM_EXEMPT_EXACT = [
 const EXEMPT_REGEXES = [/\.(?:md|mdx|txt)$/] as const;
 
 const WORKSPACE_FALLBACK_EXCLUDED_SURFACE: RuleMatch = {
-  prefixes: [...CERTAIN_EXEMPT_PREFIXES, ...MEDIUM_EXEMPT_PREFIXES, ...CERTAIN_PACKAGED_LEAF_PREFIXES],
+  prefixes: [
+    ...CERTAIN_EXEMPT_PREFIXES,
+    ...MEDIUM_EXEMPT_PREFIXES,
+    ...CERTAIN_PACKAGED_LEAF_PREFIXES,
+    ...CERTAIN_DAEMON_CORE_PREFIXES,
+  ],
   exact: [...CERTAIN_EXEMPT_EXACT, ...MEDIUM_EXEMPT_EXACT],
   regexes: EXEMPT_REGEXES,
+  excludeWhen: CERTAIN_DAEMON_CORE_EXCLUDED_SURFACE,
 };
 
 export const scopeRules: readonly ScopeRule[] = [
@@ -224,6 +257,18 @@ export const scopeRules: readonly ScopeRule[] = [
     confidence: "medium",
   },
   {
+    id: "certain-daemon-core",
+    match: CERTAIN_DAEMON_CORE_SURFACE,
+    effects: [
+      "daemon_tests_required",
+      "ui_critical_validation_required",
+      "ui_p0_validation_required",
+      "workspace_validation_required",
+    ],
+    confidence: "certain",
+    guard: "daemon core boundary",
+  },
+  {
     id: "daemon-sources",
     match: {
       prefixes: [
@@ -234,6 +279,7 @@ export const scopeRules: readonly ScopeRule[] = [
         "packages/sidecar/",
         "packages/sidecar-proto/",
       ],
+      excludeWhen: CERTAIN_DAEMON_CORE_SURFACE,
     },
     effects: ["daemon_tests_required"],
     confidence: "medium",
@@ -343,6 +389,7 @@ export const scopeRules: readonly ScopeRule[] = [
         ".github/workflows/ci.yml",
         ".github/workflows/ui-extended-main.yml",
       ],
+      excludeWhen: CERTAIN_DAEMON_CORE_SURFACE,
     },
     effects: ["ui_p0_validation_required"],
     confidence: "medium",
@@ -387,12 +434,14 @@ export const scopeRules: readonly ScopeRule[] = [
         prefixes: [
           ...CERTAIN_EXEMPT_PREFIXES,
           ...MEDIUM_EXEMPT_PREFIXES,
+          ...CERTAIN_DAEMON_CORE_PREFIXES,
           "apps/desktop/",
           "apps/packaged/",
           "tools/pack/",
         ],
         exact: [...CERTAIN_EXEMPT_EXACT, ...MEDIUM_EXEMPT_EXACT],
         regexes: EXEMPT_REGEXES,
+        excludeWhen: CERTAIN_DAEMON_CORE_EXCLUDED_SURFACE,
       },
     },
     effects: ["ui_critical_validation_required"],

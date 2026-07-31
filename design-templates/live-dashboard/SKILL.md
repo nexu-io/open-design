@@ -1,7 +1,5 @@
 ---
 name: live-dashboard
-en_name: "Notion-Style Live Team Dashboard"
-zh_name: "Notion 风格实时团队看板"
 description: |
   Notion-style team dashboard rendered as a Live Artifact. A single-page,
   self-contained HTML dashboard with KPIs, a 7-day sparkline, a real-time
@@ -19,7 +17,6 @@ triggers:
   - "Notion 仪表盘"
   - "Live Artifact dashboard"
 od:
-  category: data-finance
   mode: prototype
   platform: desktop
   scenario: operation

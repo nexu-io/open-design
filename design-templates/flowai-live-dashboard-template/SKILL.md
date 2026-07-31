@@ -1,7 +1,5 @@
 ---
 name: flowai-live-dashboard-template
-en_name: "Live Team Management Dashboard"
-zh_name: "团队管理实时看板"
 description: |
   Team-management dashboard skill in the FlowAI aesthetic — three tabs
   (Team Members, Team Details, Activity Log), KPI stat row, member table,
@@ -22,7 +20,6 @@ od:
   mode: prototype
   platform: desktop
   scenario: operations
-  category: data-finance
   preview:
     type: html
     entry: index.html

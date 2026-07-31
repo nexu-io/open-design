@@ -1,7 +1,5 @@
 ---
 name: meeting-notes
-en_name: "Meeting Notes & Action Items"
-zh_name: "会议纪要与行动项"
 description: |
   Meeting notes page — title bar with attendees, agenda checklist, decisions
   block, action items table with owners + dates, and a "next meeting" footer.
@@ -14,7 +12,6 @@ triggers:
   - "all-hands recap"
   - "会议纪要"
 od:
-  category: product-management
   mode: prototype
   platform: desktop
   scenario: operations

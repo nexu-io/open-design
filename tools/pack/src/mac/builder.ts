@@ -3,6 +3,10 @@ import { dirname, join } from "node:path";
 
 import type { ToolPackConfig } from "../config.js";
 import { domToPptxBundleResource } from "../dom-to-pptx-resource.js";
+import {
+  assertNodePtyRuntime,
+  resolveNodePtyRuntimeArch,
+} from "../node-pty-runtime.js";
 import { macResources } from "../resources.js";
 import { electronBuilderVersionForAppVersion } from "../versions.js";
 import { execFileAsync } from "./commands.js";
@@ -169,5 +173,10 @@ export async function runElectronBuilder(
   await assertMacRuntimeDependenciesResolvable({
     manifestPath: paths.assembledPackageJsonPath,
     runtimeRoot: join(paths.appPath, "Contents", "Resources", "app"),
+  });
+  await assertNodePtyRuntime({
+    appRoot: join(paths.appPath, "Contents", "Resources", "app"),
+    arch: resolveNodePtyRuntimeArch(process.arch),
+    platform: "darwin",
   });
 }

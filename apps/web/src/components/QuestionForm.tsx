@@ -18,18 +18,8 @@ import {
   DialogTitle,
 } from '@open-design/components';
 import { tForLanguageTag, useT } from '../i18n';
-import type {
-  DirectionCard,
-  FormOption,
-  InspirationRef,
-  QuestionForm,
-} from '../artifacts/question-form';
-import {
-  formatFormAnswers,
-  formOptionValueForLabel,
-  parseInspirationSelection,
-} from '../artifacts/question-form';
-import { InspirationPicker } from './InspirationPicker';
+import type { DirectionCard, FormOption, QuestionForm } from '../artifacts/question-form';
+import { formatFormAnswers, formOptionValueForLabel } from '../artifacts/question-form';
 import {
   visualStyleCardsForContext,
   type VisualStyleCard,
@@ -92,12 +82,11 @@ interface Props {
     answers: Record<string, string | string[]>,
     source: 'submit' | 'skip' | 'auto',
     files?: QuestionFormFileSubmission[],
-    inspiration?: QuestionFormInspirationSubmission,
   ) => void;
   submitDisabled?: boolean;
   visualStyleContext?: VisualStyleContext;
-  // Optional paths can move on after the timeout. A required answer never
-  // becomes a skipped answer merely because the form was left unattended.
+  // When enabled, the form moves on after the timeout. Any unanswered field,
+  // including a required one, is submitted as "(skipped)".
   autoContinueAfterTimeout?: boolean;
 }
 
@@ -107,22 +96,12 @@ export interface QuestionFormFileSubmission {
   files: File[];
 }
 
-/**
- * Structured view of what the user picked in `inspiration` questions,
- * reported alongside the serialized answer text so the host can actually
- * apply the picks (design system → project apply flow, template → per-turn
- * skillIds) instead of re-parsing the message text.
- */
-export interface QuestionFormInspirationSubmission {
-  templates: InspirationRef[];
-  designSystems: InspirationRef[];
-}
-
 // Lets an embedding host trigger submission.
 export interface QuestionFormHandle {
   submit: () => void;
-  // Submit with no answers — backs the "skip all" affordance. Every question
-  // is optional, so this just records each as "(skipped)" and moves on.
+  // Submit with no answers — backs the "skip all" affordance. This is an
+  // explicit user decision, so it records every question as "(skipped)" and
+  // moves on even when the normal form path marks a question required.
   skipAll: () => void;
 }
 
@@ -357,14 +336,10 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
     const submittedAnswers = answersWithSkippedQuestions(form, answers, skippedIds);
     const submissionForm = formWithVisualStyleOptions(form, visualStyleContext);
     const files = collectFileSubmissions(form, fileAnswers, skippedIds);
-    const inspiration = collectInspirationSubmission(form, submittedAnswers, skippedIds);
-    const text = formatFormAnswers(submissionForm, submittedAnswers);
-    if (inspiration) {
-      onSubmit(text, submittedAnswers, source, files, inspiration);
-    } else if (files.length > 0) {
-      onSubmit(text, submittedAnswers, source, files);
+    if (files.length > 0) {
+      onSubmit(formatFormAnswers(submissionForm, submittedAnswers), submittedAnswers, source, files);
     } else {
-      onSubmit(text, submittedAnswers, source);
+      onSubmit(formatFormAnswers(submissionForm, submittedAnswers), submittedAnswers, source);
     }
   }
 
@@ -376,13 +351,13 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
   }
 
   function handleSkipAll() {
-    if (locked || !onSubmit || !canSkipAll) return;
+    if (locked || !onSubmit) return;
     const empty: Record<string, string | string[]> = {};
     onSubmit(formatFormAnswers(formWithVisualStyleOptions(form, visualStyleContext), empty), empty, 'skip');
   }
 
   function handleSkipCurrent() {
-    if (locked || !onSubmit || !activeQuestion || activeQuestion.required === true) return;
+    if (locked || !onSubmit || !activeQuestion) return;
     onInteraction?.({
       element: 'step_skip',
       questionId: activeQuestion.id,
@@ -427,29 +402,29 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
     const v = currentAnswers[q.id];
     return !Array.isArray(v) || v.length <= q.maxSelections;
   });
-  // Required questions must carry a non-empty answer. Without this, main-path forms (the discovery router's
-  // required taskType/output, the ElevenLabs voice picker) would accept an
-  // empty submit and serialize "(skipped)" for fields the rest of the system
-  // treats as mandatory.
+  // Required questions must carry a non-empty answer on the normal path. An
+  // explicit per-question Skip is a deliberate alternative: it serializes the
+  // value as "(skipped)" and lets the agent proceed with sensible defaults.
   const requiredAnswered = form.questions.every((q) => {
     if (q.required !== true) return true;
+    if (skippedQuestionIds.has(q.id)) return true;
     const v = currentAnswers[q.id];
     return questionAnswerIsPresent(v);
   });
   const ready = withinSelectionLimits && requiredAnswered;
-  const canSkipAll = form.questions.every((q) => q.required !== true);
-  // Required answers remain required after a timeout. A flat form may only
-  // auto-continue once every required answer is present; a stepped form can
-  // auto-continue on an optional active step after its earlier requirements
-  // have been met. Fully optional forms retain the countdown throughout.
+  // A manual Skip all is always available, including for required questions.
+  const canSkipAll = true;
+  const hasRequiredQuestions = form.questions.some((q) => q.required === true);
+  // Timeout continuation shares the explicit Skip semantics: unanswered
+  // questions, including required ones, are serialized as "(skipped)".
   const autoContinueEnabled =
     autoContinueAfterTimeout &&
     !locked &&
-    !submitDisabled &&
-    (canSkipAll || (ready && (!stepped || activeQuestion?.required !== true)));
+    !submitDisabled;
   const currentQuestionReady =
     !activeQuestion ||
     activeQuestion.required !== true ||
+    skippedQuestionIds.has(activeQuestion.id) ||
     questionAnswerIsPresent(currentAnswers[activeQuestion.id]);
   const autoContinueCountdown = `${Math.floor(autoContinueRemaining / 60)}:${String(
     autoContinueRemaining % 60,
@@ -784,22 +759,6 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
                   onChange={(e) => update(q.id, e.target.value)}
                 />
               ) : null}
-              {q.type === 'inspiration' ? (
-                <InspirationPicker
-                  formId={form.id}
-                  questionId={q.id}
-                  sources={q.sources}
-                  query={q.query}
-                  value={Array.isArray(value) ? value : []}
-                  files={fileAnswers[q.id] ?? []}
-                  disabled={locked}
-                  onChange={(next) => update(q.id, next)}
-                  onFilesChange={(nextFiles) =>
-                    setFileAnswers((current) => ({ ...current, [q.id]: nextFiles }))
-                  }
-                  t={t}
-                />
-              ) : null}
               {q.type === 'direction-cards' && q.cards && q.cards.length > 0 ? (
                 <div className="qf-direction-cards">
                   {q.cards.map((card) => (
@@ -851,16 +810,14 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
                   {autoContinueCountdown}
                 </span>
               ) : null}
-              {activeQuestion?.required === true ? null : (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={handleSkipCurrent}
-                  disabled={submitDisabled}
-                >
-                  {t('questionForm.skip')}
-                </Button>
-              )}
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={handleSkipCurrent}
+                disabled={submitDisabled}
+              >
+                {t('questionForm.skip')}
+              </Button>
               <span className="qf-submit-actions">
                 <Button
                   type="button"
@@ -895,7 +852,7 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
                 </Button>
               </span>
             </>
-          ) : autoContinueEnabled || canSkipAll ? (
+          ) : autoContinueEnabled || !hasRequiredQuestions ? (
             <span
               className={autoContinueEnabled ? 'qf-auto-continue' : 'qf-hint'}
               title={autoContinueEnabled ? t('questions.autoSkipHint') : undefined}
@@ -1531,24 +1488,10 @@ function draftSafeAnswers(
   const fileQuestionIds = new Set(
     form.questions.filter((q) => q.type === 'file').map((q) => q.id),
   );
-  const inspirationQuestionIds = new Set(
-    form.questions.filter((q) => q.type === 'inspiration').map((q) => q.id),
-  );
-  if (fileQuestionIds.size === 0 && inspirationQuestionIds.size === 0) return answers;
+  if (fileQuestionIds.size === 0) return answers;
   const out: Record<string, string | string[]> = {};
   for (const [id, value] of Object.entries(answers)) {
-    if (fileQuestionIds.has(id)) continue;
-    if (inspirationQuestionIds.has(id)) {
-      // A restored draft has no File objects to re-upload, so persist only
-      // the catalog tokens and drop upload file names.
-      const selection = parseInspirationSelection(value);
-      const tokens = Array.isArray(value)
-        ? value.filter((entry) => !selection.uploads.includes(entry.trim()))
-        : [];
-      if (tokens.length > 0) out[id] = tokens;
-      continue;
-    }
-    out[id] = value;
+    if (!fileQuestionIds.has(id)) out[id] = value;
   }
   return out;
 }
@@ -1575,10 +1518,7 @@ function collectFileSubmissions(
 ): QuestionFormFileSubmission[] {
   const out: QuestionFormFileSubmission[] = [];
   for (const q of form.questions) {
-    // Inspiration questions carry the user's own reference images through
-    // the same upload channel as `file` questions.
-    if ((q.type !== 'file' && q.type !== 'inspiration') || skippedQuestionIds.has(q.id))
-      continue;
+    if (q.type !== 'file' || skippedQuestionIds.has(q.id)) continue;
     const files = fileAnswers[q.id] ?? [];
     if (files.length === 0) continue;
     out.push({ questionId: q.id, questionLabel: q.label, files });
@@ -1586,25 +1526,8 @@ function collectFileSubmissions(
   return out;
 }
 
-function collectInspirationSubmission(
-  form: QuestionForm,
-  answers: Record<string, string | string[]>,
-  skippedQuestionIds: ReadonlySet<string>,
-): QuestionFormInspirationSubmission | undefined {
-  const templates: InspirationRef[] = [];
-  const designSystems: InspirationRef[] = [];
-  for (const q of form.questions) {
-    if (q.type !== 'inspiration' || skippedQuestionIds.has(q.id)) continue;
-    const selection = parseInspirationSelection(answers[q.id]);
-    templates.push(...selection.templates);
-    designSystems.push(...selection.designSystems);
-  }
-  if (templates.length === 0 && designSystems.length === 0) return undefined;
-  return { templates, designSystems };
-}
-
 function emptyQuestionValue(q: QuestionForm['questions'][number]): string | string[] {
-  if (q.type === 'checkbox' || q.type === 'inspiration') return [];
+  if (q.type === 'checkbox') return [];
   if (q.type === 'switch') return 'false';
   if (q.type === 'range') return String(q.min ?? 0);
   if (q.type === 'color') return normalizeColorInputValue('');
@@ -1794,7 +1717,7 @@ export function parseSubmittedAnswers(
     if (!id) continue;
     const q = form.questions.find((x) => x.id === id);
     if (!q) continue;
-    if (q.type === 'checkbox' || q.type === 'inspiration') {
+    if (q.type === 'checkbox') {
       answers[id] = value
         .split(',')
         .map((s) => s.trim())

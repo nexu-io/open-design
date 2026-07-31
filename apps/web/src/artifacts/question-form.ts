@@ -44,88 +44,7 @@ export type QuestionType =
   | 'tel'
   | 'file'
   | 'switch'
-  | 'direction-cards'
-  | 'inspiration';
-
-/**
- * Catalog sections an `inspiration` question offers. The picker is
- * host-data-driven: the model only emits this small marker and the host
- * fetches design templates / design systems from the local registry and
- * renders upload affordances itself — the model never enumerates catalog
- * entries inline.
- */
-export type InspirationSource = 'templates' | 'design-systems' | 'upload';
-
-const INSPIRATION_SOURCES: readonly InspirationSource[] = [
-  'templates',
-  'design-systems',
-  'upload',
-];
-
-/** One resolved reference picked in an `inspiration` question. */
-export interface InspirationRef {
-  id: string;
-  label: string;
-}
-
-/**
- * Structured view of an `inspiration` question's answer value. Uploads are
- * file names only — the actual bytes ride the standard question-form upload
- * channel (see collectFileSubmissions in QuestionForm.tsx).
- */
-export interface InspirationSelection {
-  templates: InspirationRef[];
-  designSystems: InspirationRef[];
-  uploads: string[];
-}
-
-// Machine-stable suffix carried inside an inspiration answer entry, e.g.
-// "Fundraising Pitch [template:deck-fundraising]". The human-readable label
-// leads so the serialized user message stays legible to the agent, while the
-// bracketed token survives the round-trip through formatFormAnswers /
-// parseSubmittedAnswers (it deliberately does NOT use the `[value: …]` shape,
-// which parseSubmittedOptionToken would strip).
-const INSPIRATION_ENTRY_RE = /^(.*?)\s*\[(template|ds):([^\]]+)\]$/;
-
-// Entry labels must not contain characters that break the checkbox-style
-// comma-joined wire format or mimic the token suffix.
-function sanitizeInspirationLabel(label: string): string {
-  return label.replace(/[[\],]/g, ' ').replace(/\s+/g, ' ').trim();
-}
-
-export function inspirationEntryForTemplate(id: string, label: string): string {
-  return `${sanitizeInspirationLabel(label)} [template:${id.trim()}]`;
-}
-
-export function inspirationEntryForDesignSystem(id: string, label: string): string {
-  return `${sanitizeInspirationLabel(label)} [ds:${id.trim()}]`;
-}
-
-export function parseInspirationSelection(
-  value: string | string[] | undefined,
-): InspirationSelection {
-  const entries = Array.isArray(value)
-    ? value
-    : typeof value === 'string' && value.trim().length > 0
-      ? [value]
-      : [];
-  const out: InspirationSelection = { templates: [], designSystems: [], uploads: [] };
-  for (const raw of entries) {
-    const entry = raw.trim();
-    if (!entry || entry.toLowerCase() === '(skipped)') continue;
-    const m = INSPIRATION_ENTRY_RE.exec(entry);
-    if (!m) {
-      out.uploads.push(entry);
-      continue;
-    }
-    const label = (m[1] ?? '').trim() || (m[3] ?? '').trim();
-    const id = (m[3] ?? '').trim();
-    if (!id) continue;
-    if (m[2] === 'template') out.templates.push({ id, label });
-    else out.designSystems.push({ id, label });
-  }
-  return out;
-}
+  | 'direction-cards';
 
 /**
  * Rich card metadata for a single `direction-cards` option. The picker
@@ -186,17 +105,6 @@ export interface FormQuestion {
   accept?: string;
   /** Only present when `type === 'direction-cards'`. Mapped to options by `id`. */
   cards?: DirectionCard[];
-  /**
-   * Inspiration questions only. Which catalog sections the picker offers;
-   * absent → all of them.
-   */
-  sources?: InspirationSource[];
-  /**
-   * Inspiration questions only. Short task summary shown as the picker's
-   * context line (e.g. "product landing page") so the user knows what the
-   * references will ground.
-   */
-  query?: string;
 }
 
 export interface QuestionForm {
@@ -461,11 +369,6 @@ function mapRawQuestion(q: unknown, index: number): FormQuestion | null {
   const step = parseNumberAttr(qo.step);
   const multiple = qo.multiple === true;
   const accept = typeof qo.accept === 'string' ? qo.accept : undefined;
-  const sources = parseInspirationSources(qo.sources);
-  const query =
-    typeof qo.query === 'string' && qo.query.trim().length > 0
-      ? qo.query.trim()
-      : undefined;
   return {
     id,
     label,
@@ -485,8 +388,6 @@ function mapRawQuestion(q: unknown, index: number): FormQuestion | null {
     ...(multiple && type === 'file' ? { multiple } : {}),
     ...(accept && type === 'file' ? { accept } : {}),
     ...(cards ? { cards } : {}),
-    ...(sources && type === 'inspiration' ? { sources } : {}),
-    ...(query && type === 'inspiration' ? { query } : {}),
   };
 }
 
@@ -771,22 +672,7 @@ function normalizeType(raw: unknown, options?: FormOption[]): QuestionType {
     lower === 'direction'
   )
     return 'direction-cards';
-  if (
-    lower === 'inspiration' ||
-    lower === 'inspiration-picker' ||
-    lower === 'inspiration-cards' ||
-    lower === 'inspiration-gallery'
-  )
-    return 'inspiration';
   return 'text';
-}
-
-function parseInspirationSources(raw: unknown): InspirationSource[] | undefined {
-  if (!Array.isArray(raw)) return undefined;
-  const sources = raw.filter((entry): entry is InspirationSource =>
-    INSPIRATION_SOURCES.includes(entry as InspirationSource),
-  );
-  return sources.length > 0 ? Array.from(new Set(sources)) : undefined;
 }
 
 function recordQuestionFormParseFailure(

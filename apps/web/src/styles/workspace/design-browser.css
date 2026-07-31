@@ -33,9 +33,7 @@
 .db-chrome {
   position: relative;
   display: grid;
-  /* Equal side tracks keep the address omnibox optically centered even when
-     left nav and right actions have different widths (unlike auto / max-content). */
-  grid-template-columns: minmax(0, 1fr) minmax(180px, 740px) minmax(0, 1fr);
+  grid-template-columns: minmax(0, auto) minmax(180px, 740px) max-content;
   align-items: center;
   gap: 10px;
   min-width: 0;
@@ -53,12 +51,8 @@
   min-width: 0;
   max-width: 100%;
 }
-.db-nav {
-  justify-self: start;
-}
 .db-actions {
   position: relative;
-  justify-self: end;
   justify-content: flex-end;
   gap: 4px;
   flex-wrap: nowrap;
@@ -189,8 +183,6 @@
 /* ---- Address omnibox ----------------------------------------------------- */
 .db-address-form {
   position: relative;
-  justify-self: stretch;
-  width: 100%;
   height: 38px;
   min-width: 0;
   border: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
@@ -802,7 +794,7 @@
 
 @container design-browser (max-width: 920px) {
   .db-chrome {
-    grid-template-columns: minmax(0, 1fr) minmax(150px, 560px) minmax(0, 1fr);
+    grid-template-columns: minmax(0, auto) minmax(150px, 560px) max-content;
     gap: 8px;
     padding-inline: 10px;
   }
@@ -816,7 +808,7 @@
 
 @container design-browser (max-width: 760px) {
   .db-chrome {
-    grid-template-columns: minmax(0, 1fr) minmax(120px, 420px) minmax(0, 1fr);
+    grid-template-columns: minmax(0, auto) minmax(120px, 420px) max-content;
     gap: 6px;
     padding-inline: 8px;
   }
@@ -835,8 +827,7 @@
 
 @container design-browser (max-width: 620px) {
   .db-chrome {
-    /* Narrow chrome packs sides to content so the address field keeps width. */
-    grid-template-columns: max-content minmax(88px, 1fr) max-content;
+    grid-template-columns: minmax(0, auto) minmax(88px, 1fr) auto;
     gap: 4px;
   }
   .db-nav {

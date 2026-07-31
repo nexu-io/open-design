@@ -1,7 +1,5 @@
 ---
 name: digital-eguide
-en_name: "Digital E-Guide & Lead Magnet"
-zh_name: "创作者电子指南"
 description: |
   A two-spread digital e-guide preview — page 1 is a cover (display title,
   author, "What's inside" stats, table of contents teaser); page 2 is a
@@ -24,7 +22,6 @@ od:
   mode: prototype
   platform: desktop
   scenario: marketing
-  category: marketing-gtm
   preview:
     type: html
     entry: index.html

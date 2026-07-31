@@ -408,77 +408,8 @@ describe('manual edit bridge target normalization', () => {
     dom.window.close();
   });
 
-  it('announces link fields (text and href) in select payloads', () => {
-    const posts: Array<{ type?: string; target?: { id: string; kind?: string; fields?: { text?: string; href?: string } } }> = [];
-    const dom = new JSDOM(
-      `<main data-od-source-path="path-0"><a data-od-id="cta" href="/buy">Buy now</a></main>${buildManualEditBridge(true)}`,
-      { runScripts: 'dangerously', url: 'http://localhost' },
-    );
-    const anchor = dom.window.document.querySelector('a')!;
-    dom.window.parent.postMessage = ((message: unknown) => {
-      posts.push(message as (typeof posts)[number]);
-    }) as typeof dom.window.parent.postMessage;
-
-    anchor.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
-
-    const select = posts.find((message) => message.type === 'od-edit-select');
-    expect(select?.target?.id).toBe('cta');
-    expect(select?.target?.kind).toBe('link');
-    expect(select?.target?.fields).toEqual({ text: 'Buy now', href: '/buy' });
-
-    dom.window.close();
-  });
-
-  it('announces image fields (src and alt) in select payloads', () => {
-    const posts: Array<{ type?: string; target?: { id: string; kind?: string; label?: string; fields?: { src?: string; alt?: string } } }> = [];
-    const dom = new JSDOM(
-      `<main data-od-source-path="path-0"><img data-od-id="hero-image" src="/hero.png" alt="Hero image"></main>${buildManualEditBridge(true)}`,
-      { runScripts: 'dangerously', url: 'http://localhost' },
-    );
-    const image = dom.window.document.querySelector('img')!;
-    dom.window.parent.postMessage = ((message: unknown) => {
-      posts.push(message as (typeof posts)[number]);
-    }) as typeof dom.window.parent.postMessage;
-
-    image.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
-
-    const select = posts.find((message) => message.type === 'od-edit-select');
-    expect(select?.target?.id).toBe('hero-image');
-    expect(select?.target?.kind).toBe('image');
-    expect(select?.target?.fields).toEqual({ src: '/hero.png', alt: 'Hero image' });
-    // Images have no text, so the label falls back to the alt text.
-    expect(select?.target?.label).toBe('Hero image');
-
-    dom.window.close();
-  });
-
-  it('strips runtime-only attributes from selected outerHtml payloads', () => {
-    const posts: Array<{ type?: string; target?: { id: string; outerHtml?: string } }> = [];
-    const dom = new JSDOM(
-      `<main data-od-source-path="path-0"><p data-od-source-path="path-0-0">Source copy</p></main>${buildManualEditBridge(true)}`,
-      { runScripts: 'dangerously', url: 'http://localhost' },
-    );
-    const paragraph = dom.window.document.querySelector('p')!;
-    dom.window.parent.postMessage = ((message: unknown) => {
-      posts.push(message as (typeof posts)[number]);
-    }) as typeof dom.window.parent.postMessage;
-
-    paragraph.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
-
-    // Selection stamps the runtime id on the live element...
-    expect(paragraph.getAttribute('data-od-runtime-id')).toBe('path-0-0');
-    // ...but the announced outerHtml is source-shaped: no runtime bookkeeping.
-    const select = posts.find((message) => message.type === 'od-edit-select');
-    expect(select?.target?.id).toBe('path-0-0');
-    expect(select?.target?.outerHtml).toBe('<p>Source copy</p>');
-    expect(select?.target?.outerHtml).not.toContain('data-od-runtime-id');
-    expect(select?.target?.outerHtml).not.toContain('data-od-source-path');
-
-    dom.window.close();
-  });
-
   // Chrome-picker parity: graphic leaves (canvas/svg/video) are pickable
-  // levels of their own - clicking one must select it, not its card. A canvas
+  // levels of their own — clicking one must select it, not its card. A canvas
   // missing from the discovery selector was exactly the "child can't be
   // selected" bug on generated art cells.
   it('selects graphic leaf elements (canvas) instead of climbing to the card', () => {

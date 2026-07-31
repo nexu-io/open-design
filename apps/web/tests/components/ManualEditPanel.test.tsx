@@ -5,7 +5,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { Simulate } from 'react-dom/test-utils';
 import { JSDOM } from 'jsdom';
 import { ManualEditPanel, emptyManualEditDraft, manualEditPatchSummary, normalizeManualEditStyles, type ManualEditDraft } from '../../src/components/ManualEditPanel';
-import { emptyManualEditStyles, type ManualEditHistoryEntry, type ManualEditPatch, type ManualEditStyles, type ManualEditTarget } from '../../src/edit-mode/types';
+import { emptyManualEditStyles, type ManualEditPatch, type ManualEditStyles, type ManualEditTarget } from '../../src/edit-mode/types';
 
 const target: ManualEditTarget = {
   id: 'hero-title',
@@ -510,72 +510,6 @@ describe('ManualEditPanel', () => {
 
     expect(onStyleChange).toHaveBeenCalledWith('hero-title', { gap: '9px' }, 'Style: Hero Title');
     expect(onStyleChange).toHaveBeenCalledWith('hero-title', { flexDirection: 'column' }, 'Style: Hero Title');
-  });
-
-  // TODO(bug): ManualEditPanel accepts history/canUndo/canRedo/onUndo/onRedo —
-  // and FileViewer wires undoManualEdit/redoManualEdit into them — but the
-  // component body never destructures or renders them: there are no undo/redo
-  // buttons and no Changes list anywhere in manual edit mode, so the (tested,
-  // working) host undo/redo logic is unreachable from the real UI. Spec
-  // requirements "Undo/redo buttons reflect disabled state", "Center toolbar
-  // includes undo/redo", and "Changes panel shows newest changes first" are
-  // unimplemented. Un-skip once the panel (or the edit-mode toolbar) renders
-  // these controls.
-  it.skip('renders undo/redo controls with disabled state and a newest-first changes list', () => {
-    const history: ManualEditHistoryEntry[] = [
-      {
-        id: 'entry-newer',
-        label: 'Style: Hero',
-        patch: { kind: 'set-style', id: 'hero-title', styles: { color: '#ef4444' } },
-        beforeSource: '<h1 data-od-id="hero-title">Original</h1>',
-        afterSource: '<h1 data-od-id="hero-title" style="color: #ef4444">Original</h1>',
-        createdAt: 2000,
-      },
-      {
-        id: 'entry-older',
-        label: 'Content: Hero',
-        patch: { kind: 'set-text', id: 'hero-title', value: 'Original' },
-        beforeSource: '<h1 data-od-id="hero-title">Draft</h1>',
-        afterSource: '<h1 data-od-id="hero-title">Original</h1>',
-        createdAt: 1000,
-      },
-    ];
-    act(() => {
-      root.render(
-        <ManualEditPanel
-          targets={[target]}
-          selectedTarget={target}
-          draft={{ ...emptyManualEditDraft('<html></html>'), outerHtml: target.outerHtml }}
-          history={history}
-          error={null}
-          canUndo={true}
-          canRedo={false}
-          onSelectTarget={vi.fn<(target: ManualEditTarget) => void>()}
-          onDraftChange={vi.fn<OnDraftChange>()}
-          onApplyPatch={vi.fn<OnApplyPatch>()}
-          onError={vi.fn<OnError>()}
-          onClearSelection={vi.fn<OnClearSelection>()}
-          onCancelDraft={vi.fn<OnCancelDraft>()}
-          onSaveDraft={vi.fn<OnSaveDraft>()}
-          onResetDraft={vi.fn<OnResetDraft>()}
-          onUndo={vi.fn<() => void>()}
-          onRedo={vi.fn<() => void>()}
-        />,
-      );
-    });
-
-    const undo = host.querySelector('[aria-label="Undo"]') as HTMLButtonElement | null;
-    const redo = host.querySelector('[aria-label="Redo"]') as HTMLButtonElement | null;
-    expect(undo).not.toBeNull();
-    expect(redo).not.toBeNull();
-    expect(undo!.disabled).toBe(false);
-    expect(redo!.disabled).toBe(true);
-
-    const changeLabels = Array.from(host.querySelectorAll('.manual-edit-history-entry'))
-      .map((entry) => entry.textContent ?? '');
-    expect(changeLabels.length).toBe(2);
-    expect(changeLabels[0]).toContain('Style: Hero');
-    expect(changeLabels[1]).toContain('Content: Hero');
   });
 
   it('summarizes full-source history entries without rendering the full file', () => {

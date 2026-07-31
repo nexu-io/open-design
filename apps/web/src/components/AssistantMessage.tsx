@@ -58,10 +58,8 @@ import {
   parseSubmittedAnswers,
   QuestionFormView,
   type QuestionFormFileSubmission,
-  type QuestionFormInspirationSubmission,
   type QuestionFormInteraction,
 } from "./QuestionForm";
-import { InspirationPicker } from "./InspirationPicker";
 import {
   visualStyleCardsForContext,
   type VisualStyleContext,
@@ -76,8 +74,6 @@ import type { PluginFolderAgentAction } from "./design-files/pluginFolderActions
 import { Icon, type IconName } from "./Icon";
 import { UserActionCard } from "./UserActionCard";
 import { NextStepActions, type NextStepActionsVariant } from "./NextStepActions";
-import { TaskDeliverableCard } from "./TaskDeliverableCard";
-import { DESIGN_FILES_TAB } from "./FileWorkspace";
 import type { DesignToolboxActionId } from "../runtime/design-toolbox";
 import { copyToClipboard } from "../lib/copy-to-clipboard";
 import { useT } from "../i18n";
@@ -112,26 +108,10 @@ type TranslateFn = (
 // The host reports whether it accepted the answer into a real chat turn. A
 // `false` result means a pre-run guard (for example the AMR balance gate)
 // prevented the send, so the inline form must remain editable.
-/**
- * Run context reported by an inline question form on submit. Extends the
- * standard per-run selection with the inspiration picker's design-system
- * pick, which the host must APPLY (project design-system flow) rather than
- * merely attach — `RunContextSelection` has no design-system slot.
- */
-export type QuestionFormRunContext = RunContextSelection & {
-  applyDesignSystemId?: string;
-  /**
-   * Additional inspiration systems beyond the applied primary — forwarded
-   * as the run's `inspirationDesignSystemIds` prompt metadata (borrow
-   * accents/typography without replacing the primary system's tokens).
-   */
-  inspirationDesignSystemIds?: string[];
-};
-
 export type QuestionFormSubmitHandler = (
   text: string,
   attachments?: ChatAttachment[],
-  context?: QuestionFormRunContext,
+  context?: RunContextSelection,
 ) => boolean | void | Promise<boolean | void>;
 
 const DISCORD_INVITE_URL = "https://discord.gg/mHAjSMV6gz";
@@ -632,10 +612,7 @@ function AssistantMessageImpl({
               fileOps,
               streaming,
             });
-      return refreshProjectFileSnapshots(
-        mergeProjectFiles(baseFiles, linkedFiles),
-        projectFiles,
-      );
+      return mergeProjectFiles(baseFiles, linkedFiles);
     },
     [blocks, fileOps, message, produced, projectFiles, projectId, streaming],
   );
@@ -653,14 +630,6 @@ function AssistantMessageImpl({
   // produced by THIS turn; if the final turn emitted none (a summary / continue
   // message) fall back to the most recently modified HTML in the project so
   // Share / Download still target the deliverable the user just made.
-  // Deliverable card: the headline artifact of THIS terminal turn plus any
-  // additional outputs it produced. Prefer an HTML/deck artifact (what
-  // Share/Download target); otherwise fall back to the best-ranked produced
-  // file so a report (.md/.pdf) or media deliverable still gets the hero card.
-  const deliverable = useMemo(
-    () => pickTaskDeliverable(displayedProduced),
-    [displayedProduced],
-  );
   const nextStepArtifactName = useMemo(
     () => pickPreviewableArtifact(displayedProduced) ?? pickLatestPreviewableArtifact(projectFiles),
     [displayedProduced, projectFiles],
@@ -777,25 +746,6 @@ function AssistantMessageImpl({
       (!message.runStatus && !!message.endedAt) ||
       isBrandBrowserAssistMessage
     );
-  // Deliverable card: shows on the latest successfully completed turn that
-  // either produced a headline artifact (artifact mode) or changed files
-  // (changes mode). The card headlines the completion; the detailed ledger
-  // stays below. Success-only on purpose: the card carries an unconditional
-  // "Done" label, so a failed or canceled run that wrote files must fall back
-  // to the plain file ledger instead of presenting a partial artifact as
-  // delivered.
-  const changedFileCount =
-    turnArtifactOps.length > 0 ? turnArtifactOps.length : displayedProduced.length;
-  const showDeliverableCard = Boolean(
-    !streaming &&
-      isLast &&
-      runSucceeded &&
-      projectId &&
-      (deliverable || changedFileCount > 0),
-  );
-  const deliverableElapsedMs =
-    usage?.durationMs ??
-    (message.startedAt && message.endedAt ? message.endedAt - message.startedAt : undefined);
   const canFork = !streaming && !!onForkFromMessage;
   const copyMarkdown = message.content.trim().length > 0 ? message.content : undefined;
   const showFeedback =
@@ -856,7 +806,7 @@ function AssistantMessageImpl({
     return splitOnQuestionForms(message.content).some(
       (seg) =>
         seg.kind === "form" &&
-        !(suppressDirectionForms && (isDirectionForm(seg.form) || isInspirationForm(seg.form))) &&
+        !(suppressDirectionForms && isDirectionForm(seg.form)) &&
         (!nextUserContent || !parseSubmittedAnswers(seg.form, nextUserContent)),
     );
   }, [message.content, nextUserContent, suppressDirectionForms]);
@@ -1032,29 +982,6 @@ function AssistantMessageImpl({
             ].join(":")}
           />
         ) : null}
-        {/* Task deliverable card, pinned above the file ledger on a completed
-            turn. Artifact mode mirrors a finished-result card: title, real
-            preview, compact overflow actions, and a two-choice file footer.
-            Changes mode remains a compact completion summary. */}
-        {showDeliverableCard ? (
-          <TaskDeliverableCard
-            projectId={projectId!}
-            primary={deliverable?.primary ?? null}
-            secondary={deliverable?.secondary ?? []}
-            changedCount={changedFileCount}
-            statusLabel={t("assistant.doneLabel")}
-            elapsedMs={deliverableElapsedMs}
-            onOpen={(name) => onRequestOpenFile?.(name)}
-            onShare={
-              onArtifactShare && deliverable && isPreviewableHtml(deliverable.primary)
-                ? onArtifactShare
-                : undefined
-            }
-            onDownload={onArtifactDownload}
-            onOpenAllFiles={() => onRequestOpenFile?.(DESIGN_FILES_TAB)}
-            t={t}
-          />
-        ) : null}
         {turnArtifactOps.length > 0 ? (
           <FileOpsSummary
             entries={turnArtifactOps}
@@ -1062,13 +989,7 @@ function AssistantMessageImpl({
             onRequestOpenFile={onRequestOpenFile}
           />
         ) : null}
-        {/* Plain chip list only when the deliverable card is absent (older /
-            non-terminal turns) and nothing else already lists the files. */}
-        {!showDeliverableCard &&
-        !streaming &&
-        turnArtifactOps.length === 0 &&
-        displayedProduced.length > 0 &&
-        projectId ? (
+        {!streaming && turnArtifactOps.length === 0 && displayedProduced.length > 0 && projectId ? (
           <ProducedFiles
             files={displayedProduced}
             projectId={projectId}
@@ -1216,93 +1137,6 @@ function pickLatestPreviewableArtifact(files: ProjectFile[]): string | null {
     if (!latest || (f.mtime ?? 0) > (latest.mtime ?? 0)) latest = f;
   }
   return latest ? latest.name : null;
-}
-
-// Rank produced files so the deliverable card headlines the artifact a user
-// thinks of as "the result": a runnable HTML/deck first, then a written
-// document/report, then media, then loose code/text. Hidden/system files and
-// bare directories never headline.
-const DELIVERABLE_KIND_RANK: Record<string, number> = {
-  html: 0,
-  presentation: 0,
-  pdf: 1,
-  document: 1,
-  spreadsheet: 2,
-  image: 3,
-  video: 3,
-  audio: 3,
-  sketch: 4,
-  code: 5,
-  text: 6,
-  binary: 7,
-};
-
-function deliverableRank(f: ProjectFile): number {
-  if (f.kind === 'html' || /\.html?$/i.test(f.name)) return 0;
-  if (/\.mdx?$/i.test(f.name)) return 1;
-  return DELIVERABLE_KIND_RANK[f.kind] ?? 8;
-}
-
-function isDeliverableCandidate(f: ProjectFile): boolean {
-  if (f.type === 'dir') return false;
-  const base = f.name.split('/').pop() ?? f.name;
-  if (!base || base.startsWith('.')) return false;
-  if (f.name.includes('/.')) return false;
-  // brand-spec / DESIGN system scaffolding is supporting material, not the
-  // headline deliverable.
-  if (/^(design|brand-system|brand-spec)\.mdx?$/i.test(base)) return false;
-  return true;
-}
-
-// A "product" artifact is something the user opens and looks at as the result
-// (a page, deck, doc, image, media, sketch, or a written report). Source-code
-// / plain-text edits are NOT products — those turns are summarized in changes
-// mode + the file ledger, not headlined with a fake preview.
-const PRODUCT_KINDS = new Set<ProjectFile['kind']>([
-  'html',
-  'presentation',
-  'pdf',
-  'document',
-  'spreadsheet',
-  'image',
-  'video',
-  'audio',
-  'sketch',
-]);
-
-function isProductArtifact(f: ProjectFile): boolean {
-  if (!isDeliverableCandidate(f)) return false;
-  if (f.kind === 'html' || /\.html?$/i.test(f.name)) return true;
-  if (PRODUCT_KINDS.has(f.kind)) return true;
-  // A written report (markdown) headlines; source .md under a code tree does
-  // not, but a top-level report does — extension is a good-enough signal here
-  // since scaffolding (DESIGN.md etc.) is already excluded above.
-  if (/\.mdx?$/i.test(f.name)) return true;
-  return false;
-}
-
-/**
- * The primary product deliverable + its secondary outputs for this turn, or
- * null when the turn produced no headline-worthy product (→ changes mode).
- * Primary = lowest rank, tie broken by most-recently modified; secondaries =
- * the remaining candidate outputs (any kind), newest first.
- */
-function pickTaskDeliverable(
-  files: ProjectFile[],
-): { primary: ProjectFile; secondary: ProjectFile[] } | null {
-  const products = files.filter(isProductArtifact);
-  if (products.length === 0) return null;
-  const sorted = [...products].sort((a, b) => {
-    const ra = deliverableRank(a);
-    const rb = deliverableRank(b);
-    if (ra !== rb) return ra - rb;
-    return (b.mtime ?? 0) - (a.mtime ?? 0);
-  });
-  const primary = sorted[0]!;
-  const secondary = files
-    .filter((f) => isDeliverableCandidate(f) && f.name !== primary.name)
-    .sort((a, b) => (b.mtime ?? 0) - (a.mtime ?? 0));
-  return { primary, secondary };
 }
 
 const PLAN_DOCUMENT_EXCLUDES = new Set(['design.md', 'brand-system.md']);
@@ -1570,34 +1404,6 @@ function mergeProjectFiles(
     merged.push(file);
   }
   return merged;
-}
-
-/**
- * `message.producedFiles` is a run-time snapshot. A file can be edited again
- * before the settled conversation re-renders, so its old mtime would keep the
- * browser on a stale thumbnail URL. Replace matching entries with the current
- * project-file record while preserving the turn's file selection and order.
- */
-function refreshProjectFileSnapshots(
-  files: ProjectFile[],
-  projectFiles: ProjectFile[],
-): ProjectFile[] {
-  if (files.length === 0 || projectFiles.length === 0) return files;
-  const currentByPath = new Map<string, ProjectFile>();
-  for (const file of projectFiles) {
-    if (file.type === 'dir') continue;
-    for (const value of [file.name, file.path, file.localPath]) {
-      if (value) currentByPath.set(normalizeTouchedPath(value), file);
-    }
-  }
-  return files.map((file) => {
-    for (const value of [file.name, file.path, file.localPath]) {
-      if (!value) continue;
-      const current = currentByPath.get(normalizeTouchedPath(value));
-      if (current) return current;
-    }
-    return file;
-  });
 }
 
 // A run that reached a terminal state — succeeded, failed, or canceled — has a
@@ -2691,17 +2497,7 @@ function ProseBlock({
     | { key: string; kind: "suppressed-direction" };
   const renderable = segments.flatMap((seg, idx): Renderable[] => {
     if (seg.kind === "form") {
-      // Suppress only UNANSWERED direction/inspiration forms — an answered
-      // one is the record of what the user picked, and must keep rendering
-      // (locked) so the choice stays visible after the design system applies.
-      const answered = Boolean(
-        nextUserContent && parseSubmittedAnswers(seg.form, nextUserContent),
-      );
-      if (
-        suppressDirectionForms &&
-        !answered &&
-        (isDirectionForm(seg.form) || isInspirationForm(seg.form))
-      ) {
+      if (suppressDirectionForms && isDirectionForm(seg.form)) {
         return [{ key: `f-${idx}`, kind: "suppressed-direction" }];
       }
       return [{ key: `f-${idx}`, kind: "form", form: seg.form }];
@@ -2792,13 +2588,6 @@ function isDirectionForm(form: QuestionForm): boolean {
   return form.questions.some((q) => q.type === "direction-cards");
 }
 
-// An active design system already answers "what should this look like", so a
-// model-emitted inspiration picker is as redundant as a direction form —
-// both hide behind the same suppression flag (hasActiveDesignSystem).
-function isInspirationForm(form: QuestionForm): boolean {
-  return form.questions.some((q) => q.type === "inspiration");
-}
-
 function FormBlock({
   form,
   assistantMessageId,
@@ -2837,46 +2626,16 @@ function FormBlock({
     () => (nextUserContent ? parseSubmittedAnswers(form, nextUserContent) : null),
     [form, nextUserContent],
   );
-  // The submitted turn embeds a `[uploaded design files]` block mapping each
-  // original upload name to its actual (possibly de-duplicated) project path.
-  // Recover it so the locked inspiration summary resolves images by their
-  // real served path instead of guessing the raw name.
-  const uploadPathByName = useMemo(() => {
-    const map: Record<string, string> = {};
-    if (!nextUserContent) return map;
-    const re = /^- Uploaded file \d+:\s*(.+?)\s*->\s*(.+?)(?:\s*\(for:.*)?$/gm;
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(nextUserContent)) !== null) {
-      const name = m[1]?.trim();
-      const path = m[2]?.trim();
-      if (name && path) map[name] = path;
-    }
-    return map;
-  }, [nextUserContent]);
   const submittedSummary = useMemo(() => {
     const items: Array<{ label: string; value: string }> = [];
     const visualItems: Array<{
       label: string;
       cards: Array<{ title: string; src: string }>;
     }> = [];
-    // Inspiration answers carry machine tokens ("Label [template:id]") —
-    // instead of echoing them as text, the summary re-renders the picker in
-    // its locked state so the picks show as full cards (cover / title /
-    // category), identical to how they looked when chosen.
-    const inspirationItems: Array<{ id: string; query?: string; values: string[] }> = [];
-    if (!submittedFromHistory) return { items, visualItems, inspirationItems };
+    if (!submittedFromHistory) return { items, visualItems };
     for (const question of form.questions) {
       const raw = submittedFromHistory[question.id];
       const values = Array.isArray(raw) ? raw : typeof raw === "string" ? [raw] : [];
-      if (question.type === "inspiration") {
-        const picks = values.filter(
-          (value) => value.trim().length > 0 && value.trim() !== "(skipped)",
-        );
-        if (picks.length > 0) {
-          inspirationItems.push({ id: question.id, query: question.query, values: picks });
-        }
-        continue;
-      }
       const labels = values
         .filter((value) => value.trim().length > 0)
         .map((value) => formOptionLabelForValue(question, value));
@@ -2921,7 +2680,7 @@ function FormBlock({
       }
       items.push({ label: question.label, value: labels.join(", ") });
     }
-    return { items, visualItems, inspirationItems };
+    return { items, visualItems };
   }, [form, submittedFromHistory, visualStyleContext]);
   useEffect(() => {
     setDraftAnswers(readInlineQuestionFormDraft(formKey));
@@ -3033,7 +2792,6 @@ function FormBlock({
       answers: Record<string, string | string[]>,
       source: "submit" | "skip" | "auto",
       fileSubmissions: QuestionFormFileSubmission[] = [],
-      inspiration?: QuestionFormInspirationSubmission,
     ) => {
       if (submittingRef.current) return;
       submittingRef.current = true;
@@ -3050,7 +2808,7 @@ function FormBlock({
         return;
       }
       let attachments: ChatAttachment[] = [];
-      let context: QuestionFormRunContext | undefined;
+      let context: RunContextSelection | undefined;
       let submittedText = text;
       if (fileSubmissions.length > 0) {
         if (!projectId) {
@@ -3098,43 +2856,6 @@ function FormBlock({
           fileSubmissions,
           attachments,
         );
-      }
-      if (inspiration) {
-        // Picked references must actually shape the next run: templates ride
-        // the per-turn ad-hoc skill channel (the daemon appends their
-        // SKILL.md bodies for this run only) and the design system flows
-        // through the host's apply flow via applyDesignSystemId. The
-        // workspace item keeps the pick visible in the run-context UI.
-        const templateIds = inspiration.templates.map((entry) => entry.id);
-        const designSystemPick = inspiration.designSystems[0];
-        // First pick = the applied primary system; any further picks ride
-        // along as additional inspiration (prompt metadata), not as the
-        // project's bound system.
-        const extraDesignSystemIds = inspiration.designSystems
-          .slice(1)
-          .map((entry) => entry.id);
-        if (templateIds.length > 0 || designSystemPick) {
-          context = {
-            ...(context ?? {}),
-            ...(templateIds.length > 0 ? { skillIds: templateIds } : {}),
-            ...(designSystemPick
-              ? {
-                  applyDesignSystemId: designSystemPick.id,
-                  ...(extraDesignSystemIds.length > 0
-                    ? { inspirationDesignSystemIds: extraDesignSystemIds }
-                    : {}),
-                  workspaceItems: [
-                    ...(context?.workspaceItems ?? []),
-                    ...inspiration.designSystems.map((entry) => ({
-                      id: `design-system:${entry.id}`,
-                      kind: "design-system" as const,
-                      label: entry.label,
-                    })),
-                  ],
-                }
-              : {}),
-          };
-        }
       }
       if (projectId) {
         const answeredCount = form.questions.filter((question) => {
@@ -3216,26 +2937,8 @@ function FormBlock({
         </span>
         <div className="question-form-summary-body">
           <div className="question-form-summary-title">{t("questions.bannerAnswered")}</div>
-          {submittedSummary.items.length > 0 ||
-          submittedSummary.visualItems.length > 0 ||
-          submittedSummary.inspirationItems.length > 0 ? (
+          {submittedSummary.items.length > 0 || submittedSummary.visualItems.length > 0 ? (
             <>
-              {submittedSummary.inspirationItems.map((item) => (
-                <InspirationPicker
-                  key={`insp-${item.id}`}
-                  formId={form.id}
-                  questionId={item.id}
-                  query={item.query}
-                  value={item.values}
-                  files={[]}
-                  disabled
-                  onChange={() => {}}
-                  onFilesChange={() => {}}
-                  t={t}
-                  projectId={projectId}
-                  uploadPathByName={uploadPathByName}
-                />
-              ))}
               {submittedSummary.visualItems.map((item) => (
                 <div key={item.label} className="question-form-summary-visuals">
                   <span className="question-form-summary-visual-label">{item.label}</span>

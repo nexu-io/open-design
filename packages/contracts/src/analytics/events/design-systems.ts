@@ -40,8 +40,6 @@ export type TrackingDesignSystemsEntryFrom =
   | 'project_canvas'
   // Created from the Library surface.
   | 'library'
-  // Entered from the inspiration picker's design-system gallery.
-  | 'inspiration_picker'
   | 'unknown';
 
 // Origin of the design system itself. NOT the same field as
@@ -183,8 +181,6 @@ export type TrackingDesignSystemCreateEntryFrom =
   | 'project_canvas'
   // Created from the Library surface.
   | 'library'
-  // Created from the inspiration picker's design-system gallery.
-  | 'inspiration_picker'
   | 'unknown';
 
 export type TrackingDesignSystemSourceIngestEntryFrom =

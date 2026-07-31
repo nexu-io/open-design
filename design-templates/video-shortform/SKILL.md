@@ -1,7 +1,5 @@
 ---
 name: video-shortform
-en_name: "Short-Form Video Generator"
-zh_name: "短视频生成"
 description: |
   Short-form video generation skill — 3-10 second clips for product
   reveals, motion teasers, ambient loops. Defaults to Seedance 2 but
@@ -17,7 +15,6 @@ triggers:
   - "短视频"
   - "动效"
 od:
-  category: marketing-gtm
   mode: video
   surface: video
   scenario: marketing

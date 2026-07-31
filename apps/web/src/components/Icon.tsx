@@ -25,7 +25,6 @@ export type IconName =
   | 'file'
   | 'file-code'
   | 'file-text'
-  | 'filter'
   | 'folder'
   | 'folder-filled'
   | 'fork'
@@ -606,12 +605,6 @@ export function Icon({ name, size = 14, strokeWidth = 1.6, ...rest }: Props) {
           <path d="M5 3h9l5 5v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" />
           <path d="M8 13h8" />
           <path d="M8 17h6" />
-        </svg>
-      );
-    case 'filter':
-      return (
-        <svg {...common}>
-          <path d="M3 5h18l-7 8v6l-4 2v-8z" />
         </svg>
       );
     case 'plus':

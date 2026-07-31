@@ -2077,7 +2077,21 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
             {
               id: 1,
               event: 'error',
-              data: { error: { message: 'agent stream blew up' } },
+              data: {
+                error: {
+                  message: 'agent stream blew up',
+                  details: {
+                    kind: 'opencode_prompt_error',
+                    runtime: 'opencode',
+                    phase: 'timeout',
+                    openCodeSessionId: 'session-must-not-reach-langfuse',
+                    lastEventType: 'tool_call',
+                    lastToolCallId: 'call-must-not-reach-langfuse',
+                    lastToolStatus: 'in_progress',
+                    lastToolKind: 'write',
+                  },
+                },
+              },
             },
           ],
         }) as any,
@@ -2092,6 +2106,14 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
     expect(batch[0].body.metadata.status).toBe('failed');
     expect(batch[0].body.metadata.success).toBe(false);
     expect(batch[0].body.metadata.error).toBe('agent stream blew up');
+    expect(batch[0].body.metadata.diagnostics).toMatchObject({
+      amr_opencode_error_phase: 'timeout',
+      amr_opencode_last_event_type: 'tool_call',
+      amr_opencode_last_tool_status: 'in_progress',
+      amr_opencode_last_tool_kind: 'write',
+    });
+    expect(JSON.stringify(batch)).not.toContain('session-must-not-reach-langfuse');
+    expect(JSON.stringify(batch)).not.toContain('call-must-not-reach-langfuse');
     expect(bodyOf(batch, 'span-create', 'agent-run').level).toBe('ERROR');
     expect(bodyOf(batch, 'generation-create', 'llm').level).toBe('ERROR');
     expect(bodyOf(batch, 'generation-create', 'llm').statusMessage).toBe(

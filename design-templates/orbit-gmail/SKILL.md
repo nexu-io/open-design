@@ -1,7 +1,5 @@
 ---
 name: orbit-gmail
-en_name: "Gmail-Style Inbox Prototype"
-zh_name: "Gmail 风格收件箱原型"
 description: |
   Open Orbit briefing skill — selected by the Orbit pipeline when
   Gmail is the user's only connected connector, or when the user
@@ -19,7 +17,6 @@ triggers:
   - "gmail 简报"
   - "邮件摘要"
 od:
-  category: life
   mode: prototype
   platform: desktop
   scenario: orbit

@@ -1,7 +1,5 @@
 ---
 name: orbit-linear
-en_name: "Linear-Style Issue Digest Briefing"
-zh_name: "Linear 风格 Issue 日报简报"
 description: |
   Open Orbit briefing skill — selected by the Orbit pipeline when
   Linear is the user's only connected connector, or when the user
@@ -18,7 +16,6 @@ triggers:
   - "linear 简报"
   - "issue 汇总"
 od:
-  category: product-management
   mode: prototype
   platform: desktop
   scenario: orbit

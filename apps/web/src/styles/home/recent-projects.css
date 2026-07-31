@@ -293,8 +293,7 @@
   z-index: 5;
   display: grid;
   gap: 2px;
-  /* Wide enough for "Duplicate project" on one line (icon + label). */
-  min-width: 176px;
+  min-width: 144px;
   padding: 4px;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
@@ -317,7 +316,6 @@
   font: inherit;
   font-size: 13px;
   text-align: left;
-  white-space: nowrap;
 }
 .recent-projects__card-menu button:hover,
 .recent-projects__card-menu button:focus-visible {

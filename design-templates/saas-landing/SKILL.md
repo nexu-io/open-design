@@ -1,7 +1,5 @@
 ---
 name: saas-landing
-en_name: "SaaS Landing Page"
-zh_name: "SaaS 营销落地页"
 description: |
   Single-page SaaS landing with hero, features, social proof, pricing, and CTA.
   Respects the active DESIGN.md color/typography/layout tokens.
@@ -11,7 +9,6 @@ triggers:
   - "marketing page"
   - "product landing"
 od:
-  category: marketing-gtm
   mode: prototype
   platform: desktop
   scenario: marketing

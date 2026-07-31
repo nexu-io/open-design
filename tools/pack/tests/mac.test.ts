@@ -277,7 +277,6 @@ describe("renderMacPackagedConfig", () => {
 describe("runElectronBuilder", () => {
   async function prepareElectronBuilderConfig(root: string, overrides: Partial<ToolPackConfig>) {
     const cliPath = join(root, "fake-electron-builder.mjs");
-    await writeFile(cliPath, "process.exit(0);\n", "utf8");
 
     const config = makeConfig(root, {
       appVersion: "1.2.3-prerelease.4",
@@ -291,6 +290,29 @@ describe("runElectronBuilder", () => {
     await writeFile(
       paths.assembledPackageJsonPath,
       '{"dependencies":{},"name":"open-design-packaged-app","version":"1.2.3"}\n',
+      "utf8",
+    );
+    const nodePtyPrebuildRoot = join(
+      paths.appPath,
+      "Contents",
+      "Resources",
+      "app",
+      "node_modules",
+      "node-pty",
+      "prebuilds",
+      `darwin-${process.arch}`,
+    );
+    await writeFile(
+      cliPath,
+      [
+        'import { chmod, mkdir, writeFile } from "node:fs/promises";',
+        `const prebuildRoot = ${JSON.stringify(nodePtyPrebuildRoot)};`,
+        "await mkdir(prebuildRoot, { recursive: true });",
+        'await writeFile(new URL("pty.node", `file://${prebuildRoot}/`), Buffer.alloc(32 * 1024, 1));',
+        'await writeFile(new URL("spawn-helper", `file://${prebuildRoot}/`), "#!/bin/sh\\nexit 0\\n", "utf8");',
+        'await chmod(new URL("spawn-helper", `file://${prebuildRoot}/`), 0o755);',
+        "",
+      ].join("\n"),
       "utf8",
     );
 

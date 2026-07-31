@@ -1,7 +1,5 @@
 ---
 name: eng-runbook
-en_name: "Engineering Runbook"
-zh_name: "工程运维手册"
 description: |
   An engineering runbook — service overview, alerts table, dashboards
   links, common procedures with copy-pasteable commands, on-call rotation,
@@ -15,7 +13,6 @@ triggers:
   - "service runbook"
   - "运维手册"
 od:
-  category: product-management
   mode: prototype
   platform: desktop
   scenario: engineering

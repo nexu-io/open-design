@@ -1,7 +1,5 @@
 ---
 name: orbit-github
-en_name: "GitHub-Style Daily Briefing"
-zh_name: "GitHub 风格每日简报"
 description: |
   Open Orbit briefing skill — selected by the Orbit pipeline when
   GitHub is the user's only connected connector, or when the user
@@ -18,7 +16,6 @@ triggers:
   - "github 简报"
   - "代码活动汇总"
 od:
-  category: product-management
   mode: prototype
   platform: desktop
   scenario: orbit

@@ -28,7 +28,6 @@ import {
   renderConnectedExternalMcpDirective,
   resolveExclusiveSurface,
 } from './prompts/system.js';
-import { pendingPromptFlowStep } from './prompts/flow-steps.js';
 import {
   computeStableSectionHashes,
   serializeStableSections,
@@ -36,6 +35,7 @@ import {
 } from './prompts/stable-sections.js';
 import { emittedRenderableQuestionForm } from './question-form-detect.js';
 import { resolveProjectRoot } from './project-root.js';
+import { OPEN_DESIGN_PLUGIN_ID } from './mcp-observability.js';
 import {
   resolveDaemonCliPath,
   resolveDaemonPluginPreviewsDir,
@@ -192,6 +192,7 @@ import {
   getAgentDef,
   isKnownModel,
   isKnownServiceTier,
+  openDesignAmrRunAttempt,
   openDesignAmrTraceEnv,
   applyAgentLaunchEnv,
   resolveAgentLaunch,
@@ -381,7 +382,7 @@ import { createAgentStderrVisibilityFilter } from './amr-stderr-filter.js';
 import { createQoderStreamHandler } from './runtimes/qoder-stream.js';
 import { subscribe as subscribeFileEvents } from './project-watchers.js';
 import { importFigmaFromBytes } from './figma/figma-import.js';
-import { renderDesignSystemCard, renderDesignSystemPreview } from './design-systems/preview.js';
+import { renderDesignSystemPreview } from './design-systems/preview.js';
 import { renderDesignSystemShowcase } from './design-systems/showcase.js';
 import { createChatRunService } from './runtimes/runs.js';
 import {
@@ -390,7 +391,11 @@ import {
 } from './run-lifecycle-tracer.js';
 import { deriveRunErrorCode, runResultFromStatus } from './run-result.js';
 import { classifyRunFailure, isResumableFailure } from './run-failure-classification.js';
-import { decideSafeRunRetry } from './run-retry-policy.js';
+import {
+  POST_TOOL_RESUME_CONTINUATION_PROMPT,
+  decidePostToolResumeRecovery,
+  decideSafeRunRetry,
+} from './run-retry-policy.js';
 import {
   amrUserIdForRunAnalytics,
   scanRunEventsForUsageAnalytics,
@@ -402,6 +407,7 @@ import {
 } from './run-artifact-fs.js';
 import {
   AiHtmlVersionSnapshotError,
+  artifactOriginForRun,
   snapshotAiHtmlVersionsForRun,
 } from './run-html-version-snapshots.js';
 import { reportRunCompletedFromDaemon } from './langfuse-bridge.js';
@@ -626,6 +632,7 @@ import { EmptyTranscriptError, synthesizeHandoffPrompt } from './design/index.js
 import { TranscriptExportLockedError } from './transcript-export.js';
 import { registerChatRoutes } from './routes/chat.js';
 import { registerRunRoutes } from './routes/runs.js';
+import { registerByokCredentialRoutes } from './routes/byok-credentials.js';
 import { registerTerminalRoutes } from './routes/terminal.js';
 import { createTerminalService } from './terminals.js';
 import { registerSocialShareRoutes } from './routes/social-share.js';
@@ -691,6 +698,7 @@ import { apiTokenFromEnv, isApiAuthDisabled, isApiTokenMiddlewareEnabled } from 
 import { createOpenDesignPublicMetadataService } from './services/open-design-public-metadata.js';
 import { createWhatsNewService } from './services/whats-new.js';
 import { execCommandViaLoginShell } from './services/login-shell.js';
+import { ByokCredentialService } from './byok/credential-service.js';
 import {
   OFFICIAL_MARKETPLACE_ID,
   createMarketplaceSeedHelpers,
@@ -850,6 +858,9 @@ const {
 const SANDBOX_MODE_ENABLED = isSandboxModeEnabled(process.env);
 const RUNTIME_DATA_DIR = resolveDataDir(process.env.OD_DATA_DIR, PROJECT_ROOT, {
   requireExplicit: SANDBOX_MODE_ENABLED,
+});
+const defaultByokCredentialService = new ByokCredentialService({
+  dataDir: RUNTIME_DATA_DIR,
 });
 const SANDBOX_RUNTIME = resolveSandboxRuntimeConfig(SANDBOX_MODE_ENABLED, RUNTIME_DATA_DIR);
 ensureSandboxRuntimeDirs(SANDBOX_RUNTIME);
@@ -1363,52 +1374,44 @@ export function telemetryPromptFromRunRequest(message, currentPrompt) {
   return typeof currentPrompt === 'string' ? currentPrompt : message;
 }
 
-const FORM_ANSWERS_HEADER_RE = /^\s*\[form answers\s+(?:\u2014|-)\s*([^\]\r\n]+)\]/i;
+// Keep this header grammar aligned with parseFormAnswers in @open-design/contracts.
+const FORM_ANSWERS_HEADER_RE =
+  /^\s*\[form answers(?:\s*[\u2014\-:]\s*([^\]\r\n]+))?\]\s*(?:\r?\n|$)/i;
 
 // Aggressive OVERRIDE for weak / medium-strength plain agents (e.g.
 // GPT-OSS-120B Medium, Gemini 3.5 Flash) that otherwise echo RULE 1's
-// fenced form example back at the user on follow-up turns even when
-// they correctly understand the form is answered. Strong models
-// (Claude Sonnet 4.6, Gemini 3.1 Pro) already handle a shorter
-// OVERRIDE; enumerating the anti-patterns is a no-op for them and a
-// strong suppressor for the weaker ones. RULE 1 itself stays in the
-// system prompt so turn 1 can still emit a valid form.
+// fenced form example back after the user has answered it. Strong models
+// (Claude Sonnet 4.6, Gemini 3.1 Pro) already handle a shorter OVERRIDE;
+// enumerating the anti-patterns is a no-op for them and a strong suppressor
+// for the weaker ones. RULE 1 stays conditional: a genuinely new material
+// blocker may still require a new, targeted form on any turn.
 //
 // Exported so tests pin both the trigger condition and the literal
 // anti-patterns we ask the model to skip \u2014 silently weakening the
 // list (e.g. dropping the markdown-fence ban) would reintroduce the
 // form-echo regression on GPT-OSS / Gemini Flash.
-// Wording must stay truthful for BOTH charter variants: classic labels its
-// flow RULE 1/2/3; the slim charter has no RULE headings and its filesystem
-// handoff forbids `<artifact>` blocks outright. An override that asserts
-// labels or contracts the composed prompt does not contain reads as prompt
-// injection to strong models (observed: Fable flagged the block as untrusted
-// and ignored it), so every reference below is qualified by variant.
-export const FORM_ANSWERED_SYSTEM_OVERRIDE = `## OVERRIDE \u2014 form already answered (this is turn 2 or later)
+export const FORM_ANSWERED_SYSTEM_OVERRIDE = `## OVERRIDE \u2014 submitted form answers are authoritative
 
 The user already submitted their form answers (see # User request below).
-The turn-1 ask flow is finished. Treat the system prompt's turn-1 form
-directive (RULE 1 in the classic charter, "Turn 1: one line, one form" in
-the slim charter) as read-only documentation for this turn \u2014 do not
-execute any of it.
+Apply those answers. RULE 1 does not require another form merely because its
+example appears in the system prompt.
 
 Forbidden output for this turn:
-- A \`<question-form>\` tag of any id, including \`discovery\` or \`task-type\`.
-- A markdown \`\`\`json fenced block echoing the form schema or example.
-- Form-asking prose such as "Got it \u2014 tell me the following" or
+- Re-emitting the answered \`discovery\` or \`task-type\` form, or asking again
+  for information the submitted answers already provide.
+- A markdown \`\`\`json fenced block echoing an answered form's schema or example.
+- Form-asking prose that repeats the answered questions, such as
+  "Got it \u2014 tell me the following" or
   "\u8bf7\u544a\u8bc9\u6211\u4ee5\u4e0b\u4fe1\u606f".
 - Narrating fake system events such as "subagents stopped" or
   "server restart".
 
 Required output for this turn:
 - Open with a brief prose confirmation of what the brief is.
-- Then continue the brief-to-build flow your system prompt defines:
-  resolve the submitted \`brand\` value (RULE 2 in the classic charter,
-  "When the brand answer arrives" in the slim charter), then plan and
-  build the deliverable this turn (RULE 3 / "Once direction locks").
-  Follow the prompt's handoff contract for the deliverable shape \u2014
-  filesystem runs write real project files; emit a source-code
-  \`<artifact>\` block only when that contract explicitly says so.
+- Then apply RULE 2 as relevant and proceed to RULE 3 or the matching active
+  workflow.
+- Only if a new, materially blocking requirement remains unresolved may you
+  emit one new targeted \`<question-form>\`; never repeat answered fields.
 
 `;
 
@@ -1416,60 +1419,16 @@ Required output for this turn:
 // forms are not artifact-build transitions, so we only need to suppress
 // the form re-ask without directing the model toward RULE 2 / RULE 3.
 // Exported so tests can pin the literal content independently.
-export const FORM_ANSWERED_GENERIC_OVERRIDE = `## OVERRIDE \u2014 form already answered (this is turn 2 or later)
+export const FORM_ANSWERED_GENERIC_OVERRIDE = `## OVERRIDE \u2014 submitted form answers are authoritative
 
 The user already submitted their form answers (see # User request below).
 Do not ask the same form again. Treat the submitted answers as the active
-user instruction and respond accordingly.
+user instruction and respond accordingly. Ask again only if a new, materially
+blocking requirement remains unresolved.
 
 `;
 
-export const FORM_ANSWERED_INSPIRATION_OVERRIDE = `## OVERRIDE \u2014 inspiration sources already selected
-
-The user already submitted the inspiration picker. Do not ask the inspiration
-form again. Use the submitted sources as a layered reference contract for the
-deliverable you build now.
-
-Resolve each dimension independently in this strict order:
-1. selected or uploaded image references (highest priority)
-2. selected Design template
-3. selected Style / design system (fallback)
-
-Evaluate information hierarchy, layout and composition, component patterns,
-typography, color, spacing, radii, imagery treatment, and motion separately.
-For each dimension, use the highest-priority source that visibly or explicitly
-defines it. If that source does not define a dimension, let the next source
-fill only that gap. A lower-priority source must never override a dimension
-already established by a higher-priority source.
-
-Extract the references' structural and visual language, not their incidental
-copy, product names, or factual claims. The user's requested subject matter and
-content remain authoritative.
-
-`;
-
-const BRIEF_FORM_IDS = new Set(['discovery', 'task-type']);
-
-/**
- * Pick the `# Instructions` override for a form-answer turn. Brief forms
- * (discovery / task-type) normally transition straight to the build; when a
- * registered prompt flow step (prompts/flow-steps.ts) is still pending —
- * its section composed into this run's system prompt but its form never
- * surfaced in the conversation — that step's override wins so the model
- * emits the step's form (e.g. the inspiration picker) before building.
- * Selection is deterministic here because the daemon knows the run's
- * grounding state; the model must never reconcile contradicting directives.
- */
-export function resolveFormAnsweredOverride({ formId, pendingFlowStep }) {
-  if (typeof formId !== 'string' || formId.length === 0) return '';
-  const normalizedFormId = formId.toLowerCase();
-  if (normalizedFormId === 'inspiration') return FORM_ANSWERED_INSPIRATION_OVERRIDE;
-  if (!BRIEF_FORM_IDS.has(normalizedFormId)) return FORM_ANSWERED_GENERIC_OVERRIDE;
-  if (pendingFlowStep) return pendingFlowStep.formAnsweredOverride;
-  return FORM_ANSWERED_SYSTEM_OVERRIDE;
-}
-
-function formAnswerTransitionForCurrentPrompt(currentPrompt, options = {}) {
+function formAnswerTransitionForCurrentPrompt(currentPrompt) {
   if (typeof currentPrompt !== 'string') return null;
   const trimmed = currentPrompt.trim();
   if (!trimmed) return null;
@@ -1481,22 +1440,18 @@ function formAnswerTransitionForCurrentPrompt(currentPrompt, options = {}) {
     '## Latest user turn - form answers submitted',
     trimmed,
     '',
-    // Keep the wording in lock-step with main — the stronger "do not
-    // emit any `<question-form>`" suppression now lives in the
-    // system-prompt `FORM_ANSWERED_SYSTEM_OVERRIDE` block, which
-    // every plain / stream-json adapter sees. Diverging the
+    // Keep the wording in lock-step with main — the stronger answered-form
+    // dedupe now lives in the system-prompt
+    // `FORM_ANSWERED_SYSTEM_OVERRIDE` block, which every plain /
+    // stream-json adapter sees. Diverging the
     // user-request transition string here breaks `chat-route.test
     // marks submitted discovery form answers ...` which asserts on
     // the exact main wording.
-    `The user has answered the ${formId} form. Do not emit another ${formId} form.`,
+    `The user has answered the ${formId} form. Do not re-emit the answered form or repeat fields it already answered.`,
   ];
-  if (BRIEF_FORM_IDS.has(formId.toLowerCase())) {
-    // Mirrors resolveFormAnsweredOverride: a pending flow step redirects
-    // the brief-answered transition to that step's form before the build.
+  if (formId.toLowerCase() === 'discovery' || formId.toLowerCase() === 'task-type') {
     lines.push(
-      options.pendingFlowStep
-        ? options.pendingFlowStep.transitionLine
-        : 'Continue with RULE 2 / RULE 3 now. For Branch B answers, build now instead of asking another brief.',
+      'Apply the submitted answers and continue with RULE 2 / RULE 3 or the matching active workflow. Only if a new, materially blocking requirement remains unresolved may you emit one targeted form; never repeat answered fields.',
     );
   } else {
     lines.push(
@@ -1509,7 +1464,7 @@ function formAnswerTransitionForCurrentPrompt(currentPrompt, options = {}) {
 export function composeChatUserRequestForAgent(
   message,
   currentPrompt,
-  options: { skipTranscript?: boolean; pendingFlowStep?: import('./prompts/flow-steps.js').PromptFlowStep | null } = {},
+  options: { skipTranscript?: boolean } = {},
 ) {
   // When the adapter resumes its own session (today: `agy -c`), the
   // daemon-rendered `## user` / `## assistant` transcript is a duplicate
@@ -1525,9 +1480,7 @@ export function composeChatUserRequestForAgent(
     typeof bodySource === 'string' && bodySource.trim()
       ? bodySource
       : '(No extra typed instruction.)';
-  const transition = formAnswerTransitionForCurrentPrompt(currentPrompt, {
-    pendingFlowStep: options.pendingFlowStep ?? null,
-  });
+  const transition = formAnswerTransitionForCurrentPrompt(currentPrompt);
   if (!transition) return body;
   if (skip) {
     return [transition, body].join('\n\n');
@@ -2093,6 +2046,7 @@ export interface DaemonRuntimeContext {
 }
 
 export interface StartServerOptions {
+  byokCredentialService?: ByokCredentialService;
   desktopArtifactExporter?: DesktopArtifactExporter | null;
   desktopPdfExporter?: DesktopPdfExporter | null;
   desktopSlideRenderer?: DesktopSlideRenderer | null;
@@ -2110,6 +2064,7 @@ export interface StartServerResult {
 }
 
 export async function startServer({
+  byokCredentialService = defaultByokCredentialService,
   port = 7456,
   host = normalizeDaemonBindHost(process.env.OD_BIND_HOST),
   returnServer = false,
@@ -2603,6 +2558,7 @@ export async function startServer({
   const telemetry = registerTelemetryRoutes(app, {
     dataDir: RUNTIME_DATA_DIR,
     readAppConfig,
+    writeAppConfig,
   });
   const { analyticsService } = telemetry;
   const design = {
@@ -3038,6 +2994,11 @@ export async function startServer({
     http: httpDeps,
     paths: pathDeps,
   });
+  registerByokCredentialRoutes(app, {
+    http: { requireLocalDaemonRequest, sendApiError },
+    byokCredentials: byokCredentialService,
+    connectionTest: testProviderConnection,
+  });
   // Project workspace
   registerActiveContextRoutes(app, {
     db,
@@ -3189,7 +3150,6 @@ export async function startServer({
       readDesignSystemWorkspaceTextFile,
       readUserDesignSystemFile,
       renderDesignSystemPreview,
-      renderDesignSystemCard,
       renderDesignSystemShowcase,
       updateUserDesignSystem,
       updateUserDesignSystemRevisionStatus,
@@ -3630,27 +3590,12 @@ export async function startServer({
     projectFiles: projectFileDeps,
   });
 
-  // Prompt budget for the additional-inspiration grounding blocks: the picker
-  // caps selection, and each embedded DESIGN.md is cut so a handful of long
-  // imported systems cannot crowd out the primary system or the skill body.
-  const MAX_INSPIRATION_PROMPT_SYSTEMS = 3;
-  const MAX_INSPIRATION_PROMPT_BODY_CHARS = 6000;
-  const truncateInspirationPromptBody = (body: string): string => {
-    const trimmed = body.trim();
-    if (trimmed.length <= MAX_INSPIRATION_PROMPT_BODY_CHARS) return trimmed;
-    const cut = trimmed.slice(0, MAX_INSPIRATION_PROMPT_BODY_CHARS);
-    const lastBreak = cut.lastIndexOf('\n');
-    const bounded = lastBreak > MAX_INSPIRATION_PROMPT_BODY_CHARS / 2 ? cut.slice(0, lastBreak) : cut;
-    return `${bounded}\n\n… (truncated for prompt budget)`;
-  };
-
   const composeDaemonSystemPrompt = async ({
     agentId,
     projectId,
     skillId,
     skillIds,
     designSystemId,
-    inspirationDesignSystemIds,
     streamFormat,
     locale,
     sessionMode,
@@ -3688,26 +3633,7 @@ export async function startServer({
     }
     const effectiveSkillId =
       typeof skillId === 'string' && skillId ? skillId : project?.skillId;
-    // Turn-level inspiration systems (picker multi-select) extend, never
-    // replace, any project-level inspiration metadata for this run only.
-    const turnInspirationIds = Array.isArray(inspirationDesignSystemIds)
-      ? inspirationDesignSystemIds.filter((id) => typeof id === 'string' && id.length > 0)
-      : [];
-    const projectMetadata = project?.metadata;
-    const metadata =
-      turnInspirationIds.length > 0
-        ? {
-            ...(projectMetadata ?? {}),
-            inspirationDesignSystemIds: Array.from(
-              new Set([
-                ...(Array.isArray(projectMetadata?.inspirationDesignSystemIds)
-                  ? projectMetadata.inspirationDesignSystemIds
-                  : []),
-                ...turnInspirationIds,
-              ]),
-            ),
-          }
-        : projectMetadata;
+    const metadata = project?.metadata;
     // Website Clone runs reproduce someone else's site: the fidelity target
     // is the original page. Treating a project/app design system as
     // authoritative would overwrite the cloned site's palette/typography
@@ -3723,6 +3649,7 @@ export async function startServer({
           pluginDesignSystemId,
           projectDesignSystemId: project?.designSystemId,
           appDefaultDesignSystemId: appConfigForPrompt?.designSystemId,
+          disabledDesignSystemIds: appConfigForPrompt?.disabledDesignSystems,
           // A project row with designSystemId=null can mean the user picked
           // "No design system"; do not reapply the global default behind their back.
           allowAppDefault: project === null,
@@ -4036,44 +3963,6 @@ export async function startServer({
       }
     }
 
-    // Additional inspiration systems (picker multi-select): resolve each id
-    // through the same reader chain as the primary so the run prompt carries
-    // their actual DESIGN.md content, not just their names — a user-authored
-    // `user:...` system otherwise contributes nothing the agent can honor.
-    // Bounded: primary excluded, capped count, each body truncated.
-    const inspirationDesignSystems = [];
-    const inspirationIdsForPrompt =
-      !isWebCloneRun && Array.isArray(metadata?.inspirationDesignSystemIds)
-        ? Array.from(new Set(metadata.inspirationDesignSystemIds))
-            .filter(
-              (id) =>
-                typeof id === 'string' && id.length > 0 && id !== effectiveDesignSystemId,
-            )
-            .slice(0, MAX_INSPIRATION_PROMPT_SYSTEMS)
-        : [];
-    if (inspirationIdsForPrompt.length > 0) {
-      const systems = await listAllDesignSystems();
-      for (const id of inspirationIdsForPrompt) {
-        const summary = systems.find((s) => s.id === id);
-        if (!summary || !isProjectUsableDesignSystem(summary)) continue;
-        try {
-          const workspaceBody = await readDesignSystemWorkspaceTextFile(db, summary, 'DESIGN.md');
-          const body = workspaceBody ?? (await readAvailableDesignSystem(id));
-          if (typeof body === 'string' && body.trim().length > 0) {
-            inspirationDesignSystems.push({
-              id,
-              title: summary.title,
-              body: truncateInspirationPromptBody(body),
-            });
-          }
-        } catch (err) {
-          console.warn(
-            `[design-systems] inspiration resolve failed for ${id}: ${err?.message ?? err}`,
-          );
-        }
-      }
-    }
-
     const excludedCraft = new Set(designSystemCraftExemptions);
     // Web-clone fidelity exemption — see `isWebCloneRun` above.
     const requestedCraft = isWebCloneRun
@@ -4253,8 +4142,6 @@ export async function startServer({
       designSystemFixtureHtml,
       designSystemPullIndex,
       designSystemImportMode,
-      inspirationDesignSystems:
-        inspirationDesignSystems.length > 0 ? inspirationDesignSystems : undefined,
       craftBody,
       craftSections,
       memoryBody,
@@ -4416,6 +4303,12 @@ export async function startServer({
   const startChatRun = async (chatBody, run) => {
     const lifecycle = createRunLifecycleTracer(run);
     lifecycle.mark('chat_run_started');
+    const pendingNativeSessionContinue =
+      run.nativeSessionContinuePending &&
+      typeof run.nativeSessionContinuePending.sessionId === 'string'
+        ? run.nativeSessionContinuePending
+        : null;
+    run.nativeSessionContinuePending = null;
     /** @type {Partial<ChatRequest> & { imagePaths?: string[] }} */
     chatBody = chatBody || {};
     const {
@@ -4431,7 +4324,6 @@ export async function startServer({
       skillId,
       skillIds,
       designSystemId,
-      inspirationDesignSystemIds,
       sessionMode,
       attachments = [],
       commentAttachments = [],
@@ -4442,7 +4334,7 @@ export async function startServer({
       research,
       context,
       titleGeneration,
-      byokProvider,
+      byokProfileId,
       byokMediaDefaults,
     } = chatBody;
     lifecycle.mark('prompt_build_start');
@@ -4459,7 +4351,12 @@ export async function startServer({
     // into chatBody across the createChatRunService boundary. Each field
     // is optional and only set when the chat body actually carried it.
     const telemetryPrompt = telemetryPromptFromRunRequest(message, currentPrompt);
-    if (typeof telemetryPrompt === 'string') run.userPrompt = telemetryPrompt;
+    if (
+      !pendingNativeSessionContinue &&
+      typeof telemetryPrompt === 'string'
+    ) {
+      run.userPrompt = telemetryPrompt;
+    }
     if (typeof model === 'string' && model) run.model = model;
     if (typeof reasoning === 'string' && reasoning) run.reasoning = reasoning;
     if (typeof serviceTier === 'string' && serviceTier) run.serviceTier = serviceTier;
@@ -4483,10 +4380,22 @@ export async function startServer({
       );
     if (!def.bin)
       return design.runs.fail(run, 'AGENT_UNAVAILABLE', 'agent has no binary');
+    let resolvedByokCredential = null;
+    if (def.id === 'byok-opencode') {
+      try {
+        resolvedByokCredential =
+          typeof byokProfileId === 'string' && byokProfileId
+            ? await byokCredentialService.resolve(byokProfileId)
+            : null;
+      } catch {
+        resolvedByokCredential = null;
+      }
+    }
     const byokOpenCodeProvider = def.id === 'byok-opencode'
       ? buildOpenCodeByokProviderConfig(
-          byokProvider,
-          typeof model === 'string' ? model : null,
+          resolvedByokCredential?.provider,
+          resolvedByokCredential?.profile.model
+            ?? (typeof model === 'string' ? model : null),
         )
       : null;
     if (def.id === 'byok-opencode' && !byokOpenCodeProvider) {
@@ -4496,6 +4405,9 @@ export async function startServer({
         BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE,
       );
     }
+    const requestedRuntimeModel = def.id === 'byok-opencode'
+      ? resolvedByokCredential?.profile.model ?? null
+      : model;
     // Validate the checked-in `inactivityTimeoutMs` hint immediately
     // after the runtime def is selected and before any side-effectful
     // setup (auto-memory extract, `.mcp.json` write/unlink,
@@ -4780,7 +4692,7 @@ export async function startServer({
     // stableInstructionFingerprint and re-sends the whole stable block on
     // resume. Two rules keep flips down to genuine activations only:
     //   1. Scan user-authored text only — for transcript-resending agents
-    //      `message` embeds prior ASSISTANT turns, whose copy (the turn-1
+    //      `message` embeds prior ASSISTANT turns, whose copy (an earlier
     //      discovery form's own options, delivery summaries) must never flip
     //      a signal the user did not express.
     //   2. Latch detections onto the conversation (monotonic ON), so a
@@ -4819,7 +4731,6 @@ export async function startServer({
         skillId,
         skillIds,
         designSystemId,
-        inspirationDesignSystemIds,
         streamFormat: def?.streamFormat ?? 'plain',
         locale,
         sessionMode: runSessionMode,
@@ -4970,18 +4881,50 @@ export async function startServer({
       return outcome;
     };
     const snapshotAiHtmlVersionsBeforeSuccess = async () => {
+      const origin = artifactOriginForRun({
+        runId: run.id,
+        externalPluginAnalytics: run.externalPluginAnalytics,
+      });
+      if (origin) {
+        // A successful Plugin run starts pessimistically. Only the exact
+        // versions returned by the snapshot writer may promote it to matched.
+        run.artifactOriginStatus = 'missing_version';
+        run.artifactVersionId = undefined;
+      }
       const outcome = resolveRunArtifactOutcomeBeforeFinish();
       if (!outcome?.diff || !outcome.projectRoot || !run.projectId) return;
       const promptInfo = latestRunPromptForHtmlVersionSnapshot();
-      await snapshotAiHtmlVersionsForRun({
+      const result = await snapshotAiHtmlVersionsForRun({
         projectsRoot: PROJECTS_DIR,
         projectId: run.projectId,
         projectRoot: outcome.projectRoot,
         diff: outcome.diff,
         prompt: promptInfo.prompt,
         ...(promptInfo.promptSource ? { promptSource: promptInfo.promptSource } : {}),
+        ...(origin ? { origin } : {}),
         metadata: projectRecord?.metadata,
       });
+      if (origin) {
+        const matching = result.snapshots.filter(({ version }) =>
+          version.origin?.entrySurface === origin.entrySurface
+          && version.origin.externalPluginId === origin.externalPluginId
+          && version.origin.pluginWorkflowId === origin.pluginWorkflowId
+          && version.origin.runId === origin.runId,
+        );
+        if (matching.length > 0) {
+          run.artifactOriginStatus = 'matched';
+          const configuredEntry =
+            typeof projectRecord?.metadata?.entryFile === 'string'
+              ? projectRecord.metadata.entryFile.replaceAll('\\', '/')
+              : null;
+          const selected =
+            (configuredEntry
+              ? matching.find(({ fileName }) => fileName === configuredEntry)
+              : undefined)
+            ?? (matching.length === 1 ? matching[0] : undefined);
+          run.artifactVersionId = selected?.version.id;
+        }
+      }
     };
     // Chain onto the run service's terminal chokepoint so startup rejection,
     // direct cancellation, shutdown, and every explicit finish path all consume
@@ -5069,10 +5012,10 @@ export async function startServer({
         : null;
     let safeModel = resolveModelForAgent(
       def,
-      typeof model === 'string'
-        ? isKnownModel(def, model, requestedLiveModelScope)
-          ? model
-          : sanitizeCustomModel(model)
+      typeof requestedRuntimeModel === 'string'
+        ? isKnownModel(def, requestedRuntimeModel, requestedLiveModelScope)
+          ? requestedRuntimeModel
+          : sanitizeCustomModel(requestedRuntimeModel)
         : configuredModel,
       process.env,
       requestedLiveModelScope,
@@ -5141,7 +5084,7 @@ export async function startServer({
         // the probe failure and applies the identical fallback.
       }
     }
-    const agentResumeCtx =
+    const resolvedAgentResumeCtx =
       agentSupportsSessionResume && run.conversationId
         ? resolveAgentResumeContext(db, {
             conversationId: run.conversationId,
@@ -5151,6 +5094,28 @@ export async function startServer({
             currentAssistantMessageId: run.assistantMessageId ?? null,
           })
         : { storedSessionId: null as string | null, resumeSessionId: null as string | null, newSessionId: undefined as string | undefined, isResuming: false, storedStablePromptHash: null as string | null, storedStableSections: null as StableSectionHashes | null, invalidationReason: null };
+    // A same-run post-tool recovery resumes the exact session id captured from
+    // the interrupted attempt. The ordinary cross-turn cursor guard cannot
+    // admit it yet because the current assistant placeholder is still in
+    // flight, so this daemon-only path supplies the already-validated handle
+    // directly. Public chat requests cannot reach this branch.
+    const forceInternalResume =
+      pendingNativeSessionContinue != null &&
+      def.resumesSessionViaCli === true &&
+      pendingNativeSessionContinue.sessionId.length > 0;
+    const agentResumeCtx = forceInternalResume
+      ? {
+          ...resolvedAgentResumeCtx,
+          storedSessionId: pendingNativeSessionContinue.sessionId,
+          resumeSessionId: pendingNativeSessionContinue.sessionId,
+          isResuming: true,
+          storedStablePromptHash:
+            pendingNativeSessionContinue.stablePromptHash ?? null,
+          storedStableSections:
+            pendingNativeSessionContinue.stablePromptSections ?? null,
+          invalidationReason: null,
+        }
+      : resolvedAgentResumeCtx;
     const publishNativeSessionRecoveryMetadata = () => {
       if (!run.nativeSessionRecovery) return;
       design.runs.emit(run, 'diagnostic', {
@@ -5167,15 +5132,6 @@ export async function startServer({
       invalidationReason: agentResumeCtx.invalidationReason,
     });
     publishNativeSessionRecoveryMetadata();
-    // Flow-step gate for the brief-answered turn: a registered step (today
-    // the inspiration picker) whose section the composed prompt carries but
-    // whose form this conversation has never shown must run BEFORE the
-    // build. Detected from the daemon-composed prompt (not the per-turn
-    // send, which may omit cached stable instructions) + full transcript.
-    const pendingFlowStep = pendingPromptFlowStep({
-      composedSystemPrompt: daemonSystemPrompt,
-      transcript: typeof message === 'string' ? message : '',
-    });
     const userRequestPrompt = composeChatUserRequestForAgent(
       message,
       currentPrompt,
@@ -5183,7 +5139,7 @@ export async function startServer({
       // existing session. A create turn still sends the full transcript so
       // a brand-new session (incl. first turn after another agent)
       // is seeded with prior context.
-      { skipTranscript: agentResumeCtx.isResuming, pendingFlowStep },
+      { skipTranscript: agentResumeCtx.isResuming },
     );
     // The stable instruction slice (daemon prompt + tool contract + system
     // prompt = design system / skills / memory) is identical across turns of
@@ -5271,10 +5227,12 @@ export async function startServer({
     const formIdForOverride = formAnswerMatch
       ? ((formAnswerMatch[1] || 'form').trim().replace(/[^\w.-]/g, '') || 'form').toLowerCase()
       : null;
-    const formOverride = resolveFormAnsweredOverride({
-      formId: formIdForOverride,
-      pendingFlowStep,
-    });
+    const formOverride =
+      formIdForOverride === 'discovery' || formIdForOverride === 'task-type'
+        ? FORM_ANSWERED_SYSTEM_OVERRIDE
+        : formIdForOverride !== null
+          ? FORM_ANSWERED_GENERIC_OVERRIDE
+          : '';
     const promptImagePaths = selectPromptImagePaths(
       def.id,
       safeImages,
@@ -5547,8 +5505,8 @@ export async function startServer({
         startRequestedAt: run.analyticsTelemetry?.startRequestedAt ?? run.createdAt,
       };
     };
-    const spawnRetryAttempt = () => {
-      void startChatRun(chatBody, run).catch((err) => {
+    const spawnRetryAttempt = (retryChatBody = chatBody) => {
+      void startChatRun(retryChatBody, run).catch((err) => {
         const message = err instanceof Error ? err.message : String(err);
         design.runs.emit(
           run,
@@ -5570,17 +5528,17 @@ export async function startServer({
     // or shutdown during the backoff window clears the timer (runtimes/runs.ts)
     // and finalizes the queued run, and the callback re-checks cancel/terminal
     // state in case it fires first.
-    const scheduleRetryRestart = (delayMs) => {
+    const scheduleRetryRestart = (delayMs, retryChatBody = chatBody) => {
       tearDownAttemptForRetry();
       const wait = Number.isFinite(delayMs) && delayMs > 0 ? delayMs : 0;
       if (wait <= 0) {
-        spawnRetryAttempt();
+        spawnRetryAttempt(retryChatBody);
         return;
       }
       run.retryRestartTimer = setTimeout(() => {
         run.retryRestartTimer = null;
         if (run.cancelRequested || design.runs.isTerminal(run.status)) return;
-        spawnRetryAttempt();
+        spawnRetryAttempt(retryChatBody);
       }, wait);
     };
     const finalizeRetryTelemetry = (status, decision, failure, errorCode) => {
@@ -5607,7 +5565,13 @@ export async function startServer({
           : undefined;
       const eventDecision =
         attemptCount > 0
-          ? { ...decision, retryAttemptIndex: attemptCount }
+          ? {
+              ...decision,
+              retryAttemptIndex: attemptCount,
+              retryMaxAttempts:
+                run.retryMaxAttempts ?? decision.retryMaxAttempts,
+              retryStrategy: run.retryStrategy ?? decision.retryStrategy,
+            }
           : decision;
       // A successful retry has no current failure classification or error code.
       // Fall back to the failure that caused attempt 0 to be retried so success
@@ -5681,6 +5645,72 @@ export async function startServer({
         ...runSideEffectsForRun(run),
         cancelRequested: !!run.cancelRequested,
       };
+      const liveSessionId = agentResumeCtx.isResuming
+        ? agentResumeCtx.resumeSessionId
+        : agentCapturesSessionId
+          ? capturedSessionId
+          : agentResumeCtx.newSessionId;
+      const postToolResumeDecision = decidePostToolResumeRecovery({
+        result,
+        failure,
+        continuationAttemptCount:
+          run.nativeSessionContinueAttemptCount ?? 0,
+        totalRetryAttemptCount: run.retryAttemptCount ?? 0,
+        sideEffects,
+        supportsNativeSessionContinue: def.resumesSessionViaCli === true,
+        hasNativeSession: !!run.conversationId && !!liveSessionId,
+      });
+      if (
+        postToolResumeDecision?.shouldRetry &&
+        !design.runs.isTerminal(run.status) &&
+        run.conversationId &&
+        liveSessionId
+      ) {
+        run.retryOriginalFailure ??= failure ?? undefined;
+        run.retryOriginFailure = failure ? { ...failure } : null;
+        run.retryOriginErrorCode = errorCode ?? null;
+        run.retryAttemptCount = postToolResumeDecision.retryAttemptIndex;
+        run.nativeSessionContinueAttemptCount =
+          (run.nativeSessionContinueAttemptCount ?? 0) + 1;
+        run.retryMaxAttempts = postToolResumeDecision.retryMaxAttempts;
+        run.retryStrategy = postToolResumeDecision.retryStrategy;
+        run.retryFinalResult = undefined;
+        run.retrySuppressedReason = undefined;
+        upsertAgentSession(db, {
+          conversationId: run.conversationId,
+          agentId: def.id,
+          sessionId: liveSessionId,
+          stablePromptHash: currentStableHash,
+          stablePromptSections: currentStableSectionsJson,
+          model: safeModel ?? null,
+          cwd: effectiveCwd,
+          lastMessageId: run.assistantMessageId ?? null,
+        });
+        run.nativeSessionRecovery = markNativeSessionCaptured({
+          previous: run.nativeSessionRecovery,
+          agentId: def.id,
+          sessionId: liveSessionId,
+          resumed: agentResumeCtx.isResuming,
+        });
+        publishNativeSessionRecoveryMetadata();
+        design.runs.emit(run, 'run_retry_attempted', {
+          ...retryAnalyticsBase(postToolResumeDecision, failure, errorCode),
+          retry_reason: postToolResumeDecision.retryReason,
+          retry_delay_ms: postToolResumeDecision.retryDelayMs,
+        });
+        run.nativeSessionContinuePending = {
+          sessionId: liveSessionId,
+          stablePromptHash: currentStableHash,
+          stablePromptSections: currentStableSections,
+        };
+        scheduleRetryRestart(postToolResumeDecision.retryDelayMs, {
+          ...chatBody,
+          message: POST_TOOL_RESUME_CONTINUATION_PROMPT,
+          currentPrompt: POST_TOOL_RESUME_CONTINUATION_PROMPT,
+          titleGeneration: undefined,
+        });
+        return true;
+      }
       const decision = decideSafeRunRetry({
         result,
         failure,
@@ -5694,6 +5724,8 @@ export async function startServer({
           run.retryOriginErrorCode = errorCode ?? null;
         }
         run.retryAttemptCount = decision.retryAttemptIndex;
+        run.retryMaxAttempts = decision.retryMaxAttempts;
+        run.retryStrategy = decision.retryStrategy;
         run.retryFinalResult = undefined;
         run.retrySuppressedReason = undefined;
         design.runs.emit(run, 'run_retry_attempted', {
@@ -5733,11 +5765,6 @@ export async function startServer({
         sideEffects.artifactWriteSeen ||
         sideEffects.liveArtifactSeen
       );
-      const liveSessionId = agentResumeCtx.isResuming
-        ? agentResumeCtx.resumeSessionId
-        : agentCapturesSessionId
-          ? capturedSessionId
-          : agentResumeCtx.newSessionId;
       const resumableFailure =
         result === 'failed' &&
         def.resumesSessionViaCli === true &&
@@ -5752,6 +5779,7 @@ export async function startServer({
       // failure type + fix. Only meaningful on a failed result.
       run.failureCategory = result === 'failed' ? failure?.failure_category ?? null : null;
       run.failureDetail = result === 'failed' ? failure?.failure_detail ?? null : null;
+      run.failureAction = result === 'failed' ? failure?.user_action ?? null : null;
       // Stamp the classification onto the persisted assistant message too, so a
       // reload (or any daemon-side persistence without the live web error
       // handler) keeps the specific failure guidance instead of the coarse
@@ -6260,6 +6288,10 @@ export async function startServer({
           promptFilePath: promptFile?.path,
           resumeSessionId: agentResumeCtx.resumeSessionId,
           newSessionId: agentResumeCtx.newSessionId,
+          disablePlugins:
+            def.id === 'codex'
+            && run.externalPluginAnalytics?.externalPluginId
+              === OPEN_DESIGN_PLUGIN_ID,
         },
       );
     } catch (err) {
@@ -6724,7 +6756,11 @@ export async function startServer({
           agentId: def.id,
           runId: run.id,
           conversationId: run.conversationId,
-          runAttempt: run.retryAttemptCount ?? 0,
+          runAttempt: openDesignAmrRunAttempt({
+            retryAttemptCount: run.retryAttemptCount,
+            manualResumeAttemptCount: run.manualResumeAttemptCount,
+          }),
+          externalPluginAnalytics: run.externalPluginAnalytics ?? null,
         }),
         // OpenCode external-MCP injection (issue #2142). Layered AFTER
         // spawnEnvForAgent / odMediaEnv / configuredAgentEnv so the
@@ -6877,12 +6913,9 @@ export async function startServer({
       // mini extraction in the background just because the user has
       // an OpenAI key parked in media-config.
       //
-      // Also normalize the BYOK provider shape: web side sends
-      // `{ protocol, ... }` via the chat body as `byokProvider`,
-      // but memory-llm.pickProvider expects `{ provider, ... }`
-      // with `provider` being a PROVIDER_DEFAULTS key. We apply the
-      // same mapping the web pre-turn path does (ProjectView.tsx
-      // constructs `{ provider: byokOpenCodeProvider.protocol, ... }`).
+      // Normalize the spawn-resolved BYOK profile shape for the memory
+      // extractor. The raw secret never entered the persisted run body; it is
+      // held only by this run closure while the child is alive.
       const memoryChatProvider: {
         provider?: string;
         apiKey?: string;
@@ -6890,14 +6923,14 @@ export async function startServer({
         apiVersion?: string;
         model?: string;
         requiresApiKey?: boolean;
-      } | null = byokProvider
+      } | null = resolvedByokCredential
         ? {
-            provider: (byokProvider as { protocol?: string }).protocol ?? undefined,
-            apiKey: (byokProvider as { apiKey?: string }).apiKey,
-            baseUrl: (byokProvider as { baseUrl?: string }).baseUrl,
-            apiVersion: (byokProvider as { apiVersion?: string }).apiVersion,
-            model: (byokProvider as { model?: string }).model,
-            requiresApiKey: (byokProvider as { requiresApiKey?: boolean }).requiresApiKey,
+            provider: resolvedByokCredential.profile.protocol,
+            apiKey: resolvedByokCredential.apiKey,
+            baseUrl: resolvedByokCredential.profile.baseUrl,
+            apiVersion: resolvedByokCredential.profile.apiVersion,
+            model: resolvedByokCredential.profile.model,
+            requiresApiKey: resolvedByokCredential.profile.requiresApiKey,
           }
         : null;
       const memoryOptions = {
@@ -7676,6 +7709,7 @@ export async function startServer({
         mcpServers,
         envFormat: def.acpMcpEnvFormat ?? 'array',
         executionProfile,
+        completePromptOnTurnEnd: def.acpTurnEndCompletesPrompt === true,
         ...(def.id === 'amr' ? { modelUnavailableErrorCode: 'AMR_MODEL_UNAVAILABLE' } : {}),
         // Resume the prior upstream session (drives `session/load`) when the
         // resume-identity guard says it is safe; otherwise a fresh session/new.
@@ -8614,6 +8648,7 @@ export async function startServer({
     paths: { PROJECTS_DIR, RUNTIME_DATA_DIR },
     agents: { detectAgents, getAgentDef },
     chat: { startChatRun },
+    byokCredentials: byokCredentialService,
     lifecycle: { isDaemonShuttingDown: () => daemonShuttingDown },
     plugins: {
       connectorService,
@@ -9032,6 +9067,7 @@ export async function startServer({
     finalize: finalizeDeps,
     handoff: handoffDeps,
     chat: { startChatRun },
+    byokCredentials: byokCredentialService,
     messages: {
       pinAssistantMessageOnRunCreate,
       reconcileAssistantMessageOnRunEnd,

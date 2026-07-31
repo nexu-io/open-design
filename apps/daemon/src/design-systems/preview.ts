@@ -42,12 +42,11 @@ export function renderDesignSystemPreview(id: string, raw: string): string {
     pickColor(colors, ['surface', 'card', 'background-secondary', 'panel', 'elevated'])
     ?? '#ffffff';
 
-  const display = sanitizeFontStack(
-    fonts.display ?? fonts.heading,
-    "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
-  );
-  const body = sanitizeFontStack(fonts.body, display);
-  const mono = sanitizeFontStack(fonts.mono, "ui-monospace, 'JetBrains Mono', monospace");
+  const display = fonts.display
+    ?? fonts.heading
+    ?? "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
+  const body = fonts.body ?? display;
+  const mono = fonts.mono ?? "ui-monospace, 'JetBrains Mono', monospace";
 
   const renderedMarkdown = renderMarkdownLite(raw);
 
@@ -302,169 +301,6 @@ export function renderDesignSystemPreview(id: string, raw: string): string {
 </html>`;
 }
 
-/**
- * Compact card renderer for pickers (inspiration step, galleries): one
- * self-contained HTML document sized for a small embed, showing the pieces
- * a brand card needs — font-name label, title in the display face, a color
- * ramp, a type specimen with a primary button, and an imagery slot (first
- * DESIGN.md image when present, otherwise a palette graphic). Reuses the
- * same permissive DESIGN.md extractors as the full preview above.
- */
-export function renderDesignSystemCard(id: string, raw: string): string {
-  const titleMatch = /^#\s+(.+?)\s*$/m.exec(raw);
-  const title = cleanTitle(titleMatch?.[1] ?? id);
-  const colors = extractColors(raw);
-  const fonts = extractFonts(raw);
-
-  const bg =
-    pickColor(colors, ['page background', 'background', 'canvas', 'paper', 'bg ', 'page bg'])
-    ?? '#ffffff';
-  const fg =
-    pickColor(colors, ['heading', 'foreground', 'ink', 'fg', 'text', 'navy', 'graphite'])
-    ?? '#111111';
-  const accent =
-    pickColor(colors, ['primary brand', 'brand primary', 'primary', 'brand', 'accent'])
-    ?? firstNonNeutral(colors)
-    ?? '#2f6feb';
-  const border = pickColor(colors, ['border', 'divider', 'rule', 'stroke']) ?? 'rgba(0,0,0,0.12)';
-  const surface =
-    pickColor(colors, ['surface', 'card', 'background-secondary', 'panel', 'elevated'])
-    ?? bg;
-
-  const display = sanitizeFontStack(fonts.display ?? fonts.heading, 'system-ui, -apple-system, sans-serif');
-  const body = sanitizeFontStack(fonts.body, display);
-  const displayName = display.split(',')[0]?.replace(/['"]/g, '').trim() || 'System';
-  const bodyName = body.split(',')[0]?.replace(/['"]/g, '').trim() || displayName;
-  const fontLabel = displayName === bodyName ? displayName : `${displayName} / ${bodyName}`;
-
-  // Ramp: up to 8 chips from the extracted palette, deduped by value so a
-  // DESIGN.md that repeats a token under several names still reads as a ramp.
-  const seen = new Set<string>();
-  const ramp: string[] = [];
-  for (const c of colors) {
-    if (seen.has(c.value)) continue;
-    seen.add(c.value);
-    ramp.push(c.value);
-    if (ramp.length >= 8) break;
-  }
-  while (ramp.length < 8 && ramp.length > 0) ramp.push(ramp[ramp.length - 1]!);
-  if (ramp.length === 0) ramp.push(bg, surface, accent, fg, bg, surface, accent, fg);
-
-  const image = /!\[[^\]]*\]\((https?:\/\/[^)\s]+|[^)\s]+\.(?:png|jpe?g|webp|gif))\)/i.exec(raw)?.[1] ?? null;
-
-  return `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>${escapeHtml(title)} — card</title>
-  <style>
-    /* Sized entirely in viewport units so the document reads correctly at
-       ANY embed size — the picker renders it in a card-sized iframe with no
-       transform, and a bigger dialog gets proportionally bigger type. */
-    * { box-sizing: border-box; margin: 0; }
-    html, body { height: 100%; overflow: hidden; }
-    body {
-      background: ${bg};
-      color: ${fg};
-      font-family: ${body};
-      padding: 4vh 5vw 5vh;
-      display: flex;
-      flex-direction: column;
-      gap: 3.2vh;
-    }
-    .head { display: flex; align-items: baseline; justify-content: space-between; gap: 2vw; }
-    .font-label {
-      font-size: 3.4vw;
-      letter-spacing: 0.02em;
-      color: ${accent};
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      max-width: 70%;
-    }
-    .marks { font-size: 2.8vw; color: ${fg}; opacity: 0.55; letter-spacing: 0.6vw; white-space: nowrap; }
-    h1 {
-      font-family: ${display};
-      font-size: 10.5vw;
-      line-height: 1.02;
-      letter-spacing: -0.02em;
-      font-weight: 700;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .ramp { display: flex; gap: 1vw; }
-    .ramp i {
-      flex: 1;
-      height: 8vh;
-      border-radius: 1.2vw;
-      /* Faint inset keyline instead of a hard border: reads as one clean
-         color band without top/bottom divider lines between chips. */
-      box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
-    }
-    .row { display: flex; gap: 2.6vw; flex: 1; min-height: 0; }
-    .spec {
-      flex: 1.35;
-      background: ${surface};
-      border: 1px solid ${border};
-      border-radius: 2.6vw;
-      padding: 3vw;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      gap: 2vh;
-      min-width: 0;
-    }
-    .spec p { font-size: 3.8vw; line-height: 1.4; overflow: hidden; }
-    .btn {
-      align-self: flex-start;
-      font-family: ${display};
-      font-size: 3.4vw;
-      padding: 1.4vh 3.6vw;
-      border-radius: 1.6vw;
-      background: ${accent};
-      color: ${pickReadableForeground(accent)};
-      white-space: nowrap;
-    }
-    .img {
-      flex: 1;
-      border-radius: 2.6vw;
-      border: 1px solid ${border};
-      overflow: hidden;
-      position: relative;
-      background: ${accent};
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    .img img { width: 100%; height: 100%; object-fit: cover; display: block; }
-    .img .aa {
-      font-family: ${display};
-      font-size: 11vw;
-      font-weight: 700;
-      color: ${pickReadableForeground(accent)};
-    }
-  </style>
-</head>
-<body>
-  <div class="head">
-    <span class="font-label">${escapeHtml(fontLabel)}</span>
-    <span class="marks">✦ ▤ ◯</span>
-  </div>
-  <h1>${escapeHtml(title)}</h1>
-  <div class="ramp">${ramp.map((v) => `<i style="background:${v}"></i>`).join('')}</div>
-  <div class="row">
-    <div class="spec">
-      <p>The quick brown fox jumps over the lazy dog.</p>
-      <span class="btn">Continue →</span>
-    </div>
-    <div class="img">${image ? `<img src="${escapeHtml(image)}" alt="" />` : '<span class="aa">Aa</span>'}</div>
-  </div>
-</body>
-</html>`;
-}
-
 function extractSubtitle(raw: string): string {
   const lines = raw.split(/\r?\n/);
   const h1 = lines.findIndex((l) => /^#\s+/.test(l));
@@ -493,11 +329,8 @@ function extractColors(raw: string): ColorToken[] {
     colors.push({ name: cleanName, value: v });
   }
 
-  // Form A: "- **Background:** `#FAFAFA`" / "- Background: #FAFAFA".
-  // The closing bold may sit on either side of the colon ("**Background:**"
-  // keeps the colon INSIDE the bold), so stars are tolerated both before
-  // and after `[:：]` — the bundled packages all use the colon-inside form.
-  const reA = /^[\s>*-]*\**\s*([A-Za-z][A-Za-z0-9 /&()+_-]{1,40}?)\s*\**\s*[:：]\s*\**\s*`?(#[0-9a-fA-F]{3,8})/gm;
+  // Form A: "- **Background:** `#FAFAFA`" / "- Background: #FAFAFA"
+  const reA = /^[\s>*-]*\**\s*([A-Za-z][A-Za-z0-9 /&()+_-]{1,40}?)\s*\**\s*[:：]\s*`?(#[0-9a-fA-F]{3,8})/gm;
   let m;
   while ((m = reA.exec(raw)) !== null) push(m[1] ?? '', m[2] ?? '');
 
@@ -513,83 +346,18 @@ function extractFonts(raw: string): FontHints {
   const out: FontHints = {};
   // "- **Display / headings:** `'GT Sectra', ...`"
   // We want the backticked stack OR the rest of the line.
-  const re = /^[\s>*-]*\**\s*([A-Za-z][A-Za-z /]{1,30}?)\s*\**\s*[:：]\s*\**\s*`?([^`\n]+?)`?\s*$/gm;
+  const re = /^[\s>*-]*\**\s*([A-Za-z][A-Za-z /]{1,30}?)\s*\**\s*[:：]\s*`?([^`\n]+?)`?$/gm;
   let m;
   while ((m = re.exec(raw)) !== null) {
     const label = (m[1] ?? '').toLowerCase();
-    // Cut trailing "— explanation" clauses and stray emphasis before
-    // validating; a stack like `'GT Sectra', serif — display face` should
-    // yield just the stack.
-    const value = (m[2] ?? '')
-      .split(/\s+[—–]\s+/)[0]!
-      .trim()
-      .replace(/[*_`]+$/g, '')
-      .trim();
+    const value = (m[2] ?? '').trim().replace(/[*_`]+$/g, '').trim();
     if (!/[a-zA-Z]/.test(value)) continue;
     if (value.startsWith('#')) continue;
-    // A hex anywhere in the value means this is a color line whose label
-    // merely resembles a type role ("Display: Ink Black (#222222) …").
-    if (/#[0-9a-fA-F]{3,8}/.test(value)) continue;
-    // Only accept values that plausibly ARE font stacks. Prose lines about
-    // type ("4–8px (very tight)", "runs at 1.18–1.25") share the labels but
-    // carry sizes, ranges, or parentheticals — injecting them into a
-    // `font-family:` declaration can break the whole stylesheet.
-    if (/[(){};]/.test(value)) continue;
-    if (/\d\s*(?:px|pt|em|rem|%)/i.test(value)) continue;
-    if (/\d\s*[–—-]\s*\d/.test(value)) continue;
-    if (value.length > 90) continue;
     if (/display|heading|h1|title/.test(label) && !out.display) out.display = value;
     else if (/body|text|paragraph|copy/.test(label) && !out.body) out.body = value;
     else if (/mono|code/.test(label) && !out.mono) out.mono = value;
   }
   return out;
-}
-
-// CSS generic/system family keywords that must stay unquoted to keep their
-// meaning (quoting `serif` would turn it into a literal face name).
-const GENERIC_FONT_FAMILIES = new Set([
-  'serif',
-  'sans-serif',
-  'monospace',
-  'cursive',
-  'fantasy',
-  'system-ui',
-  'ui-serif',
-  'ui-sans-serif',
-  'ui-monospace',
-  'ui-rounded',
-  'emoji',
-  'math',
-  'fangsong',
-  '-apple-system',
-]);
-
-// One font-family name: letters/digits, spaces, hyphens, underscores, with an
-// optional leading hyphen for vendor names like `-apple-system`.
-const FONT_FAMILY_NAME_RE = /^-?[A-Za-z0-9][A-Za-z0-9 _-]*$/;
-
-/**
- * Serialize a DESIGN.md-extracted font stack through a strict font-family
- * grammar. `extractFonts` is deliberately permissive about prose shapes, and
- * its output is interpolated into generated `<style>` raw text, so this is
- * the HTML boundary: each comma-separated family must be a plain name
- * (optionally quoted); families containing any other character are dropped,
- * and a stack with no surviving family falls back to the trusted default.
- * The result is rebuilt from the validated names only — input text never
- * reaches the document verbatim, so a value like
- * "Karla</style><img src=…>" can never close the style element.
- */
-function sanitizeFontStack(value: string | undefined, fallback: string): string {
-  if (!value) return fallback;
-  const families: string[] = [];
-  for (const part of value.split(',')) {
-    let name = part.trim();
-    const quoted = /^(['"])(.+)\1$/.exec(name);
-    if (quoted) name = (quoted[2] ?? '').trim();
-    if (!name || name.length > 60 || !FONT_FAMILY_NAME_RE.test(name)) continue;
-    families.push(GENERIC_FONT_FAMILIES.has(name.toLowerCase()) ? name : `'${name}'`);
-  }
-  return families.length > 0 ? families.join(', ') : fallback;
 }
 
 function pickColor(colors: ColorToken[], hints: string[]): string | null {

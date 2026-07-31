@@ -1,7 +1,5 @@
 ---
 name: team-okrs
-en_name: "Team OKR Tracker"
-zh_name: "团队 OKR 追踪"
 description: |
   OKR tracker page — quarter banner, three objectives with their key
   results as progress bars, owner avatars, status pills, and a "this
@@ -14,7 +12,6 @@ triggers:
   - "objectives"
   - "目标"
 od:
-  category: corporate-strategy
   mode: prototype
   platform: desktop
   scenario: product

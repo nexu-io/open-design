@@ -1,7 +1,5 @@
 ---
 name: kanban-board
-en_name: "Kanban Task Board"
-zh_name: "看板任务管理"
 description: |
   Kanban / task board with columns (To do / In progress / In review / Done),
   draggable-looking cards, assignee avatars, swimlanes, and a top filter
@@ -15,7 +13,6 @@ triggers:
   - "jira board"
   - "看板"
 od:
-  category: product-management
   mode: prototype
   platform: desktop
   scenario: operations

@@ -1,7 +1,5 @@
 ---
 name: orbit-notion
-en_name: "Notion-Style Daily Briefing"
-zh_name: "Notion 风格每日简报"
 description: |
   Open Orbit briefing skill — selected by the Orbit pipeline when
   Notion is the user's only connected connector, or when the user
@@ -18,7 +16,6 @@ triggers:
   - "notion 简报"
   - "文档摘要"
 od:
-  category: product-management
   mode: prototype
   platform: desktop
   scenario: orbit

@@ -1,7 +1,5 @@
 ---
 name: critique
-en_name: "5-Dimension Expert Design Critique"
-zh_name: "五维专家设计评审报告"
 description: |
   Run a 5-dimension expert design review on any HTML artifact in the
   project — Philosophy / Visual hierarchy / Detail / Functionality /
@@ -25,7 +23,6 @@ od:
   mode: prototype
   platform: desktop
   scenario: design
-  category: design-craft
   upstream: "https://github.com/alchaincyf/huashu-design"
   preview:
     type: html

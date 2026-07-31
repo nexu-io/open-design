@@ -55,7 +55,6 @@ export interface RegisterDesignSystemRoutesDeps extends RouteDeps<'db' | 'paths'
     readDesignSystemWorkspaceTextFile: (db: DbHandle, summary: AvailableDesignSystemSummary | undefined, filePath: string) => Promise<string | null>;
     readUserDesignSystemFile: (root: string, id: string, filePath: string) => Promise<DesignSystemFileDetail | null>;
     renderDesignSystemPreview: (id: string, body: string) => string;
-    renderDesignSystemCard: (id: string, body: string) => string;
     renderDesignSystemShowcase: (id: string, body: string) => string;
     updateUserDesignSystem: (root: string, id: string, input: UserDesignSystemInput) => Promise<DesignSystemSummary | null>;
     updateUserDesignSystemRevisionStatus: (root: string, id: string, revisionId: string, status: 'accepted' | 'rejected') => Promise<DesignSystemRevision | null>;
@@ -97,7 +96,6 @@ export function registerDesignSystemRoutes(app: Express, ctx: RegisterDesignSyst
     readDesignSystemWorkspaceTextFile,
     readUserDesignSystemFile,
     renderDesignSystemPreview,
-    renderDesignSystemCard,
     renderDesignSystemShowcase,
     updateUserDesignSystem,
     updateUserDesignSystemRevisionStatus,
@@ -233,24 +231,6 @@ export function registerDesignSystemRoutes(app: Express, ctx: RegisterDesignSyst
       if (body === null) return res.status(404).type('text/plain').send('not found');
       const html = renderDesignSystemPreview(req.params.id, body);
       res.type('text/html').send(html);
-    } catch (err) {
-      res.status(500).type('text/plain').send(String(err));
-    }
-  });
-
-  // Compact brand card for pickers (inspiration step, gallery grids): one
-  // small self-contained document per system. Resolves the DESIGN.md the
-  // same way as /api/design-systems/:id so user-workspace systems render
-  // their edited body, not the bundled original.
-  app.get('/api/design-systems/:id/card', async (req, res) => {
-    try {
-      const systems = await listAllDesignSystems();
-      const summary = systems.find((s) => s.id === req.params.id);
-      const projectBody = await readDesignSystemWorkspaceTextFile(db, summary, 'DESIGN.md');
-      const body = projectBody ?? await readAvailableDesignSystem(req.params.id);
-      if (body === null) return res.status(404).type('text/plain').send('not found');
-      res.setHeader('Cache-Control', 'private, max-age=300');
-      res.type('text/html').send(renderDesignSystemCard(req.params.id, body));
     } catch (err) {
       res.status(500).type('text/plain').send(String(err));
     }

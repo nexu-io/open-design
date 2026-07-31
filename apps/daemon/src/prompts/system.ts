@@ -35,6 +35,7 @@ import {
   PLATFORM_CONTRACTS_BLOCK,
   PROMPT_INJECTION_RESISTANCE,
   renderSlimCoreCharter,
+  SLIM_V2_ROLE_BOUNDARY_GUARD,
 } from './core-slim.js';
 import { renderDirectionIndexBlock, renderDirectionSpecBlock } from './directions.js';
 import { DECK_FRAMEWORK_DIRECTIVE } from './deck-framework.js';
@@ -91,7 +92,6 @@ function renderUiLocalePrompt(
     '',
     `The Open Design UI locale for this run is \`${normalized}\` (${languageName}). All user-visible chat prose and generated UI controls must follow this locale, especially \`<question-form>\` titles, descriptions, labels, placeholders, helper text, and option labels. Keep machine-readable ids and object option \`value\` fields exact and unlocalized.`,
     `The artifacts you generate must also be in ${languageName}: every piece of user-visible copy in the HTML/React/page/deck you produce — headings, body text, navigation, button and link labels, captions, alt text, and form fields — is written in this language by default. This holds even when a chosen template, plugin, or design system ships its reference/example content in another language: treat that copy as a layout and style reference and translate/adapt it into ${languageName}, do not ship its wording verbatim. Keep brand names, code, and technical identifiers as-is, and honor an explicit user request for a different output language.`,
-    'Exception: for the default task-type form, keep the `taskType` option labels as the canonical routing choices: `Prototype`, `Live artifact`, `Slide deck`, `Image`, `Video`, `HyperFrames`, `Audio`, `Other`. Do not translate, reorder, or rewrite those option labels.',
   ];
   // The worked zh-CN quick-brief copy below matches the CLASSIC default
   // discovery form verbatim. The slim charter recipes that form instead of
@@ -385,7 +385,7 @@ function narrowFormAnswerSignalText(body: string): string {
  * for intent-signal scanning. The three intent signals gate stable-region
  * prompt blocks, and for transcript-resending clients `message` embeds the
  * full packed conversation — assistant turns included. Assistant copy (most
- * damagingly the turn-1 discovery form's own option copy: «幻灯 / 路演»,
+ * damagingly the default discovery form's own option copy: «幻灯 / 路演»,
  * "Slide deck / pitch", «iOS / Android / 响应式») must never flip a signal:
  * every flip changes the stable instruction hash and re-sends the whole
  * stable block on resume.
@@ -434,7 +434,7 @@ export const BASE_SYSTEM_PROMPT = renderOfficialDesignerPrompt('filesystem');
 
 export const SKIP_DISCOVERY_BRIEF_OVERRIDE = `# Automated project mode — skip discovery form
 
-This project was created through the daemon API with \`skipDiscoveryBrief: true\`. Override the discovery rules below: do NOT emit \`<question-form id="discovery">\`, do NOT show "Quick brief — 30 seconds", and do NOT ask a first-turn clarification form. Treat the user's first message and project metadata as the brief, then proceed directly to planning/building under the normal artifact workflow. Ask at most one concise follow-up only if a required detail is impossible to infer safely.`;
+This project was created through the daemon API with \`skipDiscoveryBrief: true\`. Override the discovery rules below: do NOT emit a project-opening \`<question-form id="discovery">\` or show "Quick brief — 30 seconds". Treat the user's first message and project metadata as the brief, then proceed directly to planning/building under the normal artifact workflow. Ask at most one concise follow-up only if a required detail is impossible to infer safely.`;
 
 // Injected into non-media projects so the agent knows how to dispatch
 // media generation if the user asks for it mid-session (e.g. "generate an
@@ -614,42 +614,6 @@ Active design system exception: the active design system is the visual direction
 - When a downstream framework mentions "active direction" or "theme tokens", bind those fields from the active design system instead of the built-in direction library.
 `;
 
-// Inspiration step for ungrounded runs (no active design system, no picked
-// template). Mirrored VERBATIM in packages/contracts/src/prompts/system.ts so
-// daemon-composed and BYOK/API-composed runs offer the same reference-
-// grounding surface; a drift test asserts the two copies stay identical.
-export const INSPIRATION_STEP_GUIDANCE = `
-
----
-
-## Inspiration step — ground ungrounded tasks (before the first artifact)
-
-This run has NO active design system and NO picked template. Before generating the FIRST visual artifact of a task (page, prototype, deck, image, video), give the user one structured chance to anchor the result in a concrete reference: emit a \`<question-form id="inspiration">\` whose single question has \`type: "inspiration"\`. The host renders the full picker — design templates by category, design systems with their palettes, and an upload area for the user's own reference images — so never enumerate catalog entries yourself and never fall back to asking for links in plain prose.
-
-<question-form id="inspiration" title="Pick a reference — optional but recommended">
-{
-  "questions": [
-    {
-      "id": "inspiration",
-      "label": "Ground this task in a reference",
-      "type": "inspiration",
-      "query": "<one-line task summary, e.g. product landing page>",
-      "help": "Results are markedly better with a reference — pick a template or design system, or add a few images you like. Skipping is fine."
-    }
-  ]
-}
-</question-form>
-
-Rules:
-- Localize \`title\`, \`label\`, \`help\`, and \`query\` into the user's language (set top-level \`"lang"\` when localizing); keep \`id\` and \`type\` values in English.
-- In the single short intro line before the form, tell the user that reference images or a template markedly improve the result.
-- Emit it AFTER turn-1 discovery is resolved (or as your first working turn when discovery is skipped) — never in the same message as another question-form.
-- This form is part of the locked brief-to-build flow, not a brief re-ask: a transition that says the brief is answered and to build now does not skip it — emit this single form first, then build when the picks return.
-- Stop the turn after \`</question-form>\`. The picks return as the next user message, and the host applies a picked template/design system to the run automatically — honor it, do not re-apply it manually.
-- Emit this form at most ONCE per conversation. If the answer reads \`(skipped)\`, proceed immediately with the built-in design directions and never re-ask.
-- Skip this step when the user already supplied reference images/URLs or named a specific style/brand, when the turn is a small edit to an existing artifact, or when the task produces no visual artifact.
-`;
-
 const DEFAULT_DESIGN_SYSTEM_USAGE = `Read DESIGN.md for visual principles, paste tokens.css verbatim into the first <style> when it is provided, and match component shapes from the reference component manifest or fixture when available. Treat any pull-layer index as optional context for deeper inspection; do not assume those files have already been loaded.`;
 
 function renderDesignSystemImportModeGuidance(
@@ -713,13 +677,6 @@ export interface ComposeInput {
   designSystemFixtureHtml?: string | undefined;
   designSystemPullIndex?: string | undefined;
   designSystemImportMode?: 'normalized' | 'hybrid' | 'verbatim' | undefined;
-  // Additional inspiration systems the user picked alongside the primary
-  // one (inspiration-picker multi-select). The daemon resolves each id
-  // through the same DESIGN.md reader chain as the primary and bounds the
-  // bodies before composing, so the agent receives actual palette /
-  // typography / component content to borrow from — ids alone (the old
-  // metadata line) cannot ground a user-authored system.
-  inspirationDesignSystems?: Array<{ id: string; title?: string | undefined; body: string }> | undefined;
   // Craft references the active skill opted into via `od.craft.requires`.
   // The daemon resolves the slug list to file contents and concatenates
   // them with section headers; we inject them between the DESIGN.md and
@@ -744,8 +701,8 @@ export interface ComposeInput {
   memoryHooks?: { profile?: boolean; rewrite?: boolean; verify?: boolean } | undefined;
   // Project-level metadata captured by the new-project panel. Drives the
   // agent's understanding of artifact kind, fidelity, speaker-notes intent
-  // and animation intent. Missing fields here are exactly what the
-  // discovery form should re-ask the user about on turn 1.
+  // and animation intent. Missing fields are unresolved facts, not automatic
+  // clarification triggers.
   metadata?: ProjectMetadata | undefined;
   // The template the user picked in the From-template tab, when present.
   // Snapshot of HTML files that the agent should treat as a starting
@@ -846,7 +803,6 @@ export function composeSystemPrompt({
   designSystemFixtureHtml,
   designSystemPullIndex,
   designSystemImportMode,
-  inspirationDesignSystems,
   craftBody,
   craftSections,
   memoryBody,
@@ -879,10 +835,8 @@ export function composeSystemPrompt({
   const isSlimCore = promptCoreVariant === 'slim';
   const isAskModeEarly = sessionMode === 'chat';
   // Media surfaces (image / video / audio) must be resolved BEFORE the head
-  // is built: the slim design charter mandates the turn-1 discovery form and
-  // HTML handoff, which are mutually exclusive with the media-generation
-  // contract that is the sole workflow authority on these runs (classic
-  // guaranteed this by gating its discovery layer on the same signal).
+  // is built: their generation contract, rather than the design charter's
+  // HTML workflow, is the sole workflow authority on these runs.
   const isMediaSurfaceEarly =
     skillMode === 'image' ||
     skillMode === 'video' ||
@@ -1108,7 +1062,7 @@ export function composeSystemPrompt({
     );
     if ((memoryHooks?.rewrite ?? true)) {
       parts.push(
-        `\n\n## Intent gateway — turn short asks into a brief\n\nWhen memory lets you expand a short or underspecified request into a clear brief, surface it as ONE collapsed card at the very start of your reply, then continue working without waiting for confirmation:\n\n<od-card type="task-brief">\n{ "summary": "<one line restating the expanded intent>", "fields": [ {"label": "Audience", "value": "…"}, {"label": "Deliverable", "value": "…"}, {"label": "Done means", "value": "…"} ] }\n</od-card>\n\nAt most one per turn; skip it when the request is already explicit or trivial (you may emit one compact chip instead: <od-card type="memory-applied">{ "summary": "Applied your profile and 2 rules", "used": [ {"type": "profile", "name": "Work profile"} ] }</od-card>). The card replaces the turn-1 discovery form when intent is already clear — it never replaces TodoWrite or the pre-ship self-check, and never appears as prose.`,
+        `\n\n## Intent gateway — turn short asks into a brief\n\nWhen memory lets you expand a short or underspecified request into a clear brief, surface it as ONE collapsed card at the very start of your reply, then continue working without waiting for confirmation:\n\n<od-card type="task-brief">\n{ "summary": "<one line restating the expanded intent>", "fields": [ {"label": "Audience", "value": "…"}, {"label": "Deliverable", "value": "…"}, {"label": "Done means", "value": "…"} ] }\n</od-card>\n\nAt most one per turn; skip it when the request is already explicit or trivial (you may emit one compact chip instead: <od-card type="memory-applied">{ "summary": "Applied your profile and 2 rules", "used": [ {"type": "profile", "name": "Work profile"} ] }</od-card>). When the card resolves the intent, continue without a clarification form. It never replaces TodoWrite or the pre-ship self-check, and never appears as prose.`,
       );
     }
     if ((memoryHooks?.verify ?? true)) {
@@ -1134,7 +1088,7 @@ export function composeSystemPrompt({
     // use no backticks so they stay literal inside the template strings.
     if ((memoryHooks?.rewrite ?? true)) {
       parts.push(
-        `\n\n## Intent gateway — turn short asks into a brief\n\nWhen the user's request is short or underspecified AND memory gives you enough to expand it, silently build an internal task brief (task type, audience, files/artifacts in play, delivery preferences, constraints, and what "done" means) before acting. Surface it as ONE collapsed card at the very start of your reply, then continue with the work without waiting for confirmation:\n\n<od-card type="task-brief">\n{ "summary": "<one line restating the expanded intent>", "fields": [ {"label": "Audience", "value": "…"}, {"label": "Deliverable", "value": "…"}, {"label": "Done means", "value": "…"} ] }\n</od-card>\n\nEmit at most one task-brief per turn. Skip it entirely when the request is already explicit or trivial (a greeting, a yes/no, a tiny edit). If you applied memory but skipped the brief, you may instead emit one compact chip: <od-card type="memory-applied">{ "summary": "Applied your profile and 2 rules", "used": [ {"type": "profile", "name": "Work profile"} ] }</od-card>. Never dump the brief as prose — only as the card.\n\nThe task-brief card REPLACES the turn-1 discovery question-form when memory already makes the intent clear — it does NOT replace the rest of the build flow. On every artifact-producing turn you STILL open with a TodoWrite plan (RULE 3) before writing files and update it live as you work, then run the anti-slop / brand self-check before shipping. The brief only expands intent; it is never the deliverable and never stands in for the TodoWrite plan or the self-check. Skipping the discovery form when intent is already understood is correct; skipping TodoWrite or the anti-slop gate is not.`,
+        `\n\n## Intent gateway — turn short asks into a brief\n\nWhen the user's request is short or underspecified AND memory gives you enough to expand it, silently build an internal task brief (task type, audience, files/artifacts in play, delivery preferences, constraints, and what "done" means) before acting. Surface it as ONE collapsed card at the very start of your reply, then continue with the work without waiting for confirmation:\n\n<od-card type="task-brief">\n{ "summary": "<one line restating the expanded intent>", "fields": [ {"label": "Audience", "value": "…"}, {"label": "Deliverable", "value": "…"}, {"label": "Done means", "value": "…"} ] }\n</od-card>\n\nEmit at most one task-brief per turn. Skip it entirely when the request is already explicit or trivial (a greeting, a yes/no, a tiny edit). If you applied memory but skipped the brief, you may instead emit one compact chip: <od-card type="memory-applied">{ "summary": "Applied your profile and 2 rules", "used": [ {"type": "profile", "name": "Work profile"} ] }</od-card>. Never dump the brief as prose — only as the card.\n\nWhen the task-brief card makes the intent clear, continue without a clarification form. The card does NOT replace the rest of the build flow. On every artifact-producing turn you STILL open with a TodoWrite plan (RULE 3) before writing files and update it live as you work, then run the anti-slop / brand self-check before shipping. The brief only expands intent; it is never the deliverable and never stands in for the TodoWrite plan or the self-check.`,
       );
     }
 
@@ -1211,20 +1165,6 @@ export function composeSystemPrompt({
   if (designSystemPullIndex && designSystemPullIndex.trim().length > 0) {
     parts.push(
       `\n\n## Pull-layer files available on demand${designSystemTitle ? ` — ${designSystemTitle}` : ''}\n\nThis design-system package declares richer files for inspection, source evidence, or human preview. Keep the push prompt light: use the index below to decide what to read later. When the runtime tool environment is available, read a listed path with \`\"$OD_NODE_BIN\" \"$OD_BIN\" tools design-systems read --path <path>\`; the daemon will reject paths outside this manifest allowlist.\n\n\`\`\`text\n${designSystemPullIndex.trim()}\n\`\`\``,
-    );
-  }
-
-  if (Array.isArray(inspirationDesignSystems) && inspirationDesignSystems.length > 0) {
-    const blocks = inspirationDesignSystems
-      .map((system) => {
-        const label = system.title && system.title.trim().length > 0
-          ? `${system.title.trim()} (\`${system.id}\`)`
-          : `\`${system.id}\``;
-        return `\n\n### Inspiration — ${label}\n\n${system.body.trim()}`;
-      })
-      .join('');
-    parts.push(
-      `\n\n## Additional inspiration systems\n\nThe user picked the systems below as *additional* inspiration alongside the primary selection. Precedence is explicit: the active design system above stays authoritative for tokens, palette values, and component rules. Borrow palette accents, typographic personality, or component patterns from these systems, but never replace or contradict the primary system's tokens with theirs. If no active design system section is present above, treat the first inspiration system as the leading reference.${blocks}`,
     );
   }
 
@@ -1387,49 +1327,32 @@ export function composeSystemPrompt({
     parts.push(FILESYSTEM_HANDOFF_OVERRIDE);
   }
 
-  // Mid-conversation clarification reuses the same `<question-form>` flow as
-  // turn-1 discovery (DISCOVERY_AND_PHILOSOPHY) so the host keeps ONE unified
-  // questions surface: the form renders inline in the originating assistant
-  // message, and answers return as the next user message.
+  // Clarification on any turn reuses the same `<question-form>` flow so the
+  // host keeps ONE unified questions surface: the form renders inline in the
+  // originating assistant message, and answers return as the next user message.
   // Applies to every agent — question-form is UI-parsed markup, not a tool.
   if (!isSlimCharterHead || isAskMode) parts.push(
-    "\n\n---\n\n## Clarifying questions mid-conversation\n\nWhen you need a clarification AFTER turn 1 and the answer benefits from structured input, emit a `<question-form>` block — the same markup turn-1 discovery uses — instead of writing a bulleted list of options in markdown. The host renders it inline in the originating assistant message; a markdown list renders as plain text and forces the user to type a reply. Use the richest appropriate web form controls (`radio`, `checkbox`, `select`, `text`, `textarea`, `number`, `range`, `date`, `time`, `datetime-local`, `color`, `url`, `email`, `tel`, `file`, `switch`, or `direction-cards`). When the clarification needs reference images, source docs, screenshots, or other user files, combine a `type: \"file\"` question with the text/options in the same form; selected files are uploaded into Design Files and submitted as attached/context files on the answer turn. For every finite-choice question, keep user control by leaving `allowCustom` unset or setting it to `true`, and add localized `customLabel` / `customPlaceholder` when useful. Use free-form prose questions only when a form would add no structure. Do NOT also duplicate the form's questions as markdown text alongside it.\n\n`<question-form>` is assistant text for the Open Design UI, not a native tool call. If you need to clarify direction, emit the complete `<question-form>...</question-form>` block directly in the assistant message before any TodoWrite, file write/edit, Bash, or other native tool call. Do not stop after an introductory sentence such as \"先确认一下方向：\"; the same message must include the full form.",
+    "\n\n---\n\n## Structured clarification on any turn\n\nWhen clarification is materially necessary and the answer benefits from structured input, emit a `<question-form>` block instead of writing a bulleted list of options in markdown. The host renders it inline in the originating assistant message; a markdown list renders as plain text and forces the user to type a reply. Use the richest appropriate web form controls (`radio`, `checkbox`, `select`, `text`, `textarea`, `number`, `range`, `date`, `time`, `datetime-local`, `color`, `url`, `email`, `tel`, `file`, `switch`, or `direction-cards`). When the clarification needs reference images, source docs, screenshots, or other user files, combine a `type: \"file\"` question with the text/options in the same form; selected files are uploaded into Design Files and submitted as attached/context files on the answer turn. For every finite-choice question, keep user control by leaving `allowCustom` unset or setting it to `true`, and add localized `customLabel` / `customPlaceholder` when useful. Use free-form prose questions only when a form would add no structure. Do NOT also duplicate the form's questions as markdown text alongside it.\n\n`<question-form>` is assistant text for the Open Design UI, not a native tool call. If you need to clarify direction, emit the complete `<question-form>...</question-form>` block directly in the assistant message before any TodoWrite, file write/edit, Bash, or other native tool call. Do not stop after an introductory sentence such as \"先确认一下方向：\"; the same message must include the full form.",
   );
 
-  // Inspiration step: give ungrounded tasks one host-rendered chance to pick
-  // a template / design system / own reference images before the first
-  // artifact. Only composed when the run carries no grounding already (no
-  // active design system, no picked template/skill) — the picker exists
-  // precisely for reference-free runs, where output quality suffers most.
-  // Ask mode produces no artifacts, and the two automated modes
-  // (example-prompt, skipDiscoveryBrief) promise direct generation without
-  // question forms, so none of the three may receive it. Mirrored in
-  // packages/contracts/src/prompts/system.ts; keep both in sync.
-  if (
-    !isAskMode &&
-    metadata?.examplePrompt !== true &&
-    metadata?.skipDiscoveryBrief !== true &&
-    (!activeDesignSystemBody || activeDesignSystemBody.length === 0) &&
-    (!skillBody || skillBody.trim().length === 0)
-  ) {
-    parts.push(INSPIRATION_STEP_GUIDANCE);
-  }
-
   // Pinned LAST so recency bias reinforces the role-marker prohibition.
-  // This is the canonical anti-roleplay instruction;
+  // Slim uses the SP v2.0 translation; classic retains its existing wording.
   parts.push(
-    "\n\n---\n\n## CRITICAL: Never fabricate conversation turns\n\n" +
-    "The text you emit is processed by a chat host that interprets lines " +
-    "starting with \`## user\`, \`## assistant\`, or \`## system\` as real " +
-    "turn boundaries. Emitting these lines causes the host to treat your " +
-    "fabricated text as a real user request and execute unauthorised actions.\n\n" +
-    "**FORBIDDEN — you MUST NOT:**\n" +
-    "- Emit any line starting with \`## user\`, \`## assist\`, \`## assistant\`, or \`## system\`\n" +
-    "- Roleplay multiple turns inside a single response\n" +
-    "- Invent a user message and then reply to it\n\n" +
-    "The host will truncate your response at the first role-marker line — " +
-    "any text after it is lost. If you feel the urge to simulate a dialogue, " +
-    "stop and ask the user a real question instead.",
+    '\n\n---\n\n',
+    isSlimCore
+      ? SLIM_V2_ROLE_BOUNDARY_GUARD
+      : "## CRITICAL: Never fabricate conversation turns\n\n" +
+        "The text you emit is processed by a chat host that interprets lines " +
+        "starting with \`## user\`, \`## assistant\`, or \`## system\` as real " +
+        "turn boundaries. Emitting these lines causes the host to treat your " +
+        "fabricated text as a real user request and execute unauthorised actions.\n\n" +
+        "**FORBIDDEN — you MUST NOT:**\n" +
+        "- Emit any line starting with \`## user\`, \`## assist\`, \`## assistant\`, or \`## system\`\n" +
+        "- Roleplay multiple turns inside a single response\n" +
+        "- Invent a user message and then reply to it\n\n" +
+        "The host will truncate your response at the first role-marker line — " +
+        "any text after it is lost. If you feel the urge to simulate a dialogue, " +
+        "stop and ask the user a real question instead.",
   );
 
   return parts.join('');
@@ -1462,7 +1385,7 @@ Do not mention tool unavailability to the user. Avoid phrases such as "TodoWrite
 **Allowed output:**
 - Plain chat prose to the user (in their language). State your plan as prose — a short numbered list in markdown is fine; it just must not be wrapped in \`<todo-list>\` or claim to be a tool call.
 - A final \`<artifact type="text/html">...</artifact>\` block containing a complete \`<!doctype html>\` document when the brief is ready to deliver.
-- \`<question-form>\` blocks for discovery (turn 1) and for mid-conversation clarification, exactly as the rules below describe — question-form is markup the UI parses, not a tool call.
+- \`<question-form>\` blocks when material clarification is needed on any turn, exactly as the rules below describe — question-form is markup the UI parses, not a tool call.
 
 If the rules below tell you to plan with TodoWrite, write the plan as prose instead. If they tell you to read skill side files before writing, describe in one sentence which patterns/conventions you're going to apply and proceed. If they tell you to run brand-spec extraction via Bash + Read + WebFetch, ask the user the missing brand questions in the discovery form instead.`;
 
@@ -1692,15 +1615,15 @@ function renderMetadataBlock(
   lines.push('\n\n## Project metadata');
   lines.push(
     factsOnly
-      ? 'Structured choices from project creation. Known fields are authoritative; include a matching turn-1 form question for any field marked "(unknown — ask)".'
-      : 'These are the structured choices the user made (or skipped) when creating this project. Treat known fields as authoritative; for any field marked "(unknown — ask)" you MUST include a matching question in your turn-1 discovery form.',
+      ? 'Structured choices from project creation. Known fields are authoritative. Missing fields are unresolved facts, not mandatory questions; infer reasonable defaults and clarify only material blockers.'
+      : 'These are the structured choices the user made (or skipped) when creating this project. Treat known fields as authoritative. Missing fields are unresolved facts, not mandatory questions; infer reasonable defaults and clarify only when an answer would materially change the result.',
   );
   lines.push('');
   lines.push(`- **kind**: ${metadata.kind}`);
   if (metadata.platform) {
     lines.push(`- **platform**: ${metadata.platform}`);
   } else if (metadata.kind === 'prototype' || metadata.kind === 'template' || metadata.kind === 'other') {
-    lines.push('- **platform**: (unknown — ask: responsive web, desktop web, iOS app, Android app, tablet app, or desktop app?)');
+    lines.push('- **platform**: (not provided; relevant options include responsive web, desktop web, iOS app, Android app, tablet app, or desktop app)');
   }
   if (Array.isArray(metadata.platformTargets) && metadata.platformTargets.length > 0) {
     lines.push(`- **platformTargets**: ${metadata.platformTargets.join(', ')}`);
@@ -1785,20 +1708,20 @@ function renderMetadataBlock(
 
   if (metadata.kind === 'prototype') {
     lines.push(
-      `- **fidelity**: ${metadata.fidelity ?? '(unknown — ask: wireframe vs high-fidelity)'}`,
+      `- **fidelity**: ${metadata.fidelity ?? '(not provided; common choices are wireframe or high-fidelity)'}`,
     );
   }
   if (metadata.kind === 'deck') {
     lines.push(
-      `- **slideCount**: ${metadata.slideCount ?? '(unknown — ask only if the Active plugin / Plugin inputs block does not already include slideCount)'}`,
+      `- **slideCount**: ${metadata.slideCount ?? '(not provided; also check Active plugin / Plugin inputs)'}`,
     );
     lines.push(
-      `- **speakerNotes**: ${typeof metadata.speakerNotes === 'boolean' ? metadata.speakerNotes : '(unknown — ask: include speaker notes?)'}`,
+      `- **speakerNotes**: ${typeof metadata.speakerNotes === 'boolean' ? metadata.speakerNotes : '(not provided)'}`,
     );
   }
   if (metadata.kind === 'template') {
     lines.push(
-      `- **animations**: ${typeof metadata.animations === 'boolean' ? metadata.animations : '(unknown — ask: include motion/animations?)'}`,
+      `- **animations**: ${typeof metadata.animations === 'boolean' ? metadata.animations : '(not provided)'}`,
     );
     if (metadata.templateLabel) {
       lines.push(`- **template**: ${metadata.templateLabel}`);
@@ -1806,10 +1729,10 @@ function renderMetadataBlock(
   }
   if (metadata.kind === 'image') {
     lines.push(
-      `- **imageModel**: ${metadata.imageModel ?? '(unknown — ask: which image model/provider to use)'}`,
+      `- **imageModel**: ${metadata.imageModel ?? '(not provided)'}`,
     );
     lines.push(
-      `- **aspectRatio**: ${metadata.imageAspect ?? '(unknown — ask: 1:1, 16:9 for landscape, 9:16 for portrait)'}`,
+      `- **aspectRatio**: ${metadata.imageAspect ?? '(not provided; common choices include 1:1, 16:9, or 9:16)'}`,
     );
     if (metadata.imageStyle) {
       lines.push(`- **styleNotes**: ${metadata.imageStyle}`);
@@ -1830,13 +1753,13 @@ function renderMetadataBlock(
   }
   if (metadata.kind === 'video') {
     lines.push(
-      `- **videoModel**: ${metadata.videoModel ?? '(unknown — ask: which video model to use)'}`,
+      `- **videoModel**: ${metadata.videoModel ?? '(not provided)'}`,
     );
     lines.push(
-      `- **lengthSeconds**: ${typeof metadata.videoLength === 'number' ? metadata.videoLength : '(unknown — ask: 3s / 5s / 10s)'}`,
+      `- **lengthSeconds**: ${typeof metadata.videoLength === 'number' ? metadata.videoLength : '(not provided; common choices include 3s, 5s, or 10s)'}`,
     );
     lines.push(
-      `- **aspectRatio**: ${metadata.videoAspect ?? '(unknown — ask: 16:9, 9:16, 1:1)'}`,
+      `- **aspectRatio**: ${metadata.videoAspect ?? '(not provided; common choices include 16:9, 9:16, or 1:1)'}`,
     );
     if (
       metadata.promptTemplate?.title &&
@@ -1859,30 +1782,31 @@ function renderMetadataBlock(
   }
   if (metadata.kind === 'audio') {
     lines.push(
-      `- **audioKind**: ${metadata.audioKind ?? '(unknown — ask: music / speech / sfx)'}`,
+      `- **audioKind**: ${metadata.audioKind ?? '(not provided; common choices include music, speech, or sfx)'}`,
     );
     lines.push(
-      `- **audioModel**: ${metadata.audioModel ?? '(unknown — ask: which audio model to use)'}`,
+      `- **audioModel**: ${metadata.audioModel ?? '(not provided)'}`,
     );
     lines.push(
-      `- **durationSeconds**: ${typeof metadata.audioDuration === 'number' ? metadata.audioDuration : '(unknown — ask: target duration)'}`,
+      `- **durationSeconds**: ${typeof metadata.audioDuration === 'number' ? metadata.audioDuration : '(not provided)'}`,
     );
     if (metadata.voice) {
       lines.push(`- **voice**: ${metadata.voice}`);
     } else if (metadata.audioKind === 'speech') {
-      lines.push('- **voice**: (unknown — ask: voice id / accent / pacing)');
+      lines.push('- **voice**: (not provided; relevant dimensions include voice id, accent, and pacing)');
     }
     const voiceOptions = shouldRenderElevenLabsVoiceOptions(metadata, audioVoiceOptions)
       ? audioVoiceOptions ?? []
       : [];
     if (voiceOptions.length > 0) {
       lines.push(
-        '- **ElevenLabs voice options**: Ask the user to choose from a dropdown select. The visible labels are voice descriptions; the selected value must be the exact `voice_id` passed to `--voice`. Do not ask the user to type an id.',
+        '- **ElevenLabs voice selection policy**: First infer from the current request, conversation, Plugin inputs, and available context. If the provider default can safely satisfy the brief, omit `--voice` and do not ask. Only when voice selection would materially change the requested result and no safe default can be inferred, emit the dropdown template below. Its visible labels are voice descriptions; the selected value must be the exact `voice_id` passed to `--voice`. Do not ask the user to type an id.',
       );
       if (voiceOptions.length > ELEVENLABS_VOICE_PROMPT_OPTION_LIMIT) {
         lines.push(`- **ElevenLabs voice options**: showing the first ${ELEVENLABS_VOICE_PROMPT_OPTION_LIMIT} of ${voiceOptions.length} available voices.`);
       }
       lines.push('');
+      lines.push('Conditional template — do not emit unless the voice-selection policy above requires clarification:');
       lines.push('<question-form id="elevenlabs-voice" title="Choose an ElevenLabs voice">');
       lines.push(JSON.stringify(renderElevenLabsVoiceQuestionForm(voiceOptions), null, 2));
       lines.push('</question-form>');
@@ -1896,7 +1820,7 @@ function renderMetadataBlock(
     }
     if (metadata.audioKind === 'sfx') {
       lines.push(
-        '- **SFX discovery**: Ask about the sound source/action, materials, intensity, acoustic space, timing/tail, loop/non-loop, and "avoid" constraints. Do not ask for language or voice for SFX.',
+        '- **SFX discovery**: If the audible event cannot be inferred and a missing detail would materially change the result, clarify only the highest-impact unresolved dimensions. Relevant dimensions include sound source/action, materials, intensity, acoustic space, timing/tail, loop/non-loop, and "avoid" constraints. Do not ask for language or voice for SFX.',
       );
     }
     lines.push('');

@@ -4,27 +4,27 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Agentic - reference components</title>
-    <meta name="description" content="Reference fixture for design-systems/agentic: agent workflow interface with bright neutral surfaces, orange automation signals, and editorial typography." />
+    <meta name="description" content="Reference fixture for design-systems/agentic: agent workflow interface with dark command surfaces, blue automation signals, and traceable task cards." />
     <style>
       :root {
-        --bg: #ffffff;
-        --surface: #f6f6f1;
-        --surface-warm: #fff4ec;
-        --fg: #111827;
-        --fg-2: #374151;
-        --muted: #6b7280;
-        --meta: #ff5701;
-        --border: #d1d5db;
-        --border-soft: #e5e7eb;
-        --accent: #ff5701;
-        --accent-on: #ffffff;
+        --bg: #0b1020;
+        --surface: #131b2f;
+        --surface-warm: #182343;
+        --fg: #f8fafc;
+        --fg-2: #cbd5e1;
+        --muted: #8ea0b8;
+        --meta: #60a5fa;
+        --border: #293653;
+        --border-soft: #1e2a43;
+        --accent: #60a5fa;
+        --accent-on: #06111f;
         --accent-hover: color-mix(in oklab, var(--accent), black 8%);
         --accent-active: color-mix(in oklab, var(--accent), black 14%);
-        --success: #16a34a;
-        --warn: #d97706;
-        --danger: #dc2626;
-        --font-display: Playfair Display, Georgia, serif;
-        --font-body: Playfair Display, Georgia, serif;
+        --success: #22c55e;
+        --warn: #fbbf24;
+        --danger: #fb7185;
+        --font-display: Inter, system-ui, sans-serif;
+        --font-body: Inter, system-ui, sans-serif;
         --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
         --text-xs: 12px;
         --text-sm: 13px;
@@ -55,7 +55,7 @@
         --elev-flat: none;
         --elev-ring: 0 0 0 1px var(--border);
         --elev-raised: 0 24px 72px rgba(0, 0, 0, 0.36);
-        --focus-ring: 0 0 0 4px rgba(255, 87, 1, 0.28);
+        --focus-ring: 0 0 0 4px rgba(96, 165, 250, 0.28);
         --motion-fast: 130ms;
         --motion-base: 220ms;
         --ease-standard: cubic-bezier(0.2, 0, 0, 1);
@@ -76,7 +76,7 @@
         line-height: var(--leading-body);
         -webkit-font-smoothing: antialiased;
       }
-      .page { min-height: 100vh; background: radial-gradient(circle at 80% 8%, rgba(255, 87, 1, 0.26), transparent 34%), #ffffff; }
+      .page { min-height: 100vh; background: radial-gradient(circle at 80% 8%, rgba(96, 165, 250, 0.26), transparent 34%), #0b1020; }
       .container { max-width: var(--container-max); margin-inline: auto; padding-inline: var(--container-gutter-desktop); }
       section { padding-block: var(--section-y-desktop); }
       @media (max-width: 1023px) { .container { padding-inline: var(--container-gutter-tablet); } section { padding-block: var(--section-y-tablet); } }
@@ -142,7 +142,7 @@
             <div class="panel-head"><div><p class="eyebrow">Live module</p><h3>Reference component</h3></div><span class="status">online</span></div>
             <div class="metric-grid"><div class="metric"><strong>98%</strong><span>Signal quality</span></div><div class="metric"><strong>24</strong><span>Active flows</span></div><div class="metric"><strong>3.2s</strong><span>Response time</span></div></div>
             <div class="card-row">
-              <div class="mini-card"><h3>Palette</h3><p>agent workflow interface with bright neutral surfaces, orange automation signals, and editorial typography.</p><div class="swatches" aria-label="Token swatches"><span class="swatch accent"></span><span class="swatch surface"></span><span class="swatch warm"></span><span class="swatch fg"></span></div></div>
+              <div class="mini-card"><h3>Palette</h3><p>agent workflow interface with dark command surfaces, blue automation signals, and traceable task cards.</p><div class="swatches" aria-label="Token swatches"><span class="swatch accent"></span><span class="swatch surface"></span><span class="swatch warm"></span><span class="swatch fg"></span></div></div>
               <div class="mini-card"><h3>Control</h3><p>Focus, hover, and status states share the same brand signal.</p><div class="field"><label for="agentic-input">Reference input</label><input id="agentic-input" value="Agentic system token" /></div></div>
             </div>
           </article>

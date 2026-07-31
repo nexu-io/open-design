@@ -471,134 +471,27 @@ describe('PluginsHomeSection (sort toggle)', () => {
     },
   ];
 
-  // Sort lives behind the filter trigger now, so every assertion on the
-  // order's checked state has to open the menu first.
-  function openSortMenu(): void {
-    fireEvent.click(screen.getByTestId('plugins-home-sort-trigger'));
-  }
-
   it('defaults to hot and re-ranks by freshness when Newest is picked', () => {
     renderSection(timestamped, { preferDefaultFacet: false });
 
     // Hot (default): the poster-preview tile outranks the text-only ones.
     expect(pluginIds()[0]).toBe('shiny-but-old');
-    openSortMenu();
     expect(screen.getByTestId('plugins-home-sort-hot').getAttribute('aria-checked')).toBe('true');
 
     fireEvent.click(screen.getByTestId('plugins-home-sort-newest'));
 
     expect(pluginIds()).toEqual(['plain-but-fresh', 'plain-and-mid', 'shiny-but-old']);
-    openSortMenu();
     expect(screen.getByTestId('plugins-home-sort-newest').getAttribute('aria-checked')).toBe('true');
   });
 
   it('remembers the picked order across remounts', () => {
     const first = renderSection(timestamped, { preferDefaultFacet: false });
-    openSortMenu();
     fireEvent.click(screen.getByTestId('plugins-home-sort-newest'));
     first.unmount();
 
     renderSection(timestamped, { preferDefaultFacet: false });
 
-    openSortMenu();
     expect(screen.getByTestId('plugins-home-sort-newest').getAttribute('aria-checked')).toBe('true');
     expect(pluginIds()).toEqual(['plain-but-fresh', 'plain-and-mid', 'shiny-but-old']);
-  });
-
-  it('picking a non-default order flags the collapsed trigger', () => {
-    renderSection(timestamped, { preferDefaultFacet: false });
-
-    // Collapsed, the trigger is the only surface left that can say an
-    // order other than the default is in force.
-    expect(
-      screen.getByTestId('plugins-home-sort-trigger').getAttribute('data-active'),
-    ).toBe('false');
-
-    openSortMenu();
-    fireEvent.click(screen.getByTestId('plugins-home-sort-newest'));
-
-    expect(
-      screen.getByTestId('plugins-home-sort-trigger').getAttribute('data-active'),
-    ).toBe('true');
-  });
-
-  it('closes the sort menu once an order is picked', () => {
-    renderSection(timestamped, { preferDefaultFacet: false });
-
-    openSortMenu();
-    expect(screen.queryByTestId('plugins-home-sort-menu')).toBeTruthy();
-
-    fireEvent.click(screen.getByTestId('plugins-home-sort-newest'));
-
-    expect(screen.queryByTestId('plugins-home-sort-menu')).toBeNull();
-  });
-});
-
-describe('collapsible search', () => {
-  const searchable = [
-    makePlugin({ id: 'alpha-deck', mode: 'deck', tags: ['fundraising'] }),
-    makePlugin({ id: 'beta-deck', mode: 'deck', tags: ['fundraising'] }),
-  ];
-
-  it('starts collapsed and expands when the search icon is clicked', () => {
-    renderSection(searchable, { preferDefaultFacet: false });
-
-    const field = screen.getByTestId('plugins-home-search-field');
-    expect(field.className).not.toContain('is-expanded');
-    // The input stays mounted so the width can animate both ways, but it
-    // must be out of the tab order while collapsed.
-    expect(screen.getByTestId('plugins-home-search').getAttribute('tabindex')).toBe('-1');
-
-    fireEvent.click(screen.getByTestId('plugins-home-search-toggle'));
-
-    expect(screen.getByTestId('plugins-home-search-field').className).toContain('is-expanded');
-    expect(screen.getByTestId('plugins-home-search').getAttribute('tabindex')).toBeNull();
-  });
-
-  it('collapses on blur only when the query is empty', () => {
-    renderSection(searchable, { preferDefaultFacet: false });
-
-    fireEvent.click(screen.getByTestId('plugins-home-search-toggle'));
-    const input = screen.getByTestId('plugins-home-search');
-
-    // A live query has to keep the field visible — an active filter with no
-    // visible control reads as an empty gallery with no explanation.
-    fireEvent.change(input, { target: { value: 'alpha' } });
-    fireEvent.blur(input);
-    expect(screen.getByTestId('plugins-home-search-field').className).toContain('is-expanded');
-
-    // Clearing by hand, then blurring, is the documented way out.
-    fireEvent.click(screen.getByTestId('plugins-home-search-clear'));
-    fireEvent.blur(screen.getByTestId('plugins-home-search'));
-    expect(screen.getByTestId('plugins-home-search-field').className).not.toContain('is-expanded');
-  });
-
-  it('clearing keeps the field open so the user can retype', () => {
-    renderSection(searchable, { preferDefaultFacet: false });
-
-    fireEvent.click(screen.getByTestId('plugins-home-search-toggle'));
-    fireEvent.change(screen.getByTestId('plugins-home-search'), {
-      target: { value: 'alpha' },
-    });
-
-    fireEvent.click(screen.getByTestId('plugins-home-search-clear'));
-
-    expect((screen.getByTestId('plugins-home-search') as HTMLInputElement).value).toBe('');
-    expect(screen.getByTestId('plugins-home-search-field').className).toContain('is-expanded');
-    // Clear is gone with the query it cleared.
-    expect(screen.queryByTestId('plugins-home-search-clear')).toBeNull();
-  });
-
-  it('Escape clears and closes in one press', () => {
-    renderSection(searchable, { preferDefaultFacet: false });
-
-    fireEvent.click(screen.getByTestId('plugins-home-search-toggle'));
-    const input = screen.getByTestId('plugins-home-search');
-    fireEvent.change(input, { target: { value: 'alpha' } });
-
-    fireEvent.keyDown(input, { key: 'Escape' });
-
-    expect((screen.getByTestId('plugins-home-search') as HTMLInputElement).value).toBe('');
-    expect(screen.getByTestId('plugins-home-search-field').className).not.toContain('is-expanded');
   });
 });

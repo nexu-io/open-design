@@ -6,7 +6,7 @@
  * pure answers, interruptions, and incomplete work stay compact.
  */
 
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { AssistantMessage } from '../../src/components/AssistantMessage';
@@ -315,10 +315,8 @@ describe('AssistantMessage next-step affordance during the question phase', () =
         {...handlers()}
       />,
     );
-    const questionForm = document.querySelector<HTMLElement>('[data-form-id="discovery"]');
-    expect(questionForm).not.toBeNull();
-    expect(within(questionForm!).getByText('Brief')).toBeTruthy();
-    expect(within(questionForm!).getByText('Studio name')).toBeTruthy();
+    expect(screen.getByText('Brief')).toBeTruthy();
+    expect(screen.getByText('Studio name')).toBeTruthy();
     expect(screen.queryByTestId('next-step-actions')).toBeNull();
   });
 

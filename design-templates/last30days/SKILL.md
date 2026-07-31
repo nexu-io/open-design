@@ -1,7 +1,5 @@
 ---
 name: last30days
-en_name: "30-Day Social Trend Report"
-zh_name: "近30天社区舆情报告"
 description: |
   Recent community and social trend research over the last 30 days. Use when
   the brief asks what people are saying now, recent sentiment, community
@@ -17,7 +15,6 @@ triggers:
   - "最近30天"
   - "社区反馈"
 od:
-  category: marketing-gtm
   mode: prototype
   preview:
     type: markdown

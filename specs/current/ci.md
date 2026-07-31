@@ -27,6 +27,13 @@ may skip only for a merge-queue plan whose certain-tier evaluation claims zero
 validation effects. PR, manual-hot, forced-full, and escalated queue plans keep
 all broad workspace validation.
 
+`scripts/scopes.ts` remains an install-independent preinstall entrypoint.
+`scripts/guard.ts` is the postinstall policy-floor entrypoint and composes its
+shared mechanism and scope contracts from `scripts/lib/guard/`. The
+`scripts library architecture` guard keeps those layers acyclic, prevents
+scope startup from reaching guard or third-party dependencies, and keeps CLI
+process control out of the library closure.
+
 The error cost is asymmetric by tier. A wrong `medium` rule under-arms a PR
 run and gets caught by the merge queue's stricter threshold — cost: one queue
 bounce. A wrong `certain` rule lets an invalid change reach `main` with no
@@ -162,6 +169,44 @@ Current evidence:
 - Expected savings are about 7.5 elapsed minutes and 60 runner-minutes per
   qualifying single-PR group, before queue batching discounts.
 
+## Certain daemon-core boundary
+
+Rule `certain-daemon-core` covers `apps/daemon/src/` and
+`apps/daemon/tests/`, excluding `apps/daemon/src/sidecar/` and the
+`daemon-runtime-definition` UI P0 shadow surface. Package manifests, build
+configuration, bins, the packaged sidecar compatibility bridge, and runtime
+definition source/companion tests stay medium-tier.
+
+A pure matching merge group keeps preflight and workspace typecheck, workspace
+unit coverage, broad E2E Vitest, and the complete four-domain UI P0 matrix. It
+skips web workspace tests, visual Playwright, Windows launcher-payload tests,
+and tools-dev/tools-pack unit coverage. The retained plan therefore continues
+to exercise daemon buildability, user-level API/runtime behavior, and every
+merge-gated UI P0 capability without treating web-owned rendering tests or
+packaging-format tests as daemon consumers.
+
+Guard: `daemon core boundary` (`scripts/lib/guard/scope.ts`). The policy-floor
+check verifies that:
+
+- representative source, markdown, and test files resolve only to the certain
+  daemon rule and its exact guarded effects;
+- the daemon sidecar subtree, runtime-definition shadow, and daemon package
+  manifest still escalate;
+- the workflow continues to execute E2E Vitest and the full UI P0 matrix;
+- web code cannot import another app's private implementation, and web tests
+  do not read the daemon tree through filesystem APIs;
+- the visual harness intercepts every daemon-owned route family; explicit
+  visual fixtures win and every remaining request terminates with a
+  deterministic browser-side 404.
+
+The authoritative cross-app critique coverage walker lives in
+`e2e/tests/critique-coverage.test.ts`, which remains armed by the daemon-core
+plan. The latest 400 first-parent merges contain 78 pure daemon-core groups.
+Fifteen recent groups have successful narrow PR validation paired with
+successful full merge-group validation. A representative full queue run spends
+about 20 runner-minutes in the web, visual, and Windows jobs omitted by the
+guarded plan; UI P0 remains the critical path.
+
 ## Daemon UI P0 capability shadow
 
 The UI P0 capability shadow is evidence-only. The applied `ui_p0_matrix`
@@ -183,7 +228,7 @@ and model selector. Any empty, unresolved, mixed, unknown, or out-of-surface
 change falls back to the full four-domain matrix and records the reason in
 `trace.uiP0Shadow`.
 
-Guard: `UI P0 shadow contract` (`scripts/check-ui-p0-shadow.ts`). It pins the
+Guard: `UI P0 shadow contract` (`scripts/lib/guard/scope.ts`). It pins the
 applied full matrix, the candidate group set, representative in-bound
 resolution, and full fallback for shared daemon, runtime-composition, web, and
 unresolved inputs. The shadow must accumulate successful paired runs before it

@@ -1,7 +1,5 @@
 ---
 name: sprite-animation
-en_name: "Pixel Sprite Animation Explainer"
-zh_name: "像素精灵动画解说页"
 description: |
   A pixel / sprite-style animated explainer slide — full-bleed cream stage,
   bold display year, animated pixel-art mascot (e.g. Hanafuda card, mushroom,
@@ -23,7 +21,6 @@ triggers:
   - "像素动画"
   - "复古动画"
 od:
-  category: design-craft
   mode: prototype
   platform: desktop
   scenario: marketing

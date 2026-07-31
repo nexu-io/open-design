@@ -1,7 +1,5 @@
 ---
 name: dating-web
-en_name: "Dating & Matchmaking Dashboard"
-zh_name: "约会交友数据看板"
 description: |
   A consumer-feeling dating / matchmaking dashboard — left rail navigation,
   ticker bar of community signals, headline KPIs, a 30-day mutual-matches
@@ -22,7 +20,6 @@ od:
   mode: prototype
   platform: desktop
   scenario: personal
-  category: life
   preview:
     type: html
     entry: index.html

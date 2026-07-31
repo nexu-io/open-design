@@ -1,7 +1,5 @@
 ---
 name: github-dashboard
-en_name: "GitHub Repo Analytics Dashboard"
-zh_name: "GitHub 仓库数据看板"
 description: |
   GitHub repository analytics dashboard — stars, forks, contributors,
   issues, pull requests, recent activity, and top contributors. Use when
@@ -17,7 +15,6 @@ triggers:
   - "仓库看板"
   - "GitHub 看板"
 od:
-  category: data-finance
   mode: prototype
   platform: desktop
   scenario: operation

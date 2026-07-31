@@ -1,7 +1,5 @@
 ---
 name: social-media-matrix-tracker-template
-en_name: "Social Media Matrix Tracker Dashboard"
-zh_name: "社媒矩阵数据追踪面板"
 description: |
   社媒矩阵数据追踪面板模板（Social Media Matrix Tracker）。
   Use when users ask for a cinematic, data-dense social media analytics dashboard
@@ -27,7 +25,6 @@ triggers:
   - "抖音数据看板"
   - "小红书数据看板"
 od:
-  category: marketing-gtm
   mode: template
   platform: desktop
   scenario: live-artifacts

@@ -1,10 +1,6 @@
 ---
 name: html-ppt-taste-brutalist
-en_name: "Write an Incident Debrief Deck like a Mission-Control Operator"
-zh_name: "像任务指挥中心操作员一样写事故复盘汇报"
 description: 16:9 HTML deck in tactical-telemetry / CRT-terminal taste. Deactivated-CRT charcoal slides, white-phosphor monospace, hazard-red accent, scanline overlay, ASCII syntax, density over decoration. Distilled from Leonxlnx/taste-skill `brutalist-skill` (Tactical Telemetry mode).
-od:
-  category: design-craft
 ---
 
 # HTML PPT — Tactical Telemetry / CRT Terminal

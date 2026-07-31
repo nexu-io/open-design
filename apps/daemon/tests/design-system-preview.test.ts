@@ -9,7 +9,7 @@
 // regression points at the right helper.
 
 import { describe, expect, it } from 'vitest';
-import { renderDesignSystemCard, renderDesignSystemPreview } from '../src/design-systems/preview.js';
+import { renderDesignSystemPreview } from '../src/design-systems/preview.js';
 
 // Pull every `background:<hex>;` chip style out of the palette block. Order is
 // preserved, which lets us check the extractColors output ordering.
@@ -213,49 +213,6 @@ describe('renderDesignSystemPreview — extractFonts (typography parsing)', () =
     expect(cssVar(html, 'mono')).toContain('ui-monospace');
   });
 
-  it('rebuilds font stacks through the strict serializer so markup cannot escape the style element', () => {
-    // extractFonts rejects (){}; but accepts < > / — without the serializer a
-    // Body value ending `</style><img …>` closes the generated style element
-    // and injects an active element into the document.
-    const payload = "Karla</style><img src=https://example.invalid/x>";
-    const md = [
-      '# Hostile',
-      '',
-      '## Typography',
-      '',
-      `- **Body**: \`${payload}\``,
-      "- **Display**: `'GT Sectra', serif`",
-    ].join('\n');
-
-    const html = renderDesignSystemPreview('hostile', md);
-
-    // The full preview echoes the DESIGN.md as escaped prose below the
-    // showcase, so the payload text may appear — but only entity-escaped,
-    // never as a live element.
-    expect(html).not.toMatch(/<img\s+src=https:\/\/example\.invalid/);
-    // Exactly one closing style tag — the renderer's own.
-    expect(html.match(/<\/style>/g)).toHaveLength(1);
-    // The hostile body stack falls back to the (sanitized) display stack…
-    expect(cssVar(html, 'body')).toBe("'GT Sectra', serif");
-    // …while the valid display stack survives in canonical quoted form.
-    expect(cssVar(html, 'display')).toBe("'GT Sectra', serif");
-  });
-
-  it('drops only the invalid families from a mixed stack', () => {
-    const md = [
-      '# Mixed',
-      '',
-      '## Typography',
-      '',
-      "- **Display**: `Inter, </style>bad, sans-serif`",
-    ].join('\n');
-
-    const html = renderDesignSystemPreview('mixed', md);
-
-    expect(cssVar(html, 'display')).toBe("'Inter', sans-serif");
-    expect(html.match(/<\/style>/g)).toHaveLength(1);
-  });
-
   it('uses heading label as a display alias when "display" is absent', () => {
     const md = [
       '# Headings',
@@ -269,46 +226,6 @@ describe('renderDesignSystemPreview — extractFonts (typography parsing)', () =
 
     // Heading label maps onto display via the heading regex branch.
     expect(cssVar(html, 'display')).toBe("'Playfair Display', serif");
-  });
-});
-
-describe('renderDesignSystemCard — font-stack raw-text boundary', () => {
-  it('keeps a hostile DESIGN.md font value inside the generated style element', () => {
-    // The inspiration picker auto-loads every card in an iframe, so a stored
-    // user DESIGN.md must not be able to close the style element and inject
-    // active markup (issue raised on PR #5899: `</style><img …>` in a Body
-    // font triggered an outbound image request from every card render).
-    const md = [
-      '# Hostile Brand',
-      '',
-      '## Typography',
-      '',
-      '- **Display**: `Marker Felt</style><script>alert(1)</script>`',
-      '- **Body**: `Karla</style><img src=https://example.invalid/x>`',
-    ].join('\n');
-
-    const html = renderDesignSystemCard('user:hostile', md);
-
-    expect(html).not.toContain('example.invalid');
-    expect(html).not.toContain('<script>');
-    expect(html.match(/<\/style>/g)).toHaveLength(1);
-    // No element beyond the renderer's own template: the payloads' tag names
-    // must not appear anywhere in the output.
-    expect(html).not.toMatch(/<img\s+src=https/);
-  });
-
-  it('preserves a valid font stack in canonical quoted form', () => {
-    const md = [
-      '# Clean Brand',
-      '',
-      '## Typography',
-      '',
-      "- **Display**: `'GT Sectra', Georgia, serif`",
-    ].join('\n');
-
-    const html = renderDesignSystemCard('user:clean', md);
-
-    expect(html).toContain("font-family: 'GT Sectra', 'Georgia', serif;");
   });
 });
 

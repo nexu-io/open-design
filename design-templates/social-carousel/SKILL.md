@@ -1,7 +1,5 @@
 ---
 name: social-carousel
-en_name: "Social Media Carousel"
-zh_name: "社媒轮播图"
 description: |
   A three-card social-media carousel laid out as 1080×1080 squares —
   three cinematic, on-brand panels with display headlines that connect
@@ -20,7 +18,6 @@ triggers:
   - "三连发"
   - "轮播图"
 od:
-  category: marketing-gtm
   mode: prototype
   platform: desktop
   scenario: marketing

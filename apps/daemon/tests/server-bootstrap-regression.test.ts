@@ -473,8 +473,6 @@ describe('bootstrap route regressions', () => {
         readUserDesignSystemFile: async () => null,
         renderDesignSystemPreview: (id: string, body: string) =>
           `<!doctype html><title>${id} preview</title><main>${body}</main>`,
-        renderDesignSystemCard: (id: string, body: string) =>
-          `<!doctype html><title>${id} card</title><main>${body}</main>`,
         renderDesignSystemShowcase: (id: string, body: string) =>
           `<!doctype html><title>${id} showcase</title><main>${body}</main>`,
         updateUserDesignSystem: async () => null,
@@ -506,12 +504,11 @@ describe('bootstrap route regressions', () => {
           resolve(`http://127.0.0.1:${address.port}`);
         });
       });
-      const [detail, preview, showcase, example, templatePreview] = await Promise.all([
+      const [detail, preview, showcase, example] = await Promise.all([
         fetch(`${smokeBaseUrl}/api/design-systems/${designSystemId}`),
         fetch(`${smokeBaseUrl}/api/design-systems/${designSystemId}/preview`),
         fetch(`${smokeBaseUrl}/api/design-systems/${designSystemId}/showcase`),
         fetch(`${smokeBaseUrl}/api/skills/${templateId}/example`),
-        fetch(`${smokeBaseUrl}/api/design-templates/${templateId}/preview`),
       ]);
 
       expect(detail.status).toBe(200);
@@ -535,11 +532,6 @@ describe('bootstrap route regressions', () => {
       expect(example.headers.get('content-type')).toContain('text/html');
       const exampleHtml = await example.text();
       expect(exampleHtml).toContain(`/api/skills/${templateId}/assets/demo.css`);
-
-      expect(templatePreview.status).toBe(200);
-      expect(templatePreview.headers.get('content-type')).toContain('text/html');
-      const templatePreviewHtml = await templatePreview.text();
-      expect(templatePreviewHtml).toContain(`/api/skills/${templateId}/assets/demo.css`);
 
       const asset = await fetch(`${smokeBaseUrl}/api/skills/${templateId}/assets/demo.css`, {
         headers: { Origin: 'null' },

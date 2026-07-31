@@ -9,6 +9,10 @@ import { promisify } from 'node:util';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 
 import { createPackagedSmokeReport } from '@/vitest/packaged-report';
+import {
+  assertPackagedPtySmokeResult,
+  packagedPtySmokeExpression,
+} from '@/vitest/packaged-pty-smoke';
 import { releaseAppVersionArgs } from '@/vitest/packaged-release-version';
 import {
   applyPackagedUpdateEnv,
@@ -447,6 +451,19 @@ macDescribe('packaged mac runtime smoke', () => {
       } else {
         expect(value.health.version).toEqual(expect.any(String));
       }
+      const ptyInspect = await runToolsPackJson<MacInspectResult>('inspect', [
+        '--expr',
+        packagedPtySmokeExpression('darwin'),
+      ]);
+      const pty = assertPackagedPtySmokeResult(ptyInspect.eval?.value);
+      expect(pty.projectCreateStatus).toBe(200);
+      expect(pty.projectSeedStatus).toBe(200);
+      expect(pty.terminalCreateStatus).toBe(200);
+      expect(pty.stdinStatus).toBe(200);
+      expect(pty.output).toContain(pty.marker);
+      expect(pty.exitCode, JSON.stringify(pty, null, 2)).toBe(0);
+      expect(pty.cleanup.terminalStatus).toBe(200);
+      expect(pty.cleanup.projectStatus).toBe(200);
       assertLauncherPointer(inspect.launcher.active, updateScenario.expectedCurrentVersion, 0, 'initial active');
       assertLauncherPointer(inspect.launcher.lastSuccessful, updateScenario.expectedCurrentVersion, 0, 'initial lastSuccessful');
 
@@ -699,6 +716,7 @@ macDescribe('packaged mac runtime smoke', () => {
         logs: 'skipped' in logs ? logs : summarizeLogs(logs),
         namespace,
         payloadRuntime,
+        pty,
         screenshot: report.screenshotRelpath,
         start: {
           appPath: start.appPath,

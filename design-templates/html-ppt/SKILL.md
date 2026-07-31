@@ -28,7 +28,6 @@ triggers:
   - "html deck"
   - "html slides"
 od:
-  category: consulting
   mode: deck
   upstream: "https://github.com/lewislulu/html-ppt-skill"
   preview:
@@ -99,11 +98,13 @@ Only `presenter-mode-reveal` is designed from the ground up around the feature w
 Keyboard in presenter window: `← →` navigate (syncs audience) · `R` reset timer · `Esc` close popup.
 Keyboard in audience window: `S` open presenter · `T` cycle theme · `← →` navigate (syncs presenter) · `F` fullscreen · `O` overview.
 
-## Before you author anything — ALWAYS ask or recommend
+## Before you author anything — infer first, ask only when blocked
 
-**Do not start writing slides until you understand three things.** Either ask
-the user directly, or — if they already handed you rich content — propose a
-tasteful default and confirm.
+Before writing slides, resolve the three decisions below from the user's brief,
+project metadata, supplied content, and conversation. If they are sufficiently
+clear, choose a tasteful default and proceed without waiting for confirmation;
+state the choices briefly in the plan. Ask one consolidated clarification only
+when a missing answer would materially change the deck.
 
 1. **Content & audience.** What's the deck about, how many slides, who's
    watching (engineers / execs / 小红书读者 / 学生 / VC)?
@@ -117,19 +118,19 @@ tasteful default and confirm.
    - Academic / report → `academic-paper`, `editorial-serif`, `minimal-white`
    - Edgy / cyber / launch → `cyberpunk-neon`, `vaporwave`, `y2k-chrome`,
      `neo-brutalism`
-3. **Starting point.** One of the 14 full-deck templates, or scratch? Point
-   to the closest `templates/full-decks/<name>/` and ask if it fits. If the
+3. **Starting point.** One of the 14 full-deck templates, or scratch? Choose
+   the closest `templates/full-decks/<name>/`. If the
    user's content suggests something obvious (e.g. "我要做产品发布会" →
-   `product-launch`), propose it confidently instead of asking blindly.
+   `product-launch`), use it confidently instead of asking blindly.
 
-A good opening message looks like:
+A good clarification, when one is actually needed, follows the active
+`discovery-question-form` protocol and contains only unresolved fields. For
+example, if content and audience are known but the requested tone spans
+incompatible themes, ask one theme question with 2–3 recommended options. Do
+not repeat the form as a markdown checklist.
 
-> 我可以给你做这份 PPT！先确认三件事：
-> 1. 大致内容 / 页数 / 观众是谁？
-> 2. 风格偏好？我建议从这 3 个主题里选一个：`tokyo-night`（技术分享默认好看）、`xiaohongshu-white`（小红书风）、`corporate-clean`（正式汇报）。
-> 3. 要不要用我现成的 `tech-sharing` 全 deck 模板打底？
-
-Only after those are clear, scaffold the deck and start writing.
+If the known context already resolves them, scaffold the deck and start writing
+immediately.
 
 ## Quick start
 

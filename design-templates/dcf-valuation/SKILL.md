@@ -1,7 +1,5 @@
 ---
 name: dcf-valuation
-en_name: "DCF Valuation Model"
-zh_name: "DCF 估值模型"
 description: |
   Discounted cash flow valuation and intrinsic value analysis for public
   companies. Use when the brief asks for DCF, fair value, intrinsic value,
@@ -19,7 +17,6 @@ triggers:
   - "内在价值"
 od:
   mode: prototype
-  category: data-finance
   preview:
     type: markdown
   outputs:

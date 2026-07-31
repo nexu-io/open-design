@@ -1,7 +1,5 @@
 ---
 name: audio-jingle
-en_name: "Audio Jingle & Voiceover Studio"
-zh_name: "广告音频与配音生成"
 description: |
   Audio generation skill — jingles, beds, voiceover, and sound effects.
   Routes music requests to Suno V5 / Udio / Lyria, speech to MiniMax
@@ -21,7 +19,6 @@ od:
   mode: audio
   surface: audio
   scenario: marketing
-  category: marketing-gtm
   preview:
     type: html
     entry: example.html
@@ -57,8 +54,10 @@ audio-jingle/
 ### Step 0 — Read the project metadata
 
 `audioKind`, `audioModel`, `audioDuration` (seconds), and (for speech)
-`voice`. Branch by `audioKind` and use the values verbatim — no
-clarifying form unless something is marked `(unknown — ask)`.
+`voice`. Branch by known values and use them verbatim. Missing metadata is not
+an instruction to ask: infer a safe default when possible, and emit a
+clarifying form only when the missing answer would materially change the
+requested output or prevent generation.
 
 Important: `voice` is provider-specific. For `minimax-tts`, `--voice`
 must be a valid MiniMax `voice_id` (for example `male-qn-qingse`), not

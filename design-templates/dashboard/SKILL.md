@@ -1,7 +1,5 @@
 ---
 name: dashboard
-en_name: "Analytics Admin Dashboard"
-zh_name: "数据分析管理后台"
 description: |
   Admin / analytics dashboard in a single HTML file. Fixed left sidebar,
   top bar with user/search, main grid of KPI cards and one or two charts.
@@ -18,7 +16,6 @@ od:
   mode: prototype
   platform: desktop
   scenario: operations
-  category: data-finance
   preview:
     type: html
     entry: index.html

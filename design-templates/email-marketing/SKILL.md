@@ -1,7 +1,5 @@
 ---
 name: email-marketing
-en_name: "Product Launch Email"
-zh_name: "产品发布营销邮件"
 description: |
   A brand product-launch email — masthead with wordmark, hero image block,
   headline lockup with skewed-italic accent, body copy, primary CTA, and a
@@ -21,7 +19,6 @@ od:
   mode: prototype
   platform: desktop
   scenario: marketing
-  category: marketing-gtm
   preview:
     type: html
     entry: index.html

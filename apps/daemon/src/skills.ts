@@ -272,20 +272,6 @@ export async function listSkills(
           out.push({
             id: derivedId,
             name: humanizeExampleName(example.key),
-            // Derived cards inherit the parent's semantic display name with
-            // the example's own label appended, so a gallery card reads
-            // "Refreshable Live Data Report · Crypto Dashboard" instead of a
-            // bare humanized file stem.
-            ...(displayName
-              ? {
-                  displayName: Object.fromEntries(
-                    Object.entries(displayName).map(([localeKey, parentName]) => [
-                      localeKey,
-                      `${parentName} · ${humanizeExampleName(example.key)}`,
-                    ]),
-                  ),
-                }
-              : {}),
             description,
             ...(descriptionI18n ? { descriptionI18n } : {}),
             triggers: Array.isArray(data.triggers) ? data.triggers : [],

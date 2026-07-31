@@ -1,7 +1,5 @@
 ---
 name: hr-onboarding
-en_name: "New-Hire Onboarding Plan"
-zh_name: "新员工入职计划"
 description: |
   A new-hire onboarding plan as a single page — first week schedule,
   buddy + manager intro, learning track, equipment checklist, and "you're
@@ -17,7 +15,6 @@ od:
   mode: prototype
   platform: desktop
   scenario: hr
-  category: career
   preview:
     type: html
     entry: index.html

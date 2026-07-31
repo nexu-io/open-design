@@ -1,7 +1,5 @@
 ---
 name: finance-report
-en_name: "Quarterly Finance Report"
-zh_name: "季度财务报告"
 description: |
   Quarterly / monthly financial report — masthead with KPIs, revenue and
   burn charts, P&L summary table, top-line highlights, and an outlook
@@ -19,7 +17,6 @@ od:
   mode: prototype
   platform: desktop
   scenario: finance
-  category: data-finance
   preview:
     type: html
     entry: index.html

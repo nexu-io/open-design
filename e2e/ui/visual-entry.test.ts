@@ -73,7 +73,7 @@ test('[P2] captures the home plugin catalog surface', async ({ page }) => {
   await expect(community).toBeVisible();
   await scrollVisualLocatorIntoStableView(page, community);
   await expect(home.locator('article.plugins-home__card--gallery').first()).toBeVisible();
-  await expect(home.getByTestId('plugins-home-search-toggle')).toBeVisible();
+  await expect(home.getByTestId('plugins-home-search')).toBeVisible();
 
   await captureVisual(page, 'visual-home-catalog');
 });

@@ -1,10 +1,6 @@
 ---
 name: html-ppt-taste-editorial
-en_name: "Design an Editorial-Minimalist Deck like a Print Art Director"
-zh_name: "像杂志美术总监一样做极简编辑风演示"
 description: 16:9 HTML deck in editorial-minimalist taste. Warm cream slides, serif display + grotesque body, hairline rules, monospace meta, generous macro-whitespace, one accent. Distilled from Leonxlnx/taste-skill `minimalist-skill`.
-od:
-  category: design-craft
 ---
 
 # HTML PPT — Editorial Minimalism

@@ -1,7 +1,5 @@
 ---
 name: pm-spec
-en_name: "Product Spec (PRD) One-Pager"
-zh_name: "产品需求文档 PRD"
 description: |
   Product spec / PRD as a single page — problem, success metrics, scope,
   user stories, design notes, rollout plan, open questions. Use when the
@@ -14,7 +12,6 @@ triggers:
   - "feature doc"
   - "需求文档"
 od:
-  category: product-management
   mode: prototype
   platform: desktop
   scenario: product

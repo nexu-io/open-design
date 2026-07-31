@@ -1,7 +1,5 @@
 ---
 name: docs-page
-en_name: "Developer Docs Page"
-zh_name: "开发者文档页"
 description: |
   A documentation page — inline-start nav, scrollable article body,
   inline-end table of contents. Use when the brief mentions "docs",
@@ -17,7 +15,6 @@ od:
   mode: prototype
   platform: desktop
   scenario: engineering
-  category: product-management
   preview:
     type: html
     entry: index.html

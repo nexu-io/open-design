@@ -1,7 +1,5 @@
 ---
 name: kami-landing
-en_name: "Paper-Style White Paper One-Pager"
-zh_name: "纸感白皮书单页"
 description: >
   Produce a print-grade single-page kami (紙 / 纸) document — warm
   parchment canvas, ink-blue accent, serif at one weight, no italic,
@@ -20,7 +18,7 @@ triggers:
   - print-grade page
   - kami landing
 od:
-  category: marketing-gtm
+  category: brand-page
   surface: web
   mode: prototype
   platform: desktop

@@ -1,7 +1,5 @@
 ---
 name: image-poster
-en_name: "AI Poster & Key Art Generator"
-zh_name: "AI 海报与主视觉生成"
 description: |
   Single-image generation skill for posters, key art, and editorial
   illustrations. Defaults to gpt-image-2 but is provider-agnostic — the
@@ -17,7 +15,6 @@ triggers:
   - "海报"
   - "插画"
 od:
-  category: design-craft
   mode: image
   surface: image
   scenario: design
@@ -53,8 +50,9 @@ image-poster/
 
 The active project carries `imageModel`, `imageAspect`, and (optional)
 `imageStyle` notes. Use them as the upstream model + canvas + style
-anchor; only ask the user to fill them in if they're marked `(unknown
-— ask)`.
+anchor. When a value is not provided, infer a safe default from the brief and
+media contract. Ask only when the choice would materially change the requested
+result and no safe default can be inferred.
 
 ### Step 1 — Compose the prompt
 

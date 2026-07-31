@@ -36,6 +36,10 @@ import { readAppConfig, writeAppConfig } from '../src/app-config.js';
 import { readMemoryConfig, writeMemoryConfig } from '../src/memory.js';
 import { upsertMessage } from '../src/db.js';
 import { renderCodexImagegenOverride } from '../src/prompts/system.js';
+import {
+  ByokCredentialService,
+  type ByokSecretBackend,
+} from '../src/byok/credential-service.js';
 
 const FAKE_VELA_FIXTURE = resolve(process.cwd(), 'tests', 'fixtures', 'fake-vela.mjs');
 
@@ -140,7 +144,42 @@ describe('/api/chat', () => {
         extraction: null,
       });
     }
-    const started = await startServer({ port: 0, returnServer: true }) as {
+    const byokDataDir = mkdtempSync(join(tmpdir(), 'od-chat-route-byok-'));
+    tempDirs.push(byokDataDir);
+    const byokSecrets = new Map<string, string>();
+    const byokBackend: ByokSecretBackend = {
+      kind: 'test-memory',
+      async available() { return true; },
+      async set(profileId, secret) { byokSecrets.set(profileId, secret); },
+      async get(profileId) { return byokSecrets.get(profileId) ?? null; },
+      async delete(profileId) { return byokSecrets.delete(profileId); },
+    };
+    const byokCredentialService = new ByokCredentialService({
+      dataDir: byokDataDir,
+      backend: byokBackend,
+    });
+    await byokCredentialService.upsert({
+      id: 'byok-chat-route-keyful',
+      label: 'Chat route keyful fixture',
+      protocol: 'senseaudio',
+      apiKey: 'sk-test-byok',
+      baseUrl: 'https://api.senseaudio.cn',
+      model: 'deepseek-v4-flash',
+      requiresApiKey: true,
+    });
+    await byokCredentialService.upsert({
+      id: 'byok-chat-route-keyless',
+      label: 'Chat route keyless fixture',
+      protocol: 'openai',
+      baseUrl: 'http://127.0.0.1:8000/v1',
+      model: 'model',
+      requiresApiKey: false,
+    });
+    const started = await startServer({
+      port: 0,
+      returnServer: true,
+      byokCredentialService,
+    }) as {
       url: string;
       server: http.Server;
     };
@@ -223,7 +262,6 @@ process.exit(0);
           }),
         });
         const body = await response.text();
-
         expect(response.ok).toBe(true);
         expect(body).toContain('<question-form');
         expect(body).toContain('"status":"succeeded"');
@@ -455,15 +493,10 @@ process.stdin.on('end', () => {
             projectId,
             message: 'hello',
             model: 'deepseek-v4-flash',
-            byokProvider: {
-              protocol: 'senseaudio',
-              apiKey: 'sk-test-byok',
-              baseUrl: 'https://api.senseaudio.cn',
-            },
+            byokProfileId: 'byok-chat-route-keyful',
           }),
         });
         const body = await response.text();
-
         expect(response.ok).toBe(true);
         expect(body).toContain('byok-opencode-ok');
 
@@ -472,6 +505,8 @@ process.stdin.on('end', () => {
           'run',
           '--format',
           'json',
+          '--dir',
+          expect.stringContaining(projectId),
           '-m',
           'open-design-byok/deepseek-v4-flash',
         ]);
@@ -545,12 +580,7 @@ process.stdin.on('end', () => {
             projectId,
             message: 'hello',
             model: 'model',
-            byokProvider: {
-              protocol: 'openai',
-              apiKey: '',
-              baseUrl: 'http://127.0.0.1:8000/v1',
-              requiresApiKey: false,
-            },
+            byokProfileId: 'byok-chat-route-keyless',
           }),
         });
         const body = await response.text();
@@ -563,6 +593,8 @@ process.stdin.on('end', () => {
           'run',
           '--format',
           'json',
+          '--dir',
+          expect.stringContaining(projectId),
           '-m',
           'open-design-byok/model',
         ]);
@@ -587,7 +619,7 @@ process.stdin.on('end', () => {
     );
   });
 
-  it('does not pass forged BYOK provider config to other local runtimes', async () => {
+  it('rejects forged BYOK provider config for other local runtimes', async () => {
     if (!process.env.OD_DATA_DIR) {
       throw new Error('OD_DATA_DIR is required for BYOK OpenCode config tests');
     }
@@ -637,11 +669,10 @@ process.stdin.on('end', () => {
         });
         const body = await response.text();
 
-        expect(response.ok).toBe(true);
-        expect(body).toContain('opencode-ok');
-        expect(await fsp.readFile(keyFile, 'utf8')).toBe('');
-        expect(await fsp.readFile(envFile, 'utf8')).not.toContain('open-design-byok');
-        expect(await fsp.readFile(envFile, 'utf8')).not.toContain('sk-test-byok');
+        expect(response.status).toBe(400);
+        expect(body).toContain('Raw BYOK credentials are not accepted');
+        expect(existsSync(keyFile)).toBe(false);
+        expect(existsSync(envFile)).toBe(false);
       },
     );
   });
@@ -3120,79 +3151,16 @@ process.stdin.on('end', () => {
           const transcriptIdx = prompt.indexOf('## Full conversation transcript');
           expect(transitionIdx).toBeGreaterThan(-1);
           expect(transcriptIdx).toBeGreaterThan(transitionIdx);
-          expect(prompt).toContain('The user has answered the discovery form. Do not emit another discovery form.');
-          // This run is ungrounded (no design system, no skill), so the
-          // brief-answered turn routes to the pending inspiration step —
-          // both the `# Instructions` override and the transition line —
-          // instead of the immediate build (prompts/flow-steps.ts).
-          expect(prompt).toContain('## OVERRIDE — brief answered; the inspiration step comes next');
-          expect(prompt).toContain('This run is still ungrounded (no active design system, no picked template).');
-          expect(prompt).not.toContain('Continue with RULE 2 / RULE 3 now.');
+          expect(prompt).toContain(
+            'The user has answered the discovery form. Do not re-emit the answered form or repeat fields it already answered.',
+          );
+          expect(prompt).toContain(
+            'Apply the submitted answers and continue with RULE 2 / RULE 3 or the matching active workflow.',
+          );
+          expect(prompt).toContain(
+            'Only if a new, materially blocking requirement remains unresolved',
+          );
           expect(prompt).toContain(formAnswers);
-        },
-      );
-    } finally {
-      if (previousCapturePath == null) {
-        delete process.env.OD_CAPTURE_PROMPT_PATH;
-      } else {
-        process.env.OD_CAPTURE_PROMPT_PATH = previousCapturePath;
-      }
-    }
-  });
-
-  it('grounds inspiration picker multi-select systems in the run prompt', async () => {
-    // Chain spec for the inspiration picker's multi design-system pick:
-    // web sends `inspirationDesignSystemIds` on the chat body (additional
-    // systems beyond the applied primary), and the daemon must resolve each
-    // id through the design-system reader and embed its DESIGN.md content —
-    // ids alone cannot ground a selection, so the assertion below pins an
-    // actual token from bento's DESIGN.md, not just the names.
-    const captureDir = mkdtempSync(join(tmpdir(), 'od-insp-meta-prompt-'));
-    tempDirs.push(captureDir);
-    const capturePath = join(captureDir, 'prompt.txt');
-    const previousCapturePath = process.env.OD_CAPTURE_PROMPT_PATH;
-    process.env.OD_CAPTURE_PROMPT_PATH = capturePath;
-    try {
-      await withFakeAgent(
-        'opencode',
-        `
-const fs = require('node:fs');
-let input = '';
-process.stdin.setEncoding('utf8');
-process.stdin.on('data', (chunk) => { input += chunk; });
-process.stdin.on('end', () => {
-  fs.writeFileSync(process.env.OD_CAPTURE_PROMPT_PATH, input, 'utf8');
-  console.log(JSON.stringify({ type: 'text', part: { text: 'building now' } }));
-});
-`,
-        async () => {
-          const createResponse = await fetch(`${baseUrl}/api/runs`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              agentId: 'opencode',
-              message: 'Build a landing page with these inspirations.',
-              currentPrompt: 'Build a landing page with these inspirations.',
-              inspirationDesignSystemIds: ['bento', 'organic'],
-            }),
-          });
-          expect(createResponse.status).toBe(202);
-          const { runId } = await createResponse.json() as { runId: string };
-          const statusBody = await waitForRunStatus(baseUrl, runId);
-
-          expect(statusBody.status).toBe('succeeded');
-          expect(existsSync(capturePath)).toBe(true);
-          const prompt = readFileSync(capturePath, 'utf8');
-          expect(prompt).toContain('**inspirationDesignSystemIds**: bento, organic');
-          // Grounding: the composed prompt embeds each resolvable system's
-          // DESIGN.md body (bounded), so the agent has real tokens to
-          // borrow — `#FAD4C0` is bento's primary color token. `organic`
-          // is not a registry system, so it degrades gracefully to the
-          // metadata line above without an (empty) grounding block.
-          expect(prompt).toContain('## Additional inspiration systems');
-          expect(prompt).toContain('(`bento`)');
-          expect(prompt).toContain('#FAD4C0');
-          expect(prompt).not.toContain('(`organic`)');
         },
       );
     } finally {
@@ -3728,6 +3696,13 @@ describe('chat prompt helpers', () => {
       projectDesignSystemId: 'project-ds',
       appDefaultDesignSystemId: 'default-ds',
     })).toEqual({ id: 'project-ds', source: 'project' });
+
+    expect(resolveEffectiveDesignSystemSelection({
+      requestDesignSystemId: null,
+      projectDesignSystemId: 'project-ds',
+      disabledDesignSystemIds: ['project-ds'],
+      allowAppDefault: false,
+    })).toEqual({ id: null, source: 'none' });
 
     expect(resolveEffectiveDesignSystemSelection({
       appDefaultDesignSystemId: 'default-ds',

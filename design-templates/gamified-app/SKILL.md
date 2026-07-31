@@ -1,7 +1,5 @@
 ---
 name: gamified-app
-en_name: "Gamified Habit App Prototype"
-zh_name: "游戏化打卡应用原型"
 description: |
   A multi-frame gamified mobile-app prototype — three phone frames on a dark
   showcase stage. Frame 1: cover / poster, Frame 2: today's quests with XP
@@ -24,7 +22,6 @@ od:
   mode: prototype
   platform: mobile
   scenario: personal
-  category: life
   preview:
     type: html
     entry: index.html

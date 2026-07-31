@@ -5,11 +5,33 @@ import {
   MAX_RETRY_BACKOFF_DELAY_MS,
   RATE_LIMIT_RETRY_BASE_DELAY_MS,
   SAFE_RUN_RETRY_STRATEGY,
+  NATIVE_SESSION_CONTINUE_STRATEGY,
   TRANSIENT_RETRY_BASE_DELAY_MS,
   computeRetryBackoffMs,
+  decidePostToolResumeRecovery,
   decideSafeRunRetry,
   type RunRetryPolicyInput,
 } from '../src/run-retry-policy.js';
+
+function decidePostToolResume(
+  input: Partial<Parameters<typeof decidePostToolResumeRecovery>[0]> = {},
+) {
+  return decidePostToolResumeRecovery({
+    result: 'failed',
+    continuationAttemptCount: 0,
+    totalRetryAttemptCount: 0,
+    failure: {
+      failure_category: 'timeout',
+      failure_detail: 'inactivity_timeout',
+      failure_stage: 'post_tool_resume',
+      retryable: true,
+    },
+    sideEffects: { toolCallSeen: true },
+    supportsNativeSessionContinue: true,
+    hasNativeSession: true,
+    ...input,
+  });
+}
 
 function decide(input: Partial<RunRetryPolicyInput> = {}) {
   return decideSafeRunRetry({
@@ -374,6 +396,46 @@ describe('decideSafeRunRetry', () => {
     expect(decide({ random: () => 0 })).toMatchObject({
       shouldRetry: true,
       retryDelayMs: TRANSIENT_RETRY_BASE_DELAY_MS / 2,
+    });
+  });
+});
+
+describe('decidePostToolResumeRecovery', () => {
+  it('allows one native-session continuation after a completed tool result stalls', () => {
+    expect(decidePostToolResume()).toEqual({
+      shouldRetry: true,
+      retryAttemptIndex: 1,
+      retryMaxAttempts: DEFAULT_SAFE_RUN_RETRY_MAX_ATTEMPTS,
+      retryStrategy: NATIVE_SESSION_CONTINUE_STRATEGY,
+      retryReason: 'post_tool_resume',
+      retryDelayMs: 0,
+    });
+  });
+
+  it('requires the exact post-tool timeout, a native session, and a committed tool call', () => {
+    expect(decidePostToolResume({
+      failure: {
+        failure_category: 'timeout',
+        failure_detail: 'inactivity_timeout',
+        failure_stage: 'tool_outstanding',
+        retryable: true,
+      },
+    })).toBeNull();
+    expect(decidePostToolResume({ supportsNativeSessionContinue: false })).toBeNull();
+    expect(decidePostToolResume({ hasNativeSession: false })).toBeNull();
+    expect(decidePostToolResume({ sideEffects: { toolCallSeen: false } })).toBeNull();
+  });
+
+  it('does not loop after the single continuation attempt', () => {
+    expect(decidePostToolResume({ continuationAttemptCount: 1 })).toBeNull();
+  });
+
+  it('keeps the continuation budget independent from prior safe retries', () => {
+    expect(decidePostToolResume({ totalRetryAttemptCount: 1 })).toMatchObject({
+      shouldRetry: true,
+      retryAttemptIndex: 2,
+      retryMaxAttempts: 2,
+      retryStrategy: NATIVE_SESSION_CONTINUE_STRATEGY,
     });
   });
 });

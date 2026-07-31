@@ -1,7 +1,5 @@
 ---
 name: pricing-page
-en_name: "Pricing Page"
-zh_name: "定价页"
 description: |
   A standalone pricing page — header, plan tiers, feature comparison table,
   and an FAQ. Use when the brief asks for "pricing", "plans",
@@ -15,7 +13,6 @@ triggers:
   - "定价"
   - "套餐"
 od:
-  category: marketing-gtm
   mode: prototype
   platform: desktop
   scenario: sales

@@ -1,7 +1,5 @@
 ---
 name: wireframe-annotated
-en_name: "Annotated Redline Wireframe"
-zh_name: "红线标注线框图"
 description: |
   An annotated / redline lo-fi wireframe — a desktop landing/marketing page
   drawn as flat greyboxes inside a browser chrome frame, overlaid with numbered
@@ -21,7 +19,6 @@ triggers:
   - "标注线框图"
   - "redline 标注"
 od:
-  category: design-craft
   mode: prototype
   platform: desktop
   scenario: design

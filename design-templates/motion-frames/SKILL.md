@@ -1,7 +1,5 @@
 ---
 name: motion-frames
-en_name: "Animated Motion Poster"
-zh_name: "动效循环海报"
 description: |
   A single-frame motion-design composition with looping CSS animations —
   rotating type ring, animated globe, ticking timer, parallax labels.
@@ -21,7 +19,6 @@ triggers:
   - "动态设计"
   - "动效"
 od:
-  category: design-craft
   mode: prototype
   platform: desktop
   scenario: marketing

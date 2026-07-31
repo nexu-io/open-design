@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { expect, test } from '@/playwright/suite';
 import { ensureRailOpen } from '@/playwright/rail';
 import type { Locator, Page, Request } from '@playwright/test';
-import { applyStandardMocks, fulfillAgentsRoute, STORAGE_KEY } from '@/playwright/mock-factory';
+import { applyStandardMocks, fulfillAgentsRoute, routeSuccessfulRuns, STORAGE_KEY } from '@/playwright/mock-factory';
 import { T } from '@/timeouts';
 const LOCAL_CLI_LABEL = /Local CLI|Local coding agent|本机 CLI|本地 CLI/i;
 const WEBGL_AURORA_PREVIEW_HTML = readFileSync(
@@ -179,24 +179,7 @@ test('[P0] @critical entry chrome exposes the primary home creation surface and 
 });
 
 test('[P0] @critical home hero submit creates a project and lands on a usable workspace', async ({ page }) => {
-  await page.route('**/api/runs', async (route) => {
-    if (route.request().method() !== 'POST') {
-      await route.continue();
-      return;
-    }
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: '{"runId":"home-entry-workspace-smoke"}',
-    });
-  });
-  await page.route('**/api/runs/*/events', async (route) => {
-    await route.fulfill({
-      status: 200,
-      headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' },
-      body: ['event: end', 'data: {"code":0,"status":"succeeded"}', '', ''].join('\n'),
-    });
-  });
+  await routeSuccessfulRuns(page, { runIdPrefix: 'home-entry-workspace-smoke' });
 
   await gotoEntryHome(page);
 
@@ -224,6 +207,11 @@ test('[P0] @critical home hero submit creates a project and lands on a usable wo
 test('[P1] onboarding recommendation creates a project with prefilled first prompt context', async ({ page }) => {
   const createdBodies: Array<Record<string, unknown>> = [];
   const runBodies: Array<Record<string, unknown>> = [];
+  const runRequests = await routeSuccessfulRuns(page, {
+    bodies: runBodies,
+    runIdPrefix: 'recommendation-should-not-auto-send',
+    events: false,
+  });
   const projectId = `onboarding-recommendation-${Date.now()}`;
   await page.addInitScript((key) => {
     window.localStorage.setItem(
@@ -286,19 +274,6 @@ test('[P1] onboarding recommendation creates a project with prefilled first prom
       },
     });
   });
-  await page.route('**/api/runs', async (route) => {
-    if (route.request().method() !== 'POST') {
-      await route.continue();
-      return;
-    }
-    runBodies.push(route.request().postDataJSON() as Record<string, unknown>);
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: '{"runId":"recommendation-should-not-auto-send"}',
-    });
-  });
-
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
   await page.getByRole('button', { name: LOCAL_CLI_LABEL }).click();
@@ -331,8 +306,9 @@ test('[P1] onboarding recommendation creates a project with prefilled first prom
     productType: 'product_ui',
     recommendationId: 'product_ui_prototype',
   });
-  await page.waitForTimeout(500);
-  expect(runBodies).toHaveLength(0);
+  await runRequests.expectNone({
+    message: 'onboarding recommendations should seed first-loop context without auto-sending a run',
+  });
 });
 
 test('[P1] entry top navigation matches the current home tab structure', async ({ page }) => {
@@ -1175,14 +1151,6 @@ test('[P2] home starters search and facet filters narrow the visible gallery', a
   await expect(home.locator('[data-plugin-id="localized-plugin"]')).toHaveCount(0);
   await expect(home.locator('[data-plugin-id="hyperframes-video"]')).toHaveCount(0);
 
-  await home.getByTestId('plugins-home-pill-category-all').click();
-  await expect(home.locator('[data-plugin-id="figma-importer"]')).toBeVisible();
-  await expect(home.locator('[data-plugin-id="localized-plugin"]')).toBeVisible();
-  await expect(home.locator('[data-plugin-id="hyperframes-video"]')).toBeVisible();
-  await expect(home.locator('[data-plugin-id="deck-writer"]')).toBeVisible();
-
-  // Search collapses to an icon; the field only claims width once opened.
-  await home.getByTestId('plugins-home-search-toggle').click();
   const search = home.getByTestId('plugins-home-search');
   await search.fill('Deck Writer');
   await expect(home.locator('[data-plugin-id="deck-writer"]')).toBeVisible();
@@ -1287,9 +1255,8 @@ test('[P2] home starters search can enter a no-results state and recover with cl
   // plugins views (both stay mounted), so scope to the home view to keep these
   // strict-mode locators unambiguous.
   const home = await revealHomeTemplates(page);
-  await home.getByTestId('plugins-home-pill-category-all').click();
-  await home.getByTestId('plugins-home-search-toggle').click();
   const search = home.getByTestId('plugins-home-search');
+  await search.click({ force: true });
   await search.fill('no-such-starter');
   await expect(search).toHaveValue('no-such-starter');
   await expect(home.getByTestId('plugins-home-section')).toContainText(
@@ -1688,27 +1655,16 @@ test('[P1] Community templates sort toggle switches to newest order and persists
     cards.map((card) => card.getAttribute('data-plugin-id')),
   );
 
-  // Sort lives behind the filter trigger, so each assertion on the checked
-  // order has to open the menu first.
-  const openSort = () => home.getByTestId('plugins-home-sort-trigger').click({ force: true });
-
-  await openSort();
   await expect(home.getByTestId('plugins-home-sort-hot')).toHaveAttribute('aria-checked', 'true');
   expect((await cardIds()).slice(0, 3)).toEqual(['sort-hot-visual', 'sort-middle-plain', 'sort-newest-plain']);
 
   await home.getByTestId('plugins-home-sort-newest').click();
-  // Picking an order closes the menu and flags the collapsed trigger.
-  await expect(home.getByTestId('plugins-home-sort-menu')).toHaveCount(0);
-  await expect(home.getByTestId('plugins-home-sort-trigger')).toHaveAttribute(
-    'data-active',
-    'true',
-  );
+  await expect(home.getByTestId('plugins-home-sort-newest')).toHaveAttribute('aria-checked', 'true');
   expect((await cardIds()).slice(0, 3)).toEqual(['sort-newest-plain', 'sort-middle-plain', 'sort-hot-visual']);
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await gotoEntryHome(page);
   home = await revealHomeTemplates(page);
-  await home.getByTestId('plugins-home-sort-trigger').click({ force: true });
   await expect(home.getByTestId('plugins-home-sort-newest')).toHaveAttribute('aria-checked', 'true');
   expect((await cardIds()).slice(0, 3)).toEqual(['sort-newest-plain', 'sort-middle-plain', 'sort-hot-visual']);
 });
