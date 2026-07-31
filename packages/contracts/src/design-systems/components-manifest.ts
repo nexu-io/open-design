@@ -377,6 +377,19 @@ function iterateCssRules(css: string): CssRule[] {
         quoteScan += 1;
         continue;
       }
+      // CSS escape sequence outside a quoted string (PR #6250 reviewer #5):
+      // a backslash in a selector identifier escapes the next character(s)
+      // so it is not interpreted as CSS structure. The simple form `\X` skips
+      // one literal char; the hex form `\XHHHHHH` (1–6 hex digits, optional
+      // single trailing whitespace) encodes a codepoint. We only need to keep
+      // the brace/quote/selector characters that follow the escape from
+      // perturbing the opener scan, so skip the backslash and one escaped
+      // char (covers 99% of real-world cases — `.foo\:bar`, `.foo\2d bar`,
+      // `.foo\.` — without modelling unicode codepoint semantics).
+      if (ch === '\\') {
+        quoteScan += 2;
+        continue;
+      }
       if (ch === '"' || ch === "'") {
         inQuote = ch;
         quoteScan += 1;
@@ -441,6 +454,16 @@ function iterateCssRules(css: string): CssRule[] {
       if (char === '"' || char === "'") {
         bodyInQuote = char;
         cursor += 1;
+        continue;
+      }
+      // CSS escape sequence outside a quoted string (PR #6250 reviewer #5):
+      // a backslash in a declaration value or selector context escapes the
+      // next character so `\}` (escaped closing brace, e.g. inside a content
+      // value or an unusual selector) is not counted as a rule terminator,
+      // and `\{` is not counted as a nested-block opener. Skip the backslash
+      // and one escaped char, mirroring the opener-scan escape handling.
+      if (char === '\\') {
+        cursor += 2;
         continue;
       }
       if (char === '{') {

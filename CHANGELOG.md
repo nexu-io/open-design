@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Anchor `classMatchers` to `^name(?:$|-)` so prefix-sharing classnames like `.navbar-button-thing`, `.mystatus`, `.platform-form` no longer cross-group via substring leakage. (#6224)
 - Fix components manifest extractor dropping selectors inside supported at-rule bodies (`@media` / `@supports` / `@container` / `@layer`). `stripContainerAtRuleHeaders` rewrites the at-rule header to `{`, and the brace-depth scanner now recurses into the resulting body slice so inner rules surface with their real selectors and token attribution preserved. `extractCssSelectors` reuses the same scanner so `manifest.selectors` matches `manifest.groups[].selectors` instead of falling back to a regex that lost every selector immediately inside an at-rule. (#6250)
 - Fix components manifest extractor losing token references declared inside nested-rule blocks two or more levels deep. `flattenNestedBody` now strips only the `{` / `}` brace characters and keeps every declaration body, so `var(--token)` references inside `& .child { & .grand { background: var(--c) } }` attribute to the outermost ancestor instead of being dropped. (#6250)
+- Fix components manifest extractor mis-handling CSS escape sequences in selectors and declaration values. The opening-brace and closing-brace scans now skip a `\X` escape pair so escaped identifier characters (`.\foo\:bar`) and escaped delimiters (`content: "\}"`) no longer perturb the rule boundary detection or the depth counter. (#6250)
 
 ## [0.9.0] - 2026-05-29
 
