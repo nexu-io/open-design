@@ -108,7 +108,7 @@ fi
 echo "Downloading DMG:"
 echo "  url:  $url"
 echo "  path: $download_path"
-curl -fL --output "$partial_path" "$url"
+curl -fL --connect-timeout 10 --max-time 1800 --output "$partial_path" "$url"
 mv -f "$partial_path" "$download_path"
 
 echo "Mounting DMG:"
