@@ -23,7 +23,7 @@
  * Run: `pnpm exec tsx scripts/normalize-plugin-scenarios.ts`
  * ─────────────────────────────────────────────────────────────────── */
 
-import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -31,6 +31,16 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 const officialRoot = path.join(repoRoot, 'plugins', '_official');
 const outDir = path.join(repoRoot, '.tmp');
 const outFile = path.join(outDir, 'plugin-scenario-mapping.json');
+
+async function writeJsonAtomic(filePath: string, value: unknown): Promise<void> {
+  const tempPath = `${filePath}.${process.pid}.tmp`;
+  try {
+    await writeFile(tempPath, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
+    await rename(tempPath, filePath);
+  } finally {
+    await rm(tempPath, { force: true });
+  }
+}
 
 type Scenario =
   | 'business-system'
@@ -408,32 +418,24 @@ async function main() {
   }
 
   await mkdir(outDir, { recursive: true });
-  await writeFile(
-    outFile,
-    JSON.stringify(
-      {
-        generatedAt: new Date().toISOString(),
-        total,
-        distribution: Object.fromEntries(
-          scenarioOrder.map((scenario) => [scenario, byScenario.get(scenario)?.length ?? 0]),
-        ),
-        mappings: candidates.map((c) => ({
-          id: c.id,
-          path: c.relPath,
-          title: c.title,
-          currentScenario: c.currentScenario,
-          currentMode: c.currentMode,
-          currentTaskKind: c.currentTaskKind,
-          tags: c.tags,
-          proposedScenario: c.proposedScenario,
-          reason: c.reason,
-        })),
-      },
-      null,
-      2,
+  await writeJsonAtomic(outFile, {
+    generatedAt: new Date().toISOString(),
+    total,
+    distribution: Object.fromEntries(
+      scenarioOrder.map((scenario) => [scenario, byScenario.get(scenario)?.length ?? 0]),
     ),
-    'utf8',
-  );
+    mappings: candidates.map((c) => ({
+      id: c.id,
+      path: c.relPath,
+      title: c.title,
+      currentScenario: c.currentScenario,
+      currentMode: c.currentMode,
+      currentTaskKind: c.currentTaskKind,
+      tags: c.tags,
+      proposedScenario: c.proposedScenario,
+      reason: c.reason,
+    })),
+  });
 
   console.error(`\nMapping JSON written to ${path.relative(repoRoot, outFile)}`);
 }
