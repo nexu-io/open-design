@@ -15,6 +15,7 @@ import {
   DesignFilesPanel,
   type DesignFilesNavState,
 } from "../../src/components/DesignFilesPanel";
+import { setHtmlSourceSnapshot } from "../../src/components/html-source-snapshot-cache";
 import type {
   ProjectFile,
   ProjectFileKind,
@@ -553,6 +554,72 @@ describe("DesignFilesPanel page thumbnails", () => {
       "/api/projects/test-project/raw/small.html?v=1700000000000",
       expect.any(Object),
     );
+  });
+
+  it("reuses an exact-version HTML thumbnail source across panel remounts", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response("<!doctype html><html><body><main>Cached</main></body></html>", {
+          status: 200,
+          headers: { "Content-Type": "text/html; charset=utf-8" },
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const cachedFile = file({
+      name: "cached.html",
+      kind: "html",
+      mime: "text/html",
+      size: 16 * 1024,
+      mtime: 1700000000000,
+    });
+
+    const first = renderPanel([cachedFile]);
+    await waitFor(() => {
+      expect(first.container.querySelector(".df-card-thumb iframe")).toBeTruthy();
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    first.unmount();
+
+    const second = renderPanel([cachedFile]);
+    await waitFor(() => {
+      expect(second.container.querySelector(".df-card-thumb iframe")).toBeTruthy();
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    second.unmount();
+
+    const changed = renderPanel([{ ...cachedFile, mtime: cachedFile.mtime + 1 }]);
+    await waitFor(() => {
+      expect(changed.container.querySelector(".df-card-thumb iframe")).toBeTruthy();
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("builds the current file thumbnail from the exact viewer source snapshot", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const currentFile = file({
+      name: "current.html",
+      kind: "html",
+      mime: "text/html",
+      size: 16 * 1024,
+      mtime: 1700000000000,
+    });
+    setHtmlSourceSnapshot({
+      authorizationScopeKey: "local",
+      projectId: "test-project",
+      fileName: currentFile.name,
+      refreshKey: `${currentFile.mtime}:${currentFile.size}:7`,
+      source: "<!doctype html><html><body><main>Already loaded</main></body></html>",
+    });
+
+    const { container } = renderPanel([currentFile], { filesRefreshKey: 7 });
+
+    await waitFor(() => {
+      const iframe = container.querySelector<HTMLIFrameElement>(".df-card-thumb iframe");
+      expect(iframe?.getAttribute("srcdoc") ?? iframe?.srcdoc ?? "")
+        .toContain("Already loaded");
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
 

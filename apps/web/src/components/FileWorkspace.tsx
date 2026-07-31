@@ -3752,6 +3752,7 @@ export function FileWorkspace({
           <DesignFilesPanel
             key={projectId}
             projectId={projectId}
+            filesRefreshKey={filesRefreshKey}
             viewerOnly={viewerOnly}
             downloadPending={fileSyncBadge === 'downloading'}
             rootDirName={rootDirName}

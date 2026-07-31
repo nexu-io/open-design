@@ -8,6 +8,7 @@ import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { projectFileUrl, projectRawUrl } from '../providers/registry';
 import {
   appendResourceQuery,
+  workspaceIdentityCacheKey,
   workspaceProjectHeaders,
 } from '../collab/workspace-identity';
 import { useProjectCollabContext } from '../collab/collab-context';
@@ -25,6 +26,14 @@ import { FileSyncBadge } from '../collab/FileSyncBadge';
 import { Icon } from './Icon';
 import { LiveArtifactBadges } from './LiveArtifactBadges';
 import { RemixIcon } from './RemixIcon';
+import {
+  getHtmlSourceSnapshot,
+  htmlSourceSnapshotRefreshKey,
+} from './html-source-snapshot-cache';
+import {
+  getHtmlThumbnailSource,
+  loadHtmlThumbnailSource,
+} from './html-thumbnail-source-cache';
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 
@@ -37,6 +46,7 @@ export interface DesignFilesNavState {
 
 interface Props {
   projectId: string;
+  filesRefreshKey?: number;
   /** Read-only viewer of a team-shared project: withholds create/upload actions. */
   viewerOnly?: boolean;
   /**
@@ -303,6 +313,7 @@ function RotatingTip({ auxiliary = false }: { auxiliary?: boolean }) {
  */
 export function DesignFilesPanel({
   projectId,
+  filesRefreshKey = 0,
   viewerOnly = false,
   downloadPending = false,
   rootDirName,
@@ -855,7 +866,11 @@ export function DesignFilesPanel({
           title={openLabel}
           aria-label={openLabel}
         >
-          <HtmlCardThumbnail projectId={projectId} file={f} />
+          <HtmlCardThumbnail
+            projectId={projectId}
+            file={f}
+            filesRefreshKey={filesRefreshKey}
+          />
         </button>
         <div className="df-card-meta">
           <div className="df-card-meta-text">
@@ -1684,52 +1699,94 @@ const PAGE_THUMB_LAYOUT_HEIGHT = Math.round(PAGE_THUMB_LAYOUT_WIDTH * (9 / 16));
 function HtmlCardThumbnail({
   projectId,
   file,
+  filesRefreshKey,
 }: {
   projectId: string;
   file: ProjectFile;
+  filesRefreshKey: number;
 }) {
-  const { workspaceContext } = useProjectCollabContext();
+  const {
+    workspaceContext,
+    workspaceContextLoading,
+  } = useProjectCollabContext();
   const tooLargeForThumbnail = file.size > HTML_THUMBNAIL_INLINE_MAX_BYTES;
   const url = projectFileUrl(projectId, file.name, workspaceContext);
-  const [srcDoc, setSrcDoc] = useState<string | null>(null);
+  const authorizationScopeKey = workspaceContextLoading
+    ? null
+    : workspaceContext
+      ? `workspace:${workspaceIdentityCacheKey(workspaceContext)}`
+      : 'local';
+  const refreshKey = htmlSourceSnapshotRefreshKey(file, filesRefreshKey);
+  const thumbnailIdentity = authorizationScopeKey
+    ? {
+        authorizationScopeKey,
+        projectId,
+        fileName: file.name,
+        refreshKey,
+      }
+    : null;
+  const baseHref = projectRawUrl(
+    projectId,
+    baseDirForFile(file.name),
+    workspaceContext,
+  );
+  const [srcDoc, setSrcDoc] = useState<string | null>(() => {
+    if (!thumbnailIdentity) return null;
+    const source =
+      getHtmlSourceSnapshot(
+        thumbnailIdentity.authorizationScopeKey,
+        thumbnailIdentity.projectId,
+        thumbnailIdentity.fileName,
+        thumbnailIdentity.refreshKey,
+      )?.source
+      ?? getHtmlThumbnailSource(thumbnailIdentity);
+    return source === null ? null : buildSrcdoc(source, { baseHref });
+  });
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [scale, setScale] = useState<number | null>(null);
 
   useEffect(() => {
     setSrcDoc(null);
-    if (tooLargeForThumbnail) return;
-    const controller = new AbortController();
+    if (tooLargeForThumbnail || !thumbnailIdentity) return;
+    const cachedSource =
+      getHtmlSourceSnapshot(
+        thumbnailIdentity.authorizationScopeKey,
+        thumbnailIdentity.projectId,
+        thumbnailIdentity.fileName,
+        thumbnailIdentity.refreshKey,
+      )?.source
+      ?? getHtmlThumbnailSource(thumbnailIdentity);
+    if (cachedSource !== null) {
+      setSrcDoc(buildSrcdoc(cachedSource, { baseHref }));
+      return;
+    }
     let cancelled = false;
-    void fetch(appendResourceQuery(url, `v=${Math.round(file.mtime)}`), {
-      signal: controller.signal,
-    })
-      .then((response) => (response.ok ? response.text() : null))
-      .then((html) => {
+    void loadHtmlThumbnailSource(
+      thumbnailIdentity,
+      async () => {
+        const response = await fetch(
+          appendResourceQuery(url, `v=${Math.round(file.mtime)}`),
+          {},
+        );
+        return response?.ok ? response.text() : null;
+      },
+    ).then((html) => {
         if (cancelled || html === null) return;
-        const nextSrcDoc = buildSrcdoc(html, {
-          baseHref: projectRawUrl(
-            projectId,
-            baseDirForFile(file.name),
-            workspaceContext,
-          ),
-        });
+        const nextSrcDoc = buildSrcdoc(html, { baseHref });
         if (!cancelled) setSrcDoc(nextSrcDoc);
       })
       .catch((err) => {
-        if (err instanceof DOMException && err.name === 'AbortError') return;
         if (!cancelled) setSrcDoc(null);
       });
     return () => {
       cancelled = true;
-      controller.abort();
     };
   }, [
-    file.mtime,
-    file.name,
-    projectId,
+    authorizationScopeKey,
+    baseHref,
+    refreshKey,
     tooLargeForThumbnail,
     url,
-    workspaceContext,
   ]);
 
   // Track the host width so the fixed-layout iframe scales with the card.

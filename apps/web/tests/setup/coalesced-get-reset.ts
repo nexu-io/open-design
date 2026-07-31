@@ -8,6 +8,7 @@ import { beforeEach } from 'vitest';
 import { resetCoalescedGet } from '../../src/lib/coalesced-get';
 import { resetWorkspaceContextCache } from '../../src/collab/useWorkspaceContext';
 import { resetHtmlSourceSnapshotCache } from '../../src/components/html-source-snapshot-cache';
+import { resetHtmlThumbnailSourceCache } from '../../src/components/html-thumbnail-source-cache';
 import { resetProjectCoverSnapshots } from '../../src/lib/project-cover-cache';
 import { resetThumbnailLoadGateForTests } from '../../src/lib/thumbnail-load-gate';
 import { resetSharedCancellableGet } from '../../src/lib/shared-cancellable-get';
@@ -19,6 +20,7 @@ beforeEach(() => {
   // signed-in context from one test would seed the next test's initial render.
   resetWorkspaceContextCache();
   resetHtmlSourceSnapshotCache();
+  resetHtmlThumbnailSourceCache();
   // The project-cover LRU snapshot and the thumbnail load gate are
   // module-level for the same remount-survival reason; reset both so covers
   // resolved in one test never satisfy (or budget-starve) the next.
