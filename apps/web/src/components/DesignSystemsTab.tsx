@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { coalescedGet } from '../lib/coalesced-get';
+import { coalescedGet, evictCoalescedGet } from '../lib/coalesced-get';
 import { Button, VisuallyHidden } from '@open-design/components';
 import { useAnalytics } from '../analytics/provider';
 import {
@@ -73,6 +73,8 @@ const CATEGORY_ORDER = [
 
 type SurfaceFilter = 'all' | Surface;
 type DesignSystemCollection = 'mine' | 'team' | 'official' | 'enterprise';
+const EMPTY_TEAM_SHARED_IDS: ReadonlySet<string> = new Set();
+const EMPTY_TEAM_SHARED_META: ReadonlyMap<string, { canUnshare?: boolean }> = new Map();
 type DesignSystemActionKind = 'edit' | 'publish' | 'default' | 'delete';
 
 const SURFACE_PILLS: { value: SurfaceFilter; labelKey: 'examples.modeAll' | 'ds.surfaceWeb' | 'ds.surfaceImage' | 'ds.surfaceVideo' | 'ds.surfaceAudio' }[] = [
@@ -128,6 +130,17 @@ function setsEqual<T>(a: ReadonlySet<T>, b: ReadonlySet<T>): boolean {
   if (a.size !== b.size) return false;
   for (const item of a) {
     if (!b.has(item)) return false;
+  }
+  return true;
+}
+
+function teamSharedMetaEqual(
+  a: ReadonlyMap<string, { canUnshare?: boolean }>,
+  b: ReadonlyMap<string, { canUnshare?: boolean }>,
+): boolean {
+  if (a.size !== b.size) return false;
+  for (const [key, value] of a) {
+    if (!b.has(key) || b.get(key)?.canUnshare !== value.canUnshare) return false;
   }
   return true;
 }
@@ -202,12 +215,28 @@ export function DesignSystemsTab({
   // the source of truth (it publishes them to the resource hub); we mirror the
   // list here so the "team" collection and the per-system share action stay in
   // sync. Empty (and the share action is a no-op) when there is no team context.
-  const [teamSharedIds, setTeamSharedIds] = useState<ReadonlySet<string>>(() => new Set());
+  const [teamSharedState, setTeamSharedState] = useState<{
+    workspaceIdentity: string;
+    ids: ReadonlySet<string>;
+    meta: ReadonlyMap<string, { canUnshare?: boolean }>;
+  }>(() => ({
+    workspaceIdentity,
+    ids: new Set(),
+    meta: new Map(),
+  }));
+  // Never render a previous Workspace's Team index while the next scoped read
+  // is still in flight. The cached response is partitioned by Workspace too,
+  // but React state survives the context switch itself.
+  const teamSharedIds = teamSharedState.workspaceIdentity === workspaceIdentity
+    ? teamSharedState.ids
+    : EMPTY_TEAM_SHARED_IDS;
   // Per-id share metadata mirrored off the same `/team` read — `canUnshare` is
   // the ownership gate (resource owner, or a workspace owner/admin) computed
   // server-side in `canManageSharedResource`; the unshare button only renders
   // when it is true so a member never sees an action the daemon will 403 on.
-  const [teamSharedMeta, setTeamSharedMeta] = useState<ReadonlyMap<string, { canUnshare?: boolean }>>(() => new Map());
+  const teamSharedMeta = teamSharedState.workspaceIdentity === workspaceIdentity
+    ? teamSharedState.meta
+    : EMPTY_TEAM_SHARED_META;
   const [sharingId, setSharingId] = useState<string | null>(null);
   const [unsharingId, setUnsharingId] = useState<string | null>(null);
   const [surfaceFilter, setSurfaceFilter] = useState<SurfaceFilter>('all');
@@ -228,8 +257,12 @@ export function DesignSystemsTab({
   );
 
   const userSystems = useMemo(
-    () => systems.filter((system) => isUserSystem(system) && !system.teamSynced),
-    [systems],
+    () => systems.filter((system) => (
+      isUserSystem(system) &&
+      !system.teamSynced &&
+      !teamSharedIds.has(system.id)
+    )),
+    [systems, teamSharedIds],
   );
 
   const userSearched = useMemo(
@@ -243,8 +276,8 @@ export function DesignSystemsTab({
   );
 
   // The "team" collection: team-shared design systems materialized locally.
-  // Uploaders may also see their own shared systems under "your systems"; synced
-  // teammate copies are excluded there by `teamSynced`.
+  // A shared id belongs exclusively to this collection, including the
+  // sharer's original local summary before the pulled Team copy is refreshed.
   const teamSearched = useMemo(
     () => teamSystems.filter((s) => systemMatchesQuery(locale, s, q)),
     [teamSystems, locale, q],
@@ -344,10 +377,12 @@ export function DesignSystemsTab({
     if (!pendingFocus) return;
     const sys = systems.find((s) => s.id === pendingFocus);
     if (!sys) return; // not in the loaded list yet — wait for the next refresh
-    if (isUserSystem(sys)) setDesignSystemCollection('mine');
+    if (isUserSystem(sys)) {
+      setDesignSystemCollection(teamSharedIds.has(sys.id) ? 'team' : 'mine');
+    }
     setPreviewId(pendingFocus);
     setPendingFocus(null);
-  }, [pendingFocus, systems]);
+  }, [pendingFocus, systems, teamSharedIds]);
 
   const selectedSystem = useMemo(() => {
     if (!previewId) return null;
@@ -369,11 +404,16 @@ export function DesignSystemsTab({
   // Load the set of design systems already shared to the team. Off-team (or with
   // the hub unconfigured) this returns an empty list, so the team collection is
   // simply empty and the share action is available but a no-op.
-  const refreshTeamShared = useCallback(async (options: { refreshSystems?: boolean } = {}) => {
+  const refreshTeamShared = useCallback(async (
+    options: { refreshSystems?: boolean; invalidate?: boolean } = {},
+  ) => {
     const read = beginWorkspaceScopedRead(workspaceContextRef.current);
     if (!read.context || !workspaceContextHasTeamIdentity(read.context)) {
-      setTeamSharedIds(new Set());
-      setTeamSharedMeta(new Map());
+      setTeamSharedState({
+        workspaceIdentity: workspaceIdentityCacheKey(read.context),
+        ids: new Set(),
+        meta: new Map(),
+      });
       return;
     }
     const context = read.context;
@@ -382,21 +422,26 @@ export function DesignSystemsTab({
       // ACTIVE workspace's shared set, so a constant key let a switch that
       // landed inside the in-flight/TTL window serve the previous workspace's
       // ids to the new one.
-      const cacheKey = `workspace-design-systems-team:${workspaceIdentityCacheKey(context)}`;
-      const body = await coalescedGet(cacheKey, async () => {
+      const scopedWorkspaceIdentity = workspaceIdentityCacheKey(context);
+      const cacheKey = `workspace-design-systems-team:${scopedWorkspaceIdentity}`;
+      const readTeamIndex = async () => {
         const res = await fetch('/api/workspace/design-systems/team', {
           cache: 'no-store',
           headers: workspaceProjectHeaders(context),
         });
         if (!res.ok) throw new Error(`design-systems-team ${res.status}`);
         return (await res.json()) as { ids?: unknown; resources?: unknown };
-      });
+      };
+      // A completed share/unshare invalidates the previous index answer. This
+      // component is the single mutation initiator, so evict exactly this key
+      // before re-entering the normal single-flight read.
+      if (options.invalidate) evictCoalescedGet(cacheKey);
+      const body = await coalescedGet(cacheKey, readTeamIndex);
       if (!read.isStillCurrent(workspaceContextRef.current)) return;
       if (Array.isArray(body.ids)) {
         const next = new Set(body.ids.filter((id): id is string => typeof id === 'string'));
-        setTeamSharedIds((prev) => setsEqual(prev, next) ? prev : next);
+        const meta = new Map<string, { canUnshare?: boolean }>();
         if (Array.isArray(body.resources)) {
-          const meta = new Map<string, { canUnshare?: boolean }>();
           for (const resource of body.resources) {
             if (!resource || typeof resource !== 'object') continue;
             const record = resource as Record<string, unknown>;
@@ -405,8 +450,14 @@ export function DesignSystemsTab({
               ...(typeof record.canUnshare === 'boolean' ? { canUnshare: record.canUnshare } : {}),
             });
           }
-          setTeamSharedMeta(meta);
         }
+        setTeamSharedState((prev) => (
+          prev.workspaceIdentity === scopedWorkspaceIdentity &&
+          setsEqual(prev.ids, next) &&
+          teamSharedMetaEqual(prev.meta, meta)
+            ? prev
+            : { workspaceIdentity: scopedWorkspaceIdentity, ids: next, meta }
+        ));
         if (options.refreshSystems) await onSystemsRefresh?.();
       }
     } catch {
@@ -459,7 +510,7 @@ export function DesignSystemsTab({
       });
       const body = (await res.json().catch(() => ({}))) as { shared?: boolean };
       if (res.ok && body.shared) {
-        await refreshTeamShared({ refreshSystems: true });
+        await refreshTeamShared({ refreshSystems: true, invalidate: true });
         notifyAction('success', t('ds.actionDone'));
       } else if (res.ok) {
         // Reached the daemon but there is no team identity to share under.
@@ -495,7 +546,7 @@ export function DesignSystemsTab({
       });
       const body = (await res.json().catch(() => ({}))) as { unshared?: boolean };
       if (res.ok && body.unshared) {
-        await refreshTeamShared({ refreshSystems: true });
+        await refreshTeamShared({ refreshSystems: true, invalidate: true });
         notifyAction('success', t('ds.actionDone'));
       } else {
         notifyAction('error', t('dsManager.unshareFromTeamFailed'));
