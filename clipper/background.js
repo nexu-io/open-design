@@ -155,6 +155,7 @@ async function grabImages() {
 //   3. drop the secondary Figma IR if the combined body would still be too big,
 // so the HTML page itself can never fail to save.
 const MAX_RESOURCE_BYTES = 16 * 1024 * 1024; // per-resource fetch ceiling
+const RESOURCE_FETCH_TIMEOUT_MS = 30_000;
 const MAX_TOTAL_INLINE_BYTES = 40 * 1024 * 1024; // total inlined data-URI budget
 const SAFE_BODY_BYTES = 100 * 1024 * 1024; // drop the Figma IR past this body size
 
@@ -206,7 +207,14 @@ async function compressImageToDataUri(buf, originalBase64Len) {
 }
 
 async function fetchAsDataUri(url) {
-  const resp = await fetch(url, { redirect: 'follow' });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), RESOURCE_FETCH_TIMEOUT_MS);
+  let resp;
+  try {
+    resp = await fetch(url, { redirect: 'follow', signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
   if (!resp.ok) throw new Error(String(resp.status));
   const declared = Number(resp.headers.get('content-length') || '0');
   if (declared && declared > MAX_RESOURCE_BYTES) throw new Error('too large');
