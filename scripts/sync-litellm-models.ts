@@ -14,7 +14,7 @@
 // commit the regenerated JSON. Coverage gaps (e.g. mimo-v2.5-pro) are
 // filled by the hand-maintained override table in maxTokens.ts.
 
-import { writeFileSync } from 'node:fs';
+import { rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -32,6 +32,16 @@ interface LiteLLMEntry {
   mode?: string;
   max_tokens?: number | string;
   max_output_tokens?: number | string;
+}
+
+async function writeJsonAtomic(filePath: string, contents: string): Promise<void> {
+  const tempPath = `${filePath}.${process.pid}.tmp`;
+  try {
+    await writeFile(tempPath, contents, 'utf8');
+    await rename(tempPath, filePath);
+  } finally {
+    await rm(tempPath, { force: true });
+  }
 }
 
 async function main() {
@@ -68,7 +78,7 @@ async function main() {
   };
 
   const json = JSON.stringify(payload, null, 2) + '\n';
-  writeFileSync(OUT_PATH, json);
+  await writeJsonAtomic(OUT_PATH, json);
   console.log(
     `wrote ${OUT_PATH} (${Object.keys(sorted).length} models / ${scanned} chat-mode scanned)`,
   );
