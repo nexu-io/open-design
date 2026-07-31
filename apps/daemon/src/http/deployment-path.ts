@@ -57,7 +57,8 @@ export function resolveDeploymentPathConfig(env: NodeJS.ProcessEnv = process.env
   const fallbackPort = env.OD_PORT || '7456';
 
   const publicOrigin = (request: { protocol?: string; get(name: string): string | undefined }): string =>
-    configuredPublicOrigin ?? requestOrigin(request, fallbackPort);
+    parseConfiguredPublicOrigin(env[PUBLIC_BASE_URL_ENV], basePath)
+      ?? requestOrigin(request, fallbackPort);
   const publicBaseUrl = (request: { protocol?: string; get(name: string): string | undefined }): string =>
     `${publicOrigin(request)}${basePath}`;
   const publicUrl = (

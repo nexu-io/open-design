@@ -959,6 +959,12 @@ export interface AmrAuthResultProps {
   // attempt; absent when login was started without a recorded entry.
   entry_id?: string;
   source_detail?: TrackingAmrEntrySource;
+  auth_attempt_id?: string;
+  last_stage?: import('./amr-auth.js').AmrAuthStage;
+  last_stage_result?: import('./amr-auth.js').AmrAuthStageResult;
+  last_error_kind?: import('./amr-auth.js').AmrAuthErrorKind;
+  network_path?: import('./amr-auth.js').AmrAuthNetworkPath;
+  fallback_used?: boolean;
 }
 
 export interface ChatPanelResourcesPopoverClickProps {
@@ -1238,7 +1244,13 @@ export interface HandoffClickProps {
 export interface PresentPopoverClickProps {
   page_name: 'artifact';
   area: 'present_popover';
-  element: 'in_this_tab' | 'fullscreen' | 'new_tab';
+  element:
+    | 'in_this_tab'
+    | 'fullscreen'
+    | 'new_tab'
+    | 'start_from_beginning'
+    | 'start_from_current'
+    | 'presenter_mode';
   artifact_id?: string;
   artifact_kind?: TrackingArtifactKind;
 }

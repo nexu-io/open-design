@@ -1,6 +1,12 @@
 import { expect, test } from '@/playwright/suite';
 import type { Page } from '@playwright/test';
-import { routeAgents, suppressWhatsNew } from '@/playwright/mock-factory';
+import {
+  routeAgents,
+  routeSuccessfulRuns,
+  successfulRunEventBody,
+  suppressWhatsNew,
+  trackRunRequests,
+} from '@/playwright/mock-factory';
 import { T } from '@/timeouts';
 
 test.describe.configure({ timeout: T.xlong });
@@ -990,25 +996,9 @@ test('[P1] home staged workspace context auto-sends into the first project run',
   await page.route('**/api/live-artifacts**', async (route) => {
     await route.fulfill({ json: { liveArtifacts: [] } });
   });
-  await page.route('**/api/runs', async (route) => {
-    if (route.request().method() !== 'POST') {
-      await route.fallback();
-      return;
-    }
-    const raw = route.request().postData();
-    if (raw) runBodies.push(JSON.parse(raw) as Record<string, unknown>);
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: JSON.stringify({ runId: 'home-autosend-context-run' }),
-    });
-  });
-  await page.route('**/api/runs/*/events**', async (route) => {
-    await route.fulfill({
-      status: 200,
-      headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' },
-      body: ['event: end', 'data: {"code":0,"status":"succeeded"}', '', ''].join('\n'),
-    });
+  const runRequests = await routeSuccessfulRuns(page, {
+    bodies: runBodies,
+    runId: 'home-autosend-context-run',
   });
   await page.route('**/api/dialog/open-folder', async (route) => {
     await route.fulfill({ json: { path: '/tmp/open-design/local-code-home-autosend' } });
@@ -1038,7 +1028,7 @@ test('[P1] home staged workspace context auto-sends into the first project run',
   ]);
 
   await expect(page).toHaveURL(new RegExp(`/projects/${projectId}`));
-  await expect.poll(() => runBodies.length, { timeout: 15_000 }).toBe(1);
+  await runRequests.expectCount(1, { timeout: 15_000 });
   expect(runBodies[0]?.message).toContain(prompt);
   expect(runBodies[0]?.projectId).toBe(projectId);
   expect(runBodies[0]?.conversationId).toBe(conversationId);
@@ -1277,6 +1267,7 @@ test('[P1] first-run home template reveal opens from wheel gesture', async ({ pa
 
 test('[P1] blank project entry remains retryable after create failures', async ({ page }) => {
   await routeProjectCreates(page, { failFirstCreate: true });
+  const runRequests = trackRunRequests(page);
   await gotoEntryHome(page);
 
   const failedResponsePromise = page.waitForResponse((response) =>
@@ -1288,6 +1279,7 @@ test('[P1] blank project entry remains retryable after create failures', async (
   await failedResponsePromise;
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByTestId('home-hero-blank-project')).toBeEnabled();
+  await runRequests.expectNone({ message: 'failed blank project create should not start a run' });
 
   const retryRequestPromise = page.waitForRequest((request) =>
     request.method() === 'POST' && new URL(request.url()).pathname === '/api/projects',
@@ -1908,23 +1900,9 @@ function homePresetCopyPlugin(id: string, title: string) {
 }
 
 async function routeRunsAccepted(page: Page) {
-  await page.route('**/api/runs', async (route) => {
-    if (route.request().method() !== 'POST') {
-      await route.continue();
-      return;
-    }
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: '{"runId":"home-run-smoke"}',
-    });
-  });
-  await page.route('**/api/runs/*/events', async (route) => {
-    await route.fulfill({
-      status: 200,
-      headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' },
-      body: ['event: end', 'data: {"code":0,"status":"succeeded"}', '', ''].join('\n'),
-    });
+  await routeSuccessfulRuns(page, {
+    runId: 'home-run-smoke',
+    eventBody: successfulRunEventBody(),
   });
 }
 

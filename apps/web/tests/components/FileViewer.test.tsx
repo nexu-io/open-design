@@ -141,6 +141,25 @@ function deferredResponse() {
   return { promise, resolve };
 }
 
+function installElementFullscreenMock() {
+  const original = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'requestFullscreen');
+  const requestFullscreen = vi.fn(() => Promise.resolve());
+  Object.defineProperty(HTMLElement.prototype, 'requestFullscreen', {
+    configurable: true,
+    value: requestFullscreen,
+  });
+  return {
+    requestFullscreen,
+    restore() {
+      if (original) {
+        Object.defineProperty(HTMLElement.prototype, 'requestFullscreen', original);
+      } else {
+        Reflect.deleteProperty(HTMLElement.prototype, 'requestFullscreen');
+      }
+    },
+  };
+}
+
 function srcDocActivationMessages(calls: readonly (readonly unknown[])[]) {
   return calls
     .map(([message]) => message)
@@ -1388,20 +1407,22 @@ describe('FileViewer SVG artifacts', () => {
     });
     const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
 
-    // Hover only surfaces the floating "edit params" affordance (#3438); it
-    // must not open the inspector. Pinning requires an explicit select.
+    // Hover surfaces no host chrome (the dashed highlight is in-iframe CSS);
+    // it must not open the inspector. Pinning requires an explicit select.
     window.dispatchEvent(new MessageEvent('message', {
       source: frame.contentWindow,
       data: { type: 'od-edit-hover', target: heroTarget },
     }));
-    expect(await screen.findByTestId('manual-edit-hover-open')).toBeTruthy();
+    expect(screen.queryByTestId('manual-edit-hover-open')).toBeNull();
     expect(screen.queryByText('Hero card')).toBeNull();
 
-    // Selecting pins the inspector to the hero card.
+    // Selecting raises the lightweight chrome; the inspector opens on demand
+    // through the action bar's params button and pins to the hero card.
     window.dispatchEvent(new MessageEvent('message', {
       source: frame.contentWindow,
       data: { type: 'od-edit-select', target: heroTarget },
     }));
+    fireEvent.click(await screen.findByTestId('manual-edit-open-inspector'));
     expect(await screen.findByText('Hero card')).toBeTruthy();
 
     // Hovering a different element must not switch the pinned inspector.
@@ -1548,7 +1569,8 @@ describe('FileViewer SVG artifacts', () => {
       source: frame.contentWindow,
       data: { type: 'od-edit-text-session', id: 'card-title', active: true },
     }));
-    expect(await screen.findByTitle('Pricing that scales')).toBeTruthy();
+    // Selection raises the lightweight chrome (no auto-open inspector).
+    expect(await screen.findByTestId('manual-edit-selection-frame')).toBeTruthy();
 
     // Exit while editing; the iframe commits new text, but the save fails.
     fireEvent.click(toggle);
@@ -1630,7 +1652,8 @@ describe('FileViewer SVG artifacts', () => {
       source: frame.contentWindow,
       data: { type: 'od-edit-text-session', id: 'card-title', active: true },
     }));
-    expect(await screen.findByTitle('Pricing that scales')).toBeTruthy();
+    // Selection raises the lightweight chrome (no auto-open inspector).
+    expect(await screen.findByTestId('manual-edit-selection-frame')).toBeTruthy();
 
     // Iframe-driven finish (Enter): commit + session-inactive with NO host finish.
     window.dispatchEvent(new MessageEvent('message', {
@@ -1873,7 +1896,7 @@ describe('FileViewer SVG artifacts', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: /present/i }));
-    fireEvent.click(screen.getByRole('menuitem', { name: /in this tab/i }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /start from current slide/i }));
 
     const frame = await waitFor(() => {
       const nextFrame = document.body.querySelector<HTMLIFrameElement>('.present-overlay iframe');
@@ -1890,6 +1913,181 @@ describe('FileViewer SVG artifacts', () => {
     await waitFor(() => {
       expect(container.querySelector('.html-viewer.is-tab-present')).toBeNull();
     });
+  });
+
+  it('starts deck presentation from the current slide and requests fullscreen immediately', async () => {
+    const file = baseFile({
+      name: 'deck.html',
+      path: 'deck.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Deck',
+        entry: 'deck.html',
+        renderer: 'deck-html',
+        exports: ['html'],
+      },
+    });
+    const fullscreen = installElementFullscreenMock();
+    const openMock = vi.spyOn(window, 'open').mockReturnValue(null);
+
+    try {
+      render(
+        <FileViewer
+          projectId="project-1"
+          projectKind="prototype"
+          file={file}
+          isDeck
+          liveHtml="<html><body><section class='slide'>one</section><section class='slide'>two</section></body></html>"
+        />,
+      );
+
+      const previewFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      act(() => {
+        window.dispatchEvent(new MessageEvent('message', {
+          data: { type: 'od:slide-state', active: 1, count: 2 },
+          source: previewFrame.contentWindow,
+        }));
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /present/i }));
+      expect(screen.getByRole('menuitem', { name: /start from beginning/i })).toBeTruthy();
+      expect(screen.getByRole('menuitem', { name: /start from current slide/i })).toBeTruthy();
+      expect(screen.getByRole('menuitem', { name: /presenter mode/i })).toBeTruthy();
+      expect(screen.queryByRole('menuitem', { name: /new tab/i })).toBeNull();
+
+      fireEvent.click(screen.getByRole('menuitem', { name: /start from current slide/i }));
+
+      const overlay = document.body.querySelector<HTMLElement>('.present-overlay');
+      const frame = overlay?.querySelector<HTMLIFrameElement>('iframe');
+      expect(overlay).toBeTruthy();
+      expect(frame?.srcdoc).toContain('var initialSlideIndex = 1;');
+      expect(fullscreen.requestFullscreen).toHaveBeenCalledTimes(1);
+      expect(fullscreen.requestFullscreen.mock.instances[0]).toBe(overlay);
+      expect(openMock).not.toHaveBeenCalled();
+      expect(analyticsTrackMock.mock.calls.some(([eventName, props]) => (
+        eventName === 'ui_click'
+        && props?.area === 'present_popover'
+        && props?.element === 'start_from_current'
+      ))).toBe(true);
+    } finally {
+      fullscreen.restore();
+    }
+  });
+
+  it('resets deck presentation to slide one before entering fullscreen', () => {
+    const file = baseFile({
+      name: 'deck.html',
+      path: 'deck.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Deck',
+        entry: 'deck.html',
+        renderer: 'deck-html',
+        exports: ['html'],
+      },
+    });
+    const fullscreen = installElementFullscreenMock();
+    const openMock = vi.spyOn(window, 'open').mockReturnValue(null);
+
+    try {
+      render(
+        <FileViewer
+          projectId="project-1"
+          projectKind="prototype"
+          file={file}
+          isDeck
+          liveHtml="<html><body><section class='slide'>one</section><section class='slide'>two</section></body></html>"
+        />,
+      );
+
+      const previewFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      act(() => {
+        window.dispatchEvent(new MessageEvent('message', {
+          data: { type: 'od:slide-state', active: 1, count: 2 },
+          source: previewFrame.contentWindow,
+        }));
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /present/i }));
+      fireEvent.click(screen.getByRole('menuitem', { name: /start from beginning/i }));
+
+      const overlay = document.body.querySelector<HTMLElement>('.present-overlay');
+      const frame = overlay?.querySelector<HTMLIFrameElement>('iframe');
+      expect(frame?.srcdoc).toContain('var initialSlideIndex = 0;');
+      expect(fullscreen.requestFullscreen.mock.instances[0]).toBe(overlay);
+      expect(openMock).not.toHaveBeenCalled();
+      expect(analyticsTrackMock.mock.calls.some(([eventName, props]) => (
+        eventName === 'ui_click'
+        && props?.area === 'present_popover'
+        && props?.element === 'start_from_beginning'
+      ))).toBe(true);
+    } finally {
+      fullscreen.restore();
+    }
+  });
+
+  it('opens presenter controls while the deck stage enters fullscreen', () => {
+    const file = baseFile({
+      name: 'deck.html',
+      path: 'deck.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Deck',
+        entry: 'deck.html',
+        renderer: 'deck-html',
+        exports: ['html'],
+      },
+    });
+    const fullscreen = installElementFullscreenMock();
+    const popupDocument = {
+      open: vi.fn(),
+      write: vi.fn(),
+      close: vi.fn(),
+    };
+    const popup = {
+      closed: false,
+      close: vi.fn(),
+      document: popupDocument,
+      focus: vi.fn(),
+      postMessage: vi.fn(),
+    } as unknown as Window;
+    const openMock = vi.spyOn(window, 'open').mockReturnValue(popup);
+
+    try {
+      render(
+        <FileViewer
+          projectId="project-1"
+          projectKind="prototype"
+          file={file}
+          isDeck
+          liveHtml="<html><body><section class='slide'>one</section><section class='slide'>two</section></body></html>"
+        />,
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: /present/i }));
+      fireEvent.click(screen.getByRole('menuitem', { name: /presenter mode/i }));
+
+      const overlay = document.body.querySelector<HTMLElement>('.present-overlay');
+      expect(openMock).toHaveBeenCalledTimes(1);
+      expect(popupDocument.write).toHaveBeenCalledWith(expect.stringContaining('od-presenter-data'));
+      expect(fullscreen.requestFullscreen.mock.instances[0]).toBe(overlay);
+      expect(analyticsTrackMock.mock.calls.some(([eventName, props]) => (
+        eventName === 'ui_click'
+        && props?.area === 'present_popover'
+        && props?.element === 'presenter_mode'
+      ))).toBe(true);
+    } finally {
+      fullscreen.restore();
+    }
   });
 
   it('allows downloads in React component preview iframes', async () => {
@@ -4960,7 +5158,7 @@ describe('FileViewer tweaks toolbar', () => {
     expect(f.srcdoc).not.toContain('Comment V2');
   });
 
-  it('holds the preview steady while manual Edit is open instead of live-reloading on a file change', async () => {
+  it('defers an external file change during an edit interaction, then follows it once idle', async () => {
     const { rerender } = render(
       <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile({ mtime: 1000 })}
         liveHtml='<html><body><main data-od-id="hero">Edit V1</main></body></html>'
@@ -4972,7 +5170,15 @@ describe('FileViewer tweaks toolbar', () => {
       expect(active.getAttribute('data-od-render-mode')).toBe('srcdoc');
       expect(active.srcdoc).toContain('Edit V1');
     });
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
 
+    // A live inline text session must not be yanked by a background rewrite.
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        source: frame.contentWindow,
+        data: { type: 'od-edit-text-session', id: 'hero', active: true },
+      }));
+    });
     rerender(
       <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile({ mtime: 999999 })}
         filesRefreshKey={7}
@@ -4980,10 +5186,21 @@ describe('FileViewer tweaks toolbar', () => {
       />,
     );
     await Promise.resolve();
+    const held = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    expect(held.srcdoc).toContain('Edit V1');
+    expect(held.srcdoc).not.toContain('Edit V2');
 
-    const f = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
-    expect(f.srcdoc).toContain('Edit V1');
-    expect(f.srcdoc).not.toContain('Edit V2');
+    // Interaction ends → the deferred rewrite flushes into the edit canvas,
+    // so Edit keeps building on what the agent produced.
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        source: frame.contentWindow,
+        data: { type: 'od-edit-text-session', id: 'hero', active: false },
+      }));
+    });
+    await waitFor(() => {
+      expect((screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement).srcdoc).toContain('Edit V2');
+    });
   });
 
   it('preserves URL-loaded preview scroll when opening Draw', async () => {

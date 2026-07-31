@@ -58,15 +58,93 @@ function createConfig(root: string, webOutputMode: ToolPackConfig["webOutputMode
 }
 
 describe("createWorkspaceTarballsCacheKey", () => {
+  it("invalidates when any packed package source changes", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-win-app-"));
+
+    try {
+      await writeWorkspace(root);
+      const config = createConfig(root, "server");
+      const baseline = await createWorkspaceTarballsCacheKey(config, "workspace-build");
+
+      for (const directory of PACKAGE_DIRS) {
+        const sourcePath = join(root, directory, "src", "index.ts");
+        await writeFile(sourcePath, "export const value = 2;\n", "utf8");
+        await expect(createWorkspaceTarballsCacheKey(config, "workspace-build")).resolves.not.toBe(baseline);
+        await writeFile(sourcePath, "export const value = 1;\n", "utf8");
+      }
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("invalidates when package manager or lockfile inputs change", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-win-app-"));
+
+    try {
+      await writeWorkspace(root);
+      const config = createConfig(root, "server");
+      const baseline = await createWorkspaceTarballsCacheKey(config, "workspace-build");
+
+      await writeFile(
+        join(root, "package.json"),
+        `${JSON.stringify({ packageManager: "pnpm@10.34.0" }, null, 2)}\n`,
+        "utf8",
+      );
+      await expect(createWorkspaceTarballsCacheKey(config, "workspace-build")).resolves.not.toBe(baseline);
+
+      await writeFile(
+        join(root, "package.json"),
+        `${JSON.stringify({ packageManager: "pnpm@10.33.2" }, null, 2)}\n`,
+        "utf8",
+      );
+      await writeFile(join(root, "pnpm-lock.yaml"), "lockfileVersion: '9.1'\n", "utf8");
+      await expect(createWorkspaceTarballsCacheKey(config, "workspace-build")).resolves.not.toBe(baseline);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("invalidates when the upstream workspace build key changes", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-win-app-"));
+
+    try {
+      await writeWorkspace(root);
+      const config = createConfig(root, "server");
+      const firstKey = await createWorkspaceTarballsCacheKey(config, "workspace-build-a");
+      const secondKey = await createWorkspaceTarballsCacheKey(config, "workspace-build-b");
+
+      expect(firstKey).not.toBe(secondKey);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
   it("invalidates when the web output mode changes", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-win-app-"));
 
     try {
       await writeWorkspace(root);
+      const serverKey = await createWorkspaceTarballsCacheKey(createConfig(root, "server"), "workspace-build");
+      const standaloneKey = await createWorkspaceTarballsCacheKey(createConfig(root, "standalone"), "workspace-build");
 
-      await expect(createWorkspaceTarballsCacheKey(createConfig(root, "server"))).resolves.not.toBe(
-        await createWorkspaceTarballsCacheKey(createConfig(root, "standalone")),
-      );
+      expect(serverKey).not.toBe(standaloneKey);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("ignores packed package build outputs because the upstream key carries their identity", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-win-app-"));
+
+    try {
+      await writeWorkspace(root);
+      const config = createConfig(root, "server");
+      const baseline = await createWorkspaceTarballsCacheKey(config, "workspace-build");
+
+      await mkdir(join(root, PACKAGE_DIRS[0]!, "dist"), { recursive: true });
+      await writeFile(join(root, PACKAGE_DIRS[0]!, "dist", "index.js"), "export const built = 1;\n", "utf8");
+
+      await expect(createWorkspaceTarballsCacheKey(config, "workspace-build")).resolves.toBe(baseline);
     } finally {
       await rm(root, { force: true, recursive: true });
     }

@@ -274,4 +274,104 @@ describe('run diagnostics', () => {
     });
     expect(approved.approval_requested).toBe(true);
   });
+
+  it('surfaces bounded AMR OpenCode timeout context from structured RPC error details', () => {
+    const result = summarizeRunDiagnosticsForAnalytics({
+      events: [
+        {
+          event: 'error',
+          data: {
+            message: 'json-rpc id 4: opencode prompt timed out after 30m0s',
+            error: {
+              code: 'AGENT_EXECUTION_FAILED',
+              details: {
+                kind: 'opencode_prompt_error',
+                phase: 'timeout',
+                runtime: 'opencode',
+                openCodeSessionId: 'session-must-not-reach-analytics',
+                lastEventType: 'tool_call',
+                lastToolCallId: 'call-must-not-reach-analytics',
+                lastToolStatus: 'in_progress',
+                lastToolKind: 'write',
+              },
+            },
+          },
+        },
+      ],
+      exitCode: 1,
+      signal: null,
+    });
+
+    expect(result).toMatchObject({
+      amr_opencode_error_phase: 'timeout',
+      amr_opencode_last_event_type: 'tool_call',
+      amr_opencode_last_tool_status: 'in_progress',
+      amr_opencode_last_tool_kind: 'write',
+    });
+    expect(JSON.stringify(result)).not.toContain('session-must-not-reach-analytics');
+    expect(JSON.stringify(result)).not.toContain('call-must-not-reach-analytics');
+  });
+
+  it('surfaces AMR OpenCode timeout context when structured details omit runtime', () => {
+    const result = summarizeRunDiagnosticsForAnalytics({
+      events: [
+        {
+          event: 'error',
+          data: {
+            error: {
+              details: {
+                kind: 'opencode_prompt_error',
+                phase: 'timeout',
+                lastEventType: 'tool_call_update',
+                lastToolStatus: 'completed',
+                lastToolKind: 'read',
+              },
+            },
+          },
+        },
+      ],
+      exitCode: 1,
+      signal: null,
+    });
+
+    expect(result).toMatchObject({
+      amr_opencode_error_phase: 'timeout',
+      amr_opencode_last_event_type: 'tool_call_update',
+      amr_opencode_last_tool_status: 'completed',
+      amr_opencode_last_tool_kind: 'read',
+    });
+  });
+
+  it('buckets unknown AMR OpenCode context instead of forwarding raw values', () => {
+    const result = summarizeRunDiagnosticsForAnalytics({
+      events: [
+        {
+          event: 'error',
+          data: {
+            error: {
+              details: {
+                kind: 'opencode_prompt_error',
+                runtime: 'opencode',
+                phase: 'customer-specific-phase',
+                lastEventType: 'custom.plugin.event',
+                lastToolStatus: 'waiting_for_customer_secret',
+                lastToolKind: 'mcp_customer_secret_tool',
+              },
+            },
+          },
+        },
+      ],
+      exitCode: 1,
+      signal: null,
+    });
+
+    expect(result).toMatchObject({
+      amr_opencode_error_phase: 'other',
+      amr_opencode_last_event_type: 'other',
+      amr_opencode_last_tool_status: 'other',
+      amr_opencode_last_tool_kind: 'other',
+    });
+    expect(JSON.stringify(result)).not.toContain('customer');
+    expect(JSON.stringify(result)).not.toContain('custom.plugin.event');
+  });
 });

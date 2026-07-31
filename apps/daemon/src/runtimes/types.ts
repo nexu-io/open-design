@@ -65,6 +65,11 @@ export type RuntimeContext = {
   // also persists) and the daemon seeds it with the full transcript.
   resumeSessionId?: string | null;
   newSessionId?: string;
+  // Per-run plugin isolation for agent subprocesses. External Plugin entry
+  // points use this for Local Codex so the child cannot recursively load the
+  // same Codex Plugin and route itself into another Open Design workflow.
+  // Operator-wide overrides remain owned by each runtime definition.
+  disablePlugins?: boolean;
 };
 
 // Marker on a RuntimeAgentDef declaring that the adapter's CLI maintains
@@ -224,6 +229,9 @@ export type RuntimeAgentDef = {
   // default. Operators can still override per-process via
   // `OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS` — that env wins.
   inactivityTimeoutMs?: number;
+  // Opt-in compatibility for ACP adapters that terminate a prompt with a
+  // `turn_end` session update rather than a session/prompt RPC response.
+  acpTurnEndCompletesPrompt?: boolean;
   // Declarative authentication probe. When set, detection spawns
   // `<bin> <args>` after the version check and classifies the combined
   // stdout/stderr to derive `authStatus`. This replaces the previous

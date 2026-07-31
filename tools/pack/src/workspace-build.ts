@@ -311,7 +311,7 @@ export async function ensureWorkspaceBuildArtifacts(
   config: ToolPackConfig,
   cache: ToolPackCache,
   build: () => Promise<void>,
-): Promise<void> {
+): Promise<string> {
   const key = await createWorkspaceBuildCacheKey(config);
   const nodeId = `${config.platform}.workspace-build`;
   const artifacts = workspaceBuildArtifacts(config);
@@ -369,4 +369,5 @@ export async function ensureWorkspaceBuildArtifacts(
     },
     seedFrom: versionFamilyAlias == null ? [] : [{ aliasKey: versionFamilyAlias, materialize }],
   });
+  return key;
 }

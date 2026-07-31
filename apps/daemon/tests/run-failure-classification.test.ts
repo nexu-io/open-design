@@ -167,7 +167,7 @@ describe('classifyRunFailure', () => {
       }),
     ).toMatchObject({
       failure_category: 'user_cancel',
-      failure_stage: 'tool_execution',
+      failure_stage: 'tool_outstanding',
     });
   });
 
@@ -254,6 +254,35 @@ describe('classifyRunFailure', () => {
     ).toMatchObject({
       failure_category: 'model_unavailable',
       failure_detail: 'model_not_found',
+      failure_stage: 'model_select',
+      retryable: false,
+      user_action: 'switch_model',
+    });
+  });
+
+  it('classifies provider "Unsupported model" responses before stream-close fallback', () => {
+    const message = [
+      'Bad Request: {',
+      '  "error": {',
+      '    "code": "400",',
+      '    "message": "Unsupported model claude-sonnet-4-5"',
+      '  }',
+      '}',
+    ].join('\n');
+
+    expect(
+      classifyForAgent(
+        'byok-opencode',
+        'AGENT_EXECUTION_FAILED',
+        message,
+        [
+          errorEvent('AGENT_EXECUTION_FAILED', message, true),
+          runtimeCloseEvent('stream_error'),
+        ],
+      ),
+    ).toMatchObject({
+      failure_category: 'model_unavailable',
+      failure_detail: 'model_not_supported',
       failure_stage: 'model_select',
       retryable: false,
       user_action: 'switch_model',
@@ -534,6 +563,53 @@ describe('classifyRunFailure', () => {
     });
   });
 
+  it('separates outstanding tools from post-tool resume stalls', () => {
+    const timeoutMessage = 'Agent stalled without emitting any new output for 600s.';
+
+    expect(
+      classify('TIMEOUT', timeoutMessage, [
+        { event: 'agent', data: { type: 'text_delta', delta: 'Working.' } },
+        { event: 'agent', data: { type: 'tool_use', id: 'tool-1', name: 'Read' } },
+        errorEvent('TIMEOUT', timeoutMessage, true),
+      ]),
+    ).toMatchObject({
+      failure_category: 'timeout',
+      failure_detail: 'inactivity_timeout',
+      failure_stage: 'tool_outstanding',
+    });
+
+    expect(
+      classify('TIMEOUT', timeoutMessage, [
+        { event: 'agent', data: { type: 'text_delta', delta: 'Working.' } },
+        { event: 'agent', data: { type: 'tool_use', id: 'tool-1', name: 'Read' } },
+        { event: 'agent', data: { type: 'tool_result', toolUseId: 'tool-1' } },
+        errorEvent('TIMEOUT', timeoutMessage, true),
+      ]),
+    ).toMatchObject({
+      failure_category: 'timeout',
+      failure_detail: 'inactivity_timeout',
+      failure_stage: 'post_tool_resume',
+    });
+  });
+
+  it('separates id-less outstanding tools from resolved post-tool stalls', () => {
+    const timeoutMessage = 'Agent stalled without emitting any new output for 600s.';
+    const classifyIdless = (withResult: boolean) =>
+      classify('TIMEOUT', timeoutMessage, [
+        { event: 'agent', data: { type: 'tool_use', id: null, name: 'Read' } },
+        ...(withResult
+          ? [{ event: 'agent', data: { type: 'tool_result', toolUseId: null } }]
+          : []),
+        errorEvent('TIMEOUT', timeoutMessage, true),
+      ]);
+
+    expect(classifyIdless(false)).toMatchObject({
+      failure_stage: 'tool_outstanding',
+    });
+    expect(classifyIdless(true)).toMatchObject({
+      failure_stage: 'post_tool_resume',
+    });
+  });
 
   it('honors the latest explicit non-retryable hint for timeout failures', () => {
     expect(

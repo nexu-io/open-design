@@ -85,6 +85,11 @@ describe("open-design host contract", () => {
       ...createMockOpenDesignHost(),
       updater: { status: async () => createMockOpenDesignHost().updater.status() },
     })).toBe(false);
+    const { "clear-cache": _clearCache, ...updaterWithoutClearCache } = createMockOpenDesignHost().updater;
+    expect(isOpenDesignHostBridge({
+      ...createMockOpenDesignHost(),
+      updater: updaterWithoutClearCache,
+    })).toBe(false);
   });
 
   it("reads the bridge through the package-owned global accessor", () => {

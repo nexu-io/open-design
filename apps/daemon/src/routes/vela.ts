@@ -1,4 +1,5 @@
 import type { Express, Request, Response } from 'express';
+import { randomUUID } from 'node:crypto';
 import dns from 'node:dns';
 import http from 'node:http';
 import https from 'node:https';
@@ -12,6 +13,10 @@ import {
 import { readAnalyticsContext } from '../analytics.js';
 import { agentCliEnvForAgent, type AppConfigPrefs, writeAppConfig } from '../app-config.js';
 import {
+  validateExternalPluginContext,
+  validatePluginWorkflowId,
+} from '../mcp-observability.js';
+import {
   cancelVelaLogin,
   forgetVelaLogin,
   mergeVelaEnv,
@@ -19,6 +24,8 @@ import {
   mirrorAmrOnboardingProfileAnalytics,
   parseAmrEntryAnalyticsPayload,
   parseAmrOnboardingProfileAnalyticsPayload,
+  parseVelaAuthAttemptId,
+  parseVelaAuthRequestId,
   applyVelaLiveAccount,
   clearAllVelaLiveAccounts,
   parseVelaLoginAttribution,
@@ -27,10 +34,11 @@ import {
   readVelaCredentialRevision,
   readVelaControlApiContext,
   readVelaLoginStatus,
+  readVelaLoginAttemptSnapshot,
   setVelaLiveAccount,
   shouldRefreshVelaLiveAccount,
   velaLiveAccountCacheKey,
-  spawnVelaLogin,
+  spawnVelaLoginWithFallback,
   type VelaLiveAccount,
 } from '../integrations/vela.js';
 import {
@@ -80,6 +88,48 @@ function velaApiProxyBaseUrl(
   getPublicUrl?: (req: Request, path: string) => string,
 ): string {
   return getPublicUrl?.(req, AMR_API_PROXY_PREFIX) ?? `${getPublicBaseUrl(req)}${AMR_API_PROXY_PREFIX}`;
+}
+
+function pluginLoginCorrelationEnv(input: {
+  body: unknown;
+  analyticsContext: ReturnType<typeof readAnalyticsContext>;
+  metricsEnabled: boolean;
+}): Record<string, string> {
+  const { analyticsContext } = input;
+  if (
+    !input.metricsEnabled
+    || !analyticsContext
+    || analyticsContext.clientType !== 'external_mcp'
+    || analyticsContext.entrySurface !== 'external_mcp'
+  ) {
+    return {};
+  }
+  const body =
+    input.body && typeof input.body === 'object' && !Array.isArray(input.body)
+      ? input.body as Record<string, unknown>
+      : {};
+  try {
+    const context = validateExternalPluginContext({
+      id: analyticsContext.externalPluginId,
+      version: analyticsContext.externalPluginVersion,
+      distributionMechanism: analyticsContext.distributionMechanism,
+      publisherClass: analyticsContext.publisherClass,
+    });
+    const pluginWorkflowId = validatePluginWorkflowId(body.pluginWorkflowId);
+    return {
+      OD_INSTALLATION_ID: analyticsContext.deviceId,
+      OPEN_DESIGN_PLUGIN_WORKFLOW_ID: pluginWorkflowId,
+      OPEN_DESIGN_EXTERNAL_PLUGIN_ID: context.id,
+      OPEN_DESIGN_EXTERNAL_PLUGIN_VERSION: context.version,
+      OPEN_DESIGN_DISTRIBUTION_MECHANISM: context.distributionMechanism,
+      OPEN_DESIGN_PUBLISHER_CLASS: context.publisherClass,
+    };
+  } catch {
+    // Login must remain functional when analytics metadata is absent or
+    // malformed. Invalid self-reported attribution is dropped rather than
+    // being trusted or turned into an authentication dependency.
+    return {};
+  }
 }
 
 function velaProxyRequestBody(req: Request): Buffer | null {
@@ -457,11 +507,30 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
   });
 
   app.post('/api/integrations/vela/login', async (req, res) => {
+    // Resolve a request-owned correlation id before any config or spawn work.
+    // A pre-spawn failure must never inherit the previous login's snapshot.
+    const requestAuthAttemptId = parseVelaAuthAttemptId(req.body) ?? randomUUID();
+    const requestAuthRequestId = parseVelaAuthRequestId(req.body);
+    const bodyHasRequestId = Boolean(
+      req.body
+      && typeof req.body === 'object'
+      && !Array.isArray(req.body)
+      && Object.prototype.hasOwnProperty.call(req.body, 'authRequestId'),
+    );
+    if (bodyHasRequestId && !requestAuthRequestId) {
+      res.status(400).json({ error: 'invalid_auth_request_id' });
+      return;
+    }
     try {
       const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
       const configuredEnv = agentCliEnvForAgent(appConfig.agentCliEnv, 'amr');
       const analyticsContext = readAnalyticsContext(req);
       const attribution = parseVelaLoginAttribution(req.body);
+      const correlationEnv = pluginLoginCorrelationEnv({
+        body: req.body,
+        analyticsContext,
+        metricsEnabled: appConfig.telemetry?.metrics === true,
+      });
       let loginAttribution = attribution;
       if (attribution) {
         if (analyticsContext && appConfig.telemetry?.metrics === true) {
@@ -480,41 +549,78 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
       // 飞连/CorpLink → 30.x), that extra hop makes the upstream lose the
       // client IP and reject device authorization with
       // "502: Invalid IP address: undefined", even though the direct path
-      // resolves fine. So only fall back to the proxy when the direct attempt
-      // fails to start — never when a login is already in flight.
-      let spawned;
-      try {
-        spawned = await spawnVelaLogin({
-          configuredEnv,
-          attribution: loginAttribution,
-          // Block until the direct attempt reaches device-auth steady state or
-          // exits/errors before it, so a direct failure that arrives AFTER the
-          // 250ms startup grace (the common shape on a broken edge path) still
-          // falls through to the proxy retry below instead of returning 202.
-          waitForActivation: true,
-        });
-      } catch (directErr) {
-        const directMessage =
-          directErr instanceof Error ? directErr.message : String(directErr);
-        if (/already running/i.test(directMessage)) throw directErr;
-        spawned = await spawnVelaLogin({
-          configuredEnv,
-          attribution: loginAttribution,
-          defaultApiUrl: velaApiProxyBaseUrl(req, getPublicBaseUrl, getPublicUrl),
-          waitForActivation: true,
-        });
-      }
-      res.status(202).json(spawned);
+      // resolves fine. So only fall back to the proxy when the direct child
+      // actually terminates before activation (including after this request
+      // returns) — never merely because it is slow, already activated, or a
+      // login is already in flight.
+      const spawned = await spawnVelaLoginWithFallback({
+        authAttemptId: requestAuthAttemptId,
+        authRequestId: requestAuthRequestId,
+        configuredEnv,
+        attribution: loginAttribution,
+        correlationEnv,
+        proxyApiUrl: velaApiProxyBaseUrl(req, getPublicBaseUrl, getPublicUrl),
+        // Block until the direct attempt reaches device-auth steady state or
+        // exits/errors before it. If it remains alive beyond this grace, the
+        // attempt supervisor keeps watching after this route returns and owns
+        // a single non-overlapping proxy retry on a later pre-activation exit.
+        waitForActivation: true,
+      });
+      const snapshot = readVelaLoginAttemptSnapshot();
+      res.status(202).json({
+        ...spawned,
+        ...(snapshot.authAttemptId === requestAuthAttemptId ? snapshot : {}),
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       const status = /already running/i.test(message) ? 409 : 500;
-      res.status(status).json({ error: message });
+      const snapshot = readVelaLoginAttemptSnapshot();
+      // 409 intentionally joins the already-running attempt so concurrent UI
+      // initiators can reconcile to its canonical id. Every other failure only
+      // exposes state created for this request; config/read failures before
+      // beginVelaLoginAttempt therefore cannot contaminate analytics.
+      const responseSnapshot = status === 409
+        || snapshot.authAttemptId === requestAuthAttemptId
+        ? snapshot
+        : {};
+      res.status(status).json({
+        error: message,
+        ...responseSnapshot,
+      });
     }
   });
 
-  app.post('/api/integrations/vela/login/cancel', (_req, res) => {
+  app.post('/api/integrations/vela/login/cancel', (req, res) => {
     try {
-      res.json(cancelVelaLogin());
+      const bodyHasAttemptId = Boolean(
+        req.body
+        && typeof req.body === 'object'
+        && !Array.isArray(req.body)
+        && Object.prototype.hasOwnProperty.call(req.body, 'authAttemptId'),
+      );
+      const authAttemptId = parseVelaAuthAttemptId(req.body);
+      const bodyHasRequestId = Boolean(
+        req.body
+        && typeof req.body === 'object'
+        && !Array.isArray(req.body)
+        && Object.prototype.hasOwnProperty.call(req.body, 'authRequestId'),
+      );
+      const authRequestId = parseVelaAuthRequestId(req.body);
+      if (
+        (bodyHasAttemptId && !authAttemptId)
+        || (bodyHasRequestId && !authRequestId)
+        || (bodyHasAttemptId && bodyHasRequestId)
+      ) {
+        res.status(400).json({ error: 'invalid_auth_attempt_id' });
+        return;
+      }
+      // No body remains a compatibility path for older web clients. New
+      // callers always target the attempt they observed so a delayed cancel
+      // can never terminate a newer login.
+      res.json(cancelVelaLogin(
+        authAttemptId ?? undefined,
+        authRequestId ?? undefined,
+      ));
     } catch (err) {
       res.status(500).json({ error: String(err) });
     }

@@ -69,6 +69,36 @@ export function testApiProvider(
   return postTest({ mode: 'provider', ...input }, signal);
 }
 
+export async function testSavedByokProfile(
+  profileId: string,
+  signal?: AbortSignal,
+): Promise<ConnectionTestResponse> {
+  const start = Date.now();
+  try {
+    const response = await fetch(
+      `/api/byok/profiles/${encodeURIComponent(profileId)}/test`,
+      { method: 'POST', signal },
+    );
+    if (!response.ok) {
+      return {
+        ok: false,
+        kind: 'unknown',
+        latencyMs: Date.now() - start,
+        detail: `Daemon responded with ${response.status}`,
+      };
+    }
+    return await response.json() as ConnectionTestResponse;
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') throw err;
+    return {
+      ok: false,
+      kind: 'unknown',
+      latencyMs: Date.now() - start,
+      detail: err instanceof Error ? err.message : 'Network request failed',
+    };
+  }
+}
+
 export function testAgent(
   input: AgentTestRequest,
   signal?: AbortSignal,

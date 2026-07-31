@@ -2,7 +2,7 @@ import { expect, test } from '@/playwright/suite';
 import { ensureRailOpen, openNewProjectModal as openNewProjectModalFromProjects } from '@/playwright/rail';
 import { expectAllProjectFilesActive, expectAllProjectFilesInactive, openAllProjectFiles } from '@/playwright/workspace';
 import type { Locator, Page, Response } from '@playwright/test';
-import { applyStandardMocks } from '@/playwright/mock-factory';
+import { applyStandardMocks, routeSuccessfulRuns, successfulRunEventBody } from '@/playwright/mock-factory';
 
 const CHAT_PANEL_WIDTH_STORAGE_KEY = 'open-design.project.chatPanelWidth';
 
@@ -192,17 +192,9 @@ test('[P1] keyboard chat panel resize persists after reload', async ({ page }) =
 });
 
 test('[P0] @critical project chat Enter sends while Shift+Enter inserts a newline', async ({ page }) => {
-  let runCount = 0;
-  await page.route('**/api/runs', async (route) => {
-    runCount += 1;
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: JSON.stringify({ runId: `keyboard-run-${runCount}` }),
-    });
-  });
-  await page.route('**/api/runs/*/events', async (route) => {
-    const body = [
+  const runRequests = await routeSuccessfulRuns(page, {
+    runIdPrefix: 'keyboard-run',
+    eventBody: successfulRunEventBody([
       'event: start',
       'data: {"bin":"mock-agent"}',
       '',
@@ -212,19 +204,7 @@ test('[P0] @critical project chat Enter sends while Shift+Enter inserts a newlin
           '<artifact identifier="keyboard-artifact" type="text/html" title="Keyboard Artifact"><!doctype html><html><body><main><h1>Keyboard Artifact</h1></main></body></html></artifact>',
       })}`,
       '',
-      'event: end',
-      'data: {"code":0,"status":"succeeded"}',
-      '',
-      '',
-    ].join('\n');
-    await route.fulfill({
-      status: 200,
-      headers: {
-        'content-type': 'text/event-stream',
-        'cache-control': 'no-cache',
-      },
-      body,
-    });
+    ]),
   });
 
   await gotoEntryHome(page);
@@ -242,14 +222,14 @@ test('[P0] @critical project chat Enter sends while Shift+Enter inserts a newlin
   // verified by the `.msg.user` assertions below.
   await expect(input).toContainText('first line');
   await expect(input).toContainText('second line');
-  expect(runCount).toBe(0);
+  await runRequests.expectNone({ timeout: 100 });
 
   await Promise.all([
     page.waitForResponse(isCreateRunResponse, { timeout: 5_000 }),
     input.press('Enter'),
   ]);
 
-  expect(runCount).toBe(1);
+  await runRequests.expectCount(1);
   await expect(input).toHaveText('');
   await expect(page.locator('.msg.user', { hasText: 'first line' })).toHaveCount(1);
   await expect(page.locator('.msg.user', { hasText: 'second line' })).toHaveCount(1);
@@ -364,39 +344,20 @@ test('[P1] quick switcher leaves the Design Files panel and opens the selected f
 });
 
 test('[P1] quick switcher can switch from a design file tab back to a generated artifact tab', async ({ page }) => {
-  await page.route('**/api/runs', async (route) => {
-    await route.fulfill({
-      status: 202,
-      contentType: 'application/json',
-      body: '{"runId":"mock-run"}',
-    });
-  });
-  await page.route('**/api/runs/*/events', async (route) => {
-    const artifact =
-      '<artifact identifier="quick-switcher-artifact" type="text/html" title="Quick Switcher Artifact">' +
-      '<!doctype html><html><body><main><h1>Quick Switcher Artifact</h1></main></body></html>' +
-      '</artifact>';
-    const body = [
+  const artifact =
+    '<artifact identifier="quick-switcher-artifact" type="text/html" title="Quick Switcher Artifact">' +
+    '<!doctype html><html><body><main><h1>Quick Switcher Artifact</h1></main></body></html>' +
+    '</artifact>';
+  await routeSuccessfulRuns(page, {
+    runIdPrefix: 'mock-run',
+    eventBody: successfulRunEventBody([
       'event: start',
       'data: {"bin":"mock-agent"}',
       '',
       'event: stdout',
       `data: ${JSON.stringify({ chunk: artifact })}`,
       '',
-      'event: end',
-      'data: {"code":0,"status":"succeeded"}',
-      '',
-      '',
-    ].join('\n');
-
-    await route.fulfill({
-      status: 200,
-      headers: {
-        'content-type': 'text/event-stream',
-        'cache-control': 'no-cache',
-      },
-      body,
-    });
+    ]),
   });
 
   await gotoEntryHome(page);

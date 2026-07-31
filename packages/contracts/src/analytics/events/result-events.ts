@@ -2,11 +2,19 @@
  * @module analytics/events/result-events
  * *_result event prop types (run, feedback, settings, packaged).
  */
-import type { TrackingRuntimeType } from '../public-params.js';
+import type {
+  AnalyticsAttributionQuality,
+  AnalyticsDistributionMechanism,
+  AnalyticsEntrySurface,
+  AnalyticsHostProduct,
+  AnalyticsPublisherClass,
+  TrackingRuntimeType,
+} from '../public-params.js';
 import type { ReleaseChannel } from '@open-design/release';
+import type { ArtifactOriginEntrySurface, ArtifactOriginStatus } from '../../api/files.js';
 import type { TrackingDesignSystemEditSurface, TrackingDesignSystemKind, TrackingDesignSystemLengthBucket, TrackingDesignSystemOrigin, TrackingDesignSystemRunEntryFrom } from './design-systems.js';
 import type { TrackingSettingsPage } from './event-names.js';
-import type { TrackingArtifactKind, TrackingArtifactWriteSource, TrackingArtifactWriteStatus, TrackingByokPreflightBlockReason, TrackingByokProviderId, TrackingCliProviderId, TrackingDesignSystemSource, TrackingExecutionMode, TrackingExportFormat, TrackingExportResult, TrackingFeedbackAction, TrackingFeedbackProviderId, TrackingFeedbackRating, TrackingFeedbackRatingWithNone, TrackingFeedbackReasonCode, TrackingFidelity, TrackingFileSizeBucket, TrackingFileType, TrackingFirstModelEventType, TrackingLangfuseDeliveryStatus, TrackingLangfuseDropReason, TrackingLangfuseReportResult, TrackingLangfuseReportSkipReason, TrackingProjectKind, TrackingProjectSource, TrackingResult, TrackingRunCloseReason, TrackingRunDiagnosticSource, TrackingRunFailureCategory, TrackingRunFailureDetail, TrackingRunFailureStage, TrackingRunFailureUserAction, TrackingRunLifecyclePhase, TrackingRunPhaseTimingStatus, TrackingRunResult, TrackingRunRetryFinalResult, TrackingRunRetryStrategy, TrackingRunRetrySuppressedReason, TrackingStderrLineCountBucket, TrackingTestResult, TrackingTokenCountSource } from './shared-enums.js';
+import type { TrackingAmrOpenCodeErrorPhase, TrackingAmrOpenCodeLastEventType, TrackingAmrOpenCodeLastToolKind, TrackingAmrOpenCodeLastToolStatus, TrackingArtifactKind, TrackingArtifactWriteSource, TrackingArtifactWriteStatus, TrackingByokPreflightBlockReason, TrackingByokProviderId, TrackingCliProviderId, TrackingDesignSystemSource, TrackingExecutionMode, TrackingExportFormat, TrackingExportResult, TrackingFeedbackAction, TrackingFeedbackProviderId, TrackingFeedbackRating, TrackingFeedbackRatingWithNone, TrackingFeedbackReasonCode, TrackingFidelity, TrackingFileSizeBucket, TrackingFileType, TrackingFirstModelEventType, TrackingLangfuseDeliveryStatus, TrackingLangfuseDropReason, TrackingLangfuseReportResult, TrackingLangfuseReportSkipReason, TrackingProjectKind, TrackingProjectSource, TrackingResult, TrackingRunCloseReason, TrackingRunDiagnosticSource, TrackingRunFailureCategory, TrackingRunFailureDetail, TrackingRunFailureStage, TrackingRunFailureUserAction, TrackingRunLifecyclePhase, TrackingRunPhaseTimingStatus, TrackingRunResult, TrackingRunRetryFinalResult, TrackingRunRetryStrategy, TrackingRunRetrySuppressedReason, TrackingStderrLineCountBucket, TrackingTestResult, TrackingTokenCountSource } from './shared-enums.js';
 import type { TrackingFileVersionSource, TrackingPluginImportSource, TrackingSessionMode, TrackingSettingsArea } from './ui-click.js';
 // ---- Result events -------------------------------------------------------
 
@@ -232,6 +240,26 @@ export interface RunCreatedProps {
   mcp_ids?: string[];
   skill_ids?: string[];
   token_count_source: TrackingTokenCountSource;
+  // External MCP/Plugin attribution. These fields are optional so existing UI
+  // and CLI Run producers keep their current contract; the Open Design Cloud
+  // Plugin path validates and supplies the complete subset.
+  entry_surface?: AnalyticsEntrySurface;
+  host_product?: AnalyticsHostProduct;
+  external_plugin_id?: string;
+  external_plugin_version?: string;
+  distribution_mechanism?: AnalyticsDistributionMechanism;
+  publisher_class?: AnalyticsPublisherClass;
+  attribution_quality?: AnalyticsAttributionQuality;
+  plugin_workflow_id?: string;
+  logical_request_digest?: string;
+  logical_request_digest_version?: 1;
+  mcp_session_id?: string;
+  brief_state?: 'confirmed' | 'skipped' | 'not_applicable';
+  deduplicated?: boolean;
+  resume?: boolean;
+  attempt_count?: number;
+  generation_slo_window_ms?: number;
+  recharge_wait_duration_ms?: number;
 }
 
 export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
@@ -262,6 +290,10 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   tool_call_seen?: boolean;
   artifact_write_seen?: boolean;
   live_artifact_seen?: boolean;
+  deliverable_valid?: boolean;
+  deliverable_validation?: 'valid' | 'invalid';
+  artifact_origin_status?: ArtifactOriginStatus;
+  artifact_version_id?: string;
   // Distinct artifact files this run produced OR edited (created + modified),
   // measured agent-agnostically by a filesystem snapshot diff in the daemon
   // (`run-artifact-fs.ts`). An edit-only turn that rewrites an existing file
@@ -355,6 +387,15 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   stdin_backpressure?: boolean;
   tool_result_sent?: boolean;
   last_progress_age_ms?: number;
+  // Vela's OpenCode bridge attaches this context to `error.data` when an AMR
+  // prompt fails. Keep only fixed enums in analytics: session/tool call ids,
+  // paths, titles, inputs, and outputs are deliberately not copied.
+  // Together these fields distinguish "tool still pending/running" from
+  // "tool completed, but the agent stream never reached done".
+  amr_opencode_error_phase?: TrackingAmrOpenCodeErrorPhase;
+  amr_opencode_last_event_type?: TrackingAmrOpenCodeLastEventType;
+  amr_opencode_last_tool_status?: TrackingAmrOpenCodeLastToolStatus;
+  amr_opencode_last_tool_kind?: TrackingAmrOpenCodeLastToolKind;
   attempt_index?: number;
   attempt_duration_ms?: number;
   attempt_time_to_first_token_ms?: number;
@@ -416,7 +457,7 @@ export interface RunRetryBaseProps {
 }
 
 export interface RunRetryAttemptedProps extends RunRetryBaseProps {
-  retry_reason: 'transient_failure';
+  retry_reason: 'transient_failure' | 'post_tool_resume';
   // Backoff delay (ms) waited before this retry attempt was restarted.
   retry_delay_ms?: number;
 }
@@ -523,6 +564,7 @@ export type FileUploadResultProps = TrackingFileUploadSurface & {
 export interface ArtifactExportResultProps {
   page_name: 'artifact';
   area: 'share_option_popover';
+  entry_surface: 'open_design_ui';
   artifact_id: string;
   artifact_kind: TrackingArtifactKind;
   export_format: TrackingExportFormat;
@@ -531,6 +573,12 @@ export interface ArtifactExportResultProps {
   export_duration_ms: number;
   project_id: string;
   project_kind: TrackingProjectKind | null;
+  artifact_origin_status: ArtifactOriginStatus;
+  artifact_version_id?: string;
+  origin_entry_surface: ArtifactOriginEntrySurface;
+  origin_external_plugin_id?: string;
+  origin_plugin_workflow_id?: string;
+  origin_run_id?: string;
 }
 
 // Fired when the user explicitly clicks "Save" in the Excalidraw sketch editor

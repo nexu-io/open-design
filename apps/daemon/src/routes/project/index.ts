@@ -18,7 +18,6 @@ import { createProjectArtifactFile } from '../../artifacts/create.js';
 import { ArtifactPublicationBlockedError } from '../../artifacts/publication-guard.js';
 import { ArtifactRegressionError } from '../../artifacts/stub-guard.js';
 import {
-  createProjectFileVersion,
   ensureCurrentProjectFileVersion,
   isProjectFileVersionPath,
   listProjectFileVersions,
@@ -2654,6 +2653,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     promptSource?: ProjectFileVersionPromptSource;
     source?: ProjectFileVersionSource;
     label?: string | null;
+    parentVersionId?: string;
   };
 
   function htmlVersionOptions(
@@ -2664,6 +2664,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     promptSource?: ProjectFileVersionPromptSource;
     source?: ProjectFileVersionSource;
     label?: string;
+    parentVersionId?: string;
   } {
     const fallbackPromptInfo = latestProjectPrompt(project);
     const prompt = override?.prompt !== undefined
@@ -2680,6 +2681,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       promptSource?: ProjectFileVersionPromptSource;
       source?: ProjectFileVersionSource;
       label?: string;
+      parentVersionId?: string;
     } = {
       prompt,
     };
@@ -2687,6 +2689,9 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     if (override?.source) versionOptions.source = override.source;
     if (typeof override?.label === 'string' && override.label.trim()) {
       versionOptions.label = override.label.trim();
+    }
+    if (typeof override?.parentVersionId === 'string' && override.parentVersionId.trim()) {
+      versionOptions.parentVersionId = override.parentVersionId.trim();
     }
     return versionOptions;
   }
@@ -2696,7 +2701,49 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       content: string,
       options?: ReturnType<typeof htmlVersionOptions>,
     ) => Promise<ProjectFileVersion | null>;
+    createVersion: (
+      content: string,
+      options?: ReturnType<typeof htmlVersionOptions>,
+    ) => Promise<ProjectFileVersion>;
+    matchVersionContent: (
+      content: string,
+      versionId?: string,
+    ) => Promise<{
+      status: 'matched' | 'missing_version' | 'digest_mismatch' | 'unknown';
+      version: ProjectFileVersion | null;
+    }>;
   };
+
+  async function matchedHtmlParentVersionId(
+    project: any,
+    fileName: string,
+    requestedParentVersionId: unknown,
+    versionLock: HtmlVersionLock,
+  ): Promise<string | undefined> {
+    if (typeof requestedParentVersionId !== 'string' || !requestedParentVersionId.trim()) {
+      return undefined;
+    }
+    const parentVersionId = requestedParentVersionId.trim();
+    try {
+      const existing = await readProjectFile(
+        PROJECTS_DIR,
+        project.id,
+        fileName,
+        project.metadata,
+      );
+      const match = await versionLock.matchVersionContent(
+        existing.buffer.toString('utf8'),
+        parentVersionId,
+      );
+      return match.status === 'matched' && match.version?.id === parentVersionId
+        ? parentVersionId
+        : undefined;
+    } catch {
+      // Missing/unreadable pre-edit bytes cannot prove lineage. The write may
+      // still proceed, but the new checkpoint must not inherit an origin.
+      return undefined;
+    }
+  }
 
   function htmlVersionCaptureWarning(err: unknown): ProjectFileVersionWarning {
     const message = err instanceof Error ? err.message : String(err);
@@ -3511,8 +3558,8 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       if (!project) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       }
-      const file = await readProjectFile(PROJECTS_DIR, project.id, fileName, project.metadata);
-      if (!/\.html?$/i.test(file.name)) {
+      const requestedFile = await readProjectFile(PROJECTS_DIR, project.id, fileName, project.metadata);
+      if (!/\.html?$/i.test(requestedFile.name)) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'versions are only available for HTML files');
       }
       const manualPrompt = typeof req.body?.prompt === 'string' && req.body.prompt.trim()
@@ -3525,6 +3572,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         promptSource?: ProjectFileVersionPromptSource;
         source: ProjectFileVersionSource;
         label?: string | null;
+        parentVersionId?: string;
       } = {
         prompt: manualPrompt ?? fallbackPromptInfo?.prompt ?? null,
         source: requestedSource,
@@ -3539,13 +3587,34 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       } else if (fallbackPromptInfo?.promptSource) {
         versionOptions.promptSource = fallbackPromptInfo.promptSource;
       }
-      const version = await createProjectFileVersion(
+      const version = await withProjectFileVersionLock(
         PROJECTS_DIR,
         project.id,
-        file.name,
-        file.buffer.toString('utf8'),
-        versionOptions,
+        requestedFile.name,
         project.metadata,
+        async (versionLock) => {
+          const currentFile = await readProjectFile(
+            PROJECTS_DIR,
+            project.id,
+            requestedFile.name,
+            project.metadata,
+          );
+          const parentVersionId = requestedSource === 'manual'
+            ? await matchedHtmlParentVersionId(
+              project,
+              currentFile.name,
+              req.body?.parentVersionId,
+              versionLock,
+            )
+            : undefined;
+          return versionLock.createVersion(
+            currentFile.buffer.toString('utf8'),
+            {
+              ...versionOptions,
+              ...(parentVersionId ? { parentVersionId } : {}),
+            },
+          );
+        },
       );
       if (!version) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'version could not be created');
@@ -3721,6 +3790,14 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
               ? requestProjectFileVersionUploadSource(req.body)
               : null;
             const writeAndCapture = async (versionLock?: HtmlVersionLock) => {
+              const parentVersionId = uploadProject && requestedSource === 'manual' && versionLock
+                ? await matchedHtmlParentVersionId(
+                  uploadProject,
+                  desiredName,
+                  req.body?.parentVersionId,
+                  versionLock,
+                )
+                : undefined;
               const meta = await writeProjectFile(
                 PROJECTS_DIR,
                 req.params.id,
@@ -3742,6 +3819,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
                       promptSource: 'manual',
                       source: requestedSource,
                       label: typeof req.body?.versionLabel === 'string' ? req.body.versionLabel : null,
+                      ...(parentVersionId ? { parentVersionId } : {}),
                     },
                   );
                 })()
@@ -3760,6 +3838,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
             /** @type {import('@open-design/contracts').ProjectFileResponse} */
             const body = {
               file: meta,
+              ...(versionCapture ? { version: versionCapture.version } : {}),
               ...(versionCapture?.versionWarning ? { versionWarning: versionCapture.versionWarning } : {}),
             };
             return res.json(body);
@@ -3776,6 +3855,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
           overwrite,
           versionLabel,
           versionPrompt,
+          parentVersionId: requestedParentVersionId,
         } = req.body || {};
         if (typeof name !== 'string' || typeof content !== 'string') {
           return sendApiError(
@@ -3810,6 +3890,14 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
             ? Buffer.from(content, 'base64')
             : Buffer.from(content, 'utf8');
         const writeAndCapture = async (versionLock?: HtmlVersionLock) => {
+          const parentVersionId = uploadProject && requestedSource === 'manual' && versionLock
+            ? await matchedHtmlParentVersionId(
+              uploadProject,
+              desiredName,
+              requestedParentVersionId,
+              versionLock,
+            )
+            : undefined;
           const meta = artifact === true
             ? await createProjectArtifactFile({
               projectsRoot: PROJECTS_DIR,
@@ -3835,6 +3923,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
               const versionOverride: HtmlVersionOverride = {
                 source: requestedSource,
                 label: typeof versionLabel === 'string' ? versionLabel : null,
+                ...(parentVersionId ? { parentVersionId } : {}),
               };
               if (typeof versionPrompt === 'string') {
                 versionOverride.prompt = versionPrompt;
@@ -3867,6 +3956,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         /** @type {import('@open-design/contracts').ProjectFileResponse} */
         const body = {
           file: meta,
+          ...(versionCapture ? { version: versionCapture.version } : {}),
           ...(versionCapture?.versionWarning ? { versionWarning: versionCapture.versionWarning } : {}),
         };
         res.json(body);

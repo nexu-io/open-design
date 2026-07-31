@@ -35,6 +35,7 @@ import {
 } from './prompts/stable-sections.js';
 import { emittedRenderableQuestionForm } from './question-form-detect.js';
 import { resolveProjectRoot } from './project-root.js';
+import { OPEN_DESIGN_PLUGIN_ID } from './mcp-observability.js';
 import {
   resolveDaemonCliPath,
   resolveDaemonPluginPreviewsDir,
@@ -196,6 +197,7 @@ import {
   getAgentDef,
   isKnownModel,
   isKnownServiceTier,
+  openDesignAmrRunAttempt,
   openDesignAmrTraceEnv,
   applyAgentLaunchEnv,
   resolveAgentLaunch,
@@ -394,7 +396,11 @@ import {
 } from './run-lifecycle-tracer.js';
 import { deriveRunErrorCode, runResultFromStatus } from './run-result.js';
 import { classifyRunFailure, isResumableFailure } from './run-failure-classification.js';
-import { decideSafeRunRetry } from './run-retry-policy.js';
+import {
+  POST_TOOL_RESUME_CONTINUATION_PROMPT,
+  decidePostToolResumeRecovery,
+  decideSafeRunRetry,
+} from './run-retry-policy.js';
 import {
   amrUserIdForRunAnalytics,
   scanRunEventsForUsageAnalytics,
@@ -406,6 +412,7 @@ import {
 } from './run-artifact-fs.js';
 import {
   AiHtmlVersionSnapshotError,
+  artifactOriginForRun,
   snapshotAiHtmlVersionsForRun,
 } from './run-html-version-snapshots.js';
 import { reportRunCompletedFromDaemon } from './langfuse-bridge.js';
@@ -630,6 +637,7 @@ import { EmptyTranscriptError, synthesizeHandoffPrompt } from './design/index.js
 import { TranscriptExportLockedError } from './transcript-export.js';
 import { registerChatRoutes } from './routes/chat.js';
 import { registerRunRoutes } from './routes/runs.js';
+import { registerByokCredentialRoutes } from './routes/byok-credentials.js';
 import { registerTerminalRoutes } from './routes/terminal.js';
 import { createTerminalService } from './terminals.js';
 import { registerSocialShareRoutes } from './routes/social-share.js';
@@ -695,6 +703,7 @@ import { apiTokenFromEnv, isApiAuthDisabled, isApiTokenMiddlewareEnabled } from 
 import { createOpenDesignPublicMetadataService } from './services/open-design-public-metadata.js';
 import { createWhatsNewService } from './services/whats-new.js';
 import { execCommandViaLoginShell } from './services/login-shell.js';
+import { ByokCredentialService } from './byok/credential-service.js';
 import {
   OFFICIAL_MARKETPLACE_ID,
   createMarketplaceSeedHelpers,
@@ -854,6 +863,9 @@ const {
 const SANDBOX_MODE_ENABLED = isSandboxModeEnabled(process.env);
 const RUNTIME_DATA_DIR = resolveDataDir(process.env.OD_DATA_DIR, PROJECT_ROOT, {
   requireExplicit: SANDBOX_MODE_ENABLED,
+});
+const defaultByokCredentialService = new ByokCredentialService({
+  dataDir: RUNTIME_DATA_DIR,
 });
 const SANDBOX_RUNTIME = resolveSandboxRuntimeConfig(SANDBOX_MODE_ENABLED, RUNTIME_DATA_DIR);
 ensureSandboxRuntimeDirs(SANDBOX_RUNTIME);
@@ -2003,6 +2015,7 @@ export interface DaemonRuntimeContext {
 }
 
 export interface StartServerOptions {
+  byokCredentialService?: ByokCredentialService;
   desktopArtifactExporter?: DesktopArtifactExporter | null;
   desktopPdfExporter?: DesktopPdfExporter | null;
   desktopSlideRenderer?: DesktopSlideRenderer | null;
@@ -2045,6 +2058,7 @@ export function mountDeploymentApp(listenerApp: Express, routeApp: Express, base
 }
 
 export async function startServer({
+  byokCredentialService = defaultByokCredentialService,
   port = 7456,
   host = normalizeDaemonBindHost(process.env.OD_BIND_HOST),
   returnServer = false,
@@ -2550,6 +2564,7 @@ export async function startServer({
   const telemetry = registerTelemetryRoutes(app, {
     dataDir: RUNTIME_DATA_DIR,
     readAppConfig,
+    writeAppConfig,
   });
   const { analyticsService } = telemetry;
   const design = {
@@ -2987,6 +3002,11 @@ export async function startServer({
   registerXaiRoutes(app, {
     http: httpDeps,
     paths: pathDeps,
+  });
+  registerByokCredentialRoutes(app, {
+    http: { requireLocalDaemonRequest, sendApiError },
+    byokCredentials: byokCredentialService,
+    connectionTest: testProviderConnection,
   });
   // Project workspace
   registerActiveContextRoutes(app, {
@@ -3640,6 +3660,7 @@ export async function startServer({
           pluginDesignSystemId,
           projectDesignSystemId: project?.designSystemId,
           appDefaultDesignSystemId: appConfigForPrompt?.designSystemId,
+          disabledDesignSystemIds: appConfigForPrompt?.disabledDesignSystems,
           // A project row with designSystemId=null can mean the user picked
           // "No design system"; do not reapply the global default behind their back.
           allowAppDefault: project === null,
@@ -4294,6 +4315,12 @@ export async function startServer({
   const startChatRun = async (chatBody, run) => {
     const lifecycle = createRunLifecycleTracer(run);
     lifecycle.mark('chat_run_started');
+    const pendingNativeSessionContinue =
+      run.nativeSessionContinuePending &&
+      typeof run.nativeSessionContinuePending.sessionId === 'string'
+        ? run.nativeSessionContinuePending
+        : null;
+    run.nativeSessionContinuePending = null;
     /** @type {Partial<ChatRequest> & { imagePaths?: string[] }} */
     chatBody = chatBody || {};
     const {
@@ -4319,7 +4346,7 @@ export async function startServer({
       research,
       context,
       titleGeneration,
-      byokProvider,
+      byokProfileId,
       byokMediaDefaults,
     } = chatBody;
     lifecycle.mark('prompt_build_start');
@@ -4336,7 +4363,12 @@ export async function startServer({
     // into chatBody across the createChatRunService boundary. Each field
     // is optional and only set when the chat body actually carried it.
     const telemetryPrompt = telemetryPromptFromRunRequest(message, currentPrompt);
-    if (typeof telemetryPrompt === 'string') run.userPrompt = telemetryPrompt;
+    if (
+      !pendingNativeSessionContinue &&
+      typeof telemetryPrompt === 'string'
+    ) {
+      run.userPrompt = telemetryPrompt;
+    }
     if (typeof model === 'string' && model) run.model = model;
     if (typeof reasoning === 'string' && reasoning) run.reasoning = reasoning;
     if (typeof serviceTier === 'string' && serviceTier) run.serviceTier = serviceTier;
@@ -4360,10 +4392,22 @@ export async function startServer({
       );
     if (!def.bin)
       return design.runs.fail(run, 'AGENT_UNAVAILABLE', 'agent has no binary');
+    let resolvedByokCredential = null;
+    if (def.id === 'byok-opencode') {
+      try {
+        resolvedByokCredential =
+          typeof byokProfileId === 'string' && byokProfileId
+            ? await byokCredentialService.resolve(byokProfileId)
+            : null;
+      } catch {
+        resolvedByokCredential = null;
+      }
+    }
     const byokOpenCodeProvider = def.id === 'byok-opencode'
       ? buildOpenCodeByokProviderConfig(
-          byokProvider,
-          typeof model === 'string' ? model : null,
+          resolvedByokCredential?.provider,
+          resolvedByokCredential?.profile.model
+            ?? (typeof model === 'string' ? model : null),
         )
       : null;
     if (def.id === 'byok-opencode' && !byokOpenCodeProvider) {
@@ -4373,6 +4417,9 @@ export async function startServer({
         BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE,
       );
     }
+    const requestedRuntimeModel = def.id === 'byok-opencode'
+      ? resolvedByokCredential?.profile.model ?? null
+      : model;
     // Validate the checked-in `inactivityTimeoutMs` hint immediately
     // after the runtime def is selected and before any side-effectful
     // setup (auto-memory extract, `.mcp.json` write/unlink,
@@ -4846,18 +4893,50 @@ export async function startServer({
       return outcome;
     };
     const snapshotAiHtmlVersionsBeforeSuccess = async () => {
+      const origin = artifactOriginForRun({
+        runId: run.id,
+        externalPluginAnalytics: run.externalPluginAnalytics,
+      });
+      if (origin) {
+        // A successful Plugin run starts pessimistically. Only the exact
+        // versions returned by the snapshot writer may promote it to matched.
+        run.artifactOriginStatus = 'missing_version';
+        run.artifactVersionId = undefined;
+      }
       const outcome = resolveRunArtifactOutcomeBeforeFinish();
       if (!outcome?.diff || !outcome.projectRoot || !run.projectId) return;
       const promptInfo = latestRunPromptForHtmlVersionSnapshot();
-      await snapshotAiHtmlVersionsForRun({
+      const result = await snapshotAiHtmlVersionsForRun({
         projectsRoot: PROJECTS_DIR,
         projectId: run.projectId,
         projectRoot: outcome.projectRoot,
         diff: outcome.diff,
         prompt: promptInfo.prompt,
         ...(promptInfo.promptSource ? { promptSource: promptInfo.promptSource } : {}),
+        ...(origin ? { origin } : {}),
         metadata: projectRecord?.metadata,
       });
+      if (origin) {
+        const matching = result.snapshots.filter(({ version }) =>
+          version.origin?.entrySurface === origin.entrySurface
+          && version.origin.externalPluginId === origin.externalPluginId
+          && version.origin.pluginWorkflowId === origin.pluginWorkflowId
+          && version.origin.runId === origin.runId,
+        );
+        if (matching.length > 0) {
+          run.artifactOriginStatus = 'matched';
+          const configuredEntry =
+            typeof projectRecord?.metadata?.entryFile === 'string'
+              ? projectRecord.metadata.entryFile.replaceAll('\\', '/')
+              : null;
+          const selected =
+            (configuredEntry
+              ? matching.find(({ fileName }) => fileName === configuredEntry)
+              : undefined)
+            ?? (matching.length === 1 ? matching[0] : undefined);
+          run.artifactVersionId = selected?.version.id;
+        }
+      }
     };
     // Chain onto the run service's terminal chokepoint so startup rejection,
     // direct cancellation, shutdown, and every explicit finish path all consume
@@ -4945,10 +5024,10 @@ export async function startServer({
         : null;
     let safeModel = resolveModelForAgent(
       def,
-      typeof model === 'string'
-        ? isKnownModel(def, model, requestedLiveModelScope)
-          ? model
-          : sanitizeCustomModel(model)
+      typeof requestedRuntimeModel === 'string'
+        ? isKnownModel(def, requestedRuntimeModel, requestedLiveModelScope)
+          ? requestedRuntimeModel
+          : sanitizeCustomModel(requestedRuntimeModel)
         : configuredModel,
       process.env,
       requestedLiveModelScope,
@@ -5017,7 +5096,7 @@ export async function startServer({
         // the probe failure and applies the identical fallback.
       }
     }
-    const agentResumeCtx =
+    const resolvedAgentResumeCtx =
       agentSupportsSessionResume && run.conversationId
         ? resolveAgentResumeContext(db, {
             conversationId: run.conversationId,
@@ -5027,6 +5106,28 @@ export async function startServer({
             currentAssistantMessageId: run.assistantMessageId ?? null,
           })
         : { storedSessionId: null as string | null, resumeSessionId: null as string | null, newSessionId: undefined as string | undefined, isResuming: false, storedStablePromptHash: null as string | null, storedStableSections: null as StableSectionHashes | null, invalidationReason: null };
+    // A same-run post-tool recovery resumes the exact session id captured from
+    // the interrupted attempt. The ordinary cross-turn cursor guard cannot
+    // admit it yet because the current assistant placeholder is still in
+    // flight, so this daemon-only path supplies the already-validated handle
+    // directly. Public chat requests cannot reach this branch.
+    const forceInternalResume =
+      pendingNativeSessionContinue != null &&
+      def.resumesSessionViaCli === true &&
+      pendingNativeSessionContinue.sessionId.length > 0;
+    const agentResumeCtx = forceInternalResume
+      ? {
+          ...resolvedAgentResumeCtx,
+          storedSessionId: pendingNativeSessionContinue.sessionId,
+          resumeSessionId: pendingNativeSessionContinue.sessionId,
+          isResuming: true,
+          storedStablePromptHash:
+            pendingNativeSessionContinue.stablePromptHash ?? null,
+          storedStableSections:
+            pendingNativeSessionContinue.stablePromptSections ?? null,
+          invalidationReason: null,
+        }
+      : resolvedAgentResumeCtx;
     const publishNativeSessionRecoveryMetadata = () => {
       if (!run.nativeSessionRecovery) return;
       design.runs.emit(run, 'diagnostic', {
@@ -5416,8 +5517,8 @@ export async function startServer({
         startRequestedAt: run.analyticsTelemetry?.startRequestedAt ?? run.createdAt,
       };
     };
-    const spawnRetryAttempt = () => {
-      void startChatRun(chatBody, run).catch((err) => {
+    const spawnRetryAttempt = (retryChatBody = chatBody) => {
+      void startChatRun(retryChatBody, run).catch((err) => {
         const message = err instanceof Error ? err.message : String(err);
         design.runs.emit(
           run,
@@ -5439,17 +5540,17 @@ export async function startServer({
     // or shutdown during the backoff window clears the timer (runtimes/runs.ts)
     // and finalizes the queued run, and the callback re-checks cancel/terminal
     // state in case it fires first.
-    const scheduleRetryRestart = (delayMs) => {
+    const scheduleRetryRestart = (delayMs, retryChatBody = chatBody) => {
       tearDownAttemptForRetry();
       const wait = Number.isFinite(delayMs) && delayMs > 0 ? delayMs : 0;
       if (wait <= 0) {
-        spawnRetryAttempt();
+        spawnRetryAttempt(retryChatBody);
         return;
       }
       run.retryRestartTimer = setTimeout(() => {
         run.retryRestartTimer = null;
         if (run.cancelRequested || design.runs.isTerminal(run.status)) return;
-        spawnRetryAttempt();
+        spawnRetryAttempt(retryChatBody);
       }, wait);
     };
     const finalizeRetryTelemetry = (status, decision, failure, errorCode) => {
@@ -5476,7 +5577,13 @@ export async function startServer({
           : undefined;
       const eventDecision =
         attemptCount > 0
-          ? { ...decision, retryAttemptIndex: attemptCount }
+          ? {
+              ...decision,
+              retryAttemptIndex: attemptCount,
+              retryMaxAttempts:
+                run.retryMaxAttempts ?? decision.retryMaxAttempts,
+              retryStrategy: run.retryStrategy ?? decision.retryStrategy,
+            }
           : decision;
       // A successful retry has no current failure classification or error code.
       // Fall back to the failure that caused attempt 0 to be retried so success
@@ -5550,6 +5657,72 @@ export async function startServer({
         ...runSideEffectsForRun(run),
         cancelRequested: !!run.cancelRequested,
       };
+      const liveSessionId = agentResumeCtx.isResuming
+        ? agentResumeCtx.resumeSessionId
+        : agentCapturesSessionId
+          ? capturedSessionId
+          : agentResumeCtx.newSessionId;
+      const postToolResumeDecision = decidePostToolResumeRecovery({
+        result,
+        failure,
+        continuationAttemptCount:
+          run.nativeSessionContinueAttemptCount ?? 0,
+        totalRetryAttemptCount: run.retryAttemptCount ?? 0,
+        sideEffects,
+        supportsNativeSessionContinue: def.resumesSessionViaCli === true,
+        hasNativeSession: !!run.conversationId && !!liveSessionId,
+      });
+      if (
+        postToolResumeDecision?.shouldRetry &&
+        !design.runs.isTerminal(run.status) &&
+        run.conversationId &&
+        liveSessionId
+      ) {
+        run.retryOriginalFailure ??= failure ?? undefined;
+        run.retryOriginFailure = failure ? { ...failure } : null;
+        run.retryOriginErrorCode = errorCode ?? null;
+        run.retryAttemptCount = postToolResumeDecision.retryAttemptIndex;
+        run.nativeSessionContinueAttemptCount =
+          (run.nativeSessionContinueAttemptCount ?? 0) + 1;
+        run.retryMaxAttempts = postToolResumeDecision.retryMaxAttempts;
+        run.retryStrategy = postToolResumeDecision.retryStrategy;
+        run.retryFinalResult = undefined;
+        run.retrySuppressedReason = undefined;
+        upsertAgentSession(db, {
+          conversationId: run.conversationId,
+          agentId: def.id,
+          sessionId: liveSessionId,
+          stablePromptHash: currentStableHash,
+          stablePromptSections: currentStableSectionsJson,
+          model: safeModel ?? null,
+          cwd: effectiveCwd,
+          lastMessageId: run.assistantMessageId ?? null,
+        });
+        run.nativeSessionRecovery = markNativeSessionCaptured({
+          previous: run.nativeSessionRecovery,
+          agentId: def.id,
+          sessionId: liveSessionId,
+          resumed: agentResumeCtx.isResuming,
+        });
+        publishNativeSessionRecoveryMetadata();
+        design.runs.emit(run, 'run_retry_attempted', {
+          ...retryAnalyticsBase(postToolResumeDecision, failure, errorCode),
+          retry_reason: postToolResumeDecision.retryReason,
+          retry_delay_ms: postToolResumeDecision.retryDelayMs,
+        });
+        run.nativeSessionContinuePending = {
+          sessionId: liveSessionId,
+          stablePromptHash: currentStableHash,
+          stablePromptSections: currentStableSections,
+        };
+        scheduleRetryRestart(postToolResumeDecision.retryDelayMs, {
+          ...chatBody,
+          message: POST_TOOL_RESUME_CONTINUATION_PROMPT,
+          currentPrompt: POST_TOOL_RESUME_CONTINUATION_PROMPT,
+          titleGeneration: undefined,
+        });
+        return true;
+      }
       const decision = decideSafeRunRetry({
         result,
         failure,
@@ -5563,6 +5736,8 @@ export async function startServer({
           run.retryOriginErrorCode = errorCode ?? null;
         }
         run.retryAttemptCount = decision.retryAttemptIndex;
+        run.retryMaxAttempts = decision.retryMaxAttempts;
+        run.retryStrategy = decision.retryStrategy;
         run.retryFinalResult = undefined;
         run.retrySuppressedReason = undefined;
         design.runs.emit(run, 'run_retry_attempted', {
@@ -5602,11 +5777,6 @@ export async function startServer({
         sideEffects.artifactWriteSeen ||
         sideEffects.liveArtifactSeen
       );
-      const liveSessionId = agentResumeCtx.isResuming
-        ? agentResumeCtx.resumeSessionId
-        : agentCapturesSessionId
-          ? capturedSessionId
-          : agentResumeCtx.newSessionId;
       const resumableFailure =
         result === 'failed' &&
         def.resumesSessionViaCli === true &&
@@ -5621,6 +5791,7 @@ export async function startServer({
       // failure type + fix. Only meaningful on a failed result.
       run.failureCategory = result === 'failed' ? failure?.failure_category ?? null : null;
       run.failureDetail = result === 'failed' ? failure?.failure_detail ?? null : null;
+      run.failureAction = result === 'failed' ? failure?.user_action ?? null : null;
       // Stamp the classification onto the persisted assistant message too, so a
       // reload (or any daemon-side persistence without the live web error
       // handler) keeps the specific failure guidance instead of the coarse
@@ -6129,6 +6300,10 @@ export async function startServer({
           promptFilePath: promptFile?.path,
           resumeSessionId: agentResumeCtx.resumeSessionId,
           newSessionId: agentResumeCtx.newSessionId,
+          disablePlugins:
+            def.id === 'codex'
+            && run.externalPluginAnalytics?.externalPluginId
+              === OPEN_DESIGN_PLUGIN_ID,
         },
       );
     } catch (err) {
@@ -6593,7 +6768,11 @@ export async function startServer({
           agentId: def.id,
           runId: run.id,
           conversationId: run.conversationId,
-          runAttempt: run.retryAttemptCount ?? 0,
+          runAttempt: openDesignAmrRunAttempt({
+            retryAttemptCount: run.retryAttemptCount,
+            manualResumeAttemptCount: run.manualResumeAttemptCount,
+          }),
+          externalPluginAnalytics: run.externalPluginAnalytics ?? null,
         }),
         // OpenCode external-MCP injection (issue #2142). Layered AFTER
         // spawnEnvForAgent / odMediaEnv / configuredAgentEnv so the
@@ -6746,12 +6925,9 @@ export async function startServer({
       // mini extraction in the background just because the user has
       // an OpenAI key parked in media-config.
       //
-      // Also normalize the BYOK provider shape: web side sends
-      // `{ protocol, ... }` via the chat body as `byokProvider`,
-      // but memory-llm.pickProvider expects `{ provider, ... }`
-      // with `provider` being a PROVIDER_DEFAULTS key. We apply the
-      // same mapping the web pre-turn path does (ProjectView.tsx
-      // constructs `{ provider: byokOpenCodeProvider.protocol, ... }`).
+      // Normalize the spawn-resolved BYOK profile shape for the memory
+      // extractor. The raw secret never entered the persisted run body; it is
+      // held only by this run closure while the child is alive.
       const memoryChatProvider: {
         provider?: string;
         apiKey?: string;
@@ -6759,14 +6935,14 @@ export async function startServer({
         apiVersion?: string;
         model?: string;
         requiresApiKey?: boolean;
-      } | null = byokProvider
+      } | null = resolvedByokCredential
         ? {
-            provider: (byokProvider as { protocol?: string }).protocol ?? undefined,
-            apiKey: (byokProvider as { apiKey?: string }).apiKey,
-            baseUrl: (byokProvider as { baseUrl?: string }).baseUrl,
-            apiVersion: (byokProvider as { apiVersion?: string }).apiVersion,
-            model: (byokProvider as { model?: string }).model,
-            requiresApiKey: (byokProvider as { requiresApiKey?: boolean }).requiresApiKey,
+            provider: resolvedByokCredential.profile.protocol,
+            apiKey: resolvedByokCredential.apiKey,
+            baseUrl: resolvedByokCredential.profile.baseUrl,
+            apiVersion: resolvedByokCredential.profile.apiVersion,
+            model: resolvedByokCredential.profile.model,
+            requiresApiKey: resolvedByokCredential.profile.requiresApiKey,
           }
         : null;
       const memoryOptions = {
@@ -7545,6 +7721,7 @@ export async function startServer({
         mcpServers,
         envFormat: def.acpMcpEnvFormat ?? 'array',
         executionProfile,
+        completePromptOnTurnEnd: def.acpTurnEndCompletesPrompt === true,
         ...(def.id === 'amr' ? { modelUnavailableErrorCode: 'AMR_MODEL_UNAVAILABLE' } : {}),
         // Resume the prior upstream session (drives `session/load`) when the
         // resume-identity guard says it is safe; otherwise a fresh session/new.
@@ -8483,6 +8660,7 @@ export async function startServer({
     paths: { PROJECTS_DIR, RUNTIME_DATA_DIR },
     agents: { detectAgents, getAgentDef },
     chat: { startChatRun },
+    byokCredentials: byokCredentialService,
     lifecycle: { isDaemonShuttingDown: () => daemonShuttingDown },
     plugins: {
       connectorService,
@@ -8901,6 +9079,7 @@ export async function startServer({
     finalize: finalizeDeps,
     handoff: handoffDeps,
     chat: { startChatRun },
+    byokCredentials: byokCredentialService,
     messages: {
       pinAssistantMessageOnRunCreate,
       reconcileAssistantMessageOnRunEnd,

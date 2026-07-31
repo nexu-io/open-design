@@ -64,6 +64,18 @@ multi-file groups accumulate carry-over — but only the full pool exercises the
 whole suite interleaved with mid-file shards, so treat it as the acceptance
 gate. New and repaired UI tests must hold the following invariants.
 
+The merge-gated `workspace-restoration` group also runs fully-parallel across
+its two worker-isolated tools-dev runtimes. Its cases must remain independent
+within the file as well as across files.
+
+- **Keep browser witnesses at cross-layer boundaries.** Before adding a UI
+  case, identify which assertions already belong to component or runtime tests
+  and which transition uniquely requires the running browser product. Extend
+  an existing browser workflow when it already owns the same project,
+  conversation, file, or retry setup; do not repeat that full setup only to
+  reassert a lower-layer state invariant. Retain one browser witness for each
+  distinct cross-layer transition, and keep its narrower ownership tests
+  explicit enough that future consolidation does not weaken coverage.
 - **Order independence is the contract.** Each test performs its own complete
   setup — whatever that file's model requires — and never relies on a
   predecessor's side effects; any contiguous subset of the suite must pass

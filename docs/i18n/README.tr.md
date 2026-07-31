@@ -1,7 +1,5 @@
 <h1 align="center">Open Design: Açık kaynaklı Claude Design alternatifi</h1>
 
-> 🔥 **Open Design 0.13.0 — _Stay in Flow_ burada.** Uzun tasarım oturumları eskiden her kesintide bozulurdu — bir çalıştırma yerini kaybederdi, model seçici tahmin yürütmenize yol açardı, bir dışa aktarma bir sapma daha gerektirirdi. 0.13.0 oturumu canlı tutar: Codex / OpenCode / Pi / Open Design Cloud çalıştırmalarını turlar boyunca sürdürün, doğru modeli daha hızlı seçin ve ekran görüntüsüyle desteklenen PPTX / PDF dosyalarını uygulamadan çıkmadan teslim edin. [0.13.0'ı indir](https://github.com/nexu-io/open-design/releases) · [Sürüm notları](https://github.com/nexu-io/open-design/releases/tag/open-design-v0.13.0)
->
 > ⚡ **Open Design Cloud — resmî model servisi.** Tek bir yüklemeyle GPT, Claude, Gemini ve DeepSeek'i doğrudan Open Design içinde kullanın: 20+ amiral gemisi model, sıfır yapılandırma, gerçek token kullanımına göre faturalandırma. [Open Design Cloud'yi dene](https://open-design.ai/cloud/)
 >
 > 🏅 **Open Design Fellow programı artık açık.** Siz de tasarımın açık olması gerektiğine inanıyorsanız — bir Open Design Fellow olun, ürünü çekirdek ekiple birlikte şekillendirin ve daha fazla insanın tasarımın geleceğini tanımlamaya katılmasına yardımcı olun. Ayrıntılar → [`MAINTAINERS.md`](../../MAINTAINERS.md) ve [Discord](https://discord.gg/mHAjSMV6gz).
@@ -116,10 +114,10 @@ Bir projenin Studio'su içinde, aynı tasarım sistemi birden çok artifact tür
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | ✅ Destekleniyor | `od mcp install claude` |
 | [Codex CLI](https://github.com/openai/codex) | ✅ Destekleniyor | `od mcp install codex` |
 | [DeepSeek Reasonix](https://github.com/esengine/DeepSeek-Reasonix) | ✅ Destekleniyor | `od mcp install reasonix` |
+| [Raven](https://github.com/EverMind-AI/Raven) | ✅ Destekleniyor | `od mcp install raven` |
 | [Cursor](https://www.cursor.com/cli) | ✅ Destekleniyor | `od mcp install cursor` |
 | [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ Destekleniyor | `od mcp install copilot` |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ Destekleniyor | `od mcp install copilot` |
-| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | ✅ Destekleniyor | `od mcp install gemini` |
 | [OpenCode](https://opencode.ai/) | ✅ Destekleniyor | `od mcp install opencode` |
 | [OpenClaw](https://github.com/openclaw/openclaw) | ✅ Destekleniyor | `od mcp install openclaw` |
 | [Antigravity](https://antigravity.google) | ✅ Destekleniyor | `od mcp install antigravity` |
@@ -304,8 +302,8 @@ Open Design'ı GUI'yi hiç açmadan kullanabilirsiniz — Claude Code, Codex, Cu
 ```bash
 # One-line install into the agent you're using:
 od mcp install <agent>
-# <agent> = claude | codex | cursor | copilot | openclaw | antigravity | gemini
-#         | pi | vibe | hermes | cline | kimi | trae | opencode
+# <agent> = claude | codex | reasonix | raven | cursor | copilot | openclaw | antigravity
+#         | pi | vibe | hermes | cline | kimi | kiro | trae | opencode
 ```
 
 Ardından, ajanın içinde:

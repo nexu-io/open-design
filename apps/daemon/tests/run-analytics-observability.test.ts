@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   scanRunEventsForUsageAnalytics,
   summarizeRunTimingAnalytics,
+  summarizeToolAnalytics,
 } from '../src/run-analytics-observability.js';
 
 describe('scanRunEventsForUsageAnalytics', () => {
@@ -163,11 +164,250 @@ describe('scanRunEventsForUsageAnalytics', () => {
       input_tokens_effective: 31_711,
       output_tokens: 30,
       total_tokens: 31_741,
+      thought_tokens: 20,
       cache_read_input_tokens: 2_560,
       uncached_input_tokens: 29_151,
       cache_token_source: 'openai',
+      token_count_source: 'provider_usage',
     });
     expect(result.cache_hit_ratio).toBeCloseTo(2_560 / 31_711);
+  });
+
+  it('extracts ACP-shaped usage with thought_tokens + cached_read_tokens as provider_usage', () => {
+    const result = scanRunEventsForUsageAnalytics(
+      [
+        {
+          event: 'agent',
+          data: {
+            type: 'usage',
+            usage: {
+              input_tokens: 12_000,
+              output_tokens: 400,
+              cached_read_tokens: 8_000,
+              thought_tokens: 256,
+              total_tokens: 12_656,
+            },
+          },
+        },
+      ],
+      'amr-model',
+      0,
+    );
+
+    expect(result).toMatchObject({
+      input_tokens: 12_000,
+      output_tokens: 400,
+      thought_tokens: 256,
+      total_tokens: 12_656,
+      cache_read_input_tokens: 8_000,
+      token_count_source: 'provider_usage',
+      cache_token_source: 'openai',
+    });
+  });
+
+  it('marks provider_usage when only thought_tokens are present', () => {
+    const result = scanRunEventsForUsageAnalytics(
+      [
+        {
+          event: 'agent',
+          data: {
+            type: 'usage',
+            usage: { thought_tokens: 42 },
+          },
+        },
+      ],
+      '',
+      0,
+    );
+    expect(result.thought_tokens).toBe(42);
+    expect(result.token_count_source).toBe('provider_usage');
+  });
+
+  it('merges a later thought-only usage frame with earlier complete input/output', () => {
+    // ACP runtimes can emit a complete usage frame, then a trailing partial
+    // frame with only thought_tokens (or cache counters). Reverse-scan must
+    // keep the complete fields and layer the later thought tokens on top.
+    const result = scanRunEventsForUsageAnalytics(
+      [
+        {
+          event: 'agent',
+          data: {
+            type: 'usage',
+            usage: {
+              input_tokens: 12_000,
+              output_tokens: 400,
+              total_tokens: 12_400,
+            },
+          },
+        },
+        {
+          event: 'agent',
+          data: {
+            type: 'usage',
+            usage: { thought_tokens: 256 },
+          },
+        },
+      ],
+      'amr-model',
+      0,
+    );
+
+    expect(result).toMatchObject({
+      input_tokens: 12_000,
+      output_tokens: 400,
+      total_tokens: 12_400,
+      thought_tokens: 256,
+      token_count_source: 'provider_usage',
+    });
+  });
+
+  it('merges a later cache-only usage frame without dropping earlier input/output', () => {
+    const result = scanRunEventsForUsageAnalytics(
+      [
+        {
+          event: 'agent',
+          data: {
+            type: 'usage',
+            usage: {
+              input_tokens: 1000,
+              output_tokens: 50,
+            },
+          },
+        },
+        {
+          event: 'agent',
+          data: {
+            type: 'usage',
+            usage: {
+              cache_read_input_tokens: 250,
+              cache_creation_input_tokens: 100,
+            },
+          },
+        },
+      ],
+      '',
+      0,
+    );
+
+    expect(result).toMatchObject({
+      input_tokens: 1000,
+      output_tokens: 50,
+      cache_read_input_tokens: 250,
+      cache_creation_input_tokens: 100,
+      cache_token_source: 'anthropic',
+      token_count_source: 'provider_usage',
+    });
+  });
+
+  it('merges earlier cache counters when a later frame already has input and output', () => {
+    // Inverse of the trailing cache-only case: providers may emit cache on an
+    // earlier frame and a complete input/output pair later. Reverse-scan must
+    // keep walking after primary is filled so cache_read/cache_creation still merge.
+    const result = scanRunEventsForUsageAnalytics(
+      [
+        {
+          event: 'agent',
+          data: {
+            type: 'usage',
+            usage: {
+              cache_read_input_tokens: 250,
+              cache_creation_input_tokens: 100,
+            },
+          },
+        },
+        {
+          event: 'agent',
+          data: {
+            type: 'usage',
+            usage: {
+              input_tokens: 1000,
+              output_tokens: 50,
+              total_tokens: 1050,
+            },
+          },
+        },
+      ],
+      '',
+      0,
+    );
+
+    expect(result).toMatchObject({
+      input_tokens: 1000,
+      output_tokens: 50,
+      total_tokens: 1050,
+      cache_read_input_tokens: 250,
+      cache_creation_input_tokens: 100,
+      cache_token_source: 'anthropic',
+      token_count_source: 'provider_usage',
+    });
+  });
+
+  it('merges a later output-only usage frame with earlier input and cache fields', () => {
+    // A trailing frame with only output_tokens must not freeze the reverse
+    // scan: earlier input/cache counters still need to merge into run_finished.
+    const result = scanRunEventsForUsageAnalytics(
+      [
+        {
+          event: 'agent',
+          data: {
+            type: 'usage',
+            usage: {
+              input_tokens: 8_000,
+              cache_read_input_tokens: 2_000,
+              cache_creation_input_tokens: 500,
+            },
+          },
+        },
+        {
+          event: 'agent',
+          data: {
+            type: 'usage',
+            usage: { output_tokens: 120 },
+          },
+        },
+      ],
+      'amr-model',
+      0,
+    );
+
+    expect(result).toMatchObject({
+      input_tokens: 8_000,
+      output_tokens: 120,
+      cache_read_input_tokens: 2_000,
+      cache_creation_input_tokens: 500,
+      cache_token_source: 'anthropic',
+      token_count_source: 'provider_usage',
+    });
+  });
+
+  it('merges a later input-only usage frame with earlier output tokens', () => {
+    const result = scanRunEventsForUsageAnalytics(
+      [
+        {
+          event: 'agent',
+          data: {
+            type: 'usage',
+            usage: { output_tokens: 90, total_tokens: 4_090 },
+          },
+        },
+        {
+          event: 'agent',
+          data: {
+            type: 'usage',
+            usage: { input_tokens: 4_000 },
+          },
+        },
+      ],
+      '',
+      0,
+    );
+
+    expect(result).toMatchObject({
+      input_tokens: 4_000,
+      output_tokens: 90,
+      total_tokens: 4_090,
+      token_count_source: 'provider_usage',
+    });
   });
 
   it('normalizes additive Responses-API / ACP usage where cache_read exceeds input_tokens', () => {
@@ -728,7 +968,8 @@ describe('scanRunEventsForUsageAnalytics', () => {
     expect(result).toEqual({
       total_tokens: 345,
       cache_token_source: 'unavailable',
-      token_count_source: 'unknown',
+      // Any real provider token field (including total-only) is provider_usage.
+      token_count_source: 'provider_usage',
       agent_reported_model: null,
     });
   });
@@ -768,7 +1009,7 @@ describe('scanRunEventsForUsageAnalytics', () => {
     expect(result.cache_hit_ratio).toBeCloseTo(120 / 650);
   });
 
-  it('preserves unknown token source when only cache-adjacent aliases exist without concrete input totals', () => {
+  it('marks provider_usage when only cache-adjacent aliases exist without concrete input totals', () => {
     const result = scanRunEventsForUsageAnalytics(
       [
         {
@@ -790,7 +1031,7 @@ describe('scanRunEventsForUsageAnalytics', () => {
       cache_read_input_tokens: 33,
       cache_creation_input_tokens: 7,
       cache_token_source: 'openai',
-      token_count_source: 'unknown',
+      token_count_source: 'provider_usage',
       agent_reported_model: null,
     });
   });
@@ -1029,5 +1270,204 @@ describe('summarizeRunTimingAnalytics', () => {
     expect(result.time_to_first_token_ms).toBeUndefined();
     expect(result.last_observed_phase).toBe('tool_execution');
     expect(result.attempt_terminal_phase).toBe('tool_execution');
+  });
+
+  it('counts unique tool_use ids for tool_call_count (duplicate ids do not inflate)', () => {
+    const result = summarizeRunTimingAnalytics({
+      runCreatedAt: 1_000,
+      runUpdatedAt: 5_000,
+      analyticsCapturedAt: 5_010,
+      telemetry: {
+        startChatRunStartedAt: 1_100,
+      },
+      events: [
+        {
+          id: 1,
+          event: 'agent',
+          timestamp: 2_000,
+          data: { type: 'tool_use', id: 'dup-1', name: 'Read' },
+        },
+        {
+          id: 2,
+          event: 'agent',
+          timestamp: 2_100,
+          data: {
+            type: 'tool_use',
+            id: 'dup-1',
+            name: 'Read',
+            input: { file_path: 'late.html' },
+          },
+        },
+        {
+          id: 3,
+          event: 'agent',
+          timestamp: 2_500,
+          data: { type: 'tool_result', toolUseId: 'dup-1' },
+        },
+        {
+          id: 4,
+          event: 'agent',
+          timestamp: 3_000,
+          data: { type: 'tool_use', id: 'other', name: 'Bash' },
+        },
+        {
+          id: 5,
+          event: 'agent',
+          timestamp: 3_200,
+          data: { type: 'tool_result', toolUseId: 'other' },
+        },
+      ],
+    });
+
+    expect(result.tool_call_count).toBe(2);
+    // Duration pairs from first tool_use timestamp, not the duplicate.
+    expect(result.tool_duration_ms).toBe(500 + 200);
+  });
+
+  it('prefers tool_use.startedAt over event timestamp for tool duration', () => {
+    const result = summarizeRunTimingAnalytics({
+      runCreatedAt: 1_000,
+      runUpdatedAt: 10_000,
+      analyticsCapturedAt: 10_010,
+      telemetry: {
+        startChatRunStartedAt: 1_100,
+      },
+      events: [
+        {
+          id: 1,
+          event: 'agent',
+          // Event log time is late (terminal emit); startedAt is first frame.
+          timestamp: 5_000,
+          data: {
+            type: 'tool_use',
+            id: 'acp-1',
+            name: 'Bash',
+            startedAt: 2_000,
+          },
+        },
+        {
+          id: 2,
+          event: 'agent',
+          timestamp: 5_500,
+          data: { type: 'tool_result', toolUseId: 'acp-1' },
+        },
+      ],
+    });
+
+    expect(result.tool_call_count).toBe(1);
+    // 5500 (result) - 2000 (startedAt) = 3500, not 5500 - 5000 = 500.
+    expect(result.tool_duration_ms).toBe(3_500);
+  });
+});
+
+describe('summarizeToolAnalytics', () => {
+  it('counts unique canonical families and unique tool_result errors', () => {
+    const result = summarizeToolAnalytics([
+      {
+        event: 'agent',
+        data: { type: 'tool_use', id: 't1', name: 'Read' },
+      },
+      {
+        event: 'agent',
+        data: { type: 'tool_result', toolUseId: 't1', isError: false },
+      },
+      {
+        event: 'agent',
+        data: { type: 'tool_use', id: 't2', name: 'Bash' },
+      },
+      {
+        event: 'agent',
+        data: { type: 'tool_result', toolUseId: 't2', isError: true },
+      },
+      {
+        event: 'agent',
+        data: { type: 'tool_use', id: 't3', name: 'Read' },
+      },
+      {
+        event: 'agent',
+        data: { type: 'tool_result', toolUseId: 't3', isError: true },
+      },
+      // Duplicate tool_use id must not inflate unique names.
+      {
+        event: 'agent',
+        data: { type: 'tool_use', id: 't1', name: 'Read' },
+      },
+      // Duplicate error result frames for the same toolUseId must not inflate.
+      {
+        event: 'agent',
+        data: { type: 'tool_result', toolUseId: 't2', isError: true },
+      },
+    ]);
+
+    expect(result.tool_error_count).toBe(2);
+    expect(result.tool_name_count).toBe(2);
+    // Allowlist order: Read before Bash.
+    expect(result.tool_names).toEqual(['Read', 'Bash']);
+    expect(result.tool_names_csv).toBe('Read,Bash');
+  });
+
+  it('canonicalizes arbitrary ACP names and never ships raw free-text', () => {
+    const result = summarizeToolAnalytics([
+      {
+        event: 'agent',
+        data: { type: 'tool_use', id: 'a', name: 'MultiEdit' },
+      },
+      {
+        event: 'agent',
+        data: { type: 'tool_use', id: 'b', name: 'web_fetch' },
+      },
+      {
+        event: 'agent',
+        data: { type: 'tool_use', id: 'c', name: 'Glob' },
+      },
+      {
+        event: 'agent',
+        data: { type: 'tool_use', id: 'd', name: 'mcp__custom__do_thing' },
+      },
+      {
+        event: 'agent',
+        data: { type: 'tool_use', id: 'e', name: '/Users/secret/path.ts' },
+      },
+      {
+        event: 'agent',
+        data: { type: 'tool_use', id: 'f', name: 'https://evil.example/x' },
+      },
+      {
+        event: 'agent',
+        data: { type: 'tool_use', id: 'g', name: 'read' },
+      },
+    ]);
+
+    // MultiEdit→Edit, web_fetch→Fetch, Glob→Search, mcp/path/url → other,
+    // read→Read. Allowlist order; other last.
+    expect(result.tool_names).toEqual(['Edit', 'Read', 'Search', 'Fetch', 'other']);
+    expect(result.tool_name_count).toBe(5);
+    expect(result.tool_names_csv).toBe('Edit,Read,Search,Fetch,other');
+    expect(result.tool_names.every((n) => !n.includes('/') && !n.includes('://'))).toBe(
+      true,
+    );
+  });
+
+  it('maps unknown raw names to other (bounded family set, not 25 raw names)', () => {
+    const events = Array.from({ length: 30 }, (_, i) => ({
+      event: 'agent' as const,
+      data: { type: 'tool_use', id: `id-${i}`, name: `Tool${i}` },
+    }));
+    const result = summarizeToolAnalytics(events);
+    // All ToolN collapse to `other` (not the Tool family — ToolN ≠ Tool).
+    expect(result.tool_name_count).toBe(1);
+    expect(result.tool_names).toEqual(['other']);
+    expect(result.tool_names_csv).toBe('other');
+  });
+
+  it('aliases case-insensitive known families including Tool', () => {
+    const result = summarizeToolAnalytics([
+      { event: 'agent', data: { type: 'tool_use', id: '1', name: 'WRITE' } },
+      { event: 'agent', data: { type: 'tool_use', id: '2', name: 'tool' } },
+      { event: 'agent', data: { type: 'tool_use', id: '3', name: 'Shell' } },
+      { event: 'agent', data: { type: 'tool_use', id: '4', name: 'WebFetch' } },
+    ]);
+    expect(result.tool_names).toEqual(['Write', 'Bash', 'Fetch', 'Tool']);
+    expect(result.tool_name_count).toBe(4);
   });
 });

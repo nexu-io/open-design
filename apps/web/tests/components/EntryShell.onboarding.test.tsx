@@ -5,7 +5,11 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EntryShell } from '../../src/components/EntryShell';
-import { AMR_LOGIN_TIMEOUT_MS } from '../../src/components/amrLoginPolling';
+import {
+  AMR_LOGIN_POLL_INTERVAL_MS,
+  AMR_LOGIN_STATUS_EVENT,
+  AMR_LOGIN_TIMEOUT_MS,
+} from '../../src/components/amrLoginPolling';
 import { I18nProvider } from '../../src/i18n';
 import type { AgentInfo, AppConfig } from '../../src/types';
 import { setHomeHeroPrompt } from '../helpers/home-hero-lexical';
@@ -116,6 +120,19 @@ function renderOnboarding(
     onRenameProject: vi.fn(),
     onChangeDefaultDesignSystem: vi.fn(),
     onPersistComposioKey: vi.fn(),
+    onPersistByokCredential: vi.fn(async (input) => ({
+      id: input.id ?? 'byok-onboarding-test',
+      label: input.label,
+      protocol: input.protocol,
+      baseUrl: input.baseUrl,
+      model: input.model,
+      apiVersion: input.apiVersion,
+      requiresApiKey: input.requiresApiKey ?? true,
+      configured: true,
+      keyTail: input.apiKey?.slice(-4),
+      createdAt: 1,
+      updatedAt: 1,
+    })),
     onOpenSettings: vi.fn(),
     onCompleteOnboarding: vi.fn(),
     ...overrides,
@@ -789,7 +806,7 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     expect(screen.queryByText('Signing in…')).toBeNull();
   });
 
-  it('clears AMR login pending when the cloud sign-in is canceled', async () => {
+  it('clears AMR login pending when canceled and allows a fresh sign-in attempt', async () => {
     const fetchMock = vi.fn(async (input, init) => {
       const url = String(input);
       if (url.endsWith('/api/integrations/vela/status')) {
@@ -820,10 +837,115 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     });
     expect(cloudButton.hasAttribute('disabled')).toBe(false);
     expect(screen.getByRole('button', { name: /Local coding agent/i })).toBeTruthy();
+
+    fireEvent.click(cloudButton);
+    await act(async () => {});
+    expect(screen.getByText('Signing in…')).toBeTruthy();
+    const loginCalls = fetchMock.mock.calls.filter(
+      ([input, init]) =>
+        String(input).endsWith('/api/integrations/vela/login') && init?.method === 'POST',
+    );
+    expect(loginCalls).toHaveLength(2);
+  });
+
+  it('preserves a pre-start cancel when the status refresh rejects', async () => {
+    const canonicalAuthAttemptId = '22222222-2222-4222-8222-222222222222';
+    const newerAuthAttemptId = '33333333-3333-4333-8333-333333333333';
+    let releaseLogin!: (response: Response) => void;
+    const heldLoginResponse = new Promise<Response>((resolve) => {
+      releaseLogin = resolve;
+    });
+    let statusCalls = 0;
+    const cancelAttemptIds: string[] = [];
+    const statusEvents: string[] = [];
+    const onStatusEvent = ((event: CustomEvent) => {
+      statusEvents.push(event.detail?.reason);
+    }) as EventListener;
+    window.addEventListener(AMR_LOGIN_STATUS_EVENT, onStatusEvent);
+    const fetchMock = vi.fn(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/api/integrations/vela/status')) {
+        statusCalls += 1;
+        if (cancelAttemptIds.length === 1) {
+          throw new Error('status unavailable');
+        }
+        const newerAttemptVisible = cancelAttemptIds.length >= 2;
+        return jsonResponse({
+          loggedIn: false,
+          loginInFlight: newerAttemptVisible,
+          authAttemptId: newerAttemptVisible ? newerAuthAttemptId : undefined,
+          profile: 'prod',
+          user: null,
+          configPath: '/x',
+        });
+      }
+      if (url.endsWith('/api/integrations/vela/login') && init?.method === 'POST') {
+        return heldLoginResponse;
+      }
+      if (url.endsWith('/api/integrations/vela/login/cancel') && init?.method === 'POST') {
+        const body = JSON.parse(String(init.body)) as { authAttemptId: string };
+        cancelAttemptIds.push(body.authAttemptId);
+        return jsonResponse({ canceled: false, pids: [] });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+    renderOnboarding();
+
+    const signIn = await findCloudSignInButton();
+    vi.useFakeTimers();
+    fireEvent.click(signIn);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/integrations/vela/login',
+      expect.objectContaining({ method: 'POST' }),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Cancel sign-in/i }));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(cancelAttemptIds).toHaveLength(1);
+    const statusCallsAfterEarlyCancel = statusCalls;
+
+    releaseLogin(jsonResponse({
+      pid: 123,
+      authAttemptId: canonicalAuthAttemptId,
+    }, 202));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await vi.advanceTimersByTimeAsync(AMR_LOGIN_POLL_INTERVAL_MS);
+    window.removeEventListener(AMR_LOGIN_STATUS_EVENT, onStatusEvent);
+
+    expect(cancelAttemptIds).toEqual([
+      expect.stringMatching(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+      ),
+      canonicalAuthAttemptId,
+    ]);
+    expect(statusCalls).toBeGreaterThan(statusCallsAfterEarlyCancel + 1);
+    expect(screen.getByText('Signing in…')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Cancel sign-in/i })).toBeTruthy();
+    expect(statusEvents).not.toContain('login-canceled');
+    expect(analyticsMocks.track).not.toHaveBeenCalledWith(
+      'amr_auth_result',
+      expect.objectContaining({ result: 'cancelled' }),
+      expect.anything(),
+    );
   });
 
   it('cancels AMR login and re-enables onboarding after the login timeout', async () => {
     let loginStarted = false;
+    let authAttemptId: string | null = null;
     const fetchMock = vi.fn(async (input, init) => {
       const url = String(input);
       if (url.endsWith('/api/integrations/vela/status')) {
@@ -836,10 +958,16 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
         });
       }
       if (url.endsWith('/api/integrations/vela/login') && init?.method === 'POST') {
+        const body = JSON.parse(String(init.body)) as { authAttemptId?: string };
+        authAttemptId = body.authAttemptId ?? null;
+        expect(authAttemptId).toMatch(
+          /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+        );
         loginStarted = true;
-        return jsonResponse({ pid: 123 }, 202);
+        return jsonResponse({ pid: 123, authAttemptId }, 202);
       }
       if (url.endsWith('/api/integrations/vela/login/cancel') && init?.method === 'POST') {
+        expect(JSON.parse(String(init.body))).toEqual({ authAttemptId });
         loginStarted = false;
         return jsonResponse({ canceled: true, pids: [123] });
       }
@@ -870,7 +998,13 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(AMR_LOGIN_TIMEOUT_MS);
     });
-    expect(fetchMock).toHaveBeenCalledWith('/api/integrations/vela/login/cancel', { method: 'POST' });
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/integrations/vela/login/cancel',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ authAttemptId }),
+      }),
+    );
     expect(screen.getByText('Sign-in failed.')).toBeTruthy();
     expect(screen.queryByText('Signing in…')).toBeNull();
     expect(
@@ -1601,6 +1735,12 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
 
     expect(props.onModeChange).toHaveBeenCalledWith('api');
     expect(props.onApiModelChange).toHaveBeenCalledWith('claude-opus-4-8');
+    expect(props.onPersistByokCredential).toHaveBeenCalledWith(expect.objectContaining({
+      protocol: 'anthropic',
+      apiKey: 'test-api-key',
+      baseUrl: 'https://api.anthropic.com',
+      model: 'claude-opus-4-8',
+    }));
     expect(props.onConfigPersist).toHaveBeenCalled();
     await waitFor(() => {
       expect(props.onCompleteOnboarding).toHaveBeenCalledTimes(1);
@@ -1608,10 +1748,13 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     expect((props.onConfigPersist as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0]).toMatchObject({
       mode: 'api',
       apiProtocol: 'anthropic',
-      apiKey: 'test-api-key',
+      apiKey: '',
       baseUrl: 'https://api.anthropic.com',
       model: 'claude-opus-4-8',
       apiProviderBaseUrl: null,
+      byokProfileId: 'byok-onboarding-test',
+      byokCredentialConfigured: true,
+      byokCredentialTail: '-key',
     });
   });
 

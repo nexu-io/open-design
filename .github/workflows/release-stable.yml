@@ -862,7 +862,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $prefix = "${{ steps.win_tools_pack_cache_key.outputs.prefix }}"
-          $keep = 3
+          $keep = 1
           $caches = @(gh cache list --key $prefix --sort created_at --order desc --limit 100 --json id,key,createdAt | ConvertFrom-Json)
           $stale = @($caches | Select-Object -Skip $keep)
           foreach ($cache in $stale) {

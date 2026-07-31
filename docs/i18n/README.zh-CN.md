@@ -1,7 +1,5 @@
 <h1 align="center">Open Design：The open-source Claude Design alternative</h1>
 
-> 🔥 **Open Design 0.13.0 —— _Stay in Flow_ 正式发布。** 过去，长时间的设计会话总在每一次中断时断裂——运行丢失了进度，模型选择器让你只能靠猜，导出还得多绕一道弯。0.13.0 让会话持续存活：跨轮次恢复 Codex / OpenCode / Pi / Open Design Cloud 的运行，更快选中合适的模型，并在不离开应用的情况下交付带截图支撑的 PPTX / PDF。[下载 0.13.0](https://github.com/nexu-io/open-design/releases) · [发布说明](https://github.com/nexu-io/open-design/releases/tag/open-design-v0.13.0)
->
 > ⚡ **Open Design Cloud——官方模型服务。** 一次充值，即可在 Open Design 里直接使用 GPT、Claude、Gemini 与 DeepSeek：20+ 旗舰模型、零配置、按真实 token 用量计费。[立即体验](https://open-design.ai/cloud/)
 >
 > 🏅 **Open Design Fellow 计划正式开放。** 如果你也相信设计应该是开放的，欢迎成为 Open Design Fellow，和核心团队一起打磨产品，让更多人参与并定义设计的未来。详情 → [`MAINTAINERS.md`](../../MAINTAINERS.md) 与 [Discord](https://discord.gg/mHAjSMV6gz)。
@@ -116,10 +114,10 @@ Open Design 是这样一种产物：Anthropic 随 Claude Design 推出的 **Agen
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | ✅ 支持 | `od mcp install claude` |
 | [Codex CLI](https://github.com/openai/codex) | ✅ 支持 | `od mcp install codex` |
 | [DeepSeek Reasonix](https://github.com/esengine/DeepSeek-Reasonix) | ✅ 支持 | `od mcp install reasonix` |
+| [Raven](https://github.com/EverMind-AI/Raven) | ✅ 支持 | `od mcp install raven` |
 | [Cursor](https://www.cursor.com/cli) | ✅ 支持 | `od mcp install cursor` |
 | [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ 支持 | `od mcp install copilot` |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ 支持 | `od mcp install copilot` |
-| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | ✅ 支持 | `od mcp install gemini` |
 | [OpenCode](https://opencode.ai/) | ✅ 支持 | `od mcp install opencode` |
 | [OpenClaw](https://github.com/openclaw/openclaw) | ✅ 支持 | `od mcp install openclaw` |
 | [Antigravity](https://antigravity.google) | ✅ 支持 | `od mcp install antigravity` |
@@ -304,8 +302,8 @@ Open Design (OD) 是开源替代品。同样的循环，同样的工件优先心
 ```bash
 # 一行命令安装到你正在使用的 Agent：
 od mcp install <agent>
-# <agent> = claude | codex | cursor | copilot | openclaw | antigravity | gemini
-#         | pi | vibe | hermes | cline | kimi | trae | opencode
+# <agent> = claude | codex | reasonix | raven | cursor | copilot | openclaw | antigravity
+#         | pi | vibe | hermes | cline | kimi | kiro | trae | opencode
 ```
 
 然后在 Agent 内：

@@ -3,13 +3,13 @@ title: "Open Design 0.13.0: stay in flow"
 date: 2026-07-02
 category: "Product"
 readingTime: 7
-summary: "Tag open-design-v0.13.0 — 116 PRs from 26 contributors in six days. Codename \"Stay in Flow.\" Long design sessions used to break on every interruption: a run lost its place, a model picker made you guess, a Cloud balance check hid behind a retry, a finished deck needed one more export detour. 0.13.0 turns those into a calmer loop — resume the work, see what's happening, pick the right model faster, and hand off real files without leaving Open Design."
+summary: "open-design-v0.13.0 — 116 PRs from 26 contributors in six days. Codename \"Stay in Flow.\" Long design sessions used to break on every interruption: a run lost its place, a model picker made you guess, a Cloud balance check hid behind a retry, a finished deck needed one more export detour. 0.13.0 turns those into a calmer loop — resume the work, see what's happening, pick the right model faster, and hand off real files without leaving Open Design."
 i18n:
   zh:
     title: 'Open Design 0.13.0：保持心流'
-    summary: '标签 open-design-v0.13.0 —— 六天内 26 位贡献者提交了 116 个 PR。代号「保持心流」。长时间的设计会话曾经会在每一次中断时被打断：一次运行会跑丢进度、模型选择器让你只能瞎猜、Cloud 余额检查藏在一次重试背后、做完的演示文稿还要多绕一步才能导出。0.13.0 把这些都变成了一个更从容的循环——恢复工作、看清正在发生什么、更快地选对模型，并且不必离开 Open Design 就能交出真实的文件。'
+    summary: 'open-design-v0.13.0 —— 六天内 26 位贡献者提交了 116 个 PR。代号「保持心流」。长时间的设计会话曾经会在每一次中断时被打断：一次运行会跑丢进度、模型选择器让你只能瞎猜、Cloud 余额检查藏在一次重试背后、做完的演示文稿还要多绕一步才能导出。0.13.0 把这些都变成了一个更从容的循环——恢复工作、看清正在发生什么、更快地选对模型，并且不必离开 Open Design 就能交出真实的文件。'
     bodyHtml: |
-      <p>标签 <code>open-design-v0.13.0</code>，于 2026 年 7 月 2 日发布。<strong>六天内 26 位贡献者提交了 116 个 PR。</strong>代号「保持心流」。过去几次发布教会了 Open Design 为<em>你</em>设计、捕获你的品牌、把货架摆满。这一次讲的是两者之间的节奏：那些曾经会打断一次会话、让下一条提示感觉像是从头再来的小小中断。</p>
+      <p><code>open-design-v0.13.0</code>，于 2026 年 7 月 2 日发布。<strong>六天内 26 位贡献者提交了 116 个 PR。</strong>代号「保持心流」。过去几次发布教会了 Open Design 为<em>你</em>设计、捕获你的品牌、把货架摆满。这一次讲的是两者之间的节奏：那些曾经会打断一次会话、让下一条提示感觉像是从头再来的小小中断。</p>
       <p>想看完整版本，可以查阅 <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.13.0">GitHub 上的发布说明</a>。本文是精简版：底层改了什么、你今天能用它做什么，以及从哪里开始。</p>
 
       <h2>恢复会话，而不是重新搭建它</h2>
@@ -74,9 +74,9 @@ i18n:
       </ul>
   ja:
     title: 'Open Design 0.13.0：フローにとどまる'
-    summary: 'タグ open-design-v0.13.0 — 6日間で26人のコントリビューターから116件のPR。コードネームは「フローにとどまる（Stay in Flow）」。長いデザインセッションは、以前はあらゆる中断でつまずいていました——実行が自分の位置を見失う、モデルピッカーで当てずっぽうを強いられる、Cloud の残高確認がリトライの裏に隠れる、完成したデッキにさらにもう一手間のエクスポート作業が要る。0.13.0 はそれらを、より落ち着いたループへと変えます——作業を再開し、何が起きているかを見て、より速く適切なモデルを選び、Open Design を離れることなく本物のファイルを受け渡せるように。'
+    summary: 'open-design-v0.13.0 — 6日間で26人のコントリビューターから116件のPR。コードネームは「フローにとどまる（Stay in Flow）」。長いデザインセッションは、以前はあらゆる中断でつまずいていました——実行が自分の位置を見失う、モデルピッカーで当てずっぽうを強いられる、Cloud の残高確認がリトライの裏に隠れる、完成したデッキにさらにもう一手間のエクスポート作業が要る。0.13.0 はそれらを、より落ち着いたループへと変えます——作業を再開し、何が起きているかを見て、より速く適切なモデルを選び、Open Design を離れることなく本物のファイルを受け渡せるように。'
     bodyHtml: |
-      <p>タグ <code>open-design-v0.13.0</code>、2026年7月2日にリリース。<strong>6日間で26人のコントリビューターから116件のPR。</strong>コードネームは「フローにとどまる（Stay in Flow）」。ここ数回のリリースは、Open Design にあなたの<em>ために</em>デザインすること、あなたのブランドを捉えること、棚を埋めることを教えてきました。今回はその合間にあるリズムについての話です：セッションを壊し、次のプロンプトを最初からやり直すように感じさせていた、あの小さな中断のことです。</p>
+      <p><code>open-design-v0.13.0</code>、2026年7月2日にリリース。<strong>6日間で26人のコントリビューターから116件のPR。</strong>コードネームは「フローにとどまる（Stay in Flow）」。ここ数回のリリースは、Open Design にあなたの<em>ために</em>デザインすること、あなたのブランドを捉えること、棚を埋めることを教えてきました。今回はその合間にあるリズムについての話です：セッションを壊し、次のプロンプトを最初からやり直すように感じさせていた、あの小さな中断のことです。</p>
       <p>詳細な変更履歴が読みたい方は、<a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.13.0">GitHub のリリースノート</a>にあります。本記事は短縮版です：内部で何が変わったか、今日それで何ができるか、そしてどこから始めればよいか。</p>
 
       <h2>セッションを作り直すのではなく再開する</h2>
@@ -141,9 +141,9 @@ i18n:
       </ul>
   ko:
     title: 'Open Design 0.13.0: 흐름 속에 머물기'
-    summary: '태그 open-design-v0.13.0 — 6일 동안 26명의 기여자가 만든 116개의 PR. 코드명 "흐름 속에 머물기(Stay in Flow)". 긴 디자인 세션은 예전엔 매번 방해받을 때마다 끊겼습니다 — 실행이 자기 위치를 잃고, 모델 선택기 때문에 그저 짐작만 해야 하고, Cloud 잔액 확인은 재시도 뒤에 숨어 있고, 완성된 덱은 내보내려면 한 단계를 더 거쳐야 했죠. 0.13.0은 이것들을 더 차분한 루프로 바꿉니다 — 작업을 재개하고, 무슨 일이 일어나고 있는지 보고, 더 빠르게 올바른 모델을 고르고, Open Design을 떠나지 않고도 실제 파일을 건네줄 수 있게요.'
+    summary: 'open-design-v0.13.0 — 6일 동안 26명의 기여자가 만든 116개의 PR. 코드명 "흐름 속에 머물기(Stay in Flow)". 긴 디자인 세션은 예전엔 매번 방해받을 때마다 끊겼습니다 — 실행이 자기 위치를 잃고, 모델 선택기 때문에 그저 짐작만 해야 하고, Cloud 잔액 확인은 재시도 뒤에 숨어 있고, 완성된 덱은 내보내려면 한 단계를 더 거쳐야 했죠. 0.13.0은 이것들을 더 차분한 루프로 바꿉니다 — 작업을 재개하고, 무슨 일이 일어나고 있는지 보고, 더 빠르게 올바른 모델을 고르고, Open Design을 떠나지 않고도 실제 파일을 건네줄 수 있게요.'
     bodyHtml: |
-      <p>태그 <code>open-design-v0.13.0</code>, 2026년 7월 2일 출시. <strong>6일 동안 26명의 기여자가 만든 116개의 PR.</strong> 코드명 "흐름 속에 머물기(Stay in Flow)". 지난 몇 번의 릴리스는 Open Design에게 당신을 <em>위해</em> 디자인하는 법, 당신의 브랜드를 캡처하는 법, 선반을 채우는 법을 가르쳤습니다. 이번 릴리스는 그 사이의 리듬에 관한 것입니다: 세션을 깨뜨리고 다음 프롬프트가 처음부터 다시 시작하는 것처럼 느껴지게 만들던 그 작은 방해들 말이죠.</p>
+      <p><code>open-design-v0.13.0</code>, 2026년 7월 2일 출시. <strong>6일 동안 26명의 기여자가 만든 116개의 PR.</strong> 코드명 "흐름 속에 머물기(Stay in Flow)". 지난 몇 번의 릴리스는 Open Design에게 당신을 <em>위해</em> 디자인하는 법, 당신의 브랜드를 캡처하는 법, 선반을 채우는 법을 가르쳤습니다. 이번 릴리스는 그 사이의 리듬에 관한 것입니다: 세션을 깨뜨리고 다음 프롬프트가 처음부터 다시 시작하는 것처럼 느껴지게 만들던 그 작은 방해들 말이죠.</p>
       <p>전체 변경 로그가 궁금하다면 <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.13.0">GitHub의 릴리스 노트</a>에 담겨 있습니다. 이 글은 짧은 버전입니다: 내부에서 무엇이 바뀌었는지, 오늘 그것으로 무엇을 할 수 있는지, 그리고 어디서 시작하면 되는지.</p>
 
       <h2>세션을 다시 만드는 대신 재개하기</h2>
@@ -208,9 +208,9 @@ i18n:
       </ul>
   de:
     title: 'Open Design 0.13.0: im Flow bleiben'
-    summary: 'Tag open-design-v0.13.0 — 116 PRs von 26 Mitwirkenden in sechs Tagen. Codename „Im Flow bleiben" (Stay in Flow). Lange Design-Sessions brachen früher bei jeder Unterbrechung ab: Ein Lauf verlor seinen Faden, ein Modell-Picker zwang zum Raten, eine Cloud-Guthabenprüfung versteckte sich hinter einem erneuten Versuch, ein fertiges Deck brauchte noch einen zusätzlichen Export-Umweg. 0.13.0 macht daraus eine ruhigere Schleife — Arbeit fortsetzen, sehen, was passiert, schneller das richtige Modell wählen und echte Dateien übergeben, ohne Open Design zu verlassen.'
+    summary: 'open-design-v0.13.0 — 116 PRs von 26 Mitwirkenden in sechs Tagen. Codename „Im Flow bleiben" (Stay in Flow). Lange Design-Sessions brachen früher bei jeder Unterbrechung ab: Ein Lauf verlor seinen Faden, ein Modell-Picker zwang zum Raten, eine Cloud-Guthabenprüfung versteckte sich hinter einem erneuten Versuch, ein fertiges Deck brauchte noch einen zusätzlichen Export-Umweg. 0.13.0 macht daraus eine ruhigere Schleife — Arbeit fortsetzen, sehen, was passiert, schneller das richtige Modell wählen und echte Dateien übergeben, ohne Open Design zu verlassen.'
     bodyHtml: |
-      <p>Tag <code>open-design-v0.13.0</code>, veröffentlicht am 2. Juli 2026. <strong>116 PRs von 26 Mitwirkenden in sechs Tagen.</strong> Codename „Im Flow bleiben" (Stay in Flow). Die letzten Releases haben Open Design beigebracht, <em>für</em> dich zu gestalten, deine Marke zu erfassen und die Regale zu füllen. Dieses hier dreht sich um den Rhythmus dazwischen: die kleinen Unterbrechungen, die früher eine Session zerstörten und den nächsten Prompt wie einen Neuanfang wirken ließen.</p>
+      <p><code>open-design-v0.13.0</code>, veröffentlicht am 2. Juli 2026. <strong>116 PRs von 26 Mitwirkenden in sechs Tagen.</strong> Codename „Im Flow bleiben" (Stay in Flow). Die letzten Releases haben Open Design beigebracht, <em>für</em> dich zu gestalten, deine Marke zu erfassen und die Regale zu füllen. Dieses hier dreht sich um den Rhythmus dazwischen: die kleinen Unterbrechungen, die früher eine Session zerstörten und den nächsten Prompt wie einen Neuanfang wirken ließen.</p>
       <p>Wenn du das vollständige Änderungsprotokoll willst, findest du es in den <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.13.0">Release Notes auf GitHub</a>. Dieser Beitrag ist die Kurzfassung: was sich unter der Haube geändert hat, was du heute damit machen kannst und wo du anfängst.</p>
 
       <h2>Die Session fortsetzen, statt sie neu aufzubauen</h2>
@@ -275,9 +275,9 @@ i18n:
       </ul>
   fr:
     title: 'Open Design 0.13.0 : rester dans le flow'
-    summary: 'Tag open-design-v0.13.0 — 116 PR de 26 contributeurs en six jours. Nom de code « Rester dans le flow » (Stay in Flow). Les longues sessions de conception cassaient autrefois à chaque interruption : une exécution perdait le fil, un sélecteur de modèle vous forçait à deviner, une vérification du solde Cloud se cachait derrière une nouvelle tentative, un deck terminé nécessitait un détour d''export supplémentaire. La 0.13.0 transforme tout cela en une boucle plus sereine — reprenez le travail, voyez ce qui se passe, choisissez le bon modèle plus vite, et transmettez de vrais fichiers sans quitter Open Design.'
+    summary: 'open-design-v0.13.0 — 116 PR de 26 contributeurs en six jours. Nom de code « Rester dans le flow » (Stay in Flow). Les longues sessions de conception cassaient autrefois à chaque interruption : une exécution perdait le fil, un sélecteur de modèle vous forçait à deviner, une vérification du solde Cloud se cachait derrière une nouvelle tentative, un deck terminé nécessitait un détour d''export supplémentaire. La 0.13.0 transforme tout cela en une boucle plus sereine — reprenez le travail, voyez ce qui se passe, choisissez le bon modèle plus vite, et transmettez de vrais fichiers sans quitter Open Design.'
     bodyHtml: |
-      <p>Tag <code>open-design-v0.13.0</code>, publié le 2 juillet 2026. <strong>116 PR de 26 contributeurs en six jours.</strong> Nom de code « Rester dans le flow » (Stay in Flow). Les dernières versions ont appris à Open Design à concevoir <em>pour</em> vous, à capturer votre marque et à garnir les rayons. Celle-ci parle du rythme entre les deux : les petites interruptions qui cassaient autrefois une session et faisaient sentir le prompt suivant comme un nouveau départ.</p>
+      <p><code>open-design-v0.13.0</code>, publié le 2 juillet 2026. <strong>116 PR de 26 contributeurs en six jours.</strong> Nom de code « Rester dans le flow » (Stay in Flow). Les dernières versions ont appris à Open Design à concevoir <em>pour</em> vous, à capturer votre marque et à garnir les rayons. Celle-ci parle du rythme entre les deux : les petites interruptions qui cassaient autrefois une session et faisaient sentir le prompt suivant comme un nouveau départ.</p>
       <p>Vous voulez le changelog complet ? Il se trouve dans les <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.13.0">notes de version sur GitHub</a>. Cet article est la version courte : ce qui a changé sous le capot, ce que vous pouvez en faire dès aujourd'hui, et par où commencer.</p>
 
       <h2>Reprendre la session plutôt que la reconstruire</h2>
@@ -342,9 +342,9 @@ i18n:
       </ul>
   ru:
     title: 'Open Design 0.13.0: оставаться в потоке'
-    summary: 'Тег open-design-v0.13.0 — 116 PR от 26 контрибьюторов за шесть дней. Кодовое название «Оставаться в потоке» (Stay in Flow). Долгие дизайн-сессии раньше ломались на каждом прерывании: запуск терял своё место, выбор модели заставлял гадать, проверка баланса Cloud пряталась за повторной попыткой, готовая презентация требовала ещё одного обходного шага для экспорта. 0.13.0 превращает всё это в более спокойный цикл — продолжайте работу, видьте, что происходит, быстрее выбирайте нужную модель и передавайте настоящие файлы, не покидая Open Design.'
+    summary: 'open-design-v0.13.0 — 116 PR от 26 контрибьюторов за шесть дней. Кодовое название «Оставаться в потоке» (Stay in Flow). Долгие дизайн-сессии раньше ломались на каждом прерывании: запуск терял своё место, выбор модели заставлял гадать, проверка баланса Cloud пряталась за повторной попыткой, готовая презентация требовала ещё одного обходного шага для экспорта. 0.13.0 превращает всё это в более спокойный цикл — продолжайте работу, видьте, что происходит, быстрее выбирайте нужную модель и передавайте настоящие файлы, не покидая Open Design.'
     bodyHtml: |
-      <p>Тег <code>open-design-v0.13.0</code>, выпущен 2 июля 2026 года. <strong>116 PR от 26 контрибьюторов за шесть дней.</strong> Кодовое название «Оставаться в потоке» (Stay in Flow). Последние несколько релизов научили Open Design проектировать <em>для</em> вас, захватывать ваш бренд и заполнять полки. Этот — о ритме между ними: о мелких прерываниях, которые раньше ломали сессию и заставляли следующий запрос ощущаться как начало с нуля.</p>
+      <p><code>open-design-v0.13.0</code>, выпущен 2 июля 2026 года. <strong>116 PR от 26 контрибьюторов за шесть дней.</strong> Кодовое название «Оставаться в потоке» (Stay in Flow). Последние несколько релизов научили Open Design проектировать <em>для</em> вас, захватывать ваш бренд и заполнять полки. Этот — о ритме между ними: о мелких прерываниях, которые раньше ломали сессию и заставляли следующий запрос ощущаться как начало с нуля.</p>
       <p>Нужен полный список изменений? Он есть в <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.13.0">примечаниях к релизу на GitHub</a>. Этот пост — краткая версия: что изменилось под капотом, что вы можете сделать с этим уже сегодня и с чего начать.</p>
 
       <h2>Возобновить сессию, а не перестраивать её</h2>
@@ -409,9 +409,9 @@ i18n:
       </ul>
   es:
     title: 'Open Design 0.13.0: mantente en el flow'
-    summary: 'Tag open-design-v0.13.0: 116 PRs de 26 colaboradores en seis días. Nombre en clave «Mantente en el flow» (Stay in Flow). Las sesiones largas de diseño solían romperse con cada interrupción: una ejecución perdía su lugar, un selector de modelo te obligaba a adivinar, una comprobación de saldo de Cloud se escondía detrás de un reintento, un deck terminado necesitaba un desvío más para exportarse. La 0.13.0 convierte todo eso en un ciclo más tranquilo: retoma el trabajo, ve qué está pasando, elige el modelo correcto más rápido, y entrega archivos reales sin salir de Open Design.'
+    summary: 'open-design-v0.13.0: 116 PRs de 26 colaboradores en seis días. Nombre en clave «Mantente en el flow» (Stay in Flow). Las sesiones largas de diseño solían romperse con cada interrupción: una ejecución perdía su lugar, un selector de modelo te obligaba a adivinar, una comprobación de saldo de Cloud se escondía detrás de un reintento, un deck terminado necesitaba un desvío más para exportarse. La 0.13.0 convierte todo eso en un ciclo más tranquilo: retoma el trabajo, ve qué está pasando, elige el modelo correcto más rápido, y entrega archivos reales sin salir de Open Design.'
     bodyHtml: |
-      <p>Tag <code>open-design-v0.13.0</code>, publicado el 2 de julio de 2026. <strong>116 PRs de 26 colaboradores en seis días.</strong> Nombre en clave «Mantente en el flow» (Stay in Flow). Las últimas versiones le enseñaron a Open Design a diseñar <em>para</em> ti, capturar tu marca y llenar los estantes. Esta trata sobre el ritmo entre medias: las pequeñas interrupciones que solían romper una sesión y hacer que el siguiente prompt se sintiera como empezar de cero.</p>
+      <p><code>open-design-v0.13.0</code>, publicado el 2 de julio de 2026. <strong>116 PRs de 26 colaboradores en seis días.</strong> Nombre en clave «Mantente en el flow» (Stay in Flow). Las últimas versiones le enseñaron a Open Design a diseñar <em>para</em> ti, capturar tu marca y llenar los estantes. Esta trata sobre el ritmo entre medias: las pequeñas interrupciones que solían romper una sesión y hacer que el siguiente prompt se sintiera como empezar de cero.</p>
       <p>¿Quieres el registro de cambios completo? Está en las <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.13.0">notas de la versión en GitHub</a>. Esta publicación es la versión corta: qué cambió por dentro, qué puedes hacer con ello hoy, y por dónde empezar.</p>
 
       <h2>Retomar la sesión en lugar de reconstruirla</h2>
@@ -476,9 +476,9 @@ i18n:
       </ul>
   pt-br:
     title: 'Open Design 0.13.0: continue no flow'
-    summary: 'Tag open-design-v0.13.0 — 116 PRs de 26 contribuidores em seis dias. Codinome "Continue no flow" (Stay in Flow). Sessões longas de design costumavam quebrar a cada interrupção: uma execução perdia o rumo, um seletor de modelo forçava você a adivinhar, uma verificação de saldo no Cloud se escondia atrás de uma nova tentativa, um deck pronto exigia mais um desvio para exportação. A 0.13.0 transforma tudo isso em um ciclo mais tranquilo — retome o trabalho, veja o que está acontecendo, escolha o modelo certo mais rápido e entregue arquivos reais sem sair do Open Design.'
+    summary: 'open-design-v0.13.0 — 116 PRs de 26 contribuidores em seis dias. Codinome "Continue no flow" (Stay in Flow). Sessões longas de design costumavam quebrar a cada interrupção: uma execução perdia o rumo, um seletor de modelo forçava você a adivinhar, uma verificação de saldo no Cloud se escondia atrás de uma nova tentativa, um deck pronto exigia mais um desvio para exportação. A 0.13.0 transforma tudo isso em um ciclo mais tranquilo — retome o trabalho, veja o que está acontecendo, escolha o modelo certo mais rápido e entregue arquivos reais sem sair do Open Design.'
     bodyHtml: |
-      <p>Tag <code>open-design-v0.13.0</code>, lançada em 2 de julho de 2026. <strong>116 PRs de 26 contribuidores em seis dias.</strong> Codinome "Continue no flow" (Stay in Flow). As últimas versões ensinaram o Open Design a projetar <em>para</em> você, capturar sua marca e abastecer as prateleiras. Esta é sobre o ritmo no meio disso: as pequenas interrupções que costumavam quebrar uma sessão e fazer o próximo prompt parecer um recomeço do zero.</p>
+      <p><code>open-design-v0.13.0</code>, lançada em 2 de julho de 2026. <strong>116 PRs de 26 contribuidores em seis dias.</strong> Codinome "Continue no flow" (Stay in Flow). As últimas versões ensinaram o Open Design a projetar <em>para</em> você, capturar sua marca e abastecer as prateleiras. Esta é sobre o ritmo no meio disso: as pequenas interrupções que costumavam quebrar uma sessão e fazer o próximo prompt parecer um recomeço do zero.</p>
       <p>Quer o changelog completo? Ele está nas <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.13.0">notas de versão no GitHub</a>. Este post é a versão curta: o que mudou por baixo dos panos, o que você pode fazer com isso hoje e por onde começar.</p>
 
       <h2>Retomar a sessão em vez de reconstruí-la</h2>
@@ -543,9 +543,9 @@ i18n:
       </ul>
   it:
     title: 'Open Design 0.13.0: resta nel flow'
-    summary: 'Tag open-design-v0.13.0 — 116 PR da 26 contributori in sei giorni. Nome in codice "Resta nel flow" (Stay in Flow). Le lunghe sessioni di design una volta si interrompevano a ogni interruzione: un''esecuzione perdeva il suo posto, un selettore di modello ti costringeva a indovinare, un controllo del saldo Cloud si nascondeva dietro un nuovo tentativo, un deck finito richiedeva un''altra deviazione per l''esportazione. La 0.13.0 trasforma tutto questo in un ciclo più tranquillo — riprendi il lavoro, vedi cosa sta succedendo, scegli il modello giusto più velocemente, e consegna file reali senza lasciare Open Design.'
+    summary: 'open-design-v0.13.0 — 116 PR da 26 contributori in sei giorni. Nome in codice "Resta nel flow" (Stay in Flow). Le lunghe sessioni di design una volta si interrompevano a ogni interruzione: un''esecuzione perdeva il suo posto, un selettore di modello ti costringeva a indovinare, un controllo del saldo Cloud si nascondeva dietro un nuovo tentativo, un deck finito richiedeva un''altra deviazione per l''esportazione. La 0.13.0 trasforma tutto questo in un ciclo più tranquillo — riprendi il lavoro, vedi cosa sta succedendo, scegli il modello giusto più velocemente, e consegna file reali senza lasciare Open Design.'
     bodyHtml: |
-      <p>Tag <code>open-design-v0.13.0</code>, rilasciato il 2 luglio 2026. <strong>116 PR da 26 contributori in sei giorni.</strong> Nome in codice "Resta nel flow" (Stay in Flow). Le ultime release hanno insegnato a Open Design a progettare <em>per</em> te, catturare il tuo brand e riempire gli scaffali. Questa parla del ritmo che sta nel mezzo: le piccole interruzioni che una volta rompevano una sessione e facevano sentire il prompt successivo come un ricominciare da capo.</p>
+      <p><code>open-design-v0.13.0</code>, rilasciato il 2 luglio 2026. <strong>116 PR da 26 contributori in sei giorni.</strong> Nome in codice "Resta nel flow" (Stay in Flow). Le ultime release hanno insegnato a Open Design a progettare <em>per</em> te, catturare il tuo brand e riempire gli scaffali. Questa parla del ritmo che sta nel mezzo: le piccole interruzioni che una volta rompevano una sessione e facevano sentire il prompt successivo come un ricominciare da capo.</p>
       <p>Vuoi il changelog completo? Lo trovi nelle <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.13.0">note di rilascio su GitHub</a>. Questo post è la versione breve: cosa è cambiato sotto il cofano, cosa puoi farci oggi e da dove iniziare.</p>
 
       <h2>Riprendere la sessione invece di ricostruirla</h2>
@@ -610,9 +610,9 @@ i18n:
       </ul>
   tr:
     title: 'Open Design 0.13.0: akışta kalın'
-    summary: 'Etiket open-design-v0.13.0 — altı günde 26 katkıda bulunandan 116 PR. Kod adı "Akışta Kalın" (Stay in Flow). Uzun tasarım oturumları eskiden her kesintide bozulurdu: bir çalıştırma yerini kaybederdi, bir model seçici sizi tahmin etmeye zorlardı, bir Cloud bakiye kontrolü bir yeniden deneme arkasına saklanırdı, tamamlanmış bir deste dışa aktarma için bir ek dolambaç gerektirirdi. 0.13.0 bunların hepsini daha sakin bir döngüye dönüştürüyor — işi devam ettirin, neler olduğunu görün, doğru modeli daha hızlı seçin ve Open Design''dan ayrılmadan gerçek dosyalar teslim edin.'
+    summary: 'open-design-v0.13.0 — altı günde 26 katkıda bulunandan 116 PR. Kod adı "Akışta Kalın" (Stay in Flow). Uzun tasarım oturumları eskiden her kesintide bozulurdu: bir çalıştırma yerini kaybederdi, bir model seçici sizi tahmin etmeye zorlardı, bir Cloud bakiye kontrolü bir yeniden deneme arkasına saklanırdı, tamamlanmış bir deste dışa aktarma için bir ek dolambaç gerektirirdi. 0.13.0 bunların hepsini daha sakin bir döngüye dönüştürüyor — işi devam ettirin, neler olduğunu görün, doğru modeli daha hızlı seçin ve Open Design''dan ayrılmadan gerçek dosyalar teslim edin.'
     bodyHtml: |
-      <p>Etiket <code>open-design-v0.13.0</code>, 2 Temmuz 2026'da yayınlandı. <strong>Altı günde 26 katkıda bulunandan 116 PR.</strong> Kod adı "Akışta Kalın" (Stay in Flow). Son birkaç sürüm Open Design'a sizin <em>için</em> tasarlamayı, markanızı yakalamayı ve rafları doldurmayı öğretti. Bu sürüm ise ikisi arasındaki ritimle ilgili: bir oturumu bozan ve bir sonraki istemi baştan başlıyormuş gibi hissettiren o küçük kesintilerle.</p>
+      <p><code>open-design-v0.13.0</code>, 2 Temmuz 2026'da yayınlandı. <strong>Altı günde 26 katkıda bulunandan 116 PR.</strong> Kod adı "Akışta Kalın" (Stay in Flow). Son birkaç sürüm Open Design'a sizin <em>için</em> tasarlamayı, markanızı yakalamayı ve rafları doldurmayı öğretti. Bu sürüm ise ikisi arasındaki ritimle ilgili: bir oturumu bozan ve bir sonraki istemi baştan başlıyormuş gibi hissettiren o küçük kesintilerle.</p>
       <p>Tam değişiklik günlüğünü mü istiyorsunuz? <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.13.0">GitHub'daki sürüm notlarında</a> bulunuyor. Bu yazı kısa versiyon: kaputun altında ne değişti, bununla bugün ne yapabilirsiniz ve nereden başlamalısınız.</p>
 
       <h2>Oturumu yeniden inşa etmek yerine devam ettirmek</h2>
@@ -677,7 +677,7 @@ i18n:
       </ul>
 ---
 
-Tag `open-design-v0.13.0`, published on July 2, 2026. **116 PRs from 26 contributors in six days.** Codename "Stay in Flow." The last few releases taught Open Design to design *for* you, capture your brand, and stock the shelves. This one is about the rhythm in between: the small interruptions that used to break a session and make the next prompt feel like starting over.
+`open-design-v0.13.0`, published on July 2, 2026. **116 PRs from 26 contributors in six days.** Codename "Stay in Flow." The last few releases taught Open Design to design *for* you, capture your brand, and stock the shelves. This one is about the rhythm in between: the small interruptions that used to break a session and make the next prompt feel like starting over.
 
 Want the full changelog? It lives in the [release notes on GitHub](https://github.com/nexu-io/open-design/releases/tag/open-design-v0.13.0). This is the short version: what changed underneath, what you can do with it today, and where to start.
 

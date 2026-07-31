@@ -52,6 +52,93 @@ describe('chat run service shutdown', () => {
     });
   });
 
+  it('reopens the same logical run for an explicit recharge recovery attempt', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-27T00:00:00.000Z'));
+    const runs = createRuns();
+    const run = runs.create({
+      projectId: 'project-1',
+      conversationId: 'conv-1',
+      clientRequestId: 'brief-1-cloud',
+      requestFingerprint: 'same-logical-request',
+      agentId: 'amr',
+    });
+    (run as any).failureAction = 'recharge';
+    runs.emit(run, 'error', {
+      error: {
+        code: 'AMR_INSUFFICIENT_BALANCE',
+        message: 'insufficient balance',
+        retryable: false,
+      },
+    });
+    runs.finish(run, 'failed', 1, null);
+    vi.advanceTimersByTime(12_345);
+
+    const resumed = runs.prepareRestart(run);
+
+    expect(resumed).toBe(run);
+    expect(runs.get(run.id)).toBe(run);
+    expect(runs.statusBody(run)).toMatchObject({
+      id: run.id,
+      clientRequestId: 'brief-1-cloud',
+      status: 'queued',
+      error: null,
+      errorCode: null,
+      failureAction: null,
+    });
+    expect(run.manualResumeAttemptCount).toBe(1);
+    expect(run.rechargeWaitDurationMs).toBe(12_345);
+    expect(run.events.at(-1)).toMatchObject({
+      event: 'run_resume_attempted',
+      data: {
+        runId: run.id,
+        attempt: 1,
+        reason: 'recharge',
+        rechargeWaitDurationMs: 12_345,
+      },
+    });
+    vi.useRealTimers();
+  });
+
+  it('keeps the first accepted plugin attribution immutable across request reuse', () => {
+    const runs = createRuns();
+    const request = {
+      projectId: 'project-1',
+      conversationId: 'conv-1',
+      clientRequestId: 'logical-request-1',
+      requestFingerprint: 'same-logical-request',
+      agentId: 'amr',
+      analyticsHints: {
+        entrySurface: 'external_mcp',
+        hostProduct: 'codex_cli',
+        externalPluginId: 'open-design',
+        externalPluginVersion: '0.4.0',
+        distributionMechanism: 'git_marketplace',
+        publisherClass: 'open_design_first_party',
+        attributionQuality: 'session_correlated',
+        pluginWorkflowId: '018f6f2e-4444-7444-8444-444444444444',
+        logicalRequestDigest: 'a'.repeat(64),
+        logicalRequestDigestVersion: 1,
+        generationSloWindowMs: 45 * 60 * 1000,
+      },
+    };
+    const created = runs.createOrReuse(request);
+    expect(created.kind).toBe('created');
+    const retried = runs.createOrReuse({
+      ...request,
+      analyticsHints: {
+        ...request.analyticsHints,
+        externalPluginVersion: '9.9.9',
+        pluginWorkflowId: '018f6f2e-9999-7999-8999-999999999999',
+      },
+    });
+    expect(retried.kind).toBe('reused');
+    expect(retried.run.externalPluginAnalytics).toMatchObject({
+      externalPluginVersion: '0.4.0',
+      pluginWorkflowId: '018f6f2e-4444-7444-8444-444444444444',
+    });
+  });
+
 
 
   it('ignores subsequent finish attempts after the run reaches a terminal state', async () => {
@@ -785,6 +872,89 @@ describe('run event log persistence', () => {
         completedAt: expect.any(Number),
       },
       langfuseCompletedAt: expect.any(Number),
+    });
+  });
+
+  it('restores the accepted plugin workflow binding from durable run state', () => {
+    const pluginWorkflowId = '018f6f2e-4444-7444-8444-444444444444';
+    const runs = createRunsWithLog(tmpDir);
+    const run = runs.create({
+      projectId: 'p1',
+      conversationId: 'c1',
+      clientRequestId: '018f6f2e-5555-7555-8555-555555555555',
+      requestFingerprint: 'same-logical-request',
+      agentId: 'amr',
+      analyticsHints: {
+        entrySurface: 'external_mcp',
+        hostProduct: 'codex_unknown',
+        externalPluginId: 'open-design',
+        externalPluginVersion: '0.4.0',
+        distributionMechanism: 'git_marketplace',
+        publisherClass: 'open_design_first_party',
+        attributionQuality: 'session_correlated',
+        pluginWorkflowId,
+        logicalRequestDigest: 'a'.repeat(64),
+        logicalRequestDigestVersion: 1,
+        generationSloWindowMs: 45 * 60 * 1000,
+      },
+    });
+    runs.finish(run, 'succeeded', 0, null);
+
+    const restarted = createRunsWithLog(tmpDir);
+    expect(restarted.findByPluginWorkflowId(pluginWorkflowId)).toMatchObject({
+      id: run.id,
+      projectId: 'p1',
+      externalPluginAnalytics: {
+        externalPluginId: 'open-design',
+        pluginWorkflowId,
+        logicalRequestDigest: 'a'.repeat(64),
+      },
+    });
+  });
+
+  it('reuses an interrupted durable request instead of starting it twice after restart', () => {
+    const clientRequestId = '018f6f2e-6666-7666-8666-666666666666';
+    const requestFingerprint = 'same-cloud-request';
+    const beforeRestart = createRunsWithLog(tmpDir);
+    const original = beforeRestart.create({
+      agentId: 'amr',
+      clientRequestId,
+      projectId: 'p1',
+      requestFingerprint,
+    });
+    const statePath = path.join(tmpDir, original.id, 'state.json');
+    const runningState = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+    fs.writeFileSync(
+      statePath,
+      `${JSON.stringify({ ...runningState, status: 'running' })}\n`,
+      'utf8',
+    );
+
+    const afterRestart = createRunsWithLog(tmpDir);
+    const reused = afterRestart.createOrReuse({
+      agentId: 'amr',
+      clientRequestId,
+      projectId: 'p1',
+      requestFingerprint,
+    });
+
+    expect(reused.kind).toBe('reused');
+    expect(reused.run).toMatchObject({
+      id: original.id,
+      status: 'failed',
+      errorCode: 'DAEMON_RESTARTED',
+      error: 'Run interrupted because the daemon restarted.',
+    });
+    expect(reused.run.events.slice(-2)).toMatchObject([
+      { event: 'error', data: { error: { code: 'DAEMON_RESTARTED' } } },
+      { event: 'end', data: { status: 'failed' } },
+    ]);
+    expect(fs.readdirSync(tmpDir)).toEqual([original.id]);
+    expect(JSON.parse(fs.readFileSync(statePath, 'utf8'))).toMatchObject({
+      id: original.id,
+      status: 'failed',
+      errorCode: 'DAEMON_RESTARTED',
+      terminalRecoveryReason: 'daemon_restart',
     });
   });
 

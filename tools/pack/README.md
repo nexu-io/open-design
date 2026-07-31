@@ -131,7 +131,7 @@ Headless mode targets environments without a display (WSL2, headless servers, CI
 
 - `install --headless` writes a shell launcher at `~/.local/bin/open-design-headless-<namespace>` that bakes in the namespace and resource paths. The launcher is self-contained, but the assembled app directory at those paths must remain in place — don't move it after install.
 - `start --headless` spawns the headless process directly, redirects stdout/stderr to `logs/desktop/latest.log`, and waits up to 95s (35s for identity marker + 60s for web URL) before returning.
-- `stop --headless` reads the same `runtime/desktop-root.json` identity marker as the AppImage path, validates `stamp.source === PACKAGED`, sends a graceful SHUTDOWN over IPC, then terminates the process tree. It does not perform the AppImage-specific process-command check.
+- `stop --headless` reads `runtime/headless-root.json` (separate from the AppImage path's `runtime/desktop-root.json`), validates the marker's packaged desktop stamp and namespace root, sends a graceful SHUTDOWN over IPC, then terminates the process tree. The separate marker prevents headless stop/cleanup from claiming a menu-launched AppImage; unlike AppImage stop, it does not perform the AppImage-specific process-command check.
 - `inspect --headless` returns status only. Eval and screenshot require AppImage mode because there is no Electron renderer in headless mode.
 - `uninstall --headless` removes the headless launcher after a safe stop.
 - `cleanup --headless` stops the headless process before removing namespace output/runtime roots.
@@ -164,7 +164,7 @@ AppImages built natively on a rolling distro (e.g., Arch / CachyOS) link against
 
 Verified smoke coverage in this repository currently includes:
 
-- PR lane: Ubuntu GitHub-hosted runner, headless Linux runtime.
+- Main PR CI: packaged Linux smoke is intentionally outside the main CI gate.
 - Release lane: Ubuntu GitHub-hosted runner, containerized AppImage build plus Xvfb AppImage runtime smoke when the Linux release lane is enabled.
 - Manual AppImage behavior used to choose `--appimage-extract-and-run`: Ubuntu 24.04 and Arch Linux.
 
@@ -177,7 +177,7 @@ Linux desktop apps in this space split across formats: VS Code ships `.deb` + `.
 - AppImage signing (`--signed`) — deferred pending a GPG key infrastructure decision and a user-facing verification flow design (no ETA).
 - AppImage auto-update feed (`latest-linux.yml`) — the linux electron-builder config has no `publish` block wired, so a generated feed would point users at a feed that never updates. Tracked alongside signing.
 - Additional package formats: `.deb`, `.rpm`, Snap, Flatpak — deferred until there is demand and an owner for per-distro metadata, signing/store/repository plumbing, install/remove hooks, and release validation.
-- Full Linux AppImage PR smoke remains release-lane only; PR validation runs the Linux headless packaged smoke because it does not require a display server.
+- Full Linux AppImage and headless packaged smoke remain outside the main PR gate; run the applicable tools-pack validation manually or through a release lane when Linux packaging changes.
 
 `--to dmg` is manual-install DMG output only. Any builder-generated updater metadata such as `latest-mac.yml` or
 `.blockmap` files is treated as scratch and cleaned from the builder directory; release-beta generates the authoritative
