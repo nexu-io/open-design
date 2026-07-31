@@ -3571,6 +3571,42 @@ function OnboardingByokSetupPanel({
   const t = useT();
   const running = testState.status === 'running';
   const fetchingModels = modelsState.status === 'running';
+  // A successful connection test hits the real endpoint (Anthropic
+  // /v1/messages) and proves the Base URL is reachable. The models-fetch probe
+  // instead hits a /models listing that many Anthropic-compatible proxies
+  // don't expose, so its `invalid_base_url` result is a false negative. Once
+  // the test has confirmed reachability, suppress that stale "Base URL
+  // invalid/unreachable" message so the panel shows a single, non-contradictory
+  // connection state instead of a green "connected" and a red "unreachable" at
+  // once.
+  const connectionVerified = testState.status === 'done' && testState.result.ok;
+  const suppressModelsBaseUrlError =
+    connectionVerified &&
+    modelsState.status === 'done' &&
+    !modelsState.result.ok &&
+    modelsState.result.kind === 'invalid_base_url';
+  const modelsMessage =
+    modelsState.status === 'done'
+      ? renderOnboardingProviderModelsMessage(t, modelsState.result)
+      : null;
+  const testMessage =
+    testState.status === 'done'
+      ? renderOnboardingProviderTestMessage(t, testState.result, model)
+      : null;
+  // When the connection test and the models probe both fail with the same
+  // reason (e.g. both auth_failed or both invalid_base_url), they render the
+  // exact same red line twice. Collapse that to a single error by dropping the
+  // duplicate models message and keeping the primary connection-test one; if
+  // the two failures differ, both are still shown.
+  const suppressDuplicateModelsError =
+    testState.status === 'done' &&
+    !testState.result.ok &&
+    modelsState.status === 'done' &&
+    !modelsState.result.ok &&
+    modelsMessage !== null &&
+    modelsMessage === testMessage;
+  const suppressModelsMessage =
+    suppressModelsBaseUrlError || suppressDuplicateModelsError;
   return (
     <div className="onboarding-view__setup-panel">
       <div className="onboarding-view__setup-head">
@@ -3678,14 +3714,14 @@ function OnboardingByokSetupPanel({
         <p className="onboarding-view__test-status is-running" role="status">
           {t('settings.fetchModelsRunning')}
         </p>
-      ) : modelsState.status === 'done' ? (
+      ) : modelsState.status === 'done' && !suppressModelsMessage ? (
         <p
           className={`onboarding-view__test-status is-${onboardingProviderModelsVariant(
             modelsState.result,
           )}`}
           role={modelsState.result.ok ? 'status' : 'alert'}
         >
-          {renderOnboardingProviderModelsMessage(t, modelsState.result)}
+          {modelsMessage}
         </p>
       ) : null}
       {testState.status === 'running' ? (
@@ -3699,7 +3735,7 @@ function OnboardingByokSetupPanel({
           )}`}
           role={testState.result.ok ? 'status' : 'alert'}
         >
-          {renderOnboardingProviderTestMessage(t, testState.result, model)}
+          {testMessage}
         </p>
       ) : null}
     </div>
