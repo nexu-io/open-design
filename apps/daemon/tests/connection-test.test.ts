@@ -1374,6 +1374,44 @@ describe('POST /api/test/connection provider mode', () => {
     }
   });
 
+  it('allows loopback providers to return a different model than requested', async () => {
+    // Local routers (e.g. 9Router, LiteLLM, OpenRouter) remap user-facing
+    // model aliases to real backend model IDs. The response `model` field
+    // echoes the resolved backend name, not the alias. This should succeed
+    // as long as the alias exists in the provider's /v1/models listing.
+    const fetchMock = passThroughOrUpstream((url) => {
+      if (url.endsWith('/models')) {
+        return jsonResponse({
+          data: [{ id: 'comboprincipal', object: 'model' }],
+        });
+      }
+      // Return a valid completion whose `model` field differs from the
+      // requested alias — exactly what a router does.
+      return jsonResponse({
+        choices: [
+          { message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' },
+        ],
+        model: 'minimaxai/minimax-m3',
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'openai',
+        baseUrl: 'http://127.0.0.1:1234/v1',
+        apiKey: 'dummy',
+        model: 'comboprincipal',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(true);
+    expect(body.kind).toBe('success');
+  });
+
   it('reports forbidden for internal IPv6 base URLs without calling fetch', async () => {
     for (const blockedBaseUrl of [
       'http://[fd00::1]:1234/v1',

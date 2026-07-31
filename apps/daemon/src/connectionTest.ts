@@ -1580,11 +1580,18 @@ export async function testProviderConnection(
           ),
         };
       }
+      // Skip strict response-model enforcement. For loopback providers,
+      // `validateLocalOpenAiModel` already confirms the requested alias
+      // exists in `/v1/models` before we get here, so an echoed mismatch
+      // only means the router remapped the alias to a real backend
+      // (9Router, LiteLLM, OpenRouter all do this). For api.openai.com
+      // itself, the API never echoes a different model — the strict
+      // check is just dead weight that blocks legitimate local routers.
       const completion = inspectProviderCompletion(
         input.protocol,
         data,
         model,
-        isLoopbackApiHost(validated.parsed.hostname),
+        false,
       );
       if (completion.kind) {
         const detail = redactSecrets(completion.detail ?? '', [input.apiKey]);
