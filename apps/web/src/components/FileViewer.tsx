@@ -7619,7 +7619,7 @@ function HtmlViewer({
   }
   const [inTabPresent, setInTabPresent] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
-  const previewContentWidthCacheKey = `${previewContentWidthCacheBaseKey}:${reloadKey}`;
+  const nextPreviewContentWidthCacheKey = `${previewContentWidthCacheBaseKey}:${reloadKey}`;
   // Set to true permanently once `source` has been populated for the first
   // time. After the first load, we never show the "loading" skeleton again —
   // even if a reload temporarily clears `source` to null (issue #4650).
@@ -7670,6 +7670,23 @@ function HtmlViewer({
   const [commentPreviewCanvasNode, setCommentPreviewCanvasNode] = useState<HTMLDivElement | null>(null);
   // Seed from the cache instead of a cold `null` — see htmlPreviewContentWidthState
   // above. A stale seed still self-corrects once a fresh measurement lands.
+  const previewMeasurementInteractionActive =
+    drawOverlayOpen || boardMode || inspectMode || manualEditMode;
+  const frozenPreviewContentWidthCacheKeyRef = useRef({
+    fileViewportKey,
+    key: nextPreviewContentWidthCacheKey,
+  });
+  if (
+    !previewMeasurementInteractionActive ||
+    frozenPreviewContentWidthCacheKeyRef.current.fileViewportKey !== fileViewportKey
+  ) {
+    frozenPreviewContentWidthCacheKeyRef.current = {
+      fileViewportKey,
+      key: nextPreviewContentWidthCacheKey,
+    };
+  }
+  const previewContentWidthCacheKey =
+    frozenPreviewContentWidthCacheKeyRef.current.key;
   const initialPreviewContentWidthEntry = getPreviewContentWidthCached(previewContentWidthCacheKey);
   const [desktopPreviewContentWidth, setDesktopPreviewContentWidthRaw] = useState<number | null>(
     () => initialPreviewContentWidthEntry?.width ?? null,
@@ -8261,7 +8278,13 @@ function HtmlViewer({
     viewport: previewViewport,
   });
   useEffect(() => {
-    if (previewViewport !== 'desktop' || zoomMode !== 'auto') return;
+    if (
+      previewViewport !== 'desktop' ||
+      zoomMode !== 'auto' ||
+      previewMeasurementInteractionActive
+    ) {
+      return;
+    }
     const nextWidth = boardPreviewCanvasSize?.width;
     const previousWidth = lastAutoFitCanvasWidthRef.current;
     if (typeof nextWidth === 'number' && Number.isFinite(nextWidth)) {
@@ -8293,6 +8316,7 @@ function HtmlViewer({
   }, [
     boardPreviewCanvasSize?.width,
     boardPreviewCanvasSize?.height,
+    previewMeasurementInteractionActive,
     previewViewport,
     scheduleDesktopPreviewContentMeasure,
     zoomMode,

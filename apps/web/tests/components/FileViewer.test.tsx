@@ -6516,6 +6516,65 @@ describe('FileViewer tweaks toolbar', () => {
     expect(screen.getByRole('button', { name: '100%' })).toBeTruthy();
   });
 
+  it.each([
+    ['Comment', 'board-mode-toggle'],
+    ['Draw', 'draw-overlay-toggle'],
+    ['Edit', 'manual-edit-mode-toggle'],
+  ])('keeps fixed-width auto-fit stable while %s freezes an older revision', async (_mode, toggleTestId) => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockImplementation(function getBoundingClientRectMock(this: HTMLElement) {
+        if (
+          this.classList.contains('viewer-body') ||
+          this.classList.contains('comment-preview-canvas') ||
+          this instanceof HTMLIFrameElement
+        ) {
+          return testRect(0, 0, 900, 700);
+        }
+        return testRect(0, 0, 0, 0);
+      });
+    const file = htmlPreviewFile({
+      name: `annotation-frozen-width-${toggleTestId}.html`,
+      path: `annotation-frozen-width-${toggleTestId}.html`,
+      mtime: 1710000000,
+    });
+    const view = render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={file}
+        liveHtml='<html><body><main style="min-width:1440px">Frozen V1</main></body></html>'
+      />,
+    );
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const previewWindow = installSandboxedPreviewWindow(frame);
+    fireEvent.load(frame);
+    act(() => postPreviewContentWidth(previewWindow, 1440, 900));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '63%' })).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByTestId(toggleTestId));
+    await waitFor(() => {
+      expect(screen.getByTestId(toggleTestId).getAttribute('aria-pressed')).toBe('true');
+    });
+    view.rerender(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={{ ...file, mtime: 1710000001 }}
+        filesRefreshKey={7}
+        liveHtml='<html><body><main style="min-width:1920px">Frozen V2</main></body></html>'
+      />,
+    );
+    await Promise.resolve();
+
+    expect(screen.getByRole('button', { name: '63%' })).toBeTruthy();
+    fireEvent.click(screen.getByTestId(toggleTestId));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '100%' })).toBeTruthy();
+    });
+  });
+
   it('portals the comment composer to the preview viewport instead of the clipped canvas', async () => {
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect')
       .mockImplementation(function getBoundingClientRectMock(this: HTMLElement) {
