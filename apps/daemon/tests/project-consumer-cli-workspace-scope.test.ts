@@ -37,6 +37,10 @@ function projectForRequest(request: RequestRecord): 'bound' | 'unbound' {
   ) {
     return 'unbound';
   }
+  if (request.url === '/api/runs' && request.body) {
+    const body = JSON.parse(request.body) as { projectId?: string };
+    return body.projectId === 'unbound-project' ? 'unbound' : 'bound';
+  }
   if (request.url.includes('/api/library/assets/') && request.body) {
     const body = JSON.parse(request.body) as { projectId?: string };
     return body.projectId === 'unbound-project' ? 'unbound' : 'bound';
@@ -136,6 +140,10 @@ beforeAll(async () => {
       }
       if (request.url.includes('/api/library/assets/')) {
         json(res, 200, { relPath: 'library/asset.png' });
+        return;
+      }
+      if (request.url === '/api/runs' && request.method === 'POST') {
+        json(res, 200, { runId: 'run-1' });
         return;
       }
       json(res, 404, { error: { code: 'NOT_FOUND', message: request.url } });
@@ -266,6 +274,16 @@ const consumers: ConsumerFixture[] = [
       'library',
       'apply',
       'asset-1',
+      '--project',
+      projectId,
+      '--json',
+    ],
+  },
+  {
+    label: 'run start',
+    args: (projectId) => [
+      'run',
+      'start',
       '--project',
       projectId,
       '--json',
