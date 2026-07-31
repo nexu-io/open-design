@@ -6481,7 +6481,16 @@ describe('FileViewer tweaks toolbar', () => {
       expect(overflowRequest.canvasWidth).toBe(720);
       expect(overflowRequest.measurementId).not.toBe(responsiveRequest.measurementId);
     });
-    act(() => postPreviewContentSizeResponse(previewWindow, overflowRequest, 900, 720));
+    // The resize schedules several legitimate follow-up measurements (rAF,
+    // then 80/260ms). Under a loaded full-suite worker, one can supersede the
+    // request observed by waitFor before this continuation resumes. Reply to
+    // the latest witnessed request synchronously so the test exercises the
+    // overflow-state rerender instead of intentionally sending a stale nonce.
+    act(() => {
+      overflowRequest = latestPreviewContentSizeRequest(previewWindow);
+      expect(overflowRequest.canvasWidth).toBe(720);
+      postPreviewContentSizeResponse(previewWindow, overflowRequest, 900, 720);
+    });
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: '80%' })).toBeTruthy();
