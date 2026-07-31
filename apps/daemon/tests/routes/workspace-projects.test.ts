@@ -1421,6 +1421,93 @@ describe('workspace project routes', () => {
     }
   });
 
+  it('uses the catalog title for an exact shared mirror whose local row is still a placeholder', async () => {
+    const projectId = `workspace-materialized-placeholder-${Date.now()}`;
+    const adminMemberId = 'member-admin-viewer';
+    const ownerMemberId = 'member-project-owner';
+    const resourceId = `project-resource-${projectId}`;
+    const rebindWorkspaceProject = vi.fn();
+    const teamProjectCatalog = {
+      list: vi.fn(async () => [
+        {
+          id: `catalog-${projectId}`,
+          workspaceId,
+          projectId,
+          resourceId,
+          ownerMemberId,
+          displayName: 'Owner project title',
+          syncState: 'synced',
+          lastSyncedVersionId: 'version-1',
+          createdAt: new Date(10).toISOString(),
+          updatedAt: new Date(20).toISOString(),
+          access: {
+            canView: true,
+            canComment: true,
+            canEdit: false,
+            frozen: false,
+          },
+        },
+      ]),
+      upsert: vi.fn(),
+    };
+    const app = express();
+    app.use(express.json());
+    registerProjectRoutes(app, workspaceProjectRouteDeps({
+      workspaceId,
+      projectId,
+      dbDeleteProject: vi.fn(),
+      removeProjectDir: vi.fn(),
+      teamProjectCatalog,
+      rebindWorkspaceProject,
+      workspaceRowOverrides: {
+        name: '共享项目',
+        visibility: 'team',
+        workspaceVisibility: 'team',
+        resourceHubResourceId: resourceId,
+        createdByWorkspaceMemberId: null,
+        updatedByWorkspaceMemberId: adminMemberId,
+        syncState: 'synced',
+      },
+    }));
+    const routeServer = await listen(app);
+    try {
+      const resp = await fetch(`${routeServer.url}/api/workspaces/${workspaceId}/projects?view=team`, {
+        headers: headers(adminMemberId, {
+          'x-od-workspace-type': 'team',
+          'x-od-workspace-role': 'admin',
+        }),
+      });
+      expect(resp.status).toBe(200);
+      const body = await resp.json() as { projects: Array<any> };
+      expect(body.projects).toHaveLength(1);
+      expect(body.projects[0]).toMatchObject({
+        id: projectId,
+        name: 'Owner project title',
+        createdByWorkspaceMemberId: ownerMemberId,
+        updatedByWorkspaceMemberId: adminMemberId,
+        resourceHubResourceId: resourceId,
+        project: {
+          id: projectId,
+          name: 'Owner project title',
+        },
+      });
+      expect(rebindWorkspaceProject).toHaveBeenCalledWith(
+        expect.anything(),
+        projectId,
+        expect.objectContaining({
+          workspaceId,
+          visibility: 'team',
+          createdByWorkspaceMemberId: ownerMemberId,
+          updatedByWorkspaceMemberId: adminMemberId,
+          resourceHubResourceId: resourceId,
+          syncState: 'synced',
+        }),
+      );
+    } finally {
+      await close(routeServer.server);
+    }
+  });
+
   it('does not merge remote team projects into a personal workspace list (isolation)', async () => {
     const remoteProjectId = `workspace-personal-leak-${Date.now()}`;
     const teamProjectCatalog = {
@@ -2043,6 +2130,7 @@ function workspaceProjectRouteDeps({
   teamProjectCatalog,
   collabSync,
   updateWorkspaceProject,
+  rebindWorkspaceProject,
   workspaceRowOverrides,
 }: {
   workspaceId: string;
@@ -2055,6 +2143,7 @@ function workspaceProjectRouteDeps({
   teamProjectCatalog?: unknown;
   collabSync?: unknown;
   updateWorkspaceProject?: ReturnType<typeof vi.fn>;
+  rebindWorkspaceProject?: ReturnType<typeof vi.fn>;
   workspaceRowOverrides?: Record<string, unknown>;
 }) {
   const now = 1;
@@ -2124,7 +2213,7 @@ function workspaceProjectRouteDeps({
       listWorkspaceProjectBindings: () => new Map([[projectId, workspaceId]]),
       listWorkspaceProjects: () => [workspaceRow],
       updateWorkspaceProject: updateWorkspaceProject ?? noop,
-      rebindWorkspaceProject: noop,
+      rebindWorkspaceProject: rebindWorkspaceProject ?? noop,
     },
     projectFiles: {
       writeProjectFile: noop,

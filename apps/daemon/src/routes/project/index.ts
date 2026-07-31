@@ -1975,20 +1975,34 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       });
       return;
     }
-    // canEdit: false. Only ever tighten a row that currently claims THIS
-    // workspace + THIS member as a team-writable binding for THIS project — a
-    // row bound anywhere else (including a genuinely different, unrelated
-    // local draft) is not this function's business and is left alone.
+    // canEdit: false. An exact resource-id match is authoritative enough to
+    // repair a materialized mirror whose placeholder binding has no creator:
+    // it is the same hub share, not an unrelated local project with a colliding
+    // project id. Otherwise only tighten a row that currently claims THIS
+    // workspace + THIS member as a team-writable binding for THIS project.
+    const exactRemoteBinding = existing
+      && existing.workspaceId === ctx.workspaceId
+      && existing.visibility === 'team'
+      && existing.resourceHubResourceId === remote.resourceId;
+    const expectedResourceState = remote.access.frozen ? 'frozen' : 'active';
+    if (
+      exactRemoteBinding
+      && existing.createdByWorkspaceMemberId === remote.ownerMemberId
+      && existing.resourceState === expectedResourceState
+      && existing.syncState === 'synced'
+    ) {
+      return;
+    }
     const wronglyPermissive = existing
       && existing.workspaceId === ctx.workspaceId
       && existing.visibility === 'team'
       && existing.createdByWorkspaceMemberId === ctx.workspaceMemberId;
-    if (!wronglyPermissive) return;
+    if (!exactRemoteBinding && !wronglyPermissive) return;
     rebindWorkspaceProject(db, remote.projectId, {
       workspaceId: ctx.workspaceId,
       visibility: 'team',
-      resourceState: remote.access.frozen ? 'frozen' : 'active',
-      createdByWorkspaceMemberId: null,
+      resourceState: expectedResourceState,
+      createdByWorkspaceMemberId: remote.ownerMemberId,
       updatedByWorkspaceMemberId: ctx.workspaceMemberId,
       resourceHubResourceId: remote.resourceId,
       syncState: 'synced',
@@ -2084,8 +2098,33 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     if (creator) return 'creator';
     return 'privileged';
   }
+  function catalogEnrichedLocalTeamProjectSummary(
+    summary: any,
+    remote: VelaTeamProjectRecord,
+    ctx: WorkspaceProjectContext,
+  ) {
+    const name = remote.displayName?.trim();
+    const frozen = remote.access.frozen || isWorkspaceLocked(ctx);
+    return {
+      ...summary,
+      ...(name ? { name } : {}),
+      createdByWorkspaceMemberId: remote.ownerMemberId,
+      resourceState: frozen ? 'frozen' : 'active',
+      currentUserAccess: accessForRemoteTeamProject(remote, ctx),
+      syncState: velaProjectSyncStateToProject(remote.syncState),
+      project: {
+        ...summary.project,
+        ...(name ? { name } : {}),
+      },
+    };
+  }
   async function listRemoteTeamProjectSummaries(localRows: any[], ctx: WorkspaceProjectContext) {
-    if (!teamProjectCatalog) return [];
+    if (!teamProjectCatalog) {
+      return {
+        matchedByResourceId: new Map<string, VelaTeamProjectRecord>(),
+        remoteSummaries: [],
+      };
+    }
     const localResourceIds = new Set(localRows.map((row) => row.resourceHubResourceId).filter(Boolean));
     const tombstoned = locallyTombstonedTeamProjects(localRows, ctx);
     let remoteProjects: VelaTeamProjectRecord[];
@@ -2095,11 +2134,10 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       throw new TeamProjectCatalogListError(error);
     }
     const seenResourceIds = new Set<string>();
-    const candidates = remoteProjects
+    const visibleProjects = remoteProjects
       .filter((project) => project.access.canView)
-      .filter((project) => !localResourceIds.has(project.resourceId))
       .filter((project) => !remoteTeamProjectWasUnsharedLocally(project, tombstoned, ctx));
-    for (const project of candidates) {
+    for (const project of visibleProjects) {
       try {
         reconcileLocalRowWithRemoteTeamAccess(project, ctx);
       } catch (error) {
@@ -2109,13 +2147,20 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         console.error('[team-projects] failed to reconcile local row with remote access', error);
       }
     }
-    return candidates
+    const matchedByResourceId = new Map(
+      visibleProjects
+        .filter((project) => localResourceIds.has(project.resourceId))
+        .map((project) => [project.resourceId, project] as const),
+    );
+    const remoteSummaries = visibleProjects
+      .filter((project) => !localResourceIds.has(project.resourceId))
       .filter((project) => {
         if (seenResourceIds.has(project.resourceId)) return false;
         seenResourceIds.add(project.resourceId);
         return true;
       })
       .map((project) => remoteTeamProjectSummary(project, ctx));
+    return { matchedByResourceId, remoteSummaries };
   }
   /**
    * Bind a project to this workspace, or hand back the binding it already has.
@@ -2719,9 +2764,20 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       // queried workspace, so without this guard team projects leak into (and
       // duplicate within) a personal workspace's project list.
       const needsRemoteTeamProjects = queryCanIncludeTeam && ctx.workspaceType === 'team';
+      const remoteMerge = needsRemoteTeamProjects
+        ? await listRemoteTeamProjectSummaries(rows, ctx)
+        : null;
       const mergedProjects = [
-        ...rows.map((row: any) => normalizeWorkspaceProjectRow(row, ctx)),
-        ...(needsRemoteTeamProjects ? await listRemoteTeamProjectSummaries(rows, ctx) : []),
+        ...rows.map((row: any) => {
+          const summary = normalizeWorkspaceProjectRow(row, ctx);
+          const remote = row.workspaceVisibility === 'team' && row.resourceHubResourceId
+            ? remoteMerge?.matchedByResourceId.get(row.resourceHubResourceId)
+            : null;
+          return remote && remote.projectId === row.id
+            ? catalogEnrichedLocalTeamProjectSummary(summary, remote, ctx)
+            : summary;
+        }),
+        ...(remoteMerge?.remoteSummaries ?? []),
       ];
       const projects = mergedProjects
         .filter((project: any) => {
