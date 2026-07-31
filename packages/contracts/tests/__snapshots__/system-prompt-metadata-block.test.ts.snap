@@ -4,7 +4,7 @@ exports[`renderMetadataBlock (characterization via composeSystemPrompt chat-mode
 "
 
 ## Project metadata
-These are the structured choices the user made (or skipped) when creating this project. Treat known fields as authoritative; for any field marked "(unknown — ask)" you MUST include a matching question in your turn-1 discovery form.
+These are the structured choices the user made (or skipped) when creating this project. Treat known fields as authoritative. Missing fields are unresolved facts, not mandatory questions; infer reasonable defaults and clarify only when an answer would materially change the result.
 
 - **kind**: audio
 - **audioKind**: speech
@@ -19,7 +19,7 @@ exports[`renderMetadataBlock (characterization via composeSystemPrompt chat-mode
 "
 
 ## Project metadata
-These are the structured choices the user made (or skipped) when creating this project. Treat known fields as authoritative; for any field marked "(unknown — ask)" you MUST include a matching question in your turn-1 discovery form.
+These are the structured choices the user made (or skipped) when creating this project. Treat known fields as authoritative. Missing fields are unresolved facts, not mandatory questions; infer reasonable defaults and clarify only when an answer would materially change the result.
 
 - **kind**: brand
 - **brand extraction project**: this project was created by the Brands extractor. Treat \`brand.json\`, \`DESIGN.md\`, \`BRAND-SYSTEM.md\`, \`tokens.*.json\`, \`theme.json\`, \`kit.html\`, \`kit.dark.html\`, and \`artifacts/{landing,deck,poster,email,newsletter,form}.html\` as the source of truth. Do not restart extraction from scratch unless the user explicitly asks; explain the extracted kit, then iterate the saved files when requested.
@@ -32,7 +32,7 @@ exports[`renderMetadataBlock (characterization via composeSystemPrompt chat-mode
 "
 
 ## Project metadata
-These are the structured choices the user made (or skipped) when creating this project. Treat known fields as authoritative; for any field marked "(unknown — ask)" you MUST include a matching question in your turn-1 discovery form.
+These are the structured choices the user made (or skipped) when creating this project. Treat known fields as authoritative. Missing fields are unresolved facts, not mandatory questions; infer reasonable defaults and clarify only when an answer would materially change the result.
 
 - **kind**: deck
 - **slideCount**: 12
@@ -43,7 +43,7 @@ exports[`renderMetadataBlock (characterization via composeSystemPrompt chat-mode
 "
 
 ## Project metadata
-These are the structured choices the user made (or skipped) when creating this project. Treat known fields as authoritative; for any field marked "(unknown — ask)" you MUST include a matching question in your turn-1 discovery form.
+These are the structured choices the user made (or skipped) when creating this project. Treat known fields as authoritative. Missing fields are unresolved facts, not mandatory questions; infer reasonable defaults and clarify only when an answer would materially change the result.
 
 - **kind**: image
 - **imageModel**: seedream
@@ -71,7 +71,7 @@ exports[`renderMetadataBlock (characterization via composeSystemPrompt chat-mode
 "
 
 ## Project metadata
-These are the structured choices the user made (or skipped) when creating this project. Treat known fields as authoritative; for any field marked "(unknown — ask)" you MUST include a matching question in your turn-1 discovery form.
+These are the structured choices the user made (or skipped) when creating this project. Treat known fields as authoritative. Missing fields are unresolved facts, not mandatory questions; infer reasonable defaults and clarify only when an answer would materially change the result.
 
 - **kind**: prototype
 - **platform**: web-desktop
@@ -81,7 +81,7 @@ These are the structured choices the user made (or skipped) when creating this p
 - **app-specific modules rule**: include domain-specific in-app modules/components by default (cards, panels, controls, charts, lists, quick actions, status modules, mini players, checkout/cart summaries, etc. as appropriate). These are product UI modules, not OS home-screen widgets. Give each major module a clear purpose, states, and responsive behavior instead of generic card grids.
 - **CJX-ready UX rule**: the artifact must be implementation-ready, not a static screenshot. Structure CSS tokens/components/responsive sections clearly; include real JavaScript behavior for meaningful UX such as tabs, dialogs, drawers, filters, generation/copy actions, validation, playback controls, or state transitions. If keeping a self-contained \`index.html\`, put the CSS/JS in clearly labelled blocks; for complex UX, generate \`css/\` and \`js/\` files when useful.
 - **interaction-fidelity rule**: when the requested screen includes user input, generation, copying, validation, login, checkout, filtering, or any action verb, build real interactive controls for that screen. Do not substitute static text rows, prefilled-only mockups, screenshot-like device frames, or decorative state cards for editable inputs and working actions.
-- **fidelity**: (unknown — ask: wireframe vs high-fidelity)
+- **fidelity**: (not provided; common choices are wireframe or high-fidelity)
 - **inspirationDesignSystemIds**: brand-a, brand-b — the user picked these systems as *additional* inspiration alongside the primary one. Borrow palette accents, typographic personality, or component patterns from them; don't replace the primary system's tokens.
 
 ### @ plugin context
@@ -94,7 +94,7 @@ exports[`renderMetadataBlock (characterization via composeSystemPrompt chat-mode
 "
 
 ## Project metadata
-These are the structured choices the user made (or skipped) when creating this project. Treat known fields as authoritative; for any field marked "(unknown — ask)" you MUST include a matching question in your turn-1 discovery form.
+These are the structured choices the user made (or skipped) when creating this project. Treat known fields as authoritative. Missing fields are unresolved facts, not mandatory questions; infer reasonable defaults and clarify only when an answer would materially change the result.
 
 - **kind**: prototype
 - **platform**: responsive
@@ -116,27 +116,27 @@ exports[`renderMetadataBlock (characterization via composeSystemPrompt chat-mode
 "
 
 ## Project metadata
-These are the structured choices the user made (or skipped) when creating this project. Treat known fields as authoritative; for any field marked "(unknown — ask)" you MUST include a matching question in your turn-1 discovery form.
+These are the structured choices the user made (or skipped) when creating this project. Treat known fields as authoritative. Missing fields are unresolved facts, not mandatory questions; infer reasonable defaults and clarify only when an answer would materially change the result.
 
 - **kind**: prototype
-- **platform**: (unknown — ask: responsive web, desktop web, iOS app, Android app, tablet app, or desktop app?)
+- **platform**: (not provided; relevant options include responsive web, desktop web, iOS app, Android app, tablet app, or desktop app)
 - **screen-file-first rule**: each distinct user-facing screen or surface MUST be delivered as its own HTML file unless the user explicitly asks for a single-page scroll or single-file artifact. Do not combine landing pages, product app screens, dashboards, history, pricing, settings, mobile app, tablet app, desktop app, or OS widget surfaces into one long page. Use \`index.html\` as a launcher/overview that links to screen files when more than one screen exists; it may summarize the product and show screen cards, but it must not contain the full design for every screen.
 - **product-realism rule**: final artifacts must look like real end-user product UI. Do not render project metadata, screen counts, target counts, state counts, "demo only" labels, "settings" panels for choosing platforms, "full design target" badges, viewport/device selector controls, theme/style knobs, platform output maps, behavior-spec sections, or design-process cards inside the product unless the user explicitly asks for a design spec/dashboard. Any navigation/tabs inside the artifact must be real product navigation, not designer controls for switching generated mockups.
 - **visual-system rule**: when the user does not specify colors, layout, or visual direction, you must still make an intentional product-appropriate visual system. Infer a palette from the product category and audience with at least: neutral surface tokens, a primary action color, a secondary/domain accent, and status colors. Avoid plain monochrome/unstyled greyscale outputs. Use tasteful gradients, illustrations, iconography, device/product mockups, and colored state moments where they clarify the product, while still avoiding generic beige/peach/pink/brown AI washes.
 - **app-specific modules rule**: include domain-specific in-app modules/components by default (cards, panels, controls, charts, lists, quick actions, status modules, mini players, checkout/cart summaries, etc. as appropriate). These are product UI modules, not OS home-screen widgets. Give each major module a clear purpose, states, and responsive behavior instead of generic card grids.
 - **CJX-ready UX rule**: the artifact must be implementation-ready, not a static screenshot. Structure CSS tokens/components/responsive sections clearly; include real JavaScript behavior for meaningful UX such as tabs, dialogs, drawers, filters, generation/copy actions, validation, playback controls, or state transitions. If keeping a self-contained \`index.html\`, put the CSS/JS in clearly labelled blocks; for complex UX, generate \`css/\` and \`js/\` files when useful.
 - **interaction-fidelity rule**: when the requested screen includes user input, generation, copying, validation, login, checkout, filtering, or any action verb, build real interactive controls for that screen. Do not substitute static text rows, prefilled-only mockups, screenshot-like device frames, or decorative state cards for editable inputs and working actions.
-- **fidelity**: (unknown — ask: wireframe vs high-fidelity)"
+- **fidelity**: (not provided; common choices are wireframe or high-fidelity)"
 `;
 
 exports[`renderMetadataBlock (characterization via composeSystemPrompt chat-mode) > template kind with template reference files 1`] = `
 "
 
 ## Project metadata
-These are the structured choices the user made (or skipped) when creating this project. Treat known fields as authoritative; for any field marked "(unknown — ask)" you MUST include a matching question in your turn-1 discovery form.
+These are the structured choices the user made (or skipped) when creating this project. Treat known fields as authoritative. Missing fields are unresolved facts, not mandatory questions; infer reasonable defaults and clarify only when an answer would materially change the result.
 
 - **kind**: template
-- **platform**: (unknown — ask: responsive web, desktop web, iOS app, Android app, tablet app, or desktop app?)
+- **platform**: (not provided; relevant options include responsive web, desktop web, iOS app, Android app, tablet app, or desktop app)
 - **screen-file-first rule**: each distinct user-facing screen or surface MUST be delivered as its own HTML file unless the user explicitly asks for a single-page scroll or single-file artifact. Do not combine landing pages, product app screens, dashboards, history, pricing, settings, mobile app, tablet app, desktop app, or OS widget surfaces into one long page. Use \`index.html\` as a launcher/overview that links to screen files when more than one screen exists; it may summarize the product and show screen cards, but it must not contain the full design for every screen.
 - **product-realism rule**: final artifacts must look like real end-user product UI. Do not render project metadata, screen counts, target counts, state counts, "demo only" labels, "settings" panels for choosing platforms, "full design target" badges, viewport/device selector controls, theme/style knobs, platform output maps, behavior-spec sections, or design-process cards inside the product unless the user explicitly asks for a design spec/dashboard. Any navigation/tabs inside the artifact must be real product navigation, not designer controls for switching generated mockups.
 - **visual-system rule**: when the user does not specify colors, layout, or visual direction, you must still make an intentional product-appropriate visual system. Infer a palette from the product category and audience with at least: neutral surface tokens, a primary action color, a secondary/domain accent, and status colors. Avoid plain monochrome/unstyled greyscale outputs. Use tasteful gradients, illustrations, iconography, device/product mockups, and colored state moments where they clarify the product, while still avoiding generic beige/peach/pink/brown AI washes.
@@ -159,7 +159,7 @@ exports[`renderMetadataBlock (characterization via composeSystemPrompt chat-mode
 "
 
 ## Project metadata
-These are the structured choices the user made (or skipped) when creating this project. Treat known fields as authoritative; for any field marked "(unknown — ask)" you MUST include a matching question in your turn-1 discovery form.
+These are the structured choices the user made (or skipped) when creating this project. Treat known fields as authoritative. Missing fields are unresolved facts, not mandatory questions; infer reasonable defaults and clarify only when an answer would materially change the result.
 
 - **kind**: video
 - **videoModel**: hyperframes-html

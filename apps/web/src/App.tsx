@@ -83,6 +83,7 @@ import {
   fetchMediaProvidersFromDaemon,
   hasAnyConfiguredProvider,
   fetchComposioConfigFromDaemon,
+  legacyByokMigrationErrorPresentation,
   loadConfig,
   migrateLegacyByokCredentialsToDaemon,
   mergeDaemonConfig,
@@ -456,7 +457,7 @@ function AppInner() {
   const [workingDirError, setWorkingDirError] = useState<string | null>(null);
   const [projectOpenError, setProjectOpenError] = useState<string | null>(null);
   const [legacyByokMigrationError, setLegacyByokMigrationError] =
-    useState<string | null>(null);
+    useState<Error | null>(null);
   const [settingsWelcome, setSettingsWelcome] = useState(false);
   const [settingsInitialSection, setSettingsInitialSection] = useState<SettingsSection>('execution');
   const [settingsHighlight, setSettingsHighlight] = useState<SettingsHighlight>(null);
@@ -1025,7 +1026,7 @@ function AppInner() {
       if (cancelled) return;
       setLegacyByokMigrationError(
         legacyByokMigration.status === 'failed'
-          ? legacyByokMigration.error.message
+          ? legacyByokMigration.error
           : null,
       );
       const migrationBaseConfig = legacyByokMigration.config;
@@ -1828,11 +1829,9 @@ function AppInner() {
     async (designSystemId: string, designSystemTitle: string) => {
       // "Create with this design system" must NOT assume a prototype. Route
       // the click through the hidden default design router (od-default) —
-      // exactly like a free-form Home prompt — so the agent first asks (via
-      // the task-type question-form) what to build with this system instead
-      // of silently binding the web-prototype scenario + high-fidelity
-      // metadata. The preset prompt seeds the conversation and is auto-sent
-      // so the router surfaces the confirmation form immediately; `kind`
+      // exactly like a free-form Home prompt. The preset prompt seeds the
+      // conversation and is auto-sent so the router can infer the task type
+      // from the brief, asking only when the route remains ambiguous. `kind`
       // stays the neutral 'other' so no surface-specific default leaks back
       // in on the daemon side.
       const presetPrompt = t('nextStep.brandCreateDesignPrompt', {
@@ -2648,6 +2647,12 @@ function AppInner() {
       />
     );
   }
+  const legacyByokMigrationErrorView = legacyByokMigrationError
+    ? legacyByokMigrationErrorPresentation(
+        legacyByokMigrationError,
+        t('settings.autosaveError'),
+      )
+    : null;
   return (
     <>
       <div
@@ -2759,10 +2764,10 @@ function AppInner() {
           onDismiss={() => setProjectOpenError(null)}
         />
       ) : null}
-      {legacyByokMigrationError ? (
+      {legacyByokMigrationErrorView ? (
         <Toast
-          message={t('settings.autosaveError')}
-          details={legacyByokMigrationError}
+          message={legacyByokMigrationErrorView.message}
+          details={legacyByokMigrationErrorView.details}
           actionLabel={t('settings.title')}
           onAction={() => {
             setLegacyByokMigrationError(null);

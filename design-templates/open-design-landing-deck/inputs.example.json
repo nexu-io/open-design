@@ -141,7 +141,7 @@
       "body": "Every project moves through four iterative stages. The agent picks each stage's tools deterministically; you stay in control.",
       "bullets": [
         "01 · Detect — daemon scans $PATH, auto-loads skills + systems.",
-        "02 · Discover — 30s question form locks brand · audience · scale.",
+        "02 · Discover — clarify unresolved brand · audience · scale only when they materially affect the result.",
         "03 · Direct — pick one of 5 visual directions in OKLch + type stack.",
         "04 · Deliver — write to disk, preview in sandbox, export anywhere."
       ],

@@ -111,6 +111,12 @@ When configured, Open Design calls the run-session endpoint from the daemon
 before OpenAI-compatible chat egress and attaches the returned run identifier as
 provider metadata. The credential stays server-side.
 
+This is a pre-egress admission and metadata-propagation integration only. It
+does not persist an Open Design run-to-provider-session mapping, reconcile
+provider-side status after a daemon restart, call provider-side cancellation
+from `/api/runs/:id/cancel`, or guarantee idempotency across separate retry
+requests. Those behaviors remain provider-specific or future integration work.
+
 The daemon validates the configured base URL before provider egress and never
 returns the credential from `/api/provider-orchestrator/config` or `od provider
 config`. Model discovery, connection tests, OpenAI-compatible chat proxying, and

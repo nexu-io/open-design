@@ -1638,8 +1638,8 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         }
         externalProjectDir = await createLocationProjectDir(location, id);
       }
-      // Website Clone projects that already carry the target URL skip the
-      // turn-1 discovery brief: for this scenario the URL *is* the brief —
+      // Website Clone projects that already carry the target URL explicitly
+      // skip the project-opening discovery brief: the URL *is* the brief —
       // the user asked for a reproduction, not a requirements interview, and
       // an unanswered question form just stalls the run (the agent then
       // "answers" it with conservative defaults). An explicit client-provided

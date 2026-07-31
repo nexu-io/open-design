@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  ByokCredentialProfileHttpError,
+  ByokCredentialProfileNetworkError,
   buildMediaProvidersForDaemonSave,
   BYOK_PROVIDER_PRESETS,
+  classifyByokCredentialProfileFailure,
   DEFAULT_CONFIG,
   defaultKnownProviderModel,
   fetchByokCredentialProfilesFromDaemon,
@@ -9,6 +12,7 @@ import {
   isStoredMediaProviderEntryEmpty,
   isStoredMediaProviderEntryPresent,
   KNOWN_PROVIDERS,
+  legacyByokMigrationErrorPresentation,
   loadConfig,
   migrateLegacyByokCredentialsToDaemon,
   mergeDaemonConfig,
@@ -1606,6 +1610,141 @@ describe('secure BYOK profiles', () => {
     expect(saved.theme).toBe('dark');
     expect(saved.mode).toBe('daemon');
     expect(saved.agentId).toBe('codex');
+  });
+
+  it('surfaces the daemon validation reason and preserves legacy credentials when migration gets a 400', async () => {
+    const validationMessage =
+      'BYOK baseUrl must be an absolute HTTP(S) URL without credentials, query, or fragment.';
+    const persisted: Partial<AppConfig> = {
+      ...DEFAULT_CONFIG,
+      mode: 'api',
+      apiKey: 'legacy-secret',
+      apiProtocol: 'openai',
+      baseUrl: 'not-an-absolute-url',
+      model: 'openai/gpt-5.4',
+    };
+    store.set('open-design:config', JSON.stringify(persisted));
+    const loaded = loadConfig();
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      expect(JSON.parse(String(init?.body))).toMatchObject({
+        apiKey: 'legacy-secret',
+        baseUrl: 'not-an-absolute-url',
+      });
+      return Response.json({
+        error: {
+          code: 'VALIDATION_FAILED',
+          message: validationMessage,
+        },
+      }, { status: 400 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await migrateLegacyByokCredentialsToDaemon(loaded);
+
+    expect(result).toMatchObject({
+      status: 'failed',
+      error: {
+        name: 'ByokCredentialProfileHttpError',
+        status: 400,
+        code: 'VALIDATION_FAILED',
+        message: validationMessage,
+      },
+    });
+    if (result.status !== 'failed') throw new Error('expected migration failure');
+    expect(result.error).toBeInstanceOf(ByokCredentialProfileHttpError);
+    expect(legacyByokMigrationErrorPresentation(
+      result.error,
+      'Local daemon may be offline.',
+    )).toEqual({ message: validationMessage });
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/byok/profiles',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    expect(store.get('open-design:config')).toContain('legacy-secret');
+  });
+
+  it('keeps the HTTP status fallback when a daemon error body is not structured JSON', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(
+      '<html>bad gateway</html>',
+      { status: 502, headers: { 'content-type': 'text/html' } },
+    )));
+
+    const promise = persistByokCredentialProfileToDaemon({
+      label: 'OpenRouter',
+      protocol: 'openai',
+      baseUrl: 'https://openrouter.ai/api/v1',
+      model: 'openrouter/free',
+      apiKey: 'draft-secret',
+    });
+
+    await expect(promise).rejects.toMatchObject({
+      name: 'ByokCredentialProfileHttpError',
+      status: 502,
+      message: 'Failed to save BYOK credential (502)',
+    });
+  });
+
+  it('classifies fetch rejection separately from daemon HTTP responses', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      throw new TypeError('Failed to fetch');
+    }));
+
+    const promise = persistByokCredentialProfileToDaemon({
+      label: 'OpenRouter',
+      protocol: 'openai',
+      baseUrl: 'https://openrouter.ai/api/v1',
+      model: 'openrouter/free',
+      apiKey: 'draft-secret',
+    });
+
+    const error = await promise.catch((cause: unknown) => cause);
+    expect(error).toBeInstanceOf(ByokCredentialProfileNetworkError);
+    expect(error).toMatchObject({
+      name: 'ByokCredentialProfileNetworkError',
+      message: 'Failed to fetch',
+    });
+    if (!(error instanceof Error)) throw new Error('expected network error');
+    expect(legacyByokMigrationErrorPresentation(
+      error,
+      'Local daemon may be offline.',
+    )).toEqual({
+      message: 'Local daemon may be offline.',
+      details: 'Failed to fetch',
+    });
+  });
+
+  it('classifies secure profile persistence failures with stable telemetry values', () => {
+    expect(classifyByokCredentialProfileFailure(
+      new ByokCredentialProfileHttpError(
+        400,
+        'Invalid secure profile',
+        'VALIDATION_FAILED',
+      ),
+    )).toEqual({
+      errorCode: 'VALIDATION_FAILED',
+      errorKind: 'unknown',
+    });
+    expect(classifyByokCredentialProfileFailure(
+      new ByokCredentialProfileHttpError(502, 'Bad gateway'),
+    )).toEqual({
+      errorCode: 'HTTP_502',
+      errorKind: 'unknown',
+    });
+    expect(classifyByokCredentialProfileFailure(
+      new ByokCredentialProfileNetworkError(
+        'Failed to fetch',
+        new TypeError('Failed to fetch'),
+      ),
+    )).toEqual({
+      errorCode: 'DAEMON_UNREACHABLE',
+      errorKind: 'unknown',
+    });
+    expect(classifyByokCredentialProfileFailure(
+      new TypeError('Test request failed'),
+    )).toEqual({
+      errorCode: 'TypeError',
+      errorKind: 'TypeError',
+    });
   });
 
   it('hydrates only an explicitly selected secure profile reference', async () => {

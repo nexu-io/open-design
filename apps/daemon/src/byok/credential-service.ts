@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { access, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type {
   ByokChatProviderConfig,
@@ -346,7 +346,9 @@ export function createPlatformByokSecretBackend(
   if (platform === 'darwin') return new MacOsKeychainBackend();
   if (platform === 'linux') return new LinuxSecretServiceBackend();
   if (platform === 'win32' && dataDir) {
-    return new WindowsDpapiBackend(path.join(dataDir, 'byok', 'secrets'));
+    return new RetiredWindowsSecretCleanupBackend(
+      path.join(dataDir, 'byok', 'secrets'),
+    );
   }
   return new UnavailableSecretBackend(platform);
 }
@@ -435,137 +437,6 @@ class LinuxSecretServiceBackend implements ByokSecretBackend {
   }
 }
 
-const WINDOWS_DPAPI_SCRIPT = `
-$ErrorActionPreference = 'Stop'
-Add-Type -AssemblyName System.Security
-$operation = $env:OD_BYOK_DPAPI_OPERATION
-$secretPath = $env:OD_BYOK_DPAPI_PATH
-
-try {
-  switch ($operation) {
-    'probe' {
-      $plain = [System.Text.Encoding]::UTF8.GetBytes('open-design-dpapi-probe')
-      $cipher = [System.Security.Cryptography.ProtectedData]::Protect(
-        $plain,
-        $null,
-        [System.Security.Cryptography.DataProtectionScope]::CurrentUser
-      )
-      $roundTrip = [System.Security.Cryptography.ProtectedData]::Unprotect(
-        $cipher,
-        $null,
-        [System.Security.Cryptography.DataProtectionScope]::CurrentUser
-      )
-      if ([System.Text.Encoding]::UTF8.GetString($roundTrip) -ne 'open-design-dpapi-probe') {
-        throw 'DPAPI probe failed'
-      }
-    }
-    'set' {
-      $secret = [Console]::In.ReadToEnd()
-      if ([string]::IsNullOrWhiteSpace($secret)) {
-        throw 'Secret must not be empty'
-      }
-      $plain = [System.Text.Encoding]::UTF8.GetBytes($secret)
-      $cipher = [System.Security.Cryptography.ProtectedData]::Protect(
-        $plain,
-        $null,
-        [System.Security.Cryptography.DataProtectionScope]::CurrentUser
-      )
-      $directory = [System.IO.Path]::GetDirectoryName($secretPath)
-      [System.IO.Directory]::CreateDirectory($directory) | Out-Null
-      $temporaryPath = "$secretPath.$([Guid]::NewGuid().ToString('N')).tmp"
-      try {
-        [System.IO.File]::WriteAllBytes($temporaryPath, $cipher)
-        Move-Item -LiteralPath $temporaryPath -Destination $secretPath -Force
-      } finally {
-        if (Test-Path -LiteralPath $temporaryPath) {
-          Remove-Item -LiteralPath $temporaryPath -Force
-        }
-      }
-    }
-    'get' {
-      if (-not (Test-Path -LiteralPath $secretPath -PathType Leaf)) {
-        exit 44
-      }
-      $cipher = [System.IO.File]::ReadAllBytes($secretPath)
-      $plain = [System.Security.Cryptography.ProtectedData]::Unprotect(
-        $cipher,
-        $null,
-        [System.Security.Cryptography.DataProtectionScope]::CurrentUser
-      )
-      [Console]::Out.Write([System.Text.Encoding]::UTF8.GetString($plain))
-    }
-    'delete' {
-      if (-not (Test-Path -LiteralPath $secretPath -PathType Leaf)) {
-        exit 44
-      }
-      Remove-Item -LiteralPath $secretPath -Force
-    }
-    default {
-      throw 'Unsupported DPAPI operation'
-    }
-  }
-} catch {
-  [Console]::Error.WriteLine('Open Design secure credential operation failed.')
-  exit 1
-}
-`;
-
-const WINDOWS_DPAPI_ENCODED_SCRIPT = Buffer.from(
-  WINDOWS_DPAPI_SCRIPT,
-  'utf16le',
-).toString('base64');
-
-class WindowsDpapiBackend implements ByokSecretBackend {
-  readonly kind = 'windows-dpapi';
-  private availability: Promise<boolean> | null = null;
-
-  constructor(private readonly secretsDir: string) {}
-
-  async available() {
-    this.availability ??= this.probeAvailability();
-    return this.availability;
-  }
-
-  private async probeAvailability() {
-    if (!(await commandAvailable('powershell.exe'))) return false;
-    try {
-      await runWindowsDpapiCommand('probe', this.secretsDir);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  async set(profileId: string, secret: string) {
-    assertProfileId(profileId);
-    await runWindowsDpapiCommand(
-      'set',
-      path.join(this.secretsDir, `${profileId}.bin`),
-      secret,
-    );
-  }
-
-  async get(profileId: string) {
-    assertProfileId(profileId);
-    return runWindowsDpapiCommand(
-      'get',
-      path.join(this.secretsDir, `${profileId}.bin`),
-      undefined,
-      true,
-    );
-  }
-
-  async delete(profileId: string) {
-    assertProfileId(profileId);
-    return (await runWindowsDpapiCommand(
-      'delete',
-      path.join(this.secretsDir, `${profileId}.bin`),
-      undefined,
-      true,
-    )) !== null;
-  }
-}
-
 class UnavailableSecretBackend implements ByokSecretBackend {
   readonly kind: string;
 
@@ -574,70 +445,28 @@ class UnavailableSecretBackend implements ByokSecretBackend {
   }
 
   async available() { return false; }
-  async set() { throw new Error('Secure credential storage is unavailable on this system.'); }
-  async get() { return null; }
-  async delete() { return false; }
+  async set(_profileId: string, _secret: string) {
+    throw new Error('Secure credential storage is unavailable on this system.');
+  }
+  async get(_profileId: string) { return null; }
+  async delete(_profileId: string) { return false; }
 }
 
-async function runWindowsDpapiCommand(
-  operation: 'probe' | 'set' | 'get' | 'delete',
-  secretPath: string,
-  secretInput?: string,
-  allowNotFound = false,
-): Promise<string | null> {
-  return new Promise((resolve, reject) => {
-    const child = spawn('powershell.exe', [
-      '-NoLogo',
-      '-NoProfile',
-      '-NonInteractive',
-      '-ExecutionPolicy',
-      'Bypass',
-      '-EncodedCommand',
-      WINDOWS_DPAPI_ENCODED_SCRIPT,
-    ], {
-      env: {
-        ...process.env,
-        OD_BYOK_DPAPI_OPERATION: operation,
-        OD_BYOK_DPAPI_PATH: secretPath,
-      },
-      stdio: ['pipe', 'pipe', 'pipe'],
-      windowsHide: true,
-    });
-    const stdout: Buffer[] = [];
-    let stdoutBytes = 0;
-    let settled = false;
-    const finish = (error: Error | null, output?: string | null) => {
-      if (settled) return;
-      settled = true;
-      if (error) reject(error);
-      else resolve(output === undefined ? '' : output);
-    };
-    child.stdout.on('data', (chunk: Buffer) => {
-      stdoutBytes += chunk.length;
-      if (stdoutBytes <= MAX_SECRET_OUTPUT_BYTES) stdout.push(chunk);
-    });
-    child.stderr.resume();
-    child.on('error', () => {
-      finish(new Error('Secure credential backend command failed.'));
-    });
-    child.on('close', (code) => {
-      if (stdoutBytes > MAX_SECRET_OUTPUT_BYTES) {
-        finish(new Error('Secure credential backend command failed.'));
-        return;
-      }
-      if (code === 0) {
-        finish(null, Buffer.concat(stdout).toString('utf8'));
-        return;
-      }
-      if (allowNotFound && code === 44) {
-        finish(null, null);
-        return;
-      }
-      finish(new Error('Secure credential backend command failed.'));
-    });
-    if (secretInput === undefined) child.stdin.end();
-    else child.stdin.end(secretInput);
-  });
+class RetiredWindowsSecretCleanupBackend extends UnavailableSecretBackend {
+  constructor(private readonly secretsDir: string) {
+    super('win32');
+  }
+
+  override async delete(profileId: string) {
+    assertProfileId(profileId);
+    try {
+      await unlink(path.join(this.secretsDir, `${profileId}.bin`));
+      return true;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+      throw error;
+    }
+  }
 }
 
 async function commandAvailable(command: string): Promise<boolean> {

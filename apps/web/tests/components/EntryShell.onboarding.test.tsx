@@ -2220,6 +2220,71 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     });
   });
 
+  it('lets Azure BYOK onboarding enter a custom deployment directly', async () => {
+    globalThis.fetch = vi.fn(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/api/integrations/vela/status')) {
+        return jsonResponse({ loggedIn: false, profile: 'prod', user: null, configPath: '/x' });
+      }
+      if (url.endsWith('/api/test/connection') && init?.method === 'POST') {
+        const body = JSON.parse(String(init.body ?? '{}'));
+        expect(body).toMatchObject({
+          protocol: 'azure',
+          apiKey: 'azure-key',
+          baseUrl: 'https://example.openai.azure.com',
+          model: 'deployment-one',
+        });
+        return jsonResponse({
+          ok: true,
+          kind: 'success',
+          latencyMs: 11,
+          model: 'deployment-one',
+          sample: 'Connected',
+        });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    }) as typeof fetch;
+    const props = renderOnboarding({
+      config: baseConfig({
+        mode: 'api',
+        apiProtocol: 'azure',
+        apiProviderBaseUrl: '',
+      }),
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Bring your own key/i }));
+
+    expect(screen.getByRole('tab', { name: 'Azure OpenAI' }).getAttribute('aria-selected')).toBe(
+      'true',
+    );
+    expect((screen.getByRole('button', { name: /Fetch models/i }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+    expect(screen.getAllByRole('button', { name: 'Azure OpenAI' }).length).toBeGreaterThan(0);
+
+    fireEvent.change(screen.getByLabelText('API key'), { target: { value: 'azure-key' } });
+    fireEvent.change(screen.getByLabelText('Base URL'), {
+      target: { value: 'https://example.openai.azure.com' },
+    });
+    fireEvent.change(screen.getByLabelText('Deployment name'), {
+      target: { value: 'deployment-one' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^Test$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Connected\. Replied in 11 ms/i)).toBeTruthy();
+    });
+    expect(props.onApiModelChange).toHaveBeenCalledWith('deployment-one');
+    expect((props.onConfigPersist as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0]).toMatchObject({
+      mode: 'api',
+      apiProtocol: 'azure',
+      apiKey: 'azure-key',
+      apiProviderBaseUrl: '',
+      baseUrl: 'https://example.openai.azure.com',
+      model: 'deployment-one',
+    });
+  });
+
   it('keeps the cloud sign-in landing stable while AMR detection is still in flight', async () => {
     globalThis.fetch = vi.fn(async () =>
       jsonResponse({ loggedIn: false, profile: 'prod', user: null, configPath: '/x' }),

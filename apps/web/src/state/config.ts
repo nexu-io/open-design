@@ -850,16 +850,111 @@ export async function fetchByokCredentialProfilesFromDaemon(): Promise<
   }
 }
 
+export class ByokCredentialProfileHttpError extends Error {
+  readonly status: number;
+  readonly code?: string;
+
+  constructor(status: number, message: string, code?: string) {
+    super(message);
+    this.name = 'ByokCredentialProfileHttpError';
+    this.status = status;
+    this.code = code;
+  }
+}
+
+export class ByokCredentialProfileNetworkError extends Error {
+  constructor(message: string, cause: unknown) {
+    super(message, { cause });
+    this.name = 'ByokCredentialProfileNetworkError';
+  }
+}
+
+export function classifyByokCredentialProfileFailure(error: unknown): {
+  errorCode: string;
+  errorKind: string;
+} {
+  if (error instanceof ByokCredentialProfileHttpError) {
+    return {
+      errorCode: error.code || `HTTP_${error.status}`,
+      errorKind: 'unknown',
+    };
+  }
+  if (error instanceof ByokCredentialProfileNetworkError) {
+    return {
+      errorCode: 'DAEMON_UNREACHABLE',
+      errorKind: 'unknown',
+    };
+  }
+  const fallback = error instanceof Error ? error.name : 'UNKNOWN';
+  return { errorCode: fallback, errorKind: fallback };
+}
+
+export function legacyByokMigrationErrorPresentation(
+  error: Error,
+  daemonUnavailableMessage: string,
+): { message: string; details?: string } {
+  if (error instanceof ByokCredentialProfileNetworkError) {
+    return {
+      message: daemonUnavailableMessage,
+      details: error.message,
+    };
+  }
+  return { message: error.message };
+}
+
+async function byokCredentialProfileHttpError(
+  response: Response,
+): Promise<ByokCredentialProfileHttpError> {
+  const fallback = `Failed to save BYOK credential (${response.status})`;
+  try {
+    const payload = await response.json() as unknown;
+    if (
+      payload
+      && typeof payload === 'object'
+      && 'error' in payload
+      && payload.error
+      && typeof payload.error === 'object'
+    ) {
+      const message = 'message' in payload.error
+        && typeof payload.error.message === 'string'
+        ? payload.error.message.trim()
+        : '';
+      const code = 'code' in payload.error
+        && typeof payload.error.code === 'string'
+        ? payload.error.code.trim()
+        : '';
+      if (message) {
+        return new ByokCredentialProfileHttpError(
+          response.status,
+          message,
+          code || undefined,
+        );
+      }
+    }
+  } catch {
+    // Keep the status-bearing fallback when the daemon/proxy body is invalid.
+  }
+  return new ByokCredentialProfileHttpError(response.status, fallback);
+}
+
 export async function persistByokCredentialProfileToDaemon(
   input: UpsertByokCredentialProfileRequest,
 ): Promise<ByokCredentialProfile> {
-  const response = await fetch('/api/byok/profiles', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(input),
-  });
+  let response: Response;
+  try {
+    response = await fetch('/api/byok/profiles', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+  } catch (error) {
+    const message = error instanceof Error && error.message.trim()
+      ? error.message
+      : 'Failed to reach the local daemon while saving the BYOK credential.';
+    throw new ByokCredentialProfileNetworkError(message, error);
+  }
   if (!response.ok) {
-    throw new Error(`Failed to save BYOK credential (${response.status})`);
+    throw await byokCredentialProfileHttpError(response);
   }
   const payload = await response.json() as { profile?: ByokCredentialProfile };
   if (!payload.profile?.id || !payload.profile.configured) {
