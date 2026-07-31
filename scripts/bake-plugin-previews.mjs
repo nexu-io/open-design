@@ -36,7 +36,7 @@
 
 import puppeteer from 'puppeteer-core';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, rmSync, writeFileSync, readFileSync, statSync, existsSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync, readFileSync, statSync, existsSync, renameSync, unlinkSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 
@@ -112,6 +112,17 @@ async function fetchWithTimeout(url) {
     return await fetch(url, { signal: controller.signal });
   } finally {
     clearTimeout(timeout);
+  }
+}
+
+function writeJsonAtomic(filePath, value) {
+  const tmpPath = `${filePath}.${process.pid}.tmp`;
+  try {
+    writeFileSync(tmpPath, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
+    renameSync(tmpPath, filePath);
+  } catch (error) {
+    try { unlinkSync(tmpPath); } catch (_) {}
+    throw error;
   }
 }
 
@@ -504,7 +515,7 @@ for (const id of ids) {
   previews[id] = { video: r.video, poster: r.poster, durationMs: r.durationMs, holdMs: r.holdMs, hash };
   ok += 1;
   console.log(`  + ${id}: ${(r.bytes / 1024).toFixed(0)}KB mp4, ${(r.posterBytes / 1024).toFixed(0)}KB poster (${((Date.now() - t0) / 1000).toFixed(1)}s)`);
-  writeFileSync(manifestPath, JSON.stringify({ generatedAt: null, previews }, null, 2));
+  writeJsonAtomic(manifestPath, { generatedAt: null, previews });
 }
 await browser.close();
 console.log(`done: ${ok} baked, ${reused} reused (unchanged), ${skip} skipped -> ${manifestPath}`);
