@@ -194,6 +194,65 @@ describe('useProjectCollab workspace-context seeding', () => {
     expect(project.result.current.writerAuthority).toBe('allowed');
   });
 
+  // Sticky UX (default-collapsed chat) must use effective ownership, not raw
+  // isOwner. Catalog names the viewer as owner while /collab/status hangs —
+  // isOwner stays false, but isEffectiveOwner must be true and isSharedNonOwner
+  // false so ProjectView does not permanently collapse chat for the owner.
+  it('treats catalog-named owners as effective owners while status omits ownerMemberId', async () => {
+    await warmCaches([
+      { projectId: 'p-mine', ownerMemberId: 'wm-1', sharedAt: '2026-07-01T00:00:00.000Z' },
+    ]);
+
+    // Context resolves; collab status returns shared without ownerMemberId —
+    // the exact window where raw isOwner is false but the catalog already
+    // knows the viewer is the single writer.
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const pathname = new URL(String(input), 'http://d.local').pathname;
+      if (pathname.endsWith('/workspace/context')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ context: teamContext() }),
+        } as unknown as Response;
+      }
+      if (pathname.endsWith('/collab/status')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ publishedVersion: 2, syncState: 'synced' }),
+        } as unknown as Response;
+      }
+      return { ok: true, status: 200, json: async () => ({}) } as unknown as Response;
+    }) as typeof fetch;
+
+    const project = renderHook(() => useProjectCollab('p-mine', {
+      workspaceContext: TEAM_CONTEXT,
+    }));
+    await waitFor(() => {
+      expect(project.result.current.syncState).toBe('synced');
+    });
+    expect(project.result.current.isOwner).toBe(false);
+    expect(project.result.current.isEffectiveOwner).toBe(true);
+    expect(project.result.current.isSharedNonOwner).toBe(false);
+  });
+
+  it('marks a catalog-named teammate project as shared non-owner before status names them', async () => {
+    await warmCaches([
+      {
+        projectId: 'p-theirs',
+        ownerMemberId: 'someone-else',
+        sharedAt: '2026-07-01T00:00:00.000Z',
+      },
+    ]);
+
+    installFullyHangingFetch();
+    const project = renderHook(() => useProjectCollab('p-theirs', {
+      workspaceContext: TEAM_CONTEXT,
+    }));
+    expect(project.result.current.isEffectiveOwner).toBe(false);
+    expect(project.result.current.isSharedNonOwner).toBe(true);
+  });
+
   it('still fails closed on the first read of a session, before any context is known', async () => {
     installNeverResolvingContextFetch();
     const project = renderHook(() => useProjectCollab('p-private'));

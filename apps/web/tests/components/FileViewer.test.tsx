@@ -6203,6 +6203,8 @@ describe('FileViewer tweaks toolbar', () => {
       viewerOnly: true,
       writerAuthority: 'denied',
       isOwner: false,
+      isEffectiveOwner: false,
+      isSharedNonOwner: true,
       ownerDisplayName: 'Owner',
       ownerRole: 'owner',
       downloadPending: false,
