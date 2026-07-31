@@ -65,19 +65,18 @@ export const CATALOGUE: ReadonlyArray<CatalogueEntry> = [
   { id: 'cursor', label: 'Cursor', icon: 'sparkles', command: 'cursor', macOpenBundle: 'Cursor' },
   { id: 'vscode', label: 'VS Code', icon: 'file-code', command: 'code', macOpenBundle: 'Visual Studio Code' },
   { id: 'windsurf', label: 'Windsurf', icon: 'sparkles', command: 'windsurf', macOpenBundle: 'Windsurf' },
-  // Bare `kiro` is not a deterministic IDE entry point. Once the opt-in
-  // command router is installed (v1.26.0+, `kiro-cli integrations install
-  // kiro-command-router`) `kiro` routes to whatever the user set as their
-  // default, so `kiro set-default cli` makes this tile open the terminal
-  // agent instead of the IDE — see "Kiro Command Router" in
-  // https://kiro.dev/docs/cli/reference/cli-commands/. On darwin we sidestep
-  // the router by resolving /Applications/Kiro.app first: `open -a Kiro`
-  // reaches the IDE through LaunchServices in every router state. `kiro ide
-  // <dir>` is not a fix — with the router absent, `kiro` is a Code-OSS-style
-  // launcher that treats `ide` as a path and adds a spurious `ide` entry. On
-  // win32/linux the ambiguity stays unaddressed: no deterministic IDE entry
-  // point exists there today.
-  { id: 'kiro', label: 'Kiro', icon: 'sparkles', command: 'kiro', macOpenBundle: 'Kiro', preferMacOpenBundle: true },
+  // darwin-only: bare `kiro` is not a deterministic IDE entry point. Once the
+  // opt-in command router is installed (v1.26.0+) `kiro` routes to whatever
+  // the user set as their default, so `kiro set-default cli` would make this
+  // tile open the terminal agent — see "Kiro Command Router" in
+  // https://kiro.dev/docs/cli/reference/cli-commands/. `kiro ide <dir>` is not
+  // the fix: with the router absent, `kiro` is a Code-OSS-style launcher that
+  // treats `ide` as a path and opens a spurious `ide` entry. darwin is
+  // deterministic because it resolves /Applications/Kiro.app first, which
+  // reaches the IDE through LaunchServices in every router state; `command`
+  // stays as the fallback when that bundle is missing. win32/linux stay
+  // unadvertised until they have a verified deterministic launch path. (#6313)
+  { id: 'kiro', label: 'Kiro', icon: 'sparkles', command: 'kiro', macOpenBundle: 'Kiro', preferMacOpenBundle: true, platforms: ['darwin'] },
   { id: 'zed', label: 'Zed', icon: 'edit', command: 'zed', macOpenBundle: 'Zed' },
   { id: 'qoder', label: 'Qoder', icon: 'sparkles', command: 'qoder', macOpenBundle: ['Qoder', 'QoderWork'] },
   { id: 'antigravity', label: 'Antigravity', icon: 'orbit', command: 'antigravity', macOpenBundle: ['Antigravity', 'Google Antigravity'] },

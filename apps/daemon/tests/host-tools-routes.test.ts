@@ -93,28 +93,6 @@ describe('host tools resolution order — preferMacOpenBundle', () => {
     expect(plan.args).toEqual([DIR]);
   });
 
-  it('win32: kiro falls back to the $PATH shim with the dir as its only argument', async () => {
-    stubPlatform('win32', ['/fake/bin/kiro.exe']);
-
-    const plan = await resolveHostToolLaunchPlan('kiro', DIR);
-
-    expect(plan.available).toBe(true);
-    expect(plan.command).toBe('/fake/bin/kiro.exe');
-    expect(plan.args).toEqual([DIR]);
-    expect(plan.args).not.toContain('ide');
-  });
-
-  it('linux: kiro falls back to the $PATH shim with the dir as its only argument', async () => {
-    stubPlatform('linux', ['/fake/bin/kiro']);
-
-    const plan = await resolveHostToolLaunchPlan('kiro', DIR);
-
-    expect(plan.available).toBe(true);
-    expect(plan.command).toBe('/fake/bin/kiro');
-    expect(plan.args).toEqual([DIR]);
-    expect(plan.args).not.toContain('ide');
-  });
-
   it('darwin: an unflagged entry still prefers the $PATH shim over its app bundle', async () => {
     stubPlatform('darwin', ['/fake/bin/cursor', '/Applications/Cursor.app', '/usr/bin/open']);
 
@@ -132,7 +110,7 @@ describe('host tools resolution order — preferMacOpenBundle', () => {
   });
 });
 
-describe('platform gate — Warp is darwin-only, cross-platform tools stay available everywhere', () => {
+describe('platform gate — Warp and Kiro are darwin-only, cross-platform tools stay available everywhere', () => {
   it('CATALOGUE includes a warp entry', () => {
     const warp = CATALOGUE.find((e: CatalogueEntry) => e.id === 'warp');
     expect(warp).toBeDefined();
@@ -164,12 +142,29 @@ describe('platform gate — Warp is darwin-only, cross-platform tools stay avail
     expect(applicableForPlatform(cursor, 'darwin' as Platform)).toBe(true);
   });
 
-  it('kiro is applicable on all desktop platforms (regression guard)', () => {
-    const kiro = CATALOGUE.find((e: CatalogueEntry) => e.id === 'kiro')!;
+  // Kiro is the same shape of gate as Warp: darwin resolves the IDE app bundle
+  // deterministically, win32/linux have no verified IDE launch path yet, so the
+  // entry must not be advertised there. (#6313) `resolveHostToolLaunchPlan`
+  // reads CATALOGUE directly and does not consult applicableForPlatform, so the
+  // gate has to be asserted here rather than through a launch plan.
+  it('CATALOGUE includes a kiro entry', () => {
+    const kiro = CATALOGUE.find((e: CatalogueEntry) => e.id === 'kiro');
     expect(kiro).toBeDefined();
+  });
+
+  it('kiro is not applicable on win32', () => {
+    const kiro = CATALOGUE.find((e: CatalogueEntry) => e.id === 'kiro')!;
+    expect(applicableForPlatform(kiro, 'win32' as Platform)).toBe(false);
+  });
+
+  it('kiro is not applicable on linux', () => {
+    const kiro = CATALOGUE.find((e: CatalogueEntry) => e.id === 'kiro')!;
+    expect(applicableForPlatform(kiro, 'linux' as Platform)).toBe(false);
+  });
+
+  it('kiro is applicable on darwin', () => {
+    const kiro = CATALOGUE.find((e: CatalogueEntry) => e.id === 'kiro')!;
     expect(applicableForPlatform(kiro, 'darwin' as Platform)).toBe(true);
-    expect(applicableForPlatform(kiro, 'win32' as Platform)).toBe(true);
-    expect(applicableForPlatform(kiro, 'linux' as Platform)).toBe(true);
   });
 });
 
