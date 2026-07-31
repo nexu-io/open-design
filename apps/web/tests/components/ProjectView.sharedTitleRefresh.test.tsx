@@ -5,7 +5,11 @@ import { useState, type ReactNode } from 'react';
 import type { WorkspaceCollabContext } from '@open-design/contracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ProjectView, reconcileProjectDetail } from '../../src/components/ProjectView';
+import {
+  ProjectView,
+  reconcileConversationRecoveryGlobalError,
+  reconcileProjectDetail,
+} from '../../src/components/ProjectView';
 import type { ProjectNameAuthorityResolution } from '../../src/components/ProjectView';
 import { useIframeKeepAlivePool } from '../../src/components/IframeKeepAlivePool';
 import { useProjectCollab, type ProjectCollab } from '../../src/collab/useProjectCollab';
@@ -182,7 +186,11 @@ vi.mock('../../src/components/Loading', () => ({
 }));
 
 vi.mock('../../src/components/ChatPane', () => ({
-  ChatPane: () => <div data-testid="chat-pane" />,
+  ChatPane: ({ error }: { error?: string | null }) => (
+    <div data-testid="chat-pane">
+      {error ? <span data-testid="chat-error">{error}</span> : null}
+    </div>
+  ),
 }));
 
 const mockedUseIframeKeepAlivePool = vi.mocked(useIframeKeepAlivePool);
@@ -358,6 +366,8 @@ async function exhaustConversationMaterializationRetries() {
 
 describe('ProjectView shared-project title refresh on project-metadata-changed', () => {
   beforeEach(() => {
+    mockedListConversations.mockReset();
+    mockedListMessages.mockReset();
     mockedUseIframeKeepAlivePool.mockReturnValue({
       attach: vi.fn(),
       release: vi.fn(),
@@ -784,5 +794,192 @@ describe('ProjectView shared-project title refresh on project-metadata-changed',
     });
 
     expect(mockedListMessages).not.toHaveBeenCalled();
+  });
+
+  it('does not commit an in-flight materialization recovery after unmount', async () => {
+    vi.useFakeTimers();
+    const workspace = teamWorkspaceContext();
+    const sharedProject = { ...project, workspaceId: workspace.workspaceId };
+    mockedListConversations.mockRejectedValue(
+      new ProjectConversationsHttpError(404),
+    );
+    const view = renderProjectView(sharedProject, {
+      workspaceContextOverride: workspace,
+    });
+    await exhaustConversationMaterializationRetries();
+
+    let resolveRecovery: ((value: Conversation[]) => void) | undefined;
+    mockedListConversations.mockImplementationOnce(
+      () => new Promise<Conversation[]>((resolve) => {
+        resolveRecovery = resolve;
+      }),
+    );
+    dispatchProjectEvent({
+      type: 'project-metadata-changed',
+      projectId: sharedProject.id,
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(resolveRecovery).toBeTypeOf('function');
+
+    view.unmount();
+    await act(async () => {
+      resolveRecovery?.([conversation]);
+      await Promise.resolve();
+    });
+
+    expect(mockedListMessages).not.toHaveBeenCalled();
+  });
+
+  it('does not let an old A request swallow the only completion signal after A to B to A', async () => {
+    vi.useFakeTimers();
+    const workspaceA = teamWorkspaceContext('ws-a', 'wm-a');
+    const workspaceB = teamWorkspaceContext('ws-b', 'wm-b');
+    const sharedProjectA = { ...project, workspaceId: workspaceA.workspaceId };
+    const sharedProjectB = { ...project, workspaceId: workspaceB.workspaceId };
+    mockedListConversations.mockRejectedValue(
+      new ProjectConversationsHttpError(404),
+    );
+    const view = renderProjectView(sharedProjectA, {
+      workspaceContextOverride: workspaceA,
+      projectAuthorizationKey: 'ws-a:wm-a:project-1',
+    });
+    await exhaustConversationMaterializationRetries();
+
+    let resolveOldWorkspaceARecovery: ((value: Conversation[]) => void) | undefined;
+    mockedListConversations.mockImplementationOnce(
+      () => new Promise<Conversation[]>((resolve) => {
+        resolveOldWorkspaceARecovery = resolve;
+      }),
+    );
+    dispatchProjectEvent({
+      type: 'project-metadata-changed',
+      projectId: sharedProjectA.id,
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(resolveOldWorkspaceARecovery).toBeTypeOf('function');
+
+    mockedListConversations.mockRejectedValue(
+      new ProjectConversationsHttpError(404),
+    );
+    await act(async () => {
+      view.rerender(projectViewElement(sharedProjectB, {
+        workspaceContextOverride: workspaceB,
+        projectAuthorizationKey: 'ws-b:wm-b:project-1',
+      }));
+      await Promise.resolve();
+    });
+    await act(async () => {
+      view.rerender(projectViewElement(sharedProjectA, {
+        workspaceContextOverride: workspaceA,
+        projectAuthorizationKey: 'ws-a:wm-a:project-1',
+      }));
+      await Promise.resolve();
+    });
+    await exhaustConversationMaterializationRetries();
+    const callsBeforeNewCompletion = mockedListConversations.mock.calls.length;
+
+    mockedListConversations.mockResolvedValueOnce([conversation]);
+    const currentHandler = mockedUseProjectFileEvents.mock.calls.at(-1)?.[2] as
+      | ((evt: ProjectEvent) => void)
+      | undefined;
+    currentHandler?.({
+      type: 'project-metadata-changed',
+      projectId: sharedProjectA.id,
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(mockedListConversations).toHaveBeenCalledTimes(callsBeforeNewCompletion + 1);
+    expect(mockedListMessages).toHaveBeenCalledWith(
+      sharedProjectA.id,
+      conversation.id,
+      workspaceA,
+    );
+    await act(async () => {
+      resolveOldWorkspaceARecovery?.([conversation]);
+      await Promise.resolve();
+    });
+  });
+
+  it.each([403, 500])(
+    'replaces an exhausted 404 with the completion read %s error',
+    async (status) => {
+      vi.useFakeTimers();
+      const workspace = teamWorkspaceContext();
+      const sharedProject = { ...project, workspaceId: workspace.workspaceId };
+      mockedListConversations.mockRejectedValue(
+        new ProjectConversationsHttpError(404),
+      );
+      renderProjectView(sharedProject, {
+        workspaceContextOverride: workspace,
+      });
+      await exhaustConversationMaterializationRetries();
+
+      mockedListConversations.mockRejectedValueOnce(
+        new ProjectConversationsHttpError(status),
+      );
+      dispatchProjectEvent({
+        type: 'project-metadata-changed',
+        projectId: sharedProject.id,
+      });
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      expect(screen.getByTestId('chat-error').textContent).toBe(`conversations ${status}`);
+    },
+  );
+
+  it('does not overwrite an unrelated global error with a recovery read error', () => {
+    expect(reconcileConversationRecoveryGlobalError(
+      'artifact failed to load',
+      'conversations 404',
+      'conversations 500',
+    )).toBe('artifact failed to load');
+    expect(reconcileConversationRecoveryGlobalError(
+      'conversations 404',
+      'conversations 404',
+      'conversations 500',
+    )).toBe('conversations 500');
+  });
+
+  it('coalesces concurrent completion signals within one recovery generation', async () => {
+    vi.useFakeTimers();
+    const workspace = teamWorkspaceContext();
+    const sharedProject = { ...project, workspaceId: workspace.workspaceId };
+    mockedListConversations.mockRejectedValue(
+      new ProjectConversationsHttpError(404),
+    );
+    renderProjectView(sharedProject, {
+      workspaceContextOverride: workspace,
+    });
+    await exhaustConversationMaterializationRetries();
+    const callsAfterExhaustion = mockedListConversations.mock.calls.length;
+
+    let rejectRecovery: ((reason: unknown) => void) | undefined;
+    mockedListConversations.mockImplementationOnce(
+      () => new Promise<Conversation[]>((_resolve, reject) => {
+        rejectRecovery = reject;
+      }),
+    );
+    dispatchProjectEvent({
+      type: 'project-metadata-changed',
+      projectId: sharedProject.id,
+    });
+    dispatchProjectEvent({ type: 'file-changed', path: 'index.html', kind: 'change' });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(mockedListConversations).toHaveBeenCalledTimes(callsAfterExhaustion + 1);
+    await act(async () => {
+      rejectRecovery?.(new ProjectConversationsHttpError(404));
+      await Promise.resolve();
+    });
   });
 });

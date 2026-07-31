@@ -597,9 +597,19 @@ const CONVERSATION_LOAD_RETRY_DELAYS_MS = [
 type ConversationMaterializationRecovery = {
   projectId: string;
   authorityKey: string;
+  generation: number;
   workspaceContext: WorkspaceCollabContext;
   errorMessage: string;
 };
+export function reconcileConversationRecoveryGlobalError(
+  current: string | null,
+  previousConversationError: string,
+  nextConversationError: string,
+): string {
+  return current === null || current === previousConversationError
+    ? nextConversationError
+    : current;
+}
 // Trailing-debounce window for the canonical (daemon + SQLite) tab-state write.
 // Embedded-browser navigation bursts settle well within this; the local cache
 // is written immediately so nothing is lost if the daemon write is coalesced.
@@ -1914,7 +1924,9 @@ export function ProjectView({
   const [conversationLoadError, setConversationLoadError] = useState<string | null>(null);
   const conversationMaterializationRecoveryRef =
     useRef<ConversationMaterializationRecovery | null>(null);
-  const conversationMaterializationRecoveryInFlightRef = useRef<string | null>(null);
+  const conversationMaterializationGenerationRef = useRef(0);
+  const conversationMaterializationRecoveryInFlightRef =
+    useRef<ConversationMaterializationRecovery | null>(null);
   const [messageLoadRetryNonce, setMessageLoadRetryNonce] = useState(0);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [forkingMessageId, setForkingMessageId] = useState<string | null>(null);
@@ -2342,6 +2354,7 @@ export function ProjectView({
   // dropped), create one on the fly.
   useEffect(() => {
     let cancelled = false;
+    const generation = ++conversationMaterializationGenerationRef.current;
     const requestWorkspaceContext = projectRunWorkspaceContextRef.current;
     conversationMaterializationRecoveryRef.current = null;
     setPendingEmptyConversationSeed(null);
@@ -2400,6 +2413,7 @@ export function ProjectView({
             ? {
                 projectId: project.id,
                 authorityKey: projectRunAuthorityKey,
+                generation,
                 workspaceContext: requestWorkspaceContext,
                 errorMessage: message,
               }
@@ -2414,6 +2428,15 @@ export function ProjectView({
     })();
     return () => {
       cancelled = true;
+      if (conversationMaterializationGenerationRef.current === generation) {
+        conversationMaterializationGenerationRef.current += 1;
+      }
+      if (
+        conversationMaterializationRecoveryRef.current?.generation
+        === generation
+      ) {
+        conversationMaterializationRecoveryRef.current = null;
+      }
     };
   }, [project.id, projectRunAuthorityKey]);
 
@@ -2425,11 +2448,11 @@ export function ProjectView({
     if (!recovery) return;
     if (recovery.projectId !== signalProjectId) return;
     if (recovery.authorityKey !== signalAuthorityKey) return;
+    if (conversationMaterializationGenerationRef.current !== recovery.generation) return;
     if (projectIdRef.current !== recovery.projectId) return;
     if (projectRunAuthorityKeyRef.current !== recovery.authorityKey) return;
-    const recoveryKey = `${recovery.authorityKey}:${recovery.projectId}`;
-    if (conversationMaterializationRecoveryInFlightRef.current === recoveryKey) return;
-    conversationMaterializationRecoveryInFlightRef.current = recoveryKey;
+    if (conversationMaterializationRecoveryInFlightRef.current === recovery) return;
+    conversationMaterializationRecoveryInFlightRef.current = recovery;
     try {
       // Materialization completion is already our retry signal, so perform one
       // exact-scoped read here instead of extending the fixed initial retry
@@ -2439,6 +2462,7 @@ export function ProjectView({
         workspaceContext: recovery.workspaceContext,
       });
       if (conversationMaterializationRecoveryRef.current !== recovery) return;
+      if (conversationMaterializationGenerationRef.current !== recovery.generation) return;
       if (projectIdRef.current !== recovery.projectId) return;
       if (projectRunAuthorityKeyRef.current !== recovery.authorityKey) return;
 
@@ -2464,6 +2488,10 @@ export function ProjectView({
         : null;
       setActiveConversationId(routedMatch ? routedMatch.id : list[0]!.id);
     } catch (err) {
+      if (conversationMaterializationRecoveryRef.current !== recovery) return;
+      if (conversationMaterializationGenerationRef.current !== recovery.generation) return;
+      if (projectIdRef.current !== recovery.projectId) return;
+      if (projectRunAuthorityKeyRef.current !== recovery.authorityKey) return;
       if (
         err instanceof ProjectConversationsHttpError
         && err.status === 404
@@ -2473,11 +2501,18 @@ export function ProjectView({
       // A completion signal exposed a settled non-404 failure. Stop treating
       // it as a materialization race; a later project/authority load owns any
       // further retry and error presentation.
-      if (conversationMaterializationRecoveryRef.current === recovery) {
-        conversationMaterializationRecoveryRef.current = null;
-      }
+      conversationMaterializationRecoveryRef.current = null;
+      const message = err instanceof Error
+        ? err.message
+        : 'Could not load conversations for this project.';
+      setConversationLoadError(message);
+      setError((current) => reconcileConversationRecoveryGlobalError(
+        current,
+        recovery.errorMessage,
+        message,
+      ));
     } finally {
-      if (conversationMaterializationRecoveryInFlightRef.current === recoveryKey) {
+      if (conversationMaterializationRecoveryInFlightRef.current === recovery) {
         conversationMaterializationRecoveryInFlightRef.current = null;
       }
     }
