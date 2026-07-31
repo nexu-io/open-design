@@ -13,7 +13,7 @@
 //   --force         Re-download pets that already exist on disk.
 //   --out <dir>     Destination folder (defaults to assets/community-pets).
 
-import { mkdir, stat, writeFile } from 'node:fs/promises';
+import { mkdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -49,6 +49,16 @@ interface PetShareEnvelope {
 interface ParsedArgs {
   out: string;
   force: boolean;
+}
+
+async function writeFileAtomic(filePath: string, contents: string | Buffer): Promise<void> {
+  const tempPath = `${filePath}.${process.pid}.tmp`;
+  try {
+    await writeFile(tempPath, contents);
+    await rename(tempPath, filePath);
+  } finally {
+    await rm(tempPath, { force: true });
+  }
 }
 
 function parseArgs(argv: string[]): ParsedArgs {
@@ -141,7 +151,7 @@ async function bakePet(id: string, outRoot: string, force: boolean): Promise<'wr
     throw new Error(`${id}: spritesheet is not webp/png/gif`);
   }
   await mkdir(dir, { recursive: true });
-  await writeFile(sheetPath, bytes);
+  await writeFileAtomic(sheetPath, bytes);
   // Mirror the manifest shape the daemon's `listCodexPets` reader
   // expects, plus an explicit `source` block so the in-repo origin is
   // documented next to the bytes (handy when re-baking).
@@ -155,7 +165,7 @@ async function bakePet(id: string, outRoot: string, force: boolean): Promise<'wr
     source: 'codex-pet-share',
     sourceUrl: `https://codex-pet-share.pages.dev/#/pets/${encodeURIComponent(detail.id)}`,
   };
-  await writeFile(manifestPath, JSON.stringify(manifest, null, 2) + '\n', 'utf8');
+  await writeFileAtomic(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
   return 'wrote';
 }
 
