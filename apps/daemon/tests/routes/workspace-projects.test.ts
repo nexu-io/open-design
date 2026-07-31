@@ -9,6 +9,7 @@ import { startServer } from '../../src/server.js';
 import { registerProjectRoutes } from '../../src/routes/project/index.js';
 import { projectResourceIdFor } from '../../src/integrations/vela-team-projects.js';
 import type { WorkspaceDirectoryFetchResult } from '../../src/collab/vela-workspace-context.js';
+import { recoverPersistedTeamShareOwnership } from '../../src/collab/persisted-team-share.js';
 
 describe('workspace project routes', () => {
   let server: http.Server;
@@ -1421,7 +1422,12 @@ describe('workspace project routes', () => {
     }
   });
 
-  it('uses the catalog title for an exact shared mirror whose local row is still a placeholder', async () => {
+  it.each([
+    ['syncing', 'pending_upload'],
+    ['failed', 'sync_failed'],
+  ] as const)(
+    'uses the catalog title without persisting a foreign mirror as locally owned (%s)',
+    async (remoteSyncState, expectedSyncState) => {
     const projectId = `workspace-materialized-placeholder-${Date.now()}`;
     const adminMemberId = 'member-admin-viewer';
     const ownerMemberId = 'member-project-owner';
@@ -1430,13 +1436,31 @@ describe('workspace project routes', () => {
     const teamProjectCatalog = {
       list: vi.fn(async () => [
         {
+          id: `catalog-wrong-workspace-${projectId}`,
+          workspaceId: 'ws-other',
+          projectId,
+          resourceId,
+          ownerMemberId,
+          displayName: 'Wrong workspace title',
+          syncState: 'synced',
+          lastSyncedVersionId: 'version-wrong-workspace',
+          createdAt: new Date(1).toISOString(),
+          updatedAt: new Date(2).toISOString(),
+          access: {
+            canView: true,
+            canComment: true,
+            canEdit: false,
+            frozen: false,
+          },
+        },
+        {
           id: `catalog-${projectId}`,
           workspaceId,
           projectId,
           resourceId,
           ownerMemberId,
           displayName: 'Owner project title',
-          syncState: 'synced',
+          syncState: remoteSyncState,
           lastSyncedVersionId: 'version-1',
           createdAt: new Date(10).toISOString(),
           updatedAt: new Date(20).toISOString(),
@@ -1486,10 +1510,16 @@ describe('workspace project routes', () => {
         createdByWorkspaceMemberId: ownerMemberId,
         updatedByWorkspaceMemberId: adminMemberId,
         resourceHubResourceId: resourceId,
+        currentUserAccess: {
+          canRename: false,
+          canDelete: false,
+          canMoveToPersonal: false,
+        },
         project: {
           id: projectId,
           name: 'Owner project title',
         },
+        syncState: expectedSyncState,
       });
       expect(rebindWorkspaceProject).toHaveBeenCalledWith(
         expect.anything(),
@@ -1497,16 +1527,33 @@ describe('workspace project routes', () => {
         expect.objectContaining({
           workspaceId,
           visibility: 'team',
-          createdByWorkspaceMemberId: ownerMemberId,
+          createdByWorkspaceMemberId: null,
           updatedByWorkspaceMemberId: adminMemberId,
           resourceHubResourceId: resourceId,
-          syncState: 'synced',
+          syncState: expectedSyncState,
         }),
       );
+      const persistedPatch = rebindWorkspaceProject.mock.calls[0]?.[2] as {
+        createdByWorkspaceMemberId?: string | null;
+      };
+      expect(recoverPersistedTeamShareOwnership({
+        projectId,
+        workspaceId,
+        createdByWorkspaceMemberId: persistedPatch.createdByWorkspaceMemberId ?? null,
+        updatedByWorkspaceMemberId: adminMemberId,
+      })).toBeNull();
+      expect(teamProjectCatalog.list).toHaveBeenCalledTimes(1);
+      expect(teamProjectCatalog.list).toHaveBeenCalledWith({
+        memberId: adminMemberId,
+        teamId: workspaceId,
+        role: 'admin',
+        lifecycleState: 'active',
+      });
     } finally {
       await close(routeServer.server);
     }
-  });
+    },
+  );
 
   it('does not merge remote team projects into a personal workspace list (isolation)', async () => {
     const remoteProjectId = `workspace-personal-leak-${Date.now()}`;

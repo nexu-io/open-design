@@ -1924,15 +1924,16 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
    * Reconcile a project's local `workspace_projects` row against what B's team
    * catalog says about THIS member's access to it, in both directions.
    *
-   * `listRemoteTeamProjectSummaries` below only reaches a project when its
-   * local row (if any) has no `resourceHubResourceId` match to the catalog
-   * entry — i.e. a row that predates this project's current team binding (an
-   * orphaned local draft that happens to share a project id with something
-   * later shared into this exact team, e.g. old test data, or a device that
-   * never ran the adoption flow). `accessForRemoteTeamProject` already derives
-   * the DISPLAYED capabilities from `remote.access.canEdit`; without this, the
-   * ENFORCED ones would keep reading the stale local row instead — which is
-   * exactly backwards in either direction:
+   * `listRemoteTeamProjectSummaries` passes an already-loaded local row for an
+   * exact resource/project match; unmatched catalog rows keep the historical
+   * project-id lookup used to repair stale bindings. This keeps the list path
+   * at one catalog call without adding one SQLite lookup per visible project.
+   * Exact matches may safely repair binding state, but a foreign mirror must
+   * remain creator-unattributed in SQLite; the remote owner is display/
+   * authorization evidence, not evidence that this daemon created the
+   * project. `accessForRemoteTeamProject` derives the DISPLAYED capabilities
+   * from `remote.access.canEdit`; without matching ENFORCED state, the two
+   * directions disagree:
    *   - `canEdit: true` but the local row is missing/mismatched: the listing
    *     would show a normal-looking, "editable" project whose every save 403s,
    *     because `enforceWorkspaceProjectMutation` never finds a matching row.
@@ -1941,33 +1942,42 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
    *     real, coincidence — e.g. a locally-created draft that was never
    *     shared, then this project id got reused by an unrelated team share):
    *     the local row would grant a save the remote side has already revoked.
-   * Only ever writes a row that visibly disagrees with B; a project this
-   * function never inspects (already correctly bound, resourceId matches) is
-   * untouched, and its access still comes solely from the local row as before.
+   * Only a visibly stale exact binding or the existing narrow access-repair
+   * case is written. A correct mirror remains untouched.
    */
-  function reconcileLocalRowWithRemoteTeamAccess(remote: VelaTeamProjectRecord, ctx: WorkspaceProjectContext): void {
-    const existing = getWorkspaceProjectByProjectId(db, remote.projectId);
+  function reconcileLocalRowWithRemoteTeamAccess(
+    remote: VelaTeamProjectRecord,
+    ctx: WorkspaceProjectContext,
+    loadedExactRow?: any,
+  ): void {
+    const existing = loadedExactRow ?? getWorkspaceProjectByProjectId(db, remote.projectId);
+    const existingVisibility = existing?.visibility ?? existing?.workspaceVisibility;
     // Ownership match required, same reasoning as accessForRemoteTeamProject
     // above: never rebind a row to make a reader look like this project's
     // creator just because B's generic canEdit happens to read true for them.
     const isOwner = remote.ownerMemberId === ctx.workspaceMemberId;
+    const persistedCreatorMemberId = isOwner ? ctx.workspaceMemberId : null;
     const canEdit = remote.access.canEdit && remote.access.canView && !remote.access.frozen && isOwner;
+    const expectedResourceState = remote.access.frozen ? 'frozen' : 'active';
+    const expectedSyncState = velaProjectSyncStateToProject(remote.syncState);
     if (canEdit) {
       const alreadyCorrect = existing
         && existing.workspaceId === ctx.workspaceId
-        && existing.visibility === 'team'
-        && existing.createdByWorkspaceMemberId === ctx.workspaceMemberId
-        && existing.resourceHubResourceId === remote.resourceId;
+        && existingVisibility === 'team'
+        && existing.createdByWorkspaceMemberId === persistedCreatorMemberId
+        && existing.resourceHubResourceId === remote.resourceId
+        && existing.resourceState === expectedResourceState
+        && existing.syncState === expectedSyncState;
       if (alreadyCorrect) return;
       rebindWorkspaceProject(db, remote.projectId, {
         workspaceId: ctx.workspaceId,
         visibility: 'team',
-        resourceState: 'active',
-        createdByWorkspaceMemberId: ctx.workspaceMemberId,
+        resourceState: expectedResourceState,
+        createdByWorkspaceMemberId: persistedCreatorMemberId,
         updatedByWorkspaceMemberId: ctx.workspaceMemberId,
         resourceHubResourceId: remote.resourceId,
         cloudTombstonedAt: null,
-        syncState: 'synced',
+        syncState: expectedSyncState,
         // This runs INSIDE the list read, against B's catalog — nobody changed
         // the project, so it must not restamp `lastActivityAt` below (which is
         // `MAX(p.updated_at, wp.updated_at)`). See SYNC_KEEPS_UPDATED_AT.
@@ -1982,30 +1992,29 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     // workspace + THIS member as a team-writable binding for THIS project.
     const exactRemoteBinding = existing
       && existing.workspaceId === ctx.workspaceId
-      && existing.visibility === 'team'
+      && existingVisibility === 'team'
       && existing.resourceHubResourceId === remote.resourceId;
-    const expectedResourceState = remote.access.frozen ? 'frozen' : 'active';
     if (
       exactRemoteBinding
-      && existing.createdByWorkspaceMemberId === remote.ownerMemberId
+      && existing.createdByWorkspaceMemberId === persistedCreatorMemberId
       && existing.resourceState === expectedResourceState
-      && existing.syncState === 'synced'
+      && existing.syncState === expectedSyncState
     ) {
       return;
     }
     const wronglyPermissive = existing
       && existing.workspaceId === ctx.workspaceId
-      && existing.visibility === 'team'
+      && existingVisibility === 'team'
       && existing.createdByWorkspaceMemberId === ctx.workspaceMemberId;
     if (!exactRemoteBinding && !wronglyPermissive) return;
     rebindWorkspaceProject(db, remote.projectId, {
       workspaceId: ctx.workspaceId,
       visibility: 'team',
       resourceState: expectedResourceState,
-      createdByWorkspaceMemberId: remote.ownerMemberId,
+      createdByWorkspaceMemberId: persistedCreatorMemberId,
       updatedByWorkspaceMemberId: ctx.workspaceMemberId,
       resourceHubResourceId: remote.resourceId,
-      syncState: 'synced',
+      syncState: expectedSyncState,
       // Same reason as the canEdit branch above: reconciliation, not activity.
       updatedAt: SYNC_KEEPS_UPDATED_AT,
     });
@@ -2126,6 +2135,11 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       };
     }
     const localResourceIds = new Set(localRows.map((row) => row.resourceHubResourceId).filter(Boolean));
+    const localRowByExactRemoteIdentity = new Map(
+      localRows
+        .filter((row) => row.resourceHubResourceId)
+        .map((row) => [`${row.resourceHubResourceId}\0${row.id}`, row] as const),
+    );
     const tombstoned = locallyTombstonedTeamProjects(localRows, ctx);
     let remoteProjects: VelaTeamProjectRecord[];
     try {
@@ -2135,11 +2149,13 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     }
     const seenResourceIds = new Set<string>();
     const visibleProjects = remoteProjects
+      .filter((project) => project.workspaceId === ctx.workspaceId)
       .filter((project) => project.access.canView)
       .filter((project) => !remoteTeamProjectWasUnsharedLocally(project, tombstoned, ctx));
     for (const project of visibleProjects) {
       try {
-        reconcileLocalRowWithRemoteTeamAccess(project, ctx);
+        const exactRow = localRowByExactRemoteIdentity.get(`${project.resourceId}\0${project.projectId}`);
+        reconcileLocalRowWithRemoteTeamAccess(project, ctx, exactRow);
       } catch (error) {
         // Best-effort: a reconciliation failure must not break the list itself
         // (the client still gets a correct-enough READ from accessForRemoteTeamProject
@@ -2149,7 +2165,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     }
     const matchedByResourceId = new Map(
       visibleProjects
-        .filter((project) => localResourceIds.has(project.resourceId))
+        .filter((project) => localRowByExactRemoteIdentity.has(`${project.resourceId}\0${project.projectId}`))
         .map((project) => [project.resourceId, project] as const),
     );
     const remoteSummaries = visibleProjects
