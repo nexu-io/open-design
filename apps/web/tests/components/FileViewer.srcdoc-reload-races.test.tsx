@@ -235,7 +235,7 @@ function fetchReturning(html: string) {
 }
 
 describe('FileViewer srcDoc reload — prevSourceBeforeReloadRef race conditions', () => {
-  it('seeds a same-version remount from the settled source while revalidating in the background', async () => {
+  it('seeds a same-version remount from the settled source without a redundant background read', async () => {
     const v1 = deckHtml('REVISIT-CACHED-V1');
     vi.stubGlobal('fetch', fetchReturning(v1));
 
@@ -253,8 +253,8 @@ describe('FileViewer srcDoc reload — prevSourceBeforeReloadRef race conditions
     });
     first.unmount();
 
-    const { handle: heldRevalidationHandle, stub: heldRevalidation } = deferredFetch();
-    vi.stubGlobal('fetch', heldRevalidation);
+    const remountFetch = fetchReturning(deckHtml('UNEXPECTED-REMOTE-V2'));
+    vi.stubGlobal('fetch', remountFetch);
     render(
       <FileViewer
         projectId="project-1"
@@ -266,17 +266,12 @@ describe('FileViewer srcDoc reload — prevSourceBeforeReloadRef race conditions
 
     expect(srcDocFrame().getAttribute('srcDoc')).toContain('REVISIT-CACHED-V1');
     expect(screen.queryByRole('status', { name: /loading/i })).not.toBeInTheDocument();
-    expect(heldRevalidation).toHaveBeenCalled();
-
-    await act(async () => {
-      heldRevalidationHandle.resolve(null, 500);
-      await Promise.resolve();
-    });
-    expect(srcDocFrame().getAttribute('srcDoc')).toContain('REVISIT-CACHED-V1');
-    expect(screen.queryByRole('status', { name: /loading/i })).not.toBeInTheDocument();
+    expect(
+      remountFetch.mock.calls.some(([input]) => String(input).startsWith(RAW_URL_PREFIX)),
+    ).toBe(false);
   });
 
-  it('replaces an immediate cached v1 seed with no-store background v2 even when metadata is unchanged', async () => {
+  it('invalidates a cached v1 after a file event and loads v2 even when metadata is unchanged', async () => {
     const file = deckFile({ name: 'remote-update.html', path: 'remote-update.html' });
     vi.stubGlobal('fetch', fetchReturning(deckHtml('REMOTE-CACHED-V1')));
 
@@ -293,25 +288,40 @@ describe('FileViewer srcDoc reload — prevSourceBeforeReloadRef race conditions
     });
     first.unmount();
 
-    const v2Fetch = fetchReturning(deckHtml('REMOTE-ORIGIN-V2'));
+    const { handle: v2Handle, stub: v2Fetch } = deferredFetch();
+    const v2FetchMock = vi.mocked(v2Fetch);
     vi.stubGlobal('fetch', v2Fetch);
     render(
       <FileViewer
         projectId="project-1"
         projectKind="prototype"
         file={file}
+        filesRefreshKey={1}
         isDeck
       />,
     );
 
-    expect(srcDocFrame().getAttribute('srcDoc')).toContain('REMOTE-CACHED-V1');
-    expect(screen.queryByRole('status', { name: /loading/i })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('artifact-preview-frame')).not.toBeInTheDocument();
+    expect(screen.getByRole('status', { name: /loading/i })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(
+        v2FetchMock.mock.calls.some(([input]) => String(input).startsWith(RAW_URL_PREFIX)),
+      ).toBe(true);
+    });
+
+    await act(async () => {
+      v2Handle.resolve(deckHtml('REMOTE-ORIGIN-V2'));
+      await Promise.resolve();
+    });
+
     await waitFor(() => {
       expect(srcDocFrame().getAttribute('srcDoc')).toContain('REMOTE-ORIGIN-V2');
     });
     expect(srcDocFrame().getAttribute('srcDoc')).not.toContain('REMOTE-CACHED-V1');
 
-    const rawCall = v2Fetch.mock.calls.find(([input]) => String(input).startsWith(RAW_URL_PREFIX));
+    const rawCall = v2FetchMock.mock.calls.find(([input]) =>
+      String(input).startsWith(RAW_URL_PREFIX),
+    );
     expect(rawCall?.[1]).toMatchObject({ cache: 'no-store' });
   });
 
