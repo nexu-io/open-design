@@ -1,4 +1,4 @@
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 type Manifest = {
@@ -22,6 +22,16 @@ type AssetSpec = {
   eyebrow: string;
   body: string;
 };
+
+async function writeFileAtomic(filePath: string, content: string): Promise<void> {
+	const temporaryPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+	try {
+		await writeFile(temporaryPath, content, "utf8");
+		await rename(temporaryPath, filePath);
+	} finally {
+		await unlink(temporaryPath).catch(() => {});
+	}
+}
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const designSystemsRoot = path.join(repoRoot, "design-systems");
@@ -357,11 +367,11 @@ async function generateForDir(systemDir: string): Promise<boolean> {
   await mkdir(artifactsDir, { recursive: true });
 
   await Promise.all([
-    writeFile(path.join(outDir, "kit.html"), renderKitHtml(manifest, tokens, "light"), "utf8"),
-    writeFile(path.join(outDir, "kit.dark.html"), renderKitHtml(manifest, tokens, "dark"), "utf8"),
-    writeFile(path.join(outDir, "index.html"), renderIndexHtml(manifest, tokens), "utf8"),
-    writeFile(path.join(outDir, "tokens.default.json"), `${JSON.stringify(tokenSubset(tokens), null, 2)}\n`, "utf8"),
-    ...assetSpecs.map((spec) => writeFile(path.join(artifactsDir, spec.file), renderAssetHtml(manifest, tokens, spec), "utf8")),
+    writeFileAtomic(path.join(outDir, "kit.html"), renderKitHtml(manifest, tokens, "light")),
+    writeFileAtomic(path.join(outDir, "kit.dark.html"), renderKitHtml(manifest, tokens, "dark")),
+    writeFileAtomic(path.join(outDir, "index.html"), renderIndexHtml(manifest, tokens)),
+    writeFileAtomic(path.join(outDir, "tokens.default.json"), `${JSON.stringify(tokenSubset(tokens), null, 2)}\n`),
+    ...assetSpecs.map((spec) => writeFileAtomic(path.join(artifactsDir, spec.file), renderAssetHtml(manifest, tokens, spec))),
   ]);
   return true;
 }
