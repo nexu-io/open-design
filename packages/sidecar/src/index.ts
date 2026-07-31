@@ -466,8 +466,13 @@ export async function readJsonFile<T = any>(filePath: string): Promise<T | null>
 export async function writeJsonFile(filePath: string, payload: unknown): Promise<void> {
   await mkdir(dirname(filePath), { recursive: true });
   const tmpPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
-  await writeFile(tmpPath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
-  await rename(tmpPath, filePath);
+  try {
+    await writeFile(tmpPath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+    await rename(tmpPath, filePath);
+  } catch (error) {
+    await rm(tmpPath, { force: true });
+    throw error;
+  }
 }
 
 export async function removeFile(filePath: string): Promise<void> {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { createServer } from "node:net";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
@@ -16,6 +16,7 @@ import {
   resolveRuntimeNamespaceRoot,
   resolveSidecarBase,
   resolveSourceRuntimeRoot,
+  writeJsonFile,
   type SidecarContractDescriptor,
   type SidecarStampShape,
 } from "../src/index.js";
@@ -126,6 +127,21 @@ describe("JSON IPC transport", () => {
       await expect(requestJsonIpc(socketPath, { op: "status" })).rejects.toThrow(/invalid IPC response/);
     } finally {
       await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("atomic JSON files", () => {
+  it("removes the temporary file when the final rename fails", async () => {
+    const tempRoot = await mkdtemp(join(tmpdir(), "open-design-json-"));
+    const target = join(tempRoot, "occupied");
+    await mkdir(target, { recursive: true });
+
+    try {
+      await expect(writeJsonFile(target, { ok: true })).rejects.toThrow();
+      expect(await readdir(tempRoot)).toEqual(["occupied"]);
+    } finally {
       await rm(tempRoot, { recursive: true, force: true });
     }
   });
