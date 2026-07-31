@@ -398,7 +398,7 @@ describe('ProjectView shared-project title refresh on project-metadata-changed',
     ));
 
     function RecipientShell() {
-      const [activeProject, setActiveProject] = useState(placeholder);
+      const [activeProject, setActiveProject] = useState<Project>(placeholder);
       return (
         <>
           <span data-testid="recipient-sidebar-title">{activeProject.name}</span>
