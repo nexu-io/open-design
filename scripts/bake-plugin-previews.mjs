@@ -99,8 +99,21 @@ function argList(name) {
 const OUT = path.resolve(arg('out', '.tmp/plugin-previews'));
 const LIMIT = Number(arg('limit', '0')) || 0;
 const ONLY = argList('id');
+const configuredFetchTimeout = Number(process.env.PREVIEW_FETCH_TIMEOUT_MS || 15000);
+const FETCH_TIMEOUT_MS = Number.isFinite(configuredFetchTimeout) && configuredFetchTimeout > 0
+  ? configuredFetchTimeout : 15000;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function fetchWithTimeout(url) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    return await fetch(url, { signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 function resolveChrome() {
   if (process.env.CHROME && existsSync(process.env.CHROME)) return process.env.CHROME;
@@ -116,7 +129,7 @@ function resolveChrome() {
 // ---- discover the html-preview plugins ------------------------------------
 async function discoverIds() {
   if (ONLY.length) return ONLY;
-  const res = await fetch(`${BASE_URL}/api/plugins`);
+  const res = await fetchWithTimeout(`${BASE_URL}/api/plugins`);
   const data = await res.json();
   const items = Array.isArray(data) ? data : (data.plugins || data.items || data.available || []);
   const ids = items
@@ -131,7 +144,7 @@ async function discoverIds() {
 async function loadMotionMap() {
   const map = {};
   try {
-    const res = await fetch(`${BASE_URL}/api/plugins`);
+    const res = await fetchWithTimeout(`${BASE_URL}/api/plugins`);
     const data = await res.json();
     const items = Array.isArray(data) ? data : (data.plugins || data.items || data.available || []);
     for (const it of items) {
@@ -471,7 +484,7 @@ for (const id of ids) {
   // nothing. Editing the page or bumping BAKE_VERSION invalidates the hash.
   let hash = null;
   try {
-    const html = await (await fetch(`${BASE_URL}/api/plugins/${encodeURIComponent(id)}/preview`)).text();
+    const html = await (await fetchWithTimeout(`${BASE_URL}/api/plugins/${encodeURIComponent(id)}/preview`)).text();
     hash = createHash('sha256').update(html).update(` ${BAKE_VERSION} ${motionMap[id] || ''}`).digest('hex').slice(0, 16);
   } catch {}
   const prev = previews[id];
