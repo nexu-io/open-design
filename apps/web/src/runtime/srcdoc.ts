@@ -51,6 +51,9 @@ export type SrcdocOptions = {
    * This guarantees that the iframe's `srcdoc` attribute is updated in the DOM
    * and the browser re-parses the document (issue #4650). */
   reloadKey?: number;
+  /** Document-owned identity for preview content-size reports. The host rejects
+   * reports from a previous srcdoc document even if it echoed a newer request. */
+  previewMeasurementEpoch?: string;
 };
 
 // --- Redirect-loop guard -------------------------------------------------
@@ -425,7 +428,10 @@ export function buildSrcdoc(
   // visible flash) every time the host toggle flips.
   const withTweaks = injectTweaksBridge(withEdit);
   const withTransport = injectSrcdocTransportActivationBridge(
-    injectExportCaptureBridge(injectSnapshotBridge(injectPreviewContentSizeBridge(withTweaks))),
+    injectExportCaptureBridge(injectSnapshotBridge(injectPreviewContentSizeBridge(
+      withTweaks,
+      options.previewMeasurementEpoch ?? '',
+    ))),
   );
   // Embed the reload counter so the srcdoc string differs across reloads even
   // when the underlying HTML bytes are identical.  This ensures the browser
@@ -724,32 +730,54 @@ function injectSnapshotBridge(doc: string): string {
   return injectBeforeBodyEnd(doc, script);
 }
 
-function injectPreviewContentSizeBridge(doc: string): string {
+function injectPreviewContentSizeBridge(doc: string, documentEpoch: string): string {
+  const serializedDocumentEpoch = JSON.stringify(documentEpoch).replace(/</g, '\\u003c');
   const script = `<script data-od-preview-content-size-bridge>(function(){
   if (window.__odPreviewContentSizeBridge) return;
   window.__odPreviewContentSizeBridge = true;
   var pending = false;
+  var lastRequest = null;
+  var documentEpoch = ${serializedDocumentEpoch};
   function measure(){
     var root = document.documentElement;
     var body = document.body || root;
     if (!root) return null;
-    var values = [
+    var scrollValues = [
       root.scrollWidth,
       body && body.scrollWidth,
-      root.offsetWidth,
-      body && body.offsetWidth,
+    ];
+    var clientValues = [
       root.clientWidth,
       body && body.clientWidth
     ];
-    var width = 0;
-    for (var i = 0; i < values.length; i += 1) {
-      var next = Number(values[i] || 0);
-      if (Number.isFinite(next) && next > width) width = next;
+    var scrollWidth = 0;
+    var clientWidth = 0;
+    for (var i = 0; i < scrollValues.length; i += 1) {
+      var nextScroll = Number(scrollValues[i] || 0);
+      if (Number.isFinite(nextScroll) && nextScroll > scrollWidth) scrollWidth = nextScroll;
     }
-    return width > 0 ? Math.ceil(width) : null;
+    for (var j = 0; j < clientValues.length; j += 1) {
+      var nextClient = Number(clientValues[j] || 0);
+      if (Number.isFinite(nextClient) && nextClient > clientWidth) clientWidth = nextClient;
+    }
+    return {
+      scrollWidth: scrollWidth > 0 ? Math.ceil(scrollWidth) : null,
+      clientWidth: clientWidth > 0 ? Math.ceil(clientWidth) : null
+    };
   }
   function post(){
-    try { window.parent.postMessage({ type: 'od:preview-content-size', width: measure() }, '*'); } catch (_) {}
+    if (!lastRequest) return;
+    var size = measure();
+    try {
+      window.parent.postMessage({
+        type: 'od:preview-content-size',
+        measurementId: lastRequest.measurementId,
+        generation: lastRequest.generation,
+        documentEpoch: documentEpoch,
+        scrollWidth: size && size.scrollWidth,
+        clientWidth: size && size.clientWidth
+      }, '*');
+    } catch (_) {}
   }
   function schedule(){
     if (pending) return;
@@ -762,6 +790,11 @@ function injectPreviewContentSizeBridge(doc: string): string {
   window.addEventListener('message', function(ev){
     var data = ev && ev.data;
     if (!data || data.type !== 'od:preview-content-size-request') return;
+    if (typeof data.measurementId !== 'string' || typeof data.generation !== 'string') return;
+    lastRequest = {
+      measurementId: data.measurementId,
+      generation: data.generation
+    };
     schedule();
   });
   window.addEventListener('resize', schedule);

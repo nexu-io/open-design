@@ -358,6 +358,12 @@ describe('GET /api/projects/:id/raw/* range request route', () => {
     expect(html).toContain("type: 'od:preview-scroll'");
     expect(html).toContain("type: 'od:preview-content-size'");
     expect(html).toContain('od:preview-content-size-request');
+    expect(html).toContain('lastContentSizeRequest.measurementId');
+    expect(html).toContain('lastContentSizeRequest.generation');
+    expect(html).toContain('documentEpoch: contentSizeDocumentEpoch');
+    expect(html).toContain("get('odPreviewEpoch')");
+    expect(html).toContain('scrollWidth: size && size.scrollWidth');
+    expect(html).toContain('clientWidth: size && size.clientWidth');
   });
 
   it('injects the URL preview scroll bridge before the closing body tag', async () => {
@@ -446,6 +452,12 @@ describe('GET /api/projects/:id/raw/* range request route', () => {
     expect(html).toContain('data-od-url-scroll-bridge');
     expect(html).toContain("type: 'od:preview-content-size'");
     expect(html).toContain('od:preview-content-size-request');
+    expect(html).toContain('lastContentSizeRequest.measurementId');
+    expect(html).toContain('lastContentSizeRequest.generation');
+    expect(html).toContain('documentEpoch: contentSizeDocumentEpoch');
+    expect(html).toContain("get('odPreviewEpoch')");
+    expect(html).toContain('scrollWidth: size && size.scrollWidth');
+    expect(html).toContain('clientWidth: size && size.clientWidth');
   });
 
   it('does not let the powered preview origin call normal daemon APIs', async () => {

@@ -594,7 +594,25 @@ const htmlPreviewZoomState = new Map<string, { zoom: number; zoomMode: 'auto' | 
 // real measurement message arrives (see onContentSizeMessage below) or the
 // canvas-grow recovery in the auto-fit effect fires.
 const MAX_CACHED_PREVIEW_CONTENT_WIDTHS = 128;
-const htmlPreviewContentWidthState = new Map<string, number>();
+const PREVIEW_CONTENT_WIDTH_CACHE_VERSION = 2;
+let previewContentMeasurementDocumentEpochSequence = 0;
+let previewContentMeasurementHostInstanceSequence = 0;
+function nextPreviewContentMeasurementDocumentEpoch(): string {
+  previewContentMeasurementDocumentEpochSequence += 1;
+  return `preview-document-${previewContentMeasurementDocumentEpochSequence}`;
+}
+function nextPreviewContentMeasurementHostInstance(): string {
+  previewContentMeasurementHostInstanceSequence += 1;
+  return `preview-host-${previewContentMeasurementHostInstanceSequence}`;
+}
+type PreviewContentWidthCacheEntry = {
+  version: typeof PREVIEW_CONTENT_WIDTH_CACHE_VERSION;
+  width: number;
+  measuredClientWidth: number;
+  overflow: boolean;
+};
+const htmlPreviewContentWidthState = new Map<string, PreviewContentWidthCacheEntry>();
+const htmlPreviewDocumentEpochState = new Map<string, string>();
 const MARKDOWN_CODE_BLOCK_ATTR = 'data-markdown-code-block';
 const MARKDOWN_CODE_LANGUAGE_ATTR = 'data-code-language';
 const MARKDOWN_COPY_BLOCK_ATTR = 'data-copy-code-block';
@@ -1121,6 +1139,130 @@ export function desktopPreviewAutoFitZoomPercent(
   return Math.max(1, Math.min(100, (canvasSize.width / contentWidth) * 100));
 }
 
+export type PreviewContentMeasurementRequest = {
+  measurementId: string;
+  generation: string;
+  documentEpoch: string;
+  canvasWidth: number;
+  previewScale: number;
+};
+
+export type PreviewContentMeasurementResponse = {
+  measurementId: string;
+  generation: string;
+  documentEpoch: string;
+  scrollWidth: number | null;
+  clientWidth: number | null;
+};
+
+type PreviewContentMeasurementResolution =
+  | {
+    action: 'accept';
+    contentWidth: number;
+    measuredClientWidth: number;
+    overflow: boolean;
+  }
+  | { action: 'preserve' }
+  | { action: 'remeasure-neutral' }
+  | { action: 'ignore' };
+
+const PREVIEW_CONTENT_WIDTH_EPSILON = 1;
+const PREVIEW_SCALE_EPSILON = 0.0001;
+
+/**
+ * Resolves a content-width report against the exact viewport state that asked
+ * for it. At a non-neutral zoom, html/body clientWidth expands inversely with
+ * the scale shell. An equal scrollWidth/clientWidth report is therefore only
+ * the viewport floor, not evidence that the artifact itself is that wide.
+ */
+export function resolveDesktopPreviewContentMeasurement(params: {
+  request: PreviewContentMeasurementRequest;
+  response: PreviewContentMeasurementResponse;
+  currentGeneration: string;
+  latestMeasurementId: string | null;
+  currentCanvasWidth: number;
+  currentPreviewScale: number;
+  confirmedContentWidth: number | null;
+  confirmedOverflow?: boolean | null;
+}): PreviewContentMeasurementResolution {
+  const {
+    request,
+    response,
+    currentGeneration,
+    latestMeasurementId,
+    currentCanvasWidth,
+    currentPreviewScale,
+    confirmedContentWidth,
+    confirmedOverflow,
+  } = params;
+  if (
+    response.measurementId !== request.measurementId ||
+    response.generation !== request.generation ||
+    response.documentEpoch !== request.documentEpoch ||
+    request.measurementId !== latestMeasurementId ||
+    request.generation !== currentGeneration ||
+    Math.abs(request.canvasWidth - currentCanvasWidth) > PREVIEW_CONTENT_WIDTH_EPSILON ||
+    Math.abs(request.previewScale - currentPreviewScale) > PREVIEW_SCALE_EPSILON
+  ) {
+    return { action: 'ignore' };
+  }
+
+  const scrollWidth = typeof response.scrollWidth === 'number' &&
+    Number.isFinite(response.scrollWidth) &&
+    response.scrollWidth > 0
+    ? Math.ceil(response.scrollWidth)
+    : null;
+  const clientWidth = typeof response.clientWidth === 'number' &&
+    Number.isFinite(response.clientWidth) &&
+    response.clientWidth > 0
+    ? Math.ceil(response.clientWidth)
+    : null;
+  if (scrollWidth == null || clientWidth == null) return { action: 'ignore' };
+
+  if (
+    scrollWidth > clientWidth + PREVIEW_CONTENT_WIDTH_EPSILON &&
+    Math.abs(request.previewScale - 1) > PREVIEW_SCALE_EPSILON
+  ) {
+    return confirmedContentWidth != null && confirmedOverflow === true
+      ? { action: 'preserve' }
+      : { action: 'remeasure-neutral' };
+  }
+  if (scrollWidth > clientWidth + PREVIEW_CONTENT_WIDTH_EPSILON) {
+    return {
+      action: 'accept',
+      contentWidth: scrollWidth,
+      measuredClientWidth: clientWidth,
+      overflow: true,
+    };
+  }
+  if (Math.abs(request.previewScale - 1) <= PREVIEW_SCALE_EPSILON) {
+    return {
+      action: 'accept',
+      contentWidth: Math.max(1, Math.ceil(request.canvasWidth)),
+      measuredClientWidth: clientWidth,
+      overflow: false,
+    };
+  }
+  return confirmedContentWidth == null || confirmedOverflow !== true
+    ? { action: 'remeasure-neutral' }
+    : { action: 'preserve' };
+}
+
+export function previewMeasurementFrameIsUsable(params: {
+  connected: boolean;
+  active: boolean;
+  frameRect: Pick<DOMRect, 'left' | 'right' | 'top' | 'bottom' | 'width' | 'height'>;
+  canvasRect: Pick<DOMRect, 'left' | 'right' | 'top' | 'bottom' | 'width' | 'height'>;
+}): boolean {
+  const { connected, active, frameRect, canvasRect } = params;
+  if (!connected || !active) return false;
+  if (frameRect.width <= 1 || frameRect.height <= 1) return false;
+  if (canvasRect.width <= 1 || canvasRect.height <= 1) return false;
+  const horizontalOverlap = Math.min(frameRect.right, canvasRect.right) - Math.max(frameRect.left, canvasRect.left);
+  const verticalOverlap = Math.min(frameRect.bottom, canvasRect.bottom) - Math.max(frameRect.top, canvasRect.top);
+  return horizontalOverlap > 1 && verticalOverlap > 1;
+}
+
 /**
  * The zoom percent a desktop preview opens at. Auto mode fits wide, single-scroll
  * HTML pages whose content overflows the canvas horizontally. Decks are the
@@ -1466,16 +1608,36 @@ function setPreviewZoomCached(key: string, zoom: number, zoomMode: 'auto' | 'man
   }
 }
 
-function setPreviewContentWidthCached(key: string, width: number | null) {
-  if (width == null) {
+function setPreviewContentWidthCached(key: string, entry: Omit<PreviewContentWidthCacheEntry, 'version'> | null) {
+  if (entry == null) {
     htmlPreviewContentWidthState.delete(key);
     return;
   }
-  htmlPreviewContentWidthState.set(key, width);
+  htmlPreviewContentWidthState.set(key, {
+    version: PREVIEW_CONTENT_WIDTH_CACHE_VERSION,
+    ...entry,
+  });
   if (htmlPreviewContentWidthState.size > MAX_CACHED_PREVIEW_CONTENT_WIDTHS) {
     const oldest = htmlPreviewContentWidthState.keys().next().value;
     if (oldest != null) htmlPreviewContentWidthState.delete(oldest);
   }
+}
+
+function getPreviewContentWidthCached(key: string): PreviewContentWidthCacheEntry | null {
+  const entry = htmlPreviewContentWidthState.get(key);
+  return entry?.version === PREVIEW_CONTENT_WIDTH_CACHE_VERSION ? entry : null;
+}
+
+function getPreviewDocumentEpoch(key: string): string {
+  const cached = htmlPreviewDocumentEpochState.get(key);
+  if (cached) return cached;
+  const epoch = nextPreviewContentMeasurementDocumentEpoch();
+  htmlPreviewDocumentEpochState.set(key, epoch);
+  if (htmlPreviewDocumentEpochState.size > MAX_CACHED_PREVIEW_CONTENT_WIDTHS) {
+    const oldest = htmlPreviewDocumentEpochState.keys().next().value;
+    if (oldest != null) htmlPreviewDocumentEpochState.delete(oldest);
+  }
+  return epoch;
 }
 
 interface Props {
@@ -7154,6 +7316,11 @@ function HtmlViewer({
   const [previewAssetWarning, setPreviewAssetWarning] = useState<PreviewAssetWarning | null>(null);
   const [inlinedSource, setInlinedSource] = useState<string | null>(null);
   const fileViewportKey = previewViewportStateKey(projectId, file);
+  // Content width is valid only for this exact file revision/authorization
+  // snapshot. Viewport and manual zoom preferences intentionally persist
+  // across revisions, but an intrinsic-width witness must not.
+  const previewContentWidthCacheBaseKey =
+    `${fileViewportKey}:${sourceSnapshotRefreshKey}:${sourceAuthorizationScopeKey ?? ''}`;
   // Lazily seed from the cache (not a hardcoded 100/'auto') so a remount that
   // lands back on a file the user already zoomed doesn't flash the wrong
   // value for a frame before the reset effect below corrects it.
@@ -7452,6 +7619,7 @@ function HtmlViewer({
   }
   const [inTabPresent, setInTabPresent] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const previewContentWidthCacheKey = `${previewContentWidthCacheBaseKey}:${reloadKey}`;
   // Set to true permanently once `source` has been populated for the first
   // time. After the first load, we never show the "loading" skeleton again —
   // even if a reload temporarily clears `source` to null (issue #4650).
@@ -7502,18 +7670,25 @@ function HtmlViewer({
   const [commentPreviewCanvasNode, setCommentPreviewCanvasNode] = useState<HTMLDivElement | null>(null);
   // Seed from the cache instead of a cold `null` — see htmlPreviewContentWidthState
   // above. A stale seed still self-corrects once a fresh measurement lands.
+  const initialPreviewContentWidthEntry = getPreviewContentWidthCached(previewContentWidthCacheKey);
   const [desktopPreviewContentWidth, setDesktopPreviewContentWidthRaw] = useState<number | null>(
-    () => htmlPreviewContentWidthState.get(fileViewportKey) ?? null,
+    () => initialPreviewContentWidthEntry?.width ?? null,
   );
-  const setDesktopPreviewContentWidth = useCallback((value: number | null | ((prev: number | null) => number | null)) => {
-    setDesktopPreviewContentWidthRaw((prev) => {
-      const next = typeof value === 'function'
-        ? (value as (p: number | null) => number | null)(prev)
-        : value;
-      setPreviewContentWidthCached(fileViewportKey, next);
-      return next;
-    });
-  }, [fileViewportKey]);
+  const desktopPreviewContentWidthEntryRef = useRef<PreviewContentWidthCacheEntry | null>(
+    initialPreviewContentWidthEntry,
+  );
+  const setDesktopPreviewContentWidth = useCallback((
+    entry: Omit<PreviewContentWidthCacheEntry, 'version'> | null,
+  ) => {
+    const cachedEntry: PreviewContentWidthCacheEntry | null = entry == null
+      ? null
+      : { version: PREVIEW_CONTENT_WIDTH_CACHE_VERSION, ...entry };
+    desktopPreviewContentWidthEntryRef.current = cachedEntry;
+    setPreviewContentWidthCached(previewContentWidthCacheKey, entry);
+    setDesktopPreviewContentWidthRaw((current) => (
+      current === cachedEntry?.width ? current : cachedEntry?.width ?? null
+    ));
+  }, [previewContentWidthCacheKey]);
   // Last canvas width the desktop auto-fit effect measured against (see the
   // effect below, rec:recvq6WoJUvRXl) — lets that effect tell "canvas grew"
   // apart from "canvas shrank" without re-deriving it from React state.
@@ -7521,6 +7696,53 @@ function HtmlViewer({
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const urlPreviewIframeRef = useRef<HTMLIFrameElement | null>(null);
   const srcDocPreviewIframeRef = useRef<HTMLIFrameElement | null>(null);
+  const previewContentMeasurementSequenceRef = useRef(0);
+  const previewContentMeasurementGenerationSequenceRef = useRef(0);
+  const previewContentMeasurementHostInstanceRef = useRef<string | null>(null);
+  if (previewContentMeasurementHostInstanceRef.current == null) {
+    previewContentMeasurementHostInstanceRef.current =
+      nextPreviewContentMeasurementHostInstance();
+  }
+  const previewContentMeasurementGenerationRef = useRef(
+    `${previewContentMeasurementHostInstanceRef.current}:generation-0`,
+  );
+  const previewContentMeasurementRevisionRef = useRef(
+    `${previewContentWidthCacheKey}:${reloadKey}`,
+  );
+  const previewContentMeasurementDocumentEpoch =
+    getPreviewDocumentEpoch(previewContentWidthCacheKey);
+  const previewContentMeasurementReadyRef = useRef<{
+    frame: HTMLIFrameElement;
+    generation: string;
+  } | null>(null);
+  const previewContentMeasurementExpectedDocumentEpochRef = useRef(
+    previewContentMeasurementDocumentEpoch,
+  );
+  const previewContentMeasurementCurrentDocumentEpochRef = useRef(
+    previewContentMeasurementDocumentEpoch,
+  );
+  previewContentMeasurementCurrentDocumentEpochRef.current =
+    previewContentMeasurementDocumentEpoch;
+  const latestPreviewContentMeasurementRef = useRef<{
+    request: PreviewContentMeasurementRequest;
+    source: Window;
+  } | null>(null);
+  const previewContentMeasurementContextRef = useRef({
+    canvasWidth: 0,
+    previewScale: 1,
+    eligible: false,
+  });
+  const desktopPreviewContentWidthRef = useRef(desktopPreviewContentWidth);
+  desktopPreviewContentWidthRef.current = desktopPreviewContentWidth;
+  const previewContentMeasurementRevision = `${previewContentWidthCacheKey}:${reloadKey}`;
+  if (previewContentMeasurementRevisionRef.current !== previewContentMeasurementRevision) {
+    previewContentMeasurementRevisionRef.current = previewContentMeasurementRevision;
+    previewContentMeasurementGenerationSequenceRef.current += 1;
+    previewContentMeasurementGenerationRef.current =
+      `${previewContentMeasurementHostInstanceRef.current}:generation-${previewContentMeasurementGenerationSequenceRef.current}`;
+    previewContentMeasurementReadyRef.current = null;
+    latestPreviewContentMeasurementRef.current = null;
+  }
   const previewRuntimeStateRef = useRef<PreviewRuntimeState | null>(null);
   const previewRuntimeStateRequestSequenceRef = useRef(0);
   const manualEditActivationPendingRef = useRef(false);
@@ -7600,8 +7822,65 @@ function HtmlViewer({
     setCommentPreviewCanvasNode((current) => (current === node ? current : node));
   }, []);
   const requestDesktopPreviewContentMeasure = useCallback((target: HTMLIFrameElement | null = iframeRef.current) => {
-    target?.contentWindow?.postMessage({ type: 'od:preview-content-size-request' }, '*');
-  }, []);
+    const source = target?.contentWindow;
+    if (!target || !source || target !== iframeRef.current) return;
+    if (
+      previewContentMeasurementExpectedDocumentEpochRef.current !==
+      previewContentMeasurementCurrentDocumentEpochRef.current
+    ) {
+      return;
+    }
+    const ready = previewContentMeasurementReadyRef.current;
+    if (
+      !ready ||
+      ready.frame !== target ||
+      ready.generation !== previewContentMeasurementGenerationRef.current
+    ) {
+      return;
+    }
+    const canvas = commentPreviewCanvasNode;
+    if (!previewMeasurementFrameIsUsable({
+      connected: target.isConnected,
+      active: target.dataset.odActive === 'true',
+      frameRect: target.getBoundingClientRect(),
+      canvasRect: canvas?.getBoundingClientRect() ?? target.getBoundingClientRect(),
+    })) {
+      return;
+    }
+    const {
+      canvasWidth,
+      previewScale: requestedPreviewScale,
+      eligible,
+    } = previewContentMeasurementContextRef.current;
+    if (!eligible || !Number.isFinite(canvasWidth) || canvasWidth <= 0) return;
+    const measurementId =
+      `${previewContentMeasurementHostInstanceRef.current}:measurement-${++previewContentMeasurementSequenceRef.current}`;
+    const request: PreviewContentMeasurementRequest = {
+      measurementId,
+      generation: previewContentMeasurementGenerationRef.current,
+      documentEpoch: previewContentMeasurementExpectedDocumentEpochRef.current,
+      canvasWidth,
+      previewScale: requestedPreviewScale,
+    };
+    latestPreviewContentMeasurementRef.current = { request, source };
+    source.postMessage({
+      type: 'od:preview-content-size-request',
+      ...request,
+    }, '*');
+  }, [commentPreviewCanvasNode]);
+  const beginDesktopPreviewContentMeasurementGeneration = useCallback((
+    target: HTMLIFrameElement | null,
+  ) => {
+    if (!target || target !== iframeRef.current || target.dataset.odActive !== 'true') return;
+    previewContentMeasurementGenerationSequenceRef.current += 1;
+    previewContentMeasurementGenerationRef.current =
+      `${previewContentMeasurementHostInstanceRef.current}:generation-${previewContentMeasurementGenerationSequenceRef.current}`;
+    latestPreviewContentMeasurementRef.current = null;
+    previewContentMeasurementReadyRef.current = {
+      frame: target,
+      generation: previewContentMeasurementGenerationRef.current,
+    };
+  }, [previewContentWidthCacheKey, reloadKey]);
   const scheduleDesktopPreviewContentMeasure = useCallback((target: HTMLIFrameElement | null = iframeRef.current) => {
     requestDesktopPreviewContentMeasure(target);
     window.requestAnimationFrame(() => {
@@ -7659,14 +7938,23 @@ function HtmlViewer({
     setManualEditSrcDocActive(false);
     setManualEditFrozenSource(null);
     previewRuntimeStateRef.current = null;
+  }, [fileViewportKey, projectId, file.name]);
+  useEffect(() => {
     // Restore this file's last measured content width instead of forcing
     // `null` — this effect also fires on every HtmlViewer remount (tab-away
     // and back), not only on a genuine file change, and clearing here would
     // throw away the seed above and reopen the cold-start auto-fit window
     // (rec:recvqaeMAGUdN2). A different file's key simply has no entry yet,
     // so this still defaults to null for a genuinely new file.
-    setDesktopPreviewContentWidth(htmlPreviewContentWidthState.get(fileViewportKey) ?? null);
-  }, [fileViewportKey, projectId, file.name]);
+    const cachedEntry = getPreviewContentWidthCached(previewContentWidthCacheKey);
+    setDesktopPreviewContentWidth(cachedEntry == null
+      ? null
+      : {
+        width: cachedEntry.width,
+        measuredClientWidth: cachedEntry.measuredClientWidth,
+        overflow: cachedEntry.overflow,
+      });
+  }, [previewContentWidthCacheKey, setDesktopPreviewContentWidth]);
   useEffect(() => {
     onCommentModeChange?.(commentPanelOpen);
   }, [commentPanelOpen, onCommentModeChange]);
@@ -8398,9 +8686,36 @@ function HtmlViewer({
     isDeck: effectiveDeck,
     manualZoomPercent: zoom,
     canvasSize: boardPreviewCanvasSize,
-    contentWidth: desktopPreviewContentWidth,
+    contentWidth: desktopPreviewContentWidthEntryRef.current?.overflow
+      ? desktopPreviewContentWidth
+      : null,
   });
   const previewScale = previewZoomPercent / 100;
+  previewContentMeasurementContextRef.current = {
+    canvasWidth: boardPreviewCanvasSize?.width ?? 0,
+    previewScale,
+    eligible: mode === 'preview' &&
+      previewViewport === 'desktop' &&
+      zoomMode === 'auto' &&
+      !effectiveDeck &&
+      !manualEditMode &&
+      !boardMode &&
+      !drawOverlayOpen &&
+      !inspectMode &&
+      annotationFrozenSource == null,
+  };
+  if (!previewContentMeasurementContextRef.current.eligible) {
+    latestPreviewContentMeasurementRef.current = null;
+  }
+  useEffect(() => {
+    if (previewViewport !== 'desktop' || zoomMode !== 'auto') return;
+    scheduleDesktopPreviewContentMeasure();
+  }, [
+    previewScale,
+    previewViewport,
+    scheduleDesktopPreviewContentMeasure,
+    zoomMode,
+  ]);
   const previewZoomText = zoomPercentLabel(previewZoomPercent);
   const zoomLevelActive = (level: number) => Math.abs(previewZoomPercent - level) < 0.001;
   const overlayPreviewScale = effectivePreviewScale(
@@ -8706,6 +9021,17 @@ function HtmlViewer({
   // mode entry via a ref and released on exit, so the deferred reload lands
   // exactly once when the user is done.
   const interactivePreviewModeActive = annotationFreezeActive || manualEditMode;
+  const frozenPreviewMeasurementDocumentEpochRef = useRef(
+    previewContentMeasurementDocumentEpoch,
+  );
+  if (!interactivePreviewModeActive) {
+    frozenPreviewMeasurementDocumentEpochRef.current =
+      previewContentMeasurementDocumentEpoch;
+  }
+  const transportPreviewMeasurementDocumentEpoch =
+    frozenPreviewMeasurementDocumentEpochRef.current;
+  previewContentMeasurementExpectedDocumentEpochRef.current =
+    transportPreviewMeasurementDocumentEpoch;
   const frozenPreviewSrcUrlRef = useRef<string | null>(null);
   if (interactivePreviewModeActive) {
     if (frozenPreviewSrcUrlRef.current === null) {
@@ -8772,7 +9098,19 @@ function HtmlViewer({
       : srcDocPreviewIframeRef.current;
     iframeRef.current = activeFrame;
     if (!useUrlLoadPreview) postAndConsumePreviewRuntimeState(activeFrame);
-  }, [postAndConsumePreviewRuntimeState, useUrlLoadPreview]);
+    if (
+      activeFrame?.dataset.odLoadedPreviewEpoch === transportPreviewMeasurementDocumentEpoch
+    ) {
+      beginDesktopPreviewContentMeasurementGeneration(activeFrame);
+      scheduleDesktopPreviewContentMeasure(activeFrame);
+    }
+  }, [
+    beginDesktopPreviewContentMeasurementGeneration,
+    postAndConsumePreviewRuntimeState,
+    transportPreviewMeasurementDocumentEpoch,
+    scheduleDesktopPreviewContentMeasure,
+    useUrlLoadPreview,
+  ]);
   // Clear a redirect-loop park whenever the artifact changes or the user hits
   // reload (reloadKey bump): the previewed content is fresh, so give it a clean
   // run rather than staying pinned on the "loop detected" placeholder.
@@ -8919,6 +9257,7 @@ function HtmlViewer({
       // Embed the reload counter so the srcdoc string differs across reloads
       // even when the fetched HTML bytes are identical (issue #4650).
       reloadKey,
+      previewMeasurementEpoch: transportPreviewMeasurementDocumentEpoch,
     }) : ''),
     [
       previewSource,
@@ -8927,6 +9266,7 @@ function HtmlViewer({
       file.name,
       previewStateKey,
       reloadKey,
+      transportPreviewMeasurementDocumentEpoch,
       workspaceContext,
     ],
   );
@@ -9094,11 +9434,17 @@ function HtmlViewer({
   // daemon origin + `allow-same-origin` so Workers/Storage/WASM/SAB work.
   // While the isolation probe resolves, park at about:blank instead of loading
   // the opaque URL, so a large artifact isn't fetched twice.
-  const urlFrameSrc = usePoweredPreview
+  const urlFrameBaseSrc = usePoweredPreview
     ? (powered.url as string)
     : poweredResolving
       ? 'about:blank'
       : urlTransportSrc;
+  const urlFrameSrc = urlFrameBaseSrc === 'about:blank'
+    ? urlFrameBaseSrc
+    : appendResourceQuery(
+        urlFrameBaseSrc,
+        `odPreviewEpoch=${encodeURIComponent(transportPreviewMeasurementDocumentEpoch)}`,
+      );
   const urlFrameSandbox = usePoweredPreview
     ? POWERED_PREVIEW_SANDBOX
     : 'allow-scripts allow-downloads';
@@ -9279,12 +9625,54 @@ function HtmlViewer({
     function onContentSizeMessage(ev: MessageEvent) {
       if (!isOurPreviewIframeSource(ev.source)) return;
       if (!isActivePreviewIframeSource(ev.source)) return;
-      const data = ev.data as { type?: string; width?: number | null } | null;
+      const data = ev.data as ({
+        type?: string;
+      } & Partial<PreviewContentMeasurementResponse>) | null;
       if (!data || data.type !== 'od:preview-content-size') return;
-      const measuredWidth = typeof data.width === 'number' && Number.isFinite(data.width) && data.width > 0
-        ? Math.ceil(data.width)
-        : null;
-      setDesktopPreviewContentWidth((current) => (current === measuredWidth ? current : measuredWidth));
+      const latest = latestPreviewContentMeasurementRef.current;
+      const frame = iframeRef.current;
+      if (
+        !previewContentMeasurementContextRef.current.eligible ||
+        previewContentMeasurementExpectedDocumentEpochRef.current !==
+          previewContentMeasurementCurrentDocumentEpochRef.current ||
+        !latest ||
+        latest.source !== ev.source ||
+        !frame ||
+        !previewMeasurementFrameIsUsable({
+          connected: frame.isConnected,
+          active: frame.dataset.odActive === 'true',
+          frameRect: frame.getBoundingClientRect(),
+          canvasRect: commentPreviewCanvasNode?.getBoundingClientRect() ?? frame.getBoundingClientRect(),
+        })
+      ) {
+        return;
+      }
+      const response: PreviewContentMeasurementResponse = {
+        measurementId: typeof data.measurementId === 'string' ? data.measurementId : '',
+        generation: typeof data.generation === 'string' ? data.generation : '',
+        documentEpoch: typeof data.documentEpoch === 'string' ? data.documentEpoch : '',
+        scrollWidth: typeof data.scrollWidth === 'number' ? data.scrollWidth : null,
+        clientWidth: typeof data.clientWidth === 'number' ? data.clientWidth : null,
+      };
+      const resolution = resolveDesktopPreviewContentMeasurement({
+        request: latest.request,
+        response,
+        currentGeneration: previewContentMeasurementGenerationRef.current,
+        latestMeasurementId: latest.request.measurementId,
+        currentCanvasWidth: previewContentMeasurementContextRef.current.canvasWidth,
+        currentPreviewScale: previewContentMeasurementContextRef.current.previewScale,
+        confirmedContentWidth: desktopPreviewContentWidthRef.current,
+        confirmedOverflow: desktopPreviewContentWidthEntryRef.current?.overflow ?? null,
+      });
+      if (resolution.action === 'accept') {
+        setDesktopPreviewContentWidth({
+          width: resolution.contentWidth,
+          measuredClientWidth: resolution.measuredClientWidth,
+          overflow: resolution.overflow,
+        });
+      } else if (resolution.action === 'remeasure-neutral') {
+        setDesktopPreviewContentWidth(null);
+      }
     }
     window.addEventListener('message', onMessage);
     window.addEventListener('message', onRestoreRequest);
@@ -9296,7 +9684,12 @@ function HtmlViewer({
       window.removeEventListener('message', onDcViewportMessage);
       window.removeEventListener('message', onContentSizeMessage);
     };
-  }, [isActivePreviewIframeSource, isOurPreviewIframeSource]);
+  }, [
+    commentPreviewCanvasNode,
+    isActivePreviewIframeSource,
+    isOurPreviewIframeSource,
+    setDesktopPreviewContentWidth,
+  ]);
 
   useEffect(() => {
     function onMessage(ev: MessageEvent) {
@@ -14076,6 +14469,13 @@ function HtmlViewer({
                           onLoad={() => {
                             const frame = urlPreviewIframeRef.current;
                             if (useUrlLoadPreview) iframeRef.current = frame;
+                            if (frame) frame.dataset.odLoadedSrc = frame.getAttribute('src') ?? '';
+                            if (frame) {
+                              frame.dataset.odLoadedPreviewEpoch =
+                                new URL(frame.getAttribute('src') ?? '', window.location.href)
+                                  .searchParams.get('odPreviewEpoch') ?? '';
+                            }
+                            if (useUrlLoadPreview) beginDesktopPreviewContentMeasurementGeneration(frame);
                             // First real paint of this artifact URL — drop the
                             // first-load overlay. about:blank parks don't count.
                             if ((frame?.getAttribute('src') ?? 'about:blank') !== 'about:blank') {
@@ -14110,6 +14510,13 @@ function HtmlViewer({
                           onLoad={() => {
                             const frame = urlPreviewIframeRef.current;
                             if (useUrlLoadPreview) iframeRef.current = frame;
+                            if (frame) frame.dataset.odLoadedSrc = frame.getAttribute('src') ?? '';
+                            if (frame) {
+                              frame.dataset.odLoadedPreviewEpoch =
+                                new URL(frame.getAttribute('src') ?? '', window.location.href)
+                                  .searchParams.get('odPreviewEpoch') ?? '';
+                            }
+                            if (useUrlLoadPreview) beginDesktopPreviewContentMeasurementGeneration(frame);
                             // First real paint of this artifact URL — drop the
                             // first-load overlay. about:blank parks don't count.
                             if ((frame?.getAttribute('src') ?? 'about:blank') !== 'about:blank') {
@@ -14143,6 +14550,11 @@ function HtmlViewer({
                         onLoad={() => {
                           const frame = srcDocPreviewIframeRef.current;
                           if (!useUrlLoadPreview) iframeRef.current = frame;
+                          if (frame) {
+                            frame.dataset.odLoadedPreviewEpoch =
+                              transportPreviewMeasurementDocumentEpoch;
+                          }
+                          if (!useUrlLoadPreview) beginDesktopPreviewContentMeasurementGeneration(frame);
                           // Reset the activation dedupe exactly ONCE per
                           // freshly mounted iframe DOM node, never on the
                           // subsequent load events that the same node

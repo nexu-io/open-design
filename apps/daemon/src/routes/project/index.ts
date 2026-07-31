@@ -382,6 +382,11 @@ const URL_PREVIEW_SCROLL_BRIDGE = `<script data-od-url-scroll-bridge>
   window.__odUrlScrollBridge = true;
   var pending = false;
   var contentSizePending = false;
+  var lastContentSizeRequest = null;
+  var contentSizeDocumentEpoch = '';
+  try {
+    contentSizeDocumentEpoch = new URLSearchParams(window.location.search).get('odPreviewEpoch') || '';
+  } catch (_) {}
   function scrollElement(){
     return document.querySelector('.design-canvas') || document.scrollingElement || document.documentElement;
   }
@@ -389,27 +394,44 @@ const URL_PREVIEW_SCROLL_BRIDGE = `<script data-od-url-scroll-bridge>
     var next = Number(value || 0);
     return Number.isFinite(next) ? next : 0;
   }
-  function measureContentWidth(){
+  function measureContentSize(){
     var root = document.documentElement;
     var body = document.body || root;
     if (!root) return null;
-    var values = [
+    var scrollValues = [
       root.scrollWidth,
-      body && body.scrollWidth,
-      root.offsetWidth,
-      body && body.offsetWidth,
+      body && body.scrollWidth
+    ];
+    var clientValues = [
       root.clientWidth,
       body && body.clientWidth
     ];
-    var width = 0;
-    for (var i = 0; i < values.length; i += 1) {
-      var next = num(values[i]);
-      if (next > width) width = next;
+    var scrollWidth = 0;
+    var clientWidth = 0;
+    for (var i = 0; i < scrollValues.length; i += 1) {
+      var nextScroll = num(scrollValues[i]);
+      if (nextScroll > scrollWidth) scrollWidth = nextScroll;
     }
-    return width > 0 ? Math.ceil(width) : null;
+    for (var j = 0; j < clientValues.length; j += 1) {
+      var nextClient = num(clientValues[j]);
+      if (nextClient > clientWidth) clientWidth = nextClient;
+    }
+    return {
+      scrollWidth: scrollWidth > 0 ? Math.ceil(scrollWidth) : null,
+      clientWidth: clientWidth > 0 ? Math.ceil(clientWidth) : null
+    };
   }
   function postContentSize(){
-    window.parent.postMessage({ type: 'od:preview-content-size', width: measureContentWidth() }, '*');
+    if (!lastContentSizeRequest) return;
+    var size = measureContentSize();
+    window.parent.postMessage({
+      type: 'od:preview-content-size',
+      measurementId: lastContentSizeRequest.measurementId,
+      generation: lastContentSizeRequest.generation,
+      documentEpoch: contentSizeDocumentEpoch,
+      scrollWidth: size && size.scrollWidth,
+      clientWidth: size && size.clientWidth
+    }, '*');
   }
   function scheduleContentSize(){
     if (contentSizePending) return;
@@ -477,6 +499,11 @@ const URL_PREVIEW_SCROLL_BRIDGE = `<script data-od-url-scroll-bridge>
       return;
     }
     if (data.type === 'od:preview-content-size-request') {
+      if (typeof data.measurementId !== 'string' || typeof data.generation !== 'string') return;
+      lastContentSizeRequest = {
+        measurementId: data.measurementId,
+        generation: data.generation
+      };
       scheduleContentSize();
     }
   });

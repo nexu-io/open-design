@@ -66,6 +66,8 @@ import {
   fileVersionPreviewOptions,
   parseInspectOverridesFromSource,
   previewOverlayTransform,
+  previewMeasurementFrameIsUsable,
+  resolveDesktopPreviewContentMeasurement,
   resolveDesktopPreviewZoomPercent,
   serializeInspectOverrides,
   updateInspectOverride,
@@ -265,10 +267,50 @@ function installSandboxedPreviewWindow(frame: HTMLIFrameElement): Window {
   return previewWindow;
 }
 
-function postPreviewContentWidth(source: Window, width: number) {
+function latestPreviewContentSizeRequest(source: Window) {
+  const postMessage = source.postMessage as ReturnType<typeof vi.fn>;
+  const request = previewContentSizeRequests(source)
+    .reverse()
+    .find((data) => data.type === 'od:preview-content-size-request');
+  if (!request?.measurementId || !request.generation) {
+    throw new Error('Expected a witnessed preview content-size request');
+  }
+  return request;
+}
+
+function previewContentSizeRequests(source: Window) {
+  const postMessage = source.postMessage as ReturnType<typeof vi.fn>;
+  return [...postMessage.mock.calls]
+    .map(([data]) => data as {
+      type?: string;
+      measurementId?: string;
+      generation?: string;
+      documentEpoch?: string;
+    })
+    .filter((data) => data.type === 'od:preview-content-size-request');
+}
+
+function postPreviewContentWidth(source: Window, scrollWidth: number, clientWidth = scrollWidth) {
+  const request = latestPreviewContentSizeRequest(source);
+  postPreviewContentSizeResponse(source, request, scrollWidth, clientWidth);
+}
+
+function postPreviewContentSizeResponse(
+  source: Window,
+  request: { measurementId?: string; generation?: string; documentEpoch?: string },
+  scrollWidth: number,
+  clientWidth: number,
+) {
   window.dispatchEvent(new MessageEvent('message', {
     source,
-    data: { type: 'od:preview-content-size', width },
+    data: {
+      type: 'od:preview-content-size',
+      measurementId: request.measurementId,
+      generation: request.generation,
+      documentEpoch: request.documentEpoch,
+      scrollWidth,
+      clientWidth,
+    },
   }));
 }
 
@@ -356,6 +398,234 @@ function installPreviewSnapshotBridge(iframe: HTMLIFrameElement) {
 }
 
 describe('FileViewer preview scale', () => {
+  it('keeps responsive previews at 100% and fits true fixed-width overflow', () => {
+    const responsive = resolveDesktopPreviewContentMeasurement({
+      request: {
+        measurementId: 'measure-responsive',
+        generation: 'generation-1',
+        documentEpoch: 'document-1',
+        canvasWidth: 964,
+        previewScale: 1,
+      },
+      response: {
+        measurementId: 'measure-responsive',
+        generation: 'generation-1',
+        documentEpoch: 'document-1',
+        scrollWidth: 964,
+        clientWidth: 964,
+      },
+      currentGeneration: 'generation-1',
+      latestMeasurementId: 'measure-responsive',
+      currentCanvasWidth: 964,
+      currentPreviewScale: 1,
+      confirmedContentWidth: null,
+    });
+    expect(responsive).toEqual({
+      action: 'accept',
+      contentWidth: 964,
+      measuredClientWidth: 964,
+      overflow: false,
+    });
+    expect(desktopPreviewAutoFitZoomPercent(
+      { width: 964, height: 710 },
+      responsive.action === 'accept' ? responsive.contentWidth : null,
+    )).toBe(100);
+
+    const fixedWidth = resolveDesktopPreviewContentMeasurement({
+      request: {
+        measurementId: 'measure-fixed',
+        generation: 'generation-1',
+        documentEpoch: 'document-1',
+        canvasWidth: 964,
+        previewScale: 1,
+      },
+      response: {
+        measurementId: 'measure-fixed',
+        generation: 'generation-1',
+        documentEpoch: 'document-1',
+        scrollWidth: 1440,
+        clientWidth: 964,
+      },
+      currentGeneration: 'generation-1',
+      latestMeasurementId: 'measure-fixed',
+      currentCanvasWidth: 964,
+      currentPreviewScale: 1,
+      confirmedContentWidth: null,
+    });
+    expect(fixedWidth).toEqual({
+      action: 'accept',
+      contentWidth: 1440,
+      measuredClientWidth: 964,
+      overflow: true,
+    });
+    expect(desktopPreviewAutoFitZoomPercent(
+      { width: 964, height: 710 },
+      fixedWidth.action === 'accept' ? fixedWidth.contentWidth : null,
+    ))
+      .toBeCloseTo(66.9444, 3);
+  });
+
+  it('rejects scaled viewport-floor feedback instead of collapsing auto-fit to 1%', () => {
+    const polluted = resolveDesktopPreviewContentMeasurement({
+      request: {
+        measurementId: 'measure-scaled',
+        generation: 'generation-1',
+        documentEpoch: 'document-1',
+        canvasWidth: 964,
+        previewScale: 0.669444,
+      },
+      response: {
+        measurementId: 'measure-scaled',
+        generation: 'generation-1',
+        documentEpoch: 'document-1',
+        scrollWidth: 96_400,
+        clientWidth: 96_400,
+      },
+      currentGeneration: 'generation-1',
+      latestMeasurementId: 'measure-scaled',
+      currentCanvasWidth: 964,
+      currentPreviewScale: 0.669444,
+      confirmedContentWidth: 1440,
+      confirmedOverflow: true,
+    });
+
+    expect(polluted).toEqual({ action: 'preserve' });
+    expect(desktopPreviewAutoFitZoomPercent({ width: 964, height: 710 }, 1440))
+      .toBeCloseTo(66.9444, 3);
+  });
+
+  it('ignores stale measurements and rejects retained offscreen 1px preview frames', () => {
+    const stale = resolveDesktopPreviewContentMeasurement({
+      request: {
+        measurementId: 'measure-old',
+        generation: 'generation-old',
+        documentEpoch: 'document-old',
+        canvasWidth: 964,
+        previewScale: 1,
+      },
+      response: {
+        measurementId: 'measure-old',
+        generation: 'generation-old',
+        documentEpoch: 'document-old',
+        scrollWidth: 96_400,
+        clientWidth: 96_400,
+      },
+      currentGeneration: 'generation-new',
+      latestMeasurementId: 'measure-new',
+      currentCanvasWidth: 964,
+      currentPreviewScale: 1,
+      confirmedContentWidth: 1440,
+      confirmedOverflow: true,
+    });
+    expect(stale).toEqual({ action: 'ignore' });
+    expect(resolveDesktopPreviewContentMeasurement({
+      request: {
+        measurementId: 'measure-new-host-generation',
+        generation: 'generation-new',
+        documentEpoch: 'document-new',
+        canvasWidth: 964,
+        previewScale: 1,
+      },
+      response: {
+        measurementId: 'measure-new-host-generation',
+        generation: 'generation-new',
+        documentEpoch: 'document-old',
+        scrollWidth: 96_400,
+        clientWidth: 96_400,
+      },
+      currentGeneration: 'generation-new',
+      latestMeasurementId: 'measure-new-host-generation',
+      currentCanvasWidth: 964,
+      currentPreviewScale: 1,
+      confirmedContentWidth: 1440,
+      confirmedOverflow: true,
+    })).toEqual({ action: 'ignore' });
+    expect(resolveDesktopPreviewContentMeasurement({
+      request: {
+        measurementId: 'measure-before-resize',
+        generation: 'generation-new',
+        documentEpoch: 'document-new',
+        canvasWidth: 964,
+        previewScale: 1,
+      },
+      response: {
+        measurementId: 'measure-before-resize',
+        generation: 'generation-new',
+        documentEpoch: 'document-new',
+        scrollWidth: 964,
+        clientWidth: 964,
+      },
+      currentGeneration: 'generation-new',
+      latestMeasurementId: 'measure-before-resize',
+      currentCanvasWidth: 720,
+      currentPreviewScale: 1,
+      confirmedContentWidth: 964,
+      confirmedOverflow: false,
+    })).toEqual({ action: 'ignore' });
+
+    expect(previewMeasurementFrameIsUsable({
+      connected: true,
+      active: true,
+      frameRect: testRect(-99_532, 0, 1, 710),
+      canvasRect: testRect(0, 0, 964, 710),
+    })).toBe(false);
+    expect(previewMeasurementFrameIsUsable({
+      connected: true,
+      active: true,
+      frameRect: testRect(0, 0, 964, 710),
+      canvasRect: testRect(0, 0, 964, 710),
+    })).toBe(true);
+  });
+
+  it('does not chase viewport-relative overflow while scaled without a neutral witness', () => {
+    const grown = resolveDesktopPreviewContentMeasurement({
+      request: {
+        measurementId: 'measure-growth',
+        generation: 'generation-1',
+        documentEpoch: 'document-1',
+        canvasWidth: 964,
+        previewScale: 0.669444,
+      },
+      response: {
+        measurementId: 'measure-growth',
+        generation: 'generation-1',
+        documentEpoch: 'document-1',
+        scrollWidth: 1800,
+        clientWidth: 1440,
+      },
+      currentGeneration: 'generation-1',
+      latestMeasurementId: 'measure-growth',
+      currentCanvasWidth: 964,
+      currentPreviewScale: 0.669444,
+      confirmedContentWidth: 1440,
+      confirmedOverflow: true,
+    });
+    expect(grown).toEqual({ action: 'preserve' });
+
+    const missingWitness = resolveDesktopPreviewContentMeasurement({
+      request: {
+        measurementId: 'measure-no-witness',
+        generation: 'generation-1',
+        documentEpoch: 'document-1',
+        canvasWidth: 964,
+        previewScale: 0.5,
+      },
+      response: {
+        measurementId: 'measure-no-witness',
+        generation: 'generation-1',
+        documentEpoch: 'document-1',
+        scrollWidth: 1928,
+        clientWidth: 1928,
+      },
+      currentGeneration: 'generation-1',
+      latestMeasurementId: 'measure-no-witness',
+      currentCanvasWidth: 964,
+      currentPreviewScale: 0.5,
+      confirmedContentWidth: null,
+    });
+    expect(missingWitness).toEqual({ action: 'remeasure-neutral' });
+  });
+
   it('keeps file viewer selectors in the effective global stylesheet', () => {
     const css = readExpandedIndexCss();
 
@@ -921,7 +1191,7 @@ describe('FileViewer SVG artifacts', () => {
     const { container } = render(<Shell />);
 
     const firstFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
-    expect(firstFrame.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot');
+    expect(firstFrame.getAttribute('src')).toContain('/api/projects/project-1/raw/page.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot&odPreviewEpoch=');
 
     fireEvent.click(screen.getByRole('button', { name: 'Leave project' }));
 
@@ -929,7 +1199,7 @@ describe('FileViewer SVG artifacts', () => {
     expect(screen.getByTestId('home-view')).toBeTruthy();
     const parkedFrame = container.querySelector<HTMLIFrameElement>('.iframe-keep-alive-pool iframe');
     expect(parkedFrame).toBe(firstFrame);
-    expect(parkedFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot');
+    expect(parkedFrame?.getAttribute('src')).toBe(firstFrame.getAttribute('src'));
 
     fireEvent.click(screen.getByRole('button', { name: 'Return project' }));
 
@@ -1245,7 +1515,7 @@ describe('FileViewer SVG artifacts', () => {
     expect(markup).toContain('data-od-render-mode="url-load"');
     expect(markup).toContain('data-od-render-mode="url-load" data-od-active="true"');
     expect(markup).toContain('data-od-render-mode="srcdoc" data-od-active="false"');
-    expect(markup).toContain('src="/api/projects/project-1/raw/page.html?v=1710000000&amp;r=0&amp;odPreviewBridge=scroll&amp;odPreviewBridge=selection&amp;odPreviewBridge=snapshot"');
+    expect(markup).toContain('src="/api/projects/project-1/raw/page.html?v=1710000000&amp;r=0&amp;odPreviewBridge=scroll&amp;odPreviewBridge=selection&amp;odPreviewBridge=snapshot&amp;odPreviewEpoch=preview-document-');
     expect(markup).toContain('sandbox="allow-scripts allow-downloads"');
   });
 
@@ -1341,13 +1611,13 @@ describe('FileViewer SVG artifacts', () => {
     );
 
     const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
-    expect(frame.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot');
+    expect(frame.getAttribute('src')).toContain('/api/projects/project-1/raw/page.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot&odPreviewEpoch=');
 
     fireEvent.click(screen.getByRole('button', { name: /reload preview/i }));
 
     const reloadedFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
     expect(reloadedFrame).toBe(frame);
-    expect(reloadedFrame.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=1&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot');
+    expect(reloadedFrame.getAttribute('src')).toContain('/api/projects/project-1/raw/page.html?v=1710000000&r=1&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot&odPreviewEpoch=');
   });
 
   it('keeps powered HTML previews on the powered URL when file-watch refreshes', async () => {
@@ -1412,7 +1682,7 @@ describe('FileViewer SVG artifacts', () => {
     await waitFor(() => {
       const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
       expect(frame.getAttribute('data-od-powered')).toBe('true');
-      expect(frame.getAttribute('src')).toBe(poweredSrc);
+      expect(frame.getAttribute('src')).toContain(`${poweredSrc}&odPreviewEpoch=`);
     });
 
     rerender(
@@ -1426,7 +1696,9 @@ describe('FileViewer SVG artifacts', () => {
     );
 
     await waitFor(() => {
-      expect(replaceMock).toHaveBeenCalledWith(`${poweredSrc}&fr=7`);
+      expect(replaceMock).toHaveBeenCalledWith(expect.stringMatching(
+        /^http:\/\/localhost:43111\/api\/projects\/project-1\/powered\/worker\.html\?.*fr=7/,
+      ));
     });
     const refreshUrls = replaceMock.mock.calls.map(([url]) => String(url));
     expect(refreshUrls.some((url) => url.includes('/raw/'))).toBe(false);
@@ -2081,17 +2353,17 @@ describe('FileViewer SVG artifacts', () => {
     const { container } = render(<Switcher />);
     const getFrame = () => container.querySelector<HTMLIFrameElement>('[data-testid="artifact-preview-frame"]');
     const initialFrame = getFrame();
-    expect(initialFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/first.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot');
+    expect(initialFrame?.getAttribute('src')).toContain('/api/projects/project-1/raw/first.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot&odPreviewEpoch=');
 
     const observationsBeforeSwitch = observedCommittedSrcs.length;
     fireEvent.click(screen.getByRole('button', { name: 'Switch file' }));
 
     const nextFrame = getFrame();
     expect(nextFrame).toBeTruthy();
-    expect(observedCommittedSrcs[observationsBeforeSwitch]).toBe(
-      '/api/projects/project-1/raw/second.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot',
+    expect(observedCommittedSrcs[observationsBeforeSwitch]).toContain(
+      '/api/projects/project-1/raw/second.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot&odPreviewEpoch=',
     );
-    expect(nextFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/second.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot');
+    expect(nextFrame?.getAttribute('src')).toContain('/api/projects/project-1/raw/second.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot&odPreviewEpoch=');
   });
 
   it('allows downloads in the in-tab HTML presentation iframe', { timeout: 10_000 }, async () => {
@@ -5994,6 +6266,9 @@ describe('FileViewer tweaks toolbar', () => {
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect')
       .mockImplementation(function getBoundingClientRectMock(this: HTMLElement) {
         if (this.classList.contains('viewer-body')) return testRect(0, 0, viewerBodyWidth, 700);
+        if (this instanceof HTMLIFrameElement || this.classList.contains('comment-preview-canvas')) {
+          return testRect(0, 0, viewerBodyWidth, 700);
+        }
         return testRect(0, 0, 0, 0);
       });
 
@@ -6020,11 +6295,26 @@ describe('FileViewer tweaks toolbar', () => {
     const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
     const previewWindow = installSandboxedPreviewWindow(frame);
     fireEvent.load(frame);
-    act(() => postPreviewContentWidth(previewWindow, 1440));
+    const neutralRequest = latestPreviewContentSizeRequest(previewWindow);
+    expect(neutralRequest.measurementId).toMatch(/^preview-host-\d+:measurement-\d+$/);
+    expect(neutralRequest.generation).toMatch(/^preview-host-\d+:generation-\d+$/);
+    expect(neutralRequest.documentEpoch).toMatch(/^preview-document-\d+$/);
+    expect(JSON.stringify(neutralRequest)).not.toContain('project-1');
+    act(() => postPreviewContentSizeResponse(previewWindow, neutralRequest, 1440, 900));
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: '63%' })).toBeTruthy();
     });
+    let scaledRequest = latestPreviewContentSizeRequest(previewWindow);
+    await waitFor(() => {
+      scaledRequest = latestPreviewContentSizeRequest(previewWindow);
+      expect(scaledRequest.measurementId).not.toBe(neutralRequest.measurementId);
+    });
+    act(() => {
+      postPreviewContentSizeResponse(previewWindow, neutralRequest, 90_000, 90_000);
+      postPreviewContentSizeResponse(previewWindow, scaledRequest, 90_000, 90_000);
+    });
+    expect(screen.getByRole('button', { name: '63%' })).toBeTruthy();
     const scaledShell = Array.from(container.querySelectorAll('div')).find(
       (node) => node.style.transform === 'scale(0.625)',
     );
@@ -6051,6 +6341,9 @@ describe('FileViewer tweaks toolbar', () => {
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect')
       .mockImplementation(function getBoundingClientRectMock(this: HTMLElement) {
         if (this.classList.contains('viewer-body')) return testRect(0, 0, 900, 700);
+        if (this instanceof HTMLIFrameElement || this.classList.contains('comment-preview-canvas')) {
+          return testRect(0, 0, 900, 700);
+        }
         return testRect(0, 0, 0, 0);
       });
     vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
@@ -6091,15 +6384,20 @@ describe('FileViewer tweaks toolbar', () => {
     await waitFor(() => {
       const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
       expect(frame.getAttribute('data-od-powered')).toBe('true');
-      expect(frame.getAttribute('src')).toBe(
-        'http://localhost:48123/api/projects/project-1/powered/powered-wide.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot',
+      const src = new URL(frame.getAttribute('src') ?? '');
+      expect(`${src.origin}${src.pathname}`).toBe(
+        'http://localhost:48123/api/projects/project-1/powered/powered-wide.html',
       );
+      expect(src.searchParams.get('v')).toBe('1710000000');
+      expect(src.searchParams.get('r')).toBe('0');
+      expect(src.searchParams.getAll('odPreviewBridge')).toEqual(['scroll', 'selection', 'snapshot']);
+      expect(src.searchParams.get('odPreviewEpoch')).toMatch(/^preview-document-\d+$/);
     });
 
     const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
     const previewWindow = installSandboxedPreviewWindow(frame);
     fireEvent.load(frame);
-    act(() => postPreviewContentWidth(previewWindow, 1440));
+    act(() => postPreviewContentWidth(previewWindow, 1440, 900));
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: '63%' })).toBeTruthy();
@@ -6107,9 +6405,13 @@ describe('FileViewer tweaks toolbar', () => {
   });
 
   it('keeps desktop HTML previews at 100% when measured content already fits', async () => {
+    let viewerBodyWidth = 900;
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect')
       .mockImplementation(function getBoundingClientRectMock(this: HTMLElement) {
-        if (this.classList.contains('viewer-body')) return testRect(0, 0, 900, 700);
+        if (this.classList.contains('viewer-body')) return testRect(0, 0, viewerBodyWidth, 700);
+        if (this instanceof HTMLIFrameElement || this.classList.contains('comment-preview-canvas')) {
+          return testRect(0, 0, viewerBodyWidth, 700);
+        }
         return testRect(0, 0, 0, 0);
       });
 
@@ -6141,10 +6443,77 @@ describe('FileViewer tweaks toolbar', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: '100%' })).toBeTruthy();
     });
+    viewerBodyWidth = 720;
+    window.dispatchEvent(new Event('resize'));
+    expect(screen.getByRole('button', { name: '100%' })).toBeTruthy();
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '100%' })).toBeTruthy();
+    });
     const scaledShell = Array.from(container.querySelectorAll('div')).find(
       (node) => node.style.transform === 'scale(1)',
     );
     expect(scaledShell).toBeTruthy();
+  });
+
+  it('reuses a confirmed fixed-width witness only for the same file revision', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockImplementation(function getBoundingClientRectMock(this: HTMLElement) {
+        if (
+          this.classList.contains('viewer-body') ||
+          this.classList.contains('comment-preview-canvas') ||
+          this instanceof HTMLIFrameElement
+        ) {
+          return testRect(0, 0, 900, 700);
+        }
+        return testRect(0, 0, 0, 0);
+      });
+    const file = htmlPreviewFile({
+      name: 'cached-fixed-width.html',
+      path: 'cached-fixed-width.html',
+      mtime: 1710000000,
+    });
+    const props = {
+      projectId: 'project-1',
+      projectKind: 'prototype' as const,
+      file,
+      liveHtml: '<html><body><main style="min-width:1440px">Fixed</main></body></html>',
+    };
+
+    const first = render(<FileViewer {...props} />);
+    const firstFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const firstWindow = installSandboxedPreviewWindow(firstFrame);
+    fireEvent.load(firstFrame);
+    act(() => postPreviewContentWidth(firstWindow, 1440, 900));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '63%' })).toBeTruthy();
+    });
+    const preReloadRequest = latestPreviewContentSizeRequest(firstWindow);
+    const preReloadRequestCount = previewContentSizeRequests(firstWindow).length;
+    fireEvent.click(screen.getByRole('button', { name: /reload preview/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '100%' })).toBeTruthy();
+    });
+    await Promise.resolve();
+    expect(previewContentSizeRequests(firstWindow)).toHaveLength(preReloadRequestCount);
+    act(() => {
+      postPreviewContentSizeResponse(firstWindow, preReloadRequest, 96_400, 96_400);
+    });
+    expect(screen.getByRole('button', { name: '100%' })).toBeTruthy();
+    first.unmount();
+
+    const sameRevision = render(<FileViewer {...props} />);
+    expect(screen.getByRole('button', { name: '63%' })).toBeTruthy();
+    const remountedFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const remountedWindow = installSandboxedPreviewWindow(remountedFrame);
+    fireEvent.load(remountedFrame);
+    const remountedRequest = latestPreviewContentSizeRequest(remountedWindow);
+    expect(remountedRequest.measurementId).not.toBe(preReloadRequest.measurementId);
+    expect(remountedRequest.generation).not.toBe(preReloadRequest.generation);
+    expect(remountedRequest.documentEpoch).toBe(preReloadRequest.documentEpoch);
+    sameRevision.unmount();
+
+    render(<FileViewer {...props} file={{ ...file, mtime: 1710000001 }} />);
+    expect(screen.getByRole('button', { name: '100%' })).toBeTruthy();
   });
 
   it('portals the comment composer to the preview viewport instead of the clipped canvas', async () => {
