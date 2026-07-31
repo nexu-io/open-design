@@ -286,6 +286,8 @@ function previewContentSizeRequests(source: Window) {
       measurementId?: string;
       generation?: string;
       documentEpoch?: string;
+      canvasWidth?: number;
+      previewScale?: number;
     })
     .filter((data) => data.type === 'od:preview-content-size-request');
 }
@@ -1620,9 +1622,94 @@ describe('FileViewer SVG artifacts', () => {
     expect(reloadedFrame.getAttribute('src')).toContain('/api/projects/project-1/raw/page.html?v=1710000000&r=1&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot&odPreviewEpoch=');
   });
 
+  it('keeps raw file-watch refresh measurements on the refreshed document epoch', async () => {
+    const replaceMock = vi.fn();
+    const frameWindows = new WeakMap<HTMLIFrameElement, Window>();
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockImplementation(function getBoundingClientRectMock(this: HTMLElement) {
+        if (
+          this.classList.contains('viewer-body') ||
+          this.classList.contains('comment-preview-canvas') ||
+          this instanceof HTMLIFrameElement
+        ) {
+          return testRect(0, 0, 900, 700);
+        }
+        return testRect(0, 0, 0, 0);
+      });
+    vi.spyOn(HTMLIFrameElement.prototype, 'contentWindow', 'get').mockImplementation(function (this: HTMLIFrameElement) {
+      let fakeWindow = frameWindows.get(this);
+      if (!fakeWindow) {
+        fakeWindow = {
+          document: document.implementation.createHTMLDocument('preview'),
+          location: { replace: replaceMock },
+          postMessage: vi.fn(),
+        } as unknown as Window;
+        frameWindows.set(this, fakeWindow);
+      }
+      return fakeWindow;
+    });
+    const file = baseFile({
+      name: 'page.html',
+      path: 'page.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'page.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    const props = {
+      projectId: 'project-1',
+      projectKind: 'prototype' as const,
+      file,
+      liveHtml: '<html><body><main style="min-width:1440px">Wide</main></body></html>',
+    };
+    const { rerender } = render(<FileViewer {...props} />);
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const initialEpoch = new URL(frame.src).searchParams.get('odPreviewEpoch');
+    expect(initialEpoch).toMatch(/^preview-document-\d+$/);
+
+    rerender(<FileViewer {...props} filesRefreshKey={7} />);
+
+    await waitFor(() => expect(replaceMock).toHaveBeenCalled());
+    const refreshedUrl = new URL(
+      String(replaceMock.mock.calls.at(-1)?.[0]),
+      window.location.href,
+    );
+    expect(refreshedUrl.pathname).toBe('/api/projects/project-1/raw/page.html');
+    expect(refreshedUrl.searchParams.get('fr')).toBe('7');
+    expect(refreshedUrl.searchParams.get('odPreviewEpoch')).toMatch(/^preview-document-\d+$/);
+    expect(refreshedUrl.searchParams.get('odPreviewEpoch')).not.toBe(initialEpoch);
+
+    frame.setAttribute('src', refreshedUrl.toString());
+    fireEvent.load(frame);
+    const previewWindow = frame.contentWindow!;
+    const refreshedRequest = latestPreviewContentSizeRequest(previewWindow);
+    expect(refreshedRequest.documentEpoch).toBe(refreshedUrl.searchParams.get('odPreviewEpoch'));
+    act(() => postPreviewContentSizeResponse(previewWindow, refreshedRequest, 1440, 900));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '63%' })).toBeTruthy();
+    });
+  });
+
   it('keeps powered HTML previews on the powered URL when file-watch refreshes', async () => {
     const replaceMock = vi.fn();
     const frameWindows = new WeakMap<HTMLIFrameElement, Window>();
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockImplementation(function getBoundingClientRectMock(this: HTMLElement) {
+        if (
+          this.classList.contains('viewer-body') ||
+          this.classList.contains('comment-preview-canvas') ||
+          this instanceof HTMLIFrameElement
+        ) {
+          return testRect(0, 0, 900, 700);
+        }
+        return testRect(0, 0, 0, 0);
+      });
     vi.spyOn(HTMLIFrameElement.prototype, 'contentWindow', 'get').mockImplementation(function (this: HTMLIFrameElement) {
       let fakeWindow = frameWindows.get(this);
       if (!fakeWindow) {
@@ -1684,6 +1771,9 @@ describe('FileViewer SVG artifacts', () => {
       expect(frame.getAttribute('data-od-powered')).toBe('true');
       expect(frame.getAttribute('src')).toContain(`${poweredSrc}&odPreviewEpoch=`);
     });
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const initialEpoch = new URL(frame.src).searchParams.get('odPreviewEpoch');
+    expect(initialEpoch).toMatch(/^preview-document-\d+$/);
 
     rerender(
       <FileViewer
@@ -1696,12 +1786,25 @@ describe('FileViewer SVG artifacts', () => {
     );
 
     await waitFor(() => {
-      expect(replaceMock).toHaveBeenCalledWith(expect.stringMatching(
-        /^http:\/\/localhost:43111\/api\/projects\/project-1\/powered\/worker\.html\?.*fr=7/,
-      ));
+      expect(replaceMock).toHaveBeenCalled();
     });
     const refreshUrls = replaceMock.mock.calls.map(([url]) => String(url));
     expect(refreshUrls.some((url) => url.includes('/raw/'))).toBe(false);
+    const refreshedUrl = new URL(refreshUrls.at(-1)!);
+    expect(refreshedUrl.pathname).toBe('/api/projects/project-1/powered/worker.html');
+    expect(refreshedUrl.searchParams.get('fr')).toBe('7');
+    expect(refreshedUrl.searchParams.get('odPreviewEpoch')).toMatch(/^preview-document-\d+$/);
+    expect(refreshedUrl.searchParams.get('odPreviewEpoch')).not.toBe(initialEpoch);
+
+    frame.setAttribute('src', refreshedUrl.toString());
+    fireEvent.load(frame);
+    const previewWindow = frame.contentWindow!;
+    const refreshedRequest = latestPreviewContentSizeRequest(previewWindow);
+    expect(refreshedRequest.documentEpoch).toBe(refreshedUrl.searchParams.get('odPreviewEpoch'));
+    act(() => postPreviewContentSizeResponse(previewWindow, refreshedRequest, 1440, 900));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '63%' })).toBeTruthy();
+    });
   });
 
   it('remounts the srcDoc HTML preview when reload is requested', () => {
@@ -6334,6 +6437,54 @@ describe('FileViewer tweaks toolbar', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: '75%' })).toBeTruthy();
+    });
+  });
+
+  it('updates auto-fit when the overflow witness changes at the same measured width', async () => {
+    let viewerBodyWidth = 900;
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockImplementation(function getBoundingClientRectMock(this: HTMLElement) {
+        if (
+          this.classList.contains('viewer-body') ||
+          this.classList.contains('comment-preview-canvas') ||
+          this instanceof HTMLIFrameElement
+        ) {
+          return testRect(0, 0, viewerBodyWidth, 700);
+        }
+        return testRect(0, 0, 0, 0);
+      });
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={htmlPreviewFile({
+          name: 'breakpoint-overflow-preview.html',
+          path: 'breakpoint-overflow-preview.html',
+        })}
+        liveHtml="<html><body><main>Breakpoint-sensitive page</main></body></html>"
+      />,
+    );
+
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const previewWindow = installSandboxedPreviewWindow(frame);
+    fireEvent.load(frame);
+    const responsiveRequest = latestPreviewContentSizeRequest(previewWindow);
+    act(() => postPreviewContentSizeResponse(previewWindow, responsiveRequest, 900, 900));
+    expect(screen.getByRole('button', { name: '100%' })).toBeTruthy();
+
+    viewerBodyWidth = 720;
+    window.dispatchEvent(new Event('resize'));
+    let overflowRequest = latestPreviewContentSizeRequest(previewWindow);
+    await waitFor(() => {
+      overflowRequest = latestPreviewContentSizeRequest(previewWindow);
+      expect(overflowRequest.canvasWidth).toBe(720);
+      expect(overflowRequest.measurementId).not.toBe(responsiveRequest.measurementId);
+    });
+    act(() => postPreviewContentSizeResponse(previewWindow, overflowRequest, 900, 720));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '80%' })).toBeTruthy();
     });
   });
 

@@ -7688,11 +7688,13 @@ function HtmlViewer({
   const previewContentWidthCacheKey =
     frozenPreviewContentWidthCacheKeyRef.current.key;
   const initialPreviewContentWidthEntry = getPreviewContentWidthCached(previewContentWidthCacheKey);
-  const [desktopPreviewContentWidth, setDesktopPreviewContentWidthRaw] = useState<number | null>(
-    () => initialPreviewContentWidthEntry?.width ?? null,
-  );
+  const [desktopPreviewContentWidthEntry, setDesktopPreviewContentWidthRaw] =
+    useState<PreviewContentWidthCacheEntry | null>(
+      initialPreviewContentWidthEntry,
+    );
+  const desktopPreviewContentWidth = desktopPreviewContentWidthEntry?.width ?? null;
   const desktopPreviewContentWidthEntryRef = useRef<PreviewContentWidthCacheEntry | null>(
-    initialPreviewContentWidthEntry,
+    desktopPreviewContentWidthEntry,
   );
   const setDesktopPreviewContentWidth = useCallback((
     entry: Omit<PreviewContentWidthCacheEntry, 'version'> | null,
@@ -7703,7 +7705,11 @@ function HtmlViewer({
     desktopPreviewContentWidthEntryRef.current = cachedEntry;
     setPreviewContentWidthCached(previewContentWidthCacheKey, entry);
     setDesktopPreviewContentWidthRaw((current) => (
-      current === cachedEntry?.width ? current : cachedEntry?.width ?? null
+      current?.width === cachedEntry?.width &&
+      current?.measuredClientWidth === cachedEntry?.measuredClientWidth &&
+      current?.overflow === cachedEntry?.overflow
+        ? current
+        : cachedEntry
     ));
   }, [previewContentWidthCacheKey]);
   // Last canvas width the desktop auto-fit effect measured against (see the
@@ -8710,7 +8716,7 @@ function HtmlViewer({
     isDeck: effectiveDeck,
     manualZoomPercent: zoom,
     canvasSize: boardPreviewCanvasSize,
-    contentWidth: desktopPreviewContentWidthEntryRef.current?.overflow
+    contentWidth: desktopPreviewContentWidthEntry?.overflow
       ? desktopPreviewContentWidth
       : null,
   });
@@ -9205,7 +9211,11 @@ function HtmlViewer({
     const refreshBasePreviewSrcUrl = usePoweredPreview && powered.url
       ? powered.url
       : effectiveBasePreviewSrcUrl;
-    const nextSrc = `${refreshBasePreviewSrcUrl}&fr=${filesRefreshKey}`;
+    const refreshPreviewSrcUrl = appendResourceQuery(
+      refreshBasePreviewSrcUrl,
+      `odPreviewEpoch=${encodeURIComponent(transportPreviewMeasurementDocumentEpoch)}`,
+    );
+    const nextSrc = appendResourceQuery(refreshPreviewSrcUrl, `fr=${filesRefreshKey}`);
     const timeout = window.setTimeout(() => {
       if (useUrlLoadPreview && urlPreviewIframeRef.current?.contentWindow) {
         urlPreviewIframeRef.current.contentWindow.location.replace(nextSrc);
@@ -9222,6 +9232,7 @@ function HtmlViewer({
     needsPowered,
     powered.resolved,
     powered.url,
+    transportPreviewMeasurementDocumentEpoch,
     usePoweredPreview,
   ]);
 
