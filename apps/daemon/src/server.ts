@@ -1370,39 +1370,44 @@ export function telemetryPromptFromRunRequest(message, currentPrompt) {
   return typeof currentPrompt === 'string' ? currentPrompt : message;
 }
 
-const FORM_ANSWERS_HEADER_RE = /^\s*\[form answers\s+(?:\u2014|-)\s*([^\]\r\n]+)\]/i;
+// Keep this header grammar aligned with parseFormAnswers in @open-design/contracts.
+const FORM_ANSWERS_HEADER_RE =
+  /^\s*\[form answers(?:\s*[\u2014\-:]\s*([^\]\r\n]+))?\]\s*(?:\r?\n|$)/i;
 
 // Aggressive OVERRIDE for weak / medium-strength plain agents (e.g.
 // GPT-OSS-120B Medium, Gemini 3.5 Flash) that otherwise echo RULE 1's
-// fenced form example back at the user on follow-up turns even when
-// they correctly understand the form is answered. Strong models
-// (Claude Sonnet 4.6, Gemini 3.1 Pro) already handle a shorter
-// OVERRIDE; enumerating the anti-patterns is a no-op for them and a
-// strong suppressor for the weaker ones. RULE 1 itself stays in the
-// system prompt so turn 1 can still emit a valid form.
+// fenced form example back after the user has answered it. Strong models
+// (Claude Sonnet 4.6, Gemini 3.1 Pro) already handle a shorter OVERRIDE;
+// enumerating the anti-patterns is a no-op for them and a strong suppressor
+// for the weaker ones. RULE 1 stays conditional: a genuinely new material
+// blocker may still require a new, targeted form on any turn.
 //
 // Exported so tests pin both the trigger condition and the literal
 // anti-patterns we ask the model to skip \u2014 silently weakening the
 // list (e.g. dropping the markdown-fence ban) would reintroduce the
 // form-echo regression on GPT-OSS / Gemini Flash.
-export const FORM_ANSWERED_SYSTEM_OVERRIDE = `## OVERRIDE \u2014 form already answered (this is turn 2 or later)
+export const FORM_ANSWERED_SYSTEM_OVERRIDE = `## OVERRIDE \u2014 submitted form answers are authoritative
 
 The user already submitted their form answers (see # User request below).
-RULE 1 documents the turn-1 ask flow; that flow is finished. Treat RULE 1
-as read-only documentation for this turn \u2014 do not execute any of it.
+Apply those answers. RULE 1 does not require another form merely because its
+example appears in the system prompt.
 
 Forbidden output for this turn:
-- A \`<question-form>\` tag of any id, including \`discovery\` or \`task-type\`.
-- A markdown \`\`\`json fenced block echoing the form schema or example.
-- Form-asking prose such as "Got it \u2014 tell me the following" or
+- Re-emitting the answered \`discovery\` or \`task-type\` form, or asking again
+  for information the submitted answers already provide.
+- A markdown \`\`\`json fenced block echoing an answered form's schema or example.
+- Form-asking prose that repeats the answered questions, such as
+  "Got it \u2014 tell me the following" or
   "\u8bf7\u544a\u8bc9\u6211\u4ee5\u4e0b\u4fe1\u606f".
 - Narrating fake system events such as "subagents stopped" or
   "server restart".
 
 Required output for this turn:
 - Open with a brief prose confirmation of what the brief is.
-- Then proceed to RULE 2 (branch on the submitted \`brand\` value) and
-  RULE 3 (emit the \`<artifact>\` block with the full HTML document).
+- Then apply RULE 2 as relevant and proceed to RULE 3 or the matching active
+  workflow.
+- Only if a new, materially blocking requirement remains unresolved may you
+  emit one new targeted \`<question-form>\`; never repeat answered fields.
 
 `;
 
@@ -1410,11 +1415,12 @@ Required output for this turn:
 // forms are not artifact-build transitions, so we only need to suppress
 // the form re-ask without directing the model toward RULE 2 / RULE 3.
 // Exported so tests can pin the literal content independently.
-export const FORM_ANSWERED_GENERIC_OVERRIDE = `## OVERRIDE \u2014 form already answered (this is turn 2 or later)
+export const FORM_ANSWERED_GENERIC_OVERRIDE = `## OVERRIDE \u2014 submitted form answers are authoritative
 
 The user already submitted their form answers (see # User request below).
 Do not ask the same form again. Treat the submitted answers as the active
-user instruction and respond accordingly.
+user instruction and respond accordingly. Ask again only if a new, materially
+blocking requirement remains unresolved.
 
 `;
 
@@ -1430,18 +1436,18 @@ function formAnswerTransitionForCurrentPrompt(currentPrompt) {
     '## Latest user turn - form answers submitted',
     trimmed,
     '',
-    // Keep the wording in lock-step with main — the stronger "do not
-    // emit any `<question-form>`" suppression now lives in the
-    // system-prompt `FORM_ANSWERED_SYSTEM_OVERRIDE` block, which
-    // every plain / stream-json adapter sees. Diverging the
+    // Keep the wording in lock-step with main — the stronger answered-form
+    // dedupe now lives in the system-prompt
+    // `FORM_ANSWERED_SYSTEM_OVERRIDE` block, which every plain /
+    // stream-json adapter sees. Diverging the
     // user-request transition string here breaks `chat-route.test
     // marks submitted discovery form answers ...` which asserts on
     // the exact main wording.
-    `The user has answered the ${formId} form. Do not emit another ${formId} form.`,
+    `The user has answered the ${formId} form. Do not re-emit the answered form or repeat fields it already answered.`,
   ];
   if (formId.toLowerCase() === 'discovery' || formId.toLowerCase() === 'task-type') {
     lines.push(
-      'Continue with RULE 2 / RULE 3 now. For Branch B answers, build now instead of asking another brief.',
+      'Apply the submitted answers and continue with RULE 2 / RULE 3 or the matching active workflow. Only if a new, materially blocking requirement remains unresolved may you emit one targeted form; never repeat answered fields.',
     );
   } else {
     lines.push(
@@ -4670,7 +4676,7 @@ export async function startServer({
     // stableInstructionFingerprint and re-sends the whole stable block on
     // resume. Two rules keep flips down to genuine activations only:
     //   1. Scan user-authored text only — for transcript-resending agents
-    //      `message` embeds prior ASSISTANT turns, whose copy (the turn-1
+    //      `message` embeds prior ASSISTANT turns, whose copy (an earlier
     //      discovery form's own options, delivery summaries) must never flip
     //      a signal the user did not express.
     //   2. Latch detections onto the conversation (monotonic ON), so a

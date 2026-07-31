@@ -10,7 +10,7 @@
 //     the `## Active skill` slot.
 
 import { describe, expect, it } from 'vitest';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 
@@ -64,6 +64,53 @@ const REGISTRY = {
   atoms: [],
 };
 
+describe('bundled od-default application', () => {
+  it('applies without a forced task-type stage or GenUI surface', async () => {
+    const pluginDir = path.resolve(
+      import.meta.dirname,
+      '../../../plugins/_official/scenarios/od-default',
+    );
+    const manifest = JSON.parse(
+      await readFile(path.join(pluginDir, 'open-design.json'), 'utf8'),
+    ) as PluginManifest;
+    const craftIds = manifest.od?.context?.craft ?? [];
+    const atomIds = [
+      ...new Set(
+        (manifest.od?.pipeline?.stages ?? []).flatMap((stage) => stage.atoms),
+      ),
+    ];
+    const computed = applyPlugin({
+      plugin: {
+        ...pluginRecord(pluginDir, manifest),
+        id: manifest.name,
+        title: manifest.title ?? manifest.name,
+        version: manifest.version,
+        sourceKind: 'bundled',
+      },
+      inputs: { prompt: 'Build a responsive analytics dashboard.' },
+      registry: {
+        skills: [],
+        designSystems: [],
+        craft: craftIds.map((id) => ({ id, title: id })),
+        atoms: atomIds.map((id) => ({ id, label: id })),
+      },
+    });
+
+    expect(computed.result.pipeline?.stages.map((stage) => stage.id)).toEqual([
+      'discovery',
+      'plan',
+      'generate',
+      'critique',
+    ]);
+    expect((computed.result.genuiSurfaces ?? []).map((surface) => surface.id)).not.toContain(
+      'task-type',
+    );
+    expect(
+      (computed.result.appliedPlugin.genuiSurfaces ?? []).map((surface) => surface.id),
+    ).not.toContain('task-type');
+  });
+});
+
 describe('plugin-local SKILL.md ref detection', () => {
   it('pickFirstLocalSkillPath returns the relative path for `./SKILL.md`', () => {
     const manifest = manifestWithSkills([{ path: './SKILL.md' }]);
@@ -100,6 +147,22 @@ describe('plugin-local SKILL.md ref detection', () => {
 });
 
 describe('loadPluginLocalSkill', () => {
+  it('loads the bundled od-default router from its real manifest', async () => {
+    const pluginDir = path.resolve(
+      import.meta.dirname,
+      '../../../plugins/_official/scenarios/od-default',
+    );
+    const manifest = JSON.parse(
+      await readFile(path.join(pluginDir, 'open-design.json'), 'utf8'),
+    ) as PluginManifest;
+    const local = await loadPluginLocalSkill(pluginRecord(pluginDir, manifest));
+
+    expect(local).not.toBeNull();
+    expect(local!.relpath).toBe('SKILL.md');
+    expect(local!.body).toContain('# od-default (hidden scenario)');
+    expect(local!.body).toContain('Route first; clarify only when needed');
+  });
+
   it('reads SKILL.md, strips frontmatter, and returns body/name/dir', async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), 'od-plugin-local-skill-'));
     try {
