@@ -57,6 +57,20 @@ function mustString(v: unknown, name: string): string {
   fail(`Missing required flag --${name}`);
 }
 
+function writeTextAtomic(filePath: string, content: string): void {
+  const temporaryPath = `${filePath}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`;
+  try {
+    fs.writeFileSync(temporaryPath, content, "utf8");
+    fs.renameSync(temporaryPath, filePath);
+  } finally {
+    try {
+      fs.unlinkSync(temporaryPath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+  }
+}
+
 function asIssueMode(v: unknown, dflt: IssueMode): IssueMode {
   if (typeof v !== "string") return dflt;
   const s = v.trim();
@@ -376,7 +390,7 @@ function main() {
   }
 
   fs.mkdirSync(path.dirname(absOut), { recursive: true });
-  fs.writeFileSync(absOut, md.join("\n"), "utf8");
+  writeTextAtomic(absOut, md.join("\n"));
 
   process.stdout.write(`Wrote ${absOut}\n`);
 }
