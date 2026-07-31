@@ -3,76 +3,106 @@ import { describe, expect, it } from 'vitest';
 import { extractComponentsManifest } from '../src/design-systems/components-manifest.js';
 
 describe('CSS escapes in selectors and declaration values (#6250 reviewer #5)', () => {
-  it('treats a single-char escape in a class name as data, not as opener', () => {
-    // PerishCode CHANGES_REQUESTED on PR #6250:
-    //   "Selectors with CSS-escaped identifier characters (\\:, \\/, \\-,
-    //    \\2digit hex form) — escaped identifier characters are interpreted
-    //    as structure."
+  it('treats an escaped structural brace at top level as selector data, not as opener', () => {
+    // PerishCode 7-31 09:10 on PR #6250:
+    //   "Exercise an actual outside-quote escaped brace in this regression
+    //    suite. This fixture currently contains `content: "}"`, so the brace
+    //    is protected by the quote-state logic added in the preceding commit;
+    //    it never reaches the new `char === '\\'` branch. Likewise, the first
+    //    test uses `\:` even though a colon cannot be mistaken for a rule
+    //    opener, so neither test would fail if the outside-quote escape
+    //    handling at `iterateCssRules` lines 389 and 465 were removed. That
+    //    leaves the final commit's structural-delimiter fix unprotected
+    //    despite the test names and comments claiming otherwise. Replace or
+    //    extend these fixtures with the reproduced boundary cases — for
+    //    example `.btn-a\{literal { ... }` followed by a flat rule, and an
+    //    unquoted escaped `\}` in a declaration — and assert both selectors
+    //    and both token references survive."
     //
-    // A CSS class name may legally contain an escaped character such as
-    // `.foo\-bar` (escaped `-`) or `.foo\:bar` (escaped `:`). The escape
-    // backslash is *not* a CSS structural character — it modifies the next
-    // byte so the lexer reads `\-` as a literal `-` inside an identifier
-    // and `\:` as a literal `:`. The opening-brace scan therefore must
-    // skip past the `\` and the following character before deciding
-    // whether the next byte is a `{` opener.
+    // This test reproduces that exact case. Without the outside-quote escape
+    // handling in the opener scan (lines 389-392), `.btn-a\{literal` would
+    // parse as `.btn-a\` (broken selector, then an `{` opener at the literal
+    // brace) + `literal { color: var(--a); }` parsed as a *second* rule whose
+    // selector is `literal`. With the fix, `.btn-a\{literal` is consumed as
+    // one selector (the `\{` escape keeps the `{` as identifier data) and the
+    // opener scan finds the *real* opener that follows `literal `.
     //
-    // Without the fix, `.foo\:bar { color: var(--a); }` is split at the
-    // `{` that immediately follows the selector (which is correct), but
-    // a more pathological shape such as `.foo\{not-a-rule { color:
-    // var(--a); }` (escaped brace in a class name, only valid if the
-    // escape is consumed first) would mis-count the brace.
+    // We pair it with an immediately-following flat rule so a regression that
+    // mistreats the escaped brace as the opener also breaks the second rule's
+    // boundaries (because the bogus rule body would eat the rest of the
+    // input). Asserting both selectors + both `--a`/`--b` token references
+    // survive proves the structural-delimiter handling is intact end-to-end.
     const manifest = extractComponentsManifest({
       brandId: 'css-escape-class',
       tokensCss: ':root { --a: red; --b: blue; }',
       fixtureHtml: `
         <style>
-          .btn-foo\\:bar { color: var(--a); }
-          .btn-plain { color: var(--b); }
+          .btn-a\\{literal { color: var(--a); }
+          .btn-b { color: var(--b); }
         </style>
-        <button class="btn-foo:bar btn-plain">x</button>
+        <button class="btn-a{literal btn-b">x</button>
       `,
     });
 
     expect(manifest.selectors).toEqual(
-      expect.arrayContaining(['.btn-foo\\:bar', '.btn-plain']),
+      expect.arrayContaining(['.btn-a\\{literal', '.btn-b']),
     );
     const buttonsGroup = manifest.groups.find((g) => g.id === 'buttons');
     expect(buttonsGroup).toBeDefined();
     expect(buttonsGroup?.selectors).toEqual(
-      expect.arrayContaining(['.btn-foo\\:bar', '.btn-plain']),
+      expect.arrayContaining(['.btn-a\\{literal', '.btn-b']),
     );
     expect(buttonsGroup?.tokenReferences).toEqual(
       expect.arrayContaining(['--a', '--b']),
     );
   });
 
-  it('treats an escaped closing brace in a declaration value as data', () => {
-    // Mirror case for the body scanner: a declaration value may contain a
-    // CSS escape such as `content: "\\}";` where the escaped `}` is the
-    // data, not the rule terminator. The body depth counter must not
-    // decrement on the escaped brace.
+  it('treats an unquoted escaped closing brace in a declaration as data', () => {
+    // PerishCode 7-31 09:10: "an unquoted escaped `\}` in a declaration —
+    // and assert both selectors and both token references survive."
+    //
+    // A CSS declaration value may legally contain an escaped `}` outside
+    // quotes — e.g. `content: \};` (the `\}` is data, not the rule
+    // terminator). Without the outside-quote escape handling in the body
+    // scan (lines 465-468), the parser would treat `\}` as an escape pair
+    // *and* then immediately after, the unescaped `}` that follows would
+    // close the rule — which is correct in this trivial case but breaks
+    // when there's more content after. The interesting boundary is when
+    // the escaped `}` is followed by additional declarations before the
+    // real terminator. Here we assert that `color: var(--a)` after the
+    // escaped `}` is still recorded, and that the second flat rule's
+    // `.btn-plain` selector + `--b` reference both survive.
+    //
+    // Using `attr(data-after, "\\}")` keeps the escape outside any quoted
+    // string — the inner `"\\}"` is purely part of the attr() expression
+    // payload *after* CSS-tokenization, so the opt-in is the literal `\}`
+    // (without surrounding CSS quotes) at the CSS-rule level. To make the
+    // outside-quote guarantee unambiguous, we use `content: "\\}"` *without*
+    // surrounding CSS quotes — i.e. write it as a raw identifier escape,
+    // not a string. That's the only form that actually exercises the
+    // outside-quote escape branch in the body scanner; the previous fixture
+    // (`content: "}"`) was inside a CSS string so the quote-state branch
+    // caught it instead.
     const manifest = extractComponentsManifest({
       brandId: 'css-escape-decl-value',
       tokensCss: ':root { --a: red; --b: blue; }',
       fixtureHtml: `
         <style>
-          .btn-escape::after { content: "}"; color: var(--a); }
+          .btn-escape::after { content: \\}; color: var(--a); }
           .btn-plain { color: var(--b); }
         </style>
         <button class="btn-escape btn-plain">x</button>
       `,
     });
 
-    // The selector with the escape survives intact in the opener scan…
     expect(manifest.selectors).toEqual(
       expect.arrayContaining(['.btn-escape::after', '.btn-plain']),
     );
-    // …and both tokens are recorded because the body loop correctly
-    // identifies the rule boundary at the unescaped `}` that follows
-    // `var(--a);`.
     const buttonsGroup = manifest.groups.find((g) => g.id === 'buttons');
     expect(buttonsGroup).toBeDefined();
+    expect(buttonsGroup?.selectors).toEqual(
+      expect.arrayContaining(['.btn-escape::after', '.btn-plain']),
+    );
     expect(buttonsGroup?.tokenReferences).toEqual(
       expect.arrayContaining(['--a', '--b']),
     );
