@@ -25,7 +25,7 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { startServer } from '../../src/server.js';
+import { mountDeploymentApp, startServer } from '../../src/server.js';
 import { readAppConfig, writeAppConfig } from '../../src/app-config.js';
 import {
   clearAllVelaLiveAccounts,
@@ -1926,6 +1926,99 @@ describe('ALL /api/integrations/vela/api-proxy/*', () => {
       expect(upstreamRequests[0]?.body).toBe(body);
     } finally {
       requestSpy.mockRestore();
+    }
+  });
+});
+
+describe('Vela proxy deployment base path', () => {
+  it('preserves canonical upstream paths through a non-root deployment mount', async () => {
+    const messageCenterRequests: Array<{
+      authorization: string | undefined;
+      url: string;
+    }> = [];
+    const messageCenterUpstream = createServer((req, res) => {
+      messageCenterRequests.push({
+        authorization: req.headers.authorization,
+        url: req.url ?? '',
+      });
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ messages: [], nextCursor: null, unreadCount: 0 }));
+    });
+    await new Promise<void>((resolve) => {
+      messageCenterUpstream.listen(0, '127.0.0.1', resolve);
+    });
+    const upstreamAddress = messageCenterUpstream.address() as AddressInfo;
+    const upstreamUrl = `http://127.0.0.1:${upstreamAddress.port}`;
+
+    const amrApiTargets: string[] = [];
+    const requestSpy = vi.spyOn(https, 'request').mockImplementation(((target, options, callback) => {
+      const req = new PassThrough() as any;
+      req.on('finish', () => {
+        amrApiTargets.push(target instanceof URL ? target.href : String(target));
+        const upstreamRes = new PassThrough() as any;
+        upstreamRes.statusCode = 200;
+        upstreamRes.headers = { 'content-type': 'application/json' };
+        callback?.(upstreamRes);
+        upstreamRes.end(JSON.stringify({ ok: true }));
+      });
+      req.setTimeout = () => req;
+      return req;
+    }) as typeof https.request);
+
+    const routeApp = express();
+    registerVelaRoutes(routeApp, {
+      paths: { RUNTIME_DATA_DIR: tmpHome },
+      appConfig: { readAppConfig: async () => ({}) },
+      http: {},
+      env: {
+        ...process.env,
+        VELA_API_URL: upstreamUrl,
+        VELA_CONTROL_KEY: 'prefixed-control-key',
+      },
+    });
+    const listenerApp = express();
+    mountDeploymentApp(listenerApp, routeApp, '/open-design');
+    const listenerServer = createServer(listenerApp);
+    await new Promise<void>((resolve) => listenerServer.listen(0, '127.0.0.1', resolve));
+    const listenerAddress = listenerServer.address() as AddressInfo;
+    const prefixedBaseUrl = `http://127.0.0.1:${listenerAddress.port}/open-design`;
+
+    try {
+      const amrResponse = await fetch(
+        `${prefixedBaseUrl}/api/integrations/vela/api-proxy/api/v1/models?limit=1`,
+      );
+      expect(amrResponse.status).toBe(200);
+      expect(await amrResponse.json()).toEqual({ ok: true });
+
+      const authenticatedResponse = await fetch(
+        `${prefixedBaseUrl}/api/integrations/vela/message-center/messages?locale=private`,
+      );
+      expect(authenticatedResponse.status).toBe(200);
+      await authenticatedResponse.arrayBuffer();
+
+      const publicResponse = await fetch(
+        `${prefixedBaseUrl}/api/integrations/vela/message-center-public/messages?locale=public`,
+      );
+      expect(publicResponse.status).toBe(200);
+      await publicResponse.arrayBuffer();
+
+      expect(amrApiTargets).toEqual([
+        'https://amr-api.open-design.ai/api/v1/models?limit=1',
+      ]);
+      expect(messageCenterRequests).toEqual([
+        {
+          authorization: 'Bearer prefixed-control-key',
+          url: '/api/v1/message-center/messages?locale=private',
+        },
+        {
+          authorization: undefined,
+          url: '/api/v1/message-center/messages?locale=public',
+        },
+      ]);
+    } finally {
+      requestSpy.mockRestore();
+      await new Promise<void>((resolve) => listenerServer.close(() => resolve()));
+      await new Promise<void>((resolve) => messageCenterUpstream.close(() => resolve()));
     }
   });
 });

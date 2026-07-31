@@ -58,6 +58,13 @@ const VELA_MESSAGE_CENTER_PREFIX = '/api/integrations/vela/message-center';
 const VELA_PUBLIC_MESSAGE_CENTER_PREFIX = '/api/integrations/vela/message-center-public';
 const AMR_API_UPSTREAM_ORIGIN = 'https://amr-api.open-design.ai';
 
+function routeRelativeProxySuffix(req: Request, proxyPrefix: string): string | null {
+  const queryIndex = req.url.indexOf('?');
+  const pathname = queryIndex === -1 ? req.url : req.url.slice(0, queryIndex);
+  if (pathname !== proxyPrefix && !pathname.startsWith(`${proxyPrefix}/`)) return null;
+  return req.url.slice(proxyPrefix.length);
+}
+
 type ReadAppConfig = (dataDir: string) => Promise<AppConfigPrefs>;
 type PublicBaseUrlResolver = (req: Request) => string;
 
@@ -166,8 +173,8 @@ export function pipeProxyStreamWithGuard(
 }
 
 function proxyAmrApiRequest(req: Request, res: Response): void {
-  const suffix = req.originalUrl.slice(AMR_API_PROXY_PREFIX.length);
-  if (!suffix.startsWith('/api/v1/')) {
+  const suffix = routeRelativeProxySuffix(req, AMR_API_PROXY_PREFIX);
+  if (suffix == null || !suffix.startsWith('/api/v1/')) {
     res.status(404).json({ error: 'unknown_amr_api_proxy_path' });
     return;
   }
@@ -240,7 +247,11 @@ function proxyVelaMessageCenterRequest(
   context: { apiUrl: string; controlKey?: string },
   proxyPrefix = VELA_MESSAGE_CENTER_PREFIX,
 ): void {
-  const suffix = req.originalUrl.slice(proxyPrefix.length);
+  const suffix = routeRelativeProxySuffix(req, proxyPrefix);
+  if (suffix == null) {
+    res.status(404).json({ error: 'unknown_message_center_path' });
+    return;
+  }
   const parsedSuffix = new URL(suffix, 'http://message-center.local');
   if (!isAllowedMessageCenterRequest(req.method, parsedSuffix.pathname)) {
     res.status(404).json({ error: 'unknown_message_center_path' });
