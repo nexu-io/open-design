@@ -166,6 +166,19 @@ async function openTeamTabAndSelect() {
 }
 
 describe('DesignSystemsTab — repeat share reads as "sync" once already team-shared', () => {
+  it('moves an owner-shared design system out of Personal and keeps one Team entry', async () => {
+    mockFetch(true);
+    renderTab([MY_SHARED_SYSTEM]);
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('design-kit-view-user:my-ds')).toBeNull();
+    });
+
+    fireEvent.click(screen.getByRole('tab', { name: /Team/i }));
+    expect(await screen.findByTestId('design-kit-view-user:my-ds')).toBeTruthy();
+    expect(screen.getAllByTestId('design-kit-view-user:my-ds')).toHaveLength(1);
+  });
+
   it('keeps the action visible (relabeled "Sync to team") for the owner, and re-POSTs the same /share route on click', async () => {
     mockFetch(true);
     renderTab([MY_SHARED_SYSTEM]);
