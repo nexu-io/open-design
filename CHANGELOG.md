@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- [fix] 删除项目时清理 `<RUNTIME_DATA_DIR>/runs/<runId>/` 下归属于该项目的孤立 run 目录,而非仅取消活跃 run。Run service 在 ~30 分钟 TTL 后从内存 map 移除已终止 run,但磁盘上的 `state.json`/`events.jsonl` 超出该窗口仍然残留;此前 delete project 会泄漏该项目所有已结束 run 的目录。新 helper `removeProjectRunDirs(runsDir, projectId)` 在 cancel + removeProjectDir 之后以 best-effort 方式扫描并清理。(#6117)
+- [fix] 删除项目时清理 `<RUNTIME_DATA_DIR>/runs/<runId>/` 下归属于该项目的孤立 run 目录,而非仅取消活跃 run。Run service 在 ~30 分钟 TTL 后从内存 map 移除已终止 run,但磁盘上的 `state.json`/`events.jsonl` 超出该窗口仍然残留;此前 delete project 会泄漏该项目所有已结束 run 的目录。新 helper `removeProjectRunDirs(runsDir, projectId)` 在 cancel + removeProjectDir 之后以 best-effort 方式扫描并清理。`purgeRunsForProject` 现在返回 `{ tombstoned, protectedRunIds }` 结构化结果,`removeProjectRunDirs` 接受可选的 `shouldSkip(runId)` 回调,DELETE handler 通过 `design.runs.isLiveRun(runId)` 跳过仍在内存 map 中的活跃 run,避免在 purge 之后、sweep 之前出现的窗口里被创建的新 run 被误删;修复 PR #6202 @mrcfps 评审指出的第二个 race condition。(#6117, #6202)
 
 ## [0.9.0] - 2026-05-29
 

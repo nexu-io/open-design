@@ -277,4 +277,119 @@ describe('DELETE project sweeps orphaned run dirs (#6117)', () => {
 
     expect(existsSync(runDir)).toBe(false);
   });
+
+  it('does not sweep a run dir for a run still live in the in-memory map (#6202 @mrcfps follow-up)', async () => {
+    // Reproduces the second race @mrcfps flagged on PR #6202 (non-blocking
+    // follow-up): purgeRunsForProject snapshots the in-memory runs once, then
+    // awaits per-run cancellations. A run that is created for the same project
+    // during that await window is NOT in the snapshot, so it is not tombstoned;
+    // its state.json still references the soon-to-be-deleted project. If the
+    // on-disk sweep (removeProjectRunDirs) only filters by `state.projectId`,
+    // it wipes the new run's dir out from under itself — the run keeps running
+    // but its state file is gone, and any later persistState mkdirs the dir
+    // back, recreating the orphan we just swept.
+    //
+    // After the fix:
+    //   - removeProjectRunDirs takes a `shouldSkip(runId)` callback that
+    //     consults the in-memory run map.
+    //   - The DELETE handler passes `(runId) => design.runs.isLiveRun(runId)`.
+    //   - A run that is currently in the in-memory map AND not tombstoned is
+    //     left alone even if its state.json projectId matches the sweep target.
+    //
+    // This test exercises the sweep with a controlled shouldSkip that mirrors
+    // the production wiring (isLiveRun) and asserts the live run's dir survives
+    // the sweep even though its state.json projectId matches the sweep target.
+    const runsDir = path.join(tempDir, 'runs');
+    mkdirSync(runsDir, { recursive: true });
+    const runs = createChatRunService({
+      createSseResponse: () => ({ send: vi.fn(() => true), end: vi.fn(), cleanup: vi.fn() }),
+      createSseErrorPayload: (code: string, message: string) => ({ error: { code, message } }),
+      shutdownGraceMs: 10,
+      ttlMs: 60_000,
+      runsLogDir: runsDir,
+    });
+
+    // Seed one orphaned run dir that DOES belong to p1 and is NOT in the
+    // in-memory map (simulates a TTL-expired prior run). The sweep should
+    // catch this one.
+    const orphanRunId = 'orphan-' + Math.random().toString(36).slice(2);
+    const orphanDir = path.join(runsDir, orphanRunId);
+    mkdirSync(orphanDir, { recursive: true });
+    writeFileSync(path.join(orphanDir, 'state.json'), JSON.stringify({ projectId: 'p1' }));
+
+    // And create a live run for p1 that IS in the in-memory map. The sweep
+    // must skip its directory because the production shouldSkip guard
+    // (design.runs.isLiveRun) returns true for it.
+    const liveRun = runs.create({ projectId: 'p1' });
+    const liveRunDir = path.join(runsDir, liveRun.id);
+    expect(existsSync(path.join(liveRunDir, 'state.json'))).toBe(true);
+
+    // Mount and DELETE the project. The DELETE handler will:
+    //   1. purgeRunsForProject('p1') — tombstones liveRun (it is in the
+    //      snapshot, because we created it before the request). liveRun is
+    //      now persistsDisabled=true and its dir is removed by disablePersist.
+    //   2. removeProjectRunDirs with shouldSkip = (id) => isLiveRun(id).
+    //      liveRun is no longer "live" (persistsDisabled=true), so its dir
+    //      isn't expected to survive — but we want to verify the production
+    //      path end-to-end against a "truly live" run.
+    //
+    // To exercise the race scenario end-to-end (a run created DURING the
+    // cancel await window, which is NOT in the snapshot), we mount the app
+    // but hold the DELETE back: we pre-await a manual `purgeRunsForProject`
+    // that tombstones liveRun, then create a second live run that is NOT
+    // tombstoned, then invoke the on-disk sweep directly with the production
+    // shouldSkip guard.
+    //
+    // Step 1: tombstone the first liveRun via purgeRunsForProject.
+    const firstPurge = await runs.purgeRunsForProject('p1');
+    expect(firstPurge.tombstoned).toEqual(expect.arrayContaining([liveRun.id]));
+    expect(existsSync(liveRunDir)).toBe(false);
+    expect(runs.isLiveRun(liveRun.id)).toBe(false);
+
+    // Step 2: create a new run for p1 — this one is "mid-flight" relative to
+    // the original DELETE, i.e. not in any snapshot yet. Its state.json
+    // projectId matches p1.
+    const lateRun = runs.create({ projectId: 'p1' });
+    const lateRunDir = path.join(runsDir, lateRun.id);
+    expect(existsSync(path.join(lateRunDir, 'state.json'))).toBe(true);
+    expect(runs.isLiveRun(lateRun.id)).toBe(true);
+
+    // Also re-seed an orphan dir with state.json projectId=p1 (the sweep's
+    // primary target).
+    const orphan2Dir = path.join(runsDir, 'orphan2-' + Math.random().toString(36).slice(2));
+    mkdirSync(orphan2Dir, { recursive: true });
+    writeFileSync(path.join(orphan2Dir, 'state.json'), JSON.stringify({ projectId: 'p1' }));
+
+    // Step 3: invoke the on-disk sweep with the production shouldSkip guard,
+    // exactly as the DELETE handler does.
+    const { removeProjectRunDirs } = await import('../src/projects.js');
+    const removed = await removeProjectRunDirs(runsDir, 'p1', {
+      shouldSkip: (runId) => runs.isLiveRun(runId),
+    });
+    // The orphan dirs (no in-memory run) are swept.
+    expect(removed).toBe(2);
+    expect(existsSync(orphanDir)).toBe(false);
+    expect(existsSync(orphan2Dir)).toBe(false);
+    // The late run's dir is untouched — the shouldSkip guard caught it.
+    expect(existsSync(lateRunDir)).toBe(true);
+    expect(existsSync(path.join(lateRunDir, 'state.json'))).toBe(true);
+
+    // The new helper is exposed for callers that want to query the live-run
+    // state directly (e.g. future sweep callers).
+    expect(runs.isLiveRun(lateRun.id)).toBe(true);
+    expect(runs.isLiveRun('orphanRunId-not-in-map')).toBe(false);
+    expect(runs.isLiveRun('')).toBe(false);
+
+    // And purgeRunsForProject now returns a structured result so callers can
+    // destructure safely instead of treating the return as a bare array.
+    const result = await runs.purgeRunsForProject('p1');
+    expect(result).toEqual({ tombstoned: expect.arrayContaining([lateRun.id]), protectedRunIds: [] });
+    expect(existsSync(lateRunDir)).toBe(false);
+    expect(runs.isLiveRun(lateRun.id)).toBe(false);
+
+    // Empty/invalid project id is a no-op and returns the empty structured
+    // shape (not a bare array, so callers can destructure safely).
+    await expect(runs.purgeRunsForProject('')).resolves.toEqual({ tombstoned: [], protectedRunIds: [] });
+    await expect(runs.purgeRunsForProject(undefined as unknown as string)).resolves.toEqual({ tombstoned: [], protectedRunIds: [] });
+  });
 });

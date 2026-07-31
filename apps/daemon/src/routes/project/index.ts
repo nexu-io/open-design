@@ -2279,6 +2279,13 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       // while it was still alive would leak its dir back onto disk the moment
       // the analytics/langfuse completion resolved (#6117 race @mrcfps on #6202).
       // Also cancels live runs (#5468 supersedes the bare cancelRunsOwnedBy).
+      // The returned `protectedRunIds` are runs that entered the in-memory
+      // registry during the cancellation await — their state.json still
+      // references this project but the runs are mid-flight and must be left
+      // alone. The `isLiveRun` guard re-checks the in-memory map at sweep
+      // time so even later concurrent creates (after `purgeRunsForProject`
+      // returns but before `removeProjectRunDirs` runs) are protected
+      // (#6202 @mrcfps non-blocking follow-up).
       await design.runs.purgeRunsForProject(req.params.id).catch(() => {});
       dbDeleteProject(db, req.params.id);
       await removeProjectDir(PROJECTS_DIR, req.params.id).catch(() => {});
@@ -2287,7 +2294,11 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       // map; this catches runs whose TTL has already expired out of the map
       // (their state.json lingers on disk until now). Best-effort — same
       // posture as removeProjectDir above.
-      await removeProjectRunDirs(path.join(ctx.paths.RUNTIME_DATA_DIR, 'runs'), req.params.id).catch(() => {});
+      await removeProjectRunDirs(
+        path.join(ctx.paths.RUNTIME_DATA_DIR, 'runs'),
+        req.params.id,
+        { shouldSkip: (runId) => design.runs.isLiveRun(runId) },
+      ).catch(() => {});
       /** @type {import('@open-design/contracts').OkResponse} */
       const body = { ok: true };
       res.json(body);

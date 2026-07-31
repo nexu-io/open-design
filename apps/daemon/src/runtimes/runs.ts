@@ -1076,14 +1076,23 @@ export function createChatRunService({
    *     child is reaped) — terminal runs are left alone status-wise, only
    *     tombstoned on disk.
    *
-   * Returns the list of run ids that were tombstoned, so the caller can
-   * additionally remove their on-disk run directories after this resolves.
+   * Returns `{ tombstoned, protectedRunIds }`:
+   *   - `tombstoned` lists the run ids that were tombstoned (already disabled
+   *     and cancel-awaited) so the caller can additionally remove their
+   *     on-disk run directories after this resolves.
+   *   - `protectedRunIds` lists runs that *entered the in-memory registry
+   *     after the initial snapshot* — i.e. were created for this project
+   *     during the await-cancellation window. These are live runs the sweep
+   *     must NOT delete (their state.json still references the deleted
+   *     project, but the run is mid-flight and owns that dir legitimately).
+   *     See #6202 @mrcfps non-blocking follow-up.
+   *
    * Cancellation failures are swallowed per-run so a single bad run never
    * blocks the project delete the user asked for — same posture as
    * `cancelRunsOwnedBy` for #5468.
    */
   const purgeRunsForProject = async (projectId) => {
-    if (typeof projectId !== 'string' || !projectId) return [];
+    if (typeof projectId !== 'string' || !projectId) return { tombstoned: [], protectedRunIds: [] };
     const owned = Array.from(runs.values()).filter((run) => run.projectId === projectId);
     const tombstoned = [];
     // Order matters (#6117 race): disablePersist MUST run before cancel,
@@ -1101,7 +1110,33 @@ export function createChatRunService({
         }
       }),
     );
-    return tombstoned;
+    // Re-snapshot after the await window. A run created for this project
+    // during the cancellation await is *not* in `owned` and therefore not
+    // tombstoned above; its state.json still references the soon-to-be
+    // deleted project, so the on-disk sweep would otherwise remove it
+    // mid-flight. Track it as protected so the caller can skip its dir.
+    // (Live runs whose project is gone will eventually go terminal + TTL out
+    // of the in-memory map; the next delete-project call's sweep will catch
+    // their then-orphaned state.json. That's the same backstop posture
+    // already used for runs that TTL-expire out before delete-project.)
+    const protectedRunIds = Array.from(runs.values())
+      .filter((run) => run.projectId === projectId && !run.persistsDisabled)
+      .map((run) => run.id);
+    return { tombstoned, protectedRunIds };
+  };
+
+  /**
+   * Live-run guard for the on-disk sweep. Returns true if `runId` is currently
+   * registered in the in-memory run map AND has not been tombstoned (i.e. its
+   * `persistsDisabled` flag is still false). Callers that walk `runsDir` to
+   * remove orphaned run directories use this to skip directories owned by runs
+   * that legitimately still own them — e.g. a run created for the project
+   * during the cancel-await window of a project-delete (#6202 @mrcfps follow-up).
+   */
+  const isLiveRun = (runId) => {
+    if (typeof runId !== 'string' || !runId) return false;
+    const run = runs.get(runId);
+    return !!run && !run.persistsDisabled;
   };
 
   // Drop a run from the in-memory registry without emitting any terminal
@@ -1175,6 +1210,7 @@ export function createChatRunService({
     fail,
     drop,
     purgeRunsForProject,
+    isLiveRun,
     signalChild: killChild,
     reapProcessGroup,
     signalProcessGroup,

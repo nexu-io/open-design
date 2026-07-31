@@ -1358,11 +1358,23 @@ export async function removeProjectDir(projectsRoot, projectId) {
  *
  * @param {string} runsDir Absolute path to the runtime `runs` directory.
  * @param {string} projectId The project id whose run directories to remove.
+ * @param {{ shouldSkip?: (runId: string) => boolean }} [opts] Optional
+ *   per-entry guard. When `shouldSkip(runId)` returns true, the directory is
+ *   left alone — used to protect runs that legitimately still own their
+ *   on-disk directory at sweep time (e.g. a run created for this project
+ *   during the cancel-await window of a project-delete — its state.json
+ *   references the deleted project, but it's mid-flight and would otherwise
+ *   be wiped out from under itself). See #6202 @mrcfps follow-up.
  * @returns {Promise<number>} Number of run directories removed. Resolves to 0
  *   when `runsDir` does not exist (fresh install, no runs yet).
  */
-export async function removeProjectRunDirs(runsDir, projectId) {
+export async function removeProjectRunDirs(
+  runsDir: string,
+  projectId: string,
+  opts: { shouldSkip?: (runId: string) => boolean } = {},
+): Promise<number> {
   if (!isSafeId(projectId)) return 0;
+  const shouldSkip = opts.shouldSkip;
   let entries: import('node:fs').Dirent[];
   try {
     entries = await readdir(runsDir, { withFileTypes: true });
@@ -1376,6 +1388,13 @@ export async function removeProjectRunDirs(runsDir, projectId) {
       .filter((entry) => entry.isDirectory())
       .map(async (entry) => {
         const runDir = path.join(runsDir, entry.name);
+        const runId = entry.name;
+        // Consult the live-run guard before touching the disk so a
+        // mid-flight run created during a concurrent delete-project can't
+        // have its state.json wiped out from under itself. Should be a
+        // cheap synchronous check (in-memory map lookup); see
+        // `runService.isLiveRun` in runs.ts.
+        if (shouldSkip && shouldSkip(runId)) return;
         try {
           const stateRaw = await readFile(path.join(runDir, 'state.json'), 'utf8');
           const state = JSON.parse(stateRaw);
