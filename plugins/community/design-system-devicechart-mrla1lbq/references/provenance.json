@@ -1,0 +1,19 @@
+{
+  "candidateId": "fd6e07f7-cd09-4523-a402-95225d174f5a",
+  "projectId": "brand-devicechart-2e13cb",
+  "runId": "68aa8f54-368d-4e79-9462-3fb7774d1178",
+  "conversationId": "0905fdf2-0d9b-4333-b4a9-2793e48402ad",
+  "provenance": {
+    "summary": "Detected from context/input-DESIGN.md after a successful run.",
+    "detectedAt": 1784071261529
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "context/input-DESIGN.md",
+      "label": "context/input-DESIGN.md",
+      "size": 13918,
+      "copied": true
+    }
+  ]
+}
