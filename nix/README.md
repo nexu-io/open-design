@@ -123,9 +123,11 @@ before serving the static package and proxying `/api`, `/artifacts`, and
 preserve or strip the prefix, but must route the complete browser-visible
 prefix consistently.
 
-The Web package is compiled with its path at build time. The default flake
-package is root-based; for a non-root deployment override it with a Web package
-built with the matching `OD_WEB_BASE_PATH` value, for example by overriding the
+The Web package is compiled with its path at build time. The NixOS and Home
+Manager modules derive their default `webFrontend.package` with the normalized
+`basePath`, so the configuration above is self-contained. If you provide a
+custom `webFrontend.package` (or serve `packages.<system>.web` directly), build
+it with the matching `OD_WEB_BASE_PATH` value, for example by overriding the
 derivation's `env` in a flake overlay. The daemon checks the generated Web
 manifest and fails early when the package and service setting disagree.
 Packaged desktop remains root-path only.

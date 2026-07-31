@@ -84,6 +84,7 @@ in
     passthru = {
       inherit nodejs;
       pnpmDeps = finalAttrs.pnpmDeps;
+      inherit webBasePath;
     };
 
     meta = with lib; {

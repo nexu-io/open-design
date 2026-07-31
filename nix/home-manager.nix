@@ -24,6 +24,23 @@
   cfg = config.services.open-design;
   webBasePath = lib.removeSuffix "/" cfg.webFrontend.basePath;
 
+  flakePackages =
+    if flake ? packages.${pkgs.stdenv.hostPlatform.system}
+    then flake.packages.${pkgs.stdenv.hostPlatform.system}
+    else {};
+  defaultWebPackage =
+    flakePackages.web or (throw
+      "open-design: no web package available for ${pkgs.stdenv.hostPlatform.system}; set services.open-design.webFrontend.package explicitly");
+  webPackageForBasePath = basePath:
+    defaultWebPackage.overrideAttrs (old: {
+      env = (old.env or {}) // {
+        OD_WEB_BASE_PATH = lib.removeSuffix "/" basePath;
+      };
+      passthru = (old.passthru or {}) // {
+        webBasePath = lib.removeSuffix "/" basePath;
+      };
+    });
+
   commonOpts = moduleCommon {
     inherit lib pkgs flake;
     defaultDataDir = "${config.home.homeDirectory}/.od";
@@ -189,6 +206,11 @@ in {
 
   config = lib.mkIf cfg.enable (lib.mkMerge [
     {
+      # The flake web output is root-based by default. Derive the module's
+      # default package with the configured browser prefix; an explicit
+      # package override remains authoritative for custom builds.
+      services.open-design.webFrontend.package = lib.mkDefault (webPackageForBasePath cfg.webFrontend.basePath);
+
       home.packages = [cfg.package];
 
       # Ensure the data directory exists ahead of first daemon launch.
