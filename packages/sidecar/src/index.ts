@@ -593,7 +593,13 @@ export async function requestJsonIpc<T = any>(
       if (newlineIndex < 0) return;
       socket.end();
       settle(() => {
-        const response = JSON.parse(buffer.slice(0, newlineIndex)) as { error?: { message?: string }; ok: boolean; result?: T };
+        let response: { error?: { message?: string }; ok: boolean; result?: T };
+        try {
+          response = JSON.parse(buffer.slice(0, newlineIndex)) as typeof response;
+        } catch (error) {
+          rejectRequest(new Error(`invalid IPC response from ${socketPath}: ${error instanceof Error ? error.message : String(error)}`));
+          return;
+        }
         if (!response.ok) {
           rejectRequest(new Error(response.error?.message ?? "IPC request failed"));
           return;

@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { mkdtemp, rm } from "node:fs/promises";
+import { createServer } from "node:net";
 import { join, resolve } from "node:path";
+import { tmpdir } from "node:os";
 
 import {
   bootstrapSidecarRuntime,
+  requestJsonIpc,
   createSidecarLaunchEnv,
   resolveAppIpcPath,
   resolveAppRuntimePath,
@@ -15,6 +19,13 @@ import {
   type SidecarContractDescriptor,
   type SidecarStampShape,
 } from "../src/index.js";
+
+async function listen(server: ReturnType<typeof createServer>, socketPath: string): Promise<void> {
+  await new Promise<void>((resolveListen, rejectListen) => {
+    server.once("error", rejectListen);
+    server.listen(socketPath, resolveListen);
+  });
+}
 
 type FakeStamp = SidecarStampShape & {
   app: "api" | "ui";
@@ -99,6 +110,24 @@ describe("generic sidecar path boundary", () => {
 
     expect(resolveNamespace({ contract: fakeContract, env })).toBe("selected");
     expect(resolveSidecarBase({ contract: fakeContract, env, projectRoot: "/repo/product", source: "tool" })).toBe(resolve("/runtime/base"));
+  });
+});
+
+describe("JSON IPC transport", () => {
+  it("rejects malformed server responses instead of throwing from the socket callback", async () => {
+    const tempRoot = await mkdtemp(join(tmpdir(), "open-design-sidecar-"));
+    const socketPath = join(tempRoot, "malformed.sock");
+    const server = createServer((socket) => {
+      socket.once("data", () => socket.end("not-json\n"));
+    });
+
+    try {
+      await listen(server, socketPath);
+      await expect(requestJsonIpc(socketPath, { op: "status" })).rejects.toThrow(/invalid IPC response/);
+    } finally {
+      await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
+      await rm(tempRoot, { recursive: true, force: true });
+    }
   });
 });
 
